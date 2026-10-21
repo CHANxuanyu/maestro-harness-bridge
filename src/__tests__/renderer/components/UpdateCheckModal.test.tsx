@@ -516,8 +516,9 @@ describe('UpdateCheckModal', () => {
 
 			fireEvent.click(screen.getByText('Check releases manually'));
 
+			// A failed check has no result, so this is the hardcoded fork fallback.
 			expect(window.maestro.shell.openExternal).toHaveBeenCalledWith(
-				'https://github.com/RunMaestro/Maestro/releases'
+				'https://github.com/CHANxuanyu/maestro-harness-bridge/releases'
 			);
 		});
 

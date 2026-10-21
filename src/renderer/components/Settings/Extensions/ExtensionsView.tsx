@@ -1,3 +1,5 @@
+import { extensionUiText, localizeBuiltinExtension } from './extensionI18n';
+import { useT } from '../../../i18n';
 /**
  * Extensions (Encore) marketplace - the unified surface that lists first-party
  * Encore features AND community plugins as one tiled grid with category
@@ -40,8 +42,9 @@ interface ExtensionsViewProps {
 }
 
 export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
+	const tExtra = useT();
 	const {
-		extensions,
+		extensions: sourceExtensions,
 		contributions,
 		pluginsSubsystemEnabled,
 		busyId,
@@ -56,6 +59,11 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 		revokePlugin,
 		getGrants,
 	} = useExtensions();
+
+	const extensions = useMemo(
+		() => sourceExtensions.map((ext) => localizeBuiltinExtension(ext, tExtra)),
+		[sourceExtensions, tExtra]
+	);
 
 	const [query, setQuery] = useState('');
 	const [category, setCategory] = useState<CategoryFilter>('all');
@@ -129,12 +137,17 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 	// Remounting the grid is what restores focus to the tile that was opened -
 	// see ExtensionsGrid's mount-focus effect.
 	const closeDetails = useCallback(() => setSelectedKey(null), []);
-	useModalLayer(MODAL_PRIORITIES.EXTENSION_DETAILS, 'Extension Details', closeDetails, {
-		enabled: Boolean(selected),
-		blocksLowerLayers: false,
-		capturesFocus: false,
-		focusTrap: 'none',
-	});
+	useModalLayer(
+		MODAL_PRIORITIES.EXTENSION_DETAILS,
+		tExtra('settings.extra.extensionsView.extensionDetails'),
+		closeDetails,
+		{
+			enabled: Boolean(selected),
+			blocksLowerLayers: false,
+			capturesFocus: false,
+			focusTrap: 'none',
+		}
+	);
 
 	return (
 		<div data-testid="extensions-view" data-setting-id="encore-plugins">
@@ -147,7 +160,7 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 			<span data-setting-id="encore-web-login" aria-hidden="true" />
 			<div className="flex items-center justify-between gap-3 mb-1">
 				<h3 className="text-sm font-bold" style={{ color: theme.colors.textMain }}>
-					Plugins
+					{tExtra('settings.extra.extensionsView.plugins')}
 				</h3>
 				{/* One header slot, two jobs. Installing belongs to the marketplace
 				    grid, not to one plugin's details pane - shown there it reads as
@@ -161,7 +174,8 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 						className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-colors hover:bg-white/5"
 						style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 					>
-						<ChevronLeft className="w-3.5 h-3.5" /> All plugins
+						<ChevronLeft className="w-3.5 h-3.5" />{' '}
+						{tExtra('settings.extra.extensionsView.allPlugins')}
 					</button>
 				) : (
 					<button
@@ -171,13 +185,13 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 						className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-colors hover:bg-white/5"
 						style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 					>
-						<FolderPlus className="w-3.5 h-3.5" /> Install plugin…
+						<FolderPlus className="w-3.5 h-3.5" />{' '}
+						{tExtra('settings.extra.extensionsView.installPlugin')}
 					</button>
 				)}
 			</div>
 			<p className="text-xs mb-4" style={{ color: theme.colors.textDim }}>
-				Built-in Encore features and community plugins. Enable what you want; everything else stays
-				hidden from shortcuts, menus, and the command palette.
+				{tExtra('settings.extra.extensionsView.builtInEncoreFeaturesAndCommunityPlugins')}
 			</p>
 
 			{!pluginsSubsystemEnabled && (
@@ -187,7 +201,7 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 				>
 					<div className="flex items-center gap-2 text-xs" style={{ color: theme.colors.textDim }}>
 						<Puzzle className="w-4 h-4" />
-						The community plugin subsystem is off, so only built-in features are listed.
+						{tExtra('settings.extra.extensionsView.theCommunityPluginSubsystemIsOffSo')}
 					</div>
 					<button
 						type="button"
@@ -196,7 +210,7 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 						className="px-2.5 py-1.5 rounded-lg text-xs font-medium flex-shrink-0"
 						style={{ backgroundColor: theme.colors.accent, color: theme.colors.bgMain }}
 					>
-						Enable plugins
+						{tExtra('settings.extra.extensionsView.enablePlugins')}
 					</button>
 				</div>
 			)}
@@ -234,7 +248,7 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 										color: active ? theme.colors.bgMain : theme.colors.textDim,
 									}}
 								>
-									{filterLabel(cat)}
+									{extensionUiText(filterLabel(cat), tExtra)}
 								</button>
 							);
 						})}
@@ -259,22 +273,26 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 									e.preventDefault();
 									gridEl?.querySelector<HTMLButtonElement>(ACTIVE_EXTENSION_TILE_SELECTOR)?.focus();
 								}}
-								placeholder="Search extensions…"
+								placeholder={tExtra('settings.extra.extensionsView.searchExtensions')}
 								className="bg-transparent flex-1 text-sm outline-none"
 								style={{ color: theme.colors.textMain }}
-								aria-label="Search extensions"
+								aria-label={tExtra('settings.extra.extensionsView.searchExtensions34')}
 							/>
 						</div>
 						<div className="flex items-center gap-1.5 flex-shrink-0">
 							<span className="text-xs" style={{ color: theme.colors.textDim }}>
-								Sort
+								{tExtra('settings.extra.extensionsView.sort')}
 							</span>
 							<SegmentedControl
 								value={sort}
 								onChange={handleSortChange}
-								options={SORT_OPTIONS}
+								options={SORT_OPTIONS.map((option) => ({
+									...option,
+									label: extensionUiText(option.label, tExtra),
+									title: extensionUiText(option.title, tExtra),
+								}))}
 								theme={theme}
-								ariaLabel="Sort extensions"
+								ariaLabel={tExtra('settings.extra.controls.sortExtensions')}
 								testId="extensions-sort"
 							/>
 						</div>
@@ -302,7 +320,7 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 									style={{ transform: onlyInstalled ? 'translateX(18px)' : 'translateX(2px)' }}
 								/>
 							</span>
-							Only installed
+							{tExtra('settings.extra.extensionsView.onlyInstalled')}
 						</button>
 					</div>
 
@@ -320,8 +338,11 @@ export function ExtensionsView({ theme, settingsBodies }: ExtensionsViewProps) {
 			{pendingEnable && (
 				<FirstPartyEnableModal
 					theme={theme}
-					name={pendingEnable.name}
-					permissions={pendingEnable.permissions}
+					name={extensionUiText(pendingEnable.name, tExtra)}
+					permissions={pendingEnable.permissions.map((req) => ({
+						...req,
+						reason: req.reason ? extensionUiText(req.reason, tExtra) : req.reason,
+					}))}
 					onConfirm={confirmPendingEnable}
 					onCancel={cancelPendingEnable}
 				/>

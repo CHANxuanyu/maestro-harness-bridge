@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * CommandModeBar - the "you are not talking to the agent" strip above the AI
  * composer.
@@ -49,9 +50,12 @@ export const CommandModeBar = memo(function CommandModeBar({
 	model,
 	effort,
 }: CommandModeBarProps) {
+	const t = useT();
 	const isAi = mode === 'ai';
 	const Icon = isAi ? Sparkles : Terminal;
-	const completes = isGitRepo ? 'files, dirs, branches' : 'files and dirs';
+	const completes = isGitRepo
+		? t('workflows.labels.filesDirsBranches')
+		: t('workflows.shell.extraFilesAndDirs');
 
 	return (
 		<div
@@ -64,7 +68,7 @@ export const CommandModeBar = memo(function CommandModeBar({
 		>
 			<Icon className="w-3 h-3 shrink-0" style={{ color: theme.colors.accent }} />
 			<span className="font-medium uppercase tracking-wide" style={{ color: theme.colors.accent }}>
-				{isAi ? 'AI Command' : 'Command Mode'}
+				{isAi ? t('workflows.shell.aiCommand') : t('workflows.shell.commandMode')}
 			</span>
 			<span className="truncate" style={{ color: theme.colors.textDim }} title={cwd}>
 				{remoteName ? `${remoteName}:` : ''}
@@ -78,7 +82,7 @@ export const CommandModeBar = memo(function CommandModeBar({
 				{isAi ? (
 					<>
 						<CornerDownLeft className="w-3 h-3" />
-						asks for a command
+						{t('workflows.shell.asksForACommand')}
 					</>
 				) : (
 					<>
@@ -90,7 +94,7 @@ export const CommandModeBar = memo(function CommandModeBar({
 						</kbd>
 						{completes}
 						<CornerDownLeft className="w-3 h-3 ml-1" />
-						runs it
+						{t('workflows.shell.runsIt')}
 					</>
 				)}
 				{/* The way out. There is no `!` left in the text to delete, so without
@@ -99,9 +103,9 @@ export const CommandModeBar = memo(function CommandModeBar({
 					className="px-1 rounded border font-mono ml-1"
 					style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 				>
-					Esc
+					{t('workflows.shell.esc')}
 				</kbd>
-				{isAi ? 'back to Command Mode' : 'exits'}
+				{isAi ? t('workflows.shell.backToCommandMode') : t('workflows.shell.exits')}
 				{!isAi && (
 					<>
 						<kbd
@@ -110,7 +114,7 @@ export const CommandModeBar = memo(function CommandModeBar({
 						>
 							!
 						</kbd>
-						asks AI
+						{t('workflows.shell.asksAi')}
 					</>
 				)}
 			</span>

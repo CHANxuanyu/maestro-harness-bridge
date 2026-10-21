@@ -62,6 +62,7 @@ import {
 	matchErrorPattern,
 	matchSshErrorPattern,
 } from '../../../../main/parsers/error-patterns';
+import { CodexOutputParser } from '../../../../main/parsers/codex-output-parser';
 import { ClaudeOutputParser } from '../../../../main/parsers/claude-output-parser';
 import { CopilotOutputParser } from '../../../../main/parsers/copilot-output-parser';
 import { OmpOutputParser } from '../../../../main/parsers/omp-output-parser';
@@ -138,6 +139,50 @@ describe('StdoutHandler', () => {
 	});
 
 	// ── handleData dispatch routing ────────────────────────────────────────
+
+	describe('Codex process-local tool identifiers', () => {
+		it('keeps restarted item_1 calls distinct while correlating each start and result', () => {
+			const { handler, emitter, sessionId, processes, proc } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				outputParser: new CodexOutputParser(),
+			});
+			const toolSpy = vi.fn();
+			emitter.on('tool-execution', toolSpy);
+			const sendTool = (type: string, command: string, output?: string) =>
+				sendJsonLine(handler, sessionId, {
+					type,
+					item: {
+						id: 'item_1',
+						type: 'command_execution',
+						command,
+						status: output === undefined ? 'in_progress' : 'completed',
+						aggregated_output: output,
+						exit_code: output === undefined ? undefined : 0,
+					},
+				});
+			sendTool('item.started', 'print first');
+			sendTool('item.completed', 'print first', 'first output');
+			// Even identical pid/time values cannot make a new process reuse a tool card.
+			processes.set(
+				sessionId,
+				createMockProcess({
+					...proc,
+					emittedToolCallIds: undefined,
+					outputParser: new CodexOutputParser(),
+				})
+			);
+			sendTool('item.started', 'print second');
+			sendTool('item.completed', 'print second', 'second output');
+			const events = toolSpy.mock.calls.map((call) => call[1]);
+			expect(events).toHaveLength(4);
+			expect(events[0].toolCallId).toBe(events[1].toolCallId);
+			expect(events[2].toolCallId).toBe(events[3].toolCallId);
+			expect(events[2].toolCallId).not.toBe(events[0].toolCallId);
+			expect(events[1].state.output).toBe('first output');
+			expect(events[3].state.output).toBe('second output');
+		});
+	});
 
 	describe('handleData routing', () => {
 		it('should silently return when sessionId is not found in processes map', () => {
@@ -1026,6 +1071,79 @@ describe('StdoutHandler', () => {
 			expect(proc.sessionIdEmitted).toBe(true);
 			expect(bufferManager.emitDataBuffered).toHaveBeenCalledWith(sessionId, 'The answer is 42.');
 			expect(sessionIdSpy).toHaveBeenCalledWith(sessionId, 'sess-combined');
+		});
+	});
+
+	describe('Codex public progress delivery', () => {
+		it('delivers explicit commentary before tools without using it as an interrupted final answer', () => {
+			const { handler, emitter, sessionId, proc, bufferManager } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				outputParser: new CodexOutputParser(),
+			});
+			const progress = vi.fn();
+			emitter.on('thinking-chunk', progress);
+			sendJsonLine(handler, sessionId, {
+				type: 'response_item',
+				payload: {
+					type: 'message',
+					role: 'assistant',
+					phase: 'commentary',
+					content: [{ type: 'output_text', text: 'Checking README' }],
+				},
+			});
+			expect(progress).toHaveBeenCalledExactlyOnceWith(sessionId, 'Checking README', 'commentary');
+			expect(proc.streamedText || '').toBe('');
+			expect(proc.resultEmitted).toBe(false);
+			expect(bufferManager.emitDataBuffered).not.toHaveBeenCalled();
+			sendJsonLine(handler, sessionId, {
+				type: 'item.completed',
+				item: { type: 'agent_message', phase: 'final_answer', text: 'Found the answer' },
+			});
+			sendJsonLine(handler, sessionId, {
+				type: 'turn.completed',
+				usage: { input_tokens: 10, output_tokens: 4 },
+			});
+			expect(bufferManager.emitDataBuffered).toHaveBeenCalledExactlyOnceWith(
+				sessionId,
+				'Found the answer'
+			);
+			expect(progress).toHaveBeenCalledTimes(1);
+		});
+
+		it('reveals an unphased exec message when the next tool proves it is progress', () => {
+			const { handler, emitter, sessionId, proc, bufferManager } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				outputParser: new CodexOutputParser(),
+			});
+			const events: string[] = [];
+			emitter.on('thinking-chunk', (_id, text, purpose) => events.push(`${purpose}:${text}`));
+			emitter.on('tool-execution', () => events.push('tool'));
+			sendJsonLine(handler, sessionId, {
+				type: 'item.completed',
+				item: { type: 'agent_message', text: 'Reading README' },
+			});
+			expect(events).toEqual([]);
+			sendJsonLine(handler, sessionId, {
+				type: 'item.started',
+				item: { type: 'command_execution', id: 'call-1', command: 'cat README.md' },
+			});
+			expect(events).toEqual(['commentary:Reading README', 'tool']);
+			expect(proc.streamedText || '').toBe('');
+			sendJsonLine(handler, sessionId, {
+				type: 'item.completed',
+				item: {
+					type: 'command_execution',
+					id: 'call-1',
+					command: 'cat README.md',
+					status: 'completed',
+					aggregated_output: 'Project notes',
+					exit_code: 0,
+				},
+			});
+			expect(events).toEqual(['commentary:Reading README', 'tool', 'tool']);
+			expect(bufferManager.emitDataBuffered).not.toHaveBeenCalled();
 		});
 	});
 

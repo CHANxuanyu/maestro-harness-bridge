@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * Coworking Setup panel - shown inside the Coworking section of the Encore tab.
  *
@@ -30,13 +31,6 @@ const CONFIRM_POLICY_OPTIONS: ReadonlyArray<{ value: BrowserConfirmPolicy; label
 	{ value: 'off', label: 'JS only' },
 ];
 
-const CONFIRM_POLICY_DESCRIPTIONS: Record<BrowserConfirmPolicy, string> = {
-	dangerous:
-		'Asks before risky actions: navigating, running JavaScript, typing into fields, opening or closing tabs.',
-	all: 'Asks before every browser action, including clicks and screenshots.',
-	off: 'Only asks before running JavaScript (always required); every other action runs immediately.',
-};
-
 interface CoworkingInstallStatus {
 	agentId: string;
 	configPath: string;
@@ -48,6 +42,7 @@ export interface CoworkingSetupProps {
 }
 
 export function CoworkingSetup({ theme }: CoworkingSetupProps) {
+	const tExtra = useT();
 	const [statuses, setStatuses] = useState<CoworkingInstallStatus[]>([]);
 	const [busyAgentId, setBusyAgentId] = useState<string | null>(null);
 	const [busyAll, setBusyAll] = useState(false);
@@ -103,13 +98,15 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 		} catch (err) {
 			notifyToast({
 				color: 'red',
-				title: 'Coworking',
-				message: `Could not read install status: ${err instanceof Error ? err.message : String(err)}`,
+				title: tExtra('settings.extra.coworkingSetup.coworking'),
+				message: tExtra('settings.extra.coworkingSetup.statusFailed', {
+					error: err instanceof Error ? err.message : String(err),
+				}),
 			});
 		} finally {
 			setLoading(false);
 		}
-	}, []);
+	}, [tExtra]);
 
 	useEffect(() => {
 		refresh();
@@ -124,21 +121,23 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 				await window.maestro.coworking.install(agentId);
 				notifyToast({
 					color: 'green',
-					title: 'Coworking installed',
-					message: `${getAgentDisplayName(agentId as AgentId)} will see terminals on its next launch. Restart any open ${getAgentDisplayName(agentId as AgentId)} tabs to pick up the change.`,
+					title: tExtra('settings.extra.coworkingSetup.coworkingInstalled'),
+					message: tExtra('settings.extra.coworkingSetup.installed', {
+						agent: getAgentDisplayName(agentId as AgentId),
+					}),
 				});
 				await refresh();
 			} catch (err) {
 				notifyToast({
 					color: 'red',
-					title: 'Coworking install failed',
+					title: tExtra('settings.extra.coworkingSetup.coworkingInstallFailed'),
 					message: err instanceof Error ? err.message : String(err),
 				});
 			} finally {
 				setBusyAgentId(null);
 			}
 		},
-		[busyAll, busyAgentId, refresh]
+		[busyAll, busyAgentId, refresh, tExtra]
 	);
 
 	const handleUninstall = useCallback(
@@ -149,21 +148,23 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 				await window.maestro.coworking.uninstall(agentId);
 				notifyToast({
 					color: 'theme',
-					title: 'Coworking uninstalled',
-					message: `${getAgentDisplayName(agentId as AgentId)} will stop seeing terminals after its next launch.`,
+					title: tExtra('settings.extra.coworkingSetup.coworkingUninstalled'),
+					message: tExtra('settings.extra.coworkingSetup.uninstalled', {
+						agent: getAgentDisplayName(agentId as AgentId),
+					}),
 				});
 				await refresh();
 			} catch (err) {
 				notifyToast({
 					color: 'red',
-					title: 'Coworking uninstall failed',
+					title: tExtra('settings.extra.coworkingSetup.coworkingUninstallFailed'),
 					message: err instanceof Error ? err.message : String(err),
 				});
 			} finally {
 				setBusyAgentId(null);
 			}
 		},
-		[busyAll, busyAgentId, refresh]
+		[busyAll, busyAgentId, refresh, tExtra]
 	);
 
 	const handleInstallAll = useCallback(async () => {
@@ -176,27 +177,29 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 			if (failures.length === 0) {
 				notifyToast({
 					color: 'green',
-					title: 'Coworking installed',
-					message: `Installed for ${results.length} agents. Restart any open agent tabs to pick up the change.`,
+					title: tExtra('settings.extra.coworkingSetup.coworkingInstalled'),
+					message: tExtra('settings.extra.coworkingSetup.installedAll', { count: results.length }),
 				});
 			} else {
 				notifyToast({
 					color: 'orange',
-					title: 'Coworking partially installed',
-					message: `Failed for: ${failures.map((f) => f.agentId).join(', ')}. See system log for details.`,
+					title: tExtra('settings.extra.coworkingSetup.coworkingPartiallyInstalled'),
+					message: tExtra('settings.extra.coworkingSetup.partlyFailed', {
+						agents: failures.map((f) => f.agentId).join(', '),
+					}),
 				});
 			}
 			await refresh();
 		} catch (err) {
 			notifyToast({
 				color: 'red',
-				title: 'Coworking install failed',
+				title: tExtra('settings.extra.coworkingSetup.coworkingInstallFailed'),
 				message: err instanceof Error ? err.message : String(err),
 			});
 		} finally {
 			setBusyAll(false);
 		}
-	}, [busyAll, busyAgentId, refresh]);
+	}, [busyAll, busyAgentId, refresh, tExtra]);
 
 	const allInstalled = useMemo(
 		() => statuses.length > 0 && statuses.every((s) => s.installed),
@@ -210,18 +213,16 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 			<div className="flex items-center justify-between">
 				<div>
 					<div className="text-sm font-bold" style={{ color: theme.colors.textMain }}>
-						Coworking Setup
+						{tExtra('settings.extra.coworkingSetup.coworkingSetup')}
 					</div>
 					<div className="text-xs mt-0.5" style={{ color: theme.colors.textDim }}>
-						Install the Maestro coworking MCP server into each agent's user-level config so the
-						agent can read terminal scrollback and browser tabs on demand. Enable "Interaction" per
-						agent to also let it drive browser tabs (navigate, click, type, eval, screenshot).
+						{tExtra('settings.extra.coworkingSetup.installTheMaestroCoworkingMcpServerInto')}
 					</div>
 				</div>
 				<button
 					onClick={refresh}
 					disabled={loading}
-					title="Refresh install status"
+					title={tExtra('settings.extra.coworkingSetup.refreshInstallStatus')}
 					className="p-1.5 rounded transition-colors hover:bg-white/10 disabled:opacity-40"
 					style={{ color: theme.colors.textDim }}
 				>
@@ -239,11 +240,10 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 			>
 				<div className="min-w-0 flex-1 pr-2">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						Background browsing
+						{tExtra('settings.extra.coworkingSetup.backgroundBrowsing')}
 					</div>
 					<div className="text-xs mt-0.5" style={{ color: theme.colors.textDim }}>
-						Let agents read and drive their own browser tabs while you are focused on a different
-						agent. Keeps hidden webviews alive (one renderer process each, LRU-capped).
+						{tExtra('settings.extra.coworkingSetup.letAgentsReadAndDriveTheirOwn')}
 					</div>
 				</div>
 				<div className="flex items-center gap-2 shrink-0">
@@ -251,9 +251,11 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 						<label
 							className="text-xs flex items-center gap-1"
 							style={{ color: theme.colors.textDim }}
-							title="Maximum background webviews kept alive (LRU-evicted, 1-10)"
+							title={tExtra(
+								'settings.extra.coworkingSetup.maximumBackgroundWebviewsKeptAliveLruEvicted'
+							)}
 						>
-							Limit
+							{tExtra('settings.extra.coworkingSetup.limit')}
 							<input
 								type="number"
 								min={1}
@@ -277,7 +279,7 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 						}}
 						role="switch"
 						aria-checked={backgroundBrowsers}
-						aria-label="Background browsing"
+						aria-label={tExtra('settings.extra.coworkingSetup.backgroundBrowsing')}
 					>
 						<span
 							className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
@@ -335,7 +337,11 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 											className="text-xs px-2.5 py-1 rounded transition-colors disabled:opacity-40 hover:bg-white/10"
 											style={{ color: theme.colors.error, borderColor: theme.colors.error }}
 										>
-											{isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Uninstall'}
+											{isBusy ? (
+												<Loader2 className="w-3 h-3 animate-spin" />
+											) : (
+												tExtra('settings.extra.coworkingSetup.uninstall')
+											)}
 										</button>
 									) : (
 										<button
@@ -347,7 +353,11 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 												color: theme.colors.bgMain,
 											}}
 										>
-											{isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Install'}
+											{isBusy ? (
+												<Loader2 className="w-3 h-3 animate-spin" />
+											) : (
+												tExtra('settings.extra.coworkingSetup.install')
+											)}
 										</button>
 									)}
 								</div>
@@ -360,11 +370,12 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 									<div className="flex items-center justify-between gap-3">
 										<div className="min-w-0">
 											<p className="text-sm" style={{ color: theme.colors.textMain }}>
-												Browser interaction
+												{tExtra('settings.extra.coworkingSetup.browserInteraction')}
 											</p>
 											<p className="text-xs opacity-70 mt-0.5">
-												Let this agent drive browser tabs: navigate, click, type, run JavaScript,
-												screenshot, open and close tabs. Reading tabs works without this.
+												{tExtra(
+													'settings.extra.coworkingSetup.letThisAgentDriveBrowserTabsNavigate'
+												)}
 											</p>
 										</div>
 										<button
@@ -375,7 +386,9 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 											}}
 											role="switch"
 											aria-checked={interactionOn}
-											aria-label={`Browser interaction for ${getAgentDisplayName(s.agentId as AgentId)}`}
+											aria-label={tExtra('settings.extra.coworkingSetup.interactionFor', {
+												agent: getAgentDisplayName(s.agentId as AgentId),
+											})}
 										>
 											<span
 												className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
@@ -388,17 +401,17 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 										<div className="flex items-center justify-between gap-3">
 											<div className="min-w-0">
 												<p className="text-sm" style={{ color: theme.colors.textMain }}>
-													Ask before actions
+													{tExtra('settings.extra.coworkingSetup.askBeforeActions')}
 												</p>
 												<p className="text-xs opacity-70 mt-0.5">
-													{CONFIRM_POLICY_DESCRIPTIONS[confirmPolicy]}
+													{tExtra(`settings.extra.coworkingSetup.policyHelp.${confirmPolicy}`)}
 												</p>
 											</div>
 											<div
 												className="flex rounded overflow-hidden shrink-0"
 												style={{ border: `1px solid ${theme.colors.border}` }}
 												role="radiogroup"
-												aria-label="Ask before actions"
+												aria-label={tExtra('settings.extra.coworkingSetup.askBeforeActions')}
 											>
 												{CONFIRM_POLICY_OPTIONS.map((opt) => (
 													<button
@@ -416,7 +429,7 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 														role="radio"
 														aria-checked={confirmPolicy === opt.value}
 													>
-														{opt.label}
+														{tExtra(`settings.extra.coworkingSetup.policy.${opt.value}`)}
 													</button>
 												))}
 											</div>
@@ -428,7 +441,7 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 											style={{ color: theme.colors.warning }}
 										>
 											<AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-											This agent can drive your browser without ever asking you.
+											{tExtra('settings.extra.coworkingSetup.thisAgentCanDriveYourBrowserWithout')}
 										</p>
 									)}
 								</div>
@@ -454,7 +467,9 @@ export function CoworkingSetup({ theme }: CoworkingSetupProps) {
 					) : (
 						<Download className="w-3.5 h-3.5" />
 					)}
-					{allInstalled ? 'All agents installed' : 'Install for all agents'}
+					{allInstalled
+						? tExtra('settings.extra.coworkingSetup.allAgentsInstalled')
+						: tExtra('settings.extra.coworkingSetup.installForAllAgents')}
 				</button>
 			</div>
 		</div>

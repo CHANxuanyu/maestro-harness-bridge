@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { memo } from 'react';
 import { Terminal } from 'lucide-react';
 
@@ -22,12 +23,13 @@ export const StartupCommandIndicator = memo(function StartupCommandIndicator({
 	active,
 	count,
 }: StartupCommandIndicatorProps) {
+	const t = useT();
 	if (!active) return null;
 
 	const tooltip =
 		count === 1
-			? 'One terminal tab has a saved startup command'
-			: `${count} terminal tabs have saved startup commands`;
+			? t('workflows.shell.extraOneTerminalTabHasASavedStartupCommand')
+			: t('workflows.shell.extraValueTerminalTabsHaveSavedStartupCommands', { p0: count });
 
 	return (
 		<span className="shrink-0 flex items-center" title={tooltip}>

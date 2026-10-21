@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * ThinkingStatusPill - Displays status when AI is actively processing/thinking.
  * Shows session name, bytes received, elapsed time, and Claude session ID.
@@ -19,6 +20,7 @@ import { formatTokensCompact } from '../utils/formatters';
 import { autoRunActiveElapsedMs } from '../hooks/batch/useTimeTracking';
 import { formatElapsedTicker } from '../../shared/duration';
 import { StopTurnButton } from './ui/StopTurnButton';
+import { getAgentDisplayName } from '../../shared/agentMetadata';
 import { useBackgroundAutoRuns } from '../hooks/batch/useBackgroundAutoRuns';
 import { useWindowContextOptional } from '../contexts/WindowContext';
 import {
@@ -213,6 +215,7 @@ const AutoRunRow = memo(
 		agentName?: string;
 		onOpen?: () => void;
 	}) => {
+		const t = useT();
 		const label = (
 			<>
 				<div
@@ -227,7 +230,9 @@ const AutoRunRow = memo(
 						</>
 					)}
 					<span className={agentName ? undefined : 'font-medium'}>
-						{isStopping ? 'AutoRun Stopping' : 'AutoRun'}
+						{isStopping
+							? t('workflows.shellStatus.autorunStopping')
+							: t('workflows.shellStatus.autorun')}
 					</span>
 				</span>
 			</>
@@ -251,7 +256,7 @@ const AutoRunRow = memo(
 				)}
 				<div className="flex items-center gap-2 shrink-0">
 					<span className="text-xs" style={{ color: theme.colors.textDim }}>
-						{completedTasks}/{totalTasks} tasks
+						{completedTasks}/{totalTasks} {t('workflows.shellStatus.tasks')}
 					</span>
 					{onStop && (
 						<button
@@ -266,13 +271,15 @@ const AutoRunRow = memo(
 								pointerEvents: isStopping ? 'none' : 'auto',
 							}}
 							title={
-								isStopping ? 'Stopping after current task...' : 'Stop auto-run after current task'
+								isStopping
+									? t('workflows.shellStatus.stoppingAfterCurrentTask')
+									: t('workflows.shellStatus.stopAutoRunAfterCurrentTask')
 							}
 						>
 							<svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
 								<rect x="6" y="6" width="12" height="12" rx="1" />
 							</svg>
-							{isStopping ? 'Stopping' : 'Stop'}
+							{isStopping ? t('workflows.shellStatus.stopping') : t('workflows.shellStatus.stop')}
 						</button>
 					)}
 				</div>
@@ -344,6 +351,7 @@ const AutoRunPill = memo(
 		 *  names it, and the name jumps there. */
 		agentName?: string;
 	}) => {
+		const t = useT();
 		const [isExpanded, setIsExpanded] = useState(false);
 		const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 		const startTime = autoRunState.startTime || Date.now();
@@ -404,7 +412,7 @@ const AutoRunPill = memo(
 								onClick={() => sessionId && onSessionClick?.(sessionId)}
 								className="text-xs font-medium shrink-0 hover:underline"
 								style={{ color: theme.colors.textMain }}
-								title={`Go to ${agentName}`}
+								title={t('workflows.shellStatus.goToValue', { p0: agentName })}
 							>
 								{agentName}
 							</button>
@@ -417,12 +425,18 @@ const AutoRunPill = memo(
 						className="text-xs font-semibold shrink-0"
 						style={{ color: isStopping ? theme.colors.warning : theme.colors.accent }}
 					>
-						{isStopping ? 'AutoRun Stopping' : 'AutoRun'}
+						{isStopping
+							? t('workflows.shellStatus.autorunStopping')
+							: t('workflows.shellStatus.autorun')}
 					</span>
 
 					{/* Worktree indicator */}
 					{autoRunState.worktreeActive && (
-						<span title={`Worktree: ${autoRunState.worktreeBranch || 'active'}`}>
+						<span
+							title={t('workflows.shellStatus.worktreeValue', {
+								p0: autoRunState.worktreeBranch || t('workflows.shell.active'),
+							})}
+						>
 							<GitBranch className="w-3.5 h-3.5 shrink-0" style={{ color: theme.colors.accent }} />
 						</span>
 					)}
@@ -433,7 +447,13 @@ const AutoRunPill = memo(
 						<span
 							className="flex items-center gap-1 shrink-0 text-xs font-medium"
 							style={{ color: theme.colors.warning }}
-							title={`${pendingSteeringCount} steering ${pendingSteeringCount === 1 ? 'note' : 'notes'} waiting for the next task`}
+							title={t('workflows.shellStatus.valueSteeringValueWaitingForTheNextTask', {
+								p0: pendingSteeringCount,
+								p1:
+									pendingSteeringCount === 1
+										? t('workflows.status.note')
+										: t('workflows.status.notes'),
+							})}
 						>
 							<Compass className="w-3.5 h-3.5" />
 							{pendingSteeringCount}
@@ -450,13 +470,13 @@ const AutoRunPill = memo(
 						>
 							<div className="w-px h-4" style={{ backgroundColor: theme.colors.border }} />
 							<div className="flex items-center gap-1">
-								<span className="pill-label">Goal:</span>
+								<span className="pill-label">{t('workflows.shellStatus.goal')}</span>
 								<span className="font-medium" style={{ color: theme.colors.textMain }}>
 									{autoRunState.goalProgress ?? 0}%
 								</span>
 								{autoRunState.goalIteration ? (
 									<span className="opacity-70 pill-label">
-										· iteration {autoRunState.goalIteration}
+										{t('workflows.shellStatus.iteration')} {autoRunState.goalIteration}
 									</span>
 								) : null}
 							</div>
@@ -468,7 +488,7 @@ const AutoRunPill = memo(
 						>
 							<div className="w-px h-4" style={{ backgroundColor: theme.colors.border }} />
 							<div className="flex items-center gap-1">
-								<span className="pill-label">Tasks:</span>
+								<span className="pill-label">{t('workflows.shellStatus.tasks2')}</span>
 								<span className="font-medium" style={{ color: theme.colors.textMain }}>
 									{completedTasks}/{totalTasks}
 								</span>
@@ -483,7 +503,7 @@ const AutoRunPill = memo(
 					>
 						<div className="w-px h-4" style={{ backgroundColor: theme.colors.border }} />
 						<div className="flex items-center gap-1">
-							<span className="pill-label">Elapsed:</span>
+							<span className="pill-label">{t('workflows.shellStatus.elapsed')}</span>
 							<ElapsedTimeDisplay
 								startTime={startTime}
 								accumulatedElapsedMs={autoRunState.accumulatedElapsedMs}
@@ -509,7 +529,9 @@ const AutoRunPill = memo(
 									pointerEvents: isStopping ? 'none' : 'auto',
 								}}
 								title={
-									isStopping ? 'Stopping after current task...' : 'Stop auto-run after current task'
+									isStopping
+										? t('workflows.shellStatus.stoppingAfterCurrentTask')
+										: t('workflows.shellStatus.stopAutoRunAfterCurrentTask')
 								}
 							>
 								{isStopping ? (
@@ -528,7 +550,7 @@ const AutoRunPill = memo(
 										<rect x="6" y="6" width="12" height="12" rx="1" />
 									</svg>
 								)}
-								{isStopping ? 'Stopping' : 'Stop'}
+								{isStopping ? t('workflows.shellStatus.stopping') : t('workflows.shellStatus.stop')}
 							</button>
 						</>
 					)}
@@ -545,7 +567,7 @@ const AutoRunPill = memo(
 									backgroundColor: theme.colors.warning + '40',
 									border: `1px solid ${theme.colors.warning}60`,
 								}}
-								title={`+${concurrentCount} more running`}
+								title={t('workflows.shellStatus.valueMoreRunning', { p0: concurrentCount })}
 							>
 								<span className="text-2xs font-bold" style={{ color: theme.colors.warning }}>
 									+{concurrentCount}
@@ -575,7 +597,7 @@ const AutoRunPill = memo(
 										backgroundColor: theme.colors.bgActivity,
 									}}
 								>
-									Running Processes
+									{t('workflows.shellStatus.runningProcesses')}
 								</div>
 								{/* AutoRun entry - stop lives on the pill itself, so no per-row Stop here */}
 								<AutoRunRow
@@ -631,6 +653,7 @@ function ThinkingStatusPillInner({
 	onStopAutoRun,
 	onInterrupt,
 }: ThinkingStatusPillProps) {
+	const t = useT();
 	const [isExpanded, setIsExpanded] = useState(false);
 	const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	// Auto Runs on other agents. The viewed agent's run arrives as autoRunState.
@@ -763,6 +786,9 @@ function ThinkingStatusPillInner({
 	// prefer namedSessions, then tab name, then UUID octet (NOT session name - that's already shown)
 	const displayClaudeId =
 		customName || tabName || (agentSessionId ? agentSessionId.substring(0, 8).toUpperCase() : null);
+	// The provider actually running this turn (Codex, Claude Code, ...). The pill
+	// used to say "Claude" for every agent's session id.
+	const providerName = getAgentDisplayName(primarySession.toolType);
 	// True only when the two name sources were empty and this fell through to the
 	// raw session id. A name is prose and belongs in the interface font; a hex
 	// octet is an identifier and reads better in the code face.
@@ -770,9 +796,9 @@ function ThinkingStatusPillInner({
 
 	// For tooltip, show all available info
 	const tooltipParts = [maestroSessionName];
-	if (agentSessionId) tooltipParts.push(`Claude: ${agentSessionId}`);
-	if (tabName) tooltipParts.push(`Tab: ${tabName}`);
-	if (customName) tooltipParts.push(`Named: ${customName}`);
+	if (agentSessionId) tooltipParts.push(`${providerName}: ${agentSessionId}`);
+	if (tabName) tooltipParts.push(t('workflows.status.tab', { name: tabName }));
+	if (customName) tooltipParts.push(t('workflows.status.named', { name: customName }));
 	const fullTooltip = tooltipParts.join(' | ');
 
 	return (
@@ -802,9 +828,11 @@ function ThinkingStatusPillInner({
 				    name has to carry the jump too or the pill loses its only affordance. */}
 				<button
 					onClick={() => onSessionClick?.(primarySession.id, primaryTab?.id)}
-					className="text-xs font-medium truncate min-w-0 hover:underline cursor-pointer"
+					// Capped as well as truncating: a long agent or conversation name may
+					// not take the bar from the status and the Stop control beside it.
+					className="text-xs font-medium truncate min-w-0 max-w-[14rem] hover:underline cursor-pointer"
 					style={{ color: theme.colors.textMain }}
-					title={`Jump to this tab · ${fullTooltip}`}
+					title={t('workflows.shellStatus.jumpToThisTabValue', { p0: fullTooltip })}
 				>
 					{maestroSessionName}
 				</button>
@@ -818,13 +846,13 @@ function ThinkingStatusPillInner({
 					<div className="w-px h-4" style={{ backgroundColor: theme.colors.border }} />
 					{primaryTokens > 0 ? (
 						<div className="flex items-center gap-1">
-							<span>Tokens:</span>
+							<span>{t('workflows.shellStatus.tokens')}</span>
 							<span className="font-medium" style={{ color: theme.colors.textMain }}>
 								{formatTokensCompact(primaryTokens)}
 							</span>
 						</div>
 					) : (
-						<span>Thinking...</span>
+						<span>{t('workflows.shellStatus.thinking')}</span>
 					)}
 				</div>
 
@@ -837,7 +865,7 @@ function ThinkingStatusPillInner({
 					>
 						<div className="w-px h-4" style={{ backgroundColor: theme.colors.border }} />
 						<div className="flex items-center gap-1">
-							<span className="pill-label">Elapsed:</span>
+							<span className="pill-label">{t('workflows.shellStatus.elapsed')}</span>
 							<ElapsedTimeDisplay
 								startTime={primaryTab?.thinkingStartTime || primarySession.thinkingStartTime!}
 								textColor={theme.colors.textMain}
@@ -853,14 +881,17 @@ function ThinkingStatusPillInner({
 						<div className="w-px h-4 shrink-0" style={{ backgroundColor: theme.colors.border }} />
 						<button
 							onClick={() => onSessionClick?.(primarySession.id, primaryTab?.id)}
-							className={`text-xs hover:underline cursor-pointer truncate min-w-0${
+							className={`text-xs hover:underline cursor-pointer truncate min-w-0 max-w-[16rem]${
 								displayIsSessionId ? ' font-mono' : ''
 							}`}
 							style={{ color: theme.colors.accent }}
 							title={
 								agentSessionId
-									? `Jump to this tab · Claude Session: ${agentSessionId}`
-									: 'Jump to this tab'
+									? t('workflows.shellStatus.jumpToThisTabProviderSession', {
+											provider: providerName,
+											id: agentSessionId,
+										})
+									: t('workflows.shellStatus.jumpToThisTab')
 							}
 						>
 							{displayClaudeId}
@@ -878,7 +909,7 @@ function ThinkingStatusPillInner({
 							backgroundColor: theme.colors.warning + '40',
 							border: `1px solid ${theme.colors.warning}60`,
 						}}
-						title={`+${extraCount} more running`}
+						title={t('workflows.shellStatus.valueMoreRunning', { p0: extraCount })}
 					>
 						<span className="text-2xs font-bold" style={{ color: theme.colors.warning }}>
 							+{extraCount}
@@ -916,8 +947,8 @@ function ThinkingStatusPillInner({
 								}}
 							>
 								{demotedAutoRun || backgroundAutoRuns.length > 0
-									? 'Running Processes'
-									: 'All Thinking Sessions'}
+									? t('workflows.shellStatus.runningProcesses')
+									: t('workflows.shellStatus.allThinkingSessions')}
 							</div>
 							{demotedAutoRun && (
 								<AutoRunRow

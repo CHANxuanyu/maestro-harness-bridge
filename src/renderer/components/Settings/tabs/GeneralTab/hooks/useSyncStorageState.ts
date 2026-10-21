@@ -3,6 +3,7 @@ import { captureException } from '../../../../../utils/sentry';
 import { logger } from '../../../../../utils/logger';
 import type { SyncStorageState } from '../types';
 import { syncResultErrorMessage } from '../utils';
+import { useT, type MessageKey } from '../../../../../i18n';
 
 interface UseSyncStorageStateArgs {
 	isOpen: boolean;
@@ -14,7 +15,10 @@ export function useSyncStorageState({ isOpen }: UseSyncStorageStateArgs): SyncSt
 	const [customSyncPath, setCustomSyncPath] = useState<string | undefined>(undefined);
 	const [syncRestartRequired, setSyncRestartRequired] = useState(false);
 	const [syncMigrating, setSyncMigrating] = useState(false);
-	const [syncError, setSyncError] = useState<string | null>(null);
+	const t = useT();
+	const [syncError, setSyncError] = useState<
+		{ key: MessageKey; result?: { errors?: string[]; error?: string } } | { text: string } | null
+	>(null);
 	const [syncMigratedCount, setSyncMigratedCount] = useState<number | null>(null);
 
 	useEffect(() => {
@@ -35,7 +39,7 @@ export function useSyncStorageState({ isOpen }: UseSyncStorageStateArgs): SyncSt
 			})
 			.catch((err) => {
 				logger.error('Failed to load sync settings:', undefined, err);
-				setSyncError('Failed to load storage settings');
+				setSyncError({ key: 'settings.general.storage.loadFailed' });
 				captureException(err instanceof Error ? err : new Error(String(err)), {
 					extra: { context: 'GeneralTab: failed to load sync/storage settings' },
 				});
@@ -60,15 +64,15 @@ export function useSyncStorageState({ isOpen }: UseSyncStorageStateArgs): SyncSt
 						setSyncMigratedCount(result.migrated);
 					}
 				} else {
-					setSyncError(syncResultErrorMessage(result, 'Failed to change storage location'));
+					setSyncError({ key: 'settings.general.storage.changeFailed', result });
 				}
 			} catch (error) {
-				setSyncError(error instanceof Error ? error.message : String(error));
+				setSyncError({ text: error instanceof Error ? error.message : String(error) });
 			} finally {
 				setSyncMigrating(false);
 			}
 		} catch (error) {
-			setSyncError(error instanceof Error ? error.message : String(error));
+			setSyncError({ text: error instanceof Error ? error.message : String(error) });
 		}
 	}, []);
 
@@ -86,10 +90,10 @@ export function useSyncStorageState({ isOpen }: UseSyncStorageStateArgs): SyncSt
 					setSyncMigratedCount(result.migrated);
 				}
 			} else {
-				setSyncError(syncResultErrorMessage(result, 'Failed to reset storage location'));
+				setSyncError({ key: 'settings.general.storage.resetFailed', result });
 			}
 		} catch (error) {
-			setSyncError(error instanceof Error ? error.message : String(error));
+			setSyncError({ text: error instanceof Error ? error.message : String(error) });
 		} finally {
 			setSyncMigrating(false);
 		}
@@ -107,7 +111,11 @@ export function useSyncStorageState({ isOpen }: UseSyncStorageStateArgs): SyncSt
 		customSyncPath,
 		syncRestartRequired,
 		syncMigrating,
-		syncError,
+		syncError:
+			syncError &&
+			('key' in syncError
+				? syncResultErrorMessage(syncError.result ?? {}, t(syncError.key))
+				: syncError.text),
 		syncMigratedCount,
 		chooseSyncFolder,
 		resetToDefault,

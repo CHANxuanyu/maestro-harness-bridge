@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { memo, useMemo, useRef, useState, useCallback } from 'react';
 import { ChevronUp, User } from 'lucide-react';
 import type { Theme } from '../../types';
@@ -27,8 +28,12 @@ export interface UserSourceFilterProps {
 	theme: Theme;
 }
 
-function labelForUser(user: string, labels: Map<string, string> | undefined): string {
-	if (user === DESKTOP_USER_KEY) return 'Desktop';
+function labelForUser(
+	user: string,
+	labels: Map<string, string> | undefined,
+	uiText: ReturnType<typeof useT>
+): string {
+	if (user === DESKTOP_USER_KEY) return uiText('workflows.sessions.history.desktop');
 	return labels?.get(user) ?? user;
 }
 
@@ -45,6 +50,7 @@ export const UserSourceFilter = memo(function UserSourceFilter({
 	onSelect,
 	theme,
 }: UserSourceFilterProps) {
+	const uiText = useT();
 	const [open, setOpen] = useState(false);
 	const containerRef = useRef<HTMLDivElement>(null);
 
@@ -61,10 +67,10 @@ export const UserSourceFilter = memo(function UserSourceFilter({
 	// Trigger label: sender name with parenthesized count when a specific
 	// sender is selected; just "All Senders" (no count) when not.
 	const triggerLabel = useMemo(() => {
-		if (!selectedUser) return 'All Senders';
+		if (!selectedUser) return uiText('workflows.sessions.history.allSenders');
 		const count = userCounts.get(selectedUser) ?? 0;
-		return `${labelForUser(selectedUser, userLabels)} (${count})`;
-	}, [selectedUser, userCounts, userLabels]);
+		return `${labelForUser(selectedUser, userLabels, uiText)} (${count})`;
+	}, [selectedUser, userCounts, userLabels, uiText]);
 
 	return (
 		<div ref={containerRef} className="relative">
@@ -89,7 +95,7 @@ export const UserSourceFilter = memo(function UserSourceFilter({
 						onClick={() => handleSelect(null)}
 					>
 						<User className="w-3 h-3 flex-shrink-0" />
-						<span className="font-mono">All Senders</span>
+						<span className="font-mono">{uiText('workflows.sessions.history.allSenders')}</span>
 					</button>
 					<div className="h-px" style={{ backgroundColor: theme.colors.border }} />
 					{[...userCounts.entries()].map(([user, count]) => {
@@ -106,7 +112,7 @@ export const UserSourceFilter = memo(function UserSourceFilter({
 							>
 								<User className="w-3 h-3 flex-shrink-0" />
 								<span className="font-mono truncate min-w-0">
-									{labelForUser(user, userLabels)} ({count})
+									{labelForUser(user, userLabels, uiText)} ({count})
 								</span>
 							</button>
 						);
@@ -122,7 +128,7 @@ export const UserSourceFilter = memo(function UserSourceFilter({
 					borderColor: open ? theme.colors.accent : theme.colors.border,
 					color: selectedUser ? theme.colors.accent : theme.colors.textMain,
 				}}
-				title="Filter by who sent the turn"
+				title={uiText('workflows.sessions.history.filterSender')}
 			>
 				<span className="flex items-center gap-2 min-w-0">
 					<User className="w-3 h-3 flex-shrink-0" />

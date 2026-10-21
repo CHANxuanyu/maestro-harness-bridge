@@ -1,3 +1,4 @@
+import { getT } from '../i18n';
 /**
  * Shared rules for "show only the providers this machine can actually run".
  *
@@ -48,5 +49,8 @@ export function filterToAvailableProviders<T>(
  * probed, not this one.
  */
 export function providerLocationLabel(remoteHost?: string | null): string {
-	return remoteHost ? `on ${remoteHost}` : 'locally';
+	const t = getT();
+	return remoteHost
+		? t('workflows.sessions.onHost', { host: remoteHost })
+		: t('workflows.sessions.locally');
 }

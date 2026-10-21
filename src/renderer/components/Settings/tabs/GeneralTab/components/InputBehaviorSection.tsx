@@ -10,6 +10,7 @@ import { ToggleButtonGroup } from '../../../../ToggleButtonGroup';
 import { ToggleSwitch } from '../../../../ui/ToggleSwitch';
 import type { ForcedParallelWarningState, GeneralTabSettings } from '../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useI18n } from '../../../../../i18n';
 
 interface InputBehaviorSectionProps {
 	theme: Theme;
@@ -36,6 +37,8 @@ export function InputBehaviorSection({
 	shortcuts,
 	forcedParallelWarning,
 }: InputBehaviorSectionProps) {
+	const { t, tRich } = useI18n();
+	const meta = formatMetaKey();
 	const forcedParallelShortcut = shortcuts?.forcedParallelSend
 		? formatShortcutKeys(shortcuts.forcedParallelSend.keys)
 		: formatShortcutKeys(['Meta', 'Shift', 'Enter']);
@@ -46,18 +49,17 @@ export function InputBehaviorSection({
 
 	return (
 		<div data-setting-id="general-input-behavior">
-			<SettingsSectionHeading icon={Keyboard}>Input Send Behavior</SettingsSectionHeading>
-			<p className="text-xs opacity-70 mb-3">
-				Configure how to send messages. Choose between Enter or {formatMetaKey()}
-				+Enter.
-			</p>
+			<SettingsSectionHeading icon={Keyboard}>
+				{t('settings.general.input.heading')}
+			</SettingsSectionHeading>
+			<p className="text-xs opacity-70 mb-3">{t('settings.general.input.description', { meta })}</p>
 
 			<div
 				className="mb-4 p-3 rounded border"
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<div className="flex items-center justify-between mb-2">
-					<div className="text-sm font-medium">AI Interaction Mode</div>
+					<div className="text-sm font-medium">{t('settings.general.input.aiMode')}</div>
 					<button
 						onClick={() => setEnterToSendAI(!enterToSendAI)}
 						className="px-3 py-1.5 rounded text-xs font-mono transition-all"
@@ -72,13 +74,10 @@ export function InputBehaviorSection({
 				</div>
 				<p className="text-xs opacity-70">
 					{enterToSendAI
-						? 'Press Enter to send. Use Shift+Enter for new line.'
-						: `Press ${formatMetaKey()}+Enter to send. Enter creates new line.`}
+						? t('settings.general.input.enterSends')
+						: t('settings.general.input.metaEnterSends', { meta })}
 				</p>
-				<p className="text-xs-plus opacity-55 mt-1">
-					Default for new tabs. Toggling the chip in an AI tab (or running &quot;Toggle Enter to
-					Send&quot; from the command palette) overrides this for that tab only.
-				</p>
+				<p className="text-xs-plus opacity-55 mt-1">{t('settings.general.input.tabOverride')}</p>
 			</div>
 
 			<div
@@ -86,7 +85,7 @@ export function InputBehaviorSection({
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<div className="flex items-center justify-between mb-2">
-					<div className="text-sm font-medium">Expanded AI Interaction Mode</div>
+					<div className="text-sm font-medium">{t('settings.general.input.expandedMode')}</div>
 					<button
 						onClick={() => setEnterToSendAIExpanded(!enterToSendAIExpanded)}
 						className="px-3 py-1.5 rounded text-xs font-mono transition-all"
@@ -103,8 +102,8 @@ export function InputBehaviorSection({
 				</div>
 				<p className="text-xs opacity-70">
 					{enterToSendAIExpanded
-						? 'In the expanded Prompt Composer, press Enter to send. Use Shift+Enter for new line.'
-						: `In the expanded Prompt Composer, press ${formatMetaKey()}+Enter to send. Enter creates new line.`}
+						? t('settings.general.input.expandedEnterSends')
+						: t('settings.general.input.expandedMetaEnterSends', { meta })}
 				</p>
 			</div>
 
@@ -119,7 +118,7 @@ export function InputBehaviorSection({
 			>
 				<div className="flex items-center justify-between mb-2">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						Forced Parallel Execution
+						{t('settings.general.input.forcedParallel')}
 					</div>
 					<div className="flex items-center gap-2">
 						<span
@@ -130,7 +129,7 @@ export function InputBehaviorSection({
 								opacity: !forcedParallelExecution || alwaysMode ? 0.35 : 1,
 								textDecoration: alwaysMode ? 'line-through' : 'none',
 							}}
-							title={alwaysMode ? 'Not needed in Always mode - every send is forced' : undefined}
+							title={alwaysMode ? t('settings.general.input.alwaysNotNeeded') : undefined}
 						>
 							{forcedParallelShortcut}
 						</span>
@@ -138,7 +137,7 @@ export function InputBehaviorSection({
 							checked={forcedParallelExecution}
 							onChange={forcedParallelWarning.handleToggle}
 							theme={theme}
-							ariaLabel="Forced Parallel Execution"
+							ariaLabel={t('settings.general.input.forcedParallel')}
 						/>
 					</div>
 				</div>
@@ -151,31 +150,25 @@ export function InputBehaviorSection({
 				>
 					<AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
 					<span>
-						{alwaysMode ? (
-							<>
-								<strong>Every message force-sends</strong>, even while the agent is busy - no
-								modifier needed. Parallel writes to the same files may cause one to overwrite the
-								other.
-							</>
-						) : (
-							<>
-								When enabled, use <strong>{forcedParallelShortcut}</strong> to send messages even
-								while the agent is busy. Parallel writes to the same files may cause one to
-								overwrite the other.
-							</>
-						)}
+						{alwaysMode
+							? tRich('settings.general.input.alwaysWarning', {
+									lead: <strong>{t('settings.general.input.alwaysWarningLead')}</strong>,
+								})
+							: tRich('settings.general.input.modifierWarning', {
+									shortcut: <strong>{forcedParallelShortcut}</strong>,
+								})}
 					</span>
 				</div>
 
 				{forcedParallelExecution && (
 					<div className="mt-3">
 						<div className="font-medium mb-2" style={{ color: theme.colors.textMain }}>
-							Send trigger
+							{t('settings.general.input.sendTrigger')}
 						</div>
 						<ToggleButtonGroup
 							options={[
-								{ value: 'modifier' as const, label: 'Modifier' },
-								{ value: 'always' as const, label: 'Always' },
+								{ value: 'modifier' as const, label: t('settings.general.input.modifier') },
+								{ value: 'always' as const, label: t('settings.general.input.always') },
 							]}
 							value={forcedParallelAlways ? 'always' : 'modifier'}
 							onChange={(value) => setForcedParallelAlways(value === 'always')}
@@ -183,8 +176,8 @@ export function InputBehaviorSection({
 						/>
 						<p className="text-xs opacity-70 mt-2">
 							{forcedParallelAlways
-								? 'Every send force-sends past a busy agent. No modifier required.'
-								: `Use ${forcedParallelShortcut} to force-send past a busy agent. A normal send queues as usual.`}
+								? t('settings.general.input.alwaysHelp')
+								: t('settings.general.input.modifierHelp', { shortcut: forcedParallelShortcut })}
 						</p>
 					</div>
 				)}

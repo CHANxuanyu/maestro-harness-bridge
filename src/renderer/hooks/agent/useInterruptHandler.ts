@@ -29,7 +29,26 @@ import {
 } from '../../utils/tabHelpers';
 import { nextRunnableQueueItem, takeNextRunnableQueueItem } from '../../utils/executionQueue';
 import { logger } from '../../utils/logger';
+import { isTransientActivityEntry, settleRunningToolEntries } from '../../utils/logEntries';
+import { currentActivityRetention } from '../../utils/activityRetention';
+import { getT } from '../../i18n';
 import { dropMentionHandoffs } from '../../services/crossAgentHandoff';
+
+/**
+ * What a stopped turn keeps: reasoning is scratch and goes; tool calls go too,
+ * except in the conversation-centred layout, where they are the record of what
+ * ran (see `currentActivityRetention`).
+ */
+const keptAfterStop = (log: LogEntry): boolean =>
+	!isTransientActivityEntry(log, currentActivityRetention());
+
+/**
+ * A kept call that was still running when the user pressed Stop did not
+ * finish: it becomes `canceled`, so it stops pulsing and never reads as done.
+ */
+function settleStoppedTools(logs: LogEntry[]): LogEntry[] {
+	return currentActivityRetention().keepTools ? settleRunningToolEntries(logs, 'stopped') : logs;
+}
 
 // ============================================================================
 // Dependencies interface
@@ -211,7 +230,9 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 							id: generateId(),
 							timestamp: Date.now(),
 							source: 'system',
-							text: 'Canceled by user',
+							// In the user's language at the moment they stopped; the entry
+							// keeps that text, so earlier stops stay as they were written.
+							text: getT()('workflows.status.canceledByUser'),
 						}
 					: null;
 
@@ -248,9 +269,7 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 						// Set any other busy tabs to idle (they were interrupted) and add canceled log
 						// Also clear any thinking/tool logs since the process was interrupted
 						if (tab.state === 'busy') {
-							const logsWithoutThinkingOrTools = tab.logs.filter(
-								(log) => log.source !== 'thinking' && log.source !== 'tool'
-							);
+							const logsWithoutThinkingOrTools = settleStoppedTools(tab.logs).filter(keptAfterStop);
 							const updatedLogs = canceledLog
 								? [...logsWithoutThinkingOrTools, canceledLog]
 								: logsWithoutThinkingOrTools;
@@ -291,9 +310,7 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 				const activeTabForCancel = getActiveTab(s);
 				const updatedAiTabsForIdle = s.aiTabs.map((tab) => {
 					if (tab.id === activeTabForCancel?.id || tab.state === 'busy') {
-						const logsWithoutThinkingOrTools = tab.logs.filter(
-							(log) => log.source !== 'thinking' && log.source !== 'tool'
-						);
+						const logsWithoutThinkingOrTools = settleStoppedTools(tab.logs).filter(keptAfterStop);
 						return {
 							...tab,
 							state: 'idle' as const,
@@ -391,8 +408,8 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 							if (tab) {
 								updatedSession.aiTabs = s.aiTabs.map((t) => {
 									if (t.id === tab.id) {
-										const logsWithoutThinkingOrTools = t.logs.filter(
-											(log) => log.source !== 'thinking' && log.source !== 'tool'
+										const logsWithoutThinkingOrTools = settleStoppedTools(t.logs).filter(
+											keptAfterStop
 										);
 										return {
 											...t,
@@ -438,8 +455,8 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 									return markTabRunningQueuedItem(tab, nextItem, updatedSession);
 								}
 								if (tab.state === 'busy') {
-									const logsWithoutThinkingOrTools = tab.logs.filter(
-										(log) => log.source !== 'thinking' && log.source !== 'tool'
+									const logsWithoutThinkingOrTools = settleStoppedTools(tab.logs).filter(
+										keptAfterStop
 									);
 									return {
 										...tab,
@@ -484,8 +501,8 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 								thinkingStartTime: undefined,
 								aiTabs: updatedSession.aiTabs.map((t) => {
 									if (t.state === 'busy') {
-										const logsWithoutThinkingOrTools = t.logs.filter(
-											(log) => log.source !== 'thinking' && log.source !== 'tool'
+										const logsWithoutThinkingOrTools = settleStoppedTools(t.logs).filter(
+											keptAfterStop
 										);
 										return {
 											...t,
@@ -541,8 +558,8 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 								thinkingStartTime: undefined,
 								aiTabs: s.aiTabs.map((t) => {
 									if (t.id === activeTabForError?.id || t.state === 'busy') {
-										const logsWithoutThinkingOrTools = t.logs.filter(
-											(log) => log.source !== 'thinking' && log.source !== 'tool'
+										const logsWithoutThinkingOrTools = settleStoppedTools(t.logs).filter(
+											keptAfterStop
 										);
 										return {
 											...t,

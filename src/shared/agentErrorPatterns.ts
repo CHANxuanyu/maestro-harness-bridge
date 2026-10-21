@@ -488,6 +488,17 @@ const OPENCODE_ERROR_PATTERNS: AgentErrorPatterns = {
 // ============================================================================
 
 const CODEX_ERROR_PATTERNS: AgentErrorPatterns = {
+	session_busy: [
+		{
+			// Native Codex rejects a second writer while the desktop or another
+			// CLI owns this thread. Keep the session id: this is not missing history.
+			pattern:
+				/(?:thread-store conflict: |Error: thread\/resume: thread\/resume failed: )thread [a-f0-9-]{36} already has an active writer\b/i,
+			message:
+				'This Codex session is in use by another Codex app or CLI. Release it there before resuming, or use a native Codex fork to continue in an independent session. Your existing history is preserved.',
+			recoverable: true,
+		},
+	],
 	auth_expired: [
 		{
 			pattern: /invalid.*api.*key/i,
@@ -1672,6 +1683,7 @@ const ERROR_TYPES_BY_HIT_FREQUENCY: AgentErrorType[] = [
 	'network_error',
 	'token_exhaustion',
 	'auth_expired',
+	'session_busy',
 	'agent_crashed',
 	'session_not_found',
 	'permission_denied',

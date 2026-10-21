@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React, { RefObject } from 'react';
 import { BarChart3, Search, X } from 'lucide-react';
 import { Spinner } from '../../ui/Spinner';
@@ -56,18 +57,19 @@ export const SessionSearchBar = React.memo(function SessionSearchBar({
 	onGraphBarClick,
 	onLookbackChange,
 }: SessionSearchBarProps) {
+	const uiText = useT();
 	// Phone: the Named / Show All toggles and the mode dropdown drop to a second
 	// row so the search box keeps its width. On one row they left it about
 	// 60px, and its placeholder was drawn straight through the checkboxes.
 	const phone = usePhoneLayout();
 	const placeholder =
 		searchMode === 'title'
-			? 'Search titles...'
+			? uiText('workflows.sessions.searchTitles')
 			: searchMode === 'user'
-				? 'Search your messages...'
+				? uiText('workflows.sessions.searchUserMessages')
 				: searchMode === 'assistant'
-					? 'Search AI responses...'
-					: 'Search all content...';
+					? uiText('workflows.sessions.searchResponses')
+					: uiText('workflows.sessions.searchContent');
 
 	return (
 		<div className="px-4 py-3 border-b" style={{ borderColor: theme.colors.border }}>
@@ -81,8 +83,10 @@ export const SessionSearchBar = React.memo(function SessionSearchBar({
 					style={{ color: theme.colors.textDim }}
 					title={
 						showSearchPanel
-							? 'Show activity graph'
-							: `Search sessions (${formatShortcutKeys(['Meta', 'f'])})`
+							? uiText('workflows.sessions.showActivity')
+							: uiText('workflows.sessions.searchSessionsShortcut', {
+									shortcut: formatShortcutKeys(['Meta', 'f']),
+								})
 					}
 				>
 					{showSearchPanel ? <BarChart3 className="w-4 h-4" /> : <Search className="w-4 h-4" />}
@@ -129,7 +133,7 @@ export const SessionSearchBar = React.memo(function SessionSearchBar({
 					<label
 						className="flex items-center gap-1.5 text-xs cursor-pointer select-none shrink-0"
 						style={{ color: namedOnly ? theme.colors.accent : theme.colors.textDim }}
-						title="Only show sessions with custom names"
+						title={uiText('workflows.sessions.namedSessionsOnly')}
 					>
 						<input
 							type="checkbox"
@@ -138,12 +142,12 @@ export const SessionSearchBar = React.memo(function SessionSearchBar({
 							className="w-3.5 h-3.5 rounded cursor-pointer accent-current"
 							style={{ accentColor: theme.colors.accent }}
 						/>
-						<span>Named</span>
+						<span>{uiText('workflows.sessions.named')}</span>
 					</label>
 					<label
 						className="flex items-center gap-1.5 text-xs cursor-pointer select-none shrink-0"
 						style={{ color: showAllSessions ? theme.colors.accent : theme.colors.textDim }}
-						title="Show sessions from all projects"
+						title={uiText('workflows.sessions.allProjects')}
 					>
 						<input
 							type="checkbox"
@@ -152,7 +156,7 @@ export const SessionSearchBar = React.memo(function SessionSearchBar({
 							className="w-3.5 h-3.5 rounded cursor-pointer accent-current"
 							style={{ accentColor: theme.colors.accent }}
 						/>
-						<span>Show All</span>
+						<span>{uiText('workflows.sessions.showAll')}</span>
 					</label>
 
 					<SearchModeDropdown

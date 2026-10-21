@@ -252,7 +252,7 @@ describe('main/auto-updater', () => {
 			// bypassing releases.atom entirely.
 			expect(mockAutoUpdater.setFeedURL).toHaveBeenCalledWith({
 				provider: 'generic',
-				url: 'https://github.com/RunMaestro/Maestro/releases/download/v1.2.3/',
+				url: 'https://github.com/CHANxuanyu/maestro-harness-bridge/releases/download/v1.2.3/',
 			});
 		});
 

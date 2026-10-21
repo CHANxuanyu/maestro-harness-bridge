@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { memo, useState } from 'react';
 import type { Session, Theme } from '../../types';
 import { getStatusColor } from '../../utils/theme';
@@ -84,6 +85,7 @@ export const CollapsedSessionPill = memo(function CollapsedSessionPill({
 	getWorktreeChildren,
 	setActiveSessionId,
 }: CollapsedSessionPillProps) {
+	const t = useT();
 	const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
 	const consultedSessionIds = useConsultedSessionIds();
 
@@ -113,7 +115,7 @@ export const CollapsedSessionPill = memo(function CollapsedSessionPill({
 						key={`${keyPrefix}-part-${s.id}`}
 						role="button"
 						tabIndex={0}
-						aria-label={`Switch to ${s.name}`}
+						aria-label={t('workflows.shell.switchToValue', { p0: s.name })}
 						className={`group/segment relative flex-1 h-full ${isBusyOffState ? 'animate-pulse' : ''}`}
 						style={{
 							...(hasNoClaudeProviderSession(s) && !isBusyOffState

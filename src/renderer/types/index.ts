@@ -250,7 +250,10 @@ export interface LogEntry {
 	// For tool execution entries - stores tool state and details
 	metadata?: {
 		toolState?: {
-			status?: 'running' | 'completed' | 'error' | 'failed';
+			// 'canceled': the call was still running when the user stopped the
+			// turn. Kept in the conversation layout so the record stays readable,
+			// never drawn as running or as a success.
+			status?: 'running' | 'completed' | 'error' | 'failed' | 'canceled';
 			input?: unknown;
 			output?: unknown;
 		};
@@ -297,6 +300,25 @@ export interface LogEntry {
 			error?: string;
 		};
 	};
+	// Set on every entry built from a provider transcript on disk
+	// (`transcriptMessagesToLogEntries`). Marks the entry as a complete native
+	// message rather than a streamed chunk, so live output never coalesces into
+	// it and the exit/stream clear points keep it (it is history, not scratch
+	// state). `messageId` is the provider message it came from: one native
+	// message can yield several entries (Claude text plus its tool_use blocks).
+	// `channel` is the provider's own purpose label when it reports one
+	// ('commentary' progress notes, 'final' answers, 'analysis' reasoning).
+	nativeTranscript?: {
+		messageId: string;
+		channel?: string;
+	};
+	// A LIVE public progress message the agent wrote while working (Codex
+	// `commentary`), delivered as one complete message by the thinking channel
+	// with `purpose: 'commentary'`. It is not reasoning (shown with Thinking off)
+	// and not the answer: it renders as a quiet Progress row, never coalesces
+	// with other output, and is not taken as the turn's reply. The stored form of
+	// the same thing is `nativeTranscript.channel === 'commentary'`.
+	purpose?: 'commentary';
 	// How this turn was captured. 'structured' (default) is the normal JSON-stream
 	// pipeline from `claude --print`; 'text-stream' marks entries captured during
 	// maestro-p interactive-mode turns. The renderer uses the same tool-card /

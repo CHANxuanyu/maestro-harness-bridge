@@ -30,12 +30,13 @@ import { useAnchoredMenuPosition, useClickOutside, useContextMenuPosition } from
 import { compareNamesIgnoringEmojis } from '../../../shared/emojiUtils';
 import { useGitAgentActions } from '../../hooks/git/useGitAgentActions';
 import { GitChangeCounts } from '../ui/GitChangeCounts';
-import { GitRunningBadge, PR_RUNNING_TITLE } from '../ui/GitRunningBadge';
+import { GitRunningBadge } from '../ui/GitRunningBadge';
 import { formatGitChangeSummary } from '../../../shared/gitUtils';
 import { safeClipboardWrite } from '../../utils/clipboard';
 import { flashCopiedToClipboard } from '../../utils/flashCopiedToClipboard';
 import type { WindowMoveTarget } from '../../utils/windowTargets';
 import { PluginUiItemsSlot } from '../plugins/PluginUiItemsSlot';
+import { useT } from '../../i18n';
 
 interface SessionContextMenuProps {
 	x: number;
@@ -221,6 +222,7 @@ export function SessionContextMenu({
 	onMoveToWindow,
 	onRenameWindow,
 }: SessionContextMenuProps) {
+	const t = useT();
 	const menuRef = useRef<HTMLDivElement>(null);
 
 	// Inline window-rename state. While a row is being renamed, the Move to Window
@@ -346,7 +348,7 @@ export function SessionContextMenu({
 					style={{ color: theme.colors.textMain }}
 				>
 					<Edit3 className="w-3.5 h-3.5" />
-					Rename
+					{t('common.rename')}
 				</button>
 			)}
 
@@ -360,7 +362,7 @@ export function SessionContextMenu({
 				style={{ color: theme.colors.textMain }}
 			>
 				<Settings className="w-3.5 h-3.5" />
-				Edit Agent...
+				{t('workflows.agentMenu.editAgent')}
 			</button>
 
 			{!session.isPianola && (
@@ -374,7 +376,7 @@ export function SessionContextMenu({
 					style={{ color: theme.colors.textMain }}
 				>
 					<Copy className="w-3.5 h-3.5" />
-					Duplicate...
+					{t('workflows.agentMenu.duplicate')}
 				</button>
 			)}
 
@@ -389,7 +391,9 @@ export function SessionContextMenu({
 					style={{ color: theme.colors.textMain }}
 				>
 					<Bookmark className="w-3.5 h-3.5" fill={session.bookmarked ? 'currentColor' : 'none'} />
-					{session.bookmarked ? 'Remove Bookmark' : 'Add Bookmark'}
+					{session.bookmarked
+						? t('workflows.agentMenu.removeBookmark')
+						: t('workflows.agentMenu.addBookmark')}
 				</button>
 			)}
 
@@ -418,7 +422,7 @@ export function SessionContextMenu({
 					>
 						<span className="flex items-center gap-2">
 							<FolderInput className="w-3.5 h-3.5" />
-							Move to Group
+							{t('workflows.agentMenu.moveToGroup')}
 						</span>
 						<ChevronRight className="w-3 h-3" />
 					</button>
@@ -442,8 +446,10 @@ export function SessionContextMenu({
 								disabled={!session.groupId}
 							>
 								<Folder className="w-3.5 h-3.5" />
-								Ungrouped
-								{!session.groupId && <span className="text-2xs opacity-50">(current)</span>}
+								{t('workflows.agentMenu.ungrouped')}
+								{!session.groupId && (
+									<span className="text-2xs opacity-50">{t('workflows.agentMenu.current')}</span>
+								)}
 							</button>
 
 							{groups.length > 0 && (
@@ -465,7 +471,7 @@ export function SessionContextMenu({
 									<span>{group.emoji}</span>
 									<span className="truncate">{group.name}</span>
 									{session.groupId === group.id && (
-										<span className="text-2xs opacity-50">(current)</span>
+										<span className="text-2xs opacity-50">{t('workflows.agentMenu.current')}</span>
 									)}
 								</button>
 							))}
@@ -485,7 +491,7 @@ export function SessionContextMenu({
 									style={{ color: theme.colors.accent }}
 								>
 									<FolderPlus className="w-3.5 h-3.5" />
-									Create New Group
+									{t('workflows.group.createTitle')}
 								</button>
 							)}
 						</ContextMenuFlyout>
@@ -526,7 +532,7 @@ export function SessionContextMenu({
 					>
 						<span className="flex items-center gap-2">
 							<AppWindow className="w-3.5 h-3.5" />
-							Move to Window
+							{t('workflows.agentMenu.moveToWindow')}
 						</span>
 						<ChevronRight className="w-3 h-3" />
 					</button>
@@ -553,7 +559,7 @@ export function SessionContextMenu({
 								style={{ color: theme.colors.accent }}
 							>
 								<Plus className="w-3.5 h-3.5" />
-								New Window
+								{t('workflows.agentMenu.newWindow')}
 							</button>
 
 							<div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
@@ -599,7 +605,7 @@ export function SessionContextMenu({
 												commitRenameWindow();
 											}}
 											className="shrink-0 p-0.5 rounded hover:bg-white/10"
-											title="Save window name"
+											title={t('workflows.agentMenu.saveWindowName')}
 											style={{ color: theme.colors.accent }}
 										>
 											<Check className="w-3.5 h-3.5" />
@@ -624,7 +630,9 @@ export function SessionContextMenu({
 											<AppWindow className="w-3.5 h-3.5 shrink-0" />
 											<span className="truncate">{target.label}</span>
 											{target.isCurrentOwner && (
-												<span className="text-2xs opacity-50 shrink-0">(current)</span>
+												<span className="text-2xs opacity-50 shrink-0">
+													{t('workflows.agentMenu.current')}
+												</span>
 											)}
 										</button>
 										{/* Rename affordance - secondary windows only; the primary keeps
@@ -637,7 +645,7 @@ export function SessionContextMenu({
 													beginRenameWindow(target.windowId, target.customName);
 												}}
 												className="shrink-0 p-1 mr-1.5 rounded hover:bg-white/10 opacity-60 hover:opacity-100"
-												title="Rename window"
+												title={t('workflows.agentMenu.renameWindow')}
 												style={{ color: theme.colors.textDim }}
 											>
 												<Pencil className="w-3 h-3" />
@@ -667,7 +675,7 @@ export function SessionContextMenu({
 						data-testid="session-context-git-log"
 					>
 						<History className="w-3.5 h-3.5" />
-						View Git Log
+						{t('workflows.git.viewLog')}
 					</button>
 					<button
 						type="button"
@@ -684,7 +692,7 @@ export function SessionContextMenu({
 					>
 						<span className="flex items-center gap-2">
 							<FileDiff className="w-3.5 h-3.5" />
-							View Git Diff
+							{t('workflows.git.viewDiff')}
 						</span>
 						{/* Same badge language as the ahead/behind counts below: the row
 						    itself says whether there is anything to open. */}
@@ -706,7 +714,7 @@ export function SessionContextMenu({
 					>
 						<span className="flex items-center gap-2">
 							<ArrowDownToLine className="w-3.5 h-3.5" />
-							Git Pull
+							{t('workflows.git.pull')}
 						</span>
 						{/* A backgrounded pull outranks the behind count, which is stale
 						    until it finishes anyway. */}
@@ -737,7 +745,7 @@ export function SessionContextMenu({
 					>
 						<span className="flex items-center gap-2">
 							<ArrowUpFromLine className="w-3.5 h-3.5" />
-							Git Push
+							{t('workflows.git.push')}
 						</span>
 						{gitActions.pushRunning ? (
 							<GitRunningBadge
@@ -765,7 +773,7 @@ export function SessionContextMenu({
 						data-testid="session-context-change-branch"
 					>
 						<GitBranch className="w-3.5 h-3.5" />
-						Change Branch
+						{t('workflows.git.changeBranch')}
 					</button>
 					{createPR && (
 						<button
@@ -780,15 +788,15 @@ export function SessionContextMenu({
 						>
 							<span className="flex items-center gap-2">
 								<GitPullRequest className="w-3.5 h-3.5" />
-								Create Pull Request
+								{t('workflows.git.createPR')}
 							</span>
 							{gitActions.prRunning && (
 								<GitRunningBadge
 									theme={theme}
-									label="Creating"
+									label={t('workflows.git.creating')}
 									className="flex items-center gap-1 text-2xs"
 									testId="session-context-create-pr-running"
-									title={PR_RUNNING_TITLE}
+									title={t('workflows.git.prRunningTitle')}
 								/>
 							)}
 						</button>
@@ -810,7 +818,7 @@ export function SessionContextMenu({
 							style={{ color: theme.colors.accent }}
 						>
 							<GitBranch className="w-3.5 h-3.5" />
-							Create Worktree
+							{t('workflows.git.createWorktree')}
 						</button>
 					)}
 					{onConfigureWorktrees && (
@@ -824,7 +832,7 @@ export function SessionContextMenu({
 							style={{ color: theme.colors.accent }}
 						>
 							<Settings className="w-3.5 h-3.5" />
-							Configure Worktrees
+							{t('workflows.git.configureWorktrees')}
 						</button>
 					)}
 				</>
@@ -845,7 +853,7 @@ export function SessionContextMenu({
 						style={{ color: '#06b6d4' }}
 					>
 						<Zap className="w-3.5 h-3.5" />
-						Configure Maestro Cue
+						{t('workflows.agentMenu.configureCue')}
 					</button>
 				</>
 			)}
@@ -864,7 +872,7 @@ export function SessionContextMenu({
 							style={{ color: theme.colors.error }}
 						>
 							<Trash2 className="w-3.5 h-3.5" />
-							Remove Worktree
+							{t('workflows.git.removeWorktree')}
 						</button>
 					)}
 				</>
@@ -878,7 +886,7 @@ export function SessionContextMenu({
 				type="button"
 				onClick={async () => {
 					if (await safeClipboardWrite(session.id)) {
-						flashCopiedToClipboard(session.id, 'Agent GUID Copied');
+						flashCopiedToClipboard(session.id, t('workflows.agentMenu.guidCopied'));
 					}
 					onDismiss();
 				}}
@@ -886,7 +894,7 @@ export function SessionContextMenu({
 				style={{ color: theme.colors.textMain }}
 			>
 				<Fingerprint className="w-3.5 h-3.5" />
-				Copy Agent GUID to Clipboard
+				{t('workflows.agentMenu.copyGuid')}
 			</button>
 
 			{!session.parentSessionId && !session.isPianola && (
@@ -900,7 +908,7 @@ export function SessionContextMenu({
 					style={{ color: theme.colors.error }}
 				>
 					<Trash2 className="w-3.5 h-3.5" />
-					Remove Agent
+					{t('workflows.agentMenu.removeAgent')}
 				</button>
 			)}
 		</div>

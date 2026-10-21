@@ -45,6 +45,7 @@ const ERROR_TITLES: Record<AgentErrorType, string> = {
 	agent_crashed: 'Agent Error',
 	permission_denied: 'Permission Denied',
 	session_not_found: 'Session Not Found',
+	session_busy: 'Session In Use',
 	hitl_gate: 'Review Required',
 	unknown: 'Agent Error',
 };
@@ -58,6 +59,7 @@ const RECOVERY_HINTS: Record<AgentErrorType, string> = {
 	agent_crashed: 'Try again. If it keeps happening, check the agent installation.',
 	permission_denied: 'The agent was refused access. Check the folder permissions, then try again.',
 	session_not_found: 'Start the wizard again with a fresh conversation.',
+	session_busy: 'Release this session in the other Codex app or CLI, or use a native Codex fork.',
 	hitl_gate: 'The agent is waiting on a human review step. Try again once it is cleared.',
 	unknown: 'Try again. If the problem persists, check the debug logs below.',
 };

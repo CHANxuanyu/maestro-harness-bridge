@@ -3,7 +3,7 @@ import { BookmarkCheck, Save, Undo2 } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { SectionCard } from './SectionCard';
-import { formatRelativeTime } from '../../../../../../shared/formatters';
+import { useFormatRelativeTime, useT } from '../../../../../i18n';
 import type { TypographySnapshot } from '../../../../../../shared/typographySnapshot';
 
 interface SavedTypographySectionProps {
@@ -56,31 +56,27 @@ export function SavedTypographySection({
 		setConfirmingSave(false);
 	}, [saveOverwrites, confirmingSave, onSave]);
 
+	const t = useT();
+	const formatRelativeTime = useFormatRelativeTime();
 	const status = !snapshot
-		? 'Nothing saved yet.'
+		? t('settings.display.snapshot.none')
 		: isCurrent
-			? `Your saved fonts are active. Saved ${formatRelativeTime(snapshot.savedAt)}.`
-			: `Saved ${formatRelativeTime(snapshot.savedAt)}. The fonts below are not it.`;
+			? t('settings.display.snapshot.active', { when: formatRelativeTime(snapshot.savedAt) })
+			: t('settings.display.snapshot.inactive', { when: formatRelativeTime(snapshot.savedAt) });
 
 	return (
 		<div data-setting-id="display-typography-snapshot">
 			<SettingsSectionHeading
 				icon={BookmarkCheck}
-				description={
-					<>
-						Keep the fonts and sizes you like as your own setup, then try a preset above or keep
-						tinkering below and put yours back in one click. One slot, overwritten each time you
-						save. Your zoom level is not part of it.
-					</>
-				}
+				description={t('settings.display.snapshot.description')}
 			>
-				Save &amp; Restore Customizations
+				{t('settings.display.snapshot.heading')}
 			</SettingsSectionHeading>
 			<SectionCard theme={theme}>
 				<div className="space-y-2">
 					<div className="flex items-baseline justify-between gap-3">
 						<span className="text-xs font-medium" style={{ color: theme.colors.textMain }}>
-							Your saved fonts
+							{t('settings.display.snapshot.label')}
 						</span>
 						<span className="text-xs-plus opacity-55">{status}</span>
 					</div>
@@ -97,7 +93,9 @@ export function SavedTypographySection({
 							}}
 						>
 							<Save className="w-3.5 h-3.5" />
-							{confirmingSave ? 'Replace your saved fonts?' : 'Save Customizations'}
+							{confirmingSave
+								? t('settings.display.snapshot.confirmSave')
+								: t('settings.display.snapshot.save')}
 						</button>
 						<button
 							type="button"
@@ -106,9 +104,9 @@ export function SavedTypographySection({
 							data-testid="typography-snapshot-restore"
 							title={
 								!snapshot
-									? 'Save your fonts first.'
+									? t('settings.display.snapshot.saveFirst')
 									: isCurrent
-										? 'Your saved fonts are already active.'
+										? t('settings.display.snapshot.alreadyActive')
 										: undefined
 							}
 							className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded border text-xs font-bold transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:hover:bg-transparent"
@@ -122,12 +120,12 @@ export function SavedTypographySection({
 							}}
 						>
 							<Undo2 className="w-3.5 h-3.5" />
-							Restore Customizations
+							{t('settings.display.snapshot.restore')}
 						</button>
 					</div>
 					{confirmingSave && (
 						<p className="text-xs" style={{ color: theme.colors.warning }}>
-							Click again to replace the setup you saved earlier. This cannot be undone.
+							{t('settings.display.snapshot.confirmHint')}
 						</p>
 					)}
 				</div>

@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom';
 import { Check } from 'lucide-react';
 import { AUTO_REFRESH_OPTIONS } from '../types';
 import type { Theme } from '../../../types';
+import { useT } from '../../../i18n';
 
 interface AutoRefreshOverlayProps {
 	theme: Theme;
@@ -20,6 +21,7 @@ export function AutoRefreshOverlay({
 	onMouseEnter,
 	onMouseLeave,
 }: AutoRefreshOverlayProps) {
+	const t = useT();
 	return createPortal(
 		<div
 			className="fixed z-[100] rounded-lg shadow-xl border overflow-hidden"
@@ -42,7 +44,7 @@ export function AutoRefreshOverlay({
 					color: theme.colors.textMain,
 				}}
 			>
-				Auto-refresh
+				{t('workflows.filePanel.autoRefresh')}
 			</div>
 
 			<div className="p-1">
@@ -57,7 +59,11 @@ export function AutoRefreshOverlay({
 								currentInterval === option.value ? `${theme.colors.accent}15` : 'transparent',
 						}}
 					>
-						<span className="whitespace-nowrap">{option.label}</span>
+						<span className="whitespace-nowrap">
+							{option.value < 180
+								? t('workflows.filePanel.everySeconds', { seconds: option.value })
+								: t('workflows.filePanel.everyMinutes', { minutes: option.value / 60 })}
+						</span>
 						{currentInterval === option.value && (
 							<Check className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
 						)}
@@ -72,7 +78,7 @@ export function AutoRefreshOverlay({
 							className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
 							style={{ color: theme.colors.textDim }}
 						>
-							Disable auto-refresh
+							{t('workflows.filePanel.disableAutoRefresh')}
 						</button>
 					</>
 				)}

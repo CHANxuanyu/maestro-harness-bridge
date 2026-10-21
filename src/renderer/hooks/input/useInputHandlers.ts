@@ -44,7 +44,7 @@ import { useTabCompletion } from './useTabCompletion';
 import type { TabCompletionSuggestion } from './useTabCompletion';
 import { useAtMentionCompletion } from './useAtMentionCompletion';
 import { useMentionPicker, type MentionPickerItem, type MentionCategory } from './useMentionPicker';
-import { useInputProcessing } from './useInputProcessing';
+import { useInputProcessing, type ProcessInputOptions } from './useInputProcessing';
 import { useInputKeyDown } from './useInputKeyDown';
 import {
 	useCrossAgentDispatch,
@@ -172,17 +172,9 @@ export interface UseInputHandlersReturn {
 	/** Set staged images for the current message */
 	setStagedImages: (images: string[] | ((prev: string[]) => string[])) => void;
 	/** Process and send the current input */
-	processInput: (
-		text?: string,
-		options?: { forceParallel?: boolean; images?: string[]; sessionId?: string; tabId?: string }
-	) => void;
+	processInput: (text?: string, options?: ProcessInputOptions) => void;
 	/** Ref to latest processInput for use in memoized callbacks */
-	processInputRef: React.MutableRefObject<
-		(
-			text?: string,
-			options?: { forceParallel?: boolean; images?: string[]; sessionId?: string; tabId?: string }
-		) => void
-	>;
+	processInputRef: React.MutableRefObject<(text?: string, options?: ProcessInputOptions) => void>;
 	/** Keyboard event handler for the input textarea */
 	handleInputKeyDown: (e: React.KeyboardEvent) => void;
 	/** Capture the agent/tab that owns the composer when the input gains focus */
@@ -706,12 +698,7 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 	});
 
 	// processInputRef - maintained for access in memoized callbacks without stale closures
-	const processInputRef = useRef<
-		(
-			text?: string,
-			options?: { forceParallel?: boolean; images?: string[]; sessionId?: string; tabId?: string }
-		) => void
-	>(() => {});
+	const processInputRef = useRef<(text?: string, options?: ProcessInputOptions) => void>(() => {});
 	useEffect(() => {
 		processInputRef.current = processInput;
 	}, [processInput]);
@@ -788,7 +775,9 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 			setTimeout(() => {
 				// Pin the agent/tab from click time so a focus change before the
 				// timeout cannot retarget the replay. Images were staged above.
-				processInputRef.current(text, pin);
+				// Replay's only caller is the replay button on a message, so this is
+				// the user's own send and its turn is revealed like an Enter.
+				processInputRef.current(text, { ...pin, revealTurn: true });
 				// Restore draft input after processInput clears it
 				if (draftInput) {
 					setInputValue(draftInput);

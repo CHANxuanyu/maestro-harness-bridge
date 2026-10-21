@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { useCallback, memo, useMemo } from 'react';
 import {
 	X,
@@ -102,6 +103,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 	tabIndex,
 	shortcutHint,
 }: TerminalTabItemProps) {
+	const t = useT();
 	const {
 		isHovered,
 		overlayOpen,
@@ -395,7 +397,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 				<Play
 					className="w-3 h-3 shrink-0"
 					style={{ color: theme.colors.accent, opacity: 0.85 }}
-					aria-label={`Startup command: ${tab.startupCommand}`}
+					aria-label={t('workflows.shell.startupCommandValue', { p0: tab.startupCommand })}
 				/>
 			)}
 
@@ -414,7 +416,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 					type="button"
 					onClick={handleCoworkingPillClick}
 					className="px-1 py-px rounded text-3xs font-mono shrink-0 transition-colors hover:bg-white/10"
-					title={`Coworking id - click to copy "${coworkingPillId}"`}
+					title={t('workflows.shell.coworkingIdClickToCopyValue', { p0: coworkingPillId })}
 					style={{
 						backgroundColor: theme.colors.bgActivity,
 						color: theme.colors.textDim,
@@ -446,7 +448,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 				<button
 					onClick={handleRestartClick}
 					className="p-0.5 rounded hover:bg-white/10 transition-colors shrink-0"
-					title="Restart terminal"
+					title={t('workflows.shell.restartTerminal')}
 				>
 					<RotateCw className="w-3 h-3" style={{ color: theme.colors.accent }} />
 				</button>
@@ -458,7 +460,9 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 					onClick={handleCloseClick}
 					data-tab-close
 					className="p-0.5 rounded hover:bg-white/10 transition-colors shrink-0"
-					title={`Close tab${shortcutSuffix(tabShortcuts.closeTab?.keys)}`}
+					title={t('workflows.shell.closeTabvalue', {
+						p0: shortcutSuffix(tabShortcuts.closeTab?.keys),
+					})}
 				>
 					<X className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 				</button>
@@ -497,7 +501,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Pencil className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Rename
+								{t('workflows.shell.rename')}
 							</button>
 						)}
 
@@ -509,12 +513,12 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								style={{ color: theme.colors.textMain }}
 								title={
 									tab.startupCommand
-										? `Current: ${tab.startupCommand}`
-										: 'Configure a command to run when this terminal starts'
+										? t('workflows.shell.currentValue', { p0: tab.startupCommand })
+										: t('workflows.shell.configureACommandToRunWhenThisTerminal')
 								}
 							>
 								<Play className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Startup Command…
+								{t('workflows.shell.startupCommand')}
 							</button>
 						)}
 
@@ -525,7 +529,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Clock className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Snooze Tab
+								{t('workflows.shell.snoozeTab')}
 								{tabShortcuts.snoozeTab && (
 									<ShortcutHint keys={tabShortcuts.snoozeTab.keys} theme={theme} />
 								)}
@@ -543,7 +547,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ChevronsLeft className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Move to First Position
+								{t('workflows.shell.moveToFirstPosition')}
 								{tabShortcuts.moveTabToStart && (
 									<ShortcutHint keys={tabShortcuts.moveTabToStart.keys} theme={theme} />
 								)}
@@ -556,7 +560,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ChevronsRight className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Move to Last Position
+								{t('workflows.shell.moveToLastPosition')}
 								{tabShortcuts.moveTabToEnd && (
 									<ShortcutHint keys={tabShortcuts.moveTabToEnd.keys} theme={theme} />
 								)}
@@ -575,7 +579,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Clipboard className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Buffer: Copy to Clipboard
+								{t('workflows.shell.bufferCopyToClipboard')}
 							</button>
 						)}
 
@@ -586,7 +590,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ArrowRightCircle className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Buffer: Send to Agent
+								{t('workflows.shell.bufferSendToAgent')}
 							</button>
 						)}
 
@@ -597,7 +601,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Share2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Buffer: Publish as GitHub Gist
+								{t('workflows.shell.bufferPublishAsGithubGist')}
 							</button>
 						)}
 
@@ -610,7 +614,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 							style={{ color: theme.colors.textMain }}
 						>
 							<X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							Close Tab
+							{t('workflows.shell.closeTab')}
 							{tabShortcuts.closeTab && (
 								<ShortcutHint keys={tabShortcuts.closeTab.keys} theme={theme} />
 							)}
@@ -626,7 +630,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								disabled={totalTabs === 1}
 							>
 								<X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Close Other Tabs
+								{t('workflows.shell.closeOtherTabs')}
 								{tabShortcuts.closeOtherTabs && (
 									<ShortcutHint keys={tabShortcuts.closeOtherTabs.keys} theme={theme} />
 								)}
@@ -643,7 +647,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								disabled={tabIndex === 0}
 							>
 								<ChevronsLeft className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Close Tabs to Left
+								{t('workflows.shell.closeTabsToLeft')}
 								{tabShortcuts.closeTabsLeft && (
 									<ShortcutHint keys={tabShortcuts.closeTabsLeft.keys} theme={theme} />
 								)}
@@ -662,7 +666,7 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 								disabled={tabIndex === (totalTabs ?? 1) - 1}
 							>
 								<ChevronsRight className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Close Tabs to Right
+								{t('workflows.shell.closeTabsToRight')}
 								{tabShortcuts.closeTabsRight && (
 									<ShortcutHint keys={tabShortcuts.closeTabsRight.keys} theme={theme} />
 								)}

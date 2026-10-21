@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { useCallback, useRef, useState, memo } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -82,6 +83,7 @@ export const GroupTabChip = memo(function GroupTabChip({
 	isFirstTab,
 	isLastTab,
 }: GroupTabChipProps) {
+	const t = useT();
 	const {
 		isHovered,
 		overlayOpen,
@@ -163,12 +165,12 @@ export const GroupTabChip = memo(function GroupTabChip({
 		if (!onBreakApart) return;
 		setOverlayOpen(false);
 		useModalStore.getState().openModal('confirm', {
-			title: 'Break apart group?',
+			title: t('workflows.shell.breakApartGroup'),
 			message: `Break apart "${group.name}"? Its panes return to the tab bar as individual tabs. The tabs are not closed, and you can tile them again later.`,
 			destructive: false,
 			onConfirm: () => onBreakApart(group.id),
 		});
-	}, [onBreakApart, group.id, group.name, setOverlayOpen]);
+	}, [t, onBreakApart, group.id, group.name, setOverlayOpen]);
 
 	const handleBreakApartClick = useCallback(
 		(e: React.MouseEvent) => {
@@ -335,7 +337,7 @@ export const GroupTabChip = memo(function GroupTabChip({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Pencil className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Rename group
+								{t('workflows.shell.renameGroup2')}
 							</button>
 						)}
 						{onSetEmoji && (
@@ -348,7 +350,7 @@ export const GroupTabChip = memo(function GroupTabChip({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Smile className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Change icon
+								{t('workflows.shell.changeIcon')}
 							</button>
 						)}
 						{onSnooze && (
@@ -358,7 +360,7 @@ export const GroupTabChip = memo(function GroupTabChip({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Clock className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Snooze group
+								{t('workflows.shell.snoozeGroup')}
 							</button>
 						)}
 						{onBreakApart && (
@@ -368,7 +370,7 @@ export const GroupTabChip = memo(function GroupTabChip({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Ungroup className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Break apart
+								{t('workflows.shell.breakApart')}
 							</button>
 						)}
 
@@ -384,7 +386,7 @@ export const GroupTabChip = memo(function GroupTabChip({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ChevronsLeft className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Move to First Position
+								{t('workflows.shell.moveToFirstPosition')}
 								{tabShortcuts.moveTabToStart && (
 									<ShortcutHint keys={tabShortcuts.moveTabToStart.keys} theme={theme} />
 								)}
@@ -397,7 +399,7 @@ export const GroupTabChip = memo(function GroupTabChip({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ChevronsRight className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Move to Last Position
+								{t('workflows.shell.moveToLastPosition')}
 								{tabShortcuts.moveTabToEnd && (
 									<ShortcutHint keys={tabShortcuts.moveTabToEnd.keys} theme={theme} />
 								)}

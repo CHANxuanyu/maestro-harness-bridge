@@ -1,6 +1,7 @@
 import { Sparkles } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 import { SectionCard } from './SectionCard';
 import { ToggleSettingRow } from './ToggleSettingRow';
 
@@ -24,28 +25,31 @@ export function DocumentGraphSection({
 	setDocumentGraphMaxNodes,
 }: DocumentGraphSectionProps) {
 	const maxNodePercentage = ((documentGraphMaxNodes - 50) / 950) * 100;
+	const t = useT();
 
 	return (
 		<div data-setting-id="display-document-graph">
-			<SettingsSectionHeading icon={Sparkles}>Document Graph</SettingsSectionHeading>
+			<SettingsSectionHeading icon={Sparkles}>
+				{t('settings.display.graph.heading')}
+			</SettingsSectionHeading>
 			<SectionCard theme={theme}>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show external links by default"
-					description="Display external website links as nodes. Can be toggled in the graph view."
+					title={t('settings.display.graph.externalLinks')}
+					description={t('settings.display.graph.externalLinksDescription')}
 					checked={documentGraphShowExternalLinks}
 					onChange={setDocumentGraphShowExternalLinks}
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Confirm before closing"
-					description="Ask before Escape discards the layout, depth, and node positions you set up. A graph opened from the Memories viewer never asks, since closing returns there."
+					title={t('settings.display.graph.confirmClose')}
+					description={t('settings.display.graph.confirmCloseDescription')}
 					checked={documentGraphConfirmClose}
 					onChange={setDocumentGraphConfirmClose}
 				/>
 				<div>
 					<label htmlFor="document-graph-max-nodes" className="block text-xs opacity-70 mb-2">
-						Maximum nodes to display
+						{t('settings.display.graph.maxNodes')}
 					</label>
 					<div className="flex items-center gap-3">
 						<input
@@ -69,8 +73,7 @@ export function DocumentGraphSection({
 						</span>
 					</div>
 					<p className="text-xs opacity-70 mt-1">
-						Limits initial graph size for performance. Use &quot;Load more&quot; to show additional
-						nodes.
+						{t('settings.display.graph.maxNodesDescription')}
 					</p>
 				</div>
 			</SectionCard>

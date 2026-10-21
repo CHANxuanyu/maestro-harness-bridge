@@ -1,6 +1,7 @@
 import { Bug } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { SettingCheckbox } from '../../../../SettingCheckbox';
+import { useT } from '../../../../../i18n';
 
 interface PrivacySectionProps {
 	theme: Theme;
@@ -13,13 +14,14 @@ export function PrivacySection({
 	crashReportingEnabled,
 	setCrashReportingEnabled,
 }: PrivacySectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="general-crash-reporting">
 			<SettingCheckbox
 				icon={Bug}
-				sectionLabel="Privacy"
-				title="Send anonymous crash reports"
-				description="Help improve Maestro by automatically sending crash reports. No personal data is collected. Changes take effect after restart."
+				sectionLabel={t('settings.general.privacy.heading')}
+				title={t('settings.general.privacy.title')}
+				description={t('settings.general.privacy.description')}
 				checked={crashReportingEnabled}
 				onChange={setCrashReportingEnabled}
 				theme={theme}

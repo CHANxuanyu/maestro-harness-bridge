@@ -1,13 +1,17 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
-import { render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import {
 	TiledLayout,
 	type PaneChatActions,
 } from '../../../renderer/components/MainPanel/TiledLayout';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useUIStore } from '../../../renderer/stores/uiStore';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { useModalStore } from '../../../renderer/stores/modalStore';
+import { notifyCenterFlash } from '../../../renderer/stores/centerFlashStore';
+import { translate } from '../../../renderer/i18n/translate';
 import { outputSearchKeyFor } from '../../../renderer/utils/outputSearch';
 import type { TabGroup, Theme } from '../../../renderer/types';
 import { createMockSession } from '../../helpers/mockSession';
@@ -25,6 +29,8 @@ vi.mock('../../../renderer/components/TerminalOutput', () => ({
 		return <div data-testid="pane-chat" />;
 	}),
 }));
+
+vi.mock('../../../renderer/stores/centerFlashStore', () => ({ notifyCenterFlash: vi.fn() }));
 
 const theme = {
 	colors: { accent: '#89b4fa', bgMain: '#1e1e2e', border: '#313244', textDim: '#6c7086' },
@@ -66,8 +72,16 @@ function makeSession() {
 describe('tiled AI pane chat wiring', () => {
 	beforeEach(() => {
 		chatProps.length = 0;
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		useModalStore.getState().closeAll();
+		vi.mocked(notifyCenterFlash).mockClear();
 		useSessionStore.getState().setSessions([]);
 		useUIStore.setState({ outputSearchByKey: {} });
+	});
+
+	afterEach(() => {
+		cleanup();
+		useSettingsStore.setState({ uiLanguage: 'system' });
 	});
 
 	it('gives every AI pane the same queue actions the single view has', () => {
@@ -205,5 +219,47 @@ describe('tiled AI pane chat wiring', () => {
 		expect(chatProps[1].logsEndRef).not.toBe(logsEndRef);
 		expect(chatProps[0].inputRef).toBe(inputRef);
 		expect(chatProps[1].inputRef).toBe(inputRef);
+	});
+});
+
+describe('tiled pane actions after a live language change', () => {
+	beforeEach(() => {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		useModalStore.getState().closeAll();
+		vi.mocked(notifyCenterFlash).mockClear();
+	});
+
+	afterEach(() => {
+		cleanup();
+		useSettingsStore.setState({ uiLanguage: 'system' });
+	});
+
+	function renderPaneAndChangeLanguage() {
+		const session = makeSession();
+		session.aiTabs[0].agentSessionId = 'native-session-123';
+		useSessionStore.getState().setSessions([session]);
+		render(<TiledLayout group={makeGroup()} session={session} theme={theme} />);
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		fireEvent.click(screen.getAllByRole('button', { name: '分屏操作' })[0]);
+	}
+
+	it('opens the break-apart confirmation in the current language', () => {
+		renderPaneAndChangeLanguage();
+		fireEvent.click(screen.getByRole('button', { name: '拆分组合' }));
+		expect(useModalStore.getState().getData('confirm')).toMatchObject({
+			title: '拆分组合？',
+			message: translate('zh-CN', 'workflows.shell.extraBreakApartValueItsPanesReturnToThe', {
+				p0: 'Group',
+			}),
+		});
+	});
+
+	it.each([
+		['workflows.shell.copyDeepLink', '深层链接'],
+		['workflows.shell.copySessionId', '会话 ID'],
+	] as const)('uses the current language for %s feedback', (key, detail) => {
+		renderPaneAndChangeLanguage();
+		fireEvent.click(screen.getByRole('button', { name: translate('zh-CN', key) }));
+		expect(notifyCenterFlash).toHaveBeenLastCalledWith(expect.objectContaining({ detail }));
 	});
 });

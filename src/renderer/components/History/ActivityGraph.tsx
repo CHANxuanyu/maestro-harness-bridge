@@ -1,3 +1,5 @@
+import { localizeHistoryLabel } from '../../i18n/historyLabels';
+import { useT } from '../../i18n';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Check } from 'lucide-react';
 import type { Theme, HistoryEntry, HistoryEntryType } from '../../types';
@@ -56,6 +58,7 @@ export const ActivityGraph: React.FC<ActivityGraphProps> = ({
 	alwaysShowViewportLabel = false,
 	activeFilters,
 }) => {
+	const uiText = useT();
 	const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 	const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 	const colorBlindMode = useSettingsStore((s) => s.colorBlindMode);
@@ -267,7 +270,7 @@ export const ActivityGraph: React.FC<ActivityGraphProps> = ({
 					label: new Date(startTime).toLocaleDateString([], { month: 'short', day: 'numeric' }),
 					index: 0,
 				},
-				{ label: 'Now', index: bucketCount - 1 },
+				{ label: uiText('workflows.sessions.history.now'), index: bucketCount - 1 },
 			];
 		} else if (lookbackHours <= 24) {
 			return [
@@ -282,7 +285,7 @@ export const ActivityGraph: React.FC<ActivityGraphProps> = ({
 			return [
 				{ label: `${days}d`, index: 0 },
 				{ label: `${Math.floor(days / 2)}d`, index: Math.floor(bucketCount / 2) },
-				{ label: 'Now', index: bucketCount - 1 },
+				{ label: uiText('workflows.sessions.history.now'), index: bucketCount - 1 },
 			];
 		} else {
 			// Longer periods - show start/end
@@ -292,7 +295,7 @@ export const ActivityGraph: React.FC<ActivityGraphProps> = ({
 			});
 			return [
 				{ label: startLabel, index: 0 },
-				{ label: 'Now', index: bucketCount - 1 },
+				{ label: uiText('workflows.sessions.history.now'), index: bucketCount - 1 },
 			];
 		}
 	};
@@ -305,7 +308,19 @@ export const ActivityGraph: React.FC<ActivityGraphProps> = ({
 			className="flex-1 min-w-0 flex flex-col relative mt-0.5"
 			title={
 				hoveredIndex === null
-					? `${lookbackConfig.label}: ${totalAuto} auto, ${totalUser} user${totalCue > 0 ? `, ${totalCue} cue` : ''}${totalAgent > 0 ? `, ${totalAgent} agent` : ''} (right-click to change)`
+					? uiText('workflows.sessions.history.activityGraph', {
+							period: localizeHistoryLabel(lookbackConfig.label, uiText),
+							auto: totalAuto,
+							user: totalUser,
+							cue:
+								totalCue > 0
+									? uiText('workflows.sessions.history.cueCountSuffix', { count: totalCue })
+									: '',
+							agent:
+								totalAgent > 0
+									? uiText('workflows.sessions.history.agentCountSuffix', { count: totalAgent })
+									: '',
+						})
 					: undefined
 			}
 			onContextMenu={handleContextMenu}
@@ -328,7 +343,7 @@ export const ActivityGraph: React.FC<ActivityGraphProps> = ({
 						className="px-3 py-1 text-2xs font-bold uppercase"
 						style={{ color: theme.colors.textDim }}
 					>
-						Lookback Period
+						{uiText('workflows.sessions.history.lookbackPeriod')}
 					</div>
 					{LOOKBACK_OPTIONS.map((option) => (
 						<button
@@ -342,7 +357,7 @@ export const ActivityGraph: React.FC<ActivityGraphProps> = ({
 								setContextMenu(null);
 							}}
 						>
-							{option.label}
+							{localizeHistoryLabel(option.label, uiText)}
 							{option.hours === lookbackHours && (
 								<Check className="w-3 h-3" style={{ color: theme.colors.accent }} />
 							)}
@@ -373,25 +388,33 @@ export const ActivityGraph: React.FC<ActivityGraphProps> = ({
 					</div>
 					<div className="flex flex-col gap-0.5">
 						<div className="flex items-center justify-between gap-3">
-							<span style={{ color: autoBarColor }}>Auto</span>
+							<span style={{ color: autoBarColor }}>
+								{uiText('workflows.sessions.history.autoLabel')}
+							</span>
 							<span className="font-bold" style={{ color: autoBarColor }}>
 								{bucketData[hoveredIndex].auto}
 							</span>
 						</div>
 						<div className="flex items-center justify-between gap-3">
-							<span style={{ color: theme.colors.accent }}>User</span>
+							<span style={{ color: theme.colors.accent }}>
+								{uiText('workflows.sessions.history.userLabel')}
+							</span>
 							<span className="font-bold" style={{ color: theme.colors.accent }}>
 								{bucketData[hoveredIndex].user}
 							</span>
 						</div>
 						<div className="flex items-center justify-between gap-3">
-							<span style={{ color: CUE_COLOR }}>Cue</span>
+							<span style={{ color: CUE_COLOR }}>
+								{uiText('workflows.sessions.history.cueLabel')}
+							</span>
 							<span className="font-bold" style={{ color: CUE_COLOR }}>
 								{bucketData[hoveredIndex].cue}
 							</span>
 						</div>
 						<div className="flex items-center justify-between gap-3">
-							<span style={{ color: AGENT_COLOR }}>Agent</span>
+							<span style={{ color: AGENT_COLOR }}>
+								{uiText('workflows.sessions.history.agentLabel')}
+							</span>
 							<span className="font-bold" style={{ color: AGENT_COLOR }}>
 								{bucketData[hoveredIndex].agent ?? 0}
 							</span>

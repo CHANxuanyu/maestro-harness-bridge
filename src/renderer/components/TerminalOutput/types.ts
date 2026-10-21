@@ -38,6 +38,12 @@ export interface LogItemProps {
 	 * count until `isExpanded`. Undefined for every entry with no subagent.
 	 */
 	subagentLogs?: LogEntry[];
+	/**
+	 * Set when this tool entry hosts a folded run of consecutive tool calls
+	 * (itself included; see `foldNativeToolRuns`): it draws as one "N tool calls"
+	 * row that unfolds to all of them.
+	 */
+	toolRun?: LogEntry[];
 	// Local filter state
 	localFilterQuery: string;
 	filterMode: { mode: 'include' | 'exclude'; regex: boolean };

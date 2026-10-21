@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * GitPillMenu - dropdown for the header git/branch pill.
  *
@@ -36,7 +37,7 @@ import { useModalLayer } from '../hooks/ui/useModalLayer';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { GhostIconButton } from './ui/GhostIconButton';
 import { GitChangeCounts } from './ui/GitChangeCounts';
-import { GitRunningBadge, PR_RUNNING_TITLE } from './ui/GitRunningBadge';
+import { GitRunningBadge } from './ui/GitRunningBadge';
 import { ShortcutHint } from './ui/ShortcutHint';
 import { useSettingsStore } from '../stores/settingsStore';
 import { safeClipboardWrite } from '../utils/clipboard';
@@ -153,6 +154,7 @@ export const GitPillMenu = memo(function GitPillMenu({
 	onConfigureWorktrees,
 	onClose,
 }: GitPillMenuProps) {
+	const t = useT();
 	const menuRef = useRef<HTMLDivElement>(null);
 	const { left, top, ready } = useAnchoredMenuPosition(menuRef, anchorRef);
 
@@ -198,7 +200,7 @@ export const GitPillMenu = memo(function GitPillMenu({
 								className="text-2xs uppercase font-bold w-12 shrink-0"
 								style={{ color: theme.colors.textDim }}
 							>
-								Branch
+								{t('workflows.git.branch')}
 							</span>
 							<span
 								className="text-xs font-mono font-medium truncate"
@@ -211,11 +213,11 @@ export const GitPillMenu = memo(function GitPillMenu({
 								onClick={async (e) => {
 									e.stopPropagation();
 									if (await safeClipboardWrite(branch)) {
-										flashCopiedToClipboard(branch, 'Branch Name Copied');
+										flashCopiedToClipboard(branch, t('workflows.git.branchCopied'));
 									}
 								}}
-								title="Copy branch name"
-								ariaLabel="Copy branch name"
+								title={t('workflows.git.copyBranch')}
+								ariaLabel={t('workflows.git.copyBranch')}
 								className="ml-auto shrink-0"
 							>
 								<Copy className="w-3 h-3" style={iconStyle} />
@@ -229,7 +231,7 @@ export const GitPillMenu = memo(function GitPillMenu({
 								className="text-2xs uppercase font-bold w-12 shrink-0"
 								style={{ color: theme.colors.textDim }}
 							>
-								Origin
+								{t('workflows.git.origin')}
 							</span>
 							<button
 								onClick={(e) => {
@@ -239,7 +241,7 @@ export const GitPillMenu = memo(function GitPillMenu({
 								disabled={!browserUrl}
 								className="text-xs font-mono truncate text-left hover:underline disabled:no-underline disabled:cursor-default"
 								style={{ color: theme.colors.textMain }}
-								title={browserUrl ? `Open ${remote}` : remote}
+								title={browserUrl ? t('workflows.git.openRemote', { remote }) : remote}
 								data-testid="git-pill-menu-open-remote"
 							>
 								{remote.replace(/^https?:\/\//, '').replace(/\.git$/, '')}
@@ -249,11 +251,11 @@ export const GitPillMenu = memo(function GitPillMenu({
 								onClick={async (e) => {
 									e.stopPropagation();
 									if (await safeClipboardWrite(remote)) {
-										flashCopiedToClipboard(remote, 'Remote URL Copied');
+										flashCopiedToClipboard(remote, t('workflows.git.remoteCopied'));
 									}
 								}}
-								title="Copy remote URL"
-								ariaLabel="Copy remote URL"
+								title={t('workflows.git.copyRemote')}
+								ariaLabel={t('workflows.git.copyRemote')}
 								className="ml-auto shrink-0"
 							>
 								<Copy className="w-3 h-3" style={iconStyle} />
@@ -268,7 +270,7 @@ export const GitPillMenu = memo(function GitPillMenu({
 					theme={theme}
 					testId="git-pill-menu-log"
 					icon={<History className="w-3.5 h-3.5" style={iconStyle} />}
-					label="View Git Log"
+					label={t('workflows.git.viewLog')}
 					shortcutKeys={shortcuts.viewGitLog?.keys}
 					onClick={onViewLog}
 				/>
@@ -276,7 +278,7 @@ export const GitPillMenu = memo(function GitPillMenu({
 					theme={theme}
 					testId="git-pill-menu-diff"
 					icon={<FileDiff className="w-3.5 h-3.5" style={iconStyle} />}
-					label="View Git Diff"
+					label={t('workflows.git.viewDiff')}
 					badge={
 						<GitChangeCounts
 							theme={theme}
@@ -291,7 +293,7 @@ export const GitPillMenu = memo(function GitPillMenu({
 					theme={theme}
 					testId="git-pill-menu-pull"
 					icon={<ArrowDownToLine className="w-3.5 h-3.5" style={iconStyle} />}
-					label="Git Pull"
+					label={t('workflows.git.pull')}
 					badge={
 						// A run in flight outranks the behind count, which is stale until
 						// it finishes anyway.
@@ -315,7 +317,7 @@ export const GitPillMenu = memo(function GitPillMenu({
 					theme={theme}
 					testId="git-pill-menu-push"
 					icon={<ArrowUpFromLine className="w-3.5 h-3.5" style={iconStyle} />}
-					label="Git Push"
+					label={t('workflows.git.push')}
 					badge={
 						pushRunning ? (
 							<GitRunningBadge
@@ -338,7 +340,7 @@ export const GitPillMenu = memo(function GitPillMenu({
 					theme={theme}
 					testId="git-pill-menu-switch-branch"
 					icon={<GitBranch className="w-3.5 h-3.5" style={iconStyle} />}
-					label="Change Branch"
+					label={t('workflows.git.changeBranch')}
 					shortcutKeys={shortcuts.gitChangeBranch?.keys}
 					onClick={onSwitchBranch}
 				/>
@@ -347,15 +349,15 @@ export const GitPillMenu = memo(function GitPillMenu({
 						theme={theme}
 						testId="git-pill-menu-create-pr"
 						icon={<GitPullRequest className="w-3.5 h-3.5" style={iconStyle} />}
-						label="Create Pull Request"
+						label={t('workflows.git.createPR')}
 						badge={
 							prRunning ? (
 								<GitRunningBadge
 									theme={theme}
-									label="Creating"
+									label={t('workflows.git.creating')}
 									className="flex items-center gap-1 text-2xs"
 									testId="git-pill-menu-create-pr-running"
-									title={PR_RUNNING_TITLE}
+									title={t('workflows.git.prRunningTitle')}
 								/>
 							) : undefined
 						}
@@ -373,7 +375,7 @@ export const GitPillMenu = memo(function GitPillMenu({
 							theme={theme}
 							testId="git-pill-menu-configure-worktrees"
 							icon={<Settings2 className="w-3.5 h-3.5" style={iconStyle} />}
-							label="Configure Worktrees"
+							label={t('workflows.git.configureWorktrees')}
 							onClick={onConfigureWorktrees}
 						/>
 					</>

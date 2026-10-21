@@ -11,6 +11,7 @@ import type { Theme } from '../types';
 import { Modal } from './ui/Modal';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { usePhoneLayout } from '../hooks/ui/useViewportBreakpoint';
+import { useI18n } from '../i18n';
 
 interface NewAgentChoiceModalProps {
 	theme: Theme;
@@ -27,6 +28,7 @@ export function NewAgentChoiceModal({
 	onWizardSetup,
 	wizardAvailable,
 }: NewAgentChoiceModalProps) {
+	const { t, tRich } = useI18n();
 	const handleManual = () => {
 		onClose();
 		onManualSetup();
@@ -45,7 +47,7 @@ export function NewAgentChoiceModal({
 	return (
 		<Modal
 			theme={theme}
-			title="New Agent"
+			title={t('workflows.newAgentChoice.title')}
 			priority={MODAL_PRIORITIES.NEW_AGENT_CHOICE}
 			onClose={onClose}
 			width={680}
@@ -81,10 +83,10 @@ export function NewAgentChoiceModal({
 						</div>
 						<div>
 							<h3 className="text-base font-bold mb-1" style={{ color: theme.colors.textMain }}>
-								Manual Setup
+								{t('workflows.newAgentChoice.manual')}
 							</h3>
 							<p className="text-xs leading-relaxed" style={{ color: theme.colors.textDim }}>
-								Choose your agent, working directory, and configuration options directly.
+								{t('workflows.newAgentChoice.manualDescription')}
 							</p>
 						</div>
 					</button>
@@ -118,11 +120,10 @@ export function NewAgentChoiceModal({
 						</div>
 						<div>
 							<h3 className="text-base font-bold mb-1" style={{ color: theme.colors.textMain }}>
-								Guided Setup
+								{t('workflows.newAgentChoice.guided')}
 							</h3>
 							<p className="text-xs leading-relaxed" style={{ color: theme.colors.textDim }}>
-								Walk through an interactive wizard that analyzes your project and creates a tailored
-								playbook.
+								{t('workflows.newAgentChoice.guidedDescription')}
 							</p>
 						</div>
 					</button>
@@ -138,21 +139,25 @@ export function NewAgentChoiceModal({
 				>
 					<Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: theme.colors.accent }} />
 					<span style={{ color: theme.colors.textDim }}>
-						<strong style={{ color: theme.colors.textMain }}>Note:</strong> The guided wizard
-						captures application inputs until complete. For a lighter touch, create an agent
-						manually then run{' '}
-						<code
-							className="px-1 py-0.5 rounded text-xs-plus"
-							style={{ backgroundColor: theme.colors.border }}
-						>
-							/wizard
-						</code>{' '}
-						or click the{' '}
-						<Wand2
-							className="inline w-3.5 h-3.5 align-text-bottom"
-							style={{ color: theme.colors.accent }}
-						/>{' '}
-						button in the Auto Run panel. The in-tab wizard runs alongside your other work.
+						<strong style={{ color: theme.colors.textMain }}>
+							{t('workflows.newAgentChoice.noteLabel')}
+						</strong>{' '}
+						{tRich('workflows.newAgentChoice.note', {
+							command: (
+								<code
+									className="px-1 py-0.5 rounded text-xs-plus"
+									style={{ backgroundColor: theme.colors.border }}
+								>
+									/wizard
+								</code>
+							),
+							icon: (
+								<Wand2
+									className="inline w-3.5 h-3.5 align-text-bottom"
+									style={{ color: theme.colors.accent }}
+								/>
+							),
+						})}
 					</span>
 				</div>
 			</div>

@@ -1,3 +1,5 @@
+import { extensionUiText } from './extensionI18n';
+import { useT } from '../../../i18n';
 /**
  * Details pane for a single extension (first-party Encore feature or plugin).
  *
@@ -81,6 +83,7 @@ export function ExtensionDetails({
 	getGrants,
 	settingsBody,
 }: ExtensionDetailsProps) {
+	const tExtra = useT();
 	// Grants are tagged with the plugin they belong to, so switching plugins never
 	// reads the previous plugin's snapshot before the new plugin's async load
 	// resolves. `grants` is derived and stays null until THIS plugin's snapshot has
@@ -184,7 +187,10 @@ export function ExtensionDetails({
 				: theme.colors.textDim;
 
 	const grantedCaps = new Set((grants?.granted ?? []).map((g) => g.capability));
-	const toggleLabel = ext.state === 'enabled' ? 'Disable' : 'Enable';
+	const toggleLabel =
+		ext.state === 'enabled'
+			? tExtra('settings.extra.extensionDetails.disable')
+			: tExtra('settings.extra.extensionDetails.enable');
 
 	// First-party tiles surface their supervised background services; status
 	// derives from the definition + the bridge-written flag state (enable
@@ -211,14 +217,14 @@ export function ExtensionDetails({
 						{badge && (
 							<span
 								data-testid="extension-details-badge"
-								data-badge={badge.label}
+								data-badge={extensionUiText(badge.label, tExtra)}
 								className="px-1.5 py-0.5 rounded text-3xs font-bold uppercase"
 								style={{
 									backgroundColor: theme.colors[badge.tone] + '30',
 									color: theme.colors[badge.tone],
 								}}
 							>
-								{badge.label}
+								{extensionUiText(badge.label, tExtra)}
 							</span>
 						)}
 					</div>
@@ -228,10 +234,11 @@ export function ExtensionDetails({
 					>
 						{ext.version && <span>v{ext.version}</span>}
 						{ext.author && <span>· {ext.author}</span>}
-						<span>· {CATEGORY_LABELS[ext.category]}</span>
+						<span>· {extensionUiText(CATEGORY_LABELS[ext.category], tExtra)}</span>
 						{ext.releaseDate && (
 							<span data-testid="extension-details-release-date">
-								· Released {formatCalendarDay(ext.releaseDate)}
+								{tExtra('settings.extra.extensionDetails.released')}{' '}
+								{formatCalendarDay(ext.releaseDate)}
 							</span>
 						)}
 					</div>
@@ -241,12 +248,12 @@ export function ExtensionDetails({
 					className="px-2 py-0.5 rounded text-xs-plus font-bold flex-shrink-0"
 					style={{ backgroundColor: stateColor(ext.state) + '22', color: stateColor(ext.state) }}
 				>
-					{STATE_LABELS[ext.state]}
+					{extensionUiText(STATE_LABELS[ext.state], tExtra)}
 				</span>
 			</div>
 
 			<p className="text-sm mt-3" style={{ color: theme.colors.textMain }}>
-				{ext.description || 'No description provided.'}
+				{ext.description || tExtra('settings.extra.extensionDetails.noDescriptionProvided')}
 			</p>
 
 			{/* A one-liner says what the feature is; this says how to summon it and
@@ -255,7 +262,8 @@ export function ExtensionDetails({
 
 			{isPlugin && ext.loadStatus && ext.loadStatus !== 'ok' && (
 				<p className="text-xs mt-2" style={{ color: theme.colors.error }}>
-					This plugin is {ext.loadStatus} and cannot be enabled.
+					{tExtra('settings.extra.extensionDetails.thisPluginIs')} {ext.loadStatus}{' '}
+					{tExtra('settings.extra.extensionDetails.andCannotBeEnabled')}
 					{record && record.errors.length > 0 ? ` ${record.errors.join('; ')}` : ''}
 				</p>
 			)}
@@ -270,8 +278,7 @@ export function ExtensionDetails({
 					className="text-xs mt-2"
 					style={{ color: theme.colors.error }}
 				>
-					This plugin&apos;s files no longer match their signature (tampered). It is fully disabled:
-					no code runs and no contributions apply. Reinstall it from a trusted source.
+					{tExtra('settings.extra.extensionDetails.thisPluginSFilesNoLongerMatch')}
 				</p>
 			)}
 			{isPlugin && isCodeTier && ext.trust !== 'trusted' && ext.trust !== 'invalid' && (
@@ -280,9 +287,11 @@ export function ExtensionDetails({
 					className="text-xs mt-2"
 					style={{ color: theme.colors.warning }}
 				>
-					Code execution requires a trusted signature - this plugin is{' '}
-					{(ext.trust ?? 'unsigned') === 'unsigned' ? 'unsigned' : 'signed by an untrusted key'}.
-					Its code will not run; declarative contributions (themes, prompts) still apply.
+					{tExtra('settings.extra.extensionDetails.codeExecutionRequiresATrustedSignatureThis')}{' '}
+					{(ext.trust ?? 'unsigned') === 'unsigned'
+						? tExtra('settings.extra.extensionDetails.unsigned')
+						: tExtra('settings.extra.extensionDetails.signedByAnUntrustedKey')}
+					. Its code will not run; declarative contributions (themes, prompts) still apply.
 				</p>
 			)}
 
@@ -311,7 +320,7 @@ export function ExtensionDetails({
 						className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors hover:bg-white/5 disabled:opacity-50"
 						style={{ borderColor: theme.colors.border, color: theme.colors.warning }}
 					>
-						<KeyRound className="w-4 h-4" /> Revoke
+						<KeyRound className="w-4 h-4" /> {tExtra('settings.extra.extensionDetails.revoke')}
 					</button>
 				)}
 
@@ -324,7 +333,7 @@ export function ExtensionDetails({
 						className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors hover:bg-white/5 disabled:opacity-50"
 						style={{ borderColor: theme.colors.border, color: theme.colors.error }}
 					>
-						<Trash2 className="w-4 h-4" /> Uninstall
+						<Trash2 className="w-4 h-4" /> {tExtra('settings.extra.extensionDetails.uninstall')}
 					</button>
 				)}
 			</div>
@@ -350,7 +359,7 @@ export function ExtensionDetails({
 							color: activeSubTab === 'settings' ? theme.colors.textMain : theme.colors.textDim,
 						}}
 					>
-						Settings
+						{tExtra('settings.extra.extensionDetails.settings')}
 					</button>
 				)}
 				<button
@@ -365,7 +374,7 @@ export function ExtensionDetails({
 						color: activeSubTab === 'permissions' ? theme.colors.textMain : theme.colors.textDim,
 					}}
 				>
-					Permissions
+					{tExtra('settings.extra.extensionDetails.permissions')}
 				</button>
 			</div>
 
@@ -378,7 +387,7 @@ export function ExtensionDetails({
 								className="text-xs font-bold uppercase opacity-70 mb-2"
 								style={{ color: theme.colors.textMain }}
 							>
-								Background services
+								{tExtra('settings.extra.extensionDetails.backgroundServices')}
 							</div>
 							<div className="space-y-1.5">
 								{firstPartyServices.map((service) => (
@@ -394,7 +403,7 @@ export function ExtensionDetails({
 												{service.id}
 											</div>
 											<div className="text-2xs mt-0.5" style={{ color: theme.colors.textDim }}>
-												{service.description}
+												{extensionUiText(service.description, tExtra)}
 											</div>
 										</div>
 										<span
@@ -405,7 +414,9 @@ export function ExtensionDetails({
 													ext.state === 'enabled' ? theme.colors.success : theme.colors.textDim,
 											}}
 										>
-											{ext.state === 'enabled' ? 'Running (supervised)' : 'Stopped'}
+											{ext.state === 'enabled'
+												? tExtra('settings.extra.extensionDetails.runningSupervised')
+												: tExtra('settings.extra.extensionDetails.stopped')}
 										</span>
 									</div>
 								))}
@@ -420,7 +431,7 @@ export function ExtensionDetails({
 								className="text-xs font-bold uppercase opacity-70 mb-2"
 								style={{ color: theme.colors.textMain }}
 							>
-								Requested permissions
+								{tExtra('settings.extra.extensionDetails.requestedPermissions')}
 							</div>
 							<div className="space-y-1.5">
 								{grants.requested.map((req) => {
@@ -439,11 +450,11 @@ export function ExtensionDetails({
 												className="px-1.5 py-0.5 rounded text-3xs font-bold uppercase flex-shrink-0 mt-0.5"
 												style={{ backgroundColor: color + '22', color }}
 											>
-												{risk}
+												{extensionUiText(risk, tExtra)}
 											</span>
 											<div className="min-w-0 flex-1">
 												<div className="text-xs" style={{ color: theme.colors.textMain }}>
-													{describeCapability(req.capability)}
+													{extensionUiText(describeCapability(req.capability), tExtra)}
 												</div>
 												{req.scope && (
 													<div
@@ -458,7 +469,9 @@ export function ExtensionDetails({
 												className="text-2xs font-medium flex-shrink-0 mt-0.5"
 												style={{ color: granted ? theme.colors.success : theme.colors.textDim }}
 											>
-												{granted ? 'Granted' : 'Not granted'}
+												{granted
+													? tExtra('settings.extra.extensionDetails.granted')
+													: tExtra('settings.extra.extensionDetails.notGranted')}
 											</span>
 										</div>
 									);
@@ -494,7 +507,7 @@ export function ExtensionDetails({
 								className="text-xs font-bold uppercase opacity-70 mb-2"
 								style={{ color: theme.colors.textMain }}
 							>
-								Permissions
+								{tExtra('settings.extra.extensionDetails.permissions')}
 							</div>
 							<PermissionList theme={theme} permissions={ext.permissions ?? []} />
 						</div>
@@ -507,7 +520,7 @@ export function ExtensionDetails({
 								className="text-xs font-bold uppercase opacity-70 mb-2"
 								style={{ color: theme.colors.textMain }}
 							>
-								Contributions
+								{tExtra('settings.extra.extensionDetails.contributions')}
 							</div>
 							<div className="flex flex-wrap gap-1.5">
 								{CONTRIB_BUCKETS.map((bucket) => {
@@ -517,14 +530,14 @@ export function ExtensionDetails({
 									if (count === 0) return null;
 									return (
 										<span
-											key={bucket.label}
+											key={extensionUiText(bucket.label, tExtra)}
 											className="px-1.5 py-0.5 rounded text-2xs"
 											style={{
 												backgroundColor: theme.colors.bgActivity,
 												color: theme.colors.textDim,
 											}}
 										>
-											{bucket.label}: {count}
+											{extensionUiText(bucket.label, tExtra)}: {count}
 										</span>
 									);
 								})}
@@ -532,7 +545,7 @@ export function ExtensionDetails({
 									(b) => b.pick(contributions).filter((i) => i.pluginId === ext.id).length === 0
 								) && (
 									<span className="text-xs" style={{ color: theme.colors.textDim }}>
-										No contributions.
+										{tExtra('settings.extra.extensionDetails.noContributions')}
 									</span>
 								)}
 							</div>
@@ -555,7 +568,7 @@ export function ExtensionDetails({
 								className="text-xs rounded-lg border p-3"
 								style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
 							>
-								Enable this plugin to configure it.
+								{tExtra('settings.extra.extensionDetails.enableThisPluginToConfigureIt')}
 							</div>
 						)
 					) : null}
@@ -572,7 +585,7 @@ export function ExtensionDetails({
 								className="text-xs rounded-lg border p-3"
 								style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
 							>
-								Enable Web Login to manage accounts.
+								{tExtra('settings.extra.extensionDetails.enableWebLoginToManageAccounts')}
 							</div>
 						))}
 
@@ -589,7 +602,8 @@ export function ExtensionDetails({
 								className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors hover:bg-white/5"
 								style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 							>
-								<SettingsIcon className="w-4 h-4" /> Open Pianola
+								<SettingsIcon className="w-4 h-4" />{' '}
+								{tExtra('settings.extra.extensionDetails.openPianola')}
 							</button>
 						) : (
 							<div
@@ -597,7 +611,7 @@ export function ExtensionDetails({
 								className="text-xs rounded-lg border p-3"
 								style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
 							>
-								Enable Pianola to open its manager and rules.
+								{tExtra('settings.extra.extensionDetails.enablePianolaToOpenItsManagerAnd')}
 							</div>
 						))}
 
@@ -612,7 +626,8 @@ export function ExtensionDetails({
 									className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors hover:bg-white/5"
 									style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 								>
-									<SettingsIcon className="w-4 h-4" /> Configure (grant + edit)
+									<SettingsIcon className="w-4 h-4" />{' '}
+									{tExtra('settings.extra.extensionDetails.configureGrantEdit')}
 								</button>
 							) : (
 								<div className="space-y-3">

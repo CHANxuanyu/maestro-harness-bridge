@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { useUIStore } from '../../stores/uiStore';
 import type { DropZone } from '../../utils/panelLayout';
 import type { Theme } from '../../types';
@@ -17,6 +18,7 @@ import type { Theme } from '../../types';
  * never intercepts events (it is always click-through).
  */
 export function PaneDragOverlay({ theme }: { theme: Theme }) {
+	const t = useT();
 	const paneDrag = useUIStore((s) => s.paneDrag);
 	if (!paneDrag) return null;
 
@@ -52,7 +54,7 @@ export function PaneDragOverlay({ theme }: { theme: Theme }) {
 						className="px-2 py-0.5 rounded text-xs font-semibold select-none"
 						style={{ backgroundColor: theme.colors.accent, color: theme.colors.bgMain }}
 					>
-						{isSwap ? '⇄ Swap' : 'Move'}
+						{isSwap ? t('workflows.shell.swap') : t('workflows.shell.move')}
 					</span>
 				</div>
 			)}
@@ -67,7 +69,7 @@ export function PaneDragOverlay({ theme }: { theme: Theme }) {
 					border: `1px solid ${theme.colors.accent}`,
 				}}
 			>
-				Rearranging tile…
+				{t('workflows.shell.rearrangingTile')}
 			</div>
 		</div>
 	);

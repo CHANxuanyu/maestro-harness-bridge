@@ -169,8 +169,9 @@ describe('useTranscriptBackfill', () => {
 		// The first window is seeded from TRANSCRIPT_RESUME_READ_LIMIT (500), not
 		// from the tab's entry count, so it clears the depth the resume path
 		// already put on screen. Each further page adds one TRANSCRIPT_BACKFILL_PAGE.
-		expect(read.mock.calls[0][3]).toEqual({ offset: 0, limit: 750 });
-		expect(read.mock.calls[1][3]).toEqual({ offset: 0, limit: 1000 });
+		// The owner pins the account pool, so paging never reads another account.
+		expect(read.mock.calls[0][3]).toEqual({ offset: 0, limit: 750, ownerAgentId: session.id });
+		expect(read.mock.calls[1][3]).toEqual({ offset: 0, limit: 1000, ownerAgentId: session.id });
 	});
 
 	it('stops once the window covers the whole transcript', async () => {

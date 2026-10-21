@@ -1,3 +1,5 @@
+import { permissionModeLabel, permissionModeTooltip } from '../utils/displayLabels';
+import { useT } from '../../../i18n';
 import React, { memo, useCallback, useState } from 'react';
 import {
 	ArrowUp,
@@ -13,12 +15,8 @@ import {
 	X,
 } from 'lucide-react';
 import type { Shortcut, Session, Theme, ThinkingMode } from '../../../types';
-import { formatEnterToSend, formatEnterToSendTooltip } from '../../../utils/shortcutFormatter';
-import {
-	getPermissionModeLabel,
-	getPermissionModeTooltip,
-	resolveTabPermissionMode,
-} from '../../../../shared/agentMetadata';
+import { formatEnterToSend, isMacOS } from '../../../utils/shortcutFormatter';
+import { resolveTabPermissionMode } from '../../../../shared/agentMetadata';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { shortcutSuffix } from '../../ui/ShortcutHint';
 import { updateSessionWith } from '../../../stores/sessionStore';
@@ -116,6 +114,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 	effortMenuRef,
 	processInput,
 }: ToolbarControlsProps) {
+	const t = useT();
 	const isAiMode = session.inputMode === 'ai';
 	const { isNarrow: isNarrowViewport } = useViewportBreakpoint();
 	const phone = usePhoneLayout();
@@ -194,7 +193,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 								fileSize: file.size,
 							},
 						});
-						showFlashNotification?.('Failed to attach image');
+						showFlashNotification?.(t('workflows.shell.extraFailedToAttachImage'));
 					};
 					reader.onabort = (event) => {
 						captureException(new Error('Image attachment read aborted'), {
@@ -207,7 +206,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 								eventType: event.type,
 							},
 						});
-						showFlashNotification?.('Image attachment canceled');
+						showFlashNotification?.(t('workflows.shell.extraImageAttachmentCanceled'));
 					};
 					reader.readAsDataURL(file);
 				});
@@ -269,8 +268,8 @@ export const ToolbarControls = memo(function ToolbarControls({
 						<button
 							onClick={() => document.getElementById('image-file-input')?.click()}
 							className="flex h-9 w-9 items-center justify-center rounded opacity-70"
-							title="Attach Image"
-							aria-label="Attach Image"
+							title={t('workflows.shell.attachImage')}
+							aria-label={t('workflows.shell.attachImage')}
 						>
 							<ImageIcon className="w-5 h-5" />
 						</button>
@@ -287,8 +286,16 @@ export const ToolbarControls = memo(function ToolbarControls({
 									? { color: theme.colors.accent, backgroundColor: `${theme.colors.accent}20` }
 									: undefined
 							}
-							title={isVoiceListening ? 'Stop voice input' : 'Voice input'}
-							aria-label={isVoiceListening ? 'Stop voice input' : 'Start voice input'}
+							title={
+								isVoiceListening
+									? t('workflows.shell.stopVoiceInput')
+									: t('workflows.shell.voiceInput')
+							}
+							aria-label={
+								isVoiceListening
+									? t('workflows.shell.stopVoiceInput')
+									: t('workflows.shell.startVoiceInput')
+							}
 							aria-pressed={!!isVoiceListening}
 						>
 							<Mic className="w-5 h-5" />
@@ -306,8 +313,12 @@ export const ToolbarControls = memo(function ToolbarControls({
 								backgroundColor: theme.colors.accent,
 								color: theme.colors.accentForeground,
 							}}
-							title={isTerminalMode ? 'Run command' : 'Send message'}
-							aria-label={isTerminalMode ? 'Run command' : 'Send message'}
+							title={
+								isTerminalMode ? t('workflows.shell.runCommand') : t('workflows.shell.sendMessage')
+							}
+							aria-label={
+								isTerminalMode ? t('workflows.shell.runCommand') : t('workflows.shell.sendMessage')
+							}
 						>
 							<ArrowUp className="w-5 h-5" />
 						</button>
@@ -317,8 +328,8 @@ export const ToolbarControls = memo(function ToolbarControls({
 						onClick={() => setOptionsSheetOpen(true)}
 						className="flex h-9 w-9 items-center justify-center rounded-full transition-all opacity-70"
 						style={{ color: theme.colors.textDim, border: `1px solid ${theme.colors.border}` }}
-						title="More options"
-						aria-label="More options"
+						title={t('workflows.shell.moreOptions')}
+						aria-label={t('workflows.shell.moreOptions')}
 						aria-haspopup="dialog"
 						aria-expanded={optionsSheetOpen}
 						data-testid="composer-options-button"
@@ -368,7 +379,9 @@ export const ToolbarControls = memo(function ToolbarControls({
 					<button
 						onClick={onOpenPromptComposer}
 						className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
-						title={`Open Prompt Composer${shortcutSuffix(shortcuts?.openPromptComposer?.keys)}`}
+						title={t('workflows.shell.openPromptComposervalue', {
+							p0: shortcutSuffix(shortcuts?.openPromptComposer?.keys),
+						})}
 					>
 						<PenLine className="w-4 h-4" />
 					</button>
@@ -377,7 +390,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 					<button
 						onClick={() => document.getElementById('image-file-input')?.click()}
 						className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
-						title="Attach Image"
+						title={t('workflows.shell.attachImage')}
 					>
 						<ImageIcon className="w-4 h-4" />
 					</button>
@@ -394,8 +407,16 @@ export const ToolbarControls = memo(function ToolbarControls({
 								? { color: theme.colors.accent, backgroundColor: `${theme.colors.accent}20` }
 								: undefined
 						}
-						title={isVoiceListening ? 'Stop voice input' : 'Voice input'}
-						aria-label={isVoiceListening ? 'Stop voice input' : 'Start voice input'}
+						title={
+							isVoiceListening
+								? t('workflows.shell.stopVoiceInput')
+								: t('workflows.shell.voiceInput')
+						}
+						aria-label={
+							isVoiceListening
+								? t('workflows.shell.stopVoiceInput')
+								: t('workflows.shell.startVoiceInput')
+						}
 						aria-pressed={!!isVoiceListening}
 					>
 						<Mic className="w-4 h-4" />
@@ -430,8 +451,14 @@ export const ToolbarControls = memo(function ToolbarControls({
 						color: theme.colors.textDim,
 						border: `1px solid ${theme.colors.border}`,
 					}}
-					title={toolbarExpanded ? 'Hide options' : 'Show options'}
-					aria-label={toolbarExpanded ? 'Hide toolbar options' : 'Show toolbar options'}
+					title={
+						toolbarExpanded ? t('workflows.shell.hideOptions') : t('workflows.shell.showOptions')
+					}
+					aria-label={
+						toolbarExpanded
+							? t('workflows.shell.hideToolbarOptions')
+							: t('workflows.shell.showToolbarOptions')
+					}
 				>
 					{toolbarExpanded ? (
 						<X className="w-3.5 h-3.5" />
@@ -458,10 +485,12 @@ export const ToolbarControls = memo(function ToolbarControls({
 								? `1px solid ${theme.colors.accent}50`
 								: '1px solid transparent',
 						}}
-						title={`Save to History${shortcutSuffix(tabShortcuts.toggleSaveToHistory?.keys)} - Synopsis added after each completion`}
+						title={t('workflows.shell.saveToHistoryvalueSynopsisAddedAfterEachCompletion', {
+							p0: shortcutSuffix(tabShortcuts.toggleSaveToHistory?.keys),
+						})}
 					>
 						<History className="w-3 h-3" />
-						<span>History</span>
+						<span>{t('workflows.shell.history')}</span>
 					</button>
 				)}
 				{isAiMode && hasReadOnlyCapability && (
@@ -494,13 +523,14 @@ export const ToolbarControls = memo(function ToolbarControls({
 										? `1px solid ${theme.colors.accent}50`
 										: '1px solid transparent',
 						}}
-						title={`${getPermissionModeTooltip(
+						title={`${permissionModeTooltip(
+							t,
 							currentPermissionMode,
 							session.toolType
 						)}${shortcutSuffix(tabShortcuts.toggleReadOnlyMode?.keys)}`}
 					>
 						<Eye className="w-3 h-3" />
-						<span>{getPermissionModeLabel(currentPermissionMode, session.toolType)}</span>
+						<span>{permissionModeLabel(t, currentPermissionMode, session.toolType)}</span>
 					</button>
 				)}
 				{isAiMode && supportsThinking && onToggleTabShowThinking && (
@@ -531,21 +561,23 @@ export const ToolbarControls = memo(function ToolbarControls({
 						}}
 						title={`${
 							tabShowThinking === 'off'
-								? 'Show Thinking - Click to stream AI reasoning'
+								? t('workflows.shell.extraShowThinkingClickToStreamAiReasoning')
 								: tabShowThinking === 'on'
-									? 'Thinking (temporary) - Click for sticky mode'
-									: 'Thinking (sticky) - Click to turn off'
+									? t('workflows.shell.extraThinkingTemporaryClickForStickyMode')
+									: t('workflows.shell.extraThinkingStickyClickToTurnOff')
 						}${shortcutSuffix(tabShortcuts.toggleShowThinking?.keys)}`}
 					>
 						<Brain className="w-3 h-3" />
-						<span>Thinking</span>
+						<span>{t('workflows.shell.thinking2')}</span>
 						{tabShowThinking === 'sticky' && <Pin className="w-2.5 h-2.5" />}
 					</button>
 				)}
 				<button
 					onClick={() => setEnterToSend(!enterToSend)}
 					className="flex items-center gap-1 text-2xs opacity-50 hover:opacity-100 px-2 py-1 rounded hover:bg-white/5"
-					title={formatEnterToSendTooltip(enterToSend)}
+					title={t('workflows.input.sendWith', {
+						key: enterToSend ? `${isMacOS() ? 'Cmd' : 'Ctrl'}+Enter` : 'Enter',
+					})}
 				>
 					<Keyboard className="w-3 h-3" />
 					{formatEnterToSend(enterToSend)}

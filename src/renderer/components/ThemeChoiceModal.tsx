@@ -31,6 +31,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal } from './ui/Modal';
 import { ModalBackButton } from './ui/ModalBackButton';
 import { logger } from '../utils/logger';
+import { useT, type MessageKey } from '../i18n';
 
 export interface ThemeChoiceModalProps {
 	/** The live theme - repaints as the user browses. */
@@ -64,10 +65,10 @@ export interface ThemeChoiceModalProps {
 const EXCLUDED_THEME_IDS = new Set(['custom']);
 
 /** Section order. Dark first because the app ships dark and most users stay there. */
-const MODE_SECTIONS: Array<{ mode: Theme['mode']; label: string; hint: string }> = [
-	{ mode: 'dark', label: 'Dark', hint: 'Easy on the eyes for long sessions.' },
-	{ mode: 'light', label: 'Light', hint: 'For bright rooms and shared screens.' },
-	{ mode: 'vibe', label: 'Vibe', hint: 'Louder palettes, for when the mood strikes.' },
+const MODE_SECTIONS: Array<{ mode: Theme['mode']; label: MessageKey; hint: MessageKey }> = [
+	{ mode: 'dark', label: 'workflows.themeChoice.dark', hint: 'workflows.themeChoice.darkHint' },
+	{ mode: 'light', label: 'workflows.themeChoice.light', hint: 'workflows.themeChoice.lightHint' },
+	{ mode: 'vibe', label: 'workflows.themeChoice.vibe', hint: 'workflows.themeChoice.vibeHint' },
 ];
 
 function ThemeSwatch({
@@ -132,6 +133,7 @@ export function ThemeChoiceModal({
 	onOpenThemeSettings,
 }: ThemeChoiceModalProps) {
 	const confirmRef = useRef<HTMLButtonElement>(null);
+	const t = useT();
 
 	// The theme in effect when the modal opened. Browsing applies themes live,
 	// so this is what closing without confirming has to restore - captured once,
@@ -197,23 +199,27 @@ export function ThemeChoiceModal({
 
 	if (!isOpen) return null;
 
-	const activeName = themes[activeThemeId]?.name ?? 'this theme';
+	const activeName = themes[activeThemeId]?.name ?? t('workflows.themeChoice.thisTheme');
 
 	// The verb has to describe what the click actually does, because the theme
 	// is ALREADY live - the button is the user's only readout of whether they
 	// are settling on something new or leaving things as they found them.
 	// A new install has no prior theme, so nothing can be kept or switched
 	// from; a returning user is keeping theirs only while they are still on it.
-	const confirmVerb = !isReturningUser
-		? 'Choose'
+	const confirmKey: MessageKey = !isReturningUser
+		? 'workflows.themeChoice.choose'
 		: activeThemeId === originalThemeId.current
-			? 'Keep'
-			: 'Switch to';
+			? 'workflows.themeChoice.keep'
+			: 'workflows.themeChoice.switchTo';
 
 	return (
 		<Modal
 			theme={theme}
-			title={isReturningUser ? 'Make Maestro yours' : 'Pick a theme'}
+			title={
+				isReturningUser
+					? t('workflows.themeChoice.titleReturning')
+					: t('workflows.themeChoice.titleNew')
+			}
 			headerIcon={<Palette className="w-4 h-4" style={{ color: theme.colors.accent }} />}
 			priority={MODAL_PRIORITIES.THEME_CHOICE}
 			onClose={handleDismiss}
@@ -233,7 +239,7 @@ export function ThemeChoiceModal({
 						className="text-xs underline underline-offset-2 hover:opacity-80 transition-opacity"
 						style={{ color: theme.colors.textDim }}
 					>
-						Customize in Settings
+						{t('workflows.themeChoice.customize')}
 					</button>
 					<div className="ml-auto flex items-center gap-2">
 						<button
@@ -247,7 +253,7 @@ export function ThemeChoiceModal({
 								color: theme.colors.accentForeground,
 							}}
 						>
-							{confirmVerb} {activeName}
+							{t(confirmKey, { name: activeName })}
 						</button>
 					</div>
 				</div>
@@ -256,8 +262,8 @@ export function ThemeChoiceModal({
 			<div className="space-y-4">
 				<p className="text-sm leading-relaxed" style={{ color: theme.colors.textMain }}>
 					{isReturningUser
-						? "While we're here: you've been on the default theme since you installed Maestro. There are a few more, in dark and light. Click any of them to try it on - the whole app changes as you browse, and nothing is saved until you keep it."
-						: 'Maestro ships with a set of themes, in dark and light. Click any of them to try it on - the whole app changes as you browse, and nothing is saved until you keep it.'}
+						? t('workflows.themeChoice.introReturning')
+						: t('workflows.themeChoice.introNew')}
 				</p>
 
 				<div className="space-y-4 max-h-[46vh] overflow-y-auto pr-1">
@@ -268,10 +274,10 @@ export function ThemeChoiceModal({
 									className="text-xs font-bold uppercase tracking-wider"
 									style={{ color: theme.colors.textDim }}
 								>
-									{section.label}
+									{t(section.label)}
 								</h3>
 								<span className="text-xs-plus" style={{ color: theme.colors.textDim }}>
-									{section.hint}
+									{t(section.hint)}
 								</span>
 							</div>
 							<div className="grid grid-cols-3 gap-2">
@@ -290,8 +296,7 @@ export function ThemeChoiceModal({
 				</div>
 
 				<p className="text-xs leading-relaxed" style={{ color: theme.colors.textDim }}>
-					You can change this whenever you like. Settings &rarr; Themes has every theme here, plus a
-					Custom one you can set colour by colour.
+					{t('workflows.themeChoice.footnote')}
 				</p>
 			</div>
 		</Modal>

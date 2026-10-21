@@ -153,6 +153,19 @@ function parseSessionContent(
 			}
 		}
 
+		let nativeTitle: string | undefined;
+		for (let i = lines.length - 1; i >= 0; i--) {
+			try {
+				const entry = JSON.parse(lines[i]);
+				if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
+					nativeTitle = entry.customTitle;
+					break;
+				}
+			} catch {
+				/* Partial tail writes are expected while the native harness is active. */
+			}
+		}
+
 		// Use assistant response as preview if available, otherwise fall back to user message
 		const previewMessage = firstAssistantMessage || firstUserMessage;
 
@@ -192,6 +205,12 @@ function parseSessionContent(
 			sessionId,
 			projectPath,
 			timestamp,
+			sessionName: nativeTitle,
+			nativeTitle,
+			firstUserMessage: firstUserMessage.slice(
+				0,
+				CLAUDE_SESSION_PARSE_LIMITS.FIRST_MESSAGE_PREVIEW_LENGTH
+			),
 			modifiedAt: new Date(stats.mtimeMs).toISOString(),
 			firstMessage: previewMessage.slice(
 				0,
@@ -335,7 +354,14 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 	 * view, or edited from Maestro. Falls back to the default path so a missing
 	 * file still fails with the usual read error.
 	 */
-	private async locateLocalSessionFile(projectPath: string, sessionId: string): Promise<string> {
+	private async locateLocalSessionFile(
+		projectPath: string,
+		sessionId: string,
+		configDir?: string
+	): Promise<string> {
+		// An explicitly selected pool must never fall back to a copy under another account.
+		if (configDir)
+			return path.join(this.getEncodedProjectDir(projectPath, configDir), `${sessionId}.jsonl`);
 		const defaultFile = path.join(this.getEncodedProjectDir(projectPath), `${sessionId}.jsonl`);
 		const exists = async (file: string): Promise<boolean> => {
 			try {
@@ -404,7 +430,7 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 		return {
 			...session,
 			origin: origin as AgentSessionOrigin | undefined,
-			sessionName,
+			sessionName: sessionName || session.sessionName,
 			starred,
 		};
 	}
@@ -780,7 +806,7 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 		let content: string;
 
 		if (sshConfig) {
-			const projectDir = this.getRemoteEncodedProjectDir(projectPath);
+			const projectDir = this.getRemoteEncodedProjectDir(projectPath, options?.configDir);
 			const sessionFile = `${projectDir}/${sessionId}.jsonl`;
 			const result = await readFileRemote(sessionFile, sshConfig);
 			if (!result.success || !result.data) {
@@ -792,7 +818,11 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			}
 			content = result.data;
 		} else {
-			const sessionFile = await this.locateLocalSessionFile(projectPath, sessionId);
+			const sessionFile = await this.locateLocalSessionFile(
+				projectPath,
+				sessionId,
+				options?.configDir
+			);
 			content = await fs.readFile(sessionFile, 'utf-8');
 		}
 

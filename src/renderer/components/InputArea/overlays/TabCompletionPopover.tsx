@@ -1,3 +1,4 @@
+import { useT, getT } from '../../../i18n';
 import React, { memo } from 'react';
 import type { MutableRefObject } from 'react';
 import { File, Folder, GitBranch, History, Tag } from 'lucide-react';
@@ -36,19 +37,21 @@ function getFilterIcon(filterType: TabCompletionFilter) {
 }
 
 function getFilterLabel(filterType: TabCompletionFilter): string {
-	if (filterType === 'all') return 'All';
-	if (filterType === 'history') return 'History';
-	if (filterType === 'branch') return 'Branches';
-	if (filterType === 'tag') return 'Tags';
-	return 'Files';
+	const t = getT();
+	if (filterType === 'all') return t('common.all');
+	if (filterType === 'history') return t('workflows.shell.history');
+	if (filterType === 'branch') return t('workflows.labels.branches');
+	if (filterType === 'tag') return t('workflows.labels.tags');
+	return t('workflows.labels.files');
 }
 
 function getEmptyLabel(filter: TabCompletionFilter): string {
-	if (filter === 'all') return 'suggestions';
-	if (filter === 'history') return 'history';
-	if (filter === 'branch') return 'branches';
-	if (filter === 'tag') return 'tags';
-	return 'files';
+	const t = getT();
+	if (filter === 'all') return t('workflows.labels.suggestions');
+	if (filter === 'history') return t('workflows.labels.history');
+	if (filter === 'branch') return t('workflows.labels.branchesLower');
+	if (filter === 'tag') return t('workflows.labels.tagsLower');
+	return t('workflows.labels.filesLower');
 }
 
 function getSuggestionIcon(type: TabCompletionSuggestion['type']) {
@@ -82,6 +85,7 @@ export const TabCompletionPopover = memo(function TabCompletionPopover({
 	setSelectedIndex,
 	inputRef,
 }: TabCompletionPopoverProps) {
+	const t = useT();
 	if (!isOpen || !isShellInput) {
 		return null;
 	}
@@ -96,7 +100,7 @@ export const TabCompletionPopover = memo(function TabCompletionPopover({
 				style={{ borderColor: theme.colors.border }}
 			>
 				<span className="text-xs opacity-60" style={{ color: theme.colors.textDim }}>
-					Tab Completion
+					{t('workflows.shell.tabCompletion')}
 				</span>
 				{isGitRepo && setFilter && (
 					<div className="flex gap-1">
@@ -171,7 +175,7 @@ export const TabCompletionPopover = memo(function TabCompletionPopover({
 						className="px-3 py-4 text-center text-sm opacity-50"
 						style={{ color: theme.colors.textDim }}
 					>
-						No matching {getEmptyLabel(filter)}
+						{t('workflows.shell.noMatching')} {getEmptyLabel(filter)}
 					</div>
 				)}
 			</div>

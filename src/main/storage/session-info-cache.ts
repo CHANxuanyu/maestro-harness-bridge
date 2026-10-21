@@ -49,7 +49,9 @@ const LOG_CONTEXT = '[SessionInfoCache]';
  * v3: Claude subagent transcripts priced into their parent session.
  * v4: Claude messages counted as prompts and responses, not transcript lines.
  */
-export const SESSION_INFO_CACHE_VERSION = 4;
+// v5: native conversation titles and first user requests for project history.
+// v6: preserve provider-native titles independently of Maestro display names.
+export const SESSION_INFO_CACHE_VERSION = 6;
 
 /** One source file to resolve: its identity within the scope plus its fingerprint. */
 export interface SessionFileRef {

@@ -151,4 +151,18 @@ export interface TabBarProps {
 	 * strip - stays visible while tabs overflow/scroll (e.g. Pianola's
 	 * Dashboard view button). */
 	leadingSlot?: ReactNode;
+
+	/**
+	 * The Left Bar's conversation list is the primary way between AI
+	 * conversations, so the strip draws only the CURRENT conversation's chip
+	 * (kept so its overlay menu - star, export, merge, snooze... - and the way
+	 * back from a file/terminal/browser tab stay one click away) next to every
+	 * non-AI tab and tiled group. Other AI tabs stay open and reachable from the
+	 * list, the tab switcher, search and the hotkeys; they are just not drawn
+	 * a second time here. That one chip is drawn compact (AITabProps.returnChip):
+	 * the header and the list already carry the title, and a native title long
+	 * enough to fill the row pushed the resource tabs out of reach. The search
+	 * badge still counts every open tab, since it labels the tab switcher.
+	 */
+	onlyActiveAiTab?: boolean;
 }

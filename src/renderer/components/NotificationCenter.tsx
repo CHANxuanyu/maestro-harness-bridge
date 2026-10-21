@@ -12,7 +12,7 @@
  * inside the header.
  */
 
-import { NOTIFICATION_HISTORY_PERSISTENCE_ERROR } from '../../shared/notificationInbox';
+import { useT, useFormatRelativeTime, useAppLocale } from '../i18n';
 import { shortcutSuffix } from './ui/ShortcutHint';
 import { useSettingsStore } from '../stores/settingsStore';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
@@ -25,7 +25,6 @@ import {
 	openNotificationLink,
 	performNotificationInboxAction,
 } from '../services/notificationInbox';
-import { formatRelativeTime } from '../../shared/formatters';
 import { useListNavigation } from '../hooks/keyboard/useListNavigation';
 import { useClickOutside } from '../hooks/ui/useClickOutside';
 import { useAnchoredMenuPosition } from '../hooks/ui/useAnchoredMenuPosition';
@@ -40,11 +39,6 @@ import { toastAccentColor, ToastIcon } from './Toast';
 
 type NotificationFilter = 'unread' | 'all';
 
-const FILTER_OPTIONS: ReadonlyArray<{ value: NotificationFilter; label: string }> = [
-	{ value: 'unread', label: 'Unread' },
-	{ value: 'all', label: 'All' },
-];
-
 interface NotificationCenterProps {
 	theme: Theme;
 }
@@ -53,12 +47,16 @@ interface NotificationCenterProps {
 export const NotificationCenter = memo(function NotificationCenter({
 	theme,
 }: NotificationCenterProps) {
+	const t = useT();
 	const open = useNotificationStore((s) => s.notificationCenterOpen);
 	const setOpen = useNotificationStore((s) => s.setNotificationCenterOpen);
 	const unreadCount = useNotificationStore(selectUnreadNotificationCount);
 
 	const shortcut = useSettingsStore((s) => s.shortcuts.openNotificationCenter);
-	const label = unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications';
+	const label =
+		unreadCount > 0
+			? t('workflows.notificationCenter.unreadCount', { count: unreadCount })
+			: t('workflows.notificationCenter.title');
 
 	return (
 		<>
@@ -125,6 +123,13 @@ interface NotificationCenterPopoverProps {
 
 /** History controls and entry actions, positioned against the bell or the app fallback. */
 function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCenterPopoverProps) {
+	const t = useT();
+	const locale = useAppLocale();
+	const formatRelativeTime = useFormatRelativeTime();
+	const filterOptions: ReadonlyArray<{ value: NotificationFilter; label: string }> = [
+		{ value: 'unread', label: t('workflows.notificationCenter.unread') },
+		{ value: 'all', label: t('workflows.notificationCenter.all') },
+	];
 	const menuRef = useRef<HTMLDivElement>(null);
 	const large = useSettingsStore((s) => s.notificationCenterLarge);
 	const [defaultSize] = useState(() => {
@@ -266,7 +271,7 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 				border: `1px solid ${theme.colors.border}`,
 			}}
 			role="dialog"
-			aria-label="Notifications"
+			aria-label={t('workflows.notificationCenter.title')}
 			data-testid="notification-center"
 		>
 			<div
@@ -274,12 +279,12 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 				style={{ borderColor: theme.colors.border }}
 			>
 				<span className="text-sm font-bold" style={{ color: theme.colors.textMain }}>
-					Notifications
+					{t('workflows.notificationCenter.title')}
 				</span>
 				<button
 					type="button"
 					onClick={onClose}
-					aria-label="Close notifications"
+					aria-label={t('workflows.notificationCenter.close')}
 					className="p-1 rounded hover:bg-white/5"
 					style={{ color: theme.colors.textDim }}
 				>
@@ -288,9 +293,9 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 				<SegmentedControl
 					value={filter}
 					onChange={setFilter}
-					options={FILTER_OPTIONS}
+					options={filterOptions}
 					theme={theme}
-					ariaLabel="Filter notifications"
+					ariaLabel={t('workflows.notificationCenter.filter')}
 					testId="notification-center-filter"
 				/>
 			</div>
@@ -301,7 +306,7 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 					className="px-3 py-2 text-xs border-b"
 					style={{ color: theme.colors.warning, borderColor: theme.colors.border }}
 				>
-					{NOTIFICATION_HISTORY_PERSISTENCE_ERROR}
+					{t('workflows.notificationCenter.saveError')}
 				</p>
 			)}
 			{visible.length === 0 ? (
@@ -310,7 +315,9 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 					style={{ color: theme.colors.textDim }}
 					data-testid="notification-center-empty"
 				>
-					{filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+					{filter === 'unread'
+						? t('workflows.notificationCenter.noUnread')
+						: t('workflows.notificationCenter.empty')}
 				</div>
 			) : (
 				<ul className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
@@ -353,7 +360,7 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 											</span>
 											<span
 												className="shrink-0"
-												title={new Date(record.timestamp).toLocaleString()}
+												title={new Date(record.timestamp).toLocaleString(locale)}
 											>
 												{formatRelativeTime(record.timestamp)}
 											</span>
@@ -377,7 +384,7 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 										<span
 											className="shrink-0 w-2 h-2 rounded-full mt-1.5"
 											style={{ backgroundColor: theme.colors.accent }}
-											aria-label="Unread"
+											aria-label={t('workflows.notificationCenter.unread')}
 										/>
 									)}
 								</button>
@@ -398,7 +405,9 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 													})
 												}
 											>
-												{expanded ? 'Hide details' : 'Show details'}
+												{expanded
+													? t('workflows.notificationCenter.hideDetails')
+													: t('workflows.notificationCenter.showDetails')}
 											</button>
 										)}
 										{keyboardNavigation && (
@@ -407,22 +416,22 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 													type="button"
 													className="hover:underline disabled:opacity-50"
 													disabled={record.read}
-													title="Mark as read (R)"
+													title={t('workflows.notificationCenter.markReadHint')}
 													onClick={() =>
 														performNotificationInboxAction({ action: 'read', id: record.id })
 													}
 												>
-													Mark as read
+													{t('workflows.notificationCenter.markRead')}
 												</button>
 												<button
 													type="button"
 													className="hover:underline"
-													title="Dismiss (Delete)"
+													title={t('workflows.notificationCenter.dismissHint')}
 													onClick={() =>
 														performNotificationInboxAction({ action: 'dismiss', id: record.id })
 													}
 												>
-													Dismiss
+													{t('workflows.notificationCenter.dismiss')}
 												</button>
 											</>
 										)}
@@ -450,7 +459,8 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 					className="px-3 py-2 text-xs shrink-0"
 					style={{ color: theme.colors.textDim }}
 				>
-					Arrows: navigate · Enter: open · R: read · Delete: dismiss{details ? ' · D: details' : ''}
+					{t('workflows.notificationCenter.keys')}
+					{details ? t('workflows.notificationCenter.detailKey') : ''}
 				</p>
 			)}
 
@@ -466,7 +476,7 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 					style={actionStyle(unreadCount > 0)}
 					data-testid="notification-center-mark-all-read"
 				>
-					Mark all as read
+					{t('workflows.notificationCenter.markAllRead')}
 				</button>
 				<button
 					type="button"
@@ -476,7 +486,7 @@ function NotificationCenterPopover({ theme, anchorRef, onClose }: NotificationCe
 					style={actionStyle(canClearHistory)}
 					data-testid="notification-center-clear-all"
 				>
-					Clear all
+					{t('workflows.notificationCenter.clearAll')}
 				</button>
 			</div>
 			<ResizeHandles

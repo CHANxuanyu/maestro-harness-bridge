@@ -337,7 +337,9 @@ describe('usePromptComposerHandlers', () => {
 					vi.advanceTimersByTime(0);
 				});
 
-				expect(deps.processInput).toHaveBeenCalledWith('send this message');
+				// The composer's Send is the user's own send: it asks for the turn to
+				// be revealed, as an Enter in the main composer does.
+				expect(deps.processInput).toHaveBeenCalledWith('send this message', { revealTurn: true });
 				vi.useRealTimers();
 			});
 
@@ -355,7 +357,7 @@ describe('usePromptComposerHandlers', () => {
 					vi.advanceTimersByTime(0);
 				});
 
-				expect(deps.processInput).toHaveBeenCalledWith('specific value');
+				expect(deps.processInput).toHaveBeenCalledWith('specific value', { revealTurn: true });
 				vi.useRealTimers();
 			});
 

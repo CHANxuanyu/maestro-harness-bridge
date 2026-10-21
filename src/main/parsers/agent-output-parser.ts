@@ -169,6 +169,9 @@ export interface ParsedEvent {
 	 */
 	isReasoning?: boolean;
 
+	/** A complete public progress message, separate from reasoning and the final answer. */
+	isCommentary?: boolean;
+
 	/**
 	 * Tool use blocks extracted from the message (for agents with mixed content)
 	 * When a message contains both text and tool_use, text goes in 'text' field

@@ -183,13 +183,28 @@ describe('TerminalOutput', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.useFakeTimers({ shouldAdvanceTime: true });
-		useSettingsStore.setState({ showToolCalls: true });
+		// The agents layout is the baseline these suites were written against; the
+		// conversation layout's live tool folding has its own cases.
+		useSettingsStore.setState({ showToolCalls: true, sidebarNavigationMode: 'agents' });
 		// A jump left behind by one test would fire inside the next one.
 		useUIStore.setState({ pendingLogJump: null });
 	});
 
 	afterEach(() => {
 		vi.useRealTimers();
+	});
+
+	it('translates the output region label while keeping model content unchanged', () => {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		const props = createDefaultProps();
+		const log = createLogEntry({ text: 'Model output: New Session remains English' });
+		props.session.tabs![0].logs = [log];
+		render(<TerminalOutput {...props} />);
+		const region = screen.getByRole('region', { name: 'Terminal output' });
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		expect(screen.getByRole('region', { name: '终端输出' })).toBe(region);
+		expect(screen.getByText(log.text)).toBeVisible();
+		act(() => useSettingsStore.setState({ uiLanguage: 'system' }));
 	});
 
 	describe('basic rendering', () => {
@@ -2782,6 +2797,274 @@ describe('TerminalOutput', () => {
 			expect(screen.getByText('First reply')).toBeInTheDocument();
 			expect(screen.getByText('Second reply')).toBeInTheDocument();
 			expect(screen.queryByText('Bash')).not.toBeInTheDocument();
+		});
+
+		describe('history read back from a provider transcript', () => {
+			const native = (messageId: string, channel?: string) => ({
+				nativeTranscript: { messageId, ...(channel ? { channel } : {}) },
+			});
+			const historyLogs = (): LogEntry[] => [
+				createLogEntry({ id: 'u1', text: 'Find the docs', source: 'user', ...native('u1') }),
+				createLogEntry({
+					id: 'c1',
+					text: 'Searching the provider docs first.',
+					source: 'stdout',
+					...native('c1', 'commentary'),
+				}),
+				createLogEntry({
+					id: 'call_1',
+					text: 'exec_command',
+					source: 'tool',
+					metadata: { toolState: { status: 'completed', output: 'docs/opencode.md:12' } },
+					...native('call_1'),
+				}),
+				createLogEntry({
+					id: 'call_2',
+					text: 'apply_patch',
+					source: 'tool',
+					metadata: { toolState: { status: 'completed', output: 'patched' } },
+					...native('call_2'),
+				}),
+				createLogEntry({
+					id: 'f1',
+					text: 'Zen plan supports it.',
+					source: 'stdout',
+					...native('f1', 'final'),
+				}),
+			];
+			const renderHistory = () =>
+				render(
+					<TerminalOutput
+						{...createDefaultProps({
+							session: createDefaultSession({
+								tabs: [
+									{
+										id: 'tab-1',
+										agentSessionId: 'codex-1',
+										logs: historyLogs(),
+										isUnread: false,
+										showThinking: 'off',
+									},
+								],
+								activeTabId: 'tab-1',
+							}),
+						})}
+					/>
+				);
+
+			it('draws a progress note as its own quiet row, apart from the answer', () => {
+				const { container } = renderHistory();
+				const note = container.querySelector('[data-progress-note]')!;
+				expect(note).toHaveTextContent('Searching the provider docs first.');
+				expect(note).not.toHaveTextContent('Zen plan supports it.');
+				expect(screen.getByText('Zen plan supports it.')).toBeInTheDocument();
+			});
+
+			it('draws stored tool calls folded, with the result one click away', () => {
+				useSettingsStore.setState({ showToolCalls: true });
+				const { container } = renderHistory();
+				expect(container.querySelectorAll('[data-native-tool]')).toHaveLength(2);
+				expect(screen.getByText('exec_command')).toBeInTheDocument();
+				expect(screen.queryByText('docs/opencode.md:12')).not.toBeInTheDocument();
+				fireEvent.click(screen.getByText('exec_command').closest('button')!);
+				expect(screen.getByText('docs/opencode.md:12')).toBeInTheDocument();
+			});
+
+			it('folds a run of stored tool calls into one row while tool calls are off', () => {
+				useSettingsStore.setState({ showToolCalls: false });
+				const { container } = renderHistory();
+				const run = container.querySelector('[data-tool-run]')!;
+				expect(run).toBeTruthy();
+				expect(container.querySelectorAll('[data-native-tool]')).toHaveLength(0);
+				fireEvent.click(run.querySelector('button')!);
+				// Unfolding the run lists each call; each call unfolds on its own.
+				expect(screen.queryByText('patched')).not.toBeInTheDocument();
+				fireEvent.click(
+					screen.getByRole('button', { name: /details for apply_patch|apply_patch 的详情/ })
+				);
+				expect(screen.getByText('patched')).toBeInTheDocument();
+			});
+
+			it('shows the whole stored result and nested input when a call is unfolded', () => {
+				useSettingsStore.setState({ showToolCalls: true });
+				const longOutput = Array.from({ length: 14 }, (_, i) => `line ${i + 1}`).join('\n');
+				const logs: LogEntry[] = [
+					createLogEntry({
+						id: 'call_n',
+						text: 'mcp_call',
+						source: 'tool',
+						metadata: {
+							toolState: {
+								status: 'completed',
+								input: { query: { project: 'maestro', filters: { state: 'open' } } },
+								output: longOutput,
+							},
+						},
+						...native('call_n'),
+					}),
+				];
+				const { container } = render(
+					<TerminalOutput
+						{...createDefaultProps({
+							session: createDefaultSession({
+								tabs: [
+									{
+										id: 'tab-1',
+										agentSessionId: 'codex-1',
+										logs,
+										isUnread: false,
+										showThinking: 'off',
+									},
+								],
+								activeTabId: 'tab-1',
+							}),
+						})}
+					/>
+				);
+				fireEvent.click(screen.getByText('mcp_call').closest('button')!);
+				const result = container.querySelector('[data-testid="tool-call-result"]')!;
+				// Past the eight-line inline preview: every line is there.
+				expect(result).toHaveTextContent('line 14');
+				const input = container.querySelector('[data-testid="tool-call-input"]')!;
+				// Nested arguments are shown, not skipped as "too noisy".
+				expect(input).toHaveTextContent('maestro');
+				expect(input).toHaveTextContent('open');
+				expect(container.querySelector('[data-tool-value-truncated]')).toBeNull();
+			});
+
+			it('draws a stopped call read back from history as stopped, the same as live', () => {
+				useSettingsStore.setState({ showToolCalls: true });
+				const logs: LogEntry[] = [
+					createLogEntry({
+						id: 'call_s',
+						text: 'exec_command',
+						source: 'tool',
+						metadata: {
+							toolState: { status: 'canceled', output: 'aborted by user after 15.1s' },
+						},
+						...native('call_s'),
+					}),
+				];
+				const { container } = render(
+					<TerminalOutput
+						{...createDefaultProps({
+							session: createDefaultSession({
+								tabs: [
+									{
+										id: 'tab-1',
+										agentSessionId: 'codex-1',
+										logs,
+										isUnread: false,
+										showThinking: 'off',
+									},
+								],
+								activeTabId: 'tab-1',
+							}),
+						})}
+					/>
+				);
+				const glyph = container.querySelector('[data-tool-status="canceled"]')!;
+				expect(glyph).toBeTruthy();
+				expect(glyph).toHaveAttribute('aria-label');
+				expect(screen.queryByText('✓')).not.toBeInTheDocument();
+				expect(screen.queryByText('!')).not.toBeInTheDocument();
+			});
+
+			it('says so when the stored result was shortened for storage', () => {
+				useSettingsStore.setState({ showToolCalls: true });
+				const capped = `${'x'.repeat(50)}\n... [tool output truncated, 98765 chars total]`;
+				const logs: LogEntry[] = [
+					createLogEntry({
+						id: 'call_c',
+						text: 'exec_command',
+						source: 'tool',
+						metadata: { toolState: { status: 'completed', output: capped } },
+						...native('call_c'),
+					}),
+				];
+				const { container } = render(
+					<TerminalOutput
+						{...createDefaultProps({
+							session: createDefaultSession({
+								tabs: [
+									{
+										id: 'tab-1',
+										agentSessionId: 'codex-1',
+										logs,
+										isUnread: false,
+										showThinking: 'off',
+									},
+								],
+								activeTabId: 'tab-1',
+							}),
+						})}
+					/>
+				);
+				fireEvent.click(screen.getByText('exec_command').closest('button')!);
+				const flag = container.querySelector('[data-tool-value-truncated]')!;
+				expect(flag).toHaveTextContent('98765');
+				expect(
+					container.querySelector('[data-testid="tool-call-result"] pre')
+				).not.toHaveTextContent('tool output truncated');
+			});
+		});
+
+		describe('live tool calls in the conversation layout', () => {
+			const liveLogs = (status: 'running' | 'completed'): LogEntry[] => [
+				createLogEntry({ id: 'q', text: 'run the tests', source: 'user' }),
+				createLogEntry({
+					id: 'tool-1',
+					text: 'Bash',
+					source: 'tool',
+					metadata: { toolState: { status, input: { command: 'npm run test' } } },
+				}),
+			];
+			const renderLive = (status: 'running' | 'completed') =>
+				render(
+					<TerminalOutput
+						{...createDefaultProps({
+							session: createDefaultSession({
+								state: 'busy',
+								tabs: [
+									{
+										id: 'tab-1',
+										agentSessionId: 'claude-123',
+										logs: liveLogs(status),
+										isUnread: false,
+										showThinking: 'off',
+									},
+								],
+								activeTabId: 'tab-1',
+							}),
+						})}
+					/>
+				);
+
+			it('shows what the running turn is executing even with tool calls off', () => {
+				useSettingsStore.setState({ showToolCalls: false, sidebarNavigationMode: 'conversations' });
+				const { container } = renderLive('running');
+				const run = container.querySelector('[data-tool-run]')!;
+				expect(run).toHaveAttribute('data-tool-run-status', 'running');
+				expect(run).toHaveTextContent('Bash');
+				fireEvent.click(run.querySelector('button')!);
+				expect(screen.getByText('npm run test')).toBeInTheDocument();
+			});
+
+			it('marks the run finished once the call completes', () => {
+				useSettingsStore.setState({ showToolCalls: false, sidebarNavigationMode: 'conversations' });
+				const { container } = renderLive('completed');
+				expect(container.querySelector('[data-tool-run]')).toHaveAttribute(
+					'data-tool-run-status',
+					'completed'
+				);
+			});
+
+			it('keeps the full live tool card when tool calls are on', () => {
+				useSettingsStore.setState({ showToolCalls: true, sidebarNavigationMode: 'conversations' });
+				const { container } = renderLive('running');
+				expect(container.querySelector('[data-tool-run]')).toBeNull();
+				expect(screen.getByText('npm run test')).toBeInTheDocument();
+			});
 		});
 
 		it('collapses subagent tool calls behind a count under the Task badge', () => {

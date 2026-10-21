@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React, { memo } from 'react';
 import type { MutableRefObject } from 'react';
 import { File, Folder, Users } from 'lucide-react';
@@ -44,29 +45,6 @@ interface AtMentionPopoverProps {
 	showCategoryBar?: boolean;
 }
 
-/** Human labels for the category bar segments. */
-const CATEGORY_LABELS: Record<MentionCategory, string> = {
-	all: 'All',
-	files: 'Files',
-	directories: 'Directories',
-	agents: 'Agents',
-};
-
-/** Empty-state copy per category. */
-const EMPTY_LABELS: Record<MentionCategory, string> = {
-	all: 'No matches',
-	files: 'No files',
-	directories: 'No directories',
-	agents: 'No agents available',
-};
-
-/**
- * Guidance shown for the Agents category when there are genuinely no other
- * agents to consult (empty filter + zero rows), rather than a filter miss.
- */
-const NO_OTHER_AGENTS_LABEL =
-	'No other agents available - open another agent in the Left Bar to consult it.';
-
 const ZERO_COUNTS: Record<MentionCategory, number> = {
 	all: 0,
 	files: 0,
@@ -95,6 +73,20 @@ export const AtMentionPopover = memo(function AtMentionPopover({
 	inputRef,
 	showCategoryBar = true,
 }: AtMentionPopoverProps) {
+	const t = useT();
+	const CATEGORY_LABELS: Record<MentionCategory, string> = {
+		all: t('common.all'),
+		files: t('workflows.labels.files'),
+		directories: t('workflows.labels.directories'),
+		agents: t('common.agents'),
+	};
+	const EMPTY_LABELS: Record<MentionCategory, string> = {
+		all: t('workflows.shell.extraNoMatches'),
+		files: t('workflows.shell.extraNoFiles'),
+		directories: t('workflows.shell.extraNoDirectories'),
+		agents: t('workflows.shell.extraNoAgentsAvailable'),
+	};
+	const NO_OTHER_AGENTS_LABEL = t('workflows.shell.extraNoOtherAgentsAvailableOpenAnotherAgentIn');
 	// Resolved before the early return (hooks can't sit behind a conditional).
 	// One shared, cached lookup labels every SSH row in the list.
 	const sshRemoteNames = useSshRemoteNames();
@@ -193,7 +185,14 @@ export const AtMentionPopover = memo(function AtMentionPopover({
 						style={{ color: theme.colors.textDim }}
 					>
 						{emptyLabel}
-						{filter && <span className="opacity-70"> matching &quot;{filter}&quot;</span>}
+						{filter && (
+							<span className="opacity-70">
+								{' '}
+								{t('workflows.shell.matchingQuot')}
+								{filter}
+								{t('workflows.shell.quot')}
+							</span>
+						)}
 					</div>
 				) : (
 					items.map((item, idx) => {
@@ -249,7 +248,9 @@ export const AtMentionPopover = memo(function AtMentionPopover({
 									{isGroup && (
 										<span className="text-2xs opacity-50 flex-shrink-0">
 											{item.memberSessionIds?.length ?? 0}{' '}
-											{item.memberSessionIds?.length === 1 ? 'agent' : 'agents'}
+											{item.memberSessionIds?.length === 1
+												? t('workflows.shell.agent2')
+												: t('workflows.shell.agents2')}
 										</span>
 									)}
 									<span
@@ -261,7 +262,7 @@ export const AtMentionPopover = memo(function AtMentionPopover({
 											color: isGroup ? theme.colors.accent : theme.colors.textDim,
 										}}
 									>
-										{isGroup ? 'group' : 'agent'}
+										{isGroup ? t('workflows.shell.group') : t('workflows.shell.agent2')}
 									</span>
 								</button>
 							);
@@ -297,11 +298,13 @@ export const AtMentionPopover = memo(function AtMentionPopover({
 												color: theme.colors.accent,
 											}}
 										>
-											Auto Run
+											{t('workflows.shell.autoRun')}
 										</span>
 									)}
 									<span className="text-2xs opacity-40 flex-shrink-0">
-										{item.kind === 'directory' ? 'folder' : 'file'}
+										{item.kind === 'directory'
+											? t('workflows.shell.folder')
+											: t('workflows.shell.file')}
 									</span>
 								</button>
 							);

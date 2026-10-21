@@ -9,6 +9,7 @@
 
 import { useMemo } from 'react';
 import type { Session, Theme } from '../../types';
+import type { ResumeNativeSession } from '../../services/openNativeConversation';
 
 /**
  * Dependencies for computing SessionList props.
@@ -45,6 +46,8 @@ export interface UseSessionListPropsDeps {
 	deleteSession: (id: string) => void;
 	deleteWorktreeGroup: (groupId: string) => void;
 	handleEditAgent: (session: Session) => void;
+	/** Canonical resume (`useAgentSessionManagement`), for native history rows. */
+	handleResumeSession?: ResumeNativeSession;
 	handleOpenCreatePRSession: (session: Session) => void;
 	handleQuickCreateWorktree: (session: Session) => void;
 	handleOpenWorktreeConfigSession: (session: Session) => void;
@@ -102,6 +105,7 @@ export function useSessionListProps(deps: UseSessionListPropsDeps) {
 			onDeleteSession: deps.deleteSession,
 			onDeleteWorktreeGroup: deps.deleteWorktreeGroup,
 			onEditAgent: deps.handleEditAgent,
+			onResumeNativeSession: deps.handleResumeSession,
 			onNewAgentSession: deps.addNewSession,
 			onToggleWorktreeExpanded: deps.handleToggleWorktreeExpanded,
 			onOpenCreatePR: deps.handleOpenCreatePRSession,
@@ -146,6 +150,7 @@ export function useSessionListProps(deps: UseSessionListPropsDeps) {
 			deps.deleteSession,
 			deps.deleteWorktreeGroup,
 			deps.handleEditAgent,
+			deps.handleResumeSession,
 			deps.handleOpenCreatePRSession,
 			deps.handleQuickCreateWorktree,
 			deps.handleOpenWorktreeConfigSession,

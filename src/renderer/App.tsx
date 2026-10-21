@@ -2433,6 +2433,9 @@ function MaestroConsoleInner() {
 			processInputRef.current(resolution.prompt, {
 				sessionId: resolution.sessionId,
 				tabId: resolution.tabId,
+				// A click on a chip drawn in the tab on screen (checked above): the
+				// user's own send, so its turn is revealed like an Enter.
+				revealTurn: true,
 			});
 			return;
 		}
@@ -3077,6 +3080,7 @@ function MaestroConsoleInner() {
 		deleteSession,
 		deleteWorktreeGroup,
 		handleEditAgent,
+		handleResumeSession,
 		handleOpenCreatePRSession,
 		handleQuickCreateWorktree,
 		handleOpenWorktreeConfigSession,

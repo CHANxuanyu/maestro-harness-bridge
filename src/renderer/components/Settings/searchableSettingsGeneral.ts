@@ -13,6 +13,25 @@ const META_KEY_NAME = formatMetaKeyName();
 
 export const GENERAL_SETTINGS: SearchableSetting[] = [
 	{
+		id: 'general-language',
+		tab: 'general',
+		tabLabel: 'General',
+		label: 'Language',
+		description: 'Display Maestro in English or Simplified Chinese, or follow the system language',
+		keywords: [
+			'language',
+			'locale',
+			'translation',
+			'chinese',
+			'english',
+			'zh',
+			'i18n',
+			'international',
+			'中文',
+			'简体中文',
+		],
+	},
+	{
 		id: 'general-conductor-profile',
 		tab: 'general',
 		tabLabel: 'General',

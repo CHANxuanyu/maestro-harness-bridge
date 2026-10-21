@@ -1,3 +1,4 @@
+import { useT } from '../../../../../i18n';
 import { Check, Key, Timer, X } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import type { WakatimeSettingsState } from '../types';
@@ -21,16 +22,17 @@ export function WakatimeSettings({
 	setWakatimeDetailedTracking,
 	wakatimeState,
 }: WakatimeSettingsProps) {
+	const tExtra = useT();
 	return (
 		<>
 			<div className="flex items-center justify-between">
 				<div>
 					<p className="text-sm flex items-center gap-2" style={{ color: theme.colors.textMain }}>
 						<Timer className="w-3.5 h-3.5 opacity-60" />
-						Enable WakaTime tracking
+						{tExtra('settings.extra.wakatimeSettings.enableWakatimeTracking')}
 					</p>
 					<p className="text-xs opacity-70 mt-0.5">
-						Track coding activity in Maestro sessions via WakaTime.
+						{tExtra('settings.extra.wakatimeSettings.trackCodingActivityInMaestroSessionsVia')}
 					</p>
 				</div>
 				<button
@@ -41,7 +43,7 @@ export function WakatimeSettings({
 					}}
 					role="switch"
 					aria-checked={wakatimeEnabled}
-					aria-label="Enable WakaTime tracking"
+					aria-label={tExtra('settings.extra.wakatimeSettings.enableWakatimeTracking')}
 				>
 					<span
 						className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
@@ -55,7 +57,7 @@ export function WakatimeSettings({
 				wakatimeState.wakatimeCliStatus &&
 				!wakatimeState.wakatimeCliStatus.available && (
 					<p className="text-xs mt-1" style={{ color: theme.colors.warning }}>
-						WakaTime CLI is being installed automatically...
+						{tExtra('settings.extra.wakatimeSettings.wakatimeCliIsBeingInstalledAutomatically')}
 					</p>
 				)}
 
@@ -63,10 +65,10 @@ export function WakatimeSettings({
 				<div className="flex items-center justify-between">
 					<div>
 						<p className="text-sm" style={{ color: theme.colors.textMain }}>
-							Detailed file tracking
+							{tExtra('settings.extra.wakatimeSettings.detailedFileTracking')}
 						</p>
 						<p className="text-xs opacity-70 mt-0.5">
-							Track per-file write activity. Sends file paths (not content) to WakaTime.
+							{tExtra('settings.extra.wakatimeSettings.trackPerFileWriteActivitySendsFile')}
 						</p>
 					</div>
 					<button
@@ -80,7 +82,7 @@ export function WakatimeSettings({
 						}}
 						role="switch"
 						aria-checked={wakatimeDetailedTracking}
-						aria-label="Detailed file tracking"
+						aria-label={tExtra('settings.extra.wakatimeSettings.detailedFileTracking')}
 					>
 						<span
 							className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
@@ -94,7 +96,7 @@ export function WakatimeSettings({
 			{wakatimeEnabled && (
 				<div>
 					<label htmlFor="wakatime-api-key" className="block text-xs opacity-70 mb-1">
-						API Key
+						{tExtra('settings.extra.wakatimeSettings.apiKey')}
 					</label>
 					<div
 						className="flex items-center border rounded px-3 py-2"
@@ -123,10 +125,10 @@ export function WakatimeSettings({
 						{wakatimeApiKey && (
 							<button
 								type="button"
-								aria-label="Clear WakaTime API key"
+								aria-label={tExtra('settings.extra.wakatimeSettings.clearWakatimeApiKey')}
 								onClick={() => wakatimeState.handleWakatimeApiKeyChange('')}
 								className="ml-2 opacity-50 hover:opacity-100"
-								title="Clear API key"
+								title={tExtra('settings.extra.wakatimeSettings.clearApiKey')}
 								style={
 									!wakatimeState.wakatimeKeyValidating && wakatimeState.wakatimeKeyValid === false
 										? { color: theme.colors.error, opacity: 1 }
@@ -138,8 +140,7 @@ export function WakatimeSettings({
 						)}
 					</div>
 					<p className="text-2xs mt-1.5 opacity-55">
-						Get your API key from wakatime.com/settings/api-key. Keys are stored locally in
-						~/.maestro/settings.json.
+						{tExtra('settings.extra.wakatimeSettings.getYourApiKeyFromWakatimeCom')}
 					</p>
 				</div>
 			)}

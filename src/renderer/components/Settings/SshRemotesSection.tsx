@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * SshRemotesSection - Settings section for managing SSH remote configurations
  *
@@ -47,6 +48,7 @@ export interface SshRemotesSectionProps {
 }
 
 export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
+	const tExtra = useT();
 	// SSH remotes state from hook
 	const {
 		configs,
@@ -110,8 +112,10 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 			[config.id]: {
 				success: result.success,
 				message: result.success
-					? `Connected to ${config.name || config.host}`
-					: result.error || 'Connection failed',
+					? tExtra('settings.extra.sshRemotesSection.connected', {
+							host: config.name || config.host,
+						})
+					: result.error || tExtra('settings.extra.sshRemotesSection.connectionFailed'),
 				remediation: result.result?.remediation,
 			},
 		}));
@@ -140,7 +144,7 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 			>
 				<Spinner size={20} color={theme.colors.accent} />
 				<span className="text-sm" style={{ color: theme.colors.textDim }}>
-					Loading SSH remotes...
+					{tExtra('settings.extra.sshRemotesSection.loadingSshRemotes')}
 				</span>
 			</div>
 		);
@@ -162,11 +166,14 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 
 				{/* Content */}
 				<div className="flex-1 min-w-0">
-					<p className="text-2xs uppercase font-bold opacity-50 mb-1">Remote Execution</p>
-					<p className="font-semibold mb-1">SSH Remote Hosts</p>
+					<p className="text-2xs uppercase font-bold opacity-50 mb-1">
+						{tExtra('settings.extra.sshRemotesSection.remoteExecution')}
+					</p>
+					<p className="font-semibold mb-1">
+						{tExtra('settings.extra.sshRemotesSection.sshRemoteHosts')}
+					</p>
 					<p className="text-xs opacity-70 mb-3">
-						Configure remote hosts where AI agents can be executed via SSH. This allows running
-						agents on powerful remote machines or servers with specific tools installed.
+						{tExtra('settings.extra.sshRemotesSection.configureRemoteHostsWhereAiAgentsCan')}
 					</p>
 
 					{/* Error Display */}
@@ -224,7 +231,7 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 																color: theme.colors.accent,
 															}}
 														>
-															Default
+															{tExtra('settings.extra.sshRemotesSection.default')}
 														</span>
 													)}
 													{!config.enabled && (
@@ -235,7 +242,7 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 																color: theme.colors.warning,
 															}}
 														>
-															Disabled
+															{tExtra('settings.extra.sshRemotesSection.disabled')}
 														</span>
 													)}
 												</div>
@@ -283,7 +290,7 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 													disabled={isTesting || !config.enabled}
 													className="p-1.5 rounded hover:bg-white/10 transition-colors disabled:opacity-50"
 													style={{ color: theme.colors.textDim }}
-													title="Test connection"
+													title={tExtra('settings.extra.sshRemotesSection.testConnection')}
 												>
 													{isTesting ? (
 														<Spinner size={16} />
@@ -305,7 +312,11 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 													style={{
 														color: isDefault ? theme.colors.accent : theme.colors.textDim,
 													}}
-													title={isDefault ? 'Remove as default' : 'Set as default'}
+													title={
+														isDefault
+															? tExtra('settings.extra.sshRemotesSection.removeAsDefault')
+															: tExtra('settings.extra.sshRemotesSection.setAsDefault')
+													}
 												>
 													<Check className="w-4 h-4" />
 												</button>
@@ -314,7 +325,7 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 												<GhostIconButton
 													onClick={() => handleEdit(config)}
 													padding="p-1.5"
-													title="Edit"
+													title={tExtra('settings.extra.sshRemotesSection.edit')}
 													color={theme.colors.textDim}
 												>
 													<Edit2 className="w-4 h-4" />
@@ -327,7 +338,7 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 													disabled={isDeleting}
 													className="p-1.5 rounded hover:bg-white/10 transition-colors disabled:opacity-50"
 													style={{ color: theme.colors.error }}
-													title="Delete"
+													title={tExtra('settings.extra.sshRemotesSection.delete')}
 												>
 													{isDeleting ? <Spinner size={16} /> : <Trash2 className="w-4 h-4" />}
 												</button>
@@ -350,10 +361,10 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 								style={{ color: theme.colors.textDim }}
 							/>
 							<p className="text-sm" style={{ color: theme.colors.textDim }}>
-								No SSH remotes configured
+								{tExtra('settings.extra.sshRemotesSection.noSshRemotesConfigured')}
 							</p>
 							<p className="text-xs opacity-70 mt-1">
-								Add a remote host to run AI agents on external machines
+								{tExtra('settings.extra.sshRemotesSection.addARemoteHostToRunAi')}
 							</p>
 						</div>
 					)}
@@ -369,7 +380,7 @@ export function SshRemotesSection({ theme }: SshRemotesSectionProps) {
 						}}
 					>
 						<Plus className="w-4 h-4" />
-						Add SSH Remote
+						{tExtra('settings.extra.sshRemotesSection.addSshRemote')}
 					</button>
 				</div>
 			</div>

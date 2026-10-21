@@ -5,7 +5,8 @@ import type { Theme } from '../types';
 import { useGitFileStatus, useGitDetail, type GitFileChange } from '../contexts/GitStatusContext';
 import { useAnchoredMenuPosition } from '../hooks/ui/useAnchoredMenuPosition';
 import { GitChangeCounts } from './ui/GitChangeCounts';
-import { formatGitChangeSummary, type GitChangeTotals } from '../../shared/gitUtils';
+import type { GitChangeTotals } from '../../shared/gitUtils';
+import { useT } from '../i18n';
 
 interface GitStatusWidgetProps {
 	/** Session ID to look up git status from context */
@@ -36,6 +37,7 @@ export const GitStatusWidget = memo(function GitStatusWidget({
 	onViewDiff,
 	onViewLog,
 }: GitStatusWidgetProps) {
+	const t = useT();
 	// Tooltip hover state with timeout for smooth UX
 	const [tooltipOpen, setTooltipOpen] = useState(false);
 	const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,6 +90,21 @@ export const GitStatusWidget = memo(function GitStatusWidget({
 	const modified = fileDetails?.modifiedCount ?? 0;
 	const totalChanges = additions + deletions + modified;
 	const totals: GitChangeTotals = { fileCount, additions, deletions, modified };
+	const details = [
+		additions > 0 ? `+${additions}` : '',
+		deletions > 0 ? `−${deletions}` : '',
+		modified > 0 ? `~${modified}` : '',
+	]
+		.filter(Boolean)
+		.join(' ');
+	const summary = details
+		? t(fileCount === 1 ? 'workflows.gitStatus.oneDetails' : 'workflows.gitStatus.manyDetails', {
+				count: fileCount,
+				details,
+			})
+		: t(fileCount === 1 ? 'workflows.gitStatus.oneChanged' : 'workflows.gitStatus.manyChanged', {
+				count: fileCount,
+			});
 
 	return (
 		<div
@@ -100,7 +117,7 @@ export const GitStatusWidget = memo(function GitStatusWidget({
 				onClick={onViewDiff}
 				className="flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors hover:bg-white/5"
 				style={{ color: theme.colors.textMain }}
-				title={formatGitChangeSummary(totals)}
+				title={summary}
 			>
 				{/* Compact mode: just show file count - shown at narrow widths via CSS */}
 				<span className="header-git-status-compact flex items-center gap-1" aria-hidden="true">
@@ -171,6 +188,7 @@ function GitStatusTooltip({
 	onKeepOpen,
 	onScheduleClose,
 }: GitStatusTooltipProps) {
+	const t = useT();
 	const tooltipRef = useRef<HTMLDivElement>(null);
 	const { left, top, ready } = useAnchoredMenuPosition(tooltipRef, anchorRef);
 
@@ -196,7 +214,7 @@ function GitStatusTooltip({
 					borderColor: theme.colors.border,
 				}}
 			>
-				Changed Files ({totalChanges}) • +{additions} −{deletions}
+				{t('workflows.gitStatus.changedFiles', { count: totalChanges, additions, deletions })}
 			</div>
 			<div className="max-h-96 overflow-y-auto scrollbar-thin">
 				{fileChanges.map((file: GitFileChange, idx: number) => {
@@ -253,7 +271,7 @@ function GitStatusTooltip({
 				}}
 			>
 				<FileDiff className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-				View Full Diff
+				{t('workflows.gitStatus.fullDiff')}
 			</button>
 			{onViewLog && (
 				<button
@@ -265,7 +283,7 @@ function GitStatusTooltip({
 					}}
 				>
 					<History className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-					View Git Log
+					{t('workflows.gitStatus.viewLog')}
 				</button>
 			)}
 		</div>,

@@ -1,5 +1,6 @@
 import { PanelTop } from 'lucide-react';
 import type { Theme } from '../../../../../types';
+import { useT } from '../../../../../i18n';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { SectionCard } from './SectionCard';
 import { ToggleSettingRow } from './ToggleSettingRow';
@@ -23,44 +24,37 @@ export function MainHeaderPanelSection({
 	showSessionCostPill,
 	setShowSessionCostPill,
 }: MainHeaderPanelSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="display-main-header-panel">
-			<SettingsSectionHeading icon={PanelTop}>Main Header Panel</SettingsSectionHeading>
+			<SettingsSectionHeading icon={PanelTop}>
+				{t('settings.display.header.heading')}
+			</SettingsSectionHeading>
 			<SectionCard theme={theme}>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show agent name"
-					description="Display the agent name in the main header."
+					title={t('settings.display.header.agentName')}
+					description={t('settings.display.header.agentNameDescription')}
 					checked={showAgentName}
 					onChange={setShowAgentName}
-					ariaLabel="Show agent name"
+					ariaLabel={t('settings.display.header.agentName')}
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show session ID pill"
-					description={
-						<>
-							Display the provider session ID pill (short hash, e.g. &quot;B778BF42&quot;) in the
-							main header. Click the pill to copy the full ID.
-						</>
-					}
+					title={t('settings.display.header.sessionId')}
+					description={t('settings.display.header.sessionIdDescription')}
 					checked={showSessionIdPill}
 					onChange={setShowSessionIdPill}
-					ariaLabel="Show session ID pill"
+					ariaLabel={t('settings.display.header.sessionId')}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show session cost pill"
-					description={
-						<>
-							Display the per-session running cost (e.g. &quot;$21.33&quot;) in the main header, and
-							the total cost in the group chat header.
-						</>
-					}
+					title={t('settings.display.header.cost')}
+					description={t('settings.display.header.costDescription')}
 					checked={showSessionCostPill}
 					onChange={setShowSessionCostPill}
-					ariaLabel="Show session cost pill"
+					ariaLabel={t('settings.display.header.cost')}
 					borderTop
 				/>
 			</SectionCard>

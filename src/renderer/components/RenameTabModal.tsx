@@ -4,6 +4,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, MODAL_BUTTON_BASE_CLASS, MODAL_BUTTON_SECONDARY_CLASS } from './ui/Modal';
 import { FormInput } from './ui/FormInput';
 import { formatMetaKey } from '../utils/shortcutFormatter';
+import { useT } from '../i18n';
 
 interface RenameTabModalProps {
 	theme: Theme;
@@ -20,23 +21,18 @@ interface RenameTabModalProps {
 }
 
 export const RenameTabModal = memo(function RenameTabModal(props: RenameTabModalProps) {
-	const {
-		theme,
-		initialName,
-		agentSessionId,
-		onClose,
-		onRename,
-		onAutoName,
-		hasLogs,
-		title = 'Rename Tab',
-	} = props;
+	const { theme, initialName, agentSessionId, onClose, onRename, onAutoName, hasLogs, title } =
+		props;
+	const t = useT();
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [value, setValue] = useState(initialName);
 
 	// Generate placeholder with UUID octet if available
 	const placeholder = agentSessionId
-		? `Rename ${agentSessionId.split('-')[0].toUpperCase()}...`
-		: 'Enter tab name...';
+		? t('workflows.renameTab.placeholderWithId', {
+				id: agentSessionId.split('-')[0].toUpperCase(),
+			})
+		: t('workflows.renameTab.placeholder');
 
 	const handleRename = () => {
 		onRename(value.trim());
@@ -56,7 +52,7 @@ export const RenameTabModal = memo(function RenameTabModal(props: RenameTabModal
 	return (
 		<Modal
 			theme={theme}
-			title={title}
+			title={title ?? t('workflows.renameTab.title')}
 			priority={MODAL_PRIORITIES.RENAME_TAB}
 			onClose={onClose}
 			width={400}
@@ -67,14 +63,14 @@ export const RenameTabModal = memo(function RenameTabModal(props: RenameTabModal
 						<button
 							type="button"
 							onClick={onAutoName}
-							title={`Auto-rename (${formatMetaKey()}+Shift+Enter)`}
+							title={t('workflows.renameTab.autoTitle', { keys: `${formatMetaKey()}+Shift+Enter` })}
 							className={`${MODAL_BUTTON_SECONDARY_CLASS} mr-auto`}
 							style={{
 								borderColor: theme.colors.border,
 								color: theme.colors.accent,
 							}}
 						>
-							Auto
+							{t('workflows.renameTab.auto')}
 						</button>
 					)}
 					<button
@@ -86,7 +82,7 @@ export const RenameTabModal = memo(function RenameTabModal(props: RenameTabModal
 							color: theme.colors.textMain,
 						}}
 					>
-						Cancel
+						{t('common.cancel')}
 					</button>
 					<button
 						type="button"
@@ -97,7 +93,7 @@ export const RenameTabModal = memo(function RenameTabModal(props: RenameTabModal
 							color: theme.colors.accentForeground,
 						}}
 					>
-						Rename
+						{t('common.rename')}
 					</button>
 				</>
 			}

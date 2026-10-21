@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * GroupChatPanel.tsx
  *
@@ -125,6 +126,7 @@ export function GroupChatPanel({
 	moderatorOnly = false,
 	onToggleModeratorOnly,
 }: GroupChatPanelProps): JSX.Element {
+	const t = useT();
 	const searchKey = groupChatOutputSearchKey(groupChat.id);
 	const {
 		outputSearchOpen,
@@ -146,7 +148,7 @@ export function GroupChatPanel({
 	useOutputSearchLayer({
 		open: outputSearchOpen,
 		onEscape: closeSearch,
-		ariaLabel: 'Group Chat Search',
+		ariaLabel: t('workflows.shell.groupChatSearch'),
 	});
 
 	const { currentMatchIndex, totalMatches, regexError, goToNextMatch, goToPrevMatch } =

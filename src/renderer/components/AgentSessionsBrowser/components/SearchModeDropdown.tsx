@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React, { RefObject } from 'react';
 import { Search, User, Bot, MessageSquare, ChevronDown } from 'lucide-react';
 import type { Theme } from '../../../types';
@@ -13,19 +14,29 @@ interface SearchModeDropdownProps {
 }
 
 const MODES = [
-	{ mode: 'title' as SearchMode, icon: Search, label: 'Title Only', desc: 'Search session titles' },
-	{ mode: 'user' as SearchMode, icon: User, label: 'My Messages', desc: 'Search your messages' },
+	{
+		mode: 'title' as SearchMode,
+		icon: Search,
+		label: 'workflows.sessions.searchTitleOnly',
+		desc: 'workflows.sessions.searchTitlesHelp',
+	},
+	{
+		mode: 'user' as SearchMode,
+		icon: User,
+		label: 'workflows.sessions.searchMyMessages',
+		desc: 'workflows.sessions.searchMyMessagesHelp',
+	},
 	{
 		mode: 'assistant' as SearchMode,
 		icon: Bot,
-		label: 'AI Responses',
-		desc: 'Search AI responses',
+		label: 'workflows.sessions.searchAiResponses',
+		desc: 'workflows.sessions.searchAiResponsesHelp',
 	},
 	{
 		mode: 'all' as SearchMode,
 		icon: MessageSquare,
-		label: 'All Content',
-		desc: 'Search everything',
+		label: 'workflows.sessions.searchAllContent',
+		desc: 'workflows.sessions.searchEverything',
 	},
 ] as const;
 
@@ -41,6 +52,7 @@ export const SearchModeDropdown = React.memo(function SearchModeDropdown({
 	onSelect,
 	theme,
 }: SearchModeDropdownProps) {
+	const uiText = useT();
 	const ActiveIcon = getModeIcon(searchMode);
 
 	return (
@@ -51,7 +63,18 @@ export const SearchModeDropdown = React.memo(function SearchModeDropdown({
 				style={{ color: theme.colors.textDim, border: `1px solid ${theme.colors.border}` }}
 			>
 				<ActiveIcon className="w-3 h-3" />
-				<span className="capitalize">{searchMode === 'all' ? 'All' : searchMode}</span>
+				<span className="capitalize">
+					{uiText(
+						(
+							{
+								all: 'workflows.sessions.all',
+								title: 'workflows.sessions.searchModeTitle',
+								user: 'workflows.sessions.searchModeUser',
+								assistant: 'workflows.sessions.searchModeAssistant',
+							} as const
+						)[searchMode]
+					)}
+				</span>
 				<ChevronDown className="w-3 h-3" />
 			</button>
 			{isOpen && (
@@ -71,10 +94,10 @@ export const SearchModeDropdown = React.memo(function SearchModeDropdown({
 							/>
 							<div>
 								<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-									{label}
+									{uiText(label)}
 								</div>
 								<div className="text-xs" style={{ color: theme.colors.textDim }}>
-									{desc}
+									{uiText(desc)}
 								</div>
 							</div>
 						</button>

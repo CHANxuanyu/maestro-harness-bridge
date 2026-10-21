@@ -17,6 +17,29 @@ function mountSvg(inner: string): SVGSVGElement {
 	return host.querySelector('svg')!;
 }
 
+/**
+ * Test-environment shim, not product behavior. Chromium registers a `<style>`
+ * inside an inline `<svg>` as a document stylesheet, which is how mermaid's
+ * classDef rules reach the nodes in the app. jsdom does not: for an SVG
+ * `<style>` its getComputedStyle reports an empty `fill` and the default
+ * `color`, while the SAME CSS text in an HTML `<style>` in `document.head`
+ * resolves (observed 2026-10-21 with the installed jsdom). So the diagram's own
+ * CSS text is copied, unchanged, into an HTML stylesheet. The selectors still
+ * have to match the SVG's real classDef markup, and the SVG `<style>` stays in
+ * place as mermaid emits it. Every mirror is removed in `afterEach`.
+ */
+const mirroredStyles: HTMLStyleElement[] = [];
+
+function mirrorSvgStylesheets(svg: SVGSVGElement): void {
+	for (const embedded of Array.from(svg.querySelectorAll('style'))) {
+		const mirror = document.createElement('style');
+		mirror.setAttribute('data-test-svg-style-mirror', '');
+		mirror.textContent = embedded.textContent;
+		document.head.appendChild(mirror);
+		mirroredStyles.push(mirror);
+	}
+}
+
 function htmlNode(fill: string, labelColor: string, text = 'artifactory · S4'): string {
 	return `<g class="node default">
 		<rect class="basic label-container" style="fill:${fill} !important"></rect>
@@ -30,6 +53,7 @@ function measured(el: Element, property: 'color' | 'fill'): string {
 
 afterEach(() => {
 	document.body.innerHTML = '';
+	for (const mirror of mirroredStyles.splice(0)) mirror.remove();
 });
 
 describe('repairDiagramLabelContrast', () => {
@@ -72,8 +96,14 @@ describe('repairDiagramLabelContrast', () => {
 				<rect class="basic label-container"></rect>
 				<g class="label"><foreignObject><div><span class="nodeLabel"><p>deploy-target host</p></span></div></foreignObject></g>
 			</g>`);
+		mirrorSvgStylesheets(svg);
 		const p = svg.querySelector('p')!;
+		const rect = svg.querySelector('rect')!;
 
+		// Precondition: the classDef rules really apply before the repair runs, so
+		// the case starts as the near-white-on-pale-yellow failure it describes.
+		expect(measured(rect, 'fill')).toBe('#f9e79f');
+		expect(measured(p, 'color')).toBe('#eeeeee');
 		expect(repairDiagramLabelContrast(svg)).toBe(1);
 		expect(contrastRatio(measured(p, 'color'), '#f9e79f')).toBeGreaterThanOrEqual(AA_CONTRAST);
 	});

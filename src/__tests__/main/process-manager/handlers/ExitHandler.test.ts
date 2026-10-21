@@ -158,6 +158,63 @@ describe('ExitHandler', () => {
 		vi.mocked(waitForCopilotShutdown).mockImplementation(actualWaitForCopilotShutdown);
 	});
 
+	describe('deliberate Stop at process exit', () => {
+		it.each([false, true])(
+			'preserves resume identity by suppressing stopped exit errors (ssh=%s)',
+			async (remote) => {
+				const parser = createMockOutputParser({
+					detectErrorFromExit: vi.fn(() => ({
+						type: 'session_not_found',
+						message: 'Session not found',
+						agentId: 'codex',
+						recoverable: true,
+						timestamp: 1,
+					})),
+				});
+				const proc = createMockProcess({
+					toolType: 'codex',
+					interrupted: true,
+					isStreamJsonMode: true,
+					outputParser: parser,
+					stderrBuffer: 'Session not found; Connection closed',
+					agentSessionId: 'same-native-id',
+					sshRemoteId: remote ? 'remote-1' : undefined,
+				});
+				processes.set('test-session', proc);
+				const errors = vi.fn();
+				const exits = vi.fn();
+				emitter.on('agent-error', errors);
+				emitter.on('exit', exits);
+				vi.mocked(matchSshErrorPattern).mockClear();
+				await exitHandler.handleExit('test-session', 130);
+				expect(parser.detectErrorFromExit).not.toHaveBeenCalled();
+				expect(matchSshErrorPattern).not.toHaveBeenCalled();
+				expect(errors).not.toHaveBeenCalled();
+				expect(exits).toHaveBeenCalledWith('test-session', 130);
+				expect(proc.agentSessionId).toBe('same-native-id');
+			}
+		);
+		it('still reports a real missing-session exit that was not interrupted', async () => {
+			const parser = createMockOutputParser({
+				detectErrorFromExit: vi.fn(() => ({
+					type: 'session_not_found',
+					message: 'Session not found',
+					agentId: 'codex',
+					recoverable: true,
+					timestamp: 1,
+				})),
+			});
+			processes.set('test-session', createMockProcess({ toolType: 'codex', outputParser: parser }));
+			const errors = vi.fn();
+			emitter.on('agent-error', errors);
+			await exitHandler.handleExit('test-session', 1);
+			expect(errors).toHaveBeenCalledWith(
+				'test-session',
+				expect.objectContaining({ type: 'session_not_found' })
+			);
+		});
+	});
+
 	describe('stream-json jsonBuffer processing at exit', () => {
 		it('should process remaining jsonBuffer content as a result message', async () => {
 			const resultJson = '{"type":"result","result":"Auth Bug Fix","session_id":"abc"}';

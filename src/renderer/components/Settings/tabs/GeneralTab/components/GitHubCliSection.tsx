@@ -1,6 +1,7 @@
 import { Terminal } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useI18n } from '../../../../../i18n';
 
 interface GitHubCliSectionProps {
 	theme: Theme;
@@ -9,14 +10,19 @@ interface GitHubCliSectionProps {
 }
 
 export function GitHubCliSection({ theme, ghPath, setGhPath }: GitHubCliSectionProps) {
+	const { t, tRich } = useI18n();
 	return (
 		<div data-setting-id="general-gh-path">
-			<SettingsSectionHeading icon={Terminal}>GitHub CLI (gh) Path</SettingsSectionHeading>
+			<SettingsSectionHeading icon={Terminal}>
+				{t('settings.general.gh.heading')}
+			</SettingsSectionHeading>
 			<div
 				className="p-3 rounded border"
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
-				<div className="block text-xs opacity-70 mb-1">Custom Path (optional)</div>
+				<div className="block text-xs opacity-70 mb-1">
+					{t('settings.general.customPathOptional')}
+				</div>
 				<div className="flex gap-2">
 					<input
 						type="text"
@@ -35,19 +41,21 @@ export function GitHubCliSection({ theme, ghPath, setGhPath }: GitHubCliSectionP
 								color: theme.colors.textDim,
 							}}
 						>
-							Clear
+							{t('common.clear')}
 						</button>
 					)}
 				</div>
 				<p className="text-xs opacity-70 mt-2">
-					Specify the full path to the{' '}
-					<code
-						className="px-1 py-0.5 rounded"
-						style={{ backgroundColor: theme.colors.bgActivity }}
-					>
-						gh
-					</code>{' '}
-					binary if it's not in your PATH. Used for Auto Run worktree features.
+					{tRich('settings.general.gh.description', {
+						binary: (
+							<code
+								className="px-1 py-0.5 rounded"
+								style={{ backgroundColor: theme.colors.bgActivity }}
+							>
+								gh
+							</code>
+						),
+					})}
 				</p>
 			</div>
 		</div>

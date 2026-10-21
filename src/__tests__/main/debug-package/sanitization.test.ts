@@ -38,6 +38,13 @@ vi.mock('electron-store', () => {
 describe('Debug Package Sanitization', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// Redaction also removes the host identity from prose. A real username
+		// can be a substring of "changes", making this suite machine-dependent.
+		vi.spyOn(os, 'userInfo').mockReturnValue({
+			...os.userInfo(),
+			username: 'sanitization-fixture-user',
+		});
+		vi.spyOn(os, 'hostname').mockReturnValue('sanitization-fixture-host.invalid');
 	});
 
 	afterEach(() => {

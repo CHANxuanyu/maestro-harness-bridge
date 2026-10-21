@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React, { memo, useState } from 'react';
 import { Maximize2 } from 'lucide-react';
 import type { Theme } from '../../../types';
@@ -31,6 +32,7 @@ export const StagedImagesStrip = memo(function StagedImagesStrip({
 	openAnnotator,
 	onReorder,
 }: StagedImagesStripProps) {
+	const t = useT();
 	const [organizerOpen, setOrganizerOpen] = useState(false);
 	const dnd = useStagedImageDnd(stagedImages.length, onReorder);
 
@@ -62,8 +64,8 @@ export const StagedImagesStrip = memo(function StagedImagesStrip({
 					<button
 						type="button"
 						onClick={() => setOrganizerOpen(true)}
-						title="Open image organizer"
-						aria-label="Open image organizer"
+						title={t('workflows.shell.openImageOrganizer')}
+						aria-label={t('workflows.shell.openImageOrganizer')}
 						className="shrink-0 self-center p-1.5 rounded border transition-colors hover:opacity-80 outline-none focus-visible:ring-2 focus-visible:ring-accent"
 						style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
 					>

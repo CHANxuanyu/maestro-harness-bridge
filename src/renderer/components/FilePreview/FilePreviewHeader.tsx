@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
 	FileCode,
@@ -26,7 +27,6 @@ import { captureException } from '../../utils/sentry';
 import { isWebDesktop } from '../../utils/runtimeContext';
 import { usePhoneLayout } from '../../hooks/ui/useViewportBreakpoint';
 import { formatShortcutKeys } from '../../utils/shortcutFormatter';
-import { getRevealLabel } from '../../utils/platformUtils';
 import { formatFileSize, formatDateTime, countLines } from './filePreviewUtils';
 import { formatNumber } from '../../../shared/formatters';
 import type { PreviewTier } from './filePreviewUtils';
@@ -153,6 +153,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 	toolbarVisibility,
 	onDelete,
 }: FilePreviewHeaderProps) {
+	const uiText = useT();
 	const [showBackPopup, setShowBackPopup] = useState(false);
 	const [showForwardPopup, setShowForwardPopup] = useState(false);
 	const backPopupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -192,31 +193,47 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 	// reader scrolls, which says nothing about a sheet the user opened by hand.
 	const stats: FilePreviewHeaderStat[] = [];
 	if (fileStats) {
-		stats.push({ key: 'size', label: 'Size', value: formatFileSize(fileStats.size) });
+		stats.push({
+			key: 'size',
+			label: uiText('workflows.files.size'),
+			value: formatFileSize(fileStats.size),
+		});
 	}
 	if (lineCount !== null) {
-		stats.push({ key: 'lines', label: 'Lines', value: formatNumber(lineCount) });
+		stats.push({
+			key: 'lines',
+			label: uiText('workflows.files.lines'),
+			value: formatNumber(lineCount),
+		});
 	}
 	if (tokenCount !== null) {
 		stats.push({
 			key: 'tokens',
-			label: 'Tokens',
+			label: uiText('workflows.files.tokens'),
 			value: formatTokenCount(tokenCount),
 			valueColor: theme.colors.accent,
 		});
 	}
 	if (fileStats) {
-		stats.push({ key: 'modified', label: 'Modified', value: formatDateTime(fileStats.modifiedAt) });
-		stats.push({ key: 'created', label: 'Created', value: formatDateTime(fileStats.createdAt) });
+		stats.push({
+			key: 'modified',
+			label: uiText('workflows.files.modified'),
+			value: formatDateTime(fileStats.modifiedAt),
+		});
+		stats.push({
+			key: 'created',
+			label: uiText('workflows.files.created'),
+			value: formatDateTime(fileStats.createdAt),
+		});
 	}
 	if (taskCounts) {
 		stats.push({
 			key: 'tasks',
-			label: 'Tasks',
+			label: uiText('workflows.files.tasks'),
 			value: (
 				<>
 					<span style={{ color: theme.colors.success }}>{taskCounts.closed}</span>
-					{` of ${taskCounts.open + taskCounts.closed}`}
+					{uiText('workflows.files.ofTotal', { total: taskCounts.open + taskCounts.closed })}
 				</>
 			),
 		});
@@ -236,7 +253,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'wordWrap',
 			icon: WrapText,
-			label: wordWrap ? 'Disable word wrap' : 'Enable word wrap',
+			label: wordWrap ? uiText('workflows.files.wrapOff') : uiText('workflows.files.wrapOn'),
 			onClick: () => setWordWrap(!wordWrap),
 			active: wordWrap,
 			testId: 'editor-wrap-toggle',
@@ -248,7 +265,9 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'remoteImages',
 			icon: ImageIcon,
-			label: showRemoteImages ? 'Hide remote images' : 'Show remote images',
+			label: showRemoteImages
+				? uiText('workflows.files.hideImages')
+				: uiText('workflows.files.showImages'),
 			onClick: () => setShowRemoteImages(!showRemoteImages),
 			active: showRemoteImages,
 		});
@@ -259,7 +278,9 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'htmlRender',
 			icon: Globe,
-			label: htmlRenderMode ? 'Show HTML source' : 'Render HTML in browser',
+			label: htmlRenderMode
+				? uiText('workflows.files.htmlSource')
+				: uiText('workflows.files.renderHtml'),
 			onClick: () => setHtmlRenderMode(!htmlRenderMode),
 			active: htmlRenderMode,
 			testId: 'html-render-toggle',
@@ -275,7 +296,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'openInBrowser',
 			icon: AppWindow,
-			label: 'Open in Maestro Browser',
+			label: uiText('workflows.files.openBrowser'),
 			onClick: onOpenInBrowser,
 			testId: 'open-in-maestro-browser',
 		});
@@ -297,7 +318,11 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'editToggle',
 			icon: markdownEditMode ? Eye : Edit,
-			label: markdownEditMode ? (isMarkdown ? 'Show preview' : 'View file') : 'Edit file',
+			label: markdownEditMode
+				? isMarkdown
+					? uiText('workflows.files.preview')
+					: uiText('workflows.files.view')
+				: uiText('workflows.files.edit'),
 			onClick: () => setMarkdownEditMode(!markdownEditMode),
 			active: markdownEditMode,
 			shortcut: formatShortcut('toggleMarkdownMode'),
@@ -310,7 +335,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'editImage',
 			icon: Edit,
-			label: 'Edit image',
+			label: uiText('workflows.files.editImage'),
 			onClick: onEditImage,
 			shortcut: formatShortcut('toggleMarkdownMode'),
 			testId: 'edit-image-button',
@@ -321,7 +346,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'copyContent',
 			icon: Clipboard,
-			label: isImage ? 'Copy image to clipboard' : 'Copy content to clipboard',
+			label: isImage ? uiText('workflows.files.copyImage') : uiText('workflows.files.copyContent'),
 			onClick: () => copyContentToClipboard().catch(captureException),
 			shortcut: isImage ? formatShortcutKeys(['Meta', 'c']) : undefined,
 		});
@@ -339,7 +364,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'publishGist',
 			icon: Share2,
-			label: hasGist ? 'View published gist' : 'Publish as GitHub Gist',
+			label: hasGist ? uiText('workflows.files.viewGist') : uiText('workflows.files.publishGist'),
 			onClick: onPublishGist,
 			active: hasGist,
 		});
@@ -350,7 +375,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'documentGraph',
 			icon: GitGraph,
-			label: 'View in Document Graph',
+			label: uiText('workflows.files.graph'),
 			onClick: onOpenInGraph,
 		});
 	}
@@ -363,7 +388,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'openInDefault',
 			icon: ExternalLink,
-			label: 'Open in Default App',
+			label: uiText('workflows.files.openDefault'),
 			onClick: () => {
 				window.maestro?.shell?.openPath(file.path);
 			},
@@ -375,7 +400,13 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'revealInFolder',
 			icon: FolderOpen,
-			label: getRevealLabel(window.maestro?.platform ?? ''),
+			label: uiText(
+				window.maestro?.platform === 'win32'
+					? 'workflows.files.revealExplorer'
+					: window.maestro?.platform === 'linux'
+						? 'workflows.files.revealManager'
+						: 'workflows.files.revealFinder'
+			),
 			onClick: () => {
 				window.maestro?.shell?.showItemInFolder(file.path);
 			},
@@ -387,7 +418,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'copyPath',
 			icon: Copy,
-			label: 'Copy full path to clipboard',
+			label: uiText('workflows.files.copyPath'),
 			onClick: copyPathToClipboard,
 		});
 	}
@@ -398,7 +429,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 			kind: 'button',
 			key: 'delete',
 			icon: Trash2,
-			label: 'Delete file',
+			label: uiText('workflows.files.delete'),
 			onClick: onDelete,
 			testId: 'delete-file-button',
 		});
@@ -434,7 +465,11 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 							onSave && (
 								<HoverTooltip
 									theme={theme}
-									label={hasChanges ? 'Save changes' : 'No changes to save'}
+									label={
+										hasChanges
+											? uiText('workflows.files.saveChanges')
+											: uiText('workflows.files.noChanges')
+									}
 									shortcut={hasChanges ? formatShortcutKeys(['Meta', 's']) : undefined}
 								>
 									<button
@@ -449,7 +484,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 										}}
 									>
 										{isSaving ? <Spinner size={14} /> : <Save className="w-3.5 h-3.5" />}
-										{isSaving ? 'Saving...' : 'Save'}
+										{isSaving ? uiText('workflows.files.saving') : uiText('workflows.files.save')}
 									</button>
 								</HoverTooltip>
 							)}
@@ -461,7 +496,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 										style={{ color: theme.colors.textDim }}
 										aria-haspopup="dialog"
 										aria-expanded={actionsSheetOpen}
-										aria-label="File actions"
+										aria-label={uiText('workflows.files.actions')}
 										data-testid="file-preview-actions-button"
 									>
 										<MoreHorizontal className={headerIconClass} />
@@ -491,6 +526,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 											shortcut={action.shortcut}
 										>
 											<button
+												aria-label={action.label}
 												onClick={action.onClick}
 												className={headerBtnClass}
 												style={{
@@ -558,7 +594,9 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 									disabled={!canGoBack}
 									className="p-1 rounded hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-default"
 									style={{ color: canGoBack ? theme.colors.textMain : theme.colors.textDim }}
-									title={`Go back (${formatShortcutKeys(['Meta', 'ArrowLeft'])})`}
+									title={uiText('workflows.files.back', {
+										shortcut: formatShortcutKeys(['Meta', 'ArrowLeft']),
+									})}
 								>
 									<ChevronLeft className="w-4 h-4" />
 								</button>
@@ -615,7 +653,9 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 									disabled={!canGoForward}
 									className="p-1 rounded hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-default"
 									style={{ color: canGoForward ? theme.colors.textMain : theme.colors.textDim }}
-									title={`Go forward (${formatShortcutKeys(['Meta', 'ArrowRight'])})`}
+									title={uiText('workflows.files.forward', {
+										shortcut: formatShortcutKeys(['Meta', 'ArrowRight']),
+									})}
 								>
 									<ChevronRight className="w-4 h-4" />
 								</button>

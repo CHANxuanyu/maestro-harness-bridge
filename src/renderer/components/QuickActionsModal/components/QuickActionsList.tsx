@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React from 'react';
 import type { Theme } from '../../../types';
 import { getStatusColor } from '../../../utils/theme';
@@ -31,6 +32,7 @@ export function QuickActionsList({
 	onScroll,
 	onActionClick,
 }: QuickActionsListProps) {
+	const t = useT();
 	// The number badges are the Cmd+1..9 hotkeys; a phone has no keyboard to
 	// press them on, so the column reads as ten unexplained digits.
 	const phone = usePhoneLayout();
@@ -56,10 +58,13 @@ export function QuickActionsList({
 				return (
 					<React.Fragment key={action.id}>
 						{startsBucket && bucket === 'live' && (
-							<SectionHeader label="LIVE" color={getStatusColor('busy', theme)} />
+							<SectionHeader
+								label={t('workflows.shell.live')}
+								color={getStatusColor('busy', theme)}
+							/>
 						)}
 						{startsBucket && bucket === 'idle' && (
-							<SectionHeader label="IDLE" color={theme.colors.textDim} />
+							<SectionHeader label={t('workflows.shell.idle2')} color={theme.colors.textDim} />
 						)}
 						<QuickActionRow
 							action={action}
@@ -75,7 +80,9 @@ export function QuickActionsList({
 				);
 			})}
 			{filtered.length === 0 && (
-				<div className="px-4 py-4 text-center opacity-50 text-sm">No actions found</div>
+				<div className="px-4 py-4 text-center opacity-50 text-sm">
+					{t('workflows.shell.noActionsFound')}
+				</div>
 			)}
 		</div>
 	);

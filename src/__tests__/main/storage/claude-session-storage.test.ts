@@ -472,6 +472,47 @@ describe('ClaudeSessionStorage', () => {
 		});
 	});
 
+	it('preserves the provider title through cached Maestro name overrides', async () => {
+		const projectPath = '/native-title-project';
+		const configDir = '/native-title-account';
+		const transcript = [
+			{
+				type: 'user',
+				timestamp: '2026-10-16T10:00:00Z',
+				uuid: 'u1',
+				message: { role: 'user', content: 'First request' },
+			},
+			{ type: 'custom-title', customTitle: 'Claude original' },
+		]
+			.map((entry) => JSON.stringify(entry))
+			.join('\n');
+		vi.mocked(fs.readdir).mockImplementation(async (dir) =>
+			String(dir).endsWith('-native-title-project')
+				? (['title-session.jsonl'] as never)
+				: ([] as never)
+		);
+		vi.mocked(fs.stat).mockResolvedValue({
+			size: transcript.length,
+			mtimeMs: 1792144800000,
+		} as never);
+		vi.mocked(fs.readFile).mockImplementation(async (file) => {
+			if (String(file).endsWith('title-session.jsonl')) return transcript as never;
+			throw Object.assign(new Error('Not found'), { code: 'ENOENT' });
+		});
+		storage.updateSessionName(projectPath, 'title-session', 'My Maestro name');
+		const first = await storage.listSessions(projectPath, undefined, configDir);
+		expect(first[0]).toMatchObject({
+			sessionName: 'My Maestro name',
+			nativeTitle: 'Claude original',
+		});
+		storage.updateSessionName(projectPath, 'title-session', 'Renamed in Maestro');
+		const cached = await storage.listSessions(projectPath, undefined, configDir);
+		expect(cached[0]).toMatchObject({
+			sessionName: 'Renamed in Maestro',
+			nativeTitle: 'Claude original',
+		});
+	});
+
 	describe('readSessionMessages - account lookup', () => {
 		it("reads a transcript from another account's dir when the default has none", async () => {
 			const workDir = path.join(path.sep, 'home', '.claude-work');

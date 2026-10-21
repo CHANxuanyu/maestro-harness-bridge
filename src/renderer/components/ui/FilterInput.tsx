@@ -47,7 +47,9 @@ export interface FilterInputProps {
 	title?: string;
 	ariaLabel?: string;
 	/** Width of the whole control in px. Defaults to 200. */
-	width?: number;
+	width?: number | string;
+	/** Accessible label for clearing the filter. */
+	clearLabel?: string;
 	/** Focus the input on mount. */
 	autoFocus?: boolean;
 	className?: string;
@@ -65,6 +67,7 @@ export const FilterInput = forwardRef<HTMLInputElement, FilterInputProps>(functi
 		title,
 		ariaLabel,
 		width = 200,
+		clearLabel = 'Clear filter',
 		autoFocus,
 		className,
 		onKeyDown,
@@ -121,8 +124,8 @@ export const FilterInput = forwardRef<HTMLInputElement, FilterInputProps>(functi
 			{value && (
 				<GhostIconButton
 					onClick={() => onChange('')}
-					title="Clear filter (Esc)"
-					ariaLabel="Clear filter"
+					title={`${clearLabel} (Esc)`}
+					ariaLabel={clearLabel}
 					padding="p-0.5"
 					color={theme.colors.textDim}
 				>

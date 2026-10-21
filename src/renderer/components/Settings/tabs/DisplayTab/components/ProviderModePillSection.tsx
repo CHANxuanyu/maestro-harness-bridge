@@ -1,5 +1,6 @@
 import { Tags } from 'lucide-react';
 import type { Theme } from '../../../../../types';
+import { useT } from '../../../../../i18n';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { ToggleSettingRow } from './ToggleSettingRow';
 
@@ -14,22 +15,20 @@ export function ProviderModePillSection({
 	showProviderModePill,
 	setShowProviderModePill,
 }: ProviderModePillSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="display-provider-mode-pill">
-			<SettingsSectionHeading icon={Tags}>Provider Mode Pill</SettingsSectionHeading>
+			<SettingsSectionHeading icon={Tags}>
+				{t('settings.display.providerPill.heading')}
+			</SettingsSectionHeading>
 			<div className="p-3 rounded border" style={{ borderColor: theme.colors.border }}>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show provider mode"
-					description={
-						<>
-							Display which Claude interface produced a turn (&quot;claude -p&quot; or &quot;TUI
-							Wrapper&quot;) as a pill under chat responses and on History entries.
-						</>
-					}
+					title={t('settings.display.providerPill.title')}
+					description={t('settings.display.providerPill.description')}
 					checked={showProviderModePill}
 					onChange={setShowProviderModePill}
-					ariaLabel="Show provider mode pill"
+					ariaLabel={t('settings.display.providerPill.aria')}
 				/>
 			</div>
 		</div>

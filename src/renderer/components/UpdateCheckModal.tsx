@@ -104,7 +104,7 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
 				assetsReady: false,
 				versionsBehind: 0,
 				releases: [],
-				releasesUrl: 'https://github.com/RunMaestro/Maestro/releases',
+				releasesUrl: 'https://github.com/CHANxuanyu/maestro-harness-bridge/releases',
 				error: error instanceof Error ? error.message : 'Failed to check for updates',
 			});
 		} finally {
@@ -615,7 +615,10 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
 						</div>
 						<button
 							onClick={() =>
-								openUrl(result?.releasesUrl || 'https://github.com/RunMaestro/Maestro/releases')
+								openUrl(
+									result?.releasesUrl ||
+										'https://github.com/CHANxuanyu/maestro-harness-bridge/releases'
+								)
 							}
 							className="flex items-center gap-2 text-xs hover:underline mt-2"
 							style={{ color: theme.colors.accent }}

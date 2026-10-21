@@ -1,3 +1,5 @@
+import { extensionUiText } from './extensionI18n';
+import { useT } from '../../../i18n';
 /**
  * Shared, risk-colored permission disclosure rows.
  *
@@ -36,11 +38,8 @@ interface PermissionListProps {
  * first-party grants are minted host-side by the lifecycle bridge on enable,
  * so there is no per-row grant state - only the shared `statusLabel`.
  */
-export function PermissionList({
-	theme,
-	permissions,
-	statusLabel = 'Granted on enable',
-}: PermissionListProps) {
+export function PermissionList({ theme, permissions, statusLabel }: PermissionListProps) {
+	const tExtra = useT();
 	return (
 		<div className="space-y-1.5">
 			{permissions.map((req) => {
@@ -58,11 +57,11 @@ export function PermissionList({
 							className="px-1.5 py-0.5 rounded text-3xs font-bold uppercase flex-shrink-0 mt-0.5"
 							style={{ backgroundColor: color + '22', color }}
 						>
-							{risk}
+							{extensionUiText(risk, tExtra)}
 						</span>
 						<div className="min-w-0 flex-1">
 							<div className="text-xs" style={{ color: theme.colors.textMain }}>
-								{describeCapability(req.capability)}
+								{extensionUiText(describeCapability(req.capability), tExtra)}
 							</div>
 							{req.scope && (
 								<div className="text-2xs font-mono mt-0.5" style={{ color: theme.colors.textDim }}>
@@ -80,7 +79,7 @@ export function PermissionList({
 							className="text-2xs font-medium flex-shrink-0 mt-0.5"
 							style={{ color: theme.colors.textDim }}
 						>
-							{statusLabel}
+							{statusLabel ?? tExtra('settings.extra.permissionList.grantedOnEnable')}
 						</span>
 					</div>
 				);

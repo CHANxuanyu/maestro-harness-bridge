@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React from 'react';
 import { ChevronDown, ChevronRight, EyeOff } from 'lucide-react';
 import type { Theme } from '../../types';
@@ -27,6 +28,7 @@ export function CollapsedCommandsNotice({
 	onToggle,
 	sectionName,
 }: CollapsedCommandsNoticeProps): React.ReactElement {
+	const tExtra = useT();
 	return (
 		<button
 			type="button"
@@ -42,10 +44,19 @@ export function CollapsedCommandsNotice({
 			)}
 			<EyeOff className="w-3.5 h-3.5 flex-shrink-0" />
 			<span>
-				{count} {sectionName} command{count === 1 ? '' : 's'} hidden
+				{tExtra(
+					count === 1
+						? 'settings.extra.collapsedCommands.oneHidden'
+						: 'settings.extra.collapsedCommands.manyHidden',
+					{ count, section: sectionName }
+				)}
 			</span>
 			<span className="ml-auto font-medium" style={{ color: theme.colors.accent }}>
-				{expanded ? 'Collapse' : 'Show anyway'}
+				{tExtra(
+					expanded
+						? 'settings.extra.collapsedCommands.collapse'
+						: 'settings.extra.collapsedCommands.show'
+				)}
 			</span>
 		</button>
 	);

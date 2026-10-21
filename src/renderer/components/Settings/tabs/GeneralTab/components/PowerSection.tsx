@@ -4,6 +4,7 @@ import { isMacOSPlatform } from '../../../../../utils/platformUtils';
 import type { Theme } from '../../../../../types';
 import { ToggleSwitch } from '../../../../ui/ToggleSwitch';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 
 interface PowerSectionProps {
 	theme: Theme;
@@ -20,9 +21,12 @@ export function PowerSection({
 	preventDisplaySleepEnabled,
 	setPreventDisplaySleepEnabled,
 }: PowerSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="general-power">
-			<SettingsSectionHeading icon={Battery}>Power</SettingsSectionHeading>
+			<SettingsSectionHeading icon={Battery}>
+				{t('settings.general.power.heading')}
+			</SettingsSectionHeading>
 			<div
 				className="p-3 rounded border space-y-3"
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
@@ -41,18 +45,17 @@ export function PowerSection({
 				>
 					<div className="flex-1 pr-3">
 						<div className="font-medium" style={{ color: theme.colors.textMain }}>
-							Prevent sleep while working
+							{t('settings.general.power.preventSleep')}
 						</div>
 						<div className="text-xs opacity-70 mt-0.5">
-							Keeps your computer awake when AI agents are busy, Auto Run is active, or Cue
-							pipelines are scheduled
+							{t('settings.general.power.preventSleepDescription')}
 						</div>
 					</div>
 					<ToggleSwitch
 						checked={preventSleepEnabled}
 						onChange={setPreventSleepEnabled}
 						theme={theme}
-						ariaLabel="Prevent sleep while working"
+						ariaLabel={t('settings.general.power.preventSleep')}
 					/>
 				</div>
 
@@ -85,11 +88,10 @@ export function PowerSection({
 					>
 						<div className="flex-1 pr-3">
 							<div className="font-medium" style={{ color: theme.colors.textMain }}>
-								Keep the display awake
+								{t('settings.general.power.display')}
 							</div>
 							<div className="text-xs opacity-50 mt-0.5">
-								Also blocks the screen saver, the screen lock, and idle logout, so a long run stays
-								on screen and you stay signed in
+								{t('settings.general.power.displayDescription')}
 							</div>
 						</div>
 						<ToggleSwitch
@@ -97,11 +99,9 @@ export function PowerSection({
 							onChange={setPreventDisplaySleepEnabled}
 							theme={theme}
 							disabled={!preventSleepEnabled}
-							ariaLabel="Keep the display awake"
+							ariaLabel={t('settings.general.power.display')}
 							title={
-								preventSleepEnabled
-									? undefined
-									: 'Turn on "Prevent sleep while working" to use this'
+								preventSleepEnabled ? undefined : t('settings.general.power.displayDisabledTitle')
 							}
 						/>
 					</div>
@@ -115,10 +115,7 @@ export function PowerSection({
 								color: theme.colors.warning,
 							}}
 						>
-							Warning: macOS reads a lit display as you sitting at the machine, so routine
-							housekeeping stays parked while agents work - Spotlight indexing, Photos analysis,
-							XProtect scans, Time Machine thinning, and background updates. In exchange the session
-							stays active: no screen saver, no lock screen, no idle logout.
+							{t('settings.general.power.macWarning')}
 						</div>
 					)}
 				</div>
@@ -131,7 +128,7 @@ export function PowerSection({
 							color: theme.colors.warning,
 						}}
 					>
-						Note: May have limited support on some Linux desktop environments.
+						{t('settings.general.power.linuxNote')}
 					</div>
 				)}
 			</div>

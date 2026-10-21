@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * Pre-enable permission review for a first-party (built-in) feature.
  *
@@ -38,10 +39,11 @@ export function FirstPartyEnableModal({
 	onConfirm,
 	onCancel,
 }: FirstPartyEnableModalProps) {
+	const tExtra = useT();
 	return (
 		<Modal
 			theme={theme}
-			title={`Enable ${name}`}
+			title={tExtra('settings.extra.firstPartyEnableModal.enableName', { name })}
 			priority={MODAL_PRIORITIES.CONFIRM}
 			onClose={onCancel}
 			testId="first-party-enable-modal"
@@ -57,7 +59,7 @@ export function FirstPartyEnableModal({
 						className="px-4 py-1.5 rounded border hover:bg-white/5 transition-colors text-sm"
 						style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 					>
-						Cancel
+						{tExtra('settings.extra.firstPartyEnableModal.cancel')}
 					</button>
 					<button
 						type="button"
@@ -66,20 +68,23 @@ export function FirstPartyEnableModal({
 						className="px-4 py-1.5 rounded transition-colors text-sm"
 						style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}
 					>
-						Enable {name}
+						{tExtra('settings.extra.firstPartyEnableModal.enable')} {name}
 					</button>
 				</>
 			}
 		>
 			<p className="text-xs mb-3" style={{ color: theme.colors.textDim }}>
-				{name} is a built-in Maestro feature. Enabling it grants the following capabilities to
-				first-party code:
+				{name} {tExtra('settings.extra.firstPartyEnableModal.isABuiltInMaestroFeatureEnabling')}
 			</p>
 			{permissions.length > 0 ? (
-				<PermissionList theme={theme} permissions={permissions} statusLabel="Will be granted" />
+				<PermissionList
+					theme={theme}
+					permissions={permissions}
+					statusLabel={tExtra('settings.extra.firstPartyEnableModal.willBeGranted')}
+				/>
 			) : (
 				<p className="text-xs" style={{ color: theme.colors.textDim }}>
-					This feature requests no special capabilities.
+					{tExtra('settings.extra.firstPartyEnableModal.thisFeatureRequestsNoSpecialCapabilities')}
 				</p>
 			)}
 		</Modal>

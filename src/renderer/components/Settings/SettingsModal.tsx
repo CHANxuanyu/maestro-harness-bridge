@@ -38,6 +38,7 @@ import { EnvironmentTab } from './tabs/EnvironmentTab';
 import { AboutTab } from './tabs/AboutTab';
 import { useSettingsSearch, SettingsSearchInput, SettingsSearchResults } from './SettingsSearch';
 import type { SearchableSetting } from './searchableSettings';
+import { useT, type MessageKey } from '../../i18n';
 
 type SettingsTabId =
 	| 'about'
@@ -52,27 +53,29 @@ type SettingsTabId =
 	| 'encore'
 	| 'prompts';
 
-// Alphabetized by label (case-insensitive) so the sidebar reads predictably
-// regardless of which tabs ship. Mount-time default is still 'general' -
-// that's enforced by the useState init below, not by list position.
+// Alphabetized by English label (case-insensitive) so the sidebar reads
+// predictably regardless of which tabs ship. The order is deliberately kept
+// in every UI language so muscle memory and Cmd+Shift+[ / ] survive a switch.
+// Mount-time default is still 'general' - that's enforced by the useState
+// init below, not by list position.
 const TAB_ITEMS: Array<{
 	id: SettingsTabId;
-	label: string;
+	labelKey: MessageKey;
 	icon: typeof Settings;
 }> = [
-	{ id: 'about', label: 'About', icon: Info },
-	{ id: 'aicommands', label: 'AI Commands', icon: Cpu },
-	{ id: 'display', label: 'Display', icon: Monitor },
-	{ id: 'environment', label: 'Environment', icon: Globe },
-	{ id: 'general', label: 'General', icon: Settings },
-	{ id: 'prompts', label: 'Maestro Prompts', icon: Wand2 },
-	{ id: 'notifications', label: 'Notifications', icon: Bell },
+	{ id: 'about', labelKey: 'settings.tab.about', icon: Info },
+	{ id: 'aicommands', labelKey: 'settings.tab.aicommands', icon: Cpu },
+	{ id: 'display', labelKey: 'settings.tab.display', icon: Monitor },
+	{ id: 'environment', labelKey: 'settings.tab.environment', icon: Globe },
+	{ id: 'general', labelKey: 'settings.tab.general', icon: Settings },
+	{ id: 'prompts', labelKey: 'settings.tab.prompts', icon: Wand2 },
+	{ id: 'notifications', labelKey: 'settings.tab.notifications', icon: Bell },
 	// Internal id stays 'encore' (deep links, persisted last-tab, searchable
 	// settings all key on it); the user-facing surface is the Plugins tab.
-	{ id: 'encore', label: 'Plugins', icon: Puzzle },
-	{ id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
-	{ id: 'ssh', label: 'SSH Hosts', icon: Server },
-	{ id: 'theme', label: 'Themes', icon: Palette },
+	{ id: 'encore', labelKey: 'settings.tab.encore', icon: Puzzle },
+	{ id: 'shortcuts', labelKey: 'settings.tab.shortcuts', icon: Keyboard },
+	{ id: 'ssh', labelKey: 'settings.tab.ssh', icon: Server },
+	{ id: 'theme', labelKey: 'settings.tab.theme', icon: Palette },
 ];
 
 // Single source of truth for a settings-tab button so the vertical sidebar
@@ -92,6 +95,8 @@ function SettingsTabButton({
 	theme: Theme;
 	onClick: () => void;
 }) {
+	const t = useT();
+	const label = t(tab.labelKey);
 	const Icon = tab.icon;
 	const activeEdge = `2px solid ${theme.colors.accent}`;
 	const inactiveEdge = '2px solid transparent';
@@ -106,10 +111,10 @@ function SettingsTabButton({
 					? { borderRight: isActive ? activeEdge : inactiveEdge }
 					: { borderBottom: isActive ? activeEdge : inactiveEdge }),
 			}}
-			title={tab.label}
+			title={label}
 		>
 			<Icon className="w-4 h-4 flex-shrink-0" />
-			<span className="whitespace-nowrap">{tab.label}</span>
+			<span className="whitespace-nowrap">{label}</span>
 		</button>
 	);
 }
@@ -223,6 +228,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 	// Search state
 	const [searchActive, setSearchActive] = useState(false);
 	const contentRef = useRef<HTMLDivElement>(null);
+	const t = useT();
 
 	// On xs phones the fixed 248px sidebar leaves too little room for content,
 	// so collapse the two-column layout into a horizontal tab strip above the
@@ -384,7 +390,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 			className="fixed inset-0 modal-overlay flex items-center justify-center z-[9999] p-4"
 			role="dialog"
 			aria-modal="true"
-			aria-label="Settings"
+			aria-label={t('settings.title')}
 		>
 			<div
 				ref={resizableModal.modalRef}
@@ -416,7 +422,11 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 							onClear={search.clear}
 						/>
 					</div>
-					<button onClick={onClose} className="cursor-pointer pl-4 pr-6">
+					<button
+						onClick={onClose}
+						className="cursor-pointer pl-4 pr-6"
+						aria-label={t('settings.closeAria')}
+					>
 						<X className="w-5 h-5 opacity-50 hover:opacity-100" />
 					</button>
 				</div>
@@ -442,7 +452,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 						<nav
 							className="flex-shrink-0 flex border-b overflow-x-auto scrollbar-thin"
 							style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}
-							aria-label="Settings tabs"
+							aria-label={t('settings.tabsAria')}
 						>
 							{TAB_ITEMS.map((tab) => (
 								<SettingsTabButton
@@ -460,7 +470,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 						<nav
 							className="w-[248px] flex-shrink-0 border-r py-2 overflow-y-auto scrollbar-thin"
 							style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}
-							aria-label="Settings tabs"
+							aria-label={t('settings.tabsAria')}
 						>
 							{TAB_ITEMS.map((tab) => (
 								<SettingsTabButton

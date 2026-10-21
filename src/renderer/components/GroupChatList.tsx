@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * @file GroupChatList.tsx
  * @description Left panel component for displaying and managing Group Chats.
@@ -53,6 +54,7 @@ function GroupChatContextMenu({
 	onDelete,
 	onClose,
 }: GroupChatContextMenuProps) {
+	const t = useT();
 	const menuRef = useRef<HTMLDivElement>(null);
 
 	// Close on click outside
@@ -97,7 +99,7 @@ function GroupChatContextMenu({
 				style={{ color: theme.colors.textMain }}
 			>
 				<Settings className="w-3.5 h-3.5" />
-				Edit
+				{t('workflows.shell.edit')}
 			</button>
 			<button
 				onClick={() => {
@@ -108,7 +110,7 @@ function GroupChatContextMenu({
 				style={{ color: theme.colors.textMain }}
 			>
 				<Edit3 className="w-3.5 h-3.5" />
-				Rename
+				{t('workflows.shell.rename')}
 			</button>
 			{onArchive && (
 				<button
@@ -124,7 +126,7 @@ function GroupChatContextMenu({
 					) : (
 						<Archive className="w-3.5 h-3.5" />
 					)}
-					{isArchived ? 'Unarchive' : 'Archive'}
+					{isArchived ? t('workflows.shell.unarchive') : t('workflows.shell.archive')}
 				</button>
 			)}
 			<button
@@ -136,7 +138,7 @@ function GroupChatContextMenu({
 				style={{ color: theme.colors.error }}
 			>
 				<Trash2 className="w-3.5 h-3.5" />
-				Delete
+				{t('workflows.shell.delete')}
 			</button>
 		</div>
 	);
@@ -204,6 +206,7 @@ function GroupChatListInner({
 	showUnreadAgentsOnly = false,
 	unreadGroupChatIds,
 }: GroupChatListProps): JSX.Element | null {
+	const t = useT();
 	// Support both controlled and uncontrolled modes
 	// If isExpanded prop is provided, use it as controlled state
 	// Otherwise, use internal state (default: expanded if there are group chats)
@@ -369,7 +372,7 @@ function GroupChatListInner({
 					<MessageSquare className="w-3.5 h-3.5 shrink-0" />
 					{/* shrink-0, so it either renders whole or not at all - the hook
 					    reads the resulting overflow to decide which. */}
-					{headerLabelFits && <span className="shrink-0">Group Chats</span>}
+					{headerLabelFits && <span className="shrink-0">{t('workflows.shell.groupChats')}</span>}
 					{activeCount > 0 && (
 						<span
 							className="gc-count-badge relative text-2xs px-1.5 py-0.5 rounded-full font-medium shrink-0"
@@ -394,7 +397,11 @@ function GroupChatListInner({
 									// The badge is a filled pill, so the dot needs a ring in the
 									// sidebar's own color to read as a separate mark on top of it.
 									ringColor={theme.colors.bgSidebar}
-									title={anyChatBusy ? 'A group chat is working' : 'Unread group chat messages'}
+									title={
+										anyChatBusy
+											? t('workflows.shell.aGroupChatIsWorking')
+											: t('workflows.shell.unreadGroupChatMessages')
+									}
 								/>
 							)}
 						</span>
@@ -415,8 +422,8 @@ function GroupChatListInner({
 							}}
 							title={
 								sortAlphabetical
-									? 'Sorting alphabetically (click to sort by most recent)'
-									: 'Sorting by most recent (click to sort alphabetically)'
+									? t('workflows.shell.sortingAlphabeticallyClickToSortByMostRecent')
+									: t('workflows.shell.sortingByMostRecentClickToSortAlphabetically')
 							}
 						>
 							{sortAlphabetical ? (
@@ -440,8 +447,11 @@ function GroupChatListInner({
 							}}
 							title={
 								showArchived
-									? 'Hide archived chats'
-									: `Show ${archivedCount} archived chat${archivedCount !== 1 ? 's' : ''}`
+									? t('workflows.shell.hideArchivedChats')
+									: t('workflows.shell.showValueArchivedChatvalue', {
+											p0: archivedCount,
+											p1: archivedCount !== 1 ? t('workflows.shell.pluralSuffix') : '',
+										})
 							}
 						>
 							<Archive className="w-3 h-3 shrink-0" />
@@ -461,10 +471,10 @@ function GroupChatListInner({
 							color: theme.colors.accent,
 							border: `1px solid ${theme.colors.accent}40`,
 						}}
-						title="New Group Chat"
+						title={t('workflows.shell.newGroupChat')}
 					>
 						<span aria-hidden="true">+</span>
-						<span className="gc-newchat-label">New Chat</span>
+						<span className="gc-newchat-label">{t('workflows.shell.newChat')}</span>
 					</button>
 				</div>
 			</div>
@@ -474,7 +484,9 @@ function GroupChatListInner({
 				<div className="px-2 pb-2">
 					{sortedGroupChats.length === 0 ? (
 						<div className="text-xs px-3 py-2 italic" style={{ color: theme.colors.textDim }}>
-							{groupChats.length === 0 ? 'No group chats yet' : 'All group chats are archived'}
+							{groupChats.length === 0
+								? t('workflows.shell.noGroupChatsYet')
+								: t('workflows.shell.allGroupChatsAreArchived')}
 						</div>
 					) : (
 						<div
@@ -535,7 +547,11 @@ function GroupChatListInner({
 													backgroundColor: theme.colors.border,
 													color: theme.colors.textDim,
 												}}
-												title={`${chat.participants.length} participant${chat.participants.length !== 1 ? 's' : ''}`}
+												title={t('workflows.shell.valueParticipantvalue', {
+													p0: chat.participants.length,
+													p1:
+														chat.participants.length !== 1 ? t('workflows.shell.pluralSuffix') : '',
+												})}
 											>
 												{chat.participants.length}
 											</span>
@@ -547,13 +563,13 @@ function GroupChatListInner({
 											<div
 												className={`w-2 h-2 rounded-full ${showBusy ? 'animate-pulse' : ''}`}
 												style={{ backgroundColor: statusColor }}
-												title={showBusy ? 'Thinking...' : 'Idle'}
+												title={showBusy ? t('workflows.shell.thinking') : t('workflows.shell.idle')}
 											/>
 											{isChatUnread(chat.id) && (
 												<CornerDot
 													color={theme.colors.error}
 													ringColor={theme.colors.bgSidebar}
-													title="Unread messages"
+													title={t('workflows.shell.unreadMessages')}
 												/>
 											)}
 										</div>
@@ -573,7 +589,7 @@ function GroupChatListInner({
 							}}
 						>
 							<Trash2 className="w-3 h-3" />
-							<span>Delete All Archived</span>
+							<span>{t('workflows.shell.deleteAllArchived')}</span>
 						</button>
 					)}
 				</div>

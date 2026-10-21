@@ -8,6 +8,7 @@
 import path from 'path';
 import { isWindows } from '../../shared/platformDetection';
 import { MAESTRO_FONT_STACK } from '../../shared/fontStack';
+import { DEFAULT_UI_LANGUAGE } from '../../shared/i18n';
 import { ENCORE_FEATURE_DEFAULTS } from '../../shared/encoreFeatureDefaults';
 import { DEFAULT_CUE_HISTORY_RETENTION_DAYS } from '../../shared/cue/retention';
 
@@ -76,6 +77,9 @@ export function resolveConfiguredShell(store: ShellSettingsReader): string {
 // ============================================================================
 
 export const SETTINGS_DEFAULTS: MaestroSettings = {
+	uiLanguage: DEFAULT_UI_LANGUAGE,
+	sidebarNavigationMode: 'conversations',
+	collapsedConversationProjects: [],
 	activeThemeId: 'dracula',
 	shortcuts: {},
 	fontSize: 14,

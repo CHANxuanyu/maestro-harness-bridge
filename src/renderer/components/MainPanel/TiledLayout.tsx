@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -266,6 +267,7 @@ export interface TiledLayoutProps {
  * self-heals on the next edit; this keeps the pane from rendering blank.
  */
 function PaneMissingTab({ theme }: { theme: Theme }) {
+	const t = useT();
 	return (
 		<div
 			className="flex-1 flex items-center justify-center select-none"
@@ -278,7 +280,7 @@ function PaneMissingTab({ theme }: { theme: Theme }) {
 					border: `1px solid ${theme.colors.border}`,
 				}}
 			>
-				This tab is no longer available
+				{t('workflows.shell.thisTabIsNoLongerAvailable')}
 			</div>
 		</div>
 	);
@@ -637,6 +639,7 @@ function PaneActionsMenu({
 	theme: Theme;
 	actions?: PaneTabActions;
 }) {
+	const t = useT();
 	const [open, setOpen] = React.useState(false);
 	const [pos, setPos] = React.useState<{ top: number; left: number } | null>(null);
 	const buttonRef = React.useRef<HTMLButtonElement>(null);
@@ -704,8 +707,8 @@ function PaneActionsMenu({
 			close();
 			const groupId = group.id;
 			useModalStore.getState().openModal('confirm', {
-				title: 'Break apart group?',
-				message: `Break apart "${group.name}"? Its panes return to the tab bar as individual tabs. The tabs are not closed, and you can tile them again later.`,
+				title: t('workflows.shell.breakApartGroup'),
+				message: t('workflows.shell.extraBreakApartValueItsPanesReturnToThe', { p0: group.name }),
 				destructive: false,
 				onConfirm: () => {
 					// The whole group is going away; drop any zoom so it doesn't linger.
@@ -714,7 +717,7 @@ function PaneActionsMenu({
 				},
 			});
 		},
-		[close, group.id, group.name, session.id]
+		[close, group.id, group.name, session.id, t]
 	);
 
 	const handleCopyDeepLink = React.useCallback(
@@ -722,9 +725,9 @@ function PaneActionsMenu({
 			e.stopPropagation();
 			close();
 			void safeClipboardWrite(buildSessionDeepLink(session.id, node.tab.id));
-			flashCopiedToClipboard('Deep link');
+			flashCopiedToClipboard(t('workflows.shell.extraDeepLink'));
 		},
-		[close, session.id, node.tab.id]
+		[close, session.id, node.tab.id, t]
 	);
 
 	const kind = node.tab.type;
@@ -736,10 +739,10 @@ function PaneActionsMenu({
 			close();
 			if (aiTab?.agentSessionId) {
 				void safeClipboardWrite(aiTab.agentSessionId);
-				flashCopiedToClipboard('Session ID');
+				flashCopiedToClipboard(t('workflows.shell.extraSessionId'));
 			}
 		},
-		[close, aiTab?.agentSessionId]
+		[close, aiTab?.agentSessionId, t]
 	);
 
 	const handleStar = React.useCallback(
@@ -762,8 +765,8 @@ function PaneActionsMenu({
 				draggable={false}
 				onDragStart={(e) => e.preventDefault()}
 				className="shrink-0 rounded hover:bg-white/10 transition-colors -ml-0.5 mr-0.5 p-0.5 cursor-pointer"
-				title="Pane actions"
-				aria-label="Pane actions"
+				title={t('workflows.shell.paneActions')}
+				aria-label={t('workflows.shell.paneActions')}
 			>
 				<ChevronDown className="w-3 h-3" style={{ color: 'currentColor' }} />
 			</button>
@@ -790,21 +793,25 @@ function PaneActionsMenu({
 								{kind === 'ai' && aiTab?.agentSessionId && (
 									<PaneMenuItem
 										icon={Copy}
-										label="Copy Session ID"
+										label={t('workflows.shell.copySessionId')}
 										onClick={handleCopySessionId}
 										theme={theme}
 									/>
 								)}
 								<PaneMenuItem
 									icon={Link}
-									label="Copy Deep Link"
+									label={t('workflows.shell.copyDeepLink')}
 									onClick={handleCopyDeepLink}
 									theme={theme}
 								/>
 								{kind === 'ai' && actions?.onStar && (
 									<PaneMenuItem
 										icon={Star}
-										label={aiTab?.starred ? 'Unstar Session' : 'Star Session'}
+										label={
+											aiTab?.starred
+												? t('workflows.shell.unstarSession')
+												: t('workflows.shell.starSession')
+										}
 										onClick={handleStar}
 										theme={theme}
 									/>
@@ -812,12 +819,17 @@ function PaneActionsMenu({
 								{/* File tabs are named by their filename; the rename modal only commits
 								    ai / terminal / browser tabs, so omit Rename for a file pane. */}
 								{kind !== 'file' && (
-									<PaneMenuItem icon={Pencil} label="Rename" onClick={handleRename} theme={theme} />
+									<PaneMenuItem
+										icon={Pencil}
+										label={t('workflows.shell.rename')}
+										onClick={handleRename}
+										theme={theme}
+									/>
 								)}
 								{kind === 'ai' && actions?.onMarkUnread && (
 									<PaneMenuItem
 										icon={Mail}
-										label="Mark as Unread"
+										label={t('workflows.shell.markAsUnread')}
 										onClick={wrap(actions.onMarkUnread)!}
 										theme={theme}
 									/>
@@ -825,7 +837,7 @@ function PaneActionsMenu({
 								{kind === 'ai' && actions?.onExportHtml && (
 									<PaneMenuItem
 										icon={Download}
-										label="Export as HTML"
+										label={t('workflows.shell.exportAsHtml')}
 										onClick={wrap(actions.onExportHtml)!}
 										theme={theme}
 									/>
@@ -841,7 +853,7 @@ function PaneActionsMenu({
 								{kind === 'ai' && actions?.onCopyContext && (
 									<PaneMenuItem
 										icon={Clipboard}
-										label="Context: Copy to Clipboard"
+										label={t('workflows.shell.contextCopyToClipboard')}
 										onClick={wrap(actions.onCopyContext)!}
 										theme={theme}
 									/>
@@ -849,7 +861,7 @@ function PaneActionsMenu({
 								{kind === 'ai' && actions?.onSummarizeAndContinue && (
 									<PaneMenuItem
 										icon={Minimize2}
-										label="Context: Compact"
+										label={t('workflows.shell.contextCompact')}
 										onClick={wrap(actions.onSummarizeAndContinue)!}
 										theme={theme}
 									/>
@@ -857,7 +869,7 @@ function PaneActionsMenu({
 								{kind === 'ai' && actions?.onMergeWith && (
 									<PaneMenuItem
 										icon={GitMerge}
-										label="Context: Merge Into"
+										label={t('workflows.shell.contextMergeInto')}
 										onClick={wrap(actions.onMergeWith)!}
 										theme={theme}
 									/>
@@ -865,7 +877,7 @@ function PaneActionsMenu({
 								{kind === 'ai' && actions?.onSendToAgent && (
 									<PaneMenuItem
 										icon={ArrowRightCircle}
-										label="Context: Send to Agent"
+										label={t('workflows.shell.contextSendToAgent')}
 										onClick={wrap(actions.onSendToAgent)!}
 										theme={theme}
 									/>
@@ -873,7 +885,7 @@ function PaneActionsMenu({
 								{kind === 'ai' && actions?.onPublishGist && (
 									<PaneMenuItem
 										icon={Share2}
-										label="Context: Publish as GitHub Gist"
+										label={t('workflows.shell.contextPublishAsGithubGist')}
 										onClick={wrap(actions.onPublishGist)!}
 										theme={theme}
 									/>
@@ -888,7 +900,7 @@ function PaneActionsMenu({
 								{kind === 'terminal' && actions?.onCopyTerminalBuffer && (
 									<PaneMenuItem
 										icon={Clipboard}
-										label="Copy Buffer"
+										label={t('workflows.shell.copyBuffer')}
 										onClick={wrap(actions.onCopyTerminalBuffer)!}
 										theme={theme}
 									/>
@@ -896,7 +908,7 @@ function PaneActionsMenu({
 								{kind === 'terminal' && actions?.onSendTerminalBufferToAgent && (
 									<PaneMenuItem
 										icon={ArrowRightCircle}
-										label="Send Buffer to Agent"
+										label={t('workflows.shell.sendBufferToAgent')}
 										onClick={wrap(actions.onSendTerminalBufferToAgent)!}
 										theme={theme}
 									/>
@@ -904,7 +916,7 @@ function PaneActionsMenu({
 								{kind === 'terminal' && actions?.onPublishTerminalBufferGist && (
 									<PaneMenuItem
 										icon={Share2}
-										label="Publish Buffer as GitHub Gist"
+										label={t('workflows.shell.publishBufferAsGithubGist')}
 										onClick={wrap(actions.onPublishTerminalBufferGist)!}
 										theme={theme}
 									/>
@@ -912,7 +924,7 @@ function PaneActionsMenu({
 								{kind === 'terminal' && actions?.onConfigureTerminalStartup && (
 									<PaneMenuItem
 										icon={Play}
-										label="Configure Startup Command"
+										label={t('workflows.shell.configureStartupCommand')}
 										onClick={wrap(actions.onConfigureTerminalStartup)!}
 										theme={theme}
 									/>
@@ -926,7 +938,7 @@ function PaneActionsMenu({
 								{kind === 'browser' && actions?.onCopyBrowserContent && (
 									<PaneMenuItem
 										icon={Clipboard}
-										label="Copy Content"
+										label={t('workflows.shell.copyContent')}
 										onClick={wrap(actions.onCopyBrowserContent)!}
 										theme={theme}
 									/>
@@ -934,7 +946,7 @@ function PaneActionsMenu({
 								{kind === 'browser' && actions?.onSendBrowserContentToAgent && (
 									<PaneMenuItem
 										icon={ArrowRightCircle}
-										label="Send Content to Agent"
+										label={t('workflows.shell.sendContentToAgent')}
 										onClick={wrap(actions.onSendBrowserContentToAgent)!}
 										theme={theme}
 									/>
@@ -944,20 +956,25 @@ function PaneActionsMenu({
 								<PaneMenuDivider theme={theme} />
 								<PaneMenuItem
 									icon={PanelsTopLeft}
-									label="Move to own tab"
+									label={t('workflows.shell.moveToOwnTab')}
 									onClick={handleMoveToOwnTab}
 									theme={theme}
 								/>
 								<PaneMenuItem
 									icon={Ungroup}
-									label="Break apart group"
+									label={t('workflows.shell.breakApartGroup2')}
 									onClick={handleBreakApart}
 									theme={theme}
 								/>
 								{handleClose && (
 									<>
 										<PaneMenuDivider theme={theme} />
-										<PaneMenuItem icon={X} label="Close Tab" onClick={handleClose} theme={theme} />
+										<PaneMenuItem
+											icon={X}
+											label={t('workflows.shell.closeTab')}
+											onClick={handleClose}
+											theme={theme}
+										/>
 									</>
 								)}
 							</div>
@@ -984,6 +1001,7 @@ function PaneStatusIndicators({
 	session: Session;
 	theme: Theme;
 }) {
+	const t = useT();
 	if (tab.type !== 'ai') return null;
 	const aiTab = session.aiTabs?.find((t) => t.id === tab.id);
 	if (!aiTab) return null;
@@ -992,7 +1010,7 @@ function PaneStatusIndicators({
 	return (
 		<>
 			{aiTab.agentError && (
-				<span title={`Error: ${aiTab.agentError.message}`}>
+				<span title={t('workflows.shell.errorValue', { p0: aiTab.agentError.message })}>
 					<AlertCircle className="w-3 h-3 shrink-0" style={{ color: theme.colors.error }} />
 				</span>
 			)}
@@ -1000,12 +1018,12 @@ function PaneStatusIndicators({
 				<span
 					className="w-2 h-2 rounded-full shrink-0 animate-pulse"
 					style={{ backgroundColor: theme.colors.warning }}
-					title="Thinking"
+					title={t('workflows.shell.thinking2')}
 				/>
 			)}
 			<WizardIndicator active={isWizard} generatingDocs={!!aiTab.wizardState?.isGeneratingDocs} />
 			{aiTab.isGeneratingName && (
-				<span title="Generating tab name...">
+				<span title={t('workflows.shell.generatingTabName')}>
 					<Loader2
 						className="w-3 h-3 shrink-0 animate-spin"
 						style={{ color: theme.colors.textDim }}
@@ -1016,11 +1034,11 @@ function PaneStatusIndicators({
 				<span
 					className="w-2 h-2 rounded-full shrink-0"
 					style={{ backgroundColor: theme.colors.error }}
-					title="New messages"
+					title={t('workflows.shell.newMessages')}
 				/>
 			)}
 			{draft && (
-				<span title="Has draft message">
+				<span title={t('workflows.shell.hasDraftMessage')}>
 					<Pencil className="w-3 h-3 shrink-0" style={{ color: theme.colors.warning }} />
 				</span>
 			)}
@@ -1044,6 +1062,7 @@ function PaneFrame({
 	isFocused: boolean;
 	paneTabActions?: PaneTabActions;
 }) {
+	const t = useT();
 	const title = resolveTabRefTitle(session, node.tab);
 	// Zoom/maximize: a single pane can temporarily fill the whole panel. When any
 	// pane is zoomed, `zoomedPaneId` is set (this pane is the maximized one iff it
@@ -1111,7 +1130,7 @@ function PaneFrame({
 					color: isFocused ? theme.colors.accent : theme.colors.textMain,
 					borderBottom: `1px solid ${isFocused ? theme.colors.accent : theme.colors.border}`,
 				}}
-				title="Drag to rearrange - drop on a tile's edge to move, its center to swap, or the tab bar to pop out"
+				title={t('workflows.shell.dragToRearrangeDropOnATileS')}
 				// Pointer-driven rearrange (not native draggable - see usePaneDrag). Press
 				// starts drag tracking; a plain click without movement focuses the pane. The
 				// parent's mousedown-focus is stopped so a grab stays a pure drag.
@@ -1145,8 +1164,10 @@ function PaneFrame({
 					draggable={false}
 					onDragStart={(e) => e.preventDefault()}
 					className="shrink-0 ml-auto rounded hover:bg-white/10 transition-colors p-0.5 cursor-pointer"
-					title={isZoomed ? 'Restore pane' : 'Maximize pane'}
-					aria-label={isZoomed ? 'Restore pane' : 'Maximize pane'}
+					title={isZoomed ? t('workflows.shell.restorePane') : t('workflows.shell.maximizePane')}
+					aria-label={
+						isZoomed ? t('workflows.shell.restorePane') : t('workflows.shell.maximizePane')
+					}
 				>
 					{isZoomed ? (
 						<Minimize2 className="w-3 h-3" style={{ color: 'currentColor' }} />

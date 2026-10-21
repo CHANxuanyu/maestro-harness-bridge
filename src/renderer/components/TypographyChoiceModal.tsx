@@ -39,6 +39,7 @@ import {
 	FONT_PREVIEW_CODE,
 } from '../../shared/fontStack';
 import { logger } from '../utils/logger';
+import { useT, type MessageKey, type TFunction } from '../i18n';
 
 export interface TypographyChoiceModalProps {
 	theme: Theme;
@@ -69,6 +70,35 @@ export interface TypographyChoiceModalProps {
 const PREVIEW_PROSE = FONT_PREVIEW_PROSE;
 const PREVIEW_CODE = FONT_PREVIEW_CODE;
 
+/**
+ * Display text for the shared preset table, which stays English because the
+ * Settings picker and the CLI read it too. Keyed by preset id and by the
+ * surface's English label; an unknown label renders as-is.
+ */
+const PRESET_TEXT_KEYS: Record<TypographyPresetId, { label: MessageKey; tagline: MessageKey }> = {
+	default: {
+		label: 'workflows.typography.preset.default',
+		tagline: 'workflows.typography.preset.defaultTagline',
+	},
+	hacker: {
+		label: 'workflows.typography.preset.hacker',
+		tagline: 'workflows.typography.preset.hackerTagline',
+	},
+};
+const SURFACE_LABEL_KEYS: Record<string, MessageKey> = {
+	Interface: 'workflows.typography.surface.interface',
+	'AI chat': 'workflows.typography.surface.aiChat',
+	Terminal: 'workflows.typography.surface.terminal',
+	'File preview': 'workflows.typography.surface.filePreview',
+	'Document graph': 'workflows.typography.surface.documentGraph',
+	'File editor': 'workflows.typography.surface.fileEditor',
+};
+
+function presetLabel(t: TFunction, id: TypographyPresetId): string {
+	const keys = PRESET_TEXT_KEYS[id];
+	return keys ? t(keys.label) : TYPOGRAPHY_PRESETS[id].label;
+}
+
 function PresetCard({
 	theme,
 	presetId,
@@ -82,6 +112,7 @@ function PresetCard({
 	onSelect: () => void;
 	buttonRef?: React.Ref<HTMLButtonElement>;
 }) {
+	const t = useT();
 	const preset = TYPOGRAPHY_PRESETS[presetId];
 	// Each card previews itself in its OWN faces rather than the app's current
 	// ones, so the difference between the two is visible before committing to
@@ -113,7 +144,7 @@ function PresetCard({
 					className="text-base font-semibold"
 					style={{ color: theme.colors.textMain, fontFamily: proseFont }}
 				>
-					{preset.label}
+					{presetLabel(t, presetId)}
 				</span>
 				{selected && (
 					<span
@@ -124,13 +155,13 @@ function PresetCard({
 						}}
 					>
 						<Check className="w-3 h-3" />
-						Selected
+						{t('workflows.typography.selected')}
 					</span>
 				)}
 			</div>
 
 			<p className="text-xs" style={{ color: theme.colors.textDim, fontFamily: proseFont }}>
-				{preset.tagline}
+				{PRESET_TEXT_KEYS[presetId] ? t(PRESET_TEXT_KEYS[presetId].tagline) : preset.tagline}
 			</p>
 
 			{/* Live sample: prose in the preset's reading face, code in its code face. */}
@@ -155,7 +186,11 @@ function PresetCard({
 			<dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-xs-plus">
 				{preset.surfaces.map((surface) => (
 					<div key={surface.label} className="contents">
-						<dt style={{ color: theme.colors.textDim, fontFamily: proseFont }}>{surface.label}</dt>
+						<dt style={{ color: theme.colors.textDim, fontFamily: proseFont }}>
+							{SURFACE_LABEL_KEYS[surface.label]
+								? t(SURFACE_LABEL_KEYS[surface.label])
+								: surface.label}
+						</dt>
 						<dd
 							className="text-right"
 							style={{
@@ -163,7 +198,9 @@ function PresetCard({
 								fontFamily: surface.kind === 'mono' ? codeFont : proseFont,
 							}}
 						>
-							{surface.kind === 'mono' ? 'Monospace' : 'Proportional'}
+							{surface.kind === 'mono'
+								? t('workflows.typography.monospace')
+								: t('workflows.typography.proportional')}
 						</dd>
 					</div>
 				))}
@@ -187,6 +224,7 @@ export function TypographyChoiceModal({
 		isReturningUser ? 'hacker' : 'default'
 	);
 	const confirmRef = useRef<HTMLButtonElement>(null);
+	const t = useT();
 
 	const handleConfirm = useCallback(() => {
 		onChoose(selected);
@@ -206,7 +244,11 @@ export function TypographyChoiceModal({
 	return (
 		<Modal
 			theme={theme}
-			title={isReturningUser ? 'Maestro has new typography' : 'Choose your typography'}
+			title={
+				isReturningUser
+					? t('workflows.typography.titleReturning')
+					: t('workflows.typography.titleNew')
+			}
 			headerIcon={<Type className="w-4 h-4" style={{ color: theme.colors.accent }} />}
 			priority={MODAL_PRIORITIES.TYPOGRAPHY_CHOICE}
 			onClose={onDismiss}
@@ -226,7 +268,7 @@ export function TypographyChoiceModal({
 						className="text-xs underline underline-offset-2 hover:opacity-80 transition-opacity"
 						style={{ color: theme.colors.textDim }}
 					>
-						Fine-tune in Settings
+						{t('workflows.typography.fineTune')}
 					</button>
 					<div className="ml-auto flex items-center gap-2">
 						<button
@@ -240,7 +282,7 @@ export function TypographyChoiceModal({
 								color: theme.colors.accentForeground,
 							}}
 						>
-							Use {TYPOGRAPHY_PRESETS[selected].label}
+							{t('workflows.typography.use', { name: presetLabel(t, selected) })}
 						</button>
 					</div>
 				</div>
@@ -249,8 +291,8 @@ export function TypographyChoiceModal({
 			<div className="space-y-4">
 				<p className="text-sm leading-relaxed" style={{ color: theme.colors.textMain }}>
 					{isReturningUser
-						? "We're changing the look of things a little bit. You've been using Hacker, which is monospace on every surface. The new Default keeps monospace where it earns its keep - the terminal, the file preview, and the editor - and uses a proportional face for the interface and the AI chat. Your current look is still here if you prefer it."
-						: 'Pick how Maestro should read. Default keeps monospace where it earns its keep - the terminal, the file preview, and the editor - and uses a proportional face for the interface and the AI chat. Hacker is monospace everywhere.'}
+						? t('workflows.typography.introReturning')
+						: t('workflows.typography.introNew')}
 				</p>
 
 				<div className="flex gap-4">
@@ -266,9 +308,7 @@ export function TypographyChoiceModal({
 				</div>
 
 				<p className="text-xs leading-relaxed" style={{ color: theme.colors.textDim }}>
-					This is a starting point, not a commitment. Settings &rarr; Display has a font picker for
-					each surface on its own, plus font size, custom font names, and Up/Down to step through
-					faces live.
+					{t('workflows.typography.footnote')}
 				</p>
 			</div>
 		</Modal>

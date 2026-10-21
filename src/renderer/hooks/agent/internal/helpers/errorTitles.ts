@@ -19,6 +19,8 @@ export function getErrorTitleForType(type: AgentError['type']): string {
 			return 'Agent Error';
 		case 'permission_denied':
 			return 'Permission Denied';
+		case 'session_busy':
+			return 'Session In Use';
 		case 'session_not_found':
 			return 'Session Not Found';
 		default:

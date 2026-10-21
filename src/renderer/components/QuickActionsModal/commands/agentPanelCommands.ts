@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type React from 'react';
 import type { Group, RightPanelTab, Session } from '../../../types';
 import { getAllFolderPaths } from '../../../utils/fileExplorer';
@@ -56,12 +57,13 @@ export function buildAgentPanelCommands({
 	groupChatsExpanded,
 	setGroupChatsExpanded,
 }: BuildAgentPanelCommandsArgs): QuickAction[] {
+	const t = getT();
 	const commands: QuickAction[] = [];
 
 	if (activeSession?.groupId) {
 		commands.push({
 			id: 'renameGroup',
-			label: 'Rename Group',
+			label: t('workflows.shell.renameGroup'),
 			action: () => {
 				const group = groups.find((g) => g.id === activeSession.groupId);
 				if (group) {
@@ -80,7 +82,7 @@ export function buildAgentPanelCommands({
 	if (activeSession) {
 		commands.push({
 			id: 'moveToGroup',
-			label: 'Move to Group...',
+			label: t('workflows.shell.moveToGroup'),
 			shortcut: moveToGroupShortcut,
 			action: () => {
 				setMode('move-to-group');
@@ -91,7 +93,7 @@ export function buildAgentPanelCommands({
 
 	commands.push({
 		id: 'createGroup',
-		label: 'Create New Group',
+		label: t('workflows.shell.createNewGroup'),
 		action: () => {
 			setCreateGroupModalOpen(true);
 			setQuickActionOpen(false);
@@ -101,7 +103,7 @@ export function buildAgentPanelCommands({
 	if (groups.some((group) => group.collapsed) || ungroupedCollapsed) {
 		commands.push({
 			id: 'expandAllGroups',
-			label: 'Expand All Agent Groups',
+			label: t('workflows.shell.expandAllAgentGroups'),
 			action: () => {
 				setGroups((prev) =>
 					prev.map((group) => (group.collapsed ? { ...group, collapsed: false } : group))
@@ -115,7 +117,7 @@ export function buildAgentPanelCommands({
 	if (groups.some((group) => !group.collapsed) || !ungroupedCollapsed) {
 		commands.push({
 			id: 'collapseAllGroups',
-			label: 'Collapse All Agent Groups',
+			label: t('workflows.shell.collapseAllAgentGroups'),
 			action: () => {
 				setGroups((prev) =>
 					prev.map((group) => (group.collapsed ? group : { ...group, collapsed: true }))
@@ -134,7 +136,7 @@ export function buildAgentPanelCommands({
 	) {
 		commands.push({
 			id: 'expandEntireAgentPanel',
-			label: 'Expand Entire Agent Panel',
+			label: t('workflows.shell.expandEntireAgentPanel'),
 			action: () => {
 				setGroups((prev) =>
 					prev.map((group) => (group.collapsed ? { ...group, collapsed: false } : group))
@@ -155,7 +157,7 @@ export function buildAgentPanelCommands({
 	) {
 		commands.push({
 			id: 'collapseEntireAgentPanel',
-			label: 'Collapse Entire Agent Panel',
+			label: t('workflows.shell.collapseEntireAgentPanel'),
 			action: () => {
 				setGroups((prev) =>
 					prev.map((group) => (group.collapsed ? group : { ...group, collapsed: true }))
@@ -180,7 +182,7 @@ export function buildAgentPanelCommands({
 			if (hasUnexpanded) {
 				commands.push({
 					id: 'expandAllFolders',
-					label: 'Expand All Folders in File Panel',
+					label: t('workflows.shell.expandAllFoldersInFilePanel'),
 					action: () => {
 						setSessions((prev) =>
 							prev.map((session) =>
@@ -199,7 +201,7 @@ export function buildAgentPanelCommands({
 			if (hasExpanded) {
 				commands.push({
 					id: 'collapseAllFolders',
-					label: 'Collapse All Folders in File Panel',
+					label: t('workflows.shell.collapseAllFoldersInFilePanel'),
 					action: () => {
 						setSessions((prev) =>
 							prev.map((session) =>

@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React from 'react';
 import type { Theme } from '../../../types';
 import type { SessionMessage } from '../../../hooks/agent/useSessionViewer';
@@ -15,6 +16,7 @@ export const SessionMessageBubble = React.memo(function SessionMessageBubble({
 	index,
 	theme,
 }: SessionMessageBubbleProps) {
+	const uiText = useT();
 	const isUser = message.type === 'user';
 	const isToolCall = message.toolUse && message.toolUse.length > 0;
 
@@ -37,7 +39,9 @@ export const SessionMessageBubble = React.memo(function SessionMessageBubble({
 						color: isUser ? (theme.mode === 'light' ? '#fff' : '#000') : theme.colors.textMain,
 					}}
 				>
-					<div className="whitespace-pre-wrap break-words">{message.content || '[No content]'}</div>
+					<div className="whitespace-pre-wrap break-words">
+						{message.content || uiText('workflows.sessions.noContent')}
+					</div>
 					<div
 						className="text-2xs mt-2 opacity-60"
 						style={{

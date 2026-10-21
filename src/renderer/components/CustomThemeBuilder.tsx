@@ -1,3 +1,4 @@
+import { useT, type MessageKey } from '../i18n';
 import React, { useState, useCallback, useRef } from 'react';
 import { Palette, Download, Upload, RotateCcw, Check, ChevronDown } from 'lucide-react';
 import type { Theme, ThemeColors, ThemeId } from '../types';
@@ -20,27 +21,84 @@ interface CustomThemeBuilderProps {
 }
 
 // Color picker labels with descriptions
-const COLOR_CONFIG: { key: keyof ThemeColors; label: string; description: string }[] = [
-	{ key: 'bgMain', label: 'Main Background', description: 'Primary content area' },
-	{ key: 'bgSidebar', label: 'Sidebar Background', description: 'Left & right panels' },
-	{ key: 'bgActivity', label: 'Activity Background', description: 'Hover, active states' },
-	{ key: 'bgTitleBar', label: 'Title Bar Background', description: 'Top draggable window strip' },
-	{ key: 'border', label: 'Border', description: 'Dividers & outlines' },
-	{ key: 'textMain', label: 'Main Text', description: 'Primary text color' },
-	{ key: 'textDim', label: 'Dimmed Text', description: 'Secondary text' },
-	{ key: 'accent', label: 'Accent', description: 'Highlights, links' },
-	{ key: 'accentDim', label: 'Accent Dim', description: 'Accent with transparency' },
-	{ key: 'accentText', label: 'Accent Text', description: 'Text in accent contexts' },
-	{ key: 'accentForeground', label: 'Accent Foreground', description: 'Text ON accent' },
-	{ key: 'success', label: 'Success', description: 'Green states' },
-	{ key: 'warning', label: 'Warning', description: 'Yellow/orange states' },
-	{ key: 'error', label: 'Error', description: 'Red states' },
+const COLOR_CONFIG: { key: keyof ThemeColors; label: MessageKey; description: MessageKey }[] = [
+	{
+		key: 'bgMain',
+		label: 'settings.finish.theme.color.bgMain.label',
+		description: 'settings.finish.theme.color.bgMain.description',
+	},
+	{
+		key: 'bgSidebar',
+		label: 'settings.finish.theme.color.bgSidebar.label',
+		description: 'settings.finish.theme.color.bgSidebar.description',
+	},
+	{
+		key: 'bgActivity',
+		label: 'settings.finish.theme.color.bgActivity.label',
+		description: 'settings.finish.theme.color.bgActivity.description',
+	},
+	{
+		key: 'bgTitleBar',
+		label: 'settings.finish.theme.color.bgTitleBar.label',
+		description: 'settings.finish.theme.color.bgTitleBar.description',
+	},
+	{
+		key: 'border',
+		label: 'settings.finish.theme.color.border.label',
+		description: 'settings.finish.theme.color.border.description',
+	},
+	{
+		key: 'textMain',
+		label: 'settings.finish.theme.color.textMain.label',
+		description: 'settings.finish.theme.color.textMain.description',
+	},
+	{
+		key: 'textDim',
+		label: 'settings.finish.theme.color.textDim.label',
+		description: 'settings.finish.theme.color.textDim.description',
+	},
+	{
+		key: 'accent',
+		label: 'settings.finish.theme.color.accent.label',
+		description: 'settings.finish.theme.color.accent.description',
+	},
+	{
+		key: 'accentDim',
+		label: 'settings.finish.theme.color.accentDim.label',
+		description: 'settings.finish.theme.color.accentDim.description',
+	},
+	{
+		key: 'accentText',
+		label: 'settings.finish.theme.color.accentText.label',
+		description: 'settings.finish.theme.color.accentText.description',
+	},
+	{
+		key: 'accentForeground',
+		label: 'settings.finish.theme.color.accentForeground.label',
+		description: 'settings.finish.theme.color.accentForeground.description',
+	},
+	{
+		key: 'success',
+		label: 'settings.finish.theme.color.success.label',
+		description: 'settings.finish.theme.color.success.description',
+	},
+	{
+		key: 'warning',
+		label: 'settings.finish.theme.color.warning.label',
+		description: 'settings.finish.theme.color.warning.description',
+	},
+	{
+		key: 'error',
+		label: 'settings.finish.theme.color.error.label',
+		description: 'settings.finish.theme.color.error.description',
+	},
 ];
 
 const OPTIONAL_IMPORT_COLOR_KEYS = new Set<string>(['bgTitleBar']);
 
 // Mini UI Preview component
 function MiniUIPreview({ colors }: { colors: ThemeColors }) {
+	const t = useT();
 	return (
 		<div
 			className="rounded-lg overflow-hidden border flex flex-col"
@@ -97,7 +155,7 @@ function MiniUIPreview({ colors }: { colors: ThemeColors }) {
 						style={{ borderColor: colors.border }}
 					>
 						<span className="text-3xs font-bold" style={{ color: colors.textMain }}>
-							AI Terminal
+							{t('settings.finish.theme.sample.terminal')}
 						</span>
 					</div>
 
@@ -109,7 +167,7 @@ function MiniUIPreview({ colors }: { colors: ThemeColors }) {
 								className="rounded px-1.5 py-0.5 text-3xs max-w-[80%]"
 								style={{ backgroundColor: colors.accentDim, color: colors.textMain }}
 							>
-								User message
+								{t('settings.finish.theme.sample.user')}
 							</div>
 						</div>
 						{/* AI response */}
@@ -118,7 +176,7 @@ function MiniUIPreview({ colors }: { colors: ThemeColors }) {
 								className="rounded px-1.5 py-0.5 text-3xs max-w-[80%]"
 								style={{ backgroundColor: colors.bgActivity, color: colors.textMain }}
 							>
-								AI response here
+								{t('settings.finish.theme.sample.response')}
 							</div>
 						</div>
 						{/* Status indicators */}
@@ -127,19 +185,19 @@ function MiniUIPreview({ colors }: { colors: ThemeColors }) {
 								className="text-3xs px-1 rounded"
 								style={{ backgroundColor: colors.success + '30', color: colors.success }}
 							>
-								ready
+								{t('settings.finish.theme.sample.ready')}
 							</span>
 							<span
 								className="text-3xs px-1 rounded"
 								style={{ backgroundColor: colors.warning + '30', color: colors.warning }}
 							>
-								busy
+								{t('settings.finish.theme.sample.busy')}
 							</span>
 							<span
 								className="text-3xs px-1 rounded"
 								style={{ backgroundColor: colors.error + '30', color: colors.error }}
 							>
-								error
+								{t('settings.finish.theme.sample.error')}
 							</span>
 						</div>
 					</div>
@@ -157,7 +215,7 @@ function MiniUIPreview({ colors }: { colors: ThemeColors }) {
 								color: colors.textDim,
 							}}
 						>
-							Type a message...
+							{t('settings.finish.theme.sample.input')}
 						</div>
 						<div
 							className="ml-1 w-4 h-4 rounded flex items-center justify-center text-3xs"
@@ -177,7 +235,7 @@ function MiniUIPreview({ colors }: { colors: ThemeColors }) {
 						className="text-3xs px-1 py-0.5 border-b text-center font-bold"
 						style={{ borderColor: colors.border, color: colors.accent }}
 					>
-						Files
+						{t('settings.finish.theme.sample.files')}
 					</div>
 					<div className="p-0.5 space-y-0.5">
 						<div className="text-3xs truncate" style={{ color: colors.textMain }}>
@@ -291,6 +349,7 @@ export function CustomThemeBuilder({
 	onImportError,
 	onImportSuccess,
 }: CustomThemeBuilderProps) {
+	const t = useT();
 	const [showBaseSelector, setShowBaseSelector] = useState(false);
 	const [showResetConfirm, setShowResetConfirm] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
@@ -378,7 +437,9 @@ export function CustomThemeBuilder({
 
 						if (!hasAllKeys) {
 							const missing = requiredKeys.filter((key) => !(key in data.colors));
-							const errorMsg = `Invalid theme file: missing color keys (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '...' : ''})`;
+							const errorMsg = t('settings.finish.theme.importMissingKeys', {
+								keys: missing.slice(0, 3).join(', ') + (missing.length > 3 ? '...' : ''),
+							});
 							onImportError?.(errorMsg);
 							return;
 						}
@@ -388,7 +449,10 @@ export function CustomThemeBuilder({
 						const presentKeys = colorKeys.filter((key) => key in data.colors);
 						const invalidColors = presentKeys.filter((key) => !isValidCssColor(data.colors[key]));
 						if (invalidColors.length > 0) {
-							const errorMsg = `Invalid theme file: invalid color values for ${invalidColors.slice(0, 3).join(', ')}${invalidColors.length > 3 ? '...' : ''}`;
+							const errorMsg = t('settings.finish.theme.importInvalidColors', {
+								keys:
+									invalidColors.slice(0, 3).join(', ') + (invalidColors.length > 3 ? '...' : ''),
+							});
 							onImportError?.(errorMsg);
 							return;
 						}
@@ -398,12 +462,12 @@ export function CustomThemeBuilder({
 						if (data.baseTheme && THEMES[data.baseTheme as ThemeId]) {
 							setCustomThemeBaseId(data.baseTheme);
 						}
-						onImportSuccess?.('Theme imported successfully');
+						onImportSuccess?.(t('settings.finish.theme.importSuccess'));
 					} else {
-						onImportError?.('Invalid theme file: missing colors object');
+						onImportError?.(t('settings.finish.theme.importMissingColors'));
 					}
 				} catch {
-					onImportError?.('Failed to parse theme file: invalid JSON format');
+					onImportError?.(t('settings.finish.theme.importInvalidJson'));
 				}
 			};
 			reader.readAsText(file);
@@ -413,7 +477,7 @@ export function CustomThemeBuilder({
 				fileInputRef.current.value = '';
 			}
 		},
-		[setCustomThemeColors, setCustomThemeBaseId, onImportError, onImportSuccess]
+		[setCustomThemeColors, setCustomThemeBaseId, onImportError, onImportSuccess, t]
 	);
 
 	return (
@@ -424,7 +488,7 @@ export function CustomThemeBuilder({
 				style={{ color: theme.colors.textDim }}
 			>
 				<Palette className="w-3 h-3" />
-				Custom Theme
+				{t('settings.finish.theme.custom')}
 			</div>
 
 			{/* Theme Selection Button + Controls */}
@@ -442,7 +506,7 @@ export function CustomThemeBuilder({
 				<button onClick={onSelect} className="w-full p-3 text-left" tabIndex={-1}>
 					<div className="flex justify-between items-center mb-2">
 						<span className="text-sm font-bold" style={{ color: customThemeColors.textMain }}>
-							Custom
+							{t('settings.finish.theme.customShort')}
 						</span>
 						{isSelected && (
 							<Check className="w-4 h-4" style={{ color: customThemeColors.accent }} />
@@ -469,7 +533,7 @@ export function CustomThemeBuilder({
 							className="text-2xs uppercase font-bold mb-2"
 							style={{ color: theme.colors.textDim }}
 						>
-							Preview
+							{t('settings.finish.theme.preview')}
 						</div>
 						<MiniUIPreview colors={customThemeColors} />
 					</div>
@@ -488,7 +552,7 @@ export function CustomThemeBuilder({
 								}}
 							>
 								<RotateCcw className="w-3 h-3" />
-								Initialize
+								{t('settings.finish.theme.initialize')}
 								<ChevronDown className="w-3 h-3" />
 							</button>
 
@@ -500,25 +564,33 @@ export function CustomThemeBuilder({
 										borderColor: theme.colors.border,
 									}}
 								>
-									{baseThemes.map((t) => (
+									{baseThemes.map((baseTheme) => (
 										<button
-											key={t.id}
-											onClick={() => handleInitializeFromBase(t.id)}
+											key={baseTheme.id}
+											onClick={() => handleInitializeFromBase(baseTheme.id)}
 											className="w-full px-2 py-1.5 text-left text-xs hover:opacity-80 flex items-center gap-2"
 											style={{
 												backgroundColor:
-													customThemeBaseId === t.id ? theme.colors.accentDim : 'transparent',
+													customThemeBaseId === baseTheme.id
+														? theme.colors.accentDim
+														: 'transparent',
 												color: theme.colors.textMain,
 											}}
 										>
 											<div className="flex h-3 w-8 rounded overflow-hidden">
-												<div className="flex-1" style={{ backgroundColor: t.colors.bgMain }} />
-												<div className="flex-1" style={{ backgroundColor: t.colors.accent }} />
+												<div
+													className="flex-1"
+													style={{ backgroundColor: baseTheme.colors.bgMain }}
+												/>
+												<div
+													className="flex-1"
+													style={{ backgroundColor: baseTheme.colors.accent }}
+												/>
 											</div>
-											{t.name}
-											{customThemeBaseId === t.id && (
+											{baseTheme.name}
+											{customThemeBaseId === baseTheme.id && (
 												<span className="ml-auto text-3xs" style={{ color: theme.colors.textDim }}>
-													current base
+													{t('settings.finish.theme.currentBase')}
 												</span>
 											)}
 										</button>
@@ -536,7 +608,7 @@ export function CustomThemeBuilder({
 								borderColor: theme.colors.border,
 								color: theme.colors.textMain,
 							}}
-							title="Export theme"
+							title={t('settings.finish.theme.export')}
 						>
 							<Download className="w-3 h-3" />
 						</button>
@@ -550,7 +622,7 @@ export function CustomThemeBuilder({
 								borderColor: theme.colors.border,
 								color: theme.colors.textMain,
 							}}
-							title="Import theme"
+							title={t('settings.finish.theme.import')}
 						>
 							<Upload className="w-3 h-3" />
 						</button>
@@ -571,7 +643,7 @@ export function CustomThemeBuilder({
 								borderColor: theme.colors.error + '40',
 								color: theme.colors.error,
 							}}
-							title="Reset to default"
+							title={t('settings.finish.theme.resetDefault')}
 						>
 							<RotateCcw className="w-3 h-3" />
 						</button>
@@ -582,7 +654,7 @@ export function CustomThemeBuilder({
 						className="text-2xs uppercase font-bold mb-2"
 						style={{ color: theme.colors.textDim }}
 					>
-						Colors
+						{t('settings.finish.theme.colors')}
 					</div>
 					<div
 						className="rounded-lg border p-2 max-h-64 overflow-y-auto"
@@ -595,8 +667,8 @@ export function CustomThemeBuilder({
 							<ColorInput
 								key={key}
 								colorKey={key}
-								label={label}
-								description={description}
+								label={t(label)}
+								description={t(description)}
 								value={
 									customThemeColors[key] ?? (key === 'bgTitleBar' ? customThemeColors.bgMain : '')
 								}
@@ -611,9 +683,9 @@ export function CustomThemeBuilder({
 			{showResetConfirm && (
 				<ConfirmModal
 					theme={theme}
-					title="Reset Custom Theme"
-					message="Reset all custom theme colors to their defaults? This will discard your current customizations."
-					confirmLabel="Reset"
+					title={t('settings.finish.theme.resetTitle')}
+					message={t('settings.finish.theme.resetMessage')}
+					confirmLabel={t('settings.finish.theme.reset')}
 					onConfirm={handleReset}
 					onClose={() => setShowResetConfirm(false)}
 				/>

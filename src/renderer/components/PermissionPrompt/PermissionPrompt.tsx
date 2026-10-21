@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * PermissionPrompt - app-wide modal for Claude Code standard-mode tool
  * permission requests.
@@ -49,6 +50,7 @@ function describeAction(request: PermissionRequestUI): string {
 }
 
 function PermissionPromptInner({ theme }: PermissionPromptProps) {
+	const uiText = useT();
 	const enqueue = usePermissionRequestStore((s) => s.enqueue);
 	const respond = usePermissionRequestStore((s) => s.respond);
 	const clearSession = usePermissionRequestStore((s) => s.clearSession);
@@ -118,7 +120,7 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 			>
 				<div
 					role="dialog"
-					aria-label="Question from Claude Code"
+					aria-label={uiText('workflows.sessions.claudeQuestion')}
 					className="w-[560px] max-w-[90vw] rounded-xl shadow-2xl border p-5"
 					style={{
 						backgroundColor: theme.colors.bgSidebar,
@@ -128,7 +130,9 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 				>
 					<div className="flex items-center gap-2 mb-3">
 						<MessagesSquare className="w-5 h-5" style={{ color: theme.colors.accent }} />
-						<h2 className="text-sm font-semibold">Claude Code has a question</h2>
+						<h2 className="text-sm font-semibold">
+							{uiText('workflows.sessions.claudeHasQuestion')}
+						</h2>
 					</div>
 					<QuestionPrompt
 						key={request.requestId}
@@ -151,7 +155,7 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 		>
 			<div
 				role="dialog"
-				aria-label="Permission request"
+				aria-label={uiText('workflows.sessions.permissionRequest')}
 				className="w-[520px] max-w-[90vw] rounded-xl shadow-2xl border p-5"
 				style={{
 					backgroundColor: theme.colors.bgSidebar,
@@ -161,10 +165,12 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 			>
 				<div className="flex items-center gap-2 mb-3">
 					<ShieldQuestion className="w-5 h-5" style={{ color: theme.colors.accent }} />
-					<h2 className="text-sm font-semibold">Permission required</h2>
+					<h2 className="text-sm font-semibold">
+						{uiText('workflows.sessions.permissionRequired')}
+					</h2>
 				</div>
 				<p className="text-xs mb-2" style={{ color: theme.colors.textDim }}>
-					Claude Code wants to use{' '}
+					{uiText('workflows.sessions.claudeWantsToUse')}{' '}
 					<span className="font-semibold" style={{ color: theme.colors.textMain }}>
 						{request.toolName}
 					</span>
@@ -195,7 +201,7 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 						}}
 					>
 						<X className="w-3.5 h-3.5" />
-						Deny
+						{uiText('workflows.sessions.deny')}
 					</button>
 					<button
 						onClick={onAllow}
@@ -207,7 +213,7 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 						}}
 					>
 						<Check className="w-3.5 h-3.5" />
-						Allow
+						{uiText('workflows.sessions.allow')}
 					</button>
 				</div>
 			</div>

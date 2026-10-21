@@ -453,10 +453,11 @@ class ConversationManager {
 			// This receives parsed thinking content (isPartial text) that's already extracted
 			if (this.session!.callbacks?.onThinkingChunk) {
 				this.session!.thinkingListenerCleanup = window.maestro.process.onThinkingChunk?.(
-					(sessionId: string, content: string) => {
+					(sessionId: string, content: string, purpose?: 'commentary') => {
 						if (sessionId === this.session?.sessionId && content) {
 							this.session.resetResponseTimeout?.();
-							this.session.callbacks?.onThinkingChunk?.(content);
+							// Public progress keeps the turn alive but is not reasoning.
+							if (purpose !== 'commentary') this.session.callbacks?.onThinkingChunk?.(content);
 						}
 					}
 				);

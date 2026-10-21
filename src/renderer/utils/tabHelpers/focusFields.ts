@@ -133,7 +133,13 @@ export function setShowThinkingFields(
 	logs: LogEntry[];
 } {
 	if (newMode === 'off') {
-		return { showThinking: 'off', logs: tab.logs.filter((l) => l.source !== 'thinking') };
+		// Reasoning read back from the provider transcript is history: it is hidden
+		// while thinking is off (TerminalOutput) rather than deleted, so switching
+		// thinking back on shows it again.
+		return {
+			showThinking: 'off',
+			logs: tab.logs.filter((l) => l.source !== 'thinking' || !!l.nativeTranscript),
+		};
 	}
 	return { showThinking: newMode, logs: tab.logs };
 }

@@ -1,3 +1,5 @@
+import { localizeHistoryLabel } from '../../i18n/historyLabels';
+import { useT } from '../../i18n';
 import { memo } from 'react';
 import {
 	ExternalLink,
@@ -54,6 +56,7 @@ export const HistoryEntryItem = memo(function HistoryEntryItem({
 	cueGroupExpansion,
 	isCueGroupExpanded = false,
 }: HistoryEntryItemProps) {
+	const uiText = useT();
 	const colors = getPillColor(entry.type, theme);
 	const Icon = getEntryIcon(entry.type);
 	const showProviderModePill = useSettingsStore((s) => s.showProviderModePill);
@@ -111,7 +114,11 @@ export const HistoryEntryItem = memo(function HistoryEntryItem({
 							}}
 							className="flex items-center justify-center w-5 h-5 rounded flex-shrink-0 hover:bg-white/10 transition-colors"
 							aria-expanded={expanded}
-							title={expanded ? 'Hide individual runs' : 'Show individual runs'}
+							title={
+								expanded
+									? uiText('workflows.sessions.history.hideRuns')
+									: uiText('workflows.sessions.history.showRuns')
+							}
 						>
 							{expanded ? (
 								<ChevronDown className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
@@ -210,9 +217,9 @@ export const HistoryEntryItem = memo(function HistoryEntryItem({
 							title={
 								entry.success
 									? entry.validated
-										? 'Task completed successfully, and you marked it as checked'
-										: 'Task completed successfully'
-									: 'Task failed'
+										? uiText('workflows.sessions.history.taskSuccessChecked')
+										: uiText('workflows.sessions.history.taskSuccess')
+									: uiText('workflows.sessions.history.taskFailed')
 							}
 						>
 							{entry.success ? (
@@ -237,7 +244,7 @@ export const HistoryEntryItem = memo(function HistoryEntryItem({
 						}}
 					>
 						<Icon className="w-2.5 h-2.5" />
-						{entry.type}
+						{localizeHistoryLabel(entry.type, uiText)}
 					</span>
 				</div>
 
@@ -257,7 +264,9 @@ export const HistoryEntryItem = memo(function HistoryEntryItem({
 					WebkitBoxOrient: 'vertical' as const,
 				}}
 			>
-				{entry.summary ? stripMarkdown(entry.summary) : 'No summary available'}
+				{entry.summary
+					? stripMarkdown(entry.summary)
+					: uiText('workflows.sessions.history.noSummary')}
 			</p>
 
 			{/* CUE metadata subtitle. A grouped row spends the same line on what
@@ -268,16 +277,18 @@ export const HistoryEntryItem = memo(function HistoryEntryItem({
 					data-cue-group={cueGroup.key}
 					className="text-2xs mt-1 flex items-center gap-1.5 truncate"
 					style={{ color: theme.colors.textDim }}
-					title={`${formatCount(cueGroup.runCount)} runs collapsed into this row`}
+					title={uiText('workflows.sessions.history.collapsedRuns', {
+						count: formatCount(cueGroup.runCount),
+					})}
 				>
 					<span style={{ color: theme.colors.textMain }}>
-						{formatCount(cueGroup.runCount)} runs
+						{formatCount(cueGroup.runCount)} {uiText('workflows.sessions.history.runs')}
 					</span>
 					{cueGroup.failureCount > 0 && (
 						<>
 							<span aria-hidden="true">·</span>
 							<span style={{ color: theme.colors.error }}>
-								{formatCount(cueGroup.failureCount)} failed
+								{formatCount(cueGroup.failureCount)} {uiText('workflows.sessions.history.failed')}
 							</span>
 						</>
 					)}
@@ -298,7 +309,8 @@ export const HistoryEntryItem = memo(function HistoryEntryItem({
 						style={{ color: theme.colors.textDim }}
 						title={entry.cueEventType}
 					>
-						Triggered by: {humanizeCueEventType(entry.cueEventType)}
+						{uiText('workflows.sessions.history.triggeredBy')}{' '}
+						{humanizeCueEventType(entry.cueEventType)}
 					</p>
 				)
 			)}
@@ -363,10 +375,10 @@ export const HistoryEntryItem = memo(function HistoryEntryItem({
 								color: theme.colors.warning,
 								border: `1px solid ${theme.colors.warning}40`,
 							}}
-							title="View achievements"
+							title={uiText('workflows.sessions.history.viewAchievementsHint')}
 						>
 							<Award className="w-3 h-3" />
-							View Achievements
+							{uiText('workflows.sessions.history.viewAchievements')}
 						</button>
 					)}
 					{/* Sender pill - shown for turns a logged-in browser sent */}
@@ -378,7 +390,7 @@ export const HistoryEntryItem = memo(function HistoryEntryItem({
 								color: theme.colors.textDim,
 								border: `1px solid ${theme.colors.border}`,
 							}}
-							title={`Sent by ${entry.userName}`}
+							title={uiText('workflows.sessions.history.sentBy', { name: entry.userName })}
 						>
 							<User className="w-2.5 h-2.5" />
 							{entry.userDisplayName ?? entry.userName}
@@ -393,7 +405,7 @@ export const HistoryEntryItem = memo(function HistoryEntryItem({
 								color: theme.colors.textDim,
 								border: `1px solid ${theme.colors.border}`,
 							}}
-							title={`Origin: ${entry.hostname}`}
+							title={uiText('workflows.sessions.history.origin', { host: entry.hostname })}
 						>
 							<Server className="w-2.5 h-2.5" />
 							{entry.hostname}

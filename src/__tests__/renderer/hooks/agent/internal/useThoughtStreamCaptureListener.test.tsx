@@ -62,6 +62,23 @@ describe('useThoughtStreamCaptureListener', () => {
 		expect(entries[0].text).toBe('auto-run reasoning ');
 	});
 
+	it('does not file a public progress message (commentary) as a model thought', () => {
+		renderHook(() => useThoughtStreamCaptureListener());
+
+		act(() => {
+			(thinkingHandler as unknown as (s: string, c: string, p?: 'commentary') => void)?.(
+				`${SESSION_ID}-batch-1699999999999`,
+				'Running the test suite now.',
+				'commentary'
+			);
+			thinkingHandler?.(`${SESSION_ID}-batch-1699999999999`, 'real reasoning');
+		});
+		flush();
+
+		const entries = useThoughtStreamStore.getState().buffers[SESSION_ID]?.entries ?? [];
+		expect(entries.map((e) => e.text)).toEqual(['real reasoning']);
+	});
+
 	// This used to assert the opposite - that interactive chunks were captured
 	// "too". That was the fix for an under-capture (matching only AI tabs dropped
 	// every Auto Run chunk) overshooting into an over-capture, and it is the bug

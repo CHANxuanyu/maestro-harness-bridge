@@ -37,6 +37,8 @@ import { backupSessionsBeforeWipe } from '../../stores/sessions-backup';
 import { createKeyedWriteQueue } from '../../utils/atomic-json-store';
 import { clearGhCache } from '../../utils/cliDetection';
 import { mergeUsagePeaks, type UsagePeaks } from '../../../shared/usagePeaks';
+import { assertValidUiLanguageSetting } from '../../../shared/i18n';
+import { setMenuLanguage } from '../../app-menu';
 import { compactSessionToolOutputs } from '../../../shared/toolOutput';
 import {
 	mergeDeferredSessionContent,
@@ -362,6 +364,7 @@ export function registerPersistenceHandlers(
 	});
 
 	ipcMain.handle('settings:set', async (event, key: string, value: any) => {
+		assertValidUiLanguageSetting(key, value);
 		// `usageStats` holds lifetime high-water marks, so a write may only ever
 		// raise them. Enforcing that here - against the value on disk rather than
 		// against any caller's in-memory copy - is what makes the invariant hold
@@ -395,6 +398,11 @@ export function registerPersistenceHandlers(
 		// external (maestro-cli) edits. The sender is skipped deliberately - see
 		// notifyPeerWindows.
 		notifyPeerWindows(event?.sender?.id);
+		if (key === 'uiLanguage') {
+			setMenuLanguage(value);
+			// Web-desktop runs the same renderer, but has no BrowserWindow.
+			broadcastBridgeEvent('settings:externalChange', []);
+		}
 
 		// Pointing at a different gh binary invalidates every cached gh fact:
 		// detection, resolved path, and auth status were all reached against the

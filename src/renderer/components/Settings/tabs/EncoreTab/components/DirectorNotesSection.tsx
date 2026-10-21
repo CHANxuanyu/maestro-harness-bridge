@@ -1,3 +1,4 @@
+import { useT } from '../../../../../i18n';
 import { Check, ChevronDown, Settings } from 'lucide-react';
 import { getAgentDisplayName, isBetaAgent } from '../../../../../../shared/agentMetadata';
 import type { DirectorNotesSettings, Theme, ToolType } from '../../../../../types';
@@ -22,6 +23,7 @@ export function DirectorNotesSection({
 	setDirectorNotesSettings,
 	directorNotesAgentState,
 }: DirectorNotesSectionProps) {
+	const tExtra = useT();
 	const ac = directorNotesAgentState.agentConfiguration;
 
 	// Default ON: an install that has never touched this setting should get the
@@ -48,7 +50,7 @@ export function DirectorNotesSection({
 					className="block text-xs font-bold opacity-70 uppercase mb-2"
 					style={{ color: theme.colors.textMain }}
 				>
-					Synopsis Provider
+					{tExtra('settings.extra.directorNotesSection.synopsisProvider')}
 				</div>
 
 				{/* Auto-selection. On by default; turning it off un-ghosts the
@@ -64,18 +66,24 @@ export function DirectorNotesSection({
 					className="w-full flex items-center justify-between gap-3 mb-3 text-left"
 					role="switch"
 					aria-checked={dnAutoProvider}
-					aria-label="Use the first available provider for Director's Notes"
+					aria-label={tExtra(
+						'settings.extra.directorNotesSection.useTheFirstAvailableProviderForDirector'
+					)}
 				>
 					<div>
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Use the first available provider
+							{tExtra('settings.extra.directorNotesSection.useTheFirstAvailableProvider')}
 						</div>
 						<div className="text-xs opacity-70 mt-0.5">
 							{dnAutoProvider
 								? dnAutoPickName
-									? `Picked at generation time. Right now that is ${dnAutoPickName}.`
-									: 'Picked at generation time. No supported provider is installed.'
-								: 'Off - the synopsis always runs on the provider selected below.'}
+									? tExtra('settings.extra.directorNotesSection.pickedProvider', {
+											provider: dnAutoPickName,
+										})
+									: tExtra(
+											'settings.extra.directorNotesSection.pickedAtGenerationTimeNoSupportedProvider'
+										)
+								: tExtra('settings.extra.directorNotesSection.offTheSynopsisAlwaysRunsOnThe')}
 						</div>
 					</div>
 					<ToggleSwitchTrack checked={dnAutoProvider} theme={theme} />
@@ -91,12 +99,12 @@ export function DirectorNotesSection({
 							}}
 						/>
 						<span className="text-sm" style={{ color: theme.colors.textDim }}>
-							Detecting agents...
+							{tExtra('settings.extra.directorNotesSection.detectingAgents')}
 						</span>
 					</div>
 				) : directorNotesAgentState.availableTiles.length === 0 ? (
 					<div className="text-sm py-2" style={{ color: theme.colors.textDim }}>
-						No agents available. Please install Claude Code, OpenCode, Codex, or Factory Droid.
+						{tExtra('settings.extra.directorNotesSection.noAgentsAvailablePleaseInstallClaudeCode')}
 					</div>
 				) : (
 					<div
@@ -117,14 +125,16 @@ export function DirectorNotesSection({
 									borderColor: theme.colors.border,
 									color: theme.colors.textMain,
 								}}
-								aria-label="Select synopsis provider agent"
+								aria-label={tExtra(
+									'settings.extra.directorNotesSection.selectSynopsisProviderAgent'
+								)}
 							>
 								{directorNotesAgentState.availableTiles.map((tile) => {
 									const isBeta = isBetaAgent(tile.id);
 									return (
 										<option key={tile.id} value={tile.id}>
 											{getAgentDisplayName(tile.id)}
-											{isBeta ? ' (Beta)' : ''}
+											{isBeta ? tExtra('settings.extra.directorNotesSection.beta') : ''}
 										</option>
 									);
 								})}
@@ -143,10 +153,12 @@ export function DirectorNotesSection({
 								color: ac.isConfigExpanded ? theme.colors.accent : theme.colors.textDim,
 								backgroundColor: ac.isConfigExpanded ? `${theme.colors.accent}10` : 'transparent',
 							}}
-							title="Customize provider settings"
+							title={tExtra('settings.extra.directorNotesSection.customizeProviderSettings')}
 						>
 							<Settings className="w-4 h-4" />
-							<span className="text-sm">Customize</span>
+							<span className="text-sm">
+								{tExtra('settings.extra.directorNotesSection.customize')}
+							</span>
 							{ac.hasCustomization && (
 								<span
 									className="w-2 h-2 rounded-full"
@@ -169,13 +181,14 @@ export function DirectorNotesSection({
 						>
 							<div className="flex items-center justify-between mb-3">
 								<span className="text-xs font-medium" style={{ color: theme.colors.textDim }}>
-									{getAgentDisplayName(directorNotesAgentState.selectedTile.id)} Configuration
+									{getAgentDisplayName(directorNotesAgentState.selectedTile.id)}{' '}
+									{tExtra('settings.extra.directorNotesSection.configuration')}
 								</span>
 								{ac.hasCustomization && (
 									<div className="flex items-center gap-1">
 										<Check className="w-3 h-3" style={{ color: theme.colors.success }} />
 										<span className="text-xs" style={{ color: theme.colors.success }}>
-											Customized
+											{tExtra('settings.extra.directorNotesSection.customized')}
 										</span>
 									</div>
 								)}
@@ -212,7 +225,7 @@ export function DirectorNotesSection({
 					)}
 
 				<p className="text-xs mt-2" style={{ color: theme.colors.textDim }}>
-					The AI agent used to generate synopsis summaries
+					{tExtra('settings.extra.directorNotesSection.theAiAgentUsedToGenerateSynopsis')}
 				</p>
 			</div>
 
@@ -222,7 +235,9 @@ export function DirectorNotesSection({
 					className="block text-xs font-bold mb-2"
 					style={{ color: theme.colors.textMain }}
 				>
-					Default Lookback Period: {directorNotesSettings.defaultLookbackDays} days
+					{tExtra('settings.extra.directorNotesSection.defaultLookbackPeriod')}{' '}
+					{directorNotesSettings.defaultLookbackDays}{' '}
+					{tExtra('settings.extra.directorNotesSection.days')}
 				</label>
 				<input
 					id="director-notes-default-lookback-days"
@@ -239,29 +254,25 @@ export function DirectorNotesSection({
 					className="w-full"
 				/>
 				<div className="flex justify-between text-2xs mt-1" style={{ color: theme.colors.textDim }}>
-					<span>1 day</span>
+					<span>{tExtra('settings.extra.directorNotesSection.1Day')}</span>
 					<span>7</span>
 					<span>14</span>
 					<span>30</span>
 					<span>60</span>
-					<span>90 days</span>
+					<span>{tExtra('settings.extra.directorNotesSection.90Days')}</span>
 				</div>
 				<p className="text-xs mt-2" style={{ color: theme.colors.textDim }}>
-					How far back to look when generating notes (can be adjusted per-report)
+					{tExtra('settings.extra.directorNotesSection.howFarBackToLookWhenGenerating')}
 				</p>
 			</div>
 
 			{/* Ideal End State - optional; drives the extra progress section */}
 			<div data-setting-id="encore-director-notes-ideal-end-state">
 				<div className="block text-xs font-bold mb-2" style={{ color: theme.colors.textMain }}>
-					Ideal End State (optional)
+					{tExtra('settings.extra.directorNotesSection.idealEndStateOptional')}
 				</div>
 				<p className="text-xs mb-2" style={{ color: theme.colors.textDim }}>
-					Describe where you are trying to get to: the projects in flight, which agents belong to
-					each, and what finished looks like. Leave this empty and notes are generated exactly as
-					they are today. Fill it in and the notes prioritize the projects you name, frame Next
-					Steps around them, and add a Progress Toward Ideal End State section measuring how far the
-					window moved you.
+					{tExtra('settings.extra.directorNotesSection.describeWhereYouAreTryingToGet')}
 				</p>
 				<textarea
 					ref={idealEndStateResize.textareaRef}
@@ -272,9 +283,7 @@ export function DirectorNotesSection({
 							idealEndState: e.target.value,
 						})
 					}
-					placeholder={
-						'e.g., Shipping v2 of the ingest pipeline. Agents parser-a, parser-b and schema-migration are all on it; done means the new schema is live and the legacy path is deleted.\n\nSeparately, the docs rewrite (agent docs-refresh) needs every page under /guides updated for the new CLI flags.'
-					}
+					placeholder={tExtra('settings.extra.directorNotesSection.eGShippingV2OfTheIngest')}
 					className="w-full p-3 rounded border bg-transparent outline-none text-sm resize-y"
 					style={{
 						borderColor: theme.colors.border,
@@ -300,19 +309,19 @@ export function DirectorNotesSection({
 			{/* Default Reading Mode (Rich widget dashboard vs Plain markdown) */}
 			<div data-setting-id="encore-director-notes-default-mode">
 				<div className="block text-xs font-bold mb-2" style={{ color: theme.colors.textMain }}>
-					Default Reading Mode
+					{tExtra('settings.extra.directorNotesSection.defaultReadingMode')}
 				</div>
 				<div
 					className="flex items-center rounded overflow-hidden w-fit"
 					style={{ border: `1px solid ${theme.colors.border}` }}
 					role="group"
-					aria-label="Default reading mode"
+					aria-label={tExtra('settings.extra.directorNotesSection.defaultReadingMode264')}
 				>
 					{(['rich', 'plain'] as const).map((mode) => {
 						const active = (directorNotesSettings.defaultMode ?? 'rich') === mode;
 						return (
 							<button
-								key={mode}
+								key={tExtra(`settings.extra.directorNotesSection.mode.${mode}`)}
 								onClick={() =>
 									setDirectorNotesSettings({
 										...directorNotesSettings,
@@ -326,14 +335,13 @@ export function DirectorNotesSection({
 									color: active ? theme.colors.accentForeground : theme.colors.textDim,
 								}}
 							>
-								{mode}
+								{tExtra(`settings.extra.directorNotesSection.mode.${mode}`)}
 							</button>
 						);
 					})}
 				</div>
 				<p className="text-xs mt-2" style={{ color: theme.colors.textDim }}>
-					Which view the AI Overview opens in: Rich shows the widget dashboard, Plain shows the
-					markdown notes (can be toggled per-report)
+					{tExtra('settings.extra.directorNotesSection.whichViewTheAiOverviewOpensIn')}
 				</p>
 			</div>
 		</div>

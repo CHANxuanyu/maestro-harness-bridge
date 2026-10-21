@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React, { memo, useCallback } from 'react';
 import type { Theme } from '../../../types';
 
@@ -28,6 +29,7 @@ export const CommandHistoryPopover = memo(function CommandHistoryPopover({
 	setInputValue,
 	inputRef,
 }: CommandHistoryPopoverProps) {
+	const t = useT();
 	const focusFilterRef = useCallback((el: HTMLInputElement | null) => {
 		el?.focus();
 	}, []);
@@ -55,7 +57,11 @@ export const CommandHistoryPopover = memo(function CommandHistoryPopover({
 					type="text"
 					className="w-full bg-transparent outline-none text-sm p-2 border-b"
 					style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-					placeholder={isTerminalMode ? 'Filter commands...' : 'Filter messages...'}
+					placeholder={
+						isTerminalMode
+							? t('workflows.shell.filterCommands')
+							: t('workflows.shell.filterMessages')
+					}
 					value={filter}
 					onChange={(e) => {
 						setFilter(e.target.value);
@@ -118,7 +124,9 @@ export const CommandHistoryPopover = memo(function CommandHistoryPopover({
 				})}
 				{filteredHistory.length === 0 && (
 					<div className="px-3 py-4 text-center text-sm opacity-50">
-						{isTerminalMode ? 'No matching commands' : 'No matching messages'}
+						{isTerminalMode
+							? t('workflows.shell.noMatchingCommands')
+							: t('workflows.shell.noMatchingMessages')}
 					</div>
 				)}
 			</div>

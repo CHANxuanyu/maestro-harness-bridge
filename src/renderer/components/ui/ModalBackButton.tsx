@@ -20,6 +20,7 @@
 
 import { ChevronLeft } from 'lucide-react';
 import type { Theme } from '../../types';
+import { useT } from '../../i18n';
 
 export interface ModalBackButtonProps {
 	theme: Theme;
@@ -31,7 +32,8 @@ export interface ModalBackButtonProps {
 	testId?: string;
 }
 
-export function ModalBackButton({ theme, onBack, label = 'Back', testId }: ModalBackButtonProps) {
+export function ModalBackButton({ theme, onBack, label, testId }: ModalBackButtonProps) {
+	const t = useT();
 	return (
 		<button
 			type="button"
@@ -41,7 +43,7 @@ export function ModalBackButton({ theme, onBack, label = 'Back', testId }: Modal
 			style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
 		>
 			<ChevronLeft className="w-3.5 h-3.5" />
-			{label}
+			{label ?? t('common.back')}
 		</button>
 	);
 }

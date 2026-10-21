@@ -1,3 +1,4 @@
+import { getT, type TFunction } from '../../../i18n';
 import type { Session } from '../../../types';
 import type { QuickAction } from '../types';
 import { isWebDesktop } from '../../../utils/runtimeContext';
@@ -28,37 +29,39 @@ export type TileShortcutId =
 	| 'tileFileBelow'
 	| 'tileTerminalBelow';
 
-const TILE_KINDS: ReadonlyArray<{
+function getTileKinds(t: TFunction): ReadonlyArray<{
 	kind: TileableTabKind;
 	label: string;
 	subtext: string;
 	shortcutId: TileShortcutId;
-}> = [
-	{
-		kind: 'ai',
-		label: 'Tile New AI Chat Below',
-		subtext: 'Split the current view and open a new AI chat in the bottom half',
-		shortcutId: 'tileAiBelow',
-	},
-	{
-		kind: 'browser',
-		label: 'Tile New Browser Below',
-		subtext: 'Split the current view and open a new browser tab in the bottom half',
-		shortcutId: 'tileBrowserBelow',
-	},
-	{
-		kind: 'file',
-		label: 'Tile New File Below',
-		subtext: 'Split the current view and open a new file tab in the bottom half',
-		shortcutId: 'tileFileBelow',
-	},
-	{
-		kind: 'terminal',
-		label: 'Tile New Terminal Below',
-		subtext: 'Split the current view and open a new terminal in the bottom half',
-		shortcutId: 'tileTerminalBelow',
-	},
-];
+}> {
+	return [
+		{
+			kind: 'ai',
+			label: t('workflows.shell.tileNewAiChatBelow'),
+			subtext: t('workflows.shell.splitTheCurrentViewAndOpenANew'),
+			shortcutId: 'tileAiBelow',
+		},
+		{
+			kind: 'browser',
+			label: t('workflows.shell.tileNewBrowserBelow'),
+			subtext: t('workflows.shell.splitTheCurrentViewAndOpenANew2'),
+			shortcutId: 'tileBrowserBelow',
+		},
+		{
+			kind: 'file',
+			label: t('workflows.shell.tileNewFileBelow'),
+			subtext: t('workflows.shell.splitTheCurrentViewAndOpenANew3'),
+			shortcutId: 'tileFileBelow',
+		},
+		{
+			kind: 'terminal',
+			label: t('workflows.shell.tileNewTerminalBelow'),
+			subtext: t('workflows.shell.splitTheCurrentViewAndOpenANew4'),
+			shortcutId: 'tileTerminalBelow',
+		},
+	];
+}
 
 /**
  * Commands that create a tab AND tile it under the current view in one step,
@@ -77,20 +80,22 @@ export function buildTileCommands({
 	if (!canTileNewTab(activeSession) || !activeSession) return [];
 	const sessionId = activeSession.id;
 
-	return TILE_KINDS.filter(
-		// Browser tabs need the Electron <webview>, which is inert in the
-		// web-desktop bundle; tiling one there would place an empty pane.
-		({ kind }) => kind !== 'browser' || !isWebDesktop()
-	).map(({ kind, label, subtext, shortcutId }) => ({
-		id: `tileBelow:${kind}`,
-		label,
-		subtext,
-		// An unbound entry has `keys: []`; drop the badge entirely rather than
-		// rendering an empty pill next to the label.
-		shortcut: shortcuts?.[shortcutId]?.keys?.length ? shortcuts[shortcutId] : undefined,
-		action: () => {
-			setQuickActionOpen(false);
-			tileNewTabInSession(sessionId, kind);
-		},
-	}));
+	return getTileKinds(getT())
+		.filter(
+			// Browser tabs need the Electron <webview>, which is inert in the
+			// web-desktop bundle; tiling one there would place an empty pane.
+			({ kind }) => kind !== 'browser' || !isWebDesktop()
+		)
+		.map(({ kind, label, subtext, shortcutId }) => ({
+			id: `tileBelow:${kind}`,
+			label,
+			subtext,
+			// An unbound entry has `keys: []`; drop the badge entirely rather than
+			// rendering an empty pill next to the label.
+			shortcut: shortcuts?.[shortcutId]?.keys?.length ? shortcuts[shortcutId] : undefined,
+			action: () => {
+				setQuickActionOpen(false);
+				tileNewTabInSession(sessionId, kind);
+			},
+		}));
 }

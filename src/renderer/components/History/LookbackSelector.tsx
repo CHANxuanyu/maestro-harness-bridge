@@ -1,3 +1,5 @@
+import { useT } from '../../i18n';
+import { localizeHistoryLabel } from '../../i18n/historyLabels';
 import React, { memo, useMemo, useCallback } from 'react';
 import { Calendar } from 'lucide-react';
 import type { Theme } from '../../types';
@@ -23,13 +25,14 @@ export const LookbackSelector = memo(function LookbackSelector({
 	theme,
 	disabled = false,
 }: LookbackSelectorProps) {
+	const uiText = useT();
 	// Find the current index in LOOKBACK_OPTIONS
 	const currentIndex = useMemo(() => {
 		const idx = LOOKBACK_OPTIONS.findIndex((o) => o.hours === lookbackHours);
 		return idx >= 0 ? idx : 0;
 	}, [lookbackHours]);
 
-	const currentLabel = LOOKBACK_OPTIONS[currentIndex].label;
+	const currentLabel = localizeHistoryLabel(LOOKBACK_OPTIONS[currentIndex].label, uiText);
 
 	const handleChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {

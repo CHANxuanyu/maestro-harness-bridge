@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { Group } from '../../../types';
 import type { QuickAction, QuickActionMode } from '../types';
 
@@ -18,12 +19,13 @@ export function buildMoveToGroupCommands({
 	setMode,
 	resetSelectionToFirst,
 }: BuildMoveToGroupCommandsArgs): QuickAction[] {
+	const t = getT();
 	return [
 		...(initialMode === 'main'
 			? [
 					{
 						id: 'back',
-						label: '← Back to main menu',
+						label: t('workflows.shell.backToMainMenu'),
 						action: () => {
 							setMode('main');
 							resetSelectionToFirst();
@@ -31,12 +33,16 @@ export function buildMoveToGroupCommands({
 					},
 				]
 			: []),
-		{ id: 'no-group', label: '📁 No Group (Ungrouped)', action: () => handleMoveToGroup('') },
+		{
+			id: 'no-group',
+			label: t('workflows.shell.noGroupUngrouped'),
+			action: () => handleMoveToGroup(''),
+		},
 		...groups.map((group) => ({
 			id: `group-${group.id}`,
 			label: `${group.emoji} ${group.name}`,
 			action: () => handleMoveToGroup(group.id),
 		})),
-		{ id: 'create-new', label: '+ Create New Group', action: handleCreateGroup },
+		{ id: 'create-new', label: t('workflows.shell.createNewGroup2'), action: handleCreateGroup },
 	];
 }

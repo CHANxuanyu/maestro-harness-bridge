@@ -92,7 +92,7 @@ describe('FontConfigurationPanel', () => {
 		const onRemoveCustomFont = vi.fn();
 		renderPanel({ customFonts: ['Verdana', 'Helvetica'], onRemoveCustomFont });
 
-		const removeButtons = screen.getAllByRole('button', { name: '\u00d7' });
+		const removeButtons = screen.getAllByRole('button', { name: /^Remove (Verdana|Helvetica)$/ });
 		expect(removeButtons).toHaveLength(2);
 
 		fireEvent.click(removeButtons[0]);

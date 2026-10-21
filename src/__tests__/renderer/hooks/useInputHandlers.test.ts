@@ -2605,9 +2605,12 @@ describe('useInputHandlers', () => {
 
 			// Draft should be restored after replay
 			expect(inputVal()).toBe('my draft message');
+			// Replay is the user's own send (its only caller is the replay button),
+			// so it asks for the sent turn to be revealed.
 			expect(mockProcessInput).toHaveBeenCalledWith('replayed message', {
 				sessionId: 'session-1',
 				tabId: 'tab-1',
+				revealTurn: true,
 			});
 
 			// Clean up mock

@@ -132,6 +132,11 @@ export interface ResumeSessionOptions {
 	 * instead of a transient message.
 	 */
 	suppressUnavailableFlash?: boolean;
+	/**
+	 * Exact provider account home to read the transcript from (a native history
+	 * row's `accountDir`). Without it main resolves the pool from the owner.
+	 */
+	configDir?: string;
 }
 
 /**
@@ -353,7 +358,15 @@ export function useAgentSessionManagement(
 						agentId,
 						resolvedProjectRoot,
 						agentSessionId,
-						{ offset: 0, limit: TRANSCRIPT_RESUME_READ_LIMIT },
+						{
+							offset: 0,
+							limit: TRANSCRIPT_RESUME_READ_LIMIT,
+							// The owner pins the account pool; an explicit configDir (a
+							// native history row) names the exact pool even before a newly
+							// created owner has been persisted.
+							ownerAgentId: targetSession.id,
+							...(opts?.configDir ? { configDir: opts.configDir } : {}),
+						},
 						sshRemoteId
 					);
 

@@ -1,6 +1,7 @@
 import { PanelLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Theme } from '../../../../../types';
+import { useI18n } from '../../../../../i18n';
 import { WorktreePill } from '../../../../ui/WorktreePill';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { SectionCard } from './SectionCard';
@@ -67,63 +68,54 @@ export function LeftSidePanelSection({
 	showWorktreeBranchName,
 	setShowWorktreeBranchName,
 }: LeftSidePanelSectionProps) {
+	const { t, tRich } = useI18n();
 	const pillPercentage = ((leftPanelCollapsedPillsPerRow - 5) / 45) * 100;
 
 	return (
 		<div data-setting-id="display-left-side-panel">
-			<SettingsSectionHeading icon={PanelLeft}>Left Side Panel</SettingsSectionHeading>
+			<SettingsSectionHeading icon={PanelLeft}>
+				{t('settings.display.left.heading')}
+			</SettingsSectionHeading>
 			<SectionCard theme={theme}>
 				<div data-setting-id="display-left-panel-starred-sessions">
 					<ToggleSettingRow
 						theme={theme}
-						title="Show Starred Sessions section"
-						description="Display a Starred Sessions section at the top of the left side bar listing every starred AI tab across all agents."
+						title={t('settings.display.left.starred')}
+						description={t('settings.display.left.starredDescription')}
 						checked={showStarredSessionsSection}
 						onChange={setShowStarredSessionsSection}
-						ariaLabel="Show Starred Sessions section in left side bar"
+						ariaLabel={t('settings.display.left.starredAria')}
 					/>
 				</div>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show group member count"
-					description={
-						<>
-							Display the number of agents in parentheses after each group name in the left side bar
-							(e.g. &quot;UNGROUPED AGENTS (24)&quot;).
-						</>
-					}
+					title={t('settings.display.left.memberCount')}
+					description={t('settings.display.left.memberCountDescription')}
 					checked={showLeftPanelGroupMemberCount}
 					onChange={setShowLeftPanelGroupMemberCount}
-					ariaLabel="Show group member count in left side bar"
+					ariaLabel={t('settings.display.left.memberCountAria')}
 					borderTop
 				/>
 				<div data-setting-id="display-left-panel-collapsed-initials">
 					<ToggleSettingRow
 						theme={theme}
-						title="Show agent initials when collapsed"
-						description={
-							<>
-								When the left side bar is collapsed, label each agent with two letters from its name
-								(e.g. <MonoExample>MR</MonoExample> for Maestro RC), tinted with its status color.
-								Letters are picked so no two agents share a label. Turn off to show a plain status
-								dot.
-							</>
-						}
+						title={t('settings.display.left.initials')}
+						description={tRich('settings.display.left.initialsDescription', {
+							example: <MonoExample>MR</MonoExample>,
+						})}
 						checked={showLeftPanelCollapsedInitials}
 						onChange={setShowLeftPanelCollapsedInitials}
-						ariaLabel="Show agent initials in collapsed left side bar"
+						ariaLabel={t('settings.display.left.initialsAria')}
 						borderTop
 					/>
 				</div>
 
 				<div className="pt-3 border-t" style={{ borderColor: theme.colors.border }}>
 					<p className="text-sm" style={{ color: theme.colors.textMain }}>
-						Collapsed group pills per row
+						{t('settings.display.left.pillsPerRow')}
 					</p>
 					<p className="text-xs opacity-70 mt-0.5 mb-2">
-						When a group is collapsed, its agents render as a row of activity pills. Pills wrap to a
-						new row once this many are shown, so large groups stay readable instead of condensing
-						into invisible slivers.
+						{t('settings.display.left.pillsPerRowDescription')}
 					</p>
 					<div className="flex items-center gap-3">
 						<input
@@ -137,7 +129,7 @@ export function LeftSidePanelSection({
 							style={{
 								background: `linear-gradient(to right, ${theme.colors.accent} 0%, ${theme.colors.accent} ${pillPercentage}%, ${theme.colors.bgActivity} ${pillPercentage}%, ${theme.colors.bgActivity} 100%)`,
 							}}
-							aria-label="Collapsed group pills per row"
+							aria-label={t('settings.display.left.pillsPerRow')}
 						/>
 						<span
 							className="text-sm font-mono w-8 text-right"
@@ -150,74 +142,65 @@ export function LeftSidePanelSection({
 
 				<ToggleSettingRow
 					theme={theme}
-					title="Show location pills"
-					description="Display the REMOTE / LOCAL / GIT badges next to each agent in the left side bar. Turn off to simplify the agent rows."
+					title={t('settings.display.left.locationPills')}
+					description={t('settings.display.left.locationPillsDescription')}
 					checked={showLeftPanelLocationPills}
 					onChange={setShowLeftPanelLocationPills}
-					ariaLabel="Show location pills in left side bar"
+					ariaLabel={t('settings.display.left.locationPillsAria')}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show git change indicator"
-					description="Display the branch icon and dirty file count next to git repository agents."
+					title={t('settings.display.left.git')}
+					description={t('settings.display.left.gitDescription')}
 					checked={showLeftPanelGitIndicator}
 					onChange={setShowLeftPanelGitIndicator}
-					ariaLabel="Show git change indicator in left side bar"
+					ariaLabel={t('settings.display.left.gitAria')}
 					borderTop
 				/>
 				{maestroCueEnabled && (
 					<ToggleSettingRow
 						theme={theme}
-						title="Show Cue indicator"
-						description="Display the lightning-bolt indicator next to agents with active Maestro Cue subscriptions."
+						title={t('settings.display.left.cue')}
+						description={t('settings.display.left.cueDescription')}
 						checked={showLeftPanelCueIndicator}
 						onChange={setShowLeftPanelCueIndicator}
-						ariaLabel="Show Cue indicator in left side bar"
+						ariaLabel={t('settings.display.left.cueAria')}
 						borderTop
 					/>
 				)}
 				<ToggleSettingRow
 					theme={theme}
-					title="Show terminal startup-command indicator"
-					description={
-						<>
-							Display the <MonoExample>{'>_'}</MonoExample> glyph next to agents that have at least
-							one terminal tab with a saved startup command.
-						</>
-					}
+					title={t('settings.display.left.startup')}
+					description={tRich('settings.display.left.startupDescription', {
+						glyph: <MonoExample>{'>_'}</MonoExample>,
+					})}
 					checked={showLeftPanelStartupCommandIndicator}
 					onChange={setShowLeftPanelStartupCommandIndicator}
-					ariaLabel="Show terminal startup-command indicator in left side bar"
+					ariaLabel={t('settings.display.left.startupAria')}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show group label on bookmarked agents"
-					description={
-						<>
-							Display the group badge (e.g. <MonoExample>CCS</MonoExample>) next to bookmarked
-							agents. Turn off to hide the group pill entirely.
-						</>
-					}
+					title={t('settings.display.left.groupLabel')}
+					description={tRich('settings.display.left.groupLabelDescription', {
+						example: <MonoExample>CCS</MonoExample>,
+					})}
 					checked={showGroupLabelInBookmarks}
 					onChange={setShowGroupLabelInBookmarks}
-					ariaLabel="Show group label on bookmarked agents in left side bar"
+					ariaLabel={t('settings.display.left.groupLabelAria')}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show full group label on bookmarked agents"
-					description={
-						<>
-							Display the full group name (e.g. <MonoExample>[2] CASE/CONTENT-SYSTEM</MonoExample>)
-							instead of the abbreviated badge (e.g. <MonoExample>CCS</MonoExample>) next to
-							bookmarked agents. Long names are truncated with the full value on hover.
-						</>
-					}
+					title={t('settings.display.left.fullGroupLabel')}
+					description={tRich('settings.display.left.fullGroupLabelDescription', {
+						full: <MonoExample>[2] CASE/CONTENT-SYSTEM</MonoExample>,
+						short: <MonoExample>CCS</MonoExample>,
+					})}
 					checked={showFullGroupLabelInBookmarks}
 					onChange={setShowFullGroupLabelInBookmarks}
-					ariaLabel="Show full group label on bookmarked agents in left side bar"
+					ariaLabel={t('settings.display.left.fullGroupLabelAria')}
 					disabled={!showGroupLabelInBookmarks}
 					className={`pt-2 pl-4 transition-opacity ${
 						showGroupLabelInBookmarks ? '' : 'opacity-40'
@@ -227,22 +210,24 @@ export function LeftSidePanelSection({
 					theme={theme}
 					title={
 						<span className="flex items-center gap-2">
-							Show <WorktreePill theme={theme} /> pill in subagent list
+							{tRich('settings.display.left.worktreePill', {
+								pill: <WorktreePill theme={theme} />,
+							})}
 						</span>
 					}
-					description="Display the worktree badge next to worktree child agents in the left panel."
+					description={t('settings.display.left.worktreePillDescription')}
 					checked={showWorktreePill}
 					onChange={setShowWorktreePill}
-					ariaLabel="Show worktree pill in left panel agent list"
+					ariaLabel={t('settings.display.left.worktreePillAria')}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show worktree branch name in subagent list"
-					description="Display the worktree branch name beneath the agent name in the left panel."
+					title={t('settings.display.left.branchName')}
+					description={t('settings.display.left.branchNameDescription')}
 					checked={showWorktreeBranchName}
 					onChange={setShowWorktreeBranchName}
-					ariaLabel="Show branch name in left panel agent list"
+					ariaLabel={t('settings.display.left.branchNameAria')}
 					borderTop
 				/>
 			</SectionCard>

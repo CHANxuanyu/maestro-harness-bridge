@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { useT } from '../../../i18n';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { HoverTooltip } from '../../ui/HoverTooltip';
 import { getExplorerFileIcon, getExplorerFolderIcon } from '../../../utils/theme';
@@ -129,6 +130,7 @@ export const FileTreeRow = memo(function FileTreeRow({
 	handleFileClick,
 	onOpenBrowserTabAt,
 }: FileTreeRowProps) {
+	const t = useT();
 	const { node, path: fullPath, depth, globalIndex, isLastChild, ancestorGuideMask } = item;
 	const absolutePath = `${session.fullPath}/${fullPath}`;
 	const isFolder = node.type === 'folder';
@@ -250,7 +252,7 @@ export const FileTreeRow = memo(function FileTreeRow({
 		<div
 			key={fullPath}
 			data-file-index={globalIndex}
-			title={isFolder ? 'Alt/Option+click to expand or collapse all subfolders' : undefined}
+			title={isFolder ? t('workflows.filePanel.toggleSubfolders') : undefined}
 			className="group isolate absolute top-0 left-0 w-full flex items-center gap-2 py-1 px-2 text-xs cursor-pointer select-none min-w-0"
 			style={{
 				height: `${virtualRow.size}px`,
@@ -455,8 +457,16 @@ export const FileTreeRow = memo(function FileTreeRow({
 				<span
 					data-testid="git-change-indicator"
 					data-change-type={changeType ?? 'descendant'}
-					aria-label={changeType ? `${changeType} file` : 'contains changed files'}
-					title={changeType ?? 'contains changed files'}
+					aria-label={
+						changeType
+							? t(`workflows.filePanel.changeFile.${changeType}`)
+							: t('workflows.filePanel.containsChanged')
+					}
+					title={
+						changeType
+							? t(`workflows.filePanel.change.${changeType}`)
+							: t('workflows.filePanel.containsChanged')
+					}
 					className="flex-shrink-0 inline-block w-2 h-2 rounded-full"
 					style={{
 						backgroundColor: changeColor ?? theme.colors.textDim,

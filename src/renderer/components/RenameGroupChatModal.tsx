@@ -8,6 +8,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { Theme } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, ModalFooter, FormInput } from './ui';
+import { useT } from '../i18n';
 
 interface RenameGroupChatModalProps {
 	theme: Theme;
@@ -26,6 +27,7 @@ export function RenameGroupChatModal({
 }: RenameGroupChatModalProps): JSX.Element | null {
 	const [name, setName] = useState(currentName);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const t = useT();
 
 	// Reset name when modal opens with new currentName
 	useEffect(() => {
@@ -48,7 +50,7 @@ export function RenameGroupChatModal({
 	return (
 		<Modal
 			theme={theme}
-			title="Rename Group Chat"
+			title={t('workflows.renameGroupChat.title')}
 			priority={MODAL_PRIORITIES.RENAME_GROUP_CHAT}
 			onClose={onClose}
 			initialFocusRef={inputRef}
@@ -57,7 +59,7 @@ export function RenameGroupChatModal({
 					theme={theme}
 					onCancel={onClose}
 					onConfirm={handleRename}
-					confirmLabel="Rename"
+					confirmLabel={t('common.rename')}
 					confirmDisabled={!canRename}
 				/>
 			}
@@ -65,11 +67,11 @@ export function RenameGroupChatModal({
 			<FormInput
 				ref={inputRef}
 				theme={theme}
-				label="Chat Name"
+				label={t('workflows.renameGroupChat.label')}
 				value={name}
 				onChange={setName}
 				onSubmit={canRename ? handleRename : undefined}
-				placeholder="Enter new name..."
+				placeholder={t('workflows.renameGroupChat.placeholder')}
 				autoFocus
 			/>
 		</Modal>

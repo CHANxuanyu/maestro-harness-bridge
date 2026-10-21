@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React, {
 	memo,
 	useCallback,
@@ -97,6 +98,7 @@ export const InputTextarea = memo(function InputTextarea({
 	handlePaste,
 	handleDrop,
 }: InputTextareaProps) {
+	const t = useT();
 	const colorBlindMode = useSettingsStore((state) => state.colorBlindMode);
 
 	// The chip overlay is an AI-mode enhancement. In terminal mode (shell
@@ -245,7 +247,9 @@ export const InputTextarea = memo(function InputTextarea({
 				<span
 					className="text-sm font-bold select-none pl-3 pt-3"
 					style={{ color: theme.colors.accent, fontFamily: shellFontFamily }}
-					title={isCommandModeDraft ? 'Command mode: runs in the shell, not the agent' : undefined}
+					title={
+						isCommandModeDraft ? t('workflows.shell.commandModeRunsInTheShellNotThe') : undefined
+					}
 				>
 					$
 				</span>
@@ -322,14 +326,17 @@ export const InputTextarea = memo(function InputTextarea({
 				}}
 				placeholder={
 					isTerminalMode
-						? 'Run shell command...'
+						? t('workflows.shell.runShellCommand')
 						: awaitingAiCommand
-							? 'Enter runs it - arrows choose - Esc cancels'
+							? t('workflows.shell.enterRunsItArrowsChooseEscCancels')
 							: isAiCommandDraft
-								? 'Describe what you want to accomplish... (Esc for Command Mode)'
+								? t('workflows.shell.describeWhatYouWantToAccomplishEscFor')
 								: isCommandModeDraft
-									? 'Run shell command... (! for AI Command, Esc for the agent)'
-									: `Talking to ${session.name} powered by ${getProviderDisplayName(session.toolType)}`
+									? t('workflows.shell.runShellCommandForAiCommandEscFor')
+									: t('workflows.shell.talkingToValuePoweredByValue', {
+											p0: session.name,
+											p1: getProviderDisplayName(session.toolType),
+										})
 				}
 				value={inputValue}
 				// Read-only, not disabled: a disabled textarea cannot hold focus, and

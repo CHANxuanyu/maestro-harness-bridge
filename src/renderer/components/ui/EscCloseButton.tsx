@@ -24,6 +24,7 @@ import type { CSSProperties, MouseEvent } from 'react';
 import { X } from 'lucide-react';
 import type { Theme } from '../../types';
 import { isCoarsePointer } from '../../utils/touch';
+import { useT } from '../../i18n';
 
 export interface EscCloseButtonProps {
 	theme: Theme;
@@ -50,11 +51,13 @@ export function EscCloseButton({
 	theme,
 	onClose,
 	variant = 'inline',
-	label = 'Close (Esc)',
+	label: labelProp,
 	className = '',
 	style,
 	testId,
 }: EscCloseButtonProps) {
+	const t = useT();
+	const label = labelProp ?? t('common.escClose');
 	const [hovered, setHovered] = useState(false);
 
 	// Coarse pointers (phones/tablets, incl. web-desktop mobile) have no Escape
@@ -88,7 +91,7 @@ export function EscCloseButton({
 				...style,
 			}}
 		>
-			{isTouch ? <X className="w-4 h-4" /> : 'ESC'}
+			{isTouch ? <X className="w-4 h-4" /> : t('workflows.shell.esc2')}
 		</button>
 	);
 }

@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Folder, AlertTriangle } from 'lucide-react';
 import type { AdditionalDirectory, AgentConfig, Session, ToolType } from '../../types';
@@ -40,6 +41,7 @@ export function NewInstanceModal({
 	presetGroupId,
 	presetWorkingDir,
 }: NewInstanceModalProps) {
+	const uiText = useT();
 	const [agents, setAgents] = useState<AgentConfig[]>([]);
 	const [selectedAgent, setSelectedAgent] = useState('');
 	const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
@@ -437,14 +439,14 @@ export function NewInstanceModal({
 			const expanded = expandTilde(trimmed);
 			const result = await gitService.init(expanded, effectiveSshRemoteId);
 			if (!result.success) {
-				setInitRepoError(result.error || 'Failed to initialize git repository');
+				setInitRepoError(result.error || uiText('workflows.sessions.gitInitFailed'));
 				return;
 			}
 			setGitRepoStatus('is-repo');
 		} finally {
 			setIsInitializingRepo(false);
 		}
-	}, [workingDir, isInitializingRepo, expandTilde, effectiveSshRemoteId]);
+	}, [workingDir, isInitializingRepo, expandTilde, effectiveSshRemoteId, uiText]);
 
 	const handleRefreshAgent = React.useCallback(async (agentId: string) => {
 		setRefreshingAgent(agentId);
@@ -791,7 +793,7 @@ export function NewInstanceModal({
 
 	// The counts describe whichever machine detection probed, so name that machine
 	// rather than claiming "locally" while an SSH remote is selected.
-	const providerLocation = useMemo(() => providerLocationLabel(sshRemoteHost), [sshRemoteHost]);
+	const providerLocation = providerLocationLabel(sshRemoteHost);
 
 	// Effects - load agents and optionally pre-fill from source session
 	// Dependency uses sourceSession?.id (not the full object) so unrelated
@@ -901,7 +903,7 @@ export function NewInstanceModal({
 	return (
 		<Modal
 			theme={theme}
-			title="Create New Agent"
+			title={uiText('workflows.sessions.createNewAgent')}
 			priority={MODAL_PRIORITIES.NEW_INSTANCE}
 			onClose={onClose}
 			width={600}
@@ -911,7 +913,7 @@ export function NewInstanceModal({
 					theme={theme}
 					onCancel={onClose}
 					onConfirm={handleCreate}
-					confirmLabel="Create Agent"
+					confirmLabel={uiText('workflows.sessions.createAgent')}
 					confirmDisabled={!isFormValid}
 				/>
 			}
@@ -922,7 +924,7 @@ export function NewInstanceModal({
 					ref={nameInputRef}
 					id="agent-name-input"
 					theme={theme}
-					label="Agent Name"
+					label={uiText('workflows.sessions.agentName')}
 					value={instanceName}
 					onChange={setInstanceName}
 					placeholder=""
@@ -938,16 +940,16 @@ export function NewInstanceModal({
 							className="block text-xs font-bold opacity-70 uppercase mb-2"
 							style={{ color: theme.colors.textMain }}
 						>
-							Agent Group
+							{uiText('workflows.sessions.agentGroup')}
 						</label>
 						<ThemedSelect
 							id="agent-group-select"
 							theme={theme}
 							value={selectedGroupId}
 							onChange={setSelectedGroupId}
-							aria-label="Agent Group"
+							aria-label={uiText('workflows.sessions.agentGroup')}
 							options={[
-								{ value: '', label: 'No Group (Ungrouped)' },
+								{ value: '', label: uiText('workflows.sessions.noGroup') },
 								...groups.map((g) => ({
 									value: g.id,
 									label: `${g.emoji} ${g.name}`.trim(),
@@ -1101,13 +1103,15 @@ export function NewInstanceModal({
 				{/* Working Directory */}
 				<FormInput
 					theme={theme}
-					label="Working Directory"
+					label={uiText('workflows.sessions.workingDirectory')}
 					value={workingDir}
 					onChange={handleWorkingDirChange}
 					placeholder={
 						isSshEnabled
-							? `Enter remote path${sshRemoteHost ? ` on ${sshRemoteHost}` : ''} (e.g., /home/user/project)`
-							: 'Select directory...'
+							? sshRemoteHost
+								? uiText('workflows.sessions.remotePathOnHost', { host: sshRemoteHost })
+								: uiText('workflows.sessions.remotePathExample')
+							: uiText('workflows.sessions.selectDirectory')
 					}
 					error={validation.errorField === 'directory' ? validation.error : undefined}
 					monospace
@@ -1120,8 +1124,12 @@ export function NewInstanceModal({
 							style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 							title={
 								isSshEnabled
-									? `Folder picker unavailable for SSH remote${sshRemoteHost ? ` (${sshRemoteHost})` : ''}. Enter the remote path manually.`
-									: `Browse folders (${formatShortcutKeys(['Meta', 'o'])})`
+									? sshRemoteHost
+										? uiText('workflows.sessions.remoteFolderPickerHost', { host: sshRemoteHost })
+										: uiText('workflows.sessions.remoteFolderPicker')
+									: uiText('workflows.sessions.browseShortcut', {
+											shortcut: formatShortcutKeys(['Meta', 'o']),
+										})
 							}
 						>
 							<Folder className="w-5 h-5" />
@@ -1149,7 +1157,7 @@ export function NewInstanceModal({
 					>
 						<div className="flex-1">
 							<p className="text-sm" style={{ color: theme.colors.textMain }}>
-								Not a Git repository
+								{uiText('workflows.sessions.notGitRepository')}
 							</p>
 							{initRepoError && (
 								<p className="text-xs mt-1" style={{ color: theme.colors.error }}>
@@ -1172,7 +1180,7 @@ export function NewInstanceModal({
 								['--tw-ring-offset-color' as any]: theme.colors.bgMain,
 							}}
 						>
-							{isInitializingRepo ? 'Initializing…' : 'Initialize as Git Repository'}
+							{isInitializingRepo ? 'Initializing…' : uiText('workflows.sessions.initializeGit')}
 						</button>
 					</div>
 				)}
@@ -1196,7 +1204,7 @@ export function NewInstanceModal({
 									{validation.warning}
 								</p>
 								<p className="text-xs mt-2" style={{ color: theme.colors.textDim }}>
-									We recommend using a unique directory for each managed agent.
+									{uiText('workflows.sessions.uniqueDirectoryHelp')}
 								</p>
 								<label className="flex items-center gap-2 mt-3 cursor-pointer">
 									<input
@@ -1207,7 +1215,7 @@ export function NewInstanceModal({
 										style={{ accentColor: theme.colors.warning }}
 									/>
 									<span className="text-sm" style={{ color: theme.colors.textMain }}>
-										I understand the risk and want to proceed
+										{uiText('workflows.sessions.acknowledgeDirectory')}
 									</span>
 								</label>
 							</div>
@@ -1260,9 +1268,9 @@ export function NewInstanceModal({
 					value={newSessionMessage}
 					onChange={setNewSessionMessage}
 					maxLength={NEW_SESSION_MESSAGE_MAX_LENGTH}
-					label="New Session Message"
-					description="This text is prefixed to your first message whenever a new session is created (not visible in chat)."
-					placeholder="Instructions sent with the first message of every new session..."
+					label={uiText('workflows.sessions.newSessionMessage')}
+					description={uiText('workflows.sessions.newSessionMessageHelp')}
+					placeholder={uiText('workflows.sessions.newSessionMessagePlaceholder')}
 					sizeKey="new-session-message"
 				/>
 

@@ -15,6 +15,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { Theme } from '../../types';
+import { useT } from '../../i18n';
 
 interface HamburgerDropdownProps {
 	theme: Theme;
@@ -32,6 +33,7 @@ export function HamburgerDropdown({
 	dataTour,
 	children,
 }: HamburgerDropdownProps) {
+	const t = useT();
 	if (!isPhone) {
 		return (
 			<div
@@ -65,11 +67,11 @@ export function HamburgerDropdown({
 					className="text-xs font-bold uppercase tracking-wider"
 					style={{ color: theme.colors.textDim }}
 				>
-					Menu
+					{t('workflows.emptyState.menu')}
 				</span>
 				<button
 					onClick={onClose}
-					aria-label="Close menu"
+					aria-label={t('workflows.sidebar.closeMenu')}
 					className="p-2.5 rounded-lg hover:bg-white/5"
 					style={{ color: theme.colors.textDim }}
 				>

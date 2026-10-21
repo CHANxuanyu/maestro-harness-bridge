@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type React from 'react';
 import type { Session } from '../../../types';
 import type { NotifyToastInput } from '../../../stores/notificationStore';
@@ -69,11 +70,12 @@ export function buildDebugCommands({
 	notifyToast,
 	logger,
 }: BuildDebugCommandsArgs): QuickAction[] {
+	const t = getT();
 	const commands: QuickAction[] = [
 		{
 			id: 'debugResetBusy',
-			label: 'Debug: Reset Busy State',
-			subtext: 'Clear stuck thinking/busy state for all sessions',
+			label: t('workflows.shell.debugResetBusyState'),
+			subtext: t('workflows.shell.clearStuckThinkingBusyStateForAllSessions'),
 			action: () => {
 				setSessions((prev) => prev.map(resetSessionBusyState));
 				logger.info('[Debug] Reset busy state for all sessions');
@@ -82,8 +84,8 @@ export function buildDebugCommands({
 		},
 		{
 			id: 'debugLogSessions',
-			label: 'Debug: Log Session State',
-			subtext: 'Print session state to DevTools console',
+			label: t('workflows.shell.debugLogSessionState'),
+			subtext: t('workflows.shell.printSessionStateToDevtoolsConsole'),
 			action: () => {
 				console.log(
 					'[Debug] All sessions:',
@@ -106,8 +108,8 @@ export function buildDebugCommands({
 		},
 		{
 			id: 'debugOnboardingNewUser',
-			label: 'Debug: Replay First-Run Series (New User)',
-			subtext: 'Typography, theme, updates, then agent powers - with new-user copy',
+			label: t('workflows.shell.debugReplayFirstRunSeriesNewUser'),
+			subtext: t('workflows.shell.typographyThemeUpdatesThenAgentPowersWithNew'),
 			action: () => {
 				// Forced: ignores every seen flag AND the theme gate, and skips
 				// writing the flags back, so replaying the series to look at it
@@ -118,8 +120,8 @@ export function buildDebugCommands({
 		},
 		{
 			id: 'debugOnboardingReturningUser',
-			label: 'Debug: Replay First-Run Series (Existing User)',
-			subtext: 'Same four steps, with the copy an upgrading user sees',
+			label: t('workflows.shell.debugReplayFirstRunSeriesExistingUser'),
+			subtext: t('workflows.shell.sameFourStepsWithTheCopyAnUpgrading'),
 			action: () => {
 				replayOnboardingSeries('returning');
 				setQuickActionOpen(false);
@@ -127,8 +129,8 @@ export function buildDebugCommands({
 		},
 		{
 			id: 'debugWidgetGallery',
-			label: 'Debug: Widget Gallery',
-			subtext: 'Preview the shared output/input widget library (theme-aware, no Encore flag)',
+			label: t('workflows.shell.debugWidgetGallery'),
+			subtext: t('workflows.shell.previewTheSharedOutputInputWidgetLibraryTheme'),
 			action: () => {
 				useModalStore.getState().openModal('widgetGallery');
 				setQuickActionOpen(false);
@@ -136,15 +138,16 @@ export function buildDebugCommands({
 		},
 		{
 			id: 'debugCopyInstallGuid',
-			label: 'Debug: Copy Install GUID to Clipboard',
-			subtext: 'Copy your unique installation identifier',
+			label: t('workflows.shell.debugCopyInstallGuidToClipboard'),
+			subtext: t('workflows.shell.copyYourUniqueInstallationIdentifier'),
 			action: async () => {
+				const t = getT();
 				try {
 					const installationId = await getInstallationId();
 					if (installationId) {
 						const ok = await safeClipboardWrite(installationId);
 						if (ok) {
-							flashCopiedToClipboard(installationId, 'Install GUID Copied');
+							flashCopiedToClipboard(installationId, t('workflows.shell.extraInstallGuidCopied'));
 							logger.info(
 								'[Debug] Installation GUID copied to clipboard:',
 								undefined,
@@ -153,20 +156,24 @@ export function buildDebugCommands({
 						} else {
 							notifyToast({
 								type: 'error',
-								title: 'Error',
-								message: 'Failed to copy installation GUID',
+								title: t('workflows.shell.error'),
+								message: t('workflows.shell.extraFailedToCopyInstallationGuid'),
 							});
 							logger.error('[Debug] Failed to copy Installation GUID', undefined, installationId);
 						}
 					} else {
-						notifyToast({ type: 'error', title: 'Error', message: 'No installation GUID found' });
+						notifyToast({
+							type: 'error',
+							title: t('workflows.shell.error'),
+							message: t('workflows.shell.extraNoInstallationGuidFound'),
+						});
 						logger.warn('[Debug] No installation GUID found');
 					}
 				} catch (err) {
 					notifyToast({
 						type: 'error',
-						title: 'Error',
-						message: 'Failed to copy installation GUID',
+						title: t('workflows.shell.error'),
+						message: t('workflows.shell.extraFailedToCopyInstallationGuid'),
 					});
 					logger.error('[Debug] Failed to copy installation GUID:', undefined, err);
 					captureException(err);
@@ -179,8 +186,8 @@ export function buildDebugCommands({
 	if (activeSession) {
 		commands.push({
 			id: 'debugResetSession',
-			label: 'Debug: Reset Current Session',
-			subtext: `Clear busy state for ${activeSession.name}`,
+			label: t('workflows.shell.debugResetCurrentSession'),
+			subtext: t('workflows.shell.clearBusyStateForValue', { p0: activeSession.name }),
 			action: () => {
 				setSessions((prev) =>
 					prev.map((session) =>
@@ -196,8 +203,8 @@ export function buildDebugCommands({
 	if (setPlaygroundOpen) {
 		commands.push({
 			id: 'debugPlayground',
-			label: 'Debug: Playground',
-			subtext: 'Open the developer playground',
+			label: t('workflows.shell.debugPlayground'),
+			subtext: t('workflows.shell.openTheDeveloperPlayground'),
 			action: () => {
 				setPlaygroundOpen(true);
 				setQuickActionOpen(false);
@@ -208,8 +215,8 @@ export function buildDebugCommands({
 	if (setDebugApplicationStatsOpen) {
 		commands.push({
 			id: 'debugApplicationStats',
-			label: 'Debug: View Application Stats',
-			subtext: 'Memory and data footprint per loaded agent',
+			label: t('workflows.shell.debugViewApplicationStats'),
+			subtext: t('workflows.shell.memoryAndDataFootprintPerLoadedAgent'),
 			action: () => {
 				setDebugApplicationStatsOpen(true);
 				setQuickActionOpen(false);
@@ -220,8 +227,8 @@ export function buildDebugCommands({
 	if (setDebugAgentProbeOpen) {
 		commands.push({
 			id: 'debugAgentProbe',
-			label: 'Debug: Re-Probe Agents',
-			subtext: 'Re-detect each agent binary and refresh readiness',
+			label: t('workflows.shell.debugReProbeAgents'),
+			subtext: t('workflows.shell.reDetectEachAgentBinaryAndRefreshReadiness'),
 			action: () => {
 				setDebugAgentProbeOpen(true);
 				setQuickActionOpen(false);
@@ -232,8 +239,10 @@ export function buildDebugCommands({
 	if (activeSession && activeSession.executionQueue?.length > 0 && onDebugReleaseQueuedItem) {
 		commands.push({
 			id: 'debugReleaseQueued',
-			label: 'Debug: Release Next Queued Item',
-			subtext: `Process next item from queue (${activeSession.executionQueue.length} queued)`,
+			label: t('workflows.shell.debugReleaseNextQueuedItem'),
+			subtext: t('workflows.shell.processNextItemFromQueueValueQueued', {
+				p0: activeSession.executionQueue.length,
+			}),
 			action: () => {
 				onDebugReleaseQueuedItem();
 				setQuickActionOpen(false);
@@ -253,6 +262,7 @@ export function buildDebugCommands({
 	if (activeSession) {
 		const activeTabId = activeSession.activeTabId ?? activeSession.aiTabs?.[0]?.id;
 		const simulate = (fromPipeline: boolean) => async () => {
+			const t = getT();
 			setQuickActionOpen(false);
 			try {
 				await window.maestro.debug.simulateAuthExpiry({
@@ -265,8 +275,8 @@ export function buildDebugCommands({
 			} catch (err) {
 				notifyToast({
 					type: 'error',
-					title: 'Error',
-					message: 'Failed to simulate a provider auth failure',
+					title: t('workflows.shell.error'),
+					message: t('workflows.shell.extraFailedToSimulateAProviderAuthFailure'),
 				});
 				logger.error('[Debug] Failed to simulate auth expiry', undefined, err);
 			}
@@ -275,8 +285,8 @@ export function buildDebugCommands({
 		if (activeTabId) {
 			commands.push({
 				id: 'debugTriggerReauth',
-				label: 'Debug: Trigger Provider Re-auth',
-				subtext: `Fake an expired credential on ${activeSession.name}`,
+				label: t('workflows.shell.debugTriggerProviderReAuth'),
+				subtext: t('workflows.shell.fakeAnExpiredCredentialOnValue', { p0: activeSession.name }),
 				action: simulate(false),
 			});
 		}
@@ -286,8 +296,8 @@ export function buildDebugCommands({
 		// in the field, and the one hardest to reproduce on purpose.
 		commands.push({
 			id: 'debugTriggerReauthPipeline',
-			label: 'Debug: Trigger Provider Re-auth (Cue pipeline)',
-			subtext: `Fake a pipeline auth failure on ${activeSession.name}`,
+			label: t('workflows.shell.debugTriggerProviderReAuthCuePipeline'),
+			subtext: t('workflows.shell.fakeAPipelineAuthFailureOnValue', { p0: activeSession.name }),
 			action: simulate(true),
 		});
 	}
@@ -297,14 +307,14 @@ export function buildDebugCommands({
 	if (profilingActive) {
 		commands.push({
 			id: 'debugEndProfiling',
-			label: 'Debug: End Performance Profiling',
+			label: t('workflows.shell.debugEndPerformanceProfiling'),
 			// Surface buffer pressure here rather than a duration. Chromium drops
 			// events once the buffer fills, so this is the number that says how much
 			// capture window is left; elapsed seconds say nothing, because a busy
 			// app fills the buffer in a fraction of the time a quiet one takes.
-			subtext: `Stop and save the trace bundle - trace buffer ${Math.round(
-				profilingBufferPercent * 100
-			)}% full`,
+			subtext: t('workflows.shell.stopAndSaveTheTraceBundleTraceBuffer', {
+				p0: Math.round(profilingBufferPercent * 100),
+			}),
 			action: () => {
 				onStopProfiling();
 				setQuickActionOpen(false);
@@ -313,8 +323,8 @@ export function buildDebugCommands({
 	} else {
 		commands.push({
 			id: 'debugStartProfiling',
-			label: 'Debug: Start Performance Profiling',
-			subtext: 'Capture a Chromium trace to diagnose UI lag (ends itself when the buffer fills)',
+			label: t('workflows.shell.debugStartPerformanceProfiling'),
+			subtext: t('workflows.shell.captureAChromiumTraceToDiagnoseUiLag'),
 			action: () => {
 				onStartProfiling();
 				setQuickActionOpen(false);

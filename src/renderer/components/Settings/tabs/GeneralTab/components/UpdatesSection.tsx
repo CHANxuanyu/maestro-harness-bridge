@@ -2,6 +2,7 @@ import { Download, FlaskConical } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { ToggleSwitch } from '../../../../ui/ToggleSwitch';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 
 interface UpdatesSectionProps {
 	theme: Theme;
@@ -18,9 +19,12 @@ export function UpdatesSection({
 	enableBetaUpdates,
 	setEnableBetaUpdates,
 }: UpdatesSectionProps) {
+	const t = useT();
 	return (
 		<div>
-			<SettingsSectionHeading icon={Download}>Updates</SettingsSectionHeading>
+			<SettingsSectionHeading icon={Download}>
+				{t('settings.general.updates.heading')}
+			</SettingsSectionHeading>
 			<div
 				className="p-3 rounded border space-y-3"
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
@@ -40,19 +44,17 @@ export function UpdatesSection({
 				>
 					<div className="flex-1 pr-3">
 						<div className="font-medium" style={{ color: theme.colors.textMain }}>
-							Check for updates automatically
+							{t('settings.general.updates.check')}
 						</div>
 						<div className="text-xs opacity-70 mt-0.5">
-							Check for new Maestro versions on startup and once per day while the app is running.
-							Also sends an anonymous check-in (a random install ID, app version, OS, and theme) so
-							we can count active installs. Turning this off disables both.
+							{t('settings.general.updates.checkDescription')}
 						</div>
 					</div>
 					<ToggleSwitch
 						checked={checkForUpdatesOnStartup}
 						onChange={setCheckForUpdatesOnStartup}
 						theme={theme}
-						ariaLabel="Check for updates automatically"
+						ariaLabel={t('settings.general.updates.check')}
 					/>
 				</div>
 
@@ -76,18 +78,17 @@ export function UpdatesSection({
 							style={{ color: theme.colors.textMain }}
 						>
 							<FlaskConical className="w-4 h-4" />
-							Include beta and release candidate updates
+							{t('settings.general.updates.beta')}
 						</div>
 						<div className="text-xs opacity-70 mt-0.5">
-							Opt-in to receive pre-release versions (e.g., v0.11.1-rc, v0.12.0-beta). These may
-							contain experimental features and bugs.
+							{t('settings.general.updates.betaDescription')}
 						</div>
 					</div>
 					<ToggleSwitch
 						checked={enableBetaUpdates}
 						onChange={setEnableBetaUpdates}
 						theme={theme}
-						ariaLabel="Include beta and release candidate updates"
+						ariaLabel={t('settings.general.updates.beta')}
 					/>
 				</div>
 			</div>

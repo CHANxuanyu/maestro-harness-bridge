@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * TabOverlayPortal - the shell every tab chip's action menu is drawn in.
  *
@@ -62,6 +63,7 @@ export function TabOverlayPortal({
 	theme,
 	children,
 }: TabOverlayPortalProps) {
+	const t = useT();
 	const phone = usePhoneLayout();
 
 	if (!open) return null;
@@ -77,7 +79,7 @@ export function TabOverlayPortal({
 				open
 				onClose={onClose}
 				theme={theme}
-				ariaLabel="Tab actions"
+				ariaLabel={t('workflows.shell.tabActions')}
 				scrimRef={setOverlayRef}
 				scrimClassName="maestro-tab-sheet"
 				bodyClassName="maestro-tab-sheet__body"

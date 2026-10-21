@@ -4,6 +4,7 @@ import { DEFAULT_LOCAL_IGNORE_PATTERNS } from '../../../../../stores/settingsSto
 import { FilePanelSettingsSection } from '../../../FilePanelSettingsSection';
 import { IgnorePatternsSection } from '../../../IgnorePatternsSection';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 
 interface FileIndexingSectionProps {
 	theme: Theme;
@@ -36,14 +37,17 @@ export function FileIndexingSection({
 	sshReduceEntryCapFraction,
 	setSshReduceEntryCapFraction,
 }: FileIndexingSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="display-file-indexing">
-			<SettingsSectionHeading icon={FolderSearch}>File Indexing</SettingsSectionHeading>
+			<SettingsSectionHeading icon={FolderSearch}>
+				{t('settings.display.indexing.heading')}
+			</SettingsSectionHeading>
 			<div className="space-y-3">
 				<IgnorePatternsSection
 					theme={theme}
-					title="Local Ignore Patterns"
-					description="Configure glob patterns for folders to exclude when indexing local files in the file explorer. Excluding large directories (like .git) reduces memory usage and speeds up file tree loading."
+					title={t('settings.display.indexing.localTitle')}
+					description={t('settings.display.indexing.localDescription')}
 					ignorePatterns={localIgnorePatterns}
 					onIgnorePatternsChange={setLocalIgnorePatterns}
 					defaultPatterns={DEFAULT_LOCAL_IGNORE_PATTERNS}

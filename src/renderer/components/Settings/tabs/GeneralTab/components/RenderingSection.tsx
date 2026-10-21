@@ -2,6 +2,7 @@ import { Monitor, PartyPopper } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { ToggleSwitch } from '../../../../ui/ToggleSwitch';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 
 interface RenderingSectionProps {
 	theme: Theme;
@@ -18,9 +19,12 @@ export function RenderingSection({
 	disableConfetti,
 	setDisableConfetti,
 }: RenderingSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="general-rendering">
-			<SettingsSectionHeading icon={Monitor}>Rendering Options</SettingsSectionHeading>
+			<SettingsSectionHeading icon={Monitor}>
+				{t('settings.general.rendering.heading')}
+			</SettingsSectionHeading>
 			<div
 				className="p-3 rounded border space-y-3"
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
@@ -39,17 +43,17 @@ export function RenderingSection({
 				>
 					<div className="flex-1 pr-3">
 						<div className="font-medium" style={{ color: theme.colors.textMain }}>
-							Disable GPU acceleration
+							{t('settings.general.rendering.gpu')}
 						</div>
 						<div className="text-xs opacity-70 mt-0.5">
-							Use software rendering instead of GPU. Requires restart to take effect.
+							{t('settings.general.rendering.gpuDescription')}
 						</div>
 					</div>
 					<ToggleSwitch
 						checked={disableGpuAcceleration}
 						onChange={setDisableGpuAcceleration}
 						theme={theme}
-						ariaLabel="Disable GPU acceleration"
+						ariaLabel={t('settings.general.rendering.gpu')}
 					/>
 				</div>
 
@@ -72,17 +76,17 @@ export function RenderingSection({
 							style={{ color: theme.colors.textMain }}
 						>
 							<PartyPopper className="w-4 h-4" />
-							Disable confetti animations
+							{t('settings.general.rendering.confetti')}
 						</div>
 						<div className="text-xs opacity-70 mt-0.5">
-							Skip celebratory confetti effects on achievements and milestones
+							{t('settings.general.rendering.confettiDescription')}
 						</div>
 					</div>
 					<ToggleSwitch
 						checked={disableConfetti}
 						onChange={setDisableConfetti}
 						theme={theme}
-						ariaLabel="Disable confetti animations"
+						ariaLabel={t('settings.general.rendering.confetti')}
 					/>
 				</div>
 			</div>

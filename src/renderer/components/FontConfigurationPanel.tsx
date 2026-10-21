@@ -1,9 +1,10 @@
+import { useT } from '../i18n';
 import React, { useState, useMemo, useCallback } from 'react';
 import { Type } from 'lucide-react';
 import type { Theme } from '../types';
 import { SettingsSectionHeading } from './Settings/SettingsSectionHeading';
 import { BUNDLED_FONTS, BUNDLED_FONT_NAMES, isBundledFont } from '../../shared/bundledFonts';
-import { displayFontLabel, withMonoFallback, FONT_PREVIEW_PROSE } from '../../shared/fontStack';
+import { displayFontLabel, withMonoFallback } from '../../shared/fontStack';
 
 /**
  * Common monospace fonts that are typically available across different systems.
@@ -133,7 +134,7 @@ export function FontConfigurationPanel({
 	onRemoveCustomFont,
 	onFontInteraction,
 	theme,
-	heading = 'Interface Font',
+	heading,
 	description,
 	inheritOptions,
 	sizeControl,
@@ -141,6 +142,8 @@ export function FontConfigurationPanel({
 	previewFontSize,
 	compact = false,
 }: FontConfigurationPanelProps) {
+	const t = useT();
+	const displayHeading = heading ?? t('settings.finish.font.heading');
 	const [customFontInput, setCustomFontInput] = useState('');
 
 	// The face the sample is drawn in. The caller's resolved value wins because
@@ -295,8 +298,9 @@ export function FontConfigurationPanel({
 		<div>
 			{!compact && (
 				<>
-					<SettingsSectionHeading icon={Type}>{heading}</SettingsSectionHeading>
-					{description && <p className="text-xs opacity-70 mb-2 -mt-1">{description}</p>}
+					<SettingsSectionHeading icon={Type} description={description}>
+						{displayHeading}
+					</SettingsSectionHeading>
 				</>
 			)}
 			{/*
@@ -315,7 +319,7 @@ export function FontConfigurationPanel({
 				// Compact mode drops the visible SettingsSectionHeading above, which
 				// is otherwise this control's only accessible name - so it needs one
 				// of its own here instead of being announced as an unlabeled select.
-				aria-label={compact ? heading : undefined}
+				aria-label={compact ? displayHeading : undefined}
 				// Sized down in compact mode to match its own label. The select
 				// otherwise inherits the interface font size, so at a 16px setting
 				// with a 1.2 zoom it rendered near 19px - larger than the "Interface"
@@ -335,7 +339,7 @@ export function FontConfigurationPanel({
 					</option>
 				))}
 				{unlistedValue && (
-					<optgroup label="Current">
+					<optgroup label={t('settings.finish.font.current')}>
 						{/* The typography presets store a full CSS stack, so the raw
 						    value here is "Inter, -apple-system, BlinkMacSystemFont, ..."
 						    and the closed select rendered that whole chain as the name
@@ -357,16 +361,20 @@ export function FontConfigurationPanel({
 				{/* Bundled fonts ship inside the app, so they are never annotated
 				    "(Not Found)" - unlike a system font, their presence is a fact
 				    rather than a guess. Listed first for that reason. */}
-				<optgroup label="Bundled with Maestro (always available)">
+				<optgroup label={t('settings.finish.font.bundled')}>
 					{BUNDLED_FONTS.map((font) => (
 						<option key={font.name} value={font.name} style={{ fontFamily: font.name }}>
 							{font.name}
-							{font.substituteFor ? ` - like ${font.substituteFor}` : ''}
-							{font.note ? ` (${font.note})` : ''}
+							{font.substituteFor
+								? t('settings.finish.font.similar', { font: font.substituteFor })
+								: ''}
+							{font.note
+								? ` (${font.note === 'Maestro default' ? t('settings.finish.font.defaultNote') : font.note})`
+								: ''}
 						</option>
 					))}
 				</optgroup>
-				<optgroup label="Common Monospace Fonts">
+				<optgroup label={t('settings.finish.font.monospace')}>
 					{systemMonospaceFonts.map((font) => {
 						const available = canAnnotateAvailability ? isFontAvailable(font) : true;
 						return (
@@ -375,12 +383,12 @@ export function FontConfigurationPanel({
 								value={font}
 								style={{ fontFamily: font, opacity: available ? 1 : 0.4 }}
 							>
-								{font} {canAnnotateAvailability && !available && '(Not Found)'}
+								{font} {canAnnotateAvailability && !available && t('settings.finish.font.notFound')}
 							</option>
 						);
 					})}
 				</optgroup>
-				<optgroup label="Common Proportional Fonts">
+				<optgroup label={t('settings.finish.font.proportional')}>
 					{systemProportionalFonts.map((font) => {
 						const available = canAnnotateAvailability ? isFontAvailable(font) : true;
 						return (
@@ -389,13 +397,13 @@ export function FontConfigurationPanel({
 								value={font}
 								style={{ fontFamily: font, opacity: available ? 1 : 0.4 }}
 							>
-								{font} {canAnnotateAvailability && !available && '(Not Found)'}
+								{font} {canAnnotateAvailability && !available && t('settings.finish.font.notFound')}
 							</option>
 						);
 					})}
 				</optgroup>
 				{customFonts.length > 0 && (
-					<optgroup label="Custom Fonts">
+					<optgroup label={t('settings.finish.font.custom')}>
 						{customFonts.map((font) => (
 							<option key={font} value={font} style={{ fontFamily: font }}>
 								{font}
@@ -404,7 +412,7 @@ export function FontConfigurationPanel({
 					</optgroup>
 				)}
 				{installedFonts.length > 0 && (
-					<optgroup label="All Installed Fonts">
+					<optgroup label={t('settings.finish.font.installed')}>
 						{installedFonts.map((font) => (
 							<option key={font} value={font} style={{ fontFamily: font }}>
 								{font}
@@ -438,9 +446,9 @@ export function FontConfigurationPanel({
 						fontFamily: previewFace,
 						fontSize: previewFontSize,
 					}}
-					title={FONT_PREVIEW_PROSE}
+					title={t('settings.finish.font.sample')}
 				>
-					{FONT_PREVIEW_PROSE}
+					{t('settings.finish.font.sample')}
 				</p>
 			</div>
 			{/* The size row is the LAST thing in a compact cell, so a trailing
@@ -458,10 +466,10 @@ export function FontConfigurationPanel({
 				{!compact && (
 					<span className="text-xs opacity-70">
 						{fontLoading
-							? 'Loading installed fonts...'
+							? t('settings.finish.font.loading')
 							: canAnnotateAvailability || !fontsLoaded
-								? 'Press Up/Down to preview each font.'
-								: "Installed fonts couldn't be listed, so none are marked missing."}
+								? t('settings.finish.font.previewHint')
+								: t('settings.finish.font.unavailable')}
 					</span>
 				)}
 				{sizeControl}
@@ -478,7 +486,7 @@ export function FontConfigurationPanel({
 							value={customFontInput}
 							onChange={(e) => setCustomFontInput(e.target.value)}
 							onKeyDown={handleKeyDown}
-							placeholder="Add custom font name..."
+							placeholder={t('settings.finish.font.addPlaceholder')}
 							className="flex-1 p-2 rounded border bg-transparent outline-none text-sm"
 							style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 						/>
@@ -490,7 +498,7 @@ export function FontConfigurationPanel({
 								color: theme.colors.accentForeground,
 							}}
 						>
-							Add
+							{t('settings.finish.font.add')}
 						</button>
 					</div>
 
@@ -508,6 +516,7 @@ export function FontConfigurationPanel({
 									<span style={{ color: theme.colors.textMain }}>{font}</span>
 									<button
 										onClick={() => onRemoveCustomFont(font)}
+										aria-label={t('settings.finish.font.remove', { font })}
 										className="hover:opacity-70"
 										style={{ color: theme.colors.error }}
 									>

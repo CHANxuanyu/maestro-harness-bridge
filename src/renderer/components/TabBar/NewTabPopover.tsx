@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { FileText, Globe, MessageSquare, Plus, Terminal, VenetianMask } from 'lucide-react';
@@ -46,6 +47,7 @@ export const NewTabPopover = memo(function NewTabPopover({
 	terminalKeys,
 	isOverflowing,
 }: NewTabPopoverProps) {
+	const t = useT();
 	const [popoverOpen, setPopoverOpen] = useState(false);
 	const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
 	const btnRef = useRef<HTMLButtonElement>(null);
@@ -136,7 +138,11 @@ export const NewTabPopover = memo(function NewTabPopover({
 					onClick={handleClick}
 					className="flex items-center justify-center w-6 h-6 rounded hover:bg-white/10 transition-colors"
 					style={{ color: theme.colors.textDim }}
-					title={onNewTerminalTab ? 'New tab…' : `New tab (${formatShortcutKeys(newTabKeys)})`}
+					title={
+						onNewTerminalTab
+							? t('workflows.shell.newTab')
+							: t('workflows.shell.newTabValue', { p0: formatShortcutKeys(newTabKeys) })
+					}
 				>
 					<Plus className="w-4 h-4" />
 				</button>
@@ -172,7 +178,7 @@ export const NewTabPopover = memo(function NewTabPopover({
 								className="w-3.5 h-3.5"
 								style={{ color: getTabKindColor('ai', theme) }}
 							/>
-							New AI Chat
+							{t('workflows.shell.newAiChat')}
 							<span
 								className="ml-auto text-xs"
 								data-shortcut-hint=""
@@ -191,7 +197,7 @@ export const NewTabPopover = memo(function NewTabPopover({
 								className="w-3.5 h-3.5"
 								style={{ color: getTabKindColor('terminal', theme) }}
 							/>
-							New Terminal
+							{t('workflows.shell.newTerminal')}
 							<span
 								className="ml-auto text-xs"
 								data-shortcut-hint=""
@@ -210,7 +216,7 @@ export const NewTabPopover = memo(function NewTabPopover({
 									className="w-3.5 h-3.5"
 									style={{ color: getTabKindColor('file', theme) }}
 								/>
-								New File
+								{t('workflows.shell.newFile')}
 								<span
 									className="ml-auto text-xs"
 									data-shortcut-hint=""
@@ -232,7 +238,7 @@ export const NewTabPopover = memo(function NewTabPopover({
 									className="w-3.5 h-3.5"
 									style={{ color: getTabKindColor('browser', theme) }}
 								/>
-								New Browser
+								{t('workflows.shell.newBrowser')}
 								<span
 									className="ml-auto text-xs"
 									data-shortcut-hint=""
@@ -247,13 +253,13 @@ export const NewTabPopover = memo(function NewTabPopover({
 								className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-white/10 transition-colors"
 								style={{ color: theme.colors.textMain }}
 								onClick={() => closeAndDo(() => onNewBrowserTab({ ephemeral: true }))}
-								title="Browsing data is kept in memory only and discarded when the app closes"
+								title={t('workflows.shell.browsingDataIsKeptInMemoryOnlyAnd')}
 							>
 								<VenetianMask
 									className="w-3.5 h-3.5"
 									style={{ color: getTabKindColor('browser', theme) }}
 								/>
-								New Incognito Browser
+								{t('workflows.shell.newIncognitoBrowser')}
 							</button>
 						)}
 					</div>,

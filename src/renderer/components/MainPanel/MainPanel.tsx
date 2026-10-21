@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Wand2 } from 'lucide-react';
 import { LogViewer } from '../LogViewer';
@@ -65,6 +66,7 @@ import type { MainPanelHandle, MainPanelProps } from './types';
  * owned elsewhere" branches render the identical clean state.
  */
 function EmptyMainPanel({ theme }: { theme: Theme }) {
+	const t = useT();
 	return (
 		<div
 			className="flex-1 flex flex-col items-center justify-center min-w-0 relative opacity-30"
@@ -72,7 +74,7 @@ function EmptyMainPanel({ theme }: { theme: Theme }) {
 		>
 			<Wand2 className="w-16 h-16 mb-4" style={{ color: theme.colors.textDim }} />
 			<p className="text-sm" style={{ color: theme.colors.textDim }}>
-				No agents. Create one to get started.
+				{t('workflows.shell.noAgentsCreateOneToGetStarted')}
 			</p>
 		</div>
 	);
@@ -82,6 +84,7 @@ function EmptyMainPanel({ theme }: { theme: Theme }) {
 // due to input value changes. The component will only re-render when its props actually change.
 export const MainPanel = React.memo(
 	forwardRef<MainPanelHandle, MainPanelProps>(function MainPanel(props, ref) {
+		const t = useT();
 		// PERF: Self-source the full active Session so streaming log/token updates
 		// re-render MainPanel without requiring MaestroConsoleInner to re-render.
 		const activeSession = useSessionStore(selectActiveSession);
@@ -192,6 +195,11 @@ export const MainPanel = React.memo(
 		const logLevel = useSettingsStore((s) => s.logLevel);
 		const logViewerSelectedLevels = useSettingsStore((s) => s.logViewerSelectedLevels);
 		const colorBlindMode = useSettingsStore((s) => s.colorBlindMode);
+		// The Left Bar's conversation list is the way between AI conversations, so
+		// the tab strip stops drawing a second list of them (TabBar onlyActiveAiTab).
+		const conversationNavigation = useSettingsStore(
+			(s) => s.sidebarNavigationMode === 'conversations'
+		);
 		const contextWarningsEnabled = useSettingsStore(
 			(s) => s.contextManagementSettings.contextWarningsEnabled ?? false
 		);
@@ -385,6 +393,20 @@ export const MainPanel = React.memo(
 				activeSession?.browserTabs,
 			]
 		);
+
+		// With the Left Bar listing conversations and the header naming the one in
+		// view, a strip holding nothing but that same conversation repeats both, so
+		// it is not drawn. It comes back the moment there is something else to
+		// switch to - a file, terminal or browser tab, or a tiled group - with the
+		// current conversation's chip as the way back from it. New conversation,
+		// tab search and the conversation's actions stay on the Left Bar, the
+		// command palette and their hotkeys.
+		const conversationStripRedundant =
+			conversationNavigation &&
+			(activeSession?.filePreviewTabs?.length ?? 0) === 0 &&
+			(activeSession?.terminalTabs?.length ?? 0) === 0 &&
+			(activeSession?.browserTabs?.length ?? 0) === 0 &&
+			(activeSession?.tabGroups?.length ?? 0) === 0;
 
 		// SSH remote name for header display
 		const sshRemoteName = useSshRemoteName(
@@ -709,9 +731,9 @@ export const MainPanel = React.memo(
 			(tabId: string) => {
 				const resolved = resolveBuffer(tabId);
 				if (!resolved) return;
-				props.onCopyText?.(resolved.content, 'Terminal Buffer');
+				props.onCopyText?.(resolved.content, t('workflows.shell.extraTerminalBuffer'));
 			},
-			[resolveBuffer, props.onCopyText]
+			[t, resolveBuffer, props.onCopyText]
 		);
 
 		const handlePublishTerminalBufferGist = useCallback(
@@ -751,9 +773,9 @@ export const MainPanel = React.memo(
 		// Right-click "Copy to Clipboard" on highlighted text in XTerminal.
 		const handleCopyTerminalSelection = useCallback(
 			(text: string) => {
-				props.onCopyText?.(text, 'Terminal Selection');
+				props.onCopyText?.(text, t('workflows.shell.extraTerminalSelection'));
 			},
-			[props.onCopyText]
+			[t, props.onCopyText]
 		);
 
 		// Right-click "Send to Agent" on highlighted text - resolve the tab's display name
@@ -803,21 +825,21 @@ export const MainPanel = React.memo(
 						try {
 							return new URL(browserTab.url).host || browserTab.url;
 						} catch {
-							return browserTab.url || 'Browser Tab';
+							return browserTab.url || t('workflows.shell.extraBrowserTab');
 						}
 					})();
 				return { content, displayName, url: browserTab.url };
 			},
-			[activeSession, onBrowserTabSelect]
+			[t, activeSession, onBrowserTabSelect]
 		);
 
 		const handleCopyBrowserContent = useCallback(
 			async (tabId: string) => {
 				const resolved = await resolveBrowserContent(tabId);
 				if (!resolved) return;
-				props.onCopyText?.(resolved.content, 'Page Content');
+				props.onCopyText?.(resolved.content, t('workflows.shell.extraPageContent'));
 			},
-			[resolveBrowserContent, props.onCopyText]
+			[t, resolveBrowserContent, props.onCopyText]
 		);
 
 		const handleSendBrowserContentToAgent = useCallback(
@@ -1007,13 +1029,14 @@ export const MainPanel = React.memo(
 			if (diff.diff) {
 				setGitDiffPreview(diff.diff);
 			} else {
-				notifyCenterFlash({ message: 'No diff to examine', color: 'theme' });
+				notifyCenterFlash({ message: t('workflows.shell.extraNoDiffToExamine'), color: 'theme' });
 				// Polling cache said there were changes but `git diff` is empty -
 				// repo state changed since the last poll. Re-sync so the widget
 				// stops advertising stale stats.
 				void refreshGitStatus();
 			}
 		}, [
+			t,
 			activeSession?.isGitRepo,
 			activeSession?.inputMode,
 			activeSession?.shellCwd,
@@ -1238,6 +1261,7 @@ export const MainPanel = React.memo(
 							   open, so gating this on aiTabs alone would hide the whole strip (and
 							   the "+" button) and strand the user in whatever view was last active. */
 							hasAnyTab &&
+							!conversationStripRedundant &&
 							onTabSelect &&
 							onTabClose &&
 							onNewTab && (
@@ -1320,6 +1344,7 @@ export const MainPanel = React.memo(
 									colorBlindMode={colorBlindMode}
 									// Hide local-only OS actions (Reveal in Finder) when the agent runs over SSH
 									sshRemote={Boolean(filePreviewSshRemoteId)}
+									onlyActiveAiTab={conversationNavigation}
 								/>
 							)
 						)}

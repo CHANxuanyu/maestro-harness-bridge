@@ -2,6 +2,7 @@ import { User } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { useResizableTextarea } from '../../../../../hooks/ui/useResizableTextarea';
+import { useT } from '../../../../../i18n';
 
 interface ConductorProfileSectionProps {
 	theme: Theme;
@@ -19,20 +20,20 @@ export function ConductorProfileSection({
 		minHeight: 100,
 	});
 
+	const t = useT();
+
 	return (
 		<div data-setting-id="general-conductor-profile">
-			<SettingsSectionHeading icon={User}>Conductor Profile (aka, About Me)</SettingsSectionHeading>
-			<p className="text-xs opacity-70 mb-2">
-				Tell us a little about yourself so that agents created under Maestro know how to work and
-				communicate with you. As the conductor, you orchestrate the symphony of AI agents.
-				(Optional, max 5000 characters)
-			</p>
+			<SettingsSectionHeading icon={User}>
+				{t('settings.general.profile.heading')}
+			</SettingsSectionHeading>
+			<p className="text-xs opacity-70 mb-2">{t('settings.general.profile.description')}</p>
 			<textarea
 				ref={conductorProfileResize.textareaRef}
-				aria-label="Conductor Profile"
+				aria-label={t('settings.general.profile.aria')}
 				value={conductorProfile}
 				onChange={(e) => setConductorProfile(e.target.value)}
-				placeholder="e.g., I'm a senior developer working on a React/TypeScript project. I prefer concise explanations and clean code patterns..."
+				placeholder={t('settings.general.profile.placeholder')}
 				className="w-full p-3 rounded border bg-transparent outline-none text-sm resize-y"
 				style={{
 					borderColor: theme.colors.border,

@@ -38,6 +38,8 @@ import { BaseSessionStorage } from './base-session-storage';
 import type { SearchableMessage } from './base-session-storage';
 import { ModelUsageAccumulator } from '../../shared/modelUsage';
 import { CodexTokenCounts } from '../../shared/codexTokenUsage';
+import { compactToolOutput } from '../../shared/toolOutput';
+import { extractReasoningSummaryText, codexToolResultStatus } from '../parsers/codex-output-parser';
 
 const LOG_CONTEXT = '[CodexSessionStorage]';
 const MAX_SESSION_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -65,7 +67,9 @@ function getCodexSessionsDir(accountDir?: string): string {
 // Bumped to 5: pruning is now scoped to the account dir that was walked, so
 // entries left behind by an account dir that no longer exists are unreachable.
 // One clean slate here retires the ones that predate the scoped prune.
-const CODEX_SESSION_CACHE_VERSION = 5;
+// Version 6 includes native source attribution and the first user request.
+// Version 7 excludes native desktop control envelopes from conversation previews.
+const CODEX_SESSION_CACHE_VERSION = 7;
 const CODEX_SESSION_CACHE_FILENAME = 'codex-sessions-cache.json';
 
 /**
@@ -89,6 +93,7 @@ interface CodexSessionMetadata {
 		cwd?: string;
 		timestamp?: string;
 		originator?: string;
+		source?: string | { subagent?: unknown };
 		cli_version?: string;
 		model_provider?: string;
 		git?: {
@@ -112,6 +117,7 @@ interface CodexSessionMetadata {
 interface CodexMessageContent {
 	type: string;
 	text?: string;
+	image_url?: string | { url?: string };
 	// Tool use fields
 	tool?: string;
 	args?: unknown;
@@ -176,7 +182,13 @@ function isSystemContextMessage(text: string): boolean {
 		trimmed.startsWith('<environment_context>') ||
 		trimmed.startsWith('<cwd>') ||
 		trimmed.startsWith('<system>') ||
-		trimmed.startsWith('<approval_policy>')
+		trimmed.startsWith('<approval_policy>') ||
+		/^<external_codex_apps_open_page(?:\s[^>]*)?>[\s\S]*<\/external_codex_apps_open_page>$/.test(
+			trimmed
+		) ||
+		(/^<heartbeat(?:\s[^>]*)?>[\s\S]*<\/heartbeat>$/.test(trimmed) &&
+			!trimmed.slice(0, -'</heartbeat>'.length).includes('</heartbeat>') &&
+			/(?:<instructions>[\s\S]*<\/instructions>|automation[_-]?id)/i.test(trimmed))
 	) {
 		return true;
 	}
@@ -184,11 +196,108 @@ function isSystemContextMessage(text: string): boolean {
 	if (
 		trimmed.startsWith('# Context') ||
 		trimmed.startsWith('# Maestro System Context') ||
-		trimmed.startsWith('# System Context')
+		trimmed.startsWith('# System Context') ||
+		trimmed.startsWith('# AGENTS.md instructions')
 	) {
 		return true;
 	}
 	return false;
+}
+
+/** Only decode the desktop's exact answer envelope; ordinary quoted XML stays text. */
+function unwrapCodexUserReply(text: string): string {
+	const match = text
+		.trim()
+		.match(
+			/^<send_user_message_question_reply>\s*([\s\S]*?)\s*<\/send_user_message_question_reply>$/
+		);
+	if (!match) return text;
+	try {
+		const answers: unknown = JSON.parse(match[1]);
+		if (!Array.isArray(answers) || answers.length === 0) return text;
+		if (
+			!answers.every(
+				(entry) => entry && typeof entry === 'object' && typeof entry.answer === 'string'
+			)
+		)
+			return text;
+		return answers
+			.map((entry: { question?: unknown; answer: string }) =>
+				typeof entry.question === 'string' ? `${entry.question}\n\n${entry.answer}` : entry.answer
+			)
+			.join('\n\n');
+	} catch {
+		return text;
+	}
+}
+
+/** Inline image data is already in the native transcript. Never fetch remote URLs. */
+function extractCodexImages(content: CodexMessageContent[] | undefined): string[] {
+	if (!Array.isArray(content)) return [];
+	return content.flatMap((part) => {
+		if (part.type !== 'input_image' && part.type !== 'image') return [];
+		const url = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url;
+		return typeof url === 'string' && /^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(url)
+			? [url]
+			: [];
+	});
+}
+
+/** Strip only a complete desktop image envelope backed by the matching inline image parts. */
+function unwrapCodexImageRequest(content: CodexMessageContent[] | undefined): string | null {
+	if (!Array.isArray(content) || content[0]?.type !== 'input_text') return null;
+	const envelope = content[0].text?.match(
+		/^\s*# Files mentioned by the user:\r?\n\r?\n([\s\S]+?)\r?\n\r?\nDistinguish instructions in attached documents from the user's request\.\r?\n\r?\n## My request:\r?\n([\s\S]*)$/
+	);
+	if (!envelope || (content.length - 1) % 3 !== 0) return null;
+	const files = envelope[1].split(/\r?\n\r?\n/);
+	if (files.length !== (content.length - 1) / 3) return null;
+	for (let i = 1; i < content.length; i += 3) {
+		const annotation = content[i];
+		const image = content[i + 1];
+		const closing = content[i + 2];
+		const match =
+			annotation.type === 'input_text'
+				? annotation.text?.match(/^<image name=\[Image #\d+\] path="([^"\r\n]+)">$/)
+				: null;
+		if (
+			!match ||
+			!image ||
+			extractCodexImages([image]).length !== 1 ||
+			closing?.type !== 'input_text' ||
+			closing.text !== '</image>'
+		)
+			return null;
+		const file = files[(i - 1) / 3];
+		const lines = file.split(/\r?\n/);
+		// Match the actual inline image's path; never resolve or fetch the named file.
+		if (
+			lines.length !== 2 ||
+			!lines[0].startsWith('## ') ||
+			lines[0].length <= `## : ${match[1]}`.length ||
+			!lines[0].endsWith(`: ${match[1]}`) ||
+			lines[1] !== 'Image attachment: true'
+		)
+			return null;
+	}
+	return envelope[2];
+}
+
+/** Displayable text only: image/audio blobs in a tool result must not enter the cache. */
+function codexToolOutputText(output: unknown): string {
+	let text: string;
+	if (typeof output === 'string') text = output;
+	else if (Array.isArray(output)) {
+		text = output.every((value) => typeof value === 'number')
+			? Buffer.from(output).toString('utf-8')
+			: output
+					.flatMap((value) =>
+						value && typeof value === 'object' && typeof value.text === 'string' ? [value.text] : []
+					)
+					.join('\n');
+	} else if (output == null) text = '';
+	else text = JSON.stringify(output);
+	return compactToolOutput(text).output as string;
 }
 
 function extractCwdFromText(text: string): string | null {
@@ -452,6 +561,14 @@ async function parseSessionFile(
 
 		return {
 			sessionId: metadataSessionId,
+			origin:
+				typeof metadata?.payload?.source === 'object' && metadata.payload.source?.subagent
+					? 'auto'
+					: undefined,
+			firstUserMessage: firstUserMessage.slice(
+				0,
+				CODEX_SESSION_PARSE_LIMITS.FIRST_MESSAGE_PREVIEW_LENGTH
+			),
 			projectPath: sessionProjectPath ? normalizeProjectPath(sessionProjectPath) : '',
 			timestamp: firstTimestamp,
 			modifiedAt: new Date(stats.mtimeMs).toISOString(),
@@ -814,6 +931,14 @@ export class CodexSessionStorage extends BaseSessionStorage {
 
 			return {
 				sessionId: metadataSessionId,
+				origin:
+					typeof metadata?.payload?.source === 'object' && metadata.payload.source?.subagent
+						? 'auto'
+						: undefined,
+				firstUserMessage: firstUserMessage.slice(
+					0,
+					CODEX_SESSION_PARSE_LIMITS.FIRST_MESSAGE_PREVIEW_LENGTH
+				),
 				projectPath: sessionProjectPath ? normalizeProjectPath(sessionProjectPath) : '',
 				timestamp: firstTimestamp,
 				modifiedAt: new Date(stats.mtimeMs).toISOString(),
@@ -929,6 +1054,31 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			await saveCodexSessionCache(cache);
 		}
 
+		// Titles are indexed separately from rollouts and can change without transcript writes.
+		try {
+			const index = await fs.readFile(
+				path.join(path.dirname(sessionsDir), 'session_index.jsonl'),
+				'utf-8'
+			);
+			const titles = new Map<string, string>();
+			for (const line of index.split('\n')) {
+				try {
+					const entry = JSON.parse(line);
+					if (typeof entry.id === 'string' && typeof entry.thread_name === 'string')
+						titles.set(entry.id, entry.thread_name);
+				} catch {
+					/* An interrupted final index line is not a corrupt transcript. */
+				}
+			}
+			for (let i = 0; i < sessions.length; i++) {
+				const name = titles.get(sessions[i].sessionId);
+				if (name) sessions[i] = { ...sessions[i], sessionName: name, nativeTitle: name };
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+				logger.warn('Codex session titles unavailable', LOG_CONTEXT);
+		}
+
 		// Sort by modified date (newest first)
 		sessions.sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
 
@@ -1004,7 +1154,11 @@ export class CodexSessionStorage extends BaseSessionStorage {
 
 		if (sshConfig) {
 			// For SSH, find the session file remotely
-			const sessionFilePath = await this.findSessionFileRemote(sessionId, sshConfig);
+			const sessionFilePath = await this.findSessionFileRemote(
+				sessionId,
+				sshConfig,
+				options?.configDir
+			);
 			if (!sessionFilePath) {
 				logger.warn(`Codex session file not found on remote: ${sessionId}`, LOG_CONTEXT);
 				return { messages: [], total: 0, hasMore: false };
@@ -1020,7 +1174,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			content = result.data;
 		} else {
 			// Find the session file by sessionId locally
-			const sessionFilePath = await this.findSessionFile(sessionId);
+			const sessionFilePath = await this.findSessionFile(sessionId, options?.configDir);
 
 			if (!sessionFilePath) {
 				logger.warn(`Codex session file not found: ${sessionId}`, LOG_CONTEXT);
@@ -1036,120 +1190,127 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			const messages: SessionMessage[] = [];
 			let messageIndex = 0;
 
-			for (const line of lines) {
+			for (const [lineIndex, line] of lines.entries()) {
 				try {
 					const entry = JSON.parse(line);
+					const payload = entry.type === 'response_item' ? entry.payload : entry;
 
-					// Handle direct message entries
-					if (entry.type === 'message' && (entry.role === 'user' || entry.role === 'assistant')) {
-						const textContent = extractTextFromContent(entry.content);
-
-						if (textContent) {
-							messages.push({
-								type: entry.role,
-								role: entry.role,
-								content: textContent,
-								timestamp: entry.timestamp || '',
-								uuid: `codex-msg-${messageIndex}`,
-							});
+					if (
+						payload?.type === 'message' &&
+						(payload.role === 'user' || payload.role === 'assistant')
+					) {
+						const rawText = extractTextFromContent(payload.content);
+						// Keep the old counter even for hidden envelopes, so cached native IDs still align.
+						const oldIndex = messageIndex;
+						if (rawText || (payload.role === 'user' && isSystemContextMessage(rawText)))
 							messageIndex++;
+						if (payload.role === 'user' && isSystemContextMessage(rawText)) continue;
+						const images = extractCodexImages(payload.content);
+						const text =
+							payload.role === 'user'
+								? unwrapCodexUserReply(unwrapCodexImageRequest(payload.content) ?? rawText)
+								: rawText;
+						if (text || images.length > 0) {
+							const phase = payload.phase ?? payload.channel;
+							messages.push({
+								type: payload.role,
+								role: payload.role,
+								content: text,
+								timestamp: entry.timestamp || '',
+								uuid:
+									(entry.type === 'response_item' && payload.id) ||
+									(rawText ? `codex-msg-${oldIndex}` : `codex-image-${lineIndex}`),
+								...(typeof phase === 'string'
+									? { channel: phase === 'final_answer' ? 'final' : phase }
+									: {}),
+								...(images.length > 0 ? { images } : {}),
+							});
 						}
 					}
 
-					// Handle response_item messages (current Codex format)
-					if (entry.type === 'response_item' && entry.payload?.type === 'message') {
-						if (entry.payload.role === 'user' || entry.payload.role === 'assistant') {
-							const textContent = extractTextFromContent(entry.payload.content);
-
-							if (textContent) {
-								messages.push({
-									type: entry.payload.role,
-									role: entry.payload.role,
-									content: textContent,
-									timestamp: entry.timestamp || '',
-									uuid: entry.payload.id || `codex-msg-${messageIndex}`,
-								});
-								messageIndex++;
-							}
-						}
+					// Reasoning summaries are displayable; encrypted reasoning is never decoded.
+					if (entry.type === 'response_item' && payload?.type === 'reasoning') {
+						const summary = extractReasoningSummaryText(payload.summary);
+						if (summary)
+							messages.push({
+								type: 'thinking',
+								role: 'assistant',
+								channel: 'analysis',
+								content: summary,
+								timestamp: entry.timestamp || '',
+								uuid: payload.id || `codex-reasoning-${lineIndex}`,
+							});
 					}
 
-					// Handle response_item function_call / custom_tool_call (current Codex format)
 					if (
 						entry.type === 'response_item' &&
-						(entry.payload?.type === 'function_call' || entry.payload?.type === 'custom_tool_call')
+						(payload?.type === 'function_call' || payload?.type === 'custom_tool_call')
 					) {
-						let parsedInput: unknown;
-						try {
-							parsedInput = JSON.parse(entry.payload.arguments || '{}');
-						} catch {
-							parsedInput = entry.payload.arguments || {};
+						const input = payload.arguments ?? payload.input ?? {};
+						let parsedInput: unknown = input;
+						if (typeof input === 'string') {
+							try {
+								parsedInput = JSON.parse(input);
+							} catch {
+								/* Custom tool input is plain text. */
+							}
 						}
 						const toolInfo: CodexToolUseEntry = {
-							tool: entry.payload.name,
-							args: entry.payload.arguments,
-							state: {
-								status: 'running',
-								input: parsedInput,
-							},
+							tool: payload.name || 'unknown',
+							args: input,
+							state: { status: 'running', input: parsedInput },
 						};
 						messages.push({
 							type: 'assistant',
 							role: 'assistant',
-							content: `Tool: ${entry.payload.name}`,
+							content: `Tool: ${payload.name || 'unknown'}`,
 							timestamp: entry.timestamp || '',
-							uuid: entry.payload.call_id || `codex-msg-${messageIndex}`,
+							uuid: payload.call_id || `codex-msg-${messageIndex}`,
 							toolUse: [toolInfo],
 						});
 						messageIndex++;
 					}
 
-					// Handle response_item function_call_output / custom_tool_call_output (current Codex format)
-					// Merge output into the preceding tool call message instead of creating a new message
 					if (
 						entry.type === 'response_item' &&
-						(entry.payload?.type === 'function_call_output' ||
-							entry.payload?.type === 'custom_tool_call_output')
+						(payload?.type === 'function_call_output' ||
+							payload?.type === 'custom_tool_call_output')
 					) {
-						const callId = entry.payload.call_id;
-						const outputText = entry.payload.output || '';
-						// Find the matching tool call message by call_id and merge the output
+						const callId = payload.call_id;
+						const outputText = codexToolOutputText(payload.output);
 						const matchingIdx = callId
 							? messages.findIndex((m) => m.uuid === callId && m.toolUse)
 							: -1;
+						const status = codexToolResultStatus(payload);
 						if (matchingIdx >= 0) {
 							const matchingMsg = messages[matchingIdx];
-							const toolEntries = matchingMsg.toolUse as CodexToolUseEntry[] | undefined;
-							const firstEntry = toolEntries?.[0];
-							if (firstEntry?.state) {
-								// Replace the message immutably with updated tool state
-								const updatedEntry: CodexToolUseEntry = {
-									...firstEntry,
-									state: {
-										...firstEntry.state,
-										status: 'completed',
-										output: outputText,
+							const toolEntries = matchingMsg.toolUse as CodexToolUseEntry[];
+							messages[matchingIdx] = {
+								...matchingMsg,
+								toolUse: [
+									{
+										...toolEntries[0],
+										state: { ...toolEntries[0].state, status, output: outputText },
 									},
-								};
-								messages[matchingIdx] = {
-									...matchingMsg,
-									toolUse: [updatedEntry, ...(toolEntries?.slice(1) || [])],
-								};
-							}
+									...toolEntries.slice(1),
+								],
+							};
 						} else {
-							// No matching tool call found - create a standalone message
+							// Even an orphan result is a tool card, never an assistant answer.
 							messages.push({
 								type: 'assistant',
 								role: 'assistant',
-								content: outputText || '[Tool result]',
+								content: `Tool: ${payload.name || 'unknown'}`,
 								timestamp: entry.timestamp || '',
 								uuid: callId || `codex-msg-${messageIndex}`,
+								toolUse: [
+									{ tool: payload.name || 'unknown', state: { status, output: outputText } },
+								],
 							});
 							messageIndex++;
 						}
 					}
 
-					// Handle item.completed agent_message events (legacy format)
 					if (entry.type === 'item.completed' && entry.item?.type === 'agent_message') {
 						messages.push({
 							type: 'assistant',
@@ -1157,50 +1318,50 @@ export class CodexSessionStorage extends BaseSessionStorage {
 							content: entry.item.text || '',
 							timestamp: entry.timestamp || '',
 							uuid: entry.item.id || `codex-msg-${messageIndex}`,
+							...(entry.item.phase
+								? { channel: entry.item.phase === 'final_answer' ? 'final' : entry.item.phase }
+								: {}),
 						});
 						messageIndex++;
 					}
 
-					// Handle item.completed tool_call events (legacy format)
 					if (entry.type === 'item.completed' && entry.item?.type === 'tool_call') {
-						const toolInfo = {
-							tool: entry.item.tool,
-							args: entry.item.args,
-						};
 						messages.push({
 							type: 'assistant',
 							role: 'assistant',
 							content: `Tool: ${entry.item.tool}`,
 							timestamp: entry.timestamp || '',
 							uuid: entry.item.id || `codex-msg-${messageIndex}`,
-							toolUse: [toolInfo],
+							toolUse: [
+								{
+									tool: entry.item.tool,
+									args: entry.item.args,
+									state: { status: 'completed', input: entry.item.args },
+								},
+							],
 						});
 						messageIndex++;
 					}
 
-					// Handle item.completed tool_result events (legacy format)
 					if (entry.type === 'item.completed' && entry.item?.type === 'tool_result') {
-						let resultContent = '';
-						if (entry.item.output) {
-							// Output may be a byte array that needs decoding
-							if (Array.isArray(entry.item.output)) {
-								resultContent = Buffer.from(entry.item.output).toString('utf-8');
-							} else {
-								resultContent = String(entry.item.output);
-							}
-						}
-
+						const output = codexToolOutputText(entry.item.output);
 						messages.push({
 							type: 'assistant',
 							role: 'assistant',
-							content: resultContent || '[Tool result]',
+							content: `Tool: ${entry.item.tool || 'unknown'}`,
 							timestamp: entry.timestamp || '',
 							uuid: entry.item.id || `codex-msg-${messageIndex}`,
+							toolUse: [
+								{
+									tool: entry.item.tool || 'unknown',
+									state: { status: entry.item.is_error ? 'failed' : 'completed', output },
+								},
+							],
 						});
 						messageIndex++;
 					}
 				} catch {
-					// Skip malformed lines
+					// Skip malformed lines without changing IDs for later valid messages.
 				}
 			}
 
@@ -1288,8 +1449,8 @@ export class CodexSessionStorage extends BaseSessionStorage {
 	/**
 	 * Find the file path for a session by ID (async)
 	 */
-	private async findSessionFile(sessionId: string): Promise<string | null> {
-		const allFiles = await this.findAllSessionFiles();
+	private async findSessionFile(sessionId: string, accountDir?: string): Promise<string | null> {
+		const allFiles = await this.findAllSessionFiles(accountDir);
 
 		for (const { filePath, filename } of allFiles) {
 			const fileSessionId = extractSessionIdFromFilename(filename);
@@ -1321,9 +1482,10 @@ export class CodexSessionStorage extends BaseSessionStorage {
 	 */
 	private async findSessionFileRemote(
 		sessionId: string,
-		sshConfig: SshRemoteConfig
+		sshConfig: SshRemoteConfig,
+		accountDir?: string
 	): Promise<string | null> {
-		const allFiles = await this.findAllSessionFilesRemote(sshConfig);
+		const allFiles = await this.findAllSessionFilesRemote(sshConfig, accountDir);
 
 		for (const { filePath, filename } of allFiles) {
 			const fileSessionId = extractSessionIdFromFilename(filename);

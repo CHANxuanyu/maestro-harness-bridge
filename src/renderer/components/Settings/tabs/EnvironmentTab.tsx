@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * EnvironmentTab - Global environment variables settings tab
  *
@@ -18,6 +19,7 @@ export interface EnvironmentTabProps {
 }
 
 export function EnvironmentTab({ theme }: EnvironmentTabProps) {
+	const t = useT();
 	const { shellEnvVars, setShellEnvVars, shellEnvVarsDisabled, setShellEnvVarsDisabled } =
 		useSettings();
 	const knownAuthDirs = useKnownAuthDirs();
@@ -30,16 +32,10 @@ export function EnvironmentTab({ theme }: EnvironmentTabProps) {
 				<div className="flex items-center gap-2 mb-1">
 					<Globe className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 					<span className="text-xs font-bold opacity-70 uppercase">
-						Global Environment Variables
+						{t('settings.finish.environment.heading')}
 					</span>
 				</div>
-				<p className="text-xs opacity-70 mb-2">
-					Variables set here apply to all terminal sessions and AI agents. Per-agent environment
-					variables (configured in each agent's settings) take precedence when both define the same
-					key. Common use cases: API keys, proxy settings, custom tool paths. Use the eye button to
-					switch a variable off: it stays in this list with its value intact, but is no longer
-					passed to anything Maestro runs.
-				</p>
+				<p className="text-xs opacity-70 mb-2">{t('settings.finish.environment.description')}</p>
 				<EnvVarsEditor
 					envVars={shellEnvVars}
 					setEnvVars={setShellEnvVars}

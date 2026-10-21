@@ -7,6 +7,7 @@ export { GitHubCliSection } from './GitHubCliSection';
 export { GlobalHotkeySection } from './GlobalHotkeySection';
 export { HistorySection } from './HistorySection';
 export { InputBehaviorSection } from './InputBehaviorSection';
+export { LanguageSection } from './LanguageSection';
 export { LogLevelSection } from './LogLevelSection';
 export { MaestroCliSection } from './MaestroCliSection';
 export { PowerSection } from './PowerSection';

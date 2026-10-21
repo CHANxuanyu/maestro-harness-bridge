@@ -1,3 +1,4 @@
+import { useT } from '../../../../../i18n';
 import { ChevronDown } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import type { StatsTimeRange, WakatimeSettingsState } from '../types';
@@ -30,11 +31,12 @@ export function UsageStatsSection({
 	setWakatimeDetailedTracking,
 	wakatimeState,
 }: UsageStatsSectionProps) {
+	const tExtra = useT();
 	return (
 		<div data-setting-id="encore-usage-stats" className="space-y-3">
 			<div className="flex items-center justify-between">
 				<p className="text-sm" style={{ color: theme.colors.textMain }}>
-					Default lookback window
+					{tExtra('settings.extra.usageStatsSection.defaultLookbackWindow')}
 				</p>
 				<div className="relative">
 					<select
@@ -46,14 +48,16 @@ export function UsageStatsSection({
 							borderColor: theme.colors.border,
 							color: theme.colors.textMain,
 						}}
-						aria-label="Select default lookback window"
+						aria-label={tExtra('settings.extra.usageStatsSection.selectDefaultLookbackWindow')}
 					>
-						<option value="day">Today</option>
-						<option value="week">This Week</option>
-						<option value="month">This Month</option>
-						<option value="quarter">This Quarter</option>
-						<option value="year">This Year</option>
-						<option value="all">All Time</option>
+						<option value="day">{tExtra('settings.extra.usageStatsSection.today')}</option>
+						<option value="week">{tExtra('settings.extra.usageStatsSection.thisWeek')}</option>
+						<option value="month">{tExtra('settings.extra.usageStatsSection.thisMonth')}</option>
+						<option value="quarter">
+							{tExtra('settings.extra.usageStatsSection.thisQuarter')}
+						</option>
+						<option value="year">{tExtra('settings.extra.usageStatsSection.thisYear')}</option>
+						<option value="all">{tExtra('settings.extra.usageStatsSection.allTime')}</option>
 					</select>
 					<ChevronDown
 						className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"

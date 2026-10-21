@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * GroupChatHeader.tsx
  *
@@ -53,6 +54,7 @@ export function GroupChatHeader({
 	onToggleRightPanel,
 	shortcuts,
 }: GroupChatHeaderProps): JSX.Element {
+	const t = useT();
 	// Same Display setting that governs the main header's cost pill.
 	const showSessionCostPill = useSettingsStore((s) => s.showSessionCostPill);
 
@@ -98,17 +100,17 @@ export function GroupChatHeader({
 						}}
 						tabIndex={0}
 						role="button"
-						title="Click to rename"
+						title={t('workflows.shell.clickToRename')}
 					>
-						Group Chat: {name}
+						{t('workflows.shell.groupChat')} {name}
 					</h1>
 				)}
 				<button
 					onClick={onRename}
 					className="p-1 rounded hover:opacity-80 shrink-0"
 					style={{ color: theme.colors.textDim }}
-					title={`Rename "${name}"`}
-					aria-label={`Rename group chat "${name}"`}
+					title={t('workflows.shell.renameValue', { p0: name })}
+					aria-label={t('workflows.shell.renameGroupChatValue', { p0: name })}
 				>
 					<Edit2 className="w-4 h-4" />
 				</button>
@@ -128,21 +130,19 @@ export function GroupChatHeader({
 					options={[
 						{
 							value: 'team',
-							label: 'Team Chat',
-							shortLabel: 'Team',
-							title:
-								'Show every message and history entry, including agent delegations and replies',
+							label: t('workflows.shell.teamChat'),
+							shortLabel: t('workflows.shell.team'),
+							title: t('workflows.shell.showEveryMessageAndHistoryEntryIncludingAgent'),
 						},
 						{
 							value: 'moderator',
-							label: 'Moderator Only',
-							shortLabel: 'Moderator',
-							title:
-								'Show only your conversation with the moderator, hiding the agent back-and-forth',
+							label: t('workflows.shell.moderatorOnly'),
+							shortLabel: t('workflows.shell.moderator'),
+							title: t('workflows.shell.showOnlyYourConversationWithTheModeratorHiding'),
 						},
 					]}
 					theme={theme}
-					ariaLabel="Group chat view"
+					ariaLabel={t('workflows.shell.groupChatView')}
 					testId="group-chat-view-mode"
 				/>
 				{/* Stop All button - only shown when active */}
@@ -155,10 +155,10 @@ export function GroupChatHeader({
 							color: theme.colors.error,
 							border: `1px solid ${theme.colors.error}40`,
 						}}
-						title="Stop all moderator and participant activity"
+						title={t('workflows.shell.stopAllModeratorAndParticipantActivity')}
 					>
 						<StopCircle className="w-3.5 h-3.5" />
-						Stop All
+						{t('workflows.shell.stopAll')}
 					</button>
 				)}
 				<span
@@ -168,7 +168,8 @@ export function GroupChatHeader({
 						color: theme.colors.textDim,
 					}}
 				>
-					{participantCount} participant{participantCount !== 1 ? 's' : ''}
+					{participantCount} {t('workflows.shell.participant')}
+					{participantCount !== 1 ? t('workflows.shell.pluralSuffix') : ''}
 				</span>
 				{/* Total cost pill - only show when enabled and there's a cost */}
 				{showSessionCostPill && totalCost !== undefined && totalCost > 0 && (
@@ -180,8 +181,8 @@ export function GroupChatHeader({
 						}}
 						title={
 							costIncomplete
-								? 'Total accumulated cost (incomplete: not all agents report cost data)'
-								: 'Total accumulated cost'
+								? t('workflows.shell.totalAccumulatedCostIncompleteNotAllAgentsReport')
+								: t('workflows.shell.totalAccumulatedCost')
 						}
 					>
 						<DollarSign className="w-3 h-3" />
@@ -193,7 +194,7 @@ export function GroupChatHeader({
 					onClick={onShowInfo}
 					className="p-2 rounded hover:opacity-80 shrink-0"
 					style={{ color: theme.colors.textDim }}
-					title="Info"
+					title={t('workflows.shell.info')}
 				>
 					<Info className="w-5 h-5" />
 				</button>
@@ -201,7 +202,9 @@ export function GroupChatHeader({
 					<button
 						onClick={onToggleRightPanel}
 						className="p-2 rounded hover:bg-white/5 shrink-0"
-						title={`Show right panel (${formatShortcutKeys(shortcuts.toggleRightPanel.keys)})`}
+						title={t('workflows.shell.showRightPanelValue', {
+							p0: formatShortcutKeys(shortcuts.toggleRightPanel.keys),
+						})}
 					>
 						<Columns className="w-4 h-4" />
 					</button>

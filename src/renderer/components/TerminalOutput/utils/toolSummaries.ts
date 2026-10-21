@@ -66,6 +66,27 @@ export const summarizeToolInput = (input: unknown): ToolSummary | null => {
 	return { description, detail: detail ?? '' };
 };
 
+/**
+ * The footer `compactToolOutput` (src/shared/toolOutput.ts) appends when it caps
+ * a stored tool value. Kept in sync with its `truncationNote`.
+ */
+const STORED_TRUNCATION_NOTE = /\n\.\.\. \[tool output truncated, (\d+) chars total\]$/;
+
+/**
+ * When a stored tool value was capped for persistence, its original length;
+ * otherwise null. Lets the expanded view say honestly that it is not the
+ * whole result rather than presenting a cut-off string as complete.
+ */
+export const storedToolValueTruncation = (value: unknown): number | null => {
+	if (typeof value !== 'string') return null;
+	const match = STORED_TRUNCATION_NOTE.exec(value);
+	return match ? Number(match[1]) : null;
+};
+
+/** The stored value with the cap footer removed (it is reported separately). */
+export const withoutStoredTruncationNote = (value: string): string =>
+	value.replace(STORED_TRUNCATION_NOTE, '');
+
 /** Max lines of tool output to preview inline before truncating. */
 const TOOL_OUTPUT_PREVIEW_LINES = 8;
 

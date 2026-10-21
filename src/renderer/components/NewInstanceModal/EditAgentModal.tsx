@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Info, Copy, Check, X, Folder } from 'lucide-react';
 import { GhostIconButton } from '../ui/GhostIconButton';
@@ -48,6 +49,7 @@ export function EditAgentModal({
 	session,
 	existingSessions,
 }: EditAgentModalProps) {
+	const uiText = useT();
 	const [instanceName, setInstanceName] = useState('');
 	const [workingDir, setWorkingDir] = useState('');
 	const [nudgeMessage, setNudgeMessage] = useState('');
@@ -399,8 +401,8 @@ export function EditAgentModal({
 
 	const workingDirError = useMemo(() => {
 		if (!session) return undefined;
-		if (!trimmedWorkingDir) return 'Working directory is required';
-		if (localWorkingDirRelative) return 'Enter an absolute path';
+		if (!trimmedWorkingDir) return uiText('workflows.sessions.directoryRequired');
+		if (localWorkingDirRelative) return uiText('workflows.sessions.absolutePathRequired');
 		// The SSH status line below the field reports remote failures.
 		if (workingDirChanged && !isSshEnabled && remotePathValidation.error) {
 			return remotePathValidation.error;
@@ -413,6 +415,7 @@ export function EditAgentModal({
 		workingDirChanged,
 		isSshEnabled,
 		remotePathValidation.error,
+		uiText,
 	]);
 
 	const handleSelectFolder = useCallback(async () => {
@@ -464,12 +467,16 @@ export function EditAgentModal({
 		}
 		const winner =
 			resolved.source === 'model-marker'
-				? `the selected model (${formatTokensCompact(resolved.window)})`
-				: `the provider, which reports ${formatTokensCompact(resolved.window)}`;
+				? uiText('workflows.sessions.modelContextOverride', {
+						tokens: formatTokensCompact(resolved.window),
+					})
+				: uiText('workflows.sessions.providerContextOverride', {
+						tokens: formatTokensCompact(resolved.window),
+					});
 		return {
-			contextWindow: `Currently overridden by ${winner}. Edit this field to use your own value instead.`,
+			contextWindow: uiText('workflows.sessions.contextOverride', { source: winner }),
 		};
-	}, [liveSession, session, providerChanged]);
+	}, [liveSession, session, providerChanged, uiText]);
 
 	const handleSave = useCallback(() => {
 		if (!session) return;
@@ -645,7 +652,7 @@ export function EditAgentModal({
 	return (
 		<Modal
 			theme={theme}
-			title={`Edit Agent: ${session.name}`}
+			title={uiText('workflows.sessions.editAgentName', { name: session.name })}
 			priority={MODAL_PRIORITIES.NEW_INSTANCE}
 			onClose={onClose}
 			width={600}
@@ -656,7 +663,7 @@ export function EditAgentModal({
 					style={{ borderColor: theme.colors.border }}
 				>
 					<h2 className="text-sm font-bold" style={{ color: theme.colors.textMain }}>
-						Edit Agent: {session.name}
+						{uiText('workflows.sessions.editAgent')} {session.name}
 					</h2>
 					<div className="flex items-center gap-2">
 						<button
@@ -670,12 +677,20 @@ export function EditAgentModal({
 								color: copiedId ? theme.colors.success : theme.colors.accent,
 								border: `1px solid ${copiedId ? theme.colors.success : theme.colors.accent}40`,
 							}}
-							title={copiedId ? 'Copied!' : `Click to copy: ${session.id}`}
+							title={
+								copiedId
+									? uiText('workflows.sessions.copied')
+									: uiText('workflows.sessions.copyValue', { value: session.id })
+							}
 						>
 							{copiedId ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
 							<span>{session.id.slice(0, 8)}</span>
 						</button>
-						<GhostIconButton onClick={onClose} ariaLabel="Close modal" color={theme.colors.textDim}>
+						<GhostIconButton
+							onClick={onClose}
+							ariaLabel={uiText('workflows.sessions.closeModal')}
+							color={theme.colors.textDim}
+						>
 							<X className="w-4 h-4" />
 						</GhostIconButton>
 					</div>
@@ -686,7 +701,7 @@ export function EditAgentModal({
 					theme={theme}
 					onCancel={onClose}
 					onConfirm={handleSave}
-					confirmLabel="Save Changes"
+					confirmLabel={uiText('workflows.sessions.saveChanges')}
 					confirmDisabled={!isFormValid}
 				/>
 			}
@@ -697,7 +712,7 @@ export function EditAgentModal({
 					ref={nameInputRef}
 					id="edit-agent-name-input"
 					theme={theme}
-					label="Agent Name"
+					label={uiText('workflows.sessions.agentName')}
 					value={instanceName}
 					onChange={setInstanceName}
 					placeholder=""
@@ -711,7 +726,7 @@ export function EditAgentModal({
 						className="block text-xs font-bold opacity-70 uppercase mb-2"
 						style={{ color: theme.colors.textMain }}
 					>
-						Agent Provider
+						{uiText('workflows.sessions.agentProvider')}
 					</div>
 					<select
 						value={selectedToolType}
@@ -739,11 +754,7 @@ export function EditAgentModal({
 							}}
 						>
 							<Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-							<span>
-								Your tabs and their transcripts are kept. Each provider remembers its own session
-								per tab, so switching back picks up where you left off. Any turn already running
-								finishes on the current provider.
-							</span>
+							<span>{uiText('workflows.sessions.switchProviderHelp')}</span>
 						</div>
 					)}
 				</div>
@@ -762,20 +773,20 @@ export function EditAgentModal({
 					<FormInput
 						id="edit-agent-working-dir-input"
 						theme={theme}
-						label="Working Directory"
+						label={uiText('workflows.sessions.workingDirectory')}
 						value={workingDir}
 						onChange={setWorkingDir}
 						placeholder={
 							isSshEnabled
-								? `Enter remote path${sshRemoteHost ? ` on ${sshRemoteHost}` : ''} (e.g., /home/user/project)`
-								: 'Select directory...'
+								? sshRemoteHost
+									? uiText('workflows.sessions.remotePathOnHost', { host: sshRemoteHost })
+									: uiText('workflows.sessions.remotePathExample')
+								: uiText('workflows.sessions.selectDirectory')
 						}
 						error={workingDirError}
 						helperText={
 							workingDirBlocker ??
-							(workingDirChanged
-								? 'On save, the Files panel, Auto Run folder, and git follow the new directory. Conversations the provider stored under the old path may not resume.'
-								: undefined)
+							(workingDirChanged ? uiText('workflows.sessions.directoryChangeHelp') : undefined)
 						}
 						disabled={!!workingDirBlocker}
 						monospace
@@ -789,10 +800,12 @@ export function EditAgentModal({
 								style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 								title={
 									isSshEnabled
-										? `Folder picker unavailable for SSH remote${sshRemoteHost ? ` (${sshRemoteHost})` : ''}. Enter the remote path manually.`
-										: 'Browse folders'
+										? sshRemoteHost
+											? uiText('workflows.sessions.remoteFolderPickerHost', { host: sshRemoteHost })
+											: uiText('workflows.sessions.remoteFolderPicker')
+										: uiText('workflows.sessions.browseFolders')
 								}
-								aria-label="Browse folders"
+								aria-label={uiText('workflows.sessions.browseFolders')}
 							>
 								<Folder className="w-5 h-5" />
 							</button>
@@ -823,9 +836,9 @@ export function EditAgentModal({
 					value={newSessionMessage}
 					onChange={setNewSessionMessage}
 					maxLength={NEW_SESSION_MESSAGE_MAX_LENGTH}
-					label="New Session Message"
-					description="This text is prefixed to your first message whenever a new session is created (not visible in chat)."
-					placeholder="Instructions sent with the first message of every new session..."
+					label={uiText('workflows.sessions.newSessionMessage')}
+					description={uiText('workflows.sessions.newSessionMessageHelp')}
+					placeholder={uiText('workflows.sessions.newSessionMessagePlaceholder')}
 					sizeKey="new-session-message"
 				/>
 
@@ -840,7 +853,7 @@ export function EditAgentModal({
 							className="block text-xs font-bold opacity-70 uppercase mb-2"
 							style={{ color: theme.colors.textMain }}
 						>
-							{agentName} Settings
+							{agentName} {uiText('workflows.sessions.settings')}
 						</div>
 						<AgentConfigPanel
 							theme={theme}

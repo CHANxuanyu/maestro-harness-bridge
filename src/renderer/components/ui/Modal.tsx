@@ -43,6 +43,7 @@ import { useModalLayer, type UseModalLayerOptions } from '../../hooks';
 import { useResizableModal, type ModalResizeDirection } from '../../hooks/ui/useResizableModal';
 import type { ModalResizeKey, ModalSize } from '../../utils/modalSizing';
 import { ResizeHandles } from './ResizeHandles';
+import { useT } from '../../i18n';
 
 /** Edges a top-left-anchored floating window can resize from without moving. */
 const FLOATING_RESIZE_DIRECTIONS: ModalResizeDirection[] = ['e', 'se', 's'];
@@ -268,6 +269,7 @@ export function Modal({
 	floating = null,
 }: ModalProps) {
 	const isFloating = floating !== null;
+	const t = useT();
 	const containerRef = useRef<HTMLDivElement>(null);
 	const cardElementRef = useRef<HTMLDivElement | null>(null);
 	// Resizing requires a caller-supplied resizeKey. A title-derived fallback key
@@ -425,7 +427,7 @@ export function Modal({
 								{showCloseButton && (
 									<GhostIconButton
 										onClick={onClose}
-										ariaLabel="Close modal"
+										ariaLabel={t('workflows.shared.closeModal')}
 										color={theme.colors.textDim}
 									>
 										<X className="w-4 h-4" />
@@ -525,8 +527,8 @@ export function ModalFooter({
 	theme,
 	onCancel,
 	onConfirm,
-	cancelLabel = 'Cancel',
-	confirmLabel = 'Confirm',
+	cancelLabel,
+	confirmLabel,
 	confirmDisabled = false,
 	destructive = false,
 	showCancel = true,
@@ -534,6 +536,7 @@ export function ModalFooter({
 	confirmButtonRef,
 	cancelButtonRef,
 }: ModalFooterProps) {
+	const t = useT();
 	// Stop Enter key propagation to prevent parent handlers from triggering after modal closes
 	const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
 		if (e.key === 'Enter') {
@@ -556,7 +559,7 @@ export function ModalFooter({
 						color: theme.colors.textMain,
 					}}
 				>
-					{cancelLabel}
+					{cancelLabel ?? t('common.cancel')}
 				</button>
 			)}
 			<button
@@ -571,7 +574,7 @@ export function ModalFooter({
 					color: destructive ? '#ffffff' : theme.colors.accentForeground,
 				}}
 			>
-				{confirmLabel}
+				{confirmLabel ?? t('common.confirm')}
 			</button>
 		</>
 	);

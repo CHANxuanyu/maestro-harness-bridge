@@ -19,6 +19,7 @@ import type { GroupAppearance, GroupUpdateRequest } from '../../shared/groupAppe
 import type { WebSocket } from 'ws';
 import type { Theme } from '../../shared/theme-types';
 import type { Shortcut } from '../../shared/shortcut-types';
+import type { UiLanguagePreference } from '../../shared/i18n';
 import type { CadenzaPayload } from '../../shared/cadenza-types';
 import type { MovementPayload, MovementStateSnapshot } from '../../shared/movement-types';
 import type { AgentDelegationNotice } from '../../shared/agentDelegation';
@@ -997,6 +998,8 @@ export type SettingValue = string | number | boolean | null;
  * Curated subset of settings exposed to the web interface.
  */
 export interface WebSettings {
+	/** Optional on the wire for older clients; current snapshots always include it. */
+	uiLanguage?: UiLanguagePreference;
 	theme: string;
 	fontSize: number;
 	enterToSendAI: boolean;

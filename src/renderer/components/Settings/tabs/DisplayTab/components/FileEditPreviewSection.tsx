@@ -6,8 +6,8 @@ import {
 	type FilePreviewToolbarVisibility,
 } from '../../../../../stores/settingsStore';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
-import { getRevealLabel } from '../../../../../utils/platformUtils';
-import { TOOLBAR_BUTTON_LABELS } from '../utils';
+import { localizedFileManagerName, useT } from '../../../../../i18n';
+import { TOOLBAR_BUTTON_LABEL_KEYS } from '../utils';
 import { SectionCard } from './SectionCard';
 import { ToggleSettingRow } from './ToggleSettingRow';
 
@@ -33,42 +33,46 @@ export function FileEditPreviewSection({
 	filePreviewToolbarVisibility,
 	setFilePreviewToolbarButtonVisibility,
 }: FileEditPreviewSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="display-file-edit-preview">
-			<SettingsSectionHeading icon={FileText}>File Edit &amp; Preview</SettingsSectionHeading>
+			<SettingsSectionHeading icon={FileText}>
+				{t('settings.display.fileEdit.heading')}
+			</SettingsSectionHeading>
 			<SectionCard theme={theme}>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show line numbers in the editor"
-					description="Render a line-number gutter on the left edge of the file editor. Right-clicking a line copies a maestro:// deep link to that line."
+					title={t('settings.display.fileEdit.lineNumbers')}
+					description={t('settings.display.fileEdit.lineNumbersDescription')}
 					checked={fileEditShowLineNumbers}
 					onChange={setFileEditShowLineNumbers}
-					ariaLabel="Show line numbers in the editor"
+					ariaLabel={t('settings.display.fileEdit.lineNumbers')}
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Wrap long lines in the editor"
-					description="When on, long lines wrap at whitespace. When off, the editor scrolls horizontally. Toggle live from the editor toolbar."
+					title={t('settings.display.fileEdit.wrap')}
+					description={t('settings.display.fileEdit.wrapDescription')}
 					checked={fileEditWordWrap}
 					onChange={setFileEditWordWrap}
-					ariaLabel="Wrap long lines in the editor"
+					ariaLabel={t('settings.display.fileEdit.wrap')}
 					borderTop
 				/>
 
 				<div className="pt-3 border-t" style={{ borderColor: theme.colors.border }}>
 					<p className="text-sm" style={{ color: theme.colors.textMain }}>
-						Toolbar buttons
+						{t('settings.display.fileEdit.toolbar')}
 					</p>
 					<p className="text-xs opacity-70 mt-0.5">
-						Hide buttons you never use. Hidden actions stay reachable via command palette and
-						keyboard shortcuts.
+						{t('settings.display.fileEdit.toolbarDescription')}
 					</p>
 					<div className="grid grid-cols-2 gap-2 mt-3">
 						{FILE_PREVIEW_TOOLBAR_BUTTON_KEYS.map((key) => {
 							const label =
 								key === 'revealInFolder'
-									? getRevealLabel(window.maestro?.platform ?? '')
-									: TOOLBAR_BUTTON_LABELS[key];
+									? t(TOOLBAR_BUTTON_LABEL_KEYS[key], {
+											manager: localizedFileManagerName(t, window.maestro?.platform ?? ''),
+										})
+									: t(TOOLBAR_BUTTON_LABEL_KEYS[key]);
 							const enabled = filePreviewToolbarVisibility[key];
 							return (
 								<label
@@ -88,7 +92,7 @@ export function FileEditPreviewSection({
 										}}
 										role="switch"
 										aria-checked={enabled}
-										aria-label={`Show ${label} button`}
+										aria-label={t('settings.display.fileEdit.showButton', { label })}
 									>
 										<span
 											className={`absolute left-0 top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${

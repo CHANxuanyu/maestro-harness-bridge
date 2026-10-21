@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * GroupChatModal.tsx
  *
@@ -57,6 +58,7 @@ interface GroupChatModalEditProps {
 type GroupChatModalProps = GroupChatModalCreateProps | GroupChatModalEditProps;
 
 export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
+	const t = useT();
 	const { mode, theme, isOpen, onClose } = props;
 	const groupChat = mode === 'edit' ? props.groupChat : undefined;
 
@@ -300,7 +302,7 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 				className="block text-xs font-bold opacity-70 uppercase mb-2"
 				style={{ color: theme.colors.textMain }}
 			>
-				Agent Availability
+				{t('workflows.shell.agentAvailability')}
 			</label>
 
 			<div className="flex items-start gap-3">
@@ -308,17 +310,14 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 					checked={requireIdle}
 					onChange={setRequireIdle}
 					theme={theme}
-					ariaLabel="Only work with agents that are free"
+					ariaLabel={t('workflows.shell.onlyWorkWithAgentsThatAreFree')}
 				/>
 				<div className="flex-1 min-w-0">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						Only work with agents that are free
+						{t('workflows.shell.onlyWorkWithAgentsThatAreFree')}
 					</div>
 					<div className="text-xs mt-1 leading-relaxed" style={{ color: theme.colors.textDim }}>
-						An agent brought into this chat runs in its own working directory. When this is on, the
-						moderator holds the request for any agent that is busy with your own conversation, an
-						Auto Run, or a CLI run, and sends it the moment that agent is free instead of starting a
-						second process there.
+						{t('workflows.shell.anAgentBroughtIntoThisChatRunsIn')}
 					</div>
 				</div>
 			</div>
@@ -335,10 +334,8 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 				>
 					<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
 					<div className="leading-relaxed">
-						<strong>Agents will be interrupted.</strong> The moderator will hand work to an agent
-						even while you are talking to it, so two processes can edit the same files at once,
-						overwrite each other, and leave both conversations acting on stale state. Leave this off
-						only when you know the work cannot collide.
+						<strong>{t('workflows.shell.agentsWillBeInterrupted')}</strong>{' '}
+						{t('workflows.shell.theModeratorWillHandWorkToAnAgent')}
 					</div>
 				</div>
 			)}
@@ -346,7 +343,9 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 	);
 
 	const isCreate = mode === 'create';
-	const modalTitle = isCreate ? 'New Group Chat' : 'Edit Group Chat';
+	const modalTitle = isCreate
+		? t('workflows.shell.newGroupChat')
+		: t('workflows.shell.extraEditGroupChat');
 	const modalPriority = isCreate
 		? MODAL_PRIORITIES.NEW_GROUP_CHAT
 		: MODAL_PRIORITIES.EDIT_GROUP_CHAT;
@@ -364,7 +363,7 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 					theme={theme}
 					onCancel={onClose}
 					onConfirm={handleSubmit}
-					confirmLabel={isCreate ? 'Create' : 'Save'}
+					confirmLabel={isCreate ? t('workflows.shell.create') : t('workflows.shell.save')}
 					confirmDisabled={!canSubmit}
 				/>
 			}
@@ -373,14 +372,11 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 				{/* Description (create mode only) */}
 				{isCreate && (
 					<div className="mb-6 text-sm leading-relaxed" style={{ color: theme.colors.textDim }}>
-						A Group Chat lets you collaborate with multiple AI agents in a single conversation. The{' '}
-						<span style={{ color: theme.colors.textMain }}>moderator</span> manages the conversation
-						flow, deciding when to involve other agents. You can{' '}
-						<span style={{ color: theme.colors.accent }}>@mention</span> any agent defined in
-						Maestro to bring them into the discussion. You can @mention agents from any regular AI
-						chat too, but there each mention is a single-turn answer and you are the moderator:
-						every follow-up is yours to write. A Group Chat delegates that job to an agent who acts
-						as your fiduciary, wrangling the others to work together across multiple turns.
+						{t('workflows.shell.aGroupChatLetsYouCollaborateWithMultiple')}{' '}
+						<span style={{ color: theme.colors.textMain }}>{t('workflows.shell.moderator2')}</span>{' '}
+						{t('workflows.shell.managesTheConversationFlowDecidingWhenToInvolve')}{' '}
+						<span style={{ color: theme.colors.accent }}>{t('workflows.shell.mention')}</span>{' '}
+						{t('workflows.shell.anyAgentDefinedInMaestroToBringThem')}
 					</div>
 				)}
 
@@ -390,11 +386,11 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 						<FormInput
 							ref={nameInputRef}
 							theme={theme}
-							label="Chat Name"
+							label={t('workflows.shell.chatName')}
 							value={name}
 							onChange={setName}
 							onSubmit={canSubmit ? handleSubmit : undefined}
-							placeholder="e.g., Auth Feature Implementation"
+							placeholder={t('workflows.shell.eGAuthFeatureImplementation')}
 						/>
 					</div>
 				)}
@@ -405,7 +401,7 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 						className="block text-xs font-bold opacity-70 uppercase mb-2"
 						style={{ color: theme.colors.textMain }}
 					>
-						{isCreate ? 'Select Moderator' : 'Moderator Agent'}
+						{isCreate ? t('workflows.shell.selectModerator') : t('workflows.shell.moderatorAgent')}
 					</label>
 
 					{ac.isDetecting ? (
@@ -415,12 +411,12 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 								style={{ borderColor: theme.colors.accent, borderTopColor: 'transparent' }}
 							/>
 							<span className="text-sm" style={{ color: theme.colors.textDim }}>
-								Detecting agents...
+								{t('workflows.shell.detectingAgents')}
 							</span>
 						</div>
 					) : availableTiles.length === 0 ? (
 						<div className="text-sm py-2" style={{ color: theme.colors.textDim }}>
-							No agents available. Please install Claude Code, OpenCode, Codex, or Factory Droid.
+							{t('workflows.shell.noAgentsAvailablePleaseInstallClaudeCodeOpencode')}
 						</div>
 					) : (
 						<div className="flex items-center gap-2">
@@ -436,14 +432,14 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 										color: theme.colors.textMain,
 										zIndex: 10000,
 									}}
-									aria-label="Select moderator agent"
+									aria-label={t('workflows.shell.selectModeratorAgent')}
 								>
 									{availableTiles.map((tile) => {
 										const isBeta = isBetaAgent(tile.id);
 										return (
 											<option key={tile.id} value={tile.id}>
 												{tile.name}
-												{isBeta ? ' (Beta)' : ''}
+												{isBeta ? t('workflows.shell.beta') : ''}
 											</option>
 										);
 									})}
@@ -463,10 +459,10 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 									color: ac.isConfigExpanded ? theme.colors.accent : theme.colors.textDim,
 									backgroundColor: ac.isConfigExpanded ? `${theme.colors.accent}10` : 'transparent',
 								}}
-								title="Customize moderator settings"
+								title={t('workflows.shell.customizeModeratorSettings')}
 							>
 								<Settings className="w-4 h-4" />
-								<span className="text-sm">Customize</span>
+								<span className="text-sm">{t('workflows.shell.customize')}</span>
 								{ac.hasCustomization && (
 									<span
 										className="w-2 h-2 rounded-full"
@@ -488,13 +484,13 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 						>
 							<div className="flex items-center justify-between mb-3">
 								<span className="text-xs font-medium" style={{ color: theme.colors.textDim }}>
-									{selectedTile.name} Configuration
+									{selectedTile.name} {t('workflows.shell.configuration')}
 								</span>
 								{ac.hasCustomization && (
 									<div className="flex items-center gap-1">
 										<Check className="w-3 h-3" style={{ color: theme.colors.success }} />
 										<span className="text-xs" style={{ color: theme.colors.success }}>
-											Customized
+											{t('workflows.shell.customized')}
 										</span>
 									</div>
 								)}
@@ -623,8 +619,8 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 							border: `1px solid ${theme.colors.warning}40`,
 						}}
 					>
-						<strong>Note:</strong> Changing the moderator agent will restart the moderator process.
-						Existing conversation history will be preserved.
+						<strong>{t('workflows.shell.note')}</strong>{' '}
+						{t('workflows.shell.changingTheModeratorAgentWillRestartTheModerator')}
 					</div>
 				)}
 
@@ -634,11 +630,11 @@ export function GroupChatModal(props: GroupChatModalProps): JSX.Element | null {
 						<FormInput
 							ref={nameInputRef}
 							theme={theme}
-							label="Chat Name"
+							label={t('workflows.shell.chatName')}
 							value={name}
 							onChange={setName}
 							onSubmit={canSubmit ? handleSubmit : undefined}
-							placeholder="e.g., Auth Feature Implementation"
+							placeholder={t('workflows.shell.eGAuthFeatureImplementation')}
 						/>
 					</div>
 				)}

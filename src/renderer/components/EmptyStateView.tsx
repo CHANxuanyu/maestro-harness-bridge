@@ -21,6 +21,7 @@ import { WelcomeContent } from './WelcomeContent';
 import { buildMaestroUrl } from '../utils/buildMaestroUrl';
 import { openUrl } from '../utils/openUrl';
 import { PluginUiItemsSlot } from './plugins/PluginUiItemsSlot';
+import { useT } from '../i18n';
 
 interface EmptyStateViewProps {
 	theme: Theme;
@@ -45,6 +46,7 @@ export function EmptyStateView({
 	onCheckForUpdates,
 	onStartTour,
 }: EmptyStateViewProps) {
+	const t = useT();
 	const [menuOpen, setMenuOpen] = useState(false);
 	const menuRef = useRef<HTMLDivElement>(null);
 
@@ -84,7 +86,7 @@ export function EmptyStateView({
 					<GhostIconButton
 						onClick={() => setMenuOpen(!menuOpen)}
 						padding="p-2"
-						title="Menu"
+						title={t('workflows.emptyState.menu')}
 						color={theme.colors.textDim}
 					>
 						<Menu className="w-5 h-5" />
@@ -110,10 +112,10 @@ export function EmptyStateView({
 									<Wand2 className="w-5 h-5" style={{ color: theme.colors.accent }} />
 									<div className="flex-1">
 										<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-											New Agent Wizard
+											{t('workflows.emptyState.wizard')}
 										</div>
 										<div className="text-xs" style={{ color: theme.colors.textDim }}>
-											Get started with AI
+											{t('workflows.emptyState.wizardHint')}
 										</div>
 									</div>
 									<span
@@ -138,10 +140,10 @@ export function EmptyStateView({
 										<Compass className="w-5 h-5" style={{ color: theme.colors.accent }} />
 										<div className="flex-1">
 											<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-												Take a Tour
+												{t('workflows.emptyState.tour')}
 											</div>
 											<div className="text-xs" style={{ color: theme.colors.textDim }}>
-												Learn the interface
+												{t('workflows.emptyState.tourHint')}
 											</div>
 										</div>
 									</button>
@@ -159,7 +161,7 @@ export function EmptyStateView({
 									<Settings className="w-5 h-5" style={{ color: theme.colors.textDim }} />
 									<div className="flex-1">
 										<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-											Settings
+											{t('common.settings')}
 										</div>
 									</div>
 									<span
@@ -183,7 +185,7 @@ export function EmptyStateView({
 									<HelpCircle className="w-5 h-5" style={{ color: theme.colors.textDim }} />
 									<div className="flex-1">
 										<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-											Keyboard Shortcuts
+											{t('workflows.emptyState.shortcuts')}
 										</div>
 									</div>
 									<span
@@ -209,10 +211,10 @@ export function EmptyStateView({
 									<RefreshCw className="w-5 h-5" style={{ color: theme.colors.textDim }} />
 									<div className="flex-1">
 										<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-											Check for Updates
+											{t('workflows.emptyState.checkUpdates')}
 										</div>
 										<div className="text-xs" style={{ color: theme.colors.textDim }}>
-											Get the latest version
+											{t('workflows.emptyState.checkUpdatesHint')}
 										</div>
 									</div>
 								</button>
@@ -227,10 +229,10 @@ export function EmptyStateView({
 									<Globe className="w-5 h-5" style={{ color: theme.colors.textDim }} />
 									<div className="flex-1">
 										<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-											Maestro Website
+											{t('workflows.emptyState.website')}
 										</div>
 										<div className="text-xs" style={{ color: theme.colors.textDim }}>
-											Visit runmaestro.ai
+											{t('workflows.emptyState.websiteHint')}
 										</div>
 									</div>
 									<ExternalLink className="w-4 h-4" style={{ color: theme.colors.textDim }} />
@@ -246,10 +248,10 @@ export function EmptyStateView({
 									<BookOpen className="w-5 h-5" style={{ color: theme.colors.textDim }} />
 									<div className="flex-1">
 										<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-											Documentation
+											{t('workflows.emptyState.docs')}
 										</div>
 										<div className="text-xs" style={{ color: theme.colors.textDim }}>
-											See usage docs on docs.runmaestro.ai
+											{t('workflows.emptyState.docsHint')}
 										</div>
 									</div>
 									<ExternalLink className="w-4 h-4" style={{ color: theme.colors.textDim }} />
@@ -265,10 +267,10 @@ export function EmptyStateView({
 									<Info className="w-5 h-5" style={{ color: theme.colors.textDim }} />
 									<div className="flex-1">
 										<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-											About Maestro
+											{t('workflows.emptyState.about')}
 										</div>
 										<div className="text-xs" style={{ color: theme.colors.textDim }}>
-											Version, Credits, Stats
+											{t('workflows.emptyState.aboutHint')}
 										</div>
 									</div>
 								</button>
@@ -290,7 +292,7 @@ export function EmptyStateView({
 						style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}
 					>
 						<Bot className="w-5 h-5" />
-						Create your first agent
+						{t('workflows.emptyState.createFirstAgent')}
 					</button>
 				</div>
 

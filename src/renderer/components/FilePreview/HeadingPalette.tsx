@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * HeadingPalette - a Cmd+K style jump list over a markdown document's headings.
  *
@@ -49,6 +50,7 @@ export const HeadingPalette = React.memo(function HeadingPalette({
 	onJump,
 	onClose,
 }: HeadingPaletteProps) {
+	const uiText = useT();
 	const [query, setQuery] = useState('');
 	const inputRef = useRef<HTMLInputElement>(null);
 
@@ -140,14 +142,17 @@ export const HeadingPalette = React.memo(function HeadingPalette({
 							setSelectedIndex(0);
 						}}
 						onKeyDown={onInputKeyDown}
-						placeholder="Jump to heading..."
+						placeholder={uiText('workflows.files.jumpHeading')}
 						spellCheck={false}
 						className="flex-1 bg-transparent border-none outline-none text-sm"
 						style={{ color: theme.colors.textMain }}
 						data-testid="heading-palette-input"
 					/>
 					<span className="text-2xs flex-shrink-0" style={{ color: theme.colors.textDim }}>
-						{filtered.length} of {entries.length}
+						{uiText('workflows.files.headingProgress', {
+							count: filtered.length,
+							total: entries.length,
+						})}
 					</span>
 					<EscCloseButton onClose={onClose} theme={theme} />
 				</div>
@@ -159,7 +164,7 @@ export const HeadingPalette = React.memo(function HeadingPalette({
 				>
 					{filtered.length === 0 ? (
 						<div className="px-3 py-6 text-center text-sm" style={{ color: theme.colors.textDim }}>
-							No heading matches "{query}"
+							{uiText('workflows.files.headingNoMatch', { query })}
 						</div>
 					) : (
 						filtered.map(({ entry, matchIndices }, index) => {
@@ -211,9 +216,9 @@ export const HeadingPalette = React.memo(function HeadingPalette({
 					className="px-3 py-1.5 border-t flex items-center gap-3 text-2xs flex-shrink-0"
 					style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
 				>
-					<span>Up/Down to move</span>
-					<span>Enter to jump</span>
-					<span>PgUp/PgDn to skip</span>
+					<span>{uiText('workflows.files.moveHint')}</span>
+					<span>{uiText('workflows.files.jumpHint')}</span>
+					<span>{uiText('workflows.files.pageHint')}</span>
 				</div>
 			</div>
 		</div>

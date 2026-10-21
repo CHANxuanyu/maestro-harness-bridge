@@ -2,6 +2,7 @@ import { Terminal } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import type { MaestroCliState } from '../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useI18n } from '../../../../../i18n';
 
 interface MaestroCliSectionProps {
 	theme: Theme;
@@ -19,6 +20,7 @@ export function MaestroCliSection({ theme, appVersion, maestroCli }: MaestroCliS
 		checkStatus,
 		installOrUpdate,
 	} = maestroCli;
+	const { t, tRich } = useI18n();
 
 	return (
 		<div data-setting-id="general-maestro-cli">
@@ -28,14 +30,18 @@ export function MaestroCliSection({ theme, appVersion, maestroCli }: MaestroCliS
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<div className="text-xs opacity-70">
-					Check whether <code>maestro-cli</code> is available in your PATH and whether its version
-					matches Maestro v{status?.expectedVersion || appVersion}.
+					{tRich('settings.general.cli.description', {
+						command: <code>maestro-cli</code>,
+						version: status?.expectedVersion || appVersion,
+					})}
 				</div>
 
 				{status && !checking && (
 					<div className="text-xs space-y-1">
 						<div>
-							<span style={{ color: theme.colors.textDim }}>PATH:</span>{' '}
+							<span style={{ color: theme.colors.textDim }}>
+								{t('settings.general.cli.pathLabel')}
+							</span>{' '}
 							<span
 								style={{
 									color:
@@ -45,31 +51,37 @@ export function MaestroCliSection({ theme, appVersion, maestroCli }: MaestroCliS
 								}}
 							>
 								{status.inPath
-									? 'Detected'
+									? t('settings.general.cli.detected')
 									: status.inShellPath
-										? 'Detected (shell PATH)'
-										: 'Not detected'}
+										? t('settings.general.cli.detectedShell')
+										: t('settings.general.cli.notDetected')}
 							</span>
 						</div>
 						<div>
-							<span style={{ color: theme.colors.textDim }}>Installed version:</span>{' '}
+							<span style={{ color: theme.colors.textDim }}>
+								{t('settings.general.cli.installedVersion')}
+							</span>{' '}
 							<span style={{ color: theme.colors.textMain }}>
-								{status.installedVersion || 'Not installed'}
+								{status.installedVersion || t('settings.general.cli.notInstalled')}
 							</span>
 						</div>
 						<div>
-							<span style={{ color: theme.colors.textDim }}>Expected version:</span>{' '}
+							<span style={{ color: theme.colors.textDim }}>
+								{t('settings.general.cli.expectedVersion')}
+							</span>{' '}
 							<span style={{ color: theme.colors.textMain }}>{status.expectedVersion}</span>
 						</div>
 						{status.commandPath && (
 							<div className="break-all">
-								<span style={{ color: theme.colors.textDim }}>Command path:</span>{' '}
+								<span style={{ color: theme.colors.textDim }}>
+									{t('settings.general.cli.commandPath')}
+								</span>{' '}
 								<code>{status.commandPath}</code>
 							</div>
 						)}
 						{status.needsInstallOrUpdate && (
 							<div style={{ color: theme.colors.warning }}>
-								Mismatch or missing CLI detected. Install/update to sync versions.
+								{t('settings.general.cli.mismatch')}
 							</div>
 						)}
 					</div>
@@ -81,7 +93,7 @@ export function MaestroCliSection({ theme, appVersion, maestroCli }: MaestroCliS
 					aria-atomic="true"
 					className="text-xs space-y-1"
 				>
-					{checking && <div className="opacity-70">Checking Maestro CLI status...</div>}
+					{checking && <div className="opacity-70">{t('settings.general.cli.checkingStatus')}</div>}
 					{statusError && <div style={{ color: theme.colors.warning }}>{statusError}</div>}
 					{installMessage && (
 						<div
@@ -105,7 +117,7 @@ export function MaestroCliSection({ theme, appVersion, maestroCli }: MaestroCliS
 							opacity: checking || installing ? 0.6 : 1,
 						}}
 					>
-						{checking ? 'Checking...' : 'Check now'}
+						{checking ? t('settings.general.cli.checking') : t('settings.general.cli.checkNow')}
 					</button>
 					<button
 						onClick={() => void installOrUpdate()}
@@ -118,14 +130,16 @@ export function MaestroCliSection({ theme, appVersion, maestroCli }: MaestroCliS
 						}}
 					>
 						{installing
-							? 'Installing...'
+							? t('settings.general.cli.installing')
 							: status?.needsInstallOrUpdate
-								? 'Install / Update CLI'
-								: 'Reinstall CLI'}
+								? t('settings.general.cli.installUpdate')
+								: t('settings.general.cli.reinstall')}
 					</button>
 				</div>
 				<div className="text-xs-plus opacity-55">
-					Install target: <code>{status?.installDir || '~/.local/bin'}</code>
+					{tRich('settings.general.cli.installTarget', {
+						path: <code>{status?.installDir || '~/.local/bin'}</code>,
+					})}
 				</div>
 			</div>
 		</div>

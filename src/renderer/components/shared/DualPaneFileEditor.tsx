@@ -1,3 +1,4 @@
+import { useT, localizedFileManagerName } from '../../i18n';
 /**
  * DualPaneFileEditor - shared split-pane editor chrome.
  *
@@ -21,7 +22,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Theme } from '../../constants/themes';
-import { getOpenInLabel } from '../../utils/platformUtils';
 import { formatTokensCompact } from '../../../shared/formatters';
 import { highlightMatches } from '../../utils/highlightMatches';
 import { safeStorageGet, safeStorageSet } from '../../utils/safeLocalStorage';
@@ -227,13 +227,14 @@ export function DualPaneFileEditor({
 	helpPanel,
 	showHelp,
 	isExpanded,
-	emptyStateMessage = 'Select a file to edit',
+	emptyStateMessage,
 	listWidthStorageKey,
 	onDeleteItem,
 	listFocusToken,
 	autoFocusList,
 	highlightQuery,
 }: DualPaneFileEditorProps): JSX.Element {
+	const tExtra = useT();
 	const selectedItem = items.find((i) => i.id === selectedId) ?? null;
 
 	const splitViewRef = useRef<HTMLDivElement | null>(null);
@@ -451,7 +452,7 @@ export function DualPaneFileEditor({
 							<button
 								className="dual-pane-create-button"
 								onClick={onCreateNewItem}
-								title={createNewItemLabel || 'Create new'}
+								title={createNewItemLabel || tExtra('settings.extra.dualPaneFileEditor.createNew')}
 								style={{
 									backgroundColor: theme.colors.accent,
 									color: theme.colors.accentForeground,
@@ -493,7 +494,7 @@ export function DualPaneFileEditor({
 						onMouseDown={handleResizeStart}
 						role="separator"
 						aria-orientation="vertical"
-						aria-label="Resize list pane"
+						aria-label={tExtra('settings.extra.dualPaneFileEditor.resizePane')}
 						style={{ color: theme.colors.textDim }}
 					/>
 				)}
@@ -516,9 +517,13 @@ export function DualPaneFileEditor({
 														<span
 															className="dual-pane-editor-token-count"
 															style={{ color: theme.colors.textDim }}
-															title={`~${editorTokenCount.toLocaleString()} tokens (estimated)`}
+															title={tExtra('settings.extra.dualPaneFileEditor.estimatedTokens', {
+																count: editorTokenCount.toLocaleString(),
+															})}
 														>
-															~{formatTokensCompact(editorTokenCount)} tokens
+															{tExtra('settings.extra.dualPaneFileEditor.tokenCount', {
+																count: formatTokensCompact(editorTokenCount),
+															})}
 														</span>
 													)}
 												</h3>
@@ -548,23 +553,23 @@ export function DualPaneFileEditor({
 														title={modifiedBadgeTitle}
 														data-testid="dual-pane-modified-badge"
 													>
-														Modified
+														{tExtra('settings.extra.dualPaneFileEditor.Modified')}
 													</button>
 												) : (
 													<span
 														className="dual-pane-modified-badge"
 														style={{ backgroundColor: theme.colors.accent }}
 													>
-														Modified
+														{tExtra('settings.extra.dualPaneFileEditor.Modified')}
 													</span>
 												))}
 											{showDefaultDriftedBadge && (
 												<span
 													className="dual-pane-modified-badge"
 													style={{ backgroundColor: theme.colors.warning }}
-													title="The bundled default has changed since you saved this customization."
+													title={tExtra('settings.extra.dualPaneFileEditor.defaultChanged')}
 												>
-													Default Updated
+													{tExtra('settings.extra.dualPaneFileEditor.DefaultUpdated')}
 												</span>
 											)}
 										</div>
@@ -612,14 +617,16 @@ export function DualPaneFileEditor({
 											title={openInFinderPath}
 										>
 											<ExternalLink className="w-3 h-3" />
-											{getOpenInLabel(window.maestro?.platform || 'darwin')}
+											{tExtra('settings.extra.dualPaneFileEditor.openIn', {
+												app: localizedFileManagerName(tExtra, window.maestro?.platform || 'darwin'),
+											})}
 										</button>
 									)}
 								</div>
 							</>
 						) : (
 							<div className="dual-pane-no-selection" style={{ color: theme.colors.textDim }}>
-								{emptyStateMessage}
+								{emptyStateMessage ?? tExtra('settings.extra.dualPaneFileEditor.selectFile')}
 							</div>
 						)}
 					</div>
@@ -656,8 +663,8 @@ export function DualPaneFileEditor({
 							}}
 							title={
 								item.hasDefaultDrifted
-									? 'Customized - bundled default has changed since you saved this'
-									: 'Customized'
+									? tExtra('settings.extra.dualPaneFileEditor.customizedChanged')
+									: tExtra('settings.extra.dualPaneFileEditor.customized')
 							}
 						>
 							&bull;

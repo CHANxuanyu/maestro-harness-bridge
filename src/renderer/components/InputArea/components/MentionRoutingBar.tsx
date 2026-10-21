@@ -1,3 +1,4 @@
+import { useT, type TFunction } from '../../../i18n';
 /**
  * MentionRoutingBar - shows, BEFORE send, how a message's `@agent` mentions
  * will run.
@@ -27,7 +28,7 @@ interface MentionRoutingBarProps {
 	agentNames: string[];
 }
 
-const ROUTING_COPY: Record<
+function getRoutingCopy(t: TFunction): Record<
 	MentionRouting,
 	{
 		label: string;
@@ -36,41 +37,45 @@ const ROUTING_COPY: Record<
 		describe: (names: string, many: boolean) => string;
 		hint: string;
 	}
-> = {
-	only: {
-		label: 'Only',
-		Icon: AtSign,
-		describe: (names, many) => `${names} ${many ? 'answer' : 'answers'}; this agent does not`,
-		hint: 'Move the mention later in the message to have this agent answer too.',
-	},
-	parallel: {
-		label: 'Parallel',
-		Icon: Split,
-		describe: (names, many) =>
-			`${names} ${many ? 'are' : 'is'} consulted now; this agent waits for the reply to finish`,
-		hint: 'Say "check with @agent first" to consult before this agent starts, or "then send what you find to @agent" to hand off its answer afterwards.',
-	},
-	'consult-first': {
-		label: 'Consult first',
-		Icon: ArrowLeftToLine,
-		describe: (names, many) =>
-			`${names} ${many ? 'answer' : 'answers'} first; this agent starts once the reply is in`,
-		hint: 'Drop "first" / "based on what @agent says" to run both at once.',
-	},
-	handoff: {
-		label: 'Hand-off',
-		Icon: ArrowRightFromLine,
-		describe: (names) => `This agent answers, then its answer goes to ${names}`,
-		hint: 'One way: the reply lands here, but this agent is not sent another turn. Drop "send it to" / "let @agent know" to run both at once.',
-	},
-};
+> {
+	return {
+		only: {
+			label: t('workflows.shell.only'),
+			Icon: AtSign,
+			describe: (names, many) =>
+				t(many ? 'workflows.mention.onlyMany' : 'workflows.mention.onlyOne', { names }),
+			hint: t('workflows.mention.onlyHint'),
+		},
+		parallel: {
+			label: t('workflows.shell.parallel'),
+			Icon: Split,
+			describe: (names, many) =>
+				t(many ? 'workflows.mention.parallelMany' : 'workflows.mention.parallelOne', { names }),
+			hint: t('workflows.mention.parallelHint'),
+		},
+		'consult-first': {
+			label: t('workflows.shell.consultFirst'),
+			Icon: ArrowLeftToLine,
+			describe: (names, many) =>
+				t(many ? 'workflows.mention.firstMany' : 'workflows.mention.firstOne', { names }),
+			hint: t('workflows.mention.firstHint'),
+		},
+		handoff: {
+			label: t('workflows.shell.handOff'),
+			Icon: ArrowRightFromLine,
+			describe: (names) => t('workflows.mention.handoff', { names }),
+			hint: t('workflows.mention.handoffHint'),
+		},
+	};
+}
 
 export const MentionRoutingBar = memo(function MentionRoutingBar({
 	theme,
 	routing,
 	agentNames,
 }: MentionRoutingBarProps) {
-	const copy = ROUTING_COPY[routing];
+	const t = useT();
+	const copy = getRoutingCopy(t)[routing];
 	const { Icon } = copy;
 	return (
 		<div
@@ -100,7 +105,7 @@ export const MentionRoutingBar = memo(function MentionRoutingBar({
 				style={{ color: theme.colors.textDim }}
 				title={copy.hint}
 			>
-				reword to change
+				{t('workflows.shell.rewordToChange')}
 			</span>
 		</div>
 	);

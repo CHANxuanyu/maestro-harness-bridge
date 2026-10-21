@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import React, {
 	useRef,
 	useEffect,
@@ -50,10 +51,7 @@ import {
 } from '../constants/rightPanel';
 import { PluginUiItemsSlot } from './plugins/PluginUiItemsSlot';
 import { autoRunActiveElapsedMs } from '../hooks/batch/useTimeTracking';
-import {
-	MIRRORED_RUN_CONTROL_TITLE,
-	useIsMirroredBatchRun,
-} from '../hooks/batch/useAutoRunStateMirror';
+import { useIsMirroredBatchRun } from '../hooks/batch/useAutoRunStateMirror';
 
 export interface RightPanelHandle {
 	refreshHistoryPanel: () => void;
@@ -152,6 +150,7 @@ interface RightPanelProps {
 
 export const RightPanel = memo(
 	forwardRef<RightPanelHandle, RightPanelProps>(function RightPanel(props, ref) {
+		const t = useT();
 		// === State from stores (direct subscriptions - no prop drilling) ===
 		const session = useSessionStore(selectActiveSession);
 		const setSessions = useSessionStore((s) => s.setSessions);
@@ -330,9 +329,8 @@ export const RightPanel = memo(
 			if (next.conflict) {
 				notifyToast({
 					color: 'orange',
-					title: 'Auto Run document changed on disk',
-					message:
-						'Your unsaved edits were kept. Save to overwrite it, or Revert to load the new version.',
+					title: t('workflows.shell.autoRunDocumentChangedOnDisk'),
+					message: t('workflows.shell.extraYourUnsavedEditsWereKeptSaveToOverwrite'),
 				});
 			}
 		}, [
@@ -582,7 +580,11 @@ export const RightPanel = memo(
 				<div className="flex border-b h-16" style={{ borderColor: theme.colors.border }}>
 					{(['files', 'history', ...(autoRunDisabled ? [] : ['autorun'])] as const).map((tab) => {
 						const label =
-							tab === 'autorun' ? 'Auto Run' : tab.charAt(0).toUpperCase() + tab.slice(1);
+							tab === 'autorun'
+								? t('workflows.shell.autoRun')
+								: tab === 'files'
+									? t('workflows.labels.files')
+									: t('workflows.shell.history');
 						// Each of these three tabs has its own chord. Surfacing it on the
 						// header the user is already clicking is the cheapest place to
 						// teach it.
@@ -621,7 +623,10 @@ export const RightPanel = memo(
 					<button
 						onClick={() => setRightPanelOpen(!rightPanelOpen)}
 						className="flex items-center justify-center p-2 rounded hover:bg-white/5 transition-colors w-12 shrink-0"
-						title={`${rightPanelOpen ? 'Collapse' : 'Expand'} Right Panel (${formatShortcutKeys(shortcuts.toggleRightPanel.keys)})`}
+						title={t('workflows.shell.valueRightPanelValue', {
+							p0: rightPanelOpen ? t('workflows.labels.collapse') : t('workflows.labels.expand'),
+							p1: formatShortcutKeys(shortcuts.toggleRightPanel.keys),
+						})}
 					>
 						{rightPanelOpen ? (
 							<PanelRightClose className="w-4 h-4 opacity-50" />
@@ -746,20 +751,26 @@ export const RightPanel = memo(
 										onClick={() => setActiveRightTab('autorun')}
 										className="text-xs font-bold uppercase cursor-pointer hover:underline"
 										style={{ color: theme.colors.error }}
-										title="View error details in Auto Run tab"
+										title={t('workflows.shell.viewErrorDetailsInAutoRunTab')}
 									>
-										Auto Run Paused
+										{t('workflows.shell.autoRunPaused')}
 									</button>
 								) : (
 									<span
 										className="text-xs font-bold uppercase"
 										style={{ color: theme.colors.textMain }}
 									>
-										{currentSessionBatchState.isStopping ? 'Stopping' : 'Auto Run Active'}
+										{currentSessionBatchState.isStopping
+											? t('workflows.shell.stopping')
+											: t('workflows.shell.autoRunActive2')}
 									</span>
 								)}
 								{currentSessionBatchState.worktreeActive && (
-									<span title={`Worktree: ${currentSessionBatchState.worktreeBranch || 'active'}`}>
+									<span
+										title={t('workflows.shell.worktreeValue', {
+											p0: currentSessionBatchState.worktreeBranch || t('workflows.shell.active'),
+										})}
+									>
 										<GitBranch className="w-4 h-4" style={{ color: theme.colors.warning }} />
 									</span>
 								)}
@@ -771,10 +782,10 @@ export const RightPanel = memo(
 											backgroundColor: theme.colors.error,
 											color: 'white',
 										}}
-										title="Force kill the running process"
+										title={t('workflows.shell.forceKillTheRunningProcess')}
 									>
 										<Skull className="w-3 h-3" />
-										Kill
+										{t('workflows.shell.kill')}
 									</button>
 								)}
 							</div>
@@ -783,7 +794,7 @@ export const RightPanel = memo(
 								<span
 									className="text-xs font-mono"
 									style={{ color: theme.colors.textDim }}
-									title="Total elapsed time"
+									title={t('workflows.shell.totalElapsedTime')}
 								>
 									{elapsedTime}
 								</span>
@@ -875,10 +886,17 @@ export const RightPanel = memo(
 												direction: 'rtl',
 												textAlign: 'left',
 											}}
-											title={`Document ${currentSessionBatchState.currentDocumentIndex + 1}/${currentSessionBatchState.documents.length}: ${currentSessionBatchState.documents[currentSessionBatchState.currentDocumentIndex]}.md`}
+											title={t('workflows.shell.documentValueValueValueMd', {
+												p0: currentSessionBatchState.currentDocumentIndex + 1,
+												p1: currentSessionBatchState.documents.length,
+												p2: currentSessionBatchState.documents[
+													currentSessionBatchState.currentDocumentIndex
+												],
+											})}
 										>
 											<bdi>
-												Document {currentSessionBatchState.currentDocumentIndex + 1}/
+												{t('workflows.shell.document')}{' '}
+												{currentSessionBatchState.currentDocumentIndex + 1}/
 												{currentSessionBatchState.documents.length}:{' '}
 												{
 													currentSessionBatchState.documents[
@@ -969,18 +987,25 @@ export const RightPanel = memo(
 								}
 							>
 								{errorPaused
-									? batchError?.message || 'Paused due to error'
+									? batchError?.message || t('workflows.shell.pausedDueToError')
 									: currentSessionBatchState.isStopping
-										? 'Waiting for current task to complete before stopping...'
+										? t('workflows.shell.waitingForCurrentTaskToCompleteBeforeStopping')
 										: currentSessionBatchState.goalMode
-											? `Goal: ${currentSessionBatchState.goalProgress ?? 0}%${
-													currentSessionBatchState.goalRationale
+											? t('workflows.shell.goalValueValue', {
+													p0: currentSessionBatchState.goalProgress ?? 0,
+													p1: currentSessionBatchState.goalRationale
 														? ` · ${currentSessionBatchState.goalRationale}`
-														: ''
-												}`
+														: '',
+												})
 											: currentSessionBatchState.totalTasksAcrossAllDocs > 0
-												? `${currentSessionBatchState.completedTasksAcrossAllDocs} of ${currentSessionBatchState.totalTasksAcrossAllDocs} tasks completed`
-												: `${currentSessionBatchState.completedTasks} of ${currentSessionBatchState.totalTasks} tasks completed`}
+												? t('workflows.shell.valueOfValueTasksCompleted', {
+														p0: currentSessionBatchState.completedTasksAcrossAllDocs,
+														p1: currentSessionBatchState.totalTasksAcrossAllDocs,
+													})
+												: t('workflows.shell.valueOfValueTasksCompleted', {
+														p0: currentSessionBatchState.completedTasks,
+														p1: currentSessionBatchState.totalTasks,
+													})}
 							</span>
 						</div>
 
@@ -1006,7 +1031,7 @@ export const RightPanel = memo(
 										style={{ accentColor: theme.colors.accent }}
 									/>
 									<span className="text-2xs" style={{ color: theme.colors.textDim }}>
-										Follow active task
+										{t('workflows.shell.followActiveTask')}
 									</span>
 								</label>
 							)}
@@ -1022,8 +1047,8 @@ export const RightPanel = memo(
 											color: theme.colors.accent,
 										}}
 									>
-										Loop {currentSessionBatchState.loopIteration + 1} of{' '}
-										{currentSessionBatchState.maxLoops ?? '∞'}
+										{t('workflows.shell.loop')} {currentSessionBatchState.loopIteration + 1}{' '}
+										{t('workflows.shell.of')} {currentSessionBatchState.maxLoops ?? '∞'}
 									</span>
 								)}
 								{/* Thought Stream - peer into the agent's live reasoning. Opens a
@@ -1038,12 +1063,16 @@ export const RightPanel = memo(
 										onClick={() => openThoughtStream(sessionId)}
 										title={
 											bufferedActivity > 0
-												? `${bufferedActivity} buffered thought${bufferedActivity === 1 ? '' : 's'} and tool call${bufferedActivity === 1 ? '' : 's'} - click to read`
-												: "Peer into the agent's reasoning and tool calls"
+												? t('workflows.shell.valueBufferedThoughtvalueAndToolCallvalueClickTo', {
+														p0: bufferedActivity,
+														p1: bufferedActivity === 1 ? '' : t('workflows.shell.pluralSuffix'),
+														p2: bufferedActivity === 1 ? '' : t('workflows.shell.pluralSuffix'),
+													})
+												: t('workflows.shell.peerIntoTheAgentSReasoningAndTool')
 										}
 									>
 										<Brain className="w-3 h-3" />
-										View Thoughts
+										{t('workflows.shell.viewThoughts')}
 									</button>
 								)}
 								{/* View history link - shown on all tabs except history */}
@@ -1057,7 +1086,7 @@ export const RightPanel = memo(
 										onClick={() => setActiveRightTab('history')}
 									>
 										<ScrollText className="w-3 h-3" />
-										View History
+										{t('workflows.shell.viewHistory')}
 									</button>
 								)}
 								{/* Resume/Abort when error-paused; otherwise the Stop button -
@@ -1076,12 +1105,12 @@ export const RightPanel = memo(
 												}}
 												title={
 													isMirroredRun
-														? MIRRORED_RUN_CONTROL_TITLE
-														: 'Resume Auto Run after re-authenticating'
+														? t('workflows.status.mirrored')
+														: t('workflows.shell.resumeAutoRunAfterReAuthenticating')
 												}
 											>
 												<Play className="w-3 h-3" />
-												Resume
+												{t('workflows.shell.resume')}
 											</button>
 										)}
 										{onAbortBatchOnError && (
@@ -1095,11 +1124,13 @@ export const RightPanel = memo(
 													opacity: isMirroredRun ? 0.6 : 1,
 												}}
 												title={
-													isMirroredRun ? MIRRORED_RUN_CONTROL_TITLE : 'Stop Auto Run completely'
+													isMirroredRun
+														? t('workflows.status.mirrored')
+														: t('workflows.shell.stopAutoRunCompletely')
 												}
 											>
 												<XCircle className="w-3 h-3" />
-												Abort
+												{t('workflows.shell.abort')}
 											</button>
 										)}
 									</>
@@ -1118,12 +1149,12 @@ export const RightPanel = memo(
 											}}
 											title={
 												isMirroredRun
-													? MIRRORED_RUN_CONTROL_TITLE
-													: 'Stop auto-run after the current task finishes'
+													? t('workflows.status.mirrored')
+													: t('workflows.shell.stopAutoRunAfterTheCurrentTaskFinishes')
 											}
 										>
 											<Square className="w-3 h-3" />
-											Stop
+											{t('workflows.shell.stop')}
 										</button>
 									)
 								)}
@@ -1136,11 +1167,11 @@ export const RightPanel = memo(
 				{showKillConfirm && (
 					<ConfirmModal
 						theme={theme}
-						title="Force Kill Process"
-						message="This will immediately terminate the running agent process. The current task will be interrupted mid-execution and may leave incomplete changes. Are you sure?"
+						title={t('workflows.shell.forceKillProcess')}
+						message={t('workflows.shell.extraThisWillImmediatelyTerminateTheRunningAgentProcess')}
 						headerIcon={<Skull className="w-4 h-4" style={{ color: theme.colors.error }} />}
 						icon={<Skull className="w-5 h-5" style={{ color: theme.colors.error }} />}
-						confirmLabel="Kill Process"
+						confirmLabel={t('workflows.shell.killProcess')}
 						destructive
 						onConfirm={() => {
 							if (session?.id) {

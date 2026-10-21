@@ -1,3 +1,5 @@
+import { localizeAgentConfigLabel } from '../../i18n/agentConfigLabels';
+import { useT } from '../../i18n';
 /**
  * AgentConfigPanel.tsx
  *
@@ -44,29 +46,23 @@ let envVarIdCounter = 0;
 
 // Claude token-source selector (claude-code only). Maps the tri-state
 // ClaudeTokenMode onto the segmented control labels plus a one-line hint each.
-const CLAUDE_TOKEN_MODE_OPTIONS: { value: ClaudeTokenMode; label: string }[] = [
-	{ value: 'api', label: 'claude -p' },
-	{ value: 'interactive', label: 'TUI Wrapper' },
-	{ value: 'dynamic', label: 'Dynamic' },
-];
-
-const CLAUDE_TOKEN_MODE_HINTS: Record<ClaudeTokenMode, string> = {
-	api: 'Run every turn through claude --print. Signed in with a Claude plan, it draws from your plan limits; with an API key set, it bills that key.',
-	interactive:
-		'Run every turn through the Claude TUI via maestro-p. Signed in with a Claude plan, it draws from your plan limits.',
-	dynamic:
-		'Start on the TUI, switch to claude --print near a plan limit. The switch only helps with an API key set: signed in with a plan alone, both draw from the same limits.',
-};
-
-// Built-in environment variables that Maestro sets automatically
-const BUILT_IN_ENV_VARS: { key: string; description: string; value: string }[] = [
+const CLAUDE_TOKEN_MODE_OPTIONS = [
+	{ value: 'api', labelKey: 'workflows.sessions.tokenModeApi' },
+	{ value: 'interactive', labelKey: 'workflows.sessions.tokenModeInteractive' },
+	{ value: 'dynamic', labelKey: 'workflows.sessions.tokenModeDynamic' },
+] as const;
+const CLAUDE_TOKEN_MODE_HINTS = {
+	api: 'workflows.sessions.tokenModeApiHelp',
+	interactive: 'workflows.sessions.tokenModeInteractiveHelp',
+	dynamic: 'workflows.sessions.tokenModeDynamicHelp',
+} as const;
+const BUILT_IN_ENV_VARS = [
 	{
 		key: 'MAESTRO_SESSION_RESUMED',
-		description:
-			'Set to "1" when resuming an existing session. Not set for new sessions. Use this in your agent hooks to skip initialization on resumed sessions.',
-		value: '1 (when resuming)',
+		descriptionKey: 'workflows.sessions.resumedEnvHelp',
+		valueKey: 'workflows.sessions.resumedEnvValue',
 	},
-];
+] as const;
 
 // Separate component for text input with optional model dropdown
 // This avoids the browser's native datalist styling issues
@@ -91,6 +87,7 @@ function ModelTextInput({
 	loadingModels,
 	onRefreshModels,
 }: ModelTextInputProps): JSX.Element {
+	const uiText = useT();
 	const [showDropdown, setShowDropdown] = useState(false);
 	const [filterText, setFilterText] = useState('');
 	// Track whether we're in filter mode (typing to filter dropdown vs direct input)
@@ -262,9 +259,9 @@ function ModelTextInput({
 						}}
 						className="px-2 py-1.5 rounded text-xs whitespace-nowrap"
 						style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
-						title="Reset to default model"
+						title={uiText('workflows.sessions.resetModel')}
 					>
-						Clear
+						{uiText('workflows.sessions.clear')}
 					</button>
 				)}
 				{isModelField && onRefreshModels && (
@@ -274,7 +271,7 @@ function ModelTextInput({
 							onRefreshModels();
 						}}
 						className="p-2 rounded border hover:bg-white/10 transition-colors"
-						title="Refresh available models"
+						title={uiText('workflows.sessions.refreshModels')}
 						style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
 					>
 						<RefreshCw className={`w-3 h-3 ${loadingModels ? 'animate-spin' : ''}`} />
@@ -283,12 +280,17 @@ function ModelTextInput({
 			</div>
 			{isModelField && loadingModels && (
 				<p className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
-					Loading available models...
+					{uiText('workflows.sessions.loadingModels')}
 				</p>
 			)}
 			{isModelField && !loadingModels && hasModels && (
 				<p className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
-					{availableModels.length} model{availableModels.length !== 1 ? 's' : ''} available
+					{uiText(
+						availableModels.length === 1
+							? 'workflows.sessions.modelAvailableOne'
+							: 'workflows.sessions.modelsAvailable',
+						{ count: availableModels.length }
+					)}
 				</p>
 			)}
 		</>
@@ -447,6 +449,7 @@ export function AgentConfigPanel({
 	codexAutoResetOnExhaustion = false,
 	onCodexAutoResetChange,
 }: AgentConfigPanelProps): JSX.Element {
+	const uiText = useT();
 	const callOnConfigBlurSafely = (key: string, committedValue: any) => {
 		const maybePromise = onConfigBlur(key, committedValue);
 		if (maybePromise && typeof (maybePromise as Promise<void>).catch === 'function') {
@@ -485,11 +488,13 @@ export function AgentConfigPanel({
 	// mirroring resolveClaudeSpawnMode, which falls a dynamic+SSH spawn back to
 	// api. Also drop TUI when the remote has no maestro-p to run it. The stored
 	// preference is left untouched so disabling SSH restores it.
-	const claudeTokenModeOptions = isSshEnabled
-		? CLAUDE_TOKEN_MODE_OPTIONS.filter(
-				(o) => o.value !== 'dynamic' && !(remoteMaestroPMissing && o.value === 'interactive')
-			)
-		: CLAUDE_TOKEN_MODE_OPTIONS;
+	const claudeTokenModeOptions = (
+		isSshEnabled
+			? CLAUDE_TOKEN_MODE_OPTIONS.filter(
+					(o) => o.value !== 'dynamic' && !(remoteMaestroPMissing && o.value === 'interactive')
+				)
+			: CLAUDE_TOKEN_MODE_OPTIONS
+	).map(({ value, labelKey }) => ({ value, label: uiText(labelKey) }));
 	const displayClaudeTokenMode: ClaudeTokenMode =
 		isSshEnabled &&
 		(claudeTokenMode === 'dynamic' || (remoteMaestroPMissing && claudeTokenMode === 'interactive'))
@@ -606,16 +611,20 @@ export function AgentConfigPanel({
 					className="block text-xs font-medium mb-2 flex items-center justify-between"
 					style={{ color: theme.colors.textDim }}
 				>
-					<span>{isSshEnabled ? 'Remote Command' : 'Path'}</span>
+					<span>
+						{isSshEnabled
+							? uiText('workflows.sessions.remoteCommand')
+							: uiText('workflows.sessions.path')}
+					</span>
 					{onRefreshAgent && !isSshEnabled && (
 						<button
 							onClick={onRefreshAgent}
 							className="p-1 rounded hover:bg-white/10 transition-colors flex items-center gap-1"
-							title="Re-detect agent path"
+							title={uiText('workflows.sessions.detectPathAgain')}
 							style={{ color: theme.colors.textDim }}
 						>
 							<RefreshCw className={`w-3 h-3 ${refreshingAgent ? 'animate-spin' : ''}`} />
-							<span className="text-xs">Detect</span>
+							<span className="text-xs">{uiText('workflows.sessions.detect')}</span>
 						</button>
 					)}
 				</label>
@@ -648,7 +657,9 @@ export function AgentConfigPanel({
 							className="block text-xs font-medium mb-1"
 							style={{ color: theme.colors.textDim }}
 						>
-							Detected installations ({detectedPaths.length})
+							{uiText('workflows.sessions.detectedInstallationsCount', {
+								count: detectedPaths.length,
+							})}
 						</label>
 						<select
 							value={activePathIsDetected ? activePath : CUSTOM_PATH_OPTION}
@@ -673,7 +684,9 @@ export function AgentConfigPanel({
 						>
 							{!activePathIsDetected && (
 								<option value={CUSTOM_PATH_OPTION} style={{ backgroundColor: theme.colors.bgMain }}>
-									{activePath ? `Custom: ${activePath}` : 'Custom path'}
+									{activePath
+										? uiText('workflows.sessions.customPathValue', { path: activePath })
+										: uiText('workflows.sessions.customPath')}
 								</option>
 							)}
 							{detectedPaths.map((p) => (
@@ -683,15 +696,20 @@ export function AgentConfigPanel({
 							))}
 						</select>
 						<p className="text-xs opacity-50 mt-1">
-							Multiple {agent.binaryName} binaries were found. Your selection is saved as the
-							default for future agents.
+							{uiText('workflows.sessions.multipleBinaries', {
+								binary: agent.binaryName ?? agent.id,
+							})}
 						</p>
 					</div>
 				)}
 				<p className="text-xs opacity-50 mt-2">
 					{isSshEnabled
-						? `Remote command/binary for ${agent.binaryName}. Leave empty to use default.`
-						: `Path to the ${agent.binaryName} binary. Edit to override the auto-detected path.`}
+						? uiText('workflows.sessions.remoteCommandHelp', {
+								binary: agent.binaryName ?? agent.id,
+							})
+						: uiText('workflows.sessions.localBinaryHelp', {
+								binary: agent.binaryName ?? agent.id,
+							})}
 				</p>
 			</div>
 
@@ -711,7 +729,7 @@ export function AgentConfigPanel({
 				>
 					<div className="flex items-center gap-2 min-w-0 mb-2">
 						<span className="text-xs font-medium" style={{ color: theme.colors.textDim }}>
-							Claude Token Source
+							{uiText('workflows.sessions.claudeTokenSource')}
 						</span>
 						{isSshEnabled && (
 							<button
@@ -721,12 +739,12 @@ export function AgentConfigPanel({
 									refreshRemoteMaestroP();
 								}}
 								disabled={remoteMaestroPProbing}
-								title="Re-check whether maestro-p is installed on the remote host"
+								title={uiText('workflows.sessions.recheckMaestroP')}
 								className="flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded border disabled:opacity-50"
 								style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
 							>
 								<RefreshCw className={`w-3 h-3 ${remoteMaestroPProbing ? 'animate-spin' : ''}`} />
-								Re-check
+								{uiText('workflows.sessions.recheck')}
 							</button>
 						)}
 					</div>
@@ -741,9 +759,9 @@ export function AgentConfigPanel({
 						theme={theme}
 					/>
 					<p className="text-xs opacity-50 mt-2">
-						{CLAUDE_TOKEN_MODE_HINTS[displayClaudeTokenMode]}
+						{uiText(CLAUDE_TOKEN_MODE_HINTS[displayClaudeTokenMode])}
 						{isSshEnabled && displayClaudeTokenMode === 'interactive'
-							? ' Runs maestro-p on the remote host (must be on its PATH).'
+							? uiText('workflows.sessions.remoteMaestroPHelp')
 							: ''}
 					</p>
 					{remoteMaestroPMissing && (
@@ -751,7 +769,7 @@ export function AgentConfigPanel({
 							className="text-xs mt-2"
 							style={{ color: theme.colors.warning ?? theme.colors.accent }}
 						>
-							TUI (Max plan) is unavailable: maestro-p was not found on the remote host&apos;s PATH.{' '}
+							{uiText('workflows.sessions.remoteTuiUnavailable')}{' '}
 							<button
 								type="button"
 								onClick={(e) => {
@@ -761,9 +779,9 @@ export function AgentConfigPanel({
 								className="underline hover:no-underline"
 								style={{ color: 'inherit' }}
 							>
-								Install maestro-p
+								{uiText('workflows.sessions.installMaestroP')}
 							</button>{' '}
-							there to drive the Claude TUI, or use API.
+							{uiText('workflows.sessions.installMaestroPHelp')}
 						</p>
 					)}
 					{/* Local Maestro-P Path override is local-only: over SSH maestro-p
@@ -774,7 +792,7 @@ export function AgentConfigPanel({
 								className="block text-xs font-medium mb-2"
 								style={{ color: theme.colors.textDim }}
 							>
-								Maestro-P Path (optional)
+								{uiText('workflows.sessions.maestroPPath')}
 							</label>
 							<input
 								type="text"
@@ -788,8 +806,8 @@ export function AgentConfigPanel({
 							/>
 							<p className="text-xs opacity-50 mt-2">
 								{detectedMaestroPPath
-									? `Auto-detected: ${detectedMaestroPPath}. Override only if you want a different build.`
-									: 'No bundled maestro-p found. Point this at a built copy or rebuild Maestro.'}
+									? uiText('workflows.sessions.detectedMaestroP', { path: detectedMaestroPPath })
+									: uiText('workflows.sessions.noBundledMaestroP')}
 							</p>
 						</div>
 					)}
@@ -810,7 +828,7 @@ export function AgentConfigPanel({
 						style={{ color: theme.colors.textDim }}
 						htmlFor="opencode-agent-input"
 					>
-						OpenCode Agent (optional)
+						{uiText('workflows.sessions.opencodeAgent')}
 					</label>
 					<input
 						id="opencode-agent-input"
@@ -824,11 +842,11 @@ export function AgentConfigPanel({
 						style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 					/>
 					<p className="text-xs opacity-50 mt-2">
-						Runs as <span className="font-mono">opencode run --agent &lt;name&gt;</span> so this
-						Maestro agent keeps that OpenCode agent&apos;s persona, model, and instructions. Accepts
-						plugin-provided agents (oh-my-opencode and friends), which OpenCode resolves at run time
-						even when <span className="font-mono">opencode agent list</span> does not show them. The
-						value is stored in Custom Arguments below. Plan mode still forces{' '}
+						{uiText('workflows.sessions.runsAs')}{' '}
+						<span className="font-mono">opencode run --agent &lt;name&gt;</span>{' '}
+						{uiText('workflows.sessions.opencodeAgentHelp')}{' '}
+						<span className="font-mono">opencode agent list</span>{' '}
+						{uiText('workflows.sessions.opencodeAgentHelpEnd')}{' '}
 						<span className="font-mono">--agent plan</span>.
 					</p>
 				</div>
@@ -840,7 +858,7 @@ export function AgentConfigPanel({
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-					Custom Arguments (optional)
+					{uiText('workflows.sessions.customArguments')}
 				</label>
 				<div className="flex gap-2">
 					<input
@@ -855,7 +873,7 @@ export function AgentConfigPanel({
 					/>
 				</div>
 				<p className="text-xs opacity-50 mt-2">
-					Additional CLI arguments appended to all calls to this agent
+					{uiText('workflows.sessions.customArgumentsHelp')}
 				</p>
 			</div>
 
@@ -865,7 +883,7 @@ export function AgentConfigPanel({
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-					Environment Variables (optional)
+					{uiText('workflows.sessions.environmentVariables')}
 				</label>
 				<div className="space-y-2">
 					{/* Built-in env vars (read-only, shown when showBuiltInEnvVars is true) */}
@@ -889,7 +907,7 @@ export function AgentConfigPanel({
 											}}
 											onBlur={() => setTimeout(() => setShowingTooltip(null), 150)}
 											className="p-0.5 rounded hover:bg-white/10 transition-colors"
-											title="What is this?"
+											title={uiText('workflows.sessions.whatIsThis')}
 											style={{ color: theme.colors.accent }}
 										>
 											<HelpCircle className="w-3 h-3" />
@@ -906,7 +924,7 @@ export function AgentConfigPanel({
 													transform: 'translateX(-50%)',
 												}}
 											>
-												{envVar.description}
+												{uiText(envVar.descriptionKey)}
 											</div>
 										)}
 									</div>
@@ -918,7 +936,7 @@ export function AgentConfigPanel({
 									className="p-2 rounded text-xs font-mono italic whitespace-nowrap"
 									style={{ color: theme.colors.textDim }}
 								>
-									{envVar.value}
+									{uiText(envVar.valueKey)}
 								</div>
 							</div>
 						))}
@@ -936,8 +954,12 @@ export function AgentConfigPanel({
 										padding="p-2"
 										title={
 											off
-												? `Enable ${key || 'variable'} (currently not passed to this agent)`
-												: `Disable ${key || 'variable'} (keeps the value, stops passing it to this agent)`
+												? uiText('workflows.sessions.enableVariable', {
+														name: key || uiText('workflows.sessions.variable'),
+													})
+												: uiText('workflows.sessions.disableVariable', {
+														name: key || uiText('workflows.sessions.variable'),
+													})
 										}
 										color={off ? theme.colors.textDim : theme.colors.accent}
 									>
@@ -986,7 +1008,7 @@ export function AgentConfigPanel({
 										onEnvVarRemove(key, enabled);
 									}}
 									padding="p-2"
-									title="Remove variable"
+									title={uiText('workflows.sessions.removeVariable')}
 									color={theme.colors.textDim}
 								>
 									<Trash2 className="w-3 h-3" />
@@ -1005,12 +1027,11 @@ export function AgentConfigPanel({
 						style={{ color: theme.colors.textDim }}
 					>
 						<Plus className="w-3 h-3" />
-						Add Variable
+						{uiText('workflows.sessions.addVariable')}
 					</button>
 				</div>
 				<p className="text-xs opacity-50 mt-2">
-					Agent-specific environment variables (overrides global environment variables from
-					Settings). These are passed to all calls to this agent.
+					{uiText('workflows.sessions.agentEnvironmentHelp')}
 				</p>
 			</div>
 
@@ -1027,7 +1048,7 @@ export function AgentConfigPanel({
 							className="block text-xs font-medium mb-2"
 							style={{ color: theme.colors.textDim }}
 						>
-							{option.label}
+							{localizeAgentConfigLabel(option.label, uiText)}
 						</label>
 						{option.type === 'number' && (
 							<input
@@ -1081,7 +1102,7 @@ export function AgentConfigPanel({
 									style={{ accentColor: theme.colors.accent }}
 								/>
 								<span className="text-xs" style={{ color: theme.colors.textMain }}>
-									Enabled
+									{uiText('workflows.sessions.enabled')}
 								</span>
 							</label>
 						)}
@@ -1096,7 +1117,7 @@ export function AgentConfigPanel({
 									if (option.dynamic && loadingDynamicOptions) {
 										return (
 											<p className="text-xs" style={{ color: theme.colors.textDim }}>
-												Loading options...
+												{uiText('workflows.sessions.loadingOptions')}
 											</p>
 										);
 									}
@@ -1123,7 +1144,7 @@ export function AgentConfigPanel({
 												value={opt}
 												style={{ backgroundColor: theme.colors.bgMain }}
 											>
-												{opt || '(default)'}
+												{opt || uiText('workflows.sessions.defaultOption')}
 											</option>
 										))}
 									</select>
@@ -1138,7 +1159,9 @@ export function AgentConfigPanel({
 								{configOptionNotes[option.key]}
 							</p>
 						)}
-						<p className="text-xs opacity-50 mt-2">{option.description}</p>
+						<p className="text-xs opacity-50 mt-2">
+							{localizeAgentConfigLabel(option.description, uiText)}
+						</p>
 					</div>
 				))}
 
@@ -1155,7 +1178,7 @@ export function AgentConfigPanel({
 					data-testid="codex-auto-reset-option"
 				>
 					<label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-						Automatic Usage Resets
+						{uiText('workflows.sessions.automaticUsageResets')}
 					</label>
 					<label
 						className="flex items-center gap-2 cursor-pointer"
@@ -1167,17 +1190,13 @@ export function AgentConfigPanel({
 							onChange={(e) => onCodexAutoResetChange(e.target.checked)}
 							className="w-4 h-4"
 							style={{ accentColor: theme.colors.accent }}
-							aria-label="Automatically redeem a reset credit when usage limits are hit"
+							aria-label={uiText('workflows.sessions.redeemResetAria')}
 						/>
 						<span className="text-xs" style={{ color: theme.colors.textMain }}>
-							Redeem a reset credit when this agent hits its usage limit
+							{uiText('workflows.sessions.redeemReset')}
 						</span>
 					</label>
-					<p className="text-xs opacity-50 mt-2">
-						Off by default. Reset credits are granted by OpenAI, are limited, expire, and cannot be
-						refunded - so Maestro only spends one when the account is actually blocked and the reset
-						would take effect. Manage them under Usage Dashboard - OpenAI Usage.
-					</p>
+					<p className="text-xs opacity-50 mt-2">{uiText('workflows.sessions.redeemResetHelp')}</p>
 				</div>
 			)}
 		</div>

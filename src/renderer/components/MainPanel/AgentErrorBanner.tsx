@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React from 'react';
 import { AlertCircle, X } from 'lucide-react';
 import { GhostIconButton } from '../ui/GhostIconButton';
@@ -16,6 +17,7 @@ export const AgentErrorBanner = React.memo(function AgentErrorBanner({
 	onShowDetails,
 	onClear,
 }: AgentErrorBannerProps) {
+	const t = useT();
 	return (
 		<div
 			className="flex items-center gap-3 px-4 py-2 border-b shrink-0"
@@ -40,11 +42,11 @@ export const AgentErrorBanner = React.memo(function AgentErrorBanner({
 							color: '#ffffff',
 						}}
 					>
-						View Details
+						{t('workflows.shell.viewDetails')}
 					</button>
 				)}
 				{onClear && error.recoverable && (
-					<GhostIconButton onClick={onClear} title="Dismiss error">
+					<GhostIconButton onClick={onClear} title={t('workflows.shell.dismissError')}>
 						<X className="w-4 h-4" style={{ color: theme.colors.error }} />
 					</GhostIconButton>
 				)}

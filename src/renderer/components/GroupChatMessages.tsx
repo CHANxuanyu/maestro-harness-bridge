@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * GroupChatMessages.tsx
  *
@@ -92,6 +93,7 @@ export const GroupChatMessages = memo(
 		},
 		ref
 	) {
+		const t = useT();
 		// Group chat is an AI transcript, so it rides the AI Chat surface rather
 		// than inheriting whatever the app shell happens to be set to.
 		const { fontFamily: chatFontFamily, fontSize: chatFontSize } = useSurfaceTypography('chat');
@@ -309,7 +311,9 @@ export const GroupChatMessages = memo(
 							style={{ backgroundColor: theme.colors.warning }}
 						/>
 						<span className="text-sm" style={{ color: theme.colors.textDim }}>
-							{state === 'moderator-thinking' ? 'Moderator is thinking...' : 'Agent is working...'}
+							{state === 'moderator-thinking'
+								? t('workflows.shell.moderatorIsThinking')
+								: t('workflows.shell.agentIsWorking')}
 						</span>
 					</div>
 				</div>
@@ -321,7 +325,7 @@ export const GroupChatMessages = memo(
 				ref={setContainerRef}
 				tabIndex={0}
 				role="region"
-				aria-label="Group chat messages"
+				aria-label={t('workflows.shell.groupChatMessages')}
 				className="group-chat-messages flex-1 overflow-y-auto scrollbar-thin py-2 outline-none"
 				// A group chat IS an AI transcript, so it follows the AI Chat font
 				// like the main panel and the tiled panes do. Set on the scroll
@@ -375,28 +379,33 @@ export const GroupChatMessages = memo(
 						className="px-6 py-1.5 text-2xs text-center"
 						style={{ color: theme.colors.textDim, opacity: 0.7 }}
 					>
-						{hiddenCount} team message{hiddenCount !== 1 ? 's' : ''} hidden by Moderator Only
+						{hiddenCount} {t('workflows.shell.teamMessage')}
+						{hiddenCount !== 1 ? t('workflows.shell.pluralSuffix') : ''}{' '}
+						{t('workflows.shell.hiddenByModeratorOnly')}
 					</div>
 				)}
 				{visibleMessages.length === 0 && hiddenCount > 0 ? (
 					<div className="flex items-center justify-center h-full px-6">
 						<p className="text-sm text-center max-w-md" style={{ color: theme.colors.textDim }}>
-							Moderator Only is on, and this room has nothing but agent traffic so far. Switch to
-							Team Chat in the header to see all {hiddenCount} message{hiddenCount !== 1 ? 's' : ''}
-							.
+							{t('workflows.shell.moderatorOnlyIsOnAndThisRoomHas')} {hiddenCount}{' '}
+							{t('workflows.shell.message')}
+							{hiddenCount !== 1 ? t('workflows.shell.pluralSuffix') : ''}.
 						</p>
 					</div>
 				) : messages.length === 0 ? (
 					<div className="flex items-center justify-center h-full px-6">
 						<div className="text-center max-w-md space-y-3">
 							<p className="text-sm" style={{ color: theme.colors.textDim }}>
-								Messages you send go directly to the{' '}
-								<span style={{ color: theme.colors.warning }}>moderator</span>, who orchestrates the
-								conversation and decides when to involve other agents.
+								{t('workflows.shell.messagesYouSendGoDirectlyToThe')}{' '}
+								<span style={{ color: theme.colors.warning }}>
+									{t('workflows.shell.moderator2')}
+								</span>
+								{t('workflows.shell.whoOrchestratesTheConversationAndDecidesWhenTo')}
 							</p>
 							<p className="text-sm" style={{ color: theme.colors.textDim }}>
-								Use <span style={{ color: theme.colors.accent }}>@agent</span> to message a specific
-								agent directly at any time.
+								{t('workflows.shell.use')}{' '}
+								<span style={{ color: theme.colors.accent }}>{t('workflows.shell.agent')}</span>{' '}
+								{t('workflows.shell.toMessageASpecificAgentDirectlyAtAny')}
 							</p>
 						</div>
 					</div>
@@ -507,9 +516,9 @@ export const GroupChatMessages = memo(
 										{!isUser && (
 											<div className="text-xs font-medium mb-2" style={{ color: senderColor }}>
 												{msg.from === 'moderator'
-													? 'Moderator'
+													? t('workflows.shell.moderator')
 													: msg.from === 'system'
-														? 'System'
+														? t('workflows.shell.system')
 														: msg.from}
 											</div>
 										)}
@@ -529,7 +538,7 @@ export const GroupChatMessages = memo(
 													>
 														<img
 															src={displayImageSrc(img)}
-															alt={`Attached image ${imgIdx + 1}`}
+															alt={t('workflows.shell.extraAttachedImageValue', { p0: imgIdx + 1 })}
 															className="h-20 rounded border cursor-zoom-in block"
 															style={{
 																objectFit: 'contain',
@@ -574,7 +583,7 @@ export const GroupChatMessages = memo(
 													}}
 												>
 													<ChevronDown className="w-3 h-3" />
-													Show all {lineCount} lines
+													{t('workflows.shell.showAll')} {lineCount} {t('workflows.shell.lines')}
 												</button>
 											</div>
 										) : shouldCollapse && isExpanded ? (
@@ -617,7 +626,7 @@ export const GroupChatMessages = memo(
 													}}
 												>
 													<ChevronUp className="w-3 h-3" />
-													Show less
+													{t('workflows.shell.showLess')}
 												</button>
 											</div>
 										) : !markdownEditMode ? (
@@ -667,8 +676,12 @@ export const GroupChatMessages = memo(
 													}}
 													title={
 														markdownEditMode
-															? `Show formatted (${formatShortcutKeys(['Meta', 'e'])})`
-															: `Show plain text (${formatShortcutKeys(['Meta', 'e'])})`
+															? t('workflows.shell.showFormattedValue', {
+																	p0: formatShortcutKeys(['Meta', 'e']),
+																})
+															: t('workflows.shell.showPlainTextValue', {
+																	p0: formatShortcutKeys(['Meta', 'e']),
+																})
 													}
 												>
 													{markdownEditMode ? (
@@ -683,7 +696,7 @@ export const GroupChatMessages = memo(
 												onClick={() => copyToClipboard(msg.content)}
 												className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100"
 												style={{ color: theme.colors.textDim }}
-												title="Copy to clipboard"
+												title={t('workflows.shell.copyToClipboard')}
 											>
 												<Copy className="w-3.5 h-3.5" />
 											</button>
@@ -706,8 +719,8 @@ export const GroupChatMessages = memo(
 															}}
 															title={
 																publishedUrl
-																	? `Published as Gist: ${publishedUrl}`
-																	: 'Publish as GitHub Gist'
+																	? t('workflows.shell.publishedAsGistValue', { p0: publishedUrl })
+																	: t('workflows.shell.publishAsGithubGist')
 															}
 														>
 															<Share2 className="w-3.5 h-3.5" />

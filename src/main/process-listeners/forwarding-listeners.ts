@@ -70,24 +70,34 @@ export function setupForwardingListeners(
 	// Handle thinking/streaming content chunks from AI agents
 	// Emitted when agents produce partial text events (isPartial: true)
 	// Renderer decides whether to display based on tab's showThinking setting
-	processManager.on('thinking-chunk', (sessionId: string, content: string) => {
-		if (!content) return;
-		let entry = thinkingBuffers.get(sessionId);
-		if (!entry) {
-			entry = { content: '', timer: null };
-			thinkingBuffers.set(sessionId, entry);
-		}
-		entry.content += content;
+	processManager.on(
+		'thinking-chunk',
+		(sessionId: string, content: string, purpose?: 'commentary') => {
+			if (!content) return;
+			// Commentary is one complete public message. Preserve its boundary and
+			// flush preceding reasoning instead of concatenating the two channels.
+			if (purpose === 'commentary') {
+				flushThinking(sessionId);
+				safeSend('process:thinking-chunk', sessionId, content, purpose);
+				return;
+			}
+			let entry = thinkingBuffers.get(sessionId);
+			if (!entry) {
+				entry = { content: '', timer: null };
+				thinkingBuffers.set(sessionId, entry);
+			}
+			entry.content += content;
 
-		if (entry.content.length >= THINKING_CHUNK_FLUSH_SIZE) {
-			flushThinking(sessionId);
-			return;
-		}
+			if (entry.content.length >= THINKING_CHUNK_FLUSH_SIZE) {
+				flushThinking(sessionId);
+				return;
+			}
 
-		if (!entry.timer) {
-			entry.timer = setTimeout(() => flushThinking(sessionId), THINKING_CHUNK_FLUSH_INTERVAL_MS);
+			if (!entry.timer) {
+				entry.timer = setTimeout(() => flushThinking(sessionId), THINKING_CHUNK_FLUSH_INTERVAL_MS);
+			}
 		}
-	});
+	);
 
 	// Flush pending thinking content the moment the agent finishes a turn so
 	// the final tail isn't held back by the 50ms timer.

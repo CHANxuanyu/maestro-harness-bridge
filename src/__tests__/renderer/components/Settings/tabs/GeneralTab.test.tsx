@@ -30,6 +30,7 @@ import { mockTheme } from '../../../../helpers/mockTheme';
 // Mock platformUtils
 vi.mock('../../../../../renderer/utils/platformUtils', () => ({
 	getOpenInLabel: vi.fn(() => 'Open in Finder'),
+	getFileManagerName: vi.fn(() => 'Finder'),
 	isWindowsPlatform: vi.fn(() => false),
 	isMacOSPlatform: vi.fn(() => false),
 	isLinuxPlatform: vi.fn(() => false),

@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import {
 	X,
@@ -128,6 +129,7 @@ export const FileTab = memo(function FileTab({
 	sshRemote,
 	displayName,
 }: FileTabProps) {
+	const t = useT();
 	const [showCopied, setShowCopied] = useState<'path' | 'name' | null>(null);
 	const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -418,7 +420,7 @@ export const FileTab = memo(function FileTab({
 		>
 			{/* Unsaved edits indicator - pencil icon */}
 			{hasUnsavedEdits && (
-				<span title="Has unsaved changes">
+				<span title={t('workflows.shell.hasUnsavedChanges')}>
 					<Pencil className="w-3 h-3 shrink-0" style={{ color: theme.colors.warning }} />
 				</span>
 			)}
@@ -471,7 +473,9 @@ export const FileTab = memo(function FileTab({
 					onClick={handleCloseClick}
 					data-tab-close
 					className="p-0.5 rounded hover:bg-white/10 transition-colors shrink-0"
-					title={`Close tab${shortcutSuffix(tabShortcuts.closeTab?.keys)}`}
+					title={t('workflows.shell.closeTabvalue', {
+						p0: shortcutSuffix(tabShortcuts.closeTab?.keys),
+					})}
 				>
 					<X className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 				</button>
@@ -514,7 +518,7 @@ export const FileTab = memo(function FileTab({
 									style={{ color: theme.colors.textMain }}
 								>
 									<Edit2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-									Rename Tab
+									{t('workflows.shell.renameTab')}
 									{tabShortcuts.renameTab && (
 										<ShortcutHint keys={tabShortcuts.renameTab.keys} theme={theme} />
 									)}
@@ -531,7 +535,9 @@ export const FileTab = memo(function FileTab({
 							title={tab.path}
 						>
 							<Copy className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							{showCopied === 'path' ? 'Copied!' : 'Copy File Path'}
+							{showCopied === 'path'
+								? t('workflows.shell.copied')
+								: t('workflows.shell.copyFilePath')}
 						</button>
 
 						{/* Copy File Name */}
@@ -541,7 +547,9 @@ export const FileTab = memo(function FileTab({
 							style={{ color: theme.colors.textMain }}
 						>
 							<Clipboard className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							{showCopied === 'name' ? 'Copied!' : 'Copy File Name'}
+							{showCopied === 'name'
+								? t('workflows.shell.copied')
+								: t('workflows.shell.copyFileName')}
 						</button>
 
 						{/* Open in Default App */}
@@ -551,7 +559,7 @@ export const FileTab = memo(function FileTab({
 							style={{ color: theme.colors.textMain }}
 						>
 							<ExternalLink className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							Open in Default App
+							{t('workflows.shell.openInDefaultApp')}
 						</button>
 
 						{/* Reveal in Finder / Explorer - local-only, hidden over SSH */}
@@ -581,7 +589,9 @@ export const FileTab = memo(function FileTab({
 										color: publishedGist ? theme.colors.accent : theme.colors.textDim,
 									}}
 								/>
-								{publishedGist ? 'View Published Gist' : 'Publish as GitHub Gist'}
+								{publishedGist
+									? t('workflows.shell.viewPublishedGist')
+									: t('workflows.shell.publishAsGithubGist')}
 							</button>
 						)}
 
@@ -595,7 +605,7 @@ export const FileTab = memo(function FileTab({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Clock className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Snooze Tab
+								{t('workflows.shell.snoozeTab')}
 								{tabShortcuts.snoozeTab && (
 									<ShortcutHint keys={tabShortcuts.snoozeTab.keys} theme={theme} />
 								)}
@@ -615,7 +625,7 @@ export const FileTab = memo(function FileTab({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ChevronsLeft className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Move to First Position
+								{t('workflows.shell.moveToFirstPosition')}
 								{tabShortcuts.moveTabToStart && (
 									<ShortcutHint keys={tabShortcuts.moveTabToStart.keys} theme={theme} />
 								)}
@@ -630,7 +640,7 @@ export const FileTab = memo(function FileTab({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ChevronsRight className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Move to Last Position
+								{t('workflows.shell.moveToLastPosition')}
 								{tabShortcuts.moveTabToEnd && (
 									<ShortcutHint keys={tabShortcuts.moveTabToEnd.keys} theme={theme} />
 								)}
@@ -647,7 +657,7 @@ export const FileTab = memo(function FileTab({
 							style={{ color: theme.colors.textMain }}
 						>
 							<X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							Close Tab
+							{t('workflows.shell.closeTab')}
 							{tabShortcuts.closeTab && (
 								<ShortcutHint keys={tabShortcuts.closeTab.keys} theme={theme} />
 							)}
@@ -664,7 +674,7 @@ export const FileTab = memo(function FileTab({
 								disabled={totalTabs === 1}
 							>
 								<X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Close Other Tabs
+								{t('workflows.shell.closeOtherTabs')}
 								{tabShortcuts.closeOtherTabs && (
 									<ShortcutHint keys={tabShortcuts.closeOtherTabs.keys} theme={theme} />
 								)}
@@ -682,7 +692,7 @@ export const FileTab = memo(function FileTab({
 								disabled={tabIndex === 0}
 							>
 								<ChevronsLeft className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Close Tabs to Left
+								{t('workflows.shell.closeTabsToLeft')}
 								{tabShortcuts.closeTabsLeft && (
 									<ShortcutHint keys={tabShortcuts.closeTabsLeft.keys} theme={theme} />
 								)}
@@ -702,7 +712,7 @@ export const FileTab = memo(function FileTab({
 								disabled={tabIndex === (totalTabs ?? 1) - 1}
 							>
 								<ChevronsRight className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Close Tabs to Right
+								{t('workflows.shell.closeTabsToRight')}
 								{tabShortcuts.closeTabsRight && (
 									<ShortcutHint keys={tabShortcuts.closeTabsRight.keys} theme={theme} />
 								)}

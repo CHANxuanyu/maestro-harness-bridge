@@ -19,6 +19,7 @@ import {
 import { resetEffortRejections } from '../../../../../shared/effortRejection';
 import { resolveEffortLevel } from '../../../../../shared/modelTiers';
 import { useNotificationStore } from '../../../../../renderer/stores/notificationStore';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 
 let handler: ((sessionId: string, error: any) => void) | undefined;
 let authExpiredHandler: ((payload: any) => void) | undefined;
@@ -103,6 +104,35 @@ function makeDeps() {
 }
 
 describe('useAgentErrorListener', () => {
+	it('shows an occupied Codex session in Chinese without losing its native id or raw error', () => {
+		const nativeId = '00000000-0000-7000-a000-000000000001';
+		const tab = createMockAITab({ id: 'tab-1', agentSessionId: nativeId });
+		const session = createMockSession({
+			id: 'sess-1',
+			toolType: 'codex',
+			aiTabs: [tab],
+			activeTabId: 'tab-1',
+		});
+		useSessionStore.setState({ sessions: [session] });
+		const previousLanguage = useSettingsStore.getState().uiLanguage;
+		useSettingsStore.setState({ uiLanguage: 'zh-CN' });
+		try {
+			renderHook(() => useAgentErrorListener(makeDeps()));
+			const raw = {
+				stderr: `thread-store conflict: thread ${nativeId} already has an active writer`,
+			};
+			handler!('sess-1-ai-tab-1', { ...baseError, type: 'session_busy', agentId: 'codex', raw });
+			const updated = useSessionStore.getState().sessions[0];
+			expect(updated.aiTabs[0].agentSessionId).toBe(nativeId);
+			expect(updated.aiTabs[0].logs.at(-1)?.text).toContain('正在被另一个 Codex');
+			expect(updated.aiTabs[0].logs.at(-1)?.recoveryAction).toBeUndefined();
+			expect(updated.agentError?.raw).toEqual(raw);
+			expect(useRetryStore.getState().retries).toEqual({});
+		} finally {
+			useSettingsStore.setState({ uiLanguage: previousLanguage });
+		}
+	});
+
 	it('opens the agentError modal and stamps session error state', () => {
 		const tab = createMockAITab({ id: 'tab-1' });
 		const session = createMockSession({ id: 'sess-1', aiTabs: [tab], activeTabId: 'tab-1' });
@@ -269,6 +299,35 @@ describe('useAgentErrorListener', () => {
 		// Modal should NOT open for session_not_found
 		const entry = useModalStore.getState().modals.get('agentError');
 		expect(entry?.open ?? false).toBe(false);
+	});
+
+	// The interrupted-exit "session not found" is now stopped at its source (the
+	// backend skips exit error detection for interrupted processes). The renderer
+	// deliberately has no Stop-window heuristic of its own: a missing session
+	// reported for the NEXT turn, seconds after a Stop, is a real failure and must
+	// be surfaced, not excused because a Stop happened recently.
+	it('does not mask a real session_not_found on the turn after a Stop', () => {
+		const tab = createMockAITab({
+			id: 'tab-1',
+			agentSessionId: 'native-id',
+			state: 'idle',
+			logs: [
+				{ id: 'u1', timestamp: 1, source: 'user', text: 'first' },
+				{ id: 'c1', timestamp: 2, source: 'system', text: 'Canceled by user' },
+				{ id: 'u2', timestamp: Date.now(), source: 'user', text: 'continue please' },
+			],
+		});
+		const session = createMockSession({ id: 'sess-1', aiTabs: [tab], activeTabId: 'tab-1' });
+		useSessionStore.setState({ sessions: [session] } as any);
+
+		renderHook(() => useAgentErrorListener(makeDeps()));
+		handler!('sess-1-ai-tab-1', { ...baseError, type: 'session_not_found' });
+
+		const tabAfter = useSessionStore.getState().sessions[0].aiTabs[0];
+		expect(tabAfter.agentSessionId).toBeNull();
+		expect(tabAfter.logs.find((l) => l.recoveryAction)?.recoveryAction?.lastUserPrompt).toBe(
+			'continue please'
+		);
 	});
 
 	it('stamps recoveryAction with the last user prompt on session_not_found', () => {

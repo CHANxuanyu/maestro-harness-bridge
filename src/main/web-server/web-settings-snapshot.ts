@@ -8,6 +8,7 @@
 import type { SettingsStoreInterface } from '../stores/types';
 import type { Shortcut } from '../../shared/shortcut-types';
 import type { WebSettings } from './types';
+import { DEFAULT_UI_LANGUAGE, isUiLanguagePreference } from '../../shared/i18n';
 
 /**
  * Settings keys whose changes should be broadcast to web clients so they
@@ -17,6 +18,7 @@ import type { WebSettings } from './types';
  * field there means adding its underlying key here.
  */
 export const WEB_SETTINGS_BROADCAST_KEYS: ReadonlySet<string> = new Set([
+	'uiLanguage',
 	'activeThemeId',
 	'fontSize',
 	'enterToSendAI',
@@ -36,7 +38,9 @@ export const WEB_SETTINGS_BROADCAST_KEYS: ReadonlySet<string> = new Set([
  * with the same fallback the desktop UI uses.
  */
 export function buildWebSettingsSnapshot(settingsStore: SettingsStoreInterface): WebSettings {
+	const uiLanguage = settingsStore.get('uiLanguage', DEFAULT_UI_LANGUAGE);
 	return {
+		uiLanguage: isUiLanguagePreference(uiLanguage) ? uiLanguage : DEFAULT_UI_LANGUAGE,
 		theme: settingsStore.get('activeThemeId', 'dracula') as string,
 		fontSize: settingsStore.get('fontSize', 14) as number,
 		enterToSendAI: settingsStore.get('enterToSendAI', false) as boolean,

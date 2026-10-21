@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, {
 	forwardRef,
 	useCallback,
@@ -230,6 +231,7 @@ export const BrowserTabView = React.memo(
 		{ tab, theme, onUpdateTab, isActive = true },
 		ref
 	) {
+		const t = useT();
 		const webviewRef = useRef<ElectronWebviewElement | null>(null);
 		const hostRef = useRef<HTMLDivElement | null>(null);
 		const isDomReadyRef = useRef(false);
@@ -943,16 +945,20 @@ export const BrowserTabView = React.memo(
 						webviewRef.current?.reload();
 					} else {
 						setAddressError(
-							`Could not clear browsing data: ${res?.error ?? 'not supported by this build'}`
+							t('workflows.shell.extraCouldNotClearBrowsingDataValue', {
+								p0: res?.error ?? t('workflows.input.unsupportedBuild'),
+							})
 						);
 					}
 				} catch (err) {
 					setAddressError(
-						`Could not clear browsing data: ${err instanceof Error ? err.message : String(err)}`
+						t('workflows.shell.extraCouldNotClearBrowsingDataValue', {
+							p0: err instanceof Error ? err.message : String(err),
+						})
 					);
 				}
 			})();
-		}, [clearArmed, tab.partition]);
+		}, [t, clearArmed, tab.partition]);
 
 		return (
 			<div className="flex-1 min-h-0 flex flex-col" data-testid="browser-tab-view">
@@ -977,7 +983,7 @@ export const BrowserTabView = React.memo(
 							disabled={!tab.canGoBack}
 							className="flex items-center justify-center w-8 h-8 rounded transition-colors disabled:opacity-40"
 							style={{ color: theme.colors.textMain }}
-							title="Back"
+							title={t('workflows.shell.back')}
 						>
 							<ArrowLeft className="w-4 h-4" />
 						</button>
@@ -987,7 +993,7 @@ export const BrowserTabView = React.memo(
 							disabled={!tab.canGoForward}
 							className="flex items-center justify-center w-8 h-8 rounded transition-colors disabled:opacity-40"
 							style={{ color: theme.colors.textMain }}
-							title="Forward"
+							title={t('workflows.shell.forward')}
 						>
 							<ArrowRight className="w-4 h-4" />
 						</button>
@@ -996,13 +1002,13 @@ export const BrowserTabView = React.memo(
 							onClick={handleReload}
 							className="flex items-center justify-center w-8 h-8 rounded transition-colors"
 							style={{ color: theme.colors.textMain }}
-							title={tab.isLoading ? 'Stop' : 'Reload'}
+							title={tab.isLoading ? t('workflows.shell.stop') : t('workflows.shell.reload')}
 						>
 							{tab.isLoading ? <Spinner size={16} /> : <RotateCw className="w-4 h-4" />}
 						</button>
 						<form className="flex-1 min-w-0" onSubmit={handleSubmit}>
 							<label className="sr-only" htmlFor={`browser-tab-address-${tab.id}`}>
-								Browser URL
+								{t('workflows.shell.browserUrl')}
 							</label>
 							<div className="flex flex-col gap-1">
 								<div
@@ -1014,12 +1020,12 @@ export const BrowserTabView = React.memo(
 								>
 									{tab.ephemeral ? (
 										<VenetianMask
-											aria-label="Incognito tab"
+											aria-label={t('workflows.shell.incognitoTab')}
 											className="w-4 h-4 shrink-0"
 											style={{ color: theme.colors.textDim }}
 											data-testid="browser-tab-incognito-badge"
 										>
-											<title>Incognito tab - browsing data is kept in memory only</title>
+											<title>{t('workflows.shell.incognitoTabBrowsingDataIsKeptInMemory')}</title>
 										</VenetianMask>
 									) : null}
 									{tab.favicon ? (
@@ -1029,7 +1035,7 @@ export const BrowserTabView = React.memo(
 									)}
 									<input
 										id={`browser-tab-address-${tab.id}`}
-										aria-label="Browser URL"
+										aria-label={t('workflows.shell.browserUrl')}
 										aria-invalid={addressError ? 'true' : 'false'}
 										value={addressValue}
 										onChange={(event) => {
@@ -1053,7 +1059,7 @@ export const BrowserTabView = React.memo(
 										}}
 										className="w-full bg-transparent outline-none text-sm"
 										style={{ color: theme.colors.textMain }}
-										placeholder="Enter a URL or search term"
+										placeholder={t('workflows.shell.enterAUrlOrSearchTerm')}
 									/>
 								</div>
 								{addressError ? (
@@ -1069,7 +1075,7 @@ export const BrowserTabView = React.memo(
 							disabled={tab.url === DEFAULT_BROWSER_TAB_URL}
 							className="flex items-center justify-center w-8 h-8 rounded transition-colors disabled:opacity-40"
 							style={{ color: theme.colors.textMain }}
-							title="Open in External Browser"
+							title={t('workflows.shell.openInExternalBrowser')}
 						>
 							<ExternalLink className="w-4 h-4" />
 						</button>
@@ -1082,8 +1088,8 @@ export const BrowserTabView = React.memo(
 							}}
 							title={
 								tab.hiddenFromAgent
-									? 'Hidden from agents - click to expose this tab to coworking agents'
-									: 'Visible to agents - click to hide this tab from coworking agents'
+									? t('workflows.shell.hiddenFromAgentsClickToExposeThisTab')
+									: t('workflows.shell.visibleToAgentsClickToHideThisTab')
 							}
 							aria-pressed={tab.hiddenFromAgent === true}
 						>
@@ -1099,8 +1105,8 @@ export const BrowserTabView = React.memo(
 							}}
 							title={
 								clearArmed
-									? 'Click again to clear ALL browsing data (cookies, storage, logins) for this agent\u2019s browser session'
-									: 'Clear browsing data for this agent\u2019s browser session (cookies, storage, logins - shared by all its tabs)'
+									? t('workflows.shell.clickAgainToClearAllBrowsingDataCookies')
+									: t('workflows.shell.clearBrowsingDataForThisAgentSBrowser')
 							}
 							aria-pressed={clearArmed}
 							data-testid="browser-tab-clear-session-data"
@@ -1137,7 +1143,7 @@ export const BrowserTabView = React.memo(
 								</a>
 							) : null}
 							<p className="text-sm" style={{ color: theme.colors.textDim }}>
-								Browser tabs are available in the desktop app
+								{t('workflows.shell.browserTabsAreAvailableInTheDesktopApp')}
 							</p>
 						</div>
 					) : (
@@ -1167,7 +1173,7 @@ export const BrowserTabView = React.memo(
 							<input
 								ref={findInputRef}
 								type="text"
-								aria-label="Find in page"
+								aria-label={t('workflows.shell.findInPage')}
 								value={findQuery}
 								onChange={(event) => setFindQuery(event.target.value)}
 								onKeyDown={(event) => {
@@ -1202,7 +1208,7 @@ export const BrowserTabView = React.memo(
 								}}
 								className="bg-transparent outline-none text-sm min-w-[180px]"
 								style={{ color: theme.colors.textMain }}
-								placeholder="Find in page"
+								placeholder={t('workflows.shell.findInPage')}
 							/>
 							<span
 								className="text-xs tabular-nums px-1"
@@ -1221,8 +1227,8 @@ export const BrowserTabView = React.memo(
 								disabled={findMatches.total === 0}
 								className="flex items-center justify-center w-6 h-6 rounded transition-colors disabled:opacity-40"
 								style={{ color: theme.colors.textMain }}
-								title="Previous match (Shift+Enter)"
-								aria-label="Previous match"
+								title={t('workflows.shell.previousMatchShiftEnter')}
+								aria-label={t('workflows.shell.previousMatch')}
 							>
 								<ChevronUp className="w-4 h-4" />
 							</button>
@@ -1232,8 +1238,8 @@ export const BrowserTabView = React.memo(
 								disabled={findMatches.total === 0}
 								className="flex items-center justify-center w-6 h-6 rounded transition-colors disabled:opacity-40"
 								style={{ color: theme.colors.textMain }}
-								title="Next match (Enter)"
-								aria-label="Next match"
+								title={t('workflows.shell.nextMatchEnter')}
+								aria-label={t('workflows.shell.nextMatch')}
 							>
 								<ChevronDown className="w-4 h-4" />
 							</button>
@@ -1242,8 +1248,8 @@ export const BrowserTabView = React.memo(
 								onClick={closeFind}
 								className="flex items-center justify-center w-6 h-6 rounded transition-colors"
 								style={{ color: theme.colors.textMain }}
-								title="Close (Esc)"
-								aria-label="Close find bar"
+								title={t('workflows.shell.closeEsc')}
+								aria-label={t('workflows.shell.closeFindBar')}
 							>
 								<X className="w-4 h-4" />
 							</button>

@@ -1,3 +1,5 @@
+import { localizeHistoryLabel } from '../i18n/historyLabels';
+import { useT } from '../i18n';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Check } from 'lucide-react';
 import type { Theme } from '../types';
@@ -43,6 +45,7 @@ export const SessionActivityGraph: React.FC<SessionActivityGraphProps> = ({
 	onLookbackChange,
 	className = '',
 }) => {
+	const uiText = useT();
 	const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 	const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 	const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -191,7 +194,7 @@ export const SessionActivityGraph: React.FC<SessionActivityGraphProps> = ({
 					label: new Date(startTime).toLocaleDateString([], { month: 'short', day: 'numeric' }),
 					index: 0,
 				},
-				{ label: 'Now', index: bucketCount - 1 },
+				{ label: uiText('workflows.sessions.history.now'), index: bucketCount - 1 },
 			];
 		} else if (lookbackHours <= 24) {
 			return [
@@ -206,7 +209,7 @@ export const SessionActivityGraph: React.FC<SessionActivityGraphProps> = ({
 			return [
 				{ label: `${days}d`, index: 0 },
 				{ label: `${Math.floor(days / 2)}d`, index: Math.floor(bucketCount / 2) },
-				{ label: 'Now', index: bucketCount - 1 },
+				{ label: uiText('workflows.sessions.history.now'), index: bucketCount - 1 },
 			];
 		} else {
 			// Longer periods - show start/end
@@ -216,7 +219,7 @@ export const SessionActivityGraph: React.FC<SessionActivityGraphProps> = ({
 			});
 			return [
 				{ label: startLabel, index: 0 },
-				{ label: 'Now', index: bucketCount - 1 },
+				{ label: uiText('workflows.sessions.history.now'), index: bucketCount - 1 },
 			];
 		}
 	};
@@ -228,7 +231,12 @@ export const SessionActivityGraph: React.FC<SessionActivityGraphProps> = ({
 			className={`flex-1 min-w-0 flex flex-col relative ${className}`}
 			title={
 				hoveredIndex === null
-					? `${lookbackConfig.label}: ${totalSessions} session${totalSessions !== 1 ? 's' : ''} (right-click to change)`
+					? uiText(
+							totalSessions === 1
+								? 'workflows.sessions.history.sessionGraphOne'
+								: 'workflows.sessions.history.sessionGraphMany',
+							{ period: localizeHistoryLabel(lookbackConfig.label, uiText), count: totalSessions }
+						)
 					: undefined
 			}
 			onContextMenu={handleContextMenu}
@@ -251,7 +259,7 @@ export const SessionActivityGraph: React.FC<SessionActivityGraphProps> = ({
 						className="px-3 py-1 text-2xs font-bold uppercase"
 						style={{ color: theme.colors.textDim }}
 					>
-						Lookback Period
+						{uiText('workflows.sessions.history.lookbackPeriod')}
 					</div>
 					{LOOKBACK_OPTIONS.map((option) => (
 						<button
@@ -265,7 +273,7 @@ export const SessionActivityGraph: React.FC<SessionActivityGraphProps> = ({
 								setContextMenu(null);
 							}}
 						>
-							{option.label}
+							{localizeHistoryLabel(option.label, uiText)}
 							{option.hours === lookbackHours && (
 								<Check className="w-3 h-3" style={{ color: theme.colors.accent }} />
 							)}
@@ -295,7 +303,9 @@ export const SessionActivityGraph: React.FC<SessionActivityGraphProps> = ({
 						{getTimeRangeLabel(hoveredIndex)}
 					</div>
 					<div className="flex items-center justify-between gap-3">
-						<span style={{ color: theme.colors.textDim }}>Sessions</span>
+						<span style={{ color: theme.colors.textDim }}>
+							{uiText('workflows.sessions.history.sessionsLabel')}
+						</span>
 						<span className="font-bold" style={{ color: theme.colors.accent }}>
 							{bucketData[hoveredIndex]}
 						</span>

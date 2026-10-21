@@ -763,9 +763,11 @@ export async function sendWizardMessage(
 			// This receives parsed thinking content (isPartial text) that's already extracted
 			if (callbacks?.onThinkingChunk) {
 				thinkingListenerCleanup = window.maestro.process.onThinkingChunk(
-					(receivedSessionId: string, content: string) => {
+					(receivedSessionId: string, content: string, purpose?: 'commentary') => {
 						if (receivedSessionId === session.sessionId && content) {
 							resetTimeout();
+							// Public progress keeps the turn alive but is not reasoning.
+							if (purpose === 'commentary') return;
 							try {
 								callbacks.onThinkingChunk!(content);
 							} catch (err) {

@@ -21,6 +21,7 @@ import React, { useState, useCallback } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { FolderX, Plus, X, Check, FileText } from 'lucide-react';
 import type { Theme } from '../../types';
+import { useT, type MessageKey } from '../../i18n';
 
 export interface IgnorePatternsSectionProps {
 	/** Theme object for styling */
@@ -67,19 +68,21 @@ export function IgnorePatternsSection({
 	onReset,
 	hideEyebrow = false,
 }: IgnorePatternsSectionProps) {
-	// Local state for the new pattern input
+	const t = useT();
+	// Local state for the new pattern input. The error is stored as a catalog
+	// key so a language switch while it is showing re-renders it translated.
 	const [newPattern, setNewPattern] = useState('');
-	const [inputError, setInputError] = useState<string | null>(null);
+	const [inputError, setInputError] = useState<MessageKey | null>(null);
 
 	// Handle adding a new pattern
 	const handleAddPattern = useCallback(() => {
 		const trimmedPattern = newPattern.trim();
 		if (!trimmedPattern) {
-			setInputError('Pattern cannot be empty');
+			setInputError('settings.ignore.errorEmpty');
 			return;
 		}
 		if (ignorePatterns.includes(trimmedPattern)) {
-			setInputError('Pattern already exists');
+			setInputError('settings.ignore.errorExists');
 			return;
 		}
 		onIgnorePatternsChange([...ignorePatterns, trimmedPattern]);
@@ -130,7 +133,9 @@ export function IgnorePatternsSection({
 			{/* Content */}
 			<div className="flex-1 min-w-0">
 				{!hideEyebrow && (
-					<p className="text-2xs uppercase font-bold opacity-50 mb-1">File Indexing</p>
+					<p className="text-2xs uppercase font-bold opacity-50 mb-1">
+						{t('settings.display.indexing.heading')}
+					</p>
 				)}
 				<p className="font-semibold mb-1">{title}</p>
 				<p className="text-xs opacity-70 mb-3">{description}</p>
@@ -157,12 +162,12 @@ export function IgnorePatternsSection({
 							<div className="flex items-center gap-1.5">
 								<FileText className="w-4 h-4" style={{ color: theme.colors.textDim }} />
 								<span className="text-sm" style={{ color: theme.colors.textMain }}>
-									Honor .gitignore
+									{t('settings.ignore.honorGitignore')}
 								</span>
 							</div>
 						</label>
 						<p className="text-xs mt-1 ml-7" style={{ color: theme.colors.textDim }}>
-							When enabled, patterns from .gitignore files will also be excluded from indexing.
+							{t('settings.ignore.honorGitignoreDescription')}
 						</p>
 					</div>
 				)}
@@ -171,7 +176,7 @@ export function IgnorePatternsSection({
 				{ignorePatterns.length > 0 && (
 					<div className="space-y-1.5 mb-3">
 						<p className="text-xs font-medium" style={{ color: theme.colors.textDim }}>
-							Active patterns:
+							{t('settings.ignore.active')}
 						</p>
 						<div className="flex flex-wrap gap-2">
 							{ignorePatterns.map((pattern) => (
@@ -190,7 +195,7 @@ export function IgnorePatternsSection({
 										onClick={() => handleRemovePattern(pattern)}
 										className="p-0.5 rounded hover:bg-white/10 transition-colors ml-1"
 										style={{ color: theme.colors.error }}
-										title="Remove pattern"
+										title={t('settings.ignore.remove')}
 									>
 										<X className="w-3 h-3" />
 									</button>
@@ -207,7 +212,7 @@ export function IgnorePatternsSection({
 						style={{ borderColor: theme.colors.border }}
 					>
 						<p className="text-xs" style={{ color: theme.colors.textDim }}>
-							No ignore patterns configured. All folders will be indexed.
+							{t('settings.ignore.empty')}
 						</p>
 					</div>
 				)}
@@ -223,7 +228,7 @@ export function IgnorePatternsSection({
 								setInputError(null);
 							}}
 							onKeyDown={handleKeyDown}
-							placeholder="Enter glob pattern (e.g., node_modules, *.log)"
+							placeholder={t('settings.ignore.placeholder')}
 							className="w-full px-3 py-2 rounded text-sm font-mono outline-none"
 							style={{
 								backgroundColor: theme.colors.bgActivity,
@@ -237,7 +242,7 @@ export function IgnorePatternsSection({
 								className="absolute -bottom-4 left-0 text-2xs"
 								style={{ color: theme.colors.error }}
 							>
-								{inputError}
+								{t(inputError)}
 							</p>
 						)}
 					</div>
@@ -252,7 +257,7 @@ export function IgnorePatternsSection({
 						}}
 					>
 						<Plus className="w-4 h-4" />
-						Add
+						{t('common.add')}
 					</button>
 				</div>
 
@@ -263,7 +268,7 @@ export function IgnorePatternsSection({
 					className="text-xs hover:underline"
 					style={{ color: theme.colors.textDim }}
 				>
-					Reset to defaults ({defaultsLabel})
+					{t('settings.ignore.reset', { defaults: defaultsLabel })}
 				</button>
 			</div>
 		</div>

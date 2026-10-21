@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * GroupChatInfoOverlay.tsx
  *
@@ -50,6 +51,7 @@ interface InfoRowProps {
 }
 
 function InfoRow({ theme, label, value, onCopy }: InfoRowProps) {
+	const t = useT();
 	return (
 		<div className="flex items-start justify-between gap-4 py-2">
 			<span className="text-sm shrink-0" style={{ color: theme.colors.textDim }}>
@@ -68,7 +70,7 @@ function InfoRow({ theme, label, value, onCopy }: InfoRowProps) {
 						onClick={onCopy}
 						className="p-1 rounded hover:bg-white/10 transition-colors shrink-0"
 						style={{ color: theme.colors.textDim }}
-						title="Copy to clipboard"
+						title={t('workflows.shell.copyToClipboard')}
 					>
 						<Copy className="w-3 h-3" />
 					</button>
@@ -116,6 +118,7 @@ export function GroupChatInfoOverlay({
 	onClose,
 	onOpenModeratorSession,
 }: GroupChatInfoOverlayProps): JSX.Element | null {
+	const t = useT();
 	const [isExporting, setIsExporting] = useState(false);
 	const [history, setHistory] = useState<GroupChatHistoryEntry[]>([]);
 
@@ -199,12 +202,19 @@ export function GroupChatInfoOverlay({
 	const activity = useMemo(() => computeGroupChatActivity(history), [history]);
 
 	const workingTitle = useMemo(() => {
-		const span = `Chat spans ${formatDurationCompact(stats.spanMs)} since the first message.`;
-		if (!activity.totalTurns) return `No turns recorded yet. ${span}`;
+		const span = t('workflows.shell.extraChatSpansValueSinceTheFirstMessage', {
+			p0: formatDurationCompact(stats.spanMs),
+		});
+		if (!activity.totalTurns)
+			return t('workflows.shell.extraNoTurnsRecordedYetValue', { p0: span });
 		return activity.measuredTurns === activity.totalTurns
-			? `Time agents spent working, idle gaps excluded. ${span}`
-			: `Time agents spent working, idle gaps excluded. ${activity.totalTurns - activity.measuredTurns} of ${activity.totalTurns} turns predate per-turn timing, so their work is estimated from how close together they ran. ${span}`;
-	}, [activity, stats.spanMs]);
+			? t('workflows.shell.extraTimeAgentsSpentWorkingIdleGapsExcludedValue', { p0: span })
+			: t('workflows.shell.extraTimeAgentsSpentWorkingIdleGapsExcludedValue2', {
+					p0: activity.totalTurns - activity.measuredTurns,
+					p1: activity.totalTurns,
+					p2: span,
+				});
+	}, [t, activity, stats.spanMs]);
 
 	if (!isOpen) return null;
 
@@ -213,7 +223,7 @@ export function GroupChatInfoOverlay({
 			theme={theme}
 			// The chat name lives here rather than in the header row, which had no
 			// room for it on a phone. See GroupChatHeader's left zone.
-			title={`Group Chat: ${groupChat.name}`}
+			title={t('workflows.shell.groupChatValue', { p0: groupChat.name })}
 			priority={MODAL_PRIORITIES.GROUP_CHAT_INFO}
 			onClose={onClose}
 			width={600}
@@ -225,25 +235,25 @@ export function GroupChatInfoOverlay({
 					<StatCard
 						theme={theme}
 						icon={<Users className="w-5 h-5" />}
-						label="Agents"
+						label={t('workflows.shell.agents')}
 						value={stats.participantCount}
 					/>
 					<StatCard
 						theme={theme}
 						icon={<MessageSquare className="w-5 h-5" />}
-						label="Messages"
+						label={t('workflows.shell.messages')}
 						value={stats.totalMessages}
 					/>
 					<StatCard
 						theme={theme}
 						icon={<Bot className="w-5 h-5" />}
-						label="Agent Replies"
+						label={t('workflows.shell.agentReplies')}
 						value={stats.agentMessages}
 					/>
 					<StatCard
 						theme={theme}
 						icon={<Clock className="w-5 h-5" />}
-						label="Working"
+						label={t('workflows.shell.working')}
 						value={formatDurationCompact(activity.workingTimeMs)}
 						title={workingTitle}
 					/>
@@ -253,23 +263,30 @@ export function GroupChatInfoOverlay({
 					<StatCard
 						theme={theme}
 						icon={<Coins className="w-5 h-5" />}
-						label="Tokens"
+						label={t('workflows.shell.tokens')}
 						value={activity.turnsWithTokens > 0 ? formatTokens(activity.tokenCount) : '-'}
 						title={
 							activity.turnsWithTokens > 0
-								? `${activity.tokenCount.toLocaleString()} tokens across ${activity.turnsWithTokens} of ${activity.totalTurns} turns (input, output, and cache).`
-								: 'No turn in this chat reported token usage yet.'
+								? t('workflows.shell.valueTokensAcrossValueOfValueTurnsInput', {
+										p0: activity.tokenCount.toLocaleString(),
+										p1: activity.turnsWithTokens,
+										p2: activity.totalTurns,
+									})
+								: t('workflows.shell.noTurnInThisChatReportedTokenUsage')
 						}
 					/>
 					<StatCard
 						theme={theme}
 						icon={<DollarSign className="w-5 h-5" />}
-						label="Cost"
+						label={t('workflows.shell.cost')}
 						value={activity.turnsWithCost > 0 ? formatCost(activity.costUsd) : '-'}
 						title={
 							activity.turnsWithCost > 0
-								? `Reported by ${activity.turnsWithCost} of ${activity.totalTurns} turns. Subscription-billed agents report nothing.`
-								: 'No turn in this chat reported a cost.'
+								? t('workflows.shell.reportedByValueOfValueTurnsSubscriptionBilled', {
+										p0: activity.turnsWithCost,
+										p1: activity.totalTurns,
+									})
+								: t('workflows.shell.noTurnInThisChatReportedACost')
 						}
 					/>
 				</div>
@@ -280,27 +297,27 @@ export function GroupChatInfoOverlay({
 				<div className="space-y-1">
 					<InfoRow
 						theme={theme}
-						label="Group Chat ID"
+						label={t('workflows.shell.groupChatId')}
 						value={groupChat.id}
 						onCopy={() => copyToClipboard(groupChat.id)}
 					/>
 
 					<InfoRow
 						theme={theme}
-						label="Created"
+						label={t('workflows.shell.created')}
 						value={new Date(groupChat.createdAt).toLocaleString()}
 					/>
 
 					<InfoRow
 						theme={theme}
-						label="Chat Log"
+						label={t('workflows.shell.chatLog')}
 						value={groupChat.logPath}
 						onCopy={() => copyToClipboard(groupChat.logPath)}
 					/>
 
 					<InfoRow
 						theme={theme}
-						label="Images Directory"
+						label={t('workflows.shell.imagesDirectory')}
 						value={groupChat.imagesDir}
 						onCopy={() => copyToClipboard(groupChat.imagesDir)}
 					/>
@@ -310,12 +327,16 @@ export function GroupChatInfoOverlay({
 
 				{/* Moderator Section */}
 				<div className="space-y-1">
-					<InfoRow theme={theme} label="Moderator Agent" value={groupChat.moderatorAgentId} />
+					<InfoRow
+						theme={theme}
+						label={t('workflows.shell.moderatorAgent')}
+						value={groupChat.moderatorAgentId}
+					/>
 
 					{/* Moderator Session - clickable to open in direct agent view */}
 					<div className="flex items-start justify-between gap-4 py-2">
 						<span className="text-sm shrink-0" style={{ color: theme.colors.textDim }}>
-							Moderator Session
+							{t('workflows.shell.moderatorSession')}
 						</span>
 						<div className="flex items-center gap-2 min-w-0">
 							{groupChat.moderatorSessionId ? (
@@ -327,7 +348,7 @@ export function GroupChatInfoOverlay({
 										}}
 										className="text-sm font-mono truncate text-right hover:underline flex items-center gap-1"
 										style={{ color: theme.colors.accent }}
-										title="Open moderator session in direct agent view"
+										title={t('workflows.shell.openModeratorSessionInDirectAgentView')}
 									>
 										<span className="truncate max-w-[280px]">{groupChat.moderatorSessionId}</span>
 										<ExternalLink className="w-3 h-3 shrink-0" />
@@ -336,7 +357,7 @@ export function GroupChatInfoOverlay({
 										onClick={() => copyToClipboard(groupChat.moderatorSessionId)}
 										className="p-1 rounded hover:bg-white/10 transition-colors shrink-0"
 										style={{ color: theme.colors.textDim }}
-										title="Copy to clipboard"
+										title={t('workflows.shell.copyToClipboard')}
 									>
 										<Copy className="w-3 h-3" />
 									</button>
@@ -346,7 +367,7 @@ export function GroupChatInfoOverlay({
 									className="text-sm font-mono truncate text-right"
 									style={{ color: theme.colors.textMain }}
 								>
-									Not started
+									{t('workflows.shell.notStarted')}
 								</span>
 							)}
 						</div>
@@ -359,7 +380,7 @@ export function GroupChatInfoOverlay({
 
 						<div>
 							<span className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-								Participant Sessions
+								{t('workflows.shell.participantSessions')}
 							</span>
 							<div className="mt-2 space-y-1">
 								{groupChat.participants.map((p) => (
@@ -389,7 +410,7 @@ export function GroupChatInfoOverlay({
 						}}
 					>
 						<FolderOpen className="w-4 h-4" />
-						Open in Finder
+						{t('workflows.shell.openInFinder')}
 					</button>
 					<button
 						onClick={handleExport}
@@ -401,7 +422,7 @@ export function GroupChatInfoOverlay({
 						}}
 					>
 						<Download className={`w-4 h-4 ${isExporting ? 'animate-pulse' : ''}`} />
-						{isExporting ? 'Exporting...' : 'Export HTML'}
+						{isExporting ? t('workflows.shell.exporting') : t('workflows.shell.exportHtml')}
 					</button>
 					<button
 						onClick={() => openUrl(buildMaestroUrl('https://docs.runmaestro.ai/group-chat'))}
@@ -412,7 +433,7 @@ export function GroupChatInfoOverlay({
 						}}
 					>
 						<ExternalLink className="w-4 h-4" />
-						Read more
+						{t('workflows.shell.readMore')}
 					</button>
 				</div>
 			</div>

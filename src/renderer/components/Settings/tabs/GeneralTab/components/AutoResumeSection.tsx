@@ -2,6 +2,7 @@ import { RotateCcw } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { ToggleSwitch } from '../../../../ui/ToggleSwitch';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 
 interface AutoResumeSectionProps {
 	theme: Theme;
@@ -22,9 +23,12 @@ export function AutoResumeSection({
 	autoResumeGiveUpDays,
 	setAutoResumeGiveUpDays,
 }: AutoResumeSectionProps) {
+	const t = useT();
 	return (
 		<div>
-			<SettingsSectionHeading icon={RotateCcw}>Auto-Resume on Limit</SettingsSectionHeading>
+			<SettingsSectionHeading icon={RotateCcw}>
+				{t('settings.general.resume.heading')}
+			</SettingsSectionHeading>
 			<div
 				className="p-3 rounded border space-y-3"
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
@@ -44,19 +48,17 @@ export function AutoResumeSection({
 				>
 					<div className="flex-1 pr-3">
 						<div className="font-medium" style={{ color: theme.colors.textMain }}>
-							Resume paused sessions when token/API credits are available
+							{t('settings.general.resume.title')}
 						</div>
 						<div className="text-xs opacity-70 mt-0.5">
-							Maestro probes every provider on a fixed interval and automatically resumes any queued
-							work once the limit window reopens. Probing is cheap, so the give-up window is
-							intentionally long.
+							{t('settings.general.resume.description')}
 						</div>
 					</div>
 					<ToggleSwitch
 						checked={autoResumeOnLimit}
 						onChange={setAutoResumeOnLimit}
 						theme={theme}
-						ariaLabel="Resume paused sessions when token/API credits are available"
+						ariaLabel={t('settings.general.resume.title')}
 					/>
 				</div>
 
@@ -67,7 +69,7 @@ export function AutoResumeSection({
 						style={{ borderColor: theme.colors.border }}
 					>
 						<div className="flex items-center gap-2">
-							<label className="text-xs opacity-70">Check for availability every (hours)</label>
+							<label className="text-xs opacity-70">{t('settings.general.resume.interval')}</label>
 							<input
 								type="number"
 								min={1}
@@ -80,7 +82,7 @@ export function AutoResumeSection({
 							/>
 						</div>
 						<div className="flex items-center gap-2">
-							<label className="text-xs opacity-70">Give up after (days)</label>
+							<label className="text-xs opacity-70">{t('settings.general.resume.giveUp')}</label>
 							<input
 								type="number"
 								min={1}

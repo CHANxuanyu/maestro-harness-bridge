@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { memo } from 'react';
 import { Layers, Hash, Bot, User, Zap, BarChart3, ListOrdered, MessagesSquare } from 'lucide-react';
 import { Spinner } from '../ui/Spinner';
@@ -60,18 +61,19 @@ export const HistoryStatsBar = memo(function HistoryStatsBar({
 	stats,
 	theme,
 }: HistoryStatsBarProps) {
+	const uiText = useT();
 	return (
 		<div className="flex items-center justify-center gap-4 py-2 mb-3 flex-wrap">
 			<StatItem
 				icon={<Layers className="w-3 h-3" />}
-				label="Agents"
+				label={uiText('workflows.sessions.history.agentsLabel')}
 				value={stats.agentCount}
 				color={theme.colors.accent}
 				theme={theme}
 			/>
 			<StatItem
 				icon={<Hash className="w-3 h-3" />}
-				label="Sessions"
+				label={uiText('workflows.sessions.history.sessionsLabel')}
 				value={stats.sessionCount}
 				color={theme.colors.accent}
 				theme={theme}
@@ -79,14 +81,14 @@ export const HistoryStatsBar = memo(function HistoryStatsBar({
 			<div className="w-px h-4 flex-shrink-0" style={{ backgroundColor: theme.colors.border }} />
 			<StatItem
 				icon={<User className="w-3 h-3" />}
-				label="User"
+				label={uiText('workflows.sessions.history.userLabel')}
 				value={stats.userCount}
 				color={theme.colors.accent}
 				theme={theme}
 			/>
 			<StatItem
 				icon={<Bot className="w-3 h-3" />}
-				label="Auto"
+				label={uiText('workflows.sessions.history.autoLabel')}
 				value={stats.autoCount}
 				color={theme.colors.warning}
 				theme={theme}
@@ -94,7 +96,7 @@ export const HistoryStatsBar = memo(function HistoryStatsBar({
 			{stats.agentEntryCount !== undefined && stats.agentEntryCount > 0 && (
 				<StatItem
 					icon={<MessagesSquare className="w-3 h-3" />}
-					label="Agent"
+					label={uiText('workflows.sessions.history.agentLabel')}
 					value={stats.agentEntryCount}
 					color={AGENT_COLOR}
 					theme={theme}
@@ -103,7 +105,7 @@ export const HistoryStatsBar = memo(function HistoryStatsBar({
 			{stats.cueCount !== undefined && stats.cueCount > 0 && (
 				<StatItem
 					icon={<Zap className="w-3 h-3" />}
-					label="Cue"
+					label={uiText('workflows.sessions.history.cueLabel')}
 					value={stats.cueCount}
 					color={CUE_COLOR}
 					theme={theme}
@@ -112,7 +114,7 @@ export const HistoryStatsBar = memo(function HistoryStatsBar({
 			<div className="w-px h-4 flex-shrink-0" style={{ backgroundColor: theme.colors.border }} />
 			<StatItem
 				icon={<BarChart3 className="w-3 h-3" />}
-				label="Total"
+				label={uiText('workflows.sessions.history.totalLabel')}
 				value={stats.totalCount}
 				color={theme.colors.textMain}
 				theme={theme}
@@ -140,7 +142,7 @@ export const HistoryStatsBar = memo(function HistoryStatsBar({
 								className="text-2xs uppercase tracking-wider"
 								style={{ color: theme.colors.textDim }}
 							>
-								Active
+								{uiText('workflows.sessions.history.activeLabel')}
 							</span>
 							<span
 								className="text-xs font-bold tabular-nums"
@@ -153,7 +155,7 @@ export const HistoryStatsBar = memo(function HistoryStatsBar({
 					{stats.totalQueuedItems !== undefined && stats.totalQueuedItems > 0 && (
 						<StatItem
 							icon={<ListOrdered className="w-3 h-3" />}
-							label="Queued"
+							label={uiText('workflows.sessions.history.queued')}
 							value={stats.totalQueuedItems}
 							color={theme.colors.accent}
 							theme={theme}

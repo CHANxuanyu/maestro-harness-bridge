@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * Staged Images organizer: the same strip at a size you can actually read.
  *
@@ -48,7 +49,12 @@ export function StagedImagesOrganizerModal({
 	onAnnotate,
 	setLightboxImage,
 }: StagedImagesOrganizerModalProps) {
-	useModalLayer(MODAL_PRIORITIES.STAGED_IMAGES_ORGANIZER, 'Staged Images', onClose);
+	const t = useT();
+	useModalLayer(
+		MODAL_PRIORITIES.STAGED_IMAGES_ORGANIZER,
+		t('workflows.shell.stagedImages'),
+		onClose
+	);
 	const dnd = useStagedImageDnd(stagedImages.length, onReorder);
 	const thumbnailScale = useScalePreference(THUMBNAIL_SCALE_KEY, THUMBNAIL_SCALE_RANGE);
 	// Zoom from the keyboard, but not while the lightbox or the annotator is
@@ -78,10 +84,10 @@ export function StagedImagesOrganizerModal({
 				>
 					<div className="flex flex-col">
 						<span className="text-sm font-semibold" style={{ color: theme.colors.textMain }}>
-							Staged Images
+							{t('workflows.shell.stagedImages')}
 						</span>
 						<span className="text-xs" style={{ color: theme.colors.textDim }}>
-							Drag to reorder. The numbers are what you can call them in your message.
+							{t('workflows.shell.dragToReorderTheNumbersAreWhatYou')}
 						</span>
 					</div>
 					<div className="flex items-center gap-3">
@@ -90,7 +96,7 @@ export function StagedImagesOrganizerModal({
 							control={thumbnailScale}
 							decreaseIcon={ZoomOut}
 							increaseIcon={ZoomIn}
-							subject="thumbnail size"
+							subject={t('workflows.shell.extraThumbnailSize')}
 							shortcutHint={{ decrease: '-', increase: '+', reset: '0' }}
 							testId="staged-images-zoom"
 						/>
@@ -101,7 +107,7 @@ export function StagedImagesOrganizerModal({
 				<div className="p-4 overflow-auto">
 					{stagedImages.length === 0 ? (
 						<div className="text-sm py-8 text-center" style={{ color: theme.colors.textDim }}>
-							No images staged.
+							{t('workflows.shell.noImagesStaged')}
 						</div>
 					) : (
 						<div className="flex flex-wrap gap-4" {...dnd.containerHandlers}>

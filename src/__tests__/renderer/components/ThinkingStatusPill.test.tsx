@@ -22,6 +22,7 @@ import { createMockAITab as createBaseMockAITab } from '../../helpers/mockTab';
 import { createMockSession } from '../../helpers/mockSession';
 import { useBatchStore } from '../../../renderer/stores/batchStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { getAgentDisplayName } from '../../../shared/agentMetadata';
 
 import { mockTheme } from '../../helpers/mockTheme';
 // Mock theme for tests
@@ -321,8 +322,41 @@ describe('ThinkingStatusPill', () => {
 			expect(elementWithTooltip).toHaveAttribute('title', expect.stringContaining('Test Name'));
 			expect(elementWithTooltip).toHaveAttribute(
 				'title',
-				expect.stringContaining('Claude: abc12345')
+				expect.stringContaining(`${getAgentDisplayName('claude-code')}: abc12345`)
 			);
+		});
+
+		it('names the provider actually running the turn, not always Claude', () => {
+			const item = createThinkingItem({
+				name: 'Codex Runner',
+				toolType: 'codex',
+				agentSessionId: '00000000-0000-7000-a000-000000000001',
+			});
+			render(<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />);
+			const titled = screen.getAllByText('Codex Runner').find((el) => el.getAttribute('title'))!;
+			const title = titled.getAttribute('title')!;
+			expect(title).toContain(`${getAgentDisplayName('codex')}: 00000000`);
+			expect(title).not.toContain('Claude');
+			const idButton = screen.getByText('01A13F15');
+			expect(idButton.getAttribute('title')).toContain(getAgentDisplayName('codex'));
+			expect(idButton.getAttribute('title')).not.toContain('Claude');
+		});
+
+		it('keeps Stop whole and reachable when the conversation title is long', () => {
+			const item = createThinkingItemWithTab(
+				{ name: 'Maestro handoff configuration with a long name' },
+				{ name: '查找 OpenCode 的订阅与 Harness 支持，并核对每个计划的配额与限制说明' }
+			);
+			render(<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} onInterrupt={vi.fn()} />);
+			const stop = screen.getByTestId('stop-turn-button');
+			// It never yields width, so its label cannot wrap one glyph per line.
+			expect(stop.className).toContain('shrink-0');
+			expect(stop.className).toContain('whitespace-nowrap');
+			expect(stop).toHaveAccessibleName();
+			// The titles are the parts that give way.
+			const tabTitle = screen.getByText(/查找 OpenCode/);
+			expect(tabTitle.className).toContain('truncate');
+			expect(tabTitle.className).toContain('min-w-0');
 		});
 	});
 

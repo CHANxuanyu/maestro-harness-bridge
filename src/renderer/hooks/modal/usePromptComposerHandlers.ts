@@ -28,7 +28,7 @@ export interface UsePromptComposerHandlersDeps {
 	/** Send a message to the active group chat */
 	handleSendGroupChatMessage: (message: string, images?: string[], readOnlyMode?: boolean) => void;
 	/** Process input for AI submission */
-	processInput: (value?: string) => void;
+	processInput: (value?: string, options?: { revealTurn?: boolean }) => void;
 	/** Set the main input value */
 	setInputValue: (value: string) => void;
 }
@@ -125,8 +125,9 @@ export function usePromptComposerHandlers(
 			} else {
 				// Set the input value and trigger send
 				setInputValue(value);
-				// Use setTimeout to ensure state updates before processing
-				setTimeout(() => processInput(value), 0);
+				// Use setTimeout to ensure state updates before processing. This is the
+				// user's Send, so the sent turn is revealed like an Enter in the composer.
+				setTimeout(() => processInput(value, { revealTurn: true }), 0);
 			}
 		},
 		[

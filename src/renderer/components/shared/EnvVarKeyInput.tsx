@@ -1,3 +1,4 @@
+import { useT, type MessageKey } from '../../i18n';
 /**
  * EnvVarKeyInput - the NAME half of an environment-variable row.
  *
@@ -19,6 +20,38 @@ import {
 	type KnownEnvVarKeys,
 } from '../../../shared/envVarCatalog';
 import type { Theme } from '../../types';
+
+const ENV_DESCRIPTION_KEYS: Readonly<Record<string, MessageKey>> = {
+	'Proxy for outbound HTTPS requests.': 'settings.finish.env.suggestion.proxyHttps',
+	'Proxy for outbound HTTP requests.': 'settings.finish.env.suggestion.proxyHttp',
+	'Hosts that bypass the proxy, comma separated.': 'settings.finish.env.suggestion.noProxy',
+	'Extra CA bundle, for a corporate TLS-inspecting proxy.': 'settings.finish.env.suggestion.certs',
+	'Account home. Point two agents at two dirs to run two accounts.':
+		'settings.finish.env.suggestion.accountHome',
+	'API key, used instead of the OAuth login.': 'settings.finish.env.suggestion.apiOauth',
+	'Bearer token for a gateway in front of the API.': 'settings.finish.env.suggestion.bearer',
+	'Send requests to a gateway instead of the API.': 'settings.finish.env.suggestion.gateway',
+	'Default model for this agent.': 'settings.finish.env.suggestion.model',
+	'Cap the tokens one reply may produce.': 'settings.finish.env.suggestion.maxOutput',
+	'Thinking budget per turn.': 'settings.finish.env.suggestion.thinking',
+	'Run against AWS Bedrock credentials.': 'settings.finish.env.suggestion.bedrock',
+	'Run against Google Vertex AI credentials.': 'settings.finish.env.suggestion.vertex',
+	'API key, used instead of the ChatGPT login.': 'settings.finish.env.suggestion.apiChatgpt',
+	'Path to the config file this agent should load.': 'settings.finish.env.suggestion.config',
+	'Inline JSON config, merged over the file.': 'settings.finish.env.suggestion.inlineConfig',
+	'Anthropic key for OpenCode to use.': 'settings.finish.env.suggestion.anthropic',
+	'OpenAI key for OpenCode to use.': 'settings.finish.env.suggestion.openai',
+	'Data root holding credentials and transcripts (OS-wide, not per provider).':
+		'settings.finish.env.suggestion.dataRoot',
+	'API key, used instead of the browser login.': 'settings.finish.env.suggestion.apiBrowser',
+	'Project root the droid treats as its workspace.': 'settings.finish.env.suggestion.projectRoot',
+	'Keep credentials out of the OS keyring.': 'settings.finish.env.suggestion.keyring',
+	'Write the droid log to this path.': 'settings.finish.env.suggestion.log',
+	'Token Copilot prefers over GH_TOKEN.': 'settings.finish.env.suggestion.copilotToken',
+	'GitHub token, also read by the gh CLI.': 'settings.finish.env.suggestion.ghToken',
+	'GitHub token, lowest of the three in precedence.': 'settings.finish.env.suggestion.githubToken',
+	'Already set elsewhere in Maestro.': 'settings.finish.env.suggestion.remembered',
+};
 
 export interface EnvVarKeyInputProps {
 	theme: Theme;
@@ -62,9 +95,10 @@ export function EnvVarKeyInput({
 	className,
 	containerClassName = 'relative flex-1 min-w-0',
 	style,
-	placeholder = 'VARIABLE_NAME',
+	placeholder,
 	'data-testid': testId = 'env-var-key-input',
 }: EnvVarKeyInputProps) {
+	const t = useT();
 	const [open, setOpen] = useState(false);
 	const [activeIndex, setActiveIndex] = useState(0);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -163,7 +197,7 @@ export function EnvVarKeyInput({
 				}}
 				onKeyDown={handleKeyDown}
 				onClick={(event) => event.stopPropagation()}
-				placeholder={placeholder}
+				placeholder={placeholder ?? t('settings.finish.env.namePlaceholder')}
 				className={`${className} w-full`}
 				style={style}
 				data-testid={testId}
@@ -202,7 +236,9 @@ export function EnvVarKeyInput({
 						>
 							<span>{suggestion.key}</span>
 							<span className="text-2xs font-sans" style={{ color: theme.colors.textDim }}>
-								{suggestion.description}
+								{ENV_DESCRIPTION_KEYS[suggestion.description]
+									? t(ENV_DESCRIPTION_KEYS[suggestion.description])
+									: suggestion.description}
 							</span>
 						</button>
 					))}

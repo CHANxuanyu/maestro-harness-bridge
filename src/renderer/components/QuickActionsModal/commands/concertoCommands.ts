@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { QuickAction } from '../types';
 
 interface BuildConcertoCommandsArgs {
@@ -44,16 +45,19 @@ export function buildConcertoCommands({
 	setQuickActionOpen,
 	shortcuts,
 }: BuildConcertoCommandsArgs): QuickAction[] {
+	const t = getT();
 	if (!concertoEnabled) return [];
 
 	return [
 		{
 			id: 'concerto-stage',
-			label: stageOpen ? 'Hide Concerto Stage' : 'Show Concerto Stage',
+			label: stageOpen
+				? t('workflows.shell.hideConcertoStage')
+				: t('workflows.shell.showConcertoStage'),
 			shortcut: shortcuts.toggleConcerto,
 			subtext: stageOpen
-				? 'Park the stage window - panels keep running'
-				: 'Agent-composed interactive views, in one resizable window',
+				? t('workflows.shell.parkTheStageWindowPanelsKeepRunning')
+				: t('workflows.shell.agentComposedInteractiveViewsInOneResizableWindow'),
 			action: () => {
 				toggleConcertoStage();
 				setQuickActionOpen(false);
@@ -61,10 +65,12 @@ export function buildConcertoCommands({
 		},
 		{
 			id: 'concerto-stage-float',
-			label: stageFloating ? 'Dock Concerto Stage' : 'Pop Concerto Stage Out',
+			label: stageFloating
+				? t('workflows.shell.dockConcertoStage')
+				: t('workflows.shell.popConcertoStageOut'),
 			subtext: stageFloating
-				? 'Back to a centered window'
-				: 'Float the stage so you can keep typing to the agent beside it',
+				? t('workflows.shell.backToACenteredWindow')
+				: t('workflows.shell.floatTheStageSoYouCanKeepTyping'),
 			action: () => {
 				toggleStageFloating();
 				setQuickActionOpen(false);
@@ -72,11 +78,13 @@ export function buildConcertoCommands({
 		},
 		{
 			id: 'concerto-cadenzas',
-			label: cadenzasHidden ? 'Show All Cadenzas' : 'Hide All Cadenzas',
+			label: cadenzasHidden
+				? t('workflows.shell.showAllCadenzas')
+				: t('workflows.shell.hideAllCadenzas'),
 			shortcut: shortcuts.toggleCadenzas,
 			subtext: cadenzasHidden
-				? 'Bring back the stashed floating cards'
-				: 'Stash every floating card without closing any of them',
+				? t('workflows.shell.bringBackTheStashedFloatingCards')
+				: t('workflows.shell.stashEveryFloatingCardWithoutClosingAnyOf'),
 			action: () => {
 				toggleCadenzas();
 				setQuickActionOpen(false);

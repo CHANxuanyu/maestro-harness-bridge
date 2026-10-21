@@ -12,6 +12,24 @@ const baseError: AgentError = {
 };
 
 describe('useAgentErrorRecovery', () => {
+	it('offers only a manual resume for an occupied session, never a blank replacement', () => {
+		const onRetry = vi.fn();
+		const { result } = renderHook(() =>
+			useAgentErrorRecovery({
+				error: { ...baseError, type: 'session_busy', agentId: 'codex' },
+				agentId: 'codex',
+				sessionId: 's1',
+				onRetry,
+				onRestartAgent: vi.fn(),
+				onNewSession: vi.fn(),
+			})
+		);
+		expect(result.current.recoveryActions.map((action) => action.id)).toEqual(['retry']);
+		expect(result.current.recoveryActions[0].description).toContain('releases this session');
+		act(() => result.current.recoveryActions[0].onClick());
+		expect(onRetry).toHaveBeenCalledOnce();
+	});
+
 	it('creates claude-code auth actions naming the login command, plus new session', () => {
 		const onAuthenticate = vi.fn();
 		const onNewSession = vi.fn();

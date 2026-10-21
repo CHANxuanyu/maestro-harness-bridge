@@ -3,6 +3,7 @@ import type { Theme } from '../../../../../types';
 import { SettingCheckbox } from '../../../../SettingCheckbox';
 import { ToggleButtonGroup } from '../../../../ToggleButtonGroup';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 
 interface HistorySectionProps {
 	theme: Theme;
@@ -23,13 +24,14 @@ export function HistorySection({
 	groupCueEntries,
 	setGroupCueEntries,
 }: HistorySectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="general-history">
 			<SettingCheckbox
 				icon={History}
-				sectionLabel="Default History Toggle"
-				title='Enable "History" by default for new tabs'
-				description='When enabled, new AI tabs will have the "History" toggle on by default, saving a synopsis after each completion'
+				sectionLabel={t('settings.general.history.heading')}
+				title={t('settings.general.history.title')}
+				description={t('settings.general.history.description')}
 				checked={defaultSaveToHistory}
 				onChange={setDefaultSaveToHistory}
 				theme={theme}
@@ -37,24 +39,23 @@ export function HistorySection({
 
 			{defaultSaveToHistory && (
 				<div className="mt-3" data-setting-id="general-synopsis-debounce">
-					<SettingsSectionHeading icon={Clock}>Synopsis Debounce</SettingsSectionHeading>
+					<SettingsSectionHeading icon={Clock}>
+						{t('settings.general.history.debounceHeading')}
+					</SettingsSectionHeading>
 					<ToggleButtonGroup
 						options={[
-							{ value: 0, label: 'Off' },
-							{ value: 15, label: '15s' },
-							{ value: 30, label: '30s' },
-							{ value: 60, label: '1 min' },
-							{ value: 120, label: '2 min' },
+							{ value: 0, label: t('common.off') },
+							{ value: 15, label: t('settings.general.duration.sec', { count: 15 }) },
+							{ value: 30, label: t('settings.general.duration.sec', { count: 30 }) },
+							{ value: 60, label: t('settings.general.duration.min', { count: 1 }) },
+							{ value: 120, label: t('settings.general.duration.min', { count: 2 }) },
 						]}
 						value={synopsisDebounceSeconds}
 						onChange={setSynopsisDebounceSeconds}
 						theme={theme}
 					/>
 					<p className="text-xs opacity-70 mt-2">
-						Wait for the agent to be idle this long before generating a History synopsis. Rapid
-						back-to-back completions are coalesced into a single synopsis once the conversation
-						settles, and turns that did no real work (a plain question and answer with no tool use)
-						are skipped entirely. Off generates a synopsis immediately after every completion.
+						{t('settings.general.history.debounceDescription')}
 					</p>
 				</div>
 			)}
@@ -63,9 +64,9 @@ export function HistorySection({
 			<div className="mt-3" data-setting-id="general-group-cue-entries">
 				<SettingCheckbox
 					icon={Layers}
-					sectionLabel="Group Cue History Entries"
-					title="Collapse repeated Cue runs into one History row"
-					description="A high-frequency trigger becomes a single row with its run count, the most recent run time, and a failure count. Expand the row to see the individual runs. Turn this off to list every Cue run separately."
+					sectionLabel={t('settings.general.history.cueHeading')}
+					title={t('settings.general.history.cueTitle')}
+					description={t('settings.general.history.cueDescription')}
 					checked={groupCueEntries}
 					onChange={setGroupCueEntries}
 					theme={theme}

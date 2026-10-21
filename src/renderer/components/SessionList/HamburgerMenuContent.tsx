@@ -30,6 +30,7 @@ import { isWebDesktop } from '../../utils/runtimeContext';
 import { currentWebLoginUser, signOutWebLogin } from '../../services/webLoginSession';
 import { usePhoneLayout } from '../../hooks/ui/useViewportBreakpoint';
 import { ShortcutHint } from '../ui/ShortcutHint';
+import { useT } from '../../i18n';
 
 interface HamburgerMenuContentProps {
 	theme: Theme;
@@ -46,6 +47,7 @@ export function HamburgerMenuContent({
 	startTour,
 	setMenuOpen,
 }: HamburgerMenuContentProps) {
+	const t = useT();
 	const shortcuts = useSettingsStore((s) => s.shortcuts);
 	const encoreFeatures = useSettingsStore((s) => s.encoreFeatures);
 	// A phone has no keyboard and no room for a guided tour's anchored
@@ -86,10 +88,10 @@ export function HamburgerMenuContent({
 					<Plus className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							New Agent
+							{t('workflows.menu.newAgent')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							Create a new agent session
+							{t('workflows.menu.newAgentHint')}
 						</div>
 					</div>
 					<span
@@ -112,10 +114,10 @@ export function HamburgerMenuContent({
 					<Wand2 className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							New Agent Wizard
+							{t('workflows.emptyState.wizard')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							Get started with AI
+							{t('workflows.emptyState.wizardHint')}
 						</div>
 					</div>
 					<span
@@ -137,10 +139,10 @@ export function HamburgerMenuContent({
 				<Command className="w-5 h-5" style={{ color: theme.colors.accent }} />
 				<div className="flex-1">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						Command Palette
+						{t('workflows.menu.commandPalette')}
 					</div>
 					<div className="text-xs" style={{ color: theme.colors.textDim }}>
-						Quick actions and navigation
+						{t('workflows.menu.commandPaletteHint')}
 					</div>
 				</div>
 				<span
@@ -161,10 +163,10 @@ export function HamburgerMenuContent({
 				<Bell className="w-5 h-5" style={{ color: theme.colors.accent }} />
 				<div className="flex-1">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						Notification Center
+						{t('workflows.menu.notificationCenter')}
 					</div>
 					<div className="text-xs" style={{ color: theme.colors.textDim }}>
-						Unread notifications and history
+						{t('workflows.menu.notificationCenterHint')}
 					</div>
 				</div>
 				<ShortcutHint keys={shortcuts.openNotificationCenter?.keys ?? []} theme={theme} />
@@ -180,10 +182,10 @@ export function HamburgerMenuContent({
 					<Compass className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Introductory Tour
+							{t('workflows.menu.tour')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							Learn how to use Maestro
+							{t('workflows.menu.tourHint')}
 						</div>
 					</div>
 				</button>
@@ -200,10 +202,10 @@ export function HamburgerMenuContent({
 					<Keyboard className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Keyboard Shortcuts
+							{t('workflows.emptyState.shortcuts')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							View all available shortcuts
+							{t('workflows.menu.shortcutsHint')}
 						</div>
 					</div>
 					<span
@@ -225,10 +227,10 @@ export function HamburgerMenuContent({
 				<Settings className="w-5 h-5" style={{ color: theme.colors.accent }} />
 				<div className="flex-1">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						Settings
+						{t('common.settings')}
 					</div>
 					<div className="text-xs" style={{ color: theme.colors.textDim }}>
-						Configure preferences
+						{t('workflows.menu.settingsHint')}
 					</div>
 				</div>
 				<span
@@ -249,10 +251,10 @@ export function HamburgerMenuContent({
 				<ScrollText className="w-5 h-5" style={{ color: theme.colors.accent }} />
 				<div className="flex-1">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						System Logs
+						{t('workflows.menu.systemLogs')}
 					</div>
 					<div className="text-xs" style={{ color: theme.colors.textDim }}>
-						View application logs
+						{t('workflows.menu.systemLogsHint')}
 					</div>
 				</div>
 				<span
@@ -273,10 +275,10 @@ export function HamburgerMenuContent({
 				<Cpu className="w-5 h-5" style={{ color: theme.colors.accent }} />
 				<div className="flex-1">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						Process Monitor
+						{t('workflows.menu.processMonitor')}
 					</div>
 					<div className="text-xs" style={{ color: theme.colors.textDim }}>
-						View running processes
+						{t('workflows.menu.processMonitorHint')}
 					</div>
 				</div>
 				<span
@@ -298,10 +300,10 @@ export function HamburgerMenuContent({
 					<BarChart3 className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Usage Dashboard
+							{t('workflows.menu.usageDashboard')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							View usage analytics
+							{t('workflows.menu.usageDashboardHint')}
 						</div>
 					</div>
 					<span
@@ -324,10 +326,10 @@ export function HamburgerMenuContent({
 					<ScrollText className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Director's Notes
+							{t('workflows.menu.directorNotes')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							Unified history & AI synopsis
+							{t('workflows.menu.directorNotesHint')}
 						</div>
 					</div>
 					{shortcuts.directorNotes && (
@@ -352,10 +354,10 @@ export function HamburgerMenuContent({
 					<Music className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Maestro Symphony
+							{t('workflows.shell.maestroSymphony')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							Contribute to open source
+							{t('workflows.menu.symphonyHint')}
 						</div>
 					</div>
 					<span
@@ -378,10 +380,10 @@ export function HamburgerMenuContent({
 					<Zap className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Maestro Cue
+							{t('workflows.shell.maestroCue')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							Event-driven automation
+							{t('workflows.menu.cueHint')}
 						</div>
 					</div>
 					{shortcuts.openCue && (
@@ -406,10 +408,10 @@ export function HamburgerMenuContent({
 					<Music2 className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Concerto
+							{t('workflows.shell.concerto')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							Agent-composed interactive views
+							{t('workflows.menu.concertoHint')}
 						</div>
 					</div>
 					{shortcuts.toggleConcerto && (
@@ -434,10 +436,10 @@ export function HamburgerMenuContent({
 					<Music className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Pianola
+							{t('workflows.shell.pianola')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							Autonomous manager
+							{t('workflows.menu.pianolaHint')}
 						</div>
 					</div>
 				</button>
@@ -453,10 +455,10 @@ export function HamburgerMenuContent({
 				<Globe className="w-5 h-5" style={{ color: theme.colors.accent }} />
 				<div className="flex-1">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						Maestro Website
+						{t('workflows.emptyState.website')}
 					</div>
 					<div className="text-xs" style={{ color: theme.colors.textDim }}>
-						Visit runmaestro.ai
+						{t('workflows.emptyState.websiteHint')}
 					</div>
 				</div>
 				<ExternalLink className="w-4 h-4" style={{ color: theme.colors.textDim }} />
@@ -471,10 +473,10 @@ export function HamburgerMenuContent({
 				<BookOpen className="w-5 h-5" style={{ color: theme.colors.accent }} />
 				<div className="flex-1">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						Documentation
+						{t('workflows.emptyState.docs')}
 					</div>
 					<div className="text-xs" style={{ color: theme.colors.textDim }}>
-						See usage docs on docs.runmaestro.ai
+						{t('workflows.emptyState.docsHint')}
 					</div>
 				</div>
 				<ExternalLink className="w-4 h-4" style={{ color: theme.colors.textDim }} />
@@ -493,10 +495,10 @@ export function HamburgerMenuContent({
 					<Download className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Check for Updates
+							{t('workflows.emptyState.checkUpdates')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							Get the latest version
+							{t('workflows.emptyState.checkUpdatesHint')}
 						</div>
 					</div>
 				</button>
@@ -511,10 +513,10 @@ export function HamburgerMenuContent({
 				<Info className="w-5 h-5" style={{ color: theme.colors.accent }} />
 				<div className="flex-1">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						About Maestro
+						{t('workflows.emptyState.about')}
 					</div>
 					<div className="text-xs" style={{ color: theme.colors.textDim }}>
-						Version, Credits, Stats
+						{t('workflows.emptyState.aboutHint')}
 					</div>
 				</div>
 			</button>
@@ -530,10 +532,10 @@ export function HamburgerMenuContent({
 					<LogOut className="w-5 h-5" style={{ color: theme.colors.accent }} />
 					<div className="flex-1">
 						<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Sign out ({webLoginUser.displayName})
+							{t('workflows.menu.signOut', { name: webLoginUser.displayName })}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							End this browser&apos;s Web Login session
+							{t('workflows.menu.signOutHint')}
 						</div>
 					</div>
 				</button>

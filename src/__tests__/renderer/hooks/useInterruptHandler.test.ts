@@ -36,6 +36,7 @@ vi.mock('../../../renderer/utils/tabHelpers', async () => {
 import { useInterruptHandler } from '../../../renderer/hooks/agent/useInterruptHandler';
 import type { UseInterruptHandlerDeps } from '../../../renderer/hooks/agent/useInterruptHandler';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import type { Session, AITab } from '../../../renderer/types';
 
 // ============================================================================
@@ -148,6 +149,9 @@ beforeEach(() => {
 		groups: [],
 		activeSessionId: '',
 	});
+	// The agent layout's scratch-state contract is the baseline below; the
+	// conversation layout keeps tool calls on Stop and has its own cases.
+	useSettingsStore.setState({ sidebarNavigationMode: 'agents' });
 });
 
 afterEach(() => {
@@ -300,6 +304,85 @@ describe('useInterruptHandler', () => {
 			expect(sources).toContain('user');
 			expect(sources).toContain('ai');
 			expect(sources).toContain('system'); // "Canceled by user"
+		});
+
+		it('keeps the native conversation id on Stop, so the next turn resumes the same conversation', async () => {
+			const tab = createTab({
+				id: 'tab-native',
+				state: 'busy',
+				agentSessionId: '00000000-0000-7000-a000-000000000001',
+				logs: [{ id: 'u', timestamp: 1, source: 'user', text: 'run a long command' }],
+			});
+			const session = createSession({
+				id: 'sess-native',
+				inputMode: 'ai',
+				state: 'busy',
+				aiTabs: [tab],
+				activeTabId: 'tab-native',
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: 'sess-native' });
+
+			const deps = createDeps({ sessionsRef: { current: [session] } });
+			const { result } = renderHook(() => useInterruptHandler(deps));
+			await act(async () => {
+				await result.current.handleInterrupt();
+			});
+
+			const after = useSessionStore.getState().sessions[0].aiTabs[0];
+			expect(after.agentSessionId).toBe('00000000-0000-7000-a000-000000000001');
+			expect(after.state).toBe('idle');
+			// Stop itself raises no recovery offer and no replacement session.
+			expect(after.logs.some((l) => l.recoveryAction)).toBe(false);
+			expect(after.logs[after.logs.length - 1].source).toBe('system');
+		});
+
+		it('keeps tool calls readable on Stop in the conversation layout, never as running or done', async () => {
+			useSettingsStore.setState({ sidebarNavigationMode: 'conversations' });
+			const tab = createTab({
+				id: 'tab-stop',
+				state: 'busy',
+				logs: [
+					{ id: 'log-1', timestamp: 1, source: 'user', text: 'Hello' },
+					{ id: 'log-2', timestamp: 2, source: 'thinking', text: 'Thinking...' },
+					{
+						id: 'tool-done',
+						timestamp: 3,
+						source: 'tool',
+						text: 'Read',
+						metadata: { toolState: { status: 'completed', output: 'file body' } },
+					},
+					{
+						id: 'tool-running',
+						timestamp: 4,
+						source: 'tool',
+						text: 'Bash',
+						metadata: { toolState: { status: 'running', input: { command: 'sleep 60' } } },
+					},
+				],
+			});
+			const session = createSession({
+				id: 'sess-stop',
+				inputMode: 'ai',
+				state: 'busy',
+				aiTabs: [tab],
+				activeTabId: 'tab-stop',
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: 'sess-stop' });
+
+			const deps = createDeps({ sessionsRef: { current: [session] } });
+			const { result } = renderHook(() => useInterruptHandler(deps));
+			await act(async () => {
+				await result.current.handleInterrupt();
+			});
+
+			const logs = useSessionStore.getState().sessions[0].aiTabs[0].logs;
+			expect(logs.some((l) => l.source === 'thinking')).toBe(false);
+			const done = logs.find((l) => l.id === 'tool-done')!;
+			const stopped = logs.find((l) => l.id === 'tool-running')!;
+			expect(done.metadata?.toolState).toMatchObject({ status: 'completed', output: 'file body' });
+			expect(stopped.metadata?.toolState?.status).toBe('canceled');
+			expect(stopped.metadata?.toolState?.input).toEqual({ command: 'sleep 60' });
+			expect(logs[logs.length - 1].text).toBe('Canceled by user');
 		});
 
 		it('sets session and tab state to idle', async () => {

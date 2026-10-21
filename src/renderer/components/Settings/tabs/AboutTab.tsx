@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * AboutTab - Large-format "About" panel for the Settings modal.
  *
@@ -16,6 +17,7 @@ export interface AboutTabProps {
 }
 
 export function AboutTab({ theme }: AboutTabProps) {
+	const t = useT();
 	return (
 		<div
 			className="flex flex-col items-center justify-center text-center min-h-full"
@@ -28,7 +30,7 @@ export function AboutTab({ theme }: AboutTabProps) {
 			</div>
 
 			{/* Tagline */}
-			<p className="text-base mt-3 opacity-70">Agent Orchestration Command Center</p>
+			<p className="text-base mt-3 opacity-70">{t('settings.finish.about.tagline')}</p>
 
 			{/* Version */}
 			<div className="mt-10 text-3xl font-bold font-mono" style={{ color: theme.colors.textMain }}>
@@ -43,7 +45,7 @@ export function AboutTab({ theme }: AboutTabProps) {
 			{/* Origin */}
 			<div className="flex flex-col items-center gap-3 mt-12">
 				<span className="text-sm" style={{ color: theme.colors.textMain }}>
-					Born on Nov 26, 2025 in Austin, TX
+					{t('settings.finish.about.origin')}
 				</span>
 				<MaestroFlags width={56} />
 			</div>

@@ -23,6 +23,7 @@ import { Modal } from './ui/Modal';
 import { ModalBackButton } from './ui/ModalBackButton';
 import { ToggleSwitch } from './ui/ToggleSwitch';
 import { useMaestroCliState } from './Settings/tabs/GeneralTab/hooks';
+import { useT } from '../i18n';
 
 export interface UpdatesChoiceModalProps {
 	theme: Theme;
@@ -43,12 +44,13 @@ export interface UpdatesChoiceModalProps {
 }
 
 function RecommendedBadge({ theme }: { theme: Theme }) {
+	const t = useT();
 	return (
 		<span
 			className="text-xs-plus font-bold px-2 py-0.5 rounded-full"
 			style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}
 		>
-			Recommended
+			{t('workflows.updatesChoice.recommended')}
 		</span>
 	);
 }
@@ -125,6 +127,7 @@ export function UpdatesChoiceModal({
 	onBack,
 }: UpdatesChoiceModalProps) {
 	const confirmRef = useRef<HTMLButtonElement>(null);
+	const t = useT();
 
 	// Hidden when the bridge exposes no CLI namespace, where an install button
 	// could only fail.
@@ -140,7 +143,7 @@ export function UpdatesChoiceModal({
 	return (
 		<Modal
 			theme={theme}
-			title="Stay on the Bleeding Edge"
+			title={t('workflows.updatesChoice.title')}
 			headerIcon={<FlaskConical className="w-4 h-4" style={{ color: theme.colors.accent }} />}
 			priority={MODAL_PRIORITIES.UPDATES_CHOICE}
 			onClose={onDismiss}
@@ -163,24 +166,22 @@ export function UpdatesChoiceModal({
 							color: theme.colors.accentForeground,
 						}}
 					>
-						Continue
+						{t('common.continue')}
 					</button>
 				</div>
 			}
 		>
 			<div className="space-y-4 select-none">
 				<p className="text-sm leading-relaxed" style={{ color: theme.colors.textMain }}>
-					If you want the most bleeding-edge features, we highly recommend opting into release
-					candidates. And please leave crash reporting enabled: it helps us rapidly fix problems,
-					automatically, as they are discovered.
+					{t('workflows.updatesChoice.intro')}
 				</p>
 
 				<div className="space-y-2">
 					<PreferenceRow
 						theme={theme}
 						icon={Download}
-						title="Check for updates automatically"
-						description="Check for new Maestro versions on startup and once per day while the app is running."
+						title={t('workflows.updatesChoice.autoCheck')}
+						description={t('workflows.updatesChoice.autoCheckDescription')}
 						checked={checkForUpdatesOnStartup}
 						onChange={onCheckForUpdatesOnStartupChange}
 						testId="updates-choice-auto-check"
@@ -188,8 +189,8 @@ export function UpdatesChoiceModal({
 					<PreferenceRow
 						theme={theme}
 						icon={FlaskConical}
-						title="Include beta and release candidate updates"
-						description="Get new features as soon as they ship, ahead of the stable release. Pre-releases can contain bugs."
+						title={t('workflows.updatesChoice.beta')}
+						description={t('workflows.updatesChoice.betaDescription')}
 						checked={enableBetaUpdates}
 						onChange={onEnableBetaUpdatesChange}
 						recommended
@@ -198,8 +199,8 @@ export function UpdatesChoiceModal({
 					<PreferenceRow
 						theme={theme}
 						icon={Bug}
-						title="Send anonymous crash reports"
-						description="Lets us find and fix problems as they happen. No personal data is collected. Takes effect after restart."
+						title={t('workflows.updatesChoice.crashReports')}
+						description={t('workflows.updatesChoice.crashReportsDescription')}
 						checked={crashReportingEnabled}
 						onChange={onCrashReportingEnabledChange}
 						testId="updates-choice-crash-reports"
@@ -219,15 +220,14 @@ export function UpdatesChoiceModal({
 									className="text-sm font-medium flex items-center gap-2"
 									style={{ color: theme.colors.textMain }}
 								>
-									Maestro CLI
+									{t('workflows.updatesChoice.cliTitle')}
 									{!cliInstalled && <RecommendedBadge theme={theme} />}
 								</div>
 								<div
 									className="text-xs leading-snug mt-0.5"
 									style={{ color: theme.colors.textDim }}
 								>
-									The Maestro CLI can be used by humans, but it is really intended for your agents,
-									so they can automate everything Maestro can do. We highly recommend installing it.
+									{t('workflows.updatesChoice.cliDescription')}
 								</div>
 							</div>
 							{cliInstalled ? (
@@ -237,7 +237,7 @@ export function UpdatesChoiceModal({
 									style={{ color: theme.colors.success }}
 								>
 									<CheckCircle2 className="w-4 h-4" />
-									Installed
+									{t('workflows.updatesChoice.cliInstalled')}
 								</span>
 							) : (
 								<button
@@ -253,12 +253,12 @@ export function UpdatesChoiceModal({
 									}}
 								>
 									{cli.installing
-										? 'Installing...'
+										? t('workflows.updatesChoice.cliInstalling')
 										: cli.checking
-											? 'Checking...'
+											? t('workflows.updatesChoice.cliChecking')
 											: cli.status?.installed
-												? 'Update Maestro CLI'
-												: 'Install Maestro CLI'}
+												? t('workflows.updatesChoice.cliUpdate')
+												: t('workflows.updatesChoice.cliInstall')}
 								</button>
 							)}
 						</div>
@@ -286,8 +286,7 @@ export function UpdatesChoiceModal({
 				)}
 
 				<p className="text-xs leading-relaxed" style={{ color: theme.colors.textDim }}>
-					These are your current settings. You can change any of them later in Settings &rarr;
-					General.
+					{t('workflows.updatesChoice.footnote')}
 				</p>
 			</div>
 		</Modal>

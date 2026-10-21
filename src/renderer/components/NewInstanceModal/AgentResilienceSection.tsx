@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * AgentResilienceSection - the two "Agent Resilience" auto-retry toggles shared
  * by the create (NewInstanceModal) and edit (EditAgentModal) agent dialogs.
@@ -28,17 +29,17 @@ export function AgentResilienceSection({
 	onChangeAvailability,
 	onChangeTokenExhaustion,
 }: AgentResilienceSectionProps): React.ReactElement {
+	const uiText = useT();
 	return (
 		<div>
 			<div
 				className="block text-xs font-bold opacity-70 uppercase mb-2"
 				style={{ color: theme.colors.textMain }}
 			>
-				Agent Resilience
+				{uiText('workflows.sessions.resilience')}
 			</div>
 			<p className="text-xs mb-2" style={{ color: theme.colors.textDim }}>
-				Automatically resend the last prompt when the provider fails, instead of making you re-send
-				it. Applies to interactive turns and Auto Run batches.
+				{uiText('workflows.sessions.resilienceHelp')}
 			</p>
 
 			<div className="space-y-2">
@@ -52,14 +53,14 @@ export function AgentResilienceSection({
 						onChange={(e) => onChangeAvailability(e.target.checked)}
 						className="mt-0.5 accent-current"
 						style={{ accentColor: theme.colors.accent }}
-						aria-label="Retry on availability errors"
+						aria-label={uiText('workflows.sessions.retryAvailability')}
 					/>
 					<div className="flex flex-col min-w-0">
 						<span className="text-xs font-medium" style={{ color: theme.colors.textMain }}>
-							Retry on availability errors
+							{uiText('workflows.sessions.retryAvailability')}
 						</span>
 						<span className="text-2xs" style={{ color: theme.colors.textDim }}>
-							Overloaded / 529 / server errors. Backs off 30s → 30m, then keeps trying.
+							{uiText('workflows.sessions.retryAvailabilityHelp')}
 						</span>
 					</div>
 				</label>
@@ -74,14 +75,14 @@ export function AgentResilienceSection({
 						onChange={(e) => onChangeTokenExhaustion(e.target.checked)}
 						className="mt-0.5 accent-current"
 						style={{ accentColor: theme.colors.accent }}
-						aria-label="Retry on token exhaustion"
+						aria-label={uiText('workflows.sessions.retryQuota')}
 					/>
 					<div className="flex flex-col min-w-0">
 						<span className="text-xs font-medium" style={{ color: theme.colors.textMain }}>
-							Retry on token exhaustion
+							{uiText('workflows.sessions.retryQuota')}
 						</span>
 						<span className="text-2xs" style={{ color: theme.colors.textDim }}>
-							Plan/quota limit reached. Waits until reset (or hourly), then keeps trying.
+							{uiText('workflows.sessions.retryQuotaHelp')}
 						</span>
 					</div>
 				</label>

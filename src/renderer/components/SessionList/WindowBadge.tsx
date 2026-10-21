@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { memo } from 'react';
 import { AppWindow } from 'lucide-react';
 
@@ -29,9 +30,10 @@ const BADGE_STYLE = { backgroundColor: `${BADGE_COLOR}1f`, color: BADGE_COLOR } 
  * unconditionally.
  */
 export const WindowBadge = memo(function WindowBadge({ windowNumber }: WindowBadgeProps) {
+	const t = useT();
 	if (!windowNumber) return null;
 
-	const label = `Open in window ${windowNumber}`;
+	const label = t('workflows.shell.extraOpenInWindowValue', { p0: windowNumber });
 
 	return (
 		<span

@@ -27,6 +27,20 @@ describe('Process Core Preload API', () => {
 		api = createProcessCoreApi();
 	});
 
+	it('forwards progress purpose and preserves the legacy thinking callback shape', () => {
+		const callback = vi.fn();
+		const unsubscribe = api.onThinkingChunk(callback);
+		const handler = mockOn.mock.calls.find(([channel]) => channel === 'process:thinking-chunk')![1];
+		handler({}, 'session-a', 'Working', 'commentary');
+		handler({}, 'session-a', 'Reasoning');
+		expect(callback.mock.calls).toEqual([
+			['session-a', 'Working', 'commentary'],
+			['session-a', 'Reasoning'],
+		]);
+		unsubscribe();
+		expect(mockRemoveListener).toHaveBeenCalledWith('process:thinking-chunk', handler);
+	});
+
 	describe('spawn', () => {
 		it('should invoke process:spawn with config', async () => {
 			const config: ProcessConfig = {

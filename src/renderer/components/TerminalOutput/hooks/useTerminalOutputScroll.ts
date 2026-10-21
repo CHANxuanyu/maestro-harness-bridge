@@ -124,6 +124,13 @@ interface UseTerminalOutputScrollOptions {
 	 * per-frame measurement work.
 	 */
 	onNearTop?: () => void;
+	/**
+	 * Called synchronously when a reveal request for THIS session and tab is
+	 * accepted (the user's own Send, see `requestTranscriptScrollToBottom`), just
+	 * before the view is taken to the bottom. The caller drops any reading
+	 * position it was holding there, so nothing it does later puts it back.
+	 */
+	onRevealRequested?: () => void;
 }
 
 export function useTerminalOutputScroll({
@@ -137,6 +144,7 @@ export function useTerminalOutputScroll({
 	onScrollPositionChange,
 	onAtBottomChange,
 	onNearTop,
+	onRevealRequested,
 }: UseTerminalOutputScrollOptions) {
 	const [isAtBottom, setIsAtBottom] = useState(true);
 	const [hasNewMessages, setHasNewMessages] = useState(false);
@@ -148,7 +156,20 @@ export function useTerminalOutputScroll({
 	// handler updates this ref immediately, before its throttled state update,
 	// so a settled-response DOM mutation cannot steal the reading position.
 	const userScrolledAwayRef = useRef(initialIsAtBottom === false);
-	isAtBottomRef.current = isAtBottom;
+	// Mirror the state into the ref only when the STATE changes. The ref is
+	// written synchronously wherever the position is decided (a scroll, a jump,
+	// a reveal, a restore), ahead of the state update that follows it, and a
+	// render can commit in between: a store update (a new row, the persisted
+	// at-bottom flag) renders at sync priority while this hook's own
+	// `setIsAtBottom` from an event handler waits at default priority. Copying
+	// the not-yet-updated state on every render clobbered the ref in that
+	// render - a reveal of the user's own send set it true, the row's commit
+	// reset it to false, and that commit restored the old reading position.
+	const mirroredIsAtBottomRef = useRef(isAtBottom);
+	if (mirroredIsAtBottomRef.current !== isAtBottom) {
+		mirroredIsAtBottomRef.current = isAtBottom;
+		isAtBottomRef.current = isAtBottom;
+	}
 
 	const [autoScrollPaused, setAutoScrollPaused] = useState(false);
 
@@ -156,6 +177,8 @@ export function useTerminalOutputScroll({
 	// itself (and reset its throttle window) when the callback identity changes.
 	const onNearTopRef = useRef(onNearTop);
 	onNearTopRef.current = onNearTop;
+	const onRevealRequestedRef = useRef(onRevealRequested);
+	onRevealRequestedRef.current = onRevealRequested;
 
 	// Guard flag: a cross-tab search jump is landing, so the follow-the-tail
 	// auto-scroll must stand down. Switching tabs re-renders every row, and the
@@ -324,9 +347,13 @@ export function useTerminalOutputScroll({
 	}, [scrollContainerRef]);
 
 	useEffect(() => {
+		// Each branch writes the ref with the state: the ref is no longer copied
+		// from the state on every render (see the mirror above), so a decision made
+		// here must not wait for a state change to reach it.
 		if (!activeTabId) {
 			setHasNewMessages(false);
 			setNewMessageCount(0);
+			isAtBottomRef.current = true;
 			setIsAtBottom(true);
 			userScrolledAwayRef.current = false;
 			lastLogCountRef.current = filteredLogsLength;
@@ -341,11 +368,13 @@ export function useTerminalOutputScroll({
 			if (unreadCount > 0) {
 				setHasNewMessages(true);
 				setNewMessageCount(unreadCount);
+				isAtBottomRef.current = false;
 				setIsAtBottom(false);
 				userScrolledAwayRef.current = true;
 			} else {
 				setHasNewMessages(false);
 				setNewMessageCount(0);
+				isAtBottomRef.current = true;
 				setIsAtBottom(true);
 				userScrolledAwayRef.current = false;
 			}
@@ -353,6 +382,7 @@ export function useTerminalOutputScroll({
 			tabReadStateRef.current.set(activeTabId, currentCount);
 			setHasNewMessages(false);
 			setNewMessageCount(0);
+			isAtBottomRef.current = true;
 			setIsAtBottom(true);
 			userScrolledAwayRef.current = false;
 		}
@@ -377,6 +407,7 @@ export function useTerminalOutputScroll({
 				const newCount = currentCount - lastLogCountRef.current;
 				setHasNewMessages(true);
 				setNewMessageCount((prev) => prev + newCount);
+				isAtBottomRef.current = false;
 				setIsAtBottom(false);
 			}
 		}
@@ -506,6 +537,12 @@ export function useTerminalOutputScroll({
 			// so the budget is SILENCE from the content, not wall clock. (#1535)
 			let quietTimer: number | undefined;
 			let capTimer: number | undefined;
+			// The first apply waits for a frame. Cancelling the restore (an explicit
+			// reveal, a user takeover, this effect's cleanup on a tab change or
+			// unmount) must cancel that frame too: it would otherwise re-apply the
+			// saved offset - and arm a fresh settle loop - after the cancel.
+			let firstFrame: number | undefined;
+			let superseded = false;
 
 			// Hands the view back to the ordinary follow/pause bookkeeping. The hold
 			// applyRestore keeps while it is short of the target has to be lifted if
@@ -529,6 +566,11 @@ export function useTerminalOutputScroll({
 			};
 
 			const stopSettling = () => {
+				superseded = true;
+				if (firstFrame !== undefined) {
+					cancelAnimationFrame(firstFrame);
+					firstFrame = undefined;
+				}
 				settleObserver?.disconnect();
 				settleObserver = undefined;
 				window.clearTimeout(quietTimer);
@@ -587,7 +629,10 @@ export function useTerminalOutputScroll({
 				return Math.abs(container.scrollTop - initialScrollTop) <= 1;
 			};
 
-			requestAnimationFrame(() => {
+			firstFrame = requestAnimationFrame(() => {
+				firstFrame = undefined;
+				// Cancelled before this frame (see `superseded`): nothing to restore.
+				if (superseded) return;
 				// A cross-tab search jump asked for a specific message in this tab.
 				// That beats the position the tab was left at - restoring here would
 				// scroll straight back off the hit.
@@ -671,6 +716,10 @@ export function useTerminalOutputScroll({
 	}, []);
 
 	const scrollToBottomAndResume = useCallback(() => {
+		// A mount-time restore still walking toward a saved offset would re-apply
+		// it on the next growth and undo this; going to the bottom supersedes it.
+		cancelRestoreSettleRef.current?.();
+		restoreInFlightRef.current = false;
 		userScrolledAwayRef.current = false;
 		setAutoScrollPaused(false);
 		setHasNewMessages(false);
@@ -708,6 +757,9 @@ export function useTerminalOutputScroll({
 	useEventListener(TRANSCRIPT_SCROLL_TO_BOTTOM_EVENT, (event) => {
 		const detail = (event as CustomEvent<TranscriptScrollToBottomDetail>).detail;
 		if (!detail || detail.sessionId !== sessionId || detail.tabId !== activeTabId) return;
+		// The caller first drops any reading position it holds for this tab, so
+		// nothing it does on a later commit or resize can put the reader back.
+		onRevealRequestedRef.current?.();
 		scrollToBottomAndResume();
 	});
 
@@ -728,6 +780,13 @@ export function useTerminalOutputScroll({
 
 	return {
 		isAtBottom,
+		/**
+		 * Whether the view follows the tail RIGHT NOW. Read this, not `isAtBottom`,
+		 * from effects and observers that decide whether to hold a reading
+		 * position: the state can lag a render behind a reveal or a scroll (see
+		 * the mirror above), and acting on the stale value pulls the reader back.
+		 */
+		isAtBottomRef,
 		hasNewMessages,
 		newMessageCount,
 		autoScrollPaused,

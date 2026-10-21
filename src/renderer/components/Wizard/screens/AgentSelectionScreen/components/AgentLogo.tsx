@@ -13,11 +13,13 @@ export function AgentLogo({
 	detected,
 	brandColor,
 	theme,
+	className = LOGO_SIZE_CLASS,
 }: {
 	agentId: string;
 	supported: boolean;
 	detected: boolean;
 	brandColor?: string;
+	className?: string;
 	theme: Theme;
 }): JSX.Element {
 	// A brand color can sit almost on top of the tile background - GitHub's
@@ -32,7 +34,7 @@ export function AgentLogo({
 		case 'claude-code':
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 48 48"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -49,7 +51,7 @@ export function AgentLogo({
 		case 'codex':
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 48 48"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -63,7 +65,7 @@ export function AgentLogo({
 		case 'opencode':
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 48 48"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -92,7 +94,7 @@ export function AgentLogo({
 		case 'factory-droid':
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 48 48"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -144,7 +146,7 @@ export function AgentLogo({
 			// Official GitHub Copilot mark (Primer octicon `copilot-24`).
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 24 24"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -163,7 +165,7 @@ export function AgentLogo({
 			// clean line-art rendering of Hermes' iconography.
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 48 48"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -206,7 +208,7 @@ export function AgentLogo({
 			// Official pi.dev mark (their favicon glyph, viewBox 0 0 800 800).
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 800 800"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -226,7 +228,7 @@ export function AgentLogo({
 			// Official Oh My Pi mark (omp.sh favicon glyph, viewBox 0 0 64 64).
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 64 64"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -242,7 +244,7 @@ export function AgentLogo({
 			// something leaving it upward.
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 48 48"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -274,7 +276,7 @@ export function AgentLogo({
 			// around it.
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 48 48"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -291,7 +293,7 @@ export function AgentLogo({
 			// hex and reads the knot as two interlocking chevrons.
 			return (
 				<svg
-					className={LOGO_SIZE_CLASS}
+					className={className}
 					viewBox="0 0 48 48"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -321,7 +323,7 @@ export function AgentLogo({
 			return (
 				<div
 					data-testid={AGENT_LOGO_FALLBACK_TESTID}
-					className={`${LOGO_SIZE_CLASS} rounded-full border-2`}
+					className={`${className} rounded-full border-2`}
 					style={{ borderColor: color, opacity }}
 				/>
 			);

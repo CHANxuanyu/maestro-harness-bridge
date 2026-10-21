@@ -3,6 +3,7 @@ import { AlertTriangle, Trash2 } from 'lucide-react';
 import type { Theme } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal } from './ui/Modal';
+import { useI18n } from '../i18n';
 
 interface DeleteAgentConfirmModalProps {
 	theme: Theme;
@@ -22,6 +23,7 @@ export function DeleteAgentConfirmModal({
 	onClose,
 }: DeleteAgentConfirmModalProps) {
 	const confirmButtonRef = useRef<HTMLButtonElement>(null);
+	const { t, tRich } = useI18n();
 	const [confirmationText, setConfirmationText] = useState('');
 	const isEraseEnabled = confirmationText === agentName;
 
@@ -46,7 +48,7 @@ export function DeleteAgentConfirmModal({
 	return (
 		<Modal
 			theme={theme}
-			title="Confirm Delete"
+			title={t('workflows.deleteAgent.title')}
 			// Reachable by right-clicking any Left Bar row, so the agent being
 			// deleted is often not the highlighted one. The body names it, but a
 			// destructive confirm should say what it targets in the header too.
@@ -69,7 +71,7 @@ export function DeleteAgentConfirmModal({
 							color: theme.colors.textMain,
 						}}
 					>
-						Cancel
+						{t('common.cancel')}
 					</button>
 					<button
 						ref={confirmButtonRef}
@@ -82,7 +84,7 @@ export function DeleteAgentConfirmModal({
 							color: '#ffffff',
 						}}
 					>
-						Agent Only
+						{t('workflows.deleteAgent.agentOnly')}
 					</button>
 					<button
 						type="button"
@@ -97,7 +99,7 @@ export function DeleteAgentConfirmModal({
 							color: '#ffffff',
 						}}
 					>
-						Agent + Working Directory
+						{t('workflows.deleteAgent.agentAndDirectory')}
 					</button>
 				</div>
 			}
@@ -111,12 +113,15 @@ export function DeleteAgentConfirmModal({
 				</div>
 				<div className="space-y-3">
 					<p className="leading-relaxed" style={{ color: theme.colors.textMain }}>
-						<strong style={{ color: theme.colors.warning }}>Danger:</strong> You are about to delete
-						the agent "{agentName}". This action cannot be undone.
+						<strong style={{ color: theme.colors.warning }}>
+							{t('workflows.deleteAgent.danger')}
+						</strong>{' '}
+						{t('workflows.deleteAgent.warning', { name: agentName })}
 					</p>
 					<p className="text-sm leading-relaxed" style={{ color: theme.colors.textDim }}>
-						<strong>Agent + Working Directory</strong> will also move the working directory to the
-						trash:
+						{tRich('workflows.deleteAgent.directoryNote', {
+							option: <strong>{t('workflows.deleteAgent.agentAndDirectory')}</strong>,
+						})}
 					</p>
 					<code
 						className="block text-xs px-2 py-1 rounded break-all"
@@ -129,7 +134,7 @@ export function DeleteAgentConfirmModal({
 						{workingDirectory}
 					</code>
 					<p className="text-xs leading-relaxed" style={{ color: theme.colors.textDim }}>
-						Enter agent name below to enable working directory deletion:
+						{t('workflows.deleteAgent.typeNamePrompt')}
 					</p>
 					<input
 						type="text"
@@ -142,7 +147,7 @@ export function DeleteAgentConfirmModal({
 							color: theme.colors.textMain,
 							border: `1px solid ${theme.colors.border}`,
 						}}
-						aria-label="Confirm agent name"
+						aria-label={t('workflows.deleteAgent.typeNameLabel')}
 					/>
 				</div>
 			</div>

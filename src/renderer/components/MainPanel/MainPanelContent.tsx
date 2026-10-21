@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React from 'react';
 
 import { Spinner } from '../ui/Spinner';
@@ -310,6 +311,7 @@ export interface MainPanelContentProps {
 }
 
 export const MainPanelContent = React.memo(function MainPanelContent(props: MainPanelContentProps) {
+	const t = useT();
 	const {
 		activeSession,
 		activeTab,
@@ -844,11 +846,11 @@ export const MainPanelContent = React.memo(function MainPanelContent(props: Main
 						<Spinner size={32} color={theme.colors.accent} />
 						<div className="text-center">
 							<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-								Loading {activeFileTab.name}
+								{t('workflows.shell.loading')} {activeFileTab.name}
 								{activeFileTab.extension}
 							</div>
 							<div className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
-								Fetching from remote server...
+								{t('workflows.shell.fetchingFromRemoteServer')}
 							</div>
 						</div>
 					</div>

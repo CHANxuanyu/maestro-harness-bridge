@@ -31,6 +31,7 @@ import { hasUnreadVisibleTab } from '../utils/tabHelpers';
 import { abbreviateGroupName } from '../../shared/formatters';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
 import type { Session, Group, Theme } from '../types';
+import { getT, useT } from '../i18n';
 
 // ============================================================================
 // SessionItem - Unified session item component for all list contexts
@@ -75,16 +76,17 @@ export function getEnhancedStatusColor(
 	const connecting = colorBlindMode
 		? COLORBLIND_STATUS_COLORS.connecting
 		: getConnectingColor(theme);
+	const t = getT();
 
 	// Agent Resilience: an active outage (auto-retry backing off) is a "stuck,
 	// needs attention" state. Pulsing orange, ranked above batch/agent state so a
 	// stalled agent is unmistakable in the Left Bar.
 	if (hasActiveOutage) {
-		return { color: connecting, animate: true, label: 'Auto-retrying (stuck)' };
+		return { color: connecting, animate: true, label: t('workflows.sessionRow.autoRetrying') };
 	}
 
 	if (isInBatch) {
-		return { color: warning, animate: true, label: 'Auto Run active' };
+		return { color: warning, animate: true, label: t('workflows.sessionRow.autoRunActive') };
 	}
 
 	// Ranked ABOVE the hollow-dot signal on purpose. A consult spawns into a tab
@@ -94,16 +96,20 @@ export function getEnhancedStatusColor(
 	// exists to show. Ranked BELOW the agent's own `busy`, which keeps its more
 	// specific "Thinking" / "Running command" label; both draw the same dot.
 	if (isBeingConsulted && session.state !== 'busy') {
-		return { color: warning, animate: true, label: 'Answering a consult' };
+		return { color: warning, animate: true, label: t('workflows.sessionRow.answeringConsult') };
 	}
 
 	if (hasNoClaudeProviderSession(session)) {
-		return { color: theme.colors.textDim, animate: false, label: 'No active Claude session' };
+		return {
+			color: theme.colors.textDim,
+			animate: false,
+			label: t('workflows.sessionRow.noClaudeSession'),
+		};
 	}
 
 	switch (session.state) {
 		case 'idle':
-			return { color: success, animate: false, label: 'Ready' };
+			return { color: success, animate: false, label: t('workflows.sessionRow.ready') };
 		case 'busy':
 			// `busySource` separates an agent turn from a shell command run in the
 			// same row. Both are legitimately busy, but only the AI one is counted
@@ -112,16 +118,23 @@ export function getEnhancedStatusColor(
 			return {
 				color: warning,
 				animate: true,
-				label: session.busySource === 'terminal' ? 'Running command' : 'Thinking',
+				label:
+					session.busySource === 'terminal'
+						? t('workflows.sessionRow.runningCommand')
+						: t('workflows.sessionRow.thinking'),
 			};
 		case 'error':
-			return { color: error, animate: false, label: 'Error' };
+			return { color: error, animate: false, label: t('workflows.agentState.error') };
 		case 'connecting':
-			return { color: connecting, animate: true, label: 'Connecting' };
+			return { color: connecting, animate: true, label: t('workflows.agentState.connecting') };
 		case 'waiting_input':
-			return { color: theme.colors.accent, animate: true, label: 'Waiting for input' };
+			return {
+				color: theme.colors.accent,
+				animate: true,
+				label: t('workflows.agentState.waitingInput'),
+			};
 		default:
-			return { color: theme.colors.textDim, animate: false, label: 'Unknown' };
+			return { color: theme.colors.textDim, animate: false, label: t('common.unknown') };
 	}
 }
 
@@ -232,6 +245,7 @@ export const SessionItem = memo(function SessionItem({
 	onToggleBookmark,
 	onToggleWorktrees,
 }: SessionItemProps) {
+	const t = useT();
 	const showWorktreePill = useSettingsStore((s) => s.showWorktreePill);
 	const showWorktreeBranchName = useSettingsStore((s) => s.showWorktreeBranchName);
 	const showLeftPanelLocationPills = useSettingsStore((s) => s.showLeftPanelLocationPills);
@@ -392,8 +406,16 @@ export const SessionItem = memo(function SessionItem({
 									onToggleWorktrees(session.id);
 								}}
 								className="w-4 h-4 rounded hover:bg-white/10 shrink-0 flex items-center justify-center transition-colors"
-								title={worktreesExpanded ? 'Collapse worktrees' : 'Expand worktrees'}
-								aria-label={worktreesExpanded ? 'Collapse worktrees' : 'Expand worktrees'}
+								title={
+									worktreesExpanded
+										? t('workflows.shell.collapseWorktrees')
+										: t('workflows.shell.expandWorktrees')
+								}
+								aria-label={
+									worktreesExpanded
+										? t('workflows.shell.collapseWorktrees')
+										: t('workflows.shell.expandWorktrees')
+								}
 								aria-expanded={worktreesExpanded}
 							>
 								<ChevronRight
@@ -410,7 +432,10 @@ export const SessionItem = memo(function SessionItem({
 									backgroundColor: theme.colors.accent + '33',
 									color: theme.colors.accent,
 								}}
-								title={`${worktreeChildCount} hidden worktree${worktreeChildCount === 1 ? '' : 's'}`}
+								title={t('workflows.shell.valueHiddenWorktreevalue', {
+									p0: worktreeChildCount ?? 0,
+									p1: worktreeChildCount === 1 ? '' : t('workflows.shell.pluralSuffix'),
+								})}
 							>
 								{worktreeChildCount}
 							</span>
@@ -423,8 +448,8 @@ export const SessionItem = memo(function SessionItem({
 						{variant !== 'worktree' && session.worktreeConfig && (
 							<span
 								className="shrink-0 inline-flex"
-								title="Parent agent with worktrees"
-								aria-label="Parent agent with worktrees"
+								title={t('workflows.shell.parentAgentWithWorktrees')}
+								aria-label={t('workflows.shell.parentAgentWithWorktrees')}
 							>
 								<FolderTree size={10} style={{ color: theme.colors.textDim }} />
 							</span>
@@ -434,8 +459,8 @@ export const SessionItem = memo(function SessionItem({
 						{session.isPianola && (
 							<span
 								className="shrink-0 inline-flex"
-								title="Pinned manager agent"
-								aria-label="Pinned manager agent"
+								title={t('workflows.shell.pinnedManagerAgent')}
+								aria-label={t('workflows.shell.pinnedManagerAgent')}
 							>
 								<Pin size={11} style={{ color: theme.colors.accent }} />
 							</span>
@@ -564,7 +589,7 @@ export const SessionItem = memo(function SessionItem({
 										backgroundColor: theme.colors.warning + '30',
 										color: theme.colors.warning,
 									}}
-									title="Running on remote host via SSH"
+									title={t('workflows.shell.runningOnRemoteHostViaSsh')}
 								>
 									<Server className="w-3 h-3" />
 								</div>
@@ -576,7 +601,7 @@ export const SessionItem = memo(function SessionItem({
 										backgroundColor: theme.colors.accent + '30',
 										color: theme.colors.accent,
 									}}
-									title="Git repository"
+									title={t('workflows.shell.gitRepository')}
 								>
 									GIT
 								</div>
@@ -590,9 +615,9 @@ export const SessionItem = memo(function SessionItem({
 								backgroundColor: theme.colors.warning + '30',
 								color: theme.colors.warning,
 							}}
-							title="Running on remote host via SSH"
+							title={t('workflows.shell.runningOnRemoteHostViaSsh')}
 						>
-							REMOTE
+							{t('workflows.shell.remote')}
 						</div>
 					) : (
 						/* Plain local directory: LOCAL pill suppressed in bookmark variant */
@@ -603,9 +628,9 @@ export const SessionItem = memo(function SessionItem({
 									backgroundColor: theme.colors.textDim + '20',
 									color: theme.colors.textDim,
 								}}
-								title="Local directory (not a git repo)"
+								title={t('workflows.shell.localDirectoryNotAGitRepo')}
 							>
-								LOCAL
+								{t('workflows.shell.local')}
 							</div>
 						)
 					))}
@@ -618,10 +643,10 @@ export const SessionItem = memo(function SessionItem({
 							backgroundColor: theme.colors.warning + '30',
 							color: theme.colors.warning,
 						}}
-						title="Auto Run active"
+						title={t('workflows.shell.autoRunActive')}
 					>
 						<Bot className="w-2.5 h-2.5" />
-						AUTO
+						{t('workflows.shell.auto2')}
 					</div>
 				)}
 
@@ -630,10 +655,10 @@ export const SessionItem = memo(function SessionItem({
 					<div
 						className="flex items-center gap-1 px-1.5 py-0.5 rounded text-3xs font-bold uppercase"
 						style={{ backgroundColor: theme.colors.error + '30', color: theme.colors.error }}
-						title={`Error: ${session.agentError.message}`}
+						title={t('workflows.shell.errorValue', { p0: session.agentError.message })}
 					>
 						<AlertCircle className="w-2.5 h-2.5" />
-						ERR
+						{t('workflows.shell.err2')}
 					</div>
 				)}
 
@@ -648,7 +673,11 @@ export const SessionItem = memo(function SessionItem({
 								onToggleBookmark();
 							}}
 							className="p-0.5 rounded hover:bg-white/10 transition-all"
-							title={session.bookmarked ? 'Remove bookmark' : 'Add bookmark'}
+							title={
+								session.bookmarked
+									? t('workflows.shell.removeBookmark')
+									: t('workflows.shell.addBookmark')
+							}
 						>
 							<Bookmark
 								className="w-3 h-3"
@@ -663,7 +692,7 @@ export const SessionItem = memo(function SessionItem({
 								onToggleBookmark();
 							}}
 							padding="p-0.5"
-							title="Remove bookmark"
+							title={t('workflows.shell.removeBookmark')}
 						>
 							<Bookmark
 								className="w-3 h-3"
@@ -700,7 +729,9 @@ export const SessionItem = memo(function SessionItem({
 						}
 						title={
 							session.state === 'busy' && session.cliActivity && !isInBatch
-								? `CLI: Running playbook "${session.cliActivity.playbookName}"`
+								? t('workflows.shell.cliRunningPlaybookValue', {
+										p0: session.cliActivity.playbookName,
+									})
 								: statusInfo.label
 						}
 					/>
@@ -709,7 +740,7 @@ export const SessionItem = memo(function SessionItem({
 						<div
 							className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full"
 							style={{ backgroundColor: theme.colors.error }}
-							title="Unread messages"
+							title={t('workflows.shell.unreadMessages')}
 						/>
 					)}
 				</div>

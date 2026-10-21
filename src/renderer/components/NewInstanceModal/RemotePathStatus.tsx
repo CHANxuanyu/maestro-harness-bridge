@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React from 'react';
 import { Check, X } from 'lucide-react';
 import type { RemotePathStatusProps } from './types';
@@ -7,6 +8,7 @@ export const RemotePathStatus = React.memo(function RemotePathStatus({
 	validation,
 	remoteHost,
 }: RemotePathStatusProps) {
+	const uiText = useT();
 	if (validation.checking) {
 		return (
 			<div className="mt-2 text-xs flex items-center gap-1.5">
@@ -15,7 +17,9 @@ export const RemotePathStatus = React.memo(function RemotePathStatus({
 					style={{ borderColor: theme.colors.textDim, borderTopColor: 'transparent' }}
 				/>
 				<span style={{ color: theme.colors.textDim }}>
-					{remoteHost ? `Checking path on ${remoteHost}...` : 'Checking remote path...'}
+					{remoteHost
+						? uiText('workflows.sessions.checkingHostPath', { host: remoteHost })
+						: uiText('workflows.sessions.checkingRemotePath')}
 				</span>
 			</div>
 		);
@@ -26,7 +30,9 @@ export const RemotePathStatus = React.memo(function RemotePathStatus({
 			<div className="mt-2 text-xs flex items-center gap-1.5">
 				<Check className="w-3.5 h-3.5" style={{ color: theme.colors.success }} />
 				<span style={{ color: theme.colors.success }}>
-					{remoteHost ? `Directory found on ${remoteHost}` : 'Remote directory found'}
+					{remoteHost
+						? uiText('workflows.sessions.hostDirectoryFound', { host: remoteHost })
+						: uiText('workflows.sessions.remoteDirectoryFound')}
 				</span>
 			</div>
 		);

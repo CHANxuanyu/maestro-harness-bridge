@@ -66,7 +66,11 @@ export function useThoughtStreamCaptureListener(): void {
 		};
 
 		const unsubscribe = window.maestro.process.onThinkingChunk?.(
-			(sessionId: string, content: string) => {
+			(sessionId: string, content: string, purpose?: 'commentary') => {
+				// A commentary event is the agent's PUBLIC progress message, not its
+				// reasoning; the tab transcript shows it as a Progress row. Capturing it
+				// here would file it as a model thought.
+				if (purpose === 'commentary') return;
 				// Window scoping: ignore agents this window doesn't own (broadcast events).
 				if (!ownedGate.current?.(sessionId)) return;
 				// Auto Run spawns its agent with a `{sessionId}-batch-{timestamp}`

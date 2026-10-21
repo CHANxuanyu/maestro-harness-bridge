@@ -562,7 +562,7 @@ describe('useAgentSessionManagement', () => {
 			'claude-code',
 			'/remote/project',
 			'agent-remote',
-			{ offset: 0, limit: 500 },
+			expect.objectContaining({ offset: 0, limit: 500 }),
 			'studio'
 		);
 	});
@@ -613,7 +613,7 @@ describe('useAgentSessionManagement', () => {
 			'claude-code',
 			'/test/project',
 			'agent-456',
-			{ offset: 0, limit: 500 },
+			{ offset: 0, limit: 500, ownerAgentId: activeSession.id },
 			undefined
 		);
 		expect(window.maestro.claude.getSessionOrigins).toHaveBeenCalledOnce();
@@ -632,12 +632,14 @@ describe('useAgentSessionManagement', () => {
 				timestamp: new Date('2024-01-01T00:00:00.000Z').getTime(),
 				source: 'user',
 				text: 'Hello',
+				nativeTranscript: { messageId: 'msg-1' },
 			},
 			{
 				id: 'msg-2',
 				timestamp: new Date('2024-01-01T00:00:01.000Z').getTime(),
 				source: 'stdout',
 				text: 'Hi there',
+				nativeTranscript: { messageId: 'msg-2' },
 			},
 		]);
 		expect(updatedSession.activeFileTabId).toBeNull();
@@ -702,11 +704,15 @@ describe('useAgentSessionManagement', () => {
 			(tab: AITab) => tab.agentSessionId === 'agent-tool'
 		);
 
-		// All 3 messages should be preserved - including the one with toolUse
-		expect(resumedTab?.logs).toHaveLength(3);
-		expect(resumedTab?.logs[0].text).toBe('Read file.ts');
-		expect(resumedTab?.logs[1].text).toBe('Let me read that file');
-		expect(resumedTab?.logs[2].text).toBe('Here is the content');
+		// All 3 messages keep their text - including the one with toolUse - and its
+		// tool_use block becomes a tool card right after it.
+		expect(resumedTab?.logs.map((log: LogEntry) => [log.source, log.text])).toEqual([
+			['user', 'Read file.ts'],
+			['stdout', 'Let me read that file'],
+			['tool', 'Read'],
+			['stdout', 'Here is the content'],
+		]);
+		expect(resumedTab?.logs[2].metadata?.toolState?.input).toEqual({ path: 'file.ts' });
 	});
 
 	it('skips message fetch when messages are already provided', async () => {
@@ -805,10 +811,14 @@ describe('useAgentSessionManagement', () => {
 			(tab: AITab) => tab.agentSessionId === 'agent-filter'
 		);
 
-		// Tool-use-only message (msg-2) should be filtered out
-		expect(resumedTab?.logs).toHaveLength(2);
-		expect(resumedTab?.logs[0].text).toBe('Read file.ts');
-		expect(resumedTab?.logs[1].text).toBe('Here is the content');
+		// A tool-use-only message (msg-2) is no longer dropped: it becomes a tool
+		// card under its own message id, between the question and the answer.
+		expect(resumedTab?.logs.map((log: LogEntry) => [log.id, log.source, log.text])).toEqual([
+			['msg-1', 'user', 'Read file.ts'],
+			['msg-2', 'tool', 'Read'],
+			['msg-3', 'stdout', 'Here is the content'],
+		]);
+		expect(resumedTab?.logs[1].metadata?.toolState?.input).toEqual({ path: 'file.ts' });
 	});
 
 	it('shows flash notification when session file is not found', async () => {
@@ -850,21 +860,28 @@ describe('useAgentSessionManagement', () => {
 		const setSessions = vi.fn();
 		const showFlash = vi.fn();
 
-		// All messages have empty content (tool-use only)
+		// Nothing displayable: blank text, no image, and no tool call that can be
+		// read (a nameless tool block and a bare tool_result are not cards).
 		const messages = [
 			{
 				type: 'assistant',
 				content: '',
 				timestamp: '2024-01-01T00:00:01.000Z',
 				uuid: 'msg-1',
-				toolUse: [{ type: 'tool_use', name: 'Read', input: {} }],
 			},
 			{
 				type: 'assistant',
 				content: '   ',
 				timestamp: '2024-01-01T00:00:02.000Z',
 				uuid: 'msg-2',
-				toolUse: [{ type: 'tool_use', name: 'Write', input: {} }],
+				toolUse: [{ type: 'tool_use', input: {} }],
+			},
+			{
+				type: 'user',
+				content: '',
+				timestamp: '2024-01-01T00:00:03.000Z',
+				uuid: 'msg-3',
+				toolUse: [{ type: 'tool_result', tool_use_id: 'missing', content: 'x' }],
 			},
 		];
 
@@ -1026,10 +1043,35 @@ describe('useAgentSessionManagement', () => {
 				'codex',
 				'/target/project',
 				'agent-x',
-				{ offset: 0, limit: 500 },
+				{ offset: 0, limit: 500, ownerAgentId: 'target-agent' },
 				undefined
 			);
 			expect(setActiveAgentSessionId).toHaveBeenCalledWith('agent-x');
+
+			// A native history row names its exact account pool: the read is pinned to it.
+			await act(async () => {
+				await result.current.handleResumeSession(
+					'agent-y',
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					'/target/project',
+					{ targetSessionId: 'target-agent', configDir: '/home/u/.codex-work' }
+				);
+			});
+			expect(window.maestro.agentSessions.read).toHaveBeenLastCalledWith(
+				'codex',
+				'/target/project',
+				'agent-y',
+				{
+					offset: 0,
+					limit: 500,
+					ownerAgentId: 'target-agent',
+					configDir: '/home/u/.codex-work',
+				},
+				undefined
+			);
 		} finally {
 			useSessionStore.setState({ sessions: previousStore.sessions });
 		}

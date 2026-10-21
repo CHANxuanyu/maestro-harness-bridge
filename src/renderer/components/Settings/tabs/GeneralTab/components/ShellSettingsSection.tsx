@@ -3,6 +3,7 @@ import { Check, ChevronDown, Terminal } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import type { ShellSettingsState } from '../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 
 interface ShellSettingsSectionProps {
 	theme: Theme;
@@ -32,16 +33,16 @@ export function ShellSettingsSection({
 		handleShellInteraction,
 		selectShell,
 	} = shellState;
+	const t = useT();
 
 	return (
 		<div data-setting-id="general-default-shell">
-			<SettingsSectionHeading icon={Terminal}>Default Terminal Shell</SettingsSectionHeading>
-			<p className="text-xs opacity-70 mb-2">
-				Choose which shell to use for terminal sessions. Select any shell and configure a custom
-				path if needed.
-			</p>
+			<SettingsSectionHeading icon={Terminal}>
+				{t('settings.general.shell.heading')}
+			</SettingsSectionHeading>
+			<p className="text-xs opacity-70 mb-2">{t('settings.general.shell.description')}</p>
 			{shellsLoading ? (
-				<div className="text-sm opacity-70 p-2">Loading shells...</div>
+				<div className="text-sm opacity-70 p-2">{t('settings.general.shell.loading')}</div>
 			) : (
 				<div className="space-y-2">
 					{shellsLoaded && shells.length > 0 ? (
@@ -82,7 +83,7 @@ export function ShellSettingsSection({
 													color: theme.colors.success,
 												}}
 											>
-												Available
+												{t('settings.general.shell.available')}
 											</span>
 										)
 									) : defaultShell === shell.id ? (
@@ -94,7 +95,7 @@ export function ShellSettingsSection({
 													color: theme.colors.warning,
 												}}
 											>
-												Custom Path Required
+												{t('settings.general.shell.customPathRequired')}
 											</span>
 											<Check className="w-4 h-4" style={{ color: theme.colors.accent }} />
 										</div>
@@ -106,7 +107,7 @@ export function ShellSettingsSection({
 												color: theme.colors.warning,
 											}}
 										>
-											Not Found
+											{t('settings.general.shell.notFound')}
 										</span>
 									)}
 								</div>
@@ -130,7 +131,9 @@ export function ShellSettingsSection({
 										<div className="font-medium">
 											{defaultShell.charAt(0).toUpperCase() + defaultShell.slice(1)}
 										</div>
-										<div className="text-xs opacity-70 font-mono mt-1">Current default</div>
+										<div className="text-xs opacity-70 font-mono mt-1">
+											{t('settings.general.shell.currentDefault')}
+										</div>
 									</div>
 									<Check className="w-4 h-4" style={{ color: theme.colors.accent }} />
 								</div>
@@ -146,7 +149,7 @@ export function ShellSettingsSection({
 							>
 								<div className="flex items-center gap-2">
 									<Terminal className="w-4 h-4" />
-									<span>Detect other available shells...</span>
+									<span>{t('settings.general.shell.detectOthers')}</span>
 								</div>
 							</button>
 						</div>
@@ -160,7 +163,7 @@ export function ShellSettingsSection({
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<span className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-					Shell Configuration
+					{t('settings.general.shell.config')}
 				</span>
 				<ChevronDown
 					className={`w-4 h-4 transition-transform ${shellConfigExpanded ? 'rotate-180' : ''}`}
@@ -177,7 +180,9 @@ export function ShellSettingsSection({
 					}}
 				>
 					<div>
-						<div className="block text-xs opacity-70 mb-1">Custom Path (optional)</div>
+						<div className="block text-xs opacity-70 mb-1">
+							{t('settings.general.customPathOptional')}
+						</div>
 						<div className="flex gap-2">
 							<input
 								type="text"
@@ -196,17 +201,17 @@ export function ShellSettingsSection({
 										color: theme.colors.textDim,
 									}}
 								>
-									Clear
+									{t('common.clear')}
 								</button>
 							)}
 						</div>
-						<p className="text-xs opacity-70 mt-1">
-							Override the auto-detected shell path. Leave empty to use the detected path.
-						</p>
+						<p className="text-xs opacity-70 mt-1">{t('settings.general.shell.customPathHelp')}</p>
 					</div>
 
 					<div>
-						<div className="block text-xs opacity-70 mb-1">Additional Arguments (optional)</div>
+						<div className="block text-xs opacity-70 mb-1">
+							{t('settings.general.shell.argsLabel')}
+						</div>
 						<div className="flex gap-2">
 							<input
 								type="text"
@@ -225,13 +230,11 @@ export function ShellSettingsSection({
 										color: theme.colors.textDim,
 									}}
 								>
-									Clear
+									{t('common.clear')}
 								</button>
 							)}
 						</div>
-						<p className="text-xs opacity-70 mt-1">
-							Additional CLI arguments passed to every shell session (e.g., --login, -c).
-						</p>
+						<p className="text-xs opacity-70 mt-1">{t('settings.general.shell.argsHelp')}</p>
 					</div>
 				</div>
 			)}

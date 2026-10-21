@@ -1,22 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { setApplicationMenu, buildFromTemplate, send, getFocusedWindow, FakeBrowserWindow } =
-	vi.hoisted(() => {
-		const send = vi.fn();
-		return {
-			setApplicationMenu: vi.fn(),
-			buildFromTemplate: vi.fn((template: unknown) => ({ template })),
-			send,
-			getFocusedWindow: vi.fn(),
-			FakeBrowserWindow: class {
-				isDestroyed = () => false;
-				webContents = { isDestroyed: () => false, send };
-			},
-		};
-	});
+const {
+	setApplicationMenu,
+	buildFromTemplate,
+	send,
+	getFocusedWindow,
+	getLocale,
+	FakeBrowserWindow,
+} = vi.hoisted(() => {
+	const send = vi.fn();
+	return {
+		setApplicationMenu: vi.fn(),
+		buildFromTemplate: vi.fn((template: unknown) => ({ template })),
+		send,
+		getFocusedWindow: vi.fn(),
+		getLocale: vi.fn(() => 'en-US'),
+		FakeBrowserWindow: class {
+			isDestroyed = () => false;
+			webContents = { isDestroyed: () => false, send };
+		},
+	};
+});
 
 vi.mock('electron', () => ({
-	app: { quit: vi.fn() },
+	app: { quit: vi.fn(), getLocale },
 	Menu: {
 		setApplicationMenu: (...args: unknown[]) => setApplicationMenu(...args),
 		buildFromTemplate: (...args: unknown[]) => buildFromTemplate(args[0]),
@@ -38,6 +45,7 @@ vi.mock('../../shared/platformDetection', () => ({
 import {
 	installApplicationMenu,
 	setMenuShortcutKeys,
+	setMenuLanguage,
 	resetMenuShortcutKeysForTesting,
 } from '../../main/app-menu';
 
@@ -88,6 +96,7 @@ describe('app menu', () => {
 		vi.clearAllMocks();
 		resetMenuShortcutKeysForTesting();
 		isMac = true;
+		getLocale.mockReturnValue('en-US');
 	});
 
 	it('installs File, Edit, View and Window menus on macOS', () => {
@@ -95,6 +104,54 @@ describe('app menu', () => {
 
 		const labels = lastTemplate().map((item) => item.label ?? item.role);
 		expect(labels).toEqual(['appMenu', 'File', 'Edit', 'View', 'Window']);
+	});
+
+	it('starts in the stored language and follows the system preference', () => {
+		getLocale.mockReturnValue('zh-CN');
+		installApplicationMenu('system');
+		expect(lastTemplate().map((item) => item.label ?? item.role)).toEqual([
+			'appMenu',
+			'文件',
+			'编辑',
+			'视图',
+			'窗口',
+		]);
+		expect(itemNamed(menuNamed('编辑'), '拷贝').role).toBe('copy');
+		installApplicationMenu('en');
+		expect(menuNamed('File')).toBeDefined();
+	});
+
+	it('switches languages immediately while preserving shortcut bindings and dispatch', () => {
+		setMenuShortcutKeys({ toggleMode: ['Alt', 'Meta', 't'] });
+		const before = lastTemplate().flatMap((menu) => menu.submenu ?? []);
+		setMenuLanguage('zh-CN');
+		const item = itemNamed(menuNamed('视图'), '切换 AI / Shell 模式');
+		expect(shortcutOf(item)).toBe('⌥⌘T');
+		expect(item.accelerator).toBeUndefined();
+		item.click?.({}, new FakeBrowserWindow());
+		expect(send).toHaveBeenCalledWith('menu:command', 'toggleMode');
+		const after = lastTemplate().flatMap((menu) => menu.submenu ?? []);
+		expect(after.map((entry) => entry.role)).toEqual(before.map((entry) => entry.role));
+		expect(after.map((entry) => entry.accelerator)).toEqual(
+			before.map((entry) => entry.accelerator)
+		);
+		setMenuShortcutKeys({ toggleMode: ['Meta', 'j'] });
+		expect(shortcutOf(itemNamed(menuNamed('视图'), '切换 AI / Shell 模式'))).toBe('⌘J');
+		setMenuLanguage('en');
+		expect(shortcutOf(itemNamed(menuNamed('View'), 'Switch AI / Shell Mode'))).toBe('⌘J');
+	});
+
+	it('does not rebuild the menu for an external settings change with the same locale', () => {
+		installApplicationMenu('en');
+		setMenuLanguage('system');
+		expect(buildFromTemplate).toHaveBeenCalledTimes(1);
+	});
+
+	it('uses the system locale again when a CLI reset removes the preference', () => {
+		installApplicationMenu('en');
+		getLocale.mockReturnValue('zh-CN');
+		setMenuLanguage(undefined);
+		expect(menuNamed('文件')).toBeDefined();
 	});
 
 	it('removes the menu bar entirely off macOS', () => {

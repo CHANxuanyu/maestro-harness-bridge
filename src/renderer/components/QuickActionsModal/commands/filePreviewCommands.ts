@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
 import type { QuickAction } from '../types';
 import { extractHeadings, getLanguageFromFilename } from '../../FilePreview/filePreviewUtils';
@@ -24,6 +25,7 @@ export function buildFilePreviewCommands({
 	activeSession,
 	setQuickActionOpen,
 }: BuildFilePreviewCommandsArgs): QuickAction[] {
+	const t = getT();
 	const activeFileTab = activeSession?.activeFileTabId
 		? activeSession.filePreviewTabs?.find((tab) => tab.id === activeSession.activeFileTabId)
 		: undefined;
@@ -45,8 +47,13 @@ export function buildFilePreviewCommands({
 	return [
 		{
 			id: 'jumpToHeading',
-			label: 'Jump to Heading',
-			subtext: `Search the ${headingCount} heading${headingCount === 1 ? '' : 's'} in ${activeFileTab.name}${activeFileTab.extension}`,
+			label: t('workflows.shell.jumpToHeading'),
+			subtext: t('workflows.shell.searchTheValueHeadingvalueInValuevalue', {
+				p0: headingCount,
+				p1: headingCount === 1 ? '' : t('workflows.shell.pluralSuffix'),
+				p2: activeFileTab.name,
+				p3: activeFileTab.extension,
+			}),
 			action: () => {
 				setQuickActionOpen(false);
 				// Deferred so the command palette finishes unmounting first: both are

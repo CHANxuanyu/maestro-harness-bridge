@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * QuitConfirmModal.tsx
  *
@@ -49,11 +50,16 @@ export function QuitConfirmModal({
 	onQuitWhenIdle,
 	onCancel,
 }: QuitConfirmModalProps): JSX.Element {
+	const t = useT();
 	const cancelButtonRef = useRef<HTMLButtonElement>(null);
 	// When checked, the app stays open and quits itself once everything is idle.
 	const [quitWhenIdle, setQuitWhenIdle] = useState(false);
 
-	useModalLayer(MODAL_PRIORITIES.QUIT_CONFIRM, 'Confirm Quit Application', onCancel);
+	useModalLayer(
+		MODAL_PRIORITIES.QUIT_CONFIRM,
+		t('workflows.shell.extraConfirmQuitApplication'),
+		onCancel
+	);
 
 	// Focus Cancel button on mount (safer default action)
 	useEffect(() => {
@@ -69,7 +75,6 @@ export function QuitConfirmModal({
 		e.stopPropagation();
 	};
 
-	const agentText = busyAgentCount === 1 ? 'agent is' : 'agents are';
 	const hasAutoRun = busyAgentNames.some((n) => n.includes('(Auto Run)'));
 	const hasTerminalTasks = activeTerminalTasks.length > 0;
 	const hasCueRuns = activeCueRunCount > 0;
@@ -111,7 +116,7 @@ export function QuitConfirmModal({
 						className="text-base font-semibold"
 						style={{ color: theme.colors.textMain }}
 					>
-						Quit Maestro?
+						{t('workflows.shell.quitMaestro')}
 					</h2>
 				</div>
 
@@ -124,28 +129,43 @@ export function QuitConfirmModal({
 					>
 						{busyAgentCount > 0 && (
 							<>
-								{busyAgentCount} {agentText} currently {hasAutoRun ? 'active' : 'thinking'}.{' '}
+								{t(
+									busyAgentCount === 1 ? 'workflows.quit.agentsOne' : 'workflows.quit.agentsMany',
+									{
+										count: busyAgentCount,
+										state: hasAutoRun
+											? t('workflows.shell.active')
+											: t('workflows.shell.thinking3'),
+									}
+								)}{' '}
 							</>
 						)}
 						{hasTerminalTasks && (
 							<>
-								{activeTerminalTasks.length} terminal{' '}
-								{activeTerminalTasks.length === 1 ? 'task is' : 'tasks are'} running.{' '}
+								{t(
+									activeTerminalTasks.length === 1
+										? 'workflows.quit.terminalOne'
+										: 'workflows.quit.terminalMany',
+									{ count: activeTerminalTasks.length }
+								)}{' '}
 							</>
 						)}
 						{hasCueRuns && (
 							<>
-								{activeCueRunCount} Maestro Cue{' '}
-								{activeCueRunCount === 1 ? 'operation is' : 'operations are'} running.{' '}
+								{t(activeCueRunCount === 1 ? 'workflows.quit.cueOne' : 'workflows.quit.cueMany', {
+									count: activeCueRunCount,
+								})}{' '}
 							</>
 						)}
 						{hasGroupChats && (
 							<>
-								{activeGroupChatCount} group {activeGroupChatCount === 1 ? 'chat is' : 'chats are'}{' '}
-								active.{' '}
+								{t(
+									activeGroupChatCount === 1 ? 'workflows.quit.chatOne' : 'workflows.quit.chatMany',
+									{ count: activeGroupChatCount }
+								)}{' '}
 							</>
 						)}
-						Quitting now will interrupt active work.
+						{t('workflows.shell.quittingNowWillInterruptActiveWork')}
 					</p>
 
 					{/* List of busy agents */}
@@ -158,7 +178,7 @@ export function QuitConfirmModal({
 							}}
 						>
 							<div className="text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-								Active Agents
+								{t('workflows.shell.activeAgents')}
 							</div>
 							<div className="flex flex-wrap gap-2">
 								{displayNames.map((name, index) => (
@@ -182,7 +202,7 @@ export function QuitConfirmModal({
 										className="inline-flex items-center px-2 py-1 rounded text-xs"
 										style={{ color: theme.colors.textDim }}
 									>
-										+{remainingCount} more
+										{t('workflows.quit.more', { count: remainingCount })}
 									</span>
 								)}
 							</div>
@@ -199,7 +219,7 @@ export function QuitConfirmModal({
 							}}
 						>
 							<div className="text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-								Running Terminal Tasks
+								{t('workflows.shell.runningTerminalTasks')}
 							</div>
 							<div className="flex flex-wrap gap-2">
 								{displayTerminalTasks.map((task, index) => (
@@ -223,7 +243,7 @@ export function QuitConfirmModal({
 										className="inline-flex items-center px-2 py-1 rounded text-xs"
 										style={{ color: theme.colors.textDim }}
 									>
-										+{remainingTerminalCount} more
+										{t('workflows.quit.more', { count: remainingTerminalCount })}
 									</span>
 								)}
 							</div>
@@ -240,7 +260,7 @@ export function QuitConfirmModal({
 							}}
 						>
 							<div className="text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-								Background Operations
+								{t('workflows.shell.backgroundOperations')}
 							</div>
 							<div className="flex flex-wrap gap-2">
 								{hasCueRuns && (
@@ -255,7 +275,7 @@ export function QuitConfirmModal({
 											className="w-1.5 h-1.5 rounded-full animate-pulse"
 											style={{ backgroundColor: theme.colors.warning }}
 										/>
-										Maestro Cue: {activeCueRunCount}
+										{t('workflows.shell.maestroCue2')} {activeCueRunCount}
 									</span>
 								)}
 								{hasGroupChats && (
@@ -270,7 +290,11 @@ export function QuitConfirmModal({
 											className="w-1.5 h-1.5 rounded-full animate-pulse"
 											style={{ backgroundColor: theme.colors.warning }}
 										/>
-										Group {activeGroupChatCount === 1 ? 'Chat' : 'Chats'}: {activeGroupChatCount}
+										{t('workflows.shell.group2')}{' '}
+										{activeGroupChatCount === 1
+											? t('workflows.shell.chat')
+											: t('workflows.shell.chats')}
+										: {activeGroupChatCount}
 									</span>
 								)}
 							</div>
@@ -294,10 +318,10 @@ export function QuitConfirmModal({
 							<span className="text-xs leading-relaxed">
 								<span className="font-medium inline-flex items-center gap-1">
 									<Hourglass className="w-3 h-3" style={{ color: theme.colors.warning }} />
-									Quit when idle
+									{t('workflows.shell.quitWhenIdle')}
 								</span>
 								<span className="block" style={{ color: theme.colors.textDim }}>
-									Keep running and quit automatically once all operations finish.
+									{t('workflows.shell.keepRunningAndQuitAutomaticallyOnceAllOperations')}
 								</span>
 							</span>
 						</label>
@@ -313,7 +337,7 @@ export function QuitConfirmModal({
 								color: quitWhenIdle ? theme.colors.accentForeground : '#ffffff',
 							}}
 						>
-							{quitWhenIdle ? 'Quit When Idle' : 'Quit Anyway'}
+							{quitWhenIdle ? t('workflows.shell.quitWhenIdle2') : t('workflows.shell.quitAnyway')}
 						</button>
 						<button
 							ref={cancelButtonRef}
@@ -324,7 +348,7 @@ export function QuitConfirmModal({
 								color: theme.colors.accentForeground,
 							}}
 						>
-							Cancel
+							{t('workflows.shell.cancel')}
 						</button>
 					</div>
 
@@ -336,21 +360,21 @@ export function QuitConfirmModal({
 						>
 							Tab
 						</kbd>{' '}
-						to switch •{' '}
+						{t('workflows.shell.toSwitch')}{' '}
 						<kbd
 							className="px-1.5 py-0.5 rounded border"
 							style={{ borderColor: theme.colors.border }}
 						>
 							Enter
 						</kbd>{' '}
-						to confirm •{' '}
+						{t('workflows.shell.toConfirm')}{' '}
 						<kbd
 							className="px-1.5 py-0.5 rounded border"
 							style={{ borderColor: theme.colors.border }}
 						>
-							Esc
+							{t('workflows.shell.esc')}
 						</kbd>{' '}
-						to cancel
+						{t('workflows.shell.toCancel')}
 					</div>
 				</div>
 			</div>

@@ -7,6 +7,7 @@
  */
 
 import { ipcRenderer } from 'electron';
+import type { ProjectHistoryScope, ProjectHistoryResult } from '../../shared/projectHistory';
 
 // Helper to log deprecation warnings
 const logDeprecationWarning = (method: string, replacement?: string) => {
@@ -231,6 +232,8 @@ export function createClaudeApi() {
  */
 export function createAgentSessionsApi() {
 	return {
+		listProjectHistory: (scopes: ProjectHistoryScope[]): Promise<ProjectHistoryResult> =>
+			ipcRenderer.invoke('agentSessions:listProjectHistory', scopes),
 		list: (agentId: string, projectPath: string, sshRemoteId?: string) =>
 			ipcRenderer.invoke('agentSessions:list', agentId, projectPath, sshRemoteId),
 
@@ -247,7 +250,7 @@ export function createAgentSessionsApi() {
 			agentId: string,
 			projectPath: string,
 			sessionId: string,
-			options?: { offset?: number; limit?: number },
+			options?: { offset?: number; limit?: number; configDir?: string; ownerAgentId?: string },
 			sshRemoteId?: string
 		) =>
 			ipcRenderer.invoke(

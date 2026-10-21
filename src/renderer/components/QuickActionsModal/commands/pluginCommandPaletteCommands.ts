@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type {
 	CommandContribution,
 	CommandMacroContribution,
@@ -50,6 +51,7 @@ export function buildPluginCommandPaletteCommands({
 	onCommandError,
 	setQuickActionOpen,
 }: BuildPluginCommandPaletteCommandsArgs): PluginPaletteAction[] {
+	const t = getT();
 	const actions: PluginPaletteAction[] = [];
 
 	if (onRunPromptMacro) {
@@ -57,10 +59,10 @@ export function buildPluginCommandPaletteCommands({
 			actions.push({
 				id: macro.id,
 				pluginId: macro.pluginId,
-				label: `Macro: ${macro.title}`,
+				label: t('workflows.shell.macroValue', { p0: macro.title }),
 				subtext: macro.description
-					? `${macro.description} - from ${macro.pluginId}`
-					: `from ${macro.pluginId}`,
+					? t('workflows.shell.valueFromValue', { p0: macro.description, p1: macro.pluginId })
+					: t('workflows.shell.fromValue', { p0: macro.pluginId }),
 				action: () => {
 					onRunPromptMacro(macro.prompt);
 					setQuickActionOpen(false);
@@ -76,8 +78,8 @@ export function buildPluginCommandPaletteCommands({
 				pluginId: command.pluginId,
 				label: command.title,
 				subtext: command.description
-					? `${command.description} - from ${command.pluginId}`
-					: `from ${command.pluginId}`,
+					? t('workflows.shell.valueFromValue', { p0: command.description, p1: command.pluginId })
+					: t('workflows.shell.fromValue', { p0: command.pluginId }),
 				action: () => {
 					void invokeCommand(command.id).then(
 						(result) => onCommandResult?.({ dispatched: result.dispatched, title: command.title }),
@@ -98,7 +100,7 @@ export function buildPluginCommandPaletteCommands({
 				id: item.id,
 				pluginId: item.pluginId,
 				label: item.label,
-				subtext: `from ${item.pluginId}`,
+				subtext: t('workflows.shell.fromValue', { p0: item.pluginId }),
 				action: () => {
 					void invokeCommand(`${item.pluginId}/${item.command}`).then(
 						(result) => onCommandResult?.({ dispatched: result.dispatched, title: item.label }),

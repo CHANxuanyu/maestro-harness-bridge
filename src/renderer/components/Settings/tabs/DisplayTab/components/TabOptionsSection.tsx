@@ -1,6 +1,7 @@
 import { ListFilter } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { formatMetaKeyName } from '../../../../../utils/shortcutFormatter';
+import { useT } from '../../../../../i18n';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { SectionCard } from './SectionCard';
 import { ToggleSettingRow } from './ToggleSettingRow';
@@ -44,92 +45,88 @@ export function TabOptionsSection({
 	tabBarWheelScroll,
 	setTabBarWheelScroll,
 }: TabOptionsSectionProps) {
+	const t = useT();
 	// Spelled-out modifier for shortcut hints: 'Command' on macOS, 'Ctrl' elsewhere.
 	// formatMetaKeyName reads the preload platform bridge, which is the only source
 	// that survives the renderer's `process` shim (process.platform is 'browser').
-	const shortcutPrefix = formatMetaKeyName();
+	const meta = formatMetaKeyName();
+	const lastTabTitle = t('settings.display.tabs.lastTab', { meta });
 
 	return (
 		<div data-setting-id="display-tab-filtering">
-			<SettingsSectionHeading icon={ListFilter}>Tab Options</SettingsSectionHeading>
+			<SettingsSectionHeading icon={ListFilter}>
+				{t('settings.display.tabs.heading')}
+			</SettingsSectionHeading>
 			<SectionCard theme={theme}>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show starred tabs when filtering by unread"
-					description="When the unread filter is active, starred tabs remain visible even if they have no unread messages."
+					title={t('settings.display.tabs.starred')}
+					description={t('settings.display.tabs.starredDescription')}
 					checked={showStarredInUnreadFilter}
 					onChange={setShowStarredInUnreadFilter}
-					ariaLabel="Show starred tabs when filtering by unread"
+					ariaLabel={t('settings.display.tabs.starred')}
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show file preview tabs when filtering by unread"
-					description="When the unread filter is active, file preview tabs remain visible instead of being hidden."
+					title={t('settings.display.tabs.filePreviews')}
+					description={t('settings.display.tabs.filePreviewsDescription')}
 					checked={showFilePreviewsInUnreadFilter}
 					onChange={setShowFilePreviewsInUnreadFilter}
-					ariaLabel="Show file preview tabs when filtering by unread"
+					ariaLabel={t('settings.display.tabs.filePreviews')}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show terminal tabs when filtering by unread"
-					description="When the unread filter is active, terminal tabs remain visible instead of being hidden."
+					title={t('settings.display.tabs.terminals')}
+					description={t('settings.display.tabs.terminalsDescription')}
 					checked={showTerminalTabsInUnreadFilter}
 					onChange={setShowTerminalTabsInUnreadFilter}
-					ariaLabel="Show terminal tabs when filtering by unread"
+					ariaLabel={t('settings.display.tabs.terminals')}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show browser tabs when filtering by unread"
-					description="When the unread filter is active, browser tabs remain visible instead of being hidden."
+					title={t('settings.display.tabs.browsers')}
+					description={t('settings.display.tabs.browsersDescription')}
 					checked={showBrowserTabsInUnreadFilter}
 					onChange={setShowBrowserTabsInUnreadFilter}
-					ariaLabel="Show browser tabs when filtering by unread"
+					ariaLabel={t('settings.display.tabs.browsers')}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title={`Treat ${shortcutPrefix}+0 as the last tab`}
-					description={
-						<>
-							Maestro-style: {shortcutPrefix}+1-9 jump to tabs 1-9, and {shortcutPrefix}+0 jumps to
-							the last tab. Disable to use browser-style: {shortcutPrefix}+1-8 jump to tabs 1-8, and{' '}
-							{shortcutPrefix}+9 jumps to the last tab.
-						</>
-					}
+					title={lastTabTitle}
+					description={t('settings.display.tabs.lastTabDescription', { meta })}
 					checked={useCmd0AsLastTab}
 					onChange={setUseCmd0AsLastTab}
-					ariaLabel={`Treat ${shortcutPrefix}+0 as the last tab`}
+					ariaLabel={lastTabTitle}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show domain on browser tabs"
-					description="Display a small domain pill (e.g. www.google.com) next to the page title on browser tabs. Disable to hide it."
+					title={t('settings.display.tabs.domain')}
+					description={t('settings.display.tabs.domainDescription')}
 					checked={showBrowserTabDomain}
 					onChange={setShowBrowserTabDomain}
-					ariaLabel="Show domain on browser tabs"
+					ariaLabel={t('settings.display.tabs.domain')}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show tab count on the search icon"
-					description={
-						'Display the number of open tabs as a small badge on the tab bar search (magnifier) icon. When off, the count is still shown next to "Search Tabs" in the popover that opens when you click the icon.'
-					}
+					title={t('settings.display.tabs.countBadge')}
+					description={t('settings.display.tabs.countBadgeDescription')}
 					checked={showTabCountBadge}
 					onChange={setShowTabCountBadge}
-					ariaLabel="Show tab count on the search icon"
+					ariaLabel={t('settings.display.tabs.countBadge')}
 					borderTop
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Scroll tabs with the mouse wheel"
-					description="When the tab strip overflows, hover over it and scroll the mouse wheel to pan the tabs left and right. Disable to stop translating vertical wheel movement into tab scrolling; native horizontal gestures like trackpad swipes are unaffected."
+					title={t('settings.display.tabs.wheel')}
+					description={t('settings.display.tabs.wheelDescription')}
 					checked={tabBarWheelScroll}
 					onChange={setTabBarWheelScroll}
-					ariaLabel="Scroll tabs with the mouse wheel"
+					ariaLabel={t('settings.display.tabs.wheel')}
 					borderTop
 				/>
 			</SectionCard>

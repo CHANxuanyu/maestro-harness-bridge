@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { useEffect, useRef, useState, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, GitBranch, Search, Loader2 } from 'lucide-react';
@@ -30,6 +31,7 @@ export function BranchSwitcherDropdown({
 	onClose,
 	onSwitched,
 }: BranchSwitcherDropdownProps) {
+	const t = useT();
 	const [branches, setBranches] = useState<string[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [filter, setFilter] = useState('');
@@ -57,7 +59,7 @@ export function BranchSwitcherDropdown({
 				if (cancelled) return;
 				notifyToast({
 					color: 'red',
-					title: 'Failed to load branches',
+					title: t('workflows.shell.failedToLoadBranches'),
 					message: err instanceof Error ? err.message : String(err),
 					dismissible: true,
 				});
@@ -124,7 +126,7 @@ export function BranchSwitcherDropdown({
 				const result = await gitService.switchBranch(cwd, branch, sshRemoteId);
 				if (result.success) {
 					notifyCenterFlash({
-						message: `Switched to ${branch}`,
+						message: t('workflows.shell.extraSwitchedToValue', { p0: branch }),
 						color: 'green',
 					});
 					onSwitched();
@@ -132,15 +134,16 @@ export function BranchSwitcherDropdown({
 				} else {
 					notifyToast({
 						color: 'red',
-						title: 'Branch switch failed',
-						message: result.stderr.trim() || 'git switch returned a non-zero exit code.',
+						title: t('workflows.shell.branchSwitchFailed'),
+						message:
+							result.stderr.trim() || t('workflows.shell.extraGitSwitchReturnedANonZeroExitCode'),
 						dismissible: true,
 					});
 				}
 			} catch (err) {
 				notifyToast({
 					color: 'red',
-					title: 'Branch switch failed',
+					title: t('workflows.shell.branchSwitchFailed'),
 					message: err instanceof Error ? err.message : String(err),
 					dismissible: true,
 				});
@@ -148,7 +151,7 @@ export function BranchSwitcherDropdown({
 				setSwitching(null);
 			}
 		},
-		[cwd, sshRemoteId, currentBranch, switching, onSwitched, onClose]
+		[t, cwd, sshRemoteId, currentBranch, switching, onSwitched, onClose]
 	);
 
 	const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -181,7 +184,7 @@ export function BranchSwitcherDropdown({
 				border: `1px solid ${theme.colors.border}`,
 			}}
 			role="dialog"
-			aria-label="Switch branch"
+			aria-label={t('workflows.shell.switchBranch')}
 			onClick={(e) => e.stopPropagation()}
 		>
 			{/* Search */}
@@ -195,7 +198,7 @@ export function BranchSwitcherDropdown({
 					value={filter}
 					onChange={(e) => setFilter(e.target.value)}
 					onKeyDown={onKeyDown}
-					placeholder="Filter branches…"
+					placeholder={t('workflows.shell.filterBranches')}
 					className="flex-1 bg-transparent outline-none text-sm"
 					style={{ color: theme.colors.textMain }}
 				/>
@@ -209,7 +212,7 @@ export function BranchSwitcherDropdown({
 					</div>
 				) : filtered.length === 0 ? (
 					<div className="px-3 py-4 text-xs text-center" style={{ color: theme.colors.textDim }}>
-						No matching branches
+						{t('workflows.shell.noMatchingBranches')}
 					</div>
 				) : (
 					filtered.map((branch, i) => {
@@ -229,7 +232,11 @@ export function BranchSwitcherDropdown({
 									backgroundColor: isHighlighted ? theme.colors.bgActivity : 'transparent',
 									color: isCurrent ? theme.colors.textDim : theme.colors.textMain,
 								}}
-								title={isCurrent ? 'Already on this branch' : `Switch to ${branch}`}
+								title={
+									isCurrent
+										? t('workflows.shell.alreadyOnThisBranch')
+										: t('workflows.shell.switchToValue', { p0: branch })
+								}
 							>
 								<GitBranch className="w-3 h-3 shrink-0 text-orange-500" />
 								<span className="font-mono truncate flex-1">{branch}</span>
@@ -248,7 +255,7 @@ export function BranchSwitcherDropdown({
 				className="px-3 py-1.5 border-t text-2xs flex items-center justify-between"
 				style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
 			>
-				<span data-shortcut-hint="">↑↓ navigate · Enter switch · Esc close</span>
+				<span data-shortcut-hint="">{t('workflows.shell.navigateEnterSwitchEscClose')}</span>
 				<span>{filtered.length}</span>
 			</div>
 		</div>

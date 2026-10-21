@@ -16,6 +16,7 @@ import {
 } from '../../../renderer/hooks/agent/useAgentListeners';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useModalStore } from '../../../renderer/stores/modalStore';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useAuthOutageStore } from '../../../renderer/stores/authOutageStore';
 import { useGroupChatStore } from '../../../renderer/stores/groupChatStore';
 import type { Session, AITab, AgentError } from '../../../renderer/types';
@@ -205,6 +206,9 @@ beforeEach(() => {
 		removedWorktreePaths: new Set(),
 	});
 	useModalStore.getState().closeAll();
+	// The agent layout's scratch-state contract for tool logs is the baseline
+	// here; the conversation layout keeps them (see liveProgressAndTools.test).
+	useSettingsStore.setState({ sidebarNavigationMode: 'agents' });
 
 	// Mock window.maestro
 	(window as any).maestro = {
@@ -1806,6 +1810,51 @@ describe('useAgentListeners', () => {
 			expect(remaining.map((l) => l.source)).toEqual(['stdout']);
 			expect(updated?.aiTabs[0]?.state).toBe('idle');
 			expect(updated?.aiTabs[0]?.thinkingStartTime).toBeUndefined();
+		});
+
+		it('keeps tool logs (not reasoning) on AI exit in the conversation layout', async () => {
+			useSettingsStore.setState({ sidebarNavigationMode: 'conversations' });
+			const deps = createMockDeps();
+			const tab = createMockTab({
+				id: 'tab-1',
+				showThinking: 'on',
+				logs: [
+					{ id: 'log-thinking-1', timestamp: 1700000000001, source: 'thinking', text: 'hmm' },
+					{
+						id: 'tool-done',
+						timestamp: 1700000000002,
+						source: 'tool',
+						text: 'bash',
+						metadata: { toolState: { status: 'completed', output: 'total 0' } },
+					},
+					{
+						id: 'tool-open',
+						timestamp: 1700000000003,
+						source: 'tool',
+						text: 'bash',
+						metadata: { toolState: { status: 'running' } },
+					},
+					{ id: 'log-stdout-1', timestamp: 1700000000004, source: 'stdout', text: 'final answer' },
+				],
+			});
+			const session = createMockSession({
+				id: 'sess-1',
+				state: 'busy',
+				busySource: 'ai',
+				aiTabs: [tab],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: 'sess-1' });
+
+			renderHook(() => useAgentListeners(deps));
+			await onExitHandler?.('sess-1-ai-tab-1');
+			await new Promise((r) => setTimeout(r, 50));
+
+			const logs = useSessionStore.getState().sessions[0].aiTabs[0].logs;
+			expect(logs.map((l) => l.id)).toEqual(['tool-done', 'tool-open', 'log-stdout-1']);
+			expect(logs[0].metadata?.toolState).toMatchObject({ status: 'completed', output: 'total 0' });
+			// A call the process never finished stops pulsing and is not a success.
+			expect(logs[1].metadata?.toolState?.status).toBeUndefined();
 		});
 
 		it("preserves thinking and tool logs on AI exit when showThinking is 'sticky'", async () => {

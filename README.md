@@ -1,3 +1,11 @@
+# Maestro Harness Bridge
+
+> 基于 RunMaestro/Maestro 的独立预览分支。已增加中文日常界面、项目下的原生会话列表，以及同一原生 Codex 会话的接续。信息流的视觉体验仍在改进。
+>
+> **[本分支说明](docs/fork.md) · [产品 changelog](CHANGELOG.md) · [验收记录](docs/verification/v1.0.1-hb.1.md) · [工作记录](docs/worklog.md) · [下载预览版](https://github.com/CHANxuanyu/maestro-harness-bridge/releases)**
+>
+> 应用名暂为 Maestro I18n。保留上游作者、Git 历史和 AGPL-3.0 许可。以下为上游项目介绍，分支新增能力与验证范围以以上文档为准。
+
 # Maestro
 
 <div align="center">

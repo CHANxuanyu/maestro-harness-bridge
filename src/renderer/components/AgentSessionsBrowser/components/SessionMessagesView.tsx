@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React, { RefObject } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Spinner } from '../../ui/Spinner';
@@ -26,6 +27,7 @@ export const SessionMessagesView = React.memo(function SessionMessagesView({
 	onKeyDown,
 	handleLoadMore,
 }: SessionMessagesViewProps) {
+	const uiText = useT();
 	return (
 		<div
 			ref={messagesContainerRef}
@@ -34,7 +36,7 @@ export const SessionMessagesView = React.memo(function SessionMessagesView({
 			onKeyDown={onKeyDown}
 			tabIndex={0}
 			role="region"
-			aria-label="Session messages"
+			aria-label={uiText('workflows.sessions.sessionMessages')}
 		>
 			{hasMoreMessages && (
 				<div className="text-center py-2">
@@ -49,7 +51,7 @@ export const SessionMessagesView = React.memo(function SessionMessagesView({
 							className="text-sm hover:underline"
 							style={{ color: theme.colors.accent }}
 						>
-							Load earlier messages...
+							{uiText('workflows.sessions.loadEarlierMessages')}
 						</button>
 					)}
 				</div>

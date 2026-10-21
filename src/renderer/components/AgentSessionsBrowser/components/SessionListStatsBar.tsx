@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React from 'react';
 import { BarChart3, MessageSquare, Database, DollarSign, Zap, Clock, Loader2 } from 'lucide-react';
 import type { Theme } from '../../../types';
@@ -28,17 +29,24 @@ interface SessionListStatsBarProps {
  */
 function tokenBreakdownTitle(
 	split: AggregateStats['tokenSplit'],
-	unsplitTokens: number | undefined
+	unsplitTokens: number | undefined,
+	uiText: ReturnType<typeof useT>
 ): string | undefined {
 	if (!split) return undefined;
 	const parts = [
-		`Input ${formatTokensCompact(split.inputTokens)}`,
-		`Output ${formatTokensCompact(split.outputTokens)}`,
-		`Cache reads ${formatTokensCompact(split.cacheReadTokens)}`,
-		`Cache writes ${formatTokensCompact(split.cacheCreationTokens)}`,
+		uiText('workflows.sessions.inputTokens', { tokens: formatTokensCompact(split.inputTokens) }),
+		uiText('workflows.sessions.outputTokens', { tokens: formatTokensCompact(split.outputTokens) }),
+		uiText('workflows.sessions.cacheReadTokens', {
+			tokens: formatTokensCompact(split.cacheReadTokens),
+		}),
+		uiText('workflows.sessions.cacheWriteTokens', {
+			tokens: formatTokensCompact(split.cacheCreationTokens),
+		}),
 	];
 	if (unsplitTokens && unsplitTokens > 0) {
-		parts.push(`Archived sessions, no breakdown ${formatTokensCompact(unsplitTokens)}`);
+		parts.push(
+			uiText('workflows.sessions.archivedTokens', { tokens: formatTokensCompact(unsplitTokens) })
+		);
 	}
 	return parts.join('\n');
 }
@@ -50,6 +58,7 @@ export const SessionListStatsBar = React.memo(function SessionListStatsBar({
 	sessionSinceDate,
 	theme,
 }: SessionListStatsBarProps) {
+	const uiText = useT();
 	if (loading || sessionsCount === 0) return null;
 
 	const pulse = !stats.isComplete ? 'animate-pulse' : '';
@@ -62,14 +71,18 @@ export const SessionListStatsBar = React.memo(function SessionListStatsBar({
 			<div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
 				<BarChart3 className="w-4 h-4" style={{ color: theme.colors.accent }} />
 				<span className={`text-xs font-medium ${pulse}`} style={{ color: theme.colors.textDim }}>
-					{stats.totalSessions.toLocaleString()}{' '}
-					{stats.totalSessions === 1 ? 'session' : 'sessions'}
+					{uiText(
+						stats.totalSessions === 1
+							? 'workflows.sessions.sessionOne'
+							: 'workflows.sessions.sessionMany',
+						{ count: stats.totalSessions.toLocaleString() }
+					)}
 				</span>
 			</div>
 			<div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
 				<MessageSquare className="w-4 h-4" style={{ color: theme.colors.success }} />
 				<span className={`text-xs font-medium ${pulse}`} style={{ color: theme.colors.textDim }}>
-					{stats.totalMessages.toLocaleString()} messages
+					{stats.totalMessages.toLocaleString()} {uiText('workflows.sessions.messagesUnit')}
 				</span>
 			</div>
 			<div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
@@ -96,7 +109,7 @@ export const SessionListStatsBar = React.memo(function SessionListStatsBar({
 			{(stats.totalTokens > 0 || !stats.isComplete) && (
 				<div
 					className="flex items-center gap-2 shrink-0 whitespace-nowrap"
-					title={tokenBreakdownTitle(stats.tokenSplit, stats.unsplitTokens)}
+					title={tokenBreakdownTitle(stats.tokenSplit, stats.unsplitTokens, uiText)}
 					data-testid="session-stats-tokens"
 				>
 					<Zap className="w-4 h-4" style={{ color: theme.colors.accent }} />
@@ -104,7 +117,7 @@ export const SessionListStatsBar = React.memo(function SessionListStatsBar({
 						className={`text-xs font-medium font-mono ${pulse}`}
 						style={{ color: theme.colors.textDim }}
 					>
-						{formatTokens(stats.totalTokens)} tokens
+						{formatTokens(stats.totalTokens)} {uiText('workflows.sessions.tokensUnit')}
 					</span>
 				</div>
 			)}
@@ -112,7 +125,7 @@ export const SessionListStatsBar = React.memo(function SessionListStatsBar({
 				<div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
 					<Clock className="w-4 h-4" style={{ color: theme.colors.textDim }} />
 					<span className="text-xs font-medium" style={{ color: theme.colors.textDim }}>
-						Since {sessionSinceDate.toLocaleDateString()}
+						{uiText('workflows.sessions.since')} {sessionSinceDate.toLocaleDateString()}
 					</span>
 				</div>
 			)}

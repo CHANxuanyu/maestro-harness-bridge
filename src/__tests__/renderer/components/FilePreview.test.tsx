@@ -417,7 +417,7 @@ describe('FilePreview', () => {
 				/>
 			);
 
-			const button = screen.getByRole('button', { name: 'Open in Default App' });
+			const button = screen.getByText('Open in Default App').closest('button')!;
 			expect(button).toBeEnabled();
 			fireEvent.click(button);
 			expect(window.maestro?.shell?.openPath).toHaveBeenCalledWith('/test/lib.dll');

@@ -49,6 +49,8 @@ export function isSelfContainedCard(entry: LogEntry): boolean {
 		entry.snoozeReturn ||
 		// Agent-to-agent hand-off pill - owned by services/agentDelegation.ts
 		entry.delegation ||
+		// A live public progress message: one complete message, never a stream
+		entry.purpose === 'commentary' ||
 		// Tool call card / hidden-progress placeholder
 		entry.metadata?.hiddenProgress ||
 		entry.metadata?.toolState ||
@@ -88,5 +90,59 @@ export function canAppendToLogEntry(
 ): boolean {
 	if (!entry) return false;
 	if (entry.source !== source) return false;
+	// A message read back from the provider transcript is complete. New output
+	// belongs to a new turn, never onto the end of a stored answer.
+	if (entry.nativeTranscript) return false;
 	return !isSelfContainedCard(entry);
+}
+
+/**
+ * True for a thinking/tool entry that is scratch state of the live turn, which
+ * the stream and exit clear points may drop. An entry read back from the
+ * provider transcript is history: dropping it would erase tool cards and
+ * reasoning the conversation really contains, with nothing to bring them back
+ * until the tab is re-read.
+ */
+export function isTransientActivityEntry(entry: LogEntry, opts: ActivityRetention = {}): boolean {
+	if (entry.nativeTranscript) return false;
+	if (entry.source === 'tool') return !opts.keepTools;
+	return entry.source === 'thinking';
+}
+
+/**
+ * How a clear point treats the live turn's activity. `keepTools`: tool calls
+ * are part of the record, not scratch state - the conversation-centred layout
+ * shows them folded and the user expects to read what ran (and its result)
+ * after the turn ends, a Stop, or a restart. Reasoning is still scratch.
+ */
+export interface ActivityRetention {
+	keepTools?: boolean;
+}
+
+/**
+ * Give every live tool call still marked running an honest final state when
+ * its turn is over without a result for it: `canceled` when the user stopped
+ * the turn, no status at all (unknown) when the process simply exited. Either
+ * way it stops pulsing, and nothing unfinished is ever drawn as a success.
+ * Returns `logs` itself when nothing was running.
+ */
+export function settleRunningToolEntries(
+	logs: LogEntry[],
+	reason: 'stopped' | 'exited'
+): LogEntry[] {
+	let changed = false;
+	const next = logs.map((entry) => {
+		if (entry.source !== 'tool' || entry.metadata?.toolState?.status !== 'running') return entry;
+		changed = true;
+		const rest = { ...entry.metadata.toolState };
+		delete rest.status;
+		return {
+			...entry,
+			metadata: {
+				...entry.metadata,
+				toolState: reason === 'stopped' ? { ...rest, status: 'canceled' as const } : rest,
+			},
+		};
+	});
+	return changed ? next : logs;
 }

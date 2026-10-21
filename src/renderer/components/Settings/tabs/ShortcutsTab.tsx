@@ -1,3 +1,5 @@
+import { useI18n, type MessageKey } from '../../../i18n';
+import { useShortcutLabel } from '../../../i18n/shortcutLabels';
 /**
  * ShortcutsTab - Keyboard shortcuts settings tab
  *
@@ -18,6 +20,18 @@ import { FIXED_SHORTCUTS } from '../../../constants/shortcuts';
 import { SettingsSectionHeading } from '../SettingsSectionHeading';
 import type { Theme, Shortcut } from '../../../types';
 
+const RESERVED_REASON_KEYS: Readonly<Record<string, MessageKey>> = {
+	'extends the text selection to the top': 'settings.finish.shortcuts.reason.top',
+	'extends the text selection to the bottom': 'settings.finish.shortcuts.reason.bottom',
+	'extends the text selection to the start of the line':
+		'settings.finish.shortcuts.reason.lineStart',
+	'extends the text selection to the end of the line': 'settings.finish.shortcuts.reason.lineEnd',
+};
+
+type ShortcutConflict =
+	| { kind: 'reserved'; keys: string[]; reason: string }
+	| { kind: 'duplicate'; keys: string[]; action: Shortcut };
+
 export interface ShortcutsTabProps {
 	theme: Theme;
 	hasNoAgents?: boolean;
@@ -25,6 +39,8 @@ export interface ShortcutsTabProps {
 }
 
 export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: ShortcutsTabProps) {
+	const { t, tRich } = useI18n();
+	const shortcutLabel = useShortcutLabel();
 	const { shortcuts, setShortcuts, tabShortcuts, setTabShortcuts } = useSettings();
 
 	const [recordingId, setRecordingId] = useState<string | null>(null);
@@ -32,7 +48,20 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 	const [recordingFilterShortcut, setRecordingFilterShortcut] = useState(false);
 	const [filterShortcutKeys, setFilterShortcutKeys] = useState<string[]>([]);
 	const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
-	const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+	const [shortcutConflict, setShortcutConflict] = useState<ShortcutConflict | null>(null);
+	const conflictMessage = shortcutConflict
+		? shortcutConflict.kind === 'reserved'
+			? t('settings.finish.shortcuts.reserved', {
+					keys: formatShortcutKeys(shortcutConflict.keys),
+					reason: RESERVED_REASON_KEYS[shortcutConflict.reason]
+						? t(RESERVED_REASON_KEYS[shortcutConflict.reason])
+						: shortcutConflict.reason,
+				})
+			: t('settings.finish.shortcuts.conflict', {
+					keys: formatShortcutKeys(shortcutConflict.keys),
+					action: shortcutLabel(shortcutConflict.action),
+				})
+		: null;
 	const shortcutsFilterRef = useRef<HTMLInputElement>(null);
 
 	// Notify parent of recording state changes (for escape handler coordination)
@@ -63,7 +92,7 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 	// An empty key list is the stored form of "Unassigned". The load-time merge
 	// only falls back to the default on a missing entry, so the clear sticks.
 	const clearShortcut = (actionId: string, isTabShortcut: boolean) => {
-		setConflictMessage(null);
+		setShortcutConflict(null);
 		saveKeys(actionId, isTabShortcut, []);
 		setRecordingId(null);
 	};
@@ -105,9 +134,7 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 		// select-to-end in every input in the app.
 		const reserved = findReservedShortcutCombo(keys);
 		if (reserved) {
-			setConflictMessage(
-				`${formatShortcutKeys(keys)} is reserved by the system - it ${reserved.reason} in a text field. Pick another combination.`
-			);
+			setShortcutConflict({ kind: 'reserved', keys, reason: reserved.reason });
 			setRecordingId(null);
 			return;
 		}
@@ -129,13 +156,11 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 		if (conflict) {
 			// Name the LABEL, not the id: the user picked this action from a list of
 			// labels, and 'closeOtherTabs' is not what they read.
-			setConflictMessage(
-				`${formatShortcutKeys(keys)} is already used by "${conflict.label}". Pick another combination, or clear that one first.`
-			);
+			setShortcutConflict({ kind: 'duplicate', keys, action: conflict });
 			setRecordingId(null);
 			return;
 		}
-		setConflictMessage(null);
+		setShortcutConflict(null);
 		saveKeys(actionId, isTabShortcut, keys);
 		setRecordingId(null);
 	};
@@ -154,7 +179,10 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 		if (filterShortcutKeys.length > 0) {
 			return shortcutKeysEqual(sc.keys, filterShortcutKeys);
 		}
-		return sc.label.toLowerCase().includes(shortcutsFilter.toLowerCase());
+		const query = shortcutsFilter.toLowerCase();
+		return (
+			shortcutLabel(sc).toLowerCase().includes(query) || sc.label.toLowerCase().includes(query)
+		);
 	});
 	const filteredCount = filteredShortcuts.length;
 
@@ -169,7 +197,7 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 			style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 		>
 			<span className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-				{sc.label}
+				{shortcutLabel(sc)}
 			</span>
 			<div className="flex items-center gap-1">
 				<button
@@ -197,19 +225,19 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 					}
 				>
 					{recordingId === sc.id
-						? 'Press keys...'
+						? t('settings.finish.shortcuts.press')
 						: sc.keys?.length
 							? formatShortcutKeys(sc.keys)
 							: // An action registered with no default chord (keys: []) formats to an
 								// empty string, which renders as a blank button the user cannot tell
 								// is clickable. Label it so it reads as "assign one here".
-								'Not set'}
+								t('settings.finish.shortcuts.notSet')}
 				</button>
 				{sc.keys?.length && recordingId !== sc.id ? (
 					<GhostIconButton
 						onClick={() => clearShortcut(sc.id, sc.isTabShortcut)}
-						ariaLabel={`Clear ${sc.label} shortcut`}
-						title="Clear shortcut"
+						ariaLabel={t('settings.finish.shortcuts.clearAction', { action: shortcutLabel(sc) })}
+						title={t('settings.finish.shortcuts.clear')}
 						color={theme.colors.textDim}
 					>
 						<X className="w-3.5 h-3.5" />
@@ -233,7 +261,7 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 						color: theme.colors.accent,
 					}}
 				>
-					Note: Most functionality is unavailable until you've created your first agent.
+					{t('settings.finish.shortcuts.noAgents')}
 				</p>
 			)}
 			<div className="flex items-stretch gap-2 mb-3">
@@ -246,7 +274,7 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 						setFilterShortcutKeys([]);
 						setShowUnassignedOnly(false);
 					}}
-					placeholder="Filter shortcuts..."
+					placeholder={t('settings.finish.shortcuts.filter')}
 					className="flex-1 px-3 py-2 rounded border bg-transparent outline-none text-sm"
 					style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 				/>
@@ -266,7 +294,7 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 							setFilterShortcutKeys([]);
 						}}
 						aria-pressed={showUnassignedOnly}
-						title="Show only actions with no key assigned"
+						title={t('settings.finish.shortcuts.unassignedHint')}
 						className="text-xs px-2 rounded font-medium whitespace-nowrap border"
 						style={{
 							backgroundColor: showUnassignedOnly
@@ -276,7 +304,7 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 							color: showUnassignedOnly ? theme.colors.accent : theme.colors.textDim,
 						}}
 					>
-						Unassigned {unassignedCount}
+						{t('settings.finish.shortcuts.unassigned', { count: unassignedCount })}
 					</button>
 				)}
 				<span
@@ -304,20 +332,24 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 				</p>
 			)}
 			<p className="text-xs mb-3" style={{ color: theme.colors.textDim }}>
-				Not all shortcuts can be modified. Press{' '}
-				<kbd
-					className="px-1.5 py-0.5 rounded font-mono"
-					style={{ backgroundColor: theme.colors.bgActivity }}
-				>
-					{formatShortcutKeys(['Meta', '/'])}
-				</kbd>{' '}
-				from the main interface to view the full list of keyboard shortcuts.
+				{tRich('settings.finish.shortcuts.help', {
+					key: (
+						<kbd
+							className="px-1.5 py-0.5 rounded font-mono"
+							style={{ backgroundColor: theme.colors.bgActivity }}
+						>
+							{formatShortcutKeys(['Meta', '/'])}
+						</kbd>
+					),
+				})}
 			</p>
 			<div className="space-y-5 flex-1 overflow-y-auto pr-2 scrollbar-thin">
 				{/* General Shortcuts Section */}
 				{generalShortcuts.length > 0 && (
 					<div>
-						<SettingsSectionHeading icon={Keyboard}>General</SettingsSectionHeading>
+						<SettingsSectionHeading icon={Keyboard}>
+							{t('settings.finish.shortcuts.general')}
+						</SettingsSectionHeading>
 						<div className="space-y-2">{generalShortcuts.map(renderShortcutItem)}</div>
 					</div>
 				)}
@@ -325,7 +357,9 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 				{/* AI Tab Shortcuts Section */}
 				{tabShortcutsFiltered.length > 0 && (
 					<div>
-						<SettingsSectionHeading icon={MessageSquare}>AI Tab</SettingsSectionHeading>
+						<SettingsSectionHeading icon={MessageSquare}>
+							{t('settings.finish.shortcuts.aiTab')}
+						</SettingsSectionHeading>
 						<div className="space-y-2">{tabShortcutsFiltered.map(renderShortcutItem)}</div>
 					</div>
 				)}

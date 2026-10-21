@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * TocOverlay
  *
@@ -89,9 +90,11 @@ export const TocOverlay = React.memo(function TocOverlay({
 	overlayRef,
 	onSelectEntry,
 	activeIndex,
-	buttonTitle = 'Table of Contents',
+	buttonTitle,
 	searchShortcutKey,
 }: TocOverlayProps) {
+	const uiText = useT();
+	const resolvedButtonTitle = buttonTitle ?? uiText('workflows.files.toc');
 	// The row this list LIGHTS, which is not the same question as where the
 	// document is scrolled - see the `activeIndex` prop. `-1` is a real value:
 	// the reader is above the first heading, so no row is lit and the Top sash
@@ -181,7 +184,7 @@ export const TocOverlay = React.memo(function TocOverlay({
 					color: open ? theme.colors.accentForeground : theme.colors.textMain,
 					border: `1px solid ${theme.colors.border}`,
 				}}
-				title={buttonTitle}
+				title={resolvedButtonTitle}
 			>
 				<List className="w-5 h-5" />
 			</button>
@@ -208,18 +211,18 @@ export const TocOverlay = React.memo(function TocOverlay({
 							className="text-xs font-medium uppercase tracking-wide"
 							style={{ color: theme.colors.textDim }}
 						>
-							Contents
+							{uiText('workflows.files.contents')}
 						</span>
 						<span
 							className="text-2xs flex items-center gap-1.5"
 							style={{ color: theme.colors.textDim }}
 						>
-							<span>{entries.length} headings</span>
+							<span>{uiText('workflows.files.headingCount', { count: entries.length })}</span>
 							{searchShortcutKey && (
 								<kbd
 									className="px-1 rounded font-mono"
 									style={{ backgroundColor: theme.colors.bgMain, color: theme.colors.accent }}
-									title={`Press ${searchShortcutKey} to search these headings`}
+									title={uiText('workflows.files.searchHeadings', { key: searchShortcutKey })}
 								>
 									{searchShortcutKey}
 								</kbd>
@@ -243,10 +246,10 @@ export const TocOverlay = React.memo(function TocOverlay({
 							color: theme.colors.textMain,
 							boxShadow: selectedIndex < 0 ? `inset 2px 0 0 ${theme.colors.accent}` : undefined,
 						}}
-						title="Jump to top"
+						title={uiText('workflows.files.jumpTop')}
 					>
 						<ChevronUp className="w-3 h-3" style={{ color: theme.colors.accent }} />
-						<span>Top</span>
+						<span>{uiText('workflows.files.top')}</span>
 					</button>
 
 					{/* TOC Entries - scrollable middle section */}
@@ -312,10 +315,10 @@ export const TocOverlay = React.memo(function TocOverlay({
 							borderColor: theme.colors.border,
 							color: theme.colors.textMain,
 						}}
-						title="Jump to bottom"
+						title={uiText('workflows.files.jumpBottom')}
 					>
 						<ChevronDown className="w-3 h-3" style={{ color: theme.colors.accent }} />
-						<span>Bottom</span>
+						<span>{uiText('workflows.files.bottom')}</span>
 					</button>
 				</div>
 			)}

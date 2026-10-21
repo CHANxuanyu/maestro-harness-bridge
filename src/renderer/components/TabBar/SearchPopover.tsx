@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Clock, Layers } from 'lucide-react';
@@ -73,6 +74,7 @@ export const SearchPopover = memo(function SearchPopover({
 	onShowSnoozedTabs,
 	snoozedTabCount,
 }: SearchPopoverProps) {
+	const t = useT();
 	// Where the open-tab count lives. On (the default) it rides the magnifier in
 	// the tab bar, so the number is visible without opening anything; off, it
 	// falls back to the pill next to "Search Tabs" inside the popover. It is
@@ -158,11 +160,11 @@ export const SearchPopover = memo(function SearchPopover({
 				title={
 					phone
 						? badgeCount != null
-							? `Switch tab (${badgeCount} open tabs)`
-							: 'Switch tab'
+							? t('workflows.shell.switchTabValueOpenTabs', { p0: badgeCount })
+							: t('workflows.shell.switchTab')
 						: badgeCount != null
-							? `Search… (${badgeCount} open tabs)`
-							: 'Search…'
+							? t('workflows.shell.searchValueOpenTabs', { p0: badgeCount })
+							: t('workflows.shell.search')
 				}
 			>
 				<Search className="w-4 h-4" />
@@ -174,7 +176,7 @@ export const SearchPopover = memo(function SearchPopover({
 							color: theme.colors.accent,
 							border: `1px solid ${theme.colors.accent}60`,
 						}}
-						aria-label={`${badgeCount} open tabs`}
+						aria-label={t('workflows.shell.valueOpenTabs', { p0: badgeCount })}
 					>
 						{badgeCount > 99 ? '99+' : badgeCount}
 					</span>
@@ -208,12 +210,12 @@ export const SearchPopover = memo(function SearchPopover({
 							onClick={() => closeAndDo(onSearchTabs)}
 						>
 							<Search className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							Search Tabs
+							{t('workflows.shell.searchTabs')}
 							{popoverCount != null && (
 								<CountPill
 									theme={theme}
 									count={popoverCount}
-									ariaLabel={`${popoverCount} open tabs`}
+									ariaLabel={t('workflows.shell.valueOpenTabs', { p0: popoverCount })}
 								/>
 							)}
 							<span className="ml-auto text-xs" style={{ color: theme.colors.textDim }}>
@@ -226,7 +228,7 @@ export const SearchPopover = memo(function SearchPopover({
 							onClick={() => closeAndDo(onSearchMessages)}
 						>
 							<Clock className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							Search Messages (this tab)
+							{t('workflows.shell.searchMessagesThisTab2')}
 							<span className="ml-auto text-xs" style={{ color: theme.colors.textDim }}>
 								{formatShortcutKeys(searchOutputKeys)}
 							</span>
@@ -238,7 +240,7 @@ export const SearchPopover = memo(function SearchPopover({
 								onClick={() => closeAndDo(onSearchAllTabs)}
 							>
 								<Layers className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Search Messages (all agent tabs)
+								{t('workflows.shell.searchMessagesAllAgentTabs2')}
 								{searchAllTabsKeys && (
 									<span className="ml-auto text-xs" style={{ color: theme.colors.textDim }}>
 										{formatShortcutKeys(searchAllTabsKeys)}
@@ -255,12 +257,12 @@ export const SearchPopover = memo(function SearchPopover({
 							onClick={() => closeAndDo(onShowSnoozedTabs)}
 						>
 							<Clock className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							See All Snoozed Tabs
+							{t('workflows.shell.seeAllSnoozedTabs')}
 							{snoozedTabCount != null && snoozedTabCount > 0 && (
 								<CountPill
 									theme={theme}
 									count={snoozedTabCount}
-									ariaLabel={`${snoozedTabCount} snoozed tabs`}
+									ariaLabel={t('workflows.shell.valueSnoozedTabs', { p0: snoozedTabCount })}
 								/>
 							)}
 						</button>

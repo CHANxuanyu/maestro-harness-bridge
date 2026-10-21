@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * Host-managed dispatch allow list (issue #1250).
  *
@@ -35,6 +36,7 @@ export function AgentDispatchAllowlist({
 	grant,
 	onSaved,
 }: AgentDispatchAllowlistProps) {
+	const tExtra = useT();
 	const sessions = useSessionStore((s) => s.sessions);
 	const sessionIds = useMemo(() => new Set(sessions.map((s) => s.id)), [sessions]);
 
@@ -88,7 +90,11 @@ export function AgentDispatchAllowlist({
 			const members = [...checked].filter((id) => sessionIds.has(id));
 			const snapshot = await window.maestro.plugins.setAgentAllowlist(pluginId, members);
 			onSaved(snapshot);
-			notifyToast({ color: 'green', title: 'Plugins', message: 'Updated dispatch allow list' });
+			notifyToast({
+				color: 'green',
+				title: tExtra('settings.extra.agentDispatchAllowlist.plugins'),
+				message: tExtra('settings.extra.agentDispatchAllowlist.updatedDispatchAllowList'),
+			});
 		} catch (err) {
 			// The IPC only rejects on host-side validation (InvalidAgentIds /
 			// DispatchNotGranted / ...), which the editor's own gating makes
@@ -97,13 +103,15 @@ export function AgentDispatchAllowlist({
 			captureException(err, { tags: { pluginId }, extra: { operation: 'setAgentAllowlist' } });
 			notifyToast({
 				color: 'red',
-				title: 'Plugins',
-				message: `Could not update the dispatch allow list: ${String(err)}`,
+				title: tExtra('settings.extra.agentDispatchAllowlist.plugins'),
+				message: tExtra('settings.extra.agentDispatchAllowlist.updateFailed', {
+					error: String(err),
+				}),
 			});
 		} finally {
 			setSaving(false);
 		}
-	}, [pluginId, checked, sessionIds, onSaved]);
+	}, [pluginId, checked, sessionIds, onSaved, tExtra]);
 
 	return (
 		<div className="mt-5" data-testid="agent-dispatch-allowlist">
@@ -111,11 +119,10 @@ export function AgentDispatchAllowlist({
 				className="text-xs font-bold uppercase opacity-70 mb-1"
 				style={{ color: theme.colors.textMain }}
 			>
-				Dispatch allow list
+				{tExtra('settings.extra.agentDispatchAllowlist.dispatchAllowList')}
 			</div>
 			<p className="text-xs-plus mb-2" style={{ color: theme.colors.textDim }}>
-				Choose which agents this plugin may send prompts to. High risk: only allow agents you trust
-				this plugin to drive. Changes apply immediately, with no re-signing.
+				{tExtra('settings.extra.agentDispatchAllowlist.chooseWhichAgentsThisPluginMaySend')}
 			</p>
 
 			{sessions.length === 0 ? (
@@ -123,7 +130,7 @@ export function AgentDispatchAllowlist({
 					className="text-xs italic rounded-lg border p-3"
 					style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
 				>
-					No agents yet. Create an agent, then allow it here.
+					{tExtra('settings.extra.agentDispatchAllowlist.noAgentsYetCreateAnAgentThen')}
 				</div>
 			) : (
 				<div
@@ -165,8 +172,12 @@ export function AgentDispatchAllowlist({
 					data-testid="agent-dispatch-allowlist-stale"
 					style={{ color: theme.colors.warning }}
 				>
-					{staleChecked.length} allowed target{staleChecked.length === 1 ? '' : 's'} no longer exist
-					and will be removed when you save.
+					{tExtra(
+						staleChecked.length === 1
+							? 'settings.extra.agentDispatchAllowlist.staleOne'
+							: 'settings.extra.agentDispatchAllowlist.staleMany',
+						{ count: staleChecked.length }
+					)}
 				</p>
 			)}
 
@@ -179,10 +190,16 @@ export function AgentDispatchAllowlist({
 					className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
 					style={{ backgroundColor: theme.colors.accent, color: theme.colors.bgMain }}
 				>
-					<Send className="w-3.5 h-3.5" /> Save allow list
+					<Send className="w-3.5 h-3.5" />{' '}
+					{tExtra('settings.extra.agentDispatchAllowlist.saveAllowList')}
 				</button>
 				<span className="text-xs-plus" style={{ color: theme.colors.textDim }}>
-					{liveCheckedCount} of {sessions.length} agent{sessions.length === 1 ? '' : 's'} allowed
+					{tExtra(
+						sessions.length === 1
+							? 'settings.extra.agentDispatchAllowlist.allowedOne'
+							: 'settings.extra.agentDispatchAllowlist.allowedMany',
+						{ allowed: liveCheckedCount, total: sessions.length }
+					)}
 				</span>
 			</div>
 		</div>

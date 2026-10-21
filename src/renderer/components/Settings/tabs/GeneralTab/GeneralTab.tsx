@@ -9,6 +9,7 @@ import {
 	GlobalHotkeySection,
 	HistorySection,
 	InputBehaviorSection,
+	LanguageSection,
 	LogLevelSection,
 	MaestroCliSection,
 	PowerSection,
@@ -51,6 +52,11 @@ export function GeneralTab({ theme, isOpen }: GeneralTabProps) {
 
 	return (
 		<div className="space-y-5">
+			<LanguageSection
+				theme={theme}
+				uiLanguage={settings.uiLanguage}
+				setUiLanguage={settings.setUiLanguage}
+			/>
 			<GlobalHotkeySection
 				theme={theme}
 				globalShowHotkey={settings.globalShowHotkey}

@@ -24,6 +24,7 @@ import {
 	Sparkles,
 } from 'lucide-react';
 import type { Theme } from '../types';
+import { useT, type MessageKey } from '../i18n';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal } from './ui/Modal';
 import { ModalBackButton } from './ui/ModalBackButton';
@@ -64,40 +65,55 @@ export interface AgentPowersModalProps {
  * feature twice under two names.
  */
 const EXAMPLES: Array<{
+	id: string;
 	icon: typeof Users;
-	label: string;
+	labelKey: MessageKey;
+	promptKey: MessageKey;
+	/** Keep the composer request independent of the translated display copy. */
 	prompt: string;
 }> = [
 	{
 		icon: SlidersHorizontal,
-		label: 'Change Any Setting',
+		id: 'change-any-setting',
+		labelKey: 'workflows.agentPowers.settings.label',
+		promptKey: 'workflows.agentPowers.settings.prompt',
 		prompt:
 			'Set my AI chat font to Inter, switch me to a light theme, and turn on OS notifications.',
 	},
 	{
 		icon: Users,
-		label: 'Create Agents',
+		id: 'create-agents',
+		labelKey: 'workflows.agentPowers.agents.label',
+		promptKey: 'workflows.agentPowers.agents.prompt',
 		prompt: 'Create a new agent called Scratch pointed at my home directory.',
 	},
 	{
 		icon: FileText,
-		label: 'Write an Auto Run Doc',
+		id: 'write-an-auto-run-doc',
+		labelKey: 'workflows.agentPowers.autoRun.label',
+		promptKey: 'workflows.agentPowers.autoRun.prompt',
 		prompt:
 			'Write me an Auto Run document that reviews this repo for TODOs and lists them as tasks.',
 	},
 	{
 		icon: CalendarClock,
-		label: 'Schedule a Task',
+		id: 'schedule-a-task',
+		labelKey: 'workflows.agentPowers.schedule.label',
+		promptKey: 'workflows.agentPowers.schedule.prompt',
 		prompt: 'Every weekday at 9am, summarize what changed in this repo overnight.',
 	},
 	{
 		icon: Workflow,
-		label: 'Build a Cue Pipeline',
+		id: 'build-a-cue-pipeline',
+		labelKey: 'workflows.agentPowers.pipeline.label',
+		promptKey: 'workflows.agentPowers.pipeline.prompt',
 		prompt: 'Whenever a pull request opens on this repo, have an agent review it and report back.',
 	},
 	{
 		icon: LayoutDashboard,
-		label: 'Build Me a Dashboard',
+		id: 'build-me-a-dashboard',
+		labelKey: 'workflows.agentPowers.dashboard.label',
+		promptKey: 'workflows.agentPowers.dashboard.prompt',
 		prompt:
 			'Build me an HTML dashboard of this repo: commits per week, top contributors, open TODOs.',
 	},
@@ -110,6 +126,7 @@ export function AgentPowersModal({
 	onBack,
 	onTryExample,
 }: AgentPowersModalProps) {
+	const t = useT();
 	const confirmRef = useRef<HTMLButtonElement>(null);
 
 	const handleTry = useCallback(
@@ -125,7 +142,7 @@ export function AgentPowersModal({
 	return (
 		<Modal
 			theme={theme}
-			title="Your Agents Can Drive Maestro"
+			title={t('workflows.agentPowers.title')}
 			headerIcon={<Bot className="w-4 h-4" style={{ color: theme.colors.accent }} />}
 			priority={MODAL_PRIORITIES.AGENT_POWERS}
 			onClose={onDismiss}
@@ -148,28 +165,26 @@ export function AgentPowersModal({
 							color: theme.colors.accentForeground,
 						}}
 					>
-						Got it
+						{t('workflows.agentPowers.confirm')}
 					</button>
 				</div>
 			}
 		>
 			<div className="space-y-4">
 				<p className="text-sm leading-relaxed" style={{ color: theme.colors.textMain }}>
-					You just had the chance to set your typography and your theme by hand. Either way,
-					anything you can do in Maestro, the agents inside it can do too - they reach the same
-					controls the interface does, so you can simply ask.
+					{t('workflows.agentPowers.intro')}
 				</p>
 
 				<div className="grid grid-cols-2 gap-2">
-					{EXAMPLES.map(({ icon: Icon, label, prompt }) => {
+					{EXAMPLES.map(({ id, icon: Icon, labelKey, promptKey, prompt }) => {
 						const interactive = Boolean(onTryExample);
 						return (
 							<button
-								key={label}
+								key={id}
 								type="button"
 								disabled={!interactive}
 								onClick={interactive ? () => handleTry(prompt) : undefined}
-								data-testid={`agent-powers-example-${label.toLowerCase().replace(/\s+/g, '-')}`}
+								data-testid={`agent-powers-example-${id}`}
 								className={`flex flex-col gap-1.5 p-3 rounded-lg border text-left transition-colors ${
 									interactive ? 'hover:bg-white/5 cursor-pointer' : 'cursor-default'
 								}`}
@@ -181,11 +196,11 @@ export function AgentPowersModal({
 								<span className="flex items-center gap-2">
 									<Icon className="w-3.5 h-3.5 shrink-0" style={{ color: theme.colors.accent }} />
 									<span className="text-xs font-medium" style={{ color: theme.colors.textMain }}>
-										{label}
+										{t(labelKey)}
 									</span>
 								</span>
 								<span className="text-xs-plus leading-snug" style={{ color: theme.colors.textDim }}>
-									&ldquo;{prompt}&rdquo;
+									&ldquo;{t(promptKey)}&rdquo;
 								</span>
 							</button>
 						);
@@ -201,13 +216,8 @@ export function AgentPowersModal({
 				>
 					<Sparkles className="w-4 h-4 mt-0.5 shrink-0" style={{ color: theme.colors.accent }} />
 					<p className="text-xs leading-relaxed" style={{ color: theme.colors.textMain }}>
-						Maestro is a power tool. If you are a hacker it will feel like home: keyboard shortcuts
-						all the way down, dozens of agents conducted at once, hands never leaving the keys. You
-						do not have to work that way to get the benefit. Every agent running in Maestro is
-						handed the knowledge of how to drive Maestro, down to the advanced parts like Auto Run
-						and Cue pipelines, so ask for what you want in plain language and let the agent find the
-						way there.
-						{onTryExample ? ' Pick an example above to drop it into the composer.' : ''}
+						{t('workflows.agentPowers.description')}
+						{onTryExample ? ` ${t('workflows.agentPowers.tryExample')}` : ''}
 					</p>
 				</div>
 			</div>

@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * CrossAgentResponseIndicator.tsx
  *
@@ -54,6 +55,7 @@ export function CrossAgentResponseIndicator({
 	onSessionClick,
 	onInterrupt,
 }: CrossAgentResponseIndicatorProps): JSX.Element | null {
+	const t = useT();
 	const requests = useCrossAgentInFlightStore((s) => s.requests);
 	const inFlight = useMemo(
 		() => selectInFlightForTab(requests, sourceSessionId, sourceTabId),
@@ -102,14 +104,20 @@ export function CrossAgentResponseIndicator({
 						border: `1px solid ${theme.colors.border}`,
 						color: theme.colors.textMain,
 					}}
-					title={expanded ? 'Hide consulted agents' : 'Show consulted agents'}
+					title={
+						expanded
+							? t('workflows.shellStatus.hideConsultedAgents')
+							: t('workflows.shellStatus.showConsultedAgents')
+					}
 				>
 					<Loader2
 						className="w-3.5 h-3.5 shrink-0 animate-spin"
 						style={{ color: theme.colors.accent }}
 					/>
 					<span className="shrink-0">
-						{count} {count === 1 ? 'agent' : 'agents'} responding…
+						{count}{' '}
+						{count === 1 ? t('workflows.shellStatus.agent') : t('workflows.shellStatus.agents')}{' '}
+						{t('workflows.shellStatus.responding')}
 					</span>
 					{/* Disclosure chevron: points right when collapsed, rotates down when
 					    expanded, so the pill reads as clickable-to-reveal. */}
@@ -147,7 +155,10 @@ export function CrossAgentResponseIndicator({
 								}}
 								title={
 									canJump
-										? `Jump to ${req.targetAgentName} · ${elapsed}`
+										? t('workflows.shellStatus.jumpToValueValue', {
+												p0: req.targetAgentName,
+												p1: elapsed,
+											})
 										: `${req.targetAgentName} · ${elapsed}`
 								}
 							>

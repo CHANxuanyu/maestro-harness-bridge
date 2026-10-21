@@ -17,6 +17,7 @@ import { SessionList } from '../../../renderer/components/SessionList';
 import { WindowProvider } from '../../../renderer/contexts/WindowContext';
 import type { Session, Group, Theme } from '../../../renderer/types';
 import { createMockSession as baseCreateMockSession } from '../../helpers/mockSession';
+import { createMockAITab } from '../../helpers/mockTab';
 import { seedSidebarNav, resetSidebarNavStore } from '../../helpers/seedSidebarNav';
 import { useUIStore } from '../../../renderer/stores/uiStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
@@ -353,6 +354,11 @@ describe('SessionList', () => {
 			activeSessionId: '',
 		});
 		useSettingsStore.setState({
+			// The default Left Bar is the project conversation tree (covered in
+			// "Conversation sidebar" below). Most of this file exercises the agent
+			// management view behind "Manage agents", so it starts there.
+			sidebarNavigationMode: 'agents',
+			collapsedConversationProjects: [],
 			shortcuts: defaultShortcuts,
 			leftSidebarWidth: 300,
 			ungroupedCollapsed: false,
@@ -471,6 +477,210 @@ describe('SessionList', () => {
 
 			expect(useSessionStore.getState().activeSessionId).toBe('s1');
 			expect(useUIStore.getState().leftSidebarOpen).toBe(true);
+		});
+	});
+
+	// ============================================================================
+	// Conversation sidebar (the default Left Bar)
+	// ============================================================================
+
+	describe('Conversation sidebar', () => {
+		const originalWidth = window.innerWidth;
+		const setViewportWidth = (width: number) => {
+			Object.defineProperty(window, 'innerWidth', {
+				configurable: true,
+				writable: true,
+				value: width,
+			});
+		};
+
+		beforeEach(() => {
+			useSettingsStore.setState({ sidebarNavigationMode: 'conversations' });
+		});
+
+		afterEach(() => {
+			setViewportWidth(originalWidth);
+		});
+
+		// Named tabs with no native id: the rows come from open tabs alone, so no
+		// history scan or native catch-up read is involved.
+		const seedConversations = () => {
+			const frontend = createMockSession({
+				id: 'owner-frontend',
+				name: 'Frontend Agent',
+				cwd: '/work/frontend',
+				fullPath: '/work/frontend',
+				projectRoot: '/work/frontend',
+				activeTabId: 'tab-old',
+				aiTabs: [
+					createMockAITab({ id: 'tab-old', name: 'Older chat', createdAt: 1_000 }),
+					createMockAITab({ id: 'tab-new', name: 'Newer chat', createdAt: 3_000 }),
+					createMockAITab({
+						id: 'tab-starred',
+						name: 'Pinned chat',
+						createdAt: 2_000,
+						starred: true,
+					}),
+				],
+			});
+			const backend = createMockSession({
+				id: 'owner-backend',
+				name: 'Backend Agent',
+				cwd: '/work/backend',
+				fullPath: '/work/backend',
+				projectRoot: '/work/backend',
+				activeTabId: 'tab-api',
+				aiTabs: [
+					createMockAITab({
+						id: 'tab-api',
+						name: 'API refactor',
+						createdAt: 1_500,
+						hasUnread: true,
+					}),
+				],
+			});
+			const sessions = [frontend, backend];
+			useSessionStore.setState({ sessions, activeSessionId: 'owner-frontend' });
+			return sessions;
+		};
+
+		const renderConversations = (overrides: Parameters<typeof createDefaultProps>[0] = {}) => {
+			const sessions = seedConversations();
+			return render(
+				<SessionList {...createDefaultProps({ sortedSessions: sessions, ...overrides })} />
+			);
+		};
+
+		const rowKeys = (container: HTMLElement) =>
+			Array.from(container.querySelectorAll('li[data-conversation-key]')).map((row) =>
+				row.getAttribute('data-conversation-key')
+			);
+
+		it('renders the project tree with conversations, not the agent list', () => {
+			const { container } = renderConversations();
+
+			expect(container.querySelector('[data-conversation-sidebar]')).toBeInTheDocument();
+			expect(screen.getByText('frontend')).toBeInTheDocument();
+			expect(screen.getByText('backend')).toBeInTheDocument();
+			expect(screen.getByText('Older chat')).toBeInTheDocument();
+			expect(screen.getByText('API refactor')).toBeInTheDocument();
+			// Agent names are row metadata here, never rows of their own.
+			expect(screen.queryByText('Frontend Agent')).not.toBeInTheDocument();
+			expect(screen.queryByPlaceholderText('Filter agents...')).not.toBeInTheDocument();
+		});
+
+		it('orders a project by starred first, then most recent', () => {
+			const { container } = renderConversations();
+
+			const frontendRows = rowKeys(container).filter((key) => key?.startsWith('owner-frontend:'));
+			expect(frontendRows).toEqual([
+				'owner-frontend:tab-starred',
+				'owner-frontend:tab-new',
+				'owner-frontend:tab-old',
+			]);
+		});
+
+		it('selecting a conversation activates its agent and tab', () => {
+			setViewportWidth(1440);
+			renderConversations();
+
+			fireEvent.click(screen.getByText('API refactor'));
+
+			const state = useSessionStore.getState();
+			expect(state.activeSessionId).toBe('owner-backend');
+			expect(state.sessions.find((s) => s.id === 'owner-backend')?.activeTabId).toBe('tab-api');
+			// A wide window keeps the sidebar as a column.
+			expect(useUIStore.getState().leftSidebarOpen).toBe(true);
+		});
+
+		it('closes the drawer on a narrow viewport when a conversation is tapped', () => {
+			setViewportWidth(390);
+			renderConversations();
+
+			fireEvent.click(screen.getByText('Newer chat'));
+
+			expect(
+				useSessionStore.getState().sessions.find((s) => s.id === 'owner-frontend')?.activeTabId
+			).toBe('tab-new');
+			expect(useUIStore.getState().leftSidebarOpen).toBe(false);
+		});
+
+		it('closes the drawer even when the tapped conversation is already active', () => {
+			// Nothing about the active agent or tab changes, which is exactly the
+			// case an effect keyed on the activeSessionId transition cannot see.
+			setViewportWidth(390);
+			renderConversations();
+
+			fireEvent.click(screen.getByText('Older chat'));
+
+			expect(useUIStore.getState().leftSidebarOpen).toBe(false);
+		});
+
+		it('marks the active conversation row', () => {
+			const { container } = renderConversations();
+
+			const active = container.querySelectorAll('[aria-current="page"]');
+			expect(active).toHaveLength(1);
+			expect(active[0].closest('li')?.getAttribute('data-conversation-key')).toBe(
+				'owner-frontend:tab-old'
+			);
+		});
+
+		it('narrows the rows with the conversation search and restores them when cleared', () => {
+			const { container } = renderConversations();
+			const search = screen.getByPlaceholderText('Search conversations...');
+
+			fireEvent.change(search, { target: { value: 'refactor' } });
+			expect(rowKeys(container)).toEqual(['owner-backend:tab-api']);
+			// A project with no match keeps no header while searching.
+			expect(screen.queryByText('frontend')).not.toBeInTheDocument();
+
+			fireEvent.change(search, { target: { value: '' } });
+			expect(rowKeys(container)).toHaveLength(4);
+		});
+
+		it('the unread filter keeps only conversations that need attention', () => {
+			useUIStore.setState({ showUnreadAgentsOnly: true });
+			const { container } = renderConversations();
+
+			expect(rowKeys(container)).toEqual(['owner-backend:tab-api']);
+		});
+
+		it('Cmd+F focuses the conversation search instead of opening the agent filter', () => {
+			useUIStore.setState({ activeFocus: 'sidebar' });
+			const { container } = renderConversations();
+
+			fireEvent.keyDown(container.querySelector('[data-tour="session-list"]')!, {
+				key: 'f',
+				metaKey: true,
+			});
+
+			expect(document.activeElement).toBe(screen.getByPlaceholderText('Search conversations...'));
+			expect(useUIStore.getState().sessionFilterOpen).toBe(false);
+		});
+
+		it('collapsing a project hides its rows and remembers it in settings', () => {
+			const { container } = renderConversations();
+
+			fireEvent.click(screen.getByText('backend'));
+
+			expect(rowKeys(container)).not.toContain('owner-backend:tab-api');
+			expect(useSettingsStore.getState().collapsedConversationProjects).toHaveLength(1);
+		});
+
+		it('"Manage agents" opens the agent management view, which can return', () => {
+			const addNewSession = vi.fn();
+			renderConversations({ addNewSession });
+
+			// The footer action switches views; it does not create an agent.
+			fireEvent.click(screen.getByText('Manage agents'));
+			expect(addNewSession).not.toHaveBeenCalled();
+			expect(useSettingsStore.getState().sidebarNavigationMode).toBe('agents');
+			expect(screen.getByText('New Agent')).toBeInTheDocument();
+
+			fireEvent.click(screen.getByText('Back to conversations'));
+			expect(useSettingsStore.getState().sidebarNavigationMode).toBe('conversations');
+			expect(screen.getByPlaceholderText('Search conversations...')).toBeInTheDocument();
 		});
 	});
 

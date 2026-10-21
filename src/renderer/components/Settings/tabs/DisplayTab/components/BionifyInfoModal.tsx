@@ -1,5 +1,6 @@
 import type { Theme } from '../../../../../types';
 import { MODAL_PRIORITIES } from '../../../../../constants/modalPriorities';
+import { useI18n } from '../../../../../i18n';
 import { Modal } from '../../../../ui/Modal';
 
 interface BionifyInfoModalProps {
@@ -8,10 +9,13 @@ interface BionifyInfoModalProps {
 }
 
 export function BionifyInfoModal({ theme, onClose }: BionifyInfoModalProps) {
+	const { t } = useI18n();
+	// Algorithm tokens are literal syntax, never translated.
+	const code = (value: string) => `\`${value}\``;
 	return (
 		<Modal
 			theme={theme}
-			title="Bionify Algorithm Reference"
+			title={t('settings.display.bionify.title')}
 			priority={MODAL_PRIORITIES.GROUP_CHAT_INFO}
 			onClose={onClose}
 			resizeKey="bionify-reference"
@@ -30,19 +34,18 @@ export function BionifyInfoModal({ theme, onClose }: BionifyInfoModalProps) {
 					- 0 1 1 2 0.4
 				</div>
 				<p style={{ color: theme.colors.textDim }}>
-					The first character is `-` or `+`. `-` skips common english words like `a`, `and`, and
-					`the`. `+` highlights every word.
+					{t('settings.display.bionify.sign', {
+						minus: code('-'),
+						plus: code('+'),
+						a: code('a'),
+						and: code('and'),
+						the: code('the'),
+					})}
 				</p>
 				<ul className="list-disc pl-5 space-y-2" style={{ color: theme.colors.textDim }}>
-					<li>The next four numbers control highlighted characters for words of length 1-4.</li>
-					<li>
-						The final value is a fraction of each word&apos;s characters to emphasize (for example,
-						`0.4` highlights the first 40% of characters in words longer than 4 letters).
-					</li>
-					<li>
-						Current default: `- 0 1 1 2 0.4`, which skips common words and highlights the first 40%
-						of longer words.
-					</li>
+					<li>{t('settings.display.bionify.lengths')}</li>
+					<li>{t('settings.display.bionify.fraction', { example: code('0.4') })}</li>
+					<li>{t('settings.display.bionify.default', { example: code('- 0 1 1 2 0.4') })}</li>
 				</ul>
 			</div>
 		</Modal>

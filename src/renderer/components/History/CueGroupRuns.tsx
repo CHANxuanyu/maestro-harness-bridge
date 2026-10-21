@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * The runs behind an expanded Cue group row.
  *
@@ -39,6 +40,7 @@ export const CueGroupRuns = memo(function CueGroupRuns({
 	expansion,
 	onOpenRun,
 }: CueGroupRunsProps) {
+	const uiText = useT();
 	const [runs, setRuns] = useState<HistoryEntry[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
@@ -74,11 +76,11 @@ export const CueGroupRuns = memo(function CueGroupRuns({
 				</p>
 			) : runs === null ? (
 				<p className="text-2xs" style={{ color: theme.colors.textDim }}>
-					Loading runs…
+					{uiText('workflows.sessions.history.loadingRuns')}
 				</p>
 			) : runs.length === 0 ? (
 				<p className="text-2xs" style={{ color: theme.colors.textDim }}>
-					No runs in this window.
+					{uiText('workflows.sessions.history.noRuns')}
 				</p>
 			) : (
 				<div style={{ maxHeight: RUNS_MAX_HEIGHT, overflowY: 'auto' }}>
@@ -101,7 +103,9 @@ export const CueGroupRuns = memo(function CueGroupRuns({
 								{formatTimestamp(run.timestamp, 'smart')}
 							</span>
 							<span className="text-2xs truncate" style={{ color: theme.colors.textMain }}>
-								{run.summary ? stripMarkdown(run.summary) : 'No summary available'}
+								{run.summary
+									? stripMarkdown(run.summary)
+									: uiText('workflows.sessions.history.noSummary')}
 							</span>
 						</button>
 					))}

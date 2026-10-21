@@ -8,8 +8,8 @@ import { logger } from './utils/logger';
 import { fetchWithTimeout } from './utils/fetchWithTimeout';
 
 // GitHub repository information
-const GITHUB_OWNER = 'RunMaestro';
-const GITHUB_REPO = 'Maestro';
+const GITHUB_OWNER = 'CHANxuanyu';
+const GITHUB_REPO = 'maestro-harness-bridge';
 const RELEASES_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
 
 /** Request budget for the GitHub releases poll. */

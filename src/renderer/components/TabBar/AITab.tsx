@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import { X, Star, Pencil, Loader2, AlertCircle, MessageSquare } from 'lucide-react';
 import type { AITab as AITabType, Theme } from '../../types';
@@ -88,6 +89,18 @@ export interface AITabProps {
 	totalTabs?: number;
 	/** Tab index in the full list (0-based) */
 	tabIndex?: number;
+	/**
+	 * Draw the chip as the strip's compact way back to the current conversation
+	 * (conversation navigation, see TabBarProps.onlyActiveAiTab). The header and
+	 * the Left Bar already name the conversation, so the chip shows a short fixed
+	 * label instead of the title, which for a native conversation can be a whole
+	 * paragraph and pushed every file tab out of the strip. The full title stays
+	 * in the tooltip and the accessible name, and the overlay menu keeps every
+	 * action (including Close); only the inline close button and the Cmd+N badge
+	 * are dropped, since a stray click on either should not end the conversation
+	 * or advertise a position the strip does not show.
+	 */
+	returnChip?: boolean;
 }
 
 import { getTabDisplayName } from '../../utils/tabHelpers';
@@ -141,7 +154,9 @@ export const AITab = memo(function AITab({
 	onCloseTabsRight,
 	totalTabs,
 	tabIndex,
+	returnChip = false,
 }: AITabProps) {
+	const t = useT();
 	const [showCopied, setShowCopied] = useState<'sessionId' | 'deepLink' | false>(false);
 	const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	// Agent Resilience: pulsing orange dot when this tab is stuck auto-retrying.
@@ -183,13 +198,13 @@ export const AITab = memo(function AITab({
 	// Event handlers using stable tabId to avoid inline closure captures
 	const handleMouseDown = useCallback(
 		(e: React.MouseEvent) => {
-			// Middle-click to close
-			if (e.button === 1 && canClose) {
+			// Middle-click to close (not on the return chip: see AITabProps.returnChip)
+			if (e.button === 1 && canClose && !returnChip) {
 				e.preventDefault();
 				onClose(tabId);
 			}
 		},
-		[canClose, onClose, tabId]
+		[canClose, returnChip, onClose, tabId]
 	);
 
 	const handleCloseClick = useCallback(
@@ -400,10 +415,16 @@ export const AITab = memo(function AITab({
 			// space during a drag-out (the OS renders it, unlike a clipped fixed div).
 			// getTabDisplayName is used inline rather than the memoized `displayName`
 			// below to avoid a temporal-dead-zone read in this earlier-declared callback.
-			setTabDragImage(e, { label: getTabDisplayName(tab, sessionAgentSessionId), theme });
+			setTabDragImage(e, {
+				label:
+					!tab.name && !tab.agentSessionId
+						? t('workflows.tabs.newSession')
+						: getTabDisplayName(tab, sessionAgentSessionId),
+				theme,
+			});
 			onDragStart(tabId, e);
 		},
-		[onDragStart, tabId, tab, sessionAgentSessionId, theme]
+		[onDragStart, tabId, tab, sessionAgentSessionId, theme, t]
 	);
 
 	const handleTabDrag = useCallback(
@@ -431,8 +452,11 @@ export const AITab = memo(function AITab({
 	// Deps are the specific fields getTabDisplayName reads (name, agentSessionId, fallback) -
 	// using [tab] would invalidate on every logs/state change which is too aggressive.
 	const displayName = useMemo(
-		() => getTabDisplayName(tab, sessionAgentSessionId),
-		[tab.name, tab.agentSessionId, sessionAgentSessionId]
+		() =>
+			!tab.name && !tab.agentSessionId
+				? t('workflows.tabs.newSession')
+				: getTabDisplayName(tab, sessionAgentSessionId),
+		[tab.name, tab.agentSessionId, sessionAgentSessionId, t]
 	);
 
 	// Wizard tabs show the purple wand instead of the chat-kind bubble; once the
@@ -483,9 +507,22 @@ export const AITab = memo(function AITab({
 			innerRef={setTabRef}
 			onLongPress={openOverlay}
 			data-tab-id={tab.id}
+			data-return-chip={returnChip || undefined}
 			tabIndex={0}
 			role="tab"
 			aria-selected={isActive}
+			// The return chip's label no longer names the conversation, so the full
+			// title rides on the tooltip and the accessible name.
+			title={
+				returnChip
+					? t('workflows.tabs.returnToConversationTitle', { name: displayName })
+					: undefined
+			}
+			aria-label={
+				returnChip
+					? t('workflows.tabs.returnToConversationTitle', { name: displayName })
+					: undefined
+			}
 			className={`
         relative flex items-center gap-1.5 px-3 py-1.5 cursor-pointer
         transition-all duration-150 select-none shrink-0 outline-none
@@ -516,10 +553,10 @@ export const AITab = memo(function AITab({
 				<div
 					className="flex items-center gap-0.5 px-1 py-0.5 rounded text-3xs font-bold uppercase shrink-0"
 					style={{ backgroundColor: theme.colors.error + '30', color: theme.colors.error }}
-					title={`Error: ${tab.agentError.message}`}
+					title={t('workflows.shell.errorValue', { p0: tab.agentError.message })}
 				>
 					<AlertCircle className="w-2.5 h-2.5" />
-					ERR
+					{t('workflows.shell.err2')}
 				</div>
 			)}
 
@@ -528,7 +565,7 @@ export const AITab = memo(function AITab({
 				<div
 					className="w-2 h-2 rounded-full shrink-0 animate-pulse"
 					style={{ backgroundColor: getConnectingColor(theme) }}
-					title="Stuck - auto-retrying after an outage"
+					title={t('workflows.shell.stuckAutoRetryingAfterAnOutage')}
 				/>
 			)}
 
@@ -546,7 +583,7 @@ export const AITab = memo(function AITab({
 			{/* Generating name indicator - spinning loader while tab name is being generated */}
 			{/* Show regardless of busy state since tab naming runs in parallel with the main request */}
 			{tab.isGeneratingName && (
-				<span title="Generating tab name...">
+				<span title={t('workflows.shell.generatingTabName')}>
 					<Loader2
 						className="w-3 h-3 shrink-0 animate-spin"
 						style={{ color: theme.colors.textDim }}
@@ -559,7 +596,7 @@ export const AITab = memo(function AITab({
 				<div
 					className="w-2 h-2 rounded-full shrink-0"
 					style={{ backgroundColor: theme.colors.error }}
-					title="New messages"
+					title={t('workflows.shell.newMessages')}
 				/>
 			)}
 
@@ -570,13 +607,13 @@ export const AITab = memo(function AITab({
 
 			{/* Draft indicator - pencil icon for tabs with unsent input or staged images */}
 			{hasDraft && (
-				<span title="Has draft message">
+				<span title={t('workflows.shell.hasDraftMessage')}>
 					<Pencil className="w-3 h-3 shrink-0" style={{ color: theme.colors.warning }} />
 				</span>
 			)}
 
 			{/* Shortcut hint badge - shows tab number for Cmd+1-9 navigation */}
-			{shortcutHint !== null && shortcutHint !== undefined && (
+			{!returnChip && shortcutHint !== null && shortcutHint !== undefined && (
 				<span
 					className="w-4 h-4 flex items-center justify-center rounded text-2xs font-medium shrink-0 opacity-50"
 					style={{
@@ -599,22 +636,24 @@ export const AITab = memo(function AITab({
 				/>
 			)}
 
-			{/* Tab name - always show the full name; the bar scrolls when crowded */}
+			{/* Tab name - always show the full name; the bar scrolls when crowded.
+			    The return chip shows its short fixed label instead (bounded, so a
+			    long translation cannot push the resource tabs out either). */}
 			<span
 				data-tab-label
-				className="text-xs font-medium whitespace-nowrap"
+				className={`text-xs font-medium whitespace-nowrap${returnChip ? ' max-w-[8rem] truncate' : ''}`}
 				style={{ color: isActive ? theme.colors.textMain : theme.colors.textDim }}
 			>
-				{displayName}
+				{returnChip ? t('workflows.tabs.returnToConversation') : displayName}
 			</span>
 
 			{/* Close button - visible on hover or when active, takes space of busy indicator when not busy */}
-			{canClose && (isHovered || isActive) && (
+			{canClose && !returnChip && (isHovered || isActive) && (
 				<button
 					onClick={handleCloseClick}
 					data-tab-close
 					className="p-0.5 rounded hover:bg-white/10 transition-colors shrink-0"
-					title={`Close tab${shortcutSuffix(closeTabKeys)}`}
+					title={t('workflows.shell.closeTabvalue', { p0: shortcutSuffix(closeTabKeys) })}
 				>
 					<X className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 				</button>

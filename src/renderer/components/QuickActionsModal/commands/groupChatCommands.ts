@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { GroupChat } from '../../../../shared/group-chat-types';
 import { useGroupChatStore } from '../../../stores/groupChatStore';
 import type { Session } from '../../../types';
@@ -39,15 +40,19 @@ export function buildGroupChatJumpCommands({
 	onOpenGroupChat,
 	setQuickActionOpen,
 }: BuildGroupChatJumpCommandsArgs): QuickAction[] {
+	const t = getT();
 	if (!groupChats || !onOpenGroupChat) return [];
 	return groupChats.map((groupChat) => ({
 		id: `groupchat-${groupChat.id}`,
-		label: `Group Chat: ${groupChat.name}`,
+		label: t('workflows.shell.groupChatValue', { p0: groupChat.name }),
 		action: () => {
 			onOpenGroupChat(groupChat.id);
 			setQuickActionOpen(false);
 		},
-		subtext: `${groupChat.participants.length} participant${groupChat.participants.length !== 1 ? 's' : ''}`,
+		subtext: t('workflows.shell.valueParticipantvalue', {
+			p0: groupChat.participants.length,
+			p1: groupChat.participants.length !== 1 ? t('workflows.shell.pluralSuffix') : '',
+		}),
 	}));
 }
 
@@ -64,13 +69,14 @@ export function buildGroupChatSwitcherCommands({
 	busySnapshot,
 	onOpenGroupChat,
 }: BuildGroupChatSwitcherCommandsArgs): QuickAction[] {
+	const t = getT();
 	if (!groupChats || !onOpenGroupChat) return [];
 
 	const commands: QuickAction[] = [];
 	for (const groupChat of groupChats) {
 		const run = getGroupChatRunState(groupChat.id, busySnapshot);
 		if (!run.isBusy) continue;
-		const label = `Group Chat: ${groupChat.name}`;
+		const label = t('workflows.shell.groupChatValue', { p0: groupChat.name });
 		commands.push({
 			id: `jump-groupchat-${groupChat.id}`,
 			label,
@@ -101,12 +107,13 @@ export function buildGroupChatCommands({
 	killShortcut,
 	moderatorOnlyShortcut,
 }: BuildGroupChatCommandsArgs): QuickAction[] {
+	const t = getT();
 	const commands: QuickAction[] = [];
 
 	if (onNewGroupChat && sessions.filter((session) => session.toolType !== 'terminal').length >= 2) {
 		commands.push({
 			id: 'newGroupChat',
-			label: 'New Group Chat',
+			label: t('workflows.shell.newGroupChat'),
 			shortcut: newGroupChatShortcut,
 			action: () => {
 				onNewGroupChat();
@@ -118,7 +125,7 @@ export function buildGroupChatCommands({
 	if (activeGroupChatId && onCloseGroupChat) {
 		commands.push({
 			id: 'closeGroupChat',
-			label: 'Close Group Chat',
+			label: t('workflows.shell.closeGroupChat'),
 			action: () => {
 				onCloseGroupChat();
 				setQuickActionOpen(false);
@@ -132,10 +139,12 @@ export function buildGroupChatCommands({
 		const moderatorOnly = useGroupChatStore.getState().groupChatModeratorOnly;
 		commands.push({
 			id: 'toggleGroupChatModeratorOnly',
-			label: moderatorOnly ? 'Group Chat: Show Team Chat' : 'Group Chat: Show Moderator Only',
+			label: moderatorOnly
+				? t('workflows.shell.groupChatShowTeamChat')
+				: t('workflows.shell.groupChatShowModeratorOnly'),
 			subtext: moderatorOnly
-				? 'Bring back agent delegations and replies in the transcript and history'
-				: 'Hide the agent back-and-forth and keep just your conversation with the moderator',
+				? t('workflows.shell.bringBackAgentDelegationsAndRepliesInThe')
+				: t('workflows.shell.hideTheAgentBackAndForthAndKeep'),
 			shortcut: moderatorOnlyShortcut,
 			action: () => {
 				useGroupChatStore.getState().toggleGroupChatModeratorOnly();
@@ -147,7 +156,11 @@ export function buildGroupChatCommands({
 	if (activeGroupChatId && onDeleteGroupChat && groupChats) {
 		commands.push({
 			id: 'deleteGroupChat',
-			label: `Remove Group Chat: ${groupChats.find((c) => c.id === activeGroupChatId)?.name || 'Group Chat'}`,
+			label: t('workflows.shell.removeGroupChatValue', {
+				p0:
+					groupChats.find((c) => c.id === activeGroupChatId)?.name ||
+					t('workflows.shell.extraGroupChat'),
+			}),
 			shortcut: killShortcut,
 			action: () => {
 				onDeleteGroupChat(activeGroupChatId);

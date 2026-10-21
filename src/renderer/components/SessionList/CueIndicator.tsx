@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { memo } from 'react';
 import { Zap } from 'lucide-react';
 
@@ -24,11 +25,14 @@ export const CueIndicator = memo(function CueIndicator({
 	subscriptionCount,
 	activeRun,
 }: CueIndicatorProps) {
+	const t = useT();
 	if (subscriptionCount <= 0) return null;
 
-	const tooltip = `Maestro Cue ${activeRun ? 'running' : 'active'} (${subscriptionCount} subscription${
-		subscriptionCount === 1 ? '' : 's'
-	})`;
+	const tooltip = t('workflows.shell.extraMaestroCueValueValueSubscriptionvalue', {
+		p0: activeRun ? t('workflows.labels.running') : t('workflows.shell.active'),
+		p1: subscriptionCount,
+		p2: subscriptionCount === 1 ? '' : t('workflows.shell.pluralSuffix'),
+	});
 
 	return (
 		<span

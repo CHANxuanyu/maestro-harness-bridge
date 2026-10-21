@@ -6,6 +6,7 @@ import { useFeedbackDraftStore } from '../../stores/feedbackDraftStore';
 import { useUIStore } from '../../stores/uiStore';
 import { PluginUiItemsSlot } from '../plugins/PluginUiItemsSlot';
 import { CornerDot } from '../ui/CornerDot';
+import { useT } from '../../i18n';
 
 interface SidebarActionsProps {
 	theme: Theme;
@@ -16,6 +17,8 @@ interface SidebarActionsProps {
 	hasUnreadAgents: boolean;
 	sidebarWidth: number;
 	addNewSession: () => void;
+	primaryActionLabel?: string;
+	conversationMode?: boolean;
 	openFeedback?: () => void;
 	toggleShowUnreadAgentsOnly: () => void;
 }
@@ -29,9 +32,12 @@ export const SidebarActions = memo(function SidebarActions({
 	hasUnreadAgents,
 	sidebarWidth,
 	addNewSession,
+	primaryActionLabel,
+	conversationMode = false,
 	openFeedback,
 	toggleShowUnreadAgentsOnly,
 }: SidebarActionsProps) {
+	const t = useT();
 	const compact = sidebarWidth < 320;
 	const feedbackMinimized = useFeedbackDraftStore((s) => s.isMinimized);
 	const setLeftSidebarOpen = useUIStore((s) => s.setLeftSidebarOpen);
@@ -55,8 +61,10 @@ export const SidebarActions = memo(function SidebarActions({
 				className={`flex items-center justify-center p-2 rounded transition-colors w-8 h-8 shrink-0 ${hasNoSessions && leftSidebarOpen ? 'opacity-20 cursor-not-allowed' : 'hover:bg-white/5'}`}
 				title={
 					hasNoSessions && leftSidebarOpen
-						? 'Add an agent first to collapse sidebar'
-						: `${leftSidebarOpen ? 'Collapse' : 'Expand'} Sidebar${toggleSidebarShortcutLabel}`
+						? t('workflows.sidebar.addAgentToCollapse')
+						: (leftSidebarOpen
+								? t('workflows.sidebar.collapseSidebar')
+								: t('workflows.sidebar.expandSidebar')) + toggleSidebarShortcutLabel
 				}
 			>
 				{/* The indicator is a two-state toggle: the icon flips to signal the
@@ -80,7 +88,8 @@ export const SidebarActions = memo(function SidebarActions({
 						className="flex items-center justify-center gap-2 py-2 rounded text-xs font-bold transition-colors hover:opacity-90 whitespace-nowrap overflow-hidden"
 						style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}
 					>
-						{!compact && <Bot className="w-3 h-3 shrink-0" />} New Agent
+						{!compact && <Bot className="w-3 h-3 shrink-0" />}{' '}
+						{primaryActionLabel ?? t('workflows.menu.newAgent')}
 					</button>
 
 					<div className="relative">
@@ -94,16 +103,21 @@ export const SidebarActions = memo(function SidebarActions({
 								backgroundColor: theme.colors.accent,
 								color: theme.colors.accentForeground,
 							}}
-							title={feedbackMinimized ? 'Resume feedback draft' : 'Send product feedback'}
+							title={
+								feedbackMinimized
+									? t('workflows.sidebar.resumeFeedback')
+									: t('workflows.sidebar.sendFeedback')
+							}
 						>
-							{!compact && <MessageSquarePlus className="w-3 h-3 shrink-0" />} Feedback
+							{!compact && <MessageSquarePlus className="w-3 h-3 shrink-0" />}{' '}
+							{t('workflows.sidebar.feedback')}
 						</button>
 						{feedbackMinimized && (
 							<CornerDot
 								color="#ef4444"
 								size="md"
 								ringColor={theme.colors.bgSidebar}
-								title="Feedback draft in progress"
+								title={t('workflows.sidebar.feedbackDraft')}
 							/>
 						)}
 					</div>
@@ -122,8 +136,16 @@ export const SidebarActions = memo(function SidebarActions({
 					}}
 					title={
 						showUnreadAgentsOnly
-							? `Showing unread agents only${filterUnreadAgentsShortcutLabel}`
-							: `Filter unread agents${filterUnreadAgentsShortcutLabel}`
+							? t(
+									conversationMode
+										? 'workflows.conversations.showingUnread'
+										: 'workflows.sidebar.showingUnreadOnly'
+								) + filterUnreadAgentsShortcutLabel
+							: t(
+									conversationMode
+										? 'workflows.conversations.filterUnread'
+										: 'workflows.sidebar.filterUnread'
+								) + filterUnreadAgentsShortcutLabel
 					}
 				>
 					<Bell className="w-4 h-4" />

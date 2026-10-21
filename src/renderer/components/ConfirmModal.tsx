@@ -3,6 +3,7 @@ import { AlertTriangle, Trash2 } from 'lucide-react';
 import type { Theme } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, ModalFooter } from './ui/Modal';
+import { useT } from '../i18n';
 
 interface ConfirmModalProps {
 	theme: Theme;
@@ -21,12 +22,13 @@ export const ConfirmModal = memo(function ConfirmModal({
 	message,
 	onConfirm,
 	onClose,
-	title = 'Confirm',
+	title,
 	headerIcon,
 	icon,
 	destructive = true,
 	confirmLabel,
 }: ConfirmModalProps) {
+	const t = useT();
 	const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
 	const handleConfirm = useCallback(() => {
@@ -41,7 +43,7 @@ export const ConfirmModal = memo(function ConfirmModal({
 	return (
 		<Modal
 			theme={theme}
-			title={title}
+			title={title ?? t('common.confirm')}
 			priority={MODAL_PRIORITIES.CONFIRM}
 			onClose={onClose}
 			headerIcon={headerIcon ?? <Trash2 className="w-4 h-4" style={{ color: iconColor }} />}

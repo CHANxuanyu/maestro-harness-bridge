@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
 import type { QuickAction } from '../types';
 import { areUnreadFiltersActive, toggleAllUnreadFilters } from '../../../services/unreadFilters';
@@ -57,10 +58,11 @@ export function buildNavigationCommands({
 	onNavForward,
 	shortcuts,
 }: BuildNavigationCommandsArgs): QuickAction[] {
+	const t = getT();
 	const commands: QuickAction[] = [
 		{
 			id: 'new',
-			label: 'Create New Agent',
+			label: t('workflows.shell.createNewAgent'),
 			shortcut: shortcuts.newInstance,
 			action: addNewSession,
 		},
@@ -69,7 +71,7 @@ export function buildNavigationCommands({
 	if (openWizard) {
 		commands.push({
 			id: 'wizard',
-			label: 'New Agent Wizard',
+			label: t('workflows.shell.newAgentWizard'),
 			shortcut: shortcuts.openWizard,
 			action: () => {
 				openWizard();
@@ -81,19 +83,19 @@ export function buildNavigationCommands({
 	commands.push(
 		{
 			id: 'toggleSidebar',
-			label: 'Toggle Sidebar',
+			label: t('workflows.shell.toggleSidebar'),
 			shortcut: shortcuts.toggleSidebar,
 			action: () => setLeftSidebarOpen((prev) => !prev),
 		},
 		{
 			id: 'toggleRight',
-			label: 'Toggle Right Panel',
+			label: t('workflows.shell.toggleRightPanel'),
 			shortcut: shortcuts.toggleRightPanel,
 			action: () => setRightPanelOpen((prev) => !prev),
 		},
 		{
 			id: 'nextUnreadTab',
-			label: 'Next Unread / Draft Tab',
+			label: t('workflows.shell.nextUnreadDraftTab'),
 			shortcut: shortcuts.nextUnreadTab,
 			action: () => {
 				// Delegate to the shared App.tsx callback so this matches the
@@ -105,10 +107,10 @@ export function buildNavigationCommands({
 		},
 		{
 			id: 'previousUnreadTab',
-			label: 'Previous Unread / Draft Tab',
+			label: t('workflows.shell.previousUnreadDraftTab'),
 			// previousUnreadTab ships unbound, so name the chord that actually
 			// reaches it today: Focus Active Tab pressed a second time.
-			subtext: 'Walk backwards; also the second press of Focus Active Tab',
+			subtext: t('workflows.shell.walkBackwardsAlsoTheSecondPressOfFocus'),
 			shortcut: shortcuts.previousUnreadTab?.keys?.length
 				? shortcuts.previousUnreadTab
 				: shortcuts.focusActiveTab,
@@ -122,8 +124,10 @@ export function buildNavigationCommands({
 			// The label names the state this entry PUTS you in, not the state you
 			// are in, so hitting it twice reads as a switch flipping back and
 			// forth rather than a status line that argues with itself.
-			label: areUnreadFiltersActive() ? 'Unread Only: Off' : 'Unread Only: On',
-			subtext: 'Filter both the agent list and the tab bar to unread',
+			label: areUnreadFiltersActive()
+				? t('workflows.shell.unreadOnlyOff')
+				: t('workflows.shell.unreadOnlyOn'),
+			subtext: t('workflows.shell.filterBothTheAgentListAndTheTab'),
 			shortcut: shortcuts.toggleUnreadFilters,
 			action: () => {
 				toggleAllUnreadFilters();
@@ -135,7 +139,7 @@ export function buildNavigationCommands({
 	if (onNavBack) {
 		commands.push({
 			id: 'navBack',
-			label: 'Navigate Back',
+			label: t('workflows.shell.navigateBack'),
 			shortcut: shortcuts.navBack,
 			action: () => {
 				onNavBack();
@@ -147,7 +151,7 @@ export function buildNavigationCommands({
 	if (onNavForward) {
 		commands.push({
 			id: 'navForward',
-			label: 'Navigate Forward',
+			label: t('workflows.shell.navigateForward'),
 			shortcut: shortcuts.navForward,
 			action: () => {
 				onNavForward();
@@ -159,7 +163,7 @@ export function buildNavigationCommands({
 	if (activeSession && !activeSession.sshRemote) {
 		commands.push({
 			id: 'openWorkingDirectory',
-			label: `${getOpenInLabel(platform)}: Working Directory`,
+			label: t('workflows.shell.valueWorkingDirectory', { p0: getOpenInLabel(platform) }),
 			subtext: activeSession.projectRoot,
 			action: () => {
 				openPath?.(activeSession.fullPath || activeSession.projectRoot);
@@ -171,7 +175,7 @@ export function buildNavigationCommands({
 	if (activeSession) {
 		commands.push({
 			id: 'kill',
-			label: `Remove Agent: ${activeSession.name}`,
+			label: t('workflows.shell.removeAgentValue', { p0: activeSession.name }),
 			shortcut: shortcuts.killInstance,
 			action: () => deleteSession(activeSessionId),
 		});

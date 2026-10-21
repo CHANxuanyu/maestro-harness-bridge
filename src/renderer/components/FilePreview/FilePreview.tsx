@@ -1,3 +1,4 @@
+import { useT, getT } from '../../i18n';
 import React, {
 	useState,
 	useRef,
@@ -191,6 +192,7 @@ export const FilePreview = React.memo(
 		},
 		ref
 	) {
+		const uiText = useT();
 		const [showTocOverlay, setShowTocOverlay] = useState(false);
 		// The `#` heading palette - a filtered, keyboard-driven twin of the ToC.
 		const [showHeadingPalette, setShowHeadingPalette] = useState(false);
@@ -834,8 +836,8 @@ export const FilePreview = React.memo(
 				if (/^file:\/\//.test(href) && isWebDesktop()) {
 					notifyToast({
 						color: 'theme',
-						title: 'Open file',
-						message: 'Available in the desktop app',
+						title: getT()('workflows.files.openFile'),
+						message: getT()('workflows.files.desktopOnly'),
 					});
 					return;
 				}
@@ -870,8 +872,8 @@ export const FilePreview = React.memo(
 					// write here would silently drop the user's in-editor edits.
 					notifyToast({
 						color: 'yellow',
-						title: 'Unsaved Changes',
-						message: 'Save or discard your edits before ticking tasks.',
+						title: getT()('workflows.files.unsaved'),
+						message: getT()('workflows.files.saveBeforeTask'),
 					});
 					return false;
 				}
@@ -907,8 +909,9 @@ export const FilePreview = React.memo(
 					logger.error('Failed to toggle task checkbox:', undefined, err);
 					notifyToast({
 						color: 'red',
-						title: 'Save Failed',
-						message: err instanceof Error ? err.message : 'Could not update the task.',
+						title: getT()('workflows.files.saveFailed'),
+						message:
+							err instanceof Error ? err.message : getT()('workflows.files.updateTaskFailed'),
 					});
 					return false;
 				}
@@ -1227,13 +1230,13 @@ export const FilePreview = React.memo(
 				if (result === false) return; // User cancelled save dialog
 				// Keep the file-change poller from flagging our own write.
 				await adoptOwnWriteMtime(file.path);
-				notifyCenterFlash({ message: 'File Saved', color: 'theme' });
+				notifyCenterFlash({ message: getT()('workflows.files.fileSaved'), color: 'theme' });
 			} catch (err) {
 				logger.error('Failed to save file:', undefined, err);
 				notifyToast({
 					type: 'error',
-					title: 'Save Failed',
-					message: err instanceof Error ? err.message : 'Could not save file.',
+					title: getT()('workflows.files.saveFailed'),
+					message: err instanceof Error ? err.message : getT()('workflows.files.saveFileFailed'),
 				});
 			} finally {
 				setIsSaving(false);
@@ -1295,7 +1298,11 @@ export const FilePreview = React.memo(
 		);
 
 		const writeEditedImage = useCallback(
-			async (targetPath: string, reloadAfter: boolean, flashMessage = 'Image Saved') => {
+			async (
+				targetPath: string,
+				reloadAfter: boolean,
+				flashMessage = getT()('workflows.files.imageSaved')
+			) => {
 				if (!imageSaveData) return;
 				setImageSaveBusy(true);
 				try {
@@ -1312,8 +1319,8 @@ export const FilePreview = React.memo(
 					logger.error('Failed to save edited image:', undefined, err);
 					notifyToast({
 						type: 'error',
-						title: 'Save Failed',
-						message: err instanceof Error ? err.message : 'Could not save the edited image.',
+						title: getT()('workflows.files.saveFailed'),
+						message: err instanceof Error ? err.message : getT()('workflows.files.saveImageFailed'),
 					});
 				} finally {
 					setImageSaveBusy(false);
@@ -1537,7 +1544,7 @@ export const FilePreview = React.memo(
 				blocksLowerLayers: true,
 				capturesFocus: true,
 				focusTrap: 'lenient',
-				ariaLabel: 'File Preview',
+				ariaLabel: getT()('workflows.files.filePreview'),
 				onEscape: handleEscapeRequest,
 				allowClickOutside: false,
 			});
@@ -1574,7 +1581,7 @@ export const FilePreview = React.memo(
 			notifyToast({
 				type: 'error',
 				title,
-				message: 'Clipboard write was rejected. Check browser permissions and try again.',
+				message: getT()('workflows.files.clipboardRejected'),
 			});
 
 		const copyPathToClipboard = async () => {
@@ -1582,13 +1589,13 @@ export const FilePreview = React.memo(
 			try {
 				const ok = await safeClipboardWrite(file.path);
 				if (ok) {
-					flashCopiedToClipboard(file.path, 'File Path Copied');
+					flashCopiedToClipboard(file.path, getT()('workflows.files.filePathCopied'));
 				} else {
-					failClipboardToast('Failed to Copy Path');
+					failClipboardToast(getT()('workflows.files.copyPathFailed'));
 				}
 			} catch (err) {
 				captureException(err);
-				failClipboardToast('Failed to Copy Path');
+				failClipboardToast(getT()('workflows.files.copyPathFailed'));
 			}
 		};
 
@@ -1603,8 +1610,8 @@ export const FilePreview = React.memo(
 				if (!sessionId) {
 					notifyToast({
 						type: 'error',
-						title: 'No active agent',
-						message: 'Deep links need an active agent to scope the file to. Select one first.',
+						title: getT()('workflows.files.noAgent'),
+						message: getT()('workflows.files.deepLinkAgent'),
 					});
 					return;
 				}
@@ -1614,11 +1621,11 @@ export const FilePreview = React.memo(
 					if (ok) {
 						flashCopiedToClipboard(url, `Deep Link Copied (L${lineNumber})`);
 					} else {
-						failClipboardToast('Failed to Copy Deep Link');
+						failClipboardToast(getT()('workflows.files.deepLinkFailed'));
 					}
 				} catch (err) {
 					captureException(err);
-					failClipboardToast('Failed to Copy Deep Link');
+					failClipboardToast(getT()('workflows.files.deepLinkFailed'));
 				}
 			},
 			[file]
@@ -1629,9 +1636,9 @@ export const FilePreview = React.memo(
 			if (isImage) {
 				const ok = await safeClipboardWriteImage(file.content);
 				if (ok) {
-					flashCopiedToClipboard(undefined, 'Image Copied');
+					flashCopiedToClipboard(undefined, getT()('workflows.files.imageCopied'));
 				} else {
-					failClipboardToast('Failed to Copy Image');
+					failClipboardToast(getT()('workflows.files.copyImageFailed'));
 				}
 			} else if (isMedia || isParquet) {
 				// The "content" of a media tab is an internal stream URL and a
@@ -1640,16 +1647,16 @@ export const FilePreview = React.memo(
 				// is what the viewer's own Export does, with the filter applied.)
 				const ok = await safeClipboardWrite(file.path);
 				if (ok) {
-					flashCopiedToClipboard(undefined, 'Path Copied');
+					flashCopiedToClipboard(undefined, getT()('workflows.files.pathCopied'));
 				} else {
-					failClipboardToast('Failed to Copy Path');
+					failClipboardToast(getT()('workflows.files.copyPathFailed'));
 				}
 			} else {
 				const ok = await safeClipboardWrite(file.content);
 				if (ok) {
-					flashCopiedToClipboard(undefined, 'Content Copied');
+					flashCopiedToClipboard(undefined, getT()('workflows.files.contentCopied'));
 				} else {
-					failClipboardToast('Failed to Copy Content');
+					failClipboardToast(getT()('workflows.files.copyContentFailed'));
 				}
 			}
 		};
@@ -1989,8 +1996,8 @@ export const FilePreview = React.memo(
 						<RefreshCw className="w-3.5 h-3.5 shrink-0" style={{ color: theme.colors.accent }} />
 						<span className="flex-1 text-xs" style={{ color: theme.colors.textMain }}>
 							{hasChanges
-								? 'File changed on disk. You have unsaved edits - reloading will discard them.'
-								: 'File changed on disk.'}
+								? uiText('workflows.files.changedDirty')
+								: uiText('workflows.files.changed')}
 						</span>
 						<div className="flex items-center gap-2 shrink-0">
 							<button
@@ -2001,9 +2008,12 @@ export const FilePreview = React.memo(
 									color: theme.colors.accentForeground ?? '#000',
 								}}
 							>
-								Reload
+								{uiText('workflows.files.reload')}
 							</button>
-							<GhostIconButton onClick={() => setFileChangedOnDisk(false)} title="Dismiss">
+							<GhostIconButton
+								onClick={() => setFileChangedOnDisk(false)}
+								title={uiText('workflows.files.dismiss')}
+							>
 								<X className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 							</GhostIconButton>
 						</div>
@@ -2024,9 +2034,8 @@ export const FilePreview = React.memo(
 							style={{ color: theme.colors.warning }}
 						/>
 						<span className="flex-1 text-xs" style={{ color: theme.colors.textMain }}>
-							This file no longer exists at its original location. It may have been deleted or
-							moved.
-							{hasChanges ? ' Saving will prompt you for a new location.' : ''}
+							{uiText('workflows.files.missing')}
+							{hasChanges ? uiText('workflows.files.saveNewLocation') : ''}
 						</span>
 						<div className="flex items-center gap-2 shrink-0">
 							<button
@@ -2037,7 +2046,7 @@ export const FilePreview = React.memo(
 									color: theme.colors.accentForeground ?? '#000',
 								}}
 							>
-								Dismiss
+								{uiText('workflows.files.dismiss')}
 							</button>
 						</div>
 					</div>
@@ -2123,7 +2132,11 @@ export const FilePreview = React.memo(
 													searchMode === 'jq' ? theme.colors.accent + '20' : theme.colors.bgSidebar,
 												color: searchMode === 'jq' ? theme.colors.accent : theme.colors.textDim,
 											}}
-											title={searchMode === 'jq' ? 'Switch to text search' : 'Switch to jq filter'}
+											title={
+												searchMode === 'jq'
+													? uiText('workflows.files.searchText')
+													: uiText('workflows.files.searchJq')
+											}
 										>
 											<Filter className="w-3 h-3" />
 											jq
@@ -2149,10 +2162,10 @@ export const FilePreview = React.memo(
 											}}
 											title={
 												searchKind === 'text'
-													? 'Plain-text search (click to switch to regex)'
+													? uiText('workflows.files.plainHelp')
 													: searchKind === 'regex'
-														? 'Regex search (click to switch to line-number jump)'
-														: 'Go to line (click to switch to plain-text search)'
+														? uiText('workflows.files.regexHelp')
+														: uiText('workflows.files.lineHelp')
 											}
 										>
 											{searchKind === 'text' ? (
@@ -2162,7 +2175,11 @@ export const FilePreview = React.memo(
 											) : (
 												<Hash className="w-3 h-3" />
 											)}
-											{searchKind === 'text' ? 'Text' : searchKind === 'regex' ? 'Regex' : 'Line'}
+											{searchKind === 'text'
+												? uiText('workflows.files.text')
+												: searchKind === 'regex'
+													? uiText('workflows.files.regex')
+													: uiText('workflows.files.line')}
 										</button>
 									)}
 									<input
@@ -2200,10 +2217,10 @@ export const FilePreview = React.memo(
 											searchMode === 'jq'
 												? 'jq filter - .field, select(.x == "y"), keys, contains("...")'
 												: searchKind === 'line'
-													? 'Go to line number…'
+													? uiText('workflows.files.goLine')
 													: searchKind === 'regex'
-														? 'Search by regex... (Enter: next, Shift+Enter: prev)'
-														: 'Search in file... (Enter: next, Shift+Enter: prev)'
+														? uiText('workflows.files.regexPlaceholder')
+														: uiText('workflows.files.searchPlaceholder')
 										}
 										className="flex-1 px-3 py-2 rounded border bg-transparent outline-none text-sm"
 										style={{
@@ -2238,14 +2255,14 @@ export const FilePreview = React.memo(
 											>
 												{totalMatches > 0
 													? `${currentMatchIndex + 1}/${totalMatches}`
-													: 'No matches'}
+													: uiText('workflows.files.noMatches')}
 											</span>
 											<button
 												onClick={goToPrevMatch}
 												disabled={totalMatches === 0}
 												className="p-1.5 rounded hover:bg-white/10 transition-colors disabled:opacity-30"
 												style={{ color: theme.colors.textDim }}
-												title="Previous match (Shift+Enter)"
+												title={uiText('workflows.files.previous')}
 											>
 												<ChevronUp className="w-4 h-4" />
 											</button>
@@ -2254,7 +2271,7 @@ export const FilePreview = React.memo(
 												disabled={totalMatches === 0}
 												className="p-1.5 rounded hover:bg-white/10 transition-colors disabled:opacity-30"
 												style={{ color: theme.colors.textDim }}
-												title="Next match (Enter)"
+												title={uiText('workflows.files.next')}
 											>
 												<ChevronDown className="w-4 h-4" />
 											</button>
@@ -2271,7 +2288,7 @@ export const FilePreview = React.memo(
 													}}
 													className="p-1 rounded hover:bg-white/10 transition-colors"
 													style={{ color: theme.colors.textDim }}
-													title="Clear filter"
+													title={uiText('workflows.files.clearFilter')}
 												>
 													<X className="w-3.5 h-3.5" />
 												</button>
@@ -2286,7 +2303,7 @@ export const FilePreview = React.memo(
 														: theme.colors.bgSidebar,
 													color: showJqHelp ? theme.colors.accent : theme.colors.textDim,
 												}}
-												title="Show syntax help"
+												title={uiText('workflows.files.syntaxHelp')}
 											>
 												?
 											</button>
@@ -2327,7 +2344,7 @@ export const FilePreview = React.memo(
 												borderBottom: `1px solid ${theme.colors.border}`,
 											}}
 										>
-											jq Filter Syntax
+											{uiText('workflows.files.jqSyntax')}
 										</div>
 										<div className="max-h-64 overflow-y-auto scrollbar-thin">
 											{SYNTAX_EXAMPLES.map(({ expr, desc }) => (
@@ -2385,10 +2402,10 @@ export const FilePreview = React.memo(
 							<FileCode className="w-16 h-16" style={{ color: theme.colors.textDim }} />
 							<div className="text-center">
 								<p className="text-lg font-medium" style={{ color: theme.colors.textMain }}>
-									Binary File
+									{uiText('workflows.files.binary')}
 								</p>
 								<p className="text-sm mt-1" style={{ color: theme.colors.textDim }}>
-									This file cannot be displayed as text.
+									{uiText('workflows.files.binaryHelp')}
 								</p>
 								{/* "Open in default app" hands the file to the HOST machine's OS
 								    opener via the shell bridge. In the web-desktop build the host
@@ -2397,7 +2414,7 @@ export const FilePreview = React.memo(
 								    machine. */}
 								<button
 									disabled={isWebDesktop()}
-									title={isWebDesktop() ? 'Available in the desktop app' : undefined}
+									title={isWebDesktop() ? uiText('workflows.files.desktopOnly') : undefined}
 									onClick={async () => {
 										if (isWebDesktop()) return;
 										// Local files open in place. Remote files don't exist on this
@@ -2417,11 +2434,11 @@ export const FilePreview = React.memo(
 										} catch (error) {
 											notifyToast({
 												color: 'red',
-												title: 'Open failed',
+												title: uiText('workflows.files.openFailed'),
 												message:
 													error instanceof Error
 														? error.message
-														: 'Could not download the remote file',
+														: uiText('workflows.files.remoteFailed'),
 											});
 										}
 									}}
@@ -2431,7 +2448,9 @@ export const FilePreview = React.memo(
 										color: theme.colors.accentForeground,
 									}}
 								>
-									{sshRemoteId ? 'Download & Open' : 'Open in Default App'}
+									{sshRemoteId
+										? uiText('workflows.files.downloadOpen')
+										: uiText('workflows.files.openDefault')}
 								</button>
 							</div>
 						</div>
@@ -2547,7 +2566,7 @@ export const FilePreview = React.memo(
 										fontSize: '0.8125rem',
 									}}
 								>
-									Loading giant preview…
+									{uiText('workflows.files.loadingGiant')}
 								</div>
 							}
 						>
@@ -2573,7 +2592,7 @@ export const FilePreview = React.memo(
 										fontSize: '0.8125rem',
 									}}
 								>
-									Loading fast preview…
+									{uiText('workflows.files.loadingFast')}
 								</div>
 							}
 						>
@@ -2646,7 +2665,7 @@ export const FilePreview = React.memo(
 										fontSize: '0.8125rem',
 									}}
 								>
-									Loading fast preview…
+									{uiText('workflows.files.loadingFast')}
 								</div>
 							}
 						>
@@ -2675,9 +2694,10 @@ export const FilePreview = React.memo(
 								>
 									<AlertTriangle className="w-4 h-4 flex-shrink-0" />
 									<span>
-										Large file preview truncated. Showing first{' '}
-										{formatFileSize(LARGE_FILE_PREVIEW_LIMIT)} of{' '}
-										{formatFileSize(file.content.length)}.
+										{uiText('workflows.files.truncated', {
+											shown: formatFileSize(LARGE_FILE_PREVIEW_LIMIT),
+											total: formatFileSize(file.content.length),
+										})}
 									</span>
 									<button
 										className="px-2 py-0.5 rounded text-xs font-medium hover:brightness-125 transition-all"
@@ -2688,7 +2708,7 @@ export const FilePreview = React.memo(
 										}}
 										onClick={() => setShowFullContent(true)}
 									>
-										Load full file
+										{uiText('workflows.files.loadFull')}
 									</button>
 								</div>
 							)}
@@ -2720,7 +2740,7 @@ export const FilePreview = React.memo(
 										fontSize: '0.8125rem',
 									}}
 								>
-									Loading fast preview…
+									{uiText('workflows.files.loadingFast')}
 								</div>
 							}
 						>
@@ -2749,9 +2769,10 @@ export const FilePreview = React.memo(
 								>
 									<AlertTriangle className="w-4 h-4 flex-shrink-0" />
 									<span>
-										Large file preview truncated. Showing first{' '}
-										{formatFileSize(LARGE_FILE_PREVIEW_LIMIT)} of{' '}
-										{formatFileSize(file.content.length)}.
+										{uiText('workflows.files.truncated', {
+											shown: formatFileSize(LARGE_FILE_PREVIEW_LIMIT),
+											total: formatFileSize(file.content.length),
+										})}
 									</span>
 									<button
 										className="px-2 py-0.5 rounded text-xs font-medium hover:brightness-125 transition-all"
@@ -2762,7 +2783,7 @@ export const FilePreview = React.memo(
 										}}
 										onClick={() => setShowFullContent(true)}
 									>
-										Load full file
+										{uiText('workflows.files.loadFull')}
 									</button>
 								</div>
 							)}
@@ -2835,7 +2856,7 @@ export const FilePreview = React.memo(
 				{showUnsavedChangesModal && (
 					<Modal
 						theme={theme}
-						title="Unsaved Changes"
+						title={uiText('workflows.files.unsaved')}
 						priority={MODAL_PRIORITIES.CONFIRM}
 						onClose={() => setShowUnsavedChangesModal(false)}
 						width={450}
@@ -2852,15 +2873,15 @@ export const FilePreview = React.memo(
 									setShowUnsavedChangesModal(false);
 									onClose();
 								}}
-								cancelLabel="No, Stay"
-								confirmLabel="Yes, Discard"
+								cancelLabel={uiText('workflows.files.stay')}
+								confirmLabel={uiText('workflows.files.discard')}
 								destructive
 								cancelButtonRef={cancelButtonRef}
 							/>
 						}
 					>
 						<p className="text-sm leading-relaxed" style={{ color: theme.colors.textMain }}>
-							You have unsaved changes. Are you sure you want to close without saving?
+							{uiText('workflows.files.discardHelp')}
 						</p>
 					</Modal>
 				)}
@@ -2896,7 +2917,8 @@ export const FilePreview = React.memo(
 								className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors"
 								style={{ color: theme.colors.textMain }}
 							>
-								Copy deep link to line {lineCtxMenu.lineNumber}
+								{uiText('workflows.files.copyLineLink')}
+								{lineCtxMenu.lineNumber}
 							</button>
 						</div>
 					</>

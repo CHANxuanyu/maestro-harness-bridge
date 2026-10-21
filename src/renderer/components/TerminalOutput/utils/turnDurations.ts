@@ -1,5 +1,6 @@
 import type { LogEntry } from '../../../types';
 import { isSelfContainedCard } from '../../../utils/logEntries';
+import { isProgressNoteEntry } from '../../../utils/transcriptMessages';
 
 /**
  * How long the agent took on each turn, keyed by the id of the transcript row
@@ -58,7 +59,8 @@ export function computeTurnDurations(logs: LogEntry[]): Map<string, number> {
 			log.source === 'tool' ||
 			log.source === 'thinking' ||
 			log.source === 'error' ||
-			isSelfContainedCard(log)
+			isSelfContainedCard(log) ||
+			isProgressNoteEntry(log)
 		) {
 			// Standalone rows that are not the turn's answer: they move the end mark
 			// without taking the badge.

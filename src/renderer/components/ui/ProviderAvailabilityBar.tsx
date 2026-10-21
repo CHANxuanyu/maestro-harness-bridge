@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import type { Theme } from '../../types';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -46,17 +47,32 @@ export function ProviderAvailabilityBar({
 	onShowAllChange,
 	variant = 'full',
 }: ProviderAvailabilityBarProps): JSX.Element {
+	const uiText = useT();
 	const isCompact = variant === 'compact';
 	// Nothing detected: `filterToAvailableProviders` already shows every row, so a
 	// toggle drawn OFF beside a full list reads as a filter that does not work.
 	// Draw it on and locked, and say why the list is full.
 	const isFallback = availableCount === 0;
-	const fallbackHint = `No providers detected ${locationLabel}. Showing all ${totalCount} so you can set a custom path.`;
+	const fallbackHint = uiText('workflows.sessions.providerFallbackHelp', {
+		location: locationLabel,
+		total: totalCount,
+	});
 	const summary = isCompact
-		? `${availableCount} of ${totalCount} ${locationLabel}`
+		? uiText('workflows.sessions.providerCompact', {
+				available: availableCount,
+				total: totalCount,
+				location: locationLabel,
+			})
 		: isFallback
-			? `No providers detected ${locationLabel}, showing all ${totalCount} supported`
-			: `${availableCount} providers available ${locationLabel} of ${totalCount} supported`;
+			? uiText('workflows.sessions.providerFallback', {
+					location: locationLabel,
+					total: totalCount,
+				})
+			: uiText('workflows.sessions.providerSummary', {
+					available: availableCount,
+					total: totalCount,
+					location: locationLabel,
+				});
 
 	return (
 		<div
@@ -75,9 +91,11 @@ export function ProviderAvailabilityBar({
 					checked={showAll || isFallback}
 					onChange={onShowAllChange}
 					disabled={isFallback}
-					ariaLabel="Show all supported providers"
+					ariaLabel={uiText('workflows.sessions.showSupportedProviders')}
 				/>
-				{isCompact ? 'Show All' : 'Show All Supported'}
+				{isCompact
+					? uiText('workflows.sessions.showAll')
+					: uiText('workflows.sessions.showAllSupported')}
 			</label>
 		</div>
 	);

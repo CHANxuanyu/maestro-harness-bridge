@@ -2,6 +2,7 @@ import { AlertTriangle, AtSign } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { ToggleButtonGroup } from '../../../../ToggleButtonGroup';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useI18n } from '../../../../../i18n';
 
 interface CrossAgentMentionsSectionProps {
 	theme: Theme;
@@ -18,15 +19,24 @@ export function CrossAgentMentionsSection({
 	crossAgentHandoffsWritable,
 	setCrossAgentHandoffsWritable,
 }: CrossAgentMentionsSectionProps) {
+	const { t, tRich } = useI18n();
+	const accessOptions = [
+		{ value: 'readonly' as const, label: t('settings.general.readOnly') },
+		{ value: 'readwrite' as const, label: t('settings.general.readWrite') },
+	];
 	return (
 		<div data-setting-id="general-cross-agent-mentions">
-			<SettingsSectionHeading icon={AtSign}>Cross-Agent Mentions</SettingsSectionHeading>
+			<SettingsSectionHeading icon={AtSign}>
+				{t('settings.general.mentions.heading')}
+			</SettingsSectionHeading>
 			<p className="text-xs opacity-70 mb-3">
-				When you @-mention another agent, it answers from its own workspace. Read-Only makes that a{' '}
-				<span className="font-medium">consult</span>: it reads and replies. Read/Write makes it a{' '}
-				<span className="font-medium">delegation</span>: it can also change files. A{' '}
-				<span className="font-medium">hand-off</span> (&quot;then send what you find to
-				@agent&quot;) has its own switch below.
+				{tRich('settings.general.mentions.description', {
+					consult: <span className="font-medium">{t('settings.general.mentions.consult')}</span>,
+					delegation: (
+						<span className="font-medium">{t('settings.general.mentions.delegation')}</span>
+					),
+					handoff: <span className="font-medium">{t('settings.general.mentions.handoff')}</span>,
+				})}
 			</p>
 
 			<div
@@ -34,12 +44,12 @@ export function CrossAgentMentionsSection({
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<div className="font-medium" style={{ color: theme.colors.textMain }}>
-					Consult or Delegate
+					{t('settings.general.mentions.consultOrDelegate')}
 				</div>
 				<div className="text-xs opacity-70 mt-0.5 mb-2">
 					{crossAgentMentionsWritable
-						? 'Delegate: mentioned agents may modify files in their own workspace while answering.'
-						: 'Consult: mentioned agents read to inform their answer but never modify files (the default and safest choice).'}
+						? t('settings.general.mentions.delegateState')
+						: t('settings.general.mentions.consultState')}
 				</div>
 
 				{crossAgentMentionsWritable && (
@@ -48,18 +58,12 @@ export function CrossAgentMentionsSection({
 						style={{ color: theme.colors.warning }}
 					>
 						<AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-						<span>
-							Every mention is now a delegation: the agent can change files on its own. Enable this
-							only when you trust the mentioned agent to edit its workspace unattended.
-						</span>
+						<span>{t('settings.general.mentions.delegateWarning')}</span>
 					</div>
 				)}
 
 				<ToggleButtonGroup
-					options={[
-						{ value: 'readonly' as const, label: 'Read-Only' },
-						{ value: 'readwrite' as const, label: 'Read/Write' },
-					]}
+					options={accessOptions}
 					value={crossAgentMentionsWritable ? 'readwrite' : 'readonly'}
 					onChange={(value) => setCrossAgentMentionsWritable(value === 'readwrite')}
 					theme={theme}
@@ -73,12 +77,12 @@ export function CrossAgentMentionsSection({
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<div className="font-medium" style={{ color: theme.colors.textMain }}>
-					Hand-offs
+					{t('settings.general.mentions.handoffs')}
 				</div>
 				<div className="text-xs opacity-70 mt-0.5 mb-2">
 					{crossAgentHandoffsWritable
-						? 'Read/Write: an agent handed a result ("then send what you find to @agent") may save it and change files in its own workspace (the default).'
-						: 'Read-Only: an agent handed a result reads it and replies, but never modifies files.'}
+						? t('settings.general.mentions.handoffWriteState')
+						: t('settings.general.mentions.handoffReadState')}
 				</div>
 
 				{crossAgentHandoffsWritable && (
@@ -87,18 +91,12 @@ export function CrossAgentMentionsSection({
 						style={{ color: theme.colors.warning }}
 					>
 						<AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-						<span>
-							A hand-off forwards another agent's output, which can include text from the web. The
-							receiving agent acts on it unattended.
-						</span>
+						<span>{t('settings.general.mentions.handoffWarning')}</span>
 					</div>
 				)}
 
 				<ToggleButtonGroup
-					options={[
-						{ value: 'readonly' as const, label: 'Read-Only' },
-						{ value: 'readwrite' as const, label: 'Read/Write' },
-					]}
+					options={accessOptions}
 					value={crossAgentHandoffsWritable ? 'readwrite' : 'readonly'}
 					onChange={(value) => setCrossAgentHandoffsWritable(value === 'readwrite')}
 					theme={theme}

@@ -718,6 +718,7 @@ export type AgentErrorType =
 	| 'network_error' // Connection failed, timeout
 	| 'agent_crashed' // Process exited unexpectedly
 	| 'permission_denied' // Agent lacks required permissions
+	| 'session_busy' // Another native harness owns the session writer
 	| 'session_not_found' // Session was deleted or doesn't exist
 	| 'hitl_gate' // Playbook reached a human-in-the-loop review marker
 	| 'unknown'; // Unrecognized error

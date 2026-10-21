@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { memo } from 'react';
 import {
 	Copy,
@@ -110,6 +111,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 	onCloseTabsLeft,
 	onCloseTabsRight,
 }: AITabOverlayMenuProps) {
+	const t = useT();
 	const shortcuts = useSettingsStore((s) => s.shortcuts);
 	const tabShortcuts = useSettingsStore((s) => s.tabShortcuts);
 
@@ -156,10 +158,12 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						onClick={onCopySessionId}
 						className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
 						style={{ color: theme.colors.textMain }}
-						title={`Full ID: ${tab.agentSessionId}`}
+						title={t('workflows.shell.fullIdValue', { p0: tab.agentSessionId })}
 					>
 						<Copy className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						{showCopied === 'sessionId' ? 'Copied!' : 'Copy Session ID'}
+						{showCopied === 'sessionId'
+							? t('workflows.shell.copied')
+							: t('workflows.shell.copySessionId')}
 					</button>
 				)}
 
@@ -171,7 +175,9 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						title={buildSessionDeepLink(sessionId, tabId)}
 					>
 						<Link className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						{showCopied === 'deepLink' ? 'Copied!' : 'Copy Deep Link'}
+						{showCopied === 'deepLink'
+							? t('workflows.shell.copied')
+							: t('workflows.shell.copyDeepLink')}
 					</button>
 				)}
 
@@ -186,7 +192,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 							className={`w-3.5 h-3.5 ${tab.starred ? 'fill-current' : ''}`}
 							style={{ color: tab.starred ? theme.colors.warning : theme.colors.textDim }}
 						/>
-						{tab.starred ? 'Unstar Session' : 'Star Session'}
+						{tab.starred ? t('workflows.shell.unstarSession') : t('workflows.shell.starSession')}
 						{shortcuts.toggleTabStar && (
 							<ShortcutHint keys={shortcuts.toggleTabStar.keys} theme={theme} />
 						)}
@@ -200,7 +206,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 					style={{ color: theme.colors.textMain }}
 				>
 					<Edit2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-					Rename Tab
+					{t('workflows.shell.renameTab')}
 					{tabShortcuts.renameTab && (
 						<ShortcutHint keys={tabShortcuts.renameTab.keys} theme={theme} />
 					)}
@@ -214,7 +220,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<Mail className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Mark as Unread
+						{t('workflows.shell.markAsUnread')}
 						{tabShortcuts.toggleTabUnread && (
 							<ShortcutHint keys={tabShortcuts.toggleTabUnread.keys} theme={theme} />
 						)}
@@ -229,7 +235,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<Download className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Export as HTML
+						{t('workflows.shell.exportAsHtml')}
 					</button>
 				)}
 
@@ -241,7 +247,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<Clock className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Snooze Tab
+						{t('workflows.shell.snoozeTab')}
 						{tabShortcuts.snoozeTab && (
 							<ShortcutHint keys={tabShortcuts.snoozeTab.keys} theme={theme} />
 						)}
@@ -262,7 +268,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<Clipboard className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Context: Copy to Clipboard
+						{t('workflows.shell.contextCopyToClipboard')}
 					</button>
 				)}
 
@@ -274,7 +280,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<Clipboard className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Context: Copy with Reasoning
+						{t('workflows.shell.contextCopyWithReasoning')}
 					</button>
 				)}
 
@@ -286,7 +292,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<Minimize2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Context: Compact
+						{t('workflows.shell.contextCompact')}
 					</button>
 				)}
 
@@ -298,7 +304,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<GitMerge className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Context: Merge Into
+						{t('workflows.shell.contextMergeInto')}
 					</button>
 				)}
 
@@ -310,7 +316,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<ArrowRightCircle className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Context: Send to Agent
+						{t('workflows.shell.contextSendToAgent')}
 					</button>
 				)}
 
@@ -322,7 +328,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<Share2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Context: Publish as GitHub Gist
+						{t('workflows.shell.contextPublishAsGithubGist')}
 					</button>
 				)}
 
@@ -339,7 +345,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<ChevronsLeft className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Move to First Position
+						{t('workflows.shell.moveToFirstPosition')}
 						{tabShortcuts.moveTabToStart && (
 							<ShortcutHint keys={tabShortcuts.moveTabToStart.keys} theme={theme} />
 						)}
@@ -354,7 +360,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<ChevronsRight className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Move to Last Position
+						{t('workflows.shell.moveToLastPosition')}
 						{tabShortcuts.moveTabToEnd && (
 							<ShortcutHint keys={tabShortcuts.moveTabToEnd.keys} theme={theme} />
 						)}
@@ -374,7 +380,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 					disabled={totalTabs === 1}
 				>
 					<X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-					Close Tab
+					{t('workflows.shell.closeTab')}
 					{tabShortcuts.closeTab && (
 						<ShortcutHint keys={tabShortcuts.closeTab.keys} theme={theme} />
 					)}
@@ -391,7 +397,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						disabled={totalTabs === 1}
 					>
 						<X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Close Other Tabs
+						{t('workflows.shell.closeOtherTabs')}
 						{tabShortcuts.closeOtherTabs && (
 							<ShortcutHint keys={tabShortcuts.closeOtherTabs.keys} theme={theme} />
 						)}
@@ -409,7 +415,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						disabled={tabIndex === 0}
 					>
 						<ChevronsLeft className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Close Tabs to Left
+						{t('workflows.shell.closeTabsToLeft')}
 						{tabShortcuts.closeTabsLeft && (
 							<ShortcutHint keys={tabShortcuts.closeTabsLeft.keys} theme={theme} />
 						)}
@@ -427,7 +433,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 						disabled={tabIndex === (totalTabs ?? 1) - 1}
 					>
 						<ChevronsRight className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-						Close Tabs to Right
+						{t('workflows.shell.closeTabsToRight')}
 						{tabShortcuts.closeTabsRight && (
 							<ShortcutHint keys={tabShortcuts.closeTabsRight.keys} theme={theme} />
 						)}

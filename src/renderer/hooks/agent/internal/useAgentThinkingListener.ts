@@ -19,6 +19,13 @@
  *   Applies in 'sticky' mode too - sticky preserves thinking logs already on
  *   screen, it does not entitle a stale buffer to materialize a new one.
  *
+ * Public progress (`purpose === 'commentary'`): one COMPLETE progress message
+ * the agent wrote while working, not reasoning and not a fragment of the
+ * answer. It bypasses the buffer and the Thinking gate and is written at once
+ * as its own Progress row (`LogEntry.purpose`), after flushing any reasoning
+ * buffered for that tab, so the rows keep the order main forwarded them in
+ * (reasoning, then the progress message, then the tool call that follows it).
+ *
  * Concatenated-tool-name guard: malformed chunks containing a stream of
  * back-to-back tool names get dropped (or *replace* an existing log) rather
  * than rendered as text.
@@ -34,16 +41,17 @@ import { generateId } from '../../../utils/ids';
 import { logger } from '../../../utils/logger';
 import { useOwnedSessionGate } from './useOwnedSessionGate';
 import { canAppendToLogEntry } from '../../../utils/logEntries';
+import { isProgressNoteEntry } from '../../../utils/transcriptMessages';
 import type { LogEntry } from '../../../types';
+
+type BufferedThinking = { text: string; bufferedAt: number };
 
 export function useAgentThinkingListener(): void {
 	// Buffered text plus the moment buffering STARTED for that tab. The timestamp
 	// is what separates a chunk that outlived its turn's answer (stale) from
 	// reasoning that legitimately follows an intermediate assistant message: only
 	// the former was already in hand before the stdout log appeared.
-	const thinkingChunkBufferRef = useRef<Map<string, { text: string; bufferedAt: number }>>(
-		new Map()
-	);
+	const thinkingChunkBufferRef = useRef<Map<string, BufferedThinking>>(new Map());
 	const thinkingChunkRafIdRef = useRef<number | null>(null);
 	const ownedGate = useOwnedSessionGate();
 
@@ -51,8 +59,171 @@ export function useAgentThinkingListener(): void {
 		const setSessions = useSessionStore.getState().setSessions;
 		const thinkingChunkBuffer = thinkingChunkBufferRef.current;
 
+		const applyThinking = (chunksToProcess: Map<string, BufferedThinking>) => {
+			setSessions((prev) =>
+				prev.map((s) => {
+					let hasChanges = false;
+					for (const [key] of chunksToProcess) {
+						if (key.startsWith(s.id + ':')) {
+							hasChanges = true;
+							break;
+						}
+					}
+					if (!hasChanges) return s;
+
+					// Tag thinking entries with `renderStyle: 'text-stream'` when the
+					// session's resolved Claude mode is interactive so the TUI/API
+					// footer pill matches the assistant text in the same turn.
+					const isInteractive = s.claudeInteractive?.mode === 'interactive';
+
+					let updatedTabs = s.aiTabs;
+					for (const [key, buffered] of chunksToProcess) {
+						const bufferedContent = buffered.text;
+						const [chunkSessionId, chunkTabId] = key.split(':');
+						if (chunkSessionId !== s.id) continue;
+
+						const targetTab = updatedTabs.find((t) => t.id === chunkTabId);
+						if (!targetTab) continue;
+
+						if (!thinkingLogsRecorded(targetTab.showThinking)) continue;
+
+						if (isLikelyConcatenatedToolNames(bufferedContent)) {
+							logger.warn(
+								'[App] Skipping malformed thinking chunk (concatenated tool names):',
+								undefined,
+								bufferedContent.substring(0, 100)
+							);
+							continue;
+						}
+
+						// Three log-update branches collapsed into one map call:
+						//   1. New thinking log when last log isn't thinking → append.
+						//   2. Continuation that combines cleanly → replace last log
+						//      with combined text.
+						//   3. Continuation that combined into malformed concatenated
+						//      tool names → replace last log with this chunk only
+						//      (drop the prior text rather than worsen the noise).
+						const lastLog = targetTab.logs[targetTab.logs.length - 1];
+
+						// A chunk that outlives its turn's answer is stale: the inline clear
+						// point in useBatchedSessionUpdates already removed the thinking block
+						// this chunk belonged to and appended the answer below it. Appending
+						// now would resurrect a stale prefix of that same answer underneath
+						// it. Tested explicitly (not as !isContinuation) because a
+						// self-contained thinking card is a non-continuation too.
+						//
+						// The timestamp comparison is what keeps this narrow. Claude Code and
+						// Factory Droid stream at MESSAGE granularity, so an intermediate
+						// assistant message flushes as stdout mid-turn and more reasoning can
+						// legitimately follow it. Dropping on `source === 'stdout'` alone
+						// silenced that reasoning for the rest of the turn. Only a chunk that
+						// was ALREADY buffered when the stdout landed is stale; one that
+						// arrived afterwards is new content and must be appended. A progress
+						// row is not the answer, so it never makes a chunk stale.
+						const outlivedItsAnswer =
+							lastLog?.source === 'stdout' &&
+							!isProgressNoteEntry(lastLog) &&
+							lastLog.timestamp >= buffered.bufferedAt;
+						if (outlivedItsAnswer) continue;
+
+						// Same rule as every other coalescing site: same source AND not a
+						// self-contained card. See utils/logEntries.ts.
+						const isContinuation = canAppendToLogEntry(lastLog, 'thinking');
+						const combinedText = isContinuation ? lastLog.text + bufferedContent : '';
+						const continuationIsMalformed =
+							isContinuation && isLikelyConcatenatedToolNames(combinedText);
+						if (continuationIsMalformed) {
+							logger.warn(
+								'[App] Detected malformed thinking content, replacing instead of appending'
+							);
+						}
+
+						let nextLogs: LogEntry[];
+						if (!isContinuation) {
+							const newLog: LogEntry = {
+								id: generateId(),
+								timestamp: Date.now(),
+								source: 'thinking',
+								text: bufferedContent,
+								...(isInteractive ? { renderStyle: 'text-stream' as const } : {}),
+							};
+							nextLogs = [...targetTab.logs, newLog];
+						} else {
+							const replacementText = continuationIsMalformed ? bufferedContent : combinedText;
+							nextLogs = [
+								...targetTab.logs.slice(0, -1),
+								{
+									...lastLog,
+									text: replacementText,
+									...(isInteractive ? { renderStyle: 'text-stream' as const } : {}),
+								},
+							];
+						}
+
+						updatedTabs = updatedTabs.map((tab) =>
+							tab.id === chunkTabId ? { ...tab, logs: nextLogs } : tab
+						);
+					}
+
+					return updatedTabs === s.aiTabs ? s : { ...s, aiTabs: updatedTabs };
+				})
+			);
+		};
+
+		/**
+		 * Write buffered reasoning into the tabs. `onlyKey` flushes one tab's
+		 * buffer synchronously (a progress message is about to be written for that
+		 * tab and the reasoning before it must land first); otherwise the whole
+		 * buffer goes, which is what the rAF does.
+		 */
+		const flushThinking = (onlyKey?: string) => {
+			const buffer = thinkingChunkBufferRef.current;
+			if (onlyKey) {
+				const one = buffer.get(onlyKey);
+				if (!one) return;
+				buffer.delete(onlyKey);
+				applyThinking(new Map([[onlyKey, one]]));
+				return;
+			}
+			thinkingChunkRafIdRef.current = null;
+			if (buffer.size === 0) return;
+			const chunksToProcess = new Map(buffer);
+			buffer.clear();
+			applyThinking(chunksToProcess);
+		};
+
+		/**
+		 * Append one complete public progress message as its own Progress row.
+		 * Never gated by the Thinking switch, never merged with another message
+		 * (`purpose` makes it a self-contained entry), and never dropped as stale:
+		 * arriving after stdout is not evidence it belongs to an earlier answer.
+		 */
+		const appendProgress = (actualSessionId: string, tabId: string, content: string) => {
+			if (!content.trim()) return;
+			flushThinking(`${actualSessionId}:${tabId}`);
+			setSessions((prev) =>
+				prev.map((s) => {
+					if (s.id !== actualSessionId) return s;
+					if (!s.aiTabs.some((t) => t.id === tabId)) return s;
+					const isInteractive = s.claudeInteractive?.mode === 'interactive';
+					const entry: LogEntry = {
+						id: generateId(),
+						timestamp: Date.now(),
+						source: 'stdout',
+						text: content,
+						purpose: 'commentary',
+						...(isInteractive ? { renderStyle: 'text-stream' as const } : {}),
+					};
+					return {
+						...s,
+						aiTabs: s.aiTabs.map((t) => (t.id === tabId ? { ...t, logs: [...t.logs, entry] } : t)),
+					};
+				})
+			);
+		};
+
 		const unsubscribe = window.maestro.process.onThinkingChunk?.(
-			(sessionId: string, content: string) => {
+			(sessionId: string, content: string, purpose?: 'commentary') => {
 				// Window scoping: ignore agents this window doesn't own (broadcast events).
 				if (!ownedGate.current?.(sessionId)) return;
 				const aiTabMatch = sessionId.match(REGEX_AI_TAB);
@@ -66,6 +237,11 @@ export function useAgentThinkingListener(): void {
 				// outage before the thinking-mode filter below can drop the chunk.
 				noteRetryProgress(actualSessionId, tabId);
 
+				if (purpose === 'commentary') {
+					appendProgress(actualSessionId, tabId, content);
+					return;
+				}
+
 				const existing = thinkingChunkBufferRef.current.get(bufferKey);
 				thinkingChunkBufferRef.current.set(bufferKey, {
 					text: (existing?.text ?? '') + content,
@@ -74,125 +250,7 @@ export function useAgentThinkingListener(): void {
 				});
 
 				if (thinkingChunkRafIdRef.current === null) {
-					thinkingChunkRafIdRef.current = requestAnimationFrame(() => {
-						const buffer = thinkingChunkBufferRef.current;
-						if (buffer.size === 0) {
-							thinkingChunkRafIdRef.current = null;
-							return;
-						}
-
-						const chunksToProcess = new Map(buffer);
-						buffer.clear();
-						thinkingChunkRafIdRef.current = null;
-
-						setSessions((prev) =>
-							prev.map((s) => {
-								let hasChanges = false;
-								for (const [key] of chunksToProcess) {
-									if (key.startsWith(s.id + ':')) {
-										hasChanges = true;
-										break;
-									}
-								}
-								if (!hasChanges) return s;
-
-								// Tag thinking entries with `renderStyle: 'text-stream'` when the
-								// session's resolved Claude mode is interactive so the TUI/API
-								// footer pill matches the assistant text in the same turn.
-								const isInteractive = s.claudeInteractive?.mode === 'interactive';
-
-								let updatedTabs = s.aiTabs;
-								for (const [key, buffered] of chunksToProcess) {
-									const bufferedContent = buffered.text;
-									const [chunkSessionId, chunkTabId] = key.split(':');
-									if (chunkSessionId !== s.id) continue;
-
-									const targetTab = updatedTabs.find((t) => t.id === chunkTabId);
-									if (!targetTab) continue;
-
-									if (!thinkingLogsRecorded(targetTab.showThinking)) continue;
-
-									if (isLikelyConcatenatedToolNames(bufferedContent)) {
-										logger.warn(
-											'[App] Skipping malformed thinking chunk (concatenated tool names):',
-											undefined,
-											bufferedContent.substring(0, 100)
-										);
-										continue;
-									}
-
-									// Three log-update branches collapsed into one map call:
-									//   1. New thinking log when last log isn't thinking → append.
-									//   2. Continuation that combines cleanly → replace last log
-									//      with combined text.
-									//   3. Continuation that combined into malformed concatenated
-									//      tool names → replace last log with this chunk only
-									//      (drop the prior text rather than worsen the noise).
-									const lastLog = targetTab.logs[targetTab.logs.length - 1];
-
-									// A chunk that outlives its turn's answer is stale: the inline clear
-									// point in useBatchedSessionUpdates already removed the thinking block
-									// this chunk belonged to and appended the answer below it. Appending
-									// now would resurrect a stale prefix of that same answer underneath
-									// it. Tested explicitly (not as !isContinuation) because a
-									// self-contained thinking card is a non-continuation too.
-									//
-									// The timestamp comparison is what keeps this narrow. Claude Code and
-									// Factory Droid stream at MESSAGE granularity, so an intermediate
-									// assistant message flushes as stdout mid-turn and more reasoning can
-									// legitimately follow it. Dropping on `source === 'stdout'` alone
-									// silenced that reasoning for the rest of the turn. Only a chunk that
-									// was ALREADY buffered when the stdout landed is stale; one that
-									// arrived afterwards is new content and must be appended.
-									const outlivedItsAnswer =
-										lastLog?.source === 'stdout' && lastLog.timestamp >= buffered.bufferedAt;
-									if (outlivedItsAnswer) continue;
-
-									// Same rule as every other coalescing site: same source AND not a
-									// self-contained card. See utils/logEntries.ts.
-									const isContinuation = canAppendToLogEntry(lastLog, 'thinking');
-									const combinedText = isContinuation ? lastLog.text + bufferedContent : '';
-									const continuationIsMalformed =
-										isContinuation && isLikelyConcatenatedToolNames(combinedText);
-									if (continuationIsMalformed) {
-										logger.warn(
-											'[App] Detected malformed thinking content, replacing instead of appending'
-										);
-									}
-
-									let nextLogs: LogEntry[];
-									if (!isContinuation) {
-										const newLog: LogEntry = {
-											id: generateId(),
-											timestamp: Date.now(),
-											source: 'thinking',
-											text: bufferedContent,
-											...(isInteractive ? { renderStyle: 'text-stream' as const } : {}),
-										};
-										nextLogs = [...targetTab.logs, newLog];
-									} else {
-										const replacementText = continuationIsMalformed
-											? bufferedContent
-											: combinedText;
-										nextLogs = [
-											...targetTab.logs.slice(0, -1),
-											{
-												...lastLog,
-												text: replacementText,
-												...(isInteractive ? { renderStyle: 'text-stream' as const } : {}),
-											},
-										];
-									}
-
-									updatedTabs = updatedTabs.map((tab) =>
-										tab.id === chunkTabId ? { ...tab, logs: nextLogs } : tab
-									);
-								}
-
-								return updatedTabs === s.aiTabs ? s : { ...s, aiTabs: updatedTabs };
-							})
-						);
-					});
+					thinkingChunkRafIdRef.current = requestAnimationFrame(() => flushThinking());
 				}
 			}
 		);

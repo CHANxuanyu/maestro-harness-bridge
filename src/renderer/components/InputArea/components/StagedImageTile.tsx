@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * One staged-image thumbnail. Shared by the composer strip and the organizer
  * modal so both surfaces get the same slot badge, drag visuals, and per-image
@@ -50,6 +51,7 @@ export const StagedImageTile = memo(function StagedImageTile({
 	onAnnotate,
 	onRemove,
 }: StagedImageTileProps) {
+	const t = useT();
 	const dims = TILE_SIZES[size];
 	const slot = index + 1;
 	// Scale in CSS rather than recomputing a rem number: the presets are the
@@ -65,7 +67,7 @@ export const StagedImageTile = memo(function StagedImageTile({
 		<div
 			role="button"
 			tabIndex={0}
-			aria-label={`Staged image ${slot}`}
+			aria-label={t('workflows.shell.stagedImageValue', { p0: slot })}
 			className="relative group shrink-0 flex items-center justify-center transition-opacity cursor-grab active:cursor-grabbing outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
 			style={{
 				minWidth: '64px',
@@ -105,8 +107,8 @@ export const StagedImageTile = memo(function StagedImageTile({
 					e.stopPropagation();
 					onAnnotate();
 				}}
-				title="Annotate image"
-				aria-label="Annotate image"
+				title={t('workflows.shell.annotateImage')}
+				aria-label={t('workflows.shell.annotateImage')}
 				className="absolute top-0.5 left-0.5 bg-black/60 text-white rounded-full p-1 shadow-md hover:bg-black/80 transition-colors opacity-90 hover:opacity-100 outline-none focus-visible:ring-2 focus-visible:ring-white"
 			>
 				<PenLine className="w-3 h-3" />
@@ -119,8 +121,8 @@ export const StagedImageTile = memo(function StagedImageTile({
 					e.stopPropagation();
 					onRemove();
 				}}
-				title={`Remove image ${slot}`}
-				aria-label={`Remove image ${slot}`}
+				title={t('workflows.shell.removeImageValue', { p0: slot })}
+				aria-label={t('workflows.shell.removeImageValue', { p0: slot })}
 				className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors opacity-90 hover:opacity-100 outline-none focus-visible:ring-2 focus-visible:ring-white"
 			>
 				<X className="w-3 h-3" />

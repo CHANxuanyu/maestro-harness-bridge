@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 /**
  * Data + actions hook for the Extensions (Encore) marketplace.
  *
@@ -93,8 +94,8 @@ export function useExtensions(): UseExtensionsResult {
 			} else {
 				notifyToast({
 					color: 'red',
-					title: 'Extensions',
-					message: `Failed to load plugins: ${String(err)}`,
+					title: getT()('settings.extra.extensionsView.title'),
+					message: getT()('settings.extra.extensionsView.loadFailed', { error: String(err) }),
 				});
 			}
 		} finally {
@@ -203,8 +204,8 @@ export function useExtensions(): UseExtensionsResult {
 			} catch (err) {
 				notifyToast({
 					color: 'red',
-					title: 'Extensions',
-					message: `Toggle failed: ${String(err)}`,
+					title: getT()('settings.extra.extensionsView.title'),
+					message: getT()('settings.extra.extensionsView.toggleFailed', { error: String(err) }),
 				});
 			} finally {
 				setBusyId(null);
@@ -216,8 +217,8 @@ export function useExtensions(): UseExtensionsResult {
 		} catch (err) {
 			notifyToast({
 				color: 'red',
-				title: 'Extensions',
-				message: `Could not open the permission prompt: ${String(err)}`,
+				title: getT()('settings.extra.extensionsView.title'),
+				message: getT()('settings.extra.extensionsView.consentFailed', { error: String(err) }),
 			});
 		}
 	}, []);
@@ -231,19 +232,30 @@ export function useExtensions(): UseExtensionsResult {
 			if (result.success) {
 				notifyToast({
 					color: 'green',
-					title: 'Extensions',
-					message: `Installed ${result.record?.manifest?.name ?? result.record?.id ?? 'plugin'}`,
+					title: getT()('settings.extra.extensionsView.title'),
+					message: getT()('settings.extra.extensionsView.installed', {
+						name:
+							result.record?.manifest?.name ??
+							result.record?.id ??
+							getT()('settings.extra.extensionsView.plugin'),
+					}),
 				});
 				await reload();
 			} else {
 				notifyToast({
 					color: 'orange',
-					title: 'Extensions',
-					message: `Install failed: ${result.error ?? 'unknown error'}`,
+					title: getT()('settings.extra.extensionsView.title'),
+					message: getT()('settings.extra.extensionsView.installFailed', {
+						error: result.error ?? getT()('settings.extra.extensionsView.unknownError'),
+					}),
 				});
 			}
 		} catch (err) {
-			notifyToast({ color: 'red', title: 'Extensions', message: `Install failed: ${String(err)}` });
+			notifyToast({
+				color: 'red',
+				title: getT()('settings.extra.extensionsView.title'),
+				message: getT()('settings.extra.extensionsView.installFailed', { error: String(err) }),
+			});
 		} finally {
 			setLoading(false);
 		}
@@ -255,20 +267,26 @@ export function useExtensions(): UseExtensionsResult {
 			try {
 				const result = await window.maestro.plugins.uninstall(record.id);
 				if (result.success) {
-					notifyToast({ color: 'green', title: 'Extensions', message: `Uninstalled ${record.id}` });
+					notifyToast({
+						color: 'green',
+						title: getT()('settings.extra.extensionsView.title'),
+						message: getT()('settings.extra.extensionsView.uninstalled', { id: record.id }),
+					});
 					await reload();
 				} else {
 					notifyToast({
 						color: 'orange',
-						title: 'Extensions',
-						message: `Uninstall failed: ${result.error ?? 'unknown error'}`,
+						title: getT()('settings.extra.extensionsView.title'),
+						message: getT()('settings.extra.extensionsView.uninstallFailed', {
+							error: result.error ?? getT()('settings.extra.extensionsView.unknownError'),
+						}),
 					});
 				}
 			} catch (err) {
 				notifyToast({
 					color: 'red',
-					title: 'Extensions',
-					message: `Uninstall failed: ${String(err)}`,
+					title: getT()('settings.extra.extensionsView.title'),
+					message: getT()('settings.extra.extensionsView.uninstallFailed', { error: String(err) }),
 				});
 			} finally {
 				setBusyId(null);
@@ -282,13 +300,17 @@ export function useExtensions(): UseExtensionsResult {
 			setBusyId(id);
 			try {
 				await window.maestro.plugins.revokeGrants(id);
-				notifyToast({ color: 'green', title: 'Extensions', message: 'Revoked all permissions' });
+				notifyToast({
+					color: 'green',
+					title: getT()('settings.extra.extensionsView.title'),
+					message: 'Revoked all permissions',
+				});
 				await reload();
 			} catch (err) {
 				notifyToast({
 					color: 'red',
-					title: 'Extensions',
-					message: `Revoke failed: ${String(err)}`,
+					title: getT()('settings.extra.extensionsView.title'),
+					message: getT()('settings.extra.extensionsView.revokeFailed', { error: String(err) }),
 				});
 			} finally {
 				setBusyId(null);

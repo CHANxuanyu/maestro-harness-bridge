@@ -1,3 +1,5 @@
+import { useT } from '../../../i18n';
+import { agentStateLabel } from '../../../utils/workflowLabels';
 import { memo } from 'react';
 import { formatElapsedTime } from '../../../../shared/formatters';
 import type { Theme } from '../../../types';
@@ -17,16 +19,17 @@ export const RunningAgentSubtext = memo(function RunningAgentSubtext({
 	theme,
 	isSelected,
 }: RunningAgentSubtextProps) {
+	const t = useT();
 	const elapsedMs =
 		info.thinkingStartTime !== undefined ? Math.max(0, now - info.thinkingStartTime) : null;
 	const parts: string[] = [];
 	parts.push(
 		info.statusLabel ??
-			(elapsedMs !== null ? formatElapsedTime(elapsedMs) : info.state.toUpperCase())
+			(elapsedMs !== null ? formatElapsedTime(elapsedMs) : agentStateLabel(t, info.state))
 	);
 	if (info.busyTabName) parts.push(info.busyTabName);
 	if (info.queueCount > 0) {
-		parts.push(`${info.queueCount} queued`);
+		parts.push(t('workflows.labels.queued', { count: info.queueCount }));
 	}
 	return (
 		<span

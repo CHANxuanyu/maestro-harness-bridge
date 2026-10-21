@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * ComposerOptionsSheet - everything the composer toolbar offers, on a phone.
  *
@@ -23,7 +24,7 @@
 import { memo, useState } from 'react';
 import { Brain, Eye, Gauge, History, Sparkles } from 'lucide-react';
 import type { Theme, ThinkingMode } from '../../../types';
-import { getPermissionModeLabel } from '../../../../shared/agentMetadata';
+import { permissionModeLabel } from '../utils/displayLabels';
 import { THINKING_MODES } from '../../../../shared/types';
 import { PhoneBottomSheet } from '../../ui/PhoneBottomSheet';
 import {
@@ -58,12 +59,6 @@ interface ComposerOptionsSheetProps {
 	onEffortChange?: (effort: string) => void;
 }
 
-const THINKING_LABELS: Record<ThinkingMode, string> = {
-	off: 'Off',
-	on: 'On',
-	sticky: 'Sticky',
-};
-
 export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 	open,
 	onClose,
@@ -85,6 +80,12 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 	availableEfforts,
 	onEffortChange,
 }: ComposerOptionsSheetProps) {
+	const t = useT();
+	const THINKING_LABELS: Record<ThinkingMode, string> = {
+		off: t('common.off'),
+		on: t('common.on'),
+		sticky: t('workflows.labels.sticky'),
+	};
 	const [expanded, setExpanded] = useState<string | null>(null);
 	const toggle = (key: string) => setExpanded((prev) => (prev === key ? null : key));
 
@@ -102,7 +103,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 			open={open}
 			onClose={onClose}
 			theme={theme}
-			ariaLabel="Composer options"
+			ariaLabel={t('workflows.shell.composerOptions')}
 			// Half the screen, per the brief: enough that an expanded model list is
 			// usable without the sheet swallowing the conversation behind it.
 			maxHeight="50dvh"
@@ -129,12 +130,12 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 						className="w-4 h-4 shrink-0"
 						style={{ color: tabSaveToHistory ? theme.colors.accent : theme.colors.textDim }}
 					/>
-					<span className="text-sm flex-1 min-w-0">History</span>
+					<span className="text-sm flex-1 min-w-0">{t('workflows.shell.history')}</span>
 					<span
 						className="text-xs font-mono"
 						style={{ color: tabSaveToHistory ? theme.colors.accent : theme.colors.textDim }}
 					>
-						{tabSaveToHistory ? 'On' : 'Off'}
+						{tabSaveToHistory ? t('workflows.shell.on') : t('workflows.shell.off')}
 					</span>
 				</button>
 			)}
@@ -142,8 +143,8 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 			{hasReadOnlyCapability && (
 				<PhoneSheetSection
 					icon={Eye}
-					label="Access"
-					value={getPermissionModeLabel(permissionMode, agentId)}
+					label={t('workflows.shell.access')}
+					value={permissionModeLabel(t, permissionMode, agentId)}
 					accent={permissionMode === 'readonly' ? theme.colors.warning : theme.colors.accent}
 					expanded={expanded === 'access'}
 					onToggle={() => toggle('access')}
@@ -153,7 +154,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 					{permissionModes.map((mode) => (
 						<PhoneSheetOptionRow
 							key={mode}
-							label={getPermissionModeLabel(mode, agentId)}
+							label={permissionModeLabel(t, mode, agentId)}
 							selected={mode === permissionMode}
 							accent={mode === 'readonly' ? theme.colors.warning : theme.colors.accent}
 							onSelect={() => onPermissionModeChange(mode)}
@@ -166,7 +167,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 			{supportsThinking && onThinkingModeChange && (
 				<PhoneSheetSection
 					icon={Brain}
-					label="Thinking"
+					label={t('workflows.shell.thinking2')}
 					value={THINKING_LABELS[tabShowThinking]}
 					accent={tabShowThinking === 'sticky' ? theme.colors.warning : theme.colors.accentText}
 					expanded={expanded === 'thinking'}
@@ -190,8 +191,8 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 			{onEffortChange && availableEfforts.some((e) => e !== '') && (
 				<PhoneSheetSection
 					icon={Gauge}
-					label="Effort"
-					value={currentEffort || 'default'}
+					label={t('workflows.shell.effort')}
+					value={currentEffort || t('common.default')}
 					accent={theme.colors.warning}
 					expanded={expanded === 'effort'}
 					onToggle={() => toggle('effort')}
@@ -201,7 +202,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 					{availableEfforts.map((effort) => (
 						<PhoneSheetOptionRow
 							key={effort || '__default__'}
-							label={effort || '(default)'}
+							label={effort || t('workflows.shell.default')}
 							selected={effort === currentEffort}
 							accent={theme.colors.warning}
 							onSelect={() => onEffortChange(effort)}
@@ -214,8 +215,8 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 			{onModelChange && availableModels.length > 0 && (
 				<PhoneSheetSection
 					icon={Sparkles}
-					label="Model"
-					value={currentModel || 'default'}
+					label={t('workflows.shell.model')}
+					value={currentModel || t('common.default')}
 					accent={theme.colors.accent}
 					expanded={expanded === 'model'}
 					onToggle={() => toggle('model')}
@@ -225,7 +226,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 					{modelOptions.map((model) => (
 						<PhoneSheetOptionRow
 							key={model || '__default__'}
-							label={model || '(default)'}
+							label={model || t('workflows.shell.default')}
 							selected={model === currentModel}
 							accent={theme.colors.accent}
 							onSelect={() => onModelChange(model)}

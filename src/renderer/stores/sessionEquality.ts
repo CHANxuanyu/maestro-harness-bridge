@@ -14,7 +14,10 @@ function aiTabEqual(a: AITab, b: AITab): boolean {
 		a.starred === b.starred &&
 		a.hasUnread === b.hasUnread &&
 		a.readOnlyMode === b.readOnlyMode &&
-		a.agentSessionId === b.agentSessionId
+		a.agentSessionId === b.agentSessionId &&
+		a.hidden === b.hidden &&
+		a.agentError === b.agentError &&
+		a.createdAt === b.createdAt
 	);
 }
 
@@ -46,6 +49,10 @@ export function sidebarSessionEquality(a: Session[], b: Session[]): boolean {
 			x.groupId !== y.groupId ||
 			x.parentSessionId !== y.parentSessionId ||
 			x.worktreesExpanded !== y.worktreesExpanded ||
+			x.projectRoot !== y.projectRoot ||
+			x.cwd !== y.cwd ||
+			x.sessionSshRemoteConfig !== y.sessionSshRemoteConfig ||
+			x.sshRemoteId !== y.sshRemoteId ||
 			x.worktreeBranch !== y.worktreeBranch ||
 			x.isGitRepo !== y.isGitRepo ||
 			x.isLive !== y.isLive ||

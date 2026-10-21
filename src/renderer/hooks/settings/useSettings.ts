@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/shallow';
 import type { BrowserConfirmPolicy } from '../../../shared/coworkingBrowser';
+import type { UiLanguagePreference } from '../../../shared/i18n';
 import type {
 	ThemeId,
 	ThemeColors,
@@ -572,6 +573,10 @@ export interface UseSettingsReturn {
 	// Spell check
 	spellCheck: boolean;
 	setSpellCheck: (value: boolean) => void;
+
+	// UI language (application chrome only)
+	uiLanguage: UiLanguagePreference;
+	setUiLanguage: (value: UiLanguagePreference) => void;
 }
 
 // PERF: Identity selector reused across renders so the hook doesn't allocate a new

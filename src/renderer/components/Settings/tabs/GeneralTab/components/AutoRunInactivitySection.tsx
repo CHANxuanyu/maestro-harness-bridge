@@ -2,6 +2,7 @@ import { Clock, Timer } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { ToggleButtonGroup } from '../../../../ToggleButtonGroup';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 
 interface AutoRunInactivitySectionProps {
 	theme: Theme;
@@ -18,49 +19,48 @@ export function AutoRunInactivitySection({
 	autoRunMaxTaskDurationMin,
 	setAutoRunMaxTaskDurationMin,
 }: AutoRunInactivitySectionProps) {
+	const t = useT();
+	const hr = (count: number) => t('settings.general.duration.hr', { count });
+	const unlimited = t('settings.general.unlimited');
 	return (
 		<>
 			<div data-setting-id="general-autorun-inactivity-timeout">
-				<SettingsSectionHeading icon={Clock}>Auto Run Inactivity Timeout</SettingsSectionHeading>
+				<SettingsSectionHeading icon={Clock}>
+					{t('settings.general.autorun.inactivityHeading')}
+				</SettingsSectionHeading>
 				<ToggleButtonGroup
 					options={[
-						{ value: 30, label: '30 min' },
-						{ value: 60, label: '1 hr' },
-						{ value: 240, label: '4 hr' },
-						{ value: 480, label: '8 hr' },
-						{ value: 0, label: 'Unlimited' },
+						{ value: 30, label: t('settings.general.duration.min', { count: 30 }) },
+						{ value: 60, label: hr(1) },
+						{ value: 240, label: hr(4) },
+						{ value: 480, label: hr(8) },
+						{ value: 0, label: unlimited },
 					]}
 					value={autoRunInactivityTimeoutMin}
 					onChange={setAutoRunInactivityTimeoutMin}
 					theme={theme}
 				/>
 				<p className="text-xs opacity-70 mt-2">
-					Auto Run force-kills a task if the agent produces no output for this long. Increase for
-					long refactors, heavy test runs, or web-research tasks driving a browser. Choose Unlimited
-					to disable the inactivity watchdog; the Max Task Duration cap below still applies unless
-					it is also set to Unlimited.
+					{t('settings.general.autorun.inactivityDescription')}
 				</p>
 			</div>
 			<div data-setting-id="general-autorun-max-task-duration">
-				<SettingsSectionHeading icon={Timer}>Auto Run Max Task Duration</SettingsSectionHeading>
+				<SettingsSectionHeading icon={Timer}>
+					{t('settings.general.autorun.maxHeading')}
+				</SettingsSectionHeading>
 				<ToggleButtonGroup
 					options={[
-						{ value: 60, label: '1 hr' },
-						{ value: 240, label: '4 hr' },
-						{ value: 480, label: '8 hr' },
-						{ value: 720, label: '12 hr' },
-						{ value: 0, label: 'Unlimited' },
+						{ value: 60, label: hr(1) },
+						{ value: 240, label: hr(4) },
+						{ value: 480, label: hr(8) },
+						{ value: 720, label: hr(12) },
+						{ value: 0, label: unlimited },
 					]}
 					value={autoRunMaxTaskDurationMin}
 					onChange={setAutoRunMaxTaskDurationMin}
 					theme={theme}
 				/>
-				<p className="text-xs opacity-70 mt-2">
-					Absolute cap on how long a single task may run, regardless of output. Unlike the
-					inactivity timeout, this also catches an agent that keeps emitting output but never
-					finishes - which would otherwise hang the whole multi-document run. Choose Unlimited to
-					disable the cap.
-				</p>
+				<p className="text-xs opacity-70 mt-2">{t('settings.general.autorun.maxDescription')}</p>
 			</div>
 		</>
 	);

@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React, { type RefObject } from 'react';
 import { List } from 'lucide-react';
 import { Spinner } from '../../ui/Spinner';
@@ -66,6 +67,7 @@ export const SessionListView = React.memo(function SessionListView({
 	onSubmitRename,
 	onCancelRename,
 }: SessionListViewProps) {
+	const uiText = useT();
 	return (
 		<div
 			ref={sessionsContainerRef}
@@ -82,8 +84,12 @@ export const SessionListView = React.memo(function SessionListView({
 					icon={<List className="w-12 h-12" />}
 					title={
 						sessions.length === 0
-							? `No ${agentId === 'claude-code' ? 'Claude' : 'agent'} sessions found for this project`
-							: 'No sessions match your search'
+							? uiText(
+									agentId === 'claude-code'
+										? 'workflows.sessions.noClaudeSessions'
+										: 'workflows.sessions.noAgentSessions'
+								)
+							: uiText('workflows.sessions.noMatchingSessions')
 					}
 				/>
 			) : (
@@ -118,12 +124,13 @@ export const SessionListView = React.memo(function SessionListView({
 								<div className="flex items-center gap-2">
 									<Spinner size={16} color={theme.colors.accent} />
 									<span className="text-xs" style={{ color: theme.colors.textDim }}>
-										Loading more sessions...
+										{uiText('workflows.sessions.loadingMoreSessions')}
 									</span>
 								</div>
 							) : (
 								<span className="text-xs" style={{ color: theme.colors.textDim }}>
-									{sessions.length} of {totalSessionCount} sessions loaded
+									{sessions.length} {uiText('workflows.sessions.of')} {totalSessionCount}{' '}
+									{uiText('workflows.sessions.sessionsLoaded')}
 								</span>
 							)}
 						</div>

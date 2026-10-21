@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import React, {
 	useState,
 	useEffect,
@@ -96,6 +97,7 @@ export const HistoryPanel = React.memo(
 		},
 		ref
 	) {
+		const uiText = useT();
 		const maestroCueEnabled = useSettingsStore((s) => s.encoreFeatures.maestroCue);
 		// Collapse repeated Cue triggers into one row. The rollup runs in the
 		// main process (SQL over `cue_events`), so flipping this changes the
@@ -608,13 +610,16 @@ export const HistoryPanel = React.memo(
 			(index: number) => {
 				const entry = allFilteredEntries[index];
 				if (!entry?.agentSessionId) {
-					notifyCenterFlash({ message: 'No session recorded for this entry', color: 'yellow' });
+					notifyCenterFlash({
+						message: uiText('workflows.sessions.noRecordedSession'),
+						color: 'yellow',
+					});
 					return;
 				}
 				trackShortcutUsage('historyJumpToSession');
 				onOpenSessionAsTab?.(entry.agentSessionId, entry.projectPath, entry.sessionName);
 			},
-			[allFilteredEntries, onOpenSessionAsTab]
+			[allFilteredEntries, onOpenSessionAsTab, uiText]
 		);
 
 		// Use list navigation hook for ArrowUp/ArrowDown/Enter handling
@@ -870,7 +875,7 @@ export const HistoryPanel = React.memo(
 									ref={searchInputRef}
 									autoFocus
 									type="text"
-									placeholder="Filter history..."
+									placeholder={uiText('workflows.sessions.filterHistory')}
 									value={searchFilter}
 									onChange={(e) => setSearchFilter(e.target.value)}
 									onKeyDown={(e) => {
@@ -894,7 +899,7 @@ export const HistoryPanel = React.memo(
 								<EscCloseButton
 									theme={theme}
 									variant="adornment"
-									label="Close filter (Esc)"
+									label={uiText('workflows.sessions.closeFilter')}
 									onClose={() => {
 										setSearchFilterOpen(false);
 										setSearchFilter('');
@@ -904,7 +909,12 @@ export const HistoryPanel = React.memo(
 							</div>
 							{searchFilter && (
 								<div className="text-2xs mt-1 text-right" style={{ color: theme.colors.textDim }}>
-									{allFilteredEntries.length} result{allFilteredEntries.length !== 1 ? 's' : ''}
+									{uiText(
+										allFilteredEntries.length === 1
+											? 'workflows.sessions.resultOne'
+											: 'workflows.sessions.results',
+										{ count: allFilteredEntries.length }
+									)}
 								</div>
 							)}
 						</div>
@@ -928,7 +938,9 @@ export const HistoryPanel = React.memo(
 								color: searchFilterOpen ? theme.colors.accent : theme.colors.textDim,
 								border: `1px solid ${theme.colors.border}`,
 							}}
-							title={`Search History (${formatShortcutKeys(shortcuts.filterHistory?.keys ?? ['Meta', 'f'])})`}
+							title={uiText('workflows.sessions.searchHistoryShortcut', {
+								shortcut: formatShortcutKeys(shortcuts.filterHistory?.keys ?? ['Meta', 'f']),
+							})}
 						>
 							<Search className="w-3.5 h-3.5" />
 						</button>
@@ -968,7 +980,7 @@ export const HistoryPanel = React.memo(
 								color: theme.colors.textDim,
 								border: `1px solid ${theme.colors.border}`,
 							}}
-							title="History panel help"
+							title={uiText('workflows.sessions.historyHelp')}
 						>
 							<HelpCircle className="w-3.5 h-3.5" />
 						</button>
@@ -1002,35 +1014,41 @@ export const HistoryPanel = React.memo(
 					onScroll={handleScroll}
 				>
 					{isLoading ? (
-						<div className="text-center py-8 text-xs opacity-50">Loading history...</div>
+						<div className="text-center py-8 text-xs opacity-50">
+							{uiText('workflows.sessions.loadingHistory')}
+						</div>
 					) : allFilteredEntries.length === 0 ? (
 						<div className="text-center py-8 text-xs opacity-50">
 							{totalCount === 0 && !hasNarrowingTypeFilter ? (
 								graphLookbackHours !== null ? (
 									<>
-										No entries in the last{' '}
 										{graphLookbackHours <= 24
-											? `${graphLookbackHours}h`
+											? uiText('workflows.sessions.history.recentHours', {
+													count: graphLookbackHours,
+												})
 											: graphLookbackHours <= 168
-												? `${Math.round(graphLookbackHours / 24)}d`
-												: `${Math.round(graphLookbackHours / 720)}mo`}
-										.
+												? uiText('workflows.sessions.history.recentDays', {
+														count: Math.round(graphLookbackHours / 24),
+													})
+												: uiText('workflows.sessions.history.recentMonths', {
+														count: Math.round(graphLookbackHours / 720),
+													})}
 										<br />
 										<button
 											onClick={() => handleLookbackChange(null)}
 											className="mt-2 underline hover:no-underline"
 											style={{ color: theme.colors.accent }}
 										>
-											Show all time
+											{uiText('workflows.sessions.showAllTime')}
 										</button>
 									</>
 								) : (
-									'No history yet. Run batch tasks or use /history to add entries.'
+									uiText('workflows.sessions.emptyHistory')
 								)
 							) : searchFilter ? (
-								`No entries match "${searchFilter}" in the loaded window.`
+								uiText('workflows.sessions.noHistorySearchMatch', { search: searchFilter })
 							) : (
-								'No entries match the selected filters in the loaded window.'
+								uiText('workflows.sessions.noHistoryMatches')
 							)}
 						</div>
 					) : (
@@ -1081,7 +1099,9 @@ export const HistoryPanel = React.memo(
 							className="text-center py-3 text-2xs opacity-60"
 							style={{ color: theme.colors.textDim }}
 						>
-							{isJumping ? 'Jumping to selected period...' : 'Loading more...'}
+							{isJumping
+								? uiText('workflows.sessions.jumpingToPeriod')
+								: uiText('workflows.sessions.loadingMore')}
 						</div>
 					)}
 				</div>

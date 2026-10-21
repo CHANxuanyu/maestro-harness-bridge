@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * AdditionalDirectoriesSection - manage the extra directories an agent may
  * access beyond its working directory.
@@ -85,6 +86,7 @@ export function AdditionalDirectoriesSection({
 	disableBrowse = false,
 	nativelyEnforced = false,
 }: AdditionalDirectoriesSectionProps): React.ReactElement {
+	const uiText = useT();
 	const updateAt = useCallback(
 		(index: number, patch: Partial<AdditionalDirectory>) => {
 			onChange(directories.map((dir, i) => (i === index ? { ...dir, ...patch } : dir)));
@@ -119,22 +121,16 @@ export function AdditionalDirectoriesSection({
 				className="block text-xs font-bold opacity-70 uppercase mb-2"
 				style={{ color: theme.colors.textMain }}
 			>
-				Additional Directories
+				{uiText('workflows.sessions.additionalDirectories')}
 			</div>
 			<p className="text-xs mb-2" style={{ color: theme.colors.textDim }}>
-				Directories the agent may use beyond its working directory. Toggle{' '}
-				<span className="font-bold">R</span> for read and <span className="font-bold">W</span> for
-				write on each.{' '}
+				{uiText('workflows.sessions.additionalDirectoriesHelp')}{' '}
+				<span className="font-bold">R</span> {uiText('workflows.sessions.readAnd')}{' '}
+				<span className="font-bold">W</span> {uiText('workflows.sessions.writeEach')}{' '}
 				{nativelyEnforced ? (
-					<>
-						This provider enforces these grants itself. The read/write split is carried by the
-						agent's instructions.
-					</>
+					<>{uiText('workflows.sessions.directoryGrantsNative')}</>
 				) : (
-					<>
-						This provider has no directory-permission flag, so the grants are instructions in the
-						agent's system prompt, not a sandbox.
-					</>
+					<>{uiText('workflows.sessions.directoryGrantsPrompt')}</>
 				)}
 			</p>
 
@@ -148,7 +144,9 @@ export function AdditionalDirectoriesSection({
 								value={dir.path}
 								onChange={(value) => updateAt(index, { path: value })}
 								placeholder={
-									disableBrowse ? 'Enter remote path...' : '/path/to/directory or ~/path'
+									disableBrowse
+										? uiText('workflows.sessions.remotePathPlaceholder')
+										: '/path/to/directory or ~/path'
 								}
 								monospace
 								heightClass="p-2"
@@ -160,8 +158,8 @@ export function AdditionalDirectoriesSection({
 												onClick={() => void browseAt(index)}
 												className="p-2 rounded border transition-colors hover:bg-white/5"
 												style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-												title="Browse folders"
-												aria-label="Browse folders"
+												title={uiText('workflows.sessions.browseFolders')}
+												aria-label={uiText('workflows.sessions.browseFolders')}
 											>
 												<Folder className="w-4 h-4" />
 											</button>
@@ -169,14 +167,14 @@ export function AdditionalDirectoriesSection({
 										<PermissionSquare
 											theme={theme}
 											label="R"
-											title="Read access"
+											title={uiText('workflows.sessions.readAccess')}
 											active={dir.read}
 											onToggle={() => updateAt(index, { read: !dir.read })}
 										/>
 										<PermissionSquare
 											theme={theme}
 											label="W"
-											title="Write access"
+											title={uiText('workflows.sessions.writeAccess')}
 											active={dir.write}
 											onToggle={() => updateAt(index, { write: !dir.write })}
 										/>
@@ -184,8 +182,8 @@ export function AdditionalDirectoriesSection({
 											onClick={() => removeAt(index)}
 											padding="p-2"
 											color={theme.colors.textDim}
-											title="Remove directory"
-											ariaLabel="Remove directory"
+											title={uiText('workflows.sessions.removeDirectory')}
+											ariaLabel={uiText('workflows.sessions.removeDirectory')}
 										>
 											<Trash2 className="w-4 h-4" />
 										</GhostIconButton>
@@ -197,13 +195,13 @@ export function AdditionalDirectoriesSection({
 									theme={theme}
 									value={dir.description ?? ''}
 									onChange={(value) => updateAt(index, { description: value })}
-									placeholder="Optional: what this directory is for or how to use it"
+									placeholder={uiText('workflows.sessions.directoryPurpose')}
 									heightClass="p-2"
 								/>
 							</div>
 							{inert && dir.path.trim() && (
 								<p className="mt-1 text-xs" style={{ color: theme.colors.warning }}>
-									No access selected - this directory will not be given to the agent.
+									{uiText('workflows.sessions.directoryNoAccess')}
 								</p>
 							)}
 						</div>
@@ -218,7 +216,7 @@ export function AdditionalDirectoriesSection({
 				style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 			>
 				<Plus className="w-3.5 h-3.5" />
-				Add Directory
+				{uiText('workflows.sessions.addDirectory')}
 			</button>
 		</div>
 	);

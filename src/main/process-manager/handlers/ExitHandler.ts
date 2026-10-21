@@ -232,8 +232,10 @@ export class ExitHandler {
 			this.bufferManager.emitDataBuffered(sessionId, managedProcess.streamedText, managedProcess);
 		}
 
-		// Check for errors using the parser (if not already emitted)
-		if (outputParser && !managedProcess.errorEmitted) {
+		// A deliberate Stop may end with a nonzero code and stale diagnostic text.
+		// The in-band paths already suppress those errors; the exit fallback must
+		// do so too, or a false missing-session error severs the native resume ID.
+		if (outputParser && !managedProcess.errorEmitted && !managedProcess.interrupted) {
 			const agentError = outputParser.detectErrorFromExit(
 				code,
 				managedProcess.stderrBuffer || '',
@@ -263,6 +265,7 @@ export class ExitHandler {
 		// Check for SSH-specific errors at exit (only when running via SSH remote)
 		if (
 			!managedProcess.errorEmitted &&
+			!managedProcess.interrupted &&
 			managedProcess.sshRemoteId &&
 			(code !== 0 || managedProcess.stderrBuffer)
 		) {

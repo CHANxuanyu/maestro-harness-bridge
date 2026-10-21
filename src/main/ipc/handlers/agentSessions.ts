@@ -65,7 +65,11 @@ import {
 	LOCAL_SESSION_PARSE_CONCURRENCY,
 } from '../../utils/concurrency';
 import { countClaudeTranscriptMessages } from '../../../shared/claudeTranscriptMessages';
-import { resolveAgentAccountDir } from '../../agents/provider-account-dirs';
+import { resolveAgentAccountDir, getProviderAccountDirs } from '../../agents/provider-account-dirs';
+import { getSessionsStore } from '../../stores/getters';
+import { discoverProjectHistory } from '../../storage/project-history';
+import { getPrompt } from '../../prompt-manager';
+import type { ProjectHistoryScope } from '../../../shared/projectHistory';
 
 // Re-export for backwards compatibility
 export type { GlobalAgentStats, ProviderStats };
@@ -367,6 +371,26 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 	const getMainWindow = deps?.getMainWindow;
 	const safeSend = createSafeSend(getMainWindow ?? (() => null));
 
+	ipcMain.handle(
+		'agentSessions:listProjectHistory',
+		withIpcErrorLogging(handlerOpts('listProjectHistory'), async (scopes: ProjectHistoryScope[]) =>
+			discoverProjectHistory(scopes, {
+				storages: getAllSessionStorages(),
+				owners: getSessionsStore().get('sessions', []),
+				accountDirs: getProviderAccountDirs,
+				ownerAccountDir: resolveAgentAccountDir,
+				remote: getSshRemoteById,
+				origins: deps?.agentSessionOriginsStore?.get('origins', {}),
+				internalPromptPrefixes: [getPrompt('tab-naming').trim().slice(0, 180)],
+				onError: (error, provider) => {
+					logger.warn(`Project history unavailable for ${provider}: ${String(error)}`, LOG_CONTEXT);
+					if (!isExpectedSessionReadError(error))
+						void captureException(error, { operation: 'projectHistory', provider });
+				},
+			})
+		)
+	);
+
 	// ============ List Sessions ============
 
 	ipcMain.handle(
@@ -458,19 +482,24 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 
 				// Get SSH config if provided
 				const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+				if (sshRemoteId && !sshConfig) throw new Error('SSH remote is unavailable');
+				const configDir =
+					options?.configDir ??
+					(options?.ownerAgentId ? resolveAgentAccountDir(options.ownerAgentId) : undefined);
+				const readOptions = configDir ? { ...options, configDir } : options;
 
 				// Rehydrate an aged-out starred session: on the initial load of a LOCAL
 				// session, if the provider transcript is gone but we hold a mirror, copy
 				// it back to the provider's path so the read below (and a later native
 				// --resume) finds it. No-op/cheap when the provider file still exists.
-				if (!sshConfig && !options?.offset) {
+				if (!sshConfig && !configDir && !options?.offset) {
 					await restoreStarredTranscript({ agentId, projectPath, sessionId });
 				}
 
 				const result = await storage.readSessionMessages(
 					projectPath,
 					sessionId,
-					options,
+					readOptions,
 					sshConfig
 				);
 				logger.info(

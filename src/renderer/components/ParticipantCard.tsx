@@ -1,3 +1,4 @@
+import { useT, getAppLocale, formatRelativeTimeFor } from '../i18n';
 /**
  * ParticipantCard.tsx
  *
@@ -21,7 +22,7 @@ import { getStatusColor } from '../utils/theme';
 import { formatCost } from '../utils/formatters';
 import { safeClipboardWrite } from '../utils/clipboard';
 import { parsePeekOutput, formatPeekLines } from '../utils/peekOutputParser';
-import { formatTimestamp, formatRelativeTime } from '../../shared/formatters';
+import { formatTimestamp } from '../../shared/formatters';
 import { DURATION_MS } from '../../shared/duration';
 import { notifyToast } from '../stores/notificationStore';
 import { logger } from '../utils/logger';
@@ -45,7 +46,7 @@ interface ParticipantCardProps {
  */
 function formatParticipantActivity(timestamp: number): string {
 	if (Date.now() - timestamp < DURATION_MS.hour) {
-		return formatRelativeTime(timestamp);
+		return formatRelativeTimeFor(getAppLocale(), timestamp);
 	}
 	return formatTimestamp(timestamp, 'time');
 }
@@ -60,6 +61,7 @@ export function ParticipantCard({
 	onRemove,
 	liveOutput,
 }: ParticipantCardProps): JSX.Element {
+	const t = useT();
 	const [copied, setCopied] = useState(false);
 	const [isResetting, setIsResetting] = useState(false);
 	const [isRemoving, setIsRemoving] = useState(false);
@@ -100,13 +102,13 @@ export function ParticipantCard({
 	const getStatusLabel = (): string => {
 		switch (state) {
 			case 'busy':
-				return 'Working';
+				return t('workflows.shell.working');
 			case 'error':
-				return 'Error';
+				return t('workflows.agentState.error');
 			case 'connecting':
-				return 'Connecting';
+				return t('workflows.agentState.connecting');
 			default:
-				return 'Idle';
+				return t('workflows.shell.idle');
 		}
 	};
 
@@ -139,13 +141,13 @@ export function ParticipantCard({
 			logger.error(`Failed to remove participant ${participant.name}:`, undefined, error);
 			notifyToast({
 				type: 'error',
-				title: 'Group Chat',
-				message: `Failed to remove ${participant.name}`,
+				title: t('workflows.shellStatus.groupChat'),
+				message: t('workflows.shellStatus.failedToRemoveValue', { p0: participant.name }),
 			});
 		} finally {
 			setIsRemoving(false);
 		}
-	}, [onRemove, groupChatId, participant.name]);
+	}, [t, onRemove, groupChatId, participant.name]);
 
 	const showRemoveButton = onRemove && groupChatId && !isRemoving;
 
@@ -187,7 +189,7 @@ export function ParticipantCard({
 							border: `1px solid ${theme.colors.textDim}40`,
 						}}
 					>
-						pending
+						{t('workflows.shellStatus.pending')}
 					</span>
 				) : (
 					<button
@@ -198,7 +200,7 @@ export function ParticipantCard({
 							color: theme.colors.accent,
 							border: `1px solid ${theme.colors.accent}40`,
 						}}
-						title={`Session: ${agentSessionId}\nClick to copy`}
+						title={t('workflows.shellStatus.sessionValueClickToCopy', { p0: agentSessionId })}
 					>
 						<span className="font-mono">{agentSessionId.slice(0, 8).toUpperCase()}</span>
 						{copied ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
@@ -213,13 +215,18 @@ export function ParticipantCard({
 			>
 				<div className="flex items-center gap-2">
 					{participant.messageCount !== undefined && participant.messageCount > 0 && (
-						<span className="flex items-center gap-1" title="Messages sent">
+						<span
+							className="flex items-center gap-1"
+							title={t('workflows.shellStatus.messagesSent')}
+						>
 							<MessageSquare className="w-3 h-3" />
 							{participant.messageCount}
 						</span>
 					)}
 					{participant.lastActivity && (
-						<span title="Last activity">{formatParticipantActivity(participant.lastActivity)}</span>
+						<span title={t('workflows.shellStatus.lastActivity')}>
+							{formatParticipantActivity(participant.lastActivity)}
+						</span>
 					)}
 				</div>
 				<span>{participant.agentId}</span>
@@ -230,7 +237,7 @@ export function ParticipantCard({
 				<div className="flex-1">
 					<div className="flex items-center justify-between mb-1">
 						<span className="text-2xs" style={{ color: theme.colors.textDim }}>
-							Context
+							{t('workflows.shellStatus.context')}
 						</span>
 						<span className="text-2xs" style={{ color: theme.colors.textDim }}>
 							{contextUsage}%
@@ -257,7 +264,7 @@ export function ParticipantCard({
 							backgroundColor: `${theme.colors.success}20`,
 							color: theme.colors.success,
 						}}
-						title="Total cost"
+						title={t('workflows.shellStatus.totalCost')}
 					>
 						<DollarSign className="w-3 h-3" />
 						{formatCost(participant.totalCost).slice(1)}
@@ -273,10 +280,10 @@ export function ParticipantCard({
 							color: theme.colors.warning,
 							border: `1px solid ${theme.colors.warning}40`,
 						}}
-						title="Reset context: Summarize current session and start fresh"
+						title={t('workflows.shellStatus.resetContextSummarizeCurrentSessionAndStartFresh')}
 					>
 						<RotateCcw className="w-3 h-3" />
-						Reset
+						{t('workflows.shellStatus.reset')}
 					</button>
 				)}
 				{/* Reset in progress indicator */}
@@ -289,7 +296,7 @@ export function ParticipantCard({
 						}}
 					>
 						<RotateCcw className="w-3 h-3 animate-spin" />
-						Resetting...
+						{t('workflows.shellStatus.resetting')}
 					</span>
 				)}
 				{/* Remove button */}
@@ -302,10 +309,10 @@ export function ParticipantCard({
 							color: theme.colors.error,
 							border: `1px solid ${theme.colors.error}40`,
 						}}
-						title="Remove participant from group chat"
+						title={t('workflows.shellStatus.removeParticipantFromGroupChat')}
 					>
 						<UserMinus className="w-3 h-3" />
-						Remove
+						{t('workflows.shellStatus.remove')}
 					</button>
 				)}
 				{/* Remove confirmation */}
@@ -320,7 +327,7 @@ export function ParticipantCard({
 								border: `1px solid ${theme.colors.error}60`,
 							}}
 						>
-							Confirm
+							{t('workflows.shellStatus.confirm')}
 						</button>
 						<button
 							onClick={() => setConfirmRemove(false)}
@@ -330,7 +337,7 @@ export function ParticipantCard({
 								color: theme.colors.textDim,
 							}}
 						>
-							Cancel
+							{t('workflows.shellStatus.cancel')}
 						</button>
 					</span>
 				)}
@@ -344,7 +351,7 @@ export function ParticipantCard({
 						}}
 					>
 						<UserMinus className="w-3 h-3" />
-						Removing...
+						{t('workflows.shellStatus.removing')}
 					</span>
 				)}
 				{/* Peek button - always visible */}
@@ -356,10 +363,10 @@ export function ParticipantCard({
 						color: peekOpen ? theme.colors.accent : theme.colors.textDim,
 						border: `1px solid ${peekOpen ? theme.colors.accent + '60' : theme.colors.border}`,
 					}}
-					title="Peek at live output"
+					title={t('workflows.shellStatus.peekAtLiveOutput')}
 				>
 					{peekOpen ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-					Peek
+					{t('workflows.shellStatus.peek')}
 				</button>
 			</div>
 
@@ -375,7 +382,7 @@ export function ParticipantCard({
 						border: `1px solid ${theme.colors.border}`,
 					}}
 				>
-					{formattedOutput || '(no live output yet)'}
+					{formattedOutput || t('workflows.shellStatus.noLiveOutputYet')}
 				</pre>
 			)}
 		</div>

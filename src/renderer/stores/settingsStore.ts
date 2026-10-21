@@ -39,6 +39,12 @@ import {
 } from '../../shared/typography';
 import { parseTypographySnapshot } from '../../shared/typographySnapshot';
 import {
+	DEFAULT_UI_LANGUAGE,
+	isUiLanguagePreference,
+	type UiLanguagePreference,
+} from '../../shared/i18n';
+import { applyDocumentLanguage } from '../i18n/documentLanguage';
+import {
 	DEFAULT_CUE_HISTORY_RETENTION_DAYS,
 	resolveCueHistoryRetentionDays,
 } from '../../shared/cue/retention';
@@ -417,6 +423,8 @@ export interface SettingsStoreState
 	groupChatsExpanded: boolean;
 	groupChatSortAlphabetical: boolean;
 	starredSessionsCollapsed: boolean;
+	sidebarNavigationMode: 'conversations' | 'agents';
+	collapsedConversationProjects: string[];
 	tourCompleted: boolean;
 	firstAutoRunCompleted: boolean;
 	onboardingStats: OnboardingStats;
@@ -472,6 +480,8 @@ export interface SettingsStoreState
 	bmadEnabled: boolean;
 	lastSelectedPromptId: string | null;
 	spellCheck: boolean;
+	/** UI chrome language. `system` follows the OS; never affects agent prompts. */
+	uiLanguage: UiLanguagePreference;
 }
 
 export interface SettingsStoreActions
@@ -535,6 +545,8 @@ export interface SettingsStoreActions
 	setGroupChatsExpanded: (value: boolean) => void;
 	setGroupChatSortAlphabetical: (value: boolean) => void;
 	setStarredSessionsCollapsed: (value: boolean) => void;
+	setSidebarNavigationMode: (value: 'conversations' | 'agents') => void;
+	setCollapsedConversationProjects: (value: string[]) => void;
 	setTourCompleted: (value: boolean) => void;
 	setFirstAutoRunCompleted: (value: boolean) => void;
 	setLeaderboardRegistration: (value: LeaderboardRegistration | null) => void;
@@ -584,6 +596,7 @@ export interface SettingsStoreActions
 	setBmadEnabled: (value: boolean) => void;
 	setLastSelectedPromptId: (value: string | null) => void;
 	setSpellCheck: (value: boolean) => void;
+	setUiLanguage: (value: UiLanguagePreference) => void;
 
 	// Async setters
 	setLogLevel: (value: string) => Promise<void>;
@@ -777,6 +790,8 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		groupChatsExpanded: true,
 		groupChatSortAlphabetical: false,
 		starredSessionsCollapsed: false,
+		sidebarNavigationMode: 'conversations',
+		collapsedConversationProjects: [],
 		tourCompleted: false,
 		firstAutoRunCompleted: false,
 		onboardingStats: DEFAULT_ONBOARDING_STATS,
@@ -831,6 +846,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		bmadEnabled: true,
 		lastSelectedPromptId: null,
 		spellCheck: false,
+		uiLanguage: DEFAULT_UI_LANGUAGE,
 
 		...createAnnotatorSlice(set, get, api),
 		...createWakatimeSlice(set, get, api),
@@ -1113,6 +1129,16 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		setGroupChatSortAlphabetical: (value) => {
 			set({ groupChatSortAlphabetical: value });
 			window.maestro.settings.set('groupChatSortAlphabetical', value);
+		},
+
+		setSidebarNavigationMode: (value) => {
+			set({ sidebarNavigationMode: value });
+			window.maestro.settings.set('sidebarNavigationMode', value);
+		},
+
+		setCollapsedConversationProjects: (value) => {
+			set({ collapsedConversationProjects: value });
+			window.maestro.settings.set('collapsedConversationProjects', value);
 		},
 
 		setStarredSessionsCollapsed: (value) => {
@@ -1448,6 +1474,14 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		setSpellCheck: (value) => {
 			set({ spellCheck: value });
 			window.maestro.settings.set('spellCheck', value);
+		},
+
+		setUiLanguage: (value) => {
+			const next = isUiLanguagePreference(value) ? value : DEFAULT_UI_LANGUAGE;
+			set({ uiLanguage: next });
+			// Optional chain: the store also runs in tests and browser builds that may
+			// not expose the settings bridge. The in-memory switch must still happen.
+			void window.maestro?.settings?.set('uiLanguage', next);
 		},
 
 		// ============================================================================
@@ -1896,6 +1930,13 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 	};
 });
 
+// Keep `<html lang>` on the resolved UI language. A store subscription rather
+// than a call in the setter, so hydration and cross-window reloads land too.
+applyDocumentLanguage(useSettingsStore.getState().uiLanguage);
+useSettingsStore.subscribe((state, prev) => {
+	if (state.uiLanguage !== prev.uiLanguage) applyDocumentLanguage(state.uiLanguage);
+});
+
 // ============================================================================
 // Selectors
 // ============================================================================
@@ -2244,6 +2285,14 @@ export async function loadAllSettings(): Promise<void> {
 
 		if (allSettings['groupChatSortAlphabetical'] !== undefined)
 			patch.groupChatSortAlphabetical = allSettings['groupChatSortAlphabetical'] as boolean;
+
+		if (allSettings['sidebarNavigationMode'] !== undefined)
+			patch.sidebarNavigationMode =
+				allSettings['sidebarNavigationMode'] === 'agents' ? 'agents' : 'conversations';
+		if (Array.isArray(allSettings['collapsedConversationProjects']))
+			patch.collapsedConversationProjects = (
+				allSettings['collapsedConversationProjects'] as unknown[]
+			).filter((key): key is string => typeof key === 'string');
 
 		if (allSettings['starredSessionsCollapsed'] !== undefined)
 			patch.starredSessionsCollapsed = allSettings['starredSessionsCollapsed'] as boolean;
@@ -2614,6 +2663,11 @@ export async function loadAllSettings(): Promise<void> {
 		if (allSettings['spellCheck'] !== undefined)
 			patch.spellCheck = allSettings['spellCheck'] as boolean;
 
+		// Reset and unknown values both restore the default system preference.
+		patch.uiLanguage = isUiLanguagePreference(allSettings['uiLanguage'])
+			? allSettings['uiLanguage']
+			: DEFAULT_UI_LANGUAGE;
+
 		hydrateAnnotatorSettings(allSettings, patch);
 
 		// On a RELOAD (system resume, another window's write), drop any key the user
@@ -2862,6 +2916,7 @@ export function getSettingsActions() {
 		setFilePreviewToolbarButtonVisibility: state.setFilePreviewToolbarButtonVisibility,
 		setModeratorStandingInstructions: state.setModeratorStandingInstructions,
 		setSpellCheck: state.setSpellCheck,
+		setUiLanguage: state.setUiLanguage,
 		setAutoRunDisabled: state.setAutoRunDisabled,
 		setDotfilesToggleHidden: state.setDotfilesToggleHidden,
 		setAutoRunInactivityTimeoutMin: state.setAutoRunInactivityTimeoutMin,

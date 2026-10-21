@@ -1,3 +1,4 @@
+import { useT, useFormatRelativeTime } from '../i18n';
 /**
  * SessionListItem - Renders an individual Claude session row in the AgentSessionsBrowser
  *
@@ -27,7 +28,7 @@ import {
 	Search,
 } from 'lucide-react';
 import type { Theme } from '../types';
-import { formatSize, formatRelativeTime } from '../utils/formatters';
+import { formatSize } from '../utils/formatters';
 import type { ClaudeSession } from '../hooks';
 
 /**
@@ -143,6 +144,8 @@ export const SessionListItem = React.memo(function SessionListItem({
 	onSubmitRename,
 	onCancelRename,
 }: SessionListItemProps) {
+	const t = useT();
+	const formatRelativeTime = useFormatRelativeTime();
 	const isActive = activeAgentSessionId === session.sessionId;
 
 	return (
@@ -159,7 +162,9 @@ export const SessionListItem = React.memo(function SessionListItem({
 			<button
 				onClick={(e) => onToggleStar(session.sessionId, e)}
 				className="p-1 -ml-1 rounded hover:bg-white/10 transition-colors shrink-0"
-				title={isStarred ? 'Remove from favorites' : 'Add to favorites'}
+				title={
+					isStarred ? t('workflows.shell.removeFromFavorites') : t('workflows.shell.addToFavorites')
+				}
 			>
 				<Star
 					className="w-4 h-4"
@@ -174,7 +179,7 @@ export const SessionListItem = React.memo(function SessionListItem({
 			<button
 				onClick={(e) => onQuickResume(session, e)}
 				className="p-1 rounded hover:bg-white/10 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
-				title="Resume session in new tab"
+				title={t('workflows.shell.resumeSessionInNewTab')}
 			>
 				<Play className="w-4 h-4" style={{ color: theme.colors.success }} />
 			</button>
@@ -200,7 +205,7 @@ export const SessionListItem = React.memo(function SessionListItem({
 							}}
 							onClick={(e) => e.stopPropagation()}
 							onBlur={() => onSubmitRename(session.sessionId)}
-							placeholder="Enter session name..."
+							placeholder={t('workflows.shell.enterSessionName')}
 							className="flex-1 bg-transparent outline-none text-sm font-semibold px-2 py-0.5 rounded border min-w-0"
 							style={{
 								color: theme.colors.accent,
@@ -217,7 +222,7 @@ export const SessionListItem = React.memo(function SessionListItem({
 						<button
 							onClick={(e) => onStartRename(session, e)}
 							className="p-0.5 rounded opacity-0 group-hover/name:opacity-100 hover:bg-white/10 transition-all"
-							title="Rename session"
+							title={t('workflows.shell.renameSession')}
 						>
 							<Edit3 className="w-3 h-3" style={{ color: theme.colors.accent }} />
 						</button>
@@ -232,14 +237,15 @@ export const SessionListItem = React.memo(function SessionListItem({
 						className="font-medium truncate text-sm flex-1 min-w-0"
 						style={{ color: session.sessionName ? theme.colors.textDim : theme.colors.textMain }}
 					>
-						{session.firstMessage || `Session ${session.sessionId.slice(0, 8)}...`}
+						{session.firstMessage ||
+							t('workflows.shell.sessionValue', { p0: session.sessionId.slice(0, 8) })}
 					</span>
 					{/* Rename button for sessions without a name (shows on hover) */}
 					{!session.sessionName && !isRenaming && (
 						<button
 							onClick={(e) => onStartRename(session, e)}
 							className="p-0.5 rounded opacity-0 group-hover/title:opacity-100 hover:bg-white/10 transition-all shrink-0"
-							title="Add session name"
+							title={t('workflows.shell.addSessionName')}
 						>
 							<Edit3 className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 						</button>
@@ -259,27 +265,27 @@ export const SessionListItem = React.memo(function SessionListItem({
 								backgroundColor: theme.colors.accent + '40',
 								color: theme.colors.accentText,
 							}}
-							title="User-initiated through Maestro"
+							title={t('workflows.shell.userInitiatedThroughMaestro')}
 						>
-							MAESTRO
+							{t('workflows.shell.maestro')}
 						</span>
 					)}
 					{session.origin === 'auto' && (
 						<span
 							className="text-2xs font-bold px-1.5 py-0.5 rounded"
 							style={{ backgroundColor: theme.colors.warning + '40', color: theme.colors.warning }}
-							title="Auto-run session"
+							title={t('workflows.shell.autoRunSession')}
 						>
-							AUTO
+							{t('workflows.shell.auto2')}
 						</span>
 					)}
 					{!session.origin && (
 						<span
 							className="text-2xs font-bold px-1.5 py-0.5 rounded"
 							style={{ backgroundColor: theme.colors.border, color: theme.colors.textMain }}
-							title="Claude Code CLI session"
+							title={t('workflows.shell.claudeCodeCliSession')}
 						>
-							CLI
+							{t('workflows.shell.cli')}
 						</span>
 					)}
 
@@ -360,7 +366,7 @@ export const SessionListItem = React.memo(function SessionListItem({
 					className="text-2xs px-2 py-0.5 rounded-full shrink-0"
 					style={{ backgroundColor: theme.colors.success + '20', color: theme.colors.success }}
 				>
-					ACTIVE
+					{t('workflows.shell.active3')}
 				</span>
 			)}
 		</div>

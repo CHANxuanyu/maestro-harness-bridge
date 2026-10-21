@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * "How to use it" block for a first-party feature, rendered under its
  * description in the Extensions details pane.
@@ -35,6 +36,7 @@ interface UsageGuideProps {
 }
 
 export function UsageGuide({ theme, usage }: UsageGuideProps) {
+	const tExtra = useT();
 	// The user's own bindings, falling back to the shipped defaults for a
 	// shortcut they have never touched.
 	const shortcuts = useSettingsStore((s) => s.shortcuts);
@@ -52,7 +54,7 @@ export function UsageGuide({ theme, usage }: UsageGuideProps) {
 				className="text-xs-plus font-bold uppercase tracking-wide mb-2"
 				style={{ color: theme.colors.textDim }}
 			>
-				How to use it
+				{tExtra('settings.extra.usageGuide.howToUseIt')}
 			</h4>
 
 			<div className="space-y-2">
@@ -92,7 +94,7 @@ export function UsageGuide({ theme, usage }: UsageGuideProps) {
 										>
 											<Command className="w-3 h-3 flex-shrink-0" />
 											<span>
-												Command palette:{' '}
+												{tExtra('settings.extra.usageGuide.commandPalette')}{' '}
 												<span style={{ color: theme.colors.textMain }}>
 													&ldquo;{path.commandPalette}&rdquo;
 												</span>
@@ -105,7 +107,9 @@ export function UsageGuide({ theme, usage }: UsageGuideProps) {
 											style={{ color: theme.colors.textDim }}
 										>
 											<MousePointerClick className="w-3 h-3 flex-shrink-0" />
-											<span>Click {path.menu}</span>
+											<span>
+												{tExtra('settings.extra.usageGuide.click')} {path.menu}
+											</span>
 										</div>
 									)}
 								</div>
@@ -147,7 +151,7 @@ export function UsageGuide({ theme, usage }: UsageGuideProps) {
 						className="text-xs-plus font-bold uppercase tracking-wide mb-2"
 						style={{ color: theme.colors.textDim }}
 					>
-						Good to know
+						{tExtra('settings.extra.usageGuide.goodToKnow')}
 					</h4>
 					<ul className="space-y-1.5">
 						{usage.notes.map((note) => (
@@ -170,7 +174,7 @@ export function UsageGuide({ theme, usage }: UsageGuideProps) {
 						className="text-xs-plus font-bold uppercase tracking-wide mb-2"
 						style={{ color: theme.colors.textDim }}
 					>
-						How agents drive it
+						{tExtra('settings.extra.usageGuide.howAgentsDriveIt')}
 					</h4>
 					<div className="space-y-2">
 						{usage.agentCommands.map((entry) => (
@@ -206,7 +210,7 @@ export function UsageGuide({ theme, usage }: UsageGuideProps) {
 					style={{ color: theme.colors.accent }}
 					data-testid="extension-usage-docs"
 				>
-					Full documentation
+					{tExtra('settings.extra.usageGuide.fullDocumentation')}
 				</button>
 			)}
 		</div>

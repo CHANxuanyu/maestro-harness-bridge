@@ -1,6 +1,7 @@
 // src/main/process-manager/handlers/StdoutHandler.ts
 
 import { EventEmitter } from 'events';
+import { generateUUID } from '../../../shared/uuid';
 import { logger } from '../../utils/logger';
 import { stripAllAnsiCodes } from '../../utils/terminalFilter';
 import { appendToBuffer } from '../utils/bufferUtils';
@@ -21,6 +22,21 @@ interface StdoutHandlerDependencies {
 }
 
 const MAX_COPILOT_JSON_BUFFER_LENGTH = 1024 * 1024;
+
+// Codex exec restarts its item_0/item_1 counter on every invocation. Persisted
+// tool cards outlive those processes, so a process-local id must be scoped
+// before crossing IPC. A UUID also stays unique after an application restart;
+// native call IDs (and other providers) keep their existing identities.
+const codexToolScopes = new WeakMap<ManagedProcess, string>();
+function scopeCodexToolId(process: ManagedProcess, id: string | undefined): string | undefined {
+	if (process.toolType !== 'codex' || !id || !/^item_\d+$/.test(id)) return id;
+	let scope = codexToolScopes.get(process);
+	if (!scope) {
+		scope = generateUUID();
+		codexToolScopes.set(process, scope);
+	}
+	return `codex-${scope}-${id}`;
+}
 
 /**
  * Normalize usage stats to handle cumulative vs per-turn usage reporting.
@@ -716,7 +732,9 @@ export class StdoutHandler {
 			//   cleanupExitedTabLogs on exit). Gating Claude on isReasoning silenced the
 			//   inline thinking display for every ordinary (non-extended-thinking) turn.
 			const toolType = managedProcess.toolType;
-			if (toolType !== 'copilot-cli') {
+			if (event.isCommentary) {
+				this.emitter.emit('thinking-chunk', sessionId, event.text, 'commentary');
+			} else if (toolType !== 'copilot-cli') {
 				const requiresReasoningTag =
 					toolType === 'grok' || toolType === 'codex' || toolType === 'opencode';
 				if (!requiresReasoningTag || event.isReasoning) {
@@ -725,9 +743,22 @@ export class StdoutHandler {
 			}
 			// Reasoning content is internal thinking - don't include it in the
 			// final response text. Only message content should be in streamedText.
-			if (!event.isReasoning) {
+			if (!event.isReasoning && !event.isCommentary) {
 				managedProcess.streamedText = (managedProcess.streamedText || '') + event.text;
 			}
+		}
+
+		// Older exec streams omit message phases. A subsequent tool proves the
+		// pending message was progress, so reveal it before the tool starts and
+		// keep it out of ExitHandler's final-answer fallback after an interruption.
+		if (
+			managedProcess.toolType === 'codex' &&
+			event.type === 'tool_use' &&
+			managedProcess.streamedText &&
+			!managedProcess.resultEmitted
+		) {
+			this.emitter.emit('thinking-chunk', sessionId, managedProcess.streamedText, 'commentary');
+			managedProcess.streamedText = '';
 		}
 
 		// Handle tool execution events (OpenCode, Codex)
@@ -747,8 +778,8 @@ export class StdoutHandler {
 				toolName: event.toolName,
 				state: event.toolState,
 				timestamp: Date.now(),
-				toolCallId: event.toolCallId,
-				parentToolUseId: event.parentToolUseId,
+				toolCallId: scopeCodexToolId(managedProcess, event.toolCallId),
+				parentToolUseId: scopeCodexToolId(managedProcess, event.parentToolUseId),
 			});
 		}
 
@@ -769,8 +800,8 @@ export class StdoutHandler {
 					toolName: result.toolName,
 					state: result.toolState,
 					timestamp: Date.now(),
-					toolCallId: result.toolCallId,
-					parentToolUseId: result.parentToolUseId,
+					toolCallId: scopeCodexToolId(managedProcess, result.toolCallId),
+					parentToolUseId: scopeCodexToolId(managedProcess, result.parentToolUseId),
 				});
 			}
 		}
@@ -790,8 +821,8 @@ export class StdoutHandler {
 					toolName: tool.name,
 					state: { status: 'running', input: tool.input },
 					timestamp: Date.now(),
-					toolCallId: tool.id,
-					parentToolUseId: event.parentToolUseId,
+					toolCallId: scopeCodexToolId(managedProcess, tool.id),
+					parentToolUseId: scopeCodexToolId(managedProcess, event.parentToolUseId),
 				});
 			}
 		}
@@ -800,6 +831,10 @@ export class StdoutHandler {
 		// an interim "I'm checking..." message and then the final answer.
 		// Keep the latest result text and emit once at turn completion.
 		if (managedProcess.toolType === 'codex' && outputParser.isResultMessage(event) && event.text) {
+			const previous = managedProcess.streamedText;
+			if (previous && previous !== event.text && !managedProcess.resultEmitted) {
+				this.emitter.emit('thinking-chunk', sessionId, previous, 'commentary');
+			}
 			managedProcess.streamedText = event.text;
 		}
 

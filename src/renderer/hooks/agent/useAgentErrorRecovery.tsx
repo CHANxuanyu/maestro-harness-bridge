@@ -23,6 +23,7 @@ import { KeyRound, MessageSquarePlus, RefreshCw, RotateCcw, Wifi, Terminal } fro
 import { formatAgentLoginCommand, getAgentLoginCommand } from '../../../shared/agentMetadata';
 import type { AgentError, ToolType } from '../../types';
 import type { RecoveryAction } from '../../components/AgentErrorModal';
+import { useT, type TFunction } from '../../i18n';
 
 export interface UseAgentErrorRecoveryOptions {
 	/** The agent error to generate recovery actions for */
@@ -58,7 +59,8 @@ export interface UseAgentErrorRecoveryResult {
 function getRecoveryActionsForError(
 	error: AgentError,
 	agentId: ToolType,
-	options: UseAgentErrorRecoveryOptions
+	options: UseAgentErrorRecoveryOptions,
+	t: TFunction
 ): RecoveryAction[] {
 	const actions: RecoveryAction[] = [];
 
@@ -135,6 +137,20 @@ function getRecoveryActionsForError(
 			}
 			break;
 
+		case 'session_busy':
+			// Never offer a blank replacement: the existing native history is valid.
+			if (options.onRetry) {
+				actions.push({
+					id: 'retry',
+					label: t('workflows.sessions.retryResume'),
+					description: t('workflows.sessions.retryAfterRelease'),
+					primary: true,
+					icon: <RefreshCw className="w-4 h-4" />,
+					onClick: options.onRetry,
+				});
+			}
+			break;
+
 		case 'agent_crashed':
 			// Agent crashed - offer restart or fresh session
 			if (options.onRestartAgent) {
@@ -196,11 +212,12 @@ export function useAgentErrorRecovery(
 	options: UseAgentErrorRecoveryOptions
 ): UseAgentErrorRecoveryResult {
 	const { error, agentId, onClearError } = options;
+	const t = useT();
 
 	// Generate recovery actions for the current error
 	const recoveryActions = useMemo(() => {
 		if (!error) return [];
-		return getRecoveryActionsForError(error, agentId, options);
+		return getRecoveryActionsForError(error, agentId, options, t);
 	}, [
 		error,
 		agentId,
@@ -208,6 +225,7 @@ export function useAgentErrorRecovery(
 		options.onNewSession,
 		options.onRestartAgent,
 		options.onRetry,
+		t,
 	]);
 
 	// Handler to execute a recovery action by its ID

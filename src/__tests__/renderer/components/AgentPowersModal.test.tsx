@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../renderer/contexts/LayerStackContext', () => ({
 	useLayerStack: () => ({
@@ -11,6 +11,7 @@ vi.mock('../../../renderer/contexts/LayerStackContext', () => ({
 
 import { AgentPowersModal } from '../../../renderer/components/AgentPowersModal';
 import { mockTheme } from '../../helpers/mockTheme';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 
 function renderModal(overrides: Partial<React.ComponentProps<typeof AgentPowersModal>> = {}) {
 	const props = {
@@ -23,8 +24,13 @@ function renderModal(overrides: Partial<React.ComponentProps<typeof AgentPowersM
 	return props;
 }
 
+beforeEach(() => {
+	useSettingsStore.setState({ uiLanguage: 'en' });
+});
+
 afterEach(() => {
 	cleanup();
+	useSettingsStore.setState({ uiLanguage: 'system' });
 });
 
 describe('AgentPowersModal', () => {
@@ -96,6 +102,75 @@ describe('AgentPowersModal', () => {
 
 		fireEvent.click(screen.getByTestId('agent-powers-confirm'));
 		expect(onDismiss).toHaveBeenCalled();
+	});
+
+	it('switches all example displays to Chinese while preserving the original composer prompts', () => {
+		const onTryExample = vi.fn();
+		const { onDismiss } = renderModal({ onTryExample });
+		const firstExample = screen.getByTestId('agent-powers-example-change-any-setting');
+
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+
+		expect(screen.getByText('智能体也能操作 Maestro')).toBeVisible();
+		expect(screen.getByTestId('agent-powers-confirm')).toHaveTextContent('知道了');
+		expect(screen.getByText(/点击上方任一示例，即可将请求填入输入框/)).toBeVisible();
+		expect(screen.getByTestId('agent-powers-example-change-any-setting')).toBe(firstExample);
+
+		const examples = [
+			[
+				'change-any-setting',
+				'修改任意设置',
+				'将 AI 对话字体设为 Inter',
+				'Set my AI chat font to Inter, switch me to a light theme, and turn on OS notifications.',
+			],
+			[
+				'create-agents',
+				'创建智能体',
+				'创建一个名为 Scratch 的新智能体',
+				'Create a new agent called Scratch pointed at my home directory.',
+			],
+			[
+				'write-an-auto-run-doc',
+				'编写 Auto Run 文档',
+				'检查此仓库中的 TODO',
+				'Write me an Auto Run document that reviews this repo for TODOs and lists them as tasks.',
+			],
+			[
+				'schedule-a-task',
+				'安排定时任务',
+				'每个工作日上午 9 点',
+				'Every weekday at 9am, summarize what changed in this repo overnight.',
+			],
+			[
+				'build-a-cue-pipeline',
+				'构建 Cue 流程',
+				'每当此仓库新建拉取请求时',
+				'Whenever a pull request opens on this repo, have an agent review it and report back.',
+			],
+			[
+				'build-me-a-dashboard',
+				'创建仪表盘',
+				'为此仓库创建一个 HTML 仪表盘',
+				'Build me an HTML dashboard of this repo: commits per week, top contributors, open TODOs.',
+			],
+		];
+		for (const [index, [id, label, displayPrompt, nativePrompt]] of examples.entries()) {
+			const example = screen.getByTestId('agent-powers-example-' + id);
+			expect(example).toHaveTextContent(label);
+			expect(example).toHaveTextContent(displayPrompt);
+			expect(example).not.toHaveTextContent(nativePrompt);
+			fireEvent.click(example);
+			expect(onTryExample).toHaveBeenNthCalledWith(index + 1, nativePrompt);
+		}
+		expect(onTryExample).toHaveBeenCalledTimes(6);
+		expect(onDismiss).toHaveBeenCalledTimes(6);
+	});
+
+	it('keeps Chinese examples disabled and hides the composer instruction without an agent', () => {
+		useSettingsStore.setState({ uiLanguage: 'zh-CN' });
+		renderModal();
+		expect(screen.getByTestId('agent-powers-example-create-agents')).toBeDisabled();
+		expect(screen.queryByText(/点击上方任一示例，即可将请求填入输入框/)).not.toBeInTheDocument();
 	});
 
 	describe('example prompts', () => {

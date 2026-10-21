@@ -4,7 +4,8 @@ import { SettingCheckbox } from '../../../../SettingCheckbox';
 import { ToggleButtonGroup } from '../../../../ToggleButtonGroup';
 import { ToggleSwitch } from '../../../../ui/ToggleSwitch';
 import { DEFAULT_BROWSER_HOME_URL } from '../utils';
-import { formatMetaKeyName } from '../../../../../utils/shortcutFormatter';
+import { formatMetaKeyName, formatShortcutKeys } from '../../../../../utils/shortcutFormatter';
+import { useT } from '../../../../../i18n';
 
 type BrowserKeepAliveMode = 'off' | 'recent' | 'all';
 
@@ -35,13 +36,14 @@ export function BrowserSection({
 	browserTabKeepAliveLimit,
 	setBrowserTabKeepAliveLimit,
 }: BrowserSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="general-browser">
 			<SettingCheckbox
 				icon={ExternalLink}
-				sectionLabel="Default Browser"
-				title="Use system browser for links"
-				description={`Controls the default browser for clicking links. Use ${formatMetaKeyName()}+Click on URLs to get a context menu and choose the specific browser.`}
+				sectionLabel={t('settings.general.browser.heading')}
+				title={t('settings.general.browser.title')}
+				description={t('settings.general.browser.description', { meta: formatMetaKeyName() })}
 				checked={useSystemBrowser}
 				onChange={setUseSystemBrowser}
 				theme={theme}
@@ -62,25 +64,24 @@ export function BrowserSection({
 			>
 				<div className="flex-1 pr-3">
 					<div className="font-medium" style={{ color: theme.colors.textMain }}>
-						Open HTML files in Maestro Browser on double-click
+						{t('settings.general.browser.htmlTitle')}
 					</div>
 					<div className="text-xs opacity-70 mt-0.5">
-						When enabled, double-clicking an HTML file in the file explorer opens it in the Maestro
-						browser instead of the file preview. Right-click for the full menu either way.
+						{t('settings.general.browser.htmlDescription')}
 					</div>
 				</div>
 				<ToggleSwitch
 					checked={htmlDoubleClickOpensInBrowser}
 					onChange={setHtmlDoubleClickOpensInBrowser}
 					theme={theme}
-					ariaLabel="Open HTML files in Maestro Browser on double-click"
+					ariaLabel={t('settings.general.browser.htmlTitle')}
 				/>
 			</div>
 			<div
 				className="mt-3 p-3 rounded border"
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
-				<div className="block text-xs opacity-70 mb-1">Browser Home URL</div>
+				<div className="block text-xs opacity-70 mb-1">{t('settings.general.browser.homeUrl')}</div>
 				<div className="flex gap-2">
 					<input
 						type="text"
@@ -99,13 +100,14 @@ export function BrowserSection({
 								color: theme.colors.textDim,
 							}}
 						>
-							Reset
+							{t('common.reset')}
 						</button>
 					)}
 				</div>
 				<p className="text-xs opacity-70 mt-2">
-					The URL loaded when opening a new browser tab (Cmd+B). Blank by default, so a new tab
-					opens ready for you to type an address instead of loading a page first.
+					{t('settings.general.browser.homeUrlHelp', {
+						shortcut: formatShortcutKeys(['Meta', 'b']),
+					})}
 				</p>
 			</div>
 			<div
@@ -114,18 +116,16 @@ export function BrowserSection({
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<div className="font-medium" style={{ color: theme.colors.textMain }}>
-					Background browser tabs
+					{t('settings.general.browser.keepAlive')}
 				</div>
 				<div className="text-xs opacity-70 mt-0.5 mb-2">
-					An inactive browser tab is unloaded by default, so its page reloads and loses any
-					in-memory state when you return. Keep recent or all tabs alive to preserve their state at
-					the cost of memory (each live tab holds a full browser process).
+					{t('settings.general.browser.keepAliveDescription')}
 				</div>
 				<ToggleButtonGroup
 					options={[
-						{ value: 'off' as const, label: 'Unload when inactive' },
-						{ value: 'recent' as const, label: 'Keep recent alive' },
-						{ value: 'all' as const, label: 'Keep all alive' },
+						{ value: 'off' as const, label: t('settings.general.browser.keepOff') },
+						{ value: 'recent' as const, label: t('settings.general.browser.keepRecent') },
+						{ value: 'all' as const, label: t('settings.general.browser.keepAll') },
 					]}
 					value={browserTabKeepAlive}
 					onChange={setBrowserTabKeepAlive}
@@ -133,7 +133,7 @@ export function BrowserSection({
 				/>
 				{browserTabKeepAlive === 'recent' && (
 					<div className="mt-3 flex items-center gap-2">
-						<label className="text-xs opacity-70">Keep this many recent tabs alive</label>
+						<label className="text-xs opacity-70">{t('settings.general.browser.keepLimit')}</label>
 						<input
 							type="number"
 							min={1}

@@ -1,3 +1,4 @@
+import { useT, useFormatRelativeTime } from '../../../i18n';
 /**
  * Web Login accounts, managed from the Web Login tile in Plugins.
  *
@@ -22,7 +23,6 @@ import { AlertTriangle, KeyRound, Trash2, UserPlus, Power } from 'lucide-react';
 import type { Theme } from '../../../types';
 import { MiniBadge } from '../../ui/MiniBadge';
 import { notifyToast } from '../../../stores/notificationStore';
-import { formatRelativeTime } from '../../../../shared/formatters';
 import {
 	validateWebPassword,
 	validateWebUsername,
@@ -45,6 +45,8 @@ function errorText(err: unknown): string {
 }
 
 export function WebLoginUsers({ theme }: WebLoginUsersProps) {
+	const tExtra = useT();
+	const formatRelativeTime = useFormatRelativeTime();
 	const [users, setUsers] = useState<WebUserPublic[] | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -102,7 +104,7 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 			return;
 		}
 		if (password !== confirm) {
-			setCreateError('The two passwords do not match.');
+			setCreateError(tExtra('settings.extra.webLoginUsers.theTwoPasswordsDoNotMatch'));
 			return;
 		}
 		setCreating(true);
@@ -120,15 +122,17 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 			await refresh();
 			notifyToast({
 				color: 'green',
-				title: 'Web Login',
-				message: `Added the account "${created.username}".`,
+				title: tExtra('settings.extra.webLoginUsers.webLogin'),
+				message: tExtra('settings.extra.webLoginUsers.accountAdded', {
+					username: created.username,
+				}),
 			});
 		} catch (err) {
 			setCreateError(errorText(err));
 		} finally {
 			setCreating(false);
 		}
-	}, [username, displayName, password, confirm, refresh]);
+	}, [username, displayName, password, confirm, refresh, tExtra]);
 
 	const submitReset = useCallback(
 		async (user: WebUserPublic) => {
@@ -138,7 +142,7 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 				return;
 			}
 			if (resetPassword !== resetConfirm) {
-				setResetError('The two passwords do not match.');
+				setResetError(tExtra('settings.extra.webLoginUsers.theTwoPasswordsDoNotMatch'));
 				return;
 			}
 			setRowBusyId(user.id);
@@ -148,8 +152,10 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 				await refresh();
 				notifyToast({
 					color: 'green',
-					title: 'Web Login',
-					message: `Reset the password for "${user.username}". Any browser signed in as that account is signed out.`,
+					title: tExtra('settings.extra.webLoginUsers.webLogin'),
+					message: tExtra('settings.extra.webLoginUsers.passwordReset', {
+						username: user.username,
+					}),
 				});
 			} catch (err) {
 				setResetError(errorText(err));
@@ -157,7 +163,7 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 				setRowBusyId(null);
 			}
 		},
-		[resetPassword, resetConfirm, closeResetForm, refresh]
+		[resetPassword, resetConfirm, closeResetForm, refresh, tExtra]
 	);
 
 	const toggleDisabled = useCallback(
@@ -168,18 +174,22 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 				await refresh();
 				notifyToast({
 					color: user.disabled ? 'green' : 'yellow',
-					title: 'Web Login',
+					title: tExtra('settings.extra.webLoginUsers.webLogin'),
 					message: user.disabled
-						? `Enabled "${user.username}".`
-						: `Disabled "${user.username}". Its history stays attributed to it.`,
+						? tExtra('settings.extra.webLoginUsers.enabled', { username: user.username })
+						: tExtra('settings.extra.webLoginUsers.accountDisabled', { username: user.username }),
 				});
 			} catch (err) {
-				notifyToast({ color: 'red', title: 'Web Login', message: errorText(err) });
+				notifyToast({
+					color: 'red',
+					title: tExtra('settings.extra.webLoginUsers.webLogin'),
+					message: errorText(err),
+				});
 			} finally {
 				setRowBusyId(null);
 			}
 		},
-		[refresh]
+		[refresh, tExtra]
 	);
 
 	const deleteAccount = useCallback(
@@ -191,16 +201,20 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 				await refresh();
 				notifyToast({
 					color: 'green',
-					title: 'Web Login',
-					message: `Deleted the account "${user.username}".`,
+					title: tExtra('settings.extra.webLoginUsers.webLogin'),
+					message: tExtra('settings.extra.webLoginUsers.deleted', { username: user.username }),
 				});
 			} catch (err) {
-				notifyToast({ color: 'red', title: 'Web Login', message: errorText(err) });
+				notifyToast({
+					color: 'red',
+					title: tExtra('settings.extra.webLoginUsers.webLogin'),
+					message: errorText(err),
+				});
 			} finally {
 				setRowBusyId(null);
 			}
 		},
-		[refresh]
+		[refresh, tExtra]
 	);
 
 	const inputStyle = {
@@ -219,19 +233,14 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 				style={{ color: theme.colors.warning }}
 			>
 				<AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-				<span>
-					The web interface is served over plain HTTP on your network. Passwords typed on the LAN
-					travel in the clear. Use the Remote Control tunnel or a network you trust. This
-					machine&apos;s maestro-cli is never asked to log in; every browser is, including one on
-					this machine.
-				</span>
+				<span>{tExtra('settings.extra.webLoginUsers.theWebInterfaceIsServedOverPlain')}</span>
 			</div>
 
 			<div
 				className="text-xs font-bold uppercase opacity-70"
 				style={{ color: theme.colors.textMain }}
 			>
-				Accounts
+				{tExtra('settings.extra.webLoginUsers.accounts')}
 			</div>
 
 			{loadError && (
@@ -245,14 +254,16 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 			)}
 
 			{users === null ? (
-				<p className="text-xs opacity-70 mt-1">Loading accounts…</p>
+				<p className="text-xs opacity-70 mt-1">
+					{tExtra('settings.extra.webLoginUsers.loadingAccounts')}
+				</p>
 			) : users.length === 0 ? (
 				<div
 					className="text-xs rounded-lg border p-3 mt-2"
 					data-testid="web-login-empty"
 					style={{ borderColor: theme.colors.warning, color: theme.colors.warning }}
 				>
-					No accounts yet. Until you add one, nobody can sign in.
+					{tExtra('settings.extra.webLoginUsers.noAccountsYetUntilYouAddOne')}
 				</div>
 			) : (
 				<div
@@ -277,7 +288,7 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 											{user.displayName}
 											{user.disabled && (
 												<MiniBadge
-													label="Disabled"
+													label={tExtra('settings.extra.webLoginUsers.disabled')}
 													theme={theme}
 													color={theme.colors.warning}
 													testId="web-login-disabled-badge"
@@ -285,10 +296,13 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 											)}
 										</div>
 										<div className="text-2xs font-mono truncate opacity-70">
-											{user.username} · added {formatRelativeTime(user.createdAt)} ·{' '}
+											{user.username} {tExtra('settings.extra.webLoginUsers.added')}{' '}
+											{formatRelativeTime(user.createdAt)} ·{' '}
 											{user.lastLoginAt
-												? `last signed in ${formatRelativeTime(user.lastLoginAt)}`
-												: 'never signed in'}
+												? tExtra('settings.extra.webLoginUsers.lastLogin', {
+														time: formatRelativeTime(user.lastLoginAt),
+													})
+												: tExtra('settings.extra.webLoginUsers.neverSignedIn')}
 										</div>
 									</div>
 									<div className="flex items-center gap-1 flex-shrink-0">
@@ -300,7 +314,8 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 											className="flex items-center gap-1 px-2 py-1 rounded border text-2xs transition-colors hover:bg-white/5 disabled:opacity-50"
 											style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 										>
-											<KeyRound className="w-3 h-3" /> Reset password
+											<KeyRound className="w-3 h-3" />{' '}
+											{tExtra('settings.extra.webLoginUsers.resetPassword')}
 										</button>
 										<button
 											type="button"
@@ -310,7 +325,10 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 											className="flex items-center gap-1 px-2 py-1 rounded border text-2xs transition-colors hover:bg-white/5 disabled:opacity-50"
 											style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 										>
-											<Power className="w-3 h-3" /> {user.disabled ? 'Enable' : 'Disable'}
+											<Power className="w-3 h-3" />{' '}
+											{user.disabled
+												? tExtra('settings.extra.webLoginUsers.enable')
+												: tExtra('settings.extra.webLoginUsers.disable')}
 										</button>
 										{confirmDeleteId === user.id ? (
 											<>
@@ -325,7 +343,8 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 														color: theme.colors.bgMain,
 													}}
 												>
-													<Trash2 className="w-3 h-3" /> Confirm delete
+													<Trash2 className="w-3 h-3" />{' '}
+													{tExtra('settings.extra.webLoginUsers.confirmDelete')}
 												</button>
 												<button
 													type="button"
@@ -334,7 +353,7 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 													className="px-2 py-1 rounded border text-2xs transition-colors hover:bg-white/5"
 													style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 												>
-													Cancel
+													{tExtra('settings.extra.webLoginUsers.cancel')}
 												</button>
 											</>
 										) : (
@@ -346,7 +365,8 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 												className="flex items-center gap-1 px-2 py-1 rounded border text-2xs transition-colors hover:bg-white/5 disabled:opacity-50"
 												style={{ borderColor: theme.colors.border, color: theme.colors.error }}
 											>
-												<Trash2 className="w-3 h-3" /> Delete
+												<Trash2 className="w-3 h-3" />{' '}
+												{tExtra('settings.extra.webLoginUsers.delete')}
 											</button>
 										)}
 									</div>
@@ -355,13 +375,13 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 								{resetId === user.id && (
 									<div className="mt-2 flex flex-col gap-1.5" data-testid="web-login-reset-form">
 										<p className="text-2xs opacity-70">
-											A reset signs out every browser currently using this account.
+											{tExtra('settings.extra.webLoginUsers.aResetSignsOutEveryBrowserCurrently')}
 										</p>
 										<input
 											type="password"
 											data-testid="web-login-reset-password"
-											aria-label="New password"
-											placeholder="New password"
+											aria-label={tExtra('settings.extra.webLoginUsers.newPassword')}
+											placeholder={tExtra('settings.extra.webLoginUsers.newPassword')}
 											value={resetPassword}
 											onChange={(e) => setResetPassword(e.target.value)}
 											className={inputClass}
@@ -370,8 +390,8 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 										<input
 											type="password"
 											data-testid="web-login-reset-confirm"
-											aria-label="Confirm new password"
-											placeholder="Confirm new password"
+											aria-label={tExtra('settings.extra.webLoginUsers.confirmNewPassword')}
+											placeholder={tExtra('settings.extra.webLoginUsers.confirmNewPassword')}
 											value={resetConfirm}
 											onChange={(e) => setResetConfirm(e.target.value)}
 											className={inputClass}
@@ -395,7 +415,7 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 												className="px-2.5 py-1 rounded-lg text-2xs font-medium transition-colors disabled:opacity-50"
 												style={{ backgroundColor: theme.colors.accent, color: theme.colors.bgMain }}
 											>
-												Set password
+												{tExtra('settings.extra.webLoginUsers.setPassword')}
 											</button>
 											<button
 												type="button"
@@ -404,7 +424,7 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 												className="px-2.5 py-1 rounded-lg border text-2xs transition-colors hover:bg-white/5"
 												style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 											>
-												Cancel
+												{tExtra('settings.extra.webLoginUsers.cancel')}
 											</button>
 										</div>
 									</div>
@@ -419,18 +439,17 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 				className="text-xs font-bold uppercase opacity-70 mt-5"
 				style={{ color: theme.colors.textMain }}
 			>
-				Add account
+				{tExtra('settings.extra.webLoginUsers.addAccount')}
 			</div>
 			<p className="text-xs opacity-70 mb-2">
-				Every account is an equal operator. There are no roles, and nothing created here can
-				administer accounts from a browser.
+				{tExtra('settings.extra.webLoginUsers.everyAccountIsAnEqualOperatorThere')}
 			</p>
 			<div className="flex flex-col gap-1.5">
 				<input
 					type="text"
 					data-testid="web-login-new-username"
-					aria-label="Username"
-					placeholder="Username"
+					aria-label={tExtra('settings.extra.webLoginUsers.username')}
+					placeholder={tExtra('settings.extra.webLoginUsers.username')}
 					autoComplete="off"
 					value={username}
 					onChange={(e) => setUsername(e.target.value)}
@@ -440,8 +459,8 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 				<input
 					type="text"
 					data-testid="web-login-new-display-name"
-					aria-label="Display name (optional)"
-					placeholder="Display name (optional)"
+					aria-label={tExtra('settings.extra.webLoginUsers.displayNameOptional')}
+					placeholder={tExtra('settings.extra.webLoginUsers.displayNameOptional')}
 					autoComplete="off"
 					value={displayName}
 					onChange={(e) => setDisplayName(e.target.value)}
@@ -451,8 +470,8 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 				<input
 					type="password"
 					data-testid="web-login-new-password"
-					aria-label="Password"
-					placeholder="Password"
+					aria-label={tExtra('settings.extra.webLoginUsers.password')}
+					placeholder={tExtra('settings.extra.webLoginUsers.password')}
 					autoComplete="new-password"
 					value={password}
 					onChange={(e) => setPassword(e.target.value)}
@@ -462,8 +481,8 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 				<input
 					type="password"
 					data-testid="web-login-new-confirm"
-					aria-label="Confirm password"
-					placeholder="Confirm password"
+					aria-label={tExtra('settings.extra.webLoginUsers.confirmPassword')}
+					placeholder={tExtra('settings.extra.webLoginUsers.confirmPassword')}
 					autoComplete="new-password"
 					value={confirm}
 					onChange={(e) => setConfirm(e.target.value)}
@@ -488,7 +507,7 @@ export function WebLoginUsers({ theme }: WebLoginUsersProps) {
 						className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
 						style={{ backgroundColor: theme.colors.accent, color: theme.colors.bgMain }}
 					>
-						<UserPlus className="w-3.5 h-3.5" /> Add account
+						<UserPlus className="w-3.5 h-3.5" /> {tExtra('settings.extra.webLoginUsers.addAccount')}
 					</button>
 				</div>
 			</div>

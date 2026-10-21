@@ -19,6 +19,7 @@ import {
 	normalizeHistoryEntries,
 } from '../../shared/history';
 import { resolveSyncDir } from '../../shared/syncPath';
+import { assertValidUiLanguageSetting } from '../../shared/i18n';
 
 // Get the Maestro config directory path
 export function getConfigDir(): string {
@@ -326,6 +327,7 @@ export function readSettingValue(key: string): unknown {
  * Returns true on success.
  */
 export function writeSettingValue(key: string, value: unknown): boolean {
+	assertValidUiLanguageSetting(key, value);
 	const settings = readSettings();
 	setNestedValue(settings, key, value);
 	writeStoreFile('maestro-settings.json', settings);

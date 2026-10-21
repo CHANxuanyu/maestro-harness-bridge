@@ -14,6 +14,7 @@ import { hasUnreadVisibleTab } from '../../utils/tabHelpers';
 import { useConsultedSessionIds } from '../../stores/crossAgentInFlightStore';
 import { buildAgentInitials } from '../../../shared/agentInitials';
 import { readableTextOn, transparentize } from '../../../shared/colorContrast';
+import { useT } from '../../i18n';
 
 /**
  * How much of the status color the initials badge is filled with. The active
@@ -56,6 +57,7 @@ export const SkinnySidebar = memo(function SkinnySidebar({
 	stuckOutageSignature,
 	showInitials,
 }: SkinnySidebarProps) {
+	const t = useT();
 	const consultedSessionIds = useConsultedSessionIds();
 	const attentionCtx: AttentionContext = {
 		batchSessionIds: new Set(activeBatchSessionIds),
@@ -99,13 +101,13 @@ export const SkinnySidebar = memo(function SkinnySidebar({
 				// Hollow means "no provider session yet": an outline, never a fill.
 				const isHollow = isUnboundClaude && !isBusyOffState;
 				const statusTitle = isConsulted
-					? 'Answering a consult'
+					? t('workflows.sessionRow.answeringConsult')
 					: isUnboundClaude
-						? 'No active Claude session'
+						? t('workflows.sessionRow.noClaudeSession')
 						: undefined;
 				const initials = initialsById?.get(session.id);
 				const unreadDot = !isActive && hasUnreadTabs && (
-					<CornerDot color={theme.colors.error} title="Unread messages" />
+					<CornerDot color={theme.colors.error} title={t('workflows.sessionRow.unreadMessages')} />
 				);
 				const badgeColor = effectiveStatusColor ?? theme.colors.textDim;
 				const badgeFill = transparentize(
@@ -119,7 +121,7 @@ export const SkinnySidebar = memo(function SkinnySidebar({
 						key={session.id}
 						role="button"
 						tabIndex={0}
-						aria-label={`Switch to ${session.name}`}
+						aria-label={t('workflows.sessionRow.switchTo', { name: session.name })}
 						onClick={() => setActiveSessionId(session.id)}
 						onContextMenu={(e) => handleContextMenu(e, session.id)}
 						onKeyDown={(e) => {

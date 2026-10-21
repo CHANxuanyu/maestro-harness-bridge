@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import type React from 'react';
 import { Search } from 'lucide-react';
 import type { Session, Theme } from '../../../types';
@@ -33,6 +34,7 @@ export function QuickActionsSearchBar({
 	onKeyDown,
 	onClose,
 }: QuickActionsSearchBarProps) {
+	const t = useT();
 	return (
 		<div
 			className="p-4 border-b flex items-center gap-3"
@@ -43,7 +45,7 @@ export function QuickActionsSearchBar({
 				<input
 					ref={inputRef}
 					className="flex-1 bg-transparent outline-none text-lg"
-					placeholder="Enter new name..."
+					placeholder={t('workflows.shell.enterNewName')}
 					style={{ color: theme.colors.textMain }}
 					value={renameValue}
 					onChange={(e) => setRenameValue(e.target.value)}
@@ -56,10 +58,12 @@ export function QuickActionsSearchBar({
 					className="flex-1 bg-transparent outline-none text-lg placeholder-opacity-50"
 					placeholder={
 						mode === 'move-to-group'
-							? `Move ${activeSession?.name || 'session'} to...`
+							? t('workflows.shell.moveValueTo', {
+									p0: activeSession?.name || t('workflows.labels.session'),
+								})
 							: mode === 'agents'
-								? 'Jump to agent...'
-								: 'Type a command or jump to agent...'
+								? t('workflows.shell.jumpToAgent')
+								: t('workflows.shell.typeACommandOrJumpToAgent')
 					}
 					style={{ color: theme.colors.textMain }}
 					value={search}

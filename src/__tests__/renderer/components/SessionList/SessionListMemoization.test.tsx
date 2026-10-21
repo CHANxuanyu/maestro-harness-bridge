@@ -26,8 +26,19 @@ import type { Group, Session } from '../../../../renderer/types';
 
 // Capture the props SessionItem is called with, per session id. `vi.hoisted` so
 // the map exists before the hoisted `vi.mock` factory runs.
-const { capturedProps } = vi.hoisted(() => ({
+const { capturedProps, treeProps } = vi.hoisted(() => ({
 	capturedProps: new Map<string, Record<string, unknown>[]>(),
+	treeProps: [] as Record<string, unknown>[],
+}));
+
+// The default Left Bar renders the project tree instead of SessionItem rows.
+// A plain function in place of the memo'd component runs on EVERY SessionList
+// render, so the captured props show what the real memo would compare.
+vi.mock('../../../../renderer/components/SessionList/ProjectSessionSidebar', () => ({
+	ProjectSessionSidebar: (props: Record<string, unknown>) => {
+		treeProps.push(props);
+		return null;
+	},
 }));
 
 // Swap only the component; the module also exports helpers that other Left Bar
@@ -142,6 +153,7 @@ const createProps = (sortedSessions: Session[]) =>
 describe('SessionList memoization (#1186)', () => {
 	beforeEach(() => {
 		capturedProps.clear();
+		treeProps.length = 0;
 		useUIStore.setState({
 			leftSidebarOpen: true,
 			activeFocus: 'main',
@@ -152,7 +164,12 @@ describe('SessionList memoization (#1186)', () => {
 			draggingSessionId: null,
 			bookmarksCollapsed: false,
 		} as never);
-		useSettingsStore.setState({ ungroupedCollapsed: false } as never);
+		// SessionItem rows exist only in the agent management view ("Manage
+		// agents"); the default conversation tree is covered at the end.
+		useSettingsStore.setState({
+			ungroupedCollapsed: false,
+			sidebarNavigationMode: 'agents',
+		} as never);
 	});
 
 	it('keeps row props identity-stable when a different group is expanded', () => {
@@ -224,6 +241,55 @@ describe('SessionList memoization (#1186)', () => {
 		});
 
 		expect(lastPropsFor('a1').onDrop).toBe(beforeDrop);
+	});
+
+	describe('conversation tree (default Left Bar)', () => {
+		const lastTreeProps = (): Record<string, unknown> => {
+			if (treeProps.length === 0) throw new Error('ProjectSessionSidebar never rendered');
+			return treeProps[treeProps.length - 1];
+		};
+
+		const renderTree = () => {
+			const group = makeGroup({ id: 'gA', name: 'Alpha' });
+			const inGroup = createMockSession({ id: 'a1', name: 'In Alpha', groupId: 'gA' });
+			const loose = createMockSession({ id: 'u1', name: 'Ungrouped' });
+			const sorted = [inGroup, loose];
+			useSessionStore.setState({ sessions: sorted, groups: [group], activeSessionId: '' });
+			useSettingsStore.setState({ sidebarNavigationMode: 'conversations' } as never);
+			render(<SessionList {...createProps(sorted)} />);
+		};
+
+		it('keeps the tree props identity-stable across a re-render that changes no agent', () => {
+			renderTree();
+			const before = lastTreeProps();
+			const rendersBefore = treeProps.length;
+
+			// The Left Bar keyboard cursor moves: SessionList re-renders top to
+			// bottom, but nothing the tree shows has changed.
+			act(() => {
+				useUIStore.setState({ selectedSidebarIndex: 1 });
+			});
+
+			expect(treeProps.length).toBeGreaterThan(rendersBefore);
+			expectPropsIdentical(before, lastTreeProps(), 'ProjectSessionSidebar');
+		});
+
+		it('hands the tree a new sessions array when an agent changes', () => {
+			// Positive control: the stable identity above is a memo, not a stale copy.
+			renderTree();
+			const beforeSessions = lastTreeProps().sessions;
+
+			act(() => {
+				const sessions = useSessionStore.getState().sessions;
+				useSessionStore.setState({
+					sessions: sessions.map((s) => (s.id === 'u1' ? { ...s, name: 'Renamed' } : s)),
+				});
+			});
+
+			const afterSessions = lastTreeProps().sessions as Session[];
+			expect(afterSessions).not.toBe(beforeSessions);
+			expect(afterSessions.find((s) => s.id === 'u1')?.name).toBe('Renamed');
+		});
 	});
 
 	describe('now-playing pill placement', () => {

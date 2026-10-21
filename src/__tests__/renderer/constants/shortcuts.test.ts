@@ -26,6 +26,7 @@ import {
 	TAB_SHORTCUTS,
 } from '../../../renderer/constants/shortcuts';
 import type { Shortcut } from '../../../shared/shortcut-types';
+import { workflowsShell } from '../../../renderer/i18n/locales/en/workflowsShell';
 
 const RENDERER_ROOT = join(__dirname, '../../../renderer');
 
@@ -472,17 +473,31 @@ describe('shortcut labels carry their family keyword', () => {
 	it('gives the command palette the same git names the shortcut list uses', () => {
 		// Two names for one action is two things to learn and one of them fails to
 		// match whichever word the user picked.
+		// The palette labels are i18n keys, so the names are checked in the English
+		// catalogue the keys resolve to (the shortcut labels are English too).
 		const palette = readFileSync(
 			join(RENDERER_ROOT, 'components/QuickActionsModal/commands/gitWorktreeCommands.ts'),
 			'utf-8'
 		);
-		const labels = [...palette.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
-		const gitLabels = labels.filter((l) => /branch|pull|push|worktree|repositor|diff|log/i.test(l));
+		const en = workflowsShell as Record<string, string>;
+		// Every key inside a `label:` expression, including both arms of a ternary.
+		// The expression ends at the next property, which may sit under comments.
+		const labelKeys = [
+			...palette.matchAll(
+				/label:([\s\S]*?),\n\s*(?:\/\/[^\n]*\n\s*)*(?:subtext|shortcut|action|id):/g
+			),
+		].flatMap((m) => [...m[1].matchAll(/t\('([^']+)'/g)].map((k) => k[1]));
+		expect(labelKeys.length).toBeGreaterThan(0);
+		expect(labelKeys.filter((key) => en[key] === undefined)).toEqual([]);
+		const gitLabels = labelKeys
+			.map((key) => en[key])
+			.filter((l) => /branch|pull|push|worktree|repositor|diff|log/i.test(l));
 		expect(gitLabels.filter((l) => !l.startsWith('Git: '))).toEqual([]);
-		// Create Pull Request builds its label from a ternary, so the scan above
-		// cannot see it. Assert the branchless arm directly rather than leaving the
-		// one entry that started this whole change unguarded.
-		expect(palette).toContain("'Git: Create Pull Request'");
-		expect(palette).toContain('`Git: Create Pull Request (${gitActions.branch})`');
+		// Create Pull Request is the entry that started this whole change; pin both
+		// arms of its ternary by name so a rename of either key cannot slip by.
+		expect(labelKeys).toContain('workflows.shell.gitCreatePullRequest');
+		expect(labelKeys).toContain('workflows.shell.gitCreatePullRequestValue');
+		expect(en['workflows.shell.gitCreatePullRequest']).toBe('Git: Create Pull Request');
+		expect(en['workflows.shell.gitCreatePullRequestValue']).toBe('Git: Create Pull Request ({p0})');
 	});
 });

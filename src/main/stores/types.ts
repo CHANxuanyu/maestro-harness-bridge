@@ -8,6 +8,7 @@
 import type { SshRemoteConfig, Group } from '../../shared/types';
 import type { AgentCapabilitiesSnapshotMap } from '../../shared/agentCapabilities';
 import type { MultiWindowState } from '../../shared/window-types';
+import type { UiLanguagePreference } from '../../shared/i18n';
 
 // ============================================================================
 // Stored Session Type (minimal interface for main process storage)
@@ -46,6 +47,9 @@ export interface BootstrapSettings {
 // ============================================================================
 
 export interface MaestroSettings {
+	uiLanguage: UiLanguagePreference;
+	sidebarNavigationMode: 'conversations' | 'agents';
+	collapsedConversationProjects: string[];
 	activeThemeId: string;
 	shortcuts: Record<string, any>;
 	fontSize: number;

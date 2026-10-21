@@ -1,3 +1,4 @@
+import { useT, type TFunction } from '../i18n';
 /**
  * GroupChatHistoryPanel.tsx
  *
@@ -30,14 +31,16 @@ type LookbackPeriod = {
 	bucketCount: number;
 };
 
-const LOOKBACK_OPTIONS: LookbackPeriod[] = [
-	{ label: '24 hours', hours: 24, bucketCount: 24 },
-	{ label: '72 hours', hours: 72, bucketCount: 24 },
-	{ label: '1 week', hours: 168, bucketCount: 28 },
-	{ label: '2 weeks', hours: 336, bucketCount: 28 },
-	{ label: '1 month', hours: 720, bucketCount: 30 },
-	{ label: 'All time', hours: null, bucketCount: 24 },
-];
+function getLookbackOptions(t: TFunction): LookbackPeriod[] {
+	return [
+		{ label: t('workflows.shell.24Hours'), hours: 24, bucketCount: 24 },
+		{ label: t('workflows.shell.72Hours'), hours: 72, bucketCount: 24 },
+		{ label: t('workflows.shell.1Week'), hours: 168, bucketCount: 28 },
+		{ label: t('workflows.shell.2Weeks'), hours: 336, bucketCount: 28 },
+		{ label: t('workflows.shell.1Month'), hours: 720, bucketCount: 30 },
+		{ label: t('workflows.shell.allTime'), hours: null, bucketCount: 24 },
+	];
+}
 
 /** What a chat shows before, or without, a saved lookback of its own. */
 const DEFAULT_LOOKBACK_HOURS = 24;
@@ -63,6 +66,8 @@ function GroupChatActivityGraph({
 	onLookbackChange,
 	onBarClick,
 }: GroupChatActivityGraphProps) {
+	const t = useT();
+	const LOOKBACK_OPTIONS = useMemo(() => getLookbackOptions(t), [t]);
 	const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 	const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 	const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -75,7 +80,7 @@ function GroupChatActivityGraph({
 	// Get the current lookback config
 	const lookbackConfig = useMemo(
 		() => LOOKBACK_OPTIONS.find((o) => o.hours === lookbackHours) || LOOKBACK_OPTIONS[0],
-		[lookbackHours]
+		[lookbackHours, LOOKBACK_OPTIONS]
 	);
 
 	const endTime = Date.now();
@@ -205,7 +210,7 @@ function GroupChatActivityGraph({
 					label: new Date(startTime).toLocaleDateString([], { month: 'short', day: 'numeric' }),
 					index: 0,
 				},
-				{ label: 'Now', index: bucketCount - 1 },
+				{ label: t('workflows.shell.now'), index: bucketCount - 1 },
 			];
 		} else if (lookbackHours <= 24) {
 			return [
@@ -216,7 +221,7 @@ function GroupChatActivityGraph({
 			const days = Math.floor(lookbackHours / 24);
 			return [
 				{ label: `${days}d`, index: 0 },
-				{ label: 'Now', index: bucketCount - 1 },
+				{ label: t('workflows.shell.now'), index: bucketCount - 1 },
 			];
 		} else {
 			return [
@@ -224,7 +229,7 @@ function GroupChatActivityGraph({
 					label: new Date(startTime).toLocaleDateString([], { month: 'short', day: 'numeric' }),
 					index: 0,
 				},
-				{ label: 'Now', index: bucketCount - 1 },
+				{ label: t('workflows.shell.now'), index: bucketCount - 1 },
 			];
 		}
 	};
@@ -234,7 +239,7 @@ function GroupChatActivityGraph({
 	return (
 		<div
 			className="w-full flex flex-col relative"
-			title={`${lookbackConfig.label} (right-click to change)`}
+			title={t('workflows.shell.valueRightClickToChange', { p0: lookbackConfig.label })}
 			onContextMenu={handleContextMenu}
 		>
 			{/* Context menu for lookback options */}
@@ -259,7 +264,7 @@ function GroupChatActivityGraph({
 						className="px-3 py-1 text-2xs font-bold uppercase"
 						style={{ color: theme.colors.textDim }}
 					>
-						Lookback Period
+						{t('workflows.shell.lookbackPeriod')}
 					</div>
 					{LOOKBACK_OPTIONS.map((option) => (
 						<button
@@ -319,7 +324,7 @@ function GroupChatActivityGraph({
 								</div>
 							))}
 						{Object.keys(bucketData[hoveredIndex]).length === 0 && (
-							<div style={{ color: theme.colors.textDim }}>No activity</div>
+							<div style={{ color: theme.colors.textDim }}>{t('workflows.shell.noActivity')}</div>
 						)}
 					</div>
 				</div>
@@ -438,49 +443,51 @@ interface GroupChatHistoryPanelProps {
 // the AI history chips do. "You" shares the accent with the AI history's USER
 // chip. The theme has only four semantic hues, so Synthesis takes the fixed
 // Cue cyan as the fifth.
-const TYPE_FILTER_CONFIG: {
+function getTypeFilterConfig(t: TFunction): {
 	type: GroupChatHistoryEntryType;
 	label: string;
 	shortLabel: string;
 	icon: typeof Send;
 	color: (theme: Theme) => string;
-}[] = [
-	{ type: 'user', label: 'You', shortLabel: 'You', icon: User, color: (t) => t.colors.accent },
-	{
-		type: 'delegation',
-		label: 'Delegation',
-		shortLabel: 'Task',
-		icon: Send,
-		color: (t) => t.colors.warning,
-	},
-	{
-		type: 'response',
-		label: 'Response',
-		shortLabel: 'Reply',
-		icon: MessageSquare,
-		color: (t) => t.colors.success,
-	},
-	{
-		type: 'synthesis',
-		label: 'Synthesis',
-		shortLabel: 'Synth',
-		icon: Layers,
-		color: () => CUE_COLOR,
-	},
-	{
-		type: 'error',
-		label: 'Error',
-		shortLabel: 'Err',
-		icon: AlertTriangle,
-		color: (t) => t.colors.error,
-	},
-];
-
-// Lookup the same icon + label used by the filter pills, keyed by entry type,
-// so per-entry badges stay in sync with the filter pills automatically.
-const TYPE_CONFIG_BY_TYPE = Object.fromEntries(
-	TYPE_FILTER_CONFIG.map((config) => [config.type, config])
-) as Record<GroupChatHistoryEntryType, (typeof TYPE_FILTER_CONFIG)[number]>;
+}[] {
+	return [
+		{
+			type: 'user',
+			label: t('workflows.shell.you'),
+			shortLabel: t('workflows.shell.you'),
+			icon: User,
+			color: (t) => t.colors.accent,
+		},
+		{
+			type: 'delegation',
+			label: t('workflows.shell.delegation'),
+			shortLabel: t('workflows.shell.task'),
+			icon: Send,
+			color: (t) => t.colors.warning,
+		},
+		{
+			type: 'response',
+			label: t('workflows.shell.response'),
+			shortLabel: t('workflows.shell.reply'),
+			icon: MessageSquare,
+			color: (t) => t.colors.success,
+		},
+		{
+			type: 'synthesis',
+			label: t('workflows.shell.synthesis'),
+			shortLabel: t('workflows.shell.synth'),
+			icon: Layers,
+			color: () => CUE_COLOR,
+		},
+		{
+			type: 'error',
+			label: t('workflows.shell.error'),
+			shortLabel: t('workflows.shell.err'),
+			icon: AlertTriangle,
+			color: (t) => t.colors.error,
+		},
+	];
+}
 
 // All entry types for default filter state
 const ALL_ENTRY_TYPES = new Set<GroupChatHistoryEntryType>([
@@ -524,6 +531,14 @@ export function GroupChatHistoryPanel({
 	participantColors,
 	onJumpToMessage,
 }: GroupChatHistoryPanelProps): JSX.Element {
+	const t = useT();
+	const TYPE_FILTER_CONFIG = useMemo(() => getTypeFilterConfig(t), [t]);
+	// Lookup the same icon + label used by the filter pills, keyed by entry type,
+	// so per-entry badges stay in sync with the filter pills automatically.
+	const TYPE_CONFIG_BY_TYPE = Object.fromEntries(
+		TYPE_FILTER_CONFIG.map((config) => [config.type, config])
+	) as Record<GroupChatHistoryEntryType, (typeof TYPE_FILTER_CONFIG)[number]>;
+
 	const [lookbackHours, setLookbackHours] = useState<number | null>(DEFAULT_LOOKBACK_HOURS);
 	const [searchFilter, setSearchFilter] = useState('');
 	const [activeFilters, setActiveFilters] = useState<Set<GroupChatHistoryEntryType>>(() =>
@@ -740,7 +755,10 @@ export function GroupChatHistoryPanel({
 									border: `1px solid ${isActive ? colors.border : theme.colors.border}`,
 								}}
 								aria-label={label}
-								title={`${isActive ? 'Hide' : 'Show'} ${label} entries`}
+								title={t('workflows.shell.valueValueEntries', {
+									p0: isActive ? t('common.hide') : t('common.show'),
+									p1: label,
+								})}
 							>
 								{pillIconsFit && <Icon className="w-2.5 h-2.5" />}
 								{shortLabel}
@@ -769,7 +787,7 @@ export function GroupChatHistoryPanel({
 						ref={searchInputRef}
 						autoFocus
 						type="text"
-						placeholder="Filter group chat history..."
+						placeholder={t('workflows.shell.filterGroupChatHistory')}
 						value={searchFilter}
 						onChange={(e) => setSearchFilter(e.target.value)}
 						onKeyDown={(e) => {
@@ -784,7 +802,8 @@ export function GroupChatHistoryPanel({
 					/>
 					{searchFilter && (
 						<div className="text-2xs mt-1 text-right" style={{ color: theme.colors.textDim }}>
-							{filteredEntries.length} result{filteredEntries.length !== 1 ? 's' : ''}
+							{filteredEntries.length} {t('workflows.shell.result')}
+							{filteredEntries.length !== 1 ? t('workflows.shell.pluralSuffix') : ''}
 						</div>
 					)}
 				</div>
@@ -794,7 +813,7 @@ export function GroupChatHistoryPanel({
 			<div
 				ref={listRef}
 				role="listbox"
-				aria-label="Group chat history"
+				aria-label={t('workflows.shell.groupChatHistory')}
 				aria-activedescendant={
 					filteredEntries[selectedIndex]
 						? `gc-history-${filteredEntries[selectedIndex].id}`
@@ -806,19 +825,21 @@ export function GroupChatHistoryPanel({
 				className="flex-1 overflow-y-auto space-y-2 scrollbar-thin scroll-p-2"
 			>
 				{isLoading ? (
-					<div className="text-center py-8 text-xs opacity-50">Loading history...</div>
+					<div className="text-center py-8 text-xs opacity-50">
+						{t('workflows.shell.loadingHistory')}
+					</div>
 				) : filteredEntries.length === 0 ? (
 					<div className="text-center py-8 text-xs opacity-50">
 						{entries.length === 0 ? (
 							<>
-								No task history yet.
+								{t('workflows.shell.noTaskHistoryYet')}
 								<br />
-								Entries will appear when agents complete tasks.
+								{t('workflows.shell.entriesWillAppearWhenAgentsCompleteTasks')}
 							</>
 						) : searchFilter ? (
-							`No entries match "${searchFilter}"`
+							t('workflows.shell.noEntriesMatchValue', { p0: searchFilter })
 						) : (
-							'No entries match the selected filters.'
+							t('workflows.shell.noEntriesMatchTheSelectedFilters')
 						)}
 					</div>
 				) : (
@@ -873,7 +894,7 @@ export function GroupChatHistoryPanel({
 											<span
 												className="justify-self-center flex items-center gap-1 text-2xs font-bold uppercase whitespace-nowrap"
 												style={{ color: theme.colors.accent }}
-												title={`${label} entry`}
+												title={t('workflows.shell.valueEntry', { p0: label })}
 											>
 												<TypeIcon className="w-2.5 h-2.5 shrink-0" />
 												{shortLabel}

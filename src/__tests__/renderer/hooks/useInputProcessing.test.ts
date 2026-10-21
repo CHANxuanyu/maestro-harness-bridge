@@ -49,6 +49,7 @@ import {
 	takeNextRunnableQueueItem,
 } from '../../../renderer/utils/executionQueue';
 import { useAutoRunSteeringStore } from '../../../renderer/stores/autoRunSteeringStore';
+import { TRANSCRIPT_SCROLL_TO_BOTTOM_EVENT } from '../../../renderer/services/transcriptScroll';
 import type {
 	Session,
 	AITab,
@@ -1884,6 +1885,150 @@ describe('useInputProcessing', () => {
 
 			// Bypass allowed: the write spawns immediately, nothing queued.
 			expect(window.maestro.process.spawn).toHaveBeenCalled();
+		});
+	});
+
+	describe('revealing the turn the user just sent', () => {
+		const requests: Array<{ sessionId: string; tabId: string; loggedAtRequest: boolean }> = [];
+		const onRequest = (event: Event) => {
+			const { sessionId, tabId } = (event as CustomEvent<{ sessionId: string; tabId: string }>)
+				.detail;
+			const tab = useSessionStore
+				.getState()
+				.sessions.find((s) => s.id === sessionId)
+				?.aiTabs.find((t) => t.id === tabId);
+			requests.push({
+				sessionId,
+				tabId,
+				loggedAtRequest: !!tab?.logs.some((l) => l.source === 'user' && l.text === 'from history'),
+			});
+		};
+		beforeEach(() => {
+			requests.length = 0;
+			window.addEventListener(TRANSCRIPT_SCROLL_TO_BOTTOM_EVENT, onRequest);
+		});
+		afterEach(() => {
+			window.removeEventListener(TRANSCRIPT_SCROLL_TO_BOTTOM_EVENT, onRequest);
+		});
+
+		it('asks its own tab to show the message once it is in the transcript', async () => {
+			const session = createMockSession({
+				aiTabs: [createMockTab({ id: 'tab-1', state: 'idle' })],
+				activeTabId: 'tab-1',
+			});
+			const deps = createDeps({
+				activeSession: session,
+				sessionsRef: { current: [session] },
+				inputValue: 'from history',
+			});
+			const { result } = renderHook(() => useInputProcessing(deps));
+
+			await act(async () => {
+				await result.current.processInput();
+			});
+
+			expect(window.maestro.process.spawn).toHaveBeenCalled();
+			expect(requests).toEqual([{ sessionId: session.id, tabId: 'tab-1', loggedAtRequest: true }]);
+		});
+
+		it('does not move the view for a message that only goes into the queue', async () => {
+			const busySession = createMockSession({
+				state: 'busy',
+				aiTabs: [createMockTab({ id: 'tab-1', state: 'busy' })],
+				activeTabId: 'tab-1',
+			});
+			const deps = createDeps({
+				activeSession: busySession,
+				sessionsRef: { current: [busySession] },
+				inputValue: 'from history',
+			});
+			const { result } = renderHook(() => useInputProcessing(deps));
+
+			await act(async () => {
+				await result.current.processInput();
+			});
+
+			expect(window.maestro.process.spawn).not.toHaveBeenCalled();
+			expect(requests).toEqual([]);
+		});
+
+		const idleSession = () =>
+			createMockSession({
+				aiTabs: [
+					createMockTab({ id: 'tab-1', state: 'idle' }),
+					createMockTab({ id: 'tab-2', state: 'idle' }),
+				],
+				activeTabId: 'tab-1',
+			});
+
+		it('does not move the view for a deferred re-send into the same visible tab', async () => {
+			// Session recovery: grooming finishes some time after the click, then
+			// re-sends the failed prompt pinned to its tab - the tab the user is
+			// looking at, possibly reading elsewhere in it by now.
+			const session = idleSession();
+			const deps = createDeps({ activeSession: session, sessionsRef: { current: [session] } });
+			const { result } = renderHook(() => useInputProcessing(deps));
+
+			await act(async () => {
+				await result.current.processInput('from history', {
+					sessionId: session.id,
+					tabId: 'tab-1',
+				});
+			});
+
+			expect(window.maestro.process.spawn).toHaveBeenCalled();
+			expect(requests).toEqual([]);
+		});
+
+		it('reveals an override send that is explicitly the user pressing Send', async () => {
+			// The prompt composer's Send, a follow-up chip, the replay button.
+			const session = idleSession();
+			const deps = createDeps({ activeSession: session, sessionsRef: { current: [session] } });
+			const { result } = renderHook(() => useInputProcessing(deps));
+
+			await act(async () => {
+				await result.current.processInput('from history', { revealTurn: true });
+			});
+
+			expect(requests).toEqual([{ sessionId: session.id, tabId: 'tab-1', loggedAtRequest: true }]);
+		});
+
+		it('names only the submitted tab when the user switches tabs during the probe', async () => {
+			let releaseProbe: (value: unknown[]) => void = () => {};
+			(
+				window.maestro.process.getActiveProcesses as ReturnType<typeof vi.fn>
+			).mockImplementationOnce(() => new Promise((resolve) => (releaseProbe = resolve)));
+			const session = idleSession();
+			const deps = createDeps({
+				activeSession: session,
+				sessionsRef: { current: [session] },
+				inputValue: 'from history',
+			});
+			const { result } = renderHook(() => useInputProcessing(deps));
+
+			let sending: Promise<void> = Promise.resolve();
+			act(() => {
+				sending = result.current.processInput();
+			});
+			await vi.waitFor(() => expect(window.maestro.process.getActiveProcesses).toHaveBeenCalled());
+			// While the ownership probe is out, the user moves to tab-2.
+			act(() => {
+				useSessionStore.setState({
+					sessions: useSessionStore
+						.getState()
+						.sessions.map((s) => (s.id === session.id ? { ...s, activeTabId: 'tab-2' } : s)),
+				});
+			});
+			await act(async () => {
+				releaseProbe([]);
+				await sending;
+			});
+
+			// The send still lands in tab-1, and the request names tab-1 only: the
+			// transcript now on screen (tab-2) ignores it, and it is a one-shot event,
+			// so nothing is left to replay when the user returns to tab-1.
+			expect(requests).toEqual([{ sessionId: session.id, tabId: 'tab-1', loggedAtRequest: true }]);
+			expect(requests.some((r) => r.tabId === 'tab-2')).toBe(false);
 		});
 	});
 

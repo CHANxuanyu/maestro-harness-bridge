@@ -6,8 +6,30 @@
  */
 
 import type { SettingMetadata } from './settingsMetadata';
+import { DEFAULT_UI_LANGUAGE } from './i18n';
 
 export const APPEARANCE_SETTINGS_METADATA: Record<string, SettingMetadata> = {
+	sidebarNavigationMode: {
+		description:
+			"Left sidebar navigation: 'conversations' shows conversations directly under projects; 'agents' opens agent management.",
+		type: 'string',
+		default: 'conversations',
+		category: 'appearance',
+	},
+	collapsedConversationProjects: {
+		description:
+			'Collapsed project keys in conversation sidebar navigation. Manual group collapse is stored with the group.',
+		type: 'array',
+		default: [],
+		category: 'appearance',
+	},
+	uiLanguage: {
+		description:
+			"Application UI language: 'system' follows the device language, 'en' is English, and 'zh-CN' is Simplified Chinese. Does not change agent prompts or user content.",
+		type: 'string',
+		default: DEFAULT_UI_LANGUAGE,
+		category: 'appearance',
+	},
 	activeThemeId: {
 		description:
 			'Color theme for the UI. Built-in themes include dracula, monokai, solarized-dark, nord, and others.',

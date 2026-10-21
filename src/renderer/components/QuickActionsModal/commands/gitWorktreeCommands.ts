@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
 import type { NotifyToastInput } from '../../../stores/notificationStore';
 import type { GitAgentActions } from '../../../hooks/git/useGitAgentActions';
@@ -52,6 +53,7 @@ export function buildGitWorktreeCommands({
 	openUrl,
 	logger,
 }: BuildGitWorktreeCommandsArgs): QuickAction[] {
+	const t = getT();
 	if (!activeSession) return [];
 	const commands: QuickAction[] = [];
 
@@ -65,7 +67,7 @@ export function buildGitWorktreeCommands({
 		// Mirrors the git menu order so the palette reads the same as the menus.
 		commands.push({
 			id: 'gitLog',
-			label: 'Git: View Log',
+			label: t('workflows.shell.gitViewLog'),
 			shortcut: shortcuts.viewGitLog,
 			action: () => {
 				gitActions.viewLog();
@@ -75,7 +77,7 @@ export function buildGitWorktreeCommands({
 
 		commands.push({
 			id: 'gitDiff',
-			label: 'Git: View Diff',
+			label: t('workflows.shell.gitViewDiff'),
 			// Says up front whether the diff has anything in it, the same thing the
 			// badge on the menu rows says.
 			subtext: formatGitChangeSummary(gitActions.changes),
@@ -90,15 +92,18 @@ export function buildGitWorktreeCommands({
 
 		commands.push({
 			id: 'gitPull',
-			label: 'Git: Pull',
+			label: t('workflows.shell.gitPull'),
 			// A run already in flight (its console may have been dismissed with Run
 			// in Background) is worth more than the behind count, which is stale
 			// until that run finishes.
 			subtext: gitActions.pullRunning
-				? 'Running - open to watch it'
+				? t('workflows.shell.runningOpenToWatchIt')
 				: gitActions.behind > 0
-					? `${gitActions.behind} commit${gitActions.behind === 1 ? '' : 's'} behind`
-					: 'Pull from origin',
+					? t('workflows.shell.valueCommitvalueBehind', {
+							p0: gitActions.behind,
+							p1: gitActions.behind === 1 ? '' : t('workflows.shell.pluralSuffix'),
+						})
+					: t('workflows.shell.pullFromOrigin'),
 			shortcut: shortcuts.gitPull,
 			action: () => {
 				gitActions.pull();
@@ -108,12 +113,15 @@ export function buildGitWorktreeCommands({
 
 		commands.push({
 			id: 'gitPush',
-			label: 'Git: Push',
+			label: t('workflows.shell.gitPush'),
 			subtext: gitActions.pushRunning
-				? 'Running - open to watch it'
+				? t('workflows.shell.runningOpenToWatchIt')
 				: gitActions.ahead > 0
-					? `${gitActions.ahead} commit${gitActions.ahead === 1 ? '' : 's'} ahead`
-					: 'Push to origin',
+					? t('workflows.shell.valueCommitvalueAhead', {
+							p0: gitActions.ahead,
+							p1: gitActions.ahead === 1 ? '' : t('workflows.shell.pluralSuffix'),
+						})
+					: t('workflows.shell.pushToOrigin'),
 			shortcut: shortcuts.gitPush,
 			action: () => {
 				gitActions.push();
@@ -123,8 +131,10 @@ export function buildGitWorktreeCommands({
 
 		commands.push({
 			id: 'changeBranch',
-			label: 'Git: Change Branch',
-			subtext: gitActions.branch ? `Currently on ${gitActions.branch}` : 'Switch to another branch',
+			label: t('workflows.shell.gitChangeBranch'),
+			subtext: gitActions.branch
+				? t('workflows.shell.currentlyOnValue', { p0: gitActions.branch })
+				: t('workflows.shell.switchToAnotherBranch'),
 			shortcut: shortcuts.gitChangeBranch,
 			action: () => {
 				gitActions.switchBranch();
@@ -134,7 +144,7 @@ export function buildGitWorktreeCommands({
 
 		commands.push({
 			id: 'openRepo',
-			label: 'Git: Open Repository in Browser',
+			label: t('workflows.shell.gitOpenRepositoryInBrowser'),
 			action: async () => {
 				try {
 					const browserUrl = await gitService.getRemoteBrowserUrl(resolveGitCwd(activeSession));
@@ -143,17 +153,19 @@ export function buildGitWorktreeCommands({
 					} else {
 						notifyToast({
 							type: 'error',
-							title: 'No Remote URL',
-							message: 'Could not find a remote URL for this repository',
+							title: t('workflows.shell.noRemoteUrl'),
+							message: t('workflows.shell.extraCouldNotFindARemoteUrlForThis'),
 						});
 					}
 				} catch (error) {
 					logger.error('Failed to open repository in browser:', undefined, error);
 					notifyToast({
 						type: 'error',
-						title: 'Error',
+						title: t('workflows.shell.error'),
 						message:
-							error instanceof Error ? error.message : 'Failed to open repository in browser',
+							error instanceof Error
+								? error.message
+								: t('workflows.shell.extraFailedToOpenRepositoryInBrowser'),
 					});
 					// Network/git failures are recoverable - capture for tracking but keep modal close path.
 					captureException(error);
@@ -166,10 +178,14 @@ export function buildGitWorktreeCommands({
 	if (activeSession.isGitRepo && onQuickCreateWorktree) {
 		commands.push({
 			id: 'createWorktree',
-			label: 'Git: Create Worktree',
+			label: t('workflows.shell.gitCreateWorktree'),
 			subtext: activeSession.parentSessionId
-				? `New worktree under ${sessions.find((session) => session.id === activeSession.parentSessionId)?.name || 'parent'}`
-				: 'Create a new git worktree branch',
+				? t('workflows.shell.newWorktreeUnderValue', {
+						p0:
+							sessions.find((session) => session.id === activeSession.parentSessionId)?.name ||
+							'parent',
+					})
+				: t('workflows.shell.createANewGitWorktreeBranch'),
 			action: () => {
 				const targetSession = activeSession.parentSessionId
 					? sessions.find((session) => session.id === activeSession.parentSessionId) ||
@@ -189,13 +205,13 @@ export function buildGitWorktreeCommands({
 		commands.push({
 			id: 'createPR',
 			label: gitActions.branch
-				? `Git: Create Pull Request (${gitActions.branch})`
-				: 'Git: Create Pull Request',
+				? t('workflows.shell.gitCreatePullRequestValue', { p0: gitActions.branch })
+				: t('workflows.shell.gitCreatePullRequest'),
 			subtext: gitActions.prRunning
-				? 'Creating - open to see how it went'
+				? t('workflows.shell.creatingOpenToSeeHowItWent')
 				: isWorktreeChild
-					? 'Open PR from this worktree branch'
-					: 'Open PR from the current branch',
+					? t('workflows.shell.openPrFromThisWorktreeBranch')
+					: t('workflows.shell.openPrFromTheCurrentBranch'),
 			shortcut: shortcuts.gitCreatePR,
 			action: () => {
 				if (isWorktreeChild && onOpenCreatePR) {
@@ -211,8 +227,8 @@ export function buildGitWorktreeCommands({
 	if (gitActions.canConfigureWorktrees) {
 		commands.push({
 			id: 'configureWorktrees',
-			label: 'Git: Configure Worktrees',
-			subtext: 'Set the worktree directory and watch options',
+			label: t('workflows.shell.gitConfigureWorktrees'),
+			subtext: t('workflows.shell.setTheWorktreeDirectoryAndWatchOptions'),
 			action: () => {
 				gitActions.configureWorktrees();
 				setQuickActionOpen(false);
@@ -223,8 +239,8 @@ export function buildGitWorktreeCommands({
 	if (onRefreshGitFileState) {
 		commands.push({
 			id: 'refreshGitFileState',
-			label: 'Refresh Files, Git, History',
-			subtext: 'Reload file tree, git status, history, and the previewed file',
+			label: t('workflows.shell.refreshFilesGitHistory'),
+			subtext: t('workflows.shell.reloadFileTreeGitStatusHistoryAndThe'),
 			shortcut: shortcuts.refreshGitFileState,
 			action: async () => {
 				await onRefreshGitFileState();

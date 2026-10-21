@@ -11,6 +11,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { GitStatusWidget } from '../../../renderer/components/GitStatusWidget';
 import type { Theme } from '../../../renderer/types';
 import type { GitStatusData, GitFileChange } from '../../../renderer/contexts/GitStatusContext';
@@ -115,6 +116,27 @@ describe('GitStatusWidget', () => {
 
 	afterEach(() => {
 		vi.clearAllTimers();
+	});
+
+	it('translates the Git summary and tooltip without changing the diff target', () => {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		mockGetStatus.mockReturnValue(
+			createGitStatusData({
+				totalAdditions: 0,
+				totalDeletions: 0,
+				modifiedCount: 0,
+				fileChanges: [{ path: 'README.md', additions: 0, deletions: 0 }],
+			})
+		);
+		render(<GitStatusWidget {...defaultProps} />);
+		const button = screen.getByTitle('1 file changed');
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		expect(button).toHaveAttribute('title', '1 个文件有变更');
+		fireEvent.mouseEnter(button.parentElement!);
+		expect(screen.getByText('README.md')).toBeVisible();
+		fireEvent.click(screen.getByText('查看完整差异'));
+		expect(mockOnViewDiff).toHaveBeenCalledTimes(1);
+		act(() => useSettingsStore.setState({ uiLanguage: 'system' }));
 	});
 
 	describe('Rendering Conditions', () => {

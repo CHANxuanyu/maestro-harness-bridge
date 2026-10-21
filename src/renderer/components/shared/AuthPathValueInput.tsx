@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { type KnownAuthDirs } from '../../../shared/authPaths';
@@ -26,6 +27,7 @@ export function AuthPathValueInput({
 	containerClassName,
 	style,
 }: AuthPathValueInputProps) {
+	const t = useT();
 	const knownPaths =
 		envVarKey === 'CLAUDE_CONFIG_DIR'
 			? knownAuthDirs.claudeConfigDirs
@@ -62,7 +64,7 @@ export function AuthPathValueInput({
 				onChange={(event) => onChange(event.target.value)}
 				onBlur={onBlur}
 				onClick={(event) => event.stopPropagation()}
-				placeholder="value"
+				placeholder={t('settings.finish.env.valuePlaceholder')}
 				className={className}
 				style={style}
 			/>
@@ -74,7 +76,7 @@ export function AuthPathValueInput({
 	return (
 		<div className={containerClassName}>
 			<select
-				aria-label={`Known ${envVarKey} paths`}
+				aria-label={t('settings.finish.env.knownPaths', { key: envVarKey })}
 				value={showCustomInput ? CUSTOM_AUTH_PATH_OPTION : value}
 				onChange={(event) => {
 					if (event.target.value === CUSTOM_AUTH_PATH_OPTION) {
@@ -103,7 +105,7 @@ export function AuthPathValueInput({
 						</option>
 					);
 				})}
-				<option value={CUSTOM_AUTH_PATH_OPTION}>Custom…</option>
+				<option value={CUSTOM_AUTH_PATH_OPTION}>{t('settings.finish.env.customPath')}</option>
 			</select>
 			{showCustomInput && (
 				<input
@@ -112,7 +114,7 @@ export function AuthPathValueInput({
 					onChange={(event) => onChange(event.target.value)}
 					onBlur={onBlur}
 					onClick={(event) => event.stopPropagation()}
-					placeholder="value"
+					placeholder={t('settings.finish.env.valuePlaceholder')}
 					className={`${className} w-full mt-2`}
 					style={style}
 				/>

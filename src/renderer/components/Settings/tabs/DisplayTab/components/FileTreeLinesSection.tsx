@@ -1,5 +1,6 @@
 import { ListTree } from 'lucide-react';
 import type { Theme } from '../../../../../types';
+import { useT } from '../../../../../i18n';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { SectionCard } from './SectionCard';
 import { ToggleSettingRow } from './ToggleSettingRow';
@@ -16,17 +17,20 @@ export function FileTreeLinesSection({
 	fileTreeBranchConnectors,
 	setFileTreeBranchConnectors,
 }: FileTreeLinesSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="display-file-tree-connectors">
-			<SettingsSectionHeading icon={ListTree}>Files Pane Tree Lines</SettingsSectionHeading>
+			<SettingsSectionHeading icon={ListTree}>
+				{t('settings.display.treeLines.heading')}
+			</SettingsSectionHeading>
 			<SectionCard theme={theme}>
 				<ToggleSettingRow
 					theme={theme}
-					title="Show branch connectors"
-					description="Hang each row off its folder with an elbow connector, and stop a folder's guide line at its last item. Off by default, which draws plain full-height indent guides."
+					title={t('settings.display.treeLines.title')}
+					description={t('settings.display.treeLines.description')}
 					checked={fileTreeBranchConnectors}
 					onChange={setFileTreeBranchConnectors}
-					ariaLabel="Show file tree branch connectors"
+					ariaLabel={t('settings.display.treeLines.aria')}
 				/>
 			</SectionCard>
 		</div>

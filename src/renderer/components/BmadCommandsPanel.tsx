@@ -1,3 +1,4 @@
+import { useT, useAppLocale } from '../i18n';
 import { useState, useRef, useEffect } from 'react';
 import {
 	Edit2,
@@ -29,6 +30,8 @@ interface EditingCommand {
 }
 
 export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadCommandsPanelProps) {
+	const tExtra = useT();
+	const locale = useAppLocale();
 	const [commands, setCommands] = useState<BmadCommand[]>([]);
 	const [metadata, setMetadata] = useState<BmadMetadata | null>(null);
 	const [editingCommand, setEditingCommand] = useState<EditingCommand | null>(null);
@@ -143,7 +146,7 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 
 	const formatDate = (isoDate: string) => {
 		try {
-			return new Date(isoDate).toLocaleDateString(undefined, {
+			return new Date(isoDate).toLocaleDateString(locale, {
 				year: 'numeric',
 				month: 'short',
 				day: 'numeric',
@@ -158,9 +161,11 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 			checked={enabled}
 			onChange={onEnabledChange}
 			theme={theme}
-			ariaLabel="Show BMAD commands in slash command autocomplete"
+			ariaLabel={tExtra('settings.extra.controls.showBmadCommandsInSlashCommandAutocomplete')}
 			title={
-				enabled ? 'Hide from slash command autocomplete' : 'Show in slash command autocomplete'
+				enabled
+					? tExtra('settings.extra.bmadCommandsPanel.hideFromSlashCommandAutocomplete')
+					: tExtra('settings.extra.bmadCommandsPanel.showInSlashCommandAutocomplete')
 			}
 		/>
 	);
@@ -170,11 +175,13 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 			<div className="space-y-4">
 				<div>
 					<div className="flex items-start justify-between gap-3 mb-1">
-						<label className="text-xs font-bold opacity-70 uppercase">BMAD Commands</label>
+						<label className="text-xs font-bold opacity-70 uppercase">
+							{tExtra('settings.extra.bmadCommandsPanel.bmadCommands')}
+						</label>
 						{enabledToggle}
 					</div>
 					<p className="text-xs opacity-50" style={{ color: theme.colors.textDim }}>
-						Loading BMAD commands...
+						{tExtra('settings.extra.bmadCommandsPanel.loadingBmadCommands')}
 					</p>
 				</div>
 			</div>
@@ -185,11 +192,13 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 		<div className="space-y-4">
 			<div>
 				<div className="flex items-start justify-between gap-3 mb-1">
-					<label className="text-xs font-bold opacity-70 uppercase">BMAD Commands</label>
+					<label className="text-xs font-bold opacity-70 uppercase">
+						{tExtra('settings.extra.bmadCommandsPanel.bmadCommands')}
+					</label>
 					{enabledToggle}
 				</div>
 				<p className="text-xs opacity-50" style={{ color: theme.colors.textDim }}>
-					Bundled commands from{' '}
+					{tExtra('settings.extra.bmadCommandsPanel.bundledCommandsFrom')}{' '}
 					<button
 						onClick={() => openUrl('https://github.com/bmad-code-org/BMAD-METHOD')}
 						className="underline hover:opacity-80 inline-flex items-center gap-1"
@@ -204,10 +213,10 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 						bmad-code-org/BMAD-METHOD
 						<ExternalLink className="w-2.5 h-2.5" />
 					</button>{' '}
-					for methodology-guided planning, delivery, and review workflows.{' '}
+					{tExtra('settings.extra.bmadCommandsPanel.forMethodologyGuidedPlanningDeliveryAndReview')}{' '}
 					{!enabled && (
 						<span style={{ color: theme.colors.warning }}>
-							Hidden from slash command autocomplete.
+							{tExtra('settings.extra.bmadCommandsPanel.hiddenFromSlashCommandAutocomplete')}
 						</span>
 					)}
 				</p>
@@ -231,12 +240,12 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 				>
 					<div className="flex items-center justify-between">
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							<span>Version: </span>
+							<span>{tExtra('settings.extra.bmadCommandsPanel.version')} </span>
 							<span className="font-mono" style={{ color: theme.colors.textMain }}>
 								{metadata.sourceVersion}
 							</span>
 							<span className="mx-2">•</span>
-							<span>Updated: </span>
+							<span>{tExtra('settings.extra.bmadCommandsPanel.updated')} </span>
 							<span style={{ color: theme.colors.textMain }}>
 								{formatDate(metadata.lastRefreshed)}
 							</span>
@@ -248,17 +257,14 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 								color: theme.colors.textDim,
 								border: `1px solid ${theme.colors.border}`,
 							}}
-							title="BMAD updates are intentionally disabled"
+							title={tExtra('settings.extra.bmadCommandsPanel.bmadUpdatesAreIntentionallyDisabled')}
 						>
 							<Lock className="w-3 h-3" />
-							Frozen
+							{tExtra('settings.extra.bmadCommandsPanel.frozen')}
 						</span>
 					</div>
 					<p className="text-xs leading-relaxed" style={{ color: theme.colors.textDim }}>
-						Pinned to v6.2.0, the last BMAD release whose workflows run as standalone slash
-						commands. Newer releases (currently 6.8.0) moved to a skills-based architecture that
-						requires a local install and a resolver script, so they are not compatible with Maestro.
-						Updates are disabled.
+						{tExtra('settings.extra.bmadCommandsPanel.pinnedToV620TheLast')}
 					</p>
 				</div>
 			)}
@@ -292,7 +298,7 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 												}}
 											>
 												<X className="w-3 h-3" />
-												Cancel
+												{tExtra('settings.extra.bmadCommandsPanel.cancel')}
 											</button>
 											<button
 												onClick={handleSaveEdit}
@@ -303,7 +309,7 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 												}}
 											>
 												<Save className="w-3 h-3" />
-												Save
+												{tExtra('settings.extra.bmadCommandsPanel.save')}
 											</button>
 										</div>
 									</div>
@@ -377,7 +383,7 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 														color: theme.colors.warning,
 													}}
 												>
-													Modified
+													{tExtra('settings.extra.bmadCommandsPanel.modified')}
 												</span>
 											)}
 										</div>
@@ -399,10 +405,10 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 														onClick={() => handleReset(cmd.id)}
 														className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all hover:bg-white/10"
 														style={{ color: theme.colors.textDim }}
-														title="Reset to bundled default"
+														title={tExtra('settings.extra.bmadCommandsPanel.resetToBundledDefault')}
 													>
 														<RotateCcw className="w-3 h-3" />
-														Reset
+														{tExtra('settings.extra.bmadCommandsPanel.reset')}
 													</button>
 												)}
 												<button
@@ -411,7 +417,7 @@ export function BmadCommandsPanel({ theme, enabled, onEnabledChange }: BmadComma
 													style={{ color: theme.colors.textDim }}
 												>
 													<Edit2 className="w-3 h-3" />
-													Edit
+													{tExtra('settings.extra.bmadCommandsPanel.edit')}
 												</button>
 											</div>
 											<pre

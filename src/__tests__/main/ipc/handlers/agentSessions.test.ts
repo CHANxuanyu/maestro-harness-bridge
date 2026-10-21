@@ -12,6 +12,7 @@ import {
 	isExpectedSessionReadError,
 } from '../../../../main/ipc/handlers/agentSessions';
 import * as agentSessionStorage from '../../../../main/agents';
+import { getSshRemoteById } from '../../../../main/stores';
 import {
 	GLOBAL_STATS_CACHE_MIN_UPGRADABLE_VERSION,
 	GLOBAL_STATS_CACHE_VERSION,
@@ -296,6 +297,8 @@ describe('agentSessions IPC handlers', () => {
 				mockStorage as unknown as agentSessionStorage.AgentSessionStorage
 			);
 
+			const remote = { id: 'ssh-remote-1', enabled: true } as any;
+			vi.mocked(getSshRemoteById).mockReturnValueOnce(remote);
 			const handler = handlers.get('agentSessions:read');
 			const result = await handler!(
 				{} as any,
@@ -306,12 +309,12 @@ describe('agentSessions IPC handlers', () => {
 				'ssh-remote-1'
 			);
 
-			// Since no settings store is configured, sshConfig should be undefined
+			// An enabled remote is passed through; unavailable remotes must not read local history.
 			expect(mockStorage.readSessionMessages).toHaveBeenCalledWith(
 				'/test',
 				'session-1',
 				{ offset: 0, limit: 20 },
-				undefined
+				remote
 			);
 			expect(result).toEqual(mockResult);
 		});

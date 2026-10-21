@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import { useShallow } from 'zustand/react/shallow';
 import { useState, useEffect } from 'react';
 import {
@@ -14,9 +15,9 @@ import {
 import { Spinner } from './ui/Spinner';
 import type { Theme } from '../types';
 import type { ToastWidth } from '../../shared/toastWidth';
-import { TOAST_WIDTHS, TOAST_WIDTH_LABELS } from '../../shared/toastWidth';
+import { TOAST_WIDTHS } from '../../shared/toastWidth';
 import type { ToastPosition } from '../../shared/toastPosition';
-import { TOAST_POSITIONS, TOAST_POSITION_LABELS } from '../../shared/toastPosition';
+import { TOAST_POSITIONS } from '../../shared/toastPosition';
 import { SettingCheckbox } from './SettingCheckbox';
 import { ToggleButtonGroup } from './ToggleButtonGroup';
 import { SettingsSectionHeading } from './Settings/SettingsSectionHeading';
@@ -70,6 +71,7 @@ export function NotificationsPanel({
 	theme,
 	onConfigureNotificationShortcut,
 }: NotificationsPanelProps) {
+	const tExtra = useT();
 	const settings = useSettingsStore(
 		useShallow((s) => ({
 			notificationCenterLarge: s.notificationCenterLarge,
@@ -151,59 +153,70 @@ export function NotificationsPanel({
 			<div data-setting-id="notifications-center">
 				<SettingsSectionHeading
 					icon={Bell}
-					description="Optional inbox enhancements. All are off by default."
+					description={tExtra(
+						'settings.extra.notificationsPanel.optionalInboxEnhancementsAllAreOffBy'
+					)}
 				>
-					Notification center
+					{tExtra('settings.extra.notificationsPanel.notificationCenter')}
 				</SettingsSectionHeading>
 				<SectionCard theme={theme}>
 					<ToggleSettingRow
 						theme={theme}
-						title="Use a larger notification center"
-						description="Use a wider, taller inbox while keeping it within the window."
+						title={tExtra('settings.extra.notificationsPanel.useALargerNotificationCenter')}
+						description={tExtra(
+							'settings.extra.notificationsPanel.useAWiderTallerInboxWhileKeeping'
+						)}
 						checked={settings.notificationCenterLarge}
 						onChange={settings.setNotificationCenterLarge}
-						ariaLabel="Use a larger notification center"
+						ariaLabel={tExtra('settings.extra.controls.useALargerNotificationCenter')}
 						clickableRow
 					/>
 					<ToggleSettingRow
 						theme={theme}
-						title="Expand notification details"
-						description="Read full source names, titles, and messages inside the inbox."
+						title={tExtra('settings.extra.notificationsPanel.expandNotificationDetails')}
+						description={tExtra(
+							'settings.extra.notificationsPanel.readFullSourceNamesTitlesAndMessages'
+						)}
 						checked={settings.notificationCenterDetails}
 						onChange={settings.setNotificationCenterDetails}
-						ariaLabel="Expand notification details"
+						ariaLabel={tExtra('settings.extra.controls.expandNotificationDetails')}
 						clickableRow
 					/>
 					<ToggleSettingRow
 						theme={theme}
-						title="Keyboard navigation in the notification center"
-						description="Focus the inbox when it opens and navigate entries with arrow keys."
+						title={tExtra(
+							'settings.extra.notificationsPanel.keyboardNavigationInTheNotificationCenter'
+						)}
+						description={tExtra('settings.extra.notificationsPanel.focusTheInboxWhenItOpensAnd')}
 						checked={settings.notificationCenterKeyboardNavigation}
 						onChange={settings.setNotificationCenterKeyboardNavigation}
-						ariaLabel="Keyboard navigation in the notification center"
+						ariaLabel={tExtra('settings.extra.controls.keyboardNavigationInTheNotificationCenter')}
 						clickableRow
 					/>
 					<ToggleSettingRow
 						theme={theme}
-						title="Record each queued reply"
-						description="Keep every completed queued reply in notification history. By default, only the final reply is recorded."
+						title={tExtra('settings.extra.notificationsPanel.recordEachQueuedReply')}
+						description={tExtra(
+							'settings.extra.notificationsPanel.keepEveryCompletedQueuedReplyInNotification'
+						)}
 						checked={settings.notificationHistoryQueuedReplies}
 						onChange={settings.setNotificationHistoryQueuedReplies}
-						ariaLabel="Record each queued reply"
+						ariaLabel={tExtra('settings.extra.controls.recordEachQueuedReply')}
 						clickableRow
 					/>
 					<ToggleSettingRow
 						theme={theme}
-						title="Record each Auto Run task"
-						description="Keep each completed Auto Run task in notification history. By default, run outcomes, warnings, and errors are recorded."
+						title={tExtra('settings.extra.notificationsPanel.recordEachAutoRunTask')}
+						description={tExtra('settings.extra.notificationsPanel.keepEachCompletedAutoRunTaskIn')}
 						checked={settings.notificationHistoryAutoRunTasks}
 						onChange={settings.setNotificationHistoryAutoRunTasks}
-						ariaLabel="Record each Auto Run task"
+						ariaLabel={tExtra('settings.extra.controls.recordEachAutoRunTask')}
 						clickableRow
 					/>
 					<p className="text-xs opacity-70">
-						Configure Open Notification Center in Shortcuts. It starts unbound; your existing
-						binding is preserved.
+						{tExtra(
+							'settings.extra.notificationsPanel.configureOpenNotificationCenterInShortcutsIt'
+						)}
 					</p>
 					{onConfigureNotificationShortcut && (
 						<button
@@ -212,7 +225,7 @@ export function NotificationsPanel({
 							style={{ color: theme.colors.accent }}
 							onClick={onConfigureNotificationShortcut}
 						>
-							Configure notification shortcut
+							{tExtra('settings.extra.notificationsPanel.configureNotificationShortcut')}
 							{shortcutSuffix(settings.shortcuts.openNotificationCenter?.keys)}
 						</button>
 					)}
@@ -223,16 +236,21 @@ export function NotificationsPanel({
 			<div data-setting-id="notifications-os">
 				<SettingCheckbox
 					icon={Bell}
-					sectionLabel="Operating System Notifications"
-					title="Enable OS Notifications"
-					description="Show desktop notifications when tasks complete or require attention"
+					sectionLabel={tExtra('settings.extra.controls.operatingSystemNotifications')}
+					title={tExtra('settings.extra.notificationsPanel.enableOsNotifications')}
+					description={tExtra(
+						'settings.extra.notificationsPanel.showDesktopNotificationsWhenTasksCompleteOr'
+					)}
 					checked={osNotificationsEnabled}
 					onChange={setOsNotificationsEnabled}
 					theme={theme}
 				/>
 				<button
 					onClick={() =>
-						showOsNotification('Maestro', 'Test notification - notifications are working!')
+						showOsNotification(
+							'Maestro',
+							tExtra('settings.extra.notificationsPanel.testNotificationNotificationsAreWorking')
+						)
 					}
 					className="mt-2 px-3 py-1.5 rounded text-xs font-medium transition-all"
 					style={{
@@ -241,7 +259,7 @@ export function NotificationsPanel({
 						border: `1px solid ${theme.colors.border}`,
 					}}
 				>
-					Test Notification
+					{tExtra('settings.extra.notificationsPanel.testNotification')}
 				</button>
 			</div>
 
@@ -249,9 +267,11 @@ export function NotificationsPanel({
 			<div data-setting-id="notifications-custom">
 				<SettingCheckbox
 					icon={Volume2}
-					sectionLabel="Custom Notification"
-					title="Enable Custom Notification"
-					description="Execute a custom command when AI tasks complete, such as text-to-speech feedback"
+					sectionLabel={tExtra('settings.extra.controls.customNotification')}
+					title={tExtra('settings.extra.notificationsPanel.enableCustomNotification')}
+					description={tExtra(
+						'settings.extra.controls.executeACustomCommandWhenAiTasksCompleteSuch'
+					)}
 					checked={audioFeedbackEnabled}
 					onChange={setAudioFeedbackEnabled}
 					theme={theme}
@@ -259,7 +279,9 @@ export function NotificationsPanel({
 
 				{/* Command Chain Configuration */}
 				<div className="mt-3">
-					<label className="block text-xs font-medium opacity-70 mb-1">Command Chain</label>
+					<label className="block text-xs font-medium opacity-70 mb-1">
+						{tExtra('settings.extra.notificationsPanel.commandChain')}
+					</label>
 					<div className="flex gap-2">
 						<input
 							type="text"
@@ -293,7 +315,7 @@ export function NotificationsPanel({
 								}}
 							>
 								<Square className="w-3 h-3" fill="currentColor" />
-								Stop
+								{tExtra('settings.extra.notificationsPanel.stop')}
 							</button>
 						) : (
 							<button
@@ -307,7 +329,7 @@ export function NotificationsPanel({
 									setTestError(null);
 									try {
 										const result = await window.maestro.notification.speak(
-											"Howdy, I'm Maestro, here to conduct your agentic tools into a well-tuned symphony.",
+											tExtra('settings.extra.notificationsPanel.howdyIMMaestroHereToConduct'),
 											audioFeedbackCommand
 										);
 										logger.info('[Notification] Speak result:', undefined, result);
@@ -319,7 +341,9 @@ export function NotificationsPanel({
 											// when the process exits, which hides the Stop button.
 										} else {
 											setTestStatus('error');
-											setTestError(result.error || 'Command failed');
+											setTestError(
+												result.error || tExtra('settings.extra.notificationsPanel.commandFailed')
+											);
 										}
 									} catch (err) {
 										logger.error('[Notification] Speak error:', undefined, err);
@@ -355,20 +379,20 @@ export function NotificationsPanel({
 								{testStatus === 'running' ? (
 									<>
 										<Spinner size={12} />
-										Running
+										{tExtra('settings.extra.notificationsPanel.running')}
 									</>
 								) : testStatus === 'success' ? (
 									<>
 										<Check className="w-3 h-3" />
-										Success
+										{tExtra('settings.extra.notificationsPanel.success')}
 									</>
 								) : testStatus === 'error' ? (
 									<>
 										<AlertCircle className="w-3 h-3" />
-										Failed
+										{tExtra('settings.extra.notificationsPanel.failed')}
 									</>
 								) : (
-									'Test'
+									tExtra('settings.extra.notificationsPanel.test')
 								)}
 							</button>
 						)}
@@ -386,14 +410,14 @@ export function NotificationsPanel({
 						</p>
 					)}
 					<p className="text-xs opacity-50 mt-2" style={{ color: theme.colors.textDim }}>
-						Command that accepts text via stdin. Chain multiple commands using pipes (e.g.,{' '}
+						{tExtra('settings.extra.notificationsPanel.commandThatAcceptsTextViaStdinChain')}{' '}
 						<code
 							className="px-1 py-0.5 rounded"
 							style={{ backgroundColor: theme.colors.bgActivity }}
 						>
 							cmd1 | cmd2
 						</code>
-						) to mix and match tools. Default TTS examples:{' '}
+						{tExtra('settings.extra.notificationsPanel.toMixAndMatchToolsDefaultTts')}{' '}
 						<code
 							className="px-1 py-0.5 rounded"
 							style={{ backgroundColor: theme.colors.bgActivity }}
@@ -414,14 +438,14 @@ export function NotificationsPanel({
 						>
 							festival --tts
 						</code>
-						. You can also use non-TTS commands or combine them, e.g.,{' '}
+						{tExtra('settings.extra.notificationsPanel.nonTtsCommands')}{' '}
 						<code
 							className="px-1 py-0.5 rounded"
 							style={{ backgroundColor: theme.colors.bgActivity }}
 						>
 							tee ~/log.txt | say
 						</code>{' '}
-						to log and speak simultaneously.
+						{tExtra('settings.extra.notificationsPanel.toLogAndSpeakSimultaneously')}
 					</p>
 				</div>
 			</div>
@@ -430,9 +454,11 @@ export function NotificationsPanel({
 			<div data-setting-id="notifications-idle">
 				<SettingCheckbox
 					icon={Coffee}
-					sectionLabel="Idle Notification"
-					title="Enable Idle Notification"
-					description="Execute a custom command when all agents and Auto Runs finish and Maestro becomes idle"
+					sectionLabel={tExtra('settings.extra.controls.idleNotification')}
+					title={tExtra('settings.extra.notificationsPanel.enableIdleNotification')}
+					description={tExtra(
+						'settings.extra.notificationsPanel.executeACustomCommandWhenAllAgents'
+					)}
 					checked={idleNotificationEnabled}
 					onChange={setIdleNotificationEnabled}
 					theme={theme}
@@ -440,7 +466,9 @@ export function NotificationsPanel({
 
 				{/* Command Configuration */}
 				<div className="mt-3">
-					<label className="block text-xs font-medium opacity-70 mb-1">Command</label>
+					<label className="block text-xs font-medium opacity-70 mb-1">
+						{tExtra('settings.extra.notificationsPanel.command')}
+					</label>
 					<div className="flex gap-2">
 						<input
 							type="text"
@@ -469,7 +497,7 @@ export function NotificationsPanel({
 								}}
 							>
 								<Square className="w-3 h-3" fill="currentColor" />
-								Stop
+								{tExtra('settings.extra.notificationsPanel.stop')}
 							</button>
 						) : (
 							<button
@@ -485,7 +513,9 @@ export function NotificationsPanel({
 											setIdleTestNotificationId(result.notificationId);
 										} else {
 											setIdleTestStatus('error');
-											setIdleTestError(result.error || 'Command failed');
+											setIdleTestError(
+												result.error || tExtra('settings.extra.notificationsPanel.commandFailed')
+											);
 										}
 									} catch (err) {
 										setIdleTestStatus('error');
@@ -520,20 +550,20 @@ export function NotificationsPanel({
 								{idleTestStatus === 'running' ? (
 									<>
 										<Loader2 className="w-3 h-3 animate-spin" />
-										Running
+										{tExtra('settings.extra.notificationsPanel.running')}
 									</>
 								) : idleTestStatus === 'success' ? (
 									<>
 										<Check className="w-3 h-3" />
-										Success
+										{tExtra('settings.extra.notificationsPanel.success')}
 									</>
 								) : idleTestStatus === 'error' ? (
 									<>
 										<AlertCircle className="w-3 h-3" />
-										Failed
+										{tExtra('settings.extra.notificationsPanel.failed')}
 									</>
 								) : (
-									'Test'
+									tExtra('settings.extra.notificationsPanel.test')
 								)}
 							</button>
 						)}
@@ -550,8 +580,7 @@ export function NotificationsPanel({
 						</p>
 					)}
 					<p className="text-xs opacity-50 mt-2" style={{ color: theme.colors.textDim }}>
-						Runs when all agents finish and no Auto Run is active. Cue tasks don&apos;t count as
-						activity. The command receives &quot;Maestro is idle&quot; via stdin.
+						{tExtra('settings.extra.notificationsPanel.runsWhenAllAgentsFinishAndNo')}
 					</p>
 				</div>
 			</div>
@@ -560,67 +589,61 @@ export function NotificationsPanel({
 			<div data-setting-id="notifications-toast">
 				<label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
 					<Clock className="w-3 h-3" />
-					Toast Notification Duration
+					{tExtra('settings.extra.notificationsPanel.toastNotificationDuration')}
 				</label>
 				<ToggleButtonGroup
 					options={[
-						{ value: -1, label: 'Off' },
+						{ value: -1, label: tExtra('settings.extra.notificationsPanel.off') },
 						{ value: 5, label: '5s' },
 						{ value: 10, label: '10s' },
 						{ value: 20, label: '20s' },
 						{ value: 30, label: '30s' },
-						{ value: 0, label: 'Never' },
+						{ value: 0, label: tExtra('settings.extra.notificationsPanel.never') },
 					]}
 					value={toastDuration}
 					onChange={setToastDuration}
 					theme={theme}
 				/>
 				<p className="text-xs opacity-50 mt-2">
-					How long toast notifications remain on screen. "Off" hides in-app floating toasts. "Never"
-					means they stay until manually dismissed. Either way, every notification is kept in the
-					notification center (the bell in the header). OS and custom notifications are controlled
-					separately.
+					{tExtra('settings.extra.notificationsPanel.howLongToastNotificationsRemainOnScreen')}
 				</p>
 			</div>
 
 			<div data-setting-id="notifications-toast-position">
 				<label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
 					<LayoutGrid className="w-3 h-3" />
-					Toast Notification Position
+					{tExtra('settings.extra.notificationsPanel.toastNotificationPosition')}
 				</label>
 				<ToggleButtonGroup
 					options={TOAST_POSITIONS.map((position) => ({
 						value: position,
-						label: TOAST_POSITION_LABELS[position],
+						label: tExtra(`settings.extra.notificationsPanel.position.${position}`),
 					}))}
 					value={toastPosition}
 					onChange={setToastPosition}
 					theme={theme}
 				/>
 				<p className="text-xs opacity-50 mt-2">
-					Which corner toast notifications appear in. Bottom corners stack upward; top corners stack
-					downward. In a bottom corner, toasts rise above the message input instead of covering it.
+					{tExtra('settings.extra.notificationsPanel.whichCornerToastNotificationsAppearInBottom')}
 				</p>
 			</div>
 
 			<div data-setting-id="notifications-toast-width">
 				<label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
 					<Bell className="w-3 h-3" />
-					Toast Notification Width
+					{tExtra('settings.extra.notificationsPanel.toastNotificationWidth')}
 				</label>
 				<ToggleButtonGroup
 					options={TOAST_WIDTHS.map((width) => ({
 						value: width,
-						label: TOAST_WIDTH_LABELS[width],
+						label: tExtra(`settings.extra.notificationsPanel.width.${width}`),
 					}))}
 					value={toastWidth}
 					onChange={setToastWidth}
 					theme={theme}
 				/>
 				<p className="text-xs opacity-50 mt-2">
-					How wide toast notifications render in the corner. Small is the default compact size;
-					Large is roughly 1.8&times; wider. Dynamic matches the width of the side bar on the
-					toast&apos;s side (Right Bar or Left Bar) and tracks it as you resize the panel.
+					{tExtra('settings.extra.notificationsPanel.howWideToastNotificationsRenderInThe')}
 				</p>
 			</div>
 
@@ -633,19 +656,20 @@ export function NotificationsPanel({
 				}}
 			>
 				<div className="text-xs font-medium mb-2" style={{ color: theme.colors.textMain }}>
-					When are notifications triggered?
+					{tExtra('settings.extra.notificationsPanel.whenAreNotificationsTriggered')}
 				</div>
 				<ul className="text-xs opacity-70 space-y-1" style={{ color: theme.colors.textDim }}>
-					<li>• When an AI task completes (Custom Notification)</li>
-					<li>• When all agents and Auto Runs finish (Idle Notification)</li>
+					<li>
+						{tExtra('settings.extra.notificationsPanel.whenAnAiTaskCompletesCustomNotification')}
+					</li>
+					<li>{tExtra('settings.extra.notificationsPanel.whenAllAgentsAndAutoRunsFinish')}</li>
 				</ul>
 				<div
 					className="text-xs opacity-60 mt-3 pt-3"
 					style={{ color: theme.colors.textDim, borderTop: `1px solid ${theme.colors.border}` }}
 				>
-					<strong>Tip:</strong> The default Command Chain uses TTS (text-to-speech), but you can
-					leverage any notification stack you prefer. Chain commands together with pipes to mix and
-					match - for example, log to a file while also speaking aloud.
+					<strong>{tExtra('settings.extra.notificationsPanel.tip')}</strong>{' '}
+					{tExtra('settings.extra.notificationsPanel.tipBody')}
 				</div>
 			</div>
 		</div>

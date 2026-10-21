@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+## Fork work records
+
+The portable entry for this fork is [docs/fork.md](docs/fork.md). Product changes live in [CHANGELOG.md](CHANGELOG.md); verification and stage records live in [docs/worklog.md](docs/worklog.md). Keep private transcripts, account paths and raw local acceptance captures out of public commits. Record the tested artifact and outstanding limitations for each release.
+
 Essential guidance for working with this codebase. For detailed architecture, see [ARCHITECTURE.md](ARCHITECTURE.md). For development setup and processes, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation Index
@@ -55,6 +59,7 @@ This guide has been split into focused sub-documents for progressive disclosure:
 
 Grep-verified 2026-09-04 (`npm run docs:verify` re-checks every path). This is the INDEX: name, canonical symbols, home file. The full entry for each - the failure it replaced, its invariants, and the traps that made the duplicates wrong - lives in [CANONICAL-UTILITIES.md](docs/agent-guides/CANONICAL-UTILITIES.md). If a name below matches what you are about to write, import the canonical one; read its full entry before extending or working around it.
 
+- **Native conversation display and refresh:** `transcriptMessagesToLogEntries()`, `reconcileTranscriptEntries()`, `mergeNewerEntries()` and `isProgressNoteEntry()` in `src/renderer/utils/transcriptMessages.ts`; `currentActivityRetention()` in `src/renderer/utils/activityRetention.ts`; `isTransientActivityEntry()` and `settleRunningToolEntries()` in `src/renderer/utils/logEntries.ts`; `conversationDisplayTitle()` in `src/renderer/utils/conversationTitle.ts`. See [CANONICAL-UTILITIES.md](docs/agent-guides/CANONICAL-UTILITIES.md) before adding another transcript conversion or cleanup path. Backend desktop image envelope normalization is `unwrapCodexImageRequest()` in `src/main/storage/codex-session-storage.ts`.
 - **ID generation:** `generateId()`, `generateUUID()` in `src/renderer/utils/ids.ts`
 - **Format file size:** `formatSize()` in `src/shared/formatters.ts`
 - **Format numbers:** `formatNumber()`, `formatCount()` in `src/shared/formatters.ts`

@@ -4,6 +4,7 @@ import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { ToggleButtonGroup } from '../../../../ToggleButtonGroup';
 import { formatShortcutKeys } from '../../../../../utils/shortcutFormatter';
 import { FONT_ZOOM_DEFAULT } from '../../../../../../shared/typography';
+import { useT } from '../../../../../i18n';
 
 interface FontZoomSectionProps {
 	theme: Theme;
@@ -27,19 +28,15 @@ export function FontZoomSection({ theme, fontZoom, setFontZoom }: FontZoomSectio
 	const zoomIn = formatShortcutKeys(['Meta', '=']);
 	const zoomOut = formatShortcutKeys(['Meta', '-']);
 	const zoomReset = formatShortcutKeys(['Meta', 'Shift', '0']);
+	const t = useT();
 
 	return (
 		<div data-setting-id="display-font-zoom">
 			<SettingsSectionHeading
 				icon={ZoomIn}
-				description={
-					<>
-						Scales every surface above by the same amount, so the sizes you set relative to each
-						other stay that way. {zoomIn} / {zoomOut} to adjust, {zoomReset} to reset.
-					</>
-				}
+				description={t('settings.display.zoom.description', { zoomIn, zoomOut, zoomReset })}
 			>
-				Zoom
+				{t('settings.display.zoom.heading')}
 			</SettingsSectionHeading>
 			<ToggleButtonGroup
 				options={[

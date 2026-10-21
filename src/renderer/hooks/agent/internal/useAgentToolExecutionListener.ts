@@ -83,6 +83,10 @@ export function useAgentToolExecutionListener(): void {
 							newState?.status === 'failed' ||
 							newState?.status === 'error';
 						let existingIdx = -1;
+						// A call id is a stable identity: the backend scopes per-run ids
+						// (Codex's `item_N`) per process before IPC, so the same id is the
+						// same call, whichever turn its events arrive in. A late completion
+						// after the user has moved on lands on its own card.
 						if (toolEvent.toolCallId) {
 							existingIdx = targetTab.logs.findIndex((l) => l.id === logId);
 						} else if (isFinalizing) {
@@ -103,10 +107,16 @@ export function useAgentToolExecutionListener(): void {
 						if (existingIdx >= 0) {
 							const existing = targetTab.logs[existingIdx];
 							const existingState = existing.metadata?.toolState;
+							// A duplicate or out-of-order `running` event must not reopen a
+							// call that already settled: the card would pulse forever.
+							const settled = !!existingState?.status && existingState.status !== 'running';
 							const mergedState: NonNullable<LogEntry['metadata']>['toolState'] = {
 								...existingState,
 								...newState,
 								input: newState?.input ?? existingState?.input,
+								...(settled && newState?.status === 'running'
+									? { status: existingState?.status }
+									: {}),
 							};
 							// The parent id can arrive on either the running or the
 							// finalizing event; keep whichever we have seen.

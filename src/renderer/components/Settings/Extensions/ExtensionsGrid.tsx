@@ -1,3 +1,5 @@
+import { extensionUiText } from './extensionI18n';
+import { useT } from '../../../i18n';
 /**
  * Tiled grid of extension cards (first-party Encore features + plugins).
  * Each tile shows an icon, name, one-line description, a category badge, a
@@ -82,6 +84,7 @@ export function ExtensionsGrid({
 	onKeyDown,
 	onGridElement,
 }: ExtensionsGridProps) {
+	const tExtra = useT();
 	const gridRef = useRef<HTMLDivElement | null>(null);
 
 	// Publishes the node to the parent AND keeps a local handle for the focus
@@ -129,7 +132,7 @@ export function ExtensionsGrid({
 				className="text-sm py-10 text-center"
 				style={{ color: theme.colors.textDim }}
 			>
-				No extensions match your filters.
+				{tExtra('settings.extra.extensionsGrid.noExtensionsMatchYourFilters')}
 			</div>
 		);
 	}
@@ -194,14 +197,14 @@ export function ExtensionsGrid({
 									{badge && (
 										<span
 											data-testid="extension-badge"
-											data-badge={badge.label}
+											data-badge={extensionUiText(badge.label, tExtra)}
 											className="px-1 py-0.5 rounded text-[0.571rem] font-bold uppercase flex-shrink-0"
 											style={{
 												backgroundColor: theme.colors[badge.tone] + '30',
 												color: theme.colors[badge.tone],
 											}}
 										>
-											{badge.label}
+											{extensionUiText(badge.label, tExtra)}
 										</span>
 									)}
 								</div>
@@ -209,7 +212,7 @@ export function ExtensionsGrid({
 									className="text-xs mt-0.5 line-clamp-3"
 									style={{ color: theme.colors.textDim }}
 								>
-									{ext.description || 'No description provided.'}
+									{ext.description || tExtra('settings.extra.extensionsGrid.noDescriptionProvided')}
 								</div>
 							</div>
 						</div>
@@ -220,21 +223,21 @@ export function ExtensionsGrid({
 								className="px-1.5 py-0.5 rounded text-2xs font-medium"
 								style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
 							>
-								{CATEGORY_LABELS[ext.category]}
+								{extensionUiText(CATEGORY_LABELS[ext.category], tExtra)}
 							</span>
 							<span
 								data-testid="extension-state"
 								className="px-1.5 py-0.5 rounded text-2xs font-bold"
 								style={{ backgroundColor: stateTone(ext) + '22', color: stateTone(ext) }}
 							>
-								{STATE_LABELS[ext.state]}
+								{extensionUiText(STATE_LABELS[ext.state], tExtra)}
 							</span>
 							{ext.kind === 'plugin' && ext.tier !== undefined && (
 								<span
 									className="px-1.5 py-0.5 rounded text-2xs font-medium"
 									style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
 								>
-									Tier {ext.tier}
+									{tExtra('settings.extra.extensionsGrid.tier')} {ext.tier}
 								</span>
 							)}
 							{trust && TrustIcon && (
@@ -247,7 +250,7 @@ export function ExtensionsGrid({
 									}}
 								>
 									<TrustIcon className="w-3 h-3" />
-									{trust.label}
+									{extensionUiText(trust.label, tExtra)}
 								</span>
 							)}
 							{ext.releaseDate && (
@@ -256,7 +259,9 @@ export function ExtensionsGrid({
 									data-release-date={ext.releaseDate}
 									className="px-1.5 py-0.5 rounded text-2xs font-medium ml-auto"
 									style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
-									title={`Released ${formatCalendarDay(ext.releaseDate)}`}
+									title={tExtra('settings.extra.extensionsGrid.released', {
+										date: formatCalendarDay(ext.releaseDate),
+									})}
 								>
 									{formatCalendarDay(ext.releaseDate)}
 								</span>

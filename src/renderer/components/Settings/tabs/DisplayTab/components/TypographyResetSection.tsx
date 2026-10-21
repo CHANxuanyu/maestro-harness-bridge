@@ -10,6 +10,12 @@ import {
 	type TypographyPresetId,
 	type TypographyPresetSizes,
 } from '../../../../../../shared/typographyPresets';
+import { useT, type MessageKey } from '../../../../../i18n';
+
+const PRESET_LABEL_KEYS = {
+	default: 'settings.display.preset.default',
+	hacker: 'settings.display.preset.hacker',
+} as const satisfies Record<string, MessageKey>;
 
 interface TypographyResetSectionProps {
 	theme: Theme;
@@ -45,6 +51,11 @@ export function TypographyResetSection({
 }: TypographyResetSectionProps) {
 	const [pending, setPending] = useState<TypographyPresetId | null>(null);
 	const activePreset = matchTypographyPreset(fonts, sizes);
+	const t = useT();
+	const presetLabel = (id: TypographyPresetId): string =>
+		id in PRESET_LABEL_KEYS
+			? t(PRESET_LABEL_KEYS[id as keyof typeof PRESET_LABEL_KEYS])
+			: TYPOGRAPHY_PRESETS[id].label;
 
 	const handleClick = useCallback(
 		(id: TypographyPresetId) => {
@@ -62,21 +73,17 @@ export function TypographyResetSection({
 		<div data-setting-id="display-typography-reset">
 			<SettingsSectionHeading
 				icon={RotateCcw}
-				description={
-					<>
-						Set every font and size below at once. Default is proportional to read and monospace to
-						work; Hacker is monospace everywhere.
-						{activePreset
-							? ` You're on ${TYPOGRAPHY_PRESETS[activePreset].label}.`
-							: " You've customized these, so neither preset is active."}
-					</>
-				}
+				description={`${t('settings.display.reset.description')} ${
+					activePreset
+						? t('settings.display.reset.active', { preset: presetLabel(activePreset) })
+						: t('settings.display.reset.customized')
+				}`}
 			>
-				Factory Reset Fonts
+				{t('settings.display.reset.heading')}
 			</SettingsSectionHeading>
 			<div className="flex gap-2">
 				{TYPOGRAPHY_PRESET_IDS.map((id) => {
-					const preset = TYPOGRAPHY_PRESETS[id];
+					const label = presetLabel(id);
 					const isPending = pending === id;
 					const isActive = activePreset === id;
 					return (
@@ -102,14 +109,14 @@ export function TypographyResetSection({
 							) : (
 								<Sparkles className="w-3.5 h-3.5" />
 							)}
-							{isPending ? `Reset to ${preset.label}?` : preset.label}
+							{isPending ? t('settings.display.reset.confirmButton', { preset: label }) : label}
 						</button>
 					);
 				})}
 			</div>
 			{pending && (
 				<p className="text-xs mt-2" style={{ color: theme.colors.warning }}>
-					Click again to overwrite all six fonts and all six sizes. Your zoom level is kept.
+					{t('settings.display.reset.confirmHint')}
 				</p>
 			)}
 		</div>

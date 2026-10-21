@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { logger } from '../../../renderer/utils/logger';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { FileExplorerPanel } from '../../../renderer/components/FileExplorerPanel';
 import type { Session, Theme } from '../../../renderer/types';
 import { createMockSession as baseCreateMockSession } from '../../helpers/mockSession';
@@ -360,7 +361,7 @@ describe('FileExplorerPanel', () => {
 		// rightPanelWidth (384) is below RIGHT_PANEL_COMPACT_THRESHOLD (420),
 		// which would hide the icon and break tests that assert on it.
 		const { useSettingsStore } = await import('../../../renderer/stores/settingsStore');
-		useSettingsStore.setState({ rightPanelWidth: 500 });
+		useSettingsStore.setState({ rightPanelWidth: 500, uiLanguage: 'en' });
 
 		defaultProps = {
 			session: createMockSession(),
@@ -394,7 +395,45 @@ describe('FileExplorerPanel', () => {
 	});
 
 	afterEach(() => {
+		useSettingsStore.setState({ uiLanguage: 'system' });
 		vi.useRealTimers();
+	});
+
+	it('switches file controls and counts without changing paths or actions', () => {
+		const session = createMockSession({
+			fileTreeAutoRefreshInterval: 180,
+			fileTreeStats: { fileCount: 1, folderCount: 0, totalSize: 1024 },
+		});
+		render(<FileExplorerPanel {...defaultProps} session={session} showHiddenFiles />);
+		const findButton = screen.getByTitle(/^Find Files/);
+		expect(screen.getByTitle('1 file')).toBeVisible();
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		expect(screen.getByTitle(/^查找文件/)).toBe(findButton);
+		expect(findButton).toHaveTextContent('查找');
+		expect(screen.getByText('打开')).toHaveAttribute(
+			'title',
+			expect.stringMatching(/^在 .+ 中打开$/)
+		);
+		expect(screen.getByText('.files')).toHaveAttribute('title', '隐藏点文件');
+		expect(screen.getByText('刷新')).toHaveAttribute('title', '每 180 秒自动刷新');
+		expect(screen.getByTitle('1 个文件')).toBeVisible();
+		expect(screen.getByTitle('0 个文件夹')).toBeVisible();
+		expect(screen.getByTitle('总大小：1 KB')).toBeVisible();
+		expect(screen.getByTitle(session.projectRoot)).toHaveTextContent(session.projectRoot);
+		expect(screen.getByText('README.md')).toBeVisible();
+		fireEvent.click(screen.getByTitle('展开所有文件夹'));
+		fireEvent.click(screen.getByTitle('折叠所有文件夹'));
+		fireEvent.click(findButton);
+		expect(defaultProps.expandAllFolders).toHaveBeenCalledWith(
+			session.id,
+			session,
+			defaultProps.setSessions
+		);
+		expect(defaultProps.collapseAllFolders).toHaveBeenCalledWith(
+			session.id,
+			defaultProps.setSessions
+		);
+		expect(defaultProps.setFileTreeFilterOpen).toHaveBeenCalledWith(true);
 	});
 
 	describe('Initial Render', () => {

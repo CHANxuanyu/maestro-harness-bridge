@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { memo, useMemo, useRef, useState, useCallback } from 'react';
 import { ChevronUp, Server } from 'lucide-react';
 import type { Theme } from '../../types';
@@ -19,8 +20,8 @@ export interface HostSourceFilterProps {
 	theme: Theme;
 }
 
-function labelForHost(host: string): string {
-	return host === LOCAL_HOST_KEY ? 'Local' : host;
+function labelForHost(host: string, uiText: ReturnType<typeof useT>): string {
+	return host === LOCAL_HOST_KEY ? uiText('workflows.sessions.history.local') : host;
 }
 
 /**
@@ -35,6 +36,7 @@ export const HostSourceFilter = memo(function HostSourceFilter({
 	onSelect,
 	theme,
 }: HostSourceFilterProps) {
+	const uiText = useT();
 	const [open, setOpen] = useState(false);
 	const containerRef = useRef<HTMLDivElement>(null);
 
@@ -53,10 +55,10 @@ export const HostSourceFilter = memo(function HostSourceFilter({
 	// reflect the renderer's active lookback window because they come
 	// from the server-side aggregate keyed by lookback.
 	const triggerLabel = useMemo(() => {
-		if (!selectedHost) return 'All Sources';
+		if (!selectedHost) return uiText('workflows.sessions.history.allSources');
 		const count = hostCounts.get(selectedHost) ?? 0;
-		return `${labelForHost(selectedHost)} (${count})`;
-	}, [selectedHost, hostCounts]);
+		return `${labelForHost(selectedHost, uiText)} (${count})`;
+	}, [selectedHost, hostCounts, uiText]);
 
 	return (
 		<div ref={containerRef} className="relative">
@@ -84,7 +86,7 @@ export const HostSourceFilter = memo(function HostSourceFilter({
 						onClick={() => handleSelect(null)}
 					>
 						<Server className="w-3 h-3 flex-shrink-0" />
-						<span className="font-mono">All Sources</span>
+						<span className="font-mono">{uiText('workflows.sessions.history.allSources')}</span>
 					</button>
 					<div className="h-px" style={{ backgroundColor: theme.colors.border }} />
 					{[...hostCounts.entries()].map(([host, count]) => {
@@ -101,7 +103,7 @@ export const HostSourceFilter = memo(function HostSourceFilter({
 							>
 								<Server className="w-3 h-3 flex-shrink-0" />
 								<span className="font-mono truncate min-w-0">
-									{labelForHost(host)} ({count})
+									{labelForHost(host, uiText)} ({count})
 								</span>
 							</button>
 						);
@@ -117,7 +119,7 @@ export const HostSourceFilter = memo(function HostSourceFilter({
 					borderColor: open ? theme.colors.accent : theme.colors.border,
 					color: selectedHost ? theme.colors.accent : theme.colors.textMain,
 				}}
-				title="Filter by host source"
+				title={uiText('workflows.sessions.history.filterHostSource')}
 			>
 				<span className="flex items-center gap-2 min-w-0">
 					<Server className="w-3 h-3 flex-shrink-0" />

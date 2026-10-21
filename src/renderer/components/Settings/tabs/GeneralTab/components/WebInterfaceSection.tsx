@@ -3,6 +3,7 @@ import type { Theme } from '../../../../../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { SectionCard } from '../../DisplayTab/components/SectionCard';
 import { ToggleSettingRow } from '../../DisplayTab/components/ToggleSettingRow';
+import { useT } from '../../../../../i18n';
 
 interface WebInterfaceSectionProps {
 	theme: Theme;
@@ -15,17 +16,20 @@ export function WebInterfaceSection({
 	webInterfaceAutoStart,
 	setWebInterfaceAutoStart,
 }: WebInterfaceSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="general-web-interface-auto-start">
-			<SettingsSectionHeading icon={Globe2}>Web Interface</SettingsSectionHeading>
+			<SettingsSectionHeading icon={Globe2}>
+				{t('settings.general.web.heading')}
+			</SettingsSectionHeading>
 			<SectionCard theme={theme}>
 				<ToggleSettingRow
 					theme={theme}
-					title="Turn on web interface at launch"
-					description="Automatically make Maestro's full UI available in a browser. Enabling this also turns it on now."
+					title={t('settings.general.web.title')}
+					description={t('settings.general.web.description')}
 					checked={webInterfaceAutoStart}
 					onChange={setWebInterfaceAutoStart}
-					ariaLabel="Turn on web interface at launch"
+					ariaLabel={t('settings.general.web.title')}
 					clickableRow
 				/>
 			</SectionCard>

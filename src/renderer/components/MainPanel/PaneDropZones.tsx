@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React from 'react';
 
 import { updateSessionWith } from '../../stores/sessionStore';
@@ -109,6 +110,7 @@ export function PaneDropZones({
 	theme,
 	onGroupActivated,
 }: PaneDropZonesProps) {
+	const t = useT();
 	const overlayRef = React.useRef<HTMLDivElement>(null);
 	// True while ANY native drag is in flight in this window. The overlay is
 	// click-through (pointer-events-none) at rest so it never blocks normal panel
@@ -305,7 +307,10 @@ export function PaneDropZones({
 
 			if (activeGroup) {
 				if (!target.leafId) {
-					notifyCenterFlash({ color: 'yellow', message: 'Drop onto a pane to tile it' });
+					notifyCenterFlash({
+						color: 'yellow',
+						message: t('workflows.shell.extraDropOntoAPaneToTileIt'),
+					});
 					return;
 				}
 				const groupId = activeGroup.id;
@@ -319,7 +324,10 @@ export function PaneDropZones({
 
 			// No group yet: create one from the current single view + the dragged tab.
 			if (!activeStandaloneRef) {
-				notifyCenterFlash({ color: 'yellow', message: 'Nothing here to tile with' });
+				notifyCenterFlash({
+					color: 'yellow',
+					message: t('workflows.shell.extraNothingHereToTileWith'),
+				});
 				return;
 			}
 			// A tab can't tile beside itself, and resolveHover already refuses that drag
@@ -340,7 +348,7 @@ export function PaneDropZones({
 			if (newGroupId) onGroupActivated?.(newGroupId);
 			notifyCenterFlash({ color: 'green', message: 'Tiled' });
 		},
-		[activeGroup, activeStandaloneRef, activeStandaloneTitle, session.id, onGroupActivated]
+		[activeGroup, activeStandaloneRef, activeStandaloneTitle, session.id, onGroupActivated, t]
 	);
 
 	const handleDrop = React.useCallback(
@@ -386,7 +394,7 @@ export function PaneDropZones({
 							className="px-2 py-0.5 rounded text-xs font-semibold select-none"
 							style={{ backgroundColor: theme.colors.accent, color: theme.colors.bgMain }}
 						>
-							⇄ Swap
+							{t('workflows.shell.swap')}
 						</span>
 					)}
 				</div>

@@ -6,6 +6,7 @@ import { generateId } from '../utils/ids';
 import { canCreateGroupInside } from '../../shared/groupHierarchy';
 import { usePluginContributions } from '../hooks/usePluginContributions';
 import { selectGroupsPlusEnabled, useSettingsStore } from '../stores/settingsStore';
+import { useT } from '../i18n';
 
 interface CreateGroupModalProps {
 	theme: Theme;
@@ -19,6 +20,7 @@ interface CreateGroupModalProps {
 
 export function CreateGroupModal(props: CreateGroupModalProps) {
 	const { theme, onClose, groups, setGroups, initialParentGroupId, onGroupCreated } = props;
+	const t = useT();
 	const groupsPlusEnabled = useSettingsStore(selectGroupsPlusEnabled);
 	const rootGroups = groups.filter((group) => !group.parentGroupId);
 	const initialParentId =
@@ -69,7 +71,7 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
 	return (
 		<Modal
 			theme={theme}
-			title="Create New Group"
+			title={t('workflows.group.createTitle')}
 			priority={MODAL_PRIORITIES.CREATE_GROUP}
 			onClose={onClose}
 			initialFocusRef={inputRef}
@@ -78,7 +80,7 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
 					theme={theme}
 					onCancel={onClose}
 					onConfirm={handleCreate}
-					confirmLabel="Create"
+					confirmLabel={t('common.create')}
 					confirmDisabled={!groupName.trim()}
 				/>
 			}
@@ -99,11 +101,11 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
 				<FormInput
 					ref={inputRef}
 					theme={theme}
-					label="Group Name"
+					label={t('workflows.group.nameLabel')}
 					value={groupName}
 					onChange={setGroupName}
 					onSubmit={groupName.trim() ? handleCreate : undefined}
-					placeholder="Enter group name..."
+					placeholder={t('workflows.group.namePlaceholder')}
 					heightClass="h-[52px]"
 					autoFocus
 				/>
@@ -114,7 +116,7 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
 							className="block text-xs font-medium uppercase tracking-wide mb-1"
 							style={{ color: theme.colors.textDim }}
 						>
-							Inside folder
+							{t('workflows.group.insideFolder')}
 						</label>
 						<select
 							id="create-group-parent"
@@ -123,7 +125,7 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
 							className="w-full px-3 py-2 rounded border bg-transparent outline-none text-sm cursor-pointer"
 							style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 						>
-							<option value="">Top level</option>
+							<option value="">{t('workflows.group.topLevel')}</option>
 							{rootGroups.map((group) => (
 								<option key={group.id} value={group.id}>
 									{group.name}

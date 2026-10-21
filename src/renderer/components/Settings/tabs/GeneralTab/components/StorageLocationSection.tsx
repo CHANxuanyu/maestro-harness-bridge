@@ -1,8 +1,9 @@
 import { Check, Cloud, ExternalLink, Folder, FolderSync, RotateCcw, X } from 'lucide-react';
 import type { Theme } from '../../../../../types';
-import { getOpenInLabel } from '../../../../../utils/platformUtils';
+import { localizedFileManagerName } from '../../../../../i18n/platformLabels';
 import type { SyncStorageState } from '../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 
 interface StorageLocationSectionProps {
 	theme: Theme;
@@ -21,42 +22,43 @@ export function StorageLocationSection({ theme, syncStorage }: StorageLocationSe
 		resetToDefault,
 		openStorageFolder,
 	} = syncStorage;
+	const t = useT();
 
 	return (
 		<div data-setting-id="general-storage">
-			<SettingsSectionHeading icon={FolderSync}>Storage Location</SettingsSectionHeading>
+			<SettingsSectionHeading icon={FolderSync}>
+				{t('settings.general.storage.heading')}
+			</SettingsSectionHeading>
 			<div
 				className="p-3 rounded border space-y-3"
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<div>
 					<p className="text-sm font-semibold" style={{ color: theme.colors.textMain }}>
-						Settings folder
+						{t('settings.general.storage.folder')}
 					</p>
-					<p className="text-xs opacity-70 mt-0.5">
-						Choose where Maestro stores settings, sessions, and groups (including global environment
-						variables, agents, and configurations). Use a synced folder (iCloud Drive, Dropbox,
-						OneDrive) to share across devices.
-					</p>
-					<p className="text-xs opacity-70 mt-1 italic">
-						Note: Only run Maestro on one device at a time to avoid sync conflicts.
-					</p>
+					<p className="text-xs opacity-70 mt-0.5">{t('settings.general.storage.description')}</p>
+					<p className="text-xs opacity-70 mt-1 italic">{t('settings.general.storage.note')}</p>
 				</div>
 
 				<div>
-					<div className="block text-xs opacity-70 mb-1">Default Location</div>
+					<div className="block text-xs opacity-70 mb-1">
+						{t('settings.general.storage.defaultLocation')}
+					</div>
 					<div
 						className="text-xs p-2 rounded font-mono truncate"
 						style={{ backgroundColor: theme.colors.bgActivity }}
 						title={defaultStoragePath}
 					>
-						{defaultStoragePath || 'Loading...'}
+						{defaultStoragePath || t('common.loading')}
 					</div>
 				</div>
 
 				{customSyncPath && (
 					<div>
-						<div className="block text-xs opacity-70 mb-1">Current Location (Custom)</div>
+						<div className="block text-xs opacity-70 mb-1">
+							{t('settings.general.storage.currentCustom')}
+						</div>
 						<div
 							className="text-xs p-2 rounded font-mono truncate flex items-center gap-2"
 							style={{
@@ -83,10 +85,10 @@ export function StorageLocationSection({ theme, syncStorage }: StorageLocationSe
 					>
 						<Folder className="w-3 h-3" />
 						{syncMigrating
-							? 'Migrating...'
+							? t('settings.general.storage.migrating')
 							: customSyncPath
-								? 'Change Folder...'
-								: 'Choose Folder...'}
+								? t('settings.general.storage.changeFolder')
+								: t('settings.general.storage.chooseFolder')}
 					</button>
 
 					{customSyncPath && (
@@ -98,10 +100,10 @@ export function StorageLocationSection({ theme, syncStorage }: StorageLocationSe
 								backgroundColor: theme.colors.border,
 								color: theme.colors.textMain,
 							}}
-							title="Reset to default location"
+							title={t('settings.general.storage.resetTitle')}
 						>
 							<RotateCcw className="w-3 h-3" />
-							Use Default
+							{t('settings.general.storage.useDefault')}
 						</button>
 					)}
 				</div>
@@ -115,7 +117,12 @@ export function StorageLocationSection({ theme, syncStorage }: StorageLocationSe
 						}}
 					>
 						<Check className="w-3 h-3" />
-						Migrated {syncMigratedCount} settings file{syncMigratedCount !== 1 ? 's' : ''}
+						{t(
+							syncMigratedCount === 1
+								? 'settings.general.storage.migratedOne'
+								: 'settings.general.storage.migratedMany',
+							{ count: syncMigratedCount }
+						)}
 					</div>
 				)}
 
@@ -141,7 +148,7 @@ export function StorageLocationSection({ theme, syncStorage }: StorageLocationSe
 						}}
 					>
 						<RotateCcw className="w-3 h-3" />
-						Restart Maestro for changes to take effect
+						{t('settings.general.storage.restart')}
 					</div>
 				)}
 
@@ -154,7 +161,9 @@ export function StorageLocationSection({ theme, syncStorage }: StorageLocationSe
 						title={customSyncPath || defaultStoragePath}
 					>
 						<ExternalLink className="w-3 h-3" />
-						{getOpenInLabel(window.maestro?.platform || 'darwin')}
+						{t('common.openInFileManager', {
+							manager: localizedFileManagerName(t, window.maestro?.platform || 'darwin'),
+						})}
 					</button>
 				</div>
 			</div>

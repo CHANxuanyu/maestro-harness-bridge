@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import React, { memo, useRef, useState, useEffect } from 'react';
 import type { Theme } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -18,6 +19,7 @@ interface TerminalTabRenameModalProps {
 export const TerminalTabRenameModal = memo(function TerminalTabRenameModal(
 	props: TerminalTabRenameModalProps
 ) {
+	const t = useT();
 	const { theme, isOpen, currentName, defaultName, onSave, onClose } = props;
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [value, setValue] = useState(currentName ?? '');
@@ -39,7 +41,7 @@ export const TerminalTabRenameModal = memo(function TerminalTabRenameModal(
 	return (
 		<Modal
 			theme={theme}
-			title="Rename Terminal Tab"
+			title={t('workflows.shell.renameTerminalTab')}
 			priority={MODAL_PRIORITIES.RENAME_TAB}
 			onClose={onClose}
 			width={400}
@@ -49,7 +51,7 @@ export const TerminalTabRenameModal = memo(function TerminalTabRenameModal(
 					theme={theme}
 					onCancel={onClose}
 					onConfirm={handleSave}
-					confirmLabel="Rename"
+					confirmLabel={t('workflows.shell.rename')}
 				/>
 			}
 		>
@@ -62,7 +64,7 @@ export const TerminalTabRenameModal = memo(function TerminalTabRenameModal(
 				placeholder={defaultName}
 			/>
 			<p className="mt-2 text-xs" style={{ color: theme.colors.textDim }}>
-				Leave empty to use the default name ({defaultName}).
+				{t('workflows.terminal.defaultName', { name: defaultName })}
 			</p>
 		</Modal>
 	);

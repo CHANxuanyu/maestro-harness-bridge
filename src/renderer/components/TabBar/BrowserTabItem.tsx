@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { useCallback, memo, useMemo, useState, useEffect } from 'react';
 import {
 	Globe,
@@ -97,6 +98,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 	tabIndex,
 	shortcutHint,
 }: BrowserTabItemProps) {
+	const t = useT();
 	const [faviconFailed, setFaviconFailed] = useState(false);
 	const [urlCopied, setUrlCopied] = useState(false);
 	const {
@@ -367,7 +369,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 			{tab.ephemeral && (
 				<span
 					className="shrink-0 flex items-center"
-					title="Incognito tab - browsing data is kept in memory only and discarded when the app closes"
+					title={t('workflows.shell.incognitoTabBrowsingDataIsKeptInMemory2')}
 				>
 					<VenetianMask className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 				</span>
@@ -392,7 +394,9 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 					onClick={handleCloseClick}
 					data-tab-close
 					className="p-0.5 rounded hover:bg-white/10 transition-colors shrink-0"
-					title={`Close tab${shortcutSuffix(tabShortcuts.closeTab?.keys)}`}
+					title={t('workflows.shell.closeTabvalue', {
+						p0: shortcutSuffix(tabShortcuts.closeTab?.keys),
+					})}
 				>
 					<X className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 				</button>
@@ -432,8 +436,10 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 								type="button"
 								onClick={handleCopyUrlClick}
 								className="shrink-0 p-0.5 rounded hover:bg-white/10 transition-colors"
-								title={urlCopied ? 'Copied!' : 'Copy URL'}
-								aria-label={urlCopied ? 'URL copied' : 'Copy URL'}
+								title={urlCopied ? t('workflows.shell.copied') : t('workflows.shell.copyUrl')}
+								aria-label={
+									urlCopied ? t('workflows.shell.urlCopied') : t('workflows.shell.copyUrl')
+								}
 							>
 								{urlCopied ? (
 									<Check
@@ -449,7 +455,11 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 								onClick={handleCopyUrlClick}
 								className="text-xs-plus truncate min-w-0 flex-1 text-left hover:underline"
 								style={{ color: theme.colors.textDim }}
-								title={urlCopied ? 'Copied!' : `${tab.url || 'about:blank'} (click to copy)`}
+								title={
+									urlCopied
+										? t('workflows.shell.copied')
+										: t('workflows.shell.valueClickToCopy', { p0: tab.url || 'about:blank' })
+								}
 							>
 								{tab.url || 'about:blank'}
 							</button>
@@ -464,7 +474,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Pencil className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Rename
+								{t('workflows.shell.rename')}
 							</button>
 						)}
 
@@ -473,10 +483,10 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 								onClick={handleResetNameClick}
 								className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
 								style={{ color: theme.colors.textMain }}
-								title="Clear the custom name and let the website set the tab title again"
+								title={t('workflows.shell.clearTheCustomNameAndLetTheWebsite')}
 							>
 								<RotateCcw className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Reset Name
+								{t('workflows.shell.resetName')}
 							</button>
 						)}
 
@@ -491,7 +501,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Clock className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Snooze Tab
+								{t('workflows.shell.snoozeTab')}
 								{tabShortcuts.snoozeTab && (
 									<ShortcutHint keys={tabShortcuts.snoozeTab.keys} theme={theme} />
 								)}
@@ -507,7 +517,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 										style={{ color: theme.colors.textMain }}
 									>
 										<ChevronsLeft className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-										Move to First Position
+										{t('workflows.shell.moveToFirstPosition')}
 										{tabShortcuts.moveTabToStart && (
 											<ShortcutHint keys={tabShortcuts.moveTabToStart.keys} theme={theme} />
 										)}
@@ -523,7 +533,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 											className="w-3.5 h-3.5"
 											style={{ color: theme.colors.textDim }}
 										/>
-										Move to Last Position
+										{t('workflows.shell.moveToLastPosition')}
 										{tabShortcuts.moveTabToEnd && (
 											<ShortcutHint keys={tabShortcuts.moveTabToEnd.keys} theme={theme} />
 										)}
@@ -541,7 +551,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Clipboard className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Content: Copy to Clipboard
+								{t('workflows.shell.contentCopyToClipboard')}
 							</button>
 						)}
 
@@ -552,7 +562,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ArrowRightCircle className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Content: Send to Agent
+								{t('workflows.shell.contentSendToAgent')}
 							</button>
 						)}
 
@@ -566,7 +576,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 							style={{ color: theme.colors.textMain }}
 						>
 							<X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							Close Tab
+							{t('workflows.shell.closeTab')}
 							{tabShortcuts.closeTab && (
 								<ShortcutHint keys={tabShortcuts.closeTab.keys} theme={theme} />
 							)}
@@ -582,7 +592,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 								disabled={totalTabs === 1}
 							>
 								<X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Close Other Tabs
+								{t('workflows.shell.closeOtherTabs')}
 								{tabShortcuts.closeOtherTabs && (
 									<ShortcutHint keys={tabShortcuts.closeOtherTabs.keys} theme={theme} />
 								)}
@@ -599,7 +609,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 								disabled={tabIndex === 0}
 							>
 								<ChevronsLeft className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Close Tabs to Left
+								{t('workflows.shell.closeTabsToLeft')}
 								{tabShortcuts.closeTabsLeft && (
 									<ShortcutHint keys={tabShortcuts.closeTabsLeft.keys} theme={theme} />
 								)}
@@ -618,7 +628,7 @@ export const BrowserTabItem = memo(function BrowserTabItem({
 								disabled={tabIndex === (totalTabs ?? 1) - 1}
 							>
 								<ChevronsRight className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								Close Tabs to Right
+								{t('workflows.shell.closeTabsToRight')}
 								{tabShortcuts.closeTabsRight && (
 									<ShortcutHint keys={tabShortcuts.closeTabsRight.keys} theme={theme} />
 								)}

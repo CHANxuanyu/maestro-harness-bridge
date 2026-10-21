@@ -1,3 +1,4 @@
+import { useT } from '../../../../../i18n';
 import { ChevronDown } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import type { CueSettingsState } from '../types';
@@ -12,6 +13,7 @@ interface CueSettingsSectionProps {
  * the detail-pane header carries the title/beta badge/state/enable toggle.
  */
 export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps) {
+	const tExtra = useT();
 	return (
 		<div data-setting-id="encore-cue" className="space-y-4">
 			<div className="flex items-center justify-between pt-3">
@@ -19,18 +21,23 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 					className="text-xs font-bold uppercase opacity-70"
 					style={{ color: theme.colors.textMain }}
 				>
-					Global Cue Settings
+					{tExtra('settings.extra.cueSettingsSection.globalCueSettings')}
 				</div>
 				{cueState.cueSettingsLoaded && (
 					<div className="text-2xs" style={{ color: theme.colors.textDim }}>
-						{cueState.cueSettingsSaveState === 'saving' && <>Saving&hellip;</>}
-						{cueState.cueSettingsSaveState === 'saved' && 'Saved'}
+						{cueState.cueSettingsSaveState === 'saving' && (
+							<>{tExtra('settings.extra.cueSettingsSection.saving')}</>
+						)}
+						{cueState.cueSettingsSaveState === 'saved' &&
+							tExtra('settings.extra.cueSettingsSection.saved')}
 						{cueState.cueSettingsSaveState === 'error' && (
-							<span style={{ color: theme.colors.error }}>Save failed</span>
+							<span style={{ color: theme.colors.error }}>
+								{tExtra('settings.extra.cueSettingsSection.saveFailed')}
+							</span>
 						)}
 						{cueState.cueSettingsSaveState === 'no-targets' && (
 							<span style={{ color: theme.colors.warning }}>
-								No cue.yaml yet &mdash; open a pipeline to persist
+								{tExtra('settings.extra.cueSettingsSection.noCueYamlYetOpenAPipeline')}
 							</span>
 						)}
 					</div>
@@ -39,7 +46,7 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 
 			{!cueState.cueSettingsLoaded ? (
 				<div className="text-xs" style={{ color: theme.colors.textDim }}>
-					Loading settings&hellip;
+					{tExtra('settings.extra.cueSettingsSection.loadingSettings')}
 				</div>
 			) : (
 				<>
@@ -49,7 +56,7 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 							className="block text-xs-plus font-medium mb-1"
 							style={{ color: theme.colors.textDim }}
 						>
-							Timeout (minutes)
+							{tExtra('settings.extra.cueSettingsSection.timeoutMinutes')}
 						</label>
 						<input
 							id="cue-timeout-minutes"
@@ -66,8 +73,7 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 							}}
 						/>
 						<p className="text-2xs mt-1 opacity-70">
-							Maximum time a triggered run can execute before it&apos;s automatically stopped.
-							Increase if your tasks regularly need more time.
+							{tExtra('settings.extra.cueSettingsSection.maximumTimeATriggeredRunCanExecute')}
 						</p>
 					</div>
 
@@ -77,7 +83,7 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 							className="block text-xs-plus font-medium mb-1"
 							style={{ color: theme.colors.textDim }}
 						>
-							On Source Failure
+							{tExtra('settings.extra.cueSettingsSection.onSourceFailure')}
 						</label>
 						<div className="relative">
 							<select
@@ -93,8 +99,12 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 									color: theme.colors.textMain,
 								}}
 							>
-								<option value="break">Break (stop chain)</option>
-								<option value="continue">Continue (skip failed)</option>
+								<option value="break">
+									{tExtra('settings.extra.cueSettingsSection.breakStopChain')}
+								</option>
+								<option value="continue">
+									{tExtra('settings.extra.cueSettingsSection.continueSkipFailed')}
+								</option>
 							</select>
 							<ChevronDown
 								className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
@@ -102,8 +112,7 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 							/>
 						</div>
 						<p className="text-2xs mt-1 opacity-70">
-							What to do when a pipeline stage times out or errors. &quot;Break&quot; stops the
-							entire chain; &quot;Continue&quot; skips the failed stage and proceeds to the next.
+							{tExtra('settings.extra.cueSettingsSection.whatToDoWhenAPipelineStage')}
 						</p>
 					</div>
 
@@ -113,7 +122,7 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 							className="block text-xs-plus font-medium mb-1"
 							style={{ color: theme.colors.textDim }}
 						>
-							Max Concurrent Runs
+							{tExtra('settings.extra.cueSettingsSection.maxConcurrentRuns')}
 						</label>
 						<input
 							id="cue-max-concurrent"
@@ -130,8 +139,7 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 							}}
 						/>
 						<p className="text-2xs mt-1 opacity-70">
-							How many Cue-triggered runs can execute in parallel. Higher values increase throughput
-							but agents may conflict on shared files. Default: 1.
+							{tExtra('settings.extra.cueSettingsSection.howManyCueTriggeredRunsCanExecute')}
 						</p>
 					</div>
 
@@ -141,7 +149,7 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 							className="block text-xs-plus font-medium mb-1"
 							style={{ color: theme.colors.textDim }}
 						>
-							Event Queue Size
+							{tExtra('settings.extra.cueSettingsSection.eventQueueSize')}
 						</label>
 						<input
 							id="cue-queue-size"
@@ -159,9 +167,7 @@ export function CueSettingsSection({ theme, cueState }: CueSettingsSectionProps)
 							}}
 						/>
 						<p className="text-2xs mt-1 opacity-70">
-							Events that arrive while the concurrent limit is reached are buffered here. When the
-							queue is full, the oldest event is dropped. Set to 0 to disable buffering. Default:
-							512.
+							{tExtra('settings.extra.cueSettingsSection.eventsThatArriveWhileTheConcurrentLimit')}
 						</p>
 					</div>
 				</>

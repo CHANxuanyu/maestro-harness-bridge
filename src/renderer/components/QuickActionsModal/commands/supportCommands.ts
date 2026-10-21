@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import { buildMaestroUrl } from '../../../utils/buildMaestroUrl';
 import type { NotifyToastInput } from '../../../stores/notificationStore';
 import { captureException } from '../../../utils/sentry';
@@ -59,10 +60,11 @@ export function buildSupportCommands({
 	toggleDevtools,
 	shortcuts,
 }: BuildSupportCommandsArgs): QuickAction[] {
+	const t = getT();
 	const commands: QuickAction[] = [
 		{
 			id: 'settings',
-			label: 'Settings',
+			label: t('workflows.shell.settings'),
 			shortcut: shortcuts.settings,
 			action: () => {
 				setSettingsModalOpen(true);
@@ -71,7 +73,7 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'theme',
-			label: 'Change Theme',
+			label: t('workflows.shell.changeTheme'),
 			shortcut: shortcuts.openThemeSettings,
 			action: () => {
 				setSettingsModalOpen(true);
@@ -81,7 +83,7 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'configureEnvVars',
-			label: 'Configure Global Environment Variables',
+			label: t('workflows.shell.configureGlobalEnvironmentVariables'),
 			action: () => {
 				setSettingsModalOpen(true);
 				setSettingsTab('general');
@@ -90,7 +92,7 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'shortcuts',
-			label: 'View Shortcuts',
+			label: t('workflows.shell.viewShortcuts'),
 			shortcut: shortcuts.help,
 			action: () => {
 				setShortcutsHelpOpen(true);
@@ -99,7 +101,7 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'logs',
-			label: 'View System Logs',
+			label: t('workflows.shell.viewSystemLogs'),
 			shortcut: shortcuts.systemLogs,
 			action: () => {
 				setLogViewerOpen(true);
@@ -108,7 +110,7 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'processes',
-			label: 'View System Processes',
+			label: t('workflows.shell.viewSystemProcesses'),
 			shortcut: shortcuts.processMonitor,
 			action: () => {
 				setProcessMonitorOpen(true);
@@ -117,7 +119,7 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'devtools',
-			label: 'Toggle JavaScript Console',
+			label: t('workflows.shell.toggleJavascriptConsole'),
 			action: () => {
 				toggleDevtools();
 				setQuickActionOpen(false);
@@ -125,7 +127,7 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'about',
-			label: 'About Maestro',
+			label: t('workflows.shell.aboutMaestro'),
 			action: () => {
 				setAboutModalOpen(true);
 				setQuickActionOpen(false);
@@ -133,11 +135,13 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'leaderboard',
-			label: isLeaderboardRegistered ? 'Leaderboard Registration' : 'Join Leaderboard',
+			label: isLeaderboardRegistered
+				? t('workflows.shell.leaderboardRegistration')
+				: t('workflows.shell.joinLeaderboard'),
 			shortcut: shortcuts.openLeaderboard,
 			subtext: isLeaderboardRegistered
-				? 'Update your global runmaestro.ai leaderboard profile'
-				: 'Register for the global runmaestro.ai leaderboard',
+				? t('workflows.shell.updateYourGlobalRunmaestroAiLeaderboardProfile')
+				: t('workflows.shell.registerForTheGlobalRunmaestroAiLeaderboard'),
 			action: () => {
 				onOpenLeaderboardRegistration();
 				setQuickActionOpen(false);
@@ -145,8 +149,8 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'feedback',
-			label: 'Send Feedback',
-			subtext: 'Report a bug or suggest a feature via GitHub',
+			label: t('workflows.shell.sendFeedback'),
+			subtext: t('workflows.shell.reportABugOrSuggestAFeatureVia'),
 			action: () => {
 				const draft = getFeedbackDraft();
 				if (draft.isMinimized) {
@@ -159,8 +163,8 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'website',
-			label: 'Maestro Website',
-			subtext: 'Open the Maestro website',
+			label: t('workflows.shell.maestroWebsite'),
+			subtext: t('workflows.shell.openTheMaestroWebsite'),
 			action: () => {
 				openUrl(buildMaestroUrl('https://runmaestro.ai/'));
 				setQuickActionOpen(false);
@@ -168,8 +172,8 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'docs',
-			label: 'Documentation and User Guide',
-			subtext: 'Open the Maestro documentation',
+			label: t('workflows.shell.documentationAndUserGuide'),
+			subtext: t('workflows.shell.openTheMaestroDocumentation'),
 			action: () => {
 				openUrl(buildMaestroUrl('https://docs.runmaestro.ai/'));
 				setQuickActionOpen(false);
@@ -177,8 +181,8 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'discord',
-			label: 'Join Discord',
-			subtext: 'Join the Maestro community',
+			label: t('workflows.shell.joinDiscord'),
+			subtext: t('workflows.shell.joinTheMaestroCommunity'),
 			action: () => {
 				openUrl(buildMaestroUrl('https://runmaestro.ai/discord'));
 				setQuickActionOpen(false);
@@ -186,9 +190,10 @@ export function buildSupportCommands({
 		},
 		{
 			id: 'createDebugPackage',
-			label: 'Create Debug Package',
-			subtext: 'Generate a support bundle for bug reporting',
+			label: t('workflows.shell.createDebugPackage'),
+			subtext: t('workflows.shell.generateASupportBundleForBugReporting'),
 			action: () => {
+				const t = getT();
 				setQuickActionOpen(false);
 				if (setDebugPackageModalOpen) {
 					setDebugPackageModalOpen(true);
@@ -196,30 +201,31 @@ export function buildSupportCommands({
 				}
 				notifyToast({
 					type: 'info',
-					title: 'Debug Package',
-					message: 'Creating debug package...',
+					title: t('workflows.shell.debugPackage'),
+					message: t('workflows.shell.extraCreatingDebugPackage'),
 				});
 				createDebugPackage()
 					.then((result) => {
 						if (result.success && result.path) {
 							notifyToast({
 								type: 'success',
-								title: 'Debug Package Created',
-								message: `Saved to ${result.path}`,
+								title: t('workflows.shell.debugPackageCreated'),
+								message: t('workflows.shell.extraSavedToValue', { p0: result.path }),
 							});
 						} else if (result.error !== 'Cancelled by user') {
 							notifyToast({
 								type: 'error',
-								title: 'Debug Package Failed',
-								message: result.error || 'Unknown error',
+								title: t('workflows.shell.debugPackageFailed'),
+								message: result.error || t('workflows.shell.extraUnknownError'),
 							});
 						}
 					})
 					.catch((error) => {
 						notifyToast({
 							type: 'error',
-							title: 'Debug Package Failed',
-							message: error instanceof Error ? error.message : 'Unknown error',
+							title: t('workflows.shell.debugPackageFailed'),
+							message:
+								error instanceof Error ? error.message : t('workflows.shell.extraUnknownError'),
 						});
 						captureException(error);
 						throw error;
@@ -231,8 +237,8 @@ export function buildSupportCommands({
 	if (startTour) {
 		commands.push({
 			id: 'tour',
-			label: 'Start Introductory Tour',
-			subtext: 'Take a guided tour of the interface',
+			label: t('workflows.shell.startIntroductoryTour'),
+			subtext: t('workflows.shell.takeAGuidedTourOfTheInterface'),
 			action: () => {
 				startTour();
 				setQuickActionOpen(false);
@@ -243,7 +249,7 @@ export function buildSupportCommands({
 	if (setUpdateCheckModalOpen) {
 		commands.push({
 			id: 'updateCheck',
-			label: 'Check for Updates',
+			label: t('workflows.shell.checkForUpdates'),
 			action: () => {
 				setUpdateCheckModalOpen(true);
 				setQuickActionOpen(false);

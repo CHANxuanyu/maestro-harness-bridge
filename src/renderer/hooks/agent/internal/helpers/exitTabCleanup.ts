@@ -18,6 +18,11 @@
 
 import type { LogEntry, ThinkingMode } from '../../../../types';
 import { buildHiddenProgressLogId } from '../../../../utils/hiddenProgress';
+import {
+	isTransientActivityEntry,
+	settleRunningToolEntries,
+	type ActivityRetention,
+} from '../../../../utils/logEntries';
 
 export function removeHiddenProgressLog(logs: LogEntry[], tabId: string): LogEntry[] {
 	const hiddenLogId = buildHiddenProgressLogId(tabId);
@@ -27,11 +32,17 @@ export function removeHiddenProgressLog(logs: LogEntry[], tabId: string): LogEnt
 
 export function applyExitThinkingPolicy(
 	logs: LogEntry[],
-	tab: { showThinking?: ThinkingMode }
+	tab: { showThinking?: ThinkingMode },
+	retention: ActivityRetention = {}
 ): LogEntry[] {
-	if (tab.showThinking === 'sticky') return logs;
-	const filtered = logs.filter((l) => l.source !== 'thinking' && l.source !== 'tool');
-	return filtered.length === logs.length ? logs : filtered;
+	// Kept tool calls must not go on pulsing once their process is gone.
+	const settled = retention.keepTools ? settleRunningToolEntries(logs, 'exited') : logs;
+	if (tab.showThinking === 'sticky') return settled;
+	// Only the live turn's scratch entries; tool cards and reasoning read back
+	// from the provider transcript are history and stay, and so do live tool
+	// calls when the layout keeps them (`retention.keepTools`).
+	const filtered = settled.filter((l) => !isTransientActivityEntry(l, retention));
+	return filtered.length === settled.length ? settled : filtered;
 }
 
 /**
@@ -42,7 +53,8 @@ export function applyExitThinkingPolicy(
 export function cleanupExitedTabLogs(
 	logs: LogEntry[],
 	tabId: string,
-	tab: { showThinking?: ThinkingMode }
+	tab: { showThinking?: ThinkingMode },
+	retention: ActivityRetention = {}
 ): LogEntry[] {
-	return applyExitThinkingPolicy(removeHiddenProgressLog(logs, tabId), tab);
+	return applyExitThinkingPolicy(removeHiddenProgressLog(logs, tabId), tab, retention);
 }

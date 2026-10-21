@@ -49,6 +49,7 @@ import {
 } from '../../stores/sessionStore';
 import { logger } from '../../utils/logger';
 import { requestWebBridgeReconcile } from '../../services/webBridgeReconcile';
+import { requestTranscriptScrollToBottom } from '../../services/transcriptScroll';
 
 let cachedImageOnlyPrompt: string = '';
 let inputProcessingPromptsLoaded = false;
@@ -222,6 +223,15 @@ export type ProcessInputOptions = {
 	sessionId?: string;
 	/** Prefer this AI tab over the session's current activeTabId. */
 	tabId?: string;
+	/**
+	 * This call is the user pressing Send right now (a Send button outside the
+	 * composer, a clicked chip or replay control), so the sent turn is revealed
+	 * in its tab the way an Enter in the composer is. A composer submit
+	 * (`overrideInputValue` undefined) reveals without it. Deferred sends -
+	 * session recovery after grooming, macros - leave it unset: the reader may
+	 * be somewhere else in that tab by the time they land.
+	 */
+	revealTurn?: boolean;
 };
 
 export interface UseInputProcessingReturn {
@@ -643,6 +653,10 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 			// opposed to a replay, Force Send, or recovery that hands its own text
 			// in. Only these read the draft, so only these can read it twice.
 			const isComposerSubmit = overrideInputValue === undefined;
+			// Whether the user's own Send is what dispatches this turn, so the
+			// transcript takes its tab to it (see requestTranscriptScrollToBottom
+			// below). Not every path that appends a user row is that.
+			const revealsSentTurn = isComposerSubmit || options?.revealTurn === true;
 			const inFlightKey = `${activeSession.id}:${targetTabId ?? ''}`;
 			const submitted = { text: effectiveInputValue, images: effectiveImages };
 			const isRepeatOfInFlight = (composerSubmitsInFlight.get(inFlightKey) ?? []).some(
@@ -888,6 +902,12 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 							),
 						};
 					});
+
+					// The user sent this; the consult replies stream in under it, so take
+					// the tab to it (see the matching request on the normal send below).
+					if (sourceTab && revealsSentTurn) {
+						requestTranscriptScrollToBottom(resolvedSessionId, sourceTab.id);
+					}
 
 					// Mirror the bubble to other windows, matching the normal user-entry
 					// broadcast below (best-effort; a failed mirror must not block send).
@@ -1361,6 +1381,23 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 					agentErrorPaused: false,
 				};
 			});
+
+			// The user just sent this turn (their own Send, see revealsSentTurn):
+			// take its tab to the message and follow the reply, even if they were up
+			// in history. The transcript otherwise holds a reader's position against
+			// new output (it is the agent's, on the agent's schedule), which left a
+			// send from history streaming its progress, tools and reply offscreen
+			// behind the unread badge. Raised once, after the entry is in the store
+			// and after the probe, through the same request a `!` command uses;
+			// scrolling up afterwards pauses as usual. Deferred sends (recovery after
+			// grooming), external refreshes, queue drains and background work do not
+			// ask, so they keep the reader's place. The request is a one-shot event
+			// naming the session and tab, answered only by the transcript showing
+			// that tab at that moment: a switch away during the probe moves nothing,
+			// and nothing is remembered to replay when the user comes back.
+			if (currentMode === 'ai' && activeTabForEntry && revealsSentTurn) {
+				requestTranscriptScrollToBottom(resolvedSessionId, activeTabForEntry.id);
+			}
 
 			// If directory changed, check if new directory is a Git repository
 			// For remote sessions, check remoteCwd; for local sessions, check shellCwd

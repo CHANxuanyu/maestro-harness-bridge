@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * GroupChatInput.tsx
  *
@@ -135,6 +136,7 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 	showFlashNotification,
 	shortcuts,
 }: GroupChatInputProps): JSX.Element {
+	const t = useT();
 	const spellCheckEnabled = useSettingsStore((state) => state.spellCheck);
 	const [message, setMessage] = useState(draftMessage || '');
 	// Unified `@` mention picker state (see useMentionPicker/AtMentionPopover).
@@ -503,7 +505,7 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 						const imageData = event.target!.result as string;
 						setStagedImages((prev) => {
 							if (prev.includes(imageData)) {
-								showFlashNotification?.('Duplicate image ignored');
+								showFlashNotification?.(t('workflows.shell.extraDuplicateImageIgnored'));
 								return prev;
 							}
 							return [...prev, imageData];
@@ -514,7 +516,7 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 			});
 			e.target.value = '';
 		},
-		[showFlashNotification]
+		[t, showFlashNotification]
 	);
 
 	// Reordering the strip reorders what the agent receives (every send path
@@ -580,8 +582,10 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 				>
 					<span className="flex-1 min-w-0">
 						{failedItem
-							? `Queue paused: ${failedItem.failureReason ?? 'a message could not be sent'}`
-							: 'Queue paused'}
+							? t('workflows.shell.queuePausedValue', {
+									p0: failedItem.failureReason ?? t('workflows.shell.extraAMessageCouldNotBeSent'),
+								})
+							: t('workflows.shell.queuePaused')}
 					</span>
 					{onResumeQueue && (
 						<button
@@ -590,7 +594,7 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 							className="shrink-0 px-2 py-0.5 rounded text-2xs font-bold"
 							style={{ backgroundColor: theme.colors.accent, color: theme.colors.bgMain }}
 						>
-							Resume
+							{t('workflows.shell.resume')}
 						</button>
 					)}
 				</div>
@@ -599,7 +603,7 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 			{/* One message is on its way to the moderator and cannot be removed. */}
 			{sendingItem && (
 				<div className="mb-2 px-1 text-2xs" style={{ color: theme.colors.textDim }}>
-					Sending, cannot remove
+					{t('workflows.shell.sendingCannotRemove')}
 				</div>
 			)}
 
@@ -668,7 +672,9 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 							onDrop={handleDropWrapped}
 							onDragOver={(e) => e.preventDefault()}
 							placeholder={
-								isBusy ? 'Type to queue message...' : 'Type a message... (@ to mention agent)'
+								isBusy
+									? t('workflows.shell.typeToQueueMessage')
+									: t('workflows.shell.typeAMessageToMentionAgent')
 							}
 							spellCheck={spellCheckEnabled}
 							rows={1}
@@ -688,7 +694,11 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 								<button
 									onClick={handleOpenPromptComposer}
 									className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
-									title={`Open Prompt Composer${shortcuts?.openPromptComposer ? ` (${formatShortcutKeys(shortcuts.openPromptComposer.keys)})` : ''}`}
+									title={t('workflows.shell.openPromptComposervalue', {
+										p0: shortcuts?.openPromptComposer
+											? ` (${formatShortcutKeys(shortcuts.openPromptComposer.keys)})`
+											: '',
+									})}
 								>
 									<PenLine className="w-4 h-4" />
 								</button>
@@ -696,7 +706,7 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 							<button
 								onClick={() => document.getElementById('group-chat-image-input')?.click()}
 								className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
-								title="Attach Image"
+								title={t('workflows.shell.attachImage')}
 							>
 								<ImageIcon className="w-4 h-4" />
 							</button>
@@ -725,10 +735,10 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 										? `1px solid ${theme.colors.warning}50`
 										: '1px solid transparent',
 								}}
-								title="Toggle Read-Only mode (agents won't modify files)"
+								title={t('workflows.shell.toggleReadOnlyModeAgentsWonTModify')}
 							>
 								<Eye className="w-3 h-3" />
-								<span>Read-Only</span>
+								<span>{t('workflows.shell.readOnly')}</span>
 							</button>
 
 							{/* Enter to send toggle */}
@@ -756,7 +766,7 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 							borderColor: theme.colors.border,
 							color: theme.colors.textDim,
 						}}
-						title="Notification Settings"
+						title={t('workflows.shell.notificationSettings')}
 					>
 						<Bell className="w-4 h-4" />
 					</button>
@@ -779,7 +789,7 @@ export const GroupChatInput = React.memo(function GroupChatInput({
 								: theme.colors.border,
 							color: message.trim() ? theme.colors.accentForeground : theme.colors.textDim,
 						}}
-						title={isBusy ? 'Queue message' : 'Send message'}
+						title={isBusy ? t('workflows.shell.queueMessage') : t('workflows.shell.sendMessage')}
 					>
 						<ArrowUp className="w-4 h-4" />
 					</button>

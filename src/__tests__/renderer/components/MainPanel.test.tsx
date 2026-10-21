@@ -198,10 +198,11 @@ vi.mock('../../../renderer/components/TabBar', () => ({
 		tabs: Array<{ id: string; name?: string }>;
 		onTabSelect: (id: string) => void;
 		onNewTab: () => void;
+		onlyActiveAiTab?: boolean;
 	}) => {
 		return React.createElement(
 			'div',
-			{ 'data-testid': 'tab-bar' },
+			{ 'data-testid': 'tab-bar', 'data-only-active-ai': String(!!props.onlyActiveAiTab) },
 			props.tabs.map((tab) =>
 				React.createElement(
 					'button',
@@ -625,6 +626,9 @@ describe('MainPanel', () => {
 			// in the store are showSessionIdPill: false, showSessionCostPill: true.
 			showSessionIdPill: true,
 			showSessionCostPill: true,
+			// These suites cover the agent-centred header and full tab strip; the
+			// conversation-list mode has its own cases ("Conversation navigation").
+			sidebarNavigationMode: 'agents',
 		});
 
 		// Clear capabilities cache and pre-populate with Claude Code capabilities (default test agent)
@@ -758,6 +762,57 @@ describe('MainPanel', () => {
 
 			expect(screen.getByTestId('terminal-output')).toBeInTheDocument();
 			expect(screen.queryByText('No agents. Create one to get started.')).not.toBeInTheDocument();
+		});
+	});
+
+	describe('Conversation navigation', () => {
+		beforeEach(() => {
+			useSettingsStore.setState({ sidebarNavigationMode: 'conversations' });
+		});
+
+		it('names the current conversation in the header, not the configuration', () => {
+			renderMainPanel({ activeSession: createSession({ name: 'Maestro handoff' }) });
+
+			const heading = screen.getByTestId('header-conversation-title');
+			expect(heading).toHaveTextContent('Tab 1');
+			expect(heading).not.toHaveTextContent('Maestro handoff');
+			// The configuration stays discoverable on hover.
+			expect(heading.getAttribute('title')).toContain('Maestro handoff');
+		});
+
+		it('draws no tab strip when it would only repeat the current conversation', () => {
+			renderMainPanel();
+			expect(screen.queryByTestId('tab-bar')).not.toBeInTheDocument();
+		});
+
+		it('brings the strip back, current chip only, once a resource tab is open', () => {
+			const session = createSession({
+				filePreviewTabs: [
+					{
+						id: 'file-1',
+						path: '/test/project/notes.md',
+						name: 'notes',
+						extension: '.md',
+						content: '',
+						scrollTop: 0,
+						searchQuery: '',
+						editMode: false,
+						editContent: undefined,
+						createdAt: Date.now(),
+						lastModified: Date.now(),
+					},
+				],
+			} as Partial<Session>);
+			renderMainPanel({ activeSession: session });
+			expect(screen.getByTestId('tab-bar')).toHaveAttribute('data-only-active-ai', 'true');
+		});
+
+		it('keeps the full strip and agent name in agents mode', () => {
+			useSettingsStore.setState({ sidebarNavigationMode: 'agents' });
+			renderMainPanel();
+			expect(screen.getByTestId('tab-bar')).toHaveAttribute('data-only-active-ai', 'false');
+			expect(screen.queryByTestId('header-conversation-title')).not.toBeInTheDocument();
+			expect(screen.getByText('Test Session')).toBeInTheDocument();
 		});
 	});
 

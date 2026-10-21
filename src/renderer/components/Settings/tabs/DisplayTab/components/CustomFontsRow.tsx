@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Theme } from '../../../../../types';
+import { useT } from '../../../../../i18n';
 
 interface CustomFontsRowProps {
 	theme: Theme;
@@ -28,6 +29,7 @@ export function CustomFontsRow({
 	onRemoveCustomFont,
 }: CustomFontsRowProps) {
 	const [draft, setDraft] = useState('');
+	const t = useT();
 
 	const commit = () => {
 		const trimmed = draft.trim();
@@ -50,8 +52,8 @@ export function CustomFontsRow({
 					onKeyDown={(e) => {
 						if (e.key === 'Enter') commit();
 					}}
-					placeholder="Add custom font name..."
-					aria-label="Add custom font name"
+					placeholder={t('settings.display.customFonts.placeholder')}
+					aria-label={t('settings.display.customFonts.aria')}
 					data-testid="custom-font-input"
 					className="flex-1 min-w-0 p-2 rounded border bg-transparent outline-none text-sm"
 					style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
@@ -66,7 +68,7 @@ export function CustomFontsRow({
 						color: theme.colors.accentForeground,
 					}}
 				>
-					Add
+					{t('common.add')}
 				</button>
 			</div>
 			{customFonts.length > 0 && (
@@ -84,7 +86,7 @@ export function CustomFontsRow({
 							<button
 								type="button"
 								onClick={() => onRemoveCustomFont(font)}
-								aria-label={`Remove ${font}`}
+								aria-label={t('settings.display.customFonts.remove', { font })}
 								className="hover:opacity-70"
 								style={{ color: theme.colors.error }}
 							>

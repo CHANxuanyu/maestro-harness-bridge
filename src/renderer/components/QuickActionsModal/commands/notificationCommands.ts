@@ -1,10 +1,7 @@
+import { getT } from '../../../i18n';
 import type { QuickAction } from '../types';
 import type { ToastPosition } from '../../../../shared/toastPosition';
-import {
-	TOAST_POSITIONS,
-	TOAST_POSITION_LABELS,
-	isTopToastPosition,
-} from '../../../../shared/toastPosition';
+import { TOAST_POSITIONS, isTopToastPosition } from '../../../../shared/toastPosition';
 
 interface BuildNotificationCommandsArgs {
 	/** Number of toasts currently on screen. */
@@ -46,15 +43,25 @@ export function buildNotificationCommands({
 	setToastPosition,
 	setQuickActionOpen,
 }: BuildNotificationCommandsArgs): QuickAction[] {
+	const t = getT();
+	const TOAST_POSITION_LABELS = {
+		'top-left': t('workflows.labels.topLeft'),
+		'top-right': t('workflows.labels.topRight'),
+		'bottom-left': t('workflows.labels.bottomLeft'),
+		'bottom-right': t('workflows.labels.bottomRight'),
+	};
 	return [
 		{
 			id: 'clear-all-notifications',
-			label: 'Clear All Notifications',
+			label: t('workflows.shell.clearAllNotifications'),
 			shortcut: clearAllNotificationsShortcut,
 			subtext:
 				visibleToastCount > 0
-					? `Dismiss ${visibleToastCount} visible toast${visibleToastCount === 1 ? '' : 's'}`
-					: 'No notifications on screen',
+					? t('workflows.shell.dismissValueVisibleToastvalue', {
+							p0: visibleToastCount,
+							p1: visibleToastCount === 1 ? '' : t('workflows.shell.pluralSuffix'),
+						})
+					: t('workflows.shell.noNotificationsOnScreen'),
 			action: () => {
 				clearToasts();
 				setQuickActionOpen(false);
@@ -62,12 +69,15 @@ export function buildNotificationCommands({
 		},
 		{
 			id: 'open-notification-center',
-			label: 'Open Notification Center',
+			label: t('workflows.shell.openNotificationCenter'),
 			shortcut: openNotificationCenterShortcut,
 			subtext:
 				unreadNotificationCount > 0
-					? `${unreadNotificationCount} unread notification${unreadNotificationCount === 1 ? '' : 's'}`
-					: 'No unread notifications',
+					? t('workflows.shell.valueUnreadNotificationvalue', {
+							p0: unreadNotificationCount,
+							p1: unreadNotificationCount === 1 ? '' : t('workflows.shell.pluralSuffix'),
+						})
+					: t('workflows.shell.noUnreadNotifications'),
 			action: () => {
 				openNotificationCenter();
 				setQuickActionOpen(false);
@@ -80,13 +90,15 @@ export function buildNotificationCommands({
 		...TOAST_POSITIONS.map(
 			(position): QuickAction => ({
 				id: `toast-position-${position}`,
-				label: `Move Toast Notifications to ${TOAST_POSITION_LABELS[position]}`,
+				label: t('workflows.shell.moveToastNotificationsToValue', {
+					p0: TOAST_POSITION_LABELS[position],
+				}),
 				subtext:
 					position === toastPosition
-						? 'Current position'
+						? t('workflows.shell.currentPosition')
 						: isTopToastPosition(position)
-							? 'Toasts stack downward from this corner'
-							: 'Toasts stack upward from this corner',
+							? t('workflows.shell.toastsStackDownwardFromThisCorner')
+							: t('workflows.shell.toastsStackUpwardFromThisCorner'),
 				action: () => {
 					setToastPosition(position);
 					setQuickActionOpen(false);

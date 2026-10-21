@@ -1,4 +1,5 @@
 import type { MouseEvent, PointerEvent } from 'react';
+import { useT } from '../../i18n';
 import type { ModalResizeDirection } from '../../hooks/ui/useResizableModal';
 
 interface ResizeHandlesCommonProps {
@@ -92,6 +93,7 @@ export function ResizeHandles({
 	canReset = false,
 	directions = DIRECTIONS,
 }: ResizeHandlesProps) {
+	const t = useT();
 	if (disabled) return null;
 	const handleStyles = contained ? CONTAINED_HANDLE_STYLES : HANDLE_STYLES;
 	// The handles are invisible until hover, so the native tooltip is the only
@@ -99,8 +101,8 @@ export function ResizeHandles({
 	// half of it when there is actually a remembered size to drop.
 	const tooltip = onResetSize
 		? canReset
-			? 'Drag to resize, double-click to reset'
-			: 'Drag to resize'
+			? t('workflows.composer.resizeReset')
+			: t('workflows.composer.resize')
 		: undefined;
 
 	return (

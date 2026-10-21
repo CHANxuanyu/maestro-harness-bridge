@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { templateVariableDescription } from './shared/templateVariableI18n';
 import { forwardRef } from 'react';
 import type { Theme } from '../types';
 import type { AutocompleteState } from '../hooks';
@@ -16,6 +18,7 @@ export const TemplateAutocompleteDropdown = forwardRef<
 	HTMLDivElement,
 	TemplateAutocompleteDropdownProps
 >(function TemplateAutocompleteDropdown({ theme, state, onSelect }, ref) {
+	const tExtra = useT();
 	if (!state.isOpen || state.filteredVariables.length === 0) {
 		return null;
 	}
@@ -68,7 +71,7 @@ export const TemplateAutocompleteDropdown = forwardRef<
 							{item.variable}
 						</code>
 						<span className="text-xs truncate" style={{ color: theme.colors.textDim }}>
-							{item.description}
+							{templateVariableDescription(item.variable, item.description, tExtra)}
 						</span>
 					</div>
 				))}
@@ -87,21 +90,21 @@ export const TemplateAutocompleteDropdown = forwardRef<
 				>
 					↑↓
 				</kbd>{' '}
-				navigate{' '}
+				{tExtra('settings.extra.templateAutocomplete.navigate')}{' '}
 				<kbd
 					className="px-1 py-0.5 rounded text-2xs"
 					style={{ backgroundColor: theme.colors.bgActivity }}
 				>
 					Tab
 				</kbd>{' '}
-				select{' '}
+				{tExtra('settings.extra.templateAutocomplete.select')}{' '}
 				<kbd
 					className="px-1 py-0.5 rounded text-2xs"
 					style={{ backgroundColor: theme.colors.bgActivity }}
 				>
 					Esc
 				</kbd>{' '}
-				close
+				{tExtra('settings.extra.templateAutocomplete.close')}
 			</div>
 		</div>
 	);

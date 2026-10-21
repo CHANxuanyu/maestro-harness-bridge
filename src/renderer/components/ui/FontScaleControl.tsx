@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * FontScaleControl - decrease / reset / increase font zoom for a reading pane.
  *
@@ -52,6 +53,7 @@ export const FontScaleControl = React.memo(function FontScaleControl({
 	className = '',
 	testId,
 }: FontScaleControlProps) {
+	const uiText = useT();
 	// The font hook names its fields after fonts; ScaleControl speaks the
 	// generic vocabulary. Adapt rather than making either side compromise.
 	const scaleControl = useMemo(
@@ -73,7 +75,15 @@ export const FontScaleControl = React.memo(function FontScaleControl({
 			increaseIcon={AArrowUp}
 			collapsible={collapsible}
 			collapsedIcon={ALargeSmall}
-			subject={target ? `${target} font size` : 'font size'}
+			subject={
+				target === 'preview'
+					? uiText('workflows.files.previewFontSize')
+					: target === 'editor'
+						? uiText('workflows.files.editorFontSize')
+						: target
+							? `${target} font size`
+							: uiText('workflows.files.fontSize')
+			}
 			variant={variant}
 			size={size}
 			className={className}

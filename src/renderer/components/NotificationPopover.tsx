@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import { useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, Volume2, Coffee, type LucideIcon } from 'lucide-react';
@@ -22,6 +23,7 @@ export const NotificationPopover = memo(function NotificationPopover({
 	anchorRef,
 	onClose,
 }: NotificationPopoverProps) {
+	const t = useT();
 	const popoverRef = useRef<HTMLDivElement>(null);
 
 	// Settings store
@@ -72,19 +74,19 @@ export const NotificationPopover = memo(function NotificationPopover({
 		onChange: (value: boolean) => void;
 	}> = [
 		{
-			label: 'OS Notifications',
+			label: t('workflows.shellStatus.osNotifications'),
 			icon: Bell,
 			checked: osNotificationsEnabled,
 			onChange: setOsNotificationsEnabled,
 		},
 		{
-			label: 'Custom Notifications',
+			label: t('workflows.shellStatus.customNotifications'),
 			icon: Volume2,
 			checked: audioFeedbackEnabled,
 			onChange: setAudioFeedbackEnabled,
 		},
 		{
-			label: 'Idle Notifications',
+			label: t('workflows.shellStatus.idleNotifications'),
 			icon: Coffee,
 			checked: idleNotificationEnabled,
 			onChange: setIdleNotificationEnabled,

@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * EnvVarsEditor - Editor for shell environment variables
  *
@@ -109,13 +110,14 @@ export function EnvVarsEditor({
 	envVars,
 	setEnvVars,
 	theme,
-	label = 'Environment Variables (optional)',
-	description = 'Environment variables passed to all terminal sessions and AI agent processes.',
+	label,
+	description,
 	knownAuthDirs = EMPTY_KNOWN_AUTH_DIRS,
 	disabledEnvVars,
 	setDisabledEnvVars,
 	knownEnvVarKeys = EMPTY_KNOWN_ENV_VAR_KEYS,
 }: EnvVarsEditorProps) {
+	const t = useT();
 	// The toggle needs both halves to round-trip a parked variable; with only
 	// one, switching a row off would drop its value on the floor.
 	const canToggle = Boolean(disabledEnvVars && setDisabledEnvVars);
@@ -137,7 +139,7 @@ export function EnvVarsEditor({
 		}
 		// Check for valid variable name format (alphanumeric and underscore)
 		if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.key)) {
-			return `Invalid variable name: only letters, numbers, and underscores allowed and must not start with a number.`;
+			return t('settings.finish.env.invalidName');
 		}
 		// Check if value contains special characters that might need quoting
 		if (
@@ -146,13 +148,13 @@ export function EnvVarsEditor({
 			!entry.value.startsWith('"') &&
 			!entry.value.startsWith("'")
 		) {
-			return `Invalid value: contains disallowed special characters; quote or escape them if you intend to include them.`;
+			return t('settings.finish.env.invalidValue');
 		}
 		// Variables that are consumed as filesystem paths must be absolute -
 		// relative values get resolved against the main-process cwd at runtime
 		// (often `/`) and silently point at a non-existent directory.
 		if (ABSOLUTE_PATH_KEYS[entry.key] && entry.value && !isAbsolutePath(entry.value)) {
-			return `${entry.key} must be an absolute path (starting with /).`;
+			return t('settings.finish.env.absolutePath', { key: entry.key });
 		}
 		return null;
 	};
@@ -248,7 +250,7 @@ export function EnvVarsEditor({
 		>
 			{label !== null && (
 				<label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-					{label}
+					{label ?? t('settings.finish.env.label')}
 				</label>
 			)}
 			<div className="space-y-2">
@@ -264,8 +266,12 @@ export function EnvVarsEditor({
 										padding="p-2"
 										title={
 											off
-												? `Enable ${entry.key || 'variable'} (currently not passed to any process)`
-												: `Disable ${entry.key || 'variable'} (keeps the value, stops passing it to processes)`
+												? t('settings.finish.env.enable', {
+														key: entry.key || t('settings.finish.env.variable'),
+													})
+												: t('settings.finish.env.disable', {
+														key: entry.key || t('settings.finish.env.variable'),
+													})
 										}
 										color={off ? theme.colors.textDim : theme.colors.accent}
 									>
@@ -308,7 +314,7 @@ export function EnvVarsEditor({
 								<GhostIconButton
 									onClick={() => removeEntry(entry.id)}
 									padding="p-2"
-									title="Remove variable"
+									title={t('settings.finish.env.remove')}
 									color={theme.colors.textDim}
 								>
 									<Trash2 className="w-3 h-3" />
@@ -316,7 +322,7 @@ export function EnvVarsEditor({
 							</div>
 							{error && (
 								<p className="text-xs mt-1 px-2" style={{ color: '#ef4444' }}>
-									{error}
+									{validateEntry(entry)}
 								</p>
 							)}
 						</div>
@@ -328,10 +334,14 @@ export function EnvVarsEditor({
 					style={{ color: theme.colors.textDim }}
 				>
 					<Plus className="w-3 h-3" />
-					Add Variable
+					{t('settings.finish.env.add')}
 				</button>
 			</div>
-			{description !== null && <p className="text-xs opacity-70 mt-2">{description}</p>}
+			{description !== null && (
+				<p className="text-xs opacity-70 mt-2">
+					{description ?? t('settings.finish.env.description')}
+				</p>
+			)}
 		</div>
 	);
 }

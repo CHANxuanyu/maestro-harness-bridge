@@ -1,6 +1,6 @@
 {
 	"name": "maestro",
-	"version": "1.0.1",
+	"version": "1.0.1-hb.1",
 	"description": "Maestro hones fractured attention into focused intent.",
 	"main": "dist/main/index.js",
 	"desktopName": "maestro.desktop",
@@ -11,7 +11,7 @@
 	"license": "AGPL 3.0",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/RunMaestro/Maestro.git"
+		"url": "https://github.com/CHANxuanyu/maestro-harness-bridge.git"
 	},
 	"bin": {
 		"maestro-cli": "./dist/cli/maestro-cli.js",
@@ -58,7 +58,7 @@
 		"format:all": "prettier --write .",
 		"format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
 		"format:check:all": "prettier --check .",
-		"validate:push": "bun run format:check:all && bun run lint && bun run lint:eslint && bun run test",
+		"validate:push": "npm run format:check:all && npm run lint && npm run lint:eslint && npm run test",
 		"test": "cross-env NODE_OPTIONS=--max-old-space-size=8192 vitest run",
 		"test:watch": "cross-env NODE_OPTIONS=--max-old-space-size=8192 vitest",
 		"test:coverage": "cross-env NODE_OPTIONS=--max-old-space-size=8192 vitest run --coverage",
@@ -73,7 +73,8 @@
 		"refresh-openspec": "node scripts/refresh-openspec.mjs",
 		"refresh-bmad": "node scripts/refresh-bmad.mjs",
 		"fonts:fetch": "node scripts/fetch-webfonts.mjs",
-		"fonts:check": "node scripts/fetch-webfonts.mjs --check"
+		"fonts:check": "node scripts/fetch-webfonts.mjs --check",
+		"package:harness-bridge:mac": "node scripts/package-harness-bridge.mjs"
 	},
 	"build": {
 		"npmRebuild": false,
@@ -89,8 +90,8 @@
 		],
 		"publish": {
 			"provider": "github",
-			"owner": "RunMaestro",
-			"repo": "Maestro"
+			"owner": "CHANxuanyu",
+			"repo": "maestro-harness-bridge"
 		},
 		"directories": {
 			"output": "release",

@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { Group, Session } from '../../../types';
 import type { QuickAction } from '../types';
 import type { WindowMoveTarget } from '../../../utils/windowTargets';
@@ -63,6 +64,7 @@ export function buildWindowCommands({
 	canRenameCurrentWindow,
 	beginRenameCurrentWindow,
 }: BuildWindowCommandsArgs): QuickAction[] {
+	const t = getT();
 	const commands: QuickAction[] = [];
 
 	// Rename This Window - only in a secondary window. Listed first so it is easy
@@ -71,7 +73,7 @@ export function buildWindowCommands({
 	if (canRenameCurrentWindow && beginRenameCurrentWindow) {
 		commands.push({
 			id: 'rename-current-window',
-			label: 'Rename This Window',
+			label: t('workflows.shell.renameThisWindow'),
 			action: () => beginRenameCurrentWindow(),
 		});
 	}
@@ -81,7 +83,7 @@ export function buildWindowCommands({
 		const sessionId = activeSession.id;
 		commands.push({
 			id: 'move-to-new-window',
-			label: `Move Agent to New Window: ${activeSession.name}`,
+			label: t('workflows.shell.moveAgentToNewWindowValue', { p0: activeSession.name }),
 			action: () => {
 				void moveToNewWindow(sessionId);
 				setQuickActionOpen(false);
@@ -93,7 +95,7 @@ export function buildWindowCommands({
 			if (target.isCurrentOwner) continue;
 			commands.push({
 				id: `move-to-window-${target.windowId}`,
-				label: `Move Agent to ${target.label}`,
+				label: t('workflows.shell.moveAgentToValue', { p0: target.label }),
 				action: () => {
 					void moveToWindow(sessionId, target.windowId);
 					setQuickActionOpen(false);
@@ -110,7 +112,7 @@ export function buildWindowCommands({
 		const groupLabel = `${activeGroup.emoji ? `${activeGroup.emoji} ` : ''}${activeGroup.name}`;
 		commands.push({
 			id: 'move-group-to-new-window',
-			label: `Move Group to New Window: ${groupLabel}`,
+			label: t('workflows.shell.moveGroupToNewWindowValue', { p0: groupLabel }),
 			action: () => {
 				void moveGroupToNewWindow(groupId);
 				setQuickActionOpen(false);
@@ -120,7 +122,7 @@ export function buildWindowCommands({
 			if (target.isCurrentOwner) continue;
 			commands.push({
 				id: `move-group-to-window-${target.windowId}`,
-				label: `Move Group to ${target.label}: ${groupLabel}`,
+				label: t('workflows.shell.moveGroupToValueValue', { p0: target.label, p1: groupLabel }),
 				action: () => {
 					void moveGroupToWindow(groupId, target.windowId);
 					setQuickActionOpen(false);

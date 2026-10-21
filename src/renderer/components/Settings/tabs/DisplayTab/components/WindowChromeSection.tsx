@@ -1,5 +1,6 @@
 import { AppWindow } from 'lucide-react';
 import type { Theme } from '../../../../../types';
+import { useT } from '../../../../../i18n';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { SectionCard } from './SectionCard';
 import { ToggleSettingRow } from './ToggleSettingRow';
@@ -19,21 +20,24 @@ export function WindowChromeSection({
 	autoHideMenuBar,
 	setAutoHideMenuBar,
 }: WindowChromeSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="display-window-chrome">
-			<SettingsSectionHeading icon={AppWindow}>Window Chrome</SettingsSectionHeading>
+			<SettingsSectionHeading icon={AppWindow}>
+				{t('settings.display.chrome.heading')}
+			</SettingsSectionHeading>
 			<SectionCard theme={theme}>
 				<ToggleSettingRow
 					theme={theme}
-					title="Use native title bar"
-					description="Use the OS native title bar instead of Maestro's custom title bar. Requires restart."
+					title={t('settings.display.chrome.nativeTitleBar')}
+					description={t('settings.display.chrome.nativeTitleBarDescription')}
 					checked={useNativeTitleBar}
 					onChange={setUseNativeTitleBar}
 				/>
 				<ToggleSettingRow
 					theme={theme}
-					title="Auto-hide menu bar"
-					description="Hide the application menu bar. Press Alt to toggle visibility. Applies to Windows and Linux. Requires restart."
+					title={t('settings.display.chrome.autoHideMenu')}
+					description={t('settings.display.chrome.autoHideMenuDescription')}
 					checked={autoHideMenuBar}
 					onChange={setAutoHideMenuBar}
 					borderTop

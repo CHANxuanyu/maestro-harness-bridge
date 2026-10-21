@@ -34,6 +34,8 @@ import {
 import { generateId } from '../../../utils/ids';
 import { logger } from '../../../utils/logger';
 import { cleanupExitedTabLogs } from './helpers/exitTabCleanup';
+import { currentActivityRetention } from '../../../utils/activityRetention';
+import { isProgressNoteEntry } from '../../../utils/transcriptMessages';
 import { chooseNextQueuedItem, queueIsHeldByRetry } from './helpers/exitDequeue';
 import { takeNextRunnableQueueItem } from '../../../utils/executionQueue';
 import { refreshGitRefsAfterTerminalExit } from './helpers/exitGitRefresh';
@@ -274,8 +276,11 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 						: getActiveTab(currentSession);
 					const logs = completedTab?.logs || [];
 					const lastUserLog = logs.filter((log) => log.source === 'user').pop();
+					// A progress note is narration, never the turn's reply.
 					const lastAiLog = logs
-						.filter((log) => log.source === 'stdout' || log.source === 'ai')
+						.filter(
+							(log) => (log.source === 'stdout' || log.source === 'ai') && !isProgressNoteEntry(log)
+						)
 						.pop();
 					const completedTabData =
 						currentSession.aiTabs?.find((tab) => tab.id === tabIdFromSession) ||
@@ -568,7 +573,12 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 											return tab.id === tabIdFromSession
 												? {
 														...tab,
-														logs: cleanupExitedTabLogs(tab.logs, tab.id, tab),
+														logs: cleanupExitedTabLogs(
+															tab.logs,
+															tab.id,
+															tab,
+															currentActivityRetention()
+														),
 														state: 'idle' as const,
 														thinkingStartTime: undefined,
 														// Preserve agentSessionId - stale IDs are cleared
@@ -581,7 +591,12 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 											return tab.state === 'busy'
 												? {
 														...tab,
-														logs: cleanupExitedTabLogs(tab.logs, tab.id, tab),
+														logs: cleanupExitedTabLogs(
+															tab.logs,
+															tab.id,
+															tab,
+															currentActivityRetention()
+														),
 														state: 'idle' as const,
 														thinkingStartTime: undefined,
 													}
@@ -626,7 +641,7 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 								tabIdFromSession && tab.id === tabIdFromSession
 									? {
 											...tab,
-											logs: cleanupExitedTabLogs(tab.logs, tab.id, tab),
+											logs: cleanupExitedTabLogs(tab.logs, tab.id, tab, currentActivityRetention()),
 											state: 'idle' as const,
 											thinkingStartTime: undefined,
 										}
@@ -669,7 +684,7 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 							if (tabIdFromSession && tab.id === tabIdFromSession) {
 								return {
 									...tab,
-									logs: cleanupExitedTabLogs(tab.logs, tab.id, tab),
+									logs: cleanupExitedTabLogs(tab.logs, tab.id, tab, currentActivityRetention()),
 									state: 'idle' as const,
 								};
 							}
@@ -705,7 +720,12 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 										return tab.id === tabIdFromSession
 											? {
 													...tab,
-													logs: cleanupExitedTabLogs(tab.logs, tab.id, tab),
+													logs: cleanupExitedTabLogs(
+														tab.logs,
+														tab.id,
+														tab,
+														currentActivityRetention()
+													),
 													state: 'idle' as const,
 													thinkingStartTime: undefined,
 													// Preserve agentSessionId for session resume -
@@ -717,7 +737,12 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 										return tab.state === 'busy'
 											? {
 													...tab,
-													logs: cleanupExitedTabLogs(tab.logs, tab.id, tab),
+													logs: cleanupExitedTabLogs(
+														tab.logs,
+														tab.id,
+														tab,
+														currentActivityRetention()
+													),
 													state: 'idle' as const,
 													thinkingStartTime: undefined,
 												}

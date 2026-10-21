@@ -37,9 +37,13 @@ import { getTokenSourcePill } from '../../../../shared/claudeTokenModeLabel';
 import { TurnSettingPills } from '../../ui/TurnSettingPills';
 import { CrossAgentResponseHeader } from '../../CrossAgentResponseHeader';
 import { isHiddenProgressEntry } from '../utils/collapseAiResponseLogs';
+import { toolRunStatus } from '../utils/foldNativeToolRuns';
 import { SessionRecoveryCardConnector } from './SessionRecoveryCardConnector';
 import { ToolBadge } from './ToolBadge';
+import { ToolCallFold } from './ToolCallDetails';
 import { codexDirectivesLiveForSource } from '../../../services/codexFollowup';
+import { isProgressNoteEntry } from '../../../utils/transcriptMessages';
+import { useT } from '../../../i18n';
 
 /**
  * Shallow content comparison for the nested subagent tool entries. Identity is
@@ -72,6 +76,7 @@ export const LogItem = memo(
 		isExpanded,
 		onToggleExpanded,
 		subagentLogs,
+		toolRun,
 		localFilterQuery,
 		filterMode,
 		activeLocalFilter,
@@ -115,6 +120,7 @@ export const LogItem = memo(
 		isRecoveringSession,
 		sessionRecoveryError,
 	}: LogItemProps) => {
+		const t = useT();
 		// Ref for the log item container - used for scroll-into-view on expand
 		const logItemRef = useRef<HTMLDivElement>(null);
 
@@ -388,6 +394,195 @@ export const LogItem = memo(
 					<div className="hidden sm:block w-20 shrink-0" />
 					<div className="flex-1 min-w-0">
 						<AgentDelegationCard log={log} theme={theme} />
+					</div>
+				</div>
+			);
+		}
+
+		// A provider progress note (Codex commentary) read back from the transcript:
+		// narration written between tool calls, not the answer. It renders as a
+		// quiet row under a small label so the answer bubbles stay what the eye
+		// lands on, while the note is still there to read.
+		if (isProgressNoteEntry(log)) {
+			return (
+				<div
+					ref={logItemRef}
+					className="flex gap-4 px-3 sm:px-6 py-1"
+					data-log-index={index}
+					data-log-id={log.id}
+					data-progress-note=""
+					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 32px' }}
+				>
+					<div className="hidden sm:block w-20 shrink-0" />
+					<div
+						className="flex-1 min-w-0 pl-3 border-l-2 text-xs"
+						style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
+					>
+						<span
+							className="text-2xs uppercase tracking-wide"
+							style={{ color: theme.colors.textDim, opacity: 0.8 }}
+						>
+							{t('workflows.transcript.progressNote')}
+						</span>
+						<div className="break-words" style={{ opacity: 0.9 }}>
+							{isAIMode && !markdownEditMode ? (
+								<MarkdownRenderer
+									content={filteredText}
+									theme={theme}
+									onCopy={copyToClipboard}
+									fileTree={fileTree}
+									cwd={cwd}
+									projectRoot={projectRoot}
+									onFileClick={onFileClick}
+									sshRemoteId={sshRemoteId}
+									chatLineBreaks
+									chatMath
+								/>
+							) : (
+								<div className="whitespace-pre-wrap">{filteredText}</div>
+							)}
+						</div>
+					</div>
+				</div>
+			);
+		}
+
+		// With tool calls switched off, this row stands for a whole run of
+		// consecutive tool calls (foldNativeToolRuns) - stored ones, and in the
+		// conversation-centred layout the running turn's too - and unfolds to all
+		// of them. The run's state rides on the row so a call still executing is
+		// visible (and stoppable from the composer) without unfolding it.
+		if (log.source === 'tool' && toolRun && toolRun.length > 0) {
+			const label =
+				toolRun.length === 1
+					? t('workflows.transcript.toolRunOne')
+					: t('workflows.transcript.toolRun', { count: toolRun.length });
+			const runStatus = toolRunStatus(toolRun);
+			return (
+				<div
+					ref={logItemRef}
+					className="flex gap-4 px-3 sm:px-6 py-0.5"
+					data-log-index={index}
+					data-log-id={log.id}
+					data-tool-run=""
+					data-tool-run-status={runStatus}
+					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 28px' }}
+				>
+					<div className="hidden sm:block w-20 shrink-0" />
+					<div
+						className="flex-1 min-w-0 pl-3 py-1 text-xs font-mono border-l-2"
+						style={{ borderColor: `${theme.colors.accent}60`, color: theme.colors.textMain }}
+					>
+						<button
+							type="button"
+							onClick={() => onToggleExpanded(log.id)}
+							aria-expanded={isExpanded}
+							className="flex items-center gap-1 max-w-full min-w-0 rounded outline-none focus-visible:ring-1 opacity-70 hover:opacity-100 transition-opacity"
+							style={{ color: theme.colors.textDim }}
+						>
+							{isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+							<span>{label}</span>
+							{runStatus === 'running' && (
+								<span
+									role="status"
+									aria-label={t('workflows.conversations.busy')}
+									title={t('workflows.conversations.busy')}
+									className="animate-pulse shrink-0"
+									style={{ color: theme.colors.warning }}
+								>
+									●
+								</span>
+							)}
+							{runStatus === 'error' && (
+								<span className="shrink-0" style={{ color: theme.colors.error }}>
+									!
+								</span>
+							)}
+							{runStatus === 'canceled' && (
+								<span className="shrink-0" style={{ color: theme.colors.textDim }}>
+									×
+								</span>
+							)}
+							{runStatus === 'completed' && (
+								<span className="shrink-0" style={{ color: theme.colors.success }}>
+									✓
+								</span>
+							)}
+							<span className="truncate opacity-80">
+								{Array.from(new Set(toolRun.map((entry) => entry.text))).join(', ')}
+							</span>
+						</button>
+						{isExpanded && (
+							<div
+								className="mt-1 ml-1 pl-3 flex flex-col gap-1.5 border-l select-text"
+								style={{ borderColor: `${theme.colors.accent}40` }}
+							>
+								{/* Each call unfolds on its own to its full input and result. */}
+								{toolRun.map((entry) => (
+									<ToolCallFold
+										key={entry.id}
+										log={entry}
+										theme={theme}
+										renderHeader={(call) => <ToolBadge log={call} theme={theme} part="header" />}
+									/>
+								))}
+							</div>
+						)}
+					</div>
+				</div>
+			);
+		}
+
+		// A tool call read back from the transcript is a FOLDED card: name, status
+		// and a one-line summary, with the full input and result one click away.
+		// A conversation of any length holds dozens of these, and drawing each one
+		// open as a full bubble buries the exchange it belongs to.
+		if (log.source === 'tool' && log.nativeTranscript) {
+			return (
+				<div
+					ref={logItemRef}
+					className="flex gap-4 px-3 sm:px-6 py-0.5"
+					data-log-index={index}
+					data-log-id={log.id}
+					data-native-tool=""
+					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 28px' }}
+				>
+					<div className="hidden sm:block w-20 shrink-0" />
+					<div
+						className="flex-1 min-w-0 pl-3 py-1 text-xs font-mono border-l-2"
+						style={{ borderColor: `${theme.colors.accent}60`, color: theme.colors.textMain }}
+					>
+						<button
+							type="button"
+							onClick={() => onToggleExpanded(log.id)}
+							aria-expanded={isExpanded}
+							aria-label={
+								isExpanded
+									? t('workflows.transcript.hideToolDetails', { name: log.text })
+									: t('workflows.transcript.showToolDetails', { name: log.text })
+							}
+							className="w-full flex items-start gap-1 text-left rounded outline-none focus-visible:ring-1 hover:opacity-90"
+						>
+							{isExpanded ? (
+								<ChevronUp
+									className="w-3 h-3 mt-1 shrink-0"
+									style={{ color: theme.colors.textDim }}
+								/>
+							) : (
+								<ChevronDown
+									className="w-3 h-3 mt-1 shrink-0"
+									style={{ color: theme.colors.textDim }}
+								/>
+							)}
+							<div className="flex-1 min-w-0">
+								<ToolBadge log={log} theme={theme} part="header" />
+							</div>
+						</button>
+						{isExpanded && (
+							<div className="pl-4 select-text" data-native-tool-details="">
+								<ToolBadge log={log} theme={theme} part="details" />
+							</div>
+						)}
 					</div>
 				</div>
 			);
@@ -1189,6 +1384,11 @@ export const LogItem = memo(
 		return (
 			prevProps.log.id === nextProps.log.id &&
 			prevProps.log.text === nextProps.log.text &&
+			// An entry upgraded in place from an older cached conversion keeps its
+			// id and often its text, but changes what it draws as.
+			prevProps.log.source === nextProps.log.source &&
+			prevProps.log.nativeTranscript?.channel === nextProps.log.nativeTranscript?.channel &&
+			prevProps.log.metadata?.toolState === nextProps.log.metadata?.toolState &&
 			prevProps.log.delivered === nextProps.log.delivered &&
 			prevProps.log.readOnly === nextProps.log.readOnly &&
 			prevProps.log.forceParallel === nextProps.log.forceParallel &&
@@ -1208,6 +1408,7 @@ export const LogItem = memo(
 			// transitions have to defeat the memo too. The grouping helper rebuilds
 			// the array each render, so compare contents, not identity.
 			sameSubagentLogs(prevProps.subagentLogs, nextProps.subagentLogs) &&
+			sameSubagentLogs(prevProps.toolRun, nextProps.toolRun) &&
 			// Cross-agent streaming flips true->false on the final chunk (which may
 			// carry no new text), so the pill/glow needs this to settle.
 			prevProps.log.metadata?.crossAgent?.streaming ===

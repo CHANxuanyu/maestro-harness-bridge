@@ -4,6 +4,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, ModalFooter } from './ui/Modal';
 import { FormInput } from './ui/FormInput';
 import { logger } from '../utils/logger';
+import { useT } from '../i18n';
 
 interface RenameSessionModalProps {
 	theme: Theme;
@@ -34,6 +35,7 @@ export function RenameSessionModal(props: RenameSessionModalProps) {
 	// Use targetSessionId if provided, otherwise fall back to activeSessionId
 	const sessionIdToRename = targetSessionId || activeSessionId;
 	const inputRef = useRef<HTMLInputElement>(null);
+	const t = useT();
 
 	const handleRename = () => {
 		if (value.trim()) {
@@ -79,7 +81,7 @@ export function RenameSessionModal(props: RenameSessionModalProps) {
 	return (
 		<Modal
 			theme={theme}
-			title="Rename Agent"
+			title={t('workflows.renameAgent.title')}
 			// The CURRENT name of the agent being renamed. Right-clicking a
 			// non-highlighted row renames that row, not the active agent, and the
 			// input shows the name being typed rather than the one being replaced.
@@ -92,7 +94,7 @@ export function RenameSessionModal(props: RenameSessionModalProps) {
 					theme={theme}
 					onCancel={onClose}
 					onConfirm={handleRename}
-					confirmLabel="Rename"
+					confirmLabel={t('common.rename')}
 					confirmDisabled={!value.trim()}
 				/>
 			}
@@ -103,7 +105,7 @@ export function RenameSessionModal(props: RenameSessionModalProps) {
 				value={value}
 				onChange={setValue}
 				onSubmit={handleRename}
-				placeholder="Enter agent name..."
+				placeholder={t('workflows.renameAgent.placeholder')}
 			/>
 		</Modal>
 	);

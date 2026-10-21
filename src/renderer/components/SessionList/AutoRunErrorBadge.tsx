@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { memo } from 'react';
 
 interface AutoRunErrorBadgeProps {
@@ -41,6 +42,7 @@ export const AutoRunErrorBadge = memo(function AutoRunErrorBadge({
 	nextResumeAt,
 	exhausted,
 }: AutoRunErrorBadgeProps) {
+	const t = useT();
 	if (!errorPaused) return null;
 
 	const resumeScheduled = !exhausted && typeof nextResumeAt === 'number';
@@ -49,14 +51,27 @@ export const AutoRunErrorBadge = memo(function AutoRunErrorBadge({
 	let tooltip: string;
 	if (resumeScheduled) {
 		const minutes = Math.max(1, Math.round((nextResumeAt - Date.now()) / 60_000));
-		const of = maxAttempts ? ` (${attempts ?? 1} of ${maxAttempts})` : '';
-		tooltip = `Auto Run error - resuming in about ${minutes} minute${
-			minutes === 1 ? '' : 's'
-		}${of}`;
+		tooltip = maxAttempts
+			? t(
+					minutes === 1
+						? 'workflows.autoRunError.resumeOneWithAttempts'
+						: 'workflows.autoRunError.resumeManyWithAttempts',
+					{ minutes, attempts: attempts ?? 1, maxAttempts }
+				)
+			: t(
+					minutes === 1 ? 'workflows.autoRunError.resumeOne' : 'workflows.autoRunError.resumeMany',
+					{ minutes }
+				);
 	} else if (exhausted) {
-		tooltip = `Auto Run error - gave up after ${maxAttempts ?? attempts} automatic resumes. Resume it yourself to continue.`;
+		const resumeAttempts = maxAttempts ?? attempts;
+		tooltip =
+			resumeAttempts === undefined
+				? t('workflows.autoRunError.exhaustedUnknown')
+				: t('workflows.shell.extraAutoRunErrorGaveUpAfterValueAutomatic', {
+						p0: resumeAttempts,
+					});
 	} else {
-		tooltip = 'Auto Run error - paused until you resume it.';
+		tooltip = t('workflows.shell.extraAutoRunErrorPausedUntilYouResumeIt');
 	}
 
 	return (
@@ -68,7 +83,7 @@ export const AutoRunErrorBadge = memo(function AutoRunErrorBadge({
 			title={tooltip}
 			aria-label={tooltip}
 		>
-			ERR
+			{t('workflows.shell.err2')}
 		</span>
 	);
 });

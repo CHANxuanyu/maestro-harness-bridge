@@ -44,6 +44,8 @@ import { app, BrowserWindow, Menu } from 'electron';
 import { isMacOS } from '../shared/platformDetection';
 import { formatShortcutKeysFor } from '../shared/shortcutKeys';
 import { logger } from './utils/logger';
+import { resolveAppLocale, type AppLocale } from '../shared/i18n';
+import { translateMenuLabel } from './app-menu-translations';
 
 /** Map of shortcut id -> key array, e.g. `{ toggleMode: ['Meta', 'j'] }`. */
 export type MenuShortcutKeys = Record<string, string[]>;
@@ -123,6 +125,12 @@ const VIEW_MENU_COMMANDS: MenuEntry[] = [
 let shortcutKeys: MenuShortcutKeys = {};
 /** Serialized form of the above, so redundant pushes don't rebuild the menu. */
 let shortcutKeysSignature = '';
+/** Resolved UI locale, retained when shortcut changes rebuild the menu. */
+let menuLocale: AppLocale = 'en';
+
+function menuLabel(label: string): string {
+	return translateMenuLabel(label, menuLocale);
+}
 
 /**
  * Gap between an item's name and its keystroke in the menu label.
@@ -170,7 +178,7 @@ function buildSubmenu(entries: MenuEntry[]): Electron.MenuItemConstructorOptions
 					// The keystroke goes in the LABEL, never in `accelerator` -
 					// see rule 1 in the module comment. Registering it would let
 					// NSMenu swallow the keydown before the renderer sees it.
-					label: labelWithShortcut(entry.label, entry.shortcutId),
+					label: labelWithShortcut(menuLabel(entry.label), entry.shortcutId),
 					click: (_item: Electron.MenuItem, window: Electron.BaseWindow | undefined) =>
 						sendMenuCommand(window, entry.shortcutId),
 				}
@@ -188,18 +196,18 @@ function buildTemplate(): Electron.MenuItemConstructorOptions[] {
 			// we can detect Option held and ignore the keystroke entirely.
 			role: 'appMenu',
 			submenu: [
-				{ role: 'about' },
+				{ role: 'about', label: menuLabel('About Maestro') },
 				{ type: 'separator' },
 				...buildSubmenu(APP_MENU_COMMANDS),
 				{ type: 'separator' },
-				{ role: 'services' },
+				{ role: 'services', label: menuLabel('Services') },
 				{ type: 'separator' },
-				{ role: 'hide' },
-				{ role: 'hideOthers' },
-				{ role: 'unhide' },
+				{ role: 'hide', label: menuLabel('Hide Maestro') },
+				{ role: 'hideOthers', label: menuLabel('Hide Others') },
+				{ role: 'unhide', label: menuLabel('Show All') },
 				{ type: 'separator' },
 				{
-					label: 'Quit Maestro',
+					label: menuLabel('Quit Maestro'),
 					accelerator: 'Cmd+Q',
 					click: (_item, _window, event) => {
 						if (event?.altKey) {
@@ -215,7 +223,7 @@ function buildTemplate(): Electron.MenuItemConstructorOptions[] {
 			],
 		},
 		{
-			label: 'File',
+			label: menuLabel('File'),
 			submenu: buildSubmenu(FILE_MENU_COMMANDS),
 		},
 		{
@@ -235,19 +243,19 @@ function buildTemplate(): Electron.MenuItemConstructorOptions[] {
 			// that behavior by calling `document.execCommand('undo')` on
 			// text targets. The annotator's own Cmd+Z listener bails out
 			// for text targets, so the two paths don't conflict.
-			label: 'Edit',
+			label: menuLabel('Edit'),
 			submenu: [
-				{ role: 'cut' },
-				{ role: 'copy' },
-				{ role: 'paste' },
-				{ role: 'pasteAndMatchStyle' },
-				{ role: 'delete' },
+				{ role: 'cut', label: menuLabel('Cut') },
+				{ role: 'copy', label: menuLabel('Copy') },
+				{ role: 'paste', label: menuLabel('Paste') },
+				{ role: 'pasteAndMatchStyle', label: menuLabel('Paste and Match Style') },
+				{ role: 'delete', label: menuLabel('Delete') },
 				{ type: 'separator' },
-				{ role: 'selectAll' },
+				{ role: 'selectAll', label: menuLabel('Select All') },
 			],
 		},
 		{
-			label: 'View',
+			label: menuLabel('View'),
 			submenu: buildSubmenu(VIEW_MENU_COMMANDS),
 		},
 		{
@@ -256,8 +264,11 @@ function buildTemplate(): Electron.MenuItemConstructorOptions[] {
 			// before it reaches the renderer, breaking Cmd+W tab-close in both AI and
 			// terminal modes. Window closing is handled by the app lifecycle (Cmd+Q
 			// quits, red traffic light hides) so the native Close item is unnecessary.
-			label: 'Window',
-			submenu: [{ role: 'minimize' }, { role: 'zoom' }],
+			label: menuLabel('Window'),
+			submenu: [
+				{ role: 'minimize', label: menuLabel('Minimize') },
+				{ role: 'zoom', label: menuLabel('Zoom') },
+			],
 		},
 	];
 }
@@ -272,12 +283,23 @@ function buildTemplate(): Electron.MenuItemConstructorOptions[] {
  *
  * On Windows/Linux the menu bar is removed entirely; Maestro uses its own UI.
  */
-export function installApplicationMenu(): void {
+export function installApplicationMenu(preference?: unknown): void {
+	if (preference !== undefined) {
+		menuLocale = resolveAppLocale(preference, app.getLocale());
+	}
 	if (!isMacOS()) {
 		Menu.setApplicationMenu(null);
 		return;
 	}
 	Menu.setApplicationMenu(Menu.buildFromTemplate(buildTemplate()));
+}
+
+/** Apply a persisted language change without losing the current shortcut map. */
+export function setMenuLanguage(preference: unknown): void {
+	const nextLocale = resolveAppLocale(preference, app.getLocale());
+	if (nextLocale === menuLocale) return;
+	menuLocale = nextLocale;
+	installApplicationMenu();
 }
 
 /**
@@ -299,4 +321,5 @@ export function setMenuShortcutKeys(keys: MenuShortcutKeys): void {
 export function resetMenuShortcutKeysForTesting(): void {
 	shortcutKeys = {};
 	shortcutKeysSignature = '';
+	menuLocale = 'en';
 }

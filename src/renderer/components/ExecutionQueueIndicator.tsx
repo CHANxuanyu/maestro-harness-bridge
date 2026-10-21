@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { ListOrdered, Command, MessageSquare } from 'lucide-react';
 import type { Session, Theme } from '../types';
@@ -25,9 +26,12 @@ export function ExecutionQueueIndicator({
 	onClick,
 	onSwitchTab,
 }: ExecutionQueueIndicatorProps) {
+	const t = useT();
 	const queue = session.executionQueue || [];
 	const executionQueueKeys = useSettingsStore((s) => s.shortcuts.executionQueue?.keys);
-	const openQueueTitle = `View execution queue${shortcutSuffix(executionQueueKeys)}`;
+	const openQueueTitle = t('workflows.status.queueTitle', {
+		shortcut: shortcutSuffix(executionQueueKeys),
+	});
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [maxVisiblePills, setMaxVisiblePills] = useState(3);
 
@@ -45,7 +49,7 @@ export function ExecutionQueueIndicator({
 			if (!acc[tabId]) {
 				acc[tabId] = {
 					tabId,
-					tabName: resolveQueuedItemTabName(session, item) || 'Unknown',
+					tabName: resolveQueuedItemTabName(session, item) || t('common.unknown'),
 					count: 0,
 				};
 			}
@@ -158,7 +162,8 @@ export function ExecutionQueueIndicator({
 
 				<span className="text-left whitespace-nowrap">
 					<span className="font-semibold">{queue.length}</span>{' '}
-					{queue.length === 1 ? 'item' : 'items'} queued
+					{queue.length === 1 ? t('workflows.shellStatus.item') : t('workflows.shellStatus.items')}{' '}
+					{t('workflows.shellStatus.queued')}
 				</span>
 
 				{/* Item type breakdown */}
@@ -208,7 +213,7 @@ export function ExecutionQueueIndicator({
 								maxWidth: maxPillWidth ? `${maxPillWidth}px` : undefined,
 								whiteSpace: 'nowrap',
 							}}
-							title={canJump ? `Jump to ${fullText}` : fullText}
+							title={canJump ? t('workflows.shellStatus.jumpToValue', { p0: fullText }) : fullText}
 						>
 							{fullText}
 						</button>
@@ -234,7 +239,7 @@ export function ExecutionQueueIndicator({
 				className="text-xs opacity-50 flex-shrink-0 whitespace-nowrap transition-all hover:opacity-80"
 				title={openQueueTitle}
 			>
-				Click to view
+				{t('workflows.shellStatus.clickToView')}
 			</button>
 		</div>
 	);

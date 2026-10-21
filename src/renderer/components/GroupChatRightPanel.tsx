@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * GroupChatRightPanel.tsx
  *
@@ -90,6 +91,7 @@ export function GroupChatRightPanel({
 	onColorsComputed,
 	moderatorOnly = false,
 }: GroupChatRightPanelProps): JSX.Element | null {
+	const t = useT();
 	const participantLiveOutput = useGroupChatStore((s) => s.participantLiveOutput);
 
 	// Color preferences state
@@ -366,16 +368,24 @@ export function GroupChatRightPanel({
 							borderColor: activeTab === tab ? theme.colors.accent : 'transparent',
 							color: activeTab === tab ? theme.colors.textMain : theme.colors.textDim,
 						}}
-						title={tab === 'participants' ? 'View participants' : 'View task history'}
+						title={
+							tab === 'participants'
+								? t('workflows.shell.viewParticipants')
+								: t('workflows.shell.viewTaskHistory')
+						}
 					>
-						{tab.charAt(0).toUpperCase() + tab.slice(1)}
+						{tab === 'participants'
+							? t('workflows.labels.participants')
+							: t('workflows.shell.history')}
 					</button>
 				))}
 
 				<button
 					onClick={onToggle}
 					className="flex items-center justify-center p-2 rounded hover:bg-white/5 transition-colors w-12 shrink-0"
-					title={`Collapse Panel (${formatShortcutKeys(shortcuts.toggleRightPanel.keys)})`}
+					title={t('workflows.shell.collapsePanelValue', {
+						p0: formatShortcutKeys(shortcuts.toggleRightPanel.keys),
+					})}
 				>
 					<PanelRightClose className="w-4 h-4 opacity-50" />
 				</button>
@@ -401,9 +411,9 @@ export function GroupChatRightPanel({
 					{/* Participants sorted alphabetically */}
 					{sortedParticipants.length === 0 ? (
 						<div className="text-sm text-center py-4" style={{ color: theme.colors.textDim }}>
-							No participants yet.
+							{t('workflows.shell.noParticipantsYet')}
 							<br />
-							Ask the moderator to add agents.
+							{t('workflows.shell.askTheModeratorToAddAgents')}
 						</div>
 					) : (
 						sortedParticipants.map((participant) => {

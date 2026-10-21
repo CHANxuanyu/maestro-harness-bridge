@@ -11,10 +11,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { mockTheme } from '../../../helpers/mockTheme';
 import type { FilePreviewToolbarVisibility } from '../../../../renderer/stores/settingsStore';
-import { FILE_PREVIEW_TOOLBAR_BUTTON_KEYS } from '../../../../renderer/stores/settingsStore';
+import {
+	useSettingsStore,
+	FILE_PREVIEW_TOOLBAR_BUTTON_KEYS,
+} from '../../../../renderer/stores/settingsStore';
 
 vi.mock('../../../../renderer/hooks/ui/useViewportBreakpoint', () => ({
 	usePhoneLayout: vi.fn(() => false),
@@ -190,4 +193,24 @@ describe('FilePreviewHeader on a desktop', () => {
 		expect(screen.getByText('/Users/pedram/Pedsidian/Meetings')).toBeInTheDocument();
 		expect(screen.getByText('Size:')).toBeInTheDocument();
 	});
+});
+
+it('switches desktop file controls without changing the filename or action', () => {
+	const originalLanguage = useSettingsStore.getState().uiLanguage;
+	const copyPath = vi.fn();
+	try {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		mockedUsePhoneLayout.mockReturnValue(false);
+		renderHeader({ copyPathToClipboard: copyPath });
+		const button = screen.getByRole('button', { name: 'Copy full path to clipboard' });
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		expect(screen.getByRole('button', { name: '复制完整路径到剪贴板' })).toBe(button);
+		expect(screen.getByText('MEET-07-30.md')).toBeInTheDocument();
+		expect(screen.getByText('/Users/pedram/Pedsidian/Meetings')).toBeInTheDocument();
+		fireEvent.click(button);
+		expect(copyPath).toHaveBeenCalledTimes(1);
+	} finally {
+		cleanup();
+		useSettingsStore.setState({ uiLanguage: originalLanguage });
+	}
 });

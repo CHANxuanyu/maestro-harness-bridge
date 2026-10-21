@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import { memo, useRef, useState } from 'react';
 import { ArrowUp, Bell } from 'lucide-react';
 import type { Theme } from '../../../types';
@@ -14,6 +15,7 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 	isTerminalMode,
 	processInput,
 }: NotificationSendControlsProps) {
+	const t = useT();
 	const [notificationPopoverOpen, setNotificationPopoverOpen] = useState(false);
 	const notificationBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -29,7 +31,7 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 					borderColor: theme.colors.border,
 					color: theme.colors.textDim,
 				}}
-				title="Notification Settings"
+				title={t('workflows.shell.notificationSettings')}
 			>
 				<Bell className="w-4 h-4" />
 			</button>
@@ -48,7 +50,9 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 					backgroundColor: theme.colors.accent,
 					color: theme.colors.accentForeground,
 				}}
-				title={isTerminalMode ? 'Run command (Enter)' : 'Send message'}
+				title={
+					isTerminalMode ? t('workflows.shell.runCommandEnter') : t('workflows.shell.sendMessage')
+				}
 			>
 				<ArrowUp className="w-4 h-4" />
 			</button>

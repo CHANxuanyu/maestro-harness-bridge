@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { memo, useRef, useEffect, useState, useCallback } from 'react';
 import { Copy, ExternalLink } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -64,6 +65,7 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 	restartWebServer,
 	restartTunnel,
 }: LiveOverlayPanelProps) {
+	const t = useT();
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [isPersistPending, setIsPersistPending] = useState(false);
 	const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -128,18 +130,14 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 				{/* Description Header */}
 				<div className="p-3 border-b" style={{ borderColor: theme.colors.border }}>
 					<div className="text-xs-plus leading-relaxed" style={{ color: theme.colors.textDim }}>
-						Control your agents from your phone or tablet.
+						{t('workflows.shell.controlYourAgentsFromYourPhoneOrTablet')}
 						{tunnelStatus === 'connected' ? (
 							<span className="text-blue-400">
 								{' '}
-								Remote tunnel active - access Maestro from anywhere, even outside your network.
+								{t('workflows.shell.remoteTunnelActiveAccessMaestroFromAnywhereEven')}
 							</span>
 						) : (
-							<span>
-								{' '}
-								Scan the QR code on your local network, or enable remote control to control Maestro
-								from anywhere.
-							</span>
+							<span> {t('workflows.shell.scanTheQrCodeOnYourLocalNetwork')}</span>
 						)}
 					</div>
 				</div>
@@ -149,16 +147,18 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 					<div className="flex items-center justify-between">
 						<div>
 							<div className="text-2xs uppercase font-bold" style={{ color: theme.colors.textDim }}>
-								Remote Control
+								{t('workflows.shell.remoteControl')}
 							</div>
 							<div
 								className="text-3xs mt-0.5"
 								style={{ color: theme.colors.textDim, opacity: 0.7 }}
 							>
-								Uses Cloudflare tunnel for access outside your network
+								{t('workflows.shell.usesCloudflareTunnelForAccessOutsideYourNetwork')}
 							</div>
 							{cloudflaredInstalled === false && (
-								<div className="text-3xs text-yellow-500 mt-1">Install cloudflared to enable</div>
+								<div className="text-3xs text-yellow-500 mt-1">
+									{t('workflows.shell.installCloudflaredToEnable')}
+								</div>
 							)}
 							{tunnelStatus === 'starting' && (
 								<div
@@ -167,7 +167,7 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 									aria-live="polite"
 								>
 									<div className="w-2 h-2 border border-green-400 border-t-transparent rounded-full animate-spin" />
-									<span>Starting tunnel… (can take up to 30s)</span>
+									<span>{t('workflows.shell.startingTunnelCanTakeUpTo30s')}</span>
 								</div>
 							)}
 						</div>
@@ -180,15 +180,15 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 							activeColor={LIVE_ON_COLOR}
 							disabled={!cloudflaredInstalled}
 							busy={tunnelStatus === 'starting'}
-							ariaLabel="Remote Control"
+							ariaLabel={t('workflows.shell.remoteControl')}
 							title={
 								!cloudflaredInstalled
-									? 'cloudflared not installed'
+									? t('workflows.shell.cloudflaredNotInstalled')
 									: tunnelStatus === 'starting'
-										? 'Starting tunnel…'
+										? t('workflows.shell.startingTunnel')
 										: tunnelStatus === 'connected'
-											? 'Disable remote control'
-											: 'Enable remote control'
+											? t('workflows.shell.disableRemoteControl')
+											: t('workflows.shell.enableRemoteControl')
 							}
 						/>
 					</div>
@@ -204,7 +204,7 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 							className="mt-2 p-2 rounded text-2xs"
 							style={{ backgroundColor: theme.colors.bgActivity }}
 						>
-							<div className="font-medium mb-1">To enable remote control:</div>
+							<div className="font-medium mb-1">{t('workflows.shell.toEnableRemoteControl')}</div>
 							<div className="opacity-70 font-mono">brew install cloudflared</div>
 							<button
 								type="button"
@@ -215,7 +215,7 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 								}
 								className="text-blue-400 hover:underline mt-1 block"
 							>
-								Other platforms →
+								{t('workflows.shell.otherPlatforms')}
 							</button>
 						</div>
 					)}
@@ -226,13 +226,13 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 					<div className="flex items-center justify-between">
 						<div>
 							<div className="text-2xs uppercase font-bold" style={{ color: theme.colors.textDim }}>
-								Persistent Web Link
+								{t('workflows.shell.persistentWebLink')}
 							</div>
 							<div
 								className="text-3xs mt-0.5"
 								style={{ color: theme.colors.textDim, opacity: 0.7 }}
 							>
-								Keep the same access token across restarts
+								{t('workflows.shell.keepTheSameAccessTokenAcrossRestarts')}
 							</div>
 						</div>
 
@@ -243,8 +243,12 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 							theme={theme}
 							activeColor={LIVE_ON_COLOR}
 							busy={isPersistPending}
-							ariaLabel="Persistent Web Link"
-							title={persistentWebLink ? 'Disable persistent link' : 'Enable persistent link'}
+							ariaLabel={t('workflows.shell.persistentWebLink')}
+							title={
+								persistentWebLink
+									? t('workflows.shell.disablePersistentLink')
+									: t('workflows.shell.enablePersistentLink')
+							}
 						/>
 					</div>
 				</div>
@@ -254,13 +258,13 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 					<div className="flex items-center justify-between">
 						<div>
 							<div className="text-2xs uppercase font-bold" style={{ color: theme.colors.textDim }}>
-								Custom Port
+								{t('workflows.shell.customPort')}
 							</div>
 							<div
 								className="text-3xs mt-0.5"
 								style={{ color: theme.colors.textDim, opacity: 0.7 }}
 							>
-								For static proxy routes
+								{t('workflows.shell.forStaticProxyRoutes')}
 							</div>
 						</div>
 
@@ -275,8 +279,12 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 							}}
 							theme={theme}
 							activeColor={LIVE_ON_COLOR}
-							ariaLabel="Custom Port"
-							title={webInterfaceUseCustomPort ? 'Use random port' : 'Use custom port'}
+							ariaLabel={t('workflows.shell.customPort')}
+							title={
+								webInterfaceUseCustomPort
+									? t('workflows.shell.useRandomPort')
+									: t('workflows.shell.useCustomPort')
+							}
 						/>
 					</div>
 
@@ -331,7 +339,9 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 								/>
 							</div>
 							<div className="text-3xs mt-1" style={{ color: theme.colors.textDim, opacity: 0.7 }}>
-								{isLiveMode ? 'Press Enter or click away to apply' : 'Port range: 1024-65535'}
+								{isLiveMode
+									? t('workflows.shell.pressEnterOrClickAwayToApply')
+									: t('workflows.shell.portRange102465535')}
 							</div>
 						</div>
 					)}
@@ -359,12 +369,14 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 								if (url) {
 									safeClipboardWrite(url);
 									setCopyFlash(
-										activeUrlTab === 'local' ? 'Local URL copied!' : 'Remote URL copied!'
+										activeUrlTab === 'local'
+											? t('workflows.shell.extraLocalUrlCopied')
+											: t('workflows.shell.extraRemoteUrlCopied')
 									);
 								}
 							}}
 							className="p-1.5 rounded hover:bg-white/10 transition-colors shrink-0"
-							title="Copy URL"
+							title={t('workflows.shell.copyUrl')}
 						>
 							<Copy className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 						</button>
@@ -375,7 +387,7 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 								if (url) openUrl(url);
 							}}
 							className="p-1.5 rounded hover:bg-white/10 transition-colors shrink-0"
-							title="Open in Browser"
+							title={t('workflows.shell.openInBrowser')}
 						>
 							<ExternalLink className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 						</button>
@@ -400,7 +412,9 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 								style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
 							>
 								<div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mb-3" />
-								<div className="text-white text-xs-plus font-medium">Starting tunnel...</div>
+								<div className="text-white text-xs-plus font-medium">
+									{t('workflows.shell.startingTunnel2')}
+								</div>
 							</div>
 						)}
 
@@ -440,7 +454,7 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 									}`}
 									style={activeUrlTab !== 'local' ? { color: theme.colors.textDim } : {}}
 								>
-									Local
+									{t('workflows.shell.local2')}
 								</button>
 								<button
 									type="button"
@@ -452,7 +466,7 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 									}`}
 									style={activeUrlTab !== 'remote' ? { color: theme.colors.textDim } : {}}
 								>
-									Remote
+									{t('workflows.shell.remote2')}
 								</button>
 							</div>
 							{/* Dot indicators */}
@@ -489,7 +503,7 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 								activeUrlTab === 'local' ? 'rgba(74, 222, 128, 0.3)' : 'rgba(96, 165, 250, 0.3)',
 						}}
 					>
-						Open in Browser
+						{t('workflows.shell.openInBrowser')}
 					</button>
 					<button
 						type="button"
@@ -499,7 +513,7 @@ export const LiveOverlayPanel = memo(function LiveOverlayPanel({
 						}}
 						className="w-full py-1.5 rounded text-2xs font-medium transition-colors hover:bg-red-500/20 text-red-400 border border-red-500/30"
 					>
-						Turn Off Web Interface
+						{t('workflows.shell.turnOffWebInterface')}
 					</button>
 				</div>
 			</div>

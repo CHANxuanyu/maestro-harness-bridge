@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { MaestroCliStatus } from '../../../../../../shared/maestro-cli';
 import { captureException } from '../../../../../utils/sentry';
 import type { MaestroCliState } from '../types';
+import { useT, type MessageKey } from '../../../../../i18n';
 
 interface UseMaestroCliStateArgs {
 	isOpen: boolean;
@@ -9,10 +10,15 @@ interface UseMaestroCliStateArgs {
 
 export function useMaestroCliState({ isOpen }: UseMaestroCliStateArgs): MaestroCliState {
 	const [status, setStatus] = useState<MaestroCliStatus | null>(null);
-	const [statusError, setStatusError] = useState<string | null>(null);
+	const t = useT();
+	const [statusError, setStatusError] = useState<{ key: MessageKey } | { text: string } | null>(
+		null
+	);
 	const [checking, setChecking] = useState(false);
 	const [installing, setInstalling] = useState(false);
-	const [installMessage, setInstallMessage] = useState<{ text: string; ok: boolean } | null>(null);
+	const [installMessage, setInstallMessage] = useState<{ key: MessageKey; ok: boolean } | null>(
+		null
+	);
 
 	const checkStatus = useCallback(async () => {
 		setChecking(true);
@@ -25,7 +31,7 @@ export function useMaestroCliState({ isOpen }: UseMaestroCliStateArgs): MaestroC
 			const nextStatus = await window.maestro.maestroCli.checkStatus();
 			setStatus(nextStatus);
 		} catch (err) {
-			setStatusError('Failed to check Maestro CLI status');
+			setStatusError({ key: 'settings.general.cli.checkFailed' });
 			captureException(err instanceof Error ? err : new Error(String(err)), {
 				extra: { context: 'GeneralTab: Maestro CLI status check' },
 			});
@@ -42,26 +48,17 @@ export function useMaestroCliState({ isOpen }: UseMaestroCliStateArgs): MaestroC
 			const result = await window.maestro.maestroCli.installOrUpdate();
 			setStatus(result.status);
 			if (result.pathUpdateError) {
-				setStatusError(result.pathUpdateError);
+				setStatusError({ text: result.pathUpdateError });
 			}
 			if (result.restartRequired) {
-				setInstallMessage({
-					text: 'CLI installed. Open a new terminal for PATH changes to apply.',
-					ok: true,
-				});
+				setInstallMessage({ key: 'settings.general.cli.installedRestart', ok: true });
 			} else if (result.success && result.status.versionMatch) {
-				setInstallMessage({
-					text: 'CLI is installed and matches this Maestro version.',
-					ok: true,
-				});
+				setInstallMessage({ key: 'settings.general.cli.installedOk', ok: true });
 			} else {
-				setInstallMessage({
-					text: 'CLI was installed but version/path check still needs attention.',
-					ok: false,
-				});
+				setInstallMessage({ key: 'settings.general.cli.installedAttention', ok: false });
 			}
 		} catch (err) {
-			setStatusError('Failed to install/update Maestro CLI');
+			setStatusError({ key: 'settings.general.cli.installFailed' });
 			captureException(err instanceof Error ? err : new Error(String(err)), {
 				extra: { context: 'GeneralTab: Maestro CLI install/update' },
 			});
@@ -78,10 +75,10 @@ export function useMaestroCliState({ isOpen }: UseMaestroCliStateArgs): MaestroC
 
 	return {
 		status,
-		statusError,
+		statusError: statusError && ('key' in statusError ? t(statusError.key) : statusError.text),
 		checking,
 		installing,
-		installMessage,
+		installMessage: installMessage && { text: t(installMessage.key), ok: installMessage.ok },
 		checkStatus,
 		installOrUpdate,
 	};

@@ -1,3 +1,4 @@
+import { useT, type TFunction } from '../i18n';
 import React, { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
 import {
 	X,
@@ -118,6 +119,7 @@ export const QueuedItemsList = memo(
 		shortcutEnabled = true,
 		onOpenLightbox,
 	}: QueuedItemsListProps) => {
+		const t = useT();
 		// Filter to only show items for the active tab if activeTabId is provided
 		const filteredQueue = activeTabId
 			? executionQueue.filter((item) => item.tabId === activeTabId)
@@ -273,7 +275,8 @@ export const QueuedItemsList = memo(
 						className="text-xs font-bold tracking-wider"
 						style={{ color: theme.colors.warning }}
 					>
-						QUEUED ({filteredQueue.length})
+						{t('workflows.shellStatus.queued2')}
+						{filteredQueue.length})
 					</span>
 					<div className="flex-1 h-px" style={{ backgroundColor: theme.colors.border }} />
 				</div>
@@ -298,7 +301,7 @@ export const QueuedItemsList = memo(
 						const showForceSendButton = shouldOfferForceSend(forceSendContext);
 						const canForceSend = !!forceSendContext?.canForce;
 						const forceSendTitle = forceSendContext
-							? getForceSendTitle(forceSendContext)
+							? localizedForceSendTitle(t, forceSendContext)
 							: undefined;
 
 						return (
@@ -364,7 +367,7 @@ export const QueuedItemsList = memo(
 				{queueRemoveConfirmId && (
 					<Modal
 						theme={theme}
-						title="Remove Queued Message?"
+						title={t('workflows.shellStatus.removeQueuedMessage')}
 						priority={MODAL_PRIORITIES.CONFIRM}
 						onClose={() => setQueueRemoveConfirmId(null)}
 						width={448}
@@ -374,14 +377,14 @@ export const QueuedItemsList = memo(
 								theme={theme}
 								onCancel={() => setQueueRemoveConfirmId(null)}
 								onConfirm={handleConfirmRemove}
-								confirmLabel="Remove"
+								confirmLabel={t('workflows.shellStatus.remove')}
 								destructive
 								confirmButtonRef={removeConfirmButtonRef}
 							/>
 						}
 					>
 						<p className="text-sm" style={{ color: theme.colors.textDim }}>
-							This message will be removed from the queue and will not be sent.
+							{t('workflows.shellStatus.thisMessageWillBeRemovedFromTheQueue')}
 						</p>
 					</Modal>
 				)}
@@ -390,7 +393,7 @@ export const QueuedItemsList = memo(
 				{forceSendConfirmId && forceSendConfirmItem && (
 					<Modal
 						theme={theme}
-						title="Force Send Message?"
+						title={t('workflows.shellStatus.forceSendMessage')}
 						headerIcon={<Hammer className="w-5 h-5" style={{ color: theme.colors.warning }} />}
 						priority={MODAL_PRIORITIES.CONFIRM}
 						onClose={() => setForceSendConfirmId(null)}
@@ -401,17 +404,17 @@ export const QueuedItemsList = memo(
 								theme={theme}
 								onCancel={() => setForceSendConfirmId(null)}
 								onConfirm={handleConfirmForceSend}
-								confirmLabel="Force Send"
+								confirmLabel={t('workflows.shellStatus.forceSend')}
 								confirmButtonRef={forceSendConfirmButtonRef}
 							/>
 						}
 					>
 						<p className="text-sm mb-3" style={{ color: theme.colors.textDim }}>
-							This will send the queued message immediately, running in parallel with the other tab
+							{t('workflows.shellStatus.thisWillSendTheQueuedMessageImmediatelyRunning')}
 							{forceSendConfirmContext && forceSendConfirmContext.otherBusyTabs.length === 1
 								? ''
-								: 's'}{' '}
-							currently working in this agent.
+								: t('workflows.shell.pluralSuffix')}{' '}
+							{t('workflows.shellStatus.currentlyWorkingInThisAgent')}
 						</p>
 						{forceSendConfirmContext && forceSendConfirmContext.otherBusyTabs.length > 0 && (
 							<div className="p-3 rounded" style={{ backgroundColor: theme.colors.bgActivity }}>
@@ -419,8 +422,10 @@ export const QueuedItemsList = memo(
 									className="text-xs font-bold tracking-wider mb-2"
 									style={{ color: theme.colors.warning }}
 								>
-									{forceSendConfirmContext.otherBusyTabs.length} OTHER TAB
-									{forceSendConfirmContext.otherBusyTabs.length === 1 ? '' : 'S'} WORKING
+									{forceSendConfirmContext.otherBusyTabs.length}{' '}
+									{t('workflows.shellStatus.otherTab')}
+									{forceSendConfirmContext.otherBusyTabs.length === 1 ? '' : 'S'}{' '}
+									{t('workflows.shellStatus.working')}
 								</div>
 								<ul className="text-sm space-y-1" style={{ color: theme.colors.textMain }}>
 									{forceSendConfirmContext.otherBusyTabs.map((tab) => (
@@ -472,6 +477,29 @@ QueuedItemsList.displayName = 'QueuedItemsList';
 // Uses the shared queue-drag primitives so the handle, press-to-grab feel, and
 // grabbed visual effect match the Execution Queue modal exactly.
 // ============================================================================
+
+function localizedForceSendTitle(t: TFunction, eligibility: ForceSendEligibility): string {
+	switch (eligibility.blockedReason) {
+		case 'target-tab-busy':
+			return t('workflows.queue.busy');
+		case 'needs-forced-parallel':
+			return t('workflows.queue.parallelOff');
+		case 'no-target-tab':
+			return t('workflows.queue.noTab');
+		case 'awaiting-consult':
+			return t('workflows.queue.consult');
+		default:
+			if (!eligibility.canForce && eligibility.blockedReason) return getForceSendTitle(eligibility);
+			return eligibility.requiresParallel
+				? t(
+						eligibility.otherBusyTabs.length === 1
+							? 'workflows.queue.sendParallelOne'
+							: 'workflows.queue.sendParallelMany',
+						{ count: eligibility.otherBusyTabs.length }
+					)
+				: t('workflows.queue.sendAhead');
+	}
+}
 
 interface QueuedItemRowProps {
 	item: QueuedItem;
@@ -528,6 +556,7 @@ function QueuedItemRow({
 	onRequestRemove,
 	onOpenLightbox,
 }: QueuedItemRowProps) {
+	const t = useT();
 	// Whether the inline thumbnail strip for attached images is expanded. Queued
 	// cards are compact, so images stay collapsed behind a click-to-expand toggle.
 	const [imagesExpanded, setImagesExpanded] = useState(false);
@@ -595,21 +624,27 @@ function QueuedItemRow({
 				{(isPaused || isWaitingForConnection || isAwaitingConsult || isHeldForRetry) && (
 					<div className={`flex items-center gap-1.5 ${canDrag ? 'pl-4 mb-1.5' : 'mb-1.5'}`}>
 						{isHeldForRetry && <HeldForRetryBadge theme={theme} />}
-						{isPaused && <MiniBadge label="HELD" theme={theme} color={theme.colors.warning} />}
-						{isWaitingForConnection && (
+						{isPaused && (
 							<MiniBadge
-								label="WAITING FOR CONNECTION"
+								label={t('workflows.shellStatus.held')}
 								theme={theme}
 								color={theme.colors.warning}
-								title="This message will run after Maestro reconnects"
+							/>
+						)}
+						{isWaitingForConnection && (
+							<MiniBadge
+								label={t('workflows.shellStatus.waitingForConnection')}
+								theme={theme}
+								color={theme.colors.warning}
+								title={t('workflows.shellStatus.thisMessageWillRunAfterMaestroReconnects')}
 							/>
 						)}
 						{isAwaitingConsult && (
 							<MiniBadge
-								label="WAITING FOR CONSULT"
+								label={t('workflows.shellStatus.waitingForConsult')}
 								theme={theme}
 								color={theme.colors.warning}
-								title="This turn finishes once the agent it consulted replies"
+								title={t('workflows.shellStatus.thisTurnFinishesOnceTheAgentItConsulted')}
 							/>
 						)}
 					</div>
@@ -662,12 +697,13 @@ function QueuedItemRow({
 						{isExpanded ? (
 							<>
 								<ChevronUp className="w-3 h-3" />
-								Show less
+								{t('workflows.shellStatus.showLess')}
 							</>
 						) : (
 							<>
 								<ChevronDown className="w-3 h-3" />
-								Show all ({formatNumber(hiddenChars)} more characters)
+								{t('workflows.shellStatus.showAll')}
+								{formatNumber(hiddenChars)} {t('workflows.shellStatus.moreCharacters')}
 							</>
 						)}
 					</button>
@@ -685,11 +721,17 @@ function QueuedItemRow({
 							}}
 							className="flex items-center gap-1 text-xs hover:opacity-80 transition-opacity"
 							style={{ color: theme.colors.textDim }}
-							title={imagesExpanded ? 'Hide thumbnails' : 'Show thumbnails'}
+							title={
+								imagesExpanded
+									? t('workflows.shellStatus.hideThumbnails')
+									: t('workflows.shellStatus.showThumbnails')
+							}
 						>
 							<ImageIcon className="w-3.5 h-3.5" />
 							<span>
-								{item.images.length} image{item.images.length > 1 ? 's' : ''} attached
+								{item.images.length} {t('workflows.shellStatus.image')}
+								{item.images.length > 1 ? t('workflows.shell.pluralSuffix') : ''}{' '}
+								{t('workflows.shellStatus.attached')}
 							</span>
 							{imagesExpanded ? (
 								<ChevronUp className="w-3 h-3" />
@@ -711,11 +753,11 @@ function QueuedItemRow({
 											e.stopPropagation();
 											onOpenLightbox?.(img, item.images, 'history');
 										}}
-										title="Click to view full size"
+										title={t('workflows.shellStatus.clickToViewFullSize')}
 									>
 										<img
 											src={displayImageSrc(img)}
-											alt={`Queued attachment ${imgIdx + 1}`}
+											alt={t('workflows.shellStatus.queuedAttachmentValue', { p0: imgIdx + 1 })}
 											className="h-16 rounded border block"
 											style={{
 												borderColor: theme.colors.border,
@@ -757,7 +799,7 @@ function QueuedItemRow({
 								title={forceSendTitle}
 							>
 								<Hammer className="w-3.5 h-3.5" />
-								Force Send
+								{t('workflows.shellStatus.forceSend')}
 							</button>
 						)}
 					</div>
@@ -781,7 +823,7 @@ function QueuedItemRow({
 								onClick={onEdit}
 								className="p-1 rounded hover:bg-black/20 transition-colors"
 								style={{ color: theme.colors.textDim }}
-								title="Edit message and images"
+								title={t('workflows.shellStatus.editMessageAndImages')}
 							>
 								<Pencil className="w-3.5 h-3.5" />
 							</button>
@@ -792,7 +834,7 @@ function QueuedItemRow({
 							onClick={onCopy}
 							className="p-1 rounded hover:bg-black/20 transition-colors"
 							style={{ color: isCopied ? theme.colors.success : theme.colors.textDim }}
-							title="Copy to clipboard"
+							title={t('workflows.shellStatus.copyToClipboard')}
 						>
 							{isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
 						</button>
@@ -805,8 +847,8 @@ function QueuedItemRow({
 								style={{ color: isPaused ? theme.colors.warning : theme.colors.textDim }}
 								title={
 									isPaused
-										? 'Resume this message (let it run when its turn comes)'
-										: 'Hold this message (skip it until you resume)'
+										? t('workflows.shellStatus.resumeThisMessageLetItRunWhenIts')
+										: t('workflows.shellStatus.holdThisMessageSkipItUntilYouResume')
 								}
 							>
 								{isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
@@ -818,7 +860,7 @@ function QueuedItemRow({
 							onClick={onRequestRemove}
 							className="p-1 rounded hover:bg-black/20 transition-colors"
 							style={{ color: theme.colors.textDim }}
-							title="Remove from queue"
+							title={t('workflows.shellStatus.removeFromQueue')}
 						>
 							<X className="w-4 h-4" />
 						</button>

@@ -1,3 +1,5 @@
+import { getT } from '../../../i18n';
+import { agentStateLabel } from '../../../utils/workflowLabels';
 import type React from 'react';
 import { getAgentDisplayName, getAgentLoginCommand } from '../../../../shared/agentMetadata';
 import { startManualReauth } from '../../../stores/authOutageStore';
@@ -42,14 +44,18 @@ export function buildSessionJumpCommands({
 	getSessionWindow,
 	jumpSlots,
 }: BuildSessionCommandsArgs): QuickAction[] {
+	const t = getT();
 	return sessions.map((session) => {
 		let label: string;
 		if (session.parentSessionId) {
 			const parentSession = sessions.find((p) => p.id === session.parentSessionId);
 			const parentName = parentSession?.name || 'Unknown';
-			label = `Jump to ${parentName} subagent: ${session.name}`;
+			label = t('workflows.shell.extraJumpToValueSubagentValue', {
+				p0: parentName,
+				p1: session.name,
+			});
 		} else {
-			label = `Jump to: ${session.name}`;
+			label = t('workflows.shell.extraJumpToValue', { p0: session.name });
 		}
 		const jumpDigit = jumpSlots?.get(session.id);
 
@@ -63,7 +69,7 @@ export function buildSessionJumpCommands({
 				revealJumpTarget,
 				getSessionWindow,
 			}),
-			subtext: session.state.toUpperCase(),
+			subtext: agentStateLabel(t, session.state).toUpperCase(),
 			bookmarked: !!session.bookmarked,
 			agentSortKey: alphabetizeKey(session.name),
 		};
@@ -85,12 +91,13 @@ export function buildSessionManagementCommands({
 	killShortcut,
 	openClearBookmarksConfirm,
 }: BuildSessionManagementCommandsArgs): QuickAction[] {
+	const t = getT();
 	const commands: QuickAction[] = [];
 
 	if (activeSession) {
 		commands.push({
 			id: 'rename',
-			label: `Rename Agent: ${activeSession.name}`,
+			label: t('workflows.shell.renameAgentValue', { p0: activeSession.name }),
 			action: () => {
 				setRenameInstanceValue(activeSession.name);
 				setRenameInstanceModalOpen(true);
@@ -102,7 +109,7 @@ export function buildSessionManagementCommands({
 	if (activeSession && onEditAgent) {
 		commands.push({
 			id: 'editAgent',
-			label: `Edit Agent: ${activeSession.name}`,
+			label: t('workflows.shell.editAgentValue', { p0: activeSession.name }),
 			shortcut: agentSettingsShortcut,
 			action: () => {
 				onEditAgent(activeSession);
@@ -115,8 +122,8 @@ export function buildSessionManagementCommands({
 		commands.push({
 			id: 'toggleBookmark',
 			label: activeSession.bookmarked
-				? `Unbookmark: ${activeSession.name}`
-				: `Bookmark: ${activeSession.name}`,
+				? t('workflows.shell.unbookmarkValue', { p0: activeSession.name })
+				: t('workflows.shell.bookmarkValue', { p0: activeSession.name }),
 			shortcut: toggleBookmarkShortcut,
 			action: () => {
 				setSessions((prev) =>
@@ -134,7 +141,7 @@ export function buildSessionManagementCommands({
 	if (sessions.some((session) => session.bookmarked)) {
 		commands.push({
 			id: 'clearAllBookmarks',
-			label: 'Clear All Bookmarks',
+			label: t('workflows.shell.clearAllBookmarks'),
 			action: () => {
 				const bookmarkedCount = sessions.filter((session) => session.bookmarked).length;
 				setQuickActionOpen(false);
@@ -151,8 +158,11 @@ export function buildSessionManagementCommands({
 		const agentName = getAgentDisplayName(activeSession.toolType);
 		commands.push({
 			id: 'reauthenticateProvider',
-			label: `Re-authenticate Provider: ${agentName}`,
-			subtext: `Sign in to ${agentName} again for ${activeSession.name}`,
+			label: t('workflows.shell.reAuthenticateProviderValue', { p0: agentName }),
+			subtext: t('workflows.shell.signInToValueAgainForValue', {
+				p0: agentName,
+				p1: activeSession.name,
+			}),
 			action: () => {
 				const { providerKey } = startManualReauth(activeSession.id);
 				setQuickActionOpen(false);
@@ -164,7 +174,7 @@ export function buildSessionManagementCommands({
 	if (activeSession) {
 		commands.push({
 			id: 'kill',
-			label: `Remove Agent: ${activeSession.name}`,
+			label: t('workflows.shell.removeAgentValue', { p0: activeSession.name }),
 			shortcut: killShortcut,
 			action: () => deleteSession(activeSessionId),
 		});

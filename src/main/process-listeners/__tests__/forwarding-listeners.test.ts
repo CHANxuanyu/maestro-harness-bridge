@@ -68,6 +68,27 @@ describe('Forwarding Listeners', () => {
 		);
 	});
 
+	it('preserves complete progress message boundaries and flushes prior reasoning first', () => {
+		setupForwardingListeners(mockProcessManager, mockDeps);
+		const handler = eventHandlers.get('thinking-chunk');
+		handler?.('session-a', 'Reasoning');
+		handler?.('session-b', 'Other reasoning');
+		handler?.('session-a', 'Checking the files', 'commentary');
+		handler?.('session-a', 'Running the tests', 'commentary');
+		expect(vi.mocked(mockSafeSend).mock.calls).toEqual([
+			['process:thinking-chunk', 'session-a', 'Reasoning'],
+			['process:thinking-chunk', 'session-a', 'Checking the files', 'commentary'],
+			['process:thinking-chunk', 'session-a', 'Running the tests', 'commentary'],
+		]);
+		vi.advanceTimersByTime(50);
+		expect(mockSafeSend).toHaveBeenLastCalledWith(
+			'process:thinking-chunk',
+			'session-b',
+			'Other reasoning'
+		);
+		expect(mockSafeSend).toHaveBeenCalledTimes(4);
+	});
+
 	it('should buffer thinking-chunk events and flush after the coalesce window', () => {
 		setupForwardingListeners(mockProcessManager, mockDeps);
 

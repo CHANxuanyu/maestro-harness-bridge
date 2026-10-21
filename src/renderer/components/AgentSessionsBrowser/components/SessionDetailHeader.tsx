@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React, { RefObject } from 'react';
 import { ChevronLeft, Star, Edit3, Play, X } from 'lucide-react';
 import { GhostIconButton } from '../../ui/GhostIconButton';
@@ -44,6 +45,7 @@ export const SessionDetailHeader = React.memo(function SessionDetailHeader({
 	onStartRenameNamed,
 	onStartRenameUnnamed,
 }: SessionDetailHeaderProps) {
+	const uiText = useT();
 	const isRenaming = renamingSessionId === viewingSession.sessionId;
 
 	return (
@@ -53,14 +55,18 @@ export const SessionDetailHeader = React.memo(function SessionDetailHeader({
 					onClick={onClearViewingSession}
 					padding="p-1.5"
 					color={theme.colors.textDim}
-					ariaLabel="Go back"
+					ariaLabel={uiText('workflows.sessions.goBack')}
 				>
 					<ChevronLeft className="w-5 h-5" />
 				</GhostIconButton>
 				<GhostIconButton
 					onClick={(e) => onToggleStar(viewingSession.sessionId, e)}
 					padding="p-1.5"
-					title={isStarred ? 'Remove from favorites' : 'Add to favorites'}
+					title={
+						isStarred
+							? uiText('workflows.sessions.removeFavorite')
+							: uiText('workflows.sessions.addFavorite')
+					}
 				>
 					<Star
 						className="w-5 h-5"
@@ -80,7 +86,7 @@ export const SessionDetailHeader = React.memo(function SessionDetailHeader({
 								onChange={(e) => onRenameChange(e.target.value)}
 								onKeyDown={onRenameKeyDown}
 								onBlur={onRenameBlur}
-								placeholder="Enter session name..."
+								placeholder={uiText('workflows.sessions.sessionNamePlaceholder')}
 								className="bg-transparent outline-none text-sm font-semibold px-2 py-0.5 rounded border"
 								style={{
 									color: theme.colors.accent,
@@ -97,7 +103,11 @@ export const SessionDetailHeader = React.memo(function SessionDetailHeader({
 							>
 								{viewingSession.sessionName}
 							</span>
-							<GhostIconButton onClick={onStartRenameNamed} padding="p-0.5" title="Rename session">
+							<GhostIconButton
+								onClick={onStartRenameNamed}
+								padding="p-0.5"
+								title={uiText('workflows.sessions.renameSession')}
+							>
 								<Edit3 className="w-3 h-3" style={{ color: theme.colors.accent }} />
 							</GhostIconButton>
 						</div>
@@ -112,7 +122,7 @@ export const SessionDetailHeader = React.memo(function SessionDetailHeader({
 							<GhostIconButton
 								onClick={onStartRenameUnnamed}
 								padding="p-0.5"
-								title="Add session name"
+								title={uiText('workflows.sessions.addSessionName')}
 							>
 								<Edit3 className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 							</GhostIconButton>
@@ -127,7 +137,9 @@ export const SessionDetailHeader = React.memo(function SessionDetailHeader({
 						</div>
 					)}
 					<div className="text-xs flex items-center gap-1" style={{ color: theme.colors.textDim }}>
-						<span>{totalMessages} messages</span>
+						<span>
+							{totalMessages} {uiText('workflows.sessions.messagesUnit')}
+						</span>
 						<span>•</span>
 						<span
 							className="relative group cursor-default"
@@ -152,9 +164,11 @@ export const SessionDetailHeader = React.memo(function SessionDetailHeader({
 					theme={theme}
 					onClick={onResume}
 					icon={<Play />}
-					title={`Resume this session (${formatShortcutKeys(['Meta', 'r'])})`}
+					title={uiText('workflows.sessions.resumeShortcut', {
+						shortcut: formatShortcutKeys(['Meta', 'r']),
+					})}
 				>
-					Resume
+					{uiText('workflows.sessions.resume')}
 				</HeaderActionButton>
 				<button
 					onClick={onClose}

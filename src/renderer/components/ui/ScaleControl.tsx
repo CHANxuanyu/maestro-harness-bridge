@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * ScaleControl - decrease / reset / increase for any zoomable surface.
  *
@@ -92,6 +93,7 @@ export const ScaleControl = React.memo(function ScaleControl({
 	className = '',
 	testId,
 }: ScaleControlProps) {
+	const uiText = useT();
 	const { scale, adjustScale, resetScale, canDecrease, canIncrease } = control;
 	const floating = variant === 'floating';
 	const collapsed = floating && collapsible && !!CollapsedIcon;
@@ -141,7 +143,7 @@ export const ScaleControl = React.memo(function ScaleControl({
 				<span
 					aria-hidden="true"
 					data-testid={testId ? `${testId}-handle` : undefined}
-					title={`Adjust ${subject}`}
+					title={uiText('workflows.files.scaleAdjust', { subject })}
 					className={`flex items-center justify-center ${boxClass} shrink-0 overflow-hidden transition-all duration-200 group-hover:w-0 group-hover:opacity-0 group-focus-within:w-0 group-focus-within:opacity-0`}
 					style={{
 						// A zoom that is no longer 100% tints the resting circle, so the
@@ -157,8 +159,11 @@ export const ScaleControl = React.memo(function ScaleControl({
 					type="button"
 					onClick={() => adjustScale(-1)}
 					disabled={!canDecrease}
-					aria-label={`Decrease ${subject}`}
-					title={withKey(`Decrease ${subject}`, shortcutHint?.decrease)}
+					aria-label={uiText('workflows.files.scaleDecrease', { subject })}
+					title={withKey(
+						uiText('workflows.files.scaleDecrease', { subject }),
+						shortcutHint?.decrease
+					)}
 					className={`${buttonClass} hover:opacity-100`}
 					style={buttonStyle(canDecrease)}
 				>
@@ -168,8 +173,11 @@ export const ScaleControl = React.memo(function ScaleControl({
 					<button
 						type="button"
 						onClick={resetScale}
-						aria-label={`Reset ${subject}`}
-						title={withKey(`Reset ${subject} to 100%`, shortcutHint?.reset)}
+						aria-label={uiText('workflows.files.scaleReset', { subject })}
+						title={withKey(
+							uiText('workflows.files.scaleResetHelp', { subject }),
+							shortcutHint?.reset
+						)}
 						className="focus-ring px-1 text-2xs font-medium tabular-nums rounded transition-colors hover:opacity-100"
 						style={{ color: theme.colors.textDim, opacity: 0.8 }}
 					>
@@ -180,8 +188,11 @@ export const ScaleControl = React.memo(function ScaleControl({
 					type="button"
 					onClick={() => adjustScale(1)}
 					disabled={!canIncrease}
-					aria-label={`Increase ${subject}`}
-					title={withKey(`Increase ${subject}`, shortcutHint?.increase)}
+					aria-label={uiText('workflows.files.scaleIncrease', { subject })}
+					title={withKey(
+						uiText('workflows.files.scaleIncrease', { subject }),
+						shortcutHint?.increase
+					)}
 					className={`${buttonClass} hover:opacity-100`}
 					style={buttonStyle(canIncrease)}
 				>

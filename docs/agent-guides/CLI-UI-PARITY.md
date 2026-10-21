@@ -246,6 +246,9 @@ Notification center history uses the live desktop `notificationStore` over a req
 | Group icon, color, and nesting                                           | `create-group --icon/--color/--parent`, `update-group`                                           |
 | Move an agent or a whole group to another window                         | `window move-agent`, `window move-group` (`--to new\|main\|<n>`); read: `window list`            |
 | Create a worktree agent                                                  | `create-worktree`                                                                                |
+| Select a conversation directly from a project in the sidebar             | `focus-agent <agent-id> --tab <tab-id>`; read: `session list --json`                             |
+| Switch between conversations and agent management in the sidebar         | `settings get/set sidebarNavigationMode` (`conversations` / `agents`)                            |
+| Collapse an automatic project section                                    | `settings get/set collapsedConversationProjects`                                                 |
 | New / close / rename a tab                                               | `tab new`, `tab close`, `tab rename`                                                             |
 | Star a tab (Cmd+Shift+S)                                                 | `tab star` / `tab unstar`                                                                        |
 | Mark a tab unread                                                        | `tab unread` / `tab read`                                                                        |
@@ -260,6 +263,7 @@ Notification center history uses the live desktop `notificationStore` over a req
 | Open a file / URL / terminal tab                                         | `open-file`, `open-browser`, `open-terminal`                                                     |
 | Open a modal or dashboard                                                | `open <surface> [--tab]` (registry in `src/shared/uiSurfaces.ts`)                                |
 | Auto Run: start, stop, resume, skip, abort                               | `auto-run`, `stop-auto-run`, `resume-auto-run`, ...                                              |
+| Application language (system / English / Simplified Chinese)             | `settings get uiLanguage`, `settings set uiLanguage zh-CN`, `settings reset uiLanguage`          |
 | Settings, theme, Encore features                                         | `settings`, `theme`, `set-theme`, `encore`                                                       |
 | Toasts and center flashes                                                | `notify toast`, `notify flash`                                                                   |
 | Save a pasted chat image (right-click)                                   | `image save` (`image list` to find it)                                                           |
@@ -283,6 +287,10 @@ Notification center history uses the live desktop `notificationStore` over a req
 | Playbook Exchange: browse, README, install                               | `marketplace list`, `marketplace show <id>`, `marketplace import`                                |
 
 ## Open gaps
+
+**Project native history (2026-10-16).** The desktop bridge exposes `agentSessions:listProjectHistory`, but CLI `sessions <agent-id>` is still provider scoped. One-click native-history open with automatic runner creation uses the canonical renderer resume flow and has no dedicated CLI verb yet. Adding a WS renderer action is outside this local sidebar acceptance change; this is an explicit parity gap, not a covered action. The same gap covers the external-transcript catch-up: selecting an open native conversation in the project tree (or returning to the window while it is on screen and a history scan reports newer native activity) re-reads the transcript and appends what was written outside Maestro (`refreshNativeConversation()` in `src/renderer/services/refreshNativeConversation.ts`, read-only, same tab/account/host/native id). No CLI verb triggers or reports that refresh yet; the read half is reachable through `sessions`/`agentSessions:read`, but nothing lets an agent fold newer native messages into an open tab.
+
+**Conversation tool detail folds (2026-10-19).** The conversation layout groups tool calls into expandable runs and each call can reveal its stored input/result. These view-local fold states have no CLI address or verb yet. Native transcript reads expose the underlying tool data, but do not expand the desktop card. This is an explicit presentation parity gap in the local conversation UX repair, alongside the native-history refresh gap above; no claim is made that the new fold controls are CLI-covered.
 
 Ranked by how often an agent is likely to hit them. None of these are blocked by
 a design constraint; they are simply not built yet.

@@ -10,6 +10,7 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 import { NewInstanceModal } from '../../../renderer/components/NewInstanceModal';
 import { formatShortcutKeys } from '../../../renderer/utils/shortcutFormatter';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import type { Theme, Session } from '../../../renderer/types';
 import type { AgentConfig } from '../../../renderer/types';
 
@@ -352,6 +353,31 @@ describe('NewInstanceModal', () => {
 			await waitFor(() => {
 				expect(screen.getByText('Codex')).toBeInTheDocument();
 			});
+		});
+
+		it('updates the provider location after a live language change and preserves the form', async () => {
+			const originalLanguage = useSettingsStore.getState().uiLanguage;
+			try {
+				useSettingsStore.setState({ uiLanguage: 'en' });
+				render(
+					<NewInstanceModal
+						isOpen
+						onClose={onClose}
+						onCreate={onCreate}
+						theme={theme}
+						existingSessions={[]}
+					/>
+				);
+				await screen.findByText('1 of 1 locally');
+				const name = screen.getByRole('textbox', { name: 'Agent Name' });
+				fireEvent.change(name, { target: { value: '中文验收 Alpha' } });
+				act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+				expect(screen.getByText('本机：1／1')).toBeInTheDocument();
+				expect(screen.getByRole('textbox', { name: '智能体名称' })).toBe(name);
+				expect(name).toHaveValue('中文验收 Alpha');
+			} finally {
+				act(() => useSettingsStore.setState({ uiLanguage: originalLanguage }));
+			}
 		});
 
 		it('keeps the selected provider on screen even when it is missing', async () => {

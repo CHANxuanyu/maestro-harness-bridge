@@ -15,6 +15,7 @@
 import { memo } from 'react';
 import { Spinner } from './Spinner';
 import type { Theme } from '../../types';
+import { useT } from '../../i18n';
 
 /**
  * Hover text for the Create Pull Request row's badge. `gh pr create` has no
@@ -36,11 +37,14 @@ export interface GitRunningBadgeProps {
 
 export const GitRunningBadge = memo(function GitRunningBadge({
 	theme,
-	label = 'Running',
+	label: labelProp,
 	className = 'flex items-center gap-1',
 	testId = 'git-running-badge',
-	title = 'Still running in the background - open it to watch the output',
+	title: titleProp,
 }: GitRunningBadgeProps) {
+	const t = useT();
+	const label = labelProp ?? t('workflows.git.running');
+	const title = titleProp ?? t('workflows.git.runningTitle');
 	return (
 		<span
 			className={className}

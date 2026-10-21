@@ -23,6 +23,7 @@ import {
 	SSH_REDUCE_ENTRY_CAP_MIN_FRACTION,
 	SSH_REDUCE_ENTRY_CAP_STEP,
 } from '../../stores/settingsStore';
+import { useT } from '../../i18n';
 
 export interface FilePanelSettingsSectionProps {
 	theme: Theme;
@@ -56,6 +57,7 @@ export function FilePanelSettingsSection({
 	sshReduceEntryCapFraction,
 	onSshReduceEntryCapFractionChange,
 }: FilePanelSettingsSectionProps) {
+	const t = useT();
 	const handleResetToDefaults = () => {
 		onMaxDepthChange(DEFAULT_FILE_EXPLORER_MAX_DEPTH);
 		onMaxEntriesChange(DEFAULT_FILE_EXPLORER_MAX_ENTRIES);
@@ -91,17 +93,14 @@ export function FilePanelSettingsSection({
 
 			{/* Content */}
 			<div className="flex-1 min-w-0">
-				<p className="font-semibold mb-1">File Panel Settings</p>
-				<p className="text-xs opacity-70 mb-4">
-					Limits the indexer so huge directories don&apos;t blow up memory. Scans stop at the entry
-					cap and the Files panel surfaces a warning with Load More / Load All.
-				</p>
+				<p className="font-semibold mb-1">{t('settings.filePanel.title')}</p>
+				<p className="text-xs opacity-70 mb-4">{t('settings.filePanel.description')}</p>
 
 				{/* Max depth */}
 				<div className="mb-4">
 					<div className="flex items-center justify-between mb-2">
 						<label htmlFor="file-panel-max-depth" className="text-xs font-medium">
-							Max recursion depth
+							{t('settings.filePanel.maxDepth')}
 						</label>
 						<span
 							className="text-xs font-mono px-2 py-0.5 rounded"
@@ -124,15 +123,14 @@ export function FilePanelSettingsSection({
 						}}
 					/>
 					<p className="text-xs-plus opacity-55 mt-1">
-						Default {DEFAULT_FILE_EXPLORER_MAX_DEPTH}. Deeper scans see more but take longer and use
-						more memory.
+						{t('settings.filePanel.maxDepthHelp', { value: DEFAULT_FILE_EXPLORER_MAX_DEPTH })}
 					</p>
 				</div>
 
 				{/* Max entries */}
 				<div className="mb-3">
 					<div className="flex items-center justify-between mb-2">
-						<label className="text-xs font-medium">Max file entries</label>
+						<label className="text-xs font-medium">{t('settings.filePanel.maxEntries')}</label>
 						<span
 							className="text-xs font-mono px-2 py-0.5 rounded"
 							style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textMain }}
@@ -161,10 +159,11 @@ export function FilePanelSettingsSection({
 						})}
 					</div>
 					<p className="text-xs-plus opacity-55 mt-2">
-						Soft cap. Default {formatEntries(DEFAULT_FILE_EXPLORER_MAX_ENTRIES)}. Valid range{' '}
-						{formatEntries(FILE_EXPLORER_MIN_ENTRIES)} –{' '}
-						{formatEntries(FILE_EXPLORER_MAX_ENTRIES_CAP)}. The Files panel shows a Load More / Load
-						All button when a scan hits this cap.
+						{t('settings.filePanel.maxEntriesHelp', {
+							value: formatEntries(DEFAULT_FILE_EXPLORER_MAX_ENTRIES),
+							min: formatEntries(FILE_EXPLORER_MIN_ENTRIES),
+							max: formatEntries(FILE_EXPLORER_MAX_ENTRIES_CAP),
+						})}
 					</p>
 				</div>
 
@@ -172,10 +171,9 @@ export function FilePanelSettingsSection({
 				<div className="mb-3 pt-3 border-t" style={{ borderColor: theme.colors.border }}>
 					<label className="flex items-center justify-between cursor-pointer">
 						<div className="flex-1 min-w-0 pr-3">
-							<p className="text-xs font-medium">Reduce entry cap on SSH remotes</p>
+							<p className="text-xs font-medium">{t('settings.filePanel.sshReduce')}</p>
 							<p className="text-xs-plus opacity-55 mt-0.5">
-								Apply a fraction of the cap to remote scans. Each directory walked over SSH is a
-								separate round-trip, so a smaller cap returns sooner on large remote trees.
+								{t('settings.filePanel.sshReduceDescription')}
 							</p>
 						</div>
 						<input
@@ -191,7 +189,7 @@ export function FilePanelSettingsSection({
 						<div className="mt-3">
 							<div className="flex items-center justify-between mb-2">
 								<label htmlFor="file-panel-ssh-fraction" className="text-xs font-medium">
-									SSH cap fraction
+									{t('settings.filePanel.sshFraction')}
 								</label>
 								<span
 									className="text-xs font-mono px-2 py-0.5 rounded"
@@ -217,8 +215,11 @@ export function FilePanelSettingsSection({
 								}}
 							/>
 							<p className="text-xs-plus opacity-55 mt-1">
-								{formatEntries(maxEntries)} × {sshPercentLabel} ={' '}
-								{formatEntries(sshResolvedEntries)} on SSH. Slider steps by 5%.
+								{t('settings.filePanel.sshFractionHelp', {
+									entries: formatEntries(maxEntries),
+									percent: sshPercentLabel,
+									resolved: formatEntries(sshResolvedEntries),
+								})}
 							</p>
 						</div>
 					)}
@@ -230,8 +231,10 @@ export function FilePanelSettingsSection({
 					className="text-xs hover:underline"
 					style={{ color: theme.colors.textDim }}
 				>
-					Reset to defaults (depth {DEFAULT_FILE_EXPLORER_MAX_DEPTH},{' '}
-					{formatEntries(DEFAULT_FILE_EXPLORER_MAX_ENTRIES)} entries)
+					{t('settings.filePanel.reset', {
+						depth: DEFAULT_FILE_EXPLORER_MAX_DEPTH,
+						entries: formatEntries(DEFAULT_FILE_EXPLORER_MAX_ENTRIES),
+					})}
 				</button>
 			</div>
 		</div>

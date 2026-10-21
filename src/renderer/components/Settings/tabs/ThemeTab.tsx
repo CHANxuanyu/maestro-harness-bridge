@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * ThemeTab - Theme selection and customization tab
  *
@@ -13,15 +14,11 @@ import { SettingsSectionHeading } from '../SettingsSectionHeading';
 import { Slider } from '../../widgets';
 import {
 	GLOSS_LEVELS,
-	GLOSS_LEVEL_META,
 	asGlossLevel,
 	glossLevelAtIndex,
 	glossLevelIndex,
 } from '../../../../shared/themeGloss';
 import type { Theme, ThemeId } from '../../../types';
-
-/** Stop names for the gloss slider, in ladder order. Derived so a new level cannot be added without a name. */
-const GLOSS_TICK_LABELS = GLOSS_LEVELS.map((level) => GLOSS_LEVEL_META[level].label);
 
 export interface ThemeTabProps {
 	theme: Theme;
@@ -36,6 +33,8 @@ export function ThemeTab({
 	onThemeImportError,
 	onThemeImportSuccess,
 }: ThemeTabProps) {
+	const t = useT();
+	const glossTickLabels = GLOSS_LEVELS.map((level) => t(`settings.finish.theme.gloss.${level}`));
 	const {
 		activeThemeId,
 		setActiveThemeId,
@@ -119,24 +118,22 @@ export function ThemeTab({
 			{/* Surface Gloss. Sits above the picker because it applies to whichever
 			    theme is chosen below, rather than being a property of one of them. */}
 			<div data-setting-id="theme-surface-gloss">
-				<SettingsSectionHeading icon={Lightbulb}>Surface Gloss</SettingsSectionHeading>
-				<p className="text-xs opacity-70 mb-2">
-					Adds a light source to the sidebars, headers, tab bar and composer so panels read as
-					stacked layers instead of one flat sheet. It only adds highlights and shadows, so no theme
-					color changes and text stays exactly as legible as it is now.
-				</p>
+				<SettingsSectionHeading icon={Lightbulb}>
+					{t('settings.finish.theme.gloss')}
+				</SettingsSectionHeading>
+				<p className="text-xs opacity-70 mb-2">{t('settings.finish.theme.glossDescription')}</p>
 				<Slider
 					theme={theme}
-					label="Intensity"
+					label={t('settings.finish.theme.intensity')}
 					value={glossLevelIndex(glossLevel)}
 					onChange={(index) => setThemeGloss(glossLevelAtIndex(index))}
-					tickLabels={GLOSS_TICK_LABELS}
+					tickLabels={glossTickLabels}
 					disabled={isLightTheme}
 				/>
 				<p className="text-xs-plus opacity-55 mt-2">
 					{isLightTheme
-						? 'Gloss is off on light themes: a white highlight on a light surface is invisible at best and muddy at worst.'
-						: GLOSS_LEVEL_META[glossLevel].description}
+						? t('settings.finish.theme.lightGloss')
+						: t(`settings.finish.theme.gloss.${glossLevel}Description`)}
 				</p>
 			</div>
 
@@ -147,14 +144,14 @@ export function ThemeTab({
 				tabIndex={0}
 				onKeyDown={handleThemePickerKeyDown}
 				role="group"
-				aria-label="Theme picker"
+				aria-label={t('settings.finish.theme.picker')}
 			>
-				{['dark', 'light', 'vibe'].map((mode) => (
+				{(['dark', 'light', 'vibe'] as const).map((mode) => (
 					<div key={mode}>
 						<SettingsSectionHeading
 							icon={mode === 'dark' ? Moon : mode === 'light' ? Sun : Sparkles}
 						>
-							{mode} Mode
+							{t(`settings.finish.theme.mode.${mode}`)}
 						</SettingsSectionHeading>
 						<div className="grid grid-cols-2 gap-3">
 							{groupedThemes[mode]?.map((t: Theme) => (

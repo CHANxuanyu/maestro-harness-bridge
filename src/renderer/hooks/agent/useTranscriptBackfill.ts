@@ -57,10 +57,12 @@ const MAX_WIDEN_STEPS_PER_LOAD = 8;
 
 export interface UseTranscriptBackfillOptions {
 	/**
-	 * Called synchronously with the number of entries just prepended, in the
-	 * same tick as the store update so both land in one React commit. The
-	 * transcript uses this to keep its progressive render window from mounting a
-	 * whole page of markdown in a single blocking commit (issue #1342).
+	 * Called synchronously with the number of RAW log entries just prepended,
+	 * right after the store update and before it renders. The transcript uses
+	 * it to keep its progressive render window (issue #1342) on the rows the
+	 * user was reading - note it must not shift the window by this count, which
+	 * is entries, not rendered rows (tool runs fold, hidden reasoning renders
+	 * nothing); TerminalOutput resolves the real row offset once it renders.
 	 */
 	onPrepend?: (count: number) => void;
 }
@@ -149,7 +151,9 @@ export function useTranscriptBackfill(
 						toolType || 'claude-code',
 						projectRoot,
 						agentSessionId,
-						{ offset: 0, limit: nextWindow },
+						// The owning agent pins the account pool, so paging back never
+						// reads another account's transcript with the same id.
+						{ offset: 0, limit: nextWindow, ownerAgentId: sessionId },
 						sshRemoteId
 					);
 					// The tab may have changed while that read was outstanding. Anything

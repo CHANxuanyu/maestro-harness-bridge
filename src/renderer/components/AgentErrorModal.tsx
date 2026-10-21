@@ -17,6 +17,7 @@
  */
 
 import React, { useRef, useMemo, useState } from 'react';
+import { useT } from '../i18n';
 import {
 	AlertCircle,
 	RefreshCw,
@@ -77,6 +78,7 @@ function getErrorIcon(type: AgentErrorType): React.ReactNode {
 			return <KeyRound className="w-6 h-6" />;
 		case 'token_exhaustion':
 			return <MessageSquarePlus className="w-6 h-6" />;
+		case 'session_busy':
 		case 'rate_limited':
 			return <Clock className="w-6 h-6" />;
 		case 'network_error':
@@ -133,6 +135,7 @@ export function AgentErrorModal({
 	dismissible = true,
 	onJumpToAgent,
 }: AgentErrorModalProps) {
+	const t = useT();
 	const primaryButtonRef = useRef<HTMLButtonElement>(null);
 	const [showJsonDetails, setShowJsonDetails] = useState(false);
 
@@ -150,7 +153,10 @@ export function AgentErrorModal({
 
 	const errorColor = getErrorColor(error, theme);
 	const errorIcon = getErrorIcon(error.type);
-	const errorTitle = getErrorTitle(error.type);
+	const errorTitle =
+		error.type === 'session_busy'
+			? t('workflows.sessions.sessionInUse')
+			: getErrorTitle(error.type);
 
 	return (
 		<Modal

@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import React from 'react';
 import {
 	DollarSign,
@@ -30,6 +31,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 	viewingSession,
 	theme,
 }: SessionDetailStatsPanelProps) {
+	const uiText = useT();
 	const totalTokens = viewingSession.inputTokens + viewingSession.outputTokens;
 	const usagePercent = (totalTokens / FALLBACK_CONTEXT_WINDOW) * 100;
 	const contextColor =
@@ -55,7 +57,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 							className="text-xs font-medium uppercase tracking-wider"
 							style={{ color: theme.colors.textDim }}
 						>
-							Cost
+							{uiText('workflows.sessions.cost')}
 						</span>
 					</div>
 					<span className="text-lg font-mono font-semibold" style={{ color: theme.colors.success }}>
@@ -70,7 +72,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 							className="text-xs font-medium uppercase tracking-wider"
 							style={{ color: theme.colors.textDim }}
 						>
-							Duration
+							{uiText('workflows.sessions.duration')}
 						</span>
 					</div>
 					<span
@@ -88,7 +90,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 							className="text-xs font-medium uppercase tracking-wider"
 							style={{ color: theme.colors.textDim }}
 						>
-							Total Tokens
+							{uiText('workflows.sessions.totalTokens')}
 						</span>
 					</div>
 					<div className="flex items-baseline gap-2">
@@ -99,7 +101,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 							{formatNumber(totalTokens)}
 						</span>
 						<span className="text-2xs" style={{ color: theme.colors.textDim }}>
-							of 200k context{' '}
+							{uiText('workflows.sessions.contextCapacity')}{' '}
 							<span className="font-mono font-medium" style={{ color: contextColor }}>
 								{Math.min(100, usagePercent).toFixed(1)}%
 							</span>
@@ -114,7 +116,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 							className="text-xs font-medium uppercase tracking-wider"
 							style={{ color: theme.colors.textDim }}
 						>
-							Messages
+							{uiText('workflows.sessions.messages')}
 						</span>
 					</div>
 					<span
@@ -133,7 +135,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 				<div className="flex items-center gap-2">
 					<ArrowDownToLine className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 					<span className="text-xs" style={{ color: theme.colors.textDim }}>
-						Input:{' '}
+						{uiText('workflows.sessions.input')}{' '}
 						<span className="font-mono font-medium" style={{ color: theme.colors.textMain }}>
 							{formatNumber(viewingSession.inputTokens)}
 						</span>
@@ -142,7 +144,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 				<div className="flex items-center gap-2">
 					<ArrowUpFromLine className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 					<span className="text-xs" style={{ color: theme.colors.textDim }}>
-						Output:{' '}
+						{uiText('workflows.sessions.output')}{' '}
 						<span className="font-mono font-medium" style={{ color: theme.colors.textMain }}>
 							{formatNumber(viewingSession.outputTokens)}
 						</span>
@@ -152,7 +154,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 					<div className="flex items-center gap-2">
 						<Database className="w-3 h-3" style={{ color: theme.colors.success }} />
 						<span className="text-xs" style={{ color: theme.colors.textDim }}>
-							Cache Read:{' '}
+							{uiText('workflows.sessions.cacheRead')}{' '}
 							<span className="font-mono font-medium" style={{ color: theme.colors.success }}>
 								{formatNumber(viewingSession.cacheReadTokens)}
 							</span>
@@ -163,7 +165,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 					<div className="flex items-center gap-2">
 						<Hash className="w-3 h-3" style={{ color: theme.colors.warning }} />
 						<span className="text-xs" style={{ color: theme.colors.textDim }}>
-							Cache Write:{' '}
+							{uiText('workflows.sessions.cacheWrite')}{' '}
 							<span className="font-mono font-medium" style={{ color: theme.colors.warning }}>
 								{formatNumber(viewingSession.cacheCreationTokens)}
 							</span>
@@ -173,7 +175,7 @@ export const SessionDetailStatsPanel = React.memo(function SessionDetailStatsPan
 				<div className="flex items-center gap-2">
 					<HardDrive className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 					<span className="text-xs" style={{ color: theme.colors.textDim }}>
-						Size:{' '}
+						{uiText('workflows.sessions.size')}{' '}
 						<span className="font-mono font-medium" style={{ color: theme.colors.textMain }}>
 							{formatSize(viewingSession.sizeBytes)}
 						</span>

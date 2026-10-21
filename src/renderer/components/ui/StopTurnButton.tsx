@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * StopTurnButton - the red "Stop" pill that ends the active agent's turn.
  *
@@ -25,22 +26,29 @@ interface StopTurnButtonProps {
 export function StopTurnButton({
 	theme,
 	onClick,
-	title = 'Stop this turn (Ctrl+C)',
+	title: titleProp,
 }: StopTurnButtonProps): JSX.Element {
+	const t = useT();
+	const title = titleProp ?? t('workflows.status.stopTurn');
 	return (
 		<button
 			type="button"
 			onClick={onClick}
-			className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-colors hover:opacity-80"
+			// shrink-0 + nowrap: in a crowded busy bar a flex child may otherwise be
+			// squeezed until its label wraps one character per line ("停" over "止"),
+			// which is exactly the control the user is reaching for.
+			className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-colors hover:opacity-80 shrink-0 whitespace-nowrap"
 			style={{ backgroundColor: theme.colors.error, color: 'white' }}
 			title={title}
+			aria-label={title}
+			data-testid="stop-turn-button"
 		>
 			{/* Filled square: the universal transport "stop", and the one glyph that
 			    cannot be read as "pause" or "close". */}
 			<svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
 				<rect x="6" y="6" width="12" height="12" rx="1" />
 			</svg>
-			Stop
+			{t('common.stop')}
 		</button>
 	);
 }

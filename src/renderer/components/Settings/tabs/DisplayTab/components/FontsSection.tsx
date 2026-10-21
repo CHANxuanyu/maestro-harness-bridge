@@ -15,6 +15,7 @@ import {
 	type TypographySurface,
 } from '../../../../../../shared/typography';
 import type { FontConfigurationState } from '../types';
+import { useT, type MessageKey } from '../../../../../i18n';
 
 interface FontsSectionProps {
 	theme: Theme;
@@ -67,6 +68,7 @@ export function FontsSection({
 	// default modal width that is the right answer, so the common case does not
 	// flash a single column on open.
 	const singleColumn = gridWidth > 0 && gridWidth < TWO_COLUMN_MIN_WIDTH;
+	const t = useT();
 
 	const baseSize = Number(settings.fontSize ?? 14);
 
@@ -93,11 +95,14 @@ export function FontsSection({
 				data-testid={`font-surface-${surface}`}
 			>
 				<span className="text-xs font-medium" style={{ color: theme.colors.textMain }}>
-					{spec.label}
+					{t(`settings.display.surface.${surface}` as MessageKey)}
 				</span>
-				<p className="text-xs-plus leading-snug opacity-55 flex-1">{spec.description}</p>
+				<p className="text-xs-plus leading-snug opacity-55 flex-1">
+					{t(`settings.display.surface.${surface}.description` as MessageKey)}
+				</p>
 				<FontConfigurationPanel
 					compact
+					heading={t(`settings.display.surface.${surface}` as MessageKey)}
 					fontFamily={storedFont}
 					setFontFamily={(value) => setSurfaceFontFamily(surface, value)}
 					systemFonts={fontConfiguration.systemFonts}
@@ -118,7 +123,17 @@ export function FontsSection({
 					// this pane through ordinary CSS inheritance.
 					previewFontFamily={`var(${spec.fontVar})`}
 					previewFontSize={`var(${spec.sizeVar})`}
-					inheritOptions={inheritable ? inheritOptionsForSurface(spec) : undefined}
+					inheritOptions={
+						inheritable
+							? inheritOptionsForSurface(spec).map((option) => ({
+									...option,
+									label:
+										option.value === '@terminal'
+											? t('settings.finish.font.inheritTerminal')
+											: t('settings.finish.font.inheritInterface'),
+								}))
+							: undefined
+					}
 					sizeControl={
 						<FontSizeStepper
 							theme={theme}
@@ -143,14 +158,9 @@ export function FontsSection({
 				    it takes the list icon. */}
 				<SettingsSectionHeading
 					icon={ListPlus}
-					description={
-						<>
-							Names of fonts installed on this machine that aren&apos;t in the lists below. Added
-							once here, then offered in every picker.
-						</>
-					}
+					description={t('settings.display.customFonts.description')}
 				>
-					Custom Fonts
+					{t('settings.display.customFonts.heading')}
 				</SettingsSectionHeading>
 				<SectionCard theme={theme}>
 					<CustomFontsRow
@@ -163,11 +173,8 @@ export function FontsSection({
 			</div>
 
 			<div data-setting-id="display-fonts">
-				<SettingsSectionHeading
-					icon={Type}
-					description="Interface is the proportional face and Terminal the fixed-width one. Everything else can follow either, or carry a font of its own. Press Up/Down on any picker to preview."
-				>
-					Fonts
+				<SettingsSectionHeading icon={Type} description={t('settings.display.fonts.description')}>
+					{t('settings.display.fonts.heading')}
 				</SettingsSectionHeading>
 				<SectionCard theme={theme}>
 					{/* All six surfaces in one grid: the two roots lead, and the four

@@ -24,7 +24,7 @@ import { useGitDetail } from '../../contexts/GitStatusContext';
 import { buildChangedAncestors, buildFileChangeMap } from '../../utils/gitChangeMap';
 import { RIGHT_PANEL_COMPACT_THRESHOLD } from '../../constants/rightPanel';
 import { usePhoneLayout } from '../../hooks/ui/useViewportBreakpoint';
-import { getOpenInLabel, fileManagerName } from '../../utils/platformUtils';
+import { useI18n, localizedFileManagerName } from '../../i18n';
 import { safeClipboardWrite } from '../../utils/clipboard';
 import { flashCopiedToClipboard } from '../../utils/flashCopiedToClipboard';
 import { formatShortcutKeys, formatKey, formatAltKeyName } from '../../utils/shortcutFormatter';
@@ -62,6 +62,8 @@ import { useFileContextMenu } from './hooks/useFileContextMenu';
 import { formatBytes } from './utils/pathHelpers';
 
 function FileExplorerPanelInner(props: FileExplorerPanelProps) {
+	const { t, tRich, locale } = useI18n();
+	const managerName = localizedFileManagerName(t, window.maestro?.platform || 'darwin');
 	const {
 		session,
 		theme,
@@ -548,7 +550,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 							ref={fileTreeFilterInputRef}
 							autoFocus
 							type="text"
-							placeholder="Filter files..."
+							placeholder={t('workflows.filePanel.filter')}
 							value={fileTreeFilter}
 							onChange={(e) => setFileTreeFilter(e.target.value)}
 							className="w-full pl-3 pr-14 py-2 rounded border bg-transparent outline-none text-sm"
@@ -557,7 +559,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 						<EscCloseButton
 							theme={theme}
 							variant="adornment"
-							label="Close filter (Esc)"
+							label={t('workflows.filePanel.closeFilter')}
 							onClose={handleFilterEscape}
 						/>
 					</div>
@@ -593,10 +595,12 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 								? `${theme.colors.accent}25`
 								: `${theme.colors.accent}15`,
 						}}
-						title={`Find Files (${formatShortcutKeys(shortcuts.filterFiles?.keys ?? ['Meta', 'f'])})`}
+						title={t('workflows.filePanel.findFiles', {
+							shortcut: formatShortcutKeys(shortcuts.filterFiles?.keys ?? ['Meta', 'f']),
+						})}
 					>
 						{!compact && <Search className="w-3 h-3" />}
-						{!iconOnly && 'Find'}
+						{!iconOnly && t('workflows.filePanel.find')}
 					</button>
 					{/* Open in file manager - local sessions only */}
 					{!sshRemoteId && (
@@ -610,10 +614,10 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 								border: `1px solid ${theme.colors.accent}40`,
 								backgroundColor: `${theme.colors.accent}15`,
 							}}
-							title={getOpenInLabel(window.maestro?.platform || 'darwin')}
+							title={t('common.openInFileManager', { manager: managerName })}
 						>
 							{!compact && <FolderOpen className="w-3 h-3" />}
-							{!iconOnly && 'Open'}
+							{!iconOnly && t('workflows.filePanel.open')}
 						</button>
 					)}
 					{/* Show/hide dotfiles */}
@@ -628,7 +632,11 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 									? `${theme.colors.accent}25`
 									: `${theme.colors.accent}15`,
 							}}
-							title={showHiddenFiles ? 'Hide dotfiles' : 'Show dotfiles'}
+							title={
+								showHiddenFiles
+									? t('workflows.filePanel.hideDotfiles')
+									: t('workflows.filePanel.showDotfiles')
+							}
 						>
 							{!compact &&
 								(showHiddenFiles ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />)}
@@ -650,12 +658,12 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 						}}
 						title={
 							autoRefreshInterval > 0
-								? `Auto-refresh every ${autoRefreshInterval}s`
-								: 'Refresh file tree'
+								? t('workflows.filePanel.autoRefreshEvery', { seconds: autoRefreshInterval })
+								: t('workflows.filePanel.refreshTree')
 						}
 					>
 						{!compact && <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />}
-						{!iconOnly && 'Refresh'}
+						{!iconOnly && t('workflows.filePanel.refresh')}
 					</button>
 					{/* Expand all */}
 					<button
@@ -666,7 +674,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 							border: `1px solid ${theme.colors.accent}40`,
 							backgroundColor: `${theme.colors.accent}15`,
 						}}
-						title="Expand all folders"
+						title={t('workflows.filePanel.expandAll')}
 					>
 						<div className="flex flex-col items-center -space-y-1.5">
 							<ChevronUp className="w-3 h-3" />
@@ -682,7 +690,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 							border: `1px solid ${theme.colors.accent}40`,
 							backgroundColor: `${theme.colors.accent}15`,
 						}}
-						title="Collapse all folders"
+						title={t('workflows.filePanel.collapseAll')}
 					>
 						<div className="flex flex-col items-center -space-y-1.5">
 							<ChevronDown className="w-3 h-3" />
@@ -725,8 +733,8 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 							className="flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
 							style={{ color: theme.colors.warning }}
 							onClick={() => setTruncationCollapsedFor(null)}
-							aria-label="Show file scan warning"
-							title="Not all files were loaded into the file panel. Click for options."
+							aria-label={t('workflows.filePanel.scanWarning')}
+							title={t('workflows.filePanel.scanIncomplete')}
 						>
 							<AlertTriangle className="w-3.5 h-3.5" />
 						</button>
@@ -736,10 +744,10 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 						style={{ color: theme.colors.accent }}
 						onClick={async () => {
 							if (await safeClipboardWrite(session.projectRoot)) {
-								flashCopiedToClipboard(session.projectRoot, 'Path Copied');
+								flashCopiedToClipboard(session.projectRoot, t('workflows.filePanel.pathCopied'));
 							}
 						}}
-						title="Copy path to clipboard"
+						title={t('workflows.filePanel.copyPath')}
 					>
 						<Copy className="w-3 h-3" />
 					</span>
@@ -757,7 +765,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 						}
 						onDoubleClick={async () => {
 							if (await safeClipboardWrite(session.projectRoot)) {
-								flashCopiedToClipboard(session.projectRoot, 'Path Copied');
+								flashCopiedToClipboard(session.projectRoot, t('workflows.filePanel.pathCopied'));
 							}
 						}}
 					>
@@ -791,7 +799,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 									style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 								>
 									<Folder className="w-4 h-4" />
-									Select New Directory
+									{t('workflows.filePanel.selectDirectory')}
 								</button>
 							)}
 							{session.toolType !== 'terminal' && (
@@ -802,7 +810,9 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 									style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 								>
 									<RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-									{isRefreshing ? 'Connecting...' : 'Retry Connection'}
+									{isRefreshing
+										? t('workflows.filePanel.connecting')
+										: t('workflows.filePanel.retry')}
 								</button>
 							)}
 						</>
@@ -851,7 +861,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 									className="text-xs opacity-50 text-center"
 									style={{ color: theme.colors.textDim }}
 								>
-									No files found
+									{t('workflows.filePanel.empty')}
 								</div>
 							</div>
 						)}
@@ -924,7 +934,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 					)}
 					{fileTreeFilter && flattenedTree.length === 0 && (
 						<div className="text-xs opacity-50 italic text-center py-4">
-							No files match your search
+							{t('workflows.filePanel.noMatches')}
 						</div>
 					)}
 				</>
@@ -970,7 +980,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 							}}
 						>
 							<FolderUp className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-							Drop here to move to root
+							{t('workflows.filePanel.dropRoot')}
 						</div>
 					)}
 
@@ -997,7 +1007,10 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 									style={{ color: theme.colors.accent }}
 								/>
 								<span>
-									Hold {altKeyName} <strong>before</strong> the drag - drop and try again
+									{tRich('workflows.filePanel.holdBeforeDrag', {
+										key: altKeyName,
+										before: <strong>{t('workflows.filePanel.before')}</strong>,
+									})}
 								</span>
 							</>
 						) : (
@@ -1019,7 +1032,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 										</kbd>
 									)}
 									<span>
-										{altKeyName}-drag to copy out to {fileManagerName()}
+										{t('workflows.filePanel.dragOut', { key: altKeyName, manager: managerName })}
 									</span>
 								</span>
 							</>
@@ -1041,34 +1054,54 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 				>
 					<span
 						className="flex items-center gap-1"
-						title={`${session.fileTreeStats.fileCount.toLocaleString()} file${session.fileTreeStats.fileCount !== 1 ? 's' : ''}`}
+						title={t(
+							session.fileTreeStats.fileCount === 1
+								? 'workflows.filePanel.fileOne'
+								: 'workflows.filePanel.fileMany',
+							{ count: session.fileTreeStats.fileCount.toLocaleString(locale) }
+						)}
 					>
 						<FileText className="file-stats-icon w-3 h-3 shrink-0 opacity-60" />
 						<span style={{ color: theme.colors.accent }}>
-							{session.fileTreeStats.fileCount.toLocaleString()}
+							{session.fileTreeStats.fileCount.toLocaleString(locale)}
 						</span>
 						<span className="file-stats-label opacity-60">
-							file{session.fileTreeStats.fileCount !== 1 ? 's' : ''},
+							{t(
+								session.fileTreeStats.fileCount === 1
+									? 'workflows.filePanel.fileUnitOne'
+									: 'workflows.filePanel.fileUnitMany'
+							)}
 						</span>
 					</span>
 					<span
 						className="flex items-center gap-1"
-						title={`${session.fileTreeStats.folderCount.toLocaleString()} folder${session.fileTreeStats.folderCount !== 1 ? 's' : ''}`}
+						title={t(
+							session.fileTreeStats.folderCount === 1
+								? 'workflows.filePanel.folderOne'
+								: 'workflows.filePanel.folderMany',
+							{ count: session.fileTreeStats.folderCount.toLocaleString(locale) }
+						)}
 					>
 						<Folder className="file-stats-icon w-3 h-3 shrink-0 opacity-60" />
 						<span style={{ color: theme.colors.accent }}>
-							{session.fileTreeStats.folderCount.toLocaleString()}
+							{session.fileTreeStats.folderCount.toLocaleString(locale)}
 						</span>
 						<span className="file-stats-label opacity-60">
-							folder{session.fileTreeStats.folderCount !== 1 ? 's' : ''}
+							{t(
+								session.fileTreeStats.folderCount === 1
+									? 'workflows.filePanel.folderUnitOne'
+									: 'workflows.filePanel.folderUnitMany'
+							)}
 						</span>
 					</span>
 					<span
 						className="flex items-center gap-1"
-						title={`Total size: ${formatBytes(session.fileTreeStats.totalSize)}`}
+						title={t('workflows.filePanel.totalSize', {
+							size: formatBytes(session.fileTreeStats.totalSize),
+						})}
 					>
 						<HardDrive className="file-stats-icon w-3 h-3 shrink-0 opacity-60" />
-						<span className="file-stats-label opacity-60">Size:</span>
+						<span className="file-stats-label opacity-60">{t('workflows.filePanel.size')}</span>
 						<span style={{ color: theme.colors.accent }}>
 							{formatBytes(session.fileTreeStats.totalSize)}
 						</span>
@@ -1210,13 +1243,13 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 					>
 						<FolderInput className="w-12 h-12" style={{ color: theme.colors.accent }} />
 						<span className="text-base font-medium" style={{ color: theme.colors.textMain }}>
-							Drop to import
+							{t('workflows.filePanel.dropImport')}
 						</span>
 						<span className="text-sm" style={{ color: theme.colors.textDim }}>
 							{dragOverFolder
 								? `Copies into "${getBasename(dragOverFolder)}".`
 								: 'Copies into this workspace.'}{' '}
-							Originals stay where they are.
+							{t('workflows.filePanel.originalsStay')}
 						</span>
 					</div>
 				</div>

@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { RightPanelTab } from '../../../types';
 import type { QuickAction } from '../types';
 
@@ -29,10 +30,11 @@ export function buildRightPanelCommands({
 	onAutoRunResetTasks,
 	shortcuts,
 }: BuildRightPanelCommandsArgs): QuickAction[] {
+	const t = getT();
 	const commands: QuickAction[] = [
 		{
 			id: 'goToFiles',
-			label: 'Go to Files Tab',
+			label: t('workflows.shell.goToFilesTab'),
 			shortcut: shortcuts.goToFiles,
 			action: () => {
 				setRightPanelOpen(true);
@@ -42,7 +44,7 @@ export function buildRightPanelCommands({
 		},
 		{
 			id: 'goToHistory',
-			label: 'Go to History Tab',
+			label: t('workflows.shell.goToHistoryTab'),
 			shortcut: shortcuts.goToHistory,
 			action: () => {
 				setRightPanelOpen(true);
@@ -55,7 +57,7 @@ export function buildRightPanelCommands({
 	if (!autoRunDisabled) {
 		commands.push({
 			id: 'goToAutoRun',
-			label: 'Go to Auto Run Tab',
+			label: t('workflows.shell.goToAutoRunTab'),
 			shortcut: shortcuts.goToAutoRun,
 			action: () => {
 				setRightPanelOpen(true);
@@ -67,8 +69,8 @@ export function buildRightPanelCommands({
 		if (onToggleAutoRunExpanded) {
 			commands.push({
 				id: 'autoRunExpandedPreview',
-				label: 'Auto Run Expanded Preview',
-				subtext: 'Open the Auto Run document in a centered modal',
+				label: t('workflows.shell.autoRunExpandedPreview'),
+				subtext: t('workflows.shell.openTheAutoRunDocumentInACentered'),
 				shortcut: shortcuts.toggleAutoRunExpanded,
 				action: () => {
 					onToggleAutoRunExpanded();
@@ -85,8 +87,11 @@ export function buildRightPanelCommands({
 		) {
 			commands.push({
 				id: 'resetAutoRunTasks',
-				label: `Reset Finished Tasks in ${autoRunSelectedDocument}`,
-				subtext: `Uncheck ${autoRunCompletedTaskCount} completed task${autoRunCompletedTaskCount !== 1 ? 's' : ''}`,
+				label: t('workflows.shell.resetFinishedTasksInValue', { p0: autoRunSelectedDocument }),
+				subtext: t('workflows.shell.uncheckValueCompletedTaskvalue', {
+					p0: autoRunCompletedTaskCount,
+					p1: autoRunCompletedTaskCount !== 1 ? t('workflows.shell.pluralSuffix') : '',
+				}),
 				action: () => {
 					onAutoRunResetTasks();
 					setQuickActionOpen(false);

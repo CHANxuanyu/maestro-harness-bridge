@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { localizeAppCommandDescription } from './shared/commandDescriptionI18n';
 import { useMemo, useState, useRef } from 'react';
 import {
 	Plus,
@@ -15,6 +17,7 @@ import type { Theme, CustomAICommand } from '../types';
 import { TEMPLATE_VARIABLES_GENERAL } from '../utils/templateVariables';
 import { useSaveShortcut, useTemplateAutocomplete } from '../hooks';
 import { TemplateAutocompleteDropdown } from './TemplateAutocompleteDropdown';
+import { templateVariableDescription } from './shared/templateVariableI18n';
 import { useResizableTextarea } from '../hooks/ui/useResizableTextarea';
 import { FilterInput } from './ui/FilterInput';
 import {
@@ -62,14 +65,20 @@ const normalizeFilterQuery = (query: string): string => query.replace(/^\//, '')
  *
  * Returns null when the command does not match at all.
  */
-const scoreCommand = (cmd: CustomAICommand, query: string): number | null => {
+const scoreCommand = (
+	cmd: CustomAICommand,
+	query: string,
+	displayDescription: string
+): number | null => {
 	const commandHit = fuzzyMatchWithScore(cmd.command.slice(1), query, '.');
 	const descriptionHit = fuzzyMatchWithScore(cmd.description, query);
+	const displayDescriptionHit = fuzzyMatchWithScore(displayDescription, query);
 	const bodyHit = cmd.prompt.toLowerCase().includes(query.toLowerCase());
 
 	let best = -1;
 	if (commandHit.matches) best = Math.max(best, commandHit.score);
 	if (descriptionHit.matches) best = Math.max(best, descriptionHit.score);
+	if (displayDescriptionHit.matches) best = Math.max(best, displayDescriptionHit.score);
 	if (bodyHit) best = Math.max(best, PROMPT_BODY_MATCH_SCORE);
 	return best === -1 ? null : best;
 };
@@ -79,6 +88,7 @@ export function AICommandsPanel({
 	customAICommands,
 	setCustomAICommands,
 }: AICommandsPanelProps) {
+	const tExtra = useT();
 	const [editingCommand, setEditingCommand] = useState<EditingCommand | null>(null);
 	const [filter, setFilter] = useState('');
 	const [isCreating, setIsCreating] = useState(false);
@@ -146,11 +156,21 @@ export function AICommandsPanel({
 			return [...customAICommands].sort((a, b) => a.command.localeCompare(b.command));
 		}
 		return customAICommands
-			.map((cmd) => ({ cmd, score: scoreCommand(cmd, activeQuery) }))
+			.map((cmd) => ({
+				cmd,
+				score: scoreCommand(cmd, activeQuery, localizeAppCommandDescription(cmd, tExtra)),
+			}))
 			.filter((entry): entry is { cmd: CustomAICommand; score: number } => entry.score !== null)
 			.sort((a, b) => b.score - a.score || a.cmd.command.localeCompare(b.cmd.command))
 			.map((entry) => entry.cmd);
-	}, [customAICommands, activeQuery]);
+	}, [customAICommands, activeQuery, tExtra]);
+
+	const renderDescription = (cmd: CustomAICommand) => {
+		const description = localizeAppCommandDescription(cmd, tExtra);
+		return activeQuery
+			? renderFuzzyHighlight(description, new Set(fuzzyMatchWithIndices(description, activeQuery)))
+			: description;
+	};
 
 	const toggleExpanded = (id: string) => {
 		const newExpanded = new Set(expandedCommands);
@@ -245,11 +265,10 @@ export function AICommandsPanel({
 			<div>
 				<label className="block text-xs font-bold opacity-70 uppercase mb-1 flex items-center gap-2">
 					<Terminal className="w-3 h-3" />
-					Custom AI Commands
+					{tExtra('settings.extra.aICommandsPanel.customAiCommands')}
 				</label>
 				<p className="text-xs opacity-50" style={{ color: theme.colors.textDim }}>
-					Slash commands are available in 1-1 AI chats. Built-in commands can be edited but not
-					deleted. Template variables are available.
+					{tExtra('settings.extra.aICommandsPanel.slashCommandsAreAvailableIn11')}
 				</p>
 			</div>
 
@@ -265,7 +284,7 @@ export function AICommandsPanel({
 					<div className="flex items-center gap-2">
 						<Variable className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
 						<span className="text-xs font-bold uppercase" style={{ color: theme.colors.textDim }}>
-							Template Variables
+							{tExtra('settings.extra.aICommandsPanel.templateVariables')}
 						</span>
 					</div>
 					{variablesExpanded ? (
@@ -277,8 +296,7 @@ export function AICommandsPanel({
 				{variablesExpanded && (
 					<div className="px-3 pb-3 pt-1 border-t" style={{ borderColor: theme.colors.border }}>
 						<p className="text-2xs mb-2" style={{ color: theme.colors.textDim }}>
-							Use these variables in your command prompts. They will be replaced with actual values
-							at runtime.
+							{tExtra('settings.extra.aICommandsPanel.useTheseVariablesInYourCommandPrompts')}
 						</p>
 						<div className="grid grid-cols-2 gap-x-4 gap-y-1 max-h-48 overflow-y-auto scrollbar-thin">
 							{TEMPLATE_VARIABLES_GENERAL.map(({ variable, description }) => (
@@ -290,7 +308,7 @@ export function AICommandsPanel({
 										{variable}
 									</code>
 									<span className="text-2xs truncate" style={{ color: theme.colors.textDim }}>
-										{description}
+										{templateVariableDescription(variable, description, tExtra)}
 									</span>
 								</div>
 							))}
@@ -310,7 +328,7 @@ export function AICommandsPanel({
 						}}
 					>
 						<Plus className="w-4 h-4" />
-						Add Command
+						{tExtra('settings.extra.aICommandsPanel.addCommand')}
 					</button>
 				) : (
 					<div />
@@ -320,10 +338,15 @@ export function AICommandsPanel({
 						theme={theme}
 						value={filter}
 						onChange={setFilter}
-						placeholder="Filter commands..."
-						title="Fuzzy filter on command name, description, and prompt text"
+						placeholder={tExtra('settings.extra.aICommandsPanel.filterCommands')}
+						title={tExtra('settings.extra.aICommandsPanel.fuzzyFilterOnCommandNameDescriptionAnd')}
 						resultLabel={
-							activeQuery ? `${visibleCommands.length} of ${customAICommands.length}` : undefined
+							activeQuery
+								? tExtra('settings.extra.aICommandsPanel.count', {
+										visible: visibleCommands.length,
+										total: customAICommands.length,
+									})
+								: undefined
 						}
 						width={260}
 					/>
@@ -337,11 +360,13 @@ export function AICommandsPanel({
 					style={{ backgroundColor: theme.colors.bgMain, borderColor: theme.colors.accent }}
 				>
 					<div className="text-xs font-bold uppercase" style={{ color: theme.colors.accent }}>
-						New Command
+						{tExtra('settings.extra.aICommandsPanel.newCommand')}
 					</div>
 					<div className="grid grid-cols-2 gap-3">
 						<div>
-							<label className="block text-xs font-medium opacity-70 mb-1">Command</label>
+							<label className="block text-xs font-medium opacity-70 mb-1">
+								{tExtra('settings.extra.aICommandsPanel.command')}
+							</label>
 							<input
 								type="text"
 								value={newCommand.command}
@@ -352,19 +377,25 @@ export function AICommandsPanel({
 							/>
 						</div>
 						<div>
-							<label className="block text-xs font-medium opacity-70 mb-1">Description</label>
+							<label className="block text-xs font-medium opacity-70 mb-1">
+								{tExtra('settings.extra.aICommandsPanel.description')}
+							</label>
 							<input
 								type="text"
 								value={newCommand.description}
 								onChange={(e) => setNewCommand({ ...newCommand, description: e.target.value })}
-								placeholder="Short description for autocomplete"
+								placeholder={tExtra(
+									'settings.extra.aICommandsPanel.shortDescriptionForAutocomplete'
+								)}
 								className="w-full p-2 rounded border bg-transparent outline-none text-sm"
 								style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 							/>
 						</div>
 					</div>
 					<div className="relative">
-						<label className="block text-xs font-medium opacity-70 mb-1">Prompt</label>
+						<label className="block text-xs font-medium opacity-70 mb-1">
+							{tExtra('settings.extra.aICommandsPanel.prompt')}
+						</label>
 						<textarea
 							ref={newCommandTextareaRef}
 							value={newCommand.prompt}
@@ -387,7 +418,7 @@ export function AICommandsPanel({
 									}, 0);
 								}
 							}}
-							placeholder="The actual prompt sent to the AI agent when this command is invoked... (type {{ for variables)"
+							placeholder={tExtra('settings.extra.aICommandsPanel.theActualPromptSentToTheAi')}
 							rows={10}
 							className="w-full p-2 rounded border bg-transparent outline-none text-sm resize-y scrollbar-thin min-h-[150px]"
 							style={{
@@ -414,7 +445,7 @@ export function AICommandsPanel({
 							}}
 						>
 							<X className="w-3 h-3" />
-							Cancel
+							{tExtra('settings.extra.aICommandsPanel.cancel')}
 						</button>
 						<button
 							onClick={handleCreate}
@@ -426,7 +457,7 @@ export function AICommandsPanel({
 							}}
 						>
 							<Save className="w-3 h-3" />
-							Create
+							{tExtra('settings.extra.aICommandsPanel.create')}
 						</button>
 					</div>
 				</div>
@@ -468,7 +499,7 @@ export function AICommandsPanel({
 											}}
 										>
 											<X className="w-3 h-3" />
-											Cancel
+											{tExtra('settings.extra.aICommandsPanel.cancel')}
 										</button>
 										<button
 											onClick={handleSaveEdit}
@@ -479,13 +510,15 @@ export function AICommandsPanel({
 											}}
 										>
 											<Save className="w-3 h-3" />
-											Save
+											{tExtra('settings.extra.aICommandsPanel.save')}
 										</button>
 									</div>
 								</div>
 								<div className="grid grid-cols-2 gap-3">
 									<div>
-										<label className="block text-xs font-medium opacity-70 mb-1">Command</label>
+										<label className="block text-xs font-medium opacity-70 mb-1">
+											{tExtra('settings.extra.aICommandsPanel.command')}
+										</label>
 										<input
 											type="text"
 											value={editingCommand.command}
@@ -497,7 +530,9 @@ export function AICommandsPanel({
 										/>
 									</div>
 									<div>
-										<label className="block text-xs font-medium opacity-70 mb-1">Description</label>
+										<label className="block text-xs font-medium opacity-70 mb-1">
+											{tExtra('settings.extra.aICommandsPanel.description')}
+										</label>
 										<input
 											type="text"
 											value={editingCommand.description}
@@ -581,7 +616,7 @@ export function AICommandsPanel({
 												}}
 											>
 												<Lock className="w-2.5 h-2.5" />
-												Built-in
+												{tExtra('settings.extra.aICommandsPanel.builtIn')}
 											</span>
 										)}
 									</div>
@@ -589,12 +624,7 @@ export function AICommandsPanel({
 										className="text-xs truncate max-w-[300px]"
 										style={{ color: theme.colors.textDim }}
 									>
-										{activeQuery
-											? renderFuzzyHighlight(
-													cmd.description,
-													new Set(fuzzyMatchWithIndices(cmd.description, activeQuery))
-												)
-											: cmd.description}
+										{renderDescription(cmd)}
 									</span>
 								</button>
 								{expandedCommands.has(cmd.id) && (
@@ -614,20 +644,20 @@ export function AICommandsPanel({
 												}
 												className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all hover:bg-white/10"
 												style={{ color: theme.colors.textDim }}
-												title="Edit command"
+												title={tExtra('settings.extra.aICommandsPanel.editCommand')}
 											>
 												<Edit2 className="w-3 h-3" />
-												Edit
+												{tExtra('settings.extra.aICommandsPanel.edit')}
 											</button>
 											{!cmd.isBuiltIn && (
 												<button
 													onClick={() => handleDelete(cmd.id)}
 													className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all hover:bg-white/10"
 													style={{ color: theme.colors.error }}
-													title="Delete command"
+													title={tExtra('settings.extra.aICommandsPanel.deleteCommand')}
 												>
 													<Trash2 className="w-3 h-3" />
-													Delete
+													{tExtra('settings.extra.aICommandsPanel.delete')}
 												</button>
 											)}
 										</div>
@@ -656,14 +686,15 @@ export function AICommandsPanel({
 					<p className="text-sm opacity-50" style={{ color: theme.colors.textDim }}>
 						{/* Echoes what was TYPED, slash and all - quoting back a query the
 						    user never entered reads as a bug. */}
-						No commands match "{typedQuery}"
+						{tExtra('settings.extra.aICommandsPanel.noCommandsMatch')}
+						{typedQuery}"
 					</p>
 					<button
 						onClick={() => setFilter('')}
 						className="mt-2 text-xs font-medium"
 						style={{ color: theme.colors.accent }}
 					>
-						Show all commands
+						{tExtra('settings.extra.aICommandsPanel.showAllCommands')}
 					</button>
 				</div>
 			)}
@@ -675,14 +706,14 @@ export function AICommandsPanel({
 				>
 					<Terminal className="w-8 h-8 mx-auto mb-2 opacity-30" />
 					<p className="text-sm opacity-50" style={{ color: theme.colors.textDim }}>
-						No custom AI commands configured
+						{tExtra('settings.extra.aICommandsPanel.noCustomAiCommandsConfigured')}
 					</p>
 					<button
 						onClick={() => setIsCreating(true)}
 						className="mt-2 text-xs font-medium"
 						style={{ color: theme.colors.accent }}
 					>
-						Create your first command
+						{tExtra('settings.extra.aICommandsPanel.createYourFirstCommand')}
 					</button>
 				</div>
 			)}

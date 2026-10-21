@@ -3,6 +3,7 @@ import { AppWindow, Edit3, FolderInput, FolderPlus, FolderUp, Plus, Trash2 } fro
 import type { Group, Theme } from '../../types';
 import { useClickOutside, useContextMenuPosition } from '../../hooks';
 import type { WindowMoveTarget } from '../../utils/windowTargets';
+import { useT } from '../../i18n';
 
 interface GroupContextMenuProps {
 	x: number;
@@ -52,6 +53,7 @@ export function GroupContextMenu({
 	onMoveToWindow,
 	onDismiss,
 }: GroupContextMenuProps) {
+	const t = useT();
 	const [moveSubmenuOpen, setMoveSubmenuOpen] = useState(false);
 	const [windowSubmenuOpen, setWindowSubmenuOpen] = useState(false);
 	// Same gate as the agent menu: a mover and at least one enumerated window.
@@ -120,7 +122,7 @@ export function GroupContextMenu({
 				style={{ color: theme.colors.textMain }}
 			>
 				<Edit3 className="w-3.5 h-3.5" />
-				Rename Group...
+				{t('workflows.groupMenu.rename')}
 			</button>
 
 			<button
@@ -133,7 +135,7 @@ export function GroupContextMenu({
 				style={{ color: theme.colors.accent }}
 			>
 				<Plus className="w-3.5 h-3.5" />
-				New Agent in Group...
+				{t('workflows.groupMenu.newAgent')}
 			</button>
 
 			{showMoveToWindow && (
@@ -147,7 +149,7 @@ export function GroupContextMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<AppWindow className="w-3.5 h-3.5" />
-						Move Group to Window...
+						{t('workflows.groupMenu.moveToWindow')}
 					</button>
 					{windowSubmenuOpen && (
 						<>
@@ -161,14 +163,14 @@ export function GroupContextMenu({
 								style={{ color: theme.colors.accent }}
 							>
 								<Plus className="w-3.5 h-3.5" />
-								New Window
+								{t('workflows.agentMenu.newWindow')}
 							</button>
 							{windowTargets.map((target) => (
 								<button
 									key={target.windowId}
 									type="button"
 									disabled={target.isCurrentOwner}
-									title={target.isCurrentOwner ? 'The whole group is already here' : undefined}
+									title={target.isCurrentOwner ? t('workflows.groupMenu.alreadyHere') : undefined}
 									onClick={() => {
 										onMoveToWindow?.(target.windowId);
 										onDismiss();
@@ -196,7 +198,7 @@ export function GroupContextMenu({
 						style={{ color: theme.colors.textMain }}
 					>
 						<FolderInput className="w-3.5 h-3.5" />
-						Move into...
+						{t('workflows.groupMenu.moveInto')}
 					</button>
 					{moveSubmenuOpen &&
 						eligibleParentGroups.map((parentGroup) => (
@@ -228,7 +230,7 @@ export function GroupContextMenu({
 					style={{ color: theme.colors.textMain }}
 				>
 					<FolderUp className="w-3.5 h-3.5" />
-					Move to top level
+					{t('workflows.groupMenu.moveToTopLevel')}
 				</button>
 			)}
 
@@ -243,7 +245,7 @@ export function GroupContextMenu({
 					style={{ color: theme.colors.accent }}
 				>
 					<FolderPlus className="w-3.5 h-3.5" />
-					New group inside...
+					{t('workflows.groupMenu.newGroupInside')}
 				</button>
 			)}
 
@@ -260,7 +262,10 @@ export function GroupContextMenu({
 						style={{ color: theme.colors.error }}
 					>
 						<Trash2 className="w-3.5 h-3.5" />
-						{deleteLabel ?? (memberCount > 0 ? 'Remove Group and Agents' : 'Delete Group')}
+						{deleteLabel ??
+							(memberCount > 0
+								? t('workflows.sidebar.removeGroupAndAgentsLabel')
+								: t('workflows.sidebar.deleteGroup'))}
 					</button>
 				</>
 			)}

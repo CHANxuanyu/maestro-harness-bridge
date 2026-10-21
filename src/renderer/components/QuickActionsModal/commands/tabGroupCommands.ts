@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
 import type { QuickAction } from '../types';
 import { useModalStore } from '../../../stores/modalStore';
@@ -23,6 +24,7 @@ export function buildTabGroupCommands({
 	activeSession,
 	setQuickActionOpen,
 }: BuildTabGroupCommandsArgs): QuickAction[] {
+	const t = getT();
 	const commands: QuickAction[] = [];
 	const groupId = activeSession?.activeGroupId;
 	if (!activeSession || !groupId) return commands;
@@ -31,8 +33,8 @@ export function buildTabGroupCommands({
 
 	commands.push({
 		id: 'renameTabGroup',
-		label: 'Rename Tab Group',
-		subtext: `Rename "${group.name}"`,
+		label: t('workflows.shell.renameTabGroup'),
+		subtext: t('workflows.shell.renameValue', { p0: group.name }),
 		action: () => {
 			// Reuse the shared rename-tab modal, seeded with the group id. On commit,
 			// handleRenameTab detects the group id and routes to the group-rename action.
@@ -46,11 +48,11 @@ export function buildTabGroupCommands({
 
 	commands.push({
 		id: 'breakApartTabGroup',
-		label: 'Break Apart Tab Group',
-		subtext: 'Return its panes to the tab bar as individual tabs',
+		label: t('workflows.shell.breakApartTabGroup'),
+		subtext: t('workflows.shell.returnItsPanesToTheTabBarAs'),
 		action: () => {
 			useModalStore.getState().openModal('confirm', {
-				title: 'Break apart group?',
+				title: t('workflows.shell.breakApartGroup'),
 				message: `Break apart "${group.name}"? Its panes return to the tab bar as individual tabs. The tabs are not closed, and you can tile them again later.`,
 				destructive: false,
 				onConfirm: () => updateSessionWith(activeSession.id, (s) => breakApartGroup(s, group.id)),

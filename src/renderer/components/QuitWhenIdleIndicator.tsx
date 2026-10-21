@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 /**
  * QuitWhenIdleIndicator.tsx
  *
@@ -16,6 +17,7 @@ interface QuitWhenIdleIndicatorProps {
 }
 
 export function QuitWhenIdleIndicator({ theme }: QuitWhenIdleIndicatorProps): JSX.Element | null {
+	const t = useT();
 	const armed = useQuitWhenIdleStore((s) => s.armed);
 	const cancel = useQuitWhenIdleStore((s) => s.cancel);
 
@@ -44,9 +46,9 @@ export function QuitWhenIdleIndicator({ theme }: QuitWhenIdleIndicatorProps): JS
 				<span
 					className="text-xs font-medium truncate min-w-0"
 					style={{ color: theme.colors.textMain }}
-					title="Quitting When All Operations Finish"
+					title={t('workflows.shellStatus.quittingWhenAllOperationsFinish')}
 				>
-					Quitting When All Operations Finish
+					{t('workflows.shellStatus.quittingWhenAllOperationsFinish')}
 				</span>
 				<button
 					onClick={cancel}
@@ -55,10 +57,10 @@ export function QuitWhenIdleIndicator({ theme }: QuitWhenIdleIndicatorProps): JS
 						backgroundColor: theme.colors.accent,
 						color: theme.colors.accentForeground,
 					}}
-					title="Cancel quit"
+					title={t('workflows.shellStatus.cancelQuit')}
 				>
 					<X className="w-3 h-3" />
-					Cancel
+					{t('workflows.shellStatus.cancel')}
 				</button>
 			</div>
 		</div>

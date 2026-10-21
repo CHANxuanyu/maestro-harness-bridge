@@ -119,7 +119,13 @@ export function setupDeepLinkHandling(getMainWindow: () => BrowserWindow | null)
 		process.env.REGISTER_DEEP_LINKS_IN_DEV === '1' ||
 		process.env.ENFORCE_SINGLE_INSTANCE_IN_DEV === '1';
 
-	if (!isDev) {
+	if (process.env.MAESTRO_SKIP_PROTOCOL_REGISTRATION === '1') {
+		// Isolated packaged builds can receive links without replacing the OS handler.
+		logger.debug(
+			'Skipping protocol registration (MAESTRO_SKIP_PROTOCOL_REGISTRATION=1)',
+			'DeepLink'
+		);
+	} else if (!isDev) {
 		app.setAsDefaultProtocolClient(PROTOCOL);
 		logger.info('Registered as default protocol client for maestro://', 'DeepLink');
 	} else {

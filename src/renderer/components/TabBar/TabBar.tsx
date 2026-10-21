@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { useState, useRef, useCallback, useEffect, memo, useMemo } from 'react';
 import { Bell } from 'lucide-react';
 import type { AITab, UnifiedTabRef } from '../../types';
@@ -103,7 +104,9 @@ function TabBarInner({
 	colorBlindMode,
 	sshRemote,
 	leadingSlot,
+	onlyActiveAiTab = false,
 }: TabBarProps) {
+	const t = useT();
 	// Dev-time warnings for missing handlers when unified tabs are provided
 	if (process.env.NODE_ENV !== 'production' && unifiedTabs) {
 		if (!onFileTabSelect || !onFileTabClose) {
@@ -275,6 +278,11 @@ function TabBarInner({
 		if (!unifiedTabs) return null;
 		// Window doesn't own this agent: render an empty tab strip (scoped window).
 		if (!ownsActiveAgent) return [];
+		// The conversation list owns AI navigation: only the current conversation's
+		// chip is drawn here (see TabBarProps.onlyActiveAiTab).
+		if (onlyActiveAiTab) {
+			return unifiedTabs.filter((ut) => ut.type !== 'ai' || ut.id === activeTabId);
+		}
 		if (!showUnreadOnly) return unifiedTabs;
 		// In filter mode: AI tabs filtered by unread/busy/active/draft. File,
 		// terminal and browser tabs have no unread state, so each kind is hidden
@@ -326,6 +334,7 @@ function TabBarInner({
 		activeBrowserTabId,
 		stuckTabIds,
 		queuedTabIds,
+		onlyActiveAiTab,
 	]);
 
 	// Dragging a tab toward either end of an overflowing bar scrolls the bar, so
@@ -707,6 +716,8 @@ function TabBarInner({
 						tabSwitcherKeys={tabShortcuts.tabSwitcher?.keys ?? ['Alt', 'Meta', 't']}
 						searchOutputKeys={shortcuts.searchOutput?.keys ?? ['Meta', 'f']}
 						searchAllTabsKeys={shortcuts.searchAllTabs?.keys ?? ['Alt', 'Meta', 'f']}
+						// Counts every open tab, also in conversation navigation: the
+						// badge labels the tab switcher it opens, which lists them all.
 						openTabCount={unifiedTabs?.length ?? tabs.length}
 						onShowSnoozedTabs={openSnoozedTabs}
 						snoozedTabCount={snoozedTabCount}
@@ -721,8 +732,12 @@ function TabBarInner({
 					}}
 					title={
 						showUnreadOnly
-							? `Showing unread only (${formatShortcutKeys(tabShortcuts.filterUnreadTabs?.keys ?? ['Meta', 'u'])})`
-							: `Filter unread tabs (${formatShortcutKeys(tabShortcuts.filterUnreadTabs?.keys ?? ['Meta', 'u'])})`
+							? t('workflows.shell.showingUnreadOnlyValue', {
+									p0: formatShortcutKeys(tabShortcuts.filterUnreadTabs?.keys ?? ['Meta', 'u']),
+								})
+							: t('workflows.shell.filterUnreadTabsValue', {
+									p0: formatShortcutKeys(tabShortcuts.filterUnreadTabs?.keys ?? ['Meta', 'u']),
+								})
 					}
 				>
 					<Bell className="w-4 h-4" />
@@ -752,7 +767,7 @@ function TabBarInner({
 						className="flex items-center px-3 py-1.5 text-xs italic shrink-0 self-center mb-1"
 						style={{ color: theme.colors.textDim }}
 					>
-						No unread or draft tabs
+						{t('workflows.shell.noUnreadOrDraftTabs')}
 					</div>
 				)}
 
@@ -808,6 +823,9 @@ function TabBarInner({
 											allTabs.length,
 											true
 										)}
+										// The only AI chip left in conversation navigation is the way
+										// back from a resource, not a second copy of the title.
+										returnChip={onlyActiveAiTab}
 									/>
 								</React.Fragment>
 							);

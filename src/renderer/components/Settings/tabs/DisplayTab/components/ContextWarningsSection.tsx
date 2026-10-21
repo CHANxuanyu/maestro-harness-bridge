@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-react';
 import type { ContextManagementSettings, Theme } from '../../../../../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 import { getRedThresholdUpdate, getYellowThresholdUpdate } from '../utils';
 import { SectionCard } from './SectionCard';
 import { ToggleSettingRow } from './ToggleSettingRow';
@@ -16,16 +17,19 @@ export function ContextWarningsSection({
 	contextManagementSettings,
 	updateContextManagementSettings,
 }: ContextWarningsSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="display-context-warnings">
-			<SettingsSectionHeading icon={AlertTriangle}>Context Window Warnings</SettingsSectionHeading>
+			<SettingsSectionHeading icon={AlertTriangle}>
+				{t('settings.display.context.heading')}
+			</SettingsSectionHeading>
 			<SectionCard theme={theme}>
 				<ToggleSettingRow
 					theme={theme}
-					title={<span className="font-medium">Show context consumption warnings</span>}
+					title={<span className="font-medium">{t('settings.display.context.title')}</span>}
 					description={
 						<span style={{ color: theme.colors.textDim }}>
-							Display warning banners when context window usage reaches configurable thresholds
+							{t('settings.display.context.description')}
 						</span>
 					}
 					checked={contextManagementSettings.contextWarningsEnabled}
@@ -50,7 +54,7 @@ export function ContextWarningsSection({
 								style={{ color: theme.colors.textMain }}
 							>
 								<div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#eab308' }} />
-								Yellow warning threshold
+								{t('settings.display.context.yellow')}
 							</div>
 							<span
 								className="text-xs font-mono px-2 py-0.5 rounded"
@@ -85,7 +89,7 @@ export function ContextWarningsSection({
 								style={{ color: theme.colors.textMain }}
 							>
 								<div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#ef4444' }} />
-								Red warning threshold
+								{t('settings.display.context.red')}
 							</div>
 							<span
 								className="text-xs font-mono px-2 py-0.5 rounded"

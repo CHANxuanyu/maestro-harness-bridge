@@ -18,6 +18,7 @@ import {
 	GroupsData,
 } from '../../../../main/ipc/handlers/persistence';
 import type Store from 'electron-store';
+import { setMenuLanguage } from '../../../../main/app-menu';
 import type { StoredSession } from '../../../../main/stores/types';
 import type { WebServer } from '../../../../main/web-server';
 import { broadcastBridgeEvent } from '../../../../main/web-server/handlers/bridgeHandlers';
@@ -38,6 +39,8 @@ vi.mock('electron', () => ({
 		getAllWindows: vi.fn(() => []),
 	},
 }));
+
+vi.mock('../../../../main/app-menu', () => ({ setMenuLanguage: vi.fn() }));
 
 // Mock fs/promises
 vi.mock('fs/promises', () => ({
@@ -424,6 +427,74 @@ describe('persistence IPC handlers', () => {
 	});
 
 	describe('settings:set', () => {
+		it.each(['system', 'en', 'zh-CN'])(
+			'persists %s and applies the native menu language',
+			async (value) => {
+				const result = await handlers.get('settings:set')!({}, 'uiLanguage', value);
+				expect(result).toBe(true);
+				expect(mockSettingsStore.set).toHaveBeenCalledWith('uiLanguage', value);
+				expect(setMenuLanguage).toHaveBeenCalledWith(value);
+				expect(broadcastBridgeEvent).toHaveBeenCalledWith('settings:externalChange', []);
+			}
+		);
+
+		it.each([null, '', 'fr', 'zh', true, 3, {}, ['en']])(
+			'rejects an invalid language before writing (%j)',
+			async (value) => {
+				await expect(handlers.get('settings:set')!({}, 'uiLanguage', value)).rejects.toThrow(
+					'uiLanguage must be one of'
+				);
+				expect(mockSettingsStore.set).not.toHaveBeenCalled();
+				expect(setMenuLanguage).not.toHaveBeenCalled();
+				expect(broadcastBridgeEvent).not.toHaveBeenCalled();
+			}
+		);
+
+		it('rejects a nested language value before the store can replace the scalar', async () => {
+			await expect(handlers.get('settings:set')!({}, 'uiLanguage.value', 'zh-CN')).rejects.toThrow(
+				'not a nested setting'
+			);
+			expect(mockSettingsStore.set).not.toHaveBeenCalled();
+		});
+
+		it('propagates a language write to peer windows and web settings without echoing the sender', async () => {
+			const senderSend = vi.fn();
+			const peerSend = vi.fn();
+			vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([
+				{
+					isDestroyed: () => false,
+					webContents: { id: 1, isDestroyed: () => false, send: senderSend },
+				},
+				{
+					isDestroyed: () => false,
+					webContents: { id: 2, isDestroyed: () => false, send: peerSend },
+				},
+			] as unknown as BrowserWindow[]);
+			mockWebServer.getWebClientCount.mockReturnValue(1);
+			mockSettingsStore.set.mockImplementation((key: string, value: unknown) => {
+				mockSettingsStore.store[key] = value;
+			});
+			mockSettingsStore.get.mockImplementation(
+				(key: string, fallback: unknown) => mockSettingsStore.store[key] ?? fallback
+			);
+			await handlers.get('settings:set')!({ sender: { id: 1 } }, 'uiLanguage', 'zh-CN');
+			expect(senderSend).not.toHaveBeenCalled();
+			expect(peerSend).toHaveBeenCalledWith('settings:externalChange');
+			expect(mockWebServer.broadcastSettingsChanged).toHaveBeenCalledWith(
+				expect.objectContaining({ uiLanguage: 'zh-CN' })
+			);
+			vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([]);
+		});
+
+		it('does not change the menu or broadcast when language persistence fails', async () => {
+			mockSettingsStore.set.mockImplementation(() => {
+				throw new Error('disk full');
+			});
+			expect(await handlers.get('settings:set')!({}, 'uiLanguage', 'zh-CN')).toBe(false);
+			expect(setMenuLanguage).not.toHaveBeenCalled();
+			expect(broadcastBridgeEvent).not.toHaveBeenCalled();
+		});
+
 		it('should store setting value', async () => {
 			const handler = handlers.get('settings:set');
 			const result = await handler!({} as any, 'fontSize', 16);

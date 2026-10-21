@@ -11,6 +11,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import type { LogEntry } from '../../types';
+import { useT } from '../../i18n';
 import type { TerminalOutputProps } from './types';
 import { useAnsiConverter } from '../../hooks/ui/useAnsiConverter';
 import { getActiveTab } from '../../utils/tabHelpers';
@@ -37,6 +38,7 @@ import { getClaudeTokenMode } from '../../../shared/claudeTokenMode';
 import { collapseAiResponseLogs } from './utils/collapseAiResponseLogs';
 import { computeTurnDurations } from './utils/turnDurations';
 import { groupSubagentToolLogs } from './utils/groupSubagentToolLogs';
+import { foldNativeToolRuns } from './utils/foldNativeToolRuns';
 import { buildRenderedIdMap } from './utils/renderedLogIds';
 import { useUIStore } from '../../stores/uiStore';
 import { jumpToElement } from '../../utils/jumpHighlight';
@@ -47,6 +49,47 @@ import { useLogItemUiState } from './hooks/useLogItemUiState';
 import { useTerminalOutputSearch } from './hooks/useTerminalOutputSearch';
 import { useTerminalOutputScroll } from './hooks/useTerminalOutputScroll';
 import { requestWebBridgeReconcile } from '../../services/webBridgeReconcile';
+
+/** Widest the transcript column grows in the conversation-centred layout. */
+const READING_COLUMN_MAX_WIDTH = '72rem';
+
+/**
+ * The transcript rows: the content wrapper's own children that carry a log id
+ * (the history status row above them does not).
+ */
+function transcriptRows(content: HTMLElement): Element[] {
+	return Array.from(content.children).filter((el) => el.hasAttribute('data-log-id'));
+}
+
+/**
+ * How far the reader's row may sit from its target before a scroll counts as
+ * the reader moving it. Below this the scroll is the echo of our own
+ * correction, which lands only as precisely as the scroller's offset allows
+ * (a device pixel); any real wheel, key or drag moves the row well past it,
+ * and slow sub-pixel drags still cross it because each event is compared with
+ * the fixed target, not with the previous event.
+ */
+const ANCHOR_HOLD_TOLERANCE_PX = 1;
+
+/** The row the reader is on and where its edges sit relative to the viewport top. */
+interface ReadingAnchor {
+	tabKey: string;
+	rowId: string;
+	top: number;
+	bottom: number;
+}
+
+/**
+ * Where each conversation was being read when its transcript unmounted, keyed
+ * `${sessionId}:${tabId}`. The transcript is keyed per agent and tab, so leaving
+ * one (another agent, a file tab) and coming back remounts it, and the saved
+ * absolute `scrollTop` cannot bring the reader back: the remount renders only
+ * the newest rows and mounts the rest above them over idle ticks, so that
+ * offset is reached while most of the history above it is still missing and
+ * lands near the latest messages. A message id plus its offset survives that.
+ * In memory only: a restart has no anchor and keeps the absolute restore.
+ */
+const savedReadingAnchors = new Map<string, ReadingAnchor>();
 
 /**
  * Frames a cross-tab search jump keeps re-asserting its scroll position.
@@ -64,6 +107,7 @@ const JUMP_SETTLE_MS = 400;
 // can render many log entries and is expensive to re-render.
 export const TerminalOutput = memo(
 	forwardRef<HTMLDivElement, TerminalOutputProps>((props, ref) => {
+		const t = useT();
 		const {
 			session,
 			theme,
@@ -221,11 +265,31 @@ export const TerminalOutput = memo(
 		// can show thinking with a clean, tool-free transcript, or show tools with
 		// no reasoning at all. One switch, one meaning.
 		const toolsVisible = useSettingsStore((s) => s.showToolCalls);
+		const readingColumn = useSettingsStore((s) => s.sidebarNavigationMode === 'conversations');
 		const showProviderModePill = useSettingsStore((s) => s.showProviderModePill);
-		const collapsedLogs = useMemo(
-			() => (toolsVisible ? collapsedAll : collapsedAll.filter((l) => l.source !== 'tool')),
-			[collapsedAll, toolsVisible]
+		// Reasoning summaries read back from the provider transcript follow the
+		// tab's Thinking switch. They are history and stay in the logs (the switch
+		// no longer deletes them), so hiding them is a render concern like tools.
+		const thinkingHidden = (activeTab?.showThinking ?? 'off') === 'off';
+		// With tool calls switched off, each run of stored tool calls folds into one
+		// "N tool calls" row (see foldNativeToolRuns), so a stored turn never reads
+		// as tool-free. In the conversation-centred layout the RUNNING turn's calls
+		// fold the same way, so what the agent is executing stays on screen (with
+		// its running state) instead of being hidden until the turn ends. Other
+		// layouts keep hiding live calls, as before.
+		const toolFold = useMemo(
+			() =>
+				foldNativeToolRuns(
+					thinkingHidden
+						? collapsedAll.filter((l) => !(l.source === 'thinking' && l.nativeTranscript))
+						: collapsedAll,
+					toolsVisible,
+					readingColumn
+				),
+			[collapsedAll, toolsVisible, thinkingHidden, readingColumn]
 		);
+		const collapsedLogs = toolFold.logs;
+		const toolRunByHostId = toolFold.runByHostId;
 		// Nest subagent tool badges (claude-code Task) under the tool entry that
 		// spawned them; orphans and non-claude agents pass through untouched.
 		const { logs: filteredLogs, childrenByParentId } = useMemo(
@@ -241,19 +305,25 @@ export const TerminalOutput = memo(
 		// thread for seconds on agent switch (each entry runs the full remark/rehype
 		// pipeline). Render the newest slice first, then backfill older history on
 		// idle ticks. Prepending entries above the viewport would shift what the user
-		// is reading, so snapshot distance-from-bottom before each expansion and
-		// restore it in a layout effect, before the browser paints.
+		// is reading. While the reader follows the tail, distance-from-bottom is
+		// what stays constant (snapshot before each expansion, restore before
+		// paint). While they are reading history, the MESSAGE they are reading is
+		// what must stay put: see the reading anchor below.
 		const backfillBottomDistanceRef = useRef<number | null>(null);
+		// Assigned below, once the scroll hook is wired; called before any change
+		// this component makes at the head of the list.
+		const recordReadingAnchorRef = useRef<() => void>(() => {});
 
 		const handleBeforeBackfill = useCallback(() => {
 			const container = scrollContainerRef.current;
 			if (container) {
 				backfillBottomDistanceRef.current = container.scrollHeight - container.scrollTop;
 			}
+			recordReadingAnchorRef.current();
 		}, []);
 
 		const {
-			startIndex: logStartIndex,
+			startIndex: windowStartIndex,
 			revealTo: revealLogIndex,
 			absorbPrepend: absorbLogPrepend,
 		} = useProgressiveRenderWindow(filteredLogs.length, `${session.id}-${activeTabId ?? ''}`, {
@@ -270,17 +340,33 @@ export const TerminalOutput = memo(
 		// count to the render window: it shifts by exactly that many, keeping the
 		// visible slice stable and letting the idle loop mount the new history a
 		// chunk at a time instead of one page-sized commit.
+		//
+		// The count the backfill reports is RAW log entries, but the window indexes
+		// RENDERED rows: a tool-heavy turn folds dozens of entries into one row,
+		// hidden reasoning renders none, and the newest prepended response can merge
+		// into the row that was on top. Shifting the window by the raw count pushed
+		// it far past what the user was reading (they landed minutes later in the
+		// conversation). So the backfill only records which row was first in the
+		// window; the render that brings the prepend in finds the row that now
+		// holds it and slices from there (see pendingPrependRows below).
+		const prependAnchorRef = useRef<{ rowId: string; list: LogEntry[] } | null>(null);
+		const filteredLogsRef = useRef(filteredLogs);
+		filteredLogsRef.current = filteredLogs;
+		const logStartIndexRef = useRef(windowStartIndex);
 		const historyBackfill = useTranscriptBackfill(session, activeTab, {
 			onPrepend: useCallback(
 				(count: number) => {
+					if (count <= 0) return;
 					handleBeforeBackfill();
-					absorbLogPrepend(count);
+					const list = filteredLogsRef.current;
+					const rowId = list[logStartIndexRef.current]?.id;
+					prependAnchorRef.current = rowId ? { rowId, list } : null;
 				},
-				[handleBeforeBackfill, absorbLogPrepend]
+				[handleBeforeBackfill]
 			),
 		});
 
-		useLayoutEffect(() => {
+		const restoreBackfillScroll = useCallback(() => {
 			const container = scrollContainerRef.current;
 			const bottomDistance = backfillBottomDistanceRef.current;
 			backfillBottomDistanceRef.current = null;
@@ -288,12 +374,7 @@ export const TerminalOutput = memo(
 			// Anchor to the bottom rather than the top: content was prepended, so the
 			// distance from the bottom is what stayed constant for the user.
 			container.scrollTop = container.scrollHeight - bottomDistance;
-		}, [logStartIndex]);
-
-		const visibleLogs = useMemo(
-			() => (logStartIndex > 0 ? filteredLogs.slice(logStartIndex) : filteredLogs),
-			[filteredLogs, logStartIndex]
-		);
+		}, []);
 
 		// ============================================================================
 		// Cross-tab search jump (Opt+Cmd+F -> pick a hit in another tab)
@@ -309,6 +390,68 @@ export const TerminalOutput = memo(
 			() => buildRenderedIdMap(filteredLogs, activeLogs),
 			[filteredLogs, activeLogs]
 		);
+
+		// Resolve a pending history prepend (see onPrepend above) in the render that
+		// brings it in. The anchor is the raw id of the row that was first in the
+		// window; `buildRenderedIdMap` names the row that holds it now, even when
+		// the newest prepended response merged into it. The slice starts at that
+		// row in this very render, so no commit ever mounts the prepended page (a
+		// backfill page can be hundreds of entries - the long task the progressive
+		// window exists to avoid). Only a list other than the one the anchor was
+		// taken from can hold the prepend: a render that lands before the store
+		// update (an idle chunk, say) must neither shift the window nor consume
+		// the anchor.
+		const pendingPrepend = prependAnchorRef.current;
+		const pendingPrependRows = useMemo(() => {
+			if (!pendingPrepend || pendingPrepend.list === filteredLogs) return 0;
+			const rowId = renderedIdByLogId.get(pendingPrepend.rowId);
+			const rowIndex = rowId ? filteredLogs.findIndex((row) => row.id === rowId) : -1;
+			return Math.max(0, rowIndex - windowStartIndex);
+		}, [pendingPrepend, filteredLogs, renderedIdByLogId, windowStartIndex]);
+		const logStartIndex = windowStartIndex + pendingPrependRows;
+		logStartIndexRef.current = logStartIndex;
+
+		// The window's own state catches up before paint; from the next render on
+		// the shift is part of `windowStartIndex` (and the anchor is gone, so the
+		// memo above reads 0) and the idle loop walks back through the new history
+		// a chunk at a time.
+		useLayoutEffect(() => {
+			const pending = prependAnchorRef.current;
+			if (!pending || pending.list === filteredLogs) return;
+			prependAnchorRef.current = null;
+			if (pendingPrependRows > 0) absorbLogPrepend(pendingPrependRows);
+		}, [pendingPrependRows, filteredLogs, absorbLogPrepend]);
+
+		const visibleLogs = useMemo(
+			() => (logStartIndex > 0 ? filteredLogs.slice(logStartIndex) : filteredLogs),
+			[filteredLogs, logStartIndex]
+		);
+
+		// ============================================================================
+		// Which rows are NEW (the "new messages" count)
+		// ============================================================================
+		// useTerminalOutputScroll counts growth of the length it is given as output
+		// arriving at the tail. History paged in at the HEAD is not that, so it is
+		// given the rows from the tab's ORIGINAL head on: the first row this
+		// transcript showed for the tab, resolved through buildRenderedIdMap so a
+		// merge with prepended history or a fold change still finds it. Derived in
+		// render from the list itself - no counter updated a commit later, which is
+		// what let one inflated length through and left a false unread behind - and
+		// no running subtraction to drift when visibility or reconciliation change
+		// what renders. If the head entry is gone (deleted, re-read), it re-anchors
+		// on the current first row rather than guessing.
+		const headAnchorByTabRef = useRef(new Map<string, string>());
+		const tailRowCount = useMemo(() => {
+			const tabKey = `${session.id}:${activeTabId ?? ''}`;
+			const headRawId = headAnchorByTabRef.current.get(tabKey);
+			const headRow = headRawId ? renderedIdByLogId.get(headRawId) : undefined;
+			const headIndex = headRow ? filteredLogs.findIndex((row) => row.id === headRow) : -1;
+			if (headIndex >= 0) return filteredLogs.length - headIndex;
+			const firstId = filteredLogs[0]?.id;
+			if (firstId) headAnchorByTabRef.current.set(tabKey, firstId);
+			else headAnchorByTabRef.current.delete(tabKey);
+			return filteredLogs.length;
+		}, [filteredLogs, renderedIdByLogId, session.id, activeTabId]);
 		const pendingLogJump = useUIStore((s) => s.pendingLogJump);
 		const pendingJumpMatchIdRef = useRef<string | null>(null);
 		const cancelJumpRef = useRef<(() => void) | null>(null);
@@ -354,8 +497,26 @@ export const TerminalOutput = memo(
 			pendingJumpMatchIdRef,
 		});
 
+		// Coming back to a conversation that was left mid-history: its saved
+		// reading anchor (see savedReadingAnchors), if the row is still in this
+		// transcript. Decided once per mount, and while it applies the absolute
+		// `initialScrollTop` restore is not run at all, since the two would fight.
+		const readingTabKey = `${session.id}:${activeTabId ?? ''}`;
+		const [anchorRestore] = useState(() => {
+			if (initialIsAtBottom !== false) return null;
+			const saved = savedReadingAnchors.get(readingTabKey);
+			if (!saved) return null;
+			const rowId = renderedIdByLogId.get(saved.rowId) ?? saved.rowId;
+			const rowIndex = filteredLogs.findIndex((row) => row.id === rowId);
+			return rowIndex < 0 ? null : { anchor: saved, rowIndex };
+		});
+
 		const {
 			isAtBottom,
+			// The hook's live at-bottom ref (see its mirror comment): the gate for
+			// every hold, restore and save below, because the render value can lag a
+			// reveal by a commit.
+			isAtBottomRef: isAtBottomLatestRef,
 			hasNewMessages,
 			newMessageCount,
 			autoScrollPaused,
@@ -368,15 +529,295 @@ export const TerminalOutput = memo(
 		} = useTerminalOutputScroll({
 			scrollContainerRef,
 			contentRef,
-			initialScrollTop,
+			initialScrollTop: anchorRestore ? undefined : initialScrollTop,
 			initialIsAtBottom,
 			sessionId: session.id,
 			activeTabId,
-			filteredLogsLength: filteredLogs.length,
+			// Rows from the original head on: history paged in above them is not
+			// "new messages" (it raised a 99+ badge on every earlier-history load).
+			filteredLogsLength: tailRowCount,
 			onScrollPositionChange,
 			onAtBottomChange,
 			onNearTop: historyBackfill.loadEarlier,
+			// The user's own Send for this tab: stop holding where they were reading.
+			// The reading target, a remount restore still waiting for its row, and
+			// the pause that restore would re-assert all go, synchronously, before
+			// the commit that renders their new row - so neither that commit nor a
+			// resize can scroll them back. A later scroll up records a new target.
+			// (Refs declared below; this only runs from the event, after render.)
+			onRevealRequested: () => {
+				readingAnchorRef.current = null;
+				pendingAnchorRestoreRef.current = null;
+				anchorRestoredRef.current = false;
+			},
 		});
+
+		// ============================================================================
+		// Reading anchor: keep the MESSAGE the reader is on in place
+		// ============================================================================
+		// While the reader is up in history, distance-from-bottom is the wrong
+		// invariant: a reply streaming onto the tail in the same commit as a
+		// history prepend, a chunk of the idle window mounting above, or the
+		// "Loading earlier messages..." row appearing or going away all move the
+		// rows they are reading. So the first row on screen and its offset from
+		// the viewport top are recorded as the reader's target whenever the reader
+		// moves (or, if there is none yet, before a change we cause at the head),
+		// and every commit that could move it puts it back, before paint. Raw ids
+		// survive re-collapsing through
+		// buildRenderedIdMap; when the anchored row was folded into a different
+		// row (the newest prepended response merging into the top row), the new
+		// content is OLDER and lands at that row's top, so its bottom edge is the
+		// part that stayed put.
+		const readingAnchorRef = useRef<ReadingAnchor | null>(null);
+		const readingTabKeyRef = useRef(readingTabKey);
+		readingTabKeyRef.current = readingTabKey;
+		const recordReadingAnchor = useCallback(() => {
+			const container = scrollContainerRef.current;
+			const content = contentRef.current;
+			if (!container || !content) return;
+			const rows = transcriptRows(content);
+			if (rows.length === 0) {
+				readingAnchorRef.current = null;
+				return;
+			}
+			const viewTop = container.getBoundingClientRect().top;
+			// Rows are in document order, so their bottoms increase: binary search
+			// for the first one whose bottom is still below the viewport top.
+			let lo = 0;
+			let hi = rows.length - 1;
+			while (lo < hi) {
+				const mid = (lo + hi) >> 1;
+				if (rows[mid].getBoundingClientRect().bottom > viewTop) hi = mid;
+				else lo = mid + 1;
+			}
+			const rect = rows[lo].getBoundingClientRect();
+			readingAnchorRef.current = {
+				tabKey: readingTabKeyRef.current,
+				rowId: rows[lo].getAttribute('data-log-id') ?? '',
+				top: rect.top - viewTop,
+				bottom: rect.bottom - viewTop,
+			};
+		}, []);
+		// Before a change at the head: make sure there IS a target. An existing one
+		// is left alone (see below).
+		recordReadingAnchorRef.current = () => {
+			const anchor = readingAnchorRef.current;
+			if (!anchor || anchor.tabKey !== readingTabKeyRef.current) recordReadingAnchor();
+		};
+
+		// The anchor is the reader's TARGET, and only the reader moves it. A
+		// correction lands only as precisely as the scroller's offset allows (a
+		// device pixel), so it is never re-recorded from where a correction landed:
+		// over the dozens of corrections a remount runs, those landing errors
+		// compounded into a few physical pixels of creep on every return.
+		// Measured from the row's own top, or its bottom when it was folded into
+		// an older row (that row grew at its top).
+		const measureReadingAnchor = useCallback(() => {
+			const anchor = readingAnchorRef.current;
+			const container = scrollContainerRef.current;
+			const content = contentRef.current;
+			if (!anchor || !container || !content) return null;
+			// An anchor taken in another conversation says nothing about this one.
+			if (anchor.tabKey !== readingTabKeyRef.current) return null;
+			const rowId = renderedIdByLogId.get(anchor.rowId) ?? anchor.rowId;
+			const row = transcriptRows(content).find((el) => el.getAttribute('data-log-id') === rowId);
+			if (!row) return null;
+			const viewTop = container.getBoundingClientRect().top;
+			const rect = row.getBoundingClientRect();
+			const delta =
+				rowId === anchor.rowId
+					? rect.top - viewTop - anchor.top
+					: rect.bottom - viewTop - anchor.bottom;
+			return { container, delta };
+		}, [renderedIdByLogId]);
+		const measureReadingAnchorRef = useRef(measureReadingAnchor);
+		measureReadingAnchorRef.current = measureReadingAnchor;
+
+		const handleTranscriptScroll = useCallback(() => {
+			handleScroll();
+			// The reader's row is still where the target puts it: this is the echo
+			// of our own correction (or a scroll that changed nothing for them), so
+			// the target stands. Anything that moved the row away - a wheel, a
+			// scrollbar drag, a key, a search jump - is a new target.
+			const measured = measureReadingAnchorRef.current();
+			if (measured && Math.abs(measured.delta) < ANCHOR_HOLD_TOLERANCE_PX) return;
+			recordReadingAnchor();
+		}, [handleScroll, recordReadingAnchor]);
+
+		const restoreReadingAnchor = useCallback((): boolean => {
+			const measured = measureReadingAnchor();
+			if (!measured) return false;
+			const { container, delta } = measured;
+			// Relative, so the correction acts on the real offset rather than on a
+			// value read back through the scrollTop getter.
+			if (delta !== 0) {
+				if (typeof container.scrollBy === 'function') {
+					container.scrollBy({ top: delta, behavior: 'instant' as ScrollBehavior });
+				} else {
+					container.scrollTop += delta;
+				}
+			}
+			return true;
+		}, [measureReadingAnchor]);
+
+		// Every commit that can move rows above the reader: the window moving, rows
+		// arriving or leaving, and the history status row toggling. Reading
+		// history -> the anchor; following the tail -> bottom distance (the scroll
+		// hook re-pins to the bottom on top of that). Gated on the hook's live ref,
+		// not the `isAtBottom` render value: a reveal of the user's own send flips
+		// the ref at once, and the commit that renders their new row can arrive
+		// before the state does - restoring the old anchor there scrolled the view
+		// straight back into history.
+		useLayoutEffect(() => {
+			if (!isAtBottomLatestRef.current && restoreReadingAnchor()) {
+				backfillBottomDistanceRef.current = null;
+				return;
+			}
+			restoreBackfillScroll();
+			// Keyed on what moves rows, not on the callbacks: a scroll that only
+			// changes `isAtBottom` must not re-apply an anchor it just recorded.
+		}, [
+			visibleLogs,
+			logStartIndex,
+			historyBackfill.isLoading,
+			historyBackfill.error,
+			historyBackfill.reachedStart,
+		]);
+
+		// Returning to a conversation left mid-history (anchorRestore above). The
+		// window is revealed down to the saved row only - never the whole history
+		// - and once that row is mounted it is put back at its saved offset and the
+		// view is paused there, exactly as a scroll up to it would leave it.
+		const pendingAnchorRestoreRef = useRef(anchorRestore);
+		const anchorRestoredRef = useRef(false);
+		useLayoutEffect(() => {
+			// Consumed by this mount; the unmount below saves a fresh one.
+			savedReadingAnchors.delete(readingTabKeyRef.current);
+			const pending = pendingAnchorRestoreRef.current;
+			if (pending && pending.rowIndex < logStartIndex) revealLogIndex(pending.rowIndex);
+			// Mount only.
+		}, []);
+		useLayoutEffect(() => {
+			const pending = pendingAnchorRestoreRef.current;
+			if (!pending) return;
+			readingAnchorRef.current = { ...pending.anchor, tabKey: readingTabKeyRef.current };
+			// Not mounted yet: the reveal above lands in the next commit.
+			if (!restoreReadingAnchor()) return;
+			pendingAnchorRestoreRef.current = null;
+			anchorRestoredRef.current = true;
+			pauseForJump();
+		}, [logStartIndex, visibleLogs, restoreReadingAnchor, pauseForJump]);
+		// Again after the scroll hook's own mount effects: its tab-switch effect
+		// marks a tab it has no read state for as being at the bottom, and it runs
+		// after the layout effect above. Declared after the hook, so this runs last.
+		useEffect(() => {
+			if (!anchorRestoredRef.current) return;
+			anchorRestoredRef.current = false;
+			pauseForJump();
+		}, [logStartIndex, visibleLogs, pauseForJump]);
+
+		// Save where this conversation is being read for the next mount.
+		useEffect(
+			() => () => {
+				const key = readingTabKeyRef.current;
+				const anchor = readingAnchorRef.current;
+				if (!isAtBottomLatestRef.current && anchor && anchor.tabKey === key) {
+					savedReadingAnchors.set(key, anchor);
+				} else {
+					savedReadingAnchors.delete(key);
+				}
+			},
+			[]
+		);
+
+		// ============================================================================
+		// Older history when the transcript cannot scroll up to ask for it
+		// ============================================================================
+		// The scroll hook pages history in from a scroll event near the top, and
+		// only when the transcript overflows. A tab restored from the persisted
+		// 100 entries can collapse (folded tools, hidden reasoning) to less than
+		// one screen on a large window: no scrollbar, scrollTop already 0, so no
+		// scroll event ever fires and wheel, PageUp and Home all do nothing - the
+		// rest of the conversation is unreachable. Two bounded ways in, both
+		// through the same `loadEarlier` (one page per call, its own in-flight,
+		// reached-start and account/host handling):
+		//  - automatically, once per transcript LENGTH, while the fully mounted
+		//    window does not fill the viewport. A load that adds rows changes the
+		//    length and may ask again (still short); one that adds nothing, a
+		//    failure, the start of the conversation, or a running turn stops it,
+		//    so it never walks the whole file on its own;
+		//  - on the user's own upward wheel or scroll key at scrollTop 0, which
+		//    is the request the missing scroll event would have carried.
+		const autoLoadLengthRef = useRef<number | null>(null);
+		const tabIsBusy = activeTab?.state === 'busy';
+		useEffect(() => {
+			if (
+				logStartIndex !== 0 ||
+				filteredLogs.length === 0 ||
+				tabIsBusy ||
+				historyBackfill.isLoading ||
+				historyBackfill.reachedStart ||
+				historyBackfill.error ||
+				autoLoadLengthRef.current === filteredLogs.length
+			) {
+				return;
+			}
+			const container = scrollContainerRef.current;
+			// Not laid out (a hidden pane): nothing is known about overflow yet.
+			if (!container || container.clientHeight <= 0) return;
+			if (container.scrollHeight > container.clientHeight) return;
+			autoLoadLengthRef.current = filteredLogs.length;
+			historyBackfill.loadEarlier();
+		});
+		const requestEarlierAtTop = useCallback(() => {
+			const container = scrollContainerRef.current;
+			if (!container || container.scrollTop > 0 || logStartIndexRef.current !== 0) return;
+			historyBackfill.loadEarlier();
+		}, [historyBackfill]);
+		const handleTranscriptWheel = useCallback(
+			(event: React.WheelEvent) => {
+				noteUserScrollInput(event);
+				if (event.deltaY < 0) requestEarlierAtTop();
+			},
+			[noteUserScrollInput, requestEarlierAtTop]
+		);
+		const handleTranscriptKeyDown = useCallback(
+			(event: React.KeyboardEvent) => {
+				noteUserScrollInput(event);
+				if (event.key === 'PageUp' || event.key === 'Home' || event.key === 'ArrowUp') {
+					requestEarlierAtTop();
+				}
+			},
+			[noteUserScrollInput, requestEarlierAtTop]
+		);
+
+		// Hold the reader's row in place when the layout moves with no scroll and
+		// no commit - the scroll anchoring the browser would do, which is off
+		// here. Every row is `content-visibility: auto`, so a row near the
+		// viewport switches from its 120px estimate to its real height as it comes
+		// into range, and while the reader is up in history the scroller has
+		// `overflow-anchor: none`, so nothing compensates and no scroll event
+		// fires. Left alone, that moved the reader with no input: a later commit
+		// restored a stale offset, and after a remount (whose rows above are all
+		// still estimates when it positions the reader) the real heights arriving
+		// above pushed the view about a screen back into older history.
+		// So the shift is corrected against the target, measured from the row's
+		// own top (its own growth, and anything below it, never moves the reader).
+		// Reacts to layout only, never to time; a user scroll sets a new target in
+		// its scroll event first (scroll events run before resize observers in a
+		// frame), so the correction always holds the position the user chose.
+		const restoreReadingAnchorRef = useRef(restoreReadingAnchor);
+		restoreReadingAnchorRef.current = restoreReadingAnchor;
+		useEffect(() => {
+			const content = contentRef.current;
+			if (!content || typeof ResizeObserver === 'undefined') return;
+			const observer = new ResizeObserver(() => {
+				if (isAtBottomLatestRef.current || pendingAnchorRestoreRef.current) return;
+				restoreReadingAnchorRef.current();
+			});
+			observer.observe(content);
+			return () => observer.disconnect();
+		}, []);
 
 		useEffect(() => {
 			if (!pendingLogJump) return;
@@ -467,7 +908,7 @@ export const TerminalOutput = memo(
 				ref={terminalOutputRef}
 				tabIndex={0}
 				role="region"
-				aria-label="Terminal output"
+				aria-label={t('workflows.terminalOutput.region')}
 				className="terminal-output flex-1 flex flex-col overflow-hidden transition-colors outline-none relative"
 				style={{
 					backgroundColor: theme.colors.bgMain,
@@ -625,21 +1066,30 @@ export const TerminalOutput = memo(
 						// still arrives as a prop because individual rows override it.
 						fontSize: 'var(--maestro-size-chat, inherit)',
 					}}
-					onScroll={handleScroll}
+					onScroll={handleTranscriptScroll}
 					onContextMenu={handleTranscriptContextMenu}
 					// The input events that prove a scroll is the user's. `scroll` itself
 					// cannot: this component writes `scrollTop` on every frame of a restore
 					// and on every mutation while following the tail, and each of those
 					// writes fires an indistinguishable `scroll` event.
-					onWheel={noteUserScrollInput}
+					onWheel={handleTranscriptWheel}
 					onTouchMove={noteUserScrollInput}
 					onPointerDown={noteUserScrollInput}
-					onKeyDown={noteUserScrollInput}
+					onKeyDown={handleTranscriptKeyDown}
 				>
 					{/* Content wrapper: unstyled block so its height tracks the scrollable
 					    content exactly, giving the scroll hook's ResizeObserver something
 					    that grows when late content settles. */}
-					<div ref={contentRef}>
+					{/* In the conversation-centred layout the transcript is read like a
+					    document, so its column is capped and centred: a wide window
+					    otherwise stretches every line past a comfortable reading length.
+					    Width only - the wrapper's height still tracks the content. */}
+					<div
+						ref={contentRef}
+						className={readingColumn ? 'mx-auto w-full' : undefined}
+						style={readingColumn ? { maxWidth: READING_COLUMN_MAX_WIDTH } : undefined}
+						data-reading-column={readingColumn || undefined}
+					>
 						{/* Older-history status row (issue #1407). Only meaningful once the
 						    idle render window has reached the head of the list - above that
 						    point there is still local history left to mount, so "beginning of
@@ -653,21 +1103,22 @@ export const TerminalOutput = memo(
 										style={{ color: theme.colors.textDim }}
 									>
 										<Loader2 className="w-3.5 h-3.5 animate-spin" />
-										Loading earlier messages...
+										{t('workflows.transcript.loadingEarlier')}
 									</div>
 								)}
 								{!historyBackfill.isLoading && historyBackfill.error && (
 									<div
 										className="flex items-center justify-center gap-2 py-3 text-xs"
 										style={{ color: theme.colors.textDim }}
+										role="alert"
 									>
-										{historyBackfill.error}
+										{t('workflows.transcript.earlierLoadFailed')}
 										<button
 											onClick={historyBackfill.loadEarlier}
 											className="underline hover:opacity-80 transition-opacity"
 											style={{ color: theme.colors.textMain }}
 										>
-											Retry
+											{t('workflows.conversations.retry')}
 										</button>
 									</div>
 								)}
@@ -678,7 +1129,7 @@ export const TerminalOutput = memo(
 											className="flex items-center justify-center py-3 text-xs"
 											style={{ color: theme.colors.textDim }}
 										>
-											Beginning of conversation
+											{t('workflows.transcript.conversationStart')}
 										</div>
 									)}
 							</>
@@ -704,6 +1155,7 @@ export const TerminalOutput = memo(
 									isExpanded={expandedLogs.has(log.id)}
 									onToggleExpanded={toggleExpanded}
 									subagentLogs={childrenByParentId.get(log.id)}
+									toolRun={toolRunByHostId.get(log.id)}
 									localFilterQuery={localFilters.get(log.id) || ''}
 									filterMode={filterModes.get(log.id) || { mode: 'include', regex: false }}
 									activeLocalFilter={activeLocalFilter}

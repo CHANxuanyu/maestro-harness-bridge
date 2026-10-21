@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type React from 'react';
 import { buildSessionDeepLink } from '../../../../shared/deep-link-urls';
 import { requestFileDeletion } from '../../../services/fileDeletion';
@@ -43,6 +44,7 @@ export function buildActiveTabContextCommands({
 	toggleTabStarShortcut,
 	toggleTabUnreadShortcut,
 }: BuildActiveTabContextCommandsArgs): QuickAction[] {
+	const t = getT();
 	if (!activeSession) return [];
 	const commands: QuickAction[] = [];
 
@@ -51,7 +53,7 @@ export function buildActiveTabContextCommands({
 		if (!mainPanelRef) return commands;
 		commands.push({
 			id: 'copyTerminalBuffer',
-			label: 'Buffer: Copy to Clipboard',
+			label: t('workflows.shell.bufferCopyToClipboard'),
 			action: () => {
 				mainPanelRef.current?.copyActiveTerminalBuffer();
 				setQuickActionOpen(false);
@@ -59,7 +61,7 @@ export function buildActiveTabContextCommands({
 		});
 		commands.push({
 			id: 'sendTerminalBufferToAgent',
-			label: 'Buffer: Send to Agent',
+			label: t('workflows.shell.bufferSendToAgent'),
 			action: () => {
 				mainPanelRef.current?.sendActiveTerminalBufferToAgent();
 				setQuickActionOpen(false);
@@ -68,7 +70,7 @@ export function buildActiveTabContextCommands({
 		if (ghCliAvailable) {
 			commands.push({
 				id: 'publishTerminalBufferGist',
-				label: 'Buffer: Publish as GitHub Gist',
+				label: t('workflows.shell.bufferPublishAsGithubGist'),
 				action: () => {
 					mainPanelRef.current?.publishActiveTerminalBufferGist();
 					setQuickActionOpen(false);
@@ -83,7 +85,7 @@ export function buildActiveTabContextCommands({
 		if (!mainPanelRef) return commands;
 		commands.push({
 			id: 'copyBrowserContent',
-			label: 'Content: Copy to Clipboard',
+			label: t('workflows.shell.contentCopyToClipboard'),
 			action: () => {
 				mainPanelRef.current?.copyActiveBrowserContent();
 				setQuickActionOpen(false);
@@ -91,7 +93,7 @@ export function buildActiveTabContextCommands({
 		});
 		commands.push({
 			id: 'sendBrowserContentToAgent',
-			label: 'Content: Send to Agent',
+			label: t('workflows.shell.contentSendToAgent'),
 			action: () => {
 				mainPanelRef.current?.sendActiveBrowserContentToAgent();
 				setQuickActionOpen(false);
@@ -113,7 +115,7 @@ export function buildActiveTabContextCommands({
 		if (fileTab) {
 			commands.push({
 				id: 'deletePreviewedFile',
-				label: 'File: Delete',
+				label: t('workflows.shell.fileDelete'),
 				subtext: `${fileTab.name}${fileTab.extension}`,
 				action: () => {
 					setQuickActionOpen(false);
@@ -136,7 +138,7 @@ export function buildActiveTabContextCommands({
 	if (activeTab?.agentSessionId) {
 		commands.push({
 			id: 'copySessionId',
-			label: 'Copy Session ID',
+			label: t('workflows.shell.copySessionId'),
 			subtext: activeTab.agentSessionId,
 			action: async () => {
 				if (await safeClipboardWrite(activeTab.agentSessionId!)) {
@@ -148,11 +150,11 @@ export function buildActiveTabContextCommands({
 
 		commands.push({
 			id: 'copyDeepLink',
-			label: 'Copy Deep Link',
+			label: t('workflows.shell.copyDeepLink'),
 			action: async () => {
 				const deepLink = buildSessionDeepLink(activeSession.id, activeTab.id);
 				if (await safeClipboardWrite(deepLink)) {
-					flashCopiedToClipboard(deepLink, 'Deep Link Copied');
+					flashCopiedToClipboard(deepLink, t('workflows.shell.extraDeepLinkCopied'));
 				}
 				setQuickActionOpen(false);
 			},
@@ -160,7 +162,9 @@ export function buildActiveTabContextCommands({
 
 		commands.push({
 			id: 'toggleStarTab',
-			label: activeTab.starred ? 'Unstar Session' : 'Star Session',
+			label: activeTab.starred
+				? t('workflows.shell.unstarSession')
+				: t('workflows.shell.starSession'),
 			shortcut: toggleTabStarShortcut,
 			action: () => {
 				setSessions((prev) =>
@@ -180,7 +184,7 @@ export function buildActiveTabContextCommands({
 
 		commands.push({
 			id: 'markTabUnread',
-			label: 'Mark as Unread',
+			label: t('workflows.shell.markAsUnread'),
 			shortcut: toggleTabUnreadShortcut,
 			action: () => {
 				setSessions((prev) =>
@@ -203,7 +207,7 @@ export function buildActiveTabContextCommands({
 		if (onExportTabHtml) {
 			commands.push({
 				id: 'exportTabHtml',
-				label: 'Export as HTML',
+				label: t('workflows.shell.exportAsHtml'),
 				action: () => {
 					onExportTabHtml(activeTab.id);
 					setQuickActionOpen(false);
@@ -214,7 +218,7 @@ export function buildActiveTabContextCommands({
 		if (onCopyTabContext) {
 			commands.push({
 				id: 'copyTabContext',
-				label: 'Context: Copy to Clipboard',
+				label: t('workflows.shell.contextCopyToClipboard'),
 				action: () => {
 					onCopyTabContext(activeTab.id);
 					setQuickActionOpen(false);
@@ -225,7 +229,7 @@ export function buildActiveTabContextCommands({
 		if (ghCliAvailable && onPublishTabGist) {
 			commands.push({
 				id: 'publishTabGist',
-				label: 'Context: Publish as GitHub Gist',
+				label: t('workflows.shell.contextPublishAsGithubGist'),
 				action: () => {
 					onPublishTabGist(activeTab.id);
 					setQuickActionOpen(false);

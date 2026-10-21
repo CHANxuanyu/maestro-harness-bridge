@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * Modal host for a plugin-contributed UI panel (the `modal` placement).
  *
@@ -34,6 +35,7 @@ interface PluginPanelHostProps {
 }
 
 export function PluginPanelHost({ theme, panel, onClose }: PluginPanelHostProps) {
+	const tExtra = useT();
 	useModalLayer(pluginPanelPriority(0), panel.title, onClose);
 
 	const isFull = panel.size === 'full';
@@ -63,7 +65,7 @@ export function PluginPanelHost({ theme, panel, onClose }: PluginPanelHostProps)
 						className="p-1 rounded"
 						style={{ color: theme.colors.textDim }}
 						onClick={onClose}
-						title="Close"
+						title={tExtra('settings.extra.pluginPanelHost.close')}
 					>
 						<X className="w-4 h-4" />
 					</button>

@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React from 'react';
 import { Search } from 'lucide-react';
 import type { Theme } from '../../types';
@@ -19,6 +20,7 @@ export function ShortcutFilterButton({
 	recording,
 	onRecordingChange,
 }: ShortcutFilterButtonProps) {
+	const t = useT();
 	const buttonRef = React.useRef<HTMLButtonElement>(null);
 	const active = recording || keys.length > 0;
 
@@ -58,8 +60,8 @@ export function ShortcutFilterButton({
 			onBlur={() => onRecordingChange(false)}
 			title={
 				recording
-					? 'Press any shortcut to see what it does. Keep pressing to explore - Escape or click away to stop.'
-					: 'Filter by pressing a shortcut'
+					? t('settings.finish.shortcuts.recordHint')
+					: t('settings.finish.shortcuts.byKeyHint')
 			}
 			className={`px-3 py-2 rounded border text-xs font-mono whitespace-nowrap text-center transition-colors ${recording ? 'ring-2' : ''}`}
 			style={
@@ -72,13 +74,13 @@ export function ShortcutFilterButton({
 			}
 		>
 			{recording && keys.length === 0 ? (
-				'Press keys...'
+				t('settings.finish.shortcuts.press')
 			) : keys.length > 0 ? (
 				formatShortcutKeys(keys)
 			) : (
 				<span className="flex items-center gap-1">
 					<Search className="w-3 h-3" />
-					By Key
+					{t('settings.finish.shortcuts.byKey')}
 				</span>
 			)}
 		</button>

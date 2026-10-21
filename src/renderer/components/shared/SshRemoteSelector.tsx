@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * SshRemoteSelector.tsx
  *
@@ -31,6 +32,7 @@ export function SshRemoteSelector({
 	onSshRemoteConfigChange,
 	compact = false,
 }: SshRemoteSelectorProps): JSX.Element {
+	const uiText = useT();
 	// Compact mode uses bordered container style (for nested use in config panels)
 	// Non-compact mode uses simple label + input style (for top-level modal use)
 	if (compact) {
@@ -40,7 +42,7 @@ export function SshRemoteSelector({
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
 			>
 				<label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-					SSH Remote Execution
+					{uiText('workflows.sessions.sshExecution')}
 				</label>
 				<SshRemoteDropdown
 					theme={theme}
@@ -48,9 +50,7 @@ export function SshRemoteSelector({
 					sshRemoteConfig={sshRemoteConfig}
 					onSshRemoteConfigChange={onSshRemoteConfigChange}
 				/>
-				<p className="text-xs opacity-50 mt-2">
-					Execute this agent on a remote host via SSH instead of locally
-				</p>
+				<p className="text-xs opacity-50 mt-2">{uiText('workflows.sessions.sshExecutionHelp')}</p>
 			</div>
 		);
 	}
@@ -62,7 +62,7 @@ export function SshRemoteSelector({
 				className="block text-xs font-bold opacity-70 uppercase mb-2"
 				style={{ color: theme.colors.textMain }}
 			>
-				SSH Remote Execution
+				{uiText('workflows.sessions.sshExecution')}
 			</label>
 			<SshRemoteDropdown
 				theme={theme}
@@ -71,7 +71,7 @@ export function SshRemoteSelector({
 				onSshRemoteConfigChange={onSshRemoteConfigChange}
 			/>
 			<p className="mt-1 text-xs" style={{ color: theme.colors.textDim }}>
-				Execute this agent on a remote host via SSH instead of locally.
+				{uiText('workflows.sessions.sshExecutionHelpSentence')}
 			</p>
 		</div>
 	);
@@ -89,6 +89,7 @@ function SshRemoteDropdown({
 	sshRemoteConfig?: AgentSshRemoteConfig;
 	onSshRemoteConfigChange: (config: AgentSshRemoteConfig) => void;
 }): JSX.Element {
+	const uiText = useT();
 	// Get the currently selected remote (if any)
 	const selectedRemoteId =
 		sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId ? sshRemoteConfig.remoteId : null;
@@ -133,7 +134,7 @@ function SshRemoteDropdown({
 						color: theme.colors.textMain,
 					}}
 				>
-					<option value="local">Local Execution</option>
+					<option value="local">{uiText('workflows.sessions.localExecution')}</option>
 					{sshRemotes
 						.filter((r) => r.enabled)
 						.map((remote) => (
@@ -157,7 +158,8 @@ function SshRemoteDropdown({
 					<>
 						<Cloud className="w-3 h-3" style={{ color: theme.colors.success }} />
 						<span style={{ color: theme.colors.textMain }}>
-							Agent will run on <span className="font-medium">{selectedRemote.name}</span>
+							{uiText('workflows.sessions.agentRunsOn')}{' '}
+							<span className="font-medium">{selectedRemote.name}</span>
 							<span style={{ color: theme.colors.textDim }}>
 								{' '}
 								({formatSshTarget(selectedRemote)})
@@ -167,7 +169,9 @@ function SshRemoteDropdown({
 				) : (
 					<>
 						<Monitor className="w-3 h-3" style={{ color: theme.colors.textDim }} />
-						<span style={{ color: theme.colors.textDim }}>Agent will run locally</span>
+						<span style={{ color: theme.colors.textDim }}>
+							{uiText('workflows.sessions.agentRunsLocally')}
+						</span>
 					</>
 				)}
 			</div>
@@ -194,11 +198,10 @@ function SshRemoteDropdown({
 					<History className="w-3 h-3 flex-shrink-0" style={{ color: theme.colors.textDim }} />
 					<div className="flex flex-col">
 						<span className="text-xs font-medium" style={{ color: theme.colors.textMain }}>
-							Sync history to remote
+							{uiText('workflows.sessions.syncHistoryRemote')}
 						</span>
 						<span className="text-2xs" style={{ color: theme.colors.textDim }}>
-							Share history entries via .maestro/history/ on the remote host for cross-machine
-							visibility.
+							{uiText('workflows.sessions.syncHistoryRemoteHelp')}
 						</span>
 					</div>
 				</label>
@@ -235,11 +238,10 @@ function SshRemoteDropdown({
 					<History className="w-3 h-3 flex-shrink-0" style={{ color: theme.colors.textDim }} />
 					<div className="flex flex-col">
 						<span className="text-xs font-medium" style={{ color: theme.colors.textMain }}>
-							This agent is remote-controlled
+							{uiText('workflows.sessions.remoteControlled')}
 						</span>
 						<span className="text-2xs" style={{ color: theme.colors.textDim }}>
-							Mirror history entries to this project's local .maestro/history/ so another Maestro
-							(SSH'd into this machine) can see what was done here.
+							{uiText('workflows.sessions.remoteControlledHelp')}
 						</span>
 					</div>
 				</label>
@@ -248,9 +250,9 @@ function SshRemoteDropdown({
 			{/* No remotes configured hint */}
 			{sshRemotes.filter((r) => r.enabled).length === 0 && (
 				<p className="text-xs" style={{ color: theme.colors.textDim }}>
-					No SSH remotes configured.{' '}
+					{uiText('workflows.sessions.noSshRemotes')}{' '}
 					<span style={{ color: theme.colors.accent }}>
-						Configure remotes in Settings → SSH Remotes.
+						{uiText('workflows.sessions.configureSshRemotes')}
 					</span>
 				</p>
 			)}

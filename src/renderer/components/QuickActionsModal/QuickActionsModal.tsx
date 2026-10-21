@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { memo, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { QuickAction, QuickActionsModalProps } from './types';
@@ -90,6 +91,7 @@ import {
 } from '../../utils/windowTargets';
 
 export const QuickActionsModal = memo(function QuickActionsModal(props: QuickActionsModalProps) {
+	const t = useT();
 	const {
 		theme,
 		sessions,
@@ -370,25 +372,29 @@ export const QuickActionsModal = memo(function QuickActionsModal(props: QuickAct
 				setProfilingActive(true);
 				setProfilingBufferPercent(0);
 				notifyCenterFlash({
-					message: 'Performance profiling started',
+					message: t('workflows.shell.extraPerformanceProfilingStarted'),
 					color: 'green',
 					// No duration advice here on purpose. The limit is trace-buffer
 					// pressure, which nobody can estimate by watching the app, so the
 					// recording now ends itself before data is lost.
-					detail: 'Reproduce the lag. Ends automatically if the trace buffer fills.',
+					detail: t('workflows.shell.extraReproduceTheLagEndsAutomaticallyIfTheTrace'),
 				});
 			} else {
 				notifyToast({
 					color: 'red',
-					title: 'Profiling',
-					message: res?.error || 'Failed to start profiling',
+					title: t('workflows.shell.profiling'),
+					message: res?.error || t('workflows.shell.extraFailedToStartProfiling'),
 				});
 			}
 		} catch (err) {
-			notifyToast({ color: 'red', title: 'Profiling', message: 'Failed to start profiling' });
+			notifyToast({
+				color: 'red',
+				title: t('workflows.shell.profiling'),
+				message: t('workflows.shell.extraFailedToStartProfiling'),
+			});
 			captureException(err);
 		}
-	}, [setProfilingActive, setProfilingBufferPercent]);
+	}, [t, setProfilingActive, setProfilingBufferPercent]);
 	// Stopping is slow (flush + zip compression can take tens of seconds), so we
 	// hand off to the profilingCapture service, which owns the stop-and-bundle
 	// flow and clears the wand indicator when it finishes. The modal only shows it.
@@ -452,7 +458,7 @@ export const QuickActionsModal = memo(function QuickActionsModal(props: QuickAct
 	}, [mode, initialMode, setQuickActionOpen]);
 
 	// Register layer on mount - escape behavior depends on current mode.
-	useModalLayer(MODAL_PRIORITIES.QUICK_ACTION, 'Quick Actions', handleEscape);
+	useModalLayer(MODAL_PRIORITIES.QUICK_ACTION, t('workflows.shell.quickActions'), handleEscape);
 
 	// Not on a phone. Focusing the field raises the iOS keyboard, which covers
 	// roughly the bottom half of a full-screen palette - so the list the user
@@ -628,9 +634,9 @@ export const QuickActionsModal = memo(function QuickActionsModal(props: QuickAct
 			killShortcut: shortcuts.killInstance,
 			openClearBookmarksConfirm: (bookmarkedCount) => {
 				useModalStore.getState().openModal('confirm', {
-					title: 'Clear All Bookmarks',
+					title: t('workflows.shell.clearAllBookmarks'),
 					message: `Remove bookmarks from ${bookmarkedCount} agent${
-						bookmarkedCount === 1 ? '' : 's'
+						bookmarkedCount === 1 ? '' : t('workflows.shell.pluralSuffix')
 					}?`,
 					destructive: true,
 					onConfirm: () => {
@@ -938,11 +944,17 @@ export const QuickActionsModal = memo(function QuickActionsModal(props: QuickAct
 		onCommandResult: ({ dispatched, title }) =>
 			notifyToast({
 				color: dispatched ? 'green' : 'orange',
-				title: 'Plugins',
-				message: dispatched ? `Ran "${title}"` : `"${title}" is not running`,
+				title: t('workflows.shell.plugins'),
+				message: dispatched
+					? `Ran "${title}"`
+					: t('workflows.shell.extraValueIsNotRunning', { p0: title }),
 			}),
 		onCommandError: ({ error }) =>
-			notifyToast({ color: 'red', title: 'Plugins', message: `Command failed: ${String(error)}` }),
+			notifyToast({
+				color: 'red',
+				title: t('workflows.shell.plugins'),
+				message: t('workflows.shell.extraCommandFailedValue', { p0: String(error) }),
+			}),
 		setQuickActionOpen,
 	});
 	const mainActionsWithPlugins = mergePluginContributions(
@@ -1105,7 +1117,9 @@ export const QuickActionsModal = memo(function QuickActionsModal(props: QuickAct
 				ref={modalRef}
 				role="dialog"
 				aria-modal="true"
-				aria-label={mode === 'agents' ? 'Switch Agent' : 'Quick Actions'}
+				aria-label={
+					mode === 'agents' ? t('workflows.shell.switchAgent') : t('workflows.shell.quickActions')
+				}
 				tabIndex={-1}
 				className="relative rounded-xl shadow-2xl border overflow-hidden flex flex-col outline-none select-none"
 				style={{

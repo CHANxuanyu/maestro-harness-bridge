@@ -11,7 +11,9 @@ import {
 } from 'electron';
 import { isMacOS } from '../shared/platformDetection';
 import { DURATION_MS } from '../shared/duration';
-import { installApplicationMenu } from './app-menu';
+import { installApplicationMenu, setMenuLanguage } from './app-menu';
+import { DEFAULT_UI_LANGUAGE } from '../shared/i18n';
+import { buildWebSettingsSnapshot } from './web-server/web-settings-snapshot';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
@@ -512,6 +514,10 @@ const settingsWatcher = createSettingsWatcher({
 	getSettingsPath: () => syncPath,
 	getAgentConfigsPath: () => productionDataPath,
 	onSettingsChangedExternally: () => {
+		setMenuLanguage(store.get('uiLanguage', DEFAULT_UI_LANGUAGE));
+		if (webServer && webServer.getWebClientCount() > 0) {
+			webServer.broadcastSettingsChanged(buildWebSettingsSnapshot(store));
+		}
 		// Re-apply settings the MAIN process acts on. Without this, a CLI write
 		// updates the file and the renderer while the main process keeps running
 		// on the value it read at startup - for sleep prevention that means the
@@ -3018,7 +3024,7 @@ app
 		// Install the application menu (File / Edit / View / Window on macOS,
 		// removed entirely on Windows/Linux). See src/main/app-menu.ts for why the
 		// menu is display-only and how clicks are routed back to the renderer.
-		installApplicationMenu();
+		installApplicationMenu(store.get('uiLanguage', DEFAULT_UI_LANGUAGE));
 
 		// Restore the saved multi-window layout (or a single primary window when
 		// there is nothing saved - backward compatible).

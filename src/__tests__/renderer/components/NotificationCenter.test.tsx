@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, within } from '@testing-library/react';
 import {
 	NotificationCenter,
 	NotificationCenterHost,
@@ -65,6 +65,31 @@ describe('NotificationCenter', () => {
 		seed([]);
 		useNotificationStore.setState({ historyPersistenceFailed: false });
 		useNotificationStore.getState().setDefaultDuration(20);
+	});
+
+	it('translates the inbox chrome while preserving notification content and selection', () => {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		seed(
+			[record({ title: 'User message: Notifications', message: 'Keep my English content.' })],
+			true
+		);
+		render(
+			<>
+				<NotificationCenter theme={mockTheme} />
+				<NotificationCenterHost theme={mockTheme} />
+			</>
+		);
+		const bell = screen.getByTestId('notification-center-button');
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		expect(bell).toHaveAttribute('aria-label', '通知（1 条未读）');
+		expect(screen.getByRole('dialog', { name: '通知' })).toBeVisible();
+		expect(screen.getByText('User message: Notifications')).toBeVisible();
+		expect(screen.getByText('Keep my English content.')).toBeVisible();
+		fireEvent.click(screen.getByText('全部标为已读'));
+		expect(useNotificationStore.getState().history[0].read).toBe(true);
+		expect(screen.getByText('没有未读通知')).toBeVisible();
+		expect(bell).toHaveAttribute('aria-label', '通知');
+		act(() => useSettingsStore.setState({ uiLanguage: 'system' }));
 	});
 
 	it('shows the unread count on the bell, and no badge at zero', () => {

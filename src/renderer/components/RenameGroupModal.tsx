@@ -4,6 +4,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, ModalFooter, FormInput, GroupAppearancePicker } from './ui';
 import { usePluginContributions } from '../hooks/usePluginContributions';
 import { selectGroupsPlusEnabled, useSettingsStore } from '../stores/settingsStore';
+import { useT } from '../i18n';
 
 interface RenameGroupModalProps {
 	theme: Theme;
@@ -39,6 +40,7 @@ export function RenameGroupModal(props: RenameGroupModalProps) {
 	} = props;
 
 	const inputRef = useRef<HTMLInputElement>(null);
+	const t = useT();
 	const groupsPlusEnabled = useSettingsStore(selectGroupsPlusEnabled);
 	const pluginContributions = usePluginContributions();
 
@@ -64,7 +66,7 @@ export function RenameGroupModal(props: RenameGroupModalProps) {
 	return (
 		<Modal
 			theme={theme}
-			title="Rename Group"
+			title={t('workflows.group.renameTitle')}
 			priority={MODAL_PRIORITIES.RENAME_GROUP}
 			onClose={onClose}
 			initialFocusRef={inputRef}
@@ -73,7 +75,7 @@ export function RenameGroupModal(props: RenameGroupModalProps) {
 					theme={theme}
 					onCancel={onClose}
 					onConfirm={handleRename}
-					confirmLabel="Rename"
+					confirmLabel={t('common.rename')}
 					confirmDisabled={!groupName.trim()}
 				/>
 			}
@@ -94,11 +96,11 @@ export function RenameGroupModal(props: RenameGroupModalProps) {
 				<FormInput
 					ref={inputRef}
 					theme={theme}
-					label="Group Name"
+					label={t('workflows.group.nameLabel')}
 					value={groupName}
 					onChange={setGroupName}
 					onSubmit={handleRename}
-					placeholder="Enter group name..."
+					placeholder={t('workflows.group.namePlaceholder')}
 					heightClass="h-[52px]"
 					autoFocus
 				/>

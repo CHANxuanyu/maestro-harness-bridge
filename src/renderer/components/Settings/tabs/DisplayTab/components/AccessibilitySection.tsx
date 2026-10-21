@@ -4,6 +4,7 @@ import { ToggleButtonGroup } from '../../../../ToggleButtonGroup';
 import type { Theme } from '../../../../../types';
 import { DEFAULT_BIONIFY_ALGORITHM } from '../../../../../utils/bionifyReadingMode';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 import type { BionifyAlgorithmState } from '../types';
 import { SectionCard } from './SectionCard';
 import { ToggleSettingRow } from './ToggleSettingRow';
@@ -35,12 +36,15 @@ export function AccessibilitySection({
 		}
 	};
 
+	const t = useT();
+	const algorithmExample = '`- 0 1 1 2 0.4`';
+
 	return (
 		<div>
-			<SettingsSectionHeading icon={Accessibility}>Accessibility</SettingsSectionHeading>
-			<p className="text-xs opacity-70 mb-2">
-				Visual options that adapt the interface for color vision deficiencies and long-form reading.
-			</p>
+			<SettingsSectionHeading icon={Accessibility}>
+				{t('settings.display.a11y.heading')}
+			</SettingsSectionHeading>
+			<p className="text-xs opacity-70 mb-2">{t('settings.display.a11y.description')}</p>
 
 			<div data-setting-id="display-colorblind-mode" className="mb-3">
 				<SectionCard theme={theme}>
@@ -49,19 +53,17 @@ export function AccessibilitySection({
 						title={
 							<span className="font-medium flex items-center gap-2">
 								<Eye className="w-4 h-4" />
-								<span>Color Blind Mode</span>
+								<span>{t('settings.display.a11y.colorBlind')}</span>
 							</span>
 						}
 						description={
 							<span style={{ color: theme.colors.textDim }}>
-								Swap red/green/yellow semantics for Wong&apos;s colorblind-safe palette across agent
-								status dots, diff add/remove, git status, the activity graph, Usage Dashboard
-								charts, and file extension badges.
+								{t('settings.display.a11y.colorBlindDescription')}
 							</span>
 						}
 						checked={colorBlindMode}
 						onChange={setColorBlindMode}
-						ariaLabel="Color blind mode"
+						ariaLabel={t('settings.display.a11y.colorBlindAria')}
 						clickableRow
 					/>
 				</SectionCard>
@@ -73,7 +75,7 @@ export function AccessibilitySection({
 						theme={theme}
 						title={
 							<span className="font-medium flex items-center gap-2">
-								<span>Bionify Emphasis</span>
+								<span>{t('settings.display.a11y.bionify')}</span>
 								<button
 									type="button"
 									onClick={(event) => {
@@ -82,8 +84,8 @@ export function AccessibilitySection({
 									}}
 									className="inline-flex items-center justify-center rounded transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
 									style={{ width: '20px', height: '20px', color: theme.colors.textDim }}
-									aria-label="Info"
-									title="Bionify algorithm info"
+									aria-label={t('settings.display.a11y.bionifyInfoAria')}
+									title={t('settings.display.a11y.bionifyInfoTitle')}
 								>
 									<HelpCircle className="w-3.5 h-3.5" />
 								</button>
@@ -91,7 +93,7 @@ export function AccessibilitySection({
 						}
 						checked={bionifyReadingMode}
 						onChange={setBionifyReadingMode}
-						ariaLabel="Bionify reading mode"
+						ariaLabel={t('settings.display.a11y.bionifyAria')}
 						clickableRow
 					/>
 
@@ -104,12 +106,14 @@ export function AccessibilitySection({
 						}}
 					>
 						<div>
-							<div className="block text-xs font-bold opacity-70 uppercase mb-2">Intensity</div>
+							<div className="block text-xs font-bold opacity-70 uppercase mb-2">
+								{t('settings.display.a11y.intensity')}
+							</div>
 							<ToggleButtonGroup
 								options={[
-									{ value: 0.85, label: 'Soft' },
-									{ value: 1, label: 'Default' },
-									{ value: 1.35, label: 'Strong' },
+									{ value: 0.85, label: t('settings.display.a11y.soft') },
+									{ value: 1, label: t('common.default') },
+									{ value: 1.35, label: t('settings.display.a11y.strong') },
 								]}
 								value={bionifyIntensity}
 								onChange={setBionifyIntensity}
@@ -117,8 +121,7 @@ export function AccessibilitySection({
 								disabled={!bionifyReadingMode}
 							/>
 							<p className="text-xs opacity-70 mt-2">
-								Controls how hard the emphasis hits. Strong increases emphasis weight and fades the
-								remaining characters more aggressively.
+								{t('settings.display.a11y.intensityDescription')}
 							</p>
 						</div>
 
@@ -127,11 +130,11 @@ export function AccessibilitySection({
 								htmlFor="bionify-algorithm-input"
 								className="block text-xs font-bold opacity-70 uppercase mb-2"
 							>
-								Bionify Algorithm
+								{t('settings.display.a11y.algorithm')}
 							</label>
 							<input
 								id="bionify-algorithm-input"
-								aria-label="Bionify algorithm"
+								aria-label={t('settings.display.a11y.algorithmAria')}
 								type="text"
 								value={bionifyAlgorithmState.algorithmDraft}
 								onChange={(event) => bionifyAlgorithmState.setAlgorithmDraft(event.target.value)}
@@ -152,12 +155,14 @@ export function AccessibilitySection({
 								disabled={!bionifyReadingMode}
 							/>
 							<p className="text-xs opacity-70 mt-2">
-								Format: sign, four fixed word-length rules, then a fallback fraction. Example: `- 0
-								1 1 2 0.4`
+								{t('settings.display.a11y.algorithmFormat', { example: algorithmExample })}
 							</p>
 							{!bionifyAlgorithmState.isAlgorithmValid && (
 								<p className="text-xs mt-2" style={{ color: theme.colors.warning }}>
-									Enter `+|- len1 len2 len3 len4 fraction`, for example `- 0 1 1 2 0.4`.
+									{t('settings.display.a11y.algorithmInvalid', {
+										format: '`+|- len1 len2 len3 len4 fraction`',
+										example: algorithmExample,
+									})}
 								</p>
 							)}
 						</div>

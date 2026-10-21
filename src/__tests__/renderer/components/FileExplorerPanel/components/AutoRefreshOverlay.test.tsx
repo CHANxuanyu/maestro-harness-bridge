@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { AutoRefreshOverlay } from '../../../../../renderer/components/FileExplorerPanel/components/AutoRefreshOverlay';
 
 const theme = {
@@ -24,6 +25,17 @@ const defaultProps = {
 };
 
 describe('AutoRefreshOverlay', () => {
+	it('displays Chinese interval names and preserves the seconds sent to the handler', () => {
+		useSettingsStore.setState({ uiLanguage: 'zh-CN' });
+		const onIntervalSelect = vi.fn();
+		render(<AutoRefreshOverlay {...defaultProps} onIntervalSelect={onIntervalSelect} />);
+		fireEvent.click(screen.getByText('每 3 分钟'));
+		fireEvent.click(screen.getByText('关闭自动刷新'));
+		expect(onIntervalSelect).toHaveBeenNthCalledWith(1, 180);
+		expect(onIntervalSelect).toHaveBeenNthCalledWith(2, 0);
+		act(() => useSettingsStore.setState({ uiLanguage: 'system' }));
+	});
+
 	it('renders all four interval options', () => {
 		render(<AutoRefreshOverlay {...defaultProps} />);
 		expect(screen.getByText('Every 5 seconds')).toBeTruthy();

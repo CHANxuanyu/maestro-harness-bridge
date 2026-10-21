@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * PhoneComposerHandle - the grip that folds the composer away on a phone.
  *
@@ -34,6 +35,7 @@ export function PhoneComposerHandle({
 	busy = false,
 	hasDraft = false,
 }: PhoneComposerHandleProps) {
+	const t = useT();
 	// Swipe in the direction the composer would move: up to reveal, down to fold.
 	const swipe = useSwipeGestures({
 		onSwipeUp: collapsed ? onToggle : undefined,
@@ -47,7 +49,7 @@ export function PhoneComposerHandle({
 			onClick={onToggle}
 			{...swipe.handlers}
 			aria-expanded={!collapsed}
-			aria-label={collapsed ? 'Show composer' : 'Hide composer'}
+			aria-label={collapsed ? t('workflows.shell.showComposer') : t('workflows.shell.hideComposer')}
 			data-testid="phone-composer-handle"
 			className="w-full flex items-center justify-center gap-2 py-2 select-none outline-none"
 			style={{
@@ -60,7 +62,7 @@ export function PhoneComposerHandle({
 				<span
 					className="w-2 h-2 rounded-full animate-pulse shrink-0"
 					style={{ backgroundColor: theme.colors.warning }}
-					title="Working"
+					title={t('workflows.shell.working')}
 					data-testid="phone-composer-handle-busy"
 				/>
 			)}

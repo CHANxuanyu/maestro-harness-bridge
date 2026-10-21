@@ -174,6 +174,7 @@ describe('classifyRetryableError', () => {
 			'auth_expired',
 			'permission_denied',
 			'session_not_found',
+			'session_busy',
 			'hitl_gate',
 			'token_exhaustion', // context-window-full: resending can't help
 			'agent_crashed',

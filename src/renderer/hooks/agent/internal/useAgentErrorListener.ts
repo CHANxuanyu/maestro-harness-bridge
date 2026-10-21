@@ -22,6 +22,7 @@
  */
 
 import { useEffect } from 'react';
+import { getT } from '../../../i18n';
 import { updateSessionWith, useSessionStore } from '../../../stores/sessionStore';
 import { useModalStore } from '../../../stores/modalStore';
 import { useGroupChatStore } from '../../../stores/groupChatStore';
@@ -77,7 +78,10 @@ export function useAgentErrorListener(deps: UseAgentErrorListenerDeps): void {
 			const ownsSideEffects = sideEffectGate.current?.(sessionId) ?? true;
 			const agentError: AgentError = {
 				type: error.type as AgentError['type'],
-				message: error.message,
+				message:
+					error.type === 'session_busy' && error.agentId === 'codex'
+						? getT()('workflows.sessions.codexSessionBusy')
+						: error.message,
 				recoverable: error.recoverable,
 				agentId: error.agentId,
 				sessionId: error.sessionId,

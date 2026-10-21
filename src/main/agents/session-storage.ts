@@ -37,6 +37,8 @@ export interface SessionMessage {
 	timestamp: string;
 	uuid: string;
 	toolUse?: unknown;
+	/** Native message purpose, independent of its role (commentary/final/analysis). */
+	channel?: string;
 	/**
 	 * Base64 data URLs for any image content blocks attached to the message
 	 * (e.g. user-pasted screenshots). Reconstructed from the transcript so a
@@ -56,6 +58,8 @@ export interface AgentSessionInfo {
 	timestamp: string;
 	modifiedAt: string;
 	firstMessage: string;
+	/** First real user request, used for untitled conversation rows. */
+	firstUserMessage?: string;
 	messageCount: number;
 	sizeBytes: number;
 	/** Cost in USD - optional, only provided by agents that support cost tracking */
@@ -75,6 +79,8 @@ export interface AgentSessionInfo {
 	durationSeconds: number;
 	origin?: AgentSessionOrigin;
 	sessionName?: string;
+	/** Native title before any Maestro display-name override. */
+	nativeTitle?: string;
 	starred?: boolean;
 }
 
@@ -130,6 +136,9 @@ export interface SessionListOptions {
  * Options for reading session messages
  */
 export interface SessionReadOptions {
+	/** Exact account pool selected by the conversation row. */
+	configDir?: string;
+	ownerAgentId?: string;
 	offset?: number;
 	limit?: number;
 }

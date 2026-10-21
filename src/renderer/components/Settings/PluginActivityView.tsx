@@ -1,3 +1,4 @@
+import { useT, getT } from '../../i18n';
 /**
  * Per-plugin observability (read-only) for the Plugins settings panel.
  *
@@ -32,17 +33,18 @@ function levelColor(theme: Theme, level: string): string {
 /** Coarse "time ago" label; OS- and locale-agnostic. */
 function relativeTime(at: number, now: number): string {
 	const diff = Math.max(0, now - at);
-	if (diff < 5_000) return 'just now';
+	if (diff < 5_000) return getT()('settings.extra.pluginActivityView.justNow');
 	const s = Math.floor(diff / 1000);
-	if (s < 60) return `${s}s ago`;
+	if (s < 60) return getT()('settings.extra.pluginActivityView.secondsAgo', { count: s });
 	const m = Math.floor(s / 60);
-	if (m < 60) return `${m}m ago`;
+	if (m < 60) return getT()('settings.extra.pluginActivityView.minutesAgo', { count: m });
 	const h = Math.floor(m / 60);
-	if (h < 24) return `${h}h ago`;
-	return `${Math.floor(h / 24)}d ago`;
+	if (h < 24) return getT()('settings.extra.pluginActivityView.hoursAgo', { count: h });
+	return getT()('settings.extra.pluginActivityView.daysAgo', { count: Math.floor(h / 24) });
 }
 
 export function PluginActivityView({ theme, records, pollMs = 4000 }: PluginActivityViewProps) {
+	const tExtra = useT();
 	const [activity, setActivity] = useState<PluginActivityMap>({});
 	const [now, setNow] = useState(() => Date.now());
 	const mounted = useRef(true);
@@ -86,7 +88,7 @@ export function PluginActivityView({ theme, records, pollMs = 4000 }: PluginActi
 				style={{ color: theme.colors.textDim }}
 			>
 				<ActivityIcon className="w-3.5 h-3.5" />
-				Live activity
+				{tExtra('settings.extra.pluginActivityView.liveActivity')}
 			</div>
 			<div className="flex flex-col gap-2">
 				{ids.map((id) => {
@@ -106,13 +108,21 @@ export function PluginActivityView({ theme, records, pollMs = 4000 }: PluginActi
 									{nameFor(id)}
 								</div>
 								<div className="flex items-center gap-3 shrink-0 text-xs-plus">
-									<span style={{ color: theme.colors.textDim }} title="Total host calls">
-										{a.totalCalls} call{a.totalCalls === 1 ? '' : 's'}
+									<span
+										style={{ color: theme.colors.textDim }}
+										title={tExtra('settings.extra.pluginActivityView.totalHostCalls')}
+									>
+										{tExtra(
+											a.totalCalls === 1
+												? 'settings.extra.pluginActivityView.callOne'
+												: 'settings.extra.pluginActivityView.callMany',
+											{ count: a.totalCalls }
+										)}
 									</span>
 									<span
 										className="inline-flex items-center gap-1"
 										style={{ color: theme.colors.textDim }}
-										title="Last activity"
+										title={tExtra('settings.extra.pluginActivityView.lastActivity')}
 									>
 										<Clock className="w-3 h-3" />
 										{relativeTime(a.lastActivity, now)}
@@ -122,7 +132,7 @@ export function PluginActivityView({ theme, records, pollMs = 4000 }: PluginActi
 										style={{
 											color: a.crashCount > 0 ? theme.colors.error : theme.colors.textDim,
 										}}
-										title="Crash count"
+										title={tExtra('settings.extra.pluginActivityView.crashCount')}
 									>
 										<Bug className="w-3 h-3" />
 										{a.crashCount}
@@ -132,7 +142,8 @@ export function PluginActivityView({ theme, records, pollMs = 4000 }: PluginActi
 
 							{(a.inFlight > 0 || a.peakInFlight > 0) && (
 								<div className="text-xs-plus mt-1" style={{ color: theme.colors.textDim }}>
-									In-flight {a.inFlight} (peak {a.peakInFlight})
+									{tExtra('settings.extra.pluginActivityView.inFlight')} {a.inFlight}{' '}
+									{tExtra('settings.extra.pluginActivityView.peak')} {a.peakInFlight})
 								</div>
 							)}
 

@@ -1,3 +1,4 @@
+import { useT, getT } from '../../i18n';
 /**
  * SshRemoteModal - Modal for adding/editing SSH remote configurations
  *
@@ -91,13 +92,13 @@ function getSshConfigHostSummary(host: SshConfigHost): string {
 		parts.push(`${host.user}@...`);
 	}
 	if (host.port && host.port !== 22) {
-		parts.push(`port ${host.port}`);
+		parts.push(getT()('settings.extra.sshRemoteModal.portSummary', { port: host.port }));
 	}
 	if (host.identityFile) {
 		const keyName = host.identityFile.split('/').pop() || host.identityFile;
-		parts.push(`key: ${keyName}`);
+		parts.push(getT()('settings.extra.sshRemoteModal.keySummary', { key: keyName }));
 	}
-	return parts.join(', ') || 'No details available';
+	return parts.join(', ') || getT()('settings.extra.sshRemoteModal.noDetailsAvailable');
 }
 
 export function SshRemoteModal({
@@ -109,6 +110,7 @@ export function SshRemoteModal({
 	initialConfig,
 	title,
 }: SshRemoteModalProps) {
+	const tExtra = useT();
 	// Form state
 	const [name, setName] = useState('');
 	const [host, setHost] = useState('');
@@ -279,11 +281,11 @@ export function SshRemoteModal({
 
 	// Validation
 	const validateForm = useCallback((): string | null => {
-		if (!name.trim()) return 'Name is required';
-		if (!host.trim()) return 'Host is required';
+		if (!name.trim()) return tExtra('settings.extra.sshRemoteModal.nameIsRequired');
+		if (!host.trim()) return tExtra('settings.extra.sshRemoteModal.hostIsRequired');
 		const portNum = parseInt(port, 10);
 		if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-			return 'Port must be between 1 and 65535';
+			return tExtra('settings.extra.sshRemoteModal.portMustBeBetween1And65535');
 		}
 		// Username and key are always optional - SSH will use defaults from config or ssh-agent
 
@@ -299,7 +301,7 @@ export function SshRemoteModal({
 			if (invalid) return invalid;
 		}
 		return null;
-	}, [name, host, port, sshOptions]);
+	}, [name, host, port, sshOptions, tExtra]);
 
 	const isValid = validateForm() === null;
 
@@ -375,10 +377,14 @@ export function SshRemoteModal({
 			if (result.success) {
 				onClose();
 			} else {
-				setError(result.error || 'Failed to save configuration');
+				setError(result.error || tExtra('settings.extra.sshRemoteModal.failedToSaveConfiguration'));
 			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to save configuration');
+			setError(
+				err instanceof Error
+					? err.message
+					: tExtra('settings.extra.sshRemoteModal.failedToSaveConfiguration')
+			);
 		} finally {
 			setSaving(false);
 		}
@@ -404,20 +410,23 @@ export function SshRemoteModal({
 			if (result.success && result.result) {
 				setTestResult({
 					success: true,
-					message: 'Connection successful!',
+					message: tExtra('settings.extra.sshRemoteModal.connectionSuccessful'),
 					hostname: result.result.remoteInfo?.hostname,
 				});
 			} else {
 				setTestResult({
 					success: false,
-					message: result.error || 'Connection failed',
+					message: result.error || tExtra('settings.extra.sshRemoteModal.connectionFailed'),
 					remediation: result.result?.remediation,
 				});
 			}
 		} catch (err) {
 			setTestResult({
 				success: false,
-				message: err instanceof Error ? err.message : 'Connection test failed',
+				message:
+					err instanceof Error
+						? err.message
+						: tExtra('settings.extra.sshRemoteModal.connectionTestFailed'),
 			});
 		} finally {
 			setTesting(false);
@@ -474,7 +483,11 @@ export function SshRemoteModal({
 
 	if (!isOpen) return null;
 
-	const modalTitle = title || (initialConfig ? 'Edit SSH Remote' : 'Add SSH Remote');
+	const modalTitle =
+		title ||
+		(initialConfig
+			? tExtra('settings.extra.sshRemoteModal.editSshRemote')
+			: tExtra('settings.extra.sshRemoteModal.addSshRemote'));
 	const hasSshConfigHosts = sshConfigHosts.length > 0;
 
 	return (
@@ -504,10 +517,10 @@ export function SshRemoteModal({
 							{testing ? (
 								<>
 									<Spinner size={16} />
-									Testing...
+									{tExtra('settings.extra.sshRemoteModal.testing')}
 								</>
 							) : (
-								'Test Connection'
+								tExtra('settings.extra.sshRemoteModal.testConnection')
 							)}
 						</button>
 					)}
@@ -516,7 +529,11 @@ export function SshRemoteModal({
 						theme={theme}
 						onCancel={onClose}
 						onConfirm={handleSave}
-						confirmLabel={saving ? 'Saving...' : 'Save'}
+						confirmLabel={
+							saving
+								? tExtra('settings.extra.sshRemoteModal.saving')
+								: tExtra('settings.extra.sshRemoteModal.save')
+						}
 						confirmDisabled={!isValid || saving}
 					/>
 				</div>
@@ -561,7 +578,7 @@ export function SshRemoteModal({
 							<div className="whitespace-pre-wrap break-words">{testResult.message}</div>
 							{testResult.hostname && (
 								<div className="text-xs mt-1 opacity-70">
-									Remote hostname: {testResult.hostname}
+									{tExtra('settings.extra.sshRemoteModal.remoteHostname')} {testResult.hostname}
 								</div>
 							)}
 						</div>
@@ -580,12 +597,16 @@ export function SshRemoteModal({
 						<div className="flex items-center gap-2 mb-2">
 							<FileCode className="w-4 h-4" style={{ color: theme.colors.accent }} />
 							<span className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-								Import from SSH Config
+								{tExtra('settings.extra.sshRemoteModal.importFromSshConfig')}
 							</span>
 						</div>
 						<p className="text-xs mb-2" style={{ color: theme.colors.textDim }}>
-							{sshConfigHosts.length} host{sshConfigHosts.length !== 1 ? 's' : ''} found in
-							~/.ssh/config
+							{tExtra(
+								sshConfigHosts.length === 1
+									? 'settings.extra.sshRemoteModal.hostFound'
+									: 'settings.extra.sshRemoteModal.hostsFound',
+								{ count: sshConfigHosts.length }
+							)}
 						</p>
 						<div className="relative" ref={dropdownRef}>
 							<button
@@ -602,10 +623,10 @@ export function SshRemoteModal({
 								{sshConfigLoading ? (
 									<span className="flex items-center gap-2">
 										<Spinner size={12} />
-										Loading...
+										{tExtra('settings.extra.sshRemoteModal.loading')}
 									</span>
 								) : (
-									<span>Select a host to import...</span>
+									<span>{tExtra('settings.extra.sshRemoteModal.selectAHostToImport')}</span>
 								)}
 								<ChevronDown className="w-4 h-4" style={{ color: theme.colors.textDim }} />
 							</button>
@@ -618,7 +639,7 @@ export function SshRemoteModal({
 									}}
 									onKeyDown={handleDropdownKeyDown}
 									role="listbox"
-									aria-label="SSH config hosts"
+									aria-label={tExtra('settings.extra.sshRemoteModal.sshConfigHosts')}
 									tabIndex={0}
 								>
 									{/* Filter input */}
@@ -629,7 +650,7 @@ export function SshRemoteModal({
 											value={sshConfigFilter}
 											onChange={(e) => handleSshConfigFilterChange(e.target.value)}
 											onKeyDown={handleDropdownKeyDown}
-											placeholder="Type to filter..."
+											placeholder={tExtra('settings.extra.sshRemoteModal.typeToFilter')}
 											className="w-full px-2 py-1 rounded text-sm bg-transparent outline-none"
 											style={{
 												color: theme.colors.textMain,
@@ -644,7 +665,7 @@ export function SshRemoteModal({
 												className="px-3 py-2 text-sm text-center"
 												style={{ color: theme.colors.textDim }}
 											>
-												No hosts match filter
+												{tExtra('settings.extra.sshRemoteModal.noHostsMatchFilter')}
 											</div>
 										) : (
 											filteredSshConfigHosts.map((configHost, index) => (
@@ -687,7 +708,8 @@ export function SshRemoteModal({
 					>
 						<FileCode className="w-4 h-4" />
 						<span>
-							Imported from: <code className="font-mono">{sshConfigHost}</code>
+							{tExtra('settings.extra.sshRemoteModal.importedFrom')}{' '}
+							<code className="font-mono">{sshConfigHost}</code>
 						</span>
 						<button
 							type="button"
@@ -696,7 +718,7 @@ export function SshRemoteModal({
 								setSshConfigHost(undefined);
 							}}
 							className="ml-auto text-xs opacity-70 hover:opacity-100"
-							title="Stop tracking SSH config origin"
+							title={tExtra('settings.extra.sshRemoteModal.stopTrackingSshConfigOrigin')}
 						>
 							×
 						</button>
@@ -707,11 +729,13 @@ export function SshRemoteModal({
 				<FormInput
 					ref={nameInputRef}
 					theme={theme}
-					label="Display Name"
+					label={tExtra('settings.extra.sshRemoteModal.displayName')}
 					value={name}
 					onChange={setName}
-					placeholder="My Remote Server"
-					helperText="A friendly name to identify this remote configuration"
+					placeholder={tExtra('settings.extra.sshRemoteModal.myRemoteServer')}
+					helperText={tExtra(
+						'settings.extra.controls.aFriendlyNameToIdentifyThisRemoteConfiguration'
+					)}
 				/>
 
 				{/* Host and Port */}
@@ -719,18 +743,20 @@ export function SshRemoteModal({
 					<div className="flex-1">
 						<FormInput
 							theme={theme}
-							label="Host"
+							label={tExtra('settings.extra.sshRemoteModal.host430')}
 							value={host}
 							onChange={setHost}
-							placeholder="hostname, IP, or SSH config alias"
+							placeholder={tExtra('settings.extra.sshRemoteModal.hostnameIpOrSshConfigAlias')}
 							monospace
-							helperText="Hostname, IP address, or Host pattern from ~/.ssh/config"
+							helperText={tExtra(
+								'settings.extra.controls.hostnameIpAddressOrHostPatternFromSshConfig'
+							)}
 						/>
 					</div>
 					<div className="w-24">
 						<FormInput
 							theme={theme}
-							label="Port"
+							label={tExtra('settings.extra.sshRemoteModal.port')}
 							value={port}
 							onChange={setPort}
 							placeholder="22"
@@ -742,66 +768,71 @@ export function SshRemoteModal({
 				{/* Username */}
 				<FormInput
 					theme={theme}
-					label="Username (optional)"
+					label={tExtra('settings.extra.sshRemoteModal.usernameOptional')}
 					value={username}
 					onChange={setUsername}
-					placeholder="username"
+					placeholder={tExtra('settings.extra.sshRemoteModal.username')}
 					monospace
-					helperText="Leave empty to use SSH config or system defaults"
+					helperText={tExtra('settings.extra.controls.leaveEmptyToUseSshConfigOrSystemDefaults')}
 				/>
 
 				{/* Private Key Path */}
 				<FormInput
 					theme={theme}
-					label="Private Key Path (optional)"
+					label={tExtra('settings.extra.sshRemoteModal.privateKeyPathOptional')}
 					value={privateKeyPath}
 					onChange={setPrivateKeyPath}
 					placeholder="~/.ssh/id_ed25519"
 					monospace
-					helperText="Leave empty to use SSH config or ssh-agent"
+					helperText={tExtra('settings.extra.controls.leaveEmptyToUseSshConfigOrSshAgent')}
 				/>
 
 				{/* Environment Variables */}
 				<KeyValueRows
 					theme={theme}
-					label="Environment Variables (optional)"
+					label={tExtra('settings.extra.sshRemoteModal.environmentVariablesOptional')}
 					rows={envVars}
 					onChangeRow={updateEnvVar}
 					onRemoveRow={removeEnvVar}
 					onAddRow={addEnvVar}
 					onToggleRow={toggleEnvVar}
-					addLabel="Add Variable"
+					addLabel={tExtra('settings.extra.controls.addVariable')}
 					keyPlaceholder="VARIABLE"
 					collapsed={!showEnvVars}
-					removeLabel="Remove variable"
+					removeLabel={tExtra('settings.extra.controls.removeVariable')}
 					entryNoun="variable"
 					testId="ssh-remote-env-vars"
-					helperText="Environment variables passed to agents running on this remote host"
+					helperText={tExtra(
+						'settings.extra.controls.environmentVariablesPassedToAgentsRunningOnThisRemote'
+					)}
 				/>
 
 				{/* Extra ssh -o options */}
 				<KeyValueRows
 					theme={theme}
-					label="SSH Options (optional)"
+					label={tExtra('settings.extra.sshRemoteModal.sshOptionsOptional')}
 					rows={sshOptions}
 					onChangeRow={updateSshOption}
 					onRemoveRow={removeSshOption}
 					onAddRow={addSshOption}
 					onToggleRow={toggleSshOption}
-					addLabel="Add Option"
+					addLabel={tExtra('settings.extra.controls.addOption')}
 					keyPlaceholder="ProxyCommand"
 					valuePlaceholder="/opt/homebrew/bin/tailcat tcXXXX 22"
 					collapsed={!showSshOptions}
-					removeLabel="Remove option"
+					removeLabel={tExtra('settings.extra.controls.removeOption')}
 					entryNoun="option"
 					testId="ssh-remote-ssh-options"
 					helperText={
 						<>
-							Passed to ssh as <span className="font-mono">-o KEY=VALUE</span>, overriding
-							Maestro&apos;s defaults. Use for a tunnelled host (
+							{tExtra('settings.extra.sshRemoteModal.passedToSshAs')}{' '}
+							<span className="font-mono">-o KEY=VALUE</span>
+							{tExtra('settings.extra.sshRemoteModal.overridingMaestroSDefaultsUseForA')}
 							<span className="font-mono">ProxyCommand</span>,{' '}
-							<span className="font-mono">ProxyJump</span>) or a slower link (
-							<span className="font-mono">ConnectTimeout</span>). These win over ~/.ssh/config.
+							<span className="font-mono">ProxyJump</span>
+							{tExtra('settings.extra.sshRemoteModal.orASlowerLink')}
+							<span className="font-mono">ConnectTimeout</span>
+							{tExtra('settings.extra.sshRemoteModal.theseWinOverSshConfig')}
 						</>
 					}
 				/>
@@ -816,10 +847,10 @@ export function SshRemoteModal({
 				>
 					<div>
 						<div className="font-medium text-sm" style={{ color: theme.colors.textMain }}>
-							Enable this remote
+							{tExtra('settings.extra.sshRemoteModal.enableThisRemote')}
 						</div>
 						<div className="text-xs" style={{ color: theme.colors.textDim }}>
-							Disabled remotes won&apos;t be available for selection
+							{tExtra('settings.extra.sshRemoteModal.disabledRemotesWonTBeAvailableFor')}
 						</div>
 					</div>
 					<button

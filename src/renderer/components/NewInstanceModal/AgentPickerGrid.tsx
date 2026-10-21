@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React from 'react';
 import { RefreshCw, ChevronRight, AlertTriangle } from 'lucide-react';
 import { GhostIconButton } from '../ui/GhostIconButton';
@@ -58,6 +59,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 	codexAutoResetByAgent,
 	onCodexAutoResetChange,
 }: AgentPickerGridProps) {
+	const uiText = useT();
 	return (
 		<div>
 			{/*
@@ -71,7 +73,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 					className="block text-xs font-bold opacity-70 uppercase"
 					style={{ color: theme.colors.textMain }}
 				>
-					Agent Provider
+					{uiText('workflows.sessions.agentProvider')}
 				</div>
 				{!loading && !sshConnectionError && (
 					<ProviderAvailabilityBar
@@ -86,7 +88,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 				)}
 			</div>
 			{loading ? (
-				<div className="text-sm opacity-50">Loading agents...</div>
+				<div className="text-sm opacity-50">{uiText('workflows.sessions.loadingAgents')}</div>
 			) : sshConnectionError ? (
 				/* SSH Connection Error State */
 				<div
@@ -98,17 +100,21 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 				>
 					<AlertTriangle className="w-10 h-10 mb-3" style={{ color: theme.colors.error }} />
 					<h4 className="text-base font-semibold mb-2" style={{ color: theme.colors.textMain }}>
-						Unable to Connect
+						{uiText('workflows.sessions.unableToConnect')}
 					</h4>
 					<p className="text-sm mb-3" style={{ color: theme.colors.textDim }}>
 						{sshConnectionError}
 					</p>
 					<p className="text-xs" style={{ color: theme.colors.textDim }}>
-						Select a different remote host or switch to Local Execution.
+						{uiText('workflows.sessions.chooseAnotherHost')}
 					</p>
 				</div>
 			) : (
-				<div className="space-y-1" role="listbox" aria-label="Agent provider selection">
+				<div
+					className="space-y-1"
+					role="listbox"
+					aria-label={uiText('workflows.sessions.providerSelection')}
+				>
 					{visibleAgents.map((agent) => {
 						const isSupported = SUPPORTED_AGENTS.includes(agent.id);
 						const isExpanded = expandedAgent === agent.id;
@@ -179,7 +185,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 													color: theme.colors.warning,
 												}}
 											>
-												Beta
+												{uiText('workflows.sessions.beta')}
 											</span>
 										)}
 									</div>
@@ -194,7 +200,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 															color: theme.colors.success,
 														}}
 													>
-														Available
+														{uiText('workflows.sessions.available')}
 													</span>
 												) : (
 													<span
@@ -204,7 +210,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 															color: theme.colors.error,
 														}}
 													>
-														Not Found
+														{uiText('workflows.sessions.notFound')}
 													</span>
 												)}
 												<GhostIconButton
@@ -212,7 +218,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 														e.stopPropagation();
 														onRefreshAgent(agent.id);
 													}}
-													title="Refresh detection"
+													title={uiText('workflows.sessions.refreshDetection')}
 													color={theme.colors.textDim}
 												>
 													<RefreshCw
@@ -228,7 +234,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 													color: theme.colors.warning,
 												}}
 											>
-												Coming Soon
+												{uiText('workflows.sessions.comingSoon')}
 											</span>
 										)}
 									</div>
@@ -326,7 +332,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 
 			{/* Hook behavior note */}
 			<p className="text-xs mt-2" style={{ color: theme.colors.textDim }}>
-				Agent hooks run per-message. Use{' '}
+				{uiText('workflows.sessions.hooksRunPerMessage')}{' '}
 				<button
 					type="button"
 					className="underline hover:opacity-80"
@@ -339,7 +345,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 				>
 					MAESTRO_SESSION_RESUMED
 				</button>{' '}
-				to skip on resumed sessions.
+				{uiText('workflows.sessions.skipResumedHooks')}
 			</p>
 
 			{/* Debug Info Display */}
@@ -353,15 +359,18 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 					}}
 				>
 					<div className="font-bold mb-2" style={{ color: theme.colors.error }}>
-						Debug Info: {debugInfo.binaryName} not found
+						{uiText('workflows.sessions.debugInfo')} {debugInfo.binaryName}{' '}
+						{uiText('workflows.sessions.notFoundLower')}
 					</div>
 					{debugInfo.error && <div className="mb-2 text-red-400">{debugInfo.error}</div>}
 					<div className="space-y-1 opacity-70">
 						<div>
-							<span className="opacity-50">Platform:</span> {debugInfo.platform}
+							<span className="opacity-50">{uiText('workflows.sessions.platform')}</span>{' '}
+							{debugInfo.platform}
 						</div>
 						<div>
-							<span className="opacity-50">Home:</span> {debugInfo.homeDir}
+							<span className="opacity-50">{uiText('workflows.sessions.home')}</span>{' '}
+							{debugInfo.homeDir}
 						</div>
 						<div>
 							<span className="opacity-50">PATH:</span>
@@ -378,7 +387,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 						className="mt-2 text-xs underline"
 						style={{ color: theme.colors.textDim }}
 					>
-						Dismiss
+						{uiText('workflows.sessions.dismiss')}
 					</button>
 				</div>
 			)}

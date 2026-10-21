@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * QuestionPrompt - renders a claude-code AskUserQuestion request as a picker.
  *
@@ -24,6 +25,7 @@ interface QuestionPromptProps {
 }
 
 export function QuestionPrompt({ theme, questions, onSubmit }: QuestionPromptProps) {
+	const uiText = useT();
 	// One selection slot per question, kept in a parallel array by index.
 	const [selections, setSelections] = useState<QuestionSelection[]>(() =>
 		questions.map(() => ({ selectedLabels: [], otherText: '' }))
@@ -138,7 +140,7 @@ export function QuestionPrompt({ theme, questions, onSubmit }: QuestionPromptPro
 								type="text"
 								value={selection.otherText ?? ''}
 								onChange={(e) => updateSelection(qi, { otherText: e.target.value })}
-								placeholder="Other (type a custom answer)"
+								placeholder={uiText('workflows.sessions.customAnswer')}
 								className="text-xs px-3 py-2 rounded-md outline-none select-text"
 								style={{
 									backgroundColor: theme.colors.bgMain,
@@ -163,7 +165,7 @@ export function QuestionPrompt({ theme, questions, onSubmit }: QuestionPromptPro
 					}}
 				>
 					<Send className="w-3.5 h-3.5" />
-					Submit answer
+					{uiText('workflows.sessions.submitAnswer')}
 				</button>
 			</div>
 		</div>

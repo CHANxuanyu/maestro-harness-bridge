@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import { memo, useMemo, useState, useCallback } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { AA_LARGE_CONTRAST, readableTextOn, transparentize } from '../../shared/colorContrast';
@@ -33,6 +34,7 @@ export const ContextWarningSash = memo(function ContextWarningSash({
 	onSummarizeClick,
 	tabId,
 }: ContextWarningSashProps) {
+	const t = useT();
 	const isLight = theme.mode === 'light';
 	const tabKey = tabId ?? '__default__';
 	const [dismissedByTab, setDismissedByTab] = useState<
@@ -98,7 +100,7 @@ export const ContextWarningSash = memo(function ContextWarningSash({
 		<div
 			role="alert"
 			aria-live="polite"
-			aria-label={`Context window at ${contextUsage}% capacity`}
+			aria-label={t('workflows.shellStatus.contextWindowAtValueCapacity', { p0: contextUsage })}
 			className="context-warning-sash w-full flex items-center justify-between px-2 py-1 text-xs rounded-lg"
 			style={{
 				backgroundColor,
@@ -119,11 +121,13 @@ export const ContextWarningSash = memo(function ContextWarningSash({
 				<span style={{ color: textColor }}>
 					{isRed ? (
 						<>
-							Context window at <strong>{contextUsage}%</strong> - consider compacting to continue
+							{t('workflows.shellStatus.contextWindowAt')} <strong>{contextUsage}%</strong>{' '}
+							{t('workflows.shellStatus.considerCompactingToContinue')}
 						</>
 					) : (
 						<>
-							Context window reaching <strong>{contextUsage}%</strong> capacity
+							{t('workflows.shellStatus.contextWindowReaching')} <strong>{contextUsage}%</strong>{' '}
+							{t('workflows.shellStatus.capacity')}
 						</>
 					)}
 				</span>
@@ -141,7 +145,7 @@ export const ContextWarningSash = memo(function ContextWarningSash({
 						color: buttonTextColor,
 					}}
 				>
-					Compact & Continue
+					{t('workflows.shellStatus.compactContinue')}
 				</button>
 
 				{/* Dismiss button */}
@@ -151,8 +155,8 @@ export const ContextWarningSash = memo(function ContextWarningSash({
 					tabIndex={0}
 					className="p-0.5 rounded hover:bg-white/10 transition-colors"
 					style={{ color: textColor }}
-					title="Dismiss"
-					aria-label="Dismiss warning"
+					title={t('workflows.shellStatus.dismiss')}
+					aria-label={t('workflows.shellStatus.dismissWarning')}
 				>
 					<X className="w-3 h-3" />
 				</button>

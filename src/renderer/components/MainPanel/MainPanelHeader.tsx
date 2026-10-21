@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 // Menu + Command are rc-only: the narrow-viewport sidebar opener and the Quick
 // Actions button, neither of which exists on main's header.
@@ -50,6 +51,8 @@ import {
 } from '../../../shared/tabConversationStats';
 import { useProviderProfiles } from '../../hooks/stats/useProviderProfiles';
 import { PluginUiItemsSlot } from '../plugins/PluginUiItemsSlot';
+import { AgentLogo } from '../Wizard/screens/AgentSelectionScreen/components/AgentLogo';
+import { conversationDisplayTitle } from '../../utils/conversationTitle';
 
 /** Snapshot an element's viewport rect as plain numbers for the timeline anchor. */
 function rectOf(el: HTMLElement): TimelineAnchorRect {
@@ -134,8 +137,19 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 	onOpenWorktreeConfig,
 	hasCapability,
 }: MainPanelHeaderProps) {
+	const t = useT();
 	const shortcuts = useSettingsStore((s) => s.shortcuts);
 	const showAgentName = useSettingsStore((s) => s.showAgentName);
+	const conversationNavigation = useSettingsStore(
+		(s) => s.sidebarNavigationMode === 'conversations'
+	);
+	// `null`: header shows the agent name as before. `''`: a conversation with
+	// nothing to call it yet ("New conversation"). Terminal agents have no
+	// conversation, so they keep their own name.
+	const conversationHeading =
+		conversationNavigation && activeTab && activeSession.toolType !== 'terminal'
+			? (conversationDisplayTitle(activeTab) ?? '')
+			: null;
 	const showSessionIdPill = useSettingsStore((s) => s.showSessionIdPill);
 	const showSessionCostPill = useSettingsStore((s) => s.showSessionCostPill);
 	const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
@@ -327,12 +341,14 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 	// desktop the count and the branch icon are ON the pill, so repeating them
 	// here would only restate what the user is already looking at.
 	const autoRunPillTitle = isCurrentSessionStopping
-		? 'Stopping after current task...'
+		? t('workflows.shell.extraStoppingAfterCurrentTask')
 		: [
-				'Click to stop auto-run',
+				t('workflows.shell.extraClickToStopAutoRun'),
 				isPhone ? autoRunProgressLabel : null,
 				isPhone && currentSessionBatchState?.worktreeActive
-					? `Worktree: ${currentSessionBatchState.worktreeBranch || 'active'}`
+					? t('workflows.shell.worktreeValue', {
+							p0: currentSessionBatchState.worktreeBranch || t('workflows.shell.active'),
+						})
 					: null,
 			]
 				.filter(Boolean)
@@ -363,8 +379,8 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 						}}
 						className="shrink-0 p-1 rounded hover:bg-white/5 transition-colors"
 						style={{ color: theme.colors.textDim }}
-						aria-label="Show agents sidebar"
-						title="Show sidebar"
+						aria-label={t('workflows.shell.showAgentsSidebar')}
+						title={t('workflows.shell.showSidebar')}
 					>
 						<Menu className="w-4 h-4" />
 					</button>
@@ -379,9 +395,47 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 				    compact, since the header has no room for a filename. */}
 				{showSidebarOpener && <NowPlayingIndicator theme={theme} compact />}
 				<div className="flex items-center gap-2 text-sm font-medium min-w-0 overflow-hidden">
-					{/* Session name - hidden at narrow widths via CSS container query */}
-					{showAgentName && (
-						<span className="header-session-name truncate">{activeSession.name}</span>
+					{/* With the Left Bar listing conversations, the header names the
+					    CONVERSATION in view and marks which provider runs it; the agent
+					    configuration it runs under moves to the tooltip and stays one
+					    click away through the agent's menus. Otherwise the session name -
+					    hidden at narrow widths via CSS container query. */}
+					{conversationHeading !== null ? (
+						<span
+							className="flex items-center gap-2 min-w-0"
+							data-testid="header-conversation-title"
+							title={t('workflows.header.conversationConfiguration', { name: activeSession.name })}
+						>
+							<span
+								role="img"
+								aria-label={getAgentDisplayName(activeSession.toolType)}
+								className="w-4 h-4 shrink-0 flex items-center justify-center"
+							>
+								<AgentLogo
+									agentId={activeSession.toolType}
+									supported
+									detected
+									theme={theme}
+									className="w-4 h-4"
+								/>
+							</span>
+							<span className="truncate" style={{ color: theme.colors.textMain }}>
+								{conversationHeading || t('workflows.conversations.newConversation')}
+							</span>
+							{activeTab?.state === 'busy' && (
+								<span
+									role="status"
+									aria-label={t('workflows.conversations.busy')}
+									title={t('workflows.conversations.busy')}
+									className="w-2 h-2 rounded-full shrink-0 animate-pulse"
+									style={{ backgroundColor: theme.colors.warning }}
+								/>
+							)}
+						</span>
+					) : (
+						showAgentName && (
+							<span className="header-session-name truncate">{activeSession.name}</span>
+						)
 					)}
 					{activeSession.bookmarked && (
 						<Bookmark
@@ -409,7 +463,10 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 								className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-purple-500/30 text-purple-500 bg-purple-500/10 min-w-0 outline-none ${
 									activeSession.isGitRepo ? 'cursor-pointer hover:bg-purple-500/20' : ''
 								}`}
-								title={`SSH Remote: ${sshRemoteName}${activeSession.isGitRepo && gitInfo?.branch ? ` (${gitInfo.branch})` : ''}`}
+								title={t('workflows.shell.sshRemoteValuevalue', {
+									p0: sshRemoteName,
+									p1: activeSession.isGitRepo && gitInfo?.branch ? ` (${gitInfo.branch})` : '',
+								})}
 								onClick={handleGitPillClick}
 							>
 								<Server className="w-3 h-3 shrink-0" />
@@ -440,7 +497,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 										</span>
 									</>
 								) : (
-									'LOCAL'
+									t('workflows.shell.local')
 								)}
 							</button>
 						)}
@@ -494,7 +551,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 						color: isCurrentSessionStopping ? theme.colors.bgMain : 'white',
 						pointerEvents: isCurrentSessionStopping ? 'none' : 'auto',
 					}}
-					aria-label={isCurrentSessionStopping ? 'Stopping auto-run' : 'Stop auto-run'}
+					aria-label={
+						isCurrentSessionStopping
+							? t('workflows.shell.stoppingAutoRun')
+							: t('workflows.shell.stopAutoRun')
+					}
 					title={autoRunPillTitle}
 				>
 					{isCurrentSessionStopping ? <Spinner size={16} /> : <Wand2 className="w-4 h-4" />}
@@ -504,7 +565,9 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 					{!isPhone && (
 						<>
 							<span className="uppercase tracking-wider">
-								{isCurrentSessionStopping ? 'Stopping' : 'Auto'}
+								{isCurrentSessionStopping
+									? t('workflows.shell.stopping')
+									: t('workflows.shell.auto')}
 							</span>
 							{/* Hide progress count when stopping - spinner is sufficient.
 					    Goal-Driven runs have no task list, so show the self-reported
@@ -513,7 +576,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 								<span className="text-2xs opacity-80">{autoRunProgressLabel}</span>
 							)}
 							{currentSessionBatchState?.worktreeActive && (
-								<span title={`Worktree: ${currentSessionBatchState.worktreeBranch || 'active'}`}>
+								<span
+									title={t('workflows.shell.worktreeValue', {
+										p0: currentSessionBatchState.worktreeBranch || t('workflows.shell.active'),
+									})}
+								>
 									<GitBranch className="w-3.5 h-3.5 ml-0.5" />
 								</span>
 							)}
@@ -539,13 +606,19 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 							}}
 							title={
 								activeTab.name
-									? `${activeTab.name}\nClick to copy: ${activeTab.agentSessionId}`
-									: `Click to copy: ${activeTab.agentSessionId}`
+									? t('workflows.shell.valueClickToCopyValue', {
+											p0: activeTab.name,
+											p1: activeTab.agentSessionId,
+										})
+									: t('workflows.shell.clickToCopyValue', { p0: activeTab.agentSessionId })
 							}
 							onClick={async (e) => {
 								e.stopPropagation();
 								if (await safeClipboardWrite(activeTab.agentSessionId!)) {
-									flashCopiedToClipboard(activeTab.agentSessionId!, 'Session ID Copied');
+									flashCopiedToClipboard(
+										activeTab.agentSessionId!,
+										t('workflows.shell.extraSessionIdCopied')
+									);
 								}
 							}}
 						>
@@ -577,7 +650,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 							data-testid="header-context-widget"
 							role="button"
 							tabIndex={0}
-							aria-label="Toggle context timeline"
+							aria-label={t('workflows.shell.toggleContextTimeline')}
 							{...contextTooltip.triggerHandlers}
 							onClick={(e) => toggleContextTimeline(e.currentTarget)}
 							onKeyDown={(e) => {
@@ -626,7 +699,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 												className="text-2xs uppercase font-bold mb-3"
 												style={{ color: theme.colors.textDim }}
 											>
-												Context Details
+												{t('workflows.shell.contextDetails')}
 											</div>
 
 											{/* Which account produced these numbers. With several Claude
@@ -639,7 +712,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 											>
 												<div className="flex justify-between items-center">
 													<span className="text-xs" style={{ color: theme.colors.textDim }}>
-														Provider
+														{t('workflows.shell.provider')}
 													</span>
 													<span
 														className="text-xs font-mono"
@@ -651,7 +724,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 												{activeProfile && activeProfileLabel && (
 													<div className="flex justify-between items-center mt-1">
 														<span className="text-xs" style={{ color: theme.colors.textDim }}>
-															Profile
+															{t('workflows.shell.profile')}
 														</span>
 														<span
 															className="text-xs font-mono truncate ml-2"
@@ -676,19 +749,22 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 												>
 													<div className="flex justify-between items-center">
 														<span className="text-xs" style={{ color: theme.colors.textDim }}>
-															Messages
+															{t('workflows.shell.messages')}
 														</span>
 														<span
 															className="text-xs font-mono"
 															style={{ color: theme.colors.textMain }}
-															title={`${conversationStats.userMessages.toLocaleString('en-US')} from you, ${conversationStats.aiMessages.toLocaleString('en-US')} from the agent`}
+															title={t('workflows.shell.valueFromYouValueFromTheAgent', {
+																p0: conversationStats.userMessages.toLocaleString('en-US'),
+																p1: conversationStats.aiMessages.toLocaleString('en-US'),
+															})}
 														>
 															{conversationStats.totalMessages.toLocaleString('en-US')}
 														</span>
 													</div>
 													<div className="flex justify-between items-center mt-1">
 														<span className="text-xs" style={{ color: theme.colors.textDim }}>
-															Duration
+															{t('workflows.shell.duration')}
 														</span>
 														<span
 															className="text-xs font-mono"
@@ -703,7 +779,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 											<div className="space-y-2">
 												<div className="flex justify-between items-center">
 													<span className="text-xs" style={{ color: theme.colors.textDim }}>
-														Input Tokens
+														{t('workflows.shell.inputTokens')}
 													</span>
 													<span
 														className="text-xs font-mono"
@@ -717,7 +793,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 												</div>
 												<div className="flex justify-between items-center">
 													<span className="text-xs" style={{ color: theme.colors.textDim }}>
-														Output Tokens
+														{t('workflows.shell.outputTokens')}
 													</span>
 													<span
 														className="text-xs font-mono"
@@ -730,8 +806,10 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 												{(activeTab?.usageStats?.reasoningTokens ?? 0) > 0 && (
 													<div className="flex justify-between items-center">
 														<span className="text-xs" style={{ color: theme.colors.textDim }}>
-															Reasoning Tokens
-															<span className="ml-1 text-2xs opacity-60">(in output)</span>
+															{t('workflows.shell.reasoningTokens')}
+															<span className="ml-1 text-2xs opacity-60">
+																{t('workflows.shell.inOutput')}
+															</span>
 														</span>
 														<span
 															className="text-xs font-mono"
@@ -745,7 +823,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 												)}
 												<div className="flex justify-between items-center">
 													<span className="text-xs" style={{ color: theme.colors.textDim }}>
-														Cache Read
+														{t('workflows.shell.cacheRead')}
 													</span>
 													<span
 														className="text-xs font-mono"
@@ -758,7 +836,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 												</div>
 												<div className="flex justify-between items-center">
 													<span className="text-xs" style={{ color: theme.colors.textDim }}>
-														Cache Write
+														{t('workflows.shell.cacheWrite')}
 													</span>
 													<span
 														className="text-xs font-mono"
@@ -781,7 +859,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 																className="text-xs font-bold"
 																style={{ color: theme.colors.textDim }}
 															>
-																Context Tokens
+																{t('workflows.shell.contextTokens')}
 															</span>
 															<span
 																className="text-xs font-mono font-bold"
@@ -795,7 +873,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 																className="text-xs font-bold"
 																style={{ color: theme.colors.textDim }}
 															>
-																Context Size
+																{t('workflows.shell.contextSize')}
 															</span>
 															<span
 																className="text-xs font-mono font-bold"
@@ -809,7 +887,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 																className="text-xs font-bold"
 																style={{ color: theme.colors.textDim }}
 															>
-																Usage
+																{t('workflows.shell.usage')}
 															</span>
 															<span
 																className="text-xs font-mono font-bold"
@@ -837,11 +915,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 															className="text-2xs uppercase font-bold mb-2"
 															style={{ color: theme.colors.textDim }}
 														>
-															Max Plan Usage
+															{t('workflows.shell.maxPlanUsage')}
 														</div>
 														<div className="flex justify-between items-center mb-2">
 															<span className="text-xs" style={{ color: theme.colors.textDim }}>
-																Mode
+																{t('workflows.shell.mode')}
 															</span>
 															<span
 																className="text-xs font-mono font-bold"
@@ -853,8 +931,8 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 																}}
 															>
 																{activeSession?.claudeInteractive?.mode === 'interactive'
-																	? 'Time Limits'
-																	: 'API Limits'}
+																	? t('workflows.shell.timeLimits')
+																	: t('workflows.shell.apiLimits')}
 															</span>
 														</div>
 														{batchUsageSnapshot.authState === 'unauthenticated' ? (
@@ -874,7 +952,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 																	●
 																</span>
 																<span>
-																	Not logged in - run{' '}
+																	{t('workflows.shell.notLoggedInRun')}{' '}
 																	<code style={{ color: theme.colors.accent }}>/login</code>.
 																</span>
 															</div>
@@ -923,8 +1001,10 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 																			style={{ color: theme.colors.textDim, opacity: 0.7 }}
 																		>
 																			{window.resetsAt
-																				? `Resets ${formatFutureTime(window.resetsAt)}`
-																				: 'Reset time unknown'}
+																				? t('workflows.shell.resetsValue', {
+																						p0: formatFutureTime(window.resetsAt),
+																					})
+																				: t('workflows.shell.resetTimeUnknown')}
 																		</div>
 																	</div>
 																);
@@ -949,7 +1029,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 					<button
 						onClick={() => setMemoryViewerOpen(true)}
 						className="header-secondary-btn p-2 rounded hover:bg-white/5"
-						title={`Memory Viewer (${shortcuts.openMemoryViewer ? formatShortcutKeys(shortcuts.openMemoryViewer.keys) : formatShortcutKeys(['Meta', 'Shift', 'm'])})`}
+						title={t('workflows.shell.memoryViewerValue', {
+							p0: shortcuts.openMemoryViewer
+								? formatShortcutKeys(shortcuts.openMemoryViewer.keys)
+								: formatShortcutKeys(['Meta', 'Shift', 'm']),
+						})}
 						data-tour="memory-viewer-button"
 					>
 						<Brain className="w-4 h-4" style={{ color: theme.colors.textDim }} />
@@ -964,7 +1048,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 							setAgentSessionsOpen(true);
 						}}
 						className="header-secondary-btn p-2 rounded hover:bg-white/5"
-						title={`Agent Sessions (${shortcuts.agentSessions ? formatShortcutKeys(shortcuts.agentSessions.keys) : formatShortcutKeys(['Meta', 'Shift', 'l'])})`}
+						title={t('workflows.shell.agentSessionsValue', {
+							p0: shortcuts.agentSessions
+								? formatShortcutKeys(shortcuts.agentSessions.keys)
+								: formatShortcutKeys(['Meta', 'Shift', 'l']),
+						})}
 						data-tour="agent-sessions-button"
 					>
 						<List className="w-4 h-4" style={{ color: theme.colors.textDim }} />
@@ -978,8 +1066,10 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 					<button
 						onClick={() => getModalActions().setQuickActionOpen(true)}
 						className="p-2 rounded hover:bg-white/5"
-						aria-label="Quick Actions"
-						title={`Quick Actions (${formatShortcutKeys(shortcuts.quickAction.keys)})`}
+						aria-label={t('workflows.shell.quickActions')}
+						title={t('workflows.shell.quickActionsValue', {
+							p0: formatShortcutKeys(shortcuts.quickAction.keys),
+						})}
 					>
 						<Command className="w-4 h-4" style={{ color: theme.colors.textDim }} />
 					</button>
@@ -989,7 +1079,9 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 					<button
 						onClick={() => useUIStore.getState().setRightPanelOpen(true)}
 						className="p-2 rounded hover:bg-white/5"
-						title={`Show right panel (${formatShortcutKeys(shortcuts.toggleRightPanel.keys)})`}
+						title={t('workflows.shell.showRightPanelValue', {
+							p0: formatShortcutKeys(shortcuts.toggleRightPanel.keys),
+						})}
 					>
 						<Columns className="w-4 h-4" />
 					</button>

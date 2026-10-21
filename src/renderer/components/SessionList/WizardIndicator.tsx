@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { memo } from 'react';
 import { Wand2 } from 'lucide-react';
 
@@ -26,11 +27,12 @@ export const WizardIndicator = memo(function WizardIndicator({
 	active,
 	generatingDocs,
 }: WizardIndicatorProps) {
+	const t = useT();
 	if (!active) return null;
 
 	const tooltip = generatingDocs
-		? 'Wizard generating Auto Run documents'
-		: 'Wizard active (dialog mode)';
+		? t('workflows.shell.extraWizardGeneratingAutoRunDocuments')
+		: t('workflows.shell.extraWizardActiveDialogMode');
 
 	return (
 		<span className="shrink-0 flex items-center" title={tooltip}>

@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { QuickAction } from '../types';
 
 interface BuildMediaPlayerCommandsArgs {
@@ -25,17 +26,18 @@ export function buildMediaPlayerCommands({
 	openMediaPlayerShortcut,
 	setQuickActionOpen,
 }: BuildMediaPlayerCommandsArgs): QuickAction[] {
+	const t = getT();
 	return [
 		{
 			id: 'open-media-player',
-			label: 'Open Media Player',
+			label: t('workflows.shell.openMediaPlayer'),
 			shortcut: openMediaPlayerShortcut,
 			// Listed even when there is nothing to play. Hiding a command is how a
 			// user concludes a feature does not exist; a subtext that says why it
 			// will not do anything is strictly more useful than an empty palette.
 			subtext: canOpenMediaPlayer
-				? 'Show the floating player and its queue'
-				: 'Nothing has been played yet',
+				? t('workflows.shell.showTheFloatingPlayerAndItsQueue')
+				: t('workflows.shell.nothingHasBeenPlayedYet'),
 			action: () => {
 				if (canOpenMediaPlayer) openMediaPlayer();
 				setQuickActionOpen(false);

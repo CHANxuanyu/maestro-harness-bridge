@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '../i18n';
+import { permissionModeLabel, permissionModeTooltip } from './InputArea/utils/displayLabels';
 import {
 	X,
 	PenLine,
@@ -21,12 +23,7 @@ import { useModalLayer } from '../hooks/ui/useModalLayer';
 import { useResizableModal } from '../hooks/ui/useResizableModal';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { estimateTokenCount } from '../../shared/formatters';
-import { getReadOnlyModeLabel, getReadOnlyModeTooltip } from '../../shared/agentMetadata';
-import {
-	formatShortcutKeys,
-	formatEnterToSend,
-	formatEnterToSendTooltip,
-} from '../utils/shortcutFormatter';
+import { formatShortcutKeys, formatEnterToSend, isMacOS } from '../utils/shortcutFormatter';
 import {
 	normalizeMentionName,
 	getMentionNameForContext,
@@ -115,6 +112,7 @@ export function PromptComposerModal({
 	sessions,
 	groups,
 }: PromptComposerModalProps) {
+	const { locale, t } = useI18n();
 	const [value, setValue] = useState('');
 	// Full-screen state lives in the modal store so the open-composer hotkey can
 	// cycle sizes while the modal is open (see cyclePromptComposer in modalStore).
@@ -504,7 +502,7 @@ export function PromptComposerModal({
 					onSubmit(value);
 					onClose();
 				}}
-				aria-label="Close prompt composer"
+				aria-label={t('workflows.composer.closeLabel')}
 			/>
 			<div
 				ref={resizableModal.modalRef}
@@ -532,7 +530,7 @@ export function PromptComposerModal({
 					<div className="flex items-center gap-2">
 						<PenLine className="w-5 h-5" style={{ color: theme.colors.accent }} />
 						<span className="font-medium" style={{ color: theme.colors.textMain }}>
-							Prompt Composer
+							{t('workflows.composer.title')}
 						</span>
 						<span className="text-sm opacity-60" style={{ color: theme.colors.textDim }}>
 							- {sessionName}
@@ -542,7 +540,9 @@ export function PromptComposerModal({
 						<GhostIconButton
 							onClick={toggleFullscreen}
 							padding="p-1.5"
-							title={isFullscreen ? 'Collapse' : 'Expand to full screen'}
+							title={
+								isFullscreen ? t('workflows.composer.collapse') : t('workflows.composer.expand')
+							}
 						>
 							{isFullscreen ? (
 								<Minimize2 className="w-5 h-5" style={{ color: theme.colors.textDim }} />
@@ -556,7 +556,7 @@ export function PromptComposerModal({
 								onClose();
 							}}
 							padding="p-1.5"
-							title="Close (Escape)"
+							title={t('workflows.composer.closeEscape')}
 						>
 							<X className="w-5 h-5" style={{ color: theme.colors.textDim }} />
 						</GhostIconButton>
@@ -573,7 +573,7 @@ export function PromptComposerModal({
 							<div key={img} className="relative group shrink-0">
 								<img
 									src={displayImageSrc(img)}
-									alt={`Prompt composer staged image ${idx + 1}`}
+									alt={t('workflows.composer.stagedImage', { index: idx + 1 })}
 									className="h-16 rounded border cursor-pointer hover:opacity-80 transition-opacity"
 									style={{
 										borderColor: theme.colors.border,
@@ -589,7 +589,9 @@ export function PromptComposerModal({
 											onOpenLightbox?.(img, stagedImages, 'staged');
 										}
 									}}
-									title={`Click to view (${formatShortcutKeys(['Meta', 'Shift', 'l'])})`}
+									title={t('workflows.composer.viewImage', {
+										shortcut: formatShortcutKeys(['Meta', 'Shift', 'l']),
+									})}
 								/>
 								{setStagedImages && (
 									<button
@@ -597,6 +599,7 @@ export function PromptComposerModal({
 											e.stopPropagation();
 											setStagedImages((prev) => prev.filter((_, i) => i !== idx));
 										}}
+										aria-label={t('workflows.composer.removeImage', { index: idx + 1 })}
 										className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors opacity-90 hover:opacity-100"
 									>
 										<X className="w-3 h-3" />
@@ -660,10 +663,16 @@ export function PromptComposerModal({
 															color: theme.colors.accent,
 														}}
 													>
-														Auto Run
+														{t('workflows.composer.autoRun')}
 													</span>
 												)}
-												<span className="text-2xs opacity-40 shrink-0">{item.fileType}</span>
+												<span className="text-2xs opacity-40 shrink-0">
+													{t(
+														item.fileType === 'file'
+															? 'workflows.composer.file'
+															: 'workflows.composer.folder'
+													)}
+												</span>
 											</>
 										) : item.type === 'group' ? (
 											<>
@@ -680,7 +689,7 @@ export function PromptComposerModal({
 														color: theme.colors.accent,
 													}}
 												>
-													group · {item.memberCount}
+													{t('workflows.composer.groupCount', { count: item.memberCount })}
 												</span>
 											</>
 										) : (
@@ -702,6 +711,7 @@ export function PromptComposerModal({
 						</div>
 					)}
 					<textarea
+						aria-label={t('workflows.composer.promptLabel')}
 						ref={textareaRef}
 						value={value}
 						onChange={(e) => handleValueChange(e.target.value)}
@@ -711,8 +721,8 @@ export function PromptComposerModal({
 						style={{ color: theme.colors.textMain }}
 						placeholder={
 							hasAgentMentions
-								? 'Write your prompt here... (@ to mention agents)'
-								: 'Write your prompt here... (@ to reference files)'
+								? t('workflows.composer.placeholderAgents')
+								: t('workflows.composer.placeholderFiles')
 						}
 					/>
 				</div>
@@ -730,7 +740,7 @@ export function PromptComposerModal({
 								<button
 									onClick={() => fileInputRef.current?.click()}
 									className="p-1.5 rounded hover:bg-white/10 transition-colors opacity-60 hover:opacity-100"
-									title="Attach Image"
+									title={t('workflows.composer.attachImage')}
 								>
 									<ImageIcon className="w-4 h-4" style={{ color: theme.colors.textDim }} />
 								</button>
@@ -748,8 +758,12 @@ export function PromptComposerModal({
 							className="text-xs flex items-center gap-3"
 							style={{ color: theme.colors.textDim }}
 						>
-							<span>{value.length} characters</span>
-							<span>~{tokenCount.toLocaleString('en-US')} tokens</span>
+							<span>{t('workflows.composer.characters', { count: value.length })}</span>
+							<span>
+								{t('workflows.composer.tokens', {
+									count: tokenCount.toLocaleString(locale === 'en' ? 'en-US' : locale),
+								})}
+							</span>
 						</div>
 					</div>
 
@@ -769,10 +783,12 @@ export function PromptComposerModal({
 										? `1px solid ${theme.colors.accent}50`
 										: '1px solid transparent',
 								}}
-								title={`Save to History (${formatShortcutKeys(['Meta', 's'])}) - Synopsis added after each completion`}
+								title={t('workflows.composer.historyTooltip', {
+									shortcut: formatShortcutKeys(['Meta', 's']),
+								})}
 							>
 								<History className="w-3 h-3" />
-								<span>History</span>
+								<span>{t('workflows.composer.history')}</span>
 							</button>
 						)}
 
@@ -792,12 +808,16 @@ export function PromptComposerModal({
 								}}
 								title={
 									agentId
-										? getReadOnlyModeTooltip(agentId)
-										: "Toggle Read-Only mode (agent won't modify files)"
+										? permissionModeTooltip(t, 'readonly', agentId)
+										: t('workflows.permission.agentReadonlyHint')
 								}
 							>
 								<Eye className="w-3 h-3" />
-								<span>{agentId ? getReadOnlyModeLabel(agentId) : 'Read-Only'}</span>
+								<span>
+									{agentId
+										? permissionModeLabel(t, 'readonly', agentId)
+										: t('workflows.permission.readonlyHyphen')}
+								</span>
 							</button>
 						)}
 
@@ -830,14 +850,14 @@ export function PromptComposerModal({
 								}}
 								title={
 									tabShowThinking === 'off'
-										? 'Show Thinking - Click to stream AI reasoning'
+										? t('workflows.composer.thinkingOff')
 										: tabShowThinking === 'on'
-											? 'Thinking (temporary) - Click for sticky mode'
-											: 'Thinking (sticky) - Click to turn off'
+											? t('workflows.composer.thinkingOn')
+											: t('workflows.composer.thinkingSticky')
 								}
 							>
 								<Brain className="w-3 h-3" />
-								<span>Thinking</span>
+								<span>{t('workflows.composer.thinking')}</span>
 								{tabShowThinking === 'sticky' && <Pin className="w-2.5 h-2.5" />}
 							</button>
 						)}
@@ -847,7 +867,9 @@ export function PromptComposerModal({
 							<button
 								onClick={onToggleEnterToSend}
 								className="flex items-center gap-1 text-2xs opacity-50 hover:opacity-100 px-2 py-1 rounded hover:bg-white/5"
-								title={formatEnterToSendTooltip(enterToSend)}
+								title={t('workflows.input.sendWith', {
+									key: enterToSend ? `${isMacOS() ? 'Cmd' : 'Ctrl'}+Enter` : 'Enter',
+								})}
 							>
 								<Keyboard className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 								<span style={{ color: theme.colors.textDim }}>
@@ -867,7 +889,7 @@ export function PromptComposerModal({
 							}}
 						>
 							<Send className="w-4 h-4" />
-							Send
+							{t('workflows.composer.send')}
 						</button>
 					</div>
 				</div>

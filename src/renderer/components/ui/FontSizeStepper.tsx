@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import type { CSSProperties } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import type { Theme } from '../../types';
@@ -47,8 +48,9 @@ export function FontSizeStepper({
 	inheritedSize,
 	allowInherit = true,
 	testId,
-	label = 'Size',
+	label,
 }: FontSizeStepperProps) {
+	const t = useT();
 	const inheriting = allowInherit && value === 0;
 	const effective = inheriting ? inheritedSize : value;
 
@@ -78,13 +80,13 @@ export function FontSizeStepper({
 
 	return (
 		<div className="flex items-center gap-2">
-			<span className="text-xs opacity-70 shrink-0">{label}</span>
+			<span className="text-xs opacity-70 shrink-0">{label ?? t('settings.finish.font.size')}</span>
 			<button
 				type="button"
 				onClick={() => step(-1)}
 				disabled={effective <= SURFACE_FONT_SIZE_MIN}
-				aria-label="Decrease font size"
-				title="Decrease font size"
+				aria-label={t('settings.finish.font.decrease')}
+				title={t('settings.finish.font.decrease')}
 				data-testid={testId ? `${testId}-decrease` : undefined}
 				className={buttonClass}
 				style={buttonStyle}
@@ -94,7 +96,11 @@ export function FontSizeStepper({
 			<span
 				className="text-xs tabular-nums text-center min-w-[3rem] shrink-0"
 				data-testid={testId ? `${testId}-value` : undefined}
-				title={inheriting ? `Inheriting the interface size (${effective}px)` : `${effective}px`}
+				title={
+					inheriting
+						? t('settings.finish.font.inheritingSize', { size: effective })
+						: `${effective}px`
+				}
 				style={{ color: inheriting ? theme.colors.textDim : theme.colors.textMain }}
 			>
 				{effective}px
@@ -103,8 +109,8 @@ export function FontSizeStepper({
 				type="button"
 				onClick={() => step(1)}
 				disabled={effective >= SURFACE_FONT_SIZE_MAX}
-				aria-label="Increase font size"
-				title="Increase font size"
+				aria-label={t('settings.finish.font.increase')}
+				title={t('settings.finish.font.increase')}
 				data-testid={testId ? `${testId}-increase` : undefined}
 				className={buttonClass}
 				style={buttonStyle}
@@ -126,18 +132,18 @@ export function FontSizeStepper({
 							data-testid={testId ? `${testId}-inheriting` : undefined}
 							style={{ color: theme.colors.textDim }}
 						>
-							Inherited
+							{t('settings.finish.font.inherited')}
 						</span>
 					) : (
 						<button
 							type="button"
 							onClick={() => onChange(0)}
-							title="Inherit the interface font size"
+							title={t('settings.finish.font.inheritHint')}
 							data-testid={testId ? `${testId}-inherit` : undefined}
 							className="focus-ring text-xs underline underline-offset-2 rounded hover:opacity-80 transition-opacity"
 							style={{ color: theme.colors.textDim }}
 						>
-							Inherit
+							{t('settings.finish.font.inherit')}
 						</button>
 					))}
 			</span>

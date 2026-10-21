@@ -185,6 +185,31 @@ interface CodexRawMessage {
 /**
  * Payload structure for current Codex format (response_item, event_msg, session_meta, turn_context)
  */
+/** Keep native and live Codex tool results consistent after a user Stop.
+ * The runtime writes a bare "aborted by user after 15.1s" tool result, without
+ * an is_error flag. Match only that complete control result, never a quotation
+ * or a command's output that happens to discuss cancellation.
+ */
+export function codexToolResultStatus(payload: {
+	status?: unknown;
+	is_error?: unknown;
+	output?: unknown;
+}): 'completed' | 'failed' | 'canceled' {
+	if (
+		payload.status === 'canceled' ||
+		payload.status === 'cancelled' ||
+		payload.status === 'interrupted' ||
+		(typeof payload.output === 'string' &&
+			/^(?:aborted|cancelled|canceled) by user(?: after \d+(?:\.\d+)?s)?[.!]?$/.test(
+				payload.output.trim()
+			))
+	)
+		return 'canceled';
+	return payload.is_error === true || payload.status === 'failed' || payload.status === 'error'
+		? 'failed'
+		: 'completed';
+}
+
 interface CodexPayload {
 	// Common
 	id?: string;
@@ -198,7 +223,8 @@ interface CodexPayload {
 	// response_item message payload
 	role?: string;
 	content?: Array<{ type: string; text?: string }>;
-	phase?: string; // 'commentary' | 'final'
+	phase?: string; // 'commentary' | 'final_answer'
+	channel?: string; // Older native transcripts used a channel instead of phase.
 
 	// response_item function_call / custom_tool_call payload
 	name?: string;
@@ -207,6 +233,8 @@ interface CodexPayload {
 
 	// response_item function_call_output / custom_tool_call_output payload
 	output?: string;
+	status?: string;
+	is_error?: boolean;
 
 	// response_item reasoning payload
 	summary?: unknown[];
@@ -238,6 +266,8 @@ interface CodexItem {
 	id?: string;
 	type?: 'reasoning' | 'agent_message' | 'tool_call' | 'tool_result' | 'command_execution';
 	text?: string;
+	phase?: string;
+	channel?: string;
 	// Legacy tool_call/tool_result fields (Codex < v0.111.0)
 	tool?: string;
 	args?: Record<string, unknown>;
@@ -303,7 +333,7 @@ function isCodexRetryNotice(obj: Record<string, unknown>): boolean {
  * If `summary` is absent, empty, or only contains blank strings, returns '' so the
  * caller can fall back to a non-displayable `system` event (encrypted_content only).
  */
-function extractReasoningSummaryText(summary: unknown): string {
+export function extractReasoningSummaryText(summary: unknown): string {
 	if (!Array.isArray(summary) || summary.length === 0) {
 		return '';
 	}
@@ -554,13 +584,14 @@ export class CodexOutputParser implements AgentOutputParser {
 	private transformEventMsg(payload: CodexPayload, msg: CodexRawMessage): ParsedEvent {
 		// agent_message: commentary or final response text shown to user
 		if (payload.type === 'agent_message' && payload.message) {
-			const isCommentary = payload.phase === 'commentary';
+			const isCommentary = (payload.phase ?? payload.channel) === 'commentary';
 			if (isCommentary) {
 				// Commentary is intermediate progress text - emit as partial text
 				return {
 					type: 'text',
 					text: payload.message,
 					isPartial: true,
+					isCommentary: true,
 					raw: msg,
 				};
 			}
@@ -668,12 +699,13 @@ export class CodexOutputParser implements AgentOutputParser {
 			const textContent = this.extractTextFromContent(payload.content);
 
 			if (payload.role === 'assistant') {
-				const isCommentary = payload.phase === 'commentary';
+				const isCommentary = (payload.phase ?? payload.channel) === 'commentary';
 				if (isCommentary) {
 					return {
 						type: 'text',
 						text: textContent,
 						isPartial: true,
+						isCommentary: true,
 						raw: msg,
 					};
 				}
@@ -777,7 +809,7 @@ export class CodexOutputParser implements AgentOutputParser {
 				toolName,
 				...(callId ? { toolCallId: callId } : {}),
 				toolState: {
-					status: 'completed',
+					status: codexToolResultStatus(payload),
 					output: this.decodeToolOutput(payload.output),
 				},
 				raw: msg,
@@ -868,6 +900,15 @@ export class CodexOutputParser implements AgentOutputParser {
 				};
 
 			case 'agent_message':
+				if ((item.phase ?? item.channel) === 'commentary') {
+					return {
+						type: 'text',
+						text: item.text || '',
+						isPartial: true,
+						isCommentary: true,
+						raw: msg,
+					};
+				}
 				// Final text response from agent - mark as 'result' so it gets emitted
 				// This is the actual response text (not reasoning or tool output)
 				return {
@@ -886,7 +927,13 @@ export class CodexOutputParser implements AgentOutputParser {
 					// Same id as the item.started above - see transformItemStarted.
 					...(item.id ? { toolCallId: item.id } : {}),
 					toolState: {
-						status: item.status === 'in_progress' ? 'running' : 'completed',
+						status:
+							item.status === 'in_progress'
+								? 'running'
+								: item.status === 'failed' ||
+									  (typeof item.exit_code === 'number' && item.exit_code !== 0)
+									? 'failed'
+									: 'completed',
 						input: { command: item.command },
 						output: this.decodeToolOutput(item.aggregated_output),
 						exitCode: item.exit_code,

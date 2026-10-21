@@ -471,10 +471,11 @@ export class FeedbackConversationManager {
 			// Thinking listener
 			if (callbacks?.onThinkingChunk) {
 				this.thinkingCleanup = window.maestro.process.onThinkingChunk?.(
-					(sid: string, content: string) => {
+					(sid: string, content: string, purpose?: 'commentary') => {
 						if (sid === currentSessionId && content) {
 							resetTimeout();
-							callbacks.onThinkingChunk?.(content);
+							// Public progress is proof of life, but it is not reasoning.
+							if (purpose !== 'commentary') callbacks.onThinkingChunk?.(content);
 						}
 					}
 				);

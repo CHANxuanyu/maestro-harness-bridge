@@ -1,6 +1,7 @@
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import { HeadingPalette } from '../../../../renderer/components/FilePreview/HeadingPalette';
 import { mockTheme } from '../../../helpers/mockTheme';
 import type { TocEntry } from '../../../../renderer/components/FilePreview/types';
@@ -157,4 +158,24 @@ describe('HeadingPalette', () => {
 			expect(onOuterKeyDown).not.toHaveBeenCalled();
 		});
 	});
+});
+
+it('preserves the heading query and authored heading text when the language changes', () => {
+	const originalLanguage = useSettingsStore.getState().uiLanguage;
+	try {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		const { input, onJump } = renderPalette();
+		fireEvent.change(input, { target: { value: 'equity' } });
+		input.focus();
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		expect(screen.getByPlaceholderText('跳转到标题...')).toBe(input);
+		expect(input).toHaveValue('equity');
+		expect(input).toHaveFocus();
+		expect(screen.getByTitle('OPSWAT Equity Case')).toBeInTheDocument();
+		fireEvent.keyDown(input, { key: 'Enter' });
+		expect(onJump).toHaveBeenCalledWith(ENTRIES[3], 'smooth');
+	} finally {
+		cleanup();
+		useSettingsStore.setState({ uiLanguage: originalLanguage });
+	}
 });

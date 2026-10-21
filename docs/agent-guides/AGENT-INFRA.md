@@ -417,7 +417,32 @@ interface ParsedEvent {
 }
 ```
 
+### Public progress messages
+
+`ParsedEvent.isCommentary` marks a complete public progress message, distinct
+from reasoning and the final response. `StdoutHandler` forwards it through the
+existing `thinking-chunk` event with an optional third argument, `commentary`.
+The preload callback is `(sessionId, content, purpose?: 'commentary')`.
+Reasoning keeps the existing two-argument behavior. Forwarding flushes any
+preceding reasoning buffer before sending each complete progress message, so
+message boundaries are not concatenated across channels.
+
+Progress is never accumulated into `streamedText`: otherwise an interrupted
+turn can report its progress as the final answer. For older Codex exec output
+without phase metadata, a subsequent tool event reveals the pending message
+as progress before forwarding the tool. The last result remains the final
+answer at turn completion. Codex command failures retain `failed` status,
+including completed command events whose exit code is nonzero.
+
 ### Thinking / Tool Log Contract (REQUIRED for new parsers)
+
+Conversation layout extends the legacy lifecycle below: tool calls are retained
+through final output, Stop and exit so completed work stays readable. Public
+progress is a complete message and is not controlled by the Thinking switch.
+Stored native tool/reasoning entries are history, not live scratch. Clear paths
+must use the canonical retention helpers in `src/renderer/utils/logEntries.ts`
+and `currentActivityRetention()` instead of filtering solely by `source`.
+The ephemeral tool behavior described below remains the legacy agents layout.
 
 Maestro renders reasoning and tool-execution activity as ephemeral cells whose
 lifecycle is governed by the tab's `ThinkingMode` (`'off' | 'on' | 'sticky'`,
@@ -937,3 +962,31 @@ interface ProcessConfig {
 	rows?: number;
 }
 ```
+
+### Persistent Codex tools and deliberate Stop
+
+`StdoutHandler` scopes Codex exec `item_N` tool IDs to the ManagedProcess
+instance before IPC. The native counter resets on each resumed invocation;
+using it alone overwrites earlier completed tools. Start/result and parent IDs
+share that scope, while native call IDs and other providers remain unchanged.
+Do not derive persistence identity from a process-local counter or PID alone.
+
+`ExitHandler` suppresses both provider and SSH error classification after
+`ManagedProcess.interrupted` is set, matching stdout/stderr handling. A user
+Stop must not emit `session_not_found` from teardown diagnostics and clear the
+native resume ID. Genuine errors on non-interrupted turns still propagate.
+
+`codexToolResultStatus()` in `codex-output-parser.ts` is shared by live parsing
+and native-history storage. Codex's exact `aborted by user after Ns` result is
+canceled even without `is_error`. Arbitrary text mentioning cancellation is
+not a control result. This prevents a stopped tool becoming successful on reload.
+
+### Native desktop image requests
+
+`unwrapCodexImageRequest()` in `codex-session-storage.ts` removes the desktop's
+file list and image annotation text only when the entire structured envelope
+matches real inline image parts and their listed paths. The request's own Markdown
+and the images remain. Incomplete, quoted, remote-only, mixed or assistant content
+is unchanged. This is display normalization in `readSessionMessages()` only; raw
+text still controls legacy message IDs, and native transcripts are never rewritten.
+No named path is opened and no remote image is fetched.

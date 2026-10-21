@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 /**
  * SshRemoteIgnoreSection - Settings section for SSH remote file indexing ignore patterns
  *
@@ -43,6 +44,7 @@ export function SshRemoteIgnoreSection({
 	honorGitignore,
 	onHonorGitignoreChange,
 }: SshRemoteIgnoreSectionProps) {
+	const tExtra = useT();
 	const handleReset = useCallback(() => {
 		onHonorGitignoreChange(true);
 	}, [onHonorGitignoreChange]);
@@ -50,8 +52,10 @@ export function SshRemoteIgnoreSection({
 	return (
 		<IgnorePatternsSection
 			theme={theme}
-			title="Remote Ignore Patterns"
-			description="Configure glob patterns for folders to exclude when indexing remote files via SSH. These patterns apply to all SSH connections."
+			title={tExtra('settings.extra.sshRemoteIgnoreSection.remoteIgnorePatterns')}
+			description={tExtra(
+				'settings.extra.sshRemoteIgnoreSection.configureGlobPatternsForFoldersToExclude'
+			)}
 			ignorePatterns={ignorePatterns}
 			onIgnorePatternsChange={onIgnorePatternsChange}
 			defaultPatterns={SSH_DEFAULT_PATTERNS}

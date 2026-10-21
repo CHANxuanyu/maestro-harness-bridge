@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, fireEvent, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { cleanup, render, fireEvent, waitFor, act } from '@testing-library/react';
 import { PaneDropZones } from '../../../renderer/components/MainPanel/PaneDropZones';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { TAB_TILE_MIME } from '../../../renderer/utils/tabDragPayload';
 import type { TabTilePayload } from '../../../renderer/utils/tabDragPayload';
 import { tileTabIntoGroup } from '../../../renderer/utils/panelLayout';
@@ -265,5 +266,39 @@ describe('PaneDropZones drop', () => {
 			await new Promise((r) => setTimeout(r, 50));
 		});
 		expect(overlay.className).toContain('pointer-events-none');
+	});
+});
+
+describe('pane drop feedback after a live language change', () => {
+	afterEach(() => {
+		cleanup();
+		useSettingsStore.setState({ uiLanguage: 'system' });
+	});
+
+	it('uses the new language when the user drops onto an empty view', () => {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		vi.mocked(notifyCenterFlash).mockClear();
+		const session = createMockSession({ id: 'empty-view' });
+		const { container } = render(
+			<PaneDropZones
+				session={session}
+				activeGroup={null}
+				activeStandaloneRef={null}
+				activeStandaloneTitle=""
+				theme={theme}
+			/>
+		);
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		const overlay = container.firstChild as HTMLElement;
+		const dataTransfer = mockDataTransfer({
+			ref: { type: 'ai', id: 'other-tab' },
+			source: 'tab-bar',
+		});
+		startDrag(dataTransfer);
+		fireEvent.drop(overlay, { dataTransfer, clientX: 10, clientY: 100 });
+		expect(notifyCenterFlash).toHaveBeenLastCalledWith({
+			color: 'yellow',
+			message: '没有可组合分屏的内容',
+		});
 	});
 });

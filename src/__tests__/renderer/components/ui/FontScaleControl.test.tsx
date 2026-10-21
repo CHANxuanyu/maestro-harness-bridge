@@ -1,10 +1,11 @@
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 /**
  * Tests for FontScaleControl - the shared decrease / reset / increase cluster
  * used by the Director's Notes stats bar and the file preview's floating pill.
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import { FontScaleControl } from '../../../../renderer/components/ui/FontScaleControl';
 import type { UseFontScaleReturn } from '../../../../renderer/hooks/ui/useFontScale';
 import { mockTheme } from '../../../helpers/mockTheme';
@@ -100,4 +101,21 @@ describe('FontScaleControl', () => {
 		expect(screen.getByLabelText('Increase preview font size')).toBeInTheDocument();
 		expect(screen.getByLabelText('Decrease preview font size')).toBeInTheDocument();
 	});
+});
+
+it('keeps the zoom controls mounted and functional across a language switch', () => {
+	const originalLanguage = useSettingsStore.getState().uiLanguage;
+	try {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		const control = makeControl();
+		render(<FontScaleControl theme={mockTheme} control={control} target="preview" />);
+		const increase = screen.getByRole('button', { name: 'Increase preview font size' });
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		expect(screen.getByRole('button', { name: '增大预览字号' })).toBe(increase);
+		fireEvent.click(increase);
+		expect(control.adjustFontScale).toHaveBeenCalledWith(1);
+	} finally {
+		cleanup();
+		useSettingsStore.setState({ uiLanguage: originalLanguage });
+	}
 });

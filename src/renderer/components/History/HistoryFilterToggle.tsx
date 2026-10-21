@@ -1,3 +1,5 @@
+import { useT } from '../../i18n';
+import { localizeHistoryLabel } from '../../i18n/historyLabels';
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Theme, HistoryEntryType } from '../../types';
 import { getPillColor, getEntryIcon } from './historyConstants';
@@ -82,6 +84,7 @@ export const HistoryFilterToggle = memo(function HistoryFilterToggle({
 	compact = false,
 	fillWidth = false,
 }: HistoryFilterToggleProps) {
+	const uiText = useT();
 	const rowRef = useRef<HTMLDivElement>(null);
 	const mirrorRef = useRef<HTMLDivElement>(null);
 	// Read from the PARENT, never from the row. The row's own width is the thing
@@ -143,7 +146,7 @@ export const HistoryFilterToggle = memo(function HistoryFilterToggle({
 					className="absolute left-0 top-0 whitespace-nowrap font-bold uppercase pointer-events-none"
 					style={{ ...PILL_TYPE_STYLE, visibility: 'hidden' }}
 				>
-					{visibleTypes.join('')}
+					{visibleTypes.map((type) => localizeHistoryLabel(type, uiText)).join('')}
 				</div>
 			)}
 			{visibleTypes.map((type) => {
@@ -153,7 +156,7 @@ export const HistoryFilterToggle = memo(function HistoryFilterToggle({
 
 				return (
 					<button
-						key={type}
+						key={localizeHistoryLabel(type, uiText)}
 						onClick={() => onToggleFilter(type)}
 						className={`flex items-center gap-1.5 py-1.5 rounded-full font-bold uppercase whitespace-nowrap transition-all ${
 							isActive ? 'opacity-100' : 'opacity-40'
@@ -169,7 +172,7 @@ export const HistoryFilterToggle = memo(function HistoryFilterToggle({
 						}}
 					>
 						{density.icon && <Icon className="w-3 h-3" />}
-						{type}
+						{localizeHistoryLabel(type, uiText)}
 					</button>
 				);
 			})}

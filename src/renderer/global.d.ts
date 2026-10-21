@@ -427,7 +427,14 @@ interface MaestroAPI {
 		) => Promise<boolean>;
 		onSessionId: (callback: (sessionId: string, agentSessionId: string) => void) => () => void;
 		onSlashCommands: (callback: (sessionId: string, slashCommands: string[]) => void) => () => void;
-		onThinkingChunk: (callback: (sessionId: string, content: string) => void) => () => void;
+		/**
+		 * Reasoning / preview text chunks. `purpose === 'commentary'` marks ONE
+		 * complete public progress message instead (not reasoning, not a delta,
+		 * not the final answer); without it the chunk is reasoning as before.
+		 */
+		onThinkingChunk: (
+			callback: (sessionId: string, content: string, purpose?: 'commentary') => void
+		) => () => void;
 		onToolExecution: (
 			callback: (
 				sessionId: string,
@@ -1911,6 +1918,9 @@ interface MaestroAPI {
 	};
 	// Agent Sessions API - all methods accept optional sshRemoteId for SSH remote session storage access
 	agentSessions: {
+		listProjectHistory: (
+			scopes: import('../shared/projectHistory').ProjectHistoryScope[]
+		) => Promise<import('../shared/projectHistory').ProjectHistoryResult>;
 		list: (
 			agentId: string,
 			projectPath: string,
@@ -1964,7 +1974,7 @@ interface MaestroAPI {
 			agentId: string,
 			projectPath: string,
 			sessionId: string,
-			options?: { offset?: number; limit?: number },
+			options?: { offset?: number; limit?: number; configDir?: string; ownerAgentId?: string },
 			sshRemoteId?: string
 		) => Promise<{
 			messages: Array<{

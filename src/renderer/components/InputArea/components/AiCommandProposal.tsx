@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 /**
  * AiCommandProposal - the spinner, the proposed command, and the yes/no.
  *
@@ -39,6 +40,7 @@ export const AiCommandProposal = memo(function AiCommandProposal({
 	onDismiss,
 	onChoose,
 }: AiCommandProposalProps) {
+	const t = useT();
 	const { status, request, command, error, choice } = entry;
 
 	// The proposal is a command line, so it is set in the same fixed-pitch face
@@ -69,8 +71,12 @@ export const AiCommandProposal = memo(function AiCommandProposal({
 					style={{ color: theme.colors.textDim }}
 					data-testid="ai-command-thinking"
 				>
-					<Spinner size={13} color={theme.colors.accent} ariaLabel="Processing" />
-					Processing
+					<Spinner
+						size={13}
+						color={theme.colors.accent}
+						ariaLabel={t('workflows.shell.processing')}
+					/>
+					{t('workflows.shell.processing')}
 				</div>
 			)}
 
@@ -110,7 +116,7 @@ export const AiCommandProposal = memo(function AiCommandProposal({
 						<CopyIconButton
 							value={command}
 							theme={theme}
-							title="Copy command"
+							title={t('workflows.shell.copyCommand')}
 							iconClassName="w-3.5 h-3.5"
 						/>
 					</div>
@@ -121,7 +127,7 @@ export const AiCommandProposal = memo(function AiCommandProposal({
 							active={choice === 'run'}
 							accent={theme.colors.accent}
 							icon={<Play className="w-3 h-3" />}
-							label="Run"
+							label={t('workflows.shell.run')}
 							hint="Enter"
 							testId="ai-command-run"
 							onSelect={() => onChoose('run')}
@@ -132,14 +138,14 @@ export const AiCommandProposal = memo(function AiCommandProposal({
 							active={choice === 'cancel'}
 							accent={theme.colors.textDim}
 							icon={<X className="w-3 h-3" />}
-							label="Cancel"
+							label={t('workflows.shell.cancel')}
 							hint="Esc"
 							testId="ai-command-cancel"
 							onSelect={() => onChoose('cancel')}
 							onActivate={onDismiss}
 						/>
 						<span className="ml-auto text-2xs" style={{ color: theme.colors.textDim }}>
-							&#8592; &#8594; to choose
+							{t('workflows.shell.85928594ToChoose')}
 						</span>
 					</div>
 				</>

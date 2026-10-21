@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Bot } from 'lucide-react';
 import type { Theme } from '../../../../../types';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useT } from '../../../../../i18n';
 
 interface UtilityAgentSectionProps {
 	theme: Theme;
@@ -69,10 +70,13 @@ export function UtilityAgentSection({
 	const unverifiedAgentId =
 		detectionFailed && utilityAgentId && !selectionKnown ? utilityAgentId : null;
 	const unmatchedAgentId = missingAgentId ?? unverifiedAgentId;
+	const t = useT();
 
 	return (
 		<div data-setting-id="general-utility-agent">
-			<SettingsSectionHeading icon={Bot}>Utility Agent</SettingsSectionHeading>
+			<SettingsSectionHeading icon={Bot}>
+				{t('settings.general.utility.heading')}
+			</SettingsSectionHeading>
 			<div
 				className="p-3 rounded border space-y-3"
 				style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
@@ -80,17 +84,14 @@ export function UtilityAgentSection({
 				{/* Opacity alone, no textDim override: stacking the two multiplies the
 				    dimming and drops contrast below 3:1 in most themes
 				    (CLAUDE-SETTINGS.md rule 1). Descriptions inherit textMain. */}
-				<div className="text-xs opacity-50">
-					Route auxiliary tasks (tab naming, context grooming) to a cheaper or faster agent instead
-					of the session agent. Leave as Default to keep using each tab's own agent.
-				</div>
+				<div className="text-xs opacity-50">{t('settings.general.utility.description')}</div>
 				<div>
 					<label
 						className="text-sm block mb-1"
 						style={{ color: theme.colors.textMain }}
 						htmlFor="utility-agent-select"
 					>
-						Agent
+						{t('settings.general.utility.agent')}
 					</label>
 					<select
 						id="utility-agent-select"
@@ -99,7 +100,7 @@ export function UtilityAgentSection({
 						className="w-full p-2 rounded border bg-transparent outline-none text-sm"
 						style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 					>
-						<option value="">Default (same as session)</option>
+						<option value="">{t('settings.general.utility.defaultOption')}</option>
 						{availableAgents.map((agent) => (
 							<option key={agent.id} value={agent.id}>
 								{agent.name}
@@ -114,19 +115,21 @@ export function UtilityAgentSection({
 						 */}
 						{unmatchedAgentId && (
 							<option value={unmatchedAgentId}>
-								{unmatchedAgentId} {missingAgentId ? '(not installed)' : '(unverified)'}
+								{unmatchedAgentId}{' '}
+								{missingAgentId
+									? t('settings.general.utility.notInstalled')
+									: t('settings.general.utility.unverified')}
 							</option>
 						)}
 					</select>
 					{missingAgentId && (
 						<div className="text-xs mt-1" style={{ color: theme.colors.warning }}>
-							This agent is no longer available. Auxiliary tasks will fail until you pick another
-							agent or return to Default.
+							{t('settings.general.utility.missing')}
 						</div>
 					)}
 					{!missingAgentId && unverifiedAgentId && (
 						<div className="text-xs mt-1" style={{ color: theme.colors.warning }}>
-							Could not check installed agents. This selection is still in use.
+							{t('settings.general.utility.unverifiedNote')}
 						</div>
 					)}
 				</div>
@@ -137,14 +140,14 @@ export function UtilityAgentSection({
 							style={{ color: theme.colors.textMain }}
 							htmlFor="utility-model-input"
 						>
-							Model override
+							{t('settings.general.utility.model')}
 						</label>
 						<input
 							id="utility-model-input"
 							type="text"
 							value={utilityModelId || ''}
 							onChange={(e) => setUtilityModelId(e.target.value || null)}
-							placeholder="e.g., haiku, gpt-4o-mini (leave empty for agent default)"
+							placeholder={t('settings.general.utility.modelPlaceholder')}
 							className="w-full p-2 rounded border bg-transparent outline-none text-sm"
 							style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 						/>

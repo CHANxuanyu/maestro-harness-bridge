@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { FileTreeRow } from '../../../../../renderer/components/FileExplorerPanel/components/FileTreeRow';
 import type { FlattenedNode } from '../../../../../renderer/components/FileExplorerPanel/types';
 import type { FileNode } from '../../../../../renderer/types/fileTree';
@@ -103,6 +104,19 @@ const defaultProps = {
 describe('FileTreeRow', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+	});
+
+	it('translates a file change indicator while preserving its path and Git status value', () => {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		render(<FileTreeRow {...defaultProps} changeMap={new Map([['App.tsx', 'added']])} />);
+		const indicator = screen.getByTestId('git-change-indicator');
+		expect(indicator).toHaveAttribute('aria-label', 'added file');
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		expect(indicator).toHaveAttribute('aria-label', '新增文件');
+		expect(indicator).toHaveAttribute('title', '新增');
+		expect(indicator).toHaveAttribute('data-change-type', 'added');
+		expect(screen.getByText('App.tsx')).toBeVisible();
+		act(() => useSettingsStore.setState({ uiLanguage: 'system' }));
 	});
 
 	it('renders the file name', () => {

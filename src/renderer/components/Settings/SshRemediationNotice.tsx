@@ -1,3 +1,4 @@
+import { useT, useAppLocale } from '../../i18n';
 /**
  * SshRemediationNotice - actionable panel for a recognized, fixable SSH failure.
  *
@@ -34,6 +35,8 @@ export interface SshRemediationNoticeProps {
 }
 
 export function SshRemediationNotice({ remediation, theme, className }: SshRemediationNoticeProps) {
+	const tExtra = useT();
+	const locale = useAppLocale();
 	const { title, detail, command, commandLabel, docsUrl } = remediation;
 
 	return (
@@ -51,18 +54,24 @@ export function SshRemediationNotice({ remediation, theme, className }: SshRemed
 					style={{ color: theme.colors.warning }}
 				/>
 				<div className="min-w-0 flex-1">
-					<div className="font-medium" style={{ color: theme.colors.warning }}>
-						{title}
+					<div className="font-medium" title={title} style={{ color: theme.colors.warning }}>
+						{locale === 'zh-CN' && remediation.code === 'non-posix-remote-shell'
+							? tExtra('settings.extra.sshRemediationNotice.nonPosixTitle')
+							: title}
 					</div>
 					<div className="mt-1 break-words" style={{ color: theme.colors.textMain }}>
-						{detail}
+						{locale === 'zh-CN' && remediation.code === 'non-posix-remote-shell'
+							? tExtra('settings.extra.sshRemediationNotice.nonPosixDetail')
+							: detail}
 					</div>
 
 					{command && (
 						<div className="mt-2">
 							{commandLabel && (
 								<div className="text-xs mb-1" style={{ color: theme.colors.textDim }}>
-									{commandLabel}
+									{locale === 'zh-CN' && remediation.code === 'non-posix-remote-shell'
+										? tExtra('settings.extra.sshRemediationNotice.runElevated')
+										: commandLabel}
 								</div>
 							)}
 							<div
@@ -78,7 +87,7 @@ export function SshRemediationNotice({ remediation, theme, className }: SshRemed
 								<CopyIconButton
 									value={command}
 									theme={theme}
-									title="Copy fix command"
+									title={tExtra('settings.extra.sshRemediationNotice.copyFixCommand')}
 									iconClassName="w-3.5 h-3.5"
 								/>
 							</div>
@@ -93,7 +102,7 @@ export function SshRemediationNotice({ remediation, theme, className }: SshRemed
 							style={{ color: theme.colors.accent }}
 						>
 							<ExternalLink className="w-3 h-3" />
-							Setting up a Windows remote host
+							{tExtra('settings.extra.sshRemediationNotice.settingUpAWindowsRemoteHost')}
 						</button>
 					)}
 				</div>

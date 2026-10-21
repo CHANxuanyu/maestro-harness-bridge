@@ -1,5 +1,6 @@
 import { Maximize2 } from 'lucide-react';
 import type { Theme } from '../../../../../types';
+import { useT } from '../../../../../i18n';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
 import { SectionCard } from './SectionCard';
 
@@ -9,16 +10,19 @@ interface ModalLayoutSectionProps {
 }
 
 export function ModalLayoutSection({ theme, resetModalSizes }: ModalLayoutSectionProps) {
+	const t = useT();
 	return (
 		<div data-setting-id="display-modal-layout">
-			<SettingsSectionHeading icon={Maximize2}>Modal Layout</SettingsSectionHeading>
+			<SettingsSectionHeading icon={Maximize2}>
+				{t('settings.display.modal.heading')}
+			</SettingsSectionHeading>
 			<SectionCard theme={theme} className="flex items-center justify-between gap-3">
 				<div className="min-w-0">
 					<div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-						Saved modal sizes
+						{t('settings.display.modal.title')}
 					</div>
 					<div className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
-						Clear custom dialog dimensions.
+						{t('settings.display.modal.description')}
 					</div>
 				</div>
 				<button
@@ -31,7 +35,7 @@ export function ModalLayoutSection({ theme, resetModalSizes }: ModalLayoutSectio
 						color: theme.colors.textMain,
 					}}
 				>
-					Reset
+					{t('common.reset')}
 				</button>
 			</SectionCard>
 		</div>

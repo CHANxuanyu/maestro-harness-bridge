@@ -1,6 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { TabBar } from '../../../renderer/components/TabBar';
 import { formatShortcutKeys } from '../../../renderer/utils/shortcutFormatter';
 import { isWebDesktop } from '../../../renderer/utils/runtimeContext';
@@ -471,6 +472,34 @@ describe('TabBar', () => {
 	});
 
 	describe('getTabDisplayName', () => {
+		it('localizes only the built-in empty name, preserving user names and provider identifiers', () => {
+			useSettingsStore.setState({ uiLanguage: 'en' });
+			const tabs = [
+				createTab({ id: 'empty', name: '', agentSessionId: undefined }),
+				createTab({ id: 'named', name: 'New Session', agentSessionId: undefined }),
+				createTab({ id: 'provider', name: '', agentSessionId: 'abcd1234-5678' }),
+			];
+			render(
+				<TabBar
+					tabs={tabs}
+					activeTabId="empty"
+					theme={mockTheme}
+					onTabSelect={mockOnTabSelect}
+					onTabClose={mockOnTabClose}
+					onNewTab={mockOnNewTab}
+				/>
+			);
+			act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+			expect(screen.getByText('新会话')).toBeVisible();
+			expect(screen.getByText('New Session')).toBeVisible();
+			expect(screen.getByText('ABCD1234')).toBeVisible();
+			expect(tabs[0].name).toBe('');
+			expect(tabs[1].name).toBe('New Session');
+			fireEvent.click(screen.getByText('新会话'));
+			expect(mockOnTabSelect).toHaveBeenCalledWith('empty');
+			act(() => useSettingsStore.setState({ uiLanguage: 'system' }));
+		});
+
 		it('displays tab name when provided', () => {
 			const tabs = [createTab({ id: 'tab-1', name: 'My Custom Tab' })];
 
@@ -5061,6 +5090,130 @@ describe('Unified tabs drag and drop', () => {
 			'data-tab-id',
 			'term-newer'
 		);
+	});
+});
+
+describe('Conversation-list navigation (onlyActiveAiTab)', () => {
+	const fileTab: FilePreviewTab = {
+		id: 'file-1',
+		path: '/test/notes.md',
+		name: 'notes',
+		extension: '.md',
+		content: '',
+		scrollTop: 0,
+		searchQuery: '',
+		editMode: false,
+		editContent: undefined,
+		createdAt: Date.now(),
+		lastModified: Date.now(),
+	};
+	// A native conversation title is often the whole first prompt.
+	const LONG_TITLE =
+		'This is a read-only acceptance conversation opened from native history. Do not use any tools, do not edit files, do not run other tasks. Remember the passphrase and reply only with the acknowledgement.';
+	const current = createTab({ id: 'ai-1', name: LONG_TITLE });
+	const other = createTab({ id: 'ai-2', name: 'Other conversation' });
+	const unifiedTabs = [
+		{ type: 'ai' as const, id: 'ai-1', data: current },
+		{ type: 'file' as const, id: 'file-1', data: fileTab },
+		{ type: 'ai' as const, id: 'ai-2', data: other },
+	];
+	const onTabSelect = vi.fn();
+	const onTabClose = vi.fn();
+	const renderBar = (
+		onlyActiveAiTab: boolean,
+		{ activeTabId = 'ai-1', activeFileTabId = null as string | null } = {}
+	) =>
+		render(
+			<TabBar
+				tabs={[current, other]}
+				activeTabId={activeTabId}
+				theme={mockTheme}
+				onTabSelect={onTabSelect}
+				onTabClose={onTabClose}
+				onNewTab={vi.fn()}
+				onOpenTabSearch={vi.fn()}
+				unifiedTabs={unifiedTabs}
+				activeFileTabId={activeFileTabId}
+				inputMode="ai"
+				onFileTabSelect={vi.fn()}
+				onFileTabClose={vi.fn()}
+				onlyActiveAiTab={onlyActiveAiTab}
+			/>
+		);
+	const chip = (id: string) => document.querySelector(`[data-tab-id="${id}"]`) as HTMLElement;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		useSettingsStore.setState({ uiLanguage: 'en', showTabCountBadge: true });
+	});
+	afterEach(() => {
+		act(() => useSettingsStore.setState({ uiLanguage: 'system' }));
+	});
+
+	it('draws the current conversation as a compact return chip next to the open file', () => {
+		renderBar(true, { activeFileTabId: 'file-1' });
+		const ret = chip('ai-1');
+		// A short fixed label, never the repeated title the header already shows.
+		expect(within(ret).getByText('Conversation')).toBeInTheDocument();
+		expect(screen.queryByText(LONG_TITLE)).not.toBeInTheDocument();
+		// The full title is still there for the tooltip and assistive tech.
+		expect(ret).toHaveAttribute('aria-label', `Back to conversation: ${LONG_TITLE}`);
+		expect(ret).toHaveAttribute('title', `Back to conversation: ${LONG_TITLE}`);
+		// The resource the user opened stays in the strip.
+		expect(screen.getByText('notes')).toBeInTheDocument();
+		expect(chip('file-1')).toBeInTheDocument();
+		// Other conversations are still left to the Left Bar.
+		expect(chip('ai-2')).toBeNull();
+		// No position badge for a chip that is not where Cmd+N counts, and no
+		// inline close: a stray click must not end the conversation.
+		expect(ret.querySelector('[data-tab-close]')).toBeNull();
+		expect(within(ret).queryByText('1')).not.toBeInTheDocument();
+	});
+
+	it('is inactive while the file shows and returns to the conversation on click', () => {
+		renderBar(true, { activeFileTabId: 'file-1' });
+		expect(chip('ai-1')).toHaveAttribute('aria-selected', 'false');
+		fireEvent.click(chip('ai-1'));
+		expect(onTabSelect).toHaveBeenCalledWith('ai-1');
+		// Middle-click does not close it either.
+		fireEvent.mouseDown(chip('ai-1'), { button: 1 });
+		expect(onTabClose).not.toHaveBeenCalled();
+	});
+
+	it('is the selected chip while the conversation shows, still compact', () => {
+		renderBar(true);
+		const ret = chip('ai-1');
+		expect(ret).toHaveAttribute('aria-selected', 'true');
+		expect(within(ret).getByText('Conversation')).toBeInTheDocument();
+		expect(ret.querySelector('[data-tab-close]')).toBeNull();
+	});
+
+	it('keeps the search badge on the full count of the tab switcher it opens', () => {
+		renderBar(true, { activeFileTabId: 'file-1' });
+		// The strip draws 2 chips, but the switcher behind the badge lists all 3.
+		expect(screen.getByLabelText('3 open tabs')).toBeInTheDocument();
+	});
+
+	it('follows the active conversation', () => {
+		renderBar(true, { activeTabId: 'ai-2' });
+		expect(chip('ai-2')).toHaveAttribute('aria-label', 'Back to conversation: Other conversation');
+		expect(chip('ai-1')).toBeNull();
+	});
+
+	it('localizes the return label', () => {
+		renderBar(true, { activeFileTabId: 'file-1' });
+		act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+		expect(within(chip('ai-1')).getByText('返回对话')).toBeInTheDocument();
+		expect(chip('ai-1')).toHaveAttribute('aria-label', `返回对话：${LONG_TITLE}`);
+	});
+
+	it('keeps full titled chips, the close button and the full count when the Left Bar lists agents', () => {
+		renderBar(false);
+		expect(screen.getByText(LONG_TITLE)).toBeInTheDocument();
+		expect(screen.getByText('Other conversation')).toBeInTheDocument();
+		expect(chip('ai-1')).not.toHaveAttribute('aria-label');
+		expect(chip('ai-1').querySelector('[data-tab-close]')).not.toBeNull();
+		expect(screen.getByLabelText('3 open tabs')).toBeInTheDocument();
 	});
 });
 

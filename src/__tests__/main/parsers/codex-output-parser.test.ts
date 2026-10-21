@@ -8,6 +8,41 @@ import {
 describe('CodexOutputParser', () => {
 	const parser = new CodexOutputParser();
 
+	it.each([
+		[{ output: 'aborted by user after 15.1s' }, 'canceled'],
+		[{ output: 'ok', status: 'cancelled' }, 'canceled'],
+		[{ output: 'failed', is_error: true }, 'failed'],
+		[{ output: 'The manual says "aborted by user after 15.1s".' }, 'completed'],
+	])('keeps native tool completion status accurate: %j', (result, status) => {
+		const p = new CodexOutputParser();
+		p.parseJsonLine(
+			JSON.stringify({
+				type: 'response_item',
+				payload: {
+					type: 'custom_tool_call',
+					name: 'exec',
+					call_id: 'call-stop',
+					arguments: '{}',
+				},
+			})
+		);
+		const event = p.parseJsonLine(
+			JSON.stringify({
+				type: 'response_item',
+				payload: {
+					type: 'custom_tool_call_output',
+					call_id: 'call-stop',
+					...result,
+				},
+			})
+		);
+		expect(event).toMatchObject({
+			toolName: 'exec',
+			toolCallId: 'call-stop',
+			toolState: { status },
+		});
+	});
+
 	describe('agentId', () => {
 		it('should be codex', () => {
 			expect(parser.agentId).toBe('codex');
@@ -849,6 +884,28 @@ describe('CodexOutputParser', () => {
 			expect(error?.type).toBe('rate_limited');
 		});
 
+		it('preserves an occupied desktop thread instead of treating it as missing history', () => {
+			const stderr =
+				'Error: thread/resume: thread/resume failed: thread 00000000-0000-7000-a000-000000000001 already has an active writer (code -32600)';
+			const error = parser.detectErrorFromExit(1, stderr, '');
+			expect(error?.type).toBe('session_busy');
+			expect(error?.message).toContain('native Codex fork');
+			expect(error?.raw?.stderr).toBe(stderr);
+			expect(
+				parser.detectErrorFromLine(JSON.stringify({ type: 'error', message: stderr }))?.type
+			).toBe('session_busy');
+			expect(
+				parser.detectErrorFromExit(
+					1,
+					'2026-10-16T13:00:45Z ERROR codex_core::session: thread-store conflict: thread 00000000-0000-7000-a000-000000000001 already has an active writer',
+					''
+				)?.type
+			).toBe('session_busy');
+			expect(
+				parser.detectErrorFromLine('The phrase already has an active writer describes a lock.')
+			).toBeNull();
+		});
+
 		it('should return agent_crashed for unknown non-zero exit', () => {
 			const error = parser.detectErrorFromExit(137, '', '');
 			expect(error).not.toBeNull();
@@ -1007,6 +1064,42 @@ describe('CodexOutputParser', () => {
 			expect(event?.type).toBe('system');
 		});
 	});
+
+	it.each(['phase', 'channel'])(
+		'separates public commentary from reasoning and final output using %s',
+		(field) => {
+			const messages = [
+				{
+					type: 'event_msg',
+					payload: { type: 'agent_message', message: 'Checking the files', [field]: 'commentary' },
+				},
+				{
+					type: 'response_item',
+					payload: {
+						type: 'message',
+						role: 'assistant',
+						content: [{ type: 'output_text', text: 'Checking the files' }],
+						[field]: 'commentary',
+					},
+				},
+				{
+					type: 'item.completed',
+					item: { type: 'agent_message', text: 'Checking the files', [field]: 'commentary' },
+				},
+			];
+			for (const raw of messages) {
+				const event = parser.parseJsonLine(JSON.stringify(raw));
+				expect(event).toMatchObject({
+					type: 'text',
+					text: 'Checking the files',
+					isPartial: true,
+					isCommentary: true,
+				});
+				expect(event?.isReasoning).not.toBe(true);
+				expect(parser.isResultMessage(event!)).toBe(false);
+			}
+		}
+	);
 
 	describe('event_msg events', () => {
 		describe('agent_message type', () => {
@@ -1723,6 +1816,21 @@ describe('CodexOutputParser', () => {
 			});
 		});
 
+		it('treats a finished command with a nonzero exit code as failed', () => {
+			const event = parser.parseJsonLine(
+				JSON.stringify({
+					type: 'item.completed',
+					item: {
+						type: 'command_execution',
+						command: 'test -f absent',
+						status: 'completed',
+						exit_code: 1,
+					},
+				})
+			);
+			expect(event?.toolState).toMatchObject({ status: 'failed', exitCode: 1 });
+		});
+
 		it('should parse failed command_execution', () => {
 			const line = JSON.stringify({
 				type: 'item.completed',
@@ -1738,7 +1846,7 @@ describe('CodexOutputParser', () => {
 			const event = parser.parseJsonLine(line);
 			expect(event?.type).toBe('tool_use');
 			const state = event?.toolState as { status: string; exitCode: number };
-			expect(state.status).toBe('completed');
+			expect(state.status).toBe('failed');
 			expect(state.exitCode).toBe(127);
 		});
 

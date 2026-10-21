@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { RightPanelTab, Shortcut } from '../../../types';
 import type { QuickAction } from '../types';
 import { FIXED_SHORTCUTS } from '../../../constants/shortcuts';
@@ -30,11 +31,12 @@ export function buildSearchCommands({
 	openCrossTabSearch,
 	searchAllTabsShortcut,
 }: BuildSearchCommandsArgs): QuickAction[] {
+	const t = getT();
 	return [
 		{
 			id: 'searchAgents',
-			label: 'Search: Agents',
-			subtext: 'Filter agents in the sidebar',
+			label: t('workflows.shell.searchAgents'),
+			subtext: t('workflows.shell.filterAgentsInTheSidebar'),
 			// The four in-context find bars are all Cmd+F, scoped by whatever has
 			// focus. Naming the chord here is how a user learns that; without it the
 			// palette reads as the only way in.
@@ -48,8 +50,8 @@ export function buildSearchCommands({
 		},
 		{
 			id: 'searchMessages',
-			label: 'Search: Messages (This Tab)',
-			subtext: 'Search messages in the current conversation',
+			label: t('workflows.shell.searchMessagesThisTab'),
+			subtext: t('workflows.shell.searchMessagesInTheCurrentConversation'),
 			shortcut: FIXED_SHORTCUTS.searchOutput,
 			action: () => {
 				setQuickActionOpen(false);
@@ -61,8 +63,8 @@ export function buildSearchCommands({
 			? [
 					{
 						id: 'searchAllTabs',
-						label: 'Search: Messages (All Agent Tabs)',
-						subtext: 'Search every open tab in this agent and jump to the hit',
+						label: t('workflows.shell.searchMessagesAllAgentTabs'),
+						subtext: t('workflows.shell.searchEveryOpenTabInThisAgentAnd'),
 						shortcut: searchAllTabsShortcut,
 						action: () => {
 							setQuickActionOpen(false);
@@ -74,8 +76,8 @@ export function buildSearchCommands({
 			: []),
 		{
 			id: 'searchFiles',
-			label: 'Search: Files',
-			subtext: 'Filter files in the file explorer',
+			label: t('workflows.shell.searchFiles'),
+			subtext: t('workflows.shell.filterFilesInTheFileExplorer'),
 			shortcut: FIXED_SHORTCUTS.filterFiles,
 			action: () => {
 				setQuickActionOpen(false);
@@ -87,8 +89,8 @@ export function buildSearchCommands({
 		},
 		{
 			id: 'searchHistory',
-			label: 'Search: History',
-			subtext: 'Search in the history panel',
+			label: t('workflows.shell.searchHistory'),
+			subtext: t('workflows.shell.searchInTheHistoryPanel'),
 			shortcut: FIXED_SHORTCUTS.filterHistory,
 			action: () => {
 				setQuickActionOpen(false);

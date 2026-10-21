@@ -319,9 +319,13 @@ export function createProcessCoreApi() {
 		 * Emitted when agents produce partial text events (isPartial: true)
 		 * Renderer decides whether to display based on tab's showThinking setting
 		 */
-		onThinkingChunk: (callback: (sessionId: string, content: string) => void): (() => void) => {
-			const handler = (_: unknown, sessionId: string, content: string) =>
-				callback(sessionId, content);
+		onThinkingChunk: (
+			callback: (sessionId: string, content: string, purpose?: 'commentary') => void
+		): (() => void) => {
+			const handler = (_: unknown, sessionId: string, content: string, purpose?: 'commentary') => {
+				if (purpose === 'commentary') callback(sessionId, content, purpose);
+				else callback(sessionId, content);
+			};
 			ipcRenderer.on('process:thinking-chunk', handler);
 			return () => ipcRenderer.removeListener('process:thinking-chunk', handler);
 		},

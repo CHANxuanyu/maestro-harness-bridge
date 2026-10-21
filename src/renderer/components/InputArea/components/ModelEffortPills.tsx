@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import { memo, useState } from 'react';
 import type React from 'react';
 import { Gauge, Sparkles } from 'lucide-react';
@@ -49,6 +50,7 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 	setEffortMenuOpen,
 	effortMenuRef,
 }: ModelEffortPillsProps) {
+	const t = useT();
 	const [typedModel, setTypedModel] = useState('');
 
 	if (!isVisible) {
@@ -70,10 +72,10 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 							color: theme.colors.accent,
 							border: `1px solid ${theme.colors.accent}25`,
 						}}
-						title={`Change model${shortcutSuffix(shortcutKeys)}`}
+						title={t('workflows.shell.changeModelvalue', { p0: shortcutSuffix(shortcutKeys) })}
 					>
 						<Sparkles className="w-3 h-3" />
-						<span>{currentModel || 'default'}</span>
+						<span>{currentModel || t('workflows.shell.default2')}</span>
 					</button>
 					{modelMenuOpen && (
 						<div
@@ -83,7 +85,12 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 								borderColor: theme.colors.border,
 							}}
 						>
-							<ShortcutHint theme={theme} keys={shortcutKeys ?? []} label="Try:" variant="row" />
+							<ShortcutHint
+								theme={theme}
+								keys={shortcutKeys ?? []}
+								label={t('workflows.shell.try')}
+								variant="row"
+							/>
 							<div className="max-h-48 overflow-y-auto scrollbar-thin">
 								{(availableModels.includes('') ? availableModels : ['', ...availableModels]).map(
 									(model) => (
@@ -100,7 +107,7 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 													model === currentModel ? 'rgba(255,255,255,0.05)' : undefined,
 											}}
 										>
-											{model || '(default)'}
+											{model || t('workflows.shell.default')}
 										</button>
 									)
 								)}
@@ -149,8 +156,8 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 										setTypedModel('');
 										setModelMenuOpen(false);
 									}}
-									placeholder="Or type a model ID"
-									aria-label="Use a model ID that is not listed"
+									placeholder={t('workflows.shell.orTypeAModelId')}
+									aria-label={t('workflows.shell.useAModelIdThatIsNotListed')}
 									className="w-full bg-transparent text-xs font-mono outline-none placeholder:opacity-50"
 									style={{ color: theme.colors.textMain }}
 								/>
@@ -172,10 +179,12 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 							color: theme.colors.warning,
 							border: `1px solid ${theme.colors.warning}25`,
 						}}
-						title={`Change effort level${shortcutSuffix(shortcutKeys)}`}
+						title={t('workflows.shell.changeEffortLevelvalue', {
+							p0: shortcutSuffix(shortcutKeys),
+						})}
 					>
 						<Gauge className="w-3 h-3" />
-						<span>{currentEffort || 'default'}</span>
+						<span>{currentEffort || t('workflows.shell.default2')}</span>
 					</button>
 					{effortMenuOpen && (
 						<div
@@ -185,7 +194,12 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 								borderColor: theme.colors.border,
 							}}
 						>
-							<ShortcutHint theme={theme} keys={shortcutKeys ?? []} label="Try:" variant="row" />
+							<ShortcutHint
+								theme={theme}
+								keys={shortcutKeys ?? []}
+								label={t('workflows.shell.try')}
+								variant="row"
+							/>
 							<div className="max-h-48 overflow-y-auto scrollbar-thin">
 								{availableEfforts.map((effort) => (
 									<button
@@ -202,7 +216,7 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 												effort === currentEffort ? 'rgba(255,255,255,0.05)' : undefined,
 										}}
 									>
-										{effort || '(default)'}
+										{effort || t('workflows.shell.default')}
 									</button>
 								))}
 							</div>

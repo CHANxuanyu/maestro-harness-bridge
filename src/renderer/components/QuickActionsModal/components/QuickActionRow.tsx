@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import type React from 'react';
 import { useState } from 'react';
 import { Bot } from 'lucide-react';
@@ -28,6 +29,7 @@ export function QuickActionRow({
 	selectedItemRef,
 	onClick,
 }: QuickActionRowProps) {
+	const t = useT();
 	const [isHovered, setIsHovered] = useState(false);
 	return (
 		<button
@@ -81,10 +83,10 @@ export function QuickActionRow({
 								backgroundColor: theme.colors.warning + '30',
 								color: theme.colors.warning,
 							}}
-							title="Auto Run active"
+							title={t('workflows.shell.autoRunActive')}
 						>
 							<Bot className="w-2.5 h-2.5" />
-							AUTO
+							{t('workflows.shell.auto2')}
 						</div>
 					)}
 				</div>

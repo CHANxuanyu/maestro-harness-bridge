@@ -1,3 +1,5 @@
+import { localizeHistoryLabel } from '../i18n/historyLabels';
+import { useT } from '../i18n';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -88,6 +90,7 @@ export function HistoryDetailModal({
 	onFileClick,
 	agentId,
 }: HistoryDetailModalProps) {
+	const uiText = useT();
 	const bionifyReadingMode = useSettingsStore((s) => s.bionifyReadingMode);
 	const showProviderModePill = useSettingsStore((s) => s.showProviderModePill);
 	const onCloseRef = useRef(onClose);
@@ -224,7 +227,7 @@ export function HistoryDetailModal({
 				ref={resizableModal.modalRef}
 				role="dialog"
 				aria-modal="true"
-				aria-label="History Detail"
+				aria-label={uiText('workflows.sessions.history.historyDetail')}
 				className="history-detail-modal relative overflow-hidden rounded-lg border shadow-2xl flex flex-col select-text"
 				style={{
 					...resizableModal.style,
@@ -298,9 +301,9 @@ export function HistoryDetailModal({
 									title={
 										entry.success
 											? entry.validated
-												? 'Task completed successfully, and you marked it as checked'
-												: 'Task completed successfully'
-											: 'Task failed'
+												? uiText('workflows.sessions.history.taskSuccessChecked')
+												: uiText('workflows.sessions.history.taskSuccess')
+											: uiText('workflows.sessions.history.taskFailed')
 									}
 								>
 									{entry.success ? (
@@ -325,7 +328,7 @@ export function HistoryDetailModal({
 								}}
 							>
 								<Icon className="w-2.5 h-2.5" />
-								{entry.type}
+								{localizeHistoryLabel(entry.type, uiText)}
 							</span>
 
 							{/* Sender pill - shown for turns a logged-in browser sent */}
@@ -337,7 +340,7 @@ export function HistoryDetailModal({
 										color: theme.colors.textDim,
 										border: `1px solid ${theme.colors.border}`,
 									}}
-									title={`Sent by ${entry.userName}`}
+									title={uiText('workflows.sessions.history.sentBy', { name: entry.userName })}
 								>
 									<User className="w-2.5 h-2.5" />
 									{entry.userDisplayName ?? entry.userName}
@@ -353,7 +356,7 @@ export function HistoryDetailModal({
 										color: theme.colors.textDim,
 										border: `1px solid ${theme.colors.border}`,
 									}}
-									title={`Origin: ${entry.hostname}`}
+									title={uiText('workflows.sessions.history.origin', { host: entry.hostname })}
 								>
 									<Server className="w-2.5 h-2.5" />
 									{entry.hostname}
@@ -382,7 +385,10 @@ export function HistoryDetailModal({
 									<button
 										onClick={async () => {
 											if (await safeClipboardWrite(entry.agentSessionId!)) {
-												flashCopiedToClipboard(entry.agentSessionId!, 'Session ID Copied');
+												flashCopiedToClipboard(
+													entry.agentSessionId!,
+													uiText('workflows.sessions.history.sessionIdCopied')
+												);
 											}
 										}}
 										className="flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-mono font-bold uppercase transition-colors hover:opacity-80"
@@ -391,7 +397,9 @@ export function HistoryDetailModal({
 											color: theme.colors.accent,
 											border: `1px solid ${theme.colors.accent}40`,
 										}}
-										title={`Copy session ID: ${entry.agentSessionId}`}
+										title={uiText('workflows.sessions.history.copySessionId', {
+											id: entry.agentSessionId,
+										})}
 									>
 										{entry.agentSessionId.split('-')[0].toUpperCase()}
 										<Copy className="w-2.5 h-2.5" />
@@ -413,10 +421,12 @@ export function HistoryDetailModal({
 												color: theme.colors.success,
 												border: `1px solid ${theme.colors.success}40`,
 											}}
-											title={`Resume session ${entry.agentSessionId}`}
+											title={uiText('workflows.sessions.history.resumeSession', {
+												id: entry.agentSessionId,
+											})}
 										>
 											<Play className="w-2.5 h-2.5" />
-											Resume
+											{uiText('workflows.sessions.resume')}
 										</button>
 									)}
 								</div>
@@ -447,9 +457,10 @@ export function HistoryDetailModal({
 										color: '#06b6d4',
 										border: '1px solid #06b6d440',
 									}}
-									title={`Trigger: ${entry.cueTriggerName}${
-										entry.cueEventType ? ` (${entry.cueEventType})` : ''
-									}`}
+									title={uiText('workflows.sessions.history.trigger', {
+										name: entry.cueTriggerName,
+										event: entry.cueEventType ? ` (${entry.cueEventType})` : '',
+									})}
 								>
 									{entry.cueTriggerName}
 									{entry.cueEventType && ` \u2022 ${humanizeCueEventType(entry.cueEventType)}`}
@@ -463,8 +474,8 @@ export function HistoryDetailModal({
 									maxWidth={260}
 									label={
 										entry.validated
-											? 'Clear the mark that says you checked this entry yourself.'
-											: 'Mark that you checked this entry yourself. Entirely optional, and only a bookmark for your own review pass - it changes nothing about the run.'
+											? uiText('workflows.sessions.history.unmarkCheckedHelp')
+											: uiText('workflows.sessions.history.markCheckedHelp')
 									}
 								>
 									<button
@@ -483,7 +494,7 @@ export function HistoryDetailModal({
 										) : (
 											<Check className="w-3 h-3" />
 										)}
-										Validated
+										{uiText('workflows.sessions.history.validated')}
 									</button>
 								</HoverTooltip>
 							)}
@@ -515,7 +526,7 @@ export function HistoryDetailModal({
 											className="text-2xs font-bold uppercase"
 											style={{ color: theme.colors.textDim }}
 										>
-											Context
+											{uiText('workflows.sessions.history.contextLabel')}
 										</span>
 									</div>
 									{(() => {
@@ -575,18 +586,22 @@ export function HistoryDetailModal({
 											className="text-2xs font-bold uppercase"
 											style={{ color: theme.colors.textDim }}
 										>
-											Tokens
+											{uiText('workflows.sessions.history.tokensLabel')}
 										</span>
 									</div>
 									<div className="flex items-center gap-3 text-xs font-mono">
 										<span style={{ color: theme.colors.accent }}>
-											<span style={{ color: theme.colors.textDim }}>In:</span>{' '}
+											<span style={{ color: theme.colors.textDim }}>
+												{uiText('workflows.sessions.history.tokensIn')}
+											</span>{' '}
 											{calculateDisplayInputTokens(entry.usageStats, agentId).toLocaleString(
 												'en-US'
 											)}
 										</span>
 										<span style={{ color: theme.colors.success }}>
-											<span style={{ color: theme.colors.textDim }}>Out:</span>{' '}
+											<span style={{ color: theme.colors.textDim }}>
+												{uiText('workflows.sessions.history.tokensOut')}
+											</span>{' '}
 											{(entry.usageStats.outputTokens ?? 0).toLocaleString('en-US')}
 										</span>
 									</div>
@@ -624,7 +639,7 @@ export function HistoryDetailModal({
 					<style>{proseStyles}</style>
 					{entry.type === 'CUE' && !entry.fullResponse ? (
 						<p className="text-sm italic" style={{ color: theme.colors.textDim }}>
-							This run produced no captured output.
+							{uiText('workflows.sessions.history.noCapturedOutput')}
 						</p>
 					) : (
 						<MarkdownRenderer
@@ -658,10 +673,10 @@ export function HistoryDetailModal({
 								color: theme.colors.error,
 								border: `1px solid ${theme.colors.error}40`,
 							}}
-							title="Delete this history entry"
+							title={uiText('workflows.sessions.history.deleteHistoryEntryHelp')}
 						>
 							<Trash2 className="w-4 h-4" />
-							<span className="hdm-btn-label">Delete</span>
+							<span className="hdm-btn-label">{uiText('workflows.sessions.history.delete')}</span>
 						</button>
 					) : (
 						<div />
@@ -681,10 +696,16 @@ export function HistoryDetailModal({
 									opacity: hasPrev ? 1 : 0.4,
 									cursor: hasPrev ? 'pointer' : 'default',
 								}}
-								title={hasPrev ? 'Previous entry (←)' : 'No previous entry'}
+								title={
+									hasPrev
+										? uiText('workflows.sessions.history.previousEntry')
+										: uiText('workflows.sessions.history.noPreviousEntry')
+								}
 							>
 								<ChevronLeft className="w-4 h-4" />
-								<span className="hdm-btn-label">Prev</span>
+								<span className="hdm-btn-label">
+									{uiText('workflows.sessions.history.previous')}
+								</span>
 							</button>
 							<button
 								onClick={goToNext}
@@ -697,9 +718,13 @@ export function HistoryDetailModal({
 									opacity: hasNext ? 1 : 0.4,
 									cursor: hasNext ? 'pointer' : 'default',
 								}}
-								title={hasNext ? 'Next entry (→)' : 'No next entry'}
+								title={
+									hasNext
+										? uiText('workflows.sessions.history.nextEntry')
+										: uiText('workflows.sessions.history.noNextEntry')
+								}
 							>
-								<span className="hdm-btn-label">Next</span>
+								<span className="hdm-btn-label">{uiText('workflows.sessions.history.next')}</span>
 								<ChevronRight className="w-4 h-4" />
 							</button>
 						</div>
@@ -713,7 +738,7 @@ export function HistoryDetailModal({
 							color: theme.colors.accentForeground,
 						}}
 					>
-						Close
+						{uiText('workflows.sessions.history.close')}
 					</button>
 				</div>
 			</div>
@@ -740,7 +765,7 @@ export function HistoryDetailModal({
 							<div className="flex items-center gap-2">
 								<Trash2 className="w-4 h-4" style={{ color: theme.colors.error }} />
 								<h2 className="text-sm font-bold" style={{ color: theme.colors.textMain }}>
-									Delete History Entry
+									{uiText('workflows.sessions.history.deleteHistoryEntry')}
 								</h2>
 							</div>
 							<button
@@ -759,8 +784,9 @@ export function HistoryDetailModal({
 									<AlertTriangle className="w-5 h-5" style={{ color: theme.colors.error }} />
 								</div>
 								<p className="leading-relaxed" style={{ color: theme.colors.textMain }}>
-									Are you sure you want to delete this {entry.type.toLowerCase()} history entry?
-									This action cannot be undone.
+									{uiText('workflows.sessions.history.deleteConfirm', {
+										type: localizeHistoryLabel(entry.type, uiText).toLowerCase(),
+									})}
 								</p>
 							</div>
 							<div className="mt-6 flex justify-end gap-2">
@@ -775,7 +801,7 @@ export function HistoryDetailModal({
 									className="px-4 py-2 rounded border hover:bg-white/5 transition-colors"
 									style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 								>
-									Cancel
+									{uiText('workflows.sessions.history.cancel')}
 								</button>
 								<button
 									ref={deleteButtonRef}
@@ -800,7 +826,7 @@ export function HistoryDetailModal({
 									style={{ backgroundColor: theme.colors.error }}
 									tabIndex={0}
 								>
-									Delete
+									{uiText('workflows.sessions.history.delete')}
 								</button>
 							</div>
 						</div>

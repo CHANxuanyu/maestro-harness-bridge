@@ -17,6 +17,7 @@ import { GhostIconButton } from '../ui/GhostIconButton';
 import type { Theme } from '../../types';
 import { searchSettings, type SearchableSetting } from './searchableSettings';
 import { formatShortcutKeys } from '../../utils/shortcutFormatter';
+import { useAppLocale, useT } from '../../i18n';
 
 export interface SettingsSearchProps {
 	theme: Theme;
@@ -35,7 +36,8 @@ export function useSettingsSearch({
 	const [query, setQuery] = useState('');
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
-	const results = searchSettings(query);
+	const locale = useAppLocale();
+	const results = searchSettings(query, locale);
 	const isActive = query.length > 0;
 
 	// Notify parent when search active state changes
@@ -144,6 +146,8 @@ export function SettingsSearchInput({
 	results: SearchableSetting[];
 	onClear: () => void;
 }) {
+	const t = useT();
+	const placeholder = t('settings.search.placeholder');
 	return (
 		<div className="flex items-center gap-2 px-4 py-2">
 			<Search
@@ -156,10 +160,10 @@ export function SettingsSearchInput({
 					type="text"
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
-					placeholder="Search settings..."
+					placeholder={placeholder}
 					className="w-full bg-transparent outline-none text-sm"
 					style={{ color: theme.colors.textMain }}
-					aria-label="Search settings"
+					aria-label={t('settings.search.aria')}
 				/>
 				{!isActive && (
 					<span
@@ -167,7 +171,7 @@ export function SettingsSearchInput({
 						aria-hidden="true"
 					>
 						{/* Phantom placeholder text positions the kbd hint right after where the real placeholder ends. */}
-						<span style={{ color: 'transparent' }}>Search settings...</span>
+						<span style={{ color: 'transparent' }}>{placeholder}</span>
 						<kbd
 							data-shortcut-hint=""
 							className="text-2xs px-1.5 py-0.5 rounded font-mono opacity-40"
@@ -189,7 +193,7 @@ export function SettingsSearchInput({
 					>
 						{results.length}
 					</span>
-					<GhostIconButton onClick={onClear} padding="p-0.5" ariaLabel="Clear search">
+					<GhostIconButton onClick={onClear} padding="p-0.5" ariaLabel={t('settings.search.clear')}>
 						<X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
 					</GhostIconButton>
 				</>
@@ -215,6 +219,7 @@ export function SettingsSearchResults({
 	setSelectedIndex: (i: number) => void;
 }) {
 	const selectedRef = useRef<HTMLButtonElement>(null);
+	const t = useT();
 
 	// Keep the selected row scrolled into view as arrow keys move it
 	useEffect(() => {
@@ -243,7 +248,7 @@ export function SettingsSearchResults({
 			{results.length === 0 ? (
 				<div className="text-center py-8">
 					<p className="text-sm" style={{ color: theme.colors.textDim }}>
-						No settings found for &ldquo;{query}&rdquo;
+						{t('settings.search.noResults', { query })}
 					</p>
 				</div>
 			) : (

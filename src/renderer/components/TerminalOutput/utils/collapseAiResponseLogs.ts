@@ -1,5 +1,6 @@
 import type { LogEntry } from '../../../types';
 import { isSelfContainedCard } from '../../../utils/logEntries';
+import { isProgressNoteEntry } from '../../../utils/transcriptMessages';
 
 export const isHiddenProgressEntry = (log: LogEntry): boolean =>
 	log.source === 'system' && log.id.startsWith('hidden-progress:');
@@ -32,7 +33,17 @@ export function collapseAiResponseLogs(logs: LogEntry[]): LogEntry[] {
 	// Flush the accumulated LOCAL response group into one combined entry.
 	const flushResponseGroup = () => {
 		if (currentResponseGroup.length > 0) {
-			const combinedText = currentResponseGroup.map((l) => l.text).join('');
+			// Live chunks of one stream join seamlessly. A message read back from the
+			// provider transcript is already complete, so it starts a new paragraph:
+			// gluing two stored messages end to end runs the last sentence of one
+			// into the first word of the next.
+			const combinedText = currentResponseGroup
+				.map((l, i) =>
+					i > 0 && (l.nativeTranscript || currentResponseGroup[i - 1].nativeTranscript)
+						? `\n\n${l.text}`
+						: l.text
+				)
+				.join('');
 			// The token-source pill keys off `renderStyle === 'text-stream'`
 			// (maestro-p TUI capture). A response group can lead with a non-stream
 			// entry (e.g. the "Adaptive Mode: switched ..." system banner), and
@@ -65,8 +76,12 @@ export function collapseAiResponseLogs(logs: LogEntry[]): LogEntry[] {
 			log.source === 'tool' ||
 			log.source === 'thinking' ||
 			log.source === 'error' ||
-			isSelfContainedCard(log)
+			isSelfContainedCard(log) ||
+			isProgressNoteEntry(log)
 		) {
+			// A provider progress note (Codex commentary) is narration between tool
+			// calls, not part of the answer, so it renders as its own quieter row.
+			//
 			// Flush the response group, then keep tool/thinking/error entries and any
 			// self-contained card as their own entries.
 			//

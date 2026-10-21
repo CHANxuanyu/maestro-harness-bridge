@@ -1,3 +1,5 @@
+import { useT, useAppLocale } from '../i18n';
+import { localizeAppCommandDescription } from './shared/commandDescriptionI18n';
 import { useState, useRef, useEffect } from 'react';
 import {
 	Edit2,
@@ -34,6 +36,8 @@ export function OpenSpecCommandsPanel({
 	enabled,
 	onEnabledChange,
 }: OpenSpecCommandsPanelProps) {
+	const tExtra = useT();
+	const locale = useAppLocale();
 	const [commands, setCommands] = useState<OpenSpecCommand[]>([]);
 	const [metadata, setMetadata] = useState<OpenSpecMetadata | null>(null);
 	const [editingCommand, setEditingCommand] = useState<EditingCommand | null>(null);
@@ -172,7 +176,7 @@ export function OpenSpecCommandsPanel({
 
 	const formatDate = (isoDate: string) => {
 		try {
-			return new Date(isoDate).toLocaleDateString(undefined, {
+			return new Date(isoDate).toLocaleDateString(locale, {
 				year: 'numeric',
 				month: 'short',
 				day: 'numeric',
@@ -187,9 +191,11 @@ export function OpenSpecCommandsPanel({
 			checked={enabled}
 			onChange={onEnabledChange}
 			theme={theme}
-			ariaLabel="Show OpenSpec commands in slash command autocomplete"
+			ariaLabel={tExtra('settings.extra.controls.showOpenspecCommandsInSlashCommandAutocomplete')}
 			title={
-				enabled ? 'Hide from slash command autocomplete' : 'Show in slash command autocomplete'
+				enabled
+					? tExtra('settings.extra.openSpecCommandsPanel.hideFromSlashCommandAutocomplete')
+					: tExtra('settings.extra.openSpecCommandsPanel.showInSlashCommandAutocomplete')
 			}
 		/>
 	);
@@ -201,12 +207,12 @@ export function OpenSpecCommandsPanel({
 					<div className="flex items-start justify-between gap-3 mb-1">
 						<label className="text-xs font-bold opacity-70 uppercase flex items-center gap-2">
 							<GitBranch className="w-3 h-3" />
-							OpenSpec Commands
+							{tExtra('settings.extra.openSpecCommandsPanel.openspecCommands')}
 						</label>
 						{enabledToggle}
 					</div>
 					<p className="text-xs opacity-50" style={{ color: theme.colors.textDim }}>
-						Loading OpenSpec commands...
+						{tExtra('settings.extra.openSpecCommandsPanel.loadingOpenspecCommands')}
 					</p>
 				</div>
 			</div>
@@ -219,12 +225,12 @@ export function OpenSpecCommandsPanel({
 				<div className="flex items-start justify-between gap-3 mb-1">
 					<label className="text-xs font-bold opacity-70 uppercase flex items-center gap-2">
 						<GitBranch className="w-3 h-3" />
-						OpenSpec Commands
+						{tExtra('settings.extra.openSpecCommandsPanel.openspecCommands')}
 					</label>
 					{enabledToggle}
 				</div>
 				<p className="text-xs opacity-50" style={{ color: theme.colors.textDim }}>
-					Change management commands from{' '}
+					{tExtra('settings.extra.openSpecCommandsPanel.changeManagementCommandsFrom')}{' '}
 					<button
 						onClick={() => openUrl('https://github.com/Fission-AI/OpenSpec')}
 						className="underline hover:opacity-80 inline-flex items-center gap-1"
@@ -239,10 +245,10 @@ export function OpenSpecCommandsPanel({
 						Fission-AI/OpenSpec
 						<ExternalLink className="w-2.5 h-2.5" />
 					</button>{' '}
-					for structured change proposals.{' '}
+					{tExtra('settings.extra.openSpecCommandsPanel.forStructuredChangeProposals')}{' '}
 					{!enabled && (
 						<span style={{ color: theme.colors.warning }}>
-							Hidden from slash command autocomplete.
+							{tExtra('settings.extra.openSpecCommandsPanel.hiddenFromSlashCommandAutocomplete')}
 						</span>
 					)}
 				</p>
@@ -266,12 +272,12 @@ export function OpenSpecCommandsPanel({
 					style={{ backgroundColor: theme.colors.bgMain, borderColor: theme.colors.border }}
 				>
 					<div className="text-xs" style={{ color: theme.colors.textDim }}>
-						<span>Version: </span>
+						<span>{tExtra('settings.extra.openSpecCommandsPanel.version')} </span>
 						<span className="font-mono" style={{ color: theme.colors.textMain }}>
 							{metadata.sourceVersion}
 						</span>
 						<span className="mx-2">•</span>
-						<span>Updated: </span>
+						<span>{tExtra('settings.extra.openSpecCommandsPanel.updated')} </span>
 						<span style={{ color: theme.colors.textMain }}>
 							{formatDate(metadata.lastRefreshed)}
 						</span>
@@ -287,7 +293,9 @@ export function OpenSpecCommandsPanel({
 						}}
 					>
 						<RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-						{isRefreshing ? 'Checking...' : 'Check for Updates'}
+						{isRefreshing
+							? tExtra('settings.extra.openSpecCommandsPanel.checking')
+							: tExtra('settings.extra.openSpecCommandsPanel.checkForUpdates')}
 					</button>
 				</div>
 			)}
@@ -323,7 +331,7 @@ export function OpenSpecCommandsPanel({
 												}}
 											>
 												<X className="w-3 h-3" />
-												Cancel
+												{tExtra('settings.extra.openSpecCommandsPanel.cancel')}
 											</button>
 											<button
 												onClick={handleSaveEdit}
@@ -334,7 +342,7 @@ export function OpenSpecCommandsPanel({
 												}}
 											>
 												<Save className="w-3 h-3" />
-												Save
+												{tExtra('settings.extra.openSpecCommandsPanel.save')}
 											</button>
 										</div>
 									</div>
@@ -420,7 +428,7 @@ export function OpenSpecCommandsPanel({
 														color: theme.colors.warning,
 													}}
 												>
-													Modified
+													{tExtra('settings.extra.openSpecCommandsPanel.modified')}
 												</span>
 											)}
 										</div>
@@ -428,7 +436,7 @@ export function OpenSpecCommandsPanel({
 											className="text-xs truncate max-w-[300px]"
 											style={{ color: theme.colors.textDim }}
 										>
-											{cmd.description}
+											{localizeAppCommandDescription(cmd, tExtra)}
 										</span>
 									</button>
 									{expandedCommands.has(cmd.id) && (
@@ -442,20 +450,22 @@ export function OpenSpecCommandsPanel({
 														onClick={() => handleReset(cmd.id)}
 														className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all hover:bg-white/10"
 														style={{ color: theme.colors.textDim }}
-														title="Reset to bundled default"
+														title={tExtra(
+															'settings.extra.openSpecCommandsPanel.resetToBundledDefault'
+														)}
 													>
 														<RotateCcw className="w-3 h-3" />
-														Reset
+														{tExtra('settings.extra.openSpecCommandsPanel.reset')}
 													</button>
 												)}
 												<button
 													onClick={() => setEditingCommand({ id: cmd.id, prompt: cmd.prompt })}
 													className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all hover:bg-white/10"
 													style={{ color: theme.colors.textDim }}
-													title="Edit prompt"
+													title={tExtra('settings.extra.openSpecCommandsPanel.editPrompt')}
 												>
 													<Edit2 className="w-3 h-3" />
-													Edit
+													{tExtra('settings.extra.openSpecCommandsPanel.edit')}
 												</button>
 											</div>
 											<div
@@ -485,7 +495,7 @@ export function OpenSpecCommandsPanel({
 				>
 					<GitBranch className="w-8 h-8 mx-auto mb-2 opacity-30" />
 					<p className="text-sm opacity-50" style={{ color: theme.colors.textDim }}>
-						No OpenSpec commands loaded
+						{tExtra('settings.extra.openSpecCommandsPanel.noOpenspecCommandsLoaded')}
 					</p>
 				</div>
 			)}

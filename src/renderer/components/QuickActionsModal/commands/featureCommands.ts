@@ -1,3 +1,4 @@
+import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
 import type { ActiveTabInfo, QuickAction } from '../types';
 import { editClipboardImage } from '../../ImageAnnotator/editClipboardImage';
@@ -113,11 +114,12 @@ export function buildFeatureCommands({
 	setShowStarredSessionsSection,
 	shortcuts,
 }: BuildFeatureCommandsArgs): QuickAction[] {
+	const t = getT();
 	const commands: QuickAction[] = [
 		{
 			id: 'editClipboardImage',
-			label: 'Edit Image from Clipboard',
-			subtext: 'Open the image annotator on the current clipboard image',
+			label: t('workflows.shell.editImageFromClipboard'),
+			subtext: t('workflows.shell.openTheImageAnnotatorOnTheCurrentClipboard'),
 			shortcut: shortcuts.editClipboardImage,
 			action: () => {
 				setQuickActionOpen(false);
@@ -126,41 +128,62 @@ export function buildFeatureCommands({
 		},
 		{
 			id: 'toggleBionifyReadingMode',
-			label: bionifyReadingMode ? 'Turn Off Bionify Emphasis' : 'Turn On Bionify Emphasis',
-			subtext: `Bionify emphasis: ${bionifyReadingMode ? 'enabled' : 'disabled'}`,
+			label: bionifyReadingMode
+				? t('workflows.shell.turnOffBionifyEmphasis')
+				: t('workflows.shell.turnOnBionifyEmphasis'),
+			subtext: t('workflows.shell.bionifyEmphasisValue', {
+				p0: bionifyReadingMode ? t('workflows.labels.enabled') : t('workflows.labels.disabled'),
+			}),
 			action: () => {
 				const newState = !bionifyReadingMode;
 				setBionifyReadingMode(newState);
-				flash(setSuccessFlashNotification, newState ? 'Bionify: ON' : 'Bionify: OFF');
+				flash(
+					setSuccessFlashNotification,
+					newState ? t('workflows.shell.bionifyOn') : t('workflows.shell.bionifyOff')
+				);
 				setQuickActionOpen(false);
 			},
 		},
 		{
 			id: 'toggleCustomNotification',
 			label: audioFeedbackEnabled
-				? 'Turn Off Custom Notifications'
-				: 'Turn On Custom Notifications',
-			subtext: `Custom notifications: ${audioFeedbackEnabled ? 'enabled' : 'disabled'}`,
+				? t('workflows.shell.turnOffCustomNotifications')
+				: t('workflows.shell.turnOnCustomNotifications'),
+			subtext: t('workflows.shell.customNotificationsValue', {
+				p0: audioFeedbackEnabled ? t('workflows.labels.enabled') : t('workflows.labels.disabled'),
+			}),
 			action: () => {
+				const t = getT();
 				const newState = !audioFeedbackEnabled;
 				setAudioFeedbackEnabled(newState);
 				flash(
 					setSuccessFlashNotification,
-					newState ? 'Custom Notifications: ON' : 'Custom Notifications: OFF'
+					newState
+						? t('workflows.shell.extraCustomNotificationsOn')
+						: t('workflows.shell.extraCustomNotificationsOff')
 				);
 				setQuickActionOpen(false);
 			},
 		},
 		{
 			id: 'toggleIdleNotification',
-			label: idleNotificationEnabled ? 'Turn Off Idle Notifications' : 'Turn On Idle Notifications',
-			subtext: `Idle notifications: ${idleNotificationEnabled ? 'enabled' : 'disabled'}`,
+			label: idleNotificationEnabled
+				? t('workflows.shell.turnOffIdleNotifications')
+				: t('workflows.shell.turnOnIdleNotifications'),
+			subtext: t('workflows.shell.idleNotificationsValue', {
+				p0: idleNotificationEnabled
+					? t('workflows.labels.enabled')
+					: t('workflows.labels.disabled'),
+			}),
 			action: () => {
+				const t = getT();
 				const newState = !idleNotificationEnabled;
 				setIdleNotificationEnabled(newState);
 				flash(
 					setSuccessFlashNotification,
-					newState ? 'Idle Notifications: ON' : 'Idle Notifications: OFF'
+					newState
+						? t('workflows.shell.extraIdleNotificationsOn')
+						: t('workflows.shell.extraIdleNotificationsOff')
 				);
 				setQuickActionOpen(false);
 			},
@@ -168,15 +191,22 @@ export function buildFeatureCommands({
 		{
 			id: 'toggleStarredSessionsSection',
 			label: showStarredSessionsSection
-				? 'Hide Starred Sessions Section'
-				: 'Show Starred Sessions Section',
-			subtext: `Starred Sessions section: ${showStarredSessionsSection ? 'visible' : 'hidden'}`,
+				? t('workflows.shell.hideStarredSessionsSection')
+				: t('workflows.shell.showStarredSessionsSection'),
+			subtext: t('workflows.shell.starredSessionsSectionValue', {
+				p0: showStarredSessionsSection
+					? t('workflows.labels.visible')
+					: t('workflows.labels.hidden'),
+			}),
 			action: () => {
+				const t = getT();
 				const newState = !showStarredSessionsSection;
 				setShowStarredSessionsSection(newState);
 				flash(
 					setSuccessFlashNotification,
-					newState ? 'Starred Sessions: SHOWN' : 'Starred Sessions: HIDDEN'
+					newState
+						? t('workflows.shell.extraStarredSessionsShown')
+						: t('workflows.shell.extraStarredSessionsHidden')
 				);
 				setQuickActionOpen(false);
 			},
@@ -186,9 +216,9 @@ export function buildFeatureCommands({
 	if (onOpenQueueBrowser) {
 		commands.push({
 			id: 'executionQueue',
-			label: 'View Execution Queue',
+			label: t('workflows.shell.viewExecutionQueue'),
 			shortcut: shortcuts.executionQueue,
-			subtext: 'Browse and manage queued prompts across agents',
+			subtext: t('workflows.shell.browseAndManageQueuedPromptsAcrossAgents'),
 			action: () => {
 				onOpenQueueBrowser();
 				setQuickActionOpen(false);
@@ -206,13 +236,14 @@ export function buildFeatureCommands({
 		).length;
 		commands.push({
 			id: 'editLastQueuedMessage',
-			label: 'Edit Last Queued Message',
+			label: t('workflows.shell.editLastQueuedMessage'),
 			subtext:
 				editableQueuedCount > 0
-					? `Edit the newest of ${editableQueuedCount} queued message${
-							editableQueuedCount === 1 ? '' : 's'
-						}`
-					: 'Nothing is queued on this agent',
+					? t('workflows.shell.editTheNewestOfValueQueuedMessagevalue', {
+							p0: editableQueuedCount,
+							p1: editableQueuedCount === 1 ? '' : t('workflows.shell.pluralSuffix'),
+						})
+					: t('workflows.shell.nothingIsQueuedOnThisAgent'),
 			shortcut: shortcuts.editLastQueuedMessage,
 			action: () => {
 				setQuickActionOpen(false);
@@ -224,7 +255,7 @@ export function buildFeatureCommands({
 	if (setUsageDashboardOpen) {
 		commands.push({
 			id: 'usageDashboard',
-			label: 'Usage Dashboard',
+			label: t('workflows.shell.usageDashboard'),
 			shortcut: shortcuts.usageDashboard,
 			action: () => {
 				setUsageDashboardOpen(true);
@@ -236,7 +267,7 @@ export function buildFeatureCommands({
 	if (activeSession && hasActiveSessionCapability?.('supportsSessionStorage')) {
 		commands.push({
 			id: 'agentSessions',
-			label: `View Agent Sessions for ${activeSession.name}`,
+			label: t('workflows.shell.viewAgentSessionsForValue', { p0: activeSession.name }),
 			shortcut: shortcuts.agentSessions,
 			action: () => {
 				setActiveAgentSessionId(null);
@@ -253,7 +284,7 @@ export function buildFeatureCommands({
 	) {
 		commands.push({
 			id: 'openMemoryViewer',
-			label: `View Agent Memories for ${activeSession.name}`,
+			label: t('workflows.shell.viewAgentMemoriesForValue', { p0: activeSession.name }),
 			shortcut: shortcuts.openMemoryViewer,
 			action: () => {
 				setMemoryViewerOpen(true);
@@ -265,8 +296,8 @@ export function buildFeatureCommands({
 	if (activeTabType === 'ai' && canSummarizeActiveTab && onSummarizeAndContinue) {
 		commands.push({
 			id: 'summarizeAndContinue',
-			label: 'Context: Compact',
-			subtext: 'Compact context into a fresh tab',
+			label: t('workflows.shell.contextCompact'),
+			subtext: t('workflows.shell.compactContextIntoAFreshTab'),
 			action: () => {
 				onSummarizeAndContinue();
 				setQuickActionOpen(false);
@@ -282,8 +313,8 @@ export function buildFeatureCommands({
 	) {
 		commands.push({
 			id: 'mergeSession',
-			label: 'Context: Merge Into',
-			subtext: 'Merge current context into another session',
+			label: t('workflows.shell.contextMergeInto'),
+			subtext: t('workflows.shell.mergeCurrentContextIntoAnotherSession'),
 			action: () => {
 				onOpenMergeSession();
 				setQuickActionOpen(false);
@@ -299,8 +330,8 @@ export function buildFeatureCommands({
 	) {
 		commands.push({
 			id: 'sendToAgent',
-			label: 'Context: Send to Agent',
-			subtext: 'Transfer context to a different AI agent',
+			label: t('workflows.shell.contextSendToAgent'),
+			subtext: t('workflows.shell.transferContextToADifferentAiAgent'),
 			action: () => {
 				onOpenSendToAgent();
 				setQuickActionOpen(false);
@@ -311,8 +342,8 @@ export function buildFeatureCommands({
 	if (onOpenPlaybookExchange) {
 		commands.push({
 			id: 'openPlaybookExchange',
-			label: 'Playbook Exchange',
-			subtext: 'Browse and import community playbooks',
+			label: t('workflows.shell.playbookExchange'),
+			subtext: t('workflows.shell.browseAndImportCommunityPlaybooks'),
 			action: () => {
 				onOpenPlaybookExchange();
 				setQuickActionOpen(false);
@@ -323,9 +354,9 @@ export function buildFeatureCommands({
 	if (onOpenSymphony) {
 		commands.push({
 			id: 'openSymphony',
-			label: 'Maestro Symphony',
+			label: t('workflows.shell.maestroSymphony'),
 			shortcut: shortcuts.openSymphony,
-			subtext: 'Contribute to open source projects',
+			subtext: t('workflows.shell.contributeToOpenSourceProjects'),
 			action: () => {
 				onOpenSymphony();
 				setQuickActionOpen(false);
@@ -336,9 +367,9 @@ export function buildFeatureCommands({
 	if (onOpenDirectorNotes) {
 		commands.push({
 			id: 'directorNotes',
-			label: "Director's Notes",
+			label: t('workflows.shell.directorSNotes'),
 			shortcut: shortcuts.directorNotes,
-			subtext: 'View unified history and AI synopsis across all sessions',
+			subtext: t('workflows.shell.viewUnifiedHistoryAndAiSynopsisAcrossAll'),
 			action: () => {
 				onOpenDirectorNotes();
 				setQuickActionOpen(false);
@@ -349,9 +380,9 @@ export function buildFeatureCommands({
 	if (onOpenMaestroCue) {
 		commands.push({
 			id: 'maestro-cue',
-			label: 'Maestro Cue',
+			label: t('workflows.shell.maestroCue'),
 			shortcut: shortcuts.openCue,
-			subtext: 'Event-driven automation dashboard',
+			subtext: t('workflows.shell.eventDrivenAutomationDashboard'),
 			action: () => {
 				onOpenMaestroCue();
 				setQuickActionOpen(false);
@@ -362,8 +393,8 @@ export function buildFeatureCommands({
 	if (setAgentRunDashboardOpen) {
 		commands.push({
 			id: 'agent-run-dashboard',
-			label: 'AgentRun Dashboard',
-			subtext: 'Inspect agent runs, campaigns, events, reviews, and Pianola-linked work',
+			label: t('workflows.shell.agentrunDashboard'),
+			subtext: t('workflows.shell.inspectAgentRunsCampaignsEventsReviewsAndPianola'),
 			action: () => {
 				setAgentRunDashboardOpen(true);
 				setQuickActionOpen(false);
@@ -374,8 +405,8 @@ export function buildFeatureCommands({
 	if (onOpenPianola) {
 		commands.push({
 			id: 'pianola',
-			label: 'Pianola',
-			subtext: 'Autonomous manager: rules and decision log',
+			label: t('workflows.shell.pianola'),
+			subtext: t('workflows.shell.autonomousManagerRulesAndDecisionLog'),
 			action: () => {
 				onOpenPianola();
 				setQuickActionOpen(false);
@@ -386,8 +417,8 @@ export function buildFeatureCommands({
 	if (onConfigureCue && activeSession) {
 		commands.push({
 			id: 'configure-cue',
-			label: `Configure Maestro Cue: ${activeSession.name}`,
-			subtext: 'Open YAML editor for event-driven automation',
+			label: t('workflows.shell.configureMaestroCueValue', { p0: activeSession.name }),
+			subtext: t('workflows.shell.openYamlEditorForEventDrivenAutomation'),
 			action: () => {
 				onConfigureCue(activeSession);
 				setQuickActionOpen(false);
@@ -398,8 +429,8 @@ export function buildFeatureCommands({
 	if (currentGraphFile && onOpenCurrentFileInGraph) {
 		commands.push({
 			id: 'viewInDocumentGraph',
-			label: 'View in Document Graph',
-			subtext: `Focus the graph on ${currentGraphFile}`,
+			label: t('workflows.shell.viewInDocumentGraph'),
+			subtext: t('workflows.shell.focusTheGraphOnValue', { p0: currentGraphFile }),
 			// No chord. This used to advertise Cmd+Shift+G, which belongs to View
 			// Git Log - the File Preview handled the key itself, so the graph
 			// silently won whenever a markdown preview had focus. The key was in no
@@ -415,8 +446,8 @@ export function buildFeatureCommands({
 	if (lastGraphFocusFile && onOpenLastDocumentGraph) {
 		commands.push({
 			id: 'lastDocumentGraph',
-			label: 'Open Last Document Graph',
-			subtext: `Re-open: ${lastGraphFocusFile}`,
+			label: t('workflows.shell.openLastDocumentGraph'),
+			subtext: t('workflows.shell.reOpenValue', { p0: lastGraphFocusFile }),
 			action: () => {
 				onOpenLastDocumentGraph();
 				setQuickActionOpen(false);
@@ -427,7 +458,7 @@ export function buildFeatureCommands({
 	if (setFuzzyFileSearchOpen) {
 		commands.push({
 			id: 'fuzzyFileSearch',
-			label: 'Fuzzy File Search',
+			label: t('workflows.shell.fuzzyFileSearch'),
 			shortcut: shortcuts.fuzzyFileSearch,
 			action: () => {
 				setFuzzyFileSearchOpen(true);
@@ -439,8 +470,8 @@ export function buildFeatureCommands({
 	if (isFilePreviewOpen && ghCliAvailable && onPublishGist && !markdownEditMode) {
 		commands.push({
 			id: 'publishGist',
-			label: 'Publish Document as GitHub Gist',
-			subtext: 'Share current file as a public or secret gist',
+			label: t('workflows.shell.publishDocumentAsGithubGist'),
+			subtext: t('workflows.shell.shareCurrentFileAsAPublicOrSecret'),
 			action: () => {
 				onPublishGist();
 				setQuickActionOpen(false);

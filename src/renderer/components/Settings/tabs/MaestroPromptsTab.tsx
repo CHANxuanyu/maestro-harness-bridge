@@ -1,3 +1,5 @@
+import { localizePromptText, localizePromptDescription } from './maestroPromptI18n';
+import { useT } from '../../../i18n';
 /**
  * Maestro Prompts Tab - Edit core system prompts
  *
@@ -39,6 +41,7 @@ import { openUrl } from '../../../utils/openUrl';
 import { buildMaestroUrl } from '../../../utils/buildMaestroUrl';
 import { useEditorTemplateAutocomplete } from '../../../hooks/input/useEditorTemplateAutocomplete';
 import { TemplateAutocompleteDropdown } from '../../TemplateAutocompleteDropdown';
+import { templateVariableDescription } from '../../shared/templateVariableI18n';
 import { TEMPLATE_VARIABLES, substituteTemplateVariables } from '../../../utils/templateVariables';
 import { useActiveSession } from '../../../hooks/session/useActiveSession';
 import { useSettingsStore } from '../../../stores/settingsStore';
@@ -120,6 +123,8 @@ function matchingLine(content: string, query: string): string | undefined {
 
 // Category display names (sorted alphabetically by label)
 const CATEGORY_INFO: Record<string, { label: string }> = {
+	'agent-preambles': { label: 'Agent preambles' },
+	pianola: { label: 'Pianola' },
 	autorun: { label: 'Auto Run' },
 	commands: { label: 'Commands' },
 	context: { label: 'Context' },
@@ -171,6 +176,7 @@ function groupTemplateVariables(): { label: string; variables: typeof TEMPLATE_V
 const TEMPLATE_VARIABLE_GROUPS = groupTemplateVariables();
 
 function PromptsHelpPanel({ theme, onClose }: { theme: Theme; onClose?: () => void }): JSX.Element {
+	const tExtra = useT();
 	return (
 		<div className="prompts-help-panel" style={{ color: theme.colors.textMain }}>
 			{onClose && (
@@ -178,7 +184,7 @@ function PromptsHelpPanel({ theme, onClose }: { theme: Theme; onClose?: () => vo
 					<button
 						className="expand-toggle-button"
 						onClick={onClose}
-						title="Close help"
+						title={tExtra('settings.extra.maestroPromptsTab.closeHelp')}
 						style={{
 							color: theme.colors.textDim,
 							borderColor: theme.colors.border,
@@ -191,35 +197,36 @@ function PromptsHelpPanel({ theme, onClose }: { theme: Theme; onClose?: () => vo
 
 			<div className="prompts-help-section">
 				<h3 className="prompts-help-heading" style={{ color: theme.colors.accent }}>
-					What Are Core Prompts?
+					{tExtra('settings.extra.maestroPromptsTab.whatAreCorePrompts')}
 				</h3>
 				<p className="prompts-help-text" style={{ color: theme.colors.textDim }}>
-					Core prompts are the system instructions that control how Maestro's AI features behave.
-					Each prompt is a Markdown template that gets injected into the AI context for a specific
-					feature. Customizing these lets you tailor Maestro's behavior without modifying source
-					code.
+					{tExtra('settings.extra.maestroPromptsTab.corePromptsAreTheSystemInstructionsThat')}
 				</p>
 				<p className="prompts-help-text" style={{ color: theme.colors.textDim }}>
-					Changes take effect immediately - no restart required. Use the{' '}
-					<strong style={{ color: theme.colors.textMain }}>Reset to Default</strong> button to
-					revert any prompt to its bundled original.
+					{tExtra('settings.extra.maestroPromptsTab.changesTakeEffectImmediatelyNoRestartRequired')}{' '}
+					<strong style={{ color: theme.colors.textMain }}>
+						{tExtra('settings.extra.maestroPromptsTab.resetToDefault')}
+					</strong>{' '}
+					{tExtra('settings.extra.maestroPromptsTab.buttonToRevertAnyPromptToIts')}
 				</p>
 			</div>
 
 			<div className="prompts-help-section">
 				<h3 className="prompts-help-heading" style={{ color: theme.colors.accent }}>
-					Prompt Categories
+					{tExtra('settings.extra.maestroPromptsTab.promptCategories')}
 				</h3>
 				{Object.entries(CATEGORY_INFO)
 					.sort(([, a], [, b]) => a.label.localeCompare(b.label))
 					.map(([key, info]) => (
 						<div key={key} className="prompts-help-category-item">
-							<strong style={{ color: theme.colors.textMain }}>{info.label}</strong>
+							<strong style={{ color: theme.colors.textMain }}>
+								{localizePromptText(info.label, tExtra)}
+							</strong>
 							<p
 								className="prompts-help-text"
 								style={{ color: theme.colors.textDim, marginTop: 2 }}
 							>
-								{CATEGORY_HELP[key] || ''}
+								{localizePromptText(CATEGORY_HELP[key] || '', tExtra)}
 							</p>
 						</div>
 					))}
@@ -227,7 +234,7 @@ function PromptsHelpPanel({ theme, onClose }: { theme: Theme; onClose?: () => vo
 
 			<div className="prompts-help-section">
 				<h3 className="prompts-help-heading" style={{ color: theme.colors.accent }}>
-					Include Directives
+					{tExtra('settings.extra.maestroPromptsTab.includeDirectives')}
 				</h3>
 				<p className="prompts-help-text" style={{ color: theme.colors.textDim }}>
 					<code
@@ -236,9 +243,7 @@ function PromptsHelpPanel({ theme, onClose }: { theme: Theme; onClose?: () => vo
 					>
 						{'{{INCLUDE:name}}'}
 					</code>{' '}
-					fully inlines another prompt file at assembly time. Nesting up to 3 levels deep is
-					supported and cycles are detected. Use this for foundational rules every recipient must
-					see.
+					{tExtra('settings.extra.maestroPromptsTab.fullyInlinesAnotherPromptFileAtAssembly')}
 				</p>
 				<p className="prompts-help-text" style={{ color: theme.colors.textDim }}>
 					<code
@@ -247,45 +252,44 @@ function PromptsHelpPanel({ theme, onClose }: { theme: Theme; onClose?: () => vo
 					>
 						{'{{REF:name}}'}
 					</code>{' '}
-					expands to the absolute on-disk path of the bundled{' '}
+					{tExtra('settings.extra.maestroPromptsTab.expandsToTheAbsoluteOnDiskPath')}{' '}
 					<code
 						className="prompts-help-code"
 						style={{ backgroundColor: theme.colors.bgMain, color: theme.colors.accent }}
 					>
 						.md
 					</code>{' '}
-					(native separators for the host OS) - nothing else, no description or formatting. Wrap the
-					directive with whatever prose, list markers, or context you want; the agent reads the file
-					directly. Use this for heavy reference material only some sessions need. The path resolves
-					to bundled content; to honor your customizations on this tab, agents should fetch via{' '}
+					{tExtra('settings.extra.maestroPromptsTab.nativeSeparatorsForTheHostOsNothing')}{' '}
 					<code
 						className="prompts-help-code"
 						style={{ backgroundColor: theme.colors.bgMain, color: theme.colors.accent }}
 					>
 						maestro-cli prompts get &lt;name&gt;
 					</code>{' '}
-					instead.
+					{tExtra('settings.extra.maestroPromptsTab.instead')}
 				</p>
 			</div>
 
 			<div className="prompts-help-section">
 				<h3 className="prompts-help-heading" style={{ color: theme.colors.accent }}>
-					Template Variables
+					{tExtra('settings.extra.maestroPromptsTab.templateVariables')}
 				</h3>
 				<p className="prompts-help-text" style={{ color: theme.colors.textDim }}>
-					Template variables are placeholders that get substituted with live values at runtime. Type{' '}
+					{tExtra(
+						'settings.extra.maestroPromptsTab.templateVariablesArePlaceholdersThatGetSubstituted'
+					)}{' '}
 					<code
 						className="prompts-help-code"
 						style={{ backgroundColor: theme.colors.bgMain, color: theme.colors.accent }}
 					>
 						{'{{'}
 					</code>{' '}
-					in the editor to trigger autocomplete.
+					{tExtra('settings.extra.maestroPromptsTab.inTheEditorToTriggerAutocomplete')}
 				</p>
 				{TEMPLATE_VARIABLE_GROUPS.map((group) => (
-					<div key={group.label} className="prompts-help-var-group">
+					<div key={localizePromptText(group.label, tExtra)} className="prompts-help-var-group">
 						<div className="prompts-help-var-group-label" style={{ color: theme.colors.textMain }}>
-							{group.label}
+							{localizePromptText(group.label, tExtra)}
 						</div>
 						<div className="prompts-help-var-table" style={{ borderColor: theme.colors.border }}>
 							{group.variables.map((v) => (
@@ -304,7 +308,7 @@ function PromptsHelpPanel({ theme, onClose }: { theme: Theme; onClose?: () => vo
 										{v.variable}
 									</code>
 									<span className="prompts-help-var-desc" style={{ color: theme.colors.textDim }}>
-										{v.description}
+										{templateVariableDescription(v.variable, v.description, tExtra)}
 									</span>
 								</div>
 							))}
@@ -326,7 +330,7 @@ function PromptsHelpPanel({ theme, onClose }: { theme: Theme; onClose?: () => vo
 					className="text-xs hover:opacity-80 transition-colors"
 					style={{ color: theme.colors.accent }}
 				>
-					Read more at docs.runmaestro.ai/prompt-customization
+					{tExtra('settings.extra.maestroPromptsTab.readMoreAtDocsRunmaestroAiPrompt')}
 				</button>
 			</div>
 		</div>
@@ -338,6 +342,7 @@ export function MaestroPromptsTab({
 	initialSelectedPromptId,
 	onEscapeHandled,
 }: MaestroPromptsTabProps): JSX.Element {
+	const tExtra = useT();
 	const [prompts, setPrompts] = useState<CorePrompt[]>([]);
 	const [selectedPrompt, setSelectedPrompt] = useState<CorePrompt | null>(null);
 	const [editedContent, setEditedContent] = useState('');
@@ -397,13 +402,15 @@ export function MaestroPromptsTab({
 			pluginContributions.prompts.map((p) => ({
 				id: p.id,
 				filename: '',
-				description: p.description ?? `Plugin prompt from ${p.pluginId}`,
+				description:
+					p.description ??
+					tExtra('settings.extra.maestroPromptsTab.pluginPromptFrom', { id: p.pluginId }),
 				category: PLUGIN_PROMPT_CATEGORY,
 				content: p.content,
 				isModified: false,
 				hasDefaultDrifted: false,
 			})),
-		[pluginContributions.prompts]
+		[pluginContributions.prompts, tExtra]
 	);
 	const pluginPromptIds = useMemo(
 		() => new Set(pluginPromptItems.map((p) => p.id)),
@@ -569,7 +576,7 @@ export function MaestroPromptsTab({
 		const content = editedContentRef.current;
 		if (!activeSession) {
 			setPreviewContent(
-				'Preview unavailable: no active agent session to resolve template variables against.'
+				tExtra('settings.extra.maestroPromptsTab.previewUnavailableNoActiveAgentSessionTo')
 			);
 			return;
 		}
@@ -606,7 +613,10 @@ export function MaestroPromptsTab({
 				captureException(err instanceof Error ? err : new Error(String(err)), {
 					extra: { context: 'MaestroPromptsTab.buildPreview' },
 				});
-				if (!cancelled) setPreviewContent(`Preview failed: ${String(err)}`);
+				if (!cancelled)
+					setPreviewContent(
+						tExtra('settings.extra.maestroPromptsTab.previewFailed', { error: String(err) })
+					);
 			} finally {
 				if (!cancelled) setIsBuildingPreview(false);
 			}
@@ -614,7 +624,7 @@ export function MaestroPromptsTab({
 		return () => {
 			cancelled = true;
 		};
-	}, [viewMode, selectedPrompt?.id, activeSession, conductorProfile]);
+	}, [viewMode, selectedPrompt?.id, activeSession, conductorProfile, tExtra]);
 
 	/**
 	 * Open (or, if it is already showing, close) a comparison against the
@@ -639,7 +649,9 @@ export function MaestroPromptsTab({
 					setBundledDefaultError(null);
 				} else {
 					setBundledDefaultContent('');
-					setBundledDefaultError(result.error || 'Failed to load bundled default');
+					setBundledDefaultError(
+						result.error || tExtra('settings.extra.maestroPromptsTab.failedToLoadBundledDefault')
+					);
 				}
 			} catch (err) {
 				captureException(err instanceof Error ? err : new Error(String(err)), {
@@ -656,7 +668,7 @@ export function MaestroPromptsTab({
 				setIsLoadingBundledDefault(false);
 			}
 		},
-		[comparisonView, selectedPrompt]
+		[comparisonView, selectedPrompt, tExtra]
 	);
 
 	const handleToggleShowDefault = useCallback(
@@ -722,7 +734,8 @@ export function MaestroPromptsTab({
 						setEditedContent(target.content);
 					}
 				} else {
-					const msg = result.error || 'Failed to load prompts';
+					const msg =
+						result.error || tExtra('settings.extra.maestroPromptsTab.failedToLoadPrompts');
 					captureMessage(`MaestroPromptsTab load failed: ${msg}`, {
 						extra: { error: result.error },
 					});
@@ -735,7 +748,7 @@ export function MaestroPromptsTab({
 				setError(String(err));
 			}
 		})();
-	}, []);
+	}, [tExtra]);
 
 	const filterQueryTrimmed = debouncedFilter.trim();
 
@@ -756,6 +769,7 @@ export function MaestroPromptsTab({
 				matches:
 					prompt.id.toLowerCase().includes(q) ||
 					prompt.description.toLowerCase().includes(q) ||
+					(localizePromptDescription(prompt, tExtra) ?? '').toLowerCase().includes(q) ||
 					prompt.content.toLowerCase().includes(q) ||
 					// A prompt with unsaved edits is never filtered away. The editor
 					// pane only exists while its row does, so hiding the row would
@@ -764,7 +778,7 @@ export function MaestroPromptsTab({
 				snippet: matchingLine(prompt.content, filterQueryTrimmed),
 			}))
 			.filter((entry) => entry.matches);
-	}, [allPrompts, filterQueryTrimmed, hasUnsavedChanges, selectedPrompt?.id]);
+	}, [allPrompts, filterQueryTrimmed, hasUnsavedChanges, selectedPrompt?.id, tExtra]);
 
 	// Read at filter time to hand focus back to the list; a ref keeps the
 	// Escape ladder off the filtered list's identity.
@@ -776,12 +790,17 @@ export function MaestroPromptsTab({
 			filteredPrompts.map(({ prompt, snippet }) => ({
 				id: prompt.id,
 				label: prompt.id,
-				description: snippet ? `${prompt.description}\nmatch: ${snippet}` : prompt.description,
+				description: snippet
+					? tExtra('settings.extra.maestroPromptsTab.contentMatch', {
+							description: localizePromptDescription(prompt, tExtra) ?? '',
+							snippet,
+						})
+					: localizePromptDescription(prompt, tExtra),
 				category: prompt.category,
 				isModified: prompt.isModified,
 				hasDefaultDrifted: prompt.hasDefaultDrifted,
 			})),
-		[filteredPrompts]
+		[filteredPrompts, tExtra]
 	);
 
 	const editorTokenCount = useMemo(
@@ -805,12 +824,14 @@ export function MaestroPromptsTab({
 			const prompt = allPrompts.find((p) => p.id === id);
 			if (!prompt) return;
 			if (hasUnsavedChanges) {
-				const discard = window.confirm('You have unsaved changes. Discard them?');
+				const discard = window.confirm(
+					tExtra('settings.extra.maestroPromptsTab.youHaveUnsavedChangesDiscardThem')
+				);
 				if (!discard) return;
 			}
 			openPrompt(prompt);
 		},
-		[prompts, hasUnsavedChanges, openPrompt]
+		[prompts, hasUnsavedChanges, openPrompt, tExtra]
 	);
 
 	// A filter that hides the current selection moves to the top hit, so typing
@@ -861,9 +882,9 @@ export function MaestroPromptsTab({
 				);
 				setComparisonView(null);
 				setHasUnsavedChanges(false);
-				setSuccessMessage('Changes saved');
+				setSuccessMessage(tExtra('settings.extra.maestroPromptsTab.changesSaved'));
 			} else {
-				const msg = result.error || 'Failed to save prompt';
+				const msg = result.error || tExtra('settings.extra.maestroPromptsTab.failedToSavePrompt');
 				captureMessage(`MaestroPromptsTab save failed: ${msg}`, {
 					extra: { promptId: selectedPrompt.id, error: result.error },
 				});
@@ -877,13 +898,13 @@ export function MaestroPromptsTab({
 		} finally {
 			setIsSaving(false);
 		}
-	}, [selectedPrompt, editedContent, hasUnsavedChanges]);
+	}, [selectedPrompt, editedContent, hasUnsavedChanges, tExtra]);
 
 	const handleReset = useCallback(async () => {
 		if (!selectedPrompt) return;
 
 		const confirmed = window.confirm(
-			`Reset "${selectedPrompt.id}" to the bundled default? Your customization will be lost.`
+			tExtra('settings.extra.maestroPromptsTab.resetConfirm', { id: selectedPrompt.id })
 		);
 		if (!confirmed) return;
 
@@ -909,9 +930,9 @@ export function MaestroPromptsTab({
 				setEditedContent(result.content);
 				setComparisonView(null);
 				setHasUnsavedChanges(false);
-				setSuccessMessage('Reset to default');
+				setSuccessMessage(tExtra('settings.extra.maestroPromptsTab.resetToDefault341'));
 			} else {
-				const msg = result.error || 'Failed to reset prompt';
+				const msg = result.error || tExtra('settings.extra.maestroPromptsTab.failedToResetPrompt');
 				captureMessage(`MaestroPromptsTab reset failed: ${msg}`, {
 					extra: { promptId: selectedPrompt.id, error: result.error },
 				});
@@ -925,13 +946,13 @@ export function MaestroPromptsTab({
 		} finally {
 			setIsResetting(false);
 		}
-	}, [selectedPrompt]);
+	}, [selectedPrompt, tExtra]);
 
 	const canDiffAgainstDefault = !!selectedPrompt?.isModified || hasUnsavedChanges;
 	const diffButtonTitle =
 		comparisonView === 'diff'
-			? 'Exit diff view'
-			: 'Show what you changed compared to the bundled default';
+			? tExtra('settings.extra.maestroPromptsTab.exitDiffView')
+			: tExtra('settings.extra.maestroPromptsTab.showWhatYouChangedComparedToThe');
 
 	const editorHeaderActions = (
 		<>
@@ -958,8 +979,8 @@ export function MaestroPromptsTab({
 					disabled={isLoadingBundledDefault}
 					title={
 						isShowingDefault
-							? 'Exit default view (show your customization)'
-							: 'View the current bundled default that shipped with this update'
+							? tExtra('settings.extra.maestroPromptsTab.exitDefaultViewShowYourCustomization')
+							: tExtra('settings.extra.maestroPromptsTab.viewTheCurrentBundledDefaultThatShipped')
 					}
 					style={{
 						color: isShowingDefault ? theme.colors.warning : theme.colors.textDim,
@@ -972,7 +993,11 @@ export function MaestroPromptsTab({
 			<button
 				className="expand-toggle-button"
 				onClick={() => setIsEditorExpanded((prev) => !prev)}
-				title={isEditorExpanded ? 'Collapse editor' : 'Expand editor'}
+				title={
+					isEditorExpanded
+						? tExtra('settings.extra.maestroPromptsTab.collapseEditor')
+						: tExtra('settings.extra.maestroPromptsTab.expandEditor')
+				}
 				style={{
 					color: theme.colors.textDim,
 					borderColor: theme.colors.border,
@@ -1038,19 +1063,22 @@ export function MaestroPromptsTab({
 				>
 					<style>{generateDiffViewStyles(theme, colorBlindMode)}</style>
 					<div className="prompt-diff-legend font-mono" style={{ color: theme.colors.textDim }}>
-						<span>- bundled default</span>
+						<span>{tExtra('settings.extra.maestroPromptsTab.bundledDefault')}</span>
 						<span>
-							+ your version
-							{hasUnsavedChanges ? ' (including unsaved edits)' : ''}
+							{tExtra('settings.extra.maestroPromptsTab.yourVersion')}
+							{hasUnsavedChanges
+								? tExtra('settings.extra.maestroPromptsTab.includingUnsavedEdits')
+								: ''}
 						</span>
 					</div>
 					{bundledDefaultError ? (
 						<p className="prompt-diff-empty" style={{ color: theme.colors.error }}>
-							Failed to load bundled default: {bundledDefaultError}
+							{tExtra('settings.extra.maestroPromptsTab.failedToLoadBundledDefault360')}{' '}
+							{bundledDefaultError}
 						</p>
 					) : !promptDiffFiles || promptDiffFiles.length === 0 ? (
 						<p className="prompt-diff-empty" style={{ color: theme.colors.textDim }}>
-							No differences from the bundled default.
+							{tExtra('settings.extra.maestroPromptsTab.noDifferencesFromTheBundledDefault')}
 						</p>
 					) : (
 						<div className="font-mono text-sm">
@@ -1079,7 +1107,9 @@ export function MaestroPromptsTab({
 						key={`default-${selectedPrompt?.id ?? 'none'}`}
 						value={
 							bundledDefaultError
-								? `Failed to load bundled default: ${bundledDefaultError}`
+								? tExtra('settings.extra.maestroPromptsTab.defaultLoadError', {
+										error: bundledDefaultError,
+									})
 								: bundledDefaultContent
 						}
 						onChange={() => {}}
@@ -1109,7 +1139,11 @@ export function MaestroPromptsTab({
 				>
 					<Markdown
 						preset="document"
-						content={isBuildingPreview && !previewContent ? 'Building preview...' : previewContent}
+						content={
+							isBuildingPreview && !previewContent
+								? tExtra('settings.extra.maestroPromptsTab.buildingPreview')
+								: previewContent
+						}
 						theme={theme}
 						containerRef={previewScrollRef}
 						searchHighlight={
@@ -1171,6 +1205,7 @@ export function MaestroPromptsTab({
 		selectedPrompt?.id,
 		autocomplete,
 		theme,
+		tExtra,
 	]);
 
 	/**
@@ -1185,11 +1220,13 @@ export function MaestroPromptsTab({
 		<div className="prompts-tab-header">
 			{!isEditorExpanded && (
 				<div className="prompts-tab-header-text">
-					<div className="text-xs font-bold opacity-70 uppercase mb-1">Core System Prompts</div>
+					<div className="text-xs font-bold opacity-70 uppercase mb-1">
+						{tExtra('settings.extra.maestroPromptsTab.coreSystemPrompts')}
+					</div>
 					<p className="text-xs opacity-70">
-						Customize the system prompts used by Maestro features. Changes take effect immediately.
-						Use <code className="text-xs opacity-70">{'{{INCLUDE:name}}'}</code> to reference other
-						prompt files.
+						{tExtra('settings.extra.maestroPromptsTab.customizeTheSystemPromptsUsedByMaestro')}
+						<code className="text-xs opacity-70">{'{{INCLUDE:name}}'}</code>{' '}
+						{tExtra('settings.extra.maestroPromptsTab.toReferenceOtherPromptFiles')}
 					</p>
 				</div>
 			)}
@@ -1199,9 +1236,9 @@ export function MaestroPromptsTab({
 					theme={theme}
 					value={filterQuery}
 					onChange={setFilterQuery}
-					placeholder="Filter prompts by name or content..."
-					ariaLabel="Filter prompts by name, description, or content"
-					title="Filter prompts by name, description, or content (/)"
+					placeholder={tExtra('settings.extra.maestroPromptsTab.filterPromptsByNameOrContent')}
+					ariaLabel={tExtra('settings.extra.maestroPromptsTab.filterAria')}
+					title={tExtra('settings.extra.maestroPromptsTab.filterPromptsByNameDescriptionOrContent')}
 					width={280}
 					resultLabel={filterQueryTrimmed ? `${items.length}/${prompts.length}` : undefined}
 				/>
@@ -1209,7 +1246,7 @@ export function MaestroPromptsTab({
 				<button
 					className="prompts-help-button"
 					onClick={() => setShowHelp(true)}
-					title="Prompt reference"
+					title={tExtra('settings.extra.maestroPromptsTab.promptReference')}
 					style={{
 						color: theme.colors.textDim,
 						borderColor: theme.colors.border,
@@ -1220,9 +1257,15 @@ export function MaestroPromptsTab({
 				<SegmentedControl
 					value={viewMode}
 					onChange={changeViewMode}
-					options={VIEW_MODE_OPTIONS}
+					options={VIEW_MODE_OPTIONS.map((option) => ({
+						...option,
+						label: localizePromptText(option.label, tExtra),
+						title: localizePromptText(option.title, tExtra),
+					}))}
 					theme={theme}
-					ariaLabel="Show the prompt rendered with template variables resolved, or as editable source"
+					ariaLabel={tExtra(
+						'settings.extra.controls.showThePromptRenderedWithTemplateVariablesResolvedOr'
+					)}
 					testId="prompt-view-mode"
 				/>
 			</div>
@@ -1240,7 +1283,12 @@ export function MaestroPromptsTab({
 				items={items}
 				selectedId={selectedPrompt?.id ?? null}
 				onSelect={handleSelectPrompt}
-				categories={CATEGORY_INFO}
+				categories={Object.fromEntries(
+					Object.entries(CATEGORY_INFO).map(([key, info]) => [
+						key,
+						{ ...info, label: localizePromptText(info.label, tExtra) },
+					])
+				)}
 				collapsedCategories={collapsedCategories}
 				onToggleCategory={toggleCategory}
 				header={header}
@@ -1249,8 +1297,8 @@ export function MaestroPromptsTab({
 				isExpanded={isEditorExpanded}
 				emptyStateMessage={
 					filterQueryTrimmed && items.length === 0
-						? `No prompt matches "${filterQueryTrimmed}"`
-						: 'Select a prompt to edit'
+						? tExtra('settings.extra.maestroPromptsTab.noMatches', { query: filterQueryTrimmed })
+						: tExtra('settings.extra.maestroPromptsTab.selectAPromptToEdit')
 				}
 				highlightQuery={filterQueryTrimmed}
 				listFocusToken={listFocusToken}
@@ -1259,7 +1307,7 @@ export function MaestroPromptsTab({
 				// tab by clicking its button does not yank the caret away.
 				autoFocusList
 				editorTitle={selectedPrompt?.id}
-				editorDescription={selectedPrompt?.description}
+				editorDescription={localizePromptDescription(selectedPrompt, tExtra)}
 				editorTokenCount={editorTokenCount}
 				editorHeaderActions={editorHeaderActions}
 				showModifiedBadge={selectedPrompt?.isModified}
@@ -1270,13 +1318,17 @@ export function MaestroPromptsTab({
 				successMessage={successMessage}
 				errorMessage={error}
 				primaryAction={{
-					label: isSaving ? 'Saving...' : 'Save',
+					label: isSaving
+						? tExtra('settings.extra.maestroPromptsTab.saving')
+						: tExtra('settings.extra.maestroPromptsTab.save'),
 					loading: isSaving,
 					disabled: !hasUnsavedChanges || isSelectedPluginPrompt,
 					onClick: handleSave,
 				}}
 				secondaryAction={{
-					label: isResetting ? 'Resetting...' : 'Reset to Default',
+					label: isResetting
+						? tExtra('settings.extra.maestroPromptsTab.resetting')
+						: tExtra('settings.extra.maestroPromptsTab.resetToDefault'),
 					loading: isResetting,
 					disabled: !selectedPrompt?.isModified && !hasUnsavedChanges,
 					onClick: handleReset,

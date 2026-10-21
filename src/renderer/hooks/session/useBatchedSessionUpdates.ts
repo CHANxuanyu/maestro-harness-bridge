@@ -16,7 +16,8 @@
 import { useRef, useCallback, useEffect, useMemo } from 'react';
 import type { Session, SessionState, UsageStats, LogEntry } from '../../types';
 import { useSessionStore } from '../../stores/sessionStore';
-import { canAppendToLogEntry } from '../../utils/logEntries';
+import { canAppendToLogEntry, isTransientActivityEntry } from '../../utils/logEntries';
+import { currentActivityRetention } from '../../utils/activityRetention';
 import { isAiTabHidden } from '../../utils/unifiedTabOrderUtils';
 
 // Default flush interval in milliseconds. 200ms is the sweet spot we landed on:
@@ -256,6 +257,7 @@ export function useBatchedSessionUpdates(
 						// "Captured via interactive TUI" footer pill renders on them.
 						// stderr stays untagged - error frames aren't interactive output.
 						const isInteractive = updatedSession.claudeInteractive?.mode === 'interactive';
+						const retention = currentActivityRetention();
 
 						updatedSession = {
 							...updatedSession,
@@ -268,8 +270,11 @@ export function useBatchedSessionUpdates(
 								// from prior reasoning so the final answer replaces them. The matching
 								// exit-time clear lives in useAgentListeners → cleanupExitedTabLogs.
 								// Sticky mode opts out of BOTH clear points.
+								// Entries read back from the provider transcript are history,
+								// not this turn's scratch state, so they always stay; so do the
+								// live turn's tool calls when the layout keeps them.
 								const existingLogs = tab.logs.filter((log) => {
-									if (log.source === 'thinking' || log.source === 'tool') {
+									if (isTransientActivityEntry(log, retention)) {
 										return tab.showThinking === 'sticky';
 									}
 									return true;

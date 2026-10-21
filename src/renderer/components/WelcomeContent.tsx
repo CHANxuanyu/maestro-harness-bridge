@@ -10,6 +10,7 @@ import type { Theme } from '../types';
 import maestroWandIcon from '../assets/icon-wand.png';
 import { openUrl } from '../utils/openUrl';
 import { buildMaestroUrl } from '../utils/buildMaestroUrl';
+import { useT } from '../i18n';
 
 interface WelcomeContentProps {
 	theme: Theme;
@@ -30,6 +31,7 @@ export function WelcomeContent({
 	theme,
 	showGetStarted = false,
 }: WelcomeContentProps): JSX.Element {
+	const t = useT();
 	return (
 		<div className="flex flex-col items-center text-center max-w-xl">
 			{/* Maestro Icon */}
@@ -37,12 +39,12 @@ export function WelcomeContent({
 
 			{/* Heading */}
 			<h1 className="text-2xl font-bold mb-4" style={{ color: theme.colors.textMain }}>
-				Welcome to Maestro
+				{t('workflows.welcome.title')}
 			</h1>
 
 			{/* Primary goals */}
 			<p className="text-sm mb-4" style={{ color: theme.colors.textDim }}>
-				Maestro is an orchestration tool designed to:
+				{t('workflows.welcome.intro')}
 			</p>
 
 			<div className="text-left space-y-3 mb-6">
@@ -58,10 +60,9 @@ export function WelcomeContent({
 					</span>
 					<p className="text-sm" style={{ color: theme.colors.textDim }}>
 						<strong style={{ color: theme.colors.textMain }}>
-							Manage multiple AI agents in parallel
+							{t('workflows.welcome.goalParallelTitle')}
 						</strong>{' '}
-						- Run several coding assistants simultaneously, each in their own session, switching
-						between them effortlessly.
+						- {t('workflows.welcome.goalParallelBody')}
 					</p>
 				</div>
 
@@ -77,10 +78,9 @@ export function WelcomeContent({
 					</span>
 					<p className="text-sm" style={{ color: theme.colors.textDim }}>
 						<strong style={{ color: theme.colors.textMain }}>
-							Enable unattended automation via Auto Run
+							{t('workflows.welcome.goalAutoRunTitle')}
 						</strong>{' '}
-						- Queue up task lists in markdown documents and let your agents execute them while you
-						step away.
+						- {t('workflows.welcome.goalAutoRunBody')}
 					</p>
 				</div>
 			</div>
@@ -94,20 +94,18 @@ export function WelcomeContent({
 				}}
 			>
 				<p>
-					<strong style={{ color: theme.colors.textMain }}>How it works:</strong> Maestro is a
-					pass-through to your AI provider. Your MCP tools, skills, and permissions work exactly as
-					they do when running the provider directly.
+					<strong style={{ color: theme.colors.textMain }}>
+						{t('workflows.welcome.howItWorksLabel')}
+					</strong>{' '}
+					{t('workflows.welcome.howItWorksBody')}
 				</p>
-				<p>
-					Agents default to Full Access mode with tool calls accepted automatically. Switch to
-					Standard or Read Only mode via the toolbar for guardrails.
-				</p>
+				<p>{t('workflows.welcome.accessModes')}</p>
 			</div>
 
 			{/* Get started call-to-action (only on first-launch screen) */}
 			{showGetStarted && (
 				<p className="text-sm mt-6" style={{ color: theme.colors.textDim }}>
-					To get started, create your first agent manually or with the help of the AI wizard.
+					{t('workflows.welcome.getStarted')}
 				</p>
 			)}
 
@@ -117,7 +115,7 @@ export function WelcomeContent({
 				className="text-xs mt-4 hover:opacity-80 transition-colors"
 				style={{ color: theme.colors.accent }}
 			>
-				Read more at docs.runmaestro.ai/getting-started
+				{t('workflows.welcome.readMore')}
 			</button>
 		</div>
 	);

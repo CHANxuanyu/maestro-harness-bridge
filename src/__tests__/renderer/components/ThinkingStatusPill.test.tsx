@@ -337,7 +337,7 @@ describe('ThinkingStatusPill', () => {
 			const title = titled.getAttribute('title')!;
 			expect(title).toContain(`${getAgentDisplayName('codex')}: 00000000`);
 			expect(title).not.toContain('Claude');
-			const idButton = screen.getByText('01A13F15');
+			const idButton = screen.getByText('00000000');
 			expect(idButton.getAttribute('title')).toContain(getAgentDisplayName('codex'));
 			expect(idButton.getAttribute('title')).not.toContain('Claude');
 		});

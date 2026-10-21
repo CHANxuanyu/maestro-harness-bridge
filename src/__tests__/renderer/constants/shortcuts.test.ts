@@ -482,11 +482,22 @@ describe('shortcut labels carry their family keyword', () => {
 		const en = workflowsShell as Record<string, string>;
 		// Every key inside a `label:` expression, including both arms of a ternary.
 		// The expression ends at the next property, which may sit under comments.
-		const labelKeys = [
-			...palette.matchAll(
-				/label:([\s\S]*?),\n\s*(?:\/\/[^\n]*\n\s*)*(?:subtext|shortcut|action|id):/g
-			),
-		].flatMap((m) => [...m[1].matchAll(/t\('([^']+)'/g)].map((k) => k[1]));
+		// Line breaks are `\r?\n`: Git for Windows checks the source out with CRLF.
+		const extractLabelKeys = (source: string) =>
+			[
+				...source.matchAll(
+					/label:([\s\S]*?),\r?\n\s*(?:\/\/[^\r\n]*\r?\n\s*)*(?:subtext|shortcut|action|id):/g
+				),
+			].flatMap((m) => [...m[1].matchAll(/t\('([^']+)'/g)].map((k) => k[1]));
+		// Whatever the checkout produced, the scan must give the same keys for both
+		// line endings, so a Linux pass cannot hide a Windows miss.
+		const lf = palette.replace(/\r\n/g, '\n');
+		const crlf = lf.replace(/\n/g, '\r\n');
+		const labelKeys = extractLabelKeys(palette);
+		expect(extractLabelKeys(lf)).toEqual(labelKeys);
+		expect(extractLabelKeys(crlf)).toEqual(labelKeys);
+		expect(extractLabelKeys(crlf)).toContain('workflows.shell.gitCreatePullRequest');
+		expect(extractLabelKeys(crlf)).toContain('workflows.shell.gitCreatePullRequestValue');
 		expect(labelKeys.length).toBeGreaterThan(0);
 		expect(labelKeys.filter((key) => en[key] === undefined)).toEqual([]);
 		const gitLabels = labelKeys

@@ -3,7 +3,7 @@
 这是 [RunMaestro/Maestro](https://github.com/RunMaestro/Maestro) 的独立开发分支，面向中文日常使用、项目会话组织和各家原生 harness 的历史接续。它保留上游 Git 历史与 AGPL-3.0 许可证。应用名暂保留 **Maestro I18n**，便于现有试用安装继续读取自己的配置。
 
 - [产品 changelog](../CHANGELOG.md)
-- [本版验证与限制](verification/v1.0.1-hb.1.md)
+- [本版验证与限制](verification/v1.0.1-hb.2.md)
 - [开发过程记录](worklog.md)
 - [信息流改造议题](roadmap/conversation-feed.md)
 - [本分支 Releases](https://github.com/CHANxuanyu/maestro-harness-bridge/releases)
@@ -18,7 +18,7 @@ Codex 同一原生会话一次只能有一个写入者。在另一客户端释�
 
 ## 下载与试用
 
-`v1.0.1-hb.1` 为预览版，macOS Apple Silicon 是本轮验证目标。下载 Release 的 mac-arm64 ZIP，校验随附 SHA-256 清单，再解压应用。应用采用临时签名，未做 Apple Developer ID 公证；系统可能要求通过“系统设置 → 隐私与安全性”确认打开。
+`v1.0.1-hb.2` 为预览版，macOS Apple Silicon 是本轮验证目标。下载 Release 的 mac-arm64 ZIP，校验随附 SHA-256 清单，再解压应用。应用采用临时签名，未做 Apple Developer ID 公证；系统可能要求通过“系统设置 → 隐私与安全性”确认打开。
 
 应用名 `Maestro I18n`、bundle ID `com.maestro.i18n.local` 与上游 Maestro 分开。默认配置目录为 `~/Library/Application Support/Maestro I18n`。现有同名试用版应先正常退出、备份该目录，再替换应用；不要同时启动两个同名版本。
 
@@ -29,7 +29,7 @@ Codex 同一原生会话一次只能有一个写入者。在另一客户端释�
 ```sh
 git clone https://github.com/CHANxuanyu/maestro-harness-bridge.git
 cd maestro-harness-bridge
-git checkout v1.0.1-hb.1
+git checkout v1.0.1-hb.2
 npm ci
 npm run lint
 npm run test

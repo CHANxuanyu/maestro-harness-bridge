@@ -2,6 +2,7 @@
  * Tests for Codex session storage readSessionMessages - specifically verifying
  * that tool calls are properly parsed with toolUse for ToolCallCard rendering.
  */
+import path from 'path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock Electron app
@@ -217,7 +218,10 @@ describe('CodexSessionStorage - readSessionMessages', () => {
 			origin: 'auto',
 			firstUserMessage: 'Fix the bug in main.ts',
 		});
-		expect(fs.readFile).toHaveBeenCalledWith('/accounts/work/session_index.jsonl', 'utf-8');
+		expect(fs.readFile).toHaveBeenCalledWith(
+			path.join('/accounts/work', 'session_index.jsonl'),
+			'utf-8'
+		);
 	});
 
 	it('reads the exact local account selected by the native history row', async () => {

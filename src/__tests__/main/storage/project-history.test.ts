@@ -1,3 +1,4 @@
+import path from 'path';
 import { describe, it, expect, vi } from 'vitest';
 import {
 	discoverProjectHistory,
@@ -99,7 +100,7 @@ describe('project native history discovery', () => {
 		expect(result.conversations).toHaveLength(1);
 		expect(result.conversations[0]).toMatchObject({
 			projectKey: 'sub',
-			projectPath: '/repo/sub',
+			projectPath: path.resolve('/repo/sub'),
 			ownerId: undefined,
 		});
 	});

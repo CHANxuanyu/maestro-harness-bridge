@@ -1,6 +1,8 @@
 # Codex / Maestro 双端接续使用说明
 
-适用版本：Maestro Harness Bridge `1.0.1-hb.3`，macOS Apple Silicon 预览。共享模式是单独启用的本地连接器；只安装 Maestro 应用不会自动开启。
+适用版本：Maestro Harness Bridge `1.0.1-hb.4`，macOS Apple Silicon 预览。共享模式是单独启用的本地连接器；只安装 Maestro 应用不会自动开启。
+
+hb.4 沿用 hb.3 的连接器实现，仅随新版本重新归档。已经正常启用共享的用户可继续使用现有连接器目录和自定义路径，无需为信息流更新重新启用或退出 Codex。
 
 ## 能做什么
 
@@ -17,12 +19,12 @@ Codex 和 Maestro 保持打开，轮流继续同一条已有原生 Codex 会话�
 
 ## 首次启用
 
-1. 下载本 Release 的 `Maestro-Codex-Shared-1.0.1-hb.3.zip`，按 SHA-256 清单校验，解压到固定位置，例如 `~/Applications/Maestro-Codex-Shared-1.0.1-hb.3/`。不要在运行时移动目录。
+1. 下载本 Release 的 `Maestro-Codex-Shared-1.0.1-hb.4.zip`，按 SHA-256 清单校验，解压到固定位置，例如 `~/Applications/Maestro-Codex-Shared-1.0.1-hb.4/`。不要在运行时移动目录。
 2. 等 Codex 与 Maestro 中的生成和队列结束，正常退出 Codex。启动器不会替你关闭应用。
 3. 在终端运行：
 
    ```sh
-   zsh "$HOME/Applications/Maestro-Codex-Shared-1.0.1-hb.3/enable-sharing.command"
+   zsh "$HOME/Applications/Maestro-Codex-Shared-1.0.1-hb.4/enable-sharing.command"
    ```
 
 4. 脚本检查文件完整性、原生版本与签名，再请求打开桌面 Codex。若共享进程已经运行，会提示无需重复启动。
@@ -38,7 +40,7 @@ Codex 拥有执行进程，退出前应结束两端的活动回合。原生客�
 只读检查包与版本：
 
 ```sh
-/usr/bin/python3 "$HOME/Applications/Maestro-Codex-Shared-1.0.1-hb.3/codex-shared.py" --connector-check
+/usr/bin/python3 "$HOME/Applications/Maestro-Codex-Shared-1.0.1-hb.4/codex-shared.py" --connector-check
 ```
 
 检查已运行的共享进程：同一命令最后参数改为 `--connector-verify-runtime`。检查会输出本机运行信息，请勿把原始输出当作可公开日志。

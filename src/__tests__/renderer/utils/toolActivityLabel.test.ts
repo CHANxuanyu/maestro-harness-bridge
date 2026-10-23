@@ -17,6 +17,7 @@ describe('describeToolActivity', () => {
 	describe('file reads', () => {
 		it('labels Claude Code Read with the file path', () => {
 			expect(describeToolActivity('Read', { file_path: 'src/App.tsx' })).toEqual({
+				kind: 'read',
 				verb: 'Read',
 				target: 'src/App.tsx',
 				targetIsCode: true,
@@ -25,6 +26,7 @@ describe('describeToolActivity', () => {
 
 		it('labels OpenCode lowercase read via its `path` key', () => {
 			expect(describeToolActivity('read', { path: 'README.md' })).toEqual({
+				kind: 'read',
 				verb: 'Read',
 				target: 'README.md',
 				targetIsCode: true,
@@ -41,14 +43,38 @@ describe('describeToolActivity', () => {
 	});
 
 	describe('shell commands', () => {
+		it('labels Codex exec and exec_command calls by their command', () => {
+			expect(describeToolActivity('exec', { cmd: 'rg -n foo src' })).toEqual({
+				kind: 'run',
+				verb: 'Ran',
+				target: 'rg -n foo src',
+				targetIsCode: true,
+			});
+			expect(describeToolActivity('exec_command', { cmd: 'npm test' }).target).toBe('npm test');
+		});
+
+		it('drops a login-shell wrapper, which says nothing about what ran', () => {
+			expect(describeToolActivity('shell', { command: ['bash', '-lc', 'npm test'] }).target).toBe(
+				'npm test'
+			);
+			expect(describeToolActivity('Bash', { command: '/bin/zsh -c "make all"' }).target).toBe(
+				'make all'
+			);
+			// Only a leading wrapper goes; a shell named mid-command stays.
+			expect(describeToolActivity('Bash', { command: 'echo hi | bash -c cat' }).target).toBe(
+				'echo hi | bash -c cat'
+			);
+		});
+
 		it('labels Bash with the command string', () => {
 			expect(
 				describeToolActivity('Bash', { command: 'npm test', description: 'Run tests' })
-			).toEqual({ verb: 'Ran', target: 'npm test', targetIsCode: true });
+			).toEqual({ kind: 'run', verb: 'Ran', target: 'npm test', targetIsCode: true });
 		});
 
 		it('joins an argv-array command (Codex/OpenCode shape)', () => {
 			expect(describeToolActivity('shell', { command: ['npm', 'run', 'lint'] })).toEqual({
+				kind: 'run',
 				verb: 'Ran',
 				target: 'npm run lint',
 				targetIsCode: true,
@@ -62,11 +88,13 @@ describe('describeToolActivity', () => {
 
 		it('labels BashOutput and KillShell with no target', () => {
 			expect(describeToolActivity('BashOutput', { bash_id: 'x' })).toEqual({
+				kind: 'other',
 				verb: 'Checked background output',
 				target: '',
 				targetIsCode: false,
 			});
 			expect(describeToolActivity('KillShell', { shell_id: 'x' })).toEqual({
+				kind: 'other',
 				verb: 'Stopped a background command',
 				target: '',
 				targetIsCode: false,
@@ -82,6 +110,7 @@ describe('describeToolActivity', () => {
 
 		it('labels Copilot write_to_file as Wrote', () => {
 			expect(describeToolActivity('write_to_file', { path: 'out.txt' })).toEqual({
+				kind: 'write',
 				verb: 'Wrote',
 				target: 'out.txt',
 				targetIsCode: true,
@@ -96,8 +125,23 @@ describe('describeToolActivity', () => {
 			expect(target).toContain('src/a.ts');
 		});
 
+		it('names the files a patch touches, bare or under `input`', () => {
+			const patch =
+				'*** Begin Patch\n*** Update File: src/a.ts\n@@\n-x\n*** Add File: src/b.ts\n+y\n*** End Patch';
+			expect(describeToolActivity('apply_patch', patch).target).toBe('src/a.ts, src/b.ts');
+			expect(describeToolActivity('apply_patch', { input: patch })).toEqual({
+				kind: 'edit',
+				verb: 'Edited',
+				target: 'src/a.ts, src/b.ts',
+				targetIsCode: true,
+			});
+			// A body without file headers still falls back to its own text.
+			expect(describeToolActivity('apply_patch', 'replace foo').target).toBe('replace foo');
+		});
+
 		it('labels NotebookEdit distinctly', () => {
 			expect(describeToolActivity('NotebookEdit', { notebook_path: 'nb.ipynb' })).toEqual({
+				kind: 'edit',
 				verb: 'Edited notebook',
 				target: 'nb.ipynb',
 				targetIsCode: true,
@@ -108,6 +152,7 @@ describe('describeToolActivity', () => {
 	describe('search and web', () => {
 		it('labels Grep with its pattern', () => {
 			expect(describeToolActivity('Grep', { pattern: 'TODO' })).toEqual({
+				kind: 'search',
 				verb: 'Searched for',
 				target: 'TODO',
 				targetIsCode: true,
@@ -116,6 +161,7 @@ describe('describeToolActivity', () => {
 
 		it('labels Glob distinctly from Grep', () => {
 			expect(describeToolActivity('Glob', { pattern: '**/*.ts' })).toEqual({
+				kind: 'search',
 				verb: 'Looked for files matching',
 				target: '**/*.ts',
 				targetIsCode: true,
@@ -124,11 +170,13 @@ describe('describeToolActivity', () => {
 
 		it('labels WebFetch with the URL and WebSearch with the query', () => {
 			expect(describeToolActivity('WebFetch', { url: 'https://example.com' })).toEqual({
+				kind: 'web',
 				verb: 'Fetched',
 				target: 'https://example.com',
 				targetIsCode: true,
 			});
 			expect(describeToolActivity('WebSearch', { query: 'electron ipc' })).toEqual({
+				kind: 'web',
 				verb: 'Searched the web for',
 				target: 'electron ipc',
 				targetIsCode: false,
@@ -147,6 +195,7 @@ describe('describeToolActivity', () => {
 					],
 				})
 			).toEqual({
+				kind: 'plan',
 				verb: 'Updated the task list',
 				target: 'Doing two (1/3)',
 				targetIsCode: false,
@@ -159,6 +208,7 @@ describe('describeToolActivity', () => {
 					plan: [{ step: 'Investigate', status: 'in_progress' }],
 				})
 			).toEqual({
+				kind: 'plan',
 				verb: 'Updated the task list',
 				target: 'Investigate (0/1)',
 				targetIsCode: false,
@@ -169,6 +219,7 @@ describe('describeToolActivity', () => {
 			expect(
 				describeToolActivity('Task', { description: 'Audit the parsers', prompt: 'long prompt' })
 			).toEqual({
+				kind: 'agent',
 				verb: 'Delegated to a subagent',
 				target: 'Audit the parsers',
 				targetIsCode: false,
@@ -179,6 +230,7 @@ describe('describeToolActivity', () => {
 	describe('MCP and unknown tools', () => {
 		it('splits an MCP tool name into server and tool', () => {
 			expect(describeToolActivity('mcp__linear__create_issue', {})).toEqual({
+				kind: 'other',
 				verb: 'Called linear',
 				target: 'create issue',
 				targetIsCode: false,
@@ -191,6 +243,7 @@ describe('describeToolActivity', () => {
 
 		it('still produces a line for an unrecognized tool', () => {
 			expect(describeToolActivity('SomeNewTool', { file_path: 'x.ts' })).toEqual({
+				kind: 'other',
 				verb: 'Used SomeNewTool',
 				target: 'x.ts',
 				targetIsCode: true,
@@ -199,16 +252,19 @@ describe('describeToolActivity', () => {
 
 		it('never throws on a missing name or a null input', () => {
 			expect(describeToolActivity('', null)).toEqual({
+				kind: 'other',
 				verb: 'Used a tool',
 				target: '',
 				targetIsCode: true,
 			});
 			expect(describeToolActivity('Read', undefined)).toEqual({
+				kind: 'read',
 				verb: 'Read',
 				target: '',
 				targetIsCode: true,
 			});
 			expect(describeToolActivity('Bash', [1, 2, 3])).toEqual({
+				kind: 'run',
 				verb: 'Ran',
 				target: '',
 				targetIsCode: true,

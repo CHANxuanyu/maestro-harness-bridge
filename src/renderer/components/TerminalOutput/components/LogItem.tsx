@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useId, useState, memo } from 'react';
-import { ChevronDown, ChevronUp, Eye, AlertCircle, Info } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Eye, AlertCircle, Info } from 'lucide-react';
 import type { LogItemProps } from '../types';
 import type { LogEntry } from '../../../types';
 import {
@@ -33,7 +33,7 @@ import { CrossAgentResponseHeader } from '../../CrossAgentResponseHeader';
 import { isHiddenProgressEntry } from '../utils/collapseAiResponseLogs';
 import { toolRunStatus } from '../utils/foldNativeToolRuns';
 import { SessionRecoveryCardConnector } from './SessionRecoveryCardConnector';
-import { ToolBadge } from './ToolBadge';
+import { ToolActivityLine, ToolBadge } from './ToolBadge';
 import { ToolCallFold } from './ToolCallDetails';
 import { codexDirectivesLiveForSource } from '../../../services/codexFollowup';
 import { isProgressNoteEntry } from '../../../utils/transcriptMessages';
@@ -117,6 +117,7 @@ export const LogItem = memo(
 		isLatestReply = false,
 		turnSettingChange,
 		secondaryTextColor,
+		feedNested = false,
 	}: LogItemProps) => {
 		const t = useT();
 		const locale = useAppLocale();
@@ -130,6 +131,8 @@ export const LogItem = memo(
 		const infoId = useId();
 		const toggleInfo = useCallback(() => setInfoOpen((open) => !open), []);
 		const secondary = secondaryTextColor ?? theme.colors.textDim;
+		// A row inside an unfolded turn-activity fold sits in that fold's padding.
+		const rowPadX = feedNested ? '' : 'px-3 sm:px-6';
 
 		// Handle expand toggle with scroll adjustment
 		const handleExpandToggle = useCallback(() => {
@@ -410,6 +413,39 @@ export const LogItem = memo(
 		// narration written between tool calls, not the answer. It renders as a
 		// quiet row under a small label so the answer bubbles stay what the eye
 		// lands on, while the note is still there to read.
+		// Feed: the agent narrating as it works, read like Codex shows it - plain
+		// secondary text in the turn's activity, no label and no rail.
+		if (isProgressNoteEntry(log) && feedLayout) {
+			return (
+				<div
+					ref={logItemRef}
+					className={`${rowPadX} py-0.5 min-w-0 break-words`}
+					data-log-index={index}
+					data-log-id={log.id}
+					data-progress-note=""
+					data-feed-row="activity"
+					style={{ color: secondary, contentVisibility: 'auto', containIntrinsicSize: 'auto 28px' }}
+				>
+					<span className="sr-only">{t('workflows.transcript.progressNote')}</span>
+					{isAIMode && !markdownEditMode ? (
+						<MarkdownRenderer
+							content={filteredText}
+							theme={theme}
+							onCopy={copyToClipboard}
+							fileTree={fileTree}
+							cwd={cwd}
+							projectRoot={projectRoot}
+							onFileClick={onFileClick}
+							sshRemoteId={sshRemoteId}
+							chatLineBreaks
+							chatMath
+						/>
+					) : (
+						<div className="whitespace-pre-wrap">{filteredText}</div>
+					)}
+				</div>
+			);
+		}
 		if (isProgressNoteEntry(log)) {
 			return (
 				<div
@@ -585,6 +621,55 @@ export const LogItem = memo(
 		// and a one-line summary, with the full input and result one click away.
 		// A conversation of any length holds dozens of these, and drawing each one
 		// open as a full bubble buries the exchange it belongs to.
+		// Feed: every tool call - stored or live - is one line saying what it did,
+		// its full input and result one click away. A claude-code Task with nested
+		// subagent calls keeps the badge further down, which lists them.
+		if (log.source === 'tool' && feedLayout && !subagentLogs?.length) {
+			return (
+				<div
+					ref={logItemRef}
+					className={`${rowPadX} py-0.5`}
+					data-log-index={index}
+					data-log-id={log.id}
+					data-native-tool={log.nativeTranscript ? '' : undefined}
+					data-feed-row="activity"
+					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 28px' }}
+				>
+					{/* Indented like chat prose (0.5em of the chat size), so the line
+					    starts where the text around it does. */}
+					<div style={{ marginInlineStart: '0.5em' }}>
+						<button
+							type="button"
+							onClick={() => onToggleExpanded(log.id)}
+							aria-expanded={isExpanded}
+							aria-label={
+								isExpanded
+									? t('workflows.transcript.hideToolDetails', { name: log.text })
+									: t('workflows.transcript.showToolDetails', { name: log.text })
+							}
+							className="group/tool flex items-center gap-1.5 max-w-full min-w-0 text-left text-sm rounded outline-none focus-visible:ring-1"
+						>
+							<ToolActivityLine log={log} theme={theme} secondaryTextColor={secondary} />
+							<ChevronRight
+								className={`w-3.5 h-3.5 shrink-0 transition-transform ${
+									isExpanded
+										? 'rotate-90'
+										: 'opacity-0 group-hover/tool:opacity-100 group-focus-visible/tool:opacity-100'
+								}`}
+								style={{ color: secondary }}
+								aria-hidden
+							/>
+						</button>
+						{isExpanded && (
+							<div className="pl-[1.375rem] pb-1 select-text text-xs" data-native-tool-details="">
+								<ToolBadge log={log} theme={theme} part="details" />
+							</div>
+						)}
+					</div>
+				</div>
+			);
+		}
+
 		if (log.source === 'tool' && log.nativeTranscript) {
 			return (
 				<div
@@ -770,10 +855,10 @@ export const LogItem = memo(
 		// notice keep a boundary.
 		const feedRowClass =
 			feedKind === 'user'
-				? `flex flex-col group px-3 sm:px-6 pt-5 pb-0.5 ${feedAlign === 'end' ? 'items-end' : 'items-start'}`
+				? `flex flex-col group ${rowPadX} pt-4 pb-0.5 ${feedAlign === 'end' ? 'items-end' : 'items-start'}`
 				: feedKind === 'activity'
-					? 'flex flex-col group px-3 sm:px-6 py-0'
-					: 'flex flex-col group px-3 sm:px-6 pt-1.5 pb-0.5';
+					? `flex flex-col group ${rowPadX} py-0.5`
+					: `flex flex-col group ${rowPadX} pt-1.5 pb-0.5`;
 		const feedBodyClass =
 			feedKind === 'user'
 				? 'relative min-w-0 max-w-[min(85%,40rem)] px-3.5 py-2 rounded-2xl break-words'
@@ -1072,8 +1157,31 @@ export const LogItem = memo(
 							)}
 						</div>
 					)}
+					{/* Feed: reasoning reads as quiet secondary prose in the turn's
+					    activity, like the progress notes around it. */}
+					{log.source === 'thinking' && feedLayout && (
+						<div className="text-sm break-words italic" style={{ color: secondary }}>
+							<span className="sr-only">{t('workflows.transcript.thinking')}</span>
+							{isAIMode && !markdownEditMode ? (
+								<MarkdownRenderer
+									content={log.text}
+									theme={theme}
+									onCopy={copyToClipboard}
+									fileTree={fileTree}
+									cwd={cwd}
+									projectRoot={projectRoot}
+									onFileClick={onFileClick}
+									sshRemoteId={sshRemoteId}
+									chatLineBreaks
+									chatMath
+								/>
+							) : (
+								<div className="whitespace-pre-wrap">{log.text}</div>
+							)}
+						</div>
+					)}
 					{/* Special rendering for thinking/streaming content (AI reasoning in real-time) */}
-					{log.source === 'thinking' && (
+					{log.source === 'thinking' && !feedLayout && (
 						<div
 							className="px-4 py-2 text-sm font-mono border-l-2"
 							style={{
@@ -1117,19 +1225,27 @@ export const LogItem = memo(
 					)}
 					{isHiddenProgressEntry(log) && (
 						<div
-							className="px-4 py-1.5 text-xs border-l-2"
-							style={{
-								color: theme.colors.textMain,
-								borderColor: theme.colors.accent,
-							}}
+							className={feedLayout ? 'text-sm' : 'px-4 py-1.5 text-xs border-l-2'}
+							style={
+								feedLayout
+									? { color: secondary }
+									: {
+											color: theme.colors.textMain,
+											borderColor: theme.colors.accent,
+										}
+							}
 						>
 							<div className="flex items-start gap-2">
 								<span
-									className="px-1.5 py-0.5 rounded shrink-0"
-									style={{
-										backgroundColor: `${theme.colors.accent}30`,
-										color: theme.colors.accent,
-									}}
+									className={feedLayout ? 'shrink-0' : 'px-1.5 py-0.5 rounded shrink-0'}
+									style={
+										feedLayout
+											? undefined
+											: {
+													backgroundColor: `${theme.colors.accent}30`,
+													color: theme.colors.accent,
+												}
+									}
 								>
 									{log.metadata?.hiddenProgress?.kind === 'tool'
 										? log.metadata.hiddenProgress.toolName || 'working'
@@ -1623,6 +1739,7 @@ export const LogItem = memo(
 			// Conversation feed. `isLatestReply` moves to the next reply when one
 			// arrives; the change map is rebuilt per render, so compare by value.
 			prevProps.feedLayout === nextProps.feedLayout &&
+			prevProps.feedNested === nextProps.feedNested &&
 			prevProps.isLatestReply === nextProps.isLatestReply &&
 			sameTurnSettingChange(prevProps.turnSettingChange, nextProps.turnSettingChange) &&
 			prevProps.secondaryTextColor === nextProps.secondaryTextColor

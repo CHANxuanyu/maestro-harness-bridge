@@ -160,6 +160,11 @@ export interface LogItemProps {
 	 * labels and icons stay legible on themes whose `textDim` is too faint.
 	 */
 	secondaryTextColor?: string;
+	/**
+	 * Feed only: drawn inside an unfolded turn-activity row, which already
+	 * supplies the side padding.
+	 */
+	feedNested?: boolean;
 }
 
 export interface TerminalOutputProps {

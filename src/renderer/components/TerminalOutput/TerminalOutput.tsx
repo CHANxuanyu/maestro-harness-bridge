@@ -41,6 +41,9 @@ import { computeTurnSettingChanges } from './utils/turnSettingChanges';
 import { readableTextOn } from '../../../shared/colorContrast';
 import { groupSubagentToolLogs } from './utils/groupSubagentToolLogs';
 import { foldNativeToolRuns } from './utils/foldNativeToolRuns';
+import { foldTurnActivity, type TurnActivity } from './utils/foldTurnActivity';
+import { feedProseStyles } from './utils/feedProseStyles';
+import { TurnActivityFold } from './components/TurnActivityFold';
 import { buildRenderedIdMap } from './utils/renderedLogIds';
 import { useUIStore } from '../../stores/uiStore';
 import { jumpToElement } from '../../utils/jumpHighlight';
@@ -279,17 +282,17 @@ export const TerminalOutput = memo(
 		const thinkingHidden = (activeTab?.showThinking ?? 'off') === 'off';
 		// With tool calls switched off, each run of stored tool calls folds into one
 		// "N tool calls" row (see foldNativeToolRuns), so a stored turn never reads
-		// as tool-free. In the conversation-centred layout the RUNNING turn's calls
-		// fold the same way, so what the agent is executing stays on screen (with
-		// its running state) instead of being hidden until the turn ends. Other
-		// layouts keep hiding live calls, as before.
+		// as tool-free. Live calls stay hidden, as before. The conversation-centred
+		// layout folds each finished turn's whole process instead (foldTurnActivity
+		// below), so there every call - the running turn's included - stays one
+		// line of its own.
 		const toolFold = useMemo(
 			() =>
 				foldNativeToolRuns(
 					thinkingHidden
 						? collapsedAll.filter((l) => !(l.source === 'thinking' && l.nativeTranscript))
 						: collapsedAll,
-					toolsVisible,
+					toolsVisible || readingColumn,
 					readingColumn
 				),
 			[collapsedAll, toolsVisible, thinkingHidden, readingColumn]
@@ -298,10 +301,25 @@ export const TerminalOutput = memo(
 		const toolRunByHostId = toolFold.runByHostId;
 		// Nest subagent tool badges (claude-code Task) under the tool entry that
 		// spawned them; orphans and non-claude agents pass through untouched.
-		const { logs: filteredLogs, childrenByParentId } = useMemo(
+		const { logs: groupedLogs, childrenByParentId } = useMemo(
 			() => groupSubagentToolLogs(collapsedLogs),
 			[collapsedLogs]
 		);
+		const debouncedSearchQuery = useDebouncedValue(outputSearchQuery, 150);
+		// Conversation feed: each finished turn's process (tools, reasoning,
+		// progress notes, interim text) folds behind one "Worked for ..." row above
+		// its answer, as in Codex. The running turn stays open, and a search shows
+		// everything so every match is on the page.
+		const turnLive = activeTab?.state === 'busy';
+		const turnFold = useMemo(
+			() =>
+				readingColumn && !debouncedSearchQuery
+					? foldTurnActivity(groupedLogs, { keepLastTurnOpen: turnLive })
+					: { logs: groupedLogs, activityByHostId: new Map<string, TurnActivity>() },
+			[groupedLogs, readingColumn, debouncedSearchQuery, turnLive]
+		);
+		const filteredLogs = turnFold.logs;
+		const turnActivityByHostId = turnFold.activityByHostId;
 		// Conversation feed presentation (see LogItem `feedLayout`). Derived from
 		// the full rendered list, not the progressive window, so mounting older
 		// rows cannot move which reply is newest or where a setting changed.
@@ -316,7 +334,6 @@ export const TerminalOutput = memo(
 			() => readableTextOn(theme.colors.textDim, [theme.colors.bgMain]),
 			[theme.colors.textDim, theme.colors.bgMain]
 		);
-		const debouncedSearchQuery = useDebouncedValue(outputSearchQuery, 150);
 
 		// ============================================================================
 		// Progressive transcript rendering (issue #1342)
@@ -919,8 +936,10 @@ export const TerminalOutput = memo(
 		// Memoized prose styles - applied once at container level instead of per-log-item
 		// IMPORTANT: Scoped to .terminal-output to avoid CSS conflicts with other prose containers (e.g., AutoRun panel)
 		const proseStyles = useMemo(
-			() => generateTerminalProseStyles(theme, '.terminal-output'),
-			[theme]
+			() =>
+				generateTerminalProseStyles(theme, '.terminal-output') +
+				(readingColumn ? feedProseStyles(theme) : ''),
+			[theme, readingColumn]
 		);
 
 		return (
@@ -1159,10 +1178,10 @@ export const TerminalOutput = memo(
 							// Absolute index into filteredLogs - sibling lookups (echo stripping)
 							// and jump-to-message targeting must not see the window offset.
 							const index = logStartIndex + visibleIndex;
-							return (
+							const renderRow = (entry: LogEntry, nested: boolean) => (
 								<LogItem
-									key={log.id}
-									log={log}
+									key={entry.id}
+									log={entry}
 									index={index}
 									isTerminal={isTerminal}
 									isAIMode={isAIMode}
@@ -1170,14 +1189,14 @@ export const TerminalOutput = memo(
 									fontFamily={fontFamily}
 									maxOutputLines={maxOutputLines}
 									lastUserCommand={
-										isTerminal && log.source !== 'user' ? getLastUserCommand(index) : undefined
+										isTerminal && entry.source !== 'user' ? getLastUserCommand(index) : undefined
 									}
-									isExpanded={expandedLogs.has(log.id)}
+									isExpanded={expandedLogs.has(entry.id)}
 									onToggleExpanded={toggleExpanded}
-									subagentLogs={childrenByParentId.get(log.id)}
-									toolRun={toolRunByHostId.get(log.id)}
-									localFilterQuery={localFilters.get(log.id) || ''}
-									filterMode={filterModes.get(log.id) || { mode: 'include', regex: false }}
+									subagentLogs={childrenByParentId.get(entry.id)}
+									toolRun={toolRunByHostId.get(entry.id)}
+									localFilterQuery={localFilters.get(entry.id) || ''}
+									filterMode={filterModes.get(entry.id) || { mode: 'include', regex: false }}
 									activeLocalFilter={activeLocalFilter}
 									onToggleLocalFilter={toggleLocalFilter}
 									onSetLocalFilterQuery={setLocalFilterQuery}
@@ -1211,12 +1230,12 @@ export const TerminalOutput = memo(
 									onSaveToFile={handleSaveToFile}
 									ghCliAvailable={ghCliAvailable}
 									onPublishGist={onPublishMessageGist}
-									publishedGistUrl={publishedGists[log.id]?.gistUrl}
+									publishedGistUrl={publishedGists[entry.id]?.gistUrl}
 									bionifyReadingMode={globalBionifyReadingMode}
 									bionifyIntensity={globalBionifyIntensity}
 									bionifyAlgorithm={globalBionifyAlgorithm}
 									userMessageAlignment={userMessageAlignment}
-									responseDurationMs={responseDurationByLogId.get(log.id)}
+									responseDurationMs={responseDurationByLogId.get(entry.id)}
 									// Codex's assistant directives are Codex's own emitting
 									// convention, so the same string from another provider is a
 									// message about the format. The tab comes from the resolved
@@ -1230,10 +1249,30 @@ export const TerminalOutput = memo(
 									isAdaptiveMode={getClaudeTokenMode(session) === 'dynamic'}
 									showProviderModePill={showProviderModePill}
 									feedLayout={feedLayout}
-									isLatestReply={feedFacts?.latestReplyId === log.id}
-									turnSettingChange={feedFacts?.changes.get(log.id)}
+									isLatestReply={feedFacts?.latestReplyId === entry.id}
+									turnSettingChange={feedFacts?.changes.get(entry.id)}
 									secondaryTextColor={feedLayout ? feedSecondaryColor : undefined}
+									feedNested={nested}
 								/>
+							);
+							const activity = turnActivityByHostId.get(log.id);
+							if (!activity) return renderRow(log, false);
+							// A finished turn's work, folded behind one row (foldTurnActivity).
+							const foldKey = `turn:${log.id}`;
+							const open = expandedLogs.has(foldKey);
+							return (
+								<TurnActivityFold
+									key={foldKey}
+									hostId={log.id}
+									index={index}
+									activity={activity}
+									open={open}
+									onToggle={() => toggleExpanded(foldKey)}
+									theme={theme}
+									secondaryTextColor={feedSecondaryColor}
+								>
+									{open && activity.entries.map((entry) => renderRow(entry, true))}
+								</TurnActivityFold>
 							);
 						})}
 

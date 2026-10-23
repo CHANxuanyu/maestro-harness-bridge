@@ -283,12 +283,12 @@ function turn(prefix: string, ts: number, tools: number): LogEntry[] {
 	];
 }
 
-function sessionWith(logs: LogEntry[]): Session {
+function sessionWith(logs: LogEntry[], { busy = false }: { busy?: boolean } = {}): Session {
 	return {
 		id: 'session-1',
 		name: 'Test',
 		toolType: 'codex',
-		state: 'idle',
+		state: busy ? 'busy' : 'idle',
 		inputMode: 'ai',
 		cwd: '/p',
 		projectRoot: '/p',
@@ -299,7 +299,14 @@ function sessionWith(logs: LogEntry[]): Session {
 		fileExplorerExpanded: [],
 		messageQueue: [],
 		aiTabs: [
-			{ id: 'tab-1', agentSessionId: 'native-1', logs, isUnread: false, showThinking: 'off' },
+			{
+				id: 'tab-1',
+				agentSessionId: 'native-1',
+				logs,
+				isUnread: false,
+				showThinking: 'off',
+				state: busy ? 'busy' : 'idle',
+			},
 		],
 		activeTabId: 'tab-1',
 		terminalTabs: [],
@@ -584,14 +591,21 @@ describe.each(['agents', 'conversations'] as const)(
 				backfill.onPrepend!(older.length);
 				rerender(<TerminalOutput {...props(sessionWith([...older, ...current]))} />);
 			});
+			// A new turn arrives from elsewhere while the tab streams it (busy), so
+			// the conversation layout keeps that turn unfolded.
 			const show = (tail: LogEntry[]) =>
 				act(() => {
-					rerender(<TerminalOutput {...props(sessionWith([...older, ...current, ...tail]))} />);
+					rerender(
+						<TerminalOutput
+							{...props(sessionWith([...older, ...current, ...tail], { busy: true }))}
+						/>
+					);
 				});
 			const count = () => unreadButton(container)?.textContent?.trim();
 
-			// The live turn: a progress note, then the answer starts streaming. Two
-			// distinct rows, two unread.
+			// The live turn: its question, a progress note, then the answer starts
+			// streaming. Three distinct rows, three unread.
+			const ask: LogEntry = { id: 'live-q', timestamp: 98_900, source: 'user', text: 'Why?' };
 			const note = liveProgressNote('live-p');
 			const answer = (text: string): LogEntry => ({
 				id: 'live-a',
@@ -599,11 +613,11 @@ describe.each(['agents', 'conversations'] as const)(
 				source: 'stdout',
 				text,
 			});
-			show([note]);
-			expect(count()).toBe('1');
-			show([note, answer('The build')]);
-			expect(renderedIds(container).slice(-2)).toEqual(['live-p', 'live-a']);
+			show([ask, note]);
 			expect(count()).toBe('2');
+			show([ask, note, answer('The build')]);
+			expect(renderedIds(container).slice(-2)).toEqual(['live-p', 'live-a']);
+			expect(count()).toBe('3');
 			const rows = renderedIds(container).length;
 
 			// Further chunks coalesce into the same entry (the data listener appends
@@ -611,22 +625,23 @@ describe.each(['agents', 'conversations'] as const)(
 			let text = 'The build';
 			for (const chunk of [' failed', ' in the', ' linker', ' step.']) {
 				text += chunk;
-				show([note, answer(text)]);
+				show([ask, note, answer(text)]);
 				expect(renderedIds(container).length).toBe(rows);
-				expect(count()).toBe('2');
+				expect(count()).toBe('3');
 				expect(readingRow()).toEqual(before);
 			}
 
 			// A chunk that arrived as its own entry, with no boundary in between,
 			// folds into the same response bubble: still the same message.
 			show([
+				ask,
 				note,
 				answer(text),
 				{ id: 'live-a2', timestamp: 99_200, source: 'stdout', text: ' Retrying.' },
 			]);
 			expect(renderedIds(container).length).toBe(rows);
 			expect(renderedIds(container)).not.toContain('live-a2');
-			expect(count()).toBe('2');
+			expect(count()).toBe('3');
 			expect(readingRow()).toEqual(before);
 		});
 

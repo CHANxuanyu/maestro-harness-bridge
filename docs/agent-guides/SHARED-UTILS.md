@@ -1091,7 +1091,7 @@ Which agents the Left Bar may surface AT ALL - a different question from the unr
 
 ### Tool Activity Labels (`src/renderer/utils/toolActivityLabel.ts`)
 
-`describeToolActivity(toolName, input)` turns one raw agent tool call into ONE short line of plain English (`Read src/App.tsx`, `Ran npm test`, `Edited themes.ts`), returning `{ verb, target }`.
+`describeToolActivity(toolName, input)` turns one raw agent tool call into ONE short line of plain English (`Read src/App.tsx`, `Ran npm test`, `Edited themes.ts`), returning `{ kind, verb, target, targetIsCode }`. `verb` is English prose for the Thought Stream; `kind` (`read`, `write`, `edit`, `run`, `search`, `list`, `web`, `agent`, `plan`, `other`) is the stable key a translated surface picks its own wording from - the conversation feed's one-line tool rows (`ToolActivityLine`) do exactly that, so do NOT add a second tool-name table for a localized surface. A leading login-shell wrapper (`bash -lc "npm test"`) is dropped from a command target, and an `apply_patch` body is named by the files its `*** Update File:` headers touch.
 
 Tool names differ per provider (Claude Code `Read`/`Bash`/`MultiEdit`, OpenCode lowercase `read`/`bash`, Codex `shell`/`apply_patch`/`update_plan`, Copilot `write_to_file`, MCP `mcp__server__tool`), so matching runs on a normalized name. An unrecognized tool still returns a usable `Used <name>` line rather than being dropped, so a provider that ships a new tool degrades to something readable instead of a hole in the feed. It never throws: a raw-string input (Codex `apply_patch` sends a whole diff, not an object) and an argv-array `command` are both handled.
 

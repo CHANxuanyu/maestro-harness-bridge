@@ -429,26 +429,34 @@ describe('conversation feed: tools', () => {
 		metadata: { toolState: { status: 'completed', input: { path }, output } },
 	});
 
-	it('renders nothing of a collapsed run, and each call unfolds on its own', () => {
+	it("folds a finished turn's work behind one row above its answer", () => {
 		const { container } = renderTranscript([
 			user('u1', 0, 'Read both files'),
 			call('t1', 1, 'first.md', 'FIRST FILE BODY'),
 			call('t2', 2, 'second.md', 'SECOND FILE BODY'),
 			reply('a1', 3, 'Done'),
 		]);
-		const run = row(container, 't1');
-		expect(run.getAttribute('data-tool-run')).not.toBeNull();
-		const runToggle = within(run).getByRole('button', { name: /2 tool calls/ });
-		expect(runToggle).toHaveAttribute('aria-expanded', 'false');
-		// Collapsed means absent, not hidden by a style.
-		expect(run.querySelector('[data-tool-call-fold]')).toBeNull();
-		expect(screen.queryByText('FIRST FILE BODY')).toBeNull();
+		// The fold stands in for the turn's first step and keeps its id.
+		const fold = row(container, 't1');
+		expect(fold.getAttribute('data-feed-row')).toBe('turn-activity');
+		const toggle = within(fold).getByRole('button', { name: 'Worked for 3m 0s' });
+		expect(toggle).toHaveAttribute('aria-expanded', 'false');
+		// Folded means absent, not hidden by a style; the answer stays on the page.
+		expect(row(container, 't2')).toBeNull();
+		expect(fold.querySelector('[data-turn-activity-steps]')).toBeNull();
+		expect(screen.getByText('Done')).toBeInTheDocument();
+		expect(fold.compareDocumentPosition(row(container, 'a1'))).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING
+		);
 
-		fireEvent.click(runToggle);
-		expect(runToggle).toHaveAttribute('aria-expanded', 'true');
-		const calls = within(run).getAllByRole('button', { name: 'Show details for read_file' });
+		fireEvent.click(toggle);
+		expect(toggle).toHaveAttribute('aria-expanded', 'true');
+		// One line per call, saying what it did.
+		const lines = Array.from(fold.querySelectorAll('[data-tool-activity="read"]'));
+		expect(lines.map((line) => line.textContent)).toEqual(['Readfirst.md', 'Readsecond.md']);
+		const calls = within(fold).getAllByRole('button', { name: 'Show details for read_file' });
 		expect(calls).toHaveLength(2);
-		// The run is open, the calls are not.
+		// The turn is open, the calls are not.
 		expect(screen.queryByText('FIRST FILE BODY')).toBeNull();
 		expect(screen.queryByText('SECOND FILE BODY')).toBeNull();
 
@@ -464,8 +472,59 @@ describe('conversation feed: tools', () => {
 		// Closing one call left the other open.
 		expect(screen.getByText('SECOND FILE BODY')).toBeInTheDocument();
 
-		fireEvent.click(runToggle);
-		expect(run.querySelector('[data-tool-call-fold]')).toBeNull();
+		fireEvent.click(toggle);
+		expect(fold.querySelector('[data-turn-activity-steps]')).toBeNull();
+	});
+
+	it('names a failed step on the folded row', () => {
+		const { container } = renderTranscript([
+			user('u1', 0, 'Lint it'),
+			{
+				id: 't1',
+				timestamp: at(1),
+				source: 'tool',
+				text: 'exec_command',
+				nativeTranscript: { messageId: 't1' },
+				metadata: { toolState: { status: 'failed', input: { cmd: 'npx eslint src' } } },
+			},
+			reply('a1', 2, 'Lint reported one error.'),
+		]);
+		const status = row(container, 't1').querySelector('[data-tool-status]') as HTMLElement;
+		expect(status.getAttribute('data-tool-status')).toBe('error');
+		expect(status).toHaveTextContent('Failed');
+	});
+
+	it('keeps the turn still working unfolded, and folds it once it answers', () => {
+		const logs = [
+			user('u1', 0, 'Read it'),
+			reply('p1', 1, 'Opening the file.', {
+				nativeTranscript: { messageId: 'p1', channel: 'commentary' },
+			}),
+			call('t1', 1, 'first.md', 'FIRST FILE BODY'),
+		];
+		const { container, rerenderWith } = renderTranscript(logs);
+		expect(row(container, 'p1').getAttribute('data-progress-note')).not.toBeNull();
+		expect(row(container, 't1').querySelector('[data-tool-activity="read"]')).not.toBeNull();
+
+		rerenderWith([...logs, reply('a1', 2, 'It says hello.')]);
+		expect(row(container, 'p1').getAttribute('data-feed-row')).toBe('turn-activity');
+		expect(row(container, 't1')).toBeNull();
+		expect(screen.getByText('It says hello.')).toBeInTheDocument();
+	});
+
+	it('shows every step while searching, so each match is on the page', () => {
+		const { container } = renderTranscript(
+			[
+				user('u1', 0, 'Read both files'),
+				call('t1', 1, 'first.md', 'FIRST FILE BODY'),
+				reply('a1', 3, 'Done'),
+			],
+			{ outputSearchQuery: 'first' }
+		);
+		// The search query is debounced; the fold lifts once it settles.
+		return vi.waitFor(() =>
+			expect(row(container, 't1').querySelector('[data-tool-activity="read"]')).not.toBeNull()
+		);
 	});
 
 	it('states a stopped run in words, not only a glyph', () => {
@@ -486,7 +545,7 @@ describe('conversation feed: tools', () => {
 		expect(status).toHaveAttribute('title', 'Stopped before it finished');
 	});
 
-	it('keeps status words whole in both tool headers; only the summary gives way', () => {
+	it('keeps the verb and status words whole; only the command gives way', () => {
 		// Structure only (no layout in jsdom). In a narrow window a shrinkable
 		// wrapper let "运行中" / "已停止" break between characters.
 		const { container } = renderTranscript([
@@ -502,30 +561,19 @@ describe('conversation feed: tools', () => {
 				},
 			},
 		]);
-		const run = row(container, 't1');
 		const classesOf = (el: Element | null) => (el?.getAttribute('class') ?? '').split(/\s+/);
-
-		// Run row: the count and the status are fixed units.
-		const runToggle = within(run).getByRole('button', { name: /1 tool call/ });
-		const runStatus = runToggle.querySelector('[data-tool-status]');
-		expect(classesOf(runStatus)).toEqual(expect.arrayContaining(['shrink-0', 'whitespace-nowrap']));
-		expect(classesOf(within(runToggle).getByText('1 tool call'))).toEqual(
+		const callLine = within(row(container, 't1')).getByRole('button', {
+			name: 'Show details for shell',
+		});
+		const status = callLine.querySelector('[data-tool-status]') as Element;
+		expect(classesOf(status)).toEqual(expect.arrayContaining(['shrink-0', 'whitespace-nowrap']));
+		expect(status).toHaveTextContent('Stopped');
+		expect(classesOf(within(callLine).getByText('Ran'))).toEqual(
 			expect.arrayContaining(['shrink-0', 'whitespace-nowrap'])
 		);
-
-		// Per-call header (inside the unfolded run): the status's slot in the
-		// header row must not shrink either, and the summary still truncates.
-		fireEvent.click(runToggle);
-		const callHeader = within(run).getByRole('button', { name: 'Show details for shell' });
-		const callStatus = callHeader.querySelector('[data-tool-status]') as Element;
-		expect(classesOf(callStatus)).toEqual(
-			expect.arrayContaining(['shrink-0', 'whitespace-nowrap'])
-		);
-		const slot = callStatus.closest('[data-tool-status-slot]');
-		expect(classesOf(slot)).toContain('shrink-0');
-		expect(callStatus).toHaveTextContent('Stopped');
-		const summary = within(callHeader).getByText(/\/bin\/zsh/);
-		expect(classesOf(summary)).toEqual(expect.arrayContaining(['truncate', 'min-w-0']));
+		// The shell wrapper says nothing, so the line shows the command itself.
+		const command = within(callLine).getByText('python3 -u ...');
+		expect(classesOf(command)).toEqual(expect.arrayContaining(['truncate', 'min-w-0']));
 	});
 
 	it('shows a live call running, then done, with its output intact', () => {
@@ -539,9 +587,9 @@ describe('conversation feed: tools', () => {
 		const logs = [user('u1', 0, 'Lint it'), running];
 		const { container, rerenderWith } = renderTranscript(logs);
 		const live = () => row(container, 'live-1');
-		// The conversation layout keeps the running call on screen, folded.
+		// The turn still running stays open: the call is one line with its state.
 		expect(within(live()).getByRole('status')).toHaveTextContent('Running');
-		expect(live().getAttribute('data-tool-run-status')).toBe('running');
+		expect(live()).toHaveTextContent('npx eslint src/renderer');
 
 		rerenderWith([
 			logs[0],
@@ -556,9 +604,9 @@ describe('conversation feed: tools', () => {
 				},
 			},
 		]);
+		// Done is the expected outcome: no status word.
 		expect(within(live()).queryByRole('status')).toBeNull();
-		expect(live().getAttribute('data-tool-run-status')).toBe('completed');
-		fireEvent.click(within(live()).getByRole('button', { name: /1 tool call/ }));
+		expect(live().querySelector('[data-tool-status]')).toBeNull();
 		fireEvent.click(within(live()).getByRole('button', { name: 'Show details for shell' }));
 		expect(screen.getByText('ESLINT CLEAN OUTPUT')).toBeInTheDocument();
 	});

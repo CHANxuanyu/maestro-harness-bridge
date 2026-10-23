@@ -19,8 +19,27 @@
 
 import { truncateCommand, truncatePath } from '../../shared/formatters';
 
+/**
+ * What a tool call did, as a stable key. `verb` is English prose for the
+ * Thought Stream; a surface that translates its labels (the conversation feed)
+ * picks its own wording from `kind`. `other` covers every tool without a
+ * category of its own, whose name is the honest label.
+ */
+export type ToolActivityKind =
+	| 'read'
+	| 'write'
+	| 'edit'
+	| 'run'
+	| 'search'
+	| 'list'
+	| 'web'
+	| 'agent'
+	| 'plan'
+	| 'other';
+
 /** A tool call rendered as one short, human-readable line. */
 export interface ToolActivityLabel {
+	kind: ToolActivityKind;
 	/** Past/present-tense verb phrase, e.g. `Read`, `Ran`, `Edited`. */
 	verb: string;
 	/** What it acted on: a path, command, pattern, or URL. May be empty. */
@@ -37,6 +56,21 @@ export interface ToolActivityLabel {
 	 * knows which of the two it just built, and not guessed at by the renderer.
 	 */
 	targetIsCode: boolean;
+}
+
+/**
+ * `bash -lc "npm test"` reads as `npm test`: Codex wraps most commands in a
+ * login shell, and the wrapper says nothing about what ran.
+ */
+const SHELL_WRAPPER = /^(?:\/bin\/)?(?:ba|z)?sh\s+-l?c\s+(['"]?)([\s\S]*)\1$/;
+
+/** The files an `apply_patch` body touches, from its `*** Update File:` headers. */
+function patchedFiles(patch: string | undefined): string | undefined {
+	if (!patch) return undefined;
+	const files = Array.from(patch.matchAll(/^\*\*\* (?:Update|Add|Delete) File: (.+)$/gm), (match) =>
+		match[1].trim()
+	);
+	return files.length > 0 ? files.join(', ') : undefined;
 }
 
 /** Max characters of `target` shown on the single line. */
@@ -99,7 +133,12 @@ function mcpLabel(toolName: string): ToolActivityLabel | null {
 	const match = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(toolName);
 	if (!match) return null;
 	const [, server, tool] = match;
-	return { verb: `Called ${server}`, target: tool.replace(/_/g, ' '), targetIsCode: false };
+	return {
+		kind: 'other',
+		verb: `Called ${server}`,
+		target: tool.replace(/_/g, ' '),
+		targetIsCode: false,
+	};
 }
 
 /**
@@ -129,6 +168,7 @@ export function describeToolActivity(toolName: string, input: unknown): ToolActi
 		'target_file',
 	]);
 	const command = commandString(record.command ?? record.cmd ?? record.script) ?? rawInput;
+	const patchBody = rawInput ?? firstString(record, ['input', 'patch']);
 	const pattern = firstString(record, ['pattern', 'regex', 'query', 'search']);
 	const url = firstString(record, ['url', 'uri']);
 
@@ -148,14 +188,14 @@ export function describeToolActivity(toolName: string, input: unknown): ToolActi
 		case 'readfile':
 		case 'viewfile':
 		case 'catfile':
-			return { verb: 'Read', target: shorten(filePath, true), targetIsCode: true };
+			return { kind: 'read', verb: 'Read', target: shorten(filePath, true), targetIsCode: true };
 
 		case 'write':
 		case 'writefile':
 		case 'writetofile':
 		case 'createfile':
 		case 'create':
-			return { verb: 'Wrote', target: shorten(filePath, true), targetIsCode: true };
+			return { kind: 'write', verb: 'Wrote', target: shorten(filePath, true), targetIsCode: true };
 
 		case 'edit':
 		case 'multiedit':
@@ -165,46 +205,72 @@ export function describeToolActivity(toolName: string, input: unknown): ToolActi
 		case 'applypatch':
 		case 'patch':
 		case 'editfile':
-			// Codex sends apply_patch as one raw diff string with no path field;
-			// fall back to the patch body so the line is not left bare.
+			// Codex sends apply_patch as one raw diff string with no path field
+			// (bare, or under `input` / `patch`); its file headers name what it
+			// touched, and only failing those does the line fall back to the body.
 			return {
+				kind: 'edit',
 				verb: 'Edited',
-				target: shorten(filePath ?? rawInput, !!filePath),
+				target: filePath
+					? shorten(filePath, true)
+					: shorten(patchedFiles(patchBody) ?? patchBody, false),
 				targetIsCode: true,
 			};
 
 		case 'notebookedit':
-			return { verb: 'Edited notebook', target: shorten(filePath, true), targetIsCode: true };
+			return {
+				kind: 'edit',
+				verb: 'Edited notebook',
+				target: shorten(filePath, true),
+				targetIsCode: true,
+			};
 
 		case 'bash':
 		case 'shell':
 		case 'sh':
+		case 'exec':
 		case 'execcommand':
 		case 'localshell':
 		case 'runcommand':
 		case 'terminal':
 		case 'runterminalcmd':
-			return { verb: 'Ran', target: shorten(command, false), targetIsCode: true };
+			return {
+				kind: 'run',
+				verb: 'Ran',
+				target: shorten(command?.replace(SHELL_WRAPPER, '$2'), false),
+				targetIsCode: true,
+			};
 
 		case 'bashoutput':
-			return { verb: 'Checked background output', target: '', targetIsCode: false };
+			return { kind: 'other', verb: 'Checked background output', target: '', targetIsCode: false };
 
 		case 'killshell':
 		case 'killbash':
-			return { verb: 'Stopped a background command', target: '', targetIsCode: false };
+			return {
+				kind: 'other',
+				verb: 'Stopped a background command',
+				target: '',
+				targetIsCode: false,
+			};
 
 		case 'grep':
 		case 'search':
 		case 'ripgrep':
 		case 'searchfiles':
 		case 'grepsearch':
-			return { verb: 'Searched for', target: shorten(pattern, false), targetIsCode: true };
+			return {
+				kind: 'search',
+				verb: 'Searched for',
+				target: shorten(pattern, false),
+				targetIsCode: true,
+			};
 
 		case 'glob':
 		case 'find':
 		case 'fileglob':
 		case 'globfilesearch':
 			return {
+				kind: 'search',
 				verb: 'Looked for files matching',
 				target: shorten(pattern, false),
 				targetIsCode: true,
@@ -214,19 +280,25 @@ export function describeToolActivity(toolName: string, input: unknown): ToolActi
 		case 'list':
 		case 'listdirectory':
 		case 'listdir':
-			return { verb: 'Listed', target: shorten(filePath, true), targetIsCode: true };
+			return { kind: 'list', verb: 'Listed', target: shorten(filePath, true), targetIsCode: true };
 
 		case 'webfetch':
 		case 'fetch':
-			return { verb: 'Fetched', target: shorten(url, false), targetIsCode: true };
+			return { kind: 'web', verb: 'Fetched', target: shorten(url, false), targetIsCode: true };
 
 		case 'websearch':
-			return { verb: 'Searched the web for', target: shorten(pattern, false), targetIsCode: false };
+			return {
+				kind: 'web',
+				verb: 'Searched the web for',
+				target: shorten(pattern, false),
+				targetIsCode: false,
+			};
 
 		case 'task':
 		case 'agent':
 		case 'dispatchagent':
 			return {
+				kind: 'agent',
 				verb: 'Delegated to a subagent',
 				target: shorten(firstString(record, ['description', 'prompt', 'subagent_type']), false),
 				targetIsCode: false,
@@ -236,22 +308,24 @@ export function describeToolActivity(toolName: string, input: unknown): ToolActi
 		case 'updateplan':
 		case 'todoread':
 			return {
+				kind: 'plan',
 				verb: 'Updated the task list',
 				target: shorten(todoSummary(record.todos ?? record.plan ?? record.steps), false),
 				targetIsCode: false,
 			};
 
 		case 'askuserquestion':
-			return { verb: 'Asked you a question', target: '', targetIsCode: false };
+			return { kind: 'other', verb: 'Asked you a question', target: '', targetIsCode: false };
 
 		case 'exitplanmode':
-			return { verb: 'Presented a plan', target: '', targetIsCode: false };
+			return { kind: 'other', verb: 'Presented a plan', target: '', targetIsCode: false };
 
 		default: {
 			// Unknown tool: still emit a line. Prefer whichever recognizable field
 			// the payload carried so the user sees more than a bare tool name.
 			const fallback = filePath ?? command ?? pattern ?? url;
 			return {
+				kind: 'other',
 				verb: `Used ${name || 'a tool'}`,
 				target: shorten(fallback, fallback === filePath),
 				// Whatever the fallback found is a path, command, pattern, or URL.

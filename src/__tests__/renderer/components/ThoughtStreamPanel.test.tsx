@@ -190,7 +190,7 @@ describe('ThoughtStreamPanel tool activity', () => {
 		store.appendThought(SID, TAB, 'I should check the tests. ');
 		store.appendToolActivity(SID, TAB, {
 			toolName: 'Bash',
-			label: { verb: 'Ran', target: 'npm test', targetIsCode: true },
+			label: { kind: 'run', verb: 'Ran', target: 'npm test', targetIsCode: true },
 			status: 'completed',
 			toolCallId: 'c1',
 		});
@@ -208,13 +208,13 @@ describe('ThoughtStreamPanel tool activity', () => {
 		const store = useThoughtStreamStore.getState();
 		store.appendToolActivity(SID, TAB, {
 			toolName: 'Bash',
-			label: { verb: 'Ran', target: 'npm run build', targetIsCode: true },
+			label: { kind: 'run', verb: 'Ran', target: 'npm run build', targetIsCode: true },
 			status: 'running',
 			toolCallId: 'r1',
 		});
 		store.appendToolActivity(SID, TAB, {
 			toolName: 'Edit',
-			label: { verb: 'Edited', target: 'themes.ts', targetIsCode: true },
+			label: { kind: 'edit', verb: 'Edited', target: 'themes.ts', targetIsCode: true },
 			status: 'failed',
 			toolCallId: 'f1',
 		});
@@ -274,7 +274,12 @@ describe('ThoughtStreamPanel tool activity', () => {
 			const store = useThoughtStreamStore.getState();
 			store.appendToolActivity(SID, TAB, {
 				toolName: 'TodoWrite',
-				label: { verb: 'Updated the task list', target: 'Doing two (1/3)', targetIsCode: false },
+				label: {
+					kind: 'plan',
+					verb: 'Updated the task list',
+					target: 'Doing two (1/3)',
+					targetIsCode: false,
+				},
 				status: 'completed',
 				toolCallId: 't1',
 			});
@@ -290,7 +295,7 @@ describe('ThoughtStreamPanel tool activity', () => {
 			const store = useThoughtStreamStore.getState();
 			store.appendToolActivity(SID, TAB, {
 				toolName: 'BashOutput',
-				label: { verb: 'Checked background output', target: '', targetIsCode: true },
+				label: { kind: 'other', verb: 'Checked background output', target: '', targetIsCode: true },
 				status: 'completed',
 				toolCallId: 'b1',
 			});
@@ -329,7 +334,7 @@ describe('ThoughtStreamPanel tool-call toggle', () => {
 		store.appendThought(SID, TAB, 'I should check the tests. ');
 		store.appendToolActivity(SID, TAB, {
 			toolName: 'Bash',
-			label: { verb: 'Ran', target: 'npm test', targetIsCode: true },
+			label: { kind: 'run', verb: 'Ran', target: 'npm test', targetIsCode: true },
 			status: 'completed',
 			toolCallId: 'c1',
 		});
@@ -390,7 +395,7 @@ describe('ThoughtStreamPanel tool-call toggle', () => {
 
 		useThoughtStreamStore.getState().appendToolActivity(SID, TAB, {
 			toolName: 'Edit',
-			label: { verb: 'Edited', target: 'themes.ts', targetIsCode: true },
+			label: { kind: 'edit', verb: 'Edited', target: 'themes.ts', targetIsCode: true },
 			status: 'completed',
 			toolCallId: 'c2',
 		});
@@ -420,7 +425,7 @@ describe('ThoughtStreamPanel tool-call toggle', () => {
 		// agent, and the user has no way to tell that from an idle one.
 		useThoughtStreamStore.getState().appendToolActivity(SID, TAB, {
 			toolName: 'Bash',
-			label: { verb: 'Ran', target: 'npm test', targetIsCode: true },
+			label: { kind: 'run', verb: 'Ran', target: 'npm test', targetIsCode: true },
 			status: 'completed',
 			toolCallId: 'c1',
 		});

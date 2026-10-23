@@ -3043,27 +3043,30 @@ describe('TerminalOutput', () => {
 			it('shows what the running turn is executing even with tool calls off', () => {
 				useSettingsStore.setState({ showToolCalls: false, sidebarNavigationMode: 'conversations' });
 				const { container } = renderLive('running');
-				const run = container.querySelector('[data-tool-run]')!;
-				expect(run).toHaveAttribute('data-tool-run-status', 'running');
-				expect(run).toHaveTextContent('Bash');
-				fireEvent.click(run.querySelector('button')!);
-				expect(screen.getByText('npm run test')).toBeInTheDocument();
+				const line = container.querySelector('[data-tool-activity="run"]')!;
+				expect(line).toHaveTextContent('npm run test');
+				expect(line.querySelector('[data-tool-status]')).toHaveAttribute(
+					'data-tool-status',
+					'running'
+				);
+				expect(container.querySelector('[data-tool-run]')).toBeNull();
 			});
 
-			it('marks the run finished once the call completes', () => {
+			it('drops the status once the call completes', () => {
 				useSettingsStore.setState({ showToolCalls: false, sidebarNavigationMode: 'conversations' });
 				const { container } = renderLive('completed');
-				expect(container.querySelector('[data-tool-run]')).toHaveAttribute(
-					'data-tool-run-status',
-					'completed'
-				);
+				const line = container.querySelector('[data-tool-activity="run"]')!;
+				expect(line).toHaveTextContent('npm run test');
+				expect(line.querySelector('[data-tool-status]')).toBeNull();
 			});
 
-			it('keeps the full live tool card when tool calls are on', () => {
+			it('draws the same one-line call when tool calls are on', () => {
 				useSettingsStore.setState({ showToolCalls: true, sidebarNavigationMode: 'conversations' });
 				const { container } = renderLive('running');
 				expect(container.querySelector('[data-tool-run]')).toBeNull();
-				expect(screen.getByText('npm run test')).toBeInTheDocument();
+				expect(container.querySelector('[data-tool-activity="run"]')).toHaveTextContent(
+					'npm run test'
+				);
 			});
 		});
 

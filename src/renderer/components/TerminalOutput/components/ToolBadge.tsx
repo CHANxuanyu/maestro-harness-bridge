@@ -1,6 +1,19 @@
 import React from 'react';
+import {
+	Bot,
+	FileEdit,
+	FileText,
+	FolderOpen,
+	Globe,
+	ListChecks,
+	Search,
+	Terminal,
+	Wrench,
+	type LucideIcon,
+} from 'lucide-react';
 import type { LogEntry, Theme } from '../../../types';
 import { summarizeToolInput, summarizeToolOutput } from '../utils/toolSummaries';
+import { describeToolActivity, type ToolActivityKind } from '../../../utils/toolActivityLabel';
 import { AgentTaskListCard } from '../../AgentTaskListCard';
 import { extractAgentTaskList } from '../../../utils/agentTaskList';
 import { ToolCallDetails } from './ToolCallDetails';
@@ -84,6 +97,69 @@ export function ToolStatusLabel({
 		</span>
 	);
 }
+
+const ACTIVITY_ICONS: Record<ToolActivityKind, LucideIcon> = {
+	run: Terminal,
+	read: FileText,
+	write: FileEdit,
+	edit: FileEdit,
+	search: Search,
+	list: FolderOpen,
+	web: Globe,
+	plan: ListChecks,
+	agent: Bot,
+	other: Wrench,
+};
+
+const ACTIVITY_VERB_KEYS = {
+	run: 'workflows.transcript.toolVerbRun',
+	read: 'workflows.transcript.toolVerbRead',
+	write: 'workflows.transcript.toolVerbWrite',
+	edit: 'workflows.transcript.toolVerbEdit',
+	search: 'workflows.transcript.toolVerbSearch',
+	list: 'workflows.transcript.toolVerbList',
+	web: 'workflows.transcript.toolVerbWeb',
+	plan: 'workflows.transcript.toolVerbPlan',
+	agent: 'workflows.transcript.toolVerbAgent',
+} as const;
+
+/**
+ * A tool call as the conversation feed lists it: one line saying what happened
+ * ("Ran `npm test`", "Edited LogItem.tsx"), the way Codex and Claude Code do.
+ * A finished call shows no status - that is the expected outcome; a running,
+ * failed or stopped one says so in words. Full input and result unfold below.
+ */
+export const ToolActivityLine = React.memo(function ToolActivityLine({
+	log,
+	theme,
+	secondaryTextColor,
+}: {
+	log: LogEntry;
+	theme: Theme;
+	secondaryTextColor: string;
+}) {
+	const t = useT();
+	const { kind, target } = describeToolActivity(log.text, log.metadata?.toolState?.input);
+	const Icon = ACTIVITY_ICONS[kind];
+	const status = toolStatusKind(log.metadata?.toolState?.status);
+	return (
+		<span className="flex items-center gap-2 min-w-0" data-tool-activity={kind}>
+			<Icon className="w-3.5 h-3.5 shrink-0" style={{ color: secondaryTextColor }} aria-hidden />
+			<span className="shrink-0 whitespace-nowrap" style={{ color: secondaryTextColor }}>
+				{kind === 'other' ? log.text : t(ACTIVITY_VERB_KEYS[kind])}
+			</span>
+			{target && (
+				<span
+					className="truncate min-w-0 font-mono text-[0.92em]"
+					style={{ color: theme.colors.textMain }}
+				>
+					{target}
+				</span>
+			)}
+			{status && status !== 'completed' && <ToolStatusLabel theme={theme} kind={status} />}
+		</span>
+	);
+});
 
 /**
  * The compact tool-execution badge: name pill, status glyph, input summary and

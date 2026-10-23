@@ -122,18 +122,13 @@ describe.each(['agents', 'conversations'] as const)(
 			expect(content.parentElement).toBe(scroller);
 			// No row sits inside another row or inside a turn wrapper.
 			for (const row of rows) expect(row.parentElement).toBe(content);
-			// Raw ids and their order survive (the stored tool folds into its run
-			// host, which keeps the call's own id).
-			expect(rows.map((row) => row.getAttribute('data-log-id'))).toEqual([
-				'u1',
-				'a1',
-				'u2',
-				'p2',
-				't2',
-				's2',
-				'u3',
-				'a3',
-			]);
+			// Raw ids and their order survive. The conversation layout folds the
+			// stopped turn's work behind one row, which keeps its first step's id.
+			expect(rows.map((row) => row.getAttribute('data-log-id'))).toEqual(
+				navigationMode === 'conversations'
+					? ['u1', 'a1', 'u2', 'p2', 's2', 'u3', 'a3']
+					: ['u1', 'a1', 'u2', 'p2', 't2', 's2', 'u3', 'a3']
+			);
 			const indexes = rows.map((row) => Number(row.getAttribute('data-log-index')));
 			expect(indexes).toEqual([...indexes].sort((a, b) => a - b));
 			expect(new Set(indexes).size).toBe(indexes.length);

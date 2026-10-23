@@ -208,6 +208,54 @@ function toolOutputMatchesText(output: unknown, text: string): boolean {
 	return prefix.length > 0 && cached.startsWith(prefix);
 }
 
+/**
+ * How Codex records a message delivered INTO this thread from another thread
+ * (the official app's `send_message_to_thread`): a function-call OUTPUT with no
+ * call of its own in this thread, whose whole result is a `<codex_delegation>`
+ * envelope naming the source thread and carrying the delivered input. The
+ * stored form converts to a tool card named `send_message_to_thread` with an
+ * output and NO input.
+ */
+const INBOUND_THREAD_MESSAGE_TOOL = 'send_message_to_thread';
+const INBOUND_THREAD_MESSAGE_HEAD =
+	/^<codex_delegation>\s*<source_thread_id>[^<\s]+<\/source_thread_id>\s*<input>/;
+const INBOUND_THREAD_MESSAGE_TAIL = /<\/input>\s*<\/codex_delegation>$/;
+
+/**
+ * Whether a transcript entry is another thread's message arriving in this one:
+ * the start of a turn nobody typed into Maestro, exactly as a user message is.
+ *
+ * Decided from structure, not from words appearing anywhere:
+ *  - a STORED entry (`nativeTranscript`): live cards are Maestro's own turn;
+ *  - a tool card named `send_message_to_thread` with NO input: a call this
+ *    thread makes itself (outbound) carries its arguments, an inbound delivery
+ *    is an output without a call;
+ *  - its WHOLE result is the envelope (`source_thread_id` + `input`). A result
+ *    capped for storage keeps the envelope's opening and the truncation note.
+ *
+ * Any other tool whose output merely contains the envelope text (an `exec`
+ * that printed it, a file read) is not a boundary.
+ */
+export function isInboundThreadMessage(entry: LogEntry): boolean {
+	if (entry.source !== 'tool' || !entry.nativeTranscript) return false;
+	if (entry.text !== INBOUND_THREAD_MESSAGE_TOOL) return false;
+	const state = entry.metadata?.toolState;
+	if (!state) return false;
+	if (state.input !== undefined && state.input !== null && state.input !== '') return false;
+	if (typeof state.output !== 'string') return false;
+	const output = state.output.trim();
+	const truncated = TOOL_OUTPUT_TRUNCATION_NOTE.test(output);
+	const body = output.replace(TOOL_OUTPUT_TRUNCATION_NOTE, '').trim();
+	return (
+		INBOUND_THREAD_MESSAGE_HEAD.test(body) && (truncated || INBOUND_THREAD_MESSAGE_TAIL.test(body))
+	);
+}
+
+/** Where one turn ends and the next begins: a user message, or another thread's. */
+function isTurnBoundary(entry: LogEntry): boolean {
+	return entry.source === 'user' || isInboundThreadMessage(entry);
+}
+
 function toolEntryText(call: NormalizedToolCall): string {
 	return call.name;
 }
@@ -498,8 +546,15 @@ export function mergeNewerEntries(
 	if (!anchor) return null;
 
 	const tail = visible.slice(anchor.visibleIndex + 1);
-	const unmatchedTail = [...tail];
+	// A send already tied to its native copy is accounted for: it must not also
+	// stand in, by text, for a later native message with the same words.
+	const unmatchedTail = tail.filter((entry) => !isBoundOwnSend(entry));
 	const visibleIds = new Set(visible.map((entry) => entry.id));
+	// Native user messages already on screen as the tab's OWN send, tied to it by
+	// bindDelayedOwnSends (the provider wrote them too late for the live window).
+	const ownSendMessageIds = new Set(
+		visible.filter(isBoundOwnSend).map((entry) => entry.nativeTranscript!.messageId)
+	);
 	const fresh: LogEntry[] = [];
 	// Whether the disk entries being walked belong to a turn the tab already
 	// showed LIVE (its user message matched a local send, and a local reply sits
@@ -516,7 +571,22 @@ export function mergeNewerEntries(
 	let liveTurn = anchorIsLive && (anchorEntry.source !== 'user' || tailHasLocalReply(tail, -1));
 	let liveTurnHasTools = liveTurn && liveTurnShowsTools(visible, anchor.visibleIndex);
 	for (const entry of loaded.slice(anchor.loadedIndex + 1)) {
-		if (visibleIds.has(entry.id)) continue;
+		if (visibleIds.has(entry.id)) {
+			// Another thread's message already on screen still starts a new turn:
+			// what follows it is not the live turn's to suppress.
+			if (isInboundThreadMessage(entry)) liveTurn = false;
+			continue;
+		}
+		if (
+			entry.source === 'user' &&
+			ownSendMessageIds.has(entry.nativeTranscript?.messageId ?? entry.id)
+		) {
+			// The prompt is on screen already. Everything after it is treated
+			// exactly as it was before the binding existed (as after any user
+			// message the window could not pair), so only the duplicate goes.
+			liveTurn = false;
+			continue;
+		}
 		// Only a local entry written around the same time can be this disk entry.
 		// The same short text sent again later from another app ("continue") is
 		// a genuine new turn and must still be appended.
@@ -531,7 +601,9 @@ export function mergeNewerEntries(
 			}
 			continue;
 		}
-		if (entry.source === 'user') liveTurn = false;
+		// A user message, or another thread's message delivered into this one,
+		// starts a turn the tab did not show live: it and what follows are new.
+		if (isTurnBoundary(entry)) liveTurn = false;
 		else if (liveTurn && (entry.source !== 'tool' || liveTurnHasTools)) continue;
 		fresh.push(entry);
 	}
@@ -705,6 +777,182 @@ export function reconcileTranscriptEntries(
 	return upgraded > 0 ? { logs: out, upgraded } : { logs: visible, upgraded: 0 };
 }
 
+/**
+ * A prompt Maestro sent itself that has not been tied to its native copy yet:
+ * a delivered user entry with a local id and no provenance.
+ */
+function isUnboundOwnSend(entry: LogEntry): boolean {
+	return (
+		entry.source === 'user' && !entry.nativeTranscript && entry.delivered === true && hasText(entry)
+	);
+}
+
+/**
+ * A prompt Maestro sent itself that {@link bindDelayedOwnSends} has tied to its
+ * native copy: it keeps its local id, and carries the native message id.
+ */
+function isBoundOwnSend(entry: LogEntry): boolean {
+	return (
+		entry.source === 'user' &&
+		!!entry.nativeTranscript &&
+		entry.nativeTranscript.messageId !== entry.id
+	);
+}
+
+/**
+ * Whether the provider's turn after `loaded[nativeUser]` is the turn the tab
+ * showed LIVE after `visible[localUser]`: some live entry of the tab's turn
+ * (no provenance, so written by Maestro as it streamed) has the same source and
+ * text as an entry of the native turn and was written within the live clock
+ * window of it. `skipId` is the cached native copy of the prompt itself.
+ */
+function liveTurnMatchesNative(
+	loaded: LogEntry[],
+	nativeUser: number,
+	visible: LogEntry[],
+	localUser: number,
+	skipId: string
+): boolean {
+	const nativeTurn: LogEntry[] = [];
+	for (let k = nativeUser + 1; k < loaded.length && !isTurnBoundary(loaded[k]); k++) {
+		nativeTurn.push(loaded[k]);
+	}
+	if (nativeTurn.length === 0) return false;
+	for (let k = localUser + 1; k < visible.length; k++) {
+		const entry = visible[k];
+		if (entry.id === skipId) continue;
+		if (isTurnBoundary(entry)) break;
+		if (entry.nativeTranscript) continue;
+		if (nativeTurn.some((native) => sameLiveMessage(entry, native))) return true;
+	}
+	return false;
+}
+
+/**
+ * Tie a prompt Maestro sent to its native copy when the provider wrote that copy
+ * LATE, and repair the duplicate an earlier refresh already showed for it.
+ *
+ * A provider persists the user message when it starts the turn, which is
+ * normally within seconds of the send, and `mergeNewerEntries` pairs the two by
+ * text inside `LIVE_SEND_CLOCK_WINDOW_MS`. A turn that first compacts the
+ * context (Codex `contextCompaction`) writes it minutes later: 132s in the
+ * observed case. The same words that late are, by text and clock alone,
+ * indistinguishable from the user sending them again from another app, so the
+ * merge rightly refuses them and the prompt was shown twice. This supplies the
+ * missing evidence from ORDER instead of a wider window or a global text dedup.
+ *
+ * User messages are walked one-to-one in conversation order. A cursor into
+ * `loaded` syncs on every visible entry the native read also holds (same id),
+ * and moves to the next native user message each time a visible user message is
+ * accounted for (the same id, a bound send, or an ordinary in-window live
+ * match). An own send is bound to the next native user message only when all
+ * of these hold:
+ *  - it is delivered and has no provenance yet, and the cursor is at a known
+ *    point (nothing unaccounted for between the last sync and it);
+ *  - the next native user message after the cursor has the same text, was
+ *    written AFTER the send by more than the live window (inside the window the
+ *    ordinary merge already pairs it, so its behavior is unchanged), and is not
+ *    already claimed by another send;
+ *  - the native turn under it matches the tab's own LIVE turn under the send
+ *    (an agent message streamed in that turn is the stored one: same text,
+ *    within the reply window), which a later identical prompt from another app
+ *    would not;
+ *  - when an earlier refresh already put the native copy on screen, it sits
+ *    after the send with no other user message between them.
+ *
+ * A bound send keeps its local id, timestamp, images and delivery, and gains
+ * `nativeTranscript.messageId` of its native copy; a cached native copy of it
+ * is removed from the tab (it is the same occurrence, not a turn). Nothing
+ * else moves. Anything that fails a check is left exactly as it was: a
+ * genuinely repeated prompt, a second native message with the same words, and
+ * a later external turn all keep their own entries. Idempotent.
+ */
+export function bindDelayedOwnSends(
+	loaded: LogEntry[],
+	visible: LogEntry[]
+): { logs: LogEntry[]; bound: number } {
+	if (loaded.length === 0 || visible.length === 0) return { logs: visible, bound: 0 };
+	const loadedIndex = new Map(loaded.map((entry, index) => [entry.id, index]));
+	const userIndexByMessageId = new Map<string, number>();
+	loaded.forEach((entry, index) => {
+		if (entry.source === 'user') {
+			userIndexByMessageId.set(entry.nativeTranscript?.messageId ?? entry.id, index);
+		}
+	});
+	const claimed = new Set(
+		visible.filter(isBoundOwnSend).map((entry) => entry.nativeTranscript!.messageId)
+	);
+	// The next native user message after `from`, or -1 when there is none or
+	// another thread's message comes first (that turn has no local counterpart,
+	// so pairing across it would be a guess).
+	const nextNativeUser = (from: number): number => {
+		for (let k = from + 1; k < loaded.length; k++) {
+			if (loaded[k].source === 'user') return k;
+			if (isInboundThreadMessage(loaded[k])) return -1;
+		}
+		return -1;
+	};
+
+	const stamp = new Map<string, string>();
+	const drop = new Set<string>();
+	// Index in `loaded` the walk has reached, or -1 while the position is unknown.
+	let cursor = -1;
+	for (let v = 0; v < visible.length; v++) {
+		const entry = visible[v];
+		if (drop.has(entry.id)) continue;
+		const sync = loadedIndex.get(entry.id);
+		if (sync !== undefined) {
+			cursor = sync;
+			continue;
+		}
+		if (entry.source !== 'user') continue;
+		if (isBoundOwnSend(entry)) {
+			cursor = userIndexByMessageId.get(entry.nativeTranscript!.messageId) ?? -1;
+			continue;
+		}
+		if (cursor < 0) continue;
+		const n = nextNativeUser(cursor);
+		if (n < 0) {
+			cursor = -1;
+			continue;
+		}
+		const native = loaded[n];
+		if (sameLiveMessage(entry, native)) {
+			// The ordinary in-window pairing: the merge handles it as before.
+			cursor = n;
+			continue;
+		}
+		const messageId = native.nativeTranscript?.messageId ?? native.id;
+		const cachedAt = visible.findIndex((candidate) => candidate.id === native.id);
+		const bindable =
+			isUnboundOwnSend(entry) &&
+			!claimed.has(messageId) &&
+			sameTextEntry(entry, native) &&
+			native.timestamp - entry.timestamp > LIVE_SEND_CLOCK_WINDOW_MS &&
+			(cachedAt < 0 ||
+				(cachedAt > v &&
+					!visible.slice(v + 1, cachedAt).some((between) => between.source === 'user'))) &&
+			liveTurnMatchesNative(loaded, n, visible, v, native.id);
+		if (!bindable) {
+			// Unaccounted for: stop binding until the next shared entry.
+			cursor = -1;
+			continue;
+		}
+		claimed.add(messageId);
+		stamp.set(entry.id, messageId);
+		if (cachedAt >= 0) drop.add(native.id);
+		cursor = n;
+	}
+	if (stamp.size === 0) return { logs: visible, bound: 0 };
+	const logs = visible
+		.filter((entry) => !drop.has(entry.id))
+		.map((entry) => {
+			const messageId = stamp.get(entry.id);
+			return messageId ? { ...entry, nativeTranscript: { messageId } } : entry;
+		});
+	return { logs, bound: stamp.size };
+}
+
 /** An entry that could be a turn of the conversation, as opposed to a notice or card. */
 function isConversationContent(entry: LogEntry): boolean {
 	return (
@@ -827,7 +1075,7 @@ function clockWindowMs(entry: LogEntry): number {
 function tailHasLocalReply(tail: LogEntry[], from: number): boolean {
 	for (let k = from + 1; k < tail.length; k++) {
 		const entry = tail[k];
-		if (entry.source === 'user') return false;
+		if (isTurnBoundary(entry)) return false;
 		if (
 			!entry.nativeTranscript &&
 			(entry.source === 'stdout' ||
@@ -847,9 +1095,9 @@ function tailHasLocalReply(tail: LogEntry[], from: number): boolean {
  */
 function liveTurnShowsTools(logs: LogEntry[], at: number): boolean {
 	let start = at;
-	while (start > 0 && logs[start].source !== 'user') start--;
+	while (start > 0 && !isTurnBoundary(logs[start])) start--;
 	for (let k = start + 1; k < logs.length; k++) {
-		if (logs[k].source === 'user') return false;
+		if (isTurnBoundary(logs[k])) return false;
 		if (logs[k].source === 'tool') return true;
 	}
 	return false;

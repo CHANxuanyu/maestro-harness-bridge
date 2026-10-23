@@ -138,6 +138,7 @@ import {
 } from './hooks';
 import { SidebarNavSync } from './hooks/session/SidebarNavSync';
 import { usePluginFocusRequestListener } from './hooks/session/usePluginFocusRequestListener';
+import { useNativeTranscriptFollow } from './hooks/session/useNativeTranscriptFollow';
 import { useSidebarNavStore } from './stores/sidebarNavStore';
 import { useChatFileDropZone } from './hooks/ui/useChatFileDropZone';
 import { useMainPanelProps, useSessionListProps, useRightPanelProps } from './hooks/props';
@@ -1129,6 +1130,12 @@ function MaestroConsoleInner() {
 	// Wakes snoozed tabs when their time arrives (and on launch, for wakes
 	// missed while Maestro was closed).
 	useSnoozeScheduler();
+
+	// Keeps the visible local Codex conversation current while the same native
+	// session is continued from another app (read-only catch-up on a transcript
+	// revision change). Mounted here, not in the Left Bar, so it keeps following
+	// with the sidebar collapsed or in either navigation layout.
+	useNativeTranscriptFollow();
 
 	// --- TERMINAL TAB HANDLERS ---
 	const { handleOpenTerminalTab, handleSelectTerminalTab, handleCloseTerminalTab } =

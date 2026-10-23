@@ -11,6 +11,7 @@ import type {
 } from '../../types';
 import type { FileNode } from '../../types/fileTree';
 import type Convert from 'ansi-to-html';
+import type { TurnSettingChange } from './utils/turnSettingChanges';
 
 /** Structured result from summarizeToolInput for richer rendering */
 export interface ToolSummary {
@@ -143,6 +144,22 @@ export interface LogItemProps {
 	}) => void;
 	isRecoveringSession?: boolean;
 	sessionRecoveryError?: string | null;
+	/**
+	 * Conversation feed presentation (the conversation-centred layout): prose
+	 * replies without bubbles, compact user messages, a meta line with actions
+	 * and on-demand message info instead of the timestamp gutter and footer
+	 * pills. False keeps the legacy bubble layout exactly as it was.
+	 */
+	feedLayout?: boolean;
+	/** Feed only: this row is the newest reply, so its actions stay visible. */
+	isLatestReply?: boolean;
+	/** Feed only: the model/effort this reply switched to, when it really changed. */
+	turnSettingChange?: TurnSettingChange;
+	/**
+	 * Feed only: the theme's secondary text color after `readableTextOn`, so
+	 * labels and icons stay legible on themes whose `textDim` is too faint.
+	 */
+	secondaryTextColor?: string;
 }
 
 export interface TerminalOutputProps {

@@ -345,7 +345,7 @@ describe('ThinkingStatusPill', () => {
 		it('keeps Stop whole and reachable when the conversation title is long', () => {
 			const item = createThinkingItemWithTab(
 				{ name: 'Maestro handoff configuration with a long name' },
-				{ name: '查找 OpenCode 的订阅与 Harness 支持，并核对每个计划的配额与限制说明' }
+				{ name: '查看示例项目的原生会话与工具支持，并核对每个计划的配额与限制说明' }
 			);
 			render(<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} onInterrupt={vi.fn()} />);
 			const stop = screen.getByTestId('stop-turn-button');
@@ -354,7 +354,7 @@ describe('ThinkingStatusPill', () => {
 			expect(stop.className).toContain('whitespace-nowrap');
 			expect(stop).toHaveAccessibleName();
 			// The titles are the parts that give way.
-			const tabTitle = screen.getByText(/查找 OpenCode/);
+			const tabTitle = screen.getByText(/查看示例项目/);
 			expect(tabTitle.className).toContain('truncate');
 			expect(tabTitle.className).toContain('min-w-0');
 		});

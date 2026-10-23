@@ -1970,11 +1970,31 @@ interface MaestroAPI {
 			totalCount: number;
 			nextCursor: string | null;
 		}>;
+		/**
+		 * Opaque stat revision of an existing LOCAL transcript in the exact account
+		 * pool, or null when unavailable, unsupported, missing or remote (never a
+		 * success). Stat-only while unchanged; never creates or restores a file.
+		 * Optional: older preloads and the web-desktop bridge do not expose it.
+		 */
+		getTranscriptRevision?: (
+			agentId: string,
+			projectPath: string,
+			sessionId: string,
+			options?: { configDir?: string; ownerAgentId?: string },
+			sshRemoteId?: string
+		) => Promise<string | null>;
 		read: (
 			agentId: string,
 			projectPath: string,
 			sessionId: string,
-			options?: { offset?: number; limit?: number; configDir?: string; ownerAgentId?: string },
+			options?: {
+				offset?: number;
+				limit?: number;
+				configDir?: string;
+				ownerAgentId?: string;
+				/** Suppress starred-transcript restoration: a strictly read-only read. */
+				readOnly?: boolean;
+			},
 			sshRemoteId?: string
 		) => Promise<{
 			messages: Array<{

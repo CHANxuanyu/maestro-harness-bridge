@@ -250,11 +250,33 @@ export function createAgentSessionsApi() {
 			agentId: string,
 			projectPath: string,
 			sessionId: string,
-			options?: { offset?: number; limit?: number; configDir?: string; ownerAgentId?: string },
+			options?: {
+				offset?: number;
+				limit?: number;
+				configDir?: string;
+				ownerAgentId?: string;
+				readOnly?: boolean;
+			},
 			sshRemoteId?: string
 		) =>
 			ipcRenderer.invoke(
 				'agentSessions:read',
+				agentId,
+				projectPath,
+				sessionId,
+				options,
+				sshRemoteId
+			),
+
+		getTranscriptRevision: (
+			agentId: string,
+			projectPath: string,
+			sessionId: string,
+			options?: { configDir?: string; ownerAgentId?: string },
+			sshRemoteId?: string
+		): Promise<string | null> =>
+			ipcRenderer.invoke(
+				'agentSessions:getTranscriptRevision',
 				agentId,
 				projectPath,
 				sessionId,

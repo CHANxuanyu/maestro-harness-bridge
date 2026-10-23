@@ -37,6 +37,8 @@ import { useMessageGistStore } from '../../stores/messageGistStore';
 import { getClaudeTokenMode } from '../../../shared/claudeTokenMode';
 import { collapseAiResponseLogs } from './utils/collapseAiResponseLogs';
 import { computeTurnDurations } from './utils/turnDurations';
+import { computeTurnSettingChanges } from './utils/turnSettingChanges';
+import { readableTextOn } from '../../../shared/colorContrast';
 import { groupSubagentToolLogs } from './utils/groupSubagentToolLogs';
 import { foldNativeToolRuns } from './utils/foldNativeToolRuns';
 import { buildRenderedIdMap } from './utils/renderedLogIds';
@@ -50,8 +52,12 @@ import { useTerminalOutputSearch } from './hooks/useTerminalOutputSearch';
 import { useTerminalOutputScroll } from './hooks/useTerminalOutputScroll';
 import { requestWebBridgeReconcile } from '../../services/webBridgeReconcile';
 
-/** Widest the transcript column grows in the conversation-centred layout. */
-const READING_COLUMN_MAX_WIDTH = '72rem';
+/**
+ * Widest the transcript column grows in the conversation-centred layout: a
+ * comfortable reading measure for prose (about 45rem of text after the row
+ * padding). Code fences and tables scroll inside their own wrappers.
+ */
+const READING_COLUMN_MAX_WIDTH = '50rem';
 
 /**
  * The transcript rows: the content wrapper's own children that carry a log id
@@ -295,6 +301,20 @@ export const TerminalOutput = memo(
 		const { logs: filteredLogs, childrenByParentId } = useMemo(
 			() => groupSubagentToolLogs(collapsedLogs),
 			[collapsedLogs]
+		);
+		// Conversation feed presentation (see LogItem `feedLayout`). Derived from
+		// the full rendered list, not the progressive window, so mounting older
+		// rows cannot move which reply is newest or where a setting changed.
+		const feedLayout = readingColumn;
+		const feedFacts = useMemo(
+			() => (feedLayout ? computeTurnSettingChanges(filteredLogs) : null),
+			[feedLayout, filteredLogs]
+		);
+		// Secondary labels and icons in the feed: the theme's textDim, nudged only
+		// where it is too faint to read on the page (Dracula's is about 3:1).
+		const feedSecondaryColor = useMemo(
+			() => readableTextOn(theme.colors.textDim, [theme.colors.bgMain]),
+			[theme.colors.textDim, theme.colors.bgMain]
 		);
 		const debouncedSearchQuery = useDebouncedValue(outputSearchQuery, 150);
 
@@ -1209,6 +1229,10 @@ export const TerminalOutput = memo(
 									isClaudeCode={session.toolType === 'claude-code'}
 									isAdaptiveMode={getClaudeTokenMode(session) === 'dynamic'}
 									showProviderModePill={showProviderModePill}
+									feedLayout={feedLayout}
+									isLatestReply={feedFacts?.latestReplyId === log.id}
+									turnSettingChange={feedFacts?.changes.get(log.id)}
+									secondaryTextColor={feedLayout ? feedSecondaryColor : undefined}
 								/>
 							);
 						})}

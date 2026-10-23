@@ -1,19 +1,5 @@
-import React, { useRef, useCallback, memo } from 'react';
-import {
-	ChevronDown,
-	ChevronUp,
-	Trash2,
-	Copy,
-	Check,
-	Eye,
-	FileText,
-	RotateCcw,
-	AlertCircle,
-	Save,
-	Share2,
-	Hammer,
-	GitFork,
-} from 'lucide-react';
+import React, { useRef, useCallback, useId, useState, memo } from 'react';
+import { ChevronDown, ChevronUp, Eye, AlertCircle, Info } from 'lucide-react';
 import type { LogItemProps } from '../types';
 import type { LogEntry } from '../../../types';
 import {
@@ -22,11 +8,19 @@ import {
 	getCachedAnsiHtml,
 } from '../../../utils/textProcessing';
 import { JumpToMessageTopButton } from '../../JumpToMessageTopButton';
-import { formatShortcutKeys } from '../../../utils/shortcutFormatter';
 import { MarkdownRenderer } from '../../MarkdownRenderer';
 import { LogFilterControls } from '../../LogFilterControls';
 import { linkifyNode } from '../../../utils/linkify';
-import { formatDurationWords, formatTurnDuration } from '../../../../shared/duration';
+import {
+	formatDurationWords,
+	formatElapsedTickerCompact,
+	formatTurnDuration,
+} from '../../../../shared/duration';
+import { getAgentDisplayName } from '../../../../shared/agentMetadata';
+import { MessageActions } from './MessageActions';
+import { MessageInfoPanel, MessageMetaLine, type MessageInfoField } from './MessageMeta';
+import { ToolStatusLabel } from './ToolBadge';
+import { sameTurnSettingChange } from '../utils/turnSettingChanges';
 import { sessionImageThumbnailSrc } from '../../../../shared/sessionImageRefs';
 import { displayImageSrc } from '../../../utils/sessionImageSrc';
 import { RetryStatusCard } from '../../RetryStatusCard';
@@ -43,7 +37,7 @@ import { ToolBadge } from './ToolBadge';
 import { ToolCallFold } from './ToolCallDetails';
 import { codexDirectivesLiveForSource } from '../../../services/codexFollowup';
 import { isProgressNoteEntry } from '../../../utils/transcriptMessages';
-import { useT } from '../../../i18n';
+import { useAppLocale, useFormatRelativeTime, useT } from '../../../i18n';
 
 /**
  * Shallow content comparison for the nested subagent tool entries. Identity is
@@ -119,10 +113,23 @@ export const LogItem = memo(
 		onSessionRecover,
 		isRecoveringSession,
 		sessionRecoveryError,
+		feedLayout = false,
+		isLatestReply = false,
+		turnSettingChange,
+		secondaryTextColor,
 	}: LogItemProps) => {
 		const t = useT();
+		const locale = useAppLocale();
+		const formatRelative = useFormatRelativeTime();
 		// Ref for the log item container - used for scroll-into-view on expand
 		const logItemRef = useRef<HTMLDivElement>(null);
+		// Conversation feed: the on-demand message info under the meta line. Local
+		// and transient: rows keep their identity across progressive rendering
+		// (key = log.id), and a tab switch closing it is fine for an inspection.
+		const [infoOpen, setInfoOpen] = useState(false);
+		const infoId = useId();
+		const toggleInfo = useCallback(() => setInfoOpen((open) => !open), []);
+		const secondary = secondaryTextColor ?? theme.colors.textDim;
 
 		// Handle expand toggle with scroll adjustment
 		const handleExpandToggle = useCallback(() => {
@@ -345,7 +352,7 @@ export const LogItem = memo(
 					data-log-id={log.id}
 					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 120px' }}
 				>
-					<div className="hidden sm:block w-20 shrink-0" />
+					{!feedLayout && <div className="hidden sm:block w-20 shrink-0" />}
 					<div className="flex-1 min-w-0">
 						<ShellCommandCard
 							log={log}
@@ -372,7 +379,7 @@ export const LogItem = memo(
 					data-log-id={log.id}
 					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 80px' }}
 				>
-					<div className="hidden sm:block w-20 shrink-0" />
+					{!feedLayout && <div className="hidden sm:block w-20 shrink-0" />}
 					<div className="flex-1 min-w-0">
 						<SnoozeReturnCard log={log} theme={theme} />
 					</div>
@@ -391,7 +398,7 @@ export const LogItem = memo(
 					data-log-id={log.id}
 					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 36px' }}
 				>
-					<div className="hidden sm:block w-20 shrink-0" />
+					{!feedLayout && <div className="hidden sm:block w-20 shrink-0" />}
 					<div className="flex-1 min-w-0">
 						<AgentDelegationCard log={log} theme={theme} />
 					</div>
@@ -407,24 +414,33 @@ export const LogItem = memo(
 			return (
 				<div
 					ref={logItemRef}
-					className="flex gap-4 px-3 sm:px-6 py-1"
+					// Feed: no vertical padding, so consecutive activity rows (progress,
+					// tools, thinking) share one continuous rail.
+					className={`flex gap-4 px-3 sm:px-6 ${feedLayout ? 'py-0' : 'py-1'}`}
 					data-log-index={index}
 					data-log-id={log.id}
 					data-progress-note=""
+					data-feed-row={feedLayout ? 'activity' : undefined}
 					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 32px' }}
 				>
-					<div className="hidden sm:block w-20 shrink-0" />
+					{!feedLayout && <div className="hidden sm:block w-20 shrink-0" />}
 					<div
-						className="flex-1 min-w-0 pl-3 border-l-2 text-xs"
-						style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
+						// Feed: the body inherits the configured chat size.
+						className={`flex-1 min-w-0 pl-3 border-l-2 ${feedLayout ? 'py-1' : 'text-xs'}`}
+						style={{
+							borderColor: theme.colors.border,
+							color: feedLayout ? theme.colors.textMain : theme.colors.textDim,
+						}}
 					>
 						<span
 							className="text-2xs uppercase tracking-wide"
-							style={{ color: theme.colors.textDim, opacity: 0.8 }}
+							style={
+								feedLayout ? { color: secondary } : { color: theme.colors.textDim, opacity: 0.8 }
+							}
 						>
 							{t('workflows.transcript.progressNote')}
 						</span>
-						<div className="break-words" style={{ opacity: 0.9 }}>
+						<div className="break-words" style={feedLayout ? undefined : { opacity: 0.9 }}>
 							{isAIMode && !markdownEditMode ? (
 								<MarkdownRenderer
 									content={filteredText}
@@ -461,28 +477,46 @@ export const LogItem = memo(
 			return (
 				<div
 					ref={logItemRef}
-					className="flex gap-4 px-3 sm:px-6 py-0.5"
+					className={`flex gap-4 px-3 sm:px-6 ${feedLayout ? 'py-0' : 'py-0.5'}`}
 					data-log-index={index}
 					data-log-id={log.id}
 					data-tool-run=""
 					data-tool-run-status={runStatus}
+					data-feed-row={feedLayout ? 'activity' : undefined}
 					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 28px' }}
 				>
-					<div className="hidden sm:block w-20 shrink-0" />
+					{!feedLayout && <div className="hidden sm:block w-20 shrink-0" />}
 					<div
 						className="flex-1 min-w-0 pl-3 py-1 text-xs font-mono border-l-2"
-						style={{ borderColor: `${theme.colors.accent}60`, color: theme.colors.textMain }}
+						style={{
+							borderColor: feedLayout ? theme.colors.border : `${theme.colors.accent}60`,
+							color: theme.colors.textMain,
+						}}
 					>
 						<button
 							type="button"
 							onClick={() => onToggleExpanded(log.id)}
 							aria-expanded={isExpanded}
-							className="flex items-center gap-1 max-w-full min-w-0 rounded outline-none focus-visible:ring-1 opacity-70 hover:opacity-100 transition-opacity"
-							style={{ color: theme.colors.textDim }}
+							className={
+								feedLayout
+									? 'flex items-center gap-1.5 max-w-full min-w-0 rounded outline-none focus-visible:ring-1'
+									: 'flex items-center gap-1 max-w-full min-w-0 rounded outline-none focus-visible:ring-1 opacity-70 hover:opacity-100 transition-opacity'
+							}
+							style={{ color: feedLayout ? theme.colors.textMain : theme.colors.textDim }}
 						>
 							{isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-							<span>{label}</span>
-							{runStatus === 'running' && (
+							{/* Feed: the count and the status keep their words whole; the
+							    tool names between them are what truncate. */}
+							<span className={feedLayout ? 'shrink-0 whitespace-nowrap' : undefined}>{label}</span>
+							{feedLayout ? (
+								<>
+									<span className="truncate min-w-0" style={{ color: secondary }}>
+										{Array.from(new Set(toolRun.map((entry) => entry.text))).join(', ')}
+									</span>
+									{runStatus && <ToolStatusLabel theme={theme} kind={runStatus} />}
+								</>
+							) : null}
+							{!feedLayout && runStatus === 'running' && (
 								<span
 									role="status"
 									aria-label={t('workflows.conversations.busy')}
@@ -493,29 +527,35 @@ export const LogItem = memo(
 									●
 								</span>
 							)}
-							{runStatus === 'error' && (
+							{!feedLayout && runStatus === 'error' && (
 								<span className="shrink-0" style={{ color: theme.colors.error }}>
 									!
 								</span>
 							)}
-							{runStatus === 'canceled' && (
+							{!feedLayout && runStatus === 'canceled' && (
 								<span className="shrink-0" style={{ color: theme.colors.textDim }}>
 									×
 								</span>
 							)}
-							{runStatus === 'completed' && (
+							{!feedLayout && runStatus === 'completed' && (
 								<span className="shrink-0" style={{ color: theme.colors.success }}>
 									✓
 								</span>
 							)}
-							<span className="truncate opacity-80">
-								{Array.from(new Set(toolRun.map((entry) => entry.text))).join(', ')}
-							</span>
+							{!feedLayout && (
+								<span className="truncate opacity-80">
+									{Array.from(new Set(toolRun.map((entry) => entry.text))).join(', ')}
+								</span>
+							)}
 						</button>
+						{/* Collapsed means NOT RENDERED (absent from layout and the
+						    accessibility tree), never merely styled hidden. */}
 						{isExpanded && (
 							<div
 								className="mt-1 ml-1 pl-3 flex flex-col gap-1.5 border-l select-text"
-								style={{ borderColor: `${theme.colors.accent}40` }}
+								style={{
+									borderColor: feedLayout ? theme.colors.border : `${theme.colors.accent}40`,
+								}}
 							>
 								{/* Each call unfolds on its own to its full input and result. */}
 								{toolRun.map((entry) => (
@@ -523,7 +563,15 @@ export const LogItem = memo(
 										key={entry.id}
 										log={entry}
 										theme={theme}
-										renderHeader={(call) => <ToolBadge log={call} theme={theme} part="header" />}
+										renderHeader={(call) => (
+											<ToolBadge
+												log={call}
+												theme={theme}
+												part="header"
+												feedLayout={feedLayout}
+												secondaryTextColor={secondary}
+											/>
+										)}
 									/>
 								))}
 							</div>
@@ -541,16 +589,20 @@ export const LogItem = memo(
 			return (
 				<div
 					ref={logItemRef}
-					className="flex gap-4 px-3 sm:px-6 py-0.5"
+					className={`flex gap-4 px-3 sm:px-6 ${feedLayout ? 'py-0' : 'py-0.5'}`}
 					data-log-index={index}
 					data-log-id={log.id}
 					data-native-tool=""
+					data-feed-row={feedLayout ? 'activity' : undefined}
 					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 28px' }}
 				>
-					<div className="hidden sm:block w-20 shrink-0" />
+					{!feedLayout && <div className="hidden sm:block w-20 shrink-0" />}
 					<div
 						className="flex-1 min-w-0 pl-3 py-1 text-xs font-mono border-l-2"
-						style={{ borderColor: `${theme.colors.accent}60`, color: theme.colors.textMain }}
+						style={{
+							borderColor: feedLayout ? theme.colors.border : `${theme.colors.accent}60`,
+							color: theme.colors.textMain,
+						}}
 					>
 						<button
 							type="button"
@@ -575,7 +627,13 @@ export const LogItem = memo(
 								/>
 							)}
 							<div className="flex-1 min-w-0">
-								<ToolBadge log={log} theme={theme} part="header" />
+								<ToolBadge
+									log={log}
+									theme={theme}
+									part="header"
+									feedLayout={feedLayout}
+									secondaryTextColor={secondary}
+								/>
 							</div>
 						</button>
 						{isExpanded && (
@@ -599,7 +657,7 @@ export const LogItem = memo(
 					data-log-id={log.id}
 					style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 120px' }}
 				>
-					<div className="hidden sm:block w-20 shrink-0" />
+					{!feedLayout && <div className="hidden sm:block w-20 shrink-0" />}
 					<div className="flex-1 min-w-0">
 						<RetryStatusCard outageId={log.retryOutageId} theme={theme} fallbackText={log.text} />
 					</div>
@@ -626,14 +684,167 @@ export const LogItem = memo(
 			? theme.colors.error + '66'
 			: (theme.colors.crossAgentBubbleBorder ?? theme.colors.accent + '55');
 
+		// Conversation feed: what this row draws as. Decided from the entry's own
+		// fields only (never its text), in the same precedence the body below uses.
+		const feedKind: 'user' | 'reply' | 'cross' | 'error' | 'activity' | 'notice' | null =
+			!feedLayout
+				? null
+				: isUserMessage
+					? 'user'
+					: crossAgent
+						? 'cross'
+						: log.source === 'error' || log.source === 'stderr'
+							? 'error'
+							: log.source === 'tool' || log.source === 'thinking' || isHiddenProgressEntry(log)
+								? 'activity'
+								: log.source === 'system'
+									? 'notice'
+									: 'reply';
+		// Machine events carry no message actions; everything a person reads does.
+		const feedHasMeta = feedKind !== null && feedKind !== 'activity';
+		const feedAlign: 'start' | 'end' =
+			feedKind === 'user' && userMessageAlignment !== 'left' ? 'end' : 'start';
+
+		// The on-demand metadata, built only while the panel is open. Every value
+		// is the entry's own record; an unstamped model is "not recorded", never a
+		// guess at what ran.
+		const infoFields: MessageInfoField[] = [];
+		if (feedHasMeta && infoOpen) {
+			infoFields.push({
+				label: t('workflows.transcript.infoTime'),
+				value: `${new Date(log.timestamp).toLocaleString(locale, {
+					dateStyle: 'medium',
+					timeStyle: 'short',
+				})} · ${formatRelative(log.timestamp)}`,
+			});
+			if (!isUserMessage && responseDurationMs !== undefined) {
+				infoFields.push({
+					label: t('workflows.transcript.infoDuration'),
+					value: formatElapsedTickerCompact(responseDurationMs),
+				});
+			}
+			if (feedKind === 'reply') {
+				infoFields.push(
+					{
+						label: t('workflows.transcript.infoModel'),
+						value: log.turnModel ?? t('workflows.transcript.infoNotRecorded'),
+					},
+					{
+						label: t('workflows.transcript.infoEffort'),
+						value: log.turnEffort ?? t('workflows.transcript.infoNotRecorded'),
+					}
+				);
+				if (isClaudeCode && showProviderModePill) {
+					infoFields.push({
+						label: t('workflows.transcript.infoCapture'),
+						value: getTokenSourcePill({
+							mode: log.renderStyle === 'text-stream' ? 'interactive' : 'api',
+							adaptive: isAdaptiveMode,
+						}).label,
+					});
+				}
+			}
+			if (crossAgent) {
+				infoFields.push({
+					label: t('workflows.transcript.infoFrom'),
+					value: `${crossAgent.fromAgentName} (${getAgentDisplayName(crossAgent.fromToolType)})`,
+				});
+			}
+			if (isUserMessage) {
+				const states = [
+					log.delivered ? t('workflows.transcript.infoDelivered') : null,
+					log.readOnly ? t('workflows.transcript.infoReadOnly') : null,
+					log.forceParallel ? t('workflows.transcript.infoForcedParallel') : null,
+				].filter((state): state is string => state !== null);
+				if (states.length > 0) {
+					infoFields.push({
+						label: t('workflows.transcript.infoStatus'),
+						value: states.join(' · '),
+					});
+				}
+			}
+		}
+
+		// Feed chrome per kind. A reply, a live tool or a thinking block sits on
+		// the page; only the user's message, an error, a cross-agent answer and a
+		// notice keep a boundary.
+		const feedRowClass =
+			feedKind === 'user'
+				? `flex flex-col group px-3 sm:px-6 pt-5 pb-0.5 ${feedAlign === 'end' ? 'items-end' : 'items-start'}`
+				: feedKind === 'activity'
+					? 'flex flex-col group px-3 sm:px-6 py-0'
+					: 'flex flex-col group px-3 sm:px-6 pt-1.5 pb-0.5';
+		const feedBodyClass =
+			feedKind === 'user'
+				? 'relative min-w-0 max-w-[min(85%,40rem)] px-3.5 py-2 rounded-2xl break-words'
+				: feedKind === 'cross'
+					? `relative min-w-0 p-4 pb-3 rounded-xl border overflow-hidden ${isCrossAgentStreaming ? 'animate-status-glow' : ''}`
+					: feedKind === 'error'
+						? 'relative min-w-0 p-3 rounded-lg border'
+						: feedKind === 'notice'
+							? // A grid, not a floated icon: a float is left out of the
+								// fit-content width, so a one-line notice wrapped its last
+								// character. Here the icon is its own track and every other
+								// body child (text, recovery card) sits in a second column
+								// that still shrinks and wraps when the text does not fit.
+								'relative min-w-0 max-w-full w-fit px-3 py-1.5 rounded-lg border grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 items-start [&>:not(:first-child)]:col-start-2'
+							: 'relative min-w-0';
+		const feedBodyStyle: React.CSSProperties =
+			feedKind === 'user'
+				? {
+						backgroundColor: `color-mix(in srgb, ${theme.colors.textMain} 8%, ${theme.colors.bgMain})`,
+					}
+				: feedKind === 'cross'
+					? {
+							backgroundColor: crossAgentBubbleBg,
+							borderColor: crossAgentBubbleBorder,
+							...(isCrossAgentStreaming
+								? ({ '--status-glow-color': theme.colors.accent } as React.CSSProperties)
+								: {}),
+						}
+					: feedKind === 'error'
+						? {
+								backgroundColor: `color-mix(in srgb, ${theme.colors.error} 8%, ${theme.colors.bgMain})`,
+								borderColor: theme.colors.error,
+							}
+						: feedKind === 'notice'
+							? { borderColor: theme.colors.border }
+							: {};
+
+		// The same handlers and gates for both layouts; only placement differs.
+		const messageActionProps = {
+			log,
+			theme,
+			isAIMode,
+			markdownEditMode,
+			onToggleMarkdownEditMode,
+			onReplayMessage,
+			copyToClipboard,
+			onSaveToFile,
+			onForkConversation,
+			ghCliAvailable,
+			onPublishGist,
+			publishedGistUrl,
+			deleteConfirmLogId,
+			onDeleteLog,
+			onSetDeleteConfirmLogId,
+			scrollContainerRef,
+		};
+
 		return (
 			<div
 				ref={logItemRef}
 				// Narrow screens (phones / web-desktop mobile): the fixed side gutter
 				// for the timestamp costs ~96px of bubble width, so the row stacks -
 				// timestamp above, bubble full-width. From `sm` up it's the classic
-				// side-by-side layout with the w-20 timestamp column.
-				className={`flex flex-col gap-1 sm:gap-4 group ${isReversed ? 'sm:flex-row-reverse' : 'sm:flex-row'} px-3 sm:px-6 py-2`}
+				// side-by-side layout with the w-20 timestamp column. The feed has no
+				// gutter: one column, the user's message aligned by the setting.
+				className={
+					feedKind
+						? feedRowClass
+						: `flex flex-col gap-1 sm:gap-4 group ${isReversed ? 'sm:flex-row-reverse' : 'sm:flex-row'} px-3 sm:px-6 py-2`
+				}
+				data-feed-row={feedKind ?? undefined}
 				data-log-index={index}
 				// Jump anchor for cross-tab message search. For a collapsed response
 				// group this is the FIRST entry's id (see buildRenderedIdMap).
@@ -647,74 +858,104 @@ export const LogItem = memo(
 				// React, or behavior change - purely a rendering hint.
 				style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 120px' }}
 			>
-				<div
-					className={`shrink-0 text-2xs sm:w-20 sm:pt-2 flex gap-1 sm:block ${isReversed ? 'text-right justify-end' : 'text-left'}`}
-					style={{ fontFamily, color: theme.colors.textDim, opacity: 0.6 }}
-				>
-					{(() => {
-						const logDate = new Date(log.timestamp);
-						const today = new Date();
-						const isToday = logDate.toDateString() === today.toDateString();
-						const time = logDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-						if (isToday) {
-							return time;
-						}
-						// Format: YYYY-MM-DD on first line, time on second
-						const year = logDate.getFullYear();
-						const month = String(logDate.getMonth() + 1).padStart(2, '0');
-						const day = String(logDate.getDate()).padStart(2, '0');
-						return (
-							<>
-								<div>
-									{year}-{month}-{day}
-								</div>
-								<div>{time}</div>
-							</>
-						);
-					})()}
-					{/*
+				{/* The feed shows time and duration on demand (message info), not in a
+				    permanent gutter. */}
+				{!feedKind && (
+					<div
+						className={`shrink-0 text-2xs sm:w-20 sm:pt-2 flex gap-1 sm:block ${isReversed ? 'text-right justify-end' : 'text-left'}`}
+						style={{ fontFamily, color: theme.colors.textDim, opacity: 0.6 }}
+					>
+						{(() => {
+							const logDate = new Date(log.timestamp);
+							const today = new Date();
+							const isToday = logDate.toDateString() === today.toDateString();
+							const time = logDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+							if (isToday) {
+								return time;
+							}
+							// Format: YYYY-MM-DD on first line, time on second
+							const year = logDate.getFullYear();
+							const month = String(logDate.getMonth() + 1).padStart(2, '0');
+							const day = String(logDate.getDate()).padStart(2, '0');
+							return (
+								<>
+									<div>
+										{year}-{month}-{day}
+									</div>
+									<div>{time}</div>
+								</>
+							);
+						})()}
+						{/*
 						Turn time, under the clock. Only ever on an agent reply: a user
 						message is instantaneous, so the same line under it would be
 						meaningless. Minutes are the finest rung on purpose - see
 						formatTurnDuration.
 					*/}
-					{responseDurationMs !== undefined && !isUserMessage && (
-						<div
-							className="mt-0.5 tabular-nums"
-							style={{ opacity: 0.7 }}
-							title={`Agent took ${formatDurationWords(responseDurationMs)} to answer`}
-						>
-							{formatTurnDuration(responseDurationMs)}
-						</div>
-					)}
-				</div>
+						{responseDurationMs !== undefined && !isUserMessage && (
+							<div
+								className="mt-0.5 tabular-nums"
+								style={{ opacity: 0.7 }}
+								title={`Agent took ${formatDurationWords(responseDurationMs)} to answer`}
+							>
+								{formatTurnDuration(responseDurationMs)}
+							</div>
+						)}
+					</div>
+				)}
 				<div
-					className={`flex-1 min-w-0 p-4 pb-10 rounded-xl border ${isReversed ? 'rounded-tr-none' : 'rounded-tl-none'} relative overflow-hidden ${isCrossAgentStreaming ? 'animate-status-glow' : ''}`}
-					style={{
-						backgroundColor: crossAgent
-							? crossAgentBubbleBg
-							: isUserMessage
-								? isAIMode
-									? `color-mix(in srgb, ${theme.colors.accent} 20%, ${theme.colors.bgSidebar})`
-									: `color-mix(in srgb, ${theme.colors.accent} 15%, ${theme.colors.bgActivity})`
-								: log.source === 'stderr' || log.source === 'error'
-									? `color-mix(in srgb, ${theme.colors.error} 8%, ${theme.colors.bgActivity})`
-									: isAIMode
-										? theme.colors.bgActivity
-										: 'transparent',
-						borderColor: crossAgent
-							? crossAgentBubbleBorder
-							: isUserMessage && isAIMode
-								? theme.colors.accent + '40'
-								: log.source === 'stderr' || log.source === 'error'
-									? theme.colors.error
-									: theme.colors.border,
-						// Drives the accent hue of the streaming pulse (.animate-status-glow).
-						...(isCrossAgentStreaming
-							? ({ '--status-glow-color': theme.colors.accent } as React.CSSProperties)
-							: {}),
-					}}
+					className={
+						feedKind
+							? feedBodyClass
+							: `flex-1 min-w-0 p-4 pb-10 rounded-xl border ${isReversed ? 'rounded-tr-none' : 'rounded-tl-none'} relative overflow-hidden ${isCrossAgentStreaming ? 'animate-status-glow' : ''}`
+					}
+					style={
+						feedKind
+							? feedBodyStyle
+							: {
+									backgroundColor: crossAgent
+										? crossAgentBubbleBg
+										: isUserMessage
+											? isAIMode
+												? `color-mix(in srgb, ${theme.colors.accent} 20%, ${theme.colors.bgSidebar})`
+												: `color-mix(in srgb, ${theme.colors.accent} 15%, ${theme.colors.bgActivity})`
+											: log.source === 'stderr' || log.source === 'error'
+												? `color-mix(in srgb, ${theme.colors.error} 8%, ${theme.colors.bgActivity})`
+												: isAIMode
+													? theme.colors.bgActivity
+													: 'transparent',
+									borderColor: crossAgent
+										? crossAgentBubbleBorder
+										: isUserMessage && isAIMode
+											? theme.colors.accent + '40'
+											: log.source === 'stderr' || log.source === 'error'
+												? theme.colors.error
+												: theme.colors.border,
+									// Drives the accent hue of the streaming pulse (.animate-status-glow).
+									...(isCrossAgentStreaming
+										? ({ '--status-glow-color': theme.colors.accent } as React.CSSProperties)
+										: {}),
+								}
+					}
 				>
+					{/* Without a bubble the speaker has to be stated for a screen reader.
+					    A cross-agent answer is named by its header instead. */}
+					{(feedKind === 'user' || feedKind === 'reply') && (
+						<span className="sr-only">
+							{feedKind === 'user'
+								? t('workflows.transcript.speakerUser')
+								: t('workflows.transcript.speakerAssistant')}
+						</span>
+					)}
+					{feedKind === 'notice' && (
+						<Info
+							className="w-3.5 h-3.5 mt-[0.2em]"
+							data-notice-icon=""
+							style={{ color: secondary }}
+							aria-label={t('workflows.transcript.notice')}
+							role="img"
+						/>
+					)}
 					{/* Cross-agent attribution header - this AI reply was routed back from a
 					    DIFFERENT agent the user consulted via @mention. Names the agent,
 					    provider, and session id, and offers two ways to jump into that
@@ -848,7 +1089,7 @@ export const LogItem = memo(
 										color: theme.colors.accent,
 									}}
 								>
-									thinking
+									{feedLayout ? t('workflows.transcript.thinking') : 'thinking'}
 								</span>
 							</div>
 							<div className="whitespace-pre-wrap text-sm break-words">
@@ -894,7 +1135,23 @@ export const LogItem = memo(
 										? log.metadata.hiddenProgress.toolName || 'working'
 										: 'thinking'}
 								</span>
-								{log.metadata?.toolState?.status === 'completed' ? (
+								{feedLayout ? (
+									<span className="shrink-0 pt-0.5">
+										<ToolStatusLabel
+											theme={theme}
+											kind={
+												log.metadata?.toolState?.status === 'completed'
+													? 'completed'
+													: log.metadata?.toolState?.status === 'failed' ||
+														  log.metadata?.toolState?.status === 'error'
+														? 'error'
+														: log.metadata?.toolState?.status === 'canceled'
+															? 'canceled'
+															: 'running'
+											}
+										/>
+									</span>
+								) : log.metadata?.toolState?.status === 'completed' ? (
 									<span className="shrink-0 pt-0.5" style={{ color: theme.colors.success }}>
 										✓
 									</span>
@@ -929,7 +1186,12 @@ export const LogItem = memo(
 								borderColor: theme.colors.accent,
 							}}
 						>
-							<ToolBadge log={log} theme={theme} />
+							<ToolBadge
+								log={log}
+								theme={theme}
+								feedLayout={feedLayout}
+								secondaryTextColor={secondary}
+							/>
 							{/* Subagent tool calls (claude-code Task): collapsed behind a
 							    count, expanded in place under the parent badge. */}
 							{subagentLogs && subagentLogs.length > 0 && (
@@ -952,7 +1214,13 @@ export const LogItem = memo(
 											style={{ borderColor: `${theme.colors.accent}40` }}
 										>
 											{subagentLogs.map((child) => (
-												<ToolBadge key={child.id} log={child} theme={theme} />
+												<ToolBadge
+													key={child.id}
+													log={child}
+													theme={theme}
+													feedLayout={feedLayout}
+													secondaryTextColor={secondary}
+												/>
 											))}
 										</div>
 									)}
@@ -1173,7 +1441,11 @@ export const LogItem = memo(
 					    model or effort partway through still says who answered what.
 					    Suppressed on cross-agent entries so the attribution pill above
 					    replaces it. */}
-					{!crossAgent &&
+					{/* The feed does not repeat these on every reply: the composer shows the
+					    current pair, a real change is called out in the meta line, and
+					    each reply's record is one click away in its message info. */}
+					{!feedKind &&
+						!crossAgent &&
 						log.source !== 'user' &&
 						((isClaudeCode && showProviderModePill) || log.turnModel || log.turnEffort) && (
 							<div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 max-w-[60%] pointer-events-none select-none">
@@ -1201,180 +1473,77 @@ export const LogItem = memo(
 								<TurnSettingPills theme={theme} model={log.turnModel} effort={log.turnEffort} />
 							</div>
 						)}
-					{/* Jump to top of this message - bottom left corner */}
-					<JumpToMessageTopButton
-						scrollContainerRef={scrollContainerRef}
-						messageRef={logItemRef}
-						theme={theme}
-					/>
-					{/* Action buttons - bottom right corner */}
-					<div
-						className="absolute bottom-2 right-2 flex items-center gap-1"
-						style={{ transition: 'opacity 0.15s ease-in-out' }}
-					>
-						{/* Markdown toggle button - available on both user and assistant
-						    messages in AI mode for consistent UX (#622). */}
-						{isAIMode && (
-							<button
-								onClick={onToggleMarkdownEditMode}
-								className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100"
-								style={{ color: markdownEditMode ? theme.colors.accent : theme.colors.textDim }}
-								title={
-									markdownEditMode
-										? `Show formatted (${formatShortcutKeys(['Meta', 'e'])})`
-										: `Show plain text (${formatShortcutKeys(['Meta', 'e'])})`
-								}
-							>
-								{markdownEditMode ? <Eye className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-							</button>
-						)}
-						{/* Replay button for user messages in AI mode */}
-						{isUserMessage && isAIMode && onReplayMessage && (
-							<button
-								onClick={() => onReplayMessage(log.text, log.images)}
-								className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100"
-								style={{ color: theme.colors.textDim }}
-								title="Replay message"
-							>
-								<RotateCcw className="w-3.5 h-3.5" />
-							</button>
-						)}
-						{/* Copy to Clipboard Button */}
-						<button
-							onClick={() => copyToClipboard(log.text)}
-							className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100"
-							style={{ color: theme.colors.textDim }}
-							title="Copy to clipboard"
-						>
-							<Copy className="w-3.5 h-3.5" />
-						</button>
-						{/* Save to File Button - only for AI responses */}
-						{log.source !== 'user' && isAIMode && onSaveToFile && (
-							<button
-								onClick={() => onSaveToFile(log.text)}
-								className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100"
-								style={{ color: theme.colors.textDim }}
-								title="Save to file"
-							>
-								<Save className="w-3.5 h-3.5" />
-							</button>
-						)}
-						{/* Fork conversation - user messages and AI responses (source='stdout' in AI mode, or 'ai' if ever set) */}
-						{(log.source === 'user' || log.source === 'ai' || log.source === 'stdout') &&
-							isAIMode &&
-							onForkConversation && (
-								<button
-									onClick={() => onForkConversation(log.id)}
-									className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100"
-									style={{ color: theme.colors.textDim }}
-									title="Fork conversation from here"
-								>
-									<GitFork className="w-3.5 h-3.5" />
-								</button>
-							)}
-						{/* Publish to GitHub Gist - only for AI responses when gh CLI available */}
-						{log.source !== 'user' && isAIMode && ghCliAvailable && onPublishGist && (
-							<button
-								onClick={() => onPublishGist(log.text, log.id)}
-								className={`p-1.5 rounded hover:!opacity-100 ${
-									publishedGistUrl ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'
-								}`}
-								style={{
-									color: publishedGistUrl ? theme.colors.accent : theme.colors.textDim,
-								}}
-								title={
-									publishedGistUrl
-										? `Published as Gist: ${publishedGistUrl}`
-										: 'Publish as GitHub Gist'
-								}
-							>
-								<Share2 className="w-3.5 h-3.5" />
-							</button>
-						)}
-						{/* Delete button for user messages (both AI and terminal modes) */}
-						{log.source === 'user' &&
-							onDeleteLog &&
-							(deleteConfirmLogId === log.id ? (
-								<div
-									className="flex items-center gap-1 p-1 rounded border"
-									style={{
-										backgroundColor: theme.colors.bgSidebar,
-										borderColor: theme.colors.error,
-									}}
-								>
-									<span className="text-xs px-1" style={{ color: theme.colors.error }}>
-										Delete?
-									</span>
-									<button
-										onClick={() => {
-											const nextIndex = onDeleteLog(log.id);
-											onSetDeleteConfirmLogId(null);
-											if (nextIndex !== null && nextIndex >= 0) {
-												setTimeout(() => {
-													const container = scrollContainerRef.current;
-													const items = container?.querySelectorAll('[data-log-index]');
-													const targetItem = items?.[nextIndex] as HTMLElement;
-													if (targetItem && container) {
-														container.scrollTop = targetItem.offsetTop;
-													}
-												}, 50);
-											}
-										}}
-										className="px-2 py-0.5 rounded text-xs font-medium hover:opacity-80"
-										style={{ backgroundColor: theme.colors.error, color: '#fff' }}
-									>
-										Yes
-									</button>
-									<button
-										onClick={() => onSetDeleteConfirmLogId(null)}
-										className="px-2 py-0.5 rounded text-xs hover:opacity-80"
-										style={{ color: theme.colors.textDim }}
-									>
-										No
-									</button>
-								</div>
-							) : (
-								<button
-									onClick={() => onSetDeleteConfirmLogId(log.id)}
-									className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity"
-									style={{ color: theme.colors.textDim }}
-									title={isAIMode ? 'Delete message and response' : 'Delete command and output'}
-								>
-									<Trash2 className="w-3.5 h-3.5" />
-								</button>
-							))}
-						{/* Read-only mode indicator for messages sent in read-only/plan mode */}
-						{isUserMessage && isAIMode && log.readOnly && (
-							<span title="Sent in read-only mode" className="flex items-center">
-								<Eye
-									className="w-3.5 h-3.5"
-									style={{ color: theme.colors.warning, opacity: 0.7 }}
-								/>
-							</span>
-						)}
-						{/* Force parallel indicator for messages sent via Cmd+Shift+Enter */}
-						{isUserMessage && isAIMode && log.forceParallel && (
-							<span
-								title="Sent via forced parallel execution (bypassed queue)"
-								className="flex items-center"
-							>
-								<Hammer
-									className="w-3.5 h-3.5"
-									style={{ color: theme.colors.warning, opacity: 0.7 }}
-								/>
-							</span>
-						)}
-						{/* Delivery checkmark for user messages in AI mode - positioned at the end */}
-						{isUserMessage && isAIMode && log.delivered && (
-							<span title="Message delivered" className="flex items-center">
-								<Check
-									className="w-3.5 h-3.5"
-									style={{ color: theme.colors.success, opacity: 0.6 }}
-								/>
-							</span>
-						)}
-					</div>
+					{!feedKind && (
+						<>
+							{/* Jump to top of this message - bottom left corner */}
+							<JumpToMessageTopButton
+								scrollContainerRef={scrollContainerRef}
+								messageRef={logItemRef}
+								theme={theme}
+							/>
+							{/* Action buttons - bottom right corner */}
+							<MessageActions variant="overlay" {...messageActionProps} />
+						</>
+					)}
 				</div>
+				{feedHasMeta && (
+					<MessageMetaLine
+						theme={theme}
+						align={feedAlign}
+						compact={feedKind === 'user'}
+						revealed={isLatestReply}
+						infoOpen={infoOpen}
+						infoId={infoId}
+						onToggleInfo={toggleInfo}
+						turnSettingChange={feedKind === 'reply' ? turnSettingChange : undefined}
+						secondaryTextColor={secondary}
+						actions={
+							<MessageActions variant="inline" revealed={isLatestReply} {...messageActionProps} />
+						}
+						endControl={
+							<JumpToMessageTopButton
+								scrollContainerRef={scrollContainerRef}
+								messageRef={logItemRef}
+								theme={theme}
+								placement="inline"
+								label={t('workflows.transcript.jumpToMessageTop')}
+							/>
+						}
+						trailing={
+							feedKind === 'reply' && isClaudeCode && showProviderModePill
+								? (() => {
+										// The opt-in token-source pill keeps its place on the reply
+										// it describes, as the user asked for it.
+										const { label, title } = getTokenSourcePill({
+											mode: log.renderStyle === 'text-stream' ? 'interactive' : 'api',
+											adaptive: isAdaptiveMode,
+										});
+										return (
+											<span
+												className="ml-1 text-2xs px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap"
+												style={{
+													backgroundColor: `${theme.colors.accent}20`,
+													color: theme.colors.accent,
+												}}
+												title={title}
+											>
+												{label}
+											</span>
+										);
+									})()
+								: undefined
+						}
+					/>
+				)}
+				{feedHasMeta && infoOpen && (
+					<MessageInfoPanel
+						theme={theme}
+						id={infoId}
+						fields={infoFields}
+						secondaryTextColor={secondary}
+						align={feedAlign}
+					/>
+				)}
 			</div>
 		);
 	},
@@ -1442,7 +1611,21 @@ export const LogItem = memo(
 			// transcript - leave it out and every message already on screen keeps its
 			// pill until something unrelated re-renders it.
 			prevProps.responseDurationMs === nextProps.responseDurationMs &&
-			prevProps.showProviderModePill === nextProps.showProviderModePill
+			prevProps.showProviderModePill === nextProps.showProviderModePill &&
+			// The turn stamps land on an entry without changing its text (the
+			// grouped row lifts them from whichever entry carries them), and the
+			// message info reads them.
+			prevProps.log.turnModel === nextProps.log.turnModel &&
+			prevProps.log.turnEffort === nextProps.log.turnEffort &&
+			// The message info prints the entry's time, and a same-id correction
+			// (a stored conversion upgraded in place) may carry a different one.
+			prevProps.log.timestamp === nextProps.log.timestamp &&
+			// Conversation feed. `isLatestReply` moves to the next reply when one
+			// arrives; the change map is rebuilt per render, so compare by value.
+			prevProps.feedLayout === nextProps.feedLayout &&
+			prevProps.isLatestReply === nextProps.isLatestReply &&
+			sameTurnSettingChange(prevProps.turnSettingChange, nextProps.turnSettingChange) &&
+			prevProps.secondaryTextColor === nextProps.secondaryTextColor
 		);
 	}
 );

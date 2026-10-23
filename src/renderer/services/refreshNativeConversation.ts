@@ -34,6 +34,7 @@ import {
 import { resolveSessionProjectPath } from '../components/AgentSessionsBrowser/utils/sessionProjectPath';
 import {
 	TRANSCRIPT_RESUME_READ_LIMIT,
+	bindDelayedOwnSends,
 	mergeNewerEntries,
 	reconcileTranscriptEntries,
 	stripSynopsisTurns,
@@ -142,9 +143,13 @@ function upgradeAndMerge(
 	visible: LogEntry[]
 ): { logs: LogEntry[]; added: number; upgraded: number } | null {
 	const upgrade = reconcileTranscriptEntries(loaded, visible);
-	const merged = mergeNewerEntries(loaded, upgrade.logs);
+	// A prompt Maestro sent whose native copy was written late (pre-turn context
+	// compaction) is tied to it here, and a duplicate an earlier refresh showed
+	// for it is repaired, before the merge decides what is new.
+	const own = bindDelayedOwnSends(loaded, upgrade.logs);
+	const merged = mergeNewerEntries(loaded, own.logs);
 	if (!merged) return null;
-	return { logs: merged.logs, added: merged.added, upgraded: upgrade.upgraded };
+	return { logs: merged.logs, added: merged.added, upgraded: upgrade.upgraded + own.bound };
 }
 
 const inFlight = new Map<string, Promise<NativeRefreshResult>>();
@@ -188,6 +193,10 @@ async function refreshNow(target: NativeRefreshTarget): Promise<NativeRefreshRes
 					limit,
 					ownerAgentId: sessionId,
 					...(record?.accountDir ? { configDir: record.accountDir } : {}),
+					// A catch-up is a background read: it must never restore or
+					// rewrite a transcript file (starred restoration stays on the
+					// user-driven open paths).
+					readOnly: true,
 				},
 				sshRemoteId
 			);

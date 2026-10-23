@@ -492,7 +492,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 				// session, if the provider transcript is gone but we hold a mirror, copy
 				// it back to the provider's path so the read below (and a later native
 				// --resume) finds it. No-op/cheap when the provider file still exists.
-				if (!sshConfig && !configDir && !options?.offset) {
+				if (!options?.readOnly && !sshConfig && !configDir && !options?.offset) {
 					await restoreStarredTranscript({ agentId, projectPath, sessionId });
 				}
 
@@ -507,6 +507,31 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 					LOG_CONTEXT
 				);
 				return result;
+			}
+		)
+	);
+
+	// ============ Read-only Transcript Change Probe ============
+
+	ipcMain.handle(
+		'agentSessions:getTranscriptRevision',
+		withIpcErrorLogging(
+			handlerOpts('getTranscriptRevision'),
+			async (
+				agentId: string,
+				projectPath: string,
+				sessionId: string,
+				options?: Pick<SessionReadOptions, 'configDir' | 'ownerAgentId'>,
+				sshRemoteId?: string
+			): Promise<string | null> => {
+				// Never fall back to a local transcript for an unsupported remote probe.
+				if (sshRemoteId) return null;
+				const storage = getSessionStorage(agentId);
+				if (!storage?.getTranscriptRevision) return null;
+				const configDir =
+					options?.configDir ??
+					(options?.ownerAgentId ? resolveAgentAccountDir(options.ownerAgentId) : undefined);
+				return storage.getTranscriptRevision(projectPath, sessionId, { configDir });
 			}
 		)
 	);

@@ -3,9 +3,10 @@
 这是 [RunMaestro/Maestro](https://github.com/RunMaestro/Maestro) 的独立开发分支，面向中文日常使用、项目会话组织和各家原生 harness 的历史接续。它保留上游 Git 历史与 AGPL-3.0 许可证。应用名暂保留 **Maestro I18n**，便于现有试用安装继续读取自己的配置。
 
 - [产品 changelog](../CHANGELOG.md)
-- [本版验证与限制](verification/v1.0.1-hb.2.md)
+- [本版验证与限制](verification/v1.0.1-hb.3.md)
 - [开发过程记录](worklog.md)
-- [信息流改造议题](roadmap/conversation-feed.md)
+- [信息流改造记录](roadmap/conversation-feed.md)
+- [Codex 双端接续启动与回退](codex-shared.md)
 - [本分支 Releases](https://github.com/CHANxuanyu/maestro-harness-bridge/releases)
 
 ## 当前能做什么
@@ -14,11 +15,11 @@
 
 第一次使用前，在系统中安装并登录要使用的原生 CLI。Maestro 不提供统一订阅登录、额度共享或免费模型服务。若 CLI 不在 PATH 中，可在相应智能体配置中选择可执行路径。可发现的历史由原生 CLI 的账户目录、项目路径和主机决定。
 
-Codex 同一原生会话一次只能有一个写入者。在另一客户端释放它之后再发送；需要退出那个客户端时，应正常退出，不能删除写锁或靠复制历史冒充原始接续。
+本版信息流采用紧凑正文和按需消息信息，减少大卡片、留白及重复模型/时间。Codex 同一原生会话仍由一个原生进程写入；可选[共享连接器](codex-shared.md)让两端保持打开并轮流接续。它需要单独安装，限定原生版本和本机已有会话。未启用共享时，仍需正常释放另一客户端的占用，不删除写锁或复制历史。
 
 ## 下载与试用
 
-`v1.0.1-hb.2` 为预览版，macOS Apple Silicon 是本轮验证目标。下载 Release 的 mac-arm64 ZIP，校验随附 SHA-256 清单，再解压应用。应用采用临时签名，未做 Apple Developer ID 公证；系统可能要求通过“系统设置 → 隐私与安全性”确认打开。
+`v1.0.1-hb.3` 为预览版，macOS Apple Silicon 是本轮验证目标。下载 Release 的 mac-arm64 ZIP，校验随附 SHA-256 清单，再解压应用。应用采用临时签名，未做 Apple Developer ID 公证；系统可能要求通过“系统设置 → 隐私与安全性”确认打开。
 
 应用名 `Maestro I18n`、bundle ID `com.maestro.i18n.local` 与上游 Maestro 分开。默认配置目录为 `~/Library/Application Support/Maestro I18n`。现有同名试用版应先正常退出、备份该目录，再替换应用；不要同时启动两个同名版本。
 
@@ -29,7 +30,7 @@ Codex 同一原生会话一次只能有一个写入者。在另一客户端释�
 ```sh
 git clone https://github.com/CHANxuanyu/maestro-harness-bridge.git
 cd maestro-harness-bridge
-git checkout v1.0.1-hb.2
+git checkout v1.0.1-hb.3
 npm ci
 npm run lint
 npm run test

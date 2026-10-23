@@ -80,11 +80,11 @@ function record(overrides: Partial<ProjectHistoryConversation> = {}): ProjectHis
 	return {
 		key: `codex:local:/acct:${NATIVE}`,
 		projectKey: 'group:maestro',
-		projectPath: '/Users/u/secretary-harness-dev',
+		projectPath: '/Users/u/sample-project',
 		provider: 'codex',
 		nativeSessionId: NATIVE,
-		title: 'Maestro Chinese Localization',
-		nativeTitle: '查找 OpenCode 的订阅与 Harness 支持',
+		title: 'Example Conversation',
+		nativeTitle: '查看示例项目的原生会话与工具支持',
 		preview: '',
 		createdAt: 1,
 		modifiedAt: AFTERNOON,
@@ -106,7 +106,7 @@ function owner(): Session {
 			createMockAITab({
 				id: 'tab-native',
 				agentSessionId: NATIVE,
-				name: 'Maestro Chinese Localization',
+				name: 'Example Conversation',
 				createdAt: 1,
 				logs: [{ id: 'err', timestamp: AFTERNOON, source: 'error', text: 'Busy' }],
 			}),
@@ -156,7 +156,7 @@ describe('ProjectSessionSidebar native refresh', () => {
 		expect(refreshNativeConversation.mock.calls[0][0]).toMatchObject({
 			sessionId: 'maestro-owner',
 			tabId: 'tab-native',
-			record: { projectPath: '/Users/u/secretary-harness-dev', nativeSessionId: NATIVE },
+			record: { projectPath: '/Users/u/sample-project', nativeSessionId: NATIVE },
 		});
 	});
 

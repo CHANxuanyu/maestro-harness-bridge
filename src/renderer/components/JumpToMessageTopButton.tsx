@@ -29,6 +29,14 @@ interface JumpToMessageTopButtonProps {
 	 */
 	messageAncestorSelector?: string;
 	theme: Theme;
+	/**
+	 * `overlay` (default): absolute in the message's bottom-left corner.
+	 * `inline`: an ordinary button in a flow layout (the conversation feed's meta
+	 * line), revealed with the row's other actions.
+	 */
+	placement?: 'overlay' | 'inline';
+	/** Inline only: the label in the user's language. */
+	label?: string;
 }
 
 export function JumpToMessageTopButton({
@@ -36,6 +44,8 @@ export function JumpToMessageTopButton({
 	messageRef,
 	messageAncestorSelector,
 	theme,
+	placement = 'overlay',
+	label,
 }: JumpToMessageTopButtonProps) {
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const [target, setTarget] = useState<HTMLElement | null>(null);
@@ -92,14 +102,23 @@ export function JumpToMessageTopButton({
 				const container = scrollContainerRef.current;
 				if (container && target) scrollMessageToTop(container, target);
 			}}
-			className="absolute bottom-2 left-2 p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100"
+			className={
+				placement === 'inline'
+					? 'p-1 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100'
+					: 'absolute bottom-2 left-2 p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100'
+			}
 			style={{
-				color: theme.colors.textDim,
+				// Inline inherits the meta line's readable secondary color.
+				color: placement === 'inline' ? undefined : theme.colors.textDim,
 				transition: 'opacity 0.15s ease-in-out',
 				display: !tallEnough || fullyVisible ? 'none' : undefined,
 			}}
-			title={`Jump to top of this message (${formatShortcutKeys(['Shift', 'ArrowUp'])} for previous)`}
-			aria-label="Jump to top of this message"
+			title={
+				placement === 'inline' && label
+					? label
+					: `Jump to top of this message (${formatShortcutKeys(['Shift', 'ArrowUp'])} for previous)`
+			}
+			aria-label={placement === 'inline' && label ? label : 'Jump to top of this message'}
 		>
 			<ArrowUp className="w-3.5 h-3.5" />
 		</button>

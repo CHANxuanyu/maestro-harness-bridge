@@ -5,6 +5,85 @@ import { AgentTaskListCard } from '../../AgentTaskListCard';
 import { extractAgentTaskList } from '../../../utils/agentTaskList';
 import { ToolCallDetails } from './ToolCallDetails';
 import { useT } from '../../../i18n';
+import { readableTextOn } from '../../../../shared/colorContrast';
+
+export type ToolStatusKind = 'running' | 'completed' | 'error' | 'canceled';
+
+/** Map a stored tool status onto the four states the transcript draws. */
+export function toolStatusKind(status: string | undefined): ToolStatusKind | undefined {
+	if (status === 'running') return 'running';
+	if (status === 'completed') return 'completed';
+	if (status === 'failed' || status === 'error') return 'error';
+	if (status === 'canceled') return 'canceled';
+	return undefined;
+}
+
+/**
+ * A tool state as glyph AND word, for the conversation feed: color alone must
+ * not carry it. The status color is passed through `readableTextOn` against the
+ * page background, since a theme's warning or success hue is chosen as an
+ * accent, not as text. Completed stays a quiet check with an accessible name -
+ * it is the expected outcome and repeating "Done" on every call is noise.
+ */
+export function ToolStatusLabel({
+	theme,
+	kind,
+	quiet = false,
+}: {
+	theme: Theme;
+	kind: ToolStatusKind;
+	/** Glyph only (a call inside an unfolded run whose row already says it). */
+	quiet?: boolean;
+}) {
+	const t = useT();
+	const background = theme.colors.bgMain;
+	const color =
+		kind === 'running'
+			? readableTextOn(theme.colors.warning, [background])
+			: kind === 'completed'
+				? readableTextOn(theme.colors.success, [background])
+				: kind === 'error'
+					? readableTextOn(theme.colors.error, [background])
+					: theme.colors.textMain;
+	const word =
+		kind === 'running'
+			? t('workflows.transcript.toolRunning')
+			: kind === 'completed'
+				? t('workflows.transcript.toolCompleted')
+				: kind === 'error'
+					? t('workflows.transcript.toolFailed')
+					: t('workflows.transcript.toolStopped');
+	const glyph =
+		kind === 'running' ? '●' : kind === 'completed' ? '✓' : kind === 'error' ? '!' : '×';
+	const showWord = !quiet && kind !== 'completed';
+	return (
+		<span
+			// nowrap: a status is one unit. Without it a CJK word ("运行中") breaks
+			// between characters and stacks vertically when its row is narrow.
+			className="inline-flex items-center gap-1 shrink-0 whitespace-nowrap font-sans"
+			style={{ color }}
+			data-tool-status={kind}
+			{...(kind === 'running'
+				? { role: 'status' }
+				: showWord
+					? {}
+					: {
+							role: 'img',
+							'aria-label': kind === 'canceled' ? t('workflows.transcript.toolCanceled') : word,
+						})}
+			title={kind === 'canceled' ? t('workflows.transcript.toolCanceled') : word}
+		>
+			<span aria-hidden className={kind === 'running' ? 'animate-pulse' : undefined}>
+				{glyph}
+			</span>
+			{showWord ? (
+				<span>{word}</span>
+			) : kind === 'running' ? (
+				<span className="sr-only">{word}</span>
+			) : null}
+		</span>
+	);
+}
 
 /**
  * The compact tool-execution badge: name pill, status glyph, input summary and
@@ -18,9 +97,17 @@ export const ToolBadge = React.memo(function ToolBadge({
 	log,
 	theme,
 	part = 'all',
+	feedLayout = false,
+	secondaryTextColor,
 }: {
 	log: LogEntry;
 	theme: Theme;
+	/**
+	 * Conversation feed: status as glyph plus word, and the summary in the
+	 * readable secondary color instead of half-opacity body text.
+	 */
+	feedLayout?: boolean;
+	secondaryTextColor?: string;
 	/**
 	 * Which half to draw. `header` is the name, status and one-line summary;
 	 * `details` is the full input, checklist and result. A tool call read back
@@ -33,6 +120,7 @@ export const ToolBadge = React.memo(function ToolBadge({
 	// The unfolded card shows the whole stored input and result, not the
 	// eight-line preview the inline badge uses.
 	if (part === 'details') return <ToolCallDetails log={log} theme={theme} />;
+	const feedStatus = feedLayout ? toolStatusKind(log.metadata?.toolState?.status) : undefined;
 	const showDetails = part === 'all';
 	// Extract tool input details for display
 	const toolInput = log.metadata?.toolState?.input;
@@ -77,23 +165,31 @@ export const ToolBadge = React.memo(function ToolBadge({
 				>
 					{log.text}
 				</span>
-				{toolStatus === 'running' && (
+				{feedStatus && (
+					// shrink-0 here too: this wrapper is the header row's flex item, and
+					// a shrinkable wrapper squeezed the status to one character wide.
+					// The summary after it is what truncates.
+					<span className="shrink-0 pt-0.5" data-tool-status-slot="">
+						<ToolStatusLabel theme={theme} kind={feedStatus} />
+					</span>
+				)}
+				{!feedLayout && toolStatus === 'running' && (
 					<span className="animate-pulse shrink-0 pt-0.5" style={{ color: theme.colors.warning }}>
 						●
 					</span>
 				)}
-				{toolStatus === 'completed' && (
+				{!feedLayout && toolStatus === 'completed' && (
 					<span className="shrink-0 pt-0.5" style={{ color: theme.colors.success }}>
 						✓
 					</span>
 				)}
-				{(toolStatus === 'failed' || toolStatus === 'error') && (
+				{!feedLayout && (toolStatus === 'failed' || toolStatus === 'error') && (
 					<span className="shrink-0 pt-0.5" style={{ color: theme.colors.error }}>
 						!
 					</span>
 				)}
 				{/* Stopped while running: neither busy nor a success. */}
-				{toolStatus === 'canceled' && (
+				{!feedLayout && toolStatus === 'canceled' && (
 					<span
 						className="shrink-0 pt-0.5"
 						style={{ color: theme.colors.textDim }}
@@ -107,8 +203,12 @@ export const ToolBadge = React.memo(function ToolBadge({
 				)}
 				{headerSummary && (
 					<span
-						className={`opacity-50 ${part === 'header' ? 'truncate min-w-0' : 'break-words'}`}
-						style={{ color: theme.colors.textMain }}
+						className={`${feedLayout ? '' : 'opacity-50 '}${part === 'header' ? 'truncate min-w-0' : 'break-words'}`}
+						style={{
+							color: feedLayout
+								? (secondaryTextColor ?? theme.colors.textMain)
+								: theme.colors.textMain,
+						}}
 					>
 						{headerSummary}
 					</span>

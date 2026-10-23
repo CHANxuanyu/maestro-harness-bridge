@@ -55,7 +55,7 @@ function tab(overrides: Partial<AITab> = {}): AITab {
 	return createMockAITab({
 		id: 'tab-native',
 		agentSessionId: NATIVE,
-		name: 'Maestro Chinese Localization',
+		name: 'Example Conversation',
 		inputValue: 'half-typed draft',
 		logs: cachedLogs(),
 		...overrides,
@@ -81,11 +81,11 @@ function owner(overrides: Partial<Session> = {}): Session {
 const RECORD: ProjectHistoryConversation = {
 	key: `codex:local:/Users/u/.codex:${NATIVE}`,
 	projectKey: 'group:maestro',
-	projectPath: '/Users/u/secretary-harness-dev',
+	projectPath: '/Users/u/sample-project',
 	provider: 'codex',
 	nativeSessionId: NATIVE,
-	title: 'Maestro Chinese Localization',
-	nativeTitle: '查找 OpenCode 的订阅与 Harness 支持',
+	title: 'Example Conversation',
+	nativeTitle: '原生会话刷新示例',
 	preview: '',
 	createdAt: 1,
 	modifiedAt: Date.parse('2026-10-16T15:58:30Z'),
@@ -140,7 +140,7 @@ describe('refreshNativeConversation', () => {
 		expect(after.logs.map((e) => e.id)).toEqual(['backfilled', 'm1', 'm2', 'err', 'm3', 'm4']);
 		// Same tab, same native id, user's name and draft untouched.
 		expect(after.agentSessionId).toBe(NATIVE);
-		expect(after.name).toBe('Maestro Chinese Localization');
+		expect(after.name).toBe('Example Conversation');
 		expect(after.inputValue).toBe('half-typed draft');
 		// No focus moved: not the agent, not the tab inside it.
 		expect(useSessionStore.getState().activeSessionId).toBe('elsewhere');
@@ -156,12 +156,186 @@ describe('refreshNativeConversation', () => {
 		});
 		expect(read).toHaveBeenCalledTimes(1);
 		const [provider, path, id, options] = read.mock.calls[0];
-		expect([provider, path, id]).toEqual(['codex', '/Users/u/secretary-harness-dev', NATIVE]);
+		expect([provider, path, id]).toEqual(['codex', '/Users/u/sample-project', NATIVE]);
 		expect(options).toMatchObject({
 			offset: 0,
 			ownerAgentId: 'maestro-owner',
 			configDir: '/Users/u/.codex',
 		});
+	});
+
+	it('shows an own send once when its native copy was written 132s late, and stays stable', async () => {
+		// Pre-turn context compaction: the provider persisted the user message
+		// long after Maestro sent it, which the live send window cannot pair.
+		const sentAt = Date.parse('2026-10-16T16:00:00Z');
+		const prompt = 'Delayed continuation check: reply and recall the token.';
+		const answer = 'Continued; the token is ginkgo-862.';
+		const disk = [
+			msg('m1', 'user', 'afternoon question', '2026-10-16T13:00:00Z'),
+			msg('m2', 'assistant', 'afternoon answer', '2026-10-16T13:01:00Z'),
+			msg('m5', 'user', prompt, new Date(sentAt + 132_165).toISOString()),
+			msg('m6', 'assistant', answer, new Date(sentAt + 146_030).toISOString()),
+		];
+		read.mockResolvedValue({ messages: disk, total: disk.length, hasMore: false });
+		const logs: LogEntry[] = [
+			cachedLogs()[1],
+			cachedLogs()[2],
+			{
+				id: 'local-send',
+				timestamp: sentAt,
+				source: 'user',
+				text: prompt,
+				images: [],
+				delivered: true,
+			},
+			{ id: 'live-reply', timestamp: sentAt + 146_000, source: 'stdout', text: answer },
+		];
+		useSessionStore.setState({
+			sessions: [owner({ aiTabs: [createMockAITab({ id: 'other-tab' }), tab({ logs })] })],
+			activeSessionId: 'elsewhere',
+		} as never);
+
+		const first = await refreshNativeConversation({
+			sessionId: 'maestro-owner',
+			tabId: 'tab-native',
+		});
+		expect(first).toEqual({ status: 'updated', added: 0, upgraded: 1 });
+		const after = storedTab()!;
+		const users = after.logs.filter((e) => e.source === 'user');
+		expect(users.map((e) => e.id)).toEqual(['m1', 'local-send']);
+		expect(users[1]).toMatchObject({
+			timestamp: sentAt,
+			delivered: true,
+			nativeTranscript: { messageId: 'm5' },
+		});
+		// The draft and the tab's identity are untouched.
+		expect(after.inputValue).toBe('half-typed draft');
+		expect(after.agentSessionId).toBe(NATIVE);
+
+		resetNativeConversationRefreshes();
+		const second = await refreshNativeConversation({
+			sessionId: 'maestro-owner',
+			tabId: 'tab-native',
+		});
+		expect(second).toEqual({ status: 'unchanged' });
+	});
+
+	it('shows another thread’s continuation that arrived after a stopped live turn', async () => {
+		// Maestro ran a turn and the user stopped it; then the official app
+		// continued the SAME thread with send_message_to_thread. Native records
+		// that as an output-only tool call, with no user message before it.
+		const sentAt = Date.parse('2026-10-16T16:10:04Z');
+		const prompt = 'Shared stop check: run sleep 45 once; I will stop it.';
+		const iso = (offset: number) => new Date(sentAt + offset).toISOString();
+		const disk = [
+			msg('m1', 'user', 'afternoon question', '2026-10-16T13:00:00Z'),
+			msg('m2', 'assistant', 'afternoon answer', '2026-10-16T13:01:00Z'),
+			msg('m7', 'user', prompt, iso(330)),
+			{ ...msg('m8', 'assistant', 'Shared stop wait starts', iso(3_930)), channel: 'commentary' },
+			{
+				...msg('m9', 'assistant', 'Tool: exec', iso(4_540)),
+				toolUse: [
+					{
+						tool: 'exec',
+						args: 'const r = await tools.exec_command({cmd:"sleep 45"}); text(r);',
+						state: { status: 'canceled', output: 'aborted by user after 27.5s' },
+					},
+				],
+			},
+			{
+				...msg('m10', 'assistant', 'Tool: send_message_to_thread', iso(211_930)),
+				toolUse: [
+					{
+						tool: 'send_message_to_thread',
+						state: {
+							status: 'completed',
+							output:
+								'<codex_delegation>\n  <source_thread_id>22222222-3333-4444-8555-666666666666</source_thread_id>\n  <input>Recovery check after the stop.</input>\n</codex_delegation>',
+						},
+					},
+				],
+			},
+			{
+				...msg(
+					'm11',
+					'assistant',
+					'Recovered after the stop; the turn was stopped by the user.',
+					iso(219_580)
+				),
+				channel: 'final',
+			},
+		];
+		read.mockResolvedValue({ messages: disk, total: disk.length, hasMore: false });
+		const logs: LogEntry[] = [
+			cachedLogs()[1],
+			cachedLogs()[2],
+			{ id: 'local-stop', timestamp: sentAt, source: 'user', text: prompt, images: [] },
+			{
+				id: 'live-progress',
+				timestamp: sentAt + 3_940,
+				source: 'stdout',
+				purpose: 'commentary',
+				text: 'Shared stop wait starts',
+			},
+			{
+				id: 'live-sleep',
+				timestamp: sentAt + 4_715,
+				source: 'tool',
+				text: 'shell',
+				metadata: { toolState: { status: 'canceled', input: { command: 'sleep 45' } } },
+			},
+			{
+				id: 'local-stopped',
+				timestamp: sentAt + 37_958,
+				source: 'system',
+				text: 'Canceled by user',
+			},
+		];
+		useSessionStore.setState({
+			sessions: [owner({ aiTabs: [createMockAITab({ id: 'other-tab' }), tab({ logs })] })],
+			activeSessionId: 'elsewhere',
+		} as never);
+
+		const first = await refreshNativeConversation({
+			sessionId: 'maestro-owner',
+			tabId: 'tab-native',
+		});
+		expect(first).toEqual({ status: 'updated', added: 2 });
+		const after = storedTab()!;
+		expect(after.logs.slice(-2).map((e) => e.id)).toEqual(['m10', 'm11']);
+		// The stopped turn's stored exec stays behind its own live card, the
+		// prompt is not duplicated, and nothing else about the tab moved.
+		expect(after.logs.some((e) => e.id === 'm9')).toBe(false);
+		expect(after.logs.filter((e) => e.source === 'user').map((e) => e.id)).toEqual([
+			'm1',
+			'local-stop',
+		]);
+		expect(after.inputValue).toBe('half-typed draft');
+		expect(useSessionStore.getState().sessions[0].activeTabId).toBe('other-tab');
+
+		resetNativeConversationRefreshes();
+		const second = await refreshNativeConversation({
+			sessionId: 'maestro-owner',
+			tabId: 'tab-native',
+		});
+		expect(second).toEqual({ status: 'unchanged' });
+	});
+
+	it('asks main for a strictly read-only read, with or without a record', async () => {
+		// A catch-up runs in the background (also automatically, see
+		// useNativeTranscriptFollow): it must never restore a starred transcript.
+		await refreshNativeConversation({
+			sessionId: 'maestro-owner',
+			tabId: 'tab-native',
+			record: RECORD,
+		});
+		expect(read.mock.calls[0][3]).toMatchObject({ readOnly: true });
+
+		resetNativeConversationRefreshes();
+		read.mockClear();
+		await refreshNativeConversation({ sessionId: 'maestro-owner', tabId: 'tab-native' });
+		expect(read).toHaveBeenCalled();
+		for (const call of read.mock.calls) expect(call[3]).toMatchObject({ readOnly: true });
 	});
 
 	it('never reads a record scanned on another account into a runner switched to a new one', async () => {
@@ -203,7 +377,7 @@ describe('refreshNativeConversation', () => {
 			record: RECORD,
 		});
 		expect(result).toEqual({ status: 'updated', added: 2 });
-		expect(read.mock.calls[0][1]).toBe('/Users/u/secretary-harness-dev');
+		expect(read.mock.calls[0][1]).toBe('/Users/u/sample-project');
 		expect(read.mock.calls[0][3]).toMatchObject({ configDir: '/Users/u/.codex' });
 	});
 

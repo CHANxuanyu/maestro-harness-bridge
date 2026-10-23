@@ -26,6 +26,8 @@ import os from 'os';
 import fs from 'fs/promises';
 import { logger } from '../utils/logger';
 import { captureException } from '../utils/sentry';
+import { isExpectedSessionReadError } from '../utils/session-read-errors';
+import { fileFingerprint } from './session-info-cache';
 import { readFileRemote, readDirRemote, statRemote } from '../utils/remote-fs';
 import type {
 	AgentSessionInfo,
@@ -144,7 +146,12 @@ interface CodexToolUseEntry {
  * Format: rollout-TIMESTAMP-UUID.jsonl
  */
 function extractSessionIdFromFilename(filename: string): string | null {
-	// Match pattern: rollout-YYYYMMDD_HHMMSS_MMM-UUID.jsonl or similar
+	// Current Codex uses an ISO-like timestamp with hyphens and a literal T.
+	const native = filename.match(
+		/-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\.jsonl$/i
+	);
+	if (native) return native[1];
+	// Match older rollout-YYYYMMDD_HHMMSS_MMM-UUID.jsonl names.
 	const match = filename.match(/rollout-[\d_]+-([a-f0-9-]+)\.jsonl$/i);
 	if (match) {
 		return match[1];
@@ -605,8 +612,340 @@ async function parseSessionFile(
  *
  * Provides access to Codex CLI's local session storage at ~/.codex/sessions/
  */
+interface CodexTranscriptParseState {
+	messages: SessionMessage[];
+	messageIndex: number;
+	lineIndex: number;
+}
+
+interface CodexTranscriptCursor extends CodexTranscriptParseState {
+	dev: number;
+	ino: number;
+	size: number;
+	mtimeMs: number;
+	ctimeMs: number;
+	offset: number;
+	head: Buffer;
+	boundary: Buffer;
+	visibleMessages: SessionMessage[];
+}
+
+/** One canonical conversion for cold reads and append-only catch-up. */
+function parseCodexTranscript(
+	content: string,
+	initial?: CodexTranscriptParseState
+): CodexTranscriptParseState {
+	const lines = content.split('\n').filter((l) => l.trim());
+
+	const messages: SessionMessage[] = [...(initial?.messages ?? [])];
+	let messageIndex = initial?.messageIndex ?? 0;
+
+	for (const [relativeIndex, line] of lines.entries()) {
+		const lineIndex = (initial?.lineIndex ?? 0) + relativeIndex;
+		try {
+			const entry = JSON.parse(line);
+			const payload = entry.type === 'response_item' ? entry.payload : entry;
+
+			if (
+				payload?.type === 'message' &&
+				(payload.role === 'user' || payload.role === 'assistant')
+			) {
+				const rawText = extractTextFromContent(payload.content);
+				// Keep the old counter even for hidden envelopes, so cached native IDs still align.
+				const oldIndex = messageIndex;
+				if (rawText || (payload.role === 'user' && isSystemContextMessage(rawText))) messageIndex++;
+				if (payload.role === 'user' && isSystemContextMessage(rawText)) continue;
+				const images = extractCodexImages(payload.content);
+				const text =
+					payload.role === 'user'
+						? unwrapCodexUserReply(unwrapCodexImageRequest(payload.content) ?? rawText)
+						: rawText;
+				if (text || images.length > 0) {
+					const phase = payload.phase ?? payload.channel;
+					messages.push({
+						type: payload.role,
+						role: payload.role,
+						content: text,
+						timestamp: entry.timestamp || '',
+						uuid:
+							(entry.type === 'response_item' && payload.id) ||
+							(rawText ? `codex-msg-${oldIndex}` : `codex-image-${lineIndex}`),
+						...(typeof phase === 'string'
+							? { channel: phase === 'final_answer' ? 'final' : phase }
+							: {}),
+						...(images.length > 0 ? { images } : {}),
+					});
+				}
+			}
+
+			// Reasoning summaries are displayable; encrypted reasoning is never decoded.
+			if (entry.type === 'response_item' && payload?.type === 'reasoning') {
+				const summary = extractReasoningSummaryText(payload.summary);
+				if (summary)
+					messages.push({
+						type: 'thinking',
+						role: 'assistant',
+						channel: 'analysis',
+						content: summary,
+						timestamp: entry.timestamp || '',
+						uuid: payload.id || `codex-reasoning-${lineIndex}`,
+					});
+			}
+
+			if (
+				entry.type === 'response_item' &&
+				(payload?.type === 'function_call' || payload?.type === 'custom_tool_call')
+			) {
+				const input = payload.arguments ?? payload.input ?? {};
+				let parsedInput: unknown = input;
+				if (typeof input === 'string') {
+					try {
+						parsedInput = JSON.parse(input);
+					} catch {
+						/* Custom tool input is plain text. */
+					}
+				}
+				const toolInfo: CodexToolUseEntry = {
+					tool: payload.name || 'unknown',
+					args: input,
+					state: { status: 'running', input: parsedInput },
+				};
+				messages.push({
+					type: 'assistant',
+					role: 'assistant',
+					content: `Tool: ${payload.name || 'unknown'}`,
+					timestamp: entry.timestamp || '',
+					uuid: payload.call_id || `codex-msg-${messageIndex}`,
+					toolUse: [toolInfo],
+				});
+				messageIndex++;
+			}
+
+			if (
+				entry.type === 'response_item' &&
+				(payload?.type === 'function_call_output' || payload?.type === 'custom_tool_call_output')
+			) {
+				const callId = payload.call_id;
+				const outputText = codexToolOutputText(payload.output);
+				const matchingIdx = callId ? messages.findIndex((m) => m.uuid === callId && m.toolUse) : -1;
+				const status = codexToolResultStatus(payload);
+				if (matchingIdx >= 0) {
+					const matchingMsg = messages[matchingIdx];
+					const toolEntries = matchingMsg.toolUse as CodexToolUseEntry[];
+					messages[matchingIdx] = {
+						...matchingMsg,
+						toolUse: [
+							{
+								...toolEntries[0],
+								state: { ...toolEntries[0].state, status, output: outputText },
+							},
+							...toolEntries.slice(1),
+						],
+					};
+				} else {
+					// Even an orphan result is a tool card, never an assistant answer.
+					messages.push({
+						type: 'assistant',
+						role: 'assistant',
+						content: `Tool: ${payload.name || 'unknown'}`,
+						timestamp: entry.timestamp || '',
+						uuid: callId || `codex-msg-${messageIndex}`,
+						toolUse: [{ tool: payload.name || 'unknown', state: { status, output: outputText } }],
+					});
+					messageIndex++;
+				}
+			}
+
+			if (entry.type === 'item.completed' && entry.item?.type === 'agent_message') {
+				messages.push({
+					type: 'assistant',
+					role: 'assistant',
+					content: entry.item.text || '',
+					timestamp: entry.timestamp || '',
+					uuid: entry.item.id || `codex-msg-${messageIndex}`,
+					...(entry.item.phase
+						? { channel: entry.item.phase === 'final_answer' ? 'final' : entry.item.phase }
+						: {}),
+				});
+				messageIndex++;
+			}
+
+			if (entry.type === 'item.completed' && entry.item?.type === 'tool_call') {
+				messages.push({
+					type: 'assistant',
+					role: 'assistant',
+					content: `Tool: ${entry.item.tool}`,
+					timestamp: entry.timestamp || '',
+					uuid: entry.item.id || `codex-msg-${messageIndex}`,
+					toolUse: [
+						{
+							tool: entry.item.tool,
+							args: entry.item.args,
+							state: { status: 'completed', input: entry.item.args },
+						},
+					],
+				});
+				messageIndex++;
+			}
+
+			if (entry.type === 'item.completed' && entry.item?.type === 'tool_result') {
+				const output = codexToolOutputText(entry.item.output);
+				messages.push({
+					type: 'assistant',
+					role: 'assistant',
+					content: `Tool: ${entry.item.tool || 'unknown'}`,
+					timestamp: entry.timestamp || '',
+					uuid: entry.item.id || `codex-msg-${messageIndex}`,
+					toolUse: [
+						{
+							tool: entry.item.tool || 'unknown',
+							state: { status: entry.item.is_error ? 'failed' : 'completed', output },
+						},
+					],
+				});
+				messageIndex++;
+			}
+		} catch {
+			// Skip malformed lines without changing IDs for later valid messages.
+		}
+	}
+	return { messages, messageIndex, lineIndex: (initial?.lineIndex ?? 0) + lines.length };
+}
+
 export class CodexSessionStorage extends BaseSessionStorage {
 	readonly agentId: ToolType = 'codex';
+
+	// Two active views at most; no history is copied to disk. The provider owns
+	// append-only rollouts. Replacements, shrinkage and same-size writes reset.
+	private readonly transcriptCursors = new Map<string, CodexTranscriptCursor>();
+
+	private async readLocalTranscriptIncrementally(
+		filePath: string,
+		options?: SessionReadOptions
+	): Promise<SessionMessagesResult> {
+		const file = await fs.open(filePath, 'r');
+		try {
+			const stat = await file.stat();
+			let prior = this.transcriptCursors.get(filePath);
+			if (
+				prior &&
+				(prior.dev !== stat.dev ||
+					prior.ino !== stat.ino ||
+					stat.size < prior.size ||
+					(stat.size === prior.size &&
+						(stat.mtimeMs !== prior.mtimeMs || stat.ctimeMs !== prior.ctimeMs)))
+			)
+				prior = undefined;
+			if (prior && stat.size === prior.size)
+				return BaseSessionStorage.applyMessagePagination(prior.visibleMessages, options);
+			// A truncate-and-regrow or in-place edit is not an append. Check both the
+			// file prefix and the committed boundary before extending the cursor.
+			if (prior) {
+				const head = Buffer.alloc(prior.head.length);
+				await file.read(head, 0, head.length, 0);
+				const boundary = Buffer.alloc(prior.boundary.length);
+				await file.read(boundary, 0, boundary.length, prior.offset - boundary.length);
+				if (!head.equals(prior.head) || !boundary.equals(prior.boundary)) prior = undefined;
+			}
+			const start = prior?.offset ?? 0;
+			const bytes = Buffer.alloc(stat.size - start);
+			let read = 0;
+			while (read < bytes.length) {
+				const { bytesRead } = await file.read(bytes, read, bytes.length - read, start + read);
+				if (bytesRead === 0) {
+					this.transcriptCursors.delete(filePath);
+					throw new Error('Codex transcript changed during read; retry on the next refresh');
+				}
+				read += bytesRead;
+			}
+			const completeLength = bytes.lastIndexOf(10) + 1;
+			const committed = parseCodexTranscript(
+				bytes.subarray(0, completeLength).toString('utf8'),
+				prior
+			);
+			// A final complete JSON row without a newline is visible, but not committed
+			// to the cursor. A partial UTF-8/JSON row is re-read intact on the next tick.
+			const visible =
+				completeLength < bytes.length
+					? parseCodexTranscript(bytes.subarray(completeLength).toString('utf8'), committed)
+							.messages
+					: committed.messages;
+			const offset = start + completeLength;
+			const head = Buffer.alloc(Math.min(256, offset));
+			await file.read(head, 0, head.length, 0);
+			const boundary = Buffer.alloc(Math.min(256, offset));
+			await file.read(boundary, 0, boundary.length, offset - boundary.length);
+			this.transcriptCursors.delete(filePath);
+			// Bound retained parsed content; oversized histories still use the same
+			// correct converter, but do not become a permanent main-process cache.
+			if (Buffer.byteLength(JSON.stringify(visible)) <= 32 * 1024 * 1024) {
+				this.transcriptCursors.set(filePath, {
+					...committed,
+					dev: stat.dev,
+					ino: stat.ino,
+					size: stat.size,
+					mtimeMs: stat.mtimeMs,
+					ctimeMs: stat.ctimeMs,
+					offset,
+					head,
+					boundary,
+					visibleMessages: visible,
+				});
+				if (this.transcriptCursors.size > 2)
+					this.transcriptCursors.delete(this.transcriptCursors.keys().next().value!);
+			}
+			return BaseSessionStorage.applyMessagePagination(visible, options);
+		} finally {
+			await file.close();
+		}
+	}
+
+	// A bounded account-scoped path cache, not a transcript/content cache.
+	private readonly revisionPaths = new Map<
+		string,
+		{ filePath: string | null; checkedAt: number }
+	>();
+
+	/**
+	 * Visible-tab refresh probes one file with stat after initial discovery. It
+	 * never parses history, restores a mirror, or reads another account/host.
+	 * Legacy filenames without a native UUID use the existing slow history scan.
+	 */
+	async getTranscriptRevision(
+		_projectPath: string,
+		sessionId: string,
+		options?: SessionReadOptions,
+		sshConfig?: SshRemoteConfig
+	): Promise<string | null> {
+		if (sshConfig || !sessionId) return null;
+		const key = JSON.stringify([this.getSessionsDir(options?.configDir), sessionId]);
+		let entry = this.revisionPaths.get(key);
+		if (!entry || (!entry.filePath && Date.now() - entry.checkedAt >= 10_000)) {
+			const files = await this.findAllSessionFiles(options?.configDir);
+			entry = {
+				filePath:
+					files.find((file) => extractSessionIdFromFilename(file.filename) === sessionId)
+						?.filePath ?? null,
+				checkedAt: Date.now(),
+			};
+		}
+		this.revisionPaths.delete(key);
+		this.revisionPaths.set(key, entry);
+		if (this.revisionPaths.size > 128) {
+			this.revisionPaths.delete(this.revisionPaths.keys().next().value!);
+		}
+		if (!entry.filePath) return null;
+		try {
+			const stat = await fs.stat(entry.filePath);
+			if (!stat.isFile()) return null;
+			// Include file identity and ctime to notice replacement and same-size rewrites.
+			return `${stat.dev}:${stat.ino}:${stat.ctimeMs}:${fileFingerprint(stat.size, stat.mtimeMs)}`;
+		} catch (error) {
+			if (!isExpectedSessionReadError(error)) throw error;
+			this.revisionPaths.delete(key);
+			return null;
+		}
+	}
 
 	/**
 	 * Get the Codex sessions directory path for an account (`CODEX_HOME`), or
@@ -1181,190 +1520,12 @@ export class CodexSessionStorage extends BaseSessionStorage {
 				return { messages: [], total: 0, hasMore: false };
 			}
 
+			if (options?.readOnly) return this.readLocalTranscriptIncrementally(sessionFilePath, options);
 			content = await fs.readFile(sessionFilePath, 'utf-8');
 		}
 
 		try {
-			const lines = content.split('\n').filter((l) => l.trim());
-
-			const messages: SessionMessage[] = [];
-			let messageIndex = 0;
-
-			for (const [lineIndex, line] of lines.entries()) {
-				try {
-					const entry = JSON.parse(line);
-					const payload = entry.type === 'response_item' ? entry.payload : entry;
-
-					if (
-						payload?.type === 'message' &&
-						(payload.role === 'user' || payload.role === 'assistant')
-					) {
-						const rawText = extractTextFromContent(payload.content);
-						// Keep the old counter even for hidden envelopes, so cached native IDs still align.
-						const oldIndex = messageIndex;
-						if (rawText || (payload.role === 'user' && isSystemContextMessage(rawText)))
-							messageIndex++;
-						if (payload.role === 'user' && isSystemContextMessage(rawText)) continue;
-						const images = extractCodexImages(payload.content);
-						const text =
-							payload.role === 'user'
-								? unwrapCodexUserReply(unwrapCodexImageRequest(payload.content) ?? rawText)
-								: rawText;
-						if (text || images.length > 0) {
-							const phase = payload.phase ?? payload.channel;
-							messages.push({
-								type: payload.role,
-								role: payload.role,
-								content: text,
-								timestamp: entry.timestamp || '',
-								uuid:
-									(entry.type === 'response_item' && payload.id) ||
-									(rawText ? `codex-msg-${oldIndex}` : `codex-image-${lineIndex}`),
-								...(typeof phase === 'string'
-									? { channel: phase === 'final_answer' ? 'final' : phase }
-									: {}),
-								...(images.length > 0 ? { images } : {}),
-							});
-						}
-					}
-
-					// Reasoning summaries are displayable; encrypted reasoning is never decoded.
-					if (entry.type === 'response_item' && payload?.type === 'reasoning') {
-						const summary = extractReasoningSummaryText(payload.summary);
-						if (summary)
-							messages.push({
-								type: 'thinking',
-								role: 'assistant',
-								channel: 'analysis',
-								content: summary,
-								timestamp: entry.timestamp || '',
-								uuid: payload.id || `codex-reasoning-${lineIndex}`,
-							});
-					}
-
-					if (
-						entry.type === 'response_item' &&
-						(payload?.type === 'function_call' || payload?.type === 'custom_tool_call')
-					) {
-						const input = payload.arguments ?? payload.input ?? {};
-						let parsedInput: unknown = input;
-						if (typeof input === 'string') {
-							try {
-								parsedInput = JSON.parse(input);
-							} catch {
-								/* Custom tool input is plain text. */
-							}
-						}
-						const toolInfo: CodexToolUseEntry = {
-							tool: payload.name || 'unknown',
-							args: input,
-							state: { status: 'running', input: parsedInput },
-						};
-						messages.push({
-							type: 'assistant',
-							role: 'assistant',
-							content: `Tool: ${payload.name || 'unknown'}`,
-							timestamp: entry.timestamp || '',
-							uuid: payload.call_id || `codex-msg-${messageIndex}`,
-							toolUse: [toolInfo],
-						});
-						messageIndex++;
-					}
-
-					if (
-						entry.type === 'response_item' &&
-						(payload?.type === 'function_call_output' ||
-							payload?.type === 'custom_tool_call_output')
-					) {
-						const callId = payload.call_id;
-						const outputText = codexToolOutputText(payload.output);
-						const matchingIdx = callId
-							? messages.findIndex((m) => m.uuid === callId && m.toolUse)
-							: -1;
-						const status = codexToolResultStatus(payload);
-						if (matchingIdx >= 0) {
-							const matchingMsg = messages[matchingIdx];
-							const toolEntries = matchingMsg.toolUse as CodexToolUseEntry[];
-							messages[matchingIdx] = {
-								...matchingMsg,
-								toolUse: [
-									{
-										...toolEntries[0],
-										state: { ...toolEntries[0].state, status, output: outputText },
-									},
-									...toolEntries.slice(1),
-								],
-							};
-						} else {
-							// Even an orphan result is a tool card, never an assistant answer.
-							messages.push({
-								type: 'assistant',
-								role: 'assistant',
-								content: `Tool: ${payload.name || 'unknown'}`,
-								timestamp: entry.timestamp || '',
-								uuid: callId || `codex-msg-${messageIndex}`,
-								toolUse: [
-									{ tool: payload.name || 'unknown', state: { status, output: outputText } },
-								],
-							});
-							messageIndex++;
-						}
-					}
-
-					if (entry.type === 'item.completed' && entry.item?.type === 'agent_message') {
-						messages.push({
-							type: 'assistant',
-							role: 'assistant',
-							content: entry.item.text || '',
-							timestamp: entry.timestamp || '',
-							uuid: entry.item.id || `codex-msg-${messageIndex}`,
-							...(entry.item.phase
-								? { channel: entry.item.phase === 'final_answer' ? 'final' : entry.item.phase }
-								: {}),
-						});
-						messageIndex++;
-					}
-
-					if (entry.type === 'item.completed' && entry.item?.type === 'tool_call') {
-						messages.push({
-							type: 'assistant',
-							role: 'assistant',
-							content: `Tool: ${entry.item.tool}`,
-							timestamp: entry.timestamp || '',
-							uuid: entry.item.id || `codex-msg-${messageIndex}`,
-							toolUse: [
-								{
-									tool: entry.item.tool,
-									args: entry.item.args,
-									state: { status: 'completed', input: entry.item.args },
-								},
-							],
-						});
-						messageIndex++;
-					}
-
-					if (entry.type === 'item.completed' && entry.item?.type === 'tool_result') {
-						const output = codexToolOutputText(entry.item.output);
-						messages.push({
-							type: 'assistant',
-							role: 'assistant',
-							content: `Tool: ${entry.item.tool || 'unknown'}`,
-							timestamp: entry.timestamp || '',
-							uuid: entry.item.id || `codex-msg-${messageIndex}`,
-							toolUse: [
-								{
-									tool: entry.item.tool || 'unknown',
-									state: { status: entry.item.is_error ? 'failed' : 'completed', output },
-								},
-							],
-						});
-						messageIndex++;
-					}
-				} catch {
-					// Skip malformed lines without changing IDs for later valid messages.
-				}
-			}
-
+			const { messages } = parseCodexTranscript(content);
 			return BaseSessionStorage.applyMessagePagination(messages, options);
 		} catch (error) {
 			logger.error(`Error reading Codex session: ${sessionId}`, LOG_CONTEXT, error);
@@ -1452,12 +1613,13 @@ export class CodexSessionStorage extends BaseSessionStorage {
 	private async findSessionFile(sessionId: string, accountDir?: string): Promise<string | null> {
 		const allFiles = await this.findAllSessionFiles(accountDir);
 
-		for (const { filePath, filename } of allFiles) {
-			const fileSessionId = extractSessionIdFromFilename(filename);
-			if (fileSessionId === sessionId) {
-				return filePath;
-			}
-
+		// Resolve modern filenames before inspecting any legacy transcript. Otherwise
+		// refreshing one tab reads every unrelated file preceding it in the listing.
+		const namedFile = allFiles.find(
+			(file) => extractSessionIdFromFilename(file.filename) === sessionId
+		);
+		if (namedFile) return namedFile.filePath;
+		for (const { filePath } of allFiles) {
 			// Also check by reading first line for session ID
 			try {
 				const content = await fs.readFile(filePath, 'utf-8');
@@ -1797,6 +1959,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			}
 
 			const newContent = linesToKeep.map((p) => p.line).join('\n') + '\n';
+			this.transcriptCursors.delete(sessionFilePath);
 			await fs.writeFile(sessionFilePath, newContent, 'utf-8');
 
 			const linesRemoved = parsedLines.length - linesToKeep.length;

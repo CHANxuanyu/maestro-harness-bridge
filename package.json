@@ -1,6 +1,6 @@
 {
 	"name": "maestro",
-	"version": "1.0.1-hb.2",
+	"version": "1.0.1-hb.3",
 	"description": "Maestro hones fractured attention into focused intent.",
 	"main": "dist/main/index.js",
 	"desktopName": "maestro.desktop",
@@ -74,7 +74,9 @@
 		"refresh-bmad": "node scripts/refresh-bmad.mjs",
 		"fonts:fetch": "node scripts/fetch-webfonts.mjs",
 		"fonts:check": "node scripts/fetch-webfonts.mjs --check",
-		"package:harness-bridge:mac": "node scripts/package-harness-bridge.mjs"
+		"package:harness-bridge:mac": "node scripts/package-harness-bridge.mjs",
+		"package:codex-shared": "node scripts/package-codex-shared.mjs",
+		"test:codex-shared": "node --test scripts/codex-shared/connector.test.cjs"
 	},
 	"build": {
 		"npmRebuild": false,

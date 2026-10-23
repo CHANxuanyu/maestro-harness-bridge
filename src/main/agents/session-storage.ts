@@ -139,6 +139,8 @@ export interface SessionReadOptions {
 	/** Exact account pool selected by the conversation row. */
 	configDir?: string;
 	ownerAgentId?: string;
+	/** Suppress restoration of missing mirrored transcripts during background refresh. */
+	readOnly?: boolean;
 	offset?: number;
 	limit?: number;
 }
@@ -224,6 +226,14 @@ export interface AgentSessionStorage {
 		options?: SessionReadOptions,
 		sshConfig?: SshRemoteConfig
 	): Promise<SessionMessagesResult>;
+
+	/** Cheap read-only change probe. Null means unavailable, not an empty transcript. */
+	getTranscriptRevision?(
+		projectPath: string,
+		sessionId: string,
+		options?: SessionReadOptions,
+		sshConfig?: SshRemoteConfig
+	): Promise<string | null>;
 
 	/**
 	 * Search sessions for a query string

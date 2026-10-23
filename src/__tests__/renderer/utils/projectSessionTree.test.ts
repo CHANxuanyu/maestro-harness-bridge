@@ -223,7 +223,7 @@ describe('project conversation navigation', () => {
 				aiTabs: [
 					createMockAITab({
 						id: 'legacy',
-						name: 'Maestro Chinese Localization',
+						name: 'Example Conversation',
 						agentSessionId: NATIVE,
 						createdAt: 5,
 					}),
@@ -231,8 +231,8 @@ describe('project conversation navigation', () => {
 			});
 			const native = {
 				...record({ ownerId: 'maestro-owner', projectPath: '/projects/secretary' }),
-				title: 'Maestro Chinese Localization',
-				nativeTitle: '查找 OpenCode 的订阅与 Harness 支持',
+				title: 'Example Conversation',
+				nativeTitle: '查看示例项目的原生会话与工具支持',
 			};
 			const search = (query: string) =>
 				buildProjectSessionTree({
@@ -242,16 +242,16 @@ describe('project conversation navigation', () => {
 					search: query,
 				})[0]?.conversations ?? [];
 
-			const [row] = search('OpenCode 的订阅');
+			const [row] = search('示例项目的原生会话');
 			expect(row).toMatchObject({
 				kind: 'open',
 				tabId: 'legacy',
 				// The name the user (or an older import) gave the tab is not overwritten.
-				title: 'Maestro Chinese Localization',
-				nativeTitle: '查找 OpenCode 的订阅与 Harness 支持',
+				title: 'Example Conversation',
+				nativeTitle: '查看示例项目的原生会话与工具支持',
 			});
 			// Still one row for one conversation, and the tab name keeps matching too.
-			expect(search('Chinese Localization').map((r) => r.key)).toEqual(['maestro-owner:legacy']);
+			expect(search('Example Conversation').map((r) => r.key)).toEqual(['maestro-owner:legacy']);
 			expect(search('no such title')).toEqual([]);
 		});
 

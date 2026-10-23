@@ -2,11 +2,27 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, rc, '*-RC']
+    branches: [main, rc, '*-RC', 'codex/i18n-zh-cn']
+  workflow_dispatch:
   push:
     branches: [main, rc, 'codex/i18n-zh-cn', 'codex/conversation-feed']
 
+permissions:
+  contents: read
+
 jobs:
+  hb-release-policy:
+    name: HB release policy
+    if: github.repository == 'CHANxuanyu/maestro-harness-bridge'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: node scripts/hb-release.mjs check
+      - run: node --test scripts/hb-release.test.mjs
+
   lint-and-format:
     runs-on: ubuntu-latest
     steps:

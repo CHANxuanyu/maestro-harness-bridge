@@ -25,6 +25,7 @@ permissions:
 
 jobs:
   guard:
+    if: github.repository == 'RunMaestro/Maestro'
     name: main must not contain the rc line
     runs-on: ubuntu-latest
     steps:

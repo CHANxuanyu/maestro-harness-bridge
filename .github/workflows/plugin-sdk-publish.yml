@@ -9,6 +9,7 @@ on:
 
 jobs:
   publish:
+    if: github.repository == 'RunMaestro/Maestro'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

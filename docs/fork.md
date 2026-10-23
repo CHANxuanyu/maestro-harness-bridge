@@ -3,6 +3,7 @@
 这是 [RunMaestro/Maestro](https://github.com/RunMaestro/Maestro) 的独立开发分支，面向中文日常使用、项目会话组织和各家原生 harness 的历史接续。它保留上游 Git 历史与 AGPL-3.0 许可证。应用名暂保留 **Maestro I18n**，便于现有试用安装继续读取自己的配置。
 
 - [产品 changelog](../CHANGELOG.md)
+- [分支、版本与发布管理](release-policy.md)
 - [本版验证与限制](verification/v1.0.1-hb.4.md)
 - [开发过程记录](worklog.md)
 - [信息流改造记录](roadmap/conversation-feed.md)

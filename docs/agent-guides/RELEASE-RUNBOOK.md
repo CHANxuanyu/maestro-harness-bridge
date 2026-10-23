@@ -1,5 +1,7 @@
 # Release Runbook
 
+> This document describes **RunMaestro/Maestro upstream**. For the Harness Bridge fork, use [the fork release policy](../release-policy.md). HB tag pushes do not invoke this publisher, and HB releases do not send upstream announcements.
+
 How the agents cut a Maestro release with no one watching. The conductor starts it
 with `/maestro-release-main`, `/maestro-release-rc`, or `/maestro-release-all`.
 Each command runs `node scripts/release.mjs kickoff --scope <scope>`,

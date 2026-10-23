@@ -40,6 +40,7 @@ permissions:
 
 jobs:
   rc-carries-main:
+    if: github.repository == 'RunMaestro/Maestro'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

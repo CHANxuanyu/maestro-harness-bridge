@@ -1,0 +1,13 @@
+{
+	"repository": "CHANxuanyu/maestro-harness-bridge",
+	"defaultBranch": "codex/i18n-zh-cn",
+	"requiredCiJobs": [
+		"lint-and-format",
+		"Test (ubuntu-latest, shard 1/2)",
+		"Test (ubuntu-latest, shard 2/2)",
+		"Test (windows-latest, shard 1/2)",
+		"Test (windows-latest, shard 2/2)"
+	],
+	"legacyMutableTags": ["v1.0.1-hb.2", "v1.0.1-hb.3", "v1.0.1-hb.4"],
+	"reservedUnpublishedTags": ["v1.0.1-hb.1"]
+}

@@ -35,6 +35,7 @@ concurrency:
 
 jobs:
   stale:
+    if: github.repository == 'RunMaestro/Maestro'
     runs-on: ubuntu-latest
     steps:
       # actions/stale only *applies* the stale label; it does not create it. Make

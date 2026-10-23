@@ -2,6 +2,8 @@
 
 ## Fork work records
 
+For this fork, follow [docs/release-policy.md](docs/release-policy.md) for branches, versioning, PR checks and releases. The upstream release runbook and `scripts/release.mjs` target RunMaestro infrastructure; do not use their main/rc, tag-publishes, bump or announcement flows for HB releases. Read-only fork verification lives in `scripts/hb-release.mjs`.
+
 The portable entry for this fork is [docs/fork.md](docs/fork.md). Product changes live in [CHANGELOG.md](CHANGELOG.md); verification and stage records live in [docs/worklog.md](docs/worklog.md). Keep private transcripts, account paths and raw local acceptance captures out of public commits. Record the tested artifact and outstanding limitations for each release.
 
 Essential guidance for working with this codebase. For detailed architecture, see [ARCHITECTURE.md](ARCHITECTURE.md). For development setup and processes, see [CONTRIBUTING.md](CONTRIBUTING.md).

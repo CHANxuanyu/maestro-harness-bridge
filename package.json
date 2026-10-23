@@ -76,7 +76,10 @@
 		"fonts:check": "node scripts/fetch-webfonts.mjs --check",
 		"package:harness-bridge:mac": "node scripts/package-harness-bridge.mjs",
 		"package:codex-shared": "node scripts/package-codex-shared.mjs",
-		"test:codex-shared": "node --test scripts/codex-shared/connector.test.cjs"
+		"test:codex-shared": "node --test scripts/codex-shared/connector.test.cjs",
+		"release:hb:check": "node scripts/hb-release.mjs check",
+		"release:hb:verify": "node scripts/hb-release.mjs verify",
+		"test:release-policy": "node --test scripts/hb-release.test.mjs"
 	},
 	"build": {
 		"npmRebuild": false,

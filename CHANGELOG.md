@@ -2,6 +2,15 @@
 
 本文件记录 **Maestro Harness Bridge 分支**相对上游的产品变化。上游历史见 [docs/releases.md](docs/releases.md)。本项目基于 [RunMaestro/Maestro](https://github.com/RunMaestro/Maestro)，保留原作者与 AGPL-3.0 许可证。
 
+## Unreleased
+
+### 版本管理
+
+- 为本 fork 建立独立的分支、版本、PR、发版、回退和证据规则，避免误用上游发布器。
+- 补齐默认分支 PR 的完整 CI，新增版本/文档一致性检查和可复用的只读发布验证工具。
+- 通过规则集保护主线与 HB 标签；新发布采用不可变附件。历史版本保留原始身份，README 验收入口更新到 hb.4。
+- 本次治理不修改应用行为，不重新发布或安装 hb.4。
+
 ## 1.0.1-hb.4 · 2026-10-23 · 预览版
 
 本版在 hb.3 的紧凑正文上进一步区分执行过程和最终回答。前端由原生 Claude Code Opus 实现，用户已试用并认可开发预览；GPT 负责发布审查、回归与打包。

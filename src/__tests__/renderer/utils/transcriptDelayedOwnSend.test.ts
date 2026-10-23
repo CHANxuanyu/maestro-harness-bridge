@@ -20,7 +20,7 @@ const nativeReplyBefore: LogEntry = {
 	id: 'msg_prev_final',
 	timestamp: T0,
 	source: 'stdout',
-	text: 'Other app continued; token is ginkgo-862.',
+	text: 'Other app continued; token is synthetic-token-17.',
 	nativeTranscript: { messageId: 'msg_prev_final', channel: 'final' },
 };
 
@@ -60,7 +60,7 @@ const liveTurn: LogEntry[] = [
 		id: 'live-reply',
 		timestamp: SENT + 146_030,
 		source: 'stdout',
-		text: 'Continued here; token ginkgo-862.',
+		text: 'Continued here; token synthetic-token-17.',
 		turnModel: 'model-x',
 		turnEffort: 'max',
 	},
@@ -103,7 +103,7 @@ const nativeTurn: LogEntry[] = [
 		id: 'msg_final',
 		timestamp: SENT + 146_030,
 		source: 'stdout',
-		text: 'Continued here; token ginkgo-862.',
+		text: 'Continued here; token synthetic-token-17.',
 		nativeTranscript: { messageId: 'msg_final', channel: 'final' },
 	},
 ];

@@ -39,7 +39,7 @@ const externalReply: LogEntry = {
 	id: 'msg_external_final',
 	timestamp: T + 410_321,
 	source: 'stdout',
-	text: 'Recovered after the stop; token ginkgo-862; the previous turn was stopped by the user.',
+	text: 'Recovered after the stop; token synthetic-token-17; the previous turn was stopped by the user.',
 	nativeTranscript: { messageId: 'msg_external_final', channel: 'final' },
 };
 

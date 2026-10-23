@@ -169,7 +169,7 @@ describe('refreshNativeConversation', () => {
 		// long after Maestro sent it, which the live send window cannot pair.
 		const sentAt = Date.parse('2026-10-16T16:00:00Z');
 		const prompt = 'Delayed continuation check: reply and recall the token.';
-		const answer = 'Continued; the token is ginkgo-862.';
+		const answer = 'Continued; the token is synthetic-token-17.';
 		const disk = [
 			msg('m1', 'user', 'afternoon question', '2026-10-16T13:00:00Z'),
 			msg('m2', 'assistant', 'afternoon answer', '2026-10-16T13:01:00Z'),

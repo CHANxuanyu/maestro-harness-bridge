@@ -43,6 +43,9 @@ config.mac.identity = '-';
 config.mac.notarize = false;
 config.mac.target = ['zip'];
 config.mac.artifactName = 'Maestro-I18n-${version}-mac-${arch}.${ext}';
+// Native rebuilds can embed the builder's home directory in Mach-O debug symbols.
+// Strip only debugging records in the packaged copy, before electron-builder signs it.
+config.afterPack = path.join(root, 'scripts/strip-native-debug-paths.cjs');
 mkdirSync(path.join(root, 'release'), { recursive: true });
 const configPath = path.join(root, 'release/harness-bridge-builder.json');
 writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);

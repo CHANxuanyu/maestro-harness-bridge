@@ -72,7 +72,7 @@
 
 最终在具备正常子进程回收行为的 Linux 云环境完整运行 `npm test`：2,065 个测试文件通过、1 个既有跳过；47,322 项通过、88 项既有跳过、0 项失败，进程退出码为 0。
 
-GitHub 连接器写入和现有 CLI 凭据推送均返回 403，当前修复已保存在本地工作分支并导出补丁，尚未创建 PR 或运行 Linux/Windows 远端 CI。恢复仓库写入权限后按既有 PR 流程完成集成，不绕过主线保护。
+首轮完成时，GitHub 连接器写入和 CLI 推送均返回 403，修复保存在本地工作分支并导出补丁，当时未创建 PR 或运行 Linux/Windows 远端 CI。后续授权和接续状态见本文末尾。
 
 ## 后续后端加固
 
@@ -91,4 +91,6 @@ GitHub 连接器写入和现有 CLI 凭据推送均返回 403，当前修复已�
 
 本阶段最终全仓运行 `npm test`：2,065 个文件通过、1 个既有跳过；47,340 项通过、88 项既有跳过、0 项失败，退出码 0。沿用首轮的正常子进程回收方式。共享连接器 16 项、版本规则 11 项、三项 TypeScript 检查、全仓 ESLint、全仓格式和 39 份文档引用检查全部通过。
 
-改动保存在本地 `codex/native-transcript-reliability` 分支。再次推送仍返回 GitHub 403，未创建 PR 或触发远端 CI；累计补丁已验证可干净应用到当前主线。没有修改前端、依赖、认证、队列、原生历史写入或进程终止方式，没有新增哈希与防御框架。后续集成沿用既有 PR 检查，不将云端单平台结果替代远端跨平台验收。
+改动已推送到 [codex/backend-reliability](https://github.com/CHANxuanyu/maestro-harness-bridge/tree/codex/backend-reliability)，并建立[草稿 PR #3](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/3)，目标为集成主线 `codex/i18n-zh-cn`。用户完成 GitHub App 仓库授权后恢复写入；尚未发布的四个提交改用 GitHub noreply 邮箱以通过邮箱隐私保护，文件内容未变。
+
+后续接续从该远端分支开始，先阅读本计划和 PR 中的验收记录。Linux/Windows 远端 CI 尚待确认，真实 macOS 双端与应用重启仍未验；本次未合并或发布。没有修改前端、依赖、认证、队列、原生历史写入或进程终止方式，没有新增哈希与防御框架。后续集成沿用既有 PR 检查，不将云端单平台结果替代远端跨平台验收。

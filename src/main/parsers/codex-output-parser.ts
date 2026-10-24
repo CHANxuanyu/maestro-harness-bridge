@@ -191,11 +191,10 @@ interface CodexRawMessage {
  * an is_error flag. Match only that complete control result, never a quotation
  * or a command's output that happens to discuss cancellation.
  */
-export function codexToolResultStatus(payload: {
-	status?: unknown;
-	is_error?: unknown;
-	output?: unknown;
-}): 'completed' | 'failed' | 'canceled' {
+export function codexToolResultStatus(
+	payload: { status?: unknown; is_error?: unknown; output?: unknown },
+	toolName?: string
+): 'completed' | 'failed' | 'canceled' {
 	if (
 		payload.status === 'canceled' ||
 		payload.status === 'cancelled' ||
@@ -209,8 +208,10 @@ export function codexToolResultStatus(payload: {
 	// Native exec_command results carry the exit code in this header, not an
 	// is_error flag. Pinned source: rust-v0.163.0-alpha.11.1,
 	// codex-rs/core/src/tools/context.rs, ExecCommandToolOutput::response_header.
-	// Match the header from its start so quoted diagnostics in output are inert.
+	// Only a paired native command owns this header. File readers and orphan
+	// results may contain the exact same text as ordinary output.
 	const nativeExit =
+		(toolName === 'exec_command' || toolName === 'write_stdin') &&
 		typeof payload.output === 'string'
 			? /^(?:Chunk ID: [^\n]+\n)?Wall time: \d+(?:\.\d+)? seconds\nProcess exited with code (-?\d+)\n(?:Process running with session ID [^\n]+\n)?(?:Original token count: \d+\n)?Output:\n/.exec(
 					payload.output
@@ -825,7 +826,7 @@ export class CodexOutputParser implements AgentOutputParser {
 				toolName,
 				...(callId ? { toolCallId: callId } : {}),
 				toolState: {
-					status: codexToolResultStatus(payload),
+					status: codexToolResultStatus(payload, toolName),
 					output: this.decodeToolOutput(payload.output),
 				},
 				raw: msg,

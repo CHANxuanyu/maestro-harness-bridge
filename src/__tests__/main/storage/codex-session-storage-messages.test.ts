@@ -794,6 +794,31 @@ describe('CodexSessionStorage - readSessionMessages', () => {
 		).toEqual(texts);
 	});
 
+	it.each([
+		['exec_command', 'failed'],
+		['write_stdin', 'failed'],
+		['read_file', 'completed'],
+		[undefined, 'completed'],
+	])('only interprets the native command header for a paired %s call', async (toolName, status) => {
+		vi.spyOn(storage as any, 'findSessionFile').mockResolvedValue('/native.jsonl');
+		const output = 'Wall time: 0.0100 seconds\nProcess exited with code 1\nOutput:\ncommand failed';
+		const payloads = [
+			...(toolName
+				? [{ type: 'function_call', call_id: 'native-exit', name: toolName, arguments: '{}' }]
+				: []),
+			{ type: 'function_call_output', call_id: 'native-exit', output },
+		];
+		vi.mocked(fs.readFile).mockResolvedValue(
+			payloads.map((payload) => JSON.stringify({ type: 'response_item', payload })).join('\n')
+		);
+		const { messages } = await storage.readSessionMessages('/repo', 'native');
+		expect(messages).toHaveLength(1);
+		expect(messages[0]).toMatchObject({
+			uuid: 'native-exit',
+			toolUse: [{ state: { status, output } }],
+		});
+	});
+
 	it('restores an actually aborted native tool as canceled, without treating quoted text as cancellation', async () => {
 		vi.spyOn(storage as any, 'findSessionFile').mockResolvedValue('/native.jsonl');
 		vi.mocked(fs.readFile).mockResolvedValue(

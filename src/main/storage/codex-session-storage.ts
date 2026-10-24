@@ -740,7 +740,11 @@ function parseCodexTranscript(
 				const callId = payload.call_id;
 				const outputText = codexToolOutputText(payload.output);
 				const matchingIdx = callId ? messages.findIndex((m) => m.uuid === callId && m.toolUse) : -1;
-				const status = codexToolResultStatus(payload);
+				const toolName =
+					matchingIdx >= 0
+						? (messages[matchingIdx].toolUse as CodexToolUseEntry[])[0].tool
+						: undefined;
+				const status = codexToolResultStatus(payload, toolName);
 				if (matchingIdx >= 0) {
 					const matchingMsg = messages[matchingIdx];
 					const toolEntries = matchingMsg.toolUse as CodexToolUseEntry[];

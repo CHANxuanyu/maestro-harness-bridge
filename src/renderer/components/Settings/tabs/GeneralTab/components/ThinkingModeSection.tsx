@@ -3,6 +3,7 @@ import type { Theme, ThinkingMode } from '../../../../../types';
 import { ToggleButtonGroup } from '../../../../ToggleButtonGroup';
 import { ToggleSwitch } from '../../../../ui/ToggleSwitch';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
+import { useSettingsStore } from '../../../../../stores/settingsStore';
 import { useT } from '../../../../../i18n';
 
 interface ThinkingModeSectionProps {
@@ -21,6 +22,11 @@ export function ThinkingModeSection({
 	setShowToolCalls,
 }: ThinkingModeSectionProps) {
 	const t = useT();
+	// The conversations view folds each finished turn's tool calls behind one
+	// row and lists a running turn's calls one line each, so this switch does
+	// nothing there. It still governs the agents view, so it stays a live
+	// control; the note says where it applies.
+	const conversationsView = useSettingsStore((s) => s.sidebarNavigationMode === 'conversations');
 	// Tool-call visibility is independent of the thinking mode. The two settings
 	// live under one heading because they both shape how much of the agent's work
 	// the transcript shows, but neither gates the other: thinking On with tools
@@ -83,6 +89,11 @@ export function ThinkingModeSection({
 						<div className="text-xs opacity-70 mt-0.5">
 							{t('settings.general.thinking.toolCallsDescription')}
 						</div>
+						{conversationsView && (
+							<div className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
+								{t('settings.general.thinking.toolCallsConversationsNote')}
+							</div>
+						)}
 					</div>
 					<ToggleSwitch
 						checked={showToolCalls}

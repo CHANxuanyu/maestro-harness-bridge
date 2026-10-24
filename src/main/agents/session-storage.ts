@@ -39,6 +39,9 @@ export interface SessionMessage {
 	toolUse?: unknown;
 	/** Native message purpose, independent of its role (commentary/final/analysis). */
 	channel?: string;
+	/** Native model and reasoning effort for this assistant message, when recorded. */
+	model?: string;
+	effort?: string;
 	/**
 	 * Base64 data URLs for any image content blocks attached to the message
 	 * (e.g. user-pasted screenshots). Reconstructed from the transcript so a

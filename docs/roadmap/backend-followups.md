@@ -1,6 +1,6 @@
 # 后端第二阶段计划
 
-状态：待 Codex 实施。2026-10-24 起草，用户已确认第 1 至 7 项全部由 Codex 完成，无需再等审阅；本阶段结束后由原生 Claude Code Opus 接手前端。
+状态：第 1 至 7 项的云端实现与回归已完成；用户已确认第 6 项启动入口及测试的最小范围扩展。2026-10-24 起草，本阶段结束后由原生 Claude Code Opus 接手前端。验收边界、原生 CLI 限制和交接契约见完成记录；当前 PR 与合并后主线的 CI 分别核对。
 
 本计划接续[信息流后端改进计划](backend-reliability.md)。上一阶段修复了 Codex 一侧的工具输入、失败与取消状态、回合收束和退出事件完整性。本阶段补上 PR 收尾、Claude Code 的同类缺口，以及上一阶段推迟或没有覆盖的后端项。每项依据都已在代码中确认，行号以 `codex/backend-reliability` 的 `8d01b54` 为准；实施时发现与代码不符，以代码为准并在完成记录中说明。
 
@@ -81,4 +81,58 @@
 
 ## 完成记录
 
-实施后填写：每项的问题、改动、实际测试结果和未验项，保持简短。
+### 1. PR #3 收尾
+
+- PR 提交 `dc6c597` 的[六项 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40123603835) 全部通过，审查线程为空，已补齐审查和验收记录、转为正式 PR 并合并。
+- 实际主线合并提交为 `24fbde9a96a29a793a0f412d7754fcd6eed71119`；`codex/backend-followups` 从该提交建立。[主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40125342570) 六项全部通过。
+
+### 2. Claude 工具结果
+
+- 按 `tool_use_id` 在分页前配对，保留调用输入和 ID，复用实时解析的输出展平与 4000 字符截断。孤立结果继续忽略，混合消息保留普通正文。
+- 新增本地、SSH 两个回归，修改前都因缺失 `state` 失败；修改后存储与解析器两个文件共 159 项通过。覆盖并行乱序结果、成功/失败、空输入输出、长输出、分页和读取不写文件。
+
+### 3. Claude 取消状态
+
+- 新增导出的 `claudeToolResultStatus()`，实时与历史共用，仅在 `is_error` 为真且结果全文匹配已确认原文时返回 `canceled`。不搜索关键词，不改调用 ID 和原文。
+- 原文依据：[官方 2.1.63 包](https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.63.tgz) 的 `aborted_streaming` 路径生成 `Interrupted by user`；[官方 2.1.310 Linux 包](https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.310.tgz) 在临时配置/项目目录和本地模拟 API 下收到 SDK `interrupt` 后，实际写入以 `The user doesn't want to proceed with this tool use.` 开头的完整固定文本。该版本也用同一文本表达用户拒绝工具，统一视为用户停止。没有安装 CLI 或使用真实账户。
+- 实时、历史两个新回归修改前都误报 `failed`；修复后相关五个文件 377 项通过，含并行结果、数组结果、普通错误、相似正文，以及既有 Stop、旧进程隔离和原生 ID 保留。macOS 界面停止未验。
+
+### 4. 每轮模型与思考等级
+
+- `SessionMessage` 增加可选字符串 `model`、`effort`。Codex 使用最新 `turn_context.payload.model` / `effort`，并随增量游标保存；新的上下文缺失某字段时不继承上一轮该值。字段名已按锁定版本[原生协议源码](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/protocol/src/protocol.rs)核对。
+- 两个新回归修改前均缺失模型信息；修改后三个存储测试文件 186 项通过，覆盖换模型/等级、推理与工具、迟到结果、缺省值，以及增量、完整读取和新实例一致。
+- 交接契约：Codex 的 assistant 正文、公开推理、工具消息携带当时上下文的原值；配对结果保留调用时的字段。Claude 的 assistant 消息携带 `message.model`，`<synthetic>` 和缺失模型不填，`effort` 不填。用户消息不填。`undefined` 表示原生记录未提供，不能用当前设置或相邻消息补齐。Opus 负责映射到 `turnModel` / `turnEffort` 和显示，本次没有改界面或映射层。
+
+### 5. 共享命令输出增量
+
+- 按锁定版本[通知类型](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/app-server-protocol/schema/typescript/v2/CommandExecutionOutputDeltaNotification.ts)核对 `item/commandExecution/outputDelta` 的 `threadId`、`turnId`、`itemId`、`delta`，沿用原有会话/回合过滤。
+- 每个运行中调用累计输出并约 200ms 合并发送，调用完成和回合结束前补发待发内容；完成、回合结束或连接退出均清理计时器与缓存。最终条目的输出和状态仍以原生完成事件为准。
+- 新增合成服务回归修改前没有任何中间更新；修复后连接器 17 项全部通过。200 条主调用增量产生三次累计更新，覆盖并行调用、中文、发送间隔、完成前补发、未知调用、跨会话/回合隔离、迟到事件和结束后无计时器输出。真实桌面 Codex 未验。
+- 交接契约：同一 ID 的 `item.updated` 带 `command`、累计 `aggregated_output`、`in_progress`；现有解析器转成 `isPartial: true`、`toolState.status: running` 与累计 `output`，沿用 `tool-${id}` 更新卡片，不能再次拼接累计文本。Opus 负责卡片实时显示、展开后滚动跟随与手动滚动时的阅读位置；回答正文仍按完整条目。
+
+### 6. 原生会话之外的历史摘要
+
+- Codex 及 Claude TUI / Dynamic 从原有 `agentSessions.read` 接口以 `ownerAgentId`、`readOnly: true` 和对应 SSH 主机读取本轮最终回答，不调用模型。排除工具、推理和公开进度，不借用上一轮回答，读取失败如实返回。已记录的 TUI 启动结果也覆盖自定义路径直接指向 maestro-p 的配置。Claude API 保留原生 ID 续接并加 `--no-session-persistence`；其他提供方路径不变。
+- 七个新回归先复现摘要仍启动进程、缺少参数和把摘录当模型协议解析的问题；另一个新回归先复现读取错误丢失。修复后两个相关测试文件 63 项通过，覆盖本地/SSH、首段截断、没有最终回答、普通正文含 `NOTHING_TO_REPORT` 时仍记录历史。
+- 官方 Claude Code 2.1.310 Linux 二进制在临时配置/项目目录与本地模拟 API 上实测：先生成合成会话，再以原 ID 和 `--no-session-persistence` 续接，API 请求仍有前文，项目转录逐字节与文件列表不变。TUI 实测拒绝该参数，只支持 print；Dynamic 可能选择 TUI，按计划走本地摘录。没有安装或访问真实账户。
+- 协议确认：[锁定版本 `TurnStartParams`](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/app-server-protocol/schema/typescript/v2/TurnStartParams.ts) 的 `model` / `effort` 覆盖会延续到后续回合。原有“丢弃返回 ID 就不会影响下一轮”的注释不成立，已修正。虽然原生 CLI 声明 `--ephemeral`，尚无覆盖普通与共享路由的无写入验证，本次按计划选择不调用模型的摘录方案。
+- 用户确认范围扩展后，修复 `src/main/ipc/handlers/process/resolve-claude-spawn-context.ts`：只检查本次 `config.args` 是否包含 `--no-session-persistence`，带参数时跳过 `sanitizeClaudeTranscriptBeforeApiResume()`，普通 API 续接照旧清理。没有新增配置、旁路或重试。注释说明正常 API 回合启动前已经清理过，摘要再次清理只能是空操作或改写用户文件。
+- 新增两条真实临时文件回归，经 `process:spawn` 和真实清理器验证：修复前，不持久化调用仍改写含 thinking 空壳的转录，字节断言失败；普通续接对照通过。修复后，带参数的调用逐字节不变且不产生备份或新会话文件，不带参数的调用仍清理空壳并保留有效 thinking 与正文。连同清理器、摘要 hook 和退出处理共四个文件 201 项通过；包含 thinking 400 经过错误观察后只启动一次摘要、不读本地摘录、显示 `Synopsis failed`，不创建历史条目或推进摘要时间。
+- 已知限制：原生转录若仍有空壳，摘要 API 续接可能失败；最终拒绝走现有 `Synopsis failed`，Maestro 不重启摘要、不回退成本地摘录。下一次正常 API 回合会先清理空壳，这个原因造成的拒绝随后不再出现。官方 Claude Code 2.1.310 在模拟 API 返回该 400 时，会在同一个 CLI 进程内移除请求中的 thinking 后再发一次 HTTP 请求；这属于原生 CLI 行为，本次没有修改或关闭它，不能把 Maestro 单次启动解释为全链路只发一次请求。
+- 补充原生探测使用独立合成转录与本地模拟 API：摘要最终拒绝后原转录字节和会话文件列表不变；实际清理器移除一个空壳后，正常 API 回合成功，随后的不持久化摘要也成功，前文仍在、转录字节和文件列表仍不变。额外的“原生 CLI 只发一次 HTTP”断言因上述两次请求失败，保留失败结论，不将它记为通过或放宽断言；Maestro 层只启动一次的回归通过。
+- 交接契约：本地结果标记 `AgentSpawnResult.synopsisSource: final-response`；历史持久形状沿用 `type: USER`，`summary` 与 `fullResponse` 均为最终回答首段，最多 500 个 UTF-16 单位，超长沿用 `truncateText()` 的省略号。保留原生 ID、Maestro session/tab、项目路径和任务耗时，不生成摘要用量。尚未新增持久化来源字段，Opus 若区分摘录与模型摘要需扩展历史契约。旧 Summary 不删除，`stripSynopsisTurns()` 保留。
+- 未验：macOS 两端 UI 和桌面 Codex。手动验收应使用独立合成会话，开启历史记录，分别完成 API、TUI、Dynamic、普通 Codex 和共享 Codex 一轮；在原回合结束与后台摘要完成之间比较转录字节、项目会话列表和桌面线程，确认没有新增 Summary 或会话，历史仍有条目；重启后再核对。
+
+### 7. Claude 跨应用只读跟随
+
+- Claude 新增本地 stat 版本探测，SSH 返回 null；只读路径沿用 Codex 的追加游标做法，最多保留两个已解析视图、每个不超过 32 MiB，使用已有文件身份与有限边界比较，不增加哈希。完整、SSH、增量共用一个转换器，第 2 至 4 项的结果与字段完整保留。
+- 新回归修改前出现四处失败：缺少版本探测、本地追加仍全文读取、Claude 跟随不生效。修复后四个文件 107 项通过，覆盖半行 JSON、UTF-8 分段、无末尾换行、并行工具结果后到、取消/失败、模型切换、分页、旧视图不被后到结果原地修改、截断/替换/重新增长、账户隔离和文件字节不变。8 MiB 文件正常追加后的读取量低于 2 KiB，未变化时不读取内容。
+- 跟随仍经过 `refreshNativeConversation`。Codex 与 Claude 的忙碌、队列和读取期间切换账户回归均通过；新增 Claude 集成回归确认最终日志追加而草稿、原生 ID、`scrollTop`、`isAtBottom`、`hasUnread`、活动页签和其他页签队列保持原值。
+- 交接契约：只跟随当前可见、本地、空闲且无本页签待发/重试的会话，沿用约 2 秒探测、焦点唤醒和既有失败退避。只更新 `logs`，不调整阅读位置或未读字段；新增内容的未读计数与展开/滚动表现由 Opus 接续既有前端规则。真实窗口中的滚动锚点和重启接续未验；两端同时向同一 Claude 会话发送仍不支持。
+
+### 最终检查
+
+- 推送前 `npm run lint`、`npm run lint:eslint`、`npm run format:check:all` 均通过。各项相关 Vitest 的实际结果见上文；`npm run test:codex-shared` 17 项全部通过。另有 `npm run lint:doc-refs`（39 份文档）、`node scripts/hb-release.mjs check` 与发布脚本 11 项测试通过。
+- 全仓 Vitest 与当前 PR 的 Linux / Windows 六项 CI 结果随 PR 更新；第 1 项的主线 CI 已在上方单独记录。不打包、不发布、不安装，不接触真实会话和账户目录，没有增加跳过项或放宽断言。
+- 第 6 项扩展已获确认并完成，更新后的 PR 按用户要求在六项 CI 全部通过后转为正式 PR 并合并，再确认实际主线合并提交的六项 CI。结果与提交身份记录在 [PR #4](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/4)。macOS 双端、桌面 Codex 与重启接续仍未验。
+- 上一提交 `07047df` 的额外本地全仓 Vitest 有 47,363 项通过、两个既有 `session-watcher` 创建时间用例失败，原有 88 项跳过未增加；独立 tmpfs 探测复现新文件 birthtime 早于等待前 `Date.now()` 的条件。未改动相关实现或断言，也不以单独诊断通过覆盖全仓失败。该提交远端六项 CI 全部通过；本次复跑计划要求的相关测试，完整跨平台结果由新提交的 CI 核对。

@@ -113,7 +113,7 @@ const MAX_TOOL_OUTPUT_CHARS = 4000;
  * Claude sends either a plain string or an array of `{ type: 'text', text }`
  * blocks. Output is truncated to MAX_TOOL_OUTPUT_CHARS.
  */
-function flattenToolResultContent(content: ClaudeContentBlock['content']): string {
+export function flattenToolResultContent(content: ClaudeContentBlock['content']): string {
 	let text: string;
 	if (typeof content === 'string') {
 		text = content;
@@ -127,6 +127,19 @@ function flattenToolResultContent(content: ClaudeContentBlock['content']): strin
 	}
 
 	return text.length > MAX_TOOL_OUTPUT_CHARS ? `${text.slice(0, MAX_TOOL_OUTPUT_CHARS)}...` : text;
+}
+
+/** Exact native interrupt results verified in Claude Code 2.1.63 and 2.1.310. */
+export function claudeToolResultStatus(
+	block: Pick<ClaudeContentBlock, 'is_error' | 'content'>
+): 'completed' | 'failed' | 'canceled' {
+	if (!block.is_error) return 'completed';
+	const output = flattenToolResultContent(block.content);
+	return output === 'Interrupted by user' ||
+		output ===
+			"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+		? 'canceled'
+		: 'failed';
 }
 
 /**
@@ -548,7 +561,7 @@ export class ClaudeOutputParser implements AgentOutputParser {
 				toolName,
 				toolCallId,
 				toolState: {
-					status: block.is_error ? ('failed' as const) : ('completed' as const),
+					status: claudeToolResultStatus(block),
 					output: flattenToolResultContent(block.content),
 				},
 			};

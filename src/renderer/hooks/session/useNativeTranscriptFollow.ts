@@ -1,11 +1,11 @@
 /**
  * useNativeTranscriptFollow - keep the conversation on screen current while the
- * same native Codex session is also being continued from another app.
+ * same native Codex or Claude session is also being continued from another app.
  *
  * The project history scan (useProjectHistory) only runs on focus and on a slow
  * interval, so with both windows visible a turn sent from the other app could
  * sit unseen for minutes. This follows exactly ONE conversation: the visible AI
- * tab of the active agent, when it is a LOCAL Codex tab bound to a native id
+ * tab of the active agent, when it is a LOCAL Codex or Claude tab bound to a native id
  * and Maestro is not writing to it itself (no turn running, nothing queued for
  * it, no auto-retry pending).
  *
@@ -71,7 +71,7 @@ export function resolveNativeFollowTarget(): NativeFollowTarget | null {
 	if (useGroupChatStore.getState().activeGroupChatId) return null;
 	const { sessions, activeSessionId } = useSessionStore.getState();
 	const session = sessions.find((s) => s.id === activeSessionId);
-	if (!session || session.toolType !== 'codex') return null;
+	if (!session || (session.toolType !== 'codex' && session.toolType !== 'claude-code')) return null;
 	// The AI tab must be what the main window shows (not a file, browser or
 	// terminal tab drawn over it).
 	if (

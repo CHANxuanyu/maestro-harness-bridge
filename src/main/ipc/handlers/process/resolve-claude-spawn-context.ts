@@ -203,7 +203,16 @@ export async function resolveClaudeSpawnContext(
 	// Adaptive Mode. If `resolvedConfigDirKey` wasn't already computed
 	// (Batch Mode currently off, no maestro-p Path, no stale interactive
 	// state), compute it now so we can locate the transcript on disk.
-	if (claudeResolvedMode === 'api' && config.agentSessionId && isClaudeCode && !isSshEnabled) {
+	// Non-persistent calls must not rewrite native transcripts. A normal API
+	// turn already sanitizes before starting, so doing it again for a synopsis
+	// is either a no-op or a write to the user's file.
+	if (
+		claudeResolvedMode === 'api' &&
+		config.agentSessionId &&
+		isClaudeCode &&
+		!isSshEnabled &&
+		!config.args.includes('--no-session-persistence')
+	) {
 		const configDirKey =
 			resolvedConfigDirKey ?? resolveConfigDirKey(mergeClaudeSpawnEnvLayers(deps.envLayers));
 		sanitizeClaudeTranscriptBeforeApiResume({

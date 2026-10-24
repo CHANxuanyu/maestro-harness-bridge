@@ -232,6 +232,27 @@ describe('turnDidMeaningfulWork', () => {
 });
 
 describe('runExitSynopsis', () => {
+	it('records a local final-response excerpt without interpreting model summary sentinels', async () => {
+		const deps = makeDeps();
+		const excerpt = 'NOTHING_TO_REPORT is the token discussed in the final answer.';
+		deps.spawn.mockResolvedValue({
+			success: true,
+			response: excerpt,
+			synopsisSource: 'final-response',
+		});
+		await runExitSynopsis(makeSynopsisData({ toolType: 'codex' }), deps);
+		expect(parseSynopsis).not.toHaveBeenCalled();
+		expect(deps.addHistory).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: 'USER',
+				summary: excerpt,
+				fullResponse: excerpt,
+				agentSessionId: 'agent-1',
+			})
+		);
+		expect(deps.refresh).toHaveBeenCalledOnce();
+	});
+
 	it('records a history entry and fires the synopsis toast on success', async () => {
 		const deps = makeDeps();
 		deps.spawn.mockResolvedValue({
@@ -283,7 +304,10 @@ describe('runExitSynopsis', () => {
 		expect(deps.updateLastSynopsisTime).not.toHaveBeenCalled();
 	});
 
-	it('surfaces the provider error instead of writing it to History', async () => {
+	it.each([
+		'Prompt is too long',
+		'API Error: 400 messages.1.content.0: thinking blocks cannot be modified',
+	])('surfaces the provider error instead of writing it to History: %s', async (error) => {
 		// The failure mode this guards: a synopsis whose resume no longer fits
 		// the model's context window prints "Prompt is too long" and exits. That
 		// text must never become the entry, and the turn it failed to cover must
@@ -291,8 +315,8 @@ describe('runExitSynopsis', () => {
 		const deps = makeDeps();
 		deps.spawn.mockResolvedValue({
 			success: false,
-			response: 'Prompt is too long',
-			error: 'Prompt is too long',
+			response: error,
+			error,
 			errorKind: 'process-exit',
 		});
 
@@ -300,11 +324,12 @@ describe('runExitSynopsis', () => {
 
 		expect(deps.addHistory).not.toHaveBeenCalled();
 		expect(deps.updateLastSynopsisTime).not.toHaveBeenCalled();
+		expect(deps.spawn).toHaveBeenCalledTimes(1);
 		expect(notifyToast).toHaveBeenCalledWith(
 			expect.objectContaining({
 				color: 'yellow',
 				title: 'Synopsis failed',
-				message: 'Prompt is too long',
+				message: error,
 			})
 		);
 	});

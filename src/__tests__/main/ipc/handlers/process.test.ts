@@ -11,6 +11,7 @@
  * - runCommand: Execute a single command and capture output
  */
 
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -20,6 +21,7 @@ import {
 	ProcessHandlerDependencies,
 } from '../../../../main/ipc/handlers/process';
 import { getDefaultShell } from '../../../../main/stores/defaults';
+import { encodeClaudeProjectPath } from '../../../../shared/pathUtils';
 import { stripThinkingFromTranscript } from '../../../../main/agents/claude-transcript-sanitizer';
 import { checkCustomPath } from '../../../../main/agents/path-prober';
 import { getChildProcesses } from '../../../../main/process-manager/utils/childProcessInfo';
@@ -1466,6 +1468,82 @@ describe('process IPC handlers', () => {
 				expect(stripThinkingFromTranscript).toHaveBeenCalledTimes(1);
 				const calledPath = vi.mocked(stripThinkingFromTranscript).mock.calls[0][0];
 				expect(calledPath).toContain('prior-session-uuid.jsonl');
+			});
+
+			it.each([
+				['preserves transcript bytes with --no-session-persistence', true],
+				['still sanitizes transcript bytes without --no-session-persistence', false],
+			] as const)('API resume %s', async (_label, noPersistence) => {
+				const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-api-resume-'));
+				const configDir = path.join(root, 'config');
+				const cwd = path.join(root, 'project');
+				const projectDir = path.join(configDir, 'projects', encodeClaudeProjectPath(cwd));
+				const nativeId = '11111111-2222-4333-8444-555555555556';
+				const transcriptPath = path.join(projectDir, `${nativeId}.jsonl`);
+				const retained = [
+					{ type: 'thinking', thinking: 'Valid API reasoning', signature: 'synthetic-api' },
+					{ type: 'text', text: 'Synthetic final answer 中文' },
+				];
+				const row = {
+					type: 'assistant',
+					uuid: 'synthetic-answer',
+					parentUuid: null,
+					message: {
+						role: 'assistant',
+						content: [
+							{ type: 'thinking', thinking: '', signature: 'synthetic-subscription' },
+							...retained,
+						],
+					},
+				};
+				const original = Buffer.from(JSON.stringify(row) + '\r\n');
+				const sanitizer = vi.mocked(stripThinkingFromTranscript);
+				const previousSanitizer = sanitizer.getMockImplementation()!;
+				const actual = await vi.importActual<
+					typeof import('../../../../main/agents/claude-transcript-sanitizer')
+				>('../../../../main/agents/claude-transcript-sanitizer');
+				try {
+					fs.mkdirSync(projectDir, { recursive: true });
+					fs.writeFileSync(transcriptPath, original);
+					sanitizer.mockImplementation((file) => {
+						expect(file).toBe(transcriptPath);
+						return actual.stripThinkingFromTranscript(file);
+					});
+					mockAgentDetector.getAgent.mockResolvedValue(claudeCodeAgent);
+					mockProcessManager.spawn.mockReturnValue({ pid: 4254, success: true });
+					const args = [
+						...claudeCodeAgent.args,
+						...(noPersistence ? ['--no-session-persistence'] : []),
+					];
+					await handlers.get('process:spawn')!({} as any, {
+						sessionId: 'session-api-synopsis',
+						toolType: 'claude-code',
+						cwd,
+						command: 'claude',
+						args,
+						agentSessionId: nativeId,
+						prompt: 'Synthetic synopsis',
+						sessionCustomEnvVars: { CLAUDE_CONFIG_DIR: configDir },
+					});
+
+					expect(mockProcessManager.spawn).toHaveBeenCalledTimes(1);
+					expect(mockProcessManager.spawn.mock.calls[0][0].args).toEqual(args);
+					if (noPersistence) {
+						expect(fs.readFileSync(transcriptPath)).toEqual(original);
+						expect(fs.readdirSync(projectDir)).toEqual([`${nativeId}.jsonl`]);
+						expect(sanitizer).not.toHaveBeenCalled();
+					} else {
+						expect(sanitizer).toHaveBeenCalledTimes(1);
+						expect(JSON.parse(fs.readFileSync(transcriptPath, 'utf8'))).toEqual({
+							...row,
+							message: { ...row.message, content: retained },
+						});
+						expect(fs.readFileSync(`${transcriptPath}.maestro-presanitize.bak`)).toEqual(original);
+					}
+				} finally {
+					sanitizer.mockImplementation(previousSanitizer);
+					fs.rmSync(root, { recursive: true, force: true });
+				}
 			});
 
 			it('does not sanitize a fresh pure-API spawn (no resume, nothing on disk to touch)', async () => {

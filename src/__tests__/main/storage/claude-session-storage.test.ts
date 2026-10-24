@@ -12,8 +12,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
 import { ClaudeSessionStorage } from '../../../main/storage/claude-session-storage';
+import { ClaudeOutputParser } from '../../../main/parsers/claude-output-parser';
 import { captureException } from '../../../main/utils/sentry';
-import { listDirWithStatsRemote } from '../../../main/utils/remote-fs';
+import { listDirWithStatsRemote, readFileRemote } from '../../../main/utils/remote-fs';
 import type { SshRemoteConfig } from '../../../shared/types';
 import type Store from 'electron-store';
 import type { ClaudeSessionOriginsData } from '../../../main/storage/claude-session-storage';
@@ -530,6 +531,227 @@ describe('ClaudeSessionStorage', () => {
 			expect(fs.readFile).toHaveBeenCalledWith(expected, 'utf-8');
 			expect(result.messages).toHaveLength(1);
 		});
+	});
+
+	describe('readSessionMessages - tool results', () => {
+		it('retains each assistant native model without inventing effort or synthetic models', async () => {
+			const rows = [
+				{ type: 'user', message: { role: 'user', model: 'not-an-assistant', content: 'question' } },
+				{ type: 'assistant', message: { role: 'assistant', content: 'no model' } },
+				{
+					type: 'assistant',
+					message: { role: 'assistant', model: 'claude-first', content: 'first' },
+				},
+				{
+					type: 'assistant',
+					message: {
+						role: 'assistant',
+						model: 'claude-second',
+						content: [{ type: 'tool_use', id: 'model-tool', name: 'Read', input: {} }],
+					},
+				},
+				{
+					type: 'assistant',
+					message: { role: 'assistant', model: '<synthetic>', content: 'synthetic' },
+				},
+			];
+			vi.mocked(fs.readFile).mockResolvedValue(rows.map((row) => JSON.stringify(row)).join('\n'));
+			const result = await storage.readSessionMessages('/project', 'synthetic-session', {
+				configDir: '/synthetic-account',
+			});
+			expect(result.messages.map(({ model, effort }) => ({ model, effort }))).toEqual([
+				{ model: undefined, effort: undefined },
+				{ model: undefined, effort: undefined },
+				{ model: 'claude-first', effort: undefined },
+				{ model: 'claude-second', effort: undefined },
+				{ model: undefined, effort: undefined },
+			]);
+		});
+
+		it.each(['live', 'history'])(
+			'recognizes only confirmed interruption results in %s',
+			async (source) => {
+				// Official 2.1.63 abort constant and a 2.1.310 synthetic SDK interrupt transcript.
+				const interrupted =
+					"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.";
+				const cases = [
+					{ content: 'Interrupted by user', is_error: true, status: 'canceled' },
+					{ content: interrupted, is_error: true, status: 'canceled' },
+					{
+						content: [{ type: 'text', text: 'Interrupted by user' }],
+						is_error: true,
+						status: 'canceled',
+					},
+					{ content: 'command not found', is_error: true, status: 'failed' },
+					{ content: 'interrupted 只是普通输出，取消操作见说明', is_error: true, status: 'failed' },
+					{ content: 'Interrupted by user\nadditional output', is_error: true, status: 'failed' },
+					{ content: 'Interrupted by user', is_error: false, status: 'completed' },
+					{ content: interrupted + ' More information.', is_error: true, status: 'failed' },
+				];
+				const invocation = {
+					type: 'assistant',
+					message: {
+						content: cases.map((_, index) => ({
+							type: 'tool_use',
+							id: `cancel-${index}`,
+							name: 'Bash',
+							input: { command: 'sleep 20' },
+						})),
+					},
+				};
+				const result = {
+					type: 'user',
+					message: {
+						content: cases.map(({ content, is_error }, index) => ({
+							type: 'tool_result',
+							tool_use_id: `cancel-${index}`,
+							content,
+							is_error,
+						})),
+					},
+				};
+				let actual: Array<{ id?: string; state: unknown }>;
+				if (source === 'live') {
+					const parser = new ClaudeOutputParser();
+					parser.parseJsonObject(invocation);
+					const event = parser.parseJsonObject(result)!;
+					actual = [event, ...(event.toolResultBlocks ?? [])].map((block) => ({
+						id: block.toolCallId,
+						state: block.toolState,
+					}));
+				} else {
+					vi.mocked(fs.readFile).mockResolvedValue(
+						[invocation, result].map((row) => JSON.stringify(row)).join('\n')
+					);
+					const history = await storage.readSessionMessages('/project', 'synthetic-session', {
+						configDir: '/synthetic-account',
+					});
+					actual = history.messages[0].toolUse as typeof actual;
+				}
+				expect(actual.map((block) => ({ id: block.id, state: block.state }))).toEqual(
+					cases.map((entry, index) => ({
+						id: `cancel-${index}`,
+						state: {
+							status: entry.status,
+							output: typeof entry.content === 'string' ? entry.content : 'Interrupted by user',
+						},
+					}))
+				);
+			}
+		);
+
+		it.each(['local', 'SSH'])(
+			'pairs parallel results before pagination over %s',
+			async (source) => {
+				const calls = [
+					{ type: 'tool_use', id: 'call-read', name: 'Read', input: { file_path: 'a.ts' } },
+					{ type: 'tool_use', id: 'call-patch', name: 'Edit', input: 'patch text' },
+					{ type: 'tool_use', id: 'call-search', name: 'Grep', input: { pattern: 'needle' } },
+					{ type: 'tool_use', id: 'call-empty', name: 'Bash', input: '' },
+				];
+				const invocation = {
+					type: 'assistant',
+					uuid: 'parallel',
+					message: { role: 'assistant', content: calls },
+				};
+				const results = {
+					type: 'user',
+					message: {
+						role: 'user',
+						content: [
+							{
+								type: 'tool_result',
+								tool_use_id: 'call-search',
+								is_error: true,
+								content: 'denied',
+							},
+							{
+								type: 'tool_result',
+								tool_use_id: 'call-read',
+								content: [
+									{ type: 'text', text: 'first' },
+									{ type: 'text', text: 'second' },
+								],
+							},
+							{ type: 'tool_result', tool_use_id: 'call-empty', content: '' },
+							{ type: 'tool_result', tool_use_id: 'call-patch', content: 'x'.repeat(4100) },
+						],
+					},
+				};
+				const transcript = [
+					{ type: 'user', uuid: 'question', message: { role: 'user', content: 'inspect' } },
+					invocation,
+					results,
+					{
+						type: 'user',
+						uuid: 'followup',
+						message: {
+							role: 'user',
+							content: [
+								{ type: 'tool_result', tool_use_id: 'orphan', content: 'never a card or body' },
+								{ type: 'text', text: 'continue' },
+							],
+						},
+					},
+					{ type: 'assistant', uuid: 'answer', message: { role: 'assistant', content: 'done' } },
+				]
+					.map((row) => JSON.stringify(row))
+					.join('\n');
+				vi.mocked(fs.readFile).mockResolvedValue(transcript);
+				vi.mocked(readFileRemote).mockResolvedValue({ success: true, data: transcript });
+				const ssh = source === 'SSH' ? ({ id: 'synthetic-remote' } as SshRemoteConfig) : undefined;
+				const options = { configDir: '/synthetic-account', limit: 20 };
+
+				const parser = new ClaudeOutputParser();
+				const liveCalls = parser.parseJsonObject(invocation)!;
+				const liveResults = parser.parseJsonObject(results)!;
+				const states = new Map(
+					[liveResults, ...(liveResults.toolResultBlocks ?? [])].map((result) => [
+						result.toolCallId,
+						result.toolState,
+					])
+				);
+				const expected = calls.map((call) => ({ ...call, state: states.get(call.id) }));
+				expect(liveCalls.toolUseBlocks?.map((block) => block.input)).toEqual(
+					calls.map((call) => call.input)
+				);
+				expect([...states.values()]).toEqual([
+					{ status: 'failed', output: 'denied' },
+					{ status: 'completed', output: 'firstsecond' },
+					{ status: 'completed', output: '' },
+					{ status: 'completed', output: 'x'.repeat(4000) + '...' },
+				]);
+
+				const full = await storage.readSessionMessages(
+					'/project',
+					'synthetic-session',
+					options,
+					ssh
+				);
+				expect(full.messages.map((message) => message.uuid)).toEqual([
+					'question',
+					'parallel',
+					'followup',
+					'answer',
+				]);
+				expect(full.messages[1].toolUse).toEqual(expected);
+				expect(full.messages[2].content).toBe('continue');
+				expect(full).toMatchObject({ total: 4, hasMore: false });
+				const page = await storage.readSessionMessages(
+					'/project',
+					'synthetic-session',
+					{ ...options, offset: 2, limit: 1 },
+					ssh
+				);
+				expect(page).toEqual({ messages: [full.messages[1]], total: 4, hasMore: true });
+				expect(page.messages[0].toolUse).toEqual(expected);
+				expect(fs.writeFile).not.toHaveBeenCalled();
+				expect(fs.rename).not.toHaveBeenCalled();
+				expect(fs.unlink).not.toHaveBeenCalled();
+				if (ssh) expect(fs.readFile).not.toHaveBeenCalled();
+				else expect(readFileRemote).not.toHaveBeenCalled();
+			}
+		);
 	});
 
 	describe('readSessionMessages - image reconstruction', () => {

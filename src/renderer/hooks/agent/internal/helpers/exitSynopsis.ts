@@ -135,7 +135,10 @@ export async function runExitSynopsis(
 			return;
 		}
 
-		const parsed = parseSynopsis(result.response);
+		const parsed =
+			result.synopsisSource === 'final-response'
+				? { shortSummary: result.response, fullSynopsis: result.response, nothingToReport: false }
+				: parseSynopsis(result.response);
 
 		if (parsed.nothingToReport) {
 			logger.info(

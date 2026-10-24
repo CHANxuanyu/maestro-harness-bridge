@@ -106,6 +106,194 @@ describe('useAgentExecution', () => {
 		Object.assign(window.maestro, originalMaestro);
 	});
 
+	it.each([
+		{ toolType: 'codex' as const, customPath: '/synthetic/shared-codex' },
+		{ toolType: 'codex' as const },
+		{
+			toolType: 'claude-code' as const,
+			enableMaestroP: true,
+			maestroPMode: 'interactive' as const,
+		},
+		{ toolType: 'claude-code' as const, enableMaestroP: true, maestroPMode: 'dynamic' as const },
+		{
+			toolType: 'claude-code' as const,
+			claudeInteractive: { mode: 'interactive' as const, modeReason: 'auto' as const },
+		},
+	])(
+		'creates a local synopsis without a model process for $toolType $maestroPMode $customPath',
+		async (config) => {
+			const session = createMockSession(config);
+			const read = vi.fn().mockResolvedValue({
+				messages: [
+					{ type: 'assistant', content: 'Previous turn answer' },
+					{ type: 'user', content: 'Current question' },
+					{ type: 'assistant', channel: 'commentary', content: 'Progress is not the answer' },
+					{ type: 'assistant', content: 'Tool: exec', toolUse: [{}] },
+					{
+						type: 'assistant',
+						channel: 'final',
+						content: 'NOTHING_TO_REPORT is a literal in this answer.\n\nSecond paragraph.',
+					},
+				],
+				total: 5,
+				hasMore: false,
+			});
+			window.maestro.agentSessions = { ...window.maestro.agentSessions, read };
+			const setSessions = vi.fn();
+			const { result } = renderHook(() =>
+				useAgentExecution({
+					activeSessionId: session.id,
+					sessionsRef: { current: [session] },
+					setSessions,
+					processQueuedItemRef: { current: null },
+					setFlashNotification: vi.fn(),
+					setSuccessFlashNotification: vi.fn(),
+				})
+			);
+			const promise = result.current.spawnBackgroundSynopsis(
+				session.id,
+				session.cwd,
+				'native-original',
+				'Summary prompt',
+				config.toolType,
+				config
+			);
+			await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+			expect(await promise).toEqual({
+				success: true,
+				response: 'NOTHING_TO_REPORT is a literal in this answer.',
+				agentSessionId: 'native-original',
+				synopsisSource: 'final-response',
+			});
+			expect(read).toHaveBeenCalledWith(
+				config.toolType,
+				session.cwd,
+				'native-original',
+				{ ownerAgentId: session.id, readOnly: true },
+				undefined
+			);
+			expect(mockProcess.spawn).not.toHaveBeenCalled();
+			expect(mockProcess.onData).not.toHaveBeenCalled();
+			expect(setSessions).not.toHaveBeenCalled();
+		}
+	);
+
+	it.each([
+		{
+			name: 'truncates the first paragraph',
+			messages: [
+				{ type: 'user', content: 'current question' },
+				{ type: 'assistant', content: 'x'.repeat(510) + '\n\nother paragraph' },
+			],
+			expected: {
+				success: true,
+				response: 'x'.repeat(499) + '…',
+				agentSessionId: 'native-original',
+				synopsisSource: 'final-response',
+			},
+		},
+		{
+			name: 'never substitutes an earlier turn for a missing final answer',
+			messages: [
+				{ type: 'assistant', content: 'previous answer' },
+				{ type: 'user', content: 'current question' },
+				{ type: 'assistant', channel: 'commentary', content: 'still working' },
+				{ type: 'assistant', content: 'Tool: exec', toolUse: [{}] },
+			],
+			expected: { success: false, error: 'No final answer is available for this turn' },
+		},
+	])('local synopsis $name', async ({ messages, expected }) => {
+		const session = createMockSession({
+			toolType: 'codex',
+			sessionSshRemoteConfig: { enabled: true, remoteId: 'synthetic-remote' },
+		});
+		const read = vi.fn().mockResolvedValue({ messages, total: messages.length, hasMore: false });
+		window.maestro.agentSessions = { ...window.maestro.agentSessions, read };
+		const { result } = renderHook(() =>
+			useAgentExecution({
+				activeSessionId: session.id,
+				sessionsRef: { current: [session] },
+				setSessions: vi.fn(),
+				processQueuedItemRef: { current: null },
+				setFlashNotification: vi.fn(),
+				setSuccessFlashNotification: vi.fn(),
+			})
+		);
+		expect(
+			await result.current.spawnBackgroundSynopsis(
+				session.id,
+				session.cwd,
+				'native-original',
+				'Summary prompt',
+				'codex'
+			)
+		).toEqual(expected);
+		expect(read).toHaveBeenCalledWith(
+			'codex',
+			session.cwd,
+			'native-original',
+			{ ownerAgentId: session.id, readOnly: true },
+			'synthetic-remote'
+		);
+		expect(mockProcess.spawn).not.toHaveBeenCalled();
+	});
+
+	it('preserves local synopsis read errors without falling back to a writer', async () => {
+		const session = createMockSession({ toolType: 'codex' });
+		window.maestro.agentSessions = {
+			...window.maestro.agentSessions,
+			read: vi.fn().mockRejectedValue(new Error('Synthetic transcript read failed')),
+		};
+		const { result } = renderHook(() =>
+			useAgentExecution({
+				activeSessionId: session.id,
+				sessionsRef: { current: [session] },
+				setSessions: vi.fn(),
+				processQueuedItemRef: { current: null },
+				setFlashNotification: vi.fn(),
+				setSuccessFlashNotification: vi.fn(),
+			})
+		);
+		expect(
+			await result.current.spawnBackgroundSynopsis(
+				session.id,
+				session.cwd,
+				'native-original',
+				'Summary prompt',
+				'codex'
+			)
+		).toMatchObject({ success: false, error: 'Synthetic transcript read failed' });
+		expect(mockProcess.spawn).not.toHaveBeenCalled();
+	});
+
+	it('resumes API synopsis without persisting a turn', async () => {
+		const session = createMockSession({ enableMaestroP: false });
+		const { result } = renderHook(() =>
+			useAgentExecution({
+				activeSessionId: session.id,
+				sessionsRef: { current: [session] },
+				setSessions: vi.fn(),
+				processQueuedItemRef: { current: null },
+				setFlashNotification: vi.fn(),
+				setSuccessFlashNotification: vi.fn(),
+			})
+		);
+		const promise = result.current.spawnBackgroundSynopsis(
+			session.id,
+			session.cwd,
+			'native-original',
+			'Summary prompt',
+			'claude-code'
+		);
+		await waitFor(() => expect(mockProcess.spawn).toHaveBeenCalledTimes(1));
+		const config = mockProcess.spawn.mock.calls[0][0];
+		onDataHandler?.(config.sessionId, 'Synthetic summary');
+		onExitHandler?.(config.sessionId, 0);
+		await promise;
+		expect(config.agentSessionId).toBe('native-original');
+		expect(config.args).toContain('--no-session-persistence');
+	});
+
 	it('spawns a batch agent and returns aggregated results', async () => {
 		// The tab is idle: a batch (Auto Run) spawn runs under its own `-batch-`
 		// process id and never marks a tab busy, so on exit there is no parallel
@@ -341,10 +529,15 @@ describe('useAgentExecution', () => {
 		expect(resultData.error).toBe('Prompt is too long');
 	});
 
-	it('reports a non-zero synopsis exit as failed even with prose on stdout', async () => {
+	it.each([
+		'Partial summary',
+		'API Error: 400 messages.1.content.0: thinking blocks cannot be modified',
+	])('reports a failed synopsis without retry or local fallback: %s', async (output) => {
 		const session = createMockSession();
 		const sessionsRef = { current: [session] };
 		const processQueuedItemRef = { current: null };
+		const read = vi.fn();
+		window.maestro.agentSessions = { ...window.maestro.agentSessions, read };
 
 		const { result } = renderHook(() =>
 			useAgentExecution({
@@ -370,15 +563,20 @@ describe('useAgentExecution', () => {
 		});
 
 		const targetSessionId = mockProcess.spawn.mock.calls[0][0].sessionId as string;
+		expect(mockProcess.spawn.mock.calls[0][0].args).toContain('--no-session-persistence');
 
 		act(() => {
-			onDataHandler?.(targetSessionId, 'Partial summary');
+			onDataHandler?.(targetSessionId, output);
+			observeEffortRejection(targetSessionId, { agentId: 'claude-code', message: output });
 			onExitHandler?.(targetSessionId, 1);
 		});
 
 		const resultData = await spawnPromise;
 
 		expect(resultData.success).toBe(false);
+		expect(resultData.error).toBe(output);
+		expect(mockProcess.spawn).toHaveBeenCalledTimes(1);
+		expect(read).not.toHaveBeenCalled();
 	});
 
 	it('includes appendSystemPrompt in batch spawns', async () => {

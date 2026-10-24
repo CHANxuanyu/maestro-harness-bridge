@@ -1,5 +1,5 @@
 /**
- * Following the visible local Codex conversation while the same native session
+ * Following the visible local Codex or Claude conversation while the same native session
  * is continued from another app: a stat-only revision check every ~2s, and the
  * canonical read-only catch-up only when that revision moved.
  */
@@ -125,7 +125,7 @@ describe('resolveNativeFollowTarget', () => {
 		});
 	});
 
-	it('follows nothing that Maestro is writing to, or that is not a visible local Codex tab', () => {
+	it('follows nothing that Maestro is writing to, or that is not a visible supported local tab', () => {
 		const cases: Array<[string, () => void]> = [
 			['busy turn', () => setSession(owner({ aiTabs: [codexTab({ state: 'busy' })] }))],
 			[
@@ -139,7 +139,7 @@ describe('resolveNativeFollowTarget', () => {
 						})
 					),
 			],
-			['other provider', () => setSession(owner({ toolType: 'claude-code' }))],
+			['other provider', () => setSession(owner({ toolType: 'opencode' }))],
 			[
 				'SSH remote',
 				() =>
@@ -194,6 +194,78 @@ describe('rememberBounded (backs both the consumed and the failed-revision maps)
 });
 
 describe('useNativeTranscriptFollow', () => {
+	it('follows Claude through the canonical refresh while preserving reading state and other queues', async () => {
+		const actual = await vi.importActual<
+			typeof import('../../../../renderer/services/refreshNativeConversation')
+		>('../../../../renderer/services/refreshNativeConversation');
+		refresh.mockImplementation(actual.refreshNativeConversation);
+		const read = vi.fn().mockResolvedValue({
+			messages: [
+				{
+					uuid: 'm1',
+					type: 'user',
+					role: 'user',
+					timestamp: new Date(1).toISOString(),
+					content: 'cached question',
+				},
+				{
+					uuid: 'm2',
+					type: 'assistant',
+					role: 'assistant',
+					timestamp: new Date(2).toISOString(),
+					content: 'external answer',
+					model: 'claude-test',
+				},
+			],
+			total: 2,
+			hasMore: false,
+		});
+		window.maestro.agentSessions = { ...window.maestro.agentSessions, read };
+		const queue = [
+			{
+				id: 'other-queued',
+				tabId: 'tab-other',
+				type: 'message',
+				text: 'queued elsewhere',
+			} as never,
+		];
+		setSession(
+			owner({
+				toolType: 'claude-code',
+				executionQueue: queue,
+				aiTabs: [codexTab({ scrollTop: 147, isAtBottom: false, hasUnread: true })],
+			})
+		);
+		renderHook(() => useNativeTranscriptFollow());
+		await settle();
+		expect(getTranscriptRevision).toHaveBeenCalledWith('claude-code', '/Users/u/project', NATIVE, {
+			ownerAgentId: 'owner',
+		});
+		expect(read).toHaveBeenCalledWith(
+			'claude-code',
+			'/Users/u/project',
+			NATIVE,
+			expect.objectContaining({ readOnly: true, ownerAgentId: 'owner' }),
+			undefined
+		);
+		const session = useSessionStore.getState().sessions[0];
+		expect(session.aiTabs[0]).toMatchObject({
+			inputValue: 'half-typed draft',
+			scrollTop: 147,
+			isAtBottom: false,
+			hasUnread: true,
+			agentSessionId: NATIVE,
+		});
+		expect(session.aiTabs[0].logs.map((entry) => entry.text)).toEqual([
+			'cached question',
+			'external answer',
+		]);
+		expect(session.executionQueue).toEqual(queue);
+		expect(session.activeTabId).toBe('tab-native');
+		await nextTick();
+		expect(read).toHaveBeenCalledTimes(1);
+	});
+
 	it('catches a cached tab up on first activation, then reads only when the revision moves', async () => {
 		renderHook(() => useNativeTranscriptFollow());
 		await settle();
@@ -306,31 +378,35 @@ describe('useNativeTranscriptFollow', () => {
 		expect(refresh).not.toHaveBeenCalled();
 	});
 
-	it('never checks a tab with a turn running or an item queued for it', async () => {
-		setSession(owner({ aiTabs: [codexTab({ state: 'busy' })] }));
-		renderHook(() => useNativeTranscriptFollow());
-		await settle();
-		await nextTick();
-		expect(getTranscriptRevision).not.toHaveBeenCalled();
+	it.each(['codex', 'claude-code'] as const)(
+		'never checks a busy or queued %s tab',
+		async (toolType) => {
+			setSession(owner({ toolType, aiTabs: [codexTab({ state: 'busy' })] }));
+			renderHook(() => useNativeTranscriptFollow());
+			await settle();
+			await nextTick();
+			expect(getTranscriptRevision).not.toHaveBeenCalled();
 
-		act(() => {
-			setSession(
-				owner({
-					executionQueue: [{ id: 'q', tabId: 'tab-native', type: 'message', text: 'x' } as never],
-				})
-			);
-		});
-		await nextTick();
-		expect(getTranscriptRevision).not.toHaveBeenCalled();
-		expect(refresh).not.toHaveBeenCalled();
+			act(() => {
+				setSession(
+					owner({
+						toolType,
+						executionQueue: [{ id: 'q', tabId: 'tab-native', type: 'message', text: 'x' } as never],
+					})
+				);
+			});
+			await nextTick();
+			expect(getTranscriptRevision).not.toHaveBeenCalled();
+			expect(refresh).not.toHaveBeenCalled();
 
-		// The queue drained: checked promptly, without waiting for the next tick.
-		act(() => {
-			setSession(owner());
-		});
-		await settle();
-		expect(refresh).toHaveBeenCalledTimes(1);
-	});
+			// The queue drained: checked promptly, without waiting for the next tick.
+			act(() => {
+				setSession(owner({ toolType }));
+			});
+			await settle();
+			expect(refresh).toHaveBeenCalledTimes(1);
+		}
+	);
 
 	it('drops a revision answered after the selection moved, and reads nothing for it', async () => {
 		const answer = deferred<string>();
@@ -346,30 +422,37 @@ describe('useNativeTranscriptFollow', () => {
 		expect(refresh).not.toHaveBeenCalledWith({ sessionId: 'owner', tabId: 'tab-native' });
 	});
 
-	it('does not consume a revision when the identity changed during the catch-up', async () => {
-		const read = deferred<{ status: 'unchanged' }>();
-		refresh.mockReturnValueOnce(read.promise);
-		renderHook(() => useNativeTranscriptFollow());
-		await settle();
-		expect(refresh).toHaveBeenCalledTimes(1);
+	it.each([
+		['codex', 'CODEX_HOME'],
+		['claude-code', 'CLAUDE_CONFIG_DIR'],
+	] as const)(
+		'does not consume a revision after the %s account changes',
+		async (toolType, accountEnv) => {
+			setSession(owner({ toolType }));
+			const read = deferred<{ status: 'unchanged' }>();
+			refresh.mockReturnValueOnce(read.promise);
+			renderHook(() => useNativeTranscriptFollow());
+			await settle();
+			expect(refresh).toHaveBeenCalledTimes(1);
 
-		// The account the runner reads changed while the read was out.
-		act(() => {
-			patchSession({ customEnvVars: { CODEX_HOME: '/Users/u/other-account' } });
-		});
-		read.resolve({ status: 'unchanged' });
-		await settle();
+			// The account the runner reads changed while the read was out.
+			act(() => {
+				patchSession({ customEnvVars: { [accountEnv]: '/Users/u/other-account' } });
+			});
+			read.resolve({ status: 'unchanged' });
+			await settle();
 
-		// Back on the original identity, the same revision is still unconsumed.
-		act(() => {
-			patchSession({ customEnvVars: {} });
-		});
-		await nextTick();
-		const forOriginal = refresh.mock.calls.filter(
-			([target]) => (target as { tabId: string }).tabId === 'tab-native'
-		);
-		expect(forOriginal.length).toBeGreaterThanOrEqual(2);
-	});
+			// Back on the original identity, the same revision is still unconsumed.
+			act(() => {
+				patchSession({ customEnvVars: {} });
+			});
+			await nextTick();
+			const forOriginal = refresh.mock.calls.filter(
+				([target]) => (target as { tabId: string }).tabId === 'tab-native'
+			);
+			expect(forOriginal.length).toBeGreaterThanOrEqual(2);
+		}
+	);
 
 	it('checks promptly on a tab switch and keeps each tab’s consumed revision', async () => {
 		renderHook(() => useNativeTranscriptFollow());

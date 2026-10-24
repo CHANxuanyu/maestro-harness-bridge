@@ -102,3 +102,10 @@
 - `SessionMessage` 增加可选字符串 `model`、`effort`。Codex 使用最新 `turn_context.payload.model` / `effort`，并随增量游标保存；新的上下文缺失某字段时不继承上一轮该值。字段名已按锁定版本[原生协议源码](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/protocol/src/protocol.rs)核对。
 - 两个新回归修改前均缺失模型信息；修改后三个存储测试文件 186 项通过，覆盖换模型/等级、推理与工具、迟到结果、缺省值，以及增量、完整读取和新实例一致。
 - 交接契约：Codex 的 assistant 正文、公开推理、工具消息携带当时上下文的原值；配对结果保留调用时的字段。Claude 的 assistant 消息携带 `message.model`，`<synthetic>` 和缺失模型不填，`effort` 不填。用户消息不填。`undefined` 表示原生记录未提供，不能用当前设置或相邻消息补齐。Opus 负责映射到 `turnModel` / `turnEffort` 和显示，本次没有改界面或映射层。
+
+### 5. 共享命令输出增量
+
+- 按锁定版本[通知类型](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/app-server-protocol/schema/typescript/v2/CommandExecutionOutputDeltaNotification.ts)核对 `item/commandExecution/outputDelta` 的 `threadId`、`turnId`、`itemId`、`delta`，沿用原有会话/回合过滤。
+- 每个运行中调用累计输出并约 200ms 合并发送，调用完成和回合结束前补发待发内容；完成、回合结束或连接退出均清理计时器与缓存。最终条目的输出和状态仍以原生完成事件为准。
+- 新增合成服务回归修改前没有任何中间更新；修复后连接器 17 项全部通过。200 条主调用增量产生三次累计更新，覆盖并行调用、中文、发送间隔、完成前补发、未知调用、跨会话/回合隔离、迟到事件和结束后无计时器输出。真实桌面 Codex 未验。
+- 交接契约：同一 ID 的 `item.updated` 带 `command`、累计 `aggregated_output`、`in_progress`；现有解析器转成 `isPartial: true`、`toolState.status: running` 与累计 `output`，沿用 `tool-${id}` 更新卡片，不能再次拼接累计文本。Opus 负责卡片实时显示、展开后滚动跟随与手动滚动时的阅读位置；回答正文仍按完整条目。

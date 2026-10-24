@@ -9,7 +9,7 @@ const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const readline = require('node:readline');
 const { WebSocketServer } = require('ws');
-const { parseExecArgs, translateItem } = require('./shared-exec.cjs');
+const { parseExecArgs, translateItem, runSharedExec } = require('./shared-exec.cjs');
 const { inspectThread } = require('./connector-admin.cjs');
 const { canonicalStart } = require('./process-start-identity.cjs');
 const { readDescriptor } = require('./runtime.cjs');
@@ -63,6 +63,157 @@ test('preserves tool identity, input, output and public progress', () => {
 		'commentary'
 	);
 });
+
+test(
+	'streams bounded cumulative command output before completion and cleans up at turn end',
+	{ timeout: 5000 },
+	async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hb-command-delta-'));
+		const socket = path.join(root, 'rpc.sock');
+		const server = http.createServer();
+		const wss = new WebSocketServer({ server });
+		const output = [];
+		const times = [];
+		let notify, deadline;
+		const first = Array.from({ length: 100 }, (_, i) => `${i}:中文\n`).join('');
+		const second = 'next\n'.repeat(100);
+		const command = {
+			type: 'commandExecution',
+			id: 'stream-command',
+			command: 'synthetic command',
+			status: 'inProgress',
+		};
+		const parallel = { ...command, id: 'parallel-command', command: 'parallel command' };
+		const delta = (itemId, text, extra = {}) =>
+			notify('item/commandExecution/outputDelta', {
+				threadId,
+				turnId,
+				itemId,
+				delta: text,
+				...extra,
+			});
+		wss.on('connection', (ws) =>
+			ws.on('message', (raw) => {
+				const message = JSON.parse(raw);
+				if (message.id == null) return;
+				const reply = (result) => ws.send(JSON.stringify({ id: message.id, result }));
+				notify = (method, params) => ws.send(JSON.stringify({ method, params }));
+				if (message.method === 'initialize') reply({ userAgent: 'synthetic' });
+				else if (message.method === 'thread/resume')
+					reply({ thread: { id: threadId, status: { type: 'idle' } }, model: 'synthetic' });
+				else if (message.method === 'thread/queue/list') reply({ data: [] });
+				else if (message.method === 'thread/unsubscribe') reply({});
+				else if (message.method === 'turn/start') {
+					reply({ turn: { id: turnId, status: 'inProgress' } });
+					for (const item of [command, parallel])
+						notify('item/started', { threadId, turnId, item });
+					for (let i = 0; i < 100; i++) delta(command.id, `${i}:中文\n`);
+					delta(parallel.id, 'parallel output');
+					delta(command.id, 'FOREIGN_THREAD', { threadId: 'foreign' });
+					delta(command.id, 'FOREIGN_TURN', { turnId: 'foreign' });
+					delta('unknown-item', 'UNKNOWN_ITEM');
+					// Without streaming the test still terminates and reports the missing updates.
+					deadline = setTimeout(
+						() => notify('turn/completed', { threadId, turn: { id: turnId, status: 'completed' } }),
+						1500
+					);
+				} else throw new Error('Unexpected request ' + message.method);
+			})
+		);
+		await new Promise((resolve) => server.listen(socket, resolve));
+		try {
+			await runSharedExec(
+				socket,
+				['exec', '--json', 'resume', threadId, '--', 'synthetic prompt'],
+				{
+					output(event) {
+						output.push(event);
+						if (event.type !== 'item.updated' || event.item.id !== command.id) return;
+						times.push(performance.now());
+						if (times.length === 1) {
+							for (let i = 0; i < 100; i++) delta(command.id, 'next\n');
+						} else if (times.length === 2) {
+							clearTimeout(deadline);
+							delta(command.id, 'tail');
+							notify('item/completed', {
+								threadId,
+								turnId,
+								item: {
+									...command,
+									status: 'failed',
+									exitCode: 1,
+									aggregatedOutput: first + second + 'tail\nfinal',
+								},
+							});
+							delta(command.id, 'LATE_ITEM');
+							notify('item/completed', {
+								threadId,
+								turnId,
+								item: {
+									...parallel,
+									status: 'completed',
+									exitCode: 0,
+									aggregatedOutput: 'parallel output',
+								},
+							});
+							notify('item/started', { threadId, turnId, item: { ...command, id: 'unfinished' } });
+							delta('unfinished', 'last pending output');
+							notify('turn/completed', { threadId, turn: { id: turnId, status: 'interrupted' } });
+							delta('unfinished', 'LATE_TURN');
+						}
+					},
+				}
+			);
+			const updates = output.filter((event) => event.type === 'item.updated');
+			const commandUpdates = updates.filter((event) => event.item.id === command.id);
+			assert.deepEqual(
+				commandUpdates.map((event) => event.item.aggregated_output),
+				[first, first + second, first + second + 'tail']
+			);
+			assert.ok(
+				times[1] - times[0] >= 180,
+				'successive running updates are coalesced for about 200ms'
+			);
+			assert.equal(
+				updates.length,
+				5,
+				'200 deltas produce three updates plus the two parallel calls'
+			);
+			for (const event of updates) {
+				assert.equal(event.item.type, 'command_execution');
+				assert.equal(event.item.status, 'in_progress');
+				assert.equal(
+					event.item.command,
+					event.item.id === parallel.id ? parallel.command : command.command
+				);
+			}
+			const completed = output.find(
+				(event) => event.type === 'item.completed' && event.item.id === command.id
+			);
+			assert.equal(completed.item.aggregated_output, first + second + 'tail\nfinal');
+			assert.equal(completed.item.status, 'failed');
+			assert.equal(completed.item.exit_code, 1);
+			assert.ok(output.indexOf(commandUpdates.at(-1)) < output.indexOf(completed));
+			assert.equal(output.at(-2).item.aggregated_output, 'last pending output');
+			assert.equal(output.at(-1).type, 'turn.completed');
+			assert.doesNotMatch(JSON.stringify(output), /FOREIGN_|UNKNOWN_ITEM|LATE_/);
+			assert.equal(
+				output.filter((event) => event.type === 'item.started' && event.item.id === command.id)
+					.length,
+				1
+			);
+			const count = output.length;
+			await new Promise((resolve) => setTimeout(resolve, 250));
+			assert.equal(output.length, count, 'no timer emits after the turn has ended');
+		} finally {
+			clearTimeout(deadline);
+			for (const ws of wss.clients) ws.terminate();
+			await new Promise((resolve) => wss.close(resolve));
+			await new Promise((resolve) => server.close(resolve));
+			fs.rmSync(root, { recursive: true });
+		}
+	}
+);
 
 test('preserves structured cancellation and tool failures in the exec transport', () => {
 	for (const status of ['interrupted', 'canceled', 'cancelled', 'failed']) {

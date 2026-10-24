@@ -227,6 +227,22 @@ async function runSharedExec(socket, args, io = {}) {
 		terminal = false,
 		lastUsage;
 	const deferredSleeps = new Map();
+	const commands = new Map();
+	const flushCommand = (command) => {
+		clearTimeout(command.timer);
+		command.timer = null;
+		if (!command.pending) return;
+		command.pending = false;
+		const [update] = translateItem(
+			{ ...command.item, aggregatedOutput: command.output, status: 'in_progress' },
+			false
+		);
+		output({ ...update, type: 'item.updated' });
+	};
+	const clearCommands = () => {
+		for (const command of commands.values()) clearTimeout(command.timer);
+		commands.clear();
+	};
 	const earlyEvents = [];
 	let complete, fail;
 	const done = new Promise((resolve, reject) => {
@@ -267,12 +283,32 @@ async function runSharedExec(socket, args, io = {}) {
 				},
 			});
 		} else if (event.method === 'item/started' || event.method === 'item/completed') {
+			if (p.item.type === 'commandExecution') {
+				if (event.method === 'item/started') {
+					commands.set(p.item.id, {
+						item: p.item,
+						output: p.item.aggregatedOutput || '',
+						pending: false,
+						timer: null,
+					});
+				} else {
+					const command = commands.get(p.item.id);
+					if (command) flushCommand(command);
+					commands.delete(p.item.id);
+				}
+			}
 			if (p.item.type === 'sleep' && event.method === 'item/completed') {
 				deferredSleeps.set(p.item.id, p.item);
 				return;
 			}
 			for (const translated of translateItem(p.item, event.method === 'item/completed'))
 				output(translated);
+		} else if (event.method === 'item/commandExecution/outputDelta') {
+			const command = commands.get(p.itemId);
+			if (!command || !p.delta) return;
+			command.output += p.delta;
+			command.pending = true;
+			if (!command.timer) command.timer = setTimeout(() => flushCommand(command), 200);
 		} else if (event.method === 'thread/tokenUsage/updated') lastUsage = p.tokenUsage;
 		else if (event.method === 'error') {
 			if (p.willRetry)
@@ -286,6 +322,8 @@ async function runSharedExec(socket, args, io = {}) {
 				});
 			else output({ type: 'error', message: p.error?.message || 'Codex turn failed' });
 		} else if (event.method === 'turn/completed') {
+			for (const command of commands.values()) flushCommand(command);
+			clearCommands();
 			terminal = true;
 			for (const item of deferredSleeps.values())
 				for (const translated of translateItem({ ...item, status: p.turn.status }, true))
@@ -359,6 +397,7 @@ async function runSharedExec(socket, args, io = {}) {
 		if (interrupted && !terminal) await onSignal();
 		return await done;
 	} finally {
+		clearCommands();
 		process.off('SIGINT', onSignal);
 		process.off('SIGTERM', onSignal);
 		try {

@@ -645,6 +645,47 @@ describe.each(['agents', 'conversations'] as const)(
 			expect(readingRow()).toEqual(before);
 		});
 
+		it.runIf(navigationMode === 'conversations')(
+			"counts a turn's messages, not its tool calls, and keeps the count when the turn folds",
+			async () => {
+				const { container, rerender, before } = await mountScrolledIntoHistory();
+				const count = () => unreadButton(container)?.textContent?.trim();
+				const ask: LogEntry = { id: 'live-q', timestamp: 98_900, source: 'user', text: 'Why?' };
+				const call = (id: string, status: 'running' | 'completed'): LogEntry => ({
+					id,
+					timestamp: 99_000,
+					source: 'tool',
+					text: 'exec_command',
+					metadata: { toolState: { status, input: { cmd: 'npm test' } } },
+				});
+				const answer: LogEntry = {
+					id: 'live-a',
+					timestamp: 99_100,
+					source: 'stdout',
+					text: 'Fixed.',
+				};
+				const show = (tail: LogEntry[], busy: boolean) =>
+					act(() => {
+						rerender(<TerminalOutput {...props(sessionWith([...current, ...tail], { busy }))} />);
+					});
+
+				// While the turn runs, each call is its own row, but only the question
+				// and the answer are something to read.
+				show([ask, call('live-t1', 'running')], true);
+				expect(count()).toBe('1');
+				show([ask, call('live-t1', 'completed'), call('live-t2', 'running')], true);
+				expect(count()).toBe('1');
+				show([ask, call('live-t1', 'completed'), call('live-t2', 'completed'), answer], true);
+				expect(count()).toBe('2');
+
+				// The finished turn folds its calls behind one row: the count stays.
+				show([ask, call('live-t1', 'completed'), call('live-t2', 'completed'), answer], false);
+				expect(container.querySelector('[data-feed-row="turn-activity"]')).not.toBeNull();
+				expect(count()).toBe('2');
+				expect(readingRow()).toEqual(before);
+			}
+		);
+
 		it('holds the reader when rows above grow with no scroll, and through a later refresh', async () => {
 			const { container, rerender, before } = await mountScrolledIntoHistory();
 			// A row above the reader swaps its height estimate for its real height:

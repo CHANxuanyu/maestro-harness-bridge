@@ -37,7 +37,7 @@ import { useMessageGistStore } from '../../stores/messageGistStore';
 import { getClaudeTokenMode } from '../../../shared/claudeTokenMode';
 import { collapseAiResponseLogs } from './utils/collapseAiResponseLogs';
 import { computeTurnDurations } from './utils/turnDurations';
-import { computeTurnSettingChanges } from './utils/turnSettingChanges';
+import { computeTurnSettingChanges, isFeedReplyRow } from './utils/turnSettingChanges';
 import { readableTextOn } from '../../../shared/colorContrast';
 import { groupSubagentToolLogs } from './utils/groupSubagentToolLogs';
 import { foldNativeToolRuns } from './utils/foldNativeToolRuns';
@@ -47,6 +47,7 @@ import { TurnActivityFold } from './components/TurnActivityFold';
 import { buildRenderedIdMap } from './utils/renderedLogIds';
 import { useUIStore } from '../../stores/uiStore';
 import { jumpToElement } from '../../utils/jumpHighlight';
+import { isProgressNoteEntry } from '../../utils/transcriptMessages';
 import { LogItem } from './components/LogItem';
 import { OutputSearchBar } from './components/OutputSearchBar';
 import { ScrollToBottomButton } from './components/ScrollToBottomButton';
@@ -489,6 +490,30 @@ export const TerminalOutput = memo(
 			else headAnchorByTabRef.current.delete(tabKey);
 			return filteredLogs.length;
 		}, [filteredLogs, renderedIdByLogId, session.id, activeTabId]);
+		// The conversation layout counts what someone wrote - messages, answers,
+		// progress notes and errors - not rows: a running turn's tool calls and
+		// reasoning are not "new messages", and a finished turn folding its process
+		// into one row must not shrink the number. So it counts the list BEFORE turn
+		// folding, from the same head anchor. The agents layout keeps counting rows.
+		const unreadBasisCount = useMemo(() => {
+			if (!feedLayout) return tailRowCount;
+			const headId = headAnchorByTabRef.current.get(`${session.id}:${activeTabId ?? ''}`);
+			const headRow = headId ? (renderedIdByLogId.get(headId) ?? headId) : undefined;
+			const headIndex = headRow ? groupedLogs.findIndex((row) => row.id === headRow) : -1;
+			let count = 0;
+			for (let i = Math.max(headIndex, 0); i < groupedLogs.length; i++) {
+				const row = groupedLogs[i];
+				if (
+					row.source === 'user' ||
+					row.source === 'error' ||
+					isFeedReplyRow(row) ||
+					isProgressNoteEntry(row)
+				) {
+					count++;
+				}
+			}
+			return count;
+		}, [feedLayout, tailRowCount, groupedLogs, renderedIdByLogId, session.id, activeTabId]);
 		const pendingLogJump = useUIStore((s) => s.pendingLogJump);
 		const pendingJumpMatchIdRef = useRef<string | null>(null);
 		const cancelJumpRef = useRef<(() => void) | null>(null);
@@ -572,7 +597,7 @@ export const TerminalOutput = memo(
 			activeTabId,
 			// Rows from the original head on: history paged in above them is not
 			// "new messages" (it raised a 99+ badge on every earlier-history load).
-			filteredLogsLength: tailRowCount,
+			filteredLogsLength: unreadBasisCount,
 			onScrollPositionChange,
 			onAtBottomChange,
 			onNearTop: historyBackfill.loadEarlier,

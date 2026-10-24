@@ -188,6 +188,8 @@ export const settings: AreaTranslation<typeof en> = {
 	'settings.general.thinking.toolCalls': '在回复中显示工具调用',
 	'settings.general.thinking.toolCallsDescription':
 		'在 AI 回复中显示工具调用活动（工具标记及其输入/输出）。与上方的思考模式相互独立，因此你可以只看推理过程而不受工具信息干扰。无论如何设置，智能体都会正常调用工具。',
+	'settings.general.thinking.toolCallsConversationsNote':
+		'会话列表视图会把工具调用收进每个回答上方的折叠行，因此这个开关只在“管理智能体”视图中生效。',
 
 	'settings.general.tabs.heading': '标签页行为',
 	'settings.general.tabs.autoName': '根据第一条消息自动命名标签页',

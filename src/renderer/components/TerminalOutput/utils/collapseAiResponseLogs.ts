@@ -56,6 +56,9 @@ export function collapseAiResponseLogs(logs: LogEntry[]): LogEntry[] {
 			// banner would lose them if the combined entry took `[0]` alone.
 			const turnModel = currentResponseGroup.find((l) => l.turnModel)?.turnModel;
 			const turnEffort = currentResponseGroup.find((l) => l.turnEffort)?.turnEffort;
+			const turnSettingsSource = currentResponseGroup.find(
+				(l) => l.turnModel || l.turnEffort
+			)?.turnSettingsSource;
 			result.push({
 				...currentResponseGroup[0],
 				text: combinedText,
@@ -63,6 +66,7 @@ export function collapseAiResponseLogs(logs: LogEntry[]): LogEntry[] {
 				...(hasTextStream ? { renderStyle: 'text-stream' as const } : {}),
 				...(turnModel ? { turnModel } : {}),
 				...(turnEffort ? { turnEffort } : {}),
+				...(turnSettingsSource ? { turnSettingsSource } : {}),
 			});
 			currentResponseGroup = [];
 		}

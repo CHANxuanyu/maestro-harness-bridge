@@ -24,6 +24,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { GeneralTab } from '../../../../../renderer/components/Settings/tabs/GeneralTab';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import type { ShellInfo } from '../../../../../renderer/types';
 
 import { mockTheme } from '../../../../helpers/mockTheme';
@@ -1018,6 +1019,39 @@ describe('GeneralTab', () => {
 				.closest('[data-setting-id="general-tool-calls"]') as HTMLElement;
 			fireEvent.keyDown(within(section).getByRole('button'), { key: 'Enter' });
 			expect(mockSetShowToolCalls).toHaveBeenCalledTimes(1);
+		});
+
+		it('says the switch only applies to the agents view while the conversations view is on', async () => {
+			const layout = useSettingsStore.getState().sidebarNavigationMode;
+			try {
+				useSettingsStore.setState({ sidebarNavigationMode: 'conversations' });
+				render(<GeneralTab theme={mockTheme} isOpen={true} />);
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(100);
+				});
+				const section = screen
+					.getByText('Show tool calls in responses')
+					.closest('[data-setting-id="general-tool-calls"]') as HTMLElement;
+				expect(within(section).getByText(/applies to the agents view only/)).toBeInTheDocument();
+				// Still a working control: the agents view reads it.
+				expect(within(section).getByRole('switch')).not.toBeDisabled();
+			} finally {
+				useSettingsStore.setState({ sidebarNavigationMode: layout });
+			}
+		});
+
+		it('shows no layout note in the agents view', async () => {
+			const layout = useSettingsStore.getState().sidebarNavigationMode;
+			try {
+				useSettingsStore.setState({ sidebarNavigationMode: 'agents' });
+				render(<GeneralTab theme={mockTheme} isOpen={true} />);
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(100);
+				});
+				expect(screen.queryByText(/applies to the agents view only/)).toBeNull();
+			} finally {
+				useSettingsStore.setState({ sidebarNavigationMode: layout });
+			}
 		});
 
 		it('reflects the off state independently of the thinking mode', async () => {

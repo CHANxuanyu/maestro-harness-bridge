@@ -538,6 +538,12 @@ export const RightPanel = memo(
 				style={
 					{
 						width: rightPanelOpen ? `${rightPanelWidth}px` : '0',
+						// The width is a preference, not a floor. On a window too narrow for
+						// both bars at their widths plus the main panel's 400px, the flex row
+						// would otherwise push this panel past the window edge, where the app
+						// shell clips its header controls and toolbar. Letting it shrink
+						// keeps every control on screen; the stored width is untouched.
+						minWidth: 0,
 						backgroundColor: theme.colors.bgSidebar,
 						borderColor: theme.colors.border,
 						boxShadow:

@@ -366,7 +366,12 @@ export const ToolbarControls = memo(function ToolbarControls({
 
 	return (
 		<div className="flex min-w-0 flex-wrap items-center gap-1 px-2 pb-2 pt-1">
-			<div className="flex min-w-0 flex-1 gap-1 items-center">
+			{/* In AI mode the left controls keep their own width (flex-auto), so a
+			    composer too narrow for both groups wraps the right one onto its own
+			    row. With a zero basis (flex-1) nothing wrapped: this group shrank to a
+			    sliver and its buttons spilled under History and Access. Terminal mode
+			    keeps flex-1 so its cwd still truncates in place. */}
+			<div className={`flex min-w-0 gap-1 items-center ${isTerminalMode ? 'flex-1' : 'flex-auto'}`}>
 				{isTerminalMode && (
 					<div
 						className="text-xs font-mono opacity-60 px-2 truncate"

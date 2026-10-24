@@ -87,8 +87,13 @@ export class NativeApp {
 				.context()
 				.tracing.stop({ path: this.info.outputPath(`trace-${this.boot}.zip`) });
 		} else await this.app.context().tracing.stop();
-		if (failed) await this.app.evaluate(({ app }) => app.exit(0));
-		else await this.app.close();
+		if (failed) {
+			// Confirm through the existing quit path so Maestro ends its native
+			// children. app.exit() bypasses that shutdown and leaves them running.
+			const closed = this.app.waitForEvent('close');
+			await this.page.evaluate(() => window.maestro.app.confirmQuit());
+			await closed;
+		} else await this.app.close();
 	}
 	async restart() {
 		await this.close();
@@ -175,8 +180,11 @@ export const test = base.extend<{ native: NativeApp }>({
 			await native.start();
 			await use(native);
 		} finally {
-			if (native.app) await native.close(info.status !== info.expectedStatus);
-			fs.rmSync(native.root, { recursive: true, force: true });
+			try {
+				if (native.app) await native.close(info.status !== info.expectedStatus);
+			} finally {
+				fs.rmSync(native.root, { recursive: true, force: true });
+			}
 		}
 	},
 });

@@ -223,9 +223,9 @@ it('a nonpersistent Claude resume leaves every native byte and file unchanged', 
 		{ answer: 'Initial answer.' }
 	);
 	const before = fs.readFileSync(turn.file);
-	const files = fs.readdirSync(path.dirname(turn.file));
 	const script = path.join(root, 'script.json');
 	fs.writeFileSync(script, JSON.stringify({ synopsis: { answer: 'Synopsis answer.' } }));
+	const files = fs.readdirSync(root, { recursive: true }).sort();
 	await exec(
 		process.execPath,
 		[
@@ -240,5 +240,5 @@ it('a nonpersistent Claude resume leaves every native byte and file unchanged', 
 		{ cwd: root, env: { ...process.env, CLAUDE_CONFIG_DIR: root, MAESTRO_NATIVE_SCRIPT: script } }
 	);
 	expect(fs.readFileSync(turn.file)).toEqual(before);
-	expect(fs.readdirSync(path.dirname(turn.file))).toEqual(files);
+	expect(fs.readdirSync(root, { recursive: true }).sort()).toEqual(files);
 });

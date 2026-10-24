@@ -130,6 +130,11 @@
 
 - Issue #1 的勾选状态在 PR 建立后按 hb.3、hb.4 和本阶段证据更新，未完成项链接到本计划。
 
+### 检查结果
+
+- `npm run lint`、`npm run lint:eslint`、`npx prettier --check .`、`npm run lint:doc-refs` 和 `node scripts/hb-release.mjs check` 均通过。
+- 全量 `npx vitest run`：2,065 个文件通过、1 个失败、1 个跳过；47,382 项通过、91 项既有跳过、1 项失败。失败的是 `src/__tests__/main/utils/execFile.test.ts` 中“取消时结束继承管道的孙进程”一条：单独重跑三次，两次失败、一次通过。本分支没有改动 `src/main` 或 `src/cli`，这是云容器缺少孤儿进程回收导致的既有不稳定，后端阶段记录过同类现象，主线 CI 在 Linux 和 Windows 上均通过。没有为此跳过测试或放宽断言。
+
 需要在 macOS 上手动核对的项目：
 
 1. **运行中命令输出：** 共享模式下让 Codex 运行一个持续输出的命令（如长测试），在 Maestro 展开该调用：输出应持续出现并跟到底部；上滚后不被拉回；命令结束后状态和最终输出正确。

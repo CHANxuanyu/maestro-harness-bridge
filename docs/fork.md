@@ -46,4 +46,6 @@ npm run package:harness-bridge:mac
 
 [后端第二阶段](roadmap/backend-followups.md)补充了 Claude 工具历史、停止状态、原生模型字段，以及共享 Codex 命令增量。源码中的本地 Claude 会话与 Codex 一样，当前可见且空闲时约每两秒跟随原生转录；SSH 仍使用原有读取方式。刷新保留草稿、阅读状态和队列，只更新日志，不改变发送路径。两端同时向同一 Claude 会话发送仍不支持。
 
-Codex 和 Claude TUI / Dynamic 的后台历史条目改为最终回答首段的本地摘录。Claude API 的启动前转录清理入口仍待范围确认，不能据 CLI 的不持久化参数宣称整条路径已满足只读验收。真实 macOS 双端、重启和界面表现尚未验证；这些源码变化没有打包、安装或发布，hb.4 下载包保持原状。
+Codex 和 Claude TUI / Dynamic 的后台历史条目改为最终回答首段的本地摘录。Claude API 摘要续接携带 `--no-session-persistence`，启动入口遇到该参数时跳过转录清理；普通 API 续接继续清理。若原生转录残留 thinking 空壳导致摘要最终被 API 拒绝，Maestro 走 `Synopsis failed`，不重试、不回退成本地摘录；下一次正常 API 回合清理后，这个原因造成的拒绝就不再出现。原生 Claude Code 2.1.310 对该 400 会在同一 CLI 进程内去掉请求里的 thinking 再发一次 HTTP 请求；Maestro 的单次启动不保证原生 CLI 内部只请求一次，详见[完成记录](roadmap/backend-followups.md#完成记录)。
+
+真实 macOS 双端、重启和界面表现尚未验证；这些源码变化没有打包、安装或发布，hb.4 下载包保持原状。

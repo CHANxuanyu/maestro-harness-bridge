@@ -529,10 +529,15 @@ describe('useAgentExecution', () => {
 		expect(resultData.error).toBe('Prompt is too long');
 	});
 
-	it('reports a non-zero synopsis exit as failed even with prose on stdout', async () => {
+	it.each([
+		'Partial summary',
+		'API Error: 400 messages.1.content.0: thinking blocks cannot be modified',
+	])('reports a failed synopsis without retry or local fallback: %s', async (output) => {
 		const session = createMockSession();
 		const sessionsRef = { current: [session] };
 		const processQueuedItemRef = { current: null };
+		const read = vi.fn();
+		window.maestro.agentSessions = { ...window.maestro.agentSessions, read };
 
 		const { result } = renderHook(() =>
 			useAgentExecution({
@@ -558,15 +563,20 @@ describe('useAgentExecution', () => {
 		});
 
 		const targetSessionId = mockProcess.spawn.mock.calls[0][0].sessionId as string;
+		expect(mockProcess.spawn.mock.calls[0][0].args).toContain('--no-session-persistence');
 
 		act(() => {
-			onDataHandler?.(targetSessionId, 'Partial summary');
+			onDataHandler?.(targetSessionId, output);
+			observeEffortRejection(targetSessionId, { agentId: 'claude-code', message: output });
 			onExitHandler?.(targetSessionId, 1);
 		});
 
 		const resultData = await spawnPromise;
 
 		expect(resultData.success).toBe(false);
+		expect(resultData.error).toBe(output);
+		expect(mockProcess.spawn).toHaveBeenCalledTimes(1);
+		expect(read).not.toHaveBeenCalled();
 	});
 
 	it('includes appendSystemPrompt in batch spawns', async () => {

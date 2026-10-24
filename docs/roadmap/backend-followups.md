@@ -1,6 +1,6 @@
 # 后端第二阶段计划
 
-状态：第 1 至 5 项、第 7 项的云端实现与回归已完成；第 6 项已完成范围内改动，API 启动前清理入口的扩展仍待用户确认。2026-10-24 起草，用户已确认第 1 至 7 项全部由 Codex 完成，无需再等审阅；本阶段结束后由原生 Claude Code Opus 接手前端。验收边界和交接契约见完成记录。
+状态：第 1 至 7 项的云端实现与回归已完成；用户已确认第 6 项启动入口及测试的最小范围扩展。2026-10-24 起草，本阶段结束后由原生 Claude Code Opus 接手前端。验收边界、原生 CLI 限制和交接契约见完成记录；当前 PR 与合并后主线的 CI 分别核对。
 
 本计划接续[信息流后端改进计划](backend-reliability.md)。上一阶段修复了 Codex 一侧的工具输入、失败与取消状态、回合收束和退出事件完整性。本阶段补上 PR 收尾、Claude Code 的同类缺口，以及上一阶段推迟或没有覆盖的后端项。每项依据都已在代码中确认，行号以 `codex/backend-reliability` 的 `8d01b54` 为准；实施时发现与代码不符，以代码为准并在完成记录中说明。
 
@@ -112,11 +112,14 @@
 
 ### 6. 原生会话之外的历史摘要
 
-- 已完成范围内改动：Codex 及 Claude TUI / Dynamic 从原有 `agentSessions.read` 接口以 `ownerAgentId`、`readOnly: true` 和对应 SSH 主机读取本轮最终回答，不调用模型。排除工具、推理和公开进度，不借用上一轮回答，读取失败如实返回。已记录的 TUI 启动结果也覆盖自定义路径直接指向 maestro-p 的配置。Claude API 保留原生 ID 续接并加 `--no-session-persistence`；其他提供方路径不变。
+- Codex 及 Claude TUI / Dynamic 从原有 `agentSessions.read` 接口以 `ownerAgentId`、`readOnly: true` 和对应 SSH 主机读取本轮最终回答，不调用模型。排除工具、推理和公开进度，不借用上一轮回答，读取失败如实返回。已记录的 TUI 启动结果也覆盖自定义路径直接指向 maestro-p 的配置。Claude API 保留原生 ID 续接并加 `--no-session-persistence`；其他提供方路径不变。
 - 七个新回归先复现摘要仍启动进程、缺少参数和把摘录当模型协议解析的问题；另一个新回归先复现读取错误丢失。修复后两个相关测试文件 63 项通过，覆盖本地/SSH、首段截断、没有最终回答、普通正文含 `NOTHING_TO_REPORT` 时仍记录历史。
 - 官方 Claude Code 2.1.310 Linux 二进制在临时配置/项目目录与本地模拟 API 上实测：先生成合成会话，再以原 ID 和 `--no-session-persistence` 续接，API 请求仍有前文，项目转录逐字节与文件列表不变。TUI 实测拒绝该参数，只支持 print；Dynamic 可能选择 TUI，按计划走本地摘录。没有安装或访问真实账户。
 - 协议确认：[锁定版本 `TurnStartParams`](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/app-server-protocol/schema/typescript/v2/TurnStartParams.ts) 的 `model` / `effort` 覆盖会延续到后续回合。原有“丢弃返回 ID 就不会影响下一轮”的注释不成立，已修正。虽然原生 CLI 声明 `--ephemeral`，尚无覆盖普通与共享路由的无写入验证，本次按计划选择不调用模型的摘录方案。
-- **受阻部分：** 实际启动路径还有计划未列出的 `src/main/ipc/handlers/process/resolve-claude-spawn-context.ts`，API resume 会先调用磁盘转录清理器，可能在 CLI 启动前改写旧 thinking 块。已按用户的范围外文件确认规则提出最小扩展：仅对携带 `--no-session-persistence` 的调用跳过该清理，并补对应回归；尚待回复，未修改该文件。因此 Maestro API 路径的逐字节验收仍受阻，不能用 CLI 单独验证代替。
+- 用户确认范围扩展后，修复 `src/main/ipc/handlers/process/resolve-claude-spawn-context.ts`：只检查本次 `config.args` 是否包含 `--no-session-persistence`，带参数时跳过 `sanitizeClaudeTranscriptBeforeApiResume()`，普通 API 续接照旧清理。没有新增配置、旁路或重试。注释说明正常 API 回合启动前已经清理过，摘要再次清理只能是空操作或改写用户文件。
+- 新增两条真实临时文件回归，经 `process:spawn` 和真实清理器验证：修复前，不持久化调用仍改写含 thinking 空壳的转录，字节断言失败；普通续接对照通过。修复后，带参数的调用逐字节不变且不产生备份或新会话文件，不带参数的调用仍清理空壳并保留有效 thinking 与正文。连同清理器、摘要 hook 和退出处理共四个文件 201 项通过；包含 thinking 400 经过错误观察后只启动一次摘要、不读本地摘录、显示 `Synopsis failed`，不创建历史条目或推进摘要时间。
+- 已知限制：原生转录若仍有空壳，摘要 API 续接可能失败；最终拒绝走现有 `Synopsis failed`，Maestro 不重启摘要、不回退成本地摘录。下一次正常 API 回合会先清理空壳，这个原因造成的拒绝随后不再出现。官方 Claude Code 2.1.310 在模拟 API 返回该 400 时，会在同一个 CLI 进程内移除请求中的 thinking 后再发一次 HTTP 请求；这属于原生 CLI 行为，本次没有修改或关闭它，不能把 Maestro 单次启动解释为全链路只发一次请求。
+- 补充原生探测使用独立合成转录与本地模拟 API：摘要最终拒绝后原转录字节和会话文件列表不变；实际清理器移除一个空壳后，正常 API 回合成功，随后的不持久化摘要也成功，前文仍在、转录字节和文件列表仍不变。额外的“原生 CLI 只发一次 HTTP”断言因上述两次请求失败，保留失败结论，不将它记为通过或放宽断言；Maestro 层只启动一次的回归通过。
 - 交接契约：本地结果标记 `AgentSpawnResult.synopsisSource: final-response`；历史持久形状沿用 `type: USER`，`summary` 与 `fullResponse` 均为最终回答首段，最多 500 个 UTF-16 单位，超长沿用 `truncateText()` 的省略号。保留原生 ID、Maestro session/tab、项目路径和任务耗时，不生成摘要用量。尚未新增持久化来源字段，Opus 若区分摘录与模型摘要需扩展历史契约。旧 Summary 不删除，`stripSynopsisTurns()` 保留。
 - 未验：macOS 两端 UI 和桌面 Codex。手动验收应使用独立合成会话，开启历史记录，分别完成 API、TUI、Dynamic、普通 Codex 和共享 Codex 一轮；在原回合结束与后台摘要完成之间比较转录字节、项目会话列表和桌面线程，确认没有新增 Summary 或会话，历史仍有条目；重启后再核对。
 
@@ -131,4 +134,5 @@
 
 - 推送前 `npm run lint`、`npm run lint:eslint`、`npm run format:check:all` 均通过。各项相关 Vitest 的实际结果见上文；`npm run test:codex-shared` 17 项全部通过。另有 `npm run lint:doc-refs`（39 份文档）、`node scripts/hb-release.mjs check` 与发布脚本 11 项测试通过。
 - 全仓 Vitest 与当前 PR 的 Linux / Windows 六项 CI 结果随 PR 更新；第 1 项的主线 CI 已在上方单独记录。不打包、不发布、不安装，不接触真实会话和账户目录，没有增加跳过项或放宽断言。
-- 第 6 项的范围确认尚未收到回复，按计划先提交其他已授权项，PR 保留草稿；不能将六项 CI 或 CLI 单独通过计作该入口的逐字节验收。macOS 双端、桌面 Codex 与重启接续仍未验。
+- 第 6 项扩展已获确认并完成，更新后的 PR 按用户要求在六项 CI 全部通过后转为正式 PR 并合并，再确认实际主线合并提交的六项 CI。结果与提交身份记录在 [PR #4](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/4)。macOS 双端、桌面 Codex 与重启接续仍未验。
+- 上一提交 `07047df` 的额外本地全仓 Vitest 有 47,363 项通过、两个既有 `session-watcher` 创建时间用例失败，原有 88 项跳过未增加；独立 tmpfs 探测复现新文件 birthtime 早于等待前 `Date.now()` 的条件。未改动相关实现或断言，也不以单独诊断通过覆盖全仓失败。该提交远端六项 CI 全部通过；本次复跑计划要求的相关测试，完整跨平台结果由新提交的 CI 核对。

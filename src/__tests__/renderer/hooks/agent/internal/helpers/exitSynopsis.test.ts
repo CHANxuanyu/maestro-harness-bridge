@@ -304,7 +304,10 @@ describe('runExitSynopsis', () => {
 		expect(deps.updateLastSynopsisTime).not.toHaveBeenCalled();
 	});
 
-	it('surfaces the provider error instead of writing it to History', async () => {
+	it.each([
+		'Prompt is too long',
+		'API Error: 400 messages.1.content.0: thinking blocks cannot be modified',
+	])('surfaces the provider error instead of writing it to History: %s', async (error) => {
 		// The failure mode this guards: a synopsis whose resume no longer fits
 		// the model's context window prints "Prompt is too long" and exits. That
 		// text must never become the entry, and the turn it failed to cover must
@@ -312,8 +315,8 @@ describe('runExitSynopsis', () => {
 		const deps = makeDeps();
 		deps.spawn.mockResolvedValue({
 			success: false,
-			response: 'Prompt is too long',
-			error: 'Prompt is too long',
+			response: error,
+			error,
 			errorKind: 'process-exit',
 		});
 
@@ -321,11 +324,12 @@ describe('runExitSynopsis', () => {
 
 		expect(deps.addHistory).not.toHaveBeenCalled();
 		expect(deps.updateLastSynopsisTime).not.toHaveBeenCalled();
+		expect(deps.spawn).toHaveBeenCalledTimes(1);
 		expect(notifyToast).toHaveBeenCalledWith(
 			expect.objectContaining({
 				color: 'yellow',
 				title: 'Synopsis failed',
-				message: 'Prompt is too long',
+				message: error,
 			})
 		);
 	});

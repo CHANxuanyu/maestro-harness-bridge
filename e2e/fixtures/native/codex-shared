@@ -1,0 +1,17 @@
+#!/usr/bin/env node
+'use strict';
+
+// Linux fixture entry into the real shared-exec/RpcClient transport, matching
+// connector.test.cjs. macOS launcher and native socket identity are not faked.
+if (process.argv.includes('--version')) console.log('codex-cli 0.163.0-alpha.11.1');
+else {
+	const { runSharedExec } = require('../../../scripts/codex-shared/shared-exec.cjs');
+	runSharedExec(process.env.MAESTRO_NATIVE_SOCKET, process.argv.slice(2))
+		.then(() => {
+			process.exitCode = 0;
+		})
+		.catch((error) => {
+			console.error(error.message);
+			process.exitCode = 1;
+		});
+}

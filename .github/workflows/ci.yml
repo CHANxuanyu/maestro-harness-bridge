@@ -63,3 +63,23 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run test -- --shard=${{ matrix.shard }}/2
+
+  native-e2e:
+    name: Native resume E2E (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:e2e:fixtures
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: native-e2e-failure
+          path: e2e-results/
+          retention-days: 7

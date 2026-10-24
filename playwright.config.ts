@@ -5,8 +5,7 @@
  * E2E tests launch the actual packaged/built application and interact with
  * the UI through Playwright's browser automation.
  */
-import { defineConfig, devices } from '@playwright/test';
-import path from 'path';
+import { defineConfig } from '@playwright/test';
 
 /**
  * See https://playwright.dev/docs/test-configuration
@@ -24,8 +23,8 @@ export default defineConfig({
 	// Fail the build on CI if you accidentally left test.only in the source code
 	forbidOnly: !!process.env.CI,
 
-	// Retry on CI only
-	retries: process.env.CI ? 2 : 0,
+	// A failed native acceptance run must remain failed, including on CI.
+	retries: 0,
 
 	// Opt out of parallel tests for Electron
 	workers: 1,
@@ -33,7 +32,7 @@ export default defineConfig({
 	// Reporter to use
 	reporter: process.env.CI
 		? [['github'], ['html', { open: 'never' }]]
-		: [['list'], ['html', { open: 'on-failure' }]],
+		: [['list'], ['html', { open: 'never' }]],
 
 	// Shared settings for all the projects below
 	use: {
@@ -58,9 +57,15 @@ export default defineConfig({
 		{
 			name: 'electron',
 			testDir: './e2e',
+			testIgnore: '**/native-*.spec.ts',
 			use: {
 				// Electron-specific settings will be configured in test fixtures
 			},
+		},
+		{
+			name: 'native',
+			testMatch: '**/native-*.spec.ts',
+			use: { trace: 'off', video: 'off' },
 		},
 	],
 

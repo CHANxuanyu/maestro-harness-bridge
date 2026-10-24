@@ -206,6 +206,17 @@ export function codexToolResultStatus(payload: {
 			))
 	)
 		return 'canceled';
+	// Native exec_command results carry the exit code in this header, not an
+	// is_error flag. Pinned source: rust-v0.163.0-alpha.11.1,
+	// codex-rs/core/src/tools/context.rs, ExecCommandToolOutput::response_header.
+	// Match the header from its start so quoted diagnostics in output are inert.
+	const nativeExit =
+		typeof payload.output === 'string'
+			? /^(?:Chunk ID: [^\n]+\n)?Wall time: \d+(?:\.\d+)? seconds\nProcess exited with code (-?\d+)\n(?:Process running with session ID [^\n]+\n)?(?:Original token count: \d+\n)?Output:\n/.exec(
+					payload.output
+				)
+			: null;
+	if (nativeExit && Number(nativeExit[1]) !== 0) return 'failed';
 	return payload.is_error === true || payload.status === 'failed' || payload.status === 'error'
 		? 'failed'
 		: 'completed';

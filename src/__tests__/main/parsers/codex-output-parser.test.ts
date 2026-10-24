@@ -29,6 +29,31 @@ describe('CodexOutputParser', () => {
 	});
 
 	it.each([
+		[
+			{ output: 'Wall time: 0.0100 seconds\nProcess exited with code 1\nOutput:\ncommand failed' },
+			'failed',
+		],
+		[
+			{
+				output:
+					'Chunk ID: abc123\nWall time: 0.0100 seconds\nProcess exited with code -9\nOriginal token count: 3\nOutput:\nstopped',
+			},
+			'failed',
+		],
+		[
+			{
+				output:
+					'Wall time: 0.0100 seconds\nProcess exited with code 0\nOutput:\nProcess exited with code 1',
+			},
+			'completed',
+		],
+		[
+			{
+				output:
+					'A manual example:\nWall time: 0.0100 seconds\nProcess exited with code 1\nOutput:\nexample',
+			},
+			'completed',
+		],
 		[{ output: 'aborted by user after 15.1s' }, 'canceled'],
 		[{ output: 'ok', status: 'cancelled' }, 'canceled'],
 		[{ output: 'failed', is_error: true }, 'failed'],

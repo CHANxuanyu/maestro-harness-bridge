@@ -298,6 +298,15 @@ describe('stripMarkdown', () => {
 		expect(stripMarkdown(input)).toBe('code here');
 	});
 
+	it('drops the fence of a code block cut off before it closes', () => {
+		// A history excerpt is an answer's first paragraph, which ends at the
+		// first blank line - inside a code block, if the answer opens with one.
+		expect(stripMarkdown('```ts\nconst a = 1;')).toBe('const a = 1;');
+		expect(stripMarkdown('Run this:\n```sh\nnpm test')).toBe('Run this:\nnpm test');
+		// A complete block before it is still handled as a block.
+		expect(stripMarkdown('```\na\n```\n```py\nb')).toBe('a\nb');
+	});
+
 	it('strips inline code backticks', () => {
 		expect(stripMarkdown('use `npm install` to install')).toBe('use npm install to install');
 	});

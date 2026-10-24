@@ -767,3 +767,45 @@ describe('native turn settings', () => {
 		expect(row).toMatchObject({ turnModel: 'gpt-5.5-codex', turnSettingsSource: 'native' });
 	});
 });
+
+describe('a Claude tool result that lands after its call', () => {
+	// Claude Code writes the result in a later user message; storage pairs it
+	// back onto the raw tool_use block as `state`. A refresh that read the call
+	// before the result existed must update that card, not add a second one.
+	const call = (state?: Record<string, unknown>): TranscriptMessage =>
+		m('a1', 'assistant', 'Checking the tests.', T1, {
+			toolUse: [
+				{
+					type: 'tool_use',
+					id: 'toolu_1',
+					name: 'Bash',
+					input: { command: 'npm test' },
+					...(state ? { state } : {}),
+				},
+			],
+		});
+
+	it('updates the existing card in place when the result arrives', () => {
+		const first = transcriptMessagesToLogEntries([m('u1', 'user', 'run them', T0), call()]);
+		const second = transcriptMessagesToLogEntries([
+			m('u1', 'user', 'run them', T0),
+			call({ status: 'failed', output: '1 failing' }),
+			m('a2', 'assistant', 'One test fails.', T2),
+		]);
+		const upgraded = reconcileTranscriptEntries(second, first);
+		const merged = mergeNewerEntries(second, upgraded.logs);
+		const logs = merged?.logs ?? upgraded.logs;
+
+		const cards = logs.filter((e) => e.source === 'tool');
+		expect(cards).toHaveLength(1);
+		expect(cards[0].metadata?.toolState).toMatchObject({ status: 'error', output: '1 failing' });
+		expect(logs.map((e) => e.id)).toEqual(first.map((e) => e.id).concat('a2'));
+	});
+
+	it('reads a stopped call as stopped', () => {
+		const [card] = transcriptMessagesToLogEntries([call({ status: 'canceled' })]).filter(
+			(e) => e.source === 'tool'
+		);
+		expect(card.metadata?.toolState?.status).toBe('canceled');
+	});
+});

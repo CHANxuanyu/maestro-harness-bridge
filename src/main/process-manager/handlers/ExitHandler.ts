@@ -10,6 +10,7 @@ import { emitAgentErrorAfterOutput } from '../utils/agentErrorEmit';
 import type { ManagedProcess, AgentError } from '../types';
 import type { ParsedEvent } from '../../parsers/agent-output-parser';
 import type { DataBufferManager } from './DataBufferManager';
+import type { StdoutHandler } from './StdoutHandler';
 import type { SshRemoteConfig } from '../../../shared/types';
 import { captureException } from '../../utils/sentry';
 import { getSshRemoteById } from '../../stores/getters';
@@ -26,6 +27,7 @@ interface ExitHandlerDependencies {
 	processes: Map<string, ManagedProcess>;
 	emitter: EventEmitter;
 	bufferManager: DataBufferManager;
+	stdoutHandler: StdoutHandler;
 }
 
 /**
@@ -36,11 +38,13 @@ export class ExitHandler {
 	private processes: Map<string, ManagedProcess>;
 	private emitter: EventEmitter;
 	private bufferManager: DataBufferManager;
+	private stdoutHandler: StdoutHandler;
 
 	constructor(deps: ExitHandlerDependencies) {
 		this.processes = deps.processes;
 		this.emitter = deps.emitter;
 		this.bufferManager = deps.bufferManager;
+		this.stdoutHandler = deps.stdoutHandler;
 	}
 
 	/**
@@ -100,7 +104,7 @@ export class ExitHandler {
 		// is found, we also re-derive the authoritative final answer from
 		// disk so the rendered text matches what Copilot truly finished
 		// with (not the stale planning narration our parent saw last).
-		await this.awaitCopilotShutdown(sessionId, managedProcess);
+		const copilotFinalAnswer = await this.awaitCopilotShutdown(sessionId, managedProcess);
 
 		// The main guard. `awaitCopilotShutdown` is the only suspension point in
 		// this method, so it is the only place a replacement can claim the session
@@ -120,19 +124,6 @@ export class ExitHandler {
 			);
 			return;
 		}
-
-		// An in-turn error notice still held at exit had nothing after it, so the
-		// turn ended on it. Emit it first: ahead of the exit event it explains, and
-		// ahead of detectErrorFromExit below, which would report a vaguer failure.
-		// A notice still undecided when the user pressed Stop is dropped instead:
-		// the turn ended on the stop, not on the notice, and raising it would show a
-		// red error for a turn the user deliberately abandoned (see `interrupted`).
-		if (managedProcess.interrupted) {
-			managedProcess.provisionalError = undefined;
-		}
-		settleProvisionalAgentError(this.emitter, this.bufferManager, sessionId, managedProcess, {
-			flushStreamedText: isStreamJsonMode,
-		});
 
 		// Handle regular batch mode (not stream-json)
 		if (isBatchMode && !isStreamJsonMode && managedProcess.jsonBuffer) {
@@ -192,30 +183,47 @@ export class ExitHandler {
 			// `interrupted` (the user pressed Stop) suppresses this the same way it
 			// does in StdoutHandler: a terminal envelope flushed on the way out of a
 			// deliberate stop is not a turn failure.
-			if (event?.type === 'error' && !managedProcess.errorEmitted && !managedProcess.interrupted) {
-				const agentError = outputParser.detectErrorFromParsed((event.raw as unknown) ?? event);
-				if (agentError) {
-					agentError.sessionId = sessionId;
-					if (managedProcess.sshRemoteId) {
-						agentError.sshRemoteId = managedProcess.sshRemoteId;
-					}
-					emitAgentErrorAfterOutput(
-						this.emitter,
-						this.bufferManager,
-						sessionId,
-						managedProcess,
-						agentError,
-						{ flushStreamedText: true }
-					);
+			// Some providers carry API errors in assistant-text envelopes, so use
+			// their error classifier regardless of the normalized event type.
+			const agentError =
+				event && !managedProcess.errorEmitted && !managedProcess.interrupted
+					? outputParser.detectErrorFromParsed((event.raw as unknown) ?? event)
+					: null;
+			if (agentError) {
+				agentError.sessionId = sessionId;
+				if (managedProcess.sshRemoteId) {
+					agentError.sshRemoteId = managedProcess.sshRemoteId;
 				}
-			} else if (event && outputParser.isResultMessage(event) && !managedProcess.resultEmitted) {
-				managedProcess.resultEmitted = true;
-				const resultText = event.text || managedProcess.streamedText || '';
-				if (resultText) {
-					this.bufferManager.emitDataBuffered(sessionId, resultText, managedProcess);
+				emitAgentErrorAfterOutput(
+					this.emitter,
+					this.bufferManager,
+					sessionId,
+					managedProcess,
+					agentError,
+					{ flushStreamedText: true }
+				);
+			} else if (event) {
+				if (copilotFinalAnswer && outputParser.isResultMessage(event)) {
+					event = { ...event, text: copilotFinalAnswer };
 				}
+				this.stdoutHandler.handleEvent(sessionId, managedProcess, event, outputParser);
 			}
 		}
+
+		// Copilot's disk result is newer than the parent's final stdout message or
+		// delta. Apply it after draining stdout so stale progress cannot replace it.
+		if (copilotFinalAnswer) {
+			managedProcess.streamedText = copilotFinalAnswer;
+		}
+
+		// The trailing event can prove recovery. Settle only after processing it,
+		// before the exit fallback could report a less specific error.
+		if (managedProcess.interrupted) {
+			managedProcess.provisionalError = undefined;
+		}
+		settleProvisionalAgentError(this.emitter, this.bufferManager, sessionId, managedProcess, {
+			flushStreamedText: isStreamJsonMode,
+		});
 
 		// Handle stream-json mode: emit accumulated streamed text if no result was emitted
 		// Some agents (like Factory Droid) don't send explicit "done" events, they just exit
@@ -453,7 +461,7 @@ export class ExitHandler {
 	 * For Copilot CLI batch sessions, block emitting `exit` until the
 	 * authoritative `session.shutdown` event has been written to the
 	 * on-disk events.jsonl, or activity has clearly stopped. On success
-	 * also override `streamedText` with the disk-derived final answer
+	 * return the disk-derived final answer for application after draining stdout,
 	 * so the downstream flush emits Copilot's real conclusion, not the
 	 * possibly-stale text our parent process captured before it died.
 	 *
@@ -465,7 +473,7 @@ export class ExitHandler {
 	private async awaitCopilotShutdown(
 		sessionId: string,
 		managedProcess: ManagedProcess
-	): Promise<void> {
+	): Promise<string | undefined> {
 		if (managedProcess.toolType !== 'copilot-cli') return;
 		const agentSessionId = managedProcess.agentSessionId;
 		if (!agentSessionId) return;
@@ -506,10 +514,11 @@ export class ExitHandler {
 
 		if (result !== 'observed') return;
 
+		let finalAnswerText: string | undefined;
 		try {
 			const finalAnswer = await readCopilotFinalAnswer(agentSessionId, undefined, sshRemote);
 			if (finalAnswer && finalAnswer.content) {
-				managedProcess.streamedText = finalAnswer.content;
+				finalAnswerText = finalAnswer.content;
 			}
 		} catch (err) {
 			logger.warn('[ProcessManager] Failed to read Copilot final answer', 'ProcessManager', {
@@ -565,6 +574,7 @@ export class ExitHandler {
 				error: String(err),
 			});
 		}
+		return finalAnswerText;
 	}
 
 	/**

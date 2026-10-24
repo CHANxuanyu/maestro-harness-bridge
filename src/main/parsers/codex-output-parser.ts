@@ -12,7 +12,7 @@
  *    - turn_context: Turn metadata (model, context window, etc.)
  *
  * 2. Legacy stdout format (older Codex versions):
- *    - thread.started, turn.started, item.started, item.completed, turn.completed
+ *    - thread.started, turn.started, item.started, item.updated, item.completed, turn.completed
  *
  * Key schema details:
  * - Session IDs are in session_meta payload.id (current) or thread_id (legacy)
@@ -166,6 +166,7 @@ interface CodexRawMessage {
 		| 'thread.started'
 		| 'turn.started'
 		| 'item.started'
+		| 'item.updated'
 		| 'item.completed'
 		| 'turn.completed'
 		| 'turn.failed'
@@ -261,7 +262,7 @@ interface CodexPayload {
 }
 
 /**
- * Item structure for item.started and item.completed events
+ * Item structure for item.started, item.updated and item.completed events
  */
 interface CodexItem {
 	id?: string;
@@ -514,8 +515,8 @@ export class CodexOutputParser implements AgentOutputParser {
 			};
 		}
 
-		// Handle item.started events (command_execution in progress)
-		if (msg.type === 'item.started' && msg.item) {
+		// Command starts and updates share identity; updates carry output so far.
+		if ((msg.type === 'item.started' || msg.type === 'item.updated') && msg.item) {
 			return this.transformItemStarted(msg.item, msg);
 		}
 
@@ -847,8 +848,7 @@ export class CodexOutputParser implements AgentOutputParser {
 	}
 
 	/**
-	 * Transform an item.started event
-	 * Codex v0.111.0+ emits item.started for command_execution when a tool begins running
+	 * Transform a command start or an update containing output accumulated so far.
 	 */
 	private transformItemStarted(item: CodexItem, msg: CodexRawMessage): ParsedEvent {
 		if (item.type === 'command_execution') {
@@ -860,9 +860,13 @@ export class CodexOutputParser implements AgentOutputParser {
 				// so without an id two parallel commands are indistinguishable to
 				// the renderer's name-matching fallback (issue #1485).
 				...(item.id ? { toolCallId: item.id } : {}),
+				...(msg.type === 'item.updated' ? { isPartial: true } : {}),
 				toolState: {
 					status: 'running',
 					input: { command: item.command },
+					...(msg.type === 'item.updated'
+						? { output: this.decodeToolOutput(item.aggregated_output) }
+						: {}),
 				},
 				raw: msg,
 			};

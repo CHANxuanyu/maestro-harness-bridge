@@ -100,6 +100,7 @@ export class OpencodeServerSpawner {
 			processes: this.processes,
 			emitter: this.emitter,
 			bufferManager,
+			stdoutHandler: this.stdoutHandler,
 		});
 	}
 

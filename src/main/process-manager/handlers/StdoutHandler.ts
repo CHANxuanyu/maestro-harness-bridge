@@ -14,6 +14,7 @@ import { formatAgentLoginCommand, getAgentLoginCommand } from '../../../shared/a
 import { getOmpModelContextWindow } from '../../agents/omp-model-catalog';
 import type { ManagedProcess, UsageStats, UsageTotals, AgentError } from '../types';
 import type { DataBufferManager } from './DataBufferManager';
+import type { ParsedEvent } from '../../parsers/agent-output-parser';
 
 interface StdoutHandlerDependencies {
 	processes: Map<string, ManagedProcess>;
@@ -492,7 +493,7 @@ export class StdoutHandler {
 					: outputParser.detectErrorFromLine(line);
 			if (agentError) {
 				// Capture the PROVIDER's session id off this line before anything else:
-				// the branch returns without reaching `handleParsedEvent`, so this is the
+				// the branch returns without reaching `handleEvent`, so this is the
 				// only chance, and `agentError.sessionId` below is Maestro's own
 				// composite id, not the agent's. A failing terminal envelope is exactly
 				// where an id can arrive for the first and last time - grok reports one
@@ -597,24 +598,12 @@ export class StdoutHandler {
 			}
 		}
 
-		// ── Held in-turn error notice ──
-		// Not after a Stop: a result the CLI flushes on its way out would otherwise
-		// raise the held notice for a turn the user abandoned. Exit drops it.
-		const settleHeldErrorAfterResult =
-			!!managedProcess.provisionalError &&
-			!managedProcess.interrupted &&
-			parsed !== null &&
-			!!outputParser &&
-			this.resolveProvisionalError(sessionId, managedProcess, parsed, outputParser);
-
 		// ── Process parsed data ──
 		if (parsed !== null) {
 			if (outputParser) {
-				this.handleParsedEvent(sessionId, managedProcess, parsed, outputParser);
-				// After the result, not before it: the renderer reads output that
-				// arrives after an error as recovery and erases the error card.
-				if (settleHeldErrorAfterResult) {
-					settleProvisionalAgentError(this.emitter, this.bufferManager, sessionId, managedProcess);
+				const event = outputParser.parseJsonObject(parsed);
+				if (event) {
+					this.handleEvent(sessionId, managedProcess, event, outputParser);
 				}
 			} else {
 				this.handleLegacyMessage(sessionId, managedProcess, parsed);
@@ -627,6 +616,27 @@ export class StdoutHandler {
 			this.bufferManager.emitDataBuffered(sessionId, line);
 		}
 		// Non-JSON lines from JSONL agents are silently suppressed (shell profile noise, MCP startup, etc.)
+	}
+
+	/** Dispatch a normalized event identically during streaming and at EOF. */
+	handleEvent(
+		sessionId: string,
+		managedProcess: ManagedProcess,
+		event: ParsedEvent,
+		outputParser: NonNullable<ManagedProcess['outputParser']>
+	): void {
+		// Stop abandons held notices; a later result must not raise them again.
+		const settleHeldErrorAfterResult =
+			!!managedProcess.provisionalError &&
+			!managedProcess.interrupted &&
+			this.resolveProvisionalError(sessionId, managedProcess, event, outputParser);
+
+		this.dispatchEvent(sessionId, managedProcess, event, outputParser);
+
+		// Output after an error reads as recovery, so send the result first.
+		if (settleHeldErrorAfterResult) {
+			settleProvisionalAgentError(this.emitter, this.bufferManager, sessionId, managedProcess);
+		}
 	}
 
 	/**
@@ -644,12 +654,9 @@ export class StdoutHandler {
 	private resolveProvisionalError(
 		sessionId: string,
 		managedProcess: ManagedProcess,
-		parsed: unknown,
+		event: ParsedEvent,
 		outputParser: NonNullable<ManagedProcess['outputParser']>
 	): boolean {
-		const event = outputParser.parseJsonObject(parsed);
-		if (!event) return false;
-
 		if (outputParser.isResultMessage(event)) {
 			return true;
 		}
@@ -666,16 +673,12 @@ export class StdoutHandler {
 	}
 
 	/** Handle a parsed JSON event: extract usage, session IDs, tool executions, and result data. */
-	private handleParsedEvent(
+	private dispatchEvent(
 		sessionId: string,
 		managedProcess: ManagedProcess,
-		parsed: unknown,
+		event: ParsedEvent,
 		outputParser: NonNullable<ManagedProcess['outputParser']>
 	): void {
-		const event = outputParser.parseJsonObject(parsed);
-
-		if (!event) return;
-
 		// OpenCode emits multiple steps: step_start → text → tool_use → step_finish(tool-calls) → repeat
 		// Each step may have a text event. Only the final text (before reason:"stop") is the real result.
 		// Reset resultEmitted on each new step so the last text event wins instead of the first.
@@ -766,11 +769,17 @@ export class StdoutHandler {
 			const toolStatus = getToolStatus(event.toolState);
 			if (event.toolCallId && toolStatus === 'running') {
 				const emittedToolCallIds = getEmittedToolCallIds(managedProcess);
-				if (emittedToolCallIds.has(event.toolCallId)) {
+				if (emittedToolCallIds.has(event.toolCallId) && !event.isPartial) {
 					return;
 				}
 				emittedToolCallIds.add(event.toolCallId);
-			} else if (event.toolCallId && (toolStatus === 'completed' || toolStatus === 'failed')) {
+			} else if (
+				event.toolCallId &&
+				(toolStatus === 'completed' ||
+					toolStatus === 'failed' ||
+					toolStatus === 'error' ||
+					toolStatus === 'canceled')
+			) {
 				getEmittedToolCallIds(managedProcess).delete(event.toolCallId);
 			}
 
@@ -792,7 +801,10 @@ export class StdoutHandler {
 				const status = getToolStatus(result.toolState);
 				if (
 					result.toolCallId &&
-					(status === 'completed' || status === 'failed' || status === 'error')
+					(status === 'completed' ||
+						status === 'failed' ||
+						status === 'error' ||
+						status === 'canceled')
 				) {
 					getEmittedToolCallIds(managedProcess).delete(result.toolCallId);
 				}

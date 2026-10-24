@@ -21,7 +21,8 @@ vi.mock('../../../../main/utils/logger', () => ({
 	},
 }));
 
-vi.mock('../../../../main/parsers/error-patterns', () => ({
+vi.mock('../../../../main/parsers/error-patterns', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../../../main/parsers/error-patterns')>()),
 	matchSshErrorPattern: vi.fn(() => null),
 }));
 
@@ -70,6 +71,10 @@ vi.mock('../../../../main/utils/remote-fs', () => ({
 // ── Imports (after mocks) ──────────────────────────────────────────────────
 
 import { ExitHandler } from '../../../../main/process-manager/handlers/ExitHandler';
+import { StdoutHandler } from '../../../../main/process-manager/handlers/StdoutHandler';
+import { CodexOutputParser } from '../../../../main/parsers/codex-output-parser';
+import { ClaudeOutputParser } from '../../../../main/parsers/claude-output-parser';
+import { CopilotOutputParser } from '../../../../main/parsers/copilot-output-parser';
 import {
 	nextSpawnGeneration,
 	resetSpawnGenerationsForTest,
@@ -125,6 +130,7 @@ function createMockOutputParser(overrides: Partial<AgentOutputParser> = {}): Age
 		extractSlashCommands: vi.fn(() => null),
 		isResultMessage: vi.fn(() => false),
 		detectErrorFromLine: vi.fn(() => null),
+		detectErrorFromParsed: vi.fn(() => null),
 		detectErrorFromExit: vi.fn(() => null),
 		...overrides,
 	} as unknown as AgentOutputParser;
@@ -142,7 +148,12 @@ describe('ExitHandler', () => {
 		processes = new Map();
 		emitter = new EventEmitter();
 		bufferManager = new DataBufferManager(processes, emitter);
-		exitHandler = new ExitHandler({ processes, emitter, bufferManager });
+		exitHandler = new ExitHandler({
+			processes,
+			emitter,
+			bufferManager,
+			stdoutHandler: new StdoutHandler({ processes, emitter, bufferManager }),
+		});
 		// Generations are module state and only ever count up, so they must be
 		// reset between tests or a later test inherits a stale high-water mark.
 		resetSpawnGenerationsForTest();
@@ -216,6 +227,234 @@ describe('ExitHandler', () => {
 	});
 
 	describe('stream-json jsonBuffer processing at exit', () => {
+		it.each(['\n', ''])(
+			'reports an unrecovered notice after output with line ending %j',
+			async (ending) => {
+				processes.set(
+					'test-session',
+					createMockProcess({
+						isStreamJsonMode: true,
+						outputParser: new ClaudeOutputParser(),
+						streamedText: '部分答案',
+					})
+				);
+				const stdout = new StdoutHandler({ processes, emitter, bufferManager });
+				const order: string[] = [];
+				emitter.on('data', (_sid, data) => order.push(`data:${data}`));
+				emitter.on('agent-error', (_sid, error) => order.push(`error:${error.message}`));
+				emitter.on('exit', () => order.push('exit'));
+				stdout.handleData(
+					'test-session',
+					JSON.stringify({
+						type: 'assistant',
+						error: 'server_error',
+						is_api_error_message: true,
+						message: { content: [{ type: 'text', text: 'temporary server error' }] },
+					}) + ending
+				);
+				await exitHandler.handleExit('test-session', 0);
+				expect(order).toEqual(['data:部分答案', 'error:server_error', 'exit']);
+			}
+		);
+
+		it('flushes the captured process result after its map entry has been removed', async () => {
+			const proc = createMockProcess({
+				isStreamJsonMode: true,
+				outputParser: new ClaudeOutputParser(),
+				jsonBuffer: JSON.stringify({
+					type: 'result',
+					result: '完整结果',
+					session_id: 'native-session',
+				}),
+			});
+			const data = vi.fn();
+			emitter.on('data', data);
+			await exitHandler.handleExit('test-session', 0, proc);
+			expect(data).toHaveBeenCalledExactlyOnceWith('test-session', '完整结果');
+		});
+
+		it.each(['\n', ''])('preserves the final tool result with line ending %j', async (ending) => {
+			const proc = createMockProcess({
+				toolType: 'codex',
+				isStreamJsonMode: true,
+				outputParser: new CodexOutputParser(),
+			});
+			processes.set('test-session', proc);
+			const stdout = new StdoutHandler({ processes, emitter, bufferManager });
+			const tools: Array<{ toolCallId: string; state: { status: string; output?: string } }> = [];
+			const order: string[] = [];
+			emitter.on('tool-execution', (_sid, tool) => {
+				tools.push(tool);
+				order.push(tool.state.status);
+			});
+			emitter.on('exit', () => order.push('exit'));
+			const item = { id: 'item_0', type: 'command_execution', command: 'printf 完成' };
+			stdout.handleData('test-session', JSON.stringify({ type: 'item.started', item }) + '\n');
+			stdout.handleData(
+				'test-session',
+				JSON.stringify({
+					type: 'item.completed',
+					item: { ...item, status: 'completed', exit_code: 0, aggregated_output: '完成' },
+				}) + ending
+			);
+			await exitHandler.handleExit('test-session', 0);
+			expect(order).toEqual(['running', 'completed', 'exit']);
+			expect(tools[1].toolCallId).toBe(tools[0].toolCallId);
+			expect(tools[1].state.output).toBe('完成');
+		});
+
+		it.each(['\n', ''])(
+			'keeps final commentary out of the answer with line ending %j',
+			async (ending) => {
+				processes.set(
+					'test-session',
+					createMockProcess({
+						toolType: 'codex',
+						isStreamJsonMode: true,
+						outputParser: new CodexOutputParser(),
+					})
+				);
+				const stdout = new StdoutHandler({ processes, emitter, bufferManager });
+				const commentary = vi.fn();
+				const data = vi.fn();
+				emitter.on('thinking-chunk', commentary);
+				emitter.on('data', data);
+				stdout.handleData(
+					'test-session',
+					JSON.stringify({
+						type: 'response_item',
+						payload: {
+							type: 'message',
+							role: 'assistant',
+							phase: 'commentary',
+							content: [{ type: 'output_text', text: '正在核对结果' }],
+						},
+					}) + ending
+				);
+				await exitHandler.handleExit('test-session', 0);
+				expect(commentary).toHaveBeenCalledExactlyOnceWith(
+					'test-session',
+					'正在核对结果',
+					'commentary'
+				);
+				expect(data).not.toHaveBeenCalled();
+			}
+		);
+
+		it.each(['\n', ''])(
+			'delivers every parallel tool result with line ending %j',
+			async (ending) => {
+				processes.set(
+					'test-session',
+					createMockProcess({
+						isStreamJsonMode: true,
+						outputParser: new ClaudeOutputParser(),
+					})
+				);
+				const stdout = new StdoutHandler({ processes, emitter, bufferManager });
+				const tools = vi.fn();
+				emitter.on('tool-execution', tools);
+				stdout.handleData(
+					'test-session',
+					JSON.stringify({
+						type: 'assistant',
+						message: {
+							content: [
+								{ type: 'tool_use', id: 'call_a', name: 'Read', input: { file_path: 'a' } },
+								{ type: 'tool_use', id: 'call_b', name: 'Read', input: { file_path: 'b' } },
+							],
+						},
+					}) + '\n'
+				);
+				stdout.handleData(
+					'test-session',
+					JSON.stringify({
+						type: 'user',
+						message: {
+							content: [
+								{ type: 'tool_result', tool_use_id: 'call_a', content: 'a-out' },
+								{ type: 'tool_result', tool_use_id: 'call_b', content: 'b-out', is_error: true },
+							],
+						},
+					}) + ending
+				);
+				await exitHandler.handleExit('test-session', 0);
+				expect(tools.mock.calls.map(([, tool]) => [tool.toolCallId, tool.state.status])).toEqual([
+					['call_a', 'running'],
+					['call_b', 'running'],
+					['call_a', 'completed'],
+					['call_b', 'failed'],
+				]);
+			}
+		);
+
+		it.each(['\n', ''])('delivers final usage before exit with line ending %j', async (ending) => {
+			processes.set(
+				'test-session',
+				createMockProcess({
+					toolType: 'codex',
+					isStreamJsonMode: true,
+					outputParser: new CodexOutputParser(),
+					streamedText: '最终答案',
+				})
+			);
+			const stdout = new StdoutHandler({ processes, emitter, bufferManager });
+			const usage = vi.fn();
+			const data = vi.fn();
+			emitter.on('usage', usage);
+			emitter.on('data', data);
+			stdout.handleData(
+				'test-session',
+				JSON.stringify({
+					type: 'turn.completed',
+					usage: { input_tokens: 100, output_tokens: 20 },
+				}) + ending
+			);
+			await exitHandler.handleExit('test-session', 0);
+			expect(usage).toHaveBeenCalledExactlyOnceWith(
+				'test-session',
+				expect.objectContaining({ inputTokens: 100, outputTokens: 20 })
+			);
+			expect(data).toHaveBeenCalledExactlyOnceWith('test-session', '最终答案');
+		});
+
+		it.each(['\n', ''])(
+			'recognizes recovery after an in-turn notice with line ending %j',
+			async (ending) => {
+				processes.set(
+					'test-session',
+					createMockProcess({
+						isStreamJsonMode: true,
+						outputParser: new ClaudeOutputParser(),
+					})
+				);
+				const stdout = new StdoutHandler({ processes, emitter, bufferManager });
+				const errors = vi.fn();
+				const data = vi.fn();
+				emitter.on('agent-error', errors);
+				emitter.on('data', data);
+				stdout.handleData(
+					'test-session',
+					JSON.stringify({
+						type: 'assistant',
+						error: 'server_error',
+						is_api_error_message: true,
+						message: { content: [{ type: 'text', text: 'temporary server error' }] },
+					}) + '\n'
+				);
+				stdout.handleData(
+					'test-session',
+					JSON.stringify({
+						type: 'assistant',
+						message: { content: [{ type: 'text', text: '已恢复并完成' }] },
+					}) + ending
+				);
+				await exitHandler.handleExit('test-session', 0);
+				expect(errors).not.toHaveBeenCalled();
+				expect(data).toHaveBeenCalledExactlyOnceWith('test-session', '已恢复并完成');
+			}
+		);
+
 		it('should process remaining jsonBuffer content as a result message', async () => {
 			const resultJson = '{"type":"result","result":"Auth Bug Fix","session_id":"abc"}';
 			const mockParser = createMockOutputParser({
@@ -1137,7 +1376,27 @@ describe('ExitHandler', () => {
 	});
 
 	describe('Copilot post-exit shutdown wait', () => {
-		it('blocks `exit` until events.jsonl shutdown marker is observed and overrides streamedText with the on-disk final answer', async () => {
+		it.each([
+			['empty buffer', ''],
+			[
+				'trailing message',
+				JSON.stringify({
+					type: 'assistant.message',
+					data: { content: 'Stale narration', toolRequests: [] },
+				}),
+			],
+			[
+				'trailing final answer',
+				JSON.stringify({
+					type: 'assistant.message',
+					data: { content: 'Parent result', phase: 'final_answer', toolRequests: [] },
+				}),
+			],
+			[
+				'trailing delta',
+				JSON.stringify({ type: 'assistant.message_delta', data: { deltaContent: 'Stale delta' } }),
+			],
+		])('uses the on-disk final answer after shutdown with %s', async (_label, jsonBuffer) => {
 			// Set up a real Copilot events.jsonl on a temp config dir. The
 			// streamedText our parent captured is the stale planning narration;
 			// the on-disk file has the real final answer plus the shutdown marker.
@@ -1174,6 +1433,8 @@ describe('ExitHandler', () => {
 					isBatchMode: true,
 					agentSessionId,
 					streamedText: "I'll run this end-to-end.",
+					jsonBuffer,
+					outputParser: new CopilotOutputParser(),
 				});
 				processes.set('test-session', proc);
 
@@ -1184,8 +1445,7 @@ describe('ExitHandler', () => {
 
 				await exitHandler.handleExit('test-session', 0);
 
-				expect(dataEvents).toContain('Final: I did the thing.');
-				expect(dataEvents).not.toContain("I'll run this end-to-end.");
+				expect(dataEvents).toEqual(['Final: I did the thing.']);
 				expect(exitEvents).toEqual([0]);
 				expect(processes.has('test-session')).toBe(false);
 			} finally {

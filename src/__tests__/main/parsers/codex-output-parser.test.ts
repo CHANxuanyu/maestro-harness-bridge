@@ -9,6 +9,26 @@ describe('CodexOutputParser', () => {
 	const parser = new CodexOutputParser();
 
 	it.each([
+		[
+			'*** Begin Patch\n*** Add File: example.ts\n+export {};\n*** End Patch',
+			'*** Begin Patch\n*** Add File: example.ts\n+export {};\n*** End Patch',
+		],
+		['{"command":"printf ok"}', { command: 'printf ok' }],
+		[{ command: 'printf ok' }, { command: 'printf ok' }],
+		['', ''],
+	])('preserves native custom tool input in live events: %j', (input, expected) => {
+		const event = new CodexOutputParser().parseJsonObject({
+			type: 'response_item',
+			payload: { type: 'custom_tool_call', name: 'exec', call_id: 'custom-input', input },
+		});
+		expect(event).toMatchObject({
+			toolName: 'exec',
+			toolCallId: 'custom-input',
+			toolState: { status: 'running', input: expected },
+		});
+	});
+
+	it.each([
 		[{ output: 'aborted by user after 15.1s' }, 'canceled'],
 		[{ output: 'ok', status: 'cancelled' }, 'canceled'],
 		[{ output: 'failed', is_error: true }, 'failed'],
@@ -1793,6 +1813,26 @@ describe('CodexOutputParser', () => {
 	});
 
 	describe('item.completed - command_execution events', () => {
+		it.each(['interrupted', 'canceled', 'cancelled'])(
+			'preserves an explicitly %s command even with a nonzero exit code',
+			(status) => {
+				const event = new CodexOutputParser().parseJsonObject({
+					type: 'item.completed',
+					item: {
+						id: 'stopped-command',
+						type: 'command_execution',
+						command: 'sleep 20',
+						status,
+						exit_code: 130,
+					},
+				});
+				expect(event).toMatchObject({
+					toolCallId: 'stopped-command',
+					toolState: { status: 'canceled', exitCode: 130 },
+				});
+			}
+		);
+
 		it('should parse completed command_execution with output', () => {
 			const line = JSON.stringify({
 				type: 'item.completed',

@@ -121,7 +121,12 @@ function translateItem(item, complete) {
 			type: 'function_call_output',
 			call_id: item.id,
 			output: typeof output === 'string' ? output : JSON.stringify(output),
-			is_error: item.status === 'failed',
+			status: item.status,
+			is_error:
+				item.status === 'failed' ||
+				item.success === false ||
+				item.result?.isError === true ||
+				item.error != null,
 		},
 	});
 	switch (item.type) {
@@ -242,14 +247,26 @@ async function runSharedExec(socket, args, io = {}) {
 	};
 	const onEvent = (event) => {
 		const p = event.params;
-		if (p?.threadId !== threadId) return;
+		if (terminal || p?.threadId !== threadId) return;
 		if (!turnId) {
 			if (startRequested) earlyEvents.push(event);
 			return;
 		}
 		const eventTurn = p.turnId || p.turn?.id;
 		if (eventTurn && eventTurn !== turnId) return;
-		if (event.method === 'item/started' || event.method === 'item/completed') {
+		if (event.id != null) {
+			output({
+				type: 'event_msg',
+				payload: {
+					type: 'agent_message',
+					phase: 'commentary',
+					message:
+						'Codex is waiting for a client confirmation: ' +
+						event.method +
+						'. Open this same conversation in Codex to respond, or stop this turn.',
+				},
+			});
+		} else if (event.method === 'item/started' || event.method === 'item/completed') {
 			if (p.item.type === 'sleep' && event.method === 'item/completed') {
 				deferredSleeps.set(p.item.id, p.item);
 				return;
@@ -295,22 +312,9 @@ async function runSharedExec(socket, args, io = {}) {
 		}
 	};
 	client.on('notification', onEvent);
+	client.on('serverRequest', onEvent);
 	client.on('disconnected', () => {
 		if (!terminal) fail(new Error('Shared service disconnected. No fallback writer was started.'));
-	});
-	client.on('serverRequest', (request) => {
-		if (request.params?.threadId !== threadId) return;
-		output({
-			type: 'event_msg',
-			payload: {
-				type: 'agent_message',
-				phase: 'commentary',
-				message:
-					'Codex is waiting for a client confirmation: ' +
-					request.method +
-					'. Open this same conversation in Codex to respond, or stop this turn.',
-			},
-		});
 	});
 	process.on('SIGINT', onSignal);
 	process.on('SIGTERM', onSignal);

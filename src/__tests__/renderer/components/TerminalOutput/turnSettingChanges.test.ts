@@ -131,6 +131,30 @@ describe('computeTurnSettingChanges', () => {
 		expect(latestReplyId).toBe(answer.id);
 	});
 
+	it('compares a native record only with another native record', () => {
+		// Send-time stamps hold what the user picked (often an alias); a native
+		// record holds the model id the provider wrote. Side by side they differ in
+		// spelling, not in configuration.
+		const live = reply({ turnModel: 'opus', turnEffort: 'high' });
+		const nativeA = reply({ turnModel: 'claude-opus-5-5', turnSettingsSource: 'native' });
+		const nativeB = reply({ turnModel: 'claude-sonnet-5-5', turnSettingsSource: 'native' });
+		const liveAgain = reply({ turnModel: 'opus' });
+		const liveSwitched = reply({ turnModel: 'sonnet' });
+		const { changes } = computeTurnSettingChanges([
+			live,
+			nativeA,
+			nativeB,
+			liveAgain,
+			liveSwitched,
+		]);
+		expect(changes.has(nativeA.id)).toBe(false);
+		expect(changes.get(nativeB.id)).toEqual({
+			model: { from: 'claude-opus-5-5', to: 'claude-sonnet-5-5' },
+		});
+		expect(changes.has(liveAgain.id)).toBe(false);
+		expect(changes.get(liveSwitched.id)).toEqual({ model: { from: 'opus', to: 'sonnet' } });
+	});
+
 	it('reports no newest reply for a conversation with none', () => {
 		expect(computeTurnSettingChanges([user()]).latestReplyId).toBeNull();
 		expect(computeTurnSettingChanges([]).latestReplyId).toBeNull();

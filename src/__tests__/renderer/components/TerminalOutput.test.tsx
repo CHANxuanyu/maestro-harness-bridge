@@ -3068,6 +3068,115 @@ describe('TerminalOutput', () => {
 					'npm run test'
 				);
 			});
+
+			describe('output that arrives while the call runs', () => {
+				// One props object for the whole test, so every callback keeps its
+				// identity and only the logs change between renders, as in the app.
+				let baseProps: React.ComponentProps<typeof TerminalOutput> | null = null;
+				const withOutput = (
+					status: 'running' | 'completed',
+					output: string
+				): React.ComponentProps<typeof TerminalOutput> => {
+					const tabs = [
+						{
+							id: 'tab-1',
+							agentSessionId: 'codex-1',
+							logs: [
+								createLogEntry({ id: 'q', text: 'run the tests', source: 'user' }),
+								createLogEntry({
+									id: 'tool-1',
+									text: 'shell',
+									source: 'tool',
+									metadata: {
+										toolState: { status, input: { command: 'npm run test' }, output },
+									},
+								}),
+							],
+							isUnread: false,
+							showThinking: 'off',
+						},
+					];
+					// `aiTabs` too: the transcript keys its active tab on it, so a
+					// rerender with new logs is only seen when it changes.
+					const session = createDefaultSession({
+						state: 'busy',
+						tabs,
+						aiTabs: tabs,
+						activeTabId: 'tab-1',
+					} as Partial<Session>);
+					baseProps ??= createDefaultProps({ session });
+					return { ...baseProps, session };
+				};
+				const resultScroller = (container: HTMLElement): HTMLElement =>
+					container.querySelector<HTMLElement>('[data-testid="tool-call-result"] .overflow-auto')!;
+				const fakeHeight = (el: HTMLElement, scrollHeight: number) => {
+					Object.defineProperty(el, 'scrollHeight', { configurable: true, value: scrollHeight });
+					Object.defineProperty(el, 'clientHeight', { configurable: true, value: 100 });
+				};
+
+				beforeEach(() => {
+					baseProps = null;
+					useSettingsStore.setState({ sidebarNavigationMode: 'conversations' });
+				});
+
+				// Guards the merge path: each update arrives as a new toolState object,
+				// which the row's memo already compares by identity.
+				it('updates an unfolded running call as its output grows', () => {
+					const { container, rerender } = render(
+						<TerminalOutput {...withOutput('running', 'line 1')} />
+					);
+					fireEvent.click(
+						container.querySelector('[data-tool-activity="run"]')!.closest('button')!
+					);
+					expect(container.querySelector('[data-testid="tool-call-result"]')).toHaveTextContent(
+						'line 1'
+					);
+
+					rerender(<TerminalOutput {...withOutput('running', 'line 1\nline 2')} />);
+
+					expect(container.querySelector('[data-testid="tool-call-result"]')).toHaveTextContent(
+						'line 2'
+					);
+				});
+
+				it('keeps the newest running output in view until the reader scrolls up', () => {
+					const { container, rerender } = render(
+						<TerminalOutput {...withOutput('running', 'line 1')} />
+					);
+					fireEvent.click(
+						container.querySelector('[data-tool-activity="run"]')!.closest('button')!
+					);
+					const scroller = resultScroller(container);
+
+					fakeHeight(scroller, 400);
+					rerender(<TerminalOutput {...withOutput('running', 'line 1\nline 2')} />);
+					expect(scroller.scrollTop).toBe(400);
+
+					// Reading earlier output: the next chunk must not pull the box back down.
+					scroller.scrollTop = 0;
+					fireEvent.scroll(scroller);
+					fakeHeight(scroller, 600);
+					rerender(<TerminalOutput {...withOutput('running', 'line 1\nline 2\nline 3')} />);
+					expect(scroller.scrollTop).toBe(0);
+				});
+
+				it('opens a finished call at the top of its result', () => {
+					const height = vi
+						.spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+						.mockReturnValue(400);
+					try {
+						const { container } = render(
+							<TerminalOutput {...withOutput('completed', 'line 1\nline 2')} />
+						);
+						fireEvent.click(
+							container.querySelector('[data-tool-activity="run"]')!.closest('button')!
+						);
+						expect(resultScroller(container).scrollTop).toBe(0);
+					} finally {
+						height.mockRestore();
+					}
+				});
+			});
 		});
 
 		it('collapses subagent tool calls behind a count under the Task badge', () => {

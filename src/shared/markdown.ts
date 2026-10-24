@@ -21,6 +21,9 @@ export const stripMarkdown = (text: string): string => {
 				const lines = match.split('\n');
 				return lines.slice(1, -1).join('\n');
 			})
+			// A fence left over is a block cut off before it closed (an excerpt
+			// that ends inside one): drop the fence line, keep the code.
+			.replace(/^[ \t]*```[^\n]*(?:\n|$)/gm, '')
 			// Remove inline code backticks
 			.replace(/`([^`]+)`/g, '$1')
 			// Remove bold/italic (***text***, **text**, *text*, ___text___, __text__, _text_)

@@ -4,6 +4,7 @@ import { CollapsibleJsonViewer } from '../../CollapsibleJsonViewer';
 import { AgentTaskListCard } from '../../AgentTaskListCard';
 import { extractAgentTaskList } from '../../../utils/agentTaskList';
 import { storedToolValueTruncation, withoutStoredTruncationNote } from '../utils/toolSummaries';
+import { useStickToBottom } from '../../../hooks/ui/useStickToBottom';
 import { useT } from '../../../i18n';
 
 /**
@@ -58,6 +59,8 @@ export const ToolCallDetails = React.memo(function ToolCallDetails({
 					value={output}
 					theme={theme}
 					testId="tool-call-result"
+					// A running call's result grows; keep its newest output in view.
+					followOutput={toolState?.status === 'running'}
 				/>
 			)}
 		</div>
@@ -113,13 +116,16 @@ function DetailBlock({
 	value,
 	theme,
 	testId,
+	followOutput = false,
 }: {
 	label: string;
 	value: unknown;
 	theme: Theme;
 	testId: string;
+	followOutput?: boolean;
 }) {
 	const t = useT();
+	const scrollRef = useStickToBottom<HTMLDivElement>(value, followOutput);
 	const truncatedFrom = storedToolValueTruncation(value);
 	const structured = value !== null && typeof value === 'object';
 	return (
@@ -133,6 +139,7 @@ function DetailBlock({
 				)}
 			</div>
 			<div
+				ref={scrollRef}
 				className="overflow-auto scrollbar-thin rounded"
 				style={{ maxHeight: DETAIL_BLOCK_MAX_HEIGHT, overscrollBehavior: 'contain' }}
 			>

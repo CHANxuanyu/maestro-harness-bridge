@@ -216,6 +216,8 @@ export const settings = {
 	'settings.general.thinking.toolCalls': 'Show tool calls in responses',
 	'settings.general.thinking.toolCallsDescription':
 		'Display tool-call activity (tool badges and their input/output) in AI responses. Independent of the thinking mode above, so you can watch the reasoning chain without the tool noise. Agents still run tools normally either way.',
+	'settings.general.thinking.toolCallsConversationsNote':
+		'In the conversations view, tool calls are folded into the row above each answer, so this switch applies to the agents view only.',
 
 	// Tab behavior
 	'settings.general.tabs.heading': 'Tab Behavior',

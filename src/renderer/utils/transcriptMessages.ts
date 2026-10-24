@@ -51,6 +51,13 @@ export interface TranscriptMessage {
 	 * them; anything it cannot read is ignored rather than rendered raw.
 	 */
 	toolUse?: unknown;
+	/**
+	 * The model and reasoning effort the provider recorded for this assistant
+	 * message, as written (Codex: both; Claude Code: model only). Absent means
+	 * the native record has none; it is never filled from current settings.
+	 */
+	model?: string;
+	effort?: string;
 }
 
 /** One tool call read out of a message's `toolUse`, in renderer terms. */
@@ -388,6 +395,9 @@ export function transcriptMessagesToLogEntries(messages: TranscriptMessage[]): L
 		const hasBody = text.trim().length > 0 || !!images;
 		if (hasBody) {
 			const isReasoning = msg.type === 'thinking' || channel === 'analysis';
+			// Like a live turn, only the agent's output carries the turn's settings.
+			const model = isReasoning ? undefined : nonEmptyString(msg.model);
+			const effort = isReasoning ? undefined : nonEmptyString(msg.effort);
 			entries.push({
 				id: messageId,
 				timestamp,
@@ -395,6 +405,9 @@ export function transcriptMessagesToLogEntries(messages: TranscriptMessage[]): L
 				text,
 				...(images && { images }),
 				nativeTranscript,
+				...(model ? { turnModel: model } : {}),
+				...(effort ? { turnEffort: effort } : {}),
+				...(model || effort ? { turnSettingsSource: 'native' as const } : {}),
 			});
 		}
 		calls.forEach((call, index) => {
@@ -1008,17 +1021,29 @@ function sameMoment(a: LogEntry, b: LogEntry): boolean {
 	return a.timestamp === b.timestamp || (Number.isNaN(a.timestamp) && Number.isNaN(b.timestamp));
 }
 
-/** Keep what only the renderer knows about an entry (delivery, turn settings). */
+/**
+ * Keep what only the renderer knows about an entry (delivery, turn settings).
+ * A send-time stamp outranks the native record as a pair: it is what the user
+ * chose, and mixing one axis from each would describe no configuration at all.
+ */
 function withRendererFields(cached: LogEntry, native: LogEntry): LogEntry {
-	return {
+	const cachedStamp = !!(cached.turnModel || cached.turnEffort);
+	const next: LogEntry = {
 		...native,
 		...(cached.delivered !== undefined ? { delivered: cached.delivered } : {}),
 		...(cached.readOnly !== undefined ? { readOnly: cached.readOnly } : {}),
-		...(cached.turnModel ? { turnModel: cached.turnModel } : {}),
-		...(cached.turnEffort ? { turnEffort: cached.turnEffort } : {}),
 		...(cached.renderStyle ? { renderStyle: cached.renderStyle } : {}),
 		...(cached.aiCommand ? { aiCommand: cached.aiCommand } : {}),
 	};
+	if (cachedStamp) {
+		delete next.turnModel;
+		delete next.turnEffort;
+		delete next.turnSettingsSource;
+		if (cached.turnModel) next.turnModel = cached.turnModel;
+		if (cached.turnEffort) next.turnEffort = cached.turnEffort;
+		if (cached.turnSettingsSource) next.turnSettingsSource = cached.turnSettingsSource;
+	}
+	return next;
 }
 
 /**
@@ -1036,7 +1061,11 @@ function sameRenderedEntry(a: LogEntry, b: LogEntry): boolean {
 		(a.timestamp === b.timestamp || (Number.isNaN(a.timestamp) && Number.isNaN(b.timestamp))) &&
 		JSON.stringify(a.images ?? null) === JSON.stringify(b.images ?? null) &&
 		JSON.stringify(a.metadata ?? null) === JSON.stringify(b.metadata ?? null) &&
-		isProgressNoteEntry(a) === isProgressNoteEntry(b)
+		isProgressNoteEntry(a) === isProgressNoteEntry(b) &&
+		// The message info shows these, so a reply cached before the native record
+		// carried them is filled in once.
+		a.turnModel === b.turnModel &&
+		a.turnEffort === b.turnEffort
 	);
 }
 

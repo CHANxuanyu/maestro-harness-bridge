@@ -49,7 +49,7 @@ import { setClaudeSessionOrigin } from './claude-session-origins';
 import type { SearchableMessage } from './base-session-storage';
 import { countClaudeTranscriptMessages } from '../../shared/claudeTranscriptMessages';
 import { getProviderAccountDirs } from '../agents/provider-account-dirs';
-import { flattenToolResultContent } from '../parsers/claude-output-parser';
+import { claudeToolResultStatus, flattenToolResultContent } from '../parsers/claude-output-parser';
 export type { ClaudeSessionOriginsData } from '../stores/types';
 
 /**
@@ -851,7 +851,7 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 									if (!call) continue;
 									call.state = {
 										...call.state,
-										status: block.is_error ? 'failed' : 'completed',
+										status: claudeToolResultStatus(block),
 										output: flattenToolResultContent(block.content),
 									};
 									toolCalls.delete(block.tool_use_id);

@@ -534,6 +534,78 @@ describe('ClaudeSessionStorage', () => {
 	});
 
 	describe('readSessionMessages - tool results', () => {
+		it.each(['live', 'history'])(
+			'recognizes only confirmed interruption results in %s',
+			async (source) => {
+				// Official 2.1.63 abort constant and a 2.1.310 synthetic SDK interrupt transcript.
+				const interrupted =
+					"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.";
+				const cases = [
+					{ content: 'Interrupted by user', is_error: true, status: 'canceled' },
+					{ content: interrupted, is_error: true, status: 'canceled' },
+					{
+						content: [{ type: 'text', text: 'Interrupted by user' }],
+						is_error: true,
+						status: 'canceled',
+					},
+					{ content: 'command not found', is_error: true, status: 'failed' },
+					{ content: 'interrupted 只是普通输出，取消操作见说明', is_error: true, status: 'failed' },
+					{ content: 'Interrupted by user\nadditional output', is_error: true, status: 'failed' },
+					{ content: 'Interrupted by user', is_error: false, status: 'completed' },
+					{ content: interrupted + ' More information.', is_error: true, status: 'failed' },
+				];
+				const invocation = {
+					type: 'assistant',
+					message: {
+						content: cases.map((_, index) => ({
+							type: 'tool_use',
+							id: `cancel-${index}`,
+							name: 'Bash',
+							input: { command: 'sleep 20' },
+						})),
+					},
+				};
+				const result = {
+					type: 'user',
+					message: {
+						content: cases.map(({ content, is_error }, index) => ({
+							type: 'tool_result',
+							tool_use_id: `cancel-${index}`,
+							content,
+							is_error,
+						})),
+					},
+				};
+				let actual: Array<{ id?: string; state: unknown }>;
+				if (source === 'live') {
+					const parser = new ClaudeOutputParser();
+					parser.parseJsonObject(invocation);
+					const event = parser.parseJsonObject(result)!;
+					actual = [event, ...(event.toolResultBlocks ?? [])].map((block) => ({
+						id: block.toolCallId,
+						state: block.toolState,
+					}));
+				} else {
+					vi.mocked(fs.readFile).mockResolvedValue(
+						[invocation, result].map((row) => JSON.stringify(row)).join('\n')
+					);
+					const history = await storage.readSessionMessages('/project', 'synthetic-session', {
+						configDir: '/synthetic-account',
+					});
+					actual = history.messages[0].toolUse as typeof actual;
+				}
+				expect(actual.map((block) => ({ id: block.id, state: block.state }))).toEqual(
+					cases.map((entry, index) => ({
+						id: `cancel-${index}`,
+						state: {
+							status: entry.status,
+							output: typeof entry.content === 'string' ? entry.content : 'Interrupted by user',
+						},
+					}))
+				);
+			}
+		);
+
 		it.each(['local', 'SSH'])(
 			'pairs parallel results before pagination over %s',
 			async (source) => {

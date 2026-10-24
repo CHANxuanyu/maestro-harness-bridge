@@ -90,3 +90,9 @@
 
 - 按 `tool_use_id` 在分页前配对，保留调用输入和 ID，复用实时解析的输出展平与 4000 字符截断。孤立结果继续忽略，混合消息保留普通正文。
 - 新增本地、SSH 两个回归，修改前都因缺失 `state` 失败；修改后存储与解析器两个文件共 159 项通过。覆盖并行乱序结果、成功/失败、空输入输出、长输出、分页和读取不写文件。
+
+### 3. Claude 取消状态
+
+- 新增导出的 `claudeToolResultStatus()`，实时与历史共用，仅在 `is_error` 为真且结果全文匹配已确认原文时返回 `canceled`。不搜索关键词，不改调用 ID 和原文。
+- 原文依据：[官方 2.1.63 包](https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.63.tgz) 的 `aborted_streaming` 路径生成 `Interrupted by user`；[官方 2.1.310 Linux 包](https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.310.tgz) 在临时配置/项目目录和本地模拟 API 下收到 SDK `interrupt` 后，实际写入以 `The user doesn't want to proceed with this tool use.` 开头的完整固定文本。该版本也用同一文本表达用户拒绝工具，统一视为用户停止。没有安装 CLI 或使用真实账户。
+- 实时、历史两个新回归修改前都误报 `failed`；修复后相关五个文件 377 项通过，含并行结果、数组结果、普通错误、相似正文，以及既有 Stop、旧进程隔离和原生 ID 保留。macOS 界面停止未验。

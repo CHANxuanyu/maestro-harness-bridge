@@ -12,7 +12,7 @@
  *    - turn_context: Turn metadata (model, context window, etc.)
  *
  * 2. Legacy stdout format (older Codex versions):
- *    - thread.started, turn.started, item.started, item.completed, turn.completed
+ *    - thread.started, turn.started, item.started, item.updated, item.completed, turn.completed
  *
  * Key schema details:
  * - Session IDs are in session_meta payload.id (current) or thread_id (legacy)
@@ -166,6 +166,7 @@ interface CodexRawMessage {
 		| 'thread.started'
 		| 'turn.started'
 		| 'item.started'
+		| 'item.updated'
 		| 'item.completed'
 		| 'turn.completed'
 		| 'turn.failed'
@@ -229,6 +230,7 @@ interface CodexPayload {
 	// response_item function_call / custom_tool_call payload
 	name?: string;
 	arguments?: string;
+	input?: unknown;
 	call_id?: string;
 
 	// response_item function_call_output / custom_tool_call_output payload
@@ -260,7 +262,7 @@ interface CodexPayload {
 }
 
 /**
- * Item structure for item.started and item.completed events
+ * Item structure for item.started, item.updated and item.completed events
  */
 interface CodexItem {
 	id?: string;
@@ -276,7 +278,7 @@ interface CodexItem {
 	command?: string;
 	aggregated_output?: string;
 	exit_code?: number | null;
-	status?: 'in_progress' | 'completed' | 'failed';
+	status?: 'in_progress' | 'completed' | 'failed' | 'interrupted' | 'canceled' | 'cancelled';
 }
 
 /**
@@ -513,8 +515,8 @@ export class CodexOutputParser implements AgentOutputParser {
 			};
 		}
 
-		// Handle item.started events (command_execution in progress)
-		if (msg.type === 'item.started' && msg.item) {
+		// Command starts and updates share identity; updates carry output so far.
+		if ((msg.type === 'item.started' || msg.type === 'item.updated') && msg.item) {
 			return this.transformItemStarted(msg.item, msg);
 		}
 
@@ -763,11 +765,14 @@ export class CodexOutputParser implements AgentOutputParser {
 				// tool's name - the same mis-attribution the id map exists to end.
 				this.lastToolName = toolName;
 			}
-			let parsedArgs: unknown;
-			try {
-				parsedArgs = JSON.parse(payload.arguments || '{}');
-			} catch {
-				parsedArgs = payload.arguments || {};
+			const input = payload.arguments ?? payload.input ?? {};
+			let parsedArgs: unknown = input;
+			if (typeof input === 'string') {
+				try {
+					parsedArgs = JSON.parse(input);
+				} catch {
+					// Custom tool input can be plain text, including patches.
+				}
 			}
 			return {
 				type: 'tool_use',
@@ -843,8 +848,7 @@ export class CodexOutputParser implements AgentOutputParser {
 	}
 
 	/**
-	 * Transform an item.started event
-	 * Codex v0.111.0+ emits item.started for command_execution when a tool begins running
+	 * Transform a command start or an update containing output accumulated so far.
 	 */
 	private transformItemStarted(item: CodexItem, msg: CodexRawMessage): ParsedEvent {
 		if (item.type === 'command_execution') {
@@ -856,9 +860,13 @@ export class CodexOutputParser implements AgentOutputParser {
 				// so without an id two parallel commands are indistinguishable to
 				// the renderer's name-matching fallback (issue #1485).
 				...(item.id ? { toolCallId: item.id } : {}),
+				...(msg.type === 'item.updated' ? { isPartial: true } : {}),
 				toolState: {
 					status: 'running',
 					input: { command: item.command },
+					...(msg.type === 'item.updated'
+						? { output: this.decodeToolOutput(item.aggregated_output) }
+						: {}),
 				},
 				raw: msg,
 			};
@@ -930,10 +938,10 @@ export class CodexOutputParser implements AgentOutputParser {
 						status:
 							item.status === 'in_progress'
 								? 'running'
-								: item.status === 'failed' ||
-									  (typeof item.exit_code === 'number' && item.exit_code !== 0)
-									? 'failed'
-									: 'completed',
+								: codexToolResultStatus({
+										status: item.status,
+										is_error: typeof item.exit_code === 'number' && item.exit_code !== 0,
+									}),
 						input: { command: item.command },
 						output: this.decodeToolOutput(item.aggregated_output),
 						exitCode: item.exit_code,

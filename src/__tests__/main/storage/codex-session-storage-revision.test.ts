@@ -14,6 +14,7 @@ vi.mock('../../../main/utils/remote-fs', () => ({
 	statRemote: vi.fn(),
 }));
 import { CodexSessionStorage } from '../../../main/storage/codex-session-storage';
+import { CodexOutputParser } from '../../../main/parsers/codex-output-parser';
 import type { SshRemoteConfig } from '../../../shared/types';
 
 const id = '11111111-2222-4333-8444-555555555555';
@@ -128,6 +129,103 @@ const readCold = () =>
 	});
 
 describe('Codex append-only refresh cursor', () => {
+	it('preserves custom inputs and out-of-order results across live parsing, refresh and reload', async () => {
+		const cases = [
+			{
+				input: '*** Begin Patch\n*** End Patch',
+				expected: '*** Begin Patch\n*** End Patch',
+				status: 'completed',
+			},
+			{ input: '{"command":"printf ok"}', expected: { command: 'printf ok' }, status: 'failed' },
+			{ input: { command: 'sleep 20' }, expected: { command: 'sleep 20' }, status: 'canceled' },
+			{ input: '', expected: '', status: 'completed' },
+		];
+		const parser = new CodexOutputParser();
+		let content = row('session_meta', { id });
+		for (const [index, test] of cases.entries()) {
+			const payload = {
+				type: 'custom_tool_call',
+				name: 'exec',
+				call_id: `call-${index}`,
+				input: test.input,
+			};
+			content += row('response_item', payload);
+			expect(parser.parseJsonObject({ type: 'response_item', payload })).toMatchObject({
+				toolCallId: `call-${index}`,
+				toolState: { status: 'running', input: test.expected },
+			});
+		}
+		const file = await transcript('a', content);
+		expect((await readIncrementally()).messages).toHaveLength(cases.length);
+		for (const [index, test] of [...cases.entries()].reverse()) {
+			const payload = {
+				type: 'custom_tool_call_output',
+				call_id: `call-${index}`,
+				status: test.status,
+				output: `Result ${index}: ordinary text may mention failure or cancellation.`,
+			};
+			const appended = row('response_item', payload);
+			await fs.appendFile(file, appended);
+			content += appended;
+			expect(parser.parseJsonObject({ type: 'response_item', payload })).toMatchObject({
+				toolCallId: `call-${index}`,
+				toolState: { status: test.status, output: payload.output },
+			});
+		}
+		const refreshed = await readIncrementally();
+		expect(refreshed).toEqual(await readCold());
+		expect(refreshed.messages.map((m) => m.uuid)).toEqual(cases.map((_, index) => `call-${index}`));
+		for (const [index, test] of cases.entries()) {
+			expect(refreshed.messages[index]).toMatchObject({
+				toolUse: [
+					{
+						state: {
+							input: test.expected,
+							status: test.status,
+							output: `Result ${index}: ordinary text may mention failure or cancellation.`,
+						},
+					},
+				],
+			});
+		}
+		storage = new CodexSessionStorage();
+		expect(await readIncrementally()).toEqual(refreshed);
+		expect(await fs.readFile(file, 'utf8')).toBe(content);
+	});
+
+	it('keeps a long transcript ordered through pagination and a fresh reader', async () => {
+		const initial = Array.from({ length: 1200 }, (_, index) => message(`消息 ${index}`)).join('');
+		const file = await transcript('a', initial);
+		const before = await readIncrementally(0, 1300);
+		expect(before.total).toBe(1200);
+		await fs.appendFile(file, message('新的回合'));
+		const after = await readIncrementally(0, 1300);
+		expect(after.messages.slice(0, -1)).toEqual(before.messages);
+		expect(after.messages.at(-1)?.content).toBe('新的回合');
+		expect(new Set(after.messages.map((m) => m.uuid)).size).toBe(1201);
+		expect((await readIncrementally(200, 200)).messages).toEqual(after.messages.slice(801, 1001));
+		storage = new CodexSessionStorage();
+		expect(await readIncrementally(0, 1300)).toEqual(after);
+	});
+
+	it('keeps warm transcript contents isolated when the same native ID exists in two accounts', async () => {
+		const a = await transcript('a', message('Account A'));
+		const b = await transcript('b', message('Account B'));
+		const read = (account: string) =>
+			storage.readSessionMessages('/project', id, {
+				configDir: path.join(root, account),
+				readOnly: true,
+			});
+		expect((await read('a')).messages.map((m) => m.content)).toEqual(['Account A']);
+		expect((await read('b')).messages.map((m) => m.content)).toEqual(['Account B']);
+		await fs.appendFile(b, message('B continued'));
+		expect((await read('a')).messages.map((m) => m.content)).toEqual(['Account A']);
+		expect((await read('b')).messages.map((m) => m.content)).toEqual(['Account B', 'B continued']);
+		await fs.unlink(a);
+		expect((await read('a')).messages).toEqual([]);
+		expect((await read('b')).messages).toHaveLength(2);
+	});
+
 	it('matches the cold converter across partial UTF-8 rows, tool completion and pagination', async () => {
 		const file = await transcript(
 			'a',

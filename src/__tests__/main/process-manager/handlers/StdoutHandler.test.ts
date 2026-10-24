@@ -141,6 +141,76 @@ describe('StdoutHandler', () => {
 	// ── handleData dispatch routing ────────────────────────────────────────
 
 	describe('Codex process-local tool identifiers', () => {
+		it('forwards command updates under the original call id while deduplicating starts', () => {
+			const { handler, emitter, sessionId } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				outputParser: new CodexOutputParser(),
+			});
+			const toolSpy = vi.fn();
+			emitter.on('tool-execution', toolSpy);
+			const item = {
+				id: 'item_1',
+				type: 'command_execution',
+				command: 'npm test',
+				status: 'in_progress',
+			};
+			for (const type of ['item.started', 'item.started'])
+				sendJsonLine(handler, sessionId, { type, item });
+			for (const output of ['开始\n', '开始\n完成\n']) {
+				sendJsonLine(handler, sessionId, {
+					type: 'item.updated',
+					item: { ...item, aggregated_output: output },
+				});
+			}
+			sendJsonLine(handler, sessionId, {
+				type: 'item.completed',
+				item: { ...item, status: 'completed', exit_code: 0, aggregated_output: '开始\n完成\n' },
+			});
+			const events = toolSpy.mock.calls.map(([, event]) => event);
+			expect(events.map((event) => event.state.status)).toEqual([
+				'running',
+				'running',
+				'running',
+				'completed',
+			]);
+			expect(events.slice(1).map((event) => event.state.output)).toEqual([
+				'开始\n',
+				'开始\n完成\n',
+				'开始\n完成\n',
+			]);
+			expect(new Set(events.map((event) => event.toolCallId)).size).toBe(1);
+		});
+
+		it('releases canceled native calls from the active tool set', () => {
+			const { handler, sessionId, proc, emitter } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				outputParser: new CodexOutputParser(),
+			});
+			const toolSpy = vi.fn();
+			emitter.on('tool-execution', toolSpy);
+			sendJsonLine(handler, sessionId, {
+				type: 'response_item',
+				payload: { type: 'function_call', call_id: 'native-call', name: 'shell', arguments: '{}' },
+			});
+			expect(proc.emittedToolCallIds?.has('native-call')).toBe(true);
+			sendJsonLine(handler, sessionId, {
+				type: 'response_item',
+				payload: {
+					type: 'function_call_output',
+					call_id: 'native-call',
+					status: 'interrupted',
+					output: 'stopped',
+				},
+			});
+			expect(toolSpy.mock.calls.map(([, event]) => event.state.status)).toEqual([
+				'running',
+				'canceled',
+			]);
+			expect(proc.emittedToolCallIds?.size).toBe(0);
+		});
+
 		it('keeps restarted item_1 calls distinct while correlating each start and result', () => {
 			const { handler, emitter, sessionId, processes, proc } = createTestContext({
 				isStreamJsonMode: true,

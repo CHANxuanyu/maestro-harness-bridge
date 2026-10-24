@@ -58,6 +58,7 @@ export class ChildProcessSpawner {
 			processes: this.processes,
 			emitter: this.emitter,
 			bufferManager: this.bufferManager,
+			stdoutHandler: this.stdoutHandler,
 		});
 	}
 

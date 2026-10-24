@@ -84,7 +84,7 @@
 ### 1. PR #3 收尾
 
 - PR 提交 `dc6c597` 的[六项 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40123603835) 全部通过，审查线程为空，已补齐审查和验收记录、转为正式 PR 并合并。
-- 实际主线合并提交为 `24fbde9a96a29a793a0f412d7754fcd6eed71119`；`codex/backend-followups` 从该提交建立。[主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40125342570) 正在运行，最终结果待补。
+- 实际主线合并提交为 `24fbde9a96a29a793a0f412d7754fcd6eed71119`；`codex/backend-followups` 从该提交建立。[主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40125342570) 六项全部通过。
 
 ### 2. Claude 工具结果
 
@@ -109,3 +109,13 @@
 - 每个运行中调用累计输出并约 200ms 合并发送，调用完成和回合结束前补发待发内容；完成、回合结束或连接退出均清理计时器与缓存。最终条目的输出和状态仍以原生完成事件为准。
 - 新增合成服务回归修改前没有任何中间更新；修复后连接器 17 项全部通过。200 条主调用增量产生三次累计更新，覆盖并行调用、中文、发送间隔、完成前补发、未知调用、跨会话/回合隔离、迟到事件和结束后无计时器输出。真实桌面 Codex 未验。
 - 交接契约：同一 ID 的 `item.updated` 带 `command`、累计 `aggregated_output`、`in_progress`；现有解析器转成 `isPartial: true`、`toolState.status: running` 与累计 `output`，沿用 `tool-${id}` 更新卡片，不能再次拼接累计文本。Opus 负责卡片实时显示、展开后滚动跟随与手动滚动时的阅读位置；回答正文仍按完整条目。
+
+### 6. 原生会话之外的历史摘要
+
+- 已完成范围内改动：Codex 及 Claude TUI / Dynamic 从原有 `agentSessions.read` 接口以 `ownerAgentId`、`readOnly: true` 和对应 SSH 主机读取本轮最终回答，不调用模型。排除工具、推理和公开进度，不借用上一轮回答，读取失败如实返回。已记录的 TUI 启动结果也覆盖自定义路径直接指向 maestro-p 的配置。Claude API 保留原生 ID 续接并加 `--no-session-persistence`；其他提供方路径不变。
+- 七个新回归先复现摘要仍启动进程、缺少参数和把摘录当模型协议解析的问题；另一个新回归先复现读取错误丢失。修复后两个相关测试文件 63 项通过，覆盖本地/SSH、首段截断、没有最终回答、普通正文含 `NOTHING_TO_REPORT` 时仍记录历史。
+- 官方 Claude Code 2.1.310 Linux 二进制在临时配置/项目目录与本地模拟 API 上实测：先生成合成会话，再以原 ID 和 `--no-session-persistence` 续接，API 请求仍有前文，项目转录逐字节与文件列表不变。TUI 实测拒绝该参数，只支持 print；Dynamic 可能选择 TUI，按计划走本地摘录。没有安装或访问真实账户。
+- 协议确认：[锁定版本 `TurnStartParams`](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/app-server-protocol/schema/typescript/v2/TurnStartParams.ts) 的 `model` / `effort` 覆盖会延续到后续回合。原有“丢弃返回 ID 就不会影响下一轮”的注释不成立，已修正。虽然原生 CLI 声明 `--ephemeral`，尚无覆盖普通与共享路由的无写入验证，本次按计划选择不调用模型的摘录方案。
+- **受阻部分：** 实际启动路径还有计划未列出的 `src/main/ipc/handlers/process/resolve-claude-spawn-context.ts`，API resume 会先调用磁盘转录清理器，可能在 CLI 启动前改写旧 thinking 块。已按用户的范围外文件确认规则提出最小扩展：仅对携带 `--no-session-persistence` 的调用跳过该清理，并补对应回归；尚待回复，未修改该文件。因此 Maestro API 路径的逐字节验收仍受阻，不能用 CLI 单独验证代替。
+- 交接契约：本地结果标记 `AgentSpawnResult.synopsisSource: final-response`；历史持久形状沿用 `type: USER`，`summary` 与 `fullResponse` 均为最终回答首段，最多 500 个 UTF-16 单位，超长沿用 `truncateText()` 的省略号。保留原生 ID、Maestro session/tab、项目路径和任务耗时，不生成摘要用量。尚未新增持久化来源字段，Opus 若区分摘录与模型摘要需扩展历史契约。旧 Summary 不删除，`stripSynopsisTurns()` 保留。
+- 未验：macOS 两端 UI 和桌面 Codex。手动验收应使用独立合成会话，开启历史记录，分别完成 API、TUI、Dynamic、普通 Codex 和共享 Codex 一轮；在原回合结束与后台摘要完成之间比较转录字节、项目会话列表和桌面线程，确认没有新增 Summary 或会话，历史仍有条目；重启后再核对。

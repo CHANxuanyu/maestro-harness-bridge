@@ -232,6 +232,27 @@ describe('turnDidMeaningfulWork', () => {
 });
 
 describe('runExitSynopsis', () => {
+	it('records a local final-response excerpt without interpreting model summary sentinels', async () => {
+		const deps = makeDeps();
+		const excerpt = 'NOTHING_TO_REPORT is the token discussed in the final answer.';
+		deps.spawn.mockResolvedValue({
+			success: true,
+			response: excerpt,
+			synopsisSource: 'final-response',
+		});
+		await runExitSynopsis(makeSynopsisData({ toolType: 'codex' }), deps);
+		expect(parseSynopsis).not.toHaveBeenCalled();
+		expect(deps.addHistory).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: 'USER',
+				summary: excerpt,
+				fullResponse: excerpt,
+				agentSessionId: 'agent-1',
+			})
+		);
+		expect(deps.refresh).toHaveBeenCalledOnce();
+	});
+
 	it('records a history entry and fires the synopsis toast on success', async () => {
 		const deps = makeDeps();
 		deps.spawn.mockResolvedValue({

@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import {
 	autoRunMaestroPMaxWaitSeconds,
+	getClaudeTokenMode,
 	getClaudeTokenSourceFields,
 } from '../../../shared/claudeTokenMode';
 import type { Session, SessionState, UsageStats, QueuedItem, ToolType } from '../../types';
@@ -25,6 +26,8 @@ import {
 } from '../../../shared/agentConstants';
 import { isFailedSynopsisResponse } from '../../../shared/synopsis';
 import { stripAnsiCodes } from '../../../shared/stringUtils';
+import { truncateText } from '../../../shared/formatters';
+import type { SessionMessagesResult } from '../../../main/agents/session-storage';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { logger } from '../../utils/logger';
 import { armEffortFallback, settleEffortFallback } from '../../services/effortRejection';
@@ -43,6 +46,8 @@ export interface AgentSpawnResult {
 	error?: string;
 	/** Structured error category for downstream handling */
 	errorKind?: AgentSpawnErrorKind;
+	/** A local excerpt of the native final answer, not model-generated synopsis syntax. */
+	synopsisSource?: 'final-response';
 }
 
 /**
@@ -764,6 +769,65 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 			}
 		): Promise<AgentSpawnResult> => {
 			try {
+				const owner = sessionsRef.current.find((session) => session.id === sessionId);
+				const effectiveSessionSshRemoteConfig =
+					sessionConfig?.sessionSshRemoteConfig ?? owner?.sessionSshRemoteConfig;
+				const tokenMode = getClaudeTokenMode(
+					{
+						enableMaestroP: owner?.enableMaestroP ?? sessionConfig?.enableMaestroP,
+						maestroPMode: owner?.maestroPMode ?? sessionConfig?.maestroPMode,
+					},
+					{ sshEnabled: effectiveSessionSshRemoteConfig?.enabled }
+				);
+				// TUI rejects --no-session-persistence; Dynamic can select that path.
+				// The resolved mode also covers a custom Path pointing directly at maestro-p.
+				if (
+					toolType === 'codex' ||
+					(toolType === 'claude-code' &&
+						(tokenMode !== 'api' || owner?.claudeInteractive?.mode === 'interactive'))
+				) {
+					if (!owner) return { success: false, error: 'Synopsis source session is unavailable' };
+					const remoteId = effectiveSessionSshRemoteConfig?.enabled
+						? effectiveSessionSshRemoteConfig.remoteId
+						: undefined;
+					if (remoteId === null)
+						return { success: false, error: 'Synopsis source SSH remote is unavailable' };
+					let history: SessionMessagesResult;
+					try {
+						history = await window.maestro.agentSessions.read(
+							toolType,
+							cwd,
+							resumeAgentSessionId,
+							{ ownerAgentId: sessionId, readOnly: true },
+							remoteId
+						);
+					} catch (error) {
+						return {
+							success: false,
+							error: error instanceof Error ? error.message : String(error),
+						};
+					}
+					for (let index = history.messages.length - 1; index >= 0; index--) {
+						const message = history.messages[index];
+						if (message.type === 'user' || message.role === 'user') break;
+						if (
+							(message.type === 'assistant' || message.role === 'assistant') &&
+							!message.toolUse &&
+							message.channel !== 'analysis' &&
+							message.channel !== 'commentary' &&
+							message.content.trim()
+						) {
+							const paragraph = message.content.trim().split(/\r?\n\s*\r?\n/, 1)[0];
+							return {
+								success: true,
+								response: truncateText(paragraph, 500),
+								agentSessionId: resumeAgentSessionId,
+								synopsisSource: 'final-response',
+							};
+						}
+					}
+					return { success: false, error: 'No final answer is available for this turn' };
+				}
 				const agent = await window.maestro.agents.get(toolType);
 				if (!agent) {
 					logger.error(`[spawnBackgroundSynopsis] Agent not found for toolType: ${toolType}`);
@@ -914,16 +978,7 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 						})
 					);
 
-					// Spawn with session resume - the IPC handler will use the agent's resumeArgs builder
-					// If no sessionConfig or no sessionSshRemoteConfig, try to get it from the main session (by sessionId)
-					let effectiveSessionSshRemoteConfig = sessionConfig?.sessionSshRemoteConfig;
-					if (!effectiveSessionSshRemoteConfig) {
-						// Try to find the main session and use its SSH config
-						const mainSession = sessionsRef.current.find((s) => s.id === sessionId);
-						if (mainSession && mainSession.sessionSshRemoteConfig) {
-							effectiveSessionSshRemoteConfig = mainSession.sessionSshRemoteConfig;
-						}
-					}
+					// Spawn with session resume - the IPC handler uses the agent's resumeArgs builder.
 					window.maestro.process
 						.spawn({
 							sessionId: targetSessionId,
@@ -937,7 +992,10 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 							// from spawning until it finishes, stalling background queue processing for
 							// as long as the synopsis runs. Mirrors tab-naming, which filters for the
 							// same reason.
-							args: filterYoloArgs(agent.args || [], agent),
+							args: [
+								...filterYoloArgs(agent.args || [], agent),
+								...(toolType === 'claude-code' ? ['--no-session-persistence'] : []),
+							],
 							prompt,
 							agentSessionId: resumeAgentSessionId, // This triggers the agent's resume mechanism
 							// Per-session config overrides (if set)
@@ -952,10 +1010,8 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 							// the provider has no tier mapping, or where the cheap model's
 							// context window is smaller than the tab's (see synopsisModel).
 							//
-							// Safe only because the synopsis is a LEAF: every caller discards the
-							// agentSessionId it returns rather than adopting it, so the cheap
-							// model cannot follow the conversation into the next real turn. A
-							// future caller that adopts that id must revisit this.
+							// Claude print does not persist these settings. Codex takes the local
+							// path above: turn/start overrides would affect later shared turns.
 							sessionCustomModel: synopsisModel,
 							sessionCustomEffort: cheapSynopsis.effort ?? sessionConfig?.customEffort,
 							sessionCustomContextWindow: sessionConfig?.customContextWindow,

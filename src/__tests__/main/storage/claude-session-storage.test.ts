@@ -534,6 +534,40 @@ describe('ClaudeSessionStorage', () => {
 	});
 
 	describe('readSessionMessages - tool results', () => {
+		it('retains each assistant native model without inventing effort or synthetic models', async () => {
+			const rows = [
+				{ type: 'user', message: { role: 'user', model: 'not-an-assistant', content: 'question' } },
+				{ type: 'assistant', message: { role: 'assistant', content: 'no model' } },
+				{
+					type: 'assistant',
+					message: { role: 'assistant', model: 'claude-first', content: 'first' },
+				},
+				{
+					type: 'assistant',
+					message: {
+						role: 'assistant',
+						model: 'claude-second',
+						content: [{ type: 'tool_use', id: 'model-tool', name: 'Read', input: {} }],
+					},
+				},
+				{
+					type: 'assistant',
+					message: { role: 'assistant', model: '<synthetic>', content: 'synthetic' },
+				},
+			];
+			vi.mocked(fs.readFile).mockResolvedValue(rows.map((row) => JSON.stringify(row)).join('\n'));
+			const result = await storage.readSessionMessages('/project', 'synthetic-session', {
+				configDir: '/synthetic-account',
+			});
+			expect(result.messages.map(({ model, effort }) => ({ model, effort }))).toEqual([
+				{ model: undefined, effort: undefined },
+				{ model: undefined, effort: undefined },
+				{ model: 'claude-first', effort: undefined },
+				{ model: 'claude-second', effort: undefined },
+				{ model: undefined, effort: undefined },
+			]);
+		});
+
 		it.each(['live', 'history'])(
 			'recognizes only confirmed interruption results in %s',
 			async (source) => {

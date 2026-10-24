@@ -616,6 +616,7 @@ interface CodexTranscriptParseState {
 	messages: SessionMessage[];
 	messageIndex: number;
 	lineIndex: number;
+	turnContext: Pick<SessionMessage, 'model' | 'effort'>;
 }
 
 interface CodexTranscriptCursor extends CodexTranscriptParseState {
@@ -639,12 +640,20 @@ function parseCodexTranscript(
 
 	const messages: SessionMessage[] = [...(initial?.messages ?? [])];
 	let messageIndex = initial?.messageIndex ?? 0;
+	let turnContext = initial?.turnContext ?? {};
 
 	for (const [relativeIndex, line] of lines.entries()) {
 		const lineIndex = (initial?.lineIndex ?? 0) + relativeIndex;
 		try {
 			const entry = JSON.parse(line);
 			const payload = entry.type === 'response_item' ? entry.payload : entry;
+			if (entry.type === 'turn_context') {
+				turnContext = {
+					...(typeof entry.payload?.model === 'string' ? { model: entry.payload.model } : {}),
+					...(typeof entry.payload?.effort === 'string' ? { effort: entry.payload.effort } : {}),
+				};
+				continue;
+			}
 
 			if (
 				payload?.type === 'message' &&
@@ -665,6 +674,7 @@ function parseCodexTranscript(
 					messages.push({
 						type: payload.role,
 						role: payload.role,
+						...(payload.role === 'assistant' ? turnContext : {}),
 						content: text,
 						timestamp: entry.timestamp || '',
 						uuid:
@@ -686,6 +696,7 @@ function parseCodexTranscript(
 						type: 'thinking',
 						role: 'assistant',
 						channel: 'analysis',
+						...turnContext,
 						content: summary,
 						timestamp: entry.timestamp || '',
 						uuid: payload.id || `codex-reasoning-${lineIndex}`,
@@ -717,6 +728,7 @@ function parseCodexTranscript(
 					timestamp: entry.timestamp || '',
 					uuid: payload.call_id || `codex-msg-${messageIndex}`,
 					toolUse: [toolInfo],
+					...turnContext,
 				});
 				messageIndex++;
 			}
@@ -751,6 +763,7 @@ function parseCodexTranscript(
 						timestamp: entry.timestamp || '',
 						uuid: callId || `codex-msg-${messageIndex}`,
 						toolUse: [{ tool: payload.name || 'unknown', state: { status, output: outputText } }],
+						...turnContext,
 					});
 					messageIndex++;
 				}
@@ -761,6 +774,7 @@ function parseCodexTranscript(
 					type: 'assistant',
 					role: 'assistant',
 					content: entry.item.text || '',
+					...turnContext,
 					timestamp: entry.timestamp || '',
 					uuid: entry.item.id || `codex-msg-${messageIndex}`,
 					...(entry.item.phase
@@ -775,6 +789,7 @@ function parseCodexTranscript(
 					type: 'assistant',
 					role: 'assistant',
 					content: `Tool: ${entry.item.tool}`,
+					...turnContext,
 					timestamp: entry.timestamp || '',
 					uuid: entry.item.id || `codex-msg-${messageIndex}`,
 					toolUse: [
@@ -794,6 +809,7 @@ function parseCodexTranscript(
 					type: 'assistant',
 					role: 'assistant',
 					content: `Tool: ${entry.item.tool || 'unknown'}`,
+					...turnContext,
 					timestamp: entry.timestamp || '',
 					uuid: entry.item.id || `codex-msg-${messageIndex}`,
 					toolUse: [
@@ -809,7 +825,12 @@ function parseCodexTranscript(
 			// Skip malformed lines without changing IDs for later valid messages.
 		}
 	}
-	return { messages, messageIndex, lineIndex: (initial?.lineIndex ?? 0) + lines.length };
+	return {
+		messages,
+		messageIndex,
+		lineIndex: (initial?.lineIndex ?? 0) + lines.length,
+		turnContext,
+	};
 }
 
 export class CodexSessionStorage extends BaseSessionStorage {

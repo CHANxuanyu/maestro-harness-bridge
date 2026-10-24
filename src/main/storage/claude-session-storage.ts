@@ -914,6 +914,11 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 							timestamp: entry.timestamp,
 							uuid: entry.uuid,
 							toolUse,
+							...(entry.type === 'assistant' &&
+							typeof entry.message?.model === 'string' &&
+							entry.message.model !== '<synthetic>'
+								? { model: entry.message.model }
+								: {}),
 							...(images && { images }),
 						});
 					}

@@ -129,6 +129,76 @@ const readCold = () =>
 	});
 
 describe('Codex append-only refresh cursor', () => {
+	it('retains native model and effort per turn across cold and incremental reads', async () => {
+		const file = await transcript('a', message('before context'));
+		await readIncrementally();
+		await fs.appendFile(file, row('turn_context', { model: 'model-first', effort: 'high' }));
+		await readIncrementally();
+		await fs.appendFile(
+			file,
+			row('response_item', {
+				type: 'message',
+				role: 'user',
+				content: [{ type: 'input_text', text: 'question' }],
+			}) +
+				row('response_item', {
+					type: 'reasoning',
+					summary: [{ type: 'summary_text', text: 'reasoning' }],
+				}) +
+				row('response_item', {
+					type: 'function_call',
+					call_id: 'first-tool',
+					name: 'exec',
+					arguments: '{}',
+				}) +
+				message('first answer')
+		);
+		await readIncrementally();
+		await fs.appendFile(
+			file,
+			row('turn_context', { model: 'model-second', effort: 'low' }) +
+				row('response_item', {
+					type: 'function_call_output',
+					call_id: 'first-tool',
+					output: 'late result',
+				}) +
+				row('response_item', {
+					type: 'custom_tool_call',
+					call_id: 'second-tool',
+					name: 'apply_patch',
+					input: 'patch',
+				}) +
+				message('second answer')
+		);
+		await readIncrementally();
+		await fs.appendFile(file, row('turn_context', { model: 'model-only' }) + message('no effort'));
+		await readIncrementally();
+		await fs.appendFile(file, row('turn_context', {}) + message('neither field'));
+		const result = await readIncrementally();
+		expect(result).toEqual(await readCold());
+		expect(result).toEqual(
+			await new CodexSessionStorage().readSessionMessages('/project', id, {
+				configDir: path.join(root, 'a'),
+				readOnly: true,
+				limit: 200,
+			})
+		);
+		expect(
+			result.messages.map(({ content, model, effort }) => ({ content, model, effort }))
+		).toEqual([
+			{ content: 'before context', model: undefined, effort: undefined },
+			{ content: 'question', model: undefined, effort: undefined },
+			{ content: 'reasoning', model: 'model-first', effort: 'high' },
+			{ content: 'Tool: exec', model: 'model-first', effort: 'high' },
+			{ content: 'first answer', model: 'model-first', effort: 'high' },
+			{ content: 'Tool: apply_patch', model: 'model-second', effort: 'low' },
+			{ content: 'second answer', model: 'model-second', effort: 'low' },
+			{ content: 'no effort', model: 'model-only', effort: undefined },
+			{ content: 'neither field', model: undefined, effort: undefined },
+		]);
+		expect(result.messages[3].toolUse).toMatchObject([{ state: { output: 'late result' } }]);
+	});
+
 	it('preserves custom inputs and out-of-order results across live parsing, refresh and reload', async () => {
 		const cases = [
 			{

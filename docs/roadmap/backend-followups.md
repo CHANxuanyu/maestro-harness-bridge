@@ -96,3 +96,9 @@
 - 新增导出的 `claudeToolResultStatus()`，实时与历史共用，仅在 `is_error` 为真且结果全文匹配已确认原文时返回 `canceled`。不搜索关键词，不改调用 ID 和原文。
 - 原文依据：[官方 2.1.63 包](https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.63.tgz) 的 `aborted_streaming` 路径生成 `Interrupted by user`；[官方 2.1.310 Linux 包](https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.310.tgz) 在临时配置/项目目录和本地模拟 API 下收到 SDK `interrupt` 后，实际写入以 `The user doesn't want to proceed with this tool use.` 开头的完整固定文本。该版本也用同一文本表达用户拒绝工具，统一视为用户停止。没有安装 CLI 或使用真实账户。
 - 实时、历史两个新回归修改前都误报 `failed`；修复后相关五个文件 377 项通过，含并行结果、数组结果、普通错误、相似正文，以及既有 Stop、旧进程隔离和原生 ID 保留。macOS 界面停止未验。
+
+### 4. 每轮模型与思考等级
+
+- `SessionMessage` 增加可选字符串 `model`、`effort`。Codex 使用最新 `turn_context.payload.model` / `effort`，并随增量游标保存；新的上下文缺失某字段时不继承上一轮该值。字段名已按锁定版本[原生协议源码](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/protocol/src/protocol.rs)核对。
+- 两个新回归修改前均缺失模型信息；修改后三个存储测试文件 186 项通过，覆盖换模型/等级、推理与工具、迟到结果、缺省值，以及增量、完整读取和新实例一致。
+- 交接契约：Codex 的 assistant 正文、公开推理、工具消息携带当时上下文的原值；配对结果保留调用时的字段。Claude 的 assistant 消息携带 `message.model`，`<synthetic>` 和缺失模型不填，`effort` 不填。用户消息不填。`undefined` 表示原生记录未提供，不能用当前设置或相邻消息补齐。Opus 负责映射到 `turnModel` / `turnEffort` 和显示，本次没有改界面或映射层。

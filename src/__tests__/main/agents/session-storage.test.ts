@@ -41,6 +41,20 @@ vi.mock('electron', () => ({
 	},
 }));
 
+// Model an unavailable remote deterministically for these storage API tests.
+vi.mock('../../../main/utils/remote-fs', () => ({
+	readDirRemote: vi
+		.fn()
+		.mockResolvedValue({ success: false, error: 'Synthetic remote unavailable' }),
+	readFileRemote: vi
+		.fn()
+		.mockResolvedValue({ success: false, error: 'Synthetic remote unavailable' }),
+	statRemote: vi.fn().mockResolvedValue({ success: false, error: 'Synthetic remote unavailable' }),
+	listDirWithStatsRemote: vi
+		.fn()
+		.mockResolvedValue({ success: false, error: 'Synthetic remote unavailable' }),
+}));
+
 // Mock storage implementation for testing
 class MockSessionStorage implements AgentSessionStorage {
 	readonly agentId: ToolType;

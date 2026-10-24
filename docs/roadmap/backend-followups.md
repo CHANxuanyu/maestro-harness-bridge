@@ -1,6 +1,6 @@
 # 后端第二阶段计划
 
-状态：Codex 实施中。2026-10-24 起草，用户已确认第 1 至 7 项全部由 Codex 完成，无需再等审阅；本阶段结束后由原生 Claude Code Opus 接手前端。
+状态：第 1 至 5 项、第 7 项的云端实现与回归已完成；第 6 项已完成范围内改动，API 启动前清理入口的扩展仍待用户确认。2026-10-24 起草，用户已确认第 1 至 7 项全部由 Codex 完成，无需再等审阅；本阶段结束后由原生 Claude Code Opus 接手前端。验收边界和交接契约见完成记录。
 
 本计划接续[信息流后端改进计划](backend-reliability.md)。上一阶段修复了 Codex 一侧的工具输入、失败与取消状态、回合收束和退出事件完整性。本阶段补上 PR 收尾、Claude Code 的同类缺口，以及上一阶段推迟或没有覆盖的后端项。每项依据都已在代码中确认，行号以 `codex/backend-reliability` 的 `8d01b54` 为准；实施时发现与代码不符，以代码为准并在完成记录中说明。
 
@@ -119,3 +119,16 @@
 - **受阻部分：** 实际启动路径还有计划未列出的 `src/main/ipc/handlers/process/resolve-claude-spawn-context.ts`，API resume 会先调用磁盘转录清理器，可能在 CLI 启动前改写旧 thinking 块。已按用户的范围外文件确认规则提出最小扩展：仅对携带 `--no-session-persistence` 的调用跳过该清理，并补对应回归；尚待回复，未修改该文件。因此 Maestro API 路径的逐字节验收仍受阻，不能用 CLI 单独验证代替。
 - 交接契约：本地结果标记 `AgentSpawnResult.synopsisSource: final-response`；历史持久形状沿用 `type: USER`，`summary` 与 `fullResponse` 均为最终回答首段，最多 500 个 UTF-16 单位，超长沿用 `truncateText()` 的省略号。保留原生 ID、Maestro session/tab、项目路径和任务耗时，不生成摘要用量。尚未新增持久化来源字段，Opus 若区分摘录与模型摘要需扩展历史契约。旧 Summary 不删除，`stripSynopsisTurns()` 保留。
 - 未验：macOS 两端 UI 和桌面 Codex。手动验收应使用独立合成会话，开启历史记录，分别完成 API、TUI、Dynamic、普通 Codex 和共享 Codex 一轮；在原回合结束与后台摘要完成之间比较转录字节、项目会话列表和桌面线程，确认没有新增 Summary 或会话，历史仍有条目；重启后再核对。
+
+### 7. Claude 跨应用只读跟随
+
+- Claude 新增本地 stat 版本探测，SSH 返回 null；只读路径沿用 Codex 的追加游标做法，最多保留两个已解析视图、每个不超过 32 MiB，使用已有文件身份与有限边界比较，不增加哈希。完整、SSH、增量共用一个转换器，第 2 至 4 项的结果与字段完整保留。
+- 新回归修改前出现四处失败：缺少版本探测、本地追加仍全文读取、Claude 跟随不生效。修复后四个文件 107 项通过，覆盖半行 JSON、UTF-8 分段、无末尾换行、并行工具结果后到、取消/失败、模型切换、分页、旧视图不被后到结果原地修改、截断/替换/重新增长、账户隔离和文件字节不变。8 MiB 文件正常追加后的读取量低于 2 KiB，未变化时不读取内容。
+- 跟随仍经过 `refreshNativeConversation`。Codex 与 Claude 的忙碌、队列和读取期间切换账户回归均通过；新增 Claude 集成回归确认最终日志追加而草稿、原生 ID、`scrollTop`、`isAtBottom`、`hasUnread`、活动页签和其他页签队列保持原值。
+- 交接契约：只跟随当前可见、本地、空闲且无本页签待发/重试的会话，沿用约 2 秒探测、焦点唤醒和既有失败退避。只更新 `logs`，不调整阅读位置或未读字段；新增内容的未读计数与展开/滚动表现由 Opus 接续既有前端规则。真实窗口中的滚动锚点和重启接续未验；两端同时向同一 Claude 会话发送仍不支持。
+
+### 最终检查
+
+- 推送前 `npm run lint`、`npm run lint:eslint`、`npm run format:check:all` 均通过。各项相关 Vitest 的实际结果见上文；`npm run test:codex-shared` 17 项全部通过。另有 `npm run lint:doc-refs`（39 份文档）、`node scripts/hb-release.mjs check` 与发布脚本 11 项测试通过。
+- 全仓 Vitest 与当前 PR 的 Linux / Windows 六项 CI 结果随 PR 更新；第 1 项的主线 CI 已在上方单独记录。不打包、不发布、不安装，不接触真实会话和账户目录，没有增加跳过项或放宽断言。
+- 第 6 项的范围确认尚未收到回复，按计划先提交其他已授权项，PR 保留草稿；不能将六项 CI 或 CLI 单独通过计作该入口的逐字节验收。macOS 双端、桌面 Codex 与重启接续仍未验。

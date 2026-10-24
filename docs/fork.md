@@ -41,3 +41,9 @@ npm run package:harness-bridge:mac
 打包脚本仅支持 Apple Silicon macOS，使用仓库锁定的依赖与原生模块，输出到 `release/harness-bridge/`。它会先完整构建，写入当前 Git commit，再生成应用 ZIP；不会安装应用、修改用户资料、上传资产或创建 GitHub Release。其他平台可继续研究上游构建流程，但不属于本轮预览包验证范围。
 
 开发协作继续采用前端原生 Claude Code Opus、后端与集成 GPT 的分工。每次发布应记录产品变化、源码基线、检查结果和产物 SHA-256；未完成的体验工作进入明确的下一阶段，不把工程检查通过当作产品验收通过。
+
+## 后端源码进展与限制
+
+[后端第二阶段](roadmap/backend-followups.md)补充了 Claude 工具历史、停止状态、原生模型字段，以及共享 Codex 命令增量。源码中的本地 Claude 会话与 Codex 一样，当前可见且空闲时约每两秒跟随原生转录；SSH 仍使用原有读取方式。刷新保留草稿、阅读状态和队列，只更新日志，不改变发送路径。两端同时向同一 Claude 会话发送仍不支持。
+
+Codex 和 Claude TUI / Dynamic 的后台历史条目改为最终回答首段的本地摘录。Claude API 的启动前转录清理入口仍待范围确认，不能据 CLI 的不持久化参数宣称整条路径已满足只读验收。真实 macOS 双端、重启和界面表现尚未验证；这些源码变化没有打包、安装或发布，hb.4 下载包保持原状。

@@ -310,6 +310,145 @@ async function parseSessionFileRemote(
 	}
 }
 
+interface ClaudeTranscriptParseState {
+	messages: SessionMessage[];
+	toolCalls: Map<string, { messageIndex: number; toolIndex: number }>;
+}
+
+interface ClaudeTranscriptCursor extends ClaudeTranscriptParseState {
+	dev: number;
+	ino: number;
+	size: number;
+	mtimeMs: number;
+	ctimeMs: number;
+	offset: number;
+	head: Buffer;
+	boundary: Buffer;
+	visibleMessages: SessionMessage[];
+}
+
+/** One conversion for local, SSH and append-only history reads. */
+function parseClaudeTranscript(
+	content: string,
+	initial?: ClaudeTranscriptParseState
+): ClaudeTranscriptParseState {
+	const lines = content.split('\n').filter((l) => l.trim());
+
+	const messages: SessionMessage[] = [...(initial?.messages ?? [])];
+	const toolCalls = new Map(initial?.toolCalls);
+
+	for (const line of lines) {
+		try {
+			const entry = JSON.parse(line);
+			if (entry.type === 'user' || entry.type === 'assistant') {
+				let msgContent = '';
+				let toolUse = undefined;
+				let images: string[] | undefined;
+
+				if (entry.message?.content) {
+					if (typeof entry.message.content === 'string') {
+						msgContent = entry.message.content;
+					} else if (Array.isArray(entry.message.content)) {
+						if (entry.type === 'user') {
+							for (const block of entry.message.content) {
+								if (block.type !== 'tool_result') continue;
+								const call = toolCalls.get(block.tool_use_id);
+								if (!call) continue;
+								const matching = messages[call.messageIndex];
+								const tools = matching.toolUse as Array<{ state?: Record<string, unknown> }>;
+								messages[call.messageIndex] = {
+									...matching,
+									toolUse: tools.map((tool, index) =>
+										index === call.toolIndex
+											? {
+													...tool,
+													state: {
+														...tool.state,
+														status: claudeToolResultStatus(block),
+														output: flattenToolResultContent(block.content),
+													},
+												}
+											: tool
+									),
+								};
+								toolCalls.delete(block.tool_use_id);
+							}
+						}
+						const textBlocks = entry.message.content.filter(
+							(b: { type?: string }) => b.type === 'text'
+						);
+						const toolBlocks = entry.message.content.filter(
+							(b: { type?: string }) => b.type === 'tool_use'
+						);
+						const imageBlocks = entry.message.content.filter(
+							(b: { type?: string }) => b.type === 'image'
+						);
+
+						// Reconstruct base64 data URLs from image content blocks so a
+						// resumed tab re-renders the original images instead of falling
+						// back to the harness's synthetic `[Image: ...]` placeholder text.
+						if (imageBlocks.length > 0) {
+							const urls = imageBlocks
+								.map((b: { source?: { type?: string; media_type?: string; data?: string } }) => {
+									const src = b.source;
+									if (src?.type === 'base64' && src.media_type && src.data) {
+										return `data:${src.media_type};base64,${src.data}`;
+									}
+									return null;
+								})
+								.filter((url: string | null): url is string => url !== null);
+							if (urls.length > 0) {
+								images = urls;
+							}
+						}
+
+						// Always drop the synthetic `[Image: ... Multiply coordinates by
+						// ...]` placeholder lines. They are redundant either way: when the
+						// image is in this same message we render the recovered image, and
+						// when the placeholder arrives as its own follow-up message it is a
+						// text echo of an image already shown in a prior message. Filtering
+						// line-by-line lets a placeholder-only message collapse to empty so
+						// it is dropped entirely below.
+						msgContent = stripImagePlaceholderLines(
+							textBlocks.map((b: { text?: string }) => b.text || '').join('\n')
+						);
+						if (toolBlocks.length > 0) {
+							toolUse = toolBlocks;
+							if (entry.type === 'assistant') {
+								for (const [toolIndex, block] of toolBlocks.entries()) {
+									if (block.id)
+										toolCalls.set(block.id, { messageIndex: messages.length, toolIndex });
+								}
+							}
+						}
+					}
+				}
+
+				if ((msgContent && msgContent.trim()) || toolUse || images) {
+					messages.push({
+						type: entry.type,
+						role: entry.message?.role,
+						content: msgContent,
+						timestamp: entry.timestamp,
+						uuid: entry.uuid,
+						toolUse,
+						...(entry.type === 'assistant' &&
+						typeof entry.message?.model === 'string' &&
+						entry.message.model !== '<synthetic>'
+							? { model: entry.message.model }
+							: {}),
+						...(images && { images }),
+					});
+				}
+			}
+		} catch {
+			// Skip malformed lines
+		}
+	}
+
+	return { messages, toolCalls };
+}
+
 /**
  * Claude Code Session Storage Implementation
  *
@@ -318,6 +457,110 @@ async function parseSessionFileRemote(
  */
 export class ClaudeSessionStorage extends BaseSessionStorage {
 	readonly agentId: ToolType = 'claude-code';
+
+	// Two active views at most; no history is copied to disk. The provider owns
+	// append-only rollouts. Replacements, shrinkage and same-size writes reset.
+	private readonly transcriptCursors = new Map<string, ClaudeTranscriptCursor>();
+
+	private async readLocalTranscriptIncrementally(
+		filePath: string,
+		options?: SessionReadOptions
+	): Promise<SessionMessagesResult> {
+		const file = await fs.open(filePath, 'r');
+		try {
+			const stat = await file.stat();
+			let prior = this.transcriptCursors.get(filePath);
+			if (
+				prior &&
+				(prior.dev !== stat.dev ||
+					prior.ino !== stat.ino ||
+					stat.size < prior.size ||
+					(stat.size === prior.size &&
+						(stat.mtimeMs !== prior.mtimeMs || stat.ctimeMs !== prior.ctimeMs)))
+			)
+				prior = undefined;
+			if (prior && stat.size === prior.size)
+				return BaseSessionStorage.applyMessagePagination(prior.visibleMessages, options);
+			// A truncate-and-regrow or in-place edit is not an append. Check both the
+			// file prefix and the committed boundary before extending the cursor.
+			if (prior) {
+				const head = Buffer.alloc(prior.head.length);
+				await file.read(head, 0, head.length, 0);
+				const boundary = Buffer.alloc(prior.boundary.length);
+				await file.read(boundary, 0, boundary.length, prior.offset - boundary.length);
+				if (!head.equals(prior.head) || !boundary.equals(prior.boundary)) prior = undefined;
+			}
+			const start = prior?.offset ?? 0;
+			const bytes = Buffer.alloc(stat.size - start);
+			let read = 0;
+			while (read < bytes.length) {
+				const { bytesRead } = await file.read(bytes, read, bytes.length - read, start + read);
+				if (bytesRead === 0) {
+					this.transcriptCursors.delete(filePath);
+					throw new Error('Claude transcript changed during read; retry on the next refresh');
+				}
+				read += bytesRead;
+			}
+			const completeLength = bytes.lastIndexOf(10) + 1;
+			const committed = parseClaudeTranscript(
+				bytes.subarray(0, completeLength).toString('utf8'),
+				prior
+			);
+			// A final complete JSON row without a newline is visible, but not committed
+			// to the cursor. A partial UTF-8/JSON row is re-read intact on the next tick.
+			const visible =
+				completeLength < bytes.length
+					? parseClaudeTranscript(bytes.subarray(completeLength).toString('utf8'), committed)
+							.messages
+					: committed.messages;
+			const offset = start + completeLength;
+			const head = Buffer.alloc(Math.min(256, offset));
+			await file.read(head, 0, head.length, 0);
+			const boundary = Buffer.alloc(Math.min(256, offset));
+			await file.read(boundary, 0, boundary.length, offset - boundary.length);
+			this.transcriptCursors.delete(filePath);
+			// Bound retained parsed content; oversized histories still use the same
+			// correct converter, but do not become a permanent main-process cache.
+			if (Buffer.byteLength(JSON.stringify(visible)) <= 32 * 1024 * 1024) {
+				this.transcriptCursors.set(filePath, {
+					...committed,
+					dev: stat.dev,
+					ino: stat.ino,
+					size: stat.size,
+					mtimeMs: stat.mtimeMs,
+					ctimeMs: stat.ctimeMs,
+					offset,
+					head,
+					boundary,
+					visibleMessages: visible,
+				});
+				if (this.transcriptCursors.size > 2)
+					this.transcriptCursors.delete(this.transcriptCursors.keys().next().value!);
+			}
+			return BaseSessionStorage.applyMessagePagination(visible, options);
+		} finally {
+			await file.close();
+		}
+	}
+
+	/** Probe local transcript metadata only; remote reads keep their existing path. */
+	async getTranscriptRevision(
+		projectPath: string,
+		sessionId: string,
+		options?: SessionReadOptions,
+		sshConfig?: SshRemoteConfig
+	): Promise<string | null> {
+		if (sshConfig || !sessionId) return null;
+		const filePath = await this.locateLocalSessionFile(projectPath, sessionId, options?.configDir);
+		try {
+			const stat = await fs.stat(filePath);
+			if (!stat.isFile()) return null;
+			return `${stat.dev}:${stat.ino}:${stat.ctimeMs}:${fileFingerprint(stat.size, stat.mtimeMs)}`;
+		} catch (error) {
+			if (!isExpectedSessionReadError(error)) throw error;
+			return null;
+		}
+	}
 
 	private originsStore: Store<ClaudeSessionOriginsData>;
 
@@ -824,111 +1067,14 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 				sessionId,
 				options?.configDir
 			);
+			if (options?.readOnly) return this.readLocalTranscriptIncrementally(sessionFile, options);
 			content = await fs.readFile(sessionFile, 'utf-8');
 		}
 
-		const lines = content.split('\n').filter((l) => l.trim());
-
-		const messages: SessionMessage[] = [];
-		const toolCalls = new Map<string, { state?: { status: string; output: string } }>();
-
-		for (const line of lines) {
-			try {
-				const entry = JSON.parse(line);
-				if (entry.type === 'user' || entry.type === 'assistant') {
-					let msgContent = '';
-					let toolUse = undefined;
-					let images: string[] | undefined;
-
-					if (entry.message?.content) {
-						if (typeof entry.message.content === 'string') {
-							msgContent = entry.message.content;
-						} else if (Array.isArray(entry.message.content)) {
-							if (entry.type === 'user') {
-								for (const block of entry.message.content) {
-									if (block.type !== 'tool_result') continue;
-									const call = toolCalls.get(block.tool_use_id);
-									if (!call) continue;
-									call.state = {
-										...call.state,
-										status: claudeToolResultStatus(block),
-										output: flattenToolResultContent(block.content),
-									};
-									toolCalls.delete(block.tool_use_id);
-								}
-							}
-							const textBlocks = entry.message.content.filter(
-								(b: { type?: string }) => b.type === 'text'
-							);
-							const toolBlocks = entry.message.content.filter(
-								(b: { type?: string }) => b.type === 'tool_use'
-							);
-							const imageBlocks = entry.message.content.filter(
-								(b: { type?: string }) => b.type === 'image'
-							);
-
-							// Reconstruct base64 data URLs from image content blocks so a
-							// resumed tab re-renders the original images instead of falling
-							// back to the harness's synthetic `[Image: ...]` placeholder text.
-							if (imageBlocks.length > 0) {
-								const urls = imageBlocks
-									.map((b: { source?: { type?: string; media_type?: string; data?: string } }) => {
-										const src = b.source;
-										if (src?.type === 'base64' && src.media_type && src.data) {
-											return `data:${src.media_type};base64,${src.data}`;
-										}
-										return null;
-									})
-									.filter((url: string | null): url is string => url !== null);
-								if (urls.length > 0) {
-									images = urls;
-								}
-							}
-
-							// Always drop the synthetic `[Image: ... Multiply coordinates by
-							// ...]` placeholder lines. They are redundant either way: when the
-							// image is in this same message we render the recovered image, and
-							// when the placeholder arrives as its own follow-up message it is a
-							// text echo of an image already shown in a prior message. Filtering
-							// line-by-line lets a placeholder-only message collapse to empty so
-							// it is dropped entirely below.
-							msgContent = stripImagePlaceholderLines(
-								textBlocks.map((b: { text?: string }) => b.text || '').join('\n')
-							);
-							if (toolBlocks.length > 0) {
-								toolUse = toolBlocks;
-								if (entry.type === 'assistant') {
-									for (const block of toolBlocks) {
-										if (block.id) toolCalls.set(block.id, block);
-									}
-								}
-							}
-						}
-					}
-
-					if ((msgContent && msgContent.trim()) || toolUse || images) {
-						messages.push({
-							type: entry.type,
-							role: entry.message?.role,
-							content: msgContent,
-							timestamp: entry.timestamp,
-							uuid: entry.uuid,
-							toolUse,
-							...(entry.type === 'assistant' &&
-							typeof entry.message?.model === 'string' &&
-							entry.message.model !== '<synthetic>'
-								? { model: entry.message.model }
-								: {}),
-							...(images && { images }),
-						});
-					}
-				}
-			} catch {
-				// Skip malformed lines
-			}
-		}
-
-		return BaseSessionStorage.applyMessagePagination(messages, options);
+		return BaseSessionStorage.applyMessagePagination(
+			parseClaudeTranscript(content).messages,
+			options
+		);
 	}
 
 	protected async getSearchableMessages(

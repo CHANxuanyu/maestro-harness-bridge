@@ -673,3 +673,97 @@ describe('reconcileTranscriptEntries: upgrading a legacy cache in place', () => 
 		expect(hasLegacyTranscriptEntries(transcriptMessagesToLogEntries(CODEX_TURN))).toBe(false);
 	});
 });
+
+describe('native turn settings', () => {
+	it('stamps the model and effort a reply was recorded with onto its answer only', () => {
+		const entries = transcriptMessagesToLogEntries([
+			m('u1', 'user', 'q', T0),
+			m('r1', 'assistant', 'thinking it over', T1, {
+				channel: 'analysis',
+				model: 'gpt-5.5-codex',
+				effort: 'high',
+			}),
+			m('call_1', 'assistant', 'Tool: exec_command', T2, {
+				model: 'gpt-5.5-codex',
+				effort: 'high',
+				toolUse: [{ tool: 'exec_command', state: { status: 'completed' } }],
+			}),
+			m('a1', 'assistant', 'done', T3, { model: 'gpt-5.5-codex', effort: 'high' }),
+		]);
+		const byId = new Map(entries.map((e) => [e.id, e]));
+		expect(byId.get('a1')).toMatchObject({
+			turnModel: 'gpt-5.5-codex',
+			turnEffort: 'high',
+			turnSettingsSource: 'native',
+		});
+		// Only the answer carries the pair, as a live turn stamps only its output.
+		for (const id of ['u1', 'r1', 'call_1']) {
+			expect(byId.get(id)?.turnModel).toBeUndefined();
+			expect(byId.get(id)?.turnSettingsSource).toBeUndefined();
+		}
+	});
+
+	it('leaves an axis the native record did not write unset', () => {
+		const [answer] = transcriptMessagesToLogEntries([
+			m('a1', 'assistant', 'done', T1, { model: 'claude-opus-5-5' }),
+		]);
+		expect(answer.turnModel).toBe('claude-opus-5-5');
+		expect(answer.turnEffort).toBeUndefined();
+		const [bare] = transcriptMessagesToLogEntries([m('a2', 'assistant', 'done', T1)]);
+		expect(bare.turnModel).toBeUndefined();
+		expect(bare.turnSettingsSource).toBeUndefined();
+	});
+
+	it('fills a cached reply that has no stamp, and keeps a send-time stamp over the native one', () => {
+		const loaded = transcriptMessagesToLogEntries([
+			m('u1', 'user', 'q', T0),
+			m('a1', 'assistant', 'first', T1, { model: 'claude-opus-5-5' }),
+			m('u2', 'user', 'q2', T2),
+			m('a2', 'assistant', 'second', T3, { model: 'claude-opus-5-5' }),
+		]);
+		const cache: LogEntry[] = [
+			{ id: 'u1', timestamp: Date.parse(T0), source: 'user', text: 'q' },
+			{ id: 'a1', timestamp: Date.parse(T1), source: 'stdout', text: 'first' },
+			{ id: 'u2', timestamp: Date.parse(T2), source: 'user', text: 'q2' },
+			{
+				id: 'a2',
+				timestamp: Date.parse(T3),
+				source: 'stdout',
+				text: 'second',
+				turnModel: 'opus',
+			},
+		];
+		const { logs, upgraded } = reconcileTranscriptEntries(loaded, cache);
+		expect(upgraded).toBe(1);
+		expect(logs[1]).toMatchObject({
+			turnModel: 'claude-opus-5-5',
+			turnSettingsSource: 'native',
+		});
+		expect(logs[3].turnModel).toBe('opus');
+		expect(logs[3].turnSettingsSource).toBeUndefined();
+		// Once filled, a second pass changes nothing.
+		expect(reconcileTranscriptEntries(loaded, logs).upgraded).toBe(0);
+	});
+
+	it('keeps the source when a response group is collapsed into one row', () => {
+		const [row] = collapseAiResponseLogs([
+			{
+				id: 'n1',
+				timestamp: 1,
+				source: 'stdout',
+				text: 'a',
+				nativeTranscript: { messageId: 'n1' },
+			},
+			{
+				id: 'n2',
+				timestamp: 2,
+				source: 'stdout',
+				text: 'b',
+				nativeTranscript: { messageId: 'n2' },
+				turnModel: 'gpt-5.5-codex',
+				turnSettingsSource: 'native',
+			},
+		]);
+		expect(row).toMatchObject({ turnModel: 'gpt-5.5-codex', turnSettingsSource: 'native' });
+	});
+});

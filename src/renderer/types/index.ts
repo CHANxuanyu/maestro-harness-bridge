@@ -327,13 +327,19 @@ export interface LogEntry {
 	// forward-compatible metadata for any future divergence.
 	renderStyle?: 'structured' | 'text-stream';
 	// The model and effort this turn ran under, copied from the tab's send-time
-	// stamp (`AITab.turnModel` / `turnEffort`) when the entry is created. The
+	// stamp (`AITab.turnModel` / `turnEffort`) when the entry is created, or for a
+	// reply read back from history, from the provider's own record. The
 	// transcript is a record of who answered what: a user who switches model or
 	// effort mid-conversation can read back which configuration produced each
-	// response. Undefined means the agent's own default was in force, and the
-	// footer pill is omitted rather than guessed at.
+	// response. Undefined means unknown (the agent's own default, or nothing
+	// recorded), and the footer pill is omitted rather than guessed at.
 	turnModel?: string;
 	turnEffort?: string;
+	// Where the pair above came from. Absent: the tab's send-time stamp (what the
+	// user picked, possibly an alias such as `opus`). 'native': the provider's own
+	// transcript (the model id it recorded). The two spell the same configuration
+	// differently, so a change is only ever reported between values of one kind.
+	turnSettingsSource?: 'native';
 	// For session_not_found system entries - payload for the inline "Create new
 	// session from prior context" action. The button on the entry opens
 	// SessionRecoveryModal which re-spawns the agent in place on `tabId`,

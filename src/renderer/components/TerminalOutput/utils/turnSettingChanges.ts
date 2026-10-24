@@ -51,9 +51,13 @@ export function isFeedReplyRow(log: LogEntry): boolean {
  * - Each axis keeps its own baseline: the last reply that recorded a value.
  * - A change is reported only when BOTH values are recorded and differ. An
  *   unstamped reply (written before stamps existed, read back from a provider
- *   transcript, or run on the agent default) is unknown, so it neither reports
- *   a change nor moves the baseline. Labelling a guess as the model would be
- *   worse than saying nothing.
+ *   transcript that recorded nothing, or run on the agent default) is unknown,
+ *   so it neither reports a change nor moves the baseline. Labelling a guess as
+ *   the model would be worse than saying nothing.
+ * - Both values must also come from the same place. A send-time stamp holds
+ *   what the user picked (often an alias such as `opus`); a native record holds
+ *   the id the provider wrote. A reply of the other kind only moves the
+ *   baseline, so a spelling difference is never reported as a switch.
  * - A cross-agent reply ran under ANOTHER agent's configuration and carries
  *   its own attribution header, so it reports nothing and leaves the baseline
  *   alone. It still counts as the newest reply: it is an answer.
@@ -67,26 +71,27 @@ export function computeTurnSettingChanges(rows: LogEntry[]): {
 } {
 	const changes = new Map<string, TurnSettingChange>();
 	let latestReplyId: string | null = null;
-	let lastModel: string | undefined;
-	let lastEffort: string | undefined;
+	let lastModel: { value: string; source: LogEntry['turnSettingsSource'] } | undefined;
+	let lastEffort: { value: string; source: LogEntry['turnSettingsSource'] } | undefined;
 
 	for (const row of rows) {
 		if (!isFeedReplyRow(row)) continue;
 		latestReplyId = row.id;
 		if (row.metadata?.crossAgent) continue;
 
+		const source = row.turnSettingsSource;
 		const change: TurnSettingChange = {};
 		if (row.turnModel) {
-			if (lastModel && lastModel !== row.turnModel) {
-				change.model = { from: lastModel, to: row.turnModel };
+			if (lastModel && lastModel.source === source && lastModel.value !== row.turnModel) {
+				change.model = { from: lastModel.value, to: row.turnModel };
 			}
-			lastModel = row.turnModel;
+			lastModel = { value: row.turnModel, source };
 		}
 		if (row.turnEffort) {
-			if (lastEffort && lastEffort !== row.turnEffort) {
-				change.effort = { from: lastEffort, to: row.turnEffort };
+			if (lastEffort && lastEffort.source === source && lastEffort.value !== row.turnEffort) {
+				change.effort = { from: lastEffort.value, to: row.turnEffort };
 			}
-			lastEffort = row.turnEffort;
+			lastEffort = { value: row.turnEffort, source };
 		}
 		if (change.model || change.effort) changes.set(row.id, change);
 	}

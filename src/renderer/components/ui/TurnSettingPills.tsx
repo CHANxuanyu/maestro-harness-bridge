@@ -9,7 +9,8 @@
  * configuration produced each response.
  *
  * Values come from the entry's send-time stamp (`LogEntry.turnModel` /
- * `turnEffort`). An unset value means the agent's own default was in force, and
+ * `turnEffort`), or for a reply read back from history, from what the provider
+ * recorded (`turnSettingsSource: 'native'`). An unset value is unknown, and
  * that pill is omitted rather than labeled with a guess.
  *
  * Both pills carry `data-turn-setting-pill`, which the phone block in

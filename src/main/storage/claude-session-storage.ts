@@ -49,6 +49,7 @@ import { setClaudeSessionOrigin } from './claude-session-origins';
 import type { SearchableMessage } from './base-session-storage';
 import { countClaudeTranscriptMessages } from '../../shared/claudeTranscriptMessages';
 import { getProviderAccountDirs } from '../agents/provider-account-dirs';
+import { flattenToolResultContent } from '../parsers/claude-output-parser';
 export type { ClaudeSessionOriginsData } from '../stores/types';
 
 /**
@@ -829,6 +830,7 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 		const lines = content.split('\n').filter((l) => l.trim());
 
 		const messages: SessionMessage[] = [];
+		const toolCalls = new Map<string, { state?: { status: string; output: string } }>();
 
 		for (const line of lines) {
 			try {
@@ -842,6 +844,19 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 						if (typeof entry.message.content === 'string') {
 							msgContent = entry.message.content;
 						} else if (Array.isArray(entry.message.content)) {
+							if (entry.type === 'user') {
+								for (const block of entry.message.content) {
+									if (block.type !== 'tool_result') continue;
+									const call = toolCalls.get(block.tool_use_id);
+									if (!call) continue;
+									call.state = {
+										...call.state,
+										status: block.is_error ? 'failed' : 'completed',
+										output: flattenToolResultContent(block.content),
+									};
+									toolCalls.delete(block.tool_use_id);
+								}
+							}
 							const textBlocks = entry.message.content.filter(
 								(b: { type?: string }) => b.type === 'text'
 							);
@@ -882,6 +897,11 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 							);
 							if (toolBlocks.length > 0) {
 								toolUse = toolBlocks;
+								if (entry.type === 'assistant') {
+									for (const block of toolBlocks) {
+										if (block.id) toolCalls.set(block.id, block);
+									}
+								}
 							}
 						}
 					}

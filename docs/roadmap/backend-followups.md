@@ -1,6 +1,6 @@
 # 后端第二阶段计划
 
-状态：待 Codex 实施。2026-10-24 起草，用户已确认第 1 至 7 项全部由 Codex 完成，无需再等审阅；本阶段结束后由原生 Claude Code Opus 接手前端。
+状态：Codex 实施中。2026-10-24 起草，用户已确认第 1 至 7 项全部由 Codex 完成，无需再等审阅；本阶段结束后由原生 Claude Code Opus 接手前端。
 
 本计划接续[信息流后端改进计划](backend-reliability.md)。上一阶段修复了 Codex 一侧的工具输入、失败与取消状态、回合收束和退出事件完整性。本阶段补上 PR 收尾、Claude Code 的同类缺口，以及上一阶段推迟或没有覆盖的后端项。每项依据都已在代码中确认，行号以 `codex/backend-reliability` 的 `8d01b54` 为准；实施时发现与代码不符，以代码为准并在完成记录中说明。
 
@@ -81,4 +81,12 @@
 
 ## 完成记录
 
-实施后填写：每项的问题、改动、实际测试结果和未验项，保持简短。
+### 1. PR #3 收尾
+
+- PR 提交 `dc6c597` 的[六项 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40123603835) 全部通过，审查线程为空，已补齐审查和验收记录、转为正式 PR 并合并。
+- 实际主线合并提交为 `24fbde9a96a29a793a0f412d7754fcd6eed71119`；`codex/backend-followups` 从该提交建立。[主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40125342570) 正在运行，最终结果待补。
+
+### 2. Claude 工具结果
+
+- 按 `tool_use_id` 在分页前配对，保留调用输入和 ID，复用实时解析的输出展平与 4000 字符截断。孤立结果继续忽略，混合消息保留普通正文。
+- 新增本地、SSH 两个回归，修改前都因缺失 `state` 失败；修改后存储与解析器两个文件共 159 项通过。覆盖并行乱序结果、成功/失败、空输入输出、长输出、分页和读取不写文件。

@@ -12,8 +12,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
 import { ClaudeSessionStorage } from '../../../main/storage/claude-session-storage';
+import { ClaudeOutputParser } from '../../../main/parsers/claude-output-parser';
 import { captureException } from '../../../main/utils/sentry';
-import { listDirWithStatsRemote } from '../../../main/utils/remote-fs';
+import { listDirWithStatsRemote, readFileRemote } from '../../../main/utils/remote-fs';
 import type { SshRemoteConfig } from '../../../shared/types';
 import type Store from 'electron-store';
 import type { ClaudeSessionOriginsData } from '../../../main/storage/claude-session-storage';
@@ -530,6 +531,121 @@ describe('ClaudeSessionStorage', () => {
 			expect(fs.readFile).toHaveBeenCalledWith(expected, 'utf-8');
 			expect(result.messages).toHaveLength(1);
 		});
+	});
+
+	describe('readSessionMessages - tool results', () => {
+		it.each(['local', 'SSH'])(
+			'pairs parallel results before pagination over %s',
+			async (source) => {
+				const calls = [
+					{ type: 'tool_use', id: 'call-read', name: 'Read', input: { file_path: 'a.ts' } },
+					{ type: 'tool_use', id: 'call-patch', name: 'Edit', input: 'patch text' },
+					{ type: 'tool_use', id: 'call-search', name: 'Grep', input: { pattern: 'needle' } },
+					{ type: 'tool_use', id: 'call-empty', name: 'Bash', input: '' },
+				];
+				const invocation = {
+					type: 'assistant',
+					uuid: 'parallel',
+					message: { role: 'assistant', content: calls },
+				};
+				const results = {
+					type: 'user',
+					message: {
+						role: 'user',
+						content: [
+							{
+								type: 'tool_result',
+								tool_use_id: 'call-search',
+								is_error: true,
+								content: 'denied',
+							},
+							{
+								type: 'tool_result',
+								tool_use_id: 'call-read',
+								content: [
+									{ type: 'text', text: 'first' },
+									{ type: 'text', text: 'second' },
+								],
+							},
+							{ type: 'tool_result', tool_use_id: 'call-empty', content: '' },
+							{ type: 'tool_result', tool_use_id: 'call-patch', content: 'x'.repeat(4100) },
+						],
+					},
+				};
+				const transcript = [
+					{ type: 'user', uuid: 'question', message: { role: 'user', content: 'inspect' } },
+					invocation,
+					results,
+					{
+						type: 'user',
+						uuid: 'followup',
+						message: {
+							role: 'user',
+							content: [
+								{ type: 'tool_result', tool_use_id: 'orphan', content: 'never a card or body' },
+								{ type: 'text', text: 'continue' },
+							],
+						},
+					},
+					{ type: 'assistant', uuid: 'answer', message: { role: 'assistant', content: 'done' } },
+				]
+					.map((row) => JSON.stringify(row))
+					.join('\n');
+				vi.mocked(fs.readFile).mockResolvedValue(transcript);
+				vi.mocked(readFileRemote).mockResolvedValue({ success: true, data: transcript });
+				const ssh = source === 'SSH' ? ({ id: 'synthetic-remote' } as SshRemoteConfig) : undefined;
+				const options = { configDir: '/synthetic-account', limit: 20 };
+
+				const parser = new ClaudeOutputParser();
+				const liveCalls = parser.parseJsonObject(invocation)!;
+				const liveResults = parser.parseJsonObject(results)!;
+				const states = new Map(
+					[liveResults, ...(liveResults.toolResultBlocks ?? [])].map((result) => [
+						result.toolCallId,
+						result.toolState,
+					])
+				);
+				const expected = calls.map((call) => ({ ...call, state: states.get(call.id) }));
+				expect(liveCalls.toolUseBlocks?.map((block) => block.input)).toEqual(
+					calls.map((call) => call.input)
+				);
+				expect([...states.values()]).toEqual([
+					{ status: 'failed', output: 'denied' },
+					{ status: 'completed', output: 'firstsecond' },
+					{ status: 'completed', output: '' },
+					{ status: 'completed', output: 'x'.repeat(4000) + '...' },
+				]);
+
+				const full = await storage.readSessionMessages(
+					'/project',
+					'synthetic-session',
+					options,
+					ssh
+				);
+				expect(full.messages.map((message) => message.uuid)).toEqual([
+					'question',
+					'parallel',
+					'followup',
+					'answer',
+				]);
+				expect(full.messages[1].toolUse).toEqual(expected);
+				expect(full.messages[2].content).toBe('continue');
+				expect(full).toMatchObject({ total: 4, hasMore: false });
+				const page = await storage.readSessionMessages(
+					'/project',
+					'synthetic-session',
+					{ ...options, offset: 2, limit: 1 },
+					ssh
+				);
+				expect(page).toEqual({ messages: [full.messages[1]], total: 4, hasMore: true });
+				expect(page.messages[0].toolUse).toEqual(expected);
+				expect(fs.writeFile).not.toHaveBeenCalled();
+				expect(fs.rename).not.toHaveBeenCalled();
+				expect(fs.unlink).not.toHaveBeenCalled();
+				if (ssh) expect(fs.readFile).not.toHaveBeenCalled();
+				else expect(readFileRemote).not.toHaveBeenCalled();
+			}
+		);
 	});
 
 	describe('readSessionMessages - image reconstruction', () => {

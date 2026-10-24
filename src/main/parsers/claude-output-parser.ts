@@ -113,7 +113,7 @@ const MAX_TOOL_OUTPUT_CHARS = 4000;
  * Claude sends either a plain string or an array of `{ type: 'text', text }`
  * blocks. Output is truncated to MAX_TOOL_OUTPUT_CHARS.
  */
-function flattenToolResultContent(content: ClaudeContentBlock['content']): string {
+export function flattenToolResultContent(content: ClaudeContentBlock['content']): string {
 	let text: string;
 	if (typeof content === 'string') {
 		text = content;

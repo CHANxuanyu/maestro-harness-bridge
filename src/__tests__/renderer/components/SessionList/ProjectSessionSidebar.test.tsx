@@ -10,6 +10,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ProjectHistoryConversation } from '../../../../shared/projectHistory';
 import type { Group, Session } from '../../../../renderer/types';
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
+import { useUIStore } from '../../../../renderer/stores/uiStore';
 // vi.mock calls below are hoisted above these imports.
 import { ProjectSessionSidebar } from '../../../../renderer/components/SessionList/ProjectSessionSidebar';
 import { createMockSession } from '../../../helpers/mockSession';
@@ -215,5 +216,56 @@ describe('ProjectSessionSidebar native refresh', () => {
 		renderSidebar(useSessionStore.getState().sessions);
 		await act(async () => {});
 		expect(refreshNativeConversation).not.toHaveBeenCalled();
+	});
+});
+
+describe('ProjectSessionSidebar hands the caret to the composer', () => {
+	// The Left Bar's own container sets activeFocus back to 'sidebar' on every
+	// click that bubbles up to it, so a row cannot rely on setting 'main' itself:
+	// it asks the main panel to focus the conversation's composer instead.
+	function renderInsideLeftBar() {
+		return render(
+			<div onClick={() => useUIStore.getState().setActiveFocus('sidebar')}>
+				<ProjectSessionSidebar
+					theme={mockTheme}
+					sessions={useSessionStore.getState().sessions}
+					groups={[GROUP]}
+					groupsPlusEnabled={false}
+					unreadOnly={false}
+					onToggleGroup={vi.fn()}
+					onAddAgent={vi.fn()}
+					onResumeSession={vi.fn()}
+				/>
+			</div>
+		);
+	}
+
+	beforeEach(() => {
+		useUIStore.getState().clearFocusRequest();
+	});
+
+	it('asks for the selected conversation to take focus', () => {
+		const { container } = renderInsideLeftBar();
+		fireEvent.click(rowButton(container));
+		expect(useUIStore.getState().focusRequest).toEqual({ tab: { type: 'ai', id: 'tab-native' } });
+	});
+
+	it('asks for a new conversation to take focus', () => {
+		tabHandlers.handleNewAgentSession.mockImplementation(() => {
+			const [session] = useSessionStore.getState().sessions;
+			useSessionStore.setState({
+				sessions: [
+					{
+						...session,
+						aiTabs: [...session.aiTabs, createMockAITab({ id: 'tab-new' })],
+						activeTabId: 'tab-new',
+					},
+				],
+			} as never);
+		});
+		renderInsideLeftBar();
+		fireEvent.click(screen.getByRole('button', { name: /^workflows\.conversations\.new: / }));
+		expect(tabHandlers.handleNewAgentSession).toHaveBeenCalledTimes(1);
+		expect(useUIStore.getState().focusRequest).toEqual({ tab: { type: 'ai', id: 'tab-new' } });
 	});
 });

@@ -38,6 +38,7 @@ import {
 	refreshNativeConversation,
 } from '../../services/refreshNativeConversation';
 import { hasLegacyTranscriptEntries } from '../../utils/transcriptMessages';
+import { isPhoneLayout } from '../../hooks/ui/useViewportBreakpoint';
 
 interface ProjectSessionSidebarProps {
 	theme: Theme;
@@ -103,6 +104,12 @@ function rememberOpenConversations(
 }
 
 /** Reuse the tab-strip actions so sidebar and tab navigation retain identical semantics. */
+/** The tab the active agent shows now (after a new or reopened conversation). */
+function activeTabIdNow(): string | undefined {
+	const { sessions, activeSessionId } = useSessionStore.getState();
+	return sessions.find((session) => session.id === activeSessionId)?.activeTabId;
+}
+
 export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	theme,
 	sessions,
@@ -210,9 +217,19 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 		return true;
 	}, []);
 
-	const leaveSidebar = useCallback(() => {
-		useUIStore.getState().setActiveFocus('main');
-		useUIStore.getState().closeLeftSidebarForNavigation();
+	/**
+	 * Hand the user to the conversation they picked. Setting activeFocus here is
+	 * not enough: the Left Bar's own container sets it back to 'sidebar' as the
+	 * click bubbles up, and the DOM focus would stay on the row. A focus request
+	 * is consumed by the main panel after the tab renders, which puts the caret
+	 * in its composer. Not on a phone, where focusing the composer would raise
+	 * the keyboard over the conversation the user opened to read.
+	 */
+	const leaveSidebar = useCallback((tabId: string | undefined) => {
+		const ui = useUIStore.getState();
+		ui.setActiveFocus('main');
+		if (tabId && !isPhoneLayout()) ui.requestTabFocus({ type: 'ai', id: tabId });
+		ui.closeLeftSidebarForNavigation();
 	}, []);
 
 	const openHistory = useCallback(
@@ -231,10 +248,10 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 				pendingRef.current.delete(key);
 				setPendingKeys((prev) => withoutKey(prev, key));
 				if (result.status === 'failed') setFailedKeys((prev) => ({ ...prev, [key]: true }));
-				if (result.status === 'opened') useUIStore.getState().setActiveFocus('main');
+				if (result.status === 'opened') leaveSidebar(activeTabIdNow());
 			});
 		},
-		[onResumeSession]
+		[onResumeSession, leaveSidebar]
 	);
 
 	// Newest native `modifiedAt` each record was already refreshed for, so a
@@ -281,7 +298,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 			if (!selectOwner(conversation.ownerId)) return;
 			noteDirectSelection(conversation.ownerId, conversation.tabId);
 			handleTabSelect(conversation.tabId);
-			leaveSidebar();
+			leaveSidebar(conversation.tabId);
 			// The tab may hold a copy from before the conversation continued in
 			// another app. Selecting it is the moment the user wants it current.
 			if (conversation.nativeSessionId) {
@@ -326,7 +343,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 			if (!selectOwner(ownerId)) return;
 			noteDirectSelection(ownerId, null);
 			handleNewAgentSession();
-			leaveSidebar();
+			leaveSidebar(activeTabIdNow());
 		},
 		[selectOwner, handleNewAgentSession, leaveSidebar]
 	);

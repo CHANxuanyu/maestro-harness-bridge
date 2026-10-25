@@ -1,6 +1,6 @@
 # 后端第三阶段计划
 
-状态：实施中，任务一已合并，任务二按提供方依次进行。2026-10-25 起草，用户已确认由 Codex 依次完成三项任务，无需再等审阅。
+状态：任务一已合并，任务二的 Copilot CI 时限受阻，任务三云端实现与本地验收完成。合并与主线 CI 链接记录在[性能 PR](https://github.com/CHANxuanyu/maestro-harness-bridge/pulls?q=is%3Apr+head%3Acodex%2Fstage3-performance) 的描述中。2026-10-25 起草，用户已确认由 Codex 依次完成三项任务，无需再等审阅。
 
 前三轮（[后端可靠性](backend-reliability.md)、[后端第二阶段](backend-followups.md)、[端到端验收](native-e2e.md)）把 Codex 和 Claude Code 的原生接续做扎实了，并建好了能在 CI 里驱动真实应用的端到端框架。本阶段处理剩下的三处后端缺口，按价值排序：
 
@@ -81,7 +81,7 @@
 
 - **问题和修改：** 原生工具的 `callID` 未透传，`error` 正文与中断标记丢失，历史缺少 assistant 的模型；四条真实 SQLite 回归先失败，再修复。实时与历史共用状态转换，保留输入，按调用 ID 输出结果。新增本地 SQLite 版本探测和只读增量游标，覆盖 WAL、同毫秒更新、删除、数据库替换与分页，加入原有闲置跟随范围。
 - **官方证据和判断：** 锁定 OpenCode 1.19.4 的提交与字段出处见[提供方契约](../native-provider-contracts.md#opencode-1194)。官方 stdout 只发工具终态；`step_finish` 是步骤边界，不能当整回合终止过滤后续事件，补合法多步骤回归。模型预设 `variant` 不等于思考等级，因此不填 `effort`。没有新增未知格式分支。
-- **本地验收：** 相关单元测试 44/44；完整 Electron 套件 31/31，其中本家 a 至 f 6/6；合成凭据真实入口 6/6；夹具 19/19，连接器 26/26，发布策略 11/11。类型、ESLint、全仓格式、文档引用和发布策略检查通过。临时移除接续参数、错误/中断转换、历史模型和 hook 的提供方条件后，六个场景分别在下一轮回答、失败输出、停止状态、重启接续、模型和闲置追加断言上失败；临时修改未提交，恢复后完整套件通过。[PR #10](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/10) 七项检查全部通过后合并为 0f92503e317909c4bcbcb2f0ca2ca928a85173d4；主线 CI 待确认。
+- **本地验收：** 相关单元测试 44/44；完整 Electron 套件 31/31，其中本家 a 至 f 6/6；合成凭据真实入口 6/6；夹具 19/19，连接器 26/26，发布策略 11/11。类型、ESLint、全仓格式、文档引用和发布策略检查通过。临时移除接续参数、错误/中断转换、历史模型和 hook 的提供方条件后，六个场景分别在下一轮回答、失败输出、停止状态、重启接续、模型和闲置追加断言上失败；临时修改未提交，恢复后完整套件通过。[PR #10](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/10) 七项检查全部通过后合并为 0f92503e317909c4bcbcb2f0ca2ca928a85173d4；[主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40169459141) 七项通过。
 - **限制：** a 至 f 通过正常设置关闭后台摘要，摘要 h 不在本项范围；开启自动历史摘要仍沿用既有原生调用，不能宣称无转录副作用。旧版 JSON 与 SSH 格式没有用当前官方版本证明，保留既有读取但未启用增量跟随。真实账户、macOS 和真实 CLI 未验，云端合成真实入口只验证隔离及调用流程。
 - **CI 修正：** 首轮 Linux 分片指出 hook 的旧测试仍把 OpenCode 归为不支持的提供方。保留对不支持提供方返回空值的断言，并新增 OpenCode 的支持、忙碌与排队保护断言；hook 测试 21/21，推送前检查再次通过。没有改前端行为、跳过或放宽断言。
 - **Opus：** 本项只改允许的 hook 提供方条件。暂未发现需改界面的缺陷；若后续要使 OpenCode 自动摘要不改变原生记录，需要另立范围，现有后台摘要行为未被本轮修改。
@@ -92,16 +92,77 @@
 - **只读读取：** chat_history 与 updates 共同决定 revision；按字节增量读取，复用既有游标机制，不加哈希。增量和完整结果、分页、部分 UTF-8 尾行及替换文件一致；最多缓存两条会话，超过每文件 32 MiB 则完整读取。原生没有消息时间，保持缺省语义。
 - **本地验收：** 修复前相关回归失败，修复后 parser/storage 72/72；合成凭据真实入口 6/6，46.8 秒，源凭据字节和临时目录清理通过。六个新增 Electron 用例均已临时回退已知缺陷，分别在接续、工具失败、模型或 revision 断言上失败；临时修改没有提交。合入 OpenCode 后，完整 Electron 37/37，4.4 分钟；Grok 与 OpenCode 的隔离真实入口 12/12，1.7 分钟；夹具 22/22，连接器与发布策略脚本 46/46。类型、ESLint、全仓格式、文档引用和发布策略检查通过。
 - **前端受阻：** e 的 Message info 因空时间戳变成 NaN 而崩溃；临时开启 Grok 自动跟随后，d 的新回复显示两次，严格唯一断言失败。没有伪造时间，也没有修改界面；完整界面复现和原始失败断言保留在[Opus 交接](../native-provider-contracts.md#grok-的-opus-交接与验收边界)。当前不启用 Grok 的 hook 条件，避免引入已知重复。a 至 d 通过；e 完成历史结果和模型 IPC，f 仅完成 revision 与只读 IPC，两个界面部分明确受阻，不计作通过。
-- **限制：** SSH 沿用完整读取；无 updates 的旧结果状态为 unknown，现有界面误显示运行中也交给 Opus。a 至 f 通过普通设置关闭自动历史摘要，未扩大摘要承诺。真实账户、macOS、真实 CLI 均未验。PR 与主线 CI 待确认。
+- **限制：** SSH 沿用完整读取；无 updates 的旧结果状态为 unknown，现有界面误显示运行中也交给 Opus。a 至 f 通过普通设置关闭自动历史摘要，未扩大摘要承诺。真实账户、macOS、真实 CLI 均未验。[PR #11](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/11) 合并为 `9d48072c48370b26c17367d06021a984c8af2751`，[主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40171573321) 七项通过。
 
 ### 任务二：Grok 终态错误路径补充
 
 - **问题和修改：** 后续交叉审查发现 StdoutHandler 在 parseJsonObject 之前检测错误，原先只过滤解析路径仍会转发 end 后的迟到错误。新增回归先失败，再对 JSON 与纯文本错误检测沿用同一个终态边界；非零进程退出的判定保持原行为。
-- **验收：** 相关 parser/storage 73/73；Grok 六个 Electron 场景 6/6，52.2 秒；夹具 22/22；连接器、协议与发布策略 46/46。类型、ESLint、全仓格式、文档引用和发布策略检查通过。此前六场景的缺陷反证仍有效；本次新增错误路径另有失败回归。前端受阻及真实环境未验边界不变。
+- **验收：** 相关 parser/storage 73/73；Grok 六个 Electron 场景 6/6，52.2 秒；夹具 22/22；连接器、协议与发布策略 46/46。类型、ESLint、全仓格式、文档引用和发布策略检查通过。此前六场景的缺陷反证仍有效；本次新增错误路径另有失败回归。前端受阻及真实环境未验边界不变。[PR #12](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/12) 合并为 `b33b51eeb1f1eb4bf6565202961d32f78a0991d5`，[主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40173995263) 七项通过。
 
 ### 任务二：Oh My Pi
 
 - **来源与修改：** 锁定 18.12.6 的官方源码，见[提供方契约](../native-provider-contracts.md#oh-my-pi-18126)。修复原生 toolCall/toolResult 未识别、历史缺少模型/effort、中断与失败混淆、非最终 agent_end 提前结束、终止后仍转发，以及读取混入旁支。新增只读 revision/增量游标，限定所选目录和项目，加入 hook 跟随范围。
 - **回归与本地验收：** 先有 5 条失败回归及 1 条对照通过，之后补目录切换的失败回归再修复。新增终态错误检测回归也先失败：非最终 agent_end 不应报错，最终回合后迟到错误不应转发。修复后相关单元测试和 hook 测试 55/55。六个 Electron 场景均经临时回退反证：a/c/d 移除接续参数，b 回退历史工具格式，e 移除原生模型，f 移除 hook 条件，全部明确失败。最初只移除 parser 调用 ID 的 b 反证不成立，界面仍从原始事件取 ID；新增历史与实时逐项一致断言，再回退已确认的历史格式缺陷后 b 失败。恢复后六场景通过；隔离真实入口 6/6，57.6 秒；集成已合并的 OpenCode/Grok 后，完整 Electron 43/43，5.9 分钟；三家隔离真实入口 18/18，2.6 分钟；夹具 25/25。终态错误路径修复后的 Oh My Pi 六场景复测及类型、ESLint、全仓格式、文档引用与发布策略检查通过。
 - **判断与限制：** 官方分支图决定 f 的并发写入是旁支，不能强行混入当前对话；保留忙碌不读断言，Stop 后另向当前分支追加并验证恢复刷新。没有放宽目标或修改原生写锁。只有明确中断标记才取消，无机器标记的 isError 仍是 failed。非默认 profile、SSH、真实账户、真实 CLI 和 macOS 未验。自动摘要不在本家 a 至 f 的承诺内。
-- **Opus：** 暂无新增前端缺陷；仅扩展允许的 hook 提供方条件。PR 与主线 CI 待确认。
+- **Opus：** 暂无新增前端缺陷；仅扩展允许的 hook 提供方条件。[PR #13](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/13) 合并为 `9e6c3c5c6fa384bd4a4c7cc016af345d23666ad8`，[主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40174252156) 七项通过。
+
+### 任务二：Copilot CLI
+
+- **来源与修改：** 锁定官方 @github/copilot 1.0.63 包，见[提供方契约](../native-provider-contracts.md#copilot-cli-1063)。补齐工具按原生 ID 配对、失败正文、明确 abort 的取消状态、原生模型、终止后的事件过滤，以及只读 revision/增量读取。实际 per-call effort 不落盘，保持缺省；不借用 selectedModel 或配置值。
+- **实际缺陷：** 四条格式/增量回归先失败再修；随后同 ID 的不同账户回归证明读取忽略 configDir，修复后只读所选目录。端到端暴露退出后持续忙碌，另两条回归先证明退出核对错误读取 COPILOT_CONFIG_DIR 且忽略进程目录，再修正为 COPILOT_HOME 和已有进程环境。认证和进程终止方式未改。
+- **本地验收：** 集成 OpenCode、Grok 和 Oh My Pi 后，相关七套单元测试 174/174，夹具 28/28；完整 Electron 49/49，6.2 分钟，其中本家六场景通过。首轮夹具漏写原生持久化 shutdown，按锁定官方源码补齐；之后暴露的产品目录错误已经修复。临时回退接续参数、历史工具/模型字段及 hook 条件，六个场景全部在各自验收断言失败；恢复后 6/6，52.6 秒。独立隔离真实入口 6/6，1.0 分钟；终态错误修复后六场景再验 6/6，48.0 秒。类型、ESLint、全仓格式、文档引用和发布策略检查通过；四家集成真实入口 24/24，3.5 分钟。
+- **限制与 Opus：** 真实账户、真实 CLI、macOS 与更新版本未验；SSH 保留既有读取。自动摘要未纳入 a 至 f。暂无新增前端缺陷，只改允许的 hook 条件；真实模式不绕过原生并发写锁。PR 与主线 CI 待确认。
+
+- **交叉审查补充：** 官方 session.error.data.message 原先漏报，独立错误检测又绕过终态过滤。分别运行回归确认有效错误漏报和迟到错误泄漏，再修复；工具失败仍只更新工具状态，非零进程退出的判定不变。
+
+- **原生中断补充：** 复查发现来自原生客户端的 abort 在历史中取消工具，实时解析却没有处理；Maestro 的 Stop 界面原先掩盖了这条路径。新增并行工具回归先失败，再复用已有 toolResultBlocks 取消全部未完成调用，保留已完成调用和下一回合。最终 Copilot 六场景 6/6，52.9 秒；推送前检查重新通过。
+
+- **CI 受阻：** [PR #15](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/15) 的六项既有检查通过；[Native E2E](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40173915973) 在 49/49 常规场景及 45/49 真实入口烟测通过后，被整个 job 的 15 分钟时限取消。已提出只将 job 时限改为 25 分钟的范围扩展；`.github/workflows/ci.yml` 不在原计划允许路径中，等待用户确认，未修改、未重试或合并。Copilot 的实现当前只在该 PR，不把本记录当作主线已启用。
+
+### 任务二：Factory Droid
+
+- **受阻原因：** 当前官方 @factory/cli 0.249.0 使用原生字节码，官方 SDK 的 stream-jsonrpc 格式不能证明产品当前使用的 `droid exec -o stream-json`。可读的官方旧包 0.1.0 与 0.1.2-dev.7 也不具备当前 `--resume`、输出及会话格式。详细版本、提交、源码及证据缺口见[格式核查](../native-factory-format.md)。未猜字段、未新增假程序或产品格式分支，保留既有行为。
+- **结果：** [PR #14](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/14) 只提交核查文档，七项 CI 通过后合并为 `757d67e53d36931bd8ceb6d82a39c83e81a568f5`；[主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40174411056) 七项通过。提供方的接续对齐、增量与端到端均为受阻，真实账户与 Mac 未验。未安装或执行官方包，也没有前端行为改动。
+
+### 任务三：长会话与大量历史
+
+- **问题与反证：** 固定预算的首次基线中，Codex 5 万条工具密集消息首次读取为 7673.0 至 8750.3 ms，超过 2000 ms；5000 会话搜索为 50951.2 至 53032.3 ms，超过 10000 ms，三次断言均失败。另补真实文件系统回归，40 个会话搜索枚举目录 164 次，明确超过最多 8 次的预算。
+- **修改：** 工具结果在一次解析内按调用 ID 查找已有卡片，避免每个结果遍历全部消息；搜索为本次操作复用已枚举的原生路径。复用原有结果归一化、分页、元数据缓存与增量读取，没有新增持久缓存体系或哈希，旧文件名及并发搜索继续正确。Claude 已有大工具输出压缩，本次测量未发现超预算热点，没有重复修改它。
+- **测量结果：** 同样本、同预算复测，两家所有性能断言通过，20.75 秒。Codex 5 万条首次读取降为 251.7 至 286.0 ms，5000 会话搜索为 715.5 至 836.3 ms。存储相关单元测试 377/377。完整基线、数据量、缓存条件、其他路径及复现命令见[性能验收](../native-backend-performance.md)。常规 Electron 43/43，5.4 分钟；隔离真实入口烟测 43/43，6.0 分钟；夹具 26/26，连接器 26/26，发布策略 11/11。类型、ESLint、全仓格式、文档引用与发布策略检查全部通过。性能 PR 沿用七项 CI 全部通过才合并的门槛，合并后主线结果链接记在该 PR 描述中。
+- **端到端时序修正：** 首次完整套件 42/43，OpenCode Stop 场景在 SQLite 文件已创建但表尚未建立时查询，明确报 `no such table: session`。夹具增加独立的原生表就绪条件，oneTranscript 等表齐全后才返回；缺文件、坏库和 readOpenCodeState 的缺表错误仍抛出，不吞错或重试用例。新增空库到完整原生 schema 的回归，修正后完整套件及隔离真实入口各 43/43。产品 OpenCode 代码、场景断言与超时未改变。
+- **限制与交接：** IPC 字节数是 JSON/V8 返回值估计，不含 Electron 帧开销或渲染器时间；真实账户、macOS、桌面 Codex 均未验。超过 100 MiB 的已知 ID 仍可读取，但既有元数据扫描上限会把它从项目历史及搜索发现中排除，此限制没有悄悄放宽。已加载 5 万条的前端刷新仍请求全部历史并返回约 20 至 22 MB，交给 Opus 评估请求范围及稳定消息合并，不在后端截断调用者要求的数据。性能 CI 的接入仅写建议，由用户决定。
+
+### 需要用户在 Mac 上执行
+
+先在仓库根目录检查桌面更新后的版本：
+
+```sh
+python3 scripts/codex-shared/check-version.py
+```
+
+只有该精确版本已经列入候选时，运行共享真实验收：
+
+```sh
+MAESTRO_E2E_REAL=1 \
+MAESTRO_E2E_CODEX_PATH=/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex \
+MAESTRO_E2E_SHARED_PATH="$PWD/e2e/fixtures/native/candidate-shared.py" \
+npm run test:e2e -- e2e/native-shared.spec.ts
+```
+
+提供版本号及无对话内容的 `e2e-results/native-summary.json` 摘要，确认共享 g/h 通过；维护者还需核对协议审计，再提交该精确版本准入的小 PR。候选清单以外的新版本先补官方格式审计与合成测试，不存在跳过检查的入口。真实服务双客户端通过也不能代替桌面 GUI 验收。完整流程见[共享说明](../codex-shared.md#桌面更新后的源码检查与验收)。
+
+已有匹配的 CLI 时分别运行，不安装或升级：
+
+```sh
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_OPENCODE_PATH="$(command -v opencode)" npm run test:e2e -- e2e/native-opencode.spec.ts
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_GROK_PATH="$(command -v grok)" npm run test:e2e -- e2e/native-grok.spec.ts
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_OMP_PATH="$(command -v omp)" npm run test:e2e -- e2e/native-omp.spec.ts
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_COPILOT_PATH="$(command -v copilot)" npm run test:e2e -- e2e/native-copilot.spec.ts
+```
+
+锁定版本依次为 1.19.4、1.0.45、18.12.6、1.0.63；Copilot 命令需先合并 PR #15。OMP 需要调用者提供 ANTHROPIC_API_KEY，Copilot 需要显式 COPILOT_GITHUB_TOKEN；OpenCode/Grok 使用隔离凭据副本或已支持的 API key，真实会话不复制。Factory 因格式受阻没有可宣称有效的验收命令。Grok 命令只覆盖已完成部分，不能证明详情与自动跟随的界面受阻项。所有真实模式仍标记未验。
+
+### 交给 Opus
+
+1. 修复 Grok 缺失原生时间导致的 Message info 崩溃、重启续接后回复重复，以及旧工具结果 unknown 被显示为运行中；复现步骤及原始失败断言见[提供方契约](../native-provider-contracts.md#grok-的-opus-交接与验收边界)。修复后才启用 Grok hook 条件并恢复 e/f 的完整界面验收。不能伪造时间或仅按正文消重。
+2. 评估已加载大量历史时 `refreshNativeConversation` 按 `max(500, tab.logs.length)` 请求数据的开销。性能用例中的 `50k/loaded-tab` 可重复得到约 20 至 22 MB 返回，而普通最近 500 条约 0.20 至 0.22 MB。后端保留同一消息 ID、工具状态、模型和增量语义；前端改请求方式时仍需保证阅读锚点、草稿、未读数与旧消息内容，不用后端静默截断掩盖问题。尚未测量真实渲染耗时，不能宣称已复现卡顿。

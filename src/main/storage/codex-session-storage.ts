@@ -34,6 +34,8 @@ import type {
 	SessionMessagesResult,
 	SessionReadOptions,
 	SessionMessage,
+	SessionSearchMode,
+	SessionSearchResult,
 } from '../agents';
 import type { ToolType, SshRemoteConfig } from '../../shared/types';
 import { BaseSessionStorage } from './base-session-storage';
@@ -639,6 +641,17 @@ function parseCodexTranscript(
 	const lines = content.split('\n').filter((l) => l.trim());
 
 	const messages: SessionMessage[] = [...(initial?.messages ?? [])];
+	// Index this parse's existing and appended cards once. Repeated result pairing
+	// must not rescan every prior message in a long, tool-heavy conversation.
+	const toolCalls = new Map<string, number>();
+	for (const [index, message] of messages.entries()) {
+		if (message.toolUse && !toolCalls.has(message.uuid)) toolCalls.set(message.uuid, index);
+	}
+	const appendMessage = (message: SessionMessage) => {
+		if (message.toolUse && !toolCalls.has(message.uuid))
+			toolCalls.set(message.uuid, messages.length);
+		messages.push(message);
+	};
 	let messageIndex = initial?.messageIndex ?? 0;
 	let turnContext = initial?.turnContext ?? {};
 
@@ -671,7 +684,7 @@ function parseCodexTranscript(
 						: rawText;
 				if (text || images.length > 0) {
 					const phase = payload.phase ?? payload.channel;
-					messages.push({
+					appendMessage({
 						type: payload.role,
 						role: payload.role,
 						...(payload.role === 'assistant' ? turnContext : {}),
@@ -692,7 +705,7 @@ function parseCodexTranscript(
 			if (entry.type === 'response_item' && payload?.type === 'reasoning') {
 				const summary = extractReasoningSummaryText(payload.summary);
 				if (summary)
-					messages.push({
+					appendMessage({
 						type: 'thinking',
 						role: 'assistant',
 						channel: 'analysis',
@@ -721,7 +734,7 @@ function parseCodexTranscript(
 					args: input,
 					state: { status: 'running', input: parsedInput },
 				};
-				messages.push({
+				appendMessage({
 					type: 'assistant',
 					role: 'assistant',
 					content: `Tool: ${payload.name || 'unknown'}`,
@@ -739,7 +752,7 @@ function parseCodexTranscript(
 			) {
 				const callId = payload.call_id;
 				const outputText = codexToolOutputText(payload.output);
-				const matchingIdx = callId ? messages.findIndex((m) => m.uuid === callId && m.toolUse) : -1;
+				const matchingIdx = callId ? (toolCalls.get(callId) ?? -1) : -1;
 				const toolName =
 					matchingIdx >= 0
 						? (messages[matchingIdx].toolUse as CodexToolUseEntry[])[0].tool
@@ -760,7 +773,7 @@ function parseCodexTranscript(
 					};
 				} else {
 					// Even an orphan result is a tool card, never an assistant answer.
-					messages.push({
+					appendMessage({
 						type: 'assistant',
 						role: 'assistant',
 						content: `Tool: ${payload.name || 'unknown'}`,
@@ -774,7 +787,7 @@ function parseCodexTranscript(
 			}
 
 			if (entry.type === 'item.completed' && entry.item?.type === 'agent_message') {
-				messages.push({
+				appendMessage({
 					type: 'assistant',
 					role: 'assistant',
 					content: entry.item.text || '',
@@ -789,7 +802,7 @@ function parseCodexTranscript(
 			}
 
 			if (entry.type === 'item.completed' && entry.item?.type === 'tool_call') {
-				messages.push({
+				appendMessage({
 					type: 'assistant',
 					role: 'assistant',
 					content: `Tool: ${entry.item.tool}`,
@@ -809,7 +822,7 @@ function parseCodexTranscript(
 
 			if (entry.type === 'item.completed' && entry.item?.type === 'tool_result') {
 				const output = codexToolOutputText(entry.item.output);
-				messages.push({
+				appendMessage({
 					type: 'assistant',
 					role: 'assistant',
 					content: `Tool: ${entry.item.tool || 'unknown'}`,
@@ -1559,10 +1572,33 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		}
 	}
 
+	async searchSessions(
+		projectPath: string,
+		query: string,
+		searchMode: SessionSearchMode,
+		sshConfig?: SshRemoteConfig
+	): Promise<SessionSearchResult[]> {
+		if (sshConfig) return super.searchSessions(projectPath, query, searchMode, sshConfig);
+		if (!query.trim()) return [];
+		const sessions = await this.listSessions(projectPath);
+		const files = await this.findAllSessionFiles();
+		// Operation-local paths, not another cache. Concurrent searches own their
+		// lists; legacy filenames still use the existing metadata lookup below.
+		const paths = new Map<string, string>();
+		for (const file of files) {
+			const id = extractSessionIdFromFilename(file.filename);
+			if (id && !paths.has(id)) paths.set(id, file.filePath);
+		}
+		return this.searchSessionMessages(sessions, query, searchMode, (sessionId) =>
+			this.getSearchableMessages(sessionId, projectPath, undefined, paths.get(sessionId))
+		);
+	}
+
 	protected async getSearchableMessages(
 		sessionId: string,
 		_projectPath: string,
-		sshConfig?: SshRemoteConfig
+		sshConfig?: SshRemoteConfig,
+		localFilePath?: string
 	): Promise<SearchableMessage[]> {
 		let content: string;
 
@@ -1574,7 +1610,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 				if (!result.success || !result.data) return [];
 				content = result.data;
 			} else {
-				const sessionFilePath = await this.findSessionFile(sessionId);
+				const sessionFilePath = localFilePath ?? (await this.findSessionFile(sessionId));
 				if (!sessionFilePath) return [];
 				content = await fs.readFile(sessionFilePath, 'utf-8');
 			}

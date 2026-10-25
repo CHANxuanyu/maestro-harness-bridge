@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { shellEscape } from '../../src/main/utils/shell-escape';
 import type { NativeApp, NativeScene, Provider } from './native-app';
+import { readOpenCodeState } from './native/opencode-protocol.cjs';
 
 export function realPrompt(native: NativeApp, prompt: string, scene: NativeScene): string {
 	const commands = (scene.tools ?? []).map((tool, index) => {
@@ -21,6 +22,13 @@ export function realPrompt(native: NativeApp, prompt: string, scene: NativeScene
 }
 
 export function nativeIdentity(provider: Provider, file: string) {
+	if (provider === 'opencode') {
+		const state = readOpenCodeState(file);
+		return {
+			id: state.sessions[0]?.id,
+			model: state.messages.findLast((row) => row.data.role === 'assistant')?.data.modelID,
+		};
+	}
 	// Read the same native identity fields documented by the repository's
 	// Claude/Codex storage parsers. This never searches an account directory.
 	const records = fs
@@ -62,13 +70,15 @@ export async function realExternalTurn(
 					'--dangerously-skip-permissions',
 					...(id ? ['--resume', id] : []),
 				]
-			: [
-					'exec',
-					'--json',
-					'--dangerously-bypass-approvals-and-sandbox',
-					'--skip-git-repo-check',
-					...(id ? ['resume', id] : []),
-				];
+			: provider === 'opencode'
+				? ['run', '--format', 'json', ...(id ? ['--session', id] : [])]
+				: [
+						'exec',
+						'--json',
+						'--dangerously-bypass-approvals-and-sandbox',
+						'--skip-git-repo-check',
+						...(id ? ['resume', id] : []),
+					];
 	const child = spawn(
 		native.realCli!.executable,
 		[...args, '--', realPrompt(native, prompt, scene)],
@@ -126,6 +136,12 @@ export async function realExternalTurn(
 }
 
 export function nativeToolIds(provider: Provider, file: string, commands: string[]) {
+	if (provider === 'opencode') {
+		const calls = readOpenCodeState(file).parts.filter((row) => row.data.type === 'tool');
+		return commands.map(
+			(command) => calls.find((row) => row.data.state.input.command.includes(command))?.data.callID
+		);
+	}
 	const records = fs
 		.readFileSync(file, 'utf8')
 		.trim()

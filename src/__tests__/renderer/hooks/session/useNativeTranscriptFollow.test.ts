@@ -114,6 +114,23 @@ afterEach(() => {
 });
 
 describe('resolveNativeFollowTarget', () => {
+	it('follows a local OpenCode tab only while idle without queued work', () => {
+		setSession(owner({ toolType: 'opencode' }));
+		expect(resolveNativeFollowTarget()).toMatchObject({
+			agentId: 'opencode',
+			nativeId: NATIVE,
+			tabId: 'tab-native',
+		});
+		setSession(owner({ toolType: 'opencode', aiTabs: [codexTab({ state: 'busy' })] }));
+		expect(resolveNativeFollowTarget()).toBeNull();
+		setSession(
+			owner({
+				toolType: 'opencode',
+				executionQueue: [{ id: 'q', tabId: 'tab-native', type: 'message', text: 'x' } as never],
+			})
+		);
+		expect(resolveNativeFollowTarget()).toBeNull();
+	});
 	it('names the visible local Codex tab with its canonical identity', () => {
 		const target = resolveNativeFollowTarget();
 		expect(target).toMatchObject({
@@ -139,7 +156,7 @@ describe('resolveNativeFollowTarget', () => {
 						})
 					),
 			],
-			['other provider', () => setSession(owner({ toolType: 'opencode' }))],
+			['unsupported provider', () => setSession(owner({ toolType: 'terminal' }))],
 			[
 				'SSH remote',
 				() =>

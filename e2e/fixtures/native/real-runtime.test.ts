@@ -54,7 +54,23 @@ it('a missing selected account fails without falling back to another account', (
 		'Claude login is unavailable'
 	);
 });
-it.each(['claude', 'codex'])(
+it('OpenCode copies only the native auth file into its isolated XDG data directory', () => {
+	const { source, destination } = dirs();
+	const account = path.join(source, 'opencode');
+	fs.mkdirSync(account);
+	const auth = JSON.stringify({ openai: { type: 'api', key: 'synthetic-api-key' } });
+	fs.writeFileSync(path.join(account, 'auth.json'), auth);
+	fs.writeFileSync(path.join(account, 'opencode.db'), 'private database sentinel');
+	prepareCredentials('opencode', destination, { XDG_DATA_HOME: source });
+	expect(fs.readdirSync(destination)).toEqual(['auth.json']);
+	expect(fs.readFileSync(path.join(destination, 'auth.json'), 'utf8')).toBe(auth);
+	expect(fs.readFileSync(path.join(account, 'auth.json'), 'utf8')).toBe(auth);
+	expect(fs.readFileSync(path.join(account, 'opencode.db'), 'utf8')).toBe(
+		'private database sentinel'
+	);
+	expect(fs.statSync(path.join(destination, 'auth.json')).mode & 0o777).toBe(0o600);
+});
+it.each(['claude', 'codex', 'opencode'])(
 	'uses the supplied %s executable and its locked version',
 	(provider) => {
 		const executable = path.resolve(`e2e/fixtures/native/${provider}`);

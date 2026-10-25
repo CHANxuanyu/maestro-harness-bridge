@@ -36,6 +36,14 @@ export function nativeIdentity(provider: Provider, file: string) {
 		.trim()
 		.split('\n')
 		.map((line) => JSON.parse(line));
+	if (provider === 'grok') {
+		const last = records.findLast((record) => record.type === 'assistant');
+		return {
+			id: path.basename(path.dirname(file)),
+			model: last?.model_id,
+			effort: last?.reasoning_effort,
+		};
+	}
 	if (provider === 'claude') {
 		const id = records.find((record) => record.sessionId)?.sessionId;
 		const model = records.findLast((record) => record.message?.model)?.message.model;
@@ -70,18 +78,20 @@ export async function realExternalTurn(
 					'--dangerously-skip-permissions',
 					...(id ? ['--resume', id] : []),
 				]
-			: provider === 'opencode'
-				? ['run', '--format', 'json', ...(id ? ['--session', id] : [])]
-				: [
-						'exec',
-						'--json',
-						'--dangerously-bypass-approvals-and-sandbox',
-						'--skip-git-repo-check',
-						...(id ? ['resume', id] : []),
-					];
+			: provider === 'grok'
+				? ['--output-format', 'streaming-json', '--always-approve', ...(id ? ['--resume', id] : [])]
+				: provider === 'opencode'
+					? ['run', '--format', 'json', ...(id ? ['--session', id] : [])]
+					: [
+							'exec',
+							'--json',
+							'--dangerously-bypass-approvals-and-sandbox',
+							'--skip-git-repo-check',
+							...(id ? ['resume', id] : []),
+						];
 	const child = spawn(
 		native.realCli!.executable,
-		[...args, '--', realPrompt(native, prompt, scene)],
+		[...args, provider === 'grok' ? '-p' : '--', realPrompt(native, prompt, scene)],
 		{
 			cwd: native.project,
 			env: { ...process.env, ...native.env, MAESTRO_NATIVE_SCRIPT: script },
@@ -147,6 +157,12 @@ export function nativeToolIds(provider: Provider, file: string, commands: string
 		.trim()
 		.split('\n')
 		.map((line) => JSON.parse(line));
+	if (provider === 'grok') {
+		const calls = records.flatMap((record) => record.tool_calls ?? []);
+		return commands.map(
+			(command) => calls.find((call) => JSON.parse(call.arguments).command?.includes(command))?.id
+		);
+	}
 	const calls =
 		provider === 'claude'
 			? records.flatMap((record) =>

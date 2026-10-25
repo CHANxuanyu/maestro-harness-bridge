@@ -14,10 +14,11 @@ import { installedCli, prepareCredentials } from './native/real-runtime.cjs';
 import { appendTurn } from './native/append-turn.cjs';
 import { realPrompt, realExternalTurn } from './native-real';
 import { launchElectronApp } from './electron-app';
+import { createGrokTurn } from './native/grok-protocol.cjs';
 import { createOpenCodeTurn } from './native/opencode-protocol.cjs';
 
 const exec = promisify(execFile);
-export type Provider = 'claude' | 'codex' | 'opencode';
+export type Provider = 'claude' | 'codex' | 'opencode' | 'grok';
 export interface NativeTool {
 	id: string;
 	command: string;
@@ -47,6 +48,7 @@ export class NativeApp {
 	readonly project = path.join(this.root, 'project');
 	readonly claude = path.join(this.root, 'claude');
 	readonly codex = path.join(this.root, 'codex');
+	readonly grok = path.join(this.root, 'grok');
 	readonly opencode = path.join(this.root, 'xdg', 'opencode');
 	readonly script = path.join(this.root, 'scenario.json');
 	app!: ElectronApplication;
@@ -62,7 +64,7 @@ export class NativeApp {
 	private provider?: Provider;
 	readonly control = path.join(this.root, 'control.json');
 	constructor(private info: TestInfo) {
-		for (const dir of [this.data, this.project, this.claude, this.codex, this.opencode])
+		for (const dir of [this.data, this.project, this.claude, this.codex, this.opencode, this.grok])
 			fs.mkdirSync(dir, { recursive: true });
 		fs.writeFileSync(
 			path.join(this.data, 'maestro-settings.json'),
@@ -76,8 +78,8 @@ export class NativeApp {
 				automaticTabNamingEnabled: false,
 				sidebarNavigationMode: 'conversations',
 				// Provider resume scenarios exclude background synopsis (scenario h).
-				// OpenCode has no verified non-persisting synopsis invocation.
-				...(/^opencode /.test(info.title) ? { defaultSaveToHistory: false } : {}),
+				// These providers have no verified non-persisting synopsis invocation.
+				...(/^(opencode|grok) /.test(info.title) ? { defaultSaveToHistory: false } : {}),
 			})
 		);
 	}
@@ -95,6 +97,8 @@ export class NativeApp {
 			CLAUDE_CONFIG_DIR: this.claude,
 			CLAUDE_SECURESTORAGE_CONFIG_DIR: this.claude,
 			CODEX_HOME: this.codex,
+			GROK_HOME: this.grok,
+			GROK_AUTH_PATH: path.join(this.grok, 'auth.json'),
 			XDG_DATA_HOME: path.dirname(this.opencode),
 			XDG_CONFIG_HOME: path.join(this.root, 'xdg-config'),
 			XDG_CACHE_HOME: path.join(this.root, 'xdg-cache'),
@@ -107,7 +111,9 @@ export class NativeApp {
 		};
 	}
 	providerHome(provider: Provider) {
-		return provider === 'claude' ? this.claude : provider === 'codex' ? this.codex : this.opencode;
+		return { claude: this.claude, codex: this.codex, opencode: this.opencode, grok: this.grok }[
+			provider
+		];
 	}
 	async start() {
 		if (this.real && !this.realCli) {
@@ -186,6 +192,10 @@ export class NativeApp {
 			'--env',
 			`CODEX_HOME=${this.codex}`,
 			'--env',
+			`GROK_HOME=${this.grok}`,
+			'--env',
+			`GROK_AUTH_PATH=${path.join(this.grok, 'auth.json')}`,
+			'--env',
 			`XDG_DATA_HOME=${path.dirname(this.opencode)}`,
 			'--env',
 			`MAESTRO_NATIVE_SCRIPT=${this.script}`,
@@ -245,6 +255,13 @@ export class NativeApp {
 	}
 	async externalTurn(provider: Provider, prompt: string, scene: NativeScene, id?: string) {
 		if (this.real) return realExternalTurn(this, provider, prompt, scene, id);
+		if (provider === 'grok') {
+			const turn = createGrokTurn({ configDir: this.grok, cwd: this.project, id, prompt });
+			for (const tool of scene.tools ?? []) turn.startTool(tool);
+			for (const tool of [...(scene.tools ?? [])].reverse()) turn.finishTool(tool);
+			turn.finish(scene.answer);
+			return turn;
+		}
 		if (provider === 'opencode') {
 			const turn = createOpenCodeTurn({ configDir: this.opencode, cwd: this.project, id, prompt });
 			for (const tool of scene.tools ?? []) turn.startTool(tool);
@@ -255,7 +272,7 @@ export class NativeApp {
 		return appendTurn(
 			{
 				provider,
-				configDir: provider === 'claude' ? this.claude : this.codex,
+				configDir: this.providerHome(provider),
 				cwd: this.project,
 				id,
 				prompt,
@@ -292,13 +309,17 @@ export class NativeApp {
 			return fs.existsSync(file) ? [file] : [];
 		}
 		const dir = path.join(
-			provider === 'claude' ? this.claude : this.codex,
+			this.providerHome(provider),
 			provider === 'claude' ? 'projects' : 'sessions'
 		);
 		if (!fs.existsSync(dir)) return [];
 		return fs
 			.readdirSync(dir, { recursive: true })
-			.filter((name) => String(name).endsWith('.jsonl'))
+			.filter((name) =>
+				provider === 'grok'
+					? String(name).endsWith('chat_history.jsonl')
+					: String(name).endsWith('.jsonl')
+			)
 			.map((name) => path.join(dir, String(name)))
 			.sort();
 	}

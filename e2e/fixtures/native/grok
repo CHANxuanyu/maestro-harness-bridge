@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const { setTimeout: delay } = require('node:timers/promises');
+const { createGrokTurn } = require('./grok-protocol.cjs');
+
+// CLI flags: the pinned pager/src/app/cli.rs. Scenario controls never enter stdout.
+async function run() {
+	const args = process.argv.slice(2);
+	if (args.includes('--version')) return console.log('grok 1.0.45');
+	if (args.includes('--help')) return console.log('-p --resume --output-format streaming-json');
+	if (!process.env.GROK_HOME || !process.env.MAESTRO_NATIVE_SCRIPT)
+		throw new Error('Missing isolated fixture directories');
+	const configDir = process.env.GROK_HOME;
+	fs.mkdirSync(configDir, { recursive: true });
+	const script = JSON.parse(fs.readFileSync(process.env.MAESTRO_NATIVE_SCRIPT, 'utf8'));
+	const countFile = path.join(configDir, 'fixture-turn-count');
+	const count = fs.existsSync(countFile) ? Number(fs.readFileSync(countFile)) : 0;
+	const scene = script.scene || script.turns[count];
+	if (!scene) throw new Error(`No scripted turn ${count}`);
+	fs.writeFileSync(countFile, String(count + 1));
+	fs.writeFileSync(path.join(configDir, 'fixture-process'), String(process.pid));
+	const prompt = args[args.indexOf('-p') + 1];
+	if (!args.includes('-p') || !prompt) throw new Error('The native headless prompt is required');
+	const turn = createGrokTurn({
+		configDir,
+		cwd: process.cwd(),
+		prompt,
+		id: args.includes('--resume') ? args[args.indexOf('--resume') + 1] : undefined,
+		emit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
+	});
+	let stopped = false;
+	process.once('SIGINT', () => {
+		stopped = true;
+		turn.stop();
+		process.exitCode = 130;
+	});
+	for (const tool of scene.tools || []) turn.startTool(tool);
+	if (scene.waitForStop) {
+		while (!stopped) await delay(25);
+		return;
+	}
+	for (const tool of [...(scene.tools || [])].reverse()) {
+		for (const gate of tool.gates || []) while (!fs.existsSync(gate) && !stopped) await delay(10);
+		await delay(scene.toolDelay ?? 300);
+		if (stopped) return;
+		turn.finishTool(tool);
+	}
+	if (!stopped) turn.finish(scene.answer);
+}
+run().catch((error) => {
+	console.error(error.message);
+	process.exitCode = 1;
+});

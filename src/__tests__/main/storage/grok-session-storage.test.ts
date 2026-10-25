@@ -400,9 +400,24 @@ describe('GrokSessionStorage - reading messages', () => {
 	});
 
 	it('maps transcript records to display messages, merging tool_result into the tool call', async () => {
-		mockLocalFs(
-			sessionFiles(PROJECT, SESSION_ID, summaryJson(SESSION_ID, PROJECT), chatHistoryJsonl())
+		const files = sessionFiles(
+			PROJECT,
+			SESSION_ID,
+			summaryJson(SESSION_ID, PROJECT),
+			chatHistoryJsonl()
 		);
+		// grok-build 1.0.45 storage::SessionUpdateEnvelope: only this durable
+		// status proves completion; result prose alone cannot prove success.
+		files[path.join(SESSIONS_DIR, encodeURIComponent(PROJECT), SESSION_ID, 'updates.jsonl')] =
+			JSON.stringify({
+				timestamp: 1792886400,
+				method: 'session/update',
+				params: {
+					sessionId: SESSION_ID,
+					update: { sessionUpdate: 'tool_call_update', toolCallId: 'call-1', status: 'completed' },
+				},
+			});
+		mockLocalFs(files);
 
 		const storage = new GrokSessionStorage();
 		const result = await storage.readSessionMessages(PROJECT, SESSION_ID);

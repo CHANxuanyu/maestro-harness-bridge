@@ -40,6 +40,17 @@ import { isMacOS } from '../../shared/platformDetection';
 import { BaseSessionStorage } from './base-session-storage';
 import type { SearchableMessage } from './base-session-storage';
 import { isExpectedRemoteError } from './remote-error-utils';
+import {
+	grokBashExitCode,
+	grokContentText,
+	grokNativeToolStatus,
+} from '../../shared/grokToolState';
+import {
+	nativeFileRevision,
+	parseNativeJsonl,
+	readNativeJsonl,
+	type NativeJsonlCursor,
+} from './native-jsonl-cursor';
 
 const LOG_CONTEXT = '[GrokSessionStorage]';
 const MAX_SESSION_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -106,16 +117,20 @@ interface GrokChatRecord {
 	synthetic_reason?: string;
 	tool_calls?: GrokToolCall[];
 	tool_call_id?: string;
+	model_id?: string;
+	reasoning_effort?: string;
 }
 
 /** Tool use entry shape used when building SessionMessage.toolUse arrays. */
 interface GrokToolUseEntry {
+	id?: string;
 	tool?: string;
 	args?: unknown;
 	state: {
 		status: string;
 		input?: unknown;
-		output?: string;
+		output?: unknown;
+		exitCode?: number;
 	};
 }
 
@@ -215,10 +230,11 @@ function buildToolUse(toolCalls?: GrokToolCall[]): GrokToolUseEntry[] | undefine
 				input = call.arguments;
 			}
 			return {
+				id: call.id,
 				tool: call.name,
 				// Raw JSON string on purpose - see JSDoc above.
 				args: call.arguments,
-				state: { status: 'running', input },
+				state: { status: 'unknown', input },
 			};
 		});
 	return entries.length > 0 ? entries : undefined;
@@ -232,7 +248,7 @@ function buildToolUse(toolCalls?: GrokToolCall[]): GrokToolUseEntry[] | undefine
  * preceding assistant record's tool entry by call id; system and reasoning
  * records are skipped.
  */
-function parseChatHistory(content: string): ParsedGrokChatHistory {
+function parseChatHistory(content: string | GrokChatRecord[]): ParsedGrokChatHistory {
 	const messages: SessionMessage[] = [];
 	let firstUserMessage = '';
 	let firstAssistantMessage = '';
@@ -240,17 +256,9 @@ function parseChatHistory(content: string): ParsedGrokChatHistory {
 	// Maps a tool call id to the message/tool entry awaiting its tool_result.
 	const pendingToolCalls = new Map<string, { messageIndex: number; entryIndex: number }>();
 
-	for (const line of content.split(/\r?\n/)) {
-		if (!line.trim()) continue;
-
-		let record: GrokChatRecord;
-		try {
-			record = JSON.parse(line) as GrokChatRecord;
-		} catch {
-			// Grok appends while running, so a live session can have a partial final line.
-			continue;
-		}
-
+	for (const record of typeof content === 'string'
+		? parseNativeJsonl<GrokChatRecord>(content)
+		: content) {
 		if (record.type === 'user') {
 			const rawText = extractUserText(record.content);
 			if (isSyntheticUserRecord(record, rawText)) continue;
@@ -289,6 +297,8 @@ function parseChatHistory(content: string): ParsedGrokChatHistory {
 				timestamp: '',
 				uuid: `grok-msg-${messageIndex++}`,
 				toolUse,
+				model: record.model_id,
+				effort: record.reasoning_effort,
 			});
 			continue;
 		}
@@ -302,7 +312,7 @@ function parseChatHistory(content: string): ParsedGrokChatHistory {
 				const entry = entries[target.entryIndex];
 				entries[target.entryIndex] = {
 					...entry,
-					state: { ...entry.state, status: 'completed', output },
+					state: { ...entry.state, output },
 				};
 				pendingToolCalls.delete(callId);
 			} else if (output.trim()) {
@@ -324,6 +334,71 @@ function parseChatHistory(content: string): ParsedGrokChatHistory {
 	return { messages, firstUserMessage, firstAssistantMessage };
 }
 
+interface GrokStoredUpdate {
+	method?: string;
+	params?: {
+		sessionId?: string;
+		update?: {
+			sessionUpdate?: string;
+			toolCallId?: string;
+			status?: string;
+			rawInput?: unknown;
+			rawOutput?: unknown;
+			content?: unknown;
+			stop_reason?: string;
+		};
+	};
+}
+
+// grok-build@2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8:
+// storage::SessionUpdateEnvelope and extensions::notification::TurnCompleted.
+// chat_history has result prose but no status; durable ACP updates own outcomes.
+function applyGrokUpdates(
+	messages: SessionMessage[],
+	updates: GrokStoredUpdate[],
+	sessionId: string
+): void {
+	const calls = new Map<string, GrokToolUseEntry>();
+	for (const message of messages)
+		for (const call of (message.toolUse as GrokToolUseEntry[] | undefined) ?? [])
+			if (call.id) calls.set(call.id, call);
+	const pending = new Set<string>();
+	for (const row of updates) {
+		if (row.params?.sessionId !== sessionId) continue;
+		const update = row.params.update;
+		if (!update) continue;
+		if (row.method === '_x.ai/session/update' && update.sessionUpdate === 'turn_completed') {
+			if (update.stop_reason === 'cancelled')
+				for (const id of pending) {
+					const call = calls.get(id);
+					if (call) call.state = { ...call.state, status: 'canceled' };
+				}
+			pending.clear();
+			continue;
+		}
+		if (
+			row.method !== 'session/update' ||
+			!['tool_call', 'tool_call_update'].includes(update.sessionUpdate ?? '') ||
+			!update.toolCallId
+		)
+			continue;
+		const call = calls.get(update.toolCallId);
+		if (!call) continue;
+		const status = grokNativeToolStatus(update.status, update.rawOutput);
+		if (status === 'running') pending.add(update.toolCallId);
+		else if (status === 'completed' || status === 'failed') pending.delete(update.toolCallId);
+		const output = update.rawOutput ?? grokContentText(update.content);
+		const exitCode = grokBashExitCode(update.rawOutput);
+		call.state = {
+			...call.state,
+			...(status !== 'unknown' ? { status } : {}),
+			...(['completed', 'failed'].includes(status) && exitCode !== undefined ? { exitCode } : {}),
+			...(update.rawInput !== undefined ? { input: update.rawInput } : {}),
+			...(output !== undefined ? { output } : {}),
+		};
+	}
+}
+
 /**
  * Session storage implementation for Grok CLI.
  *
@@ -334,6 +409,51 @@ function parseChatHistory(content: string): ParsedGrokChatHistory {
  */
 export class GrokSessionStorage extends BaseSessionStorage {
 	readonly agentId: ToolType = 'grok';
+	// Two active sessions, each with chat_history and updates. No disk cache.
+	private readonly transcriptCursors = new Map<
+		string,
+		NativeJsonlCursor<GrokChatRecord | GrokStoredUpdate>
+	>();
+
+	private async readNativeRows<T extends GrokChatRecord | GrokStoredUpdate>(
+		file: string,
+		readOnly: boolean,
+		sshConfig?: SshRemoteConfig
+	): Promise<T[]> {
+		const stat = await this.statSessionFile(file, sshConfig);
+		if (!stat || stat.size > MAX_SESSION_FILE_SIZE) {
+			this.transcriptCursors.delete(file);
+			return [];
+		}
+		if (sshConfig || !readOnly)
+			return parseNativeJsonl<T>((await this.readSessionFile(file, sshConfig)) ?? '');
+		const result = await readNativeJsonl<T>(
+			file,
+			this.transcriptCursors.get(file) as NativeJsonlCursor<T> | undefined
+		);
+		this.transcriptCursors.delete(file);
+		if (result.cursor) {
+			this.transcriptCursors.set(file, result.cursor);
+			if (this.transcriptCursors.size > 4)
+				this.transcriptCursors.delete(this.transcriptCursors.keys().next().value!);
+		}
+		return result.rows;
+	}
+
+	async getTranscriptRevision(
+		projectPath: string,
+		sessionId: string,
+		_options?: SessionReadOptions,
+		sshConfig?: SshRemoteConfig
+	): Promise<string | null> {
+		if (sshConfig) return null;
+		const dir = await this.findSessionDir(projectPath, sessionId);
+		if (!dir) return null;
+		const transcript = await nativeFileRevision(path.join(dir, 'chat_history.jsonl'));
+		return transcript
+			? `${transcript}|${(await nativeFileRevision(path.join(dir, 'updates.jsonl'))) ?? '-'}`
+			: null;
+	}
 
 	/** Resolve the sessions base directory (local or remote POSIX tilde form). */
 	private getSessionsDir(sshConfig?: SshRemoteConfig): string {
@@ -561,12 +681,18 @@ export class GrokSessionStorage extends BaseSessionStorage {
 			return { messages: [], total: 0, hasMore: false };
 		}
 
-		const transcript = await this.readTranscript(sessionDir, sshConfig);
-		if (!transcript) {
-			return { messages: [], total: 0, hasMore: false };
-		}
-
-		const { messages } = parseChatHistory(transcript.content);
+		const records = await this.readNativeRows<GrokChatRecord>(
+			this.joinPath(sshConfig, sessionDir, 'chat_history.jsonl'),
+			options?.readOnly === true,
+			sshConfig
+		);
+		const updates = await this.readNativeRows<GrokStoredUpdate>(
+			this.joinPath(sshConfig, sessionDir, 'updates.jsonl'),
+			options?.readOnly === true,
+			sshConfig
+		);
+		const { messages } = parseChatHistory(records);
+		applyGrokUpdates(messages, updates, sessionId);
 		return BaseSessionStorage.applyMessagePagination(messages, options);
 	}
 

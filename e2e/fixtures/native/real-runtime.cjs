@@ -9,6 +9,7 @@ const versions = {
 	claude: '2.1.310 (Claude Code)',
 	codex: 'codex-cli 0.163.0-alpha.11.1',
 	opencode: '1.19.4',
+	grok: 'grok 1.0.45',
 };
 
 function installedCli(provider, env = process.env, sharedAcceptance = false) {
@@ -27,6 +28,16 @@ function installedCli(provider, env = process.env, sharedAcceptance = false) {
 }
 
 function prepareCredentials(provider, destination, env = process.env) {
+	if (provider === 'grok') {
+		// Pinned login/src/{auth_method,storage}.rs. Never run the native reader
+		// on the source: it can chmod/recover that file. Copy bytes read-only.
+		if (env.XAI_API_KEY || env.GROK_CODE_XAI_API_KEY) return {};
+		const source =
+			env.GROK_AUTH_PATH ||
+			path.join(env.GROK_HOME || path.join(os.homedir(), '.grok'), 'auth.json');
+		fs.writeFileSync(path.join(destination, 'auth.json'), fs.readFileSync(source), { mode: 0o600 });
+		return {};
+	}
 	if (provider === 'opencode') {
 		// OpenCode 1.19.4: packages/opencode/src/auth/index.ts reads only auth.json
 		// under Global.Path.data. The app and CLI use isolated XDG dirs for this run.

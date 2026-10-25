@@ -50,7 +50,7 @@ async function run(provider) {
 	const persist = !args.includes('--no-session-persistence');
 	const stateFile = path.join(configDir, 'fixture-turn-count');
 	const count = fs.existsSync(stateFile) ? Number(fs.readFileSync(stateFile, 'utf8')) : 0;
-	const scene = persist ? script.turns[count] : script.synopsis;
+	const scene = persist ? script.scene || script.turns[count] : script.synopsis;
 	if (!scene) throw new Error(`No scripted turn ${count}; unexpected invocation`);
 	if (persist) {
 		fs.writeFileSync(stateFile, String(count + 1));

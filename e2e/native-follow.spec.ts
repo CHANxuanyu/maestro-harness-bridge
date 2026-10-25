@@ -1,8 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { test, expect, type Provider } from './fixtures/native-app';
-import { appendTurn } from './fixtures/native/append-turn.cjs';
 import { createTurn } from './fixtures/native/protocol.cjs';
 
 for (const provider of ['claude', 'codex'] satisfies Provider[]) {
@@ -17,11 +15,10 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 			},
 		]);
 		const configDir = provider === 'claude' ? native.claude : native.codex;
-		const identity = { provider, configDir, cwd: native.project, id: randomUUID() };
-		appendTurn(
-			{ ...identity, prompt: 'External follow history' },
-			{ answer: Array.from({ length: 80 }, (_, i) => `History paragraph ${i}.`).join('\n\n') }
-		);
+		const seed = await native.externalTurn(provider, 'External follow history', {
+			answer: Array.from({ length: 80 }, (_, i) => `History paragraph ${i}.`).join('\n\n'),
+		});
+		const identity = { provider, configDir, cwd: native.project, id: seed.id };
 		await native.createAgent(provider);
 		await native.page
 			.locator('[data-conversation-kind="history"] button[data-tree-nav]')
@@ -29,9 +26,11 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 			.click();
 		await expect(native.output().getByText('History paragraph 79.', { exact: true })).toBeVisible();
 		const scroll = native.output().locator(':scope > .overflow-y-auto');
-		appendTurn(
-			{ ...identity, prompt: 'An external idle turn' },
-			{ answer: 'Idle external answer.' }
+		await native.externalTurn(
+			provider,
+			'An external idle turn',
+			{ answer: 'Idle external answer.' },
+			seed.id
 		);
 		await expect(native.output().getByText('Idle external answer.', { exact: true })).toBeVisible();
 		await expect
@@ -44,19 +43,38 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		});
 		const anchor = native.output().getByText('History paragraph 0.', { exact: true });
 		const before = await anchor.boundingBox();
-		const external = createTurn({ ...identity, prompt: 'External work while reading' });
 		const tool = {
 			id: 'external-result',
 			command: 'printf external-output',
 			output: 'external-output',
 		};
-		external.startTool(tool);
+		const gate = path.join(native.root, 'external-work');
+		const external = native.real
+			? native.externalTurn(
+					provider,
+					'External work while reading',
+					{
+						answer: 'External work completed.',
+						tools: [{ ...tool, updates: ['external-output'], gates: [gate] }],
+					},
+					seed.id
+				)
+			: undefined;
+		external?.catch(() => {}); // Awaited below after releasing the workload gate.
+		const synthetic = native.real
+			? undefined
+			: createTurn({ ...identity, prompt: 'External work while reading' });
+		synthetic?.startTool(tool);
 		const unread = native
 			.output()
 			.getByTitle('New messages (click to pin to bottom)', { exact: true });
 		await expect(unread).toHaveText('1');
-		external.finishTool(tool);
-		external.finish('External work completed.');
+		fs.writeFileSync(gate, 'continue');
+		if (external) await external;
+		else {
+			synthetic.finishTool(tool);
+			synthetic.finish('External work completed.');
+		}
 		await expect(
 			native.output().getByText('External work completed.', { exact: true })
 		).toBeVisible();
@@ -67,10 +85,13 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		await unread.click();
 		await native.send('Run a tool while the other writer appends');
 		await expect(native.output().locator('[data-tool-status="running"]').first()).toBeVisible();
-		appendTurn(
-			{ ...identity, prompt: 'A synthetic concurrent append' },
-			{ answer: 'Wait until Maestro becomes idle.' }
+		const concurrent = native.externalTurn(
+			provider,
+			'An external append while Maestro is busy',
+			{ answer: 'Wait until Maestro becomes idle.' },
+			seed.id
 		);
+		concurrent.catch(() => {}); // Awaited after Stop; never turn a CLI refusal into success.
 		// Observe two real 2-second probes from useNativeTranscriptFollow.
 		// This synthetic append tests the read guard, not supported concurrent writes.
 		await native.page.waitForTimeout(4200);
@@ -78,6 +99,7 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 			native.output().getByText('Wait until Maestro becomes idle.', { exact: true })
 		).toHaveCount(0);
 		await native.page.getByRole('button', { name: /^Stop/ }).click();
+		await concurrent;
 		await expect(
 			native.output().getByText('Wait until Maestro becomes idle.', { exact: true })
 		).toBeVisible();
@@ -111,12 +133,7 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 			await native.page.locator('[data-tour="history-tab"]').click();
 			const summary =
 				provider === 'claude' ? 'A native acceptance turn completed.' : 'Saved work answer.';
-			await expect(
-				native.page
-					.locator('[data-tour="history-panel"]')
-					.getByText(summary, { exact: true })
-					.first()
-			).toBeVisible();
+			await native.historyEntry(agentId, summary);
 			expect(fs.readFileSync(file)).toEqual(before);
 			expect(native.files(provider)).toEqual(files);
 			await expect(native.page.locator('[data-conversation-key]')).toHaveCount(rows);
@@ -186,16 +203,7 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 	}) => {
 		native.scriptTurns([]);
 		for (const title of ['First focus history', 'Second focus history'])
-			appendTurn(
-				{
-					provider,
-					configDir: provider === 'claude' ? native.claude : native.codex,
-					cwd: native.project,
-					id: randomUUID(),
-					prompt: title,
-				},
-				{ answer: `${title} answer.` }
-			);
+			await native.externalTurn(provider, title, { answer: `${title} answer.` });
 		await native.createAgent(provider);
 		const rows = native.page.locator('[data-conversation-kind="history"] button[data-tree-nav]');
 		await rows.filter({ hasText: 'First focus history' }).click();

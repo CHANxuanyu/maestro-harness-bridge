@@ -116,13 +116,25 @@ export abstract class BaseSessionStorage implements AgentSessionStorage {
 		}
 
 		const sessions = await this.listSessions(projectPath, sshConfig);
+		return this.searchSessionMessages(sessions, query, searchMode, (sessionId) =>
+			this.getSearchableMessages(sessionId, projectPath, sshConfig)
+		);
+	}
+
+	/** Search one discovered list, allowing providers to reuse that operation's file paths. */
+	protected async searchSessionMessages(
+		sessions: AgentSessionInfo[],
+		query: string,
+		searchMode: SessionSearchMode,
+		loadMessages: (sessionId: string) => Promise<SearchableMessage[]>
+	): Promise<SessionSearchResult[]> {
 		const searchLower = query.toLowerCase();
 		const results: SessionSearchResult[] = [];
 
 		for (const session of sessions) {
 			let messages: SearchableMessage[];
 			try {
-				messages = await this.getSearchableMessages(session.sessionId, projectPath, sshConfig);
+				messages = await loadMessages(session.sessionId);
 			} catch (error) {
 				const errMsg = error instanceof Error ? error.message : String(error);
 				logger.warn(

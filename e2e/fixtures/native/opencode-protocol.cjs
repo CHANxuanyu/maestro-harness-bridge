@@ -11,6 +11,23 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 
+// File creation precedes SQLite schema installation. Wait for the three native
+// projection tables read below, rather than treating an empty file as ready.
+function openCodeSchemaReady(file) {
+	const db = new DatabaseSync(file, { readOnly: true });
+	try {
+		return (
+			db
+				.prepare(
+					"SELECT count(*) AS total FROM sqlite_schema WHERE type = 'table' AND name IN ('session', 'message', 'part')"
+				)
+				.get().total === 3
+		);
+	} finally {
+		db.close();
+	}
+}
+
 function readOpenCodeState(file) {
 	const db = new DatabaseSync(file, { readOnly: true });
 	try {
@@ -187,4 +204,4 @@ function createOpenCodeTurn({ configDir, cwd, id, prompt, emit = () => {} }) {
 		},
 	};
 }
-module.exports = { createOpenCodeTurn, readOpenCodeState };
+module.exports = { createOpenCodeTurn, readOpenCodeState, openCodeSchemaReady };

@@ -17,7 +17,7 @@ import { launchElectronApp } from './electron-app';
 import { createCopilotTurn } from './native/copilot-protocol.cjs';
 import { createOmpTurn } from './native/omp-protocol.cjs';
 import { createGrokTurn } from './native/grok-protocol.cjs';
-import { createOpenCodeTurn } from './native/opencode-protocol.cjs';
+import { createOpenCodeTurn, openCodeSchemaReady } from './native/opencode-protocol.cjs';
 
 const exec = promisify(execFile);
 export type Provider = 'claude' | 'codex' | 'opencode' | 'grok' | 'omp' | 'copilot';
@@ -390,7 +390,9 @@ export class NativeApp {
 	}
 	async oneTranscript(provider: Provider) {
 		await expect.poll(() => this.files(provider).length).toBe(1);
-		return this.files(provider)[0];
+		const file = this.files(provider)[0];
+		if (provider === 'opencode') await expect.poll(() => openCodeSchemaReady(file)).toBe(true);
+		return file;
 	}
 }
 

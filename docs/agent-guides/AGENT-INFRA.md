@@ -779,6 +779,7 @@ interface AgentSessionStorage {
 
 - `listSessionsPaginated()` - Cursor-based pagination over `listSessions()`
 - `searchSessions()` - Full-text search with configurable mode (title/user/assistant/all)
+- `searchSessionMessages()` - Protected search over one discovered list with a provider-owned message loader, so native file paths can be reused within one operation
 - `paginateSessions()` - Static helper for cursor pagination
 - `applyMessagePagination()` - Static helper for message pagination (load from end)
 - `extractMatchPreview()` - Static helper for search result preview snippets

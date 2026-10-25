@@ -63,6 +63,7 @@ describe('session-watcher', () => {
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
@@ -197,15 +198,19 @@ describe('session-watcher', () => {
 
 		it('ignores pre-existing files whose creation time is before spawnTimestamp', async () => {
 			ensureProjectsDir();
-			writeJsonl('old-session-id');
-
-			// Wait so `Date.now()` is observably after the old file's birthtime.
-			await sleep(20);
-			const spawnTimestamp = Date.now();
-			await sleep(5);
-
+			const oldPath = writeJsonl('old-session-id');
+			const spawnTimestamp = 2000;
 			const newId = 'new-session-id';
-			writeJsonl(newId);
+			const newPath = writeJsonl(newId);
+			// The filesystem clock may lag Date.now() on tmpfs. Keep real files
+			// and stat metadata, but supply the exact time boundary under test.
+			const stat = fs.promises.stat.bind(fs.promises);
+			vi.spyOn(fs.promises, 'stat').mockImplementation(async (file) => {
+				const result = await stat(file);
+				if (file === oldPath) result.birthtimeMs = spawnTimestamp - 1;
+				if (file === newPath) result.birthtimeMs = spawnTimestamp;
+				return result;
+			});
 
 			const result = await discoverSessionId({
 				configDir,
@@ -354,11 +359,20 @@ describe('session-watcher', () => {
 
 		it('ignores subdirectories that happen to end in .jsonl', async () => {
 			ensureProjectsDir();
-			const spawnTimestamp = Date.now();
-			await sleep(5);
-			fs.mkdirSync(path.join(projectsDir(), 'weird-dir.jsonl'));
+			const directoryPath = path.join(projectsDir(), 'weird-dir.jsonl');
+			fs.mkdirSync(directoryPath);
 			const sessionId = 'real-session';
-			writeJsonl(sessionId);
+			const filePath = writeJsonl(sessionId);
+			// Both entries are eligible by time. The directory would win without
+			// the isFile check; filesystem and wall-clock precision are irrelevant.
+			const spawnTimestamp = 2000;
+			const stat = fs.promises.stat.bind(fs.promises);
+			vi.spyOn(fs.promises, 'stat').mockImplementation(async (file) => {
+				const result = await stat(file);
+				if (file === directoryPath) result.birthtimeMs = spawnTimestamp;
+				if (file === filePath) result.birthtimeMs = spawnTimestamp + 1;
+				return result;
+			});
 
 			const result = await discoverSessionId({
 				configDir,

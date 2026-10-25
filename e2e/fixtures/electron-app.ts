@@ -31,6 +31,27 @@ function getMainPath(): string {
 	return path.join(__dirname, '../../dist/main/index.js');
 }
 
+// Both native-resume acceptance and the existing suites launch the built app.
+// Restart tests call this again with the same isolated data directory.
+export async function launchElectronApp(
+	appPath: string,
+	testDataDir: string,
+	env: Record<string, string> = {}
+): Promise<ElectronApplication> {
+	return electron.launch({
+		args: [appPath, ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],
+		env: {
+			...process.env,
+			MAESTRO_DEMO_DIR: testDataDir,
+			MAESTRO_USER_DATA: testDataDir,
+			ELECTRON_DISABLE_GPU: '1',
+			NODE_ENV: 'test',
+			...env,
+		},
+		timeout: 30000,
+	});
+}
+
 /**
  * Create a unique test data directory for isolation
  */
@@ -93,25 +114,10 @@ export const test = base.extend<ElectronTestFixtures>({
 
 	// Launch Electron application
 	electronApp: async ({ appPath, testDataDir, electronLaunchEnv }, use) => {
-		// Launch the Electron app
-		const app = await electron.launch({
-			args: [appPath],
-			env: {
-				...process.env,
-				// Use the app's real demo-mode redirect so every persisted store,
-				// including Group Chats, resolves inside this test directory.
-				MAESTRO_DEMO_DIR: testDataDir,
-				MAESTRO_DATA_DIR: testDataDir,
-				// Disable hardware acceleration for CI
-				ELECTRON_DISABLE_GPU: '1',
-				// Set NODE_ENV to test
-				NODE_ENV: 'test',
-				// Ensure we're in a testing context
-				MAESTRO_E2E_TEST: 'true',
-				...electronLaunchEnv,
-			},
-			// Increase timeout for slow CI environments
-			timeout: 30000,
+		const app = await launchElectronApp(appPath, testDataDir, {
+			MAESTRO_DATA_DIR: testDataDir,
+			MAESTRO_E2E_TEST: 'true',
+			...electronLaunchEnv,
 		});
 
 		await use(app);

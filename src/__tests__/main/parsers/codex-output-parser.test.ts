@@ -29,6 +29,64 @@ describe('CodexOutputParser', () => {
 	});
 
 	it.each([
+		[
+			'exec_command',
+			'Wall time: 0.0100 seconds\nProcess exited with code 1\nOutput:\ncommand failed',
+			'failed',
+		],
+		[
+			'write_stdin',
+			'Wall time: 0.0100 seconds\nProcess exited with code 1\nOutput:\ncommand failed',
+			'failed',
+		],
+		[
+			'exec_command',
+			'Chunk ID: abc123\nWall time: 0.0100 seconds\nProcess exited with code -9\nOriginal token count: 3\nOutput:\nstopped',
+			'failed',
+		],
+		[
+			'exec_command',
+			'Wall time: 0.0100 seconds\nProcess exited with code 0\nOutput:\nProcess exited with code 1',
+			'completed',
+		],
+		[
+			'exec_command',
+			'A manual example:\nWall time: 0.0100 seconds\nProcess exited with code 1\nOutput:\nexample',
+			'completed',
+		],
+		[
+			'read_file',
+			'Wall time: 0.0100 seconds\nProcess exited with code 1\nOutput:\ncommand failed',
+			'completed',
+		],
+		[
+			undefined,
+			'Wall time: 0.0100 seconds\nProcess exited with code 1\nOutput:\ncommand failed',
+			'completed',
+		],
+	])(
+		'reads a native exit header only for its paired command tool: %s %s',
+		(toolName, output, status) => {
+			const parser = new CodexOutputParser();
+			if (toolName)
+				parser.parseJsonObject({
+					type: 'response_item',
+					payload: {
+						type: 'function_call',
+						name: toolName,
+						call_id: 'native-exit',
+						arguments: '{}',
+					},
+				});
+			const result = parser.parseJsonObject({
+				type: 'response_item',
+				payload: { type: 'function_call_output', call_id: 'native-exit', output },
+			});
+			expect(result).toMatchObject({ toolCallId: 'native-exit', toolState: { status, output } });
+		}
+	);
+
+	it.each([
 		[{ output: 'aborted by user after 15.1s' }, 'canceled'],
 		[{ output: 'ok', status: 'cancelled' }, 'canceled'],
 		[{ output: 'failed', is_error: true }, 'failed'],

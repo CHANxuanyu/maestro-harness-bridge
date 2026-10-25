@@ -410,6 +410,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 
 				// Get SSH config if provided
 				const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+				if (sshRemoteId && !sshConfig) throw new Error('SSH remote is unavailable');
 
 				const sessions = await storage.listSessions(projectPath, sshConfig);
 				logger.info(
@@ -441,6 +442,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 
 				// Get SSH config if provided
 				const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+				if (sshRemoteId && !sshConfig) throw new Error('SSH remote is unavailable');
 
 				// List the pool of the account this agent actually runs under: its
 				// provider only resumes sessions from that config dir.
@@ -557,6 +559,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 
 				// Get SSH config if provided
 				const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+				if (sshRemoteId && !sshConfig) throw new Error('SSH remote is unavailable');
 
 				const results = await storage.searchSessions(projectPath, query, searchMode, sshConfig);
 				logger.info(
@@ -574,14 +577,21 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 		'agentSessions:getPath',
 		withIpcErrorLogging(
 			handlerOpts('getPath'),
-			async (agentId: string, projectPath: string, sessionId: string): Promise<string | null> => {
+			async (
+				agentId: string,
+				projectPath: string,
+				sessionId: string,
+				sshRemoteId?: string
+			): Promise<string | null> => {
 				const storage = getSessionStorage(agentId);
 				if (!storage) {
 					logger.warn(`No session storage available for agent: ${agentId}`, LOG_CONTEXT);
 					return null;
 				}
 
-				return storage.getSessionPath(projectPath, sessionId);
+				const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+				if (sshRemoteId && !sshConfig) throw new Error('SSH remote is unavailable');
+				return storage.getSessionPath(projectPath, sessionId, sshConfig);
 			}
 		)
 	);

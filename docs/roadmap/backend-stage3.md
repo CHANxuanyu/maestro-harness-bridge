@@ -120,6 +120,8 @@
 - **CI 受阻：** [PR #15](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/15) 的六项既有检查通过；[Native E2E](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40173915973) 在 49/49 常规场景及 45/49 真实入口烟测通过后，被整个 job 的 15 分钟时限取消。已提出只将 job 时限改为 25 分钟的范围扩展；`.github/workflows/ci.yml` 不在原计划允许路径中，等待用户确认，未修改、未重试或合并。Copilot 的实现尚未合入主线，不把本记录当作主线已启用。
 - **主线集成准备：** 已同步主线 `a4fdcc0491973fd4d5bdd416d5fc24871467a4fe`，完成记录的唯一冲突保留主线完整内容，产品代码自动合并。集成后相关测试 475/475，夹具 29/29，完整 Electron 49/49（6.2 分钟），Copilot/OpenCode 隔离真实入口 12/12（1.8 分钟），静态、文档及发布检查通过。集成稿保存在 `codex/stage3-copilot-integration`，供云端接续与审阅；未修改 CI 时限，也未更新 PR #15 的代码分支或合并该 PR。范围获准后，在此稿上仅把该 job 的 15 分钟改为 25 分钟，再更新原 PR 并等待七项检查及主线 CI。
 
+- **历史修复集成补充：** 准备分支继续合入主线 `be88f6a8667200bc19ee96119022297b6604eaff`（PR #17、#18 的账户分页、SSH 路径及搜索语义修复），无冲突。集成后 31 个相关单元测试文件 657/657、夹具 29/29、完整 Electron 51/51（6.3 分钟）、完整隔离真实入口烟测 51/51（7.0 分钟）；烟测同时确认合成源凭据未改写、临时会话清理完成。类型、ESLint、全仓格式、文档引用、连接器 26/26 和发布策略 11/11 通过。只更新上述准备分支及本记录；PR #15 的代码分支仍为 `8d5aab0c33a458c2fcb2037b268ca83abdc9718b`，CI 时限范围确认与真实环境未验边界不变，没有重试 CI。
+
 ### 任务二：Factory Droid
 
 - **受阻原因：** 当前官方 @factory/cli 0.249.0 使用原生字节码，官方 SDK 的 stream-jsonrpc 格式不能证明产品当前使用的 `droid exec -o stream-json`。可读的官方旧包 0.1.0 与 0.1.2-dev.7 也不具备当前 `--resume`、输出及会话格式。详细版本、提交、源码及证据缺口见[格式核查](../native-factory-format.md)。未猜字段、未新增假程序或产品格式分支，保留既有行为。

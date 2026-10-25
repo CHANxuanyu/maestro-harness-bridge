@@ -41,6 +41,30 @@ it('searches a project without walking the same account directories for every re
 	expect(listing.mock.calls.length).toBeLessThanOrEqual(8);
 });
 
+it('searches cached titles without rereading transcripts or scanning paths twice', async () => {
+	const project = path.join(isolation.home, 'project');
+	const account = path.join(isolation.home, '.codex');
+	const fixtures = Array.from({ length: 3 }, () => createSession('codex', account, project, 4));
+	const storage = new CodexSessionStorage();
+	const sessions = await storage.listSessions(project);
+	expect(sessions.every((session) => session.firstMessage.includes('answer 0'))).toBe(true);
+	const reads = vi.spyOn(fs, 'readFile');
+	const listing = vi.spyOn(fs, 'readdir');
+
+	const results = await storage.searchSessions(project, 'answer 0', 'title');
+	expect(results.map((result) => result.sessionId).sort()).toEqual(
+		fixtures.map((fixture) => fixture.id).sort()
+	);
+	expect(results.every((result) => result.matchType === 'title' && result.matchCount === 1)).toBe(
+		true
+	);
+	expect(
+		reads.mock.calls.filter(([file]) => fixtures.some((fixture) => file === fixture.file))
+	).toEqual([]);
+	// The existing year/month/day tree is discovered once; metadata comes from its cache.
+	expect(listing.mock.calls.length).toBeLessThanOrEqual(4);
+});
+
 it('preserves legacy filename lookup and independent concurrent searches', async () => {
 	const account = path.join(isolation.home, '.codex');
 	const projects = ['a', 'b'].map((name) => path.join(isolation.home, name));
@@ -53,4 +77,40 @@ it('preserves legacy filename lookup and independent concurrent searches', async
 	expect(results.map((result) => result.map((match) => match.sessionId))).toEqual(
 		fixtures.map((fixture) => [fixture.id])
 	);
+});
+
+it('keeps the selected account across history pages for the same project', async () => {
+	const project = path.join(isolation.home, 'project');
+	const selected = path.join(isolation.home, 'work-account');
+	const defaultSession = createSession('codex', path.join(isolation.home, '.codex'), project, 4);
+	const selectedSessions = Array.from({ length: 2 }, () =>
+		createSession('codex', selected, project, 4)
+	);
+	const storage = new CodexSessionStorage();
+	const first = await storage.listSessionsPaginated(project, { configDir: selected, limit: 1 });
+	expect(first.totalCount).toBe(2);
+	expect(first.hasMore).toBe(true);
+	expect(first.nextCursor).toBe(first.sessions[0].sessionId);
+	const second = await storage.listSessionsPaginated(project, {
+		configDir: selected,
+		cursor: first.nextCursor!,
+		limit: 1,
+	});
+	expect(
+		[...first.sessions, ...second.sessions].map((session) => session.sessionId).sort()
+	).toEqual(selectedSessions.map((session) => session.id).sort());
+	expect(second.totalCount).toBe(2);
+	expect(second.hasMore).toBe(false);
+	expect(second.nextCursor).toBeNull();
+	const defaults = await storage.listSessionsPaginated(project);
+	expect(defaults.sessions.map((session) => session.sessionId)).toEqual([defaultSession.id]);
+});
+
+it('does not borrow default history when the selected account directory is missing', async () => {
+	const project = path.join(isolation.home, 'project');
+	createSession('codex', path.join(isolation.home, '.codex'), project, 4);
+	const result = await new CodexSessionStorage().listSessionsPaginated(project, {
+		configDir: path.join(isolation.home, 'missing-account'),
+	});
+	expect(result).toEqual({ sessions: [], totalCount: 0, hasMore: false, nextCursor: null });
 });

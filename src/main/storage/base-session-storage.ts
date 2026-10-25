@@ -49,7 +49,8 @@ export abstract class BaseSessionStorage implements AgentSessionStorage {
 
 	abstract listSessions(
 		projectPath: string,
-		sshConfig?: SshRemoteConfig
+		sshConfig?: SshRemoteConfig,
+		accountDir?: string
 	): Promise<AgentSessionInfo[]>;
 
 	abstract readSessionMessages(
@@ -97,7 +98,7 @@ export abstract class BaseSessionStorage implements AgentSessionStorage {
 		options?: SessionListOptions,
 		sshConfig?: SshRemoteConfig
 	): Promise<PaginatedSessionsResult> {
-		const allSessions = await this.listSessions(projectPath, sshConfig);
+		const allSessions = await this.listSessions(projectPath, sshConfig, options?.configDir);
 		return BaseSessionStorage.paginateSessions(allSessions, options);
 	}
 
@@ -134,7 +135,8 @@ export abstract class BaseSessionStorage implements AgentSessionStorage {
 		for (const session of sessions) {
 			let messages: SearchableMessage[];
 			try {
-				messages = await loadMessages(session.sessionId);
+				// Listed metadata already contains the title; only body searches need messages.
+				messages = searchMode === 'title' ? [] : await loadMessages(session.sessionId);
 			} catch (error) {
 				const errMsg = error instanceof Error ? error.message : String(error);
 				logger.warn(
@@ -149,7 +151,7 @@ export abstract class BaseSessionStorage implements AgentSessionStorage {
 			const titleMatch = titleText.includes(searchLower);
 			let matchPreview = '';
 
-			if (titleMatch) {
+			if (titleMatch && (searchMode === 'title' || searchMode === 'all')) {
 				matchPreview = BaseSessionStorage.extractMatchPreview(
 					session.sessionName || session.firstMessage || '',
 					titleText,

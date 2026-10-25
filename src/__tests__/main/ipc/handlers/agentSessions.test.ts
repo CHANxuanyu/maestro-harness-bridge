@@ -38,10 +38,7 @@ vi.mock('../../../../main/agents', () => ({
 	getAllSessionStorages: vi.fn(),
 }));
 
-// Mock the stores module. The agentSessions handler now resolves SSH remotes
-// through the canonical store getter; in the absence of a configured remote
-// we want a clean undefined return (matching the prior "no settings store"
-// behavior the tests below assert against), not an "uninitialized" throw.
+// Resolve configured remotes without accessing the user's settings store.
 vi.mock('../../../../main/stores', () => ({
 	getSshRemoteById: vi.fn().mockReturnValue(undefined),
 }));
@@ -70,6 +67,7 @@ describe('agentSessions IPC handlers', () => {
 	beforeEach(() => {
 		// Clear mocks
 		vi.clearAllMocks();
+		vi.mocked(getSshRemoteById).mockReset().mockReturnValue(undefined);
 
 		// Capture all registered handlers
 		handlers = new Map();
@@ -102,6 +100,49 @@ describe('agentSessions IPC handlers', () => {
 				expect(handlers.has(channel)).toBe(true);
 			}
 		});
+	});
+
+	describe.each([
+		{ channel: 'list', method: 'listSessions', args: [] },
+		{ channel: 'listPaginated', method: 'listSessionsPaginated', args: [{ limit: 10 }] },
+		{ channel: 'read', method: 'readSessionMessages', args: ['session-1', { readOnly: true }] },
+		{ channel: 'search', method: 'searchSessions', args: ['local-only', 'all'] },
+		{ channel: 'getPath', method: 'getSessionPath', args: ['session-1'] },
+	])('$channel remote boundary', ({ channel, method, args }) => {
+		it.each(['missing', 'disabled'])(
+			'rejects a %s remote without reading local storage',
+			async (state) => {
+				if (state === 'disabled') {
+					vi.mocked(getSshRemoteById).mockReturnValueOnce({
+						id: 'ssh-remote-1',
+						enabled: false,
+					} as any);
+				}
+				const sessions = [{ sessionId: 'local-only-session' }];
+				const readStorage = vi
+					.fn()
+					.mockResolvedValue(
+						channel === 'listPaginated'
+							? { sessions, hasMore: false, totalCount: 1, nextCursor: null }
+							: sessions
+					);
+				vi.mocked(agentSessionStorage.getSessionStorage).mockReturnValue({
+					agentId: 'claude-code',
+					[method]: readStorage,
+				} as unknown as agentSessionStorage.AgentSessionStorage);
+
+				await expect(
+					handlers.get(`agentSessions:${channel}`)!(
+						{},
+						'claude-code',
+						'/test',
+						...args,
+						'ssh-remote-1'
+					)
+				).rejects.toThrow('SSH remote is unavailable');
+				expect(readStorage).not.toHaveBeenCalled();
+			}
+		);
 	});
 
 	describe('agentSessions:list', () => {
@@ -148,12 +189,13 @@ describe('agentSessions IPC handlers', () => {
 				mockStorage as unknown as agentSessionStorage.AgentSessionStorage
 			);
 
+			const remote = { id: 'ssh-remote-1', enabled: true } as any;
+			vi.mocked(getSshRemoteById).mockReturnValueOnce(remote);
 			const handler = handlers.get('agentSessions:list');
-			// Note: Without settings store, sshConfig will be undefined even if sshRemoteId is passed
 			const result = await handler!({} as any, 'claude-code', '/test', 'ssh-remote-1');
 
-			// Since no settings store is configured, sshConfig should be undefined
-			expect(mockStorage.listSessions).toHaveBeenCalledWith('/test', undefined);
+			expect(getSshRemoteById).toHaveBeenCalledWith('ssh-remote-1');
+			expect(mockStorage.listSessions).toHaveBeenCalledWith('/test', remote);
 			expect(result).toEqual(mockSessions);
 		});
 	});
@@ -218,6 +260,8 @@ describe('agentSessions IPC handlers', () => {
 				mockStorage as unknown as agentSessionStorage.AgentSessionStorage
 			);
 
+			const remote = { id: 'ssh-remote-1', enabled: true } as any;
+			vi.mocked(getSshRemoteById).mockReturnValueOnce(remote);
 			const handler = handlers.get('agentSessions:listPaginated');
 			const result = await handler!(
 				{} as any,
@@ -227,11 +271,11 @@ describe('agentSessions IPC handlers', () => {
 				'ssh-remote-1'
 			);
 
-			// Since no settings store is configured, sshConfig should be undefined
+			expect(getSshRemoteById).toHaveBeenCalledWith('ssh-remote-1');
 			expect(mockStorage.listSessionsPaginated).toHaveBeenCalledWith(
 				'/test',
 				{ limit: 10 },
-				undefined
+				remote
 			);
 			expect(result).toEqual(mockResult);
 		});
@@ -375,6 +419,8 @@ describe('agentSessions IPC handlers', () => {
 				mockStorage as unknown as agentSessionStorage.AgentSessionStorage
 			);
 
+			const remote = { id: 'ssh-remote-1', enabled: true } as any;
+			vi.mocked(getSshRemoteById).mockReturnValueOnce(remote);
 			const handler = handlers.get('agentSessions:search');
 			const result = await handler!(
 				{} as any,
@@ -385,13 +431,36 @@ describe('agentSessions IPC handlers', () => {
 				'ssh-remote-1'
 			);
 
-			// Since no settings store is configured, sshConfig should be undefined
-			expect(mockStorage.searchSessions).toHaveBeenCalledWith('/test', 'hello', 'all', undefined);
+			expect(getSshRemoteById).toHaveBeenCalledWith('ssh-remote-1');
+			expect(mockStorage.searchSessions).toHaveBeenCalledWith('/test', 'hello', 'all', remote);
 			expect(result).toEqual(mockResults);
 		});
 	});
 
 	describe('agentSessions:getPath', () => {
+		it('resolves the session path on the requested enabled remote', async () => {
+			const remote = { id: 'ssh-remote-1', enabled: true } as any;
+			vi.mocked(getSshRemoteById).mockReturnValueOnce(remote);
+			const mockStorage = {
+				getSessionPath: vi.fn((_project: string, _session: string, sshConfig?: unknown) =>
+					sshConfig ? '/remote/session.jsonl' : '/local/session.jsonl'
+				),
+			};
+			vi.mocked(agentSessionStorage.getSessionStorage).mockReturnValue(
+				mockStorage as unknown as agentSessionStorage.AgentSessionStorage
+			);
+
+			const result = await handlers.get('agentSessions:getPath')!(
+				{},
+				'claude-code',
+				'/test',
+				'session-1',
+				'ssh-remote-1'
+			);
+			expect(result).toBe('/remote/session.jsonl');
+			expect(mockStorage.getSessionPath).toHaveBeenCalledWith('/test', 'session-1', remote);
+		});
+
 		it('should return session path from storage', async () => {
 			const mockStorage = {
 				agentId: 'claude-code',
@@ -405,7 +474,7 @@ describe('agentSessions IPC handlers', () => {
 			const handler = handlers.get('agentSessions:getPath');
 			const result = await handler!({} as any, 'claude-code', '/test', 'session-1');
 
-			expect(mockStorage.getSessionPath).toHaveBeenCalledWith('/test', 'session-1');
+			expect(mockStorage.getSessionPath).toHaveBeenCalledWith('/test', 'session-1', undefined);
 			expect(result).toBe('/path/to/session.jsonl');
 		});
 

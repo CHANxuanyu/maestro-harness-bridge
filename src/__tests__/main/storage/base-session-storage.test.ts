@@ -29,6 +29,7 @@ class TestSessionStorage extends BaseSessionStorage {
 
 	/** Session IDs that should throw when loading messages */
 	failingSessions: Set<string> = new Set();
+	loadedSessionIds: string[] = [];
 
 	async listSessions(
 		_projectPath: string,
@@ -69,6 +70,7 @@ class TestSessionStorage extends BaseSessionStorage {
 		_projectPath: string,
 		_sshConfig?: SshRemoteConfig
 	): Promise<SearchableMessage[]> {
+		this.loadedSessionIds.push(sessionId);
 		if (this.failingSessions.has(sessionId)) {
 			throw new Error(`Failed to load messages for ${sessionId}`);
 		}
@@ -368,6 +370,46 @@ describe('BaseSessionStorage', () => {
 	// ---- searchSessions (instance) ----
 
 	describe('searchSessions', () => {
+		it.each(['user', 'assistant'] as const)(
+			'takes the %s preview from that role when the title also matches',
+			async (mode) => {
+				const storage = new TestSessionStorage();
+				storage.sessions = [{ ...makeSession('s-1'), sessionName: 'needle in title' }];
+				storage.searchableMessages.set('s-1', [
+					{ role: 'user', textContent: 'user body needle' },
+					{ role: 'assistant', textContent: 'assistant body needle' },
+				]);
+				expect(await storage.searchSessions('/test', 'needle', mode)).toEqual([
+					{ sessionId: 's-1', matchType: mode, matchPreview: `${mode} body needle`, matchCount: 1 },
+				]);
+			}
+		);
+
+		it('uses listed metadata for title search without loading unavailable message bodies', async () => {
+			const storage = new TestSessionStorage();
+			storage.sessions = [
+				{ ...makeSession('named'), sessionName: 'Searchable NAME', firstMessage: 'other' },
+				{ ...makeSession('preview'), firstMessage: 'Searchable preview' },
+				{ ...makeSession('body-only'), firstMessage: 'Unrelated title' },
+			];
+			storage.failingSessions.add('named');
+			storage.failingSessions.add('preview');
+			storage.searchableMessages.set('body-only', [
+				{ role: 'user', textContent: 'searchable body' },
+			]);
+
+			expect(await storage.searchSessions('/test', 'SEARCHABLE', 'title')).toEqual([
+				{ sessionId: 'named', matchType: 'title', matchPreview: 'Searchable NAME', matchCount: 1 },
+				{
+					sessionId: 'preview',
+					matchType: 'title',
+					matchPreview: 'Searchable preview',
+					matchCount: 1,
+				},
+			]);
+			expect(storage.loadedSessionIds).toEqual([]);
+		});
+
 		it('returns empty for empty query', async () => {
 			const storage = new TestSessionStorage();
 			const results = await storage.searchSessions('/test', '  ', 'all');

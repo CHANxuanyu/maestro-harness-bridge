@@ -67,6 +67,7 @@ describe('agentSessions IPC handlers', () => {
 	beforeEach(() => {
 		// Clear mocks
 		vi.clearAllMocks();
+		vi.mocked(getSshRemoteById).mockReset().mockReturnValue(undefined);
 
 		// Capture all registered handlers
 		handlers = new Map();
@@ -106,6 +107,7 @@ describe('agentSessions IPC handlers', () => {
 		{ channel: 'listPaginated', method: 'listSessionsPaginated', args: [{ limit: 10 }] },
 		{ channel: 'read', method: 'readSessionMessages', args: ['session-1', { readOnly: true }] },
 		{ channel: 'search', method: 'searchSessions', args: ['local-only', 'all'] },
+		{ channel: 'getPath', method: 'getSessionPath', args: ['session-1'] },
 	])('$channel remote boundary', ({ channel, method, args }) => {
 		it.each(['missing', 'disabled'])(
 			'rejects a %s remote without reading local storage',
@@ -436,6 +438,29 @@ describe('agentSessions IPC handlers', () => {
 	});
 
 	describe('agentSessions:getPath', () => {
+		it('resolves the session path on the requested enabled remote', async () => {
+			const remote = { id: 'ssh-remote-1', enabled: true } as any;
+			vi.mocked(getSshRemoteById).mockReturnValueOnce(remote);
+			const mockStorage = {
+				getSessionPath: vi.fn((_project: string, _session: string, sshConfig?: unknown) =>
+					sshConfig ? '/remote/session.jsonl' : '/local/session.jsonl'
+				),
+			};
+			vi.mocked(agentSessionStorage.getSessionStorage).mockReturnValue(
+				mockStorage as unknown as agentSessionStorage.AgentSessionStorage
+			);
+
+			const result = await handlers.get('agentSessions:getPath')!(
+				{},
+				'claude-code',
+				'/test',
+				'session-1',
+				'ssh-remote-1'
+			);
+			expect(result).toBe('/remote/session.jsonl');
+			expect(mockStorage.getSessionPath).toHaveBeenCalledWith('/test', 'session-1', remote);
+		});
+
 		it('should return session path from storage', async () => {
 			const mockStorage = {
 				agentId: 'claude-code',
@@ -449,7 +474,7 @@ describe('agentSessions IPC handlers', () => {
 			const handler = handlers.get('agentSessions:getPath');
 			const result = await handler!({} as any, 'claude-code', '/test', 'session-1');
 
-			expect(mockStorage.getSessionPath).toHaveBeenCalledWith('/test', 'session-1');
+			expect(mockStorage.getSessionPath).toHaveBeenCalledWith('/test', 'session-1', undefined);
 			expect(result).toBe('/path/to/session.jsonl');
 		});
 

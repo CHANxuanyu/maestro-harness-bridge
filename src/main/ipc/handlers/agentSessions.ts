@@ -577,14 +577,21 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 		'agentSessions:getPath',
 		withIpcErrorLogging(
 			handlerOpts('getPath'),
-			async (agentId: string, projectPath: string, sessionId: string): Promise<string | null> => {
+			async (
+				agentId: string,
+				projectPath: string,
+				sessionId: string,
+				sshRemoteId?: string
+			): Promise<string | null> => {
 				const storage = getSessionStorage(agentId);
 				if (!storage) {
 					logger.warn(`No session storage available for agent: ${agentId}`, LOG_CONTEXT);
 					return null;
 				}
 
-				return storage.getSessionPath(projectPath, sessionId);
+				const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+				if (sshRemoteId && !sshConfig) throw new Error('SSH remote is unavailable');
+				return storage.getSessionPath(projectPath, sessionId, sshConfig);
 			}
 		)
 	);

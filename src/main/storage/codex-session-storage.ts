@@ -1578,7 +1578,8 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		searchMode: SessionSearchMode,
 		sshConfig?: SshRemoteConfig
 	): Promise<SessionSearchResult[]> {
-		if (sshConfig) return super.searchSessions(projectPath, query, searchMode, sshConfig);
+		if (sshConfig || searchMode === 'title')
+			return super.searchSessions(projectPath, query, searchMode, sshConfig);
 		if (!query.trim()) return [];
 		const sessions = await this.listSessions(projectPath);
 		const files = await this.findAllSessionFiles();

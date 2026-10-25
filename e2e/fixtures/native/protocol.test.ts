@@ -215,6 +215,52 @@ it('the shared app-server drives the real connector and writes readable native r
 	}
 });
 
+for (const blocker of ['active', 'queued'] as const) {
+	it(`the shared executable reports ${blocker} rejection in the production adapter format`, async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-shared-rejection-'));
+		roots.push(root);
+		const seed = appendTurn(
+			{ provider: 'codex', configDir: root, cwd: root, prompt: 'Shared history' },
+			{ answer: 'Shared initial answer.' }
+		);
+		const socket = path.join(root, 'rpc.sock');
+		const server = await startAppServer({
+			socket,
+			configDir: root,
+			cwd: root,
+			id: seed.id,
+			scenes: [],
+		});
+		if (blocker === 'active') server.state.status = 'active';
+		else server.state.queue = [{ id: 'queued' }];
+		try {
+			const result = await exec(
+				process.execPath,
+				[
+					path.resolve('e2e/fixtures/native/codex-shared'),
+					'exec',
+					'--json',
+					'resume',
+					seed.id,
+					'--',
+					'Refuse this turn',
+				],
+				{ cwd: root, env: { ...process.env, MAESTRO_NATIVE_SOCKET: socket } }
+			).catch((error: { code: number; stdout: string; stderr: string }) => error);
+			expect(result).toMatchObject({ code: 1, stderr: '' });
+			// scripts/codex-shared/exec-adapter-v2.cjs emits this native exec error envelope.
+			const event = JSON.parse(result.stdout.trim());
+			expect(event).toEqual({ type: 'error', message: expect.stringMatching(/^Shared Codex: /) });
+			expect(new CodexOutputParser().detectErrorFromParsed(event)?.message).toContain(
+				blocker === 'active' ? 'still generating in another client' : 'already has queued messages'
+			);
+			expect(server.state.turns).toHaveLength(0);
+		} finally {
+			await server.close();
+		}
+	});
+}
+
 it('a nonpersistent Claude resume leaves every native byte and file unchanged', async () => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-native-synopsis-'));
 	roots.push(root);

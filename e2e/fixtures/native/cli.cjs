@@ -99,6 +99,8 @@ async function run(provider) {
 		turn.finishTool(tool, tool.status);
 	}
 	if (!stopped) turn.finish(scene.answer);
+	// Hold the completed native writer before Maestro starts its exit synopsis.
+	if (scene.exitGate) while (!fs.existsSync(scene.exitGate) && !stopped) await delay(10);
 }
 
 module.exports = { run };

@@ -28,6 +28,7 @@ export interface NativeScene {
 	waitForStop?: boolean;
 	stopDiagnostic?: boolean;
 	toolDelay?: number;
+	exitGate?: string;
 }
 
 export class NativeApp {
@@ -107,7 +108,10 @@ export class NativeApp {
 		);
 		return JSON.parse(result.stdout);
 	}
-	async createAgent(provider: Provider) {
+	async createAgent(
+		provider: Provider,
+		options: { executable?: string; env?: Record<string, string> } = {}
+	) {
 		const result = await this.cli(
 			'create-agent',
 			`Native ${provider}`,
@@ -116,13 +120,14 @@ export class NativeApp {
 			'--cwd',
 			this.project,
 			'--custom-path',
-			path.resolve(`e2e/fixtures/native/${provider}`),
+			options.executable ?? path.resolve(`e2e/fixtures/native/${provider}`),
 			'--env',
 			`CLAUDE_CONFIG_DIR=${this.claude}`,
 			'--env',
 			`CODEX_HOME=${this.codex}`,
 			'--env',
-			`MAESTRO_NATIVE_SCRIPT=${this.script}`
+			`MAESTRO_NATIVE_SCRIPT=${this.script}`,
+			...Object.entries(options.env ?? {}).flatMap(([key, value]) => ['--env', `${key}=${value}`])
 		);
 		expect(result.success).toBe(true);
 		await expect(this.input()).toBeVisible();

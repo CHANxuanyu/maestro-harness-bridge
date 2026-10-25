@@ -42,11 +42,11 @@ test('codex: history pagination keeps the selected agent account', async ({ nati
 		expect(fs.readFileSync(turn.file)).toEqual(before[index]);
 });
 
-test('opencode: unavailable SSH history never falls back to local sessions', async ({ native }) => {
+test('opencode: history queries preserve the search mode and remote host', async ({ native }) => {
 	native.scriptTurns([]);
 	// Reuse the pinned OpenCode transcript writer, or the explicitly selected real CLI.
 	const turn = await native.externalTurn('opencode', 'Local history boundary needle', {
-		answer: 'Only this local account contains the boundary needle.',
+		answer: 'Assistant boundary needle reply.',
 	});
 	const before = fs.readFileSync(turn.file);
 	const local = await native.page.evaluate(async (project) => {
@@ -55,40 +55,63 @@ test('opencode: unavailable SSH history never falls back to local sessions', asy
 			list: await api.list('opencode', project),
 			page: await api.listPaginated('opencode', project, { limit: 10 }),
 			search: await api.search('opencode', project, 'boundary needle', 'all'),
+			assistantSearch: await api.search('opencode', project, 'boundary needle', 'assistant'),
+			userSearch: await api.search('opencode', project, 'boundary needle', 'user'),
 		};
 	}, native.project);
 	expect(local.list).toHaveLength(1);
 	const id = local.list[0].sessionId;
 	expect(local.page.sessions.map((session) => session.sessionId)).toEqual([id]);
 	expect(local.search.map((session) => session.sessionId)).toEqual([id]);
+	expect(local.assistantSearch).toEqual([
+		{
+			sessionId: id,
+			matchType: 'assistant',
+			matchCount: 1,
+			matchPreview: 'Assistant boundary needle reply.',
+		},
+	]);
+	expect(local.userSearch).toEqual([
+		{
+			sessionId: id,
+			matchType: 'user',
+			matchCount: 1,
+			// Real-mode prompts append workload instructions after this opening line.
+			matchPreview: expect.stringMatching(/^Local history boundary needle(?:$|\n)/),
+		},
+	]);
 
-	const remoteResults = await native.page.evaluate(async (project) => {
-		await window.maestro.settings.set('sshRemotes', [
-			{
-				id: 'disabled-history-remote',
-				name: 'Disabled synthetic remote',
-				host: 'history.invalid',
-				port: 22,
-				username: 'synthetic',
-				privateKeyPath: '',
-				enabled: false,
-			},
-		]);
-		const api = window.maestro.agentSessions;
-		const results = await Promise.allSettled(
-			['missing-history-remote', 'disabled-history-remote'].flatMap((remote) => [
-				api.list('opencode', project, remote),
-				api.listPaginated('opencode', project, { limit: 10 }, remote),
-				api.search('opencode', project, 'boundary needle', 'all', remote),
-			])
-		);
-		return results.map((result) =>
-			result.status === 'rejected'
-				? { status: result.status, error: String(result.reason) }
-				: { status: result.status, error: '' }
-		);
-	}, native.project);
-	expect(remoteResults).toHaveLength(6);
+	const remoteResults = await native.page.evaluate(
+		async ({ project, id }) => {
+			await window.maestro.settings.set('sshRemotes', [
+				{
+					id: 'disabled-history-remote',
+					name: 'Disabled synthetic remote',
+					host: 'history.invalid',
+					port: 22,
+					username: 'synthetic',
+					privateKeyPath: '',
+					enabled: false,
+				},
+			]);
+			const api = window.maestro.agentSessions;
+			const results = await Promise.allSettled(
+				['missing-history-remote', 'disabled-history-remote'].flatMap((remote) => [
+					api.list('opencode', project, remote),
+					api.listPaginated('opencode', project, { limit: 10 }, remote),
+					api.search('opencode', project, 'boundary needle', 'all', remote),
+					api.getPath('opencode', project, id, remote),
+				])
+			);
+			return results.map((result) =>
+				result.status === 'rejected'
+					? { status: result.status, error: String(result.reason) }
+					: { status: result.status, error: '' }
+			);
+		},
+		{ project: native.project, id }
+	);
+	expect(remoteResults).toHaveLength(8);
 	for (const result of remoteResults) {
 		expect(result.status).toBe('rejected');
 		expect(result.error).toContain('SSH remote is unavailable');

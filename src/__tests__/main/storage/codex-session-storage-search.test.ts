@@ -41,6 +41,30 @@ it('searches a project without walking the same account directories for every re
 	expect(listing.mock.calls.length).toBeLessThanOrEqual(8);
 });
 
+it('searches cached titles without rereading transcripts or scanning paths twice', async () => {
+	const project = path.join(isolation.home, 'project');
+	const account = path.join(isolation.home, '.codex');
+	const fixtures = Array.from({ length: 3 }, () => createSession('codex', account, project, 4));
+	const storage = new CodexSessionStorage();
+	const sessions = await storage.listSessions(project);
+	expect(sessions.every((session) => session.firstMessage.includes('answer 0'))).toBe(true);
+	const reads = vi.spyOn(fs, 'readFile');
+	const listing = vi.spyOn(fs, 'readdir');
+
+	const results = await storage.searchSessions(project, 'answer 0', 'title');
+	expect(results.map((result) => result.sessionId).sort()).toEqual(
+		fixtures.map((fixture) => fixture.id).sort()
+	);
+	expect(results.every((result) => result.matchType === 'title' && result.matchCount === 1)).toBe(
+		true
+	);
+	expect(
+		reads.mock.calls.filter(([file]) => fixtures.some((fixture) => file === fixture.file))
+	).toEqual([]);
+	// The existing year/month/day tree is discovered once; metadata comes from its cache.
+	expect(listing.mock.calls.length).toBeLessThanOrEqual(4);
+});
+
 it('preserves legacy filename lookup and independent concurrent searches', async () => {
 	const account = path.join(isolation.home, '.codex');
 	const projects = ['a', 'b'].map((name) => path.join(isolation.home, name));

@@ -7,11 +7,17 @@ const { execFileSync } = require('node:child_process');
 
 const versions = { claude: '2.1.310 (Claude Code)', codex: 'codex-cli 0.163.0-alpha.11.1' };
 
-function installedCli(provider, env = process.env) {
+function installedCli(provider, env = process.env, sharedAcceptance = false) {
 	const configured = env[`MAESTRO_E2E_${provider.toUpperCase()}_PATH`];
 	const executable = configured || execFileSync('which', [provider], { encoding: 'utf8' }).trim();
 	const version = execFileSync(executable, ['--version'], { encoding: 'utf8', env }).trim();
-	if (version !== versions[provider])
+	const reviewedShared =
+		sharedAcceptance &&
+		provider === 'codex' &&
+		require('../../../scripts/codex-shared/versions.json').some(
+			(entry) => entry.version === version && ['candidate', 'admitted'].includes(entry.state)
+		);
+	if (version !== versions[provider] && !reviewedShared)
 		throw new Error(`Unsupported ${provider} version: ${version}`);
 	return { executable: path.resolve(executable), version };
 }

@@ -96,7 +96,7 @@ export class NativeApp {
 	async start() {
 		if (this.real && !this.realCli) {
 			this.provider = this.info.title.startsWith('claude') ? 'claude' : 'codex';
-			this.realCli = installedCli(this.provider);
+			this.realCli = installedCli(this.provider, process.env, /^codex [gh]:/.test(this.info.title));
 			this.credentials = prepareCredentials(
 				this.provider,
 				this.provider === 'claude' ? this.claude : this.codex

@@ -67,3 +67,30 @@ Codex 拥有执行进程，退出前应结束两端的活动回合。原生客�
 源码在仓库 `scripts/codex-shared/`；`npm run package:codex-shared` 生成独立包，`npm run test:codex-shared` 运行不接触真实账户的合成测试。包包含 ws 的许可证和本仓库许可证，不分发 Codex 二进制或个人认证。
 
 启动器通过 exec 保留签名原生进程作为桌面的直接子进程，独立 sidecar 只转换传输封装。没有修改官方应用、签名检查或授权机制。Maestro 通过 `exec --json resume` 适配器连接原生服务，不重新实现模型的执行循环。
+
+## 桌面更新后的源码检查与验收
+
+本节适用于后端第三阶段源码；上文已发行 hb.4 附件没有重建。版本明细和逐标签差异见[协议审计](codex-shared-protocol.md)。`versions.json` 中只有 `admitted` 能日常启动；当前仍只有原锁定版本。`candidate` 不等于可用版本，未知版本也不会自动加入候选。
+
+1. 桌面更新后，在仓库根目录运行只读检查：
+
+   ```sh
+   python3 scripts/codex-shared/check-version.py
+   ```
+
+   已安装新版源码连接器时，也可运行其 `--connector-check`。未知或候选版本返回非零，并报告方法、参数或字段差异；导出不受支持时明确报告导出失败，不把缺少证据当作兼容。协议相同也会提示仍缺 Mac 验收及明确准入。检查不会启动共享服务或修改版本清单。
+
+2. 版本已列为候选时，在 Mac 上用精确的桌面内置 CLI 运行共享真实验收：
+
+   ```sh
+   MAESTRO_E2E_REAL=1 \
+   MAESTRO_E2E_CODEX_PATH=/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex \
+   MAESTRO_E2E_SHARED_PATH="$PWD/e2e/fixtures/native/candidate-shared.py" \
+   npm run test:e2e -- e2e/native-shared.spec.ts
+   ```
+
+   候选入口只接受测试创建的私有目录，每次调用都重新检查精确版本、实际导出的协议和原生签名。它没有跳过检查的参数，不安装为桌面启动器，也不开放日常使用。测试沿用独立账户副本和临时会话；原账户不写入。它验证真实原生服务上的双客户端和摘要行为，桌面 GUI 操作仍不能由 Linux 合成结果代替。
+
+3. 向维护者提供版本号和 `e2e-results/native-summary.json` 的无对话内容摘要，确认 g/h 全通过。不要提交截图、trace、原始日志或会话。维护者结合协议审计和用户 Mac 验收，在小 PR 中把该精确版本的状态改为 `admitted`，记录验收依据，跑全套检查后合并。没有两项证据不准入。候选清单以外的新版本先由维护者按官方提交补齐审计与合成测试，再重复此流程。
+
+本轮没有安装、打包或发布；源码通过不代表现有发行附件已经更新。

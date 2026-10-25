@@ -11,7 +11,10 @@ import { RpcClient } from '../../scripts/codex-shared/rpc.cjs';
 const exec = promisify(execFile);
 
 export async function startRealShared(native: NativeApp, id: string) {
-	const connector = path.resolve(process.env.MAESTRO_E2E_SHARED_PATH!);
+	const candidate = native.realCli!.version !== 'codex-cli 0.163.0-alpha.11.1';
+	const connector = path.resolve(
+		candidate ? 'e2e/fixtures/native/candidate-shared.py' : process.env.MAESTRO_E2E_SHARED_PATH!
+	);
 	const root = path.join(native.root, 'shared-runtime');
 	fs.mkdirSync(root, { mode: 0o700 });
 	const env = { ...process.env, ...native.env, MAESTRO_SHARED_STATE: root };

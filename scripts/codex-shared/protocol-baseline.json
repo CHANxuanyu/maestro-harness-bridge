@@ -1,0 +1,1130 @@
+{
+	"InitializeParams.$required": ["clientInfo"],
+	"InitializeParams.clientInfo.name": {
+		"type": "string"
+	},
+	"InitializeParams.clientInfo.title": {
+		"type": ["string", "null"]
+	},
+	"InitializeParams.clientInfo.version": {
+		"type": "string"
+	},
+	"InitializeParams.capabilities.experimentalApi": {
+		"anyOf": [
+			{
+				"type": "boolean"
+			}
+		]
+	},
+	"v2/ThreadResumeParams.$required": ["threadId"],
+	"v2/ThreadResumeParams.threadId": {
+		"type": "string"
+	},
+	"v2/ThreadResumeParams.excludeTurns": {
+		"type": "boolean"
+	},
+	"v2/ThreadResumeResponse.thread.id": {
+		"type": "string"
+	},
+	"v2/ThreadResumeResponse.thread.status": {
+		"allOf": [
+			{
+				"oneOf": [
+					{
+						"properties": {
+							"type": {
+								"enum": ["notLoaded"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"type": {
+								"enum": ["idle"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"type": {
+								"enum": ["systemError"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"activeFlags": {
+								"items": {
+									"enum": ["waitingOnApproval", "waitingOnUserInput"],
+									"type": "string"
+								},
+								"type": "array"
+							},
+							"type": {
+								"enum": ["active"],
+								"type": "string"
+							}
+						},
+						"required": ["activeFlags", "type"],
+						"type": "object"
+					}
+				]
+			}
+		]
+	},
+	"v2/ThreadResumeResponse.model": {
+		"type": "string"
+	},
+	"v2/ThreadReadParams.$required": ["threadId"],
+	"v2/ThreadReadParams.threadId": {
+		"type": "string"
+	},
+	"v2/ThreadReadParams.includeTurns": {
+		"type": "boolean"
+	},
+	"v2/ThreadReadResponse.thread.ephemeral": {
+		"type": "boolean"
+	},
+	"v2/ThreadReadResponse.thread.status": {
+		"allOf": [
+			{
+				"oneOf": [
+					{
+						"properties": {
+							"type": {
+								"enum": ["notLoaded"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"type": {
+								"enum": ["idle"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"type": {
+								"enum": ["systemError"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"activeFlags": {
+								"items": {
+									"enum": ["waitingOnApproval", "waitingOnUserInput"],
+									"type": "string"
+								},
+								"type": "array"
+							},
+							"type": {
+								"enum": ["active"],
+								"type": "string"
+							}
+						},
+						"required": ["activeFlags", "type"],
+						"type": "object"
+					}
+				]
+			}
+		]
+	},
+	"v2/ThreadLoadedListParams.$required": [],
+	"v2/ThreadLoadedListParams.cursor": {
+		"type": ["string", "null"]
+	},
+	"v2/ThreadLoadedListParams.limit": {
+		"format": "uint32",
+		"minimum": 0,
+		"type": ["integer", "null"]
+	},
+	"v2/ThreadLoadedListResponse.data": {
+		"items": {
+			"type": "string"
+		},
+		"type": "array"
+	},
+	"v2/ThreadLoadedListResponse.nextCursor": {
+		"type": ["string", "null"]
+	},
+	"v2/ThreadQueueListParams.$required": ["threadId"],
+	"v2/ThreadQueueListParams.threadId": {
+		"type": "string"
+	},
+	"v2/ThreadQueueListResponse.data": {
+		"type": "array"
+	},
+	"v2/ThreadBackgroundTerminalsListParams.$required": ["threadId"],
+	"v2/ThreadBackgroundTerminalsListParams.threadId": {
+		"type": "string"
+	},
+	"v2/ThreadBackgroundTerminalsListParams.limit": {
+		"format": "uint32",
+		"minimum": 0,
+		"type": ["integer", "null"]
+	},
+	"v2/ThreadBackgroundTerminalsListResponse.data": {
+		"type": "array"
+	},
+	"v2/TurnStartParams.$required": ["input", "threadId"],
+	"v2/TurnStartParams.threadId": {
+		"type": "string"
+	},
+	"v2/TurnStartParams.input": {
+		"items": {
+			"oneOf": [
+				{
+					"properties": {
+						"text": {
+							"type": "string"
+						},
+						"text_elements": {
+							"items": {
+								"properties": {
+									"byteRange": {
+										"allOf": [
+											{
+												"properties": {
+													"end": {
+														"format": "uint",
+														"minimum": 0,
+														"type": "integer"
+													},
+													"start": {
+														"format": "uint",
+														"minimum": 0,
+														"type": "integer"
+													}
+												},
+												"required": ["end", "start"],
+												"type": "object"
+											}
+										]
+									},
+									"placeholder": {
+										"type": ["string", "null"]
+									}
+								},
+								"required": ["byteRange"],
+								"type": "object"
+							},
+							"type": "array"
+						},
+						"type": {
+							"enum": ["text"],
+							"type": "string"
+						}
+					},
+					"required": ["text", "type"],
+					"type": "object"
+				},
+				{
+					"anyOf": [
+						{
+							"properties": {
+								"url": {
+									"type": "string"
+								}
+							},
+							"required": ["url"],
+							"type": "object"
+						},
+						{
+							"properties": {
+								"fileId": {
+									"type": "string"
+								}
+							},
+							"required": ["fileId"],
+							"type": "object"
+						}
+					],
+					"properties": {
+						"detail": {
+							"anyOf": [
+								{
+									"enum": ["auto", "low", "high", "original"],
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
+						"type": {
+							"enum": ["image"],
+							"type": "string"
+						}
+					},
+					"required": ["type"],
+					"type": "object"
+				},
+				{
+					"properties": {
+						"detail": {
+							"anyOf": [
+								{
+									"enum": ["auto", "low", "high", "original"],
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
+						"path": {
+							"type": "string"
+						},
+						"type": {
+							"enum": ["localImage"],
+							"type": "string"
+						}
+					},
+					"required": ["path", "type"],
+					"type": "object"
+				},
+				{
+					"properties": {
+						"type": {
+							"enum": ["audio"],
+							"type": "string"
+						},
+						"url": {
+							"type": "string"
+						}
+					},
+					"required": ["type", "url"],
+					"type": "object"
+				},
+				{
+					"properties": {
+						"path": {
+							"type": "string"
+						},
+						"type": {
+							"enum": ["localAudio"],
+							"type": "string"
+						}
+					},
+					"required": ["path", "type"],
+					"type": "object"
+				},
+				{
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"path": {
+							"type": "string"
+						},
+						"type": {
+							"enum": ["skill"],
+							"type": "string"
+						}
+					},
+					"required": ["name", "path", "type"],
+					"type": "object"
+				},
+				{
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"path": {
+							"type": "string"
+						},
+						"type": {
+							"enum": ["mention"],
+							"type": "string"
+						}
+					},
+					"required": ["name", "path", "type"],
+					"type": "object"
+				}
+			]
+		},
+		"type": "array"
+	},
+	"v2/TurnStartParams.clientUserMessageId": {
+		"type": ["string", "null"]
+	},
+	"v2/TurnStartParams.cwd": {
+		"type": ["string", "null"]
+	},
+	"v2/TurnStartParams.model": {
+		"type": ["string", "null"]
+	},
+	"v2/TurnStartParams.sandboxPolicy": {
+		"anyOf": [
+			{
+				"oneOf": [
+					{
+						"properties": {
+							"type": {
+								"enum": ["dangerFullAccess"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"networkAccess": {
+								"type": "boolean"
+							},
+							"type": {
+								"enum": ["readOnly"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"networkAccess": {
+								"allOf": [
+									{
+										"enum": ["restricted", "enabled"],
+										"type": "string"
+									}
+								]
+							},
+							"type": {
+								"enum": ["externalSandbox"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"excludeSlashTmp": {
+								"type": "boolean"
+							},
+							"excludeTmpdirEnvVar": {
+								"type": "boolean"
+							},
+							"networkAccess": {
+								"type": "boolean"
+							},
+							"type": {
+								"enum": ["workspaceWrite"],
+								"type": "string"
+							},
+							"writableRoots": {
+								"items": {
+									"type": "string"
+								},
+								"type": "array"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					}
+				]
+			},
+			{
+				"type": "null"
+			}
+		]
+	},
+	"v2/TurnStartParams.approvalPolicy": {
+		"anyOf": [
+			{
+				"oneOf": [
+					{
+						"enum": ["untrusted", "on-request", "never"],
+						"type": "string"
+					},
+					{
+						"additionalProperties": false,
+						"properties": {
+							"granular": {
+								"properties": {
+									"mcp_elicitations": {
+										"type": "boolean"
+									},
+									"request_permissions": {
+										"type": "boolean"
+									},
+									"rules": {
+										"type": "boolean"
+									},
+									"sandbox_approval": {
+										"type": "boolean"
+									},
+									"skill_approval": {
+										"type": "boolean"
+									}
+								},
+								"required": ["mcp_elicitations", "rules", "sandbox_approval"],
+								"type": "object"
+							}
+						},
+						"required": ["granular"],
+						"type": "object"
+					}
+				]
+			},
+			{
+				"type": "null"
+			}
+		]
+	},
+	"v2/TurnStartParams.effort": {
+		"anyOf": [
+			{
+				"minLength": 1,
+				"type": "string"
+			},
+			{
+				"type": "null"
+			}
+		]
+	},
+	"v2/TurnStartParams.summary": {
+		"anyOf": [
+			{
+				"oneOf": [
+					{
+						"enum": ["auto", "concise", "detailed"],
+						"type": "string"
+					},
+					{
+						"enum": ["none"],
+						"type": "string"
+					}
+				]
+			},
+			{
+				"type": "null"
+			}
+		]
+	},
+	"v2/TurnStartResponse.turn.id": {
+		"type": "string"
+	},
+	"v2/TurnInterruptParams.$required": ["threadId", "turnId"],
+	"v2/TurnInterruptParams.threadId": {
+		"type": "string"
+	},
+	"v2/TurnInterruptParams.turnId": {
+		"type": "string"
+	},
+	"v2/ThreadUnsubscribeParams.$required": ["threadId"],
+	"v2/ThreadUnsubscribeParams.threadId": {
+		"type": "string"
+	},
+	"v2/CommandExecutionOutputDeltaNotification.threadId": {
+		"type": "string"
+	},
+	"v2/CommandExecutionOutputDeltaNotification.turnId": {
+		"type": "string"
+	},
+	"v2/CommandExecutionOutputDeltaNotification.itemId": {
+		"type": "string"
+	},
+	"v2/CommandExecutionOutputDeltaNotification.delta": {
+		"type": "string"
+	},
+	"v2/ThreadTokenUsageUpdatedNotification.threadId": {
+		"type": "string"
+	},
+	"v2/ThreadTokenUsageUpdatedNotification.turnId": {
+		"type": "string"
+	},
+	"v2/ThreadTokenUsageUpdatedNotification.tokenUsage.last.inputTokens": {
+		"format": "int64",
+		"type": "integer"
+	},
+	"v2/ThreadTokenUsageUpdatedNotification.tokenUsage.last.cachedInputTokens": {
+		"format": "int64",
+		"type": "integer"
+	},
+	"v2/ThreadTokenUsageUpdatedNotification.tokenUsage.last.outputTokens": {
+		"format": "int64",
+		"type": "integer"
+	},
+	"v2/ThreadTokenUsageUpdatedNotification.tokenUsage.last.reasoningOutputTokens": {
+		"format": "int64",
+		"type": "integer"
+	},
+	"v2/ErrorNotification.threadId": {
+		"type": "string"
+	},
+	"v2/ErrorNotification.turnId": {
+		"type": "string"
+	},
+	"v2/ErrorNotification.willRetry": {
+		"type": "boolean"
+	},
+	"v2/ErrorNotification.error.message": {
+		"type": "string"
+	},
+	"v2/TurnCompletedNotification.threadId": {
+		"type": "string"
+	},
+	"v2/TurnCompletedNotification.turn.id": {
+		"type": "string"
+	},
+	"v2/TurnCompletedNotification.turn.status": {
+		"enum": ["completed", "interrupted", "failed", "inProgress"],
+		"type": "string"
+	},
+	"v2/TurnCompletedNotification.turn.error.message": {
+		"anyOf": [
+			{
+				"type": "string"
+			}
+		]
+	},
+	"v2/ItemStartedNotification.threadId": {
+		"type": "string"
+	},
+	"v2/ItemStartedNotification.turnId": {
+		"type": "string"
+	},
+	"v2/ItemStartedNotification.item.type": {
+		"type": "string"
+	},
+	"v2/ItemCompletedNotification.threadId": {
+		"type": "string"
+	},
+	"v2/ItemCompletedNotification.turnId": {
+		"type": "string"
+	},
+	"v2/ItemCompletedNotification.item.type": {
+		"type": "string"
+	},
+	"ThreadItem.userMessage.id": {
+		"type": "string"
+	},
+	"ThreadItem.userMessage.type": {
+		"enum": ["userMessage"],
+		"type": "string"
+	},
+	"ThreadItem.hookPrompt.id": {
+		"type": "string"
+	},
+	"ThreadItem.hookPrompt.type": {
+		"enum": ["hookPrompt"],
+		"type": "string"
+	},
+	"ThreadItem.agentMessage.id": {
+		"type": "string"
+	},
+	"ThreadItem.agentMessage.type": {
+		"enum": ["agentMessage"],
+		"type": "string"
+	},
+	"ThreadItem.agentMessage.text": {
+		"type": "string"
+	},
+	"ThreadItem.agentMessage.phase": {
+		"anyOf": [
+			{
+				"oneOf": [
+					{
+						"enum": ["commentary"],
+						"type": "string"
+					},
+					{
+						"enum": ["partial_answer"],
+						"type": "string"
+					},
+					{
+						"enum": ["final_answer"],
+						"type": "string"
+					}
+				]
+			},
+			{
+				"type": "null"
+			}
+		]
+	},
+	"ThreadItem.functionCallOutput.id": {
+		"type": "string"
+	},
+	"ThreadItem.functionCallOutput.type": {
+		"enum": ["functionCallOutput"],
+		"type": "string"
+	},
+	"ThreadItem.functionCallOutput.namespace": {
+		"type": ["string", "null"]
+	},
+	"ThreadItem.functionCallOutput.output": {
+		"anyOf": [
+			{
+				"type": "string"
+			},
+			{
+				"items": {
+					"oneOf": [
+						{
+							"properties": {
+								"text": {
+									"type": "string"
+								},
+								"type": {
+									"enum": ["input_text"],
+									"type": "string"
+								}
+							},
+							"required": ["text", "type"],
+							"type": "object"
+						},
+						{
+							"anyOf": [
+								{
+									"properties": {
+										"image_url": {
+											"type": "string"
+										}
+									},
+									"required": ["image_url"],
+									"type": "object"
+								},
+								{
+									"properties": {
+										"file_id": {
+											"type": "string"
+										}
+									},
+									"required": ["file_id"],
+									"type": "object"
+								}
+							],
+							"properties": {
+								"detail": {
+									"anyOf": [
+										{
+											"enum": ["auto", "low", "high", "original"],
+											"type": "string"
+										},
+										{
+											"type": "null"
+										}
+									]
+								},
+								"type": {
+									"enum": ["input_image"],
+									"type": "string"
+								}
+							},
+							"required": ["type"],
+							"type": "object"
+						},
+						{
+							"properties": {
+								"audio_url": {
+									"type": "string"
+								},
+								"type": {
+									"enum": ["input_audio"],
+									"type": "string"
+								}
+							},
+							"required": ["audio_url", "type"],
+							"type": "object"
+						},
+						{
+							"properties": {
+								"encrypted_content": {
+									"type": "string"
+								},
+								"type": {
+									"enum": ["encrypted_content"],
+									"type": "string"
+								}
+							},
+							"required": ["encrypted_content", "type"],
+							"type": "object"
+						}
+					]
+				},
+				"type": "array"
+			}
+		]
+	},
+	"ThreadItem.plan.id": {
+		"type": "string"
+	},
+	"ThreadItem.plan.type": {
+		"enum": ["plan"],
+		"type": "string"
+	},
+	"ThreadItem.plan.text": {
+		"type": "string"
+	},
+	"ThreadItem.reasoning.id": {
+		"type": "string"
+	},
+	"ThreadItem.reasoning.type": {
+		"enum": ["reasoning"],
+		"type": "string"
+	},
+	"ThreadItem.reasoning.summary": {
+		"items": {
+			"type": "string"
+		},
+		"type": "array"
+	},
+	"ThreadItem.commandExecution.id": {
+		"type": "string"
+	},
+	"ThreadItem.commandExecution.type": {
+		"enum": ["commandExecution"],
+		"type": "string"
+	},
+	"ThreadItem.commandExecution.status": {
+		"enum": ["inProgress", "completed", "failed", "declined"],
+		"type": "string"
+	},
+	"ThreadItem.commandExecution.command": {
+		"type": "string"
+	},
+	"ThreadItem.commandExecution.aggregatedOutput": {
+		"type": ["string", "null"]
+	},
+	"ThreadItem.commandExecution.exitCode": {
+		"format": "int32",
+		"type": ["integer", "null"]
+	},
+	"ThreadItem.commandExecution.durationMs": {
+		"format": "int64",
+		"type": ["integer", "null"]
+	},
+	"ThreadItem.fileChange.id": {
+		"type": "string"
+	},
+	"ThreadItem.fileChange.type": {
+		"enum": ["fileChange"],
+		"type": "string"
+	},
+	"ThreadItem.fileChange.status": {
+		"enum": ["inProgress", "completed", "failed", "declined"],
+		"type": "string"
+	},
+	"ThreadItem.fileChange.changes": {
+		"items": {
+			"properties": {
+				"diff": {
+					"type": "string"
+				},
+				"kind": {
+					"oneOf": [
+						{
+							"properties": {
+								"type": {
+									"enum": ["add"],
+									"type": "string"
+								}
+							},
+							"required": ["type"],
+							"type": "object"
+						},
+						{
+							"properties": {
+								"type": {
+									"enum": ["delete"],
+									"type": "string"
+								}
+							},
+							"required": ["type"],
+							"type": "object"
+						},
+						{
+							"properties": {
+								"move_path": {
+									"type": ["string", "null"]
+								},
+								"type": {
+									"enum": ["update"],
+									"type": "string"
+								}
+							},
+							"required": ["type"],
+							"type": "object"
+						}
+					]
+				},
+				"path": {
+					"type": "string"
+				}
+			},
+			"required": ["diff", "kind", "path"],
+			"type": "object"
+		},
+		"type": "array"
+	},
+	"ThreadItem.mcpToolCall.id": {
+		"type": "string"
+	},
+	"ThreadItem.mcpToolCall.type": {
+		"enum": ["mcpToolCall"],
+		"type": "string"
+	},
+	"ThreadItem.mcpToolCall.status": {
+		"enum": ["inProgress", "completed", "failed"],
+		"type": "string"
+	},
+	"ThreadItem.mcpToolCall.result": {
+		"anyOf": [
+			{
+				"properties": {
+					"_meta": {},
+					"content": {
+						"items": true,
+						"type": "array"
+					},
+					"structuredContent": {}
+				},
+				"required": ["content"],
+				"type": "object"
+			},
+			{
+				"type": "null"
+			}
+		]
+	},
+	"ThreadItem.mcpToolCall.error": {
+		"anyOf": [
+			{
+				"properties": {
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": ["message"],
+				"type": "object"
+			},
+			{
+				"type": "null"
+			}
+		]
+	},
+	"ThreadItem.mcpToolCall.server": {
+		"type": "string"
+	},
+	"ThreadItem.mcpToolCall.tool": {
+		"type": "string"
+	},
+	"ThreadItem.mcpToolCall.arguments": {},
+	"ThreadItem.mcpToolCall.durationMs": {
+		"format": "int64",
+		"type": ["integer", "null"]
+	},
+	"ThreadItem.dynamicToolCall.id": {
+		"type": "string"
+	},
+	"ThreadItem.dynamicToolCall.type": {
+		"enum": ["dynamicToolCall"],
+		"type": "string"
+	},
+	"ThreadItem.dynamicToolCall.status": {
+		"enum": ["inProgress", "completed", "failed"],
+		"type": "string"
+	},
+	"ThreadItem.dynamicToolCall.success": {
+		"type": ["boolean", "null"]
+	},
+	"ThreadItem.dynamicToolCall.tool": {
+		"type": "string"
+	},
+	"ThreadItem.dynamicToolCall.arguments": {},
+	"ThreadItem.dynamicToolCall.namespace": {
+		"type": ["string", "null"]
+	},
+	"ThreadItem.dynamicToolCall.contentItems": {
+		"items": {
+			"oneOf": [
+				{
+					"properties": {
+						"text": {
+							"type": "string"
+						},
+						"type": {
+							"enum": ["inputText"],
+							"type": "string"
+						}
+					},
+					"required": ["text", "type"],
+					"type": "object"
+				},
+				{
+					"properties": {
+						"imageUrl": {
+							"type": "string"
+						},
+						"type": {
+							"enum": ["inputImage"],
+							"type": "string"
+						}
+					},
+					"required": ["imageUrl", "type"],
+					"type": "object"
+				},
+				{
+					"properties": {
+						"audioUrl": {
+							"type": "string"
+						},
+						"type": {
+							"enum": ["inputAudio"],
+							"type": "string"
+						}
+					},
+					"required": ["audioUrl", "type"],
+					"type": "object"
+				}
+			]
+		},
+		"type": ["array", "null"]
+	},
+	"ThreadItem.dynamicToolCall.durationMs": {
+		"format": "int64",
+		"type": ["integer", "null"]
+	},
+	"ThreadItem.subAgentActivity.id": {
+		"type": "string"
+	},
+	"ThreadItem.subAgentActivity.type": {
+		"enum": ["subAgentActivity"],
+		"type": "string"
+	},
+	"ThreadItem.webSearch.id": {
+		"type": "string"
+	},
+	"ThreadItem.webSearch.type": {
+		"enum": ["webSearch"],
+		"type": "string"
+	},
+	"ThreadItem.webSearch.results": {
+		"items": true,
+		"type": ["array", "null"]
+	},
+	"ThreadItem.webSearch.action": {
+		"anyOf": [
+			{
+				"oneOf": [
+					{
+						"properties": {
+							"queries": {
+								"items": {
+									"type": "string"
+								},
+								"type": ["array", "null"]
+							},
+							"query": {
+								"type": ["string", "null"]
+							},
+							"type": {
+								"enum": ["search"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"type": {
+								"enum": ["openPage"],
+								"type": "string"
+							},
+							"url": {
+								"type": ["string", "null"]
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"pattern": {
+								"type": ["string", "null"]
+							},
+							"type": {
+								"enum": ["findInPage"],
+								"type": "string"
+							},
+							"url": {
+								"type": ["string", "null"]
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					},
+					{
+						"properties": {
+							"type": {
+								"enum": ["other"],
+								"type": "string"
+							}
+						},
+						"required": ["type"],
+						"type": "object"
+					}
+				]
+			},
+			{
+				"type": "null"
+			}
+		]
+	},
+	"ThreadItem.webSearch.query": {
+		"type": "string"
+	},
+	"ThreadItem.sleep.id": {
+		"type": "string"
+	},
+	"ThreadItem.sleep.type": {
+		"enum": ["sleep"],
+		"type": "string"
+	},
+	"ThreadItem.sleep.durationMs": {
+		"format": "uint64",
+		"minimum": 0,
+		"type": "integer"
+	},
+	"ThreadItem.contextCompaction.id": {
+		"type": "string"
+	},
+	"ThreadItem.contextCompaction.type": {
+		"enum": ["contextCompaction"],
+		"type": "string"
+	},
+	"method.initialize": true,
+	"method.thread/resume": true,
+	"method.thread/read": true,
+	"method.thread/loaded/list": true,
+	"method.thread/queue/list": true,
+	"method.thread/backgroundTerminals/list": true,
+	"method.turn/start": true,
+	"method.turn/interrupt": true,
+	"method.thread/unsubscribe": true
+}

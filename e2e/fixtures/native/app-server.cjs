@@ -2,13 +2,15 @@
 
 // Reuses the synthetic JSON-RPC server shapes in
 // scripts/codex-shared/connector.test.cjs. Notifications and turn_context are
-// pinned to codex-cli 0.163.0-alpha.11.1; no simulated renderer or connector.
+// pinned to the explicit catalog below; its used fields are compared against
+// official commits by audit-protocol.cjs. No simulated renderer or connector.
 const http = require('node:http');
 const fs = require('node:fs');
 const { WebSocketServer } = require('ws');
 const { randomUUID } = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
 const { createTurn } = require('./protocol.cjs');
+const versions = require('../../../scripts/codex-shared/versions.json');
 
 async function startAppServer({
 	socket,
@@ -18,10 +20,15 @@ async function startAppServer({
 	scenes,
 	acceptBlocker = false,
 	userInput = false,
+	version = process.env.MAESTRO_E2E_CODEX_VERSION || 'codex-cli 0.163.0-alpha.11.1',
 }) {
+	// Version projections and official commits are recorded in versions.json.
+	// All reviewed versions use these same queue/turn/command fields.
+	if (!versions.some((entry) => entry.version === version))
+		throw new Error('No reviewed synthetic app-server protocol: ' + version);
 	const server = http.createServer();
 	const wss = new WebSocketServer({ server });
-	const state = { status: 'idle', queue: [], requests: [], turns: [] };
+	const state = { version, status: 'idle', queue: [], requests: [], turns: [] };
 	let sceneIndex = 0;
 	let interruptTurn;
 	const notify = (method, params) => {
@@ -33,7 +40,7 @@ async function startAppServer({
 			if (message.id == null || !message.method) return;
 			state.requests.push(message);
 			const reply = (result) => ws.send(JSON.stringify({ id: message.id, result }));
-			if (message.method === 'initialize') reply({ userAgent: 'native-e2e' });
+			if (message.method === 'initialize') reply({ userAgent: version });
 			else if (message.method === 'thread/resume')
 				reply({ thread: { id, status: { type: state.status } }, model: 'gpt-5.3-codex' });
 			else if (message.method === 'thread/read')

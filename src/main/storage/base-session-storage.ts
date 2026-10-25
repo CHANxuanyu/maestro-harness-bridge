@@ -49,7 +49,8 @@ export abstract class BaseSessionStorage implements AgentSessionStorage {
 
 	abstract listSessions(
 		projectPath: string,
-		sshConfig?: SshRemoteConfig
+		sshConfig?: SshRemoteConfig,
+		accountDir?: string
 	): Promise<AgentSessionInfo[]>;
 
 	abstract readSessionMessages(
@@ -97,7 +98,7 @@ export abstract class BaseSessionStorage implements AgentSessionStorage {
 		options?: SessionListOptions,
 		sshConfig?: SshRemoteConfig
 	): Promise<PaginatedSessionsResult> {
-		const allSessions = await this.listSessions(projectPath, sshConfig);
+		const allSessions = await this.listSessions(projectPath, sshConfig, options?.configDir);
 		return BaseSessionStorage.paginateSessions(allSessions, options);
 	}
 

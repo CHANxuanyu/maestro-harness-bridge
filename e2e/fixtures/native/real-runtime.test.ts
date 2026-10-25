@@ -66,3 +66,20 @@ it.each(['claude', 'codex'])(
 		).toBe(executable);
 	}
 );
+
+it('permits only reviewed exact candidates in shared real acceptance', () => {
+	const { source } = dirs();
+	const executable = path.join(source, 'codex');
+	const writeVersion = (version: string) =>
+		fs.writeFileSync(
+			executable,
+			`#!/usr/bin/env node\nconsole.log(${JSON.stringify(version)});\n`,
+			{ mode: 0o755 }
+		);
+	const env = { ...process.env, MAESTRO_E2E_CODEX_PATH: executable };
+	writeVersion('codex-cli 0.164.0');
+	expect(() => installedCli('codex', env)).toThrow('Unsupported codex version');
+	expect(installedCli('codex', env, true).version).toBe('codex-cli 0.164.0');
+	writeVersion('codex-cli 9.99.0');
+	expect(() => installedCli('codex', env, true)).toThrow('Unsupported codex version');
+});

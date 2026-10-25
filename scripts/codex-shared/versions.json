@@ -1,0 +1,162 @@
+[
+	{
+		"version": "codex-cli 0.163.0",
+		"tag": "rust-v0.163.0",
+		"commit": "83086188ae0614bd882818ff1aa23f3194962012",
+		"date": "2026-10-15T18:57:08Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.163.0-alpha.11.1",
+		"tag": "rust-v0.163.0-alpha.11.1",
+		"commit": "680c4ba93ec79c292287fb9e0b627dc7a76e3b5e",
+		"date": "2026-10-21T21:10:14Z",
+		"state": "admitted",
+		"macAcceptance": "Existing hb.3/hb.4 admission; docs/codex-shared.md"
+	},
+	{
+		"version": "codex-cli 0.163.0-alpha.11.2",
+		"tag": "rust-v0.163.0-alpha.11.2",
+		"commit": "51f97c6bca5500edbb986f6d9fe64fa2e63cbdd4",
+		"date": "2026-10-22T05:30:13Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.163.0-alpha.12",
+		"tag": "rust-v0.163.0-alpha.12",
+		"commit": "6699a0dbccf48c747f6353c99a29dcd3a0eff30b",
+		"date": "2026-10-14T09:38:13Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.163.0-alpha.13",
+		"tag": "rust-v0.163.0-alpha.13",
+		"commit": "de2b65246c4de715f86e48dae454a09d88d277f2",
+		"date": "2026-10-14T14:46:39Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0",
+		"tag": "rust-v0.164.0",
+		"commit": "6aaac694803004a63c6f393d153c96d22521a6b9",
+		"date": "2026-10-23T03:15:13Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.1",
+		"tag": "rust-v0.164.0-alpha.1",
+		"commit": "5003dcd68efc5b668c0264f6ff6708c7689a589b",
+		"date": "2026-10-16T12:39:40Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.10",
+		"tag": "rust-v0.164.0-alpha.10",
+		"commit": "246178f7839a01a1e3142866c78f8cc248550305",
+		"date": "2026-10-21T22:46:30Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.11",
+		"tag": "rust-v0.164.0-alpha.11",
+		"commit": "fd591b6049c2745a2097baab41180fbdb19bdac0",
+		"date": "2026-10-22T03:06:47Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.11.1",
+		"tag": "rust-v0.164.0-alpha.11.1",
+		"commit": "6905ecede7816e91373e9eabda3f6b0368fc747b",
+		"date": "2026-10-22T22:54:07Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.12",
+		"tag": "rust-v0.164.0-alpha.12",
+		"commit": "de8e7df8a026d30ca5e7b98fd0be8fef9249a4b0",
+		"date": "2026-10-22T10:06:11Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.2",
+		"tag": "rust-v0.164.0-alpha.2",
+		"commit": "f37ce690135a69c3d4bb0210786bd95a866c370a",
+		"date": "2026-10-16T16:02:22Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.3",
+		"tag": "rust-v0.164.0-alpha.3",
+		"commit": "bd43893f3db678fcb7124296905a65b2dfa9dac0",
+		"date": "2026-10-17T02:23:07Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.4",
+		"tag": "rust-v0.164.0-alpha.4",
+		"commit": "c108a58ad4fa46c06079681e96069d01d118b4a7",
+		"date": "2026-10-19T09:13:00Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.5",
+		"tag": "rust-v0.164.0-alpha.5",
+		"commit": "de85a077cd48f5ce3c49ddd6037de394d8ff5f85",
+		"date": "2026-10-19T12:31:38Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.6",
+		"tag": "rust-v0.164.0-alpha.6",
+		"commit": "835707e3d8ed3240fb467804d3715dac0e1871fc",
+		"date": "2026-10-19T20:55:10Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.7",
+		"tag": "rust-v0.164.0-alpha.7",
+		"commit": "fe136d4e70ef2b5bbed40a2d22b3aabf267796d3",
+		"date": "2026-10-20T08:37:46Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.8",
+		"tag": "rust-v0.164.0-alpha.8",
+		"commit": "57dedf20a502c8d1d13b89f0a9c0cbf4f5f71320",
+		"date": "2026-10-20T20:30:58Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.164.0-alpha.9",
+		"tag": "rust-v0.164.0-alpha.9",
+		"commit": "bcee56bcdb74cbf08fc6dd47ef0079fded4bba9a",
+		"date": "2026-10-21T13:02:14Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	},
+	{
+		"version": "codex-cli 0.165.0-alpha.1",
+		"tag": "rust-v0.165.0-alpha.1",
+		"commit": "4cf2c16e4bc67809f620582d1999818e1b51eb2e",
+		"date": "2026-10-23T12:40:54Z",
+		"state": "candidate",
+		"macAcceptance": "unverified"
+	}
+]

@@ -1,4 +1,5 @@
 'use strict';
+require('./protocol.test.cjs');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

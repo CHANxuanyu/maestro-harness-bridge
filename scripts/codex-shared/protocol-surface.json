@@ -1,0 +1,223 @@
+{
+	"source": "openai/codex@680c4ba93ec79c292287fb9e0b627dc7a76e3b5e; codex-rs/app-server-protocol/schema/json/codex_app_server_protocol.schemas.json; experimental queue/background methods from src/protocol/common.rs and v2/thread.rs",
+	"requests": {
+		"initialize": "InitializeParams",
+		"thread/resume": "v2/ThreadResumeParams",
+		"thread/read": "v2/ThreadReadParams",
+		"thread/loaded/list": "v2/ThreadLoadedListParams",
+		"thread/queue/list": "v2/ThreadQueueListParams",
+		"thread/backgroundTerminals/list": "v2/ThreadBackgroundTerminalsListParams",
+		"turn/start": "v2/TurnStartParams",
+		"turn/interrupt": "v2/TurnInterruptParams",
+		"thread/unsubscribe": "v2/ThreadUnsubscribeParams"
+	},
+	"notifications": [
+		"initialized",
+		"item/started",
+		"item/completed",
+		"item/commandExecution/outputDelta",
+		"thread/tokenUsage/updated",
+		"error",
+		"turn/completed"
+	],
+	"definitions": {
+		"InitializeParams": {
+			"paths": [
+				"clientInfo.name",
+				"clientInfo.title",
+				"clientInfo.version",
+				"capabilities.experimentalApi"
+			],
+			"request": true
+		},
+		"v2/ThreadResumeParams": {
+			"paths": ["threadId", "excludeTurns"],
+			"request": true
+		},
+		"v2/ThreadResumeResponse": {
+			"paths": ["thread.id", "thread.status", "model"]
+		},
+		"v2/ThreadReadParams": {
+			"paths": ["threadId", "includeTurns"],
+			"request": true
+		},
+		"v2/ThreadReadResponse": {
+			"paths": ["thread.ephemeral", "thread.status"]
+		},
+		"v2/ThreadLoadedListParams": {
+			"paths": ["cursor", "limit"],
+			"request": true
+		},
+		"v2/ThreadLoadedListResponse": {
+			"paths": ["data", "nextCursor"]
+		},
+		"v2/ThreadQueueListParams": {
+			"paths": ["threadId"],
+			"request": true,
+			"experimental": true
+		},
+		"v2/ThreadQueueListResponse": {
+			"paths": ["data"],
+			"experimental": true
+		},
+		"v2/ThreadBackgroundTerminalsListParams": {
+			"paths": ["threadId", "limit"],
+			"request": true,
+			"experimental": true
+		},
+		"v2/ThreadBackgroundTerminalsListResponse": {
+			"paths": ["data"],
+			"experimental": true
+		},
+		"v2/TurnStartParams": {
+			"paths": [
+				"threadId",
+				"input",
+				"clientUserMessageId",
+				"cwd",
+				"model",
+				"sandboxPolicy",
+				"approvalPolicy",
+				"effort",
+				"summary"
+			],
+			"request": true
+		},
+		"v2/TurnStartResponse": {
+			"paths": ["turn.id"]
+		},
+		"v2/TurnInterruptParams": {
+			"paths": ["threadId", "turnId"],
+			"request": true
+		},
+		"v2/ThreadUnsubscribeParams": {
+			"paths": ["threadId"],
+			"request": true
+		},
+		"v2/CommandExecutionOutputDeltaNotification": {
+			"paths": ["threadId", "turnId", "itemId", "delta"]
+		},
+		"v2/ThreadTokenUsageUpdatedNotification": {
+			"paths": [
+				"threadId",
+				"turnId",
+				"tokenUsage.last.inputTokens",
+				"tokenUsage.last.cachedInputTokens",
+				"tokenUsage.last.outputTokens",
+				"tokenUsage.last.reasoningOutputTokens"
+			]
+		},
+		"v2/ErrorNotification": {
+			"paths": ["threadId", "turnId", "willRetry", "error.message"]
+		},
+		"v2/TurnCompletedNotification": {
+			"paths": ["threadId", "turn.id", "turn.status", "turn.error.message"]
+		},
+		"v2/ItemStartedNotification": {
+			"paths": ["threadId", "turnId", "item.type"]
+		},
+		"v2/ItemCompletedNotification": {
+			"paths": ["threadId", "turnId", "item.type"]
+		}
+	},
+	"itemFields": [
+		"id",
+		"type",
+		"status",
+		"success",
+		"result",
+		"error",
+		"text",
+		"phase",
+		"summary",
+		"command",
+		"aggregatedOutput",
+		"exitCode",
+		"server",
+		"tool",
+		"arguments",
+		"namespace",
+		"contentItems",
+		"output",
+		"changes",
+		"durationMs",
+		"results",
+		"action",
+		"query"
+	],
+	"genericServerRequestFields": ["id", "method", "params.threadId", "params.turnId"],
+	"handledItems": [
+		"agentMessage",
+		"reasoning",
+		"commandExecution",
+		"mcpToolCall",
+		"dynamicToolCall",
+		"functionCallOutput",
+		"fileChange",
+		"sleep",
+		"webSearch",
+		"plan",
+		"userMessage",
+		"hookPrompt",
+		"contextCompaction",
+		"subAgentActivity"
+	],
+	"opaqueItemPolicy": "Other item types are forwarded as complete native JSON; only common id/type/status/success/result.isError/error probes are interpreted.",
+	"experimentalDeclarations": {
+		"ThreadQueueListParams": "pub struct ThreadQueueListParams { pub thread_id: String, #[ts(optional = nullable)] pub cursor: Option<String>, #[ts(optional = nullable)] pub limit: Option<u32>, }",
+		"ThreadQueueListResponse": "pub struct ThreadQueueListResponse { pub data: Vec<QueuedSubmission>, pub next_cursor: Option<String>, }",
+		"ThreadBackgroundTerminalsListParams": "pub struct ThreadBackgroundTerminalsListParams { pub thread_id: String, #[ts(optional = nullable)] pub cursor: Option<String>, #[ts(optional = nullable)] pub limit: Option<u32>, }",
+		"ThreadBackgroundTerminalsListResponse": "pub struct ThreadBackgroundTerminalsListResponse { pub data: Vec<ThreadBackgroundTerminal>, pub next_cursor: Option<String>, }"
+	},
+	"readAliases": {
+		"shared-exec.cjs": {
+			"event": ["id", "method", "params"],
+			"p": [
+				"threadId",
+				"turnId",
+				"turn.id",
+				"turn.status",
+				"turn.error.message",
+				"itemId",
+				"delta",
+				"tokenUsage",
+				"willRetry",
+				"error.message",
+				"item.id",
+				"item.type",
+				"item.status",
+				"item.success",
+				"item.result",
+				"item.error",
+				"item.text",
+				"item.phase",
+				"item.summary",
+				"item.command",
+				"item.aggregatedOutput",
+				"item.exitCode",
+				"item.server",
+				"item.tool",
+				"item.arguments",
+				"item.namespace",
+				"item.contentItems",
+				"item.output",
+				"item.changes",
+				"item.durationMs",
+				"item.results",
+				"item.action",
+				"item.query"
+			],
+			"resumed": ["thread.id", "thread.status.type", "model"],
+			"queued": ["data.length"],
+			"started": ["turn.id"],
+			"last": ["inputTokens", "cachedInputTokens", "outputTokens", "reasoningOutputTokens"]
+		},
+		"connector-admin.cjs": {
+			"list": ["nextCursor", "data"],
+			"terminals": ["data.length"]
+		},
+		"rpc.cjs": {
+			"message": ["id", "method", "params", "error.message", "result"]
+		}
+	}
+}

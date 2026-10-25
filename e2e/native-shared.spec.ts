@@ -6,6 +6,14 @@ import { startRealShared } from './fixtures/native-shared-real';
 import { realPrompt } from './fixtures/native-real';
 import { runSharedExec } from '../scripts/codex-shared/shared-exec.cjs';
 
+test.beforeEach(async ({}, info) => {
+	if (process.env.MAESTRO_E2E_REAL !== '1')
+		info.annotations.push({
+			type: 'synthetic-protocol-version',
+			description: process.env.MAESTRO_E2E_CODEX_VERSION || 'codex-cli 0.163.0-alpha.11.1',
+		});
+});
+
 async function shared(native: NativeApp, scenes: unknown[], extraEnv: Record<string, string> = {}) {
 	native.scriptTurns(
 		scenes.map((scene: any, index) => ({

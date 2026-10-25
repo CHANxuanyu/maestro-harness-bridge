@@ -39,6 +39,13 @@ for (const file of ['codex-shared.py', 'enable-sharing.command', 'disable-sharin
 	chmodSync(path.join(output, file), 0o755);
 }
 copyFileSync(path.join(root, 'docs/codex-shared.md'), path.join(output, 'README.md'));
+for (const file of [
+	'versions.json',
+	'protocol-surface.json',
+	'protocol-baseline.json',
+	'protocol-check.cjs',
+])
+	copyFileSync(path.join(root, 'scripts/codex-shared', file), path.join(output, file));
 copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));
 copyFileSync(
 	path.join(path.dirname(require.resolve('ws/package.json')), 'LICENSE'),
@@ -55,6 +62,10 @@ for (const file of [
 	'README.md',
 	'LICENSE',
 	'WS-LICENSE.txt',
+	'versions.json',
+	'protocol-surface.json',
+	'protocol-baseline.json',
+	'protocol-check.cjs',
 ]) {
 	files[file] = createHash('sha256')
 		.update(readFileSync(path.join(output, file)))
@@ -66,7 +77,9 @@ writeFileSync(
 		{
 			state: 'READY_FOR_OPT_IN',
 			version,
-			nativeVersion: 'codex-cli 0.163.0-alpha.11.1',
+			nativeVersions: require('./codex-shared/versions.json')
+				.filter((entry) => entry.state === 'admitted')
+				.map((entry) => entry.version),
 			sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], {
 				cwd: root,
 				encoding: 'utf8',

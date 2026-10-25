@@ -87,7 +87,22 @@ it('Grok copies only the explicitly selected auth file and leaves native session
 	expect(fs.statSync(path.join(destination, 'auth.json')).mode & 0o777).toBe(0o600);
 	expect(prepareCredentials('grok', destination, { XAI_API_KEY: 'synthetic-api-key' })).toEqual({});
 });
-it.each(['claude', 'codex', 'opencode', 'grok'])(
+it('Oh My Pi uses only the supplied API key and never opens account files', () => {
+	const { source, destination } = dirs();
+	fs.writeFileSync(path.join(source, 'auth.json'), 'private sentinel');
+	expect(() => prepareCredentials('omp', destination, { PI_CODING_AGENT_DIR: source })).toThrow(
+		'requires ANTHROPIC_API_KEY'
+	);
+	expect(
+		prepareCredentials('omp', destination, {
+			ANTHROPIC_API_KEY: 'synthetic-api-key',
+			PI_CODING_AGENT_DIR: source,
+		})
+	).toEqual({ ANTHROPIC_API_KEY: 'synthetic-api-key' });
+	expect(fs.readdirSync(destination)).toEqual([]);
+	expect(fs.readFileSync(path.join(source, 'auth.json'), 'utf8')).toBe('private sentinel');
+});
+it.each(['claude', 'codex', 'opencode', 'grok', 'omp'])(
 	'uses the supplied %s executable and its locked version',
 	(provider) => {
 		const executable = path.resolve(`e2e/fixtures/native/${provider}`);

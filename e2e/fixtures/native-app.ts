@@ -14,11 +14,12 @@ import { installedCli, prepareCredentials } from './native/real-runtime.cjs';
 import { appendTurn } from './native/append-turn.cjs';
 import { realPrompt, realExternalTurn } from './native-real';
 import { launchElectronApp } from './electron-app';
+import { createOmpTurn } from './native/omp-protocol.cjs';
 import { createGrokTurn } from './native/grok-protocol.cjs';
 import { createOpenCodeTurn } from './native/opencode-protocol.cjs';
 
 const exec = promisify(execFile);
-export type Provider = 'claude' | 'codex' | 'opencode' | 'grok';
+export type Provider = 'claude' | 'codex' | 'opencode' | 'grok' | 'omp';
 export interface NativeTool {
 	id: string;
 	command: string;
@@ -48,6 +49,7 @@ export class NativeApp {
 	readonly project = path.join(this.root, 'project');
 	readonly claude = path.join(this.root, 'claude');
 	readonly codex = path.join(this.root, 'codex');
+	readonly omp = path.join(this.root, 'omp', 'agent');
 	readonly grok = path.join(this.root, 'grok');
 	readonly opencode = path.join(this.root, 'xdg', 'opencode');
 	readonly script = path.join(this.root, 'scenario.json');
@@ -64,7 +66,15 @@ export class NativeApp {
 	private provider?: Provider;
 	readonly control = path.join(this.root, 'control.json');
 	constructor(private info: TestInfo) {
-		for (const dir of [this.data, this.project, this.claude, this.codex, this.opencode, this.grok])
+		for (const dir of [
+			this.data,
+			this.project,
+			this.claude,
+			this.codex,
+			this.opencode,
+			this.grok,
+			this.omp,
+		])
 			fs.mkdirSync(dir, { recursive: true });
 		fs.writeFileSync(
 			path.join(this.data, 'maestro-settings.json'),
@@ -79,7 +89,7 @@ export class NativeApp {
 				sidebarNavigationMode: 'conversations',
 				// Provider resume scenarios exclude background synopsis (scenario h).
 				// These providers have no verified non-persisting synopsis invocation.
-				...(/^(opencode|grok) /.test(info.title) ? { defaultSaveToHistory: false } : {}),
+				...(/^(opencode|grok|omp) /.test(info.title) ? { defaultSaveToHistory: false } : {}),
 			})
 		);
 	}
@@ -98,6 +108,10 @@ export class NativeApp {
 			CLAUDE_SECURESTORAGE_CONFIG_DIR: this.claude,
 			CODEX_HOME: this.codex,
 			GROK_HOME: this.grok,
+			PI_CODING_AGENT_DIR: this.omp,
+			PI_CONFIG_DIR: path.relative(os.homedir(), path.dirname(this.omp)),
+			OMP_PROFILE: '',
+			PI_PROFILE: '',
 			GROK_AUTH_PATH: path.join(this.grok, 'auth.json'),
 			XDG_DATA_HOME: path.dirname(this.opencode),
 			XDG_CONFIG_HOME: path.join(this.root, 'xdg-config'),
@@ -111,15 +125,29 @@ export class NativeApp {
 		};
 	}
 	providerHome(provider: Provider) {
-		return { claude: this.claude, codex: this.codex, opencode: this.opencode, grok: this.grok }[
-			provider
-		];
+		return {
+			claude: this.claude,
+			codex: this.codex,
+			opencode: this.opencode,
+			grok: this.grok,
+			omp: this.omp,
+		}[provider];
 	}
 	async start() {
 		if (this.real && !this.realCli) {
 			this.provider = this.info.title.split(' ')[0].replace(':', '') as Provider;
 			this.realCli = installedCli(this.provider, process.env, /^codex [gh]:/.test(this.info.title));
-			this.credentials = prepareCredentials(this.provider, this.providerHome(this.provider));
+			// Keep the synthetic OMP API key scoped to its own application. Claude's
+			// smoke cases must still exercise the read-only OAuth snapshot path.
+			const credentialEnv =
+				this.provider === 'omp' && process.env.MAESTRO_E2E_SMOKE === '1'
+					? { ...process.env, ANTHROPIC_API_KEY: 'synthetic-api-key' }
+					: process.env;
+			this.credentials = prepareCredentials(
+				this.provider,
+				this.providerHome(this.provider),
+				credentialEnv
+			);
 			this.info.annotations.push({ type: 'native-cli-version', description: this.realCli.version });
 		}
 		this.app = await launchElectronApp(path.resolve('dist/main/index.js'), this.data, this.env);
@@ -194,6 +222,14 @@ export class NativeApp {
 			'--env',
 			`GROK_HOME=${this.grok}`,
 			'--env',
+			`PI_CODING_AGENT_DIR=${this.omp}`,
+			'--env',
+			`PI_CONFIG_DIR=${path.relative(os.homedir(), path.dirname(this.omp))}`,
+			'--env',
+			'OMP_PROFILE=',
+			'--env',
+			'PI_PROFILE=',
+			'--env',
 			`GROK_AUTH_PATH=${path.join(this.grok, 'auth.json')}`,
 			'--env',
 			`XDG_DATA_HOME=${path.dirname(this.opencode)}`,
@@ -255,8 +291,14 @@ export class NativeApp {
 	}
 	async externalTurn(provider: Provider, prompt: string, scene: NativeScene, id?: string) {
 		if (this.real) return realExternalTurn(this, provider, prompt, scene, id);
-		if (provider === 'grok') {
-			const turn = createGrokTurn({ configDir: this.grok, cwd: this.project, id, prompt });
+		if (provider === 'grok' || provider === 'omp') {
+			const createTurn = provider === 'grok' ? createGrokTurn : createOmpTurn;
+			const turn = createTurn({
+				configDir: this.providerHome(provider),
+				cwd: this.project,
+				id,
+				prompt,
+			});
 			for (const tool of scene.tools ?? []) turn.startTool(tool);
 			for (const tool of [...(scene.tools ?? [])].reverse()) turn.finishTool(tool);
 			turn.finish(scene.answer);

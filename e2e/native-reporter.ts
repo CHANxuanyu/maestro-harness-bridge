@@ -12,7 +12,7 @@ export default class NativeReporter implements Reporter {
 	}[] = [];
 	constructor(private options: { output?: string } = {}) {}
 	onTestEnd(test: TestCase, result: TestResult) {
-		const match = /^(claude|codex|opencode|grok)(?: ([a-j]))?:/.exec(test.title);
+		const match = /^(claude|codex|opencode|grok|omp)(?: ([a-j]))?:/.exec(test.title);
 		if (!match) return;
 		// No title, prompt, errors, stdout, session IDs, account paths or captures
 		// enter the shareable summary. Diagnostics remain in local Playwright files.

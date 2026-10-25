@@ -74,3 +74,26 @@ MAESTRO_E2E_REAL=1 MAESTRO_E2E_GROK_PATH="$(command -v grok)" \
 ```
 
 测试在临时 GROK_HOME 和 GROK_AUTH_PATH 中运行。若无 API key，只读复制选定 auth.json，不调用可能修改权限或恢复文件的原生认证读取函数，不复制真实会话。上述命令只验当前已完成部分，不代表两个界面受阻项已通过。
+
+## Oh My Pi 18.12.6
+
+锁定 [can1357/oh-my-pi v18.12.6，45c35e40c46166dc726ccc52f5d27f40f2449f99](https://github.com/can1357/oh-my-pi/tree/45c35e40c46166dc726ccc52f5d27f40f2449f99)。字段来自 `packages/ai/src/types.ts`、`packages/agent/src/{types,agent-loop}.ts`、`packages/coding-agent/src/session/{session-entries,session-paths,session-manager,session-context,agent-session}.ts`、`packages/coding-agent/src/modes/print-mode.ts`。目录、认证与版本入口来自同一提交的 `packages/utils/src/{dirs,cli}.ts`、`packages/ai/src/env-api-key.ts` 和 README。
+
+原生版本 3 的 session JSONL 是分支图。历史只沿选定 activeLeafId/parentId 读取，不能把旁支串成一段对话。toolCall.arguments 是原生对象，toolResult 是独立角色消息，按 toolCallId 配对 input/output/status。模型来自 assistant.model；effort 来自当前分支的 thinking_level_change.thinkingLevel，null 清除；configured=auto 不冒充实际等级。带 `__synthetic` 或 `__interrupted` 的已确认原生中断标记映射为 canceled；普通 isError 是 failed，不靠错误正文猜取消。部分正在执行的工具被中断时只记录 isError，没有明确取消标记，这类历史结果保留 failed，不能承诺全部中断都能区分。
+
+只有 agent_end.isTerminal=true 结束事件流。原生维护或内部重试发出的 isTerminal=false 不能截断下一步。正常终止后迟到的文本和工具事件不再转发，既有 willRetry 和 TTSR 规则保留。
+
+本地 revision 与只读增量游标使用原生文件身份、大小及时间，不用哈希。最多保留两份不超过 32 MiB 的文件游标；增量、完整读取及分页语义一致。PI_CODING_AGENT_DIR 按原生目录选择读取，每次确认 header 的 session ID 与项目，缓存路径不能跨所选目录复用。SSH、非默认 profile 和 XDG 默认位置没有完成真实验收；不扩展认证或写锁行为。
+
+a 至 f 覆盖两轮同 ID、并行工具与历史一致、Stop、应用重启、项目历史模型、闲置跨应用追加、草稿和阅读位置。f 按官方 session-manager 的 foreign-entry 规则验收：忙碌时不刷新，并发写入成为旁支后不混入当前分支；Stop 后向当前分支再追加则正常刷新。原生分支语义改变了测试准备方式，没有改变“闲置刷新、忙碌不读”的目标。该场景不宣称提供并发写入支持。
+
+真实模式只接受 `omp/18.12.6`，使用调用者提供的 ANTHROPIC_API_KEY，不读取或复制 OMP 原账户文件。PI_CODING_AGENT_DIR、PI_CONFIG_DIR 与 XDG 路径都指向测试临时目录，清除 profile 选择，自动摘要通过普通设置关闭。本轮真实账户、macOS 与真实 CLI 均未验；已有匹配 CLI 和 API key 时执行：
+
+```bash
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_OMP_PATH="$(command -v omp)" \
+  npm run test:e2e -- e2e/native-omp.spec.ts
+```
+
+本项未发现需要 Opus 改界面的缺陷，只改允许的 hook 提供方条件。
+
+Oh My Pi 的非最终 agent_end 也不会进入独立错误检测路径；最终 agent_end 之后的迟到错误和其他事件共享终态过滤。此路径由失败后修复的回归覆盖。

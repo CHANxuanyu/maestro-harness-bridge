@@ -20,6 +20,7 @@ import type { AgentError, ToolType } from '../../shared/types';
 import type { AgentOutputParser, ParsedEvent } from './agent-output-parser';
 import { getErrorPatterns, matchErrorPattern } from './error-patterns';
 import { stripAnsiCodes } from '../../shared/stringUtils';
+import { ompToolStatus } from '../../shared/ompToolState';
 
 /**
  * Oh My Pi's Time-Traveling Stream Rules (TTSR) deliberately abort the in-flight
@@ -80,10 +81,12 @@ interface OmpRawEvent {
 	error?: unknown;
 	messageText?: string;
 	willRetry?: boolean;
+	isTerminal?: boolean;
 }
 
 export class OmpOutputParser implements AgentOutputParser {
 	readonly agentId: ToolType = 'omp';
+	private ended = false;
 
 	parseJsonLine(line: string): ParsedEvent | null {
 		if (!line.trim()) {
@@ -102,11 +105,18 @@ export class OmpOutputParser implements AgentOutputParser {
 	}
 
 	parseJsonObject(parsed: unknown): ParsedEvent | null {
+		if (this.ended) return null;
 		if (!parsed || typeof parsed !== 'object') {
 			return null;
 		}
 
 		const event = parsed as OmpRawEvent;
+		// v18.12.6 agent-session.ts #settleAgentEnd tags maintenance/retry
+		// continuations explicitly. Only a terminal settle closes this process.
+		if (event.type === 'agent_end') {
+			if (event.isTerminal === false) return { type: 'system', raw: event };
+			if (event.isTerminal === true) this.ended = true;
+		}
 		const sessionId =
 			event.sessionId || event.session_id || (event.type === 'session' ? event.id : undefined);
 
@@ -242,7 +252,7 @@ export class OmpOutputParser implements AgentOutputParser {
 					toolCallId: event.toolCallId,
 					toolName: event.toolName,
 					toolState: {
-						status: event.isError ? 'failed' : 'completed',
+						status: ompToolStatus(event.result, event.isError),
 						output: event.result,
 					},
 					sessionId,
@@ -283,12 +293,13 @@ export class OmpOutputParser implements AgentOutputParser {
 	}
 
 	detectErrorFromParsed(parsed: unknown): AgentError | null {
-		if (!parsed || typeof parsed !== 'object') {
+		if (this.ended || !parsed || typeof parsed !== 'object') {
 			return null;
 		}
 
 		const event = parsed as OmpRawEvent;
-		if (event.willRetry) {
+		// Official 18.12.6 #settleAgentEnd can continue after a nonterminal end.
+		if (event.willRetry || (event.type === 'agent_end' && event.isTerminal === false)) {
 			return null;
 		}
 		const errorText = this.extractErrorText(event);

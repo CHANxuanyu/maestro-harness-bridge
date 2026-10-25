@@ -10,6 +10,7 @@ const versions = {
 	codex: 'codex-cli 0.163.0-alpha.11.1',
 	opencode: '1.19.4',
 	grok: 'grok 1.0.45',
+	omp: 'omp/18.12.6',
 };
 
 function installedCli(provider, env = process.env, sharedAcceptance = false) {
@@ -28,6 +29,11 @@ function installedCli(provider, env = process.env, sharedAcceptance = false) {
 }
 
 function prepareCredentials(provider, destination, env = process.env) {
+	if (provider === 'omp') {
+		// v18.12.6 ai/README.md and env-api-key.ts. No native account files are copied.
+		if (!env.ANTHROPIC_API_KEY) throw new Error('Oh My Pi acceptance requires ANTHROPIC_API_KEY.');
+		return { ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY };
+	}
 	if (provider === 'grok') {
 		// Pinned login/src/{auth_method,storage}.rs. Never run the native reader
 		// on the source: it can chmod/recover that file. Copy bytes read-only.

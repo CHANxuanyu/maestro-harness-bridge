@@ -36,6 +36,15 @@ export function nativeIdentity(provider: Provider, file: string) {
 		.trim()
 		.split('\n')
 		.map((line) => JSON.parse(line));
+	if (provider === 'omp') {
+		const last = records.findLast((record) => record.message?.role === 'assistant');
+		const thinking = records.findLast((record) => record.type === 'thinking_level_change');
+		return {
+			id: records.find((record) => record.type === 'session')?.id,
+			model: last?.message?.model,
+			effort: thinking?.thinkingLevel,
+		};
+	}
 	if (provider === 'grok') {
 		const last = records.findLast((record) => record.type === 'assistant');
 		return {
@@ -78,17 +87,24 @@ export async function realExternalTurn(
 					'--dangerously-skip-permissions',
 					...(id ? ['--resume', id] : []),
 				]
-			: provider === 'grok'
-				? ['--output-format', 'streaming-json', '--always-approve', ...(id ? ['--resume', id] : [])]
-				: provider === 'opencode'
-					? ['run', '--format', 'json', ...(id ? ['--session', id] : [])]
-					: [
-							'exec',
-							'--json',
-							'--dangerously-bypass-approvals-and-sandbox',
-							'--skip-git-repo-check',
-							...(id ? ['resume', id] : []),
-						];
+			: provider === 'omp'
+				? ['-p', '--mode', 'json', ...(id ? ['--resume', id] : [])]
+				: provider === 'grok'
+					? [
+							'--output-format',
+							'streaming-json',
+							'--always-approve',
+							...(id ? ['--resume', id] : []),
+						]
+					: provider === 'opencode'
+						? ['run', '--format', 'json', ...(id ? ['--session', id] : [])]
+						: [
+								'exec',
+								'--json',
+								'--dangerously-bypass-approvals-and-sandbox',
+								'--skip-git-repo-check',
+								...(id ? ['resume', id] : []),
+							];
 	const child = spawn(
 		native.realCli!.executable,
 		[...args, provider === 'grok' ? '-p' : '--', realPrompt(native, prompt, scene)],
@@ -157,6 +173,17 @@ export function nativeToolIds(provider: Provider, file: string, commands: string
 		.trim()
 		.split('\n')
 		.map((line) => JSON.parse(line));
+	if (provider === 'omp') {
+		return commands.map(
+			(command) =>
+				records
+					.flatMap((record) => record.message?.content ?? [])
+					.find(
+						(block) =>
+							block.type === 'toolCall' && String(block.arguments?.command ?? '').includes(command)
+					)?.id
+		);
+	}
 	if (provider === 'grok') {
 		const calls = records.flatMap((record) => record.tool_calls ?? []);
 		return commands.map(

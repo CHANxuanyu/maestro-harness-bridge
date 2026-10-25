@@ -41,11 +41,26 @@ import type {
 } from '../agents/session-storage';
 import type { ToolType, SshRemoteConfig } from '../../shared/types';
 import { isWindows, isMacOS } from '../../shared/platformDetection';
+import { ompToolStatus } from '../../shared/ompToolState';
+import {
+	nativeFileRevision,
+	parseNativeJsonl,
+	readNativeJsonl,
+	type NativeJsonlCursor,
+} from './native-jsonl-cursor';
 
 const LOG_CONTEXT = '[OmpSessionStorage]';
 
 /** Cap on how much of a single transcript we parse, guarding against a runaway file. */
 const MAX_SESSION_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+
+// v18.12.6 utils/src/dirs.ts: an explicit agent directory owns its sessions.
+function getLocalOmpSessionsDir(): string {
+	return path.resolve(
+		process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.omp', 'agent'),
+		'sessions'
+	);
+}
 
 /**
  * True when two paths resolve to the same location, comparing case-insensitively
@@ -84,6 +99,9 @@ interface OmpRawMessage {
 	usage?: OmpUsage;
 	model?: string;
 	timestamp?: string;
+	toolCallId?: string;
+	details?: unknown;
+	isError?: boolean;
 }
 
 interface OmpEvent {
@@ -93,6 +111,9 @@ interface OmpEvent {
 	cwd?: string;
 	title?: string;
 	message?: OmpRawMessage;
+	parentId?: string | null;
+	activeLeafId?: string | null;
+	thinkingLevel?: string | null;
 }
 
 /** Fully parsed transcript: the session header, title, and ordered events. */
@@ -133,6 +154,96 @@ function extractToolUse(content: OmpContentBlock[] | string | undefined): unknow
 	return toolBlocks.length > 0 ? toolBlocks : undefined;
 }
 
+// v18.12.6 session-entries.ts resolveSessionLeafId, and session-manager.ts
+// branch traversal. Off-branch completions must not select an abandoned branch.
+function activeOmpEvents(events: OmpEvent[]): OmpEvent[] {
+	const entries = events.filter((entry) => entry.type !== 'session' && entry.id);
+	if (!entries.some((entry) => entry.parentId !== undefined)) return events;
+	const last = entries.at(-1);
+	if (!last) return [];
+	let leaf = last.activeLeafId !== undefined ? last.activeLeafId : last.id;
+	const byId = new Map(entries.map((entry) => [entry.id!, entry]));
+	if (leaf && !byId.has(leaf))
+		leaf = [...entries]
+			.reverse()
+			.find((entry) => entry.activeLeafId === undefined || entry.activeLeafId === entry.id)?.id;
+	const branch: OmpEvent[] = [];
+	const visited = new Set<string>();
+	while (leaf && !visited.has(leaf)) {
+		visited.add(leaf);
+		const entry = byId.get(leaf);
+		if (!entry) break;
+		branch.push(entry);
+		leaf = entry.parentId;
+	}
+	return branch.reverse();
+}
+
+interface OmpToolUse {
+	id: string;
+	tool: string;
+	state: { status: string; input?: unknown; output?: unknown };
+}
+
+// v18.12.6 ai/src/types.ts: toolCall arguments are already an object;
+// toolResult is a separate message, never a tool_result content block.
+function ompMessages(events: OmpEvent[], transcript: OmpTranscript): SessionMessage[] {
+	const messages: SessionMessage[] = [];
+	const calls = new Map<string, OmpToolUse>();
+	let effort: string | undefined;
+	for (const event of activeOmpEvents(events)) {
+		if (event.type === 'thinking_level_change') {
+			effort = typeof event.thinkingLevel === 'string' ? event.thinkingLevel : undefined;
+			continue;
+		}
+		if (event.type !== 'message' || !event.message) continue;
+		const message = event.message;
+		if (message.role === 'toolResult') {
+			const call = message.toolCallId ? calls.get(message.toolCallId) : undefined;
+			if (call) {
+				const output = {
+					content: message.content,
+					...(message.details !== undefined ? { details: message.details } : {}),
+				};
+				call.state = { ...call.state, status: ompToolStatus(output, message.isError), output };
+			}
+			continue;
+		}
+		if (message.role !== 'user' && message.role !== 'assistant') continue;
+		const content = extractText(message.content);
+		const tools: OmpToolUse[] = [];
+		if (Array.isArray(message.content)) {
+			for (const block of message.content) {
+				if (
+					block.type !== 'toolCall' ||
+					typeof block.id !== 'string' ||
+					typeof block.name !== 'string'
+				)
+					continue;
+				const call = {
+					id: block.id,
+					tool: block.name,
+					state: { status: 'running', input: block.arguments },
+				};
+				calls.set(call.id, call);
+				tools.push(call);
+			}
+		}
+		const toolUse = tools.length ? tools : extractToolUse(message.content);
+		if (!content && !toolUse) continue;
+		messages.push({
+			type: message.role,
+			role: message.role,
+			content,
+			timestamp: event.timestamp || transcript.createdAt || '',
+			uuid: event.id || `${transcript.sessionId}-${messages.length}`,
+			toolUse,
+			...(message.role === 'assistant' ? { model: message.model, effort } : {}),
+		});
+	}
+	return messages;
+}
+
 /** Normalize an omp cost value (number or `{ total }`) to USD. */
 function normalizeCost(cost: OmpUsage['cost']): number {
 	if (typeof cost === 'number') return cost;
@@ -150,9 +261,10 @@ function normalizeCost(cost: OmpUsage['cost']): number {
  */
 export class OmpSessionStorage extends BaseSessionStorage {
 	readonly agentId: ToolType = 'omp';
+	private readonly transcriptCursors = new Map<string, NativeJsonlCursor<OmpEvent>>();
 
-	private async parseTranscript(filePath: string): Promise<OmpTranscript | null> {
-		let raw: string;
+	private async parseTranscript(filePath: string, readOnly = false): Promise<OmpTranscript | null> {
+		let events: OmpEvent[];
 		try {
 			const stat = await fs.stat(filePath);
 			if (stat.size > MAX_SESSION_FILE_SIZE) {
@@ -161,29 +273,30 @@ export class OmpSessionStorage extends BaseSessionStorage {
 				});
 				return null;
 			}
-			raw = await fs.readFile(filePath, 'utf-8');
+			if (readOnly) {
+				const result = await readNativeJsonl<OmpEvent>(
+					filePath,
+					this.transcriptCursors.get(filePath)
+				);
+				events = result.rows;
+				this.transcriptCursors.delete(filePath);
+				if (result.cursor) {
+					this.transcriptCursors.set(filePath, result.cursor);
+					if (this.transcriptCursors.size > 2)
+						this.transcriptCursors.delete(this.transcriptCursors.keys().next().value!);
+				}
+			} else events = parseNativeJsonl<OmpEvent>(await fs.readFile(filePath, 'utf-8'));
 		} catch (error) {
 			logger.debug(`Failed to read omp transcript: ${filePath}`, LOG_CONTEXT, { error });
 			return null;
 		}
 
-		const events: OmpEvent[] = [];
 		let cwd: string | null = null;
 		let createdAt: string | null = null;
 		let title: string | null = null;
 		let sessionId: string | null = null;
 
-		for (const line of raw.split('\n')) {
-			const trimmed = line.trim();
-			if (!trimmed) continue;
-			let event: OmpEvent;
-			try {
-				event = JSON.parse(trimmed) as OmpEvent;
-			} catch {
-				continue;
-			}
-			events.push(event);
-
+		for (const event of events) {
 			if (event.type === 'session') {
 				cwd = typeof event.cwd === 'string' ? event.cwd : cwd;
 				createdAt = typeof event.timestamp === 'string' ? event.timestamp : createdAt;
@@ -209,7 +322,7 @@ export class OmpSessionStorage extends BaseSessionStorage {
 	 */
 	private async collectTranscriptFiles(): Promise<string[]> {
 		// omp sessions root: ~/.omp/agent/sessions (dotfile convention on every platform).
-		const root = path.join(os.homedir(), '.omp', 'agent', 'sessions');
+		const root = getLocalOmpSessionsDir();
 
 		let subdirs: string[];
 		try {
@@ -356,6 +469,14 @@ export class OmpSessionStorage extends BaseSessionStorage {
 	 * returned - read/delete stay project-scoped, matching listSessions().
 	 */
 	private async findTranscriptPath(projectPath: string, sessionId: string): Promise<string | null> {
+		for (const [filePath, cursor] of this.transcriptCursors) {
+			if (!filePath.startsWith(getLocalOmpSessionsDir() + path.sep)) continue;
+			const header = cursor.rows.find((row) => row.type === 'session');
+			if (header?.id === sessionId && header.cwd && samePath(header.cwd, projectPath)) {
+				if (await nativeFileRevision(filePath)) return filePath;
+				this.transcriptCursors.delete(filePath);
+			}
+		}
 		const files = await this.collectTranscriptFiles();
 		for (const filePath of files) {
 			const transcript = await this.parseTranscript(filePath);
@@ -365,6 +486,17 @@ export class OmpSessionStorage extends BaseSessionStorage {
 			return filePath;
 		}
 		return null;
+	}
+
+	async getTranscriptRevision(
+		projectPath: string,
+		sessionId: string,
+		_options?: SessionReadOptions,
+		sshConfig?: SshRemoteConfig
+	): Promise<string | null> {
+		if (sshConfig) return null;
+		const file = await this.findTranscriptPath(projectPath, sessionId);
+		return file ? nativeFileRevision(file) : null;
 	}
 
 	async readSessionMessages(
@@ -380,29 +512,16 @@ export class OmpSessionStorage extends BaseSessionStorage {
 		const filePath = await this.findTranscriptPath(projectPath, sessionId);
 		if (!filePath) return { messages: [], total: 0, hasMore: false };
 
-		const transcript = await this.parseTranscript(filePath);
+		const transcript = await this.parseTranscript(filePath, options?.readOnly === true);
 		if (!transcript) return { messages: [], total: 0, hasMore: false };
 
-		const messages: SessionMessage[] = [];
-		for (const event of transcript.events) {
-			if (event.type !== 'message' || !event.message) continue;
-			const role = event.message.role;
-			if (role !== 'user' && role !== 'assistant') continue;
-
-			const content = extractText(event.message.content);
-			const toolUse = extractToolUse(event.message.content);
-			if (!content && !toolUse) continue;
-
-			messages.push({
-				type: role,
-				role,
-				content,
-				timestamp: event.timestamp || transcript.createdAt || '',
-				uuid: event.id || `${transcript.sessionId}-${messages.length}`,
-				toolUse,
-			});
-		}
-
+		if (
+			transcript.sessionId !== sessionId ||
+			!transcript.cwd ||
+			!samePath(transcript.cwd, projectPath)
+		)
+			return { messages: [], total: 0, hasMore: false };
+		const messages = ompMessages(transcript.events, transcript);
 		return BaseSessionStorage.applyMessagePagination(messages, options);
 	}
 
@@ -418,7 +537,7 @@ export class OmpSessionStorage extends BaseSessionStorage {
 		if (!transcript) return [];
 
 		const out: SearchableMessage[] = [];
-		for (const event of transcript.events) {
+		for (const event of activeOmpEvents(transcript.events)) {
 			if (event.type !== 'message' || !event.message) continue;
 			const role = event.message.role;
 			if (role !== 'user' && role !== 'assistant') continue;

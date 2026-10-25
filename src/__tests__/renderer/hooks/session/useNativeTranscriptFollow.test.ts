@@ -114,23 +114,26 @@ afterEach(() => {
 });
 
 describe('resolveNativeFollowTarget', () => {
-	it('follows a local OpenCode tab only while idle without queued work', () => {
-		setSession(owner({ toolType: 'opencode' }));
-		expect(resolveNativeFollowTarget()).toMatchObject({
-			agentId: 'opencode',
-			nativeId: NATIVE,
-			tabId: 'tab-native',
-		});
-		setSession(owner({ toolType: 'opencode', aiTabs: [codexTab({ state: 'busy' })] }));
-		expect(resolveNativeFollowTarget()).toBeNull();
-		setSession(
-			owner({
-				toolType: 'opencode',
-				executionQueue: [{ id: 'q', tabId: 'tab-native', type: 'message', text: 'x' } as never],
-			})
-		);
-		expect(resolveNativeFollowTarget()).toBeNull();
-	});
+	it.each(['opencode', 'omp'] as const)(
+		'follows a local %s tab only while idle without queued work',
+		(toolType) => {
+			setSession(owner({ toolType }));
+			expect(resolveNativeFollowTarget()).toMatchObject({
+				agentId: toolType,
+				nativeId: NATIVE,
+				tabId: 'tab-native',
+			});
+			setSession(owner({ toolType, aiTabs: [codexTab({ state: 'busy' })] }));
+			expect(resolveNativeFollowTarget()).toBeNull();
+			setSession(
+				owner({
+					toolType,
+					executionQueue: [{ id: 'q', tabId: 'tab-native', type: 'message', text: 'x' } as never],
+				})
+			);
+			expect(resolveNativeFollowTarget()).toBeNull();
+		}
+	);
 	it('names the visible local Codex tab with its canonical identity', () => {
 		const target = resolveNativeFollowTarget();
 		expect(target).toMatchObject({

@@ -54,3 +54,39 @@ it('preserves legacy filename lookup and independent concurrent searches', async
 		fixtures.map((fixture) => [fixture.id])
 	);
 });
+
+it('keeps the selected account across history pages for the same project', async () => {
+	const project = path.join(isolation.home, 'project');
+	const selected = path.join(isolation.home, 'work-account');
+	const defaultSession = createSession('codex', path.join(isolation.home, '.codex'), project, 4);
+	const selectedSessions = Array.from({ length: 2 }, () =>
+		createSession('codex', selected, project, 4)
+	);
+	const storage = new CodexSessionStorage();
+	const first = await storage.listSessionsPaginated(project, { configDir: selected, limit: 1 });
+	expect(first.totalCount).toBe(2);
+	expect(first.hasMore).toBe(true);
+	expect(first.nextCursor).toBe(first.sessions[0].sessionId);
+	const second = await storage.listSessionsPaginated(project, {
+		configDir: selected,
+		cursor: first.nextCursor!,
+		limit: 1,
+	});
+	expect(
+		[...first.sessions, ...second.sessions].map((session) => session.sessionId).sort()
+	).toEqual(selectedSessions.map((session) => session.id).sort());
+	expect(second.totalCount).toBe(2);
+	expect(second.hasMore).toBe(false);
+	expect(second.nextCursor).toBeNull();
+	const defaults = await storage.listSessionsPaginated(project);
+	expect(defaults.sessions.map((session) => session.sessionId)).toEqual([defaultSession.id]);
+});
+
+it('does not borrow default history when the selected account directory is missing', async () => {
+	const project = path.join(isolation.home, 'project');
+	createSession('codex', path.join(isolation.home, '.codex'), project, 4);
+	const result = await new CodexSessionStorage().listSessionsPaginated(project, {
+		configDir: path.join(isolation.home, 'missing-account'),
+	});
+	expect(result).toEqual({ sessions: [], totalCount: 0, hasMore: false, nextCursor: null });
+});

@@ -69,3 +69,19 @@
 新增 `docs/release-policy.md`、版本说明和 PR 模板、可复用只读 `scripts/hb-release.mjs` 与反例回归、规则集 JSON。CI 覆盖 fork 主线 PR；上游守卫、SDK 与 stale 流程限定为上游仓库。远端配置与验证通过本次治理 PR 和 Rules 页面留痕，完整 API 前后快照仅保留本机。
 
 GPT 负责此次治理与验证，没有修改 Claude 前端、原生接续、现有应用或配置，也不为制度调整另发安装包。保留既有版本和失败候选；未来发布的附件冻结，历史版本不删除重发。完整流程见[发布管理](release-policy.md)。
+
+## 2026-10-25：自主后端审查，历史账户与主机边界
+
+基于第三阶段已合并主线 `a4fdcc0491973fd4d5bdd416d5fc24871467a4fe`，沿用用户对后端自主修复的授权及原有范围限制。
+
+- **失效 SSH 配置：** `agentSessions:list`、`listPaginated`、`search` 把缺失或已禁用的 remote 解析成 `undefined`，随后读了本地存储。六条回归先失败，已有 `read` 的两条对照通过；三个入口补上与 `read` 相同的 `SSH remote is unavailable` 错误，存储不被调用。原有三条所谓 SSH 透传测试实际期待本地回退，现改为提供 enabled remote 并断言原样透传，另保留本地正常调用的对照。
+- **Codex 账户分页：** IPC 已解析 `ownerAgentId` 得到 `configDir`，但 `BaseSessionStorage.listSessionsPaginated()` 丢了这个参数。两个隔离磁盘回归先失败：选中账户读到默认账户，所选目录缺失也借用了默认历史。现在按既有 `AgentSessionStorage.listSessions()` 契约传递第三个账户参数；两页会话、总数、游标及默认账户各自保持正确。没有新建缓存、哈希或账户发现路径。
+- **Electron 反证：** 新增 `e2e/native-history-boundary.spec.ts`，用实际 preload/IPC 和现有锁定版本夹具。OpenCode 的本地列表、分页和搜索对照正常，失效远程请求在修复前却 fulfilled；Codex 所选账户两条历史在修复前被分页成 0 条。两个场景均先确认失败，再修产品代码。最初远程用例选用 Codex 默认列表作本地对照，因夹具位于自定义账户而返回空，未把这次用例设置错误计为缺陷反证；改用遵循隔离 XDG 路径的 OpenCode 后才得到有效反证。
+- **验证：** 存储、IPC、远程读取相关 24 个文件 460/460；新增 Electron 2/2，8.9 秒；使用合成凭据的真实入口烟测 2/2，10.3 秒，源凭据与临时目录清理检查通过。夹具 26/26，连接器 26/26，发布策略 11/11；类型、ESLint、全仓格式、文档引用及版本规则检查通过。没有重试、跳过或放宽断言。两类 Electron 场景复用已有官方格式出处，没有产品测试旁路。完整原生套件及 Linux/Windows 分片由本次 CI 执行，PR 和实际合并提交的七项 CI 结果见[本次 PR](https://github.com/CHANxuanyu/maestro-harness-bridge/pulls?q=is%3Apr+head%3Acodex%2Fbackend-remote-history) 描述。
+- **边界：** 未修改前端行为、认证、写锁、停止机制、依赖或 CI 时限；不打包、不安装、不发布。新场景只验历史读取，草稿、队列、Stop/重启沿用完整原生接续套件。真实账户、真实 SSH 服务、桌面 Codex 和 macOS 未验。Copilot PR #15 的总任务时限仍待原先的范围确认，本轮未绕过该阻塞。
+
+### 交给 Opus：会话浏览器的账户上下文
+
+代码审查发现 `AgentSessionsBrowser` 给 `useSessionPagination` 传了 `activeSession.id`，但 `useAgentSessionsSearch` 和 `useSessionViewer` 没有同样的账户信息；当前 search preload/IPC/storage 契约也没有账户参数。这是需要前后端共同对齐的未完成项，不能把本轮分页修复说成完整账户浏览已验收。
+
+复现用例：为同一项目准备默认账户和自定义 CODEX_HOME 两份独立合成历史，自定义历史含唯一关键词，选择自定义账户智能体打开会话浏览器。分页应只列自定义历史；切到正文搜索，查该唯一关键词，再打开搜索结果或列表中的历史。预期搜索、预览和接续都继续使用相同账户。当前搜索调用没有带所选账户，默认存储无法搜索到自定义关键词；查看调用也需补查。不要把该现象处理成扩大搜索到所有账户、按正文消重或读取失败后回退默认账户。此处是已定位的契约缺口及交接复现，尚未声称通过完整界面验收。

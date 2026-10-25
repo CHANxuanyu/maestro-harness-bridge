@@ -70,7 +70,24 @@ it('OpenCode copies only the native auth file into its isolated XDG data directo
 	);
 	expect(fs.statSync(path.join(destination, 'auth.json')).mode & 0o777).toBe(0o600);
 });
-it.each(['claude', 'codex', 'opencode'])(
+it('Grok copies only the explicitly selected auth file and leaves native sessions untouched', () => {
+	const { source, destination } = dirs();
+	const auth = '{}\n'; // An empty native AuthStore; this checks byte isolation, not login.
+	const file = path.join(source, 'selected-auth.json');
+	fs.writeFileSync(file, auth);
+	fs.mkdirSync(path.join(source, 'sessions'));
+	fs.writeFileSync(path.join(source, 'sessions', 'existing'), 'private sentinel');
+	prepareCredentials('grok', destination, { GROK_HOME: source, GROK_AUTH_PATH: file });
+	expect(fs.readdirSync(destination)).toEqual(['auth.json']);
+	expect(fs.readFileSync(path.join(destination, 'auth.json'), 'utf8')).toBe(auth);
+	expect(fs.readFileSync(file, 'utf8')).toBe(auth);
+	expect(fs.readFileSync(path.join(source, 'sessions', 'existing'), 'utf8')).toBe(
+		'private sentinel'
+	);
+	expect(fs.statSync(path.join(destination, 'auth.json')).mode & 0o777).toBe(0o600);
+	expect(prepareCredentials('grok', destination, { XAI_API_KEY: 'synthetic-api-key' })).toEqual({});
+});
+it.each(['claude', 'codex', 'opencode', 'grok'])(
 	'uses the supplied %s executable and its locked version',
 	(provider) => {
 		const executable = path.resolve(`e2e/fixtures/native/${provider}`);

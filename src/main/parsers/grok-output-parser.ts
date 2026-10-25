@@ -49,17 +49,17 @@
  * falls back to matching the newest still-running badge BY TOOL NAME and two
  * concurrent calls to the same tool settle onto each other.
  *
- * Field reading is deliberately tolerant (camelCase and snake_case, `rawInput`
- * and `input`, `rawOutput` and `output`) because this shape comes from the
- * grok-build 1.0.16 sources plus a captured updates.jsonl rather than from a
- * schema this repo can pin a fixture to. A line that carries neither an id nor
- * a name is absorbed as a system event, so schema drift degrades to the old
- * drop-it behaviour instead of emitting a nameless badge.
+ * Stage 3 pins grok-build 1.0.45, commit
+ * 2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8. The exact stdout envelopes are in
+ * crates/codegen/xai-grok-pager/src/headless/reducer/acp.rs. ACP text content
+ * can carry error output when rawOutput is absent. Existing legacy aliases
+ * remain supported; new fixtures use the pinned camelCase fields.
  */
 
 import type { ToolType, AgentError } from '../../shared/types';
 import type { AgentOutputParser, ParsedEvent } from './agent-output-parser';
 import { getErrorPatterns, matchErrorPattern } from './error-patterns';
+import { grokBashExitCode, grokContentText } from '../../shared/grokToolState';
 
 /** Cap for user-facing unmatched error bodies in UI/logs. */
 const MAX_ERROR_MESSAGE_CHARS = 500;
@@ -100,6 +100,7 @@ interface GrokRawMessage {
 	output?: unknown;
 	/** Failure detail on a settling `tool_call_update`. */
 	error?: unknown;
+	content?: unknown;
 }
 
 /** Grok statuses that mean the call has settled, mapped onto the status
@@ -175,6 +176,7 @@ export class GrokOutputParser implements AgentOutputParser {
 	 *  `tool_call`. Entries are removed as each call settles; a parser instance
 	 *  lives for one process, so an unsettled call cannot outlive the run. */
 	private readonly toolNamesById = new Map<string, string>();
+	private ended = false;
 
 	/** Parse a single JSON line from Grok's JSONL output stream.
 	 *  Non-JSON lines (e.g. stray stderr text like `Error: ...`) return null. */
@@ -192,6 +194,8 @@ export class GrokOutputParser implements AgentOutputParser {
 
 	/** Parse an already-deserialized JSON object into a normalized ParsedEvent. */
 	parseJsonObject(parsed: unknown): ParsedEvent | null {
+		// The locked headless reducer emits one terminal end for this process.
+		if (this.ended) return null;
 		if (!parsed || typeof parsed !== 'object') {
 			return null;
 		}
@@ -211,6 +215,8 @@ export class GrokOutputParser implements AgentOutputParser {
 			case 'tool_call_update':
 				return this.toolCallEvent(msg, true) ?? { type: 'system', raw: msg };
 			case 'end': {
+				this.ended = true;
+				this.toolNamesById.clear();
 				const sessionId =
 					typeof msg.sessionId === 'string' && msg.sessionId ? msg.sessionId : undefined;
 				// A non-end_turn stop means the turn died early (headless
@@ -315,7 +321,9 @@ export class GrokOutputParser implements AgentOutputParser {
 			this.toolNamesById.set(toolCallId, reportedName);
 		}
 
-		const status = isUpdate ? normalizeToolStatus(msg.status) : 'running';
+		let status = isUpdate ? normalizeToolStatus(msg.status) : 'running';
+		const exitCode = grokBashExitCode(msg.rawOutput);
+		if (status === 'completed' && exitCode !== undefined && exitCode !== 0) status = 'failed';
 		if (toolCallId && status !== 'running') {
 			this.toolNamesById.delete(toolCallId);
 		}
@@ -325,7 +333,7 @@ export class GrokOutputParser implements AgentOutputParser {
 		// `LogEntry.metadata.toolState` is {status,input,output}, so an `error` key
 		// would survive the merge and render nowhere - the badge would say failed
 		// and show nothing. A call that produced real output keeps it.
-		const output = firstDefined(msg.rawOutput, msg.output, msg.error);
+		const output = firstDefined(msg.rawOutput, msg.output, msg.error, grokContentText(msg.content));
 
 		return {
 			type: 'tool_use',
@@ -333,6 +341,7 @@ export class GrokOutputParser implements AgentOutputParser {
 			...(toolCallId ? { toolCallId } : {}),
 			toolState: {
 				status,
+				...(status !== 'running' && exitCode !== undefined ? { exitCode } : {}),
 				// Only send fields the line actually carried. The renderer merges
 				// a running badge with its update and falls back to the existing
 				// value per field, so omitting a field the line did not restate

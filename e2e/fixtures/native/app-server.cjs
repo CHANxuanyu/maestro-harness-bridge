@@ -4,6 +4,7 @@
 // scripts/codex-shared/connector.test.cjs. Notifications and turn_context are
 // pinned to codex-cli 0.163.0-alpha.11.1; no simulated renderer or connector.
 const http = require('node:http');
+const fs = require('node:fs');
 const { WebSocketServer } = require('ws');
 const { randomUUID } = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
@@ -63,7 +64,7 @@ async function startAppServer({ socket, configDir, cwd, id, scenes }) {
 					};
 					notify('item/started', { threadId: id, turnId, item });
 					let previous = '';
-					for (const output of tool.updates || []) {
+					for (const [index, output] of (tool.updates || []).entries()) {
 						notify('item/commandExecution/outputDelta', {
 							threadId: id,
 							turnId,
@@ -72,6 +73,7 @@ async function startAppServer({ socket, configDir, cwd, id, scenes }) {
 						});
 						previous = output;
 						await delay(300);
+						if (tool.gates?.[index]) while (!fs.existsSync(tool.gates[index])) await delay(10);
 					}
 					native.finishTool(tool, tool.status);
 					const complete = {

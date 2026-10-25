@@ -7,11 +7,22 @@ if (process.argv.includes('--version')) console.log('codex-cli 0.163.0-alpha.11.
 else {
 	const { runSharedExec } = require('../../../scripts/codex-shared/shared-exec.cjs');
 	runSharedExec(process.env.MAESTRO_NATIVE_SOCKET, process.argv.slice(2))
-		.then(() => {
-			process.exitCode = 0;
+		.then(async (result) => {
+			// The real connector has already emitted its complete native stream.
+			// This fixture gate separates original-turn bytes from synopsis work.
+			const gate = process.env.MAESTRO_NATIVE_EXIT_GATE;
+			if (gate) {
+				const fs = require('node:fs');
+				const { setTimeout: delay } = require('node:timers/promises');
+				while (!fs.existsSync(gate)) await delay(10);
+			}
+			process.exitCode = result.interrupted ? 130 : 0;
 		})
 		.catch((error) => {
-			console.error(error.message);
+			// Same exec error envelope as scripts/codex-shared/exec-adapter-v2.cjs.
+			process.stdout.write(
+				JSON.stringify({ type: 'error', message: 'Shared Codex: ' + error.message }) + '\n'
+			);
 			process.exitCode = 1;
 		});
 }

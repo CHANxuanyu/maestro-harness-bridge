@@ -64,6 +64,15 @@ afterEach(async () => {
 });
 
 describe('Grok native history and live outcomes', () => {
+	it('error detection follows the same terminal boundary as parsed events', () => {
+		const parser = new GrokOutputParser();
+		const error = { type: 'error', message: 'Native failure' };
+		expect(parser.detectErrorFromParsed(error)).not.toBeNull();
+		parser.parseJsonObject({ type: 'end', sessionId: id });
+		expect(parser.detectErrorFromParsed(error)).toBeNull();
+		expect(parser.detectErrorFromLine(JSON.stringify(error))).toBeNull();
+		expect(parser.detectErrorFromLine('Error: Authentication failed')).toBeNull();
+	});
 	it('treats a native Bash nonzero exit as failure even when ACP says completed', async () => {
 		// tools/src/types/output.rs and shell/src/session/acp_conversion.rs:
 		// ACP completion does not inspect Bash.exit_code.

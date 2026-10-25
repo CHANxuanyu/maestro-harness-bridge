@@ -391,7 +391,7 @@ export class GrokOutputParser implements AgentOutputParser {
 	 * wait for the exit path (avoids false mid-stream unknowns).
 	 */
 	detectErrorFromLine(line: string): AgentError | null {
-		if (!line.trim()) {
+		if (this.ended || !line.trim()) {
 			return null;
 		}
 
@@ -414,7 +414,8 @@ export class GrokOutputParser implements AgentOutputParser {
 	 *  actually emits the agent-error, mirroring the Antigravity parser's dual
 	 *  handling of its failed terminal envelope. */
 	detectErrorFromParsed(parsed: unknown): AgentError | null {
-		if (!parsed || typeof parsed !== 'object') {
+		// StdoutHandler detects errors before parsing, so it needs the same terminal boundary.
+		if (this.ended || !parsed || typeof parsed !== 'object') {
 			return null;
 		}
 

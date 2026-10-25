@@ -71,7 +71,7 @@ export function resolveNativeFollowTarget(): NativeFollowTarget | null {
 	if (useGroupChatStore.getState().activeGroupChatId) return null;
 	const { sessions, activeSessionId } = useSessionStore.getState();
 	const session = sessions.find((s) => s.id === activeSessionId);
-	if (!session || (session.toolType !== 'codex' && session.toolType !== 'claude-code')) return null;
+	if (!session || !['codex', 'claude-code', 'opencode'].includes(session.toolType)) return null;
 	// The AI tab must be what the main window shows (not a file, browser or
 	// terminal tab drawn over it).
 	if (

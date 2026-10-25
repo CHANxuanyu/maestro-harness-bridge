@@ -25,6 +25,7 @@ import type { ToolType, AgentError } from '../../shared/types';
 import type { AgentOutputParser, ParsedEvent } from './agent-output-parser';
 import { getErrorPatterns, matchErrorPattern } from './error-patterns';
 import { stripAllAnsiCodes } from '../utils/terminalFilter';
+import { normalizeOpenCodeToolState } from '../../shared/opencodeToolState';
 
 /**
  * Error object structure from OpenCode
@@ -83,6 +84,7 @@ interface OpenCodePart {
 		status?: 'pending' | 'running' | 'completed' | 'error';
 		input?: Record<string, unknown>;
 		output?: string;
+		error?: string;
 		title?: string;
 		metadata?: Record<string, unknown>;
 		time?: {
@@ -188,7 +190,8 @@ export class OpenCodeOutputParser implements AgentOutputParser {
 			return {
 				type: 'tool_use',
 				toolName: msg.part?.tool,
-				toolState: msg.part?.state,
+				toolCallId: msg.part?.callID,
+				toolState: normalizeOpenCodeToolState(msg.part?.state),
 				sessionId: msg.sessionID,
 				raw: msg,
 			};

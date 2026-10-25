@@ -14,9 +14,10 @@ import { installedCli, prepareCredentials } from './native/real-runtime.cjs';
 import { appendTurn } from './native/append-turn.cjs';
 import { realPrompt, realExternalTurn } from './native-real';
 import { launchElectronApp } from './electron-app';
+import { createOpenCodeTurn } from './native/opencode-protocol.cjs';
 
 const exec = promisify(execFile);
-export type Provider = 'claude' | 'codex';
+export type Provider = 'claude' | 'codex' | 'opencode';
 export interface NativeTool {
 	id: string;
 	command: string;
@@ -46,6 +47,7 @@ export class NativeApp {
 	readonly project = path.join(this.root, 'project');
 	readonly claude = path.join(this.root, 'claude');
 	readonly codex = path.join(this.root, 'codex');
+	readonly opencode = path.join(this.root, 'xdg', 'opencode');
 	readonly script = path.join(this.root, 'scenario.json');
 	app!: ElectronApplication;
 	page!: Page;
@@ -60,7 +62,8 @@ export class NativeApp {
 	private provider?: Provider;
 	readonly control = path.join(this.root, 'control.json');
 	constructor(private info: TestInfo) {
-		for (const dir of [this.data, this.project, this.claude, this.codex]) fs.mkdirSync(dir);
+		for (const dir of [this.data, this.project, this.claude, this.codex, this.opencode])
+			fs.mkdirSync(dir, { recursive: true });
 		fs.writeFileSync(
 			path.join(this.data, 'maestro-settings.json'),
 			JSON.stringify({
@@ -72,6 +75,9 @@ export class NativeApp {
 				tourCompleted: true,
 				automaticTabNamingEnabled: false,
 				sidebarNavigationMode: 'conversations',
+				// Provider resume scenarios exclude background synopsis (scenario h).
+				// OpenCode has no verified non-persisting synopsis invocation.
+				...(/^opencode /.test(info.title) ? { defaultSaveToHistory: false } : {}),
 			})
 		);
 	}
@@ -89,18 +95,25 @@ export class NativeApp {
 			CLAUDE_CONFIG_DIR: this.claude,
 			CLAUDE_SECURESTORAGE_CONFIG_DIR: this.claude,
 			CODEX_HOME: this.codex,
+			XDG_DATA_HOME: path.dirname(this.opencode),
+			XDG_CONFIG_HOME: path.join(this.root, 'xdg-config'),
+			XDG_CACHE_HOME: path.join(this.root, 'xdg-cache'),
+			XDG_STATE_HOME: path.join(this.root, 'xdg-state'),
+			OPENCODE_CONFIG_DIR: path.join(this.root, 'xdg-config', 'opencode'),
+			OPENCODE_CONFIG: '',
+			OPENCODE_CONFIG_CONTENT: '{}',
 			MAESTRO_NATIVE_SCRIPT: this.script,
 			MAESTRO_USER_DATA: this.data,
 		};
 	}
+	providerHome(provider: Provider) {
+		return provider === 'claude' ? this.claude : provider === 'codex' ? this.codex : this.opencode;
+	}
 	async start() {
 		if (this.real && !this.realCli) {
-			this.provider = this.info.title.startsWith('claude') ? 'claude' : 'codex';
+			this.provider = this.info.title.split(' ')[0].replace(':', '') as Provider;
 			this.realCli = installedCli(this.provider, process.env, /^codex [gh]:/.test(this.info.title));
-			this.credentials = prepareCredentials(
-				this.provider,
-				this.provider === 'claude' ? this.claude : this.codex
-			);
+			this.credentials = prepareCredentials(this.provider, this.providerHome(this.provider));
 			this.info.annotations.push({ type: 'native-cli-version', description: this.realCli.version });
 		}
 		this.app = await launchElectronApp(path.resolve('dist/main/index.js'), this.data, this.env);
@@ -156,17 +169,14 @@ export class NativeApp {
 			? {
 					MAESTRO_E2E_CLI: this.realCli!.executable,
 					MAESTRO_E2E_CONTROL: this.control,
-					MAESTRO_E2E_PROCESS: path.join(
-						provider === 'claude' ? this.claude : this.codex,
-						'fixture-process'
-					),
+					MAESTRO_E2E_PROCESS: path.join(this.providerHome(provider), 'fixture-process'),
 				}
 			: {};
 		const result = await this.cli(
 			'create-agent',
 			`Native ${provider}`,
 			'--type',
-			provider === 'claude' ? 'claude-code' : 'codex',
+			provider === 'claude' ? 'claude-code' : provider,
 			'--cwd',
 			this.project,
 			'--custom-path',
@@ -175,6 +185,8 @@ export class NativeApp {
 			`CLAUDE_CONFIG_DIR=${this.claude}`,
 			'--env',
 			`CODEX_HOME=${this.codex}`,
+			'--env',
+			`XDG_DATA_HOME=${path.dirname(this.opencode)}`,
 			'--env',
 			`MAESTRO_NATIVE_SCRIPT=${this.script}`,
 			...Object.entries({ ...realEnv, ...options.env }).flatMap(([key, value]) => [
@@ -233,6 +245,13 @@ export class NativeApp {
 	}
 	async externalTurn(provider: Provider, prompt: string, scene: NativeScene, id?: string) {
 		if (this.real) return realExternalTurn(this, provider, prompt, scene, id);
+		if (provider === 'opencode') {
+			const turn = createOpenCodeTurn({ configDir: this.opencode, cwd: this.project, id, prompt });
+			for (const tool of scene.tools ?? []) turn.startTool(tool);
+			for (const tool of [...(scene.tools ?? [])].reverse()) turn.finishTool(tool, tool.status);
+			turn.finish(scene.answer);
+			return turn;
+		}
 		return appendTurn(
 			{
 				provider,
@@ -268,6 +287,10 @@ export class NativeApp {
 		} else await expect(panel.getByText(expected, { exact: true }).first()).toBeVisible();
 	}
 	files(provider: Provider): string[] {
+		if (provider === 'opencode') {
+			const file = path.join(this.opencode, 'opencode.db');
+			return fs.existsSync(file) ? [file] : [];
+		}
 		const dir = path.join(
 			provider === 'claude' ? this.claude : this.codex,
 			provider === 'claude' ? 'projects' : 'sessions'

@@ -10,7 +10,9 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-real-smoke-'));
 const claude = path.join(root, 'claude-source');
 const codex = path.join(root, 'codex-source');
 const runs = path.join(root, 'runs');
-for (const dir of [claude, codex, runs]) fs.mkdirSync(dir);
+const xdg = path.join(root, 'xdg-source');
+const opencode = path.join(xdg, 'opencode');
+for (const dir of [claude, codex, runs, opencode]) fs.mkdirSync(dir, { recursive: true });
 const credentials = new Map([
 	[
 		path.join(claude, '.credentials.json'),
@@ -19,6 +21,10 @@ const credentials = new Map([
 		}),
 	],
 	[path.join(codex, 'auth.json'), JSON.stringify({ OPENAI_API_KEY: 'synthetic-api-key' })],
+	[
+		path.join(opencode, 'auth.json'),
+		JSON.stringify({ openai: { type: 'api', key: 'synthetic-api-key' } }),
+	],
 ]);
 for (const [file, bytes] of credentials) fs.writeFileSync(file, bytes, { mode: 0o600 });
 const env = {
@@ -29,8 +35,10 @@ const env = {
 	MAESTRO_E2E_TEMP_ROOT: runs,
 	MAESTRO_E2E_CLAUDE_PATH: path.resolve('e2e/fixtures/native/claude'),
 	MAESTRO_E2E_CODEX_PATH: path.resolve('e2e/fixtures/native/codex'),
+	MAESTRO_E2E_OPENCODE_PATH: path.resolve('e2e/fixtures/native/opencode'),
 	CLAUDE_CONFIG_DIR: claude,
 	CODEX_HOME: codex,
+	XDG_DATA_HOME: xdg,
 };
 for (const key of ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) delete env[key];
 try {
@@ -43,6 +51,7 @@ try {
 		assert.equal(fs.readFileSync(file, 'utf8'), bytes, 'Source credentials changed');
 	assert.deepEqual(fs.readdirSync(claude), ['.credentials.json']);
 	assert.deepEqual(fs.readdirSync(codex), ['auth.json']);
+	assert.deepEqual(fs.readdirSync(opencode), ['auth.json']);
 	assert.deepEqual(fs.readdirSync(runs), [], 'Acceptance left temporary sessions behind');
 	process.exitCode = result.status ?? 1;
 } finally {

@@ -5,7 +5,11 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const versions = { claude: '2.1.310 (Claude Code)', codex: 'codex-cli 0.163.0-alpha.11.1' };
+const versions = {
+	claude: '2.1.310 (Claude Code)',
+	codex: 'codex-cli 0.163.0-alpha.11.1',
+	opencode: '1.19.4',
+};
 
 function installedCli(provider, env = process.env, sharedAcceptance = false) {
 	const configured = env[`MAESTRO_E2E_${provider.toUpperCase()}_PATH`];
@@ -23,6 +27,17 @@ function installedCli(provider, env = process.env, sharedAcceptance = false) {
 }
 
 function prepareCredentials(provider, destination, env = process.env) {
+	if (provider === 'opencode') {
+		// OpenCode 1.19.4: packages/opencode/src/auth/index.ts reads only auth.json
+		// under Global.Path.data. The app and CLI use isolated XDG dirs for this run.
+		const source = path.join(
+			env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'),
+			'opencode',
+			'auth.json'
+		);
+		fs.writeFileSync(path.join(destination, 'auth.json'), fs.readFileSync(source), { mode: 0o600 });
+		return {};
+	}
 	if (provider === 'codex') {
 		// Source: src/main/agents/codex-auth.ts. Copy only credentials, never the
 		// account config, hooks, databases or existing native session directory.

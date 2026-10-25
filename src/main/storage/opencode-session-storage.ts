@@ -37,6 +37,7 @@ import type { ToolType, SshRemoteConfig } from '../../shared/types';
 import { isWindows } from '../../shared/platformDetection';
 import { ModelUsageAccumulator } from '../../shared/modelUsage';
 import type { ModelTokenUsage } from '../../shared/tokenUsage';
+import { normalizeOpenCodeToolState, type OpenCodeToolState } from '../../shared/opencodeToolState';
 
 const LOG_CONTEXT = '[OpenCodeSessionStorage]';
 
@@ -179,15 +180,12 @@ interface OpenCodeMessage {
  */
 interface OpenCodePart {
 	id: string;
+	callID?: string;
 	messageID: string;
 	type: 'text' | 'reasoning' | 'tool' | 'step-start' | 'step-finish';
 	text?: string;
 	tool?: string;
-	state?: {
-		status?: string;
-		input?: unknown;
-		output?: unknown;
-	};
+	state?: OpenCodeToolState;
 }
 
 // ─── SQLite row types (v1.2+) ────────────────────────────────────────────────
@@ -244,13 +242,62 @@ interface SqliteMessageData {
  * Parsed part data from the SQLite `data` JSON blob
  */
 interface SqlitePartData {
+	callID?: string;
 	type?: 'text' | 'reasoning' | 'tool' | 'step-start' | 'step-finish';
 	text?: string;
 	tool?: string;
-	state?: {
-		status?: string;
-		input?: unknown;
-		output?: unknown;
+	state?: OpenCodeToolState;
+}
+
+interface SqlitePartRow {
+	id: string;
+	message_id: string;
+	time_created: number;
+	time_updated: number;
+	data: string;
+}
+
+interface ParsedSqliteRow<T> {
+	updated: number;
+	bytes: number;
+	value: T | null;
+}
+
+interface OpenCodeTranscriptCursor {
+	dev: number;
+	ino: number;
+	watermark: number;
+	messages: Map<string, ParsedSqliteRow<OpenCodeMessage>>;
+	parts: Map<string, ParsedSqliteRow<OpenCodePart>>;
+}
+
+function decodeSqliteMessage(row: SqliteMessageRow): OpenCodeMessage | null {
+	const data = safeJsonParse<SqliteMessageData>(row.data);
+	if (!data) return null;
+	return {
+		id: row.id,
+		sessionID: row.session_id,
+		role: data.role || 'user',
+		time: { created: row.time_created },
+		model: { modelID: data.modelID, providerID: data.providerID },
+		tokens: data.tokens,
+		cost: data.cost,
+	};
+}
+
+function decodeSqlitePart(
+	row: Pick<SqlitePartRow, 'id' | 'message_id' | 'data'>
+): OpenCodePart | null {
+	const data = safeJsonParse<SqlitePartData>(row.data);
+	if (!data) return null;
+	return {
+		id: row.id,
+		messageID: row.message_id,
+		callID: data.callID,
+		type: data.type || 'text',
+		text: data.text,
+		tool: data.tool,
+		state: data.state,
 	};
 }
 
@@ -408,6 +455,117 @@ async function listJsonFilesRemote(dirPath: string, sshConfig: SshRemoteConfig):
  */
 export class OpenCodeSessionStorage extends BaseSessionStorage {
 	readonly agentId: ToolType = 'opencode';
+	// Same two-view, 32 MiB bound as the existing JSONL transcript cursors.
+	private readonly transcriptCursors = new Map<string, OpenCodeTranscriptCursor>();
+
+	private loadSqliteTranscriptIncrementally(sessionId: string): {
+		messages: OpenCodeMessage[];
+		parts: Map<string, OpenCodePart[]>;
+	} | null {
+		const db = openOpenCodeDb();
+		if (!db) {
+			this.transcriptCursors.delete(sessionId);
+			return null;
+		}
+		try {
+			if (!tableExists(db, 'message') || !tableExists(db, 'part')) return null;
+			// A read transaction keeps metadata and bodies on the same WAL snapshot.
+			db.prepare('BEGIN').run();
+			if (!db.prepare('SELECT 1 FROM session WHERE id = ?').get(sessionId)) return null;
+			const stat = fsSync.statSync(OPENCODE_DB_PATH);
+			const cached = this.transcriptCursors.get(sessionId);
+			const prior = cached?.dev === stat.dev && cached.ino === stat.ino ? cached : undefined;
+			let watermark = 0;
+			let bytes = 0;
+			// OpenCode 1.19.4's database/schema.sql.ts updates time_updated with Date.now().
+			// Re-read the watermark itself: consecutive updates can share a millisecond.
+			// Scan only IDs/timestamps for old rows, including deletions; fetch and parse
+			// bodies only for new/changed rows. No hashes or writes to the provider DB.
+			const readRows = <T>(
+				table: 'message' | 'part',
+				previous: Map<string, ParsedSqliteRow<T>> | undefined,
+				decode: (row: SqliteMessageRow & SqlitePartRow) => T | null
+			): Map<string, ParsedSqliteRow<T>> => {
+				const rows = db
+					.prepare(
+						`SELECT ${prior ? 'id, time_updated' : '*'} FROM ${table} WHERE session_id = ? ORDER BY time_created ASC, id ASC`
+					)
+					.all(sessionId) as Array<SqliteMessageRow & SqlitePartRow>;
+				const body = db.prepare(`SELECT * FROM ${table} WHERE id = ? AND session_id = ?`);
+				const next = new Map<string, ParsedSqliteRow<T>>();
+				for (const metadata of rows) {
+					const old = previous?.get(metadata.id);
+					let entry = old;
+					if (
+						!old ||
+						old.updated !== metadata.time_updated ||
+						metadata.time_updated >= prior!.watermark
+					) {
+						const row = prior
+							? (body.get(metadata.id, sessionId) as SqliteMessageRow & SqlitePartRow)
+							: metadata;
+						entry = {
+							updated: metadata.time_updated,
+							bytes: Buffer.byteLength(row.data),
+							value: decode(row),
+						};
+					}
+					next.set(metadata.id, entry!);
+					watermark = Math.max(watermark, metadata.time_updated);
+					bytes += entry!.bytes;
+				}
+				return next;
+			};
+			const messageRows = readRows('message', prior?.messages, decodeSqliteMessage);
+			const partRows = readRows('part', prior?.parts, decodeSqlitePart);
+			const messages: OpenCodeMessage[] = [];
+			const parts = new Map<string, OpenCodePart[]>();
+			for (const row of messageRows.values()) if (row.value) messages.push(row.value);
+			for (const row of partRows.values()) {
+				if (!row.value) continue;
+				const list = parts.get(row.value.messageID) ?? [];
+				list.push(row.value);
+				parts.set(row.value.messageID, list);
+			}
+			this.transcriptCursors.delete(sessionId);
+			if (bytes <= 32 * 1024 * 1024) {
+				this.transcriptCursors.set(sessionId, {
+					dev: stat.dev,
+					ino: stat.ino,
+					watermark,
+					messages: messageRows,
+					parts: partRows,
+				});
+				if (this.transcriptCursors.size > 2)
+					this.transcriptCursors.delete(this.transcriptCursors.keys().next().value!);
+			}
+			return { messages, parts };
+		} finally {
+			// Closing a read-only connection releases its snapshot, including early returns.
+			db.close();
+		}
+	}
+
+	async getTranscriptRevision(
+		_projectPath: string,
+		sessionId: string,
+		_options?: SessionReadOptions,
+		sshConfig?: SshRemoteConfig
+	): Promise<string | null> {
+		if (sshConfig || !sessionExistsInSqlite(sessionId)) return null;
+		// WAL commits can leave the main DB's size and mtime unchanged.
+		return [OPENCODE_DB_PATH, `${OPENCODE_DB_PATH}-wal`]
+			.map((file) => {
+				try {
+					const stat = fsSync.statSync(file);
+					return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '-';
+					throw error;
+				}
+			})
+			.join('|');
+	}
 
 	/**
 	 * Get the session directory for a project (local)
@@ -1152,7 +1310,7 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 
 			const messageRows = db
 				.prepare(
-					'SELECT id, session_id, time_created, time_updated, data FROM message WHERE session_id = ? ORDER BY time_created ASC'
+					'SELECT id, session_id, time_created, time_updated, data FROM message WHERE session_id = ? ORDER BY time_created ASC, id ASC'
 				)
 				.all(sessionId) as SqliteMessageRow[];
 
@@ -1187,48 +1345,29 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 			let totalCost = 0;
 
 			for (const row of messageRows) {
-				const data = safeJsonParse<SqliteMessageData>(row.data);
-				if (!data) continue;
-
-				const msg: OpenCodeMessage = {
-					id: row.id,
-					sessionID: sessionId,
-					role: data.role || 'user',
-					time: { created: row.time_created },
-					tokens: data.tokens,
-					cost: data.cost,
-				};
+				const msg = decodeSqliteMessage(row);
+				if (!msg) continue;
 				messages.push(msg);
-
-				if (data.tokens) {
-					totalInputTokens += data.tokens.input || 0;
-					totalOutputTokens += data.tokens.output || 0;
-					totalCacheReadTokens += data.tokens.cache?.read || 0;
-					totalCacheWriteTokens += data.tokens.cache?.write || 0;
+				if (msg.tokens) {
+					totalInputTokens += msg.tokens.input || 0;
+					totalOutputTokens += msg.tokens.output || 0;
+					totalCacheReadTokens += msg.tokens.cache?.read || 0;
+					totalCacheWriteTokens += msg.tokens.cache?.write || 0;
 				}
-				if (data.cost) {
-					totalCost += data.cost;
-				}
+				totalCost += msg.cost || 0;
 
 				// Load parts from SQLite
 				if (hasPartTable) {
 					const partRows = db
-						.prepare('SELECT id, data FROM part WHERE message_id = ? ORDER BY time_created ASC')
+						.prepare(
+							'SELECT id, data FROM part WHERE message_id = ? ORDER BY time_created ASC, id ASC'
+						)
 						.all(row.id) as Array<{ id: string; data: string }>;
 
 					const messageParts: OpenCodePart[] = [];
 					for (const partRow of partRows) {
-						const partData = safeJsonParse<SqlitePartData>(partRow.data);
-						if (partData) {
-							messageParts.push({
-								id: partRow.id,
-								messageID: row.id,
-								type: partData.type || 'text',
-								text: partData.text,
-								tool: partData.tool,
-								state: partData.state,
-							});
-						}
+						const part = decodeSqlitePart({ ...partRow, message_id: row.id });
+						if (part) messageParts.push(part);
 					}
 					parts.set(row.id, messageParts);
 				}
@@ -1571,9 +1710,13 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 		options?: SessionReadOptions,
 		sshConfig?: SshRemoteConfig
 	): Promise<SessionMessagesResult> {
-		const { messages, parts } = sshConfig
-			? await this.loadSessionMessagesRemote(sessionId, sshConfig)
-			: await this.loadMessagesLocal(sessionId);
+		const incremental =
+			options?.readOnly && !sshConfig ? this.loadSqliteTranscriptIncrementally(sessionId) : null;
+		const { messages, parts } =
+			incremental ??
+			(sshConfig
+				? await this.loadSessionMessagesRemote(sessionId, sshConfig)
+				: await this.loadMessagesLocal(sessionId));
 
 		const sessionMessages: SessionMessage[] = [];
 
@@ -1585,7 +1728,14 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 
 			// Extract tool use if present
 			const toolParts = msgParts.filter((p) => p.type === 'tool');
-			const toolUse = toolParts.length > 0 ? toolParts : undefined;
+			const toolUse =
+				toolParts.length > 0
+					? toolParts.map((part) => ({
+							...part,
+							id: part.callID ?? part.id,
+							state: normalizeOpenCodeToolState(part.state),
+						}))
+					: undefined;
 
 			if (textContent || toolUse) {
 				// Convert Unix timestamp (ms) to ISO string
@@ -1597,6 +1747,7 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 					content: textContent,
 					timestamp,
 					uuid: msg.id,
+					model: msg.role === 'assistant' ? msg.model?.modelID : undefined,
 					toolUse,
 				});
 			}

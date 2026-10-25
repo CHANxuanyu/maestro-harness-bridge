@@ -11,6 +11,7 @@ const versions = {
 	opencode: '1.19.4',
 	grok: 'grok 1.0.45',
 	omp: 'omp/18.12.6',
+	copilot: "GitHub Copilot CLI 1.0.63.\nRun 'copilot update' to check for updates.",
 };
 
 function installedCli(provider, env = process.env, sharedAcceptance = false) {
@@ -43,6 +44,12 @@ function prepareCredentials(provider, destination, env = process.env) {
 			path.join(env.GROK_HOME || path.join(os.homedir(), '.grok'), 'auth.json');
 		fs.writeFileSync(path.join(destination, 'auth.json'), fs.readFileSync(source), { mode: 0o600 });
 		return {};
+	}
+	if (provider === 'copilot') {
+		// Official app.js environment authentication; never invoke account/keychain login.
+		if (!env.COPILOT_GITHUB_TOKEN)
+			throw new Error('Copilot acceptance requires COPILOT_GITHUB_TOKEN.');
+		return { COPILOT_GITHUB_TOKEN: env.COPILOT_GITHUB_TOKEN };
 	}
 	if (provider === 'opencode') {
 		// OpenCode 1.19.4: packages/opencode/src/auth/index.ts reads only auth.json

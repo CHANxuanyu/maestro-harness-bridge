@@ -54,6 +54,15 @@ describe('CopilotShutdownWaiter', () => {
 	});
 
 	describe('resolveCopilotEventsPath', () => {
+		it('uses the official COPILOT_HOME and ignores the nonexistent COPILOT_CONFIG_DIR variable', () => {
+			vi.stubEnv('COPILOT_HOME', configDir);
+			vi.stubEnv('COPILOT_CONFIG_DIR', path.join(configDir, 'wrong'));
+			try {
+				expect(resolveCopilotEventsPath(AGENT_SESSION_ID)).toBe(eventsPath);
+			} finally {
+				vi.unstubAllEnvs();
+			}
+		});
 		it('builds the canonical session-state path', () => {
 			const p = resolveCopilotEventsPath(AGENT_SESSION_ID, configDir);
 			expect(p).toBe(eventsPath);

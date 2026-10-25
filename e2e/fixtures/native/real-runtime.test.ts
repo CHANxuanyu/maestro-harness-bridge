@@ -102,7 +102,7 @@ it('Oh My Pi uses only the supplied API key and never opens account files', () =
 	expect(fs.readdirSync(destination)).toEqual([]);
 	expect(fs.readFileSync(path.join(source, 'auth.json'), 'utf8')).toBe('private sentinel');
 });
-it.each(['claude', 'codex', 'opencode', 'grok', 'omp'])(
+it.each(['claude', 'codex', 'opencode', 'grok', 'omp', 'copilot'])(
 	'uses the supplied %s executable and its locked version',
 	(provider) => {
 		const executable = path.resolve(`e2e/fixtures/native/${provider}`);
@@ -130,4 +130,20 @@ it('permits only reviewed exact candidates in shared real acceptance', () => {
 	expect(installedCli('codex', env, true).version).toBe('codex-cli 0.164.0');
 	writeVersion('codex-cli 9.99.0');
 	expect(() => installedCli('codex', env, true)).toThrow('Unsupported codex version');
+});
+
+it('Copilot uses only the explicit token and does not read account files', () => {
+	const { source, destination } = dirs();
+	fs.writeFileSync(path.join(source, 'config.json'), 'private sentinel');
+	expect(() => prepareCredentials('copilot', destination, { COPILOT_HOME: source })).toThrow(
+		'requires COPILOT_GITHUB_TOKEN'
+	);
+	expect(
+		prepareCredentials('copilot', destination, {
+			COPILOT_HOME: source,
+			COPILOT_GITHUB_TOKEN: 'synthetic-api-key',
+		})
+	).toEqual({ COPILOT_GITHUB_TOKEN: 'synthetic-api-key' });
+	expect(fs.readdirSync(destination)).toEqual([]);
+	expect(fs.readFileSync(path.join(source, 'config.json'), 'utf8')).toBe('private sentinel');
 });

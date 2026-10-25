@@ -22,6 +22,7 @@ import type { ToolType, SshRemoteConfig } from '../../shared/types';
 import { BaseSessionStorage } from './base-session-storage';
 import type { SearchableMessage } from './base-session-storage';
 import { isExpectedRemoteError } from './remote-error-utils';
+import { nativeFileRevision, readNativeJsonl, type NativeJsonlCursor } from './native-jsonl-cursor';
 import { ModelUsageAccumulator } from '../../shared/modelUsage';
 import type { ModelTokenUsage } from '../../shared/tokenUsage';
 
@@ -97,6 +98,11 @@ interface CopilotEvent {
 	};
 	data?: {
 		content?: string;
+		model?: string;
+		toolCallId?: string;
+		success?: boolean;
+		result?: { content?: string; detailedContent?: string };
+		error?: { message?: string; code?: string };
 		toolRequests?: CopilotToolRequest[];
 		sessionDurationMs?: number;
 		modelMetrics?: Record<
@@ -207,22 +213,31 @@ function matchesProject(metadata: CopilotWorkspaceMetadata, projectPath: string)
 	);
 }
 
-/** Convert Copilot tool requests into a normalized tool-use structure. */
-function buildToolUse(toolRequests?: CopilotToolRequest[]): unknown {
-	if (!toolRequests?.length) return undefined;
-	const toolUse = toolRequests
-		.filter((tool) => tool.name)
+// Official @github/copilot@1.0.63 (c440c72e8caca344fe4a4223cceb59dcd241cb48),
+// index.js event schemas and app.js Adr/_dr. Results carry native success/error;
+// an abort event cancels only calls still pending at that point in the log.
+interface CopilotToolUse {
+	name: string;
+	id?: string;
+	input: unknown;
+	state: { status: string; input: unknown; output?: string };
+}
+function buildToolUse(toolRequests?: CopilotToolRequest[]): CopilotToolUse[] | undefined {
+	const tools = toolRequests
+		?.filter((tool) => tool.name)
 		.map((tool) => ({
-			name: tool.name,
+			name: tool.name!,
 			id: tool.toolCallId,
 			input: tool.arguments,
+			state: { status: 'running', input: tool.arguments },
 		}));
-	return toolUse.length > 0 ? toolUse : undefined;
+	return tools?.length ? tools : undefined;
 }
 
 /** Parse events.jsonl content into messages, statistics, and content indicators. */
-function parseEvents(content: string): ParsedCopilotSessionData {
+function parseEvents(content: string | CopilotEvent[]): ParsedCopilotSessionData {
 	const messages: SessionMessage[] = [];
+	const calls = new Map<string, CopilotToolUse>();
 	let firstAssistantMessage = '';
 	let firstUserMessage = '';
 	let parsedEventCount = 0;
@@ -236,13 +251,33 @@ function parseEvents(content: string): ParsedCopilotSessionData {
 	};
 	const modelAcc = new ModelUsageAccumulator();
 
-	for (const line of content.split(/\r?\n/)) {
-		if (!line.trim()) continue;
+	for (const line of typeof content === 'string' ? content.split(/\r?\n/) : content) {
+		if (typeof line === 'string' && !line.trim()) continue;
 
 		try {
-			const entry = JSON.parse(line) as CopilotEvent;
+			const entry = typeof line === 'string' ? (JSON.parse(line) as CopilotEvent) : line;
 			parsedEventCount += 1;
 
+			if (entry.type === 'tool.execution_complete') {
+				const call = entry.data?.toolCallId ? calls.get(entry.data.toolCallId) : undefined;
+				if (call) {
+					const success = entry.data?.success !== false;
+					call.state = {
+						...call.state,
+						status: success ? 'completed' : 'failed',
+						output:
+							entry.data?.result?.content ||
+							entry.data?.result?.detailedContent ||
+							(!success ? entry.data?.error?.message || '' : ''),
+					};
+				}
+				continue;
+			}
+			if (entry.type === 'abort') {
+				for (const call of calls.values())
+					if (call.state.status === 'running') call.state.status = 'canceled';
+				continue;
+			}
 			if (entry.type === 'user.message') {
 				const contentText = entry.data?.content || '';
 				if (contentText.trim()) {
@@ -261,6 +296,7 @@ function parseEvents(content: string): ParsedCopilotSessionData {
 			if (entry.type === 'assistant.message') {
 				const contentText = entry.data?.content || '';
 				const toolUse = buildToolUse(entry.data?.toolRequests);
+				for (const call of toolUse ?? []) if (call.id) calls.set(call.id, call);
 				if (contentText.trim() || toolUse) {
 					firstAssistantMessage ||= contentText;
 					messages.push({
@@ -270,6 +306,8 @@ function parseEvents(content: string): ParsedCopilotSessionData {
 						timestamp: entry.timestamp || '',
 						uuid: entry.id || `copilot-assistant-${messages.length}`,
 						toolUse,
+						model: entry.data?.model,
+						// Actual per-call reasoningEffort is ephemeral assistant.usage, not history.
 					});
 				}
 				continue;
@@ -357,6 +395,7 @@ async function getLocalDirectorySize(sessionDir: string): Promise<number> {
  */
 export class CopilotSessionStorage extends BaseSessionStorage {
 	readonly agentId: ToolType = 'copilot-cli';
+	private readonly transcriptViews = new Map<string, NativeJsonlCursor<CopilotEvent>>();
 
 	/** Remote session state directory path using POSIX tilde expansion. */
 	private getRemoteSessionStateDir(): string {
@@ -685,17 +724,46 @@ export class CopilotSessionStorage extends BaseSessionStorage {
 		sshConfig?: SshRemoteConfig
 	): Promise<SessionMessagesResult> {
 		// Guard: verify session belongs to the requested project before returning content
-		if (!(await this.sessionMatchesProject(sessionId, _projectPath, sshConfig))) {
+		if (
+			!(await this.sessionMatchesProject(sessionId, _projectPath, sshConfig, options?.configDir))
+		) {
 			return { messages: [], total: 0, hasMore: false };
 		}
 
-		const eventsContent = await this.readEventsFile(sessionId, sshConfig);
-		if (!eventsContent) {
-			return { messages: [], total: 0, hasMore: false };
-		}
+		let content: string | CopilotEvent[] | null;
+		if (options?.readOnly && !sshConfig) {
+			const file = this.getEventsPath(sessionId, undefined, options?.configDir);
+			try {
+				const next = await readNativeJsonl(file, this.transcriptViews.get(file));
+				this.transcriptViews.delete(file);
+				if (next.cursor) this.transcriptViews.set(file, next.cursor);
+				while (this.transcriptViews.size > 2)
+					this.transcriptViews.delete(this.transcriptViews.keys().next().value!);
+				content = next.rows;
+			} catch (error) {
+				this.transcriptViews.delete(file);
+				const code = (error as NodeJS.ErrnoException).code;
+				if (code === 'ENOENT' || code === 'EACCES' || code === 'EPERM')
+					return { messages: [], total: 0, hasMore: false };
+				throw error;
+			}
+		} else content = await this.readEventsFile(sessionId, sshConfig, options?.configDir);
+		if (!content) return { messages: [], total: 0, hasMore: false };
+		return BaseSessionStorage.applyMessagePagination(parseEvents(content).messages, options);
+	}
 
-		const { messages } = parseEvents(eventsContent);
-		return BaseSessionStorage.applyMessagePagination(messages, options);
+	async getTranscriptRevision(
+		projectPath: string,
+		sessionId: string,
+		options?: SessionReadOptions,
+		sshConfig?: SshRemoteConfig
+	): Promise<string | null> {
+		if (
+			sshConfig ||
+			!(await this.sessionMatchesProject(sessionId, projectPath, undefined, options?.configDir))
+		)
+			return null;
+		return nativeFileRevision(this.getEventsPath(sessionId, undefined, options?.configDir));
 	}
 
 	/** Get searchable user/assistant messages for session search. */
@@ -746,14 +814,15 @@ export class CopilotSessionStorage extends BaseSessionStorage {
 		};
 	}
 
-	/** Check whether a session belongs to the given project. Returns true if ownership cannot be determined (fail-open for missing metadata). */
+	/** Check whether a session belongs to the given project. Missing or unreadable metadata does not select another account. */
 	private async sessionMatchesProject(
 		sessionId: string,
 		projectPath: string,
-		sshConfig?: SshRemoteConfig
+		sshConfig?: SshRemoteConfig,
+		accountDir?: string
 	): Promise<boolean> {
 		try {
-			const workspacePath = this.getWorkspacePath(sessionId, sshConfig);
+			const workspacePath = this.getWorkspacePath(sessionId, sshConfig, accountDir);
 			const workspaceContent = sshConfig
 				? await this.readRemoteFile(workspacePath, sshConfig)
 				: await fs.readFile(workspacePath, 'utf8');

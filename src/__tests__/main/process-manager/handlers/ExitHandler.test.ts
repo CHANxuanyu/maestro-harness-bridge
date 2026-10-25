@@ -1376,6 +1376,61 @@ describe('ExitHandler', () => {
 	});
 
 	describe('Copilot post-exit shutdown wait', () => {
+		it('reconciles the account selected for this process, including its final answer', async () => {
+			const fs = await import('fs/promises');
+			const os = await import('os');
+			const path = await import('path');
+			const root = await fs.mkdtemp(path.join(os.tmpdir(), 'maestro-copilot-account-exit-'));
+			const selected = path.join(root, 'selected');
+			const id = 'selected-session';
+			const file = path.join(selected, 'session-state', id, 'events.jsonl');
+			await fs.mkdir(path.dirname(file), { recursive: true });
+			await fs.writeFile(
+				file,
+				[
+					{ type: 'session.start', data: { sessionId: id } },
+					{
+						type: 'assistant.message',
+						data: { content: 'Selected account answer', toolRequests: [] },
+					},
+					{ type: 'session.shutdown', data: { currentTokens: 42 } },
+				]
+					.map((row) => JSON.stringify(row))
+					.join('\n') + '\n'
+			);
+			vi.stubEnv('COPILOT_HOME', path.join(root, 'other'));
+			vi.stubEnv('COPILOT_CONFIG_DIR', path.join(root, 'other'));
+			vi.mocked(waitForCopilotShutdown).mockImplementation((session, options) =>
+				actualWaitForCopilotShutdown(session, {
+					...options,
+					maxWaitMs: 100,
+					inactivityMs: 20,
+					pollIntervalMs: 5,
+				})
+			);
+			try {
+				const proc = createMockProcess({
+					toolType: 'copilot-cli',
+					isBatchMode: true,
+					isStreamJsonMode: true,
+					agentSessionId: id,
+					maestroEnvVars: { COPILOT_HOME: selected },
+					outputParser: new CopilotOutputParser(),
+				});
+				processes.set('test-session', proc);
+				const answers: string[] = [];
+				emitter.on('data', (_id, answer) => answers.push(answer));
+				await exitHandler.handleExit('test-session', 0);
+				expect(answers).toEqual(['Selected account answer']);
+				expect(waitForCopilotShutdown).toHaveBeenCalledWith(
+					id,
+					expect.objectContaining({ configDir: selected })
+				);
+			} finally {
+				vi.unstubAllEnvs();
+				await fs.rm(root, { recursive: true, force: true });
+			}
+		});
 		it.each([
 			['empty buffer', ''],
 			[
@@ -1423,8 +1478,8 @@ describe('ExitHandler', () => {
 				].join('\n') + '\n'
 			);
 
-			const prevConfigDir = process.env.COPILOT_CONFIG_DIR;
-			process.env.COPILOT_CONFIG_DIR = configDir;
+			const prevConfigDir = process.env.COPILOT_HOME;
+			process.env.COPILOT_HOME = configDir;
 
 			try {
 				const proc = createMockProcess({
@@ -1450,9 +1505,9 @@ describe('ExitHandler', () => {
 				expect(processes.has('test-session')).toBe(false);
 			} finally {
 				if (prevConfigDir === undefined) {
-					delete process.env.COPILOT_CONFIG_DIR;
+					delete process.env.COPILOT_HOME;
 				} else {
-					process.env.COPILOT_CONFIG_DIR = prevConfigDir;
+					process.env.COPILOT_HOME = prevConfigDir;
 				}
 				await fs.rm(configDir, { recursive: true, force: true });
 			}

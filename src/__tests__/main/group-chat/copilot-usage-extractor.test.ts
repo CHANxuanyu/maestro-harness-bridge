@@ -29,14 +29,14 @@ describe('extractCopilotUsageFromDisk', () => {
 
 	beforeEach(async () => {
 		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'copilot-usage-test-'));
-		originalConfigDir = process.env.COPILOT_CONFIG_DIR;
-		process.env.COPILOT_CONFIG_DIR = tmpDir;
+		originalConfigDir = process.env.COPILOT_HOME;
+		process.env.COPILOT_HOME = tmpDir;
 		vi.mocked(readFileRemote).mockReset();
 	});
 
 	afterEach(async () => {
-		if (originalConfigDir === undefined) delete process.env.COPILOT_CONFIG_DIR;
-		else process.env.COPILOT_CONFIG_DIR = originalConfigDir;
+		if (originalConfigDir === undefined) delete process.env.COPILOT_HOME;
+		else process.env.COPILOT_HOME = originalConfigDir;
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	});
 

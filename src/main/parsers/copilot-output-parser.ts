@@ -122,6 +122,7 @@ function extractToolOutput(result: CopilotToolExecutionResult | undefined): stri
 export class CopilotOutputParser implements AgentOutputParser {
 	readonly agentId: ToolType = 'copilot-cli';
 
+	private ended = false;
 	private toolNames = new Map<string, string>();
 	/** Tracks whether reasoning deltas were received in the current turn.
 	 *  Used to dedupe the `assistant.reasoning` summary against its preceding
@@ -147,6 +148,7 @@ export class CopilotOutputParser implements AgentOutputParser {
 
 	/** Parse an already-deserialized JSON object into a normalized ParsedEvent. */
 	parseJsonObject(parsed: unknown): ParsedEvent | null {
+		if (this.ended) return null;
 		if (!parsed || typeof parsed !== 'object') {
 			return null;
 		}
@@ -186,7 +188,28 @@ export class CopilotOutputParser implements AgentOutputParser {
 				return this.parseToolExecutionStart(msg);
 			case 'tool.execution_complete':
 				return this.parseToolExecutionComplete(msg);
+			case 'abort': {
+				// Official 1.0.63 abort settles pending tools even when another native
+				// client initiated it. Reuse the existing parallel result event contract.
+				const results = [...this.toolNames].map(([toolCallId, toolName]) => ({
+					toolCallId,
+					toolName,
+					toolState: { status: 'canceled' },
+				}));
+				this.toolNames.clear();
+				if (!results.length) return { type: 'system', raw: msg };
+				return {
+					type: 'tool_use',
+					...results[0],
+					toolResultBlocks: results.slice(1),
+					raw: msg,
+				};
+			}
 			case 'result':
+				// @github/copilot@1.0.63 app.js _dr is the process terminal event.
+				// assistant.message and assistant.turn_end can precede more steps.
+				this.ended = true;
+				this.toolNames.clear();
 				return {
 					type: 'result',
 					sessionId: msg.sessionId,
@@ -519,7 +542,7 @@ export class CopilotOutputParser implements AgentOutputParser {
 
 	/** Detect agent errors from an already-parsed JSON object. Skips bare exit codes to allow detectErrorFromExit to classify with full context. */
 	detectErrorFromParsed(parsed: unknown): AgentError | null {
-		if (!parsed || typeof parsed !== 'object') {
+		if (this.ended || !parsed || typeof parsed !== 'object') {
 			return null;
 		}
 
@@ -528,7 +551,11 @@ export class CopilotOutputParser implements AgentOutputParser {
 			return null;
 		}
 
-		const errorText = extractErrorText(msg.error) || extractErrorText(msg.data?.error);
+		// @github/copilot 1.0.63 app.js qYr defines session.error.data.message; Adr emits it.
+		const errorText =
+			(msg.type === 'session.error' ? extractErrorText(msg.data?.message) : null) ||
+			extractErrorText(msg.error) ||
+			extractErrorText(msg.data?.error);
 
 		// Do NOT synthesize an error for bare non-zero exit codes.
 		// Returning null here lets detectErrorFromExit() run with full

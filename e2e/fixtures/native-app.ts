@@ -14,12 +14,13 @@ import { installedCli, prepareCredentials } from './native/real-runtime.cjs';
 import { appendTurn } from './native/append-turn.cjs';
 import { realPrompt, realExternalTurn } from './native-real';
 import { launchElectronApp } from './electron-app';
+import { createCopilotTurn } from './native/copilot-protocol.cjs';
 import { createOmpTurn } from './native/omp-protocol.cjs';
 import { createGrokTurn } from './native/grok-protocol.cjs';
 import { createOpenCodeTurn } from './native/opencode-protocol.cjs';
 
 const exec = promisify(execFile);
-export type Provider = 'claude' | 'codex' | 'opencode' | 'grok' | 'omp';
+export type Provider = 'claude' | 'codex' | 'opencode' | 'grok' | 'omp' | 'copilot';
 export interface NativeTool {
 	id: string;
 	command: string;
@@ -49,6 +50,7 @@ export class NativeApp {
 	readonly project = path.join(this.root, 'project');
 	readonly claude = path.join(this.root, 'claude');
 	readonly codex = path.join(this.root, 'codex');
+	readonly copilot = path.join(this.root, 'copilot');
 	readonly omp = path.join(this.root, 'omp', 'agent');
 	readonly grok = path.join(this.root, 'grok');
 	readonly opencode = path.join(this.root, 'xdg', 'opencode');
@@ -74,6 +76,7 @@ export class NativeApp {
 			this.opencode,
 			this.grok,
 			this.omp,
+			this.copilot,
 		])
 			fs.mkdirSync(dir, { recursive: true });
 		fs.writeFileSync(
@@ -89,7 +92,9 @@ export class NativeApp {
 				sidebarNavigationMode: 'conversations',
 				// Provider resume scenarios exclude background synopsis (scenario h).
 				// These providers have no verified non-persisting synopsis invocation.
-				...(/^(opencode|grok|omp) /.test(info.title) ? { defaultSaveToHistory: false } : {}),
+				...(/^(opencode|grok|omp|copilot) /.test(info.title)
+					? { defaultSaveToHistory: false }
+					: {}),
 			})
 		);
 	}
@@ -107,6 +112,8 @@ export class NativeApp {
 			CLAUDE_CONFIG_DIR: this.claude,
 			CLAUDE_SECURESTORAGE_CONFIG_DIR: this.claude,
 			CODEX_HOME: this.codex,
+			COPILOT_HOME: this.copilot,
+			COPILOT_AUTO_UPDATE: 'false',
 			GROK_HOME: this.grok,
 			PI_CODING_AGENT_DIR: this.omp,
 			PI_CONFIG_DIR: path.relative(os.homedir(), path.dirname(this.omp)),
@@ -131,6 +138,7 @@ export class NativeApp {
 			opencode: this.opencode,
 			grok: this.grok,
 			omp: this.omp,
+			copilot: this.copilot,
 		}[provider];
 	}
 	async start() {
@@ -142,7 +150,9 @@ export class NativeApp {
 			const credentialEnv =
 				this.provider === 'omp' && process.env.MAESTRO_E2E_SMOKE === '1'
 					? { ...process.env, ANTHROPIC_API_KEY: 'synthetic-api-key' }
-					: process.env;
+					: this.provider === 'copilot' && process.env.MAESTRO_E2E_SMOKE === '1'
+						? { ...process.env, COPILOT_GITHUB_TOKEN: 'synthetic-api-key' }
+						: process.env;
 			this.credentials = prepareCredentials(
 				this.provider,
 				this.providerHome(this.provider),
@@ -210,7 +220,7 @@ export class NativeApp {
 			'create-agent',
 			`Native ${provider}`,
 			'--type',
-			provider === 'claude' ? 'claude-code' : provider,
+			provider === 'claude' ? 'claude-code' : provider === 'copilot' ? 'copilot-cli' : provider,
 			'--cwd',
 			this.project,
 			'--custom-path',
@@ -219,6 +229,10 @@ export class NativeApp {
 			`CLAUDE_CONFIG_DIR=${this.claude}`,
 			'--env',
 			`CODEX_HOME=${this.codex}`,
+			'--env',
+			`COPILOT_HOME=${this.copilot}`,
+			'--env',
+			'COPILOT_AUTO_UPDATE=false',
 			'--env',
 			`GROK_HOME=${this.grok}`,
 			'--env',
@@ -291,6 +305,13 @@ export class NativeApp {
 	}
 	async externalTurn(provider: Provider, prompt: string, scene: NativeScene, id?: string) {
 		if (this.real) return realExternalTurn(this, provider, prompt, scene, id);
+		if (provider === 'copilot') {
+			const turn = createCopilotTurn({ configDir: this.copilot, cwd: this.project, id, prompt });
+			for (const tool of scene.tools ?? []) turn.startTool(tool);
+			for (const tool of [...(scene.tools ?? [])].reverse()) turn.finishTool(tool);
+			turn.finish(scene.answer);
+			return turn;
+		}
 		if (provider === 'grok' || provider === 'omp') {
 			const createTurn = provider === 'grok' ? createGrokTurn : createOmpTurn;
 			const turn = createTurn({
@@ -352,15 +373,17 @@ export class NativeApp {
 		}
 		const dir = path.join(
 			this.providerHome(provider),
-			provider === 'claude' ? 'projects' : 'sessions'
+			provider === 'claude' ? 'projects' : provider === 'copilot' ? 'session-state' : 'sessions'
 		);
 		if (!fs.existsSync(dir)) return [];
 		return fs
 			.readdirSync(dir, { recursive: true })
 			.filter((name) =>
-				provider === 'grok'
-					? String(name).endsWith('chat_history.jsonl')
-					: String(name).endsWith('.jsonl')
+				provider === 'copilot'
+					? String(name).endsWith('events.jsonl')
+					: provider === 'grok'
+						? String(name).endsWith('chat_history.jsonl')
+						: String(name).endsWith('.jsonl')
 			)
 			.map((name) => path.join(dir, String(name)))
 			.sort();

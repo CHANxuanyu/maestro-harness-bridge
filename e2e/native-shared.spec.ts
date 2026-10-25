@@ -1,40 +1,51 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { test, expect, type NativeApp } from './fixtures/native-app';
-import { appendTurn } from './fixtures/native/append-turn.cjs';
 import { startAppServer } from './fixtures/native/app-server.cjs';
+import { startRealShared } from './fixtures/native-shared-real';
+import { realPrompt } from './fixtures/native-real';
 import { runSharedExec } from '../scripts/codex-shared/shared-exec.cjs';
 
 async function shared(native: NativeApp, scenes: unknown[], extraEnv: Record<string, string> = {}) {
-	const seed = appendTurn(
-		{
-			provider: 'codex',
-			configDir: native.codex,
-			cwd: native.project,
-			id: randomUUID(),
-			prompt: 'Shared acceptance history',
-		},
-		{ answer: 'Initial shared answer.' }
+	native.scriptTurns(
+		scenes.map((scene: any, index) => ({
+			...scene,
+			exitGate: index === 0 ? extraEnv.MAESTRO_NATIVE_EXIT_GATE : undefined,
+		}))
 	);
-	const socket = path.join(native.root, 'shared.sock');
-	const server = await startAppServer({
-		socket,
-		configDir: native.codex,
-		cwd: native.project,
-		id: seed.id,
-		scenes,
+	const seed = await native.externalTurn('codex', 'Shared acceptance history', {
+		answer: 'Initial shared answer.',
 	});
-	const agentId = await native.createAgent('codex', {
-		executable: path.resolve('e2e/fixtures/native/codex-shared'),
-		env: { MAESTRO_NATIVE_SOCKET: socket, ...extraEnv },
-	});
-	await native.page
-		.locator('[data-conversation-kind="history"] button[data-tree-nav]')
-		.filter({ hasText: 'Shared acceptance history' })
-		.click();
-	await expect(native.output().getByText('Initial shared answer.', { exact: true })).toBeVisible();
-	return { server, socket, seed, agentId };
+	let socket = path.join(native.root, 'shared.sock');
+	const server = native.real
+		? await startRealShared(native, seed.id)
+		: await startAppServer({
+				socket,
+				configDir: native.codex,
+				cwd: native.project,
+				id: seed.id,
+				scenes,
+			});
+	if (native.real) socket = server.socket;
+	try {
+		const agentId = await native.createAgent('codex', {
+			executable: path.resolve(
+				native.real ? 'e2e/fixtures/native/real-cli' : 'e2e/fixtures/native/codex-shared'
+			),
+			env: { MAESTRO_NATIVE_SOCKET: socket, ...extraEnv, ...server.env },
+		});
+		await native.page
+			.locator('[data-conversation-kind="history"] button[data-tree-nav]')
+			.filter({ hasText: 'Shared acceptance history' })
+			.click();
+		await expect(
+			native.output().getByText('Initial shared answer.', { exact: true })
+		).toBeVisible();
+		return { server, socket, seed, agentId };
+	} catch (error) {
+		await server.close();
+		throw error;
+	}
 }
 
 test('codex g: real connector keeps two clients in one thread with live output and confirmation notices', async ({
@@ -55,14 +66,19 @@ test('codex g: real connector keeps two clients in one thread with live output a
 	]);
 	try {
 		await native.send('Send through the shared connector');
+		if (native.real) await expect.poll(() => server.approvals.length).toBeGreaterThan(0);
+		const confirmation = native.real
+			? server.approvals.at(-1)!.method
+			: 'item/commandExecution/requestApproval';
 		await expect(
 			native
 				.output()
 				.getByText(
-					'Codex is waiting for a client confirmation: item/commandExecution/requestApproval. Open this same conversation in Codex to respond, or stop this turn.',
+					`Codex is waiting for a client confirmation: ${confirmation}. Open this same conversation in Codex to respond, or stop this turn.`,
 					{ exact: true }
 				)
 		).toBeVisible();
+		if (native.real) server.approve();
 		await expect(native.output().locator('[data-tool-status="running"]').first()).toBeVisible();
 		await native.expandTools();
 		const result = native.output().getByTestId('tool-call-result');
@@ -78,19 +94,36 @@ test('codex g: real connector keeps two clients in one thread with live output a
 		await expect(native.output().locator('[data-tool-status="running"]')).toHaveCount(0);
 		await runSharedExec(
 			socket,
-			['exec', '--json', 'resume', seed.id, '--', 'Send from the other client'],
+			[
+				'exec',
+				'--json',
+				'resume',
+				seed.id,
+				'--',
+				native.real
+					? realPrompt(native, 'Send from the other client', {
+							answer: 'Other client shared answer.',
+						})
+					: 'Send from the other client',
+			],
 			{ output: () => {} }
 		);
 		await expect(
 			native.output().getByText('Other client shared answer.', { exact: true })
 		).toBeVisible();
+		await server.refresh?.();
 		expect(server.state.turns).toHaveLength(2);
 		expect(native.files('codex')).toEqual([seed.file]);
 		expect(fs.readFileSync(seed.file, 'utf8')).toContain('Other client shared answer.');
 	} finally {
 		for (const gate of gates) fs.writeFileSync(gate, 'continue');
 		try {
-			await expect.poll(() => server.state.status).toBe('idle');
+			await expect
+				.poll(async () => {
+					await server.refresh?.();
+					return server.state.status;
+				})
+				.toBe('idle');
 		} finally {
 			await server.close();
 		}
@@ -102,9 +135,12 @@ for (const blocker of ['active', 'queued'] as const) {
 		native,
 	}) => {
 		const { server, seed } = await shared(native, [{ answer: 'Unexpected accepted turn.' }]);
-		const before = fs.readFileSync(seed.file);
-		if (blocker === 'active') server.state.status = 'active';
+		if (native.real) await server.block(blocker);
+		else if (blocker === 'active') server.state.status = 'active';
 		else server.state.queue = [{ id: 'queued' }]; // connector.test.cjs queue response fixture
+		const before = fs.readFileSync(seed.file);
+		const turnsBefore = server.state.turns.length;
+		const queueBefore = [...server.state.queue];
 		try {
 			await native.send('This turn must not be sent');
 			const text =
@@ -112,15 +148,17 @@ for (const blocker of ['active', 'queued'] as const) {
 					? /still generating in another client|session is busy/i
 					: /already has queued messages/i;
 			await expect(native.page.getByText(text).first()).toBeVisible();
-			expect(server.state.turns).toHaveLength(0);
-			expect(
-				server.state.requests.filter(
-					(request: { method: string }) => request.method === 'turn/start'
-				)
-			).toHaveLength(0);
+			await server.refresh?.();
+			expect(server.state.turns).toHaveLength(turnsBefore);
+			if (!native.real)
+				expect(
+					server.state.requests.filter(
+						(request: { method: string }) => request.method === 'turn/start'
+					)
+				).toHaveLength(0);
 			expect(fs.readFileSync(seed.file)).toEqual(before);
 			expect(native.files('codex')).toEqual([seed.file]);
-			expect(server.state.queue).toEqual(blocker === 'queued' ? [{ id: 'queued' }] : []);
+			expect(server.state.queue).toEqual(queueBefore);
 		} finally {
 			await server.close();
 		}
@@ -161,6 +199,7 @@ test('codex h: shared history uses the final answer without sending a Summary tu
 		).toBeVisible();
 		expect(fs.readFileSync(seed.file)).toEqual(before);
 		expect(native.files('codex')).toEqual([seed.file]);
+		await server.refresh?.();
 		expect(server.state.turns).toHaveLength(1);
 		await expect(native.page.locator('[data-conversation-key]')).toHaveCount(rows);
 	} finally {

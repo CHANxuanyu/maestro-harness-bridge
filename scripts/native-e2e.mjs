@@ -1,6 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+if (process.env.MAESTRO_E2E_REAL === '1' && process.env.CI && process.env.MAESTRO_E2E_SMOKE !== '1')
+	throw new Error(
+		'Real-account acceptance runs only locally. Use test:e2e:real-smoke for synthetic credentials.'
+	);
+
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 function run(command, args) {
 	const result = spawnSync(command, args, { stdio: 'inherit' });

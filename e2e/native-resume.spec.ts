@@ -1,9 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { test, expect, type Provider } from './fixtures/native-app';
-
-import { appendTurn } from './fixtures/native/append-turn.cjs';
+import { nativeIdentity, nativeToolIds } from './fixtures/native-real';
 
 for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 	test(`${provider} a: two turns append to the same native session`, async ({ native }) => {
@@ -55,8 +53,17 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		await expect(native.output().locator('[data-tool-status="running"]')).toHaveCount(0);
 		const file = await native.oneTranscript(provider);
 		const content = fs.readFileSync(file, 'utf8');
+		const ids = native.real
+			? nativeToolIds(
+					provider,
+					file,
+					tools.map((tool) => tool.command)
+				)
+			: tools.map((tool) => tool.id);
+		expect(ids.every((id) => typeof id === 'string' && id.length > 0)).toBe(true);
+		expect(new Set(ids).size).toBe(tools.length);
+		for (const id of ids) expect(content).toContain(id);
 		for (const tool of tools) {
-			expect(content).toContain(tool.id);
 			expect(content).toContain(tool.output);
 		}
 	});
@@ -117,20 +124,15 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		native,
 	}) => {
 		native.scriptTurns([]);
-		const turn = appendTurn(
-			{
-				provider,
-				configDir: provider === 'claude' ? native.claude : native.codex,
-				cwd: native.project,
-				id: randomUUID(),
-				prompt: 'External acceptance history',
-			},
-			{
-				answer: 'Answer from external history.',
-				tools: [{ id: 'history-tool', command: 'printf history-result', output: 'history-result' }],
-			}
-		);
+		const turn = await native.externalTurn(provider, 'External acceptance history', {
+			answer: 'Answer from external history.',
+			tools: [{ id: 'history-tool', command: 'printf history-result', output: 'history-result' }],
+		});
 		const before = fs.readFileSync(turn.file);
+		const metadata = native.real
+			? nativeIdentity(provider, turn.file)
+			: { model: provider === 'claude' ? 'claude-sonnet-4-6' : 'gpt-5.3-codex', effort: 'high' };
+		expect(metadata.model).toBeTruthy();
 		await native.createAgent(provider);
 		await native.page
 			.locator('[data-conversation-kind="history"] button[data-tree-nav]')
@@ -142,13 +144,11 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		await native.expandTools();
 		await expect(native.output().getByTestId('tool-call-result')).toContainText('history-result');
 		await native.output().getByRole('button', { name: 'Message info', exact: true }).last().click();
-		await expect(
-			native
-				.output()
-				.getByText(provider === 'claude' ? 'claude-sonnet-4-6' : 'gpt-5.3-codex', { exact: true })
-		).toBeVisible();
-		if (provider === 'codex')
-			await expect(native.output().getByText('high', { exact: true })).toBeVisible();
+		await expect(native.output().getByText(metadata.model, { exact: true })).toBeVisible();
+		if (provider === 'codex') {
+			expect(metadata.effort).toBeTruthy();
+			await expect(native.output().getByText(metadata.effort, { exact: true })).toBeVisible();
+		}
 		expect(fs.readFileSync(turn.file)).toEqual(before);
 	});
 }

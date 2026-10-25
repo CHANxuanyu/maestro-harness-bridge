@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+'use strict';
+
+// Relay the actual CLI's args, stdin, stdout and stderr without translating
+// any native events. The optional test gate holds exit only after it finishes,
+// letting history acceptance snapshot the original transcript before synopsis.
+const fs = require('node:fs');
+const { spawn } = require('node:child_process');
+const { setTimeout: delay } = require('node:timers/promises');
+const args = process.argv.slice(2);
+const inspection = args.includes('--version') || args.includes('--help');
+const control =
+	!inspection && fs.existsSync(process.env.MAESTRO_E2E_CONTROL)
+		? JSON.parse(fs.readFileSync(process.env.MAESTRO_E2E_CONTROL, 'utf8'))
+		: {};
+const child = spawn(process.env.MAESTRO_E2E_CLI, args, { stdio: 'inherit' });
+if (!inspection) fs.writeFileSync(process.env.MAESTRO_E2E_PROCESS, String(child.pid));
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
+child.on('error', (error) => {
+	console.error(error.message);
+	process.exitCode = 1;
+});
+child.on('exit', async (code, signal) => {
+	if (code === 0 && control.exitGate && !args.includes('--no-session-persistence'))
+		while (!fs.existsSync(control.exitGate)) await delay(10);
+	process.exitCode = code ?? (signal === 'SIGINT' ? 130 : 1);
+});

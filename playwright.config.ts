@@ -10,6 +10,8 @@ import { defineConfig } from '@playwright/test';
 /**
  * See https://playwright.dev/docs/test-configuration
  */
+const realNative = process.env.MAESTRO_E2E_REAL === '1';
+
 export default defineConfig({
 	// Test directory
 	testDir: './e2e',
@@ -30,9 +32,11 @@ export default defineConfig({
 	workers: 1,
 
 	// Reporter to use
-	reporter: process.env.CI
-		? [['github'], ['html', { open: 'never' }]]
-		: [['list'], ['html', { open: 'never' }]],
+	reporter: realNative
+		? [['list'], ['html', { open: 'never' }], ['./e2e/native-reporter.ts']]
+		: process.env.CI
+			? [['github'], ['html', { open: 'never' }]]
+			: [['list'], ['html', { open: 'never' }]],
 
 	// Shared settings for all the projects below
 	use: {
@@ -65,6 +69,9 @@ export default defineConfig({
 		{
 			name: 'native',
 			testMatch: '**/native-*.spec.ts',
+			testIgnore:
+				realNative && !process.env.MAESTRO_E2E_SHARED_PATH ? '**/native-shared.spec.ts' : [],
+			timeout: realNative ? 240000 : 60000,
 			use: { trace: 'off', video: 'off' },
 		},
 	],
@@ -74,7 +81,7 @@ export default defineConfig({
 
 	// Expect timeout
 	expect: {
-		timeout: 10000,
+		timeout: realNative ? 90000 : 10000,
 	},
 
 	// Output directory for test artifacts

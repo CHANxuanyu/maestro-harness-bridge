@@ -1,0 +1,72 @@
+#!/usr/bin/env node
+'use strict';
+
+// Linux smoke stand-in for the installed codex-shared.py launcher. Its args,
+// runtime descriptor keys and lifecycle verbs come from scripts/codex-shared.
+// It runs the existing synthetic app-server plus the real shared-exec; native
+// macOS signature/socket identity checks are explicitly outside this fixture.
+const fs = require('node:fs');
+const path = require('node:path');
+const { startAppServer } = require('./app-server.cjs');
+const { runSharedExec } = require('../../../scripts/codex-shared/shared-exec.cjs');
+const args = process.argv.slice(2);
+const root = process.env.MAESTRO_SHARED_STATE;
+if (!root || !process.env.MAESTRO_E2E_SMOKE)
+	throw new Error('Synthetic shared launcher requires its isolated smoke environment');
+const descriptorFile = path.join(root, 'runtime.json');
+(async () => {
+	if (args.includes('--version')) {
+		console.log('codex-cli 0.163.0-alpha.11.1');
+		return;
+	}
+	if (args.includes('--help')) {
+		console.log('exec --json resume');
+		return;
+	}
+	if (args[0] === '--connector-check') return;
+	if (args[0] === '--connector-verify-runtime') {
+		fs.readFileSync(descriptorFile);
+		return;
+	}
+	if (args[0] === '--connector-stop-idle') {
+		process.kill(JSON.parse(fs.readFileSync(descriptorFile, 'utf8')).pid, 'SIGTERM');
+		return;
+	}
+	if (args.includes('app-server')) {
+		const configDir = process.env.CODEX_HOME;
+		const files = fs
+			.readdirSync(path.join(configDir, 'sessions'), { recursive: true })
+			.filter((file) => String(file).endsWith('.jsonl'));
+		if (files.length !== 1) throw new Error('Shared smoke needs exactly one new native session');
+		const first = fs
+			.readFileSync(path.join(configDir, 'sessions', files[0]), 'utf8')
+			.split('\n')
+			.map((line) => line && JSON.parse(line))
+			.find((record) => record?.type === 'session_meta');
+		const socket = path.join(root, 'fixture.sock');
+		const server = await startAppServer({
+			socket,
+			configDir,
+			cwd: process.cwd(),
+			id: first.payload.id,
+			scenes: JSON.parse(fs.readFileSync(process.env.MAESTRO_NATIVE_SCRIPT, 'utf8')).turns,
+			acceptBlocker: true,
+			userInput: args.includes('features.default_mode_request_user_input=true'),
+		});
+		fs.writeFileSync(descriptorFile, JSON.stringify({ socket, pid: process.pid }), { mode: 0o600 });
+		process.once('SIGTERM', async () => {
+			await server.close();
+			process.exitCode = 0;
+		});
+		return;
+	}
+	const descriptor = JSON.parse(fs.readFileSync(descriptorFile, 'utf8'));
+	const result = await runSharedExec(descriptor.socket, args);
+	if (result.interrupted) process.exitCode = 130;
+})().catch((error) => {
+	// exec-adapter-v2.cjs error envelope, also used by the fixture entrypoint.
+	process.stdout.write(
+		JSON.stringify({ type: 'error', message: 'Shared Codex: ' + error.message }) + '\n'
+	);
+	process.exitCode = 1;
+});

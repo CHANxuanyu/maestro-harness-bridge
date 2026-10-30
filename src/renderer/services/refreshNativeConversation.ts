@@ -140,13 +140,25 @@ function identityOf(session: Session, tab: AITab): string {
  */
 function upgradeAndMerge(
 	loaded: LogEntry[],
-	visible: LogEntry[]
+	visible: LogEntry[],
+	partialWindow: boolean
 ): { logs: LogEntry[]; added: number; upgraded: number } | null {
-	const upgrade = reconcileTranscriptEntries(loaded, visible);
+	// A tail read has no evidence about the older prefix. In particular, legacy
+	// envelope removal must not rewrite entries outside this window. Keep that
+	// prefix verbatim, including object identity; full reads retain the existing
+	// upgrade behavior. Without a shared id only the ordered merge can help.
+	const loadedIds = new Set(loaded.map((entry) => entry.id));
+	const windowStart = partialWindow ? visible.findIndex((entry) => loadedIds.has(entry.id)) : 0;
+	const upgrade =
+		windowStart < 0
+			? { logs: visible, upgraded: 0 }
+			: reconcileTranscriptEntries(loaded, visible.slice(windowStart));
+	const upgradedLogs =
+		upgrade.upgraded > 0 ? [...visible.slice(0, windowStart), ...upgrade.logs] : visible;
 	// A prompt Maestro sent whose native copy was written late (pre-turn context
 	// compaction) is tied to it here, and a duplicate an earlier refresh showed
 	// for it is repaired, before the merge decides what is new.
-	const own = bindDelayedOwnSends(loaded, upgrade.logs);
+	const own = bindDelayedOwnSends(loaded, upgradedLogs);
 	const merged = mergeNewerEntries(loaded, own.logs);
 	if (!merged) return null;
 	return { logs: merged.logs, added: merged.added, upgraded: upgrade.upgraded + own.bound };
@@ -180,10 +192,16 @@ async function refreshNow(target: NativeRefreshTarget): Promise<NativeRefreshRes
 	if (!projectRoot) return { status: 'failed', error: 'No project path for this conversation' };
 
 	let loaded: LogEntry[] = [];
+	let partialWindow = false;
 	let merged: ReturnType<typeof upgradeAndMerge> = null;
 	try {
-		let limit = Math.max(TRANSCRIPT_RESUME_READ_LIMIT, tab.logs?.length ?? 0);
-		for (let step = 0; step <= MAX_WIDEN_STEPS; step++) {
+		const baseLimit = Math.max(TRANSCRIPT_RESUME_READ_LIMIT, tab.logs?.length ?? 0);
+		const limits = Array.from({ length: MAX_WIDEN_STEPS + 1 }, (_, step) => baseLimit * 2 ** step);
+		// Usually a shared native id is in the last 500 messages. If not, retain
+		// the old window and all six doublings: an untimed live tab may need its
+		// entire user sequence before there is enough evidence for an anchor.
+		if (baseLimit > TRANSCRIPT_RESUME_READ_LIMIT) limits.unshift(TRANSCRIPT_RESUME_READ_LIMIT);
+		for (const limit of limits) {
 			const result = await window.maestro.agentSessions.read(
 				session.toolType || 'claude-code',
 				projectRoot,
@@ -203,17 +221,20 @@ async function refreshNow(target: NativeRefreshTarget): Promise<NativeRefreshRes
 			loaded = transcriptMessagesToLogEntries(
 				stripSynopsisTurns((result?.messages ?? []) as TranscriptMessage[])
 			);
+			partialWindow = result?.hasMore === true;
 			// An unreadable transcript comes back empty from several adapters
 			// rather than throwing. It is never a reason to empty a full tab.
 			if (loaded.length === 0) {
+				// A valid tail may contain only filtered native envelopes. Read
+				// farther back before treating an empty conversion as unreadable.
+				if (partialWindow) continue;
 				return { status: 'failed', error: 'The conversation could not be read' };
 			}
 			// Merge against the tab as it is NOW: a backfill may have prepended,
 			// and the merge only ever appends to whatever is there.
 			const current = locate(sessionId, tabId).tab;
-			merged = upgradeAndMerge(loaded, current?.logs ?? tab.logs ?? []);
+			merged = upgradeAndMerge(loaded, current?.logs ?? tab.logs ?? [], partialWindow);
 			if (merged || !result?.hasMore) break;
-			limit *= 2;
 		}
 	} catch (error) {
 		logger.warn('[refreshNativeConversation] Read failed', undefined, error);
@@ -226,6 +247,10 @@ async function refreshNow(target: NativeRefreshTarget): Promise<NativeRefreshRes
 		return { status: 'failed', error: 'Newer messages could not be lined up with this tab' };
 	}
 	if (merged.added === 0 && merged.upgraded === 0) return { status: 'unchanged' };
+	// There is no await between the last merge and this synchronous store write.
+	// Reuse that result; running all three merge functions again only repeats
+	// work on the same logs. Identity and write blockers are still checked below.
+	const next = merged;
 
 	// Re-check everything after the await, inside the store update, so the write
 	// lands on exactly the state that was checked (a session removed meanwhile
@@ -246,15 +271,6 @@ async function refreshNow(target: NativeRefreshTarget): Promise<NativeRefreshRes
 			(record && !nativeRecordFitsTab(s, fresh, record))
 		) {
 			outcome = { status: 'skipped', reason: 'changed' };
-			return s;
-		}
-		const next = upgradeAndMerge(loaded, fresh.logs ?? []);
-		if (!next) {
-			outcome = { status: 'skipped', reason: 'changed' };
-			return s;
-		}
-		if (next.added === 0 && next.upgraded === 0) {
-			outcome = { status: 'unchanged' };
 			return s;
 		}
 		outcome = {

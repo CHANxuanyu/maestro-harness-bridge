@@ -549,7 +549,8 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 				projectPath: string,
 				query: string,
 				searchMode: SessionSearchMode,
-				sshRemoteId?: string
+				sshRemoteId?: string,
+				options?: Pick<SessionReadOptions, 'configDir' | 'ownerAgentId'>
 			): Promise<SessionSearchResult[]> => {
 				const storage = getSessionStorage(agentId);
 				if (!storage) {
@@ -561,7 +562,16 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 				const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
 				if (sshRemoteId && !sshConfig) throw new Error('SSH remote is unavailable');
 
-				const results = await storage.searchSessions(projectPath, query, searchMode, sshConfig);
+				const configDir =
+					options?.configDir ??
+					(options?.ownerAgentId ? resolveAgentAccountDir(options.ownerAgentId) : undefined);
+				const results = await storage.searchSessions(
+					projectPath,
+					query,
+					searchMode,
+					sshConfig,
+					configDir
+				);
 				logger.info(
 					`Found ${results.length} matching sessions for query "${query}" (agent: ${agentId})${sshRemoteId ? ' (remote via SSH)' : ''}`,
 					LOG_CONTEXT

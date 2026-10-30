@@ -17,6 +17,7 @@
  * - searchSessions() - full-text search with configurable mode
  */
 
+import fs from 'fs/promises';
 import type { ToolType, SshRemoteConfig } from '../../shared/types';
 import { logger } from '../utils/logger';
 import type {
@@ -86,7 +87,8 @@ export abstract class BaseSessionStorage implements AgentSessionStorage {
 	protected abstract getSearchableMessages(
 		sessionId: string,
 		projectPath: string,
-		sshConfig?: SshRemoteConfig
+		sshConfig?: SshRemoteConfig,
+		accountDir?: string
 	): Promise<SearchableMessage[]>;
 
 	/**
@@ -110,15 +112,18 @@ export abstract class BaseSessionStorage implements AgentSessionStorage {
 		projectPath: string,
 		query: string,
 		searchMode: SessionSearchMode,
-		sshConfig?: SshRemoteConfig
+		sshConfig?: SshRemoteConfig,
+		accountDir?: string
 	): Promise<SessionSearchResult[]> {
 		if (!query.trim()) {
 			return [];
 		}
 
-		const sessions = await this.listSessions(projectPath, sshConfig);
+		// An explicitly selected missing account is an error, not an empty default search.
+		if (accountDir && !sshConfig) await fs.access(accountDir);
+		const sessions = await this.listSessions(projectPath, sshConfig, accountDir);
 		return this.searchSessionMessages(sessions, query, searchMode, (sessionId) =>
-			this.getSearchableMessages(sessionId, projectPath, sshConfig)
+			this.getSearchableMessages(sessionId, projectPath, sshConfig, accountDir)
 		);
 	}
 

@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import { createTurn } from './fixtures/native/protocol.cjs';
 import { test, expect } from './fixtures/native-app';
 
 // Native formats come from the version-pinned protocol.cjs and
@@ -117,4 +119,89 @@ test('opencode: history queries preserve the search mode and remote host', async
 		expect(result.error).toContain('SSH remote is unavailable');
 	}
 	expect(fs.readFileSync(turn.file)).toEqual(before);
+});
+
+test('codex: browser search, preview and resume use the selected account', async ({ native }) => {
+	await native.close();
+	const homeDir = path.join(native.root, 'isolated-home');
+	fs.mkdirSync(homeDir);
+	await native.start(homeDir);
+	native.scriptTurns([{ answer: 'Selected account resumed answer.' }]);
+	const selected = await native.externalTurn('codex', 'selected-account-needle', {
+		answer: 'Selected account preview answer.',
+	});
+	// The same native UUID in a different account must never supply the preview.
+	// This default-account transcript always uses the pinned writer, including in real mode.
+	const fallback = createTurn({
+		provider: 'codex',
+		configDir: path.join(homeDir, '.codex'),
+		cwd: native.project,
+		id: selected.id,
+		prompt: 'default-account-needle',
+	});
+	fallback.finish('Default account preview must remain private.');
+	const before = fs.readFileSync(selected.file);
+	const defaultBefore = fs.readFileSync(fallback.file);
+	const ownerAgentId = await native.createAgent('codex');
+	await native.input().press(process.platform === 'darwin' ? 'Meta+Shift+L' : 'Control+Shift+L');
+	const search = native.page.getByPlaceholder('Search all content...', { exact: true });
+	await expect(search).toBeVisible();
+	await search.fill('default-account-needle');
+	await expect(
+		native.page.getByText('No sessions match your search', { exact: true })
+	).toBeVisible();
+	await search.fill('selected-account-needle');
+	// The browser shows the old list while searching; only this highlighted hit proves a result.
+	await expect(native.page.getByText('selected-account-needle', { exact: true })).toBeVisible();
+	await expect(native.page.getByText('No sessions match your search', { exact: true })).toHaveCount(
+		0
+	);
+	await search.press('Enter');
+	await expect(
+		native.page.getByText('Selected account preview answer.', { exact: true })
+	).toBeVisible();
+	await expect(
+		native.page.getByText('Default account preview must remain private.', { exact: true })
+	).toHaveCount(0);
+	await native.page.getByRole('button', { name: 'Resume', exact: true }).click();
+	await expect(
+		native.output().getByText('Selected account preview answer.', { exact: true })
+	).toBeVisible();
+	await native.send('Continue the selected account');
+	await expect(
+		native.output().getByText('Selected account resumed answer.', { exact: true })
+	).toBeVisible();
+	expect(native.files('codex')).toEqual([selected.file]);
+	expect(fs.readFileSync(selected.file).subarray(0, before.length)).toEqual(before);
+	expect(fs.readFileSync(fallback.file)).toEqual(defaultBefore);
+	// This CLI endpoint reads the persisted store; renderer persistence is debounced by 2 seconds.
+	await expect
+		.poll(async () => {
+			const current = await native.cli('tab', 'show', 'active', '--agent', ownerAgentId);
+			return { id: current.tab.agentSessionId, state: current.tab.state };
+		})
+		.toEqual({ id: selected.id, state: 'idle' });
+	fs.renameSync(native.codex, `${native.codex}-removed`);
+	try {
+		const failures = await native.page.evaluate(
+			async ({ project, ownerAgentId, id }) => {
+				const api = window.maestro.agentSessions;
+				const results = await Promise.allSettled([
+					api.search('codex', project, 'default-account-needle', 'all', undefined, {
+						ownerAgentId,
+					}),
+					api.read('codex', project, id, { ownerAgentId }),
+				]);
+				return results.map((result) =>
+					result.status === 'rejected' ? String(result.reason) : 'unexpected success'
+				);
+			},
+			{ project: native.project, ownerAgentId, id: selected.id }
+		);
+		expect(failures).toHaveLength(2);
+		for (const error of failures) expect(error).toContain('ENOENT');
+	} finally {
+		fs.renameSync(`${native.codex}-removed`, native.codex);
+	}
+	expect(fs.readFileSync(fallback.file)).toEqual(defaultBefore);
 });

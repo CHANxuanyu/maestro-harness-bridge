@@ -51,6 +51,8 @@ export interface UseSessionViewerDeps {
 	agentId?: string;
 	/** Optional SSH remote ID for accessing sessions on a remote host */
 	sshRemoteId?: string;
+	/** Owning Maestro agent, selecting the same account as history pagination. */
+	ownerAgentId?: string;
 }
 
 /**
@@ -115,6 +117,7 @@ export function useSessionViewer({
 	cwd,
 	agentId = 'claude-code',
 	sshRemoteId,
+	ownerAgentId,
 }: UseSessionViewerDeps): UseSessionViewerReturn {
 	const [viewingSession, setViewingSession] = useState<AgentSession | null>(null);
 	const [messages, setMessages] = useState<SessionMessage[]>([]);
@@ -142,7 +145,7 @@ export function useSessionViewer({
 					agentId,
 					cwd,
 					session.sessionId,
-					{ offset, limit: 20 },
+					{ offset, limit: 20, ownerAgentId },
 					sshRemoteId
 				);
 
@@ -168,7 +171,7 @@ export function useSessionViewer({
 				setMessagesLoading(false);
 			}
 		},
-		[cwd, agentId, sshRemoteId]
+		[cwd, agentId, sshRemoteId, ownerAgentId]
 	);
 
 	/**

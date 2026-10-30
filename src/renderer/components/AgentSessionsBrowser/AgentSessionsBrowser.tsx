@@ -56,7 +56,12 @@ export function AgentSessionsBrowser({
 		handleMessagesScroll,
 		clearViewingSession,
 		setViewingSession,
-	} = useSessionViewer({ cwd: projectPathForSessions, agentId, sshRemoteId });
+	} = useSessionViewer({
+		cwd: projectPathForSessions,
+		agentId,
+		sshRemoteId,
+		ownerAgentId: activeSession?.id,
+	});
 
 	const { starredSessions, setStarredSessions, toggleStar } = useAgentSessionsStar({
 		activeSession,
@@ -120,6 +125,7 @@ export function AgentSessionsBrowser({
 		projectPathForSessions,
 		agentId,
 		sshRemoteId,
+		ownerAgentId: activeSession?.id,
 	});
 
 	const {

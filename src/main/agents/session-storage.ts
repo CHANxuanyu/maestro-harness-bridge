@@ -250,7 +250,8 @@ export interface AgentSessionStorage {
 		projectPath: string,
 		query: string,
 		searchMode: SessionSearchMode,
-		sshConfig?: SshRemoteConfig
+		sshConfig?: SshRemoteConfig,
+		accountDir?: string
 	): Promise<SessionSearchResult[]>;
 
 	/**

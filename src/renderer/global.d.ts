@@ -2013,7 +2013,8 @@ interface MaestroAPI {
 			projectPath: string,
 			query: string,
 			searchMode: 'title' | 'user' | 'assistant' | 'all',
-			sshRemoteId?: string
+			sshRemoteId?: string,
+			options?: { configDir?: string; ownerAgentId?: string }
 		) => Promise<
 			Array<{
 				sessionId: string;

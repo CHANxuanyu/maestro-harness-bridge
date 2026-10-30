@@ -623,9 +623,14 @@ export function mergeNewerEntries(
 		// a genuine new turn and must still be appended. Without a native time,
 		// only the next local entry in sequence can be it.
 		const untimed = !Number.isFinite(entry.timestamp);
+		// An unmatched native user starts an external turn. Its reply cannot
+		// claim a later local reply merely because their words are identical.
 		const repeat = untimed
 			? unmatchedTail.findIndex(
-					(local) => tail.indexOf(local) > lastUntimedPairAt && sameTextEntry(local, entry)
+					(local) =>
+						(entry.source === 'user' || liveTurn) &&
+						tail.indexOf(local) > lastUntimedPairAt &&
+						sameTextEntry(local, entry)
 				)
 			: unmatchedTail.findIndex((local) => sameLiveMessage(local, entry));
 		if (repeat >= 0) {
@@ -1195,6 +1200,12 @@ function findNewestSharedEntry(
 		const byNativeId = byId.get(visible[v].id);
 		if (byNativeId !== undefined) return { visibleIndex: v, loadedIndex: byNativeId };
 	}
+	// A never-hydrated Grok tab has only local ids and renderer times. NaN is
+	// not timestamp evidence, even if both sides happen to have it. With no
+	// shared id, require one unique alignment of the complete user sequence.
+	if (loaded.every((entry) => !Number.isFinite(entry.timestamp))) {
+		return findUniqueUntimedUserAnchor(loaded, visible);
+	}
 	for (let v = visible.length - 1; v >= 0; v--) {
 		if (!hasText(visible[v])) continue;
 		const byExactStamp = byStamp.get(stampKey(visible[v]));
@@ -1226,6 +1237,38 @@ function findNewestSharedEntry(
 		return nearest === null ? null : { visibleIndex: v, loadedIndex: nearest };
 	}
 	return null;
+}
+
+/**
+ * The earliest and latest ordered user alignments must be identical. A failed
+ * send missing from disk, an image-only prompt, or multiple possible matches
+ * gives no anchor. Repeated text is allowed when the whole alignment is unique.
+ */
+function findUniqueUntimedUserAnchor(
+	loaded: LogEntry[],
+	visible: LogEntry[]
+): { visibleIndex: number; loadedIndex: number } | null {
+	const users = visible.flatMap((entry, index) => (entry.source === 'user' ? [index] : []));
+	if (users.length === 0) return null;
+	const earliest: number[] = [];
+	let next = 0;
+	for (let i = 0; i < loaded.length && next < users.length; i++) {
+		if (sameTextEntry(visible[users[next]], loaded[i])) {
+			earliest.push(i);
+			next++;
+		}
+	}
+	if (earliest.length !== users.length) return null;
+	next = users.length - 1;
+	for (let i = loaded.length - 1; i >= 0 && next >= 0; i--) {
+		if (sameTextEntry(visible[users[next]], loaded[i])) {
+			if (earliest[next] !== i) return null;
+			next--;
+		}
+	}
+	// Start at the first proven send so an external turn between two local
+	// sends is still visited by the existing ordered merge.
+	return { visibleIndex: users[0], loadedIndex: earliest[0] };
 }
 
 /** The candidate written closest to `target`, or null on a tie. */

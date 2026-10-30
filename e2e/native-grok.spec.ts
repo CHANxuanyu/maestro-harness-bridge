@@ -5,6 +5,37 @@ import { nativeIdentity, nativeToolIds } from './fixtures/native-real';
 import { createGrokTurn } from './fixtures/native/grok-protocol.cjs';
 
 for (const provider of ['grok'] satisfies Provider[]) {
+	test(`${provider} h: a live-created tab follows without opening history`, async ({ native }) => {
+		native.scriptTurns([{ answer: 'Live-created answer.' }]);
+		await native.createAgent(provider);
+		await native.send('Start a new live conversation');
+		await expect(native.output().getByText('Live-created answer.', { exact: true })).toBeVisible();
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		const file = await native.oneTranscript(provider);
+		const id = nativeIdentity(provider, file).id;
+		const before = fs.readFileSync(file);
+		await native.input().fill('Keep the live-tab draft.');
+		await native.externalTurn(
+			provider,
+			'External continuation of the live tab',
+			{
+				answer: 'External answer on the live tab.',
+			},
+			id
+		);
+		await expect(
+			native.output().getByText('External answer on the live tab.', { exact: true })
+		).toBeVisible();
+		await native.page.waitForTimeout(4200);
+		await expect(
+			native.output().getByText('External answer on the live tab.', { exact: true })
+		).toHaveCount(1);
+		await expect(native.output().getByText('Live-created answer.', { exact: true })).toHaveCount(1);
+		await expect(native.input()).toHaveValue('Keep the live-tab draft.');
+		expect(native.files(provider)).toEqual([file]);
+		expect(fs.readFileSync(file).subarray(0, before.length)).toEqual(before);
+	});
+
 	test(`${provider} a: two turns append to the same native session`, async ({ native }) => {
 		native.scriptTurns([{ answer: 'First native answer.' }, { answer: 'Second native answer.' }]);
 		await native.createAgent(provider);

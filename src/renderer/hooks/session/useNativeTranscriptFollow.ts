@@ -1,6 +1,6 @@
 /**
  * useNativeTranscriptFollow - keep the conversation on screen current while the
- * same native session (Codex, Claude Code, OpenCode, Oh My Pi, Grok) is also
+ * same native session (Codex, Claude Code, OpenCode, Oh My Pi, Copilot CLI, Grok) is also
  * being continued from another app.
  *
  * The project history scan (useProjectHistory) only runs on focus and on a slow
@@ -72,7 +72,10 @@ export function resolveNativeFollowTarget(): NativeFollowTarget | null {
 	if (useGroupChatStore.getState().activeGroupChatId) return null;
 	const { sessions, activeSessionId } = useSessionStore.getState();
 	const session = sessions.find((s) => s.id === activeSessionId);
-	if (!session || !['codex', 'claude-code', 'opencode', 'omp', 'grok'].includes(session.toolType))
+	if (
+		!session ||
+		!['codex', 'claude-code', 'opencode', 'omp', 'copilot-cli', 'grok'].includes(session.toolType)
+	)
 		return null;
 	// The AI tab must be what the main window shows (not a file, browser or
 	// terminal tab drawn over it).

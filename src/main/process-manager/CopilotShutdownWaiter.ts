@@ -87,7 +87,7 @@ export interface CopilotShutdownWaitOptions {
 	maxWaitMs?: number;
 	inactivityMs?: number;
 	pollIntervalMs?: number;
-	/** Override for testing - defaults to `~/.copilot` (or $COPILOT_CONFIG_DIR). */
+	/** Selected process account directory; defaults to $COPILOT_HOME or `~/.copilot`. */
 	configDir?: string;
 	/** When set, read the events file from this remote host over SSH instead of locally. */
 	sshRemote?: SshRemoteConfig | null;

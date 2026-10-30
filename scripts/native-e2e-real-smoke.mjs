@@ -37,6 +37,7 @@ const env = {
 	MAESTRO_E2E_TEMP_ROOT: runs,
 	MAESTRO_E2E_CLAUDE_PATH: path.resolve('e2e/fixtures/native/claude'),
 	MAESTRO_E2E_CODEX_PATH: path.resolve('e2e/fixtures/native/codex'),
+	MAESTRO_E2E_COPILOT_PATH: path.resolve('e2e/fixtures/native/copilot'),
 	MAESTRO_E2E_OMP_PATH: path.resolve('e2e/fixtures/native/omp'),
 	MAESTRO_E2E_GROK_PATH: path.resolve('e2e/fixtures/native/grok'),
 	GROK_HOME: grok,

@@ -105,3 +105,22 @@ MAESTRO_E2E_REAL=1 MAESTRO_E2E_OMP_PATH="$(command -v omp)" \
 本项未发现需要 Opus 改界面的缺陷，只改允许的 hook 提供方条件。
 
 Oh My Pi 的非最终 agent_end 也不会进入独立错误检测路径；最终 agent_end 之后的迟到错误和其他事件共享终态过滤。此路径由失败后修复的回归覆盖。
+
+## Copilot CLI 1.0.63
+
+锁定官方 npm 包 [@github/copilot 1.0.63](https://registry.npmjs.org/@github/copilot/1.0.63)，gitHead `c440c72e8caca344fe4a4223cceb59dcd241cb48`。只读解包核对 `index.js` 的事件 schema 和会话实现，以及 `app.js` 的 Adr stdout 过滤、\_dr 终止事件、WM/n0e 工作区元数据、kft 版本输出、Session.abort+shutdown 退出流程。1.0.64 以后包转为原生加载器，本轮没有用旧版证据宣称验证了最新版 1.0.103。没有执行或安装官方包。
+
+落盘是 COPILOT_HOME/session-state/<id>/events.jsonl 与 workspace.yaml。assistant.message.toolRequests.arguments 是对象；工具完成结果按 toolCallId 配对，success=false 保留 error.message，普通错误文字不推断取消。原生 abort 只把当时未完成的调用改为 canceled，已经成功或失败的调用不变；下一回合新工具照常运行。实时 abort 同样通过已有的并行工具结果契约取消未完成调用，不依赖 Maestro 的 Stop 按钮。模型来自 assistant.message.data.model，不能取 selectedModel 冒充实际模型。实际 reasoningEffort 在 ephemeral 的 assistant.usage 中，既不落盘也不进入此 CLI 的 JSON stdout，所以历史 effort 保持缺省。
+
+只有 CLI 的 type=result 是整个进程的终止边界，assistant.message/assistant.turn_end 不能截断后续步骤。官方 qYr schema 的 session.error.data.message 经 Adr 发到 stdout，按原文进入错误检测；修复此前漏报。终止后迟到的工具、文本和错误不再转发。官方 session.shutdown 只写入文件而被 Adr 排除出 stdout，夹具同样遵循这个规则。
+
+读取和 revision 使用界面选中的 configDir，不串到同 ID 的默认账户。退出后的最终答案核对也使用进程实际 COPILOT_HOME；修复了旧工具函数读取不存在的 COPILOT_CONFIG_DIR、以及退出核对忽略所选目录的问题。这只修正只读位置，不改变认证、原生写锁或进程终止方式。增量游标最多缓存两份不超过 32 MiB 的文件，追加、半行、多字节字符、分页和文件替换均与完整读取一致。SSH 保留既有远程完整读取，不启用本地跟随回退。
+
+真实模式只接受官方 kft 的 1.0.63 完整版本输出。需要调用者提供 COPILOT_GITHUB_TOKEN，不从账户、系统 keychain 或 gh 登录中获取凭据。测试使用临时 COPILOT_HOME，关闭原生自动更新，自动摘要通过普通设置关闭。真实账户、macOS 和真实 CLI 未验。已有匹配 CLI 和所需 token 时执行：
+
+```bash
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_COPILOT_PATH="$(command -v copilot)" \
+  npm run test:e2e -- e2e/native-copilot.spec.ts
+```
+
+目前六个 Linux 合成场景通过，未发现需要 Opus 改界面的缺陷。跨应用场景只证明读取的忙碌保护与闲置刷新，不承诺真实 CLI 接受两个同时写入者；原生拒绝将使真实验收明确失败，不删锁或新建会话掩盖。

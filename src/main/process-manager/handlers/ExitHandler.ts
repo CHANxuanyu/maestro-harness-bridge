@@ -494,9 +494,11 @@ export class ExitHandler {
 			}
 		}
 
+		// Reconciliation must read the same account as this invocation.
+		const configDir = managedProcess.maestroEnvVars?.COPILOT_HOME;
 		let result: CopilotShutdownWaitResult;
 		try {
-			result = await waitForCopilotShutdown(agentSessionId, { sshRemote });
+			result = await waitForCopilotShutdown(agentSessionId, { sshRemote, configDir });
 		} catch (err) {
 			logger.warn('[ProcessManager] Copilot shutdown wait threw', 'ProcessManager', {
 				sessionId,
@@ -516,7 +518,7 @@ export class ExitHandler {
 
 		let finalAnswerText: string | undefined;
 		try {
-			const finalAnswer = await readCopilotFinalAnswer(agentSessionId, undefined, sshRemote);
+			const finalAnswer = await readCopilotFinalAnswer(agentSessionId, configDir, sshRemote);
 			if (finalAnswer && finalAnswer.content) {
 				finalAnswerText = finalAnswer.content;
 			}
@@ -537,7 +539,7 @@ export class ExitHandler {
 		// session.shutdown had appeared on stdout. See the docstring on
 		// `readCopilotShutdownUsage` for the field-mapping rationale.
 		try {
-			const usage = await readCopilotShutdownUsage(agentSessionId, undefined, sshRemote);
+			const usage = await readCopilotShutdownUsage(agentSessionId, configDir, sshRemote);
 			if (usage) {
 				const contextWindow =
 					managedProcess.contextWindow && managedProcess.contextWindow > 0

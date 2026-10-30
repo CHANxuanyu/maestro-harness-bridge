@@ -10,8 +10,9 @@ import { logger } from './logger';
 const LOG_CONTEXT = 'CopilotEvents';
 
 /**
+ * Official @github/copilot@1.0.63 app.js resolves COPILOT_HOME.
  * Resolve the on-disk path Copilot uses for a given agent session's
- * append-only event log. Honors `$COPILOT_CONFIG_DIR` (or a test override)
+ * append-only event log. Honors `$COPILOT_HOME` (or a test override)
  * and falls back to `~/.copilot`.
  *
  * NOTE: this resolves a LOCAL path only. For SSH-remote sessions the file
@@ -19,7 +20,7 @@ const LOG_CONTEXT = 'CopilotEvents';
  * config instead of building a local path.
  */
 export function resolveCopilotEventsPath(agentSessionId: string, configDir?: string): string {
-	const root = configDir || process.env.COPILOT_CONFIG_DIR || path.join(os.homedir(), '.copilot');
+	const root = configDir || process.env.COPILOT_HOME || path.join(os.homedir(), '.copilot');
 	return path.join(root, 'session-state', agentSessionId, 'events.jsonl');
 }
 
@@ -27,7 +28,7 @@ export function resolveCopilotEventsPath(agentSessionId: string, configDir?: str
  * Build the remote-shell path to a Copilot session's event log. Uses `$HOME`
  * so it expands on the remote shell regardless of remote user; the remote side
  * always lives at the default `~/.copilot` location (a local
- * `$COPILOT_CONFIG_DIR` override does not apply to the remote host).
+ * `$COPILOT_HOME` override does not apply to the remote host).
  */
 export function copilotRemoteEventsPath(agentSessionId: string): string {
 	return `$HOME/.copilot/session-state/${agentSessionId}/events.jsonl`;

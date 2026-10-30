@@ -1,6 +1,6 @@
 # 后端第三阶段计划
 
-状态：任务一已合并，任务二的 Copilot CI 时限受阻，任务三云端实现与本地验收完成。合并与主线 CI 链接记录在[性能 PR](https://github.com/CHANxuanyu/maestro-harness-bridge/pulls?q=is%3Apr+head%3Acodex%2Fstage3-performance) 的描述中。2026-10-25 起草，用户已确认由 Codex 依次完成三项任务，无需再等审阅。
+状态：任务一、任务三已合并，Copilot 的 CI 时限调整已于 2026-10-30 获用户批准。Copilot 的最新验收、合并与主线 CI 见 [PR #15](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/15)，性能结果见[性能 PR](https://github.com/CHANxuanyu/maestro-harness-bridge/pulls?q=is%3Apr+head%3Acodex%2Fstage3-performance)。2026-10-25 起草，用户已确认由 Codex 依次完成三项任务，无需再等审阅。
 
 前三轮（[后端可靠性](backend-reliability.md)、[后端第二阶段](backend-followups.md)、[端到端验收](native-e2e.md)）把 Codex 和 Claude Code 的原生接续做扎实了，并建好了能在 CI 里驱动真实应用的端到端框架。本阶段处理剩下的三处后端缺口，按价值排序：
 
@@ -111,13 +111,18 @@
 - **来源与修改：** 锁定官方 @github/copilot 1.0.63 包，见[提供方契约](../native-provider-contracts.md#copilot-cli-1063)。补齐工具按原生 ID 配对、失败正文、明确 abort 的取消状态、原生模型、终止后的事件过滤，以及只读 revision/增量读取。实际 per-call effort 不落盘，保持缺省；不借用 selectedModel 或配置值。
 - **实际缺陷：** 四条格式/增量回归先失败再修；随后同 ID 的不同账户回归证明读取忽略 configDir，修复后只读所选目录。端到端暴露退出后持续忙碌，另两条回归先证明退出核对错误读取 COPILOT_CONFIG_DIR 且忽略进程目录，再修正为 COPILOT_HOME 和已有进程环境。认证和进程终止方式未改。
 - **本地验收：** 集成 OpenCode、Grok 和 Oh My Pi 后，相关七套单元测试 174/174，夹具 28/28；完整 Electron 49/49，6.2 分钟，其中本家六场景通过。首轮夹具漏写原生持久化 shutdown，按锁定官方源码补齐；之后暴露的产品目录错误已经修复。临时回退接续参数、历史工具/模型字段及 hook 条件，六个场景全部在各自验收断言失败；恢复后 6/6，52.6 秒。独立隔离真实入口 6/6，1.0 分钟；终态错误修复后六场景再验 6/6，48.0 秒。类型、ESLint、全仓格式、文档引用和发布策略检查通过；四家集成真实入口 24/24，3.5 分钟。
-- **限制与 Opus：** 真实账户、真实 CLI、macOS 与更新版本未验；SSH 保留既有读取。自动摘要未纳入 a 至 f。暂无新增前端缺陷，只改允许的 hook 条件；真实模式不绕过原生并发写锁。PR 与主线 CI 待确认。
+- **限制与 Opus：** 真实账户、真实 CLI、macOS 与更新版本未验；SSH 保留既有读取。自动摘要未纳入 a 至 f。暂无新增前端缺陷，只改允许的 hook 条件；真实模式不绕过原生并发写锁。PR 与实际主线合并提交的七项 CI 结果见 [PR #15](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/15)。
 
 - **交叉审查补充：** 官方 session.error.data.message 原先漏报，独立错误检测又绕过终态过滤。分别运行回归确认有效错误漏报和迟到错误泄漏，再修复；工具失败仍只更新工具状态，非零进程退出的判定不变。
 
 - **原生中断补充：** 复查发现来自原生客户端的 abort 在历史中取消工具，实时解析却没有处理；Maestro 的 Stop 界面原先掩盖了这条路径。新增并行工具回归先失败，再复用已有 toolResultBlocks 取消全部未完成调用，保留已完成调用和下一回合。最终 Copilot 六场景 6/6，52.9 秒；推送前检查重新通过。
 
-- **CI 受阻：** [PR #15](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/15) 的六项既有检查通过；[Native E2E](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40173915973) 在 49/49 常规场景及 45/49 真实入口烟测通过后，被整个 job 的 15 分钟时限取消。已提出只将 job 时限改为 25 分钟的范围扩展；`.github/workflows/ci.yml` 不在原计划允许路径中，等待用户确认，未修改、未重试或合并。Copilot 的实现当前只在该 PR，不把本记录当作主线已启用。
+- **此前 CI 受阻：** [PR #15](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/15) 的六项既有检查通过；[Native E2E](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40173915973) 在 49/49 常规场景及 45/49 真实入口烟测通过后，被整个 job 的 15 分钟时限取消。当时因 `.github/workflows/ci.yml` 不在原计划允许路径中，提出只将 job 时限改为 25 分钟的范围扩展，等待确认期间未修改、重试或合并。
+- **主线集成准备：** 已同步主线 `a4fdcc0491973fd4d5bdd416d5fc24871467a4fe`，完成记录的唯一冲突保留主线完整内容，产品代码自动合并。集成后相关测试 475/475，夹具 29/29，完整 Electron 49/49（6.2 分钟），Copilot/OpenCode 隔离真实入口 12/12（1.8 分钟），静态、文档及发布检查通过。集成稿保存在 `codex/stage3-copilot-integration`，供云端接续与审阅；未修改 CI 时限，也未更新 PR #15 的代码分支或合并该 PR。范围获准后，在此稿上仅把该 job 的 15 分钟改为 25 分钟，再更新原 PR 并等待七项检查及主线 CI。
+
+- **历史修复集成补充：** 准备分支继续合入主线 `be88f6a8667200bc19ee96119022297b6604eaff`（PR #17、#18 的账户分页、SSH 路径及搜索语义修复），无冲突。集成后 31 个相关单元测试文件 657/657、夹具 29/29、完整 Electron 51/51（6.3 分钟）、完整隔离真实入口烟测 51/51（7.0 分钟）；烟测同时确认合成源凭据未改写、临时会话清理完成。类型、ESLint、全仓格式、文档引用、连接器 26/26 和发布策略 11/11 通过。只更新上述准备分支及本记录；PR #15 的代码分支仍为 `8d5aab0c33a458c2fcb2037b268ca83abdc9718b`，CI 时限范围确认与真实环境未验边界不变，没有重试 CI。
+
+- **2026-10-30 收尾：** 用户批准只将 Native resume E2E (Linux) 的 `timeout-minutes` 从 15 改为 25。已在准备分支合入主线 `6d0b27f471a5c730372362bdd9e017aee5051862`，保留 Opus 的全部 Grok 修复；两处合并冲突只涉及提供方列表及同一列表的测试，均保留 Grok 和 Copilot。工作流只有上述一行差异，其他 job、步骤、用例重试及断言未变。集成后 32 个相关文件 685/685，夹具 29/29，完整 Electron 51/51（7.4 分钟），完整隔离真实入口烟测 51/51（7.9 分钟），合成源凭据未改写且临时会话清理通过。类型、ESLint、全仓格式、文档引用、连接器 26/26、发布策略 11/11 与源策略检查通过。继续推进原 PR #15，实际合并提交及两次七项 CI 的链接记在该 PR 中，不另开提供方 PR；真实环境仍未验。
 
 ### 任务二：Factory Droid
 
@@ -128,7 +133,7 @@
 
 - **问题与反证：** 固定预算的首次基线中，Codex 5 万条工具密集消息首次读取为 7673.0 至 8750.3 ms，超过 2000 ms；5000 会话搜索为 50951.2 至 53032.3 ms，超过 10000 ms，三次断言均失败。另补真实文件系统回归，40 个会话搜索枚举目录 164 次，明确超过最多 8 次的预算。
 - **修改：** 工具结果在一次解析内按调用 ID 查找已有卡片，避免每个结果遍历全部消息；搜索为本次操作复用已枚举的原生路径。复用原有结果归一化、分页、元数据缓存与增量读取，没有新增持久缓存体系或哈希，旧文件名及并发搜索继续正确。Claude 已有大工具输出压缩，本次测量未发现超预算热点，没有重复修改它。
-- **测量结果：** 同样本、同预算复测，两家所有性能断言通过，20.75 秒。Codex 5 万条首次读取降为 251.7 至 286.0 ms，5000 会话搜索为 715.5 至 836.3 ms。存储相关单元测试 377/377。完整基线、数据量、缓存条件、其他路径及复现命令见[性能验收](../native-backend-performance.md)。常规 Electron 43/43，5.4 分钟；隔离真实入口烟测 43/43，6.0 分钟；夹具 26/26，连接器 26/26，发布策略 11/11。类型、ESLint、全仓格式、文档引用与发布策略检查全部通过。性能 PR 沿用七项 CI 全部通过才合并的门槛，合并后主线结果链接记在该 PR 描述中。
+- **测量结果：** 同样本、同预算复测，两家所有性能断言通过，20.75 秒。Codex 5 万条首次读取降为 251.7 至 286.0 ms，5000 会话搜索为 715.5 至 836.3 ms。存储相关单元测试 377/377。完整基线、数据量、缓存条件、其他路径及复现命令见[性能验收](../native-backend-performance.md)。常规 Electron 43/43，5.4 分钟；隔离真实入口烟测 43/43，6.0 分钟；夹具 26/26，连接器 26/26，发布策略 11/11。类型、ESLint、全仓格式、文档引用与发布策略检查全部通过。[PR #16](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/16) 七项 CI 全部通过后合并为 `a4fdcc0491973fd4d5bdd416d5fc24871467a4fe`；[主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/40179311864) 七项全部通过。PR CI 用时 21 分 06 秒，主线 CI 用时 20 分 01 秒。
 - **端到端时序修正：** 首次完整套件 42/43，OpenCode Stop 场景在 SQLite 文件已创建但表尚未建立时查询，明确报 `no such table: session`。夹具增加独立的原生表就绪条件，oneTranscript 等表齐全后才返回；缺文件、坏库和 readOpenCodeState 的缺表错误仍抛出，不吞错或重试用例。新增空库到完整原生 schema 的回归，修正后完整套件及隔离真实入口各 43/43。产品 OpenCode 代码、场景断言与超时未改变。
 - **限制与交接：** IPC 字节数是 JSON/V8 返回值估计，不含 Electron 帧开销或渲染器时间；真实账户、macOS、桌面 Codex 均未验。超过 100 MiB 的已知 ID 仍可读取，但既有元数据扫描上限会把它从项目历史及搜索发现中排除，此限制没有悄悄放宽。已加载 5 万条的前端刷新仍请求全部历史并返回约 20 至 22 MB，交给 Opus 评估请求范围及稳定消息合并，不在后端截断调用者要求的数据。性能 CI 的接入仅写建议，由用户决定。
 

@@ -114,7 +114,7 @@ afterEach(() => {
 });
 
 describe('resolveNativeFollowTarget', () => {
-	it.each(['opencode', 'omp', 'grok'] as const)(
+	it.each(['opencode', 'omp', 'copilot-cli', 'grok'] as const)(
 		'follows a local %s tab only while idle without queued work',
 		(toolType) => {
 			setSession(owner({ toolType }));

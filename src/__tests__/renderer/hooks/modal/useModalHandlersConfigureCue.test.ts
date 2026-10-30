@@ -62,12 +62,20 @@ function openedWith() {
 
 describe('handleConfigureCue', () => {
 	beforeEach(() => {
+		vi.useFakeTimers();
 		vi.clearAllMocks();
 		useModalStore.setState({ modals: new Map() } as never);
 	});
 
-	afterEach(() => {
-		vi.restoreAllMocks();
+	afterEach(async () => {
+		try {
+			// Run the delayed focus effect before jsdom removes document at file teardown.
+			await act(async () => vi.runOnlyPendingTimersAsync());
+			expect(vi.getTimerCount()).toBe(0);
+		} finally {
+			vi.useRealTimers();
+			vi.restoreAllMocks();
+		}
 	});
 
 	it('carries the right-clicked agent through so its row can be marked', async () => {

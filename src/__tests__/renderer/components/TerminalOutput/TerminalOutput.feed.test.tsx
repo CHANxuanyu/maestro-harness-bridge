@@ -180,6 +180,37 @@ describe('conversation feed: message info on demand', () => {
 		expect(panel).toHaveTextContent('Not recorded');
 	});
 
+	it('reads "Not recorded" for a native message with no stored time, and still names its model', () => {
+		// Grok's history carries no per-message time: the conversion leaves NaN.
+		const { container } = renderTranscript([
+			user('u1', 0, 'Q', { timestamp: Number.NaN }),
+			reply('a1', 0, 'Native answer', {
+				timestamp: Number.NaN,
+				turnModel: 'grok-build',
+				turnEffort: 'high',
+				turnSettingsSource: 'native',
+			}),
+		]);
+		fireEvent.click(infoToggle(row(container, 'a1')));
+		const panel = container.querySelector('[data-message-info]') as HTMLElement;
+		expect(within(panel).getByText('Time').nextElementSibling).toHaveTextContent('Not recorded');
+		expect(panel).toHaveTextContent('grok-build');
+		expect(panel).toHaveTextContent('high');
+		expect(panel).not.toHaveTextContent('Invalid');
+		expect(panel).not.toHaveTextContent('NaN');
+		// No turn duration can be measured without times.
+		expect(panel).not.toHaveTextContent('Took');
+	});
+
+	it('draws no clock in the agents layout for a message with no stored time', () => {
+		useSettingsStore.setState({ sidebarNavigationMode: 'agents' });
+		const { container } = renderTranscript([
+			reply('a1', 0, 'Native answer', { timestamp: Number.NaN }),
+		]);
+		expect(row(container, 'a1')).toHaveTextContent('Native answer');
+		expect(row(container, 'a1').textContent).not.toMatch(/NaN|Invalid Date/);
+	});
+
 	it('reports a user message’s send states', () => {
 		const { container } = renderTranscript([
 			user('u1', 0, 'Q', { delivered: true, readOnly: true }),
@@ -492,6 +523,50 @@ describe('conversation feed: tools', () => {
 		const status = row(container, 't1').querySelector('[data-tool-status]') as HTMLElement;
 		expect(status.getAttribute('data-tool-status')).toBe('error');
 		expect(status).toHaveTextContent('Failed');
+	});
+
+	it("says a step's outcome is unknown instead of passing it off as done", () => {
+		const unknownCall = (id: string, minutes: number): LogEntry => ({
+			id,
+			timestamp: at(minutes),
+			source: 'tool',
+			text: 'run_command',
+			nativeTranscript: { messageId: id },
+			metadata: { toolState: { status: 'unknown', input: { command: 'ls' }, output: 'a.txt' } },
+		});
+		const { container } = renderTranscript([
+			user('u1', 0, 'List it'),
+			unknownCall('t1', 1),
+			reply('a1', 2, 'Listed.'),
+		]);
+		const fold = row(container, 't1');
+		const folded = fold.querySelector('[data-tool-status]') as HTMLElement;
+		expect(folded.getAttribute('data-tool-status')).toBe('unknown');
+		expect(folded).toHaveTextContent('Result unknown');
+		fireEvent.click(within(fold).getByRole('button', { name: /^Worked for 2m 0s/ }));
+		const step = fold.querySelector('[data-tool-activity] [data-tool-status]') as HTMLElement;
+		expect(step.getAttribute('data-tool-status')).toBe('unknown');
+		expect(container.querySelector('[data-tool-status="running"]')).toBeNull();
+		expect(container.querySelector('[data-tool-status="completed"]')).toBeNull();
+		expect(container.querySelector('.animate-pulse')).toBeNull();
+	});
+
+	it('marks an unknown outcome in the agents layout without a running pulse', () => {
+		useSettingsStore.setState({ sidebarNavigationMode: 'agents', showToolCalls: true });
+		const { container } = renderTranscript([
+			user('u1', 0, 'List it'),
+			{
+				id: 't1',
+				timestamp: at(1),
+				source: 'tool',
+				text: 'run_command',
+				nativeTranscript: { messageId: 't1' },
+				metadata: { toolState: { status: 'unknown', output: 'a.txt' } },
+			},
+			reply('a1', 2, 'Listed.'),
+		]);
+		expect(container.querySelector('[data-tool-status="unknown"]')).not.toBeNull();
+		expect(container.querySelector('.animate-pulse')).toBeNull();
 	});
 
 	it('keeps the turn still working unfolded, and folds it once it answers', () => {

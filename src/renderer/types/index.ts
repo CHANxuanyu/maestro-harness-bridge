@@ -253,7 +253,9 @@ export interface LogEntry {
 			// 'canceled': the call was still running when the user stopped the
 			// turn. Kept in the conversation layout so the record stays readable,
 			// never drawn as running or as a success.
-			status?: 'running' | 'completed' | 'error' | 'failed' | 'canceled';
+			// 'unknown': read back from a history that records the call and its
+			// result but not whether it succeeded. Also neither running nor done.
+			status?: 'running' | 'completed' | 'error' | 'failed' | 'canceled' | 'unknown';
 			input?: unknown;
 			output?: unknown;
 		};

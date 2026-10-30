@@ -100,6 +100,39 @@ describe('transcriptMessagesToLogEntries: native fidelity', () => {
 		expect(entry.metadata?.toolState?.input).toEqual({ cmd: 'ls' });
 	});
 
+	it('keeps a status the provider explicitly recorded as unknown', () => {
+		// Grok's chat_history has the result text but no outcome; without its
+		// updates file the storage says so instead of guessing.
+		const [entry] = transcriptMessagesToLogEntries([
+			m('grok-msg-1', 'assistant', '', T0, {
+				toolUse: [
+					{
+						id: 'call-1',
+						tool: 'run_command',
+						state: { status: 'unknown', input: { command: 'ls' }, output: 'a.txt' },
+					},
+				],
+			}),
+		]);
+		expect(entry.metadata?.toolState).toEqual({
+			status: 'unknown',
+			input: { command: 'ls' },
+			output: 'a.txt',
+		});
+	});
+
+	it('lets a later result settle a call first recorded as unknown', () => {
+		const entries = transcriptMessagesToLogEntries([
+			m('a1', 'assistant', '', T0, {
+				toolUse: [{ type: 'tool_use', id: 'toolu_9', name: 'Bash', state: { status: 'unknown' } }],
+			}),
+			m('r1', 'user', '', T0, {
+				toolUse: [{ type: 'tool_result', tool_use_id: 'toolu_9', content: 'ok' }],
+			}),
+		]);
+		expect(entries.find((e) => e.source === 'tool')?.metadata?.toolState?.status).toBe('completed');
+	});
+
 	it('keeps both the prose and the tool cards of a Claude mixed message', () => {
 		const entries = transcriptMessagesToLogEntries([
 			m('a1', 'assistant', 'Let me check the config.', T0, {
@@ -255,6 +288,23 @@ describe('transcript rendering groups', () => {
 		expect(run.map((e) => e.id)).toEqual(['tool-1', 'tool-2']);
 		expect(toolRunStatus(run)).toBe('running');
 		expect(toolRunStatus([running])).toBe('completed');
+		// An unknown outcome never lets the run read as a success, and outranks
+		// nothing that is actually known to have gone wrong.
+		const unknown: LogEntry = {
+			id: 'tool-3',
+			timestamp: 3,
+			source: 'tool',
+			text: 'run_command',
+			metadata: { toolState: { status: 'unknown' } },
+		};
+		expect(toolRunStatus([running, unknown])).toBe('unknown');
+		expect(
+			toolRunStatus([
+				unknown,
+				{ ...unknown, id: 'f', metadata: { toolState: { status: 'error' } } },
+			])
+		).toBe('error');
+		expect(toolRunStatus([unknown, executing])).toBe('running');
 		// Outside the conversation layout live calls stay hidden, as before.
 		expect(foldNativeToolRuns([user, running, executing], false).logs.map((e) => e.id)).toEqual([
 			'q',

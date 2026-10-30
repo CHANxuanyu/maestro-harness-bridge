@@ -1,5 +1,12 @@
 import { useState, memo } from 'react';
-import { ChevronDown, ChevronRight, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+	ChevronDown,
+	ChevronRight,
+	Clock,
+	CheckCircle2,
+	AlertCircle,
+	HelpCircle,
+} from 'lucide-react';
 import { Spinner } from './ui/Spinner';
 import type { Theme } from '../types';
 
@@ -43,21 +50,41 @@ export function getToolName(toolUse: ToolUseEntry | ToolUseEntry[] | undefined):
 }
 
 /**
- * Get status icon based on tool state
+ * Get status icon based on tool state. Only a recorded success draws as one: a
+ * call whose outcome the provider did not record (Grok history without its
+ * updates file reports `unknown`) gets a neutral mark instead.
  */
-function StatusIcon({ status, theme }: { status?: string; theme: Theme }) {
+function StatusIcon({ status, theme }: { status: string; theme: Theme }) {
 	switch (status) {
 		case 'completed':
 		case 'success':
-			return <CheckCircle2 className="w-3.5 h-3.5" style={{ color: theme.colors.success }} />;
+			return (
+				<CheckCircle2
+					className="w-3.5 h-3.5"
+					style={{ color: theme.colors.success }}
+					data-tool-card-status="completed"
+				/>
+			);
 		case 'running':
 		case 'pending':
 			return <Spinner size={14} color={theme.colors.warning} />;
 		case 'error':
 		case 'failed':
-			return <AlertCircle className="w-3.5 h-3.5" style={{ color: theme.colors.error }} />;
+			return (
+				<AlertCircle
+					className="w-3.5 h-3.5"
+					style={{ color: theme.colors.error }}
+					data-tool-card-status="error"
+				/>
+			);
 		default:
-			return <CheckCircle2 className="w-3.5 h-3.5" style={{ color: theme.colors.success }} />;
+			return (
+				<HelpCircle
+					className="w-3.5 h-3.5"
+					style={{ color: theme.colors.textDim }}
+					data-tool-card-status="unknown"
+				/>
+			);
 	}
 }
 
@@ -141,7 +168,8 @@ export const ToolCallCard = memo(function ToolCallCard({
 	const tool = toolUse[0];
 	const toolName = getToolName(tool);
 	const state = tool.state;
-	const status = state?.status || 'completed';
+	// No recorded status is not a success.
+	const status = state?.status || 'unknown';
 
 	// Collapsed view - just show tool name and "Show more"
 	if (!expanded) {

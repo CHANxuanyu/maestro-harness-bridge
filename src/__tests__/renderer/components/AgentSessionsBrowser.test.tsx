@@ -49,6 +49,7 @@ vi.mock('lucide-react', () => ({
 	ArrowUpFromLine: () => <span data-testid="icon-arrow-up" />,
 	Edit3: () => <span data-testid="icon-edit" />,
 	CheckCircle2: () => <span data-testid="icon-check-circle" />,
+	HelpCircle: () => <span data-testid="icon-help-circle" />,
 	AlertCircle: () => <span data-testid="icon-alert-circle" />,
 }));
 

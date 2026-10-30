@@ -20,14 +20,15 @@ import { ToolCallDetails } from './ToolCallDetails';
 import { useT } from '../../../i18n';
 import { readableTextOn } from '../../../../shared/colorContrast';
 
-export type ToolStatusKind = 'running' | 'completed' | 'error' | 'canceled';
+export type ToolStatusKind = 'running' | 'completed' | 'error' | 'canceled' | 'unknown';
 
-/** Map a stored tool status onto the four states the transcript draws. */
+/** Map a stored tool status onto the five states the transcript draws. */
 export function toolStatusKind(status: string | undefined): ToolStatusKind | undefined {
 	if (status === 'running') return 'running';
 	if (status === 'completed') return 'completed';
 	if (status === 'failed' || status === 'error') return 'error';
 	if (status === 'canceled') return 'canceled';
+	if (status === 'unknown') return 'unknown';
 	return undefined;
 }
 
@@ -65,9 +66,19 @@ export function ToolStatusLabel({
 				? t('workflows.transcript.toolCompleted')
 				: kind === 'error'
 					? t('workflows.transcript.toolFailed')
-					: t('workflows.transcript.toolStopped');
+					: kind === 'unknown'
+						? t('workflows.transcript.toolUnknown')
+						: t('workflows.transcript.toolStopped');
 	const glyph =
-		kind === 'running' ? '●' : kind === 'completed' ? '✓' : kind === 'error' ? '!' : '×';
+		kind === 'running'
+			? '●'
+			: kind === 'completed'
+				? '✓'
+				: kind === 'error'
+					? '!'
+					: kind === 'unknown'
+						? '?'
+						: '×';
 	const showWord = !quiet && kind !== 'completed';
 	return (
 		<span
@@ -218,6 +229,7 @@ export const ToolBadge = React.memo(function ToolBadge({
 		toolStatus === 'failed' ||
 		toolStatus === 'error' ||
 		toolStatus === 'canceled' ||
+		toolStatus === 'unknown' ||
 		(toolStatus === undefined && !!log.nativeTranscript)
 			? summarizeToolOutput(log.metadata?.toolState?.output)
 			: null;
@@ -262,6 +274,19 @@ export const ToolBadge = React.memo(function ToolBadge({
 				{!feedLayout && (toolStatus === 'failed' || toolStatus === 'error') && (
 					<span className="shrink-0 pt-0.5" style={{ color: theme.colors.error }}>
 						!
+					</span>
+				)}
+				{/* The provider recorded no outcome: neither busy nor a success. */}
+				{!feedLayout && toolStatus === 'unknown' && (
+					<span
+						className="shrink-0 pt-0.5"
+						style={{ color: theme.colors.textDim }}
+						data-tool-status="unknown"
+						role="img"
+						aria-label={t('workflows.transcript.toolUnknown')}
+						title={t('workflows.transcript.toolUnknown')}
+					>
+						?
 					</span>
 				)}
 				{/* Stopped while running: neither busy nor a success. */}

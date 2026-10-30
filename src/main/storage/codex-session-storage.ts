@@ -1526,6 +1526,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		options?: SessionReadOptions,
 		sshConfig?: SshRemoteConfig
 	): Promise<SessionMessagesResult> {
+		if (options?.configDir && !sshConfig) await fs.access(options.configDir);
 		// Get session file content either locally or via SSH
 		let content: string;
 
@@ -1576,13 +1577,15 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		projectPath: string,
 		query: string,
 		searchMode: SessionSearchMode,
-		sshConfig?: SshRemoteConfig
+		sshConfig?: SshRemoteConfig,
+		accountDir?: string
 	): Promise<SessionSearchResult[]> {
 		if (sshConfig || searchMode === 'title')
-			return super.searchSessions(projectPath, query, searchMode, sshConfig);
+			return super.searchSessions(projectPath, query, searchMode, sshConfig, accountDir);
 		if (!query.trim()) return [];
-		const sessions = await this.listSessions(projectPath);
-		const files = await this.findAllSessionFiles();
+		if (accountDir) await fs.access(accountDir);
+		const sessions = await this.listSessions(projectPath, undefined, accountDir);
+		const files = await this.findAllSessionFiles(accountDir);
 		// Operation-local paths, not another cache. Concurrent searches own their
 		// lists; legacy filenames still use the existing metadata lookup below.
 		const paths = new Map<string, string>();
@@ -1591,7 +1594,13 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			if (id && !paths.has(id)) paths.set(id, file.filePath);
 		}
 		return this.searchSessionMessages(sessions, query, searchMode, (sessionId) =>
-			this.getSearchableMessages(sessionId, projectPath, undefined, paths.get(sessionId))
+			this.getSearchableMessages(
+				sessionId,
+				projectPath,
+				undefined,
+				accountDir,
+				paths.get(sessionId)
+			)
 		);
 	}
 
@@ -1599,19 +1608,21 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		sessionId: string,
 		_projectPath: string,
 		sshConfig?: SshRemoteConfig,
+		accountDir?: string,
 		localFilePath?: string
 	): Promise<SearchableMessage[]> {
 		let content: string;
 
 		try {
 			if (sshConfig) {
-				const sessionFilePath = await this.findSessionFileRemote(sessionId, sshConfig);
+				const sessionFilePath = await this.findSessionFileRemote(sessionId, sshConfig, accountDir);
 				if (!sessionFilePath) return [];
 				const result = await readFileRemote(sessionFilePath, sshConfig);
 				if (!result.success || !result.data) return [];
 				content = result.data;
 			} else {
-				const sessionFilePath = localFilePath ?? (await this.findSessionFile(sessionId));
+				const sessionFilePath =
+					localFilePath ?? (await this.findSessionFile(sessionId, accountDir));
 				if (!sessionFilePath) return [];
 				content = await fs.readFile(sessionFilePath, 'utf-8');
 			}

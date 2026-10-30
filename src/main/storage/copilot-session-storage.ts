@@ -723,6 +723,7 @@ export class CopilotSessionStorage extends BaseSessionStorage {
 		options?: SessionReadOptions,
 		sshConfig?: SshRemoteConfig
 	): Promise<SessionMessagesResult> {
+		if (options?.configDir && !sshConfig) await fs.access(options.configDir);
 		// Guard: verify session belongs to the requested project before returning content
 		if (
 			!(await this.sessionMatchesProject(sessionId, _projectPath, sshConfig, options?.configDir))
@@ -770,14 +771,15 @@ export class CopilotSessionStorage extends BaseSessionStorage {
 	protected async getSearchableMessages(
 		sessionId: string,
 		_projectPath: string,
-		sshConfig?: SshRemoteConfig
+		sshConfig?: SshRemoteConfig,
+		accountDir?: string
 	): Promise<SearchableMessage[]> {
 		// Guard: verify session belongs to the requested project before returning content
-		if (!(await this.sessionMatchesProject(sessionId, _projectPath, sshConfig))) {
+		if (!(await this.sessionMatchesProject(sessionId, _projectPath, sshConfig, accountDir))) {
 			return [];
 		}
 
-		const eventsContent = await this.readEventsFile(sessionId, sshConfig);
+		const eventsContent = await this.readEventsFile(sessionId, sshConfig, accountDir);
 		if (!eventsContent) {
 			return [];
 		}

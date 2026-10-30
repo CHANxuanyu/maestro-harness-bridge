@@ -1076,7 +1076,8 @@ describe('AgentSessionsBrowser', () => {
 				'/path/to/project',
 				'search term',
 				'all',
-				undefined // sshRemoteId - not set for local sessions
+				undefined, // sshRemoteId - not set for local sessions
+				{ ownerAgentId: 'session-1' }
 			);
 		});
 

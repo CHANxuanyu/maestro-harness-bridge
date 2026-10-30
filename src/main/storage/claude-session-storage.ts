@@ -1080,19 +1080,20 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 	protected async getSearchableMessages(
 		sessionId: string,
 		projectPath: string,
-		sshConfig?: SshRemoteConfig
+		sshConfig?: SshRemoteConfig,
+		accountDir?: string
 	): Promise<SearchableMessage[]> {
 		let content: string;
 
 		try {
 			if (sshConfig) {
-				const projectDir = this.getRemoteEncodedProjectDir(projectPath);
+				const projectDir = this.getRemoteEncodedProjectDir(projectPath, accountDir);
 				const sessionFile = `${projectDir}/${sessionId}.jsonl`;
 				const result = await readFileRemote(sessionFile, sshConfig);
 				if (!result.success || !result.data) return [];
 				content = result.data;
 			} else {
-				const sessionFile = await this.locateLocalSessionFile(projectPath, sessionId);
+				const sessionFile = await this.locateLocalSessionFile(projectPath, sessionId, accountDir);
 				content = await fs.readFile(sessionFile, 'utf-8');
 			}
 		} catch {

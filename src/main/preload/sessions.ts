@@ -289,7 +289,8 @@ export function createAgentSessionsApi() {
 			projectPath: string,
 			query: string,
 			searchMode: 'title' | 'user' | 'assistant' | 'all',
-			sshRemoteId?: string
+			sshRemoteId?: string,
+			options?: { configDir?: string; ownerAgentId?: string }
 		) =>
 			ipcRenderer.invoke(
 				'agentSessions:search',
@@ -297,7 +298,8 @@ export function createAgentSessionsApi() {
 				projectPath,
 				query,
 				searchMode,
-				sshRemoteId
+				sshRemoteId,
+				options
 			),
 
 		getPath: (agentId: string, projectPath: string, sessionId: string, sshRemoteId?: string) =>

@@ -141,7 +141,7 @@ export class NativeApp {
 			copilot: this.copilot,
 		}[provider];
 	}
-	async start() {
+	async start(homeDir?: string) {
 		if (this.real && !this.realCli) {
 			this.provider = this.info.title.split(' ')[0].replace(':', '') as Provider;
 			this.realCli = installedCli(this.provider, process.env, /^codex [gh]:/.test(this.info.title));
@@ -160,7 +160,12 @@ export class NativeApp {
 			);
 			this.info.annotations.push({ type: 'native-cli-version', description: this.realCli.version });
 		}
-		this.app = await launchElectronApp(path.resolve('dist/main/index.js'), this.data, this.env);
+		// A history-boundary case needs a synthetic default account as well as the selected one.
+		// Scope HOME to this child process so the test never seeds the user's default directory.
+		this.app = await launchElectronApp(path.resolve('dist/main/index.js'), this.data, {
+			...this.env,
+			...(homeDir ? { HOME: homeDir } : {}),
+		});
 		this.boot++;
 		await this.app.context().tracing.start({ screenshots: true, snapshots: true });
 		this.page = await this.app.firstWindow();

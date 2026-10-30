@@ -28,6 +28,50 @@ const defaults = {
 };
 
 describe('useAgentSessionsSearch', () => {
+	it('keeps the selected account and reruns a query when its owner changes', async () => {
+		const { rerender } = renderHook((args) => useAgentSessionsSearch(args), {
+			initialProps: { ...defaults, ownerAgentId: 'account-a', sshRemoteId: 'ssh-1' },
+		});
+		await act(async () => vi.advanceTimersByTimeAsync(300));
+		expect(mockSearch).toHaveBeenLastCalledWith(
+			'claude-code',
+			'/project',
+			'hello',
+			'user',
+			'ssh-1',
+			{ ownerAgentId: 'account-a' }
+		);
+		rerender({ ...defaults, ownerAgentId: 'account-b', sshRemoteId: 'ssh-1' });
+		await act(async () => vi.advanceTimersByTimeAsync(300));
+		expect(mockSearch).toHaveBeenLastCalledWith(
+			'claude-code',
+			'/project',
+			'hello',
+			'user',
+			'ssh-1',
+			{ ownerAgentId: 'account-b' }
+		);
+	});
+
+	it('does not replace the selected account with a late search from the previous owner', async () => {
+		let finishPrevious!: (value: unknown[]) => void;
+		mockSearch.mockReturnValueOnce(
+			new Promise((resolve) => {
+				finishPrevious = resolve;
+			})
+		);
+		const { result, rerender } = renderHook((args) => useAgentSessionsSearch(args), {
+			initialProps: { ...defaults, ownerAgentId: 'previous' },
+		});
+		await act(async () => vi.advanceTimersByTimeAsync(300));
+		rerender({ ...defaults, ownerAgentId: 'selected' });
+		await act(async () => vi.advanceTimersByTimeAsync(300));
+		expect(result.current.searchResults[0].sessionId).toBe('s1');
+		await act(async () => finishPrevious([{ sessionId: 'previous-account' }]));
+		expect(result.current.searchResults[0].sessionId).toBe('s1');
+		expect(result.current.isSearching).toBe(false);
+	});
+
 	it('title mode returns empty results without calling IPC', async () => {
 		const { result } = renderHook(() =>
 			useAgentSessionsSearch({ ...defaults, searchMode: 'title' })
@@ -78,7 +122,9 @@ describe('useAgentSessionsSearch', () => {
 		});
 		await vi.runAllTimersAsync();
 		expect(mockSearch).toHaveBeenCalledTimes(1);
-		expect(mockSearch).toHaveBeenCalledWith('claude-code', '/project', 'world', 'user', undefined);
+		expect(mockSearch).toHaveBeenCalledWith('claude-code', '/project', 'world', 'user', undefined, {
+			ownerAgentId: undefined,
+		});
 	});
 
 	it('IPC call includes all required parameters', async () => {
@@ -87,7 +133,9 @@ describe('useAgentSessionsSearch', () => {
 			vi.runAllTimers();
 		});
 		await vi.runAllTimersAsync();
-		expect(mockSearch).toHaveBeenCalledWith('claude-code', '/project', 'hello', 'user', 'ssh-1');
+		expect(mockSearch).toHaveBeenCalledWith('claude-code', '/project', 'hello', 'user', 'ssh-1', {
+			ownerAgentId: undefined,
+		});
 	});
 
 	it('passes undefined sshRemoteId when not set', async () => {
@@ -96,7 +144,9 @@ describe('useAgentSessionsSearch', () => {
 			vi.runAllTimers();
 		});
 		await vi.runAllTimersAsync();
-		expect(mockSearch).toHaveBeenCalledWith('claude-code', '/project', 'hello', 'user', undefined);
+		expect(mockSearch).toHaveBeenCalledWith('claude-code', '/project', 'hello', 'user', undefined, {
+			ownerAgentId: undefined,
+		});
 	});
 
 	it('sets isSearching true during debounce + IPC', async () => {

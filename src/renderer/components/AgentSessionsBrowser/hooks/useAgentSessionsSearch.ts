@@ -9,6 +9,7 @@ interface UseAgentSessionsSearchArgs {
 	projectPathForSessions: string | undefined;
 	agentId: string;
 	sshRemoteId: string | undefined;
+	ownerAgentId?: string;
 }
 
 export function useAgentSessionsSearch({
@@ -17,6 +18,7 @@ export function useAgentSessionsSearch({
 	projectPathForSessions,
 	agentId,
 	sshRemoteId,
+	ownerAgentId,
 }: UseAgentSessionsSearchArgs): {
 	searchResults: SearchResult[];
 	isSearching: boolean;
@@ -37,6 +39,8 @@ export function useAgentSessionsSearch({
 			return;
 		}
 
+		// A result from the previous account or query cannot replace the current search.
+		let active = true;
 		setIsSearching(true);
 		searchTimeoutRef.current = setTimeout(async () => {
 			if (!projectPathForSessions || !search.trim()) {
@@ -51,26 +55,30 @@ export function useAgentSessionsSearch({
 					projectPathForSessions,
 					search,
 					searchMode,
-					sshRemoteId
+					sshRemoteId,
+					{ ownerAgentId }
 				);
+				if (!active) return;
 				setSearchResults(results);
 			} catch (error) {
+				if (!active) return;
 				logger.error('Search failed:', undefined, error);
 				captureException(error, {
 					extra: { fn: 'useAgentSessionsSearch', agentId, projectPathForSessions },
 				});
 				setSearchResults([]);
 			} finally {
-				setIsSearching(false);
+				if (active) setIsSearching(false);
 			}
 		}, 300);
 
 		return () => {
+			active = false;
 			if (searchTimeoutRef.current) {
 				clearTimeout(searchTimeoutRef.current);
 			}
 		};
-	}, [search, searchMode, projectPathForSessions, agentId, sshRemoteId]);
+	}, [search, searchMode, projectPathForSessions, agentId, sshRemoteId, ownerAgentId]);
 
 	return { searchResults, isSearching };
 }

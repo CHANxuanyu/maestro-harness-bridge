@@ -199,6 +199,22 @@ describe('Sessions Preload API', () => {
 		});
 
 		describe('search', () => {
+			it('passes the account options after the existing remote argument', async () => {
+				await api.search('codex', '/project', 'needle', 'all', 'ssh-1', {
+					ownerAgentId: 'owner',
+					configDir: '/selected',
+				});
+				expect(mockInvoke).toHaveBeenCalledWith(
+					'agentSessions:search',
+					'codex',
+					'/project',
+					'needle',
+					'all',
+					'ssh-1',
+					{ ownerAgentId: 'owner', configDir: '/selected' }
+				);
+			});
+
 			it('should invoke agentSessions:search', async () => {
 				mockInvoke.mockResolvedValue([]);
 
@@ -210,6 +226,7 @@ describe('Sessions Preload API', () => {
 					'/project',
 					'search query',
 					'title',
+					undefined,
 					undefined
 				);
 			});

@@ -19,6 +19,7 @@ import {
 	loadGlobalStatsCache,
 	saveGlobalStatsCache,
 } from '../../../../main/utils/statsCache';
+import * as accountDirs from '../../../../main/agents/provider-account-dirs';
 import os from 'os';
 import path from 'path';
 import { promises as realFs } from 'fs';
@@ -365,6 +366,67 @@ describe('agentSessions IPC handlers', () => {
 	});
 
 	describe('agentSessions:search', () => {
+		it('resolves the owning account and honors an explicit account without losing SSH', async () => {
+			const storage = { searchSessions: vi.fn().mockResolvedValue([]) };
+			vi.mocked(agentSessionStorage.getSessionStorage).mockReturnValue(
+				storage as unknown as agentSessionStorage.AgentSessionStorage
+			);
+			const resolve = vi.spyOn(accountDirs, 'resolveAgentAccountDir').mockReturnValue('/selected');
+			const remote = { id: 'ssh-1', enabled: true } as any;
+			vi.mocked(getSshRemoteById).mockReturnValue(remote);
+			try {
+				await handlers.get('agentSessions:search')!(
+					{},
+					'codex',
+					'/project',
+					'needle',
+					'all',
+					'ssh-1',
+					{ ownerAgentId: 'owner' }
+				);
+				expect(resolve).toHaveBeenCalledWith('owner');
+				expect(storage.searchSessions).toHaveBeenLastCalledWith(
+					'/project',
+					'needle',
+					'all',
+					remote,
+					'/selected'
+				);
+				await handlers.get('agentSessions:search')!(
+					{},
+					'codex',
+					'/project',
+					'needle',
+					'all',
+					'ssh-1',
+					{ ownerAgentId: 'owner', configDir: '/explicit' }
+				);
+				expect(storage.searchSessions).toHaveBeenLastCalledWith(
+					'/project',
+					'needle',
+					'all',
+					remote,
+					'/explicit'
+				);
+				storage.searchSessions.mockRejectedValueOnce(
+					Object.assign(new Error('missing account'), { code: 'ENOENT' })
+				);
+				await expect(
+					handlers.get('agentSessions:search')!(
+						{},
+						'codex',
+						'/project',
+						'needle',
+						'all',
+						undefined,
+						{ ownerAgentId: 'owner' }
+					)
+				).rejects.toThrow('missing account');
+			} finally {
+				resolve.mockRestore();
+			}
+		});
+
 		it('should return search results from storage', async () => {
 			const mockResults = [
 				{
@@ -387,7 +449,13 @@ describe('agentSessions IPC handlers', () => {
 			const handler = handlers.get('agentSessions:search');
 			const result = await handler!({} as any, 'claude-code', '/test', 'hello', 'all');
 
-			expect(mockStorage.searchSessions).toHaveBeenCalledWith('/test', 'hello', 'all', undefined);
+			expect(mockStorage.searchSessions).toHaveBeenCalledWith(
+				'/test',
+				'hello',
+				'all',
+				undefined,
+				undefined
+			);
 			expect(result).toEqual(mockResults);
 		});
 
@@ -432,7 +500,13 @@ describe('agentSessions IPC handlers', () => {
 			);
 
 			expect(getSshRemoteById).toHaveBeenCalledWith('ssh-remote-1');
-			expect(mockStorage.searchSessions).toHaveBeenCalledWith('/test', 'hello', 'all', remote);
+			expect(mockStorage.searchSessions).toHaveBeenCalledWith(
+				'/test',
+				'hello',
+				'all',
+				remote,
+				undefined
+			);
 			expect(result).toEqual(mockResults);
 		});
 	});

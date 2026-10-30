@@ -151,6 +151,8 @@ test('codex: browser search, preview and resume use the selected account', async
 		native.page.getByText('No sessions match your search', { exact: true })
 	).toBeVisible();
 	await search.fill('selected-account-needle');
+	// The browser shows the old list while searching; only this highlighted hit proves a result.
+	await expect(native.page.getByText('selected-account-needle', { exact: true })).toBeVisible();
 	await expect(native.page.getByText('No sessions match your search', { exact: true })).toHaveCount(
 		0
 	);

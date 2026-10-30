@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Provider } from './fixtures/native-app';
 import { nativeIdentity, nativeToolIds } from './fixtures/native-real';
+import { createGrokTurn } from './fixtures/native/grok-protocol.cjs';
 
 for (const provider of ['grok'] satisfies Provider[]) {
 	test(`${provider} a: two turns append to the same native session`, async ({ native }) => {
@@ -122,6 +123,13 @@ for (const provider of ['grok'] satisfies Provider[]) {
 		).toBeVisible();
 		expect(native.files(provider)).toEqual([file]);
 		expect(fs.readFileSync(file, 'utf8')).toContain('After application restart.');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		// Let both idle follow probes reconcile the untimed native answer with
+		// the live answer; an immediate assertion alone misses the duplicate.
+		await native.page.waitForTimeout(4200);
+		await expect(
+			native.output().getByText('After application restart.', { exact: true })
+		).toHaveCount(1);
 	});
 
 	test(`${provider} e: project history opens results and IPC preserves native model information`, async ({
@@ -171,15 +179,22 @@ for (const provider of ['grok'] satisfies Provider[]) {
 		expect(fs.readFileSync(turn.file)).toEqual(before);
 		expect(fs.readFileSync(updateFile)).toEqual(updateBytes);
 	});
-	test(`${provider} f: backend revision and read-only IPC expose external appends`, async ({
+	test(`${provider} f: external turns follow only when idle and preserve reading and drafts`, async ({
 		native,
 	}) => {
-		native.scriptTurns([]);
-		const seed = await native.externalTurn(provider, 'External backend follow history', {
-			answer: 'Original history.',
+		native.scriptTurns([
+			{
+				answer: '',
+				waitForStop: true,
+				tools: [{ id: 'busy-tool', command: 'sleep 60', output: '' }],
+			},
+		]);
+		const configDir = native.grok;
+		const seed = await native.externalTurn(provider, 'External follow history', {
+			answer: Array.from({ length: 80 }, (_, i) => `History paragraph ${i}.`).join('\n\n'),
 		});
+		const identity = { provider, configDir, cwd: native.project, id: seed.id };
 		await native.createAgent(provider);
-		const identity = { cwd: native.project, id: seed.id };
 		const revision = () =>
 			native.page.evaluate(
 				({ cwd, id }) => window.maestro.agentSessions.getTranscriptRevision('grok', cwd, id),
@@ -190,26 +205,169 @@ for (const provider of ['grok'] satisfies Provider[]) {
 				({ cwd, id, readOnly }) => window.maestro.agentSessions.read('grok', cwd, id, { readOnly }),
 				{ ...identity, readOnly }
 			);
-		const before = await revision();
-		expect(before).toBeTruthy();
+		const originalRevision = await revision();
+		expect(originalRevision).toBeTruthy();
 		expect(
-			(await read(true)).messages.some((message) => message.content === 'Original history.')
+			(await read(true)).messages.some((message) =>
+				message.content.includes('History paragraph 0.')
+			)
 		).toBe(true);
+		await native.page
+			.locator('[data-conversation-kind="history"] button[data-tree-nav]')
+			.filter({ hasText: 'External follow history' })
+			.click();
+		await expect(native.output().getByText('History paragraph 79.', { exact: true })).toBeVisible();
+		const scroll = native.output().locator(':scope > .overflow-y-auto');
 		await native.externalTurn(
 			provider,
-			'External append',
-			{ answer: 'Externally appended answer.' },
+			'An external idle turn',
+			{ answer: 'Idle external answer.' },
 			seed.id
 		);
-		expect(await revision()).not.toBe(before);
+		expect(await revision()).not.toBe(originalRevision);
 		const bytes = fs.readFileSync(seed.file);
-		const updates = fs.readFileSync(path.join(path.dirname(seed.file), 'updates.jsonl'));
+		const updateFile = path.join(path.dirname(seed.file), 'updates.jsonl');
+		const updates = fs.readFileSync(updateFile);
+		await expect(native.output().getByText('Idle external answer.', { exact: true })).toBeVisible();
 		const incremental = await read(true);
 		expect(incremental).toEqual(await read(false));
 		expect(
-			incremental.messages.filter((message) => message.content === 'Externally appended answer.')
+			incremental.messages.filter((message) => message.content === 'Idle external answer.')
 		).toHaveLength(1);
 		expect(fs.readFileSync(seed.file)).toEqual(bytes);
-		expect(fs.readFileSync(path.join(path.dirname(seed.file), 'updates.jsonl'))).toEqual(updates);
+		expect(fs.readFileSync(updateFile)).toEqual(updates);
+		await expect
+			.poll(() => scroll.evaluate((node) => node.scrollHeight - node.clientHeight - node.scrollTop))
+			.toBeLessThanOrEqual(1);
+		await native.input().fill('Preserve this draft.');
+		await scroll.evaluate((node) => {
+			node.scrollTop = 0;
+			node.dispatchEvent(new Event('scroll'));
+		});
+		const anchor = native.output().getByText('History paragraph 0.', { exact: true });
+		const before = await anchor.boundingBox();
+		const tool = {
+			id: 'external-result',
+			command: 'printf external-output',
+			output: 'external-output',
+		};
+		const gate = path.join(native.root, 'external-work');
+		const external = native.real
+			? native.externalTurn(
+					provider,
+					'External work while reading',
+					{
+						answer: 'External work completed.',
+						tools: [{ ...tool, updates: ['external-output'], gates: [gate] }],
+					},
+					seed.id
+				)
+			: undefined;
+		external?.catch(() => {}); // Awaited below after releasing the workload gate.
+		const synthetic = native.real
+			? undefined
+			: createGrokTurn({ ...identity, prompt: 'External work while reading' });
+		synthetic?.startTool(tool);
+		const unread = native
+			.output()
+			.getByTitle('New messages (click to pin to bottom)', { exact: true });
+		await expect(unread).toHaveText('1');
+		fs.writeFileSync(gate, 'continue');
+		if (external) await external;
+		else {
+			synthetic.finishTool(tool);
+			synthetic.finish('External work completed.');
+		}
+		await expect(
+			native.output().getByText('External work completed.', { exact: true })
+		).toBeVisible();
+		await expect(unread).toHaveText('2');
+		expect(await scroll.evaluate((node) => node.scrollTop)).toBe(0);
+		expect(Math.abs((await anchor.boundingBox())!.y - before!.y)).toBeLessThanOrEqual(1);
+		await expect(native.input()).toHaveValue('Preserve this draft.');
+		await unread.click();
+		await native.send('Run a tool while the other writer appends');
+		await expect(native.output().locator('[data-tool-status="running"]').first()).toBeVisible();
+		const concurrent = native.externalTurn(
+			provider,
+			'An external append while Maestro is busy',
+			{ answer: 'Wait until Maestro becomes idle.' },
+			seed.id
+		);
+		concurrent.catch(() => {}); // Awaited after Stop; never turn a CLI refusal into success.
+		// Observe two real 2-second probes from useNativeTranscriptFollow.
+		// This checks the idle read guard during an ordinary native append.
+		await native.page.waitForTimeout(4200);
+		await expect(
+			native.output().getByText('Wait until Maestro becomes idle.', { exact: true })
+		).toHaveCount(0);
+		await native.page.getByRole('button', { name: /^Stop/ }).click();
+		await concurrent;
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		// grok-build@2bdd1d6a, shell/src/session/storage/jsonl/mod.rs:
+		// append_chat_message_commit_aware (1333) uses append_jsonl, whose
+		// per-record lock_append (594) preserves ordinary foreign appends.
+		// There is no OMP leaf/side-branch model. Full-file compaction rewrites
+		// bypass this lock and are outside this concurrent-append assertion.
+		await expect(
+			native.output().getByText('Wait until Maestro becomes idle.', { exact: true })
+		).toBeVisible();
+		await native.externalTurn(
+			provider,
+			'An external turn after Stop',
+			{
+				answer: 'Idle refresh resumed after Stop.',
+			},
+			seed.id
+		);
+		await expect(
+			native.output().getByText('Idle refresh resumed after Stop.', { exact: true })
+		).toBeVisible();
+		expect(native.files(provider)).toHaveLength(1);
+	});
+
+	test(`${provider} g: chat-only history keeps tool results unknown`, async ({ native }) => {
+		native.scriptTurns([]);
+		// A stored-format case in both modes, not a claim that a live CLI omits
+		// updates. ConversationItem and the independent JSONL files come from
+		// grok-build@2bdd1d6a, sampling-types/src/conversation.rs and
+		// shell/src/session/storage/jsonl/mod.rs. No invented outcome field.
+		const turn = createGrokTurn({
+			configDir: native.grok,
+			cwd: native.project,
+			prompt: 'Chat-only external history',
+			persistUpdates: false,
+		});
+		const tool = {
+			id: 'unknown-outcome',
+			command: 'printf legacy-output',
+			output: 'legacy-output',
+		};
+		turn.startTool(tool);
+		turn.finishTool(tool);
+		turn.finish('Chat-only external answer.');
+		const before = fs.readFileSync(turn.file);
+		const updateFile = path.join(path.dirname(turn.file), 'updates.jsonl');
+		expect(fs.existsSync(updateFile)).toBe(false);
+		await native.createAgent(provider);
+		await native.page
+			.locator(
+				`[data-conversation-kind="history"][data-conversation-key*="${turn.id}"] button[data-tree-nav]`
+			)
+			.click();
+		await expect(
+			native.output().getByText('Chat-only external answer.', { exact: true })
+		).toBeVisible();
+		await expect(native.output().locator('[data-tool-status="unknown"]').first()).toBeVisible();
+		await expect(
+			native.output().getByText('Result unknown', { exact: true }).first()
+		).toBeVisible();
+		await native.expandTools();
+		await expect(native.output().getByTestId('tool-call-result')).toContainText('legacy-output');
+		await expect(native.output().locator('[data-tool-status="unknown"]').first()).toBeVisible();
+		await expect(native.output().locator('[data-tool-status="running"]')).toHaveCount(0);
+		await expect(native.output().locator('[data-tool-status="completed"]')).toHaveCount(0);
+		expect(fs.readFileSync(turn.file)).toEqual(before);
+		expect(fs.existsSync(updateFile)).toBe(false);
 	});
 }

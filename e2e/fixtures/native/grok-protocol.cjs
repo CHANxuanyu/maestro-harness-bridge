@@ -10,7 +10,7 @@ const { randomUUID } = require('node:crypto');
 const model = 'grok-native-model';
 const textContent = (text) => [{ type: 'content', content: { type: 'text', text } }];
 
-function createGrokTurn({ configDir, cwd, id, prompt, emit = () => {} }) {
+function createGrokTurn({ configDir, cwd, id, prompt, persistUpdates = true, emit = () => {} }) {
 	const resumed = Boolean(id);
 	id ||= randomUUID();
 	const dir = path.join(configDir, 'sessions', encodeURIComponent(cwd), id);
@@ -40,12 +40,16 @@ function createGrokTurn({ configDir, cwd, id, prompt, emit = () => {} }) {
 		summary.num_messages++;
 		saveSummary();
 	};
-	const notification = (method, update) =>
+	// The same pinned storage separates chat_history from ACP updates. Older
+	// chat-only sessions cannot establish a tool's outcome from its text result.
+	const notification = (method, update) => {
+		if (!persistUpdates) return;
 		append('updates.jsonl', {
 			timestamp: Math.floor(Date.now() / 1000),
 			method,
 			params: { sessionId: id, update },
 		});
+	};
 	const acp = (kind, fields) => {
 		// toolName is a stdout field; ACP carries native identity in its metadata.
 		const persisted = Object.fromEntries(

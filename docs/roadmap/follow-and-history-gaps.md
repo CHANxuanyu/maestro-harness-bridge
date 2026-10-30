@@ -1,6 +1,6 @@
 # 跟随与历史缺口（Codex 第五轮）
 
-状态：待 Codex 实施。2026-10-30 起草。用户已确认非审美类工作交给 Codex，依次完成，无需再等审阅。
+状态：任务一已完成本地验收，PR 与主线 CI 见完成记录；任务二至五待实施。2026-10-30 起草。用户已确认非审美类工作交给 Codex，依次完成，无需再等审阅。
 
 Opus 已在 `feed/grok-ui-fixes` 修复[后端第三阶段](backend-stage3.md#交给-opus)交出的 Grok 三项界面问题，处理结果见[提供方契约](../native-provider-contracts.md#grok-的-opus-交接与验收边界)。本轮收尾这些修复的端到端验收，并处理第三阶段留下的其余非界面缺口。任务按顺序进行，每项一个 PR。某项受阻时写明原因，继续下一项。
 
@@ -65,3 +65,23 @@ Opus 已在 `feed/grok-ui-fixes` 修复[后端第三阶段](backend-stage3.md#�
 ## 完成记录
 
 实施后按任务填写：问题、改动、实际测试结果、受阻与未验项，保持简短。交给 Opus 的事项和需要用户在 Mac 上执行的事项单独列出。
+
+### 任务一：Grok 自动跟随
+
+- **改动：** f 保留 revision、只读与完整读取一致性及原生字节不变的断言，补齐闲置追加、底部跟随、阅读锚点、未读数、草稿、运行中屏蔽与 Stop 后恢复。d 增加两次闲置轮询后的唯一答案断言；e 保留 Opus 恢复的消息信息断言。新增 g，以官方 chat_history 格式生成没有 updates 的历史，折叠和展开后的工具结果都保持 unknown，不能显示运行中或完成。产品代码、界面外观和文案未改。
+- **来源与边界：** 锁定 grok-build `2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8`（1.0.45）。`storage/jsonl/mod.rs` 的普通聊天追加经过逐条 append lock，Stop 后可读到另一端的普通追加；没有照搬 OMP 旁支结论。整文件压缩会绕过追加锁，不能据此承诺压缩期间的并发安全。g 在普通和真实入口两种模式中都是原生存储格式用例，不宣称真实 CLI 主动省略了 updates。
+- **反证：** 四次本地临时回退全部失败且已恢复：去掉 hook 的 Grok 条件后，f 等不到闲置外部回答；回退无时间配对后，d 的回答定位到两份；去掉 LogItem 无效时间判断后，e 无法显示 Not recorded；把 unknown 映射为 running 后，g 的“运行中为零”断言收到 1。反证源码、截图和日志均未提交。
+- **已完成检查：** 相关单元测试 155/155，原生夹具 30/30；类型、ESLint、全仓格式、文档引用、连接器 26/26、发布策略 11/11 和源策略检查通过。完整 Electron 52/52（7.6 分钟），完整隔离真实入口烟测 52/52（8.3 分钟），合成源凭据未改写且临时会话清理通过。最终 Grok 用例复验 7/7（1.1 分钟）；[本项 PR](https://github.com/CHANxuanyu/maestro-harness-bridge/pulls?q=is%3Apr+head%3Acodex%2Fround5-grok-follow) 按顺序记录七项 PR CI、实际合并提交及主线 CI。
+- **未验：** 真实 Grok CLI、真实账户、macOS 及原生压缩并发；没有安装、打包或发布。
+
+### 交给 Opus
+
+- 任务一尚未发现新增界面缺陷。第三阶段三项 Grok 修复已由本轮用例覆盖；从未打开历史的实时标签由任务二处理。
+
+### 需要用户在 Mac 上执行
+
+在已安装 Grok 1.0.45 的开发 checkout 中执行，使用隔离的新会话；实际账户会产生模型调用费用。完整隔离与清理说明见[真实验收](../verification/native-e2e.md)。
+
+```sh
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_GROK_PATH="$(command -v grok)" npm run test:e2e -- e2e/native-grok.spec.ts
+```

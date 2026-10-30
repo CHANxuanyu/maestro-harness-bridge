@@ -51,7 +51,7 @@ model_id 和 reasoning_effort 仅来自原生 assistant。chat_history 不记录
 
 ### Grok 的 Opus 交接与验收边界
 
-已完成 a、b、c、d；e 的历史正文、工具结果和模型/effort IPC 契约通过。f 的 revision 与只读 IPC 增量结果通过，界面自动跟随受阻，当前 hook 不加入 Grok。这些边界在用例标题中明确区分，没有把后端 IPC 结果当作界面通过。
+以下是第三阶段移交时的复现记录：a 至 d 与 e 的后端契约通过；当时 f 只覆盖 revision 与只读 IPC，尚未启用界面跟随。Opus 的修复和第五轮的补充验收见下文，不能把此前的 IPC 结果当作界面通过。
 
 1. **消息详情崩溃：** 从 Grok 项目历史打开带 model_id 的回复，点击 Message info。现有转换将空 timestamp 转成 NaN，详情格式化抛出 RangeError: Invalid time value，整个会话显示错误边界。Opus 应保留“无原生时间”的语义并正常显示原生模型与 effort。复现用 e 的现有准备流程，在模型 IPC 断言后加回下列原始界面断言；它已在当前界面明确失败：
 
@@ -72,7 +72,7 @@ model_id 和 reasoning_effort 仅来自原生 assistant。chat_history 不记录
 2. `mergeNewerEntries` 对没有原生时间的条目改用顺序证据：锚点之后的原生条目只与本标签尚未配对、且位于上一次配对之后的同文本本地条目一一配对，新条目按磁盘顺序插入。真实重复回合仍各自保留，不按正文全局消重。Grok 已加入 `useNativeTranscriptFollow`。
 3. 存储明确返回 unknown 的工具调用显示为“结果未知”，折叠行同样标出；会话浏览器的工具卡片不再把未知或缺失状态画成成功。
 
-仍未覆盖：标签从未从历史打开、全部由本次实时发送组成时，没有原生 ID 和时间可作锚点，跟随刷新会静默失败，外部追加要从项目历史重新打开才能看到。f 的完整界面验收（闲置追加、阅读锚点与草稿、运行中不读、Stop 后刷新）交给 Codex 按 Grok 的并发语义补齐。
+第五轮已补充 f 的完整界面用例（闲置追加、阅读锚点、未读数与草稿、运行中屏蔽、Stop 后刷新），以及 chat_history 没有 updates 时的 unknown 工具结果用例。普通追加按锁定源码的逐条追加锁验证，整文件压缩的并发安全不在结论内；没有采用 OMP 的旁支断言。实际结果与四项缺陷反证见[第五轮完成记录](roadmap/follow-and-history-gaps.md#完成记录)。尚待任务二处理：标签从未从历史打开、全部由本次实时发送组成时，没有共享原生 ID 或时间可作锚点。
 
 自动历史摘要通过普通设置关闭，理由与 OpenCode a 至 f 相同。真实账户、macOS 和真实 Grok CLI 未验。版本入口只接受已核对的 grok 1.0.45 输出；其他版本输出仍拒绝。已有匹配 CLI 时执行：
 

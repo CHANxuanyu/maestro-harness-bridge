@@ -1,6 +1,6 @@
 # 后端第三阶段计划
 
-状态：任务一、任务三已合并，Copilot 的 CI 时限调整已于 2026-10-30 获用户批准。Copilot 的最新验收、合并与主线 CI 见 [PR #15](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/15)，性能结果见[性能 PR](https://github.com/CHANxuanyu/maestro-harness-bridge/pulls?q=is%3Apr+head%3Acodex%2Fstage3-performance)。2026-10-25 起草，用户已确认由 Codex 依次完成三项任务，无需再等审阅。
+状态：任务一、任务三及 Copilot 已合并；Factory 格式核查受阻，真实环境仍未验。Copilot 的最新验收、合并与主线 CI 见 [PR #15](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/15)，性能结果见[性能 PR](https://github.com/CHANxuanyu/maestro-harness-bridge/pulls?q=is%3Apr+head%3Acodex%2Fstage3-performance)。2026-10-25 起草，用户已确认由 Codex 依次完成三项任务，无需再等审阅。
 
 前三轮（[后端可靠性](backend-reliability.md)、[后端第二阶段](backend-followups.md)、[端到端验收](native-e2e.md)）把 Codex 和 Claude Code 的原生接续做扎实了，并建好了能在 CI 里驱动真实应用的端到端框架。本阶段处理剩下的三处后端缺口，按价值排序：
 
@@ -122,7 +122,7 @@
 
 - **历史修复集成补充：** 准备分支继续合入主线 `be88f6a8667200bc19ee96119022297b6604eaff`（PR #17、#18 的账户分页、SSH 路径及搜索语义修复），无冲突。集成后 31 个相关单元测试文件 657/657、夹具 29/29、完整 Electron 51/51（6.3 分钟）、完整隔离真实入口烟测 51/51（7.0 分钟）；烟测同时确认合成源凭据未改写、临时会话清理完成。类型、ESLint、全仓格式、文档引用、连接器 26/26 和发布策略 11/11 通过。只更新上述准备分支及本记录；PR #15 的代码分支仍为 `8d5aab0c33a458c2fcb2037b268ca83abdc9718b`，CI 时限范围确认与真实环境未验边界不变，没有重试 CI。
 
-- **2026-10-30 收尾：** 用户批准只将 Native resume E2E (Linux) 的 `timeout-minutes` 从 15 改为 25。已在准备分支合入主线 `6d0b27f471a5c730372362bdd9e017aee5051862`，保留 Opus 的全部 Grok 修复；两处合并冲突只涉及提供方列表及同一列表的测试，均保留 Grok 和 Copilot。工作流只有上述一行差异，其他 job、步骤、用例重试及断言未变。集成后 32 个相关文件 685/685，夹具 29/29，完整 Electron 51/51（7.4 分钟），完整隔离真实入口烟测 51/51（7.9 分钟），合成源凭据未改写且临时会话清理通过。类型、ESLint、全仓格式、文档引用、连接器 26/26、发布策略 11/11 与源策略检查通过。继续推进原 PR #15，实际合并提交及两次七项 CI 的链接记在该 PR 中，不另开提供方 PR；真实环境仍未验。
+- **2026-10-30 收尾：** 用户批准只将 Native resume E2E (Linux) 的 `timeout-minutes` 从 15 改为 25。已在准备分支合入主线 `6d0b27f471a5c730372362bdd9e017aee5051862`，保留 Opus 的全部 Grok 修复；两处合并冲突只涉及提供方列表及同一列表的测试，均保留 Grok 和 Copilot。工作流只有上述一行差异，其他 job、步骤、用例重试及断言未变。集成后 32 个相关文件 685/685，夹具 29/29，完整 Electron 51/51（7.4 分钟），完整隔离真实入口烟测 51/51（7.9 分钟），合成源凭据未改写且临时会话清理通过。类型、ESLint、全仓格式、文档引用、连接器 26/26、发布策略 11/11 与源策略检查通过。原 [PR #15](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/15) 的[七项 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41075929794) 首次运行全部通过（20 分 15 秒），合并为 `552421e6f230bf1853a54a13dd9e52b1dccce313`。[实际主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41079190054) 首次运行七项通过（20 分 28 秒），夹具 29/29、完整 Electron 51/51（6.7 分钟）、隔离真实入口烟测 51/51（7.6 分钟）；Native job 用时 15 分 53 秒。没有空提交或手动重跑 CI；真实环境仍未验。
 
 ### 任务二：Factory Droid
 
@@ -165,7 +165,7 @@ MAESTRO_E2E_REAL=1 MAESTRO_E2E_OMP_PATH="$(command -v omp)" npm run test:e2e -- 
 MAESTRO_E2E_REAL=1 MAESTRO_E2E_COPILOT_PATH="$(command -v copilot)" npm run test:e2e -- e2e/native-copilot.spec.ts
 ```
 
-锁定版本依次为 1.19.4、1.0.45、18.12.6、1.0.63；Copilot 命令需先合并 PR #15。OMP 需要调用者提供 ANTHROPIC_API_KEY，Copilot 需要显式 COPILOT_GITHUB_TOKEN；OpenCode/Grok 使用隔离凭据副本或已支持的 API key，真实会话不复制。Factory 因格式受阻没有可宣称有效的验收命令。Grok 命令只覆盖已完成部分，不能证明详情与自动跟随的界面受阻项。所有真实模式仍标记未验。
+锁定版本依次为 1.19.4、1.0.45、18.12.6、1.0.63；Copilot 已随 PR #15 合并。OMP 需要调用者提供 ANTHROPIC_API_KEY，Copilot 需要显式 COPILOT_GITHUB_TOKEN；OpenCode/Grok 使用隔离凭据副本或已支持的 API key，真实会话不复制。Factory 因格式受阻没有可宣称有效的验收命令。Grok 命令只覆盖已完成部分，不能证明详情与自动跟随的界面受阻项。所有真实模式仍标记未验。
 
 ### 交给 Opus
 

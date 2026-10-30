@@ -59,3 +59,30 @@ it('the pinned Grok fixture produces matching stdout and native history outcomes
 	});
 	expect(fs.readFileSync(turn.file)).toEqual(before);
 });
+
+it('chat-only history has no recorded tool outcome and reads without writing updates', async () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-grok-chat-only-'));
+	roots.push(root);
+	vi.stubEnv('GROK_HOME', root);
+	const turn = createGrokTurn({
+		configDir: root,
+		cwd: root,
+		prompt: 'Chat-only fixture',
+		persistUpdates: false,
+	});
+	const tool = { id: 'chat-only-tool', command: 'printf result', output: 'result' };
+	turn.startTool(tool);
+	turn.finishTool(tool);
+	turn.finish('Chat-only answer');
+	const before = fs.readFileSync(turn.file);
+	const updates = path.join(path.dirname(turn.file), 'updates.jsonl');
+	expect(fs.existsSync(updates)).toBe(false);
+	const result = await new GrokSessionStorage().readSessionMessages(root, turn.id, {
+		readOnly: true,
+	});
+	expect(result.messages.flatMap((message) => message.toolUse ?? [])).toMatchObject([
+		{ id: tool.id, state: { status: 'unknown', output: tool.output } },
+	]);
+	expect(fs.readFileSync(turn.file)).toEqual(before);
+	expect(fs.existsSync(updates)).toBe(false);
+});

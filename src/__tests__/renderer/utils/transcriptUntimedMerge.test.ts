@@ -57,6 +57,146 @@ const hydrated = [
 	native(1, 'stdout', 'Before application restart.'),
 ];
 
+describe('following an untimed conversation that was only shown live', () => {
+	it('anchors a unique user sequence and adds an external turn once', () => {
+		const visible = [local('u1', 0, 'user', 'Mine'), local('a1', 1, 'stdout', 'My answer')];
+		const loaded = [
+			native(0, 'user', 'Mine'),
+			native(1, 'stdout', 'My answer'),
+			native(2, 'user', 'Elsewhere'),
+			native(3, 'stdout', 'External answer'),
+		];
+		const merged = refresh(loaded, visible);
+		expect(merged?.added).toBe(2);
+		expect(merged?.logs.map((e) => e.id)).toEqual(['u1', 'a1', 'grok-msg-2', 'grok-msg-3']);
+		expect(refresh(loaded, merged!.logs)?.added).toBe(0);
+	});
+
+	it.each([NOW, Number.NaN])('refuses multiple user alignments even at time %s', (timestamp) => {
+		const visible = [{ ...local('u1', 0, 'user', 'continue'), timestamp }];
+		const loaded = [native(0, 'user', 'continue'), native(1, 'user', 'continue')];
+		expect(refresh(loaded, visible)).toBeNull();
+	});
+
+	it('does not ignore an unpersisted failed send to force a match', () => {
+		const visible = [
+			local('u1', 0, 'user', 'Mine'),
+			local('a1', 1, 'stdout', 'My answer'),
+			{ ...local('failed', 2, 'user', 'Never persisted'), delivered: false },
+		];
+		expect(
+			refresh(
+				[
+					native(0, 'user', 'Mine'),
+					native(1, 'stdout', 'My answer'),
+					native(2, 'user', 'Elsewhere'),
+				],
+				visible
+			)
+		).toBeNull();
+	});
+
+	it.each(['External answer', 'Second answer'])(
+		'keeps an external turn between local turns, including repeated reply text: %s',
+		(externalAnswer) => {
+			const visible = [
+				local('u1', 0, 'user', 'First'),
+				local('a1', 1, 'stdout', 'First answer'),
+				local('u2', 2, 'user', 'Second'),
+				local('a2', 3, 'stdout', 'Second answer'),
+			];
+			const loaded = [
+				native(0, 'user', 'First'),
+				native(1, 'stdout', 'First answer'),
+				native(2, 'user', 'Elsewhere'),
+				native(3, 'stdout', externalAnswer),
+				native(4, 'user', 'Second'),
+				native(5, 'stdout', 'Second answer'),
+			];
+			const merged = refresh(loaded, visible);
+			expect(merged?.added).toBe(2);
+			expect(merged?.logs.map((e) => e.id)).toEqual([
+				'u1',
+				'a1',
+				'grok-msg-2',
+				'grok-msg-3',
+				'u2',
+				'a2',
+			]);
+			expect(refresh(loaded, merged!.logs)?.added).toBe(0);
+		}
+	);
+
+	it('allows repeated local prompts when the complete alignment is unique', () => {
+		const visible = [
+			local('u1', 0, 'user', 'continue'),
+			local('a1', 1, 'stdout', 'One'),
+			local('u2', 2, 'user', 'continue'),
+			local('a2', 3, 'stdout', 'Two'),
+		];
+		const loaded = [
+			native(0, 'user', 'continue'),
+			native(1, 'stdout', 'One'),
+			native(2, 'user', 'continue'),
+			native(3, 'stdout', 'Two'),
+			native(4, 'user', 'Elsewhere'),
+		];
+		expect(refresh(loaded, visible)?.logs.map((e) => e.id)).toEqual([
+			'u1',
+			'a1',
+			'u2',
+			'a2',
+			'grok-msg-4',
+		]);
+	});
+
+	it('keeps a stopped turn’s own progress and tool while adding an external reply', () => {
+		const visible: LogEntry[] = [
+			local('u1', 0, 'user', 'Run work'),
+			{ ...local('progress', 1, 'stdout', 'Working'), purpose: 'commentary' },
+			{
+				...local('tool', 1, 'tool', 'run_command'),
+				metadata: { toolState: { status: 'canceled' } },
+			},
+		];
+		const loaded = [
+			native(0, 'user', 'Run work'),
+			{
+				...native(1, 'stdout', 'Working'),
+				nativeTranscript: { messageId: 'grok-msg-1', channel: 'commentary' },
+			},
+			native(2, 'tool', 'run_command'),
+			native(3, 'user', 'Elsewhere'),
+			native(4, 'stdout', 'Working'),
+		];
+		const merged = refresh(loaded, visible);
+		expect(merged?.added).toBe(2);
+		expect(merged?.logs.map((e) => e.id)).toEqual([
+			'u1',
+			'progress',
+			'tool',
+			'grok-msg-3',
+			'grok-msg-4',
+		]);
+	});
+
+	it('requires a user-message sequence, not just matching answer text', () => {
+		expect(
+			refresh([native(0, 'stdout', 'Same answer')], [local('a1', 0, 'stdout', 'Same answer')])
+		).toBeNull();
+		expect(refresh([native(0, 'user', '')], [local('u1', 0, 'user', '')])).toBeNull();
+	});
+
+	it('does not use the untimed sequence fallback for a timed provider', () => {
+		expect(
+			refresh(
+				[{ ...native(0, 'user', 'Same prompt'), timestamp: NOW + 24 * 60 * 60_000 }],
+				[local('u1', 0, 'user', 'Same prompt')]
+			)
+		).toBeNull();
+	});
+});
+
 describe('mergeNewerEntries without native times', () => {
 	it('does not append the stored copy of a turn the tab ran live after reopening it', () => {
 		const visible = [

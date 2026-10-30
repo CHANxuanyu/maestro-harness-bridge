@@ -55,15 +55,17 @@ export function foldNativeToolRuns(
 /**
  * The run's state as one glyph: running beats failed beats stopped beats
  * finished. `completed` only when EVERY call completed - a stopped or unknown
- * call must never make the run read as a success.
+ * call must never make the run read as a success. A call whose outcome the
+ * provider recorded as unknown says so when nothing outranks it.
  */
 export function toolRunStatus(
 	run: LogEntry[]
-): 'running' | 'error' | 'canceled' | 'completed' | undefined {
+): 'running' | 'error' | 'canceled' | 'completed' | 'unknown' | undefined {
 	const statuses = run.map((entry) => entry.metadata?.toolState?.status);
 	if (statuses.includes('running')) return 'running';
 	if (statuses.some((s) => s === 'error' || s === 'failed')) return 'error';
 	if (statuses.includes('canceled')) return 'canceled';
 	if (statuses.length > 0 && statuses.every((s) => s === 'completed')) return 'completed';
+	if (statuses.includes('unknown')) return 'unknown';
 	return undefined;
 }

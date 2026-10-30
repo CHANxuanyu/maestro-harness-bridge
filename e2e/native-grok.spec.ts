@@ -149,9 +149,15 @@ for (const provider of ['grok'] satisfies Provider[]) {
 		).toBeVisible();
 		await native.expandTools();
 		await expect(native.output().getByTestId('tool-call-result')).toContainText('history-result');
-		// The separate Message info UI acceptance is blocked by its invalid-date
-		// crash on Grok's absent timestamps. Preserve the failing UI reproduction
-		// in docs/native-provider-contracts.md; this case verifies the backend IPC.
+		// Grok stores no per-message time: Message info must say so and still name
+		// the native model and effort (it used to crash formatting NaN).
+		await native.output().getByRole('button', { name: 'Message info', exact: true }).last().click();
+		const info = native.output().locator('[data-message-info]').last();
+		await expect(info).toContainText('Not recorded');
+		await expect(native.output().getByText(metadata.model, { exact: true })).toBeVisible();
+		if (metadata.effort) {
+			await expect(native.output().getByText(metadata.effort, { exact: true })).toBeVisible();
+		}
 		const read = await native.page.evaluate(
 			({ cwd, id }) => window.maestro.agentSessions.read('grok', cwd, id, { readOnly: true }),
 			{ cwd: native.project, id: turn.id }

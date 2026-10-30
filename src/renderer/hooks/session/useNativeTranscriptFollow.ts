@@ -1,11 +1,12 @@
 /**
  * useNativeTranscriptFollow - keep the conversation on screen current while the
- * same native Codex or Claude session is also being continued from another app.
+ * same native session (Codex, Claude Code, OpenCode, Oh My Pi, Copilot CLI, Grok) is also
+ * being continued from another app.
  *
  * The project history scan (useProjectHistory) only runs on focus and on a slow
  * interval, so with both windows visible a turn sent from the other app could
  * sit unseen for minutes. This follows exactly ONE conversation: the visible AI
- * tab of the active agent, when it is a LOCAL Codex or Claude tab bound to a native id
+ * tab of the active agent, when it is a LOCAL tab of one of those providers bound to a native id
  * and Maestro is not writing to it itself (no turn running, nothing queued for
  * it, no auto-retry pending).
  *
@@ -73,7 +74,7 @@ export function resolveNativeFollowTarget(): NativeFollowTarget | null {
 	const session = sessions.find((s) => s.id === activeSessionId);
 	if (
 		!session ||
-		!['codex', 'claude-code', 'opencode', 'omp', 'copilot-cli'].includes(session.toolType)
+		!['codex', 'claude-code', 'opencode', 'omp', 'copilot-cli', 'grok'].includes(session.toolType)
 	)
 		return null;
 	// The AI tab must be what the main window shows (not a file, browser or

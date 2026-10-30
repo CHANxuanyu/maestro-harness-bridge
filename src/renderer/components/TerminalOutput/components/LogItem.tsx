@@ -578,6 +578,17 @@ export const LogItem = memo(
 									✓
 								</span>
 							)}
+							{!feedLayout && runStatus === 'unknown' && (
+								<span
+									className="shrink-0"
+									style={{ color: theme.colors.textDim }}
+									role="img"
+									aria-label={t('workflows.transcript.toolUnknown')}
+									title={t('workflows.transcript.toolUnknown')}
+								>
+									?
+								</span>
+							)}
 							{!feedLayout && (
 								<span className="truncate opacity-80">
 									{Array.from(new Set(toolRun.map((entry) => entry.text))).join(', ')}
@@ -797,10 +808,14 @@ export const LogItem = memo(
 		if (feedHasMeta && infoOpen) {
 			infoFields.push({
 				label: t('workflows.transcript.infoTime'),
-				value: `${new Date(log.timestamp).toLocaleString(locale, {
-					dateStyle: 'medium',
-					timeStyle: 'short',
-				})} · ${formatRelative(log.timestamp)}`,
+				// Some providers (Grok) store no per-message time, so a message read
+				// back from their history has none. Say so rather than format NaN.
+				value: Number.isFinite(log.timestamp)
+					? `${new Date(log.timestamp).toLocaleString(locale, {
+							dateStyle: 'medium',
+							timeStyle: 'short',
+						})} · ${formatRelative(log.timestamp)}`
+					: t('workflows.transcript.infoNotRecorded'),
 			});
 			if (!isUserMessage && responseDurationMs !== undefined) {
 				infoFields.push({
@@ -950,27 +965,28 @@ export const LogItem = memo(
 						className={`shrink-0 text-2xs sm:w-20 sm:pt-2 flex gap-1 sm:block ${isReversed ? 'text-right justify-end' : 'text-left'}`}
 						style={{ fontFamily, color: theme.colors.textDim, opacity: 0.6 }}
 					>
-						{(() => {
-							const logDate = new Date(log.timestamp);
-							const today = new Date();
-							const isToday = logDate.toDateString() === today.toDateString();
-							const time = logDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-							if (isToday) {
-								return time;
-							}
-							// Format: YYYY-MM-DD on first line, time on second
-							const year = logDate.getFullYear();
-							const month = String(logDate.getMonth() + 1).padStart(2, '0');
-							const day = String(logDate.getDate()).padStart(2, '0');
-							return (
-								<>
-									<div>
-										{year}-{month}-{day}
-									</div>
-									<div>{time}</div>
-								</>
-							);
-						})()}
+						{Number.isFinite(log.timestamp) &&
+							(() => {
+								const logDate = new Date(log.timestamp);
+								const today = new Date();
+								const isToday = logDate.toDateString() === today.toDateString();
+								const time = logDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+								if (isToday) {
+									return time;
+								}
+								// Format: YYYY-MM-DD on first line, time on second
+								const year = logDate.getFullYear();
+								const month = String(logDate.getMonth() + 1).padStart(2, '0');
+								const day = String(logDate.getDate()).padStart(2, '0');
+								return (
+									<>
+										<div>
+											{year}-{month}-{day}
+										</div>
+										<div>{time}</div>
+									</>
+								);
+							})()}
 						{/*
 						Turn time, under the clock. Only ever on an agent reply: a user
 						message is instantaneous, so the same line under it would be
@@ -1735,7 +1751,8 @@ export const LogItem = memo(
 			prevProps.log.turnEffort === nextProps.log.turnEffort &&
 			// The message info prints the entry's time, and a same-id correction
 			// (a stored conversion upgraded in place) may carry a different one.
-			prevProps.log.timestamp === nextProps.log.timestamp &&
+			// Object.is: a message with no stored time is NaN, which never equals itself.
+			Object.is(prevProps.log.timestamp, nextProps.log.timestamp) &&
 			// Conversation feed. `isLatestReply` moves to the next reply when one
 			// arrives; the change map is rebuilt per render, so compare by value.
 			prevProps.feedLayout === nextProps.feedLayout &&

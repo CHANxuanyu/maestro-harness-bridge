@@ -98,7 +98,9 @@ function parseToolArgs(value: unknown): unknown {
  * A stored status is only trusted when it says the call FINISHED. A transcript
  * is history: a call recorded as running/pending had its result written
  * elsewhere or never (an interrupted turn), and drawing it as running would
- * pulse forever on a conversation nothing is executing. Unknown stays unknown.
+ * pulse forever on a conversation nothing is executing. Unknown stays unknown:
+ * a provider that says so explicitly (Grok without its updates file) keeps
+ * `unknown`, which draws as neither a success nor a call still running.
  */
 const FINISHED_TOOL_STATUSES = new Set(['completed', 'complete', 'success', 'succeeded', 'done']);
 const FAILED_TOOL_STATUSES = new Set(['error', 'failed', 'failure']);
@@ -110,7 +112,7 @@ const FAILED_TOOL_STATUSES = new Set(['error', 'failed', 'failure']);
  */
 const CANCELED_TOOL_STATUSES = new Set(['canceled', 'cancelled', 'interrupted', 'aborted']);
 
-type HistoricToolStatus = 'completed' | 'error' | 'canceled';
+type HistoricToolStatus = 'completed' | 'error' | 'canceled' | 'unknown';
 
 function historicToolStatus(status: unknown): HistoricToolStatus | undefined {
 	if (typeof status !== 'string') return undefined;
@@ -118,6 +120,7 @@ function historicToolStatus(status: unknown): HistoricToolStatus | undefined {
 	if (FINISHED_TOOL_STATUSES.has(s)) return 'completed';
 	if (FAILED_TOOL_STATUSES.has(s)) return 'error';
 	if (CANCELED_TOOL_STATUSES.has(s)) return 'canceled';
+	if (s === 'unknown') return 'unknown';
 	return undefined;
 }
 
@@ -545,6 +548,14 @@ export function selectOlderEntries(loaded: LogEntry[], visible: LogEntry[]): Log
  * this twice never duplicates. New entries are interleaved into that tail by
  * timestamp, keeping each side's own order.
  *
+ * A provider that stores no per-message time (Grok) gives the clock window
+ * nothing to compare, so for its entries the evidence is ORDER instead: a
+ * native entry repeats the first unmatched local entry with the same text that
+ * comes AFTER the last one it paired, one to one, never an earlier one. A real
+ * repeat of the same words still has its own native message left over and is
+ * appended. Such an entry is placed by disk order too: before the local entry
+ * the next native message paired with, or at the end.
+ *
  * Returns `null` when no entry of `visible` is in `loaded`: the window is too
  * small (widen it) or the two do not describe the same conversation. Never
  * guesses in that case, since a wrong splice would duplicate or hide turns.
@@ -583,6 +594,13 @@ export function mergeNewerEntries(
 	const anchorIsLive = anchorEntry.id !== loaded[anchor.loadedIndex].id;
 	let liveTurn = anchorIsLive && (anchorEntry.source !== 'user' || tailHasLocalReply(tail, -1));
 	let liveTurnHasTools = liveTurn && liveTurnShowsTools(visible, anchor.visibleIndex);
+	// Order bookkeeping for native entries with no time: the tail index of the
+	// last local entry one of them paired with, the new ones still waiting for
+	// the next pairing to fix their place, and where each settled batch goes.
+	let lastUntimedPairAt = -1;
+	let pendingUntimed: LogEntry[] = [];
+	const untimedBefore = new Map<number, LogEntry[]>();
+	let untimedAdded = 0;
 	for (const entry of loaded.slice(anchor.loadedIndex + 1)) {
 		if (visibleIds.has(entry.id)) {
 			// Another thread's message already on screen still starts a new turn:
@@ -602,13 +620,26 @@ export function mergeNewerEntries(
 		}
 		// Only a local entry written around the same time can be this disk entry.
 		// The same short text sent again later from another app ("continue") is
-		// a genuine new turn and must still be appended.
-		const repeat = unmatchedTail.findIndex((local) => sameLiveMessage(local, entry));
+		// a genuine new turn and must still be appended. Without a native time,
+		// only the next local entry in sequence can be it.
+		const untimed = !Number.isFinite(entry.timestamp);
+		const repeat = untimed
+			? unmatchedTail.findIndex(
+					(local) => tail.indexOf(local) > lastUntimedPairAt && sameTextEntry(local, entry)
+				)
+			: unmatchedTail.findIndex((local) => sameLiveMessage(local, entry));
 		if (repeat >= 0) {
 			const local = unmatchedTail[repeat];
 			unmatchedTail.splice(repeat, 1);
+			const at = tail.indexOf(local);
+			if (untimed) {
+				lastUntimedPairAt = at;
+				if (pendingUntimed.length > 0) {
+					untimedBefore.set(at, pendingUntimed);
+					pendingUntimed = [];
+				}
+			}
 			if (entry.source === 'user') {
-				const at = tail.indexOf(local);
 				liveTurn = tailHasLocalReply(tail, at);
 				liveTurnHasTools = liveTurn && liveTurnShowsTools(tail, at);
 			}
@@ -618,23 +649,31 @@ export function mergeNewerEntries(
 		// starts a turn the tab did not show live: it and what follows are new.
 		if (isTurnBoundary(entry)) liveTurn = false;
 		else if (liveTurn && (entry.source !== 'tool' || liveTurnHasTools)) continue;
-		fresh.push(entry);
+		if (untimed) {
+			pendingUntimed.push(entry);
+			untimedAdded++;
+		} else {
+			fresh.push(entry);
+		}
 	}
-	if (fresh.length === 0) return { logs: visible, added: 0 };
+	if (fresh.length === 0 && untimedAdded === 0) return { logs: visible, added: 0 };
 
 	const mergedTail: LogEntry[] = [];
 	let i = 0;
 	let j = 0;
 	while (i < tail.length || j < fresh.length) {
 		if (j >= fresh.length || (i < tail.length && !(fresh[j].timestamp < tail[i].timestamp))) {
+			const before = untimedBefore.get(i);
+			if (before) mergedTail.push(...before);
 			mergedTail.push(tail[i++]);
 		} else {
 			mergedTail.push(fresh[j++]);
 		}
 	}
+	mergedTail.push(...pendingUntimed);
 	return {
 		logs: [...visible.slice(0, anchor.visibleIndex + 1), ...mergedTail],
-		added: fresh.length,
+		added: fresh.length + untimedAdded,
 	};
 }
 

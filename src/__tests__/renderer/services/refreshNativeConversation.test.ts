@@ -16,6 +16,7 @@ import type { AITab, LogEntry, QueuedItem, Session } from '../../../renderer/typ
 import type { ProjectHistoryConversation } from '../../../shared/projectHistory';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
+import { transcriptMessagesToLogEntries } from '../../../renderer/utils/transcriptMessages';
 
 const NATIVE = '00000000-0000-7000-a000-000000000001';
 
@@ -541,6 +542,177 @@ describe('refreshNativeConversation', () => {
 		expect(await a).toEqual(await b);
 		expect(read).toHaveBeenCalledTimes(1);
 		expect(storedTab()!.logs.filter((e) => e.id === 'm3')).toHaveLength(1);
+	});
+
+	it('refreshes a large loaded tab through one tail window and preserves all older entries', async () => {
+		const disk = Array.from({ length: 1002 }, (_, index) =>
+			msg(
+				`disk-${index}`,
+				index % 2 ? 'assistant' : 'user',
+				`message ${index}`,
+				new Date(index * 1000).toISOString()
+			)
+		);
+		const logs = transcriptMessagesToLogEntries(disk.slice(0, 1000));
+		patchStoredTab({ logs });
+		read.mockImplementation(async (_provider, _project, _id, options) => ({
+			messages: disk.slice(-options.limit),
+			total: disk.length,
+			hasMore: options.limit < disk.length,
+		}));
+
+		expect(
+			await refreshNativeConversation({ sessionId: 'maestro-owner', tabId: 'tab-native' })
+		).toEqual({ status: 'updated', added: 2 });
+		expect(read).toHaveBeenCalledTimes(1);
+		expect(read.mock.calls[0][3]).toMatchObject({ limit: 500, offset: 0, readOnly: true });
+		const after = storedTab()!;
+		expect(after.logs).toHaveLength(1002);
+		expect(after.logs.slice(0, logs.length).every((entry, index) => entry === logs[index])).toBe(
+			true
+		);
+		expect(after.inputValue).toBe('half-typed draft');
+		expect(after.agentSessionId).toBe(NATIVE);
+	});
+
+	it('widens past a tail containing only filtered desktop envelopes', async () => {
+		const conversation = Array.from({ length: 1002 }, (_, index) =>
+			msg(
+				`disk-${index}`,
+				index % 2 ? 'assistant' : 'user',
+				`message ${index}`,
+				new Date(index * 1000).toISOString()
+			)
+		);
+		const logs = transcriptMessagesToLogEntries(conversation.slice(0, 1000));
+		// The existing canonical converter filters this native app-shell shape.
+		// A nonempty adapter page can therefore have no visible entries.
+		const disk = [
+			...conversation,
+			...Array.from({ length: 500 }, (_, index) =>
+				msg(
+					`envelope-${index}`,
+					'user',
+					'<external_codex_apps_open_page>{"page_id":null}</external_codex_apps_open_page>',
+					new Date((1002 + index) * 1000).toISOString()
+				)
+			),
+		];
+		patchStoredTab({ logs });
+		read.mockImplementation(async (_provider, _project, _id, options) => ({
+			messages: disk.slice(-options.limit),
+			total: disk.length,
+			hasMore: options.limit < disk.length,
+		}));
+		expect(
+			await refreshNativeConversation({ sessionId: 'maestro-owner', tabId: 'tab-native' })
+		).toEqual({ status: 'updated', added: 2 });
+		expect(read.mock.calls.map((call) => call[3].limit)).toEqual([500, 1000]);
+		expect(storedTab()!.logs).toHaveLength(1002);
+		expect(
+			storedTab()!
+				.logs.slice(0, logs.length)
+				.every((entry, index) => entry === logs[index])
+		).toBe(true);
+	});
+
+	it('upgrades a tail tool result without rewriting older entries outside the read window', async () => {
+		// Same canonical tool and desktop-envelope shapes as transcriptNativeConversion.test.ts.
+		const envelope: LogEntry = {
+			id: 'old-envelope',
+			timestamp: 0,
+			source: 'user',
+			text: '<external_codex_apps_open_page>{"page_id":null}</external_codex_apps_open_page>',
+		};
+		const oldTool: LogEntry = {
+			id: 'old-tool',
+			timestamp: 0,
+			source: 'stdout',
+			text: 'Tool: exec_command',
+		};
+		const tool = (id: string, timestamp: string, completed: boolean) => ({
+			...msg(id, 'assistant', '', timestamp),
+			toolUse: [
+				{
+					tool: 'exec_command',
+					args: '{"cmd":"ls"}',
+					state: completed ? { status: 'completed', output: 'a' } : { status: 'running' },
+				},
+			],
+		});
+		const history = Array.from({ length: 600 }, (_, index) =>
+			msg(
+				`history-${index}`,
+				index % 2 ? 'assistant' : 'user',
+				`message ${index}`,
+				new Date((index + 1) * 1000).toISOString()
+			)
+		);
+		const toolTime = new Date(601000).toISOString();
+		const logs = [
+			envelope,
+			oldTool,
+			...transcriptMessagesToLogEntries([...history, tool('tail-tool', toolTime, false)]),
+		];
+		const disk = [
+			tool('old-tool', new Date(0).toISOString(), true),
+			...history,
+			tool('tail-tool', toolTime, true),
+			msg('external-user', 'user', 'external question', new Date(602000).toISOString()),
+			msg('external-answer', 'assistant', 'external answer', new Date(603000).toISOString()),
+		];
+		patchStoredTab({ logs });
+		read.mockImplementation(async (_provider, _project, _id, options) => ({
+			messages: disk.slice(-options.limit),
+			total: disk.length,
+			hasMore: options.limit < disk.length,
+		}));
+
+		expect(
+			await refreshNativeConversation({ sessionId: 'maestro-owner', tabId: 'tab-native' })
+		).toEqual({ status: 'updated', added: 2, upgraded: 1 });
+		const after = storedTab()!;
+		expect(after.logs).toHaveLength(logs.length + 2);
+		expect(after.logs.slice(0, -3).every((entry, index) => entry === logs[index])).toBe(true);
+		expect(after.logs[0]).toBe(envelope);
+		expect(after.logs[1]).toBe(oldTool);
+		expect(after.logs.find((entry) => entry.id === 'tail-tool')?.metadata?.toolState).toMatchObject(
+			{ status: 'completed', output: 'a' }
+		);
+		expect(after.inputValue).toBe('half-typed draft');
+	});
+
+	it('retains the old widening reach when a long untimed live tab needs its complete user sequence', async () => {
+		// Normalized adapter messages, matching the no-time Grok contract. More
+		// than 500 * 2^6 entries proves a tail probe must not reduce the old reach.
+		const disk = Array.from({ length: 40002 }, (_, index) =>
+			msg(`native-${index}`, index % 2 ? 'assistant' : 'user', `unique message ${index}`, '')
+		);
+		const logs = transcriptMessagesToLogEntries(disk.slice(0, 40000)).map((entry, index) => ({
+			...entry,
+			id: `local-${index}`,
+			timestamp: index * 1000,
+			nativeTranscript: undefined,
+		}));
+		patchStoredTab({ logs });
+		read.mockImplementation(async (_provider, _project, _id, options) => ({
+			messages: disk.slice(-options.limit),
+			total: disk.length,
+			hasMore: options.limit < disk.length,
+		}));
+		const target = { sessionId: 'maestro-owner', tabId: 'tab-native' };
+		expect(await refreshNativeConversation(target)).toEqual({ status: 'updated', added: 2 });
+		expect(read.mock.calls.map((call) => call[3].limit)).toEqual([500, 40000, 80000]);
+		expect(storedTab()!.logs).toHaveLength(40002);
+		expect(
+			storedTab()!
+				.logs.slice(0, logs.length)
+				.every((entry, index) => entry === logs[index])
+		).toBe(true);
+		expect(storedTab()!.logs.at(-1)?.text).toBe('unique message 40001');
+		read.mockClear();
+		expect(await refreshNativeConversation(target)).toEqual({ status: 'unchanged' });
+		expect(read.mock.calls.map((call) => call[3].limit)).toEqual([500]);
 	});
 
 	it('widens the window instead of leaving a gap when more than one window was written elsewhere', async () => {

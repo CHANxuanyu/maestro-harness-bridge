@@ -1347,6 +1347,7 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.transcript.toolFailed': '失败',
 	'workflows.transcript.toolCompleted': '完成',
 	'workflows.transcript.toolStopped': '已停止',
+	'workflows.transcript.toolUnknown': '结果未知',
 	'workflows.transcript.workedFor': '已处理 {duration}',
 	'workflows.transcript.worked': '已处理',
 	'workflows.transcript.showTurnActivity': '展开处理过程',

@@ -98,7 +98,9 @@ function parseToolArgs(value: unknown): unknown {
  * A stored status is only trusted when it says the call FINISHED. A transcript
  * is history: a call recorded as running/pending had its result written
  * elsewhere or never (an interrupted turn), and drawing it as running would
- * pulse forever on a conversation nothing is executing. Unknown stays unknown.
+ * pulse forever on a conversation nothing is executing. Unknown stays unknown:
+ * a provider that says so explicitly (Grok without its updates file) keeps
+ * `unknown`, which draws as neither a success nor a call still running.
  */
 const FINISHED_TOOL_STATUSES = new Set(['completed', 'complete', 'success', 'succeeded', 'done']);
 const FAILED_TOOL_STATUSES = new Set(['error', 'failed', 'failure']);
@@ -110,7 +112,7 @@ const FAILED_TOOL_STATUSES = new Set(['error', 'failed', 'failure']);
  */
 const CANCELED_TOOL_STATUSES = new Set(['canceled', 'cancelled', 'interrupted', 'aborted']);
 
-type HistoricToolStatus = 'completed' | 'error' | 'canceled';
+type HistoricToolStatus = 'completed' | 'error' | 'canceled' | 'unknown';
 
 function historicToolStatus(status: unknown): HistoricToolStatus | undefined {
 	if (typeof status !== 'string') return undefined;
@@ -118,6 +120,7 @@ function historicToolStatus(status: unknown): HistoricToolStatus | undefined {
 	if (FINISHED_TOOL_STATUSES.has(s)) return 'completed';
 	if (FAILED_TOOL_STATUSES.has(s)) return 'error';
 	if (CANCELED_TOOL_STATUSES.has(s)) return 'canceled';
+	if (s === 'unknown') return 'unknown';
 	return undefined;
 }
 

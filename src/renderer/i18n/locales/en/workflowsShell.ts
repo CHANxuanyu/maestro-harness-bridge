@@ -1420,6 +1420,7 @@ export const workflowsShell = {
 	'workflows.transcript.toolFailed': 'Failed',
 	'workflows.transcript.toolCompleted': 'Done',
 	'workflows.transcript.toolStopped': 'Stopped',
+	'workflows.transcript.toolUnknown': 'Result unknown',
 	'workflows.transcript.workedFor': 'Worked for {duration}',
 	'workflows.transcript.worked': 'Worked',
 	'workflows.transcript.showTurnActivity': 'Show what the agent did',

@@ -66,7 +66,9 @@ export function TurnActivityFold({
 					style={{ color: secondaryTextColor }}
 				>
 					<span>{label}</span>
-					{(activity.status === 'error' || activity.status === 'canceled') && (
+					{(activity.status === 'error' ||
+						activity.status === 'canceled' ||
+						activity.status === 'unknown') && (
 						<ToolStatusLabel theme={theme} kind={activity.status} />
 					)}
 					<ChevronRight

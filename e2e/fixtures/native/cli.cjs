@@ -63,6 +63,12 @@ async function run(provider) {
 		cwd,
 		id,
 		prompt,
+		// Claude Code 2.1.310: --model wins over ANTHROPIC_MODEL. DeepSeek's
+		// official integration uses [1m] as a Claude context hint; the gateway
+		// reports the underlying model ID (api-docs.deepseek.com/guides/anthropic_api/).
+		...(provider === 'claude' && (flagValue('--model') || process.env.ANTHROPIC_MODEL)
+			? { model: (flagValue('--model') || process.env.ANTHROPIC_MODEL).replace(/\[1m\]$/, '') }
+			: {}),
 		persist,
 		emit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
 	});

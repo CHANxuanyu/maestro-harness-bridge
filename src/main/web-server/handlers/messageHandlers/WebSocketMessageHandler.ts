@@ -469,6 +469,7 @@ export class WebSocketMessageHandler {
 				break;
 
 			case 'create_session':
+			case 'create_preset_session':
 				handleCreateSession(this.ctx, client, message);
 				break;
 

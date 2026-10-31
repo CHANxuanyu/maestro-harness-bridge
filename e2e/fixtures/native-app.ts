@@ -197,16 +197,19 @@ export class NativeApp {
 		await this.start();
 	}
 	async cli(...args: string[]) {
+		return this.cliWithEnv({}, ...args);
+	}
+	async cliWithEnv(env: Record<string, string>, ...args: string[]) {
 		const result = await exec(
 			process.execPath,
 			[path.resolve('dist/cli/maestro-cli.js'), ...args, '--json'],
-			{ env: { ...process.env, ...this.env } }
+			{ env: { ...process.env, ...this.env, ...env } }
 		);
 		return JSON.parse(result.stdout);
 	}
 	async createAgent(
 		provider: Provider,
-		options: { executable?: string; env?: Record<string, string> } = {}
+		options: { executable?: string; env?: Record<string, string>; preset?: 'deepseek' } = {}
 	) {
 		this.provider = provider;
 		const executable =
@@ -221,17 +224,25 @@ export class NativeApp {
 					MAESTRO_E2E_PROCESS: path.join(this.providerHome(provider), 'fixture-process'),
 				}
 			: {};
-		const result = await this.cli(
+		const presetKey =
+			this.real && process.env.MAESTRO_E2E_SMOKE !== '1'
+				? process.env.DEEPSEEK_API_KEY
+				: 'synthetic-deepseek-key';
+		if (options.preset && !presetKey)
+			throw new Error('DeepSeek acceptance requires DEEPSEEK_API_KEY');
+		const result = await this.cliWithEnv(
+			options.preset ? { DEEPSEEK_E2E_KEY: presetKey! } : {},
 			'create-agent',
-			`Native ${provider}`,
+			`Native ${options.preset ?? provider}`,
 			'--type',
 			provider === 'claude' ? 'claude-code' : provider === 'copilot' ? 'copilot-cli' : provider,
 			'--cwd',
 			this.project,
 			'--custom-path',
 			executable,
-			'--env',
-			`CLAUDE_CONFIG_DIR=${this.claude}`,
+			...(options.preset
+				? ['--preset', options.preset, '--api-key-env', 'DEEPSEEK_E2E_KEY']
+				: ['--env', `CLAUDE_CONFIG_DIR=${this.claude}`]),
 			'--env',
 			`CODEX_HOME=${this.codex}`,
 			'--env',
@@ -371,13 +382,13 @@ export class NativeApp {
 			await expect(panel).toContainText(entry.summary);
 		} else await expect(panel.getByText(expected, { exact: true }).first()).toBeVisible();
 	}
-	files(provider: Provider): string[] {
+	files(provider: Provider, configDir = this.providerHome(provider)): string[] {
 		if (provider === 'opencode') {
 			const file = path.join(this.opencode, 'opencode.db');
 			return fs.existsSync(file) ? [file] : [];
 		}
 		const dir = path.join(
-			this.providerHome(provider),
+			configDir,
 			provider === 'claude' ? 'projects' : provider === 'copilot' ? 'session-state' : 'sessions'
 		);
 		if (!fs.existsSync(dir)) return [];
@@ -393,9 +404,9 @@ export class NativeApp {
 			.map((name) => path.join(dir, String(name)))
 			.sort();
 	}
-	async oneTranscript(provider: Provider) {
-		await expect.poll(() => this.files(provider).length).toBe(1);
-		const file = this.files(provider)[0];
+	async oneTranscript(provider: Provider, configDir = this.providerHome(provider)) {
+		await expect.poll(() => this.files(provider, configDir).length).toBe(1);
+		const file = this.files(provider, configDir)[0];
 		if (provider === 'opencode') await expect.poll(() => openCodeSchemaReady(file)).toBe(true);
 		return file;
 	}

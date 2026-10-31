@@ -11,6 +11,7 @@ import { AGENT_IDS } from '../../../../shared/agentIds';
 import { readBackgroundField } from '../../../../shared/focusPlacement';
 import type { CreateSessionConfig } from '../../types';
 import type { WebClient, WebClientMessage, MessageHandlerContext } from './types';
+import { prepareDeepSeekPreset } from '../../../agents/deepseek-preset';
 
 /**
  * Known agent types for validation - derived from the canonical AGENT_IDS list.
@@ -42,11 +43,11 @@ export function handleGetSessions(ctx: MessageHandlerContext, client: WebClient)
 /**
  * Handle create_session message - create a new agent session
  */
-export function handleCreateSession(
+export async function handleCreateSession(
 	ctx: MessageHandlerContext,
 	client: WebClient,
 	message: WebClientMessage
-): void {
+): Promise<void> {
 	const name = message.name as string;
 	const toolType = message.toolType as string;
 	const cwd = message.cwd as string;
@@ -100,9 +101,36 @@ export function handleCreateSession(
 	}
 	// autoRunFolderPath can be set outside of the agent's cwd (no confinement needed)
 	if (message.autoRunFolderPath) config.autoRunFolderPath = message.autoRunFolderPath as string;
+	if (message.preset !== undefined || message.type === 'create_preset_session') {
+		try {
+			if (
+				message.preset !== 'deepseek' ||
+				toolType !== 'claude-code' ||
+				config.sessionSshRemoteConfig?.enabled ||
+				config.customArgs
+			) {
+				throw new Error('The DeepSeek preset requires local Claude Code without custom arguments');
+			}
+			const prepared = await prepareDeepSeekPreset({
+				apiKey: message.presetApiKey as string,
+				model: config.customModel,
+				customEnvVars: config.customEnvVars,
+			});
+			config.customModel = prepared.customModel;
+			config.customEnvVars = prepared.customEnvVars;
+		} catch (error) {
+			ctx.send(client, {
+				type: 'create_session_result',
+				success: false,
+				requestId: message.requestId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return;
+		}
+	}
 	const hasConfig = Object.keys(config).length > 0;
 
-	ctx.callbacks
+	await ctx.callbacks
 		.createSession(
 			name,
 			toolType,

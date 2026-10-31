@@ -4,15 +4,21 @@
 // without moving the Left Bar selection; the agent is still created and listed.
 
 import * as path from 'path';
+import { readFileSync } from 'node:fs';
 import { withMaestroClient } from '../services/maestro-client';
 import { formatError, formatSuccess } from '../output/formatter';
 import { AGENT_IDS } from '../../shared/agentIds';
 import { parseCliBool } from '../utils/parse';
 import { resolveBackgroundFlag } from '../../shared/focusPlacement';
+import { validateDeepSeekPreset } from '../../shared/agentPresets';
+import { failCommand } from '../services/session-command';
 
 const VALID_TYPES: Set<string> = new Set(AGENT_IDS.filter((id) => id !== 'terminal'));
 
 interface CreateAgentOptions {
+	preset?: string;
+	apiKeyEnv?: string;
+	apiKeyStdin?: boolean;
 	cwd: string;
 	type: string;
 	group?: string;
@@ -54,6 +60,8 @@ export async function createAgent(name: string, options: CreateAgentOptions): Pr
 		for (const entry of options.env) {
 			const eqIndex = entry.indexOf('=');
 			if (eqIndex === -1) {
+				if (options.preset)
+					return failCommand('Invalid --env format. Expected KEY=VALUE', options.json);
 				const msg = `Invalid --env format "${entry}". Expected KEY=VALUE`;
 				if (options.json) {
 					console.log(JSON.stringify({ success: false, error: msg }));
@@ -63,6 +71,33 @@ export async function createAgent(name: string, options: CreateAgentOptions): Pr
 				process.exit(1);
 			}
 			customEnvVars[entry.slice(0, eqIndex)] = entry.slice(eqIndex + 1);
+		}
+	}
+
+	// Read preset credentials without putting their value into CLI arguments.
+	let presetApiKey: string | undefined;
+	if (options.preset !== undefined || options.apiKeyEnv !== undefined || options.apiKeyStdin) {
+		try {
+			if (
+				options.preset !== 'deepseek' ||
+				options.type !== 'claude-code' ||
+				options.sshRemote ||
+				options.customArgs
+			) {
+				throw new Error('The DeepSeek preset requires local Claude Code without custom arguments');
+			}
+			if (Boolean(options.apiKeyEnv) === Boolean(options.apiKeyStdin)) {
+				throw new Error('Choose exactly one of --api-key-env or --api-key-stdin');
+			}
+			if (options.apiKeyEnv && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(options.apiKeyEnv)) {
+				throw new Error('--api-key-env takes an environment variable name, not a key');
+			}
+			presetApiKey = options.apiKeyStdin
+				? readFileSync(0, 'utf8').trim()
+				: (process.env[options.apiKeyEnv!] ?? '');
+			validateDeepSeekPreset({ apiKey: presetApiKey, model: options.model, customEnvVars });
+		} catch (error) {
+			return failCommand(error instanceof Error ? error.message : String(error), options.json);
 		}
 	}
 
@@ -129,7 +164,9 @@ export async function createAgent(name: string, options: CreateAgentOptions): Pr
 	// Build the WebSocket message payload
 	const background = resolveBackgroundFlag(options, 'create-agent');
 	const payload: Record<string, unknown> = {
-		type: 'create_session',
+		// An older desktop must reject an unknown preset command, rather than
+		// silently dropping its fields and creating a regular Claude agent.
+		type: options.preset ? 'create_preset_session' : 'create_session',
 		name,
 		toolType: options.type,
 		cwd,
@@ -138,6 +175,10 @@ export async function createAgent(name: string, options: CreateAgentOptions): Pr
 	};
 
 	// Add optional config fields
+	if (options.preset) {
+		payload.preset = options.preset;
+		payload.presetApiKey = presetApiKey;
+	}
 	if (options.nudge) payload.nudgeMessage = options.nudge;
 	if (options.newSessionMessage) payload.newSessionMessage = options.newSessionMessage;
 	if (options.customPath) payload.customPath = options.customPath;

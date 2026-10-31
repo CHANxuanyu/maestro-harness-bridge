@@ -12,6 +12,11 @@ and the Left Bar context menus (`src/renderer/components/SessionList/`). The
 authoritative CLI surface is `docs/cli-reference.md`, generated from the
 Commander tree by `npm run gen:cli-reference`.
 
+The HB DeepSeek preset (2026-10-31) adds `create-agent --preset deepseek` with
+`--api-key-env` or `--api-key-stdin`. Both CLI and the pending UI call the same
+main-process preparation service; account isolation, model catalog and the Opus
+handoff are recorded in [core-experience-contracts.md](../core-experience-contracts.md).
+
 ## Focus belongs to the human (`--background` / `--focus`)
 
 An agent may create a surface. It may not decide the human should be looking at

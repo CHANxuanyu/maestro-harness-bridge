@@ -48,6 +48,7 @@ export function AgentSessionsBrowser({
 		viewingSession,
 		messages,
 		messagesLoading,
+		messagesError,
 		hasMoreMessages,
 		totalMessages,
 		messagesContainerRef,
@@ -119,7 +120,7 @@ export function AgentSessionsBrowser({
 		hasMoreSessions,
 	});
 
-	const { searchResults, isSearching } = useAgentSessionsSearch({
+	const { searchResults, isSearching, searchError } = useAgentSessionsSearch({
 		search,
 		searchMode,
 		projectPathForSessions,
@@ -402,6 +403,7 @@ export function AgentSessionsBrowser({
 					<SessionMessagesView
 						messages={messages}
 						messagesLoading={messagesLoading}
+						messagesError={messagesError}
 						hasMoreMessages={hasMoreMessages}
 						theme={theme}
 						messagesContainerRef={messagesContainerRef}
@@ -476,6 +478,7 @@ export function AgentSessionsBrowser({
 						hasMoreSessions={hasMoreSessions}
 						totalSessionCount={totalSessionCount}
 						agentId={agentId}
+						accountUnavailable={searchError === 'account-unavailable'}
 						theme={theme}
 						sessionsContainerRef={sessionsContainerRef}
 						selectedItemRef={selectedItemRef}

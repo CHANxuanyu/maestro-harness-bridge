@@ -23,6 +23,7 @@ import * as accountDirs from '../../../../main/agents/provider-account-dirs';
 import os from 'os';
 import path from 'path';
 import { promises as realFs } from 'fs';
+import { ACCOUNT_UNAVAILABLE_MARKER } from '../../../../shared/accountUnavailableError';
 
 // Mock electron's ipcMain
 vi.mock('electron', () => ({
@@ -365,6 +366,67 @@ describe('agentSessions IPC handlers', () => {
 		});
 	});
 
+	describe('a missing selected account', () => {
+		const enoent = () => Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' });
+		let existing: string;
+		beforeEach(async () => {
+			existing = await realFs.mkdtemp(path.join(os.tmpdir(), 'maestro-account-'));
+		});
+		afterEach(async () => {
+			await realFs.rm(existing, { recursive: true, force: true });
+		});
+
+		it('rejects a read and a search with the account marker when the account dir is gone', async () => {
+			const storage = {
+				readSessionMessages: vi.fn().mockRejectedValue(enoent()),
+				searchSessions: vi.fn().mockRejectedValue(enoent()),
+			};
+			vi.mocked(agentSessionStorage.getSessionStorage).mockReturnValue(
+				storage as unknown as agentSessionStorage.AgentSessionStorage
+			);
+			const gone = path.join(existing, 'moved-away');
+			await expect(
+				handlers.get('agentSessions:read')!({}, 'codex', '/project', 'id', { configDir: gone })
+			).rejects.toThrow(ACCOUNT_UNAVAILABLE_MARKER);
+			await expect(
+				handlers.get('agentSessions:search')!({}, 'codex', '/project', 'q', 'all', undefined, {
+					configDir: gone,
+				})
+			).rejects.toThrow(ACCOUNT_UNAVAILABLE_MARKER);
+		});
+
+		it('keeps the original error when the account dir exists or the read is remote', async () => {
+			const storage = {
+				readSessionMessages: vi.fn().mockRejectedValue(enoent()),
+				searchSessions: vi.fn().mockRejectedValue(enoent()),
+			};
+			vi.mocked(agentSessionStorage.getSessionStorage).mockReturnValue(
+				storage as unknown as agentSessionStorage.AgentSessionStorage
+			);
+			// A deleted session file in a present account is not an account problem.
+			await expect(
+				handlers.get('agentSessions:read')!({}, 'codex', '/project', 'id', { configDir: existing })
+			).rejects.toThrow('ENOENT: no such file');
+			await expect(
+				handlers.get('agentSessions:search')!({}, 'codex', '/project', 'q', 'all', undefined, {
+					configDir: existing,
+				})
+			).rejects.toThrow('ENOENT: no such file');
+			// A remote account dir is a path on the other host: never probed here.
+			vi.mocked(getSshRemoteById).mockReturnValue({ id: 'ssh-1', enabled: true } as any);
+			await expect(
+				handlers.get('agentSessions:read')!(
+					{},
+					'codex',
+					'/project',
+					'id',
+					{ configDir: path.join(existing, 'moved-away') },
+					'ssh-1'
+				)
+			).rejects.toThrow('ENOENT: no such file');
+		});
+	});
+
 	describe('agentSessions:search', () => {
 		it('resolves the owning account and honors an explicit account without losing SSH', async () => {
 			const storage = { searchSessions: vi.fn().mockResolvedValue([]) };
@@ -411,6 +473,7 @@ describe('agentSessions IPC handlers', () => {
 				storage.searchSessions.mockRejectedValueOnce(
 					Object.assign(new Error('missing account'), { code: 'ENOENT' })
 				);
+				// '/selected' does not exist: the failure is the account, and says so.
 				await expect(
 					handlers.get('agentSessions:search')!(
 						{},
@@ -421,7 +484,7 @@ describe('agentSessions IPC handlers', () => {
 						undefined,
 						{ ownerAgentId: 'owner' }
 					)
-				).rejects.toThrow('missing account');
+				).rejects.toThrow(ACCOUNT_UNAVAILABLE_MARKER);
 			} finally {
 				resolve.mockRestore();
 			}

@@ -2303,6 +2303,39 @@ describe('MainPanel', () => {
 			});
 		});
 
+		it('should say an unknown duration was not recorded rather than leave it blank', async () => {
+			// Grok history stores no message times; persisted as JSON the NaN turns
+			// into null, so neither end of the span is known.
+			const session = createSession({
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'grok-1',
+						name: 'Tab 1',
+						isUnread: false,
+						createdAt: Date.now(),
+						logs: [
+							{ id: 'l1', timestamp: null as unknown as number, source: 'user', text: 'hi' },
+							{ id: 'l2', timestamp: Number.NaN, source: 'stdout', text: 'hello' },
+						],
+						usageStats: { contextWindow: 200000 },
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+
+			renderMainPanel({ activeSession: session });
+			fireEvent.mouseEnter(screen.getByTestId('header-context-widget'));
+
+			await waitFor(() => {
+				expect(screen.getByText('Duration')).toBeInTheDocument();
+			});
+			const value = screen.getByText('Duration').nextElementSibling as HTMLElement;
+			expect(value).toHaveTextContent('Not recorded');
+			expect(value).not.toHaveTextContent('0m');
+			expect(screen.getByText('2')).toBeInTheDocument();
+		});
+
 		it('should omit the conversation rows for a tab with no messages', async () => {
 			const session = createSession({
 				aiTabs: [

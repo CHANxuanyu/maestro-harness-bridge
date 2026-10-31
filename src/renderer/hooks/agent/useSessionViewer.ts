@@ -1,5 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useLayoutEffect } from 'react';
 import { logger } from '../../utils/logger';
+import { isAccountUnavailableError } from '../../../shared/accountUnavailableError';
 
 /**
  * Session message from Claude session JSONL files
@@ -56,6 +57,13 @@ export interface UseSessionViewerDeps {
 }
 
 /**
+ * Why the open session's messages could not be read. `account-unavailable`:
+ * the agent's selected account dir is missing, which is not the same as the
+ * session being empty.
+ */
+export type SessionReadError = 'account-unavailable' | 'failed';
+
+/**
  * Return type for useSessionViewer hook
  */
 export interface UseSessionViewerReturn {
@@ -65,6 +73,8 @@ export interface UseSessionViewerReturn {
 	messages: SessionMessage[];
 	/** Whether messages are currently loading */
 	messagesLoading: boolean;
+	/** Why the last read of the open session failed, or null */
+	messagesError: SessionReadError | null;
 	/** Whether there are more messages to load */
 	hasMoreMessages: boolean;
 	/** Total number of messages in the session */
@@ -125,8 +135,33 @@ export function useSessionViewer({
 	const [hasMoreMessages, setHasMoreMessages] = useState(false);
 	const [totalMessages, setTotalMessages] = useState(0);
 	const [messagesOffset, setMessagesOffset] = useState(0);
+	const [messagesError, setMessagesError] = useState<SessionReadError | null>(null);
 
 	const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+	// Bumped whenever what the preview shows is replaced (another session, the
+	// list, another agent or account), so a read that lands afterwards cannot
+	// paint the old session, its count or its error over the new one.
+	const generationRef = useRef(0);
+
+	// The agent, account, project and host the preview reads from. When it
+	// changes, the open session belongs to another account: close it rather than
+	// leave the previous account's transcript on screen. A layout effect, so the
+	// stale preview is never painted.
+	const scopeKey = [agentId, cwd ?? '', sshRemoteId ?? '', ownerAgentId ?? ''].join('\u0000');
+	const scopeRef = useRef(scopeKey);
+	useLayoutEffect(() => {
+		if (scopeRef.current === scopeKey) return;
+		scopeRef.current = scopeKey;
+		generationRef.current++;
+		setViewingSession(null);
+		setMessages([]);
+		setMessagesLoading(false);
+		setMessagesError(null);
+		setHasMoreMessages(false);
+		setTotalMessages(0);
+		setMessagesOffset(0);
+	}, [scopeKey]);
 
 	/**
 	 * Load messages for a session with pagination support
@@ -137,6 +172,7 @@ export function useSessionViewer({
 		async (session: AgentSession, offset: number = 0) => {
 			if (!cwd) return;
 
+			const generation = generationRef.current;
 			setMessagesLoading(true);
 			try {
 				// Use the generic agentSessions API with agentId parameter
@@ -148,6 +184,7 @@ export function useSessionViewer({
 					{ offset, limit: 20, ownerAgentId },
 					sshRemoteId
 				);
+				if (generation !== generationRef.current) return;
 
 				if (offset === 0) {
 					setMessages(result.messages);
@@ -166,9 +203,17 @@ export function useSessionViewer({
 				setHasMoreMessages(result.hasMore);
 				setMessagesOffset(offset + result.messages.length);
 			} catch (error) {
-				logger.error('Failed to load messages:', undefined, error);
+				if (generation !== generationRef.current) return;
+				// A missing account is an expected state with its own message, not a
+				// crash to report.
+				if (isAccountUnavailableError(error)) {
+					setMessagesError('account-unavailable');
+				} else {
+					logger.error('Failed to load messages:', undefined, error);
+					setMessagesError('failed');
+				}
 			} finally {
-				setMessagesLoading(false);
+				if (generation === generationRef.current) setMessagesLoading(false);
 			}
 		},
 		[cwd, agentId, sshRemoteId, ownerAgentId]
@@ -179,9 +224,11 @@ export function useSessionViewer({
 	 */
 	const handleViewSession = useCallback(
 		(session: AgentSession) => {
+			generationRef.current++;
 			setViewingSession(session);
 			setMessages([]);
 			setMessagesOffset(0);
+			setMessagesError(null);
 			loadMessages(session, 0);
 		},
 		[loadMessages]
@@ -222,14 +269,18 @@ export function useSessionViewer({
 	 * Clear viewing session and return to list view
 	 */
 	const clearViewingSession = useCallback(() => {
+		generationRef.current++;
 		setViewingSession(null);
 		setMessages([]);
+		setMessagesLoading(false);
+		setMessagesError(null);
 	}, []);
 
 	return {
 		viewingSession,
 		messages,
 		messagesLoading,
+		messagesError,
 		hasMoreMessages,
 		totalMessages,
 		messagesOffset,

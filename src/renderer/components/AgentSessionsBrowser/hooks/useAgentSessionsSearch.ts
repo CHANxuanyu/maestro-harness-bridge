@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { logger } from '../../../utils/logger';
 import { captureException } from '../../../utils/sentry';
+import { isAccountUnavailableError } from '../../../../shared/accountUnavailableError';
 import type { SearchMode, SearchResult } from '../types';
 
 interface UseAgentSessionsSearchArgs {
@@ -22,9 +23,12 @@ export function useAgentSessionsSearch({
 }: UseAgentSessionsSearchArgs): {
 	searchResults: SearchResult[];
 	isSearching: boolean;
+	/** The agent's selected account could not be read, so no results is not "no matches". */
+	searchError: 'account-unavailable' | null;
 } {
 	const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 	const [isSearching, setIsSearching] = useState(false);
+	const [searchError, setSearchError] = useState<'account-unavailable' | null>(null);
 	const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 	useEffect(() => {
@@ -36,6 +40,7 @@ export function useAgentSessionsSearch({
 		if (searchMode === 'title' || !search.trim()) {
 			setSearchResults([]);
 			setIsSearching(false);
+			setSearchError(null);
 			return;
 		}
 
@@ -60,8 +65,16 @@ export function useAgentSessionsSearch({
 				);
 				if (!active) return;
 				setSearchResults(results);
+				setSearchError(null);
 			} catch (error) {
 				if (!active) return;
+				setSearchResults([]);
+				// A missing account is an expected state with its own message.
+				if (isAccountUnavailableError(error)) {
+					setSearchError('account-unavailable');
+					return;
+				}
+				setSearchError(null);
 				logger.error('Search failed:', undefined, error);
 				captureException(error, {
 					extra: { fn: 'useAgentSessionsSearch', agentId, projectPathForSessions },
@@ -80,5 +93,5 @@ export function useAgentSessionsSearch({
 		};
 	}, [search, searchMode, projectPathForSessions, agentId, sshRemoteId, ownerAgentId]);
 
-	return { searchResults, isSearching };
+	return { searchResults, isSearching, searchError };
 }

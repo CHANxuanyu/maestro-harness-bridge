@@ -50,6 +50,7 @@ import type {
 import type { GlobalAgentStats, ProviderStats, SshRemoteConfig } from '../../../shared/types';
 import { captureException } from '../../utils/sentry';
 import { isExpectedSessionReadError } from '../../utils/session-read-errors';
+import { accountUnavailableError } from '../../../shared/accountUnavailableError';
 import {
 	snapshotStarredTranscript,
 	releaseTranscriptMirror,
@@ -75,6 +76,28 @@ import type { ProjectHistoryScope } from '../../../shared/projectHistory';
 export type { GlobalAgentStats, ProviderStats };
 
 const LOG_CONTEXT = '[AgentSessions]';
+
+/**
+ * Re-throw a failed read or search of the agent's selected account. When the
+ * account dir itself is gone, say so with the marker the session browser
+ * recognizes, so it is not shown as an account with no matching sessions.
+ * Anything else (a deleted session file in a present account) keeps its own
+ * error. A remote account dir is a path on the other host and is not probed.
+ */
+async function rethrowSessionReadError(
+	error: unknown,
+	configDir: string | undefined,
+	sshConfig: SshRemoteConfig | undefined
+): Promise<never> {
+	if (configDir && !sshConfig) {
+		const present = await fs.access(configDir).then(
+			() => true,
+			() => false
+		);
+		if (!present) throw accountUnavailableError();
+	}
+	throw error;
+}
 
 /**
  * Re-exported so existing importers keep resolving from here. The definition
@@ -498,12 +521,9 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 					await restoreStarredTranscript({ agentId, projectPath, sessionId });
 				}
 
-				const result = await storage.readSessionMessages(
-					projectPath,
-					sessionId,
-					readOptions,
-					sshConfig
-				);
+				const result = await storage
+					.readSessionMessages(projectPath, sessionId, readOptions, sshConfig)
+					.catch((error: unknown) => rethrowSessionReadError(error, configDir, sshConfig));
 				logger.info(
 					`Read ${result.messages.length} messages for session ${sessionId} (agent: ${agentId})${sshRemoteId ? ' (remote via SSH)' : ''}`,
 					LOG_CONTEXT
@@ -565,13 +585,9 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 				const configDir =
 					options?.configDir ??
 					(options?.ownerAgentId ? resolveAgentAccountDir(options.ownerAgentId) : undefined);
-				const results = await storage.searchSessions(
-					projectPath,
-					query,
-					searchMode,
-					sshConfig,
-					configDir
-				);
+				const results = await storage
+					.searchSessions(projectPath, query, searchMode, sshConfig, configDir)
+					.catch((error: unknown) => rethrowSessionReadError(error, configDir, sshConfig));
 				logger.info(
 					`Found ${results.length} matching sessions for query "${query}" (agent: ${agentId})${sshRemoteId ? ' (remote via SSH)' : ''}`,
 					LOG_CONTEXT

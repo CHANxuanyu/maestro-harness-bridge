@@ -236,6 +236,10 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 		() => (contextDetailsVisible ? computeTabConversationStats(activeTab?.logs) : null),
 		[contextDetailsVisible, activeTab?.logs]
 	);
+	// Undefined when either end of the span has no stored time (Grok history).
+	const conversationDuration = conversationStats
+		? formatConversationDuration(conversationStats.durationMs)
+		: undefined;
 
 	// The git menu opens on hover. The open delay keeps it from popping up while
 	// the pointer merely crosses the header on its way somewhere else; the close
@@ -766,12 +770,20 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 														<span className="text-xs" style={{ color: theme.colors.textDim }}>
 															{t('workflows.shell.duration')}
 														</span>
-														<span
-															className="text-xs font-mono"
-															style={{ color: theme.colors.textMain }}
-														>
-															{formatConversationDuration(conversationStats.durationMs)}
-														</span>
+														{/* Unknown when the provider stores no message
+														    times (Grok): say so, never draw it as 0m. */}
+														{conversationDuration !== undefined ? (
+															<span
+																className="text-xs font-mono"
+																style={{ color: theme.colors.textMain }}
+															>
+																{conversationDuration}
+															</span>
+														) : (
+															<span className="text-xs" style={{ color: theme.colors.textDim }}>
+																{t('workflows.transcript.infoNotRecorded')}
+															</span>
+														)}
 													</div>
 												</div>
 											)}

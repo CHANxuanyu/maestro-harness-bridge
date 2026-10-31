@@ -167,6 +167,14 @@ describe('shared/formatters', () => {
 	// formatRelativeTime tests
 	// ==========================================================================
 	describe('formatRelativeTime', () => {
+		it.each([null, NaN, Infinity, -Infinity, 8.64e15 + 1, '', 'not-a-date', new Date(NaN)])(
+			'keeps invalid input %s non-throwing like formatTimestamp',
+			(input) => {
+				expect(formatRelativeTime(input)).toBe('Invalid Date');
+				expect(formatRelativeTime(input, { includeSeconds: true })).toBe('Invalid Date');
+			}
+		);
+
 		const now = Date.now();
 
 		it('should format just now for < 1 minute', () => {

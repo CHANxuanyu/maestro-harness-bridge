@@ -1274,6 +1274,18 @@ describe('formatter', () => {
 			},
 		];
 
+		it('omits an unknown duration while retaining the session and message count', () => {
+			const result = formatSessions(
+				[{ ...mockSessions[0], durationSeconds: undefined }],
+				'Test Agent',
+				1,
+				1
+			);
+			expect(result).toContain(`${mockSessions[0].messageCount} msgs`);
+			expect(result).toContain(mockSessions[0].sessionId);
+			expect(result).not.toMatch(/NaN|undefined|\b\d+(?:\.\d+)?[smh]\b/);
+		});
+
 		it('should format sessions with agent name and count info', () => {
 			const result = formatSessions(mockSessions, 'Test Agent', 10, 10);
 			expect(result).toContain('SESSIONS');

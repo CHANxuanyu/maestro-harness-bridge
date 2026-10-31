@@ -675,7 +675,7 @@ export interface SessionDisplay {
 	firstMessage: string;
 	messageCount: number;
 	costUsd: number;
-	durationSeconds: number;
+	durationSeconds?: number;
 	starred?: boolean;
 }
 
@@ -709,7 +709,9 @@ export function formatSessions(
 		const cost = session.costUsd > 0 ? c('yellow', `$${session.costUsd.toFixed(4)}`) : dim('$0');
 		const msgs = dim(`${session.messageCount} msgs`);
 		const dur =
-			session.durationSeconds > 0 ? dim(formatDurationSeconds(session.durationSeconds)) : '';
+			session.durationSeconds !== undefined && session.durationSeconds > 0
+				? dim(formatDurationSeconds(session.durationSeconds))
+				: '';
 		const preview = session.firstMessage
 			? dim(truncate(session.firstMessage.replace(/\n/g, ' '), 70))
 			: '';

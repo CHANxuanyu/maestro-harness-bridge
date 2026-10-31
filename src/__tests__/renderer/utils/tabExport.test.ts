@@ -392,6 +392,21 @@ describe('tabExport', () => {
 		});
 
 		describe('duration calculation', () => {
+			it.each([false, true])('omits an unknown duration after JSON persistence=%s', (persisted) => {
+				const tab = createMockTab({
+					logs: [
+						createLogEntry({ source: 'user', text: 'Untimed request', timestamp: NaN }),
+						createLogEntry({ source: 'ai', text: 'Untimed answer', timestamp: NaN }),
+					],
+				});
+				if (persisted) tab.logs = JSON.parse(JSON.stringify(tab.logs));
+				const html = generateTabExportHtml(tab, mockSession, mockTheme);
+				expect(html).not.toContain('<div class="stat-value">0m</div>');
+				expect(html).not.toContain('<div class="stat-label">Duration</div>');
+				expect(html).not.toMatch(/Invalid Date|NaN|undefined/);
+				expect(html).toContain('<div class="stat-value">2</div>');
+			});
+
 			it('shows 0m for fewer than 2 log entries', () => {
 				const tab = createMockTab({
 					logs: [createLogEntry({ source: 'user', text: 'Alone' })],
@@ -846,6 +861,28 @@ describe('tabExport', () => {
 
 				expect(html).toContain('class="messages"');
 			});
+
+			it.each([false, true])(
+				'omits invalid message times after JSON persistence=%s',
+				(persisted) => {
+					const tab = createMockTab({
+						logs: [
+							createLogEntry({ id: 'untimed', text: 'Untimed native answer', timestamp: NaN }),
+							createLogEntry({
+								id: 'timed',
+								text: 'Timed native answer',
+								timestamp: 1703116800000,
+							}),
+						],
+					});
+					if (persisted) tab.logs = JSON.parse(JSON.stringify(tab.logs));
+					const html = generateTabExportHtml(tab, mockSession, mockTheme);
+					expect(html).not.toContain('Invalid Date');
+					expect(html.match(/class="message-time"/g)).toHaveLength(1);
+					expect(html).toContain('Untimed native answer');
+					expect(html).toContain('Timed native answer');
+				}
+			);
 
 			it('includes message timestamps', () => {
 				const tab = createMockTab({

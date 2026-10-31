@@ -24,7 +24,7 @@ import { formatDurationCompact } from './formatters';
  * back, so nothing is lost on the way through.
  */
 export interface ConversationLogEntry {
-	timestamp: number;
+	timestamp?: number | null;
 	source: string;
 }
 
@@ -57,8 +57,8 @@ export interface TabConversationStats<T extends ConversationLogEntry> {
 	userMessages: number;
 	/** Entries the agent produced as prose (`ai` / `stdout`). */
 	aiMessages: number;
-	/** Wall clock between the first and last entry. Zero below two entries. */
-	durationMs: number;
+	/** Span between known endpoints; undefined when unknown, zero for an empty conversation. */
+	durationMs: number | undefined;
 }
 
 /**
@@ -71,6 +71,8 @@ export function computeTabConversationStats<T extends ConversationLogEntry>(
 	logs: readonly T[] | undefined
 ): TabConversationStats<T> {
 	const relevantLogs = (logs ?? []).filter((log) => CONVERSATION_LOG_SOURCES.has(log.source));
+	// JSON stores an untimed native NaN as null. Neither null nor a missing time is the epoch.
+	const durationMs = (relevantLogs.at(-1)?.timestamp ?? NaN) - (relevantLogs[0]?.timestamp ?? NaN);
 
 	return {
 		logs: relevantLogs,
@@ -78,13 +80,19 @@ export function computeTabConversationStats<T extends ConversationLogEntry>(
 		userMessages: relevantLogs.filter((l) => l.source === 'user').length,
 		aiMessages: relevantLogs.filter((l) => l.source === 'ai' || l.source === 'stdout').length,
 		durationMs:
-			relevantLogs.length < 2
+			relevantLogs.length === 0
 				? 0
-				: relevantLogs[relevantLogs.length - 1].timestamp - relevantLogs[0].timestamp,
+				: Number.isFinite(durationMs) && durationMs >= 0
+					? durationMs
+					: undefined,
 	};
 }
 
 /** Render a conversation span the way the export does, including the zero case. */
-export function formatConversationDuration(durationMs: number): string {
+export function formatConversationDuration(
+	durationMs: number | null | undefined
+): string | undefined {
+	if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs < 0)
+		return undefined;
 	return durationMs > 0 ? formatDurationCompact(durationMs) : '0m';
 }

@@ -50,14 +50,14 @@ interface StoredAiTab {
 		inputTokens?: number;
 		outputTokens?: number;
 	};
-	logs?: Array<{ text?: string; source?: string; timestamp?: number }>;
+	logs?: Array<{ text?: string; source?: string; timestamp?: number | null }>;
 	state?: string;
 }
 
 /** Conversation figures in the shape `SessionDisplay` wants them. */
 interface TabSessionStats {
 	messageCount: number;
-	durationSeconds: number;
+	durationSeconds?: number;
 }
 
 function readAgentTabs(agentId: string): StoredAiTab[] {
@@ -66,22 +66,22 @@ function readAgentTabs(agentId: string): StoredAiTab[] {
 }
 
 /**
- * Count one stored tab's conversation with the shared helper.
- *
- * The narrowing is not ceremony: these logs come straight off disk, so an entry
- * missing a source or a timestamp is possible and would otherwise be counted as
- * a message that happened at the epoch.
+ * Count stored conversation messages even when their native timestamps are unknown.
+ * The shared helper keeps an unknown span distinct from a real zero duration.
  */
 function statsForTab(tab: StoredAiTab): TabSessionStats {
 	const conversation = computeTabConversationStats(
 		(tab.logs ?? []).filter(
-			(l): l is { text?: string; source: string; timestamp: number } =>
-				typeof l.source === 'string' && typeof l.timestamp === 'number'
+			(l): l is { text?: string; source: string; timestamp?: number | null } =>
+				typeof l.source === 'string'
 		)
 	);
 	return {
 		messageCount: conversation.totalMessages,
-		durationSeconds: Math.floor(conversation.durationMs / 1000),
+		durationSeconds:
+			conversation.durationMs === undefined
+				? undefined
+				: Math.floor(conversation.durationMs / 1000),
 	};
 }
 

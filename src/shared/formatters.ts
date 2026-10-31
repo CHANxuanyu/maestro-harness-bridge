@@ -189,15 +189,17 @@ export function formatTokensCompact(tokens: number): string {
  * Format a date/timestamp as relative time (e.g., "just now", "5m ago", "2h ago").
  * Accepts either a timestamp (number of milliseconds) or a date string.
  *
- * @param dateOrTimestamp - Either a Date object, timestamp in milliseconds, or ISO date string
+ * @param dateOrTimestamp - A Date, millisecond timestamp, ISO date string, or null for unknown time
  * @param options - Optional formatting options
  * @param options.includeSeconds - When true, sub-minute durations render as "Ns ago" instead of "just now"
  * @returns Relative time string (e.g., "just now", "5m ago", "3d ago", or localized date)
  */
 export function formatRelativeTime(
-	dateOrTimestamp: Date | number | string,
+	dateOrTimestamp: Date | number | string | null,
 	options?: { includeSeconds?: boolean }
 ): string {
+	// JSON persists an unknown native NaN timestamp as null, not the Unix epoch.
+	if (dateOrTimestamp === null) return 'Invalid Date';
 	let timestamp: number;
 
 	if (typeof dateOrTimestamp === 'number') {
@@ -207,6 +209,9 @@ export function formatRelativeTime(
 	} else {
 		timestamp = dateOrTimestamp.getTime();
 	}
+
+	const date = new Date(timestamp);
+	if (Number.isNaN(date.getTime())) return 'Invalid Date';
 
 	const now = Date.now();
 	const diffMs = now - timestamp;
@@ -225,7 +230,7 @@ export function formatRelativeTime(
 	if (diffHours < 24) return `${diffHours}h ago`;
 	if (diffDays < 7) return `${diffDays}d ago`;
 	// Show compact date format (e.g., "Dec 3") for older dates
-	return dtfUsMonthDay().format(new Date(timestamp));
+	return dtfUsMonthDay().format(date);
 }
 
 /**

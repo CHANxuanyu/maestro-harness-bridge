@@ -227,6 +227,11 @@ import type { WebUserPublic } from '../shared/webLogin';
 interface MaestroAPI {
 	// Context merging API (for session context transfer and grooming)
 	context: {
+		handoff: import('../main/preload/context').ContextApi['handoff'];
+		handoffTargets: import('../main/preload/context').ContextApi['handoffTargets'];
+		onHandoffReadSource: import('../main/preload/context').ContextApi['onHandoffReadSource'];
+		onHandoffOpenTarget: import('../main/preload/context').ContextApi['onHandoffOpenTarget'];
+		sendHandoffResponse: import('../main/preload/context').ContextApi['sendHandoffResponse'];
 		getStoredSession: (
 			agentId: string,
 			projectRoot: string,
@@ -1787,6 +1792,8 @@ interface MaestroAPI {
 		deleteUser: (id: string) => Promise<void>;
 	};
 	agents: {
+		getPresets: import('../main/preload/agents').AgentsApi['getPresets'];
+		prepareDeepSeekPreset: import('../main/preload/agents').AgentsApi['prepareDeepSeekPreset'];
 		detect: (sshRemoteId?: string) => Promise<AgentConfig[]>;
 		refresh: (
 			agentId?: string,

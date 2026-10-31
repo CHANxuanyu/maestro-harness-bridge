@@ -3,6 +3,7 @@
  * that tool calls are properly parsed with toolUse for ToolCallCard rendering.
  */
 import path from 'path';
+import { embedSystemPromptInPrompt } from '../../../shared/embeddedSystemPrompt';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock Electron app
@@ -294,6 +295,36 @@ describe('CodexSessionStorage - readSessionMessages', () => {
 		const result = await storage.readSessionMessages('/repo', 'native');
 		expect(result.messages).toHaveLength(1);
 		expect(result.messages[0]).toMatchObject({ content: 'My real request', uuid: 'codex-msg-2' });
+	});
+
+	it('retains the first handoff request inside the canonical Maestro system envelope', async () => {
+		vi.spyOn(storage as any, 'findSessionFile').mockResolvedValue('/native.jsonl');
+		const prompt = '# Handoff\nSource: Claude\n\nUser:\nContinue the parser repair.';
+		const wrapped = embedSystemPromptInPrompt(
+			'# Maestro System Context\nPrivate conductor profile.',
+			prompt
+		);
+		// The envelope is the existing Maestro spawn contract; the outer event
+		// is the pinned Codex response_item/message format used above.
+		const content = JSON.stringify({
+			type: 'response_item',
+			payload: {
+				type: 'message',
+				role: 'user',
+				content: [{ type: 'input_text', text: wrapped }],
+			},
+		});
+		vi.mocked(fs.readFile).mockResolvedValue(content);
+		const result = await storage.readSessionMessages('/repo', 'native');
+		// The canonical renderer reader strips exactly once. Keep the native
+		// content here so user-quoted separators cannot be stripped twice.
+		expect(result.messages).toEqual([
+			expect.objectContaining({
+				role: 'user',
+				content: wrapped,
+				uuid: 'codex-msg-0',
+			}),
+		]);
 	});
 
 	it('should parse function_call entries with toolUse', async () => {

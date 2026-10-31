@@ -118,6 +118,7 @@ export interface LiveSessionInfo {
  * Callbacks required by the message handler
  */
 export interface MessageHandlerCallbacks {
+	handoffCommand?: import('../../../../shared/aiHandoff').HandoffCommandCallback;
 	getSessionDetail: (sessionId: string) => SessionDetailForHandler | null;
 	/**
 	 * The live Auto Run state the desktop last broadcast for an agent (what the

@@ -116,7 +116,7 @@ it('an external CLI failure also ends the workload it left in its process group'
 					files: () => [],
 					externalCount: 0,
 					externalProcesses: new Map(),
-					realCli: { executable },
+					realCliFor: () => ({ executable }),
 					env: { WORKLOAD_PID: pidFile },
 				} as any,
 				'claude',

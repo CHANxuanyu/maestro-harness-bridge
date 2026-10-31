@@ -208,6 +208,11 @@ if (typeof window !== 'undefined') {
 
 // Mock window.maestro API (Electron IPC bridge)
 const mockMaestro = {
+	context: {
+		onHandoffReadSource: vi.fn().mockReturnValue(() => {}),
+		onHandoffOpenTarget: vi.fn().mockReturnValue(() => {}),
+		sendHandoffResponse: vi.fn(),
+	},
 	settings: {
 		get: vi.fn().mockResolvedValue(undefined),
 		set: vi.fn().mockResolvedValue(undefined),
@@ -215,6 +220,7 @@ const mockMaestro = {
 		onExternalChange: vi.fn().mockReturnValue(() => {}),
 	},
 	sessions: {
+		getDeferredContent: vi.fn().mockResolvedValue({}),
 		get: vi.fn().mockResolvedValue([]),
 		save: vi.fn().mockResolvedValue(undefined),
 		setAll: vi.fn().mockResolvedValue(undefined),

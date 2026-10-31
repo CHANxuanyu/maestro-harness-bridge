@@ -64,6 +64,8 @@
  * them to change behaviour, which is the thing this table exists to prevent.
  */
 export const CLI_BACKGROUND_DEFAULTS = {
+	/** Handoffs prepare a draft; --focus opens it for review. */
+	handoff: true,
 	/** maestro-cli open-file - focuses today. */
 	'open-file': false,
 	/** maestro-cli open-terminal - focuses today. */

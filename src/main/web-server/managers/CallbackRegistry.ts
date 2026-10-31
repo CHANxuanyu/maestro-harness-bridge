@@ -12,6 +12,11 @@ import type {
 
 import { logger } from '../../utils/logger';
 import type {
+	HandoffCommandCallback,
+	HandoffCommand,
+	HandoffCommandResult,
+} from '../../../shared/aiHandoff';
+import type {
 	GetSessionsCallback,
 	GetSessionDetailCallback,
 	WriteToSessionCallback,
@@ -256,6 +261,7 @@ export interface WebServerCallbacks {
 	sendGroupChatMessage: SendGroupChatMessageCallback | null;
 	mergeContext: MergeContextCallback | null;
 	transferContext: TransferContextCallback | null;
+	handoffCommand: HandoffCommandCallback | null;
 	summarizeContext: SummarizeContextCallback | null;
 	createGist: CreateGistCallback | null;
 	getCueSubscriptions: GetCueSubscriptionsCallback | null;
@@ -363,6 +369,7 @@ export class CallbackRegistry {
 		sendGroupChatMessage: null,
 		mergeContext: null,
 		transferContext: null,
+		handoffCommand: null,
 		summarizeContext: null,
 		createGist: null,
 		getCueSubscriptions: null,
@@ -958,6 +965,11 @@ export class CallbackRegistry {
 		if (!this.callbacks.transferContext) return false;
 		return this.callbacks.transferContext(sourceSessionId, targetSessionId);
 	}
+	async handoffCommand(request: HandoffCommand): Promise<HandoffCommandResult> {
+		if (!this.callbacks.handoffCommand)
+			return { success: false, error: 'AI handoff is not configured', code: 'unavailable' };
+		return this.callbacks.handoffCommand(request);
+	}
 
 	async summarizeContext(sessionId: string): Promise<boolean> {
 		if (!this.callbacks.summarizeContext) return false;
@@ -1443,6 +1455,9 @@ export class CallbackRegistry {
 
 	setTransferContextCallback(callback: TransferContextCallback): void {
 		this.callbacks.transferContext = callback;
+	}
+	setHandoffCommandCallback(callback: HandoffCommandCallback): void {
+		this.callbacks.handoffCommand = callback;
 	}
 
 	setSummarizeContextCallback(callback: SummarizeContextCallback): void {

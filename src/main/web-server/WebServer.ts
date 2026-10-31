@@ -36,6 +36,7 @@ import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { randomUUID } from 'crypto';
+import type { HandoffCommandCallback, HandoffCommand } from '../../shared/aiHandoff';
 import path from 'path';
 import { existsSync } from 'fs';
 import { logger } from '../utils/logger';
@@ -838,6 +839,10 @@ export class WebServer {
 		this.callbackRegistry.setMergeContextCallback(callback);
 	}
 
+	setHandoffCommandCallback(callback: HandoffCommandCallback): void {
+		this.callbackRegistry.setHandoffCommandCallback(callback);
+	}
+
 	setTransferContextCallback(callback: TransferContextCallback): void {
 		this.callbackRegistry.setTransferContextCallback(callback);
 	}
@@ -1345,6 +1350,7 @@ export class WebServer {
 				this.callbackRegistry.sendGroupChatMessage(chatId, message),
 			mergeContext: async (sourceSessionId: string, targetSessionId: string) =>
 				this.callbackRegistry.mergeContext(sourceSessionId, targetSessionId),
+			handoffCommand: (request: HandoffCommand) => this.callbackRegistry.handoffCommand(request),
 			transferContext: async (sourceSessionId: string, targetSessionId: string) =>
 				this.callbackRegistry.transferContext(sourceSessionId, targetSessionId),
 			summarizeContext: async (sessionId: string) =>

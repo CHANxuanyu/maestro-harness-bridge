@@ -113,7 +113,7 @@ export async function realExternalTurn(
 									...(id ? ['resume', id] : []),
 								];
 	const child = spawn(
-		native.realCli!.executable,
+		native.realCliFor(provider).executable,
 		[
 			...args,
 			provider === 'grok' || provider === 'copilot' ? '-p' : '--',

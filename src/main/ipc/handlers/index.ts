@@ -194,6 +194,7 @@ export type { MaestroSettings, SessionsData, GroupsData };
  * Dependencies required for handler registration
  */
 export interface HandlerDependencies {
+	aiHandoff?: import('../../ai-handoff').AiHandoffService;
 	mainWindow: BrowserWindow | null;
 	getMainWindow: () => BrowserWindow | null;
 	app: App;
@@ -308,6 +309,7 @@ export function registerAllHandlers(deps: HandlerDependencies): void {
 	// Register BMAD handlers (no dependencies needed)
 	registerBmadHandlers();
 	registerContextHandlers({
+		aiHandoff: deps.aiHandoff,
 		getMainWindow: deps.getMainWindow,
 		getProcessManager: deps.getProcessManager,
 		getAgentDetector: deps.getAgentDetector,

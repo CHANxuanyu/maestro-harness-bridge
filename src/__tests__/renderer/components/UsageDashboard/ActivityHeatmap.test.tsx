@@ -11,7 +11,7 @@
  * - Applies theme colors correctly
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { ActivityHeatmap } from '../../../../renderer/components/UsageDashboard/ActivityHeatmap';
@@ -311,8 +311,16 @@ function printedDayLabels(container: HTMLElement): string[] {
 }
 
 describe('ActivityHeatmap day labels', () => {
+	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		// The grid follows today, not the data. Keep Dec 1 inside the 30-day
+		// window and off the narrow grid's regular label stride.
+		vi.setSystemTime(new Date(2024, 11, 20, 12));
+	});
+
 	afterEach(() => {
 		vi.mocked(useElementWidth).mockReturnValue(0);
+		vi.useRealTimers();
 	});
 
 	it('labels every column when each one has room', () => {
@@ -333,9 +341,22 @@ describe('ActivityHeatmap day labels', () => {
 		const labels = printedDayLabels(container);
 		expect(labels.length).toBeGreaterThan(1);
 		expect(labels.length).toBeLessThan(30);
-		// The month boundary is the one label kept off-stride. The grid is built
-		// from today rather than from the data, so assert on its SHAPE (a month
-		// abbreviation among day numbers) instead of naming a month.
+		// The month boundary is kept even though it falls off the regular stride.
 		expect(labels.filter((text) => !/^\d+$/.test(text)).length).toBeGreaterThanOrEqual(1);
+		expect(labels).toContain('Dec');
+	});
+
+	it('thins a 30-day window without inventing a month boundary', () => {
+		// Oct 2 through Oct 31 contains no first-of-month date.
+		vi.setSystemTime(new Date(2026, 9, 31, 12));
+		vi.mocked(useElementWidth).mockReturnValue(270);
+		const { container } = render(
+			<ActivityHeatmap data={monthData()} timeRange="month" theme={theme} />
+		);
+
+		const labels = printedDayLabels(container);
+		expect(labels.length).toBeGreaterThan(1);
+		expect(labels.length).toBeLessThan(30);
+		expect(labels.filter((text) => !/^\d+$/.test(text))).toEqual([]);
 	});
 });

@@ -75,12 +75,48 @@ describe('computeTabConversationStats', () => {
 		expect(stats.durationMs).toBe(60_000);
 	});
 
+	it.each([
+		['missing first time', [log('user', NaN), log('ai', 1000)]],
+		['missing last time', [log('user', 0), log('ai', NaN)]],
+		['single untimed message', [log('user', NaN)]],
+		['missing timestamp field', [{ source: 'user' }]],
+		[
+			'JSON persisted untimed messages',
+			JSON.parse(JSON.stringify([log('user', NaN), log('ai', NaN)])),
+		],
+		['backward span', [log('user', 1000), log('ai', 0)]],
+	] as const)('keeps %s unknown without dropping messages', (_name, entries) => {
+		const stats = computeTabConversationStats(entries);
+		expect(stats.durationMs).toBeUndefined();
+		expect(stats.totalMessages).toBe(entries.length);
+	});
+
+	it('measures known endpoints even when an intervening message is untimed', () => {
+		expect(
+			computeTabConversationStats([
+				{ source: 'user', timestamp: 0 },
+				{ source: 'ai', timestamp: 1000 },
+			]).durationMs
+		).toBe(1000);
+		expect(
+			computeTabConversationStats([log('user', 0), log('tool', NaN), log('ai', 2000)]).durationMs
+		).toBe(2000);
+		expect(computeTabConversationStats([log('user', 0), log('ai', 0)]).durationMs).toBe(0);
+	});
+
 	it('reports a zero span for a single entry', () => {
 		expect(computeTabConversationStats([log('user', 0)]).durationMs).toBe(0);
 	});
 });
 
 describe('formatConversationDuration', () => {
+	it.each([undefined, null, NaN, Infinity, -1000])(
+		'does not label unknown span %s as zero minutes',
+		(duration) => {
+			expect(formatConversationDuration(duration)).toBeUndefined();
+		}
+	);
+
 	it('renders zero as 0m rather than an empty string', () => {
 		expect(formatConversationDuration(0)).toBe('0m');
 	});

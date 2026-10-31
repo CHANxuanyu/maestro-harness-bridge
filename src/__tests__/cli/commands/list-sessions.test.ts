@@ -290,6 +290,57 @@ describe('list sessions command', () => {
 				aiTabs: tabs,
 			}) as unknown as SessionInfo;
 
+		it.each(['claude-code', 'grok'])(
+			'keeps persisted untimed %s messages without a fabricated duration',
+			(toolType) => {
+				vi.mocked(resolveAgentId).mockReturnValue('agent-abc-123');
+				vi.mocked(getSessionById).mockReturnValue(mockAgent({ toolType }));
+				vi.mocked(listClaudeSessions).mockReturnValue(mockSessionResult);
+				vi.mocked(readSessions).mockReturnValue([
+					{
+						...agentWithTabs([
+							{
+								id: 'tab-1',
+								agentSessionId: 'session-1',
+								createdAt: START,
+								logs: JSON.parse(JSON.stringify([tabLog('user', NaN), tabLog('stdout', NaN)])),
+							},
+						]),
+						toolType,
+					},
+				]);
+				listSessions('agent-abc', { json: true });
+				const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+				const session = output.sessions.find(
+					(entry: { sessionId: string }) => entry.sessionId === 'session-1'
+				);
+				expect(session.messageCount).toBe(2);
+				expect(session).not.toHaveProperty('durationSeconds');
+			}
+		);
+
+		it('preserves a known zero duration in CLI JSON', () => {
+			vi.mocked(resolveAgentId).mockReturnValue('agent-abc-123');
+			vi.mocked(getSessionById).mockReturnValue(mockAgent({ toolType: 'grok' }));
+			vi.mocked(readSessions).mockReturnValue([
+				{
+					...agentWithTabs([
+						{
+							id: 'tab-1',
+							agentSessionId: 'session-1',
+							createdAt: START,
+							logs: [tabLog('user', 0), tabLog('stdout', 0)],
+						},
+					]),
+					toolType: 'grok',
+				},
+			]);
+			listSessions('agent-abc', { json: true });
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.sessions[0].messageCount).toBe(2);
+			expect(output.sessions[0].durationSeconds).toBe(0);
+		});
+
 		it('should overlay the tab conversation figures onto disk-derived Claude sessions', () => {
 			vi.mocked(resolveAgentId).mockReturnValue('agent-abc-123');
 			vi.mocked(getSessionById).mockReturnValue(mockAgent());

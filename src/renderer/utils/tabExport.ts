@@ -37,8 +37,11 @@ function escapeHtml(text: string): string {
 /**
  * Format a timestamp for display
  */
-function formatTimestamp(timestamp: number): string {
-	return formatTimestampShared(timestamp, 'full');
+function formatTimestamp(timestamp: number): string | undefined {
+	// Untimed native entries can also be null after JSON persistence.
+	if (!Number.isFinite(timestamp)) return undefined;
+	const formatted = formatTimestampShared(timestamp, 'full');
+	return formatted === 'Invalid Date' ? undefined : formatted;
 }
 
 /**
@@ -138,6 +141,7 @@ export function generateTabExportHtml(
 			const color = getSourceColor(log.source, theme);
 			const isUser = log.source === 'user';
 			const label = getSourceLabel(log.source);
+			const timestamp = formatTimestamp(log.timestamp);
 
 			// Format content with markdown
 			const formattedContent = formatContent(log.text);
@@ -146,7 +150,7 @@ export function generateTabExportHtml(
       <div class="message ${isUser ? 'message-user' : 'message-agent'}">
         <div class="message-header">
           <span class="message-from" style="color: ${color}">${escapeHtml(label)}</span>
-          <span class="message-time">${formatTimestamp(log.timestamp)}</span>
+          ${timestamp ? `<span class="message-time">${timestamp}</span>` : ''}
           ${log.readOnly ? '<span class="read-only-badge">read-only</span>' : ''}
         </div>
         <div class="message-content">${formattedContent}</div>
@@ -676,10 +680,14 @@ export function generateTabExportHtml(
         <div class="stat-value">${stats.aiMessages}</div>
         <div class="stat-label">AI</div>
       </div>
-      <div class="stat-card">
+      ${
+				stats.duration === undefined
+					? ''
+					: `<div class="stat-card">
         <div class="stat-value">${stats.duration}</div>
         <div class="stat-label">Duration</div>
-      </div>
+      </div>`
+			}
     </div>
 
     <section class="section">

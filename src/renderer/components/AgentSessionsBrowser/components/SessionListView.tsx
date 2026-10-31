@@ -1,6 +1,6 @@
 import { useT } from '../../../i18n';
 import React, { type RefObject } from 'react';
-import { List } from 'lucide-react';
+import { List, UserX } from 'lucide-react';
 import { Spinner } from '../../ui/Spinner';
 import { EmptyStatePlaceholder } from '../../ui/EmptyStatePlaceholder';
 import { SessionListItem, type SearchResultInfo } from '../../SessionListItem';
@@ -23,6 +23,8 @@ interface SessionListViewProps {
 	hasMoreSessions: boolean;
 	totalSessionCount: number;
 	agentId: string;
+	/** The agent's selected account could not be read by the search. */
+	accountUnavailable?: boolean;
 	theme: Theme;
 	sessionsContainerRef: RefObject<HTMLDivElement>;
 	selectedItemRef: RefObject<HTMLButtonElement | HTMLDivElement | null>;
@@ -53,6 +55,7 @@ export const SessionListView = React.memo(function SessionListView({
 	hasMoreSessions,
 	totalSessionCount,
 	agentId,
+	accountUnavailable = false,
 	theme,
 	sessionsContainerRef,
 	selectedItemRef,
@@ -78,6 +81,13 @@ export const SessionListView = React.memo(function SessionListView({
 				<div className="flex items-center justify-center py-12">
 					<Spinner size={24} color={theme.colors.textDim} />
 				</div>
+			) : filteredSessions.length === 0 && accountUnavailable ? (
+				<EmptyStatePlaceholder
+					theme={theme}
+					icon={<UserX className="w-12 h-12" />}
+					title={uiText('workflows.sessions.accountUnavailable')}
+					description={uiText('workflows.sessions.accountUnavailableDetail')}
+				/>
 			) : filteredSessions.length === 0 ? (
 				<EmptyStatePlaceholder
 					theme={theme}

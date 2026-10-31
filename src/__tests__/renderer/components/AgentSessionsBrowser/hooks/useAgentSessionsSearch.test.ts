@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAgentSessionsSearch } from '../../../../../renderer/components/AgentSessionsBrowser/hooks/useAgentSessionsSearch';
+import { captureException } from '../../../../../renderer/utils/sentry';
+
+vi.mock('../../../../../renderer/utils/sentry', () => ({ captureException: vi.fn() }));
 
 const mockSearch = vi.fn();
 
@@ -200,5 +203,37 @@ describe('useAgentSessionsSearch', () => {
 		const { unmount } = renderHook(() => useAgentSessionsSearch(defaults));
 		unmount();
 		expect(clearSpy).toHaveBeenCalled();
+	});
+});
+
+describe('useAgentSessionsSearch: an unavailable account', () => {
+	it('reports the account as unavailable, not as a search with no matches', async () => {
+		mockSearch.mockRejectedValueOnce(
+			new Error(
+				"Error invoking remote method 'agentSessions:search': Error: MAESTRO_ACCOUNT_UNAVAILABLE: the selected account directory is missing"
+			)
+		);
+		const { result, rerender } = renderHook((args) => useAgentSessionsSearch(args), {
+			initialProps: { ...defaults, ownerAgentId: 'account-a' },
+		});
+		await act(async () => vi.advanceTimersByTimeAsync(300));
+		expect(result.current.searchResults).toEqual([]);
+		expect(result.current.searchError).toBe('account-unavailable');
+		// An expected state, not a crash to report.
+		expect(captureException).not.toHaveBeenCalled();
+
+		// The next query that succeeds clears it.
+		rerender({ ...defaults, search: 'other', ownerAgentId: 'account-a' });
+		await act(async () => vi.advanceTimersByTimeAsync(300));
+		expect(result.current.searchError).toBeNull();
+		expect(result.current.searchResults).toHaveLength(1);
+	});
+
+	it('still reports an unexpected search failure', async () => {
+		mockSearch.mockRejectedValueOnce(new Error('disk on fire'));
+		const { result } = renderHook(() => useAgentSessionsSearch({ ...defaults }));
+		await act(async () => vi.advanceTimersByTimeAsync(300));
+		expect(result.current.searchError).toBeNull();
+		expect(captureException).toHaveBeenCalled();
 	});
 });

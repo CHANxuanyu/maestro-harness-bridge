@@ -1,14 +1,17 @@
 import { useT } from '../../../i18n';
 import React, { RefObject } from 'react';
-import { Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2, UserX } from 'lucide-react';
 import { Spinner } from '../../ui/Spinner';
 import type { Theme } from '../../../types';
-import type { SessionMessage } from '../../../hooks/agent/useSessionViewer';
+import type { SessionMessage, SessionReadError } from '../../../hooks/agent/useSessionViewer';
+import { EmptyStatePlaceholder } from '../../ui/EmptyStatePlaceholder';
 import { SessionMessageBubble } from './SessionMessageBubble';
 
 interface SessionMessagesViewProps {
 	messages: SessionMessage[];
 	messagesLoading: boolean;
+	/** Why the session could not be read; shown only while nothing is on screen. */
+	messagesError?: SessionReadError | null;
 	hasMoreMessages: boolean;
 	theme: Theme;
 	messagesContainerRef: RefObject<HTMLDivElement>;
@@ -20,6 +23,7 @@ interface SessionMessagesViewProps {
 export const SessionMessagesView = React.memo(function SessionMessagesView({
 	messages,
 	messagesLoading,
+	messagesError,
 	hasMoreMessages,
 	theme,
 	messagesContainerRef,
@@ -60,6 +64,29 @@ export const SessionMessagesView = React.memo(function SessionMessagesView({
 			{messages.map((msg, idx) => (
 				<SessionMessageBubble key={msg.uuid || idx} message={msg} index={idx} theme={theme} />
 			))}
+
+			{messagesError && !messagesLoading && messages.length === 0 && (
+				<EmptyStatePlaceholder
+					theme={theme}
+					icon={
+						messagesError === 'account-unavailable' ? (
+							<UserX className="w-12 h-12" />
+						) : (
+							<AlertCircle className="w-12 h-12" />
+						)
+					}
+					title={uiText(
+						messagesError === 'account-unavailable'
+							? 'workflows.sessions.accountUnavailable'
+							: 'workflows.sessions.loadMessagesFailed'
+					)}
+					description={
+						messagesError === 'account-unavailable'
+							? uiText('workflows.sessions.accountUnavailableDetail')
+							: undefined
+					}
+				/>
+			)}
 
 			{messagesLoading && messages.length === 0 && (
 				<div className="flex items-center justify-center py-8">

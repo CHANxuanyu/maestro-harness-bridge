@@ -108,3 +108,27 @@ describe('SessionMessagesView', () => {
 		expect(onKeyDown).toHaveBeenCalled();
 	});
 });
+
+describe('SessionMessagesView: a preview that could not be read', () => {
+	it('says the account is unavailable instead of drawing an empty conversation', () => {
+		render(<SessionMessagesView {...defaultProps({ messagesError: 'account-unavailable' })} />);
+		expect(screen.getByText("This agent's account is unavailable")).toBeInTheDocument();
+		expect(screen.queryByTestId('message-bubble')).toBeNull();
+	});
+
+	it('says the conversation could not be loaded for any other failure', () => {
+		render(<SessionMessagesView {...defaultProps({ messagesError: 'failed' })} />);
+		expect(screen.getByText("Couldn't load this conversation")).toBeInTheDocument();
+		expect(screen.queryByText("This agent's account is unavailable")).toBeNull();
+	});
+
+	it('keeps showing messages already on screen when a later page fails', () => {
+		render(
+			<SessionMessagesView
+				{...defaultProps({ messages: [makeMsg('a')], messagesError: 'failed' })}
+			/>
+		);
+		expect(screen.getAllByTestId('message-bubble')).toHaveLength(1);
+		expect(screen.queryByText("Couldn't load this conversation")).toBeNull();
+	});
+});

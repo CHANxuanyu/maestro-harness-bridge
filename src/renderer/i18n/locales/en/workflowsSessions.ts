@@ -106,7 +106,7 @@ export const workflowsSessions = {
 	'workflows.sessions.noMatchingSessions': 'No sessions match your search',
 	'workflows.sessions.accountUnavailable': "This agent's account is unavailable",
 	'workflows.sessions.accountUnavailableDetail':
-		'Its account folder was moved or deleted, so its sessions cannot be read. Sessions from another account are not shown in their place.',
+		'Its account folder is missing, so its sessions cannot be read. Sessions from another account are not shown in their place.',
 	'workflows.sessions.loadMessagesFailed': "Couldn't load this conversation",
 	'workflows.sessions.loadingMoreSessions': 'Loading more sessions...',
 	'workflows.sessions.of': 'of',

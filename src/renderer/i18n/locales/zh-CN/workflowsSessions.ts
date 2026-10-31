@@ -102,7 +102,7 @@ export const workflowsSessions = {
 	'workflows.sessions.noMatchingSessions': '没有符合搜索条件的会话',
 	'workflows.sessions.accountUnavailable': '该智能体的账户不可用',
 	'workflows.sessions.accountUnavailableDetail':
-		'账户目录已被移动或删除，无法读取其中的会话，也不会改用其他账户的会话。',
+		'账户目录不存在，无法读取其中的会话，也不会改用其他账户的会话。',
 	'workflows.sessions.loadMessagesFailed': '无法加载这个对话',
 	'workflows.sessions.loadingMoreSessions': '正在加载更多会话...',
 	'workflows.sessions.of': '／',

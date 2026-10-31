@@ -97,7 +97,17 @@
 ### 阶段零：hb.5 源码候选
 
 - 从最新主线 `006faefaacf5a2c5405f78f37bae45e44eed501e` 建立 `codex/core-experience-hb5-candidate`，带入本计划（来源 `feed/product-plan` 的 `d70353c684af48cf009d45cf99137f3b34fb0992`）。将版本统一为 `1.0.1-hb.5`，归档 hb.4 以来的产品变化，补齐候选说明、账户/主机与连接器边界、升级与回退方法。没有修改产品行为。
-- 发布规则 11 项、连接器回归 26 项、版本一致性与 39 份指引的路径检查通过。类型、ESLint、全仓格式检查通过；七项远端检查的最终结果记录在候选 PR；合并后核对实际主线提交 CI，再开始功能一。阶段零合并身份和 CI 链接在后续完成记录中回填。
+- 发布规则 11 项、连接器回归 26 项、版本一致性与 39 份指引的路径检查通过。类型、ESLint、全仓格式检查通过。七项远端检查及实际主线提交 CI 均已核对，链接见下方；随后从该主线开始功能一。
 - [hb.5 验证记录](../verification/v1.0.1-hb.5.md)包含核心流程清单与 Mac 第 3 步以后的完整命令顺序。构建来源取该候选 PR 的实际合并提交，避免后续三项功能混入 hb.5。当前未创建标签、打包、安装、上传或发布，没有改动真实账户与会话。
 - **Mac 待验：** 发行包、签名、SQLite/PTY、真实账户、桌面 Codex 与核心 GUI 流程、一周 `dogfood` 试用均由用户执行；云端结果不替代实机勾选。
+- **已合并：** [PR #27](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/27)；实际合并提交 `a2b2ce5c0777109f593fe75d328c39ae93b5e6a4`。[PR 七项检查](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41243349147)首次通过，用时 25 分 16 秒；[实际主线七项检查](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41245354894)首次通过，用时 18 分 49 秒。Mac 构建 hb.5 固定该合并提交，不使用后续主线。Mac 核心真实模式命令补充 Claude/Codex 筛选，避免误要求其余四家账户；不改变冻结源码身份。
 - **Opus：** 阶段零没有新增界面需求。PR #26 已修复账户不可用提示、切换账户的旧预览和未知时长显示，均纳入候选；后续三个功能的界面、文案与外观按下方各项契约接手。
+
+### 功能一：DeepSeek 预设的后端与 CLI
+
+- 从阶段零合并提交建立 `codex/core-deepseek-preset`。沿用 Claude Code 的 AgentId、解析器和存储；共用准备函数提供独立账户目录、官方网关、凭据与模型映射。官方来源、核对日期及模型目录见[后端契约](../core-experience-contracts.md#deepseek-预设)。没有新存储体系、内容哈希或测试旁路。
+- CLI 增加 `create-agent --preset deepseek`，密钥只能从环境变量名或 stdin 输入。预设不能通过 `--env` 改写凭据、模型或账户选择；非法输入不回显值。独立请求类型使旧版桌面明确拒绝，不会忽略预设后误建成 Claude 智能体。普通创建保持原行为。
+- 初始 12 条回归在旧实现全部失败；补充的非法输入回显、旧桌面请求及必填预设回归也分别先失败后修复。相关单元 171 条、原生夹具 30 条通过。端到端临时回退为共用 Claude 目录时，隔离断言失败；恢复后新建、多轮、Stop/续接、重启和双向账户历史隔离通过。普通模式 4 个相关场景及合成凭据模式 4 个相关场景通过，包含原有 Claude 的 a/c/d；最后的独立预设请求还单独复核通过。类型、ESLint、全仓格式、文档路径与发布规则通过；远端检查和实际合并提交 CI 由功能 PR 留痕。
+- **未验与限制：** 真实 DeepSeek 网关、账户额度和 macOS 未验；云端真实模式入口只用合成凭据。新增预设只面向本机。界面尚未接入，不能把后端目录和模型测试当成新界面已完成。
+- **Opus：** 预设入口、列表/标签的 DeepSeek 身份、模型目录与密钥遮盖的接入契约、复现步骤均在[后端契约](../core-experience-contracts.md#交给-opus-的复现用例)。新增文案和外观由 Opus 决定。
+- **Mac：** 在包含此功能的源码上设置 `DEEPSEEK_API_KEY`，运行 `MAESTRO_E2E_REAL=1 npm run test:e2e -- --grep 'claude DeepSeek:'`；还需要锁定 Claude CLI 和正常 Claude 登录用于账户隔离检查。不要用后续源码重新打包 hb.5。

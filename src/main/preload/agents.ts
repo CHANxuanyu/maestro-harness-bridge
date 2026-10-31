@@ -9,6 +9,11 @@
  */
 
 import { ipcRenderer } from 'electron';
+import type {
+	DEEPSEEK_PRESET,
+	DeepSeekPresetRequest,
+	PreparedAgentPreset,
+} from '../../shared/agentPresets';
 import type { AgentCapabilities, AgentConfig } from '../../shared/types';
 import {
 	SNAPSHOT_UPDATED_CHANNEL,
@@ -53,6 +58,10 @@ export interface AgentRefreshResult {
  */
 export function createAgentsApi() {
 	return {
+		getPresets: (): Promise<Array<typeof DEEPSEEK_PRESET>> =>
+			ipcRenderer.invoke('agents:getPresets'),
+		prepareDeepSeekPreset: (request: DeepSeekPresetRequest): Promise<PreparedAgentPreset> =>
+			ipcRenderer.invoke('agents:prepareDeepSeekPreset', request),
 		/**
 		 * Detect available agents
 		 */

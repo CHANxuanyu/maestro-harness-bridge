@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron';
+import { prepareDeepSeekPreset } from '../../agents/deepseek-preset';
+import { DEEPSEEK_PRESET, type DeepSeekPresetRequest } from '../../../shared/agentPresets';
 import Store from 'electron-store';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -1027,6 +1029,13 @@ async function discoverOpenCodeSlashCommandsRemote(
 
 export function registerAgentsHandlers(deps: AgentsHandlerDependencies): void {
 	const { getAgentDetector, agentConfigsStore, settingsStore, sessionsStore } = deps;
+	ipcMain.handle('agents:getPresets', () => [DEEPSEEK_PRESET]);
+	ipcMain.handle(
+		'agents:prepareDeepSeekPreset',
+		withIpcErrorLogging(handlerOpts('prepareDeepSeekPreset'), (request: DeepSeekPresetRequest) =>
+			prepareDeepSeekPreset(request)
+		)
+	);
 
 	// Detect all available agents (supports SSH remote detection via optional sshRemoteId)
 	ipcMain.handle(

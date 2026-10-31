@@ -164,6 +164,8 @@ describe('agents IPC handlers', () => {
 	describe('registration', () => {
 		it('should register all agents handlers', () => {
 			const expectedChannels = [
+				'agents:getPresets',
+				'agents:prepareDeepSeekPreset',
 				'agents:detect',
 				'agents:refresh',
 				'agents:get',

@@ -33,6 +33,7 @@ function createTurn({
 	cwd,
 	id = randomUUID(),
 	prompt,
+	model = models[provider],
 	persist = true,
 	emit = () => {},
 }) {
@@ -50,7 +51,7 @@ function createTurn({
 			sessionId: id,
 			cwd,
 			timestamp: timestamp(),
-			message: { role, content, ...(role === 'assistant' ? { model: models.claude } : {}) },
+			message: { role, content, ...(role === 'assistant' ? { model } : {}) },
 		};
 		append(record);
 		emit({ type: role, session_id: id, message: record.message });

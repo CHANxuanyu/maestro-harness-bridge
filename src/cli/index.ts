@@ -1267,6 +1267,9 @@ program
 program
 	.command('create-agent <name>')
 	.description('Create a new agent in the Maestro desktop app')
+	.option('--preset <preset>', 'Agent preset (deepseek, using local Claude Code)')
+	.option('--api-key-env <name>', 'Read the preset API key from this environment variable')
+	.option('--api-key-stdin', 'Read the preset API key from standard input')
 	.requiredOption('-d, --cwd <path>', 'Working directory for the agent')
 	.option(
 		'-t, --type <type>',

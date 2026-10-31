@@ -1000,6 +1000,9 @@ Create a new agent in the Maestro desktop app
 
 | Option                            | Description                                                                                                 | Default         |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------- |
+| `--preset <preset>`               | Agent preset (deepseek, using local Claude Code)                                                            | -               |
+| `--api-key-env <name>`            | Read the preset API key from this environment variable                                                      | -               |
+| `--api-key-stdin`                 | Read the preset API key from standard input                                                                 | -               |
 | `-d, --cwd <path>`                | Working directory for the agent                                                                             | -               |
 | `-t, --type <type>`               | Agent type (claude-code, codex, opencode, factory-droid, copilot-cli, antigravity, gemini-cli, qwen3-coder) | `"claude-code"` |
 | `-g, --group <id>`                | Group ID to assign the agent to                                                                             | -               |

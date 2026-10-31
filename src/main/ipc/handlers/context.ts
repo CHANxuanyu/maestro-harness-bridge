@@ -29,6 +29,8 @@ import { captureException } from '../../utils/sentry';
 import { cheapTurnSettings } from '../../../shared/modelTiers';
 import type { ToolType } from '../../../shared/types';
 import type { ClaudeTokenSourceFields } from '../../../shared/claudeTokenMode';
+import type { AiHandoffService } from '../../ai-handoff';
+import type { HandoffRequest } from '../../../shared/aiHandoff';
 
 const LOG_CONTEXT = '[ContextMerge]';
 
@@ -49,6 +51,7 @@ const handlerOpts = (
  * Dependencies required for context handler registration
  */
 export interface ContextHandlerDependencies {
+	aiHandoff?: AiHandoffService;
 	getMainWindow: () => BrowserWindow | null;
 	getProcessManager: () => ProcessManager | null;
 	getAgentDetector: () => AgentDetector | null;
@@ -66,6 +69,18 @@ export interface ContextHandlerDependencies {
  */
 export function registerContextHandlers(deps: ContextHandlerDependencies): void {
 	const { getProcessManager, getAgentDetector, agentConfigsStore, settingsStore } = deps;
+	ipcMain.handle(
+		'context:handoff',
+		withIpcErrorLogging(handlerOpts('handoff'), async (request: HandoffRequest) =>
+			requireDependency(() => deps.aiHandoff ?? null, 'AI handoff').prepare(request)
+		)
+	);
+	ipcMain.handle(
+		'context:handoffTargets',
+		withIpcErrorLogging(handlerOpts('handoffTargets'), async (sourceAgentId: string) =>
+			requireDependency(() => deps.aiHandoff ?? null, 'AI handoff').targets(sourceAgentId)
+		)
+	);
 
 	logger.info('Registering context IPC handlers', LOG_CONTEXT);
 

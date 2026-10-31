@@ -22,6 +22,7 @@
 
 import { app } from 'electron';
 import path from 'path';
+import { hasEmbeddedSystemPrompt } from '../../shared/embeddedSystemPrompt';
 import os from 'os';
 import fs from 'fs/promises';
 import { logger } from '../utils/logger';
@@ -676,7 +677,14 @@ function parseCodexTranscript(
 				// Keep the old counter even for hidden envelopes, so cached native IDs still align.
 				const oldIndex = messageIndex;
 				if (rawText || (payload.role === 'user' && isSystemContextMessage(rawText))) messageIndex++;
-				if (payload.role === 'user' && isSystemContextMessage(rawText)) continue;
+				// Maestro embeds its system prompt and the first user request in one
+				// native message. Only a pure system envelope may be discarded.
+				if (
+					payload.role === 'user' &&
+					!hasEmbeddedSystemPrompt(rawText) &&
+					isSystemContextMessage(rawText)
+				)
+					continue;
 				const images = extractCodexImages(payload.content);
 				const text =
 					payload.role === 'user'

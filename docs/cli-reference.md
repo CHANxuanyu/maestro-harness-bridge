@@ -237,6 +237,21 @@ Send a message to an agent and get a JSON response
 | `-t, --tab`          | Open/focus the session tab in Maestro desktop                                                                                                           | -       |
 | `--no-system-prompt` | Skip the Maestro system prompt (agent identity, git branch, history path, conductor profile). Default is to include it for parity with the desktop app. | -       |
 
+## `maestro-cli handoff <tab> [provider]`
+
+Prepare a new conversation with another AI in the same project
+
+| Option                 | Description                                                     | Default |
+| ---------------------- | --------------------------------------------------------------- | ------- |
+| `--agent <id>`         | Source agent for an active or ambiguous tab                     | -       |
+| `--list-targets`       | List available target providers without creating a draft        | -       |
+| `--send`               | Explicitly send the prepared handoff instead of leaving a draft | -       |
+| `--instruction <text>` | Append an instruction to the handoff                            | -       |
+| `--max-tokens <count>` | Estimated token budget for the handoff                          | -       |
+| `--background`         | Prepare the target tab without changing selection (default)     | -       |
+| `--focus`              | Focus the prepared target tab                                   | -       |
+| `--json`               | Output JSON                                                     | -       |
+
 ## `maestro-cli ask <agent-id> <question>`
 
 Ask another agent a question and print its answer (background consult - never touches the target's open conversation)

@@ -7,9 +7,10 @@ import { isWebContentsAvailable } from '../../utils/safe-send';
 
 export function registerContextOpsCallbacks(
 	server: WebServer,
-	deps: Pick<WebServerFactoryDependencies, 'getMainWindow'>
+	deps: Pick<WebServerFactoryDependencies, 'getMainWindow' | 'aiHandoff'>
 ): void {
 	const { getMainWindow } = deps;
+	if (deps.aiHandoff) server.setHandoffCommandCallback(deps.aiHandoff.command);
 
 	// Merge context - uses IPC request-response pattern
 	server.setMergeContextCallback(async (sourceSessionId: string, targetSessionId: string) => {

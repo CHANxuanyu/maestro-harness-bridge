@@ -153,6 +153,7 @@ import {
 import {
 	handleMergeContext,
 	handleTransferContext,
+	handleAiHandoff,
 	handleSummarizeContext,
 	handleCreateGist,
 } from './contextOps';
@@ -559,6 +560,9 @@ export class WebSocketMessageHandler {
 
 			case 'transfer_context':
 				handleTransferContext(this.ctx, client, message);
+				break;
+			case 'ai_handoff':
+				void handleAiHandoff(this.ctx, client, message);
 				break;
 
 			case 'summarize_context':

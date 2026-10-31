@@ -14,6 +14,7 @@ import { cleanPlaybooks } from './commands/clean-playbooks';
 import { send } from './commands/send';
 import { dispatch } from './commands/dispatch';
 import { ask } from './commands/ask';
+import { handoff } from './commands/handoff';
 import { queueList, queueRemove } from './commands/queue';
 import {
 	snoozeDismiss,
@@ -511,6 +512,19 @@ program
 // consult path (hidden tab on the target, fresh context, no focus, no unread),
 // returning the answer here instead of interrupting whatever conversation the
 // human has open with that agent.
+program
+	.command('handoff <tab> [provider]')
+	.description('Prepare a new conversation with another AI in the same project')
+	.option('--agent <id>', 'Source agent for an active or ambiguous tab')
+	.option('--list-targets', 'List available target providers without creating a draft')
+	.option('--send', 'Explicitly send the prepared handoff instead of leaving a draft')
+	.option('--instruction <text>', 'Append an instruction to the handoff')
+	.option('--max-tokens <count>', 'Estimated token budget for the handoff')
+	.option('--background', 'Prepare the target tab without changing selection (default)')
+	.option('--focus', 'Focus the prepared target tab')
+	.option('--json', 'Output JSON')
+	.action(handoff);
+
 program
 	.command('ask <agent-id> <question>')
 	.description(

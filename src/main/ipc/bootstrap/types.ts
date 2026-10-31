@@ -1,4 +1,5 @@
 import type { App, BrowserWindow } from 'electron';
+import type { AiHandoffService } from '../../ai-handoff';
 import type { ProcessManager } from '../../process-manager';
 import type { WebServer } from '../../web-server';
 import type { AgentDetector } from '../../agents';
@@ -30,6 +31,7 @@ import type {
 } from '../../stores';
 
 export interface IpcBootstrapDependencies {
+	aiHandoff: AiHandoffService;
 	// getters - mutable `let` singletons that stay declared in index.ts
 	getMainWindow: () => BrowserWindow | null;
 	getProcessManager: () => ProcessManager | null;

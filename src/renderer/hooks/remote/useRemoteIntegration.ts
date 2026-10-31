@@ -59,6 +59,7 @@ import {
 } from '../../utils/desktopTabSelectionSync';
 import { loadAllSettings } from '../../stores/settingsStore';
 import { useRemoteGroupChat } from './useRemoteGroupChat';
+import { readHandoffSource, openHandoffTarget } from '../../services/aiHandoff';
 
 /**
  * Dependencies for the useRemoteIntegration hook.
@@ -301,6 +302,37 @@ async function buildSessionGistBody(session: Session, agentSessionId: string): P
  * @returns Empty object (all functionality via side effects)
  */
 export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteIntegrationReturn {
+	useEffect(() => {
+		const stopRead = window.maestro.context.onHandoffReadSource(async (request, channel) => {
+			try {
+				window.maestro.context.sendHandoffResponse(channel, await readHandoffSource(request));
+			} catch (error) {
+				if (!(error instanceof RangeError))
+					captureException(error, { tags: { context: 'aiHandoffRead' } });
+				window.maestro.context.sendHandoffResponse(channel, {
+					success: false,
+					code: error instanceof RangeError ? 'invalid-request' : 'unavailable',
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		});
+		const stopOpen = window.maestro.context.onHandoffOpenTarget(async (request, channel) => {
+			try {
+				window.maestro.context.sendHandoffResponse(channel, await openHandoffTarget(request));
+			} catch (error) {
+				captureException(error, { tags: { context: 'aiHandoffOpen' } });
+				window.maestro.context.sendHandoffResponse(channel, {
+					success: false,
+					code: 'unavailable',
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		});
+		return () => {
+			stopRead();
+			stopOpen();
+		};
+	}, []);
 	const {
 		activeSessionId,
 		isLiveMode,

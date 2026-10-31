@@ -6,6 +6,26 @@
  */
 
 import type { WebClient, WebClientMessage, MessageHandlerContext } from './types';
+import type { HandoffCommand, HandoffCommandResult } from '../../../../shared/aiHandoff';
+import { captureException } from '../../../utils/sentry';
+
+/** Always answer the correlated request, including validation and save failures. */
+export async function handleAiHandoff(
+	ctx: MessageHandlerContext,
+	client: WebClient,
+	message: WebClientMessage
+): Promise<void> {
+	let result: HandoffCommandResult;
+	try {
+		result = ctx.callbacks.handoffCommand
+			? await ctx.callbacks.handoffCommand(message as unknown as HandoffCommand)
+			: { success: false, code: 'unavailable', error: 'AI handoff is not configured' };
+	} catch (error) {
+		captureException(error, { tags: { context: 'aiHandoffCommand' } });
+		result = { success: false, error: error instanceof Error ? error.message : String(error) };
+	}
+	ctx.send(client, { type: 'ai_handoff_result', requestId: message.requestId, ...result });
+}
 
 /**
  * Handle merge_context message - merge context from source to target session

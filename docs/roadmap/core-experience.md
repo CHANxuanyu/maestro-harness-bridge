@@ -111,3 +111,13 @@
 - **未验与限制：** 真实 DeepSeek 网关、账户额度和 macOS 未验；云端真实模式入口只用合成凭据。新增预设只面向本机。界面尚未接入，不能把后端目录和模型测试当成新界面已完成。
 - **Opus：** 预设入口、列表/标签的 DeepSeek 身份、模型目录与密钥遮盖的接入契约、复现步骤均在[后端契约](../core-experience-contracts.md#交给-opus-的复现用例)。新增文案和外观由 Opus 决定。
 - **Mac：** 在包含此功能的源码上设置 `DEEPSEEK_API_KEY`，运行 `MAESTRO_E2E_REAL=1 npm run test:e2e -- --grep 'claude DeepSeek:'`；还需要锁定 Claude CLI 和正常 Claude 登录用于账户隔离检查。不要用后续源码重新打包 hb.5。
+
+- **功能一已合并：** [PR #28](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/28)，合并提交 `d9343973b8a7736e13c991a1f662f27b89ba8c46`。[PR 七项检查](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41247862111)首次通过，用时 21 分 55 秒；[实际主线七项检查](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41249571128)首次通过，用时 21 分 52 秒。两次均包含原生夹具 30 条、普通端到端 55 条、合成凭据入口 55 条。
+
+### 功能二：换个 AI 继续的后端与 CLI
+
+- 从功能一实际合并提交建立 `codex/core-ai-handoff`。新增共用服务完成本机三家目录、同项目执行者复用/创建、多窗口路由、指定源标签的最近正文提取、工具一行与预算裁剪。草稿先持久化，只有显式 `--send` 或后续用户发送才进入原有发送队列；原生 ID 不继承，源正文、草稿与文件不变。没有新增界面入口、存储体系或模型整理。
+- CLI `handoff` 与桌面 `context.handoff` 共用服务；同时补齐功能一预加载接口的 renderer 类型声明。预算恰好够用、超长回答角色丢失、新执行者窗口归属分别先以回归证明失败再修复。混合提供方的合成真实模式先证明误用 Claude CLI，再按提供方复用锁定版本和临时凭据快照。端到端还发现 Codex 原生读取会丢掉系统封装内的首条用户请求，新增失败回归后复用 `embeddedSystemPrompt` 修复，纯系统上下文仍过滤，原生文件不改写。
+- **本地验收通过：** 16 个相关单元文件共 495 条、原生夹具 30 条；普通端到端 8 个相关场景、合成凭据入口 5 个相关场景通过。最终源码的合成凭据交接场景再次单独核对。临时将默认交接改为自动发送后，新端到端在 `draft` / `queued` 断言上失败；恢复后通过，反证改动未提交。类型、ESLint、全仓格式、39 份指引引用、623 条文档路径及发布规则 11 项通过。七项远端检查与实际主线合并提交的结果由功能 PR 留痕，并在下一项完成记录补上链接。
+- **未验与限制：** 真实账户、DeepSeek 网关和 macOS 未验；界面菜单、命令面板、额度错误旁入口、草稿大小和新增文案待 Opus。可用性只确认本机 CLI/已配置账户，不发请求验证额度；目标执行者不可用时不另建重复项。CLI 的 `queued` 只承诺入队，不冒充模型回合成功。
+- **Opus 与 Mac：** 接口、错误码、默认不发送约束、六向复现和 Mac 命令见[交接契约](../core-experience-contracts.md#换个-ai-继续)。

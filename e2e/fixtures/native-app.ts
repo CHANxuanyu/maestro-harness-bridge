@@ -61,6 +61,10 @@ export class NativeApp {
 	readonly real = process.env.MAESTRO_E2E_REAL === '1';
 	realCli?: { executable: string; version: string };
 	private credentials: Record<string, string> = {};
+	private realProviders = new Map<
+		Provider,
+		{ executable: string; version: string; credentials: Record<string, string> }
+	>();
 	private scenes: NativeScene[] = [];
 	private sceneIndex = 0;
 	externalCount = 0;
@@ -141,24 +145,29 @@ export class NativeApp {
 			copilot: this.copilot,
 		}[provider];
 	}
+	realCliFor(provider: Provider) {
+		const cached = this.realProviders.get(provider);
+		if (cached) return cached;
+		const cli = installedCli(provider, process.env, /^codex [gh]:/.test(this.info.title));
+		// Only this provider receives its synthetic smoke credential. Real runs
+		// retain the existing read-only credential snapshot into temporary dirs.
+		const credentialEnv =
+			provider === 'omp' && process.env.MAESTRO_E2E_SMOKE === '1'
+				? { ...process.env, ANTHROPIC_API_KEY: 'synthetic-api-key' }
+				: provider === 'copilot' && process.env.MAESTRO_E2E_SMOKE === '1'
+					? { ...process.env, COPILOT_GITHUB_TOKEN: 'synthetic-api-key' }
+					: process.env;
+		const credentials = prepareCredentials(provider, this.providerHome(provider), credentialEnv);
+		const result = { ...cli, credentials };
+		this.realProviders.set(provider, result);
+		this.credentials = { ...this.credentials, ...credentials };
+		this.info.annotations.push({ type: 'native-cli-version', description: cli.version });
+		return result;
+	}
 	async start(homeDir?: string) {
 		if (this.real && !this.realCli) {
 			this.provider = this.info.title.split(' ')[0].replace(':', '') as Provider;
-			this.realCli = installedCli(this.provider, process.env, /^codex [gh]:/.test(this.info.title));
-			// Keep the synthetic OMP API key scoped to its own application. Claude's
-			// smoke cases must still exercise the read-only OAuth snapshot path.
-			const credentialEnv =
-				this.provider === 'omp' && process.env.MAESTRO_E2E_SMOKE === '1'
-					? { ...process.env, ANTHROPIC_API_KEY: 'synthetic-api-key' }
-					: this.provider === 'copilot' && process.env.MAESTRO_E2E_SMOKE === '1'
-						? { ...process.env, COPILOT_GITHUB_TOKEN: 'synthetic-api-key' }
-						: process.env;
-			this.credentials = prepareCredentials(
-				this.provider,
-				this.providerHome(this.provider),
-				credentialEnv
-			);
-			this.info.annotations.push({ type: 'native-cli-version', description: this.realCli.version });
+			this.realCli = this.realCliFor(this.provider);
 		}
 		// A history-boundary case needs a synthetic default account as well as the selected one.
 		// Scope HOME to this child process so the test never seeds the user's default directory.
@@ -217,9 +226,11 @@ export class NativeApp {
 			(this.real
 				? path.resolve('e2e/fixtures/native/real-cli')
 				: path.resolve(`e2e/fixtures/native/${provider}`));
-		const realEnv = this.real
+		const providerCli = this.real ? this.realCliFor(provider) : undefined;
+		const realEnv = providerCli
 			? {
-					MAESTRO_E2E_CLI: this.realCli!.executable,
+					...(options.preset ? {} : providerCli.credentials),
+					MAESTRO_E2E_CLI: providerCli.executable,
 					MAESTRO_E2E_CONTROL: this.control,
 					MAESTRO_E2E_PROCESS: path.join(this.providerHome(provider), 'fixture-process'),
 				}

@@ -1,3 +1,4 @@
+import { createDesktopAiHandoff } from './ai-handoff-desktop';
 import {
 	app,
 	BrowserWindow,
@@ -637,8 +638,20 @@ const debugPackageDeps: DebugPackageDependencies = {
 	bootstrapStore,
 };
 
+const aiHandoff = createDesktopAiHandoff({
+	getWindowForSession: (sessionId) => {
+		const ownerId = windowRegistry.getWindowForSession(sessionId);
+		const owner = ownerId ? windowRegistry.get(ownerId) : windowRegistry.getPrimary();
+		return owner?.browserWindow ?? mainWindow;
+	},
+	sessionsStore,
+	agentConfigsStore,
+	settingsStore: store,
+});
+
 // Create web server factory with dependency injection (Phase 2 refactoring)
 const createWebServer = createWebServerFactory({
+	aiHandoff,
 	settingsStore: store,
 	sessionsStore,
 	groupsStore,
@@ -2880,6 +2893,7 @@ app
 		// Set up IPC handlers
 		logger.debug('Setting up IPC handlers', 'Startup');
 		setupIpcHandlers({
+			aiHandoff,
 			debugPackageDeps,
 			getMainWindow: () => mainWindow,
 			getProcessManager: () => processManager,

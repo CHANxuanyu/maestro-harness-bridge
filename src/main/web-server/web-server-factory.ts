@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import type { AiHandoffService } from '../ai-handoff';
 import { BrowserWindow } from 'electron';
 import { WebServer, type WebServerOptions } from './WebServer';
 import { tunnelManager } from '../tunnel-manager';
@@ -55,6 +56,7 @@ interface GroupsStore {
 
 /** Dependencies required for creating the web server */
 export interface WebServerFactoryDependencies {
+	aiHandoff?: AiHandoffService;
 	/** Settings store for reading web interface configuration */
 	settingsStore: SettingsStore;
 	/** Sessions store for reading session data */

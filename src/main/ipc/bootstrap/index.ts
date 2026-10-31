@@ -408,6 +408,7 @@ export function setupIpcHandlers(deps: IpcBootstrapDependencies): void {
 	wireMultiWindowTelemetry(deps.windowRegistry, { settingsStore: deps.settingsStore });
 	// Register Context Merge handlers for session context transfer and grooming
 	registerContextHandlers({
+		aiHandoff: deps.aiHandoff,
 		getMainWindow: deps.getMainWindow,
 		getProcessManager: deps.getProcessManager,
 		getAgentDetector: deps.getAgentDetector,

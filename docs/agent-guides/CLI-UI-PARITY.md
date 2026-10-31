@@ -334,7 +334,12 @@ a design constraint; they are simply not built yet.
    trip, so that section reads "unavailable". The Feedback modal's own support
    package checkbox has the same gap today. Closing it needs a main-to-renderer
    request with a response channel.
-9. **Context: Compact, Merge Into, Send to Agent.** The WS messages
+9. **Context: Compact, Merge Into, Send to Agent.** The HB `handoff` command
+   now provides the new three-provider handoff through its own shared service
+   (`ai_handoff`, `context.handoff`): draft by default, same-project runner reuse,
+   explicit `--send`. The new UI entries remain for Opus; the older generic
+   compact/merge/transfer paths below remain separate gaps.
+   The WS messages
    (`summarize_context`, `merge_context`, `transfer_context`) and the preload
    listeners exist, but NO renderer code subscribes to
    `onRemoteSummarizeContext` / `onRemoteMergeContext` /

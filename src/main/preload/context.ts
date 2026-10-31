@@ -8,6 +8,14 @@
 
 import { ipcRenderer } from 'electron';
 import type { ClaudeTokenSourceFields } from '../../shared/claudeTokenMode';
+import type {
+	HandoffRequest,
+	HandoffResult,
+	HandoffTargetsResult,
+	HandoffReadRequest,
+	HandoffReadResult,
+	HandoffOpenRequest,
+} from '../../shared/aiHandoff';
 
 /**
  * Message structure from stored sessions
@@ -35,6 +43,28 @@ export interface StoredSessionResponse {
  */
 export function createContextApi() {
 	return {
+		handoff: (request: HandoffRequest): Promise<HandoffResult> =>
+			ipcRenderer.invoke('context:handoff', request),
+		handoffTargets: (sourceAgentId: string): Promise<HandoffTargetsResult> =>
+			ipcRenderer.invoke('context:handoffTargets', sourceAgentId),
+		onHandoffReadSource: (
+			callback: (request: HandoffReadRequest, responseChannel: string) => void
+		) => {
+			const handler = (_event: unknown, request: HandoffReadRequest, responseChannel: string) =>
+				callback(request, responseChannel);
+			ipcRenderer.on('context:readHandoffSource', handler);
+			return () => ipcRenderer.removeListener('context:readHandoffSource', handler);
+		},
+		onHandoffOpenTarget: (
+			callback: (request: HandoffOpenRequest, responseChannel: string) => void
+		) => {
+			const handler = (_event: unknown, request: HandoffOpenRequest, responseChannel: string) =>
+				callback(request, responseChannel);
+			ipcRenderer.on('context:openHandoffTarget', handler);
+			return () => ipcRenderer.removeListener('context:openHandoffTarget', handler);
+		},
+		sendHandoffResponse: (responseChannel: string, result: HandoffReadResult | HandoffResult) =>
+			ipcRenderer.send(responseChannel, result),
 		// Get context from a stored agent session
 		getStoredSession: (
 			agentId: string,

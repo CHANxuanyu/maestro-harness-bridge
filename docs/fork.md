@@ -4,7 +4,7 @@
 
 - [产品 changelog](../CHANGELOG.md)
 - [分支、版本与发布管理](release-policy.md)
-- [本版验证与限制](verification/v1.0.1-hb.4.md)
+- [本版验证与限制](verification/v1.0.1-hb.5.md)
 - [开发过程记录](worklog.md)
 - [信息流改造记录](roadmap/conversation-feed.md)
 - [Codex 双端接续启动与回退](codex-shared.md)
@@ -19,6 +19,8 @@
 本版信息流采用紧凑正文和按需消息信息，并把已结束回合的工具、公开进度和推理摘要收进回答上方的一行。需要查看过程时展开，失败与停止状态保持可见。Codex 同一原生会话仍由一个原生进程写入；可选[共享连接器](codex-shared.md)让两端保持打开并轮流接续。它需要单独安装，限定原生版本和本机已有会话。未启用共享时，仍需正常释放另一客户端的占用，不删除写锁或复制历史。
 
 ## 下载与试用
+
+主线正在准备 `1.0.1-hb.5` 候选，尚无发行附件。它汇集 hb.4 之后的五轮改进；[候选说明](release-notes/v1.0.1-hb.5.md)及[Mac 构建、验收与发布顺序](verification/v1.0.1-hb.5.md#mac-操作顺序)与已发布包分开。构建该候选须检出阶段零 PR 的合并提交，不能直接打包后续主线。
 
 `v1.0.1-hb.4` 为预览版，macOS Apple Silicon 是本轮验证目标。下载 Release 的 mac-arm64 ZIP，校验随附 SHA-256 清单，再解压应用。应用采用临时签名，未做 Apple Developer ID 公证；系统可能要求通过“系统设置 → 隐私与安全性”确认打开。
 
@@ -48,4 +50,4 @@ npm run package:harness-bridge:mac
 
 Codex 和 Claude TUI / Dynamic 的后台历史条目改为最终回答首段的本地摘录。Claude API 摘要续接携带 `--no-session-persistence`，启动入口遇到该参数时跳过转录清理；普通 API 续接继续清理。若原生转录残留 thinking 空壳导致摘要最终被 API 拒绝，Maestro 走 `Synopsis failed`，不重试、不回退成本地摘录；下一次正常 API 回合清理后，这个原因造成的拒绝就不再出现。原生 Claude Code 2.1.310 对该 400 会在同一 CLI 进程内去掉请求里的 thinking 再发一次 HTTP 请求；Maestro 的单次启动不保证原生 CLI 内部只请求一次，详见[完成记录](roadmap/backend-followups.md#完成记录)。
 
-真实 macOS 双端、重启和界面表现尚未验证；这些源码变化没有打包、安装或发布，hb.4 下载包保持原状。
+hb.5 候选的真实 macOS 双端、重启和界面表现尚未验证；这些源码变化没有打包、安装或发布，hb.4 下载包保持原状。新候选连接器包含命令增量和版本准入检查，不能沿用旧包“连接器实现相同”的结论。

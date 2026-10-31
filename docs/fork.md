@@ -6,6 +6,7 @@
 - [分支、版本与发布管理](release-policy.md)
 - [本版验证与限制](verification/v1.0.1-hb.4.md)
 - [开发过程记录](worklog.md)
+- [核心体验计划：跨 AI 与关于我](roadmap/core-experience.md)
 - [信息流改造记录](roadmap/conversation-feed.md)
 - [Codex 双端接续启动与回退](codex-shared.md)
 - [本分支 Releases](https://github.com/CHANxuanyu/maestro-harness-bridge/releases)

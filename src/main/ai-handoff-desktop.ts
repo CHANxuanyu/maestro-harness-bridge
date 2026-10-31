@@ -19,7 +19,7 @@ export function createDesktopAiHandoff(deps: {
 	return createAiHandoffService({
 		getSessions: () => deps.sessionsStore.get('sessions', []),
 		getAgentConfig: (toolType) => deps.agentConfigsStore.get('configs', {})[toolType] ?? {},
-		getGlobalEnv: () => deps.settingsStore.get('globalShellEnvVars', {}),
+		getGlobalEnv: () => deps.settingsStore.get('shellEnvVars', {}),
 		env: deps.env ?? process.env,
 		isAvailable: async (config) => {
 			const binary = getAgentDefinition(config.toolType)?.binaryName;

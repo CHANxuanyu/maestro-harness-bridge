@@ -107,6 +107,29 @@ describe('handoff desktop ownership routing', () => {
 		});
 	});
 
+	it('classifies an inherited DeepSeek gateway from the same shellEnvVars setting as spawn', async () => {
+		const service = createDesktopAiHandoff({
+			getWindowForSession: () => sourceWindow,
+			sessionsStore: { get: () => [source, target] } as never,
+			agentConfigsStore: { get: () => ({}) } as never,
+			settingsStore: {
+				get: (key: string) =>
+					key === 'shellEnvVars'
+						? {
+								ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+								ANTHROPIC_AUTH_TOKEN: 'synthetic-key',
+								CLAUDE_CONFIG_DIR: '/deepseek-account',
+							}
+						: {},
+			} as never,
+			env: {},
+		});
+		expect(await service.targets('target')).toEqual({
+			success: true,
+			targets: [{ provider: 'deepseek', runnerId: 'source' }],
+		});
+	});
+
 	it('reports an unavailable owner instead of writing to a different window', async () => {
 		const result = await api([source, target], null).prepare({
 			sourceAgentId: 'source',

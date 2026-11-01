@@ -1,6 +1,6 @@
+import { createNativeTempDir } from './temp-root.cjs';
 import { it, expect } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -8,7 +8,7 @@ import NativeReporter from '../../native-reporter';
 import { realExternalTurn } from '../native-real';
 
 it('the shared summary excludes conversation text, paths, diagnostics and native IDs', () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-real-report-'));
+	const root = createNativeTempDir('maestro-real-report-');
 	const output = path.join(root, 'summary.json');
 	try {
 		const reporter = new NativeReporter({ output });
@@ -37,7 +37,7 @@ it('the shared summary excludes conversation text, paths, diagnostics and native
 });
 
 it('the real relay preserves arguments, input and output, then holds exit after its child finishes', async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-real-relay-'));
+	const root = createNativeTempDir('maestro-real-relay-');
 	const gate = path.join(root, 'exit');
 	const record = path.join(root, 'record.json');
 	const childPath = path.join(root, 'cli');
@@ -98,7 +98,7 @@ it('the real relay preserves arguments, input and output, then holds exit after 
 });
 
 it('an external CLI failure also ends the workload it left in its process group', async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-real-external-'));
+	const root = createNativeTempDir('maestro-real-external-');
 	const pidFile = path.join(root, 'workload-pid');
 	const executable = path.join(root, 'cli');
 	fs.writeFileSync(

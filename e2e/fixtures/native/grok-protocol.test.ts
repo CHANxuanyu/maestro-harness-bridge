@@ -1,6 +1,6 @@
+import { createNativeTempDir } from './temp-root.cjs';
 import { afterEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { GrokOutputParser } from '../../../src/main/parsers/grok-output-parser';
@@ -17,7 +17,7 @@ afterEach(() => {
 	for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true });
 });
 it('the pinned Grok fixture produces matching stdout and native history outcomes', async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-grok-fixture-'));
+	const root = createNativeTempDir('maestro-grok-fixture-');
 	roots.push(root);
 	vi.stubEnv('GROK_HOME', root);
 	const parser = new GrokOutputParser();
@@ -61,7 +61,7 @@ it('the pinned Grok fixture produces matching stdout and native history outcomes
 });
 
 it('chat-only history has no recorded tool outcome and reads without writing updates', async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-grok-chat-only-'));
+	const root = createNativeTempDir('maestro-grok-chat-only-');
 	roots.push(root);
 	vi.stubEnv('GROK_HOME', root);
 	const turn = createGrokTurn({

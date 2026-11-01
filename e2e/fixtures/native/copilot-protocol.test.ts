@@ -1,6 +1,6 @@
+import { createNativeTempDir } from './temp-root.cjs';
 import { afterEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { CopilotOutputParser } from '../../../src/main/parsers/copilot-output-parser';
@@ -17,7 +17,7 @@ afterEach(() => {
 	for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true });
 });
 it('the pinned Copilot fixture produces matching stdout and native history outcomes', async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-copilot-fixture-'));
+	const root = createNativeTempDir('maestro-copilot-fixture-');
 	roots.push(root);
 	vi.stubEnv('COPILOT_HOME', root);
 	const parser = new CopilotOutputParser();

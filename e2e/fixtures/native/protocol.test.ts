@@ -1,3 +1,4 @@
+import { createNativeTempDir } from './temp-root.cjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -43,7 +44,7 @@ afterEach(() => {
 for (const provider of ['claude', 'codex']) {
 	describe(provider, () => {
 		it('SIGINT records a native cancellation before exit', async () => {
-			const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-native-stop-'));
+			const root = createNativeTempDir('maestro-native-stop-');
 			roots.push(root);
 			const script = path.join(root, 'script.json');
 			fs.writeFileSync(
@@ -106,7 +107,7 @@ for (const provider of ['claude', 'codex']) {
 		});
 
 		it('the executable stream and native storage retain the same answer, tool IDs and results', async () => {
-			const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-native-fixture-'));
+			const root = createNativeTempDir('maestro-native-fixture-');
 			roots.push(root);
 			const script = path.join(root, 'script.json');
 			const tools = [
@@ -172,7 +173,7 @@ for (const provider of ['claude', 'codex']) {
 }
 
 it('the shared app-server drives the real connector and writes readable native results', async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-shared-fixture-'));
+	const root = createNativeTempDir('maestro-shared-fixture-');
 	roots.push(root);
 	const scene = {
 		answer: 'Shared fixture answer.',
@@ -217,7 +218,7 @@ it('the shared app-server drives the real connector and writes readable native r
 
 for (const blocker of ['active', 'queued'] as const) {
 	it(`the shared executable reports ${blocker} rejection in the production adapter format`, async () => {
-		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-shared-rejection-'));
+		const root = createNativeTempDir('maestro-shared-rejection-');
 		roots.push(root);
 		const seed = appendTurn(
 			{ provider: 'codex', configDir: root, cwd: root, prompt: 'Shared history' },
@@ -262,7 +263,7 @@ for (const blocker of ['active', 'queued'] as const) {
 }
 
 it('a nonpersistent Claude resume leaves every native byte and file unchanged', async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-native-synopsis-'));
+	const root = createNativeTempDir('maestro-native-synopsis-');
 	roots.push(root);
 	const turn = appendTurn(
 		{ provider: 'claude', configDir: root, cwd: root, prompt: 'Initial turn' },

@@ -229,3 +229,7 @@ Grep-verified 2026-09-04 (`npm run docs:verify` checks that every path below sti
 If your use case does NOT match an existing utility, prefer extending the canonical file over creating a new one. If you genuinely need something new, add the full entry HERE and a one-line index entry in CLAUDE.md so the next person can find it.
 
 The tracker at [DEDUP-TRACKER.md](DEDUP-TRACKER.md) lists all known duplication findings.
+
+## Native test temporary directories
+
+`nativeTempRoot()` and `createNativeTempDir(prefix)` in `e2e/fixtures/native/temp-root.cjs` select `MAESTRO_E2E_TEMP_ROOT`, then the short macOS temporary root or the system temporary root. They resolve the root physically before creating directories. Use them for native fixture and Electron acceptance directories; OMP uses the same root for its containment guard. A symlinked temporary path must not produce a different Claude project key from the child process cwd.

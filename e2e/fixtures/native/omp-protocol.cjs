@@ -5,8 +5,8 @@
 // {session-entries,session-paths,session-manager,agent-session}.ts;
 // modes/print-mode.ts printableEvent. No scenario controls enter native rows.
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
+const { nativeTempRoot } = require('./temp-root.cjs');
 const { randomUUID } = require('node:crypto');
 const content = (text) => [{ type: 'text', text }];
 const model = 'omp-native-model';
@@ -32,7 +32,7 @@ function createOmpTurn({ configDir, cwd, id, prompt, emit = () => {} }) {
 		: undefined;
 	if (resumed && !file) throw new Error('Session not found');
 	if (!file) {
-		const relative = path.relative(fs.realpathSync(os.tmpdir()), fs.realpathSync(cwd));
+		const relative = path.relative(nativeTempRoot(), fs.realpathSync(cwd));
 		if (relative.startsWith('..') || path.isAbsolute(relative))
 			throw new Error('Fixture project must be under the temporary root');
 		const bucket = `-tmp-${relative.replace(/[/\\:]/g, '-')}`;

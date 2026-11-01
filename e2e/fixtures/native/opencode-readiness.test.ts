@@ -1,5 +1,5 @@
+import { createNativeTempDir } from './temp-root.cjs';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
@@ -10,7 +10,7 @@ import {
 } from './opencode-protocol.cjs';
 
 it('distinguishes an existing SQLite file from a complete native schema without hiding errors', () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-readiness-'));
+	const root = createNativeTempDir('opencode-readiness-');
 	const file = path.join(root, 'opencode.db');
 	const db = new DatabaseSync(file);
 	try {

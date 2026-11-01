@@ -1,13 +1,13 @@
+import { createNativeTempDir } from './temp-root.cjs';
 import { it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { installedCli, prepareCredentials } = require('./real-runtime.cjs');
 const roots: string[] = [];
 function dirs() {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-real-credentials-'));
+	const root = createNativeTempDir('maestro-real-credentials-');
 	roots.push(root);
 	const source = path.join(root, 'source'),
 		destination = path.join(root, 'destination');

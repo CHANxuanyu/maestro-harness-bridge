@@ -154,3 +154,10 @@ hb.5 候选 `a2b2ce5` 的 Codex 真实验收中，d（正常重启后续接）�
 - **原有重启场景：** copilot、grok、omp 的 d 原来要求重启后从“历史”行打开会话，这只在标签没保存原生 ID 时成立。修复后标签带着原生会话恢复，侧栏显示为已打开的标签，不再另列历史行。三处改为点击绑定该原生 ID 的已打开行，并在历史加载完成后断言该 ID 只出现一行。侧栏行新增 `data-native-session-id` 供定位。临时回退修复后，这三条和 `claude k` 失败，claude、codex、opencode 的 d 仍通过；恢复后七条重启场景全部通过。
 - **验证：** 完整单元测试 2089 个文件 47663/47663（88 跳过）；类型检查、ESLint、格式、文档路径和引用检查通过。完整 Electron 套件在改三条 d 之前为 55/58，失败的正是这三条。
 - **限制：** 退出请求只发给主窗口，副窗口最后 2 秒的改动在退出时仍可能丢失，需要 main 在确认退出前通知所有窗口保存，已写给 Codex。Codex 读取首条用户请求的问题已由 `efde61263` 修复；d 的真实模式需在下一候选上重跑确认。
+
+## 2026-11-02：hb.6 前置项，测试临时目录
+
+- 分支 `codex/hb6-prerequisites`，起点 `57341e712`。仅本地开发，不改冻结 hb.5 源码、连接器范围或真实账户。
+- 新增 `temp-root.test.ts` 的物理路径与 OMP 根目录两条回归，修改前均失败，修改后 2/2。Electron、夹具和 OMP 守卫共用物理临时根目录，macOS 保留短 socket 路径，越界项目仍拒绝。
+- `npm run test:e2e:fixtures`：29/32，三条共享 socket 用例被沙箱 `listen EPERM` 阻止，没有跳过或重试。`npm run lint`、`npm run lint:eslint` 与改动文件 Prettier 通过。
+- `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep 'omp a:'` 在 renderer 构建阶段受阻：已就位的 node_modules 是工作区外链接，Vite 写入 `.vite-temp` 被沙箱拒绝。没有绕过。完整 Electron 验收及临时回退反证待沙箱外执行。默认环境验收命令为 `npm run test:e2e:fixtures`、`npm run test:e2e`；hb.5 已冻结，原 Mac 临时目录限制须由发布证据维护者写入其 VERIFICATION.json limits。

@@ -18,6 +18,7 @@ import { createCopilotTurn } from './native/copilot-protocol.cjs';
 import { createOmpTurn } from './native/omp-protocol.cjs';
 import { createGrokTurn } from './native/grok-protocol.cjs';
 import { createOpenCodeTurn, openCodeSchemaReady } from './native/opencode-protocol.cjs';
+import { createNativeTempDir } from './native/temp-root.cjs';
 
 const exec = promisify(execFile);
 export type Provider = 'claude' | 'codex' | 'opencode' | 'grok' | 'omp' | 'copilot';
@@ -40,12 +41,7 @@ export interface NativeScene {
 }
 
 export class NativeApp {
-	readonly root = fs.mkdtempSync(
-		path.join(
-			process.env.MAESTRO_E2E_TEMP_ROOT || (process.platform === 'darwin' ? '/tmp' : os.tmpdir()),
-			'maestro-native-e2e-'
-		)
-	);
+	readonly root = createNativeTempDir('maestro-native-e2e-');
 	readonly data = path.join(this.root, 'maestro');
 	readonly project = path.join(this.root, 'project');
 	readonly claude = path.join(this.root, 'claude');

@@ -288,6 +288,27 @@ export function AgentLogo({
 				</svg>
 			);
 
+		case 'deepseek':
+			// A preset provider identity (agentProviderId), not an AgentId. DeepSeek's
+			// mark is a whale; this keeps the silhouette, the raised tail and the eye.
+			return (
+				<svg
+					className={className}
+					viewBox="0 0 48 48"
+					fill="none"
+					xmlns="http://www.w3.org/2000/svg"
+					style={{ opacity }}
+				>
+					<path
+						d="M5 25c0-7.5 7-13 17-13 7.5 0 13 3.5 15.5 8.5L41 15h3l-2 8 2 8h-3l-3.5-5.5C35 32 29 36 21 36 11.5 36 5 31.5 5 25z"
+						stroke={color}
+						strokeWidth="2"
+						strokeLinejoin="round"
+					/>
+					<circle cx="15" cy="23" r="2" fill={color} />
+				</svg>
+			);
+
 		case 'qwen3-coder':
 			// Qwen's mark is a geometric knot inside a hex silhouette; this keeps the
 			// hex and reads the knot as two interlocking chevrons.

@@ -68,7 +68,7 @@ export function QueuedItemEditModal({
 
 	// Options come from the agent's own provider, never a hardcoded list: Claude
 	// Code's thinking levels and Codex's reasoning efforts are different sets.
-	const providerOptions = useAgentModelEffortOptions(session?.toolType);
+	const providerOptions = useAgentModelEffortOptions(session?.toolType, session?.customEnvVars);
 	const menus = useModelEffortMenus();
 	// Currently-viewed image in the local carousel; null when the carousel is closed.
 	const [lightboxImage, setLightboxImage] = useState<string | null>(null);

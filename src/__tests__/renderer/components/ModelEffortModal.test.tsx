@@ -88,6 +88,32 @@ describe('ModelEffortModal', () => {
 		expect(onClose).toHaveBeenCalled();
 	});
 
+	it('offers a DeepSeek agent its preset models under the DeepSeek name, never Claude models', async () => {
+		const session = seedStore();
+		useSessionStore.setState({
+			sessions: [
+				{
+					...session,
+					customModel: 'deepseek-flash[1m]',
+					customEnvVars: {
+						ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+						CLAUDE_CONFIG_DIR: '/data/accounts/deepseek-1',
+					},
+				},
+			],
+		});
+		renderModal();
+
+		await screen.findByText('DeepSeek');
+		expect(screen.queryByText('Claude Code')).not.toBeInTheDocument();
+		expect(screen.queryByText('claude-sonnet-4.5')).not.toBeInTheDocument();
+		fireEvent.keyDown(keyTarget(), { key: 'ArrowDown' });
+		fireEvent.keyDown(keyTarget(), { key: 'Enter' });
+		// One step from the preset default lands on the next catalog entry.
+		expect(setTabModel).toHaveBeenCalledWith('tab-1', 'deepseek-flash');
+		expect(window.maestro.agents.getModels).not.toHaveBeenCalled();
+	});
+
 	it('moves the model with Up/Down and the effort with Left/Right, committing both on Enter', async () => {
 		renderModal();
 		await screen.findByText('claude-sonnet-4.5');

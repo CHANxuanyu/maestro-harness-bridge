@@ -9,7 +9,7 @@
  * tabs (ran live, then survived a restart with locally generated ids).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { LogEntry } from '../../../renderer/types';
 import {
 	isSynopsisRequest,
@@ -250,6 +250,42 @@ describe('selectOlderEntries', () => {
 });
 
 describe('mergeNewerEntries', () => {
+	it('does not repeatedly scan the immutable tail when aligning a long untimed conversation', () => {
+		const count = 1024;
+		const visible = Array.from({ length: count }, (_, index) =>
+			entry(`local-${index}`, `unique ${index}`, index % 2 ? 'stdout' : 'user', index * 1000)
+		);
+		const loaded = Array.from({ length: count + 2 }, (_, index) =>
+			entry(`native-${index}`, `unique ${index}`, index % 2 ? 'stdout' : 'user', NaN)
+		);
+		let indexedReads = 0;
+		const slice = visible.slice.bind(visible);
+		// Count actual array-element reads, not wall-clock time on a busy runner.
+		// Only the immutable tail is observed; matching and merge remain real.
+		const observedSlice = vi.spyOn(visible, 'slice').mockImplementation((start, end) => {
+			const result = slice(start, end);
+			if (start !== 1 || end !== undefined) return result;
+			return new Proxy(result, {
+				get(target, key, receiver) {
+					if (typeof key === 'string' && /^\d+$/.test(key)) indexedReads++;
+					return Reflect.get(target, key, receiver);
+				},
+			});
+		});
+		try {
+			const merged = mergeNewerEntries(loaded, visible)!;
+			expect(merged.added).toBe(2);
+			expect(merged.logs).toHaveLength(count + 2);
+			expect(merged.logs.slice(0, count).every((value, index) => value === visible[index])).toBe(
+				true
+			);
+			expect(merged.logs.slice(-2)).toEqual(loaded.slice(-2));
+			expect(indexedReads).toBeLessThan(count * 20);
+		} finally {
+			observedSlice.mockRestore();
+		}
+	});
+
 	const ids = (logs: LogEntry[] | undefined) => (logs ?? []).map((e) => e.id);
 
 	it('appends what the native transcript gained, keeping earlier history and local errors', () => {

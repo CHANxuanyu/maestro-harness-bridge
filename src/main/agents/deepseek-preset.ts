@@ -43,3 +43,18 @@ export async function prepareDeepSeekPreset(
 		},
 	};
 }
+
+/** Find factory-created accounts after their agents were removed, without creating any. */
+export async function getDeepSeekAccountDirs(userDataDir: string): Promise<string[]> {
+	const parent = path.join(userDataDir, 'accounts');
+	try {
+		const entries = await fs.readdir(parent, { withFileTypes: true });
+		return entries
+			.filter((entry) => entry.isDirectory() && entry.name.startsWith('deepseek-'))
+			.map((entry) => path.join(parent, entry.name))
+			.sort();
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+		throw error;
+	}
+}

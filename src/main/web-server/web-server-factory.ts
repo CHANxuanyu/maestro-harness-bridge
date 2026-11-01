@@ -1,3 +1,4 @@
+import type { AboutMeService } from '../about-me';
 /**
  * Web server factory for creating and configuring the web server.
  * Extracted from main/index.ts for better modularity.
@@ -56,6 +57,7 @@ interface GroupsStore {
 
 /** Dependencies required for creating the web server */
 export interface WebServerFactoryDependencies {
+	aboutMe?: AboutMeService;
 	aiHandoff?: AiHandoffService;
 	/** Settings store for reading web interface configuration */
 	settingsStore: SettingsStore;

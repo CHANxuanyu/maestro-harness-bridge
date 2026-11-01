@@ -51,7 +51,7 @@ export async function atomicWriteJson(filePath: string, data: unknown): Promise<
 }
 
 /**
- * Atomically write arbitrary string contents to `filePath` via a temp file +
+ * Atomically write arbitrary string or byte contents to `filePath` via a temp file +
  * rename, with the same EPERM/EBUSY retry behavior as atomicWriteJson. Use for
  * non-JSON payloads (TOML, comment-preserving JSON) where the caller has already
  * produced the exact bytes to persist. A crash mid-write leaves the original
@@ -65,7 +65,7 @@ export async function atomicWriteJson(filePath: string, data: unknown): Promise<
  */
 export async function atomicWriteFile(
 	filePath: string,
-	contents: string,
+	contents: string | Uint8Array,
 	options?: { mode?: number }
 ): Promise<void> {
 	const tmp = `${filePath}.tmp`;

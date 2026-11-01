@@ -127,7 +127,7 @@ import {
 	handleOpenTerminalTab,
 	handleNewAITabWithPrompt,
 } from './tabs';
-import { handleGetSettings, handleSetSetting } from './settings';
+import { handleGetSettings, handleSetSetting, handleAboutMe } from './settings';
 import { handleTerminalWrite, handleTerminalResize } from './terminal';
 import {
 	handleGetGitStatus,
@@ -465,6 +465,9 @@ export class WebSocketMessageHandler {
 				handleGetSettings(this.ctx, client, message);
 				break;
 
+			case 'about_me':
+				void handleAboutMe(this.ctx, client, message);
+				break;
 			case 'set_setting':
 				handleSetSetting(this.ctx, client, message);
 				break;

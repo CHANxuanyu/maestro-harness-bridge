@@ -1,3 +1,4 @@
+import type { AboutMeService } from '../../about-me';
 import type { App, BrowserWindow } from 'electron';
 import type { AiHandoffService } from '../../ai-handoff';
 import type { ProcessManager } from '../../process-manager';
@@ -31,6 +32,7 @@ import type {
 } from '../../stores';
 
 export interface IpcBootstrapDependencies {
+	aboutMe: AboutMeService;
 	aiHandoff: AiHandoffService;
 	// getters - mutable `let` singletons that stay declared in index.ts
 	getMainWindow: () => BrowserWindow | null;

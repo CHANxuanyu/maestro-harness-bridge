@@ -1,3 +1,6 @@
+import { createAboutMeService } from './about-me';
+import { getNativeInstructionFiles } from './agents/native-instructions';
+import { notifyPeerWindows } from './ipc/handlers/persistence';
 import { createDesktopAiHandoff } from './ai-handoff-desktop';
 import {
 	app,
@@ -638,6 +641,19 @@ const debugPackageDeps: DebugPackageDependencies = {
 	bootstrapStore,
 };
 
+const aboutMe = createAboutMeService({
+	settingsStore: store,
+	getFiles: () =>
+		getNativeInstructionFiles({
+			userDataDir: app.getPath('userData'),
+			globalShellEnvVars: store.get('shellEnvVars', {}),
+		}),
+	onContentChanged: (senderWebContentsId) => {
+		notifyPeerWindows(senderWebContentsId);
+		webServer?.broadcastSettingsChanged(buildWebSettingsSnapshot(store));
+	},
+});
+
 const aiHandoff = createDesktopAiHandoff({
 	getWindowForSession: (sessionId) => {
 		const ownerId = windowRegistry.getWindowForSession(sessionId);
@@ -651,6 +667,7 @@ const aiHandoff = createDesktopAiHandoff({
 
 // Create web server factory with dependency injection (Phase 2 refactoring)
 const createWebServer = createWebServerFactory({
+	aboutMe,
 	aiHandoff,
 	settingsStore: store,
 	sessionsStore,
@@ -2893,6 +2910,7 @@ app
 		// Set up IPC handlers
 		logger.debug('Setting up IPC handlers', 'Startup');
 		setupIpcHandlers({
+			aboutMe,
 			aiHandoff,
 			debugPackageDeps,
 			getMainWindow: () => mainWindow,

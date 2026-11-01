@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { aboutMe } from './commands/about-me';
 // Maestro CLI
 // Command-line interface for Maestro
 
@@ -507,11 +508,21 @@ program
 	)
 	.action(dispatch);
 
-// Ask command - the agent-to-agent question. `dispatch` hands WORK to an agent
-// and lands in a real tab; `ask` asks a QUESTION and rides the cross-agent
-// consult path (hidden tab on the target, fresh context, no focus, no unread),
-// returning the answer here instead of interrupting whatever conversation the
-// human has open with that agent.
+program
+	.command('about-me <action>')
+	.description('Show, stage, apply or inspect the shared native instruction profile')
+	.option('--file <path>', 'Read Markdown for set from a file')
+	.option('--stdin', 'Read Markdown for set from standard input')
+	.option('--clear', 'Stage removal of the managed segment')
+	.option(
+		'--confirm <path>',
+		'Approve this exact resolved file from status (repeatable)',
+		(value: string, previous: string[]) => [...previous, value],
+		[]
+	)
+	.option('--json', 'Output JSON including per-file states')
+	.action(aboutMe);
+
 program
 	.command('handoff <tab> [provider]')
 	.description('Prepare a new conversation with another AI in the same project')
@@ -525,6 +536,11 @@ program
 	.option('--json', 'Output JSON')
 	.action(handoff);
 
+// Ask command - the agent-to-agent question. `dispatch` hands WORK to an agent
+// and lands in a real tab; `ask` asks a QUESTION and rides the cross-agent
+// consult path (hidden tab on the target, fresh context, no focus, no unread),
+// returning the answer here instead of interrupting whatever conversation the
+// human has open with that agent.
 program
 	.command('ask <agent-id> <question>')
 	.description(

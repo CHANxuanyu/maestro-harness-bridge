@@ -237,6 +237,18 @@ Send a message to an agent and get a JSON response
 | `-t, --tab`          | Open/focus the session tab in Maestro desktop                                                                                                           | -       |
 | `--no-system-prompt` | Skip the Maestro system prompt (agent identity, git branch, history path, conductor profile). Default is to include it for parity with the desktop app. | -       |
 
+## `maestro-cli about-me <action>`
+
+Show, stage, apply or inspect the shared native instruction profile
+
+| Option             | Description                                               | Default |
+| ------------------ | --------------------------------------------------------- | ------- |
+| `--file <path>`    | Read Markdown for set from a file                         | -       |
+| `--stdin`          | Read Markdown for set from standard input                 | -       |
+| `--clear`          | Stage removal of the managed segment                      | -       |
+| `--confirm <path>` | Approve this exact resolved file from status (repeatable) | `[]`    |
+| `--json`           | Output JSON including per-file states                     | -       |
+
 ## `maestro-cli handoff <tab> [provider]`
 
 Prepare a new conversation with another AI in the same project

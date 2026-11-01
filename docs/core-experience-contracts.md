@@ -92,3 +92,71 @@ MAESTRO_E2E_REAL=1 npm run test:e2e -- --grep 'claude handoff:'
 ```
 
 场景包含三家六个方向的草稿、保持原生文件不变、同项目复用、IPC/CLI 一致及一次显式发送。真实网关、额度、macOS 与 Opus 新入口尚未验证；云端仅执行假 CLI 和合成凭据的真实模式入口。
+
+交接当前只提取文本上下文与工具摘要，不复制图片或附件；源附件仍留在原会话。
+
+## 关于我
+
+### 来源、文件与现有内容
+
+2026-10-31 核对 Claude Code 官方[记忆文档](https://code.claude.com/docs/en/memory)、[环境变量文档](https://code.claude.com/docs/en/env-vars)和 Codex 官方[AGENTS.md 文档](https://developers.openai.com/codex/guides/agents-md)。Claude 使用账户目录里的 `CLAUDE.md`，Codex 使用 `CODEX_HOME`（默认 `~/.codex`）里的 `AGENTS.md`。Codex 同目录中非空的 `AGENTS.override.md` 优先，接口以 `shadowedBy` 返回，绝不另行改写 override。
+
+复用已有 `conductorProfile` Markdown，不增加第二份“关于我”或新存储。原来的 Maestro 系统提示注入保持现状；本轮增加原生全局文件同步。原生工具在启动时发现这些文件，不能把计划中“每轮加载”理解成已经运行的 CLI 会即时重载。实际加载及 Mac 使用未验，需要重新启动原生 CLI 并验证。
+
+目录来自既有账户发现的原始候选：本机智能体、提供方、全局环境、进程环境、默认目录、既有规则认可的 home 账户目录；另包括预设工厂创建的 DeepSeek 目录和此前已管理的文件。SSH 智能体不加入。共享同一历史池的两个账户仍各自同步自己的指令文件；实际指向同一文件的目录别名/符号链接只写一次，返回原始路径与实际目标，保留链接本身。不搜索整个磁盘，也不猜未知账户路径。
+
+### 共用接口与确认
+
+`window.maestro.settings.aboutMe(command)` 与 CLI `{ type: 'about_me', request: command }` 请求使用同一服务：
+
+- `{ action: 'show' }`：返回现有 Markdown 与 token 估算。
+- `{ action: 'set', content }`：仅保存 Markdown，不写原生文件，不调用模型。保留内容原样，没有新增长度上限；拒绝包含管理标记或无效 Unicode 的内容。
+- `{ action: 'status' }`：读当前文件，列出 `path`、`aliases`、`resolvedPath`、`providers`、`state`、`currentBlock`、`shadowedBy` 及文件错误。只返回管理段，不返回段外用户内容。
+- `{ action: 'apply', content, confirmations?: [{ path, resolvedPath, block }] }`：`content` 必须等于刚显示/保存的档案；确认项必须来自 `status`，`block` 是当时的 `currentBlock`（不存在为 `null`）。第一次写入、链接改指新目标、管理段在外部改变均要求明确确认。提交后再次比对实际目标与管理段，旧确认不能覆盖新修改。已经确认且未外改的文件可直接更新或清空。
+
+状态为 `synced`、`pending`、`unconfirmed`、`external-change`、`missing-directory`、`invalid-block`、`error`。成功/失败均返回 `content`、`estimatedTokens`、`files`；apply 另有 `written`，列出已实际写入的文件。`code` 区分 `invalid-request`、`profile-changed`、`confirmation-required`、`file-error`、`persistence-failed`、`unavailable`。失败可能是部分成功，不能把整个批次当成回滚：逐文件原子写入，某个文件失败或未确认不覆盖它，其他已批准文件可以完成。写后保存归属记录失败也明确报错；再次读取状态，按返回的归属/冲突状态确认，不自动重试。
+
+在既有 settings 中以 `aboutMeApplied` 保存每个路径上次已应用的准确管理段及实际目标，不使用内容哈希或不透明版本号。段外字节（包括 BOM、CRLF、非 UTF-8 字节和无末尾换行）原样保留。标记重复/不完整或管理段不是 UTF-8 时拒绝改写；目录不存在不自动创建账户目录，已有目录内缺失的文件经确认后新建。空内容在 apply 时删除完整管理段，保留文件和其他字节。并发 Maestro 请求串行执行；没有为外部编辑器增加锁，原子替换不承诺跨进程事务。
+
+token 沿用 `estimateTokenCount` 的字符数/4 估算，仅代表 Markdown 自身，不是提供方的真实计费或整轮系统上下文。成功 `set` 通知其他桌面窗口与 web 客户端，写入窗口从返回结果更新本地内容；apply 后重新获取/使用返回的文件状态。不会经由通用 `settings:set` 记录档案正文。
+
+### 关于我 CLI
+
+需连接正在运行且使用同一数据目录的 Maestro；内容只从文件或 stdin 输入：
+
+```sh
+maestro-cli about-me show --json
+maestro-cli about-me set --file /absolute/profile.md --json
+# 或：maestro-cli about-me set --stdin --json < /absolute/profile.md
+maestro-cli about-me status --json
+# 逐项查看状态中的 resolvedPath；只给明确批准的实际文件路径：
+maestro-cli about-me apply \
+  --confirm '/absolute/claude-account/CLAUDE.md' \
+  --confirm '/absolute/codex-account/AGENTS.md' --json
+# 后续正常更新已有归属且未外改的文件：
+maestro-cli about-me apply --json
+# 清空分为保存空内容和应用，前者不改原生文件：
+maestro-cli about-me set --clear --json
+maestro-cli about-me apply --json
+```
+
+`--file`、`--stdin`、`--clear` 三选一；`--confirm` 可重复，只接受当前状态中的绝对实际目标。CLI 从最新状态取得待确认的段；这条显式命令表示批准该文件当前的管理段，不提供全局 force 或跳过确认开关。未提供确认时，首次 apply 只报告未确认状态；已有归属的文件仍按常规更新。失败退出码为 1，JSON 保留部分结果，不把未知/失败显示成成功。
+
+### 交给 Opus 的关于我复现用例
+
+1. 在 General 设置的现有 Conductor Profile (About Me) 编辑内容。目前保存仅改变 `conductorProfile`，没有原生文件确认、状态或 token 信息。接入上述 `set -> status -> 确认 -> apply`，沿用同一 Markdown，不另建一份档案；新增界面和文案由 Opus 决定。
+2. 用 CLI 保存超过 5000 字符的 Markdown，再在现有编辑框修改：原来的 `setConductorProfile` 会截到 5000 字符。新后端不截断，接入时应避免经旧 setter 丢失内容，并用返回的完整内容更新当前窗口。
+3. 首次 apply、外部改段或符号链接改指目标时，展示原始路径、实际目标及当前管理段；用户明确确认后原样传回快照。期间继续外改应保持冲突，不静默覆盖，不自动重试。
+4. 构造缺失目录、重复标记和一个正常文件；批量应用会返回部分完成和每个文件状态。分别呈现 `written` 与未完成项，不把它显示成全部成功或全部回滚。非空 Codex override 必须提示其优先级，不能显示为“模型已经加载”。
+5. 清空后执行 apply，管理段应消失、其他字节不变；提示重新启动原生 CLI。这里只验文件，不把合成端到端结果显示为真实模型加载验收。
+
+### 用户的 Mac 关于我验收
+
+先使用包含本功能的源码并按上面的 CLI 顺序保存、查看和逐文件确认，不能用 hb.5 冻结源码。选择自己愿意写入的短测试偏好，记录确认的账户目录，重新启动 Maestro 对话及对应的原生 CLI：
+
+```sh
+CLAUDE_CONFIG_DIR='/absolute/approved-claude-account' claude
+CODEX_HOME='/absolute/approved-codex-account' codex
+```
+
+对 DeepSeek 使用它的独立账户目录及既有网关、模型、环境变量凭据启动 Claude Code，不把密钥填进命令行参数或验收记录。分别在 Maestro 内外用同一测试问题验证偏好生效；检查 Codex 的 override，已经运行的旧 CLI 先退出再启动。外部修改管理段后运行 status/apply，应先拒绝覆盖；最后 `set --clear` 与 apply 后确认段消失、其他字节不变。每个本机账户分别记录，真实加载、Mac 和账户请求目前均未验。

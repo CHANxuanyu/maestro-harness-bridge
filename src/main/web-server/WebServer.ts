@@ -1,3 +1,4 @@
+import type { AboutMeCommand, AboutMeCommandCallback } from '../../shared/aboutMe';
 /**
  * WebServer - HTTP and WebSocket server for remote access
  *
@@ -839,6 +840,10 @@ export class WebServer {
 		this.callbackRegistry.setMergeContextCallback(callback);
 	}
 
+	setAboutMeCommandCallback(callback: AboutMeCommandCallback): void {
+		this.callbackRegistry.setAboutMeCommandCallback(callback);
+	}
+
 	setHandoffCommandCallback(callback: HandoffCommandCallback): void {
 		this.callbackRegistry.setHandoffCommandCallback(callback);
 	}
@@ -1350,6 +1355,7 @@ export class WebServer {
 				this.callbackRegistry.sendGroupChatMessage(chatId, message),
 			mergeContext: async (sourceSessionId: string, targetSessionId: string) =>
 				this.callbackRegistry.mergeContext(sourceSessionId, targetSessionId),
+			aboutMeCommand: (request: AboutMeCommand) => this.callbackRegistry.aboutMeCommand(request),
 			handoffCommand: (request: HandoffCommand) => this.callbackRegistry.handoffCommand(request),
 			transferContext: async (sourceSessionId: string, targetSessionId: string) =>
 				this.callbackRegistry.transferContext(sourceSessionId, targetSessionId),

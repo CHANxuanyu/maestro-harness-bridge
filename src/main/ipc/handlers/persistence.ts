@@ -1,3 +1,4 @@
+import type { AboutMeService } from '../../about-me';
 /**
  * Persistence IPC Handlers
  *
@@ -82,7 +83,7 @@ function cliActivityChanged(
  * and snapping the caret to the end. Peer windows still have to hear about it,
  * so route that here - immediately, and only to windows that did not write.
  */
-function notifyPeerWindows(senderWebContentsId: number | undefined): void {
+export function notifyPeerWindows(senderWebContentsId: number | undefined): void {
 	for (const win of BrowserWindow.getAllWindows()) {
 		if (!isWebContentsAvailable(win)) continue;
 		if (win.webContents.id === senderWebContentsId) continue;
@@ -173,6 +174,7 @@ function senderWebContentsIdOf(event: unknown): number | undefined {
  * Dependencies required for persistence handlers
  */
 export interface PersistenceHandlerDependencies {
+	aboutMe?: AboutMeService;
 	settingsStore: Store<MaestroSettings>;
 	sessionsStore: Store<SessionsData>;
 	groupsStore: Store<GroupsData>;
@@ -357,6 +359,12 @@ export function registerPersistenceHandlers(
 	};
 
 	// Settings management
+	if (deps.aboutMe) {
+		ipcMain.handle('settings:aboutMe', (event, command: unknown) =>
+			deps.aboutMe!.command(command, senderWebContentsIdOf(event))
+		);
+	}
+
 	ipcMain.handle('settings:get', async (_, key: string) => {
 		const value = settingsStore.get(key);
 		logger.debug(`Settings read: ${key}`, 'Settings', { key, value });

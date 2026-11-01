@@ -391,7 +391,11 @@ const ConversationRow = memo(function ConversationRow({
 	);
 
 	return (
-		<li data-conversation-key={conversation.key} data-conversation-kind={conversation.kind}>
+		<li
+			data-conversation-key={conversation.key}
+			data-conversation-kind={conversation.kind}
+			data-native-session-id={conversation.nativeSessionId ?? undefined}
+		>
 			<div className="group relative flex items-center">
 				<button
 					type="button"

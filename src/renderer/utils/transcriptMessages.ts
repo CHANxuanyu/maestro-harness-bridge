@@ -572,7 +572,13 @@ export function mergeNewerEntries(
 	const tail = visible.slice(anchor.visibleIndex + 1);
 	// A send already tied to its native copy is accounted for: it must not also
 	// stand in, by text, for a later native message with the same words.
-	const unmatchedTail = tail.filter((entry) => !isBoundOwnSend(entry));
+	const tailPositions = new Map<LogEntry, number>();
+	const unmatchedTail = new Map<number, LogEntry>();
+	tail.forEach((entry, index) => {
+		// Preserve indexOf's first occurrence even if a reference occurs twice.
+		if (!tailPositions.has(entry)) tailPositions.set(entry, index);
+		if (!isBoundOwnSend(entry)) unmatchedTail.set(index, entry);
+	});
 	const visibleIds = new Set(visible.map((entry) => entry.id));
 	// Native user messages already on screen as the tab's OWN send, tied to it by
 	// bindDelayedOwnSends (the provider wrote them too late for the live window).
@@ -625,18 +631,24 @@ export function mergeNewerEntries(
 		const untimed = !Number.isFinite(entry.timestamp);
 		// An unmatched native user starts an external turn. Its reply cannot
 		// claim a later local reply merely because their words are identical.
-		const repeat = untimed
-			? unmatchedTail.findIndex(
-					(local) =>
-						(entry.source === 'user' || liveTurn) &&
-						tail.indexOf(local) > lastUntimedPairAt &&
-						sameTextEntry(local, entry)
-				)
-			: unmatchedTail.findIndex((local) => sameLiveMessage(local, entry));
-		if (repeat >= 0) {
-			const local = unmatchedTail[repeat];
-			unmatchedTail.splice(repeat, 1);
-			const at = tail.indexOf(local);
+		let repeat: number | undefined;
+		// Map iteration retains the original unmatched order. Removing a match
+		// neither shifts the remaining array nor rescans the immutable tail.
+		for (const [index, local] of unmatchedTail) {
+			const matches = untimed
+				? (entry.source === 'user' || liveTurn) &&
+					tailPositions.get(local)! > lastUntimedPairAt &&
+					sameTextEntry(local, entry)
+				: sameLiveMessage(local, entry);
+			if (matches) {
+				repeat = index;
+				break;
+			}
+		}
+		if (repeat !== undefined) {
+			const local = unmatchedTail.get(repeat)!;
+			unmatchedTail.delete(repeat);
+			const at = tailPositions.get(local)!;
 			if (untimed) {
 				lastUntimedPairAt = at;
 				if (pendingUntimed.length > 0) {

@@ -147,3 +147,34 @@ it('an external CLI failure also ends the workload it left in its process group'
 		fs.rmSync(root, { recursive: true });
 	}
 });
+
+it('a successful external CLI lets its remaining writer finish before the next turn', async () => {
+	const root = createNativeTempDir('maestro-external-success-');
+	const executable = path.join(root, 'cli');
+	const file = path.join(root, 'rollout.jsonl');
+	const released = path.join(root, 'released');
+	fs.writeFileSync(
+		executable,
+		`#!${process.execPath}\nconst fs = require('node:fs');\nconst { spawn } = require('node:child_process');\nfs.writeFileSync(${JSON.stringify(file)}, JSON.stringify({type: 'session_meta', payload: {id: 'fixture-thread'}}) + '\\n');\nconst child = spawn(process.execPath, ['-e', ${JSON.stringify(`setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(released)}, 'released'), 150)`)}], {stdio: 'inherit'});\nchild.unref();\n`,
+		{ mode: 0o700 }
+	);
+	try {
+		await realExternalTurn(
+			{
+				root,
+				project: root,
+				externalCount: 0,
+				externalProcesses: new Map(),
+				files: () => (fs.existsSync(file) ? [file] : []),
+				realCliFor: () => ({ executable }),
+				env: {},
+			} as any,
+			'codex',
+			'Finish normally',
+			{ answer: '' }
+		);
+		expect(fs.existsSync(released)).toBe(true);
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});

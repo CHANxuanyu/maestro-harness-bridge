@@ -87,6 +87,7 @@ async function startAppServer({
 				reply({ turn: { id: turnId, status: 'inProgress' } });
 				notify('turn/started', { threadId: id, turn });
 				const native = createTurn({
+					effort: scene.effort,
 					provider: 'codex',
 					configDir,
 					cwd,

@@ -177,6 +177,7 @@ it('the shared app-server drives the real connector and writes readable native r
 	roots.push(root);
 	const scene = {
 		answer: 'Shared fixture answer.',
+		effort: 'high',
 		tools: [{ id: 'shared-tool', command: 'printf shared-result', output: 'shared-result' }],
 	};
 	const seed = appendTurn(

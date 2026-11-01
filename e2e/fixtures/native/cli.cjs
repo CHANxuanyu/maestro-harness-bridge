@@ -63,6 +63,7 @@ async function run(provider) {
 		cwd,
 		id,
 		prompt,
+		effort: scene.effort,
 		// Claude Code 2.1.310: --model wins over ANTHROPIC_MODEL. DeepSeek's
 		// official integration uses [1m] as a Claude context hint; the gateway
 		// reports the underlying model ID (api-docs.deepseek.com/guides/anthropic_api/).
@@ -105,6 +106,7 @@ async function run(provider) {
 		turn.finishTool(tool, tool.status);
 	}
 	if (!stopped) turn.finish(scene.answer);
+	if (provider === 'codex' && !stopped) await delay(1100);
 	// Hold the completed native writer before Maestro starts its exit synopsis.
 	if (scene.exitGate) while (!fs.existsSync(scene.exitGate) && !stopped) await delay(10);
 }

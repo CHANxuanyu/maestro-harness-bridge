@@ -110,6 +110,9 @@ export async function realExternalTurn(
 									'--json',
 									'--dangerously-bypass-approvals-and-sandbox',
 									'--skip-git-repo-check',
+									...(scene.effort
+										? ['-c', `model_reasoning_effort=${JSON.stringify(scene.effort)}`]
+										: []),
 									...(id ? ['resume', id] : []),
 								];
 	const child = spawn(
@@ -148,9 +151,10 @@ export async function realExternalTurn(
 				);
 		});
 	});
-	// A failed or timed-out CLI can leave a shell workload holding its pipes
-	// open. End only this invocation's process group when the CLI exits.
-	child.once('exit', () => {
+	// Failed invocations may leave workloads behind. Successful invocations
+	// must finish normally; close waits for inherited output pipes to close.
+	child.once('exit', (code) => {
+		if (code === 0) return;
 		try {
 			process.kill(-child.pid!, 'SIGTERM');
 		} catch (error) {
@@ -216,13 +220,21 @@ export function nativeToolIds(provider: Provider, file: string, commands: string
 								.map((item) => ({ id: item.id, command: item.input?.command }))
 						: []
 				)
-			: records
-					.filter(
-						(record) => record.type === 'response_item' && record.payload?.type === 'function_call'
+			: records.flatMap((record) => {
+					// 11.1 persists completed TurnItems even when the model's tool
+					// invocation is not a direct exec_command function call.
+					const item = record.payload?.item;
+					if (
+						record.type === 'event_msg' &&
+						record.payload?.type === 'item_completed' &&
+						item?.type === 'CommandExecution'
 					)
-					.map((record) => ({
-						id: record.payload.call_id,
-						command: JSON.parse(record.payload.arguments).cmd,
-					}));
+						return [{ id: item.id, command: item.command.join(' ') }];
+					if (record.type === 'response_item' && record.payload?.type === 'function_call')
+						return [
+							{ id: record.payload.call_id, command: JSON.parse(record.payload.arguments).cmd },
+						];
+					return [];
+				});
 	return commands.map((command) => calls.find((call) => call.command?.includes(command))?.id);
 }

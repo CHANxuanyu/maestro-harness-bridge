@@ -161,3 +161,11 @@ hb.5 候选 `a2b2ce5` 的 Codex 真实验收中，d（正常重启后续接）�
 - 新增 `temp-root.test.ts` 的物理路径与 OMP 根目录两条回归，修改前均失败，修改后 2/2。Electron、夹具和 OMP 守卫共用物理临时根目录，macOS 保留短 socket 路径，越界项目仍拒绝。
 - `npm run test:e2e:fixtures`：29/32，三条共享 socket 用例被沙箱 `listen EPERM` 阻止，没有跳过或重试。`npm run lint`、`npm run lint:eslint` 与改动文件 Prettier 通过。
 - `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep 'omp a:'` 在 renderer 构建阶段受阻：已就位的 node_modules 是工作区外链接，Vite 写入 `.vite-temp` 被沙箱拒绝。没有绕过。完整 Electron 验收及临时回退反证待沙箱外执行。默认环境验收命令为 `npm run test:e2e:fixtures`、`npm run test:e2e`；hb.5 已冻结，原 Mac 临时目录限制须由发布证据维护者写入其 VERIFICATION.json limits。
+
+## 2026-11-02：hb.6 前置项，Codex 契约与退出时序
+
+- 按官方 `rust-v0.163.0-alpha.11.1` 核对 exec JSON、持久化 CommandExecution、可空 effort 和文件写锁，出处与后续验收见 [hb.6 前置项](verification/hb6-prerequisites.md)。普通 exec 假程序不再伪造命令增量；完成时输出断言保留，运行中跟随及上滚断言移到共享模式。
+- 正常 teardown 等 Stop 消失；假 Codex 最终回答后再等待 1100ms 退出。原生工具 ID 读取支持持久化 item_completed；默认 effort 保留 null，显式 high 的正向用例继续核对 high。
+- 外部成功进程不再收到进程组 SIGTERM，失败清理仍保留。合成子进程证明原清理会截断收尾，但这不能证明真实 active writer 冲突已消失；没有删除写锁、加重试或调用真实 CLI。
+- 新增五条失败回归，修复后通过；临时回退 protocol、native-real、native-app 后重现 5 失败 / 4 通过，恢复修改。相关夹具最终 9/9；Codex 解析、消息、revision 单元测试 219/219。`npm run lint`、`npm run lint:eslint`、改动文件 Prettier 通过。
+- 默认 Vitest 配置加载也遇到外部 node_modules 的 `.vite-temp` 写入拒绝。将配置中的 `__dirname` 换成原生 ESM URL，使用同一配置的 `--configLoader native` 运行单元测试，无断言或选择范围旁路。Electron 命令仍保持原入口，其执行与 Electron 临时回退反证由沙箱外补验。

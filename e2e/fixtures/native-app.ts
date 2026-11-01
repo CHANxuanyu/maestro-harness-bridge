@@ -32,6 +32,7 @@ export interface NativeTool {
 }
 export interface NativeScene {
 	answer: string;
+	effort?: string;
 	tools?: NativeTool[];
 	waitForStop?: boolean;
 	stopDiagnostic?: boolean;
@@ -183,6 +184,9 @@ export class NativeApp {
 		for (const child of this.externalProcesses.keys())
 			if (child.pid && child.exitCode === null) process.kill(-child.pid, 'SIGTERM');
 		await Promise.allSettled(this.externalProcesses.values());
+		// The final answer can precede native writer shutdown. A normal close
+		// must not open a busy-agent confirmation that the test cannot answer.
+		if (!failed) await expect(this.page.getByTestId('stop-turn-button')).toHaveCount(0);
 		if (failed) {
 			await this.page.screenshot({ path: this.info.outputPath(`failure-${this.boot}.png`) });
 			await this.app

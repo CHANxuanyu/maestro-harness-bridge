@@ -215,3 +215,59 @@ test('codex h: shared history uses the final answer without sending a Summary tu
 		await server.close();
 	}
 });
+
+test('codex g: running output grows, follows the bottom and respects upward reading', async ({
+	native,
+}) => {
+	const updates = [60, 100, 140].map((count) =>
+		Array.from({ length: count }, (_, index) => `line-${index}\n`).join('')
+	);
+	const gates = updates.map((_, index) => path.join(native.root, `output-${index}.continue`));
+	const tool = {
+		id: 'streaming-command',
+		command: 'printf streaming-lines',
+		output: updates[2],
+		updates,
+		gates,
+	};
+	const { server } = await shared(native, [
+		{ answer: 'Streaming command finished.', tools: [tool] },
+	]);
+	try {
+		await native.send('Run a command with streaming output');
+		await expect(native.output().locator('[data-tool-status="running"]').first()).toBeVisible();
+		await native.expandTools();
+		const result = native.output().getByTestId('tool-call-result');
+		const scroll = result.locator('div.overflow-auto');
+		await expect(result).toContainText('line-59');
+		await expect
+			.poll(() => scroll.evaluate((node) => node.scrollHeight - node.clientHeight))
+			.toBeGreaterThan(0);
+		await expect
+			.poll(() =>
+				scroll.evaluate((node) => Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop))
+			)
+			.toBeLessThanOrEqual(1);
+		fs.writeFileSync(gates[0], 'continue');
+		await expect(result).toContainText('line-99');
+		await expect
+			.poll(() =>
+				scroll.evaluate((node) => Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop))
+			)
+			.toBeLessThanOrEqual(1);
+		await scroll.evaluate((node) => {
+			node.scrollTop = 0;
+			node.dispatchEvent(new Event('scroll'));
+		});
+		fs.writeFileSync(gates[1], 'continue');
+		await expect(result).toContainText('line-139');
+		await expect.poll(() => scroll.evaluate((node) => node.scrollTop)).toBe(0);
+		fs.writeFileSync(gates[2], 'continue');
+		await expect(
+			native.output().getByText('Streaming command finished.', { exact: true })
+		).toBeVisible();
+	} finally {
+		for (const gate of gates) fs.writeFileSync(gate, 'continue');
+		await server.close();
+	}
+});

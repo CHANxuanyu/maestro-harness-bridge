@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath } from 'node:url';
 
 // Directories excluded from the default unit-test run (have their own configs).
 const sharedExclude = [
@@ -120,7 +120,7 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
-			'@': path.resolve(__dirname, './src'),
+			'@': fileURLToPath(new URL('./src', import.meta.url)),
 		},
 	},
 });

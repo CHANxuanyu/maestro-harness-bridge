@@ -126,12 +126,11 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		native.scriptTurns([]);
 		const turn = await native.externalTurn(provider, 'External acceptance history', {
 			answer: 'Answer from external history.',
+			effort: 'high',
 			tools: [{ id: 'history-tool', command: 'printf history-result', output: 'history-result' }],
 		});
 		const before = fs.readFileSync(turn.file);
-		const metadata = native.real
-			? nativeIdentity(provider, turn.file)
-			: { model: provider === 'claude' ? 'claude-sonnet-4-6' : 'gpt-5.3-codex', effort: 'high' };
+		const metadata = nativeIdentity(provider, turn.file);
 		expect(metadata.model).toBeTruthy();
 		await native.createAgent(provider);
 		await native.page
@@ -184,9 +183,31 @@ test('claude k: an answer that lands just before quit is saved with the tab', as
 	await expect(native.output().getByText(answer, { exact: true })).toBeVisible();
 });
 
-test('codex b: running output grows, follows the bottom and respects upward reading', async ({
-	native,
-}) => {
+test('codex e: default effort information matches the native record', async ({ native }) => {
+	native.scriptTurns([]);
+	const turn = await native.externalTurn('codex', 'Default effort history', {
+		answer: 'Default effort answer.',
+	});
+	const metadata = nativeIdentity('codex', turn.file);
+	const before = fs.readFileSync(turn.file);
+	await native.createAgent('codex');
+	await native.page
+		.locator('[data-conversation-kind="history"] button[data-tree-nav]')
+		.filter({ hasText: 'Default effort history' })
+		.click();
+	await expect(native.output().getByText('Default effort answer.', { exact: true })).toBeVisible();
+	await native.output().getByRole('button', { name: 'Message info', exact: true }).last().click();
+	const info = native.output().getByRole('group', { name: 'Message info', exact: true });
+	await expect(
+		info
+			.locator('div.contents')
+			.filter({ has: native.page.locator('dt', { hasText: /^Effort$/ }) })
+			.locator('dd')
+	).toHaveText(metadata.effort ?? 'Not recorded');
+	expect(fs.readFileSync(turn.file)).toEqual(before);
+});
+
+test('codex b: exec command output appears at completion', async ({ native }) => {
 	const updates = [60, 100, 140].map((count) =>
 		Array.from({ length: count }, (_, index) => `line-${index}\n`).join('')
 	);
@@ -205,34 +226,15 @@ test('codex b: running output grows, follows the bottom and respects upward read
 		await expect(native.output().locator('[data-tool-status="running"]').first()).toBeVisible();
 		await native.expandTools();
 		const result = native.output().getByTestId('tool-call-result');
-		const scroll = result.locator('div.overflow-auto');
-		await expect(result).toContainText('line-59');
-		await expect
-			.poll(() => scroll.evaluate((node) => node.scrollHeight - node.clientHeight))
-			.toBeGreaterThan(0);
-		await expect
-			.poll(() =>
-				scroll.evaluate((node) => Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop))
-			)
-			.toBeLessThanOrEqual(1);
-		fs.writeFileSync(gates[0], 'continue');
-		await expect(result).toContainText('line-99');
-		await expect
-			.poll(() =>
-				scroll.evaluate((node) => Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop))
-			)
-			.toBeLessThanOrEqual(1);
-		await scroll.evaluate((node) => {
-			node.scrollTop = 0;
-			node.dispatchEvent(new Event('scroll'));
-		});
-		fs.writeFileSync(gates[1], 'continue');
-		await expect(result).toContainText('line-139');
-		await expect.poll(() => scroll.evaluate((node) => node.scrollTop)).toBe(0);
-		fs.writeFileSync(gates[2], 'continue');
+		await expect(result).toHaveCount(0);
+		for (const gate of gates) fs.writeFileSync(gate, 'continue');
 		await expect(
 			native.output().getByText('Streaming command finished.', { exact: true })
 		).toBeVisible();
+		await native.expandTools();
+		await expect(result).toContainText('line-0');
+		await expect(result).toContainText('line-139');
+		await expect(native.output().locator('[data-tool-status="running"]')).toHaveCount(0);
 	} finally {
 		for (const gate of gates) fs.writeFileSync(gate, 'continue');
 	}

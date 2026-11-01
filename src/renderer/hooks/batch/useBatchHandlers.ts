@@ -41,6 +41,7 @@ import type { RightPanelHandle } from '../../components/RightPanel';
 import type { AgentSpawnResult, SpawnAgentOptions } from '../agent/useAgentExecution';
 import * as Sentry from '@sentry/electron/renderer';
 import { queueLeaderboardDelta, noteAutoRunCreditSettled } from '../../services/leaderboard';
+import { confirmQuitAfterSave } from '../../services/quitSave';
 import { logger } from '../../utils/logger';
 
 /**
@@ -889,7 +890,7 @@ export function useBatchHandlers(deps: UseBatchHandlersDeps): UseBatchHandlersRe
 			const ops = await collectActiveOperations();
 
 			if (!ops.hasActiveOperations) {
-				window.maestro.app.confirmQuit();
+				await confirmQuitAfterSave();
 			} else {
 				// Tell main the modal is up so it disarms the dead-renderer safety
 				// timeout - otherwise the app force-quits after a few seconds while

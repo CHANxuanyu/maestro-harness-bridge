@@ -30,6 +30,7 @@ import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useBatchStore } from '../../../renderer/stores/batchStore';
 import { useGroupChatStore } from '../../../renderer/stores/groupChatStore';
 import { useFeedbackDraftStore } from '../../../renderer/stores/feedbackDraftStore';
+import { registerQuitSave } from '../../../renderer/services/quitSave';
 import type { GroupChat } from '../../../renderer/types';
 
 beforeEach(() => {
@@ -85,6 +86,20 @@ describe('useQuitWhenIdle', () => {
 
 		await new Promise((r) => setTimeout(r, 50));
 		expect(confirmQuit).not.toHaveBeenCalled();
+	});
+
+	it('lands the pending save before quitting', async () => {
+		const order: string[] = [];
+		confirmQuit.mockImplementation(() => order.push('confirmQuit'));
+		const unregister = registerQuitSave(async () => {
+			order.push('saved');
+		});
+		try {
+			renderHook(() => useQuitWhenIdle());
+			await vi.waitFor(() => expect(order).toEqual(['saved', 'confirmQuit']));
+		} finally {
+			unregister();
+		}
 	});
 
 	it('does nothing at all until armed', async () => {

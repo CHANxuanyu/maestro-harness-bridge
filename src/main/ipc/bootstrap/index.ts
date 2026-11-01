@@ -224,6 +224,7 @@ export function setupIpcHandlers(deps: IpcBootstrapDependencies): void {
 
 	// Persistence operations - extracted to src/main/ipc/handlers/persistence.ts
 	const persistenceHandlers = registerPersistenceHandlers({
+		aboutMe: deps.aboutMe,
 		settingsStore: deps.settingsStore,
 		sessionsStore: deps.sessionsStore,
 		groupsStore: deps.groupsStore,

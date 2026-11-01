@@ -84,6 +84,7 @@ vi.mock('../../../../main/themes', () => ({
 
 describe('persistence IPC handlers', () => {
 	let handlers: Map<string, Function>;
+	const aboutMeCommand = vi.fn();
 	let mockSettingsStore: {
 		get: ReturnType<typeof vi.fn>;
 		set: ReturnType<typeof vi.fn>;
@@ -155,6 +156,7 @@ describe('persistence IPC handlers', () => {
 
 		// Register handlers
 		const deps: PersistenceHandlerDependencies = {
+			aboutMe: { command: aboutMeCommand },
 			settingsStore: mockSettingsStore as unknown as Store<MaestroSettings>,
 			sessionsStore: mockSessionsStore as unknown as Store<SessionsData>,
 			groupsStore: mockGroupsStore as unknown as Store<GroupsData>,
@@ -168,9 +170,25 @@ describe('persistence IPC handlers', () => {
 		handlers.clear();
 	});
 
+	it('routes About Me to the shared service with the writing window identity', async () => {
+		const command = { action: 'set', content: 'Synthetic preference' };
+		const result = { success: true, content: command.content, files: [], estimatedTokens: 5 };
+		aboutMeCommand.mockResolvedValue(result);
+		expect(handlers.has('settings:aboutMe')).toBe(true);
+		expect(
+			await handlers.get('settings:aboutMe')!(
+				{ sender: { id: 41, isDestroyed: () => false } },
+				command
+			)
+		).toEqual(result);
+		expect(aboutMeCommand).toHaveBeenCalledExactlyOnceWith(command, 41);
+		expect(mockSettingsStore.set).not.toHaveBeenCalled();
+	});
+
 	describe('registration', () => {
 		it('should register all persistence handlers', () => {
 			const expectedChannels = [
+				'settings:aboutMe',
 				'settings:get',
 				'settings:set',
 				'settings:getAll',

@@ -1,3 +1,4 @@
+import type { AboutMeApplied } from '../../shared/aboutMe';
 /**
  * Store type definitions
  *
@@ -47,6 +48,8 @@ export interface BootstrapSettings {
 // ============================================================================
 
 export interface MaestroSettings {
+	conductorProfile?: string;
+	aboutMeApplied?: Record<string, AboutMeApplied>;
 	uiLanguage: UiLanguagePreference;
 	sidebarNavigationMode: 'conversations' | 'agents';
 	collapsedConversationProjects: string[];

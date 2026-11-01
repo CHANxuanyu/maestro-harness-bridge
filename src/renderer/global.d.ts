@@ -266,6 +266,9 @@ interface MaestroAPI {
 		cancelGrooming: () => Promise<void>;
 	};
 	settings: {
+		aboutMe: (
+			command: import('../shared/aboutMe').AboutMeCommand
+		) => Promise<import('../shared/aboutMe').AboutMeResult>;
 		get: (key: string) => Promise<unknown>;
 		set: (key: string, value: unknown) => Promise<boolean>;
 		getAll: () => Promise<Record<string, unknown>>;

@@ -17,6 +17,13 @@ The HB DeepSeek preset (2026-10-31) adds `create-agent --preset deepseek` with
 main-process preparation service; account isolation, model catalog and the Opus
 handoff are recorded in [core-experience-contracts.md](../core-experience-contracts.md).
 
+The HB About Me export (2026-11-01) adds `about-me show|set|status|apply`.
+Desktop `settings.aboutMe` and the CLI `about_me` request share the same service
+for native instruction discovery, exact managed blocks and explicit file consent.
+`set` only stages the existing `conductorProfile`; `apply` performs approved writes.
+The settings UI is pending Opus, with conflict, partial-result and long-profile
+reproductions in [core-experience-contracts.md](../core-experience-contracts.md#关于我).
+
 ## Focus belongs to the human (`--background` / `--focus`)
 
 An agent may create a surface. It may not decide the human should be looking at

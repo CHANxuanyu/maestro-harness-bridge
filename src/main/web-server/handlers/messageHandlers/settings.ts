@@ -1,3 +1,4 @@
+import type { AboutMeCommand, AboutMeResult } from '../../../../shared/aboutMe';
 /**
  * Settings domain WebSocket message handlers.
  *
@@ -92,4 +93,35 @@ export function handleSetSetting(
 		.catch((error) => {
 			ctx.sendError(client, `Failed to set setting: ${error.message}`);
 		});
+}
+
+/** Return a correlated snapshot on both success and failure, including partial writes. */
+export async function handleAboutMe(
+	ctx: MessageHandlerContext,
+	client: WebClient,
+	message: WebClientMessage
+): Promise<void> {
+	let result: AboutMeResult;
+	try {
+		result = ctx.callbacks.aboutMeCommand
+			? await ctx.callbacks.aboutMeCommand(message.request as AboutMeCommand)
+			: {
+					success: false,
+					content: '',
+					estimatedTokens: 0,
+					files: [],
+					code: 'unavailable',
+					error: 'About Me is not configured',
+				};
+	} catch (error) {
+		result = {
+			success: false,
+			content: '',
+			estimatedTokens: 0,
+			files: [],
+			code: 'file-error',
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
+	ctx.send(client, { type: 'about_me_result', requestId: message.requestId, ...result });
 }

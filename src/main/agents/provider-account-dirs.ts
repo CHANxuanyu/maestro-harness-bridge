@@ -160,6 +160,27 @@ async function scanHomeForAccountDirs(
 	return dirs.sort((a, b) => a.localeCompare(b));
 }
 
+/** Account roots before transcript-pool dedupe, for per-account native files. */
+export async function getProviderAccountDirCandidates(
+	toolType: string,
+	options: ProviderAccountDirsOptions = {}
+): Promise<string[]> {
+	const config = getProviderProfileConfig(toolType);
+	if (!config) return [];
+	const homeDir = options.homeDir ?? os.homedir();
+	const env = options.env ?? process.env;
+
+	const candidates = collectConfiguredAccountDirs(toolType, config, options);
+	const fromProcessEnv = env[config.envVar];
+	if (typeof fromProcessEnv === 'string' && !isBlankEnvValue(fromProcessEnv)) {
+		candidates.push(fromProcessEnv.trim());
+	}
+	candidates.push(path.join(homeDir, config.defaultSubdir));
+	candidates.push(...(await scanHomeForAccountDirs(config, homeDir)));
+
+	return candidates;
+}
+
 /**
  * The account dirs to read for a provider, deduped by the REAL path of their
  * sessions subtree.
@@ -183,16 +204,7 @@ export async function getProviderAccountDirs(
 	const config = getProviderProfileConfig(toolType);
 	if (!config) return [];
 
-	const homeDir = options.homeDir ?? os.homedir();
-	const env = options.env ?? process.env;
-
-	const candidates = collectConfiguredAccountDirs(toolType, config, options);
-	const fromProcessEnv = env[config.envVar];
-	if (typeof fromProcessEnv === 'string' && !isBlankEnvValue(fromProcessEnv)) {
-		candidates.push(fromProcessEnv.trim());
-	}
-	candidates.push(path.join(homeDir, config.defaultSubdir));
-	candidates.push(...(await scanHomeForAccountDirs(config, homeDir)));
+	const candidates = await getProviderAccountDirCandidates(toolType, options);
 
 	const byRealSessionsDir = new Map<string, string>();
 	for (const candidate of candidates) {

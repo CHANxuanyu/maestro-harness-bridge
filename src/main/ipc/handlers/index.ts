@@ -194,6 +194,7 @@ export type { MaestroSettings, SessionsData, GroupsData };
  * Dependencies required for handler registration
  */
 export interface HandlerDependencies {
+	aboutMe?: import('../../about-me').AboutMeService;
 	aiHandoff?: import('../../ai-handoff').AiHandoffService;
 	mainWindow: BrowserWindow | null;
 	getMainWindow: () => BrowserWindow | null;
@@ -268,6 +269,7 @@ export function registerAllHandlers(deps: HandlerDependencies): void {
 		sessionsStore: deps.sessionsStore,
 	});
 	registerPersistenceHandlers({
+		aboutMe: deps.aboutMe,
 		settingsStore: deps.settingsStore,
 		sessionsStore: deps.sessionsStore,
 		groupsStore: deps.groupsStore,

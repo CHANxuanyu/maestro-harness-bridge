@@ -38,6 +38,20 @@ describe('Settings Preload API', () => {
 			api = createSettingsApi();
 		});
 
+		it('passes the complete About Me consent snapshot to the dedicated handler', async () => {
+			const command = {
+				action: 'apply' as const,
+				content: 'Preference',
+				confirmations: [
+					{ path: '/synthetic/CLAUDE.md', resolvedPath: '/synthetic/CLAUDE.md', block: null },
+				],
+			};
+			const result = { success: false, code: 'confirmation-required', files: [] };
+			mockInvoke.mockResolvedValue(result);
+			expect(await api.aboutMe(command)).toEqual(result);
+			expect(mockInvoke).toHaveBeenCalledExactlyOnceWith('settings:aboutMe', command);
+		});
+
 		describe('get', () => {
 			it('should invoke settings:get with key', async () => {
 				mockInvoke.mockResolvedValue('test-value');

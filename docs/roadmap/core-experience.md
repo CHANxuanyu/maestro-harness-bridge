@@ -122,8 +122,19 @@
 - **未验与限制：** 真实账户、DeepSeek 网关和 macOS 未验；界面菜单、命令面板、额度错误旁入口、草稿大小和新增文案待 Opus。可用性只确认本机 CLI/已配置账户，不发请求验证额度；目标执行者不可用时不另建重复项。CLI 的 `queued` 只承诺入队，不冒充模型回合成功。
 - **Opus 与 Mac：** 接口、错误码、默认不发送约束、六向复现和 Mac 命令见[交接契约](../core-experience-contracts.md#换个-ai-继续)。
 
+- **PR 验收与合并：** [PR #29](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/29) 的[七项检查](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41253163850)首次通过，用时 21 分 56 秒；合并为 `579ff84ec0bd3d039e459b88d491287cf5693726`。实际主线发现的长历史性能缺陷及后续修复见下一节，保留原失败结果。
+
 ### 功能二合并后的 CI 修复
 
 - PR #29 在当前提交 `4c6a7a38f7f74a85644e299525c8edff80bdef85` 七项检查通过后，合并为 `579ff84ec0bd3d039e459b88d491287cf5693726`。实际主线 [CI 41254657516](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41254657516) 六项通过，Windows 第二分片的既有 4 万条无时间消息用例超过 10 秒；没有把这一轮记录成全绿，也没有重跑。
 - 定位到原生转录的公共合并函数反复扫描未改变的数组位置，并在每次匹配后移动剩余数组。新增确定性工作量回归：1024 条消息在旧实现产生 1052153 次尾部元素读取，超过 20480 的上界，先失败再修复。按对象身份缓存原位置、以保持顺序的 Map 删除已匹配项，保持首个匹配、重复引用、顺序及原对象语义；无内容哈希，无界面/文案变化。
-- 本地相关单元 8 个文件 175 条通过，Claude/Codex/Grok 的跟随 f 及 Grok 活跃标签 h 共 4 个端到端场景通过；类型、ESLint、全仓格式、文档引用与发布规则通过。保留原 40002 条数据用例、所有原断言、10 秒超时和 CI 配置。修复分支为 `codex/core-native-merge-ci`，单独修复 PR 恢复主线验收后再实施功能三；实际检查和合并结果由修复 PR 留痕，并在功能三完成记录补齐。
+- 本地相关单元 8 个文件 175 条通过，Claude/Codex/Grok 的跟随 f 及 Grok 活跃标签 h 共 4 个端到端场景通过；类型、ESLint、全仓格式、文档引用与发布规则通过。保留原 40002 条数据用例、所有原断言、10 秒超时和 CI 配置。修复分支 `codex/core-native-merge-ci` 的 [PR #30](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/30) 在[七项检查](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41256887056)首次通过（20 分 05 秒）后合并为 `c966137a62a1216982c4a48f36bc004f3fc5c796`；实际合并树与被测提交一致。Windows 第二分片的刷新整组 28 条约 1.5 秒；两种原生模式各 56 条、夹具 30 条通过。[实际主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41258432044)与功能三 PR 检查并行，功能三合并前须确认两者全绿，最终结果在 PR #30 和功能 PR 留痕。
+
+### 功能三：关于我的后端与 CLI
+
+- 复用现有 `conductorProfile` Markdown、settings 与 token 估算。统一服务负责本机 Claude/DeepSeek/Codex 指令文件定位、查看、保存、状态与应用；桌面 `settings.aboutMe` 和 CLI `about-me show|set|status|apply` 共用入口，保存内容不自动写用户文件。首次写入、管理段外改或链接改指目标须明确确认实际目标和当前段；不新增哈希、配置旁路或独立存储。
+- 按官方文档核对账户文件位置与 Codex override 优先级，保留共享历史池下不同账户自己的指令文件。逐文件原子写入，段外字节及符号链接不变，清空只删除管理段；缺失账户目录不自动创建，部分失败返回实际完成项。具体接口、错误码和确认快照见[关于我契约](../core-experience-contracts.md#关于我)。
+- **回归证据：** 功能实现前，服务、文件发现、CLI 与传输回归在缺失入口上失败。端到端临时撤掉确认保护时，在未确认写入断言失败；临时覆盖整份文件时，在段外字节保留断言失败，随后恢复正常实现。相关单元 10 个文件 317 条、原生夹具 30 条通过，普通端到端 8 个相关场景、合成凭据入口 5 个相关场景通过。当前最终源码的七项检查与实际主线结果由功能 PR 留痕。类型、ESLint、全仓格式、39 份指引引用、625 条文档路径、发布规则 11 项与共享连接器 26 项通过。
+- **事实核对与限制：** 已有 General 设置中存在 Conductor Profile (About Me)，因此沿用同一份内容。官方说明是启动时发现原生指令，不能将计划中的“每轮加载”解释为运行中的 CLI 即时重载；目标仍是 Maestro 内外使用同一偏好，实际加载由用户重启原生 CLI 后在 Mac 验收。既有 Maestro 提示注入保持原样，token 估算只针对 Markdown；真实账户、模型加载和 Mac 一律未验。没有跨进程文件锁，不承诺跨文件事务，部分失败不会整体回滚。
+- **Opus：** 现有输入框会截断超过 5000 字符的内容；新增后端保留完整 Markdown。设置页应接入保存、逐文件确认、冲突/部分失败与 token 状态，不经旧 setter 截断。完整复现用例见[前端交接](../core-experience-contracts.md#交给-opus-的关于我复现用例)，本 PR 不改界面、文案或外观。
+- **Mac：** 用户按[关于我命令与验收顺序](../core-experience-contracts.md#用户的-mac-关于我验收)逐文件明确确认，然后以对应 `CLAUDE_CONFIG_DIR` / `CODEX_HOME` 重启原生 CLI，核对 Maestro 内外加载、外部修改与清空。功能源码不混入冻结的 hb.5 候选；不打包、发布、安装或接触真实账户目录。

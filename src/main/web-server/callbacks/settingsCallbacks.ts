@@ -12,10 +12,11 @@ export function registerSettingsCallbacks(
 	server: WebServer,
 	deps: Pick<
 		WebServerFactoryDependencies,
-		'settingsStore' | 'getMainWindow' | 'groupsStore' | 'sessionsStore'
+		'settingsStore' | 'getMainWindow' | 'groupsStore' | 'sessionsStore' | 'aboutMe'
 	>
 ): void {
 	const { settingsStore, getMainWindow, groupsStore, sessionsStore } = deps;
+	if (deps.aboutMe) server.setAboutMeCommandCallback(deps.aboutMe.command);
 
 	// Set up callback for web server to read settings
 	// Shares the exact field mapping the broadcast path uses below, so the two

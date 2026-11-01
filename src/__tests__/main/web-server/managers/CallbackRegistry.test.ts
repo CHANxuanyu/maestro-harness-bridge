@@ -787,3 +787,34 @@ describe('CallbackRegistry', () => {
 		});
 	});
 });
+
+describe('About Me callback', () => {
+	it('does not report success when the shared service is unavailable', async () => {
+		expect(await new CallbackRegistry().aboutMeCommand({ action: 'status' })).toMatchObject({
+			success: false,
+			code: 'unavailable',
+		});
+	});
+	it('forwards the exact file consent and partial result', async () => {
+		const registry = new CallbackRegistry();
+		const result = {
+			success: false,
+			content: 'Profile',
+			estimatedTokens: 2,
+			files: [],
+			written: ['/synthetic/CLAUDE.md'],
+			code: 'file-error' as const,
+		};
+		const callback = vi.fn().mockResolvedValue(result);
+		registry.setAboutMeCommandCallback(callback);
+		const command = {
+			action: 'apply' as const,
+			content: 'Profile',
+			confirmations: [
+				{ path: '/synthetic/CLAUDE.md', resolvedPath: '/synthetic/CLAUDE.md', block: null },
+			],
+		};
+		expect(await registry.aboutMeCommand(command)).toEqual(result);
+		expect(callback).toHaveBeenCalledExactlyOnceWith(command);
+	});
+});

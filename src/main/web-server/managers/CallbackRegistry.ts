@@ -1,3 +1,8 @@
+import type {
+	AboutMeCommand,
+	AboutMeCommandCallback,
+	AboutMeResult,
+} from '../../../shared/aboutMe';
 /**
  * CallbackRegistry - Manages callback functions for the WebServer
  *
@@ -262,6 +267,7 @@ export interface WebServerCallbacks {
 	mergeContext: MergeContextCallback | null;
 	transferContext: TransferContextCallback | null;
 	handoffCommand: HandoffCommandCallback | null;
+	aboutMeCommand: AboutMeCommandCallback | null;
 	summarizeContext: SummarizeContextCallback | null;
 	createGist: CreateGistCallback | null;
 	getCueSubscriptions: GetCueSubscriptionsCallback | null;
@@ -370,6 +376,7 @@ export class CallbackRegistry {
 		mergeContext: null,
 		transferContext: null,
 		handoffCommand: null,
+		aboutMeCommand: null,
 		summarizeContext: null,
 		createGist: null,
 		getCueSubscriptions: null,
@@ -965,6 +972,19 @@ export class CallbackRegistry {
 		if (!this.callbacks.transferContext) return false;
 		return this.callbacks.transferContext(sourceSessionId, targetSessionId);
 	}
+	async aboutMeCommand(request: AboutMeCommand): Promise<AboutMeResult> {
+		if (!this.callbacks.aboutMeCommand)
+			return {
+				success: false,
+				content: '',
+				estimatedTokens: 0,
+				files: [],
+				code: 'unavailable',
+				error: 'About Me is not configured',
+			};
+		return this.callbacks.aboutMeCommand(request);
+	}
+
 	async handoffCommand(request: HandoffCommand): Promise<HandoffCommandResult> {
 		if (!this.callbacks.handoffCommand)
 			return { success: false, error: 'AI handoff is not configured', code: 'unavailable' };
@@ -1456,6 +1476,10 @@ export class CallbackRegistry {
 	setTransferContextCallback(callback: TransferContextCallback): void {
 		this.callbacks.transferContext = callback;
 	}
+	setAboutMeCommandCallback(callback: AboutMeCommandCallback): void {
+		this.callbacks.aboutMeCommand = callback;
+	}
+
 	setHandoffCommandCallback(callback: HandoffCommandCallback): void {
 		this.callbacks.handoffCommand = callback;
 	}

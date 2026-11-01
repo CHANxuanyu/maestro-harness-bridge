@@ -169,3 +169,11 @@ hb.5 候选 `a2b2ce5` 的 Codex 真实验收中，d（正常重启后续接）�
 - 外部成功进程不再收到进程组 SIGTERM，失败清理仍保留。合成子进程证明原清理会截断收尾，但这不能证明真实 active writer 冲突已消失；没有删除写锁、加重试或调用真实 CLI。
 - 新增五条失败回归，修复后通过；临时回退 protocol、native-real、native-app 后重现 5 失败 / 4 通过，恢复修改。相关夹具最终 9/9；Codex 解析、消息、revision 单元测试 219/219。`npm run lint`、`npm run lint:eslint`、改动文件 Prettier 通过。
 - 默认 Vitest 配置加载也遇到外部 node_modules 的 `.vite-temp` 写入拒绝。将配置中的 `__dirname` 换成原生 ESM URL，使用同一配置的 `--configLoader native` 运行单元测试，无断言或选择范围旁路。Electron 命令仍保持原入口，其执行与 Electron 临时回退反证由沙箱外补验。
+
+## 2026-11-02：hb.6 前置项，本地原生历史路径别名
+
+- 以官方固定版本核对 Claude Code 2.1.310、Copilot 1.0.63、Grok 1.0.45 和 OpenCode 1.19.4 的 cwd 来源，包完整性与源码出处见 [hb.6 前置项](verification/hb6-prerequisites.md)。只下载并读取公开包，没有执行原生二进制。
+- 四种提供方共用 `localProjectPathCandidates`，本地读取同时匹配所选路径和 realpath。Claude 合并两个目录并按原生 ID 去重；OpenCode 同时保留 JSON 与 SQLite 读取。缺失项目保留旧路径，账户选择和 SSH 路径不变，不改原生文件。
+- `project-alias.test.ts` 四条回归先 4/4 失败再 4/4 通过，覆盖列表、分页、搜索、消息、revision、外部追加、旧路径记录、缺失项目、同名前缀和所选账户边界。临时回退四个存储实现后再次 4/4 失败，恢复修改。相关存储单元测试 174/174。
+- 新增四条 Electron `path:` 场景，核对真实 IPC、界面历史打开与外部追加跟随。Electron 执行及反证受相同沙箱构建限制，交由 Opus；没有用夹具结果替代 Electron 结论。
+- `npm run lint`、`npm run lint:eslint`、改动文件 Prettier 和 `git diff --check` 通过。定向 Electron 命令已实际运行，仍在 `.vite-temp` 写入处失败，0 条场景执行。

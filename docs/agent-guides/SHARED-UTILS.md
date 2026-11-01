@@ -6,6 +6,8 @@ All utilities in Maestro organized by category. Each entry lists the file path, 
 
 Worktree paths: `normalizeWorktreePath(path, posix?)` and `isPathAtOrUnderRoot(path, root)` in `src/shared/worktreePaths.ts` provide shared comparison rules. The renderer's `worktreeDedup.ts` re-exports the normalizer. SSH callers use POSIX normalization, preserving case, literal backslashes, and the root directory while collapsing duplicate and trailing slashes for comparison.
 
+Local native history aliases: `localProjectPathCandidates(projectPath)` in `src/main/storage/local-project-paths.ts` returns saved and physical local paths without a persistent cache. Readers retain legacy records and missing project history. SSH must keep its own path semantics; this helper does not select accounts or modify native records.
+
 Remote worktree aliases: `resolveWorktreeAliasesRemote(paths, sshRemote)` in `src/main/utils/remote-git.ts` provides the shared main-process probe for saved children and Git registry paths. It reports physical paths, missing candidates, and unresolved aliases independently; `resolveWorktreePathsRemote()` also uses it for configured scans.
 
 ---

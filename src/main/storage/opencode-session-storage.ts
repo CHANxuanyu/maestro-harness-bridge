@@ -18,6 +18,7 @@
  */
 
 import path from 'path';
+import { localProjectPathCandidates } from './local-project-paths';
 import os from 'os';
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -633,7 +634,10 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 		const projectFiles = await listJsonFiles(projectDir);
 
 		// Normalize project path for comparison (resolve and remove trailing separators)
-		const normalizedPath = path.resolve(projectPath).replace(TRAILING_SEP_RE, '');
+		const normalizedPaths = localProjectPathCandidates(projectPath).map((candidate) =>
+			path.resolve(candidate).replace(TRAILING_SEP_RE, '')
+		);
+		const normalizedPath = normalizedPaths[0];
 		logger.info(`Looking for OpenCode project for path: ${normalizedPath}`, LOG_CONTEXT);
 
 		for (const file of projectFiles) {
@@ -647,7 +651,7 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 			const storedPath = path.resolve(projectData.worktree).replace(TRAILING_SEP_RE, '');
 
 			// Exact match
-			if (storedPath === normalizedPath) {
+			if (normalizedPaths.includes(storedPath)) {
 				logger.info(
 					`Found OpenCode project: ${projectData.id} for path: ${normalizedPath}`,
 					LOG_CONTEXT
@@ -657,8 +661,11 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 
 			// Check if one is a subdirectory of the other (handles worktree subdirs)
 			if (
-				normalizedPath.startsWith(storedPath + path.sep) ||
-				storedPath.startsWith(normalizedPath + path.sep)
+				normalizedPaths.some(
+					(candidate) =>
+						candidate.startsWith(storedPath + path.sep) ||
+						storedPath.startsWith(candidate + path.sep)
+				)
 			) {
 				logger.info(
 					`Found OpenCode project (subdirectory match): ${projectData.id} for path: ${normalizedPath}`,
@@ -768,15 +775,13 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 		if (!sessionDirectory) return false;
 
 		const normalizedSessionDir = path.resolve(sessionDirectory).replace(TRAILING_SEP_RE, '');
-		const normalizedProjectPath = path.resolve(projectPath).replace(TRAILING_SEP_RE, '');
-
-		// Exact match
-		if (normalizedSessionDir === normalizedProjectPath) return true;
-
-		// Session is in a subdirectory of the project
-		if (normalizedSessionDir.startsWith(normalizedProjectPath + path.sep)) return true;
-
-		return false;
+		return localProjectPathCandidates(projectPath).some((candidate) => {
+			const normalizedProjectPath = path.resolve(candidate).replace(TRAILING_SEP_RE, '');
+			return (
+				normalizedSessionDir === normalizedProjectPath ||
+				normalizedSessionDir.startsWith(normalizedProjectPath + path.sep)
+			);
+		});
 	}
 
 	/**
@@ -1000,7 +1005,10 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 				return null;
 			}
 
-			const normalizedPath = path.resolve(projectPath).replace(TRAILING_SEP_RE, '');
+			const normalizedPaths = localProjectPathCandidates(projectPath).map((candidate) =>
+				path.resolve(candidate).replace(TRAILING_SEP_RE, '')
+			);
+			const normalizedPath = normalizedPaths[0];
 
 			// Find matching project(s) - exact match or subdirectory match
 			const projects = db.prepare('SELECT id, worktree FROM project').all() as Array<{
@@ -1019,9 +1027,12 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 				}
 				const storedPath = path.resolve(proj.worktree).replace(TRAILING_SEP_RE, '');
 				if (
-					storedPath === normalizedPath ||
-					normalizedPath.startsWith(storedPath + path.sep) ||
-					storedPath.startsWith(normalizedPath + path.sep)
+					normalizedPaths.some(
+						(candidate) =>
+							storedPath === candidate ||
+							candidate.startsWith(storedPath + path.sep) ||
+							storedPath.startsWith(candidate + path.sep)
+					)
 				) {
 					matchingProjectIds.push(proj.id);
 				}
@@ -1043,17 +1054,20 @@ export class OpenCodeSessionStorage extends BaseSessionStorage {
 				// Escape the separator too: on Windows it IS the LIKE escape
 				// character, so a raw `\` before the `%` would turn the wildcard
 				// into a literal percent and match no subdirectory at all.
-				const escapedPrefix = (normalizedPath + path.sep).replace(/[%_\\]/g, '\\$&');
-				const globalSessions = db
-					.prepare(
-						"SELECT id, project_id, directory, title, version, time_created, time_updated, summary_additions, summary_deletions, summary_files FROM session WHERE project_id = 'global' AND (directory = ? OR directory LIKE ? ESCAPE '\\') ORDER BY time_updated DESC"
-					)
-					.all(normalizedPath, escapedPrefix + '%') as SqliteSessionRow[];
+				const globalSessions = normalizedPaths.flatMap((candidate) => {
+					const escapedPrefix = (candidate + path.sep).replace(/[%_\\]/g, '\\$&');
+					return db
+						.prepare(
+							"SELECT id, project_id, directory, title, version, time_created, time_updated, summary_additions, summary_deletions, summary_files FROM session WHERE project_id = 'global' AND (directory = ? OR directory LIKE ? ESCAPE '\\') ORDER BY time_updated DESC"
+						)
+						.all(candidate, escapedPrefix + '%') as SqliteSessionRow[];
+				});
 				if (globalSessions.length > 0) {
 					const existingIds = new Set(sessions.map((s) => s.id));
 					for (const gs of globalSessions) {
 						if (!existingIds.has(gs.id)) {
 							sessions.push(gs);
+							existingIds.add(gs.id);
 						}
 					}
 				}

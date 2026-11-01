@@ -18,6 +18,7 @@
 
 import { useEffect, useState } from 'react';
 import { readEffortFromConfig } from '../../utils/agentEffort';
+import { DEEPSEEK_PRESET, isDeepSeekAgent } from '../../../shared/agentPresets';
 
 export interface AgentModelEffortOptions {
 	/** Model ids the agent offers. Empty when the agent has no model selection. */
@@ -45,16 +46,32 @@ export interface AgentModelEffortOptions {
  * agent's list.
  *
  * @param agentId - The agent's tool type, or undefined when no agent is active.
+ * @param customEnvVars - The agent's own env. A DeepSeek preset is a Claude Code
+ *   agent, so only its env tells it apart: it offers the preset catalog, never
+ *   Claude's models, and no effort levels (the preset documents none).
  */
-export function useAgentModelEffortOptions(agentId?: string): AgentModelEffortOptions {
+export function useAgentModelEffortOptions(
+	agentId?: string,
+	customEnvVars?: Record<string, string>
+): AgentModelEffortOptions {
 	const [models, setModels] = useState<string[]>([]);
 	const [efforts, setEfforts] = useState<string[]>([]);
 	const [defaultModel, setDefaultModel] = useState('');
 	const [defaultEffort, setDefaultEffort] = useState('');
 	const [loaded, setLoaded] = useState(false);
 
+	const deepseek = !!agentId && isDeepSeekAgent(agentId, customEnvVars);
+
 	useEffect(() => {
 		if (!agentId) return;
+		if (deepseek) {
+			setModels([...DEEPSEEK_PRESET.models]);
+			setEfforts([]);
+			setDefaultModel(DEEPSEEK_PRESET.defaultModel);
+			setDefaultEffort('');
+			setLoaded(true);
+			return;
+		}
 		let stale = false;
 		setLoaded(false);
 
@@ -101,7 +118,7 @@ export function useAgentModelEffortOptions(agentId?: string): AgentModelEffortOp
 		return () => {
 			stale = true;
 		};
-	}, [agentId]);
+	}, [agentId, deepseek]);
 
 	return { models, efforts, defaultModel, defaultEffort, loaded };
 }

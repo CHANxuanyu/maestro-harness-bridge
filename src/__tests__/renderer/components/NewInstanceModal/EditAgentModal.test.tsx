@@ -163,6 +163,36 @@ describe('EditAgentModal', () => {
 		});
 	});
 
+	it('shows a DeepSeek preset agent as DeepSeek and never lists Claude models', async () => {
+		render(
+			<EditAgentModal
+				isOpen={true}
+				onClose={onClose}
+				onSave={onSave}
+				theme={theme}
+				session={createSession({
+					customPath: undefined,
+					customArgs: undefined,
+					customModel: 'deepseek-flash[1m]',
+					customEnvVars: {
+						ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+						ANTHROPIC_AUTH_TOKEN: 'sk-secret-test',
+						CLAUDE_CONFIG_DIR: '/data/accounts/deepseek-1',
+					},
+				})}
+				existingSessions={[]}
+			/>
+		);
+
+		const provider = await screen.findByTestId('edit-agent-provider-fixed');
+		expect(provider).toHaveTextContent('DeepSeek');
+		// The provider is the preset itself; switching it to another harness is not offered.
+		expect(screen.queryByDisplayValue('Claude Code')).not.toBeInTheDocument();
+		await waitFor(() => expect(window.maestro.agents.detect).toHaveBeenCalled());
+		expect(window.maestro.agents.getModels).not.toHaveBeenCalled();
+		expect(screen.queryByText('claude-opus')).not.toBeInTheDocument();
+	});
+
 	it('should show session name in modal title', async () => {
 		render(
 			<EditAgentModal

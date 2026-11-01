@@ -60,6 +60,7 @@ import {
 import { getModelFamily } from '../utils/modelFamily';
 import { readableTextOn } from '../../shared/colorContrast';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
+import { agentProviderId } from '../../shared/agentPresets';
 import { getTabDisplayName } from '../utils/tabHelpers';
 import { selectActiveSession, useSessionStore } from '../stores/sessionStore';
 import { useTabStore } from '../stores/tabStore';
@@ -157,8 +158,10 @@ export function ModelEffortModal({ theme, tabId, onClose }: ModelEffortModalProp
 	const tab = activeSession?.aiTabs.find((t) => t.id === tabId);
 	const agentId = activeSession?.toolType;
 
-	const { models, efforts, defaultModel, defaultEffort, loaded } =
-		useAgentModelEffortOptions(agentId);
+	const { models, efforts, defaultModel, defaultEffort, loaded } = useAgentModelEffortOptions(
+		agentId,
+		activeSession?.customEnvVars
+	);
 	const { model: currentModel, effort: currentEffort } = resolveModelEffort(tab, activeSession, {
 		defaultModel,
 		defaultEffort,
@@ -500,7 +503,9 @@ export function ModelEffortModal({ theme, tabId, onClose }: ModelEffortModalProp
 					{agentId && (
 						<>
 							<span className="opacity-40">&middot;</span>
-							<span className="shrink-0 opacity-70">{getAgentDisplayName(agentId)}</span>
+							<span className="shrink-0 opacity-70">
+								{getAgentDisplayName(agentProviderId(agentId, activeSession?.customEnvVars))}
+							</span>
 						</>
 					)}
 				</div>

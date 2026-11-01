@@ -12,6 +12,15 @@ export const workflowsSessions = {
 	'workflows.sessions.chooseAnotherHost':
 		'Select a different remote host or switch to Local Execution.',
 	'workflows.sessions.providerSelection': 'Agent provider selection',
+	'workflows.sessions.deepseek.description':
+		'Runs on Claude Code. Its history stays separate from Claude.',
+	'workflows.sessions.deepseek.localOnly': 'Runs on this machine only. Turn off SSH to use it.',
+	'workflows.sessions.deepseek.needsClaude': 'Needs Claude Code',
+	'workflows.sessions.deepseek.apiKey': 'DeepSeek API key',
+	'workflows.sessions.deepseek.apiKeyHint':
+		"Saved only in this agent's environment and shown masked.",
+	'workflows.sessions.deepseek.model': 'Model',
+	'workflows.sessions.deepseek.createFailed': 'Could not create the DeepSeek agent: {error}',
 	'workflows.sessions.beta': 'Beta',
 	'workflows.sessions.available': 'Available',
 	'workflows.sessions.notFound': 'Not Found',

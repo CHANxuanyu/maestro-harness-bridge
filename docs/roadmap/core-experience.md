@@ -114,6 +114,11 @@
 
 - **功能一已合并：** [PR #28](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/28)，合并提交 `d9343973b8a7736e13c991a1f662f27b89ba8c46`。[PR 七项检查](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41247862111)首次通过，用时 21 分 55 秒；[实际主线七项检查](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41249571128)首次通过，用时 21 分 52 秒。两次均包含原生夹具 30 条、普通端到端 55 条、合成凭据入口 55 条。
 
+### 功能一：DeepSeek 预设的界面（Opus）
+
+- 新建对话框单列 DeepSeek（遮盖密钥、预设模型、仅本机，创建时才准备账户）；侧栏、标题栏、智能体行与模型选择按新的 `agentProviderId()` 显示 DeepSeek，同项目的 Claude 与 DeepSeek 分成两个提供方；编辑时提供方固定。15 条单元回归和 Electron 场景 `claude DeepSeek dialog` 修复前失败、修复后通过。细节与限制见[工作记录](../worklog.md)。
+- **未验：** 真实 DeepSeek 账户、强度能否使用、Mac 发行包。删除 DeepSeek 智能体后打开其遗留历史会建普通 Claude Code 执行者，记为后续问题。
+
 ### 功能二：换个 AI 继续的后端与 CLI
 
 - 从功能一实际合并提交建立 `codex/core-ai-handoff`。新增共用服务完成本机三家目录、同项目执行者复用/创建、多窗口路由、指定源标签的最近正文提取、工具一行与预算裁剪。草稿先持久化，只有显式 `--send` 或后续用户发送才进入原有发送队列；原生 ID 不继承，源正文、草稿与文件不变。没有新增界面入口、存储体系或模型整理。

@@ -9,10 +9,11 @@ import { captureException } from '../utils/sentry';
 import { mergeDeferredItems } from '../../shared/deferredSessionContent';
 import { createKeyedWriteQueue } from '../../shared/keyedWriteQueue';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
-import { isDeepSeekAgent, DEEPSEEK_PRESET } from '../../shared/agentPresets';
+import { DEEPSEEK_PRESET, sessionProviderId } from '../../shared/agentPresets';
 import { buildHandoffDraft } from './aiHandoffContext';
 import { enqueuePromptForTab } from './queuedPrompt';
 import type {
+	HandoffDraftNote,
 	HandoffReadRequest,
 	HandoffSourceSnapshot,
 	HandoffOpenRequest,
@@ -61,11 +62,7 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 		let target = request.runnerId
 			? state.sessions.find((session) => session.id === request.runnerId)
 			: state.sessions.find(
-					(session) =>
-						matches(session) &&
-						(isDeepSeekAgent(session.toolType, session.customEnvVars)
-							? 'deepseek'
-							: session.toolType) === request.provider
+					(session) => matches(session) && sessionProviderId(session) === request.provider
 				);
 		if (request.runnerId && (!target || !matches(target)))
 			return {
@@ -75,6 +72,17 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 			};
 		const createdAgent = !target;
 		const settings = useSettingsStore.getState();
+		const source = state.sessions.find((session) => session.id === request.sourceAgentId);
+		// The note above the draft's composer. The draft text stays in the
+		// composer only; the source is named when this window knows the agent.
+		const handoffDraft: HandoffDraftNote = {
+			sourceAgentId: request.sourceAgentId,
+			...(source ? { sourceName: source.name, sourceProvider: sessionProviderId(source) } : {}),
+			estimatedTokens: request.draft.estimatedTokens,
+			budgetTokens: request.draft.budgetTokens,
+			omittedEntries: request.draft.omittedEntries,
+			omittedCharacters: request.draft.omittedCharacters,
+		};
 		let tabId: string;
 		if (!target) {
 			const created = createMergedSession({
@@ -94,7 +102,11 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				...created.session,
 				...request.config,
 				shellLogs: [],
-				aiTabs: created.session.aiTabs.map((tab) => ({ ...tab, inputValue: request.draft.text })),
+				aiTabs: created.session.aiTabs.map((tab) => ({
+					...tab,
+					inputValue: request.draft.text,
+					handoffDraft,
+				})),
 			};
 			state.addSession(target);
 		} else {
@@ -109,7 +121,7 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 			target = {
 				...created.session,
 				aiTabs: created.session.aiTabs.map((tab) =>
-					tab.id === tabId ? { ...tab, inputValue: request.draft.text } : tab
+					tab.id === tabId ? { ...tab, inputValue: request.draft.text, handoffDraft } : tab
 				),
 			};
 			const updated = target;

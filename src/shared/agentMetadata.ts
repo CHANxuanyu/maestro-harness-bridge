@@ -7,6 +7,7 @@
  */
 
 import type { AgentId } from './agentIds';
+import { DEEPSEEK_PRESET } from './agentPresets';
 
 /**
  * Human-readable display names for every agent.
@@ -38,6 +39,8 @@ export function getAgentDisplayName(agentId: AgentId | string): string {
 	if (Object.prototype.hasOwnProperty.call(AGENT_DISPLAY_NAMES, agentId)) {
 		return AGENT_DISPLAY_NAMES[agentId as AgentId];
 	}
+	// A preset is a provider identity, not an AgentId (see agentProviderId).
+	if (agentId === DEEPSEEK_PRESET.id) return DEEPSEEK_PRESET.name;
 	return agentId;
 }
 

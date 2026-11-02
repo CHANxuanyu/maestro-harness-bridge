@@ -40,6 +40,9 @@ import { filterCommandHistory, getCurrentCommandHistory } from './utils/commandH
 import { resolveCommandCwd } from '../../services/shellCommand';
 import { CommandModeBar } from './components/CommandModeBar';
 import { MentionRoutingBar } from './components/MentionRoutingBar';
+import { HandoffDraftBar } from './components/HandoffDraftBar';
+import { handoffDraftNoteFor } from '../../services/aiHandoffEntry';
+import { updateAiTab } from '../../stores/sessionStore';
 import { useMentionRouting } from './hooks/useMentionRouting';
 import { AiCommandProposal } from './components/AiCommandProposal';
 import { useAiCommandStore, selectAiCommandEntry, aiCommandKey } from '../../stores/aiCommandStore';
@@ -180,6 +183,11 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 
 	// Get wizardState from active tab (not session level - wizard state is per-tab)
 	const wizardState = activeTab?.wizardState;
+	const handoffNote = handoffDraftNoteFor(activeTab);
+	const dismissHandoffNote = useCallback(() => {
+		if (activeTab)
+			updateAiTab(session.id, activeTab.id, (tab) => ({ ...tab, handoffDraft: undefined }));
+	}, [activeTab, session.id]);
 
 	// PERF: Memoize derived state to avoid recalculation on every render
 	const isResumingSession = !!activeTab?.agentSessionId;
@@ -664,6 +672,10 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 								routing={mentionRouting.routing}
 								agentNames={mentionRouting.agentNames}
 							/>
+						)}
+
+						{session.inputMode === 'ai' && handoffNote && (
+							<HandoffDraftBar theme={theme} note={handoffNote} onDismiss={dismissHandoffNote} />
 						)}
 
 						{isAiCommandDraft && aiCommandEntry && (

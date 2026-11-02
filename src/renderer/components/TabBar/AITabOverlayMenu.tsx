@@ -8,6 +8,7 @@ import {
 	Mail,
 	GitMerge,
 	ArrowRightCircle,
+	ArrowRightLeft,
 	Minimize2,
 	Download,
 	Clipboard,
@@ -45,6 +46,8 @@ export interface AITabOverlayMenuProps {
 	onSummarizeAndContinueClick: (e: React.MouseEvent) => void;
 	onMergeWithClick: (e: React.MouseEvent) => void;
 	onSendToAgentClick: (e: React.MouseEvent) => void;
+	/** "Continue with another AI". Absent when this tab cannot hand off. */
+	onHandoffClick?: (e: React.MouseEvent) => void;
 	onPublishGistClick: (e: React.MouseEvent) => void;
 	onMoveToFirstClick: (e: React.MouseEvent) => void;
 	onMoveToLastClick: (e: React.MouseEvent) => void;
@@ -91,6 +94,7 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 	onSummarizeAndContinueClick,
 	onMergeWithClick,
 	onSendToAgentClick,
+	onHandoffClick,
 	onPublishGistClick,
 	onMoveToFirstClick,
 	onMoveToLastClick,
@@ -256,9 +260,26 @@ export const AITabOverlayMenu = memo(function AITabOverlayMenu({
 
 				{/* Context Management Section - divider and grouped options */}
 				{(tab.agentSessionId || (tab.logs?.length ?? 0) >= 1) &&
-					(onMergeWith || onSendToAgent || onSummarizeAndContinue || onCopyContext) && (
+					(onHandoffClick ||
+						onMergeWith ||
+						onSendToAgent ||
+						onSummarizeAndContinue ||
+						onCopyContext) && (
 						<div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
 					)}
+
+				{/* Continue with another AI: first in the section, it is the one that
+				    moves the conversation on rather than copying or merging it. */}
+				{onHandoffClick && (
+					<button
+						onClick={onHandoffClick}
+						className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+						style={{ color: theme.colors.textMain }}
+					>
+						<ArrowRightLeft className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
+						{t('workflows.sessions.handoff.menuItem')}
+					</button>
+				)}
 
 				{/* Context: Copy to Clipboard */}
 				{(tab.logs?.length ?? 0) >= 1 && onCopyContext && (

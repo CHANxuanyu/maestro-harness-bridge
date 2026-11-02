@@ -13,6 +13,19 @@ export interface HandoffDraft {
 	omittedCharacters: number;
 }
 
+/**
+ * What a draft tab remembers about its handoff, for the note above its
+ * composer. Stamped when the draft tab is opened, so a draft made from the CLI
+ * explains itself the same way as one made from the dialog. The draft text
+ * itself lives only in the composer.
+ */
+export interface HandoffDraftNote extends Omit<HandoffDraft, 'text'> {
+	sourceAgentId: string;
+	/** Source agent's name and provider, when the opening window knows the agent. */
+	sourceName?: string;
+	sourceProvider?: string;
+}
+
 export interface HandoffRunnerConfig extends ClaudeTokenSourceFields {
 	customPath?: string;
 	customArgs?: string;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { MainPanelHeader } from '../../../../renderer/components/MainPanel/MainPanelHeader';
 import { useModalStore } from '../../../../renderer/stores/modalStore';
 import { useMediaPlaybackStore } from '../../../../renderer/stores/mediaPlaybackStore';
@@ -8,9 +8,12 @@ import type { Session, Theme, AITab } from '../../../../renderer/types';
 
 import { mockTheme } from '../../../helpers/mockTheme';
 // Mock stores
+// Per-test settings overrides layered over the fixed defaults below.
+const settingsMocks = vi.hoisted(() => ({ overrides: {} as Record<string, unknown> }));
 vi.mock('../../../../renderer/stores/settingsStore', () => ({
 	useSettingsStore: vi.fn((selector) =>
 		selector({
+			...settingsMocks.overrides,
 			shortcuts: {
 				agentSessions: { keys: ['Meta', 'Shift', 'l'] },
 				toggleRightPanel: { keys: ['Meta', 'b'] },
@@ -197,6 +200,7 @@ function setViewportWidth(width: number): void {
 describe('MainPanelHeader', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		settingsMocks.overrides = {};
 		uiMocks.state.rightPanelOpen = false;
 		uiMocks.state.leftSidebarHidden = false;
 		uiMocks.state.leftSidebarOpen = true;
@@ -215,6 +219,25 @@ describe('MainPanelHeader', () => {
 
 	afterEach(() => {
 		mockOpenModal.mockRestore();
+	});
+
+	it('marks a DeepSeek preset conversation as DeepSeek, not Claude Code', () => {
+		settingsMocks.overrides = { sidebarNavigationMode: 'conversations' };
+		render(
+			<MainPanelHeader
+				{...defaultProps}
+				activeSession={makeSession({
+					toolType: 'claude-code',
+					customEnvVars: {
+						ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+						CLAUDE_CONFIG_DIR: '/data/accounts/deepseek-1',
+					},
+				})}
+			/>
+		);
+		const title = screen.getByTestId('header-conversation-title');
+		expect(within(title).getByRole('img', { name: 'DeepSeek' })).toBeInTheDocument();
+		expect(within(title).queryByRole('img', { name: 'Claude Code' })).not.toBeInTheDocument();
 	});
 
 	it('renders session name', () => {

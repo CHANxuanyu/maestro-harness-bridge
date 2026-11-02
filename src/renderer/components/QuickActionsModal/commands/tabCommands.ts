@@ -6,6 +6,7 @@ import { resolveSnoozeTarget } from '../../../utils/snoozeHelpers';
 import { useModalStore } from '../../../stores/modalStore';
 import { resolveModelEffortTabId } from '../../../utils/panelLayout';
 import { visibleAiTabs } from '../../../utils/tabHelpers';
+import { canHandOffTab, requestAiHandoff } from '../../../services/aiHandoffEntry';
 
 interface BuildNewTabCommandsArgs {
 	activeSession: Session | undefined;
@@ -358,6 +359,29 @@ export function buildTabCommands({
 			action: () => {
 				setQuickActionOpen(false);
 				useModalStore.getState().openModal('modelEffort', { tabId: modelEffortTabId });
+			},
+		});
+	}
+
+	// Continue the focused AI tab with another AI. Same target rule as the
+	// model/effort entry (an AI tab, never while a room owns the view), plus the
+	// handoff's own: a local agent with a conversation to hand over.
+	if (
+		modelEffortTabId &&
+		activeSession &&
+		canHandOffTab(
+			activeSession,
+			activeSession.aiTabs.find((tab) => tab.id === modelEffortTabId)
+		)
+	) {
+		const sessionId = activeSession.id;
+		commands.push({
+			id: 'aiHandoff',
+			label: t('workflows.sessions.handoff.paletteLabel'),
+			subtext: t('workflows.sessions.handoff.paletteSubtext'),
+			action: () => {
+				setQuickActionOpen(false);
+				requestAiHandoff(sessionId, modelEffortTabId);
 			},
 		});
 	}

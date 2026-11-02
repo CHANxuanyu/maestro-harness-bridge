@@ -272,6 +272,7 @@ Notification center history uses the live desktop `notificationStore` over a req
 | Move Tab to First / Last                                                 | `tab move <tab-id> first\|last\|<index>`                                                         |
 | Send a message, or run a shell command                                   | `send`, `dispatch`, `send-terminal`                                                              |
 | Consult another agent (`@mention`)                                       | `ask <agent> "<question>" --from <caller>`                                                       |
+| Continue with another AI (tab menu, palette, limit or login error)       | `handoff <source-tab> <provider>` (draft only); choices: `handoff <source-tab> --list-targets`   |
 | Open a file / URL / terminal tab                                         | `open-file`, `open-browser`, `open-terminal`                                                     |
 | Open a modal or dashboard                                                | `open <surface> [--tab]` (registry in `src/shared/uiSurfaces.ts`)                                |
 | Auto Run: start, stop, resume, skip, abort                               | `auto-run`, `stop-auto-run`, `resume-auto-run`, ...                                              |
@@ -344,8 +345,11 @@ a design constraint; they are simply not built yet.
 9. **Context: Compact, Merge Into, Send to Agent.** The HB `handoff` command
    now provides the new three-provider handoff through its own shared service
    (`ai_handoff`, `context.handoff`): draft by default, same-project runner reuse,
-   explicit `--send`. The new UI entries remain for Opus; the older generic
-   compact/merge/transfer paths below remain separate gaps.
+   explicit `--send`. The UI entries (tab menu, palette, error modal, the
+   transcript's limit and login errors, a live outage card) call the same
+   `context.handoff` without `send`; the note above a draft's composer is view
+   state with no verb. The older generic compact/merge/transfer paths below
+   remain separate gaps.
    The WS messages
    (`summarize_context`, `merge_context`, `transfer_context`) and the preload
    listeners exist, but NO renderer code subscribes to

@@ -16,6 +16,7 @@ import { WizardIndicator } from '../SessionList/WizardIndicator';
 import { useTabHasActiveOutage } from '../../stores/retryStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { shortcutSuffix } from '../ui/ShortcutHint';
+import { requestAiHandoff, useCanHandOffTab } from '../../services/aiHandoffEntry';
 
 export interface AITabProps {
 	tab: AITabType;
@@ -161,6 +162,7 @@ export const AITab = memo(function AITab({
 	const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	// Agent Resilience: pulsing orange dot when this tab is stuck auto-retrying.
 	const hasActiveOutage = useTabHasActiveOutage(sessionId ?? '', tabId);
+	const canHandOff = useCanHandOffTab(sessionId, tabId);
 	const closeTabKeys = useSettingsStore((s) => s.tabShortcuts.closeTab?.keys);
 
 	// Clear copy feedback timeout on unmount
@@ -276,6 +278,15 @@ export const AITab = memo(function AITab({
 			setOverlayOpen(false);
 		},
 		[onMergeWith, tabId, setOverlayOpen]
+	);
+
+	const handleHandoffClick = useCallback(
+		(e: React.MouseEvent) => {
+			e.stopPropagation();
+			if (sessionId) requestAiHandoff(sessionId, tabId);
+			setOverlayOpen(false);
+		},
+		[sessionId, tabId, setOverlayOpen]
 	);
 
 	const handleSendToAgentClick = useCallback(
@@ -692,6 +703,7 @@ export const AITab = memo(function AITab({
 					onSummarizeAndContinueClick={handleSummarizeAndContinueClick}
 					onMergeWithClick={handleMergeWithClick}
 					onSendToAgentClick={handleSendToAgentClick}
+					onHandoffClick={canHandOff ? handleHandoffClick : undefined}
 					onPublishGistClick={handlePublishGistClick}
 					onMoveToFirstClick={handleMoveToFirstClick}
 					onMoveToLastClick={handleMoveToLastClick}

@@ -113,4 +113,49 @@ describe('useAgentErrorRecovery', () => {
 
 		expect(onRetry).toHaveBeenCalledTimes(1);
 	});
+
+	it('offers to continue with another AI after a limit or a lost login, and only then', () => {
+		const onHandoff = vi.fn();
+		const actions = (type: AgentError['type']) =>
+			renderHook(() =>
+				useAgentErrorRecovery({
+					error: { ...baseError, type },
+					agentId: 'claude-code',
+					sessionId: 's1',
+					onRetry: vi.fn(),
+					onAuthenticate: vi.fn(),
+					onNewSession: vi.fn(),
+					onRestartAgent: vi.fn(),
+					onHandoff,
+				})
+			).result.current.recoveryActions;
+
+		// Never the primary action: the original remedy stays first.
+		const limited = actions('rate_limited');
+		expect(limited.map((action) => action.id)).toEqual(['retry', 'handoff']);
+		expect(limited[1]).toMatchObject({ label: 'Continue with another AI' });
+		expect(limited[1].primary).toBeFalsy();
+		expect(actions('auth_expired').map((action) => action.id)).toEqual([
+			'authenticate',
+			'new-session',
+			'handoff',
+		]);
+		for (const type of ['network_error', 'token_exhaustion', 'agent_crashed'] as const)
+			expect(actions(type).map((action) => action.id)).not.toContain('handoff');
+
+		act(() => limited[1].onClick());
+		expect(onHandoff).toHaveBeenCalledTimes(1);
+	});
+
+	it('leaves the handoff out when the caller cannot hand this tab off', () => {
+		const { result } = renderHook(() =>
+			useAgentErrorRecovery({
+				error: { ...baseError, type: 'rate_limited' },
+				agentId: 'claude-code',
+				sessionId: 's1',
+				onRetry: vi.fn(),
+			})
+		);
+		expect(result.current.recoveryActions.map((action) => action.id)).toEqual(['retry']);
+	});
 });

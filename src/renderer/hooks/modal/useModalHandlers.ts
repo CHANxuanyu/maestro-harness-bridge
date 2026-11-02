@@ -37,6 +37,7 @@ import { CONDUCTOR_BADGES } from '../../constants/conductorBadges';
 import { gitService } from '../../services/git';
 import { cueService } from '../../services/cue';
 import { canHandOffTab, requestAiHandoff } from '../../services/aiHandoffEntry';
+import { confirmQuitAfterSave } from '../../services/quitSave';
 import { notifyCenterFlash } from '../../stores/centerFlashStore';
 import { useGitDetail } from '../../contexts/GitStatusContext';
 
@@ -300,7 +301,7 @@ export function useModalHandlers(
 
 	const handleConfirmQuit = useCallback(() => {
 		getModalActions().setQuitConfirmModalOpen(false);
-		window.maestro.app.confirmQuit();
+		void confirmQuitAfterSave();
 	}, []);
 
 	const handleCancelQuit = useCallback(() => {

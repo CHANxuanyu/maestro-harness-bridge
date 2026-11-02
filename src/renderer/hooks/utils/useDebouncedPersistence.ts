@@ -43,6 +43,7 @@ import { logger } from '../../utils/logger';
 import { captureException } from '../../utils/sentry';
 import { compactSessionToolOutputs } from '../../../shared/toolOutput';
 import { MAX_PERSISTED_SESSION_LOGS } from '../../../shared/deferredSessionContent';
+import { registerQuitSave } from '../../services/quitSave';
 
 /**
  * Thrown by `persistInternal` when the session registry was never read back
@@ -389,8 +390,9 @@ export function useDebouncedPersistence(
 	// Store the timer ID for cleanup
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	// Track if flush is in progress to prevent double-flushing
-	const flushingRef = useRef(false);
+	// The pass currently writing, if any. A second flush while one runs is
+	// dropped; the save before quit waits on it instead (see saveBeforeQuit).
+	const flushingRef = useRef<Promise<void> | null>(null);
 
 	// Snapshot of the sessions array as it existed at the previous flush.
 	// Captured from the successful initial load. If this hook did not observe
@@ -490,34 +492,36 @@ export function useDebouncedPersistence(
 	const persistSessions = useCallback(async () => {
 		if (flushingRef.current) return;
 
-		flushingRef.current = true;
-		try {
-			await persistInternal();
-			isPendingRef.current = false;
-			setIsPending(false);
-		} catch (err) {
-			logger.warn(
-				'[Persistence] flush failed; isPending preserved for next-mutation/beforeunload retry',
-				undefined,
-				err
-			);
-			// persistInternal throws a "recoverable disk error" only when the main
-			// process deliberately returned false from setAll/setMany (e.g. a
-			// transient ENOSPC) - it throws purely to preserve `isPending` for the
-			// retry below. That's an expected, user-environment condition, not a
-			// Maestro bug, so keep it out of Sentry. Genuine flush failures (real
-			// exceptions) still report. (MAESTRO-QF)
-			const message = err instanceof Error ? err.message : String(err);
-			if (!message.includes('recoverable disk error') && message !== SESSIONS_NOT_READ_MESSAGE) {
-				captureException(err instanceof Error ? err : new Error(String(err)), {
-					extra: { operation: 'useDebouncedPersistence.persistSessions' },
-				});
+		const pass = (async () => {
+			try {
+				await persistInternal();
+				isPendingRef.current = false;
+				setIsPending(false);
+			} catch (err) {
+				logger.warn(
+					'[Persistence] flush failed; isPending preserved for next-mutation/beforeunload retry',
+					undefined,
+					err
+				);
+				// persistInternal throws a "recoverable disk error" only when the main
+				// process deliberately returned false from setAll/setMany (e.g. a
+				// transient ENOSPC) - it throws purely to preserve `isPending` for the
+				// retry below. That's an expected, user-environment condition, not a
+				// Maestro bug, so keep it out of Sentry. Genuine flush failures (real
+				// exceptions) still report. (MAESTRO-QF)
+				const message = err instanceof Error ? err.message : String(err);
+				if (!message.includes('recoverable disk error') && message !== SESSIONS_NOT_READ_MESSAGE) {
+					captureException(err instanceof Error ? err : new Error(String(err)), {
+						extra: { operation: 'useDebouncedPersistence.persistSessions' },
+					});
+				}
+				// Deliberately do NOT setIsPending(false) - the failed write is
+				// still pending. Next mutation OR beforeunload will retry.
 			}
-			// Deliberately do NOT setIsPending(false) - the failed write is
-			// still pending. Next mutation OR beforeunload will retry.
-		} finally {
-			flushingRef.current = false;
-		}
+		})();
+		flushingRef.current = pass;
+		await pass;
+		flushingRef.current = null;
 	}, [persistInternal]);
 
 	/**
@@ -554,6 +558,26 @@ export function useDebouncedPersistence(
 		},
 		[persistSessions]
 	);
+
+	/**
+	 * Write whatever the debounce is still holding and resolve once it is on
+	 * disk. A confirmed quit hard-exits without closing the window, so neither
+	 * the timer nor beforeunload gets another chance (see services/quitSave.ts).
+	 */
+	const saveBeforeQuit = useCallback(async () => {
+		if (timerRef.current) {
+			clearTimeout(timerRef.current);
+			timerRef.current = null;
+		}
+		if (!initialLoadComplete.current) return;
+		// A pass already writing carries the tree it started with, which can
+		// predate the latest change. Let it land, then diff once more; a pass
+		// with nothing new to write sends nothing.
+		while (flushingRef.current) await flushingRef.current;
+		await persistSessions();
+	}, [initialLoadComplete, persistSessions]);
+
+	useEffect(() => registerQuitSave(saveBeforeQuit), [saveBeforeQuit]);
 
 	// Debounced persistence via store subscribe (no App-level sessions subscription)
 	useEffect(() => {

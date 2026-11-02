@@ -539,6 +539,34 @@ describe('System Preload API', () => {
 			api = createAppApi();
 		});
 
+		it('acknowledges quit saving only after the registered persistence promise resolves', async () => {
+			let release!: () => void;
+			const save = vi.fn(
+				() =>
+					new Promise<void>((resolve) => {
+						release = resolve;
+					})
+			);
+			const unsubscribe = api.onQuitSaveRequest(save);
+			const listener = mockOn.mock.calls.find(([channel]) => channel === 'app:requestQuitSave')![1];
+			const completion = listener({} as any, 'request-1');
+			expect(mockSend).not.toHaveBeenCalled();
+			release();
+			await completion;
+			expect(mockSend).toHaveBeenCalledWith('app:quitSaveComplete', 'request-1', true);
+			unsubscribe();
+			expect(mockRemoveListener).toHaveBeenCalledWith('app:requestQuitSave', listener);
+		});
+
+		it('reports a failed quit save without claiming that it was persisted', async () => {
+			api.onQuitSaveRequest(async () => {
+				throw new Error('synthetic persistence failure');
+			});
+			const listener = mockOn.mock.calls.find(([channel]) => channel === 'app:requestQuitSave')![1];
+			await listener({} as any, 'request-2');
+			expect(mockSend).toHaveBeenCalledWith('app:quitSaveComplete', 'request-2', false);
+		});
+
 		describe('onQuitConfirmationRequest', () => {
 			it('should register event listener and return cleanup function', () => {
 				const callback = vi.fn();

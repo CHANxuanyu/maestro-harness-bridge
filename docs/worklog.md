@@ -177,3 +177,10 @@ hb.5 候选 `a2b2ce5` 的 Codex 真实验收中，d（正常重启后续接）�
 - `project-alias.test.ts` 四条回归先 4/4 失败再 4/4 通过，覆盖列表、分页、搜索、消息、revision、外部追加、旧路径记录、缺失项目、同名前缀和所选账户边界。临时回退四个存储实现后再次 4/4 失败，恢复修改。相关存储单元测试 174/174。
 - 新增四条 Electron `path:` 场景，核对真实 IPC、界面历史打开与外部追加跟随。Electron 执行及反证受相同沙箱构建限制，交由 Opus；没有用夹具结果替代 Electron 结论。
 - `npm run lint`、`npm run lint:eslint`、改动文件 Prettier 和 `git diff --check` 通过。定向 Electron 命令已实际运行，仍在 `.vite-temp` 写入处失败，0 条场景执行。
+
+## 2026-11-02：hb.6 前置项，多窗口退出保存协调
+
+- `before-quit` 确认后先向 WindowRegistry 中存活的 app 窗口请求保存，按请求 ID 和 webContents 校验回执，总等待上限 5 秒。窗口销毁、渲染进程退出或发送失败可结束该窗口等待；错误回执不记成成功。重入不重发，不重置期限。全部结束后才 flush main 写入并启动原有清理及退出宽限期。
+- preload 的 `onQuitSaveRequest(save)` 等所注册保存 Promise 完成再回执，失败回传 false，并提供卸载监听函数。没有改动 renderer 界面、文案或持久化逻辑；本克隆缺少 PR #32 的 quitSave 服务，Opus 的前端接入仍是发布前置条件。
+- 初始七条新增回归先失败，修复后连同原有用例 73/73；补充发送时销毁覆盖后共 74 项。临时回退 main 与 preload 后新增八条均失败，恢复后复验。用例包括所有窗口收齐后才清理、总时限和重入、错误来源和过期回执、销毁和崩溃、发送失败、保存 Promise 等待与失败回执。
+- 最终相关单元 74/74，类型、ESLint、改动文件 Prettier、626 条文档路径与 HB 源码策略检查通过。全量夹具 39/42，剩余三条均因沙箱 socket `listen EPERM`，无跳过。Playwright 可列出 63 个原生场景；Codex 定向 Electron 命令实际仍在 Vite 构建受阻，0 条执行。

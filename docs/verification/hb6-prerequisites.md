@@ -15,7 +15,7 @@
 
 - 临时目录回归 2/2；Codex 契约、正常 teardown、外部进程隔离相关夹具 9/9；Codex 解析、消息和 revision 单元测试 219/219。
 - Codex 五条新回归均先失败再通过。临时回退三个实现文件后再次出现 5 条失败，恢复后 9/9。这是夹具反证，不能替代 Electron 反证。
-- 全量夹具中三条共享 socket 用例受沙箱 `listen EPERM` 阻挡，未跳过。Electron 在 renderer 构建时因外部 node_modules 链接内的 `.vite-temp` 写入被拒而停止，没有启动测试场景，也没有绕过限制。
+- 全量夹具 39/42，三条共享 socket 用例受沙箱 `listen EPERM` 阻挡，未跳过。Electron 在 renderer 构建时因外部 node_modules 链接内的 `.vite-temp` 写入被拒而停止，没有启动测试场景，也没有绕过限制。
 - 单元命令：`npm run test -- --configLoader native src/__tests__/main/parsers/codex-output-parser.test.ts src/__tests__/main/storage/codex-session-storage-messages.test.ts src/__tests__/main/storage/codex-session-storage-revision.test.ts`。
 
 ## 交给 Opus 的界面验收
@@ -59,3 +59,25 @@ TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --gr
 ```
 
 第一条实际 174/174；第二条需沙箱外执行并做临时回退反证。Opus 另验：项目经自定义符号链接打开，在四种提供方的历史中打开原生记录，正常重启后继续相同原生 ID，再由外部追加并核对唯一显示、草稿和滚动位置。
+
+## 多窗口保存交接
+
+主进程与 preload 已实现，当前分支没有 PR #32 的 `services/quitSave.ts`。没有前端监听时，main 会等待 5 秒后记录超时并继续退出，不能声称副窗口尾部改动已经保存。
+
+Opus 在每个 App 窗口的持久化服务就绪后，使用 `window.maestro.app.onQuitSaveRequest(save)` 注册该窗口现有的 quit-save 操作，卸载时调用返回的 unsubscribe。`save` 必须等已注册的保存和持久化 IPC 完成，失败应 reject。不要在这里再次确认退出或调用 confirmQuit；preload 自动回传成功或失败，main 完成全部窗口协调。手写的 renderer API 声明如未从 preload 推导，需要补同名方法 `(save: () => void | Promise<void>) => () => void`。原三条确认退出路径继续使用既有前端修复，本轮不重做需求第 1 项。
+
+复现用例：打开两个窗口，各自持有智能体，在两个窗口最后一次回复或草稿变化后的 2 秒内从主窗口退出。重新启动，核对两个窗口磁盘副本都包含最新内容和完整回答；同时核对正常退出和更新退出路径。再用一个无响应副窗口核对 5 秒总时限，主窗口仍落盘，失败不能显示成已保存。建议新增 Electron 场景 `app quit: all windows flush pending persistence`，不要用测试注入保存监听来替代真实 App 注册。
+
+已运行 74/74 单元测试；临时回退 main 与 preload 后新增八条全部失败，恢复后再次通过。命令：
+
+```sh
+npm run test -- --configLoader native src/__tests__/main/app-lifecycle/quit-handler.test.ts src/__tests__/main/preload/system.test.ts
+```
+
+Opus 接入监听和场景后，在 Mac 沙箱外运行：
+
+```sh
+TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep 'claude k:|app quit: all windows flush pending persistence'
+```
+
+该 Electron 命令依赖 Opus 的前端场景进入工作区，本轮未执行，也未将缺少监听的场景记为通过。

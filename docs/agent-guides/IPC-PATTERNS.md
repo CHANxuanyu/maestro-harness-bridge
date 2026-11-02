@@ -196,6 +196,10 @@ Add to the `Window` interface so TypeScript knows about `window.maestro.myFeatur
 
 ---
 
+### Quit persistence handshake
+
+`createAppApi().onQuitSaveRequest(save)` registers a window-local callback and returns an unsubscribe function. Main sends `app:requestQuitSave` with a fresh request ID only after quit confirmation. Preload waits for `save()` and sends `app:quitSaveComplete(requestId, saved)` with a boolean outcome; failed saves are never reported as successful. The renderer should register the existing quit-save service, including awaiting its persistence IPC, rather than implementing another store writer. Main accepts only the expected webContents and request ID, excludes non-app windows, and applies one 5 second deadline before cleanup. See [hb.6 integration steps](../verification/hb6-prerequisites.md).
+
 ## Error Handling Conventions
 
 ### Standard Response Formats

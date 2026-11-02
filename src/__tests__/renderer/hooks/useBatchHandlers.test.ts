@@ -188,6 +188,7 @@ beforeEach(() => {
 		...((window as any).maestro || {}),
 		app: {
 			onQuitConfirmationRequest: vi.fn().mockReturnValue(vi.fn()),
+			onQuitSaveRequest: vi.fn().mockReturnValue(vi.fn()),
 			confirmQuit: vi.fn(),
 			cancelQuit: vi.fn(),
 		},

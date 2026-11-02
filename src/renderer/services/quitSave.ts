@@ -13,6 +13,11 @@
  * a quit (no busy work, the quit-confirmation modal, quit-when-idle) goes
  * through `confirmQuitAfterSave()`. Do NOT call
  * `window.maestro.app.confirmQuit()` directly.
+ *
+ * That covers the window that confirmed. Once a quit is confirmed, main also
+ * asks EVERY app window to save (`app:requestQuitSave`) and waits for each
+ * answer, five seconds in all, before its cleanup. `answerQuitSaveRequests()`
+ * is each window's answer, mounted by the same persistence hook.
  */
 
 import { logger } from '../utils/logger';
@@ -35,26 +40,49 @@ export function registerQuitSave(save: () => Promise<void>): () => void {
 	};
 }
 
+/**
+ * Run the registered save. Rejects when it fails or does not settle within
+ * QUIT_SAVE_TIMEOUT_MS, so a caller can tell a save from a give-up.
+ */
+function runRegisteredSave(): Promise<void> {
+	const save = saveBeforeQuit;
+	if (!save) return Promise.resolve();
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	return Promise.race([
+		save(),
+		new Promise<void>((_, reject) => {
+			timer = setTimeout(() => reject(new QuitSaveTimeoutError()), QUIT_SAVE_TIMEOUT_MS);
+		}),
+	]).finally(() => clearTimeout(timer));
+}
+
+class QuitSaveTimeoutError extends Error {
+	constructor() {
+		super('save before quit timed out');
+	}
+}
+
 /** Save pending agent changes, then tell main the quit is confirmed. */
 export async function confirmQuitAfterSave(): Promise<void> {
-	const save = saveBeforeQuit;
-	if (save) {
-		let timer: ReturnType<typeof setTimeout> | undefined;
+	// With nothing to save, confirm in the same tick, as before.
+	if (saveBeforeQuit) {
 		try {
-			await Promise.race([
-				save(),
-				new Promise<void>((resolve) => {
-					timer = setTimeout(() => {
-						logger.warn('[Persistence] save before quit timed out; quitting anyway');
-						resolve();
-					}, QUIT_SAVE_TIMEOUT_MS);
-				}),
-			]);
+			await runRegisteredSave();
 		} catch (err) {
-			logger.warn('[Persistence] save before quit failed; quitting anyway', undefined, err);
-		} finally {
-			clearTimeout(timer);
+			if (err instanceof QuitSaveTimeoutError)
+				logger.warn('[Persistence] save before quit timed out; quitting anyway');
+			else logger.warn('[Persistence] save before quit failed; quitting anyway', undefined, err);
 		}
 	}
 	window.maestro.app.confirmQuit();
+}
+
+/**
+ * Answer main's save request for this window. A window with nothing registered
+ * answers at once, because one that stays silent holds every quit for main's
+ * whole deadline. A failed or hung save is answered as not saved (the preload
+ * reports a rejection as `false`), never as saved. Returns the unsubscribe.
+ */
+export function answerQuitSaveRequests(): () => void {
+	return window.maestro.app.onQuitSaveRequest(runRegisteredSave);
 }

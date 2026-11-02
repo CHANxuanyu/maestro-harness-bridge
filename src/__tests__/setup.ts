@@ -770,6 +770,7 @@ const mockMaestro = {
 	},
 	app: {
 		onQuitConfirmationRequest: vi.fn().mockReturnValue(() => {}),
+		onQuitSaveRequest: vi.fn().mockReturnValue(() => {}),
 		confirmQuit: vi.fn(),
 		cancelQuit: vi.fn(),
 		onSystemResume: vi.fn().mockReturnValue(() => {}),

@@ -2291,6 +2291,8 @@ interface MaestroAPI {
 	};
 	app: {
 		onQuitConfirmationRequest: (callback: () => void) => () => void;
+		/** Answer main's per-window save request on a confirmed quit; a rejection reports "not saved". */
+		onQuitSaveRequest: (save: () => void | Promise<void>) => () => void;
 		confirmQuit: () => void;
 		cancelQuit: () => void;
 		quitConfirmationPending: () => void;

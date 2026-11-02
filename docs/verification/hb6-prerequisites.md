@@ -82,6 +82,17 @@ TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --gr
 
 该 Electron 命令依赖 Opus 的前端场景进入工作区，本轮未执行，也未将缺少监听的场景记为通过。
 
+## Opus 整合与 Mac 沙箱外验收（2026-11-02）
+
+五个提交按原样叠在 PR #32（`feed/quit-session-flush`）之上，只合并了 CHANGELOG、工作记录和 `native-resume.spec.ts` 的冲突（保留 #32 的 `claude k`，接上本分支的 `codex e` 与改名后的 `codex b`）。
+
+- **逐窗口保存监听：** `answerQuitSaveRequests()`（`src/renderer/services/quitSave.ts`）由 `useDebouncedPersistence` 在每个应用窗口挂载，收到请求即运行该窗口注册的保存，超过 `QUIT_SAVE_TIMEOUT_MS` 或失败时 reject，由 preload 回报“未保存”；没有注册保存的窗口立即回执。`confirmQuitAfterSave()` 沿用同一保存与时限。
+- **新增 Electron 场景 `claude l: an answer in a second window that lands just before quit is saved`：** 把智能体放进第二个应用窗口，回答出现后立即退出，核对主进程日志出现 `Quit confirmed by renderer` 与 `Application shutting down`、没有 `Quit save timed out` 或 `did not complete`，并核对磁盘上的会话含该回答。临时去掉监听后，第二个窗口的回答仍会在主进程等待的 5 秒里由防抖写出，所以场景在超时日志断言失败；每次退出因此多等约 5 秒（`claude k` 由 11 秒变为 21 秒）。恢复后通过。
+- **场景修正：** `copilot path:` 与 `opencode path:` 在侧栏按提问文字找历史行，而这两家以回答作原生标题，侧栏实际显示的是 “Physical history answer…”。改为按 `data-native-session-id` 定位，四家通用；别名读取本身无误。
+- **默认环境（macOS 用户临时目录，未设 `TMPDIR` 覆盖）：** `npm run test:e2e:fixtures` 42/42；`npm run test:e2e` 首次 63/65，失败的正是上面两条，修正后四个 `path:` 场景 4/4。
+- **反证（未提交）：** 回退 `src/main/storage` 的别名读取后四个 `path:` 场景全部在列出会话处失败；回退 `native-app.ts` 与 `omp-protocol.cjs` 的物理临时根目录后，默认环境下 `omp a` 至 `omp f` 六条全部失败；回退四个 Codex 夹具文件后，Electron 的 codex 场景仍通过（它们核对的是界面与原生记录一致，夹具变回旧行为时两边依然一致），契约由夹具测试 `codex-contract.test.ts` 承担，回退后其中两条失败、恢复后 5/5。全部恢复后重新构建再运行。
+- **未覆盖：** 两个窗口同时有尾部改动、更新退出路径和无响应窗口的 5 秒总时限只由 main 单元测试覆盖；active writer 拒绝提示与 effort 显示的界面核对（上文第 2、3 项）没有新增界面改动，只由现有场景覆盖。真实模式、真实账户与 Mac 发行包未验。
+
 ## 按需求核对的回归与反证
 
 | 项目            | 新增或加强的回归名称                                                                                                                                                                                                                                              | 结果与边界                                                                                                  |
@@ -97,24 +108,24 @@ TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --gr
 
 实际命令及通过数：
 
-| 命令                                                                                                   | 实际结果                                                   |
-| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ---- | ----------------- | ---- |
-| `npm run test:e2e:fixtures -- temp-root.test.ts`                                                       | 2/2                                                        |
-| `npm run test:e2e:fixtures -- codex-contract.test.ts app-lifecycle.test.ts real-isolation.test.ts`     | 9/9                                                        |
-| `npm run test:e2e:fixtures -- project-alias.test.ts`                                                   | 4/4                                                        |
-| `npm run test:e2e:fixtures`                                                                            | 39/42，三条共享 socket 因沙箱 EPERM 失败，无跳过或自动重试 |
-| 上文 Codex 三文件单元命令                                                                              | 219/219                                                    |
-| 上文六个存储文件单元命令                                                                               | 174/174                                                    |
-| 上文 quit-handler 与 preload 两文件单元命令                                                            | 74/74                                                      |
-| `npm run lint`                                                                                         | 通过                                                       |
-| `npm run lint:eslint`                                                                                  | 通过                                                       |
-| `node_modules/.bin/prettier --check`，参数为各提交的改动文件                                           | 通过                                                       |
-| `git diff --check`                                                                                     | 通过                                                       |
-| `npm run docs:verify`                                                                                  | 626 条路径，0 缺失                                         |
-| `node scripts/hb-release.mjs check`                                                                    | 通过；包版本保持 hb.5，本轮没有准备发行包                  |
-| `node_modules/.bin/playwright test --project=native --list`                                            | 列出 63 个场景，属于发现检查，不是执行通过                 |
-| `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep 'omp a:'`          | Vite 构建写入被拒，0 场景执行                              |
-| `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep '(claude           | copilot                                                    | grok | opencode) path:'` | 同上 |
-| `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep 'codex [abdefg]:'` | 同上                                                       |
+| 命令                                                                                                                           | 实际结果                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `npm run test:e2e:fixtures -- temp-root.test.ts`                                                                               | 2/2                                                        |
+| `npm run test:e2e:fixtures -- codex-contract.test.ts app-lifecycle.test.ts real-isolation.test.ts`                             | 9/9                                                        |
+| `npm run test:e2e:fixtures -- project-alias.test.ts`                                                                           | 4/4                                                        |
+| `npm run test:e2e:fixtures`                                                                                                    | 39/42，三条共享 socket 因沙箱 EPERM 失败，无跳过或自动重试 |
+| 上文 Codex 三文件单元命令                                                                                                      | 219/219                                                    |
+| 上文六个存储文件单元命令                                                                                                       | 174/174                                                    |
+| 上文 quit-handler 与 preload 两文件单元命令                                                                                    | 74/74                                                      |
+| `npm run lint`                                                                                                                 | 通过                                                       |
+| `npm run lint:eslint`                                                                                                          | 通过                                                       |
+| `node_modules/.bin/prettier --check`，参数为各提交的改动文件                                                                   | 通过                                                       |
+| `git diff --check`                                                                                                             | 通过                                                       |
+| `npm run docs:verify`                                                                                                          | 626 条路径，0 缺失                                         |
+| `node scripts/hb-release.mjs check`                                                                                            | 通过；包版本保持 hb.5，本轮没有准备发行包                  |
+| `node_modules/.bin/playwright test --project=native --list`                                                                    | 列出 63 个场景，属于发现检查，不是执行通过                 |
+| `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep 'omp a:'`                                  | Vite 构建写入被拒，0 场景执行                              |
+| `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep '(claude\|copilot\|grok\|opencode) path:'` | 同上                                                       |
+| `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep 'codex [abdefg]:'`                         | 同上                                                       |
 
 Electron 命令执行时 `MAESTRO_E2E_REAL` 未设置。Mac 补验也必须使用假程序模式；可以显式加 `MAESTRO_E2E_REAL=0` 防止继承外部环境。发布前仍需 Opus 接入保存监听、完成界面复现及沙箱外 Electron 正反验收；没有将这些项目记为完成。

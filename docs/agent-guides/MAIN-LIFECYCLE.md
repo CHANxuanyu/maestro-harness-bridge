@@ -638,7 +638,7 @@ Managed by `src/main/app-lifecycle/quit-handler.ts`.
 3. If not yet confirmed, event is prevented
 4. Renderer is asked to check for busy agents via `app:requestQuitConfirmation`
 5. User confirms or cancels via `app:quitConfirmed` / `app:quitCancelled` IPC
-6. On confirm, `app:requestQuitSave` goes to every live session-owning app window. `createAppApi().onQuitSaveRequest(save)` acknowledges only after the registered save settles. Main checks the request ID and sender, with one 5 second deadline across all windows.
+6. On confirm, `app:requestQuitSave` goes to every live session-owning app window. `createAppApi().onQuitSaveRequest(save)` acknowledges only after the registered save settles; each window registers it through `answerQuitSaveRequests()` (`src/renderer/services/quitSave.ts`), mounted by `useDebouncedPersistence`. Main checks the request ID and sender, with one 5 second deadline across all windows.
 7. After acknowledgements, unavailable renderers or the deadline, synchronous store flush and cleanup run. The hard-exit grace period starts only after this stage. Renderer integration must register its existing persistence save in every app window; the hb.6 backend branch supplies the transport and coordinator.
 
 ### Cleanup Operations

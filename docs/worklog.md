@@ -190,3 +190,13 @@ hb.5 候选 `a2b2ce5` 的 Codex 真实验收中，d（正常重启后续接）�
 - 加强 `finds native command IDs in 11.1 durable CommandExecution items`：同一命令同时存在模型 function_call 和持久化 CommandExecution 时，优先读取后者的 ID，旧格式单独存在仍可读取。新断言先失败；修复仅限验收读取器。
 - 官方 exec JSON 处理器会另分配 `item_N`，不要把 stdout 的条目标识和原生持久化标识误认为同一个命名空间。当前 b 场景分别检查界面命令/结果/状态以及原生记录 ID 的存在与唯一性，没有跨域比较 ID。
 - 单独临时回退 ID 读取修复后 1 失败 / 3 通过，恢复后相关夹具 9/9；最终全量夹具仍为 39/42，三项失败均为沙箱 socket EPERM。类型、ESLint 与改动文件 Prettier 通过。
+
+## 2026-11-02：hb.6 前置项整合与 Mac 验收（Opus）
+
+把 Codex 在独立克隆中完成的五个提交叠到 PR #32 之上，接上逐窗口退出保存的前端监听，并在 Mac 沙箱外完成 Electron 正反验收。详细命令、结果和未覆盖项见 [hb.6 前置项验证](verification/hb6-prerequisites.md#opus-整合与-mac-沙箱外验收2026-11-02)。
+
+- **整合：** 五个提交原样保留作者与说明，只合并 CHANGELOG、工作记录和 `native-resume.spec.ts` 的冲突。这些提交改动的 e2e 夹具（`.cjs`）不在仓库 ESLint 范围内（`lint:eslint` 只检查 `src/`，主线未改动的 `protocol.cjs` 同样有 7 个这类错误），提交钩子会对它们报错，所以按原样提交时跳过了钩子，每个提交先单独跑 Prettier 检查。
+- **逐窗口保存：** `answerQuitSaveRequests()` 由持久化 hook 在每个应用窗口挂载，回应主进程的 `app:requestQuitSave`；保存失败或超过 `QUIT_SAVE_TIMEOUT_MS` 时回报未保存。新增回归 7 条（服务 6 条、hook 1 条）修复前失败；`useBatchHandlers` 测试的 `window.maestro.app` 替身补上新方法，断言不变。新 Electron 场景 `claude l` 在去掉监听时于超时日志断言失败。
+- **场景修正：** `copilot path:` 与 `opencode path:` 按原生 ID 定位历史行（这两家以回答作标题），别名读取无需改动。
+- **验证：** 默认 macOS 临时目录下全量夹具 42/42、完整 Electron 63/65（失败为上面两条，修正后 4/4）；`claude k`、`claude l` 通过；三组反证（别名读取、物理临时根目录、Codex 契约夹具）均失败于预期位置，恢复后通过。完整单元测试 2090 个文件 47678/47678（88 跳过）；类型、ESLint、格式、文档路径、文档引用与发布规则检查通过。
+- **限制：** 两个窗口同时有尾部改动、更新退出与无响应窗口的总时限只由 main 单元测试覆盖；真实模式、真实账户与 Mac 发行包未验。

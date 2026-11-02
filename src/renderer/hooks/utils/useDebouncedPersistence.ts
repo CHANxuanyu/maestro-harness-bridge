@@ -43,7 +43,7 @@ import { logger } from '../../utils/logger';
 import { captureException } from '../../utils/sentry';
 import { compactSessionToolOutputs } from '../../../shared/toolOutput';
 import { MAX_PERSISTED_SESSION_LOGS } from '../../../shared/deferredSessionContent';
-import { registerQuitSave } from '../../services/quitSave';
+import { answerQuitSaveRequests, registerQuitSave } from '../../services/quitSave';
 
 /**
  * Thrown by `persistInternal` when the session registry was never read back
@@ -578,6 +578,8 @@ export function useDebouncedPersistence(
 	}, [initialLoadComplete, persistSessions]);
 
 	useEffect(() => registerQuitSave(saveBeforeQuit), [saveBeforeQuit]);
+	// Every app window answers main's own save request on a confirmed quit.
+	useEffect(() => answerQuitSaveRequests(), []);
 
 	// Debounced persistence via store subscribe (no App-level sessions subscription)
 	useEffect(() => {

@@ -73,10 +73,16 @@ interface ToolbarControlsProps {
 	effortMenuRef: React.RefObject<HTMLDivElement>;
 	/**
 	 * Send the composer's contents. Only used on a phone, where the send button
-	 * moves into this row (see the phone branch below); the desktop keeps it in
-	 * the column beside the composer.
+	 * moves into this row (see the phone branch below); the desktop passes its
+	 * send controls as `trailing` instead.
 	 */
 	processInput?: () => void;
+	/**
+	 * Desktop only: rendered at the end of this row, inside the input card
+	 * (notification settings and send), so the composer is one card with
+	 * nothing hanging off its right edge.
+	 */
+	trailing?: React.ReactNode;
 }
 
 export const ToolbarControls = memo(function ToolbarControls({
@@ -113,6 +119,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 	setEffortMenuOpen,
 	effortMenuRef,
 	processInput,
+	trailing,
 }: ToolbarControlsProps) {
 	const t = useT();
 	const isAiMode = session.inputMode === 'ai';
@@ -364,13 +371,17 @@ export const ToolbarControls = memo(function ToolbarControls({
 		);
 	}
 
+	// Ghost controls, the way a chat composer draws its settings: no fill and no
+	// border, dim when off, the icon (or the label) takes the color when on.
+	const ghost =
+		'flex items-center gap-1 rounded-md px-1.5 py-1 text-xs whitespace-nowrap cursor-pointer transition-all hover:bg-white/10';
+
 	return (
 		<div className="flex min-w-0 flex-wrap items-center gap-1 px-2 pb-2 pt-1">
-			{/* In AI mode the left controls keep their own width (flex-auto), so a
-			    composer too narrow for both groups wraps the right one onto its own
-			    row. With a zero basis (flex-1) nothing wrapped: this group shrank to a
-			    sliver and its buttons spilled under History and Access. Terminal mode
-			    keeps flex-1 so its cwd still truncates in place. */}
+			{/* Left: what the user adds to the message and how the turn runs. In AI
+			    mode it keeps its own width (flex-auto), so a composer too narrow for
+			    both groups wraps the right one onto its own row; terminal mode keeps
+			    flex-1 so its cwd still truncates in place. */}
 			<div className={`flex min-w-0 gap-1 items-center ${isTerminalMode ? 'flex-1' : 'flex-auto'}`}>
 				{isTerminalMode && (
 					<div
@@ -379,6 +390,15 @@ export const ToolbarControls = memo(function ToolbarControls({
 					>
 						{formatTerminalCwd(session)}
 					</div>
+				)}
+				{isAiMode && canAttachImages && (
+					<button
+						onClick={() => document.getElementById('image-file-input')?.click()}
+						className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
+						title={t('workflows.shell.attachImage')}
+					>
+						<ImageIcon className="w-4 h-4" />
+					</button>
 				)}
 				{isAiMode && onOpenPromptComposer && (
 					<button
@@ -389,15 +409,6 @@ export const ToolbarControls = memo(function ToolbarControls({
 						})}
 					>
 						<PenLine className="w-4 h-4" />
-					</button>
-				)}
-				{isAiMode && canAttachImages && (
-					<button
-						onClick={() => document.getElementById('image-file-input')?.click()}
-						className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
-						title={t('workflows.shell.attachImage')}
-					>
-						<ImageIcon className="w-4 h-4" />
 					</button>
 				)}
 				{showVoiceButton && (
@@ -428,6 +439,112 @@ export const ToolbarControls = memo(function ToolbarControls({
 					</button>
 				)}
 				{imageFileInput}
+
+				{isNarrowViewport && (
+					<button
+						type="button"
+						onClick={() => setToolbarExpanded((v) => !v)}
+						className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
+						style={{ color: theme.colors.textDim }}
+						title={
+							toolbarExpanded ? t('workflows.shell.hideOptions') : t('workflows.shell.showOptions')
+						}
+						aria-label={
+							toolbarExpanded
+								? t('workflows.shell.hideToolbarOptions')
+								: t('workflows.shell.showToolbarOptions')
+						}
+					>
+						{toolbarExpanded ? <X className="w-4 h-4" /> : <MoreHorizontal className="w-4 h-4" />}
+					</button>
+				)}
+
+				<div
+					className={`flex items-center gap-0.5 ${showToggleGroup ? '' : 'hidden'}`}
+					data-tour="toolbar-toggles"
+				>
+					{isAiMode && hasReadOnlyCapability && (
+						<button
+							onClick={() =>
+								handlePermissionModeChange(
+									nextPermissionMode(currentPermissionMode, hasStandardCapability)
+								)
+							}
+							className={`${ghost} ${currentPermissionMode === 'standard' ? 'opacity-60 hover:opacity-100' : ''}`}
+							style={{
+								color:
+									currentPermissionMode === 'readonly'
+										? theme.colors.warning
+										: currentPermissionMode === 'full'
+											? theme.colors.accent
+											: theme.colors.textDim,
+							}}
+							title={`${permissionModeTooltip(
+								t,
+								currentPermissionMode,
+								session.toolType
+							)}${shortcutSuffix(tabShortcuts.toggleReadOnlyMode?.keys)}`}
+						>
+							<Eye className="w-3.5 h-3.5" />
+							<span>{permissionModeLabel(t, currentPermissionMode, session.toolType)}</span>
+						</button>
+					)}
+					{isAiMode && supportsThinking && onToggleTabShowThinking && (
+						<button
+							onClick={onToggleTabShowThinking}
+							className={`${ghost} ${tabShowThinking !== 'off' ? '' : 'opacity-40 hover:opacity-100'}`}
+							style={{
+								color:
+									tabShowThinking === 'sticky'
+										? theme.colors.warning
+										: tabShowThinking === 'on'
+											? theme.colors.accentText
+											: theme.colors.textDim,
+							}}
+							title={`${
+								tabShowThinking === 'off'
+									? t('workflows.shell.extraShowThinkingClickToStreamAiReasoning')
+									: tabShowThinking === 'on'
+										? t('workflows.shell.extraThinkingTemporaryClickForStickyMode')
+										: t('workflows.shell.extraThinkingStickyClickToTurnOff')
+							}${shortcutSuffix(tabShortcuts.toggleShowThinking?.keys)}`}
+							aria-label={t('workflows.shell.thinking2')}
+							aria-pressed={tabShowThinking !== 'off'}
+						>
+							<Brain className="w-3.5 h-3.5" />
+							{tabShowThinking === 'sticky' && <Pin className="w-2.5 h-2.5" />}
+						</button>
+					)}
+					{isAiMode && onToggleTabSaveToHistory && (
+						<button
+							onClick={onToggleTabSaveToHistory}
+							className={`${ghost} ${tabSaveToHistory ? '' : 'opacity-40 hover:opacity-100'}`}
+							style={{ color: tabSaveToHistory ? theme.colors.accent : theme.colors.textDim }}
+							title={t('workflows.shell.saveToHistoryvalueSynopsisAddedAfterEachCompletion', {
+								p0: shortcutSuffix(tabShortcuts.toggleSaveToHistory?.keys),
+							})}
+							aria-label={t('workflows.shell.history')}
+							aria-pressed={tabSaveToHistory}
+						>
+							<History className="w-3.5 h-3.5" />
+						</button>
+					)}
+					<button
+						onClick={() => setEnterToSend(!enterToSend)}
+						className={`${ghost} opacity-40 hover:opacity-100`}
+						style={{ color: theme.colors.textDim }}
+						title={t('workflows.input.sendWith', {
+							key: enterToSend ? `${isMacOS() ? 'Cmd' : 'Ctrl'}+Enter` : 'Enter',
+						})}
+					>
+						<Keyboard className="w-3.5 h-3.5" />
+						<span className="text-2xs">{formatEnterToSend(enterToSend)}</span>
+					</button>
+				</div>
+			</div>
+
+			{/* Right: which model answers, then send, in the corner of the card. */}
+			<div className="ml-auto flex items-center gap-1">
 				<ModelEffortPills
 					isVisible={isAiMode}
 					theme={theme}
@@ -445,148 +562,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 					setEffortMenuOpen={setEffortMenuOpen}
 					effortMenuRef={effortMenuRef}
 				/>
-			</div>
-
-			{isNarrowViewport && (
-				<button
-					type="button"
-					onClick={() => setToolbarExpanded((v) => !v)}
-					className="ml-auto flex h-7 w-7 items-center justify-center rounded-full transition-all opacity-60 hover:opacity-100"
-					style={{
-						color: theme.colors.textDim,
-						border: `1px solid ${theme.colors.border}`,
-					}}
-					title={
-						toolbarExpanded ? t('workflows.shell.hideOptions') : t('workflows.shell.showOptions')
-					}
-					aria-label={
-						toolbarExpanded
-							? t('workflows.shell.hideToolbarOptions')
-							: t('workflows.shell.showToolbarOptions')
-					}
-				>
-					{toolbarExpanded ? (
-						<X className="w-3.5 h-3.5" />
-					) : (
-						<MoreHorizontal className="w-3.5 h-3.5" />
-					)}
-				</button>
-			)}
-
-			<div
-				className={`flex items-center gap-2 ${isNarrowViewport ? '' : 'ml-auto'} ${showToggleGroup ? '' : 'hidden'}`}
-				data-tour="toolbar-toggles"
-			>
-				{isAiMode && onToggleTabSaveToHistory && (
-					<button
-						onClick={onToggleTabSaveToHistory}
-						className={`flex items-center gap-1.5 text-2xs px-2 py-1 rounded-full cursor-pointer transition-all whitespace-nowrap ${
-							tabSaveToHistory ? '' : 'opacity-40 hover:opacity-70'
-						}`}
-						style={{
-							backgroundColor: tabSaveToHistory ? `${theme.colors.accent}25` : 'transparent',
-							color: tabSaveToHistory ? theme.colors.accent : theme.colors.textDim,
-							border: tabSaveToHistory
-								? `1px solid ${theme.colors.accent}50`
-								: '1px solid transparent',
-						}}
-						title={t('workflows.shell.saveToHistoryvalueSynopsisAddedAfterEachCompletion', {
-							p0: shortcutSuffix(tabShortcuts.toggleSaveToHistory?.keys),
-						})}
-					>
-						<History className="w-3 h-3" />
-						<span>{t('workflows.shell.history')}</span>
-					</button>
-				)}
-				{isAiMode && hasReadOnlyCapability && (
-					<button
-						onClick={() =>
-							handlePermissionModeChange(
-								nextPermissionMode(currentPermissionMode, hasStandardCapability)
-							)
-						}
-						className={`flex items-center gap-1.5 text-2xs px-2 py-1 rounded-full cursor-pointer transition-all whitespace-nowrap ${
-							currentPermissionMode === 'standard' ? 'opacity-40 hover:opacity-70' : ''
-						}`}
-						style={{
-							backgroundColor:
-								currentPermissionMode === 'readonly'
-									? `${theme.colors.warning}25`
-									: currentPermissionMode === 'full'
-										? `${theme.colors.accent}25`
-										: 'transparent',
-							color:
-								currentPermissionMode === 'readonly'
-									? theme.colors.warning
-									: currentPermissionMode === 'full'
-										? theme.colors.accent
-										: theme.colors.textDim,
-							border:
-								currentPermissionMode === 'readonly'
-									? `1px solid ${theme.colors.warning}50`
-									: currentPermissionMode === 'full'
-										? `1px solid ${theme.colors.accent}50`
-										: '1px solid transparent',
-						}}
-						title={`${permissionModeTooltip(
-							t,
-							currentPermissionMode,
-							session.toolType
-						)}${shortcutSuffix(tabShortcuts.toggleReadOnlyMode?.keys)}`}
-					>
-						<Eye className="w-3 h-3" />
-						<span>{permissionModeLabel(t, currentPermissionMode, session.toolType)}</span>
-					</button>
-				)}
-				{isAiMode && supportsThinking && onToggleTabShowThinking && (
-					<button
-						onClick={onToggleTabShowThinking}
-						className={`flex items-center gap-1.5 text-2xs px-2 py-1 rounded-full cursor-pointer transition-all whitespace-nowrap ${
-							tabShowThinking !== 'off' ? '' : 'opacity-40 hover:opacity-70'
-						}`}
-						style={{
-							backgroundColor:
-								tabShowThinking === 'sticky'
-									? `${theme.colors.warning}30`
-									: tabShowThinking === 'on'
-										? `${theme.colors.accentText}25`
-										: 'transparent',
-							color:
-								tabShowThinking === 'sticky'
-									? theme.colors.warning
-									: tabShowThinking === 'on'
-										? theme.colors.accentText
-										: theme.colors.textDim,
-							border:
-								tabShowThinking === 'sticky'
-									? `1px solid ${theme.colors.warning}50`
-									: tabShowThinking === 'on'
-										? `1px solid ${theme.colors.accentText}50`
-										: '1px solid transparent',
-						}}
-						title={`${
-							tabShowThinking === 'off'
-								? t('workflows.shell.extraShowThinkingClickToStreamAiReasoning')
-								: tabShowThinking === 'on'
-									? t('workflows.shell.extraThinkingTemporaryClickForStickyMode')
-									: t('workflows.shell.extraThinkingStickyClickToTurnOff')
-						}${shortcutSuffix(tabShortcuts.toggleShowThinking?.keys)}`}
-					>
-						<Brain className="w-3 h-3" />
-						<span>{t('workflows.shell.thinking2')}</span>
-						{tabShowThinking === 'sticky' && <Pin className="w-2.5 h-2.5" />}
-					</button>
-				)}
-				<button
-					onClick={() => setEnterToSend(!enterToSend)}
-					className="flex items-center gap-1 text-2xs opacity-50 hover:opacity-100 px-2 py-1 rounded hover:bg-white/5"
-					title={t('workflows.input.sendWith', {
-						key: enterToSend ? `${isMacOS() ? 'Cmd' : 'Ctrl'}+Enter` : 'Enter',
-					})}
-				>
-					<Keyboard className="w-3 h-3" />
-					{formatEnterToSend(enterToSend)}
-				</button>
+				{trailing}
 			</div>
 		</div>
 	);

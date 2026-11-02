@@ -782,17 +782,20 @@ function ThinkingStatusPillInner({
 	const customName = agentSessionId ? namedSessions?.[agentSessionId] : undefined;
 	const tabName = primaryTab?.name;
 
-	// Display name for the tab slot (to the left of Stop button):
-	// prefer namedSessions, then tab name, then UUID octet (NOT session name - that's already shown)
-	const displayClaudeId =
-		customName || tabName || (agentSessionId ? agentSessionId.substring(0, 8).toUpperCase() : null);
+	// The running turn is the conversation the user is looking at: the pill only
+	// has to say that it is working and offer Stop. Naming the agent or the tab
+	// would repeat the header right above it.
+	const primaryOnScreen =
+		primarySession.id === activeSessionId &&
+		(!primaryTab || !activeTabId || primaryTab.id === activeTabId);
+
+	// Display name for the tab slot (to the left of Stop button): a name the user
+	// gave or the tab carries. A bare provider session id is an identifier, not a
+	// name, so it stays in the tooltip instead of on the pill.
+	const displayClaudeId = primaryOnScreen ? null : customName || tabName || null;
 	// The provider actually running this turn (Codex, Claude Code, ...). The pill
 	// used to say "Claude" for every agent's session id.
 	const providerName = getAgentDisplayName(primarySession.toolType);
-	// True only when the two name sources were empty and this fell through to the
-	// raw session id. A name is prose and belongs in the interface font; a hex
-	// octet is an identifier and reads better in the code face.
-	const displayIsSessionId = !customName && !tabName && Boolean(agentSessionId);
 
 	// For tooltip, show all available info
 	const tooltipParts = [maestroSessionName];
@@ -812,9 +815,10 @@ function ThinkingStatusPillInner({
 			<div
 				className="relative flex items-center gap-2 px-4 py-1.5 rounded-full max-w-full min-w-0"
 				style={{
-					backgroundColor: theme.colors.warning + '20',
+					backgroundColor: theme.colors.bgActivity,
 					border: `1px solid ${theme.colors.border}`,
 				}}
+				title={fullTooltip}
 			>
 				{/* Thinking Pill - Pulsing yellow circle indicator */}
 				<div
@@ -822,20 +826,23 @@ function ThinkingStatusPillInner({
 					style={{ backgroundColor: theme.colors.warning }}
 				/>
 
-				{/* Maestro session name - always visible, truncates on narrow widths. Clickable:
-				    it jumps to the thinking tab, same as the tab-name segment. The tab-name
-				    segment is the first thing container queries drop on narrow widths, so the
-				    name has to carry the jump too or the pill loses its only affordance. */}
-				<button
-					onClick={() => onSessionClick?.(primarySession.id, primaryTab?.id)}
-					// Capped as well as truncating: a long agent or conversation name may
-					// not take the bar from the status and the Stop control beside it.
-					className="text-xs font-medium truncate min-w-0 max-w-[14rem] hover:underline cursor-pointer"
-					style={{ color: theme.colors.textMain }}
-					title={t('workflows.shellStatus.jumpToThisTabValue', { p0: fullTooltip })}
-				>
-					{maestroSessionName}
-				</button>
+				{/* Maestro session name - shown only when the running turn is somewhere
+				    else, truncates on narrow widths. Clickable: it jumps to the thinking tab,
+				    same as the tab-name segment. The tab-name segment is the first thing
+				    container queries drop on narrow widths, so the name has to carry the
+				    jump too or the pill loses its only affordance. */}
+				{!primaryOnScreen && (
+					<button
+						onClick={() => onSessionClick?.(primarySession.id, primaryTab?.id)}
+						// Capped as well as truncating: a long agent or conversation name may
+						// not take the bar from the status and the Stop control beside it.
+						className="text-xs font-medium truncate min-w-0 max-w-[14rem] hover:underline cursor-pointer"
+						style={{ color: theme.colors.textMain }}
+						title={t('workflows.shellStatus.jumpToThisTabValue', { p0: fullTooltip })}
+					>
+						{maestroSessionName}
+					</button>
+				)}
 
 				{/* Token info / Thinking placeholder - carries its own divider so hiding the
 				    segment on narrow widths (pill-seg-tokens) takes the divider with it */}
@@ -843,7 +850,9 @@ function ThinkingStatusPillInner({
 					className="pill-seg-tokens flex items-center gap-2 shrink-0 text-xs"
 					style={{ color: theme.colors.textDim }}
 				>
-					<div className="w-px h-4" style={{ backgroundColor: theme.colors.border }} />
+					{!primaryOnScreen && (
+						<div className="w-px h-4" style={{ backgroundColor: theme.colors.border }} />
+					)}
 					{primaryTokens > 0 ? (
 						<div className="flex items-center gap-1">
 							<span>{t('workflows.shellStatus.tokens')}</span>
@@ -881,9 +890,7 @@ function ThinkingStatusPillInner({
 						<div className="w-px h-4 shrink-0" style={{ backgroundColor: theme.colors.border }} />
 						<button
 							onClick={() => onSessionClick?.(primarySession.id, primaryTab?.id)}
-							className={`text-xs hover:underline cursor-pointer truncate min-w-0 max-w-[16rem]${
-								displayIsSessionId ? ' font-mono' : ''
-							}`}
+							className="text-xs hover:underline cursor-pointer truncate min-w-0 max-w-[16rem]"
 							style={{ color: theme.colors.accent }}
 							title={
 								agentSessionId

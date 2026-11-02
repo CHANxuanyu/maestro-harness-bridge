@@ -824,28 +824,22 @@ describe('MainPanel', () => {
 			expect(screen.getByText('My Test Session')).toBeInTheDocument();
 		});
 
-		it('should display LOCAL badge for non-git repos', () => {
+		it('draws no badge for a local folder that is not a git repo', () => {
 			const session = createSession({ isGitRepo: false });
 			renderMainPanel({ activeSession: session });
 
-			expect(screen.getByText('LOCAL')).toBeInTheDocument();
+			// The old LOCAL badge had no menu and no hover; the ordinary case says nothing.
+			expect(screen.queryByText('LOCAL')).not.toBeInTheDocument();
 		});
 
-		it('should tag the LOCAL badge with the phone-layout hook class', () => {
-			const session = createSession({ isGitRepo: false });
-			renderMainPanel({ activeSession: session });
-
-			// The phone stylesheet retires the inert LOCAL badge by this class.
-			expect(screen.getByText('LOCAL')).toHaveClass('header-local-badge');
-		});
-
-		it('should not tag the git branch pill with the phone-layout hook class', async () => {
+		it('keeps the git branch control, drawn as quiet text', async () => {
 			const session = createSession({ isGitRepo: true });
 			renderMainPanel({ activeSession: session });
 
-			// The git pill opens a menu, so it survives on a phone.
-			const branch = await screen.findByText(/GIT|main/);
-			expect(branch.closest('button')).not.toHaveClass('header-local-badge');
+			// The git pill opens a menu, so it stays; it is no longer a colored pill.
+			const branch = (await screen.findByText(/GIT|main/)).closest('button')!;
+			expect(branch).toHaveAttribute('aria-haspopup', 'menu');
+			expect(branch.className).not.toMatch(/orange|rounded-full/);
 		});
 
 		it('should display GIT badge with branch name for git repos', async () => {
@@ -2667,8 +2661,8 @@ describe('MainPanel', () => {
 
 			renderMainPanel({ activeSession: session });
 
-			// Should show LOCAL badge instead of git branch
-			expect(screen.getByText('LOCAL')).toBeInTheDocument();
+			// No git branch, and no LOCAL badge in its place
+			expect(screen.queryByText('LOCAL')).not.toBeInTheDocument();
 			expect(screen.queryByText('main')).not.toBeInTheDocument();
 		});
 	});

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	APP_TITLE_STRIP_HEIGHT,
+	appTitleStripText,
 	shouldShowAppTitleStrip,
 } from '../../../renderer/utils/appTitleStrip';
 
@@ -39,5 +40,19 @@ describe('shouldShowAppTitleStrip', () => {
 
 	it('matches the 40px strip AppShell pads for', () => {
 		expect(APP_TITLE_STRIP_HEIGHT).toBe(40);
+	});
+});
+
+describe('appTitleStripText', () => {
+	it('names the group and the agent, never a conversation or session id', () => {
+		expect(
+			appTitleStripText({ group: { emoji: '📁', name: 'project' }, sessionName: 'Native claude' })
+		).toBe('📁 project \u00b7 Native claude');
+	});
+
+	it('is just the agent name outside a group', () => {
+		expect(appTitleStripText({ group: undefined, sessionName: 'Native claude' })).toBe(
+			'Native claude'
+		);
 	});
 });

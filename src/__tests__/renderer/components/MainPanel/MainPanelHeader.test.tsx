@@ -260,15 +260,36 @@ describe('MainPanelHeader', () => {
 		expect(screen.getByText('main')).toBeInTheDocument();
 	});
 
-	it('renders LOCAL badge for non-git repo', () => {
-		render(
+	it('renders no badge for a local non-git folder', () => {
+		const { container } = render(
 			<MainPanelHeader
 				{...defaultProps}
 				activeSession={makeSession({ isGitRepo: false })}
 				gitInfo={null}
 			/>
 		);
-		expect(screen.getByText('LOCAL')).toBeInTheDocument();
+		expect(screen.queryByText('LOCAL')).not.toBeInTheDocument();
+		// The wrapper is left empty, which the stylesheet retires with :empty.
+		expect(container.querySelector('.header-git-pill')).toBeEmptyDOMElement();
+	});
+
+	it('keeps a healthy context reading dim and colors it only when it fills up', () => {
+		const { rerender } = render(
+			<MainPanelHeader
+				{...defaultProps}
+				activeTabContextUsage={20}
+				getContextColor={() => mockTheme.colors.success}
+			/>
+		);
+		expect(screen.getByText('20%')).toHaveStyle({ color: mockTheme.colors.textDim });
+		rerender(
+			<MainPanelHeader
+				{...defaultProps}
+				activeTabContextUsage={85}
+				getContextColor={() => mockTheme.colors.error}
+			/>
+		);
+		expect(screen.getByText('85%')).toHaveStyle({ color: mockTheme.colors.error });
 	});
 
 	it('renders SSH remote pill when SSH is configured', () => {
@@ -787,7 +808,7 @@ describe('MainPanelHeader', () => {
 						/>
 					);
 
-					fireEvent.mouseEnter(screen.getByText('LOCAL').closest('div')!);
+					fireEvent.mouseEnter(document.querySelector('.header-git-pill')!);
 					act(() => {
 						vi.advanceTimersByTime(500);
 					});
@@ -868,8 +889,8 @@ describe('MainPanelHeader', () => {
 				/>
 			);
 
-			fireEvent.click(screen.getByText('LOCAL'));
-
+			// There is nothing to click: no badge is drawn for a non-git folder.
+			expect(screen.queryByRole('button', { name: /LOCAL|GIT/ })).not.toBeInTheDocument();
 			expect(screen.queryByTestId('git-pill-menu')).not.toBeInTheDocument();
 		});
 	});

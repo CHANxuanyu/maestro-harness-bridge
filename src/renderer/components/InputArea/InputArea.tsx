@@ -646,7 +646,8 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 			<div className="flex min-w-0 gap-3">
 				<div className="flex min-w-0 flex-1 flex-col">
 					<div
-						className="chrome-raised relative flex min-w-0 flex-1 flex-col rounded-lg border bg-opacity-50"
+						data-testid="composer-card"
+						className="chrome-raised relative flex min-w-0 flex-1 flex-col rounded-xl border bg-opacity-50"
 						style={{
 							borderColor: showQueueingBorder ? theme.colors.warning : theme.colors.border,
 							backgroundColor: showQueueingBorder
@@ -748,6 +749,17 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 							setEffortMenuOpen={setEffortMenuOpen}
 							effortMenuRef={effortMenuRef}
 							processInput={processInput}
+							trailing={
+								// Phone: send moves into the toolbar row (see ToolbarControls'
+								// phone branch) and the notification bell is dropped.
+								!phone && (
+									<NotificationSendControls
+										theme={theme}
+										isTerminalMode={isTerminalMode}
+										processInput={processInput}
+									/>
+								)
+							}
 						/>
 					</div>
 					{/* Context Warning Sash - AI mode only, appears below input when context usage is high */}
@@ -763,18 +775,6 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 						/>
 					)}
 				</div>
-
-				{/* Phone: this column is gone. The notification bell opens a settings
-				    popover that has no business on a 390px composer, and send has moved
-				    into the toolbar row (see ToolbarControls' phone branch) so the
-				    composer gets the full width it needs to show what is being typed. */}
-				{!phone && (
-					<NotificationSendControls
-						theme={theme}
-						isTerminalMode={isTerminalMode}
-						processInput={processInput}
-					/>
-				)}
 			</div>
 		</div>
 	);

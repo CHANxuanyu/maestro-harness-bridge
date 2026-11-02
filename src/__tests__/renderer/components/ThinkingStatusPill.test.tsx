@@ -337,9 +337,47 @@ describe('ThinkingStatusPill', () => {
 			const title = titled.getAttribute('title')!;
 			expect(title).toContain(`${getAgentDisplayName('codex')}: 00000000`);
 			expect(title).not.toContain('Claude');
-			const idButton = screen.getByText('00000000');
-			expect(idButton.getAttribute('title')).toContain(getAgentDisplayName('codex'));
-			expect(idButton.getAttribute('title')).not.toContain('Claude');
+			// The id is named in the tooltip only, never drawn as a segment.
+			expect(screen.queryByText('00000000')).not.toBeInTheDocument();
+		});
+
+		it('never draws a bare provider session id on the pill', () => {
+			const item = createThinkingItem({
+				name: 'Unnamed Tab Agent',
+				agentSessionId: 'abc12345-def',
+			});
+			render(<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />);
+			expect(screen.queryByText('ABC12345')).not.toBeInTheDocument();
+			expect(screen.getByText('Unnamed Tab Agent')).toBeInTheDocument();
+		});
+
+		it('says only that the conversation on screen is working, with Stop', () => {
+			const item = createThinkingItemWithTab(
+				{
+					id: 'sess-here',
+					name: 'Agent On Screen',
+					agentSessionId: 'abc12345-def',
+					currentCycleTokens: 0,
+				},
+				{ id: 'tab-here', name: 'Fix the login bug', agentSessionId: 'abc12345-def' }
+			);
+			render(
+				<ThinkingStatusPill
+					thinkingItems={[item]}
+					theme={mockTheme}
+					activeSessionId="sess-here"
+					activeTabId="tab-here"
+					onInterrupt={vi.fn()}
+				/>
+			);
+			// The header already names the agent and the conversation.
+			expect(screen.queryByText('Agent On Screen')).not.toBeInTheDocument();
+			expect(screen.queryByText('Fix the login bug')).not.toBeInTheDocument();
+			expect(screen.queryByText('ABC12345')).not.toBeInTheDocument();
+			expect(screen.getByText('Thinking...')).toBeInTheDocument();
+			expect(screen.getByTestId('stop-turn-button')).toBeInTheDocument();
+			// The details stay one hover away.
+			expect(screen.getByTitle(/Fix the login bug/)).toBeInTheDocument();
 		});
 
 		it('keeps Stop whole and reachable when the conversation title is long', () => {
@@ -376,10 +414,10 @@ describe('ThinkingStatusPill', () => {
 				/>
 			);
 
-			// agentSessionId: 'claude-456' -> displayClaudeId: 'CLAUDE-4'
-			const claudeIdButton = screen.getByText('CLAUDE-4');
-			expect(claudeIdButton.tagName).toBe('BUTTON');
-			fireEvent.click(claudeIdButton);
+			// No tab name and only a provider id: the agent name is the jump.
+			const nameButton = screen.getByText('Click Test Session');
+			expect(nameButton.tagName).toBe('BUTTON');
+			fireEvent.click(nameButton);
 
 			// tab is null for legacy items
 			expect(onSessionClick).toHaveBeenCalledWith('session-123', undefined);
@@ -432,8 +470,7 @@ describe('ThinkingStatusPill', () => {
 				/>
 			);
 
-			// agentSessionId 'claude-789' -> displayClaudeId 'CLAUDE-7'
-			fireEvent.click(screen.getByText('CLAUDE-7'));
+			fireEvent.click(screen.getByText('Live Agent'));
 
 			expect(onSessionClick).toHaveBeenCalledWith('session-xyz', undefined);
 			const streamState = useThoughtStreamStore.getState();
@@ -641,10 +678,11 @@ describe('ThinkingStatusPill', () => {
 				/>
 			);
 
-			// Primary pill follows the active tab (tab-2 → 'Read'); the other tab's name
-			// stays hidden in the collapsed dropdown.
-			expect(screen.getByText('Read')).toBeInTheDocument();
-			expect(screen.queryByText('Write')).not.toBeInTheDocument();
+			// Primary pill follows the active tab (tab-2 → 'Read'). That tab is on
+			// screen, so it is named in the pill's tooltip rather than drawn; the
+			// other tab's name stays hidden in the collapsed dropdown.
+			expect(screen.getByTitle(/Tab: Read/)).toBeInTheDocument();
+			expect(screen.queryByTitle(/Tab: Write/)).not.toBeInTheDocument();
 		});
 
 		// Active tab itself is idle: fall back to a busy tab in the active session.
@@ -1238,7 +1276,7 @@ describe('ThinkingStatusPill', () => {
 				/>
 			);
 			// Primary pill describes the focused tab, not the accent AutoRun pill.
-			expect(screen.getByText('Force Sent')).toBeInTheDocument();
+			expect(screen.getByTitle(/Tab: Force Sent/)).toBeInTheDocument();
 			// The interrupt Stop button (for the focused tab) is present.
 			expect(screen.getByText('Stop')).toBeInTheDocument();
 			// AutoRun is demoted: its label only lives in the collapsed dropdown, so it is
@@ -1387,13 +1425,10 @@ describe('ThinkingStatusPill', () => {
 			expect(stopButton).toHaveStyle({ backgroundColor: mockTheme.colors.error });
 		});
 
-		it('applies accent color to Claude ID button', () => {
-			const item = createThinkingItem({
-				name: 'Accent Test',
-				agentSessionId: 'test-id-1234',
-			});
+		it('applies accent color to the tab name button', () => {
+			const item = createThinkingItemWithTab({ name: 'Accent Test' }, { name: 'Accent Tab' });
 			render(<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />);
-			const claudeButton = screen.getByText('TEST-ID-');
+			const claudeButton = screen.getByText('Accent Tab');
 			expect(claudeButton.tagName).toBe('BUTTON');
 			expect(claudeButton).toHaveStyle({ color: mockTheme.colors.accent });
 		});
@@ -1410,10 +1445,7 @@ describe('ThinkingStatusPill', () => {
 		});
 
 		it('tokens segment and Claude ID segment carry their drop classes', () => {
-			const item = createThinkingItem({
-				currentCycleTokens: 100,
-				agentSessionId: 'test-id-1234',
-			});
+			const item = createThinkingItemWithTab({ currentCycleTokens: 100 }, { name: 'Named Tab' });
 			const { container } = render(<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />);
 			expect(container.querySelector('.pill-seg-tokens')).not.toBeNull();
 			expect(container.querySelector('.pill-seg-claude-id')).not.toBeNull();
@@ -1507,7 +1539,7 @@ describe('ThinkingStatusPill', () => {
 		});
 
 		it('re-renders when theme changes', () => {
-			const item = createThinkingItem({ name: 'Theme Test' });
+			const item = createThinkingItemWithTab({ name: 'Theme Test' }, { name: 'Theme Tab' });
 			const newTheme = {
 				...mockTheme,
 				colors: { ...mockTheme.colors, accent: '#ff0000' },
@@ -1517,7 +1549,7 @@ describe('ThinkingStatusPill', () => {
 
 			rerender(<ThinkingStatusPill thinkingItems={[item]} theme={newTheme} />);
 
-			const claudeButton = screen.getByText('ABC12345');
+			const claudeButton = screen.getByText('Theme Tab');
 			expect(claudeButton.tagName).toBe('BUTTON');
 			expect(claudeButton).toHaveStyle({ color: '#ff0000' });
 		});

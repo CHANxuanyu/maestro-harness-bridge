@@ -385,6 +385,17 @@ describe('InputArea', () => {
 			expect(screen.getByTitle('Send message')).toBeInTheDocument();
 		});
 
+		it('keeps send and notification settings inside the input card', () => {
+			// One card, as in a conversation-first composer: nothing hangs off its
+			// right edge in a column of its own.
+			const props = createDefaultProps();
+			render(<InputArea {...props} />);
+
+			const card = screen.getByTestId('composer-card');
+			expect(card).toContainElement(screen.getByTitle('Send message'));
+			expect(card).toContainElement(screen.getByTitle('Notification Settings'));
+		});
+
 		it('renders Enter to send toggle', () => {
 			const props = createDefaultProps();
 			render(<InputArea {...props} />);
@@ -554,9 +565,10 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
+			// An icon in the composer row; its name is still "History".
 			const toggle = screen.getByTitle(/Save to History/);
 			expect(toggle).toBeInTheDocument();
-			expect(toggle).toHaveTextContent('History');
+			expect(toggle).toHaveAccessibleName('History');
 		});
 
 		it('renders ThinkingStatusPill when items are thinking', () => {

@@ -116,6 +116,39 @@ describe('ToolbarControls', () => {
 		expect(updatedTab.readOnlyMode).toBe(false);
 	});
 
+	it('draws the turn settings as plain controls and puts the model beside send', () => {
+		renderToolbar({
+			tabSaveToHistory: true,
+			tabShowThinking: 'on',
+			currentModel: 'sonnet',
+			currentEffort: 'high',
+			availableModels: ['sonnet', 'opus'],
+			availableEfforts: ['low', 'high'],
+			onModelChange: vi.fn(),
+			onEffortChange: vi.fn(),
+			trailing: <button title="Send message">send</button>,
+		});
+
+		// On or off, none of them is a filled or outlined pill.
+		for (const title of [
+			/Save to History/,
+			/^Full Access/,
+			/Thinking/,
+			/^Change model/,
+			/^Change effort/,
+		]) {
+			const control = screen.getByTitle(title);
+			expect(control.style.backgroundColor).toBe('');
+			expect(control.style.borderStyle).toBe('');
+		}
+		// The model is named in words, then the send button closes the row.
+		const model = screen.getByTitle(/^Change model/);
+		expect(model).toHaveTextContent('sonnet');
+		const row = model.closest('.ml-auto') as HTMLElement;
+		expect(row).toContainElement(screen.getByTitle(/^Change effort/));
+		expect(row.lastElementChild).toBe(screen.getByTitle('Send message'));
+	});
+
 	it('hides AI-only controls in terminal mode', () => {
 		renderToolbar({
 			session: createInputAreaSession({ inputMode: 'terminal' }),

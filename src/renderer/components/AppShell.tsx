@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, type ComponentProps, type ReactNode } from 'react';
-import { shouldShowAppTitleStrip } from '../utils/appTitleStrip';
+import { appTitleStripText, shouldShowAppTitleStrip } from '../utils/appTitleStrip';
 import { SessionList } from './SessionList';
 import { RightPanel, type RightPanelHandle } from './RightPanel';
 import { MainPanel, type MainPanelHandle } from './MainPanel';
@@ -115,16 +115,6 @@ export function AppShell({
 	const titleGroupId = useSessionStore((s) => selectActiveSession(s)?.groupId);
 	const titleSessionName = useSessionStore((s) => selectActiveSession(s)?.name);
 	const sessionsReadOk = useSessionStore((s) => s.sessionsReadOk);
-	const titleTabLabel = useSessionStore((s) => {
-		const sess = selectActiveSession(s);
-		if (!sess) return null;
-		const activeTab = sess.aiTabs?.find((t) => t.id === sess.activeTabId);
-		if (!activeTab) return null;
-		return (
-			activeTab.name ||
-			(activeTab.agentSessionId ? activeTab.agentSessionId.split('-')[0].toUpperCase() : null)
-		);
-	});
 	const hasTitleSession = useSessionStore((s) => !!selectActiveSession(s));
 	// Unmounting the Concerto surfaces only hides them; their Zustand stores live
 	// outside React. Clear both stores when the feature is disabled so stale views
@@ -189,18 +179,10 @@ export function AppShell({
 								className="text-xs select-none opacity-50"
 								style={{ color: theme.colors.textDim }}
 							>
-								{(() => {
-									const parts: string[] = [];
-									const group = groups.find((g) => g.id === titleGroupId);
-									if (group) {
-										parts.push(`${group.emoji} ${group.name}`);
-									}
-									parts.push(titleSessionName);
-									if (titleTabLabel) {
-										parts.push(titleTabLabel);
-									}
-									return parts.join(' | ');
-								})()}
+								{appTitleStripText({
+									group: groups.find((g) => g.id === titleGroupId),
+									sessionName: titleSessionName,
+								})}
 							</span>
 						)
 					)}

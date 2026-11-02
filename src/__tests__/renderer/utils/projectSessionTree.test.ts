@@ -437,6 +437,36 @@ describe('project conversation navigation', () => {
 			expect(rows[0].title).toBe('Fix the login bug');
 		});
 
+		it('never titles an open tab with its provider id before it has a name or a record', () => {
+			const session = createMockSession({
+				id: 'agent',
+				groupId: project.id,
+				cwd: '/repo',
+				aiTabs: [
+					createMockAITab({ id: 'running', name: null, agentSessionId: NATIVE, createdAt: 1 }),
+				],
+			});
+			const rows = buildProjectSessionTree({ sessions: [session], groups: [project] })[0]
+				.conversations;
+			expect(rows).toHaveLength(1);
+			// Empty: the tree draws its "New conversation" label for it.
+			expect(rows[0].title).toBe('');
+
+			// Once the user has said something, the row says it, like the header.
+			const sent = {
+				...session,
+				aiTabs: [
+					{
+						...session.aiTabs[0],
+						logs: [{ id: 'u1', timestamp: 2, source: 'user' as const, text: 'Say hello\nmore' }],
+					},
+				],
+			};
+			const named = buildProjectSessionTree({ sessions: [sent], groups: [project] })[0]
+				.conversations;
+			expect(named[0].title).toBe('Say hello');
+		});
+
 		it('pages history per project while keeping every open tab, and search reaches past the page', () => {
 			const history = Array.from({ length: 40 }, (_, i) =>
 				record({

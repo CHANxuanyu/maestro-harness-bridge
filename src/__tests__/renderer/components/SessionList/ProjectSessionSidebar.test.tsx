@@ -268,4 +268,17 @@ describe('ProjectSessionSidebar hands the caret to the composer', () => {
 		expect(tabHandlers.handleNewAgentSession).toHaveBeenCalledTimes(1);
 		expect(useUIStore.getState().focusRequest).toEqual({ tab: { type: 'ai', id: 'tab-new' } });
 	});
+
+	it('starts a conversation with the open agent from the button at the top', () => {
+		tabHandlers.handleNewAgentSession.mockClear();
+		renderInsideLeftBar();
+		fireEvent.click(screen.getByTestId('sidebar-new-conversation'));
+		expect(tabHandlers.handleNewAgentSession).toHaveBeenCalledTimes(1);
+	});
+
+	it('hides the top button when no agent is open', () => {
+		useSessionStore.setState({ activeSessionId: 'gone' } as never);
+		renderInsideLeftBar();
+		expect(screen.queryByTestId('sidebar-new-conversation')).not.toBeInTheDocument();
+	});
 });

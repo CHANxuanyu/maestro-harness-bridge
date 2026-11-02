@@ -936,6 +936,29 @@ export const THEMES: Record<ThemeId, Theme> = {
 export const DEFAULT_CUSTOM_THEME_COLORS = THEMES.dracula.colors;
 
 /**
+ * Themes that come as a light and dark pair. Only these follow the system's
+ * appearance: a theme someone picked on its own (Dracula, Nord, a plugin or
+ * custom theme) is never swapped behind their back.
+ */
+export const APPEARANCE_PAIRS: Partial<Record<ThemeId, ThemeId>> = {
+	'clay-dark': 'clay-light',
+	'clay-light': 'clay-dark',
+};
+
+/**
+ * The theme to draw for `themeId` when the system is in dark (`prefersDark`) or
+ * light mode: its pair when the pair matches the system and it does not, else
+ * `themeId` unchanged. The stored choice is never rewritten, so turning the
+ * system back restores it.
+ */
+export function themeIdForAppearance(themeId: string, prefersDark: boolean): string {
+	const pair = APPEARANCE_PAIRS[themeId as ThemeId];
+	if (!pair) return themeId;
+	const isLight = THEMES[themeId as ThemeId].mode === 'light';
+	return isLight === !prefersDark ? themeId : pair;
+}
+
+/**
  * Get a theme by its ID
  * Returns null if the theme ID is not found
  */

@@ -331,6 +331,10 @@ export interface UseSettingsReturn {
 	themeGloss: GlossLevel;
 	setThemeGloss: (value: GlossLevel) => void;
 
+	// Paired themes (Clay Dark / Clay Light) follow the system appearance
+	followSystemAppearance: boolean;
+	setFollowSystemAppearance: (value: boolean) => void;
+
 	// Tab filtering settings
 	showStarredInUnreadFilter: boolean;
 	setShowStarredInUnreadFilter: (value: boolean) => void;

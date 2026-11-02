@@ -82,11 +82,13 @@ export const SidebarActions = memo(function SidebarActions({
 					className="flex-1 grid gap-2"
 					style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
 				>
+					{/* Quiet text buttons: the sidebar is for finding a conversation, so
+					    its housekeeping actions should not be the loudest thing in it. */}
 					<button
 						type="button"
 						onClick={addNewSession}
-						className="flex items-center justify-center gap-2 py-2 rounded text-xs font-bold transition-colors hover:opacity-90 whitespace-nowrap overflow-hidden"
-						style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}
+						className="flex items-center justify-center gap-2 py-2 rounded text-xs transition-colors hover:bg-white/10 whitespace-nowrap overflow-hidden"
+						style={{ color: theme.colors.textDim }}
 					>
 						{!compact && <Bot className="w-3 h-3 shrink-0" />}{' '}
 						{primaryActionLabel ?? t('workflows.menu.newAgent')}
@@ -98,11 +100,8 @@ export const SidebarActions = memo(function SidebarActions({
 							onClick={openFeedback}
 							disabled={!openFeedback}
 							data-feedback-button="true"
-							className="w-full flex items-center justify-center gap-2 py-2 rounded text-xs font-bold transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap overflow-hidden"
-							style={{
-								backgroundColor: theme.colors.accent,
-								color: theme.colors.accentForeground,
-							}}
+							className="w-full flex items-center justify-center gap-2 py-2 rounded text-xs transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap overflow-hidden"
+							style={{ color: theme.colors.textDim }}
 							title={
 								feedbackMinimized
 									? t('workflows.sidebar.resumeFeedback')

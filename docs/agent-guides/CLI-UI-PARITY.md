@@ -292,6 +292,7 @@ Notification center history uses the live desktop `notificationStore` over a req
 | Open a modal or dashboard                                                | `open <surface> [--tab]` (registry in `src/shared/uiSurfaces.ts`)                                |
 | Auto Run: start, stop, resume, skip, abort                               | `auto-run`, `stop-auto-run`, `resume-auto-run`, ...                                              |
 | Application language (system / English / Simplified Chinese)             | `settings get uiLanguage`, `settings set uiLanguage zh-CN`, `settings reset uiLanguage`          |
+| Follow system light and dark mode (Clay pair)                            | `settings get followSystemAppearance`, `settings set followSystemAppearance false`               |
 | Settings, theme, Encore features                                         | `settings`, `theme`, `set-theme`, `encore`                                                       |
 | Toasts and center flashes                                                | `notify toast`, `notify flash`                                                                   |
 | Save a pasted chat image (right-click)                                   | `image save` (`image list` to find it)                                                           |

@@ -53,6 +53,14 @@ export const THEME_SETTINGS: SearchableSetting[] = [
 		],
 	},
 	{
+		id: 'theme-follow-system',
+		tab: 'theme',
+		tabLabel: 'Themes',
+		label: 'Follow System Appearance',
+		description: 'Switch between Clay Dark and Clay Light with the system light or dark mode',
+		keywords: ['system', 'appearance', 'dark', 'light', 'mode', 'auto', 'follow', 'os', 'clay'],
+	},
+	{
 		id: 'theme-picker',
 		tab: 'theme',
 		tabLabel: 'Themes',

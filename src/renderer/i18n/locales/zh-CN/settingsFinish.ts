@@ -46,6 +46,10 @@ export const settingsFinish = {
 	'settings.finish.shortcuts.byKeyHint': '按下快捷键进行筛选',
 	'settings.finish.shortcuts.byKey': '按键筛选',
 	'settings.finish.theme.gloss': '界面光泽',
+	'settings.finish.theme.followSystem.heading': '外观',
+	'settings.finish.theme.followSystem.title': '跟随系统的浅色与深色模式',
+	'settings.finish.theme.followSystem.description':
+		'Clay Dark 和 Clay Light 随系统切换，其他主题保持所选。',
 	'settings.finish.theme.glossDescription':
 		'为侧栏、标题栏、标签栏和输入框添加光照，让面板更有层次。仅增加高光与阴影，不改变主题颜色或文字清晰度。',
 	'settings.finish.theme.intensity': '强度',

@@ -82,6 +82,7 @@ export const SETTINGS_DEFAULTS: MaestroSettings = {
 	sidebarNavigationMode: 'conversations',
 	collapsedConversationProjects: [],
 	activeThemeId: DEFAULT_THEME_ID,
+	followSystemAppearance: true,
 	shortcuts: {},
 	// Proportional to read, monospace to work: the Default typography preset
 	// is the out-of-the-box setup. Stored choices are untouched.

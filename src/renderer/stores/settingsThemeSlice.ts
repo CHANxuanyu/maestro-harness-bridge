@@ -68,6 +68,11 @@ export interface ThemeState {
 	colorBlindMode: boolean;
 	themeGloss: GlossLevel;
 	/**
+	 * Draw the other half of a light/dark theme pair when the system is in the
+	 * other mode (see `themeIdForAppearance`). `activeThemeId` is never rewritten.
+	 */
+	followSystemAppearance: boolean;
+	/**
 	 * Whether the typography chooser has been shown. False on a fresh install
 	 * AND on every install that predates the chooser, which is what makes the
 	 * same modal reach existing users once after the update.
@@ -102,6 +107,7 @@ export interface ThemeActions {
 	setCustomThemeBaseId: (value: ThemeId) => void;
 	setColorBlindMode: (value: boolean) => void;
 	setThemeGloss: (value: GlossLevel) => void;
+	setFollowSystemAppearance: (value: boolean) => void;
 	setTypographyPromptSeen: (value: boolean) => void;
 	setThemePromptSeen: (value: boolean) => void;
 	setUpdatesPromptSeen: (value: boolean) => void;
@@ -123,6 +129,7 @@ export const createThemeSlice: StateCreator<SettingsStore, [], [], ThemeSlice> =
 	customThemeBaseId: 'dracula',
 	colorBlindMode: false,
 	themeGloss: DEFAULT_GLOSS_LEVEL,
+	followSystemAppearance: true,
 	typographyPromptSeen: false,
 	themePromptSeen: false,
 	updatesPromptSeen: false,
@@ -257,6 +264,11 @@ export const createThemeSlice: StateCreator<SettingsStore, [], [], ThemeSlice> =
 		window.maestro.settings.set('themeGloss', level);
 	},
 
+	setFollowSystemAppearance: (value) => {
+		set({ followSystemAppearance: value });
+		window.maestro.settings.set('followSystemAppearance', value);
+	},
+
 	setTypographyPromptSeen: (value) => {
 		set({ typographyPromptSeen: value });
 		window.maestro.settings.set('typographyPromptSeen', value);
@@ -373,4 +385,6 @@ export function hydrateThemeSettings(
 	// unrecognized level would render as permanently-off with no error.
 	if (allSettings['themeGloss'] !== undefined)
 		patch.themeGloss = asGlossLevel(allSettings['themeGloss']);
+	if (typeof allSettings['followSystemAppearance'] === 'boolean')
+		patch.followSystemAppearance = allSettings['followSystemAppearance'];
 }

@@ -3,7 +3,8 @@ import type { ProjectHistoryConversation, ProjectHistoryScope } from '../../shar
 import { getBasename } from '../../shared/formatters';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
 import { DEEPSEEK_PRESET, sessionProviderId } from '../../shared/agentPresets';
-import { getTabDisplayName, isSessionIdLabel, visibleAiTabs } from './tabHelpers';
+import { isSessionIdLabel, visibleAiTabs } from './tabHelpers';
+import { conversationDisplayTitle } from './conversationTitle';
 import {
 	matchRecordForTab,
 	openTabIdentity,
@@ -297,7 +298,15 @@ export function buildProjectSessionTree({
 			if (identity && claimed.has(identity)) continue;
 			if (identity) claimed.add(identity);
 			const recordTitle = record ? historyTitle(record) : '';
-			const title = tab.name || recordTitle || (tab.agentSessionId ? getTabDisplayName(tab) : '');
+			// Never the provider id label. Before the tab is named or its native
+			// record is scanned, the row uses the first thing the user said, like
+			// the header does, and "New conversation" (the tree's empty-title
+			// label) before that. The logs are READ here but not subscribed to
+			// (see sidebarSessionEquality): a send flips the tab to busy, which
+			// rebuilds the row at the moment the first message lands, and later
+			// streamed chunks never touch the first message.
+			const name = tab.name && !isSessionIdLabel(tab.name, tab.agentSessionId) ? tab.name : '';
+			const title = name || recordTitle || conversationDisplayTitle(tab) || '';
 			rowsByProject.get(key)!.push({
 				key: `${session.id}:${tab.id}`,
 				kind: 'open',

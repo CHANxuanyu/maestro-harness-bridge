@@ -139,6 +139,10 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 			? `${active.id}:${active.activeTabId}`
 			: null;
 	});
+	// The agent the "New conversation" button at the top starts one with.
+	const activeOwnerId = useSessionStore((s) =>
+		s.sessions.some((session) => session.id === s.activeSessionId) ? s.activeSessionId : null
+	);
 	const { handleTabSelect, handleNewAgentSession, handleTabClose, handleRequestTabRename } =
 		useAITabHandlers();
 
@@ -388,6 +392,9 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 			[project.key]: (prev[project.key] ?? PROJECT_HISTORY_PAGE_SIZE) + PROJECT_HISTORY_PAGE_SIZE,
 		}));
 	}, []);
+	const newConversationHere = useCallback(() => {
+		if (activeOwnerId) newConversation(activeOwnerId);
+	}, [activeOwnerId, newConversation]);
 	const manageAgents = useCallback(() => {
 		useSettingsStore.getState().setSidebarNavigationMode('agents');
 	}, []);
@@ -412,6 +419,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 			onToggleProject={toggleProject}
 			onSelectConversation={selectConversation}
 			onNewConversation={newConversation}
+			onNewConversationHere={activeOwnerId ? newConversationHere : undefined}
 			onRenameConversation={renameConversation}
 			onCloseConversation={closeConversation}
 			onShowMore={showMore}

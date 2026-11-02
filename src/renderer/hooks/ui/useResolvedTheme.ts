@@ -11,13 +11,23 @@
 
 import { useMemo } from 'react';
 import { THEMES } from '../../constants/themes';
+import { themeIdForAppearance } from '../../../shared/themes';
+import type { ThemeId } from '../../../shared/theme-types';
+import { usePrefersDarkColorScheme } from './usePrefersDarkColorScheme';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { usePluginContributions } from '../usePluginContributions';
 import { resolvePluginTheme } from '../../utils/pluginThemes';
 import type { Theme } from '../../types';
 
 export function useResolvedTheme(): Theme {
-	const activeThemeId = useSettingsStore((s) => s.activeThemeId);
+	const storedThemeId = useSettingsStore((s) => s.activeThemeId);
+	const followSystemAppearance = useSettingsStore((s) => s.followSystemAppearance);
+	const prefersDark = usePrefersDarkColorScheme();
+	// A paired theme (Clay Dark / Clay Light) follows the system; every other
+	// theme is drawn exactly as stored.
+	const activeThemeId = followSystemAppearance
+		? (themeIdForAppearance(storedThemeId, prefersDark) as ThemeId)
+		: storedThemeId;
 	const customThemeColors = useSettingsStore((s) => s.customThemeColors);
 	// Empty buckets when the plugins Encore flag is off, so this is inert by default.
 	const pluginContributions = usePluginContributions();

@@ -17,10 +17,14 @@ import { ThemeTab } from '../../../../../renderer/components/Settings/tabs/Theme
 import type { Theme } from '../../../../../renderer/types';
 
 import { mockTheme } from '../../../../helpers/mockTheme';
+import { THEMES } from '../../../../../shared/themes';
 const mockSetActiveThemeId = vi.fn();
 const mockSetCustomThemeColors = vi.fn();
 const mockSetCustomThemeBaseId = vi.fn();
 const mockSetThemeGloss = vi.fn();
+const mockSetFollowSystemAppearance = vi.fn();
+let mockActiveThemeId = 'dracula';
+let mockFollowSystemAppearance = true;
 
 // Mutable so a test can model a store that has not hydrated `themeGloss` yet,
 // or a settings blob written by a build that predates the setting.
@@ -29,8 +33,10 @@ let mockThemeGloss: string | undefined = 'off';
 // Mock useSettings hook
 vi.mock('../../../../../renderer/hooks/settings/useSettings', () => ({
 	useSettings: () => ({
-		activeThemeId: 'dracula',
+		activeThemeId: mockActiveThemeId,
 		setActiveThemeId: mockSetActiveThemeId,
+		followSystemAppearance: mockFollowSystemAppearance,
+		setFollowSystemAppearance: mockSetFollowSystemAppearance,
 		customThemeColors: {
 			bgMain: '#282a36',
 			bgSidebar: '#21222c',
@@ -122,6 +128,39 @@ describe('ThemeTab', () => {
 		vi.useRealTimers();
 		vi.clearAllMocks();
 		mockThemeGloss = 'off';
+		mockActiveThemeId = 'dracula';
+		mockFollowSystemAppearance = true;
+	});
+
+	describe('follow system appearance', () => {
+		// The shared setup answers every media query with `matches: false`, so the
+		// system reads as light mode here.
+		const clayThemes = {
+			...mockThemes,
+			'clay-dark': THEMES['clay-dark'],
+			'clay-light': THEMES['clay-light'],
+		};
+
+		it('turns the setting off and on', async () => {
+			render(<ThemeTab theme={mockTheme} themes={mockThemes} />);
+			const toggle = screen.getByText('Follow system light and dark mode');
+			fireEvent.click(toggle);
+			expect(mockSetFollowSystemAppearance).toHaveBeenCalledWith(false);
+		});
+
+		it('marks the half of the Clay pair being drawn, not the stored one', async () => {
+			mockActiveThemeId = 'clay-dark';
+			render(<ThemeTab theme={THEMES['clay-light']} themes={clayThemes} />);
+			expect(screen.getByText('Clay Light').closest('button')).toHaveClass('ring-2');
+			expect(screen.getByText('Clay Dark').closest('button')).not.toHaveClass('ring-2');
+		});
+
+		it('marks the stored theme when following is off', async () => {
+			mockActiveThemeId = 'clay-dark';
+			mockFollowSystemAppearance = false;
+			render(<ThemeTab theme={THEMES['clay-dark']} themes={clayThemes} />);
+			expect(screen.getByText('Clay Dark').closest('button')).toHaveClass('ring-2');
+		});
 	});
 
 	it('should display theme mode sections', async () => {

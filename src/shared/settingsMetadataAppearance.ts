@@ -39,6 +39,13 @@ export const APPEARANCE_SETTINGS_METADATA: Record<string, SettingMetadata> = {
 		default: DEFAULT_THEME_ID,
 		category: 'appearance',
 	},
+	followSystemAppearance: {
+		description:
+			"Follow the system's light or dark mode with a theme that comes as a light and dark pair (Clay Dark and Clay Light). Other themes are never changed.",
+		type: 'boolean',
+		default: true,
+		category: 'appearance',
+	},
 	themeGloss: {
 		description:
 			"How much light the app chrome catches: 'off' (flat, the shipped look), 'sheen', 'strong', or 'max'. Adds highlights and shadows only; it changes no theme color, and it has no effect on light themes.",

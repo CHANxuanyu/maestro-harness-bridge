@@ -520,9 +520,42 @@ describe('conversation feed: tools', () => {
 			},
 			reply('a1', 2, 'Lint reported one error.'),
 		]);
-		const status = row(container, 't1').querySelector('[data-tool-status]') as HTMLElement;
+		const fold = row(container, 't1');
+		const status = fold.querySelector('[data-tool-status]') as HTMLElement;
 		expect(status.getAttribute('data-tool-status')).toBe('error');
-		expect(status).toHaveTextContent('Failed');
+		// One sentence, not a word and a badge glued together ("Worked ! Failed").
+		expect(status).toHaveTextContent('· 1 failed step');
+		expect(status).not.toHaveTextContent('!');
+		expect(
+			within(fold).getByRole('button', { name: 'Worked for 2m 0s · 1 failed step' })
+		).toBeTruthy();
+	});
+
+	it('counts every failed step on the folded row', () => {
+		const failed = (id: string, minutes: number): LogEntry => ({
+			id,
+			timestamp: at(minutes),
+			source: 'tool',
+			text: 'exec_command',
+			nativeTranscript: { messageId: id },
+			metadata: { toolState: { status: 'failed', input: { cmd: 'npm test' } } },
+		});
+		const { container } = renderTranscript([
+			user('u1', 0, 'Fix the tests'),
+			failed('t1', 1),
+			failed('t2', 2),
+			{
+				id: 't3',
+				timestamp: at(3),
+				source: 'tool',
+				text: 'exec_command',
+				nativeTranscript: { messageId: 't3' },
+				metadata: { toolState: { status: 'completed', input: { cmd: 'npm test' } } },
+			},
+			reply('a1', 4, 'All tests pass now.'),
+		]);
+		const status = row(container, 't1').querySelector('[data-tool-status]') as HTMLElement;
+		expect(status).toHaveTextContent('· 2 failed steps');
 	});
 
 	it("says a step's outcome is unknown instead of passing it off as done", () => {

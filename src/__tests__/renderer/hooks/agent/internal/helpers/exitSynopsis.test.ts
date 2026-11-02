@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
 	buildSynopsisPrompt,
 	runExitSynopsis,
@@ -9,9 +9,12 @@ import {
 } from '../../../../../../renderer/hooks/agent/internal/helpers/exitSynopsis';
 import type { LogEntry } from '../../../../../../renderer/types';
 import { notifyToast } from '../../../../../../renderer/stores/notificationStore';
+import { useSessionStore } from '../../../../../../renderer/stores/sessionStore';
+import { createMockAITab, createMockSession } from '../../../../../helpers';
 import { parseSynopsis } from '../../../../../../shared/synopsis';
 
-vi.mock('../../../../../../renderer/stores/notificationStore', () => ({
+vi.mock('../../../../../../renderer/stores/notificationStore', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../../../../../renderer/stores/notificationStore')>()),
 	notifyToast: vi.fn(),
 }));
 
@@ -277,6 +280,51 @@ describe('runExitSynopsis', () => {
 			expect.objectContaining({ type: 'info', title: 'Synopsis', message: 'short' })
 		);
 		expect(deps.refresh).toHaveBeenCalled();
+	});
+
+	describe('when the user is reading that conversation', () => {
+		const withSynopsis = () => {
+			const deps = makeDeps();
+			deps.spawn.mockResolvedValue({ success: true, response: 'response text' });
+			vi.mocked(parseSynopsis).mockReturnValue({
+				shortSummary: 'short',
+				fullSynopsis: 'full',
+				nothingToReport: false,
+			} as any);
+			return deps;
+		};
+		beforeEach(() => {
+			useSessionStore.setState({
+				sessions: [
+					createMockSession({
+						id: 'sess-1',
+						activeTabId: 'tab-1',
+						aiTabs: [createMockAITab({ id: 'tab-1' })],
+					}),
+				],
+				activeSessionId: 'sess-1',
+			} as any);
+		});
+		afterEach(() => {
+			vi.restoreAllMocks();
+		});
+
+		it('records the history entry without a toast: they watched it finish', async () => {
+			vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+			const deps = withSynopsis();
+			await runExitSynopsis(makeSynopsisData(), deps);
+			expect(deps.addHistory).toHaveBeenCalledWith(expect.objectContaining({ summary: 'short' }));
+			expect(notifyToast).not.toHaveBeenCalled();
+		});
+
+		it('still raises the toast when the window is in the background', async () => {
+			vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+			const deps = withSynopsis();
+			await runExitSynopsis(makeSynopsisData(), deps);
+			expect(notifyToast).toHaveBeenCalledWith(
+				expect.objectContaining({ title: 'Synopsis', message: 'short' })
+			);
+		});
 	});
 
 	it('skips history when nothingToReport is set', async () => {

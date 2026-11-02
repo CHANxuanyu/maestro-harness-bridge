@@ -3,7 +3,8 @@ import { ChevronRight } from 'lucide-react';
 import type { Theme } from '../../../types';
 import { formatElapsedTickerCompact } from '../../../../shared/duration';
 import type { TurnActivity } from '../utils/foldTurnActivity';
-import { ToolStatusLabel } from './ToolBadge';
+import { toolRunStatus } from '../utils/foldNativeToolRuns';
+import { readableTextOn } from '../../../../shared/colorContrast';
 import { useT } from '../../../i18n';
 
 /**
@@ -14,7 +15,9 @@ import { useT } from '../../../i18n';
  * The row stands in the transcript for the turn's first activity entry, so it
  * carries that entry's id and index for the scroll anchors and jump targets.
  * A failed or stopped call still shows on the folded row, so a problem is never
- * hidden behind the fold.
+ * hidden behind the fold. It reads as one line ("Worked for 3s · 1 failed
+ * step"): a failed step the agent recovered from is part of the work, not an
+ * alarm, so it is counted in words rather than flagged with a badge.
  */
 export function TurnActivityFold({
 	hostId,
@@ -43,6 +46,28 @@ export function TurnActivityFold({
 					duration: formatElapsedTickerCompact(activity.durationMs),
 				})
 			: t('workflows.transcript.worked');
+	const failedSteps =
+		activity.status === 'error'
+			? Math.max(
+					1,
+					activity.entries.filter(
+						(entry) => entry.source === 'tool' && toolRunStatus([entry]) === 'error'
+					).length
+				)
+			: 0;
+	const problem =
+		activity.status === 'error'
+			? t(
+					failedSteps === 1
+						? 'workflows.transcript.failedStepOne'
+						: 'workflows.transcript.failedSteps',
+					{ count: failedSteps }
+				)
+			: activity.status === 'canceled'
+				? t('workflows.transcript.toolStopped')
+				: activity.status === 'unknown'
+					? t('workflows.transcript.toolUnknown')
+					: null;
 	return (
 		<div
 			className="flex flex-col px-3 sm:px-6 pt-1.5 pb-1"
@@ -66,10 +91,22 @@ export function TurnActivityFold({
 					style={{ color: secondaryTextColor }}
 				>
 					<span>{label}</span>
-					{(activity.status === 'error' ||
-						activity.status === 'canceled' ||
-						activity.status === 'unknown') && (
-						<ToolStatusLabel theme={theme} kind={activity.status} />
+					{/* Real spaces, not only the CSS gap: the row is one sentence for a
+					    screen reader and for copied text alike. */}
+					{problem && ' '}
+					{problem && (
+						<span data-tool-status={activity.status}>
+							{'· '}
+							<span
+								style={
+									activity.status === 'error'
+										? { color: readableTextOn(theme.colors.error, [theme.colors.bgMain]) }
+										: undefined
+								}
+							>
+								{problem}
+							</span>
+						</span>
 					)}
 					<ChevronRight
 						className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}

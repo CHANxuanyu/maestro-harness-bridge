@@ -1350,6 +1350,8 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.transcript.toolUnknown': '结果未知',
 	'workflows.transcript.workedFor': '已处理 {duration}',
 	'workflows.transcript.worked': '已处理',
+	'workflows.transcript.failedStepOne': '{count} 个步骤失败',
+	'workflows.transcript.failedSteps': '{count} 个步骤失败',
 	'workflows.transcript.showTurnActivity': '展开处理过程',
 	'workflows.transcript.hideTurnActivity': '收起处理过程',
 	'workflows.transcript.toolVerbRun': '运行',

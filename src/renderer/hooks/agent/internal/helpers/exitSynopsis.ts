@@ -17,6 +17,9 @@
 
 import { logger } from '../../../../utils/logger';
 import { notifyToast } from '../../../../stores/notificationStore';
+import { useSessionStore } from '../../../../stores/sessionStore';
+import { useGroupChatStore } from '../../../../stores/groupChatStore';
+import { isConversationOnScreen } from '../../../../utils/sessionAttention';
 import { formatRelativeTime } from '../../../../../shared/formatters';
 import { parseSynopsis } from '../../../../../shared/synopsis';
 import { hasRunnableQueueItem } from '../../../../utils/executionQueue';
@@ -178,18 +181,29 @@ export async function runExitSynopsis(
 			deps.updateLastSynopsisTime(synopsisData.sessionId, synopsisData.tabId, synopsisTime);
 		}
 
-		notifyToast({
-			type: 'info',
-			title: 'Synopsis',
-			message: parsed.shortSummary,
-			group: synopsisData.groupName,
-			project: synopsisData.projectName,
-			taskDuration: duration,
-			sessionId: synopsisData.sessionId,
+		// The history entry is always written. The toast is for a turn the user
+		// did not watch finish; the one they are reading needs no notice.
+		const { sessions, activeSessionId } = useSessionStore.getState();
+		const onScreen = isConversationOnScreen({
+			session: sessions.find((s) => s.id === synopsisData.sessionId),
 			tabId: synopsisData.tabId,
-			tabName: synopsisData.tabName,
-			skipCustomNotification: true,
+			activeSessionId,
+			windowFocused: typeof document !== 'undefined' && document.hasFocus(),
+			groupChatOpen: !!useGroupChatStore.getState().activeGroupChatId,
 		});
+		if (!onScreen)
+			notifyToast({
+				type: 'info',
+				title: 'Synopsis',
+				message: parsed.shortSummary,
+				group: synopsisData.groupName,
+				project: synopsisData.projectName,
+				taskDuration: duration,
+				sessionId: synopsisData.sessionId,
+				tabId: synopsisData.tabId,
+				tabName: synopsisData.tabName,
+				skipCustomNotification: true,
+			});
 
 		deps.rightPanelRef.current?.refreshHistoryPanel();
 	} catch (err) {

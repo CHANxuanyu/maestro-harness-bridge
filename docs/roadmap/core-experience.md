@@ -148,3 +148,9 @@
 - **事实核对与限制：** 已有 General 设置中存在 Conductor Profile (About Me)，因此沿用同一份内容。官方说明是启动时发现原生指令，不能将计划中的“每轮加载”解释为运行中的 CLI 即时重载；目标仍是 Maestro 内外使用同一偏好，实际加载由用户重启原生 CLI 后在 Mac 验收。既有 Maestro 提示注入保持原样，token 估算只针对 Markdown；真实账户、模型加载和 Mac 一律未验。没有跨进程文件锁，不承诺跨文件事务，部分失败不会整体回滚。
 - **Opus：** 现有输入框会截断超过 5000 字符的内容；新增后端保留完整 Markdown。设置页应接入保存、逐文件确认、冲突/部分失败与 token 状态，不经旧 setter 截断。完整复现用例见[前端交接](../core-experience-contracts.md#交给-opus-的关于我复现用例)，本 PR 不改界面、文案或外观。
 - **Mac：** 用户按[关于我命令与验收顺序](../core-experience-contracts.md#用户的-mac-关于我验收)逐文件明确确认，然后以对应 `CLAUDE_CONFIG_DIR` / `CODEX_HOME` 重启原生 CLI，核对 Maestro 内外加载、外部修改与清空。功能源码不混入冻结的 hb.5 候选；不打包、发布、安装或接触真实账户目录。
+
+### 功能三：关于我的界面与启动去重（Opus）
+
+- General 设置里的“关于我”改为新区块：编辑框没有长度上限，停顿后经 `settings.aboutMe set` 保存（与 CLI 同一服务），不再经旧 setter 截到 5000 字。下方列出 `status` 返回的每个原生文件、实际文件、使用它的智能体（DeepSeek 目录显示为 DeepSeek）和状态；第一次写入、别处写的段落和外部改过的段落要逐个勾选，勾选记下当时显示的段落，文件再变即取消；写入按文件报告已写入与未完成，不自动重试。规则集中在 `src/renderer/services/aboutMe.ts`。
+- 系统提示去重：Codex 补了只读判定 `native` 和文件使用者，并接入 CLI、Cue 与群聊主持人；桌面对话经 `conductorProfileForAgent()` 使用同一判定，原生文件已同步时只写一句指引。回归、反证与验证见[工作记录](../worklog.md)。
+- **未完成：** 新建向导与 `/wizard` 的系统提示仍带全文。**未验：** 真实账户、真实模型加载、Mac 发行包。

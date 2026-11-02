@@ -1044,14 +1044,41 @@ describe('settingsStore', () => {
 	// ========================================================================
 
 	describe('setters with validation', () => {
-		it('setConductorProfile trims to 5000 characters', () => {
+		it('saveConductorProfile keeps a profile over 5000 characters and saves it through About Me', async () => {
 			const longProfile = 'a'.repeat(6000);
-			useSettingsStore.getState().setConductorProfile(longProfile);
-			expect(useSettingsStore.getState().conductorProfile).toBe('a'.repeat(5000));
-			expect(window.maestro.settings.set).toHaveBeenCalledWith(
+			vi.mocked(window.maestro.settings.aboutMe).mockResolvedValueOnce({
+				success: true,
+				content: longProfile,
+				estimatedTokens: 1500,
+				files: [],
+			});
+			const saved = await useSettingsStore.getState().saveConductorProfile(longProfile);
+			expect(saved.success).toBe(true);
+			expect(window.maestro.settings.aboutMe).toHaveBeenCalledWith({
+				action: 'set',
+				content: longProfile,
+			});
+			expect(useSettingsStore.getState().conductorProfile).toBe(longProfile);
+			// The generic setter would put the profile through settings:set as well.
+			expect(window.maestro.settings.set).not.toHaveBeenCalledWith(
 				'conductorProfile',
-				'a'.repeat(5000)
+				expect.anything()
 			);
+		});
+
+		it('saveConductorProfile keeps the saved profile when the save is refused', async () => {
+			useSettingsStore.setState({ conductorProfile: 'kept' });
+			vi.mocked(window.maestro.settings.aboutMe).mockResolvedValueOnce({
+				success: false,
+				code: 'persistence-failed',
+				error: 'disk full',
+				content: 'kept',
+				estimatedTokens: 1,
+				files: [],
+			});
+			const saved = await useSettingsStore.getState().saveConductorProfile('new text');
+			expect(saved).toMatchObject({ success: false, code: 'persistence-failed' });
+			expect(useSettingsStore.getState().conductorProfile).toBe('kept');
 		});
 
 		it('setLeftSidebarWidth clamps to 256-600', () => {
@@ -2153,8 +2180,14 @@ describe('settingsStore', () => {
 			// the older on-disk snapshot - that loses characters and, because the
 			// textarea is controlled, snaps the caret to the end of the field.
 			useSettingsStore.setState({ settingsLoaded: true, conductorProfile: 'abc' });
+			vi.mocked(window.maestro.settings.aboutMe).mockResolvedValueOnce({
+				success: true,
+				content: 'abcdef',
+				estimatedTokens: 2,
+				files: [],
+			});
 			vi.mocked(window.maestro.settings.getAll).mockImplementation(async () => {
-				useSettingsStore.getState().setConductorProfile('abcdef');
+				await useSettingsStore.getState().saveConductorProfile('abcdef');
 				return { conductorProfile: 'abc', fontSize: 16 };
 			});
 

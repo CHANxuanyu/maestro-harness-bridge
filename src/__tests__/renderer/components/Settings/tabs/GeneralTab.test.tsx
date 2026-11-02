@@ -3,7 +3,7 @@
  *
  * Tests the general settings tab including:
  * - Section rendering (About Me, Shell, Log Level, GitHub CLI, etc.)
- * - Conductor Profile textarea with character count and 5000-char limit
+ * - About Me textarea with a token estimate, saved in full on a typing pause
  * - Shell detection, selection, and configuration
  * - Custom shell path, arguments, and environment variables
  * - Log level toggle buttons
@@ -45,7 +45,7 @@ vi.mock('../../../../../shared/platformDetection', () => ({
 }));
 
 // Shared mock fns so tests can assert on useSettings setters
-const mockSetConductorProfile = vi.fn();
+const mockSaveConductorProfile = vi.fn();
 const mockSetDefaultShell = vi.fn();
 const mockSetCustomShellPath = vi.fn();
 const mockSetShellArgs = vi.fn();
@@ -75,7 +75,7 @@ vi.mock('../../../../../renderer/hooks/settings/useSettings', () => ({
 	useSettings: () => ({
 		// Conductor Profile
 		conductorProfile: '',
-		setConductorProfile: mockSetConductorProfile,
+		saveConductorProfile: mockSaveConductorProfile,
 		// Global show-Maestro hotkey
 		globalShowHotkey: [],
 		setGlobalShowHotkey: vi.fn(),
@@ -170,7 +170,7 @@ describe('GeneralTab', () => {
 				await vi.advanceTimersByTimeAsync(100);
 			});
 
-			expect(screen.getByText('Conductor Profile (aka, About Me)')).toBeInTheDocument();
+			expect(screen.getByText('About Me')).toBeInTheDocument();
 			expect(screen.getByText('Default Terminal Shell')).toBeInTheDocument();
 			expect(screen.getByText('System Log Level')).toBeInTheDocument();
 			expect(screen.getByText('GitHub CLI (gh) Path')).toBeInTheDocument();
@@ -186,7 +186,7 @@ describe('GeneralTab', () => {
 			expect(screen.getByText('Storage Location')).toBeInTheDocument();
 		});
 
-		it('places the Maestro CLI section directly below the Conductor Profile', async () => {
+		it('places the Maestro CLI section directly below About Me', async () => {
 			const { container } = render(<GeneralTab theme={mockTheme} isOpen={true} />);
 
 			await act(async () => {
@@ -217,7 +217,7 @@ describe('GeneralTab', () => {
 	// =========================================================================
 	// 2. Conductor Profile
 	// =========================================================================
-	describe('Conductor Profile', () => {
+	describe('About Me', () => {
 		it('should render the textarea with placeholder', async () => {
 			render(<GeneralTab theme={mockTheme} isOpen={true} />);
 
@@ -227,20 +227,10 @@ describe('GeneralTab', () => {
 
 			const textarea = screen.getByPlaceholderText(/I'm a senior developer/);
 			expect(textarea).toBeInTheDocument();
-			expect(screen.getByRole('textbox', { name: 'Conductor Profile' })).toBe(textarea);
+			expect(screen.getByRole('textbox', { name: 'About Me' })).toBe(textarea);
 		});
 
-		it('should display character count as 0/5000 when empty', async () => {
-			render(<GeneralTab theme={mockTheme} isOpen={true} />);
-
-			await act(async () => {
-				await vi.advanceTimersByTimeAsync(100);
-			});
-
-			expect(screen.getByText('0/5000')).toBeInTheDocument();
-		});
-
-		it('should display character count matching profile length', async () => {
+		it('should estimate tokens instead of counting toward a character limit', async () => {
 			mockUseSettingsOverrides = { conductorProfile: 'Hello world' };
 			render(<GeneralTab theme={mockTheme} isOpen={true} />);
 
@@ -248,10 +238,11 @@ describe('GeneralTab', () => {
 				await vi.advanceTimersByTimeAsync(100);
 			});
 
-			expect(screen.getByText('11/5000')).toBeInTheDocument();
+			expect(screen.getByTestId('about-me-tokens')).toHaveTextContent('~3 tokens');
+			expect(screen.queryByText(/\/5000/)).not.toBeInTheDocument();
 		});
 
-		it('should have maxLength of 5000 on the textarea', async () => {
+		it('should not cap the textarea length', async () => {
 			render(<GeneralTab theme={mockTheme} isOpen={true} />);
 
 			await act(async () => {
@@ -259,10 +250,16 @@ describe('GeneralTab', () => {
 			});
 
 			const textarea = screen.getByPlaceholderText(/I'm a senior developer/) as HTMLTextAreaElement;
-			expect(textarea.maxLength).toBe(5000);
+			expect(textarea.hasAttribute('maxLength')).toBe(false);
 		});
 
-		it('should call setConductorProfile when text changes', async () => {
+		it('should save the text through saveConductorProfile after a typing pause', async () => {
+			mockSaveConductorProfile.mockResolvedValue({
+				success: true,
+				content: 'Test profile',
+				estimatedTokens: 3,
+				files: [],
+			});
 			render(<GeneralTab theme={mockTheme} isOpen={true} />);
 
 			await act(async () => {
@@ -271,8 +268,13 @@ describe('GeneralTab', () => {
 
 			const textarea = screen.getByPlaceholderText(/I'm a senior developer/);
 			fireEvent.change(textarea, { target: { value: 'Test profile' } });
+			expect(mockSaveConductorProfile).not.toHaveBeenCalled();
 
-			expect(mockSetConductorProfile).toHaveBeenCalledWith('Test profile');
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(1000);
+			});
+
+			expect(mockSaveConductorProfile).toHaveBeenCalledWith('Test profile');
 		});
 	});
 

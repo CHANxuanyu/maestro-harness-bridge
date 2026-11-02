@@ -239,7 +239,7 @@ vi.mock('../../../renderer/hooks/settings/useSettings', () => ({
 		setEncoreFeatures: mockSetEncoreFeatures,
 		// Conductor profile settings
 		conductorProfile: '',
-		setConductorProfile: vi.fn(),
+		saveConductorProfile: vi.fn(),
 		// Global show-Maestro hotkey
 		globalShowHotkey: [],
 		setGlobalShowHotkey: vi.fn(),

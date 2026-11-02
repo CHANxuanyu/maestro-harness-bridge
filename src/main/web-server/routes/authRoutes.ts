@@ -33,10 +33,11 @@ import {
 } from '../auth/web-login-policy';
 import { renderLoginPage } from '../auth/login-page';
 import type { RateLimitConfig } from '../types';
+import { DEFAULT_THEME_ID } from '../../../shared/theme-types';
 
 const LOG_CONTEXT = 'WebServer:Auth';
 
-const FALLBACK_THEME_ID = 'dracula';
+const FALLBACK_THEME_ID = DEFAULT_THEME_ID;
 
 /**
  * A login attempt is the one route on the server worth guessing at, so it gets
@@ -100,7 +101,7 @@ export function buildClearedSessionCookie(token: string, secure: boolean): strin
 
 /** The user's active theme, or the bundled default when nothing resolves. */
 function resolveActiveTheme(): Theme {
-	let themeId = FALLBACK_THEME_ID;
+	let themeId: string = FALLBACK_THEME_ID;
 	try {
 		themeId = getSettingsStore().get('activeThemeId', FALLBACK_THEME_ID);
 	} catch {

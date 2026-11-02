@@ -114,10 +114,11 @@ export class WindowRegistry extends EventEmitter {
 			sessionIds: [...(options.sessionIds ?? [])],
 			isMain: options.isMain ?? false,
 			kind: options.kind ?? 'app',
-			// Default to expanded for a fresh window; a restore passes the saved
-			// per-window collapse state so panels come back as the user left them.
+			// A fresh window opens with the conversation list and the conversation;
+			// the Right Bar (files, history, Auto Run) opens on demand. A restore
+			// passes the saved per-window state so panels come back as left.
 			leftPanelCollapsed: options.leftPanelCollapsed ?? false,
-			rightPanelCollapsed: options.rightPanelCollapsed ?? false,
+			rightPanelCollapsed: options.rightPanelCollapsed ?? true,
 			name: options.name,
 		});
 		this.emitChange({ type: 'created', windowId: id });

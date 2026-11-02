@@ -44,9 +44,10 @@ describe('WindowRegistry', () => {
 			expect(entry?.browserWindow).toBe(bw);
 			expect(entry?.sessionIds).toEqual([]);
 			expect(entry?.isMain).toBe(false);
-			// Panels default to expanded for a fresh window.
+			// A fresh window opens with the conversation list and the
+			// conversation; the Right Bar opens on demand.
 			expect(entry?.leftPanelCollapsed).toBe(false);
-			expect(entry?.rightPanelCollapsed).toBe(false);
+			expect(entry?.rightPanelCollapsed).toBe(true);
 		});
 
 		it('carries the panel-collapse state supplied at create time (layout restore)', () => {
@@ -194,7 +195,7 @@ describe('WindowRegistry', () => {
 			registry.setPanelState('w1', { leftPanelCollapsed: true });
 			expect(registry.get('w1')?.leftPanelCollapsed).toBe(true);
 			// Omitted field left untouched (still the create default).
-			expect(registry.get('w1')?.rightPanelCollapsed).toBe(false);
+			expect(registry.get('w1')?.rightPanelCollapsed).toBe(true);
 			expect(listener).toHaveBeenCalledWith(
 				expect.objectContaining({ type: 'panel-changed', windowId: 'w1' })
 			);

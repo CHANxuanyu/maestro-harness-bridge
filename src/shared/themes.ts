@@ -46,6 +46,50 @@ type AnsiPalette = Pick<
 	| 'selection'
 >;
 
+/**
+ * Clay terminal palettes: muted, warm hues that sit on the Clay backgrounds
+ * without the saturated neon of most dark terminal schemes.
+ */
+const clayDarkAnsi: AnsiPalette = {
+	ansiBlack: '#1f1e1d',
+	ansiRed: '#e5675b',
+	ansiGreen: '#8fbf77',
+	ansiYellow: '#e0b15c',
+	ansiBlue: '#7aa5d6',
+	ansiMagenta: '#c99ad0',
+	ansiCyan: '#76b7b2',
+	ansiWhite: '#d9d6cc',
+	ansiBrightBlack: '#6f6d66',
+	ansiBrightRed: '#f08072',
+	ansiBrightGreen: '#a6d18e',
+	ansiBrightYellow: '#f0c674',
+	ansiBrightBlue: '#94bbe6',
+	ansiBrightMagenta: '#dbb0e0',
+	ansiBrightCyan: '#8fd0cb',
+	ansiBrightWhite: '#f5f4ef',
+	selection: 'rgba(217, 119, 87, 0.28)',
+};
+
+const clayLightAnsi: AnsiPalette = {
+	ansiBlack: '#1f1e1d',
+	ansiRed: '#b8392b',
+	ansiGreen: '#3f7a2e',
+	ansiYellow: '#8a6100',
+	ansiBlue: '#2f5f9e',
+	ansiMagenta: '#8a4597',
+	ansiCyan: '#1f7672',
+	ansiWhite: '#6f6d66',
+	ansiBrightBlack: '#57554f',
+	ansiBrightRed: '#c94a3a',
+	ansiBrightGreen: '#4d8c3a',
+	ansiBrightYellow: '#9c7010',
+	ansiBrightBlue: '#3a6db0',
+	ansiBrightMagenta: '#9b55a8',
+	ansiBrightCyan: '#2a8783',
+	ansiBrightWhite: '#3d3c38',
+	selection: 'rgba(194, 96, 62, 0.2)',
+};
+
 /** Official Dracula terminal palette */
 const draculaAnsi: AnsiPalette = {
 	ansiBlack: '#21222c',
@@ -391,6 +435,31 @@ const winampAnsi: AnsiPalette = {
 
 export const THEMES: Record<ThemeId, Theme> = {
 	// Dark themes
+	// Clay: warm neutrals with one terracotta accent, the default since the
+	// 2026-11-02 redesign (docs/roadmap/claude-code-ui.md). The accent is kept
+	// for primary actions, selection and links; everything else is neutral.
+	'clay-dark': {
+		id: 'clay-dark',
+		name: 'Clay Dark',
+		mode: 'dark',
+		colors: {
+			bgMain: '#262624',
+			bgTitleBar: '#1f1e1d',
+			bgSidebar: '#1f1e1d',
+			bgActivity: '#30302e',
+			border: '#3d3c38',
+			textMain: '#f5f4ef',
+			textDim: '#a6a39a',
+			accent: '#d97757',
+			accentDim: 'rgba(217, 119, 87, 0.18)',
+			accentText: '#e8916f',
+			accentForeground: '#1f1e1d',
+			success: '#8fbf77',
+			warning: '#e0b15c',
+			error: '#e5675b',
+			...clayDarkAnsi,
+		},
+	},
 	dracula: {
 		id: 'dracula',
 		name: 'Dracula',
@@ -587,6 +656,28 @@ export const THEMES: Record<ThemeId, Theme> = {
 		},
 	},
 	// Light themes
+	'clay-light': {
+		id: 'clay-light',
+		name: 'Clay Light',
+		mode: 'light',
+		colors: {
+			bgMain: '#faf9f5',
+			bgTitleBar: '#f3f1ea',
+			bgSidebar: '#f3f1ea',
+			bgActivity: '#eceae1',
+			border: '#e0ddd2',
+			textMain: '#1f1e1d',
+			textDim: '#6f6d66',
+			accent: '#c2603e',
+			accentDim: 'rgba(194, 96, 62, 0.12)',
+			accentText: '#a3502f',
+			accentForeground: '#ffffff',
+			success: '#3f7a2e',
+			warning: '#8a6100',
+			error: '#b8392b',
+			...clayLightAnsi,
+		},
+	},
 	'github-light': {
 		id: 'github-light',
 		name: 'GitHub',

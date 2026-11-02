@@ -198,6 +198,7 @@ test('codex h: shared history uses the final answer without sending a Summary tu
 		const before = fs.readFileSync(seed.file);
 		const rows = await native.page.locator('[data-conversation-key]').count();
 		fs.writeFileSync(gate, 'exit');
+		await native.openRightBar();
 		await native.page.locator('[data-tour="history-tab"]').click();
 		await expect(
 			native.page

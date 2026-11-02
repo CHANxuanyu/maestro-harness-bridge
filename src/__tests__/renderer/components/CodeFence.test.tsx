@@ -86,6 +86,13 @@ describe('CodeFence', () => {
 		mockHighlightAuto.mockReturnValue({ language: null, relevance: 0 });
 	});
 
+	it('renders code in the code face even when the transcript reads in a proportional font', () => {
+		// The chat inherits the interface font (Inter by default). Without its own
+		// face a fenced block inherited it too and lost its column alignment.
+		render(<CodeFence {...defaultProps} language="ts" code="const a = 1;" />);
+		expect(screen.getByTestId('code-fence')).toHaveClass('font-mono');
+	});
+
 	it('auto-detects a language for an untagged fence', async () => {
 		// A bare fence has no explicit tag, so detection runs against the body.
 		mockHighlightAuto.mockReturnValue({ language: 'javascript', relevance: 10 });

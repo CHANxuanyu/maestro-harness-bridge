@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+	DEFAULT_THEME_ID,
 	isValidThemeId,
 	resolveThemeId,
 	RETIRED_THEME_IDS,
@@ -62,10 +63,10 @@ describe('resolveThemeId', () => {
 	});
 
 	it('falls back for anything unrecognized, including non-strings', () => {
-		expect(resolveThemeId('not-a-theme')).toBe('dracula');
-		expect(resolveThemeId(undefined)).toBe('dracula');
-		expect(resolveThemeId(null)).toBe('dracula');
-		expect(resolveThemeId(42)).toBe('dracula');
+		expect(resolveThemeId('not-a-theme')).toBe('clay-dark');
+		expect(resolveThemeId(undefined)).toBe('clay-dark');
+		expect(resolveThemeId(null)).toBe('clay-dark');
+		expect(resolveThemeId(42)).toBe('clay-dark');
 		expect(resolveThemeId('not-a-theme', 'nord')).toBe('nord');
 	});
 
@@ -73,6 +74,31 @@ describe('resolveThemeId', () => {
 		for (const [retired, replacement] of Object.entries(RETIRED_THEME_IDS)) {
 			expect(isValidThemeId(retired)).toBe(false);
 			expect(THEMES[replacement]).toBeDefined();
+		}
+	});
+});
+
+// The 2026-11-02 redesign's default look (docs/roadmap/claude-code-ui.md).
+describe('Clay themes', () => {
+	it('ship a dark and a light variant', () => {
+		expect(THEMES['clay-dark']).toMatchObject({ id: 'clay-dark', mode: 'dark' });
+		expect(THEMES['clay-light']).toMatchObject({ id: 'clay-light', mode: 'light' });
+		expect(isValidThemeId('clay-dark')).toBe(true);
+		expect(isValidThemeId('clay-light')).toBe(true);
+	});
+
+	it('are the default theme a fresh install starts on', () => {
+		expect(DEFAULT_THEME_ID).toBe('clay-dark');
+	});
+
+	it('keep one accent and neutral surfaces', () => {
+		for (const id of ['clay-dark', 'clay-light'] as const) {
+			const { colors } = THEMES[id];
+			// Surfaces are warm greys, never tinted with the accent hue.
+			for (const surface of [colors.bgMain, colors.bgSidebar, colors.bgActivity]) {
+				const [r, g, b] = [1, 3, 5].map((i) => parseInt(surface.slice(i, i + 2), 16));
+				expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(16);
+			}
 		}
 	});
 });

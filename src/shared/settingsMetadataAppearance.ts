@@ -7,6 +7,8 @@
 
 import type { SettingMetadata } from './settingsMetadata';
 import { DEFAULT_UI_LANGUAGE } from './i18n';
+import { DEFAULT_THEME_ID } from './theme-types';
+import { TYPOGRAPHY_PRESETS } from './typographyPresets';
 
 export const APPEARANCE_SETTINGS_METADATA: Record<string, SettingMetadata> = {
 	sidebarNavigationMode: {
@@ -32,9 +34,9 @@ export const APPEARANCE_SETTINGS_METADATA: Record<string, SettingMetadata> = {
 	},
 	activeThemeId: {
 		description:
-			'Color theme for the UI. Built-in themes include dracula, monokai, solarized-dark, nord, and others.',
+			'Color theme for the UI. Built-in themes include clay-dark (the default), clay-light, dracula, monokai, solarized-dark, nord, and others.',
 		type: 'string',
-		default: 'dracula',
+		default: DEFAULT_THEME_ID,
 		category: 'appearance',
 	},
 	themeGloss: {
@@ -59,20 +61,20 @@ export const APPEARANCE_SETTINGS_METADATA: Record<string, SettingMetadata> = {
 	fontSize: {
 		description: 'Base font size in pixels. Affects all UI text via rem scaling.',
 		type: 'number',
-		default: 14,
+		default: TYPOGRAPHY_PRESETS.default.sizes.fontSize,
 		category: 'appearance',
 	},
 	fontFamily: {
 		description: 'Font family for the UI. Accepts any CSS font-family string.',
 		type: 'string',
-		default: 'Roboto Mono, Menlo, "Courier New", monospace',
+		default: TYPOGRAPHY_PRESETS.default.fonts.fontFamily,
 		category: 'appearance',
 	},
 	terminalFontFamily: {
 		description:
 			'Font family for the command terminal, independent of the UI font. Accepts any CSS font-family string. When empty, the terminal inherits the UI font.',
 		type: 'string',
-		default: '',
+		default: TYPOGRAPHY_PRESETS.default.fonts.terminalFontFamily,
 		category: 'appearance',
 	},
 	chatFontFamily: {
@@ -93,7 +95,7 @@ export const APPEARANCE_SETTINGS_METADATA: Record<string, SettingMetadata> = {
 		description:
 			'Font family for the file editor, independent of the UI font. Accepts any CSS font-family string. When empty, the editor inherits the UI font.',
 		type: 'string',
-		default: '',
+		default: TYPOGRAPHY_PRESETS.default.fonts.fileEditorFontFamily,
 		category: 'appearance',
 	},
 	chatFontSize: {
@@ -107,7 +109,7 @@ export const APPEARANCE_SETTINGS_METADATA: Record<string, SettingMetadata> = {
 		description:
 			'Font size in px for the command terminal, before zoom. 0 means inherit the interface font size.',
 		type: 'number',
-		default: 0,
+		default: TYPOGRAPHY_PRESETS.default.sizes.terminalFontSize,
 		category: 'appearance',
 	},
 	filePreviewFontSize: {
@@ -121,7 +123,7 @@ export const APPEARANCE_SETTINGS_METADATA: Record<string, SettingMetadata> = {
 		description:
 			'Font size in px for a file being edited, before zoom. 0 means inherit the interface font size.',
 		type: 'number',
-		default: 0,
+		default: TYPOGRAPHY_PRESETS.default.sizes.fileEditorFontSize,
 		category: 'appearance',
 	},
 	documentGraphFontFamily: {

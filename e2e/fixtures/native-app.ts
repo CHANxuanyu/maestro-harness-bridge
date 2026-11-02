@@ -293,6 +293,16 @@ export class NativeApp {
 	input() {
 		return this.page.getByPlaceholder(/^Talking to /);
 	}
+	/**
+	 * Open the Right Bar (files, history, Auto Run) the way a user does: it
+	 * starts collapsed, and the header's "Show right panel" button is the
+	 * visible way in. Collapsed, the bar's own toggle sits off screen.
+	 */
+	async openRightBar() {
+		const show = this.page.getByTitle(/^Show right panel/);
+		if (await show.count()) await show.click();
+		await expect(this.page.locator('[data-tour="history-tab"]')).toBeVisible();
+	}
 	outputFile(name: string) {
 		return this.info.outputPath(name);
 	}

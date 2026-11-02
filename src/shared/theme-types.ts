@@ -13,6 +13,8 @@
  * Available theme identifiers
  */
 export type ThemeId =
+	| 'clay-dark'
+	| 'clay-light'
 	| 'dracula'
 	| 'monokai'
 	| 'github-light'
@@ -158,10 +160,21 @@ export interface Theme {
 }
 
 /**
+ * The theme an install starts on, and the fallback for an unknown stored id.
+ * Clay Dark is the calm, warm-neutral look the 2026-11-02 redesign targets
+ * (docs/roadmap/claude-code-ui.md). Users who picked a theme keep it: only the
+ * unset default moves. Read it from here; do not write a theme id literal as a
+ * default anywhere else.
+ */
+export const DEFAULT_THEME_ID: ThemeId = 'clay-dark';
+
+/**
  * Type guard to check if a string is a valid ThemeId
  */
 export function isValidThemeId(id: string): id is ThemeId {
 	const validIds: ThemeId[] = [
+		'clay-dark',
+		'clay-light',
 		'dracula',
 		'monokai',
 		'github-light',
@@ -208,7 +221,7 @@ export const RETIRED_THEME_IDS: Record<string, ThemeId> = {
  * Retired ids resolve to their replacement, anything else unrecognized falls
  * back rather than propagating a broken lookup.
  */
-export function resolveThemeId(id: unknown, fallback: ThemeId = 'dracula'): ThemeId {
+export function resolveThemeId(id: unknown, fallback: ThemeId = DEFAULT_THEME_ID): ThemeId {
 	if (typeof id !== 'string') return fallback;
 	if (isValidThemeId(id)) return id;
 	return RETIRED_THEME_IDS[id] ?? fallback;

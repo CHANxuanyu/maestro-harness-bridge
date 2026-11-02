@@ -13,7 +13,8 @@ describe('uiStore', () => {
 			const state = useUIStore.getState();
 
 			expect(state.leftSidebarOpen).toBe(true);
-			expect(state.rightPanelOpen).toBe(true);
+			// Conversation-first: the Right Bar opens on demand.
+			expect(state.rightPanelOpen).toBe(false);
 			expect(state.activeFocus).toBe('main');
 			expect(state.activeRightTab).toBe('files');
 			expect(state.bookmarksCollapsed).toBe(false);
@@ -91,21 +92,21 @@ describe('uiStore', () => {
 		});
 
 		it('sets right panel open with a value', () => {
-			useUIStore.getState().setRightPanelOpen(false);
-			expect(useUIStore.getState().rightPanelOpen).toBe(false);
+			useUIStore.getState().setRightPanelOpen(true);
+			expect(useUIStore.getState().rightPanelOpen).toBe(true);
 		});
 
 		it('sets right panel open with an updater function', () => {
 			useUIStore.getState().setRightPanelOpen((prev) => !prev);
-			expect(useUIStore.getState().rightPanelOpen).toBe(false);
+			expect(useUIStore.getState().rightPanelOpen).toBe(true);
 		});
 
 		it('toggles right panel', () => {
-			expect(useUIStore.getState().rightPanelOpen).toBe(true);
-			useUIStore.getState().toggleRightPanel();
 			expect(useUIStore.getState().rightPanelOpen).toBe(false);
 			useUIStore.getState().toggleRightPanel();
 			expect(useUIStore.getState().rightPanelOpen).toBe(true);
+			useUIStore.getState().toggleRightPanel();
+			expect(useUIStore.getState().rightPanelOpen).toBe(false);
 		});
 
 		describe('closeLeftSidebarForNavigation', () => {
@@ -497,14 +498,14 @@ describe('uiStore', () => {
 			}));
 
 			expect(result.current.leftOpen).toBe(true);
-			expect(result.current.rightOpen).toBe(true);
+			expect(result.current.rightOpen).toBe(false);
 
 			act(() => {
 				useUIStore.getState().setLeftSidebarOpen(false);
 			});
 
 			expect(result.current.leftOpen).toBe(false);
-			expect(result.current.rightOpen).toBe(true);
+			expect(result.current.rightOpen).toBe(false);
 		});
 	});
 

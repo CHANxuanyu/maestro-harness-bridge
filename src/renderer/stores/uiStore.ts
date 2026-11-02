@@ -420,7 +420,8 @@ export const useUIStore = create<UIStore>()((set) => ({
 	// --- State ---
 	leftSidebarOpen: true,
 	leftSidebarHidden: false,
-	rightPanelOpen: true,
+	// The Right Bar opens on demand, as in a conversation-first layout.
+	rightPanelOpen: false,
 	activeFocus: 'main',
 	activeRightTab: 'files',
 	zoomedPaneId: null,

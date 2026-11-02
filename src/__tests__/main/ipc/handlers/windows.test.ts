@@ -422,17 +422,18 @@ describe('Windows IPC Handlers', () => {
 			const win = makeFakeWindow();
 			registry.create({ browserWindow: win, sessionIds: [], isMain: false });
 
-			// Defaults to expanded panels before any write.
+			// Defaults before any write: the conversation list open, the Right Bar
+			// collapsed until asked for.
 			const before = (await handlers.get('windows:getState')!(makeEvent(win))) as {
 				leftPanelCollapsed: boolean;
 				rightPanelCollapsed: boolean;
 			};
 			expect(before.leftPanelCollapsed).toBe(false);
-			expect(before.rightPanelCollapsed).toBe(false);
+			expect(before.rightPanelCollapsed).toBe(true);
 
 			await handlers.get('windows:setPanelState')!(makeEvent(win), {
 				leftPanelCollapsed: true,
-				rightPanelCollapsed: true,
+				rightPanelCollapsed: false,
 			});
 
 			const after = (await handlers.get('windows:getState')!(makeEvent(win))) as {
@@ -440,7 +441,7 @@ describe('Windows IPC Handlers', () => {
 				rightPanelCollapsed: boolean;
 			};
 			expect(after.leftPanelCollapsed).toBe(true);
-			expect(after.rightPanelCollapsed).toBe(true);
+			expect(after.rightPanelCollapsed).toBe(false);
 		});
 	});
 

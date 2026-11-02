@@ -31,10 +31,14 @@ body {
 	   the variable. */
 	font-family: var(
 		--maestro-font-interface,
-		'JetBrains Mono',
-		'Fira Code',
-		'Courier New',
-		monospace
+		Inter,
+		-apple-system,
+		BlinkMacSystemFont,
+		'Segoe UI',
+		Roboto,
+		'Helvetica Neue',
+		Arial,
+		sans-serif
 	);
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;

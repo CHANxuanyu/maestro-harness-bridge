@@ -9,9 +9,8 @@
 import type { StateCreator } from 'zustand';
 import type { ThemeId, ThemeColors } from '../types';
 import { DEFAULT_CUSTOM_THEME_COLORS } from '../constants/themes';
-import { resolveThemeId } from '../../shared/theme-types';
+import { DEFAULT_THEME_ID, resolveThemeId } from '../../shared/theme-types';
 import { TYPOGRAPHY_PRESETS, type TypographyPresetId } from '../../shared/typographyPresets';
-import { MAESTRO_FONT_STACK } from '../../shared/fontStack';
 import type { GlossLevel } from '../../shared/themeGloss';
 import { DEFAULT_GLOSS_LEVEL, asGlossLevel } from '../../shared/themeGloss';
 import {
@@ -114,21 +113,12 @@ export interface ThemeActions {
 export type ThemeSlice = ThemeState & ThemeActions;
 
 export const createThemeSlice: StateCreator<SettingsStore, [], [], ThemeSlice> = (set, get) => ({
-	fontFamily: MAESTRO_FONT_STACK,
-	terminalFontFamily: '',
-	chatFontFamily: '',
-	filePreviewFontFamily: '',
-	fileEditorFontFamily: '',
-	documentGraphFontFamily: '',
-	fontSize: BASE_FONT_SIZE_DEFAULT,
-	chatFontSize: 0,
-	terminalFontSize: 0,
-	filePreviewFontSize: 0,
-	fileEditorFontSize: 0,
-	documentGraphFontSize: 0,
+	// The Default typography preset is what an install starts on.
+	...TYPOGRAPHY_PRESETS.default.fonts,
+	...TYPOGRAPHY_PRESETS.default.sizes,
 	fontZoom: FONT_ZOOM_DEFAULT,
 	typographySnapshot: null,
-	activeThemeId: 'dracula',
+	activeThemeId: DEFAULT_THEME_ID,
 	customThemeColors: DEFAULT_CUSTOM_THEME_COLORS,
 	customThemeBaseId: 'dracula',
 	colorBlindMode: false,

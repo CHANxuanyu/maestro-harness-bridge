@@ -9,6 +9,7 @@ import type { SettingsStoreInterface } from '../stores/types';
 import type { Shortcut } from '../../shared/shortcut-types';
 import type { WebSettings } from './types';
 import { DEFAULT_UI_LANGUAGE, isUiLanguagePreference } from '../../shared/i18n';
+import { DEFAULT_THEME_ID } from '../../shared/theme-types';
 
 /**
  * Settings keys whose changes should be broadcast to web clients so they
@@ -41,7 +42,7 @@ export function buildWebSettingsSnapshot(settingsStore: SettingsStoreInterface):
 	const uiLanguage = settingsStore.get('uiLanguage', DEFAULT_UI_LANGUAGE);
 	return {
 		uiLanguage: isUiLanguagePreference(uiLanguage) ? uiLanguage : DEFAULT_UI_LANGUAGE,
-		theme: settingsStore.get('activeThemeId', 'dracula') as string,
+		theme: settingsStore.get('activeThemeId', DEFAULT_THEME_ID) as string,
 		fontSize: settingsStore.get('fontSize', 14) as number,
 		enterToSendAI: settingsStore.get('enterToSendAI', false) as boolean,
 		defaultSaveToHistory: settingsStore.get('defaultSaveToHistory', true) as boolean,

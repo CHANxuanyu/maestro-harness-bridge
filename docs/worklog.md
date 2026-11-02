@@ -2,6 +2,95 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-02：关于我的原生启动判定
+
+基于 `57341e712`，在独立本地分支 `codex/about-me-native` 补后端、共享契约、CLI 与测试。没有修改渲染层、冻结的 hb.5、依赖或远端。本轮被测对象是该分支工作树的源码及由它构建的 `dist/main`、`dist/cli`、`dist/renderer`，不是发行包；未安装、发布或调用真实模型与账户。
+
+后端与测试源码分为 `d3a470bb3`（原生检查与使用者）和 `43062437e`（提示接入与启动账户）两个本地提交。构建发生在提交前，运行时代码与后者一致；没有将构建中仍显示的起点提交号当成发行来源。
+
+- **交付：** `native` 从当次启动配置解析一个本机原生文件，与 apply 串行；复用抽出的文件检查，只有确认同步的当前非空段且不被 Codex override 遮蔽时返回 loaded。status 汇总物理文件别名的本机 `agentIds` 与 DeepSeek 预设来源，保持 providers 和归属格式。共享英文替代文字已用于 CLI、Cue 智能体、群聊主持人与综合提示；渲染层启动、向导、设置页留给 Opus，具体字段和复现见[接口契约](core-experience-contracts.md#关于我)。
+- **启动一致性：** 新回归发现原账户解析器跳过空值时会误用低层账户，与桌面删除该变量的行为不一致；已修正。CLI 与 Cue 原先未将全局账户环境传给子进程，现使用同一解析结果提供本机 Claude/Codex 的账户变量，避免检查文件与实际读取文件不同。
+- **失败先行：** native、指引文字与使用者信息首轮 13 失败 / 39 通过；提示集成 6 失败 / 159 通过；空值与 CLI 账户环境 3 失败 / 163 通过；Cue 账户环境 2 失败 / 23 通过。CLI 测试初稿误写 settings 文件名，修正夹具后单独重验 3 条仍因旧正文注入失败；夹具设置错误不计为有效反证。
+- **回退反证：** 临时把 native 判定改为始终 loaded，49 条中 9 条失败；临时让独立 CLI 恢复正文注入，3 条全部失败。两次均恢复原字节，恢复后对应 52 条全部通过。没有修改断言、超时、重试或测试排除项。
+- **验证：** 相关单元分三批为 9 文件 375/375、7 文件 118/118、3 文件 32/32，共 19 个不同文件 525 条通过、0 跳过。类型三项目、ESLint、Prettier、文档路径与引用、差异空白检查通过。主进程及 preload、CLI、渲染构建通过；渲染构建保留既有动态导入警告。
+- **未完成：** 合成 Electron E2E 已补 native、agentIds、DeepSeek 和 override 断言，但沙箱中在 125ms 的应用启动阶段报 `Process failed to launch`，1 条失败且未到用例断言；没有尝试绕过沙箱。真实模型加载、Mac 使用、完整端到端及渲染层提示去重未验。native 仍是文件检查，不保证检查后的外部修改，也不证明旧模型进程即时重载。Cue 通知和 shell/CLI 命令模板没有直接接收提示的模型，保留原档案；未知提供方和 SSH 同样保留正文。
+
+主要新增回归名称：`only reports %s loaded for a confirmed, current, nonempty managed block`、`checks fresh bytes without discovery, file writes or ownership changes`、`recognizes ownership through a new alias but refuses a repointed alias`、`queues native reads behind an in-flight apply`、`merges agent ids and DeepSeek provenance by actual file without changing providers or ownership`、`attributes local agents with the same replacement and fallback rules as spawn`、`uses the shared %s pointer only for a current owned native block without a desktop connection`、`uses the actual %s moderator account for both initial and synthesis profile injection`。另覆盖参数拒绝、EACCES、主机层失败、空值取消与两类进程启动账户匹配。
+
+本克隆的 `node_modules` 为共享只读链接。默认 `npm test` 和 `npm run build:renderer` 在 Vite 写 `.vite-temp` 时 EPERM，未执行测试；改用 runner 加载原 `vitest.config.mts`，补齐配置所需的 `__dirname` 并把缓存放在临时目录。未改仓库配置或产品行为。临时入口 `/tmp/maestro-about-me-vitest.mjs` 内容为：
+
+```js
+import path from 'node:path';
+import os from 'node:os';
+import { pathToFileURL } from 'node:url';
+globalThis.__dirname = process.cwd();
+const { startVitest } = await import(
+	pathToFileURL(path.join(process.cwd(), 'node_modules/vitest/dist/node.js'))
+);
+const ctx = await startVitest(
+	'test',
+	process.argv.slice(2),
+	{ run: true, configLoader: 'runner' },
+	{ cacheDir: path.join(os.tmpdir(), 'maestro-about-me-vite-cache') }
+);
+await ctx.close();
+```
+
+实际单元命令如下，反证只重跑其中 about-me 与 system-prompt-native 两个文件，不累计为新增通过数：
+
+```sh
+node --max-old-space-size=8192 /tmp/maestro-about-me-vitest.mjs \
+  src/__tests__/main/about-me.test.ts \
+  src/__tests__/main/agents/native-instructions.test.ts \
+  src/__tests__/main/agents/provider-account-dirs.test.ts \
+  src/__tests__/cli/services/system-prompt.test.ts \
+  src/__tests__/cli/services/system-prompt-native.test.ts \
+  src/__tests__/cli/services/agent-spawner.test.ts \
+  src/__tests__/main/group-chat/group-chat-router.test.ts \
+  src/__tests__/main/cue/cue-spawn-builder.test.ts \
+  src/__tests__/main/web-server/handlers/about-me.test.ts
+node --max-old-space-size=8192 /tmp/maestro-about-me-vitest.mjs \
+  src/__tests__/cli/commands/about-me.test.ts \
+  src/__tests__/cli/commands/list-sessions.test.ts \
+  src/__tests__/main/cue/cue-executor.test.ts \
+  src/__tests__/main/cue/cue-cli-executor.test.ts \
+  src/__tests__/main/cue/cue-shell-executor.test.ts \
+  src/__tests__/main/cue/cue-notify-executor.test.ts \
+  src/__tests__/main/ipc/bootstrap/handler-wiring.test.ts
+node --max-old-space-size=8192 /tmp/maestro-about-me-vitest.mjs \
+  src/__tests__/main/process-manager/utils/envBuilder.test.ts \
+  src/__tests__/main/process-manager/utils/envBuilder.blankKeys.test.ts \
+  src/__tests__/shared/providerProfiles.test.ts
+npm run lint
+npm run lint:eslint
+npm run format:check:all
+npm run docs:verify
+npm run lint:doc-refs
+git diff --check
+npm run build:main
+npm run build:cli
+node --input-type=module -e 'import path from "node:path"; import os from "node:os"; import { pathToFileURL } from "node:url"; globalThis.__dirname = process.cwd(); const { build } = await import(pathToFileURL(path.join(process.cwd(), "node_modules/vite/dist/node/index.js"))); await build({ configLoader: "runner", cacheDir: path.join(os.tmpdir(), "maestro-about-me-vite-cache") });'
+```
+
+本轮已构建后执行但启动失败的命令：
+
+```sh
+task_home=$(mktemp -d /tmp/maestro-about-me-e2e-home.XXXXXX)
+env HOME="$task_home" MAESTRO_E2E_REAL=0 MAESTRO_DISABLE_CUE_TELEMETRY=1 \
+  ELECTRON_DISABLE_GPU=1 node node_modules/@playwright/test/cli.js test \
+  --project=native e2e/native-about-me.spec.ts
+```
+
+交给 Opus 在沙箱外重新构建并执行，仍只用合成夹具：
+
+```sh
+task_home=$(mktemp -d /tmp/maestro-about-me-e2e-home.XXXXXX)
+env HOME="$task_home" MAESTRO_E2E_REAL=0 MAESTRO_DISABLE_CUE_TELEMETRY=1 \
+  ELECTRON_DISABLE_GPU=1 npm run test:e2e -- e2e/native-about-me.spec.ts
+```
+
+Opus 应先完成该 E2E，再对 native 判定与渲染层提示替换分别作临时回退反证，恢复后重新验证。设置页按 `agentIds` 关联当前智能体、按 `deepseek` 标记预设目录；`spawnHelpers.ts` 及向导发送与实际启动相同的配置，只在成功 loaded 时使用共享指引。Codex 首条原生用户消息内的系统封装也须检验没有重复档案正文。本轮没有发送消息给其他人或调用外部模型。
+
 ## 2026-11-01：关于我后端与 CLI
 
 复用 `conductorProfile` 与既有 settings，提供统一的查看、保存、文件状态和确认应用服务。Claude、DeepSeek、Codex 的本机账户分别同步原生指令；确认包含实际目标与管理段快照，首次写入和外部修改不能静默覆盖。逐文件原子写入保留段外字节和符号链接，清空只删除托管段，不新建缺失账户目录，不改 SSH。

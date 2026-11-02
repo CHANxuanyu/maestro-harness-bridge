@@ -24,6 +24,16 @@ for native instruction discovery, exact managed blocks and explicit file consent
 The settings UI is pending Opus, with conflict, partial-result and long-profile
 reproductions in [core-experience-contracts.md](../core-experience-contracts.md#关于我).
 
+The native startup check (2026-11-02) is an internal read, not a user action.
+`settings.aboutMe({ action: 'native', agent })` and the CLI `about_me` transport
+use the same serialized service. No `status --agent` verb is needed: the existing
+`status --json` returns each file's `agentIds` and optional DeepSeek provenance,
+while startup needs the live spawn configuration, including unsaved environment
+values. Standalone CLI prompts reuse `inspectNativeAboutMe()` without a desktop
+connection. A confirmed, current, nonempty native block replaces duplicate prompt
+text with `nativeAboutMePointer()`; every uncertain result retains the body.
+Renderer startup and wizard integration remain with Opus.
+
 ## Focus belongs to the human (`--background` / `--focus`)
 
 An agent may create a surface. It may not decide the human should be looking at

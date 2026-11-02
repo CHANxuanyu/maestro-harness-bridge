@@ -432,7 +432,7 @@ export const MainPanel = React.memo(
 			efforts: pillEfforts,
 			defaultModel: agentDefaultModel,
 			defaultEffort: agentDefaultEffort,
-		} = useAgentModelEffortOptions(activeSession?.toolType);
+		} = useAgentModelEffortOptions(activeSession?.toolType, activeSession?.customEnvVars);
 		const setSessions = useSessionStore((s) => s.setSessions);
 
 		// Navigate to agent/tab when clicking an agent pill in the log viewer

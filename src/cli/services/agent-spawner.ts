@@ -18,6 +18,8 @@ import { getAgentDefinition } from '../../main/agents/definitions';
 import { hasCapability } from '../../main/agents/capabilities';
 import { checkCustomPath } from '../../main/agents/path-prober';
 import { getAgentCustomPath, readAgentConfig, readSshRemotes } from './storage';
+import { readCliAccountDirLayers } from './agent-account-dir';
+import { resolveAgentAccountEnv } from '../../shared/agentAccountDir';
 import { generateUUID } from '../../shared/uuid';
 import {
 	DEFAULT_QUERY_SOURCE,
@@ -207,6 +209,8 @@ function resolveAgentOverrides(
  * the user explicitly opted into them.
  */
 function applyEnvLayers(
+	toolType: ToolType,
+	sshRemote: boolean,
 	env: NodeJS.ProcessEnv,
 	agentDefaults: Record<string, string> | undefined,
 	batchDefaults: Record<string, string> | undefined,
@@ -226,6 +230,17 @@ function applyEnvLayers(
 	}
 	if (userEnvVars) Object.assign(env, userEnvVars);
 	if (readOnlyOverrides) Object.assign(env, readOnlyOverrides);
+	// Standalone CLI spawns must use the same account as the native profile
+	// check, including Settings -> Environment and expanded local paths.
+	if (!sshRemote && (toolType === 'claude-code' || toolType === 'codex')) {
+		Object.assign(
+			env,
+			resolveAgentAccountEnv(
+				{ toolType, customEnvVars: userEnvVars },
+				readCliAccountDirLayers(toolType)
+			)
+		);
+	}
 }
 
 /**
@@ -519,6 +534,8 @@ async function spawnClaudeAgent(
 	// Pass only the user-level env (no agent defaults) so shell-provided values
 	// keep precedence over agent defaults.
 	applyEnvLayers(
+		'claude-code',
+		!!sshRemoteConfig?.enabled,
 		env,
 		def?.defaultEnvVars,
 		def?.batchModeEnvVars,
@@ -963,6 +980,8 @@ async function spawnJsonLineAgent(
 	// Pass only the user-level env (no agent defaults) so shell-provided values
 	// keep precedence over agent defaults.
 	applyEnvLayers(
+		toolType,
+		!!sshRemoteConfig?.enabled,
 		env,
 		def?.defaultEnvVars,
 		def?.batchModeEnvVars,

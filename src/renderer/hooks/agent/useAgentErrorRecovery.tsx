@@ -19,7 +19,15 @@
  */
 
 import { useMemo, useCallback } from 'react';
-import { KeyRound, MessageSquarePlus, RefreshCw, RotateCcw, Wifi, Terminal } from 'lucide-react';
+import {
+	ArrowRightLeft,
+	KeyRound,
+	MessageSquarePlus,
+	RefreshCw,
+	RotateCcw,
+	Wifi,
+	Terminal,
+} from 'lucide-react';
 import { formatAgentLoginCommand, getAgentLoginCommand } from '../../../shared/agentMetadata';
 import type { AgentError, ToolType } from '../../types';
 import type { RecoveryAction } from '../../components/AgentErrorModal';
@@ -42,6 +50,12 @@ export interface UseAgentErrorRecoveryOptions {
 	onRestartAgent?: () => void;
 	/** Callback to open authentication flow */
 	onAuthenticate?: () => void;
+	/**
+	 * Callback to open "Continue with another AI" for the errored tab. Offered
+	 * after a limit or a lost login, never as the primary action: the original
+	 * remedy stays first. Omit it when the tab cannot hand off.
+	 */
+	onHandoff?: () => void;
 }
 
 export interface UseAgentErrorRecoveryResult {
@@ -51,6 +65,22 @@ export interface UseAgentErrorRecoveryResult {
 	handleRecovery: (actionId: string) => void;
 	/** Clear the error and dismiss the modal */
 	clearError: () => void;
+}
+
+/** "Continue with another AI", for the errors `errorOffersHandoff` names. */
+function pushHandoff(
+	actions: RecoveryAction[],
+	options: UseAgentErrorRecoveryOptions,
+	t: TFunction
+) {
+	if (!options.onHandoff) return;
+	actions.push({
+		id: 'handoff',
+		label: t('workflows.sessions.handoff.action'),
+		description: t('workflows.sessions.handoff.recoveryDescription'),
+		icon: <ArrowRightLeft className="w-4 h-4" />,
+		onClick: options.onHandoff,
+	});
 }
 
 /**
@@ -92,6 +122,7 @@ function getRecoveryActionsForError(
 					onClick: options.onNewSession,
 				});
 			}
+			pushHandoff(actions, options, t);
 			break;
 		}
 
@@ -121,6 +152,7 @@ function getRecoveryActionsForError(
 					onClick: options.onRetry,
 				});
 			}
+			pushHandoff(actions, options, t);
 			break;
 
 		case 'network_error':
@@ -222,6 +254,7 @@ export function useAgentErrorRecovery(
 		error,
 		agentId,
 		options.onAuthenticate,
+		options.onHandoff,
 		options.onNewSession,
 		options.onRestartAgent,
 		options.onRetry,

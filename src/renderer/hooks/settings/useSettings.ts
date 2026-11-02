@@ -15,6 +15,7 @@ import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/shallow';
 import type { BrowserConfirmPolicy } from '../../../shared/coworkingBrowser';
 import type { UiLanguagePreference } from '../../../shared/i18n';
+import type { AboutMeResult } from '../../../shared/aboutMe';
 import type {
 	ThemeId,
 	ThemeColors,
@@ -60,7 +61,7 @@ export interface UseSettingsReturn {
 
 	// Conductor Profile (About Me)
 	conductorProfile: string;
-	setConductorProfile: (value: string) => void;
+	saveConductorProfile: (content: string) => Promise<AboutMeResult>;
 
 	// Global show-Maestro hotkey (system-wide). Empty array = unset.
 	globalShowHotkey: string[];

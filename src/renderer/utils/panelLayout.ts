@@ -406,6 +406,8 @@ export function resolveSingleViewTabRef(session: Session): UnifiedTabRef | null 
  * Both the `openModelEffort` shortcut and the command palette's "Change Tabs
  * Model and Effort" entry resolve their target here, because two copies of this
  * predicate is exactly how one surface keeps the guard and the other loses it.
+ * The palette's "Continue with Another AI" rides it for the same reasons: it
+ * acts on one AI tab, and never on a background agent behind a room.
  */
 export function resolveModelEffortTabId(
 	session: Session | null | undefined,

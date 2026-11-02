@@ -2,6 +2,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {
 	getProviderAccountDirCandidates,
+	getAgentAccountDirLayers,
+	readStoredSessions,
 	type ProviderAccountDirsOptions,
 } from './provider-account-dirs';
 import { getDeepSeekAccountDirs } from './deepseek-preset';
@@ -9,6 +11,7 @@ import { getProviderProfileConfig } from '../../shared/providerProfiles';
 import { isBlankEnvValue } from '../../shared/agentEnvironment';
 import { expandTilde } from '../../shared/pathUtils';
 import type { AboutMeTarget } from '../../shared/aboutMe';
+import { nativeAboutMeTarget } from '../about-me-files';
 
 /**
  * User-level instruction paths, verified 2026-10-31 against official docs:
@@ -26,18 +29,41 @@ export async function getNativeInstructionFiles(options: {
 }): Promise<AboutMeTarget[]> {
 	const homeDir = options.homeDir ?? os.homedir();
 	const targets: AboutMeTarget[] = [];
+	const sessions = options.sessions ?? readStoredSessions();
+	const deepseekDirs = new Set(
+		(await getDeepSeekAccountDirs(options.userDataDir)).map((dir) => path.resolve(dir))
+	);
 	for (const provider of ['claude-code', 'codex'] as const) {
 		const candidates = await getProviderAccountDirCandidates(provider, {
 			homeDir,
 			env: options.env,
-			sessions: options.sessions,
+			sessions,
 			agentLevelEnvVars: options.agentLevelEnvVars?.[provider],
 		});
 		const config = getProviderProfileConfig(provider)!;
 		const globalDir = options.globalShellEnvVars[config.envVar];
 		if (globalDir && !isBlankEnvValue(globalDir)) candidates.push(globalDir.trim());
-		if (provider === 'claude-code')
-			candidates.push(...(await getDeepSeekAccountDirs(options.userDataDir)));
+		if (provider === 'claude-code') candidates.push(...deepseekDirs);
+		const layers = getAgentAccountDirLayers(provider, {
+			...options,
+			agentLevelEnvVars: options.agentLevelEnvVars?.[provider],
+		});
+		const consumers = new Map<string, string[]>();
+		for (const session of sessions) {
+			if (session.toolType !== provider || typeof session.id !== 'string') continue;
+			const ssh = session.sessionSshRemoteConfig as { enabled?: boolean } | undefined;
+			const target = nativeAboutMeTarget(
+				{
+					toolType: provider,
+					customEnvVars: session.customEnvVars as Record<string, string> | undefined,
+					sshRemote: !!ssh?.enabled,
+				},
+				layers
+			);
+			if (!target) continue;
+			consumers.set(target.path, [...(consumers.get(target.path) ?? []), session.id]);
+			candidates.push(path.dirname(target.path));
+		}
 		const files = new Set(
 			candidates.map((dir) =>
 				path.join(
@@ -46,7 +72,15 @@ export async function getNativeInstructionFiles(options: {
 				)
 			)
 		);
-		for (const file of files) targets.push({ path: file, provider });
+		for (const file of files)
+			targets.push({
+				path: file,
+				provider,
+				agentIds: [...new Set(consumers.get(file) ?? [])],
+				...(provider === 'claude-code' && deepseekDirs.has(path.dirname(file))
+					? { deepseek: true as const }
+					: {}),
+			});
 	}
 	return targets;
 }

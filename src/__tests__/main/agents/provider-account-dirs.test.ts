@@ -331,6 +331,29 @@ describe('resolveAgentAccountDir', () => {
 		);
 	});
 
+	it('treats a blank configured account variable as cancellation, matching desktop spawn', () => {
+		const globalDir = path.join(outsideHome, 'global');
+		const envDir = path.join(outsideHome, 'env');
+		for (const customEnvVars of [{ CLAUDE_CONFIG_DIR: '' }, { CLAUDE_CONFIG_DIR: ' ' }]) {
+			expect(
+				resolveAgentAccountDir('agent-1', {
+					...base(),
+					sessions: [agent({ customEnvVars })],
+					globalShellEnvVars: { CLAUDE_CONFIG_DIR: globalDir },
+					env: { CLAUDE_CONFIG_DIR: envDir },
+				})
+			).toBe(path.join(homeDir, '.claude'));
+		}
+		expect(
+			resolveAgentAccountDir('agent-1', {
+				...base(),
+				sessions: [agent()],
+				globalShellEnvVars: { CLAUDE_CONFIG_DIR: '' },
+				env: { CLAUDE_CONFIG_DIR: envDir },
+			})
+		).toBe(path.join(homeDir, '.claude'));
+	});
+
 	it('returns an SSH agent its remote path untouched, and nothing when it set none', () => {
 		const ssh = { sessionSshRemoteConfig: { enabled: true } };
 		expect(

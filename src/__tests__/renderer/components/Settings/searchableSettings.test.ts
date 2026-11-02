@@ -142,6 +142,10 @@ describe('searchableSettings', () => {
 		// they remain findable - keyword drift from UI text is silent otherwise.
 		it.each([
 			// General tab
+			['About Me', 'general-conductor-profile'],
+			['native instruction files', 'general-conductor-profile'],
+			['CLAUDE.md', 'general-conductor-profile'],
+			['AGENTS.md', 'general-conductor-profile'],
 			['Auto Run Inactivity Timeout', 'general-autorun-inactivity-timeout'],
 			['refactor', 'general-autorun-inactivity-timeout'],
 			['resume paused', 'general-auto-resume'],

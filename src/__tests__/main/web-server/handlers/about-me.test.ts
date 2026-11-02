@@ -7,6 +7,40 @@ import type {
 
 const client = { id: 'synthetic-client' } as WebClient;
 describe('About Me WebSocket result', () => {
+	it('passes the live native request and its read-only result through the CLI transport', async () => {
+		const command = {
+			action: 'native',
+			agent: {
+				toolType: 'claude-code',
+				customEnvVars: { CLAUDE_CONFIG_DIR: 'synthetic-account' },
+				sshRemote: false,
+			},
+		};
+		const result = {
+			success: true,
+			content: 'Profile',
+			estimatedTokens: 2,
+			files: [],
+			native: { loaded: true, provider: 'claude-code', state: 'synced' },
+		};
+		const callback = vi.fn().mockResolvedValue(result);
+		const send = vi.fn();
+		await handleAboutMe(
+			{ callbacks: { aboutMeCommand: callback }, send } as unknown as MessageHandlerContext,
+			client,
+			{
+				type: 'about_me',
+				requestId: 'native-read',
+				request: command,
+			}
+		);
+		expect(callback).toHaveBeenCalledExactlyOnceWith(command);
+		expect(send).toHaveBeenCalledExactlyOnceWith(client, {
+			type: 'about_me_result',
+			requestId: 'native-read',
+			...result,
+		});
+	});
 	it('preserves a partial failure and correlates the response', async () => {
 		const result = {
 			success: false,

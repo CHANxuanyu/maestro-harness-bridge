@@ -38,6 +38,7 @@ import {
 	clampSurfaceFontSize,
 } from '../../shared/typography';
 import { parseTypographySnapshot } from '../../shared/typographySnapshot';
+import type { AboutMeResult } from '../../shared/aboutMe';
 import {
 	DEFAULT_UI_LANGUAGE,
 	isUiLanguagePreference,
@@ -494,8 +495,14 @@ export interface SettingsStoreActions
 		BrowserTabsActions,
 		ShortcutsActions,
 		ThemeActions {
+	/**
+	 * Save the About Me Markdown through the About Me service (the one
+	 * `maestro-cli about-me set` uses). Nothing is cut: the stored text is
+	 * whatever the service returns, and the store only changes when it saved.
+	 * Writing it into native instruction files is a separate apply.
+	 */
+	saveConductorProfile: (content: string) => Promise<AboutMeResult>;
 	// Simple setters
-	setConductorProfile: (value: string) => void;
 	setGlobalShowHotkey: (value: string[]) => void;
 	setDefaultShell: (value: string) => void;
 	setCustomShellPath: (value: string) => void;
@@ -861,10 +868,10 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		// Simple Setters
 		// ============================================================================
 
-		setConductorProfile: (value) => {
-			const trimmed = value.slice(0, 5000);
-			set({ conductorProfile: trimmed });
-			window.maestro.settings.set('conductorProfile', trimmed);
+		saveConductorProfile: async (content) => {
+			const result = await window.maestro.settings.aboutMe({ action: 'set', content });
+			if (result.success) set({ conductorProfile: result.content });
+			return result;
 		},
 
 		setGlobalShowHotkey: (value) => {
@@ -2758,7 +2765,7 @@ export function getSettingsState(): SettingsStoreState {
 export function getSettingsActions() {
 	const state = useSettingsStore.getState();
 	return {
-		setConductorProfile: state.setConductorProfile,
+		saveConductorProfile: state.saveConductorProfile,
 		setGlobalShowHotkey: state.setGlobalShowHotkey,
 		setDefaultShell: state.setDefaultShell,
 		setCustomShellPath: state.setCustomShellPath,

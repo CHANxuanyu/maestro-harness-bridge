@@ -101,7 +101,7 @@ MAESTRO_E2E_REAL=1 npm run test:e2e -- --grep 'claude handoff:'
 
 2026-10-31 核对 Claude Code 官方[记忆文档](https://code.claude.com/docs/en/memory)、[环境变量文档](https://code.claude.com/docs/en/env-vars)和 Codex 官方[AGENTS.md 文档](https://developers.openai.com/codex/guides/agents-md)。Claude 使用账户目录里的 `CLAUDE.md`，Codex 使用 `CODEX_HOME`（默认 `~/.codex`）里的 `AGENTS.md`。Codex 同目录中非空的 `AGENTS.override.md` 优先，接口以 `shadowedBy` 返回，绝不另行改写 override。
 
-复用已有 `conductorProfile` Markdown，不增加第二份“关于我”或新存储。原来的 Maestro 系统提示注入保持现状；本轮增加原生全局文件同步。原生工具在启动时发现这些文件，不能把计划中“每轮加载”理解成已经运行的 CLI 会即时重载。实际加载及 Mac 使用未验，需要重新启动原生 CLI 并验证。
+复用已有 `conductorProfile` Markdown，不增加第二份“关于我”或新存储。原生全局文件同步当前非空档案且通过下述启动检查时，Maestro 提示用共享替代文字指向原生管理段，避免重复正文；其他情况继续注入正文。主进程与 CLI 已接入，渲染层启动与向导由 Opus 接入。原生工具在启动时发现这些文件，不能把计划中“每轮加载”理解成已经运行的 CLI 会即时重载。实际加载及 Mac 使用未验，需要重新启动原生 CLI 并验证。
 
 目录来自既有账户发现的原始候选：本机智能体、提供方、全局环境、进程环境、默认目录、既有规则认可的 home 账户目录；另包括预设工厂创建的 DeepSeek 目录和此前已管理的文件。SSH 智能体不加入。共享同一历史池的两个账户仍各自同步自己的指令文件；实际指向同一文件的目录别名/符号链接只写一次，返回原始路径与实际目标，保留链接本身。不搜索整个磁盘，也不猜未知账户路径。
 
@@ -111,7 +111,8 @@ MAESTRO_E2E_REAL=1 npm run test:e2e -- --grep 'claude handoff:'
 
 - `{ action: 'show' }`：返回现有 Markdown 与 token 估算。
 - `{ action: 'set', content }`：仅保存 Markdown，不写原生文件，不调用模型。保留内容原样，没有新增长度上限；拒绝包含管理标记或无效 Unicode 的内容。
-- `{ action: 'status' }`：读当前文件，列出 `path`、`aliases`、`resolvedPath`、`providers`、`state`、`currentBlock`、`shadowedBy` 及文件错误。只返回管理段，不返回段外用户内容。
+- `{ action: 'status' }`：读当前文件，列出 `path`、`aliases`、`resolvedPath`、`providers`、`agentIds`、可选 `deepseek: true`、`state`、`currentBlock`、`shadowedBy` 及文件错误。`agentIds` 始终为数组，汇总会话存储中按启动环境实际使用该文件的本机智能体 ID；SSH 不计入，同一 realpath 的别名合并汇总。`deepseek` 表示目录来自 `getDeepSeekAccountDirs` 的预设目录，别名合并后保留；没有使用者时仍可为 true。DeepSeek 仍是 `claude-code`，`providers` 仍只含 `claude-code` / `codex`。只返回管理段，不返回段外用户内容。
+- `{ action: 'native', agent: { toolType: string, customEnvVars?: Record<string, string>, sshRemote?: boolean } }`：启动前的只读检查，返回现有 `AboutMeResult`，`files` 为 `[]`，另有 `native: { loaded: boolean, provider?: AboutMeProvider, path?: string, resolvedPath?: string, state?: AboutMeFileState, shadowedBy?: string[] }`。不写文件、不改归属记录、不调用模型，与 apply 使用同一串行队列。
 - `{ action: 'apply', content, confirmations?: [{ path, resolvedPath, block }] }`：`content` 必须等于刚显示/保存的档案；确认项必须来自 `status`，`block` 是当时的 `currentBlock`（不存在为 `null`）。第一次写入、链接改指新目标、管理段在外部改变均要求明确确认。提交后再次比对实际目标与管理段，旧确认不能覆盖新修改。已经确认且未外改的文件可直接更新或清空。
 
 状态为 `synced`、`pending`、`unconfirmed`、`external-change`、`missing-directory`、`invalid-block`、`error`。成功/失败均返回 `content`、`estimatedTokens`、`files`；apply 另有 `written`，列出已实际写入的文件。`code` 区分 `invalid-request`、`profile-changed`、`confirmation-required`、`file-error`、`persistence-failed`、`unavailable`。失败可能是部分成功，不能把整个批次当成回滚：逐文件原子写入，某个文件失败或未确认不覆盖它，其他已批准文件可以完成。写后保存归属记录失败也明确报错；再次读取状态，按返回的归属/冲突状态确认，不自动重试。
@@ -119,6 +120,23 @@ MAESTRO_E2E_REAL=1 npm run test:e2e -- --grep 'claude handoff:'
 在既有 settings 中以 `aboutMeApplied` 保存每个路径上次已应用的准确管理段及实际目标，不使用内容哈希或不透明版本号。段外字节（包括 BOM、CRLF、非 UTF-8 字节和无末尾换行）原样保留。标记重复/不完整或管理段不是 UTF-8 时拒绝改写；目录不存在不自动创建账户目录，已有目录内缺失的文件经确认后新建。空内容在 apply 时删除完整管理段，保留文件和其他字节。并发 Maestro 请求串行执行；没有为外部编辑器增加锁，原子替换不承诺跨进程事务。
 
 token 沿用 `estimateTokenCount` 的字符数/4 估算，仅代表 Markdown 自身，不是提供方的真实计费或整轮系统上下文。成功 `set` 通知其他桌面窗口与 web 客户端，写入窗口从返回结果更新本地内容；apply 后重新获取/使用返回的文件状态。不会经由通用 `settings:set` 记录档案正文。
+
+### 启动时的原生判定与替代文字
+
+`native` 使用请求中与本次启动完全相同的 `toolType`、`customEnvVars`、`sshRemote`，不按 ID 回读可能过期的智能体配置。提供方级变量、Settings -> Environment、进程环境及主目录由主进程读取。目录复用 `resolveAgentAccountDir`：智能体自己的环境变量对象替换提供方级对象，未设置时才继承提供方；随后是全局环境、进程环境、默认目录。`customEnvVars: {}` 也表示替换；显式空字符串取消低层同名变量并使用默认目录。DeepSeek 按其自己的 `CLAUDE_CONFIG_DIR` 解析。CLI 从自身 stores 读取这些层，CLI 与 Cue 启动环境同样使用此解析结果。
+
+只检查该次启动对应的一个指令文件，不枚举其他账户。按 realpath 合并已有归属的路径别名；别名必须仍指向同一实际文件。仅在非 SSH、提供方为 `claude-code` 或 `codex`、此刻文件状态为 `synced`、`currentBlock` 非 null 且与当前档案的管理段相等时，才允许 `loaded: true`；Codex 还要求 `shadowedBy` 为空。同文但未确认、待应用、外改、空档案、缺失目录、标记无效、读取错误、未知提供方一律 false。只读检查不建立新的归属，`aboutMeApplied` 的格式保持不变。
+
+共享函数 `nativeAboutMePointer(provider)` 位于 `src/shared/aboutMe.ts`，两种返回值逐字如下：
+
+```text
+The conductor's profile is in your global CLAUDE.md, between the maestro:about-me markers. It is not repeated here and keeps the authority described below.
+The conductor's profile is in your global AGENTS.md, between the maestro:about-me markers. It is not repeated here and keeps the authority described below.
+```
+
+只有成功返回 `loaded: true` 且有提供方时才替换正文，不删提示中随后解释档案权限的文字。主进程 Cue 的智能体模板上下文、群聊主持人与综合提示使用服务的 `promptProfile(agent)`；独立 CLI 的系统提示直接复用 `inspectNativeAboutMe` 文件检查，桌面不可用时也不复制判断逻辑。Cue 通知与 shell/CLI 命令模板没有直接接收该提示的智能体，继续使用原始档案；没有匹配提供方的提示同样保持原样。
+
+`loaded` 是启动时文件条件的判定，不是模型已加载的遥测。外部进程在检查后仍可改文件，本轮没有新增跨进程锁。不得把它缓存为智能体永久属性，也不得将合成夹具通过当成真实模型验收。
 
 ### 关于我 CLI
 
@@ -142,6 +160,8 @@ maestro-cli about-me apply --json
 
 `--file`、`--stdin`、`--clear` 三选一；`--confirm` 可重复，只接受当前状态中的绝对实际目标。CLI 从最新状态取得待确认的段；这条显式命令表示批准该文件当前的管理段，不提供全局 force 或跳过确认开关。未提供确认时，首次 apply 只报告未确认状态；已有归属的文件仍按常规更新。失败退出码为 1，JSON 保留部分结果，不把未知/失败显示成成功。
 
+`native` 是启动内部读取，不是新增用户动作，不增加 `status --agent` 命令。现有 `status --json` 已返回全部文件及 `agentIds`；IPC 与 CLI 的 `about_me` 传输均可承载 native 请求，独立 CLI 启动直接复用文件检查。
+
 ### 交给 Opus 的关于我复现用例
 
 1. 在 General 设置的现有 Conductor Profile (About Me) 编辑内容。目前保存仅改变 `conductorProfile`，没有原生文件确认、状态或 token 信息。接入上述 `set -> status -> 确认 -> apply`，沿用同一 Markdown，不另建一份档案；新增界面和文案由 Opus 决定。
@@ -149,6 +169,8 @@ maestro-cli about-me apply --json
 3. 首次 apply、外部改段或符号链接改指目标时，展示原始路径、实际目标及当前管理段；用户明确确认后原样传回快照。期间继续外改应保持冲突，不静默覆盖，不自动重试。
 4. 构造缺失目录、重复标记和一个正常文件；批量应用会返回部分完成和每个文件状态。分别呈现 `written` 与未完成项，不把它显示成全部成功或全部回滚。非空 Codex override 必须提示其优先级，不能显示为“模型已经加载”。
 5. 清空后执行 apply，管理段应消失、其他字节不变；提示重新启动原生 CLI。这里只验文件，不把合成端到端结果显示为真实模型加载验收。
+6. `spawnHelpers.ts` 与两种向导在构建提示时，以实际启动配置调用 `native`；成功且 `loaded` 为 true 才用共享 `nativeAboutMePointer`。未确认、修改后未 apply、外改、override、SSH、异常或清空都保留原注入行为。切换账户或编辑尚未保存的智能体环境后，下一次检查必须使用新值。设置页用 `agentIds` 关联智能体，用 `deepseek` 标记预设来源，不扩展 `providers`。
+7. 同步一个合成测试偏好后，检查 Claude 和 Codex 的启动提示只含对应替代文字；Codex 嵌入首条用户消息的系统封装也不再含该段正文。外改后再次启动应恢复正文。该渲染层端到端与反证由 Opus 在沙箱外完成，本轮后端未声明通过。
 
 ### 用户的 Mac 关于我验收
 

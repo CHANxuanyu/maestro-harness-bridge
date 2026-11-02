@@ -16,13 +16,15 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Check, RefreshCw, X, Zap } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, Check, RefreshCw, X, Zap } from 'lucide-react';
 
 import { useRetryStore, useRetryStatus, retryNow, cancelRetry } from '../stores/retryStore';
 import { formatDurationHuman } from '../../shared/formatters';
 import { describeQuotaWindow } from '../../shared/quotaLimitDetail';
 import { getConnectingColor } from '../utils/theme';
 import { QuotaLimitEvidence } from './ui/QuotaLimitEvidence';
+import { requestAiHandoff, useCanHandOffTab } from '../services/aiHandoffEntry';
+import { useT } from '../i18n';
 import type { Theme } from '../types';
 
 interface RetryStatusCardProps {
@@ -63,12 +65,19 @@ export function RetryStatusCard({
 	theme,
 	fallbackText,
 }: RetryStatusCardProps): React.ReactElement | null {
+	const t = useT();
 	const outage = useRetryStore((s) => s.outages[outageId]);
 
 	// What the retry is ACTUALLY doing, which the outage record cannot say. See
 	// useRetryStatus: `nextRetryAt` is untouched by an early fire, so the
 	// arithmetic below keeps counting down over a resend that is already running.
 	const retryStatus = useRetryStatus(outage?.sessionId ?? '', outage?.tabId ?? '');
+	// A long limit is when the user may rather move on than wait. Only while the
+	// outage is live, and it leaves the retry running: it prepares a draft.
+	const canHandOff = useCanHandOffTab(
+		outage?.status === 'active' ? outage.sessionId : undefined,
+		outage?.status === 'active' ? outage.tabId : undefined
+	);
 
 	// Constitutional "stuck / backing off" hue - pulsing orange, distinct from
 	// thinking-yellow. Theme-derived so it tracks the palette (see getConnectingColor).
@@ -276,6 +285,21 @@ export function RetryStatusCard({
 					<X className="w-3.5 h-3.5" />
 					Stop
 				</button>
+				{canHandOff && (
+					<button
+						type="button"
+						onClick={() => requestAiHandoff(outage.sessionId, outage.tabId)}
+						className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors hover:opacity-80"
+						style={{
+							backgroundColor: theme.colors.accent + '15',
+							color: theme.colors.accent,
+							border: `1px solid ${theme.colors.accent}40`,
+						}}
+					>
+						<ArrowRightLeft className="w-3.5 h-3.5" />
+						{t('workflows.sessions.handoff.action')}
+					</button>
+				)}
 			</div>
 		</div>
 	);

@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAboutMeService } from '../../main/about-me';
 import { estimateTokenCount } from '../../shared/formatters';
 import type { AboutMeResult, AboutMeConfirmation, AboutMeTarget } from '../../shared/aboutMe';
+import * as aboutMeContract from '../../shared/aboutMe';
+import type { AgentAccountDirLayers } from '../../shared/agentAccountDir';
 
 vi.mock('../../main/utils/sentry', () => ({ captureException: vi.fn() }));
 vi.mock('fs/promises', async (original) => {
@@ -19,6 +21,7 @@ let claude: string;
 let codex: string;
 let values: Record<string, unknown>;
 let files: AboutMeTarget[];
+let layers: AgentAccountDirLayers;
 const changed = vi.fn();
 const store = {
 	get: (key: string, fallback?: unknown) => (Object.hasOwn(values, key) ? values[key] : fallback),
@@ -30,6 +33,7 @@ const service = () =>
 	createAboutMeService({
 		settingsStore: store as never,
 		getFiles: async () => files,
+		getAccountDirLayers: () => layers,
 		onContentChanged: changed,
 	});
 const confirm = (status: AboutMeResult): AboutMeConfirmation[] =>
@@ -52,6 +56,14 @@ beforeEach(async () => {
 		{ path: codex, provider: 'codex' },
 	];
 	values = {};
+	layers = {
+		homeDir: root,
+		env: {},
+		globalShellEnvVars: {
+			CLAUDE_CONFIG_DIR: path.dirname(claude),
+			CODEX_HOME: path.dirname(codex),
+		},
+	};
 	changed.mockClear();
 });
 afterEach(async () => {
@@ -394,5 +406,290 @@ describe('preexisting managed text', () => {
 		const result = await api.command({ action: 'apply', content: 'Owned' });
 		expect(result.files[0].state).toBe('external-change');
 		expect(await fs.readFile(claude, 'utf8')).toBe('User replaced the entire file.');
+	});
+});
+
+describe('About Me native startup read', () => {
+	it.each(['claude-code', 'codex'] as const)('uses the exact shared pointer for %s', (provider) => {
+		const filename = provider === 'claude-code' ? 'CLAUDE.md' : 'AGENTS.md';
+		expect(aboutMeContract.nativeAboutMePointer(provider)).toBe(
+			`The conductor's profile is in your global ${filename}, between the maestro:about-me markers. It is not repeated here and keeps the authority described below.`
+		);
+	});
+
+	it.each(['claude-code', 'codex'] as const)(
+		'only reports %s loaded for a confirmed, current, nonempty managed block',
+		async (toolType) => {
+			const file = toolType === 'claude-code' ? claude : codex;
+			const api = service();
+			const request = { action: 'native', agent: { toolType } };
+			await api.command({ action: 'set', content: 'Current profile' });
+			await fs.writeFile(file, `${START}\nCurrent profile\n${END}`);
+			expect(await api.command(request)).toMatchObject({
+				success: true,
+				native: { loaded: false, provider: toolType, path: file, state: 'unconfirmed' },
+			});
+			await applyConfirmed(api);
+			expect(await api.command(request)).toMatchObject({
+				native: { loaded: true, resolvedPath: file, state: 'synced', shadowedBy: [] },
+			});
+			await api.command({ action: 'set', content: 'Pending profile' });
+			expect(await api.command(request)).toMatchObject({
+				native: { loaded: false, state: 'pending' },
+			});
+			await fs.writeFile(file, `${START}\nExternal profile\n${END}`);
+			expect(await api.command(request)).toMatchObject({
+				native: { loaded: false, state: 'external-change' },
+			});
+			await api.command({ action: 'set', content: '' });
+			await applyConfirmed(api);
+			expect(await api.command(request)).toMatchObject({
+				native: { loaded: false, state: 'synced' },
+			});
+		}
+	);
+
+	it('checks fresh bytes without discovery, file writes or ownership changes', async () => {
+		const api = service();
+		await api.command({ action: 'set', content: 'Owned' });
+		await applyConfirmed(api);
+		const before = structuredClone(values);
+		const bytes = await fs.readFile(claude);
+		const stat = await fs.stat(claude);
+		const getFiles = vi.fn().mockRejectedValue(new Error('must not discover other accounts'));
+		const readOnly = createAboutMeService({
+			settingsStore: store as never,
+			getFiles,
+			getAccountDirLayers: () => layers,
+		});
+		const set = vi.spyOn(store, 'set');
+		expect(
+			await readOnly.command({ action: 'native', agent: { toolType: 'claude-code' } })
+		).toMatchObject({ success: true, files: [], native: { loaded: true } });
+		expect(getFiles).not.toHaveBeenCalled();
+		expect(set).not.toHaveBeenCalled();
+		expect(values).toEqual(before);
+		expect(await fs.readFile(claude)).toEqual(bytes);
+		expect((await fs.stat(claude)).mtimeMs).toBe(stat.mtimeMs);
+		await fs.writeFile(claude, START);
+		expect(
+			await readOnly.command({ action: 'native', agent: { toolType: 'claude-code' } })
+		).toMatchObject({ native: { loaded: false, state: 'invalid-block' } });
+	});
+
+	it('follows live agent env replacement and the canonical account directory layers', async () => {
+		const api = service();
+		layers = {
+			homeDir: root,
+			agentLevelEnvVars: { CLAUDE_CONFIG_DIR: path.join(root, 'provider') },
+			globalShellEnvVars: { CLAUDE_CONFIG_DIR: path.join(root, 'global') },
+			env: { CLAUDE_CONFIG_DIR: path.join(root, 'process') },
+		};
+		const read = (customEnvVars?: Record<string, string>) =>
+			api.command({ action: 'native', agent: { toolType: 'claude-code', customEnvVars } });
+		expect(await read({ CLAUDE_CONFIG_DIR: '~/deepseek' })).toMatchObject({
+			native: { path: path.join(root, 'deepseek', 'CLAUDE.md'), loaded: false },
+		});
+		expect(await read()).toMatchObject({
+			native: { path: path.join(root, 'provider', 'CLAUDE.md') },
+		});
+		expect(await read({})).toMatchObject({
+			native: { path: path.join(root, 'global', 'CLAUDE.md') },
+		});
+		expect(await read({ ANTHROPIC_BASE_URL: 'https://synthetic.invalid' })).toMatchObject({
+			native: { path: path.join(root, 'global', 'CLAUDE.md') },
+		});
+		layers.globalShellEnvVars = {};
+		expect(await read({})).toMatchObject({
+			native: { path: path.join(root, 'process', 'CLAUDE.md') },
+		});
+		layers.env = {};
+		expect(await read({})).toMatchObject({
+			native: { path: path.join(root, '.claude', 'CLAUDE.md') },
+		});
+	});
+
+	it('recognizes ownership through a new alias but refuses a repointed alias', async () => {
+		const api = service();
+		await api.command({ action: 'set', content: 'Owned' });
+		await applyConfirmed(api);
+		const alias = path.join(root, 'live-alias');
+		const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+		await fs.symlink(path.dirname(claude), alias, linkType);
+		const request = {
+			action: 'native',
+			agent: { toolType: 'claude-code', customEnvVars: { CLAUDE_CONFIG_DIR: alias } },
+		};
+		expect(await api.command(request)).toMatchObject({
+			native: { loaded: true, resolvedPath: claude },
+		});
+		await fs.unlink(alias);
+		const other = path.join(root, 'other');
+		await fs.mkdir(other);
+		await fs.writeFile(path.join(other, 'CLAUDE.md'), `${START}\nOwned\n${END}`);
+		await fs.symlink(other, alias, linkType);
+		expect(await api.command(request)).toMatchObject({
+			native: { loaded: false, state: 'unconfirmed' },
+		});
+	});
+
+	it('does not report a Codex block loaded while its actual account has an override', async () => {
+		const api = service();
+		await api.command({ action: 'set', content: 'Owned' });
+		await applyConfirmed(api);
+		const request = { action: 'native', agent: { toolType: 'codex' } };
+		const override = path.join(path.dirname(codex), 'AGENTS.override.md');
+		await fs.writeFile(override, 'Override');
+		expect(await api.command(request)).toMatchObject({
+			native: { loaded: false, state: 'synced', shadowedBy: [override] },
+		});
+		await fs.writeFile(override, ' \n');
+		expect(await api.command(request)).toMatchObject({ native: { loaded: true, shadowedBy: [] } });
+		await fs.unlink(override);
+		await fs.mkdir(override);
+		expect(await api.command(request)).toMatchObject({ native: { loaded: false, state: 'error' } });
+	});
+
+	it('keeps SSH, unknown providers, missing directories and unreadable targets unloaded', async () => {
+		const api = service();
+		await api.command({ action: 'set', content: 'Owned' });
+		await applyConfirmed(api);
+		for (const agent of [{ toolType: 'claude-code', sshRemote: true }, { toolType: 'other' }]) {
+			expect(await api.command({ action: 'native', agent })).toMatchObject({
+				native: { loaded: false },
+			});
+		}
+		layers.globalShellEnvVars = { CLAUDE_CONFIG_DIR: path.join(root, 'missing') };
+		expect(
+			await api.command({ action: 'native', agent: { toolType: 'claude-code' } })
+		).toMatchObject({ native: { loaded: false, state: 'missing-directory' } });
+		await fs.unlink(claude);
+		await fs.mkdir(claude);
+		layers.globalShellEnvVars = { CLAUDE_CONFIG_DIR: path.dirname(claude) };
+		expect(
+			await api.command({ action: 'native', agent: { toolType: 'claude-code' } })
+		).toMatchObject({ native: { loaded: false, state: 'error' } });
+	});
+
+	it('keeps a file read failure and a host-layer failure unloaded without changing ownership', async () => {
+		const api = service();
+		await api.command({ action: 'set', content: 'Owned' });
+		await applyConfirmed(api);
+		const before = structuredClone(values);
+		vi.spyOn(fs, 'readFile').mockRejectedValueOnce(
+			Object.assign(new Error('synthetic denied'), { code: 'EACCES' })
+		);
+		expect(
+			await api.command({ action: 'native', agent: { toolType: 'claude-code' } })
+		).toMatchObject({ native: { loaded: false, state: 'error' } });
+		const failingHost = createAboutMeService({
+			settingsStore: store as never,
+			getFiles: async () => [],
+			getAccountDirLayers: () => {
+				throw new Error('synthetic store failure');
+			},
+		});
+		expect(
+			await failingHost.command({ action: 'native', agent: { toolType: 'codex' } })
+		).toMatchObject({ success: false, code: 'file-error', native: { loaded: false } });
+		expect(values).toEqual(before);
+	});
+
+	it('queues native reads behind an in-flight apply', async () => {
+		files = [files[0]];
+		const api = service();
+		await api.command({ action: 'set', content: 'Ordered' });
+		const status = await api.command({ action: 'status' });
+		const rename = atomicFs.rename;
+		let release!: () => void;
+		let entered!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const started = new Promise<void>((resolve) => {
+			entered = resolve;
+		});
+		vi.mocked(atomicFs.rename).mockImplementationOnce(async (...args) => {
+			entered();
+			await gate;
+			return rename(...args);
+		});
+		const apply = api.command({
+			action: 'apply',
+			content: status.content,
+			confirmations: confirm(status),
+		});
+		await started;
+		const native = api.command({ action: 'native', agent: { toolType: 'claude-code' } });
+		release();
+		expect((await apply).success).toBe(true);
+		expect(await native).toMatchObject({ native: { loaded: true } });
+	});
+
+	it.each([
+		{ action: 'native' },
+		{ action: 'native', agent: null },
+		{ action: 'native', agent: { toolType: 42 } },
+		{ action: 'native', agent: { toolType: 'codex', customEnvVars: [] } },
+		{ action: 'native', agent: { toolType: 'codex', customEnvVars: { CODEX_HOME: 42 } } },
+		{ action: 'native', agent: { toolType: 'codex', sshRemote: 'false' } },
+	])('rejects invalid native request %j', async (request) => {
+		expect(await service().command(request)).toMatchObject({
+			success: false,
+			code: 'invalid-request',
+		});
+	});
+});
+
+describe('About Me status consumers', () => {
+	it('merges agent ids and DeepSeek provenance by actual file without changing providers or ownership', async () => {
+		const alias = path.join(root, 'deepseek-alias');
+		await fs.symlink(
+			path.dirname(claude),
+			alias,
+			process.platform === 'win32' ? 'junction' : 'dir'
+		);
+		files = [
+			{ path: claude, provider: 'claude-code', agentIds: ['first'] },
+			{
+				path: path.join(alias, 'CLAUDE.md'),
+				provider: 'claude-code',
+				agentIds: ['second', 'first'],
+				deepseek: true,
+			},
+		];
+		const api = service();
+		await api.command({ action: 'set', content: 'Owned' });
+		const applied = await applyConfirmed(api);
+		expect(applied.files).toHaveLength(1);
+		expect(applied.files[0]).toMatchObject({
+			agentIds: ['first', 'second'],
+			deepseek: true,
+			providers: ['claude-code'],
+		});
+		const status = await api.command({ action: 'status' });
+		expect(status.files[0]).toMatchObject({ agentIds: ['first', 'second'], deepseek: true });
+		for (const record of Object.values(values.aboutMeApplied as Record<string, object>)) {
+			expect(Object.keys(record).sort()).toEqual(['block', 'provider', 'resolvedPath']);
+		}
+		files = [];
+		expect((await api.command({ action: 'status' })).files[0].agentIds).toEqual([]);
+	});
+});
+
+describe('backend prompt profile selection', () => {
+	it('returns the shared pointer only after apply and restores the full profile on uncertainty', async () => {
+		const api = service();
+		const agent = { toolType: 'claude-code' };
+		await api.command({ action: 'set', content: 'Prompt profile' });
+		expect(await api.promptProfile(agent)).toBe('Prompt profile');
+		await applyConfirmed(api);
+		expect(await api.promptProfile(agent)).toBe(
+			aboutMeContract.nativeAboutMePointer('claude-code')
+		);
+		expect(await api.promptProfile({ ...agent, sshRemote: true })).toBe('Prompt profile');
+		expect(await api.promptProfile({ toolType: 'unknown' })).toBe('Prompt profile');
+		await api.command({ action: 'set', content: 'Pending profile' });
+		expect(await api.promptProfile(agent)).toBe('Pending profile');
 	});
 });

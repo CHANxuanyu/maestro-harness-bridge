@@ -147,6 +147,73 @@ describe('project conversation navigation', () => {
 			};
 		}
 
+		it('shows a DeepSeek preset as its own provider beside Claude Code', () => {
+			const deepseekDir = '/data/accounts/deepseek-1';
+			const claude = createMockSession({
+				id: 'claude-owner',
+				toolType: 'claude-code',
+				groupId: project.id,
+				aiTabs: [createMockAITab({ id: 'claude-tab', name: 'Claude chat', createdAt: 1 })],
+			});
+			const deepseek = createMockSession({
+				id: 'deepseek-owner',
+				toolType: 'claude-code',
+				groupId: project.id,
+				customEnvVars: {
+					ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+					CLAUDE_CONFIG_DIR: deepseekDir,
+				},
+				aiTabs: [createMockAITab({ id: 'deepseek-tab', name: 'DeepSeek chat', createdAt: 2 })],
+			});
+			const history = [
+				record({
+					key: 'claude-code:local:/ds:owned',
+					provider: 'claude-code',
+					nativeSessionId: 'owned',
+					ownerId: 'deepseek-owner',
+					accountDir: deepseekDir,
+				}),
+				// The runner was removed; the account directory still says whose transcript it is.
+				record({
+					key: 'claude-code:local:/ds:orphan',
+					provider: 'claude-code',
+					nativeSessionId: 'orphan',
+					accountDir: deepseekDir,
+				}),
+				record({
+					key: 'claude-code:local:/claude:mine',
+					provider: 'claude-code',
+					nativeSessionId: 'mine',
+					ownerId: 'claude-owner',
+				}),
+			];
+			const sessions = [claude, deepseek];
+			const [tree] = buildProjectSessionTree({ sessions, groups: [project], history });
+			expect(tree.agents.map((agent) => [agent.id, agent.provider])).toEqual([
+				['claude-owner', 'claude-code'],
+				['deepseek-owner', 'deepseek'],
+			]);
+			const providerOf = (match: (row: (typeof tree.conversations)[number]) => boolean) =>
+				tree.conversations.find(match)?.provider;
+			expect(providerOf((row) => row.tabId === 'deepseek-tab')).toBe('deepseek');
+			expect(providerOf((row) => row.tabId === 'claude-tab')).toBe('claude-code');
+			expect(providerOf((row) => row.nativeSessionId === 'owned')).toBe('deepseek');
+			expect(providerOf((row) => row.nativeSessionId === 'orphan')).toBe('deepseek');
+			expect(providerOf((row) => row.nativeSessionId === 'mine')).toBe('claude-code');
+
+			const [filtered] = buildProjectSessionTree({
+				sessions,
+				groups: [project],
+				history,
+				providerFilter: 'deepseek',
+			});
+			expect(filtered.conversations.map((row) => row.tabId ?? row.nativeSessionId)).toEqual(
+				expect.arrayContaining(['deepseek-tab', 'owned', 'orphan'])
+			);
+			expect(filtered.conversations).toHaveLength(3);
+			expect(providersInHistory(sessions, history)).toEqual(['claude-code', 'deepseek']);
+		});
+
 		it('lists history with no runner directly under the project, with no configuration level', () => {
 			const projects = buildProjectSessionTree({
 				sessions: [],
@@ -483,6 +550,35 @@ describe('project conversation navigation', () => {
 		expect(sidebarSessionEquality([before], [{ ...before, projectRoot: '/another/project' }])).toBe(
 			false
 		);
+		// Becoming a DeepSeek preset (or moving its account) changes provider marks and history rows.
+		const deepseek = {
+			...before,
+			toolType: 'claude-code' as const,
+			customEnvVars: {
+				ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+				CLAUDE_CONFIG_DIR: '/data/accounts/deepseek-1',
+			},
+		};
+		expect(sidebarSessionEquality([{ ...before, toolType: 'claude-code' }], [deepseek])).toBe(
+			false
+		);
+		expect(
+			sidebarSessionEquality(
+				[deepseek],
+				[
+					{
+						...deepseek,
+						customEnvVars: { ...deepseek.customEnvVars, CLAUDE_CONFIG_DIR: '/data/accounts/x' },
+					},
+				]
+			)
+		).toBe(false);
+		expect(
+			sidebarSessionEquality(
+				[deepseek],
+				[{ ...deepseek, customEnvVars: { ...deepseek.customEnvVars } }]
+			)
+		).toBe(true);
 		expect(
 			sidebarSessionEquality(
 				[before],

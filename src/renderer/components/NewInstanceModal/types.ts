@@ -183,4 +183,9 @@ export interface AgentPickerGridProps {
 	/** Codex automatic usage resets, per agent id. Defaults off when absent. */
 	codexAutoResetByAgent?: Record<string, boolean>;
 	onCodexAutoResetChange?: (agentId: string, value: boolean) => void;
+	/**
+	 * A preset that runs on Claude Code (DeepSeek), drawn right after the Claude
+	 * Code row so it only appears where Claude Code itself does.
+	 */
+	claudePresetRow?: React.ReactNode;
 }

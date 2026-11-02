@@ -1,4 +1,5 @@
 import type { AITab, Session } from '../types';
+import { sessionProviderId } from '../../shared/agentPresets';
 
 // Fields on Session that the sidebar (SessionList, useSessionCategories) actually
 // reads to render. Streaming-heavy fields (aiLogs, shellLogs, workLog, usageStats,
@@ -57,7 +58,10 @@ export function sidebarSessionEquality(a: Session[], b: Session[]): boolean {
 			x.isGitRepo !== y.isGitRepo ||
 			x.isLive !== y.isLive ||
 			x.inputMode !== y.inputMode ||
-			x.activeTabId !== y.activeTabId
+			x.activeTabId !== y.activeTabId ||
+			// Provider identity and the account dir decide DeepSeek marks and history rows.
+			sessionProviderId(x) !== sessionProviderId(y) ||
+			x.customEnvVars?.CLAUDE_CONFIG_DIR !== y.customEnvVars?.CLAUDE_CONFIG_DIR
 		) {
 			return false;
 		}

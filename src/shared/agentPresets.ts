@@ -30,6 +30,24 @@ export function isDeepSeekAgent(toolType: string, env?: Record<string, string>):
 	return toolType === 'claude-code' && env?.ANTHROPIC_BASE_URL === DEEPSEEK_PRESET.baseUrl;
 }
 
+/**
+ * The provider a person sees. A DeepSeek preset runs Claude Code, so its
+ * `toolType` stays `claude-code` for spawning, parsing and history; anything
+ * that NAMES or GROUPS by provider (labels, marks, filters, "new conversation"
+ * choices) asks this instead, or DeepSeek is shown as Claude Code.
+ */
+export function agentProviderId(toolType: string, env?: Record<string, string>): string {
+	return isDeepSeekAgent(toolType, env) ? DEEPSEEK_PRESET.id : toolType;
+}
+
+/** {@link agentProviderId} for an agent record. */
+export function sessionProviderId(session: {
+	toolType: string;
+	customEnvVars?: Record<string, string>;
+}): string {
+	return agentProviderId(session.toolType, session.customEnvVars);
+}
+
 export function validateDeepSeekPreset(request: DeepSeekPresetRequest): void {
 	if (
 		typeof request.apiKey !== 'string' ||

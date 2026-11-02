@@ -53,13 +53,74 @@ export const settings = {
 		'System-wide shortcut that brings Maestro to the foreground from any app. Works on macOS, Windows, and Linux. Leave blank to disable. (Tip: pick something with two modifiers, e.g. {example}, to avoid clashes.)',
 	'settings.general.hotkey.empty': 'Click to set hotkey',
 
-	// Conductor profile
-	'settings.general.profile.heading': 'Conductor Profile (aka, About Me)',
+	// About Me (conductorProfile)
+	'settings.general.profile.heading': 'About Me',
 	'settings.general.profile.description':
-		'Tell us a little about yourself so that agents created under Maestro know how to work and communicate with you. As the conductor, you orchestrate the symphony of AI agents. (Optional, max 5000 characters)',
-	'settings.general.profile.aria': 'Conductor Profile',
+		'Who you are, how you like to work, and instructions you always want followed. Every agent Maestro starts reads it.',
+	'settings.general.profile.aria': 'About Me',
 	'settings.general.profile.placeholder':
 		"e.g., I'm a senior developer working on a React/TypeScript project. I prefer concise explanations and clean code patterns...",
+	'settings.general.profile.tokens': '~{tokens} tokens',
+	'settings.general.profile.saving': 'Saving…',
+	'settings.general.profile.saved': 'Saved',
+	'settings.general.profile.saveFailed': 'Not saved: {error}',
+	'settings.general.profile.saveMarker':
+		'Not saved: remove the maestro:about-me marker lines. Maestro uses them to find its own section.',
+	'settings.general.profile.nativeTitle': 'Native instruction files',
+	'settings.general.profile.nativeDescription':
+		'Claude Code and Codex read these files each time they start, in Maestro and in your own terminal. Maestro writes About Me only between its own markers and leaves the rest of each file as it is.',
+	'settings.general.profile.checking': 'Checking files…',
+	'settings.general.profile.checkAgain': 'Check again',
+	'settings.general.profile.statusFailed': 'Could not check the files: {error}',
+	'settings.general.profile.noFiles':
+		'No Claude Code or Codex account folders were found on this computer.',
+	'settings.general.profile.state.synced': 'Up to date',
+	'settings.general.profile.state.empty': 'No section',
+	'settings.general.profile.state.pending': 'Needs update',
+	'settings.general.profile.state.unconfirmed': 'Needs your OK',
+	'settings.general.profile.state.external': 'Edited outside Maestro',
+	'settings.general.profile.state.overridden': 'Overridden',
+	'settings.general.profile.state.missing': 'Folder missing',
+	'settings.general.profile.state.broken': 'Markers broken',
+	'settings.general.profile.state.error': 'Cannot read',
+	'settings.general.profile.state.unrecorded': 'Not recorded',
+	'settings.general.profile.realFile': 'Real file: {path}',
+	'settings.general.profile.usedBy': 'Used by {names}',
+	'settings.general.profile.usedByMore': 'Used by {names} and {count} more',
+	'settings.general.profile.usedByNone': 'No Maestro agent uses this account',
+	'settings.general.profile.consentNew': 'Add an About Me section to this file',
+	'settings.general.profile.consentForeign': 'Replace the existing About Me section',
+	'settings.general.profile.consentEdited': 'Replace the section that was edited outside Maestro',
+	'settings.general.profile.noSection':
+		'This file has no About Me section yet. Maestro will add one at the end.',
+	'settings.general.profile.showSection': 'Show current section',
+	'settings.general.profile.hideSection': 'Hide current section',
+	'settings.general.profile.missingHint': 'Maestro does not create account folders.',
+	'settings.general.profile.brokenHint':
+		'Fix or remove the maestro:about-me markers in this file, then check again.',
+	'settings.general.profile.errorHint': 'Could not read this file: {error}',
+	'settings.general.profile.unrecordedHint':
+		'Written, but Maestro could not record it: {error}. Check again before writing.',
+	'settings.general.profile.overrideWarning':
+		'Codex reads {path} instead, because it is not empty. This file is not used until you empty that one.',
+	'settings.general.profile.writeNone': 'Write to files',
+	'settings.general.profile.writeOne': 'Write to {count} file',
+	'settings.general.profile.write': 'Write to {count} files',
+	'settings.general.profile.removeOne': 'Remove from {count} file',
+	'settings.general.profile.remove': 'Remove from {count} files',
+	'settings.general.profile.writing': 'Writing…',
+	'settings.general.profile.wroteOne': 'Wrote {count} file.',
+	'settings.general.profile.wrote': 'Wrote {count} files.',
+	'settings.general.profile.removedOne': 'Removed the section from {count} file.',
+	'settings.general.profile.removed': 'Removed the section from {count} files.',
+	'settings.general.profile.partial':
+		'Wrote {written} of {total} files. The others are marked below.',
+	'settings.general.profile.upToDate': 'All files are already up to date.',
+	'settings.general.profile.restart':
+		'Restart any claude or codex that is already running so it reads the change.',
+	'settings.general.profile.profileChanged':
+		'About Me changed in another window or the CLI while writing. Check it, then write again.',
+	'settings.general.profile.applyFailed': 'Could not write: {error}',
 
 	// Maestro CLI
 	'settings.general.cli.description':

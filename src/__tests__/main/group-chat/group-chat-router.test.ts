@@ -80,6 +80,7 @@ import {
 	getGroupChatReadOnlyState,
 	clearPendingParticipants,
 	setGetSessionsCallback,
+	setGetModeratorSettingsCallback,
 	setSshStore,
 	setModeratorResponseTimeout,
 	clearModeratorResponseTimeout,
@@ -109,6 +110,8 @@ import {
 import { readLog } from '../../../main/group-chat/group-chat-log';
 import { AgentDetector } from '../../../main/agents';
 import { groupChatEmitters } from '../../../main/ipc/handlers/groupChat';
+import { createAboutMeService } from '../../../main/about-me';
+import { nativeAboutMePointer } from '../../../shared/aboutMe';
 import { getPrompt } from '../../../main/prompt-manager';
 
 describe('group-chat-router', () => {
@@ -186,6 +189,7 @@ describe('group-chat-router', () => {
 		vi.clearAllMocks();
 		groupChatEmitters.emitMessage = undefined;
 		setGetSessionsCallback(() => []);
+		setGetModeratorSettingsCallback(() => ({ conductorProfile: '' }));
 	});
 
 	// Helper to track created chats for cleanup
@@ -201,6 +205,56 @@ describe('group-chat-router', () => {
 		await spawnModerator(chat, mockProcessManager);
 		return chat;
 	}
+
+	it.each(['claude-code', 'codex'] as const)(
+		'uses the actual %s moderator account for both initial and synthesis profile injection',
+		async (provider) => {
+			const account = await fs.realpath(testDir);
+			const file = path.join(account, provider === 'claude-code' ? 'CLAUDE.md' : 'AGENTS.md');
+			const profile = 'Synthetic moderator preference';
+			const block = `<!-- maestro:about-me:start -->\n${profile}\n<!-- maestro:about-me:end -->`;
+			await fs.writeFile(file, block);
+			const values: Record<string, unknown> = {
+				conductorProfile: profile,
+				aboutMeApplied: { [file]: { provider, resolvedPath: file, block } },
+			};
+			const aboutMe = createAboutMeService({
+				settingsStore: {
+					get: (key: string, fallback: unknown) => values[key] ?? fallback,
+					set: vi.fn(),
+				} as never,
+				getFiles: async () => [],
+				getAccountDirLayers: () => ({ homeDir: account, env: {} }),
+			});
+			const callback = vi.fn(async (agent) => ({
+				conductorProfile: await aboutMe.promptProfile(agent),
+			}));
+			setGetModeratorSettingsCallback(callback);
+			const chat = await createTestChatWithModerator('Native profile', provider);
+			const customEnvVars = {
+				[provider === 'claude-code' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME']: account,
+			};
+			await updateGroupChat(chat.id, { moderatorConfig: { customEnvVars } });
+			for (const synthesize of [false, true]) {
+				mockProcessManager.spawn.mockClear();
+				if (synthesize)
+					await spawnModeratorSynthesis(chat.id, mockProcessManager, mockAgentDetector);
+				else await routeUserMessage(chat.id, 'Hello', mockProcessManager, mockAgentDetector);
+				expect(callback).toHaveBeenLastCalledWith({
+					toolType: provider,
+					customEnvVars,
+					sshRemote: false,
+				});
+				const prompt = mockProcessManager.spawn.mock.calls[0]?.[0]?.prompt ?? '';
+				expect(prompt).toContain(nativeAboutMePointer(provider));
+				expect(prompt).not.toContain(profile);
+			}
+			await fs.writeFile(file, block.replace(profile, 'External edit'));
+			mockProcessManager.spawn.mockClear();
+			await spawnModeratorSynthesis(chat.id, mockProcessManager, mockAgentDetector);
+			expect(mockProcessManager.spawn.mock.calls[0]?.[0]?.prompt).toContain(profile);
+		}
+	);
 
 	// ===========================================================================
 	// Test 5.1: extractMentions finds @mentions
@@ -1779,6 +1833,7 @@ describe('group-chat-router', () => {
 			const chat = await createTestChatWithModerator('Unknown Agent Test');
 			await addParticipant(chat.id, 'Client', 'claude-code', mockProcessManager);
 			setGetSessionsCallback(() => []);
+			setGetModeratorSettingsCallback(() => ({ conductorProfile: '' }));
 			mockProcessManager.spawn.mockClear();
 
 			await routeModeratorResponse(
@@ -1921,6 +1976,7 @@ describe('group-chat-router', () => {
 		afterEach(() => {
 			// Clear the module-level callbacks after SSH tests
 			setGetSessionsCallback(() => []);
+			setGetModeratorSettingsCallback(() => ({ conductorProfile: '' }));
 			mockWrapSpawnWithSsh.mockReset();
 		});
 

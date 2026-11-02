@@ -45,6 +45,7 @@ import {
 } from '../../stores/claudeUsageStore';
 import { formatCost, formatFutureTime } from '../../../shared/formatters';
 import { getAgentDisplayName } from '../../../shared/agentMetadata';
+import { sessionProviderId } from '../../../shared/agentPresets';
 import {
 	computeTabConversationStats,
 	formatConversationDuration,
@@ -412,11 +413,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 						>
 							<span
 								role="img"
-								aria-label={getAgentDisplayName(activeSession.toolType)}
+								aria-label={getAgentDisplayName(sessionProviderId(activeSession))}
 								className="w-4 h-4 shrink-0 flex items-center justify-center"
 							>
 								<AgentLogo
-									agentId={activeSession.toolType}
+									agentId={sessionProviderId(activeSession)}
 									supported
 									detected
 									theme={theme}
@@ -722,7 +723,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 														className="text-xs font-mono"
 														style={{ color: theme.colors.textMain }}
 													>
-														{getAgentDisplayName(activeSession.toolType)}
+														{getAgentDisplayName(sessionProviderId(activeSession))}
 													</span>
 												</div>
 												{activeProfile && activeProfileLabel && (

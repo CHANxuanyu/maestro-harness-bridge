@@ -13,9 +13,18 @@ export const settingsSearchZhCN: SettingsSearchOverlay = {
 		keywords: ['语言', '中文', '英文', '界面', '本地化', '翻译'],
 	},
 	'general-conductor-profile': {
-		label: '指挥家档案（关于我）',
-		description: '向智能体介绍你自己，让它们知道如何与你协作',
-		keywords: ['档案', '个人资料', '关于我', '自我介绍'],
+		label: '关于我',
+		description: '向智能体介绍你自己，并写入 Claude Code 和 Codex 的原生指令文件',
+		keywords: [
+			'档案',
+			'个人资料',
+			'关于我',
+			'自我介绍',
+			'指挥家档案',
+			'原生指令文件',
+			'写入文件',
+			'重新检查',
+		],
 	},
 	'general-global-show-hotkey': {
 		label: '唤起 Maestro 的全局快捷键',

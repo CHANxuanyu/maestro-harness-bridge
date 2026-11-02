@@ -215,6 +215,16 @@ beforeEach(() => {
 				content: 'Maestro System Context: {{AGENT_NAME}}',
 			}),
 		},
+		// The system prompt asks whether the agent's native file holds About Me.
+		settings: {
+			aboutMe: vi.fn().mockResolvedValue({
+				success: true,
+				content: 'default',
+				estimatedTokens: 2,
+				files: [],
+				native: { loaded: false },
+			}),
+		},
 	};
 
 	// Spy on addEventListener/removeEventListener for event listener tests

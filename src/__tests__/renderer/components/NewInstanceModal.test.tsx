@@ -13,6 +13,7 @@ import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import type { Theme, Session } from '../../../renderer/types';
 import type { AgentConfig } from '../../../renderer/types';
+import { DEEPSEEK_PRESET } from '../../../shared/agentPresets';
 
 // lucide-react icons are mocked globally in src/__tests__/setup.ts using a Proxy
 
@@ -849,6 +850,149 @@ describe('NewInstanceModal', () => {
 			});
 
 			expect(dirInput).toHaveValue('/existing/path');
+		});
+	});
+
+	describe('DeepSeek preset', () => {
+		const prepared = {
+			toolType: 'claude-code' as const,
+			customModel: 'deepseek-v4-pro',
+			customEnvVars: {
+				ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+				ANTHROPIC_AUTH_TOKEN: 'sk-secret-test',
+				CLAUDE_CONFIG_DIR: '/data/accounts/deepseek-1',
+			},
+		};
+		let prepare: ReturnType<typeof vi.fn>;
+
+		beforeEach(() => {
+			prepare = vi.fn().mockResolvedValue(prepared);
+			(window.maestro.agents as Record<string, unknown>).prepareDeepSeekPreset = prepare;
+		});
+
+		const renderModal = () =>
+			render(
+				<NewInstanceModal
+					isOpen={true}
+					onClose={onClose}
+					onCreate={onCreate}
+					theme={theme}
+					existingSessions={[]}
+				/>
+			);
+
+		const deepseekOption = async () =>
+			within(await screen.findByTestId('deepseek-preset-row')).getByRole('option');
+
+		const fillForm = () => {
+			fireEvent.change(screen.getByLabelText('Agent Name'), { target: { value: 'DeepSeek' } });
+			fireEvent.change(screen.getByPlaceholderText('Select directory...'), {
+				target: { value: '/projects/app' },
+			});
+		};
+
+		it('creates a DeepSeek agent from its own row, preparing the account only on Create', async () => {
+			renderModal();
+			fireEvent.click(await deepseekOption());
+			expect(await deepseekOption()).toHaveAttribute('aria-selected', 'true');
+			// Running on Claude Code does not make the Claude Code row the selection.
+			expect(screen.getByRole('option', { name: /^Claude Code/ })).toHaveAttribute(
+				'aria-selected',
+				'false'
+			);
+			fillForm();
+			expect(screen.getByText('Create Agent').closest('button')).toBeDisabled();
+
+			const key = screen.getByLabelText('DeepSeek API key');
+			expect(key).toHaveAttribute('type', 'password');
+			fireEvent.change(key, { target: { value: 'sk-secret-test' } });
+			const model = screen.getByLabelText('Model');
+			expect(model).toHaveTextContent(DEEPSEEK_PRESET.defaultModel);
+			fireEvent.click(model);
+			fireEvent.click(await screen.findByRole('option', { name: 'deepseek-v4-pro' }));
+			expect(prepare).not.toHaveBeenCalled();
+
+			await act(async () => {
+				fireEvent.click(screen.getByText('Create Agent'));
+			});
+
+			expect(prepare).toHaveBeenCalledTimes(1);
+			expect(prepare).toHaveBeenCalledWith({ apiKey: 'sk-secret-test', model: 'deepseek-v4-pro' });
+			expect(onCreate).toHaveBeenCalledWith(
+				'claude-code',
+				'/projects/app',
+				'DeepSeek',
+				undefined,
+				undefined,
+				undefined, // customPath: the preset runs the detected Claude Code
+				undefined, // customArgs: refused by the preset
+				prepared.customEnvVars,
+				'deepseek-v4-pro',
+				undefined,
+				undefined,
+				expect.objectContaining({ enabled: false, remoteId: null }),
+				undefined, // effort: the preset documents none
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				true,
+				true,
+				undefined,
+				false
+			);
+			expect(onClose).toHaveBeenCalled();
+		});
+
+		it('creates nothing when the dialog is cancelled after choosing DeepSeek', async () => {
+			renderModal();
+			fireEvent.click(await deepseekOption());
+			fireEvent.change(screen.getByLabelText('DeepSeek API key'), {
+				target: { value: 'sk-secret-test' },
+			});
+			fireEvent.click(screen.getByText('Cancel'));
+			expect(prepare).not.toHaveBeenCalled();
+			expect(onCreate).not.toHaveBeenCalled();
+		});
+
+		it('keeps the dialog open and names the failure without the key', async () => {
+			prepare.mockRejectedValue(
+				new Error(
+					"Error invoking remote method 'agents:prepareDeepSeekPreset': Error: Select a model from the DeepSeek preset catalog"
+				)
+			);
+			renderModal();
+			fireEvent.click(await deepseekOption());
+			fillForm();
+			fireEvent.change(screen.getByLabelText('DeepSeek API key'), {
+				target: { value: 'sk-secret-test' },
+			});
+			await act(async () => {
+				fireEvent.click(screen.getByText('Create Agent'));
+			});
+
+			const alert = await screen.findByRole('alert');
+			expect(alert).toHaveTextContent(
+				'Could not create the DeepSeek agent: Select a model from the DeepSeek preset catalog'
+			);
+			expect(alert.textContent).not.toContain('sk-secret-test');
+			expect(alert.textContent).not.toContain('Error invoking remote method');
+			expect(onCreate).not.toHaveBeenCalled();
+			expect(onClose).not.toHaveBeenCalled();
+		});
+
+		it('cannot be chosen without Claude Code', async () => {
+			vi.mocked(window.maestro.agents.detect).mockResolvedValue([
+				createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: false }),
+				createAgentConfig({ id: 'codex', name: 'Codex', available: true }),
+			]);
+			renderModal();
+			await showAllProviders();
+			const option = await deepseekOption();
+			expect(option).toHaveAttribute('aria-disabled', 'true');
+			expect(within(screen.getByTestId('deepseek-preset-row')).getByText('Needs Claude Code'));
+			fireEvent.click(option);
+			expect(option).toHaveAttribute('aria-selected', 'false');
 		});
 	});
 

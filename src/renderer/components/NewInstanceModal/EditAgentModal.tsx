@@ -25,6 +25,7 @@ import { SshRemoteSelector } from '../shared/SshRemoteSelector';
 import { getEffortConfigKey } from '../../utils/agentEffort';
 import { safeClipboardWrite } from '../../utils/clipboard';
 import { getAgentDisplayName } from '../../../shared/agentMetadata';
+import { DEEPSEEK_PRESET, isDeepSeekAgent } from '../../../shared/agentPresets';
 import { useRemotePathValidation } from '../../hooks/agent/useRemotePathValidation';
 import { NudgeMessageField } from './NudgeMessageField';
 import { RemotePathStatus } from './RemotePathStatus';
@@ -133,6 +134,9 @@ export function EditAgentModal({
 
 	// Track whether provider has been changed from the original
 	const providerChanged = session ? selectedToolType !== session.toolType : false;
+	// A DeepSeek preset is identified by the env it was created with. It runs on
+	// Claude Code but offers only the preset catalog, and its provider is fixed.
+	const deepseek = !!session && isDeepSeekAgent(session.toolType, session.customEnvVars);
 
 	// Resolve the auto-detected maestro-p path so the Batch Mode toggle can show
 	// it as helper text in the path-override input.
@@ -167,7 +171,9 @@ export function EditAgentModal({
 				setAgent(foundAgent || null);
 
 				// Load models if agent supports model selection
-				if (foundAgent?.capabilities?.supportsModelSelection) {
+				if (deepseek && !isProviderSwitch) {
+					setAvailableModels([...DEEPSEEK_PRESET.models]);
+				} else if (foundAgent?.capabilities?.supportsModelSelection) {
 					setLoadingModels(true);
 					window.maestro.agents
 						.getModels(activeToolType)
@@ -328,7 +334,7 @@ export function EditAgentModal({
 		return () => {
 			stale = true;
 		};
-	}, [isOpen, session, selectedToolType]);
+	}, [isOpen, session, selectedToolType, deepseek]);
 
 	// Populate form when session changes or modal opens
 	useEffect(() => {
@@ -594,6 +600,7 @@ export function EditAgentModal({
 
 	// Refresh available models
 	const refreshModels = useCallback(async () => {
+		if (deepseek) return;
 		if (!agent?.capabilities?.supportsModelSelection) return;
 		setLoadingModels(true);
 		try {
@@ -604,7 +611,7 @@ export function EditAgentModal({
 		} finally {
 			setLoadingModels(false);
 		}
-	}, [selectedToolType, agent]);
+	}, [selectedToolType, agent, deepseek]);
 
 	// Refresh agent detection
 	const handleRefreshAgent = useCallback(async () => {
@@ -647,7 +654,7 @@ export function EditAgentModal({
 
 	if (!isOpen || !session) return null;
 
-	const agentName = getAgentDisplayName(selectedToolType);
+	const agentName = getAgentDisplayName(deepseek ? DEEPSEEK_PRESET.id : selectedToolType);
 
 	return (
 		<Modal
@@ -728,22 +735,32 @@ export function EditAgentModal({
 					>
 						{uiText('workflows.sessions.agentProvider')}
 					</div>
-					<select
-						value={selectedToolType}
-						onChange={(e) => setSelectedToolType(e.target.value as ToolType)}
-						className="w-full p-2 rounded border bg-transparent outline-none text-sm"
-						style={{
-							borderColor: theme.colors.border,
-							color: theme.colors.textMain,
-							backgroundColor: theme.colors.bgMain,
-						}}
-					>
-						{SUPPORTED_AGENTS.map((agentId) => (
-							<option key={agentId} value={agentId}>
-								{getAgentDisplayName(agentId)}
-							</option>
-						))}
-					</select>
+					{deepseek ? (
+						<div
+							data-testid="edit-agent-provider-fixed"
+							className="w-full p-2 rounded border text-sm"
+							style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+						>
+							{DEEPSEEK_PRESET.name}
+						</div>
+					) : (
+						<select
+							value={selectedToolType}
+							onChange={(e) => setSelectedToolType(e.target.value as ToolType)}
+							className="w-full p-2 rounded border bg-transparent outline-none text-sm"
+							style={{
+								borderColor: theme.colors.border,
+								color: theme.colors.textMain,
+								backgroundColor: theme.colors.bgMain,
+							}}
+						>
+							{SUPPORTED_AGENTS.map((agentId) => (
+								<option key={agentId} value={agentId}>
+									{getAgentDisplayName(agentId)}
+								</option>
+							))}
+						</select>
+					)}
 					{providerChanged && (
 						<div
 							className="mt-2 p-2 rounded border text-xs flex items-start gap-2"

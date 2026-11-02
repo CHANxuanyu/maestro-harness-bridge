@@ -1,6 +1,6 @@
 import { substituteTemplateVariables } from './templateVariables';
 import { gitService } from '../services/git';
-import { useSettingsStore } from '../stores/settingsStore';
+import { conductorProfileForAgent } from '../services/aboutMe';
 
 /**
  * Prepare the Maestro system prompt for an agent spawn.
@@ -54,7 +54,7 @@ export async function prepareMaestroSystemPrompt(opts: {
 		}
 	}
 
-	const conductorProfile = useSettingsStore.getState().conductorProfile;
+	const conductorProfile = await conductorProfileForAgent(opts.session);
 
 	const base = substituteTemplateVariables(result.content, {
 		session: opts.session as any,

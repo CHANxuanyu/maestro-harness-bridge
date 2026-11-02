@@ -30,6 +30,7 @@ import { getConnectingColor } from '../utils/theme';
 import { hasUnreadVisibleTab } from '../utils/tabHelpers';
 import { abbreviateGroupName } from '../../shared/formatters';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
+import { sessionProviderId } from '../../shared/agentPresets';
 import type { Session, Group, Theme } from '../types';
 import { getT, useT } from '../i18n';
 
@@ -532,7 +533,7 @@ export const SessionItem = memo(function SessionItem({
 						)}
 						<Activity className="row-provider-icon w-3 h-3" />{' '}
 						<span className="row-provider">
-							{getAgentDisplayName(session.toolType)}
+							{getAgentDisplayName(sessionProviderId(session))}
 							{session.sessionSshRemoteConfig?.enabled ? ' (SSH)' : ''}
 						</span>
 					</div>

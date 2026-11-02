@@ -6,12 +6,23 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import os from 'node:os';
+import path from 'node:path';
+import type { AgentAccountDirLayers } from '../../../shared/agentAccountDir';
 import type { CueExecutionConfig } from '../../../main/cue/cue-executor';
 import type { CueEvent, CueSubscription } from '../../../main/cue/cue-types';
 import type { SessionInfo } from '../../../shared/types';
 import type { TemplateContext } from '../../../shared/templateVariables';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
+
+const mockGetAccountLayers = vi.fn<() => AgentAccountDirLayers>(() => ({
+	homeDir: path.join(os.tmpdir(), 'synthetic-cue-home'),
+	env: {},
+}));
+vi.mock('../../../main/agents/provider-account-dirs', () => ({
+	getAgentAccountDirLayers: () => mockGetAccountLayers(),
+}));
 
 const mockGetAgentDefinition = vi.fn();
 const mockGetAgentCapabilities = vi.fn(() => ({
@@ -150,6 +161,30 @@ describe('cue-spawn-builder', () => {
 	});
 
 	describe('buildSpawnSpec', () => {
+		it.each(['claude-code', 'codex'])(
+			'uses the %s account selected for the native About Me check',
+			async (toolType) => {
+				const account = path.join(os.tmpdir(), 'synthetic-cue-global');
+				const key = toolType === 'claude-code' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+				mockGetAccountLayers.mockReturnValueOnce({
+					homeDir: path.join(os.tmpdir(), 'synthetic-cue-home'),
+					env: {},
+					globalShellEnvVars: { [key]: account },
+				});
+				try {
+					const result = await buildSpawnSpec(createConfig({ toolType }), 'profile pointer');
+					expect(result.ok).toBe(true);
+					if (result.ok) expect(result.spec.env[key]).toBe(account);
+				} finally {
+					mockGetAccountLayers.mockReset();
+					mockGetAccountLayers.mockReturnValue({
+						homeDir: path.join(os.tmpdir(), 'synthetic-cue-home'),
+						env: {},
+					});
+				}
+			}
+		);
+
 		it('returns error for unknown agent type', async () => {
 			mockGetAgentDefinition.mockReturnValue(undefined);
 

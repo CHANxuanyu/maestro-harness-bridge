@@ -30,6 +30,7 @@ import { CrossTabSearchModal } from '../CrossTabSearchModal';
 import type { CrossTabSearchJumpTarget } from '../CrossTabSearchModal';
 import { SnoozeTabModal } from '../SnoozeTabModal';
 import { ModelEffortModal } from '../ModelEffortModal';
+import { AiHandoffModal } from '../AiHandoffModal';
 import { SnoozedTabsModal } from '../SnoozedTabsModal';
 import { snoozeTabWithMirror } from '../../services/snoozeActions';
 import { PromptComposerModal } from '../PromptComposerModal';
@@ -552,6 +553,10 @@ export const AppUtilityModals = memo(function AppUtilityModals({
 		() => useModalStore.getState().closeModal('modelEffort'),
 		[]
 	);
+	// "Continue with another AI" resolves its tab and targets itself too.
+	const aiHandoffOpen = useModalStore(selectModalOpen('aiHandoff'));
+	const aiHandoffData = useModalStore(selectModalData('aiHandoff'));
+	const closeAiHandoff = useCallback(() => useModalStore.getState().closeModal('aiHandoff'), []);
 	const closeSnoozeTab = useCallback(() => useModalStore.getState().closeModal('snoozeTab'), []);
 	const closeSnoozedTabs = useCallback(
 		() => useModalStore.getState().closeModal('snoozedTabs'),
@@ -895,6 +900,15 @@ export const AppUtilityModals = memo(function AppUtilityModals({
 			{/* --- MODEL & EFFORT (keyboard-only per-tab tuning) --- */}
 			{modelEffortOpen && modelEffortData && (
 				<ModelEffortModal theme={theme} tabId={modelEffortData.tabId} onClose={closeModelEffort} />
+			)}
+
+			{aiHandoffOpen && aiHandoffData && (
+				<AiHandoffModal
+					theme={theme}
+					sessionId={aiHandoffData.sessionId}
+					tabId={aiHandoffData.tabId}
+					onClose={closeAiHandoff}
+				/>
 			)}
 
 			{/* --- SNOOZED TABS (list across all agents) --- */}

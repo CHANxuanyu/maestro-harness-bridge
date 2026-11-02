@@ -1,4 +1,5 @@
 import { createAboutMeService } from './about-me';
+import { getAgentAccountDirLayers } from './agents/provider-account-dirs';
 import { getNativeInstructionFiles } from './agents/native-instructions';
 import { notifyPeerWindows } from './ipc/handlers/persistence';
 import { createDesktopAiHandoff } from './ai-handoff-desktop';
@@ -643,6 +644,7 @@ const debugPackageDeps: DebugPackageDependencies = {
 
 const aboutMe = createAboutMeService({
 	settingsStore: store,
+	getAccountDirLayers: getAgentAccountDirLayers,
 	getFiles: () =>
 		getNativeInstructionFiles({
 			userDataDir: app.getPath('userData'),
@@ -1403,6 +1405,13 @@ app
 					// see the note on the notify path above.
 					return cmdResult;
 				}
+
+				templateContext.conductorProfile =
+					(await aboutMe.promptProfile({
+						toolType: storedSession.toolType,
+						customEnvVars: storedSession.customEnvVars,
+						sshRemote: !!storedSession.sessionSshRemoteConfig?.enabled,
+					})) || undefined;
 
 				const agentConfigValues = getAgentConfigForAgent(storedSession.toolType);
 

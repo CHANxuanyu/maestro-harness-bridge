@@ -165,3 +165,89 @@ test('claude handoff: six directions stay drafts until explicit send', async ({ 
 	for (const [file, bytes] of before) expect(fs.readFileSync(file)).toEqual(bytes);
 	expect(native.files('codex')).toHaveLength(2);
 });
+
+// The dialog is only a way in to the same draft service: open it from the
+// palette, pick the other provider, and land on an unsent draft that explains
+// itself. Sending is the composer's ordinary Send.
+test('claude handoff dialog: the palette prepares an unsent draft that the normal Send sends', async ({
+	native,
+}) => {
+	test.skip(native.real, 'The dialog adds no CLI behaviour; claude handoff: covers the real CLIs');
+	const { page } = native;
+	const codexId = await native.createAgent('codex');
+	native.scriptTurns([{ answer: 'Original dialog answer.' }]);
+	const claudeId = await native.createAgent('claude');
+	await native.send('Original dialog question.');
+	await expect(native.output().getByText('Original dialog answer.', { exact: true })).toBeVisible();
+	await expect(page.getByTestId('stop-turn-button')).toHaveCount(0);
+	const source = (await native.cli('tab', 'show', 'active', '--agent', claudeId)).tab;
+	const sourceLogs = () =>
+		page.evaluate(
+			async ({ claudeId, sourceTab }) =>
+				(await window.maestro.sessions.getAll())
+					.find((agent: { id: string }) => agent.id === claudeId)
+					.aiTabs.find((tab: { id: string }) => tab.id === sourceTab).logs,
+			{ claudeId, sourceTab: source.tabId }
+		);
+	await expect.poll(async () => (await sourceLogs()).length).toBeGreaterThan(1);
+	const sourceBefore = await sourceLogs();
+	const claudeFile = await native.oneTranscript('claude');
+	const claudeBytes = fs.readFileSync(claudeFile);
+	expect(native.files('codex')).toEqual([]);
+
+	await page.keyboard.press('ControlOrMeta+k');
+	await page.keyboard.type('Continue with Another AI');
+	await page.keyboard.press('Enter');
+	const dialog = page.getByTestId('ai-handoff-modal');
+	const codex = dialog.getByRole('radio', { name: /^Codex/ });
+	await expect(codex).toBeChecked();
+	await expect(dialog.getByText('New tab in Native codex', { exact: true })).toBeVisible();
+	await expect(dialog.getByRole('radio')).toHaveCount(1);
+	await dialog.getByRole('button', { name: 'Prepare draft' }).click();
+	await expect(dialog).toHaveCount(0);
+
+	// The user is on the codex draft, nothing has run, and the note says why.
+	await expect(native.input()).toHaveAttribute('placeholder', /^Talking to Native codex/);
+	await expect(native.input()).toHaveValue(/Original dialog question\./);
+	await expect(native.input()).toHaveValue(/Original dialog answer\./);
+	const note = page.getByTestId('handoff-draft-bar');
+	await expect(note).toContainText('Handoff draft');
+	await expect(note).toContainText('from Native claude (Claude Code)');
+	await expect(note).toContainText('tokens');
+	const stored = await page.evaluate(async (codexId) => {
+		const agents = await window.maestro.sessions.getAll();
+		const codexAgent = agents.find((agent: { id: string }) => agent.id === codexId);
+		return {
+			count: agents.length,
+			draft: codexAgent.aiTabs.find((tab: { inputValue: string }) => tab.inputValue),
+			codexTabs: codexAgent.aiTabs.length,
+		};
+	}, codexId);
+	expect(stored.count).toBe(2);
+	expect(stored.codexTabs).toBe(2);
+	expect(stored.draft).toMatchObject({
+		agentSessionId: null,
+		logs: [],
+		handoffDraft: {
+			sourceAgentId: claudeId,
+			sourceName: 'Native claude',
+			sourceProvider: 'claude-code',
+			budgetTokens: 8000,
+			omittedEntries: 0,
+		},
+	});
+	expect(await sourceLogs()).toEqual(sourceBefore);
+	expect(fs.readFileSync(claudeFile)).toEqual(claudeBytes);
+	expect(native.files('codex')).toEqual([]);
+
+	native.scriptTurns([{ answer: 'Dialog handoff finished.' }]);
+	await native.input().press('Enter');
+	await expect(
+		native.output().getByText('Dialog handoff finished.', { exact: true })
+	).toBeVisible();
+	await expect(page.getByTestId('stop-turn-button')).toHaveCount(0);
+	await expect(note).toHaveCount(0);
+	const codexFile = await native.oneTranscript('codex');
+	expect(fs.readFileSync(codexFile, 'utf8')).toContain('Original dialog question.');
+	expect(fs.readFileSync(claudeFile)).toEqual(claudeBytes);
+});

@@ -93,6 +93,13 @@ export const MODAL_PRIORITIES = {
 	 */
 	MODEL_EFFORT: 872,
 
+	/**
+	 * "Continue with another AI": picks a target for one tab's conversation and
+	 * prepares a draft. Opened from the tab menu, the palette, and the error
+	 * modal (which closes first), so it sits with the per-tab dialogs.
+	 */
+	AI_HANDOFF: 871,
+
 	/** Director's Notes modal - unified history and AI overview */
 	DIRECTOR_NOTES: 848,
 

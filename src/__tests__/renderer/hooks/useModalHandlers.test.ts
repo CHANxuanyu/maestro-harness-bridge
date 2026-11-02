@@ -37,6 +37,7 @@ import { useGroupChatStore } from '../../../renderer/stores/groupChatStore';
 import { useAgentStore } from '../../../renderer/stores/agentStore';
 import { useAgentErrorRecovery } from '../../../renderer/hooks/agent/useAgentErrorRecovery';
 import { gitService } from '../../../renderer/services/git';
+import { registerQuitSave } from '../../../renderer/services/quitSave';
 import type { Session, AITab } from '../../../renderer/types';
 import { createMockAITab as createBaseMockAITab, createMockFileTab } from '../../helpers/mockTab';
 import { createMockSession } from '../../helpers/mockSession';
@@ -341,6 +342,36 @@ describe('useModalHandlers', () => {
 
 			expect(useModalStore.getState().isOpen('quitConfirm')).toBe(false);
 			expect(window.maestro.app.confirmQuit).toHaveBeenCalledOnce();
+		});
+
+		it('handleConfirmQuit lands the pending save before confirming', async () => {
+			const order: string[] = [];
+			(window.maestro.app.confirmQuit as any).mockImplementation(() => order.push('confirmQuit'));
+			let finishSave: () => void = () => {};
+			const unregister = registerQuitSave(
+				() =>
+					new Promise<void>((resolve) => {
+						finishSave = () => {
+							order.push('saved');
+							resolve();
+						};
+					})
+			);
+			try {
+				const { result } = renderHook(() =>
+					useModalHandlers(createInputRef(), createTerminalOutputRef())
+				);
+				act(() => {
+					result.current.handleConfirmQuit();
+				});
+				expect(order).toEqual([]);
+				await act(async () => {
+					finishSave();
+				});
+				expect(order).toEqual(['saved', 'confirmQuit']);
+			} finally {
+				unregister();
+			}
 		});
 
 		it('handleCancelQuit closes quit modal and calls cancelQuit', () => {

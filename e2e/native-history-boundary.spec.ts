@@ -240,9 +240,12 @@ for (const provider of ['claude', 'copilot', 'grok', 'opencode'] as const) {
 			{ agentType, alias, ownerAgentId }
 		);
 		expect(page.sessions.map((session) => session.sessionId)).toEqual([turn.id]);
+		// Copilot and OpenCode title a native session from its answer, not the
+		// prompt, so the row is found by its native ID.
 		await native.page
-			.locator('[data-conversation-kind="history"] button[data-tree-nav]')
-			.filter({ hasText: 'Symlink history' })
+			.locator(
+				`[data-conversation-kind="history"][data-native-session-id="${turn.id}"] button[data-tree-nav]`
+			)
 			.click();
 		await expect(
 			native.output().getByText('Physical history answer.', { exact: true })

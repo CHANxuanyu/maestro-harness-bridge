@@ -32,6 +32,15 @@ test('claude about-me: IPC and CLI preserve native files until explicit consent'
 	const preset = await native.page.evaluate(() =>
 		window.maestro.agents.prepareDeepSeekPreset({ apiKey: 'synthetic-not-used' })
 	);
+	const claudeAgent = await native.createAgent('claude');
+	const codexAgent = await native.createAgent('codex');
+	const nativeRequest = (toolType: 'claude-code' | 'codex'): AboutMeCommand => ({
+		action: 'native',
+		agent: {
+			toolType,
+			customEnvVars: { CLAUDE_CONFIG_DIR: native.claude, CODEX_HOME: native.codex },
+		},
+	});
 	const profileFile = path.join(native.root, 'profile.md');
 	const profile = 'Synthetic preference: concise answers.\n测试偏好';
 	fs.writeFileSync(profileFile, profile);
@@ -53,6 +62,20 @@ test('claude about-me: IPC and CLI preserve native files until explicit consent'
 	).toBe(true);
 	const refused = await command({ action: 'apply', content: profile });
 	expect(refused).toMatchObject({ success: false, code: 'confirmation-required', written: [] });
+	expect(await command(nativeRequest('claude-code'))).toMatchObject({
+		native: { loaded: false, state: 'unconfirmed' },
+	});
+	expect(status.files.find((file) => file.aliases.includes(claudeFile))?.agentIds).toEqual([
+		claudeAgent,
+	]);
+	expect(status.files.find((file) => file.aliases.includes(codexFile))?.agentIds).toEqual([
+		codexAgent,
+	]);
+	expect(status.files.find((file) => file.deepseek)).toMatchObject({
+		providers: ['claude-code'],
+		agentIds: [],
+		deepseek: true,
+	});
 	for (const file of [claudeFile, codexFile]) expect(fs.readFileSync(file)).toEqual(prefix);
 	for (const file of status.files.filter((file) => ![claudeFile, codexFile].includes(file.path)))
 		expect(fs.existsSync(file.path)).toBe(false);
@@ -63,6 +86,18 @@ test('claude about-me: IPC and CLI preserve native files until explicit consent'
 	)) as AboutMeResult;
 	expect(applied.success).toBe(true);
 	expect(applied.written).toHaveLength(6);
+	for (const provider of ['claude-code', 'codex'] as const)
+		expect(await command(nativeRequest(provider))).toMatchObject({
+			success: true,
+			files: [],
+			native: { loaded: true, provider, state: 'synced' },
+		});
+	const override = path.join(native.codex, 'AGENTS.override.md');
+	fs.writeFileSync(override, 'Synthetic override');
+	expect(await command(nativeRequest('codex'))).toMatchObject({
+		native: { loaded: false, state: 'synced', shadowedBy: [override] },
+	});
+	fs.unlinkSync(override);
 	for (const file of [claudeFile, codexFile]) {
 		const bytes = fs.readFileSync(file);
 		expect(bytes.subarray(0, prefix.length)).toEqual(prefix);
@@ -83,6 +118,9 @@ test('claude about-me: IPC and CLI preserve native files until explicit consent'
 		),
 	]);
 	fs.writeFileSync(claudeFile, external);
+	expect(await command(nativeRequest('claude-code'))).toMatchObject({
+		native: { loaded: false, state: 'external-change' },
+	});
 	const blocked = await command({ action: 'apply', content: profile });
 	expect(blocked.success).toBe(false);
 	expect(blocked.files.find((file) => file.aliases.includes(claudeFile))!.state).toBe(
@@ -95,6 +133,9 @@ test('claude about-me: IPC and CLI preserve native files until explicit consent'
 	expect((await native.cli('about-me', 'set', '--clear')).content).toBe('');
 	const cleared = await command({ action: 'apply', content: '' });
 	expect(cleared.success).toBe(true);
+	expect(await command(nativeRequest('codex'))).toMatchObject({
+		native: { loaded: false, state: 'synced' },
+	});
 	for (const file of [claudeFile, codexFile]) expect(fs.readFileSync(file)).toEqual(prefix);
 	for (const file of cleared.files.filter((file) => ![claudeFile, codexFile].includes(file.path)))
 		expect(fs.readFileSync(file.path, 'utf8')).toBe('');

@@ -1406,6 +1406,13 @@ app
 					return cmdResult;
 				}
 
+				templateContext.conductorProfile =
+					(await aboutMe.promptProfile({
+						toolType: storedSession.toolType,
+						customEnvVars: storedSession.customEnvVars,
+						sshRemote: !!storedSession.sessionSshRemoteConfig?.enabled,
+					})) || undefined;
+
 				const agentConfigValues = getAgentConfigForAgent(storedSession.toolType);
 
 				// Resolve the agent's binary the way a tab spawn does: the agent's

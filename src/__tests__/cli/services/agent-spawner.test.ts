@@ -159,11 +159,13 @@ vi.mock('os', async () => {
 // Mock storage service
 const mockGetAgentCustomPath = vi.fn();
 const mockReadAgentConfig = vi.fn<(toolType: string) => Record<string, unknown>>(() => ({}));
+const mockReadSettingValue = vi.fn<(key: string) => unknown>(() => undefined);
 const mockReadSshRemotes = vi.fn<() => unknown[]>(() => []);
 vi.mock('../../../cli/services/storage', () => ({
 	getAgentCustomPath: (...args: unknown[]) => mockGetAgentCustomPath(...args),
 	readAgentConfig: (toolType: string) => mockReadAgentConfig(toolType),
 	readSshRemotes: () => mockReadSshRemotes(),
+	readSettingValue: (key: string) => mockReadSettingValue(key),
 }));
 
 // Mock SSH wrapper so SSH tests don't need real ssh/bash on the test machine
@@ -2265,6 +2267,24 @@ Some text with [x] in it that's not a checkbox
 			expect(args).toContain('--session-level');
 			expect(args).not.toContain('--agent-level');
 		});
+
+		it.each(['claude-code', 'codex'] as const)(
+			'spawns %s in the same global account used by the native profile check',
+			async (provider) => {
+				const account = path.join(os.tmpdir(), 'synthetic-global-account');
+				const key = provider === 'claude-code' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+				mockReadSettingValue.mockImplementation((setting) =>
+					setting === 'shellEnvVars' ? { [key]: account } : undefined
+				);
+				try {
+					const p = spawnAgent(provider, '/p', 'hi', undefined, { customEnvVars: {} });
+					await driveSpawnToCompletion(p, 0, provider === 'claude-code' ? CLAUDE_OK() : undefined);
+					expect(spawnCall().options.env[key]).toBe(account);
+				} finally {
+					mockReadSettingValue.mockReset();
+				}
+			}
+		);
 
 		it('applies session customEnvVars to local spawn env (wins over shell env)', async () => {
 			const prev = process.env.MAESTRO_TEST_ENV;

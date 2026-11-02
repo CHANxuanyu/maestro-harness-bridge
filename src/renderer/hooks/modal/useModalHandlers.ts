@@ -36,6 +36,7 @@ import { resolveActiveTabRef, resolveTabRefRenameValue } from '../../utils/panel
 import { CONDUCTOR_BADGES } from '../../constants/conductorBadges';
 import { gitService } from '../../services/git';
 import { cueService } from '../../services/cue';
+import { canHandOffTab, requestAiHandoff } from '../../services/aiHandoffEntry';
 import { notifyCenterFlash } from '../../stores/centerFlashStore';
 import { useGitDetail } from '../../contexts/GitStatusContext';
 
@@ -460,6 +461,19 @@ export function useModalHandlers(
 		if (providerKey) getModalActions().openReauthModal({ providerKey });
 	}, []);
 
+	// Continue the errored tab with another AI. The error modal closes so the
+	// dialog is not stacked under it, but the error itself stays on the agent:
+	// a handoff only prepares a draft elsewhere.
+	const handleHandoffAfterError = useCallback((sessionId: string, tabId: string) => {
+		getModalActions().setAgentErrorModalSessionId(null);
+		requestAiHandoff(sessionId, tabId);
+	}, []);
+	const errorTab = errorSession
+		? errorSession.aiTabs.find(
+				(tab) => tab.id === (errorSession.agentErrorTabId ?? errorSession.activeTabId)
+			)
+		: undefined;
+
 	// Determine the effective error: historical wins when explicitly requested (user clicked Details),
 	// otherwise fall back to live session error
 	const isHistorical = !!historicalAgentError;
@@ -488,6 +502,10 @@ export function useModalHandlers(
 		onAuthenticate:
 			!isHistorical && errorSession
 				? () => handleAuthenticateAfterError(errorSession.id)
+				: undefined,
+		onHandoff:
+			!isHistorical && errorSession && canHandOffTab(errorSession, errorTab)
+				? () => handleHandoffAfterError(errorSession.id, errorTab!.id)
 				: undefined,
 	});
 

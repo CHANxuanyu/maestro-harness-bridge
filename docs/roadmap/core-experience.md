@@ -135,6 +135,11 @@
 - 定位到原生转录的公共合并函数反复扫描未改变的数组位置，并在每次匹配后移动剩余数组。新增确定性工作量回归：1024 条消息在旧实现产生 1052153 次尾部元素读取，超过 20480 的上界，先失败再修复。按对象身份缓存原位置、以保持顺序的 Map 删除已匹配项，保持首个匹配、重复引用、顺序及原对象语义；无内容哈希，无界面/文案变化。
 - 本地相关单元 8 个文件 175 条通过，Claude/Codex/Grok 的跟随 f 及 Grok 活跃标签 h 共 4 个端到端场景通过；类型、ESLint、全仓格式、文档引用与发布规则通过。保留原 40002 条数据用例、所有原断言、10 秒超时和 CI 配置。修复分支 `codex/core-native-merge-ci` 的 [PR #30](https://github.com/CHANxuanyu/maestro-harness-bridge/pull/30) 在[七项检查](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41256887056)首次通过（20 分 05 秒）后合并为 `c966137a62a1216982c4a48f36bc004f3fc5c796`；实际合并树与被测提交一致。Windows 第二分片的刷新整组 28 条约 1.5 秒；两种原生模式各 56 条、夹具 30 条通过。[实际主线 CI](https://github.com/CHANxuanyu/maestro-harness-bridge/actions/runs/41258432044)与功能三 PR 检查并行，功能三合并前须确认两者全绿，最终结果在 PR #30 和功能 PR 留痕。
 
+### 功能二：换个 AI 继续的界面（Opus）
+
+- 标签菜单、命令面板、错误对话框、对话里的额度/限流/登录失效错误和正在重试的额度卡片都能打开“换个 AI 继续”。对话框只请求草稿，成功后跳到新标签；输入框上方说明来源、大小与省略，按发送才发出。规则集中在 `aiHandoffEntry.ts`。回归和 Electron 场景 `claude handoff dialog` 修复前失败、修复后通过，细节见[工作记录](../worklog.md)。
+- **未完成：** 契约第 5 项（会话浏览器预览中的系统封装）；侧栏不区分草稿标签。**未验：** 真实账户、Mac 发行包。
+
 ### 功能三：关于我的后端与 CLI
 
 - 复用现有 `conductorProfile` Markdown、settings 与 token 估算。统一服务负责本机 Claude/DeepSeek/Codex 指令文件定位、查看、保存、状态与应用；桌面 `settings.aboutMe` 和 CLI `about-me show|set|status|apply` 共用入口，保存内容不自动写用户文件。首次写入、管理段外改或链接改指目标须明确确认实际目标和当前段；不新增哈希、配置旁路或独立存储。

@@ -734,6 +734,54 @@ describe('agent-switch window scoping', () => {
 		expect(setActiveSessionId).not.toHaveBeenCalled();
 		expect(revealJumpTarget).not.toHaveBeenCalled();
 	});
+	it('offers to continue the focused AI tab with another AI, and not where it cannot', () => {
+		const talked = (id: string) =>
+			createMockAITab({
+				id,
+				logs: [{ id: `${id}-u`, timestamp: 1, source: 'user', text: 'Hello' }],
+			});
+		const session = createMockSession({
+			id: 's1',
+			aiTabs: [talked('tab-1'), createMockAITab({ id: 'tab-2', logs: [] })],
+			activeTabId: 'tab-1',
+		});
+		const args = {
+			activeSession: session,
+			isAiMode: true,
+			activeTabInfo: {
+				isTerminalMode: false,
+				hasActiveTab: true,
+				activeUnifiedIndex: 0,
+				unifiedTabCount: 2,
+				activeTabType: 'ai' as const,
+			},
+			enterToSendAI: true,
+			setQuickActionOpen: close,
+			shortcuts: {},
+			toggleInputMode: vi.fn(),
+		};
+		useModalStore.getState().closeModal('aiHandoff');
+		const command = buildTabCommands(args).find((a) => a.id === 'aiHandoff');
+		expect(command?.label).toBe('Continue with Another AI');
+		command!.action();
+		expect(close).toHaveBeenCalledWith(false);
+		expect(useModalStore.getState().modals.get('aiHandoff')).toMatchObject({
+			open: true,
+			data: { sessionId: 's1', tabId: 'tab-1' },
+		});
+
+		const ids = (over: Partial<typeof args> & { activeGroupChatId?: string }) =>
+			buildTabCommands({ ...args, ...over }).map((a) => a.id);
+		// An empty tab has nothing to hand over; a room is not the agent's tab.
+		expect(ids({ activeSession: { ...session, activeTabId: 'tab-2' } })).not.toContain('aiHandoff');
+		expect(ids({ activeGroupChatId: 'chat-1' })).not.toContain('aiHandoff');
+		expect(
+			ids({
+				activeSession: { ...session, sessionSshRemoteConfig: { enabled: true } } as never,
+			})
+		).not.toContain('aiHandoff');
+	});
+
 	it('offers the model/effort picker for an AI tab and targets the focused pane', () => {
 		const session = createMockSession({
 			id: 's1',

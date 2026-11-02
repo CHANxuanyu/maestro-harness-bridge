@@ -63,6 +63,7 @@ export type {
 // Import AgentError for use within this file
 import type { AgentError, SessionCliActivity } from '../../shared/types';
 import type { AgentDelegationKind } from '../../shared/agentDelegation';
+import type { HandoffDraftNote } from '../../shared/aiHandoff';
 import type { ComposerCommandMode } from '../utils/shellCommandInput';
 import type { MindMapLayoutType } from '../components/DocumentGraph/layoutTypes';
 
@@ -912,6 +913,13 @@ export interface AITab {
 	 * services/crossAgentHandoff.ts.
 	 */
 	pendingMentionHandoff?: MentionHandoff;
+	/**
+	 * Set on a tab opened by "Continue with another AI" (services/aiHandoff.ts):
+	 * its composer holds a prepared handoff draft. The note above the composer
+	 * reads it while the tab has no conversation yet, so sending the draft
+	 * retires the note without anyone clearing it.
+	 */
+	handoffDraft?: HandoffDraftNote;
 	/**
 	 * Parked per-provider state for every provider this tab is NOT currently
 	 * using. The live provider's values stay in `agentSessionId` / `usageStats` /

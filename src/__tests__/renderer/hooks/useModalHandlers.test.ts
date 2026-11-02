@@ -562,6 +562,51 @@ describe('useModalHandlers', () => {
 	// ======================================================================
 
 	describe('Group F: Agent Error Handlers', () => {
+		it('lets a live error hand its tab to another AI, keeping the error on the agent', () => {
+			const limit = {
+				type: 'rate_limited',
+				message: 'Usage limit reached.',
+				recoverable: true,
+				agentId: 'claude-code',
+				timestamp: 1,
+			} as const;
+			const tab = createMockAITab({
+				id: 'tab-1',
+				logs: [{ id: 'u', timestamp: 1, source: 'user', text: 'Keep going' }],
+			});
+			const session = createMockSession({
+				id: 'session-1',
+				activeTabId: 'tab-1',
+				aiTabs: [tab],
+				agentError: limit,
+				agentErrorTabId: 'tab-1',
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: 'session-1' });
+			getModalActions().setAgentErrorModalSessionId('session-1');
+			const recovery = useAgentErrorRecovery as ReturnType<typeof vi.fn>;
+			recovery.mockClear();
+			renderHook(() => useModalHandlers(createInputRef(), createTerminalOutputRef()));
+			const options = recovery.mock.calls.at(-1)![0];
+			expect(options.onHandoff).toBeTypeOf('function');
+			act(() => options.onHandoff());
+			expect(useModalStore.getState().isOpen('agentError')).toBe(false);
+			expect(useModalStore.getState().getData('aiHandoff')).toEqual({
+				sessionId: 'session-1',
+				tabId: 'tab-1',
+			});
+			expect(useSessionStore.getState().sessions[0].agentError).toEqual(limit);
+			useModalStore.getState().closeModal('aiHandoff');
+
+			// An SSH agent cannot hand off, so the action is not offered at all.
+			useSessionStore.setState({
+				sessions: [{ ...session, sessionSshRemoteConfig: { enabled: true } } as Session],
+			});
+			getModalActions().setAgentErrorModalSessionId('session-1');
+			recovery.mockClear();
+			renderHook(() => useModalHandlers(createInputRef(), createTerminalOutputRef()));
+			expect(recovery.mock.calls.at(-1)![0].onHandoff).toBeUndefined();
+		});
+
 		it('handleCloseAgentErrorModal clears agentErrorModalSessionId', () => {
 			getModalActions().setAgentErrorModalSessionId('session-1');
 			expect(useModalStore.getState().isOpen('agentError')).toBe(true);

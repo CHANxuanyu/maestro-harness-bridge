@@ -63,7 +63,19 @@ export function resolveAgentAccountDir(
 		custom,
 		layers.globalShellEnvVars?.[config.envVar],
 		layers.env?.[config.envVar],
-	].find(usable);
-	if (!chosen) return path.join(layers.homeDir, config.defaultSubdir);
+	].find((value) => typeof value === 'string');
+	// A configured blank cancels lower layers in buildChildProcessEnv.
+	if (!usable(chosen)) return path.join(layers.homeDir, config.defaultSubdir);
 	return path.resolve(expandTilde(chosen.trim(), layers.homeDir));
+}
+
+/** Account-only local spawn overlay, keeping readers and standalone runners aligned. */
+export function resolveAgentAccountEnv(
+	agent: AgentAccountDirInput,
+	layers: AgentAccountDirLayers
+): Record<string, string> {
+	if (agent.sshRemote) return {};
+	const config = getProviderProfileConfig(agent.toolType);
+	const directory = resolveAgentAccountDir(agent, layers);
+	return config && directory ? { [config.envVar]: directory } : {};
 }

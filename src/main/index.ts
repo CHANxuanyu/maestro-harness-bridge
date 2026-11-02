@@ -1,4 +1,5 @@
 import { createAboutMeService } from './about-me';
+import { getAgentAccountDirLayers } from './agents/provider-account-dirs';
 import { getNativeInstructionFiles } from './agents/native-instructions';
 import { notifyPeerWindows } from './ipc/handlers/persistence';
 import { createDesktopAiHandoff } from './ai-handoff-desktop';
@@ -643,6 +644,7 @@ const debugPackageDeps: DebugPackageDependencies = {
 
 const aboutMe = createAboutMeService({
 	settingsStore: store,
+	getAccountDirLayers: getAgentAccountDirLayers,
 	getFiles: () =>
 		getNativeInstructionFiles({
 			userDataDir: app.getPath('userData'),

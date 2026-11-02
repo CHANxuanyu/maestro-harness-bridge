@@ -70,6 +70,7 @@ import {
 	type UseBatchHandlersDeps,
 } from '../../../renderer/hooks/batch/useBatchHandlers';
 import { useBatchProcessor } from '../../../renderer/hooks/batch/useBatchProcessor';
+import { useDebouncedPersistence } from '../../../renderer/hooks/utils/useDebouncedPersistence';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useBatchStore } from '../../../renderer/stores/batchStore';
@@ -821,6 +822,117 @@ describe('useBatchHandlers', () => {
 
 			// Terminal sessions should not prevent quitting
 			expect(window.maestro.app.confirmQuit).toHaveBeenCalled();
+		});
+
+		// Main never closes the window on a confirmed quit (it hard-exits after
+		// cleanup), so beforeunload never fires. A change still inside the 2 s
+		// save debounce must be written before main is told to quit, or a reply
+		// that landed just before quit is gone after restart.
+		describe('saving sessions before quit', () => {
+			const savedNames = (call: unknown[]) => (call[0] as Session[]).map((s) => s.name);
+
+			function captureQuit() {
+				let quitCallback: () => Promise<void> = async () => {};
+				(window.maestro.app.onQuitConfirmationRequest as any).mockImplementation(
+					(cb: () => Promise<void>) => {
+						quitCallback = cb;
+						return vi.fn();
+					}
+				);
+				return () => quitCallback();
+			}
+
+			function mockSessionWrites(order: string[], write = async () => true) {
+				const save = vi.fn(async (sessions: Session[]) => {
+					order.push(`save:${sessions.map((s) => s.name).join(',')}`);
+					return write();
+				});
+				(window.maestro as any).sessions = { setAll: save, setMany: save };
+				(window.maestro.app.confirmQuit as any).mockImplementation(() => order.push('confirmQuit'));
+				return save;
+			}
+
+			it('writes a change made inside the save debounce before confirming quit', async () => {
+				const order: string[] = [];
+				const save = mockSessionWrites(order);
+				const session = createMockSession({ id: 'session-1', state: 'idle', name: 'asked' });
+				useSessionStore.setState({
+					sessions: [session],
+					activeSessionId: 'session-1',
+					sessionsReadOk: true,
+				});
+				const requestQuit = captureQuit();
+				const loaded = { current: true };
+				renderHook(() => {
+					useDebouncedPersistence(loaded);
+					return useBatchHandlers(createDeps());
+				});
+
+				// The reply lands, then quit is requested well before the debounce fires.
+				act(() => {
+					useSessionStore.setState({ sessions: [{ ...session, name: 'answered' }] });
+				});
+				await act(async () => {
+					await requestQuit();
+				});
+
+				expect(order).toEqual(['save:answered', 'confirmQuit']);
+				expect(savedNames(save.mock.calls.at(-1)!)).toEqual(['answered']);
+			});
+
+			it('does not let a save already in flight stand in for a later change', async () => {
+				vi.useFakeTimers();
+				try {
+					const order: string[] = [];
+					let releaseFirst: (ok: boolean) => void = () => {};
+					let writes = 0;
+					mockSessionWrites(order, () =>
+						++writes === 1
+							? new Promise<boolean>((resolve) => (releaseFirst = resolve))
+							: Promise.resolve(true)
+					);
+					const session = createMockSession({ id: 'session-1', state: 'idle', name: 'asked' });
+					useSessionStore.setState({
+						sessions: [session],
+						activeSessionId: 'session-1',
+						sessionsReadOk: true,
+					});
+					const requestQuit = captureQuit();
+					const loaded = { current: true };
+					renderHook(() => {
+						useDebouncedPersistence(loaded);
+						return useBatchHandlers(createDeps());
+					});
+
+					// The debounced save of the prompt is still writing when the reply lands.
+					act(() => {
+						useSessionStore.setState({ sessions: [{ ...session, name: 'running' }] });
+					});
+					act(() => {
+						vi.advanceTimersByTime(2000);
+					});
+					expect(order).toEqual(['save:running']);
+					act(() => {
+						useSessionStore.setState({ sessions: [{ ...session, name: 'answered' }] });
+					});
+
+					let quitDone = false;
+					const quitting = act(async () => {
+						await requestQuit();
+						quitDone = true;
+					});
+					await act(async () => {
+						releaseFirst(true);
+						await vi.advanceTimersByTimeAsync(0);
+					});
+					await quitting;
+
+					expect(quitDone).toBe(true);
+					expect(order).toEqual(['save:running', 'save:answered', 'confirmQuit']);
+				} finally {
+					vi.useRealTimers();
+				}
+			});
 		});
 
 		it('unsubscribes on unmount', () => {

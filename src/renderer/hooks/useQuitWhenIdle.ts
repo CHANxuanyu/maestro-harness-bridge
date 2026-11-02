@@ -11,6 +11,7 @@
 import { useEffect } from 'react';
 import { useQuitWhenIdleStore } from '../stores/quitWhenIdleStore';
 import { collectActiveOperations } from '../utils/collectActiveOperations';
+import { confirmQuitAfterSave } from '../services/quitSave';
 
 /** How often to re-check for idle while a quit is armed. */
 const IDLE_POLL_INTERVAL_MS = 2000;
@@ -33,7 +34,7 @@ export function useQuitWhenIdle(): void {
 			}
 			if (!snapshot.hasActiveOperations) {
 				useQuitWhenIdleStore.getState().cancel();
-				window.maestro.app.confirmQuit();
+				await confirmQuitAfterSave();
 			}
 		};
 

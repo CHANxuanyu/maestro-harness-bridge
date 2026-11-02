@@ -153,6 +153,37 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 	});
 }
 
+// Saving is provider independent, so one provider covers it. The tool holds the
+// turn past the 2 s save debounce, so the copy on disk already has the prompt
+// when the answer lands; quit then follows inside the next debounce window.
+test('claude k: an answer that lands just before quit is saved with the tab', async ({
+	native,
+}) => {
+	const answer = 'Saved right before quit.';
+	native.scriptTurns([
+		{
+			answer,
+			tools: [{ id: 'quit-hold', command: 'printf held', output: 'held' }],
+			toolDelay: 2600,
+		},
+	]);
+	await native.createAgent('claude');
+	await native.send('Answer right before quit');
+	await expect(native.output().getByText(answer, { exact: true })).toBeVisible();
+	await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+	await native.restart();
+	const saved = JSON.parse(
+		fs.readFileSync(path.join(native.data, 'maestro-sessions.json'), 'utf8')
+	) as { sessions: { aiTabs?: { logs?: { source: string; text?: string }[] }[] }[] };
+	const replies = saved.sessions.flatMap((session) =>
+		(session.aiTabs ?? []).flatMap((tab) =>
+			(tab.logs ?? []).filter((log) => log.source !== 'user').map((log) => log.text?.trim())
+		)
+	);
+	expect(replies).toContain(answer);
+	await expect(native.output().getByText(answer, { exact: true })).toBeVisible();
+});
+
 test('codex b: running output grows, follows the bottom and respects upward reading', async ({
 	native,
 }) => {

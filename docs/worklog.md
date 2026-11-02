@@ -184,3 +184,9 @@ hb.5 候选 `a2b2ce5` 的 Codex 真实验收中，d（正常重启后续接）�
 - preload 的 `onQuitSaveRequest(save)` 等所注册保存 Promise 完成再回执，失败回传 false，并提供卸载监听函数。没有改动 renderer 界面、文案或持久化逻辑；本克隆缺少 PR #32 的 quitSave 服务，Opus 的前端接入仍是发布前置条件。
 - 初始七条新增回归先失败，修复后连同原有用例 73/73；补充发送时销毁覆盖后共 74 项。临时回退 main 与 preload 后新增八条均失败，恢复后复验。用例包括所有窗口收齐后才清理、总时限和重入、错误来源和过期回执、销毁和崩溃、发送失败、保存 Promise 等待与失败回执。
 - 最终相关单元 74/74，类型、ESLint、改动文件 Prettier、626 条文档路径与 HB 源码策略检查通过。全量夹具 39/42，剩余三条均因沙箱 socket `listen EPERM`，无跳过。Playwright 可列出 63 个原生场景；Codex 定向 Electron 命令实际仍在 Vite 构建受阻，0 条执行。
+
+## 2026-11-02：Codex 工具标识边界复核
+
+- 加强 `finds native command IDs in 11.1 durable CommandExecution items`：同一命令同时存在模型 function_call 和持久化 CommandExecution 时，优先读取后者的 ID，旧格式单独存在仍可读取。新断言先失败；修复仅限验收读取器。
+- 官方 exec JSON 处理器会另分配 `item_N`，不要把 stdout 的条目标识和原生持久化标识误认为同一个命名空间。当前 b 场景分别检查界面命令/结果/状态以及原生记录 ID 的存在与唯一性，没有跨域比较 ID。
+- 单独临时回退 ID 读取修复后 1 失败 / 3 通过，恢复后相关夹具 9/9；最终全量夹具仍为 39/42，三项失败均为沙箱 socket EPERM。类型、ESLint 与改动文件 Prettier 通过。

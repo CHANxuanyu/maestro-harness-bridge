@@ -5,7 +5,7 @@
 ## Codex 依据与版本决定
 
 - 普通 exec 在 item started/completed 中给出命令状态和完成输出，忽略 commandExecution/outputDelta；item.updated 用于其他条目，不能据此承诺命令增量。依据 [11.1 JSON 事件处理器](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/exec/src/event_processor_with_jsonl_output.rs)。[11.2 同文件](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.2/codex-rs/exec/src/event_processor_with_jsonl_output.rs) 的 Git blob 同为 `73e0c9d911c82aae67c44e6b1a4ce54c7092b6be`，升级它不能解决这个输出差异。
-- 原生完成命令是 `event_msg / item_completed / CommandExecution`，包含 id、command 数组和聚合输出。依据 [items.rs](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/protocol/src/items.rs)、[protocol.rs](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/protocol/src/protocol.rs) 和[持久化策略](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/rollout/src/policy.rs)。ExecCommandBegin/End 是瞬时事件，不能假定存在于持久化文件。旧 function_call 读取保留。
+- 原生完成命令是 `event_msg / item_completed / CommandExecution`，包含 id、command 数组和聚合输出。依据 [items.rs](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/protocol/src/items.rs)、[protocol.rs](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/protocol/src/protocol.rs) 和[持久化策略](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/rollout/src/policy.rs)。ExecCommandBegin/End 是瞬时事件，不能假定存在于持久化文件。旧 function_call 读取保留；两者同时存在时优先使用持久化 CommandExecution 的 ID。exec stdout 另分配 item_N，验收不将这两个标识域强行等同。
 - effort 是可空字段。用户提供的 11.1 实机样本确实为 null，不复制样本内容或会话标识入库。默认场景核对原生值与现有“未记录”显示；显式 high 场景仍必须显示 high。
 - [exec 关闭流程](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/exec/src/lib.rs) 在最终回答后仍有线程退订和客户端关闭；测试必须等进程结束。假程序复现观察到的 1100ms 间隔。
 - [writer_lock.rs](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11.1/codex-rs/rollout/src/writer_lock.rs) 使用 OS 文件锁与协调锁，不是按时间过期的租约。守卫释放文件句柄并清理路径；残留文件名不等于活跃锁。成功外部调用现在等管道正常关闭，不再杀整个进程组。真实冲突根因仍待实机复验，不删除锁，不自动重试。
@@ -81,3 +81,40 @@ TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --gr
 ```
 
 该 Electron 命令依赖 Opus 的前端场景进入工作区，本轮未执行，也未将缺少监听的场景记为通过。
+
+## 按需求核对的回归与反证
+
+| 项目            | 新增或加强的回归名称                                                                                                                                                                                                                                              | 结果与边界                                                                                                  |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 2，exec 输出    | `Codex exec publishes command output only at completion`；Electron `codex b: exec command output appears at completion`，共享 `codex g: running output grows, follows the bottom and respects upward reading`                                                     | 夹具先红后绿，回退后重现失败；原跟随与上滚断言保留到共享场景。Electron 未执行。                             |
+| 3，teardown     | `normal teardown waits for the native writer after its final answer`                                                                                                                                                                                              | 先红后绿，回退后失败；假程序模拟最终回答后 1100ms 才退出。                                                  |
+| 4，工具 ID      | `finds native command IDs in 11.1 durable CommandExecution items`                                                                                                                                                                                                 | 先红后绿；补充同命令模型调用 ID 优先级断言后再次先红后绿，单独回退后 1 失败 / 3 通过。                      |
+| 5，effort       | `Codex fixture preserves unknown effort instead of inventing high`；`Codex fixture retains explicitly configured effort`                                                                                                                                          | 缺失值回归先红后绿并回退复现；保留显式 high 正向要求，默认场景核对原生值。                                  |
+| 6，外部写入进程 | `a successful external CLI lets its remaining writer finish before the next turn`                                                                                                                                                                                 | 先红后绿，回退后失败；失败清理原测试仍通过。真实 active writer 冲突没有实机复验。                           |
+| 7，多窗口退出   | `waits for every live app window before flushing main stores and killing processes` 等六条 main 回归，以及 `acknowledges quit saving only after the registered persistence promise resolves`、`reports a failed quit save without claiming that it was persisted` | 74/74，回退 main 与 preload 后新增八条全失败。前端监听及 Electron 场景待 Opus。                             |
+| Mac 临时根目录  | `uses a physical native app root when the configured temporary root is a symlink`；`OMP uses the configured native root and still refuses projects outside it`                                                                                                    | 修改前两条失败，修改后 2/2；默认 Mac Electron 与临时回退反证待沙箱外。                                      |
+| 四种历史路径    | `<provider> reads physical native history through a project symlink without changing it`，provider 为 claude、copilot、grok、opencode                                                                                                                             | 修改前 4/4 失败，修改后 4/4 通过；回退四个存储实现再次 4/4 失败。新增四条 Electron `path:` 场景，尚未执行。 |
+
+实际命令及通过数：
+
+| 命令                                                                                                   | 实际结果                                                   |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ---- | ----------------- | ---- |
+| `npm run test:e2e:fixtures -- temp-root.test.ts`                                                       | 2/2                                                        |
+| `npm run test:e2e:fixtures -- codex-contract.test.ts app-lifecycle.test.ts real-isolation.test.ts`     | 9/9                                                        |
+| `npm run test:e2e:fixtures -- project-alias.test.ts`                                                   | 4/4                                                        |
+| `npm run test:e2e:fixtures`                                                                            | 39/42，三条共享 socket 因沙箱 EPERM 失败，无跳过或自动重试 |
+| 上文 Codex 三文件单元命令                                                                              | 219/219                                                    |
+| 上文六个存储文件单元命令                                                                               | 174/174                                                    |
+| 上文 quit-handler 与 preload 两文件单元命令                                                            | 74/74                                                      |
+| `npm run lint`                                                                                         | 通过                                                       |
+| `npm run lint:eslint`                                                                                  | 通过                                                       |
+| `node_modules/.bin/prettier --check`，参数为各提交的改动文件                                           | 通过                                                       |
+| `git diff --check`                                                                                     | 通过                                                       |
+| `npm run docs:verify`                                                                                  | 626 条路径，0 缺失                                         |
+| `node scripts/hb-release.mjs check`                                                                    | 通过；包版本保持 hb.5，本轮没有准备发行包                  |
+| `node_modules/.bin/playwright test --project=native --list`                                            | 列出 63 个场景，属于发现检查，不是执行通过                 |
+| `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep 'omp a:'`          | Vite 构建写入被拒，0 场景执行                              |
+| `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep '(claude           | copilot                                                    | grok | opencode) path:'` | 同上 |
+| `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep 'codex [abdefg]:'` | 同上                                                       |
+
+Electron 命令执行时 `MAESTRO_E2E_REAL` 未设置。Mac 补验也必须使用假程序模式；可以显式加 `MAESTRO_E2E_REAL=0` 防止继承外部环境。发布前仍需 Opus 接入保存监听、完成界面复现及沙箱外 Electron 正反验收；没有将这些项目记为完成。

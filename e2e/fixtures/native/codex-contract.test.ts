@@ -59,10 +59,23 @@ it('finds native command IDs in 11.1 durable CommandExecution items', () => {
 			},
 		},
 	}));
-	fs.writeFileSync(file, rows.map((row) => JSON.stringify(row)).join('\n'));
+	const modelCalls = ['first', 'legacy'].map((name) => ({
+		type: 'response_item',
+		payload: {
+			type: 'function_call',
+			call_id: `model-${name}`,
+			arguments: JSON.stringify({ cmd: `printf ${name}-result` }),
+		},
+	}));
+	fs.writeFileSync(file, [...modelCalls, ...rows].map((row) => JSON.stringify(row)).join('\n'));
 	expect(
-		nativeToolIds('codex', file, ['printf first-result', 'printf second-result', 'unrun'])
-	).toEqual(['call-first', 'call-second', undefined]);
+		nativeToolIds('codex', file, [
+			'printf first-result',
+			'printf second-result',
+			'printf legacy-result',
+			'unrun',
+		])
+	).toEqual(['call-first', 'call-second', 'model-legacy', undefined]);
 });
 
 it('Codex fixture preserves unknown effort instead of inventing high', () => {

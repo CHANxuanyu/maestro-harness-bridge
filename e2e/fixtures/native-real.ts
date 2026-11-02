@@ -220,21 +220,28 @@ export function nativeToolIds(provider: Provider, file: string, commands: string
 								.map((item) => ({ id: item.id, command: item.input?.command }))
 						: []
 				)
-			: records.flatMap((record) => {
-					// 11.1 persists completed TurnItems even when the model's tool
-					// invocation is not a direct exec_command function call.
-					const item = record.payload?.item;
-					if (
-						record.type === 'event_msg' &&
-						record.payload?.type === 'item_completed' &&
-						item?.type === 'CommandExecution'
-					)
-						return [{ id: item.id, command: item.command.join(' ') }];
-					if (record.type === 'response_item' && record.payload?.type === 'function_call')
-						return [
-							{ id: record.payload.call_id, command: JSON.parse(record.payload.arguments).cmd },
-						];
-					return [];
-				});
+			: records
+					.flatMap((record) => {
+						// 11.1 persists completed TurnItems even when the model's tool
+						// invocation is not a direct exec_command function call. Prefer its
+						// durable command ID over a model call ID when both records exist.
+						const item = record.payload?.item;
+						if (
+							record.type === 'event_msg' &&
+							record.payload?.type === 'item_completed' &&
+							item?.type === 'CommandExecution'
+						)
+							return [{ id: item.id, command: item.command.join(' '), nativeOrder: 0 }];
+						if (record.type === 'response_item' && record.payload?.type === 'function_call')
+							return [
+								{
+									id: record.payload.call_id,
+									command: JSON.parse(record.payload.arguments).cmd,
+									nativeOrder: 1,
+								},
+							];
+						return [];
+					})
+					.sort((a, b) => a.nativeOrder - b.nativeOrder);
 	return commands.map((command) => calls.find((call) => call.command?.includes(command))?.id);
 }

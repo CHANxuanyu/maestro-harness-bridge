@@ -400,7 +400,8 @@ export class NativeApp {
 			);
 			expect(entry.summary.trim()).not.toBe('');
 			expect(entry.summary).not.toMatch(/Synopsis failed/i);
-			await expect(panel).toContainText(entry.summary);
+			// The panel renders the summary as markdown, so compare its plain text.
+			await expect(panel).toContainText(entry.summary.replace(/[`*]/g, ''));
 		} else await expect(panel.getByText(expected, { exact: true }).first()).toBeVisible();
 	}
 	files(provider: Provider, configDir = this.providerHome(provider)): string[] {
@@ -434,6 +435,8 @@ export class NativeApp {
 }
 
 export const test = base.extend<{ native: NativeApp }>({
+	// Playwright requires the fixture argument to be destructured, even when empty.
+	// eslint-disable-next-line no-empty-pattern
 	native: async ({}, use, info) => {
 		const native = new NativeApp(info);
 		try {

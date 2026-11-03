@@ -283,6 +283,10 @@ test('codex b: exec command output appears at completion', async ({ native }) =>
 		await expect(
 			native.output().getByText('Streaming command finished.', { exact: true })
 		).toBeVisible();
+		// The answer lands before the exec process exits, and the finished turn
+		// then folds its tools behind "Worked for". Expand once the turn has ended,
+		// or the fold closes the rows being read.
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
 		await native.expandTools();
 		await expect(result).toContainText('line-0');
 		await expect(result).toContainText('line-139');

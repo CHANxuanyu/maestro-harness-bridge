@@ -59,6 +59,7 @@ export interface NativeFollowTarget {
 	agentId: string;
 	projectPath: string;
 	nativeId: string;
+	sshRemoteId?: string;
 }
 
 /**
@@ -91,8 +92,8 @@ export function resolveNativeFollowTarget(): NativeFollowTarget | null {
 	if (!tab || tab.hidden || !tab.agentSessionId) return null;
 	if (nativeRefreshBlocker(session, tab)) return null;
 	const { projectPathForSessions, sshRemoteId } = resolveSessionProjectPath(session);
-	// Remote transcripts have no local revision; the history scan keeps them.
-	if (sshRemoteId || !projectPathForSessions) return null;
+	// Codex can stat and decode its native rollouts through the selected SSH host.
+	if ((sshRemoteId && session.toolType !== 'codex') || !projectPathForSessions) return null;
 	const identity = openTabIdentity(runnerAccount(session), tab.agentSessionId);
 	return {
 		key: [session.id, tab.id, identity, projectPathForSessions].join('\u0000'),
@@ -101,6 +102,7 @@ export function resolveNativeFollowTarget(): NativeFollowTarget | null {
 		agentId: session.toolType,
 		projectPath: projectPathForSessions,
 		nativeId: tab.agentSessionId,
+		...(sshRemoteId ? { sshRemoteId } : {}),
 	};
 }
 
@@ -143,9 +145,16 @@ export function useNativeTranscriptFollow(): void {
 		try {
 			let revision: string | null;
 			try {
-				revision = await getRevision(target.agentId, target.projectPath, target.nativeId, {
-					ownerAgentId: target.sessionId,
-				});
+				const options = { ownerAgentId: target.sessionId };
+				revision = target.sshRemoteId
+					? await getRevision(
+							target.agentId,
+							target.projectPath,
+							target.nativeId,
+							options,
+							target.sshRemoteId
+						)
+					: await getRevision(target.agentId, target.projectPath, target.nativeId, options);
 			} catch {
 				// Unavailable is not a change; the history scan still covers it.
 				return;

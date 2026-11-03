@@ -243,3 +243,7 @@ The tracker at [DEDUP-TRACKER.md](DEDUP-TRACKER.md) lists all known duplication 
 ## Native test temporary directories
 
 `nativeTempRoot()` and `createNativeTempDir(prefix)` in `e2e/fixtures/native/temp-root.cjs` select `MAESTRO_E2E_TEMP_ROOT`, then the short macOS temporary root or the system temporary root. They resolve the root physically before creating directories. Use them for native fixture and Electron acceptance directories; OMP uses the same root for its containment guard. A symlinked temporary path must not produce a different Claude project key from the child process cwd.
+
+## Codex rollout archives
+
+`codexRolloutSessionId()`, `isCodexRollout()`, `preferPlainCodexRollouts()`, `readCodexRollout()` and `readCodexRolloutSync()` in `src/shared/codexRollout.ts` are the filename, source selection and bounded read entry points for Codex native history. Both `.jsonl` and `.jsonl.zst` use a 100 MB source and expanded-byte limit. Zstd decoding uses Node's built-in implementation entirely in memory. SSH storage transfers binary bytes as base64 for local decoding. A plain rollout wins when both forms carry the same UUID. Never write expanded archives to disk or use compressed byte offsets as transcript offsets.

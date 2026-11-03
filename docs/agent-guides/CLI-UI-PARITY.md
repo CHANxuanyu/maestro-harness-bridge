@@ -426,3 +426,7 @@ still missing. Grouped, highest value first:
 - **Agents/groups:** worktree folder + scan, group emoji, `remove-agent --erase`.
 - **Symphony** contributions; **low value:** devtools, tour, leaderboard,
   `notify clear`, clear terminal, `gist --file`, deep link, reveal in Finder.
+
+## Native history coverage (2026-11-03)
+
+`maestro-cli native-history list <agent>` returns the project sidebar's native conversation records through `agentSessions:listProjectHistory`. `read <agent> <conversation>` uses the canonical read-only transcript adapter. `delete <agent> <conversation>` removes a whole local Codex conversation in the selected account. These verbs require the desktop app. Pianola's offline learning scan uses the bounded shared Codex rollout decoder.

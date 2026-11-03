@@ -28,6 +28,7 @@ import {
 import { windowList, windowMoveAgent, windowMoveGroup } from './commands/window';
 import { sessionList, sessionShow } from './commands/session';
 import { listSessions } from './commands/list-sessions';
+import { nativeHistory } from './commands/native-history';
 import { openFile } from './commands/open-file';
 import { imageList, imageSave } from './commands/image';
 import { openGraph } from './commands/open-graph';
@@ -310,6 +311,12 @@ list
 	.option('-s, --search <keyword>', 'Filter sessions by keyword in name or first message')
 	.option('--json', 'Output as JSON (for scripting)')
 	.action(listSessions);
+
+program
+	.command('native-history <action> <agent> [conversation]')
+	.description('List or read native project history, or delete a whole Codex conversation')
+	.option('--json', 'Output JSON')
+	.action(nativeHistory);
 
 list
 	.command('ssh-remotes')

@@ -40,6 +40,16 @@ vi.mock('fs/promises', () => ({
 		readdir: vi.fn(),
 		stat: vi.fn(),
 		access: vi.fn(),
+		open: vi.fn(async (file: string) => {
+			const content = Buffer.from(await fs.readFile(file, 'utf8'));
+			return {
+				stat: async () => ({ size: content.length }),
+				read: async (buffer: Buffer, offset: number, length: number, position: number) => ({
+					bytesRead: content.copy(buffer, offset, position, position + length),
+				}),
+				close: async () => {},
+			};
+		}),
 		writeFile: vi.fn().mockResolvedValue(undefined),
 	},
 }));

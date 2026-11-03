@@ -21,6 +21,13 @@
  */
 
 import { app } from 'electron';
+import {
+	MAX_CODEX_ROLLOUT_BYTES,
+	codexRolloutSessionId,
+	decodeCodexRollout,
+	preferPlainCodexRollouts,
+	readCodexRollout,
+} from '../../shared/codexRollout';
 import path from 'path';
 import { hasEmbeddedSystemPrompt } from '../../shared/embeddedSystemPrompt';
 import os from 'os';
@@ -29,7 +36,13 @@ import { logger } from '../utils/logger';
 import { captureException } from '../utils/sentry';
 import { isExpectedSessionReadError } from '../utils/session-read-errors';
 import { fileFingerprint } from './session-info-cache';
-import { readFileRemote, readDirRemote, statRemote } from '../utils/remote-fs';
+import {
+	readFileRemote,
+	readBinaryFileRemoteAsBase64,
+	deleteRemote,
+	readDirRemote,
+	statRemote,
+} from '../utils/remote-fs';
 import type {
 	AgentSessionInfo,
 	SessionMessagesResult,
@@ -47,7 +60,7 @@ import { compactToolOutput } from '../../shared/toolOutput';
 import { extractReasoningSummaryText, codexToolResultStatus } from '../parsers/codex-output-parser';
 
 const LOG_CONTEXT = '[CodexSessionStorage]';
-const MAX_SESSION_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+const MAX_SESSION_FILE_SIZE = MAX_CODEX_ROLLOUT_BYTES;
 
 /**
  * Get Codex sessions base directory (platform-specific)
@@ -74,7 +87,7 @@ function getCodexSessionsDir(accountDir?: string): string {
 // One clean slate here retires the ones that predate the scoped prune.
 // Version 6 includes native source attribution and the first user request.
 // Version 7 excludes native desktop control envelopes from conversation previews.
-const CODEX_SESSION_CACHE_VERSION = 7;
+const CODEX_SESSION_CACHE_VERSION = 8;
 const CODEX_SESSION_CACHE_FILENAME = 'codex-sessions-cache.json';
 
 /**
@@ -148,19 +161,27 @@ interface CodexToolUseEntry {
  * Extract the session ID (UUID) from a Codex session filename
  * Format: rollout-TIMESTAMP-UUID.jsonl
  */
-function extractSessionIdFromFilename(filename: string): string | null {
-	// Current Codex uses an ISO-like timestamp with hyphens and a literal T.
-	const native = filename.match(
-		/-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\.jsonl$/i
-	);
-	if (native) return native[1];
-	// Match older rollout-YYYYMMDD_HHMMSS_MMM-UUID.jsonl names.
-	const match = filename.match(/rollout-[\d_]+-([a-f0-9-]+)\.jsonl$/i);
-	if (match) {
-		return match[1];
+const extractSessionIdFromFilename = codexRolloutSessionId;
+
+async function readRemoteRollout(filePath: string, sshConfig: SshRemoteConfig): Promise<string> {
+	const stat = await statRemote(filePath, sshConfig);
+	if (!stat.success || !stat.data) throw new Error(`Cannot stat Codex conversation: ${stat.error}`);
+	if (stat.data.size > MAX_SESSION_FILE_SIZE)
+		throw new RangeError('Codex rollout exceeds the read size limit');
+	if (!filePath.endsWith('.zst')) {
+		const result = await readFileRemote(filePath, sshConfig);
+		if (!result.success || result.data === undefined)
+			throw new Error(`Cannot read Codex conversation: ${result.error}`);
+		if (Buffer.byteLength(result.data) > MAX_SESSION_FILE_SIZE)
+			throw new RangeError('Codex rollout exceeds the read size limit');
+		return result.data;
 	}
-	// Fallback: use filename without extension
-	return filename.replace('.jsonl', '');
+	const result = await readBinaryFileRemoteAsBase64(filePath, sshConfig);
+	if (!result.success || result.data === undefined)
+		throw new Error(
+			`Cannot transfer compressed Codex conversation for local zstd decompression: ${result.error}`
+		);
+	return decodeCodexRollout(Buffer.from(result.data, 'base64'), filePath);
 }
 
 /**
@@ -389,7 +410,7 @@ async function parseSessionFile(
 			return null;
 		}
 
-		const content = await fs.readFile(filePath, 'utf-8');
+		const content = await readCodexRollout(filePath);
 		const lines = content.split('\n').filter((l) => l.trim());
 
 		if (lines.length === 0) {
@@ -872,6 +893,8 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		const file = await fs.open(filePath, 'r');
 		try {
 			const stat = await file.stat();
+			if (stat.size > MAX_SESSION_FILE_SIZE)
+				throw new RangeError('Codex rollout exceeds the read size limit');
 			let prior = this.transcriptCursors.get(filePath);
 			if (
 				prior &&
@@ -963,7 +986,35 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		options?: SessionReadOptions,
 		sshConfig?: SshRemoteConfig
 	): Promise<string | null> {
-		if (sshConfig || !sessionId) return null;
+		if (!sessionId) return null;
+		if (sshConfig) {
+			const key = JSON.stringify(['ssh', sshConfig.id, options?.configDir, sessionId]);
+			let entry = this.revisionPaths.get(key);
+			if (!entry || (!entry.filePath && Date.now() - entry.checkedAt >= 10000)) {
+				entry = {
+					filePath: await this.findSessionFileRemote(sessionId, sshConfig, options?.configDir),
+					checkedAt: Date.now(),
+				};
+			}
+			if (entry.filePath?.endsWith('.zst')) {
+				const plain = entry.filePath.slice(0, -4);
+				const stat = await statRemote(plain, sshConfig);
+				if (stat.success && stat.data && !stat.data.isDirectory)
+					entry = { ...entry, filePath: plain };
+			}
+			this.revisionPaths.delete(key);
+			this.revisionPaths.set(key, entry);
+			if (this.revisionPaths.size > 128)
+				this.revisionPaths.delete(this.revisionPaths.keys().next().value!);
+			const file = entry.filePath;
+			if (!file) return null;
+			const stat = await statRemote(file, sshConfig);
+			if (!stat.success || !stat.data) {
+				this.revisionPaths.delete(key);
+				throw new Error(`Cannot stat Codex conversation: ${stat.error}`);
+			}
+			return `${file}:${fileFingerprint(stat.data.size, stat.data.mtime)}`;
+		}
 		const key = JSON.stringify([this.getSessionsDir(options?.configDir), sessionId]);
 		let entry = this.revisionPaths.get(key);
 		if (!entry || (!entry.filePath && Date.now() - entry.checkedAt >= 10_000)) {
@@ -974,6 +1025,14 @@ export class CodexSessionStorage extends BaseSessionStorage {
 						?.filePath ?? null,
 				checkedAt: Date.now(),
 			};
+		}
+		if (entry.filePath?.endsWith('.zst')) {
+			const plain = entry.filePath.slice(0, -4);
+			try {
+				if ((await fs.stat(plain)).isFile()) entry = { ...entry, filePath: plain };
+			} catch (error) {
+				if (!isExpectedSessionReadError(error)) throw error;
+			}
 		}
 		this.revisionPaths.delete(key);
 		this.revisionPaths.set(key, entry);
@@ -1013,7 +1072,8 @@ export class CodexSessionStorage extends BaseSessionStorage {
 	 * Find all session files, organized by date directories
 	 */
 	private async findAllSessionFiles(
-		accountDir?: string
+		accountDir?: string,
+		preferPlain = true
 	): Promise<Array<{ filePath: string; filename: string }>> {
 		const sessionsDir = this.getSessionsDir(accountDir);
 		const sessionFiles: Array<{ filePath: string; filename: string }> = [];
@@ -1063,7 +1123,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 						// Find session files
 						const files = await fs.readdir(dayDir);
 						for (const file of files) {
-							if (file.endsWith('.jsonl')) {
+							if (/\.jsonl(?:\.zst)?$/i.test(file)) {
 								sessionFiles.push({
 									filePath: path.join(dayDir, file),
 									filename: file,
@@ -1077,7 +1137,9 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			}
 		}
 
-		return sessionFiles;
+		return preferPlain
+			? preferPlainCodexRollouts(sessionFiles, (file) => file.filename)
+			: sessionFiles;
 	}
 
 	/**
@@ -1086,7 +1148,8 @@ export class CodexSessionStorage extends BaseSessionStorage {
 	 */
 	private async findAllSessionFilesRemote(
 		sshConfig: SshRemoteConfig,
-		accountDir?: string
+		accountDir?: string,
+		preferPlain = true
 	): Promise<Array<{ filePath: string; filename: string }>> {
 		const sessionsDir = this.getRemoteSessionsDir(accountDir);
 		const sessionFiles: Array<{ filePath: string; filename: string }> = [];
@@ -1125,7 +1188,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 					if (!filesResult.success || !filesResult.data) continue;
 
 					for (const fileEntry of filesResult.data) {
-						if (!fileEntry.isDirectory && fileEntry.name.endsWith('.jsonl')) {
+						if (!fileEntry.isDirectory && /\.jsonl(?:\.zst)?$/i.test(fileEntry.name)) {
 							sessionFiles.push({
 								filePath: `${dayDir}/${fileEntry.name}`,
 								filename: fileEntry.name,
@@ -1136,7 +1199,9 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			}
 		}
 
-		return sessionFiles;
+		return preferPlain
+			? preferPlainCodexRollouts(sessionFiles, (file) => file.filename)
+			: sessionFiles;
 	}
 
 	/**
@@ -1157,16 +1222,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 				return null;
 			}
 
-			const result = await readFileRemote(filePath, sshConfig);
-			if (!result.success || !result.data) {
-				logger.error(
-					`Failed to read remote Codex session file: ${filePath} - ${result.error}`,
-					LOG_CONTEXT
-				);
-				return null;
-			}
-
-			const content = result.data;
+			const content = await readRemoteRollout(filePath, sshConfig);
 			const lines = content.split('\n').filter((l) => l.trim());
 
 			if (lines.length === 0) {
@@ -1549,15 +1605,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 				logger.warn(`Codex session file not found on remote: ${sessionId}`, LOG_CONTEXT);
 				return { messages: [], total: 0, hasMore: false };
 			}
-			const result = await readFileRemote(sessionFilePath, sshConfig);
-			if (!result.success || !result.data) {
-				logger.error(
-					`Failed to read remote Codex session: ${sessionId} - ${result.error}`,
-					LOG_CONTEXT
-				);
-				return { messages: [], total: 0, hasMore: false };
-			}
-			content = result.data;
+			content = await readRemoteRollout(sessionFilePath, sshConfig);
 		} else {
 			// Find the session file by sessionId locally
 			const sessionFilePath = await this.findSessionFile(sessionId, options?.configDir);
@@ -1567,8 +1615,9 @@ export class CodexSessionStorage extends BaseSessionStorage {
 				return { messages: [], total: 0, hasMore: false };
 			}
 
-			if (options?.readOnly) return this.readLocalTranscriptIncrementally(sessionFilePath, options);
-			content = await fs.readFile(sessionFilePath, 'utf-8');
+			if (options?.readOnly && !sessionFilePath.endsWith('.zst'))
+				return this.readLocalTranscriptIncrementally(sessionFilePath, options);
+			content = await readCodexRollout(sessionFilePath);
 		}
 
 		try {
@@ -1625,14 +1674,12 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			if (sshConfig) {
 				const sessionFilePath = await this.findSessionFileRemote(sessionId, sshConfig, accountDir);
 				if (!sessionFilePath) return [];
-				const result = await readFileRemote(sessionFilePath, sshConfig);
-				if (!result.success || !result.data) return [];
-				content = result.data;
+				content = await readRemoteRollout(sessionFilePath, sshConfig);
 			} else {
 				const sessionFilePath =
 					localFilePath ?? (await this.findSessionFile(sessionId, accountDir));
 				if (!sessionFilePath) return [];
-				content = await fs.readFile(sessionFilePath, 'utf-8');
+				content = await readCodexRollout(sessionFilePath);
 			}
 		} catch {
 			return [];
@@ -1703,7 +1750,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		for (const { filePath } of allFiles) {
 			// Also check by reading first line for session ID
 			try {
-				const content = await fs.readFile(filePath, 'utf-8');
+				const content = await readCodexRollout(filePath);
 				const firstLine = content.split('\n')[0];
 				if (firstLine) {
 					const metadata = JSON.parse(firstLine) as CodexSessionMetadata;
@@ -1729,6 +1776,10 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		accountDir?: string
 	): Promise<string | null> {
 		const allFiles = await this.findAllSessionFilesRemote(sshConfig, accountDir);
+		const named = allFiles.find(
+			(file) => extractSessionIdFromFilename(file.filename) === sessionId
+		);
+		if (named) return named.filePath;
 
 		for (const { filePath, filename } of allFiles) {
 			const fileSessionId = extractSessionIdFromFilename(filename);
@@ -1738,9 +1789,9 @@ export class CodexSessionStorage extends BaseSessionStorage {
 
 			// Also check by reading first line for session ID
 			try {
-				const result = await readFileRemote(filePath, sshConfig);
-				if (result.success && result.data) {
-					const firstLine = result.data.split('\n')[0];
+				const content = await readRemoteRollout(filePath, sshConfig);
+				if (content) {
+					const firstLine = content.split('\n')[0];
 					if (firstLine) {
 						const metadata = JSON.parse(firstLine) as CodexSessionMetadata;
 						const metadataId = metadata?.payload?.id || metadata.id;
@@ -1757,307 +1808,48 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		return null;
 	}
 
+	/** Remove whole native rollouts only on an explicit conversation deletion. */
+	async deleteSession(
+		sessionId: string,
+		accountDir?: string,
+		sshConfig?: SshRemoteConfig
+	): Promise<{ success: boolean }> {
+		if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(sessionId))
+			throw new Error('Invalid Codex session ID');
+		const files = sshConfig
+			? await this.findAllSessionFilesRemote(sshConfig, accountDir, false)
+			: await this.findAllSessionFiles(accountDir, false);
+		for (const file of files) {
+			if (extractSessionIdFromFilename(file.filename) !== sessionId) continue;
+			if (sshConfig) {
+				const result = await deleteRemote(file.filePath, sshConfig, false);
+				if (!result.success) throw new Error(`Cannot delete Codex conversation: ${result.error}`);
+				continue;
+			}
+			await fs.unlink(file.filePath).catch((error: NodeJS.ErrnoException) => {
+				if (error.code !== 'ENOENT') throw error;
+			});
+		}
+		return { success: true };
+	}
+
 	async deleteMessagePair(
 		_projectPath: string,
 		sessionId: string,
-		userMessageUuid: string,
-		fallbackContent?: string,
+		_userMessageUuid: string,
+		_fallbackContent?: string,
 		sshConfig?: SshRemoteConfig
 	): Promise<{ success: boolean; error?: string; linesRemoved?: number }> {
-		// Delete operations on remote sessions are not supported
-		if (sshConfig) {
-			logger.warn('Delete message pair not supported for SSH remote sessions', LOG_CONTEXT);
-			return { success: false, error: 'Delete not supported for remote sessions' };
-		}
-		const sessionFilePath = await this.findSessionFile(sessionId);
-
-		if (!sessionFilePath) {
-			logger.warn('Codex session file not found for deletion', LOG_CONTEXT, { sessionId });
+		if (sshConfig)
+			return {
+				success: false,
+				error: 'Delete not supported for remote sessions. Native Codex history is read-only.',
+			};
+		if (!(await this.findSessionFile(sessionId)))
 			return { success: false, error: 'Session file not found' };
-		}
-
-		try {
-			const content = await fs.readFile(sessionFilePath, 'utf-8');
-			const lines = content.split('\n').filter((l) => l.trim());
-
-			interface ParsedLine {
-				line: string;
-				entry: {
-					type?: string;
-					role?: string;
-					content?: CodexMessageContent[];
-					payload?: {
-						id?: string;
-						type?: string;
-						role?: string;
-						content?: CodexMessageContent[];
-						call_id?: string;
-						name?: string;
-					};
-					item?: {
-						id?: string;
-						type?: string;
-						tool?: string;
-						tool_call_id?: string;
-					};
-				} | null;
-				remove?: boolean;
-			}
-
-			/**
-			 * Check if an entry is a user message in either format:
-			 * - Legacy: { type: 'message', role: 'user' }
-			 * - v0.111.0: { type: 'response_item', payload: { type: 'message', role: 'user' } }
-			 */
-			function isUserMessage(entry: ParsedLine['entry']): boolean {
-				if (!entry) return false;
-				if (entry.type === 'message' && entry.role === 'user') return true;
-				if (
-					entry.type === 'response_item' &&
-					entry.payload?.type === 'message' &&
-					entry.payload?.role === 'user'
-				) {
-					return true;
-				}
-				return false;
-			}
-
-			/**
-			 * Extract text content from a user message entry (either format)
-			 */
-			function getUserMessageContent(entry: ParsedLine['entry']): string {
-				if (!entry) return '';
-				if (entry.type === 'message' && entry.role === 'user' && entry.content) {
-					return extractTextFromContent(entry.content);
-				}
-				if (
-					entry.type === 'response_item' &&
-					entry.payload?.type === 'message' &&
-					entry.payload?.role === 'user' &&
-					entry.payload?.content
-				) {
-					return extractTextFromContent(entry.payload.content);
-				}
-				return '';
-			}
-
-			const parsedLines: ParsedLine[] = [];
-			let userMessageIndex = -1;
-
-			// Build a message-index counter that mirrors readSessionMessages logic.
-			// readSessionMessages increments messageIndex only for actual displayable messages,
-			// so we must do the same here to match UUIDs like "codex-msg-N".
-			let messageIndex = 0;
-
-			// Parse all lines and find the target user message
-			for (let i = 0; i < lines.length; i++) {
-				try {
-					const entry = JSON.parse(lines[i]);
-					parsedLines.push({ line: lines[i], entry });
-
-					// Match user messages in both legacy and v0.111.0 formats
-					if (isUserMessage(entry)) {
-						// Check payload.id first (v0.111.0 format uses real IDs)
-						if (
-							entry.type === 'response_item' &&
-							entry.payload?.id &&
-							userMessageUuid === entry.payload.id
-						) {
-							userMessageIndex = parsedLines.length - 1;
-						}
-						const text = getUserMessageContent(entry);
-						if (text) {
-							// Fallback: match by sequential message UUID (codex-msg-N)
-							if (
-								userMessageIndex !== parsedLines.length - 1 &&
-								userMessageUuid === `codex-msg-${messageIndex}`
-							) {
-								userMessageIndex = parsedLines.length - 1;
-							}
-							messageIndex++;
-						}
-					}
-					// Match by payload.id for non-user v0.111.0 entries (e.g. tool calls referenced by id)
-					else if (
-						entry.type === 'response_item' &&
-						entry.payload?.id &&
-						userMessageUuid === entry.payload.id
-					) {
-						userMessageIndex = parsedLines.length - 1;
-					}
-
-					// Count assistant messages to keep messageIndex in sync with readSessionMessages
-					if (entry.type === 'message' && entry.role === 'assistant') {
-						const text = extractTextFromContent(entry.content);
-						if (text) messageIndex++;
-					} else if (
-						entry.type === 'response_item' &&
-						entry.payload?.type === 'message' &&
-						entry.payload?.role === 'assistant'
-					) {
-						const text = extractTextFromContent(entry.payload?.content);
-						if (text) messageIndex++;
-					} else if (entry.type === 'item.completed' && entry.item?.type === 'agent_message') {
-						messageIndex++;
-					} else if (entry.type === 'item.completed' && entry.item?.type === 'tool_call') {
-						messageIndex++;
-					} else if (entry.type === 'item.completed' && entry.item?.type === 'tool_result') {
-						messageIndex++;
-					} else if (
-						entry.type === 'response_item' &&
-						(entry.payload?.type === 'function_call' || entry.payload?.type === 'custom_tool_call')
-					) {
-						messageIndex++;
-					}
-					// function_call_output / custom_tool_call_output normally merges into a preceding tool call
-					// in readSessionMessages. But when no matching call_id is found, readSessionMessages creates
-					// a standalone assistant message and increments messageIndex. Mirror that here.
-					if (
-						entry.type === 'response_item' &&
-						(entry.payload?.type === 'function_call_output' ||
-							entry.payload?.type === 'custom_tool_call_output')
-					) {
-						const callId = entry.payload.call_id;
-						// Check if any prior parsed line has a matching call_id
-						const hasMatchingCall = callId
-							? parsedLines.some(
-									(p) =>
-										p.entry &&
-										p.entry.type === 'response_item' &&
-										(p.entry.payload?.type === 'function_call' ||
-											p.entry.payload?.type === 'custom_tool_call') &&
-										p.entry.payload?.call_id === callId
-								)
-							: false;
-						if (!hasMatchingCall) {
-							messageIndex++;
-						}
-					}
-				} catch {
-					parsedLines.push({ line: lines[i], entry: null });
-				}
-			}
-
-			// Fallback: try content match if UUID didn't work
-			if (userMessageIndex === -1 && fallbackContent) {
-				const normalizedFallback = fallbackContent.trim().toLowerCase();
-
-				for (let i = parsedLines.length - 1; i >= 0; i--) {
-					const entry = parsedLines[i].entry;
-					if (isUserMessage(entry)) {
-						const textContent = getUserMessageContent(entry);
-						if (textContent.trim().toLowerCase() === normalizedFallback) {
-							userMessageIndex = i;
-							logger.info('Found Codex message by content match', LOG_CONTEXT, {
-								sessionId,
-								index: i,
-							});
-							break;
-						}
-					}
-				}
-			}
-
-			if (userMessageIndex === -1) {
-				logger.warn('User message not found for deletion in Codex session', LOG_CONTEXT, {
-					sessionId,
-					userMessageUuid,
-					hasFallback: !!fallbackContent,
-				});
-				return { success: false, error: 'User message not found' };
-			}
-
-			// Find the end of the response (next user message) and collect tool_call IDs being deleted
-			let endIndex = parsedLines.length;
-			const deletedToolCallIds = new Set<string>();
-			const deletedCallIds = new Set<string>();
-
-			for (let i = userMessageIndex + 1; i < parsedLines.length; i++) {
-				const entry = parsedLines[i].entry;
-
-				// Stop at the next user message (either format)
-				if (isUserMessage(entry)) {
-					endIndex = i;
-					break;
-				}
-
-				// Collect tool_call IDs from item.completed events being deleted (legacy)
-				if (
-					entry?.type === 'item.completed' &&
-					entry?.item?.type === 'tool_call' &&
-					entry?.item?.id
-				) {
-					deletedToolCallIds.add(entry.item.id);
-				}
-
-				// Collect call_ids from response_item function_call events being deleted (v0.111.0)
-				if (
-					entry?.type === 'response_item' &&
-					(entry?.payload?.type === 'function_call' ||
-						entry?.payload?.type === 'custom_tool_call') &&
-					entry?.payload?.call_id
-				) {
-					deletedCallIds.add(entry.payload.call_id);
-				}
-			}
-
-			// Remove the message pair
-			let linesToKeep = [...parsedLines.slice(0, userMessageIndex), ...parsedLines.slice(endIndex)];
-
-			// If we deleted any tool_call blocks, clean up orphaned tool_result/output blocks
-			if (deletedToolCallIds.size > 0 || deletedCallIds.size > 0) {
-				linesToKeep = linesToKeep.filter((item) => {
-					const entry = item.entry;
-
-					// Remove tool_result events that reference deleted tool_call IDs (legacy)
-					if (entry?.type === 'item.completed' && entry?.item?.type === 'tool_result') {
-						// tool_result items reference tool_call via tool_call_id or the item.id pattern
-						const toolCallId = entry.item.tool_call_id || entry.item.id;
-						if (toolCallId && deletedToolCallIds.has(toolCallId)) {
-							return false;
-						}
-					}
-
-					// Remove function_call_output events that reference deleted call_ids (v0.111.0)
-					if (
-						entry?.type === 'response_item' &&
-						(entry?.payload?.type === 'function_call_output' ||
-							entry?.payload?.type === 'custom_tool_call_output') &&
-						entry?.payload?.call_id &&
-						deletedCallIds.has(entry.payload.call_id)
-					) {
-						return false;
-					}
-
-					return true;
-				});
-
-				const allDeletedIds = [...Array.from(deletedToolCallIds), ...Array.from(deletedCallIds)];
-				logger.info('Cleaned up orphaned tool output blocks in Codex session', LOG_CONTEXT, {
-					sessionId,
-					deletedToolCallIds: allDeletedIds,
-				});
-			}
-
-			const newContent = linesToKeep.map((p) => p.line).join('\n') + '\n';
-			this.transcriptCursors.delete(sessionFilePath);
-			await fs.writeFile(sessionFilePath, newContent, 'utf-8');
-
-			const linesRemoved = parsedLines.length - linesToKeep.length;
-			logger.info('Deleted message pair from Codex session', LOG_CONTEXT, {
-				sessionId,
-				userMessageUuid,
-				linesRemoved,
-			});
-
-			return { success: true, linesRemoved };
-		} catch (error) {
-			logger.error('Error deleting message pair from Codex session', LOG_CONTEXT, {
-				sessionId,
-				error,
-			});
-			captureException(error, { operation: 'codexStorage:deleteMessagePair', sessionId });
-			return { success: false, error: String(error) };
-		}
+		return {
+			success: false,
+			error: 'Native Codex history is read-only. Delete the whole conversation instead.',
+		};
 	}
 }

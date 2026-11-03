@@ -259,7 +259,7 @@ export interface GlobalStatsCache {
  * v6: Claude subagent transcripts priced into their parent session.
  * v7: Claude messages counted as prompts and responses, not transcript lines.
  */
-export const GLOBAL_STATS_CACHE_VERSION = 7;
+export const GLOBAL_STATS_CACHE_VERSION = 8;
 
 /**
  * Oldest global cache version with the current shape whose CLAUDE entries can be

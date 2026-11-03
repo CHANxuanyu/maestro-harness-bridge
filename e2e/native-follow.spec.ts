@@ -231,3 +231,36 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		expect(native.files(provider)).toHaveLength(2);
 	});
 }
+
+test('codex compressed history opens and follows replaced archives', async ({ native }) => {
+	const { zstdCompressSync } = await import('node:zlib');
+	const seed = await native.externalTurn('codex', 'Compressed history fixture', {
+		answer: 'Older compressed answer.',
+	});
+	const bytes = fs.readFileSync(seed.file);
+	fs.writeFileSync(seed.file + '.zst', zstdCompressSync(bytes));
+	fs.unlinkSync(seed.file);
+	await native.createAgent('codex');
+	await native.page
+		.locator('[data-conversation-kind="history"] button[data-tree-nav]')
+		.filter({ hasText: 'Compressed history fixture' })
+		.click();
+	await expect(
+		native.output().getByText('Older compressed answer.', { exact: true })
+	).toBeVisible();
+	const appended = Buffer.from(
+		JSON.stringify({
+			type: 'response_item',
+			payload: {
+				type: 'message',
+				role: 'assistant',
+				content: [{ type: 'output_text', text: 'Externally revised archive.' }],
+			},
+		}) + '\n'
+	);
+	fs.writeFileSync(seed.file + '.zst', zstdCompressSync(Buffer.concat([bytes, appended])));
+	await expect(
+		native.output().getByText('Externally revised archive.', { exact: true })
+	).toBeVisible();
+	expect(fs.existsSync(seed.file)).toBe(false);
+});

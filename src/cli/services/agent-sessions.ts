@@ -323,3 +323,16 @@ export function listClaudeSessions(
 
 	return { sessions: paginated, totalCount, filteredCount };
 }
+
+/** Native history CLI actions share the desktop adapters, accounts and read limits. */
+export async function invokeNativeHistory<T>(channel: string, args: unknown[]): Promise<T> {
+	const { withMaestroClient } = await import('./maestro-client');
+	const reply = await withMaestroClient((client) =>
+		client.sendCommand<{ ok: boolean; result?: T; error?: string }>(
+			{ type: 'bridge.invoke', channel, args },
+			'bridge.response'
+		)
+	);
+	if (!reply.ok) throw new Error(reply.error || 'Native history request failed');
+	return reply.result as T;
+}

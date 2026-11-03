@@ -1,3 +1,8 @@
+import {
+	readCodexRollout,
+	preferPlainCodexRollouts,
+	isCodexRollout,
+} from '../../../shared/codexRollout';
 /**
  * Agent Sessions IPC Handlers
  *
@@ -68,6 +73,7 @@ import {
 import { countClaudeTranscriptMessages } from '../../../shared/claudeTranscriptMessages';
 import { resolveAgentAccountDir, getProviderAccountDirs } from '../../agents/provider-account-dirs';
 import { getSessionsStore } from '../../stores/getters';
+import { CodexSessionStorage } from '../../storage/codex-session-storage';
 import { discoverProjectHistory } from '../../storage/project-history';
 import { getPrompt } from '../../prompt-manager';
 import type { ProjectHistoryScope } from '../../../shared/projectHistory';
@@ -313,12 +319,15 @@ async function discoverCodexSessionFiles(): Promise<SessionFileInfo[]> {
 		dayDirs,
 		LOCAL_SESSION_READ_CONCURRENCY,
 		async ({ dir, prefix }) =>
-			(await readdirOrEmpty(dir))
-				.filter((f) => f.endsWith('.jsonl'))
-				.map((file) => ({
-					filePath: path.join(dir, file),
-					sessionKey: `${prefix}/${file.replace('.jsonl', '')}`,
-				}))
+			preferPlainCodexRollouts(
+				(await readdirOrEmpty(dir)).filter(
+					(file) => file.endsWith('.jsonl') || isCodexRollout(file)
+				),
+				(file) => file
+			).map((file) => ({
+				filePath: path.join(dir, file),
+				sessionKey: `${prefix}/${file.replace(/\.jsonl(?:\.zst)?$/, '')}`,
+			}))
 	);
 
 	return statSessionFiles(listings.flat());
@@ -411,6 +420,28 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 						void captureException(error, { operation: 'projectHistory', provider });
 				},
 			})
+		)
+	);
+
+	ipcMain.handle(
+		'agentSessions:deleteCodexConversation',
+		withIpcErrorLogging(
+			handlerOpts('deleteCodexConversation'),
+			async (ownerId: string, nativeId: string) => {
+				const owner = getSessionsStore()
+					.get('sessions', [])
+					.find((session) => session.id === ownerId);
+				if (!owner || owner.toolType !== 'codex') throw new Error('A Codex agent is required');
+				const remoteId = owner.sessionSshRemoteConfig?.enabled
+					? owner.sessionSshRemoteConfig.remoteId
+					: undefined;
+				const sshConfig = remoteId ? getSshRemoteById(remoteId) : undefined;
+				if (owner.sessionSshRemoteConfig?.enabled && !sshConfig)
+					throw new Error('SSH remote is unavailable');
+				const storage = getSessionStorage('codex');
+				if (!(storage instanceof CodexSessionStorage)) throw new Error('Codex storage unavailable');
+				return storage.deleteSession(nativeId, resolveAgentAccountDir(ownerId), sshConfig);
+			}
 		)
 	);
 
@@ -517,7 +548,13 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 				// session, if the provider transcript is gone but we hold a mirror, copy
 				// it back to the provider's path so the read below (and a later native
 				// --resume) finds it. No-op/cheap when the provider file still exists.
-				if (!options?.readOnly && !sshConfig && !configDir && !options?.offset) {
+				if (
+					agentId !== 'codex' &&
+					!options?.readOnly &&
+					!sshConfig &&
+					!configDir &&
+					!options?.offset
+				) {
 					await restoreStarredTranscript({ agentId, projectPath, sessionId });
 				}
 
@@ -547,13 +584,17 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 				sshRemoteId?: string
 			): Promise<string | null> => {
 				// Never fall back to a local transcript for an unsupported remote probe.
-				if (sshRemoteId) return null;
+				if (sshRemoteId && agentId !== 'codex') return null;
+				const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+				if (sshRemoteId && !sshConfig) throw new Error('SSH remote is unavailable');
 				const storage = getSessionStorage(agentId);
 				if (!storage?.getTranscriptRevision) return null;
 				const configDir =
 					options?.configDir ??
 					(options?.ownerAgentId ? resolveAgentAccountDir(options.ownerAgentId) : undefined);
-				return storage.getTranscriptRevision(projectPath, sessionId, { configDir });
+				return sshConfig
+					? storage.getTranscriptRevision(projectPath, sessionId, { configDir }, sshConfig)
+					: storage.getTranscriptRevision(projectPath, sessionId, { configDir });
 			}
 		)
 	);
@@ -1153,6 +1194,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 			});
 			const codexToProcess = codexFiles.filter((f) => {
 				const cached = cache!.providers['codex'].sessions[f.sessionKey];
+				if (cache!.version < GLOBAL_STATS_CACHE_VERSION) return true;
 				return !cached || cached.fileMtimeMs < f.mtimeMs;
 			});
 
@@ -1181,7 +1223,10 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 				async ({ file, provider }) => {
 					const label = provider === 'claude-code' ? 'Claude' : 'Codex';
 					try {
-						const content = await fs.readFile(file.filePath, 'utf-8');
+						const content =
+							provider === 'codex'
+								? await readCodexRollout(file.filePath)
+								: await fs.readFile(file.filePath, 'utf-8');
 						const stats =
 							provider === 'claude-code'
 								? parseClaudeSessionContent(

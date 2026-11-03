@@ -23,6 +23,7 @@ vi.mock('../../../../main/utils/logger', () => ({
 }));
 import { registerAgentSessionsHandlers } from '../../../../main/ipc/handlers/agentSessions';
 import { getSessionStorage, type AgentSessionStorage } from '../../../../main/agents';
+import { getSshRemoteById } from '../../../../main/stores';
 import { resolveAgentAccountDir } from '../../../../main/agents/provider-account-dirs';
 import { restoreStarredTranscript } from '../../../../main/storage/starred-transcript-mirror';
 
@@ -61,9 +62,9 @@ describe('read-only transcript refresh IPC', () => {
 		expect(resolveAgentAccountDir).not.toHaveBeenCalled();
 	});
 	it('never probes locally when a remote was requested', async () => {
-		expect(
-			await invoke('codex', '/project', 'native-id', undefined, 'unavailable-remote')
-		).toBeNull();
+		await expect(
+			invoke('codex', '/project', 'native-id', undefined, 'unavailable-remote')
+		).rejects.toThrow('SSH remote is unavailable');
 		expect(getSessionStorage).not.toHaveBeenCalled();
 		expect(probe).not.toHaveBeenCalled();
 	});
@@ -84,12 +85,31 @@ describe('read-only transcript refresh IPC', () => {
 			undefined
 		);
 	});
-	it('retains the existing user-driven initial-read restoration behavior', async () => {
+	it('keeps Codex initial reads read-only even when an older caller omits readOnly', async () => {
 		await handlers.get('agentSessions:read')!({}, 'codex', '/project', 'native-id', { offset: 0 });
-		expect(restoreStarredTranscript).toHaveBeenCalledWith({
-			agentId: 'codex',
-			projectPath: '/project',
-			sessionId: 'native-id',
-		});
+		expect(restoreStarredTranscript).not.toHaveBeenCalled();
+		expect(read).toHaveBeenCalledWith('/project', 'native-id', { offset: 0 }, undefined);
+	});
+	it('passes the selected SSH host into Codex revision reads', async () => {
+		const remote = {
+			id: 'remote',
+			enabled: true,
+		} as import('../../../../shared/types').SshRemoteConfig;
+		vi.mocked(getSshRemoteById).mockReturnValueOnce(remote);
+		expect(
+			await invoke(
+				'codex',
+				'/remote/project',
+				'native-id',
+				{ configDir: '/remote/account' },
+				'remote'
+			)
+		).toBe('opaque-revision');
+		expect(probe).toHaveBeenCalledWith(
+			'/remote/project',
+			'native-id',
+			{ configDir: '/remote/account' },
+			remote
+		);
 	});
 });

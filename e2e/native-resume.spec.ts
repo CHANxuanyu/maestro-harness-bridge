@@ -37,6 +37,10 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		await expect(
 			native.output().getByText('Tool acceptance complete.', { exact: true })
 		).toBeVisible();
+		// Same reason as codex b below: the answer can land before the native
+		// process exits, and the finished turn then folds its tools. A real Codex
+		// run lost the race and its detail buttons unmounted mid-click.
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
 		await native.expandTools();
 		for (const tool of tools) {
 			const result = native

@@ -118,15 +118,21 @@ export function resolveAppProduct(options: UserDataDirOptions = {}): {
 /** Refuse foreign identities and legacy settings with no evidence of this fork. */
 export function assertUserDataDirProduct(dir: string, product: AppProductIdentity): string {
 	checkedProduct(product);
+	let stored: AppProductIdentity | undefined;
 	try {
-		const stored = checkedProduct(
+		stored = checkedProduct(
 			JSON.parse(fs.readFileSync(path.join(dir, PRODUCT_IDENTITY_FILE), 'utf8'))
 		);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+			throw new Error(
+				`Cannot verify that the data directory belongs to ${product.productName}: ${dir}. ${PRODUCT_IDENTITY_FILE} is unreadable or invalid.`
+			);
+	}
+	if (stored) {
 		if (stored.productId !== product.productId || stored.productName !== product.productName)
 			throw new Error(`Maestro data directory belongs to a different product: ${dir}`);
 		return dir;
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
 	}
 	const settingsFile = path.join(resolveSyncDir(dir), 'maestro-settings.json');
 	let settings: Record<string, unknown>;
@@ -134,11 +140,13 @@ export function assertUserDataDirProduct(dir: string, product: AppProductIdentit
 		settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return dir;
-		throw error;
+		throw new Error(
+			`Cannot verify that the data directory belongs to ${product.productName}: ${dir}. maestro-settings.json is unreadable or invalid.`
+		);
 	}
 	if (
 		product.productId === 'com.maestro.i18n.local' &&
-		['system', 'en', 'zh-CN'].includes(settings.uiLanguage as string)
+		['system', 'en', 'zh-CN'].includes(settings?.uiLanguage as string)
 	)
 		return dir;
 	throw new Error(
@@ -146,20 +154,39 @@ export function assertUserDataDirProduct(dir: string, product: AppProductIdentit
 	);
 }
 
-/** The desktop claims its own data directory once, after validating legacy data. */
-export function recordUserDataProduct(dir: string): void {
-	const identity = resolveAppProduct();
-	if (!identity.verified) return;
-	assertUserDataDirProduct(dir, identity.product);
-	fs.mkdirSync(dir, { recursive: true });
+/** Electron chose this directory. Record identity without blocking store recovery or startup. */
+export function recordUserDataProduct(
+	dir: string,
+	warn: (message: string) => void = console.warn
+): void {
 	try {
-		fs.writeFileSync(path.join(dir, PRODUCT_IDENTITY_FILE), JSON.stringify(identity.product), {
-			flag: 'wx',
-			mode: 0o600,
-		});
+		const identity = resolveAppProduct();
+		if (!identity.verified) return;
+		fs.mkdirSync(dir, { recursive: true });
+		try {
+			fs.writeFileSync(path.join(dir, PRODUCT_IDENTITY_FILE), JSON.stringify(identity.product), {
+				flag: 'wx',
+				mode: 0o600,
+			});
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+			const stored = checkedProduct(
+				JSON.parse(fs.readFileSync(path.join(dir, PRODUCT_IDENTITY_FILE), 'utf8'))
+			);
+			if (
+				stored.productId !== identity.product.productId ||
+				stored.productName !== identity.product.productName
+			)
+				throw new Error(`Maestro data directory belongs to a different product: ${dir}`);
+		}
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-		assertUserDataDirProduct(dir, identity.product);
+		try {
+			warn(
+				`Could not record Maestro data directory product identity: ${error instanceof Error ? error.message : String(error)}`
+			);
+		} catch {
+			// Even a failed warning reporter must not prevent desktop startup.
+		}
 	}
 }
 
@@ -206,6 +233,15 @@ function probeIsPackaged(): boolean {
  */
 export function resolveUserDataDir(options: UserDataDirOptions = {}): string {
 	const env = options.env ?? process.env;
+	// Desktop shared services inherit Electron's already selected folder.
+	// Electron running the CLI as Node has no browser process type and keeps
+	// the same strict checks as an ordinary Node CLI or standalone runner.
+	if (
+		env.MAESTRO_USER_DATA &&
+		process.versions.electron &&
+		(process as NodeJS.Process & { type?: string }).type === 'browser'
+	)
+		return path.resolve(env.MAESTRO_USER_DATA);
 	const identity = resolveAppProduct(options);
 	if (env.MAESTRO_USER_DATA) {
 		const dir = path.resolve(env.MAESTRO_USER_DATA);

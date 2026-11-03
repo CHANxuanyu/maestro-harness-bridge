@@ -18,6 +18,7 @@ import { isMacOS } from '../shared/platformDetection';
 import { DURATION_MS } from '../shared/duration';
 import { installApplicationMenu, setMenuLanguage } from './app-menu';
 import { recordUserDataProduct } from '../shared/userDataDir';
+import { captureMessage } from './utils/sentry';
 import { DEFAULT_UI_LANGUAGE } from '../shared/i18n';
 import { buildWebSettingsSnapshot } from './web-server/web-settings-snapshot';
 import path from 'path';
@@ -294,7 +295,10 @@ if (isDevelopment && !DEMO_MODE && !process.env.USE_PROD_DATA) {
 // in the same data directory the app actually uses. Without this, dev and prod
 // would clobber each other's cli-server.json at the hardcoded platform default.
 process.env.MAESTRO_USER_DATA = app.getPath('userData');
-recordUserDataProduct(app.getPath('userData'));
+recordUserDataProduct(app.getPath('userData'), (message) => {
+	logger.warn(message, 'ProductIdentity');
+	void captureMessage(message, 'warning').catch(() => {});
+});
 
 // ============================================================================
 // Store Initialization (after userData path is configured)

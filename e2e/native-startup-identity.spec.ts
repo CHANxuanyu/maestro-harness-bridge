@@ -46,6 +46,8 @@ for (const scenario of ['torn settings', 'no language marker', 'foreign sidecar'
 			expect(fs.readFileSync(path.join(native.data, quarantined!), 'utf8')).toBe(torn);
 		}
 		if (scenario === 'foreign sidecar')
-			await expect(native.cli('list')).rejects.toThrow(/different product/);
+			// The fixture always appends --json, so use a verb that takes it and reads
+			// the data folder; bare `list` fails on the option before the folder check.
+			await expect(native.cli('list', 'agents')).rejects.toThrow(/different product/);
 	});
 }

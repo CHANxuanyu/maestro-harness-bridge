@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { isPathAtOrUnderRoot, normalizeWorktreePath } from '../../shared/worktreePaths';
 
 /**
  * Read candidates for a local project, retaining its saved spelling as well
@@ -63,13 +64,36 @@ export async function localProjectWorktrees(
 	return (await cached.value).map((entry) => ({ ...entry, missing: !fs.existsSync(entry.path) }));
 }
 
-/** Confirm membership from Git's common-directory registry, never folder decoding. */
+/** Confirm recorded cwd membership from Git or Claude desktop's managed worktree root. */
 export async function localProjectWorktree(
 	projectPath: string,
 	cwd: string
 ): Promise<import('../../shared/projectHistory').NativeWorktree | undefined> {
 	const paths = localProjectPathCandidates(cwd);
-	return (await localProjectWorktrees(projectPath)).find((entry) => paths.includes(entry.path));
+	const registered = await localProjectWorktrees(projectPath);
+	const exact = registered.find((entry) => paths.includes(entry.path));
+	if (exact) return exact;
+	// Claude desktop removes archived worktrees from Git, sometimes along with
+	// the directory. Their recorded cwd still identifies the owning project.
+	for (const project of localProjectPathCandidates(projectPath)) {
+		const root = path.join(project, '.claude', 'worktrees');
+		for (const candidate of paths) {
+			const resolved = path.resolve(candidate);
+			if (!isPathAtOrUnderRoot(normalizeWorktreePath(resolved), normalizeWorktreePath(root)))
+				continue;
+			const name = path.relative(root, resolved).split(path.sep)[0];
+			if (!name) continue;
+			const worktreePath = path.join(root, name);
+			return (
+				registered.find((entry) => entry.path === worktreePath) ?? {
+					path: worktreePath,
+					name,
+					missing: !fs.existsSync(worktreePath),
+				}
+			);
+		}
+	}
+	return undefined;
 }
 
 /** All desktop and CLI resume spawns keep the native conversation's cwd. */

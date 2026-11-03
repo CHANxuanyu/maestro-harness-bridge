@@ -638,10 +638,12 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			for (const dir of await this.getProjectHistoryDirs(projectPath, account)) {
 				const candidate = path.join(dir, `${sessionId}.jsonl`);
 				try {
-					await fs.access(candidate);
-					return candidate;
+					const stats = await fs.stat(candidate);
+					const session = await parseSessionFile(candidate, sessionId, '', stats);
+					if (session && (await localProjectWorktree(projectPath, session.projectPath)))
+						return candidate;
 				} catch {
-					/* Try the next registered worktree. */
+					/* Try the next worktree candidate within this account. */
 				}
 			}
 			return null;
@@ -687,7 +689,29 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			projectPath,
 			...(await localProjectWorktrees(projectPath)).map((entry) => entry.path),
 		];
-		return [...new Set(paths.flatMap((cwd) => this.getEncodedProjectDirs(cwd, configDir)))];
+		const dirs = paths.flatMap((cwd) => this.getEncodedProjectDirs(cwd, configDir));
+		const projectsDir = this.getProjectsDir(configDir);
+		try {
+			// Encoding only narrows the scan. listSessions confirms membership from
+			// each transcript's cwd, including archived, unregistered worktrees.
+			const prefixes = localProjectPathCandidates(projectPath).map(
+				(candidate) => `${encodeClaudeProjectPath(path.join(candidate, '.claude', 'worktrees'))}-`
+			);
+			for (const name of await fs.readdir(projectsDir)) {
+				if (prefixes.some((prefix) => name.startsWith(prefix)))
+					dirs.push(path.join(projectsDir, name));
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+				logger.warn(`Cannot enumerate Claude worktree history: ${projectsDir}`, LOG_CONTEXT, {
+					error,
+				});
+				if (!isExpectedSessionReadError(error))
+					captureException(error, { operation: 'claudeStorage:getProjectHistoryDirs' });
+				throw error;
+			}
+		}
+		return [...new Set(dirs)];
 	}
 
 	/**
@@ -993,14 +1017,15 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			return this.listSessionsPaginatedRemote(projectPath, options, sshConfig);
 		}
 
-		if ((await localProjectWorktrees(projectPath)).length > 1) {
+		const projectDirs = await this.getProjectHistoryDirs(projectPath, options?.configDir);
+		const ownDirs = this.getEncodedProjectDirs(projectPath, options?.configDir);
+		if (projectDirs.some((dir) => !ownDirs.includes(dir))) {
 			return BaseSessionStorage.paginateSessions(
 				await this.listSessions(projectPath, undefined, options?.configDir),
 				options
 			);
 		}
-		const { cursor, limit = 100, configDir } = options || {};
-		const projectDirs = await this.getProjectHistoryDirs(projectPath, configDir);
+		const { cursor, limit = 100 } = options || {};
 		const projectDir = projectDirs.join('\0');
 		const sortedFiles = await this.statProjectSessionFiles(projectDirs);
 		const totalCount = sortedFiles.length;

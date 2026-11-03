@@ -103,6 +103,116 @@ it.each(['claude', 'codex'])(
 		).toBe('Worktree question');
 	}
 );
+
+it.each(
+	['claude', 'codex'].flatMap((provider) =>
+		[false, true].flatMap((missing) =>
+			[false, true].map((nested) => ({ provider, missing, nested }))
+		)
+	)
+)(
+	'finds unregistered $provider desktop history, missing=$missing, nested=$nested',
+	async ({ provider, missing, nested }) => {
+		git('worktree', 'remove', '--force', worktree);
+		const cwd = nested ? path.join(worktree, 'packages', 'app') : worktree;
+		if (!missing) await fs.mkdir(cwd, { recursive: true });
+		const file =
+			provider === 'claude'
+				? path.join(account, 'projects', encodeClaudeProjectPath(cwd), `${id}.jsonl`)
+				: path.join(
+						account,
+						'sessions',
+						'2026',
+						'11',
+						'03',
+						`rollout-2026-11-03T00-00-00-${id}.jsonl`
+					);
+		if (provider === 'claude' && nested) {
+			await fs.mkdir(path.dirname(file), { recursive: true });
+			await fs.rename(
+				path.join(account, 'projects', encodeClaudeProjectPath(worktree), `${id}.jsonl`),
+				file
+			);
+		}
+		const content = (await fs.readFile(file, 'utf8')).replaceAll(
+			JSON.stringify(worktree),
+			JSON.stringify(cwd)
+		);
+		await fs.writeFile(file, content);
+		const storage = provider === 'claude' ? new ClaudeSessionStorage() : new CodexSessionStorage();
+		const sessions = await storage.listSessions(project, undefined, account);
+		expect(sessions).toHaveLength(1);
+		expect(sessions[0]).toMatchObject({
+			projectPath: cwd,
+			worktree: { path: worktree, name: 'x', missing },
+		});
+		expect((await storage.listSessionsPaginated(project, { configDir: account })).sessions).toEqual(
+			sessions
+		);
+		for (const scope of [project, cwd]) {
+			expect(
+				(await storage.readSessionMessages(scope, id, { configDir: account, readOnly: true }))
+					.messages[0].content
+			).toBe('Worktree question');
+		}
+		const { nativeSessionResumeCwd } = await import('../../../main/storage/local-project-paths');
+		if (missing) {
+			await expect(nativeSessionResumeCwd(storage, project, id, account)).rejects.toThrow(
+				'Worktree is gone or unavailable. This conversation is read-only.'
+			);
+		} else expect(await nativeSessionResumeCwd(storage, project, id, account)).toBe(cwd);
+		expect(await fs.readFile(file, 'utf8')).toBe(content);
+	}
+);
+
+it.each(['claude', 'codex'])(
+	'excludes %s transcript cwd paths that merely share the project prefix',
+	async (provider) => {
+		for (const cwd of [path.join(`${project}-other`, '.claude', 'worktrees', 'x')]) {
+			// Put the misleading cwd in an otherwise plausible transcript folder.
+			const file =
+				provider === 'claude'
+					? path.join(account, 'projects', encodeClaudeProjectPath(worktree), 'wrong.jsonl')
+					: path.join(account, 'sessions', '2026', '11', '03', 'wrong.jsonl');
+			await fs.writeFile(
+				file,
+				provider === 'claude'
+					? JSON.stringify({ type: 'user', cwd, message: { content: 'Wrong project' } })
+					: JSON.stringify({ type: 'session_meta', payload: { id: 'wrong', cwd } }) +
+							'\n' +
+							JSON.stringify({ type: 'message', role: 'user', content: 'Wrong project' })
+			);
+			const storage =
+				provider === 'claude' ? new ClaudeSessionStorage() : new CodexSessionStorage();
+			expect(
+				(await storage.listSessions(project, undefined, account)).map((s) => s.sessionId)
+			).toEqual([id]);
+		}
+	}
+);
+
+it('does not read an unrelated Claude cwd from a plausible archived worktree folder', async () => {
+	const dir = path.join(
+		account,
+		'projects',
+		encodeClaudeProjectPath(path.join(worktree, 'nested'))
+	);
+	await fs.mkdir(dir, { recursive: true });
+	await fs.writeFile(
+		path.join(dir, 'wrong.jsonl'),
+		JSON.stringify({
+			type: 'user',
+			cwd: path.join(`${project}-other`, '.claude', 'worktrees', 'x'),
+			message: { content: 'Other project must stay excluded' },
+		})
+	);
+	await expect(
+		new ClaudeSessionStorage().readSessionMessages(project, 'wrong', {
+			configDir: account,
+			readOnly: true,
+		})
+	).rejects.toThrow(/ENOENT/);
+});
 it('gives an exact-cwd owner precedence across duplicate scopes and keeps deleted worktrees readable', async () => {
 	const storage = new ClaudeSessionStorage();
 	const owners = [

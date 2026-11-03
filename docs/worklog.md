@@ -4,7 +4,7 @@
 
 ## 2026-11-03：随包 CLI 产品目录与最终验证
 
-本轮第三部分把 CLI 存储、连接发现、origin、运行标记与忙碌探测收敛到 canonical userDataDir。打包把产品名称和 ID 嵌入 CLI，并生成随包身份 JSON 供独立 Cue 与编译模块读取。桌面启动写一次产品身份侧文件；CLI 保留 MAESTRO_USER_DATA 覆盖，但拒绝其他产品身份和没有 fork 标记的旧设置。旧 HB 目录凭 uiLanguage 字段识别，未改写旧设置。`settings set` 在应用运行时等待同一 settings:set 接口回执，关闭后写原文件。
+本轮第三部分把 CLI 存储、连接发现、origin、运行标记与忙碌探测收敛到 canonical userDataDir。打包把产品名称和 ID 嵌入 CLI，并生成随包身份 JSON 供独立 Cue 与编译模块读取。桌面启动在身份文件缺失时记录身份，不验证旧设置；身份冲突只警告并调用 captureMessage，身份记录及报告失败都不阻断启动。桌面共享服务信任 Electron 已选定的目录。CLI 保留 MAESTRO_USER_DATA 覆盖，但拒绝其他产品身份和没有 fork 标记的旧设置，损坏设置明确报不能验证。旧 HB 目录凭 uiLanguage 字段识别，未改写旧设置。`settings set` 在应用运行时等待同一 settings:set 接口回执，关闭后写原文件。
 
 - 失败先行，产品目录 4 条全部失败；live apply 首轮 1 失败 / 1 通过；运行标记路径首轮 6 失败 / 31 通过。临时回退运行标记与忙碌探测后 2 条失败，恢复后通过。整轮修复的回退和完整命令结果见交付报告。
 - 临时 HOME 中实测按 fork 身份构建的 CLI，默认目录主题写入成功，显式指向 upstream 身份的临时目录以非零退出并保留其设置。此产物是源码测试用的独立 CLI，没有构建或验收发行包。
@@ -13,12 +13,16 @@
 - 最终完整单元为 2109 文件，47888 通过 / 5 失败 / 90 既有跳过，另有 permission-relay 的 socket setup 失败。暂退生产代码到 `72545fdad` 后，五条失败和 setup 失败全部复现；基线比较为 78 通过 / 5 失败 / 2 既有跳过。相关修改文件 17 个、254 条全部通过，原有会话存储 API 114 条也全部通过。删除错误文案兼容临时回退后复现 6 失败 / 108 通过，随后恢复；原 API 断言保持原样。
 - 最终类型三项目、ESLint、src Prettier、差异空白与新增行长划线检查通过。主进程与 preload、fork 身份 CLI 构建通过；临时 HOME 中两项产品目录 smoke 断言通过。
 - 类型三项目、ESLint 和 src Prettier 首轮通过。合成夹具 39 通过 / 3 失败，另有 3 个 Unix socket listen EPERM；两条新增 Electron 用例均在启动时报 Process failed to launch，未进入断言。主进程、preload、renderer 和 CLI 构建通过，渲染构建保留原有动态导入警告。没有修改断言强度、增加自动重试或禁用测试。
+- 后续覆盖复核先复现桌面损坏设置、缺语言标记、外部身份及 CLI 错误报告的问题，再补齐归档 worktree 的存在、缺失、嵌套 cwd、分页及只读打开。临时回退本轮生产修复后 15 失败 / 17 通过；仅回退 Claude 候选读取的 cwd 校验后，其他项目正文泄漏断言再次失败。全部生产文件按原字节恢复，反证没有提交。恢复后相关 10 文件 234 条通过。新扫描曾漏报意外目录错误，属于产品回归，修复后既有 Sentry 断言保持原样并通过。
+- 本轮主进程、preload、renderer 和 fork 身份 CLI 构建通过。临时 HOME 的 CLI smoke 确认损坏设置报不能验证且无 SyntaxError，外部 sidecar 仍拒绝，原设置字节不变。新增桌面身份启动三场景，并把缺失 worktree 的 Electron 用例扩展到 Claude 与 Codex，先用 Git 注销并移除目录，再验证阅读与发送拒绝。五场景均在 Electron 启动前失败；独立最小 Electron 应用也复现同一 Process failed to launch，属于当前环境限制，没有执行场景断言。
+- Opus 提供的沙箱外完整合成 Electron 结果为 `f77e4a5fb` 上 71 通过 / 0 失败，耗时 16.1 分钟，无产品或测试失败待修；该结果不覆盖本次后续修改。当前修改的 GUI 场景仍须在沙箱外执行。
+- 后续修复最终通过 `npm run lint`、`npm run lint:eslint`、`npm run format:check`，文档与 Electron 用例的单独 Prettier 检查、差异空白和新增长划线检查也通过。使用临时目录与合成账户，无真实账户目录操作，保留三笔既有提交并仅追加本地提交，不推送。
 
-被测对象为本地源码及临时 CLI 构建，真实模型、真实账户、Mac 安装包和跨平台 CI 未验。SSH worktree 关联明确不支持；完全移出 Git 注册表且重启前从未发现的外部 worktree 不能证明主仓库归属。Opus 仍须在沙箱外重跑 Electron 与发行包验收。
+被测对象为本地源码及临时 fork 身份 CLI 构建，未构建新安装包，真实模型、真实账户、Mac 安装包和跨平台 CI 未验。SSH worktree 关联明确不支持；完全移出 Git 注册表且不位于项目 `.claude/worktrees/` 内的外部 worktree 不能证明主仓库归属。后续修改的 Electron 场景与发行包验收仍待沙箱外执行。
 
 ## 2026-11-03：同仓库 worktree 对话
 
-被测对象为 hb.6 上的本地源码。Claude 与 Codex 共用只读 Git worktree 注册表，按项目 cwd 缓存 30 秒并限制 128 项，通过 common-dir 与注册表确认同仓库路径。Claude 从原生记录读取 cwd，候选目录不靠编码反解；Codex 保留 session_meta cwd。项目树优先选择 exact-cwd 智能体，其他同仓库对话归主项目，原生 ID 与账户键去重。
+被测对象为 hb.6 上的本地源码。Claude 与 Codex 共用只读 Git worktree 注册表，按项目 cwd 缓存 30 秒并限制 128 项，通过 common-dir 与注册表确认同仓库路径。后续复核补充项目 `.claude/worktrees/` 内的原生 cwd 归属：即使 Git 已注销或目录已删除，仍按第一层目录名保留 worktree 身份，子目录 cwd 同样有效。使用 isPathAtOrUnderRoot 校验路径边界。Claude 编码目录仅缩小扫描候选，列表、分页及主项目读取再以转录 cwd 确认归属，不反解目录名；Codex 保留 session_meta cwd。项目树优先选择 exact-cwd 智能体，其他同仓库对话归主项目，原生 ID 与账户键去重。
 
 - 接续在主进程共享启动入口读取所选账户的原生 cwd。目录缺失时拒绝启动并说明只读，历史打开使用 readOnly。最小 MiniBadge 显示分支或目录名；`native-history list` 和 `list-sessions --native` 复用项目树服务。SSH 只提供原项目路径历史，并返回 worktree 扩展未实现的原因。
 - 临时 Git 仓库与 linked worktree 回归首轮 3 条全部失败；接续新增 1 条先失败。覆盖托管目录、外部 worktree、伪候选排除、exact-cwd、去重、删除目录后读取及跨适配器缓存查询。临时回退整轮生产修复后 7 失败 / 8 通过，恢复后 2 文件 15 条通过；此前适配器、进程、CLI 相关 6 文件 224 条通过。

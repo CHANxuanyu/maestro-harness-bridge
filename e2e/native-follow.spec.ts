@@ -265,43 +265,49 @@ test('codex compressed history opens and follows replaced archives', async ({ na
 	expect(fs.existsSync(seed.file)).toBe(false);
 });
 
-test('claude worktree history stays readable after its working folder is deleted', async ({
-	native,
-}) => {
-	const { execFileSync } = await import('node:child_process');
-	const git = (...args: string[]) =>
-		execFileSync('git', args, {
-			cwd: native.project,
-			stdio: 'pipe',
-			env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+for (const provider of ['claude', 'codex'] as const) {
+	test(`${provider} worktree history stays readable after Git removes its working folder`, async ({
+		native,
+	}) => {
+		const { execFileSync } = await import('node:child_process');
+		const git = (...args: string[]) =>
+			execFileSync('git', args, {
+				cwd: native.project,
+				stdio: 'pipe',
+				env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+			});
+		git('init');
+		git(
+			'-c',
+			'user.name=Fixture',
+			'-c',
+			'user.email=fixture@example.test',
+			'commit',
+			'--allow-empty',
+			'-m',
+			'fixture'
+		);
+		const cwd = path.join(native.project, '.claude', 'worktrees', 'history-x');
+		git('worktree', 'add', '-b', 'history-x', cwd);
+		const turn = createTurn({
+			provider,
+			configDir: provider === 'claude' ? native.claude : native.codex,
+			cwd,
+			prompt: 'Managed worktree history',
 		});
-	git('init');
-	git(
-		'-c',
-		'user.name=Fixture',
-		'-c',
-		'user.email=fixture@example.test',
-		'commit',
-		'--allow-empty',
-		'-m',
-		'fixture'
-	);
-	const cwd = path.join(native.project, '.claude', 'worktrees', 'history-x');
-	git('worktree', 'add', '-b', 'history-x', cwd);
-	const turn = createTurn({
-		provider: 'claude',
-		configDir: native.claude,
-		cwd,
-		prompt: 'Managed worktree history',
+		turn.finish('Worktree transcript answer.');
+		const before = fs.readFileSync(turn.file);
+		git('worktree', 'remove', '--force', cwd);
+		await native.createAgent(provider);
+		await native.page
+			.locator('[data-conversation-kind="history"] button[data-tree-nav]')
+			.filter({ hasText: 'Managed worktree history' })
+			.click();
+		await expect(
+			native.output().getByText('Worktree transcript answer.', { exact: true })
+		).toBeVisible();
+		await native.send('Continue after archive');
+		await expect(native.output().getByText(/Worktree is gone or unavailable/)).toBeVisible();
+		expect(fs.readFileSync(turn.file)).toEqual(before);
 	});
-	turn.finish('Worktree transcript answer.');
-	fs.rmSync(cwd, { recursive: true, force: true });
-	await native.createAgent('claude');
-	await native.page
-		.locator('[data-conversation-kind="history"] button[data-tree-nav]')
-		.filter({ hasText: 'Managed worktree history' })
-		.click();
-	await expect(
-		native.output().getByText('Worktree transcript answer.', { exact: true })
-	).toBeVisible();
-});
+}

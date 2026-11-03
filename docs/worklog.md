@@ -428,4 +428,4 @@ hb.6 源码 `72545fdad` 的真实 Codex 验收中，`codex b: parallel tools` �
 
 同一源码的真实 Claude 验收中，`claude h: saving history` 90 秒内没有等到历史条目。临时导出 Maestro 日志后确认是测试工作量的问题，不是产品问题：真实回合只运行 `printf saved-work`，什么都没改，总结提示词规定这种情况回答 `NOTHING_TO_REPORT`，Maestro 按设计不写历史。工作量改为 `printf saved-work | tee saved-work.txt`，让总结有可报告的文件改动；假程序只显示命令，不受影响。随后条目写入，但测试拿原始 markdown 比对面板文字（面板把反引号渲染成代码样式），改为比对去掉 markdown 标记后的显示文字，检查内容不变。两处改动之前的两次真实运行就是各自的反证。改完后真实 Claude h 和真实 Codex h 各 1/1 通过，四个假程序 h 场景通过，真实账户位置快照前后一致。
 
-日志里 `Spawning process:` 打印的是渲染进程传来的检测路径，实际启动的是 `handle-spawn.ts` 里优先的 `sessionCustomPath`，所以主回合确实走了固定版本 2.1.310 的包装脚本，看日志时容易误读。整轮 Claude 真实验收结束后 `/private/tmp` 留下 3 个只含 `claude/` 配置目录的临时目录（没有凭据文件，没有残留进程），是 Claude CLI 在清理后又写回了配置目录，已检查后删除；测试清理应等子进程写完再删，列为后续。
+日志里 `Spawning process:` 打印的是渲染进程传来的检测路径，实际启动的是 `handle-spawn.ts` 里优先的 `sessionCustomPath`，所以主回合确实走了固定版本 2.1.310 的包装脚本，看日志时容易误读。整轮 Claude 真实验收结束后 `/private/tmp` 留下只含 `claude/` 配置目录的临时目录，没有凭据文件。原因是 4 个 `maestro-p --status` 探测进程在各自测试结束后没有退出（父进程已是 1，各自指向一个临时 Claude 配置），清理之后又写回了配置。探测用的是发布克隆里的 Electron 和 `maestro-p`，而测试跑在构建克隆，来路还没查清。进程已停止，目录检查后删除，真实账户位置不受影响。测试应随测试应用一起结束这些探测，列为后续。

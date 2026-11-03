@@ -282,3 +282,9 @@ describe('ProjectSessionSidebar hands the caret to the composer', () => {
 		expect(screen.queryByTestId('sidebar-new-conversation')).not.toBeInTheDocument();
 	});
 });
+
+it('shows the recorded worktree identity beside a conversation title', () => {
+	setHistory([record({ worktree: { path: '/synthetic/worktrees/x', branch: 'fixture-x' } })]);
+	renderSidebar(useSessionStore.getState().sessions);
+	expect(screen.getByText('fixture-x').getAttribute('title')).toBe('/synthetic/worktrees/x');
+});

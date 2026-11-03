@@ -4,7 +4,9 @@ import * as os from 'os';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { ProcessManager } from '../../../process-manager';
-import { AgentDetector } from '../../../agents';
+import { nativeSessionResumeCwd } from '../../../storage/local-project-paths';
+import { resolveAgentAccountDir } from '../../../../shared/agentAccountDir';
+import { AgentDetector, getSessionStorage } from '../../../agents';
 import { checkBinaryExists, checkCustomPath } from '../../../agents/path-prober';
 import { resolveMaestroCliScriptPath } from '../../../cue/cue-cli-executor';
 import {
@@ -187,6 +189,32 @@ export async function handleProcessSpawn(
 		agentCustomEnvVars: agentConfigValues.customEnvVars as Record<string, string> | undefined,
 		sessionCustomEnvVars: config.sessionCustomEnvVars,
 	};
+
+	if (
+		config.agentSessionId &&
+		!config.sessionSshRemoteConfig?.enabled &&
+		(config.toolType === 'claude-code' || config.toolType === 'codex')
+	) {
+		const storage = getSessionStorage(config.toolType);
+		if (storage) {
+			const accountDir = resolveAgentAccountDir(
+				{ toolType: config.toolType, customEnvVars: config.sessionCustomEnvVars },
+				{
+					agentLevelEnvVars: claudeEnvLayers.agentCustomEnvVars,
+					globalShellEnvVars,
+					homeDir: os.homedir(),
+					env: process.env,
+				}
+			);
+			const nativeCwd = await nativeSessionResumeCwd(
+				storage,
+				config.cwd,
+				config.agentSessionId,
+				accountDir
+			);
+			if (nativeCwd) config = { ...config, cwd: nativeCwd };
+		}
+	}
 
 	const claudeContext = await resolveClaudeSpawnContext(config, agent, {
 		sessionsStore: deps.sessionsStore,

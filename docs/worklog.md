@@ -2,6 +2,15 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-03：同仓库 worktree 对话
+
+被测对象为 hb.6 上的本地源码。Claude 与 Codex 共用只读 Git worktree 注册表，按项目 cwd 缓存 30 秒并限制 128 项，通过 common-dir 与注册表确认同仓库路径。Claude 从原生记录读取 cwd，候选目录不靠编码反解；Codex 保留 session_meta cwd。项目树优先选择 exact-cwd 智能体，其他同仓库对话归主项目，原生 ID 与账户键去重。
+
+- 接续在主进程共享启动入口读取所选账户的原生 cwd。目录缺失时拒绝启动并说明只读，历史打开使用 readOnly。最小 MiniBadge 显示分支或目录名；`native-history list` 和 `list-sessions --native` 复用项目树服务。SSH 只提供原项目路径历史，并返回 worktree 扩展未实现的原因。
+- 临时 Git 仓库与 linked worktree 回归首轮 3 条全部失败；接续新增 1 条先失败。覆盖托管目录、外部 worktree、伪候选排除、exact-cwd、去重、删除目录后读取及跨适配器缓存查询。临时回退整轮生产修复后 7 失败 / 8 通过，恢复后 2 文件 15 条通过；此前适配器、进程、CLI 相关 6 文件 224 条通过。
+- 补充统计去重回归，主项目和 worktree 同时列出同一原生 ID 时只计一次。修复前 1 失败，修复后通过；临时移除去重后同一断言再次失败，随后恢复。
+- 增加合成 Electron 用例 `claude worktree history stays readable after its working folder is deleted`。最终全套检查与 Electron 结果在交付报告汇总。未测发行包、真实账户或模型。已从 Git 注册表彻底移除且重启前从未发现的外部 worktree 无法证明所属仓库；其原目录路径下的原生历史仍可直接读取。
+
 ## 2026-11-03：Codex 压缩原生历史
 
 本轮被测对象为 `codex/native-history-coverage` 分支源码，基于 hb.6 合并候选 `72545fdad`。未构建发行包，未使用真实账户或模型，原生归档只在内存中解码。

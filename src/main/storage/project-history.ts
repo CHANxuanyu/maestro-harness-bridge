@@ -116,6 +116,13 @@ export async function discoverProjectHistory(
 				if (scope.sshRemoteId && (!remote || !remote.enabled)) {
 					throw new Error('SSH remote is unavailable; local history was not substituted.');
 				}
+				if (remote && (provider === 'claude-code' || provider === 'codex'))
+					result.errors.push({
+						projectKey: scope.projectKey,
+						provider,
+						message:
+							'Worktree history expansion is unavailable over SSH. Only project-path history is listed.',
+					});
 				const projectPath = normalize(scope.projectPath, scope.sshRemoteId);
 				const candidates = scope.ownerIds
 					.map((id) => owners.get(id))
@@ -152,6 +159,22 @@ export async function discoverProjectHistory(
 							)
 								continue;
 							const nativePath = normalize(native.projectPath || projectPath, scope.sshRemoteId);
+							const exactScope = orderedScopes.find(
+								(candidate) =>
+									candidate.sshRemoteId === scope.sshRemoteId &&
+									normalize(candidate.projectPath, candidate.sshRemoteId) === nativePath
+							);
+							const mainScope =
+								!scope.sshRemoteId && native.worktree?.commonDir
+									? orderedScopes.find(
+											(candidate) =>
+												!candidate.sshRemoteId &&
+												normalize(candidate.projectPath) ===
+													path.dirname(native.worktree!.commonDir!)
+										)
+									: undefined;
+							const owningScope = exactScope || mainScope;
+							if (owningScope && owningScope.projectKey !== scope.projectKey) continue;
 							const origin =
 								deps.origins?.[provider]?.[nativePath]?.[native.sessionId] ||
 								deps.origins?.[provider]?.[projectPath]?.[native.sessionId];
@@ -164,9 +187,24 @@ export async function discoverProjectHistory(
 							]);
 							if (rows.has(key)) continue;
 							let compatible: HistoryOwner | undefined;
-							for (const owner of candidates) {
+							const compatibleOwners = deps.owners
+								.filter(
+									(owner) => owner.toolType === provider && ownerHost(owner) === scope.sshRemoteId
+								)
+								.sort(
+									(a, b) =>
+										Number(normalize(b.cwd || '', scope.sshRemoteId) === nativePath) -
+										Number(normalize(a.cwd || '', scope.sshRemoteId) === nativePath)
+								);
+							for (const owner of compatibleOwners) {
 								if (
-									normalize(owner.projectRoot || owner.cwd || '', scope.sshRemoteId) !== nativePath
+									normalize(owner.cwd || owner.projectRoot || '', scope.sshRemoteId) !==
+										nativePath &&
+									!(
+										native.worktree &&
+										normalize(owner.projectRoot || owner.cwd || '', scope.sshRemoteId) ===
+											projectPath
+									)
 								)
 									continue;
 								if (
@@ -177,6 +215,7 @@ export async function discoverProjectHistory(
 									)) === pool
 								) {
 									compatible = owner;
+									if (normalize(owner.cwd || '', scope.sshRemoteId) === nativePath) break;
 									if (
 										owner.aiTabs?.some(
 											(tab) => !tab.hidden && tab.agentSessionId === native.sessionId
@@ -200,6 +239,7 @@ export async function discoverProjectHistory(
 								key,
 								projectKey: scope.projectKey,
 								projectPath: nativePath,
+								worktree: native.worktree,
 								provider,
 								nativeSessionId: native.sessionId,
 								title: title || native.sessionId.slice(0, 8),

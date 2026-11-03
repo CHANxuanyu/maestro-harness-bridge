@@ -310,6 +310,7 @@ list
 	.option('-k, --skip <count>', 'Number of sessions to skip for pagination (default: 0)')
 	.option('-s, --search <keyword>', 'Filter sessions by keyword in name or first message')
 	.option('--json', 'Output as JSON (for scripting)')
+	.option('--native', 'List project native history through the running desktop app')
 	.action(listSessions);
 
 program

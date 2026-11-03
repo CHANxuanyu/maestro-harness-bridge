@@ -20,6 +20,7 @@
  * ```
  */
 
+import { localProjectWorktree } from './local-project-paths';
 import { app } from 'electron';
 import {
 	MAX_CODEX_ROLLOUT_BYTES,
@@ -1448,7 +1449,8 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			if (cached && cached.fileMtimeMs >= stats.mtimeMs) {
 				if (
 					cached.session.projectPath &&
-					isSessionForProject(cached.session.projectPath, projectPath)
+					(isSessionForProject(cached.session.projectPath, projectPath) ||
+						(await localProjectWorktree(projectPath, cached.session.projectPath)))
 				) {
 					sessions.push(cached.session);
 				}
@@ -1464,7 +1466,11 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			if (session) {
 				cache.sessions[filePath] = { session, fileMtimeMs: stats.mtimeMs };
 				cacheUpdated = true;
-				if (session.projectPath && isSessionForProject(session.projectPath, projectPath)) {
+				if (
+					session.projectPath &&
+					(isSessionForProject(session.projectPath, projectPath) ||
+						(await localProjectWorktree(projectPath, session.projectPath)))
+				) {
 					sessions.push(session);
 				}
 			}
@@ -1493,6 +1499,11 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		if (cacheUpdated) {
 			cache.lastProcessedAt = Date.now();
 			await saveCodexSessionCache(cache);
+		}
+
+		for (let i = 0; i < sessions.length; i++) {
+			const worktree = await localProjectWorktree(projectPath, sessions[i].projectPath);
+			if (worktree && !worktree.isMain) sessions[i] = { ...sessions[i], worktree };
 		}
 
 		// Titles are indexed separately from rollouts and can change without transcript writes.

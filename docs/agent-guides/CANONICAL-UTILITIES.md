@@ -247,3 +247,7 @@ The tracker at [DEDUP-TRACKER.md](DEDUP-TRACKER.md) lists all known duplication 
 ## Codex rollout archives
 
 `codexRolloutSessionId()`, `isCodexRollout()`, `preferPlainCodexRollouts()`, `readCodexRollout()` and `readCodexRolloutSync()` in `src/shared/codexRollout.ts` are the filename, source selection and bounded read entry points for Codex native history. Both `.jsonl` and `.jsonl.zst` use a 100 MB source and expanded-byte limit. Zstd decoding uses Node's built-in implementation entirely in memory. SSH storage transfers binary bytes as base64 for local decoding. A plain rollout wins when both forms carry the same UUID. Never write expanded archives to disk or use compressed byte offsets as transcript offsets.
+
+## Native history worktrees
+
+`localProjectWorktrees()`, `localProjectWorktree()` and `nativeSessionResumeCwd()` extend `src/main/storage/local-project-paths.ts`. The first two share a bounded 30-second Git registry cache keyed by physical local project cwd. A single read-only common-dir query and worktree registry query cover every transcript in that repository. Transcript cwd is authoritative, never reconstructed from Claude's lossy folder encoding. The resume helper resolves the selected native conversation in its original account and rejects an unavailable cwd before a process starts. SSH paths never enter these helpers.

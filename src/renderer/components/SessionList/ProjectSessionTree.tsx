@@ -49,6 +49,7 @@ import type { SidebarConversation, SidebarProject } from '../../utils/projectSes
 import { useClickOutside, useContextMenuPosition } from '../../hooks';
 import { AgentLogo } from '../Wizard/screens/AgentSelectionScreen/components/AgentLogo';
 import { getAgentDisplayName } from '../../../shared/agentMetadata';
+import { MiniBadge } from '../ui/MiniBadge';
 import { FilterInput } from '../ui/FilterInput';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { shortcutSuffix } from '../ui/ShortcutHint';
@@ -449,6 +450,18 @@ const ConversationRow = memo(function ConversationRow({
 					>
 						{title}
 					</span>
+					{conversation.history?.worktree && (
+						<MiniBadge
+							theme={theme}
+							label={
+								conversation.history.worktree.branch ||
+								conversation.history.worktree.name ||
+								'Worktree'
+							}
+							title={conversation.history.worktree.path}
+							color={theme.colors.textDim}
+						/>
+					)}
 					{conversation.starred && (
 						<Star
 							aria-hidden

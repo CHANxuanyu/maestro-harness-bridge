@@ -2,6 +2,36 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-03：hb.6 候选与 Windows 账户路径回归
+
+本轮在无远端的独立克隆 `codex/hb6-candidate` 上工作，起点为 `0c15c18f5eef5cc17aec6387fd1797973f7b5d92`，包含 PR #32 至 #43 的叠加内容。仅准备发布制度第 1 步的本地候选，没有推送、开 PR、打标签、构建、安装或发布；没有运行真实模式或访问真实账户、钥匙串及 Maestro 用户数据。被测对象是本地源码，未把开发预览或旧包验收当成本版包通过。
+
+- **Windows 判断：** `b596e2773` 的两条测试将 mock 的 `/tmp` 经平台 `path.join` 得到的目录直接作为预期。Windows 上它是根相对路径，`path.resolve` 会补当前盘符。实际启动经 `resolveAgentAccountEnv()`，原生检查经 `nativeAboutMeTarget()`，两者都调用 `resolveAgentAccountDir()` 并使用相同的 CLI 设置层。因此是测试预期缺少解析，不是两条生产路径不一致，没有修改生产实现。
+- **回归：** `agent-spawner.test.ts` 的 `native account (host paths)` 和新增 `native account (win32 paths)` 分别对 Claude Code、Codex 运行 `spawns %s in the same global account used by the native profile check`。用隔离的 path 默认导出注入 `path.win32` 和合成 cwd；期望值通过相应平台解析计算，盘符只用于合成输入，不写死在预期结果。每条同时比较实际启动环境、原生检查目标的父目录和平台解析结果，不跳过 Windows。
+- **失败先行与反证：** 新 Windows 用例保留旧断言时，150 条中 2 失败、148 通过；两条在目录一致断言通过后于旧预期失败。修正后相关四文件 220/220。另临时让启动 overlay 使用未解析目录，150 条中 2 失败、148 通过，失败点是启动目录与检查目录不一致；finally 恢复生产文件原字节，相关四文件再次 220/220。反证改动未提交。
+- **候选内容：** package 与 lock 根及根包版本统一为 `1.0.1-hb.6`；Unreleased 归入 2026-11-03 候选节并保留空标题，hb.5 仅在标题注明“未发布，编号作废”，原正文保留。新增[版本说明](release-notes/v1.0.1-hb.6.md)与[验收记录](verification/v1.0.1-hb.6.md)，README 和分支入口对齐。说明以 hb.4 为上一公开版，引用真实模式锁定表，区分连接器累计变化与未扩大准入；真实模式和发行包 GUI 全为待执行。
+- **候选反证：** 临时只读一致性检查在旧版本上报 `hb.6 candidate version`（实际 hb.5），完成版本与文档后通过；正式检查脚本未改，输出 `HB source policy passed: 1.0.1-hb.6`。
+
+实际命令与结果如下，重复运行不累加成新的通过数：
+
+| 命令                                                                                                                                                                                                                   | 实际结果                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `npm run test -- src/__tests__/cli/services/agent-spawner.test.ts`                                                                                                                                                     | Windows 注入旧断言及故意破坏启动路径各为 2 失败 / 148 通过；恢复后纳入下行 |
+| `npm run test -- src/__tests__/cli/services/agent-spawner.test.ts src/__tests__/cli/services/system-prompt-native.test.ts src/__tests__/main/agents/provider-account-dirs.test.ts src/__tests__/main/about-me.test.ts` | 4 文件，220/220，无跳过                                                    |
+| `npm run lint`                                                                                                                                                                                                         | 通过，三个 TypeScript 配置                                                 |
+| `npm run lint:eslint`                                                                                                                                                                                                  | 通过                                                                       |
+| `npm run format:check:all`                                                                                                                                                                                             | 通过，全仓文件                                                             |
+| `npm run docs:verify`                                                                                                                                                                                                  | 647 条路径，0 缺失                                                         |
+| `npm run lint:doc-refs`                                                                                                                                                                                                | 39 份指引引用全部有效                                                      |
+| `npm run test:release-policy`                                                                                                                                                                                          | 11/11，无跳过                                                              |
+| `git diff --check`                                                                                                                                                                                                     | 通过                                                                       |
+| `node scripts/hb-release.mjs check`                                                                                                                                                                                    | `HB source policy passed: 1.0.1-hb.6`                                      |
+| `npm run test`                                                                                                                                                                                                         | 2100 文件通过、1 文件既有跳过；47859 通过、88 既有跳过、0 失败；414.73 秒  |
+
+默认沙箱首次启动定向单元时，Vite 向工作区外已存在的共享依赖目录写临时配置被 EPERM 阻止，0 用例执行；经自动审批允许同一命令在沙箱外运行后才得到上表结果。没有安装依赖、改测试配置、放宽断言、增加重试或旁路。完整单元仅运行一轮，既有跳过项如实保留在计数中，本轮未新增任何跳过。Windows 测试修复单独提交为 `d1257ebc9`。原始日志只留在临时目录，不入公共提交。
+
+**未完成与交接：** 本轮没有新的 Windows/Linux CI、Electron、真实模式或发行包证据，无远端所以未创建 PR。已有界面缺口与 Mac 复现步骤见[Opus 清单](verification/v1.0.1-hb.6.md#交给-opus-的界面复现)，包括 DeepSeek 遗留历史路由、Codex 系统封装预览、草稿辨认、向导提示、输出/effort/active writer 和多窗口退出；本轮未启动 GUI，未将这些记录成新观察到的故障，未修改渲染层或冻结项。用户后续须重新登录 Claude，并在实际 hb.6 Mac 包勾选核心流程、三项功能和改版项；Opus 从新克隆复核门禁、真实模式、打包与五项资产后再按发布制度推进。
+
 ## 2026-11-02：关于我的原生启动判定
 
 基于 `57341e712`，在独立本地分支 `codex/about-me-native` 补后端、共享契约、CLI 与测试。没有修改渲染层、冻结的 hb.5、依赖或远端。本轮被测对象是该分支工作树的源码及由它构建的 `dist/main`、`dist/cli`、`dist/renderer`，不是发行包；未安装、发布或调用真实模型与账户。

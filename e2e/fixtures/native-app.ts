@@ -80,6 +80,12 @@ export class NativeApp {
 			this.copilot,
 		])
 			fs.mkdirSync(dir, { recursive: true });
+		const productFile = path.resolve('dist/maestro-product.json');
+		const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
+		const product = fs.existsSync(productFile)
+			? JSON.parse(fs.readFileSync(productFile, 'utf8'))
+			: { productName: pkg.build.productName, productId: pkg.build.appId };
+		fs.writeFileSync(path.join(this.data, 'maestro-product.json'), JSON.stringify(product));
 		fs.writeFileSync(
 			path.join(this.data, 'maestro-settings.json'),
 			JSON.stringify({

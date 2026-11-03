@@ -2,6 +2,20 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-03：随包 CLI 产品目录与最终验证
+
+本轮第三部分把 CLI 存储、连接发现、origin、运行标记与忙碌探测收敛到 canonical userDataDir。打包把产品名称和 ID 嵌入 CLI，并生成随包身份 JSON 供独立 Cue 与编译模块读取。桌面启动写一次产品身份侧文件；CLI 保留 MAESTRO_USER_DATA 覆盖，但拒绝其他产品身份和没有 fork 标记的旧设置。旧 HB 目录凭 uiLanguage 字段识别，未改写旧设置。`settings set` 在应用运行时等待同一 settings:set 接口回执，关闭后写原文件。
+
+- 失败先行，产品目录 4 条全部失败；live apply 首轮 1 失败 / 1 通过；运行标记路径首轮 6 失败 / 31 通过。临时回退运行标记与忙碌探测后 2 条失败，恢复后通过。整轮修复的回退和完整命令结果见交付报告。
+- 临时 HOME 中实测按 fork 身份构建的 CLI，默认目录主题写入成功，显式指向 upstream 身份的临时目录以非零退出并保留其设置。此产物是源码测试用的独立 CLI，没有构建或验收发行包。
+- 完整首轮单元 2109 文件，47873 通过 / 10 失败 / 90 既有跳过。发现并修正旧 Claude 自定义账户无 cwd 行的兼容回退、全局统计的 legacy 文件名兼容，并把原生打开的严格 readOnly 参数纳入原有精确断言。后续相关 7 文件 172 条通过；增加压缩统计、普通文件优先和归档项保留回归，原实现 2 条失败，恢复后该文件 48 条通过。
+- 复核补齐 SSH Codex revision 的 host 隔离与路径缓存、整段远程删除、父项目路径读取 worktree 对话、主仓库与独立 worktree 项目同时存在时的归属，以及 exact-worktree 列表的身份。新增用例在修复前分别失败，恢复后通过。完整轮次与反证数量在交付报告汇总。
+- 最终完整单元为 2109 文件，47888 通过 / 5 失败 / 90 既有跳过，另有 permission-relay 的 socket setup 失败。暂退生产代码到 `72545fdad` 后，五条失败和 setup 失败全部复现；基线比较为 78 通过 / 5 失败 / 2 既有跳过。相关修改文件 17 个、254 条全部通过，原有会话存储 API 114 条也全部通过。删除错误文案兼容临时回退后复现 6 失败 / 108 通过，随后恢复；原 API 断言保持原样。
+- 最终类型三项目、ESLint、src Prettier、差异空白与新增行长划线检查通过。主进程与 preload、fork 身份 CLI 构建通过；临时 HOME 中两项产品目录 smoke 断言通过。
+- 类型三项目、ESLint 和 src Prettier 首轮通过。合成夹具 39 通过 / 3 失败，另有 3 个 Unix socket listen EPERM；两条新增 Electron 用例均在启动时报 Process failed to launch，未进入断言。主进程、preload、renderer 和 CLI 构建通过，渲染构建保留原有动态导入警告。没有修改断言强度、增加自动重试或禁用测试。
+
+被测对象为本地源码及临时 CLI 构建，真实模型、真实账户、Mac 安装包和跨平台 CI 未验。SSH worktree 关联明确不支持；完全移出 Git 注册表且重启前从未发现的外部 worktree 不能证明主仓库归属。Opus 仍须在沙箱外重跑 Electron 与发行包验收。
+
 ## 2026-11-03：同仓库 worktree 对话
 
 被测对象为 hb.6 上的本地源码。Claude 与 Codex 共用只读 Git worktree 注册表，按项目 cwd 缓存 30 秒并限制 128 项，通过 common-dir 与注册表确认同仓库路径。Claude 从原生记录读取 cwd，候选目录不靠编码反解；Codex 保留 session_meta cwd。项目树优先选择 exact-cwd 智能体，其他同仓库对话归主项目，原生 ID 与账户键去重。
@@ -16,9 +30,9 @@
 本轮被测对象为 `codex/native-history-coverage` 分支源码，基于 hb.6 合并候选 `72545fdad`。未构建发行包，未使用真实账户或模型，原生归档只在内存中解码。
 
 - 历史适配器与独立全局统计扫描识别 `.jsonl.zst`，共享工具限制源文件和展开后的字节量，普通文件按 UUID 优先。同步 CLI 学习扫描复用同一解码入口。会话、token 和全局统计缓存版本递增，全局旧缓存保留归档项并重读现存 Codex 文件。
-- `native-history list|read|delete` 走桌面 IPC 适配器，读取使用 readOnly；删除整段 Codex 对话限本机账户和 UUID，不重写任何剩余原生文件。`shared-history-manager.ts` 只读 Maestro 自有 history 文件，没有 Codex rollout 读取点。
+- `native-history list|read|delete` 走桌面 IPC 适配器，读取使用 readOnly；删除整段 Codex 对话限所选主机、账户和 UUID，不重写任何剩余原生文件。`shared-history-manager.ts` 只读 Maestro 自有 history 文件，没有 Codex rollout 读取点。
 - 失败先行，压缩读取 2 失败 / 1 通过，整段删除新增 1 失败，CLI 桥接新增 1 失败。回退存储修复后 3 失败 / 1 通过；临时取消解码后大小上限测试 1 失败 / 3 通过，随后恢复。相关初批 7 文件 71 条通过。旧 mock 增加只读文件描述符接口，读取隔离断言改为检查实际 open 路径。
-- 增加 Electron 合成用例 `codex compressed history opens and follows replaced archives`。最终检查和 Electron 启动结果在后续本日记录及交付报告汇总。SSH 整段删除未提供，已有逐消息删除不用于压缩归档。发行包与真实跨应用验收留给 Opus。
+- 增加 Electron 合成用例 `codex compressed history opens and follows replaced archives`。最终检查和 Electron 启动结果在后续本日记录及交付报告汇总。SSH 整段删除复用非递归远程文件删除；逐消息删除统一拒绝改写 Codex 原生历史。发行包与真实跨应用验收留给 Opus。
 
 ## 2026-11-03：hb.6 候选与 Windows 账户路径回归
 

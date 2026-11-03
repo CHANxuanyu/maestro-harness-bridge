@@ -10,7 +10,7 @@
 // app is not a git checkout.
 
 import { execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,3 +34,12 @@ mkdirSync(outDir, { recursive: true });
 const commitHash = resolveCommitHash();
 writeFileSync(path.join(outDir, 'build-info.json'), `${JSON.stringify({ commitHash }, null, 2)}\n`);
 console.log(`[gen-build-info] wrote dist/main/build-info.json (commitHash="${commitHash}")`);
+
+const pkg = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+writeFileSync(
+	path.join(repoRoot, 'dist', 'maestro-product.json'),
+	JSON.stringify({
+		productName: process.env.MAESTRO_PRODUCT_NAME || pkg.build.productName,
+		productId: process.env.MAESTRO_PRODUCT_ID || pkg.build.appId,
+	}) + '\n'
+);

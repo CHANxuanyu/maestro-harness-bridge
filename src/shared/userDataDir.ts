@@ -25,15 +25,25 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { resolveSyncDir } from './syncPath';
 
 /** Directory name Electron derives from `package.json` `name`, unpackaged. */
 const UNPACKAGED_APP_NAME = 'maestro';
-/** Directory name Electron derives from `build.productName`, once packaged. */
-const PACKAGED_APP_NAME = 'Maestro';
+export interface AppProductIdentity {
+	productName: string;
+	productId: string;
+}
+
+declare const __MAESTRO_PRODUCT__: AppProductIdentity | undefined;
+const PRODUCT_IDENTITY_FILE = 'maestro-product.json';
 /** Sibling directory the app redirects to in development. */
 const DEV_APP_NAME = 'maestro-dev';
 
 export interface UserDataDirOptions {
+	/** Shipped Resources directory or compiled shared module directory. */
+	runtimeDir?: string;
+	/** Injected identity for tests and embedding processes. */
+	product?: AppProductIdentity;
 	env?: NodeJS.ProcessEnv;
 	platform?: NodeJS.Platform;
 	homedir?: string;
@@ -47,6 +57,110 @@ export interface UserDataDirOptions {
 	isPackaged?: boolean;
 	/** Whether this is a development run. Defaults to `NODE_ENV`. */
 	isDevelopment?: boolean;
+}
+
+function checkedProduct(value: AppProductIdentity): AppProductIdentity {
+	if (
+		!value ||
+		typeof value.productName !== 'string' ||
+		!value.productName.trim() ||
+		/[\\/]/.test(value.productName) ||
+		value.productName === '.' ||
+		value.productName === '..' ||
+		typeof value.productId !== 'string' ||
+		!value.productId
+	)
+		throw new Error('Invalid packaged Maestro product identity');
+	return value;
+}
+
+/** Packaging writes this identity for both the bundled CLI and standalone runners. */
+export function resolveAppProduct(options: UserDataDirOptions = {}): {
+	product: AppProductIdentity;
+	verified: boolean;
+} {
+	if (options.product) return { product: checkedProduct(options.product), verified: true };
+	if (typeof __MAESTRO_PRODUCT__ !== 'undefined')
+		return { product: checkedProduct(__MAESTRO_PRODUCT__), verified: true };
+	// Uncompiled checkouts use package metadata. Compiled runners require their shipped identity.
+	if (options.runtimeDir || __filename.endsWith('.js')) {
+		let directory = options.runtimeDir ?? __dirname;
+		for (let level = 0; level < 5; level++) {
+			try {
+				const product = JSON.parse(
+					fs.readFileSync(path.join(directory, PRODUCT_IDENTITY_FILE), 'utf8')
+				);
+				return { product: checkedProduct(product), verified: true };
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+			}
+			const parent = path.dirname(directory);
+			if (parent === directory) break;
+			directory = parent;
+		}
+		throw new Error(
+			'Packaged Maestro product identity is missing. Set MAESTRO_USER_DATA only with a matching product identity.'
+		);
+	}
+	const pkg = require('../../package.json') as {
+		productName?: string;
+		build: { productName: string; appId: string };
+	};
+	return {
+		product: checkedProduct({
+			productName: pkg.productName || pkg.build.productName,
+			productId: pkg.build.appId,
+		}),
+		verified: false,
+	};
+}
+
+/** Refuse foreign identities and legacy settings with no evidence of this fork. */
+export function assertUserDataDirProduct(dir: string, product: AppProductIdentity): string {
+	checkedProduct(product);
+	try {
+		const stored = checkedProduct(
+			JSON.parse(fs.readFileSync(path.join(dir, PRODUCT_IDENTITY_FILE), 'utf8'))
+		);
+		if (stored.productId !== product.productId || stored.productName !== product.productName)
+			throw new Error(`Maestro data directory belongs to a different product: ${dir}`);
+		return dir;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+	}
+	const settingsFile = path.join(resolveSyncDir(dir), 'maestro-settings.json');
+	let settings: Record<string, unknown>;
+	try {
+		settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return dir;
+		throw error;
+	}
+	if (
+		product.productId === 'com.maestro.i18n.local' &&
+		['system', 'en', 'zh-CN'].includes(settings.uiLanguage as string)
+	)
+		return dir;
+	throw new Error(
+		`Cannot verify that the data directory belongs to ${product.productName}: ${dir}`
+	);
+}
+
+/** The desktop claims its own data directory once, after validating legacy data. */
+export function recordUserDataProduct(dir: string): void {
+	const identity = resolveAppProduct();
+	if (!identity.verified) return;
+	assertUserDataDirProduct(dir, identity.product);
+	fs.mkdirSync(dir, { recursive: true });
+	try {
+		fs.writeFileSync(path.join(dir, PRODUCT_IDENTITY_FILE), JSON.stringify(identity.product), {
+			flag: 'wx',
+			mode: 0o600,
+		});
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+		assertUserDataDirProduct(dir, identity.product);
+	}
 }
 
 function platformRoot(platform: NodeJS.Platform, home: string, env: NodeJS.ProcessEnv): string {
@@ -92,7 +206,11 @@ function probeIsPackaged(): boolean {
  */
 export function resolveUserDataDir(options: UserDataDirOptions = {}): string {
 	const env = options.env ?? process.env;
-	if (env.MAESTRO_USER_DATA) return path.resolve(env.MAESTRO_USER_DATA);
+	const identity = resolveAppProduct(options);
+	if (env.MAESTRO_USER_DATA) {
+		const dir = path.resolve(env.MAESTRO_USER_DATA);
+		return identity.verified ? assertUserDataDirProduct(dir, identity.product) : dir;
+	}
 
 	const platform = options.platform ?? os.platform();
 	const home = options.homedir ?? os.homedir();
@@ -103,7 +221,8 @@ export function resolveUserDataDir(options: UserDataDirOptions = {}): string {
 	if (!isPackaged && isDevelopment && !env.USE_PROD_DATA) {
 		return path.join(root, DEV_APP_NAME);
 	}
-	return path.join(root, isPackaged ? PACKAGED_APP_NAME : UNPACKAGED_APP_NAME);
+	const dir = path.join(root, isPackaged ? identity.product.productName : UNPACKAGED_APP_NAME);
+	return identity.verified ? assertUserDataDirProduct(dir, identity.product) : dir;
 }
 
 /**
@@ -119,13 +238,20 @@ export function resolveUserDataDir(options: UserDataDirOptions = {}): string {
  * is obvious from the message.
  */
 export function assertUserDataDirExists(dir: string, options: UserDataDirOptions = {}): string {
-	if (isDirectory(dir)) return dir;
+	if (isDirectory(dir)) {
+		const identity = resolveAppProduct(options);
+		return identity.verified ? assertUserDataDirProduct(dir, identity.product) : dir;
+	}
 
 	const env = options.env ?? process.env;
 	const platform = options.platform ?? os.platform();
 	const home = options.homedir ?? os.homedir();
 	const root = platformRoot(platform, home, env);
-	const alternatives = [PACKAGED_APP_NAME, UNPACKAGED_APP_NAME, DEV_APP_NAME]
+	const alternatives = [
+		resolveAppProduct(options).product.productName,
+		UNPACKAGED_APP_NAME,
+		DEV_APP_NAME,
+	]
 		.map((name) => path.join(root, name))
 		.filter((candidate) => {
 			if (candidate === dir) return false;

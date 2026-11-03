@@ -54,7 +54,8 @@ describe('NotificationSendControls', () => {
 
 			expect(screen.queryByTitle('Send message')).not.toBeInTheDocument();
 			const stop = screen.getByTestId('stop-turn-button');
-			expect(stop).toHaveAccessibleName('Stop this turn (Ctrl+C)');
+			// Names the key that does the same thing; Ctrl+C only reaches a terminal tab.
+			expect(stop).toHaveAccessibleName(/^Stop this turn \((Esc|⎋)\)$/);
 			fireEvent.click(stop);
 			expect(onStop).toHaveBeenCalledTimes(1);
 			expect(processInput).not.toHaveBeenCalled();

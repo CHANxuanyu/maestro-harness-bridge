@@ -78,6 +78,19 @@ export function isThinkingItemOnScreen(
 }
 
 /**
+ * Whether this agent's conversation on screen (its active tab) is running: the
+ * case in which Stop belongs to the composer, as the send key and as Escape.
+ * Asked from a key handler at event time, so it takes one agent rather than the
+ * whole thinking list.
+ */
+export function isOnScreenTurnRunning(session: Session | null | undefined): boolean {
+	if (!session) return false;
+	return buildThinkingItems([session]).some((item) =>
+		isThinkingItemOnScreen(item, session.id, session.activeTabId)
+	);
+}
+
+/**
  * The one surface that draws Stop. Stop is an agent-level action (it signals
  * every process the ACTIVE agent has in flight, see `useInterruptHandler`), so
  * exactly one control may offer it, and only for work it can reach:

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	buildThinkingItems,
+	isOnScreenTurnRunning,
 	isThinkingItemOnScreen,
 	resolveStopPlacement,
 } from '../../../renderer/utils/thinkingItems';
@@ -216,5 +217,29 @@ describe('resolveStopPlacement', () => {
 	it('yields to the Auto Run pill, whose own Stop ends the run', () => {
 		expect(place([sameAgentOtherTab], true)).toBe('none');
 		expect(place([], true)).toBe('none');
+	});
+});
+
+describe('isOnScreenTurnRunning', () => {
+	const agent = (activeTabId: string, busyTabId: string, inputModeBusy = true) =>
+		createMockSession({
+			id: 'agent',
+			state: inputModeBusy ? 'busy' : 'idle',
+			busySource: 'ai',
+			activeTabId,
+			aiTabs: [
+				createMockAITab({ id: 'a', state: busyTabId === 'a' ? 'busy' : 'idle' }),
+				createMockAITab({ id: 'b', state: busyTabId === 'b' ? 'busy' : 'idle' }),
+			],
+		});
+
+	it('is true while the tab on screen is running', () => {
+		expect(isOnScreenTurnRunning(agent('a', 'a'))).toBe(true);
+	});
+
+	it('is false for another running tab of the agent, or an idle agent', () => {
+		expect(isOnScreenTurnRunning(agent('a', 'b'))).toBe(false);
+		expect(isOnScreenTurnRunning(agent('a', 'a', false))).toBe(false);
+		expect(isOnScreenTurnRunning(undefined)).toBe(false);
 	});
 });

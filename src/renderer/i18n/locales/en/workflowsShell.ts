@@ -1303,7 +1303,7 @@ export const workflowsShell = {
 	'workflows.git.branchCopied': 'Branch Name Copied',
 	'workflows.git.remoteCopied': 'Remote URL Copied',
 	'workflows.git.openRemote': 'Open {remote}',
-	'workflows.status.stopTurn': 'Stop this turn (Ctrl+C)',
+	'workflows.status.stopTurn': 'Stop this turn',
 	'workflows.status.canceledByUser': 'Canceled by user',
 	'workflows.status.queueTitle': 'View execution queue{shortcut}',
 	'workflows.status.note': 'note',

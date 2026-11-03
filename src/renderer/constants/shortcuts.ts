@@ -460,6 +460,14 @@ export const FIXED_SHORTCUTS: Record<string, Shortcut> = {
 		label: 'Search Output (in Main Window)',
 		keys: ['Meta', 'f'],
 	},
+	// Escape stops the conversation on screen while it runs (composer or
+	// transcript focused). Fixed rather than rebindable: Escape already answers
+	// popovers, command mode and modals first, and the order is the contract.
+	stopTurn: {
+		id: 'stopTurn',
+		label: 'Stop Running Turn (Interrupt, in Main Window)',
+		keys: ['Escape'],
+	},
 	searchDirectorNotes: {
 		id: 'searchDirectorNotes',
 		label: "Search Director's Notes",

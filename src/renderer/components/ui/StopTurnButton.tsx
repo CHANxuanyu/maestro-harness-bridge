@@ -15,6 +15,7 @@ import { useT } from '../../i18n';
  */
 
 import type { Theme } from '../../types';
+import { shortcutSuffix } from './ShortcutHint';
 
 interface StopTurnButtonProps {
 	theme: Theme;
@@ -22,6 +23,12 @@ interface StopTurnButtonProps {
 	onClick: () => void;
 	/** Tooltip text. Name what stops, not which provider is running. */
 	title?: string;
+	/**
+	 * The key that does the same thing where this control is drawn, named in the
+	 * tooltip: Escape for the send key's Stop. Omitted where no key reaches the
+	 * same target (the pill's Stop is for a conversation off screen).
+	 */
+	shortcutKeys?: string[];
 	/**
 	 * `pill` (default): the labelled red pill. `icon`: the glyph alone, drawn in
 	 * the send key's place while the conversation on screen runs.
@@ -37,9 +44,10 @@ export function StopTurnButton({
 	title: titleProp,
 	variant = 'pill',
 	className,
+	shortcutKeys,
 }: StopTurnButtonProps): JSX.Element {
 	const t = useT();
-	const title = titleProp ?? t('workflows.status.stopTurn');
+	const title = (titleProp ?? t('workflows.status.stopTurn')) + shortcutSuffix(shortcutKeys);
 	if (variant === 'icon') {
 		return (
 			<button

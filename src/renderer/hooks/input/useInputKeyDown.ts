@@ -32,6 +32,7 @@ import { aiCommandKey, getAiCommandEntry, useAiCommandStore } from '../../stores
 import { acceptAiCommand, dismissAiCommand } from '../../services/aiCommand';
 import { eventMatchesShortcutKeys } from '../../utils/shortcutMatch';
 import { useEventListener } from '../utils/useEventListener';
+import { isOnScreenTurnRunning } from '../../utils/thinkingItems';
 
 /**
  * Window event that runs Forced Parallel Send from outside the composer.
@@ -81,6 +82,11 @@ export interface InputKeyDownDeps {
 	inputRef: React.RefObject<HTMLTextAreaElement | null>;
 	/** Ref to the terminal output container */
 	terminalOutputRef: React.RefObject<HTMLDivElement | null>;
+	/**
+	 * Stop the running turn (the agent-level interrupt the send key's Stop runs).
+	 * Escape calls it while the conversation on screen is running.
+	 */
+	interruptTurn?: () => void;
 }
 
 // ============================================================================
@@ -109,6 +115,7 @@ export function useInputKeyDown(deps: InputKeyDownDeps): InputKeyDownReturn {
 		setCommandMode,
 		inputRef,
 		terminalOutputRef,
+		interruptTurn,
 	} = deps;
 
 	// --- InputContext state (completion dropdowns) ---
@@ -487,6 +494,22 @@ export function useInputKeyDown(deps: InputKeyDownDeps): InputKeyDownReturn {
 				}
 			} else if (e.key === 'Escape') {
 				e.preventDefault();
+				// While the conversation on screen runs, Escape is its Stop - the same
+				// control as the send key (`resolveStopPlacement`), reached only after
+				// the popovers and the command-mode ladder above have had the key. The
+				// caret stays here, so the next message can be typed at once, and the
+				// draft is left alone. stopPropagation keeps the window-level
+				// `handleEscapeInMain` from blurring the composer right afterwards.
+				if (
+					interruptTurn &&
+					activeSession?.inputMode === 'ai' &&
+					isOnScreenTurnRunning(activeSession)
+				) {
+					e.stopPropagation();
+					trackShortcutUsage('stopTurn');
+					interruptTurn();
+					return;
+				}
 				inputRef.current?.blur();
 				terminalOutputRef.current?.focus();
 			} else if (e.key === 'ArrowUp') {
@@ -530,6 +553,7 @@ export function useInputKeyDown(deps: InputKeyDownDeps): InputKeyDownReturn {
 			setCommandMode,
 			inputRef,
 			terminalOutputRef,
+			interruptTurn,
 			// InputContext values
 			commandHistoryOpen,
 			tabCompletionOpen,

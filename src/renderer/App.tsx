@@ -981,6 +981,9 @@ function MaestroConsoleInner() {
 	const processQueuedItemRef = useRef<
 		((sessionId: string, item: QueuedItem) => Promise<void>) | null
 	>(null);
+	// Ref for handleInterrupt - bridges the ordering gap between useInputHandlers
+	// (Escape stops the conversation on screen) and useInterruptHandler below
+	const interruptTurnRef = useRef<(() => void) | null>(null);
 	// Ref for handleResumeSession - bridges ordering gap between useModalHandlers and useAgentSessionManagement
 	const handleResumeSessionRef = useRef<
 		((agentSessionId: string, providedMessages?: undefined, sessionName?: string) => void) | null
@@ -1920,6 +1923,7 @@ function MaestroConsoleInner() {
 		getBatchState,
 		activeBatchRunState,
 		processQueuedItemRef,
+		interruptTurnRef,
 		flushBatchedUpdates: batchedUpdater.flushNow,
 		handleHistoryCommand,
 		handleWizardCommand,
@@ -2357,6 +2361,8 @@ function MaestroConsoleInner() {
 		cancelPendingSynopsis,
 		processQueuedItem,
 	});
+	// Bridge: Escape in the composer reaches the interrupt through this ref
+	interruptTurnRef.current = handleInterrupt;
 
 	// --- FILE TREE MANAGEMENT ---
 	// Extracted hook for file tree operations (refresh, git state, filtering)

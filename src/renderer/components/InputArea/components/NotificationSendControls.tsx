@@ -4,6 +4,7 @@ import { ArrowUp, Bell } from 'lucide-react';
 import type { Theme } from '../../../types';
 import { NotificationPopover } from '../../NotificationPopover';
 import { StopTurnButton } from '../../ui/StopTurnButton';
+import { FIXED_SHORTCUTS } from '../../../constants/shortcuts';
 
 interface NotificationSendControlsProps {
 	theme: Theme;
@@ -52,7 +53,14 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 			)}
 			{/* While the turn on screen runs the corner key is Stop; once there is a
 			    draft the corner queues it and Stop steps in beside it. */}
-			{onStop && <StopTurnButton theme={theme} onClick={onStop} variant="icon" />}
+			{onStop && (
+				<StopTurnButton
+					theme={theme}
+					onClick={onStop}
+					variant="icon"
+					shortcutKeys={FIXED_SHORTCUTS.stopTurn.keys}
+				/>
+			)}
 			{(!onStop || hasDraft) && (
 				<button
 					type="button"

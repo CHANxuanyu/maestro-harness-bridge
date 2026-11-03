@@ -1237,7 +1237,7 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.git.branchCopied': '已复制分支名称',
 	'workflows.git.remoteCopied': '已复制远程地址',
 	'workflows.git.openRemote': '打开 {remote}',
-	'workflows.status.stopTurn': '停止本轮（Ctrl+C）',
+	'workflows.status.stopTurn': '停止本轮',
 	'workflows.status.canceledByUser': '已由用户停止',
 	'workflows.status.queueTitle': '查看执行队列{shortcut}',
 	'workflows.status.note': '笔记',

@@ -104,6 +104,7 @@ export const shortcutLabelsZhCN: Readonly<Record<string, string>> = {
 	historyJumpToSession: '跳转到条目所属会话（在“历史记录”标签页中）',
 	searchLogs: '搜索系统日志',
 	searchOutput: '搜索输出（在主窗口中）',
+	stopTurn: '停止正在运行的回合（中断，在主窗口中）',
 	searchDirectorNotes: '搜索导演笔记',
 	filePreviewBack: '文件预览：后退',
 	filePreviewForward: '文件预览：前进',

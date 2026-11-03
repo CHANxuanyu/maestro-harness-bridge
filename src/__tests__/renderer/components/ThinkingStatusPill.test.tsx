@@ -614,7 +614,9 @@ describe('ThinkingStatusPill', () => {
 			render(
 				<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} onInterrupt={() => {}} />
 			);
-			const stop = screen.getByTitle('Stop this turn (Ctrl+C)');
+			// No key named: Escape stops only the conversation on screen, and the
+			// pill's Stop is for one running elsewhere. Ctrl+C reaches a terminal tab.
+			const stop = screen.getByTitle('Stop this turn');
 			expect(stop).toBeInTheDocument();
 			expect(stop).not.toHaveAttribute('title', expect.stringContaining('Claude'));
 		});

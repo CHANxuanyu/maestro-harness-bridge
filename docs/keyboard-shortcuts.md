@@ -267,7 +267,8 @@ A freshly tiled pane takes the keyboard, and the caret lands in whatever that pa
 | Edit Last Queued Message | `Cmd+Shift+E` / `Ctrl+Shift+E`                    |
 | Navigate Command History | `Up Arrow` while in input                         |
 | Slash Commands           | Type `/` to open autocomplete                     |
-| Focus Output             | `Esc` while in input                              |
+| Stop the Running Turn    | `Esc` while the conversation on screen runs       |
+| Focus Output             | `Esc` while in input (nothing running)            |
 | Focus Input              | `Esc` while in output                             |
 | Open Output Search       | `Cmd+F` while in output                           |
 | Search All Open Tabs     | `Opt+Cmd+F` / `Alt+Ctrl+F`                        |

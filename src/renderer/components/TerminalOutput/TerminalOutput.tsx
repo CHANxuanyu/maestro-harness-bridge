@@ -45,6 +45,7 @@ import { foldTurnActivity, type TurnActivity } from './utils/foldTurnActivity';
 import { feedProseStyles } from './utils/feedProseStyles';
 import { TurnActivityFold } from './components/TurnActivityFold';
 import { TurnRunningStatus } from './components/TurnRunningStatus';
+import { trackShortcutUsage } from '../../utils/shortcutTracking';
 import { buildRenderedIdMap } from './utils/renderedLogIds';
 import { useUIStore } from '../../stores/uiStore';
 import { jumpToElement } from '../../utils/jumpHighlight';
@@ -144,7 +145,7 @@ export const TerminalOutput = memo(
 			forcedParallelEnabled,
 			getForceSendContext,
 			forceSendShortcutEnabled = true,
-			onInterrupt: _onInterrupt,
+			onInterrupt,
 			onScrollPositionChange,
 			onAtBottomChange,
 			initialScrollTop,
@@ -990,6 +991,12 @@ export const TerminalOutput = memo(
 					if (e.key === 'Escape' && !outputSearchOpen) {
 						e.preventDefault();
 						e.stopPropagation();
+						// While this conversation runs, Escape is its Stop, as it is in the
+						// composer (the running-status row above says what it stops).
+						if (turnLive && onInterrupt) {
+							trackShortcutUsage('stopTurn');
+							onInterrupt();
+						}
 						// Focus back to text input
 						inputRef.current?.focus();
 						setActiveFocus('main');

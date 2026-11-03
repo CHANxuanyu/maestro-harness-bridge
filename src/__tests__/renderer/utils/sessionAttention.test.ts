@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+	isConversationOnScreen,
 	sessionNeedsAttention,
 	sessionOrChildrenNeedAttention,
 	outageIdsFromSignature,
@@ -136,5 +137,40 @@ describe('sessionOrChildrenNeedAttention', () => {
 		expect(
 			sessionOrChildrenNeedAttention(createMockSession({ id: 'p2' }), undefined, EMPTY_CTX)
 		).toBe(false);
+	});
+});
+
+// A finished turn in the conversation the user is reading needs no notice:
+// they watched it happen. Everything else (another agent, another tab, a
+// background window, a group chat in front) still does.
+describe('isConversationOnScreen', () => {
+	const tabId = 'tab-1';
+	const session = createMockSession({
+		id: 's1',
+		activeTabId: tabId,
+		aiTabs: [createMockAITab({ id: tabId }), createMockAITab({ id: 'tab-2' })],
+	});
+	const base = { session, tabId, activeSessionId: 's1', windowFocused: true, groupChatOpen: false };
+
+	it('is true for the focused window showing that agent and that AI tab', () => {
+		expect(isConversationOnScreen(base)).toBe(true);
+	});
+
+	it('is false when the window is in the background', () => {
+		expect(isConversationOnScreen({ ...base, windowFocused: false })).toBe(false);
+	});
+
+	it('is false for another agent, another tab, or no tab', () => {
+		expect(isConversationOnScreen({ ...base, activeSessionId: 's2' })).toBe(false);
+		expect(isConversationOnScreen({ ...base, tabId: 'tab-2' })).toBe(false);
+		expect(isConversationOnScreen({ ...base, tabId: undefined })).toBe(false);
+		expect(isConversationOnScreen({ ...base, session: undefined })).toBe(false);
+	});
+
+	it('is false when a file tab or a group chat covers the conversation', () => {
+		expect(
+			isConversationOnScreen({ ...base, session: { ...session, activeFileTabId: 'file-1' } })
+		).toBe(false);
+		expect(isConversationOnScreen({ ...base, groupChatOpen: true })).toBe(false);
 	});
 });

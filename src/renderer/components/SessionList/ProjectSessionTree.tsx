@@ -39,6 +39,7 @@ import {
 	Plus,
 	RotateCw,
 	Settings2,
+	PenSquare,
 	Star,
 	X,
 } from 'lucide-react';
@@ -50,6 +51,8 @@ import { AgentLogo } from '../Wizard/screens/AgentSelectionScreen/components/Age
 import { getAgentDisplayName } from '../../../shared/agentMetadata';
 import { FilterInput } from '../ui/FilterInput';
 import { SegmentedControl } from '../ui/SegmentedControl';
+import { shortcutSuffix } from '../ui/ShortcutHint';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useFormatRelativeTime, useT, type TFunction } from '../../i18n';
 
 export type ProjectHistoryLoadStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
@@ -79,6 +82,11 @@ export interface ProjectSessionTreeProps {
 	/** Open rows focus their tab; history rows resume in the original harness. */
 	onSelectConversation: (conversation: SidebarConversation) => void;
 	onNewConversation: (ownerId: string) => void;
+	/**
+	 * A new conversation with the agent the user is in, from the button at the
+	 * top of the list. Absent when no agent is open, which hides the button.
+	 */
+	onNewConversationHere?: () => void;
 	onRenameConversation: (conversation: SidebarConversation) => void;
 	/** Closes the TAB. Never deletes native history. */
 	onCloseConversation: (conversation: SidebarConversation) => void;
@@ -391,7 +399,11 @@ const ConversationRow = memo(function ConversationRow({
 	);
 
 	return (
-		<li data-conversation-key={conversation.key} data-conversation-kind={conversation.kind}>
+		<li
+			data-conversation-key={conversation.key}
+			data-conversation-kind={conversation.kind}
+			data-native-session-id={conversation.nativeSessionId ?? undefined}
+		>
 			<div className="group relative flex items-center">
 				<button
 					type="button"
@@ -792,6 +804,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	onToggleProject,
 	onSelectConversation,
 	onNewConversation,
+	onNewConversationHere,
 	onRenameConversation,
 	onCloseConversation,
 	onShowMore,
@@ -799,6 +812,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	onAddAgent,
 }: ProjectSessionTreeProps) {
 	const t = useT();
+	const newTabKeys = useSettingsStore((s) => s.tabShortcuts.newTab?.keys);
 	const formatRelativeTime = useFormatRelativeTime();
 	const formatRelative = useCallback(
 		(value: number) => formatRelativeTime(value),
@@ -969,6 +983,20 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	return (
 		<div className="flex flex-col min-w-0 gap-1 select-none">
 			<div className="px-2 pt-1 pb-2 flex flex-col gap-1.5">
+				{/* The first thing in the list is starting one, the way a chat app opens. */}
+				{onNewConversationHere && (
+					<button
+						type="button"
+						onClick={onNewConversationHere}
+						className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-white/10"
+						style={{ color: theme.colors.textMain }}
+						title={t('workflows.conversations.newConversation') + shortcutSuffix(newTabKeys)}
+						data-testid="sidebar-new-conversation"
+					>
+						<PenSquare className="w-4 h-4 shrink-0" style={{ color: theme.colors.textDim }} />
+						<span className="truncate">{t('workflows.conversations.newConversation')}</span>
+					</button>
+				)}
 				<FilterInput
 					theme={theme}
 					value={search}

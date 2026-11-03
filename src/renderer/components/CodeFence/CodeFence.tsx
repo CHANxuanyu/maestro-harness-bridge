@@ -166,7 +166,9 @@ export const CodeFence = memo(function CodeFence({
 
 	return (
 		<div
-			className="relative code-fence"
+			// The code face (the terminal font): the transcript around it reads in
+			// the proportional interface font, which would lose column alignment.
+			className="relative code-fence font-mono"
 			translate="no"
 			style={containerStyle}
 			data-testid="code-fence"

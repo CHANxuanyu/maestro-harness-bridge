@@ -1,5 +1,6 @@
 import type { Session } from '../types';
 import { hasUnreadVisibleTab } from './unifiedTabOrderUtils';
+import { resolveModelEffortTabId } from './panelLayout';
 
 /**
  * Inputs the "needs attention" predicate can't read off the Session itself:
@@ -63,4 +64,26 @@ export function sessionOrChildrenNeedAttention(
 ): boolean {
 	if (sessionNeedsAttention(session, ctx)) return true;
 	return children?.some((child) => sessionNeedsAttention(child, ctx)) ?? false;
+}
+
+/**
+ * Whether the user is looking at this agent's AI tab right now: the window has
+ * focus, the agent is the active one, and that tab is the AI tab in front (not
+ * behind a file, terminal or browser tab, not a background pane, and not under
+ * an open group chat). A turn that finishes there was watched as it happened,
+ * so it needs no notice; anywhere else it does. The "which AI tab is in front"
+ * half is `resolveModelEffortTabId()`, shared with the model and handoff
+ * commands, so the three cannot disagree about what is on screen.
+ */
+export function isConversationOnScreen(input: {
+	session: Session | undefined;
+	tabId: string | undefined;
+	activeSessionId: string | null;
+	windowFocused: boolean;
+	groupChatOpen: boolean;
+}): boolean {
+	const { session, tabId } = input;
+	if (!input.windowFocused || !session || !tabId) return false;
+	if (session.id !== input.activeSessionId) return false;
+	return resolveModelEffortTabId(session, input.groupChatOpen ? 'open' : null) === tabId;
 }

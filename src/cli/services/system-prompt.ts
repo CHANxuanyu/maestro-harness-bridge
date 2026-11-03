@@ -7,6 +7,9 @@
 // receives. Without this, CLI-spawned agents are missing the entire "what is
 // Maestro and what can I do with it" preamble.
 
+import { inspectNativeAboutMe, type Baselines } from '../../main/about-me-files';
+import { nativeAboutMePointer } from '../../shared/aboutMe';
+import { readCliAccountDirLayers } from './agent-account-dir';
 import path from 'path';
 import fs from 'fs';
 import type { SessionInfo } from '../../shared/types';
@@ -77,8 +80,22 @@ export async function prepareMaestroSystemPromptCli(
 	const historyFilePath = isSsh ? undefined : getHistoryFilePath(session.id);
 
 	const conductorProfileSetting = readSettingValue('conductorProfile');
-	const conductorProfile =
+	let conductorProfile =
 		typeof conductorProfileSetting === 'string' ? conductorProfileSetting : undefined;
+
+	if (conductorProfile) {
+		const native = await inspectNativeAboutMe(
+			{
+				toolType: session.toolType,
+				customEnvVars: session.customEnvVars,
+				sshRemote: isSsh,
+			},
+			readCliAccountDirLayers(session.toolType),
+			conductorProfile,
+			(readSettingValue('aboutMeApplied') ?? {}) as Baselines
+		);
+		if (native.loaded && native.provider) conductorProfile = nativeAboutMePointer(native.provider);
+	}
 
 	return substituteTemplateVariables(template, {
 		session: {

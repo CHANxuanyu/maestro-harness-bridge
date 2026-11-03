@@ -1,3 +1,4 @@
+import type { AgentAccountDirInput } from '../../shared/agentAccountDir';
 /**
  * @file group-chat-router.ts
  * @description Message routing for Group Chat feature.
@@ -142,9 +143,9 @@ export type GetSessionsCallback = () => GroupChatSessionInfo[];
  */
 export type GetCustomEnvVarsCallback = (agentId: string) => Record<string, string> | undefined;
 export type GetAgentConfigCallback = (agentId: string) => Record<string, any> | undefined;
-export type GetModeratorSettingsCallback = () => {
-	conductorProfile: string;
-};
+export type GetModeratorSettingsCallback = (
+	agent: AgentAccountDirInput
+) => { conductorProfile: string } | Promise<{ conductorProfile: string }>;
 
 // Module-level callback for session lookup
 let getSessionsCallback: GetSessionsCallback | null = null;
@@ -1078,7 +1079,11 @@ export async function routeUserMessage(
 			}
 
 			// Get moderator settings for prompt customization
-			const moderatorSettings = getModeratorSettingsCallback?.() ?? {
+			const moderatorSettings = (await getModeratorSettingsCallback?.({
+				toolType: chat.moderatorAgentId,
+				customEnvVars: chat.moderatorConfig?.customEnvVars,
+				sshRemote: !!chat.moderatorConfig?.sshRemoteConfig?.enabled,
+			})) ?? {
 				conductorProfile: '',
 			};
 
@@ -2402,7 +2407,11 @@ export async function spawnModeratorSynthesis(
 			: '(No agents currently in this group chat)';
 
 	// Get moderator settings for prompt customization
-	const synthModeratorSettings = getModeratorSettingsCallback?.() ?? {
+	const synthModeratorSettings = (await getModeratorSettingsCallback?.({
+		toolType: chat.moderatorAgentId,
+		customEnvVars: chat.moderatorConfig?.customEnvVars,
+		sshRemote: !!chat.moderatorConfig?.sshRemoteConfig?.enabled,
+	})) ?? {
 		conductorProfile: '',
 	};
 	const synthBasePrompt = getModeratorSystemPrompt().replace(

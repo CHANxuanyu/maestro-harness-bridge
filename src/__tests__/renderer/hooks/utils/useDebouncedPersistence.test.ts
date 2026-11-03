@@ -1820,6 +1820,41 @@ describe('useDebouncedPersistence', () => {
 			});
 		});
 
+		describe('quit save requested by main', () => {
+			it('answers every request by writing the pending tree, and stops on unmount', async () => {
+				let handed: (() => void | Promise<void>) | undefined;
+				const dispose = vi.fn();
+				vi.mocked(window.maestro.app.onQuitSaveRequest).mockImplementation((save) => {
+					handed = save;
+					return dispose;
+				});
+				const initialLoadRef = makeInitialLoadRef(true);
+				seedSessions([makeSession()]);
+				const { unmount } = renderPersistence(initialLoadRef);
+				expect(window.maestro.app.onQuitSaveRequest).toHaveBeenCalledTimes(1);
+
+				act(() => {
+					useSessionStore.setState({ sessions: [makeSession({ name: 'Changed before quit' })] });
+				});
+				// The change sits in the debounce: nothing is on disk yet.
+				const written = () =>
+					[
+						...vi.mocked(window.maestro.sessions.setAll).mock.calls,
+						...vi.mocked(window.maestro.sessions.setMany).mock.calls,
+					].flatMap(([sessions]) => sessions as Session[]);
+				expect(written()).toEqual([]);
+				await act(async () => {
+					await handed!();
+				});
+				expect(written()).toEqual(
+					expect.arrayContaining([expect.objectContaining({ name: 'Changed before quit' })])
+				);
+
+				unmount();
+				expect(dispose).toHaveBeenCalledTimes(1);
+			});
+		});
+
 		describe('flush on unmount', () => {
 			it('should persist on unmount when initialLoadComplete is true', () => {
 				const session = makeSession();

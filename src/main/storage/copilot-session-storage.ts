@@ -1,4 +1,5 @@
 import path from 'path';
+import { localProjectPathCandidates } from './local-project-paths';
 import os from 'os';
 import fs from 'fs/promises';
 import { logger } from '../utils/logger';
@@ -200,17 +201,22 @@ function normalizePath(value?: string): string | null {
 }
 
 /** Check whether session metadata matches the given project path. */
-function matchesProject(metadata: CopilotWorkspaceMetadata, projectPath: string): boolean {
-	const normalizedProject = normalizePath(projectPath);
+function matchesProject(
+	metadata: CopilotWorkspaceMetadata,
+	projectPath: string,
+	remote = false
+): boolean {
 	const gitRoot = normalizePath(metadata.git_root);
 	const cwd = normalizePath(metadata.cwd);
-
-	if (!normalizedProject) return true;
-	return (
-		gitRoot === normalizedProject ||
-		cwd === normalizedProject ||
-		cwd?.startsWith(`${normalizedProject}/`) === true
-	);
+	return (remote ? [projectPath] : localProjectPathCandidates(projectPath)).some((candidate) => {
+		const normalizedProject = normalizePath(candidate);
+		if (!normalizedProject) return true;
+		return (
+			gitRoot === normalizedProject ||
+			cwd === normalizedProject ||
+			cwd?.startsWith(`${normalizedProject}/`) === true
+		);
+	});
 }
 
 // Official @github/copilot@1.0.63 (c440c72e8caca344fe4a4223cceb59dcd241cb48),
@@ -830,7 +836,7 @@ export class CopilotSessionStorage extends BaseSessionStorage {
 				: await fs.readFile(workspacePath, 'utf8');
 			if (!workspaceContent) return false; // No metadata → can't verify ownership, fail-closed
 			const metadata = parseWorkspaceMetadata(workspaceContent, sessionId);
-			return matchesProject(metadata, projectPath);
+			return matchesProject(metadata, projectPath, Boolean(sshConfig));
 		} catch {
 			return false; // Missing/unreadable metadata → fail-closed
 		}
@@ -900,7 +906,7 @@ export class CopilotSessionStorage extends BaseSessionStorage {
 
 			const metadata = parseWorkspaceMetadata(workspaceContent, sessionId);
 
-			if (!matchesProject(metadata, projectPath)) {
+			if (!matchesProject(metadata, projectPath, Boolean(sshConfig))) {
 				return null;
 			}
 

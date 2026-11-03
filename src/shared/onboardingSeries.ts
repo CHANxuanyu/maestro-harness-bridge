@@ -16,6 +16,7 @@
  * and cannot drift from the flags the settings store persists.
  */
 
+import { DEFAULT_THEME_ID } from './theme-types';
 export const ONBOARDING_STEPS = ['typography', 'theme', 'updates', 'agentPowers'] as const;
 
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
@@ -36,7 +37,7 @@ export const ONBOARDING_STEP_FLAGS: Record<OnboardingStep, string> = {
 };
 
 /** The theme id every install starts on, and the one the theme step gates on. */
-export const DEFAULT_THEME_ID = 'dracula';
+export { DEFAULT_THEME_ID };
 
 export interface OnboardingPlanInput {
 	audience: OnboardingAudience;
@@ -58,10 +59,10 @@ export interface OnboardingPlanInput {
  * A new user always gets it - they have expressed no preference yet.
  *
  * A returning user gets it only while still on the default theme. Anyone who
- * has moved off Dracula has already found the theme picker and made a choice,
+ * has moved off the default theme has already found the theme picker and made a choice,
  * and re-opening that decision uninvited would be presumptuous. Note this reads
  * the CURRENT theme rather than a "has ever changed it" flag: a user who
- * switched away and deliberately came back to Dracula looks identical to one
+ * switched away and deliberately came back to the default looks identical to one
  * who never touched it, and showing them a theme picker is harmless either way.
  */
 export function isThemeStepEligible(audience: OnboardingAudience, activeThemeId: string): boolean {

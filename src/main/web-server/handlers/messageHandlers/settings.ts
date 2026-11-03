@@ -16,6 +16,7 @@ const ALLOWED_SETTING_KEYS = new Set([
 	'customThemeColors',
 	'customThemeBaseId',
 	'themeGloss',
+	'followSystemAppearance',
 	'fontSize',
 	'enterToSendAI',
 	'defaultSaveToHistory',

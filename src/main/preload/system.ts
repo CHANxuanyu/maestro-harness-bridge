@@ -181,6 +181,20 @@ export function createAppApi() {
 			ipcRenderer.on('app:requestQuitConfirmation', handler);
 			return () => ipcRenderer.removeListener('app:requestQuitConfirmation', handler);
 		},
+		/** Register the window's existing quit-save operation and acknowledge its completion. */
+		onQuitSaveRequest: (save: () => void | Promise<void>) => {
+			const handler = async (_event: IpcRendererEvent, requestId: string) => {
+				try {
+					await save();
+					ipcRenderer.send('app:quitSaveComplete', requestId, true);
+				} catch {
+					ipcRenderer.send('app:quitSaveComplete', requestId, false);
+				}
+			};
+			ipcRenderer.on('app:requestQuitSave', handler);
+			return () => ipcRenderer.removeListener('app:requestQuitSave', handler);
+		},
+
 		confirmQuit: () => {
 			ipcRenderer.send('app:quitConfirmed');
 		},

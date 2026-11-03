@@ -2,7 +2,9 @@ import type { Group, Session } from '../types';
 import type { ProjectHistoryConversation, ProjectHistoryScope } from '../../shared/projectHistory';
 import { getBasename } from '../../shared/formatters';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
-import { getTabDisplayName, isSessionIdLabel, visibleAiTabs } from './tabHelpers';
+import { DEEPSEEK_PRESET, sessionProviderId } from '../../shared/agentPresets';
+import { isSessionIdLabel, visibleAiTabs } from './tabHelpers';
+import { conversationDisplayTitle } from './conversationTitle';
 import {
 	matchRecordForTab,
 	openTabIdentity,
@@ -90,6 +92,28 @@ interface ProjectSessionTreeOptions {
 
 function sessionPath(session: Session): string {
 	return session.projectRoot || session.cwd;
+}
+
+/**
+ * A native record is filed under its harness (`claude-code`), but a DeepSeek
+ * preset's transcripts live in that preset's own account directory and are
+ * DeepSeek's conversations to the user. The owner says so when there is one;
+ * the account directory says so when the runner has since been removed.
+ */
+function historyProviderId(
+	record: ProjectHistoryConversation,
+	owner: Session | undefined,
+	sessions: Session[]
+): string {
+	if (owner) return sessionProviderId(owner);
+	const deepseekAccount =
+		!!record.accountDir &&
+		sessions.some(
+			(session) =>
+				sessionProviderId(session) === DEEPSEEK_PRESET.id &&
+				session.customEnvVars?.CLAUDE_CONFIG_DIR === record.accountDir
+		);
+	return deepseekAccount ? DEEPSEEK_PRESET.id : record.provider;
 }
 
 /**
@@ -251,11 +275,12 @@ export function buildProjectSessionTree({
 			rowsByProject.set(key, []);
 		}
 		// "New conversation" offers a provider, never a configuration.
-		if (!project.agents.some((agent) => agent.provider === session.toolType)) {
+		const provider = sessionProviderId(session);
+		if (!project.agents.some((agent) => agent.provider === provider)) {
 			project.agents.push({
 				id: session.id,
 				name: session.name,
-				provider: session.toolType,
+				provider,
 				projectPath: path,
 			});
 		}
@@ -273,13 +298,21 @@ export function buildProjectSessionTree({
 			if (identity && claimed.has(identity)) continue;
 			if (identity) claimed.add(identity);
 			const recordTitle = record ? historyTitle(record) : '';
-			const title = tab.name || recordTitle || (tab.agentSessionId ? getTabDisplayName(tab) : '');
+			// Never the provider id label. Before the tab is named or its native
+			// record is scanned, the row uses the first thing the user said, like
+			// the header does, and "New conversation" (the tree's empty-title
+			// label) before that. The logs are READ here but not subscribed to
+			// (see sidebarSessionEquality): a send flips the tab to busy, which
+			// rebuilds the row at the moment the first message lands, and later
+			// streamed chunks never touch the first message.
+			const name = tab.name && !isSessionIdLabel(tab.name, tab.agentSessionId) ? tab.name : '';
+			const title = name || recordTitle || conversationDisplayTitle(tab) || '';
 			rowsByProject.get(key)!.push({
 				key: `${session.id}:${tab.id}`,
 				kind: 'open',
 				ownerId: session.id,
 				tabId: tab.id,
-				provider: session.toolType,
+				provider,
 				nativeSessionId: tab.agentSessionId ?? null,
 				title,
 				...aliasFor(title, record),
@@ -308,7 +341,7 @@ export function buildProjectSessionTree({
 			kind: 'history',
 			ownerId: owner ? owner.id : null,
 			tabId: null,
-			provider: record.provider,
+			provider: historyProviderId(record, owner, sessions),
 			nativeSessionId: record.nativeSessionId,
 			title,
 			...aliasFor(title, record),
@@ -381,9 +414,17 @@ export function providersInHistory(
 	const providers = new Set<string>();
 	for (const session of sessions) {
 		if (session.toolType !== 'terminal' && visibleAiTabs(session.aiTabs).length > 0)
-			providers.add(session.toolType);
+			providers.add(sessionProviderId(session));
 	}
-	for (const record of history) providers.add(record.provider);
+	const ownerById = new Map(sessions.map((session) => [session.id, session]));
+	for (const record of history)
+		providers.add(
+			historyProviderId(
+				record,
+				record.ownerId ? ownerById.get(record.ownerId) : undefined,
+				sessions
+			)
+		);
 	return [...providers].sort((a, b) =>
 		getAgentDisplayName(a).localeCompare(getAgentDisplayName(b))
 	);

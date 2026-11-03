@@ -128,6 +128,39 @@ describe('handoff renderer work without UI changes', () => {
 		expect(enqueuePromptForTab).not.toHaveBeenCalled();
 	});
 
+	it('marks each draft tab with where its draft came from, in an existing or a new runner', async () => {
+		const note = {
+			sourceAgentId: 'source',
+			sourceName: 'Claude',
+			sourceProvider: 'claude-code',
+			estimatedTokens: draft.estimatedTokens,
+			budgetTokens: draft.budgetTokens,
+			omittedEntries: draft.omittedEntries,
+			omittedCharacters: draft.omittedCharacters,
+		};
+		const existing = await openHandoffTarget(request());
+		const stored = sessions()
+			.find((item) => item.id === 'target')!
+			.aiTabs.find((tab) => tab.id === existing.tabId)!;
+		expect(stored.handoffDraft).toEqual(note);
+		// The draft text itself stays only in the composer, never in the note.
+		expect(JSON.stringify(stored.handoffDraft)).not.toContain(draft.text);
+		// The old tab of the target runner is not a draft.
+		expect(sessions().find((item) => item.id === 'target')!.aiTabs[0].handoffDraft).toBeUndefined();
+
+		const created = await openHandoffTarget(
+			request({ runnerId: undefined, provider: 'deepseek', config: { toolType: 'claude-code' } })
+		);
+		expect(created).toMatchObject({ success: true, createdAgent: true });
+		const runner = sessions().find((item) => item.id === created.agentId)!;
+		expect(runner.aiTabs.find((tab) => tab.id === created.tabId)!.handoffDraft).toEqual(note);
+		// The persisted copy is the one that carries the note.
+		const saved = vi.mocked(window.maestro.sessions.setMany).mock.calls.at(-1)![0] as Array<{
+			aiTabs: Array<{ id: string; handoffDraft?: unknown }>;
+		}>;
+		expect(saved[0].aiTabs.find((tab) => tab.id === created.tabId)!.handoffDraft).toEqual(note);
+	});
+
 	it('only explicit send queues the fresh target tab after its draft is persisted', async () => {
 		let persisted = false;
 		vi.mocked(window.maestro.sessions.setMany).mockImplementation(async () => {

@@ -130,6 +130,7 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 			const files = native.files(provider);
 			const rows = await native.page.locator('[data-conversation-key]').count();
 			fs.writeFileSync(exitGate, 'exit');
+			await native.openRightBar();
 			await native.page.locator('[data-tour="history-tab"]').click();
 			const summary =
 				provider === 'claude' ? 'A native acceptance turn completed.' : 'Saved work answer.';
@@ -156,8 +157,7 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		await expect.poll(() => native.page.evaluate(() => innerWidth)).toBe(1000);
 		const expandLeft = native.page.getByTitle(/^Expand Sidebar/);
 		if (await expandLeft.isVisible()) await expandLeft.click();
-		const expandRight = native.page.getByTitle(/^Expand Right Panel/);
-		if (await expandRight.isVisible()) await expandRight.click();
+		await native.openRightBar();
 		const left = native.page.locator('[data-tour="session-list"]');
 		await expect(left).toBeVisible();
 		await expect.poll(async () => (await left.boundingBox())!.width).toBeGreaterThan(200);

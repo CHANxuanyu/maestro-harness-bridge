@@ -37,6 +37,13 @@
 			type="font/woff2"
 			crossorigin
 		/>
+		<link
+			rel="preload"
+			href="./fonts/inter-latin-400_700-1.woff2"
+			as="font"
+			type="font/woff2"
+			crossorigin
+		/>
 
 		<!-- Critical CSS for splash screen - inline to prevent FOUC -->
 		<style>
@@ -56,7 +63,16 @@
 			}
 
 			body {
-				font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+				/* Kept in sync by hand with INTERFACE_FONT_STACK in src/shared/fontStack.ts. */
+				font-family:
+					Inter,
+					-apple-system,
+					BlinkMacSystemFont,
+					'Segoe UI',
+					Roboto,
+					'Helvetica Neue',
+					Arial,
+					sans-serif;
 				-webkit-font-smoothing: antialiased;
 				-moz-osx-font-smoothing: grayscale;
 				background-color: #1a1a2e;
@@ -141,7 +157,15 @@
 			}
 
 			.splash-text {
-				font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+				font-family:
+					Inter,
+					-apple-system,
+					BlinkMacSystemFont,
+					'Segoe UI',
+					Roboto,
+					'Helvetica Neue',
+					Arial,
+					sans-serif;
 				font-size: 14px;
 				letter-spacing: 0.05em;
 				color: rgba(255, 255, 255, 0.5);

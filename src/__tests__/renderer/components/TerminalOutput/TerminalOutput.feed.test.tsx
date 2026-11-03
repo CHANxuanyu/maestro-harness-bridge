@@ -10,8 +10,8 @@
  */
 
 import React, { createRef } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import type { LogEntry, Session } from '../../../../renderer/types';
 import type { TerminalOutputProps } from '../../../../renderer/components/TerminalOutput/types';
 import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
@@ -520,9 +520,42 @@ describe('conversation feed: tools', () => {
 			},
 			reply('a1', 2, 'Lint reported one error.'),
 		]);
-		const status = row(container, 't1').querySelector('[data-tool-status]') as HTMLElement;
+		const fold = row(container, 't1');
+		const status = fold.querySelector('[data-tool-status]') as HTMLElement;
 		expect(status.getAttribute('data-tool-status')).toBe('error');
-		expect(status).toHaveTextContent('Failed');
+		// One sentence, not a word and a badge glued together ("Worked ! Failed").
+		expect(status).toHaveTextContent('· 1 failed step');
+		expect(status).not.toHaveTextContent('!');
+		expect(
+			within(fold).getByRole('button', { name: 'Worked for 2m 0s · 1 failed step' })
+		).toBeTruthy();
+	});
+
+	it('counts every failed step on the folded row', () => {
+		const failed = (id: string, minutes: number): LogEntry => ({
+			id,
+			timestamp: at(minutes),
+			source: 'tool',
+			text: 'exec_command',
+			nativeTranscript: { messageId: id },
+			metadata: { toolState: { status: 'failed', input: { cmd: 'npm test' } } },
+		});
+		const { container } = renderTranscript([
+			user('u1', 0, 'Fix the tests'),
+			failed('t1', 1),
+			failed('t2', 2),
+			{
+				id: 't3',
+				timestamp: at(3),
+				source: 'tool',
+				text: 'exec_command',
+				nativeTranscript: { messageId: 't3' },
+				metadata: { toolState: { status: 'completed', input: { cmd: 'npm test' } } },
+			},
+			reply('a1', 4, 'All tests pass now.'),
+		]);
+		const status = row(container, 't1').querySelector('[data-tool-status]') as HTMLElement;
+		expect(status).toHaveTextContent('· 2 failed steps');
 	});
 
 	it("says a step's outcome is unknown instead of passing it off as done", () => {
@@ -684,5 +717,103 @@ describe('conversation feed: tools', () => {
 		expect(live().querySelector('[data-tool-status]')).toBeNull();
 		fireEvent.click(within(live()).getByRole('button', { name: 'Show details for shell' }));
 		expect(screen.getByText('ESLINT CLEAN OUTPUT')).toBeInTheDocument();
+	});
+});
+
+describe('conversation feed: the running turn', () => {
+	const logs = [user('u1', 0, 'Check the build'), reply('a1', 1, 'Running it now.')];
+
+	function runningSession(overrides: Partial<Session> = {}, startedAgoMs = 12_000): Session {
+		return createMockSession({
+			id: 'session-1',
+			toolType: 'codex',
+			activeTabId: 'tab-1',
+			state: 'busy',
+			busySource: 'ai',
+			aiTabs: [
+				createMockAITab({
+					id: 'tab-1',
+					logs,
+					showThinking: 'off',
+					state: 'busy',
+					thinkingStartTime: Date.now() - startedAgoMs,
+				}),
+			],
+			...overrides,
+		});
+	}
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('says the turn is running in one line at the end of the transcript', () => {
+		const { container } = renderTranscript(logs, { session: runningSession() });
+		const status = screen.getByTestId('turn-running-status');
+		expect(status).toHaveTextContent('Thinking...');
+		expect(status).toHaveTextContent('12s');
+		// After the newest reply, so it reads as what is happening now.
+		expect(
+			row(container, 'a1').compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
+		// It is a status, not a control: Stop is the composer's send key.
+		expect(within(status).queryByRole('button')).toBeNull();
+	});
+
+	it('keeps counting while the turn runs', () => {
+		vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+		renderTranscript(logs, { session: runningSession({}, 5_000) });
+		expect(screen.getByTestId('turn-running-status')).toHaveTextContent('5s');
+		act(() => {
+			vi.advanceTimersByTime(3_000);
+		});
+		expect(screen.getByTestId('turn-running-status')).toHaveTextContent('8s');
+	});
+
+	it('shows how much the turn has produced so far', () => {
+		renderTranscript(logs, { session: runningSession({ currentCycleTokens: 1234 }) });
+		expect(screen.getByTestId('turn-running-status')).toHaveTextContent('1.2K tokens');
+	});
+
+	it('is gone once the turn ends', () => {
+		const { rerenderWith } = renderTranscript(logs, { session: runningSession() });
+		expect(screen.getByTestId('turn-running-status')).toBeInTheDocument();
+		rerenderWith(logs, { session: sessionWith(logs) });
+		expect(screen.queryByTestId('turn-running-status')).not.toBeInTheDocument();
+	});
+
+	it('stops on Escape in the transcript and hands the caret back to the composer', () => {
+		const onInterrupt = vi.fn();
+		const composer = document.createElement('textarea');
+		document.body.appendChild(composer);
+		const inputRef = { current: composer };
+		const { container } = renderTranscript(logs, {
+			session: runningSession(),
+			onInterrupt,
+			inputRef: inputRef as never,
+		});
+		fireEvent.keyDown(container.querySelector('.terminal-output') as HTMLElement, {
+			key: 'Escape',
+		});
+
+		expect(onInterrupt).toHaveBeenCalledTimes(1);
+		expect(document.activeElement).toBe(composer);
+		composer.remove();
+	});
+
+	it('only moves the caret on Escape once the turn has ended', () => {
+		const onInterrupt = vi.fn();
+		const { container } = renderTranscript(logs, { onInterrupt });
+		fireEvent.keyDown(container.querySelector('.terminal-output') as HTMLElement, {
+			key: 'Escape',
+		});
+
+		expect(onInterrupt).not.toHaveBeenCalled();
+	});
+
+	it('is drawn in the agents layout too, where the pill used to say it', () => {
+		useSettingsStore.setState({ sidebarNavigationMode: 'agents' });
+		renderTranscript(logs, { session: runningSession() });
+		expect(screen.getByTestId('turn-running-status')).toHaveTextContent('Thinking...');
 	});
 });

@@ -218,3 +218,47 @@ test('codex: browser search, preview and resume use the selected account', async
 	}
 	expect(fs.readFileSync(fallback.file)).toEqual(defaultBefore);
 });
+
+for (const provider of ['claude', 'copilot', 'grok', 'opencode'] as const) {
+	test(`${provider} path: project aliases discover and follow physical native history`, async ({
+		native,
+	}) => {
+		native.scriptTurns([]);
+		const turn = await native.externalTurn(provider, 'Symlink history', {
+			answer: 'Physical history answer.',
+		});
+		const before = fs.readFileSync(turn.file);
+		const alias = path.join(native.root, 'project-alias');
+		fs.symlinkSync(native.project, alias, 'junction');
+		const ownerAgentId = await native.createAgent(provider);
+		expect((await native.cli('update-agent', ownerAgentId, '--cwd', alias)).success).toBe(true);
+		const agentType =
+			provider === 'claude' ? 'claude-code' : provider === 'copilot' ? 'copilot-cli' : provider;
+		const page = await native.page.evaluate(
+			({ agentType, alias, ownerAgentId }) =>
+				window.maestro.agentSessions.listPaginated(agentType, alias, { ownerAgentId, limit: 10 }),
+			{ agentType, alias, ownerAgentId }
+		);
+		expect(page.sessions.map((session) => session.sessionId)).toEqual([turn.id]);
+		// Copilot and OpenCode title a native session from its answer, not the
+		// prompt, so the row is found by its native ID.
+		await native.page
+			.locator(
+				`[data-conversation-kind="history"][data-native-session-id="${turn.id}"] button[data-tree-nav]`
+			)
+			.click();
+		await expect(
+			native.output().getByText('Physical history answer.', { exact: true })
+		).toBeVisible();
+		expect(fs.readFileSync(turn.file)).toEqual(before);
+		await native.externalTurn(
+			provider,
+			'Append through physical cwd',
+			{ answer: 'Followed through the project alias.' },
+			turn.id
+		);
+		await expect(
+			native.output().getByText('Followed through the project alias.', { exact: true })
+		).toBeVisible();
+	});
+}

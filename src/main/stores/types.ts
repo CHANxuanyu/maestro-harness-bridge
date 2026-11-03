@@ -54,6 +54,7 @@ export interface MaestroSettings {
 	sidebarNavigationMode: 'conversations' | 'agents';
 	collapsedConversationProjects: string[];
 	activeThemeId: string;
+	followSystemAppearance: boolean;
 	shortcuts: Record<string, any>;
 	fontSize: number;
 	fontFamily: string;

@@ -1,5 +1,13 @@
 import React, { useRef, useCallback, useId, useState, memo } from 'react';
-import { ChevronDown, ChevronRight, ChevronUp, Eye, AlertCircle, Info } from 'lucide-react';
+import {
+	ChevronDown,
+	ChevronRight,
+	ChevronUp,
+	Eye,
+	AlertCircle,
+	Info,
+	ArrowRightLeft,
+} from 'lucide-react';
 import type { LogItemProps } from '../types';
 import type { LogEntry } from '../../../types';
 import {
@@ -38,6 +46,11 @@ import { ToolCallFold } from './ToolCallDetails';
 import { codexDirectivesLiveForSource } from '../../../services/codexFollowup';
 import { isProgressNoteEntry } from '../../../utils/transcriptMessages';
 import { useAppLocale, useFormatRelativeTime, useT } from '../../../i18n';
+import {
+	errorOffersHandoff,
+	requestAiHandoff,
+	useCanHandOffTab,
+} from '../../../services/aiHandoffEntry';
 
 /**
  * Shallow content comparison for the nested subagent tool entries. Identity is
@@ -124,6 +137,14 @@ export const LogItem = memo(
 		const formatRelative = useFormatRelativeTime();
 		// Ref for the log item container - used for scroll-into-view on expand
 		const logItemRef = useRef<HTMLDivElement>(null);
+		// `codexFollowupTabId` is the tab on screen, whatever the provider: the
+		// tab this transcript belongs to. Every row runs this hook, so only a
+		// limit or login error passes real ids; the rest cost one comparison.
+		const handoffError = log.source === 'error' && errorOffersHandoff(log.agentError?.type);
+		const offerHandoff = useCanHandOffTab(
+			handoffError ? sessionId : undefined,
+			handoffError ? codexFollowupTabId : undefined
+		);
 		// Conversation feed: the on-demand message info under the meta line. Local
 		// and transient: rows keep their identity across progressive rendering
 		// (key = log.id), and a tab switch closing it is fine for an inspection.
@@ -1157,19 +1178,40 @@ export const LogItem = memo(
 									chatMath
 								/>
 							</div>
-							{!!log.agentError?.parsedJson && onShowErrorDetails && (
-								<button
-									onClick={() => onShowErrorDetails(log.agentError!)}
-									className="self-start flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity"
-									style={{
-										backgroundColor: theme.colors.error + '15',
-										borderColor: theme.colors.error + '40',
-										color: theme.colors.error,
-									}}
-								>
-									<Eye className="w-3 h-3" />
-									View Details
-								</button>
+							{((!!log.agentError?.parsedJson && onShowErrorDetails) || offerHandoff) && (
+								<div className="flex flex-wrap items-center gap-2">
+									{!!log.agentError?.parsedJson && onShowErrorDetails && (
+										<button
+											onClick={() => onShowErrorDetails(log.agentError!)}
+											className="flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity"
+											style={{
+												backgroundColor: theme.colors.error + '15',
+												borderColor: theme.colors.error + '40',
+												color: theme.colors.error,
+											}}
+										>
+											<Eye className="w-3 h-3" />
+											View Details
+										</button>
+									)}
+									{/* A limit or a lost login leaves the user waiting on this
+									    provider. The error above stays as it is; this only offers
+									    a way to move the conversation on as a draft. */}
+									{offerHandoff && (
+										<button
+											onClick={() => requestAiHandoff(sessionId!, codexFollowupTabId!)}
+											className="flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity"
+											style={{
+												backgroundColor: theme.colors.accent + '15',
+												borderColor: theme.colors.accent + '40',
+												color: theme.colors.accent,
+											}}
+										>
+											<ArrowRightLeft className="w-3 h-3" />
+											{t('workflows.sessions.handoff.action')}
+										</button>
+									)}
+								</div>
 							)}
 						</div>
 					)}

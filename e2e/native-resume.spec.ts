@@ -126,12 +126,11 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		native.scriptTurns([]);
 		const turn = await native.externalTurn(provider, 'External acceptance history', {
 			answer: 'Answer from external history.',
+			effort: 'high',
 			tools: [{ id: 'history-tool', command: 'printf history-result', output: 'history-result' }],
 		});
 		const before = fs.readFileSync(turn.file);
-		const metadata = native.real
-			? nativeIdentity(provider, turn.file)
-			: { model: provider === 'claude' ? 'claude-sonnet-4-6' : 'gpt-5.3-codex', effort: 'high' };
+		const metadata = nativeIdentity(provider, turn.file);
 		expect(metadata.model).toBeTruthy();
 		await native.createAgent(provider);
 		await native.page
@@ -153,9 +152,114 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 	});
 }
 
-test('codex b: running output grows, follows the bottom and respects upward reading', async ({
+// Saving is provider independent, so one provider covers it. The tool holds the
+// turn past the 2 s save debounce, so the copy on disk already has the prompt
+// when the answer lands; quit then follows inside the next debounce window.
+test('claude k: an answer that lands just before quit is saved with the tab', async ({
 	native,
 }) => {
+	const answer = 'Saved right before quit.';
+	native.scriptTurns([
+		{
+			answer,
+			tools: [{ id: 'quit-hold', command: 'printf held', output: 'held' }],
+			toolDelay: 2600,
+		},
+	]);
+	await native.createAgent('claude');
+	await native.send('Answer right before quit');
+	await expect(native.output().getByText(answer, { exact: true })).toBeVisible();
+	await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+	await native.restart();
+	const saved = JSON.parse(
+		fs.readFileSync(path.join(native.data, 'maestro-sessions.json'), 'utf8')
+	) as { sessions: { aiTabs?: { logs?: { source: string; text?: string }[] }[] }[] };
+	const replies = saved.sessions.flatMap((session) =>
+		(session.aiTabs ?? []).flatMap((tab) =>
+			(tab.logs ?? []).filter((log) => log.source !== 'user').map((log) => log.text?.trim())
+		)
+	);
+	expect(replies).toContain(answer);
+	await expect(native.output().getByText(answer, { exact: true })).toBeVisible();
+});
+
+// The confirming window saves before it confirms (claude k). A second app
+// window has its own save debounce, so main asks every app window to save
+// after the confirm and waits for each answer. This one answers too.
+test('claude l: an answer in a second window that lands just before quit is saved', async ({
+	native,
+}) => {
+	test.skip(native.real, 'Window bookkeeping only; claude k covers the real CLI');
+	const answer = 'Saved from the second window.';
+	native.scriptTurns([
+		{
+			answer,
+			tools: [{ id: 'quit-hold', command: 'printf held', output: 'held' }],
+			toolDelay: 2600,
+		},
+	]);
+	const agentId = await native.createAgent('claude');
+	const opened = native.app.waitForEvent('window');
+	expect(
+		await native.page.evaluate((id) => window.maestro.windows.create([id]), agentId)
+	).not.toBeNull();
+	const second = await opened;
+	await second.waitForLoadState('domcontentloaded');
+	const input = second.getByPlaceholder(/^Talking to /);
+	await input.fill('Answer in the second window right before quit');
+	await input.press('Enter');
+	const output = second.getByLabel('Terminal output', { exact: true });
+	await expect(output.getByText(answer, { exact: true })).toBeVisible();
+	await expect(second.getByTestId('stop-turn-button')).toHaveCount(0);
+	// Main logs a window that never answered (timeout) or failed to save. The
+	// two always-present lines prove the log was captured at all.
+	const mainLog: string[] = [];
+	for (const stream of [native.app.process().stdout, native.app.process().stderr])
+		stream?.on('data', (chunk: Buffer) => mainLog.push(chunk.toString()));
+	await native.close();
+	const log = mainLog.join('');
+	expect(log).toContain('Quit confirmed by renderer');
+	expect(log).toContain('Application shutting down');
+	expect(log).not.toMatch(/Quit save (timed out|did not complete)/);
+	const saved = JSON.parse(
+		fs.readFileSync(path.join(native.data, 'maestro-sessions.json'), 'utf8')
+	) as { sessions: { aiTabs?: { logs?: { source: string; text?: string }[] }[] }[] };
+	const replies = saved.sessions.flatMap((session) =>
+		(session.aiTabs ?? []).flatMap((tab) =>
+			(tab.logs ?? []).filter((log) => log.source !== 'user').map((log) => log.text?.trim())
+		)
+	);
+	expect(replies).toContain(answer);
+	// Reopen in one window so the fixture can find the agent again.
+	fs.rmSync(path.join(native.data, 'maestro-window-state.json'), { force: true });
+	await native.start();
+});
+
+test('codex e: default effort information matches the native record', async ({ native }) => {
+	native.scriptTurns([]);
+	const turn = await native.externalTurn('codex', 'Default effort history', {
+		answer: 'Default effort answer.',
+	});
+	const metadata = nativeIdentity('codex', turn.file);
+	const before = fs.readFileSync(turn.file);
+	await native.createAgent('codex');
+	await native.page
+		.locator('[data-conversation-kind="history"] button[data-tree-nav]')
+		.filter({ hasText: 'Default effort history' })
+		.click();
+	await expect(native.output().getByText('Default effort answer.', { exact: true })).toBeVisible();
+	await native.output().getByRole('button', { name: 'Message info', exact: true }).last().click();
+	const info = native.output().getByRole('group', { name: 'Message info', exact: true });
+	await expect(
+		info
+			.locator('div.contents')
+			.filter({ has: native.page.locator('dt', { hasText: /^Effort$/ }) })
+			.locator('dd')
+	).toHaveText(metadata.effort ?? 'Not recorded');
+	expect(fs.readFileSync(turn.file)).toEqual(before);
+});
+
+test('codex b: exec command output appears at completion', async ({ native }) => {
 	const updates = [60, 100, 140].map((count) =>
 		Array.from({ length: count }, (_, index) => `line-${index}\n`).join('')
 	);
@@ -174,34 +278,19 @@ test('codex b: running output grows, follows the bottom and respects upward read
 		await expect(native.output().locator('[data-tool-status="running"]').first()).toBeVisible();
 		await native.expandTools();
 		const result = native.output().getByTestId('tool-call-result');
-		const scroll = result.locator('div.overflow-auto');
-		await expect(result).toContainText('line-59');
-		await expect
-			.poll(() => scroll.evaluate((node) => node.scrollHeight - node.clientHeight))
-			.toBeGreaterThan(0);
-		await expect
-			.poll(() =>
-				scroll.evaluate((node) => Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop))
-			)
-			.toBeLessThanOrEqual(1);
-		fs.writeFileSync(gates[0], 'continue');
-		await expect(result).toContainText('line-99');
-		await expect
-			.poll(() =>
-				scroll.evaluate((node) => Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop))
-			)
-			.toBeLessThanOrEqual(1);
-		await scroll.evaluate((node) => {
-			node.scrollTop = 0;
-			node.dispatchEvent(new Event('scroll'));
-		});
-		fs.writeFileSync(gates[1], 'continue');
-		await expect(result).toContainText('line-139');
-		await expect.poll(() => scroll.evaluate((node) => node.scrollTop)).toBe(0);
-		fs.writeFileSync(gates[2], 'continue');
+		await expect(result).toHaveCount(0);
+		for (const gate of gates) fs.writeFileSync(gate, 'continue');
 		await expect(
 			native.output().getByText('Streaming command finished.', { exact: true })
 		).toBeVisible();
+		// The answer lands before the exec process exits, and the finished turn
+		// then folds its tools behind "Worked for". Expand once the turn has ended,
+		// or the fold closes the rows being read.
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		await native.expandTools();
+		await expect(result).toContainText('line-0');
+		await expect(result).toContainText('line-139');
+		await expect(native.output().locator('[data-tool-status="running"]')).toHaveCount(0);
 	} finally {
 		for (const gate of gates) fs.writeFileSync(gate, 'continue');
 	}

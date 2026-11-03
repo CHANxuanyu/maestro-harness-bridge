@@ -57,29 +57,38 @@ export const SANS_FALLBACK_STACK =
  * JavaScript runs and so cannot import this.
  *
  * Deliberately a separate NAME from {@link MAESTRO_FONT_STACK} even though it
- * currently holds the same value: that one follows the user's `fontFamily`
- * setting as its default and may be changed, this one must never follow it. If
- * the two ever need to diverge, change this one and leave the body text alone.
+ * currently holds the same value: that one is the `font-mono` utility and may
+ * change with it, this one is the brand mark and must never follow any setting.
+ * If the two ever need to diverge, change this one and leave `font-mono` alone.
  */
 /**
- * The font stack Maestro itself ships with, and the default the `fontFamily`
- * SETTING carries.
+ * The interface font Maestro ships with: the default the `fontFamily` SETTING
+ * carries, proportional since the 2026-11-02 redesign (Inter is bundled, so it
+ * resolves on every machine; the system sans stack follows it).
  *
- * It has to be identical in the places that render at different moments during
- * startup, because any disagreement between them shows up as the app visibly
- * changing font while it boots:
+ * It has to be identical in the places that render the interface at different
+ * moments during startup, because any disagreement between them shows up as
+ * the app visibly changing font while it boots:
  *
- *   1. the splash screen's inline CSS in `src/renderer/index.html`
- *   2. `body` in `src/renderer/index.css`
- *   3. the `font-mono` utility in `tailwind.config.mjs`
- *   4. the `fontFamily` setting default, in BOTH `src/main/stores/defaults.ts`
- *      and `src/renderer/stores/settingsStore.ts`
+ *   1. the splash screen's body and status text in `src/renderer/index.html`
+ *      (and the browser build's splash body in `src/web-desktop/index.html`)
+ *   2. the `body` fallback in `src/renderer/index.css`
+ *   3. the `fontFamily` setting default, in BOTH `src/main/stores/defaults.ts`
+ *      and the renderer settings store (both read the Default typography preset)
  *
  * The splash paints before React mounts and the setting arrives from disk after
  * it, so a default naming a different family than the splash repaints the whole
- * window the instant React takes over. That is exactly what shipped: the splash
- * asked for JetBrains Mono while the setting default asked for Roboto Mono, so
- * a cold start went Courier New -> JetBrains Mono -> Menlo.
+ * window the instant React takes over. That shipped once: the splash asked for
+ * JetBrains Mono while the setting default asked for Roboto Mono, so a cold
+ * start went Courier New -> JetBrains Mono -> Menlo.
+ */
+export const INTERFACE_FONT_STACK = `Inter, ${SANS_FALLBACK_STACK}`;
+
+/**
+ * Maestro's monospace stack: the `font-mono` utility in `tailwind.config.mjs`
+ * and the wordmark below. It was also the interface default until the
+ * 2026-11-02 redesign; code, the terminal and the editor still use a
+ * monospace face, but the interface reads in {@link INTERFACE_FONT_STACK}.
  *
  * JetBrains Mono leads because it is bundled (see bundledFonts.ts), so it is
  * the one family here guaranteed to resolve; the rest are fallbacks for a

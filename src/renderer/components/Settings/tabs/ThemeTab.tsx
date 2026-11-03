@@ -7,8 +7,11 @@ import { useT } from '../../../i18n';
  */
 
 import React, { useRef, useEffect } from 'react';
-import { Moon, Sun, Sparkles, Check, Lightbulb } from 'lucide-react';
+import { Moon, Sun, Sparkles, Check, Lightbulb, SunMoon } from 'lucide-react';
 import { useSettings } from '../../../hooks';
+import { usePrefersDarkColorScheme } from '../../../hooks/ui/usePrefersDarkColorScheme';
+import { SettingCheckbox } from '../../SettingCheckbox';
+import { themeIdForAppearance } from '../../../../shared/themes';
 import { CustomThemeBuilder } from '../../CustomThemeBuilder';
 import { SettingsSectionHeading } from '../SettingsSectionHeading';
 import { Slider } from '../../widgets';
@@ -44,7 +47,16 @@ export function ThemeTab({
 		setCustomThemeBaseId,
 		themeGloss,
 		setThemeGloss,
+		followSystemAppearance,
+		setFollowSystemAppearance,
 	} = useSettings();
+	const prefersDark = usePrefersDarkColorScheme();
+	// The theme on screen. With "follow system" on, Clay Dark and Clay Light are
+	// one choice and the system picks the half, so mark the half being drawn.
+	const shownThemeId =
+		followSystemAppearance !== false
+			? themeIdForAppearance(activeThemeId, prefersDark)
+			: activeThemeId;
 
 	const themePickerRef = useRef<HTMLDivElement>(null);
 	const isLightTheme = theme.mode === 'light';
@@ -137,6 +149,18 @@ export function ThemeTab({
 				</p>
 			</div>
 
+			<div data-setting-id="theme-follow-system">
+				<SettingCheckbox
+					icon={SunMoon}
+					sectionLabel={t('settings.finish.theme.followSystem.heading')}
+					title={t('settings.finish.theme.followSystem.title')}
+					description={t('settings.finish.theme.followSystem.description')}
+					checked={followSystemAppearance !== false}
+					onChange={setFollowSystemAppearance}
+					theme={theme}
+				/>
+			</div>
+
 			<div
 				data-setting-id="theme-picker"
 				ref={themePickerRef}
@@ -159,7 +183,7 @@ export function ThemeTab({
 									key={t.id}
 									data-theme-id={t.id}
 									onClick={() => setActiveThemeId(t.id)}
-									className={`p-3 rounded-lg border text-left transition-all ${activeThemeId === t.id ? 'ring-2' : ''}`}
+									className={`p-3 rounded-lg border text-left transition-all ${shownThemeId === t.id ? 'ring-2' : ''}`}
 									style={
 										{
 											borderColor: theme.colors.border,
@@ -173,7 +197,7 @@ export function ThemeTab({
 										<span className="text-sm font-bold" style={{ color: t.colors.textMain }}>
 											{t.name}
 										</span>
-										{activeThemeId === t.id && (
+										{shownThemeId === t.id && (
 											<Check className="w-4 h-4" style={{ color: t.colors.accent }} />
 										)}
 									</div>

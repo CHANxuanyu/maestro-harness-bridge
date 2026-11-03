@@ -100,6 +100,8 @@ describe('native instruction account discovery', () => {
 		expect(files).toContainEqual({
 			path: path.join(directory, 'CLAUDE.md'),
 			provider: 'claude-code',
+			agentIds: [],
+			deepseek: true,
 		});
 		await expect(fs.stat(path.join(directory, 'projects'))).rejects.toMatchObject({
 			code: 'ENOENT',
@@ -113,5 +115,51 @@ describe('native instruction account discovery', () => {
 		);
 		await expect(fs.stat(userDataDir)).rejects.toMatchObject({ code: 'ENOENT' });
 		expect(await fs.readdir(homeDir)).toEqual([]);
+	});
+});
+
+describe('native instruction consumers', () => {
+	it('attributes local agents with the same replacement and fallback rules as spawn', async () => {
+		const provider = path.join(root, 'provider');
+		const global = path.join(root, 'global');
+		const own = path.join(root, 'own');
+		const files = await getNativeInstructionFiles({
+			...options(),
+			globalShellEnvVars: { CLAUDE_CONFIG_DIR: global },
+			agentLevelEnvVars: { 'claude-code': { CLAUDE_CONFIG_DIR: provider } },
+			sessions: [
+				{ id: 'inherited', toolType: 'claude-code' },
+				{ id: 'empty', toolType: 'claude-code', customEnvVars: {} },
+				{
+					id: 'replaced',
+					toolType: 'claude-code',
+					customEnvVars: { ANTHROPIC_BASE_URL: 'https://synthetic.invalid' },
+				},
+				{ id: 'own', toolType: 'claude-code', customEnvVars: { CLAUDE_CONFIG_DIR: own } },
+				{
+					id: 'ssh',
+					toolType: 'claude-code',
+					sessionSshRemoteConfig: { enabled: true },
+					customEnvVars: { CLAUDE_CONFIG_DIR: own },
+				},
+				{ id: 'codex', toolType: 'codex' },
+				{ id: 'unknown', toolType: 'other' },
+			],
+		});
+		expect(files.find((file) => file.path === path.join(provider, 'CLAUDE.md'))?.agentIds).toEqual([
+			'inherited',
+		]);
+		expect(files.find((file) => file.path === path.join(global, 'CLAUDE.md'))?.agentIds).toEqual([
+			'empty',
+			'replaced',
+		]);
+		expect(files.find((file) => file.path === path.join(own, 'CLAUDE.md'))?.agentIds).toEqual([
+			'own',
+		]);
+		expect(
+			files.find((file) => file.path === path.join(homeDir, '.codex', 'AGENTS.md'))?.agentIds
+		).toEqual(['codex']);
+		expect(files.flatMap((file) => file.agentIds)).not.toContain('ssh');
+		expect(files.filter((file) => file.deepseek)).toEqual([]);
 	});
 });

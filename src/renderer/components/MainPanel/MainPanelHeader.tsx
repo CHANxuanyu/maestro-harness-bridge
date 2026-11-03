@@ -45,6 +45,7 @@ import {
 } from '../../stores/claudeUsageStore';
 import { formatCost, formatFutureTime } from '../../../shared/formatters';
 import { getAgentDisplayName } from '../../../shared/agentMetadata';
+import { sessionProviderId } from '../../../shared/agentPresets';
 import {
 	computeTabConversationStats,
 	formatConversationDuration,
@@ -110,6 +111,11 @@ export interface MainPanelHeaderProps {
 	onStopBatchRun?: (sessionId?: string) => void;
 	onOpenWorktreeConfig?: () => void;
 	hasCapability: (cap: keyof AgentCapabilities) => boolean;
+}
+
+/** The context readout stays dim while it reads healthy; only warning and error take color. */
+function quietContextColor(color: string, theme: Theme): string {
+	return color === theme.colors.success ? theme.colors.textDim : color;
 }
 
 export const MainPanelHeader = React.memo(function MainPanelHeader({
@@ -412,11 +418,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 						>
 							<span
 								role="img"
-								aria-label={getAgentDisplayName(activeSession.toolType)}
+								aria-label={getAgentDisplayName(sessionProviderId(activeSession))}
 								className="w-4 h-4 shrink-0 flex items-center justify-center"
 							>
 								<AgentLogo
-									agentId={activeSession.toolType}
+									agentId={sessionProviderId(activeSession)}
 									supported
 									detected
 									theme={theme}
@@ -477,33 +483,26 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 								<span className="truncate uppercase">{sshRemoteName}</span>
 							</button>
 						) : (
-							/* The LOCAL badge carries the `header-local-badge` hook so the phone
-							   layout can retire it. It is inert for non-git agents (no menu, no
-							   hover handlers), so on a 390px header it spends width to say
-							   nothing; the git pill keeps its icon because that one opens a menu. */
-							<button
-								className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border min-w-0 cursor-pointer outline-none ${
-									activeSession.isGitRepo
-										? 'border-orange-500/30 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20'
-										: 'header-local-badge border-blue-500/30 text-blue-500 bg-blue-500/10'
-								}`}
-								onClick={handleGitPillClick}
-								title={activeSession.isGitRepo && gitInfo?.branch ? gitInfo.branch : undefined}
-								aria-haspopup="menu"
-								aria-expanded={gitMenuOpen}
-							>
-								{activeSession.isGitRepo ? (
-									<>
-										<GitBranch className="w-3 h-3 shrink-0" />
-										{/* Hide branch name text at narrow widths via CSS container query */}
-										<span className="header-git-branch-text truncate">
-											{gitInfo?.branch || 'GIT'}
-										</span>
-									</>
-								) : (
-									t('workflows.shell.local')
-								)}
-							</button>
+							/* A local folder that is not a git repo has nothing to say here: the
+							   old LOCAL badge had no menu and no hover, so it spent header width on
+							   the ordinary case. Only a branch earns a control, and it reads as
+							   quiet text with an icon rather than a colored pill. */
+							activeSession.isGitRepo && (
+								<button
+									className="flex items-center gap-1.5 text-xs px-1.5 py-0.5 rounded-md min-w-0 cursor-pointer outline-none hover:bg-white/10"
+									style={{ color: theme.colors.textDim }}
+									onClick={handleGitPillClick}
+									title={gitInfo?.branch || undefined}
+									aria-haspopup="menu"
+									aria-expanded={gitMenuOpen}
+								>
+									<GitBranch className="w-3 h-3 shrink-0" />
+									{/* Hide branch name text at narrow widths via CSS container query */}
+									<span className="header-git-branch-text truncate">
+										{gitInfo?.branch || 'GIT'}
+									</span>
+								</button>
+							)
 						)}
 						{/* Branch badge for SSH/container git agents. The SSH host pill above
 						    replaces the GIT/branch badge, so without this remote agents lose the
@@ -513,7 +512,8 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 							sshRemoteName &&
 							activeSession.isGitRepo && (
 								<button
-									className="flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border border-orange-500/30 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 min-w-0 cursor-pointer outline-none"
+									className="flex items-center gap-1.5 text-xs px-1.5 py-0.5 rounded-md min-w-0 cursor-pointer outline-none hover:bg-white/10"
+									style={{ color: theme.colors.textDim }}
 									title={gitInfo?.branch || undefined}
 									onClick={handleGitPillClick}
 									aria-haspopup="menu"
@@ -637,7 +637,10 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 					!activeFileTabId &&
 					(activeTab?.agentSessionId || activeTab?.usageStats) &&
 					hasCapability('supportsCostTracking') && (
-						<span className="header-cost-widget text-xs font-mono font-bold px-2 py-0.5 rounded-full border border-green-500/30 text-green-500 bg-green-500/10">
+						<span
+							className="header-cost-widget text-xs tabular-nums"
+							style={{ color: theme.colors.textDim }}
+						>
 							{formatCost(activeTab?.usageStats?.totalCostUsd ?? 0)}
 						</span>
 					)}
@@ -667,9 +670,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 							{/* Plain-text readout: "X% context remaining" - clearer than a
 							    gauge bar at narrow widths and avoids redundant label+bar. */}
 							<span
-								className="text-xs font-mono font-medium tabular-nums whitespace-nowrap"
+								className="text-xs tabular-nums whitespace-nowrap"
 								style={{
-									color: getContextColor(activeTabContextUsage, theme),
+									// Dim while there is room (the green band); the warning and error
+									// colors only appear once the window is filling up.
+									color: quietContextColor(getContextColor(activeTabContextUsage, theme), theme),
 								}}
 							>
 								{Math.round(activeTabContextUsage)}%
@@ -722,7 +727,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 														className="text-xs font-mono"
 														style={{ color: theme.colors.textMain }}
 													>
-														{getAgentDisplayName(activeSession.toolType)}
+														{getAgentDisplayName(sessionProviderId(activeSession))}
 													</span>
 												</div>
 												{activeProfile && activeProfileLabel && (

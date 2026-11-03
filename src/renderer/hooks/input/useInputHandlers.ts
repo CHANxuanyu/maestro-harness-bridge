@@ -123,6 +123,11 @@ export interface UseInputHandlersDeps {
 	processQueuedItemRef: React.MutableRefObject<
 		((sessionId: string, item: QueuedItem) => Promise<void>) | null
 	>;
+	/**
+	 * Ref to the agent-level interrupt (`useInterruptHandler`), which App creates
+	 * after this hook; Escape stops the conversation on screen through it.
+	 */
+	interruptTurnRef?: React.MutableRefObject<(() => void) | null>;
 	/** Flush pending batched session updates */
 	flushBatchedUpdates: () => void;
 	/** Handler for /history command */
@@ -217,6 +222,7 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 		getBatchState,
 		activeBatchRunState,
 		processQueuedItemRef,
+		interruptTurnRef,
 		flushBatchedUpdates,
 		handleHistoryCommand,
 		handleWizardCommand,
@@ -707,6 +713,9 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 	// useInputKeyDown (absorb - keyboard handler for input textarea)
 	// ====================================================================
 
+	// Read at call time: the interrupt is created after this hook runs.
+	const interruptTurn = useCallback(() => interruptTurnRef?.current?.(), [interruptTurnRef]);
+
 	const { handleInputKeyDown } = useInputKeyDown({
 		getInputValue,
 		setInputValue,
@@ -720,6 +729,7 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 		setCommandMode: setAiCommandMode,
 		inputRef,
 		terminalOutputRef,
+		interruptTurn,
 	});
 
 	// ====================================================================

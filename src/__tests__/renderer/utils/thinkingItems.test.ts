@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildThinkingItems } from '../../../renderer/utils/thinkingItems';
+import {
+	buildThinkingItems,
+	isOnScreenTurnRunning,
+	isThinkingItemOnScreen,
+	resolveStopPlacement,
+} from '../../../renderer/utils/thinkingItems';
+import type { ThinkingItem } from '../../../renderer/types';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 
@@ -151,5 +157,89 @@ describe('buildThinkingItems', () => {
 			const ownsSession = () => false;
 			expect(buildThinkingItems(sessions, ownsSession)).toEqual([]);
 		});
+	});
+});
+
+describe('isThinkingItemOnScreen', () => {
+	const session = createMockSession({ id: 'agent', state: 'busy', busySource: 'ai' });
+	const tab = createMockAITab({ id: 'tab', state: 'busy' });
+
+	it('is the active tab of the active agent', () => {
+		expect(isThinkingItemOnScreen({ session, tab }, 'agent', 'tab')).toBe(true);
+	});
+
+	it('is not another tab, another agent, or a turn with no tab', () => {
+		expect(isThinkingItemOnScreen({ session, tab }, 'agent', 'other-tab')).toBe(false);
+		expect(isThinkingItemOnScreen({ session, tab }, 'other-agent', 'tab')).toBe(false);
+		expect(isThinkingItemOnScreen({ session, tab: null }, 'agent', 'tab')).toBe(false);
+		expect(isThinkingItemOnScreen({ session, tab }, 'agent', undefined)).toBe(false);
+	});
+});
+
+/**
+ * Stop is one agent-level action, so exactly one Stop is drawn. Each placement
+ * names the one surface that draws it.
+ */
+describe('resolveStopPlacement', () => {
+	const here = createMockSession({ id: 'here', state: 'busy', busySource: 'ai' });
+	const elsewhere = createMockSession({ id: 'elsewhere', state: 'busy', busySource: 'ai' });
+	const onScreen: ThinkingItem = { session: here, tab: createMockAITab({ id: 'tab-here' }) };
+	const sameAgentOtherTab: ThinkingItem = {
+		session: here,
+		tab: createMockAITab({ id: 'tab-other' }),
+	};
+	const otherAgent: ThinkingItem = {
+		session: elsewhere,
+		tab: createMockAITab({ id: 'tab-elsewhere' }),
+	};
+	const place = (items: ThinkingItem[], autoRunRunning = false) =>
+		resolveStopPlacement(items, 'here', 'tab-here', autoRunRunning);
+
+	it('puts Stop on the send key while the conversation on screen runs', () => {
+		expect(place([onScreen])).toBe('composer');
+		expect(place([onScreen, sameAgentOtherTab, otherAgent])).toBe('composer');
+		// A turn fired in the tab on screen during an Auto Run is still stopped there.
+		expect(place([onScreen], true)).toBe('composer');
+	});
+
+	it('leaves it on the pill for another conversation of this agent', () => {
+		expect(place([sameAgentOtherTab])).toBe('pill');
+		expect(place([otherAgent, sameAgentOtherTab])).toBe('pill');
+	});
+
+	it('draws no Stop for a turn this agent cannot stop', () => {
+		// Stop reaches this agent only, so another agent's turn gets none; consults
+		// this agent fanned out are the only thing left for it to stop.
+		expect(place([otherAgent])).toBe('consults');
+		expect(place([])).toBe('consults');
+	});
+
+	it('yields to the Auto Run pill, whose own Stop ends the run', () => {
+		expect(place([sameAgentOtherTab], true)).toBe('none');
+		expect(place([], true)).toBe('none');
+	});
+});
+
+describe('isOnScreenTurnRunning', () => {
+	const agent = (activeTabId: string, busyTabId: string, inputModeBusy = true) =>
+		createMockSession({
+			id: 'agent',
+			state: inputModeBusy ? 'busy' : 'idle',
+			busySource: 'ai',
+			activeTabId,
+			aiTabs: [
+				createMockAITab({ id: 'a', state: busyTabId === 'a' ? 'busy' : 'idle' }),
+				createMockAITab({ id: 'b', state: busyTabId === 'b' ? 'busy' : 'idle' }),
+			],
+		});
+
+	it('is true while the tab on screen is running', () => {
+		expect(isOnScreenTurnRunning(agent('a', 'a'))).toBe(true);
+	});
+
+	it('is false for another running tab of the agent, or an idle agent', () => {
+		expect(isOnScreenTurnRunning(agent('a', 'b'))).toBe(false);
+		expect(isOnScreenTurnRunning(agent('a', 'a', false))).toBe(false);
+		expect(isOnScreenTurnRunning(undefined)).toBe(false);
 	});
 });

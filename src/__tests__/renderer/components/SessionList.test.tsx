@@ -22,6 +22,7 @@ import { seedSidebarNav, resetSidebarNavStore } from '../../helpers/seedSidebarN
 import { useUIStore } from '../../../renderer/stores/uiStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { MAESTRO_FONT_STACK } from '../../../shared/fontStack';
 import type { AggregatedContributions } from '../../../shared/plugins/contributions';
 
 // Deep-cloned default autoRunStats captured from a fresh store (no longer exported).
@@ -758,6 +759,14 @@ describe('SessionList', () => {
 	// ============================================================================
 
 	describe('LIVE Mode', () => {
+		// The width thresholds below were drawn at the old 14px monospace
+		// interface font. Since the 2026-11-02 redesign the default is 15px Inter,
+		// whose measured label widths differ; pin the typography these thresholds
+		// describe.
+		beforeEach(() => {
+			useSettingsStore.setState({ fontSize: 14, fontFamily: MAESTRO_FONT_STACK });
+		});
+
 		it('shows OFFLINE when live mode is disabled', () => {
 			useUIStore.setState({ leftSidebarOpen: true });
 			useSettingsStore.setState({ leftSidebarWidth: 310 });

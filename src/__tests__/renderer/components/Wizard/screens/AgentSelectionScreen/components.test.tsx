@@ -15,6 +15,7 @@ import {
 } from '../../../../../../renderer/components/Wizard/screens/AgentSelectionScreen/components';
 import { AGENT_TILES } from '../../../../../../renderer/components/Wizard/screens/AgentSelectionScreen';
 import { PICKABLE_AGENT_IDS } from '../../../../../../shared/agentMetadata';
+import { DEEPSEEK_PRESET } from '../../../../../../shared/agentPresets';
 import { AGENT_LOGO_FALLBACK_TESTID } from '../../../../../../renderer/components/Wizard/screens/AgentSelectionScreen/components/AgentLogo';
 
 vi.mock('../../../../../../renderer/components/shared/AgentConfigPanel', () => ({
@@ -61,7 +62,8 @@ describe('AgentSelectionScreen components', () => {
 		// marker rather than "some svg rendered": the fallback is a div today, but
 		// were it ever redrawn as an svg, a presence check would start passing for
 		// exactly the providers this test exists to catch.
-		for (const agentId of PICKABLE_AGENT_IDS) {
+		// DeepSeek is a preset rather than an AgentId, but it is named and marked as a provider.
+		for (const agentId of [...PICKABLE_AGENT_IDS, DEEPSEEK_PRESET.id]) {
 			const { queryByTestId, unmount } = render(
 				<AgentLogo agentId={agentId} supported detected theme={mockTheme} />
 			);

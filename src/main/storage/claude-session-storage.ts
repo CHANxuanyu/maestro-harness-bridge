@@ -14,6 +14,8 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
+import fsSync from 'fs';
+import { localProjectPathCandidates } from './local-project-paths';
 import Store from 'electron-store';
 import { logger } from '../utils/logger';
 import { captureException } from '../utils/sentry';
@@ -603,25 +605,27 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 		sessionId: string,
 		configDir?: string
 	): Promise<string> {
-		// An explicitly selected pool must never fall back to a copy under another account.
-		if (configDir)
-			return path.join(this.getEncodedProjectDir(projectPath, configDir), `${sessionId}.jsonl`);
-		const defaultFile = path.join(this.getEncodedProjectDir(projectPath), `${sessionId}.jsonl`);
-		const exists = async (file: string): Promise<boolean> => {
-			try {
-				await fs.access(file);
-				return true;
-			} catch {
-				return false;
+		const defaultFile = path.join(
+			this.getEncodedProjectDir(projectPath, configDir),
+			`${sessionId}.jsonl`
+		);
+		const locate = async (account?: string) => {
+			for (const dir of this.getEncodedProjectDirs(projectPath, account)) {
+				const candidate = path.join(dir, `${sessionId}.jsonl`);
+				try {
+					await fs.access(candidate);
+					return candidate;
+				} catch {
+					// Try the other spelling within the same selected account.
+				}
 			}
+			return null;
 		};
-		if (await exists(defaultFile)) return defaultFile;
-		for (const accountDir of await getProviderAccountDirs('claude-code')) {
-			const candidate = path.join(
-				this.getEncodedProjectDir(projectPath, accountDir),
-				`${sessionId}.jsonl`
-			);
-			if (candidate !== defaultFile && (await exists(candidate))) return candidate;
+		const selected = await locate(configDir);
+		if (selected || configDir) return selected ?? defaultFile;
+		for (const account of await getProviderAccountDirs('claude-code')) {
+			const candidate = await locate(account);
+			if (candidate) return candidate;
 		}
 		return defaultFile;
 	}
@@ -641,6 +645,16 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 	private getEncodedProjectDir(projectPath: string, configDir?: string): string {
 		const encodedPath = encodeClaudeProjectPath(projectPath);
 		return path.join(this.getProjectsDir(configDir), encodedPath);
+	}
+
+	private getEncodedProjectDirs(projectPath: string, configDir?: string): string[] {
+		return [
+			...new Set(
+				localProjectPathCandidates(projectPath).map((candidate) =>
+					this.getEncodedProjectDir(candidate, configDir)
+				)
+			),
+		];
 	}
 
 	/**
@@ -686,8 +700,17 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 	 * transcript folder yet.
 	 */
 	private async statProjectSessionFiles(
-		projectDir: string
+		projectDir: string | string[]
 	): Promise<{ sessionId: string; filePath: string; sizeBytes: number; mtimeMs: number }[]> {
+		if (Array.isArray(projectDir)) {
+			const candidates = (
+				await Promise.all(projectDir.map((dir) => this.statProjectSessionFiles(dir)))
+			).flat();
+			// Prefer the saved spelling when the same native ID appears twice.
+			return [...new Map(candidates.reverse().map((file) => [file.sessionId, file])).values()].sort(
+				(a, b) => b.mtimeMs - a.mtimeMs
+			);
+		}
 		let filenames: string[];
 		try {
 			filenames = await fs.readdir(projectDir);
@@ -818,8 +841,9 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			return this.listSessionsRemote(projectPath, sshConfig, configDir);
 		}
 
-		const projectDir = this.getEncodedProjectDir(projectPath, configDir);
-		const files = await this.statProjectSessionFiles(projectDir);
+		const projectDirs = this.getEncodedProjectDirs(projectPath, configDir);
+		const projectDir = projectDirs.join('\0');
+		const files = await this.statProjectSessionFiles(projectDirs);
 
 		if (files.length === 0) {
 			// Still a full listing, so still prune: a project whose transcripts were
@@ -921,9 +945,9 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 		}
 
 		const { cursor, limit = 100, configDir } = options || {};
-		const projectDir = this.getEncodedProjectDir(projectPath, configDir);
-
-		const sortedFiles = await this.statProjectSessionFiles(projectDir);
+		const projectDirs = this.getEncodedProjectDirs(projectPath, configDir);
+		const projectDir = projectDirs.join('\0');
+		const sortedFiles = await this.statProjectSessionFiles(projectDirs);
 		const totalCount = sortedFiles.length;
 		if (totalCount === 0) {
 			return { sessions: [], hasMore: false, totalCount: 0, nextCursor: null };
@@ -1132,8 +1156,10 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			const projectDir = this.getRemoteEncodedProjectDir(projectPath);
 			return `${projectDir}/${sessionId}.jsonl`;
 		}
-		const projectDir = this.getEncodedProjectDir(projectPath);
-		return path.join(projectDir, `${sessionId}.jsonl`);
+		const candidates = this.getEncodedProjectDirs(projectPath).map((dir) =>
+			path.join(dir, `${sessionId}.jsonl`)
+		);
+		return candidates.find((file) => fsSync.existsSync(file)) ?? candidates[0];
 	}
 
 	async deleteMessagePair(

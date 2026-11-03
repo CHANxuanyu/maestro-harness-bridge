@@ -26,6 +26,8 @@ import {
 import { getClaudeTokenMode } from '../../shared/claudeTokenMode';
 import { QUERY_SOURCE_ENV_VAR } from '../../shared/querySource';
 import { buildSpawnPath } from '../utils/spawnPath';
+import { resolveAgentAccountEnv } from '../../shared/agentAccountDir';
+import { getAgentAccountDirLayers } from '../agents/provider-account-dirs';
 
 // ─── Types ──────���────────────────────────────────────────────────────────────
 
@@ -152,6 +154,15 @@ export async function buildSpawnSpec(
 	// `spawnEnvVars` needs to allow undefined. Explicitly type it; the spread
 	// at the end of the function already handles the undefined case via `|| {}`.
 	let spawnEnvVars: Record<string, string> | undefined = effectiveEnvVars;
+	if (!sshRemoteConfig?.enabled && (toolType === 'claude-code' || toolType === 'codex')) {
+		Object.assign(
+			spawnEnvVars,
+			resolveAgentAccountEnv(
+				{ toolType, customEnvVars: effectiveEnvVars },
+				getAgentAccountDirLayers(toolType)
+			)
+		);
+	}
 	let sshStdinScript: string | undefined;
 	let sshRemoteCommand: string | undefined;
 	let stdinPrompt: string | undefined;

@@ -1,9 +1,13 @@
 import { useT } from '../../../i18n';
 import { memo, useState } from 'react';
 import type React from 'react';
-import { Gauge, Sparkles } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type { Theme } from '../../../types';
 import { ShortcutHint, shortcutSuffix } from '../../ui/ShortcutHint';
+
+/** Plain dim text with a chevron, the way a chat composer names its model. */
+const PICKER_CLASS =
+	'flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs whitespace-nowrap cursor-pointer transition-all opacity-80 hover:opacity-100 hover:bg-white/10';
 
 interface ModelEffortPillsProps {
 	isVisible: boolean;
@@ -66,20 +70,16 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 							setModelMenuOpen(!modelMenuOpen);
 							setEffortMenuOpen(false);
 						}}
-						className="flex items-center gap-1 text-2xs px-2 py-1 rounded-full cursor-pointer transition-all opacity-60 hover:opacity-100"
-						style={{
-							backgroundColor: `${theme.colors.accent}10`,
-							color: theme.colors.accent,
-							border: `1px solid ${theme.colors.accent}25`,
-						}}
+						className={PICKER_CLASS}
+						style={{ color: theme.colors.textDim }}
 						title={t('workflows.shell.changeModelvalue', { p0: shortcutSuffix(shortcutKeys) })}
 					>
-						<Sparkles className="w-3 h-3" />
 						<span>{currentModel || t('workflows.shell.default2')}</span>
+						<ChevronDown className="w-3 h-3 opacity-70" />
 					</button>
 					{modelMenuOpen && (
 						<div
-							className="absolute bottom-full left-0 mb-1 rounded border shadow-lg z-50"
+							className="absolute bottom-full right-0 mb-1 rounded border shadow-lg z-50"
 							style={{
 								backgroundColor: theme.colors.bgMain,
 								borderColor: theme.colors.border,
@@ -173,22 +173,18 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 							setEffortMenuOpen(!effortMenuOpen);
 							setModelMenuOpen(false);
 						}}
-						className="flex items-center gap-1 text-2xs px-2 py-1 rounded-full cursor-pointer transition-all opacity-60 hover:opacity-100"
-						style={{
-							backgroundColor: `${theme.colors.warning}10`,
-							color: theme.colors.warning,
-							border: `1px solid ${theme.colors.warning}25`,
-						}}
+						className={PICKER_CLASS}
+						style={{ color: theme.colors.textDim }}
 						title={t('workflows.shell.changeEffortLevelvalue', {
 							p0: shortcutSuffix(shortcutKeys),
 						})}
 					>
-						<Gauge className="w-3 h-3" />
 						<span>{currentEffort || t('workflows.shell.default2')}</span>
+						<ChevronDown className="w-3 h-3 opacity-70" />
 					</button>
 					{effortMenuOpen && (
 						<div
-							className="absolute bottom-full left-0 mb-1 rounded border shadow-lg z-50"
+							className="absolute bottom-full right-0 mb-1 rounded border shadow-lg z-50"
 							style={{
 								backgroundColor: theme.colors.bgMain,
 								borderColor: theme.colors.border,

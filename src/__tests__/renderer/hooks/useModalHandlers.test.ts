@@ -37,6 +37,7 @@ import { useGroupChatStore } from '../../../renderer/stores/groupChatStore';
 import { useAgentStore } from '../../../renderer/stores/agentStore';
 import { useAgentErrorRecovery } from '../../../renderer/hooks/agent/useAgentErrorRecovery';
 import { gitService } from '../../../renderer/services/git';
+import { registerQuitSave } from '../../../renderer/services/quitSave';
 import type { Session, AITab } from '../../../renderer/types';
 import { createMockAITab as createBaseMockAITab, createMockFileTab } from '../../helpers/mockTab';
 import { createMockSession } from '../../helpers/mockSession';
@@ -343,6 +344,36 @@ describe('useModalHandlers', () => {
 			expect(window.maestro.app.confirmQuit).toHaveBeenCalledOnce();
 		});
 
+		it('handleConfirmQuit lands the pending save before confirming', async () => {
+			const order: string[] = [];
+			(window.maestro.app.confirmQuit as any).mockImplementation(() => order.push('confirmQuit'));
+			let finishSave: () => void = () => {};
+			const unregister = registerQuitSave(
+				() =>
+					new Promise<void>((resolve) => {
+						finishSave = () => {
+							order.push('saved');
+							resolve();
+						};
+					})
+			);
+			try {
+				const { result } = renderHook(() =>
+					useModalHandlers(createInputRef(), createTerminalOutputRef())
+				);
+				act(() => {
+					result.current.handleConfirmQuit();
+				});
+				expect(order).toEqual([]);
+				await act(async () => {
+					finishSave();
+				});
+				expect(order).toEqual(['saved', 'confirmQuit']);
+			} finally {
+				unregister();
+			}
+		});
+
 		it('handleCancelQuit closes quit modal and calls cancelQuit', () => {
 			getModalActions().setQuitConfirmModalOpen(true);
 			expect(useModalStore.getState().isOpen('quitConfirm')).toBe(true);
@@ -562,6 +593,51 @@ describe('useModalHandlers', () => {
 	// ======================================================================
 
 	describe('Group F: Agent Error Handlers', () => {
+		it('lets a live error hand its tab to another AI, keeping the error on the agent', () => {
+			const limit = {
+				type: 'rate_limited',
+				message: 'Usage limit reached.',
+				recoverable: true,
+				agentId: 'claude-code',
+				timestamp: 1,
+			} as const;
+			const tab = createMockAITab({
+				id: 'tab-1',
+				logs: [{ id: 'u', timestamp: 1, source: 'user', text: 'Keep going' }],
+			});
+			const session = createMockSession({
+				id: 'session-1',
+				activeTabId: 'tab-1',
+				aiTabs: [tab],
+				agentError: limit,
+				agentErrorTabId: 'tab-1',
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: 'session-1' });
+			getModalActions().setAgentErrorModalSessionId('session-1');
+			const recovery = useAgentErrorRecovery as ReturnType<typeof vi.fn>;
+			recovery.mockClear();
+			renderHook(() => useModalHandlers(createInputRef(), createTerminalOutputRef()));
+			const options = recovery.mock.calls.at(-1)![0];
+			expect(options.onHandoff).toBeTypeOf('function');
+			act(() => options.onHandoff());
+			expect(useModalStore.getState().isOpen('agentError')).toBe(false);
+			expect(useModalStore.getState().getData('aiHandoff')).toEqual({
+				sessionId: 'session-1',
+				tabId: 'tab-1',
+			});
+			expect(useSessionStore.getState().sessions[0].agentError).toEqual(limit);
+			useModalStore.getState().closeModal('aiHandoff');
+
+			// An SSH agent cannot hand off, so the action is not offered at all.
+			useSessionStore.setState({
+				sessions: [{ ...session, sessionSshRemoteConfig: { enabled: true } } as Session],
+			});
+			getModalActions().setAgentErrorModalSessionId('session-1');
+			recovery.mockClear();
+			renderHook(() => useModalHandlers(createInputRef(), createTerminalOutputRef()));
+			expect(recovery.mock.calls.at(-1)![0].onHandoff).toBeUndefined();
+		});
+
 		it('handleCloseAgentErrorModal clears agentErrorModalSessionId', () => {
 			getModalActions().setAgentErrorModalSessionId('session-1');
 			expect(useModalStore.getState().isOpen('agentError')).toBe(true);

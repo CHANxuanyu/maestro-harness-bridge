@@ -34,7 +34,10 @@ import { captureException } from '../utils/sentry';
 import { isInitialized } from '../stores/instances';
 import { getAgentConfigsStore, getSessionsStore, getSettingsStore } from '../stores/getters';
 import { isBlankEnvValue } from '../../shared/agentEnvironment';
-import { resolveAgentAccountDir as resolveAccountDirForAgent } from '../../shared/agentAccountDir';
+import {
+	resolveAgentAccountDir as resolveAccountDirForAgent,
+	type AgentAccountDirLayers,
+} from '../../shared/agentAccountDir';
 import {
 	effectiveAgentCustomEnvVars,
 	getProviderProfileConfig,
@@ -70,7 +73,7 @@ export interface ProviderAccountDirsOptions {
 }
 
 /** Stored agents, or an empty list before `initializeStores()` has run. */
-function readStoredSessions(): Array<Record<string, unknown>> {
+export function readStoredSessions(): Array<Record<string, unknown>> {
 	if (!isInitialized()) return [];
 	return getSessionsStore().get('sessions', []) as Array<Record<string, unknown>>;
 }
@@ -244,6 +247,19 @@ function readGlobalShellEnvVars(): Record<string, string> {
 	return vars && typeof vars === 'object' ? (vars as Record<string, string>) : {};
 }
 
+/** Host-owned environment layers for both live spawn requests and stored agents. */
+export function getAgentAccountDirLayers(
+	toolType: string,
+	options: AgentAccountDirOptions = {}
+): AgentAccountDirLayers {
+	return {
+		agentLevelEnvVars: options.agentLevelEnvVars ?? readAgentLevelEnvVars(toolType),
+		globalShellEnvVars: options.globalShellEnvVars ?? readGlobalShellEnvVars(),
+		env: options.env ?? process.env,
+		homeDir: options.homeDir ?? os.homedir(),
+	};
+}
+
 /**
  * The account dir one STORED agent runs under, read from the stores. The rule
  * itself lives in `shared/agentAccountDir.ts`, shared with the CLI.
@@ -265,11 +281,6 @@ export function resolveAgentAccountDir(
 					: undefined,
 			sshRemote: !!sshConfig?.enabled,
 		},
-		{
-			agentLevelEnvVars: options.agentLevelEnvVars ?? readAgentLevelEnvVars(session.toolType),
-			globalShellEnvVars: options.globalShellEnvVars ?? readGlobalShellEnvVars(),
-			env: options.env ?? process.env,
-			homeDir: options.homeDir ?? os.homedir(),
-		}
+		getAgentAccountDirLayers(session.toolType, options)
 	);
 }

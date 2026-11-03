@@ -2,6 +2,125 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-03：hb.6 候选与 Windows 账户路径回归
+
+本轮在无远端的独立克隆 `codex/hb6-candidate` 上工作，起点为 `0c15c18f5eef5cc17aec6387fd1797973f7b5d92`，包含 PR #32 至 #43 的叠加内容。仅准备发布制度第 1 步的本地候选，没有推送、开 PR、打标签、构建、安装或发布；没有运行真实模式或访问真实账户、钥匙串及 Maestro 用户数据。被测对象是本地源码，未把开发预览或旧包验收当成本版包通过。
+
+- **Windows 判断：** `b596e2773` 的两条测试将 mock 的 `/tmp` 经平台 `path.join` 得到的目录直接作为预期。Windows 上它是根相对路径，`path.resolve` 会补当前盘符。实际启动经 `resolveAgentAccountEnv()`，原生检查经 `nativeAboutMeTarget()`，两者都调用 `resolveAgentAccountDir()` 并使用相同的 CLI 设置层。因此是测试预期缺少解析，不是两条生产路径不一致，没有修改生产实现。
+- **回归：** `agent-spawner.test.ts` 的 `native account (host paths)` 和新增 `native account (win32 paths)` 分别对 Claude Code、Codex 运行 `spawns %s in the same global account used by the native profile check`。用隔离的 path 默认导出注入 `path.win32` 和合成 cwd；期望值通过相应平台解析计算，盘符只用于合成输入，不写死在预期结果。每条同时比较实际启动环境、原生检查目标的父目录和平台解析结果，不跳过 Windows。
+- **失败先行与反证：** 新 Windows 用例保留旧断言时，150 条中 2 失败、148 通过；两条在目录一致断言通过后于旧预期失败。修正后相关四文件 220/220。另临时让启动 overlay 使用未解析目录，150 条中 2 失败、148 通过，失败点是启动目录与检查目录不一致；finally 恢复生产文件原字节，相关四文件再次 220/220。反证改动未提交。
+- **候选内容：** package 与 lock 根及根包版本统一为 `1.0.1-hb.6`；Unreleased 归入 2026-11-03 候选节并保留空标题，hb.5 仅在标题注明“未发布，编号作废”，原正文保留。新增[版本说明](release-notes/v1.0.1-hb.6.md)与[验收记录](verification/v1.0.1-hb.6.md)，README 和分支入口对齐。说明以 hb.4 为上一公开版，引用真实模式锁定表，区分连接器累计变化与未扩大准入；真实模式和发行包 GUI 全为待执行。
+- **候选反证：** 临时只读一致性检查在旧版本上报 `hb.6 candidate version`（实际 hb.5），完成版本与文档后通过；正式检查脚本未改，输出 `HB source policy passed: 1.0.1-hb.6`。
+
+实际命令与结果如下，重复运行不累加成新的通过数：
+
+| 命令                                                                                                                                                                                                                   | 实际结果                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `npm run test -- src/__tests__/cli/services/agent-spawner.test.ts`                                                                                                                                                     | Windows 注入旧断言及故意破坏启动路径各为 2 失败 / 148 通过；恢复后纳入下行 |
+| `npm run test -- src/__tests__/cli/services/agent-spawner.test.ts src/__tests__/cli/services/system-prompt-native.test.ts src/__tests__/main/agents/provider-account-dirs.test.ts src/__tests__/main/about-me.test.ts` | 4 文件，220/220，无跳过                                                    |
+| `npm run lint`                                                                                                                                                                                                         | 通过，三个 TypeScript 配置                                                 |
+| `npm run lint:eslint`                                                                                                                                                                                                  | 通过                                                                       |
+| `npm run format:check:all`                                                                                                                                                                                             | 通过，全仓文件                                                             |
+| `npm run docs:verify`                                                                                                                                                                                                  | 647 条路径，0 缺失                                                         |
+| `npm run lint:doc-refs`                                                                                                                                                                                                | 39 份指引引用全部有效                                                      |
+| `npm run test:release-policy`                                                                                                                                                                                          | 11/11，无跳过                                                              |
+| `git diff --check`                                                                                                                                                                                                     | 通过                                                                       |
+| `node scripts/hb-release.mjs check`                                                                                                                                                                                    | `HB source policy passed: 1.0.1-hb.6`                                      |
+| `npm run test`                                                                                                                                                                                                         | 2100 文件通过、1 文件既有跳过；47859 通过、88 既有跳过、0 失败；414.73 秒  |
+
+默认沙箱首次启动定向单元时，Vite 向工作区外已存在的共享依赖目录写临时配置被 EPERM 阻止，0 用例执行；经自动审批允许同一命令在沙箱外运行后才得到上表结果。没有安装依赖、改测试配置、放宽断言、增加重试或旁路。完整单元仅运行一轮，既有跳过项如实保留在计数中，本轮未新增任何跳过。Windows 测试修复单独提交为 `d1257ebc9`。原始日志只留在临时目录，不入公共提交。
+
+**未完成与交接：** 本轮没有新的 Windows/Linux CI、Electron、真实模式或发行包证据，无远端所以未创建 PR。已有界面缺口与 Mac 复现步骤见[Opus 清单](verification/v1.0.1-hb.6.md#交给-opus-的界面复现)，包括 DeepSeek 遗留历史路由、Codex 系统封装预览、草稿辨认、向导提示、输出/effort/active writer 和多窗口退出；本轮未启动 GUI，未将这些记录成新观察到的故障，未修改渲染层或冻结项。用户后续须重新登录 Claude，并在实际 hb.6 Mac 包勾选核心流程、三项功能和改版项；Opus 从新克隆复核门禁、真实模式、打包与五项资产后再按发布制度推进。
+
+## 2026-11-02：关于我的原生启动判定
+
+基于 `57341e712`，在独立本地分支 `codex/about-me-native` 补后端、共享契约、CLI 与测试。没有修改渲染层、冻结的 hb.5、依赖或远端。本轮被测对象是该分支工作树的源码及由它构建的 `dist/main`、`dist/cli`、`dist/renderer`，不是发行包；未安装、发布或调用真实模型与账户。
+
+后端与测试源码分为 `d3a470bb3`（原生检查与使用者）和 `43062437e`（提示接入与启动账户）两个本地提交。构建发生在提交前，运行时代码与后者一致；没有将构建中仍显示的起点提交号当成发行来源。
+
+- **交付：** `native` 从当次启动配置解析一个本机原生文件，与 apply 串行；复用抽出的文件检查，只有确认同步的当前非空段且不被 Codex override 遮蔽时返回 loaded。status 汇总物理文件别名的本机 `agentIds` 与 DeepSeek 预设来源，保持 providers 和归属格式。共享英文替代文字已用于 CLI、Cue 智能体、群聊主持人与综合提示；渲染层启动、向导、设置页留给 Opus，具体字段和复现见[接口契约](core-experience-contracts.md#关于我)。
+- **启动一致性：** 新回归发现原账户解析器跳过空值时会误用低层账户，与桌面删除该变量的行为不一致；已修正。CLI 与 Cue 原先未将全局账户环境传给子进程，现使用同一解析结果提供本机 Claude/Codex 的账户变量，避免检查文件与实际读取文件不同。
+- **失败先行：** native、指引文字与使用者信息首轮 13 失败 / 39 通过；提示集成 6 失败 / 159 通过；空值与 CLI 账户环境 3 失败 / 163 通过；Cue 账户环境 2 失败 / 23 通过。CLI 测试初稿误写 settings 文件名，修正夹具后单独重验 3 条仍因旧正文注入失败；夹具设置错误不计为有效反证。
+- **回退反证：** 临时把 native 判定改为始终 loaded，49 条中 9 条失败；临时让独立 CLI 恢复正文注入，3 条全部失败。两次均恢复原字节，恢复后对应 52 条全部通过。没有修改断言、超时、重试或测试排除项。
+- **验证：** 相关单元分三批为 9 文件 375/375、7 文件 118/118、3 文件 32/32，共 19 个不同文件 525 条通过、0 跳过。类型三项目、ESLint、Prettier、文档路径与引用、差异空白检查通过。主进程及 preload、CLI、渲染构建通过；渲染构建保留既有动态导入警告。
+- **未完成：** 合成 Electron E2E 已补 native、agentIds、DeepSeek 和 override 断言，但沙箱中在 125ms 的应用启动阶段报 `Process failed to launch`，1 条失败且未到用例断言；没有尝试绕过沙箱。真实模型加载、Mac 使用、完整端到端及渲染层提示去重未验。native 仍是文件检查，不保证检查后的外部修改，也不证明旧模型进程即时重载。Cue 通知和 shell/CLI 命令模板没有直接接收提示的模型，保留原档案；未知提供方和 SSH 同样保留正文。
+
+主要新增回归名称：`only reports %s loaded for a confirmed, current, nonempty managed block`、`checks fresh bytes without discovery, file writes or ownership changes`、`recognizes ownership through a new alias but refuses a repointed alias`、`queues native reads behind an in-flight apply`、`merges agent ids and DeepSeek provenance by actual file without changing providers or ownership`、`attributes local agents with the same replacement and fallback rules as spawn`、`uses the shared %s pointer only for a current owned native block without a desktop connection`、`uses the actual %s moderator account for both initial and synthesis profile injection`。另覆盖参数拒绝、EACCES、主机层失败、空值取消与两类进程启动账户匹配。
+
+本克隆的 `node_modules` 为共享只读链接。默认 `npm test` 和 `npm run build:renderer` 在 Vite 写 `.vite-temp` 时 EPERM，未执行测试；改用 runner 加载原 `vitest.config.mts`，补齐配置所需的 `__dirname` 并把缓存放在临时目录。未改仓库配置或产品行为。临时入口 `/tmp/maestro-about-me-vitest.mjs` 内容为：
+
+```js
+import path from 'node:path';
+import os from 'node:os';
+import { pathToFileURL } from 'node:url';
+globalThis.__dirname = process.cwd();
+const { startVitest } = await import(
+	pathToFileURL(path.join(process.cwd(), 'node_modules/vitest/dist/node.js'))
+);
+const ctx = await startVitest(
+	'test',
+	process.argv.slice(2),
+	{ run: true, configLoader: 'runner' },
+	{ cacheDir: path.join(os.tmpdir(), 'maestro-about-me-vite-cache') }
+);
+await ctx.close();
+```
+
+实际单元命令如下，反证只重跑其中 about-me 与 system-prompt-native 两个文件，不累计为新增通过数：
+
+```sh
+node --max-old-space-size=8192 /tmp/maestro-about-me-vitest.mjs \
+  src/__tests__/main/about-me.test.ts \
+  src/__tests__/main/agents/native-instructions.test.ts \
+  src/__tests__/main/agents/provider-account-dirs.test.ts \
+  src/__tests__/cli/services/system-prompt.test.ts \
+  src/__tests__/cli/services/system-prompt-native.test.ts \
+  src/__tests__/cli/services/agent-spawner.test.ts \
+  src/__tests__/main/group-chat/group-chat-router.test.ts \
+  src/__tests__/main/cue/cue-spawn-builder.test.ts \
+  src/__tests__/main/web-server/handlers/about-me.test.ts
+node --max-old-space-size=8192 /tmp/maestro-about-me-vitest.mjs \
+  src/__tests__/cli/commands/about-me.test.ts \
+  src/__tests__/cli/commands/list-sessions.test.ts \
+  src/__tests__/main/cue/cue-executor.test.ts \
+  src/__tests__/main/cue/cue-cli-executor.test.ts \
+  src/__tests__/main/cue/cue-shell-executor.test.ts \
+  src/__tests__/main/cue/cue-notify-executor.test.ts \
+  src/__tests__/main/ipc/bootstrap/handler-wiring.test.ts
+node --max-old-space-size=8192 /tmp/maestro-about-me-vitest.mjs \
+  src/__tests__/main/process-manager/utils/envBuilder.test.ts \
+  src/__tests__/main/process-manager/utils/envBuilder.blankKeys.test.ts \
+  src/__tests__/shared/providerProfiles.test.ts
+npm run lint
+npm run lint:eslint
+npm run format:check:all
+npm run docs:verify
+npm run lint:doc-refs
+git diff --check
+npm run build:main
+npm run build:cli
+node --input-type=module -e 'import path from "node:path"; import os from "node:os"; import { pathToFileURL } from "node:url"; globalThis.__dirname = process.cwd(); const { build } = await import(pathToFileURL(path.join(process.cwd(), "node_modules/vite/dist/node/index.js"))); await build({ configLoader: "runner", cacheDir: path.join(os.tmpdir(), "maestro-about-me-vite-cache") });'
+```
+
+本轮已构建后执行但启动失败的命令：
+
+```sh
+task_home=$(mktemp -d /tmp/maestro-about-me-e2e-home.XXXXXX)
+env HOME="$task_home" MAESTRO_E2E_REAL=0 MAESTRO_DISABLE_CUE_TELEMETRY=1 \
+  ELECTRON_DISABLE_GPU=1 node node_modules/@playwright/test/cli.js test \
+  --project=native e2e/native-about-me.spec.ts
+```
+
+交给 Opus 在沙箱外重新构建并执行，仍只用合成夹具：
+
+```sh
+task_home=$(mktemp -d /tmp/maestro-about-me-e2e-home.XXXXXX)
+env HOME="$task_home" MAESTRO_E2E_REAL=0 MAESTRO_DISABLE_CUE_TELEMETRY=1 \
+  ELECTRON_DISABLE_GPU=1 npm run test:e2e -- e2e/native-about-me.spec.ts
+```
+
+Opus 应先完成该 E2E，再对 native 判定与渲染层提示替换分别作临时回退反证，恢复后重新验证。设置页按 `agentIds` 关联当前智能体、按 `deepseek` 标记预设目录；`spawnHelpers.ts` 及向导发送与实际启动相同的配置，只在成功 loaded 时使用共享指引。Codex 首条原生用户消息内的系统封装也须检验没有重复档案正文。本轮没有发送消息给其他人或调用外部模型。
+
 ## 2026-11-01：关于我后端与 CLI
 
 复用 `conductorProfile` 与既有 settings，提供统一的查看、保存、文件状态和确认应用服务。Claude、DeepSeek、Codex 的本机账户分别同步原生指令；确认包含实际目标与管理段快照，首次写入和外部修改不能静默覆盖。逐文件原子写入保留段外字节和符号链接，清空只删除托管段，不新建缺失账户目录，不改 SSH。
@@ -143,3 +262,160 @@ GPT 负责此次治理与验证，没有修改 Claude 前端、原生接续、�
 - **切换账户与迟到读取：** 智能体、项目、主机或所属智能体变化时关闭预览，并丢弃之后才返回的旧读取；同一智能体内先后打开两个会话时，前一个读取也不能覆盖后一个。三条 hook 回归先失败后通过。
 - **未知时长：** 上下文详情的时长未知时显示“未记录”，不显示 0m；回归先失败后通过。
 - **验证：** 类型检查、ESLint 和格式检查通过；相关单元测试 491 个文件 10871/10871。`native-history-boundary` 的 Codex 场景扩展为界面断言：移走账户目录后打开会话浏览器搜索，提示账户不可用而不是没有匹配；IPC 的读取和搜索都带固定标记。临时回退本项的 main 与界面改动后，该场景失败，恢复后通过。首版断言在重开浏览器后等待列表行，但浏览器会自动跳到当前会话的预览，在 CI 中因时序失败；改为先移走目录再打开（列表为空，不会自动跳转），本地连续两次通过。预览的提示由单元测试覆盖。真实账户和 macOS 未验，五万条历史的实际绘制测量仍需目标机器。
+
+## 2026-11-01：DeepSeek 预设的界面（Opus）
+
+基于主线 `57341e712`，接入[后端契约](core-experience-contracts.md#交给-opus-的复现用例)中的四个复现用例，只改渲染层与共享的显示规则。
+
+- **提供方身份：** DeepSeek 仍是 `claude-code`，所以所有按 `toolType` 命名或分组的地方都把它当成 Claude Code。新增 `agentProviderId()` / `sessionProviderId()`（`src/shared/agentPresets.ts`），只用于命名和分组，启动、解析和历史读取仍按 `toolType`。侧栏原先把同一项目里的 Claude 和 DeepSeek 合成一个“新建对话”选项，提供方筛选也分不开；历史记录按所属智能体判断，智能体已删除时按账户目录判断。侧栏的重绘比较加上提供方身份和账户目录，编辑环境变量后能及时刷新。
+- **显示：** 标题栏图标与提供方、智能体行、模型面板标题显示 DeepSeek，并新增简化的鲸鱼图标。模型选择（输入框模型按钮、模型面板、排队消息编辑）只给预设的三个模型，不请求 Claude 模型目录；预设没有写明支持哪些强度，所以不提供强度选择。编辑智能体时提供方固定为 DeepSeek。
+- **新建：** 提供方列表在 Claude Code 下方单列 DeepSeek，没有 Claude Code 时不可选，开启 SSH 时不可选（仅本机）。选中后输入遮盖的密钥并选模型；只有点创建时才调用 `prepareDeepSeekPreset`，选择或取消都不建目录。预设负责路由、凭据、模型和账户，Claude Code 行的参数、环境变量、模型和强度都不带入，只沿用它的可执行路径。失败时对话框保持打开，显示原因但不含密钥；对话框关闭即清空密钥。界面与 `maestro-cli create-agent --preset deepseek` 建出的智能体字段一致。
+- **回归与反证：** 身份、侧栏、重绘比较、图标、标题栏、智能体行、模型列表、模型面板、新建与编辑对话框共 15 条回归，修复前全部失败。新增 Electron 场景 `claude DeepSeek dialog`：在对话框里把 Claude Code 行指向夹具 CLI，再创建 DeepSeek 智能体并发送一轮，检查保存的字段、独立账户里的原生记录、默认 Claude 目录为空，以及标题栏和侧栏只显示 DeepSeek。临时回退全部渲染层改动后，15 条单元回归和该场景失败（对话框里没有 DeepSeek 选项），恢复后通过。
+- **验证：** 完整单元测试 2091 个文件 47669/47669（88 跳过）；完整 Electron 套件 58/58（macOS，`TMPDIR` 与 `MAESTRO_E2E_TEMP_ROOT` 设为 `/private/tmp`）；类型、ESLint、格式、文档路径与引用、发布规则检查通过。
+- **限制：** 该场景只在假程序下运行：真实模式需要把真实密钥输入页面，而 Playwright 的操作记录会写进追踪文件；真实网关仍由 CLI 场景 `claude DeepSeek:` 覆盖。DeepSeek 智能体被删除后，打开它留下的历史会新建一个普通 Claude Code 执行者（`openNativeConversation` 按 `record.provider` 建），此时不带网关，记为后续问题。强度是否可用、真实 DeepSeek 账户和 Mac 发行包未验。
+
+## 2026-11-02：换个 AI 继续的界面（Opus）
+
+叠在 DeepSeek 界面（PR #34）之上，接入[交接契约](core-experience-contracts.md#交给-opus-的交接复现用例)的第 1、2、4 项。只改渲染层，交接服务、IPC 和 CLI 不变。
+
+- **入口：** 对话的标签菜单、命令面板、错误对话框的恢复操作、对话里的额度/限流/登录失效错误、正在重试的额度卡片，共五处，都打开同一个对话框。哪些标签能交接（有对话、非 SSH）和哪些错误给入口（`rate_limited`、`auth_expired`）集中在 `src/renderer/services/aiHandoffEntry.ts`，五处不会各判各的。错误入口不清除原错误，也不停止正在进行的重试。
+- **对话框：** 用 `handoffTargets` 列出可接手的 AI，说明草稿去处（本项目已有智能体的新标签，或新建智能体），请求时不带 `send`，所以对话框本身发不出任何内容。成功后跳到新标签；没有生成草稿时留在对话框显示原因；已生成但没保存等情况会跳到草稿并给出需确认的提示，不自动重试。副标题沿用标题栏的对话名，不显示会话 ID。
+- **草稿说明：** `openHandoffTarget()` 在草稿标签上记下来源、估算 token 和省略条目/字符（不含草稿正文）。输入框上方的说明条只在该标签还没有对话时显示，发送后自动消失，也可以手动关闭。CLI 准备的草稿同样有说明。
+- **回归与反证：** 入口规则、对话框（7 条）、说明条、服务标记、错误恢复、错误对话框接线、额度卡片、标签菜单、命令面板、对话错误按钮，修复前 7 条行为回归和 3 个新文件全部失败。新增 Electron 场景 `claude handoff dialog`：从命令面板打开对话框，选 Codex，检查草稿标签、说明条、保存字段、源标签和原生文件不变，再用普通发送发出。临时回退全部渲染层改动后，单元回归和该场景失败（没有对话框），恢复后通过。
+- **验证：** 完整单元测试 2094 个文件 47696/47696（88 跳过）；完整 Electron 套件 59/59（macOS，`TMPDIR` 与 `MAESTRO_E2E_TEMP_ROOT` 设为 `/private/tmp`）；类型、ESLint、格式、文档路径与发布规则检查通过。
+- **限制：** 侧栏里草稿标签和其他空标签一样显示“新建对话”；契约第 5 项（会话浏览器预览首轮交接时显示系统封装）未做；真实账户和 Mac 未验。
+
+## 2026-11-02：关于我的界面与启动去重（Opus）
+
+叠在“换个 AI 继续”的界面（PR #35）之上，接入[关于我契约](core-experience-contracts.md#交给-opus-的关于我复现用例)的复现用例 1 至 5，并修掉同步原生文件后系统提示重复带“关于我”的问题。后端部分交给 Codex 在独立克隆中完成，三个提交原样并入。
+
+- **设置页：** 原 Conductor Profile 输入框换成“关于我”区块。编辑框没有长度上限，停顿约 0.6 秒后经 `saveConductorProfile()` 调用 `settings.aboutMe set`，按服务返回的内容更新；旧的 `setConductorProfile`（截到 5000 字、经 `settings.set` 保存）已删除。保存只改 Maestro 的档案，不碰原生文件。
+- **原生文件：** 列出 `status` 的每个文件：提供方（`deepseek` 标记的目录显示为 DeepSeek）、原始路径、实际文件、`agentIds` 对应的智能体名称、状态。第一次写入、别处写的段落、外部改过的段落都要勾选，勾选记下当时显示的实际文件与段落并原样传给 `apply`；之后的检查若显示段落或目标变了，勾选自动取消。已归 Maestro 管理的文件直接计入“写入 N 个文件”；清空档案后按钮变成“从 N 个文件中移除”。Codex 的非空 override 标为“被覆盖”并说明原因，不显示为已同步。
+- **结果：** `summarizeAboutMeApply()` 把一次 apply 分为已写入、已写入但未记录、待确认、失败和目录缺失。部分完成显示“已写入 1 个，共 3 个”，其余文件在列表里标明；档案在写入时被别处修改会说明，不自动重试。写入或移除后提示重启已经在运行的 claude 或 codex。
+- **系统提示：** `prepareMaestroSystemPrompt()` 改用 `conductorProfileForAgent()`：按智能体当下的 `toolType` 和 `customEnvVars` 询问 `native`，只有明确 `loaded: true` 才代入 `nativeAboutMePointer()`；SSH 智能体不询问，空档案、检查失败或其他任何状态都保留全文。
+- **Codex 的后端（3 个提交）：** `native` 只读判定、`status` 的 `agentIds` 与 `deepseek`、共享的替代文字，CLI、Cue 与群聊主持人提示使用同一判定；另把账户变量配置为空值时的解析改为回到默认目录，与实际启动进程时的环境合并一致（核对过 `buildChildProcessEnv`）。细节见上方“关于我的原生启动判定”。
+- **回归与反证：** 新增规则、区块（12 条）、存储保存、系统提示（6 条）与搜索登记回归；原有 GeneralTab 中断言 5000 字上限的用例按新行为改写；`useRemoteHandlers` 测试的 `window.maestro` 替身补上 `settings.aboutMe`（系统提示现在会询问它，缺了会多一次 Sentry 上报），断言不变。临时撤掉全部渲染层改动后，13 条行为回归失败、2 个新测试文件无法导入，Electron 场景 `claude about-me settings` 与 `codex about-me prompt` 失败（后者在原生记录里找到正文而不是指引）。在完整实现上另做两次针对性反证：把保存改回截到 5000 字，设置页场景停在“正在保存”；让勾选在文件再变后保留，设置页场景在勾选断言失败、两条单元回归失败，文件本身仍被后端拒绝改写。恢复后全部通过。
+- **验证：** 完整单元测试 2098 个文件 47758/47758（88 跳过）；完整 Electron 套件 61/61（macOS，`TMPDIR` 与 `MAESTRO_E2E_TEMP_ROOT` 设为 `/private/tmp`）；类型、ESLint、全仓格式、文档路径、文档引用与发布规则检查通过。浅色（ayu-light）与深色主题截图检查过版面，预览管理段时关闭了字体连字，避免 `<!--` 显示成箭头。
+- **限制：** 新建向导与 `/wizard` 的系统提示仍带全文（提示在同步函数里一次性生成，改动需要四处启动点改为异步）；新场景只在假程序下运行；真实账户、真实模型加载与 Mac 发行包未验。
+
+## 2026-11-01：退出前保存会话（Opus）
+
+hb.5 候选 `a2b2ce5` 的 Codex 真实验收中，d（正常重启后续接）重启前回答已显示、进程已退出，重启后标签只剩提问。基于主线 `57341e712` 处理前端部分，只改渲染层。
+
+- **根因：** 渲染端会话保存有 2 秒尾部防抖。确认退出后，main 只写出自己已收到的改动，随后在 750 毫秒后强制结束进程，窗口从不关闭，所以 `beforeunload` 不触发，防抖里的改动直接丢失。真实 Codex 在回答后约 1.1 秒才退出，测试随即重启，回答正好落在这个窗口里；此前一次防抖已把提问写盘，所以重启后只剩提问。假程序回合不到 2 秒，提问和回答都没写盘，读取原生记录时整段补回，因而 CI 未暴露。
+- **修复：** 新增 `services/quitSave.ts`，持久化 hook 注册“写出防抖中的改动并等其落盘”，三条确认退出路径（无忙碌任务、退出确认框、空闲后退出）都改为先保存再通知 main。正在写的一次保存只带它开始时的快照，退出保存会等它完成后再比较一次。保存失败或 3 秒未完成时照常退出，不重试。
+- **回归与反证：** 单元回归覆盖防抖期内的改动、写盘途中的新改动、退出确认框和空闲退出四条路径，另有服务自身的失败、超时和注销用例。临时回退四个渲染层文件后，四条路径回归全部失败，恢复后通过。新增 Electron 场景 `claude k`：用工具把回合拖过 2 秒，使提问先写盘，回答落地后立即重启，检查磁盘上的标签副本含有回答。修复前该场景失败，磁盘副本只有提问和运行中的 Bash 工具。
+- **原有重启场景：** copilot、grok、omp 的 d 原来要求重启后从“历史”行打开会话，这只在标签没保存原生 ID 时成立。修复后标签带着原生会话恢复，侧栏显示为已打开的标签，不再另列历史行。三处改为点击绑定该原生 ID 的已打开行，并在历史加载完成后断言该 ID 只出现一行。侧栏行新增 `data-native-session-id` 供定位。临时回退修复后，这三条和 `claude k` 失败，claude、codex、opencode 的 d 仍通过；恢复后七条重启场景全部通过。
+- **验证：** 完整单元测试 2089 个文件 47663/47663（88 跳过）；类型检查、ESLint、格式、文档路径和引用检查通过。完整 Electron 套件在改三条 d 之前为 55/58，失败的正是这三条。
+- **限制：** 退出请求只发给主窗口，副窗口最后 2 秒的改动在退出时仍可能丢失，需要 main 在确认退出前通知所有窗口保存，已写给 Codex。Codex 读取首条用户请求的问题已由 `efde61263` 修复；d 的真实模式需在下一候选上重跑确认。
+
+## 2026-11-02：hb.6 前置项，测试临时目录
+
+- 分支 `codex/hb6-prerequisites`，起点 `57341e712`。仅本地开发，不改冻结 hb.5 源码、连接器范围或真实账户。
+- 新增 `temp-root.test.ts` 的物理路径与 OMP 根目录两条回归，修改前均失败，修改后 2/2。Electron、夹具和 OMP 守卫共用物理临时根目录，macOS 保留短 socket 路径，越界项目仍拒绝。
+- `npm run test:e2e:fixtures`：29/32，三条共享 socket 用例被沙箱 `listen EPERM` 阻止，没有跳过或重试。`npm run lint`、`npm run lint:eslint` 与改动文件 Prettier 通过。
+- `TMPDIR=/private/tmp/ MAESTRO_E2E_TEMP_ROOT=/private/tmp npm run test:e2e -- --grep 'omp a:'` 在 renderer 构建阶段受阻：已就位的 node_modules 是工作区外链接，Vite 写入 `.vite-temp` 被沙箱拒绝。没有绕过。完整 Electron 验收及临时回退反证待沙箱外执行。默认环境验收命令为 `npm run test:e2e:fixtures`、`npm run test:e2e`；hb.5 已冻结，原 Mac 临时目录限制须由发布证据维护者写入其 VERIFICATION.json limits。
+
+## 2026-11-02：hb.6 前置项，Codex 契约与退出时序
+
+- 按官方 `rust-v0.163.0-alpha.11.1` 核对 exec JSON、持久化 CommandExecution、可空 effort 和文件写锁，出处与后续验收见 [hb.6 前置项](verification/hb6-prerequisites.md)。普通 exec 假程序不再伪造命令增量；完成时输出断言保留，运行中跟随及上滚断言移到共享模式。
+- 正常 teardown 等 Stop 消失；假 Codex 最终回答后再等待 1100ms 退出。原生工具 ID 读取支持持久化 item_completed；默认 effort 保留 null，显式 high 的正向用例继续核对 high。
+- 外部成功进程不再收到进程组 SIGTERM，失败清理仍保留。合成子进程证明原清理会截断收尾，但这不能证明真实 active writer 冲突已消失；没有删除写锁、加重试或调用真实 CLI。
+- 新增五条失败回归，修复后通过；临时回退 protocol、native-real、native-app 后重现 5 失败 / 4 通过，恢复修改。相关夹具最终 9/9；Codex 解析、消息、revision 单元测试 219/219。`npm run lint`、`npm run lint:eslint`、改动文件 Prettier 通过。
+- 默认 Vitest 配置加载也遇到外部 node_modules 的 `.vite-temp` 写入拒绝。将配置中的 `__dirname` 换成原生 ESM URL，使用同一配置的 `--configLoader native` 运行单元测试，无断言或选择范围旁路。Electron 命令仍保持原入口，其执行与 Electron 临时回退反证由沙箱外补验。
+
+## 2026-11-02：hb.6 前置项，本地原生历史路径别名
+
+- 以官方固定版本核对 Claude Code 2.1.310、Copilot 1.0.63、Grok 1.0.45 和 OpenCode 1.19.4 的 cwd 来源，包完整性与源码出处见 [hb.6 前置项](verification/hb6-prerequisites.md)。只下载并读取公开包，没有执行原生二进制。
+- 四种提供方共用 `localProjectPathCandidates`，本地读取同时匹配所选路径和 realpath。Claude 合并两个目录并按原生 ID 去重；OpenCode 同时保留 JSON 与 SQLite 读取。缺失项目保留旧路径，账户选择和 SSH 路径不变，不改原生文件。
+- `project-alias.test.ts` 四条回归先 4/4 失败再 4/4 通过，覆盖列表、分页、搜索、消息、revision、外部追加、旧路径记录、缺失项目、同名前缀和所选账户边界。临时回退四个存储实现后再次 4/4 失败，恢复修改。相关存储单元测试 174/174。
+- 新增四条 Electron `path:` 场景，核对真实 IPC、界面历史打开与外部追加跟随。Electron 执行及反证受相同沙箱构建限制，交由 Opus；没有用夹具结果替代 Electron 结论。
+- `npm run lint`、`npm run lint:eslint`、改动文件 Prettier 和 `git diff --check` 通过。定向 Electron 命令已实际运行，仍在 `.vite-temp` 写入处失败，0 条场景执行。
+
+## 2026-11-02：hb.6 前置项，多窗口退出保存协调
+
+- `before-quit` 确认后先向 WindowRegistry 中存活的 app 窗口请求保存，按请求 ID 和 webContents 校验回执，总等待上限 5 秒。窗口销毁、渲染进程退出或发送失败可结束该窗口等待；错误回执不记成成功。重入不重发，不重置期限。全部结束后才 flush main 写入并启动原有清理及退出宽限期。
+- preload 的 `onQuitSaveRequest(save)` 等所注册保存 Promise 完成再回执，失败回传 false，并提供卸载监听函数。没有改动 renderer 界面、文案或持久化逻辑；本克隆缺少 PR #32 的 quitSave 服务，Opus 的前端接入仍是发布前置条件。
+- 初始七条新增回归先失败，修复后连同原有用例 73/73；补充发送时销毁覆盖后共 74 项。临时回退 main 与 preload 后新增八条均失败，恢复后复验。用例包括所有窗口收齐后才清理、总时限和重入、错误来源和过期回执、销毁和崩溃、发送失败、保存 Promise 等待与失败回执。
+- 最终相关单元 74/74，类型、ESLint、改动文件 Prettier、626 条文档路径与 HB 源码策略检查通过。全量夹具 39/42，剩余三条均因沙箱 socket `listen EPERM`，无跳过。Playwright 可列出 63 个原生场景；Codex 定向 Electron 命令实际仍在 Vite 构建受阻，0 条执行。
+
+## 2026-11-02：Codex 工具标识边界复核
+
+- 加强 `finds native command IDs in 11.1 durable CommandExecution items`：同一命令同时存在模型 function_call 和持久化 CommandExecution 时，优先读取后者的 ID，旧格式单独存在仍可读取。新断言先失败；修复仅限验收读取器。
+- 官方 exec JSON 处理器会另分配 `item_N`，不要把 stdout 的条目标识和原生持久化标识误认为同一个命名空间。当前 b 场景分别检查界面命令/结果/状态以及原生记录 ID 的存在与唯一性，没有跨域比较 ID。
+- 单独临时回退 ID 读取修复后 1 失败 / 3 通过，恢复后相关夹具 9/9；最终全量夹具仍为 39/42，三项失败均为沙箱 socket EPERM。类型、ESLint 与改动文件 Prettier 通过。
+
+## 2026-11-02：hb.6 前置项整合与 Mac 验收（Opus）
+
+把 Codex 在独立克隆中完成的五个提交叠到 PR #32 之上，接上逐窗口退出保存的前端监听，并在 Mac 沙箱外完成 Electron 正反验收。详细命令、结果和未覆盖项见 [hb.6 前置项验证](verification/hb6-prerequisites.md#opus-整合与-mac-沙箱外验收2026-11-02)。
+
+- **整合：** 五个提交原样保留作者与说明，只合并 CHANGELOG、工作记录和 `native-resume.spec.ts` 的冲突。这些提交改动的 e2e 夹具（`.cjs`）不在仓库 ESLint 范围内（`lint:eslint` 只检查 `src/`，主线未改动的 `protocol.cjs` 同样有 7 个这类错误），提交钩子会对它们报错，所以按原样提交时跳过了钩子，每个提交先单独跑 Prettier 检查。
+- **逐窗口保存：** `answerQuitSaveRequests()` 由持久化 hook 在每个应用窗口挂载，回应主进程的 `app:requestQuitSave`；保存失败或超过 `QUIT_SAVE_TIMEOUT_MS` 时回报未保存。新增回归 7 条（服务 6 条、hook 1 条）修复前失败；`useBatchHandlers` 测试的 `window.maestro.app` 替身补上新方法，断言不变。新 Electron 场景 `claude l` 在去掉监听时于超时日志断言失败。
+- **场景修正：** `copilot path:` 与 `opencode path:` 按原生 ID 定位历史行（这两家以回答作标题），别名读取无需改动。
+- **验证：** 默认 macOS 临时目录下全量夹具 42/42、完整 Electron 63/65（失败为上面两条，修正后 4/4）；`claude k`、`claude l` 通过；三组反证（别名读取、物理临时根目录、Codex 契约夹具）均失败于预期位置，恢复后通过。完整单元测试 2090 个文件 47678/47678（88 跳过）；类型、ESLint、格式、文档路径、文档引用与发布规则检查通过。
+- **限制：** 两个窗口同时有尾部改动、更新退出与无响应窗口的总时限只由 main 单元测试覆盖；真实模式、真实账户与 Mac 发行包未验。
+
+## 2026-11-02：界面改版第一阶段，配色与字体（Opus）
+
+用户要求把界面改成 Claude Code 的样子，并由 Opus 作为 PM 持续交付。设计说明与分阶段计划见 [界面改版](roadmap/claude-code-ui.md)。本阶段叠在 PR #37 之上，只改默认值和呈现。
+
+- **审查：** 用假程序跑一段两轮、带工具调用与代码块的对话，深浅主题各截全窗口图。最显眼的是全等宽字体、默认展开的右栏、每轮弹出的摘要通知、标题栏与输入框的大量标签，以及 Dracula 紫色。
+- **改动：** 新增 Clay Dark / Clay Light 两套暖中性主题，`DEFAULT_THEME_ID` 收拢十余处 `'dracula'` 默认值；两侧设置默认值改为 Default 字体预设（界面与对话 Inter，终端与编辑器 JetBrains Mono），`INTERFACE_FONT_STACK` 让启动画面、`body` 回退字体与设置保持一致；右栏默认收起。只有未设置过的值换成新默认，已保存的主题和字体不变。字体切换后发现对话代码块继承了比例字体，`CodeFence` 改用代码字体。
+- **测试：** 新增 Clay 主题、默认主题、右栏默认、代码字体等回归，旧默认值的断言按新行为改写；侧栏头部宽度阈值的测试固定在它们设计时的 14px 等宽字体。Electron 中依赖右栏默认展开的 `h`、`i` 场景改为先从标题栏打开右栏（新增 `openRightBar()`，收起时右栏自身的按钮在窗口外）。临时撤掉源码改动后 9 个测试文件 23 条失败，恢复后通过。
+- **验证：** 完整单元测试 2099 个文件 47801/47801（88 跳过）；完整 Electron 66/71，失败的 5 条即上述右栏场景，修正后 5/5。类型、ESLint、格式与文档检查通过；深浅两种 Clay 主题截图核对过。
+- **限制：** 侧栏头部在 15px 下放不下“OFFLINE”文字（第四阶段改版）；标题栏、输入框、通知与对话区排版留待后续阶段。
+
+## 2026-11-02：界面改版第二阶段，对话区（Opus）
+
+叠在第一阶段（PR #38）之上。核对对话区后，回复下方的操作图标本来就是“悬停才显示，只有最新一条常显”，与 Claude Code 一致，未改。
+
+- **摘要通知：** 回合结束后的摘要会写进历史并弹出“摘要”通知。新增 `isConversationOnScreen()`（`src/renderer/utils/sessionAttention.ts`）：窗口有焦点、该智能体是当前智能体、该 AI 标签在最前（用 `resolveModelEffortTabId()` 判断，不在文件、终端、浏览器标签或群聊之后）时，用户看着它结束，不再弹通知；历史记录照常写入。其他情况照旧提醒。
+- **回合摘要行：** “Worked” 后面原来直接接失败徽标，显示成“Worked ! Failed”。现在是一句话，例如“Worked for 3s · 1 failed step”，失败步骤按数量写出并用错误色；停止和结果未知同样用“· 文字”。保留 `data-tool-status`，空格是真实文本而不是只靠 CSS 间距，读屏和复制得到的都是完整句子。
+- **测试：** 新增在看/后台窗口/其他智能体/其他标签/文件标签/群聊六种情况的回归、摘要通知在看时不弹与后台时照弹的回归、失败步骤措辞与计数的回归。
+
+## 2026-11-02：界面改版第三阶段，输入框与标题栏（Opus）
+
+叠在第二阶段（PR #39）之上，只改呈现，快捷键、命令面板和 CLI 对等不变。
+
+- **输入框：** 发送键和通知铃铛原来在输入框右侧另起一列，现在通过 `ToolbarControls` 的 `trailing` 放进卡片底行右端，发送是圆形强调色按钮，铃铛是暗色图标（手机布局不变）。权限、思考、历史、回车方式改成没有底色和边框的小控件，打开时只变色；思考和历史只留图标，名字放在 `aria-label`。模型和强度从左侧彩色胶囊改成右侧的暗色文字加下拉箭头，菜单改为从右侧展开。
+- **运行胶囊：** 运行中的就是正在看的对话时，胶囊只显示状态、用时、+N 和停止，不再写智能体名和标签名（标题栏已经写了），详情放在悬停提示里；其他对话运行时照旧写出名字。任何情况都不再把会话 ID 的十六进制片段画在胶囊上，只在提示里。底色从黄色改为 `bgActivity`。
+- **窗口标题条：** 新增 `appTitleStripText()`（`src/renderer/utils/appTitleStrip.ts`），只写分组和智能体名，不再写标签名或会话 ID 片段。
+- **标题栏：** 本地非 git 目录的 LOCAL 标签没有菜单也没有悬停，删掉；空的分支容器由 `.header-git-pill:empty` 隐藏，手机样式里对应的 `.header-local-badge` 规则一并删除。分支、费用改成暗色文字；上下文百分比在健康区间是暗色，进入警告和错误区间才变色（沿用用户设置的阈值）。
+- **测试：** 新增输入框卡片包含发送与铃铛、设置控件无底色且模型紧挨发送、在看的对话只显示状态与停止、胶囊不画会话 ID、标题条文字、非 git 目录不画标签、上下文健康时为暗色的回归；改写了断言旧样式（LOCAL 标签、会话 ID 按钮、正在看的标签名）的用例。临时撤掉源码改动后 6 个测试文件 13 条失败，恢复后通过。
+- **验证：** 完整单元测试 2099 个文件 47814/47814（88 跳过）；完整 Electron 69/69（含 1000px 下两侧栏与输入框控件不重叠的 `i` 场景）；类型、ESLint、全仓格式检查通过。深浅两种 Clay 主题截图核对过。
+- **限制：** 运行时发送键没有变成停止：停止已在运行胶囊上，同一个操作画两次违反 `StopTurnButton` 的约定，留待把运行状态移进对话时一起处理。运行中的对话在侧栏里会短暂显示会话 ID，归入第四阶段的侧栏行。只在假程序下验证，真实账户与 Mac 发行包未验。
+
+## 2026-11-02：界面改版第四阶段，侧栏与外观（Opus）
+
+叠在第三阶段（PR #40）之上，只改默认值和呈现，快捷键、命令面板和 CLI 对等不变。
+
+- **新会话按钮：** 会话列表最上方新增“新会话”，在当前智能体里开一段新对话，走与项目菜单相同的 `newConversation`（提示里写出 `newTab` 快捷键）。没有打开的智能体时不显示。
+- **对话行标题：** 打开的标签没有名字时，原来退回会话 ID 片段（`CC6F2159`）。现在依次用标签名、原生记录标题、用户说的第一句话，都没有时显示“新会话”，与标题栏一致。第一句话是在重建行时读取的；`sidebarSessionEquality` 仍不比较日志，因为发送会把标签切到忙碌并触发重建，之后的流式输出不会改动第一句话。
+- **侧栏底部：** “管理智能体”和“反馈”从强调色实心按钮改为暗色文字按钮。
+- **跟随系统深浅色：** 新设置 `followSystemAppearance`（默认开），由 `themeIdForAppearance()` 和 `APPEARANCE_PAIRS`（`src/shared/themes.ts`）决定，只在 `useResolvedTheme()` 里生效，系统模式由 `usePrefersDarkColorScheme()` 实时读取。只有成对的主题（Clay Dark 与 Clay Light）会切换，Dracula、插件主题和自定义主题不受影响；`activeThemeId` 不会被改写，系统切回时恢复原选择。“设置 -> 主题”新增开关并加入设置搜索，选择器标出实际显示的那一半。CLI 通过通用的 `settings get/set followSystemAppearance` 对等，网页端允许列表同步加入。
+- **测试：** 新增成对切换与不成对不变、主题解析随系统实时切换和关闭时不变、主题页开关与标记显示的那一半、顶部新会话按钮及无智能体时隐藏、打开的标签不显示会话 ID 并在发送后用第一句话的回归。临时撤掉源码改动后 5 个测试文件 8 条失败，恢复后逐字节一致并通过。
+- **验证：** 完整单元测试 2101 个文件 47826/47826（88 跳过）；完整 Electron 69/69，改用第一句话作行标题后又完整跑了一遍，仍是 69/69；类型、ESLint、全仓格式与文档检查通过。截图核对：本机系统为浅色时默认显示 Clay Light，模拟系统切换为深色、浅色时界面实时跟随。
+- **限制：** 运行时发送键仍未变成停止，运行状态尚未移进对话。只在假程序下验证，真实账户与 Mac 发行包未验。
+
+## 2026-11-03：界面改版第五阶段，运行状态（Opus）
+
+叠在第四阶段（PR #41）之上，只改呈现，快捷键、命令面板和 CLI 对等不变（停止早已有 CLI 路径，这里没有新增操作）。
+
+- **一个停止：** 新增 `resolveStopPlacement()` 和 `isThinkingItemOnScreen()`（`src/renderer/utils/thinkingItems.ts`），由 `InputArea` 按它把停止交给唯一的一个界面：正在看的对话运行时是输入框的发送键；同一智能体的其他对话运行时是运行胶囊；本智能体没有在运行时是跨智能体胶囊（只为它派出的咨询）；Auto Run 时交给 Auto Run 胶囊自己的停止。别的智能体在运行时不再画停止：停止只作用于当前智能体，原来那颗按下去停不了它。
+- **发送键：** `StopTurnButton` 新增 `variant="icon"`（中性色圆键，同一个方块图标和名字）。正在看的对话运行时发送键变成停止；输入框里有内容时发送键回来，名字改为“加入消息队列”，停止挪到它左边。桌面在 `NotificationSendControls`，手机在 `ToolbarControls` 的手机分支，规则相同。终端模式不变。
+- **对话里的运行状态：** 新增 `TurnRunningStatus`，在正在运行的对话末尾写一行：脉动点、“思考中...”、用时（`formatElapsedTickerCompact`）和已生成的 token。只读出文字，计时和 token 对读屏隐藏。计时组件从胶囊里搬到 `ui/ElapsedTimeDisplay.tsx`，胶囊和这一行共用同一个扣除睡眠的计时；`MergeProgressOverlay`、`SummarizeProgressOverlay`、`TransferProgressModal` 里另有三份本地副本，未动。
+- **运行胶囊：** 不再描述正在看的对话，只写别处在运行的工作；Auto Run 胶囊的 +N 也不再算它。没有名字的对话改用 `conversationDisplayTitle()`（名字或第一句话）写出是哪段，胶囊和下拉列表一致；下拉列表原来退回手写的 `substring(0, 8).toUpperCase()` 会话 ID 片段，已去掉。第三阶段加的“在看时只显示状态与停止”分支、Auto Run 被降级到下拉列表的分支，以及下拉列表里 Auto Run 行自己的停止，都因此不可达，已删除。
+- **测试：** 新增停止位置的五种情况、正在看的对话判断、发送键变停止与有草稿时加入队列（桌面和手机）、对话末尾的运行行（出现、计时、token、结束后消失、两种布局）、胶囊不描述正在看的对话的回归，改写了断言旧胶囊行为的用例。临时撤掉源码改动后 6 个测试文件 22 条失败，恢复后 13 个文件逐字节一致并通过；对话命名的两条回归在实现前先跑过，失败 2 条。
+- **验证：** 完整单元测试 2101 个文件 47847/47847（88 跳过）；完整 Electron 69/69（改动后共跑了两遍，都是 69/69）；类型、ESLint、全仓格式与文档检查通过。深浅两种 Clay 主题截图核对：运行时发送键是停止、有草稿时加入队列键和停止并排、对话末尾一行运行状态、切到同一智能体的新对话后胶囊写出另一段对话的名字并带停止。
+- **限制：** 停止仍是智能体级，正在看的对话运行时按停止，同一智能体其他在运行的对话也会停（原有行为）。仍没有键盘停止快捷键。三份本地计时组件未合并。只在假程序下验证，真实账户与 Mac 发行包未验。
+
+## 2026-11-03：Esc 停止正在看的对话（Opus）
+
+叠在第五阶段（PR #42）之上。只改渲染层，停止仍走原来的 `handleInterrupt`。
+
+- **规则：** 新增 `isOnScreenTurnRunning()`（`src/renderer/utils/thinkingItems.ts`），与发送键变停止用同一个判断：当前智能体正在看的标签在运行，且是 AI 模式。输入框里，Esc 在弹出菜单、AI 命令提案和命令模式阶梯之后、原来的“失焦到对话区”之前处理；停止时阻止冒泡，光标留在输入框，草稿不动。对话区里，Esc 在运行时先停止再回到输入框（`TerminalOutput` 原来收到 `onInterrupt` 但没用）。同一智能体的其他对话在运行时 Esc 不停止，那个停止在运行胶囊上。
+- **接线：** `useInterruptHandler` 在 `useInputHandlers` 之后创建，所以 App 新增 `interruptTurnRef` 桥接，与 `processQueuedItemRef` 同一做法。
+- **快捷键：** `FIXED_SHORTCUTS.stopTurn`（Esc，不可改绑：Esc 先给弹窗、菜单和命令模式，这个顺序就是约定），中文标签同步；两处触发都记 `trackShortcutUsage('stopTurn')`，键盘熟练度不会因为分母多一项而够不到。发送键上的停止提示写出 Esc；运行胶囊上的停止不写，因为 Esc 停不了屏幕外的对话。停止提示原来写“（Ctrl+C）”，但 Ctrl+C 只转给终端标签，改掉。
+- **测试：** 新增真实 DOM 下 Esc 停止并保留光标、草稿不动、弹出菜单和命令模式先处理、同一智能体其他对话不停、终端模式不停，对话区 Esc 停止并回到输入框、空闲时只移光标，`isOnScreenTurnRunning` 与停止提示的回归。临时撤掉源码改动后 5 个测试文件 7 条失败，恢复后 11 个文件逐字节一致并通过。
+- **验证：** 完整单元测试 2101 个文件 47857/47857（88 跳过）；完整 Electron 69/69；类型、ESLint、全仓格式与文档检查通过。另在真实界面里跑了一次（临时脚本，未提交）：运行中在输入框按 Esc，对话显示“已停止”，草稿和光标留在输入框；空闲时再按 Esc，焦点照旧移到对话区。
+- **限制：** 停止仍是智能体级（原有行为）。CLI 仍没有中断命令，这是 CLI-UI-PARITY 里已有的缺口，需要主进程与 CLI 改动。只在假程序下验证，真实账户与 Mac 发行包未验。

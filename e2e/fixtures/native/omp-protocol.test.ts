@@ -1,6 +1,6 @@
+import { createNativeTempDir } from './temp-root.cjs';
 import { afterEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { OmpOutputParser } from '../../../src/main/parsers/omp-output-parser';
@@ -17,7 +17,7 @@ afterEach(() => {
 	for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true });
 });
 it('the pinned Omp fixture produces matching stdout and native history outcomes', async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-omp-fixture-'));
+	const root = createNativeTempDir('maestro-omp-fixture-');
 	roots.push(root);
 	vi.stubEnv('PI_CODING_AGENT_DIR', root);
 	const parser = new OmpOutputParser();

@@ -7,7 +7,8 @@
 
 import path from 'path';
 import { isWindows } from '../../shared/platformDetection';
-import { MAESTRO_FONT_STACK } from '../../shared/fontStack';
+import { TYPOGRAPHY_PRESETS } from '../../shared/typographyPresets';
+import { DEFAULT_THEME_ID } from '../../shared/theme-types';
 import { DEFAULT_UI_LANGUAGE } from '../../shared/i18n';
 import { ENCORE_FEATURE_DEFAULTS } from '../../shared/encoreFeatureDefaults';
 import { DEFAULT_CUE_HISTORY_RETENTION_DAYS } from '../../shared/cue/retention';
@@ -80,20 +81,13 @@ export const SETTINGS_DEFAULTS: MaestroSettings = {
 	uiLanguage: DEFAULT_UI_LANGUAGE,
 	sidebarNavigationMode: 'conversations',
 	collapsedConversationProjects: [],
-	activeThemeId: 'dracula',
+	activeThemeId: DEFAULT_THEME_ID,
+	followSystemAppearance: true,
 	shortcuts: {},
-	fontSize: 14,
-	fontFamily: MAESTRO_FONT_STACK,
-	terminalFontFamily: '',
-	chatFontFamily: '',
-	filePreviewFontFamily: '',
-	fileEditorFontFamily: '',
-	documentGraphFontFamily: '',
-	chatFontSize: 0,
-	terminalFontSize: 0,
-	filePreviewFontSize: 0,
-	fileEditorFontSize: 0,
-	documentGraphFontSize: 0,
+	// Proportional to read, monospace to work: the Default typography preset
+	// is the out-of-the-box setup. Stored choices are untouched.
+	...TYPOGRAPHY_PRESETS.default.fonts,
+	...TYPOGRAPHY_PRESETS.default.sizes,
 	fontZoom: 1,
 	// The user's own saved fonts and sizes, so the Factory Reset presets are
 	// safe to try. Null until they save one. See shared/typographySnapshot.ts.

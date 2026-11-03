@@ -92,10 +92,12 @@ vi.mock('../../../renderer/hooks/agent/useAgentCapabilities', () => ({
 
 // Mock child components to isolate InputArea testing
 vi.mock('../../../renderer/components/ThinkingStatusPill', () => ({
-	ThinkingStatusPill: vi.fn(({ thinkingItems, onSessionClick }) =>
+	ThinkingStatusPill: vi.fn(({ thinkingItems, onInterrupt }) =>
 		// Only render when there are thinking items (matches real component behavior)
 		thinkingItems && thinkingItems.length > 0 ? (
-			<div data-testid="thinking-status-pill">ThinkingStatusPill</div>
+			<div data-testid="thinking-status-pill" data-has-stop={onInterrupt ? 'yes' : 'no'}>
+				ThinkingStatusPill
+			</div>
 		) : null
 	),
 }));
@@ -385,6 +387,17 @@ describe('InputArea', () => {
 			expect(screen.getByTitle('Send message')).toBeInTheDocument();
 		});
 
+		it('keeps send and notification settings inside the input card', () => {
+			// One card, as in a conversation-first composer: nothing hangs off its
+			// right edge in a column of its own.
+			const props = createDefaultProps();
+			render(<InputArea {...props} />);
+
+			const card = screen.getByTestId('composer-card');
+			expect(card).toContainElement(screen.getByTitle('Send message'));
+			expect(card).toContainElement(screen.getByTitle('Notification Settings'));
+		});
+
 		it('renders Enter to send toggle', () => {
 			const props = createDefaultProps();
 			render(<InputArea {...props} />);
@@ -554,9 +567,10 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
+			// An icon in the composer row; its name is still "History".
 			const toggle = screen.getByTitle(/Save to History/);
 			expect(toggle).toBeInTheDocument();
-			expect(toggle).toHaveTextContent('History');
+			expect(toggle).toHaveAccessibleName('History');
 		});
 
 		it('renders ThinkingStatusPill when items are thinking', () => {
@@ -2621,30 +2635,46 @@ describe('InputArea', () => {
 });
 
 /**
- * Stop is one agent-level action, so exactly one Stop may be on screen. The
- * thinking pill owns it whenever it renders; the cross-agent pill picks it up
- * only when the thinking pill is absent, which is what happens to a message
- * addressed solely to other agents (this agent never goes busy). The two render
- * conditions have to stay each other's inverse or the user gets two Stops or
- * none.
+ * Stop is one agent-level action, so exactly one Stop may be on screen. While
+ * the conversation on screen runs, the composer's send key is that Stop; for
+ * another running conversation of this agent the thinking pill carries it; and
+ * when this agent is not thinking at all the cross-agent pill carries it for the
+ * consults it fanned out. The placements are one decision
+ * (`resolveStopPlacement`), so they cannot drift into two Stops or none.
  */
-describe('InputArea cross-agent Stop placement', () => {
+describe('InputArea Stop placement', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		useSessionStore.setState({ sessions: [], groups: [] });
 	});
 
 	const indicator = () => screen.getByTestId('cross-agent-indicator');
+	const composerStop = () =>
+		within(screen.getByTestId('composer-card')).queryByTestId('stop-turn-button');
 
-	it('carries Stop when nothing else is offering one', () => {
+	const busyAgent = (id: string, busyTabId: string) =>
+		createMockSession({
+			id,
+			inputMode: 'ai',
+			state: 'busy',
+			busySource: 'ai',
+			activeTabId: 'tab-1',
+			aiTabs: [
+				{ id: 'tab-1', logs: [], state: busyTabId === 'tab-1' ? 'busy' : 'idle' },
+				{ id: 'tab-2', logs: [], state: busyTabId === 'tab-2' ? 'busy' : 'idle' },
+			] as never,
+		});
+
+	it('carries Stop on the cross-agent pill when nothing of this agent is thinking', () => {
 		const props = createDefaultProps();
 		render(<InputArea {...props} />);
 
 		expect(indicator()).toHaveAttribute('data-has-stop', 'yes');
+		expect(composerStop()).toBeNull();
 		expect(screen.queryByTestId('thinking-status-pill')).not.toBeInTheDocument();
 	});
 
-	it('runs the same agent-level interrupt the thinking pill would', () => {
+	it('runs the same agent-level interrupt from the cross-agent pill', () => {
 		const handleInterrupt = vi.fn();
 		const props = createDefaultProps({ handleInterrupt });
 		render(<InputArea {...props} />);
@@ -2653,11 +2683,65 @@ describe('InputArea cross-agent Stop placement', () => {
 		expect(handleInterrupt).toHaveBeenCalledTimes(1);
 	});
 
-	it('yields Stop to the pill while Auto Run is running', () => {
+	it('turns the send key into Stop while the conversation on screen runs', () => {
+		const handleInterrupt = vi.fn();
+		const session = busyAgent('agent-here', 'tab-1');
+		useSessionStore.setState({ sessions: [session] });
+		render(<InputArea {...createDefaultProps({ session, handleInterrupt })} />);
+
+		const stop = composerStop();
+		expect(stop).not.toBeNull();
+		expect(screen.queryByTitle('Send message')).not.toBeInTheDocument();
+		expect(screen.getByTestId('thinking-status-pill')).toHaveAttribute('data-has-stop', 'no');
+		expect(indicator()).toHaveAttribute('data-has-stop', 'no');
+		expect(screen.getAllByTestId('stop-turn-button')).toHaveLength(1);
+
+		fireEvent.click(stop!);
+		expect(handleInterrupt).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps a queue key beside Stop once there is a draft', () => {
+		const processInput = vi.fn();
+		const session = busyAgent('agent-here', 'tab-1');
+		useSessionStore.setState({ sessions: [session] });
+		render(
+			<InputArea {...createDefaultProps({ session, processInput, inputValue: 'and then this' })} />
+		);
+
+		expect(composerStop()).not.toBeNull();
+		fireEvent.click(screen.getByTitle('Queue message'));
+		expect(processInput).toHaveBeenCalledTimes(1);
+	});
+
+	it('leaves Stop on the pill for another running conversation of this agent', () => {
+		const session = busyAgent('agent-here', 'tab-2');
+		useSessionStore.setState({ sessions: [session] });
+		render(<InputArea {...createDefaultProps({ session })} />);
+
+		expect(composerStop()).toBeNull();
+		expect(screen.getByTitle('Send message')).toBeInTheDocument();
+		expect(screen.getByTestId('thinking-status-pill')).toHaveAttribute('data-has-stop', 'yes');
+		expect(indicator()).toHaveAttribute('data-has-stop', 'no');
+	});
+
+	it('offers no turn Stop for another agent, whose turn it cannot reach', () => {
+		const here = createMockSession({ id: 'agent-here', inputMode: 'ai' });
+		const elsewhere = busyAgent('agent-elsewhere', 'tab-1');
+		useSessionStore.setState({ sessions: [here, elsewhere] });
+		render(<InputArea {...createDefaultProps({ session: here })} />);
+
+		expect(composerStop()).toBeNull();
+		expect(screen.getByTestId('thinking-status-pill')).toHaveAttribute('data-has-stop', 'no');
+		// The consults this agent fanned out are still its own to stop.
+		expect(indicator()).toHaveAttribute('data-has-stop', 'yes');
+	});
+
+	it('yields Stop to the Auto Run pill while Auto Run is running', () => {
 		const props = createDefaultProps({ autoRunState: { isRunning: true } as never });
 		render(<InputArea {...props} />);
 
 		expect(indicator()).toHaveAttribute('data-has-stop', 'no');
+		expect(composerStop()).toBeNull();
 	});
 
 	it('draws no indicator at all outside AI mode', () => {
@@ -2667,6 +2751,14 @@ describe('InputArea cross-agent Stop placement', () => {
 		render(<InputArea {...props} />);
 
 		expect(screen.queryByTestId('cross-agent-indicator')).not.toBeInTheDocument();
+	});
+
+	it('keeps the run key in terminal mode while an AI turn runs', () => {
+		const session = { ...busyAgent('agent-here', 'tab-1'), inputMode: 'terminal' as const };
+		useSessionStore.setState({ sessions: [session] });
+		render(<InputArea {...createDefaultProps({ session })} />);
+
+		expect(composerStop()).toBeNull();
 	});
 });
 

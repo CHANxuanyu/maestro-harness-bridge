@@ -177,6 +177,7 @@ import type { WindowCommandRequest, WindowCommandResult } from '../../../shared/
 import type { GroupAppearance, GroupUpdateRequest } from '../../../shared/groupAppearance';
 import type { CadenzaPayload } from '../../../shared/cadenza-types';
 import type { MovementPayload, MovementStateSnapshot } from '../../../shared/movement-types';
+import { DEFAULT_THEME_ID } from '../../../shared/theme-types';
 
 const LOG_CONTEXT = 'CallbackRegistry';
 
@@ -796,7 +797,7 @@ export class CallbackRegistry {
 			return this.callbacks.getSettings();
 		}
 		return {
-			theme: 'dracula',
+			theme: DEFAULT_THEME_ID,
 			fontSize: 14,
 			enterToSendAI: false,
 			defaultSaveToHistory: true,

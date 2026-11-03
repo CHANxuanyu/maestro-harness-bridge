@@ -2,6 +2,7 @@ import type { WebServer } from '../WebServer';
 import type { WebServerFactoryDependencies } from '../web-server-factory';
 import { getThemeById } from '../../themes';
 import { getHistoryManager } from '../../history-manager';
+import { DEFAULT_THEME_ID } from '../../../shared/theme-types';
 
 export function registerThemeCallbacks(
 	server: WebServer,
@@ -11,7 +12,7 @@ export function registerThemeCallbacks(
 
 	// Set up callback for web server to fetch current theme
 	server.setGetThemeCallback(() => {
-		const themeId = settingsStore.get('activeThemeId', 'dracula');
+		const themeId = settingsStore.get('activeThemeId', DEFAULT_THEME_ID);
 		return getThemeById(themeId);
 	});
 

@@ -20,6 +20,8 @@ import {
 import { useCenterFlashStore } from '../../../renderer/stores/centerFlashStore';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useUIStore } from '../../../renderer/stores/uiStore';
+import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { useModalStore } from '../../../renderer/stores/modalStore';
 import type { Session, Theme, LogEntry } from '../../../renderer/types';
 import { TRANSCRIPT_SCROLL_TO_BOTTOM_EVENT } from '../../../renderer/services/transcriptScroll';
 import { useComposerInputStore } from '../../../renderer/stores/composerInputStore';
@@ -347,6 +349,58 @@ describe('TerminalOutput', () => {
 			expect(markdown).toHaveTextContent('fatal: not a git repository');
 			expect(markdown).toHaveTextContent('hint: run');
 			expect(markdown.textContent).toBe(errorText);
+		});
+
+		it('offers to continue with another AI beside a limit or login error, and only those', () => {
+			const tabWith = (logs: LogEntry[]) => ({
+				id: 'tab-1',
+				agentSessionId: 'claude-123',
+				logs,
+				isUnread: false,
+				showThinking: 'on' as const,
+			});
+			const errorLog = (type: 'rate_limited' | 'auth_expired' | 'network_error') =>
+				createLogEntry({
+					id: `err-${type}`,
+					source: 'error',
+					text: 'Usage limit reached.',
+					agentError: {
+						type,
+						message: 'Usage limit reached.',
+						recoverable: true,
+						agentId: 'claude-code',
+						timestamp: 1,
+					},
+				});
+			const question = createLogEntry({ id: 'q', source: 'user', text: 'Keep going' });
+			const show = (type: 'rate_limited' | 'auth_expired' | 'network_error') => {
+				const tab = tabWith([question, errorLog(type)]);
+				const session = createDefaultSession({
+					tabs: [tab],
+					aiTabs: [tab],
+					activeTabId: 'tab-1',
+				} as Partial<Session>);
+				useSessionStore.setState({ sessions: [session] });
+				return render(<TerminalOutput {...createDefaultProps({ session })} />);
+			};
+			useModalStore.getState().closeModal('aiHandoff');
+
+			const limited = show('rate_limited');
+			// The original error stays; the handoff sits beside it.
+			expect(screen.getByText('Error')).toBeInTheDocument();
+			fireEvent.click(screen.getByRole('button', { name: 'Continue with another AI' }));
+			expect(useModalStore.getState().modals.get('aiHandoff')).toMatchObject({
+				open: true,
+				data: { sessionId: 'session-1', tabId: 'tab-1' },
+			});
+			limited.unmount();
+
+			const login = show('auth_expired');
+			expect(screen.getByRole('button', { name: 'Continue with another AI' })).toBeInTheDocument();
+			login.unmount();
+
+			show('network_error');
+			expect(screen.queryByRole('button', { name: 'Continue with another AI' })).toBeNull();
 		});
 
 		it('collapses consecutive AI responses in AI mode', () => {

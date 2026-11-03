@@ -13,6 +13,9 @@ import { RetryStatusCard } from '../../../renderer/components/RetryStatusCard';
 import { useRetryStore } from '../../../renderer/stores/retryStore';
 import { mockTheme } from '../../helpers/mockTheme';
 import type { OutageRecord } from '../../../renderer/stores/retryStore';
+import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { useModalStore } from '../../../renderer/stores/modalStore';
+import { createMockAITab, createMockSession } from '../../helpers';
 
 const NOW = new Date('2026-01-01T00:00:00Z').getTime();
 
@@ -230,6 +233,49 @@ describe('RetryStatusCard', () => {
 
 			expect(screen.getByText('Plan quota exhausted')).toBeInTheDocument();
 			expect(screen.queryByTestId('quota-limit-evidence')).not.toBeInTheDocument();
+		});
+	});
+
+	// A long quota outage is exactly when the user may rather move on than wait.
+	// The handoff only prepares a draft, so the retry keeps running beside it.
+	describe('continuing with another AI', () => {
+		beforeEach(() => {
+			useModalStore.getState().closeModal('aiHandoff');
+			useSessionStore.setState({
+				sessions: [
+					createMockSession({
+						id: 's1',
+						aiTabs: [
+							createMockAITab({
+								id: 't1',
+								logs: [{ id: 'u', timestamp: 1, source: 'user', text: 'Keep going' }],
+							}),
+						],
+					}),
+				],
+			});
+		});
+
+		it('offers it while the outage is live, without stopping the retry', () => {
+			setOutage({ strategy: 'token-exhaustion' });
+			render(<RetryStatusCard outageId="o1" theme={mockTheme} />);
+			fireEvent.click(screen.getByRole('button', { name: /Continue with another AI/ }));
+			expect(useModalStore.getState().modals.get('aiHandoff')).toMatchObject({
+				open: true,
+				data: { sessionId: 's1', tabId: 't1' },
+			});
+			expect(useRetryStore.getState().outages.o1.status).toBe('active');
+		});
+
+		it('is absent once the outage is over or the tab cannot be handed off', () => {
+			setOutage({ status: 'recovered', attempts: 1 });
+			const { unmount } = render(<RetryStatusCard outageId="o1" theme={mockTheme} />);
+			expect(screen.queryByRole('button', { name: /Continue with another AI/ })).toBeNull();
+			unmount();
+			useSessionStore.setState({ sessions: [] });
+			setOutage();
+			render(<RetryStatusCard outageId="o1" theme={mockTheme} />);
+			expect(screen.queryByRole('button', { name: /Continue with another AI/ })).toBeNull();
 		});
 	});
 });

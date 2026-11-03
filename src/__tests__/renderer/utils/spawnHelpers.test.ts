@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { prepareMaestroSystemPrompt } from '../../../renderer/utils/spawnHelpers';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { nativeAboutMePointer } from '../../../shared/aboutMe';
 
 vi.mock('../../../renderer/utils/templateVariables', () => ({
 	substituteTemplateVariables: vi.fn((content: string, vars: Record<string, any>) => {
@@ -132,5 +134,83 @@ describe('prepareMaestroSystemPrompt', () => {
 		expect(first).toBeDefined();
 		expect(second).toBeDefined();
 		expect((window as any).maestro.prompts.get).toHaveBeenCalledTimes(2);
+	});
+
+	// The profile reaches a provider through its own instruction file once that
+	// file is synced; sending it in the system prompt as well repeats it, and for
+	// Codex puts it in the first visible user message of the native transcript.
+	describe('About Me already in the native instruction file', () => {
+		const claudeSession = {
+			...baseSession,
+			toolType: 'claude-code',
+			customEnvVars: { CLAUDE_CONFIG_DIR: '/accounts/work' },
+		};
+		const nativeAnswer = (loaded: boolean, provider: 'claude-code' | 'codex' = 'claude-code') => ({
+			success: true,
+			content: 'Real profile',
+			estimatedTokens: 3,
+			files: [],
+			native: { loaded, provider, path: '/accounts/work/CLAUDE.md' },
+		});
+
+		beforeEach(() => {
+			useSettingsStore.setState({ conductorProfile: 'Real profile' });
+			(window as any).maestro.prompts.get.mockResolvedValue({
+				success: true,
+				content: 'Profile: {{conductorProfile}}',
+			});
+			(window as any).maestro.settings = {
+				...(window as any).maestro.settings,
+				aboutMe: vi.fn().mockResolvedValue(nativeAnswer(false)),
+			};
+		});
+
+		it('names the file instead of repeating the profile when it is loaded there', async () => {
+			(window as any).maestro.settings.aboutMe.mockResolvedValue(nativeAnswer(true));
+			const result = await prepareMaestroSystemPrompt({ session: claudeSession });
+			expect(result).toBe(`Profile: ${nativeAboutMePointer('claude-code')}`);
+			expect(result).not.toContain('Real profile');
+			expect((window as any).maestro.settings.aboutMe).toHaveBeenCalledWith({
+				action: 'native',
+				agent: {
+					toolType: 'claude-code',
+					customEnvVars: { CLAUDE_CONFIG_DIR: '/accounts/work' },
+					sshRemote: false,
+				},
+			});
+		});
+
+		it('uses the Codex wording for a Codex agent', async () => {
+			(window as any).maestro.settings.aboutMe.mockResolvedValue(nativeAnswer(true, 'codex'));
+			const result = await prepareMaestroSystemPrompt({
+				session: { ...baseSession, toolType: 'codex' },
+			});
+			expect(result).toBe(`Profile: ${nativeAboutMePointer('codex')}`);
+		});
+
+		it('keeps the profile when the native file does not hold it', async () => {
+			const result = await prepareMaestroSystemPrompt({ session: claudeSession });
+			expect(result).toBe('Profile: Real profile');
+		});
+
+		it('keeps the profile when the check fails', async () => {
+			(window as any).maestro.settings.aboutMe.mockRejectedValue(new Error('IPC gone'));
+			const result = await prepareMaestroSystemPrompt({ session: claudeSession });
+			expect(result).toBe('Profile: Real profile');
+		});
+
+		it('does not ask about an SSH agent, whose files live on the remote host', async () => {
+			const result = await prepareMaestroSystemPrompt({
+				session: { ...claudeSession, sessionSshRemoteConfig: { enabled: true } },
+			});
+			expect(result).toBe('Profile: Real profile');
+			expect((window as any).maestro.settings.aboutMe).not.toHaveBeenCalled();
+		});
+
+		it('does not ask when there is no profile', async () => {
+			useSettingsStore.setState({ conductorProfile: '' });
+			await prepareMaestroSystemPrompt({ session: claudeSession });
+			expect((window as any).maestro.settings.aboutMe).not.toHaveBeenCalled();
+		});
 	});
 });

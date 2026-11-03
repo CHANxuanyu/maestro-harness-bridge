@@ -38,4 +38,49 @@ describe('NotificationSendControls', () => {
 
 		expect(processInput).toHaveBeenCalled();
 	});
+
+	describe('while the conversation on screen runs', () => {
+		it('turns the send key into Stop', () => {
+			const onStop = vi.fn();
+			const processInput = vi.fn();
+			render(
+				<NotificationSendControls
+					theme={inputAreaTheme}
+					isTerminalMode={false}
+					processInput={processInput}
+					onStop={onStop}
+				/>
+			);
+
+			expect(screen.queryByTitle('Send message')).not.toBeInTheDocument();
+			const stop = screen.getByTestId('stop-turn-button');
+			// Names the key that does the same thing; Ctrl+C only reaches a terminal tab.
+			expect(stop).toHaveAccessibleName(/^Stop this turn \((Esc|⎋)\)$/);
+			fireEvent.click(stop);
+			expect(onStop).toHaveBeenCalledTimes(1);
+			expect(processInput).not.toHaveBeenCalled();
+		});
+
+		it('keeps the corner for queueing a draft, with Stop beside it', () => {
+			const onStop = vi.fn();
+			const processInput = vi.fn();
+			render(
+				<NotificationSendControls
+					theme={inputAreaTheme}
+					isTerminalMode={false}
+					processInput={processInput}
+					onStop={onStop}
+					hasDraft
+				/>
+			);
+
+			const queue = screen.getByTitle('Queue message');
+			const stop = screen.getByTestId('stop-turn-button');
+			// The corner (last control) is the draft's key; Stop sits just before it.
+			expect(stop.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+			fireEvent.click(queue);
+			expect(processInput).toHaveBeenCalledTimes(1);
+			expect(onStop).not.toHaveBeenCalled();
+		});
+	});
 });

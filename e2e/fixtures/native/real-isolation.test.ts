@@ -1,6 +1,6 @@
+import { createNativeTempDir } from './temp-root.cjs';
 import { it, expect } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -8,7 +8,7 @@ import NativeReporter from '../../native-reporter';
 import { realExternalTurn } from '../native-real';
 
 it('the shared summary excludes conversation text, paths, diagnostics and native IDs', () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-real-report-'));
+	const root = createNativeTempDir('maestro-real-report-');
 	const output = path.join(root, 'summary.json');
 	try {
 		const reporter = new NativeReporter({ output });
@@ -37,7 +37,7 @@ it('the shared summary excludes conversation text, paths, diagnostics and native
 });
 
 it('the real relay preserves arguments, input and output, then holds exit after its child finishes', async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-real-relay-'));
+	const root = createNativeTempDir('maestro-real-relay-');
 	const gate = path.join(root, 'exit');
 	const record = path.join(root, 'record.json');
 	const childPath = path.join(root, 'cli');
@@ -98,7 +98,7 @@ it('the real relay preserves arguments, input and output, then holds exit after 
 });
 
 it('an external CLI failure also ends the workload it left in its process group', async () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-real-external-'));
+	const root = createNativeTempDir('maestro-real-external-');
 	const pidFile = path.join(root, 'workload-pid');
 	const executable = path.join(root, 'cli');
 	fs.writeFileSync(
@@ -145,5 +145,36 @@ it('an external CLI failure also ends the workload it left in its process group'
 			}
 		}
 		fs.rmSync(root, { recursive: true });
+	}
+});
+
+it('a successful external CLI lets its remaining writer finish before the next turn', async () => {
+	const root = createNativeTempDir('maestro-external-success-');
+	const executable = path.join(root, 'cli');
+	const file = path.join(root, 'rollout.jsonl');
+	const released = path.join(root, 'released');
+	fs.writeFileSync(
+		executable,
+		`#!${process.execPath}\nconst fs = require('node:fs');\nconst { spawn } = require('node:child_process');\nfs.writeFileSync(${JSON.stringify(file)}, JSON.stringify({type: 'session_meta', payload: {id: 'fixture-thread'}}) + '\\n');\nconst child = spawn(process.execPath, ['-e', ${JSON.stringify(`setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(released)}, 'released'), 150)`)}], {stdio: 'inherit'});\nchild.unref();\n`,
+		{ mode: 0o700 }
+	);
+	try {
+		await realExternalTurn(
+			{
+				root,
+				project: root,
+				externalCount: 0,
+				externalProcesses: new Map(),
+				files: () => (fs.existsSync(file) ? [file] : []),
+				realCliFor: () => ({ executable }),
+				env: {},
+			} as any,
+			'codex',
+			'Finish normally',
+			{ answer: '' }
+		);
+		expect(fs.existsSync(released)).toBe(true);
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
 	}
 });

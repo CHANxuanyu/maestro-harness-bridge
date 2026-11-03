@@ -34,6 +34,7 @@ function createTurn({
 	id = randomUUID(),
 	prompt,
 	model = models[provider],
+	effort = null,
 	persist = true,
 	emit = () => {},
 }) {
@@ -69,7 +70,7 @@ function createTurn({
 				cli_version: '0.163.0-alpha.11.1',
 				source: 'cli',
 			});
-		rollout('turn_context', { cwd, model: models.codex, effort: 'high' });
+		rollout('turn_context', { cwd, model, effort });
 		rollout('response_item', {
 			type: 'message',
 			role: 'user',
@@ -105,19 +106,9 @@ function createTurn({
 				});
 			}
 		},
-		updateTool(tool, output) {
-			if (provider === 'codex')
-				emit({
-					type: 'item.updated',
-					item: {
-						id: tool.id,
-						type: 'command_execution',
-						command: tool.command,
-						aggregated_output: output,
-						status: 'in_progress',
-					},
-				});
-		},
+		// exec/src/event_processor_with_jsonl_output.rs at the pinned tag
+		// ignores output deltas. Only the shared app-server streams them.
+		updateTool() {},
 		finishTool(tool, status = 'completed') {
 			const output =
 				status === 'canceled'
@@ -147,6 +138,23 @@ function createTurn({
 				// The pinned exec/src/exec_events.rs has no canceled command status.
 				// SIGINT ends this stream; Maestro settles its still-running call.
 				if (status === 'canceled') return;
+				rollout('event_msg', {
+					type: 'item_completed',
+					thread_id: id,
+					turn_id: 'fixture-turn',
+					completed_at_ms: Date.now(),
+					item: {
+						type: 'CommandExecution',
+						id: tool.id,
+						command: ['/bin/sh', '-c', tool.command],
+						cwd,
+						parsed_cmd: [],
+						source: 'agent',
+						status,
+						aggregated_output: output,
+						exit_code: status === 'failed' ? 1 : 0,
+					},
+				});
 				emit({
 					type: 'item.completed',
 					item: {

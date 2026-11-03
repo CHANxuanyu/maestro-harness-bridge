@@ -12,7 +12,8 @@ import {
 } from '../../../renderer/stores/settingsStore';
 import type { SettingsStoreState } from '../../../renderer/stores/settingsStore';
 import { SETTINGS_METADATA } from '../../../shared/settingsMetadata';
-import { MAESTRO_FONT_STACK } from '../../../shared/fontStack';
+import { INTERFACE_FONT_STACK } from '../../../shared/fontStack';
+import { DEFAULT_CODE_FONT } from '../../../shared/typographyPresets';
 import { DEFAULT_CUE_HISTORY_RETENTION_DAYS } from '../../../shared/cue/retention';
 import { useUIStore } from '../../../renderer/stores/uiStore';
 import { useNotificationStore } from '../../../renderer/stores/notificationStore';
@@ -95,9 +96,12 @@ function resetStore() {
 		shellArgs: '',
 		shellEnvVars: {},
 		ghPath: '',
-		fontFamily: MAESTRO_FONT_STACK,
-		fontSize: 14,
-		activeThemeId: 'dracula',
+		// The real defaults, so the initial-state assertions describe a fresh install.
+		fontFamily: INTERFACE_FONT_STACK,
+		terminalFontFamily: DEFAULT_CODE_FONT,
+		fileEditorFontFamily: DEFAULT_CODE_FONT,
+		fontSize: 15,
+		activeThemeId: 'clay-dark',
 		customThemeColors: DEFAULT_CUSTOM_THEME_COLORS,
 		customThemeBaseId: 'dracula',
 		enterToSendAI: true,
@@ -238,18 +242,20 @@ describe('settingsStore', () => {
 			expect(state.shellEnvVars).toEqual({});
 			expect(state.shellEnvVarsDisabled).toEqual({});
 			expect(state.ghPath).toBe('');
-			expect(state.fontFamily).toBe(MAESTRO_FONT_STACK);
-			// Every surface font defaults to empty, meaning "inherit the interface
-			// font", so a fresh install pins no surface to a face of its own.
-			expect(state.terminalFontFamily).toBe('');
+			// A fresh install starts on the Default typography preset: the reading
+			// surfaces inherit the proportional interface font (empty), and only
+			// the terminal and the editor, where columns carry meaning, pin the
+			// code face.
+			expect(state.fontFamily).toBe(INTERFACE_FONT_STACK);
+			expect(state.terminalFontFamily).toBe(DEFAULT_CODE_FONT);
 			expect(state.chatFontFamily).toBe('');
 			expect(state.filePreviewFontFamily).toBe('');
-			expect(state.fileEditorFontFamily).toBe('');
+			expect(state.fileEditorFontFamily).toBe(DEFAULT_CODE_FONT);
 			// False on a fresh install AND on every install predating the chooser,
 			// which is what makes one gate serve new and existing users alike.
 			expect(state.typographyPromptSeen).toBe(false);
-			expect(state.fontSize).toBe(14);
-			expect(state.activeThemeId).toBe('dracula');
+			expect(state.fontSize).toBe(15);
+			expect(state.activeThemeId).toBe('clay-dark');
 			expect(state.customThemeColors).toEqual(DEFAULT_CUSTOM_THEME_COLORS);
 			expect(state.customThemeBaseId).toBe('dracula');
 			expect(state.enterToSendAI).toBe(true);
@@ -1044,14 +1050,41 @@ describe('settingsStore', () => {
 	// ========================================================================
 
 	describe('setters with validation', () => {
-		it('setConductorProfile trims to 5000 characters', () => {
+		it('saveConductorProfile keeps a profile over 5000 characters and saves it through About Me', async () => {
 			const longProfile = 'a'.repeat(6000);
-			useSettingsStore.getState().setConductorProfile(longProfile);
-			expect(useSettingsStore.getState().conductorProfile).toBe('a'.repeat(5000));
-			expect(window.maestro.settings.set).toHaveBeenCalledWith(
+			vi.mocked(window.maestro.settings.aboutMe).mockResolvedValueOnce({
+				success: true,
+				content: longProfile,
+				estimatedTokens: 1500,
+				files: [],
+			});
+			const saved = await useSettingsStore.getState().saveConductorProfile(longProfile);
+			expect(saved.success).toBe(true);
+			expect(window.maestro.settings.aboutMe).toHaveBeenCalledWith({
+				action: 'set',
+				content: longProfile,
+			});
+			expect(useSettingsStore.getState().conductorProfile).toBe(longProfile);
+			// The generic setter would put the profile through settings:set as well.
+			expect(window.maestro.settings.set).not.toHaveBeenCalledWith(
 				'conductorProfile',
-				'a'.repeat(5000)
+				expect.anything()
 			);
+		});
+
+		it('saveConductorProfile keeps the saved profile when the save is refused', async () => {
+			useSettingsStore.setState({ conductorProfile: 'kept' });
+			vi.mocked(window.maestro.settings.aboutMe).mockResolvedValueOnce({
+				success: false,
+				code: 'persistence-failed',
+				error: 'disk full',
+				content: 'kept',
+				estimatedTokens: 1,
+				files: [],
+			});
+			const saved = await useSettingsStore.getState().saveConductorProfile('new text');
+			expect(saved).toMatchObject({ success: false, code: 'persistence-failed' });
+			expect(useSettingsStore.getState().conductorProfile).toBe('kept');
 		});
 
 		it('setLeftSidebarWidth clamps to 256-600', () => {
@@ -2006,7 +2039,7 @@ describe('settingsStore', () => {
 
 			await loadAllSettings();
 
-			expect(useSettingsStore.getState().activeThemeId).toBe('dracula');
+			expect(useSettingsStore.getState().activeThemeId).toBe('clay-dark');
 		});
 
 		// Opting out has to survive a restart: a user who turned grouping off
@@ -2153,8 +2186,14 @@ describe('settingsStore', () => {
 			// the older on-disk snapshot - that loses characters and, because the
 			// textarea is controlled, snaps the caret to the end of the field.
 			useSettingsStore.setState({ settingsLoaded: true, conductorProfile: 'abc' });
+			vi.mocked(window.maestro.settings.aboutMe).mockResolvedValueOnce({
+				success: true,
+				content: 'abcdef',
+				estimatedTokens: 2,
+				files: [],
+			});
 			vi.mocked(window.maestro.settings.getAll).mockImplementation(async () => {
-				useSettingsStore.getState().setConductorProfile('abcdef');
+				await useSettingsStore.getState().saveConductorProfile('abcdef');
 				return { conductorProfile: 'abc', fontSize: 16 };
 			});
 
@@ -2309,8 +2348,8 @@ describe('settingsStore', () => {
 
 			const state = useSettingsStore.getState();
 			expect(state.settingsLoaded).toBe(true);
-			expect(state.fontFamily).toBe(MAESTRO_FONT_STACK);
-			expect(state.fontSize).toBe(14);
+			expect(state.fontFamily).toBe(INTERFACE_FONT_STACK);
+			expect(state.fontSize).toBe(15);
 		});
 
 		describe('cue time backfill', () => {

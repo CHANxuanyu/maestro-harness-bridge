@@ -12,7 +12,8 @@ import {
 	CLAUDE_SESSION_ORIGINS_DEFAULTS,
 	AGENT_SESSION_ORIGINS_DEFAULTS,
 } from '../../../main/stores/defaults';
-import { MAESTRO_FONT_STACK } from '../../../shared/fontStack';
+import { INTERFACE_FONT_STACK } from '../../../shared/fontStack';
+import { TYPOGRAPHY_PRESETS } from '../../../shared/typographyPresets';
 import { DEFAULT_CUE_HISTORY_RETENTION_DAYS } from '../../../shared/cue/retention';
 
 describe('stores/defaults', () => {
@@ -122,8 +123,8 @@ describe('stores/defaults', () => {
 	});
 
 	describe('SETTINGS_DEFAULTS', () => {
-		it('should have correct default theme', () => {
-			expect(SETTINGS_DEFAULTS.activeThemeId).toBe('dracula');
+		it('should start on the Clay Dark theme', () => {
+			expect(SETTINGS_DEFAULTS.activeThemeId).toBe('clay-dark');
 		});
 
 		it('should have empty shortcuts by default', () => {
@@ -131,7 +132,16 @@ describe('stores/defaults', () => {
 		});
 
 		it('should have correct default fontSize', () => {
-			expect(SETTINGS_DEFAULTS.fontSize).toBe(14);
+			// A proportional face reads about a pixel smaller than a monospace one.
+			expect(SETTINGS_DEFAULTS.fontSize).toBe(15);
+		});
+
+		it('should start on the Default typography preset: proportional to read, monospace to work', () => {
+			const { fonts, sizes } = TYPOGRAPHY_PRESETS.default;
+			for (const [key, value] of Object.entries({ ...fonts, ...sizes }))
+				expect(SETTINGS_DEFAULTS[key as keyof typeof SETTINGS_DEFAULTS]).toBe(value);
+			expect(SETTINGS_DEFAULTS.terminalFontFamily).toMatch(/monospace$/);
+			expect(SETTINGS_DEFAULTS.fileEditorFontFamily).toMatch(/monospace$/);
 		});
 
 		it('should have correct default fontFamily', () => {
@@ -139,7 +149,7 @@ describe('stores/defaults', () => {
 			// (src/renderer/public/fonts/), and must match what the splash screen
 			// paints with before React mounts. When it named Roboto Mono instead,
 			// the window visibly changed font the moment React took over.
-			expect(SETTINGS_DEFAULTS.fontFamily).toBe(MAESTRO_FONT_STACK);
+			expect(SETTINGS_DEFAULTS.fontFamily).toBe(INTERFACE_FONT_STACK);
 		});
 
 		it('should have empty customFonts by default', () => {

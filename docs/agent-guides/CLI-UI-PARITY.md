@@ -21,8 +21,22 @@ The HB About Me export (2026-11-01) adds `about-me show|set|status|apply`.
 Desktop `settings.aboutMe` and the CLI `about_me` request share the same service
 for native instruction discovery, exact managed blocks and explicit file consent.
 `set` only stages the existing `conductorProfile`; `apply` performs approved writes.
-The settings UI is pending Opus, with conflict, partial-result and long-profile
-reproductions in [core-experience-contracts.md](../core-experience-contracts.md#关于我).
+The Settings page (2026-11-02) saves through `set`, lists `status`, and writes with
+`apply` plus the per-file confirmations the user ticked, so a page write and
+`about-me apply --confirm <real file>` reach the same checks. Conflict,
+partial-result and long-profile cases are in
+[core-experience-contracts.md](../core-experience-contracts.md#关于我).
+
+The native startup check (2026-11-02) is an internal read, not a user action.
+`settings.aboutMe({ action: 'native', agent })` and the CLI `about_me` transport
+use the same serialized service. No `status --agent` verb is needed: the existing
+`status --json` returns each file's `agentIds` and optional DeepSeek provenance,
+while startup needs the live spawn configuration, including unsaved environment
+values. Standalone CLI prompts reuse `inspectNativeAboutMe()` without a desktop
+connection. A confirmed, current, nonempty native block replaces duplicate prompt
+text with `nativeAboutMePointer()`; every uncertain result retains the body.
+Desktop spawns ask the same read through `conductorProfileForAgent()`; the
+wizard prompts still inject the body.
 
 ## Focus belongs to the human (`--background` / `--focus`)
 
@@ -272,10 +286,13 @@ Notification center history uses the live desktop `notificationStore` over a req
 | Move Tab to First / Last                                                 | `tab move <tab-id> first\|last\|<index>`                                                         |
 | Send a message, or run a shell command                                   | `send`, `dispatch`, `send-terminal`                                                              |
 | Consult another agent (`@mention`)                                       | `ask <agent> "<question>" --from <caller>`                                                       |
+| Continue with another AI (tab menu, palette, limit or login error)       | `handoff <source-tab> <provider>` (draft only); choices: `handoff <source-tab> --list-targets`   |
+| About Me: save, check native files, write approved files                 | `about-me set`, `about-me status`, `about-me apply --confirm <real file>`                        |
 | Open a file / URL / terminal tab                                         | `open-file`, `open-browser`, `open-terminal`                                                     |
 | Open a modal or dashboard                                                | `open <surface> [--tab]` (registry in `src/shared/uiSurfaces.ts`)                                |
 | Auto Run: start, stop, resume, skip, abort                               | `auto-run`, `stop-auto-run`, `resume-auto-run`, ...                                              |
 | Application language (system / English / Simplified Chinese)             | `settings get uiLanguage`, `settings set uiLanguage zh-CN`, `settings reset uiLanguage`          |
+| Follow system light and dark mode (Clay pair)                            | `settings get followSystemAppearance`, `settings set followSystemAppearance false`               |
 | Settings, theme, Encore features                                         | `settings`, `theme`, `set-theme`, `encore`                                                       |
 | Toasts and center flashes                                                | `notify toast`, `notify flash`                                                                   |
 | Save a pasted chat image (right-click)                                   | `image save` (`image list` to find it)                                                           |
@@ -344,8 +361,11 @@ a design constraint; they are simply not built yet.
 9. **Context: Compact, Merge Into, Send to Agent.** The HB `handoff` command
    now provides the new three-provider handoff through its own shared service
    (`ai_handoff`, `context.handoff`): draft by default, same-project runner reuse,
-   explicit `--send`. The new UI entries remain for Opus; the older generic
-   compact/merge/transfer paths below remain separate gaps.
+   explicit `--send`. The UI entries (tab menu, palette, error modal, the
+   transcript's limit and login errors, a live outage card) call the same
+   `context.handoff` without `send`; the note above a draft's composer is view
+   state with no verb. The older generic compact/merge/transfer paths below
+   remain separate gaps.
    The WS messages
    (`summarize_context`, `merge_context`, `transfer_context`) and the preload
    listeners exist, but NO renderer code subscribes to

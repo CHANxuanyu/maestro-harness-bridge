@@ -22,6 +22,8 @@ import { useRemotePathValidation } from '../../hooks/agent/useRemotePathValidati
 import { NudgeMessageField } from './NudgeMessageField';
 import { RemotePathStatus } from './RemotePathStatus';
 import { AgentPickerGrid } from './AgentPickerGrid';
+import { DeepSeekPresetRow } from './DeepSeekPresetRow';
+import { DEEPSEEK_PRESET, type PreparedAgentPreset } from '../../../shared/agentPresets';
 import {
 	filterToAvailableProviders,
 	providerLocationLabel,
@@ -30,6 +32,12 @@ import { logger } from '../../utils/logger';
 import { getEffortConfigKey, readEffortFromConfig } from '../../utils/agentEffort';
 import { gitService } from '../../services/git';
 import { withBlankEnvVarRow } from '../../../shared/envVarCatalog';
+
+/** Electron wraps a main-process throw as "Error invoking remote method 'x': Error: msg". */
+function presetFailure(error: unknown): string {
+	const message = error instanceof Error ? error.message : String(error);
+	return message.replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '');
+}
 
 export function NewInstanceModal({
 	isOpen,
@@ -44,6 +52,13 @@ export function NewInstanceModal({
 	const uiText = useT();
 	const [agents, setAgents] = useState<AgentConfig[]>([]);
 	const [selectedAgent, setSelectedAgent] = useState('');
+	// DeepSeek runs on Claude Code, so choosing it sets selectedAgent to
+	// claude-code plus this flag; the Claude Code row is not the selection.
+	const [deepseekSelected, setDeepseekSelected] = useState(false);
+	const [deepseekApiKey, setDeepseekApiKey] = useState('');
+	const [deepseekModel, setDeepseekModel] = useState<string>(DEEPSEEK_PRESET.defaultModel);
+	const [deepseekError, setDeepseekError] = useState<string | null>(null);
+	const preparingPresetRef = useRef(false);
 	const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
 	const [showAllProviders, setShowAllProviders] = useState(false);
 	const [workingDir, setWorkingDir] = useState('');
@@ -102,6 +117,15 @@ export function NewInstanceModal({
 	const groups = useSessionStore((s) => s.groups);
 
 	const nameInputRef = useRef<HTMLInputElement>(null);
+
+	// The key must not outlive the dialog it was typed into.
+	useEffect(() => {
+		if (isOpen) return;
+		setDeepseekSelected(false);
+		setDeepseekApiKey('');
+		setDeepseekModel(DEEPSEEK_PRESET.defaultModel);
+		setDeepseekError(null);
+	}, [isOpen]);
 
 	// Fetch home directory on mount for tilde expansion
 	useEffect(() => {
@@ -522,12 +546,13 @@ export function NewInstanceModal({
 		[agents, dynamicOptions]
 	);
 
-	const handleCreate = React.useCallback(() => {
+	const handleCreate = React.useCallback(async () => {
 		const name = instanceName.trim();
 		if (!name) return; // Name is required
 
 		const sshConfig = agentSshRemoteConfigs[selectedAgent] || agentSshRemoteConfigs['_pending_'];
-		const sshRemoteId = sshConfig?.enabled ? sshConfig?.remoteId : null;
+		// The DeepSeek preset is local only (its account directory lives here).
+		const sshRemoteId = !deepseekSelected && sshConfig?.enabled ? sshConfig?.remoteId : null;
 		// With SSH enabled the field holds a REMOTE path, so a leading `~` is the
 		// remote user's home and only the remote shell can expand it: every
 		// remote `cd`/`ls`/`stat` renders it as `"$HOME/..."`. Expanding locally
@@ -546,21 +571,55 @@ export function NewInstanceModal({
 		);
 		if (!result.valid) return;
 
+		// The preset's account directory is created here, on Create, and nowhere
+		// else: choosing the row or cancelling the dialog prepares nothing. The
+		// preset owns routing, credentials, model and account, so the Claude Code
+		// row's args, env, model and effort do not apply to it.
+		let preset: PreparedAgentPreset | undefined;
+		if (deepseekSelected) {
+			if (preparingPresetRef.current) return;
+			preparingPresetRef.current = true;
+			setDeepseekError(null);
+			try {
+				preset = await window.maestro.agents.prepareDeepSeekPreset({
+					apiKey: deepseekApiKey.trim(),
+					model: deepseekModel,
+				});
+			} catch (error) {
+				setDeepseekError(presetFailure(error));
+				return;
+			} finally {
+				preparingPresetRef.current = false;
+			}
+		}
+
 		// Get per-agent config values
 		const agentCustomPath = customAgentPaths[selectedAgent]?.trim() || undefined;
-		const agentCustomArgs = customAgentArgs[selectedAgent]?.trim() || undefined;
-		const agentCustomEnvVars =
-			customAgentEnvVars[selectedAgent] && Object.keys(customAgentEnvVars[selectedAgent]).length > 0
+		const agentCustomArgs = preset
+			? undefined
+			: customAgentArgs[selectedAgent]?.trim() || undefined;
+		const agentCustomEnvVars = preset
+			? preset.customEnvVars
+			: customAgentEnvVars[selectedAgent] &&
+				  Object.keys(customAgentEnvVars[selectedAgent]).length > 0
 				? customAgentEnvVars[selectedAgent]
 				: undefined;
 		// Get model from agent config - this will become per-session
-		const agentCustomModel = agentConfigs[selectedAgent]?.model?.trim() || undefined;
+		const agentCustomModel = preset
+			? preset.customModel
+			: agentConfigs[selectedAgent]?.model?.trim() || undefined;
 		// Get contextWindow and providerPath from agent config
-		const agentCustomContextWindow = agentConfigs[selectedAgent]?.contextWindow || undefined;
-		const agentCustomProviderPath = agentConfigs[selectedAgent]?.providerPath?.trim() || undefined;
+		const agentCustomContextWindow = preset
+			? undefined
+			: agentConfigs[selectedAgent]?.contextWindow || undefined;
+		const agentCustomProviderPath = preset
+			? undefined
+			: agentConfigs[selectedAgent]?.providerPath?.trim() || undefined;
 		// Effort/reasoningEffort: agents use one or the other key (e.g. Codex stores
-		// it under `reasoningEffort`, Claude Code uses `effort`).
-		const agentCustomEffort = readEffortFromConfig(agentConfigs[selectedAgent]);
+		// it under `reasoningEffort`, Claude Code uses `effort`). The preset documents none.
+		const agentCustomEffort = preset
+			? undefined
+			: readEffortFromConfig(agentConfigs[selectedAgent]);
 
 		// Get SSH remote configuration for this session (stored per-session, not per-agent)
 		const sshRemoteConfig = agentSshRemoteConfigs[selectedAgent];
@@ -569,7 +628,7 @@ export function NewInstanceModal({
 		// `shareHistoryToProjectDir` persists regardless of SSH enablement so it also
 		// applies to agents that run locally but are controlled from another Maestro.
 		const sessionSshRemoteConfig =
-			sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId
+			!preset && sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId
 				? {
 						enabled: true,
 						remoteId: sshRemoteConfig.remoteId,
@@ -602,9 +661,10 @@ export function NewInstanceModal({
 		// and spawns maestro-p on a remote that may not have it (exit 127). Only the
 		// unset->default path keeps the `|| undefined` collapse (a falsy default
 		// stays "unconfigured").
-		const explicitMaestroP = enableMaestroPByAgent[selectedAgent];
-		const agentEnableMaestroP =
-			explicitMaestroP ?? (isAdaptiveModeDefaultOn(selectedAgent) || undefined);
+		const explicitMaestroP = preset ? undefined : enableMaestroPByAgent[selectedAgent];
+		const agentEnableMaestroP = preset
+			? undefined
+			: (explicitMaestroP ?? (isAdaptiveModeDefaultOn(selectedAgent) || undefined));
 		const agentMaestroPPath =
 			agentEnableMaestroP && maestroPPathByAgent[selectedAgent]?.trim()
 				? maestroPPathByAgent[selectedAgent].trim()
@@ -640,6 +700,9 @@ export function NewInstanceModal({
 		onClose();
 
 		// Reset
+		setDeepseekSelected(false);
+		setDeepseekApiKey('');
+		setDeepseekModel(DEEPSEEK_PRESET.defaultModel);
 		setInstanceName('');
 		handleWorkingDirChange('');
 		setAdditionalDirectories([]);
@@ -682,6 +745,9 @@ export function NewInstanceModal({
 	}, [
 		instanceName,
 		selectedAgent,
+		deepseekSelected,
+		deepseekApiKey,
+		deepseekModel,
 		workingDir,
 		additionalDirectories,
 		homeDir,
@@ -717,6 +783,7 @@ export function NewInstanceModal({
 		return (
 			selectedAgent &&
 			isAgentUsable &&
+			(!deepseekSelected || !!deepseekApiKey.trim()) &&
 			workingDir.trim() &&
 			instanceName.trim() &&
 			validation.valid &&
@@ -724,6 +791,8 @@ export function NewInstanceModal({
 		);
 	}, [
 		selectedAgent,
+		deepseekSelected,
+		deepseekApiKey,
 		agents,
 		workingDir,
 		instanceName,
@@ -970,7 +1039,7 @@ export function NewInstanceModal({
 					providerLocationLabel={providerLocation}
 					showAllProviders={showAllProviders}
 					onShowAllProvidersChange={setShowAllProviders}
-					selectedAgent={selectedAgent}
+					selectedAgent={deepseekSelected ? '' : selectedAgent}
 					expandedAgent={expandedAgent}
 					refreshingAgent={refreshingAgent}
 					debugInfo={debugInfo}
@@ -984,7 +1053,34 @@ export function NewInstanceModal({
 					agentConfigs={agentConfigs}
 					availableModels={availableModels}
 					loadingModels={loadingModels}
-					onAgentSelect={(agentId) => setSelectedAgent(agentId)}
+					onAgentSelect={(agentId) => {
+						setSelectedAgent(agentId);
+						setDeepseekSelected(false);
+					}}
+					claudePresetRow={
+						<DeepSeekPresetRow
+							theme={theme}
+							available={
+								!!agents.find((agent) => agent.id === 'claude-code')?.available ||
+								!!customAgentPaths['claude-code']?.trim()
+							}
+							blockedBySsh={!!isSshEnabled && !deepseekSelected}
+							selected={deepseekSelected}
+							apiKey={deepseekApiKey}
+							model={deepseekModel}
+							error={deepseekError}
+							onSelect={() => {
+								setSelectedAgent('claude-code');
+								setDeepseekSelected(true);
+								setExpandedAgent(null);
+							}}
+							onApiKeyChange={(value) => {
+								setDeepseekApiKey(value);
+								setDeepseekError(null);
+							}}
+							onModelChange={setDeepseekModel}
+						/>
+					}
 					onAgentExpand={(agentId) => setExpandedAgent(agentId)}
 					onRefreshAgent={handleRefreshAgent}
 					onDismissDebug={() => setDebugInfo(null)}
@@ -1242,25 +1338,27 @@ export function NewInstanceModal({
 				    machine, independent of local SSH remote setup.
 				    Uses '_pending_' key when no agent selected, transfers to
 				    agent when selected. */}
-				<SshRemoteSelector
-					theme={theme}
-					sshRemotes={sshRemotes}
-					sshRemoteConfig={
-						agentSshRemoteConfigs[selectedAgent] || agentSshRemoteConfigs['_pending_']
-					}
-					onSshRemoteConfigChange={(config) => {
-						setAgentSshRemoteConfigs((prev) => {
-							const newConfigs: Record<string, AgentSshRemoteConfig> = {
-								...prev,
-								_pending_: config,
-							};
-							if (selectedAgent) {
-								newConfigs[selectedAgent] = config;
-							}
-							return newConfigs;
-						});
-					}}
-				/>
+				{!deepseekSelected && (
+					<SshRemoteSelector
+						theme={theme}
+						sshRemotes={sshRemotes}
+						sshRemoteConfig={
+							agentSshRemoteConfigs[selectedAgent] || agentSshRemoteConfigs['_pending_']
+						}
+						onSshRemoteConfigChange={(config) => {
+							setAgentSshRemoteConfigs((prev) => {
+								const newConfigs: Record<string, AgentSshRemoteConfig> = {
+									...prev,
+									_pending_: config,
+								};
+								if (selectedAgent) {
+									newConfigs[selectedAgent] = config;
+								}
+								return newConfigs;
+							});
+						}}
+					/>
+				)}
 
 				{/* New Session Message */}
 				<NudgeMessageField

@@ -58,6 +58,7 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 	onLoadDynamicOptionsForAgent,
 	codexAutoResetByAgent,
 	onCodexAutoResetChange,
+	claudePresetRow,
 }: AgentPickerGridProps) {
 	const uiText = useT();
 	return (
@@ -136,195 +137,198 @@ export const AgentPickerGrid = React.memo(function AgentPickerGrid({
 						};
 
 						return (
-							<div
-								key={agent.id}
-								className={`rounded border transition-all overflow-hidden ${
-									isSelected ? 'ring-2' : ''
-								}`}
-								style={
-									{
-										borderColor: theme.colors.border,
-										backgroundColor: isSelected ? theme.colors.accentDim : 'transparent',
-										'--tw-ring-color': theme.colors.accent,
-									} as React.CSSProperties
-								}
-							>
-								{/* Collapsed header row */}
+							<React.Fragment key={agent.id}>
 								<div
-									onClick={handleAgentHeaderActivate}
-									onKeyDown={(e) => {
-										if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
-											e.preventDefault();
-											handleAgentHeaderActivate();
-										}
-									}}
-									className={`w-full text-left px-3 py-2 flex items-center justify-between ${
-										!isSupported
-											? 'opacity-40 cursor-not-allowed'
-											: 'hover:bg-white/5 cursor-pointer'
+									className={`rounded border transition-all overflow-hidden ${
+										isSelected ? 'ring-2' : ''
 									}`}
-									style={{ color: theme.colors.textMain }}
-									role="option"
-									aria-selected={isSelected}
-									aria-expanded={isExpanded}
-									tabIndex={isSupported ? 0 : -1}
+									style={
+										{
+											borderColor: theme.colors.border,
+											backgroundColor: isSelected ? theme.colors.accentDim : 'transparent',
+											'--tw-ring-color': theme.colors.accent,
+										} as React.CSSProperties
+									}
 								>
-									<div className="flex items-center gap-2">
-										{isSupported && (
-											<ChevronRight
-												className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-												style={{ color: theme.colors.textDim }}
-											/>
-										)}
-										<span className="font-medium">{agent.name}</span>
-										{isBetaAgent(agent.id) && (
-											<span
-												className="text-3xs px-1.5 py-0.5 rounded font-bold uppercase"
-												style={{
-													backgroundColor: theme.colors.warning + '30',
-													color: theme.colors.warning,
-												}}
-											>
-												{uiText('workflows.sessions.beta')}
-											</span>
-										)}
-									</div>
-									<div className="flex items-center gap-2">
-										{isSupported ? (
-											<>
-												{agent.available ? (
-													<span
-														className="text-xs px-2 py-0.5 rounded"
-														style={{
-															backgroundColor: theme.colors.success + '20',
-															color: theme.colors.success,
-														}}
-													>
-														{uiText('workflows.sessions.available')}
-													</span>
-												) : (
-													<span
-														className="text-xs px-2 py-0.5 rounded"
-														style={{
-															backgroundColor: theme.colors.error + '20',
-															color: theme.colors.error,
-														}}
-													>
-														{uiText('workflows.sessions.notFound')}
-													</span>
-												)}
-												<GhostIconButton
-													onClick={(e) => {
-														e.stopPropagation();
-														onRefreshAgent(agent.id);
+									{/* Collapsed header row */}
+									<div
+										onClick={handleAgentHeaderActivate}
+										onKeyDown={(e) => {
+											if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+												e.preventDefault();
+												handleAgentHeaderActivate();
+											}
+										}}
+										className={`w-full text-left px-3 py-2 flex items-center justify-between ${
+											!isSupported
+												? 'opacity-40 cursor-not-allowed'
+												: 'hover:bg-white/5 cursor-pointer'
+										}`}
+										style={{ color: theme.colors.textMain }}
+										role="option"
+										aria-selected={isSelected}
+										aria-expanded={isExpanded}
+										tabIndex={isSupported ? 0 : -1}
+									>
+										<div className="flex items-center gap-2">
+											{isSupported && (
+												<ChevronRight
+													className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+													style={{ color: theme.colors.textDim }}
+												/>
+											)}
+											<span className="font-medium">{agent.name}</span>
+											{isBetaAgent(agent.id) && (
+												<span
+													className="text-3xs px-1.5 py-0.5 rounded font-bold uppercase"
+													style={{
+														backgroundColor: theme.colors.warning + '30',
+														color: theme.colors.warning,
 													}}
-													title={uiText('workflows.sessions.refreshDetection')}
-													color={theme.colors.textDim}
 												>
-													<RefreshCw
-														className={`w-3 h-3 ${refreshingAgent === agent.id ? 'animate-spin' : ''}`}
-													/>
-												</GhostIconButton>
-											</>
-										) : (
-											<span
-												className="text-xs px-2 py-0.5 rounded"
-												style={{
-													backgroundColor: theme.colors.warning + '20',
-													color: theme.colors.warning,
-												}}
-											>
-												{uiText('workflows.sessions.comingSoon')}
-											</span>
-										)}
+													{uiText('workflows.sessions.beta')}
+												</span>
+											)}
+										</div>
+										<div className="flex items-center gap-2">
+											{isSupported ? (
+												<>
+													{agent.available ? (
+														<span
+															className="text-xs px-2 py-0.5 rounded"
+															style={{
+																backgroundColor: theme.colors.success + '20',
+																color: theme.colors.success,
+															}}
+														>
+															{uiText('workflows.sessions.available')}
+														</span>
+													) : (
+														<span
+															className="text-xs px-2 py-0.5 rounded"
+															style={{
+																backgroundColor: theme.colors.error + '20',
+																color: theme.colors.error,
+															}}
+														>
+															{uiText('workflows.sessions.notFound')}
+														</span>
+													)}
+													<GhostIconButton
+														onClick={(e) => {
+															e.stopPropagation();
+															onRefreshAgent(agent.id);
+														}}
+														title={uiText('workflows.sessions.refreshDetection')}
+														color={theme.colors.textDim}
+													>
+														<RefreshCw
+															className={`w-3 h-3 ${refreshingAgent === agent.id ? 'animate-spin' : ''}`}
+														/>
+													</GhostIconButton>
+												</>
+											) : (
+												<span
+													className="text-xs px-2 py-0.5 rounded"
+													style={{
+														backgroundColor: theme.colors.warning + '20',
+														color: theme.colors.warning,
+													}}
+												>
+													{uiText('workflows.sessions.comingSoon')}
+												</span>
+											)}
+										</div>
 									</div>
-								</div>
 
-								{/* Expanded details for supported agents */}
-								{isSupported && isExpanded && (
-									<div className="px-3 pb-3 pt-2">
-										<AgentConfigPanel
-											theme={theme}
-											agent={agent}
-											customPath={customAgentPaths[agent.id] || ''}
-											onCustomPathChange={(value) => {
-												onCustomPathChange(agent.id, value);
-											}}
-											onCustomPathBlur={() => {
-												/* Saved on agent create */
-											}}
-											customArgs={customAgentArgs[agent.id] || ''}
-											onCustomArgsChange={(value) => {
-												onCustomArgsChange(agent.id, value);
-											}}
-											onCustomArgsBlur={() => {
-												/* Saved on agent create */
-											}}
-											customEnvVars={customAgentEnvVars[agent.id] || {}}
-											onEnvVarKeyChange={(oldKey, newKey, value) => {
-												onEnvVarKeyChange(agent.id, oldKey, newKey, value);
-											}}
-											onEnvVarValueChange={(key, value) => {
-												onEnvVarValueChange(agent.id, key, value);
-											}}
-											onEnvVarRemove={(key) => {
-												onEnvVarRemove(agent.id, key);
-											}}
-											onEnvVarAdd={() => {
-												onEnvVarAdd(agent.id);
-											}}
-											onEnvVarsBlur={() => {
-												/* Saved on agent create */
-											}}
-											agentConfig={agentConfigs[agent.id] || {}}
-											onConfigChange={(key, value) => {
-												onConfigChange(agent.id, key, value);
-											}}
-											onConfigBlur={(key, value) => {
-												onConfigBlur(agent.id, key, value);
-											}}
-											availableModels={availableModels[agent.id] || []}
-											loadingModels={loadingModels[agent.id] || false}
-											onRefreshModels={() => onRefreshModels(agent.id)}
-											dynamicOptions={dynamicOptions[agent.id] || {}}
-											loadingDynamicOptions={loadingDynamicOptions[agent.id] || false}
-											onRefreshAgent={() => onRefreshAgent(agent.id)}
-											refreshingAgent={refreshingAgent === agent.id}
-											showBuiltInEnvVars
-											enableMaestroP={
-												enableMaestroPByAgent?.[agent.id] ?? isAdaptiveModeDefaultOn(agent.id)
-											}
-											onEnableMaestroPChange={
-												onEnableMaestroPChange
-													? (value) => onEnableMaestroPChange(agent.id, value)
-													: undefined
-											}
-											codexAutoResetOnExhaustion={codexAutoResetByAgent?.[agent.id] ?? false}
-											onCodexAutoResetChange={
-												onCodexAutoResetChange
-													? (value) => onCodexAutoResetChange(agent.id, value)
-													: undefined
-											}
-											maestroPMode={maestroPModeByAgent?.[agent.id] ?? 'dynamic'}
-											onMaestroPModeChange={
-												onMaestroPModeChange
-													? (mode) => onMaestroPModeChange(agent.id, mode)
-													: undefined
-											}
-											maestroPPath={maestroPPathByAgent?.[agent.id] ?? ''}
-											onMaestroPPathChange={
-												onMaestroPPathChange
-													? (value) => onMaestroPPathChange(agent.id, value)
-													: undefined
-											}
-											onMaestroPPathBlur={() => {
-												/* Saved on agent create */
-											}}
-											detectedMaestroPPath={detectedMaestroPPath}
-										/>
-									</div>
-								)}
-							</div>
+									{/* Expanded details for supported agents */}
+									{isSupported && isExpanded && (
+										<div className="px-3 pb-3 pt-2">
+											<AgentConfigPanel
+												theme={theme}
+												agent={agent}
+												customPath={customAgentPaths[agent.id] || ''}
+												onCustomPathChange={(value) => {
+													onCustomPathChange(agent.id, value);
+												}}
+												onCustomPathBlur={() => {
+													/* Saved on agent create */
+												}}
+												customArgs={customAgentArgs[agent.id] || ''}
+												onCustomArgsChange={(value) => {
+													onCustomArgsChange(agent.id, value);
+												}}
+												onCustomArgsBlur={() => {
+													/* Saved on agent create */
+												}}
+												customEnvVars={customAgentEnvVars[agent.id] || {}}
+												onEnvVarKeyChange={(oldKey, newKey, value) => {
+													onEnvVarKeyChange(agent.id, oldKey, newKey, value);
+												}}
+												onEnvVarValueChange={(key, value) => {
+													onEnvVarValueChange(agent.id, key, value);
+												}}
+												onEnvVarRemove={(key) => {
+													onEnvVarRemove(agent.id, key);
+												}}
+												onEnvVarAdd={() => {
+													onEnvVarAdd(agent.id);
+												}}
+												onEnvVarsBlur={() => {
+													/* Saved on agent create */
+												}}
+												agentConfig={agentConfigs[agent.id] || {}}
+												onConfigChange={(key, value) => {
+													onConfigChange(agent.id, key, value);
+												}}
+												onConfigBlur={(key, value) => {
+													onConfigBlur(agent.id, key, value);
+												}}
+												availableModels={availableModels[agent.id] || []}
+												loadingModels={loadingModels[agent.id] || false}
+												onRefreshModels={() => onRefreshModels(agent.id)}
+												dynamicOptions={dynamicOptions[agent.id] || {}}
+												loadingDynamicOptions={loadingDynamicOptions[agent.id] || false}
+												onRefreshAgent={() => onRefreshAgent(agent.id)}
+												refreshingAgent={refreshingAgent === agent.id}
+												showBuiltInEnvVars
+												enableMaestroP={
+													enableMaestroPByAgent?.[agent.id] ?? isAdaptiveModeDefaultOn(agent.id)
+												}
+												onEnableMaestroPChange={
+													onEnableMaestroPChange
+														? (value) => onEnableMaestroPChange(agent.id, value)
+														: undefined
+												}
+												codexAutoResetOnExhaustion={codexAutoResetByAgent?.[agent.id] ?? false}
+												onCodexAutoResetChange={
+													onCodexAutoResetChange
+														? (value) => onCodexAutoResetChange(agent.id, value)
+														: undefined
+												}
+												maestroPMode={maestroPModeByAgent?.[agent.id] ?? 'dynamic'}
+												onMaestroPModeChange={
+													onMaestroPModeChange
+														? (mode) => onMaestroPModeChange(agent.id, mode)
+														: undefined
+												}
+												maestroPPath={maestroPPathByAgent?.[agent.id] ?? ''}
+												onMaestroPPathChange={
+													onMaestroPPathChange
+														? (value) => onMaestroPPathChange(agent.id, value)
+														: undefined
+												}
+												onMaestroPPathBlur={() => {
+													/* Saved on agent create */
+												}}
+												detectedMaestroPPath={detectedMaestroPPath}
+											/>
+										</div>
+									)}
+								</div>
+								{/* A preset that runs on Claude Code sits directly under its row, and only where that row is drawn. */}
+								{agent.id === 'claude-code' && claudePresetRow}
+							</React.Fragment>
 						);
 					})}
 				</div>

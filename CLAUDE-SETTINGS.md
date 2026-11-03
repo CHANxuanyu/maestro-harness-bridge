@@ -30,12 +30,12 @@ This is "double-dimming". Each channel dims independently, so stacking them mult
 
 Measured contrast against each theme's `bgMain` (WCAG needs 3:1 for secondary text, 4.5:1 for body):
 
-| Dimming approach                                    | Passes 3:1         | Dracula (default theme) |
-| --------------------------------------------------- | ------------------ | ----------------------- |
-| `opacity-70` on inherited `textMain` (the standard) | **21 / 21 themes** | 7.34:1                  |
-| `textDim`, no opacity utility                       | 21 / 21 themes     | 3.03:1                  |
-| `opacity-50` on inherited `textMain` (old default)  | 15 / 21 themes     | 4.52:1                  |
-| `opacity-50` **+** `textDim` (double-dim)           | **4 / 21 themes**  | **1.74:1**              |
+| Dimming approach                                    | Passes 3:1         | Dracula (default theme until 2026-11-02) |
+| --------------------------------------------------- | ------------------ | ---------------------------------------- |
+| `opacity-70` on inherited `textMain` (the standard) | **21 / 21 themes** | 7.34:1                                   |
+| `textDim`, no opacity utility                       | 21 / 21 themes     | 3.03:1                                   |
+| `opacity-50` on inherited `textMain` (old default)  | 15 / 21 themes     | 4.52:1                                   |
+| `opacity-50` **+** `textDim` (double-dim)           | **4 / 21 themes**  | **1.74:1**                               |
 
 Double-dimming costs an average of **1.21 contrast points** and fails the 3:1 floor in **17 of 21 themes**. On Dracula the same sentence renders at 1.74:1 instead of 7.34:1 - roughly a **4x** readability loss. That is why one description reads fine and the one directly below it looks broken.
 

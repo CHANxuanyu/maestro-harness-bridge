@@ -48,6 +48,10 @@ export const settingsFinish = {
 	'settings.finish.shortcuts.byKeyHint': 'Filter by pressing a shortcut',
 	'settings.finish.shortcuts.byKey': 'By Key',
 	'settings.finish.theme.gloss': 'Surface Gloss',
+	'settings.finish.theme.followSystem.heading': 'Appearance',
+	'settings.finish.theme.followSystem.title': 'Follow system light and dark mode',
+	'settings.finish.theme.followSystem.description':
+		'Clay Dark and Clay Light switch with the system. Other themes stay as chosen.',
 	'settings.finish.theme.glossDescription':
 		'Adds a light source to the sidebars, headers, tab bar and composer so panels read as stacked layers instead of one flat sheet. It only adds highlights and shadows, so no theme color changes and text stays exactly as legible as it is now.',
 	'settings.finish.theme.intensity': 'Intensity',

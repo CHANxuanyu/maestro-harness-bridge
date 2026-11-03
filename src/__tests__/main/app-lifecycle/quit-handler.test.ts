@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { EventEmitter } from 'node:events';
 
 // Track event handlers
 let beforeQuitHandler: ((event: { preventDefault: () => void }) => void) | null = null;
@@ -37,6 +38,7 @@ vi.mock('electron', () => ({
 	},
 	ipcMain: {
 		on: (...args: unknown[]) => mockIpcMainOn(...args),
+		removeListener: (channel: string) => ipcHandlers.delete(channel),
 	},
 	BrowserWindow: vi.fn(),
 }));
@@ -81,6 +83,11 @@ vi.mock('../../../main/window-state-persistence', () => ({
 	saveAllWindowStates: (...args: unknown[]) => mockSaveAllWindowStates(...args),
 }));
 
+const mockFlushSessionWrites = vi.fn();
+vi.mock('../../../main/stores', () => ({
+	flushPendingSessionWritesSync: () => mockFlushSessionWrites(),
+}));
+
 // Platform is controllable per-test: the update-install hard-exit only applies
 // on macOS (Squirrel.Mac/ShipIt), while Windows/Linux keep the graceful path.
 let mockIsMacOS = true;
@@ -93,7 +100,12 @@ vi.mock('../../../shared/platformDetection', () => ({
 describe('app-lifecycle/quit-handler', () => {
 	let mockMainWindow: {
 		isDestroyed: ReturnType<typeof vi.fn>;
-		webContents: { send: ReturnType<typeof vi.fn>; isDestroyed: ReturnType<typeof vi.fn> };
+		webContents: {
+			send: ReturnType<typeof vi.fn>;
+			isDestroyed: ReturnType<typeof vi.fn>;
+			once: ReturnType<typeof vi.fn>;
+			removeListener: ReturnType<typeof vi.fn>;
+		};
 	};
 	let mockProcessManager: {
 		killAll: ReturnType<typeof vi.fn>;
@@ -126,6 +138,7 @@ describe('app-lifecycle/quit-handler', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.useFakeTimers();
 		beforeQuitHandler = null;
 		ipcHandlers.clear();
 		mockIsMacOS = true;
@@ -136,7 +149,19 @@ describe('app-lifecycle/quit-handler', () => {
 
 		mockMainWindow = {
 			isDestroyed: vi.fn().mockReturnValue(false),
-			webContents: { send: vi.fn(), isDestroyed: vi.fn().mockReturnValue(false) },
+			webContents: {
+				send: vi.fn((channel, requestId) => {
+					if (channel === 'app:requestQuitSave')
+						ipcHandlers.get('app:quitSaveComplete')?.(
+							{ sender: mockMainWindow.webContents },
+							requestId,
+							true
+						);
+				}),
+				isDestroyed: vi.fn().mockReturnValue(false),
+				once: vi.fn(),
+				removeListener: vi.fn(),
+			},
 		};
 		mockProcessManager = {
 			killAll: vi.fn(),
@@ -168,6 +193,8 @@ describe('app-lifecycle/quit-handler', () => {
 	});
 
 	afterEach(() => {
+		vi.clearAllTimers();
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
 
@@ -386,7 +413,7 @@ describe('app-lifecycle/quit-handler', () => {
 			const { createQuitHandler } = await import('../../../main/app-lifecycle/quit-handler');
 
 			const fakeStore = { set: vi.fn() };
-			const fakeRegistry = { getAll: vi.fn(() => []) };
+			const fakeRegistry = { getAll: vi.fn(() => []), getAppWindows: vi.fn(() => []) };
 			const quitHandler = createQuitHandler({
 				...deps,
 				windowStateStore: fakeStore,
@@ -615,6 +642,137 @@ describe('app-lifecycle/quit-handler', () => {
 
 			vi.useRealTimers();
 		});
+	});
+
+	describe('renderer persistence before cleanup', () => {
+		function pendingWindow(id: number) {
+			return {
+				isDestroyed: vi.fn(() => false),
+				webContents: Object.assign(new EventEmitter(), {
+					id,
+					isDestroyed: vi.fn(() => false),
+					send: vi.fn(),
+				}),
+			};
+		}
+		async function startSaving(prepare?: (windows: ReturnType<typeof pendingWindow>[]) => void) {
+			vi.useFakeTimers();
+			const { createQuitHandler } = await import('../../../main/app-lifecycle/quit-handler');
+			const { WindowRegistry } = await import('../../../main/window-registry');
+			const registry = new WindowRegistry();
+			const windows = [pendingWindow(101), pendingWindow(102)];
+			for (const window of windows) registry.create({ browserWindow: window as any });
+			const hud = pendingWindow(103);
+			registry.create({ browserWindow: hud as any, kind: 'cadenza-hud' });
+			const dead = pendingWindow(104);
+			dead.isDestroyed.mockReturnValue(true);
+			registry.create({ browserWindow: dead as any });
+			deps.getMainWindow.mockReturnValue(windows[0]);
+			const handler = createQuitHandler({ ...deps, getWindowRegistry: () => registry } as any);
+			handler.setup();
+			ipcHandlers.get('app:quitConfirmed')!();
+			prepare?.(windows);
+			beforeQuitHandler!({ preventDefault: vi.fn() });
+			return { windows, hud, dead };
+		}
+		function acknowledge(
+			window: ReturnType<typeof pendingWindow>,
+			requestId: string,
+			saved = true
+		) {
+			ipcHandlers.get('app:quitSaveComplete')?.({ sender: window.webContents }, requestId, saved);
+		}
+		afterEach(() => {
+			vi.clearAllTimers();
+			vi.useRealTimers();
+		});
+
+		it('waits for every live app window before flushing main stores and killing processes', async () => {
+			const { windows, hud, dead } = await startSaving();
+			expect(mockProcessManager.killAll).not.toHaveBeenCalled();
+			const requestId = windows[0].webContents.send.mock.calls[0]?.[1];
+			for (const window of windows)
+				expect(window.webContents.send).toHaveBeenCalledWith('app:requestQuitSave', requestId);
+			expect(hud.webContents.send).not.toHaveBeenCalled();
+			expect(dead.webContents.send).not.toHaveBeenCalled();
+			acknowledge(windows[0], requestId);
+			expect(mockProcessManager.killAll).not.toHaveBeenCalled();
+			acknowledge(windows[1], requestId);
+			beforeQuitHandler!({ preventDefault: vi.fn() });
+			expect(mockProcessManager.killAll).toHaveBeenCalledOnce();
+			expect(mockFlushSessionWrites).toHaveBeenCalledOnce();
+			expect(mockFlushSessionWrites.mock.invocationCallOrder[0]).toBeLessThan(
+				mockProcessManager.killAll.mock.invocationCallOrder[0]
+			);
+			expect(ipcHandlers.has('app:quitSaveComplete')).toBe(false);
+			for (const window of windows) expect(window.webContents.listenerCount('destroyed')).toBe(0);
+		});
+
+		it('uses one total save deadline across windows and repeated quit attempts', async () => {
+			const { windows } = await startSaving();
+			vi.advanceTimersByTime(3000);
+			const repeated = { preventDefault: vi.fn() };
+			beforeQuitHandler!(repeated);
+			expect(repeated.preventDefault).toHaveBeenCalled();
+			vi.advanceTimersByTime(1999);
+			expect(mockProcessManager.killAll).not.toHaveBeenCalled();
+			vi.advanceTimersByTime(1);
+			beforeQuitHandler!({ preventDefault: vi.fn() });
+			expect(mockProcessManager.killAll).toHaveBeenCalledOnce();
+			for (const window of windows) expect(window.webContents.send).toHaveBeenCalledOnce();
+			expect(mockLogger.warn).toHaveBeenCalledWith(
+				expect.stringContaining('Quit save timed out'),
+				'Shutdown'
+			);
+			vi.advanceTimersByTime(750);
+			expect(process.kill).toHaveBeenCalledOnce();
+		});
+
+		it('ignores stale, malformed and unrelated acknowledgements', async () => {
+			const { windows } = await startSaving();
+			const requestId = windows[0].webContents.send.mock.calls[0]?.[1];
+			acknowledge(pendingWindow(101), requestId);
+			acknowledge(windows[0], 'stale-request');
+			ipcHandlers.get('app:quitSaveComplete')?.(
+				{ sender: windows[0].webContents },
+				requestId,
+				undefined
+			);
+			acknowledge(windows[1], requestId);
+			beforeQuitHandler!({ preventDefault: vi.fn() });
+			expect(mockProcessManager.killAll).not.toHaveBeenCalled();
+			acknowledge(windows[0], requestId);
+			beforeQuitHandler!({ preventDefault: vi.fn() });
+			expect(mockProcessManager.killAll).toHaveBeenCalledOnce();
+		});
+
+		it('continues saving other windows when a renderer is disposed during send', async () => {
+			const { windows } = await startSaving((targets) => {
+				targets[0].webContents.send.mockImplementation(() => {
+					throw new Error('disposed');
+				});
+			});
+			expect(mockProcessManager.killAll).not.toHaveBeenCalled();
+			const requestId = windows[1].webContents.send.mock.calls[0]?.[1];
+			expect(windows[1].webContents.send).toHaveBeenCalledWith('app:requestQuitSave', requestId);
+			acknowledge(windows[1], requestId);
+			beforeQuitHandler!({ preventDefault: vi.fn() });
+			expect(mockProcessManager.killAll).toHaveBeenCalledOnce();
+		});
+
+		it.each(['destroyed', 'render-process-gone'])(
+			'settles a %s renderer without waiting for the deadline',
+			async (event) => {
+				const { windows } = await startSaving();
+				expect(mockProcessManager.killAll).not.toHaveBeenCalled();
+				const requestId = windows[0].webContents.send.mock.calls[0]?.[1];
+				windows[0].webContents.emit(event);
+				acknowledge(windows[1], requestId, false);
+				beforeQuitHandler!({ preventDefault: vi.fn() });
+				expect(mockProcessManager.killAll).toHaveBeenCalledOnce();
+				expect(mockLogger.warn).toHaveBeenCalled();
+			}
+		);
 	});
 
 	describe('confirmQuit', () => {

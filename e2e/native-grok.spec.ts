@@ -140,14 +140,20 @@ for (const provider of ['grok'] satisfies Provider[]) {
 		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
 		const id = nativeIdentity(provider, file).id;
 		await native.restart();
+		// The tab saved at quit comes back bound to its native session, so the
+		// conversation is the restored open tab rather than a separate history row.
 		await native.page
 			.locator(
-				`[data-conversation-kind="history"][data-conversation-key*="${id}"] button[data-tree-nav]`
+				`[data-conversation-kind="open"][data-native-session-id="${id}"] button[data-tree-nav]`
 			)
 			.click();
 		await expect(
 			native.output().getByText('Before application restart.', { exact: true })
 		).toBeVisible();
+		await expect(
+			native.page.getByText('Loading conversation history...', { exact: true })
+		).toHaveCount(0);
+		await expect(native.page.locator(`[data-native-session-id="${id}"]`)).toHaveCount(1);
 		await native.send('After restart');
 		await expect(
 			native.output().getByText('After application restart.', { exact: true })

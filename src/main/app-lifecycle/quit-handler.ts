@@ -3,7 +3,8 @@
  * Manages quit confirmation flow and cleanup on application exit.
  */
 
-import { app, ipcMain, BrowserWindow } from 'electron';
+import { app, ipcMain, BrowserWindow, type IpcMainEvent } from 'electron';
+import { generateUUID } from '../../shared/uuid';
 import type Store from 'electron-store';
 import { logger } from '../utils/logger';
 import type { ProcessManager } from '../process-manager';
@@ -29,6 +30,9 @@ import { flushPendingSessionWritesSync } from '../stores';
  * renderer crashed), force-quit to prevent the app from lingering in the background.
  */
 const QUIT_CONFIRMATION_TIMEOUT_MS = 5000;
+
+// One deadline for the whole renderer save phase, independent of window count.
+const QUIT_SAVE_TIMEOUT_MS = 5000;
 
 /**
  * Grace window between running cleanup and hard-exiting on a normal user quit.
@@ -140,6 +144,8 @@ interface QuitHandlerState {
 	installingUpdate: boolean;
 	/** Guards against re-entrant before-quit running cleanup / arming the timer twice. */
 	cleanupStarted: boolean;
+	/** Renderer persistence must settle before stores or native writers close. */
+	rendererSave: 'idle' | 'pending' | 'complete';
 }
 
 /** Quit handler instance */
@@ -160,7 +166,7 @@ export interface QuitHandler {
  * 2. before-quit is intercepted if not confirmed
  * 3. Renderer is asked to check for busy agents
  * 4. User confirms or cancels via IPC
- * 5. On confirm, cleanup runs and app quits
+ * 5. On confirm, renderer saves settle within one deadline, then cleanup runs
  *
  * @param deps - Dependencies for quit handling
  * @returns QuitHandler instance
@@ -188,6 +194,7 @@ export function createQuitHandler(deps: QuitHandlerDependencies): QuitHandler {
 		confirmationTimeout: null,
 		installingUpdate: false,
 		cleanupStarted: false,
+		rendererSave: 'idle',
 	};
 
 	return {
@@ -267,10 +274,29 @@ export function createQuitHandler(deps: QuitHandlerDependencies): QuitHandler {
 					return;
 				}
 
+				if (state.rendererSave === 'pending') {
+					event.preventDefault();
+					return;
+				}
+				if (state.rendererSave === 'idle') {
+					state.rendererSave = 'pending';
+					let dispatching = true;
+					flushRendererPersistence(() => {
+						state.rendererSave = 'complete';
+						if (!dispatching) app.quit();
+					});
+					dispatching = false;
+					if (state.rendererSave === 'pending') {
+						event.preventDefault();
+						return;
+					}
+				}
+
 				// Quit confirmed. Guard against a re-entrant before-quit (e.g. another
 				// path calling app.quit() during the grace window) running cleanup or
 				// arming the timer twice.
 				if (state.cleanupStarted) {
+					if (!state.installingUpdate || isMacOS()) event.preventDefault();
 					return;
 				}
 				state.cleanupStarted = true;
@@ -324,6 +350,68 @@ export function createQuitHandler(deps: QuitHandlerDependencies): QuitHandler {
 			state.installingUpdate = true;
 		},
 	};
+
+	/** Request the registered persistence save from each session-owning window. */
+	function flushRendererPersistence(done: () => void): void {
+		const registry = getWindowRegistry?.();
+		const windows = registry
+			? registry.getAppWindows().map((entry) => entry.browserWindow)
+			: [getMainWindow()];
+		const pending = new Set(
+			windows.filter(isWebContentsAvailable).map((window) => window.webContents)
+		);
+		if (pending.size === 0) {
+			done();
+			return;
+		}
+
+		const requestId = generateUUID();
+		const disposers: Array<() => void> = [];
+		let finished = false;
+		const finish = () => {
+			if (finished) return;
+			finished = true;
+			clearTimeout(timeout);
+			ipcMain.removeListener('app:quitSaveComplete', onComplete);
+			for (const dispose of disposers) dispose();
+			done();
+		};
+		const settle = (sender: Electron.WebContents, saved: boolean) => {
+			if (!pending.delete(sender)) return;
+			if (!saved) logger.warn(`Quit save did not complete for renderer ${sender.id}`, 'Shutdown');
+			if (pending.size === 0) finish();
+		};
+		const onComplete = (event: IpcMainEvent, id: unknown, saved: unknown) => {
+			if (id !== requestId || typeof saved !== 'boolean') return;
+			settle(event.sender, saved);
+		};
+		const timeout = setTimeout(() => {
+			logger.warn(`Quit save timed out with ${pending.size} renderer(s) pending`, 'Shutdown');
+			finish();
+		}, QUIT_SAVE_TIMEOUT_MS);
+		ipcMain.on('app:quitSaveComplete', onComplete);
+
+		// Register every target before sending so fast replies cannot end the
+		// phase before the remaining windows have been asked to save.
+		const targets = [...pending];
+		for (const contents of targets) {
+			const unavailable = () => settle(contents, false);
+			contents.once('destroyed', unavailable);
+			contents.once('render-process-gone', unavailable);
+			disposers.push(() => {
+				contents.removeListener('destroyed', unavailable);
+				contents.removeListener('render-process-gone', unavailable);
+			});
+		}
+		for (const contents of targets) {
+			if (!pending.has(contents)) continue;
+			try {
+				contents.send('app:requestQuitSave', requestId);
+			} catch {
+				settle(contents, false);
+			}
+		}
+	}
 
 	/** Clears the quit confirmation safety timeout if active. */
 	function clearConfirmationTimeout(): void {

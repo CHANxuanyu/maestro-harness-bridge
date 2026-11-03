@@ -16,7 +16,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
-import * as path from 'path';
+import accountPath, * as path from 'path';
 import { EventEmitter } from 'events';
 
 // Create mock spawn function at module level
@@ -156,14 +156,23 @@ vi.mock('os', async () => {
 	};
 });
 
+// Isolate path injection from Node and the test runner. Account resolution and
+// native instruction discovery use this default import, including via node:path.
+vi.mock('path', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('path')>();
+	return { ...actual, default: { ...actual } };
+});
+
 // Mock storage service
 const mockGetAgentCustomPath = vi.fn();
 const mockReadAgentConfig = vi.fn<(toolType: string) => Record<string, unknown>>(() => ({}));
+const mockReadSettingValue = vi.fn<(key: string) => unknown>(() => undefined);
 const mockReadSshRemotes = vi.fn<() => unknown[]>(() => []);
 vi.mock('../../../cli/services/storage', () => ({
 	getAgentCustomPath: (...args: unknown[]) => mockGetAgentCustomPath(...args),
 	readAgentConfig: (toolType: string) => mockReadAgentConfig(toolType),
 	readSshRemotes: () => mockReadSshRemotes(),
+	readSettingValue: (key: string) => mockReadSettingValue(key),
 }));
 
 // Mock SSH wrapper so SSH tests don't need real ssh/bash on the test machine
@@ -189,6 +198,8 @@ import { isolateAgentEnv } from '../../helpers/agentEnvIsolation';
 // `spawnAgent` above; other suites here call `vi.resetModules()`.
 import { resetEffortRejections } from '../../../shared/effortRejection';
 import { resolveEffortLevel } from '../../../shared/modelTiers';
+import { readCliAccountDirLayers } from '../../../cli/services/agent-account-dir';
+import { nativeAboutMeTarget } from '../../../main/about-me-files';
 
 describe('agent-spawner', () => {
 	beforeEach(() => {
@@ -2264,6 +2275,44 @@ Some text with [x] in it that's not a checkbox
 			const { args } = spawnCall();
 			expect(args).toContain('--session-level');
 			expect(args).not.toContain('--agent-level');
+		});
+
+		describe.each(['host', 'win32'] as const)('native account (%s paths)', (flavor) => {
+			it.each(['claude-code', 'codex'] as const)(
+				'spawns %s in the same global account used by the native profile check',
+				async (provider) => {
+					const paths = flavor === 'win32' ? path.win32 : path;
+					// Supply a synthetic Windows cwd so even a POSIX host resolves a drive.
+					const cwd = flavor === 'win32' ? 'Q:/synthetic-project' : process.cwd();
+					if (flavor === 'win32') {
+						vi.spyOn(accountPath, 'resolve').mockImplementation((...parts) =>
+							paths.resolve(cwd, ...parts)
+						);
+						vi.spyOn(accountPath, 'join').mockImplementation(paths.join);
+					}
+					const account = paths.join(os.tmpdir(), 'synthetic-global-account');
+					const key = provider === 'claude-code' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+					mockReadSettingValue.mockImplementation((setting) =>
+						setting === 'shellEnvVars' ? { [key]: account } : undefined
+					);
+					try {
+						const agent = { toolType: provider, customEnvVars: {} };
+						const target = nativeAboutMeTarget(agent, readCliAccountDirLayers(provider));
+						const p = spawnAgent(provider, '/p', 'hi', undefined, agent);
+						await driveSpawnToCompletion(
+							p,
+							0,
+							provider === 'claude-code' ? CLAUDE_OK() : undefined
+						);
+						expect(target).toBeDefined();
+						const spawnedAccount = spawnCall().options.env[key];
+						expect(spawnedAccount).toBe(paths.dirname(target!.path));
+						expect(spawnedAccount).toBe(paths.resolve(cwd, account));
+					} finally {
+						mockReadSettingValue.mockReset();
+					}
+				}
+			);
 		});
 
 		it('applies session customEnvVars to local spawn env (wins over shell env)', async () => {

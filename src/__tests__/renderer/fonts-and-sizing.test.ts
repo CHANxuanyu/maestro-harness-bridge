@@ -37,7 +37,11 @@ const DEFAULT_ONBOARDING_STATS = JSON.parse(JSON.stringify(_INITIAL_STATE.onboar
 const DEFAULT_AI_COMMANDS = JSON.parse(JSON.stringify(_INITIAL_STATE.customAICommands));
 import { DEFAULT_SHORTCUTS, TAB_SHORTCUTS } from '../../renderer/constants/shortcuts';
 import { DEFAULT_CUSTOM_THEME_COLORS } from '../../renderer/constants/themes';
-import { MAESTRO_FONT_STACK, WORDMARK_FONT_STACK } from '../../shared/fontStack';
+import {
+	INTERFACE_FONT_STACK,
+	MAESTRO_FONT_STACK,
+	WORDMARK_FONT_STACK,
+} from '../../shared/fontStack';
 
 // Mock the FontConfigurationPanel's common monospace fonts list
 const COMMON_MONOSPACE_FONTS = [
@@ -81,7 +85,7 @@ describe('Cross-platform Fonts and Sizing', () => {
 			shellArgs: '',
 			shellEnvVars: {},
 			ghPath: '',
-			fontFamily: MAESTRO_FONT_STACK,
+			fontFamily: INTERFACE_FONT_STACK,
 			fontSize: 14,
 			activeThemeId: 'dracula',
 			customThemeColors: DEFAULT_CUSTOM_THEME_COLORS,
@@ -164,30 +168,31 @@ describe('Cross-platform Fonts and Sizing', () => {
 
 			// Default font family should include multiple fallbacks
 			const fontFamily = result.current.fontFamily;
-			expect(fontFamily).toContain('JetBrains Mono'); // Bundled, so always resolves
-			expect(fontFamily).toContain('Courier New'); // Universal fallback
-			expect(fontFamily).toContain('monospace'); // Generic fallback
+			expect(fontFamily).toContain('Inter'); // Bundled, so always resolves
+			expect(fontFamily).toContain('-apple-system'); // macOS system face
+			expect(fontFamily).toContain('Segoe UI'); // Windows system face
+			expect(fontFamily).toContain('sans-serif'); // Generic fallback
 		});
 
 		it('should lead with the bundled family so the default always resolves', async () => {
 			const { result } = renderHook(() => useSettings());
 			await waitForSettingsLoaded(result);
 
-			// JetBrains Mono is the only family in the stack that ships with the app
-			// (src/renderer/public/fonts/). Everything after it is a fallback for a
-			// renderer that somehow fails to load it. If the default ever leads with
-			// a family that is merely *hoped* to be installed - as it did when it
-			// led with Roboto Mono - a machine without that font silently renders
-			// the app in whatever comes next.
-			expect(result.current.fontFamily.trim().startsWith("'JetBrains Mono'")).toBe(true);
+			// Inter is the only family in the stack that ships with the app
+			// (src/renderer/public/fonts/). Everything after it is the system sans
+			// fallback for a renderer that somehow fails to load it. If the default
+			// ever leads with a family that is merely *hoped* to be installed - as
+			// it did when it led with Roboto Mono - a machine without that font
+			// silently renders the app in whatever comes next.
+			expect(result.current.fontFamily.trim().startsWith('Inter,')).toBe(true);
 		});
 
-		it('should have generic monospace as the last fallback', async () => {
+		it('should have generic sans-serif as the last fallback', async () => {
 			const { result } = renderHook(() => useSettings());
 			await waitForSettingsLoaded(result);
 
 			const fontFamily = result.current.fontFamily;
-			expect(fontFamily.trim().endsWith('monospace')).toBe(true);
+			expect(fontFamily.trim().endsWith('sans-serif')).toBe(true);
 		});
 
 		// These four surfaces paint at different moments during startup - the splash
@@ -244,19 +249,24 @@ describe('Cross-platform Fonts and Sizing', () => {
 			const body = /font-family:\s*(var\(\s*--maestro-font-interface,[^;]*\));/.exec(css);
 			expect(body).not.toBeNull();
 
-			expect(varFallback(body![1])).toEqual(familyNames(MAESTRO_FONT_STACK));
+			expect(varFallback(body![1])).toEqual(familyNames(INTERFACE_FONT_STACK));
 		});
 
 		it('should match the splash screen font stack in index.html', () => {
 			const html = readRepoFile('src/renderer/index.html');
 
-			// Every font-family in the splash's inline CSS, including the wordmark's.
-			const stacks = [...html.matchAll(/font-family:\s*([^;]+);/g)].map((m) => m[1]);
+			// The wordmark is the brand font; every other font-family in the
+			// splash's inline CSS paints interface text and must be the interface
+			// default, or the app changes font the moment React takes over.
+			const wordmark = /\.splash-title\s*\{[^}]*\}/.exec(html)?.[0] ?? '';
+			const rest = html.replace(wordmark, '');
+			const stacks = [...rest.matchAll(/font-family:\s*([^;]+);/g)].map((m) => m[1]);
 			expect(stacks.length).toBeGreaterThan(0);
-
 			for (const stack of stacks) {
-				expect(familyNames(stack)).toEqual(familyNames(MAESTRO_FONT_STACK));
+				expect(familyNames(stack)).toEqual(familyNames(INTERFACE_FONT_STACK));
 			}
+			const brand = /font-family:\s*([^;]+);/.exec(wordmark)?.[1] ?? '';
+			expect(familyNames(brand)).toEqual(familyNames(WORDMARK_FONT_STACK));
 		});
 
 		it('should not fetch the app font over the network', () => {

@@ -8,6 +8,9 @@ import { isWebDesktop } from '../../../renderer/utils/runtimeContext';
 import type { AITab, Theme, FilePreviewTab } from '../../../renderer/types';
 
 import { mockTheme } from '../../helpers/mockTheme';
+import { createMockSession } from '../../helpers/mockSession';
+import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { useModalStore } from '../../../renderer/stores/modalStore';
 
 // Default to desktop (Electron) behavior; individual tests flip this to true to
 // exercise the web-desktop branch where the new-browser-tab affordance is hidden.
@@ -2982,6 +2985,88 @@ describe('TabBar', () => {
 			// Middle tab should show both move options
 			expect(screen.getByText('Move to First Position')).toBeInTheDocument();
 			expect(screen.getByText('Move to Last Position')).toBeInTheDocument();
+		});
+	});
+
+	describe('Continue with another AI', () => {
+		const talkedTab = () =>
+			createTab({
+				id: 'tab-1',
+				name: 'Tab 1',
+				logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }],
+			});
+		const openMenu = () => {
+			fireEvent.mouseEnter(screen.getByText('Tab 1').closest('[data-tab-id]')!);
+			act(() => {
+				vi.advanceTimersByTime(450);
+			});
+		};
+		const seed = (ssh = false, tab = talkedTab()) =>
+			useSessionStore.setState({
+				sessions: [
+					createMockSession({
+						id: 'agent-1',
+						aiTabs: [tab],
+						...(ssh ? { sessionSshRemoteConfig: { enabled: true } } : {}),
+					} as never),
+				],
+			});
+
+		beforeEach(() => useModalStore.getState().closeModal('aiHandoff'));
+
+		it('opens the handoff dialog for this tab from its menu', () => {
+			seed();
+			render(
+				<TabBar
+					tabs={[talkedTab()]}
+					activeTabId="tab-1"
+					sessionId="agent-1"
+					theme={mockTheme}
+					onTabSelect={mockOnTabSelect}
+					onTabClose={mockOnTabClose}
+					onNewTab={mockOnNewTab}
+				/>
+			);
+			openMenu();
+			fireEvent.click(screen.getByText('Continue with another AI…'));
+			expect(useModalStore.getState().modals.get('aiHandoff')).toMatchObject({
+				open: true,
+				data: { sessionId: 'agent-1', tabId: 'tab-1' },
+			});
+		});
+
+		it('is absent for an SSH agent and for a tab with nothing to hand over', () => {
+			seed(true);
+			const { unmount } = render(
+				<TabBar
+					tabs={[talkedTab()]}
+					activeTabId="tab-1"
+					sessionId="agent-1"
+					theme={mockTheme}
+					onTabSelect={mockOnTabSelect}
+					onTabClose={mockOnTabClose}
+					onNewTab={mockOnNewTab}
+				/>
+			);
+			openMenu();
+			expect(screen.queryByText('Continue with another AI…')).not.toBeInTheDocument();
+			unmount();
+
+			const empty = createTab({ id: 'tab-1', name: 'Tab 1', logs: [] });
+			seed(false, empty);
+			render(
+				<TabBar
+					tabs={[empty]}
+					activeTabId="tab-1"
+					sessionId="agent-1"
+					theme={mockTheme}
+					onTabSelect={mockOnTabSelect}
+					onTabClose={mockOnTabClose}
+					onNewTab={mockOnNewTab}
+				/>
+			);
+			openMenu();
+			expect(screen.queryByText('Continue with another AI…')).not.toBeInTheDocument();
 		});
 	});
 

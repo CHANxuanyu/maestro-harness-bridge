@@ -1,9 +1,9 @@
 import { useSettings } from '../../../../hooks';
 import {
+	AboutMeSection,
 	AutoRunInactivitySection,
 	AutoResumeSection,
 	BrowserSection,
-	ConductorProfileSection,
 	CrossAgentMentionsSection,
 	GitHubCliSection,
 	GlobalHotkeySection,
@@ -62,10 +62,11 @@ export function GeneralTab({ theme, isOpen }: GeneralTabProps) {
 				globalShowHotkey={settings.globalShowHotkey}
 				setGlobalShowHotkey={settings.setGlobalShowHotkey}
 			/>
-			<ConductorProfileSection
+			<AboutMeSection
 				theme={theme}
+				isOpen={isOpen}
 				conductorProfile={settings.conductorProfile}
-				setConductorProfile={settings.setConductorProfile}
+				saveConductorProfile={settings.saveConductorProfile}
 			/>
 			<MaestroCliSection theme={theme} appVersion={appVersion} maestroCli={maestroCli} />
 			<ShellSettingsSection

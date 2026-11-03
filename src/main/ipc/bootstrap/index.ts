@@ -465,8 +465,8 @@ export function setupIpcHandlers(deps: IpcBootstrapDependencies): void {
 	setGetAgentConfigCallback(deps.getAgentConfigForAgent);
 
 	// Set up callback for group chat router to get moderator conductor profile
-	setGetModeratorSettingsCallback(() => ({
-		conductorProfile: (deps.settingsStore.get('conductorProfile', '') as string) || '',
+	setGetModeratorSettingsCallback(async (agent) => ({
+		conductorProfile: await deps.aboutMe.promptProfile(agent),
 	}));
 
 	// Set up SSH store for group chat SSH remote execution support

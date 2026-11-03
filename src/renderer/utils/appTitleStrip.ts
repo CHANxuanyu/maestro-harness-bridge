@@ -32,3 +32,19 @@ export function shouldShowAppTitleStrip(conditions: AppTitleStripConditions): bo
 		!webDesktop
 	);
 }
+
+/**
+ * The words in the title strip: where the user is (group, then agent), never
+ * which conversation. The header right below already names the conversation,
+ * and an unnamed tab's only fallback was its provider session id, which put a
+ * hex code at the top of every window.
+ */
+export function appTitleStripText(input: {
+	group?: { emoji?: string; name: string } | null;
+	sessionName: string;
+}): string {
+	const parts: string[] = [];
+	if (input.group) parts.push(`${input.group.emoji ?? ''} ${input.group.name}`.trim());
+	parts.push(input.sessionName);
+	return parts.join(' \u00b7 ');
+}

@@ -7,7 +7,7 @@
  * in `src/renderer/utils/spawnHelpers.ts`.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SessionInfo } from '../../../shared/types';
 
 vi.mock('../../../cli/services/prompt-loader', () => ({
@@ -17,6 +17,7 @@ vi.mock('../../../cli/services/prompt-loader', () => ({
 vi.mock('../../../cli/services/storage', () => ({
 	getConfigDirectory: vi.fn(() => '/mock/config'),
 	readSettingValue: vi.fn(),
+	readAgentConfig: vi.fn(() => ({})),
 }));
 
 vi.mock('../../../cli/services/git-utils', () => ({
@@ -39,6 +40,10 @@ vi.mock('fs', async () => {
 });
 
 import fs from 'fs';
+import os from 'node:os';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import { isolateAgentEnv } from '../../helpers/agentEnvIsolation';
 import { prepareMaestroSystemPromptCli } from '../../../cli/services/system-prompt';
 import { getCliPrompt } from '../../../cli/services/prompt-loader';
 import { readSettingValue } from '../../../cli/services/storage';
@@ -54,7 +59,15 @@ const mockSession = (overrides: Partial<SessionInfo> = {}): SessionInfo => ({
 });
 
 describe('prepareMaestroSystemPromptCli', () => {
-	beforeEach(() => {
+	isolateAgentEnv(['CLAUDE_CONFIG_DIR', 'CODEX_HOME']);
+	let root: string;
+	afterEach(async () => {
+		vi.restoreAllMocks();
+		await fsp.rm(root, { recursive: true, force: true });
+	});
+	beforeEach(async () => {
+		root = await fsp.mkdtemp(path.join(os.tmpdir(), 'maestro-cli-prompt-'));
+		vi.spyOn(os, 'homedir').mockReturnValue(root);
 		// Clear call history but keep implementations - explicit per-test
 		// defaults below so behavior is unambiguous.
 		vi.clearAllMocks();

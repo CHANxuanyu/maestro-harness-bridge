@@ -19,7 +19,7 @@
  * switching Default -> Hacker -> Default would not round-trip.
  */
 
-import { SANS_FALLBACK_STACK } from './fontStack';
+import { INTERFACE_FONT_STACK } from './fontStack';
 import { BASE_FONT_SIZE_DEFAULT } from './typography';
 
 /** The interface font that produces Maestro's original all-monospace look. */
@@ -39,7 +39,7 @@ export const MONO_SURFACE_FONT = MONO_INTERFACE_FONT;
  * follow for anyone who prefers the native look, and the generic anchors the
  * chain.
  */
-export const DEFAULT_INTERFACE_FONT = `Inter, ${SANS_FALLBACK_STACK}`;
+export const DEFAULT_INTERFACE_FONT = INTERFACE_FONT_STACK;
 
 /**
  * The monospace face for the Default preset's code surfaces. JetBrains Mono is

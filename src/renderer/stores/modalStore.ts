@@ -173,6 +173,12 @@ export interface WizardResumeModalData {
 	state: SerializableWizardState;
 }
 
+/** "Continue with another AI" dialog data: the tab whose conversation moves on. */
+export interface AiHandoffModalData {
+	sessionId: string;
+	tabId: string;
+}
+
 /** Agent error modal data */
 export interface AgentErrorModalData {
 	sessionId: string;
@@ -374,6 +380,7 @@ export type ModalId =
 	| 'renameInstance'
 	| 'agentError'
 	| 'reauth'
+	| 'aiHandoff'
 	// Quick Actions
 	| 'quickAction'
 	| 'tabSwitcher'
@@ -577,6 +584,7 @@ export interface ModalDataMap {
 	wizardResume: WizardResumeModalData;
 	agentError: AgentErrorModalData;
 	reauth: ReauthModalData;
+	aiHandoff: AiHandoffModalData;
 	deleteAgent: DeleteAgentModalData;
 	/**
 	 * Present when opened from the Left Bar's right-click menu, naming the agent

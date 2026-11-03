@@ -18,6 +18,7 @@ import { createCopilotTurn } from './native/copilot-protocol.cjs';
 import { createOmpTurn } from './native/omp-protocol.cjs';
 import { createGrokTurn } from './native/grok-protocol.cjs';
 import { createOpenCodeTurn, openCodeSchemaReady } from './native/opencode-protocol.cjs';
+import { createNativeTempDir } from './native/temp-root.cjs';
 
 const exec = promisify(execFile);
 export type Provider = 'claude' | 'codex' | 'opencode' | 'grok' | 'omp' | 'copilot';
@@ -31,6 +32,7 @@ export interface NativeTool {
 }
 export interface NativeScene {
 	answer: string;
+	effort?: string;
 	tools?: NativeTool[];
 	waitForStop?: boolean;
 	stopDiagnostic?: boolean;
@@ -40,12 +42,7 @@ export interface NativeScene {
 }
 
 export class NativeApp {
-	readonly root = fs.mkdtempSync(
-		path.join(
-			process.env.MAESTRO_E2E_TEMP_ROOT || (process.platform === 'darwin' ? '/tmp' : os.tmpdir()),
-			'maestro-native-e2e-'
-		)
-	);
+	readonly root = createNativeTempDir('maestro-native-e2e-');
 	readonly data = path.join(this.root, 'maestro');
 	readonly project = path.join(this.root, 'project');
 	readonly claude = path.join(this.root, 'claude');
@@ -187,6 +184,9 @@ export class NativeApp {
 		for (const child of this.externalProcesses.keys())
 			if (child.pid && child.exitCode === null) process.kill(-child.pid, 'SIGTERM');
 		await Promise.allSettled(this.externalProcesses.values());
+		// The final answer can precede native writer shutdown. A normal close
+		// must not open a busy-agent confirmation that the test cannot answer.
+		if (!failed) await expect(this.page.getByTestId('stop-turn-button')).toHaveCount(0);
 		if (failed) {
 			await this.page.screenshot({ path: this.info.outputPath(`failure-${this.boot}.png`) });
 			await this.app
@@ -292,6 +292,16 @@ export class NativeApp {
 	}
 	input() {
 		return this.page.getByPlaceholder(/^Talking to /);
+	}
+	/**
+	 * Open the Right Bar (files, history, Auto Run) the way a user does: it
+	 * starts collapsed, and the header's "Show right panel" button is the
+	 * visible way in. Collapsed, the bar's own toggle sits off screen.
+	 */
+	async openRightBar() {
+		const show = this.page.getByTitle(/^Show right panel/);
+		if (await show.count()) await show.click();
+		await expect(this.page.locator('[data-tour="history-tab"]')).toBeVisible();
 	}
 	outputFile(name: string) {
 		return this.info.outputPath(name);

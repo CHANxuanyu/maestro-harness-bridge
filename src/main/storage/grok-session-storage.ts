@@ -19,6 +19,8 @@
  */
 
 import path from 'path';
+import fsSync from 'fs';
+import { localProjectPathCandidates } from './local-project-paths';
 import os from 'os';
 import fs from 'fs/promises';
 import { logger } from '../utils/logger';
@@ -521,9 +523,10 @@ export class GrokSessionStorage extends BaseSessionStorage {
 			sshConfig,
 			'grokStorage:listCwdFolders'
 		);
+		const candidates = sshConfig ? [projectPath] : localProjectPathCandidates(projectPath);
 		return folders.filter((name) => {
 			const decoded = this.decodeCwdFolder(name);
-			return decoded !== null && matchesProject(decoded, projectPath);
+			return decoded !== null && candidates.some((candidate) => matchesProject(decoded, candidate));
 		});
 	}
 
@@ -720,11 +723,9 @@ export class GrokSessionStorage extends BaseSessionStorage {
 	/**
 	 * Get the filesystem path to a session's chat_history.jsonl file.
 	 *
-	 * Best-effort synchronous guess (matches sibling behavior): the project
-	 * path is first mapped to the realpath'd cwd form Grok records (macOS
-	 * `/var|/tmp|/etc` -> `/private/...`) so the local path agrees with what
-	 * listSessions() finds. Over SSH the remote OS is unknown, so the path is
-	 * encoded as given and may miss symlink-resolved variants.
+	 * Check both the saved project spelling and its physical local cwd. Keep
+	 * the existing macOS fallback for unavailable paths. SSH paths remain
+	 * remote and are never resolved against the local filesystem.
 	 */
 	getSessionPath(
 		projectPath: string,
@@ -734,13 +735,19 @@ export class GrokSessionStorage extends BaseSessionStorage {
 		if (!isSafeGrokSessionId(sessionId)) {
 			return null;
 		}
-		const encoded = encodeURIComponent(toGrokRecordedCwd(projectPath, Boolean(sshConfig)));
-		return this.joinPath(
-			sshConfig,
-			this.getSessionsDir(sshConfig),
-			encoded,
-			sessionId,
-			'chat_history.jsonl'
+		const projects = sshConfig ? [projectPath] : localProjectPathCandidates(projectPath);
+		const candidates = projects.map((project) =>
+			this.joinPath(
+				sshConfig,
+				this.getSessionsDir(sshConfig),
+				encodeURIComponent(toGrokRecordedCwd(project, Boolean(sshConfig))),
+				sessionId,
+				'chat_history.jsonl'
+			)
+		);
+		return (
+			(!sshConfig && candidates.find((file) => fsSync.existsSync(file))) ||
+			candidates[candidates.length - 1]
 		);
 	}
 

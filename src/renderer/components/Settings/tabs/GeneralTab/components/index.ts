@@ -1,7 +1,7 @@
+export { AboutMeSection } from './AboutMeSection';
 export { AutoRunInactivitySection } from './AutoRunInactivitySection';
 export { AutoResumeSection } from './AutoResumeSection';
 export { BrowserSection } from './BrowserSection';
-export { ConductorProfileSection } from './ConductorProfileSection';
 export { CrossAgentMentionsSection } from './CrossAgentMentionsSection';
 export { GitHubCliSection } from './GitHubCliSection';
 export { GlobalHotkeySection } from './GlobalHotkeySection';

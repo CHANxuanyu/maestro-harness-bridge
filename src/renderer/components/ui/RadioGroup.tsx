@@ -6,6 +6,8 @@ export interface RadioOption<T extends string> {
 	label: string;
 	/** Optional secondary line shown beneath the label */
 	description?: string;
+	/** Optional mark drawn between the radio dot and the label (a provider logo, say) */
+	icon?: React.ReactNode;
 	disabled?: boolean;
 }
 
@@ -18,6 +20,11 @@ export interface RadioGroupProps<T extends string> {
 	ariaLabel?: string;
 	/** Override the rendered name attribute (defaults to ariaLabel or 'radio-group') */
 	name?: string;
+	/**
+	 * Focus the selected row on mount, so arrow keys move the choice at once.
+	 * For a dialog whose whole job is this one choice.
+	 */
+	autoFocus?: boolean;
 }
 
 /**
@@ -31,6 +38,7 @@ export function RadioGroup<T extends string>({
 	theme,
 	ariaLabel,
 	name,
+	autoFocus = false,
 }: RadioGroupProps<T>): React.ReactElement {
 	const groupName = name ?? ariaLabel ?? 'radio-group';
 
@@ -56,6 +64,7 @@ export function RadioGroup<T extends string>({
 							value={option.value}
 							checked={selected}
 							disabled={disabled}
+							autoFocus={autoFocus && selected}
 							onChange={() => {
 								if (!disabled) onChange(option.value);
 							}}
@@ -78,6 +87,11 @@ export function RadioGroup<T extends string>({
 								/>
 							)}
 						</span>
+						{option.icon && (
+							<span aria-hidden="true" className="flex-shrink-0 mt-px">
+								{option.icon}
+							</span>
+						)}
 						<span className="flex flex-col min-w-0">
 							<span className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
 								{option.label}

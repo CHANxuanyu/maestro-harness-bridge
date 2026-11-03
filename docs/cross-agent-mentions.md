@@ -47,7 +47,7 @@ Mention several agents in one message and each runs independently and concurrent
 
 **Stop** ends the whole turn, consults included. A consultation is part of your agent's turn even though it runs as its own background process, so pressing Stop (or `Ctrl+C`) signals your agent _and_ every agent it fanned out to. Each one stops where it is: whatever it had already written is kept in its bubble, followed by a note that it was stopped. That is deliberately worded apart from a failure - a consult you stopped did not fail to answer you.
 
-When your message was addressed **only** to other agents (it starts with `@name`), your own agent never goes busy, so the usual Stop on the thinking pill never appears. In that case the in-flight consultation pill carries the Stop button itself, so there is always exactly one Stop on screen while other agents are working for you.
+When your message was addressed **only** to other agents (it starts with `@name`), your own agent never goes busy, so the send button never turns into Stop. In that case the in-flight consultation pill carries the Stop button itself, so there is always exactly one Stop on screen while other agents are working for you.
 
 ### Mentions in a queued message wait their turn
 

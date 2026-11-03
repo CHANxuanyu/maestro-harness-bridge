@@ -203,6 +203,28 @@ describe('ToolbarControls', () => {
 			expect(processInput).toHaveBeenCalled();
 		});
 
+		it('turns the send key into Stop while the conversation on screen runs', () => {
+			const onStop = vi.fn();
+			const processInput = vi.fn();
+			renderPhoneToolbar({ onStop, processInput });
+
+			expect(screen.queryByRole('button', { name: 'Send message' })).not.toBeInTheDocument();
+			fireEvent.click(screen.getByTestId('stop-turn-button'));
+			expect(onStop).toHaveBeenCalledTimes(1);
+			expect(processInput).not.toHaveBeenCalled();
+		});
+
+		it('queues a draft from the centre with Stop beside it while running', () => {
+			const onStop = vi.fn();
+			const processInput = vi.fn();
+			renderPhoneToolbar({ onStop, processInput, hasDraft: true });
+
+			expect(screen.getByTestId('stop-turn-button')).toBeInTheDocument();
+			fireEvent.click(screen.getByRole('button', { name: 'Queue message' }));
+			expect(processInput).toHaveBeenCalledTimes(1);
+			expect(onStop).not.toHaveBeenCalled();
+		});
+
 		it('opens the options sheet from the ... button', () => {
 			renderPhoneToolbar();
 			expect(screen.queryByTestId('composer-options-sheet')).not.toBeInTheDocument();

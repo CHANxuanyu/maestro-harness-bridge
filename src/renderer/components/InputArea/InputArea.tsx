@@ -19,6 +19,7 @@ import { WizardInputPanel } from '../InlineWizard';
 import { useImageAnnotatorStore } from '../ImageAnnotator/imageAnnotatorStore';
 import { useAgentCapabilities, useScrollIntoView, useVoiceInput } from '../../hooks';
 import { useThinkingItems } from '../../hooks/session/useThinkingItems';
+import { resolveStopPlacement } from '../../utils/thinkingItems';
 import { useWindowContextOptional } from '../../contexts/WindowContext';
 import { filterSlashCommands } from '../../utils/search';
 import { InputTextarea } from './components/InputTextarea';
@@ -412,11 +413,23 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 	// gets the screen; the user pulls it up to type. Remembered across reloads,
 	// and it starts folded - on a handheld the composer is in the way far more
 	// often than it is in use. The handle keeps a busy dot, since Stop lives in
-	// the folded thinking pill, and a pencil for an unsent draft.
+	// the folded composer row, and a pencil for an unsent draft.
 	const phone = usePhoneLayout();
 	const composerFold = usePersistedToggle(PHONE_COMPOSER_COLLAPSED_KEY, true);
 	const phoneHandleBusy = thinkingItems.length > 0 || !!autoRunState?.isRunning;
-	const phoneHandleHasDraft = inputValue.trim().length > 0 || stagedImages.length > 0;
+	const hasDraft = inputValue.trim().length > 0 || stagedImages.length > 0;
+
+	// The one Stop on screen (see `resolveStopPlacement`). While the conversation
+	// on screen runs it is the send key; in terminal mode the composer runs shell
+	// commands, so the key stays a run key there.
+	const stopPlacement = resolveStopPlacement(
+		thinkingItems,
+		session.id,
+		session.activeTabId,
+		!!autoRunState?.isRunning
+	);
+	const composerStop =
+		stopPlacement === 'composer' && session.inputMode === 'ai' ? handleInterrupt : undefined;
 
 	// Show summarization progress overlay when active for this tab
 	if (isSummarizing && session.inputMode === 'ai' && onCancelSummarize) {
@@ -490,7 +503,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 				collapsed
 				onToggle={composerFold.toggle}
 				busy={phoneHandleBusy}
-				hasDraft={phoneHandleHasDraft}
+				hasDraft={hasDraft}
 			/>
 		);
 	}
@@ -521,15 +534,12 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 					sourceTabId={getActiveTab(session)?.id}
 					onSessionClick={onSessionClick}
 					// A message that LEADS with a mention is answered only by the consulted
-					// agents, so this agent never goes busy and the thinking pill (the usual
-					// home of Stop) never appears - leaving the user with nothing to press
+					// agents, so this agent never goes busy and neither the send key nor the
+					// thinking pill offers Stop - leaving the user with nothing to press
 					// while other agents work on their behalf. Carry Stop here in exactly
-					// that case, and stay out of the way when the thinking pill is already
-					// offering it: both buttons run the same agent-level interrupt, so two
-					// of them on screen is just a second copy of one control.
-					onInterrupt={
-						thinkingItems.length > 0 || autoRunState?.isRunning ? undefined : handleInterrupt
-					}
+					// that case: every Stop runs the same agent-level interrupt, so two of
+					// them on screen is just a second copy of one control.
+					onInterrupt={stopPlacement === 'consults' ? handleInterrupt : undefined}
 				/>
 			)}
 
@@ -555,7 +565,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 					activeSessionId={session.id}
 					activeTabId={session.activeTabId}
 					onStopAutoRun={onStopAutoRun}
-					onInterrupt={handleInterrupt}
+					onInterrupt={stopPlacement === 'pill' ? handleInterrupt : undefined}
 				/>
 			)}
 
@@ -749,6 +759,8 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 							setEffortMenuOpen={setEffortMenuOpen}
 							effortMenuRef={effortMenuRef}
 							processInput={processInput}
+							onStop={composerStop}
+							hasDraft={hasDraft}
 							trailing={
 								// Phone: send moves into the toolbar row (see ToolbarControls'
 								// phone branch) and the notification bell is dropped.
@@ -757,6 +769,8 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 										theme={theme}
 										isTerminalMode={isTerminalMode}
 										processInput={processInput}
+										onStop={composerStop}
+										hasDraft={hasDraft}
 									/>
 								)
 							}

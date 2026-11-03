@@ -62,3 +62,45 @@ export function buildThinkingItems(
 	}
 	return items;
 }
+
+/**
+ * Whether this thinking item is the turn the user is looking at: the active tab
+ * of the active agent. That turn says it is running in its own transcript and
+ * is stopped from the composer's send key, so the pill leaves it out. A legacy
+ * item (no tab) is never on screen: no transcript row can describe it.
+ */
+export function isThinkingItemOnScreen(
+	item: ThinkingItem,
+	activeSessionId: string | undefined,
+	activeTabId: string | undefined
+): boolean {
+	return !!activeTabId && item.session.id === activeSessionId && item.tab?.id === activeTabId;
+}
+
+/**
+ * The one surface that draws Stop. Stop is an agent-level action (it signals
+ * every process the ACTIVE agent has in flight, see `useInterruptHandler`), so
+ * exactly one control may offer it, and only for work it can reach:
+ *  - `composer`: the conversation on screen is running; the send key is Stop.
+ *  - `pill`: another conversation of this agent is running; the thinking pill
+ *    that names it carries Stop.
+ *  - `consults`: nothing of this agent is thinking. Another agent's turn gets no
+ *    Stop (this one cannot reach it); the cross-agent pill carries it for the
+ *    consults this agent fanned out.
+ *  - `none`: an Auto Run owns the pill, and its own Stop ends the run.
+ */
+export type StopPlacement = 'composer' | 'pill' | 'consults' | 'none';
+
+export function resolveStopPlacement(
+	thinkingItems: ThinkingItem[],
+	activeSessionId: string | undefined,
+	activeTabId: string | undefined,
+	autoRunRunning: boolean
+): StopPlacement {
+	if (thinkingItems.some((item) => isThinkingItemOnScreen(item, activeSessionId, activeTabId))) {
+		return 'composer';
+	}
+	if (autoRunRunning) return 'none';
+	if (thinkingItems.some((item) => item.session.id === activeSessionId)) return 'pill';
+	return 'consults';
+}

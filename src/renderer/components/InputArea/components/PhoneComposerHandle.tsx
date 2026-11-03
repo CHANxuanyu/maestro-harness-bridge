@@ -10,7 +10,7 @@ import { useT } from '../../../i18n';
  *
  * The bar carries the two things a collapsed composer must not hide: a pulsing
  * dot while the agent (or Auto Run) is working, since Stop lives in the folded
- * thinking pill, and a pencil when unsent text or staged images are waiting.
+ * composer row, and a pencil when unsent text or staged images are waiting.
  */
 
 import { ChevronDown, ChevronUp, Pencil } from 'lucide-react';

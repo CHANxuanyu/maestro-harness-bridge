@@ -39,11 +39,12 @@ interface CrossAgentResponseIndicatorProps {
 	 */
 	onSessionClick?: (sessionId: string, tabId?: string) => void;
 	/**
-	 * Stop this agent's turn, consults included. Omitted when the thinking pill
-	 * below is already showing its own Stop (the two run the same agent-level
-	 * interrupt, so both on screen is one control drawn twice). Passed in when it
-	 * is NOT - a message that leads with a mention is answered only by the
-	 * consulted agents, so this agent never goes busy and no other Stop exists.
+	 * Stop this agent's turn, consults included. Passed only when
+	 * `resolveStopPlacement` says no other surface draws Stop - a message that
+	 * leads with a mention is answered only by the consulted agents, so this agent
+	 * never goes busy and neither the send key nor the thinking pill offers it.
+	 * Every Stop runs the same agent-level interrupt, so two on screen is one
+	 * control drawn twice.
 	 */
 	onInterrupt?: () => void;
 }

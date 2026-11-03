@@ -6,7 +6,7 @@ import { useT } from '../i18n';
  *
  * When AutoRun is active, shows a special AutoRun pill with total elapsed time instead.
  */
-import { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { GitBranch, Compass } from 'lucide-react';
 import type {
 	Session,
@@ -17,9 +17,10 @@ import type {
 	BackgroundAutoRun,
 } from '../types';
 import { formatTokensCompact } from '../utils/formatters';
-import { autoRunActiveElapsedMs } from '../hooks/batch/useTimeTracking';
-import { formatElapsedTicker } from '../../shared/duration';
 import { StopTurnButton } from './ui/StopTurnButton';
+import { ElapsedTimeDisplay } from './ui/ElapsedTimeDisplay';
+import { isThinkingItemOnScreen } from '../utils/thinkingItems';
+import { conversationDisplayTitle } from '../utils/conversationTitle';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
 import { useBackgroundAutoRuns } from '../hooks/batch/useBackgroundAutoRuns';
 import { useWindowContextOptional } from '../contexts/WindowContext';
@@ -38,89 +39,31 @@ interface ThinkingStatusPillProps {
 	// AutoRun state for the active session - when provided and running, shows AutoRun pill instead
 	autoRunState?: BatchRunState;
 	activeSessionId?: string;
-	// Active AI tab within the active session. When forced-parallel runs two busy tabs in
-	// the same agent, the pill follows this tab so the display matches what Stop interrupts.
+	// Active AI tab within the active session. Its own running turn is left off the pill:
+	// the transcript says it is running and the composer's send key is its Stop.
 	activeTabId?: string;
 	// Callback to stop auto-run (shows stop button in AutoRunPill when provided)
 	onStopAutoRun?: () => void;
-	// Callback to interrupt the current AI session
+	// Callback to interrupt the viewed agent. Passed only when the pill is where Stop is
+	// drawn (`resolveStopPlacement` returned 'pill'); without it the pill draws no Stop.
 	onInterrupt?: () => void;
 }
 
-// ElapsedTimeDisplay - shows time since thinking (or the Auto Run) started.
-// Machine sleep is subtracted: the agent was suspended along with the app, so
-// counting the sleep would report an overnight wake as hours of work. For an
-// Auto Run, pass the tracker fields too: a paused run's clock stops.
-const ElapsedTimeDisplay = memo(
-	({
-		startTime,
-		accumulatedElapsedMs,
-		lastActiveTimestamp,
-		textColor,
-	}: {
-		startTime: number;
-		accumulatedElapsedMs?: number;
-		lastActiveTimestamp?: number;
-		textColor: string;
-	}) => {
-		const measureSeconds = useCallback(
-			() =>
-				Math.floor(
-					autoRunActiveElapsedMs({ startTime, accumulatedElapsedMs, lastActiveTimestamp }) / 1000
-				),
-			[startTime, accumulatedElapsedMs, lastActiveTimestamp]
-		);
-		const [elapsedSeconds, setElapsedSeconds] = useState(measureSeconds);
-
-		useEffect(() => {
-			setElapsedSeconds(measureSeconds());
-			const interval = setInterval(() => {
-				setElapsedSeconds(measureSeconds());
-			}, 1000);
-			return () => clearInterval(interval);
-		}, [measureSeconds]);
-
-		return (
-			// Monospace on purpose, unlike the name slots around it: this counts up
-			// once a second, and proportional digits change width as they tick, so
-			// the pill would twitch on every frame.
-			<span className="font-mono text-xs" style={{ color: textColor }}>
-				{formatElapsedTicker(elapsedSeconds * 1000)}
-			</span>
-		);
-	}
-);
-
-ElapsedTimeDisplay.displayName = 'ElapsedTimeDisplay';
-
-// Helper to get display name for a thinking item (used in pill and dropdown)
-// Priority: 1. namedSessions lookup, 2. tab name, 3. UUID octet
+// Helper to get the conversation's name for a dropdown row: a name the user gave
+// the provider session, else what the conversation is called everywhere else
+// (`conversationDisplayTitle`: the tab name or the first thing the user asked).
+// Never the provider session id: an id in a list of running work reads as an
+// error. `null` when there is nothing to call it yet; the row then shows only
+// the agent.
 function getItemDisplayName(
 	session: Session,
 	tab: AITab | null,
 	namedSessions?: Record<string, string>
-): string {
+): string | null {
 	// Use tab's agentSessionId if available, fallback to session's (legacy)
 	const agentSessionId = tab?.agentSessionId || session.agentSessionId;
-
-	// Priority 1: Named session from namedSessions lookup
-	if (agentSessionId) {
-		const customName = namedSessions?.[agentSessionId];
-		if (customName) return customName;
-	}
-
-	// Priority 2: Tab name if available
-	if (tab?.name) {
-		return tab.name;
-	}
-
-	// Priority 3: UUID octet (first 8 chars uppercase)
-	if (agentSessionId) {
-		return agentSessionId.substring(0, 8).toUpperCase();
-	}
-
-	// Fall back to Maestro session name
-	return session.name;
+	const customName = agentSessionId ? namedSessions?.[agentSessionId] : undefined;
+	return customName || conversationDisplayTitle(tab);
 }
 
 // formatTokensCompact imported from ../utils/formatters
@@ -159,8 +102,12 @@ const ThinkingItemRow = memo(
 					{/* Maestro session name (from left bar) + Tab name */}
 					<span className="text-xs truncate">
 						<span className="font-medium">{maestroName}</span>
-						<span style={{ color: theme.colors.textDim }}> / </span>
-						<span style={{ color: theme.colors.textDim }}>{tabDisplayName}</span>
+						{tabDisplayName && (
+							<>
+								<span style={{ color: theme.colors.textDim }}> / </span>
+								<span style={{ color: theme.colors.textDim }}>{tabDisplayName}</span>
+							</>
+						)}
 					</span>
 				</div>
 				<div
@@ -192,18 +139,15 @@ function getAutoRunTaskCounts(autoRunState: BatchRunState): { completed: number;
 	};
 }
 
-// AutoRun entry inside a "Running Processes" dropdown. When onStop is provided it renders a
-// per-row Stop button - used when AutoRun is demoted from the pill (because the focused tab is
-// busy) so the user can still stop AutoRun without losing it to a navigation-only list.
-// A run on ANOTHER agent passes agentName + onOpen instead: the row names that agent and
-// jumps to it, and carries no Stop (the pill's controls act on the viewed agent only).
+// AutoRun entry inside a "Running Processes" dropdown. The viewed agent's run keeps its Stop on
+// the AutoRun pill itself, so the row carries none. A run on ANOTHER agent passes agentName +
+// onOpen: the row names that agent and jumps to it.
 const AutoRunRow = memo(
 	({
 		theme,
 		completedTasks,
 		totalTasks,
 		isStopping,
-		onStop,
 		agentName,
 		onOpen,
 	}: {
@@ -211,7 +155,6 @@ const AutoRunRow = memo(
 		completedTasks: number;
 		totalTasks: number;
 		isStopping?: boolean;
-		onStop?: () => void;
 		agentName?: string;
 		onOpen?: () => void;
 	}) => {
@@ -258,30 +201,6 @@ const AutoRunRow = memo(
 					<span className="text-xs" style={{ color: theme.colors.textDim }}>
 						{completedTasks}/{totalTasks} {t('workflows.shellStatus.tasks')}
 					</span>
-					{onStop && (
-						<button
-							onClick={() => !isStopping && onStop()}
-							disabled={isStopping}
-							className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium transition-colors ${
-								isStopping ? 'cursor-not-allowed' : 'hover:opacity-80'
-							}`}
-							style={{
-								backgroundColor: isStopping ? theme.colors.warning : theme.colors.error,
-								color: isStopping ? theme.colors.bgMain : 'white',
-								pointerEvents: isStopping ? 'none' : 'auto',
-							}}
-							title={
-								isStopping
-									? t('workflows.shellStatus.stoppingAfterCurrentTask')
-									: t('workflows.shellStatus.stopAutoRunAfterCurrentTask')
-							}
-						>
-							<svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
-								<rect x="6" y="6" width="12" height="12" rx="1" />
-							</svg>
-							{isStopping ? t('workflows.shellStatus.stopping') : t('workflows.shellStatus.stop')}
-						</button>
-					)}
 				</div>
 			</div>
 		);
@@ -638,7 +557,9 @@ AutoRunPill.displayName = 'AutoRunPill';
  * ThinkingStatusPill Inner Component
  * Shows the primary thinking item with an expandable list when multiple tabs are thinking.
  * Each "thinking item" is a (session, tab) pair - one entry per busy tab across all agents.
- * Features: pulsing indicator, session name, bytes/tokens, elapsed time, Claude session UUID.
+ * The conversation on screen is left out (`isThinkingItemOnScreen`): its transcript says it
+ * is running and the composer's send key is its Stop, so the pill is for work elsewhere.
+ * Features: pulsing indicator, agent and conversation name, tokens, elapsed time.
  *
  * When AutoRun is active for the active session, shows AutoRunPill with +N badge for concurrent items.
  */
@@ -691,22 +612,16 @@ function ThinkingStatusPillInner({
 		};
 	}, []);
 
-	// Does the tab the user is currently viewing have its own live request? AutoRun spawns its
-	// agent in isolation and does NOT mark any tab as state='busy' (see
-	// useAgentExecution.spawnAgentForSession), so a matching entry here is a real, separately
-	// interruptible request (e.g. a force-send the user fired while AutoRun runs in the background).
-	const focusedTabBusy = Boolean(
-		activeTabId &&
-		thinkingItems.some(
-			(item) => item.session.id === activeSessionId && item.tab?.id === activeTabId
-		)
+	// The turn on screen is drawn by its own transcript and stopped from the composer, so the
+	// pill lists only work running elsewhere.
+	const listedItems = thinkingItems.filter(
+		(item) => !isThinkingItemOnScreen(item, activeSessionId, activeTabId)
 	);
 
-	// If AutoRun is active for the current session, show the AutoRun pill with concurrent
-	// thinking items badge for parallel operations - UNLESS the focused tab has its own live
-	// request. In that case the pill must describe the focused tab so its Stop button interrupts
-	// what the user is looking at; AutoRun is demoted into the dropdown (with its own Stop) below.
-	if (autoRunState?.isRunning && !focusedTabBusy) {
+	// If AutoRun is active for the current session, show the AutoRun pill with a badge for the
+	// other work running alongside it. A turn the user fired in the tab on screen (force-send)
+	// is not part of that count: its transcript says it is running.
+	if (autoRunState?.isRunning) {
 		return (
 			<AutoRunPill
 				theme={theme}
@@ -717,7 +632,7 @@ function ThinkingStatusPillInner({
 				// Right Panel card and the Auto Run tab keep a disabled Stop that
 				// explains why; this pill is too tight for that copy.
 				onStop={autoRunState.mirrored ? undefined : onStopAutoRun}
-				thinkingItems={thinkingItems}
+				thinkingItems={listedItems}
 				namedSessions={namedSessions}
 				onSessionClick={onSessionClick}
 				backgroundAutoRuns={backgroundAutoRuns}
@@ -726,7 +641,7 @@ function ThinkingStatusPillInner({
 	}
 
 	// thinkingItems is pre-filtered by caller (PERF optimization)
-	if (thinkingItems.length === 0) {
+	if (listedItems.length === 0) {
 		if (backgroundAutoRuns.length === 0) return null;
 		// Nothing is thinking, but another agent is mid Auto Run: show that run,
 		// named, with the rest in the dropdown. No Stop - it is not this agent's run.
@@ -744,27 +659,14 @@ function ThinkingStatusPillInner({
 		);
 	}
 
-	// AutoRun is running but demoted because the focused tab is busy - surface it in the dropdown.
-	const demotedAutoRun = autoRunState?.isRunning ? autoRunState : null;
-
-	// Primary item selection (each layer falls back to the next):
-	//   1. The exact active tab in the active session - when forced-parallel runs two busy
-	//      tabs in the same agent, this keeps the pill (name, elapsed time) describing the
-	//      tab the user is viewing, which is also the tab Stop will interrupt.
-	//   2. Any busy tab in the active session (active tab itself isn't busy).
-	//   3. The first thinking item anywhere.
-	const activeItem =
-		(activeTabId &&
-			thinkingItems.find(
-				(item) => item.session.id === activeSessionId && item.tab?.id === activeTabId
-			)) ||
-		thinkingItems.find((item) => item.session.id === activeSessionId);
-	const primaryItem = activeItem || thinkingItems[0];
-	const additionalItems = thinkingItems.filter((item) => item !== primaryItem);
-	// The dropdown lists every other running process. A demoted AutoRun counts as one entry, so the
-	// +N badge and dropdown appear even when the focused tab is the only thinking item. Auto Runs
-	// on other agents count too: they never mark a tab busy, so they are not thinking items.
-	const extraCount = additionalItems.length + (demotedAutoRun ? 1 : 0) + backgroundAutoRuns.length;
+	// Primary item: a busy tab of the viewed agent first (the one Stop can reach), else the
+	// first item anywhere.
+	const primaryItem =
+		listedItems.find((item) => item.session.id === activeSessionId) || listedItems[0];
+	const additionalItems = listedItems.filter((item) => item !== primaryItem);
+	// The dropdown lists every other running process. Auto Runs on other agents count too: they
+	// never mark a tab busy, so they are not thinking items.
+	const extraCount = additionalItems.length + backgroundAutoRuns.length;
 	const hasMultiple = extraCount > 0;
 
 	const { session: primarySession, tab: primaryTab } = primaryItem;
@@ -778,21 +680,16 @@ function ThinkingStatusPillInner({
 	// Use tab's agentSessionId if available, fallback to session's (legacy)
 	const agentSessionId = primaryTab?.agentSessionId || primarySession.agentSessionId;
 
-	// Priority: 1. namedSessions lookup, 2. tab's name, 3. UUID octet
+	// A name the user gave this provider session, if any (see displayClaudeId below).
 	const customName = agentSessionId ? namedSessions?.[agentSessionId] : undefined;
 	const tabName = primaryTab?.name;
 
-	// The running turn is the conversation the user is looking at: the pill only
-	// has to say that it is working and offer Stop. Naming the agent or the tab
-	// would repeat the header right above it.
-	const primaryOnScreen =
-		primarySession.id === activeSessionId &&
-		(!primaryTab || !activeTabId || primaryTab.id === activeTabId);
-
 	// Display name for the tab slot (to the left of Stop button): a name the user
-	// gave or the tab carries. A bare provider session id is an identifier, not a
-	// name, so it stays in the tooltip instead of on the pill.
-	const displayClaudeId = primaryOnScreen ? null : customName || tabName || null;
+	// gave, else the conversation's title (its name or the first thing the user
+	// asked), so a conversation running elsewhere says which one it is. A bare
+	// provider session id is an identifier, not a name, so it stays in the
+	// tooltip instead of on the pill.
+	const displayClaudeId = customName || conversationDisplayTitle(primaryTab) || null;
 	// The provider actually running this turn (Codex, Claude Code, ...). The pill
 	// used to say "Claude" for every agent's session id.
 	const providerName = getAgentDisplayName(primarySession.toolType);
@@ -826,23 +723,20 @@ function ThinkingStatusPillInner({
 					style={{ backgroundColor: theme.colors.warning }}
 				/>
 
-				{/* Maestro session name - shown only when the running turn is somewhere
-				    else, truncates on narrow widths. Clickable: it jumps to the thinking tab,
-				    same as the tab-name segment. The tab-name segment is the first thing
-				    container queries drop on narrow widths, so the name has to carry the
-				    jump too or the pill loses its only affordance. */}
-				{!primaryOnScreen && (
-					<button
-						onClick={() => onSessionClick?.(primarySession.id, primaryTab?.id)}
-						// Capped as well as truncating: a long agent or conversation name may
-						// not take the bar from the status and the Stop control beside it.
-						className="text-xs font-medium truncate min-w-0 max-w-[14rem] hover:underline cursor-pointer"
-						style={{ color: theme.colors.textMain }}
-						title={t('workflows.shellStatus.jumpToThisTabValue', { p0: fullTooltip })}
-					>
-						{maestroSessionName}
-					</button>
-				)}
+				{/* Maestro session name - truncates on narrow widths. Clickable: it jumps to
+				    the thinking tab, same as the tab-name segment. The tab-name segment is the
+				    first thing container queries drop on narrow widths, so the name has to
+				    carry the jump too or the pill loses its only affordance. */}
+				<button
+					onClick={() => onSessionClick?.(primarySession.id, primaryTab?.id)}
+					// Capped as well as truncating: a long agent or conversation name may
+					// not take the bar from the status and the Stop control beside it.
+					className="text-xs font-medium truncate min-w-0 max-w-[14rem] hover:underline cursor-pointer"
+					style={{ color: theme.colors.textMain }}
+					title={t('workflows.shellStatus.jumpToThisTabValue', { p0: fullTooltip })}
+				>
+					{maestroSessionName}
+				</button>
 
 				{/* Token info / Thinking placeholder - carries its own divider so hiding the
 				    segment on narrow widths (pill-seg-tokens) takes the divider with it */}
@@ -850,9 +744,7 @@ function ThinkingStatusPillInner({
 					className="pill-seg-tokens flex items-center gap-2 shrink-0 text-xs"
 					style={{ color: theme.colors.textDim }}
 				>
-					{!primaryOnScreen && (
-						<div className="w-px h-4" style={{ backgroundColor: theme.colors.border }} />
-					)}
+					<div className="w-px h-4" style={{ backgroundColor: theme.colors.border }} />
 					{primaryTokens > 0 ? (
 						<div className="flex items-center gap-1">
 							<span>{t('workflows.shellStatus.tokens')}</span>
@@ -953,20 +845,11 @@ function ThinkingStatusPillInner({
 									backgroundColor: theme.colors.bgActivity,
 								}}
 							>
-								{demotedAutoRun || backgroundAutoRuns.length > 0
+								{backgroundAutoRuns.length > 0
 									? t('workflows.shellStatus.runningProcesses')
 									: t('workflows.shellStatus.allThinkingSessions')}
 							</div>
-							{demotedAutoRun && (
-								<AutoRunRow
-									theme={theme}
-									completedTasks={getAutoRunTaskCounts(demotedAutoRun).completed}
-									totalTasks={getAutoRunTaskCounts(demotedAutoRun).total}
-									isStopping={demotedAutoRun.isStopping}
-									onStop={demotedAutoRun.mirrored ? undefined : onStopAutoRun}
-								/>
-							)}
-							{thinkingItems.map((item) => (
+							{listedItems.map((item) => (
 								<ThinkingItemRow
 									key={`${item.session.id}-${item.tab?.id ?? 'legacy'}`}
 									item={item}
@@ -1020,9 +903,8 @@ export const ThinkingStatusPill = memo(ThinkingStatusPillInner, (prevProps, next
 			return false;
 		}
 		// Also check concurrent thinking items (shown as +N badge on AutoRun pill).
-		// AutoRun doesn't mark its tab as busy, so every thinkingItem is a concurrent item.
-		// activeTabId / currentCycleTokens matter too: when the focused tab has its own live
-		// request, AutoRun is demoted and the pill renders that tab's primary item live.
+		// AutoRun doesn't mark its tab as busy, so every thinkingItem is a concurrent item,
+		// except the turn on screen, which is left out: the active ids decide which one that is.
 		if (prevProps.activeSessionId !== nextProps.activeSessionId) return false;
 		if (prevProps.activeTabId !== nextProps.activeTabId) return false;
 		const prevConcurrent = prevProps.thinkingItems;
@@ -1045,9 +927,10 @@ export const ThinkingStatusPill = memo(ThinkingStatusPillInner, (prevProps, next
 		return prevProps.theme === nextProps.theme;
 	}
 
-	// Check if active session/tab changed - both affect which item shows as primary.
-	// activeTabId matters when two busy tabs share the active session (forced parallel):
-	// the busy-tab set is identical, so only the active-tab change should re-render the pill.
+	// Check if active session/tab changed - both decide which item is on screen (left out)
+	// and which shows as primary. activeTabId matters when two busy tabs share the active
+	// session (forced parallel): the busy-tab set is identical, so only the active-tab change
+	// should re-render the pill.
 	if (prevProps.activeSessionId !== nextProps.activeSessionId) return false;
 	if (prevProps.activeTabId !== nextProps.activeTabId) return false;
 
@@ -1097,7 +980,9 @@ export const ThinkingStatusPill = memo(ThinkingStatusPillInner, (prevProps, next
 
 	// Note: We intentionally don't compare onInterrupt/onStopAutoRun callbacks
 	// because they may change reference on parent re-renders but are semantically
-	// the same. The component will use the latest callback from props anyway.
+	// the same. The component will use the latest callback from props anyway. Whether
+	// onInterrupt is passed at all decides whether Stop is drawn, so that is compared.
+	if (!!prevProps.onInterrupt !== !!nextProps.onInterrupt) return false;
 
 	return prevProps.theme === nextProps.theme;
 });

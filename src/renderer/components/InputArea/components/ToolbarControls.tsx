@@ -33,6 +33,7 @@ import { addStagedImageIfUnique } from '../utils/stagedImages';
 import { formatTerminalCwd } from '../utils/terminalPath';
 import { ComposerOptionsSheet } from './ComposerOptionsSheet';
 import { ModelEffortPills } from './ModelEffortPills';
+import { StopTurnButton } from '../../ui/StopTurnButton';
 
 interface ToolbarControlsProps {
 	session: Session;
@@ -78,6 +79,13 @@ interface ToolbarControlsProps {
 	 */
 	processInput?: () => void;
 	/**
+	 * Phone only, set while the conversation on screen runs: the send key becomes
+	 * Stop (the desktop passes the same through `trailing`).
+	 */
+	onStop?: () => void;
+	/** Phone only: the composer holds a draft, which a running turn queues. */
+	hasDraft?: boolean;
+	/**
 	 * Desktop only: rendered at the end of this row, inside the input card
 	 * (notification settings and send), so the composer is one card with
 	 * nothing hanging off its right edge.
@@ -119,6 +127,8 @@ export const ToolbarControls = memo(function ToolbarControls({
 	setEffortMenuOpen,
 	effortMenuRef,
 	processInput,
+	onStop,
+	hasDraft = false,
 	trailing,
 }: ToolbarControlsProps) {
 	const t = useT();
@@ -260,6 +270,11 @@ export const ToolbarControls = memo(function ToolbarControls({
 	// here from the column beside the composer so the three controls sit on one
 	// reachable line.
 	if (phone) {
+		const sendLabel = isTerminalMode
+			? t('workflows.shell.runCommand')
+			: onStop
+				? t('workflows.shell.queueMessage')
+				: t('workflows.shell.sendMessage');
 		return (
 			<>
 				<div className="flex min-w-0 items-center gap-1 px-2 pb-2 pt-1">
@@ -310,25 +325,35 @@ export const ToolbarControls = memo(function ToolbarControls({
 					)}
 					{imageFileInput}
 					{/* Send sits in the MIDDLE, between the left actions and the "...", so
-					    it is the one control at the centre of the thumb's arc. */}
-					{processInput && (
-						<button
-							type="button"
-							onClick={() => processInput()}
-							className="mx-auto flex h-9 w-14 items-center justify-center rounded-lg shadow-sm transition-all"
-							style={{
-								backgroundColor: theme.colors.accent,
-								color: theme.colors.accentForeground,
-							}}
-							title={
-								isTerminalMode ? t('workflows.shell.runCommand') : t('workflows.shell.sendMessage')
-							}
-							aria-label={
-								isTerminalMode ? t('workflows.shell.runCommand') : t('workflows.shell.sendMessage')
-							}
-						>
-							<ArrowUp className="w-5 h-5" />
-						</button>
+					    it is the one control at the centre of the thumb's arc. While the
+					    turn on screen runs it is Stop; a draft brings the key back to
+					    queue it, with Stop beside it. */}
+					{(processInput || onStop) && (
+						<div className="mx-auto flex items-center gap-2">
+							{onStop && (
+								<StopTurnButton
+									theme={theme}
+									onClick={onStop}
+									variant="icon"
+									className="h-9 w-14 rounded-lg"
+								/>
+							)}
+							{processInput && (!onStop || hasDraft) && (
+								<button
+									type="button"
+									onClick={() => processInput()}
+									className="flex h-9 w-14 items-center justify-center rounded-lg shadow-sm transition-all"
+									style={{
+										backgroundColor: theme.colors.accent,
+										color: theme.colors.accentForeground,
+									}}
+									title={sendLabel}
+									aria-label={sendLabel}
+								>
+									<ArrowUp className="w-5 h-5" />
+								</button>
+							)}
+						</div>
 					)}
 					<button
 						type="button"

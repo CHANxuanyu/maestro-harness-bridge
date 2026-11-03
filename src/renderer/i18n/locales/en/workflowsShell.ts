@@ -1405,6 +1405,7 @@ export const workflowsShell = {
 	'workflows.transcript.hideToolDetails': 'Hide details for {name}',
 	'workflows.transcript.toolRunOne': '1 tool call',
 	'workflows.transcript.toolRun': '{count} tool calls',
+	'workflows.transcript.turnTokens': '{count} tokens',
 	'workflows.transcript.loadingEarlier': 'Loading earlier messages...',
 	'workflows.transcript.earlierLoadFailed': "Couldn't load earlier messages",
 	'workflows.transcript.conversationStart': 'Beginning of conversation',

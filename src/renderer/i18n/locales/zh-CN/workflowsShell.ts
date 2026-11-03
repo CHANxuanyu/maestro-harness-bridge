@@ -1332,6 +1332,7 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.transcript.hideToolDetails': '收起 {name} 的详情',
 	'workflows.transcript.toolRunOne': '1 次工具调用',
 	'workflows.transcript.toolRun': '{count} 次工具调用',
+	'workflows.transcript.turnTokens': '{count} token',
 	'workflows.transcript.loadingEarlier': '正在加载更早的消息…',
 	'workflows.transcript.earlierLoadFailed': '无法加载更早的消息',
 	'workflows.transcript.conversationStart': '会话开头',

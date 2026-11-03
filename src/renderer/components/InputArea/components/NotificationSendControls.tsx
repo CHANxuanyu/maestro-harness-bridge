@@ -3,17 +3,27 @@ import { memo, useRef, useState } from 'react';
 import { ArrowUp, Bell } from 'lucide-react';
 import type { Theme } from '../../../types';
 import { NotificationPopover } from '../../NotificationPopover';
+import { StopTurnButton } from '../../ui/StopTurnButton';
 
 interface NotificationSendControlsProps {
 	theme: Theme;
 	isTerminalMode: boolean;
 	processInput: () => void;
+	/**
+	 * Set while the conversation on screen runs (`resolveStopPlacement` chose the
+	 * composer): the send key becomes Stop.
+	 */
+	onStop?: () => void;
+	/** The composer holds something to send; while running it is queued. */
+	hasDraft?: boolean;
 }
 
 export const NotificationSendControls = memo(function NotificationSendControls({
 	theme,
 	isTerminalMode,
 	processInput,
+	onStop,
+	hasDraft = false,
 }: NotificationSendControlsProps) {
 	const t = useT();
 	const [notificationPopoverOpen, setNotificationPopoverOpen] = useState(false);
@@ -40,20 +50,29 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 					onClose={() => setNotificationPopoverOpen(false)}
 				/>
 			)}
-			<button
-				type="button"
-				onClick={() => processInput()}
-				className="flex h-8 w-8 items-center justify-center rounded-full shadow-sm transition-all hover:opacity-90 cursor-pointer"
-				style={{
-					backgroundColor: theme.colors.accent,
-					color: theme.colors.accentForeground,
-				}}
-				title={
-					isTerminalMode ? t('workflows.shell.runCommandEnter') : t('workflows.shell.sendMessage')
-				}
-			>
-				<ArrowUp className="w-4 h-4" />
-			</button>
+			{/* While the turn on screen runs the corner key is Stop; once there is a
+			    draft the corner queues it and Stop steps in beside it. */}
+			{onStop && <StopTurnButton theme={theme} onClick={onStop} variant="icon" />}
+			{(!onStop || hasDraft) && (
+				<button
+					type="button"
+					onClick={() => processInput()}
+					className="flex h-8 w-8 items-center justify-center rounded-full shadow-sm transition-all hover:opacity-90 cursor-pointer"
+					style={{
+						backgroundColor: theme.colors.accent,
+						color: theme.colors.accentForeground,
+					}}
+					title={
+						isTerminalMode
+							? t('workflows.shell.runCommandEnter')
+							: onStop
+								? t('workflows.shell.queueMessage')
+								: t('workflows.shell.sendMessage')
+					}
+				>
+					<ArrowUp className="w-4 h-4" />
+				</button>
+			)}
 		</div>
 	);
 });

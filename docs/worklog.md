@@ -7,6 +7,7 @@
 被测对象为 `codex/native-history-coverage` 分支上基于 `13ea76d49` 的本地源码。
 
 - Windows worktree 注册表路径和 common-dir 转成本机格式，精确匹配与托管目录回退复用 canonical 路径比较；共享 normalizer 统一本地盘符大小写，SSH 保留原规则。原 `worktree-history.test.ts` 严格断言保持原样。新增隔离 `path.win32` 的平台无关测试先复现 5 失败 / 1 通过，修复后相关 4 文件 91 条通过。主进程类型检查通过，Windows CI 与 Electron 留待外部执行。
+- worktree E2E 使用显式 `expectRefusal` 发送声明，不消耗场景或生成真实模型工作负载；等待原有错误消息后，真实模式核对 CLI relay 的 invocation 记录未新增或改变。原消息与转录字节断言保留。fixture 全套在允许本地 Unix socket 的环境中 12 文件 49 条通过，随后补充无场景回归。临时 E2E 类型配置包含改动的 spec、fixture 与 renderer 全局声明，CJS 依赖按未声明 JS 模块处理；给原有布局按钮数组补充 Locator 类型后通过。Electron 未启动。
 
 ## 2026-11-03：随包 CLI 产品目录与最终验证
 

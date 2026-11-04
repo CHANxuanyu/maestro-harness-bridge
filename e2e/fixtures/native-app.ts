@@ -332,8 +332,16 @@ export class NativeApp {
 		).reverse())
 			await button.click();
 	}
-	async send(prompt: string) {
-		if (this.real) {
+	async send(prompt: string, options: { expectRefusal?: string | RegExp } = {}) {
+		if (options.expectRefusal && this.real && !this.provider)
+			throw new Error('A refused real send requires a selected provider');
+		const invocation =
+			options.expectRefusal && this.real
+				? path.join(this.providerHome(this.provider!), 'fixture-process')
+				: undefined;
+		const before =
+			invocation && fs.existsSync(invocation) ? fs.readFileSync(invocation, 'utf8') : undefined;
+		if (this.real && !options.expectRefusal) {
 			const scene = this.scenes[this.sceneIndex++];
 			if (!scene) throw new Error('No acceptance workload was defined for this send');
 			fs.writeFileSync(this.control, JSON.stringify({ exitGate: scene.exitGate }));
@@ -345,6 +353,13 @@ export class NativeApp {
 		}
 		await this.input().fill(prompt);
 		await this.input().press('Enter');
+		if (options.expectRefusal) {
+			await expect(this.output().getByText(options.expectRefusal)).toBeVisible();
+			if (invocation)
+				expect(fs.existsSync(invocation) ? fs.readFileSync(invocation, 'utf8') : undefined).toEqual(
+					before
+				);
+		}
 	}
 	async externalTurn(provider: Provider, prompt: string, scene: NativeScene, id?: string) {
 		if (this.real) return realExternalTurn(this, provider, prompt, scene, id);

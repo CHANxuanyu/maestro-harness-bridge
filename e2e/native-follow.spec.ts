@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { Locator } from '@playwright/test';
 import { test, expect, type Provider } from './fixtures/native-app';
 import { createTurn } from './fixtures/native/protocol.cjs';
 
@@ -183,7 +184,7 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 			...(await stats.locator(':scope > span').all()),
 		];
 		const toolbar = native.page.locator('[data-tour="toolbar-toggles"]').locator('..');
-		const buttons = [];
+		const buttons: Locator[] = [];
 		for (const button of await toolbar.getByRole('button').all())
 			if (await button.isVisible()) buttons.push(button);
 		expect(buttons.length).toBeGreaterThanOrEqual(5);
@@ -306,7 +307,9 @@ for (const provider of ['claude', 'codex'] as const) {
 		await expect(
 			native.output().getByText('Worktree transcript answer.', { exact: true })
 		).toBeVisible();
-		await native.send('Continue after archive');
+		await native.send('Continue after archive', {
+			expectRefusal: /Worktree is gone or unavailable/,
+		});
 		await expect(native.output().getByText(/Worktree is gone or unavailable/)).toBeVisible();
 		expect(fs.readFileSync(turn.file)).toEqual(before);
 	});

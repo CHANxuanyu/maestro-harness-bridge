@@ -43,10 +43,11 @@ export async function localProjectWorktrees(
 			let entry: import('../../shared/projectHistory').NativeWorktree | undefined;
 			for (const field of result.stdout.split('\0')) {
 				if (field.startsWith('worktree ')) {
+					const worktreePath = path.normalize(field.slice(9));
 					entry = {
-						path: field.slice(9),
-						name: path.basename(field.slice(9)),
-						commonDir: common.stdout.trim(),
+						path: worktreePath,
+						name: path.basename(worktreePath),
+						commonDir: path.normalize(common.stdout.trim()),
 						isMain: entries.length === 0,
 					};
 					entries.push(entry);
@@ -71,7 +72,11 @@ export async function localProjectWorktree(
 ): Promise<import('../../shared/projectHistory').NativeWorktree | undefined> {
 	const paths = localProjectPathCandidates(cwd);
 	const registered = await localProjectWorktrees(projectPath);
-	const exact = registered.find((entry) => paths.includes(entry.path));
+	const exact = registered.find((entry) =>
+		paths.some(
+			(candidate) => normalizeWorktreePath(candidate) === normalizeWorktreePath(entry.path)
+		)
+	);
 	if (exact) return exact;
 	// Claude desktop removes archived worktrees from Git, sometimes along with
 	// the directory. Their recorded cwd still identifies the owning project.
@@ -85,7 +90,9 @@ export async function localProjectWorktree(
 			if (!name) continue;
 			const worktreePath = path.join(root, name);
 			return (
-				registered.find((entry) => entry.path === worktreePath) ?? {
+				registered.find(
+					(entry) => normalizeWorktreePath(entry.path) === normalizeWorktreePath(worktreePath)
+				) ?? {
 					path: worktreePath,
 					name,
 					missing: !fs.existsSync(worktreePath),

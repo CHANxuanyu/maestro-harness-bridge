@@ -2,6 +2,12 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-04：PR 46 CI 修复
+
+被测对象为 `codex/native-history-coverage` 分支上基于 `13ea76d49` 的本地源码。
+
+- Windows worktree 注册表路径和 common-dir 转成本机格式，精确匹配与托管目录回退复用 canonical 路径比较；共享 normalizer 统一本地盘符大小写，SSH 保留原规则。原 `worktree-history.test.ts` 严格断言保持原样。新增隔离 `path.win32` 的平台无关测试先复现 5 失败 / 1 通过，修复后相关 4 文件 91 条通过。主进程类型检查通过，Windows CI 与 Electron 留待外部执行。
+
 ## 2026-11-03：随包 CLI 产品目录与最终验证
 
 本轮第三部分把 CLI 存储、连接发现、origin、运行标记与忙碌探测收敛到 canonical userDataDir。打包把产品名称和 ID 嵌入 CLI，并生成随包身份 JSON 供独立 Cue 与编译模块读取。桌面启动在身份文件缺失时记录身份，不验证旧设置；身份冲突只警告并调用 captureMessage，身份记录及报告失败都不阻断启动。桌面共享服务信任 Electron 已选定的目录。CLI 保留 MAESTRO_USER_DATA 覆盖，但拒绝其他产品身份和没有 fork 标记的旧设置，损坏设置明确报不能验证。旧 HB 目录凭 uiLanguage 字段识别，未改写旧设置。`settings set` 在应用运行时等待同一 settings:set 接口回执，关闭后写原文件。

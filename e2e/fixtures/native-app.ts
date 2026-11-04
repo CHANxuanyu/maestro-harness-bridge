@@ -68,7 +68,10 @@ export class NativeApp {
 	readonly externalProcesses = new Map<ChildProcess, Promise<unknown>>();
 	private provider?: Provider;
 	readonly control = path.join(this.root, 'control.json');
-	constructor(private info: TestInfo) {
+	constructor(
+		private info: TestInfo,
+		private options: { providerCli?: boolean } = {}
+	) {
 		for (const dir of [
 			this.data,
 			this.project,
@@ -168,7 +171,7 @@ export class NativeApp {
 		return result;
 	}
 	async start(homeDir?: string) {
-		if (this.real && !this.realCli) {
+		if (this.real && this.options.providerCli !== false && !this.realCli) {
 			this.provider = this.info.title.split(' ')[0].replace(':', '') as Provider;
 			this.realCli = this.realCliFor(this.provider);
 		}
@@ -455,11 +458,10 @@ export class NativeApp {
 	}
 }
 
-export const test = base.extend<{ native: NativeApp }>({
-	// Playwright requires the fixture argument to be destructured, even when empty.
-	// eslint-disable-next-line no-empty-pattern
-	native: async ({}, use, info) => {
-		const native = new NativeApp(info);
+export const test = base.extend<{ native: NativeApp; nativeProviderCli: boolean }>({
+	nativeProviderCli: [true, { option: true }],
+	native: async ({ nativeProviderCli }, use, info) => {
+		const native = new NativeApp(info, { providerCli: nativeProviderCli });
 		try {
 			await native.start();
 			await use(native);

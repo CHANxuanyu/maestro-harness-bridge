@@ -3,6 +3,8 @@ import path from 'node:path';
 import { test, expect } from './fixtures/native-app';
 import { launchElectronApp } from './fixtures/electron-app';
 
+test.use({ nativeProviderCli: false });
+
 for (const scenario of ['torn settings', 'no language marker', 'foreign sidecar'] as const) {
 	test(`desktop identity keeps startup available with ${scenario}`, async ({ native }) => {
 		const sidecar = path.join(native.data, 'maestro-product.json');

@@ -8,6 +8,9 @@
 
 - Windows worktree 注册表路径和 common-dir 转成本机格式，精确匹配与托管目录回退复用 canonical 路径比较；共享 normalizer 统一本地盘符大小写，SSH 保留原规则。原 `worktree-history.test.ts` 严格断言保持原样。新增隔离 `path.win32` 的平台无关测试先复现 5 失败 / 1 通过，修复后相关 4 文件 91 条通过。主进程类型检查通过，Windows CI 与 Electron 留待外部执行。
 - worktree E2E 使用显式 `expectRefusal` 发送声明，不消耗场景或生成真实模型工作负载；等待原有错误消息后，真实模式核对 CLI relay 的 invocation 记录未新增或改变。原消息与转录字节断言保留。fixture 全套在允许本地 Unix socket 的环境中 12 文件 49 条通过，随后补充无场景回归。临时 E2E 类型配置包含改动的 spec、fixture 与 renderer 全局声明，CJS 依赖按未声明 JS 模块处理；给原有布局按钮数组补充 Locator 类型后通过。Electron 未启动。
+- 桌面身份 spec 通过 `nativeProviderCli: false` 显式关闭 fixture 启动前的 CLI 解析与凭证准备，重复启动同样有效；既有测试的标题解析默认不变。新增启动单元测试验证 opt-out、默认解析与缓存。最终相关源码 4 文件 91 条、fixture 全套 13 文件 53 条通过，主进程与临时 E2E 类型检查、改动代码 ESLint、Prettier、差异空白及新增长划线检查通过。Playwright 两种模式均收集到原有 5 个目标场景，没有启动 Electron 或执行其断言。
+
+外部待执行 `node scripts/native-e2e-real-smoke.mjs --grep "worktree history stays readable|desktop identity"` 与 `node scripts/native-e2e.mjs --grep "worktree history stays readable|desktop identity"`，随后完整 `npm run test:e2e:real-smoke` 和 `npm run test:e2e`。Windows 原有严格回归仍需 Windows CI 证明。仓库没有 E2E tsconfig，本轮临时配置仅覆盖改动的 E2E 文件和相关导入，未声明 CJS 依赖使用隐式 any；全目录严格类型检查仍有既有错误。
 
 ## 2026-11-03：随包 CLI 产品目录与最终验证
 

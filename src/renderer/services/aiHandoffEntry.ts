@@ -17,12 +17,15 @@ import type { AITab, Session } from '../types';
 /**
  * A handoff carries the tab's text, so a tab with no exchange has nothing to
  * hand over. SSH sources use the already loaded transcript and stay on their
- * own host. A tab whose
+ * own host, so an SSH agent that names no remote is not offered: the handoff
+ * could never reach a host. A tab whose
  * transcript is still deferred (a browser client) does hold a conversation;
  * the service reads it without hydrating the tab.
  */
 export function canHandOffTab(session: Session | undefined, tab: AITab | undefined): boolean {
 	if (!session || !tab) return false;
+	const ssh = session.sessionSshRemoteConfig;
+	if (ssh?.enabled && !ssh.remoteId) return false;
 	if (session.deferredContent?.tabIds.includes(tab.id)) return true;
 	return tab.logs.some(
 		(entry) =>

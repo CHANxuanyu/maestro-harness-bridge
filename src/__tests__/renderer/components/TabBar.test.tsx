@@ -3001,13 +3001,20 @@ describe('TabBar', () => {
 				vi.advanceTimersByTime(450);
 			});
 		};
-		const seed = (ssh = false, tab = talkedTab()) =>
+		const seed = (ssh: false | true | string = false, tab = talkedTab()) =>
 			useSessionStore.setState({
 				sessions: [
 					createMockSession({
 						id: 'agent-1',
 						aiTabs: [tab],
-						...(ssh ? { sessionSshRemoteConfig: { enabled: true } } : {}),
+						...(ssh
+							? {
+									sessionSshRemoteConfig: {
+										enabled: true,
+										remoteId: typeof ssh === 'string' ? ssh : null,
+									},
+								}
+							: {}),
 					} as never),
 				],
 			});
@@ -3035,7 +3042,24 @@ describe('TabBar', () => {
 			});
 		});
 
-		it('is absent for an SSH agent and for a tab with nothing to hand over', () => {
+		it('is offered for an SSH agent with a remote', () => {
+			seed('remote-1');
+			render(
+				<TabBar
+					tabs={[talkedTab()]}
+					activeTabId="tab-1"
+					sessionId="agent-1"
+					theme={mockTheme}
+					onTabSelect={mockOnTabSelect}
+					onTabClose={mockOnTabClose}
+					onNewTab={mockOnNewTab}
+				/>
+			);
+			openMenu();
+			expect(screen.getByText('Continue with another AI…')).toBeInTheDocument();
+		});
+
+		it('is absent for an SSH agent with no remote and for a tab with nothing to hand over', () => {
 			seed(true);
 			const { unmount } = render(
 				<TabBar

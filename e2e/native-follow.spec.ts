@@ -113,7 +113,15 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		native.scriptTurns([
 			{
 				answer: 'Saved work answer.',
-				tools: [{ id: 'history-work', command: 'printf saved-work', output: 'saved-work' }],
+				// A real synopsis answers NOTHING_TO_REPORT for a turn that changes
+				// nothing, so the workload writes a project file it can report.
+				tools: [
+					{
+						id: 'history-work',
+						command: 'printf saved-work | tee saved-work.txt',
+						output: 'saved-work',
+					},
+				],
 				exitGate,
 			},
 			{ answer: 'Unexpected persisted synopsis.' },

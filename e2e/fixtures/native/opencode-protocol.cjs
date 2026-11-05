@@ -11,10 +11,15 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 
+// Readers poll while the fake CLI is still installing the schema in the default
+// rollback journal, and the writer switches to WAL while a reader may be open.
+// Wait out the other side's lock instead of failing on SQLITE_BUSY.
+const BUSY_TIMEOUT_MS = 5000;
+
 // File creation precedes SQLite schema installation. Wait for the three native
 // projection tables read below, rather than treating an empty file as ready.
 function openCodeSchemaReady(file) {
-	const db = new DatabaseSync(file, { readOnly: true });
+	const db = new DatabaseSync(file, { readOnly: true, timeout: BUSY_TIMEOUT_MS });
 	try {
 		return (
 			db
@@ -29,7 +34,7 @@ function openCodeSchemaReady(file) {
 }
 
 function readOpenCodeState(file) {
-	const db = new DatabaseSync(file, { readOnly: true });
+	const db = new DatabaseSync(file, { readOnly: true, timeout: BUSY_TIMEOUT_MS });
 	try {
 		return {
 			sessions: db
@@ -52,7 +57,7 @@ function readOpenCodeState(file) {
 function createOpenCodeTurn({ configDir, cwd, id, prompt, emit = () => {} }) {
 	fs.mkdirSync(configDir, { recursive: true });
 	const file = path.join(configDir, 'opencode.db');
-	const db = new DatabaseSync(file);
+	const db = new DatabaseSync(file, { timeout: BUSY_TIMEOUT_MS });
 	db.exec(`
 		PRAGMA journal_mode = WAL;
 		CREATE TABLE IF NOT EXISTS project (id TEXT PRIMARY KEY, worktree TEXT NOT NULL);

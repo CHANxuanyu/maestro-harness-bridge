@@ -164,7 +164,10 @@ describe('resolveNativeFollowTarget', () => {
 				'SSH remote',
 				() =>
 					setSession(
-						owner({ sessionSshRemoteConfig: { enabled: true, remoteId: 'remote-1' } } as never)
+						owner({
+							toolType: 'claude-code',
+							sessionSshRemoteConfig: { enabled: true, remoteId: 'remote-1' },
+						} as never)
 					),
 			],
 			['no native id', () => setSession(owner({ aiTabs: [codexTab({ agentSessionId: null })] }))],
@@ -537,4 +540,18 @@ describe('useNativeTranscriptFollow', () => {
 		expect(session.aiTabs.find((t) => t.id === 'tab-native')?.inputValue).toBe('half-typed draft');
 		expect(session.executionQueue ?? []).toHaveLength(0);
 	});
+});
+
+it('probes a Codex SSH conversation through its own host and preserves remote identity', async () => {
+	setSession(owner({ sessionSshRemoteConfig: { enabled: true, remoteId: 'remote-1' } } as never));
+	expect(resolveNativeFollowTarget()).toMatchObject({ agentId: 'codex', sshRemoteId: 'remote-1' });
+	renderHook(() => useNativeTranscriptFollow());
+	await settle();
+	expect(getTranscriptRevision).toHaveBeenCalledWith(
+		'codex',
+		'/Users/u/project',
+		NATIVE,
+		{ ownerAgentId: 'owner' },
+		'remote-1'
+	);
 });

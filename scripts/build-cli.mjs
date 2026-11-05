@@ -70,6 +70,10 @@ async function build() {
 			plugins: [rawMdPlugin],
 			define: {
 				__MAESTRO_CLI_VERSION__: JSON.stringify(cliVersion),
+				__MAESTRO_PRODUCT__: JSON.stringify({
+					productName: process.env.MAESTRO_PRODUCT_NAME || pkgJson.build.productName,
+					productId: process.env.MAESTRO_PRODUCT_ID || pkgJson.build.appId,
+				}),
 			},
 		});
 

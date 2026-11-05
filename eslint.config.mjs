@@ -120,5 +120,18 @@ export default tseslint.config(
 				version: 'detect',
 			},
 		},
+	},
+
+	// CommonJS files (the native E2E fixtures) run under Node and load modules
+	// with require(); lint them as CommonJS instead of as browser ES modules.
+	{
+		files: ['**/*.cjs'],
+		languageOptions: {
+			sourceType: 'commonjs',
+			globals: { ...globals.node },
+		},
+		rules: {
+			'@typescript-eslint/no-require-imports': 'off',
+		},
 	}
 );

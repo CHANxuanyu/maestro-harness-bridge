@@ -4,14 +4,13 @@
  * Shared module for the CLI server discovery file, used by both the Electron
  * main process (writes) and the CLI (reads) to locate the running server.
  *
- * NOTE: This file has its own `getConfigDir()` implementation (lowercase "maestro")
- * which matches the electron-store default from package.json `"name": "maestro"`.
- * See cli-activity.ts for the same pattern and rationale.
+ * The canonical user-data resolver keeps storage and server discovery on the
+ * product identity shipped with this CLI.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { resolveUserDataDir } from './userDataDir';
 
 export interface CliServerInfo {
 	port: number;
@@ -36,24 +35,7 @@ export interface CliServerInfo {
 
 // Get the Maestro config directory path (lowercase "maestro")
 function getConfigDir(): string {
-	// Allow overriding the data directory (e.g. for dev mode: maestro-dev).
-	// Matches the override honored by src/cli/services/storage.ts so the CLI's
-	// discovery file lookup tracks the same data directory as its session reads.
-	if (process.env.MAESTRO_USER_DATA) {
-		return path.resolve(process.env.MAESTRO_USER_DATA);
-	}
-
-	const platform = os.platform();
-	const home = os.homedir();
-
-	if (platform === 'darwin') {
-		return path.join(home, 'Library', 'Application Support', 'maestro');
-	} else if (platform === 'win32') {
-		return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'maestro');
-	} else {
-		// Linux and others
-		return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'maestro');
-	}
+	return resolveUserDataDir();
 }
 
 const DISCOVERY_FILE = 'cli-server.json';
@@ -94,8 +76,8 @@ export function writeCliServerInfo(info: CliServerInfo): void {
  * Returns null if the file is missing or invalid
  */
 export function readCliServerInfo(): CliServerInfo | null {
+	const filePath = getDiscoveryFilePath();
 	try {
-		const filePath = getDiscoveryFilePath();
 		const content = fs.readFileSync(filePath, 'utf-8');
 		const data = JSON.parse(content) as CliServerInfo;
 		if (

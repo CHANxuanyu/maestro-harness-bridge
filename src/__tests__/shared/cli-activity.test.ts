@@ -104,7 +104,7 @@ describe('cli-activity', () => {
 						'/Users/testuser',
 						'Library',
 						'Application Support',
-						'maestro',
+						'Maestro',
 						'cli-activity.json'
 					),
 					'utf-8'
@@ -122,7 +122,7 @@ describe('cli-activity', () => {
 				getCliActivityForSession('any-session');
 
 				expect(mockFs.readFileSync).toHaveBeenCalledWith(
-					path.join('C:\\Users\\testuser\\AppData\\Roaming', 'maestro', 'cli-activity.json'),
+					path.join('C:\\Users\\testuser\\AppData\\Roaming', 'Maestro', 'cli-activity.json'),
 					'utf-8'
 				);
 
@@ -138,7 +138,7 @@ describe('cli-activity', () => {
 				getCliActivityForSession('any-session');
 
 				expect(mockFs.readFileSync).toHaveBeenCalledWith(
-					path.join('C:\\Users\\testuser', 'AppData', 'Roaming', 'maestro', 'cli-activity.json'),
+					path.join('C:\\Users\\testuser', 'AppData', 'Roaming', 'Maestro', 'cli-activity.json'),
 					'utf-8'
 				);
 
@@ -156,7 +156,7 @@ describe('cli-activity', () => {
 				getCliActivityForSession('any-session');
 
 				expect(mockFs.readFileSync).toHaveBeenCalledWith(
-					path.join('/home/testuser/.custom-config', 'maestro', 'cli-activity.json'),
+					path.join('/home/testuser/.custom-config', 'Maestro', 'cli-activity.json'),
 					'utf-8'
 				);
 
@@ -172,7 +172,7 @@ describe('cli-activity', () => {
 				getCliActivityForSession('any-session');
 
 				expect(mockFs.readFileSync).toHaveBeenCalledWith(
-					path.join('/home/testuser', '.config', 'maestro', 'cli-activity.json'),
+					path.join('/home/testuser', '.config', 'Maestro', 'cli-activity.json'),
 					'utf-8'
 				);
 
@@ -190,7 +190,7 @@ describe('cli-activity', () => {
 				getCliActivityForSession('any-session');
 
 				expect(mockFs.readFileSync).toHaveBeenCalledWith(
-					path.join('/home/testuser', '.config', 'maestro', 'cli-activity.json'),
+					path.join('/home/testuser', '.config', 'Maestro', 'cli-activity.json'),
 					'utf-8'
 				);
 

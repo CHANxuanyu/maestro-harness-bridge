@@ -7,7 +7,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { resolveUserDataDir } from '../../shared/userDataDir';
+import { resolveSyncDir } from '../../shared/syncPath';
 import { isSessionBusyWithCli, getCliActivityForSession } from '../../shared/cli-activity';
 import { formatWarning, formatInfo } from '../output/formatter';
 import { humanizeDuration } from '../../shared/duration';
@@ -20,28 +21,11 @@ export interface BusyCheckResult {
 /**
  * Check if the desktop app has the session in a busy state.
  *
- * NOTE: This reads the desktop app's lowercase "maestro" config directory (the
- * electron-store default from package.json "name": "maestro"), which is
- * intentionally different from cli/services/storage.ts using "Maestro"
- * (capitalized) for CLI-specific storage. We need the desktop's session state,
- * not CLI storage.
+ * Reads the same product and synced-store directory as desktop storage.
  */
 export function isSessionBusyInDesktop(sessionId: string): BusyCheckResult {
 	try {
-		const platform = os.platform();
-		const home = os.homedir();
-		let configDir: string;
-
-		if (platform === 'darwin') {
-			configDir = path.join(home, 'Library', 'Application Support', 'maestro');
-		} else if (platform === 'win32') {
-			configDir = path.join(
-				process.env.APPDATA || path.join(home, 'AppData', 'Roaming'),
-				'maestro'
-			);
-		} else {
-			configDir = path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'maestro');
-		}
+		const configDir = resolveSyncDir(resolveUserDataDir());
 
 		const sessionsPath = path.join(configDir, 'maestro-sessions.json');
 		const content = fs.readFileSync(sessionsPath, 'utf-8');

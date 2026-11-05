@@ -15,7 +15,11 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
 import fsSync from 'fs';
-import { localProjectPathCandidates } from './local-project-paths';
+import {
+	localProjectPathCandidates,
+	localProjectWorktrees,
+	localProjectWorktree,
+} from './local-project-paths';
 import Store from 'electron-store';
 import { logger } from '../utils/logger';
 import { captureException } from '../utils/sentry';
@@ -123,6 +127,18 @@ function parseSessionContent(
 		let timestamp = new Date(stats.mtimeMs).toISOString();
 
 		const messageCount = countClaudeTranscriptMessages(content);
+		let recordedCwd: string | undefined;
+		for (const line of lines) {
+			try {
+				const entry = JSON.parse(line);
+				if (typeof entry.cwd === 'string' && entry.cwd) {
+					recordedCwd = entry.cwd;
+					break;
+				}
+			} catch {
+				/* Incomplete row. */
+			}
+		}
 
 		// Extract first meaningful message content
 		// Prefer first assistant response as preview (more meaningful than system context)
@@ -206,7 +222,7 @@ function parseSessionContent(
 
 		return {
 			sessionId,
-			projectPath,
+			projectPath: recordedCwd || projectPath,
 			timestamp,
 			sessionName: nativeTitle,
 			nativeTitle,
@@ -619,6 +635,17 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 					// Try the other spelling within the same selected account.
 				}
 			}
+			for (const dir of await this.getProjectHistoryDirs(projectPath, account)) {
+				const candidate = path.join(dir, `${sessionId}.jsonl`);
+				try {
+					const stats = await fs.stat(candidate);
+					const session = await parseSessionFile(candidate, sessionId, '', stats);
+					if (session && (await localProjectWorktree(projectPath, session.projectPath)))
+						return candidate;
+				} catch {
+					/* Try the next worktree candidate within this account. */
+				}
+			}
 			return null;
 		};
 		const selected = await locate(configDir);
@@ -655,6 +682,36 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 				)
 			),
 		];
+	}
+
+	private async getProjectHistoryDirs(projectPath: string, configDir?: string): Promise<string[]> {
+		const paths = [
+			projectPath,
+			...(await localProjectWorktrees(projectPath)).map((entry) => entry.path),
+		];
+		const dirs = paths.flatMap((cwd) => this.getEncodedProjectDirs(cwd, configDir));
+		const projectsDir = this.getProjectsDir(configDir);
+		try {
+			// Encoding only narrows the scan. listSessions confirms membership from
+			// each transcript's cwd, including archived, unregistered worktrees.
+			const prefixes = localProjectPathCandidates(projectPath).map(
+				(candidate) => `${encodeClaudeProjectPath(path.join(candidate, '.claude', 'worktrees'))}-`
+			);
+			for (const name of await fs.readdir(projectsDir)) {
+				if (prefixes.some((prefix) => name.startsWith(prefix)))
+					dirs.push(path.join(projectsDir, name));
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+				logger.warn(`Cannot enumerate Claude worktree history: ${projectsDir}`, LOG_CONTEXT, {
+					error,
+				});
+				if (!isExpectedSessionReadError(error))
+					captureException(error, { operation: 'claudeStorage:getProjectHistoryDirs' });
+				throw error;
+			}
+		}
+		return [...new Set(dirs)];
 	}
 
 	/**
@@ -798,10 +855,20 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 				const file = byPath.get(ref.key);
 				if (!file) return null;
 				try {
-					return await parseSessionFile(file.filePath, file.sessionId, projectPath, {
-						size: file.sizeBytes,
-						mtimeMs: file.mtimeMs,
-					});
+					return await parseSessionFile(
+						file.filePath,
+						file.sessionId,
+						localProjectPathCandidates(projectPath).some(
+							(candidate) =>
+								encodeClaudeProjectPath(candidate) === path.basename(path.dirname(file.filePath))
+						)
+							? projectPath
+							: '',
+						{
+							size: file.sizeBytes,
+							mtimeMs: file.mtimeMs,
+						}
+					);
 				} catch (error) {
 					// Outer half of the same boundary `parseSessionFile` guards: the file
 					// can vanish or become unreadable between the stat and the read.
@@ -841,7 +908,7 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			return this.listSessionsRemote(projectPath, sshConfig, configDir);
 		}
 
-		const projectDirs = this.getEncodedProjectDirs(projectPath, configDir);
+		const projectDirs = await this.getProjectHistoryDirs(projectPath, configDir);
 		const projectDir = projectDirs.join('\0');
 		const files = await this.statProjectSessionFiles(projectDirs);
 
@@ -865,7 +932,13 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			`Found ${sessionsWithOrigins.length} Claude sessions for project: ${projectPath}`,
 			LOG_CONTEXT
 		);
-		return sessionsWithOrigins;
+		const confirmed: AgentSessionInfo[] = [];
+		for (const session of sessionsWithOrigins) {
+			const worktree = await localProjectWorktree(projectPath, session.projectPath);
+			if (localProjectPathCandidates(projectPath).includes(session.projectPath) || worktree)
+				confirmed.push({ ...session, ...(worktree && !worktree.isMain ? { worktree } : {}) });
+		}
+		return confirmed;
 	}
 
 	/**
@@ -944,8 +1017,15 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			return this.listSessionsPaginatedRemote(projectPath, options, sshConfig);
 		}
 
-		const { cursor, limit = 100, configDir } = options || {};
-		const projectDirs = this.getEncodedProjectDirs(projectPath, configDir);
+		const projectDirs = await this.getProjectHistoryDirs(projectPath, options?.configDir);
+		const ownDirs = this.getEncodedProjectDirs(projectPath, options?.configDir);
+		if (projectDirs.some((dir) => !ownDirs.includes(dir))) {
+			return BaseSessionStorage.paginateSessions(
+				await this.listSessions(projectPath, undefined, options?.configDir),
+				options
+			);
+		}
+		const { cursor, limit = 100 } = options || {};
 		const projectDir = projectDirs.join('\0');
 		const sortedFiles = await this.statProjectSessionFiles(projectDirs);
 		const totalCount = sortedFiles.length;

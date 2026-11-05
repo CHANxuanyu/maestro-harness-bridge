@@ -1,3 +1,13 @@
+/** A native conversation's recorded Git worktree. */
+export interface NativeWorktree {
+	path: string;
+	name?: string;
+	branch?: string;
+	commonDir?: string;
+	isMain?: boolean;
+	missing?: boolean;
+}
+
 /** Native conversations visible under the user's existing project groups. */
 export interface ProjectHistoryScope {
 	projectKey: string;
@@ -12,6 +22,7 @@ export interface ProjectHistoryConversation {
 	key: string;
 	projectKey: string;
 	projectPath: string;
+	worktree?: NativeWorktree;
 	provider: string;
 	nativeSessionId: string;
 	title: string;

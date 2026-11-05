@@ -1,6 +1,8 @@
 // Set a single setting value
 // Supports dot-notation, auto type coercion, --raw for explicit JSON
 
+import { isCliServerRunning } from '../../shared/cli-server-discovery';
+import { invokeNativeHistory } from '../services/agent-sessions';
 import { readSettingValue, writeSettingValue } from '../services/storage';
 import { formatSuccess, formatError, formatWarning } from '../output/formatter';
 import { emitJsonl } from '../output/jsonl';
@@ -42,7 +44,11 @@ function parseValue(input: string): unknown {
 	return input;
 }
 
-export function settingsSet(key: string, value: string, options: SettingsSetOptions): void {
+export function settingsSet(
+	key: string,
+	value: string,
+	options: SettingsSetOptions
+): void | Promise<void> {
 	try {
 		const oldValue = readSettingValue(key);
 		const topKey = key.split('.')[0];
@@ -65,18 +71,33 @@ export function settingsSet(key: string, value: string, options: SettingsSetOpti
 			parsedValue = parseValue(value);
 		}
 
-		writeSettingValue(key, parsedValue);
-
-		if (options.json) {
-			emitJsonl({
-				type: 'setting_set',
-				key,
-				oldValue,
-				newValue: parsedValue,
-			});
-		} else {
-			console.log(formatSuccess(`${key} = ${JSON.stringify(parsedValue)}`));
+		const report = () => {
+			if (options.json) {
+				emitJsonl({
+					type: 'setting_set',
+					key,
+					oldValue,
+					newValue: parsedValue,
+				});
+			} else {
+				console.log(formatSuccess(`${key} = ${JSON.stringify(parsedValue)}`));
+			}
+		};
+		if (isCliServerRunning()) {
+			return invokeNativeHistory<boolean>('settings:set', [key, parsedValue])
+				.then((applied) => {
+					if (!applied) throw new Error('The running app could not apply the setting');
+					report();
+				})
+				.catch((error: unknown) => {
+					const message = error instanceof Error ? error.message : String(error);
+					if (options.json) console.error(JSON.stringify({ error: message }));
+					else console.error(formatError(`Failed to set "${key}": ${message}`));
+					process.exit(1);
+				});
 		}
+		writeSettingValue(key, parsedValue);
+		report();
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		if (options.json) {

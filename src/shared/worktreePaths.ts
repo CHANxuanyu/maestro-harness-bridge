@@ -7,7 +7,10 @@ export function normalizeWorktreePath(path: string, posix = false): string {
 	// SSH paths preserve literal backslashes. Local UNC paths retain their
 	// semantic double separator; ordinary redundant separators collapse.
 	const hasUncPrefix = !posix && /^[\\/]{2}[^\\/]/.test(path);
-	const separated = posix ? path : path.replace(/\\/g, '/');
+	// Windows drive letters share one spelling for local comparisons.
+	const separated = posix
+		? path
+		: path.replace(/\\/g, '/').replace(/^[a-z]:/, (drive) => drive.toUpperCase());
 	const collapsed = separated.replace(/\/+/g, '/');
 	const normalized = hasUncPrefix ? `/${collapsed}` : collapsed;
 	if (normalized === '/' || (!posix && /^[A-Za-z]:\/$/.test(normalized))) return normalized;

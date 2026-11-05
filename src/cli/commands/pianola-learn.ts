@@ -1,3 +1,8 @@
+import {
+	isCodexRollout,
+	preferPlainCodexRollouts,
+	readCodexRolloutSync,
+} from '../../shared/codexRollout';
 /**
  * Pianola learn CLI command.
  *
@@ -75,7 +80,11 @@ function readTranscriptLines(file: string): string[] | null {
 	try {
 		const stat = fs.statSync(file);
 		if (stat.size > LEARN_MAX_FILE_BYTES) return null;
-		return fs.readFileSync(file, 'utf-8').split('\n');
+		return (
+			file.endsWith('.jsonl.zst')
+				? readCodexRolloutSync(file, LEARN_MAX_FILE_BYTES)
+				: fs.readFileSync(file, 'utf-8')
+		).split('\n');
 	} catch {
 		return null;
 	}
@@ -85,7 +94,7 @@ function readTranscriptLines(file: string): string[] | null {
 function minePairsFromFile(agent: TranscriptAgent, file: string): DecisionPair[] {
 	const lines = readTranscriptLines(file);
 	if (!lines) return [];
-	const sessionId = path.basename(file, '.jsonl');
+	const sessionId = path.basename(file).replace(/\.jsonl(?:\.zst)?$/, '');
 	const messages: PianolaMessage[] = [];
 	let projectPath: string | undefined;
 	for (const line of lines) {
@@ -157,10 +166,13 @@ export function pianolaLearn(options: PianolaLearnOptions): void {
 				? path.join(home, '.claude', 'projects')
 				: path.join(home, '.codex', 'sessions');
 		const match =
-			agent === 'claude-code'
-				? (n: string): boolean => n.endsWith('.jsonl')
-				: (n: string): boolean => /^rollout-.*\.jsonl$/i.test(n);
-		const files = collectTranscriptFiles(dir, match)
+			agent === 'claude-code' ? (n: string): boolean => n.endsWith('.jsonl') : isCodexRollout;
+		const collected = collectTranscriptFiles(dir, match);
+		const files = (
+			agent === 'codex'
+				? preferPlainCodexRollouts(collected, (file) => path.basename(file.path))
+				: collected
+		)
 			.filter((f) => f.mtime >= sinceMs)
 			.sort((a, b) => b.mtime - a.mtime)
 			.slice(0, sessionLimit);

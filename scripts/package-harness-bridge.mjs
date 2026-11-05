@@ -15,8 +15,11 @@ const hash = execFileSync('git', ['rev-parse', '--short=8', 'HEAD'], {
 	cwd: root,
 	encoding: 'utf8',
 }).trim();
+const product = { productName: 'Maestro I18n', productId: 'com.maestro.i18n.local' };
 const env = {
 	...process.env,
+	MAESTRO_PRODUCT_NAME: product.productName,
+	MAESTRO_PRODUCT_ID: product.productId,
 	VITE_APP_VERSION: `${pkg.version} ${hash} (preview)`,
 	VITE_COMMIT_HASH: hash,
 	MAESTRO_SENTRY_DSN: '',
@@ -29,16 +32,17 @@ writeFileSync(
 	"process.env.MAESTRO_SKIP_PROTOCOL_REGISTRATION = '1';\nrequire('./index.js');\n"
 );
 const config = structuredClone(pkg.build);
-config.appId = 'com.maestro.i18n.local';
-config.productName = 'Maestro I18n';
+config.appId = product.productId;
+config.productName = product.productName;
 config.protocols = [];
 config.publish = null;
 config.directories.output = 'release/harness-bridge';
 config.extraMetadata = {
 	name: 'maestro-i18n',
-	productName: 'Maestro I18n',
+	productName: product.productName,
 	main: 'dist/main/harness-bridge-entry.cjs',
 };
+config.mac.extraResources.push({ from: 'dist/maestro-product.json', to: 'maestro-product.json' });
 config.mac.identity = '-';
 config.mac.notarize = false;
 config.mac.target = ['zip'];

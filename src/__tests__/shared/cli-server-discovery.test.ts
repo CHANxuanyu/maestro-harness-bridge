@@ -106,7 +106,7 @@ describe('cli-server-discovery', () => {
 					'/Users/testuser',
 					'Library',
 					'Application Support',
-					'maestro',
+					'Maestro',
 					'cli-server.json'
 				),
 				'utf-8'
@@ -123,7 +123,7 @@ describe('cli-server-discovery', () => {
 				readCliServerInfo();
 
 				expect(mockFs.readFileSync).toHaveBeenCalledWith(
-					path.join('C:\\Users\\testuser\\AppData\\Roaming', 'maestro', 'cli-server.json'),
+					path.join('C:\\Users\\testuser\\AppData\\Roaming', 'Maestro', 'cli-server.json'),
 					'utf-8'
 				);
 			} finally {
@@ -145,7 +145,7 @@ describe('cli-server-discovery', () => {
 				readCliServerInfo();
 
 				expect(mockFs.readFileSync).toHaveBeenCalledWith(
-					path.join('C:\\Users\\testuser', 'AppData', 'Roaming', 'maestro', 'cli-server.json'),
+					path.join('C:\\Users\\testuser', 'AppData', 'Roaming', 'Maestro', 'cli-server.json'),
 					'utf-8'
 				);
 			} finally {
@@ -167,7 +167,7 @@ describe('cli-server-discovery', () => {
 				readCliServerInfo();
 
 				expect(mockFs.readFileSync).toHaveBeenCalledWith(
-					path.join('/home/testuser/.custom-config', 'maestro', 'cli-server.json'),
+					path.join('/home/testuser/.custom-config', 'Maestro', 'cli-server.json'),
 					'utf-8'
 				);
 			} finally {
@@ -189,7 +189,7 @@ describe('cli-server-discovery', () => {
 				readCliServerInfo();
 
 				expect(mockFs.readFileSync).toHaveBeenCalledWith(
-					path.join('/home/testuser', '.config', 'maestro', 'cli-server.json'),
+					path.join('/home/testuser', '.config', 'Maestro', 'cli-server.json'),
 					'utf-8'
 				);
 			} finally {
@@ -256,7 +256,7 @@ describe('cli-server-discovery', () => {
 		it('should write the file with correct content via atomic rename', () => {
 			writeCliServerInfo(sampleInfo);
 
-			const expectedDir = path.join('/Users/testuser', 'Library', 'Application Support', 'maestro');
+			const expectedDir = path.join('/Users/testuser', 'Library', 'Application Support', 'Maestro');
 			const expectedFile = path.join(expectedDir, 'cli-server.json');
 			const expectedTmp = expectedFile + '.tmp';
 
@@ -278,7 +278,7 @@ describe('cli-server-discovery', () => {
 					'/Users/testuser',
 					'Library',
 					'Application Support',
-					'maestro',
+					'Maestro',
 					'cli-server.json'
 				) + '.tmp';
 			expect(mockFs.chmodSync).toHaveBeenCalledWith(expectedTmp, 0o600);
@@ -293,7 +293,7 @@ describe('cli-server-discovery', () => {
 			writeCliServerInfo(sampleInfo);
 
 			expect(mockFs.mkdirSync).toHaveBeenCalledWith(
-				path.join('/Users/testuser', 'Library', 'Application Support', 'maestro'),
+				path.join('/Users/testuser', 'Library', 'Application Support', 'Maestro'),
 				{ recursive: true }
 			);
 		});
@@ -397,7 +397,7 @@ describe('cli-server-discovery', () => {
 				'/Users/testuser',
 				'Library',
 				'Application Support',
-				'maestro',
+				'Maestro',
 				'cli-server.json'
 			);
 			expect(mockFs.unlinkSync).toHaveBeenCalledWith(expectedFile);

@@ -804,6 +804,56 @@ describe('agentSessions:getGlobalStats discovery', () => {
 		);
 	});
 
+	it.each([false, true])(
+		'counts compressed Codex stats, preserves archived totals and prefers plain=%s',
+		async (withPlain) => {
+			const { zstdCompressSync } = await import('node:zlib');
+			const dir = path.join(home, '.codex', 'sessions', '2026', '11', '03');
+			await realFs.mkdir(dir, { recursive: true });
+			const name = 'rollout-2026-11-03T00-00-00-11111111-2222-4333-8444-555555555555';
+			const transcript = (input: number) =>
+				JSON.stringify({
+					type: 'event_msg',
+					payload: {
+						type: 'token_count',
+						info: { total_token_usage: { input_tokens: input, output_tokens: 2 } },
+					},
+				}) + '\n';
+			await realFs.writeFile(path.join(dir, name + '.jsonl.zst'), zstdCompressSync(transcript(10)));
+			if (withPlain) await realFs.writeFile(path.join(dir, name + '.jsonl'), transcript(20));
+			const entry = (inputTokens: number, archived: boolean) => ({
+				messages: 0,
+				inputTokens,
+				outputTokens: 0,
+				cacheReadTokens: 0,
+				cacheCreationTokens: 0,
+				cachedInputTokens: 0,
+				sizeBytes: 1,
+				fileMtimeMs: Date.now() + 60000,
+				archived,
+			});
+			vi.mocked(loadGlobalStatsCache).mockResolvedValueOnce({
+				version: GLOBAL_STATS_CACHE_VERSION - 1,
+				lastUpdated: 0,
+				providers: {
+					codex: {
+						sessions: { [`2026/11/03/${name}`]: entry(999, false), archived: entry(7, true) },
+					},
+				},
+			});
+			const stats = (await getGlobalStats()) as unknown as {
+				totalInputTokens: number;
+				totalSessions: number;
+			};
+			expect(stats.totalSessions).toBe(2);
+			expect(stats.totalInputTokens).toBe((withPlain ? 20 : 10) + 7);
+			expect(
+				vi.mocked(saveGlobalStatsCache).mock.calls.at(-1)?.[0].providers.codex.sessions.archived
+					.inputTokens
+			).toBe(7);
+		}
+	);
+
 	it('upgrades a cache from an older Claude parser: re-parses live sessions, rescales archived ones', async () => {
 		const projects = path.join(home, '.claude', 'projects', '-Users-a');
 		await realFs.mkdir(projects, { recursive: true });

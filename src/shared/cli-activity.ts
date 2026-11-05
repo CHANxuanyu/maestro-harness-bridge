@@ -4,23 +4,12 @@
  * Shared module for tracking when CLI is actively running tasks on a session.
  * Used to sync state between CLI and desktop app.
  *
- * NOTE: This file has its own `getConfigDir()` implementation (lowercase "maestro")
- * which matches the electron-store default from package.json `"name": "maestro"`.
- * The CLI storage.ts uses "Maestro" (capitalized) which is inconsistent.
- * This module uses lowercase to be consistent with the Electron app.
- *
- * Duplicated implementations:
- * - cli/services/storage.ts → getConfigDir() uses "Maestro" (capitalized)
- * - main/group-chat/group-chat-storage.ts → getConfigDir() uses electron-store
- * - shared/cli-activity.ts → getConfigDir() uses "maestro" (lowercase)
- *
- * These are kept separate to avoid cross-module dependencies and maintain
- * compatibility with existing data directories.
+ * Storage and discovery use the canonical packaged product data directory.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { resolveUserDataDir } from './userDataDir';
 
 interface CliActivityStatus {
 	sessionId: string;
@@ -38,17 +27,7 @@ interface CliActivityFile {
 
 // Get the Maestro config directory path
 function getConfigDir(): string {
-	const platform = os.platform();
-	const home = os.homedir();
-
-	if (platform === 'darwin') {
-		return path.join(home, 'Library', 'Application Support', 'maestro');
-	} else if (platform === 'win32') {
-		return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'maestro');
-	} else {
-		// Linux and others
-		return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'maestro');
-	}
+	return resolveUserDataDir();
 }
 
 const ACTIVITY_FILE = 'cli-activity.json';

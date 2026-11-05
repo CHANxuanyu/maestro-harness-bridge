@@ -12,6 +12,9 @@ export const workflowsShell = {
 	'workflows.conversations.openFailed': "Couldn't open this conversation",
 	'workflows.conversations.refreshFailed': "Couldn't load newer messages; showing the saved copy",
 	'workflows.conversations.retry': 'Retry',
+	'workflows.conversations.worktree': 'Ran in worktree {path}',
+	'workflows.conversations.worktreeGone':
+		'This worktree no longer exists, so the conversation is read-only',
 	'workflows.conversations.showMore': 'Show {count} more',
 	'workflows.conversations.loadingHistory': 'Loading conversation history...',
 	'workflows.conversations.refreshingHistory': 'Refreshing conversation history',

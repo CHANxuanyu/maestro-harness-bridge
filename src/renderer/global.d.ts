@@ -1982,7 +1982,7 @@ interface MaestroAPI {
 		}>;
 		/**
 		 * Opaque stat revision of an existing LOCAL transcript in the exact account
-		 * pool, or null when unavailable, unsupported, missing or remote (never a
+		 * pool, or null when unavailable, unsupported or missing (never a
 		 * success). Stat-only while unchanged; never creates or restores a file.
 		 * Optional: older preloads and the web-desktop bridge do not expose it.
 		 */

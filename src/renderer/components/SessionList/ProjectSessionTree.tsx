@@ -33,6 +33,7 @@ import {
 	AlertCircle,
 	ChevronDown,
 	ChevronRight,
+	GitBranch,
 	Loader2,
 	MoreHorizontal,
 	Pencil,
@@ -385,6 +386,7 @@ const ConversationRow = memo(function ConversationRow({
 	openMenu,
 }: ConversationRowProps) {
 	const title = conversationTitle(conversation, t);
+	const worktree = conversation.history?.worktree;
 	const isOpen = conversation.kind === 'open';
 	const indent = 4 + depth * DEPTH_INDENT + 16;
 
@@ -449,6 +451,28 @@ const ConversationRow = memo(function ConversationRow({
 					>
 						{title}
 					</span>
+					{worktree && (
+						// Where the conversation ran, kept quieter than its title: the
+						// folder name is short, the branch and full path wait in the hover.
+						<span
+							data-worktree
+							className="shrink min-w-0 max-w-[7rem] flex items-center gap-0.5 text-2xs"
+							style={{
+								color: theme.colors.textDim,
+								opacity: worktree.missing ? 0.6 : undefined,
+							}}
+							title={[
+								t('workflows.conversations.worktree', { path: worktree.path }),
+								worktree.branch,
+								worktree.missing ? t('workflows.conversations.worktreeGone') : undefined,
+							]
+								.filter(Boolean)
+								.join('\n')}
+						>
+							<GitBranch aria-hidden className="w-3 h-3 shrink-0" />
+							<span className="truncate">{worktree.name || worktree.branch}</span>
+						</span>
+					)}
 					{conversation.starred && (
 						<Star
 							aria-hidden

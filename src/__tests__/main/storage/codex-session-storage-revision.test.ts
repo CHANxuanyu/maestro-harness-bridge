@@ -10,7 +10,7 @@ vi.mock('../../../main/utils/logger', () => ({
 vi.mock('../../../main/utils/sentry', () => ({ captureException: vi.fn() }));
 vi.mock('../../../main/utils/remote-fs', () => ({
 	readFileRemote: vi.fn(),
-	readDirRemote: vi.fn(),
+	readDirRemote: vi.fn().mockResolvedValue({ success: true, data: [] }),
 	statRemote: vi.fn(),
 }));
 import { CodexSessionStorage } from '../../../main/storage/codex-session-storage';
@@ -101,7 +101,7 @@ describe('Codex read-only transcript revision', () => {
 	it('matches filenames before reading unrelated history during an actual refresh', async () => {
 		const file = await transcript('a', JSON.stringify({ type: 'session_meta', payload: { id } }));
 		await fs.writeFile(path.join(path.dirname(file), 'aaa-legacy.jsonl'), 'unrelated');
-		const contents = vi.spyOn(fs, 'readFile');
+		const contents = vi.spyOn(fs, 'open');
 		await storage.readSessionMessages('/project', id, { configDir: path.join(root, 'a') });
 		expect(contents.mock.calls.map((call) => call[0])).toEqual([file]);
 	});

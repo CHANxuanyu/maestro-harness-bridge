@@ -68,7 +68,10 @@ export class NativeApp {
 	readonly externalProcesses = new Map<ChildProcess, Promise<unknown>>();
 	private provider?: Provider;
 	readonly control = path.join(this.root, 'control.json');
-	constructor(private info: TestInfo) {
+	constructor(
+		private info: TestInfo,
+		private options: { providerCli?: boolean } = {}
+	) {
 		for (const dir of [
 			this.data,
 			this.project,
@@ -80,6 +83,12 @@ export class NativeApp {
 			this.copilot,
 		])
 			fs.mkdirSync(dir, { recursive: true });
+		const productFile = path.resolve('dist/maestro-product.json');
+		const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
+		const product = fs.existsSync(productFile)
+			? JSON.parse(fs.readFileSync(productFile, 'utf8'))
+			: { productName: pkg.build.productName, productId: pkg.build.appId };
+		fs.writeFileSync(path.join(this.data, 'maestro-product.json'), JSON.stringify(product));
 		fs.writeFileSync(
 			path.join(this.data, 'maestro-settings.json'),
 			JSON.stringify({
@@ -162,7 +171,7 @@ export class NativeApp {
 		return result;
 	}
 	async start(homeDir?: string) {
-		if (this.real && !this.realCli) {
+		if (this.real && this.options.providerCli !== false && !this.realCli) {
 			this.provider = this.info.title.split(' ')[0].replace(':', '') as Provider;
 			this.realCli = this.realCliFor(this.provider);
 		}
@@ -326,8 +335,16 @@ export class NativeApp {
 		).reverse())
 			await button.click();
 	}
-	async send(prompt: string) {
-		if (this.real) {
+	async send(prompt: string, options: { expectRefusal?: string | RegExp } = {}) {
+		if (options.expectRefusal && this.real && !this.provider)
+			throw new Error('A refused real send requires a selected provider');
+		const invocation =
+			options.expectRefusal && this.real
+				? path.join(this.providerHome(this.provider!), 'fixture-process')
+				: undefined;
+		const before =
+			invocation && fs.existsSync(invocation) ? fs.readFileSync(invocation, 'utf8') : undefined;
+		if (this.real && !options.expectRefusal) {
 			const scene = this.scenes[this.sceneIndex++];
 			if (!scene) throw new Error('No acceptance workload was defined for this send');
 			fs.writeFileSync(this.control, JSON.stringify({ exitGate: scene.exitGate }));
@@ -339,6 +356,13 @@ export class NativeApp {
 		}
 		await this.input().fill(prompt);
 		await this.input().press('Enter');
+		if (options.expectRefusal) {
+			await expect(this.output().getByText(options.expectRefusal)).toBeVisible();
+			if (invocation)
+				expect(fs.existsSync(invocation) ? fs.readFileSync(invocation, 'utf8') : undefined).toEqual(
+					before
+				);
+		}
 	}
 	async externalTurn(provider: Provider, prompt: string, scene: NativeScene, id?: string) {
 		if (this.real) return realExternalTurn(this, provider, prompt, scene, id);
@@ -434,11 +458,10 @@ export class NativeApp {
 	}
 }
 
-export const test = base.extend<{ native: NativeApp }>({
-	// Playwright requires the fixture argument to be destructured, even when empty.
-	// eslint-disable-next-line no-empty-pattern
-	native: async ({}, use, info) => {
-		const native = new NativeApp(info);
+export const test = base.extend<{ native: NativeApp; nativeProviderCli: boolean }>({
+	nativeProviderCli: [true, { option: true }],
+	native: async ({ nativeProviderCli }, use, info) => {
+		const native = new NativeApp(info, { providerCli: nativeProviderCli });
 		try {
 			await native.start();
 			await use(native);

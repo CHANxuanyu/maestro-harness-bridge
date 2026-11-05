@@ -613,7 +613,7 @@ describe('useAgentSessionManagement', () => {
 			'claude-code',
 			'/test/project',
 			'agent-456',
-			{ offset: 0, limit: 500, ownerAgentId: activeSession.id },
+			{ offset: 0, limit: 500, ownerAgentId: activeSession.id, readOnly: true },
 			undefined
 		);
 		expect(window.maestro.claude.getSessionOrigins).toHaveBeenCalledOnce();
@@ -1043,7 +1043,7 @@ describe('useAgentSessionManagement', () => {
 				'codex',
 				'/target/project',
 				'agent-x',
-				{ offset: 0, limit: 500, ownerAgentId: 'target-agent' },
+				{ offset: 0, limit: 500, ownerAgentId: 'target-agent', readOnly: true },
 				undefined
 			);
 			expect(setActiveAgentSessionId).toHaveBeenCalledWith('agent-x');
@@ -1069,6 +1069,7 @@ describe('useAgentSessionManagement', () => {
 					limit: 500,
 					ownerAgentId: 'target-agent',
 					configDir: '/home/u/.codex-work',
+					readOnly: true,
 				},
 				undefined
 			);

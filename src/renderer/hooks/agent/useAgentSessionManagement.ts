@@ -365,6 +365,7 @@ export function useAgentSessionManagement(
 							// native history row) names the exact pool even before a newly
 							// created owner has been persisted.
 							ownerAgentId: targetSession.id,
+							readOnly: true,
 							...(opts?.configDir ? { configDir: opts.configDir } : {}),
 						},
 						sshRemoteId

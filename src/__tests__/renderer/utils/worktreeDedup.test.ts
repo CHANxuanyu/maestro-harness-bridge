@@ -161,6 +161,9 @@ describe('normalizePath', () => {
 	it.each([
 		['/', false, '/'],
 		['C:\\', false, 'C:/'],
+		['c:\\', false, 'C:/'],
+		['c:/Users/Test/repo/', false, 'C:/Users/Test/repo'],
+		['c:/Users/Test/repo/', true, 'c:/Users/Test/repo'],
 		['\\\\server\\share\\repo\\', false, '//server/share/repo'],
 		['//server//share/repo/', true, '/server/share/repo'],
 		['/trees/feature\\name/', true, '/trees/feature\\name'],

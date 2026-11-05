@@ -426,3 +426,9 @@ still missing. Grouped, highest value first:
 - **Agents/groups:** worktree folder + scan, group emoji, `remove-agent --erase`.
 - **Symphony** contributions; **low value:** devtools, tour, leaderboard,
   `notify clear`, clear terminal, `gist --file`, deep link, reveal in Finder.
+
+## Native history coverage (2026-11-03)
+
+`maestro-cli native-history list <agent>` returns the project sidebar's native conversation records through `agentSessions:listProjectHistory`. `read <agent> <conversation>` uses the canonical read-only transcript adapter. `delete <agent> <conversation>` removes a whole Codex conversation in the selected local or SSH account. Partial native-message deletion returns a read-only error. These verbs require the desktop app. Pianola's offline learning scan uses the bounded shared Codex rollout decoder.
+
+Packaged CLI storage and discovery use the shipped product identity. `settings set` uses the live `settings:set` IPC handler when the desktop is running and waits for its acknowledgement. Offline writes keep the same value validation and product-directory checks.

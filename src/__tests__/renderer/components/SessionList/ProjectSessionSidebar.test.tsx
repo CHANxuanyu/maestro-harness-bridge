@@ -21,11 +21,17 @@ const EN: Record<string, string> = {
 	'workflows.conversations.refreshFailed': "Couldn't load newer messages; showing the saved copy",
 	'workflows.conversations.openFailed': "Couldn't open this conversation",
 	'workflows.conversations.retry': 'Retry',
+	'workflows.conversations.worktree': 'Ran in worktree {path}',
+	'workflows.conversations.worktreeGone':
+		'This worktree no longer exists, so the conversation is read-only',
 };
 
 vi.mock('../../../../renderer/i18n', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../../../../renderer/i18n')>();
-	const t = (key: string) => EN[key] ?? key;
+	const t = (key: string, params?: Record<string, unknown>) =>
+		(EN[key] ?? key).replace(/\{(\w+)\}/g, (match, name) =>
+			params && name in params ? String(params[name]) : match
+		);
 	return { ...actual, useT: () => t };
 });
 
@@ -281,4 +287,34 @@ describe('ProjectSessionSidebar hands the caret to the composer', () => {
 		renderInsideLeftBar();
 		expect(screen.queryByTestId('sidebar-new-conversation')).not.toBeInTheDocument();
 	});
+});
+
+it('shows the recorded worktree identity beside a conversation title', () => {
+	setHistory([record({ worktree: { path: '/synthetic/worktrees/x', branch: 'fixture-x' } })]);
+	renderSidebar(useSessionStore.getState().sessions);
+	expect(screen.getByText('fixture-x').closest('[data-worktree]')?.getAttribute('title')).toBe(
+		'Ran in worktree /synthetic/worktrees/x\nfixture-x'
+	);
+});
+
+it('labels a worktree by its folder and says when that folder is gone', () => {
+	setHistory([
+		record({
+			worktree: {
+				path: '/synthetic/repo/.claude/worktrees/handoff-x',
+				name: 'handoff-x',
+				branch: 'claude/handoff-x',
+				missing: true,
+			},
+		}),
+	]);
+	renderSidebar(useSessionStore.getState().sessions);
+	expect(screen.queryByText('claude/handoff-x')).not.toBeInTheDocument();
+	expect(screen.getByText('handoff-x').closest('[data-worktree]')?.getAttribute('title')).toBe(
+		[
+			'Ran in worktree /synthetic/repo/.claude/worktrees/handoff-x',
+			'claude/handoff-x',
+			'This worktree no longer exists, so the conversation is read-only',
+		].join('\n')
+	);
 });

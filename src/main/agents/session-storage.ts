@@ -56,6 +56,7 @@ export interface SessionMessage {
  * Contains summary information about a session without loading all messages
  */
 export interface AgentSessionInfo {
+	worktree?: import('../../shared/projectHistory').NativeWorktree;
 	sessionId: string;
 	projectPath: string;
 	timestamp: string;

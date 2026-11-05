@@ -15,6 +15,8 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.conversations.openFailed': '无法打开此会话',
 	'workflows.conversations.refreshFailed': '无法载入较新的消息，正在显示已保存的内容',
 	'workflows.conversations.retry': '重试',
+	'workflows.conversations.worktree': '在工作副本中运行：{path}',
+	'workflows.conversations.worktreeGone': '该工作副本已删除，此会话只能查看',
 	'workflows.conversations.showMore': '再显示 {count} 个',
 	'workflows.conversations.loadingHistory': '正在加载历史会话...',
 	'workflows.conversations.refreshingHistory': '正在刷新历史会话',

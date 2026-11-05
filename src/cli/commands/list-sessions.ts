@@ -10,6 +10,7 @@
 // the disk-based Claude path is reconciled with it.
 
 import os from 'os';
+import { nativeHistory } from './native-history';
 import {
 	resolveAgentId,
 	getSessionById,
@@ -24,6 +25,7 @@ import { computeTabConversationStats } from '../../shared/tabConversationStats';
 import type { ToolType } from '../../shared/types';
 
 interface ListSessionsOptions {
+	native?: boolean;
 	limit?: string;
 	skip?: string;
 	search?: string;
@@ -189,7 +191,11 @@ function listTabSessions(
 	return { sessions: paginated, totalCount, filteredCount };
 }
 
-export function listSessions(agentIdArg: string, options: ListSessionsOptions): void {
+export function listSessions(
+	agentIdArg: string,
+	options: ListSessionsOptions
+): void | Promise<void> {
+	if (options.native) return nativeHistory('list', agentIdArg, undefined, options);
 	try {
 		const agentId = resolveAgentId(agentIdArg);
 		const agent = getSessionById(agentId);

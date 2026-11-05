@@ -251,6 +251,7 @@ async function collectBreakdowns(cache: TokenUsageCache): Promise<SessionTokenBr
 					// Key by account too: the same sessionId can't collide across
 					// accounts, but this keeps cache entries unambiguous.
 					const key = tokenCacheKey(`${agentType}@${accountKey}`, info.sessionId);
+					if (liveKeys.has(key)) continue;
 					liveKeys.add(key);
 					const fingerprint = sessionFingerprint(info.modifiedAt, info.sizeBytes);
 					let breakdown = cache.get(key, fingerprint);

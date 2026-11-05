@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { Locator } from '@playwright/test';
 import { test, expect, type Provider } from './fixtures/native-app';
 import { createTurn } from './fixtures/native/protocol.cjs';
 
@@ -183,7 +184,7 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 			...(await stats.locator(':scope > span').all()),
 		];
 		const toolbar = native.page.locator('[data-tour="toolbar-toggles"]').locator('..');
-		const buttons = [];
+		const buttons: Locator[] = [];
 		for (const button of await toolbar.getByRole('button').all())
 			if (await button.isVisible()) buttons.push(button);
 		expect(buttons.length).toBeGreaterThanOrEqual(5);
@@ -229,5 +230,87 @@ for (const provider of ['claude', 'codex'] satisfies Provider[]) {
 		await native.page.keyboard.type('Typed in a new conversation.');
 		await expect(native.input()).toHaveValue('Typed in a new conversation.');
 		expect(native.files(provider)).toHaveLength(2);
+	});
+}
+
+test('codex compressed history opens and follows replaced archives', async ({ native }) => {
+	const { zstdCompressSync } = await import('node:zlib');
+	const seed = await native.externalTurn('codex', 'Compressed history fixture', {
+		answer: 'Older compressed answer.',
+	});
+	const bytes = fs.readFileSync(seed.file);
+	fs.writeFileSync(seed.file + '.zst', zstdCompressSync(bytes));
+	fs.unlinkSync(seed.file);
+	await native.createAgent('codex');
+	await native.page
+		.locator('[data-conversation-kind="history"] button[data-tree-nav]')
+		.filter({ hasText: 'Compressed history fixture' })
+		.click();
+	await expect(
+		native.output().getByText('Older compressed answer.', { exact: true })
+	).toBeVisible();
+	const appended = Buffer.from(
+		JSON.stringify({
+			type: 'response_item',
+			payload: {
+				type: 'message',
+				role: 'assistant',
+				content: [{ type: 'output_text', text: 'Externally revised archive.' }],
+			},
+		}) + '\n'
+	);
+	fs.writeFileSync(seed.file + '.zst', zstdCompressSync(Buffer.concat([bytes, appended])));
+	await expect(
+		native.output().getByText('Externally revised archive.', { exact: true })
+	).toBeVisible();
+	expect(fs.existsSync(seed.file)).toBe(false);
+});
+
+for (const provider of ['claude', 'codex'] as const) {
+	test(`${provider} worktree history stays readable after Git removes its working folder`, async ({
+		native,
+	}) => {
+		const { execFileSync } = await import('node:child_process');
+		const git = (...args: string[]) =>
+			execFileSync('git', args, {
+				cwd: native.project,
+				stdio: 'pipe',
+				env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+			});
+		git('init');
+		git(
+			'-c',
+			'user.name=Fixture',
+			'-c',
+			'user.email=fixture@example.test',
+			'commit',
+			'--allow-empty',
+			'-m',
+			'fixture'
+		);
+		const cwd = path.join(native.project, '.claude', 'worktrees', 'history-x');
+		git('worktree', 'add', '-b', 'history-x', cwd);
+		const turn = createTurn({
+			provider,
+			configDir: provider === 'claude' ? native.claude : native.codex,
+			cwd,
+			prompt: 'Managed worktree history',
+		});
+		turn.finish('Worktree transcript answer.');
+		const before = fs.readFileSync(turn.file);
+		git('worktree', 'remove', '--force', cwd);
+		await native.createAgent(provider);
+		await native.page
+			.locator('[data-conversation-kind="history"] button[data-tree-nav]')
+			.filter({ hasText: 'Managed worktree history' })
+			.click();
+		await expect(
+			native.output().getByText('Worktree transcript answer.', { exact: true })
+		).toBeVisible();
+		await native.send('Continue after archive', {
+			expectRefusal: /Worktree is gone or unavailable/,
+		});
+		await expect(native.output().getByText(/Worktree is gone or unavailable/)).toBeVisible();
+		expect(fs.readFileSync(turn.file)).toEqual(before);
 	});
 }

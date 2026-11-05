@@ -24,6 +24,7 @@ import { Spinner } from './ui/Spinner';
 import type { Session, Theme, RightPanelTab, BatchRunState } from '../types';
 import type { FileTreeChanges } from '../utils/fileExplorer';
 import { FileExplorerPanel } from './FileExplorerPanel';
+import { ChangesPanel } from './ChangesPanel';
 import { HistoryPanel, HistoryPanelHandle } from './HistoryPanel';
 import { AutoRun, AutoRunHandle } from './AutoRun';
 import { AutoRunExpandedModal } from './AutoRun/AutoRunExpandedModal';
@@ -162,7 +163,18 @@ export const RightPanel = memo(
 		const ownsActiveSession = useWindowOwnsSession(session?.id);
 
 		const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
-		const activeRightTab = useUIStore((s) => s.activeRightTab);
+		const storedRightTab = useUIStore((s) => s.activeRightTab);
+		// The new shell shows Changes and Files only, and the classic shell has no
+		// Changes view, so each maps a tab it does not have onto one it does. The
+		// stored value is left alone, so switching back restores the user's tab.
+		const newShell = useSettingsStore((s) => s.newShell);
+		const activeRightTab: RightPanelTab = newShell
+			? storedRightTab === 'files'
+				? 'files'
+				: 'changes'
+			: storedRightTab === 'changes'
+				? 'files'
+				: storedRightTab;
 		const activeFocus = useUIStore((s) => s.activeFocus);
 		const setRightPanelOpen = useUIStore((s) => s.setRightPanelOpen);
 		const setActiveFocus = useUIStore((s) => s.setActiveFocus);
@@ -584,22 +596,29 @@ export const RightPanel = memo(
 
 				{/* Tab Header */}
 				<div className="flex border-b h-16" style={{ borderColor: theme.colors.border }}>
-					{(['files', 'history', ...(autoRunDisabled ? [] : ['autorun'])] as const).map((tab) => {
+					{(newShell
+						? (['changes', 'files'] as const)
+						: (['files', 'history', ...(autoRunDisabled ? [] : ['autorun'])] as const)
+					).map((tab) => {
 						const label =
-							tab === 'autorun'
-								? t('workflows.shell.autoRun')
-								: tab === 'files'
-									? t('workflows.labels.files')
-									: t('workflows.shell.history');
+							tab === 'changes'
+								? t('workflows.changes.tab')
+								: tab === 'autorun'
+									? t('workflows.shell.autoRun')
+									: tab === 'files'
+										? t('workflows.labels.files')
+										: t('workflows.shell.history');
 						// Each of these three tabs has its own chord. Surfacing it on the
 						// header the user is already clicking is the cheapest place to
 						// teach it.
 						const jumpShortcut =
-							tab === 'files'
-								? shortcuts.goToFiles
-								: tab === 'history'
-									? shortcuts.goToHistory
-									: shortcuts.goToAutoRun;
+							tab === 'changes'
+								? undefined
+								: tab === 'files'
+									? shortcuts.goToFiles
+									: tab === 'history'
+										? shortcuts.goToHistory
+										: shortcuts.goToAutoRun;
 						return (
 							<button
 								key={tab}
@@ -667,6 +686,12 @@ export const RightPanel = memo(
 						}
 					}}
 				>
+					{activeRightTab === 'changes' && (
+						<div className="h-full">
+							<ChangesPanel theme={theme} session={session} />
+						</div>
+					)}
+
 					{/* FileExplorerPanel stays mounted so auto-refresh timer persists across tab switches */}
 					<div
 						data-tour="files-panel"

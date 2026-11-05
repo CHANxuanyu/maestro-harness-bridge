@@ -24,6 +24,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { logger } from '../../../../../renderer/utils/logger';
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { DisplayTab } from '../../../../../renderer/components/Settings/tabs/DisplayTab';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import type { Theme } from '../../../../../renderer/types';
 
 import { mockTheme } from '../../../../helpers/mockTheme';
@@ -869,6 +870,26 @@ describe('DisplayTab', () => {
 			fireEvent.click(zoom.getByRole('button', { name: '150%' }));
 			expect(mockSetFontZoom).toHaveBeenCalledWith(1.5);
 			expect(mockSetSurfaceFontSize).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('New shell', () => {
+		it('switches the new shell on and off from its own row', async () => {
+			useSettingsStore.setState({ newShell: false });
+			render(<DisplayTab theme={mockTheme} />);
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(50);
+			});
+
+			const section = document.querySelector('[data-setting-id="display-new-shell"]')!;
+			const toggle = within(section as HTMLElement).getByRole('switch', {
+				name: 'Use the new shell',
+			});
+			fireEvent.click(toggle);
+			expect(useSettingsStore.getState().newShell).toBe(true);
+			expect(window.maestro.settings.set).toHaveBeenCalledWith('newShell', true);
+			fireEvent.click(toggle);
+			expect(useSettingsStore.getState().newShell).toBe(false);
 		});
 	});
 

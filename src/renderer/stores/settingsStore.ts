@@ -683,6 +683,14 @@ export type SettingsStore = SettingsStoreState & SettingsStoreActions;
 export const selectGroupsPlusEnabled = (state: SettingsStore) =>
 	state.encoreFeatures.groupsPlus === true;
 
+/**
+ * Whether the window navigates by conversation: the Left Bar lists projects
+ * and conversations, and the tab strip stops repeating them. The new shell
+ * always does; the classic shell follows the sidebar navigation setting.
+ */
+export const selectConversationNavigation = (state: SettingsStoreState) =>
+	state.newShell || state.sidebarNavigationMode === 'conversations';
+
 // ============================================================================
 // Auto Run watchdog helpers
 // ============================================================================

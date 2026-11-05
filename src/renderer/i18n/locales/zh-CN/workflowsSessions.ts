@@ -51,6 +51,14 @@ export const workflowsSessions = {
 	'workflows.sessions.handoff.draftCut': '最早一条截掉了 {count} 个字符',
 	'workflows.sessions.handoff.draftHint': '按发送前不会发出',
 	'workflows.sessions.handoff.dismissNote': '关闭交接提示',
+	'workflows.sessions.review.title': '让另一家复核',
+	'workflows.sessions.review.intro':
+		'在同一个目录里和另一家开一条复核会话。草稿会列出改动的文件，请对方只报告问题、不改文件。你按发送之前什么都不会发出。',
+	'workflows.sessions.review.targets': '复核方',
+	'workflows.sessions.review.scope':
+		'带上这条会话的开头和改动文件清单。复核方自己读差异；它的工具支持只读时，以只读模式打开。',
+	'workflows.sessions.review.prepare': '准备复核',
+	'workflows.sessions.handoff.headerButton': '交给…',
 	'workflows.sessions.beta': '测试版',
 	'workflows.sessions.available': '可用',
 	'workflows.sessions.notFound': '未找到',

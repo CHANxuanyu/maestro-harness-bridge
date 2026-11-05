@@ -13,6 +13,14 @@ const META_KEY_NAME = formatMetaKeyName();
 
 export const DISPLAY_SETTINGS: SearchableSetting[] = [
 	{
+		id: 'display-new-shell',
+		tab: 'display',
+		tabLabel: 'Display',
+		label: 'New Shell',
+		description: 'Projects and conversations on the left, the changes panel on the right',
+		keywords: ['new shell', 'newShell', 'layout', 'interface', 'changes panel', 'review', '新界面'],
+	},
+	{
 		id: 'display-typography-reset',
 		tab: 'display',
 		tabLabel: 'Display',

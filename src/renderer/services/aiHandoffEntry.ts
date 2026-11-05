@@ -56,9 +56,18 @@ export function errorOffersHandoff(type: AgentErrorType | undefined): boolean {
 	return type === 'rate_limited' || type === 'auth_expired';
 }
 
-/** Open the "Continue with another AI" dialog for one tab. */
-export function requestAiHandoff(sessionId: string, tabId: string): void {
-	useModalStore.getState().openModal('aiHandoff', { sessionId, tabId });
+/**
+ * Open the "Continue with another AI" dialog for one tab. `review` opens the
+ * same dialog to ask another AI to review the working directory's changes.
+ */
+export function requestAiHandoff(
+	sessionId: string,
+	tabId: string,
+	mode: 'handoff' | 'review' = 'handoff'
+): void {
+	useModalStore
+		.getState()
+		.openModal('aiHandoff', mode === 'review' ? { sessionId, tabId, mode } : { sessionId, tabId });
 }
 
 /**

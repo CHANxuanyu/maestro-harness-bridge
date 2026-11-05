@@ -183,6 +183,7 @@ function resetStore() {
 
 describe('settingsStore', () => {
 	it.each([
+		['newShell', 'setNewShell'],
 		['notificationCenterLarge', 'setNotificationCenterLarge'],
 		['notificationCenterDetails', 'setNotificationCenterDetails'],
 		['notificationCenterKeyboardNavigation', 'setNotificationCenterKeyboardNavigation'],

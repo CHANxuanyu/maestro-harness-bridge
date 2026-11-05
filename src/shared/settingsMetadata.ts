@@ -57,6 +57,12 @@ export type SettingCategory =
 // ============================================================================
 
 export const SETTINGS_METADATA: Record<string, SettingMetadata> = {
+	newShell: {
+		description: 'Use the new conversation shell',
+		type: 'boolean',
+		default: false,
+		category: 'appearance',
+	},
 	...APPEARANCE_SETTINGS_METADATA,
 	...EDITOR_SETTINGS_METADATA,
 	...CORE_SETTINGS_METADATA,

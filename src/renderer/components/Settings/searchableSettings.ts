@@ -66,6 +66,13 @@ export interface SearchableSetting {
 // Composed registry
 // ---------------------------------------------------------------------------
 export const ALL_SEARCHABLE_SETTINGS: SearchableSetting[] = [
+	{
+		id: 'newShell',
+		tab: 'display',
+		tabLabel: 'Display',
+		label: 'New shell',
+		keywords: ['newShell', '新界面'],
+	},
 	...ABOUT_SETTINGS,
 	...GENERAL_SETTINGS,
 	...DISPLAY_SETTINGS,

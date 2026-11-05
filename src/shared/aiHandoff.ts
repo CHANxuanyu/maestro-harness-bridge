@@ -1,9 +1,21 @@
+import type { AgentSshRemoteConfig } from './types';
+import { normalizeWorktreePath } from './worktreePaths';
 import type { ClaudeTokenSourceFields } from './claudeTokenMode';
 
 /** Product choices; DeepSeek still runs on the Claude Code harness. */
 export const HANDOFF_PROVIDERS = ['claude-code', 'codex', 'deepseek'] as const;
 export type HandoffProvider = (typeof HANDOFF_PROVIDERS)[number];
 export const DEFAULT_HANDOFF_BUDGET = 8000;
+
+export interface ConversationOrigin {
+	kind: 'handoff' | 'review';
+	sourceSessionId: string;
+	sourceTabId: string;
+	sourceProvider: string;
+	/** Source native ID, retained after its tab closes. */
+	sourceNativeSessionId?: string;
+	createdAt: number;
+}
 
 export interface HandoffDraft {
 	text: string;
@@ -47,10 +59,13 @@ export interface HandoffRunner extends HandoffRunnerConfig {
 	projectRoot: string;
 	cwd: string;
 	groupId?: string;
-	sessionSshRemoteConfig?: { enabled?: boolean };
+	sessionSshRemoteConfig?: AgentSshRemoteConfig;
 }
 
+export type HandoffMode = 'handoff' | 'review';
+
 export interface HandoffRequest {
+	mode?: HandoffMode;
 	sourceAgentId: string;
 	sourceTabId: string;
 	targetProvider: HandoffProvider;
@@ -62,6 +77,7 @@ export interface HandoffRequest {
 }
 
 export interface HandoffReadRequest {
+	mode?: HandoffMode;
 	sourceAgentId: string;
 	sourceTabId: string;
 	provider: HandoffProvider;
@@ -70,6 +86,9 @@ export interface HandoffReadRequest {
 }
 
 export interface HandoffSourceSnapshot {
+	cwd: string;
+	sessionSshRemoteConfig?: AgentSshRemoteConfig;
+	sourceNativeSessionId?: string;
 	sourceAgentId: string;
 	sourceTabId: string;
 	projectPath: string;
@@ -78,6 +97,10 @@ export interface HandoffSourceSnapshot {
 }
 
 export interface HandoffOpenRequest {
+	cwd: string;
+	sessionSshRemoteConfig?: AgentSshRemoteConfig;
+	mode: HandoffMode;
+	origin: ConversationOrigin;
 	sourceAgentId: string;
 	provider: HandoffProvider;
 	runnerId?: string;
@@ -90,6 +113,7 @@ export interface HandoffOpenRequest {
 }
 
 export interface HandoffResult {
+	mode?: HandoffMode;
 	success: boolean;
 	error?: string;
 	code?: 'invalid-request' | 'unavailable' | 'persistence-failed' | 'queue-failed';
@@ -135,6 +159,8 @@ export function handoffRequestError(request: HandoffRequest): string | null {
 		(!Number.isSafeInteger(request.budgetTokens) || request.budgetTokens <= 0)
 	)
 		return 'The handoff budget must be a positive integer';
+	if (request.mode !== undefined && request.mode !== 'handoff' && request.mode !== 'review')
+		return 'Mode must be handoff or review';
 	if (request.instruction !== undefined && typeof request.instruction !== 'string')
 		return 'The handoff instruction must be text';
 	if (
@@ -143,4 +169,21 @@ export function handoffRequestError(request: HandoffRequest): string | null {
 	)
 		return 'Send and background must be boolean values';
 	return null;
+}
+
+/** Host and execution directory, never the sidebar project grouping. */
+export function handoffLocation(runner: {
+	cwd: string;
+	sessionSshRemoteConfig?: AgentSshRemoteConfig;
+}): { cwd: string; key: string } {
+	const ssh = runner.sessionSshRemoteConfig;
+	if (ssh?.enabled && !ssh.remoteId) throw new Error('SSH is enabled but no remote is configured');
+	const cwd = ssh?.enabled ? ssh.workingDirOverride || runner.cwd : runner.cwd;
+	if (!cwd?.trim()) throw new Error('The source working directory is missing');
+	const posix = ssh?.enabled || cwd.startsWith('/');
+	const normalized = normalizeWorktreePath(cwd, posix);
+	return {
+		cwd,
+		key: `${ssh?.enabled ? `ssh:${ssh.remoteId}` : 'local'}\0${posix ? normalized : normalized.toLowerCase()}`,
+	};
 }

@@ -2,6 +2,14 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-05：hb.7 后端 C，交接和复核
+
+交接按执行 cwd 与 SSH remoteId 匹配目标，不再按项目分组路径复用其他 worktree，也不从其他项目复制配置。缺失目标取工具全局配置；本机 DeepSeek 从全局网关配置调用既有隔离预设，SSH 上没有对应预设 runner 时明确失败，因为既有工厂只创建本机账户目录，本轮不发明远程账户创建协议。
+
+`ai_handoff prepare` 默认 handoff，可指定 review。复核沿用预算器，固定包含来源目标摘录、`git:changes` 文件清单、自己执行 `git diff HEAD` 与只报告问题不改文件的要求。支持时先设置只读权限再保存、排队；两种模式均记录 ConversationOrigin，保存 native id，`session list` 和 `tab show --json` 返回来源。CLI 增加 `--review` 并等待有界 git/SSH 读取，Covered 增加复核行。
+
+先运行失败测试，确认旧实现误用其他项目配置、拒绝 SSH、缺少 review 和 origin；新增与回归测试覆盖目标复用、新建、全局配置、SSH 命令生成、预算、持久化及既有读取路径。仅测本地源码与合成账户字段，预设创建在测试中 mock，没有发模型请求、启动 Electron 或访问真实账户。真实 SSH、Windows 和发行包验收留给 Opus；后续核对条目记录公共检查结果。
+
 ## 2026-11-05：hb.7 后端 B，改动接口
 
 新增共享改动类型、`git:changes` / `git:changeDiff`、预加载、渲染服务与 `changes` CLI。CLI 通过现有 bridge.invoke 调用同一 IPC，按选中标签所属智能体的 cwd 与 SSH 配置读取。状态与行数一次 git 调用及 SSH 连接；逐文件差异先读状态取得改名来源，再读取正文。无 HEAD 按空树，完整 totals 在 500 条截断前计算，二进制与大文件、超时、非仓库均明确返回。

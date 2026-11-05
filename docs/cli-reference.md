@@ -288,6 +288,7 @@ Prepare a new conversation with another AI in the same project
 | ---------------------- | --------------------------------------------------------------- | ------- |
 | `--agent <id>`         | Source agent for an active or ambiguous tab                     | -       |
 | `--list-targets`       | List available target providers without creating a draft        | -       |
+| `--review`             | Prepare a review that reports problems without editing files    | -       |
 | `--send`               | Explicitly send the prepared handoff instead of leaving a draft | -       |
 | `--instruction <text>` | Append an instruction to the handoff                            | -       |
 | `--max-tokens <count>` | Estimated token budget for the handoff                          | -       |

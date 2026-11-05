@@ -26,7 +26,7 @@ describe('AI handoff entry points', () => {
 		expect(canHandOffTab(createMockSession({ aiTabs: [tab] }), tab)).toBe(true);
 	});
 
-	it('withholds it from an empty tab, an SSH agent and a missing tab', () => {
+	it('withholds it from empty and missing tabs and supports loaded SSH conversations', () => {
 		const empty = createMockAITab({ id: 'tab-1', logs: [] });
 		expect(canHandOffTab(createMockSession({ aiTabs: [empty] }), empty)).toBe(false);
 		// Tool rows and blank text are not a conversation to hand over.
@@ -44,7 +44,7 @@ describe('AI handoff entry points', () => {
 				createMockSession({ aiTabs: [tab], sessionSshRemoteConfig: { enabled: true } } as never),
 				tab
 			)
-		).toBe(false);
+		).toBe(true);
 		expect(canHandOffTab(createMockSession({ aiTabs: [tab] }), undefined)).toBe(false);
 	});
 

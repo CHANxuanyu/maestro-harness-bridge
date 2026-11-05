@@ -1,3 +1,5 @@
+import type { ConversationOrigin } from '../../shared/aiHandoff';
+export type { ConversationOrigin } from '../../shared/aiHandoff';
 // Type definitions for Maestro renderer
 
 // Re-export context merge types
@@ -835,6 +837,7 @@ export interface ProviderTabSession {
 // AI Tab for multi-tab support within a Maestro session
 // Each tab represents a separate AI agent conversation (Claude Code, OpenCode, etc.)
 export interface AITab {
+	origin?: ConversationOrigin;
 	id: string; // Unique tab ID (generated UUID)
 	agentSessionId: string | null; // Agent session UUID (null for new tabs)
 	name: string | null; // User-defined name (null = show UUID octet)

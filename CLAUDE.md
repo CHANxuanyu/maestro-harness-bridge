@@ -59,6 +59,7 @@ This guide has been split into focused sub-documents for progressive disclosure:
 
 ### Commonly-reimplemented functions (do NOT add new copies)
 
+- **Handoff execution context:** `handoffLocation()` in `src/shared/aiHandoff.ts` compares the effective cwd and SSH host without resolving remote paths locally.
 - **Conversation changes:** `getGitChanges()`, `getGitChangeDiff()`, `changesCommand()` and `parseGitChanges()` in `src/main/git-changes.ts`; shared wire types in `src/shared/gitChanges.ts`. Both the panel and CLI use the same IPC handlers.
 
 Grep-verified 2026-09-04 (`npm run docs:verify` re-checks every path). This is the INDEX: name, canonical symbols, home file. The full entry for each - the failure it replaced, its invariants, and the traps that made the duplicates wrong - lives in [CANONICAL-UTILITIES.md](docs/agent-guides/CANONICAL-UTILITIES.md). If a name below matches what you are about to write, import the canonical one; read its full entry before extending or working around it.

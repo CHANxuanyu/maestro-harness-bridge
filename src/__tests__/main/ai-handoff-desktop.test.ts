@@ -2,7 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserWindow } from 'electron';
 import { createDesktopAiHandoff } from '../../main/ai-handoff-desktop';
 import { requestFromRenderer } from '../../main/web-server/callbacks/remoteRequest';
-import { checkCustomPath } from '../../main/agents/path-prober';
+import { checkBinaryExists, checkCustomPath } from '../../main/agents/path-prober';
+
+vi.mock('../../main/agents/deepseek-preset', () => ({ prepareDeepSeekPreset: vi.fn() }));
+vi.mock('../../main/stores', () => ({ getSshRemoteById: vi.fn() }));
+vi.mock('../../main/utils/ssh-command-builder', () => ({ buildSshCommand: vi.fn() }));
+vi.mock('../../main/utils/execFile', () => ({ execFileNoThrow: vi.fn() }));
+import { getSshRemoteById } from '../../main/stores';
+import { buildSshCommand } from '../../main/utils/ssh-command-builder';
+import { execFileNoThrow } from '../../main/utils/execFile';
+import { prepareDeepSeekPreset } from '../../main/agents/deepseek-preset';
 
 vi.mock('../../main/web-server/callbacks/remoteRequest', () => ({ requestFromRenderer: vi.fn() }));
 vi.mock('../../main/agents/path-prober', () => ({
@@ -57,12 +66,14 @@ describe('handoff desktop ownership routing', () => {
 	}
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(checkBinaryExists).mockResolvedValue({ exists: true, path: '/global-cli' });
 		vi.mocked(checkCustomPath).mockResolvedValue({ exists: true, path: '/configured-cli' });
 		vi.mocked(requestFromRenderer).mockImplementation(async (_win, channel) => {
 			if (channel === 'context:readHandoffSource')
 				return {
 					sourceAgentId: 'source',
 					sourceTabId: 'source-tab',
+					cwd: '/project',
 					projectPath: '/project',
 					draft,
 				} as never;
@@ -127,6 +138,70 @@ describe('handoff desktop ownership routing', () => {
 		expect(await service.targets('target')).toEqual({
 			success: true,
 			targets: [{ provider: 'deepseek', runnerId: 'source' }],
+		});
+	});
+
+	it('checks a remote target on its own host through the SSH builder', async () => {
+		const ssh = { enabled: true, remoteId: 'remote', workingDirOverride: '/remote/tree' };
+		vi.mocked(getSshRemoteById).mockReturnValue({ id: 'remote', enabled: true } as never);
+		vi.mocked(buildSshCommand).mockResolvedValue({
+			command: 'ssh',
+			args: ['remote', 'probe'],
+		} as never);
+		vi.mocked(execFileNoThrow).mockResolvedValue({ exitCode: 0, stdout: '/bin/codex', stderr: '' });
+		vi.mocked(requestFromRenderer).mockResolvedValueOnce({
+			sourceAgentId: 'source',
+			sourceTabId: 'source-tab',
+			projectPath: '/project',
+			cwd: '/remote/tree',
+			sessionSshRemoteConfig: ssh,
+			draft,
+		} as never);
+		const result = await api([{ ...source, sessionSshRemoteConfig: ssh } as typeof source]).prepare(
+			{ sourceAgentId: 'source', sourceTabId: 'source-tab', targetProvider: 'codex' }
+		);
+		expect(result.success).toBe(true);
+		expect(buildSshCommand).toHaveBeenCalledWith(
+			expect.objectContaining({ id: 'remote' }),
+			expect.objectContaining({ command: 'command', args: ['-v', 'codex'], cwd: '/remote/tree' })
+		);
+		expect(execFileNoThrow).toHaveBeenCalledWith('ssh', ['remote', 'probe'], undefined, {
+			timeout: 10000,
+		});
+		expect(checkBinaryExists).not.toHaveBeenCalled();
+	});
+
+	it('uses the existing DeepSeek preset only when creating from global gateway settings', async () => {
+		const env = {
+			ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+			ANTHROPIC_AUTH_TOKEN: 'synthetic-key',
+			CLAUDE_CONFIG_DIR: '/global-account',
+		};
+		vi.mocked(prepareDeepSeekPreset).mockResolvedValue({
+			toolType: 'claude-code',
+			customModel: 'deepseek-flash[1m]',
+			customEnvVars: { ...env, CLAUDE_CONFIG_DIR: '/isolated-preset' },
+		});
+		const service = createDesktopAiHandoff({
+			getWindowForSession: () => sourceWindow,
+			sessionsStore: { get: () => [target] } as never,
+			agentConfigsStore: { get: () => ({ 'claude-code': { customEnvVars: env } }) } as never,
+			settingsStore: { get: () => ({}) } as never,
+			env: {},
+		});
+		await service.targets('target');
+		expect(prepareDeepSeekPreset).not.toHaveBeenCalled();
+		await service.prepare({
+			sourceAgentId: 'target',
+			sourceTabId: 'source-tab',
+			targetProvider: 'deepseek',
+		});
+		expect(prepareDeepSeekPreset).toHaveBeenCalledWith({
+			apiKey: 'synthetic-key',
+			model: undefined,
+		});
+		expect(vi.mocked(requestFromRenderer).mock.calls.at(-1)?.[2].args?.[0]).toMatchObject({
+			config: { customEnvVars: { CLAUDE_CONFIG_DIR: '/isolated-preset' } },
 		});
 	});
 

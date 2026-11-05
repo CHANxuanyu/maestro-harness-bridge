@@ -247,3 +247,7 @@ The tracker at [DEDUP-TRACKER.md](DEDUP-TRACKER.md) lists all known duplication 
 ## Conversation changes
 
 `getGitChanges()`, `getGitChangeDiff()`, `changesCommand()` and `parseGitChanges()` in `src/main/git-changes.ts` own the read-only changes wire format. Types live in `src/shared/gitChanges.ts`. Status v2 and net HEAD numstat share one bounded `execGitReadOnly()` invocation, including untracked counts; SSH inherits the canonical builder, optional-lock environment and timeout. NUL records preserve quoted names and rename sources. Counts are null for binary and files over 1 MiB, totals precede the 500-file limit, and unborn repositories compare with the empty tree. Do not join staged and unstaged numstats, since that double-counts intermediate edits. File diffs first read status for rename sources, then include both paths in the patch query. Unexpected execution failures propagate; only explicit timeout and non-repository results become flags.
+
+## Handoff execution context
+
+`handoffLocation()` in `src/shared/aiHandoff.ts` resolves only the configured execution directory and builds its host-scoped comparison key. The sidebar project root is grouping metadata, not a spawn directory. An SSH override wins over cwd, a missing remote ID fails, and remote paths are never passed through local realpath or path.resolve. Main routing and renderer target insertion share this check so worktrees and identically named directories on different hosts cannot be mixed.

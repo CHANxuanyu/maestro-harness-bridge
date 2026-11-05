@@ -35,14 +35,18 @@ it('builds a bounded review goal, changes list and explicit read-only instructio
 			branch: 'main',
 			files: [
 				{ path: 'src/parser.ts', status: 'modified', staged: true, additions: 2, deletions: 1 },
+				{ path: 'src/new.ts', status: 'untracked', staged: false, additions: 1, deletions: 0 },
 			],
-			totals: { files: 1, additions: 2, deletions: 1 },
+			totals: { files: 2, additions: 3, deletions: 1 },
 			truncated: false,
 		},
 	});
 	expect(draft.text).toContain('Fix the parser goal');
 	expect(draft.text).toContain('src/parser.ts');
 	expect(draft.text).toContain('git diff HEAD');
+	expect(draft.text).toContain('tracked changes');
+	expect(draft.text).toContain('untracked src/new.ts');
+	expect(draft.text).toContain('Read the untracked files in the list directly');
 	expect(draft.text).toContain('without editing files');
 	expect(draft.estimatedTokens).toBeLessThanOrEqual(300);
 });

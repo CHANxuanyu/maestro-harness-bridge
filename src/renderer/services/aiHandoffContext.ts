@@ -50,7 +50,7 @@ export function buildHandoffDraft(
 	const instruction = literalMentions(
 		(options.instruction ? `\nInstruction:\n${options.instruction}\n` : '') +
 			(review
-				? '\nRun git diff HEAD yourself to read the changes. Report problems without editing files.\n'
+				? '\nRun git diff HEAD yourself to read tracked changes. Read the untracked files in the list directly. Report problems without editing files.\n'
 				: '')
 	);
 	const entries = source.logs.flatMap((entry) => {

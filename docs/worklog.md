@@ -2,6 +2,14 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-05：hb.7 后端，Opus 复核修正
+
+在 `codex/hb7-backend` 的 `5f5ce0ae8` 上重新阅读附录 C 第 2 项后修正四项问题。未跟踪的嵌套仓库保留 Git 的末尾 `/`，符号链接（含悬空链接）与不可读文件均保留 untracked 状态、null 行数和空差异，单条读取失败不再中断清单。混合临时仓库同时放置这些条目、普通未跟踪文件和已修改文件，核对正常文件的 2 增 1 删及完整 totals。复核草稿明确要求对已跟踪改动执行 `git diff HEAD`，直接阅读清单里的未跟踪文件。root 本机使用平台 path.normalize，SSH 保留远端原样，文件路径仍用 `/`。
+
+先只改测试运行三文件，14 失败、21 通过；失败覆盖目录、悬空链接、不可读文件、链接行数/差异、复核文案及路径契约。实现后同一命令 35/35；原有 18 文件命令重跑为 951/951、无跳过。既有 root 断言改为严格比较原生路径，文件路径及其余旧断言保留，没有放宽为可选结果。Windows 用隔离的 path 默认导出注入 path.win32，不修改 process.platform；实际 POSIX 权限与符号链接用例仅在非 Windows 运行，本机均已执行。
+
+`npm run lint`、修改源文件 ESLint、测试专用 dash ESLint、`npm run format:check:all`、`npm run docs:verify` 和 `git diff --check` 均通过；文档检查 653 条路径、0 缺失。精确命令和结果追加在[后端核对报告](verification/hb7-backend.md#opus-review-corrections)。被测对象为本地源码，无远端操作、真实模式、账户目录访问、Electron、发行包或模型调用；真实 Windows、SSH 和 GUI 仍未验。
+
 ## 2026-11-05：hb.7 后端 D，帮助核对与最终验证
 
 在本克隆 gitignored scratch 中为每次命令创建新的 HOME、CLAUDE_CONFIG_DIR、CODEX_HOME，只执行版本、帮助与 feature flags 列表。Claude Code 为 2.1.317，Codex CLI 为 0.166.0-alpha.6。帮助确认 plan 权限参数和只读 sandbox 参数；已有 capability 布尔值不变，在字段旁记录核对版本。不以帮助输出声称 DeepSeek 图片或推理能力已通过，也不声称 Codex 已能在沙箱里调用 Maestro。该项仅审计与注释，没有行为改动，未造一个没有行为意义的失败测试；修改前既有 capability 测试为 25/25。

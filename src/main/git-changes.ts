@@ -1,3 +1,4 @@
+import path from 'path';
 import type {
 	GitChangedFile,
 	GitChanges,
@@ -29,11 +30,12 @@ export function changesCommand(file?: string, oldPath?: string): string[] {
 					`${numstat} "$base" -- || exit $?`,
 					// xargs preserves NUL-delimited filenames, including newlines and quotes.
 					`git ls-files --others --exclude-standard -z | xargs -0 sh -c ${shellEscape(`for file do
-			size=$(wc -c < "$file") || exit $?
+			if [ -L "$file" ] || [ ! -f "$file" ] || [ ! -r "$file" ]; then printf '%s\\t%s\\t%s\\0' '-' '-' "$file"; continue; fi
+			size=$(wc -c 2>/dev/null < "$file") || { printf '%s\\t%s\\t%s\\0' '-' '-' "$file"; continue; }
 			if [ "$size" -gt ${MAX_BYTES} ]; then printf '%s\\t%s\\t%s\\0' '-' '-' "$file"; continue; fi
-			${numstat} --no-index -- /dev/null "$file"
+			${numstat} --no-index -- /dev/null "$file" 2>/dev/null
 			code=$?
-			[ "$code" -le 1 ] || exit "$code"
+			[ "$code" -le 1 ] || printf '%s\\t%s\\t%s\\0' '-' '-' "$file"
 		done`)} sh`,
 					'code=$?; [ "$code" -eq 0 ] || exit "$code"',
 					`git diff --no-ext-diff --no-textconv --no-renames --name-only -z "$base" -- | xargs -0 sh -c ${shellEscape(`base=$1; shift
@@ -49,19 +51,23 @@ export function changesCommand(file?: string, oldPath?: string): string[] {
 					base,
 					`file=${shellEscape(file)}`,
 					`oldfile=${shellEscape(oldPath ?? file)}`,
+					'tracked=0; if git ls-files --error-unmatch -- "$file" >/dev/null 2>&1 || git cat-file -e "$base:$oldfile" 2>/dev/null; then tracked=1; fi',
+					'if [ "$tracked" -eq 0 ] && { [ -L "$file" ] || [ ! -f "$file" ] || [ ! -r "$file" ]; }; then printf "patch\\0\\0"; exit 0; fi',
 					// Check both ends before generating a patch, including large deletions.
-					'size=0; [ ! -f "$file" ] || size=$(wc -c < "$file") || exit $?',
+					'size=0; if [ -f "$file" ]; then size=$(wc -c 2>/dev/null < "$file") || { if [ "$tracked" -eq 0 ]; then printf "patch\\0\\0"; exit 0; else exit 1; fi; }; fi',
 					'oldsize=$(git cat-file -s "$base:$oldfile" 2>/dev/null) || oldsize=0',
 					`if [ "$size" -gt ${MAX_BYTES} ] || [ "$oldsize" -gt ${MAX_BYTES} ]; then printf 'large\\0'; exit 0; fi`,
+					'if [ "$tracked" -eq 1 ]; then',
 					'printf "patch\\0"',
-					'if git ls-files --error-unmatch -- "$file" >/dev/null 2>&1 || git cat-file -e "$base:$oldfile" 2>/dev/null; then',
 					`${numstat} "$base" -- "$oldfile" "$file" || exit $?`,
 					'printf "\\0"',
 					'git diff --no-ext-diff --no-textconv --find-renames "$base" -- "$oldfile" "$file"',
 					'else',
-					`${numstat} --no-index -- /dev/null "$file"; code=$?; [ "$code" -le 1 ] || exit "$code"`,
-					'printf "\\0"',
-					'git diff --no-ext-diff --no-textconv --no-index -- /dev/null "$file"; code=$?; [ "$code" -le 1 ] || exit "$code"',
+					// Buffer before framing so an untracked read failure cannot leave half a response.
+					'stats=$(git diff --no-ext-diff --no-textconv --numstat --no-index -- /dev/null "$file" 2>/dev/null); code=$?; if [ "$code" -gt 1 ]; then printf "patch\\0\\0"; exit 0; fi',
+					// The suffix preserves patch-final newlines through command substitution.
+					'patch=$(git diff --no-ext-diff --no-textconv --no-index -- /dev/null "$file" 2>/dev/null; code=$?; [ "$code" -le 1 ] || exit "$code"; printf .) || { printf "patch\\0\\0"; exit 0; }',
+					'printf "patch\\0%s\\0\\0%s" "$stats" "${patch%.}"',
 					'fi',
 				];
 	return [
@@ -76,7 +82,7 @@ export function changesCommand(file?: string, oldPath?: string): string[] {
 
 function emptyChanges(root: string): GitChanges {
 	return {
-		root: slash(root),
+		root,
 		branch: null,
 		files: [],
 		totals: { files: 0, additions: 0, deletions: 0 },
@@ -165,13 +171,16 @@ export async function getGitChanges(
 	remoteCwd?: string
 ): Promise<GitChanges> {
 	const result = await execGitReadOnly(changesCommand(), cwd, sshRemote, remoteCwd ?? cwd);
-	if (isGitTimeout(result)) return { ...emptyChanges(remoteCwd ?? cwd), timedOut: true };
+	const fallbackRoot = sshRemote ? (remoteCwd ?? cwd) : path.normalize(cwd);
+	if (isGitTimeout(result)) return { ...emptyChanges(fallbackRoot), timedOut: true };
 	if (result.exitCode !== 0) {
 		if (isNotAGitRepositoryError(result.stderr))
-			return { ...emptyChanges(remoteCwd ?? cwd), notARepo: true };
+			return { ...emptyChanges(fallbackRoot), notARepo: true };
 		throw new Error(result.stderr || `git changes failed: ${result.exitCode}`);
 	}
-	return parseGitChanges(result.stdout);
+	const changes = parseGitChanges(result.stdout);
+	if (!sshRemote) changes.root = path.normalize(changes.root);
+	return changes;
 }
 
 export async function getGitChangeDiff(

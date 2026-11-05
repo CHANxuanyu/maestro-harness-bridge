@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync, realpathSync } from 'node:fs';
+import {
+	mkdtempSync,
+	mkdirSync,
+	writeFileSync,
+	rmSync,
+	renameSync,
+	realpathSync,
+	symlinkSync,
+	chmodSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -41,7 +50,7 @@ describe('combined changes on a real repository', () => {
 		writeFileSync(path.join(cwd, unusual), 'last line');
 		const result = await getGitChanges(cwd);
 		expect(result).toMatchObject({
-			root: cwd.replace(/\\/g, '/'),
+			root: cwd,
 			branch: 'main',
 			truncated: false,
 			totals: { files: 3, additions: 3, deletions: 1 },
@@ -72,7 +81,7 @@ describe('combined changes on a real repository', () => {
 		for (let index = 0; index < 501; index++)
 			writeFileSync(path.join(cwd, `sub/${index}`), 'line\n');
 		const result = await getGitChanges(path.join(cwd, 'sub'));
-		expect(result.root).toBe(cwd.replace(/\\/g, '/'));
+		expect(result.root).toBe(cwd);
 		expect(result.files).toHaveLength(500);
 		expect(result).toMatchObject({
 			truncated: true,
@@ -149,6 +158,104 @@ describe('combined changes on a real repository', () => {
 		expect(await getGitChanges(cwd)).toMatchObject({ notARepo: true });
 		await expect(getGitChangeDiff(cwd, '../escape')).rejects.toThrow('relative');
 	});
+
+	it.each(['snapshot', 'diff'] as const)(
+		'tolerates an untracked nested repository in a %s',
+		async (read) => {
+			writeFileSync(path.join(cwd, 'normal'), 'base\n');
+			git('add', 'normal');
+			git('commit', '-m', 'initial');
+			mkdirSync(path.join(cwd, 'inner'));
+			git('-C', 'inner', 'init');
+			writeFileSync(path.join(cwd, 'inner/f'), 'nested\n');
+			writeFileSync(path.join(cwd, 'top'), 'top\n');
+			if (read === 'diff') {
+				expect(await getGitChangeDiff(cwd, 'inner/')).toEqual({
+					diff: '',
+					binary: false,
+					tooLarge: false,
+				});
+			} else {
+				expect((await getGitChanges(cwd)).files).toEqual([
+					{ path: 'inner/', status: 'untracked', staged: false, additions: null, deletions: null },
+					{ path: 'top', status: 'untracked', staged: false, additions: 1, deletions: 0 },
+				]);
+			}
+		}
+	);
+
+	// POSIX permissions and file symlinks require a native POSIX filesystem.
+	describe.skipIf(process.platform === 'win32')('odd untracked filesystem entries', () => {
+		it.each(['dangling', 'symlink', 'unreadable'] as const)(
+			'keeps a %s entry in the snapshot',
+			async (kind) => {
+				writeFileSync(path.join(cwd, 'normal'), 'base\n');
+				git('add', 'normal');
+				git('commit', '-m', 'initial');
+				const file = path.join(cwd, 'odd');
+				if (kind === 'unreadable') {
+					writeFileSync(file, 'secret\n');
+					chmodSync(file, 0);
+				} else symlinkSync(kind === 'dangling' ? 'missing' : 'normal', file);
+				writeFileSync(path.join(cwd, 'top'), 'top\n');
+				expect((await getGitChanges(cwd)).files).toEqual([
+					{ path: 'odd', status: 'untracked', staged: false, additions: null, deletions: null },
+					{ path: 'top', status: 'untracked', staged: false, additions: 1, deletions: 0 },
+				]);
+			}
+		);
+
+		it.each(['dangling', 'symlink', 'unreadable'] as const)(
+			'returns an empty diff for a %s entry',
+			async (kind) => {
+				writeFileSync(path.join(cwd, 'normal'), 'base\n');
+				git('add', 'normal');
+				git('commit', '-m', 'initial');
+				const file = path.join(cwd, 'odd');
+				if (kind === 'unreadable') {
+					writeFileSync(file, 'secret\n');
+					chmodSync(file, 0);
+				} else symlinkSync(kind === 'dangling' ? 'missing' : 'normal', file);
+				expect(await getGitChangeDiff(cwd, 'odd')).toEqual({
+					diff: '',
+					binary: false,
+					tooLarge: false,
+				});
+			}
+		);
+
+		it('preserves normal counts beside several odd entries in the same snapshot', async () => {
+			writeFileSync(path.join(cwd, 'normal'), 'base\n');
+			git('add', 'normal');
+			git('commit', '-m', 'initial');
+			writeFileSync(path.join(cwd, 'normal'), 'changed\nsecond\n');
+			mkdirSync(path.join(cwd, 'inner'));
+			git('-C', 'inner', 'init');
+			writeFileSync(path.join(cwd, 'inner/f'), 'nested\n');
+			symlinkSync('missing', path.join(cwd, 'dangling'));
+			symlinkSync('normal', path.join(cwd, 'link'));
+			writeFileSync(path.join(cwd, 'unreadable'), 'secret\n');
+			chmodSync(path.join(cwd, 'unreadable'), 0);
+			writeFileSync(path.join(cwd, 'top'), 'top\n');
+			const snapshot = await getGitChanges(cwd);
+			expect(snapshot.files).toEqual([
+				{ path: 'dangling', status: 'untracked', staged: false, additions: null, deletions: null },
+				{ path: 'inner/', status: 'untracked', staged: false, additions: null, deletions: null },
+				{ path: 'link', status: 'untracked', staged: false, additions: null, deletions: null },
+				{ path: 'normal', status: 'modified', staged: false, additions: 2, deletions: 1 },
+				{ path: 'top', status: 'untracked', staged: false, additions: 1, deletions: 0 },
+				{
+					path: 'unreadable',
+					status: 'untracked',
+					staged: false,
+					additions: null,
+					deletions: null,
+				},
+			]);
+			expect(snapshot.totals).toEqual({ files: 6, additions: 3, deletions: 1 });
+			expect((await getGitChangeDiff(cwd, 'normal')).diff).toContain('+second');
+		});
+	});
 });
 
 describe('remote wire command and parser', () => {
@@ -160,13 +267,13 @@ describe('remote wire command and parser', () => {
 		expect(args.join(' ')).toContain('--numstat -z');
 	});
 
-	it('normalizes Windows-style paths independently of the host platform', () => {
+	it('preserves the root spelling and normalizes file separators independently of the host', () => {
 		const result = parseGitChanges(
 			'C:\\repo\0# branch.head main\0' +
 				'2 R. N... 100644 100644 100644 abc def R100 dir\\new\0dir\\old\0\0' +
 				'0\t0\t\0dir\\old\0dir\\new\0\0'
 		);
-		expect(result.root).toBe('C:/repo');
+		expect(result.root).toBe('C:\\repo');
 		expect(result.files[0]).toMatchObject({ path: 'dir/new', oldPath: 'dir/old' });
 	});
 });

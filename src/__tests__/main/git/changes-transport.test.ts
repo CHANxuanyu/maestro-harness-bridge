@@ -1,4 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import path from 'path';
+// Clone the default export so Windows path injection cannot affect Node or Vitest.
+vi.mock('path', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('path')>();
+	return { ...actual, default: { ...actual } };
+});
 vi.mock('../../../main/utils/execFile', () => ({ execFileNoThrow: vi.fn() }));
 vi.mock('../../../main/utils/cliDetection', () => ({
 	resolveSshPath: vi.fn().mockResolvedValue('ssh'),
@@ -21,7 +27,54 @@ const remote: SshRemoteConfig = {
 	sshOptions: { ConnectTimeout: '45' },
 };
 describe('changes SSH transport', () => {
-	afterEach(() => vi.clearAllMocks());
+	afterEach(() => {
+		vi.clearAllMocks();
+		vi.restoreAllMocks();
+	});
+	it('returns a native Windows root with slash-separated files without changing the host platform', async () => {
+		vi.spyOn(path, 'normalize').mockImplementation(path.win32.normalize);
+		const cwd = 'C:\\Users\\fixture\\repo\\sub';
+		vi.mocked(execFileNoThrow).mockResolvedValue({
+			exitCode: 0,
+			stderr: '',
+			stdout: 'C:/Users/fixture/repo\0# branch.head topic\0? dir/file\0\0' + '1\t0\tdir/file\0\0',
+		});
+		const result = await getGitChanges(cwd);
+		expect(result.root).toBe(path.win32.dirname(cwd));
+		expect(result.branch).toBe('topic');
+		expect(result.files[0].path).toBe('dir/file');
+	});
+	it.each(['timeout', 'notARepo'] as const)(
+		'preserves the native cwd on a Windows %s result',
+		async (kind) => {
+			vi.spyOn(path, 'normalize').mockImplementation(path.win32.normalize);
+			const cwd = 'C:\\Users\\fixture\\repo';
+			vi.mocked(execFileNoThrow).mockResolvedValue({
+				exitCode: kind === 'timeout' ? 'ETIMEDOUT' : 128,
+				stderr: kind === 'timeout' ? 'timeout' : 'fatal: not a git repository',
+				stdout: '',
+			});
+			expect(await getGitChanges(cwd)).toEqual({
+				root: cwd,
+				branch: null,
+				files: [],
+				totals: { files: 0, additions: 0, deletions: 0 },
+				truncated: false,
+				[kind === 'timeout' ? 'timedOut' : 'notARepo']: true,
+			});
+		}
+	);
+	it('keeps the SSH root exactly as printed even with Windows local path semantics', async () => {
+		const normalize = vi.spyOn(path, 'normalize').mockImplementation(path.win32.normalize);
+		const root = '/remote/literal\\name/repo';
+		vi.mocked(execFileNoThrow).mockResolvedValue({
+			exitCode: 0,
+			stderr: '',
+			stdout: `${root}\0# branch.head topic\0\0\0`,
+		});
+		expect((await getGitChanges('C:\\unused', remote, root)).root).toBe(root);
+		expect(normalize).not.toHaveBeenCalled();
+	});
 	it('uses the canonical SSH builder once, with remote quoting, overrides and optional locks disabled', async () => {
 		vi.mocked(execFileNoThrow).mockResolvedValue({
 			exitCode: 0,

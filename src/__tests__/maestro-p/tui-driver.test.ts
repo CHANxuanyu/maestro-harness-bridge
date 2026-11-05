@@ -131,6 +131,49 @@ describe('TuiDriver', () => {
 		mockPtyProcess.resize.mockClear();
 	});
 
+	describe('terminate()', () => {
+		beforeEach(() => vi.useFakeTimers());
+		afterEach(() => vi.useRealTimers());
+
+		it('sends SIGTERM then SIGKILL if exit never arrives', async () => {
+			const driver = await makeDriver();
+			const stopping = driver.terminate();
+			expect(mockPtyProcess.kill.mock.calls).toEqual([['SIGTERM']]);
+			await vi.advanceTimersByTimeAsync(999);
+			expect(mockPtyProcess.kill).toHaveBeenCalledTimes(1);
+			await vi.advanceTimersByTimeAsync(1);
+			await stopping;
+			expect(mockPtyProcess.kill.mock.calls).toEqual([['SIGTERM'], ['SIGKILL']]);
+			expect(mockPtyProcess.write).not.toHaveBeenCalled();
+			expect(driver.listenerCount('exit')).toBe(0);
+		});
+
+		it('confirms exit and cancels escalation', async () => {
+			const driver = await makeDriver();
+			const stopping = driver.terminate();
+			triggerExit(0);
+			await stopping;
+			await vi.advanceTimersByTimeAsync(2000);
+			expect(mockPtyProcess.kill.mock.calls).toEqual([['SIGTERM']]);
+			expect(driver.listenerCount('exit')).toBe(0);
+		});
+
+		it('is a no-op once exited', async () => {
+			const driver = await makeDriver();
+			triggerExit(0);
+			await driver.terminate();
+			expect(mockPtyProcess.kill).not.toHaveBeenCalled();
+		});
+
+		it('observes an exit delivered synchronously by kill', async () => {
+			const driver = await makeDriver();
+			mockPtyProcess.kill.mockImplementationOnce(() => triggerExit(0));
+			await driver.terminate();
+			expect(mockPtyProcess.kill.mock.calls).toEqual([['SIGTERM']]);
+			expect(vi.getTimerCount()).toBe(0);
+		});
+	});
+
 	describe('start()', () => {
 		it('spawns node-pty with xterm-256color, the provided cwd, and default 200x50 dimensions', async () => {
 			await makeDriver();

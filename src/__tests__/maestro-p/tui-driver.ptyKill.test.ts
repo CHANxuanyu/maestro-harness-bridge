@@ -153,6 +153,15 @@ describe('TuiDriver PTY teardown on Windows', () => {
 		expect(() => fakePty.flushDeferreds()).not.toThrow();
 	});
 
+	it('terminate() never hands node-pty a signal on Windows, including escalation', async () => {
+		const driver = await makeDriver();
+		const stopping = driver.terminate();
+		await vi.advanceTimersByTimeAsync(1000);
+		await stopping;
+		expect(fakePty.kill.mock.calls).toEqual([[undefined], [undefined]]);
+		expect(() => fakePty.flushDeferreds()).not.toThrow();
+	});
+
 	it('still passes the signal through on POSIX', async () => {
 		mockIsWindows.mockReturnValue(false);
 		const driver = await makeDriver();

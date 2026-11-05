@@ -7,6 +7,7 @@
 - [本版验证与限制](verification/v1.0.1-hb.6.md)
 - [开发过程记录](worklog.md)
 - [信息流改造记录](roadmap/conversation-feed.md)
+- [新界面规格](roadmap/new-shell.md)
 - [Codex 双端接续启动与回退](codex-shared.md)
 - [本分支 Releases](https://github.com/CHANxuanyu/maestro-harness-bridge/releases)
 

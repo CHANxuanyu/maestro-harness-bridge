@@ -2,6 +2,14 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-05：hb.7 后端 D，帮助核对与最终验证
+
+在本克隆 gitignored scratch 中为每次命令创建新的 HOME、CLAUDE_CONFIG_DIR、CODEX_HOME，只执行版本、帮助与 feature flags 列表。Claude Code 为 2.1.317，Codex CLI 为 0.166.0-alpha.6。帮助确认 plan 权限参数和只读 sandbox 参数；已有 capability 布尔值不变，在字段旁记录核对版本。不以帮助输出声称 DeepSeek 图片或推理能力已通过，也不声称 Codex 已能在沙箱里调用 Maestro。该项仅审计与注释，没有行为改动，未造一个没有行为意义的失败测试；修改前既有 capability 测试为 25/25。
+
+最终被测对象是本地源码，没有发行包。合并一次运行全部触及的测试及 capability 回归，18 文件、938/938、无跳过；`npm run lint` 三个配置、修改源文件 ESLint、测试专用 dash ESLint、全仓 `npm run format:check:all` 和 `npm run docs:verify` 均通过，路径检查为 653 条、0 缺失。构建后的 CLI 在隔离目录实跑 settings set/get newShell，返回 true 和 boolean；生成 CLI reference 后已格式化；起始失败、精确最终命令、CLI parity 两行和限制存于[后端核对报告](verification/hb7-backend.md)，[能力核对](verification/hb7-capabilities.md)逐项区分 flag 与模型行为。
+
+Electron、真实 SSH、Windows、安装包和付费调用均未验。既有 DeepSeek 预设工厂只支持本机新账户，SSH 上缺少同目录 preset runner 时明确失败，未改成在本机运行。Opus 后续询问用户再验证 DeepSeek 图片、推理强度和 Codex 派活；本轮没有真实账户写入、模型请求、推送或发布。
+
 ## 2026-11-05：hb.7 后端 C，交接和复核
 
 交接按执行 cwd 与 SSH remoteId 匹配目标，不再按项目分组路径复用其他 worktree，也不从其他项目复制配置。缺失目标取工具全局配置；本机 DeepSeek 从全局网关配置调用既有隔离预设，SSH 上没有对应预设 runner 时明确失败，因为既有工厂只创建本机账户目录，本轮不发明远程账户创建协议。

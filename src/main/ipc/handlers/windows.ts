@@ -12,7 +12,7 @@
  * manager's `createSecondaryWindow`, which registers the new window itself.
  */
 
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain, type IpcMainEvent, type WebContents } from 'electron';
 import type {
 	WindowBounds,
 	WindowHighlightDropZonePayload,
@@ -26,6 +26,7 @@ import type { WindowManager } from '../../app-lifecycle/window-manager';
 import { registeredWindowToWindowState } from '../../window-state-persistence';
 import { requireDependency, withIpcErrorLogging } from '../../utils/ipcHandler';
 import { logger } from '../../utils/logger';
+import { generateUUID } from '../../../shared/uuid';
 
 const LOG_CONTEXT = '[Windows]';
 
@@ -153,13 +154,60 @@ export function wireWindowRegistryBroadcast(registry: WindowRegistry): () => voi
 			fromWindowId: change.fromWindowId,
 			toWindowId: change.toWindowId,
 		};
-		for (const entry of registry.getAppWindows()) {
-			const { browserWindow } = entry;
-			if (browserWindow.isDestroyed()) continue;
-			const { webContents } = browserWindow;
-			if (webContents.isDestroyed()) continue;
-			webContents.send(WINDOW_SESSION_MOVED_CHANNEL, payload);
+		const broadcast = () => {
+			for (const entry of registry.getAppWindows()) {
+				const { browserWindow } = entry;
+				if (browserWindow.isDestroyed()) continue;
+				const { webContents } = browserWindow;
+				if (webContents.isDestroyed()) continue;
+				webContents.send(WINDOW_SESSION_MOVED_CHANNEL, payload);
+			}
+		};
+		const source =
+			change.type === 'session-moved' && change.fromWindowId
+				? registry.get(change.fromWindowId)?.browserWindow
+				: undefined;
+		if (!source || source.isDestroyed() || source.webContents.isDestroyed()) {
+			broadcast();
+			return;
 		}
+		// The new owner reloads the agent when this broadcast arrives, so the old
+		// owner's last changes have to be in the store first.
+		void requestHandoverSave(source.webContents).then(broadcast);
+	});
+}
+
+/** How long a move waits for the old owner's save before going ahead without it. */
+export const HANDOVER_SAVE_TIMEOUT_MS = 3000;
+
+/**
+ * Ask a window to write its pending changes before an agent leaves it. A window
+ * saves only the agents it owns, so this is the last moment those changes can
+ * land. It reuses the quit save's request, which every window already answers,
+ * matched here by its own id. Always resolves: a stuck window must not hold up
+ * the move.
+ */
+function requestHandoverSave(contents: WebContents): Promise<void> {
+	return new Promise((resolve) => {
+		const requestId = generateUUID();
+		const finish = () => {
+			clearTimeout(timeout);
+			ipcMain.removeListener('app:quitSaveComplete', onComplete);
+			contents.removeListener('destroyed', finish);
+			resolve();
+		};
+		const onComplete = (event: IpcMainEvent, id: unknown, saved: unknown) => {
+			if (id !== requestId || event.sender !== contents) return;
+			if (saved !== true) logger.warn('Save before an agent move failed', LOG_CONTEXT);
+			finish();
+		};
+		const timeout = setTimeout(() => {
+			logger.warn('Save before an agent move timed out', LOG_CONTEXT);
+			finish();
+		}, HANDOVER_SAVE_TIMEOUT_MS);
+		ipcMain.on('app:quitSaveComplete', onComplete);
+		contents.once('destroyed', finish);
+		contents.send('app:requestQuitSave', requestId);
 	});
 }
 

@@ -508,7 +508,12 @@ export function registerPersistenceHandlers(
 		logger.debug(`Loaded ${sessions.length} sessions from store`, 'Sessions');
 		return sessions;
 	};
-	ipcMain.handle('sessions:getAll', loadStoredSessions);
+	// Behind the write queue: a window taking over an agent reads it here right
+	// after the old owner's last save, which may still be in progress.
+	ipcMain.handle(
+		'sessions:getAll',
+		queueWrite(() => loadStoredSessions())
+	);
 	ipcMain.handle('sessions:getBootstrap', async () =>
 		(await loadStoredSessions()).map(projectWebSession)
 	);

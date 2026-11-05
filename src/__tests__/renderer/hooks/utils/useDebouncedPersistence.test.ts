@@ -131,6 +131,15 @@ function renderPersistence(initialLoadRef: { current: boolean }, delay?: number)
 	);
 }
 
+function renderOwnedPersistence(
+	initialLoadRef: { current: boolean },
+	ownsSession: (sessionId: string) => boolean
+) {
+	return renderHook(({ owns }) => useDebouncedPersistence(initialLoadRef, undefined, owns), {
+		initialProps: { owns: ownsSession },
+	});
+}
+
 // ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
@@ -2820,6 +2829,151 @@ describe('useDebouncedPersistence', () => {
 			const reported = captureExceptionMock.mock.calls[0][0] as Error;
 			expect(reported).toBeInstanceOf(Error);
 			expect(reported.message).toBe('boom');
+		});
+	});
+
+	// -----------------------------------------------------------------------
+	// Each agent lives in exactly one window, and every window keeps its own copy
+	// of the whole tree. The copy of an agent another window owns is stale, and
+	// background updates here still give it a new identity, so ownership has to
+	// decide what is written: otherwise it lands over the owner's conversation.
+	// -----------------------------------------------------------------------
+	describe('window ownership', () => {
+		const ownsOnly = (id: string) => (sessionId: string) => sessionId === id;
+		const savedIds = () =>
+			[
+				...vi.mocked(window.maestro.sessions.setAll).mock.calls.map(([sessions]) => sessions),
+				...vi.mocked(window.maestro.sessions.setMany).mock.calls.map(([sessions]) => sessions),
+			].flatMap((sessions) => (sessions as Session[]).map((session) => session.id));
+
+		it('leaves out an agent another window owns on the opening save', () => {
+			const mine = makeSession({ id: 'mine', name: 'Mine' });
+			const theirs = makeSession({ id: 'theirs', name: 'Theirs' });
+			renderOwnedPersistence(makeInitialLoadRef(true), ownsOnly('mine'));
+			act(() => {
+				seedSessions([mine, theirs]);
+			});
+			act(() => {
+				vi.advanceTimersByTime(2000);
+			});
+
+			expect(savedIds()).toEqual(['mine']);
+		});
+
+		it('leaves out an agent another window owns on the startup repair save', async () => {
+			const mine = makeSession({ id: 'mine', name: 'Mine' });
+			const theirs = makeSession({ id: 'theirs', name: 'Theirs' });
+			const initialLoadRef = makeInitialLoadRef(false);
+			useSessionStore.setState({ sessionsReadOk: false });
+			renderOwnedPersistence(initialLoadRef, ownsOnly('mine'));
+			act(() => {
+				useSessionStore.setState({ sessions: [mine, theirs], sessionsReadOk: true });
+			});
+			initialLoadRef.current = true;
+			act(() => {
+				seedSessions([{ ...mine, name: 'Mine, changed' }, theirs]);
+			});
+			await act(async () => {
+				vi.advanceTimersByTime(2000);
+			});
+
+			expect(savedIds()).toEqual(['mine']);
+		});
+
+		it('leaves out a background change to an agent another window owns', async () => {
+			const mine = makeSession({ id: 'mine', name: 'Mine' });
+			const theirs = makeSession({ id: 'theirs', name: 'Theirs' });
+			renderOwnedPersistence(makeInitialLoadRef(true), ownsOnly('mine'));
+			act(() => {
+				seedSessions([mine, theirs]);
+			});
+			await act(async () => {
+				vi.advanceTimersByTime(2000);
+			});
+			vi.mocked(window.maestro.sessions.setAll).mockClear();
+			vi.mocked(window.maestro.sessions.setMany).mockClear();
+
+			act(() => {
+				seedSessions([
+					{ ...mine, name: 'Mine, changed' },
+					{ ...theirs, name: 'Stale copy' },
+				]);
+			});
+			await act(async () => {
+				vi.advanceTimersByTime(2000);
+			});
+
+			expect(savedIds()).toEqual(['mine']);
+		});
+
+		it('writes nothing when every change belongs to another window', async () => {
+			const mine = makeSession({ id: 'mine', name: 'Mine' });
+			const theirs = makeSession({ id: 'theirs', name: 'Theirs' });
+			renderOwnedPersistence(makeInitialLoadRef(true), ownsOnly('mine'));
+			act(() => {
+				seedSessions([mine, theirs]);
+			});
+			await act(async () => {
+				vi.advanceTimersByTime(2000);
+			});
+			vi.mocked(window.maestro.sessions.setAll).mockClear();
+			vi.mocked(window.maestro.sessions.setMany).mockClear();
+
+			act(() => {
+				seedSessions([mine, { ...theirs, name: 'Stale copy' }]);
+			});
+			await act(async () => {
+				vi.advanceTimersByTime(2000);
+			});
+
+			expect(window.maestro.sessions.setMany).not.toHaveBeenCalled();
+			expect(window.maestro.sessions.setAll).not.toHaveBeenCalled();
+		});
+
+		it('follows ownership as it changes', async () => {
+			const mine = makeSession({ id: 'mine', name: 'Mine' });
+			const moved = makeSession({ id: 'moved', name: 'Moved' });
+			const hook = renderOwnedPersistence(makeInitialLoadRef(true), ownsOnly('mine'));
+			act(() => {
+				seedSessions([mine, moved]);
+			});
+			await act(async () => {
+				vi.advanceTimersByTime(2000);
+			});
+			vi.mocked(window.maestro.sessions.setAll).mockClear();
+			vi.mocked(window.maestro.sessions.setMany).mockClear();
+
+			hook.rerender({ owns: () => true });
+			act(() => {
+				seedSessions([mine, { ...moved, name: 'Moved, changed here' }]);
+			});
+			await act(async () => {
+				vi.advanceTimersByTime(2000);
+			});
+
+			expect(savedIds()).toEqual(['moved']);
+		});
+
+		it('still deletes an agent this window does not own', async () => {
+			const mine = makeSession({ id: 'mine', name: 'Mine' });
+			const theirs = makeSession({ id: 'theirs', name: 'Theirs' });
+			renderOwnedPersistence(makeInitialLoadRef(true), ownsOnly('mine'));
+			act(() => {
+				seedSessions([mine, theirs]);
+			});
+			await act(async () => {
+				vi.advanceTimersByTime(2000);
+			});
+			vi.mocked(window.maestro.sessions.setMany).mockClear();
+
+			act(() => {
+				seedSessions([mine]);
+			});
+			await act(async () => {
+				vi.advanceTimersByTime(2000);
+			});
+
+			expect(window.maestro.sessions.setMany).toHaveBeenCalledWith([], ['theirs']);
 		});
 	});
 });

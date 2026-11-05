@@ -2148,7 +2148,11 @@ function MaestroConsoleInner() {
 
 	// Persist sessions to electron-store using debounced persistence (reduces disk writes from 100+/sec to <1/sec during streaming)
 	// The hook handles: debouncing, flush-on-unmount, flush-on-visibility-change, flush-on-beforeunload
-	const { flushNow: flushSessionPersistence } = useDebouncedPersistence(initialLoadComplete);
+	const { flushNow: flushSessionPersistence } = useDebouncedPersistence(
+		initialLoadComplete,
+		undefined,
+		ownsSession
+	);
 
 	// Session lifecycle operations (rename, delete, star, unread, groups persistence, nav tracking)
 	// - provided by useSessionLifecycle hook (Phase 2H)

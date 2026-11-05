@@ -25,9 +25,12 @@
 
 import { useEffect } from 'react';
 import type { Session } from '../../types';
+import { useComposerInputStore } from '../../stores/composerInputStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { logger } from '../../utils/logger';
+import { isWebDesktop } from '../../utils/runtimeContext';
 import { captureException } from '../../utils/sentry';
+import { normalizeComposerCommandMode } from '../../utils/shellCommandInput';
 
 export interface SessionLifecycleSyncPayload {
 	added?: Session[];
@@ -126,22 +129,67 @@ export function useSessionLifecycleSync(
 			);
 		};
 
-		const unsubscribe = api.onLifecycleSync((payload: SessionLifecycleSyncPayload) => {
+		// Live events reach only an agent's owner, so this window's copy of an agent
+		// it just received stopped at whenever that agent last left it. Showing that
+		// copy hides the conversation, and the first edit here would write it over
+		// the real one. Main announces a move after the old owner has saved, so the
+		// store holds the current agent by now.
+		const reloadArrivedAgent = async (sessionId: string, toWindowId?: string): Promise<void> => {
+			await whenSessionsLoaded();
+			if (disposed) return;
+			const thisWindow = await window.maestro.windows.getState();
+			if (disposed || !thisWindow || thisWindow.id !== toWindowId) return;
+			const stored = (await api.getAll()).find((session: Session) => session.id === sessionId);
+			if (disposed || !stored) return;
+			const restored = await restoreSession(stored);
+			if (disposed) return;
+			useSessionStore
+				.getState()
+				.setSessions((prev) => prev.map((s) => (s.id === sessionId ? restored : s)));
+			// The composer reads a tab's draft only when it switches to that tab, so one
+			// already showing this agent still holds the stale copy's draft.
+			const composer = useComposerInputStore.getState();
+			const onScreen = restored.aiTabs?.find((tab) => tab.id === composer.aiValueTabId);
+			if (onScreen) {
+				composer.loadAiDraft(
+					onScreen.id,
+					onScreen.inputValue ?? '',
+					normalizeComposerCommandMode(onScreen.commandMode)
+				);
+			}
+			// The restore pass resets every agent to idle; one moved mid-turn is not.
+			void reattachLiveTurns?.();
+		};
+
+		const enqueue = (operation: string, work: () => Promise<void>) => {
 			// Report a failed delta but keep the chain alive: it is what preserves
 			// arrival order for every delta behind it, and a rejected link would
 			// silently stop this client following its peers for the rest of the run.
-			queue = queue
-				.then(() => applyDelta(payload))
-				.catch((err) => {
-					captureException(err instanceof Error ? err : new Error(String(err)), {
-						extra: { operation: 'useSessionLifecycleSync.applyDelta' },
-					});
+			queue = queue.then(work).catch((err) => {
+				captureException(err instanceof Error ? err : new Error(String(err)), {
+					extra: { operation },
 				});
+			});
+		};
+
+		const unsubscribe = api.onLifecycleSync((payload: SessionLifecycleSyncPayload) => {
+			enqueue('useSessionLifecycleSync.applyDelta', () => applyDelta(payload));
 		});
+		// A web-desktop client mirrors every agent rather than owning any.
+		const unsubscribeMoves = isWebDesktop()
+			? undefined
+			: window.maestro.windows?.onSessionMoved?.((change) => {
+					if (change.type !== 'session-moved' || !change.sessionId) return;
+					const { sessionId, toWindowId } = change;
+					enqueue('useSessionLifecycleSync.reloadArrivedAgent', () =>
+						reloadArrivedAgent(sessionId, toWindowId)
+					);
+				});
 
 		return () => {
 			disposed = true;
 			unsubscribe();
+			unsubscribeMoves?.();
 		};
 	}, [restoreSession, reattachLiveTurns]);
 }

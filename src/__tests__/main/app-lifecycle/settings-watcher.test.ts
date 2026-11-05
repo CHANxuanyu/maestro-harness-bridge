@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { FSWatcher, WatchEventType } from 'fs';
 import type { BrowserWindow } from 'electron';
+import { trackStoreWrites } from '../../../main/stores/write-tracker';
 
 type WatchCallback = (eventType: WatchEventType, filename: string | null) => void;
 
@@ -21,6 +22,7 @@ const mockClose = vi.fn();
 
 const mockExistsSync = vi.fn();
 const mockMkdirSync = vi.fn();
+const mockReadFileSync = vi.fn();
 const mockWatch = vi.fn((...args: unknown[]) => {
 	watcherCallbacks.push(args[1] as WatchCallback);
 	return {
@@ -32,9 +34,11 @@ const mockWatch = vi.fn((...args: unknown[]) => {
 vi.mock('fs', () => ({
 	default: {
 		existsSync: (...args: unknown[]) => mockExistsSync(...args),
+		readFileSync: (...args: unknown[]) => mockReadFileSync(...args),
 		mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
 		watch: (...args: unknown[]) => mockWatch(...args),
 	},
+	readFileSync: (...args: unknown[]) => mockReadFileSync(...args),
 	existsSync: (...args: unknown[]) => mockExistsSync(...args),
 	mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
 	watch: (...args: unknown[]) => mockWatch(...args),
@@ -49,6 +53,11 @@ describe('app-lifecycle/settings-watcher', () => {
 	// rc broadcasts the reload to EVERY open window rather than just the main
 	// one, so the watcher takes an enumerator instead of a getMainWindow.
 	let getBroadcastWindows: () => BrowserWindow[];
+	let store: { _serialize(value: unknown): string; _write(value: unknown): void };
+
+	function writeInternally() {
+		store._write({ conductorProfile: 'app value' });
+	}
 
 	/** Fire a change event for `filename` on every registered watcher. */
 	function emitChange(filename: string) {
@@ -82,6 +91,17 @@ describe('app-lifecycle/settings-watcher', () => {
 
 		const { resetInternalWriteTracking } = await import('../../../main/stores/write-tracker');
 		resetInternalWriteTracking();
+		mockReadFileSync.mockReturnValue(Buffer.from('{}'));
+		store = trackStoreWrites(
+			{
+				path: '/test/sync/maestro-settings.json',
+				_serialize: JSON.stringify,
+				_write(value: unknown) {
+					mockReadFileSync.mockReturnValue(Buffer.from(this._serialize(value)));
+				},
+			},
+			'maestro-settings.json'
+		);
 	});
 
 	afterEach(() => {
@@ -92,6 +112,7 @@ describe('app-lifecycle/settings-watcher', () => {
 	it('notifies the renderer for an external settings change', async () => {
 		await startWatcher();
 
+		mockReadFileSync.mockReturnValue(Buffer.from('{"external":true}'));
 		emitChange('maestro-settings.json');
 		vi.advanceTimersByTime(400);
 
@@ -108,10 +129,9 @@ describe('app-lifecycle/settings-watcher', () => {
 	});
 
 	it("does not notify the renderer for the app's own settings write", async () => {
-		const { markInternalWrite } = await import('../../../main/stores/write-tracker');
 		await startWatcher();
 
-		markInternalWrite('maestro-settings.json');
+		writeInternally();
 		emitChange('maestro-settings.json');
 		vi.advanceTimersByTime(400);
 
@@ -119,11 +139,10 @@ describe('app-lifecycle/settings-watcher', () => {
 	});
 
 	it('suppresses a burst of self-writes (typing in a text setting)', async () => {
-		const { markInternalWrite } = await import('../../../main/stores/write-tracker');
 		await startWatcher();
 
 		for (let i = 0; i < 20; i++) {
-			markInternalWrite('maestro-settings.json');
+			writeInternally();
 			emitChange('maestro-settings.json');
 			vi.advanceTimersByTime(120); // ~8 keystrokes/sec
 		}
@@ -132,13 +151,12 @@ describe('app-lifecycle/settings-watcher', () => {
 		expect(send).not.toHaveBeenCalled();
 	});
 
-	it('resumes notifying once the self-write shadow has elapsed', async () => {
-		const { markInternalWrite, INTERNAL_WRITE_SHADOW_MS } =
-			await import('../../../main/stores/write-tracker');
+	it('notifies for new external content after an earlier internal write', async () => {
 		await startWatcher();
 
-		markInternalWrite('maestro-settings.json');
-		vi.advanceTimersByTime(INTERNAL_WRITE_SHADOW_MS + 1);
+		writeInternally();
+		vi.advanceTimersByTime(501);
+		mockReadFileSync.mockReturnValue(Buffer.from('{"conductorProfile":"external value"}'));
 
 		emitChange('maestro-settings.json');
 		vi.advanceTimersByTime(400);
@@ -147,11 +165,10 @@ describe('app-lifecycle/settings-watcher', () => {
 	});
 
 	it('tracks each watched file independently', async () => {
-		const { markInternalWrite } = await import('../../../main/stores/write-tracker');
 		await startWatcher();
 
 		// A settings write must not mask an external agent-config change.
-		markInternalWrite('maestro-settings.json');
+		writeInternally();
 		emitChange('maestro-agent-configs.json');
 		vi.advanceTimersByTime(400);
 

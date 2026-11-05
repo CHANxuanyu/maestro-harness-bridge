@@ -357,7 +357,7 @@ src/main/stores/
   instances.ts     # Store instance creation and initialization
   getters.ts       # Public getter functions
   utils.ts         # Utility functions (getCustomSyncPath, getEarlySettings)
-  write-tracker.ts # Stamps the app's own store writes (see below)
+  write-tracker.ts # Fingerprints the app's own store writes (see below)
 ```
 
 `initializeStores()` must be called before any store getter. The `app.setPath('userData', ...)` calls must happen before initialization.
@@ -370,7 +370,7 @@ The app's own writes fire that same watcher, and echoing them back is actively h
 
 Three pieces keep that from happening. Change any one of them and the keystroke-loss bug comes back:
 
-1. **`src/main/stores/write-tracker.ts`** - `trackStoreWrites(store, fileName)` wraps the `set` / `delete` / `clear` / `reset` methods of a store instance so every mutation stamps a timestamp. It is applied in `instances.ts` at construction, so new write call sites are covered without touching them. The watcher drops any change that lands within `INTERNAL_WRITE_SHADOW_MS` (500ms) of a stamp, checked at event time rather than after the debounce so continuous typing stays suppressed.
+1. **`src/main/stores/write-tracker.ts`** - `trackStoreWrites(store, fileName)` wraps conf's synchronous write and serializer hooks, recording a hash of the bytes successfully written by every mutator, including full-document assignment. Before writing, it remembers any external disk content that the app may carry forward. `consumeExternalStoreChange()` compares content at watch-event time and acknowledges external edits when their notification is queued. Internal events never cancel that queued reload. There is no time-based suppression, so nearby CLI edits reach both the renderer and main-process consumers while app-only typing stays quiet.
 2. **`notifyPeerWindows()` in `src/main/ipc/handlers/persistence.ts`** - because the watcher now stays quiet for our own writes, `settings:set` explicitly forwards `settings:externalChange` to every window _except_ the one that wrote. Multi-window sync would otherwise break.
 3. **The in-flight guard in `loadAllSettings()` (`src/renderer/stores/settingsStore.ts`)** - a reload snapshots the store before its awaited reads and drops any key the user changed while they were in flight. Those edits already persisted themselves, so the in-memory value is newer. Skipped on the initial hydration, where the store still holds defaults and every disk value must land.
 

@@ -2,6 +2,36 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-05：设置监听不再遗漏紧邻的外部写入
+
+本轮基于 `72545fdad`，在无远端的 `codex/settings-watcher-shadow` 本地分支修复设置监听。被测对象是本克隆源码，未启动 Electron、打包、安装或访问真实账户目录。
+
+- **实现：** 两个既有监听文件改用成功写入字节的 SHA-256，删除 500ms 时间屏蔽及其旧接口。写入前发现外部内容时保留待通知标记，避免 electron-store 读回并保留该值后将其误判为纯内部写入。事件发生时确认外部变更，后续内部事件不会取消已排队的 300ms 通知；所有窗口和主进程回调共用该决定。未增加监听器或轮询。
+- **失败先行：** 新增真实临时文件及 conf 存储回归，修复前 10 条中 8 失败、2 通过，覆盖两个文件的 100ms 外部写入、延迟内部事件及两种交错事件顺序。修复后同一组 10/10；相关四文件 42/42，无跳过。旧时间接口测试改为内容不变量，保留自身写入、连续输入、独立文件、返回值和异常断言，新增全文赋值及序列化后外部替换覆盖。
+- **端到端：** 新增 `e2e/native-settings-watcher.spec.ts`，先经 IPC 显式保存设置，再立即运行 CLI 将界面语言切为简体中文，并断言窗口中的创建智能体文字切换。文件时间断言要求两次写入间隔小于 500ms，避免 CLI 启动过慢使旧实现假通过。Playwright 列举成功，Electron 执行交给 Opus。
+
+最终相关回归为 31 文件 945/945，无跳过；与四文件 42 条重叠，不累计计数。三个 TypeScript 项目、全部触及代码和测试的 ESLint、全仓 Prettier、647 条文档路径（0 缺失）、差异空白检查通过。实际命令如下：
+
+```sh
+npm run test -- src/__tests__/main/app-lifecycle/settings-watcher-content.test.ts
+npm run test -- src/__tests__/main/app-lifecycle/settings-watcher.test.ts src/__tests__/main/app-lifecycle/settings-watcher-content.test.ts src/__tests__/main/stores/write-tracker.test.ts src/__tests__/main/stores/instances.test.ts
+npm run test -- src/__tests__/main/app-lifecycle src/__tests__/main/stores src/__tests__/cli/services/storage.test.ts src/__tests__/renderer/hooks/useSettings.test.ts src/__tests__/renderer/stores/settingsStore.test.ts
+npm run lint
+node node_modules/eslint/bin/eslint.js --ignore-pattern '!src/__tests__/**' src/main/app-lifecycle/settings-watcher.ts src/main/stores/write-tracker.ts src/__tests__/main/app-lifecycle/settings-watcher.test.ts src/__tests__/main/app-lifecycle/settings-watcher-content.test.ts src/__tests__/main/stores/write-tracker.test.ts src/__tests__/main/stores/instances.test.ts e2e/native-settings-watcher.spec.ts
+npm run format:check:all
+npm run docs:verify
+node node_modules/@playwright/test/cli.js test --project=native e2e/native-settings-watcher.spec.ts --list
+git diff --check
+```
+
+首条单元命令在修改生产代码前失败（8 失败、2 通过），修改后通过（10/10）；第二条 42/42，第三条 945/945。ESLint 显式取消测试目录的默认忽略，没有减少检查规则；Playwright 仅列举 1 条回归，未启动应用。Opus 应在沙箱外运行：
+
+```sh
+MAESTRO_E2E_REAL=0 node scripts/native-e2e.mjs --grep "settings watcher: immediate CLI write after an app write updates the window"
+```
+
+该命令会先构建 main、renderer 和 CLI，再执行合成账户夹具。原生 GUI、Linux/Windows CI 和发行包均未验证，不能用本地单元通过替代。
+
 ## 2026-11-04：PR 46 CI 修复
 
 被测对象为 `codex/native-history-coverage` 分支上基于 `13ea76d49` 的本地源码。

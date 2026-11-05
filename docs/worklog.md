@@ -2,6 +2,24 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-05：额度探针退出残留
+
+被测对象为基于 `78760e641` 的 `codex/status-probe-leak` 本地源码。hb.6 的构建来源不变，本修复进入下一版。
+
+现象：hb.6 验收期间，本机 5 个打包版 `maestro-p --status` 在 33 小时后仍在运行，父进程为 PID 1，各带一个空闲的 `claude`。它们的配置目录都是真实模式 E2E 的临时目录，没有登录，也没有完成引导，`claude` 停在首次使用的界面。
+
+根因分两层。第一，`statusMode` 等待 `ready` 没有上限：运行模式监听 `ready-timeout`，状态模式不监听，能结束它的只有父进程 `execFile` 的 30 秒定时器，而定时器随父进程一起消失。用假 `claude` 按采样器的调用方式复现：父进程第 3 秒退出或被 SIGKILL，到第 45 秒探针和 `claude` 仍存活，探针父进程为 1；父进程不退出时定时器在 30 秒结束探针；`claude` 能到输入框时探针第 25 秒自行退出。第二，部分退出路径不确认 `claude` 已停止：`quit()` 发 SIGTERM 后不等结果，读端已关闭时模块级 EPIPE 处理直接 `process.exit(0)`，`workspace-untrusted` 发完 SIGTERM 立即退出。假 `claude` 不响应 SIGTERM 和 SIGHUP 时，这些路径都会把它留下。
+
+修复只在状态模式。启动前挂 28 秒硬期限（复用 `createIdleWatchdog`），每秒检查父进程：`ppid` 改变或 `kill(pid, 0)` 返回 ESRCH 视为已退出，EPERM 视为存活，起始父进程为 0 或 1 时只靠期限。不用 stdin EOF 判断，脚本里的 `--status < /dev/null` 不受影响。`TuiDriver.terminate()` 发 SIGTERM，等 1 秒，再 SIGKILL。硬期限和父进程退出跳过 `/quit`，避免把按键打进未知界面；其余路径先 `quit()` 再 `terminate()`。同步 `exit` 兜底覆盖 EPIPE 和 `main().catch`。状态模式新增 SIGHUP 处理。退出码：`ready` 前到期 4，之后到期 3，父进程退出或 SIGHUP 129。运行模式和 `quit()` 不变。
+
+- 失败先行：实现前新测试 4 个文件 10 失败 / 119 通过。
+- 最终：`src/__tests__/maestro-p` 及采样器、watchdog 相关 26 文件 522 条通过；进程级 12 条连续三轮全部通过。`npm run lint`、`npm run lint:eslint`、Prettier、`docs:verify`、`lint:doc-refs`、`node scripts/hb-release.mjs check` 通过。
+- 真实 Electron：源码构建的应用、真实采样器和 `maestro-p` 包、停住的假 `claude`。确认探针是应用的子进程后退出，正常退出 2.1 秒、SIGKILL 0.9 秒后两个进程都消失。
+- 临时回退：`index.ts` 与 `tui-driver.ts` 改回修复前，同一 Electron 检查两种退出方式都失败，各留下父进程为 1 的探针和它的 `claude`；进程级与驱动测试 14 失败 / 121 通过，控制用例仍通过。回退未提交，恢复后哈希与构建产物逐字节一致。
+- 手工：停住的探针第 28 秒以 4 退出，假 `claude` 不响应信号时第 29 秒退出且 `claude` 消失，都早于 30 秒定时器；第 12 秒才到输入框的探针仍成功；健康探针输出结构与修复前一致。
+
+未验项：未运行真实 `claude`，不响应 SIGTERM 和 SIGHUP 的假 `claude` 覆盖最坏信号行为；未运行打包版；Electron 检查的临时 spec 没有提交，因为 `test:e2e` 不构建 `maestro-p`，把它加入构建会让全部场景开始跑探针；进程级测试依赖 POSIX 脚本，Windows 只有单元测试覆盖，由 CI 执行；本地未跑完整单元测试，由 CI 执行。`maestro-p` 自身被 SIGKILL 时无法运行任何清理，`claude` 只能靠 PTY 挂断结束。
+
 ## 2026-11-05：hb.6 重新打包候选
 
 hb.6 未打标签。PR #45、#46 已合入主线（`2919fbfea`，主线 CI 通过），本候选只改文档：CHANGELOG 把 Windows worktree 修复从 Unreleased 移入 hb.6；候选说明补上 worktree 历史与压缩 Codex 历史，写明新的构建来源，并增加一条已知限制（运行中命令行改设置若紧跟应用自身写入，窗口可能不更新，hb.7 的设置监听修复解决）；验收记录标明重新打包，真实模式与发行包 GUI 在新包上重做。

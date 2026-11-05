@@ -1,115 +1,138 @@
-/**
- * Tests for the internal store-write tracker used by the settings file watcher
- * to tell the app's own writes apart from external edits.
- */
-
+/** Tests for content-based suppression of internal store writes. */
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import Conf from 'conf';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-	markInternalWrite,
-	hadRecentInternalWrite,
+	consumeExternalStoreChange,
 	resetInternalWriteTracking,
 	trackStoreWrites,
-	INTERNAL_WRITE_SHADOW_MS,
 } from '../../../main/stores/write-tracker';
 
 describe('main/stores/write-tracker', () => {
+	let root: string;
+	let store: Conf<Record<string, unknown>>;
+	const filename = 'maestro-settings.json';
+
 	beforeEach(() => {
 		vi.useFakeTimers();
 		resetInternalWriteTracking();
+		root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-write-tracker-'));
+		store = new Conf({ cwd: root, configName: 'maestro-settings', defaults: { value: 'initial' } });
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		vi.useRealTimers();
+		fs.rmSync(root, { recursive: true, force: true });
 	});
 
-	it('reports no recent write for an untouched file', () => {
-		expect(hadRecentInternalWrite('maestro-settings.json')).toBe(false);
+	it('does not suppress an untracked file', () => {
+		expect(consumeExternalStoreChange(filename, store.path)).toBe(true);
 	});
 
-	it('reports a recent write inside the shadow window', () => {
-		markInternalWrite('maestro-settings.json');
-		vi.advanceTimersByTime(INTERNAL_WRITE_SHADOW_MS - 1);
+	it('recognizes the initial content without an app mutation', () => {
+		trackStoreWrites(store, filename);
 
-		expect(hadRecentInternalWrite('maestro-settings.json')).toBe(true);
+		expect(consumeExternalStoreChange(filename, store.path)).toBe(false);
 	});
 
-	it('expires once the shadow window has elapsed', () => {
-		markInternalWrite('maestro-settings.json');
-		vi.advanceTimersByTime(INTERNAL_WRITE_SHADOW_MS + 1);
+	it('recognizes our written content regardless of elapsed time', () => {
+		trackStoreWrites(store, filename);
+		const result = store.set('value', 'app');
+		vi.advanceTimersByTime(10000);
 
-		expect(hadRecentInternalWrite('maestro-settings.json')).toBe(false);
+		expect(result).toBeUndefined();
+		expect(store.get('value')).toBe('app');
+		expect(consumeExternalStoreChange(filename, store.path)).toBe(false);
+	});
+
+	it.each(['delete', 'clear', 'reset'] as const)(
+		'tracks %s, including nested mutators',
+		(method) => {
+			trackStoreWrites(store, filename);
+			store.set('value', 'app');
+
+			store[method]('value');
+
+			expect(store.get('value')).toBe(method === 'delete' ? undefined : 'initial');
+			expect(consumeExternalStoreChange(filename, store.path)).toBe(false);
+		}
+	);
+
+	it('tracks full-document assignment too', () => {
+		trackStoreWrites(store, filename);
+		store.store = { replaced: true };
+
+		expect(store.store).toEqual({ replaced: true });
+		expect(consumeExternalStoreChange(filename, store.path)).toBe(false);
+	});
+
+	it('does not acknowledge external content during a read', () => {
+		trackStoreWrites(store, filename);
+		fs.writeFileSync(store.path, '{"value":"external"}');
+
+		expect(store.get('value')).toBe('external');
+		expect(consumeExternalStoreChange(filename, store.path)).toBe(true);
+		expect(consumeExternalStoreChange(filename, store.path)).toBe(false);
 	});
 
 	it('keeps files independent', () => {
-		markInternalWrite('maestro-settings.json');
+		trackStoreWrites(store, filename);
+		const configs = trackStoreWrites(
+			new Conf({ cwd: root, configName: 'maestro-agent-configs', defaults: {} }),
+			'maestro-agent-configs.json'
+		);
+		store.set('value', 'app');
+		configs.set('configs', {});
+		fs.writeFileSync(store.path, '{"value":"external"}');
 
-		expect(hadRecentInternalWrite('maestro-agent-configs.json')).toBe(false);
+		expect(consumeExternalStoreChange('maestro-agent-configs.json', configs.path)).toBe(false);
+		expect(consumeExternalStoreChange(filename, store.path)).toBe(true);
 	});
 
-	describe('trackStoreWrites', () => {
-		function makeStore() {
-			return {
-				data: {} as Record<string, unknown>,
-				set(key: string, value: unknown) {
-					this.data[key] = value;
-					return 'set-result';
-				},
-				delete(key: string) {
-					delete this.data[key];
-				},
-				clear() {
-					this.data = {};
-				},
-				reset() {
-					this.data = {};
-				},
-				get(key: string) {
-					return this.data[key];
-				},
-			};
-		}
-
-		it('stamps a write and preserves the return value and behaviour', () => {
-			const store = trackStoreWrites(makeStore(), 'maestro-settings.json');
-
-			const result = store.set('conductorProfile', 'hello');
-
-			expect(result).toBe('set-result');
-			expect(store.get('conductorProfile')).toBe('hello');
-			expect(hadRecentInternalWrite('maestro-settings.json')).toBe(true);
+	it('preserves an external edit when an internal mutation throws', () => {
+		const target = store as unknown as { _write(value: unknown): void };
+		vi.spyOn(target, '_write').mockImplementation(() => {
+			throw new Error('ENOSPC');
 		});
+		trackStoreWrites(store, filename);
+		fs.writeFileSync(store.path, '{"value":"external"}');
 
-		it('stamps delete, clear, and reset too', () => {
-			for (const method of ['delete', 'clear', 'reset'] as const) {
-				resetInternalWriteTracking();
-				const store = trackStoreWrites(makeStore(), 'maestro-settings.json');
+		expect(() => store.set('value', 'app')).toThrow('ENOSPC');
+		expect(store.get('value')).toBe('external');
+		expect(consumeExternalStoreChange(filename, store.path)).toBe(true);
+	});
 
-				store[method]('conductorProfile');
-
-				expect(hadRecentInternalWrite('maestro-settings.json')).toBe(true);
-			}
+	it('does not acknowledge serialized bytes from a failed write', () => {
+		const target = store as unknown as {
+			_serialize(value: unknown): string;
+			_write(value: unknown): void;
+		};
+		vi.spyOn(target, '_write').mockImplementation((value) => {
+			target._serialize(value);
+			throw new Error('ENOSPC');
 		});
+		trackStoreWrites(store, filename);
 
-		it('does not stamp reads', () => {
-			const store = trackStoreWrites(makeStore(), 'maestro-settings.json');
+		expect(() => store.set('value', 'app')).toThrow('ENOSPC');
+		expect(store.get('value')).toBe('initial');
+		expect(consumeExternalStoreChange(filename, store.path)).toBe(false);
+	});
 
-			store.get('conductorProfile');
-
-			expect(hadRecentInternalWrite('maestro-settings.json')).toBe(false);
+	it('captures the actual serializer output rather than a later external replacement', () => {
+		store = new Conf({ cwd: root, configName: 'maestro-settings', serialize: JSON.stringify });
+		const target = store as unknown as { _write(value: unknown): void };
+		const write = target._write;
+		vi.spyOn(target, '_write').mockImplementation((value) => {
+			write.call(store, value);
+			fs.writeFileSync(store.path, '{"value":"external"}');
 		});
+		trackStoreWrites(store, filename);
 
-		it('stamps even when the underlying write throws', () => {
-			const store = trackStoreWrites(
-				{
-					set() {
-						throw new Error('ENOSPC');
-					},
-				},
-				'maestro-settings.json'
-			);
+		store.set('value', 'app');
 
-			expect(() => store.set()).toThrow('ENOSPC');
-			expect(hadRecentInternalWrite('maestro-settings.json')).toBe(true);
-		});
+		expect(consumeExternalStoreChange(filename, store.path)).toBe(true);
 	});
 });

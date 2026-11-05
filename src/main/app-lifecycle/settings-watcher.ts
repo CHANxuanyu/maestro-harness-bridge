@@ -5,9 +5,10 @@
  */
 
 import fsSync from 'fs';
+import path from 'path';
 import { logger } from '../utils/logger';
 import { createSafeSend, type GetBroadcastWindows } from '../utils/safe-send';
-import { hadRecentInternalWrite } from '../stores/write-tracker';
+import { consumeExternalStoreChange } from '../stores/write-tracker';
 
 /** Dependencies for settings watcher */
 export interface SettingsWatcherDependencies {
@@ -59,8 +60,7 @@ export function createSettingsWatcher(deps: SettingsWatcherDependencies): Settin
 	const safeSend = createSafeSend(getBroadcastWindows);
 	const watchers: fsSync.FSWatcher[] = [];
 
-	// Debounce to coalesce rapid writes. Self-caused events are dropped up front
-	// via hadRecentInternalWrite() - see the comment in watchFile().
+	// Debounce external edits without letting later internal events cancel them.
 	let settingsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let agentConfigsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -79,14 +79,13 @@ export function createSettingsWatcher(deps: SettingsWatcherDependencies): Settin
 		try {
 			const watcher = fsSync.watch(dirPath, (_eventType, changedFile) => {
 				if (changedFile === filename) {
-					// Our own writes land here too. Telling the renderer to reload
-					// because of a write it just made is not merely wasteful: the
-					// reload is async, so it can overwrite whatever the user typed
-					// while it was in flight (the Conductor Profile textarea saves
-					// on every keystroke, and the caret jumped to the end of the
-					// field every time this fired). Checked at event time rather
-					// than after the debounce so continuous typing stays suppressed.
-					if (hadRecentInternalWrite(filename)) {
+					// Reloading our own writes can clobber live typing (the Conductor
+					// Profile saves per keystroke). Compare content, not write timing:
+					// a nearby CLI edit must still reload. The tracker also latches
+					// external content seen before an app write carries it forward.
+					// Decide now and retain the queued reload across later internal
+					// events, even if the debounced file matches our latest write.
+					if (!consumeExternalStoreChange(filename, path.join(dirPath, filename))) {
 						return;
 					}
 

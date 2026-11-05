@@ -79,6 +79,7 @@ export function resolveConfiguredShell(store: ShellSettingsReader): string {
 
 export const SETTINGS_DEFAULTS: MaestroSettings = {
 	uiLanguage: DEFAULT_UI_LANGUAGE,
+	newShell: false,
 	sidebarNavigationMode: 'conversations',
 	collapsedConversationProjects: [],
 	activeThemeId: DEFAULT_THEME_ID,

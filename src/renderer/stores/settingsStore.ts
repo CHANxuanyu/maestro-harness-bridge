@@ -424,6 +424,7 @@ export interface SettingsStoreState
 	groupChatsExpanded: boolean;
 	groupChatSortAlphabetical: boolean;
 	starredSessionsCollapsed: boolean;
+	newShell: boolean;
 	sidebarNavigationMode: 'conversations' | 'agents';
 	collapsedConversationProjects: string[];
 	tourCompleted: boolean;
@@ -552,6 +553,7 @@ export interface SettingsStoreActions
 	setGroupChatsExpanded: (value: boolean) => void;
 	setGroupChatSortAlphabetical: (value: boolean) => void;
 	setStarredSessionsCollapsed: (value: boolean) => void;
+	setNewShell: (value: boolean) => void;
 	setSidebarNavigationMode: (value: 'conversations' | 'agents') => void;
 	setCollapsedConversationProjects: (value: string[]) => void;
 	setTourCompleted: (value: boolean) => void;
@@ -681,6 +683,14 @@ export type SettingsStore = SettingsStoreState & SettingsStoreActions;
 export const selectGroupsPlusEnabled = (state: SettingsStore) =>
 	state.encoreFeatures.groupsPlus === true;
 
+/**
+ * Whether the window navigates by conversation: the Left Bar lists projects
+ * and conversations, and the tab strip stops repeating them. The new shell
+ * always does; the classic shell follows the sidebar navigation setting.
+ */
+export const selectConversationNavigation = (state: SettingsStoreState) =>
+	state.newShell || state.sidebarNavigationMode === 'conversations';
+
 // ============================================================================
 // Auto Run watchdog helpers
 // ============================================================================
@@ -797,6 +807,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		groupChatsExpanded: true,
 		groupChatSortAlphabetical: false,
 		starredSessionsCollapsed: false,
+		newShell: false,
 		sidebarNavigationMode: 'conversations',
 		collapsedConversationProjects: [],
 		tourCompleted: false,
@@ -1138,6 +1149,10 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 			window.maestro.settings.set('groupChatSortAlphabetical', value);
 		},
 
+		setNewShell: (value) => {
+			set({ newShell: value });
+			window.maestro.settings.set('newShell', value);
+		},
 		setSidebarNavigationMode: (value) => {
 			set({ sidebarNavigationMode: value });
 			window.maestro.settings.set('sidebarNavigationMode', value);
@@ -2293,6 +2308,7 @@ export async function loadAllSettings(): Promise<void> {
 		if (allSettings['groupChatSortAlphabetical'] !== undefined)
 			patch.groupChatSortAlphabetical = allSettings['groupChatSortAlphabetical'] as boolean;
 
+		if (allSettings['newShell'] !== undefined) patch.newShell = allSettings['newShell'] === true;
 		if (allSettings['sidebarNavigationMode'] !== undefined)
 			patch.sidebarNavigationMode =
 				allSettings['sidebarNavigationMode'] === 'agents' ? 'agents' : 'conversations';

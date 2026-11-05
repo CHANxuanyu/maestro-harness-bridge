@@ -11,6 +11,7 @@ interface HandoffOptions {
 	agent?: string;
 	listTargets?: boolean;
 	send?: boolean;
+	review?: boolean;
 	maxTokens?: string;
 	instruction?: string;
 	background?: boolean;
@@ -23,7 +24,7 @@ export async function handoff(
 	provider: string | undefined,
 	options: HandoffOptions
 ): Promise<void> {
-	if (options.listTargets && (provider !== undefined || options.send))
+	if (options.listTargets && (provider !== undefined || options.send || options.review))
 		return failCommand('--list-targets cannot be combined with a target or --send', options.json);
 	if (!options.listTargets && !isHandoffProvider(provider))
 		return failCommand(
@@ -47,12 +48,17 @@ export async function handoff(
 					sourceAgentId: source.agentId,
 					sourceTabId: source.tabId,
 					targetProvider: provider,
+					mode: options.review ? 'review' : 'handoff',
 					budgetTokens,
 					instruction: options.instruction,
 					send: options.send === true,
 					background: resolveBackgroundFlag(options, 'handoff'),
 				};
-		const result = await sendSimpleCommand<HandoffCommandResult>(payload, 'ai_handoff_result');
+		const result = await sendSimpleCommand<HandoffCommandResult>(
+			payload,
+			'ai_handoff_result',
+			75000
+		);
 		if (options.json) {
 			reportResult({ ...result }, { json: true, successMessage: '', jsonResult: { ...result } });
 			return;

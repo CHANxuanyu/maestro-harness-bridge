@@ -16,13 +16,16 @@ import type { AITab, Session } from '../types';
 
 /**
  * A handoff carries the tab's text, so a tab with no exchange has nothing to
- * hand over. An SSH agent's history belongs to the remote host, and the
- * service refuses to read it, so it is not offered there either. A tab whose
+ * hand over. SSH sources use the already loaded transcript and stay on their
+ * own host, so an SSH agent that names no remote is not offered: the handoff
+ * could never reach a host. A tab whose
  * transcript is still deferred (a browser client) does hold a conversation;
  * the service reads it without hydrating the tab.
  */
 export function canHandOffTab(session: Session | undefined, tab: AITab | undefined): boolean {
-	if (!session || !tab || session.sessionSshRemoteConfig?.enabled) return false;
+	if (!session || !tab) return false;
+	const ssh = session.sessionSshRemoteConfig;
+	if (ssh?.enabled && !ssh.remoteId) return false;
 	if (session.deferredContent?.tabIds.includes(tab.id)) return true;
 	return tab.logs.some(
 		(entry) =>
@@ -53,9 +56,18 @@ export function errorOffersHandoff(type: AgentErrorType | undefined): boolean {
 	return type === 'rate_limited' || type === 'auth_expired';
 }
 
-/** Open the "Continue with another AI" dialog for one tab. */
-export function requestAiHandoff(sessionId: string, tabId: string): void {
-	useModalStore.getState().openModal('aiHandoff', { sessionId, tabId });
+/**
+ * Open the "Continue with another AI" dialog for one tab. `review` opens the
+ * same dialog to ask another AI to review the working directory's changes.
+ */
+export function requestAiHandoff(
+	sessionId: string,
+	tabId: string,
+	mode: 'handoff' | 'review' = 'handoff'
+): void {
+	useModalStore
+		.getState()
+		.openModal('aiHandoff', mode === 'review' ? { sessionId, tabId, mode } : { sessionId, tabId });
 }
 
 /**

@@ -628,7 +628,21 @@ describe('useModalHandlers', () => {
 			expect(useSessionStore.getState().sessions[0].agentError).toEqual(limit);
 			useModalStore.getState().closeModal('aiHandoff');
 
-			// An SSH agent cannot hand off, so the action is not offered at all.
+			// An SSH agent with a remote hands off on its own host.
+			useSessionStore.setState({
+				sessions: [
+					{
+						...session,
+						sessionSshRemoteConfig: { enabled: true, remoteId: 'remote-1' },
+					} as Session,
+				],
+			});
+			getModalActions().setAgentErrorModalSessionId('session-1');
+			recovery.mockClear();
+			renderHook(() => useModalHandlers(createInputRef(), createTerminalOutputRef()));
+			expect(recovery.mock.calls.at(-1)![0].onHandoff).toBeTypeOf('function');
+
+			// SSH that names no remote could never reach a host, so it is not offered.
 			useSessionStore.setState({
 				sessions: [{ ...session, sessionSshRemoteConfig: { enabled: true } } as Session],
 			});

@@ -1,3 +1,5 @@
+import type { ConversationOrigin } from '../../shared/aiHandoff';
+export type { ConversationOrigin } from '../../shared/aiHandoff';
 // Type definitions for Maestro renderer
 
 // Re-export context merge types
@@ -69,7 +71,8 @@ import type { MindMapLayoutType } from '../components/DocumentGraph/layoutTypes'
 
 export type SessionState = 'idle' | 'busy' | 'waiting_input' | 'connecting' | 'error';
 export type FileChangeType = 'modified' | 'added' | 'deleted';
-export type RightPanelTab = 'files' | 'history' | 'autorun';
+/** `changes` exists only in the new shell, which shows Changes and Files alone. */
+export type RightPanelTab = 'changes' | 'files' | 'history' | 'autorun';
 /**
  * Tabs in the Usage Dashboard modal. Shared so the in-memory uiStore can
  * remember the last-selected tab across dashboard opens (resets on restart).
@@ -835,6 +838,7 @@ export interface ProviderTabSession {
 // AI Tab for multi-tab support within a Maestro session
 // Each tab represents a separate AI agent conversation (Claude Code, OpenCode, etc.)
 export interface AITab {
+	origin?: ConversationOrigin;
 	id: string; // Unique tab ID (generated UUID)
 	agentSessionId: string | null; // Agent session UUID (null for new tabs)
 	name: string | null; // User-defined name (null = show UUID octet)

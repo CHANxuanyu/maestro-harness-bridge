@@ -907,6 +907,7 @@ export const AppUtilityModals = memo(function AppUtilityModals({
 					theme={theme}
 					sessionId={aiHandoffData.sessionId}
 					tabId={aiHandoffData.tabId}
+					mode={aiHandoffData.mode}
 					onClose={closeAiHandoff}
 				/>
 			)}

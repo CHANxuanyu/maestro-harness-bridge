@@ -24,7 +24,7 @@ import {
 	generateGroupName,
 	resolveTabRefTitle,
 } from '../../utils/panelLayout';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { selectConversationNavigation, useSettingsStore } from '../../stores/settingsStore';
 import { notifyCenterFlash } from '../../stores/centerFlashStore';
 import { useTerminalMounting } from '../../hooks/terminal/useTerminalMounting';
 import { useCoworkingBufferResponder } from '../../hooks/coworking/useCoworkingBufferResponder';
@@ -197,9 +197,7 @@ export const MainPanel = React.memo(
 		const colorBlindMode = useSettingsStore((s) => s.colorBlindMode);
 		// The Left Bar's conversation list is the way between AI conversations, so
 		// the tab strip stops drawing a second list of them (TabBar onlyActiveAiTab).
-		const conversationNavigation = useSettingsStore(
-			(s) => s.sidebarNavigationMode === 'conversations'
-		);
+		const conversationNavigation = useSettingsStore(selectConversationNavigation);
 		const contextWarningsEnabled = useSettingsStore(
 			(s) => s.contextManagementSettings.contextWarningsEnabled ?? false
 		);

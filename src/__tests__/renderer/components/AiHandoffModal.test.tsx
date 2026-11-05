@@ -118,6 +118,42 @@ describe('AiHandoffModal', () => {
 		expect(notifyToast).not.toHaveBeenCalled();
 	});
 
+	it('in review mode asks for a review of the changes instead of a handoff', async () => {
+		handoff.mockResolvedValue({
+			success: true,
+			agentId: 'codex-agent',
+			tabId: 'review-tab',
+			draft,
+		});
+		const onClose = vi.fn();
+		render(
+			<LayerStackProvider>
+				<AiHandoffModal
+					theme={mockTheme}
+					sessionId="claude-agent"
+					tabId="tab-1"
+					mode="review"
+					onClose={onClose}
+				/>
+			</LayerStackProvider>
+		);
+		expect(screen.getByText('Ask another AI to review')).toBeInTheDocument();
+		await screen.findByRole('radio', { name: /Codex/ });
+		// The handoff's scope note describes a transcript budget a review does not use.
+		expect(screen.getByText(/list of changed files/)).toBeInTheDocument();
+		expect(screen.queryByText(/one-line summary of each tool call/)).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole('button', { name: 'Prepare review' }));
+		await waitFor(() => expect(onClose).toHaveBeenCalled());
+		// Still a draft: review adds the mode and nothing else, so nothing is sent.
+		expect(handoff).toHaveBeenCalledWith({
+			sourceAgentId: 'claude-agent',
+			sourceTabId: 'tab-1',
+			targetProvider: 'codex',
+			mode: 'review',
+		});
+		expect(jumpToAgent).toHaveBeenCalledWith('codex-agent', { tabId: 'review-tab' });
+	});
+
 	it('prepares with Enter', async () => {
 		handoff.mockResolvedValue({ success: true, agentId: 'codex-agent', tabId: 'new-tab', draft });
 		const onClose = renderModal();

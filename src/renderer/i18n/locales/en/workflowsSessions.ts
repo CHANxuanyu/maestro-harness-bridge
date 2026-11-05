@@ -57,6 +57,14 @@ export const workflowsSessions = {
 	'workflows.sessions.handoff.draftCut': '{count} characters cut from the oldest entry',
 	'workflows.sessions.handoff.draftHint': 'Nothing is sent until you press Send',
 	'workflows.sessions.handoff.dismissNote': 'Dismiss handoff note',
+	'workflows.sessions.review.title': 'Ask another AI to review',
+	'workflows.sessions.review.intro':
+		'Opens a review conversation with another AI in the same folder. The draft lists the changed files and asks it to report problems without editing anything. Nothing is sent until you press Send.',
+	'workflows.sessions.review.targets': 'Review with',
+	'workflows.sessions.review.scope':
+		'Brings the start of this conversation and the list of changed files. The reviewer reads the diff itself, and opens read-only where its tool supports that.',
+	'workflows.sessions.review.prepare': 'Prepare review',
+	'workflows.sessions.handoff.headerButton': 'Hand off to…',
 	'workflows.sessions.beta': 'Beta',
 	'workflows.sessions.available': 'Available',
 	'workflows.sessions.notFound': 'Not Found',

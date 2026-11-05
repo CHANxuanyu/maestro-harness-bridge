@@ -21,6 +21,36 @@ function context(logs: LogEntry[]) {
 	);
 }
 
+it('builds a bounded review goal, changes list and explicit read-only instructions', () => {
+	const source = context([
+		log('goal', 'user', 'Fix the parser goal'),
+		log('answer', 'ai', 'Recent answer'),
+	]);
+	const draft = buildHandoffDraft(source, {
+		provider: 'codex',
+		mode: 'review',
+		budgetTokens: 300,
+		changes: {
+			root: '/project',
+			branch: 'main',
+			files: [
+				{ path: 'src/parser.ts', status: 'modified', staged: true, additions: 2, deletions: 1 },
+				{ path: 'src/new.ts', status: 'untracked', staged: false, additions: 1, deletions: 0 },
+			],
+			totals: { files: 2, additions: 3, deletions: 1 },
+			truncated: false,
+		},
+	});
+	expect(draft.text).toContain('Fix the parser goal');
+	expect(draft.text).toContain('src/parser.ts');
+	expect(draft.text).toContain('git diff HEAD');
+	expect(draft.text).toContain('tracked changes');
+	expect(draft.text).toContain('untracked src/new.ts');
+	expect(draft.text).toContain('Read the untracked files in the list directly');
+	expect(draft.text).toContain('without editing files');
+	expect(draft.estimatedTokens).toBeLessThanOrEqual(300);
+});
+
 describe('handoff draft from the existing tab context', () => {
 	it('keeps the source and answer bodies, makes each tool one line, and leaves source bytes alone', () => {
 		const source = context([

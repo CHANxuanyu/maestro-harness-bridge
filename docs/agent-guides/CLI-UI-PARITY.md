@@ -255,6 +255,9 @@ Notification center history uses the live desktop `notificationStore` over a req
 
 | Point-and-click action                                                   | CLI                                                                                              |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Switch to the new shell (Settings, Display, New Shell)                   | `settings set newShell true` / `settings get newShell`                                           |
+| Ask another provider to review the current conversation changes          | `handoff <tab> <provider> --review [--send] [--json]`; read origin: `tab show <tab> --json`      |
+| Read conversation changes and a file diff                                | `changes [--agent <id>] [--tab <id>] [--file <path>] [--json]`                                   |
 | Open / close notification center                                         | `open notification-center`, `notify inbox open` / `close`                                        |
 | Read / clear / activate notification history                             | `notify inbox list`, `read`, `read-all`, `clear`, `activate`, `link`                             |
 | Dismiss one / all visible notifications                                  | `notify inbox dismiss [id]`                                                                      |

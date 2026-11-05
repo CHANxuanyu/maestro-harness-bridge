@@ -32,7 +32,7 @@ import { useComposerInputStore } from '../../stores/composerInputStore';
 import { generateTerminalProseStyles } from '../../utils/markdownConfig';
 import { safeClipboardWrite } from '../../utils/clipboard';
 import { flashCopiedToClipboard } from '../../utils/flashCopiedToClipboard';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { selectConversationNavigation, useSettingsStore } from '../../stores/settingsStore';
 import { useMessageGistStore } from '../../stores/messageGistStore';
 import { getClaudeTokenMode } from '../../../shared/claudeTokenMode';
 import { collapseAiResponseLogs } from './utils/collapseAiResponseLogs';
@@ -277,7 +277,7 @@ export const TerminalOutput = memo(
 		// can show thinking with a clean, tool-free transcript, or show tools with
 		// no reasoning at all. One switch, one meaning.
 		const toolsVisible = useSettingsStore((s) => s.showToolCalls);
-		const readingColumn = useSettingsStore((s) => s.sidebarNavigationMode === 'conversations');
+		const readingColumn = useSettingsStore(selectConversationNavigation);
 		const showProviderModePill = useSettingsStore((s) => s.showProviderModePill);
 		// Reasoning summaries read back from the provider transcript follow the
 		// tab's Thinking switch. They are history and stay in the logs (the switch

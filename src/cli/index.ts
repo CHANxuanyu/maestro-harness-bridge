@@ -16,6 +16,7 @@ import { send } from './commands/send';
 import { dispatch } from './commands/dispatch';
 import { ask } from './commands/ask';
 import { handoff } from './commands/handoff';
+import { changes } from './commands/changes';
 import { queueList, queueRemove } from './commands/queue';
 import {
 	snoozeDismiss,
@@ -524,10 +525,20 @@ program
 	.action(aboutMe);
 
 program
+	.command('changes')
+	.description('Read changes against HEAD in a conversation working directory')
+	.option('-a, --agent <id>', 'Agent whose active tab to use')
+	.option('--tab <id>', 'Conversation tab, exact ID, prefix or active')
+	.option('--file <path>', 'Read the diff for one repository-relative file')
+	.option('--json', 'Output the shared changes or diff structure as JSON')
+	.action(changes);
+
+program
 	.command('handoff <tab> [provider]')
 	.description('Prepare a new conversation with another AI in the same project')
 	.option('--agent <id>', 'Source agent for an active or ambiguous tab')
 	.option('--list-targets', 'List available target providers without creating a draft')
+	.option('--review', 'Prepare a review that reports problems without editing files')
 	.option('--send', 'Explicitly send the prepared handoff instead of leaving a draft')
 	.option('--instruction <text>', 'Append an instruction to the handoff')
 	.option('--max-tokens <count>', 'Estimated token budget for the handoff')

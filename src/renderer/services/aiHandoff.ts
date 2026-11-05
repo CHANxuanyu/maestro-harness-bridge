@@ -3,7 +3,9 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useComposerInputStore } from '../stores/composerInputStore';
 import { createTab, createMergedSession, focusAiTabInSession } from '../utils/tabHelpers';
 import { extractTabContext } from '../utils/contextExtractor';
-import { isSameDirectory } from '../utils/agentWorkingDirectory';
+import { handoffLocation } from '../../shared/aiHandoff';
+import { permissionModeFields } from '../utils/tabHelpers/focusFields';
+import { gitService } from './git';
 import { noteDesktopAiTabSelection } from '../utils/desktopTabSelectionSync';
 import { captureException } from '../utils/sentry';
 import { mergeDeferredItems } from '../../shared/deferredSessionContent';
@@ -32,7 +34,7 @@ export async function readHandoffSource(
 		.getState()
 		.sessions.find((item) => item.id === request.sourceAgentId);
 	let tab = session?.aiTabs.find((item) => item.id === request.sourceTabId);
-	if (!session || !tab || session.sessionSshRemoteConfig?.enabled) return null;
+	if (!session || !tab) return null;
 	if (session.deferredContent?.tabIds.includes(tab.id)) {
 		const stored = await window.maestro.sessions.getDeferredContent(session.id, tab.id, false);
 		session = useSessionStore.getState().sessions.find((item) => item.id === request.sourceAgentId);
@@ -42,22 +44,58 @@ export async function readHandoffSource(
 		// source tab, its composer draft, or the active selection.
 		tab = { ...tab, logs: mergeDeferredItems(stored.logs, tab.logs, (entry) => entry.id) };
 	}
+	const location = handoffLocation(session);
+	const ssh = session.sessionSshRemoteConfig;
+	const changes =
+		request.mode === 'review'
+			? await gitService.getChanges(
+					session.cwd,
+					ssh?.enabled ? ssh.remoteId! : undefined,
+					ssh?.enabled ? location.cwd : undefined
+				)
+			: undefined;
+	const current = useSessionStore
+		.getState()
+		.sessions.find((item) => item.id === request.sourceAgentId);
+	if (
+		!current ||
+		handoffLocation(current).key !== location.key ||
+		!current.aiTabs.some((item) => item.id === request.sourceTabId)
+	)
+		return null;
 	const source = extractTabContext(tab, session.name, session);
 	return {
+		cwd: location.cwd,
+		sessionSshRemoteConfig: session.sessionSshRemoteConfig,
+		sourceNativeSessionId: tab.agentSessionId ?? undefined,
 		sourceAgentId: session.id,
 		sourceTabId: tab.id,
 		projectPath: session.projectRoot || session.cwd,
 		groupId: session.groupId,
-		draft: buildHandoffDraft(source, request),
+		draft: buildHandoffDraft(source, { ...request, changes }),
 	};
 }
 
 export async function openHandoffTarget(request: HandoffOpenRequest): Promise<HandoffResult> {
-	return writes.enqueue(`${request.projectPath}:${request.provider}`, async () => {
+	return writes.enqueue(`${handoffLocation(request).key}:${request.provider}`, async () => {
+		const agent =
+			request.mode === 'review'
+				? await window.maestro.agents.get(
+						request.config.toolType,
+						request.sessionSshRemoteConfig?.enabled
+							? request.sessionSshRemoteConfig.remoteId!
+							: undefined
+					)
+				: undefined;
+		const tabFields = {
+			origin: request.origin,
+			...(request.mode === 'review' && agent?.capabilities?.supportsReadOnlyMode
+				? permissionModeFields('readonly')
+				: {}),
+		};
 		const state = useSessionStore.getState();
 		const matches = (session: Session) =>
-			!session.sessionSshRemoteConfig?.enabled &&
-			isSameDirectory(session.projectRoot || session.cwd, request.projectPath) &&
+			handoffLocation(session).key === handoffLocation(request).key &&
 			session.toolType === request.config.toolType;
 		let target = request.runnerId
 			? state.sessions.find((session) => session.id === request.runnerId)
@@ -90,7 +128,7 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 					request.provider === 'deepseek'
 						? DEEPSEEK_PRESET.name
 						: getAgentDisplayName(request.config.toolType),
-				projectRoot: request.projectPath,
+				projectRoot: request.cwd,
 				toolType: request.config.toolType,
 				groupId: request.groupId,
 				mergedLogs: [],
@@ -101,9 +139,14 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 			target = {
 				...created.session,
 				...request.config,
+				projectRoot: request.projectPath,
+				sessionSshRemoteConfig: request.sessionSshRemoteConfig
+					? { ...request.sessionSshRemoteConfig }
+					: undefined,
 				shellLogs: [],
 				aiTabs: created.session.aiTabs.map((tab) => ({
 					...tab,
+					...tabFields,
 					inputValue: request.draft.text,
 					handoffDraft,
 				})),
@@ -121,7 +164,9 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 			target = {
 				...created.session,
 				aiTabs: created.session.aiTabs.map((tab) =>
-					tab.id === tabId ? { ...tab, inputValue: request.draft.text, handoffDraft } : tab
+					tab.id === tabId
+						? { ...tab, ...tabFields, inputValue: request.draft.text, handoffDraft }
+						: tab
 				),
 			};
 			const updated = target;
@@ -130,6 +175,7 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 		const agentId = target.id;
 		const result: HandoffResult = {
 			success: true,
+			mode: request.mode,
 			agentId,
 			tabId,
 			createdAgent,

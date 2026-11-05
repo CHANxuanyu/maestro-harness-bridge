@@ -2,6 +2,48 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-05：hb.7 新界面第一阶段（界面）
+
+在 `codex/hb7-shell-ui`（基于 `codex/hb7-backend`）上做新界面第一阶段，全部在 `newShell` 开关后面，旧界面不变。设置的“显示”里加了开关；右栏在新界面下只有“改动”和“文件”，“改动”面板用附录 B 的两个只读调用，回合结束、切换会话和手动刷新时重读，git 超时保留上一次的结果；底部按钮以复核模式打开现有的交接对话框。顶栏在新界面下加“交给…”。新增共享选择器 `selectConversationNavigation()`：新界面总是按会话导航，旧界面照旧跟随侧栏设置，六处原来各自判断的地方都改用它。
+
+新增和改动的测试：`ChangesPanel`（9 条，含 SSH、超时保留、回合结束刷新、复核入口）、右栏新界面三条、顶栏三条、交接对话框复核模式、入口复核模式、选择器两条、显示设置开关一条。七组临时反证（去掉回合结束刷新、去掉超时保留、复核改成交接、右栏忽略开关、顶栏去掉两道判断、选择器忽略开关、对话框丢掉 mode）各只让对应测试失败，反证改动未提交。
+
+用临时的 Electron 场景（假 Claude 命令行、临时 git 仓库，用完已删除）在 Clay 浅色、Dracula 深色和 GitHub 浅色下截图核对：改动列表、行数、逐行差异和复核对话框显示正常。核对时发现一个已有问题：命令行写设置后，若应用刚在 500 毫秒内写过一次设置，文件监听会把这次外部修改当成自己的写入丢掉，界面不会更新（场景里回合结束时写入的用量统计正好触发）。这不是新界面引入的，记为后续给 Codex 的后端事项。
+
+## 2026-11-05：hb.7 后端，Opus 复核修正
+
+在 `codex/hb7-backend` 的 `5f5ce0ae8` 上重新阅读附录 C 第 2 项后修正四项问题。未跟踪的嵌套仓库保留 Git 的末尾 `/`，符号链接（含悬空链接）与不可读文件均保留 untracked 状态、null 行数和空差异，单条读取失败不再中断清单。混合临时仓库同时放置这些条目、普通未跟踪文件和已修改文件，核对正常文件的 2 增 1 删及完整 totals。复核草稿明确要求对已跟踪改动执行 `git diff HEAD`，直接阅读清单里的未跟踪文件。root 本机使用平台 path.normalize，SSH 保留远端原样，文件路径仍用 `/`。
+
+先只改测试运行三文件，14 失败、21 通过；失败覆盖目录、悬空链接、不可读文件、链接行数/差异、复核文案及路径契约。实现后同一命令 35/35；原有 18 文件命令重跑为 951/951、无跳过。既有 root 断言改为严格比较原生路径，文件路径及其余旧断言保留，没有放宽为可选结果。Windows 用隔离的 path 默认导出注入 path.win32，不修改 process.platform；实际 POSIX 权限与符号链接用例仅在非 Windows 运行，本机均已执行。
+
+`npm run lint`、修改源文件 ESLint、测试专用 dash ESLint、`npm run format:check:all`、`npm run docs:verify` 和 `git diff --check` 均通过；文档检查 653 条路径、0 缺失。精确命令和结果追加在[后端核对报告](verification/hb7-backend.md#opus-review-corrections)。被测对象为本地源码，无远端操作、真实模式、账户目录访问、Electron、发行包或模型调用；真实 Windows、SSH 和 GUI 仍未验。
+
+## 2026-11-05：hb.7 后端 D，帮助核对与最终验证
+
+在本克隆 gitignored scratch 中为每次命令创建新的 HOME、CLAUDE_CONFIG_DIR、CODEX_HOME，只执行版本、帮助与 feature flags 列表。Claude Code 为 2.1.317，Codex CLI 为 0.166.0-alpha.6。帮助确认 plan 权限参数和只读 sandbox 参数；已有 capability 布尔值不变，在字段旁记录核对版本。不以帮助输出声称 DeepSeek 图片或推理能力已通过，也不声称 Codex 已能在沙箱里调用 Maestro。该项仅审计与注释，没有行为改动，未造一个没有行为意义的失败测试；修改前既有 capability 测试为 25/25。
+
+最终被测对象是本地源码，没有发行包。合并一次运行全部触及的测试及 capability 回归，18 文件、938/938、无跳过；`npm run lint` 三个配置、修改源文件 ESLint、测试专用 dash ESLint、全仓 `npm run format:check:all` 和 `npm run docs:verify` 均通过，路径检查为 653 条、0 缺失。构建后的 CLI 在隔离目录实跑 settings set/get newShell，返回 true 和 boolean；生成 CLI reference 后已格式化；起始失败、精确最终命令、CLI parity 两行和限制存于[后端核对报告](verification/hb7-backend.md)，[能力核对](verification/hb7-capabilities.md)逐项区分 flag 与模型行为。
+
+Electron、真实 SSH、Windows、安装包和付费调用均未验。既有 DeepSeek 预设工厂只支持本机新账户，SSH 上缺少同目录 preset runner 时明确失败，未改成在本机运行。Opus 后续询问用户再验证 DeepSeek 图片、推理强度和 Codex 派活；本轮没有真实账户写入、模型请求、推送或发布。
+
+## 2026-11-05：hb.7 后端 C，交接和复核
+
+交接按执行 cwd 与 SSH remoteId 匹配目标，不再按项目分组路径复用其他 worktree，也不从其他项目复制配置。缺失目标取工具全局配置；本机 DeepSeek 从全局网关配置调用既有隔离预设，SSH 上没有对应预设 runner 时明确失败，因为既有工厂只创建本机账户目录，本轮不发明远程账户创建协议。
+
+`ai_handoff prepare` 默认 handoff，可指定 review。复核沿用预算器，固定包含来源目标摘录、`git:changes` 文件清单、自己执行 `git diff HEAD` 与只报告问题不改文件的要求。支持时先设置只读权限再保存、排队；两种模式均记录 ConversationOrigin，保存 native id，`session list` 和 `tab show --json` 返回来源。CLI 增加 `--review` 并等待有界 git/SSH 读取，Covered 增加复核行。
+
+先运行失败测试，确认旧实现误用其他项目配置、拒绝 SSH、缺少 review 和 origin；新增与回归测试覆盖目标复用、新建、全局配置、SSH 命令生成、预算、持久化及既有读取路径。仅测本地源码与合成账户字段，预设创建在测试中 mock，没有发模型请求、启动 Electron 或访问真实账户。真实 SSH、Windows 和发行包验收留给 Opus；后续核对条目记录公共检查结果。
+
+## 2026-11-05：hb.7 后端 B，改动接口
+
+新增共享改动类型、`git:changes` / `git:changeDiff`、预加载、渲染服务与 `changes` CLI。CLI 通过现有 bridge.invoke 调用同一 IPC，按选中标签所属智能体的 cwd 与 SSH 配置读取。状态与行数一次 git 调用及 SSH 连接；逐文件差异先读状态取得改名来源，再读取正文。无 HEAD 按空树，完整 totals 在 500 条截断前计算，二进制与大文件、超时、非仓库均明确返回。
+
+先添加用例并确认缺少模块时失败；真实临时仓库覆盖暂存与未暂存、未跟踪、改名、删除、冲突、空树、大文件、text attributes、超大差异和截断合计。SSH 用命令生成及解析测试，不连接主机；Windows 风格路径测试不修改 process.platform。测试及公共检查汇总见后续核对条目。被测对象仅本地源码，没有 Electron、真实 SSH 或 Windows 验收，没有安装包。
+
+## 2026-11-05：hb.7 后端 A，新界面设置
+
+在 `codex/hb7-backend` 本地源码上登记 `newShell`，默认 false，含主进程默认、元数据、渲染 store 的加载与保存和设置搜索。先写失败测试：通用 CLI 两条均失败，store 新用例失败；实现后相关两文件通过。CLI 使用隔离临时数据，不访问真实账户。外壳 UI 由 Opus 实现，本轮不启动 Electron，不构建发行包，不推送。
+
 ## 2026-11-05：新界面规格定稿
 
 用户确认了新界面的五个界面决定和目标用户，全部按推荐执行。规格存为[新界面](roadmap/new-shell.md)，附 hb.7 的后端接口：新界面开关、改动面板的只读调用、交接的复核模式和来源记录、能力核对。本条只改文档，没有改代码，没有运行真实模式，也没有访问真实账户。

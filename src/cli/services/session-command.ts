@@ -22,8 +22,12 @@ export interface SimpleResult {
 /** Send one command to the desktop and return the typed result. */
 export async function sendSimpleCommand<
 	T extends Pick<SimpleResult, 'success' | 'error'> = SimpleResult,
->(payload: Record<string, unknown>, responseType: string): Promise<T> {
-	return withMaestroClient((client) => client.sendCommand<T>(payload, responseType));
+>(payload: Record<string, unknown>, responseType: string, timeoutMs?: number): Promise<T> {
+	return withMaestroClient((client) =>
+		timeoutMs === undefined
+			? client.sendCommand<T>(payload, responseType)
+			: client.sendCommand<T>(payload, responseType, timeoutMs)
+	);
 }
 
 /**

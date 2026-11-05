@@ -1,3 +1,5 @@
+import type { GitChanges } from '../../shared/gitChanges';
+import type { HandoffMode } from '../../shared/aiHandoff';
 import type { ContextSource } from '../types/contextMerge';
 import { isProgressNoteEntry } from '../utils/transcriptMessages';
 import { estimateTokenCount } from '../../shared/formatters';
@@ -19,16 +21,37 @@ function literalMentions(text: string): string {
 /** No model invocation: retain recent human/assistant bodies and one line per tool. */
 export function buildHandoffDraft(
 	source: ContextSource,
-	options: { provider: HandoffProvider; budgetTokens?: number; instruction?: string }
+	options: {
+		provider: HandoffProvider;
+		budgetTokens?: number;
+		instruction?: string;
+		mode?: HandoffMode;
+		changes?: GitChanges;
+	}
 ): HandoffDraft {
 	const budgetTokens = options.budgetTokens ?? DEFAULT_HANDOFF_BUDGET;
 	if (!Number.isSafeInteger(budgetTokens) || budgetTokens <= 0)
 		throw new RangeError('The handoff budget must be a positive integer');
+	const review = options.mode === 'review';
+	if (review && (!options.changes || options.changes.timedOut || options.changes.notARepo))
+		throw new Error('Review requires a current git changes snapshot');
+	const goal =
+		source.logs
+			.find((entry) => entry.source === 'user' && entry.text.trim())
+			?.text.replace(/\s+/g, ' ')
+			.trim()
+			.slice(0, 512) ?? 'Review the current changes';
+	const reviewContext = review
+		? `\nSource goal (excerpt): ${goal}\nChanged files:\n${options.changes!.files.map((file) => `${file.status} ${file.path}${file.oldPath ? ` (from ${file.oldPath})` : ''}`).join('\n') || '(none)'}${options.changes!.truncated ? `\n[List truncated: ${options.changes!.totals.files} total files]` : ''}\n`
+		: '';
 	const header = literalMentions(
-		`# Handoff\nSource: ${source.name}\nProvider: ${options.provider}\nProject: ${source.projectRoot}\nNative session: ${source.agentSessionId ?? '(new)'}\n`
+		`# ${review ? 'Review' : 'Handoff'}\nSource: ${source.name}\nProvider: ${options.provider}\nProject: ${source.projectRoot}\nNative session: ${source.agentSessionId ?? '(new)'}\n${reviewContext}`
 	);
 	const instruction = literalMentions(
-		options.instruction ? `\nInstruction:\n${options.instruction}\n` : ''
+		(options.instruction ? `\nInstruction:\n${options.instruction}\n` : '') +
+			(review
+				? '\nRun git diff HEAD yourself to read tracked changes. Read the untracked files in the list directly. Report problems without editing files.\n'
+				: '')
 	);
 	const entries = source.logs.flatMap((entry) => {
 		if (entry.source === 'tool') {

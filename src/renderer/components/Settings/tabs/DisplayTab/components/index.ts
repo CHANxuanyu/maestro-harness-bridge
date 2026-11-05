@@ -17,6 +17,7 @@ export { MaxLogBufferSection } from './MaxLogBufferSection';
 export { MaxOutputLinesSection } from './MaxOutputLinesSection';
 export { MessageAlignmentSection } from './MessageAlignmentSection';
 export { ModalLayoutSection } from './ModalLayoutSection';
+export { NewShellSection } from './NewShellSection';
 export { TabOptionsSection } from './TabOptionsSection';
 export { WindowChromeSection } from './WindowChromeSection';
 export { TypographyResetSection } from './TypographyResetSection';

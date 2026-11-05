@@ -177,6 +177,8 @@ export interface WizardResumeModalData {
 export interface AiHandoffModalData {
 	sessionId: string;
 	tabId: string;
+	/** `review` asks the target to review the changes instead of continuing. */
+	mode?: 'handoff' | 'review';
 }
 
 /** Agent error modal data */

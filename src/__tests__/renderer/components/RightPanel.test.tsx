@@ -53,6 +53,12 @@ vi.mock('../../../renderer/components/FileExplorerPanel', () => ({
 	)),
 }));
 
+vi.mock('../../../renderer/components/ChangesPanel', () => ({
+	ChangesPanel: vi.fn(({ session }) => (
+		<div data-testid="changes-panel">ChangesPanel: {session?.name}</div>
+	)),
+}));
+
 vi.mock('../../../renderer/components/HistoryPanel', () => ({
 	HistoryPanel: vi.fn((props) => <div data-testid="history-panel">HistoryPanel</div>),
 }));
@@ -226,6 +232,7 @@ describe('RightPanel', () => {
 			shortcuts: mockShortcuts,
 			showHiddenFiles: false,
 			autoRunDisabled: false,
+			newShell: false,
 		});
 		useFileExplorerStore.setState({
 			fileTreeFilter: '',
@@ -381,6 +388,44 @@ describe('RightPanel', () => {
 
 			const toggleButton = screen.getByTitle(/collapse right panel/i);
 			expect(toggleButton.title).toContain('Cmd+B');
+		});
+	});
+
+	describe('New shell', () => {
+		it('shows only Changes and Files, and Changes in place of a tab it does not have', () => {
+			useSettingsStore.setState({ newShell: true });
+			useUIStore.setState({ activeRightTab: 'history' });
+			render(<RightPanel {...createDefaultProps()} />);
+
+			expect(screen.getByRole('button', { name: 'Changes' })).toBeInTheDocument();
+			expect(screen.getByRole('button', { name: 'Files' })).toBeInTheDocument();
+			expect(screen.queryByRole('button', { name: 'History' })).not.toBeInTheDocument();
+			expect(screen.queryByRole('button', { name: 'Auto Run' })).not.toBeInTheDocument();
+			expect(screen.getByTestId('changes-panel')).toBeInTheDocument();
+			expect(screen.queryByTestId('history-panel')).not.toBeInTheDocument();
+			// The stored tab is untouched, so the classic shell gets it back.
+			expect(useUIStore.getState().activeRightTab).toBe('history');
+		});
+
+		it('opens the Changes tab on click and keeps Files as it was', () => {
+			useSettingsStore.setState({ newShell: true });
+			useUIStore.setState({ activeRightTab: 'files' });
+			const setActiveRightTab = vi.fn();
+			render(<RightPanel {...createDefaultProps({ setActiveRightTab })} />);
+
+			expect(screen.queryByTestId('changes-panel')).not.toBeInTheDocument();
+			expect(screen.getByTestId('file-explorer-panel')).toBeVisible();
+			fireEvent.click(screen.getByRole('button', { name: 'Changes' }));
+			expect(setActiveRightTab).toHaveBeenCalledWith('changes');
+		});
+
+		it('the classic shell has no Changes tab and shows Files for a stored Changes tab', () => {
+			useUIStore.setState({ activeRightTab: 'changes' });
+			render(<RightPanel {...createDefaultProps()} />);
+
+			expect(screen.queryByRole('button', { name: 'Changes' })).not.toBeInTheDocument();
+			expect(screen.queryByTestId('changes-panel')).not.toBeInTheDocument();
+			expect(screen.getByTestId('file-explorer-panel')).toBeVisible();
 		});
 	});
 

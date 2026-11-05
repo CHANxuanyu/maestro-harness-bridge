@@ -3,6 +3,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { MainPanelHeader } from '../../../../renderer/components/MainPanel/MainPanelHeader';
 import { useModalStore } from '../../../../renderer/stores/modalStore';
+import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { useMediaPlaybackStore } from '../../../../renderer/stores/mediaPlaybackStore';
 import type { Session, Theme, AITab } from '../../../../renderer/types';
 
@@ -10,7 +11,11 @@ import { mockTheme } from '../../../helpers/mockTheme';
 // Mock stores
 // Per-test settings overrides layered over the fixed defaults below.
 const settingsMocks = vi.hoisted(() => ({ overrides: {} as Record<string, unknown> }));
-vi.mock('../../../../renderer/stores/settingsStore', () => ({
+vi.mock('../../../../renderer/stores/settingsStore', async (importOriginal) => ({
+	// The real rule, so the header and the store cannot disagree about it.
+	selectConversationNavigation: (
+		await importOriginal<typeof import('../../../../renderer/stores/settingsStore')>()
+	).selectConversationNavigation,
 	useSettingsStore: vi.fn((selector) =>
 		selector({
 			...settingsMocks.overrides,
@@ -518,6 +523,43 @@ describe('MainPanelHeader', () => {
 			fireEvent.click(screen.getByLabelText('Show agents sidebar'));
 			expect(uiMocks.setLeftSidebarHidden).toHaveBeenCalledWith(false);
 			expect(uiMocks.setLeftSidebarOpen).toHaveBeenCalledWith(true);
+		});
+	});
+
+	describe('new shell handoff button', () => {
+		const talked = makeTab({
+			logs: [{ id: 'u', timestamp: 1, source: 'user', text: 'Fix login' }],
+		} as Partial<AITab>);
+		const seedStore = () =>
+			useSessionStore.setState({
+				sessions: [makeSession({ aiTabs: [talked], activeTabId: 'tab-1' } as Partial<Session>)],
+			});
+
+		it('hands the conversation on screen to another AI', () => {
+			settingsMocks.overrides = { newShell: true };
+			seedStore();
+			render(<MainPanelHeader {...defaultProps} activeTab={talked} />);
+			fireEvent.click(screen.getByTestId('header-handoff'));
+			expect(mockOpenModal).toHaveBeenCalledWith('aiHandoff', {
+				sessionId: 'session-1',
+				tabId: 'tab-1',
+			});
+		});
+
+		it('is absent in the classic shell, which keeps it in the tab menu', () => {
+			seedStore();
+			render(<MainPanelHeader {...defaultProps} activeTab={talked} />);
+			expect(screen.queryByTestId('header-handoff')).not.toBeInTheDocument();
+		});
+
+		it('is absent when the conversation has nothing to hand over', () => {
+			settingsMocks.overrides = { newShell: true };
+			const empty = makeTab({ logs: [] } as Partial<AITab>);
+			useSessionStore.setState({
+				sessions: [makeSession({ aiTabs: [empty], activeTabId: 'tab-1' } as Partial<Session>)],
+			});
+			render(<MainPanelHeader {...defaultProps} activeTab={empty} />);
+			expect(screen.queryByTestId('header-handoff')).not.toBeInTheDocument();
 		});
 	});
 

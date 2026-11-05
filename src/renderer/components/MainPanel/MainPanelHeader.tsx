@@ -12,15 +12,17 @@ import {
 	Brain,
 	Menu,
 	Command,
+	ArrowRightLeft,
 } from 'lucide-react';
 import { Spinner } from '../ui/Spinner';
 import { formatShortcutKeys } from '../../utils/shortcutFormatter';
 import { GitStatusWidget } from '../GitStatusWidget';
 import { GitPillMenu } from '../GitPillMenu';
 import { NotificationCenter } from '../NotificationCenter';
+import { requestAiHandoff, useCanHandOffTab } from '../../services/aiHandoffEntry';
 import { useHoverTooltip } from '../../hooks';
 import { useGitAgentActions } from '../../hooks/git/useGitAgentActions';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { selectConversationNavigation, useSettingsStore } from '../../stores/settingsStore';
 import { NowPlayingIndicator } from '../MediaPlayback/NowPlayingIndicator';
 import { useUIStore } from '../../stores/uiStore';
 import { getModalActions } from '../../stores/modalStore';
@@ -146,9 +148,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 	const t = useT();
 	const shortcuts = useSettingsStore((s) => s.shortcuts);
 	const showAgentName = useSettingsStore((s) => s.showAgentName);
-	const conversationNavigation = useSettingsStore(
-		(s) => s.sidebarNavigationMode === 'conversations'
-	);
+	const conversationNavigation = useSettingsStore(selectConversationNavigation);
 	// `null`: header shows the agent name as before. `''`: a conversation with
 	// nothing to call it yet ("New conversation"). Terminal agents have no
 	// conversation, so they keep their own name.
@@ -159,6 +159,14 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 	const showSessionIdPill = useSettingsStore((s) => s.showSessionIdPill);
 	const showSessionCostPill = useSettingsStore((s) => s.showSessionCostPill);
 	const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
+	// The new shell has no tab menu to hold "Continue with another AI", so the
+	// header carries it.
+	const newShell = useSettingsStore((s) => s.newShell);
+	// Asked only in the new shell, so the classic header does no extra work.
+	const canHandOff = useCanHandOffTab(
+		newShell ? activeSession?.id : undefined,
+		newShell ? activeTab?.id : undefined
+	);
 	const leftSidebarHidden = useUIStore((s) => s.leftSidebarHidden);
 	const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen);
 	const { isXs, isNarrow } = useViewportBreakpoint();
@@ -1089,6 +1097,19 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 						})}
 					>
 						<Command className="w-4 h-4" style={{ color: theme.colors.textDim }} />
+					</button>
+				)}
+
+				{newShell && canHandOff && activeTab && (
+					<button
+						onClick={() => requestAiHandoff(activeSession.id, activeTab.id)}
+						className="flex items-center gap-1.5 px-2 py-1 rounded text-xs hover:bg-white/5"
+						style={{ color: theme.colors.textDim }}
+						title={t('workflows.sessions.handoff.paletteSubtext')}
+						data-testid="header-handoff"
+					>
+						<ArrowRightLeft className="w-3.5 h-3.5" />
+						{t('workflows.sessions.handoff.headerButton')}
 					</button>
 				)}
 

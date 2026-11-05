@@ -79,5 +79,15 @@ describe('AI handoff entry points', () => {
 			open: true,
 			data: { sessionId: 'agent-1', tabId: 'tab-1' },
 		});
+		// A plain handoff carries no mode, so the dialog keeps its handoff wording.
+		expect(useModalStore.getState().modals.get('aiHandoff')?.data).not.toHaveProperty('mode');
+	});
+
+	it('opens the same dialog in review mode for the Changes panel', () => {
+		requestAiHandoff('agent-1', 'tab-1', 'review');
+		expect(useModalStore.getState().modals.get('aiHandoff')).toMatchObject({
+			open: true,
+			data: { sessionId: 'agent-1', tabId: 'tab-1', mode: 'review' },
+		});
 	});
 });

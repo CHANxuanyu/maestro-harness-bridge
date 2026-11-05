@@ -50,13 +50,22 @@ export interface AiHandoffModalProps {
 	/** The agent and tab whose conversation moves on. */
 	sessionId: string;
 	tabId: string;
+	/** `review` asks the target to review the changes instead of continuing. */
+	mode?: 'handoff' | 'review';
 	onClose: () => void;
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-export function AiHandoffModal({ theme, sessionId, tabId, onClose }: AiHandoffModalProps) {
+export function AiHandoffModal({
+	theme,
+	sessionId,
+	tabId,
+	mode = 'handoff',
+	onClose,
+}: AiHandoffModalProps) {
 	const t = useT();
+	const review = mode === 'review';
 	const tab = useSessionStore((state) =>
 		state.sessions.find((session) => session.id === sessionId)?.aiTabs.find((x) => x.id === tabId)
 	);
@@ -106,6 +115,7 @@ export function AiHandoffModal({ theme, sessionId, tabId, onClose }: AiHandoffMo
 				sourceAgentId: sessionId,
 				sourceTabId: tabId,
 				targetProvider: selected,
+				...(review ? { mode } : {}),
 			});
 			if (result.agentId && result.tabId) {
 				jumpToAgent(result.agentId, { tabId: result.tabId });
@@ -136,7 +146,7 @@ export function AiHandoffModal({ theme, sessionId, tabId, onClose }: AiHandoffMo
 		}
 		busyRef.current = false;
 		setBusy(false);
-	}, [onClose, selected, sessionId, t, tabId]);
+	}, [mode, onClose, review, selected, sessionId, t, tabId]);
 
 	// Arrow keys move between the targets natively (they are radios). Enter
 	// prepares from anywhere in the body; the footer buttons handle their own.
@@ -166,7 +176,7 @@ export function AiHandoffModal({ theme, sessionId, tabId, onClose }: AiHandoffMo
 	return (
 		<Modal
 			theme={theme}
-			title={t('workflows.sessions.handoff.title')}
+			title={t(review ? 'workflows.sessions.review.title' : 'workflows.sessions.handoff.title')}
 			subtitle={tab ? (conversationDisplayTitle(tab) ?? getTabDisplayName(tab)) : undefined}
 			headerIcon={<ArrowRightLeft className="w-4 h-4" style={{ color: theme.colors.accent }} />}
 			priority={MODAL_PRIORITIES.AI_HANDOFF}
@@ -181,7 +191,11 @@ export function AiHandoffModal({ theme, sessionId, tabId, onClose }: AiHandoffMo
 					confirmLabel={
 						busy
 							? t('workflows.sessions.handoff.preparing')
-							: t('workflows.sessions.handoff.prepare')
+							: t(
+									review
+										? 'workflows.sessions.review.prepare'
+										: 'workflows.sessions.handoff.prepare'
+								)
 					}
 					confirmDisabled={!selected || busy}
 				/>
@@ -189,7 +203,7 @@ export function AiHandoffModal({ theme, sessionId, tabId, onClose }: AiHandoffMo
 		>
 			<div className="flex flex-col gap-4 select-none" onKeyDown={handleKeyDown}>
 				<p className="text-sm leading-relaxed" style={dim}>
-					{t('workflows.sessions.handoff.intro')}
+					{t(review ? 'workflows.sessions.review.intro' : 'workflows.sessions.handoff.intro')}
 				</p>
 
 				{targets === null ? (
@@ -211,13 +225,17 @@ export function AiHandoffModal({ theme, sessionId, tabId, onClose }: AiHandoffMo
 				) : (
 					<div className="flex flex-col gap-2">
 						<div className="text-2xs uppercase tracking-wide font-medium" style={dim}>
-							{t('workflows.sessions.handoff.targets')}
+							{t(
+								review ? 'workflows.sessions.review.targets' : 'workflows.sessions.handoff.targets'
+							)}
 						</div>
 						<RadioGroup
 							theme={theme}
 							value={selected ?? ''}
 							onChange={(value) => setSelected(value as HandoffProvider)}
-							ariaLabel={t('workflows.sessions.handoff.targets')}
+							ariaLabel={t(
+								review ? 'workflows.sessions.review.targets' : 'workflows.sessions.handoff.targets'
+							)}
 							autoFocus
 							options={targets.map((target) => ({
 								value: target.provider,
@@ -235,9 +253,11 @@ export function AiHandoffModal({ theme, sessionId, tabId, onClose }: AiHandoffMo
 							}))}
 						/>
 						<p className="text-xs leading-relaxed" style={dim}>
-							{t('workflows.sessions.handoff.scope', {
-								budget: formatCount(DEFAULT_HANDOFF_BUDGET),
-							})}
+							{review
+								? t('workflows.sessions.review.scope')
+								: t('workflows.sessions.handoff.scope', {
+										budget: formatCount(DEFAULT_HANDOFF_BUDGET),
+									})}
 						</p>
 					</div>
 				)}

@@ -243,3 +243,7 @@ The tracker at [DEDUP-TRACKER.md](DEDUP-TRACKER.md) lists all known duplication 
 ## Native test temporary directories
 
 `nativeTempRoot()` and `createNativeTempDir(prefix)` in `e2e/fixtures/native/temp-root.cjs` select `MAESTRO_E2E_TEMP_ROOT`, then the short macOS temporary root or the system temporary root. They resolve the root physically before creating directories. Use them for native fixture and Electron acceptance directories; OMP uses the same root for its containment guard. A symlinked temporary path must not produce a different Claude project key from the child process cwd.
+
+## Conversation changes
+
+`getGitChanges()`, `getGitChangeDiff()`, `changesCommand()` and `parseGitChanges()` in `src/main/git-changes.ts` own the read-only changes wire format. Types live in `src/shared/gitChanges.ts`. Status v2 and net HEAD numstat share one bounded `execGitReadOnly()` invocation, including untracked counts; SSH inherits the canonical builder, optional-lock environment and timeout. NUL records preserve quoted names and rename sources. Counts are null for binary and files over 1 MiB, totals precede the 500-file limit, and unborn repositories compare with the empty tree. Do not join staged and unstaged numstats, since that double-counts intermediate edits. File diffs first read status for rename sources, then include both paths in the patch query. Unexpected execution failures propagate; only explicit timeout and non-repository results become flags.

@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { getGitChanges, getGitChangeDiff } from '../../../git-changes';
 import { execFileNoThrow, execFileBufferNoThrow } from '../../../utils/execFile';
 import { execGit, execGitReadOnly, isGitTimeout } from '../../../utils/remote-git';
 import { logger } from '../../../utils/logger';
@@ -18,6 +19,28 @@ import { LOG_CONTEXT, handlerOpts, readOnlyGitReply } from './shared';
  * info, log, graph, commitCount, show, showFile, getRepoRoot.
  */
 export function registerReadHandlers(): void {
+	const remoteForChanges = (id?: string) => {
+		if (!id) return undefined;
+		const remote = getSshRemoteById(id);
+		if (!remote || !remote.enabled) throw new Error(`SSH remote unavailable: ${id}`);
+		return remote;
+	};
+	ipcMain.handle(
+		'git:changes',
+		withIpcErrorLogging(
+			handlerOpts('changes'),
+			(cwd: string, sshRemoteId?: string, remoteCwd?: string) =>
+				getGitChanges(cwd, remoteForChanges(sshRemoteId), remoteCwd ?? cwd)
+		)
+	);
+	ipcMain.handle(
+		'git:changeDiff',
+		withIpcErrorLogging(
+			handlerOpts('changeDiff'),
+			(cwd: string, file: string, sshRemoteId?: string, remoteCwd?: string) =>
+				getGitChangeDiff(cwd, file, remoteForChanges(sshRemoteId), remoteCwd ?? cwd)
+		)
+	);
 	// Basic Git operations
 	// All handlers accept optional sshRemoteId and remoteCwd for remote execution
 

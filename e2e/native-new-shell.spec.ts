@@ -947,3 +947,180 @@ test('new shell T5: stage commit and revert single files in a real worktree', as
 		fs.rmSync(native.root, { recursive: true, force: true });
 	}
 });
+
+// eslint-disable-next-line no-empty-pattern
+test('new shell permission review: restore closed standard Claude after switching to Codex', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	seedNewShell(native);
+	let failed = false;
+	try {
+		await native.start(home);
+		const owner = await native.createAgent('claude');
+		await native.cli('tab', 'permission', 'active', 'standard', '--agent', owner);
+		expect((await native.cli('tab', 'show', 'active', '--agent', owner)).tab.permissionMode).toBe(
+			'standard'
+		);
+		await native.cli('tab', 'rename', 'active', 'Closed standard source', '--agent', owner);
+		await native.cli('tab', 'close', 'active', '--agent', owner);
+		await native.cli('update-agent', owner, '--provider', 'codex', '--force');
+		await native.cli(
+			'update-agent',
+			owner,
+			'--custom-path',
+			path.resolve('e2e/fixtures/native/codex'),
+			'--env',
+			`CODEX_HOME=${native.codex}`,
+			'--env',
+			`MAESTRO_NATIVE_SCRIPT=${native.script}`
+		);
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await native.page.keyboard.press('ControlOrMeta+Shift+t');
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		const restored = (await native.cli('tab', 'show', 'active', '--agent', owner)).tab;
+		expect(restored).toMatchObject({
+			permissionMode: 'readonly',
+			readOnly: true,
+			agentSessionId: null,
+			name: 'Closed standard source',
+		});
+		native.scriptTurns([{ answer: 'Restored readonly conversation complete' }]);
+		await native.send('Synthetic restored conversation');
+		await expect(native.output()).toContainText('Restored readonly conversation complete');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		const invocations = fs
+			.readFileSync(path.join(native.codex, 'fixture-invocations.jsonl'), 'utf8')
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line) as { args: string[] });
+		expect(invocations).toHaveLength(1);
+		expect(invocations[0].args[invocations[0].args.indexOf('--sandbox') + 1]).toBe('read-only');
+		expect(invocations[0].args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await native.close(failed);
+	}
+});
+
+// This exercises the browser's real IPC route. The separate acceptance checklist
+// also covers the browser-local permission control and its WebSocket transport.
+// eslint-disable-next-line no-empty-pattern
+test('new shell permission review: browser request tightens the desktop full source', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	seedNewShell(native);
+	let failed = false;
+	try {
+		await native.start(home);
+		const owner = await native.createAgent('claude');
+		await native.cli('tab', 'permission', 'active', 'full', '--agent', owner);
+		const source = (await native.cli('tab', 'show', 'active', '--agent', owner)).tab;
+		expect(source.permissionMode).toBe('full');
+		const created = await native.page.evaluate(
+			({ owner, sourceId }) => window.maestro.web.requestNewTab(owner, false, sourceId, 'readonly'),
+			{ owner, sourceId: source.tabId }
+		);
+		expect(created).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		expect((await native.cli('tab', 'show', source.tabId)).tab.permissionMode).toBe('full');
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await native.close(failed);
+	}
+});
+
+for (const scenario of ['timeout', 'moved project'] as const) {
+	// eslint-disable-next-line no-empty-pattern
+	test(`new shell permission review: owner ${scenario} cannot widen a new conversation`, async ({}, info) => {
+		const native = new NativeApp(info, { providerCli: false });
+		const home = path.join(native.root, 'home');
+		fs.mkdirSync(home, { recursive: true });
+		seedNewShell(native);
+		const project = fs.realpathSync(native.project);
+		const sessions = ['owner-a', 'owner-b'].map((id, index) =>
+			createMockSession({
+				id,
+				name: id,
+				toolType: 'codex',
+				cwd: project,
+				projectRoot: project,
+				customPath: path.resolve('e2e/fixtures/native/codex'),
+				customEnvVars: { CODEX_HOME: native.codex, MAESTRO_NATIVE_SCRIPT: native.script },
+				aiTabs: [
+					createMockAITab({
+						id: `${id}-tab`,
+						createdAt: index + 1,
+						permissionMode: 'full',
+						readOnlyMode: false,
+						saveToHistory: false,
+					}),
+				],
+				activeTabId: `${id}-tab`,
+				unifiedTabOrder: [{ type: 'ai', id: `${id}-tab` }],
+			})
+		);
+		fs.writeFileSync(path.join(native.data, 'maestro-sessions.json'), JSON.stringify({ sessions }));
+		let failed = false;
+		try {
+			await native.start(home);
+			const opened = native.app.waitForEvent('window');
+			expect(
+				await native.page.evaluate(() => window.maestro.windows.create(['owner-b']))
+			).not.toBeNull();
+			const second = await opened;
+			await second.waitForLoadState('domcontentloaded');
+			await expect(second.getByTitle(/^Full Access/)).toHaveText('Full Access');
+			if (scenario === 'timeout') {
+				await second.getByTitle(/^Full Access/).click();
+				await second.getByRole('menuitemradio', { name: 'Read-Only', exact: true }).click();
+				await expect(second.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+				const peerWindow = await native.app.browserWindow(second);
+				// Drop only the permission query to reproduce a silent owner without
+				// replacing its state or the real request timeout implementation.
+				await peerWindow.evaluate((win) => {
+					const send = win.webContents.send.bind(win.webContents);
+					win.webContents.send = (channel, ...args) => {
+						if (channel !== 'windows:readConversationPermissions') send(channel, ...args);
+					};
+				});
+				const replies = await native.page.evaluate(() =>
+					window.maestro.windows.getConversationPermissions(['owner-a', 'owner-b'])
+				);
+				expect(replies[0]?.tabs[0].permissionMode).toBe('full');
+				expect(replies[1]).toBeNull();
+			} else {
+				await native.cli('tab', 'permission', 'owner-a-tab', 'readonly');
+				const otherProject = path.join(native.root, 'other-project');
+				fs.mkdirSync(otherProject);
+				await native.cli('update-agent', 'owner-b', '--cwd', otherProject);
+				await second.locator('[data-conversation-key$=":owner-b-tab"] [data-tree-nav]').click();
+				const [snapshot] = await native.page.evaluate(() =>
+					window.maestro.windows.getConversationPermissions(['owner-b'])
+				);
+				expect(snapshot).toMatchObject({
+					projectKey: `path:local:${fs.realpathSync(otherProject)}`,
+					host: null,
+				});
+				expect(snapshot!.tabs[0].permissionMode).toBe('full');
+			}
+			const created = await native.cli('tab', 'new', '--agent', 'owner-a');
+			expect(created.success).toBe(true);
+			await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+			expect((await native.cli('tab', 'show', created.tabId)).tab).toMatchObject({
+				permissionMode: 'readonly',
+				readOnly: true,
+			});
+		} catch (error) {
+			failed = true;
+			throw error;
+		} finally {
+			await native.close(failed);
+		}
+	});
+}

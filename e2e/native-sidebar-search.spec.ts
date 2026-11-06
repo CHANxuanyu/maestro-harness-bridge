@@ -169,6 +169,13 @@ for (const [provider, scenario] of [
 			expect(cli.result.hits[0].conversation.nativeSessionId).toBe(initial.id);
 			if (scenario === 'legacy-title')
 				expect(cli.result.hits[0].conversation.title).toBe(nativeTitle);
+			const transcript = await native.cli('native-history', 'read', session.id, initial.id);
+			expect(transcript.result.messages.length).toBeGreaterThan(500);
+			expect(
+				transcript.result.messages.some((message: { content: string }) =>
+					message.content.includes(phrase)
+				)
+			).toBe(true);
 			await row.click();
 			const flashed = native
 				.output()
@@ -179,9 +186,12 @@ for (const [provider, scenario] of [
 			await expect(flashed).not.toHaveAttribute('data-feed-row', 'turn-activity');
 			await expect(native.output().getByText(phrase, { exact: true })).toBeInViewport();
 			if (scenario === 'legacy-title') {
-				const opened = await native.cli('tab', 'show', 'active');
-				expect(opened.tab.name).toBe(nativeTitle);
-				expect(opened.tab.agentSessionId).toBe(initial.id);
+				await expect
+					.poll(async () => (await native.cli('tab', 'show', 'active')).tab)
+					.toMatchObject({
+						name: nativeTitle,
+						agentSessionId: initial.id,
+					});
 			}
 			await expect(native.output().locator('.jump-flash')).toHaveCount(0);
 			await input.focus();

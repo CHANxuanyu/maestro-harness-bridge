@@ -338,3 +338,11 @@ title index once, with the same per-file and total byte budgets as rollouts.
 The native search jump sets `revealTurnActivity`; `TerminalOutput` uses it only
 with `newShell`, expands the containing turn, then targets the body row rather
 than the fold header, including when both carry the same first-message ID.
+
+Local `CodexSessionStorage` discovery includes the account's native
+`archived_sessions` root and its date directories, even without a `sessions`
+directory. Listing, reads, revision lookup and explicit whole-conversation
+deletion share that discovery and `preferPlainCodexRollouts()`; cache pruning
+covers both roots within the selected account. Opening a search hit still reads
+and decodes through this storage adapter, without restoring or expanding a file
+on disk. SSH discovery remains unchanged and content search remains local only.

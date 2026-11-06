@@ -66,6 +66,15 @@ Without an indexed name, the title comes from the first displayed user request.
 Native content jumps carry `revealTurnActivity`; only `newShell` expands the
 containing turn and flashes the body after it mounts.
 
+The third-round correction adds no action or CLI verb. Local Codex history
+discovery now includes `archived_sessions` as well as `sessions`, so an archived
+content hit can pass the canonical read used by resume and backfill.
+`native-history read <agent> <native-id>` uses that same reader; `list` and explicit
+conversation deletion share its account-scoped discovery. Plain rollouts still
+take precedence over compressed copies. The Electron scenario checks CLI content
+before clicking, retains the body-in-viewport and flash assertions, and polls the
+persisted tab name after opening. These reads do not close the navigation gap.
+
 ## Stop and read-only resume corrections (2026-11-06)
 
 No UI action or CLI verb is added. `tab permission <tab> readonly` and

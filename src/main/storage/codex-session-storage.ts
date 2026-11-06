@@ -893,7 +893,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 	}
 
 	/**
-	 * Find all session files, organized by date directories
+	 * Find active date-organized rollouts and native archived rollouts
 	 */
 	private async findAllSessionFiles(
 		accountDir?: string,
@@ -902,60 +902,67 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		const sessionsDir = this.getSessionsDir(accountDir);
 		const sessionFiles: Array<{ filePath: string; filename: string }> = [];
 
-		try {
-			await fs.access(sessionsDir);
-		} catch {
-			return [];
-		}
-
-		// Scan YYYY directories
-		const years = await fs.readdir(sessionsDir);
-		for (const year of years) {
-			if (!/^\d{4}$/.test(year)) continue;
-
-			const yearDir = path.join(sessionsDir, year);
+		const archiveDir = path.join(path.dirname(sessionsDir), 'archived_sessions');
+		for (const directory of [archiveDir, sessionsDir]) {
 			try {
-				const yearStat = await fs.stat(yearDir);
-				if (!yearStat.isDirectory()) continue;
+				await fs.access(directory);
 			} catch {
 				continue;
 			}
 
-			// Scan MM directories
-			const months = await fs.readdir(yearDir);
-			for (const month of months) {
-				if (!/^\d{2}$/.test(month)) continue;
+			// Active rollouts use date directories; native archives also store files at the root.
+			const years = await fs.readdir(directory);
+			for (const year of years) {
+				if (directory === archiveDir && /\.jsonl(?:\.zst)?$/i.test(year)) {
+					sessionFiles.push({ filePath: path.join(directory, year), filename: year });
+					continue;
+				}
+				if (!/^\d{4}$/.test(year)) continue;
 
-				const monthDir = path.join(yearDir, month);
+				const yearDir = path.join(directory, year);
 				try {
-					const monthStat = await fs.stat(monthDir);
-					if (!monthStat.isDirectory()) continue;
+					const yearStat = await fs.stat(yearDir);
+					if (!yearStat.isDirectory()) continue;
 				} catch {
 					continue;
 				}
 
-				// Scan DD directories
-				const days = await fs.readdir(monthDir);
-				for (const day of days) {
-					if (!/^\d{2}$/.test(day)) continue;
+				// Scan MM directories
+				const months = await fs.readdir(yearDir);
+				for (const month of months) {
+					if (!/^\d{2}$/.test(month)) continue;
 
-					const dayDir = path.join(monthDir, day);
+					const monthDir = path.join(yearDir, month);
 					try {
-						const dayStat = await fs.stat(dayDir);
-						if (!dayStat.isDirectory()) continue;
-
-						// Find session files
-						const files = await fs.readdir(dayDir);
-						for (const file of files) {
-							if (/\.jsonl(?:\.zst)?$/i.test(file)) {
-								sessionFiles.push({
-									filePath: path.join(dayDir, file),
-									filename: file,
-								});
-							}
-						}
+						const monthStat = await fs.stat(monthDir);
+						if (!monthStat.isDirectory()) continue;
 					} catch {
 						continue;
+					}
+
+					// Scan DD directories
+					const days = await fs.readdir(monthDir);
+					for (const day of days) {
+						if (!/^\d{2}$/.test(day)) continue;
+
+						const dayDir = path.join(monthDir, day);
+						try {
+							const dayStat = await fs.stat(dayDir);
+							if (!dayStat.isDirectory()) continue;
+
+							// Find session files
+							const files = await fs.readdir(dayDir);
+							for (const file of files) {
+								if (/\.jsonl(?:\.zst)?$/i.test(file)) {
+									sessionFiles.push({
+										filePath: path.join(dayDir, file),
+										filename: file,
+									});
+								}
+							}
+						} catch {
+							continue;
+						}
 					}
 				}
 			}
@@ -1297,11 +1304,12 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		// reachable by any prefix, so they survive until the cache version is
 		// bumped. They are a handful of stale records, not stale numbers: every
 		// session served to a caller comes from the account it just walked.
-		const accountPrefix = sessionsDir.endsWith(path.sep)
-			? sessionsDir
-			: `${sessionsDir}${path.sep}`;
+		const accountPrefixes = [
+			sessionsDir,
+			path.join(path.dirname(sessionsDir), 'archived_sessions'),
+		].map((directory) => `${directory}${path.sep}`);
 		for (const cachedPath of Object.keys(cache.sessions)) {
-			if (!cachedPath.startsWith(accountPrefix)) continue;
+			if (!accountPrefixes.some((prefix) => cachedPath.startsWith(prefix))) continue;
 			if (!currentFilePaths.has(cachedPath)) {
 				delete cache.sessions[cachedPath];
 				cacheUpdated = true;

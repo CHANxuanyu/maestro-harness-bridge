@@ -218,6 +218,56 @@ it('prefers the plain file for the same UUID even when the compressed name sorts
 	).toHaveLength(1);
 });
 
+it.each(['', '2026/11/03'])(
+	'reads native archives at %s without mixing accounts',
+	async (layout) => {
+		const archive = path.join(account, 'archived_sessions', layout);
+		await fs.mkdir(archive, { recursive: true });
+		const archivedFile = path.join(archive, path.basename(file));
+		await fs.writeFile(archivedFile, content);
+		const storage = new CodexSessionStorage();
+		expect((await read(storage, true)).messages.map((message) => message.content)).toEqual([
+			'compressed question',
+			'compressed answer',
+		]);
+		expect(
+			(await storage.listSessions(isolation.root, undefined, account)).map(
+				(session) => session.sessionId
+			)
+		).toEqual([id]);
+		const otherAccount = path.join(isolation.root, 'other-account');
+		await fs.mkdir(otherAccount);
+		expect(
+			await storage.readSessionMessages(isolation.root, id, {
+				configDir: otherAccount,
+				readOnly: true,
+			})
+		).toMatchObject({ messages: [], total: 0 });
+		expect(
+			await storage.getTranscriptRevision(isolation.root, id, { configDir: otherAccount })
+		).toBeNull();
+		expect(await fs.readFile(archivedFile, 'utf8')).toBe(content);
+	}
+);
+
+it('prefers the active plain rollout over its native archive and deletes both only on explicit deletion', async () => {
+	const archive = path.join(account, 'archived_sessions');
+	await fs.mkdir(archive);
+	const archivedFile = path.join(archive, path.basename(file) + '.zst');
+	await fs.writeFile(archivedFile, zstdCompressSync(content.replaceAll('compressed', 'stale')));
+	await fs.writeFile(file, content);
+	const storage = new CodexSessionStorage();
+	expect((await read(storage, true)).messages[0].content).toBe('compressed question');
+	expect(
+		(await storage.listSessions(isolation.root, undefined, account)).map(
+			(session) => session.sessionId
+		)
+	).toEqual([id]);
+	expect(await storage.deleteSession(id, account)).toEqual({ success: true });
+	await expect(fs.stat(file)).rejects.toThrow();
+	await expect(fs.stat(archivedFile)).rejects.toThrow();
+});
+
 it('follows immutable compressed revisions with a full reread when bytes change', async () => {
 	const storage = new CodexSessionStorage();
 	await fs.writeFile(file + '.zst', zstdCompressSync(content));

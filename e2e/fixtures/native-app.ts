@@ -183,9 +183,13 @@ export class NativeApp {
 		}
 		// A history-boundary case needs a synthetic default account as well as the selected one.
 		// Scope HOME to this child process so the test never seeds the user's default directory.
+		// Synthetic runs never see the real home: a provider's store there, such as an
+		// OpenCode database from the desktop app, would be read instead of the fixture's.
+		const home = homeDir ?? (this.real ? undefined : path.join(this.root, 'synthetic-home'));
+		if (home) fs.mkdirSync(home, { recursive: true });
 		this.app = await launchElectronApp(path.resolve('dist/main/index.js'), this.data, {
 			...this.env,
-			...(homeDir ? { HOME: homeDir } : {}),
+			...(home ? { HOME: home } : {}),
 		});
 		this.boot++;
 		await this.app.context().tracing.start({ screenshots: true, snapshots: true });

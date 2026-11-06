@@ -624,7 +624,24 @@ hook failures return their original diagnostics, with no automatic retry.
 The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
+## New shell conversation archive and native deletion (2026-11-06)
+
+| 界面动作                     | CLI                                                                  | 共用实现                                                             |
+| ---------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 对话右键或命令面板归档       | `tab archive <tab-id>`；`native-history archive <agent> <native-id>` | `agentSessions:archiveConversation` 与 `createConversationArchive()` |
+| 项目底部展开已归档列表       | `native-history list --archived`；限定项目时加 `<agent>`             | 主进程归档元数据与 `listProjectHistory` 的归档过滤                   |
+| 取消归档                     | `native-history unarchive <agent> <native-id>`                       | 同一归档服务，移除 Maestro 标记                                      |
+| Codex 对话右键或命令面板删除 | `native-history delete <agent> <native-id> --yes`                    | 新界面复用同一服务，再调用原有 `CodexSessionStorage.deleteSession()` |
+
+归档写入 Maestro 设置的 `archivedConversations`，以工具、主机、规范账户历史目录和原生 ID 为身份。主进程检查仍在运行的进程，并向每个所属窗口请求实时检查及标签关闭。忙碌、排队或窗口无法确认时拒绝；关闭采用原标签实现，不调用模型、不写原生历史。项目扫描、缓存条目和打开标签的投影都排除归档项。工作树归档仍显示在所属项目下。
+
+权限继承排除归档项的最近活动；没有普通对话时使用归档中最严格的已知档位。没有 Maestro 权限记录的原生历史保守记为只读。空项目不会在重启时被当作损坏数据补出高权限对话。新界面关闭时不启用归档过滤或新增菜单；归档写操作要求 `newShell`。既有 CLI 删除增加 `--yes` 确认，这是两种界面共用的安全收紧。Claude 不提供原生删除。
+
 ## Open gaps
+
+- T9：自动发现但尚无匹配工具及账户配置的历史，可在界面直接归档或取消归档。CLI 的修改命令使用 `<agent>` 指定账户，需要先有匹配的配置；暂未提供直接按账户目录修改的参数。全局 `native-history list --archived` 仍可读取这些条目。
+- T9：运行状态拒绝覆盖 Maestro 管理的进程、窗口标签和队列。尚未接入其他应用或独立原生 CLI 的活动探测，不声称能识别这些外部进程是否正在写同一历史。
+- T9：跨窗口先全部检查，再逐个关闭。若后一个窗口在关闭时失败，归档标记回退，但已关闭窗口的标签不自动恢复；尚未提供跨窗口事务式回滚。
 
 **Provider switch wording (2026-11-06).** The existing CLI help, force warning and
 success text still describe the classic reset behavior. With `newShell` enabled,

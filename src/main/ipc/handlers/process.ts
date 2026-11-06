@@ -2,13 +2,13 @@ import { ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import type { AgentConfigsData } from '../../stores/types';
 import * as os from 'os';
-import * as path from 'path';
 import { ProcessManager } from '../../process-manager';
 import { AgentDetector } from '../../agents';
 import type { InteractiveReplayController } from '../../agents/claude-interactive-replay';
 import type { ProcessConfig as ProcessSpawnConfig } from '../../process-manager/types';
 import { logger } from '../../utils/logger';
 import { getChildProcesses } from '../../process-manager/utils/childProcessInfo';
+import { isShellForeground } from '../../process-manager/utils/terminalForeground';
 import { addBreadcrumb } from '../../utils/sentry';
 import { isWebContentsAvailable } from '../../utils/safe-send';
 import {
@@ -322,7 +322,7 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 			if (!managed?.ptyProcess || !managed.command) return false;
 			const foreground = managed.ptyProcess.process;
 			if (!foreground) return false;
-			return path.basename(managed.command) !== foreground;
+			return !isShellForeground(managed.command, foreground);
 		})
 	);
 

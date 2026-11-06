@@ -4,6 +4,7 @@ import { useSessionStore } from '../../../stores/sessionStore';
 import { useTabStore } from '../../../stores/tabStore';
 import { getTerminalSessionId } from '../../../utils/terminalTabHelpers';
 import { captureMessage } from '../../../utils/sentry';
+import { getT } from '../../../i18n';
 import type { TerminalTabHandlersReturn } from './types';
 
 export function useTerminalTabHandlers(): TerminalTabHandlersReturn {
@@ -38,10 +39,11 @@ export function useTerminalTabHandlers(): TerminalTabHandlersReturn {
 			void Promise.all(checks).then((busy) => {
 				if (busy.some(Boolean)) {
 					useModalStore.getState().openModal('confirm', {
-						message:
+						message: getT()(
 							tabIds.length > 1
-								? 'These terminals are running commands. Close them and stop the commands?'
-								: 'This terminal is running a command. Close it and stop the command?',
+								? 'workflows.shell.closeRunningTerminals'
+								: 'workflows.shell.closeRunningTerminal'
+						),
 						onConfirm: close,
 						destructive: true,
 					});

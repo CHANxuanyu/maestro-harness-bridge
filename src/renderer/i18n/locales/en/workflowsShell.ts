@@ -601,6 +601,10 @@ export const workflowsShell = {
 	'workflows.shell.closeFindBar': 'Close find bar',
 	'workflows.shell.noAgentsCreateOneToGetStarted': 'No agents. Create one to get started.',
 	'workflows.shell.loading': 'Loading',
+	'workflows.shell.closeRunningTerminal':
+		'This terminal is running a command. Close it and stop the command?',
+	'workflows.shell.closeRunningTerminals':
+		'These terminals are running commands. Close them and stop the commands?',
 	'workflows.shell.fetchingFromRemoteServer': 'Fetching from remote server...',
 	'workflows.shell.showAgentsSidebar': 'Show agents sidebar',
 	'workflows.shell.showSidebar': 'Show sidebar',

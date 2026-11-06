@@ -585,6 +585,8 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.shell.closeFindBar': '关闭查找栏',
 	'workflows.shell.noAgentsCreateOneToGetStarted': '暂无智能体。创建一个即可开始。',
 	'workflows.shell.loading': '正在加载',
+	'workflows.shell.closeRunningTerminal': '这个终端正在运行命令。要关闭它并停止命令吗？',
+	'workflows.shell.closeRunningTerminals': '这些终端正在运行命令。要关闭它们并停止命令吗？',
 	'workflows.shell.fetchingFromRemoteServer': '正在从远程服务器获取...',
 	'workflows.shell.showAgentsSidebar': '显示智能体侧栏',
 	'workflows.shell.showSidebar': '显示侧栏',

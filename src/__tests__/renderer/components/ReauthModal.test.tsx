@@ -149,7 +149,7 @@ describe('ReauthModal', () => {
 		// how a remote login came up as an empty box.
 		expect(mockWrite).not.toHaveBeenCalled();
 		await emitShellOutput(mockSpawnTerminalTab.mock.calls[0][0].sessionId);
-		expect(mockWrite).toHaveBeenCalledWith(expect.any(String), 'claude /login\r');
+		expect(mockWrite).toHaveBeenCalledWith(expect.any(String), 'claude auth login\r');
 	});
 
 	// The routing key is load-bearing twice over: `-terminal-` makes PtySpawner
@@ -207,7 +207,7 @@ describe('ReauthModal', () => {
 
 		// ...and that shell is the one that gets the login typed into it.
 		await emitShellOutput(liveSessionId);
-		expect(mockWrite).toHaveBeenCalledWith(liveSessionId, 'claude /login\r');
+		expect(mockWrite).toHaveBeenCalledWith(liveSessionId, 'claude auth login\r');
 	});
 
 	// The abandoned attempt's promise resolves after the remount. It must not
@@ -249,7 +249,7 @@ describe('ReauthModal', () => {
 				vi.advanceTimersByTime(8000);
 			});
 
-			expect(mockWrite).toHaveBeenCalledWith(expect.any(String), 'claude /login\r');
+			expect(mockWrite).toHaveBeenCalledWith(expect.any(String), 'claude auth login\r');
 		} finally {
 			vi.useRealTimers();
 		}
@@ -472,7 +472,7 @@ describe('ReauthModal for a user-initiated login', () => {
 		await flushSpawn();
 		await emitShellOutput(mockSpawnTerminalTab.mock.calls[0][0].sessionId);
 
-		expect(mockWrite).toHaveBeenCalledWith(expect.any(String), 'claude /login\r');
+		expect(mockWrite).toHaveBeenCalledWith(expect.any(String), 'claude auth login\r');
 	});
 });
 
@@ -922,7 +922,7 @@ describe('ReauthModal on Windows', () => {
 
 		expect(mockWrite).toHaveBeenCalledWith(
 			expect.any(String),
-			'& "C:\\Program Files\\Claude\\claude.exe" /login\r'
+			'& "C:\\Program Files\\Claude\\claude.exe" auth login\r'
 		);
 	});
 
@@ -941,6 +941,6 @@ describe('ReauthModal on Windows', () => {
 		await flushSpawn();
 		await emitShellOutput(mockSpawnTerminalTab.mock.calls[0][0].sessionId);
 
-		expect(mockWrite).toHaveBeenCalledWith(expect.any(String), 'claude /login\r');
+		expect(mockWrite).toHaveBeenCalledWith(expect.any(String), 'claude auth login\r');
 	});
 });

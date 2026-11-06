@@ -270,7 +270,7 @@ export interface AgentLoginCommand {
  */
 const AGENT_LOGIN_COMMANDS: Record<AgentId, AgentLoginCommand | null> = {
 	terminal: null,
-	'claude-code': { binary: 'claude', args: '/login' },
+	'claude-code': { binary: 'claude', args: 'auth login' },
 	codex: { binary: 'codex', args: 'login', remoteArgs: 'login --device-auth' },
 	'gemini-cli': { binary: 'gemini', args: '', followUp: '/auth' },
 	'qwen3-coder': { binary: 'qwen3-coder', args: '', followUp: '/auth' },

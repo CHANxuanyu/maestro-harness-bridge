@@ -15,6 +15,7 @@ const mockMaestro = {
 	process: {
 		spawn: vi.fn(),
 		onData: vi.fn(() => vi.fn()),
+		onAgentError: vi.fn(() => vi.fn()),
 		onExit: vi.fn(() => vi.fn()),
 	},
 	autorun: {

@@ -20,6 +20,8 @@ import {
 } from './wizardPrompts';
 import {
 	detectWizardError,
+	wizardErrorFromAgentError,
+	formatWizardError,
 	createGenericErrorMessage,
 	type WizardError,
 } from './wizardErrorDetection';
@@ -126,6 +128,7 @@ interface ConversationSession {
 	dataListenerCleanup?: () => void;
 	/** Cleanup function for exit listener */
 	exitListenerCleanup?: () => void;
+	agentErrorListenerCleanup?: () => void;
 	/** Cleanup function for thinking chunk listener */
 	thinkingListenerCleanup?: () => void;
 	/** Cleanup function for tool execution listener */
@@ -392,6 +395,7 @@ class ConversationManager {
 		}
 
 		return new Promise<SendMessageResult>((resolve) => {
+			let agentError: WizardError | null = null;
 			wizardDebugLogger.log('spawn', 'Setting up agent spawn', {
 				sessionId: this.session!.sessionId,
 				agentId: agent.id,
@@ -480,6 +484,16 @@ class ConversationManager {
 				);
 			}
 
+			this.session!.agentErrorListenerCleanup = window.maestro.process.onAgentError(
+				(sessionId, error) => {
+					if (sessionId === this.session?.sessionId) {
+						agentError = wizardErrorFromAgentError(error, this.session.agentType);
+					}
+				}
+			);
+
+			// Main settles provisional errors and forwards agent:error before process:exit.
+			// Keep the structured error for this turn until exit instead of parsing display text.
 			// Set up exit listener
 			this.session!.exitListenerCleanup = window.maestro.process.onExit(
 				(sessionId: string, code: number) => {
@@ -494,7 +508,7 @@ class ConversationManager {
 						// Agent finished - cleanupListeners() clears the inactivity timeout
 						this.cleanupListeners();
 
-						if (code === 0) {
+						if (code === 0 && !agentError) {
 							const parsedResponse = this.parseAgentOutput();
 							wizardDebugLogger.log('data', 'Parsed agent response', {
 								parseSuccess: parsedResponse.parseSuccess,
@@ -515,9 +529,9 @@ class ConversationManager {
 						} else {
 							// Check for provider errors in the output
 							const rawOutput = this.session?.outputBuffer || '';
-							const detectedError = this.session
-								? detectWizardError(rawOutput, this.session.agentType)
-								: null;
+							const detectedError =
+								agentError ??
+								(this.session ? detectWizardError(rawOutput, this.session.agentType) : null);
 
 							if (detectedError) {
 								wizardDebugLogger.log('error', 'Detected provider error', {
@@ -536,7 +550,7 @@ class ConversationManager {
 								});
 								resolve({
 									success: false,
-									error: `${detectedError.title}: ${detectedError.message}`,
+									error: formatWizardError(detectedError),
 									rawOutput,
 									detectedError,
 								});
@@ -905,6 +919,8 @@ class ConversationManager {
 	 * Clean up event listeners and any pending timeouts
 	 */
 	private cleanupListeners(): void {
+		this.session?.agentErrorListenerCleanup?.();
+		if (this.session) this.session.agentErrorListenerCleanup = undefined;
 		if (this.session?.dataListenerCleanup) {
 			this.session.dataListenerCleanup();
 			this.session.dataListenerCleanup = undefined;

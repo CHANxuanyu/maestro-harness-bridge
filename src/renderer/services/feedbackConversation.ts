@@ -7,6 +7,12 @@
  * but simplified for the feedback use case.
  */
 
+import {
+	detectWizardError,
+	wizardErrorFromAgentError,
+	formatWizardError,
+	type WizardError,
+} from '../components/Wizard/services/wizardErrorDetection';
 import type { ToolType } from '../types';
 import { stripAnsiCodes } from '../../shared/stringUtils';
 import type { FeedbackAccount } from '../../shared/feedbackAccounts';
@@ -343,6 +349,7 @@ export class FeedbackConversationManager {
 	private systemPrompt = '';
 	private dataCleanup?: () => void;
 	private exitCleanup?: () => void;
+	private agentErrorCleanup?: () => void;
 	private thinkingCleanup?: () => void;
 	private toolCleanup?: () => void;
 	private timeoutId?: ReturnType<typeof setTimeout>;
@@ -429,6 +436,7 @@ export class FeedbackConversationManager {
 		const prompt = this.buildPrompt(userMessage, history, currentSystemPrompt);
 
 		let outputBuffer = '';
+		let agentError: WizardError | null = null;
 		let settled = false;
 		return new Promise<FeedbackTurnResult>((resolve) => {
 			const resolveOnce = (result: FeedbackTurnResult) => {
@@ -513,27 +521,39 @@ export class FeedbackConversationManager {
 				);
 			}
 
+			this.agentErrorCleanup = window.maestro.process.onAgentError((sid, error) => {
+				if (sid === currentSessionId)
+					agentError = wizardErrorFromAgentError(error, currentAgentType);
+			});
+
 			// Exit listener
 			this.exitCleanup = window.maestro.process.onExit((sid: string, code: number) => {
 				if (sid !== currentSessionId) return;
 
-				if (code === 0) {
+				const detectedError =
+					agentError ?? (code !== 0 ? detectWizardError(outputBuffer, currentAgentType) : null);
+				if (code === 0 && !detectedError) {
 					const parsed = extractJsonFromOutput(outputBuffer);
 					const response = parsed ?? DEFAULT_FEEDBACK_RESPONSE;
 					resolveOnce({ response, failed: false });
 				} else {
-					const message = buildProviderFailureMessage({
+					const diagnostics = buildProviderFailureMessage({
 						agentName,
 						binaryPath: displayBinaryPath,
 						reason: `exited with code ${code} before it could respond`,
 						output: outputBuffer,
 					});
+					const message = detectedError
+						? `${formatWizardError(detectedError)}\n\n${diagnostics}`
+						: diagnostics;
 					const errorResponse = {
 						...DEFAULT_FEEDBACK_RESPONSE,
 						message,
 					};
 					const detail = summarizeProcessFailure(outputBuffer);
-					const error = `Agent exited with code ${code}: ${detail || '(no output)'}`;
+					const error = detectedError
+						? message
+						: `Agent exited with code ${code}: ${detail || '(no output)'}`;
 					callbacks?.onError?.(error);
 					resolveOnce({ response: errorResponse, failed: true, error });
 				}
@@ -695,6 +715,8 @@ export class FeedbackConversationManager {
 	 * Clean up listeners
 	 */
 	private cleanupListeners(): void {
+		this.agentErrorCleanup?.();
+		this.agentErrorCleanup = undefined;
 		if (this.timeoutId) {
 			clearTimeout(this.timeoutId);
 			this.timeoutId = undefined;

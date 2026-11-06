@@ -3211,7 +3211,7 @@ describe('StdoutHandler - single JSON parse per line', () => {
 
 		it('uses the claude login command even when the pattern message is generic', () => {
 			// Pattern-58 style message: no login command in the text. The
-			// agentId map must still produce "claude /login" so Claude SSH
+			// agentId map must still produce "claude auth login" so Claude SSH
 			// users keep actionable guidance.
 			const mockParser = mockAuthParser(
 				'claude-code',
@@ -3237,9 +3237,9 @@ describe('StdoutHandler - single JSON parse per line', () => {
 			expect(errorSpy).toHaveBeenCalledTimes(1);
 			const emitted = errorSpy.mock.calls[0][1];
 			expect(emitted.message).toBe(
-				'Authentication failed on remote host "build-box". SSH into the remote and run "claude /login" to re-authenticate.'
+				'Authentication failed on remote host "build-box". SSH into the remote and run "claude auth login" to re-authenticate.'
 			);
-			expect(emitted.message).toContain('claude /login');
+			expect(emitted.message).toContain('claude auth login');
 		});
 
 		it('omits a login command for agents without a known CLI login', () => {
@@ -3269,7 +3269,7 @@ describe('StdoutHandler - single JSON parse per line', () => {
 			expect(emitted.message).toBe(
 				'Authentication failed on remote host "build-box". SSH into the remote to re-authenticate.'
 			);
-			expect(emitted.message).not.toContain('claude /login');
+			expect(emitted.message).not.toContain('claude auth login');
 			expect(emitted.message).not.toContain('grok login');
 		});
 

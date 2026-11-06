@@ -13,9 +13,23 @@
 import { describe, it, expect } from 'vitest';
 import {
 	detectWizardError,
+	wizardErrorFromAgentError,
 	formatWizardError,
 	createGenericErrorMessage,
 } from '../../../../../renderer/components/Wizard/services/wizardErrorDetection';
+
+describe('wizardErrorFromAgentError', () => {
+	it('keeps an unfamiliar wire error message with a safe generic presentation', () => {
+		expect(
+			wizardErrorFromAgentError({ type: 'constructor', message: 'Provider detail' }, 'claude-code')
+		).toMatchObject({
+			type: 'unknown',
+			title: 'Agent Error',
+			message: 'Provider detail',
+			canRetry: true,
+		});
+	});
+});
 
 describe('detectWizardError', () => {
 	it('returns null for empty output and for ordinary output', () => {
@@ -42,7 +56,7 @@ describe('detectWizardError', () => {
 	it('names the provider login command rather than assuming Claude', () => {
 		expect(detectWizardError('unauthorized', 'codex')?.recoveryHint).toContain('codex login');
 		expect(detectWizardError('unauthorized', 'claude-code')?.recoveryHint).toContain(
-			'claude /login'
+			'claude auth login'
 		);
 	});
 
@@ -96,5 +110,6 @@ describe('createGenericErrorMessage', () => {
 
 	it('names the exit code when there is nothing else to say', () => {
 		expect(createGenericErrorMessage('', 3)).toContain('3');
+		expect(createGenericErrorMessage('', 3)).not.toMatch(/terminal/i);
 	});
 });

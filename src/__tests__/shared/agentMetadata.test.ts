@@ -258,7 +258,7 @@ describe('agentMetadata', () => {
 		it('substitutes a configured custom binary path', () => {
 			const login = getAgentLoginCommand('claude-code', '/opt/tools/claude');
 			expect(login?.binary).toBe('/opt/tools/claude');
-			expect(login?.args).toBe('/login');
+			expect(login?.args).toBe('auth login');
 		});
 
 		it('ignores a blank custom path', () => {
@@ -277,7 +277,9 @@ describe('agentMetadata', () => {
 		});
 
 		it('keeps the local args on a remote for agents with no remote variant', () => {
-			expect(getAgentLoginCommand('claude-code', undefined, { remote: true })?.args).toBe('/login');
+			expect(getAgentLoginCommand('claude-code', undefined, { remote: true })?.args).toBe(
+				'auth login'
+			);
 		});
 
 		it('flags agents whose login only exists as a slash command in their TUI', () => {

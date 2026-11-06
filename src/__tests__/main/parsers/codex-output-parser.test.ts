@@ -8,6 +8,42 @@ import {
 describe('CodexOutputParser', () => {
 	const parser = new CodexOutputParser();
 
+	it.each([
+		undefined,
+		null,
+		{},
+		[{ text: 'Step', completed: 'false' }],
+		[{ text: 'Step' }],
+		[{ completed: true }],
+		[null],
+	])('does not invent or clear a plan from malformed todo_list items: %j', (items) => {
+		const event = new CodexOutputParser().parseJsonObject({
+			type: 'item.updated',
+			item: { id: 'plan', type: 'todo_list', items },
+		});
+		expect(event?.type).toBe('system');
+		expect(event?.toolState).toBeUndefined();
+	});
+
+	it('keeps unfinished steps pending when the exec turn completes', () => {
+		const event = new CodexOutputParser().parseJsonObject({
+			type: 'item.completed',
+			item: { id: 'plan', type: 'todo_list', items: [{ text: 'Unfinished', completed: false }] },
+		});
+		expect(event?.toolState).toEqual({
+			status: 'completed',
+			input: { plan: [{ step: 'Unfinished', status: 'pending' }] },
+		});
+	});
+
+	it('preserves an explicitly empty exec task list', () => {
+		const event = new CodexOutputParser().parseJsonObject({
+			type: 'item.updated',
+			item: { id: 'plan', type: 'todo_list', items: [] },
+		});
+		expect(event?.toolState?.input).toEqual({ plan: [] });
+	});
+
 	it.each(['item.started', 'item.updated', 'item.completed'])(
 		'forwards %s checklist updates',
 		(type) => {

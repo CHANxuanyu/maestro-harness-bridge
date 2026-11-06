@@ -43,6 +43,48 @@ function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
 // buildAgentArgs
 // ---------------------------------------------------------------------------
 describe('buildAgentArgs', () => {
+	it.each([undefined, 'native-plan-session'])(
+		'enables Codex task lists before the resume selector (%s) without changing permissions',
+		(agentSessionId) => {
+			const agent = makeAgent(getAgentDefinition('codex'));
+			const args = buildAgentArgs(agent, {
+				baseArgs: [],
+				prompt: 'Use the plan tool',
+				cwd: '/project',
+				readOnlyMode: true,
+				agentSessionId,
+				enableTaskList: true,
+			});
+			expect(args).toEqual([
+				'-C',
+				'/project',
+				'exec',
+				'--json',
+				'--sandbox',
+				'read-only',
+				'--skip-git-repo-check',
+				'-c',
+				'tools.update_plan.enabled=true',
+				...(agentSessionId ? ['resume', agentSessionId] : []),
+			]);
+		}
+	);
+
+	it('leaves classic Codex and interactive launches unchanged', () => {
+		const agent = makeAgent(getAgentDefinition('codex'));
+		expect(buildAgentArgs(agent, { baseArgs: [], prompt: 'Hi', readOnlyMode: true })).toEqual([
+			'exec',
+			'--json',
+			'--sandbox',
+			'read-only',
+			'--skip-git-repo-check',
+		]);
+		expect(buildAgentArgs(agent, { baseArgs: [], enableTaskList: true })).toEqual([]);
+		expect(
+			buildAgentArgs(makeAgent(), { baseArgs: [], prompt: 'Hi', enableTaskList: true })
+		).toEqual([]);
+	});
+
 	it('returns baseArgs when agent is null', () => {
 		const result = buildAgentArgs(null, { baseArgs: ['--foo', '--bar'] });
 		expect(result).toEqual(['--foo', '--bar']);

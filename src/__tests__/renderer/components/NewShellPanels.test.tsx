@@ -919,4 +919,24 @@ describe('latest conversation tasks', () => {
 		expect(screen.getByTestId('tasks-empty')).toBeInTheDocument();
 		expect(screen.queryByRole('list')).toBeNull();
 	});
+
+	it('explains missing tool data without turning a prose checklist into tasks', () => {
+		render(
+			<TasksPanel
+				logs={[
+					{
+						id: 'prose-plan',
+						timestamp: 1,
+						source: 'ai',
+						text: 'I have no update_plan tool.\n- [x] First\n- [x] Second',
+					},
+				]}
+				theme={mockTheme}
+			/>
+		);
+		expect(screen.getByTestId('tasks-empty')).toHaveTextContent(
+			'The tools in this conversation have not provided a task list. Checklists in replies are not shown here.'
+		);
+		expect(screen.queryByRole('list')).toBeNull();
+	});
 });

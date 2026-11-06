@@ -64,6 +64,7 @@ export interface TuiDriverOptions {
 export const DEFAULT_COLS = 200;
 export const DEFAULT_ROWS = 50;
 export const QUIT_GRACE_MS = 2000;
+const TERMINATE_GRACE_MS = 1000;
 // Gap between writing the prompt body and the terminating Enter. Claude's
 // TUI uses a multi-line input editor: when text and the trailing `\r` arrive
 // in a single PTY write (or back-to-back within the same input tick), the
@@ -787,6 +788,25 @@ export class TuiDriver extends EventEmitter {
 				resolve();
 			}, QUIT_GRACE_MS);
 			this.once('exit', onExit);
+		});
+	}
+
+	// Status mode's bounded stop, including a TUI that ignores /quit or SIGTERM.
+	// Leave quit()'s run-mode contract unchanged.
+	async terminate(): Promise<void> {
+		if (!this.ptyProcess || this.exited) return;
+		await new Promise<void>((resolve) => {
+			const onExit = (): void => {
+				clearTimeout(timer);
+				resolve();
+			};
+			const timer = setTimeout(() => {
+				this.off('exit', onExit);
+				this.kill('SIGKILL');
+				resolve();
+			}, TERMINATE_GRACE_MS);
+			this.once('exit', onExit);
+			this.kill('SIGTERM');
 		});
 	}
 

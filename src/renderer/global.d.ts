@@ -1949,6 +1949,7 @@ interface MaestroAPI {
 	};
 	// Agent Sessions API - all methods accept optional sshRemoteId for SSH remote session storage access
 	agentSessions: {
+		toolOutput: import('../main/preload/sessions').AgentSessionsApi['toolOutput'];
 		projects: import('../main/preload/sessions').AgentSessionsApi['projects'];
 		openProject: import('../main/preload/sessions').AgentSessionsApi['openProject'];
 		onOpenProject: import('../main/preload/sessions').AgentSessionsApi['onOpenProject'];

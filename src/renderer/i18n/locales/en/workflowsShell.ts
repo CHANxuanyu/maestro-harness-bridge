@@ -1607,6 +1607,20 @@ export const workflowsShell = {
 	'workflows.transcript.toolCanceled': 'Stopped before it finished',
 	'workflows.transcript.toolInput': 'Input',
 	'workflows.transcript.toolResult': 'Result',
+	'workflows.transcript.fullToolOutput': 'Show full output (about {size} KB)',
+	'workflows.transcript.fullToolOutputLoading': 'Loading full output…',
+	'workflows.transcript.fullToolOutputMissing':
+		'This output could not be found in the original record',
+	'workflows.transcript.fullToolOutputTooLarge':
+		'The original record exceeds the 100 MB read limit',
+	'workflows.transcript.fullToolOutputUnavailable':
+		'Could not read the original record. Collapse and reopen to try again.',
+	'workflows.transcript.fullToolOutputCopy': 'Copy output',
+	'workflows.transcript.fullToolOutputHide': 'Hide full output',
+	'workflows.transcript.fullToolOutputCopied': 'Copied',
+	'workflows.transcript.fullToolOutputCopyFailed': 'Could not copy output',
+	'workflows.transcript.fullToolOutputOmitted':
+		'Showing the last 2 MB. Omitted {bytes} bytes from the beginning.',
 	'workflows.transcript.toolValueTruncated': 'Shortened when saved ({count} characters in full)',
 	'workflows.transcript.speakerUser': 'You',
 	'workflows.transcript.speakerAssistant': 'Assistant',

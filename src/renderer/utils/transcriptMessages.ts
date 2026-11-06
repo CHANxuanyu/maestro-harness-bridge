@@ -426,6 +426,7 @@ export function transcriptMessagesToLogEntries(messages: TranscriptMessage[]): L
 				source: 'tool',
 				text: toolEntryText(call),
 				metadata: {
+					...(call.callId ? { toolCallId: call.callId } : {}),
 					toolState: {
 						...(call.status ? { status: call.status } : {}),
 						...(input !== undefined ? { input } : {}),

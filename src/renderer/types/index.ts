@@ -253,6 +253,8 @@ export interface LogEntry {
 	agentError?: AgentError;
 	// For tool execution entries - stores tool state and details
 	metadata?: {
+		/** Native tool call identity, independent of the rendered message ID. */
+		toolCallId?: string;
 		toolState?: {
 			// 'canceled': the call was still running when the user stopped the
 			// turn. Kept in the conversation layout so the record stays readable,

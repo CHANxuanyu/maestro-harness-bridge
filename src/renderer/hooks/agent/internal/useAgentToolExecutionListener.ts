@@ -127,6 +127,7 @@ export function useAgentToolExecutionListener(): void {
 								metadata: {
 									...existing.metadata,
 									toolState: mergedState,
+									...(toolEvent.toolCallId ? { toolCallId: toolEvent.toolCallId } : {}),
 									...(mergedParentToolUseId ? { parentToolUseId: mergedParentToolUseId } : {}),
 								},
 								...(isInteractive ? { renderStyle: 'text-stream' as const } : {}),
@@ -144,6 +145,7 @@ export function useAgentToolExecutionListener(): void {
 								text: toolEvent.toolName,
 								metadata: {
 									toolState: newState,
+									...(toolEvent.toolCallId ? { toolCallId: toolEvent.toolCallId } : {}),
 									...(toolEvent.parentToolUseId
 										? { parentToolUseId: toolEvent.parentToolUseId }
 										: {}),

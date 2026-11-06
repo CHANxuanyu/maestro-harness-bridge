@@ -36,6 +36,20 @@ function message(overrides: Partial<TranscriptMessage> = {}): TranscriptMessage 
 }
 
 describe('transcriptMessagesToLogEntries', () => {
+	it('retains native call IDs separately from the message ID for on-demand results', () => {
+		const entries = transcriptMessagesToLogEntries([
+			message({
+				uuid: 'message-id',
+				type: 'assistant',
+				content: 'Tool: exec_command',
+				toolUse: [
+					{ id: 'call-1', tool: 'exec_command', state: { status: 'completed', output: 'ok' } },
+				],
+			}),
+		]);
+		expect(entries[0].id).toBe('message-id');
+		expect(entries[0].metadata?.toolCallId).toBe('call-1');
+	});
 	it('keeps messages with text and maps user vs assistant to log sources', () => {
 		const entries = transcriptMessagesToLogEntries([
 			message({ uuid: 'a', type: 'user', content: 'question' }),

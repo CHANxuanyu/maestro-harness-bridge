@@ -1,5 +1,7 @@
 # Canonical Utilities - Full Rationale
 
+- **On-demand native tool results:** `readToolOutputFile()` in `src/main/storage/native-tool-output.ts` runs `readNativeToolOutput()` in a disposable worker. Use `agentSessions:toolOutput` from UI and CLI so owner account selection, the 100 MiB native read cap, 2 MiB UTF-8 tail and read-only behavior stay shared. `codexToolOutputText()` in `src/shared/codexToolOutput.ts` is the native text decoder; the storage wrapper still applies `compactToolOutput()`. Claude uses `flattenToolResultContent(content, false)` only inside the bounded worker. Full text never enters session state. Do not add a second transcript parser or full-output persistence path.
+
 The complete, reasoned entry for every commonly-reimplemented function in the codebase. The always-loaded index in [CLAUDE.md](../../CLAUDE.md#commonly-reimplemented-functions-do-not-add-new-copies) lists each entry as one line (name, canonical symbols, path); this file carries the why - the failure each canonical implementation replaced, the invariants it protects, and the traps that made the duplicates subtly wrong. Read the matching entry here BEFORE extending or working around one of these utilities.
 
 Grep-verified 2026-09-04 (`npm run docs:verify` checks that every path below still resolves).

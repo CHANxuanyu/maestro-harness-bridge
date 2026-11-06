@@ -327,7 +327,7 @@ program
 program
 	.command('native-history <action> [session] [conversation-or-tool-call-id]')
 	.description(
-		'List projects, list/read/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an open native ID)'
+		'List projects, list/read/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an exact native history ID)'
 	)
 	.option('--json', 'Output JSON')
 	.option('--copy', 'Copy the returned tool output to the desktop clipboard')

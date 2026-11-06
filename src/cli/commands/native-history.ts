@@ -1,6 +1,6 @@
 import { invokeNativeHistory } from '../services/agent-sessions';
 import { getSessionById, readSessions, resolveAgentId } from '../services/storage';
-import type { NativeToolOutputResult } from '../../shared/nativeToolOutput';
+import type { NativeToolOutputTarget, NativeToolOutputResult } from '../../shared/nativeToolOutput';
 import { failCommand, resolveTabEntry, listDesktopTabs } from '../services/session-command';
 import type { ProjectHistoryResult } from '../../shared/projectHistory';
 
@@ -19,29 +19,73 @@ export async function nativeHistory(
 		}
 		if (action === 'tool-output') {
 			if (!agentArg || !nativeId) throw new Error('A session and tool call ID are required');
+			let target: NativeToolOutputTarget | undefined;
 			const tab = await resolveTabEntry(agentArg).catch(async (error) => {
-				const matches = (await listDesktopTabs()).filter(
-					(entry) => entry.agentSessionId === agentArg
+				const tabs = await listDesktopTabs();
+				const matches = tabs.filter((entry) => entry.agentSessionId === agentArg);
+				if (matches.length === 1) return matches[0];
+				if (matches.length > 1) throw error;
+				const sources = new Map(
+					tabs
+						.flatMap((entry) => entry.toolOutputSources ?? [])
+						.filter((source) => source.nativeSessionId === agentArg)
+						.map((source) => [JSON.stringify(source), source])
 				);
-				if (matches.length !== 1) throw error;
-				return matches[0];
+				if (sources.size === 1) {
+					target = [...sources.values()][0];
+					return undefined;
+				}
+				if (sources.size > 1 || !String(error).includes('Tab not found:')) throw error;
+				// The renderer opens history before its debounced tab save reaches main.
+				// Resolve the exact native ID through the same project history as the sidebar.
+				const owners = readSessions();
+				const history = await invokeNativeHistory<ProjectHistoryResult>(
+					'agentSessions:listProjectHistory',
+					[
+						owners.map((owner) => ({
+							projectKey: owner.id,
+							projectPath: owner.projectRoot || owner.cwd,
+							ownerIds: owners.map((item) => item.id),
+							sshRemoteId: owner.sessionSshRemoteConfig?.enabled
+								? owner.sessionSshRemoteConfig.remoteId
+								: undefined,
+						})),
+					]
+				);
+				const records = new Map(
+					history.conversations
+						.filter((record) => record.nativeSessionId === agentArg)
+						.map((record) => [record.key, record])
+				);
+				const record = records.size === 1 ? [...records.values()][0] : undefined;
+				if (!record?.ownerId) throw error;
+				target = {
+					provider: record.provider,
+					projectPath: record.projectPath,
+					nativeSessionId: record.nativeSessionId,
+					ownerAgentId: record.ownerId,
+					accountDir: record.accountDir,
+					sshRemoteId: record.sshRemoteId,
+				};
+				return undefined;
 			});
-			const owner = getSessionById(tab.agentId);
-			if (!owner || !tab.agentSessionId) throw new Error('Native conversation not found');
+			if (tab) {
+				const owner = getSessionById(tab.agentId);
+				if (!owner || !tab.agentSessionId) throw new Error('Native conversation not found');
+				target = {
+					provider: owner.toolType,
+					projectPath: owner.projectRoot || owner.cwd,
+					nativeSessionId: tab.agentSessionId,
+					ownerAgentId: tab.agentId,
+					sshRemoteId: owner.sessionSshRemoteConfig?.enabled
+						? owner.sessionSshRemoteConfig.remoteId || 'unavailable'
+						: undefined,
+				};
+			}
+			if (!target) throw new Error('Native conversation not found');
 			const result = await invokeNativeHistory<NativeToolOutputResult>(
 				'agentSessions:toolOutput',
-				[
-					{
-						provider: owner.toolType,
-						projectPath: owner.projectRoot || owner.cwd,
-						nativeSessionId: tab.agentSessionId,
-						ownerAgentId: tab.agentId,
-						sshRemoteId: owner.sessionSshRemoteConfig?.enabled
-							? owner.sessionSshRemoteConfig.remoteId || 'unavailable'
-							: undefined,
-					},
-					nativeId,
-				],
+				[target, nativeId],
 				45000
 			);
 			if (result.status !== 'found') throw new Error(`Tool output: ${result.status}`);

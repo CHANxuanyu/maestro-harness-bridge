@@ -38,6 +38,26 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## Stop and read-only resume corrections (2026-11-06)
+
+No UI action or CLI verb is added. `tab permission <tab> readonly` and
+`tab read-only <tab> true` retain the existing permission implementation;
+`send` and `dispatch` into an open conversation still reach `useInputProcessing`.
+That path now uses `appendReadOnlyPrompt()` in `src/shared/readOnlyPrompt.ts`.
+Resume, backfill and refresh decode the same suffix in
+`transcriptMessagesToLogEntries()`, including history written by older builds.
+Standalone CLI and Auto Run contain no copy of this suffix and are unchanged.
+Native files remain untouched. The CLI's raw native-history read still returns
+provider content rather than the renderer's normalized conversation entries.
+
+Stop forwards the existing `ManagedProcess.interrupted` flag through exit IPC,
+so the exit listener does not request a synopsis after deliberate cancellation.
+The existing CLI Stop gap below remains open. A new command cannot simply reuse
+the old remote interrupt callback: it constructs a legacy process id and does
+not share the desktop handler's multi-tab, queue and synopsis cancellation work.
+Closing that gap requires an acknowledged command routed to the same owner and
+interrupt implementation. This correction adds no separate stop implementation.
+
 ## New shell cleanup, batch 1
 
 The new shell permission menu and the phone options sheet share `permissionModes()`
@@ -471,6 +491,8 @@ a design constraint; they are simply not built yet.
 1. **Interrupt a running turn.** Escape stops a busy agent in the UI. There is
    no CLI equivalent and no WS message behind one. This is the largest remaining
    gap: an agent that starts a runaway turn on another agent cannot stop it.
+   The 2026-11-06 Stop/synopsis correction preserves this gap; the legacy remote
+   interrupt callback is not the desktop interrupt implementation.
 2. **Reopen a closed tab.** `closedTabHistory` and `unifiedClosedTabHistory` are
    runtime-only and never persisted, so the CLI cannot see the stack to restore
    from it. Closing this means persisting that history first.

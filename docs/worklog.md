@@ -2,6 +2,12 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-06：权限继承验收复用 Electron 浏览器
+
+`e2e/native-new-shell.spec.ts` 的所属窗口与网页来源场景移除 Playwright `browser` 夹具，通过 `native.app.evaluate()` 创建无 preload 的普通 `BrowserWindow`，加载原 web-desktop URL，并通过 Electron 的窗口事件取得 Page。窗口随 `native.close()` 清理，不再依赖单独安装 Chromium；未增加下载、安装或重试步骤。权限断言、产品实现、旧界面及 CLI 均不变。
+
+被测对象为本分支测试源码，修复提交 `467719a52`。临时源码回归修改前 1 条失败，修改后 1 条通过；相关权限单元测试 2 文件、45 条通过，无跳过。`npx tsc --noEmit -p tsconfig.json` 通过；原文件 153 条断言语句逐条比对相同。Playwright 只做测试收集，两份文件共 8 条场景成功收集，未启动 Electron。格式检查通过。沙箱外的 Electron 多窗口与真实 web-desktop 路径仍需 Opus 运行，不将静态检查或收集成功记作场景通过。
+
 ## 2026-11-06：新界面日常收尾三项
 
 在 `codex/new-shell-daily` 逐项先写回归并确认失败，再修复压缩续接设置保留、worktree 会话清理入口和置顶菜单。压缩保留原始可选字段及旧式只读标记，不复制命令模式；清理沿用已有回调和确认；置顶、命令面板、CLI 共用 tabStore 和原生历史保存路径，并防止旧扫描结果覆盖取消置顶。

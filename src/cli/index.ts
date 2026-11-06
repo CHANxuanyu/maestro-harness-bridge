@@ -147,6 +147,7 @@ import { removePlaybook } from './commands/remove-playbook';
 import { focusAgent, switchMode } from './commands/agent-control';
 import {
 	tabNew,
+	tabCompact,
 	tabClose,
 	tabRename,
 	tabStar,
@@ -1598,6 +1599,17 @@ tabTargetOptions(tab.command('panel <tab-id> <action>'))
 	.option('--content <text>', 'Set the remembered text file edit buffer before this action')
 	.option('--line <number>', 'Jump to a line in the remembered preview')
 	.action((tabId, action, options) => tabPanel(tabId, action, options));
+
+tabTargetOptions(
+	tab
+		.command('compact <tab-id>')
+		.description(
+			'Start context compaction in a fresh conversation; observe completion in the desktop'
+		)
+)
+	.option('--background', 'Keep the current agent and tab selected (default)')
+	.option('--focus', 'Select the compacted conversation when ready')
+	.action((tabId, options) => tabCompact(tabId, options));
 
 tabTargetOptions(tab.command('close <tab-id>'))
 	.description('Close a tab (owning agent is resolved automatically)')

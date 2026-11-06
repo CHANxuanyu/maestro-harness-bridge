@@ -2063,6 +2063,35 @@ describe('web-server/web-server-factory', () => {
 			);
 		});
 
+		it('routes named compaction to the owner window with placement intact', () => {
+			const ownerSend = vi.fn();
+			const ownerWindow = {
+				webContents: { send: ownerSend, isDestroyed: () => false },
+				isDestroyed: () => false,
+			};
+			const createWebServer = createWebServerFactory({
+				...deps,
+				getWindowForSession: vi.fn(() => ownerWindow as never),
+			});
+			const server = createWebServer() as any;
+			const callback = server.setSummarizeContextCallback.mock.calls[0][0];
+			void callback('session-1', 'target-tab', true);
+			expect(ownerSend).toHaveBeenCalledWith(
+				'remote:summarizeContext',
+				'session-1',
+				expect.any(String),
+				'target-tab',
+				true
+			);
+			expect(mockWebContents.send).not.toHaveBeenCalledWith(
+				'remote:summarizeContext',
+				expect.anything(),
+				expect.anything(),
+				expect.anything(),
+				expect.anything()
+			);
+		});
+
 		it('setSummarizeContextCallback forwards to the renderer', () => {
 			const createWebServer = createWebServerFactory(deps);
 			const server = createWebServer() as any;

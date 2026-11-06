@@ -1,3 +1,4 @@
+import { persistTabStarred } from '../utils/starredSessions';
 import { getWindowContext } from '../contexts/WindowContext';
 import { spawnPtyForTab } from '../services/terminalSpawn';
 import { useSettingsStore } from './settingsStore';
@@ -214,7 +215,7 @@ export interface TabStoreActions {
 	/**
 	 * Toggle the starred flag on an AI tab.
 	 */
-	starTab: (tabId: string) => void;
+	starTab: (tabId: string, sessionId?: string, starred?: boolean) => void;
 
 	/**
 	 * Set the hasUnread flag on an AI tab.
@@ -623,12 +624,17 @@ export const useTabStore = create<TabStore>()((set) => ({
 	},
 
 	// Tab metadata
-	starTab: (tabId) => {
-		const session = getActiveSession();
-		if (!session) return;
-		const tab = session.aiTabs.find((t) => t.id === tabId);
-		if (!tab) return;
-		updateAiTab(tabId, { starred: !tab.starred });
+	starTab: (tabId, sessionId, starred) => {
+		const state = useSessionStore.getState();
+		const session = state.sessions.find((s) => s.id === (sessionId ?? state.activeSessionId));
+		const tab = session?.aiTabs.find((t) => t.id === tabId);
+		if (!session || !tab) return;
+		const next = starred ?? !tab.starred;
+		persistTabStarred(session, tab, next);
+		updateSessionWith(session.id, (s) => ({
+			...s,
+			aiTabs: s.aiTabs.map((t) => (t.id === tabId ? { ...t, starred: next } : t)),
+		}));
 	},
 
 	markUnread: (tabId, unread = true) => updateAiTab(tabId, { hasUnread: unread }),

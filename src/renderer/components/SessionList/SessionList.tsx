@@ -1700,6 +1700,7 @@ function SessionListInner(props: SessionListProps) {
 							}}
 						>
 							<ProjectSessionSidebar
+								onDeleteWorktree={onDeleteWorktree}
 								headerMenu={
 									newShell ? (
 										<div ref={menuRef} className="relative z-30" data-tour="hamburger-menu">

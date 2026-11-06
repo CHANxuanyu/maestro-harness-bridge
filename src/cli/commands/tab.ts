@@ -139,6 +139,18 @@ async function tabAction(
 	}
 }
 
+export async function tabCompact(
+	tabId: string,
+	options: TabMutateOptions & { background?: boolean; focus?: boolean }
+): Promise<void> {
+	await tabAction(tabId, options, () => ({
+		type: 'summarize_context',
+		responseType: 'summarize_context_result',
+		successMessage: 'Started context compaction',
+		extraPayload: { background: resolveBackgroundFlag(options, 'tab-compact') },
+	}));
+}
+
 export async function tabClose(tabId: string, options: TabMutateOptions): Promise<void> {
 	await tabAction(tabId, options, (owner) => ({
 		type: 'close_tab',

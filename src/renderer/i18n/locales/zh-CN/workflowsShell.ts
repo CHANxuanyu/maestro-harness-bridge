@@ -147,6 +147,8 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.conversations.newConversation': '新会话',
 	'workflows.conversations.history': '浏览历史会话',
 	'workflows.conversations.configure': '智能体配置',
+	'workflows.conversations.pin': '置顶',
+	'workflows.conversations.unpin': '取消置顶',
 	'workflows.conversations.rename': '重命名会话',
 	'workflows.conversations.close': '关闭标签页',
 	'workflows.conversations.closeKeepsHistory': '会话仍会保留在此列表中',

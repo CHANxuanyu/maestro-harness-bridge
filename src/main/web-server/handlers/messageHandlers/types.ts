@@ -370,7 +370,7 @@ export interface MessageHandlerCallbacks {
 	sendGroupChatMessage: (chatId: string, message: string) => Promise<boolean>;
 	mergeContext: (sourceSessionId: string, targetSessionId: string) => Promise<boolean>;
 	transferContext: (sourceSessionId: string, targetSessionId: string) => Promise<boolean>;
-	summarizeContext: (sessionId: string) => Promise<boolean>;
+	summarizeContext: (sessionId: string, tabId?: string, background?: boolean) => Promise<boolean>;
 	createGist: (
 		sessionId: string,
 		description: string,

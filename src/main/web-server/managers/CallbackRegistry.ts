@@ -992,9 +992,13 @@ export class CallbackRegistry {
 		return this.callbacks.handoffCommand(request);
 	}
 
-	async summarizeContext(sessionId: string): Promise<boolean> {
+	async summarizeContext(
+		sessionId: string,
+		tabId?: string,
+		background?: boolean
+	): Promise<boolean> {
 		if (!this.callbacks.summarizeContext) return false;
-		return this.callbacks.summarizeContext(sessionId);
+		return this.callbacks.summarizeContext(sessionId, tabId, background);
 	}
 
 	async createGist(

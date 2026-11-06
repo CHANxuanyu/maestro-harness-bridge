@@ -1,3 +1,4 @@
+import { useTabStore } from '../../stores/tabStore';
 import { dispatchToastClickAction } from '../../services/toastClickActions';
 import { jumpToAgent } from '../../services/agentNavigation';
 import { startNotificationHistorySync } from '../../stores/notificationStore';
@@ -28,7 +29,6 @@ import type { SnoozeCommandResult } from '../../../shared/snoozeCommands';
 import type { SteeringCommandResult } from '../../../shared/autoRunSteeringCommands';
 import { recordAgentDelegation } from '../../services/agentDelegation';
 import { requestFileTreeRefresh } from '../../utils/fileTreeRefresh';
-import { persistTabStarred } from '../../utils/starredSessions';
 import { formatLogsForClipboard } from '../../utils/contextExtractor';
 import { messagesToLogEntries } from '../../components/AgentSessionsBrowser/utils/messagesToLogEntries';
 import type { SessionMessage } from '../agent/useSessionViewer';
@@ -1018,15 +1018,7 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 		// Handle remote star tab from web interface
 		const unsubscribeStarTab = window.maestro.process.onRemoteStarTab(
 			(sessionId: string, tabId: string, starred: boolean) => {
-				const session = sessionsRef.current.find((s) => s.id === sessionId);
-				const tab = session?.aiTabs.find((t) => t.id === tabId);
-				if (!session || !tab?.agentSessionId) return;
-
-				// Persist starred state and broadcast the change (same logic as
-				// desktop handleTabStar) so the Left Bar's starred cache refreshes.
-				persistTabStarred(session, tab, starred);
-
-				updateAiTab(sessionId, tabId, (t) => ({ ...t, starred }));
+				useTabStore.getState().starTab(tabId, sessionId, starred);
 			}
 		);
 

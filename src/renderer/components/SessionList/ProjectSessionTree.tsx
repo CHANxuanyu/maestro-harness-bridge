@@ -97,6 +97,8 @@ export interface ProjectSessionTreeProps {
 	onRenameConversation: (conversation: SidebarConversation) => void;
 	/** Closes the TAB. Never deletes native history. */
 	onCloseConversation: (conversation: SidebarConversation) => void;
+	onTogglePin?: (conversation: SidebarConversation) => void;
+	onDeleteWorktree?: (conversation: SidebarConversation) => void;
 	onShowMore?: (project: SidebarProject) => void;
 	/** The secondary management view (agent configurations). */
 	onManageAgents?: () => void;
@@ -843,6 +845,8 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	onNewConversationHere,
 	onRenameConversation,
 	onCloseConversation,
+	onDeleteWorktree,
+	onTogglePin,
 	onShowMore,
 	onManageAgents,
 	onAddAgent,
@@ -946,12 +950,36 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 										},
 									]
 								: []),
+							...(onTogglePin
+								? [
+										{
+											key: 'pin',
+											label: t(
+												conversation.starred
+													? 'workflows.conversations.unpin'
+													: 'workflows.conversations.pin'
+											),
+											icon: <Star className="w-3.5 h-3.5" />,
+											onSelect: () => onTogglePin(conversation),
+										},
+									]
+								: []),
 							{
 								key: 'rename',
 								label: t('workflows.conversations.rename'),
 								icon: <Pencil className="w-3.5 h-3.5" />,
 								onSelect: () => onRenameConversation(conversation),
 							},
+							...(conversation.canDeleteWorktree && onDeleteWorktree
+								? [
+										{
+											key: 'worktree-cleanup',
+											label: t('workflows.git.removeWorktree'),
+											color: theme.colors.error,
+											onSelect: () => onDeleteWorktree(conversation),
+										},
+									]
+								: []),
 							{
 								key: 'close',
 								label: t(

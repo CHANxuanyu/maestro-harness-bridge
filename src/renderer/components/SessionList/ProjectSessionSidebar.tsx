@@ -1,3 +1,4 @@
+import { useTabStore } from '../../stores/tabStore';
 import { type ReactNode, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Group, Session, Theme } from '../../types';
 import type {
@@ -49,6 +50,7 @@ interface ProjectSessionSidebarProps {
 	unreadOnly: boolean;
 	onToggleGroup: (id: string) => void;
 	onAddAgent: () => void;
+	onDeleteWorktree?: (session: Session) => void;
 	/** Canonical resume; without it history rows are listed but cannot open. */
 	onResumeSession?: ResumeNativeSession;
 }
@@ -121,6 +123,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	onToggleGroup,
 	onAddAgent,
 	onResumeSession,
+	onDeleteWorktree,
 }: ProjectSessionSidebarProps) {
 	const newShell = useSettingsStore(selectNewShellEnabled);
 	const [search, setSearch] = useState('');
@@ -426,6 +429,20 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 			onNewConversationHere={activeOwnerId ? newConversationHere : undefined}
 			onRenameConversation={renameConversation}
 			onCloseConversation={closeConversation}
+			onTogglePin={(conversation) => {
+				if (conversation.ownerId && conversation.tabId)
+					useTabStore.getState().starTab(conversation.tabId, conversation.ownerId);
+			}}
+			onDeleteWorktree={
+				onDeleteWorktree
+					? (conversation) => {
+							const owner = useSessionStore
+								.getState()
+								.sessions.find((s) => s.id === conversation.ownerId);
+							if (owner?.parentSessionId && owner.worktreeBranch) onDeleteWorktree(owner);
+						}
+					: undefined
+			}
 			onShowMore={showMore}
 			onManageAgents={manageAgents}
 			onAddAgent={onAddAgent}

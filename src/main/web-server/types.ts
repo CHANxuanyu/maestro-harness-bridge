@@ -1377,7 +1377,11 @@ export type TransferContextCallback = (
 	sourceSessionId: string,
 	targetSessionId: string
 ) => Promise<boolean>;
-export type SummarizeContextCallback = (sessionId: string) => Promise<boolean>;
+export type SummarizeContextCallback = (
+	sessionId: string,
+	tabId?: string,
+	background?: boolean
+) => Promise<boolean>;
 export type CreateGistCallback = (
 	sessionId: string,
 	description: string,

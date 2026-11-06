@@ -55,10 +55,20 @@ export function createContextOpsRemoteApi() {
 		 * Uses request-response pattern with a unique responseChannel
 		 */
 		onRemoteSummarizeContext: (
-			callback: (sessionId: string, responseChannel: string) => void
+			callback: (
+				sessionId: string,
+				responseChannel: string,
+				tabId?: string,
+				background?: boolean
+			) => void
 		): (() => void) => {
-			const handler = (_: unknown, sessionId: string, responseChannel: string) =>
-				callback(sessionId, responseChannel);
+			const handler = (
+				_: unknown,
+				sessionId: string,
+				responseChannel: string,
+				tabId?: string,
+				background?: boolean
+			) => callback(sessionId, responseChannel, tabId, background);
 			ipcRenderer.on('remote:summarizeContext', handler);
 			return () => ipcRenderer.removeListener('remote:summarizeContext', handler);
 		},

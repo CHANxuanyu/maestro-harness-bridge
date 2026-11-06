@@ -152,6 +152,8 @@ export const workflowsShell = {
 	'workflows.conversations.newConversation': 'New conversation',
 	'workflows.conversations.history': 'Browse history',
 	'workflows.conversations.configure': 'Agent settings',
+	'workflows.conversations.pin': 'Pin',
+	'workflows.conversations.unpin': 'Unpin',
 	'workflows.conversations.rename': 'Rename conversation',
 	'workflows.conversations.close': 'Close tab',
 	'workflows.conversations.closeKeepsHistory': 'The conversation stays in this list',

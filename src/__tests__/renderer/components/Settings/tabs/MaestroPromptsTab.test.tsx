@@ -51,6 +51,7 @@ vi.mock('../../../../../renderer/stores/settingsStore', () => ({
 	useSettingsStore: vi.fn((selector: (s: unknown) => unknown) =>
 		selector({
 			conductorProfile: '',
+			encoreFeatures: {},
 			lastSelectedPromptId: mockLastSelectedPromptId,
 			setLastSelectedPromptId: mockSetLastSelectedPromptId,
 			shortcuts: { toggleMarkdownMode: { keys: ['Meta', 'e'] } },

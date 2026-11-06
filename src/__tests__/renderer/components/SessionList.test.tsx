@@ -1558,6 +1558,10 @@ describe('SessionList', () => {
 		});
 
 		it('renders plugin virtual groups without persisted group controls and falls back to Manual', async () => {
+			useSettingsStore.setState({
+				settingsLoaded: true,
+				encoreFeatures: { ...useSettingsStore.getState().encoreFeatures, plugins: true },
+			});
 			let notifyPluginChange: (() => void) | undefined;
 			vi.mocked(window.maestro.plugins.contributions).mockResolvedValue({
 				...EMPTY_PLUGIN_CONTRIBUTIONS,
@@ -1594,7 +1598,7 @@ describe('SessionList', () => {
 			];
 			useSessionStore.setState({ sessions, groups: [persistedGroup] });
 			useSettingsStore.setState({
-				encoreFeatures: { ...DEFAULT_ENCORE_FEATURES, groupsPlus: false },
+				encoreFeatures: { ...DEFAULT_ENCORE_FEATURES, groupsPlus: false, plugins: true },
 			});
 
 			render(<SessionList {...createDefaultProps({ sortedSessions: sessions })} />);
@@ -1629,6 +1633,10 @@ describe('SessionList', () => {
 		});
 
 		it('renders every session from a sparse computed snapshot by placing extras in Other', async () => {
+			useSettingsStore.setState({
+				settingsLoaded: true,
+				encoreFeatures: { ...useSettingsStore.getState().encoreFeatures, plugins: true },
+			});
 			vi.mocked(window.maestro.plugins.contributions).mockResolvedValue({
 				...EMPTY_PLUGIN_CONTRIBUTIONS,
 				groupings: [

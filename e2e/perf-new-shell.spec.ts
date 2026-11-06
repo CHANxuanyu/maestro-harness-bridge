@@ -291,7 +291,11 @@ test('new shell startup, long transcript, switching, scrolling and synthetic str
 									});
 								});
 							});
-							await page.getByTitle('Scroll to bottom (click to pin)', { exact: true }).click();
+							await page.evaluate(() => {
+								const container = document.querySelector('.terminal-output .overflow-y-auto');
+								if (!container) throw Error('Transcript scroll container missing');
+								container.scrollTop = container.scrollHeight;
+							});
 							await painted(page);
 							await phase('large.stream.100Hz', async () => {
 								await app!.evaluate(async ({ BrowserWindow }) => {

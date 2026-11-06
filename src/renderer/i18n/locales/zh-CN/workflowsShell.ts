@@ -2,6 +2,18 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.newShell.terminal': '终端',
+	'workflows.newShell.tasks': '任务',
+	'workflows.newShell.tasksEmpty': '这条会话还没有任务清单',
+	'workflows.newShell.tasksProgress': '{completed} / {total} 已完成',
+	'workflows.newShell.task.pending': '待办',
+	'workflows.newShell.task.in_progress': '进行中',
+	'workflows.newShell.task.completed': '完成',
+	'workflows.newShell.newTerminal': '新建终端',
+	'workflows.newShell.closeTerminal': '关闭终端',
+	'workflows.newShell.selectTerminal': '切换终端',
+	'workflows.newShell.goToTerminal': '打开终端面板',
+	'workflows.newShell.goToTasks': '打开任务面板',
 	'workflows.handoff.continuedTitle': '接手：{title}',
 	'workflows.handoff.reviewTitle': '复核：{title}',
 	'workflows.handoff.continuedMessage': '从「{title}」接手',

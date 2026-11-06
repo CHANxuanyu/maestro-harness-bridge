@@ -122,6 +122,10 @@ export async function spawnPtyForTab(options: SpawnPtyForTabOptions): Promise<vo
 				}
 			: undefined;
 
+	if (effectiveSshConfig && tab.panelLocationKey && tab.cwd) {
+		effectiveSshConfig.workingDirOverride = tab.startupCommandCwd || tab.cwd;
+	}
+
 	// When a startup command is configured, spawn the PTY in its configured cwd
 	// (if any) so the command runs in the right directory. Otherwise keep the
 	// existing fallback chain.

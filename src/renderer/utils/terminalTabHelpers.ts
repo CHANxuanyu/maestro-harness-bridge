@@ -94,7 +94,8 @@ export function hasRunningTerminalProcess(session: Session): boolean {
 export function resolveTerminalTab(
 	sessions: Session[],
 	targetSessionId: string,
-	ref?: string
+	ref?: string,
+	newShell = false
 ): { session: Session; tab: TerminalTab } | null {
 	const trimmedRef = ref?.trim();
 
@@ -116,6 +117,11 @@ export function resolveTerminalTab(
 
 	const target = sessions.find((s) => s.id === targetSessionId);
 	if (!target) return null;
+	if (newShell) {
+		const selected = target.aiTabs?.find((tab) => tab.id === target.activeTabId)?.newShellPanel
+			?.terminalTabId;
+		if (selected) return resolveTerminalTab(sessions, targetSessionId, selected);
+	}
 	const tabs = target.terminalTabs || [];
 	if (target.activeTerminalTabId) {
 		const active = tabs.find((t) => t.id === target.activeTerminalTabId);

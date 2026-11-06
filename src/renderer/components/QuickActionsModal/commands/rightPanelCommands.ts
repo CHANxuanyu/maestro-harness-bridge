@@ -1,3 +1,4 @@
+import { openUiSurface } from '../../../utils/openUiSurface';
 import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { getT } from '../../../i18n';
 import type { RightPanelTab } from '../../../types';
@@ -55,6 +56,32 @@ export function buildRightPanelCommands({
 			},
 		},
 	];
+
+	if (newShell) {
+		for (const [id, surface, label, shortcut] of [
+			[
+				'goToTerminal',
+				'terminal-panel',
+				'workflows.newShell.goToTerminal',
+				useSettingsStore.getState().shortcuts.toggleMode,
+			],
+			[
+				'goToTasks',
+				'tasks-panel',
+				'workflows.newShell.goToTasks',
+				useSettingsStore.getState().shortcuts.goToTasks,
+			],
+		] as const)
+			commands.push({
+				id,
+				label: t(label),
+				shortcut,
+				action: () => {
+					openUiSurface(surface);
+					setQuickActionOpen(false);
+				},
+			});
+	}
 
 	if (!autoRunDisabled) {
 		commands.push({

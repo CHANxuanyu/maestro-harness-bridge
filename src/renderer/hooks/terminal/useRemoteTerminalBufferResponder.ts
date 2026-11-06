@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../stores/settingsStore';
 /**
  * Answers `remote:readTerminalTab` requests from the CLI / web bridge by reading
  * the tab's xterm scrollback out of the per-session `TerminalView` ref map that
@@ -39,9 +40,11 @@ export function tailLines(content: string, tail?: number): { content: string; to
 }
 
 export function useRemoteTerminalBufferResponder(
-	terminalViewRefs: MutableRefObject<Map<string, TerminalViewHandle>>
+	terminalViewRefs: MutableRefObject<Map<string, TerminalViewHandle>>,
+	enabled = true
 ): void {
 	useEffect(() => {
+		if (!enabled) return;
 		// Defensive: tests mock `window.maestro` without this bridge, and an older
 		// preload bundle won't have it either.
 		const bridge = window.maestro?.process;
@@ -62,7 +65,12 @@ export function useRemoteTerminalBufferResponder(
 			) => bridge.sendRemoteReadTerminalTabResponse(responseChannel, success, result);
 
 			const sessions = useSessionStore.getState().sessions;
-			const resolved = resolveTerminalTab(sessions, sessionId, payload.tabRef);
+			const resolved = resolveTerminalTab(
+				sessions,
+				sessionId,
+				payload.tabRef,
+				useSettingsStore.getState().newShell
+			);
 			if (!resolved) {
 				// Same diagnosis ladder as the write path, so `read-terminal` and
 				// `send-terminal` explain an unresolvable tab identically.
@@ -114,5 +122,5 @@ export function useRemoteTerminalBufferResponder(
 			ack(true, { ...meta, content: tailed.content, totalLines: tailed.totalLines });
 		});
 		return off;
-	}, [terminalViewRefs]);
+	}, [terminalViewRefs, enabled]);
 }

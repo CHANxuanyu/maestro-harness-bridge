@@ -120,7 +120,22 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 				{
 					answer: 'Claude implemented shipping. See [cart.ts](cart.ts:2).',
 					writes: { 'cart.ts': edited },
-					tools: [{ id: 'write-cart', command: 'write cart.ts', output: 'cart.ts updated' }],
+					tools: [
+						{ id: 'write-cart', command: 'write cart.ts', output: 'cart.ts updated' },
+						{
+							id: 'shipping-plan',
+							name: 'TodoWrite',
+							command: '',
+							output: 'Plan saved',
+							input: {
+								todos: [
+									{ content: 'Implement shipping', status: 'completed' },
+									{ content: 'Review shipping', status: 'in_progress' },
+									{ content: 'Merge shipping', status: 'pending' },
+								],
+							},
+						},
+					],
 				},
 			]);
 			await native.send('Implement free shipping');
@@ -267,6 +282,57 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 							.join('\n')
 					).not.toContain(other);
 			}
+		});
+		await test.step('5b terminal output survives conversation switches and TodoWrite appears in Tasks', async () => {
+			await select(claudeTab);
+			await native.page.locator('[data-tour="terminal-tab"]').click();
+			const terminal = native.page.getByTestId('terminal-panel');
+			await expect(terminal).toBeVisible();
+			await expect
+				.poll(() => saved().find((s) => s.id === claudeId)?.terminalTabs?.[0]?.pid || 0)
+				.toBeGreaterThan(0);
+			const terminalId = saved().find((s) => s.id === claudeId)!.terminalTabs[0].id;
+			const input = terminal.locator('.xterm-helper-textarea').first();
+			await input.focus();
+			await input.pressSequentially('echo HB8_TERMINAL_RETAINED');
+			await input.press('Enter');
+			const readBuffer = () =>
+				native.app.evaluate(
+					async ({ ipcMain, BrowserWindow }, args) => {
+						const response = `remote:readTerminalTab:response:hb8-${Date.now()}`;
+						return new Promise<string>((resolve, reject) => {
+							const timer = setTimeout(() => {
+								ipcMain.removeAllListeners(response);
+								reject(new Error('Terminal buffer timeout'));
+							}, 5000);
+							ipcMain.once(response, (_event, result) => {
+								clearTimeout(timer);
+								if (result.success) resolve(result.content);
+								else reject(new Error(result?.error || 'Terminal buffer unavailable'));
+							});
+							// Same preload event consumed by CLI read-terminal.
+							const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())!;
+							win.webContents.send(
+								'remote:readTerminalTab',
+								args.agent,
+								{ tabRef: args.tab },
+								response
+							);
+						});
+					},
+					{ agent: claudeId, tab: terminalId }
+				);
+			await expect.poll(readBuffer).toMatch(/(?:^|\n)HB8_TERMINAL_RETAINED\r?(?:\n|$)/);
+			await select(codexTab);
+			await select(claudeTab);
+			await expect(terminal).toBeVisible();
+			await expect.poll(readBuffer).toMatch(/(?:^|\n)HB8_TERMINAL_RETAINED\r?(?:\n|$)/);
+			expect(saved().find((s) => s.id === claudeId)!.terminalTabs[0].id).toBe(terminalId);
+			await native.page.locator('[data-tour="tasks-tab"]').click();
+			await expect(native.page.getByTestId('tasks-progress')).toHaveText('1 / 3 completed');
+			await expect(native.page.getByTestId('tasks-panel')).toContainText('Review shipping');
+			// Restore this conversation's file panel for the restart acceptance below.
+			await native.page.locator('[data-tour="files-tab"]').click();
 		});
 		await test.step('6 normal restart restores conversations, panels and drafts', async () => {
 			await select(claudeTab);

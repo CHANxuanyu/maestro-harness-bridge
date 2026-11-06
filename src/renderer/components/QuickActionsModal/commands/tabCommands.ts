@@ -138,7 +138,7 @@ export function buildNewTabCommands({
 					? 'workflows.newShell.openANewTerminalTabInTheActive'
 					: 'workflows.shell.openANewTerminalTabInTheActive'
 			),
-			shortcut: newTerminalTabShortcut,
+			shortcut: newShell ? undefined : newTerminalTabShortcut,
 			action: () => {
 				onNewTerminalTab();
 				setQuickActionOpen(false);
@@ -182,7 +182,7 @@ export function buildTabCommands({
 	const { isTerminalMode, hasActiveTab, activeUnifiedIndex, unifiedTabCount, activeTabType } =
 		activeTabInfo;
 
-	if (activeSession) {
+	if (activeSession && !newShell) {
 		commands.push({
 			id: 'switchMode',
 			label: t('workflows.shell.switchAiShellMode'),

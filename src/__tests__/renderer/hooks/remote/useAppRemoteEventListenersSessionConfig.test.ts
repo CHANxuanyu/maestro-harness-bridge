@@ -1,3 +1,4 @@
+import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { createMockFileTab } from '../../../helpers/mockTab';
 /**
  * Covers the `update_session_config` allowlist in useAppRemoteEventListeners -
@@ -36,6 +37,7 @@ const ack = vi.fn();
 const setMany = vi.fn().mockResolvedValue(undefined);
 
 function setup(sessions: Session[]) {
+	vi.mocked(useSessionStore.getState).mockReturnValue({ sessions } as never);
 	const sessionsRef = { current: sessions };
 	const setSessions = vi.fn();
 

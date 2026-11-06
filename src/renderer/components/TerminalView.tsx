@@ -329,7 +329,7 @@ export const TerminalView = memo(
 		// rather than unmounting, so xterm.js's ResizeObserver never fires - the WebGL/canvas
 		// renderer won't repaint unless explicitly told to after the element becomes visible.
 		useEffect(() => {
-			if (activeTab) {
+			if (activeTab && isVisible !== false) {
 				// Short delay so the DOM visibility change applies before fitting/repainting
 				const timer = setTimeout(() => {
 					const handle = terminalRefs.current.get(activeTab.id);
@@ -338,22 +338,7 @@ export const TerminalView = memo(
 				}, 50);
 				return () => clearTimeout(timer);
 			}
-		}, [activeTab?.id]);
-
-		// Repaint + focus when the terminal panel becomes visible again (e.g. returning from AI mode).
-		// activeTab?.id doesn't change in this case, so the effect above won't fire - we need an
-		// explicit refresh here. The display:none → display:flex transition can wipe the WebGL/canvas
-		// framebuffer, so we must tell xterm.js to redraw from its internal buffer.
-		useEffect(() => {
-			if (isVisible && activeTab) {
-				const timer = setTimeout(() => {
-					const handle = terminalRefs.current.get(activeTab.id);
-					handle?.refresh();
-					handle?.focus();
-				}, 50);
-				return () => clearTimeout(timer);
-			}
-		}, [isVisible]);
+		}, [activeTab?.id, isVisible]);
 
 		// Close search when the active terminal tab changes.
 		// Intentionally depends only on activeTab?.id - we want to close search when

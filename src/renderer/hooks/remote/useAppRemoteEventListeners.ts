@@ -1,3 +1,8 @@
+import {
+	openPanelTerminal,
+	panelTerminals,
+	selectPanelTerminal,
+} from '../../services/newShellTerminal';
 import { saveFilePreview } from '../mainPanel/useFilePreviewHandlers';
 import { isImageFile } from '../../../shared/gitUtils';
 import { isParquetPreviewMarker } from '../../../shared/parquet/preview';
@@ -448,28 +453,45 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 		if (!background) {
 			switchActiveSession(sessionId, 'open-terminal');
 		}
-		const baseTab = createTerminalTabHelper(
-			config?.shell,
-			config?.cwd ?? session.cwd,
-			config?.name ?? null
-		);
-		// A requested command becomes the tab's startup command rather than a
-		// one-shot write: TerminalView already runs that once the PTY is up, and
-		// storing it means a `npm run dev` terminal comes back after a restart or
-		// a manual restart of the tab instead of reopening to an empty shell.
-		const command = config?.command?.trim();
-		const tab = command ? { ...baseTab, startupCommand: command } : baseTab;
-		setSessions((prev) =>
-			prev.map((s) => {
-				if (s.id !== sessionId) return s;
-				// A background terminal is added to the tab bar and nothing else:
-				// `activate: false` leaves every active-* id alone, and the mode is
-				// left as-is because flipping the agent into terminal mode is itself
-				// a view change for anyone looking at that agent.
-				if (background) return addTerminalTabHelper(s, tab, { activate: false });
-				return { ...addTerminalTabHelper(s, tab), inputMode: 'terminal' as const };
-			})
-		);
+		let terminalOwnerId = sessionId;
+		let tab: import('../../types').TerminalTab;
+		if (useSettingsStore.getState().newShell) {
+			try {
+				const target = openPanelTerminal(sessionId, { ...config, additional: true, background });
+				if (!target) {
+					ack(false);
+					return;
+				}
+				tab = target.tab;
+				terminalOwnerId = target.session.id;
+			} catch {
+				ack(false);
+				return;
+			}
+		} else {
+			const baseTab = createTerminalTabHelper(
+				config?.shell,
+				config?.cwd ?? session.cwd,
+				config?.name ?? null
+			);
+			// A requested command becomes the tab's startup command rather than a
+			// one-shot write: TerminalView already runs that once the PTY is up, and
+			// storing it means a `npm run dev` terminal comes back after a restart or
+			// a manual restart of the tab instead of reopening to an empty shell.
+			const command = config?.command?.trim();
+			tab = command ? { ...baseTab, startupCommand: command } : baseTab;
+			setSessions((prev) =>
+				prev.map((s) => {
+					if (s.id !== sessionId) return s;
+					// A background terminal is added to the tab bar and nothing else:
+					// `activate: false` leaves every active-* id alone, and the mode is
+					// left as-is because flipping the agent into terminal mode is itself
+					// a view change for anyone looking at that agent.
+					if (background) return addTerminalTabHelper(s, tab, { activate: false });
+					return { ...addTerminalTabHelper(s, tab), inputMode: 'terminal' as const };
+				})
+			);
+		}
 
 		// Start the shell here rather than leaving it to TerminalView. That component
 		// only renders the agent the user is looking at, and only spawns for the ACTIVE
@@ -482,12 +504,12 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 		// Safe to call unconditionally: the spawn dedupes in-flight calls by process
 		// id, and once the PID lands TerminalView's own `pid !== 0` check stops it
 		// spawning a second one when it later mounts.
-		const sessionForSpawn = selectSessionById(sessionId)(useSessionStore.getState());
+		const sessionForSpawn = selectSessionById(terminalOwnerId)(useSessionStore.getState());
 		if (sessionForSpawn) {
 			void spawnPtyForTab({
 				session: sessionForSpawn,
 				tab,
-				onPid: createTabPidChangeHandler(sessionId),
+				onPid: createTabPidChangeHandler(terminalOwnerId),
 				onSpawnFailure: (tabId, isPersistent, message) => {
 					// No xterm to write into from here, so report through the store and a
 					// toast. Persistent tabs stay as restartable husks exactly as they do
@@ -499,7 +521,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 						message,
 					});
 					if (isPersistent) {
-						createTabStateChangeHandler(sessionId)(tabId, 'exited');
+						createTabStateChangeHandler(terminalOwnerId)(tabId, 'exited');
 					} else {
 						useTabStore.getState().closeTerminalTab(tabId, 'spawn-failure');
 					}
@@ -530,7 +552,12 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			}
 		};
 
-		const resolved = resolveTerminalTab(sessionsRef.current, sessionId, tabRef);
+		const resolved = resolveTerminalTab(
+			sessionsRef.current,
+			sessionId,
+			tabRef,
+			useSettingsStore.getState().newShell
+		);
 		if (!resolved) {
 			const session = sessionsRef.current.find((s) => s.id === sessionId);
 			if (!session) {
@@ -610,19 +637,31 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 		const sessions = sessionId
 			? sessionsRef.current.filter((s) => s.id === sessionId)
 			: sessionsRef.current;
-		const tabs = sessions.flatMap((session) =>
-			(session.terminalTabs || []).map((tab, index) => ({
-				tabId: tab.id,
-				agentId: session.id,
-				agentName: session.name,
-				name: getTerminalTabDisplayName(tab, index),
-				cwd: tab.cwd || session.cwd || '',
-				pid: tab.pid,
-				state: tab.state,
-				active: session.activeTerminalTabId === tab.id,
-				startupCommand: tab.startupCommand ?? null,
-			}))
-		);
+		const source = sessionsRef.current.find((s) => s.id === sessionId);
+		const entries =
+			useSettingsStore.getState().newShell && source
+				? panelTerminals(sessionsRef.current, source)
+				: sessions.flatMap((session) =>
+						(session.terminalTabs || []).map((tab) => ({ session, tab }))
+					);
+		const tabs = entries.map(({ session, tab }) => ({
+			tabId: tab.id,
+			agentId: session.id,
+			agentName: session.name,
+			name: getTerminalTabDisplayName(
+				tab,
+				session.terminalTabs.findIndex((t) => t.id === tab.id)
+			),
+			cwd: tab.cwd || session.cwd || '',
+			pid: tab.pid,
+			state: tab.state,
+			active:
+				source && useSettingsStore.getState().newShell
+					? source.aiTabs.find((t) => t.id === source.activeTabId)?.newShellPanel?.terminalTabId ===
+						tab.id
+					: session.activeTerminalTabId === tab.id,
+			startupCommand: tab.startupCommand ?? null,
+		}));
 		window.maestro.process.sendRemoteListTerminalTabsResponse(responseChannel, tabs);
 	});
 
@@ -1891,6 +1930,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 				permissionMode: 'permission',
 				newShellPanelAction: 'panel',
 				newShellPanelFilter: 'string',
+				newShellTerminalId: 'string',
 				newShellFileContent: 'string',
 				newShellFileLine: 'line',
 				enterToSend: 'boolean',
@@ -1963,6 +2003,37 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
 						success: false,
 						error: error instanceof Error ? error.message : String(error),
+					});
+					return;
+				}
+			}
+
+			let panelTerminalOwnerId: string | undefined;
+			if (
+				['terminal', 'tasks', 'terminal-select', 'terminal-close'].includes(
+					String(tabPatch.newShellPanelAction)
+				)
+			) {
+				try {
+					if (!useSettingsStore.getState().newShell)
+						throw new Error('This panel requires the new shell');
+					const action = tabPatch.newShellPanelAction;
+					if (action === 'terminal-select' || action === 'terminal-close') {
+						const targetTab = session.aiTabs.find((tab) => tab.id === targetTabId)!;
+						const terminalId =
+							tabPatch.newShellTerminalId || targetTab.newShellPanel?.terminalTabId;
+						const target = panelTerminals(useSessionStore.getState().sessions, session).find(
+							(item) => item.tab.id === terminalId
+						);
+						if (!target) throw new Error('Terminal not found in this conversation directory');
+						panelTerminalOwnerId = target.session.id;
+						if (action === 'terminal-close') useTabStore.getState().closeTerminalTab(target.tab.id);
+						else selectPanelTerminal(sessionId, target.tab.id, targetTabId);
+					}
+				} catch (error) {
+					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+						success: false,
+						error: String(error),
 					});
 					return;
 				}
@@ -2055,6 +2126,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 					const {
 						newShellPanelAction,
 						newShellPanelFilter,
+						newShellTerminalId: _terminalId,
 						newShellFileContent: _content,
 						newShellFileLine: _line,
 						...fields
@@ -2086,7 +2158,18 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			try {
 				const current =
 					useSessionStore.getState().sessions?.find((s) => s.id === sessionId) ?? session;
-				if ((await window.maestro.sessions.setMany([applyTabPatch(current) as any], [])) === false)
+				const terminalOwner =
+					panelTerminalOwnerId && panelTerminalOwnerId !== sessionId
+						? useSessionStore.getState().sessions.find((s) => s.id === panelTerminalOwnerId)
+						: undefined;
+				if (
+					(await window.maestro.sessions.setMany(
+						terminalOwner
+							? ([applyTabPatch(current), terminalOwner] as any)
+							: [applyTabPatch(current) as any],
+						[]
+					)) === false
+				)
 					throw new Error('The tab config could not be saved');
 			} catch (persistErr) {
 				logger.error('[Remote] Failed to persist tab config:', undefined, persistErr);

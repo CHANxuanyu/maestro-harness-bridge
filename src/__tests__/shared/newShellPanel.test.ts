@@ -17,6 +17,15 @@ describe('conversation panel state', () => {
 			);
 		}
 	);
+	it.each(['terminal', 'tasks'] as const)(
+		'remembers %s without changing the classic shell',
+		(tab) => {
+			const panel = changeNewShellPanel(undefined, tab);
+			expect(panel).toEqual({ tab, open: true });
+			expect(shellRightPanelTab('history', true, panel)).toBe(tab);
+			expect(shellRightPanelTab('history', false, panel)).toBe('history');
+		}
+	);
 	const file = { tab: 'files' as const, fileTabId: 'f', open: true, filter: 'src' };
 	it('remembers a file across panel switches and a serialized restart', () => {
 		const stored = JSON.parse(JSON.stringify(changeNewShellPanel(file, 'changes')));

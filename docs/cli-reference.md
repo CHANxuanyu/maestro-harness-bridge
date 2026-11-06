@@ -116,12 +116,13 @@ List playbooks (optionally filter by agent)
 
 List agent sessions (most recent first)
 
-| Option                   | Description                                            | Default |
-| ------------------------ | ------------------------------------------------------ | ------- |
-| `-l, --limit <count>`    | Maximum number of sessions to show (default: 25)       | -       |
-| `-k, --skip <count>`     | Number of sessions to skip for pagination (default: 0) | -       |
-| `-s, --search <keyword>` | Filter sessions by keyword in name or first message    | -       |
-| `--json`                 | Output as JSON (for scripting)                         | -       |
+| Option                   | Description                                                 | Default |
+| ------------------------ | ----------------------------------------------------------- | ------- |
+| `-l, --limit <count>`    | Maximum number of sessions to show (default: 25)            | -       |
+| `-k, --skip <count>`     | Number of sessions to skip for pagination (default: 0)      | -       |
+| `-s, --search <keyword>` | Filter sessions by keyword in name or first message         | -       |
+| `--json`                 | Output as JSON (for scripting)                              | -       |
+| `--native`               | List project native history through the running desktop app | -       |
 
 ## `maestro-cli list ssh-remotes`
 
@@ -139,6 +140,22 @@ List open terminal tabs in the desktop app (all agents unless --agent is given)
 | ------------------ | ------------------------------------------- | ------- |
 | `-a, --agent <id>` | Only list terminals belonging to this agent | -       |
 | `--json`           | Output as JSON (for scripting)              | -       |
+
+## `maestro-cli open-project <path>`
+
+Open a local project in the new shell, reusing its agent or creating one silently
+
+| Option   | Description | Default |
+| -------- | ----------- | ------- |
+| `--json` | Output JSON | -       |
+
+## `maestro-cli native-history <action> [agent] [conversation]`
+
+List recent projects, list or read native project history, or delete a whole Codex conversation
+
+| Option   | Description | Default |
+| -------- | ----------- | ------- |
+| `--json` | Output JSON | -       |
 
 ## `maestro-cli show`
 
@@ -279,22 +296,6 @@ Read changes against HEAD in a conversation working directory
 | `--tab <id>`       | Conversation tab, exact ID, prefix or active        | -       |
 | `--file <path>`    | Read the diff for one repository-relative file      | -       |
 | `--json`           | Output the shared changes or diff structure as JSON | -       |
-
-## `maestro-cli open-project <path>`
-
-Open a local project in the new shell, reusing its agent or creating one silently
-
-| Option   | Description | Default |
-| -------- | ----------- | ------- |
-| `--json` | Output JSON | -       |
-
-## `maestro-cli native-history <action> [agent] [conversation]`
-
-List recent projects, list or read native project history, or delete a whole Codex conversation
-
-| Option   | Description | Default |
-| -------- | ----------- | ------- |
-| `--json` | Output JSON | -       |
 
 ## `maestro-cli handoff <tab> [provider]`
 
@@ -1209,13 +1210,28 @@ Manage an agent's tabs in the desktop app
 
 Open a new tab for an agent (optionally seeded with a prompt)
 
-| Option                | Description                                                     | Default |
-| --------------------- | --------------------------------------------------------------- | ------- |
-| `-a, --agent <id>`    | Target agent ID                                                 | -       |
-| `-p, --prompt <text>` | Seed the new AI tab with this prompt                            | -       |
-| `--background`        | Create the tab without moving the view (agent and tab stay put) | -       |
-| `--focus`             | Switch to the new tab after creating it (default)               | -       |
-| `--json`              | Output as JSON (for scripting)                                  | -       |
+| Option                     | Description                                                      | Default |
+| -------------------------- | ---------------------------------------------------------------- | ------- |
+| `--provider <provider>`    | New shell: choose claude-code, codex or deepseek without sending | -       |
+| `--replace-empty <tab-id>` | Move an empty conversation and its draft to the chosen provider  | -       |
+| `-a, --agent <id>`         | Target agent ID                                                  | -       |
+| `-p, --prompt <text>`      | Seed the new AI tab with this prompt                             | -       |
+| `--background`             | Create the tab without moving the view (agent and tab stay put)  | -       |
+| `--focus`                  | Switch to the new tab after creating it (default)                | -       |
+| `--json`                   | Output as JSON (for scripting)                                   | -       |
+
+## `maestro-cli tab panel <tab-id> <action>`
+
+New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, back, open, close, edit, preview or save; read with tab show
+
+| Option             | Description                                                         | Default |
+| ------------------ | ------------------------------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active"                      | -       |
+| `--json`           | Output as JSON (for scripting)                                      | -       |
+| `--terminal <id>`  | Terminal to select or close; defaults to the conversation selection | -       |
+| `--filter <query>` | Filter the conversation file tree; an empty string clears it        | -       |
+| `--content <text>` | Set the remembered text file edit buffer before this action         | -       |
+| `--line <number>`  | Jump to a line in the remembered preview                            | -       |
 
 ## `maestro-cli tab close <tab-id>`
 

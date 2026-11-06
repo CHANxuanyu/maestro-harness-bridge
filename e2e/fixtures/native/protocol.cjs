@@ -85,7 +85,12 @@ function createTurn({
 		startTool(tool) {
 			if (provider === 'claude')
 				claudeMessage('assistant', [
-					{ type: 'tool_use', id: tool.id, name: 'Bash', input: { command: tool.command } },
+					{
+						type: 'tool_use',
+						id: tool.id,
+						name: tool.name || 'Bash',
+						input: tool.input || { command: tool.command },
+					},
 				]);
 			else {
 				rollout('response_item', {

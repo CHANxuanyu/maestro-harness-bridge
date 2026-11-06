@@ -124,14 +124,37 @@ describe('tab commands', () => {
 		});
 		expect(payload()).not.toHaveProperty('send');
 	});
-	it.each(['files', 'changes', 'back', 'open', 'close', 'edit', 'preview', 'save'])(
-		'tab panel writes %s through the acknowledged tab patch',
+	it.each([
+		'files',
+		'changes',
+		'terminal',
+		'tasks',
+		'back',
+		'open',
+		'close',
+		'edit',
+		'preview',
+		'save',
+	])('tab panel writes %s through the acknowledged tab patch', async (action) => {
+		const payload = mockTab({ success: true });
+		await tabPanel('tab-aaaa', action, {});
+		expect(payload()).toMatchObject({
+			type: 'update_session_config',
+			configPatch: { tabId: 'tab-aaaa', newShellPanelAction: action },
+		});
+	});
+
+	it.each(['terminal-select', 'terminal-close'])(
+		'%s targets the requested terminal',
 		async (action) => {
 			const payload = mockTab({ success: true });
-			await tabPanel('tab-aaaa', action, {});
+			await tabPanel('tab-aaaa', action, { terminal: 'term-id' });
 			expect(payload()).toMatchObject({
-				type: 'update_session_config',
-				configPatch: { tabId: 'tab-aaaa', newShellPanelAction: action },
+				configPatch: {
+					tabId: 'tab-aaaa',
+					newShellPanelAction: action,
+					newShellTerminalId: 'term-id',
+				},
 			});
 		}
 	);

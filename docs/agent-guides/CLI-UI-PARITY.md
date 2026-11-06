@@ -79,6 +79,32 @@ agent switcher in the classic shell, without overwriting saved shortcuts.
 This opens a project, not a particular archived conversation; the native resume
 and refresh gaps below remain separate.
 
+## New shell terminal and tasks panels (hb.8)
+
+| UI action                                   | CLI                                                                                                                   | Shared implementation                                                                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Open Terminal or Tasks                      | `tab panel <conversation> terminal` / `tasks`; `open terminal-panel` / `open tasks-panel` for the active conversation | `newShellPanel`, `openUiSurface`, right panel                                                                 |
+| Open an additional terminal                 | `open-terminal --agent <id> [--cwd <path>] [--background]`                                                            | `openPanelTerminal()`, `terminalTabHelpers`, `terminalSpawn`                                                  |
+| Select a terminal in the directory dropdown | `tab panel <conversation> terminal-select --terminal <id>`                                                            | `selectPanelTerminal()`                                                                                       |
+| Close a terminal                            | `tab panel <conversation> terminal-close [--terminal <id>]`                                                           | `tabStore.closeTerminalTab()`; GUI checks whether a command is busy, CLI explicitly closes the named terminal |
+| Read or write terminal output               | `list terminals [--agent <id>]`, `read-terminal [--tab <id>]`, `send-terminal [--tab <id>]`                           | Existing terminal resolver, PTY and mounted `TerminalView` buffer                                             |
+| Collapse the panel                          | `tab panel <conversation> close`                                                                                      | Persisted `newShellPanel.open`                                                                                |
+
+Terminal and Tasks entries require `newShell`; classic tabs and bindings keep their
+existing behavior. Cmd/Ctrl+J opens the directory terminal panel, and
+Cmd/Ctrl+Shift+7 opens Tasks. Both have palette entries and right-panel buttons;
+these are in-place panel switches, so they use the menu exception in UI-PATTERNS.
+The panel width uses the existing persisted `rightPanelWidth`. Escape from panel
+chrome or Tasks collapses the panel; while xterm owns input, Escape retains its
+terminal meaning. The existing panel-collapse shortcut remains available there.
+
+The default terminal is shared by normalized working directory and SSH remote ID,
+with worktrees kept separate. An explicit additional-terminal action creates a
+second one. `list terminals --agent` lists that directory's shared terminals with their
+actual owner IDs. `tab show --json` returns `newShellPanel`, including the selected
+terminal ID. Tasks are read-only, extracted from the latest top-level TodoWrite or
+update_plan in the conversation; native-history reads expose the source tool data.
+
 ## Focus belongs to the human (`--background` / `--focus`)
 
 An agent may create a surface. It may not decide the human should be looking at

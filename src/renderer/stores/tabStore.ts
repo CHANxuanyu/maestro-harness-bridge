@@ -1,3 +1,9 @@
+import { useSettingsStore } from './settingsStore';
+import {
+	openPanelTerminal,
+	panelTerminals,
+	selectPanelTerminal,
+} from '../services/newShellTerminal';
 /**
  * tabStore - Zustand store for tab operations and tab-specific UI state
  *
@@ -770,13 +776,19 @@ export const useTabStore = create<TabStore>()((set) => ({
 	createTerminalTab: (options?) => {
 		const session = getActiveSession();
 		if (!session) return;
+		if (useSettingsStore.getState().newShell) {
+			openPanelTerminal(session.id, { ...options, additional: true });
+			return;
+		}
 		const tab = createTerminalTabHelper(options?.shell, options?.cwd, options?.name);
 		const updatedSession = addTerminalTabHelper(session, tab);
 		updateActiveSession({ ...updatedSession, inputMode: 'terminal' });
 	},
 
 	closeTerminalTab: (tabId, reason = 'user-action') => {
-		const session = getActiveSession();
+		const session = useSessionStore
+			.getState()
+			.sessions.find((s) => s.terminalTabs?.some((tab) => tab.id === tabId));
 		if (!session) return;
 		const tab = (session.terminalTabs || []).find((t) => t.id === tabId);
 		const updatedSession = closeTerminalTabHelper(session, tabId);
@@ -797,12 +809,42 @@ export const useTabStore = create<TabStore>()((set) => ({
 		});
 		// Kill the PTY process after confirming the tab will be removed
 		window.maestro.process.kill(getTerminalSessionId(session.id, tabId));
-		updateActiveSession(updatedSession);
+		if (useSettingsStore.getState().newShell) {
+			useSessionStore.getState().setSessions((prev) => {
+				const next = prev.map((s) =>
+					s.id === session.id
+						? {
+								...updatedSession,
+								inputMode: s.inputMode,
+								activeTabId: s.activeTabId,
+								activeFileTabId: s.activeFileTabId,
+								activeBrowserTabId: s.activeBrowserTabId,
+							}
+						: s
+				);
+				return next.map((s) => {
+					if (!s.aiTabs?.some((tab) => tab.newShellPanel?.terminalTabId === tabId)) return s;
+					const fallback = panelTerminals(next, s)[0]?.tab.id;
+					return {
+						...s,
+						aiTabs: s.aiTabs.map((tab) =>
+							tab.newShellPanel?.terminalTabId === tabId
+								? { ...tab, newShellPanel: { ...tab.newShellPanel, terminalTabId: fallback } }
+								: tab
+						),
+					};
+				});
+			});
+		} else updateSessionWith(session.id, () => updatedSession);
 	},
 
 	selectTerminalTab: (tabId) => {
 		const session = getActiveSession();
 		if (!session) return;
+		if (useSettingsStore.getState().newShell) {
+			selectPanelTerminal(session.id, tabId);
+			return;
+		}
 		const updatedSession = selectTerminalTabHelper(session, tabId);
 		updateActiveSession({ ...updatedSession, inputMode: 'terminal' });
 	},

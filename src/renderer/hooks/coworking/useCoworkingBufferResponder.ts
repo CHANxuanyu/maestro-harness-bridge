@@ -16,9 +16,11 @@ import type { TerminalViewHandle } from '../../components/TerminalView';
 import { captureException } from '../../utils/sentry';
 
 export function useCoworkingBufferResponder(
-	terminalViewRefs: MutableRefObject<Map<string, TerminalViewHandle>>
+	terminalViewRefs: MutableRefObject<Map<string, TerminalViewHandle>>,
+	enabled = true
 ): void {
 	useEffect(() => {
+		if (!enabled) return;
 		// Same defensive guard as the registry-sync hook: bail when the coworking
 		// bridge is absent (tests that mock `window.maestro` without it, older
 		// preload bundles).
@@ -49,5 +51,5 @@ export function useCoworkingBufferResponder(
 			bridge.sendBufferResponse(responseChannel, content);
 		});
 		return off;
-	}, [terminalViewRefs]);
+	}, [terminalViewRefs, enabled]);
 }

@@ -286,6 +286,7 @@ export const MainPanel = React.memo(
 		// tabs (visible + kept-alive hidden). Lifted here so the coworking browser
 		// responder can reach a mounted tab's handle without stealing focus.
 		const browserViewRefs = useRef<Map<string, BrowserTabViewHandle>>(new Map());
+		const newShell = useSettingsStore((s) => s.newShell);
 		// Terminal session mounting lifecycle (refs, state, effects)
 		const {
 			terminalViewRefs,
@@ -293,18 +294,18 @@ export const MainPanel = React.memo(
 			mountedTerminalSessionsRef,
 			terminalSearchOpen,
 			setTerminalSearchOpen,
-		} = useTerminalMounting(activeSession);
+		} = useTerminalMounting(newShell ? null : activeSession);
 
 		// Coworking - mirror active session's terminal tabs into the main-process registry
 		// so the MCP `list_terminals` tool is accurate, and answer buffer-fetch requests
 		// from main via the per-session TerminalView ref map. Both hooks no-op when the
 		// `coworking` Encore flag is off.
 		useCoworkingRegistrySync();
-		useCoworkingBufferResponder(terminalViewRefs);
+		useCoworkingBufferResponder(terminalViewRefs, !newShell);
 
 		// Serve CLI/web `read-terminal` requests. Lives here because the xterm
 		// scrollback exists only in the mounted TerminalView, not in the store.
-		useRemoteTerminalBufferResponder(terminalViewRefs);
+		useRemoteTerminalBufferResponder(terminalViewRefs, !newShell);
 
 		// Extract tab handlers from props
 		const {
@@ -358,7 +359,7 @@ export const MainPanel = React.memo(
 			fileTabCanGoForward,
 			activeFileTabNavIndex,
 		} = useMemo(() => getTabDerivedState(activeSession), [activeSession]);
-		const newShell = useSettingsStore((s) => s.newShell);
+
 		const activeFileTabId = newShell ? null : (activeSession?.activeFileTabId ?? null);
 		const activeBrowserTabId = activeSession?.activeBrowserTabId ?? null;
 		const fileGistUrls = useTabStore((s) => s.fileGistUrls);

@@ -195,8 +195,8 @@ describe('TerminalView - isVisible repaint behaviour', () => {
 		expect(mockFocus).not.toHaveBeenCalled();
 
 		// Transition: hidden → visible (simulates returning from AI mode)
+		rerender(<TerminalView {...defaultProps} session={session} isVisible={true} />);
 		await act(async () => {
-			rerender(<TerminalView {...defaultProps} session={session} isVisible={true} />);
 			// Advance past the 50ms setTimeout inside the effect
 			await new Promise((resolve) => setTimeout(resolve, 100));
 		});
@@ -222,8 +222,8 @@ describe('TerminalView - isVisible repaint behaviour', () => {
 		mockRefresh.mockClear();
 
 		// Re-render with same isVisible=false - the isVisible effect must NOT fire
+		rerender(<TerminalView {...defaultProps} session={session} isVisible={false} />);
 		await act(async () => {
-			rerender(<TerminalView {...defaultProps} session={session} isVisible={false} />);
 			await new Promise((resolve) => setTimeout(resolve, 100));
 		});
 
@@ -246,8 +246,8 @@ describe('TerminalView - isVisible repaint behaviour', () => {
 		const callsAfterMount = mockRefresh.mock.calls.length;
 
 		// Now hide the terminal
+		rerender(<TerminalView {...defaultProps} session={session} isVisible={false} />);
 		await act(async () => {
-			rerender(<TerminalView {...defaultProps} session={session} isVisible={false} />);
 			await new Promise((resolve) => setTimeout(resolve, 100));
 		});
 
@@ -264,8 +264,8 @@ describe('TerminalView - isVisible repaint behaviour', () => {
 		);
 
 		// First show
+		rerender(<TerminalView {...defaultProps} session={session} isVisible={true} />);
 		await act(async () => {
-			rerender(<TerminalView {...defaultProps} session={session} isVisible={true} />);
 			await new Promise((resolve) => setTimeout(resolve, 100));
 		});
 
@@ -273,14 +273,14 @@ describe('TerminalView - isVisible repaint behaviour', () => {
 		expect(callsAfterFirstShow).toBeGreaterThanOrEqual(1);
 
 		// Hide
+		rerender(<TerminalView {...defaultProps} session={session} isVisible={false} />);
 		await act(async () => {
-			rerender(<TerminalView {...defaultProps} session={session} isVisible={false} />);
 			await new Promise((resolve) => setTimeout(resolve, 100));
 		});
 
 		// Second show
+		rerender(<TerminalView {...defaultProps} session={session} isVisible={true} />);
 		await act(async () => {
-			rerender(<TerminalView {...defaultProps} session={session} isVisible={true} />);
 			await new Promise((resolve) => setTimeout(resolve, 100));
 		});
 

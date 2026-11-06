@@ -1,3 +1,4 @@
+import { openUiSurface } from '../../utils/openUiSurface';
 import { shellRightPanelTab } from '../../../shared/newShellPanel';
 import { shellFeatureVisible } from '../../../shared/newShellFeatures';
 import { chooseProject } from '../../services/openProject';
@@ -714,7 +715,9 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				trackShortcut('navForward');
 			} else if (ctx.isShortcut(e, 'toggleMode')) {
 				e.preventDefault();
-				if (ctx.activeSessionId) {
+				if (useSettingsStore.getState().newShell) {
+					openUiSurface('terminal-panel');
+				} else if (ctx.activeSessionId) {
 					// Cmd+J always opens a new terminal tab (analogous to Cmd+T for AI tabs).
 					// handleOpenTerminalTab creates the tab and sets inputMode:'terminal' automatically.
 					// Safe in wizard tabs - it creates a new tab rather than disrupting wizard state.
@@ -819,6 +822,10 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					ctx.setEditAgentSession(activeSession);
 					trackShortcut('agentSettings');
 				}
+			} else if (useSettingsStore.getState().newShell && ctx.isShortcut(e, 'goToTasks')) {
+				e.preventDefault();
+				openUiSurface('tasks-panel');
+				trackShortcut('goToTasks');
 			} else if (ctx.isShortcut(e, 'goToFiles')) {
 				e.preventDefault();
 				ctx.setRightPanelOpen(true);
@@ -1185,7 +1192,10 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				if (requestEditLastQueuedMessage()) trackShortcut('editLastQueuedMessage');
 			} else if (ctx.isShortcut(e, 'jumpToTerminal')) {
 				e.preventDefault();
-				if (activeSession && !ctx.activeGroupChatId) {
+				if (useSettingsStore.getState().newShell) {
+					openUiSurface('terminal-panel');
+					trackShortcut('jumpToTerminal');
+				} else if (activeSession && !ctx.activeGroupChatId) {
 					const result = ctx.navigateToClosestTerminalTab(activeSession);
 					if (result) {
 						ctx.setSessions((prev: Session[]) =>

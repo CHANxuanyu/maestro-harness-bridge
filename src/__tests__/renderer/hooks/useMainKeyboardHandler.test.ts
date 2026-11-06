@@ -4989,3 +4989,40 @@ describe('new shell project entry shortcuts', () => {
 		expect(open).toHaveBeenCalledTimes(newShell ? 1 : 0);
 	});
 });
+
+describe('new shell panel shortcuts', () => {
+	afterEach(() => useSettingsStore.setState({ newShell: false }));
+	it.each(['toggleMode', 'jumpToTerminal', 'goToTasks'])(
+		'opens the conversation panel for %s without changing the center or creating a shell',
+		(action) => {
+			useSettingsStore.setState({ newShell: true });
+			const session = {
+				id: 'panels',
+				inputMode: 'ai',
+				activeTabId: 'chat',
+				aiTabs: [{ id: 'chat', logs: [] }],
+				terminalTabs: [],
+			};
+			useUIStore.setState({ rightPanelOpen: false, activeRightTab: 'files' });
+			const create = vi.fn();
+			const navigate = vi.fn();
+			const { result } = renderHook(() => useMainKeyboardHandler());
+			result.current.keyboardHandlerRef.current = createMockContext({
+				activeSession: session,
+				activeSessionId: session.id,
+				handleOpenTerminalTab: create,
+				navigateToClosestTerminalTab: navigate,
+				isShortcut: (_event: KeyboardEvent, id: string) => id === action,
+			});
+			act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', metaKey: true })));
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].newShellPanel).toMatchObject({
+				tab: action === 'goToTasks' ? 'tasks' : 'terminal',
+				open: true,
+			});
+			expect(useUIStore.getState().activeFocus).toBe('right');
+			expect(useSessionStore.getState().sessions[0].inputMode).toBe('ai');
+			expect(create).not.toHaveBeenCalled();
+			expect(navigate).not.toHaveBeenCalled();
+		}
+	);
+});

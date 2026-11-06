@@ -93,6 +93,12 @@ export const DEFAULT_SHORTCUTS = {
 	help: { id: 'help', label: 'Show Shortcuts', keys: ['Meta', '/'] },
 	settings: { id: 'settings', label: 'Open Settings', keys: ['Meta', ','] },
 	agentSettings: { id: 'agentSettings', label: 'Open Agent Settings', keys: ['Alt', 'Meta', ','] },
+	goToTasks: {
+		id: 'goToTasks',
+		shell: 'new',
+		label: 'Open Tasks Panel',
+		keys: ['Meta', 'Shift', '7'],
+	},
 	goToFiles: { id: 'goToFiles', label: 'Go to Files Tab', keys: ['Meta', 'Shift', 'f'] },
 	goToHistory: { id: 'goToHistory', label: 'Go to History Tab', keys: ['Meta', 'Shift', 'h'] },
 	goToAutoRun: { id: 'goToAutoRun', label: 'Go to Auto Run Tab', keys: ['Meta', 'Shift', '1'] },

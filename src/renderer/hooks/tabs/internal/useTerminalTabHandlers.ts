@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useModalStore } from '../../../stores/modalStore';
-import { selectActiveSession, useSessionStore } from '../../../stores/sessionStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { useTabStore } from '../../../stores/tabStore';
 import { getTerminalSessionId } from '../../../utils/terminalTabHelpers';
 import { captureMessage } from '../../../utils/sentry';
@@ -19,7 +19,9 @@ export function useTerminalTabHandlers(): TerminalTabHandlersReturn {
 
 	const handleCloseTerminalTab = useCallback(
 		(tabId: string) => {
-			const session = selectActiveSession(useSessionStore.getState());
+			const session = useSessionStore
+				.getState()
+				.sessions.find((s) => s.terminalTabs?.some((tab) => tab.id === tabId));
 			if (!session) {
 				closeTerminalTab(tabId);
 				return;

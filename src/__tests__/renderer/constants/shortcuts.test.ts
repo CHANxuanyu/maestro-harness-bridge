@@ -336,8 +336,12 @@ describe('DEFAULT_SHORTCUTS / TAB_SHORTCUTS / FIXED_SHORTCUTS duplicate bindings
 			const allowed = INTENTIONALLY_SHARED.find((g) => g.chord === chord);
 			// The allowlist must match EXACTLY. Listing a chord does not license
 			// every future action to join that group - a new arrival is a new
-			// decision and has to be made deliberately.
-			if (allowed && [...allowed.ids].sort().join(',') === [...ids].sort().join(',')) continue;
+			// decision and has to be made deliberately. Apply the same shell gate
+			// to the expected group: History and Director Notes are classic-only.
+			const allowedIds = allowed?.ids.filter((id) =>
+				all.some((sc) => sc.id === id && shortcutAppliesToShell(sc, newShell))
+			);
+			if (allowedIds && allowedIds.sort().join(',') === [...ids].sort().join(',')) continue;
 			unexplained.push(`${chord} is claimed by: ${ids.join(', ')}`);
 		}
 

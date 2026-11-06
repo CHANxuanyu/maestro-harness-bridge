@@ -1,0 +1,175 @@
+import { useUIStore } from '../stores/uiStore';
+import { useEffect, useRef, useState } from 'react';
+import { Plus, X } from 'lucide-react';
+import { truncatePath } from '../../shared/formatters';
+import { useSessionStore } from '../stores/sessionStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import {
+	openPanelTerminal,
+	panelTerminalLocation,
+	panelTerminals,
+	selectPanelTerminal,
+} from '../services/newShellTerminal';
+import { useTerminalMounting } from '../hooks/terminal/useTerminalMounting';
+import { useRemoteTerminalBufferResponder } from '../hooks/terminal/useRemoteTerminalBufferResponder';
+import { useCoworkingBufferResponder } from '../hooks/coworking/useCoworkingBufferResponder';
+import { useSurfaceTypography } from '../hooks/ui/useSurfaceTypography';
+import { useTerminalTabHandlers } from '../hooks/tabs/internal/useTerminalTabHandlers';
+import { getTerminalTabDisplayName } from '../utils/terminalTabHelpers';
+import {
+	TerminalView,
+	createTabPidChangeHandler,
+	createTabStateChangeHandler,
+} from './TerminalView';
+import { useT } from '../i18n';
+import type { Session, Theme } from '../types';
+
+export function NewShellTerminalPanel({
+	session,
+	theme,
+	visible,
+}: {
+	session: Session;
+	theme: Theme;
+	visible: boolean;
+}) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
+	const activeFocus = useUIStore((s) => s.activeFocus);
+	const sessions = useSessionStore((s) => s.sessions);
+	const source = sessions.find((s) => s.id === session.id) || session;
+	const typography = useSurfaceTypography('terminal');
+	const { handleCloseTerminalTab } = useTerminalTabHandlers();
+	const [error, setError] = useState('');
+	const panel = source.aiTabs?.find((tab) => tab.id === source.activeTabId)?.newShellPanel;
+	let pool: ReturnType<typeof panelTerminals> = [];
+	let cwd = source.cwd;
+	try {
+		cwd = panelTerminalLocation(source).cwd;
+		pool = panelTerminals(sessions, source);
+	} catch {
+		/* The opening effect displays invalid remote configuration errors. */
+	}
+	const selected = pool.find((item) => item.tab.id === panel?.terminalTabId) || pool[0];
+	// Only a visit opens a shell. Closing the last shell does not immediately reopen it.
+	useEffect(() => {
+		if (!newShell || !visible) return;
+		try {
+			openPanelTerminal(source.id);
+			setError('');
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		}
+	}, [newShell, visible, source.id, source.activeTabId]);
+
+	const mounted = useTerminalMounting(newShell && visible ? selected?.session || null : null);
+	useRemoteTerminalBufferResponder(mounted.terminalViewRefs, newShell);
+	useCoworkingBufferResponder(mounted.terminalViewRefs, newShell);
+	const panelRef = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (!visible || activeFocus !== 'right') return;
+		if (selected) mounted.terminalViewRefs.current.get(selected.session.id)?.focusActiveTerminal();
+		else panelRef.current?.focus();
+	}, [visible, selected?.tab.id, activeFocus]);
+	if (!newShell) return null;
+	return (
+		<div
+			ref={panelRef}
+			tabIndex={-1}
+			data-testid="terminal-panel"
+			aria-hidden={!visible}
+			{...(!visible ? { inert: '' } : {})}
+			className="absolute inset-0 flex flex-col outline-none"
+			style={{
+				visibility: visible ? 'visible' : 'hidden',
+				pointerEvents: visible ? 'auto' : 'none',
+			}}
+		>
+			<div
+				className="flex items-center gap-1 px-3 h-9 shrink-0 text-xs"
+				style={{ color: theme.colors.textDim }}
+			>
+				<span className="truncate min-w-0 flex-1" title={selected?.tab.cwd || cwd}>
+					{truncatePath(selected?.tab.cwd || cwd, 32)}
+				</span>
+				{pool.length > 1 && (
+					<select
+						aria-label={t('workflows.newShell.selectTerminal')}
+						className="max-w-28 min-w-0 rounded"
+						style={{ backgroundColor: theme.colors.bgSidebar, color: theme.colors.textMain }}
+						value={selected?.tab.id}
+						onChange={(event) => selectPanelTerminal(source.id, event.target.value)}
+					>
+						{pool.map(({ tab }, index) => (
+							<option key={tab.id} value={tab.id}>
+								{getTerminalTabDisplayName(tab, index)}
+							</option>
+						))}
+					</select>
+				)}
+				<button
+					className="p-1 shrink-0"
+					title={t('workflows.newShell.newTerminal')}
+					aria-label={t('workflows.newShell.newTerminal')}
+					onClick={() => {
+						try {
+							openPanelTerminal(source.id, { additional: true });
+							setError('');
+						} catch (err) {
+							setError(String(err));
+						}
+					}}
+				>
+					<Plus className="w-4 h-4" />
+				</button>
+				<button
+					className="p-1 shrink-0 disabled:opacity-30"
+					disabled={!selected}
+					title={t('workflows.newShell.closeTerminal')}
+					aria-label={t('workflows.newShell.closeTerminal')}
+					onClick={() => selected && handleCloseTerminalTab(selected.tab.id)}
+				>
+					<X className="w-4 h-4" />
+				</button>
+			</div>
+			{error && (
+				<p role="alert" className="px-3 text-sm" style={{ color: theme.colors.error }}>
+					{error}
+				</p>
+			)}
+			<div className="relative flex-1 min-h-0">
+				{mounted.mountedTerminalSessionIds.map((id) => {
+					const owner = sessions.find((s) => s.id === id);
+					if (!owner?.terminalTabs?.length) return null;
+					const shown = visible && selected?.session.id === id;
+					const viewSession = shown ? { ...owner, activeTerminalTabId: selected.tab.id } : owner;
+					return (
+						<div
+							key={id}
+							className="absolute inset-0 flex"
+							{...(!shown ? { inert: '' } : {})}
+							style={{
+								visibility: shown ? 'visible' : 'hidden',
+								pointerEvents: shown ? 'auto' : 'none',
+							}}
+						>
+							<TerminalView
+								ref={(handle) => {
+									if (handle) mounted.terminalViewRefs.current.set(id, handle);
+									else mounted.terminalViewRefs.current.delete(id);
+								}}
+								session={viewSession}
+								theme={theme}
+								fontFamily={typography.fontFamily}
+								fontSize={typography.fontSize}
+								onTabPidChange={createTabPidChangeHandler(id)}
+								onTabStateChange={createTabStateChangeHandler(id)}
+								isVisible={shown}
+							/>
+						</div>
+					);
+				})}
+			</div>
+		</div>
+	);
+}

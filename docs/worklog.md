@@ -2,6 +2,18 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-06：T9 第三轮 Electron 失败定位
+
+外部结果为 3 条中 1 条通过、2 条失败。只读场景的 trace 已出现与 `tab new` 返回 ID 完全一致的打开对话及 Read-Only 控件；`tab show` 读取主进程持久化库存，而创建确认发生在渲染层更新后、默认两秒防抖保存前，因此判定为读取时序。场景现在先确认同一对话行，再以 `expect.poll` 等待该 ID 可读，只容忍该 ID 暂时不存在，随后仍严格检查两项只读字段、归档库存为空和原生文件字节不变。创建只执行一次，没有增加测试重试。
+
+网页场景的 trace 网络记录为 HTTP 503，页面正文是 `Web-Desktop bundle not built`，并未进入归档界面。`scripts/native-e2e.mjs` 原来只构建 main、renderer 和 CLI，现补上 web-desktop。先提交失败回归 `1efdcd8c4`，两条分别证明缺少网页构建和网页构建失败时没有阻止启动验收；修复后两条通过。网页仍使用无 preload 的 Electron `BrowserWindow`，明确桌面尺寸并检查网页产物、HTTP 200、web-desktop 与 newShell 标记，再保留原有刷新、CLI 变更、网页取消归档和原生文件不变断言，无需安装 Chromium。
+
+相关 Vitest 共 5 文件、161 条通过，均使用 `--configLoader runner --no-cache`，没有跳过或自动重试。`npx tsc --noEmit -p tsconfig.json` 通过；E2E 与新增脚本测试的临时严格类型配置补齐原有 Window 声明后通过。首次临时类型配置漏掉该声明导致检查失败，未改动产品类型或降低严格选项。Playwright 仅收集 3 条场景，未启动 Electron。修改文件的 Prettier、适用的 ESLint 和差异检查通过。
+
+被测对象是当前分支验收源码和本地 `dist/web-desktop` 构建产物，不是发行包。为避免默认 Vite 配置加载器写入共享 node_modules，本机使用 runner；直接使用 runner 因现有配置依赖 `__dirname` 失败，随后仅在构建进程提供该变量并把缓存放在临时目录，成功构建网页包。原配置的字体路径、CSS、动态导入和体积警告仍保留。没有运行完整 E2E 构建链，网页运行与修复后的三条 Electron 结果待外部确认。
+
+本轮没有产品实现、用户文案、设置或 CLI 行为变化，旧界面不受影响，CHANGELOG 不新增产品变化。CLI 对等文档补充验收方式，原有 Open gaps 不变。Opus 在沙箱外执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-conversation-archive.spec.ts --retries=0`，入口会自动构建网页包；直接运行 Playwright 时需先完成构建。未运行真实账户、模型、SSH、其他平台或安装包，未推送或发布。
+
 ## 2026-11-06：T9 归档第二轮审查修复
 
 三条审查意见均复现。取消归档改为保留独立的权限元数据，仅更新 `archived` 状态；默认归档读取和原生扫描过滤不包含已恢复项，权限解析读取完整库存。归档时保存原活动时间，避免较旧的完全访问对话在取消归档后压过较新的只读对话。未带新状态字段的旧归档仍按已归档读取。

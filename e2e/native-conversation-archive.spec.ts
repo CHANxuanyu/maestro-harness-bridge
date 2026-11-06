@@ -129,9 +129,29 @@ test('unarchive without reopening retains readonly after another restart', async
 		// The restored history row stays unopened, including across this restart.
 		await native.restart(home);
 		const created = await native.cli('tab', 'new', '--agent', owner.id);
+		expect(created.success).toBe(true);
+		await expect(
+			native.page.locator(`[data-conversation-key="${owner.id}:${created.tabId}"]`)
+		).toBeVisible();
 		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		// Creation is acknowledged before debounced persistence updates the CLI inventory.
+		await expect
+			.poll(async () => {
+				try {
+					return (await native.cli('tab', 'show', created.tabId, '--agent', owner.id)).tab?.tabId;
+				} catch (error) {
+					if (String(error).includes(`Tab not found: ${created.tabId}`)) return null;
+					throw error;
+				}
+			})
+			.toBe(created.tabId);
 		const shown = await native.cli('tab', 'show', created.tabId, '--agent', owner.id);
-		expect(shown.tab).toMatchObject({ permissionMode: 'readonly', readOnly: true });
+		expect(shown.tab).toMatchObject({
+			tabId: created.tabId,
+			agentId: owner.id,
+			permissionMode: 'readonly',
+			readOnly: true,
+		});
 		expect((await native.cli('native-history', 'list', '--archived')).result.conversations).toEqual(
 			[]
 		);
@@ -146,6 +166,10 @@ test('unarchive without reopening retains readonly after another restart', async
 
 // eslint-disable-next-line no-empty-pattern
 test('subdirectory archives stay reachable in the browser after refresh and live changes', async ({}, info) => {
+	expect(
+		fs.existsSync(path.resolve('dist/web-desktop/index.html')),
+		'Build browser assets with npm run build:web-desktop before direct Playwright runs'
+	).toBe(true);
 	const native = new NativeApp(info, { providerCli: false });
 	const home = path.join(native.root, 'home');
 	const cwd = path.join(native.project, 'packages', 'api');
@@ -182,16 +206,22 @@ test('subdirectory archives stay reachable in the browser after refresh and live
 		const url = new URL(await native.page.evaluate(() => window.maestro.webserver.getUrl()));
 		url.hostname = '127.0.0.1';
 		const opened = native.app!.waitForEvent('window');
-		await native.app!.evaluate(({ BrowserWindow }, href) => {
-			const window = new BrowserWindow({
+		await native.app!.evaluate(({ BrowserWindow }) => {
+			new BrowserWindow({
+				width: 1400,
+				height: 900,
 				webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
 			});
-			void window.loadURL(href);
-		}, url.href);
+		});
 		const web = await opened;
+		const response = await web.goto(url.href);
+		expect(response?.status()).toBe(200);
+		await expect(web.locator('html')).toHaveAttribute('data-runtime', 'web-desktop');
+		await expect(web.locator('html')).toHaveAttribute('data-new-shell', 'true');
 		const archived = web.getByRole('button', { name: 'Archived 1', exact: true });
 		await expect(archived).toBeVisible();
-		await web.reload();
+		const reloaded = await web.reload();
+		expect(reloaded?.status()).toBe(200);
 		await expect(archived).toBeVisible();
 		await native.cli('native-history', 'unarchive', owner, turn.id);
 		await expect(archived).toHaveCount(0);

@@ -53,6 +53,6 @@ export function useNativeCommands(
 			cancelled = true;
 		};
 		// key contains the context and account environment. No polling while the menu is closed.
-	}, [key, supported, open, refresh]);
+	}, [key, supported, open, refresh, session?.agentCommands]);
 	return { supported, commands: snapshot?.commands ?? builtins, warning: snapshot?.warning };
 }

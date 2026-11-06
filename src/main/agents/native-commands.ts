@@ -14,6 +14,33 @@ import { readDirRemote, readFileRemote, statRemote } from '../utils/remote-fs';
 import { buildSshCommand } from '../utils/ssh-command-builder';
 import { execFileNoThrow } from '../utils/execFile';
 
+/** Only names reported by an existing process are remembered. Discovery never starts a process. */
+const reportedCommands = new Map<string, string[]>();
+
+export function rememberNativeCommands(key: string | undefined, commands: unknown): void {
+	if (!key || !Array.isArray(commands)) return;
+	reportedCommands.delete(key);
+	reportedCommands.set(
+		key,
+		commands.filter((c): c is string => typeof c === 'string').slice(0, 2048)
+	);
+	while (reportedCommands.size > 64) reportedCommands.delete(reportedCommands.keys().next().value!);
+}
+
+/** Freeze the same account, cwd and host identity at spawn and discovery time. */
+export function nativeCommandScope(
+	context: NativeCommandContext,
+	layers: AgentAccountDirLayers,
+	remote?: SshRemoteConfig
+) {
+	const { cwd } = handoffLocation(context);
+	const account = resolveAgentAccountDir(
+		{ ...context, sshRemote: !!context.sessionSshRemoteConfig?.enabled },
+		layers
+	);
+	return { cwd, account, key: JSON.stringify([context.toolType, cwd, account, remote ?? null]) };
+}
+
 interface CommandStat {
 	mtime: number;
 	size: number;
@@ -36,6 +63,7 @@ interface CacheEntry {
 	result: NativeCommandSnapshot;
 	directories: Map<string, { revision: string; entries: CommandEntry[] }>;
 	files: Map<string, { revision: string; content: string }>;
+	fileNames: Set<string>;
 }
 const localFiles: CommandFiles = {
 	async stat(file) {
@@ -59,7 +87,7 @@ const localFiles: CommandFiles = {
 function remoteFiles(remote: SshRemoteConfig): CommandFiles {
 	return {
 		async stat(file) {
-			const result = await statRemote(file, remote);
+			const result = await statRemote(file, remote, undefined, { followSymlinks: true });
 			if (!result.success || !result.data) {
 				if (result.error?.startsWith('Path not found:')) return undefined;
 				throw new Error('Remote stat unavailable');
@@ -96,18 +124,28 @@ export function createNativeCommandDiscovery(deps: Dependencies) {
 		const ssh = context.sessionSshRemoteConfig;
 		const warning = ssh?.enabled ? 'remote-unavailable' : 'unavailable';
 		try {
-			const { cwd } = handoffLocation(context);
 			const remote = ssh?.enabled ? deps.remote?.(ssh.remoteId!) : undefined;
 			if (ssh?.enabled && !remote) return { ...fallback, warning };
-			let account = resolveAgentAccountDir(
-				{ ...context, sshRemote: !!ssh?.enabled },
-				deps.layers(context.toolType)
-			);
-			const key = JSON.stringify([context.toolType, cwd, account, remote ?? null]);
+			const scope = nativeCommandScope(context, deps.layers(context.toolType), remote);
+			const { cwd, key } = scope;
+			let { account } = scope;
 			const previous = cache.get(key);
-			if (cachedOnly) return previous?.result ?? fallback;
+			const withReported = (result: NativeCommandSnapshot, fileNames = previous?.fileNames) => {
+				if (result.warning) return result;
+				const merged = new Map(result.commands.map((command) => [command.command, command]));
+				for (const name of reportedCommands.get(key) ?? []) {
+					const command = name.startsWith('/') ? name : `/${name}`;
+					if (!merged.has(command) && !fileNames?.has(command.slice(1)))
+						merged.set(command, { command, description: '', source: 'reported' });
+				}
+				return {
+					...result,
+					commands: [...merged.values()].sort((a, b) => a.command.localeCompare(b.command)),
+				};
+			};
+			if (cachedOnly) return withReported(previous?.result ?? fallback);
 			const inFlight = pending.get(key);
-			if (inFlight) return inFlight;
+			if (inFlight) return withReported(await inFlight, cache.get(key)?.fileNames);
 			const scan = async (): Promise<NativeCommandSnapshot> => {
 				if (remote && !account) {
 					const variable = context.toolType === 'codex' ? 'CODEX_HOME' : 'CLAUDE_CONFIG_DIR';
@@ -128,7 +166,12 @@ export function createNativeCommandDiscovery(deps: Dependencies) {
 				if (!account) throw new Error('Account unavailable');
 				const io = remote ? remoteFiles(remote) : localFiles;
 				const paths = remote ? path.posix : path;
-				const next: CacheEntry = { result: fallback, directories: new Map(), files: new Map() };
+				const next: CacheEntry = {
+					result: fallback,
+					directories: new Map(),
+					files: new Map(),
+					fileNames: new Set(previous?.fileNames),
+				};
 				const commands = new Map<string, NativeCommand>();
 				const claimed = new Set<string>();
 				let entriesSeen = 0;
@@ -158,6 +201,7 @@ export function createNativeCommandDiscovery(deps: Dependencies) {
 					next.files.set(file, { revision, content });
 					const doc = parseCodexMarkdownDoc(content);
 					claimed.add(name);
+					next.fileNames.add(name);
 					if (!doc.userInvocable || !doc.body) return;
 					commands.set(name, {
 						command: `/${name}`,
@@ -170,7 +214,8 @@ export function createNativeCommandDiscovery(deps: Dependencies) {
 								.slice(0, 100) ||
 							'',
 						source,
-						...(context.toolType === 'codex' ? { prompt: doc.body } : {}),
+						// Claude resolves personal skills first, so project precedence needs an explicit body.
+						...(context.toolType === 'codex' || source === 'project' ? { prompt: doc.body } : {}),
 					});
 				};
 				const markdown = async (
@@ -217,6 +262,8 @@ export function createNativeCommandDiscovery(deps: Dependencies) {
 					commands: [...commands.values()].sort((a, b) => a.command.localeCompare(b.command)),
 				};
 				cache.delete(key);
+				while (next.fileNames.size > 4096)
+					next.fileNames.delete(next.fileNames.values().next().value!);
 				cache.set(key, next);
 				while (cache.size > 64) cache.delete(cache.keys().next().value!);
 				return next.result;
@@ -224,13 +271,19 @@ export function createNativeCommandDiscovery(deps: Dependencies) {
 			const work = scan()
 				.catch(() => {
 					const result = { ...fallback, warning } as NativeCommandSnapshot;
-					// A failed remote read must never continue offering the last host's custom commands.
-					cache.delete(key);
+					// Keep the warning on cached reads too, so reported commands cannot bypass an outage.
+					cache.set(key, {
+						result,
+						directories: new Map(),
+						files: new Map(),
+						fileNames: previous?.fileNames ?? new Set(),
+					});
+					while (cache.size > 64) cache.delete(cache.keys().next().value!);
 					return result;
 				})
 				.finally(() => pending.delete(key));
 			pending.set(key, work);
-			return work;
+			return withReported(await work, cache.get(key)?.fileNames);
 		} catch {
 			return { ...fallback, warning };
 		}

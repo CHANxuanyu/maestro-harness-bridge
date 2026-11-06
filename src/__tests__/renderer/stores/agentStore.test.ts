@@ -1800,6 +1800,39 @@ describe('agentStore', () => {
 			expect(spawnCall.permissionMode).toBe('full');
 		});
 
+		it('dispatches the selected Claude project body with arguments, not the ambiguous slash name', async () => {
+			useSettingsStore.setState({ newShell: true });
+			const session = createMockSession({ id: 'project-command' });
+			useSessionStore.getState().setSessions([session]);
+			window.maestro.agents.getNativeCommands = vi
+				.fn()
+				.mockResolvedValue({
+					commands: [
+						{
+							command: '/deploy',
+							description: 'Project',
+							prompt: 'Project deployment $ARGUMENTS',
+							source: 'project',
+						},
+					],
+				});
+			await useAgentStore
+				.getState()
+				.processQueuedItem(
+					session.id,
+					createQueuedItem({
+						type: 'command',
+						command: '/deploy',
+						commandArgs: 'staging',
+						text: undefined,
+					}),
+					defaultDeps
+				);
+			expect(mockSpawn).toHaveBeenCalledWith(
+				expect.objectContaining({ prompt: 'Project deployment staging' })
+			);
+		});
+
 		it.each(['warning', 'rejection'])(
 			'holds a queued native command on discovery %s',
 			async (failure) => {

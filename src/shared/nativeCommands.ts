@@ -12,7 +12,7 @@ export interface NativeCommand {
 	command: string;
 	description: string;
 	prompt?: string;
-	source: 'builtin' | 'project' | 'user';
+	source: 'builtin' | 'project' | 'user' | 'reported';
 }
 export interface NativeCommandSnapshot {
 	commands: NativeCommand[];

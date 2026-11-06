@@ -9,7 +9,7 @@ test.skip(process.env.MAESTRO_E2E_REAL === '1', 'Commands discovery uses tempora
 test.setTimeout(120_000);
 
 // eslint-disable-next-line no-empty-pattern
-test('native commands refresh on slash reopen without sending a turn', async ({}, info) => {
+test('native commands refresh, preserve drafts and retain scoped plugin reports', async ({}, info) => {
 	const native = new NativeApp(info, { providerCli: false });
 	const home = path.join(native.root, 'isolated-home');
 	fs.mkdirSync(home, { recursive: true });
@@ -75,6 +75,86 @@ test('native commands refresh on slash reopen without sending a turn', async ({}
 			native.page.getByRole('button', { name: '/added User Added after first open' })
 		).toHaveCount(0);
 		expect(fs.existsSync(path.join(native.claude, 'fixture-turn-count'))).toBe(false);
+		await native.input().press('Escape');
+		await native.input().fill('');
+		await native.cli('update-agent', session.id, '--token-source', 'api');
+		const projectSkill = path.join(native.project, '.claude', 'skills', 'deploy');
+		const personalSkill = path.join(native.claude, 'skills', 'deploy');
+		fs.mkdirSync(projectSkill, { recursive: true });
+		fs.mkdirSync(personalSkill, { recursive: true });
+		fs.writeFileSync(path.join(projectSkill, 'SKILL.md'), 'Project deployment $ARGUMENTS');
+		fs.writeFileSync(path.join(personalSkill, 'SKILL.md'), 'Personal deployment must not run');
+		fs.writeFileSync(
+			native.script,
+			JSON.stringify({
+				scene: { answer: 'Project command completed', slashCommands: ['plugin:review'] },
+				synopsis: { answer: 'Command completed' },
+			})
+		);
+		await native.page.evaluate(() => {
+			const original = window.maestro.agents.getNativeCommands;
+			let release!: () => void;
+			const pending = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			window.maestro.agents.getNativeCommands = async (...args) => {
+				if (!args[1]) await pending;
+				return original(...args);
+			};
+			window.addEventListener(
+				't10:release-command-scan',
+				() => {
+					window.maestro.agents.getNativeCommands = original;
+					release();
+				},
+				{ once: true }
+			);
+		});
+		await native.send('/deploy staging');
+		await expect(native.input()).toHaveValue('');
+		await native.input().press('Enter');
+		await native.input().fill('Keep this next draft');
+		await native.page.evaluate(() => window.dispatchEvent(new Event('t10:release-command-scan')));
+		await expect(
+			native.output().getByText('Project command completed', { exact: true })
+		).toBeVisible();
+		await expect(native.input()).toHaveValue('Keep this next draft');
+		expect(fs.readFileSync(path.join(native.claude, 'fixture-turn-count'), 'utf8')).toBe('1');
+		const transcripts = path.join(
+			native.claude,
+			'projects',
+			native.project.replace(/[^a-zA-Z0-9]/g, '-')
+		);
+		const history = fs
+			.readdirSync(transcripts)
+			.filter((name) => name.endsWith('.jsonl'))
+			.map((name) => fs.readFileSync(path.join(transcripts, name), 'utf8'))
+			.join('\n');
+		expect(history).toContain('Project deployment staging');
+		expect(history).not.toContain('Personal deployment must not run');
+		await native.input().fill('/plugin');
+		await expect(
+			native.page.getByRole('button', { name: '/plugin:review Reported by tool' })
+		).toBeVisible();
+		expect((await native.cli('tab', 'commands', tabId)).commands).toContainEqual({
+			command: '/plugin:review',
+			description: '',
+			source: 'reported',
+		});
+		await native.input().press('Escape');
+		await native.input().fill('');
+		const otherAccount = path.join(native.root, 'other-account');
+		fs.mkdirSync(otherAccount, { recursive: true });
+		await native.cli('update-agent', session.id, '--env', `CLAUDE_CONFIG_DIR=${otherAccount}`);
+		await native.input().fill('/plugin');
+		await expect(
+			native.page.getByRole('button', { name: '/plugin:review Reported by tool' })
+		).toHaveCount(0);
+		expect(
+			(await native.cli('tab', 'commands', tabId)).commands.some(
+				(c: { command: string }) => c.command === '/plugin:review'
+			)
+		).toBe(false);
 	} catch (error) {
 		failed = true;
 		throw error;

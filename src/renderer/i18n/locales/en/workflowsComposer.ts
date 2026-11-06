@@ -1,4 +1,5 @@
 export const workflowsComposer = {
+	'workflows.nativeCommands.reported': 'Reported by tool',
 	'workflows.nativeCommands.queuedUnavailable':
 		'Could not read native commands. Your command is held in the queue. Try sending it again when the connection is available.',
 	'workflows.nativeCommands.project': 'Project',

@@ -15,6 +15,21 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('native command refresh in the composer', () => {
+	it('refreshes an already open menu when the provider reports plugin commands', async () => {
+		const session = createMockSession({ cwd: `/temporary/composer-${++counter}` });
+		const read = vi.fn().mockResolvedValue(command('initial'));
+		window.maestro.agents.getNativeCommands = read;
+		const { result, rerender } = renderHook(({ current }) => useNativeCommands(current, true), {
+			initialProps: { current: session },
+		});
+		await waitFor(() => expect(result.current.commands[0]?.command).toBe('/initial'));
+		read.mockResolvedValue(command('plugin:review'));
+		rerender({
+			current: { ...session, agentCommands: [{ command: '/plugin:review', description: '' }] },
+		});
+		await waitFor(() => expect(result.current.commands[0]?.command).toBe('/plugin:review'));
+	});
+
 	it('leaves the classic shell discovery unchanged', () => {
 		useSettingsStore.setState({ newShell: false });
 		window.maestro.agents.getNativeCommands = vi.fn();

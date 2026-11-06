@@ -549,6 +549,28 @@ describe('process IPC handlers', () => {
 			expect(result.success).toBe(false);
 		});
 
+		it('freezes command scope from the provider account and execution directory', async () => {
+			mockAgentDetector.getAgent.mockResolvedValue({ id: 'claude-code', requiresPty: false });
+			mockProcessManager.spawn.mockReturnValue({ pid: 1000, success: true });
+			mockAgentConfigsStore.get.mockReturnValue({
+				'claude-code': { customEnvVars: { CLAUDE_CONFIG_DIR: '/temporary/provider-account' } },
+			});
+			const config = {
+				sessionId: 'command-owner',
+				toolType: 'claude-code',
+				cwd: '/temporary/project',
+				command: 'claude',
+				args: [],
+			};
+			await handlers.get('process:spawn')!({} as any, config);
+			expect(JSON.parse(mockProcessManager.spawn.mock.calls[0][0].nativeCommandScopeKey)).toEqual([
+				'claude-code',
+				'/temporary/project',
+				'/temporary/provider-account',
+				null,
+			]);
+		});
+
 		it('should pass environment variables to spawn', async () => {
 			const mockAgent = {
 				id: 'claude-code',

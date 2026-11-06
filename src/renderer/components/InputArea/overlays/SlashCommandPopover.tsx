@@ -92,7 +92,9 @@ export const SlashCommandPopover = memo(function SlashCommandPopover({
 									{t(
 										cmd.source === 'project'
 											? 'workflows.nativeCommands.project'
-											: 'workflows.nativeCommands.user'
+											: cmd.source === 'reported'
+												? 'workflows.nativeCommands.reported'
+												: 'workflows.nativeCommands.user'
 									)}
 								</span>
 							)}

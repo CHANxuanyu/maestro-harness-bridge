@@ -2,7 +2,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createNativeCommandDiscovery } from '../../../main/agents/native-commands';
+import {
+	createNativeCommandDiscovery,
+	nativeCommandScope,
+	rememberNativeCommands,
+} from '../../../main/agents/native-commands';
 
 vi.mock('../../../main/utils/remote-fs', () => ({
 	statRemote: vi.fn(),
@@ -41,6 +45,152 @@ const authored = (result: Awaited<ReturnType<ReturnType<typeof discovery>>>) =>
 	result.commands.filter((c) => c.source !== 'builtin');
 
 describe('account scoped native commands', () => {
+	it('keeps file priority, hiding and deletion when a native report contains the same names', async () => {
+		const context = request();
+		const read = discovery();
+		const selected = await file(
+			'project/.claude/commands/plugin/review.md',
+			'Selected project body'
+		);
+		await file('project/.claude/skills/hidden/SKILL.md', '---\nuser-invocable: false\n---\nHidden');
+		rememberNativeCommands(nativeCommandScope(context, { homeDir: root, env: {} }).key, [
+			'plugin:review',
+			'plugin:other',
+			'hidden',
+		]);
+		const first = await read(context);
+		expect(first.commands.find((c) => c.command === '/plugin:review')).toMatchObject({
+			source: 'project',
+			prompt: 'Selected project body',
+		});
+		expect(first.commands.some((c) => c.command === '/hidden')).toBe(false);
+		expect(first.commands.find((c) => c.command === '/plugin:other')?.source).toBe('reported');
+		await fs.unlink(selected);
+		expect((await read(context)).commands.some((c) => c.command === '/plugin:review')).toBe(false);
+	});
+
+	it('does not let cached native reports bypass a read failure', async () => {
+		const context = request();
+		const read = discovery();
+		rememberNativeCommands(nativeCommandScope(context, { homeDir: root, env: {} }).key, [
+			'plugin:review',
+		]);
+		expect((await read(context)).commands.some((c) => c.command === '/plugin:review')).toBe(true);
+		const stat = vi
+			.spyOn(fs, 'stat')
+			.mockRejectedValueOnce(Object.assign(new Error('denied'), { code: 'EACCES' }));
+		try {
+			expect((await read(context)).warning).toBe('unavailable');
+			const cached = await read(context, true);
+			expect(cached.warning).toBe('unavailable');
+			expect(cached.commands.every((c) => c.source === 'builtin')).toBe(true);
+		} finally {
+			stat.mockRestore();
+		}
+	});
+
+	it('isolates reports between SSH hosts and remote account overrides without local reads', async () => {
+		const remote = {
+			id: 'report-host',
+			name: 'Fixture',
+			host: 'fixture.invalid',
+			port: 22,
+			username: 'fixture',
+			enabled: true,
+		};
+		const layers = { homeDir: root, env: {} };
+		const read = createNativeCommandDiscovery({
+			layers: () => layers,
+			remote: (id) => ({ ...remote, id }),
+		});
+		const context = {
+			...request(),
+			customEnvVars: { CLAUDE_CONFIG_DIR: '~/account-a' },
+			sessionSshRemoteConfig: {
+				enabled: true,
+				remoteId: remote.id,
+				workingDirOverride: '~/project',
+			},
+		};
+		rememberNativeCommands(nativeCommandScope(context, layers, remote).key, ['plugin:remote']);
+		expect((await read(context, true)).commands.some((c) => c.command === '/plugin:remote')).toBe(
+			true
+		);
+		expect(
+			(
+				await read(
+					{
+						...context,
+						sessionSshRemoteConfig: { ...context.sessionSshRemoteConfig, remoteId: 'other-host' },
+					},
+					true
+				)
+			).commands.some((c) => c.command === '/plugin:remote')
+		).toBe(false);
+		expect(
+			(
+				await read({ ...context, customEnvVars: { CLAUDE_CONFIG_DIR: '~/account-b' } }, true)
+			).commands.some((c) => c.command === '/plugin:remote')
+		).toBe(false);
+	});
+
+	it('executes the discovered Claude project skill body instead of the personal namesake', async () => {
+		await file('account-a/skills/deploy/SKILL.md', 'Personal deployment');
+		await file('project/.claude/skills/deploy/SKILL.md', 'Project deployment $ARGUMENTS');
+		const result = await discovery()(request());
+		expect(result.commands.find((c) => c.command === '/deploy')).toEqual({
+			command: '/deploy',
+			description: 'Project deployment $ARGUMENTS',
+			source: 'project',
+			prompt: 'Project deployment $ARGUMENTS',
+		});
+	});
+
+	it('follows the target metadata for remote command directory symlinks', async () => {
+		const remote = {
+			id: 'linked-host',
+			name: 'Fixture',
+			host: 'fixture.invalid',
+			port: 22,
+			username: 'fixture',
+			enabled: true,
+		};
+		vi.mocked(statRemote).mockImplementation(async (target, _remote, _deps, options) => {
+			if (target === '~/account/commands')
+				return {
+					success: true,
+					data: { size: 1, mtime: 10, isDirectory: options?.followSymlinks === true },
+				};
+			if (target === '~/account/commands/linked.md')
+				return { success: true, data: { size: 6, mtime: 10, isDirectory: false } };
+			return { success: false, error: `Path not found: ${target}` };
+		});
+		vi.mocked(readDirRemote).mockResolvedValue({
+			success: true,
+			data: [{ name: 'linked.md', isDirectory: false, isSymlink: false }],
+		});
+		vi.mocked(readFileRemote).mockResolvedValue({ success: true, data: 'Linked' });
+		const read = createNativeCommandDiscovery({
+			layers: () => ({ homeDir: root, env: {} }),
+			remote: () => remote,
+		});
+		const result = await read({
+			...request(),
+			customEnvVars: { CLAUDE_CONFIG_DIR: '~/account' },
+			sessionSshRemoteConfig: {
+				enabled: true,
+				remoteId: remote.id,
+				workingDirOverride: '~/project',
+			},
+		});
+		expect(result.warning).toBeUndefined();
+		expect(result.commands).toContainEqual({
+			command: '/linked',
+			description: 'Linked',
+			source: 'user',
+		});
+	});
+
 	it('does not revive a hidden project skill from the user account', async () => {
 		await file(
 			'project/.codex/skills/private/SKILL.md',
@@ -105,7 +255,12 @@ describe('account scoped native commands', () => {
 				{ command: '/remote', description: 'Remote command', source: 'user' },
 			]);
 			expect(localRead).not.toHaveBeenCalled();
-			expect(statRemote).toHaveBeenCalledWith('~/remote-project/.claude/skills', remote);
+			expect(statRemote).toHaveBeenCalledWith(
+				'~/remote-project/.claude/skills',
+				remote,
+				undefined,
+				{ followSymlinks: true }
+			);
 			vi.mocked(statRemote).mockResolvedValue({ success: false, error: 'Permission denied' });
 			const failed = await read(context);
 			expect(failed.warning).toBe('remote-unavailable');
@@ -126,8 +281,8 @@ describe('account scoped native commands', () => {
 		);
 		await file('project/.claude/commands/nested/check.md', 'Nested');
 		expect(authored(await discovery()(request()))).toEqual([
-			{ command: '/nested:check', description: 'Nested', source: 'project' },
-			{ command: '/visible', description: 'Visible skill', source: 'project' },
+			{ command: '/nested:check', description: 'Nested', source: 'project', prompt: 'Nested' },
+			{ command: '/visible', description: 'Visible skill', source: 'project', prompt: 'Use this' },
 		]);
 	});
 

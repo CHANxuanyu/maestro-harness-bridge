@@ -13,6 +13,7 @@
  */
 
 import type { LogEntry } from '../types';
+import { READ_ONLY_PROMPT_SUFFIX, stripReadOnlyPrompt } from '../../shared/readOnlyPrompt';
 import { stripEmbeddedSystemPrompt } from '../../shared/embeddedSystemPrompt';
 import { compactToolOutput } from '../../shared/toolOutput';
 import { generateId } from './ids';
@@ -377,7 +378,7 @@ export function transcriptMessagesToLogEntries(messages: TranscriptMessage[]): L
 		attachResults(results);
 
 		if (msg.type === 'user') {
-			const text = stripEmbeddedSystemPrompt(msg.content ?? '');
+			const text = stripReadOnlyPrompt(stripEmbeddedSystemPrompt(msg.content ?? ''));
 			if (!images && (isInternalDesktopEnvelope(text) || !text.trim())) continue;
 			entries.push({
 				id: messageId,
@@ -932,7 +933,11 @@ function liveTurnMatchesNative(
  * A bound send keeps its local id, timestamp, images and delivery, and gains
  * `nativeTranscript.messageId` of its native copy; a cached native copy of it
  * is removed from the tab (it is the same occurrence, not a turn). Nothing
- * else moves. Anything that fails a check is left exactly as it was: a
+ * else moves. For an already cached duplicate inside the live clock window,
+ * the next visible user boundary and the native id suffice; a stopped turn may
+ * have neither a delivery stamp nor a final answer. Without an earlier anchor,
+ * only that adjacent cached copy can establish the match.
+ * Anything that fails a check is left exactly as it was: a
  * genuinely repeated prompt, a second native message with the same words, and
  * a later external turn all keep their own entries. Idempotent.
  */
@@ -942,6 +947,7 @@ export function bindDelayedOwnSends(
 ): { logs: LogEntry[]; bound: number } {
 	if (loaded.length === 0 || visible.length === 0) return { logs: visible, bound: 0 };
 	const loadedIndex = new Map(loaded.map((entry, index) => [entry.id, index]));
+	const visibleIndex = new Map(visible.map((entry, index) => [entry.id, index]));
 	const userIndexByMessageId = new Map<string, number>();
 	loaded.forEach((entry, index) => {
 		if (entry.source === 'user') {
@@ -979,20 +985,42 @@ export function bindDelayedOwnSends(
 			cursor = userIndexByMessageId.get(entry.nativeTranscript!.messageId) ?? -1;
 			continue;
 		}
-		if (cursor < 0) continue;
-		const n = nextNativeUser(cursor);
+		let n = cursor >= 0 ? nextNativeUser(cursor) : -1;
+		if (cursor < 0) {
+			// A first stopped turn may have no earlier shared entry. Only its
+			// next visible turn boundary can be the cached duplicate. Never scan
+			// the whole native history per local send, or untimed tabs go quadratic.
+			for (let next = v + 1; next < visible.length; next++) {
+				if (!isTurnBoundary(visible[next])) continue;
+				const candidate = loadedIndex.get(visible[next].id);
+				if (candidate !== undefined && sameLiveMessage(entry, loaded[candidate])) n = candidate;
+				break;
+			}
+		}
+
 		if (n < 0) {
 			cursor = -1;
 			continue;
 		}
 		const native = loaded[n];
+		const messageId = native.nativeTranscript?.messageId ?? native.id;
+		const cachedAt = visibleIndex.get(native.id) ?? -1;
 		if (sameLiveMessage(entry, native)) {
-			// The ordinary in-window pairing: the merge handles it as before.
+			// An old refresh may already have persisted this native copy next to
+			// the local send. Stop need not produce delivery or a final answer.
+			if (
+				!entry.nativeTranscript &&
+				!claimed.has(messageId) &&
+				cachedAt > v &&
+				!visible.slice(v + 1, cachedAt).some((between) => isTurnBoundary(between))
+			) {
+				claimed.add(messageId);
+				stamp.set(entry.id, messageId);
+				drop.add(native.id);
+			}
 			cursor = n;
 			continue;
 		}
-		const messageId = native.nativeTranscript?.messageId ?? native.id;
-		const cachedAt = visible.findIndex((candidate) => candidate.id === native.id);
 		const bindable =
 			isUnboundOwnSend(entry) &&
 			!claimed.has(messageId) &&
@@ -1133,9 +1161,10 @@ function sameRenderedEntry(a: LogEntry, b: LogEntry): boolean {
 export function hasLegacyTranscriptEntries(logs: LogEntry[] | undefined): boolean {
 	return (logs ?? []).some(
 		(entry) =>
-			!entry.nativeTranscript &&
-			((entry.source === 'stdout' && !entry.metadata && /^Tool: \S+$/.test(entry.text.trim())) ||
-				(entry.source === 'user' && isInternalDesktopEnvelope(entry.text)))
+			(entry.source === 'user' && entry.text.endsWith(READ_ONLY_PROMPT_SUFFIX)) ||
+			(!entry.nativeTranscript &&
+				((entry.source === 'stdout' && !entry.metadata && /^Tool: \S+$/.test(entry.text.trim())) ||
+					(entry.source === 'user' && isInternalDesktopEnvelope(entry.text))))
 	);
 }
 

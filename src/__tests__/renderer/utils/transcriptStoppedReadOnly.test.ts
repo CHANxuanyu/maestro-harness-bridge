@@ -138,3 +138,23 @@ it('only removes an exact terminal suffix from user messages', () => {
 		PROMPT + '\n\n---\n\nIMPORTANT: You are in read-only/plan mode.',
 	]);
 });
+
+it('keeps two nearby genuine sends and their distinct native identities', () => {
+	const messages = [
+		prior,
+		user,
+		{ ...user, uuid: 'native-user-2', timestamp: new Date(T + 4000).toISOString() },
+	];
+	const loaded = transcriptMessagesToLogEntries(messages);
+	const second = { ...own, id: 'local-user-2', timestamp: T + 3800 };
+	const cached = [loaded[0], own, loaded[1], stopped, second, loaded[2]];
+	const result = bindDelayedOwnSends(loaded, cached);
+	expect(
+		result.logs
+			.filter((entry) => entry.source === 'user')
+			.map((entry) => [entry.id, entry.nativeTranscript?.messageId])
+	).toEqual([
+		['local-user', 'native-user'],
+		['local-user-2', 'native-user-2'],
+	]);
+});

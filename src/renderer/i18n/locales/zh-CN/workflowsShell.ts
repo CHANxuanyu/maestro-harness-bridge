@@ -2,6 +2,42 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.shell.signInRequired': '需要重新登录',
+	'workflows.shell.signInRequiredBody':
+		'{tool} 不接受当前的登录凭据。重新登录后，这个对话可以接着做。',
+	'workflows.shell.signInAgain': '重新登录',
+	'workflows.reauth.userTitle': '重新登录 {tool}',
+	'workflows.reauth.failureTitle': '{tool} 需要重新登录',
+	'workflows.reauth.genericProvider': '提供商',
+	'workflows.reauth.userBody':
+		'在下面完成 {tool} 的登录。同一账户下的工作都会生效，不会打断正在进行的内容。',
+	'workflows.reauth.failureBody':
+		'{tool} 不接受当前保存的登录凭据。{pipeline}{scope}排队的消息都还在。',
+	'workflows.reauth.pipelineImpact': 'Cue 流程也受影响。',
+	'workflows.reauth.singleImpact': '当前工作已暂停，重新登录后恢复。',
+	'workflows.reauth.multipleImpact': '这个账户下共 {count} 处工作已暂停，重新登录后恢复。',
+	'workflows.reauth.fixCredentialClose': '处理好当前使用的凭据后，关闭窗口。',
+	'workflows.reauth.fixCredentialResume': '处理好当前使用的凭据后，点恢复。',
+	'workflows.reauth.exitedClose': '登录已结束。',
+	'workflows.reauth.exitedResume': '登录已结束。点恢复，重新运行失败的内容。',
+	'workflows.reauth.runningClose': '在上面完成登录后，关闭窗口。',
+	'workflows.reauth.runningResume': '在上面完成登录后，点恢复。',
+	'workflows.reauth.starting': '正在打开登录终端...',
+	'workflows.reauth.readingLogin': '正在读取登录方式...',
+	'workflows.reauth.noLoginCommand':
+		'{tool} 没有可以自动运行的登录命令。请在终端里登录，然后恢复。',
+	'workflows.reauth.cancel': '稍后再说',
+	'workflows.reauth.notNow': '稍后再说',
+	'workflows.reauth.done': '关闭',
+	'workflows.reauth.resumeSingle': '恢复',
+	'workflows.reauth.resumeMultiple': '恢复{count}',
+	'workflows.reauth.environment': '{name} 的环境变量',
+	'workflows.reauth.readingEnvironment': '正在读取环境变量...',
+	'workflows.reauth.noEnvironment': '{name} 没有设置环境变量。',
+	'workflows.reauth.followUp': '然后输入 {command}',
+	'workflows.reauth.credentialSet': '{name} 已设置',
+	'workflows.reauth.credentialUnset': '{name} 未设置',
+
 	'workflows.newShell.terminalEmpty': '没有打开的终端',
 	'workflows.newShell.terminalStartFailed': '终端没有启动：{reason}',
 	'workflows.shell.terminalStartFailed': '终端启动失败',
@@ -1556,7 +1592,7 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.projects.start': '选一个项目开始',
 	'workflows.projects.description': '你在 Claude Code 和 Codex 里的对话都会在这里，不用迁移。',
 	'workflows.projects.recent': '最近的项目',
-	'workflows.projects.ready': '{tool} 已就绪',
+	'workflows.projects.installed': '{tool} 已安装',
 	'workflows.projects.notInstalled': '{tool} 未安装',
 	'workflows.projects.install': '请先安装 Claude Code 或 Codex，再打开项目。',
 	'workflows.effort.low': '低',

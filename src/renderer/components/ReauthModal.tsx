@@ -25,6 +25,7 @@
  * `LoginTerminal`, shared with the GitHub CLI login behind Send Feedback.
  */
 
+import { useI18n } from '../i18n';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, KeyRound, Terminal as TerminalIcon, Users } from 'lucide-react';
 import { Modal } from './ui/Modal';
@@ -78,6 +79,7 @@ export interface ReauthModalProps {
 }
 
 export function ReauthModal({ theme, outage, session, onClose }: ReauthModalProps) {
+	const { t, tRich, locale } = useI18n();
 	const defaultShell = useSettingsStore((s) => s.defaultShell);
 	const shellArgs = useSettingsStore((s) => s.shellArgs);
 	const shellEnvVars = useSettingsStore((s) => s.shellEnvVars);
@@ -262,13 +264,15 @@ export function ReauthModal({ theme, outage, session, onClose }: ReauthModalProp
 		if (!profile) return null;
 		if (profile.credential) {
 			const named = classifyCredentialKind(session.toolType, profileEnv).envVarName;
-			return named ? `${named} set` : null;
+			return named ? t('workflows.reauth.credentialSet', { name: named }) : null;
 		}
 		const config = getProviderProfileConfig(session.toolType);
 		if (!config) return null;
 		const configured = profileEnv[config.envVar];
-		return configured ? `${config.envVar}=${configured}` : `${config.envVar} unset`;
-	}, [profile, session.toolType, profileEnv]);
+		return configured
+			? `${config.envVar}=${configured}`
+			: t('workflows.reauth.credentialUnset', { name: config.envVar });
+	}, [profile, session.toolType, profileEnv, t]);
 
 	/** Shell the login runs in (never WSL locally - see resolveLoginShell). */
 	const loginShell = useMemo(
@@ -308,16 +312,20 @@ export function ReauthModal({ theme, outage, session, onClose }: ReauthModalProp
 	}, [outage.providerKey, onClose]);
 
 	const statusLine = loginBlockedReason
-		? `Fix the credential this agent presents, then ${userInitiated ? 'close' : 'resume'}.`
+		? t(
+				userInitiated
+					? 'workflows.reauth.fixCredentialClose'
+					: 'workflows.reauth.fixCredentialResume'
+			)
 		: status === 'failed'
 			? spawnError
 			: status === 'exited'
 				? userInitiated
-					? 'The login session ended.'
-					: 'The login session ended. Resume to re-run everything that failed.'
+					? t('workflows.reauth.exitedClose')
+					: t('workflows.reauth.exitedResume')
 				: status === 'running'
-					? `Complete the provider login above, then ${userInitiated ? 'close this dialog' : 'resume'}.`
-					: 'Starting the login shell...';
+					? t(userInitiated ? 'workflows.reauth.runningClose' : 'workflows.reauth.runningResume')
+					: t('workflows.reauth.starting');
 
 	const statusColor = loginBlockedReason
 		? theme.colors.warning
@@ -330,9 +338,9 @@ export function ReauthModal({ theme, outage, session, onClose }: ReauthModalProp
 	return (
 		<Modal
 			theme={theme}
-			title={
-				userInitiated ? `Sign in to ${agentName} again.` : 'Please reauthenticate the provider.'
-			}
+			title={t(userInitiated ? 'workflows.reauth.userTitle' : 'workflows.reauth.failureTitle', {
+				tool: !userInitiated && locale === 'en' ? t('workflows.reauth.genericProvider') : agentName,
+			})}
 			priority={MODAL_PRIORITIES.REAUTH}
 			onClose={handleDismiss}
 			width={1100}
@@ -363,7 +371,7 @@ export function ReauthModal({ theme, outage, session, onClose }: ReauthModalProp
 						className="px-4 py-1.5 rounded border hover:bg-white/5 transition-colors text-sm"
 						style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 					>
-						{userInitiated ? 'Cancel' : 'Not Now'}
+						{t(userInitiated ? 'workflows.reauth.cancel' : 'workflows.reauth.notNow')}
 					</button>
 					<button
 						type="button"
@@ -376,32 +384,27 @@ export function ReauthModal({ theme, outage, session, onClose }: ReauthModalProp
 						data-testid="reauth-resume"
 					>
 						{userInitiated
-							? 'Done'
+							? t('workflows.reauth.done')
 							: blockedCount > 1
-								? `Resume ${blockedCount} Agents`
-								: 'Resume Agent'}
+								? t('workflows.reauth.resumeMultiple', {
+										count: locale === 'zh-CN' ? '' : blockedCount,
+									})
+								: t('workflows.reauth.resumeSingle')}
 					</button>
 				</div>
 			}
 		>
 			<div className="flex flex-col gap-3 flex-1 min-h-0 p-4">
-				{userInitiated ? (
-					<p className="text-sm leading-relaxed" style={{ color: theme.colors.textMain }}>
-						Run the <span style={{ color: theme.colors.textDim }}>{agentName}</span> login below.
-						Every agent on this provider shares the credential store, so signing in once covers all
-						of them. Nothing is stopped and no turn is interrupted.
-					</p>
-				) : (
-					<p className="text-sm leading-relaxed" style={{ color: theme.colors.textMain }}>
-						<span style={{ color: theme.colors.textDim }}>{agentName}</span> rejected its stored
-						credentials
-						{outage.fromPipeline ? ', taking Cue pipelines down with it' : ''}.{' '}
-						{blockedCount > 1
-							? `All ${blockedCount} agents on this provider are stopped until you log in again.`
-							: 'This agent is stopped until you log in again.'}{' '}
-						Their queued messages are held, not lost.
-					</p>
-				)}
+				<p className="text-sm leading-relaxed" style={{ color: theme.colors.textMain }}>
+					{tRich(userInitiated ? 'workflows.reauth.userBody' : 'workflows.reauth.failureBody', {
+						tool: <span style={{ color: theme.colors.textDim }}>{agentName}</span>,
+						pipeline: outage.fromPipeline ? t('workflows.reauth.pipelineImpact') : '',
+						scope:
+							blockedCount > 1
+								? t('workflows.reauth.multipleImpact', { count: blockedCount })
+								: t('workflows.reauth.singleImpact'),
+					})}
+				</p>
 
 				{!userInitiated && blockedNames.length > 0 && (
 					<div
@@ -459,7 +462,7 @@ export function ReauthModal({ theme, outage, session, onClose }: ReauthModalProp
 							<ChevronRight className="w-3.5 h-3.5" />
 						)}
 						<span>
-							Environment for {session.name}
+							{t('workflows.reauth.environment', { name: session.name })}
 							{providerEnv === null ? '' : ` (${effectiveEnv.length})`}
 						</span>
 					</button>
@@ -474,13 +477,13 @@ export function ReauthModal({ theme, outage, session, onClose }: ReauthModalProp
 						>
 							{providerEnv === null ? (
 								<p className="text-xs" style={{ color: theme.colors.textDim }}>
-									Reading environment...
+									{t('workflows.reauth.readingEnvironment')}
 								</p>
 							) : (
 								<EnvVarList
 									theme={theme}
 									vars={effectiveEnv}
-									emptyMessage={`No environment variables are set for ${session.name}.`}
+									emptyMessage={t('workflows.reauth.noEnvironment', { name: session.name })}
 									testId="reauth-env"
 								/>
 							)}
@@ -501,7 +504,7 @@ export function ReauthModal({ theme, outage, session, onClose }: ReauthModalProp
 						<span className="truncate">{commandLine}</span>
 						{login?.followUp && (
 							<span className="shrink-0" style={{ color: theme.colors.textDim }}>
-								then type {login.followUp}
+								{t('workflows.reauth.followUp', { command: login.followUp })}
 							</span>
 						)}
 					</div>
@@ -515,12 +518,11 @@ export function ReauthModal({ theme, outage, session, onClose }: ReauthModalProp
 					</p>
 				) : providerEnv === null ? (
 					<p className="text-sm" style={{ color: theme.colors.textDim }}>
-						Reading this agent's environment to work out how it signs in...
+						{t('workflows.reauth.readingLogin')}
 					</p>
 				) : (
 					<p className="text-sm" style={{ color: theme.colors.error }}>
-						{agentName} has no login command Maestro can run. Re-authenticate it from a terminal,
-						then resume.
+						{t('workflows.reauth.noLoginCommand', { tool: agentName })}
 					</p>
 				)}
 

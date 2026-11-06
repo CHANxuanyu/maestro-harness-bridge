@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../stores/settingsStore';
 import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
@@ -47,6 +48,11 @@ const pluginBridge = {
 };
 
 beforeEach(() => {
+	useSettingsStore.setState({
+		settingsLoaded: true,
+		newShell: false,
+		encoreFeatures: { ...useSettingsStore.getState().encoreFeatures, plugins: true },
+	});
 	// Structurally-compatible test double; the real type carries extra management
 	// methods the uiItems slot never calls.
 	window.maestro.plugins = pluginBridge as unknown as typeof window.maestro.plugins;

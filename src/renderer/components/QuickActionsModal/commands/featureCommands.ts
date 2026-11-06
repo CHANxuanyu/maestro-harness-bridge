@@ -156,7 +156,6 @@ export function buildFeatureCommands({
 			}),
 			action: () => {
 				const t = getT();
-				const newShell = selectNewShellEnabled(useSettingsStore.getState());
 				const newState = !audioFeedbackEnabled;
 				setAudioFeedbackEnabled(newState);
 				flash(
@@ -180,7 +179,6 @@ export function buildFeatureCommands({
 			}),
 			action: () => {
 				const t = getT();
-				const newShell = selectNewShellEnabled(useSettingsStore.getState());
 				const newState = !idleNotificationEnabled;
 				setIdleNotificationEnabled(newState);
 				flash(
@@ -204,7 +202,6 @@ export function buildFeatureCommands({
 			}),
 			action: () => {
 				const t = getT();
-				const newShell = selectNewShellEnabled(useSettingsStore.getState());
 				const newState = !showStarredSessionsSection;
 				setShowStarredSessionsSection(newState);
 				flash(

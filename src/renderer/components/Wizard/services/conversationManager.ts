@@ -508,7 +508,7 @@ class ConversationManager {
 						// Agent finished - cleanupListeners() clears the inactivity timeout
 						this.cleanupListeners();
 
-						if (code === 0 && !agentError) {
+						if (code === 0 && (this.session.outputBuffer.trim() || !agentError)) {
 							const parsedResponse = this.parseAgentOutput();
 							wizardDebugLogger.log('data', 'Parsed agent response', {
 								parseSuccess: parsedResponse.parseSuccess,

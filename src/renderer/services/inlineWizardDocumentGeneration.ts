@@ -1141,7 +1141,8 @@ export async function generateInlineDocuments(
 							logger.info('[InlineWizardDocGen] Agent exited with code:', undefined, code);
 
 							const detectedError =
-								agentError ?? (code !== 0 ? detectWizardError(outputBuffer, agentType) : null);
+								(code === 0 && outputBuffer.trim() ? null : agentError) ??
+								(code !== 0 ? detectWizardError(outputBuffer, agentType) : null);
 							if (code === 0 && !detectedError) {
 								resolve({
 									success: true,

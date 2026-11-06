@@ -22,8 +22,15 @@
 import React from 'react';
 import { render as rtlRender, screen, act, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { openProviderReauth } from '../../../renderer/services/providerReauth';
+import { useModalStore } from '../../../renderer/stores/modalStore';
+import * as retryStore from '../../../renderer/stores/retryStore';
 import { ReauthModal } from '../../../renderer/components/ReauthModal';
-import type { AuthOutage } from '../../../renderer/stores/authOutageStore';
+import {
+	reportAuthFailure,
+	useAuthOutageStore,
+	type AuthOutage,
+} from '../../../renderer/stores/authOutageStore';
 import { providerAuthKey } from '../../../shared/providerAuthIdentity';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
@@ -106,7 +113,8 @@ beforeEach(() => {
 	mockGetCustomEnvVars.mockResolvedValue({});
 	platformState.current = 'darwin';
 	// Each test owns its own global layer; the store persists between them.
-	useSettingsStore.setState({ shellEnvVars: {} } as never);
+	useSettingsStore.setState({ shellEnvVars: {}, uiLanguage: 'en' });
+	useAuthOutageStore.setState({ outages: {} });
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const maestro = (window as any).maestro;
@@ -943,4 +951,227 @@ describe('ReauthModal on Windows', () => {
 
 		expect(mockWrite).toHaveBeenCalledWith(expect.any(String), 'claude auth login\r');
 	});
+});
+
+describe('ReauthModal localized recovery', () => {
+	it('drops the outage on Not Now, so the next failure prompts again', async () => {
+		const session = createMockSession({ id: 'sess-1', toolType: 'claude-code' });
+		const outage = createOutage({ blocked: [{ sessionId: session.id, tabIds: ['failed-tab'] }] });
+		useAuthOutageStore.setState({ outages: { [outage.providerKey]: outage } });
+		const onClose = vi.fn();
+		render(<ReauthModal theme={mockTheme} outage={outage} session={session} onClose={onClose} />);
+		await flushSpawn();
+		fireEvent.click(screen.getByRole('button', { name: 'Not Now' }));
+		expect(onClose).toHaveBeenCalledOnce();
+		expect(useAuthOutageStore.getState().outages[outage.providerKey]).toBeUndefined();
+		act(() => useSessionStore.setState({ sessions: [session] }));
+		expect(reportAuthFailure({ sessionId: session.id, message: 'rejected' }).opened).toBe(true);
+	});
+
+	it('replays the failed turn when sign-in is reopened from its tab', async () => {
+		const failed = createMockSession({ id: 'sess-1', toolType: 'claude-code' });
+		const session = {
+			...failed,
+			aiTabs: [
+				{
+					...failed.aiTabs[0],
+					id: 'failed-tab',
+					agentError: {
+						type: 'auth_expired' as const,
+						message: 'rejected',
+						recoverable: true,
+						agentId: 'claude-code',
+						timestamp: 0,
+					},
+				},
+			],
+		};
+		act(() => useSessionStore.setState({ sessions: [session] }));
+		openProviderReauth(session.id, 'failed-tab');
+		const key = useModalStore.getState().getData('reauth')!.providerKey;
+		const outage = useAuthOutageStore.getState().outages[key];
+		expect(outage).toMatchObject({
+			initiatedBy: 'failure',
+			blocked: [{ sessionId: session.id, tabIds: ['failed-tab'] }],
+		});
+		render(<ReauthModal theme={mockTheme} outage={outage} session={session} onClose={vi.fn()} />);
+		await flushSpawn();
+		Object.assign(window.maestro, {
+			agentError: { clearError: vi.fn().mockResolvedValue(undefined) },
+		});
+		const replay = vi.spyOn(retryStore, 'replayAfterAuth').mockImplementation(() => {});
+		try {
+			fireEvent.click(screen.getByTestId('reauth-resume'));
+			expect(replay).toHaveBeenCalledWith(session.id, ['failed-tab']);
+			expect(useAuthOutageStore.getState().outages[key]).toBeUndefined();
+		} finally {
+			replay.mockRestore();
+		}
+	});
+
+	it.each([false, true])(
+		'renders Chinese login instructions and terminal states, user initiated %s',
+		async (userInitiated) => {
+			useSettingsStore.setState({ uiLanguage: 'zh-CN' });
+			const session = createMockSession({
+				id: 'sess-1',
+				name: '测试工作',
+				toolType: 'claude-code',
+			});
+			const outage = createOutage({ initiatedBy: userInitiated ? 'user' : 'failure' });
+			mockSpawnTerminalTab.mockReturnValue(new Promise(() => {}));
+			render(<ReauthModal theme={mockTheme} outage={outage} session={session} onClose={vi.fn()} />);
+			expect(screen.getByText('正在读取登录方式...')).toBeInTheDocument();
+			await flushSpawn();
+			expect(
+				screen.getByText(userInitiated ? '重新登录 Claude Code' : 'Claude Code 需要重新登录')
+			).toBeInTheDocument();
+			expect(
+				screen.getByText(
+					(_, element) =>
+						element?.tagName === 'P' &&
+						element.textContent ===
+							(userInitiated
+								? '在下面完成 Claude Code 的登录。同一账户下的工作都会生效，不会打断正在进行的内容。'
+								: 'Claude Code 不接受当前保存的登录凭据。当前工作已暂停，重新登录后恢复。排队的消息都还在。')
+				)
+			).toBeInTheDocument();
+			expect(screen.getByText('正在打开登录终端...')).toBeInTheDocument();
+			expect(screen.getByRole('button', { name: '稍后再说' })).toBeInTheDocument();
+			expect(screen.getByTestId('reauth-resume')).toHaveTextContent(
+				userInitiated ? '关闭' : '恢复'
+			);
+		}
+	);
+
+	it.each([false, true])(
+		'localizes running and exited status, manual %s',
+		async (userInitiated) => {
+			useSettingsStore.setState({ uiLanguage: 'zh-CN' });
+			const session = createMockSession({ id: 'sess-1', toolType: 'claude-code' });
+			render(
+				<ReauthModal
+					theme={mockTheme}
+					outage={createOutage({ initiatedBy: userInitiated ? 'user' : 'failure' })}
+					session={session}
+					onClose={vi.fn()}
+				/>
+			);
+			await flushSpawn();
+			expect(
+				screen.getByText(
+					userInitiated ? '在上面完成登录后，关闭窗口。' : '在上面完成登录后，点恢复。'
+				)
+			).toBeInTheDocument();
+			act(() => exitHandler!(mockSpawnTerminalTab.mock.calls[0][0].sessionId));
+			expect(
+				screen.getByText(
+					userInitiated ? '登录已结束。' : '登录已结束。点恢复，重新运行失败的内容。'
+				)
+			).toBeInTheDocument();
+		}
+	);
+
+	it.each([1, 2])(
+		'joins Chinese Cue and affected work copy without spaces, count %s',
+		async (count) => {
+			useSettingsStore.setState({ uiLanguage: 'zh-CN' });
+			const session = createMockSession({ id: 'sess-1', toolType: 'claude-code' });
+			const outage = createOutage({
+				fromPipeline: true,
+				blocked: Array.from({ length: count }, (_, i) => ({
+					sessionId: `sess-${i + 1}`,
+					tabIds: [],
+				})),
+			});
+			render(<ReauthModal theme={mockTheme} outage={outage} session={session} onClose={vi.fn()} />);
+			await flushSpawn();
+			const scope =
+				count === 1
+					? '当前工作已暂停，重新登录后恢复。'
+					: '这个账户下共 2 处工作已暂停，重新登录后恢复。';
+			expect(
+				screen.getByText(
+					(_, element) =>
+						element?.tagName === 'P' &&
+						element.textContent ===
+							`Claude Code 不接受当前保存的登录凭据。Cue 流程也受影响。${scope}排队的消息都还在。`
+				)
+			).toBeInTheDocument();
+			expect(screen.getByTestId('reauth-resume')).toHaveTextContent('恢复');
+		}
+	);
+
+	it.each([false, true])('localizes credential repair status, manual %s', async (userInitiated) => {
+		useSettingsStore.setState({ uiLanguage: 'zh-CN' });
+		const session = createMockSession({
+			id: 'sess-1',
+			toolType: 'claude-code',
+			customEnvVars: { ANTHROPIC_API_KEY: 'test-placeholder' },
+		});
+		render(
+			<ReauthModal
+				theme={mockTheme}
+				outage={createOutage({ initiatedBy: userInitiated ? 'user' : 'failure' })}
+				session={session}
+				onClose={vi.fn()}
+			/>
+		);
+		await flushSpawn();
+		expect(
+			screen.getByText(
+				userInitiated ? '处理好当前使用的凭据后，关闭窗口。' : '处理好当前使用的凭据后，点恢复。'
+			)
+		).toBeInTheDocument();
+		expect(screen.getByText('ANTHROPIC_API_KEY 已设置')).toBeInTheDocument();
+		expect(mockSpawnTerminalTab).not.toHaveBeenCalled();
+	});
+
+	it('translates environment disclosure and providers without a login command', async () => {
+		useSettingsStore.setState({ uiLanguage: 'zh-CN' });
+		const session = createMockSession({ id: 'sess-1', name: '测试工作', toolType: 'omp' });
+		render(
+			<ReauthModal
+				theme={mockTheme}
+				outage={createOutage({ toolType: 'omp' })}
+				session={session}
+				onClose={vi.fn()}
+			/>
+		);
+		fireEvent.click(screen.getByTestId('reauth-env-toggle'));
+		expect(screen.getByText('正在读取环境变量...')).toBeInTheDocument();
+		await flushSpawn();
+		expect(screen.getByTestId('reauth-env-toggle')).toHaveTextContent('测试工作 的环境变量 (0)');
+		expect(screen.getByText('测试工作 没有设置环境变量。')).toBeInTheDocument();
+		expect(
+			screen.getByText(/没有可以自动运行的登录命令。请在终端里登录，然后恢复。/)
+		).toBeInTheDocument();
+	});
+
+	it('localizes interactive follow-up commands without translating the command', async () => {
+		useSettingsStore.setState({ uiLanguage: 'zh-CN' });
+		const session = createMockSession({ id: 'sess-1', toolType: 'gemini-cli' });
+		render(
+			<ReauthModal
+				theme={mockTheme}
+				outage={createOutage({ toolType: 'gemini-cli' })}
+				session={session}
+				onClose={vi.fn()}
+			/>
+		);
+		await flushSpawn();
+		expect(screen.getByText('然后输入 /auth')).toBeInTheDocument();
+	});
+});
+
+it('switches login copy live without restarting the terminal', async () => {
+	const session = createMockSession({ id: 'sess-1', toolType: 'claude-code' });
+	render(
+		<ReauthModal theme={mockTheme} outage={createOutage()} session={session} onClose={vi.fn()} />
+	);
+	await flushSpawn();
+	expect(screen.getByText('Please reauthenticate the provider.')).toBeInTheDocument();
+	act(() => useSettingsStore.setState({ uiLanguage: 'zh-CN' }));
+	expect(screen.getByText('Claude Code 需要重新登录')).toBeInTheDocument();
+	expect(mockSpawnTerminalTab).toHaveBeenCalledOnce();
 });

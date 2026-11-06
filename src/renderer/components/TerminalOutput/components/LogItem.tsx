@@ -26,8 +26,10 @@ import {
 	formatElapsedTickerCompact,
 	formatTurnDuration,
 } from '../../../../shared/duration';
-import { getAgentDisplayName } from '../../../../shared/agentMetadata';
-import { DEEPSEEK_PRESET } from '../../../../shared/agentPresets';
+import { useSessionStore } from '../../../stores/sessionStore';
+import { openProviderReauth } from '../../../services/providerReauth';
+import { getAgentDisplayName, getAgentLoginCommand } from '../../../../shared/agentMetadata';
+import { DEEPSEEK_PRESET, sessionProviderId } from '../../../../shared/agentPresets';
 import { MessageActions } from './MessageActions';
 import { MessageInfoPanel, MessageMetaLine, type MessageInfoField } from './MessageMeta';
 import { ToolStatusLabel } from './ToolBadge';
@@ -138,6 +140,24 @@ export const LogItem = memo(
 	}: LogItemProps) => {
 		const t = useT();
 		const newShell = useSettingsStore(selectNewShellEnabled);
+		const signInRequired =
+			newShell && log.source === 'error' && log.agentError?.type === 'auth_expired';
+		const authSession = useSessionStore((state) =>
+			signInRequired ? state.sessions.find((session) => session.id === sessionId) : undefined
+		);
+		// Only a failure still standing on this tab can be fixed from here. An older
+		// card stays in the transcript as history, with nothing left to sign in for.
+		const offerSignIn =
+			!!authSession &&
+			!!getAgentLoginCommand(authSession.toolType, authSession.customPath) &&
+			authSession.aiTabs.some(
+				(tab) => tab.id === codexFollowupTabId && tab.agentError?.type === 'auth_expired'
+			);
+		const remoteAuthError = !!(
+			sshRemoteId ||
+			authSession?.sshRemoteId ||
+			authSession?.sessionSshRemoteConfig?.enabled
+		);
 		const locale = useAppLocale();
 		const formatRelative = useFormatRelativeTime();
 		// Ref for the log item container - used for scroll-into-view on expand
@@ -1222,16 +1242,26 @@ export const LogItem = memo(
 								<span className="text-sm font-medium" style={{ color: theme.colors.error }}>
 									{newShell
 										? t(
-												log.agentError && isLimitError(log.agentError)
-													? 'workflows.shell.quotaExhausted'
-													: 'workflows.shell.errorTitle'
+												signInRequired
+													? 'workflows.shell.signInRequired'
+													: log.agentError && isLimitError(log.agentError)
+														? 'workflows.shell.quotaExhausted'
+														: 'workflows.shell.errorTitle'
 											)
 										: 'Error'}
 								</span>
 							</div>
 							<div className="text-sm" style={{ color: theme.colors.textMain }}>
 								<MarkdownRenderer
-									content={log.text}
+									content={
+										signInRequired && !remoteAuthError
+											? t('workflows.shell.signInRequiredBody', {
+													tool: getAgentDisplayName(
+														authSession ? sessionProviderId(authSession) : log.agentError!.agentId
+													),
+												})
+											: log.text
+									}
 									theme={theme}
 									onCopy={copyToClipboard}
 									fileTree={fileTree}
@@ -1243,8 +1273,23 @@ export const LogItem = memo(
 									chatMath
 								/>
 							</div>
-							{((!!log.agentError?.parsedJson && onShowErrorDetails) || offerHandoff) && (
+							{((!!log.agentError?.parsedJson && onShowErrorDetails) ||
+								offerHandoff ||
+								offerSignIn) && (
 								<div className="flex flex-wrap items-center gap-2">
+									{offerSignIn && (
+										<button
+											onClick={() => openProviderReauth(sessionId!, codexFollowupTabId)}
+											className="flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity"
+											style={{
+												backgroundColor: theme.colors.accent,
+												borderColor: theme.colors.accent,
+												color: theme.colors.accentForeground,
+											}}
+										>
+											{t('workflows.shell.signInAgain')}
+										</button>
+									)}
 									{!!log.agentError?.parsedJson && onShowErrorDetails && (
 										<button
 											onClick={() => onShowErrorDetails(log.agentError!)}
@@ -1268,18 +1313,22 @@ export const LogItem = memo(
 										</button>
 									)}
 									{/* A limit or a lost login leaves the user waiting on this
-									    provider. The error above stays as it is; this only offers
-									    a way to move the conversation on as a draft. */}
+									    provider. Offer a way to move the conversation on as a draft. */}
 									{offerHandoff && (
 										<button
 											onClick={() => requestAiHandoff(sessionId!, codexFollowupTabId!)}
 											className="flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity"
 											style={{
-												backgroundColor: newShell
-													? theme.colors.accent
-													: theme.colors.accent + '15',
+												backgroundColor: offerSignIn
+													? 'transparent'
+													: newShell
+														? theme.colors.accent
+														: theme.colors.accent + '15',
 												borderColor: newShell ? theme.colors.accent : theme.colors.accent + '40',
-												color: newShell ? theme.colors.accentForeground : theme.colors.accent,
+												color:
+													newShell && !offerSignIn
+														? theme.colors.accentForeground
+														: theme.colors.accent,
 											}}
 										>
 											<ArrowRightLeft className="w-3 h-3" />

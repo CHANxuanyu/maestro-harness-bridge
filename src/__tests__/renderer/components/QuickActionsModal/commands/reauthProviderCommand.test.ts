@@ -10,7 +10,10 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { buildSessionManagementCommands } from '../../../../../renderer/components/QuickActionsModal/commands/sessionCommands';
-import { useAuthOutageStore } from '../../../../../renderer/stores/authOutageStore';
+import {
+	useAuthOutageStore,
+	reportAuthFailure,
+} from '../../../../../renderer/stores/authOutageStore';
 import { useModalStore } from '../../../../../renderer/stores/modalStore';
 import { useSessionStore } from '../../../../../renderer/stores/sessionStore';
 import { createMockSession } from '../../../../helpers/mockSession';
@@ -97,4 +100,15 @@ describe('Re-authenticate Provider command', () => {
 		expect(providerKey).not.toBe('claude-code');
 		expect(useAuthOutageStore.getState().outages[providerKey!].sshRemoteId).toBe('remote-1');
 	});
+});
+
+it('reopens an existing failure without replacing its replay roster', async () => {
+	const session = createMockSession({ id: 's1', toolType: 'claude-code' });
+	useSessionStore.setState({ sessions: [session] });
+	reportAuthFailure({ sessionId: session.id, tabId: 'failed-tab', message: 'Login expired' });
+	const outage = useAuthOutageStore.getState().outages['claude-code'];
+	await find(build(session))!.action();
+	expect(useModalStore.getState().getData('reauth')).toEqual({ providerKey: 'claude-code' });
+	expect(useAuthOutageStore.getState().outages['claude-code']).toBe(outage);
+	expect(outage.blocked).toEqual([{ sessionId: 's1', tabIds: ['failed-tab'] }]);
 });

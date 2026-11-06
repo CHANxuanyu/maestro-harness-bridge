@@ -996,7 +996,7 @@ class PhaseGenerator {
 					});
 
 					const detectedError =
-						agentError ??
+						(code === 0 && this.outputBuffer.trim() ? null : agentError) ??
 						(code !== 0 ? detectWizardError(this.outputBuffer, config.agentType) : null);
 					if (code === 0 && !detectedError) {
 						// Try to extract result from stream-json format

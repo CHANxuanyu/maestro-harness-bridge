@@ -163,17 +163,43 @@ describe.each(surfaces)('$name structured process errors', ({ name, start }) => 
 		expect(result.error).toContain('claude auth login');
 	});
 
-	it('uses the structured type even when the message does not match a pattern and exit is zero', async () => {
+	it.each(['', '  \n\t'])(
+		'uses structured errors on exit zero without a usable answer: %j',
+		async (output) => {
+			const pending = start();
+			await vi.waitFor(() => expect(window.maestro.process.spawn).toHaveBeenCalledOnce());
+			const sessionId = vi.mocked(window.maestro.process.spawn).mock.calls[0][0].sessionId;
+			onData!(sessionId, output);
+			onAgentError!(sessionId, { ...authError, message: 'Provider refusal A17' });
+			onExit!(sessionId, 0);
+			const result = await pending;
+			expect(result.error).toContain('Authentication Required');
+			expect(result.error).toContain('Provider refusal A17');
+			expect(result.error).toContain('claude auth login');
+		}
+	);
+
+	it.each([0, 1])('prioritizes usable output only on exit zero, exit %s', async (code) => {
 		const pending = start();
 		await vi.waitFor(() => expect(window.maestro.process.spawn).toHaveBeenCalledOnce());
 		const sessionId = vi.mocked(window.maestro.process.spawn).mock.calls[0][0].sessionId;
-		onData!(sessionId, '{"confidence":90,"ready":true,"message":"Earlier response"}');
-		onAgentError!(sessionId, { ...authError, message: 'Provider refusal A17' });
-		onExit!(sessionId, 0);
+		const output =
+			name === 'phaseGenerator' || name === 'inlineWizardDocumentGeneration'
+				? '---DOCUMENT: Phase-01-Setup.md---\n# Setup\n- [ ] Create the project\n---END DOCUMENT---'
+				: '{"confidence":90,"ready":true,"message":"Recovered answer"}';
+		onAgentError!(sessionId, { ...authError, message: 'Transient retry warning' });
+		onData!(sessionId, output);
+		onExit!(sessionId, code);
 		const result = await pending;
-		expect(result.error).toContain('Authentication Required');
-		expect(result.error).toContain('Provider refusal A17');
-		expect(result.error).toContain('claude auth login');
+		if (code === 0) {
+			expect(result.error).toBeUndefined();
+			if ('success' in result) expect(result.success).toBe(true);
+			if ('failed' in result) expect(result.failed).toBe(false);
+		} else {
+			expect(result.error).toContain('Authentication Required');
+			expect(result.error).toContain('Transient retry warning');
+		}
+		expect(errorCleanup).toHaveBeenCalledOnce();
 	});
 
 	it('removes the error listener when spawning fails', async () => {

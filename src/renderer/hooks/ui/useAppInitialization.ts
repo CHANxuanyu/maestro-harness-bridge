@@ -71,6 +71,7 @@ export interface AppInitializationReturn {
 export function useAppInitialization(): AppInitializationReturn {
 	// --- Store selectors ---
 	const settingsLoaded = useSettingsStore((s) => s.settingsLoaded);
+	const newShell = useSettingsStore((s) => s.newShell);
 	const sessionsLoaded = useSessionStore((s) => s.sessionsLoaded);
 	const initialFileTreeReady = useSessionStore((s) => s.initialFileTreeReady);
 	const suppressWindowsWarning = useSettingsStore((s) => s.suppressWindowsWarning);
@@ -183,22 +184,23 @@ export function useAppInitialization(): AppInitializationReturn {
 	// Gated on sessionsLoaded because "does this user already have agents" is
 	// what tells a new user from a returning one, and on isMainWindow so a
 	// second window does not ask the same questions again.
-	const onboardingSeriesStartedRef = useRef(false);
+	const onboardingSeriesStartedRef = useRef<boolean | null>(null);
 	useEffect(() => {
 		exposeOnboardingSeriesDebug();
 
 		if (!settingsLoaded || !sessionsLoaded) return;
 		if (!isMainWindow) return;
-		if (onboardingSeriesStartedRef.current) return;
-		onboardingSeriesStartedRef.current = true;
+		// Reconsider skipped steps when the user switches shells, not when seen flags change.
+		if (onboardingSeriesStartedRef.current === newShell) return;
+		onboardingSeriesStartedRef.current = newShell;
 
 		startOnboardingSeries({
 			audience: hasAnySession ? 'returning' : 'new',
 			seen: {
-				typography: typographyPromptSeen,
-				theme: themePromptSeen,
+				typography: newShell || typographyPromptSeen,
+				theme: newShell || themePromptSeen,
 				updates: updatesPromptSeen,
-				agentPowers: agentPowersPromptSeen,
+				agentPowers: newShell || agentPowersPromptSeen,
 			},
 			activeThemeId,
 		});
@@ -207,6 +209,7 @@ export function useAppInitialization(): AppInitializationReturn {
 		sessionsLoaded,
 		isMainWindow,
 		hasAnySession,
+		newShell,
 		typographyPromptSeen,
 		themePromptSeen,
 		updatesPromptSeen,

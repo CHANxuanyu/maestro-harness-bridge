@@ -2,8 +2,7 @@ import { getT } from '../../../i18n';
 import { agentStateLabel } from '../../../utils/workflowLabels';
 import type React from 'react';
 import { getAgentDisplayName, getAgentLoginCommand } from '../../../../shared/agentMetadata';
-import { startManualReauth } from '../../../stores/authOutageStore';
-import { getModalActions } from '../../../stores/modalStore';
+import { openProviderReauth } from '../../../services/providerReauth';
 import type { Session } from '../../../types';
 import { sessionJumpShortcut } from '../../../utils/sessionJumpSlots';
 import type { QuickAction } from '../types';
@@ -164,9 +163,8 @@ export function buildSessionManagementCommands({
 				p1: activeSession.name,
 			}),
 			action: () => {
-				const { providerKey } = startManualReauth(activeSession.id);
+				openProviderReauth(activeSession.id);
 				setQuickActionOpen(false);
-				if (providerKey) getModalActions().openReauthModal({ providerKey });
 			},
 		});
 	}

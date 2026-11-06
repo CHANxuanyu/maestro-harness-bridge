@@ -1,3 +1,6 @@
+import { useAuthOutageStore, reportAuthFailure } from '../../../../renderer/stores/authOutageStore';
+import { useSessionStore } from '../../../../renderer/stores/sessionStore';
+import { useModalStore } from '../../../../renderer/stores/modalStore';
 import { useMessageGistStore } from '../../../../renderer/stores/messageGistStore';
 /**
  * The conversation feed (sidebarNavigationMode 'conversations'): what the user
@@ -903,4 +906,153 @@ describe('new shell transcript cleanup', () => {
 			expect(screen.getByRole('button', { name: 'View details' })).toHaveClass('underline');
 		} else expect(screen.getAllByText('Error')).toHaveLength(2);
 	});
+});
+
+describe('new shell login failure card', () => {
+	const errorLog: LogEntry = {
+		id: 'auth',
+		timestamp: at(1),
+		source: 'error',
+		text: 'Raw provider rejection',
+		agentError: {
+			type: 'auth_expired',
+			message: 'Raw provider rejection',
+			agentId: 'codex',
+			recoverable: true,
+			timestamp: at(1),
+		},
+	};
+	beforeEach(() => {
+		useAuthOutageStore.setState({ outages: {} });
+		useModalStore.getState().closeModal('reauth');
+	});
+
+	const failedSession = (logs: LogEntry[]) => {
+		const session = sessionWith(logs);
+		return {
+			...session,
+			aiTabs: session.aiTabs.map((tab) => ({ ...tab, agentError: errorLog.agentError })),
+		};
+	};
+
+	it.each(['en', 'zh-CN'] as const)(
+		'offers sign in as primary and preserves an existing outage in %s',
+		(uiLanguage) => {
+			useSettingsStore.setState({ newShell: true, uiLanguage });
+			const logs = [user('u1', 0, 'Please help'), errorLog];
+			const session = failedSession(logs);
+			useSessionStore.setState({ sessions: [session] });
+			reportAuthFailure({ sessionId: session.id, tabId: 'tab-1', message: errorLog.text });
+			const outage = useAuthOutageStore.getState().outages.codex;
+			renderTranscript(logs, { session });
+			expect(
+				screen.getByText(uiLanguage === 'en' ? 'Sign in again' : '需要重新登录')
+			).toBeInTheDocument();
+			expect(
+				screen.getByText(
+					uiLanguage === 'en'
+						? 'Codex rejected the saved credentials. Sign in again to pick this conversation back up.'
+						: 'Codex 不接受当前的登录凭据。重新登录后，这个对话可以接着做。'
+				)
+			).toBeInTheDocument();
+			expect(screen.queryByText(errorLog.text)).not.toBeInTheDocument();
+			const signIn = screen.getByRole('button', {
+				name: uiLanguage === 'en' ? 'Sign in' : '重新登录',
+			});
+			expect(signIn).toHaveStyle({
+				backgroundColor: mockTheme.colors.accent,
+				color: mockTheme.colors.accentForeground,
+			});
+			const handoff = screen.getByRole('button', {
+				name: uiLanguage === 'en' ? 'Continue with another AI' : '换个 AI 继续',
+			});
+			expect(handoff.style.backgroundColor).toBe('transparent');
+			expect(handoff.style.borderColor).toBe(handoff.style.color);
+			expect(handoff).toHaveStyle({ color: mockTheme.colors.accent });
+			fireEvent.click(signIn);
+			expect(useModalStore.getState().getData('reauth')).toEqual({ providerKey: 'codex' });
+			expect(useAuthOutageStore.getState().outages.codex).toBe(outage);
+			expect(outage.blocked).toEqual([{ sessionId: session.id, tabIds: ['tab-1'] }]);
+		}
+	);
+
+	it('re-raises the failed turn after the prompt was dismissed', () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = failedSession([errorLog]);
+		useSessionStore.setState({ sessions: [session] });
+		renderTranscript([errorLog], { session });
+		fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+		expect(useModalStore.getState().getData('reauth')).toEqual({ providerKey: 'codex' });
+		expect(useAuthOutageStore.getState().outages.codex).toMatchObject({
+			initiatedBy: 'failure',
+			blocked: [{ sessionId: session.id, tabIds: ['tab-1'] }],
+		});
+	});
+
+	it('leaves an old card as history once the tab has moved on', () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = sessionWith([errorLog]);
+		useSessionStore.setState({ sessions: [session] });
+		renderTranscript([errorLog], { session });
+		expect(screen.getByText('Sign in again')).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+	});
+
+	it('names the DeepSeek preset rather than the Claude binary it runs on', () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = {
+			...failedSession([errorLog]),
+			toolType: 'claude-code' as const,
+			customEnvVars: { ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic' },
+		};
+		useSessionStore.setState({ sessions: [session] });
+		renderTranscript([errorLog], { session });
+		expect(screen.getByText(/^DeepSeek rejected the saved credentials/)).toBeInTheDocument();
+	});
+
+	it.each(['sshRemoteId', 'sessionSshRemoteConfig'] as const)(
+		'keeps remote instructions through %s',
+		(field) => {
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+			const remoteError = { ...errorLog, text: 'Sign in on build-host: codex login --device-auth' };
+			const session = {
+				...failedSession([remoteError]),
+				[field]: field === 'sshRemoteId' ? 'build-host' : { enabled: true, remoteId: 'build-host' },
+			};
+			useSessionStore.setState({ sessions: [session] });
+			renderTranscript([remoteError], { session });
+			expect(screen.getByText(remoteError.text)).toBeInTheDocument();
+			fireEvent.click(screen.getByRole('button', { name: '重新登录' }));
+			const key = useModalStore.getState().getData('reauth')!.providerKey;
+			expect(useAuthOutageStore.getState().outages[key].sshRemoteId).toBe('build-host');
+		}
+	);
+
+	it('does not offer login for a provider without a command', () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = { ...failedSession([errorLog]), toolType: 'omp' as const };
+		useSessionStore.setState({ sessions: [session] });
+		renderTranscript([errorLog], { session });
+		expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+	});
+
+	it.each([false, true])(
+		'preserves other error buttons and legacy cards, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const log = newShell
+				? { ...errorLog, agentError: { ...errorLog.agentError!, type: 'rate_limited' as const } }
+				: errorLog;
+			const logs = [user('u1', 0, 'Please help'), log];
+			const session = sessionWith(logs);
+			useSessionStore.setState({ sessions: [session] });
+			renderTranscript(logs, { session });
+			expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+			expect(screen.getByText(log.text)).toBeInTheDocument();
+			expect(screen.getByText(newShell ? 'Quota exhausted' : 'Error')).toBeInTheDocument();
+			expect(screen.getByRole('button', { name: 'Continue with another AI' })).toHaveStyle({
+				backgroundColor: newShell ? mockTheme.colors.accent : mockTheme.colors.accent + '15',
+			});
+		}
+	);
 });

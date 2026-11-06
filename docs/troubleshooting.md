@@ -101,7 +101,7 @@ Each error modal shows:
 
 ### Expired Provider Credentials
 
-An expired token is handled differently from the errors above, because it takes down every agent AND every Cue pipeline on that provider at once. Instead of the generic error modal, Maestro opens a re-authentication dialog with a terminal embedded in it and runs the provider's own login command for you (`claude /login`, `codex login`, `opencode auth login`, and so on). Finish the login in that terminal and click Done. The agent keeps its view and its transcript.
+An expired token is handled differently from the errors above, because it takes down every agent AND every Cue pipeline on that provider at once. Instead of the generic error modal, Maestro opens a re-authentication dialog with a terminal embedded in it and runs the provider's own login command for you (`claude auth login`, `codex login`, `opencode auth login`, and so on). Finish the login in that terminal and click Done. The agent keeps its view and its transcript.
 
 Two details worth knowing:
 

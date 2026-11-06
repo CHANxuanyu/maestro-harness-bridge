@@ -216,6 +216,7 @@ beforeAll(() => {
 
 function resetStores() {
 	mockSettingsState.settingsLoaded = false;
+	mockSettingsState.newShell = false;
 	mockSettingsState.suppressWindowsWarning = false;
 	mockSettingsState.enableBetaUpdates = false;
 	mockSettingsState.checkForUpdatesOnStartup = false;
@@ -501,6 +502,50 @@ describe('useAppInitialization', () => {
 			expect(mockStartOnboardingSeries).toHaveBeenCalledWith(
 				expect.objectContaining({
 					seen: { typography: true, theme: false, updates: false, agentPowers: false },
+				})
+			);
+		});
+
+		it.each([false, true])(
+			'only asks update preferences in the new shell, updates seen %s',
+			(updatesSeen) => {
+				loaded();
+				mockSettingsState.newShell = true;
+				mockSettingsState.updatesPromptSeen = updatesSeen;
+				const { unmount } = renderHook(() => useAppInitialization());
+				expect(mockStartOnboardingSeries).toHaveBeenLastCalledWith(
+					expect.objectContaining({
+						seen: { typography: true, theme: true, updates: updatesSeen, agentPowers: true },
+					})
+				);
+				expect(mockSettingsSet).not.toHaveBeenCalled();
+				for (const key of ['typographyPromptSeen', 'themePromptSeen', 'agentPowersPromptSeen']) {
+					expect(mockSettingsState[key]).toBe(false);
+				}
+				unmount();
+				mockSettingsState.newShell = false;
+				renderHook(() => useAppInitialization());
+				expect(mockStartOnboardingSeries).toHaveBeenLastCalledWith(
+					expect.objectContaining({
+						seen: { typography: false, theme: false, updates: updatesSeen, agentPowers: false },
+					})
+				);
+			}
+		);
+
+		it('offers skipped steps when switching back to the legacy shell without a restart', () => {
+			loaded();
+			mockSettingsState.newShell = true;
+			const { rerender } = renderHook(() => useAppInitialization());
+			mockSettingsState.updatesPromptSeen = true;
+			rerender();
+			expect(mockStartOnboardingSeries).toHaveBeenCalledOnce();
+			mockSettingsState.newShell = false;
+			rerender();
+			expect(mockStartOnboardingSeries).toHaveBeenCalledTimes(2);
+			expect(mockStartOnboardingSeries).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					seen: { typography: false, theme: false, updates: true, agentPowers: false },
 				})
 			);
 		});

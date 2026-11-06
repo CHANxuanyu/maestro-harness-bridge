@@ -531,7 +531,8 @@ export class FeedbackConversationManager {
 				if (sid !== currentSessionId) return;
 
 				const detectedError =
-					agentError ?? (code !== 0 ? detectWizardError(outputBuffer, currentAgentType) : null);
+					(code === 0 && outputBuffer.trim() ? null : agentError) ??
+					(code !== 0 ? detectWizardError(outputBuffer, currentAgentType) : null);
 				if (code === 0 && !detectedError) {
 					const parsed = extractJsonFromOutput(outputBuffer);
 					const response = parsed ?? DEFAULT_FEEDBACK_RESPONSE;

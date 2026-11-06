@@ -96,7 +96,9 @@ export function ProjectStartView({ theme }: { theme: Theme }) {
 					{['claude-code', 'codex']
 						.map((id) =>
 							t(
-								ready.includes(id) ? 'workflows.projects.ready' : 'workflows.projects.notInstalled',
+								ready.includes(id)
+									? 'workflows.projects.installed'
+									: 'workflows.projects.notInstalled',
 								{ tool: getAgentDisplayName(id) }
 							)
 						)

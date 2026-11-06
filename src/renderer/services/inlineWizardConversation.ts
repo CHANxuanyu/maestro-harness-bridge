@@ -832,7 +832,7 @@ export async function sendWizardMessage(
 						cleanupListeners();
 
 						const detectedError =
-							agentError ??
+							(code === 0 && outputBuffer.trim() ? null : agentError) ??
 							(code !== 0 ? detectWizardError(outputBuffer, session.agentType) : null);
 						if (detectedError) {
 							resolve({

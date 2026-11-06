@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { appendReadOnlyPrompt } from '../../../shared/readOnlyPrompt';
 import {
+	bindDelayedOwnSends,
 	hasLegacyTranscriptEntries,
+	mergeNewerEntries,
+	reconcileTranscriptEntries,
 	transcriptMessagesToLogEntries,
 } from '../../../renderer/utils/transcriptMessages';
 import { withMentionTurnNotes } from '../../../renderer/services/crossAgentMentions';
@@ -12,14 +15,8 @@ import {
 	loadCrossAgentConsultPrompts,
 } from '../../../renderer/services/crossAgentConsultHold';
 
-const consultTemplate = readFileSync(
-	new URL('../../../prompts/cross-agent-consult-pending.md', import.meta.url),
-	'utf8'
-);
-const handoffTemplate = readFileSync(
-	new URL('../../../prompts/cross-agent-handoff-pending.md', import.meta.url),
-	'utf8'
-);
+const consultTemplate = readFileSync('src/prompts/cross-agent-consult-pending.md', 'utf8');
+const handoffTemplate = readFileSync('src/prompts/cross-agent-handoff-pending.md', 'utf8');
 
 describe('read-only turns with mention notes', () => {
 	it.each(['parallel', 'handoff', 'both'] as const)(
@@ -56,10 +53,45 @@ describe('read-only turns with mention notes', () => {
 					expect(message.content).toBe(content);
 					expect(hasLegacyTranscriptEntries([{ ...entry, text: content }])).toBe(true);
 					expect(hasLegacyTranscriptEntries([entry])).toBe(false);
+					const own = {
+						id: 'local-user',
+						source: 'user' as const,
+						text: prompt,
+						timestamp: entry.timestamp - 200,
+					};
+					const upgraded = reconcileTranscriptEntries([entry], [own, { ...entry, text: content }]);
+					const bound = bindDelayedOwnSends([entry], upgraded.logs);
+					expect(mergeNewerEntries([entry], bound.logs)?.logs).toEqual([
+						{ ...own, nativeTranscript: { messageId: entry.id } },
+					]);
 				}
 			} finally {
 				vi.restoreAllMocks();
 			}
 		}
 	);
+
+	it('decodes editable notes through the actual dispatch formatter', async () => {
+		const prompt = 'Keep my exact words.\n';
+		vi.spyOn(window.maestro.prompts, 'get').mockResolvedValue({
+			success: true,
+			content:
+				'自定义协作提示：请与 {{CONSULTED_AGENTS}} 核对。\n<!-- /maestro-internal-note:123 -->',
+		});
+		try {
+			await loadCrossAgentConsultPrompts(true);
+			const content = withMentionTurnNotes(appendReadOnlyPrompt(prompt), {
+				consultTargets: [{ targetSessionId: 'reviewer', targetAgentName: '复核对话' }],
+				handoffTargets: [],
+			});
+			expect(content).toContain('请与 复核对话 核对');
+			expect(
+				transcriptMessagesToLogEntries([
+					{ uuid: 'custom-user', type: 'user', timestamp: '2026-11-06T12:00:00Z', content },
+				])[0].text
+			).toBe(prompt);
+		} finally {
+			vi.restoreAllMocks();
+		}
+	});
 });

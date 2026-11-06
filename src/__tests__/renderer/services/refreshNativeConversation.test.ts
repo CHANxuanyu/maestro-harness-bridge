@@ -232,6 +232,46 @@ describe('refreshNativeConversation', () => {
 		}
 	);
 
+	it('does not treat the first user in a partial window as the first send of the conversation', async () => {
+		const native = transcriptMessagesToLogEntries(DISK.slice(2));
+		const own: LogEntry = {
+			id: 'local-first',
+			source: 'user',
+			timestamp: native[0].timestamp - 10000,
+			text: native[0].text,
+		};
+		const logs = [own, ...native];
+		patchStoredTab({ logs });
+		read.mockResolvedValue({ messages: DISK.slice(2), total: 502, hasMore: true });
+		expect(
+			await refreshNativeConversation({ sessionId: 'maestro-owner', tabId: 'tab-native' })
+		).toEqual({ status: 'unchanged' });
+		expect(storedTab()!.logs).toBe(logs);
+	});
+
+	it('keeps the cache and reports failure when the widening budget cannot reach the old prompt', async () => {
+		const native = transcriptMessagesToLogEntries(DISK);
+		const logs = [
+			{
+				id: 'uncovered-user',
+				timestamp: 1,
+				source: 'user' as const,
+				text: appendReadOnlyPrompt('Old request'),
+			},
+			...native,
+		];
+		patchStoredTab({ logs });
+		read.mockResolvedValue({ messages: DISK, total: 100000, hasMore: true });
+		expect(
+			await refreshNativeConversation({ sessionId: 'maestro-owner', tabId: 'tab-native' })
+		).toMatchObject({ status: 'failed' });
+		expect(read.mock.calls.map((call) => call[3].limit)).toEqual([
+			500, 1000, 2000, 4000, 8000, 16000, 32000,
+		]);
+		expect(storedTab()!.logs).toBe(logs);
+		expect(hasLegacyTranscriptEntries(storedTab()!.logs)).toBe(true);
+	});
+
 	it('appends what was written outside Maestro to a non-empty open tab, and keeps everything local', async () => {
 		const result = await refreshNativeConversation({
 			sessionId: 'maestro-owner',

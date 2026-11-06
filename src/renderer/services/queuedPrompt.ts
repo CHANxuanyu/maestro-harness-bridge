@@ -1,3 +1,4 @@
+import { useOperationStore } from '../stores/operationStore';
 /**
  * queuedPrompt - put a prompt into an agent's execution queue from outside the
  * composer.
@@ -96,7 +97,7 @@ export function enqueuePromptForTab(options: {
 	if (!session) return null;
 
 	const tab = session.aiTabs?.find((t) => t.id === tabId) ?? getActiveTab(session);
-	if (!tab) return null;
+	if (!tab || useOperationStore.getState().tabReplacementLocks[tab.id]) return null;
 
 	const item = buildQueuedMessageItem({ session, tab, text, images });
 	updateSessionWith(sessionId, (s) => ({

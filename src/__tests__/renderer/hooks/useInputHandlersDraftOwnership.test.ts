@@ -89,6 +89,9 @@ import {
 	useInputHandlers,
 	type UseInputHandlersDeps,
 } from '../../../renderer/hooks/input/useInputHandlers';
+import { createMockAITab } from '../../helpers/mockTab';
+import { openHandoffTarget } from '../../../renderer/services/aiHandoff';
+import { useInputSync } from '../../../renderer/hooks/input/useInputSync';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useComposerInputStore } from '../../../renderer/stores/composerInputStore';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
@@ -211,6 +214,75 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('composer draft ownership', () => {
+	it.each([false, true])(
+		'retains a reused handoff draft through actual tab-switch effects, new shell %s',
+		async (newShell) => {
+			const actual = await vi.importActual<
+				typeof import('../../../renderer/hooks/input/useInputSync')
+			>('../../../renderer/hooks/input/useInputSync');
+			const previous = vi.mocked(useInputSync).getMockImplementation()!;
+			vi.mocked(useInputSync).mockImplementation(actual.useInputSync);
+			useSettingsStore.setState({ newShell });
+			const source = baseCreateMockSession({
+				id: 'session-a',
+				cwd: '/project',
+				activeTabId: 'a1',
+				aiTabs: [createMockAITab({ id: 'a1' })],
+			});
+			const target = baseCreateMockSession({
+				id: 'session-b',
+				cwd: '/project',
+				toolType: 'codex',
+				activeTabId: 'b1',
+				aiTabs: [createMockAITab({ id: 'b1', logs: [], inputValue: '', agentSessionId: null })],
+			});
+			useSessionStore.setState({ sessions: [source, target], activeSessionId: target.id });
+			vi.mocked(window.maestro.sessions.setMany).mockResolvedValue(true);
+			const harness = renderHook(() => useInputHandlers(createMockDeps()));
+			try {
+				await act(() =>
+					openHandoffTarget({
+						sourceAgentId: source.id,
+						runnerId: target.id,
+						provider: 'codex',
+						config: { toolType: 'codex' },
+						cwd: '/project',
+						projectPath: '/project',
+						mode: 'handoff',
+						origin: {
+							kind: 'handoff',
+							sourceSessionId: source.id,
+							sourceTabId: 'a1',
+							sourceProvider: 'claude-code',
+							createdAt: 1,
+						},
+						draft: {
+							text: 'retained handoff',
+							estimatedTokens: 4,
+							budgetTokens: 8000,
+							omittedEntries: 0,
+							omittedCharacters: 0,
+						},
+						send: false,
+						background: false,
+					})
+				);
+				expect(useComposerInputStore.getState().aiValue).toBe('retained handoff');
+				act(() => useSessionStore.getState().setActiveSessionId(source.id));
+				expect(useSessionStore.getState().sessions[1].aiTabs[0].inputValue).toBe(
+					'retained handoff'
+				);
+				act(() => useSessionStore.getState().setActiveSessionId(target.id));
+				expect(useComposerInputStore.getState().aiValueTabId).toBe('b1');
+				expect(useComposerInputStore.getState().aiValue).toBe('retained handoff');
+			} finally {
+				harness.unmount();
+				vi.mocked(useInputSync).mockImplementation(previous);
+				useSettingsStore.setState({ newShell: false });
+			}
+		}
+	);
+
 	it('attributes typing to the active tab on an ordinary agent switch', () => {
 		renderHook(() => useInputHandlers(createMockDeps()));
 

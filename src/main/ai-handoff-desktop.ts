@@ -85,6 +85,38 @@ export function createDesktopAiHandoff(deps: {
 				error: 'The target window did not answer the handoff request',
 			};
 			if (!isWebContentsAvailable(win)) return fallback;
+			const sourceWindow = deps.getWindowForSession(request.sourceAgentId);
+			if (request.newConversation?.replaceTabId && sourceWindow?.id !== win.id) {
+				if (!isWebContentsAvailable(sourceWindow)) return fallback;
+				const snapshot = await requestFromRenderer<HandoffReadResult>(
+					sourceWindow,
+					'context:readHandoffSource',
+					{
+						fallback: null,
+						args: [
+							{
+								sourceAgentId: request.sourceAgentId,
+								sourceTabId: request.newConversation.replaceTabId,
+								provider: request.origin.sourceProvider,
+								emptyConversation: true,
+							},
+						],
+						timeoutMs: 30000,
+					}
+				);
+				if (
+					!snapshot ||
+					'success' in snapshot ||
+					!snapshot.emptyConversation ||
+					handoffLocation(snapshot).key !== handoffLocation(request).key
+				)
+					return { ...fallback, error: 'The source conversation could not be read from its owner' };
+				request = {
+					...request,
+					draft: snapshot.draft,
+					newConversation: { ...request.newConversation, source: snapshot.emptyConversation },
+				};
+			}
 			return requestFromRenderer<HandoffResult>(win, 'context:openHandoffTarget', {
 				fallback,
 				args: [request],

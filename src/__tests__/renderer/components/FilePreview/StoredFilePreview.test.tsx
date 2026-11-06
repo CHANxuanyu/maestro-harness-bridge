@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { StoredFilePreview } from '../../../../renderer/components/FilePreview/StoredFilePreview';
 import { useFilePreviewTabHandlers } from '../../../../renderer/hooks/tabs/internal/useFilePreviewTabHandlers';
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { createMockSession, createMockFileTab } from '../../../helpers';
 import { mockTheme } from '../../../helpers/mockTheme';
+import { saveFilePreview } from '../../../../renderer/hooks/mainPanel/useFilePreviewHandlers';
+import { useAppHandlers } from '../../../../renderer/hooks/ui/useAppHandlers';
+import { useCenterFlashStore } from '../../../../renderer/stores/centerFlashStore';
+import { useUIStore } from '../../../../renderer/stores/uiStore';
 
 let preview: any;
 vi.mock('../../../../renderer/components/FilePreview', () => ({
@@ -55,6 +59,77 @@ beforeEach(() => {
 	vi.mocked(window.maestro.fs.writeFile).mockResolvedValue(true);
 });
 describe('stored FilePreview binding', () => {
+	it.each([undefined, 'remote'])(
+		'blocks loading previews and saves on host %s',
+		async (sshRemoteId) => {
+			useSessionStore.getState().updateSession('owner', {
+				filePreviewTabs: [{ ...file, content: '', isLoading: true, sshRemoteId }],
+			});
+			render(<Harness />);
+			expect(screen.getByRole('status')).toHaveTextContent(/loading/i);
+			expect(screen.queryByText('Save fixture')).not.toBeInTheDocument();
+			expect(
+				await saveFilePreview({
+					path: file.path,
+					content: 'must not overwrite',
+					activeSession: session,
+					activeFileTabId: file.id,
+					filePreviewSshRemoteId: sshRemoteId,
+				})
+			).toBe(false);
+			expect(window.maestro.fs.writeFile).not.toHaveBeenCalled();
+		}
+	);
+
+	it.each([undefined, 'remote'])(
+		'refuses a direct save of a loading tab on host %s',
+		async (sshRemoteId) => {
+			useSessionStore
+				.getState()
+				.updateSession('owner', { filePreviewTabs: [{ ...file, content: '', isLoading: true }] });
+			expect(
+				await saveFilePreview({
+					path: file.path,
+					content: 'unsafe',
+					activeSession: session,
+					activeFileTabId: file.id,
+					filePreviewSshRemoteId: sshRemoteId,
+				})
+			).toBe(false);
+			expect(window.maestro.fs.stat).not.toHaveBeenCalled();
+			expect(window.maestro.fs.writeFile).not.toHaveBeenCalled();
+		}
+	);
+
+	it.each([undefined, 'remote'])(
+		'reports failed reads without leaving an editable empty file on host %s',
+		async (sshRemoteId) => {
+			useSettingsStore.setState({ newShell: true });
+			useCenterFlashStore.setState({ active: null });
+			useSessionStore.getState().updateSession('owner', {
+				cwd: '/project',
+				fullPath: '/project',
+				filePreviewTabs: [],
+				sshRemoteId,
+			});
+			vi.mocked(window.maestro.fs.readFile).mockRejectedValue(new Error('fixture read failed'));
+			const { result } = renderHook(() => {
+				const tabs = useFilePreviewTabHandlers();
+				return useAppHandlers({
+					setSessions: useSessionStore.getState().setSessions,
+					setActiveFocus: useUIStore.getState().setActiveFocus,
+					setConfirmModalMessage: vi.fn(),
+					setConfirmModalOnConfirm: vi.fn(),
+					setConfirmModalOpen: vi.fn(),
+					onOpenFileTab: tabs.handleOpenFileTab,
+				});
+			});
+			await act(() => result.current.handleFileClick({ name: 'a.md', type: 'file' }, 'a.md'));
+			expect(useSessionStore.getState().sessions[0].filePreviewTabs).toEqual([]);
+			expect(useCenterFlashStore.getState().active?.message).toContain('fixture read failed');
+			expect(window.maestro.fs.writeFile).not.toHaveBeenCalled();
+		}
+	);
 	it.each([false, true])(
 		'shares line jumps, edits and save in tiled and panel views, panel %s',
 		async (panel) => {

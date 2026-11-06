@@ -6,6 +6,8 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useTabStore } from '../../stores/tabStore';
 import { useFilePreviewHandlers } from '../../hooks/mainPanel/useFilePreviewHandlers';
 import { filePaneAttrs } from '../../utils/paneFocus';
+import { useT } from '../../i18n';
+import { Spinner } from '../ui/Spinner';
 const FilePreview = React.lazy(() =>
 	import('../FilePreview').then((m) => ({ default: m.FilePreview }))
 );
@@ -22,6 +24,7 @@ export function StoredFilePreview({
 	actions: PaneFileActions | null;
 	onBack?: () => void;
 }) {
+	const t = useT();
 	const shortcuts = useSettingsStore((s) => s.shortcuts);
 	// Subscribe to THIS tab via the session store so edit-mode / edit-content / tier /
 	// html-mode changes re-render the pane (the session prop is a snapshot that alone
@@ -69,6 +72,15 @@ export function StoredFilePreview({
 	);
 
 	if (!fileTab || !memoizedFilePreviewFile) return null;
+	if (fileTab.isLoading)
+		return (
+			<div role="status" className="flex flex-1 items-center justify-center gap-3">
+				<span aria-hidden="true">
+					<Spinner size={24} color={theme.colors.accent} />
+				</span>
+				{t('workflows.shell.loading')} {memoizedFilePreviewFile.name}
+			</div>
+		);
 
 	return (
 		// Tagged with the tab id so the pane focus router can land the caret in THIS

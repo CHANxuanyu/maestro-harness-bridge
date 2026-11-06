@@ -79,6 +79,8 @@ export interface HandoffRequest {
 }
 
 export interface HandoffReadRequest {
+	/** Read a draft for a tool change in the source owner. */
+	emptyConversation?: boolean;
 	mode?: HandoffMode;
 	sourceAgentId: string;
 	sourceTabId: string;
@@ -88,6 +90,7 @@ export interface HandoffReadRequest {
 }
 
 export interface HandoffSourceSnapshot {
+	emptyConversation?: { stagedImages?: string[]; commandMode?: 'off' | 'shell' | 'ai' };
 	sourceTitle?: string;
 	cwd: string;
 	sessionSshRemoteConfig?: AgentSshRemoteConfig;
@@ -100,7 +103,11 @@ export interface HandoffSourceSnapshot {
 }
 
 export interface HandoffOpenRequest {
-	newConversation?: { replaceTabId?: string };
+	newConversation?: {
+		replaceTabId?: string;
+		/** Supplied by the source owner across windows. The target must retain the source. */
+		source?: NonNullable<HandoffSourceSnapshot['emptyConversation']>;
+	};
 	cwd: string;
 	sessionSshRemoteConfig?: AgentSshRemoteConfig;
 	mode: HandoffMode;

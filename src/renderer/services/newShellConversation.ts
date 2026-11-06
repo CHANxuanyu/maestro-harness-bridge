@@ -1,3 +1,4 @@
+import { useOperationStore } from '../stores/operationStore';
 import { getT } from '../i18n';
 import { captureException } from '../utils/sentry';
 import { useEffect, useState } from 'react';
@@ -37,6 +38,9 @@ export async function newShellConversation(
 	targetProvider: HandoffProvider,
 	replaceTabId?: string
 ) {
+	const unlock = replaceTabId
+		? useOperationStore.getState().lockTabReplacement(replaceTabId)
+		: undefined;
 	const result = await window.maestro.context
 		.conversation({ action: 'new-conversation', sourceAgentId, targetProvider, replaceTabId })
 		.catch((error) => {
@@ -47,6 +51,7 @@ export async function newShellConversation(
 				error: error instanceof Error ? error.message : String(error),
 			};
 		});
+	unlock?.();
 	if (!result.success)
 		notifyToast({
 			type: 'error',

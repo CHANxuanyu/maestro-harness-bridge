@@ -19,6 +19,7 @@ import { useUIStore } from '../../../renderer/stores/uiStore';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useFileExplorerStore } from '../../../renderer/stores/fileExplorerStore';
 import type { Session } from '../../../renderer/types';
+import { createMockAITab, createMockFileTab } from '../../helpers';
 import { createMockSession as baseCreateMockSession } from '../../helpers/mockSession';
 import type { FileNode } from '../../../renderer/types/fileTree';
 import type { UseFileExplorerEffectsDeps } from '../../../renderer/hooks/git/useFileExplorerEffects';
@@ -87,6 +88,7 @@ beforeEach(() => {
 	});
 	useUIStore.setState({
 		activeFocus: 'main',
+		rightPanelOpen: true,
 		activeRightTab: 'files',
 	});
 	useFileExplorerStore.setState({
@@ -604,6 +606,50 @@ describe('useFileExplorerEffects', () => {
 	// ====================================================================
 
 	describe('keyboard navigation', () => {
+		it.each([
+			['history', 'files', false, true, true],
+			['files', 'changes', false, true, false],
+			['files', 'files', true, true, false],
+			['files', 'files', false, false, false],
+		] as const)(
+			'uses visible tree with stored %s panel %s preview %s open %s',
+			async (stored, panel, preview, open, visible) => {
+				useSettingsStore.setState({ newShell: true });
+				useUIStore.setState({ activeFocus: 'right', activeRightTab: stored, rightPanelOpen: open });
+				const session = createMockSession({
+					aiTabs: [
+						createMockAITab({
+							id: 'ai',
+							newShellPanel: { tab: panel, fileTabId: preview ? 'file' : undefined, open },
+						}),
+					],
+					activeTabId: 'ai',
+					filePreviewTabs: [createMockFileTab({ id: 'file' })],
+				});
+				useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+				const hook = await loadHook();
+				const deps = createDeps();
+				renderHook(() => hook(deps));
+				act(() =>
+					useFileExplorerStore.setState({
+						flatFileList: [
+							{ name: 'a.ts', fullPath: 'a.ts', isFolder: false, type: 'file' },
+							{ name: 'b.ts', fullPath: 'b.ts', isFolder: false, type: 'file' },
+						],
+						selectedFileIndex: 0,
+					})
+				);
+				act(() => {
+					window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+				});
+				expect(useFileExplorerStore.getState().selectedFileIndex).toBe(visible ? 1 : 0);
+				act(() => {
+					window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+				});
+				expect(deps.handleFileClick).toHaveBeenCalledTimes(visible ? 1 : 0);
+			}
+		);
+
 		it('handles ArrowDown to move selection', async () => {
 			const useFileExplorerEffects = await loadHook();
 			useUIStore.setState({ activeFocus: 'right', activeRightTab: 'files' });

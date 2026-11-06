@@ -104,6 +104,34 @@ describe('handoff desktop ownership routing', () => {
 		expect(checkCustomPath).toHaveBeenCalledWith('/codex');
 	});
 
+	it('gets a cross-window replacement snapshot from its owner before opening the target', async () => {
+		vi.mocked(requestFromRenderer).mockResolvedValueOnce({
+			sourceAgentId: 'source',
+			sourceTabId: 'source-tab',
+			cwd: '/project',
+			projectPath: '/project',
+			draft: { ...draft, text: 'latest draft' },
+			emptyConversation: { stagedImages: ['live-image'], commandMode: 'off' },
+		});
+		const result = await api().command({
+			action: 'new-conversation',
+			sourceAgentId: 'source',
+			targetProvider: 'codex',
+			replaceTabId: 'source-tab',
+		});
+		expect(result.success).toBe(true);
+		expect(
+			vi.mocked(requestFromRenderer).mock.calls.map(([win, channel]) => [win, channel])
+		).toEqual([
+			[sourceWindow, 'context:readHandoffSource'],
+			[targetWindow, 'context:openHandoffTarget'],
+		]);
+		expect(vi.mocked(requestFromRenderer).mock.calls[1][2].args?.[0]).toMatchObject({
+			draft: { text: 'latest draft' },
+			newConversation: { source: { stagedImages: ['live-image'] } },
+		});
+	});
+
 	it('creates a missing project runner in the source window', async () => {
 		const otherProject = { ...target, projectRoot: '/other', cwd: '/other' };
 		await api([source, otherProject]).prepare({

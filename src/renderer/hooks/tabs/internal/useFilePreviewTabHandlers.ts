@@ -28,6 +28,28 @@ import {
 } from './filePreviewTabHelpers';
 import type { FilePreviewTabHandlersReturn, FileTabOpenParams, MediaOpenMode } from './types';
 
+/** Shared placement for opening, creating and selecting a file. */
+function locateFileTab(session: Session, tabId: string): Partial<Session> {
+	if (!useSettingsStore.getState().newShell)
+		return { ...fileTabFocusFields(tabId), activeGroupId: null };
+	if (session.id === useSessionStore.getState().activeSessionId)
+		useUIStore.getState().setRightPanelOpen(true);
+	return {
+		aiTabs: session.aiTabs.map((tab) =>
+			tab.id === session.activeTabId
+				? {
+						...tab,
+						newShellPanel: patchNewShellPanel(tab.newShellPanel, {
+							tab: 'files',
+							fileTabId: tabId,
+							open: true,
+						}),
+					}
+				: tab
+		),
+	};
+}
+
 export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 	const handleOpenFileTab = useCallback(
 		(
@@ -96,26 +118,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 				}
 			}
 
-			if (newShell && activate && activeSessionId === useSessionStore.getState().activeSessionId)
-				useUIStore.getState().setRightPanelOpen(true);
 			updateSessionWith(activeSessionId, (s) => {
-				const focusFile = (id: string) =>
-					newShell
-						? {
-								aiTabs: s.aiTabs.map((tab) =>
-									tab.id === s.activeTabId
-										? {
-												...tab,
-												newShellPanel: patchNewShellPanel(tab.newShellPanel, {
-													tab: 'files',
-													fileTabId: id,
-													open: true,
-												}),
-											}
-										: tab
-								),
-							}
-						: fileTabFocusFields(id);
 				const existingTab = s.filePreviewTabs.find((tab) => tab.path === file.path);
 				if (existingTab) {
 					const updatedTabs = s.filePreviewTabs.map((tab) =>
@@ -162,7 +165,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 						filePreviewTabs: updatedTabs,
 						// A background re-open refreshes the tab's content in place and
 						// leaves the view alone; only an activating open brings it forward.
-						...(activate ? focusFile(existingTab.id) : {}),
+						...(activate ? locateFileTab(s, existingTab.id) : {}),
 						activeTabId: s.activeTabId,
 						// Opening a standalone file takes over the panel, so leave any active
 						// tiled group.
@@ -210,7 +213,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 						filePreviewTabs: updatedTabs,
 						// This branch rewrites the file tab that is ALREADY active, so
 						// activation only has to clear the surfaces that outrank it.
-						...(activate ? focusFile(currentTabId) : {}),
+						...(activate ? locateFileTab(s, currentTabId) : {}),
 					};
 				}
 
@@ -243,7 +246,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 					...s,
 					filePreviewTabs: [...s.filePreviewTabs, newFileTab],
 					unifiedTabOrder: updatedUnifiedTabOrder,
-					...(activate ? focusFile(newTabId) : {}),
+					...(activate ? locateFileTab(s, newTabId) : {}),
 				};
 			});
 		},
@@ -381,12 +384,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 
 		updateSessionWith(currentSession.id, (s) => ({
 			...s,
-			activeFileTabId: tabId,
-			activeBrowserTabId: null,
-			activeTerminalTabId: null,
-			inputMode: 'ai',
-			// Selecting a standalone file tab leaves any active tiled group.
-			activeGroupId: null,
+			...locateFileTab(s, tabId),
 		}));
 
 		const { fileTabAutoRefreshEnabled } = useSettingsStore.getState();
@@ -429,13 +427,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 				...s,
 				filePreviewTabs: [...s.filePreviewTabs, newFileTab],
 				unifiedTabOrder: updatedUnifiedTabOrder,
-				activeFileTabId: newTabId,
-				activeBrowserTabId: null,
-				activeTerminalTabId: null,
-				inputMode: 'ai' as const,
-				// A newly-created untitled file tab takes over the panel, so it must
-				// leave any active tiled group (mirrors handleSelectFileTab).
-				activeGroupId: null,
+				...locateFileTab(s, newTabId),
 			};
 		});
 		// A blank file exists to be typed into, so put the caret in the editor rather

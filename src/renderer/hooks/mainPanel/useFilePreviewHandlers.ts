@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import type { Session, FilePreviewTab } from '../../types';
-import { updateFileTab } from '../../stores/sessionStore';
+import { updateFileTab, useSessionStore } from '../../stores/sessionStore';
 import { getFileTabFileName } from '../../utils/tabHelpers';
 import { requestFileTreeRefresh } from '../../utils/fileTreeRefresh';
 
@@ -37,6 +37,13 @@ export async function saveFilePreview({
 	content: string;
 	filePreviewSshRemoteId?: string;
 }): Promise<boolean> {
+	// Read the live tab, since a callback can outlive the loaded preview it came from.
+	const canSave = () => {
+		const session = useSessionStore.getState().sessions.find((s) => s.id === activeSession?.id);
+		const tab = (session ?? activeSession)?.filePreviewTabs?.find((t) => t.id === activeFileTabId);
+		return !tab?.isLoading && (!session || !activeFileTabId || !!tab);
+	};
+	if (!canSave()) return false;
 	let savePath = path;
 
 	// Untitled file - prompt for save location
@@ -71,6 +78,7 @@ export async function saveFilePreview({
 		}
 	}
 
+	if (!canSave()) return false;
 	await window.maestro.fs.writeFile(savePath, content, filePreviewSshRemoteId);
 
 	// Stamp the tab with the mtime our own write just produced. The tab's

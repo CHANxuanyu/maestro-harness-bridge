@@ -424,6 +424,7 @@ export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
 				]);
 
 				if (contentResult.status === 'rejected') {
+					useUIStore.getState().setFlashNotification(String(contentResult.reason));
 					logger.error(
 						`Failed to read file: ${
 							contentResult.reason instanceof Error
@@ -446,6 +447,7 @@ export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
 				// has either been closed by the user or never existed; surface a
 				// closure for the loading tab if it's still hanging around.
 				if (content === null) {
+					useUIStore.getState().setFlashNotification(`Could not read file: ${node.name}`);
 					if (loadRequestId) {
 						closeLoadingTabIfStillLoading(targetSessionId, fullPath, loadRequestId);
 					}
@@ -481,6 +483,7 @@ export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
 				);
 				setActiveFocus('main');
 			} catch (error) {
+				useUIStore.getState().setFlashNotification(String(error));
 				logger.error(
 					`Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
 					undefined,

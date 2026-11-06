@@ -49,6 +49,7 @@ describe('useFilePreviewTabHandlers', () => {
 
 	beforeEach(() => {
 		resetTabHandlerStores();
+		useSettingsStore.setState({ newShell: false });
 		useMediaPlaybackStore.setState({
 			items: [],
 			activeItemId: null,
@@ -94,6 +95,43 @@ describe('useFilePreviewTabHandlers', () => {
 		}
 		useSettingsStore.setState({ newShell: false });
 	});
+
+	it.each(['new', 'select'] as const)(
+		'routes %s files to the right panel in the new shell',
+		async (entry) => {
+			useSettingsStore.setState({ newShell: true });
+			setupSession({
+				aiTabs: [
+					createMockAITab({
+						id: 'ai-1',
+						inputValue: 'keep draft',
+						newShellPanel: { tab: 'changes', filter: 'keep' },
+					}),
+				],
+				activeTabId: 'ai-1',
+				filePreviewTabs: [createMockFileTab({ id: 'existing' })],
+			});
+			useUIStore.setState({ rightPanelOpen: false });
+			const { result } = renderHook(() => useFilePreviewTabHandlers());
+			await act(async () => {
+				if (entry === 'new') result.current.handleNewFileTab();
+				else await result.current.handleSelectFileTab('existing');
+			});
+			const session = getSession();
+			const file = entry === 'new' ? session.filePreviewTabs.at(-1)! : session.filePreviewTabs[0];
+			expect(session.aiTabs[0].newShellPanel).toEqual({
+				tab: 'files',
+				fileTabId: file.id,
+				filter: 'keep',
+				open: true,
+			});
+			expect(useUIStore.getState().rightPanelOpen).toBe(true);
+			expect(session.activeFileTabId).toBeFalsy();
+			expect(session.activeTabId).toBe('ai-1');
+			expect(session.aiTabs[0].inputValue).toBe('keep draft');
+			if (entry === 'new') expect(file.editMode).toBe(true);
+		}
+	);
 
 	it('preserves the conversation filter when opening a preview', () => {
 		useSettingsStore.setState({ newShell: true });

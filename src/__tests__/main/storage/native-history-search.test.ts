@@ -4,6 +4,7 @@ import path from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { searchNativeHistoryFiles } from '../../../main/storage/native-history-search-reader';
+import { embedSystemPromptInPrompt } from '../../../shared/embeddedSystemPrompt';
 
 let root: string;
 let accounts: Array<{ provider: 'claude-code' | 'codex'; accountDir: string }>;
@@ -112,3 +113,105 @@ it('does not duplicate an archived rollout when its plain source exists', async 
 	await seed('codex', id, 'needle');
 	expect((await searchNativeHistoryFiles({ query: 'needle', accounts })).hits).toHaveLength(1);
 });
+
+it('searches the displayed Codex user request without the Maestro envelope', async () => {
+	const file = await seed('codex', '00000000-0000-0000-0000-000000000001', 'Done');
+	const rows = (await fs.readFile(file, 'utf8'))
+		.trim()
+		.split('\n')
+		.map((line) => JSON.parse(line));
+	delete rows[1].payload.id;
+	rows[1].payload.content[0].text = embedSystemPromptInPrompt(
+		'# Maestro System Context',
+		'amber lighthouse'
+	);
+	await fs.writeFile(file, rows.map((row) => JSON.stringify(row)).join('\n'));
+	const result = await searchNativeHistoryFiles({ query: 'amber lighthouse', accounts });
+	expect(result.hits).toHaveLength(1);
+	expect(result.hits[0].message.text).toBe('amber lighthouse');
+	expect(result.hits[0].matchPreview).toBe('amber lighthouse');
+	expect(result.hits[0].conversation.title).toBe('amber lighthouse');
+	expect(
+		(await searchNativeHistoryFiles({ query: 'Maestro System Context', accounts })).hits
+	).toEqual([]);
+});
+
+it.each([false, true])(
+	'finds legacy Codex metadata and environment cwd (compressed: %s)',
+	async (compressed) => {
+		const id = '00000000-0000-0000-0000-000000000001';
+		const file = await seed('codex', id, 'unused', compressed);
+		const content = [
+			{ id, timestamp: '2026-11-06T10:00:00Z' },
+			{
+				type: 'message',
+				role: 'user',
+				content: [
+					{
+						type: 'input_text',
+						text: '<environment_context><cwd>/legacy/project</cwd></environment_context>',
+					},
+				],
+			},
+			{
+				type: 'message',
+				role: 'user',
+				content: [{ type: 'input_text', text: 'amber lighthouse' }],
+			},
+		]
+			.map((row) => JSON.stringify(row))
+			.join('\n');
+		await fs.writeFile(file, compressed ? zstdCompressSync(content) : content);
+		const result = await searchNativeHistoryFiles({
+			query: 'amber lighthouse',
+			accounts,
+			projectPath: '/legacy/project',
+		});
+		expect(result.truncated).toBe(false);
+		expect(result.hits).toHaveLength(1);
+		expect(result.hits[0].conversation).toMatchObject({
+			nativeSessionId: id,
+			projectPath: '/legacy/project',
+			title: 'amber lighthouse',
+		});
+		expect(
+			(await searchNativeHistoryFiles({ query: 'environment_context', accounts })).hits
+		).toEqual([]);
+	}
+);
+
+it.each([false, true])(
+	'uses native titles or the real user request outside loaded projects (indexed: %s)',
+	async (indexed) => {
+		const id = '00000000-0000-0000-0000-000000000001';
+		const file = await seed('codex', id, 'amber lighthouse', false, '/unloaded/project');
+		const rows = (await fs.readFile(file, 'utf8'))
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line));
+		rows.splice(1, 0, {
+			type: 'response_item',
+			payload: {
+				type: 'message',
+				role: 'user',
+				content: [{ type: 'input_text', text: '# AGENTS.md instructions\nInjected context' }],
+			},
+		});
+		await fs.writeFile(file, rows.map((row) => JSON.stringify(row)).join('\n'));
+		if (indexed) {
+			await fs.writeFile(
+				path.join(accounts[1].accountDir, 'session_index.jsonl'),
+				[
+					JSON.stringify({ id, thread_name: 'Previous name' }),
+					JSON.stringify({ id, thread_name: 'Named native conversation' }),
+					'{"id":',
+				].join('\n')
+			);
+		}
+		const result = await searchNativeHistoryFiles({ query: 'amber lighthouse', accounts });
+		expect(result.hits).toHaveLength(1);
+		expect(result.hits[0].conversation.title).toBe(
+			indexed ? 'Named native conversation' : 'Unrelated title'
+		);
+	}
+);

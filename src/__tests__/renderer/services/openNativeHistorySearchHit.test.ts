@@ -6,6 +6,8 @@ import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 import type { NativeHistorySearchHit } from '../../../shared/nativeHistorySearch';
 import { openNativeConversation } from '../../../renderer/services/openNativeConversation';
+import { parseNativeSearchMessages } from '../../../shared/sessionSearch';
+import { embedSystemPromptInPrompt } from '../../../shared/embeddedSystemPrompt';
 vi.mock('../../../renderer/services/openNativeConversation', () => ({
 	openNativeConversation: vi.fn(),
 }));
@@ -93,7 +95,40 @@ it('loads an older hit using the exact account and requests the existing scroll 
 		sessionId: 'owner',
 		tabId: 'tab',
 		logId: 'old-message',
+		revealTurnActivity: true,
 	});
+});
+
+it('locates a Codex request without a native ID after display removes its envelope', async () => {
+	const rawText = embedSystemPromptInPrompt('# Maestro System Context', 'amber lighthouse');
+	const parsed = parseNativeSearchMessages(
+		JSON.stringify({
+			type: 'response_item',
+			timestamp: new Date(1).toISOString(),
+			payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: rawText }] },
+		}),
+		'codex'
+	).messages[0];
+	vi.mocked(window.maestro.agentSessions.read).mockResolvedValue({
+		messages: [
+			{
+				uuid: 'codex-msg-0',
+				type: 'user',
+				role: 'user',
+				content: rawText,
+				timestamp: new Date(1).toISOString(),
+			},
+		],
+		total: 1,
+		hasMore: false,
+	});
+	expect(
+		await openNativeHistorySearchHit(
+			{ ...hit, message: { ...parsed, text: parsed.textContent } },
+			vi.fn()
+		)
+	).toBe(true);
+	expect(useUIStore.getState().pendingLogJump?.logId).toBe('codex-msg-0');
 });
 it('does not move focus after another conversation is selected during the read', async () => {
 	vi.mocked(window.maestro.agentSessions.read).mockImplementationOnce(async () => {

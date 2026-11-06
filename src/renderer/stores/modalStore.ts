@@ -104,6 +104,7 @@ export interface ConfirmModalData {
 	onConfirm: () => void;
 	title?: string;
 	destructive?: boolean;
+	confirmLabel?: string;
 }
 
 /** Rename instance modal data */
@@ -1456,6 +1457,7 @@ export function useModalActions() {
 		confirmModalOnConfirm: confirmData?.onConfirm ?? null,
 		confirmModalTitle: confirmData?.title,
 		confirmModalDestructive: confirmData?.destructive,
+		confirmModalConfirmLabel: confirmData?.confirmLabel,
 
 		// Quit Confirmation Modal
 		quitConfirmModalOpen,

@@ -207,10 +207,13 @@ export const ChangesPanel = memo(function ChangesPanel({
 		}
 	};
 	const confirmRevert = (file: GitChangedFile) => {
+		const deletesFile =
+			file.status === 'untracked' || file.status === 'added' || file.status === 'copied';
 		useModalStore.getState().openModal('confirm', {
 			title: t('workflows.changes.revertTitle'),
+			confirmLabel: t(deletesFile ? 'workflows.files.delete' : 'workflows.changes.revert'),
 			message: t(
-				file.status === 'untracked' || file.status === 'added' || file.status === 'copied'
+				deletesFile
 					? 'workflows.changes.deleteNewConfirm'
 					: file.status === 'renamed'
 						? 'workflows.changes.renameConfirm'
@@ -457,7 +460,12 @@ export const ChangesPanel = memo(function ChangesPanel({
 			<div className="flex items-center gap-2 py-2 text-xs" style={dim}>
 				<span className="flex-1 min-w-0 truncate" data-testid="changes-summary">
 					{changes && hasChanges
-						? t('workflows.changes.summary', { files: changes.totals.files })
+						? t(
+								changes.totals.files === 1
+									? 'workflows.changes.summaryOne'
+									: 'workflows.changes.summary',
+								{ files: changes.totals.files }
+							)
 						: (changes?.branch ?? '')}
 					{changes && hasChanges && (
 						<>

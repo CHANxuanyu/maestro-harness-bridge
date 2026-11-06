@@ -121,6 +121,7 @@ export const workflowsFiles = {
 	'workflows.changes.unstageFile': '取消暂存 {file}',
 	'workflows.changes.revertFile': '撤销 {file}',
 	'workflows.changes.revertTitle': '撤销文件改动',
+	'workflows.changes.revert': '撤销改动',
 	'workflows.changes.revertConfirm': '确定撤销“{file}”的全部已暂存和未暂存改动？此操作无法恢复。',
 	'workflows.changes.deleteNewConfirm':
 		'将删除这个新文件：“{file}”，包括已暂存的内容。此操作无法恢复。',
@@ -150,6 +151,7 @@ export const workflowsFiles = {
 	'workflows.changes.timedOut': 'git 没有及时响应，请刷新重试。',
 	'workflows.changes.clean': '和上次提交相比没有改动。',
 	'workflows.changes.summary': '{files} 个文件有改动',
+	'workflows.changes.summaryOne': '{files} 个文件有改动',
 	'workflows.changes.truncated': '只显示前 {shown} 个文件，共 {total} 个。',
 	'workflows.changes.refresh': '刷新改动',
 	'workflows.changes.noCounts': '行数未知',

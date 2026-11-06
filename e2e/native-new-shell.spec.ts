@@ -673,7 +673,7 @@ test('new shell T5: stage commit and revert single files in a real worktree', as
 		await panel.getByRole('button', { name: 'Revert tracked.txt', exact: true }).click();
 		const confirm = native.page.getByRole('dialog', { name: 'Revert file changes' });
 		await expect(confirm).toContainText('tracked.txt');
-		await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+		await confirm.getByRole('button', { name: 'Revert changes', exact: true }).click();
 		await expect(
 			panel.getByRole('button', { name: 'Revert tracked.txt', exact: true })
 		).toHaveCount(0);
@@ -686,7 +686,7 @@ test('new shell T5: stage commit and revert single files in a real worktree', as
 		expect(fs.existsSync(path.join(worktree, '-新 文件.txt'))).toBe(true);
 		await panel.getByText('-新 文件.txt', { exact: true }).hover();
 		await panel.getByRole('button', { name: 'Revert -新 文件.txt', exact: true }).click();
-		await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+		await confirm.getByRole('button', { name: 'Delete file', exact: true }).click();
 		await expect(panel.getByText('No changes against the last commit.')).toBeVisible();
 		expect(fs.existsSync(path.join(worktree, '-新 文件.txt'))).toBe(false);
 		expect(git(worktree, 'status', '--porcelain')).toBe('');
@@ -719,6 +719,64 @@ test('new shell T5: stage commit and revert single files in a real worktree', as
 		).toMatchObject({ success: true });
 		expect(git(worktree, 'show', 'HEAD:cli file.txt')).toBe('cli content\n');
 		expect(git(worktree, 'status', '--porcelain')).toBe('');
+
+		// A staged deletion and its same-name worktree file must stay one staged row.
+		git(worktree, 'rm', '--cached', 'tracked.txt');
+		await panel.getByRole('button', { name: 'Refresh changes' }).click();
+		await expect(panel.getByText('Staged (1)', { exact: true })).toBeVisible();
+		await expect(panel.getByTestId('changes-summary')).toContainText('1 file changed');
+		await expect(panel.getByText('tracked.txt', { exact: true })).toHaveCount(1);
+		await input.fill('staged deletion');
+		await expect(panel.getByRole('button', { name: 'Commit 1 file', exact: true })).toBeEnabled();
+		await panel.getByText('tracked.txt', { exact: true }).hover();
+		await panel.getByRole('button', { name: 'Unstage tracked.txt', exact: true }).click();
+		await expect(panel.getByText('No changes against the last commit.')).toBeVisible();
+		expect(git(worktree, 'status', '--porcelain')).toBe('');
+		expect(fs.readFileSync(path.join(worktree, 'tracked.txt'), 'utf8')).toBe('staged content\n');
+
+		git(worktree, 'rm', 'tracked.txt');
+		fs.writeFileSync(path.join(worktree, 'tracked.txt'), 'replacement\n');
+		expect((await native.cli('changes', '--tab', tabId)).files).toContainEqual(
+			expect.objectContaining({
+				path: 'tracked.txt',
+				status: 'deleted',
+				staged: true,
+				unstaged: true,
+			})
+		);
+		expect(await native.cli('changes', 'unstage', 'tracked.txt', '--tab', tabId)).toMatchObject({
+			success: true,
+		});
+		expect(git(worktree, 'status', '--porcelain')).toBe(' M tracked.txt\n');
+		expect(fs.readFileSync(path.join(worktree, 'tracked.txt'), 'utf8')).toBe('replacement\n');
+		expect(
+			await native.cli('changes', 'revert', 'tracked.txt', '--yes', '--tab', tabId)
+		).toMatchObject({ success: true });
+
+		// RM must stage successfully alone and together with another changed path.
+		const renamed = '改名 file.txt';
+		git(worktree, 'mv', '--', 'tracked.txt', renamed);
+		fs.writeFileSync(path.join(worktree, renamed), 'staged content\nlater\n');
+		expect(git(worktree, 'status', '--porcelain=v2', '-z')).toContain('2 RM ');
+		expect(await native.cli('changes', 'stage', renamed, '--tab', tabId)).toMatchObject({
+			success: true,
+		});
+		expect(git(worktree, 'show', `:${renamed}`)).toBe('staged content\nlater\n');
+		fs.writeFileSync(path.join(worktree, renamed), 'staged content\nlater\nbatch\n');
+		fs.writeFileSync(path.join(worktree, 'cli file.txt'), 'cli content\nbatch\n');
+		expect(
+			await native.cli('changes', 'stage', renamed, 'cli file.txt', '--tab', tabId)
+		).toMatchObject({ success: true });
+		expect(git(worktree, 'show', `:${renamed}`)).toBe('staged content\nlater\nbatch\n');
+		expect(git(worktree, 'show', ':cli file.txt')).toBe('cli content\nbatch\n');
+		expect(git(worktree, 'diff', '--name-only')).toBe('');
+		await panel.getByRole('button', { name: 'Refresh changes' }).click();
+		await expect(panel.getByText('Staged (2)', { exact: true })).toBeVisible();
+		await expect(panel.getByRole('button', { name: 'Commit 2 files', exact: true })).toBeEnabled();
+		expect(git(native.project, 'diff', '--cached', '--name-only')).toBe('');
+		expect(fs.readFileSync(path.join(native.project, 'tracked.txt'), 'utf8')).toBe(
+			'main tree stays dirty\n'
+		);
 	} catch (error) {
 		failed = true;
 		throw error;

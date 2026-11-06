@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ChangesPanel } from '../../../renderer/components/ChangesPanel';
 import { useModalStore } from '../../../renderer/stores/modalStore';
-import type { GitChanges } from '../../../shared/gitChanges';
+import type { GitChangedFile, GitChanges } from '../../../shared/gitChanges';
 import type { Session } from '../../../renderer/types';
 import { createMockAITab, createMockSession } from '../../helpers';
 import { mockTheme } from '../../helpers/mockTheme';
@@ -219,6 +219,139 @@ describe('new shell single file actions', () => {
 		expect(screen.getByPlaceholderText('Stage files before committing')).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: 'Commit' })).toBeDisabled();
 		expect(screen.queryByText(/^Staged \(/)).not.toBeInTheDocument();
+	});
+
+	it.each([false, true])(
+		'counts a staged deletion with a replacement once, another staged file %s',
+		async (anotherStaged) => {
+			changes.mockResolvedValue({
+				...twoFiles,
+				files: [
+					{
+						path: 'tracked.txt',
+						status: 'deleted',
+						staged: true,
+						unstaged: true,
+						additions: 1,
+						deletions: 1,
+					},
+					{ ...twoFiles.files[0], staged: anotherStaged },
+				],
+			});
+			render(<ChangesPanel theme={mockTheme} session={session()} />);
+			expect(await screen.findByText(`Staged (${anotherStaged ? 2 : 1})`)).toBeInTheDocument();
+			expect(screen.getByText(`Unstaged (${anotherStaged ? 0 : 1})`)).toBeInTheDocument();
+			expect(screen.getAllByText('tracked.txt')).toHaveLength(1);
+			expect(screen.getByLabelText('Also has unstaged changes')).toBeInTheDocument();
+			fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), {
+				target: { value: 'commit staged deletion' },
+			});
+			expect(
+				screen.getByRole('button', {
+					name: anotherStaged ? 'Commit 2 files' : 'Commit 1 file',
+				})
+			).toBeEnabled();
+			await act(async () => {
+				fireEvent.click(screen.getByRole('button', { name: 'Unstage tracked.txt' }));
+			});
+			expect(applyChange).toHaveBeenCalledWith(
+				'/project',
+				{ action: 'unstage', paths: ['tracked.txt'] },
+				undefined,
+				undefined
+			);
+		}
+	);
+
+	it.each(['en', 'zh-CN'] as const)(
+		'names the destructive confirmation action in %s',
+		async (locale) => {
+			useSettingsStore.setState({ uiLanguage: locale });
+			const files: GitChangedFile[] = [
+				{ path: 'tracked.txt', status: 'modified', staged: false, additions: 1, deletions: 1 },
+				{
+					path: 'renamed.txt',
+					oldPath: 'old.txt',
+					status: 'renamed',
+					staged: true,
+					additions: 0,
+					deletions: 0,
+				},
+				{
+					path: 'recreated.txt',
+					status: 'deleted',
+					staged: true,
+					unstaged: true,
+					additions: 1,
+					deletions: 1,
+				},
+				{ path: 'new.txt', status: 'untracked', staged: false, additions: 1, deletions: 0 },
+				{ path: 'added.txt', status: 'added', staged: true, additions: 1, deletions: 0 },
+				{
+					path: 'copy.txt',
+					oldPath: 'tracked.txt',
+					status: 'copied',
+					staged: true,
+					additions: 1,
+					deletions: 0,
+				},
+			];
+			changes.mockResolvedValue({
+				...twoFiles,
+				files,
+				totals: { files: files.length, additions: 5, deletions: 2 },
+			});
+			const { unmount } = render(<ChangesPanel theme={mockTheme} session={session()} />);
+			try {
+				await screen.findByText('tracked.txt');
+				for (const file of files) {
+					fireEvent.click(
+						screen.getByRole('button', {
+							name: `${locale === 'en' ? 'Revert' : '撤销'} ${file.path}`,
+						})
+					);
+					const data = useModalStore.getState().getData('confirm');
+					const deletesFile = ['untracked', 'added', 'copied'].includes(file.status);
+					expect(data?.confirmLabel).toBe(
+						locale === 'en'
+							? deletesFile
+								? 'Delete file'
+								: 'Revert changes'
+							: deletesFile
+								? '删除文件'
+								: '撤销改动'
+					);
+					expect(data?.message).toContain(file.path);
+					expect(data?.destructive).toBe(true);
+				}
+				expect(applyChange).not.toHaveBeenCalled();
+			} finally {
+				unmount();
+				useSettingsStore.setState({ uiLanguage: 'en' });
+			}
+		}
+	);
+
+	it.each([
+		['en', 1, '1 file changed'],
+		['en', 2, '2 files changed'],
+		['zh-CN', 1, '1 个文件有改动'],
+		['zh-CN', 2, '2 个文件有改动'],
+	] as const)('shows the %s summary for %s files', async (locale, count, summary) => {
+		useSettingsStore.setState({ uiLanguage: locale });
+		changes.mockResolvedValue({
+			...twoFiles,
+			files: twoFiles.files.slice(0, count),
+			totals: { ...twoFiles.totals, files: count },
+		});
+		const { unmount } = render(<ChangesPanel theme={mockTheme} session={session()} />);
+		try {
+			await screen.findByText('app.ts');
+			expect(screen.getByTestId('changes-summary')).toHaveTextContent(`${summary} +3 -1`);
+		} finally {
+			unmount();
+			useSettingsStore.setState({ uiLanguage: 'en' });
+		}
 	});
 
 	it('stages once while pending and shows staged and unstaged groups after refresh', async () => {

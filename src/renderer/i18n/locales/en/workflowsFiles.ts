@@ -126,6 +126,7 @@ export const workflowsFiles = {
 	'workflows.changes.unstageFile': 'Unstage {file}',
 	'workflows.changes.revertFile': 'Revert {file}',
 	'workflows.changes.revertTitle': 'Revert file changes',
+	'workflows.changes.revert': 'Revert changes',
 	'workflows.changes.revertConfirm':
 		'Revert all staged and unstaged changes to "{file}"? This cannot be undone.',
 	'workflows.changes.deleteNewConfirm':
@@ -158,6 +159,7 @@ export const workflowsFiles = {
 	'workflows.changes.timedOut': 'Git did not answer in time. Try refreshing.',
 	'workflows.changes.clean': 'No changes against the last commit.',
 	'workflows.changes.summary': '{files} files changed',
+	'workflows.changes.summaryOne': '{files} file changed',
 	'workflows.changes.truncated': 'Showing the first {shown} of {total} files.',
 	'workflows.changes.refresh': 'Refresh changes',
 	'workflows.changes.noCounts': 'no line count',

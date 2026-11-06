@@ -14,6 +14,7 @@
 
 import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest';
 import { EventEmitter } from 'events';
+import planEvents from '../../../../../e2e/fixtures/native/codex-plan-events.json';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -1175,6 +1176,63 @@ describe('StdoutHandler', () => {
 	});
 
 	describe('Codex public progress delivery', () => {
+		it('keeps the observed final answer out of commentary after the plan completion snapshot', () => {
+			const { handler, emitter, sessionId, proc, bufferManager } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				outputParser: new CodexOutputParser(),
+			});
+			const progress = vi.fn();
+			const tools = vi.fn();
+			emitter.on('thinking-chunk', progress);
+			emitter.on('tool-execution', tools);
+			for (const event of planEvents) sendJsonLine(handler, sessionId, event);
+			const final = planEvents[9].item!.text;
+			expect(bufferManager.emitDataBuffered).toHaveBeenCalledExactlyOnceWith(sessionId, final);
+			expect(proc.resultEmitted).toBe(true);
+			expect(progress.mock.calls).toEqual([
+				[sessionId, planEvents[2].item!.text, 'commentary'],
+				[sessionId, planEvents[7].item!.text, 'commentary'],
+			]);
+			expect(
+				tools.mock.calls
+					.filter(([, event]) => event.toolName === 'update_plan')
+					.map(
+						([, event]) =>
+							event.state.input.plan.filter(
+								(task: { status: string }) => task.status === 'completed'
+							).length
+					)
+			).toEqual([0, 1, 2, 2]);
+		});
+
+		it.each(['item.updated', 'item.completed'])(
+			'keeps the final answer when only a plan %s follows it',
+			(type) => {
+				const { handler, emitter, sessionId, bufferManager } = createTestContext({
+					isStreamJsonMode: true,
+					toolType: 'codex',
+					outputParser: new CodexOutputParser(),
+				});
+				const progress = vi.fn();
+				emitter.on('thinking-chunk', progress);
+				for (const event of [
+					planEvents[0],
+					planEvents[1],
+					planEvents[3],
+					planEvents[9],
+					{ ...planEvents[10], type },
+					planEvents[11],
+				])
+					sendJsonLine(handler, sessionId, event);
+				expect(bufferManager.emitDataBuffered).toHaveBeenCalledExactlyOnceWith(
+					sessionId,
+					planEvents[9].item!.text
+				);
+				expect(progress).not.toHaveBeenCalled();
+			}
+		);
+
 		it('delivers explicit commentary before tools without using it as an interrupted final answer', () => {
 			const { handler, emitter, sessionId, proc, bufferManager } = createTestContext({
 				isStreamJsonMode: true,

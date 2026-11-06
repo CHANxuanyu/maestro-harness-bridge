@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import planEvents from '../../../../e2e/fixtures/native/codex-plan-events.json';
 import { CodexOutputParser } from '../../../main/parsers/codex-output-parser';
 import {
 	classifyRetryableError,
@@ -7,6 +8,32 @@ import {
 
 describe('CodexOutputParser', () => {
 	const parser = new CodexOutputParser();
+
+	it('preserves the observed exec plan sequence and final result classification', () => {
+		const parser = new CodexOutputParser();
+		const events = planEvents.map((event) => parser.parseJsonObject(event));
+		expect(events[9]).toMatchObject({ type: 'result', text: planEvents[9].item!.text });
+		expect(events[10]).toMatchObject({
+			type: 'tool_use',
+			toolName: 'update_plan',
+			toolCallId: 'item_1',
+			toolState: { status: 'completed' },
+		});
+		expect(
+			events
+				.filter((event) => event?.toolName === 'update_plan')
+				.map((event) => ({
+					status: (event!.toolState as { status: string }).status,
+					partial: event!.isPartial,
+				}))
+		).toEqual([
+			{ status: 'running', partial: false },
+			{ status: 'running', partial: true },
+			{ status: 'running', partial: true },
+			{ status: 'completed', partial: false },
+		]);
+		expect(events[11]?.type).toBe('usage');
+	});
 
 	it.each([
 		undefined,

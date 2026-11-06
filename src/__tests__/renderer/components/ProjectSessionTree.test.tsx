@@ -18,6 +18,7 @@ const EN: Record<string, string> = {
 	'workflows.conversations.addAccount': 'Add account or configuration',
 	'workflows.conversations.handoff': 'Hand off…',
 	'workflows.conversations.search': 'Search conversations...',
+	'workflows.conversations.contentSearchPlaceholder': 'Search conversations...',
 	'workflows.conversations.new': 'New conversation',
 	'workflows.conversations.newWith': 'New with {provider}',
 	'workflows.conversations.newConversation': 'New conversation',
@@ -477,4 +478,29 @@ describe('ProjectSessionTree', () => {
 		fireEvent.click(screen.getAllByRole('button', { name: 'Retry' })[0]);
 		expect(props.onRetryHistory).toHaveBeenCalled();
 	});
+});
+
+it('shows a separate content group with highlighted snippet and keyboard opening in the new shell', () => {
+	useSettingsStore.setState({ newShell: true });
+	const hit = {
+		conversation: { key: 'body-hit', title: 'Body result', projectPath: '/project' },
+		matchPreview: 'before needle after',
+		message: { role: 'assistant', text: 'needle' },
+	};
+	const open = vi.fn();
+	setup({
+		search: 'needle',
+		projects: [],
+		contentSearch: { hits: [hit], truncated: true },
+		onSelectContent: open,
+	});
+	expect(screen.getByText('workflows.conversations.contentResults')).toBeTruthy();
+	expect(screen.getByText('workflows.conversations.moreContentResults')).toBeTruthy();
+	const row = screen.getByRole('button', { name: /Body result/ });
+	expect(row.textContent).toContain('/project');
+	expect(row.querySelector('mark')?.textContent).toBe('needle');
+	fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowDown' });
+	expect(document.activeElement).toBe(row);
+	fireEvent.click(row);
+	expect(open).toHaveBeenCalledWith(hit);
 });

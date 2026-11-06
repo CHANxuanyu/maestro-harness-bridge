@@ -190,6 +190,18 @@ export const workflowsShell = {
 	'workflows.conversations.closeConversation': 'Close conversation',
 	'workflows.conversations.addAccount': 'Add account or configuration',
 	'workflows.conversations.handoff': 'Hand off…',
+	'workflows.conversations.contentSearchPlaceholder': 'Search conversations...',
+	'workflows.conversations.contentSearchLimited': 'Search reached its limit. Narrow your search.',
+	'workflows.conversations.titleResults': 'Conversations',
+	'workflows.conversations.contentResults': 'Conversation content',
+	'workflows.conversations.remoteContentExcluded':
+		'Remote conversations are searched by title only.',
+	'workflows.conversations.searchingContent': 'Searching conversation content...',
+	'workflows.conversations.contentSearchFailed':
+		'Could not search conversation content. Try again.',
+	'workflows.conversations.moreContentResults': 'More results are available. Narrow your search.',
+	'workflows.conversations.noContentMatches': 'No matching conversation content',
+	'workflows.conversations.contentOpenFailed': 'Could not locate this message. Search again.',
 	'workflows.conversations.search': 'Search conversations...',
 	'workflows.conversations.new': 'New conversation',
 	'workflows.conversations.newWith': 'New with {provider}',

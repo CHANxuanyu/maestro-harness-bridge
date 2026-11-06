@@ -573,3 +573,7 @@ Packaged CLI storage and discovery use the shipped product identity. `settings s
 Progressive row element reuse changes rendering work only. No new UI action or CLI verb is introduced. Existing conversation selection, transcript search and jumps retain their current paths and existing gaps; this change does not claim to close native resume or refresh gaps.
 
 New shell stdout placeholder cleanup now shares the existing 200 ms output batch, including final flush. It adds no user action. CLI and UI initiated turns continue through the same process listener and session batcher.
+
+## Renderer benchmark runner (2026-11-06)
+
+T4 第三轮只修改离线合成基准，不增加界面动作或 maestro-cli 动词。阶段选择使用 `MAESTRO_PERF_STAGES`，运行命令、依赖和结果读回见 [renderer 性能复测](../perf-renderer.md)。产品内性能采集仍走既有 `profiling start/status/stop`，本轮没有填补 Open gaps 中的交互缺口。

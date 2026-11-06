@@ -829,6 +829,33 @@ function parseCodexTranscript(
 				messageIndex++;
 			}
 
+			if (entry.type === 'item.completed' && entry.item?.type === 'file_change') {
+				appendMessage({
+					type: 'assistant',
+					role: 'assistant',
+					content: 'Tool: file_change',
+					...turnContext,
+					timestamp: entry.timestamp || '',
+					uuid: entry.item.id || `codex-msg-${messageIndex}`,
+					toolUse: [
+						{
+							id: entry.item.id,
+							tool: 'file_change',
+							state: {
+								status:
+									entry.item.status === 'completed'
+										? 'completed'
+										: entry.item.status === 'failed'
+											? 'failed'
+											: 'unknown',
+								input: { changes: entry.item.changes },
+							},
+						},
+					],
+				});
+				messageIndex++;
+			}
+
 			if (entry.type === 'item.completed' && entry.item?.type === 'tool_call') {
 				appendMessage({
 					type: 'assistant',
@@ -841,7 +868,8 @@ function parseCodexTranscript(
 						{
 							tool: entry.item.tool,
 							args: entry.item.args,
-							state: { status: 'completed', input: entry.item.args },
+							// Completing the call envelope does not prove execution succeeded.
+							state: { status: 'unknown', input: entry.item.args },
 						},
 					],
 				});

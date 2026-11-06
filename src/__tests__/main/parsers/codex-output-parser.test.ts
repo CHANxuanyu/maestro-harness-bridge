@@ -9,6 +9,29 @@ import {
 
 describe('CodexOutputParser', () => {
 	const parser = new CodexOutputParser();
+	it.each(['completed', 'failed', undefined])(
+		'preserves file_change paths with explicit success status %s',
+		(status) => {
+			const event = new CodexOutputParser().parseJsonObject({
+				type: 'item.completed',
+				item: {
+					id: 'file-1',
+					type: 'file_change',
+					status,
+					changes: [{ path: 'src/app.ts', kind: 'update' }],
+				},
+			});
+			expect(event).toMatchObject({
+				type: 'tool_use',
+				toolName: 'file_change',
+				toolCallId: 'file-1',
+				toolState: {
+					status: status ?? 'unknown',
+					input: { changes: [{ path: 'src/app.ts', kind: 'update' }] },
+				},
+			});
+		}
+	);
 
 	it('preserves the observed exec plan sequence and final result classification', () => {
 		const parser = new CodexOutputParser();

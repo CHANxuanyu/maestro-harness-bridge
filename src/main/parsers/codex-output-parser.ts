@@ -285,7 +285,9 @@ interface CodexItem {
 		| 'tool_call'
 		| 'tool_result'
 		| 'command_execution'
+		| 'file_change'
 		| 'todo_list';
+	changes?: Array<{ path: string; kind: string }>;
 	items?: Array<{ text: string; completed: boolean }>;
 	text?: string;
 	phase?: string;
@@ -905,6 +907,22 @@ export class CodexOutputParser implements AgentOutputParser {
 	 */
 	private transformItemCompleted(item: CodexItem, msg: CodexRawMessage): ParsedEvent {
 		switch (item.type) {
+			case 'file_change':
+				return {
+					type: 'tool_use',
+					toolName: 'file_change',
+					toolCallId: item.id,
+					toolState: {
+						status:
+							item.status === 'completed'
+								? 'completed'
+								: item.status === 'failed'
+									? 'failed'
+									: 'unknown',
+						input: { changes: item.changes },
+					},
+					raw: msg,
+				};
 			case 'todo_list':
 				// Exec emits a complete snapshot on every update. Missing or malformed
 				// items must not clear a previous plan or invent completed steps.

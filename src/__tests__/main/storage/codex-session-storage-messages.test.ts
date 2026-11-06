@@ -158,6 +158,54 @@ function createSessionContent(): string {
 }
 
 describe('CodexSessionStorage - readSessionMessages', () => {
+	it('does not certify a legacy tool call with no result as a successful write', async () => {
+		const storage = new CodexSessionStorage();
+		vi.spyOn(storage as any, 'findSessionFile').mockResolvedValue('/fixture.jsonl');
+		vi.mocked(fs.readFile).mockResolvedValue(
+			JSON.stringify({
+				type: 'item.completed',
+				item: {
+					id: 'pending',
+					type: 'tool_call',
+					tool: 'apply_patch',
+					args: { patch: '*** Begin Patch\n*** Add File: a.ts\n+x\n*** End Patch' },
+				},
+			})
+		);
+		const result = await storage.readSessionMessages('/repo', 'native', { readOnly: true });
+		expect(result.messages[0].toolUse).toMatchObject([{ state: { status: 'unknown' } }]);
+	});
+	it('retains completed and failed file changes in read-only native history', async () => {
+		const storage = new CodexSessionStorage();
+		vi.spyOn(storage as any, 'findSessionFile').mockResolvedValue('/fixture.jsonl');
+		vi.mocked(fs.readFile).mockResolvedValue(
+			['completed', 'failed']
+				.map((status) =>
+					JSON.stringify({
+						type: 'item.completed',
+						timestamp: '2026-11-06T09:00:00Z',
+						item: {
+							id: status,
+							type: 'file_change',
+							status,
+							changes: [{ path: 'a.ts', kind: 'update' }],
+						},
+					})
+				)
+				.join('\n')
+		);
+		const result = await storage.readSessionMessages('/repo', 'native', { readOnly: true });
+		expect(result.messages.map((m) => m.toolUse)).toEqual(
+			['completed', 'failed'].map((status) => [
+				{
+					id: status,
+					tool: 'file_change',
+					state: { status, input: { changes: [{ path: 'a.ts', kind: 'update' }] } },
+				},
+			])
+		);
+		expect(fs.writeFile).not.toHaveBeenCalled();
+	});
 	let storage: CodexSessionStorage;
 
 	beforeEach(() => {

@@ -88,15 +88,18 @@ export const SlashCommandPopover = memo(function SlashCommandPopover({
 						<div className="font-mono text-sm leading-tight">
 							{highlightSlashCommand(cmd.command, inputValueLower.replace(/^\//, ''))}
 							{cmd.source && cmd.source !== 'builtin' && (
-								<span className="ml-2 text-xs font-sans">
-									{t(
-										cmd.source === 'project'
-											? 'workflows.nativeCommands.project'
-											: cmd.source === 'reported'
-												? 'workflows.nativeCommands.reported'
-												: 'workflows.nativeCommands.user'
-									)}
-								</span>
+								<>
+									{' '}
+									<span className="ml-2 text-xs font-sans">
+										{t(
+											cmd.source === 'project'
+												? 'workflows.nativeCommands.project'
+												: cmd.source === 'reported'
+													? 'workflows.nativeCommands.reported'
+													: 'workflows.nativeCommands.user'
+										)}
+									</span>
+								</>
 							)}
 						</div>
 						<div className="text-xs-plus opacity-70 leading-tight">

@@ -1,9 +1,44 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SlashCommandPopover } from '../../../../../renderer/components/InputArea/overlays/SlashCommandPopover';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { createItemRefs, inputAreaTheme } from '../_fixtures';
 
+afterEach(() => {
+	cleanup();
+	useSettingsStore.setState({ uiLanguage: 'en' });
+});
+
 describe('SlashCommandPopover', () => {
+	it.each([
+		['en', 'user', 'User'],
+		['en', 'project', 'Project'],
+		['en', 'reported', 'Reported by tool'],
+		['zh-CN', 'user', '用户'],
+		['zh-CN', 'project', '项目'],
+		['zh-CN', 'reported', '工具上报'],
+	] as const)('separates the %s %s source from the command name', (uiLanguage, source, label) => {
+		useSettingsStore.setState({ uiLanguage });
+		render(
+			<SlashCommandPopover
+				isOpen
+				commands={[{ command: '/before', description: 'Before refresh', source }]}
+				inputValueLower="/"
+				selectedIndex={0}
+				itemRefs={createItemRefs<HTMLButtonElement>()}
+				theme={inputAreaTheme}
+				setInputValue={vi.fn()}
+				setSlashCommandOpen={vi.fn()}
+				setSelectedSlashCommandIndex={vi.fn()}
+				inputRef={{ current: null }}
+			/>
+		);
+		const button = screen.getByRole('button');
+		// A CSS margin does not separate adjacent inline text in Chromium's accessible name.
+		expect(button.firstElementChild?.textContent).toBe(`/before ${label}`);
+		expect(button).toHaveAccessibleName(`/before ${label} Before refresh`);
+	});
+
 	it('labels command sources and keeps the read failure notice visible', () => {
 		render(
 			<SlashCommandPopover

@@ -76,6 +76,10 @@ event does not identify a file scope. Failed reads show only native builtins,
 including cached reads after the failure. No discovery call starts a provider or
 writes native files.
 
+Source badges have a text separator from the command name, including English
+and Chinese accessible names. This presentation fix adds no action or CLI verb;
+`tab commands` still returns the command, description and source separately.
+
 Open gaps: plugin commands appear after an existing Claude process reports them;
 there is no offline inventory of Claude plugin manifests or Codex plugin catalogs.
 Project Claude commands expand their selected Markdown body and `$ARGUMENTS`

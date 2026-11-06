@@ -1,3 +1,4 @@
+import { resolveProjectConversationPermission } from '../../../utils/newConversationPermissions';
 import { useTabStore } from '../../../stores/tabStore';
 import { useCallback, type RefObject } from 'react';
 import { useInlineWizardContext } from '../../../contexts/InlineWizardContext';
@@ -21,6 +22,7 @@ import {
 	createTab,
 	cycleShowThinkingFields,
 	getActiveTab,
+	permissionModeFields,
 	getInitialRenameValue,
 	getTabDisplayName,
 	hasActiveWizard,
@@ -39,10 +41,13 @@ export function useAITabHandlers(
 	const { endWizard: endInlineWizard } = useInlineWizardContext();
 
 	const createNewAITab = useCallback(
-		(fromConversation = false) => {
-			const { activeSessionId } = useSessionStore.getState();
+		async (fromConversation = false) => {
+			const { activeSessionId, sessions } = useSessionStore.getState();
 			const { defaultSaveToHistory, defaultShowThinking } = useSettingsStore.getState();
-			if (!activeSessionId) return;
+			const target = sessions.find((session) => session.id === activeSessionId);
+			if (!target) return;
+			const newShell = useSettingsStore.getState().newShell;
+			const sourceTabId = newShell && fromConversation ? getActiveTab(target)?.id : undefined;
 
 			if (isWebDesktop()) {
 				// Focus the composer SYNCHRONOUSLY, inside the tap that asked for the
@@ -54,7 +59,7 @@ export function useAITabHandlers(
 				// keyed on the tab, so it keeps focus through the switch below.
 				inputRef?.current?.focus();
 				void window.maestro.web
-					.requestNewTab(activeSessionId, false)
+					.requestNewTab(activeSessionId, false, ...(sourceTabId ? [sourceTabId] : []))
 					.then((result) => {
 						if (!result?.tabId) return;
 						// Draw the tab NOW rather than waiting to be told about it. The
@@ -71,10 +76,19 @@ export function useAITabHandlers(
 							// client's tab, since that focus belongs to whoever holds this
 							// client, not to whoever is at the desktop.
 							if (session.aiTabs.some((tab) => tab.id === result.tabId)) {
-								return { ...session, ...aiTabFocusFields(result.tabId) };
+								return {
+									...session,
+									...aiTabFocusFields(result.tabId),
+									aiTabs: session.aiTabs.map((tab) =>
+										tab.id === result.tabId && newShell && result.permissionMode
+											? { ...tab, ...permissionModeFields(result.permissionMode) }
+											: tab
+									),
+								};
 							}
 							const created = createTab(session, {
 								id: result.tabId,
+								permissionSource: newShell && result.permissionMode ? result : undefined,
 								saveToHistory: defaultSaveToHistory,
 								showThinking: defaultShowThinking,
 							});
@@ -87,9 +101,14 @@ export function useAITabHandlers(
 				return;
 			}
 
+			const projectPermission =
+				newShell && !sourceTabId ? await resolveProjectConversationPermission(target) : undefined;
+
 			updateSessionWith(activeSessionId, (session) => {
 				const result = createTab(session, {
-					permissionSource: fromConversation ? (getActiveTab(session) ?? undefined) : undefined,
+					permissionSource: sourceTabId
+						? session.aiTabs.find((tab) => tab.id === sourceTabId)
+						: projectPermission,
 					saveToHistory: defaultSaveToHistory,
 					showThinking: defaultShowThinking,
 				});

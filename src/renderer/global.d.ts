@@ -1,3 +1,5 @@
+import type { ConversationPermissionSnapshot } from '../shared/window-types';
+import type { NewTabResult } from '../main/web-server/types';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Global type declarations for the renderer process.
@@ -495,9 +497,14 @@ interface MaestroAPI {
 			) => void
 		) => () => void;
 		onRemoteNewTab: (
-			callback: (sessionId: string, responseChannel: string, background?: boolean) => void
+			callback: (
+				sessionId: string,
+				responseChannel: string,
+				background?: boolean,
+				sourceTabId?: string
+			) => void
 		) => () => void;
-		sendRemoteNewTabResponse: (responseChannel: string, result: { tabId: string } | null) => void;
+		sendRemoteNewTabResponse: (responseChannel: string, result: NewTabResult | null) => void;
 		onRemoteCloseTab: (callback: (sessionId: string, tabId: string) => void) => () => void;
 		onRemoteRenameTab: (
 			callback: (sessionId: string, tabId: string, newName: string, responseChannel: string) => void
@@ -1310,7 +1317,11 @@ interface MaestroAPI {
 	web: {
 		claimAutoRunStart: (sessionId: string) => Promise<boolean>;
 		releaseAutoRunStartClaim: (sessionId: string) => Promise<boolean>;
-		requestNewTab: (sessionId: string, background?: boolean) => Promise<{ tabId: string } | null>;
+		requestNewTab: (
+			sessionId: string,
+			background?: boolean,
+			sourceTabId?: string
+		) => Promise<NewTabResult | null>;
 		requestCloseTab: (sessionId: string, tabId: string) => Promise<boolean>;
 		broadcastUserInput: (
 			sessionId: string,
@@ -4948,6 +4959,12 @@ interface MaestroAPI {
 	// Multi-window API - enumerate/create/focus/close windows and inspect or
 	// move the agents (sessions) each window owns. `sessionIds` are agent IDs.
 	windows: {
+		getConversationPermissions: (
+			sessionIds: string[]
+		) => Promise<Array<ConversationPermissionSnapshot | null>>;
+		onReadConversationPermissions: (
+			read: (sessionId: string) => ConversationPermissionSnapshot | null
+		) => () => void;
 		create: (
 			sessionIds?: string[],
 			bounds?: Partial<{

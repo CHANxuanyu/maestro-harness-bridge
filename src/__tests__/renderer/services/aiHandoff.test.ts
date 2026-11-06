@@ -50,6 +50,10 @@ const request = (over: Partial<HandoffOpenRequest> = {}): HandoffOpenRequest => 
 const sessions = () => useSessionStore.getState().sessions;
 
 beforeEach(() => {
+	window.maestro.windows = {
+		...window.maestro.windows,
+		getConversationPermissions: vi.fn().mockResolvedValue([]),
+	};
 	vi.clearAllMocks();
 	useOperationStore.getState().resetAll();
 	clearLiveDraft('source-tab');
@@ -879,6 +883,36 @@ describe('new shell permission boundaries', () => {
 });
 
 describe('permission metadata across renderer owners', () => {
+	it('project provider creation uses fresh owner permissions instead of stale full copies', async () => {
+		useSettingsStore.setState({ newShell: true });
+		window.maestro.windows = {
+			...window.maestro.windows,
+			getConversationPermissions: vi.fn(async (ids: string[]) =>
+				ids.map((sessionId, index) => ({
+					sessionId,
+					tabs: [
+						{
+							id: `${sessionId}-tab`,
+							lastActivity: index + 1,
+							permissionMode: 'readonly' as const,
+							readOnlyMode: true,
+						},
+					],
+				}))
+			),
+		};
+		const result = await openHandoffTarget(
+			request({ newConversation: {}, origin: { ...request().origin, sourceTabId: '' } })
+		);
+		expect(result.success).toBe(true);
+		expect(
+			sessions()
+				.find((session) => session.id === result.agentId)
+				?.aiTabs.find((tab) => tab.id === result.tabId)
+		).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
+		expect(window.maestro.windows.getConversationPermissions).toHaveBeenCalled();
+	});
+
 	it('captures legacy permission without reading history or building a handoff', async () => {
 		sessions()[0].aiTabs[0].readOnlyMode = true;
 		const result = await readHandoffSource({

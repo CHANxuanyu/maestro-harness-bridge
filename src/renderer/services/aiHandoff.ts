@@ -10,7 +10,7 @@ import { useComposerInputStore } from '../stores/composerInputStore';
 import { createTab, createMergedSession, focusAiTabInSession } from '../utils/tabHelpers';
 import { extractTabContext } from '../utils/contextExtractor';
 import { handoffLocation } from '../../shared/aiHandoff';
-import { recentProjectConversation } from '../utils/newConversationPermissions';
+import { resolveProjectConversationPermission } from '../utils/newConversationPermissions';
 import {
 	permissionModeFields,
 	newConversationPermissionFields,
@@ -82,10 +82,10 @@ export async function readHandoffSource(
 	if (!session) return null;
 	if (request.permissionOnly) {
 		if (request.sourceTabId && !tab) return null;
-		const source = tab ?? recentProjectConversation(session)?.tab;
+		const source = tab ?? (await resolveProjectConversationPermission(session));
 		return {
 			sourceAgentId: session.id,
-			sourceTabId: source?.id ?? '',
+			sourceTabId: tab?.id ?? '',
 			sourcePermission: permissionModeFields(resolveTabPermissionMode(source)),
 			cwd: handoffLocation(session).cwd,
 			projectPath: session.projectRoot || session.cwd,
@@ -237,7 +237,7 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				request.sourcePermission ??
 				replacement ??
 				(request.newConversation
-					? sourceSession && recentProjectConversation(sourceSession)?.tab
+					? sourceSession && (await resolveProjectConversationPermission(sourceSession))
 					: sourceSession?.aiTabs.find((tab) => tab.id === request.origin.sourceTabId));
 			const permissions = newShell
 				? newConversationPermissionFields(sourcePermission, capabilities)

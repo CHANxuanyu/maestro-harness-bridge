@@ -164,3 +164,13 @@ export interface WindowHighlightDropZonePayload {
 	windowId: string;
 	active: boolean;
 }
+/** Permission metadata only, read from the renderer that owns the session. */
+export interface ConversationPermissionSnapshot {
+	sessionId: string;
+	tabs: Array<{
+		id: string;
+		permissionMode: 'full' | 'standard' | 'readonly';
+		readOnlyMode: boolean;
+		lastActivity: number;
+	}>;
+}

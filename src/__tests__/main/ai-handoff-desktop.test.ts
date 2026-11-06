@@ -203,6 +203,22 @@ describe('handoff desktop ownership routing', () => {
 		});
 	});
 
+	it('bounds project permission reads and lets the target resolve conservatively after a missing reply', async () => {
+		vi.mocked(requestFromRenderer).mockResolvedValueOnce(null);
+		const result = await api().command({
+			action: 'new-conversation',
+			sourceAgentId: 'source',
+			targetProvider: 'codex',
+		});
+		expect(vi.mocked(requestFromRenderer).mock.calls[0][2].timeoutMs).toBe(250);
+		expect(vi.mocked(requestFromRenderer).mock.calls[1][0]).toBe(targetWindow);
+		expect(vi.mocked(requestFromRenderer).mock.calls[1][2].args?.[0]).toMatchObject({
+			newConversation: {},
+			sourceAgentId: 'source',
+		});
+		expect(result.success).toBe(true);
+	});
+
 	it('reads project permission metadata from the source owner for CLI provider creation', async () => {
 		const result = await api().command({
 			action: 'new-conversation',

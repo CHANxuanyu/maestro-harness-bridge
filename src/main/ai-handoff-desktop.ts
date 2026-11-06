@@ -88,37 +88,47 @@ export function createDesktopAiHandoff(deps: {
 			if (!isWebContentsAvailable(win)) return fallback;
 			const sourceWindow = deps.getWindowForSession(request.sourceAgentId);
 			if (request.newConversation && sourceWindow?.id !== win.id) {
-				if (!isWebContentsAvailable(sourceWindow)) return fallback;
-				const snapshot = await requestFromRenderer<HandoffReadResult>(
-					sourceWindow,
-					'context:readHandoffSource',
-					{
-						fallback: null,
-						args: [
+				if (!isWebContentsAvailable(sourceWindow) && request.newConversation.replaceTabId)
+					return fallback;
+				const snapshot = isWebContentsAvailable(sourceWindow)
+					? await requestFromRenderer<HandoffReadResult>(
+							sourceWindow,
+							'context:readHandoffSource',
 							{
-								sourceAgentId: request.sourceAgentId,
-								sourceTabId: request.newConversation.replaceTabId ?? '',
-								provider: request.origin.sourceProvider,
-								emptyConversation: !!request.newConversation.replaceTabId,
-								permissionOnly: !request.newConversation.replaceTabId,
-							},
-						],
-						timeoutMs: 30000,
-					}
-				);
+								fallback: null,
+								args: [
+									{
+										sourceAgentId: request.sourceAgentId,
+										sourceTabId: request.newConversation.replaceTabId ?? '',
+										provider: request.origin.sourceProvider,
+										emptyConversation: !!request.newConversation.replaceTabId,
+										permissionOnly: !request.newConversation.replaceTabId,
+									},
+								],
+								timeoutMs: request.newConversation.replaceTabId ? 30000 : 250,
+							}
+						)
+					: null;
 				if (
 					!snapshot ||
 					'success' in snapshot ||
 					(request.newConversation.replaceTabId && !snapshot.emptyConversation) ||
 					handoffLocation(snapshot).key !== handoffLocation(request).key
-				)
-					return { ...fallback, error: 'The source conversation could not be read from its owner' };
-				request = {
-					...request,
-					draft: snapshot.draft,
-					sourcePermission: snapshot.sourcePermission,
-					newConversation: { ...request.newConversation, source: snapshot.emptyConversation },
-				};
+				) {
+					if (request.newConversation.replaceTabId)
+						return {
+							...fallback,
+							error: 'The source conversation could not be read from its owner',
+						};
+					// The target resolves project permissions with its own bounded owner
+					// query and conservative local fallback when this source did not answer.
+				} else
+					request = {
+						...request,
+						draft: snapshot.draft,
+						sourcePermission: snapshot.sourcePermission,
+						newConversation: { ...request.newConversation, source: snapshot.emptyConversation },
+					};
 			}
 			return requestFromRenderer<HandoffResult>(win, 'context:openHandoffTarget', {
 				fallback,

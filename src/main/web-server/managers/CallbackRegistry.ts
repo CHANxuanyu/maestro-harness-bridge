@@ -31,6 +31,7 @@ import type {
 	SelectSessionCallback,
 	SelectTabCallback,
 	NewTabCallback,
+	NewTabResult,
 	CloseTabCallback,
 	RenameTabCallback,
 	RenameTabResult,
@@ -473,9 +474,13 @@ export class CallbackRegistry {
 		return this.callbacks.selectTab(sessionId, tabId);
 	}
 
-	async newTab(sessionId: string, background?: boolean): Promise<{ tabId: string } | null> {
+	async newTab(
+		sessionId: string,
+		background?: boolean,
+		sourceTabId?: string
+	): Promise<NewTabResult | null> {
 		if (!this.callbacks.newTab) return null;
-		return this.callbacks.newTab(sessionId, background);
+		return this.callbacks.newTab(sessionId, background, ...(sourceTabId ? [sourceTabId] : []));
 	}
 
 	async closeTab(sessionId: string, tabId: string): Promise<boolean> {

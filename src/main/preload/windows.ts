@@ -9,6 +9,7 @@
 
 import { ipcRenderer } from 'electron';
 import type {
+	ConversationPermissionSnapshot,
 	WindowBounds,
 	WindowHighlightDropZonePayload,
 	WindowInfo,
@@ -25,6 +26,19 @@ export type { WindowBounds };
  */
 export function createWindowsApi() {
 	return {
+		getConversationPermissions: (
+			sessionIds: string[]
+		): Promise<Array<ConversationPermissionSnapshot | null>> =>
+			ipcRenderer.invoke('windows:getConversationPermissions', sessionIds),
+		onReadConversationPermissions: (
+			read: (sessionId: string) => ConversationPermissionSnapshot | null
+		): (() => void) => {
+			const handler = (_event: unknown, sessionId: string, responseChannel: string) =>
+				ipcRenderer.send(responseChannel, read(sessionId));
+			ipcRenderer.on('windows:readConversationPermissions', handler);
+			return () => ipcRenderer.removeListener('windows:readConversationPermissions', handler);
+		},
+
 		/**
 		 * Open a new secondary window.
 		 * @param sessionIds - Agent IDs the new window should own (default: none)

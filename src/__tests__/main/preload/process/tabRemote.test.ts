@@ -47,6 +47,17 @@ describe('Process TabRemote Preload API', () => {
 		expect(callback).toHaveBeenCalledWith('session-1', 'tab-1', tabs);
 	});
 
+	it('forwards the explicit source and returns the desktop permission fields', () => {
+		const callback = vi.fn();
+		api.onRemoteNewTab(callback);
+		const handler = mockOn.mock.calls.find(([channel]) => channel === 'remote:newTab')![1];
+		handler({}, 'owner', 'ack', false, 'readonly-source');
+		expect(callback).toHaveBeenCalledWith('owner', 'ack', false, 'readonly-source');
+		const response = { tabId: 'new', permissionMode: 'readonly' as const, readOnlyMode: true };
+		api.sendRemoteNewTabResponse('ack', response);
+		expect(mockSend).toHaveBeenCalledWith('ack', response);
+	});
+
 	describe('sendRemoteNewTabResponse', () => {
 		it('should send response via ipcRenderer.send', () => {
 			api.sendRemoteNewTabResponse('response-channel', { tabId: 'tab-123' });

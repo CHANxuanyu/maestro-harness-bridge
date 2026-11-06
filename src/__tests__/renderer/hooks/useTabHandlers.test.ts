@@ -1,3 +1,4 @@
+import { conversationPermissionSnapshot } from '../../../renderer/utils/newConversationPermissions';
 /**
  * Tests for useTabHandlers hook
  *
@@ -202,12 +203,20 @@ describe('useTabHandlers', () => {
 	describe('AI tab operations', () => {
 		it.each(['handleNewAgentSession', 'handleNewTab'] as const)(
 			'%s inherits from its conversation or project scope',
-			(entry) => {
+			async (entry) => {
 				useSettingsStore.setState({ newShell: true });
+				window.maestro.windows = {
+					...window.maestro.windows,
+					getConversationPermissions: vi.fn(async (ids: string[]) =>
+						ids.map(conversationPermissionSnapshot)
+					),
+				};
 				const current = createMockAITab({ id: 'current', createdAt: 1, readOnlyMode: true });
 				const latest = createMockAITab({ id: 'latest', createdAt: 2, permissionMode: 'standard' });
 				const { result } = renderWithSession([current, latest], [], current.id);
-				act(() => result.current[entry]());
+				await act(async () => {
+					await result.current[entry]();
+				});
 				const created = getSession().aiTabs.at(-1)!;
 				expect(created).toMatchObject(
 					entry === 'handleNewAgentSession'

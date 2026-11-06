@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
@@ -17,10 +17,20 @@ import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 import { newConversationPermissionFields } from '../../../renderer/utils/tabHelpers/focusFields';
 import { buildAgentArgs } from '../../../main/utils/agent-args';
 import { getAgentDefinition } from '../../../main/agents/definitions';
+import {
+	conversationPermissionSnapshot,
+	resolveProjectConversationPermission,
+} from '../../../renderer/utils/newConversationPermissions';
 import type { AgentConfig } from '../../../main/agents';
 import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
 
+afterEach(() => vi.restoreAllMocks());
+
 beforeEach(() => {
+	window.maestro.windows = {
+		...window.maestro.windows,
+		getConversationPermissions: vi.fn().mockResolvedValue([]),
+	};
 	useSettingsStore.setState({ newShell: true });
 	for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
 		setCapabilitiesCache(id, capabilities);
@@ -245,4 +255,119 @@ it('can inherit from a recently closed project conversation when only file tabs 
 		closedTabHistory: [{ tab: source, index: 0, closedAt: 1 }],
 	});
 	expect(createTab(session)!.tab).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
+});
+
+describe('owner permission resolution', () => {
+	it('uses live recency rather than unnecessarily retaining an old readonly restriction', async () => {
+		const target = createMockSession({
+			id: 'target',
+			aiTabs: [createMockAITab({ permissionMode: 'readonly' })],
+		});
+		useSessionStore.setState({ sessions: [target] });
+		vi.spyOn(window.maestro.windows, 'getConversationPermissions').mockResolvedValue([
+			{
+				sessionId: target.id,
+				tabs: [{ id: 'latest', lastActivity: 50, permissionMode: 'full', readOnlyMode: false }],
+			},
+		]);
+		expect(await resolveProjectConversationPermission(target)).toEqual(
+			permissionModeFields('full')
+		);
+	});
+
+	it.each(['reject', 'partial', 'absent'] as const)(
+		'keeps the strictest known mode when an owner is %s',
+		async (state) => {
+			const target = createMockSession({
+				id: 'target',
+				aiTabs: [
+					createMockAITab({ id: 'strict', permissionMode: 'standard', createdAt: 1 }),
+					createMockAITab({ id: 'recent', permissionMode: 'full', createdAt: 2 }),
+				],
+			});
+			useSessionStore.setState({ sessions: [target] });
+			const read = vi.spyOn(window.maestro.windows, 'getConversationPermissions');
+			if (state === 'reject') read.mockRejectedValue(new Error('owner unavailable'));
+			else
+				read.mockResolvedValue(
+					state === 'absent'
+						? [null]
+						: [
+								{
+									sessionId: 'other',
+									tabs: [
+										{
+											id: 'tightened',
+											lastActivity: 3,
+											permissionMode: 'readonly',
+											readOnlyMode: true,
+										},
+									],
+								},
+								null,
+							]
+				);
+			expect(await resolveProjectConversationPermission(target)).toEqual(
+				permissionModeFields(state === 'partial' ? 'readonly' : 'standard')
+			);
+		}
+	);
+
+	it('queries only the same project and SSH host, without resolving remote paths locally', async () => {
+		const target = createMockSession({
+			id: 'remote',
+			cwd: '~/project',
+			projectRoot: '~/project',
+			sessionSshRemoteConfig: { enabled: true, remoteId: 'host-a' },
+		});
+		useSessionStore.setState({
+			sessions: [
+				target,
+				{ ...target, id: 'peer' },
+				{
+					...target,
+					id: 'other-host',
+					sessionSshRemoteConfig: { enabled: true, remoteId: 'host-b' },
+				},
+				{ ...target, id: 'other-project', projectRoot: '~/other', cwd: '~/other' },
+				{ ...target, id: 'local', sessionSshRemoteConfig: undefined },
+			],
+		});
+		const read = vi
+			.spyOn(window.maestro.windows, 'getConversationPermissions')
+			.mockResolvedValue([null, null]);
+		await resolveProjectConversationPermission(target);
+		expect(read).toHaveBeenCalledExactlyOnceWith(['remote', 'peer']);
+	});
+
+	it('owner snapshots include selected and retained closed tabs but omit hidden tabs and transcript text', () => {
+		const selected = createMockAITab({
+			id: 'selected',
+			createdAt: 1,
+			lastSelectedAt: 10,
+			readOnlyMode: true,
+		});
+		const closed = createMockAITab({
+			id: 'closed',
+			createdAt: 2,
+			logs: [{ id: 'l', timestamp: 20, source: 'user', text: 'private' }],
+		});
+		useSessionStore.setState({
+			sessions: [
+				createMockSession({
+					id: 'owner',
+					aiTabs: [selected, createMockAITab({ hidden: true })],
+					closedTabHistory: [{ tab: closed, index: 0, closedAt: 30 }],
+				}),
+			],
+		});
+		expect(conversationPermissionSnapshot('owner')).toEqual({
+			sessionId: 'owner',
+			tabs: [
+				{ id: 'closed', lastActivity: 20, permissionMode: 'full', readOnlyMode: false },
+				{ id: 'selected', lastActivity: 10, permissionMode: 'readonly', readOnlyMode: true },
+			],
+		});
+		expect(conversationPermissionSnapshot('missing')).toBeNull();
+	});
 });

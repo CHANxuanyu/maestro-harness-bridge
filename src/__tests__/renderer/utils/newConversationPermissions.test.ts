@@ -258,6 +258,68 @@ it('can inherit from a recently closed project conversation when only file tabs 
 });
 
 describe('owner permission resolution', () => {
+	it.each(['missing', 'reject', 'partial'] as const)(
+		'falls back to readonly when an owner is %s even if every cached tab is full',
+		async (response) => {
+			const target = createMockSession({
+				id: 'target',
+				cwd: '/project',
+				projectRoot: '/project',
+				aiTabs: [createMockAITab({ permissionMode: 'full' })],
+			});
+			const peer = { ...target, id: 'peer' };
+			useSessionStore.setState({ sessions: [target, peer] });
+			const read = vi.spyOn(window.maestro.windows, 'getConversationPermissions');
+			if (response === 'reject') read.mockRejectedValue(new Error('owner unavailable'));
+			else
+				read.mockResolvedValue(
+					response === 'missing' ? [null, null] : [conversationPermissionSnapshot(target.id), null]
+				);
+			expect(await resolveProjectConversationPermission(target)).toEqual(
+				permissionModeFields('readonly')
+			);
+		}
+	);
+
+	it.each(['project', 'host'] as const)(
+		'excludes a peer whose authoritative %s has changed',
+		async (change) => {
+			const target = createMockSession({
+				id: 'target',
+				cwd: '/project',
+				projectRoot: '/project',
+				aiTabs: [createMockAITab({ createdAt: 1, permissionMode: 'readonly' })],
+			});
+			const peer = {
+				...target,
+				id: 'peer',
+				aiTabs: [createMockAITab({ createdAt: 100, permissionMode: 'full' })],
+			};
+			useSessionStore.setState({ sessions: [target, peer] });
+			const targetSnapshot = conversationPermissionSnapshot(target.id)!;
+			useSessionStore.setState({
+				sessions: [
+					target,
+					{
+						...peer,
+						...(change === 'project'
+							? { cwd: '/other', projectRoot: '/other' }
+							: { sessionSshRemoteConfig: { enabled: true, remoteId: 'other-host' } }),
+					},
+				],
+			});
+			const peerSnapshot = conversationPermissionSnapshot(peer.id)!;
+			useSessionStore.setState({ sessions: [target, peer] });
+			vi.spyOn(window.maestro.windows, 'getConversationPermissions').mockResolvedValue([
+				targetSnapshot,
+				peerSnapshot,
+			]);
+			expect(await resolveProjectConversationPermission(target)).toEqual(
+				permissionModeFields('readonly')
+			);
+		}
+	);
+
 	it('uses live recency rather than unnecessarily retaining an old readonly restriction', async () => {
 		const target = createMockSession({
 			id: 'target',
@@ -266,7 +328,7 @@ describe('owner permission resolution', () => {
 		useSessionStore.setState({ sessions: [target] });
 		vi.spyOn(window.maestro.windows, 'getConversationPermissions').mockResolvedValue([
 			{
-				sessionId: target.id,
+				...conversationPermissionSnapshot(target.id)!,
 				tabs: [{ id: 'latest', lastActivity: 50, permissionMode: 'full', readOnlyMode: false }],
 			},
 		]);
@@ -276,7 +338,7 @@ describe('owner permission resolution', () => {
 	});
 
 	it.each(['reject', 'partial', 'absent'] as const)(
-		'keeps the strictest known mode when an owner is %s',
+		'requires readonly when an owner is %s',
 		async (state) => {
 			const target = createMockSession({
 				id: 'target',
@@ -308,7 +370,7 @@ describe('owner permission resolution', () => {
 							]
 				);
 			expect(await resolveProjectConversationPermission(target)).toEqual(
-				permissionModeFields(state === 'partial' ? 'readonly' : 'standard')
+				permissionModeFields('readonly')
 			);
 		}
 	);
@@ -363,6 +425,8 @@ describe('owner permission resolution', () => {
 		});
 		expect(conversationPermissionSnapshot('owner')).toEqual({
 			sessionId: 'owner',
+			projectKey: 'path:local:/test/project',
+			host: null,
 			tabs: [
 				{ id: 'closed', lastActivity: 20, permissionMode: 'full', readOnlyMode: false },
 				{ id: 'selected', lastActivity: 10, permissionMode: 'readonly', readOnlyMode: true },

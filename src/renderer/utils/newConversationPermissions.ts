@@ -6,6 +6,18 @@ import { useSessionStore } from '../stores/sessionStore';
 import { sessionProjectKey, sessionHost } from './nativeConversationMatch';
 import { visibleAiTabs } from './unifiedTabOrderUtils';
 
+function permissionProjectIdentity(session: Session) {
+	const state = useSessionStore.getState();
+	return {
+		projectKey: sessionProjectKey(
+			session,
+			new Map(state.sessions.map((owner) => [owner.id, owner])),
+			new Map(state.groups.map((group) => [group.id, group]))
+		).key,
+		host: sessionHost(session) ?? null,
+	};
+}
+
 /** Keep project membership and retained conversation inventory in one place. */
 function projectSessions(session: Session): Session[] {
 	const state = useSessionStore.getState();
@@ -68,6 +80,7 @@ export function conversationPermissionSnapshot(
 	return session
 		? {
 				sessionId,
+				...permissionProjectIdentity(session),
 				tabs: knownConversations(session).map((tab) => ({
 					id: tab.id,
 					...permissionModeFields(resolveTabPermissionMode(tab)),
@@ -82,35 +95,34 @@ export async function resolveProjectConversationPermission(
 	session: Session
 ): Promise<ReturnType<typeof permissionModeFields>> {
 	const owners = projectSessions(session);
+	const identity = permissionProjectIdentity(session);
 	let snapshots: Array<ConversationPermissionSnapshot | null> | undefined;
 	try {
 		snapshots = await window.maestro.windows?.getConversationPermissions?.(
 			owners.map((owner) => owner.id)
 		);
 	} catch {
-		/* An unavailable owner uses the conservative local fallback below. */
+		/* An unavailable owner cannot authorize permissions from a cached copy. */
 	}
 	const complete =
 		snapshots?.length === owners.length &&
-		snapshots.every((snapshot, index) => snapshot?.sessionId === owners[index].id);
-	if (complete) {
-		const latest = snapshots!
-			.flatMap((snapshot) => snapshot!.tabs)
-			.reduce<
-				ConversationPermissionSnapshot['tabs'][number] | undefined
-			>((recent, tab) => (!recent || tab.lastActivity > recent.lastActivity ? tab : recent), undefined);
-		return permissionModeFields(resolveTabPermissionMode(latest));
-	}
-	// Do not guess recency from a stale peer. Retain every known restriction,
-	// including replies that succeeded while another owner was unavailable.
-	const current =
-		useSessionStore.getState().sessions.find((item) => item.id === session.id) ?? session;
-	const known = [
-		...projectSessions(current).flatMap(knownConversations),
-		...(snapshots ?? []).flatMap((snapshot) => snapshot?.tabs ?? []),
-	];
-	const modes = known.map(resolveTabPermissionMode);
-	return permissionModeFields(
-		modes.includes('readonly') ? 'readonly' : modes.includes('standard') ? 'standard' : 'full'
-	);
+		snapshots.every(
+			(snapshot, index) =>
+				snapshot?.sessionId === owners[index].id &&
+				typeof snapshot.projectKey === 'string' &&
+				(snapshot.host === null || typeof snapshot.host === 'string')
+		);
+	if (!complete) return permissionModeFields('readonly');
+	const matchesProject = (snapshot: ConversationPermissionSnapshot) =>
+		snapshot.projectKey === identity.projectKey && snapshot.host === identity.host;
+	const target = snapshots!.find((snapshot) => snapshot!.sessionId === session.id)!;
+	if (!target || !matchesProject(target)) return permissionModeFields('readonly');
+	const latest = snapshots!
+		.filter((snapshot) => matchesProject(snapshot!))
+		.flatMap((snapshot) => snapshot!.tabs)
+		.reduce<ConversationPermissionSnapshot['tabs'][number] | undefined>(
+			(recent, tab) => (!recent || tab.lastActivity > recent.lastActivity ? tab : recent),
+			undefined
+		);
+	return permissionModeFields(resolveTabPermissionMode(latest));
 }

@@ -119,8 +119,8 @@ compact permission and activity snapshot from each session's owning window in
 parallel, with a 250 ms limit. Unassigned sessions follow the existing primary
 window ownership rule. It checks the replying window and rejects a reply
 if ownership moved. Complete replies select the newest selection, message or
-creation time. Missing or timed out replies use the strictest known mode across
-local project copies and successful replies, including retained closed tabs.
+creation time after checking each authoritative project and host identity. Missing
+or timed out replies require readonly, even if every cached copy says full access.
 Projects on different SSH hosts remain separate; remote paths are not resolved
 locally. The provider creation route also bounds its source metadata hop to
 250 ms and lets the target use the same resolver after a missing reply.

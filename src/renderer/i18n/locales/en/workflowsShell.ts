@@ -1,4 +1,9 @@
 export const workflowsShell = {
+	'workflows.newShell.terminalEmpty': 'No terminal open',
+	'workflows.newShell.terminalStartFailed': 'Terminal did not start: {reason}',
+	'workflows.shell.terminalStartFailed': 'Failed to start terminal',
+	'workflows.shell.terminalsStartFailed': 'Failed to start {count} terminals',
+	'workflows.shell.terminalsNotStarted': '{count} terminals could not be started.',
 	'workflows.newShell.terminal': 'Terminal',
 	'workflows.newShell.tasks': 'Tasks',
 	'workflows.newShell.tasksEmpty': 'This conversation has no task list yet',

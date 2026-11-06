@@ -2,6 +2,11 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.newShell.terminalEmpty': '没有打开的终端',
+	'workflows.newShell.terminalStartFailed': '终端没有启动：{reason}',
+	'workflows.shell.terminalStartFailed': '终端启动失败',
+	'workflows.shell.terminalsStartFailed': '{count} 个终端启动失败',
+	'workflows.shell.terminalsNotStarted': '{count} 个终端没有启动。',
 	'workflows.newShell.terminal': '终端',
 	'workflows.newShell.tasks': '任务',
 	'workflows.newShell.tasksEmpty': '这条会话还没有任务清单',

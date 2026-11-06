@@ -49,6 +49,8 @@ export const NewShellTerminalPanel = forwardRef<
 	const typography = useSurfaceTypography('terminal');
 	const { handleCloseTerminalTab } = useTerminalTabHandlers();
 	const [error, setError] = useState('');
+	const [openedVisit, setOpenedVisit] = useState<{ sessionId: string; tabId: string } | null>(null);
+	useEffect(() => setError(''), [source.id, source.activeTabId]);
 	const panel = source.aiTabs?.find((tab) => tab.id === source.activeTabId)?.newShellPanel;
 	let pool: ReturnType<typeof panelTerminals> = [];
 	let cwd = source.cwd;
@@ -64,16 +66,37 @@ export const NewShellTerminalPanel = forwardRef<
 	const openedThisVisit = useRef(false);
 	useEffect(() => {
 		openedThisVisit.current = false;
+		setOpenedVisit(null);
 	}, [newShell, visible, source.id, source.activeTabId]);
 	useEffect(() => {
 		if (!newShell || !visible || openedThisVisit.current) return;
 		try {
-			if (openPanelTerminal(source.id)) openedThisVisit.current = true;
-			setError('');
+			if (openPanelTerminal(source.id)) {
+				openedThisVisit.current = true;
+				setOpenedVisit({ sessionId: source.id, tabId: source.activeTabId });
+			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			openedThisVisit.current = true;
+			setOpenedVisit({ sessionId: source.id, tabId: source.activeTabId });
+			setError(
+				t('workflows.newShell.terminalStartFailed', {
+					reason: err instanceof Error ? err.message : String(err),
+				})
+			);
 		}
-	}, [newShell, visible, source.id, source.activeTabId, windowContext?.ownsSession]);
+	}, [newShell, visible, source.id, source.activeTabId, windowContext?.ownsSession, t]);
+
+	const handleNewTerminal = () => {
+		try {
+			openPanelTerminal(source.id, { additional: true });
+		} catch (err) {
+			setError(
+				t('workflows.newShell.terminalStartFailed', {
+					reason: err instanceof Error ? err.message : String(err),
+				})
+			);
+		}
+	};
 
 	const mounted = useTerminalMounting(newShell && visible ? selected?.session || null : null);
 	useImperativeHandle(ref, () => ({
@@ -143,14 +166,7 @@ export const NewShellTerminalPanel = forwardRef<
 					className="p-1 shrink-0"
 					title={t('workflows.newShell.newTerminal')}
 					aria-label={t('workflows.newShell.newTerminal')}
-					onClick={() => {
-						try {
-							openPanelTerminal(source.id, { additional: true });
-							setError('');
-						} catch (err) {
-							setError(String(err));
-						}
-					}}
+					onClick={handleNewTerminal}
 				>
 					<Plus className="w-4 h-4" />
 				</button>
@@ -213,6 +229,25 @@ export const NewShellTerminalPanel = forwardRef<
 				</p>
 			)}
 			<div className="relative flex-1 min-h-0">
+				{visible &&
+					!pool.length &&
+					openedVisit?.sessionId === source.id &&
+					openedVisit.tabId === source.activeTabId && (
+						<div
+							data-testid="terminal-empty"
+							className="h-full flex flex-col items-center justify-center gap-2 text-sm"
+							style={{ color: theme.colors.textDim }}
+						>
+							<p>{t('workflows.newShell.terminalEmpty')}</p>
+							<button
+								className="px-2 py-1 rounded"
+								style={{ color: theme.colors.accent }}
+								onClick={handleNewTerminal}
+							>
+								{t('workflows.newShell.newTerminal')}
+							</button>
+						</div>
+					)}
 				{mounted.mountedTerminalSessionIds.map((id) => {
 					const owner = sessions.find((s) => s.id === id);
 					if (!owner?.terminalTabs?.length || windowContext?.ownsSession(owner.id, true) === false)
@@ -243,7 +278,16 @@ export const NewShellTerminalPanel = forwardRef<
 								theme={theme}
 								fontFamily={typography.fontFamily}
 								fontSize={typography.fontSize}
-								onTabPidChange={createTabPidChangeHandler(id)}
+								onTabPidChange={(tabId, pid) => {
+									createTabPidChangeHandler(id)(tabId, pid);
+									if (pool.some((item) => item.session.id === id && item.tab.id === tabId))
+										setError('');
+								}}
+								onSpawnFailure={(tabId, reason) => {
+									if (pool.some((item) => item.session.id === id && item.tab.id === tabId)) {
+										setError(t('workflows.newShell.terminalStartFailed', { reason }));
+									}
+								}}
 								onTabStateChange={createTabStateChangeHandler(id)}
 								searchOpen={shown && mounted.terminalSearchOpen}
 								onSearchClose={() => mounted.setTerminalSearchOpen(false)}

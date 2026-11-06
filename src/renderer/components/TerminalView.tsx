@@ -8,6 +8,8 @@ import {
 	useState,
 	useMemo,
 } from 'react';
+import { getT } from '../i18n';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useWindowContextOptional } from '../contexts/WindowContext';
 import { XTerminal, XTerminalHandle } from './XTerminal';
 import { TerminalSearchBar } from './TerminalSearchBar';
@@ -58,6 +60,7 @@ interface TerminalViewProps {
 	fontSize?: number;
 	onTabStateChange: (tabId: string, state: TerminalTab['state'], exitCode?: number) => void;
 	onTabPidChange: (tabId: string, pid: number) => void;
+	onSpawnFailure?: (tabId: string, message: string) => void;
 	searchOpen?: boolean;
 	onSearchClose?: () => void;
 	/** Whether the terminal panel is currently visible (inputMode === 'terminal'). Used to trigger repaint when returning from AI mode. */
@@ -97,6 +100,7 @@ export const TerminalView = memo(
 			fontSize,
 			onTabStateChange,
 			onTabPidChange,
+			onSpawnFailure,
 			searchOpen,
 			onSearchClose,
 			isVisible,
@@ -108,6 +112,7 @@ export const TerminalView = memo(
 		ref
 	) {
 		const windowContext = useWindowContextOptional();
+		const newShell = useSettingsStore((s) => s.newShell);
 		// Map of tabId → XTerminalHandle ref for each tab instance
 		const terminalRefs = useRef<Map<string, XTerminalHandle>>(new Map());
 		// Track previous tab states to detect transitions (for exit message)
@@ -126,6 +131,8 @@ export const TerminalView = memo(
 		onTabPidChangeRef.current = onTabPidChange;
 		const onTabStateChangeRef = useRef(onTabStateChange);
 		onTabStateChangeRef.current = onTabStateChange;
+		const onSpawnFailureRef = useRef(onSpawnFailure);
+		onSpawnFailureRef.current = onSpawnFailure;
 
 		// Touch key bar (coarse-pointer devices only). Evaluated once per render;
 		// the pointer type does not change during a session.
@@ -167,11 +174,17 @@ export const TerminalView = memo(
 				spawnFailureCountRef.current = 0;
 				spawnFailureLastMessageRef.current = null;
 				spawnFailureTimerRef.current = null;
+				const t = getT();
 				notifyToast({
 					type: 'error',
-					title: count > 1 ? `Failed to start ${count} terminals` : 'Failed to start terminal',
+					title:
+						count > 1
+							? t('workflows.shell.terminalsStartFailed', { count })
+							: t('workflows.shell.terminalStartFailed'),
 					message:
-						count > 1 ? `${count} terminals could not be started. ${lastMessage}` : lastMessage,
+						count > 1
+							? `${t('workflows.shell.terminalsNotStarted', { count })} ${lastMessage}`
+							: lastMessage,
 				});
 			}, 200);
 		}, []);
@@ -190,17 +203,21 @@ export const TerminalView = memo(
 					message,
 					decision: isPersistent ? 'keep-for-restart' : 'close',
 				});
+				// Stop another spawn while the panel renders the error before deferred close.
+				onTabStateChangeRef.current(tabId, 'exited');
+				onSpawnFailureRef.current?.(tabId, message);
 				if (isPersistent) {
-					onTabStateChangeRef.current(tabId, 'exited');
 					terminalRefs.current
 						.get(tabId)
-						?.write('\r\n\x1b[2m[failed to start] - restart from the tab menu\x1b[0m\r\n');
+						?.write(
+							`\r\n\x1b[2m[failed to start]${newShell ? '' : ' - restart from the tab menu'}\x1b[0m\r\n`
+						);
 				} else {
 					setTimeout(() => closeTerminalTab(tabId, 'spawn-failure'), 0);
 				}
 				notifySpawnFailure(message);
 			},
-			[session.id, closeTerminalTab, notifySpawnFailure]
+			[session.id, closeTerminalTab, notifySpawnFailure, newShell]
 		);
 
 		const activeTab = getActiveTerminalTab(session);
@@ -419,9 +436,9 @@ export const TerminalView = memo(
 					});
 					if (age < 2000 && !wasKilled) {
 						// Exited almost immediately - surface as a startup failure toast.
-						notifySpawnFailure(
-							`Shell exited immediately${tab.exitCode != null ? ` (exit code: ${tab.exitCode})` : ''}.`
-						);
+						const message = `Shell exited immediately${tab.exitCode != null ? ` (exit code: ${tab.exitCode})` : ''}.`;
+						onSpawnFailureRef.current?.(tabId, message);
+						notifySpawnFailure(message);
 					}
 					if (keepTab) {
 						// Keep the tab; show a visible notice instead of a silent dead husk.
@@ -430,7 +447,9 @@ export const TerminalView = memo(
 							: `process exited${tab.exitCode != null ? ` (code ${tab.exitCode})` : ''}`;
 						terminalRefs.current
 							.get(tabId)
-							?.write(`\r\n\x1b[2m[${reason}] - restart from the tab menu\x1b[0m\r\n`);
+							?.write(
+								`\r\n\x1b[2m[${reason}]${newShell ? '' : ' - restart from the tab menu'}\x1b[0m\r\n`
+							);
 					} else {
 						// Close on next tick to avoid mutating state mid-render.
 						setTimeout(() => closeTerminalTab(tabId, 'pty-exit'), 0);
@@ -444,6 +463,7 @@ export const TerminalView = memo(
 			session.sshRemoteId,
 			closeTerminalTab,
 			notifySpawnFailure,
+			newShell,
 		]);
 
 		const terminalTabs = session.terminalTabs || [];

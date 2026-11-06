@@ -9,6 +9,7 @@
  */
 
 import React from 'react';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { render, act, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TerminalView } from '../../../renderer/components/TerminalView';
@@ -171,6 +172,7 @@ const maestro = () => (window as any).maestro;
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	useSettingsStore.setState({ newShell: false, uiLanguage: 'en' });
 	xtermPropsBySessionId.clear();
 	// spawnTerminalTab and onData are not in the global setup mock - add them here
 	maestro().process.spawnTerminalTab = vi.fn().mockResolvedValue({ success: true, pid: 9999 });
@@ -995,4 +997,91 @@ describe('TerminalView — PTY window size', () => {
 
 		expect(mockSyncSize).toHaveBeenCalled();
 	});
+});
+
+describe('TerminalView startup feedback', () => {
+	afterEach(() => vi.useRealTimers());
+
+	it.each([false, true])(
+		'reports the failure callback and respects newShell=%s in xterm',
+		async (newShell) => {
+			useSettingsStore.setState({ newShell });
+			const onSpawnFailure = vi.fn();
+			maestro().process.spawnTerminalTab.mockRejectedValueOnce(new Error('PTY unavailable'));
+			const tab = makeTab({ pid: 0, startupCommand: 'echo fixture' });
+			await act(async () => {
+				render(
+					<TerminalView
+						{...defaultProps}
+						session={makeSession([tab])}
+						onSpawnFailure={onSpawnFailure}
+						isVisible
+					/>
+				);
+			});
+			expect(onSpawnFailure).toHaveBeenCalledWith('tab-1', 'PTY unavailable');
+			expect(mockWrite).toHaveBeenCalledWith(
+				newShell
+					? '\r\n\x1b[2m[failed to start]\x1b[0m\r\n'
+					: '\r\n\x1b[2m[failed to start] - restart from the tab menu\x1b[0m\r\n'
+			);
+		}
+	);
+
+	it.each([false, true])('respects newShell=%s in the exit notice', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		const tab = makeTab({ startupCommand: 'echo fixture', createdAt: Date.now() - 5000 });
+		const view = render(<TerminalView {...defaultProps} session={makeSession([tab])} isVisible />);
+		view.rerender(
+			<TerminalView
+				{...defaultProps}
+				session={makeSession([{ ...tab, state: 'exited', exitCode: 1 }])}
+				isVisible
+			/>
+		);
+		expect(mockWrite).toHaveBeenCalledWith(
+			newShell
+				? '\r\n\x1b[2m[process exited (code 1)]\x1b[0m\r\n'
+				: '\r\n\x1b[2m[process exited (code 1)] - restart from the tab menu\x1b[0m\r\n'
+		);
+	});
+
+	it.each([
+		[false, 'en', 1, 'Failed to start terminal', 'PTY unavailable'],
+		[true, 'en', 1, 'Failed to start terminal', 'PTY unavailable'],
+		[false, 'zh-CN', 1, '终端启动失败', 'PTY unavailable'],
+		[true, 'zh-CN', 1, '终端启动失败', 'PTY unavailable'],
+		[
+			false,
+			'en',
+			2,
+			'Failed to start 2 terminals',
+			'2 terminals could not be started. PTY unavailable',
+		],
+		[
+			true,
+			'en',
+			2,
+			'Failed to start 2 terminals',
+			'2 terminals could not be started. PTY unavailable',
+		],
+		[false, 'zh-CN', 2, '2 个终端启动失败', '2 个终端没有启动。 PTY unavailable'],
+		[true, 'zh-CN', 2, '2 个终端启动失败', '2 个终端没有启动。 PTY unavailable'],
+	] as const)(
+		'localizes newShell=%s locale=%s count=%s',
+		async (newShell, locale, count, title, message) => {
+			vi.useFakeTimers();
+			useSettingsStore.setState({ newShell, uiLanguage: locale });
+			maestro().process.spawnTerminalTab.mockRejectedValue(new Error('PTY unavailable'));
+			const tabs = Array.from({ length: count }, (_, index) =>
+				makeTab({ id: `tab-${index}`, pid: 0, startupCommand: 'echo fixture' })
+			);
+			await act(async () => {
+				render(<TerminalView {...defaultProps} session={makeSession(tabs)} isVisible />);
+			});
+			await act(async () => vi.advanceTimersByTimeAsync(250));
+			expect(mockNotifyToast).toHaveBeenCalledTimes(1);
+			expect(mockNotifyToast).toHaveBeenCalledWith({ type: 'error', title, message });
+		}
+	);
 });

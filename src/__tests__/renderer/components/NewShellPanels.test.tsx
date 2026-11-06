@@ -13,10 +13,11 @@ import {
 	renderHook,
 	render as renderView,
 	screen,
+	within,
 	waitFor,
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createRef, forwardRef, useEffect, useImperativeHandle } from 'react';
+import { Profiler, createRef, forwardRef, useEffect, useImperativeHandle } from 'react';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 import { mockTheme } from '../../helpers/mockTheme';
@@ -85,6 +86,166 @@ beforeEach(() => {
 });
 
 describe('new shell terminals', () => {
+	it.each([
+		['en', 'No terminal open', 'New terminal', 'Terminal did not start: PTY unavailable'],
+		['zh-CN', '没有打开的终端', '新建终端', '终端没有启动：PTY unavailable'],
+	] as const)(
+		'retains a spawn failure until a successful retry in %s',
+		async (locale, empty, create, failure) => {
+			useSettingsStore.setState({ uiLanguage: locale });
+			vi.mocked(window.maestro.process.spawnTerminalTab).mockRejectedValueOnce(
+				new Error('PTY unavailable')
+			);
+			render(<NewShellTerminalPanel session={first()} theme={mockTheme} visible />);
+			await waitFor(() => expect(screen.queryByTestId('terminal-instance')).toBeNull());
+			expect(screen.getByRole('alert')).toHaveTextContent(failure);
+			expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(1);
+			const emptyState = screen.getByTestId('terminal-empty');
+			expect(emptyState).toHaveTextContent(empty);
+			expect(emptyState).toHaveClass('flex', 'items-center', 'justify-center', 'text-sm');
+			expect(emptyState).toHaveStyle({ color: mockTheme.colors.textDim });
+			let finish!: (result: { success: boolean; pid: number }) => void;
+			vi.mocked(window.maestro.process.spawnTerminalTab).mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						finish = resolve;
+					})
+			);
+			fireEvent.click(within(emptyState).getByRole('button', { name: create }));
+			await waitFor(() => expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(2));
+			expect(screen.getByRole('alert')).toHaveTextContent(failure);
+			expect(screen.queryByTestId('terminal-empty')).toBeNull();
+			await act(async () => finish({ success: true, pid: 43 }));
+			expect(screen.queryByRole('alert')).toBeNull();
+			expect(screen.getByTestId('terminal-instance')).toHaveAttribute('data-pty-pid', '43');
+		}
+	);
+
+	it('offers a new terminal after the last terminal closes', async () => {
+		render(<NewShellTerminalPanel session={first()} theme={mockTheme} visible />);
+		await waitFor(() =>
+			expect(screen.getByTestId('terminal-instance')).toHaveAttribute('data-pty-pid', '42')
+		);
+		const closedId = useSessionStore.getState().sessions[0].terminalTabs[0].id;
+		act(() => useTabStore.getState().closeTerminalTab(closedId));
+		expect(screen.getByTestId('terminal-empty')).toHaveTextContent('No terminal open');
+		fireEvent.click(
+			within(screen.getByTestId('terminal-empty')).getByRole('button', { name: 'New terminal' })
+		);
+		await waitFor(() => expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(2));
+		expect(useSessionStore.getState().sessions[0].terminalTabs[0].id).not.toBe(closedId);
+		expect(screen.queryByTestId('terminal-empty')).toBeNull();
+	});
+
+	it('does not show the empty state while the automatic spawn is pending', async () => {
+		let finish!: (result: { success: boolean; pid: number }) => void;
+		vi.mocked(window.maestro.process.spawnTerminalTab).mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve;
+				})
+		);
+		render(<NewShellTerminalPanel session={first()} theme={mockTheme} visible />);
+		expect(screen.queryByTestId('terminal-empty')).toBeNull();
+		await act(async () => finish({ success: true, pid: 42 }));
+		expect(screen.queryByTestId('terminal-empty')).toBeNull();
+	});
+
+	it('never commits the empty state during automatic opening on a new visit', async () => {
+		const commits: boolean[] = [];
+		const view = render(
+			<Profiler
+				id="terminal"
+				onRender={() => commits.push(!!screen.queryByTestId('terminal-empty'))}
+			>
+				<NewShellTerminalPanel session={first()} theme={mockTheme} visible />
+			</Profiler>
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId('terminal-instance')).toHaveAttribute('data-pty-pid', '42')
+		);
+		expect(commits).not.toContain(true);
+		act(() =>
+			useTabStore
+				.getState()
+				.closeTerminalTab(useSessionStore.getState().sessions[0].terminalTabs[0].id)
+		);
+		expect(screen.getByTestId('terminal-empty')).toBeInTheDocument();
+		const other = createMockSession({ ...first(), id: 'other', cwd: '/other' });
+		act(() => useSessionStore.getState().setSessions((s) => [...s, other]));
+		commits.length = 0;
+		view.rerender(
+			<Profiler
+				id="terminal"
+				onRender={() => commits.push(!!screen.queryByTestId('terminal-empty'))}
+			>
+				<NewShellTerminalPanel session={other} theme={mockTheme} visible />
+			</Profiler>
+		);
+		await waitFor(() => expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(2));
+		expect(commits).not.toContain(true);
+	});
+
+	it('shows the empty state when automatic opening throws before creating a tab', () => {
+		const invalid = createMockSession({
+			...first(),
+			sessionSshRemoteConfig: { enabled: true, remoteId: '' },
+		});
+		useSessionStore.getState().setSessions([invalid]);
+		render(<NewShellTerminalPanel session={invalid} theme={mockTheme} visible />);
+		expect(screen.getByTestId('terminal-empty')).toHaveTextContent('No terminal open');
+		expect(screen.getByRole('alert')).toHaveTextContent(
+			'Terminal did not start: SSH is enabled but no remote is configured'
+		);
+		fireEvent.click(
+			within(screen.getByTestId('terminal-empty')).getByRole('button', { name: 'New terminal' })
+		);
+		expect(screen.getByRole('alert')).toHaveTextContent(
+			'Terminal did not start: SSH is enabled but no remote is configured'
+		);
+		expect(window.maestro.process.spawnTerminalTab).not.toHaveBeenCalled();
+	});
+
+	it('keeps an immediate shell exit reason after its terminal is removed', async () => {
+		render(<NewShellTerminalPanel session={first()} theme={mockTheme} visible />);
+		await waitFor(() =>
+			expect(screen.getByTestId('terminal-instance')).toHaveAttribute('data-pty-pid', '42')
+		);
+		const terminalId = useSessionStore.getState().sessions[0].terminalTabs[0].id;
+		act(() =>
+			vi.mocked(window.maestro.process.onExit).mock.lastCall![0](`first-terminal-${terminalId}`, 1)
+		);
+		await waitFor(() => expect(screen.queryByTestId('terminal-instance')).toBeNull());
+		expect(screen.getByRole('alert')).toHaveTextContent(
+			'Terminal did not start: Shell exited immediately (exit code: 1).'
+		);
+		expect(screen.getByTestId('terminal-empty')).toBeInTheDocument();
+	});
+
+	it('does not carry another conversation failure into a pending automatic spawn', async () => {
+		vi.mocked(window.maestro.process.spawnTerminalTab).mockRejectedValueOnce(
+			new Error('PTY unavailable')
+		);
+		const view = render(<NewShellTerminalPanel session={first()} theme={mockTheme} visible />);
+		await waitFor(() => expect(screen.getByTestId('terminal-empty')).toBeInTheDocument());
+		expect(screen.getByRole('alert')).toHaveTextContent('PTY unavailable');
+		const other = createMockSession({ ...first(), id: 'other', cwd: '/other' });
+		act(() => useSessionStore.getState().setSessions((s) => [...s, other]));
+		let finish!: (result: { success: boolean; pid: number }) => void;
+		vi.mocked(window.maestro.process.spawnTerminalTab).mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve;
+				})
+		);
+		view.rerender(<NewShellTerminalPanel session={other} theme={mockTheme} visible />);
+		try {
+			expect(screen.queryByRole('alert')).toBeNull();
+		} finally {
+			await act(async () => finish({ success: true, pid: 43 }));
+		}
+	});
+
 	it('starts lazily and keeps the same xterm across collapse, panel and conversation switches', async () => {
 		const session = first();
 		const { rerender } = render(
@@ -282,6 +443,7 @@ describe('new shell terminals', () => {
 			</WindowProvider>
 		);
 		expect(window.maestro.process.spawnTerminalTab).not.toHaveBeenCalled();
+		expect(screen.queryByTestId('terminal-empty')).toBeNull();
 		await act(async () =>
 			hydrate({ id: 'primary', sessionIds: [b.id], activeSessionId: b.id } as Awaited<
 				ReturnType<typeof window.maestro.windows.getState>
@@ -373,6 +535,7 @@ describe('new shell terminals', () => {
 			</WindowProvider>
 		);
 		expect(window.maestro.process.spawnTerminalTab).not.toHaveBeenCalled();
+		expect(screen.queryByTestId('terminal-empty')).toBeNull();
 		await act(async () =>
 			hydrate({ id: 'primary', sessionIds: ['first'], activeSessionId: 'first' } as Awaited<
 				ReturnType<typeof window.maestro.windows.getState>

@@ -1,3 +1,4 @@
+import { notifyToast } from '../../../../renderer/stores/notificationStore';
 import { WindowProvider, useWindowContext } from '../../../../renderer/contexts/WindowContext';
 import { createElement, forwardRef } from 'react';
 import { render, screen } from '@testing-library/react';
@@ -16,6 +17,8 @@ import { openPanelTerminal } from '../../../../renderer/services/newShellTermina
 
 vi.mock('../../../../renderer/components/XTerminal', () => ({ XTerminal: forwardRef(() => null) }));
 
+vi.mock('../../../../renderer/stores/notificationStore', () => ({ notifyToast: vi.fn() }));
+
 const ack = vi.fn();
 const saved = vi.fn().mockResolvedValue(true);
 const opened = vi.fn();
@@ -23,7 +26,7 @@ const listed = vi.fn();
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	useSettingsStore.setState({ newShell: true });
+	useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
 	useSessionStore.setState({
 		activeSessionId: 'first',
 		sessions: ['first', 'second'].map((id) =>
@@ -459,3 +462,27 @@ describe('new shell terminal CLI bridge', () => {
 		expect(saved).not.toHaveBeenCalled();
 	});
 });
+
+it.each([false, true])(
+	'localizes background terminal failures with newShell=%s',
+	async (newShell) => {
+		act(() => useSettingsStore.setState({ newShell, uiLanguage: 'zh-CN' }));
+		vi.mocked(window.maestro.process.spawnTerminalTab).mockRejectedValueOnce(
+			new Error('PTY unavailable')
+		);
+		act(() =>
+			window.dispatchEvent(
+				new CustomEvent('maestro:openTerminalTab', {
+					detail: { sessionId: 'first', background: true, responseChannel: 'open' },
+				})
+			)
+		);
+		await waitFor(() =>
+			expect(notifyToast).toHaveBeenCalledWith({
+				type: 'error',
+				title: '终端启动失败',
+				message: 'PTY unavailable',
+			})
+		);
+	}
+);

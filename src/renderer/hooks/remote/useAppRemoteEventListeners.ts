@@ -1,3 +1,4 @@
+import { getT } from '../../i18n';
 import { getWindowContext } from '../../contexts/WindowContext';
 import { previousHostTerminals } from '../../utils/terminalTabHelpers';
 import {
@@ -527,7 +528,11 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 					} else {
 						useTabStore.getState().closeTerminalTab(tabId, 'spawn-failure');
 					}
-					notifyToast({ type: 'error', title: 'Failed to start terminal', message });
+					notifyToast({
+						type: 'error',
+						title: getT()('workflows.shell.terminalStartFailed'),
+						message,
+					});
 				},
 			});
 		}

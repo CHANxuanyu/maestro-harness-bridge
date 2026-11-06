@@ -511,7 +511,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 							   quiet text with an icon rather than a colored pill. */
 							activeSession.isGitRepo && (
 								<button
-									className="flex items-center gap-1.5 text-xs px-1.5 py-0.5 rounded-md min-w-0 cursor-pointer outline-none hover:bg-white/10"
+									className={`flex items-center gap-1.5 text-xs px-1.5 py-0.5 rounded-md min-w-0 cursor-pointer outline-none hover:bg-white/10${newShell ? ' shrink-0 max-w-48' : ''}`}
 									style={{ color: theme.colors.textDim }}
 									onClick={handleGitPillClick}
 									title={gitInfo?.branch || undefined}

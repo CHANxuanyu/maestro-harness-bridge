@@ -48,7 +48,10 @@ export function ProjectStartView({ theme }: { theme: Theme }) {
 						type="button"
 						onClick={() => void chooseProject()}
 						className="px-5 py-2.5 rounded-md text-sm font-medium focus-ring"
-						style={{ backgroundColor: theme.colors.textMain, color: theme.colors.bgMain }}
+						style={{
+							backgroundColor: theme.colors.accent,
+							color: theme.colors.accentForeground,
+						}}
 					>
 						{t('workflows.projects.folder')}
 					</button>

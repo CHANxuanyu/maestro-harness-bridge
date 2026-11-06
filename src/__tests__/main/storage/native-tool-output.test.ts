@@ -31,6 +31,34 @@ async function fixture(rows: unknown[], compressed = false) {
 }
 
 describe('native tool output on demand', () => {
+	it('finds Claude child tools only inside the parent session subagents directory', async () => {
+		const file = await fixture([claude('parent', 'parent-call')]);
+		const children = file.replace(/\.jsonl$/, '') + '/subagents';
+		await fs.mkdir(children, { recursive: true });
+		const child = path.join(children, 'agent-child.jsonl');
+		const output = 'child output'.repeat(1000) + 'CHILD TAIL';
+		await fs.writeFile(child, JSON.stringify(claude(output)));
+		const before = await fs.stat(child);
+		expect(await readNativeToolOutput(file, 'claude-code', 'call-1')).toMatchObject({
+			status: 'found',
+			text: output,
+		});
+		expect((await fs.stat(child)).mtimeMs).toBe(before.mtimeMs);
+		expect(
+			await readNativeToolOutput(path.join(root, 'another.jsonl'), 'claude-code', 'call-1')
+		).toEqual({ status: 'not-found' });
+	});
+	it('does not follow a child transcript symlink out of the session', async () => {
+		const file = await fixture([]);
+		const children = file.replace(/\.jsonl$/, '') + '/subagents';
+		await fs.mkdir(children, { recursive: true });
+		const outside = path.join(root, 'outside.jsonl');
+		await fs.writeFile(outside, JSON.stringify(claude('outside')));
+		await fs.symlink(outside, path.join(children, 'agent-link.jsonl'));
+		expect(await readNativeToolOutput(file, 'claude-code', 'call-1')).toEqual({
+			status: 'not-found',
+		});
+	});
 	it('retains the real Claude output length in the existing compact preview', () => {
 		const text = 'x'.repeat(9000) + 'final error';
 		expect(flattenToolResultContent(text)).toBe(compactToolOutput(text).output);

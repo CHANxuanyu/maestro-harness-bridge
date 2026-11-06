@@ -1,4 +1,6 @@
-import { readCodexRollout } from '../../shared/codexRollout';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { readCodexRollout, MAX_CODEX_ROLLOUT_BYTES } from '../../shared/codexRollout';
 import { flattenToolResultContent } from '../parsers/claude-output-parser';
 import { codexToolOutputText } from '../../shared/codexToolOutput';
 import type { NativeToolOutputResult } from '../../shared/nativeToolOutput';
@@ -11,8 +13,42 @@ export async function readNativeToolOutput(
 	provider: 'claude-code' | 'codex',
 	toolCallId: string
 ): Promise<NativeToolOutputResult> {
+	const parent = await readToolOutputFromFile(file, provider, toolCallId);
+	if (provider !== 'claude-code' || parent.status !== 'not-found') return parent;
 	try {
-		const content = await readCodexRollout(file);
+		const sessionDir = file.replace(/\.jsonl$/, '');
+		const directory = path.join(sessionDir, 'subagents');
+		// A child lookup is confined to this parent's own directory.
+		if (!(await fs.lstat(sessionDir)).isDirectory() || !(await fs.lstat(directory)).isDirectory())
+			return { status: 'not-found' };
+		let remaining = MAX_CODEX_ROLLOUT_BYTES - (await fs.stat(file)).size;
+		let entries = 0;
+		for await (const entry of await fs.opendir(directory)) {
+			if (++entries > 128) return { status: 'too-large' };
+			if (!entry.isFile() || !/^agent-.*\.jsonl$/.test(entry.name)) continue;
+			const child = path.join(directory, entry.name);
+			const size = (await fs.lstat(child)).size;
+			if (size > remaining) return { status: 'too-large' };
+			remaining -= size;
+			const result = await readToolOutputFromFile(child, provider, toolCallId, size);
+			if (result.status !== 'not-found') return result;
+		}
+		return { status: 'not-found' };
+	} catch (error) {
+		return {
+			status: (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'not-found' : 'unavailable',
+		};
+	}
+}
+
+async function readToolOutputFromFile(
+	file: string,
+	provider: 'claude-code' | 'codex',
+	toolCallId: string,
+	maxBytes = MAX_CODEX_ROLLOUT_BYTES
+): Promise<NativeToolOutputResult> {
+	try {
+		const content = await readCodexRollout(file, maxBytes);
 		let start = 0;
 		while (start < content.length) {
 			const newline = content.indexOf('\n', start);

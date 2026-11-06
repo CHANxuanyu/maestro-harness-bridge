@@ -229,7 +229,12 @@ export class NativeApp {
 			process.execPath,
 			[path.resolve('dist/cli/maestro-cli.js'), ...args, '--json'],
 			{ env: { ...process.env, ...this.env, ...env } }
-		);
+		).catch((error: Error & { stdout?: string; stderr?: string }) => {
+			throw new Error(
+				`${error.message}\nstdout:\n${error.stdout ?? ''}\nstderr:\n${error.stderr ?? ''}`,
+				{ cause: error }
+			);
+		});
 		return JSON.parse(result.stdout);
 	}
 	async createAgent(

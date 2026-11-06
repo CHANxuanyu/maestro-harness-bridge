@@ -83,3 +83,10 @@ it('copies only the bounded returned text through the desktop clipboard handler'
 	await nativeHistory('tool-output', 'tab', 'call-1', { json: true, copy: true });
 	expect(invokeNativeHistory).toHaveBeenLastCalledWith('clipboard:writeText', ['TAIL']);
 });
+
+it('searches native history through the same desktop implementation with an optional project', async () => {
+	await nativeHistory('search', 'secret phrase', undefined, { json: true, project: '/project' });
+	expect(invokeNativeHistory).toHaveBeenCalledWith('agentSessions:searchNativeHistory', [
+		{ query: 'secret phrase', projectPath: '/project' },
+	]);
+});

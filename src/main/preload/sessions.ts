@@ -1,3 +1,7 @@
+import type {
+	NativeHistorySearchRequest,
+	NativeHistorySearchResult,
+} from '../../shared/nativeHistorySearch';
 import type { NativeToolOutputTarget, NativeToolOutputResult } from '../../shared/nativeToolOutput';
 import type { NativeProject, OpenProjectTarget, OpenProjectResult } from '../../shared/projects';
 /**
@@ -240,6 +244,12 @@ export function createAgentSessionsApi() {
 		): Promise<NativeToolOutputResult> =>
 			ipcRenderer.invoke('agentSessions:toolOutput', target, toolCallId),
 
+		searchNativeHistory: (
+			request: NativeHistorySearchRequest
+		): Promise<NativeHistorySearchResult> =>
+			ipcRenderer.invoke('agentSessions:searchNativeHistory', request),
+		cancelNativeHistorySearch: (requestId: string): Promise<void> =>
+			ipcRenderer.invoke('agentSessions:cancelNativeHistorySearch', requestId),
 		projects: (): Promise<NativeProject[]> => ipcRenderer.invoke('agentSessions:projects'),
 		openProject: (path: string): Promise<OpenProjectResult> =>
 			ipcRenderer.invoke('agentSessions:openProject', path),

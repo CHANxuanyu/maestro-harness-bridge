@@ -1,3 +1,4 @@
+import { parseNativeSearchMessages } from '../../shared/sessionSearch';
 /**
  * Codex CLI Session Storage Implementation
  *
@@ -1708,43 +1709,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			return [];
 		}
 
-		const lines = content.split('\n').filter((l) => l.trim());
-		const searchableMessages: SearchableMessage[] = [];
-
-		for (const line of lines) {
-			try {
-				const entry = JSON.parse(line);
-
-				let textContent = '';
-				let role: 'user' | 'assistant' | null = null;
-
-				// Handle message entries (legacy format)
-				if (entry.type === 'message') {
-					role = entry.role;
-					textContent = extractTextFromContent(entry.content);
-				}
-
-				// Handle response_item messages (current Codex format)
-				if (entry.type === 'response_item' && entry.payload?.type === 'message') {
-					role = entry.payload.role;
-					textContent = extractTextFromContent(entry.payload.content);
-				}
-
-				// Handle item.completed agent_message
-				if (entry.type === 'item.completed' && entry.item?.type === 'agent_message') {
-					role = 'assistant';
-					textContent = entry.item.text || '';
-				}
-
-				if (role && (role === 'user' || role === 'assistant') && textContent.trim()) {
-					searchableMessages.push({ role, textContent });
-				}
-			} catch {
-				// Skip malformed lines
-			}
-		}
-
-		return searchableMessages;
+		return parseNativeSearchMessages(content, 'codex').messages;
 	}
 
 	getSessionPath(

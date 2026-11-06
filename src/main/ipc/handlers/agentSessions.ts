@@ -1,3 +1,8 @@
+import { runNativeHistorySearch } from '../../storage/native-history-search';
+import type {
+	NativeHistorySearchRequest,
+	NativeHistorySearchAccount,
+} from '../../../shared/nativeHistorySearch';
 import { nativeToolCommand } from '../../../shared/nativeToolOutput';
 import { MAX_PERSISTED_TOOL_OUTPUT_CHARS } from '../../../shared/toolOutput';
 import type {
@@ -423,20 +428,81 @@ function aggregateProviderStats(
 export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDependencies): void {
 	const getMainWindow = deps?.getMainWindow;
 	const safeSend = createSafeSend(getMainWindow ?? (() => null));
-	const nativeProjects = createNativeProjectDiscovery({
-		accountDirs: async (provider) => {
-			const dirs = await getProviderAccountDirs(provider);
-			const layers = getAgentAccountDirLayers(provider);
-			const effectiveDefault = resolveAccountDir({ toolType: provider }, layers);
-			if (effectiveDefault) dirs.push(effectiveDefault);
-			for (const owner of getSessionsStore().get('sessions', [])) {
-				if (owner.toolType !== provider || owner.sessionSshRemoteConfig?.enabled) continue;
-				const dir = resolveAgentAccountDir(owner.id);
-				if (dir) dirs.push(dir);
-			}
-			return [...new Set(dirs)];
-		},
+	const nativeAccountDirs = async (provider: string) => {
+		const dirs = await getProviderAccountDirs(provider);
+		const layers = getAgentAccountDirLayers(provider);
+		const effectiveDefault = resolveAccountDir({ toolType: provider }, layers);
+		if (effectiveDefault) dirs.push(effectiveDefault);
+		for (const owner of getSessionsStore().get('sessions', [])) {
+			if (owner.toolType !== provider || owner.sessionSshRemoteConfig?.enabled) continue;
+			const dir = resolveAgentAccountDir(owner.id);
+			if (dir) dirs.push(dir);
+		}
+		return [...new Set(dirs)];
+	};
+	const nativeProjects = createNativeProjectDiscovery({ accountDirs: nativeAccountDirs });
+	const searches = new Map<string, AbortController>();
+	ipcMain.handle('agentSessions:cancelNativeHistorySearch', (event, requestId: string) => {
+		searches.get(`${event.sender?.id ?? 'bridge'}:${requestId}`)?.abort();
 	});
+	ipcMain.handle(
+		'agentSessions:searchNativeHistory',
+		async (event, request: NativeHistorySearchRequest) => {
+			if (
+				!request ||
+				typeof request.query !== 'string' ||
+				request.query.length > 256 ||
+				(request.projectPath !== undefined &&
+					(typeof request.projectPath !== 'string' || !path.isAbsolute(request.projectPath))) ||
+				(request.requestId !== undefined &&
+					(typeof request.requestId !== 'string' || request.requestId.length > 128))
+			)
+				throw new Error('Invalid native history search');
+			if (request.query.trim().length < 2) return { hits: [], truncated: false };
+			const key = request.requestId
+				? `${event.sender?.id ?? 'bridge'}:${request.requestId}`
+				: undefined;
+			const controller = new AbortController();
+			if (key) {
+				searches.get(key)?.abort();
+				searches.set(key, controller);
+			}
+			let timedOut = false;
+			const timeout = setTimeout(() => {
+				timedOut = true;
+				controller.abort();
+			}, 5000);
+			let onAbort = () => {};
+			const cancelled = new Promise<null>((resolve) => {
+				onAbort = () => resolve(null);
+				controller.signal.addEventListener('abort', onAbort, { once: true });
+			});
+			const stopped = () =>
+				timedOut
+					? { hits: [], truncated: true, limited: true }
+					: { hits: [], truncated: false, cancelled: true };
+			try {
+				const accounts: NativeHistorySearchAccount[] = [];
+				for (const provider of ['claude-code', 'codex'] as const) {
+					if (controller.signal.aborted) return stopped();
+					const directories = await Promise.race([nativeAccountDirs(provider), cancelled]);
+					if (!directories || controller.signal.aborted) return stopped();
+					for (const accountDir of directories.slice(0, 64))
+						accounts.push({ provider, accountDir });
+				}
+				const result = await runNativeHistorySearch(
+					{ query: request.query, projectPath: request.projectPath, accounts },
+					controller.signal
+				);
+				return timedOut ? stopped() : result;
+			} finally {
+				clearTimeout(timeout);
+				controller.signal.removeEventListener('abort', onAbort);
+				if (key && searches.get(key) === controller) searches.delete(key);
+			}
+		}
+	);
+
 	const openProject = createProjectOpener({
 		sessions: () => getSessionsStore().get('sessions', []),
 		detect: async () => (await deps?.getAgentDetector?.()?.detectAgents()) ?? [],

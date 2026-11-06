@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { searchNativeHistoryFiles } from '../../../main/storage/native-history-search-reader';
 import { embedSystemPromptInPrompt } from '../../../shared/embeddedSystemPrompt';
 
@@ -16,7 +16,54 @@ beforeEach(async () => {
 	];
 });
 afterEach(async () => {
+	vi.restoreAllMocks();
 	await fs.rm(root, { recursive: true, force: true });
+});
+
+it('bounds title index bytes and reports incomplete metadata without dropping a body hit', async () => {
+	const id = '00000000-0000-0000-0000-000000000001';
+	await seed('codex', id, 'amber lighthouse');
+	const indexPath = path.join(accounts[1].accountDir, 'session_index.jsonl');
+	await fs.writeFile(indexPath, JSON.stringify({ id, thread_name: 'x'.repeat(5000) }));
+	const result = await searchNativeHistoryFiles({
+		query: 'amber lighthouse',
+		accounts,
+		limits: { maxBytes: 3000 },
+	});
+	expect(result).toMatchObject({ truncated: true, limited: true });
+	expect(result.hits).toHaveLength(1);
+	expect(result.hits[0].conversation.title).toBe('Unrelated title');
+});
+
+it('reads each account title index once and keeps equal native IDs in separate accounts', async () => {
+	const id = '00000000-0000-0000-0000-000000000001';
+	const first = await seed('codex', id, 'amber lighthouse');
+	await seed('codex', '00000000-0000-0000-0000-000000000002', 'amber lighthouse');
+	const secondPool = path.join(root, 'second-codex');
+	const secondFile = path.join(secondPool, 'sessions', path.basename(first));
+	await fs.mkdir(path.dirname(secondFile), { recursive: true });
+	await fs.copyFile(first, secondFile);
+	accounts.push({ provider: 'codex', accountDir: secondPool });
+	const indexes = [accounts[1].accountDir, secondPool].map((pool) =>
+		path.join(pool, 'session_index.jsonl')
+	);
+	await Promise.all(
+		indexes.map((file, index) =>
+			fs.writeFile(file, JSON.stringify({ id, thread_name: `Account ${index}` }))
+		)
+	);
+	const opened = vi.spyOn(fs, 'open');
+	const result = await searchNativeHistoryFiles({ query: 'amber lighthouse', accounts });
+	expect(result.truncated).toBe(false);
+	expect(result.hits).toHaveLength(3);
+	expect(
+		result.hits
+			.filter((hit) => hit.conversation.nativeSessionId === id)
+			.map((hit) => hit.conversation.title)
+			.sort()
+	).toEqual(['Account 0', 'Account 1']);
+	for (const file of indexes)
+		expect(opened.mock.calls.filter(([name]) => name === file)).toHaveLength(1);
 });
 async function seed(
 	provider: 'claude-code' | 'codex',

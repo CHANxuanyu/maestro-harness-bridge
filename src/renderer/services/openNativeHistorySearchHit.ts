@@ -81,7 +81,12 @@ export async function openNativeHistorySearchHit(
 			return older.length ? { ...tab, logs } : tab;
 		});
 		if (!logId || !current()) return false;
-		useUIStore.getState().setPendingLogJump({ sessionId: ownerId, tabId, logId });
+		useUIStore.getState().setPendingLogJump({
+			sessionId: ownerId,
+			tabId,
+			logId,
+			revealTurnActivity: true,
+		});
 		return true;
 	} catch {
 		return false;

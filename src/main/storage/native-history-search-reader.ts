@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readCodexRollout, codexRolloutSessionId } from '../../shared/codexRollout';
 import { extractMatchPreview, parseNativeSearchMessages } from '../../shared/sessionSearch';
 import { normalizeWorktreePath } from '../../shared/worktreePaths';
+import { parseCodexSessionTitles } from '../../shared/codexSessionMetadata';
 import type {
 	NativeHistorySearchAccount,
 	NativeHistorySearchRequest,
@@ -34,6 +35,7 @@ export async function searchNativeHistoryFiles(
 	result.truncated = discovered.truncated;
 	if (discovered.truncated) result.limited = true;
 	const seen = new Set<string>();
+	const titlesByPool = new Map<string, Map<string, string>>();
 	const requestedProject = input.projectPath
 		? normalizeWorktreePath(
 				await fs.realpath(input.projectPath).catch(() => path.resolve(input.projectPath!))
@@ -90,6 +92,34 @@ export async function searchNativeHistoryFiles(
 				result.truncated = true;
 				break;
 			}
+			if (provider === 'codex' && !titlesByPool.has(pool)) {
+				titlesByPool.set(pool, new Map());
+				try {
+					const indexPath = path.join(pool, 'session_index.jsonl');
+					const indexStat = await fs.stat(indexPath);
+					const indexAllowance = Math.min(8 * 1024 * 1024, Math.floor(remaining / 2));
+					if (Date.now() >= deadline || indexStat.size > indexAllowance || indexAllowance <= 0) {
+						result.truncated = true;
+						result.limited = true;
+					} else {
+						remaining -= indexStat.size;
+						let index: string;
+						try {
+							index = await readCodexRollout(indexPath, indexAllowance);
+						} catch (error) {
+							remaining -= indexAllowance;
+							throw error;
+						}
+						remaining -= Buffer.byteLength(index);
+						titlesByPool.set(pool, parseCodexSessionTitles(index));
+					}
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+						result.truncated = true;
+						result.limited = true;
+					}
+				}
+			}
 
 			const matchPreview = extractMatchPreview(
 				message.textContent,
@@ -105,6 +135,7 @@ export async function searchNativeHistoryFiles(
 					projectKey: parsed.projectPath,
 					projectPath: parsed.projectPath,
 					title: (
+						(provider === 'codex' ? titlesByPool.get(pool)?.get(nativeSessionId) : undefined) ||
 						parsed.title ||
 						parsed.messages.find((item) => item.role === 'user')?.textContent ||
 						nativeSessionId

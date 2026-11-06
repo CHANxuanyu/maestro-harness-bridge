@@ -307,6 +307,7 @@ export const TerminalOutput = memo(
 		// no reasoning at all. One switch, one meaning.
 		const toolsVisible = useSettingsStore((s) => s.showToolCalls);
 		const readingColumn = useSettingsStore(selectConversationNavigation);
+		const newShell = useSettingsStore((s) => s.newShell);
 		const showProviderModePill = useSettingsStore((s) => s.showProviderModePill);
 		// Reasoning summaries read back from the provider transcript follow the
 		// tab's Thinking switch. They are history and stay in the logs (the switch
@@ -919,14 +920,29 @@ export const TerminalOutput = memo(
 			if (!activeTab || pendingLogJump.tabId !== activeTab.id) return;
 
 			const { logId } = pendingLogJump;
-			const renderedId = renderedIdByLogId.get(logId) ?? logId;
+			let renderedId = renderedIdByLogId.get(logId) ?? logId;
+			let activityHostId: string | undefined;
+			if (newShell && pendingLogJump.revealTurnActivity) {
+				const bodyId = buildRenderedIdMap(groupedLogs, activeLogs).get(logId) ?? logId;
+				activityHostId = Array.from(turnActivityByHostId).find(([, activity]) =>
+					activity.entries.some((entry) => entry.id === bodyId)
+				)?.[0];
+				if (activityHostId) {
+					const foldKey = `turn:${activityHostId}`;
+					if (!expandedLogs.has(foldKey)) {
+						toggleExpanded(foldKey);
+						return;
+					}
+					renderedId = bodyId;
+				}
+			}
 			pendingJumpMatchIdRef.current = renderedId;
 			cancelJumpRef.current?.();
 
 			// The target may still be behind the progressive render window (#1342).
 			// jumpToElement gives up after ~30 frames, which idle backfill can outlast
 			// on a long transcript, so pull the entry in now instead of racing it.
-			const targetIndex = filteredLogs.findIndex((l) => l.id === renderedId);
+			const targetIndex = filteredLogs.findIndex((l) => l.id === (activityHostId ?? renderedId));
 			if (targetIndex >= 0) revealLogIndex(targetIndex);
 
 			jumpInFlightRef.current = true;
@@ -937,7 +953,11 @@ export const TerminalOutput = memo(
 				() =>
 					Array.from(
 						scrollContainerRef.current?.querySelectorAll<HTMLElement>('[data-log-id]') ?? []
-					).find((el) => el.getAttribute('data-log-id') === renderedId),
+					).find(
+						(el) =>
+							el.getAttribute('data-log-id') === renderedId &&
+							(!activityHostId || el.getAttribute('data-feed-row') !== 'turn-activity')
+					),
 				{
 					color: theme.colors.accent,
 					// Instant rather than smooth: an animated scroll is still running
@@ -970,6 +990,12 @@ export const TerminalOutput = memo(
 			pauseForJump,
 			filteredLogs,
 			revealLogIndex,
+			newShell,
+			groupedLogs,
+			activeLogs,
+			turnActivityByHostId,
+			expandedLogs,
+			toggleExpanded,
 		]);
 
 		// Helper to find last user command for echo stripping in terminal mode

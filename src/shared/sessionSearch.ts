@@ -1,3 +1,14 @@
+import { hasEmbeddedSystemPrompt, stripEmbeddedSystemPrompt } from './embeddedSystemPrompt';
+import { stripTurnPrompt } from './turnPrompt';
+import { codexSessionMetadata, extractCwdFromText } from './codexSessionMetadata';
+import {
+	extractTextFromContent,
+	isSystemContextMessage,
+	unwrapCodexImageRequest,
+	unwrapCodexUserReply,
+	type CodexMessageContent,
+} from './codexSessionText';
+
 /** Shared by native history search and the session browser. */
 export function extractMatchPreview(
 	originalText: string,
@@ -32,19 +43,20 @@ export function parseNativeSearchMessages(content: string, provider: 'claude-cod
 	let projectPath: string | undefined;
 	let sessionId: string | undefined;
 	let title: string | undefined;
-	for (const line of content.split('\n')) {
-		if (!line.trim()) continue;
+	for (const [lineIndex, line] of content
+		.split('\n')
+		.filter((line) => line.trim())
+		.entries()) {
 		try {
 			const entry = JSON.parse(line);
-			const cwd =
-				provider === 'codex'
-					? entry.type === 'session_meta'
-						? entry.payload?.cwd
-						: undefined
-					: entry.cwd;
+			const metadata =
+				provider === 'codex' && (lineIndex === 0 || entry.type === 'session_meta')
+					? codexSessionMetadata(entry)
+					: null;
+			const cwd = provider === 'codex' ? metadata?.payload?.cwd : entry.cwd;
 			if (!projectPath && typeof cwd === 'string') projectPath = cwd;
-			if (entry.type === 'session_meta' && typeof entry.payload?.id === 'string')
-				sessionId = entry.payload.id;
+			const nativeId = metadata?.payload?.id ?? metadata?.id;
+			if (typeof nativeId === 'string') sessionId = nativeId;
 			if (typeof entry.customTitle === 'string') title = entry.customTitle;
 			let role: unknown;
 			let parts: unknown;
@@ -61,7 +73,7 @@ export function parseNativeSearchMessages(content: string, provider: 'claude-cod
 					const payload = entry.type === 'message' ? entry : entry.payload;
 					role = payload.role;
 					parts = Array.isArray(payload.content) ? payload.content : undefined;
-					uuid = payload.id;
+					uuid = entry.type === 'response_item' ? payload.id : undefined;
 				} else if (entry.type === 'item.completed' && entry.item?.type === 'agent_message') {
 					role = 'assistant';
 					parts = entry.item.text;
@@ -69,22 +81,31 @@ export function parseNativeSearchMessages(content: string, provider: 'claude-cod
 				}
 			}
 			if (role !== 'user' && role !== 'assistant') continue;
-			const textContent =
+			let textContent =
 				typeof parts === 'string'
 					? parts
 					: Array.isArray(parts)
-						? parts
-								.filter(
-									(part) =>
-										part &&
-										(part.type === 'text' ||
-											(provider === 'codex' &&
-												(part.type === 'input_text' || part.type === 'output_text')))
-								)
-								.map((part) => (typeof part.text === 'string' ? part.text : ''))
-								.filter((text) => text.trim())
-								.join(' ')
+						? provider === 'codex'
+							? extractTextFromContent(parts)
+							: parts
+									.filter((part) => part && part.type === 'text')
+									.map((part) => (typeof part.text === 'string' ? part.text : ''))
+									.filter((text) => text.trim())
+									.join(' ')
 						: '';
+			if (provider === 'codex' && role === 'user') {
+				const rawText = textContent;
+				if (!projectPath) projectPath = extractCwdFromText(rawText) ?? undefined;
+				if (!hasEmbeddedSystemPrompt(rawText) && isSystemContextMessage(rawText)) continue;
+				// Use the storage reader's desktop unwrapping and the renderer's prompt decoders.
+				textContent = stripTurnPrompt(
+					stripEmbeddedSystemPrompt(
+						unwrapCodexUserReply(
+							unwrapCodexImageRequest(parts as CodexMessageContent[] | undefined) ?? rawText
+						)
+					)
+				);
+			}
 			if (textContent.trim())
 				messages.push({
 					role,

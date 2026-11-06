@@ -233,6 +233,7 @@ describe('renderer benchmark failure isolation', () => {
 			if (index) expect(key.eventStartMs).toBeGreaterThan(stream.keyEvents[index - 1].eventStartMs);
 		}
 		expect(stream.frames).toHaveLength(metrics.frameCount);
+		expect(stream.frames[0].startMs).toBe(0);
 		expect(stream.frames[0].durationMs).toBe(16);
 		expect(stream.frames[1].startMs - stream.frames[0].startMs).toBe(16);
 	});

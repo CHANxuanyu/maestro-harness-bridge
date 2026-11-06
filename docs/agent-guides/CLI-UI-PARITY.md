@@ -577,3 +577,10 @@ New shell stdout placeholder cleanup now shares the existing 200 ms output batch
 ## Renderer benchmark runner (2026-11-06)
 
 T4 第三轮只修改离线合成基准，不增加界面动作或 maestro-cli 动词。阶段选择使用 `MAESTRO_PERF_STAGES`，运行命令、依赖和结果读回见 [renderer 性能复测](../perf-renderer.md)。产品内性能采集仍走既有 `profiling start/status/stop`，本轮没有填补 Open gaps 中的交互缺口。
+
+## T4 fourth round rendering
+
+Opening and switching conversations use the existing UI and CLI selection paths.
+Lazy row construction changes no action, command, message or IPC contract.
+The progressive window still hydrates the full history and retains search and jump targets.
+No new CLI verb or parity gap is introduced.

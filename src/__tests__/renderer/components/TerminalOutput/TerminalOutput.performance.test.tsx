@@ -91,6 +91,7 @@ it('builds row elements once while hydrating every history entry in order', () =
 	const started = performance.now();
 	const view = render(<TerminalOutput {...props} />);
 	expect(view.container.querySelectorAll('[data-log-id]')).toHaveLength(25);
+	expect(vi.mocked(getClaudeTokenMode).mock.calls.length).toBeLessThanOrEqual(25);
 	let ticks = 0;
 	while (idle.size && ticks++ < count) {
 		const [id, callback] = idle.entries().next().value!;
@@ -117,4 +118,8 @@ it('builds row elements once while hydrating every history entry in order', () =
 	expect(view.container.querySelector('[data-log-id="message-0"]')).toHaveTextContent(
 		'Corrected earliest message'
 	);
+	vi.mocked(getClaudeTokenMode).mockClear();
+	view.rerender(<TerminalOutput {...props} session={{ ...session, id: 'next-session' }} />);
+	expect(view.container.querySelectorAll('[data-log-id]')).toHaveLength(25);
+	expect(vi.mocked(getClaudeTokenMode).mock.calls.length).toBeLessThanOrEqual(25);
 }, 60_000);

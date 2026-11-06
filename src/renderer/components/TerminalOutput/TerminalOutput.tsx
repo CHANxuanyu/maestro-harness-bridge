@@ -975,172 +975,177 @@ export const TerminalOutput = memo(
 			[theme, readingColumn]
 		);
 
-		// Keep row elements stable while the idle window grows. Only the slice
-		// changes on an idle tick; React can reuse every already mounted element.
+		// Create row elements only when the idle window reaches them, then reuse
+		// them on subsequent ticks. Switching never constructs the hidden history.
 		// The legacy shell keeps constructing only its visible slice.
 		const rowLogs = newShell ? filteredLogs : visibleLogs;
 		const rowStartIndex = newShell ? 0 : logStartIndex;
-		const renderedRows = useMemo(
-			() =>
-				rowLogs.map((log, visibleIndex) => {
-					// Absolute index into filteredLogs - sibling lookups (echo stripping)
-					// and jump-to-message targeting must not see the window offset.
-					const index = rowStartIndex + visibleIndex;
-					const renderRow = (entry: LogEntry, nested: boolean) => (
-						<LogItem
-							key={entry.id}
-							log={entry}
-							handoffOrigin={entry.id === originMessageId ? activeTab?.origin : undefined}
-							index={index}
-							isTerminal={isTerminal}
-							isAIMode={isAIMode}
-							theme={theme}
-							fontFamily={fontFamily}
-							maxOutputLines={maxOutputLines}
-							lastUserCommand={
-								isTerminal && entry.source !== 'user' ? getLastUserCommand(index) : undefined
-							}
-							isExpanded={expandedLogs.has(entry.id)}
-							onToggleExpanded={toggleExpanded}
-							subagentLogs={childrenByParentId.get(entry.id)}
-							toolRun={toolRunByHostId.get(entry.id)}
-							localFilterQuery={localFilters.get(entry.id) || ''}
-							filterMode={filterModes.get(entry.id) || { mode: 'include', regex: false }}
-							activeLocalFilter={activeLocalFilter}
-							onToggleLocalFilter={toggleLocalFilter}
-							onSetLocalFilterQuery={setLocalFilterQuery}
-							onSetFilterMode={setFilterModeForLog}
-							onClearLocalFilter={clearLocalFilter}
-							deleteConfirmLogId={deleteConfirmLogId}
-							onDeleteLog={onDeleteLog}
-							onSetDeleteConfirmLogId={setDeleteConfirmLogId}
-							scrollContainerRef={scrollContainerRef}
-							setLightboxImage={setLightboxImage}
-							copyToClipboard={copyToClipboard}
-							ansiConverter={ansiConverter}
-							markdownEditMode={markdownEditMode}
-							onToggleMarkdownEditMode={toggleMarkdownEditMode}
-							onReplayMessage={onReplayMessage}
-							onForkConversation={onForkConversation}
-							sessionId={session.id}
-							onSessionRecover={onSessionRecover}
-							isRecoveringSession={isRecoveringSession}
-							sessionRecoveryError={sessionRecoveryError}
-							fileTree={fileTree}
-							cwd={cwd}
-							projectRoot={projectRoot}
-							onFileClick={onFileClick}
-							sshRemoteId={
-								session.sessionSshRemoteConfig?.enabled
-									? (session.sessionSshRemoteConfig?.remoteId ?? undefined)
-									: undefined
-							}
-							onShowErrorDetails={onShowErrorDetails}
-							onSaveToFile={handleSaveToFile}
-							ghCliAvailable={ghCliAvailable}
-							onPublishGist={onPublishMessageGist}
-							publishedGistUrl={publishedGists[entry.id]?.gistUrl}
-							bionifyReadingMode={globalBionifyReadingMode}
-							bionifyIntensity={globalBionifyIntensity}
-							bionifyAlgorithm={globalBionifyAlgorithm}
-							userMessageAlignment={userMessageAlignment}
-							responseDurationMs={responseDurationByLogId.get(entry.id)}
-							// Codex's assistant directives are Codex's own emitting
-							// convention, so the same string from another provider is a
-							// message about the format. The tab comes from the resolved
-							// `activeTab` rather than `session.activeTabId`, which can
-							// still name a hidden consult tab - the transcript below is
-							// drawing `activeTab`'s logs, so that is the conversation a
-							// chip in them belongs to.
-							codexDirectives={session.toolType === 'codex'}
-							codexFollowupTabId={activeTab?.id}
-							isClaudeCode={session.toolType === 'claude-code'}
-							isAdaptiveMode={getClaudeTokenMode(session) === 'dynamic'}
-							showProviderModePill={showProviderModePill}
-							feedLayout={feedLayout}
-							isLatestReply={feedFacts?.latestReplyId === entry.id}
-							turnSettingChange={feedFacts?.changes.get(entry.id)}
-							secondaryTextColor={feedLayout ? feedSecondaryColor : undefined}
-							feedNested={nested}
-						/>
-					);
-					const activity = turnActivityByHostId.get(log.id);
-					if (!activity) return renderRow(log, false);
-					// A finished turn's work, folded behind one row (foldTurnActivity).
-					const foldKey = `turn:${log.id}`;
-					const open = expandedLogs.has(foldKey);
-					return (
-						<TurnActivityFold
-							key={foldKey}
-							hostId={log.id}
-							index={index}
-							activity={activity}
-							open={open}
-							onToggle={() => toggleExpanded(foldKey)}
-							theme={theme}
-							secondaryTextColor={feedSecondaryColor}
-						>
-							{open && activity.entries.map((entry) => renderRow(entry, true))}
-						</TurnActivityFold>
-					);
-				}),
-			[
-				rowLogs,
-				rowStartIndex,
-				originMessageId,
-				activeTab,
-				isTerminal,
-				isAIMode,
-				theme,
-				fontFamily,
-				maxOutputLines,
-				getLastUserCommand,
-				expandedLogs,
-				toggleExpanded,
-				childrenByParentId,
-				toolRunByHostId,
-				localFilters,
-				filterModes,
-				activeLocalFilter,
-				toggleLocalFilter,
-				setLocalFilterQuery,
-				setFilterModeForLog,
-				clearLocalFilter,
-				deleteConfirmLogId,
-				onDeleteLog,
-				setDeleteConfirmLogId,
-				setLightboxImage,
-				copyToClipboard,
-				ansiConverter,
-				markdownEditMode,
-				toggleMarkdownEditMode,
-				onReplayMessage,
-				onForkConversation,
-				session,
-				onSessionRecover,
-				isRecoveringSession,
-				sessionRecoveryError,
-				fileTree,
-				cwd,
-				projectRoot,
-				onFileClick,
-				onShowErrorDetails,
-				handleSaveToFile,
-				ghCliAvailable,
-				onPublishMessageGist,
-				publishedGists,
-				globalBionifyReadingMode,
-				globalBionifyIntensity,
-				globalBionifyAlgorithm,
-				userMessageAlignment,
-				responseDurationByLogId,
-				showProviderModePill,
-				feedLayout,
-				feedFacts,
-				feedSecondaryColor,
-				turnActivityByHostId,
-			]
-		);
+		const renderRows = useMemo(() => {
+			const createRow = (log: LogEntry, visibleIndex: number) => {
+				// Absolute index into filteredLogs - sibling lookups (echo stripping)
+				// and jump-to-message targeting must not see the window offset.
+				const index = rowStartIndex + visibleIndex;
+				const renderRow = (entry: LogEntry, nested: boolean) => (
+					<LogItem
+						key={entry.id}
+						log={entry}
+						handoffOrigin={entry.id === originMessageId ? activeTab?.origin : undefined}
+						index={index}
+						isTerminal={isTerminal}
+						isAIMode={isAIMode}
+						theme={theme}
+						fontFamily={fontFamily}
+						maxOutputLines={maxOutputLines}
+						lastUserCommand={
+							isTerminal && entry.source !== 'user' ? getLastUserCommand(index) : undefined
+						}
+						isExpanded={expandedLogs.has(entry.id)}
+						onToggleExpanded={toggleExpanded}
+						subagentLogs={childrenByParentId.get(entry.id)}
+						toolRun={toolRunByHostId.get(entry.id)}
+						localFilterQuery={localFilters.get(entry.id) || ''}
+						filterMode={filterModes.get(entry.id) || { mode: 'include', regex: false }}
+						activeLocalFilter={activeLocalFilter}
+						onToggleLocalFilter={toggleLocalFilter}
+						onSetLocalFilterQuery={setLocalFilterQuery}
+						onSetFilterMode={setFilterModeForLog}
+						onClearLocalFilter={clearLocalFilter}
+						deleteConfirmLogId={deleteConfirmLogId}
+						onDeleteLog={onDeleteLog}
+						onSetDeleteConfirmLogId={setDeleteConfirmLogId}
+						scrollContainerRef={scrollContainerRef}
+						setLightboxImage={setLightboxImage}
+						copyToClipboard={copyToClipboard}
+						ansiConverter={ansiConverter}
+						markdownEditMode={markdownEditMode}
+						onToggleMarkdownEditMode={toggleMarkdownEditMode}
+						onReplayMessage={onReplayMessage}
+						onForkConversation={onForkConversation}
+						sessionId={session.id}
+						onSessionRecover={onSessionRecover}
+						isRecoveringSession={isRecoveringSession}
+						sessionRecoveryError={sessionRecoveryError}
+						fileTree={fileTree}
+						cwd={cwd}
+						projectRoot={projectRoot}
+						onFileClick={onFileClick}
+						sshRemoteId={
+							session.sessionSshRemoteConfig?.enabled
+								? (session.sessionSshRemoteConfig?.remoteId ?? undefined)
+								: undefined
+						}
+						onShowErrorDetails={onShowErrorDetails}
+						onSaveToFile={handleSaveToFile}
+						ghCliAvailable={ghCliAvailable}
+						onPublishGist={onPublishMessageGist}
+						publishedGistUrl={publishedGists[entry.id]?.gistUrl}
+						bionifyReadingMode={globalBionifyReadingMode}
+						bionifyIntensity={globalBionifyIntensity}
+						bionifyAlgorithm={globalBionifyAlgorithm}
+						userMessageAlignment={userMessageAlignment}
+						responseDurationMs={responseDurationByLogId.get(entry.id)}
+						// Codex's assistant directives are Codex's own emitting
+						// convention, so the same string from another provider is a
+						// message about the format. The tab comes from the resolved
+						// `activeTab` rather than `session.activeTabId`, which can
+						// still name a hidden consult tab - the transcript below is
+						// drawing `activeTab`'s logs, so that is the conversation a
+						// chip in them belongs to.
+						codexDirectives={session.toolType === 'codex'}
+						codexFollowupTabId={activeTab?.id}
+						isClaudeCode={session.toolType === 'claude-code'}
+						isAdaptiveMode={getClaudeTokenMode(session) === 'dynamic'}
+						showProviderModePill={showProviderModePill}
+						feedLayout={feedLayout}
+						isLatestReply={feedFacts?.latestReplyId === entry.id}
+						turnSettingChange={feedFacts?.changes.get(entry.id)}
+						secondaryTextColor={feedLayout ? feedSecondaryColor : undefined}
+						feedNested={nested}
+					/>
+				);
+				const activity = turnActivityByHostId.get(log.id);
+				if (!activity) return renderRow(log, false);
+				// A finished turn's work, folded behind one row (foldTurnActivity).
+				const foldKey = `turn:${log.id}`;
+				const open = expandedLogs.has(foldKey);
+				return (
+					<TurnActivityFold
+						key={foldKey}
+						hostId={log.id}
+						index={index}
+						activity={activity}
+						open={open}
+						onToggle={() => toggleExpanded(foldKey)}
+						theme={theme}
+						secondaryTextColor={feedSecondaryColor}
+					>
+						{open && activity.entries.map((entry) => renderRow(entry, true))}
+					</TurnActivityFold>
+				);
+			};
+			const rows: ReturnType<typeof createRow>[] = [];
+			return (start: number) => {
+				for (let i = start; i < rowLogs.length; i++) {
+					rows[i] ??= createRow(rowLogs[i], i);
+				}
+				return rows.slice(start);
+			};
+		}, [
+			rowLogs,
+			rowStartIndex,
+			originMessageId,
+			activeTab,
+			isTerminal,
+			isAIMode,
+			theme,
+			fontFamily,
+			maxOutputLines,
+			getLastUserCommand,
+			expandedLogs,
+			toggleExpanded,
+			childrenByParentId,
+			toolRunByHostId,
+			localFilters,
+			filterModes,
+			activeLocalFilter,
+			toggleLocalFilter,
+			setLocalFilterQuery,
+			setFilterModeForLog,
+			clearLocalFilter,
+			deleteConfirmLogId,
+			onDeleteLog,
+			setDeleteConfirmLogId,
+			setLightboxImage,
+			copyToClipboard,
+			ansiConverter,
+			markdownEditMode,
+			toggleMarkdownEditMode,
+			onReplayMessage,
+			onForkConversation,
+			session,
+			onSessionRecover,
+			isRecoveringSession,
+			sessionRecoveryError,
+			fileTree,
+			cwd,
+			projectRoot,
+			onFileClick,
+			onShowErrorDetails,
+			handleSaveToFile,
+			ghCliAvailable,
+			onPublishMessageGist,
+			publishedGists,
+			globalBionifyReadingMode,
+			globalBionifyIntensity,
+			globalBionifyAlgorithm,
+			userMessageAlignment,
+			responseDurationByLogId,
+			showProviderModePill,
+			feedLayout,
+			feedFacts,
+			feedSecondaryColor,
+			turnActivityByHostId,
+		]);
 
 		return (
 			<div
@@ -1380,7 +1385,7 @@ export const TerminalOutput = memo(
 							</>
 						)}
 						{/* Log entries */}
-						{newShell ? renderedRows.slice(logStartIndex) : renderedRows}
+						{renderRows(newShell ? logStartIndex : 0)}
 
 						{/* The running turn, in one line after its newest output. The pill no
 						    longer describes the conversation on screen, and the composer's send

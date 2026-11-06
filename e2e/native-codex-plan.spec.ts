@@ -46,9 +46,7 @@ test('codex: completed plan keeps its final answer visible after the next messag
 		expect((await native.cli('tab', 'panel', tabId, 'tasks', '--agent', agentId)).success).toBe(
 			true
 		);
-		expect(
-			(await native.cli('dispatch', agentId, 'Run the synthetic plan', '--tab', tabId)).success
-		).toBe(true);
+		await native.send('Run the synthetic plan');
 		await expect(native.page.getByTestId('tasks-progress')).toHaveText('2 / 2 completed');
 		await expect(native.page.getByTestId('tasks-panel').getByRole('listitem')).toHaveCount(2);
 		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
@@ -63,10 +61,7 @@ test('codex: completed plan keeps its final answer visible after the next messag
 			logs().filter((log) => log.source !== 'stdout' && log.text.includes('PLAN_FINAL:'))
 		).toEqual([]);
 
-		expect(
-			(await native.cli('dispatch', agentId, 'Send the synthetic follow-up', '--tab', tabId))
-				.success
-		).toBe(true);
+		await native.send('Send the synthetic follow-up');
 		await expect(native.output()).toContainText('FOLLOW_UP: still here.');
 		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
 		// Do not expand any activity folds. The previous answer must stay in the feed.

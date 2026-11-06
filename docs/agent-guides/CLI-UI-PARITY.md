@@ -141,8 +141,12 @@ documented in [Codex plan verification](../verification/codex-plan.md).
 The review fix uses the same StdoutHandler for Send and `dispatch`: plan updates
 and completion snapshots preserve the pending final answer. No new UI action or
 CLI verb is added. The default synthetic Electron case sends two messages via
-`dispatch` and opens Tasks via `tab panel`; the opt-in login diagnostic sends once
-with `--ephemeral` and does not test native-history recovery.
+`NativeApp.send` and opens Tasks via `tab panel`. The real diagnostic fills the
+same composer and presses Enter once, preserving its plan prompt without the
+generic real-workload suffix. `NativeApp.cli` appends `--json`, which `dispatch`
+does not accept, so neither scenario submits messages through that wrapper.
+The opt-in login diagnostic uses `--ephemeral` and does not test native-history
+recovery. Product Send and CLI `dispatch` still share their existing implementation.
 
 Open gap: there is no CLI result containing the normalized live Tasks panel list or
 its empty-state text. `tab show` exposes the panel selection, and native history

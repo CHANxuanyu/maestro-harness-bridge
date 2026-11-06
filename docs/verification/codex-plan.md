@@ -41,7 +41,7 @@ Opus 提供的授权实验确认：`0.166.0-alpha.6` 开启配置后产生真实
 
 `e2e/fixtures/native/codex-plan-events.json` 保留真实事件类型、顺序和同 id 关联，正文、命令、用量和 thread id 都换成合成内容。解析器、输出层、可执行夹具和 Electron 共用这一份数据。夹具原样输出 12 个 JSON 事件，只另写支持后续 resume 的最小合成历史，不将其当作真实 rollout 形状的验证。
 
-默认合成 Electron 场景在 `e2e/native-codex-plan.spec.ts`。它检查任务面板 2/2、最终回答存为 stdout 且可见，再发一条合成消息，不展开过程记录，确认前一回答仍可见。该场景已写入，Codex 未启动 Electron：
+默认合成 Electron 场景在 `e2e/native-codex-plan.spec.ts`。它经 `native.send` 从输入框发送两条消息，检查任务面板 2/2、最终回答存为 stdout 且可见，再发一条合成消息，不展开过程记录，确认前一回答仍可见。第三轮修复了首轮和追问误用 `NativeApp.cli('dispatch', ...)` 的调用，该夹具自动追加的 `--json` 不被 dispatch 接受。源码契约回归修复前两项失败，修复后两项通过；这不代表 Electron 已通过，Codex 未启动 Electron：
 
 ```sh
 npm run build
@@ -82,11 +82,11 @@ npx playwright test e2e/real-codex-plan.spec.ts --project=electron --workers=1 -
 
 脚本只发送一个回合，要求三次更新两步清单，预计四次模型响应。粗略预算为数万输入 token、数千输出及推理 token，常见耗时约 1 到 3 分钟，具体取决于所选模型和工具上下文，不承诺固定金额。等待上限 180 秒，整个测试 240 秒；API key 模式的 Playwright 与提供方请求重试关闭。失败后停止，不追加收费尝试。
 
-断言 live IPC 的完成数依次为 0、1、2、2，同一清单 id；任务面板最终为 2/2；最终回答从正式输出通道送达且不进入 commentary；CLI 原生历史读取仍得到完成清单；正常退出重启后面板保持；项目标记文件和目录不变。流程经 CLI 发消息、设置权限和开面板，展示结果从真实 Electron DOM 读取。失败不能退化成“空状态也算通过”。默认不开 `MAESTRO_E2E_REAL=1` 时整个测试跳过。
+断言 live IPC 的完成数依次为 0、1、2、2，同一清单 id；任务面板最终为 2/2；最终回答从正式输出通道送达且不进入 commentary；CLI 原生历史读取仍得到完成清单；正常退出重启后面板保持；项目标记文件和目录不变。流程经输入框发送原始诊断提示词，经 CLI 设置权限和开面板，展示结果从真实 Electron DOM 读取。真实模式直接使用 `native.input().fill()` 和 `press('Enter')`，因为 `native.send` 要求通用 workload，且没有 shell workload 时会追加“不使用工具”，与计划诊断冲突。失败不能退化成“空状态也算通过”。默认不开 `MAESTRO_E2E_REAL=1` 时整个测试跳过。
 
 ## Opus 的真实运行：现有登录模式
 
-设置 `MAESTRO_E2E_CODEX_AUTH=login`。脚本保持 HOME 和 CODEX_HOME 的继承值，不读取或复制用户登录、配置文件，不写临时 Codex 配置，也不设置 API key；检测到 CODEX_API_KEY 或 OPENAI_API_KEY 时直接拒绝。Codex 自身正常使用现有登录。仍创建临时项目和 Maestro 数据，关闭自动命名和历史摘要，只经 dispatch 发送一条消息，使用 readonly 权限和 `--ephemeral`，不写原生对话历史。无需提供模型时沿用用户默认模型，也可显式设置 MAESTRO_E2E_CODEX_MODEL。
+设置 `MAESTRO_E2E_CODEX_AUTH=login`。脚本保持 HOME 和 CODEX_HOME 的继承值，不读取或复制用户登录、配置文件，不写临时 Codex 配置，也不设置 API key；检测到 CODEX_API_KEY 或 OPENAI_API_KEY 时直接拒绝。Codex 自身正常使用现有登录。仍创建临时项目和 Maestro 数据，关闭自动命名和历史摘要，只经输入框发送一条消息，使用 readonly 权限和 `--ephemeral`，不写原生对话历史。无需提供模型时沿用用户默认模型，也可显式设置 MAESTRO_E2E_CODEX_MODEL。
 
 ```sh
 MAESTRO_E2E_REAL=1 \

@@ -179,8 +179,11 @@ test('codex: real task list and final answer through the panel', async ({}, info
 			'Calculate 3+3 mentally, then mark both completed. Finish by saying "PLAN_CHECK_DONE 4 6".',
 			'If update_plan is unavailable, do not simulate a tool call. Reply "PLAN_TOOL_UNAVAILABLE" and a plain markdown checklist of those two completed calculations.',
 		].join('\n');
-		// One dispatch only. Assertion polling below never resubmits a prompt.
-		expect((await cli('dispatch', agentId, prompt, '--tab', tabId)).success).toBe(true);
+		// Use the composer without native.send's real-workload prompt suffix,
+		// which forbids tools when no shell workload is defined.
+		// Submit once. Assertion polling below never resubmits a prompt.
+		await native.input().fill(prompt);
+		await native.input().press('Enter');
 		await expect
 			.poll(() => native.page.evaluate(() => window.__realCodexPlan.exits.length), {
 				timeout: 180_000,

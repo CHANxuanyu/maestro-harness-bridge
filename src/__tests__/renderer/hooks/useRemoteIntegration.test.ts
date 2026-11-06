@@ -575,11 +575,31 @@ describe('useRemoteIntegration', () => {
 
 	it('loads and subscribes to browser archives without handling desktop tab lifecycle', async () => {
 		vi.spyOn(runtimeContext, 'isWebDesktop').mockReturnValue(true);
+		const previousNewShell = useSettingsStore.getState().newShell;
+		const previousSessionsLoaded = useSessionStore.getState().sessionsLoaded;
+		const previousRecords = useConversationArchiveStore.getState().records;
 		useSettingsStore.setState({ newShell: true });
 		useSessionStore.setState({ sessionsLoaded: true });
-		const records = [
-			{ key: 'native', nativeSessionId: 'native', ownerIds: ['owner'] },
-		] as ArchivedConversation[];
+		useConversationArchiveStore.setState({ records: [] });
+		const records: ArchivedConversation[] = [
+			{
+				key: 'native',
+				nativeSessionId: 'native',
+				ownerIds: ['owner'],
+				projectKey: 'project',
+				projectPath: '/repo/packages/api',
+				provider: 'codex',
+				title: 'Subdirectory archive',
+				preview: '',
+				createdAt: 1,
+				modifiedAt: 2,
+				messageCount: 2,
+				starred: false,
+				permissionMode: 'readonly',
+				archivedAt: 3,
+			},
+		];
+		const unarchived = records.map((record) => ({ ...record, archived: false }));
 		const archives = vi.fn().mockResolvedValue(records);
 		let changed: ((records: ArchivedConversation[]) => void) | undefined;
 		const stop = vi.fn();
@@ -598,20 +618,44 @@ describe('useRemoteIntegration', () => {
 			aiTabs: [createMockTab({ agentSessionId: 'native' })],
 		});
 		const deps = createDeps({ sessions: [session] });
-		const { unmount } = renderHook(() => useRemoteIntegration(deps));
+		let hook = renderHook(() => useRemoteIntegration(deps));
 		try {
 			await act(async () => {});
 			expect(useConversationArchiveStore.getState().records).toEqual(records);
 			expect(archives).toHaveBeenCalledOnce();
+			expect(archives).toHaveBeenCalledWith({ includeUnarchived: true });
 			expect(changed).toBeTypeOf('function');
+			act(() => changed!(unarchived));
+			expect(useConversationArchiveStore.getState().records).toEqual(unarchived);
 			act(() => changed!([]));
 			expect(useConversationArchiveStore.getState().records).toEqual([]);
+			act(() => changed!(records));
+			expect(useConversationArchiveStore.getState().records).toEqual(records);
+
+			// A page reload reads current metadata and installs a fresh subscription.
+			hook.unmount();
+			expect(stop).toHaveBeenCalledOnce();
+			useConversationArchiveStore.setState({ records: [] });
+			archives.mockResolvedValue(unarchived);
+			changed = undefined;
+			hook = renderHook(() => useRemoteIntegration(deps));
+			await act(async () => {});
+			expect(archives).toHaveBeenCalledTimes(2);
+			expect(archives).toHaveBeenLastCalledWith({ includeUnarchived: true });
+			expect(useConversationArchiveStore.getState().records).toEqual(unarchived);
+			expect(changed).toBeTypeOf('function');
+			act(() => changed!(records));
+			expect(useConversationArchiveStore.getState().records).toEqual(records);
+			expect(window.maestro.agentSessions.onArchivesChanged).toHaveBeenCalledTimes(2);
 			expect(lifecycle).not.toHaveBeenCalled();
-			expect(useSessionStore.getState().sessions[0].aiTabs).toHaveLength(1);
+			expect(useSessionStore.getState().sessions[0].aiTabs).toEqual(session.aiTabs);
 		} finally {
-			unmount();
+			hook.unmount();
+			useSettingsStore.setState({ newShell: previousNewShell });
+			useSessionStore.setState({ sessionsLoaded: previousSessionsLoaded });
+			useConversationArchiveStore.setState({ records: previousRecords });
 		}
-		expect(stop).toHaveBeenCalledOnce();
+		expect(stop).toHaveBeenCalledTimes(2);
 	});
 
 	describe('active session broadcast', () => {

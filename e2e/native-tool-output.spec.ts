@@ -117,7 +117,8 @@ for (const scenario of [
 			closed = true;
 			const stored = fs.readFileSync(path.join(native.data, 'maestro-sessions.json'), 'utf8');
 			expect(stored).not.toContain(tail);
-			expect(stored).toContain('tool output truncated');
+			// A child conversation's tool rows live in its own transcript, not this session file.
+			if (mode !== 'child') expect(stored).toContain('tool output truncated');
 		} catch (error) {
 			failed = true;
 			throw error;

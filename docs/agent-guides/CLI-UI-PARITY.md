@@ -68,6 +68,13 @@ is added. The native refresh and Stop entries under Open gaps remain open, and
 raw native-history reads still expose provider wire content. Old custom notes
 without the new envelope cannot be identified safely and remain unchanged.
 
+The third-round Electron correction changes acceptance checks only. Full
+conversation assertions cover both repaired sends and their distinct identities;
+the persisted cache is checked against its exact 100-entry tail, followed by
+native backfill after restart. Selecting the conversation still uses the existing
+refresh service. No UI action, CLI verb or production implementation changes,
+and the native refresh and Stop gaps below remain open.
+
 ## New shell cleanup, batch 1
 
 The new shell permission menu and the phone options sheet share `permissionModes()`

@@ -5,6 +5,7 @@ import { NativeApp } from './fixtures/native-app';
 import type { Session } from '../src/renderer/types';
 import { appendReadOnlyPrompt } from '../src/shared/readOnlyPrompt';
 import { transcriptMessagesToLogEntries } from '../src/renderer/utils/transcriptMessages';
+import { MAX_PERSISTED_SESSION_LOGS } from '../src/shared/deferredSessionContent';
 
 // This regression must never discover credentials or invoke a real provider.
 for (const provider of ['claude', 'codex'] as const) {
@@ -188,6 +189,9 @@ for (const provider of ['claude', 'codex'] as const) {
 			const tab = session.aiTabs.find((item) => item.id === session.activeTabId)!;
 			const canonical = transcriptMessagesToLogEntries(result.messages);
 			const first = canonical.find((entry) => entry.source === 'user')!;
+			const repeat = canonical.filter((entry) => entry.source === 'user')[1];
+			expect([first.text, repeat.text]).toEqual([prompt, prompt]);
+			expect(result.messages.slice(-500).some((message) => message.uuid === first.id)).toBe(false);
 			const own = {
 				id: 'cached-local-send',
 				source: 'user' as const,
@@ -200,27 +204,84 @@ for (const provider of ['claude', 'codex'] as const) {
 				own,
 				...canonical.map((entry) => (entry.id === first.id ? { ...entry, text: wire } : entry)),
 			];
+			// Keep the target inactive so the click, rather than startup upkeep,
+			// triggers the repair. This oversized cache is deliberate: disk saves
+			// retain only 100 entries, but the loaded tab must repair its full history.
+			const idleTabId = 'idle-cache-observer';
+			session.aiTabs.push({
+				...tab,
+				id: idleTabId,
+				agentSessionId: null,
+				name: 'Refresh observer',
+				logs: [],
+			});
+			session.unifiedTabOrder?.push({ type: 'ai', id: idleTabId });
+			session.activeTabId = idleTabId;
 			fs.writeFileSync(sessionsFile, JSON.stringify(state));
 			await native.start(home);
 			closed = false;
+			await native.page.evaluate(() => window.maestro.logger.setLogLevel('info'));
+			const readMessages = () =>
+				native.page.evaluate(async (id) => {
+					const logs = await window.maestro.logger.getLogs({ context: '[AgentSessions]' });
+					return logs
+						.filter((entry) => entry.message.startsWith('Read ') && entry.message.includes(id))
+						.map((entry) => entry.message);
+				}, seed.id);
+			expect(await readMessages()).toEqual([]);
 			const conversation = native.page.locator(
 				`[data-conversation-key="${agentId}:${tab.id}"] [data-tree-nav]`
 			);
 			await conversation.click();
+			// Observe the real adapter reads without replacing the IPC or merger.
+			const agent = provider === 'claude' ? 'claude-code' : 'codex';
 			await expect
-				.poll(() => {
-					const logs = saved()
-						.sessions.find((item) => item.id === agentId)!
-						.aiTabs.find((item) => item.id === tab.id)!.logs;
-					return logs
-						.filter((entry) => entry.source === 'user' && entry.text.startsWith(prompt))
-						.map((entry) => entry.text);
-				})
-				.toEqual([prompt, prompt]);
+				.poll(async () => (await readMessages()).slice(0, 2))
+				.toEqual([
+					`Read 500 messages for session ${seed.id} (agent: ${agent})`,
+					`Read ${result.messages.length} messages for session ${seed.id} (agent: ${agent})`,
+				]);
+			await expect(native.output().getByText(prompt, { exact: true })).toHaveCount(2);
+			await expect(native.output().locator(`[data-log-id="${own.id}"] .prose`)).toHaveText(prompt);
+			await expect(native.output().locator(`[data-log-id="${repeat.id}"] .prose`)).toHaveText(
+				prompt
+			);
+			await expect(native.output().locator(`[data-log-id="${first.id}"]`)).toHaveCount(0);
+			await expect(native.output()).not.toContainText('IMPORTANT: You are in read-only/plan mode.');
+			await expect(native.output()).not.toContainText('[Maestro] This message also mentions');
+			// Saving trims a COPY of the repaired history. Early messages must be
+			// checked above in the full conversation, not in this bounded disk tail.
+			const expectedTail = canonical.slice(-MAX_PERSISTED_SESSION_LOGS);
+			await expect
+				.poll(
+					() =>
+						saved()
+							.sessions.find((item) => item.id === agentId)!
+							.aiTabs.find((item) => item.id === tab.id)!.logs
+				)
+				.toEqual(expectedTail);
 			await native.restart(home);
 			await native.page
 				.locator(`[data-conversation-key="${agentId}:${tab.id}"] [data-tree-nav]`)
 				.click();
+			// A restart restores the 100-entry tail. Scroll to its start to
+			// exercise the real backfill before checking the two original sends.
+			await expect(native.output().getByText('Later answer 324', { exact: true })).toBeVisible();
+			await expect(native.output().locator(`[data-log-id="${expectedTail[0].id}"]`)).toHaveCount(1);
+			await native
+				.output()
+				.locator(':scope > .overflow-y-auto')
+				.evaluate((node) => {
+					node.scrollTop = 0;
+					node.dispatchEvent(new Event('scroll'));
+				});
+			await expect(native.output().getByText(prompt, { exact: true })).toHaveCount(2);
+			await expect(native.output().locator(`[data-log-id="${first.id}"] .prose`)).toHaveText(
+				prompt
+			);
+			await expect(native.output().locator(`[data-log-id="${repeat.id}"] .prose`)).toHaveText(
+				prompt
+			);
 			await expect(native.output()).not.toContainText('IMPORTANT: You are in read-only/plan mode.');
 			await expect(native.output()).not.toContainText('[Maestro] This message also mentions');
 			await native.close();
@@ -228,11 +289,7 @@ for (const provider of ['claude', 'codex'] as const) {
 			const logs = saved()
 				.sessions.find((item) => item.id === agentId)!
 				.aiTabs.find((item) => item.id === tab.id)!.logs;
-			expect(
-				logs
-					.filter((entry) => entry.source === 'user' && entry.text.startsWith(prompt))
-					.map((entry) => entry.text)
-			).toEqual([prompt, prompt]);
+			expect(logs).toEqual(expectedTail);
 			expect(
 				logs.some((entry) => entry.text.includes('IMPORTANT: You are in read-only/plan mode.'))
 			).toBe(false);

@@ -85,6 +85,28 @@ describe('buildAgentArgs', () => {
 		).toEqual([]);
 	});
 
+	it('keeps an explicit task-tool opt-out after the new shell default', () => {
+		const agent = makeAgent(getAgentDefinition('codex'));
+		const args = buildAgentArgs(agent, {
+			baseArgs: [],
+			prompt: 'Plan',
+			readOnlyMode: true,
+			enableTaskList: true,
+			agentSessionId: 'existing',
+		});
+		const resolved = applyAgentConfigOverrides(agent, args, {
+			sessionCustomArgs: '-c tools.update_plan.enabled=false',
+		});
+		expect(resolved.args.slice(-6)).toEqual([
+			'-c',
+			'tools.update_plan.enabled=true',
+			'resume',
+			'existing',
+			'-c',
+			'tools.update_plan.enabled=false',
+		]);
+	});
+
 	it('returns baseArgs when agent is null', () => {
 		const result = buildAgentArgs(null, { baseArgs: ['--foo', '--bar'] });
 		expect(result).toEqual(['--foo', '--bar']);

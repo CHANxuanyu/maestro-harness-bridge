@@ -905,6 +905,15 @@ export class CodexOutputParser implements AgentOutputParser {
 	private transformItemCompleted(item: CodexItem, msg: CodexRawMessage): ParsedEvent {
 		switch (item.type) {
 			case 'todo_list':
+				// Exec emits a complete snapshot on every update. Missing or malformed
+				// items must not clear a previous plan or invent completed steps.
+				if (
+					!Array.isArray(item.items) ||
+					!item.items.every(
+						(task) => task && typeof task.text === 'string' && typeof task.completed === 'boolean'
+					)
+				)
+					return { type: 'system', raw: msg };
 				return {
 					type: 'tool_use',
 					isPartial: msg.type === 'item.updated',
@@ -913,7 +922,9 @@ export class CodexOutputParser implements AgentOutputParser {
 					toolState: {
 						status: msg.type === 'item.completed' ? 'completed' : 'running',
 						input: {
-							plan: (item.items || []).map((task) => ({
+							// The upstream exec projection loses in_progress. False cannot
+							// be promoted to active, even when the turn has completed.
+							plan: item.items.map((task) => ({
 								step: task.text,
 								status: task.completed ? 'completed' : 'pending',
 							})),

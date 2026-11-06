@@ -45,7 +45,8 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.shell.terminalsNotStarted': '{count} 个终端没有启动。',
 	'workflows.newShell.terminal': '终端',
 	'workflows.newShell.tasks': '任务',
-	'workflows.newShell.tasksEmpty': '这条会话还没有任务清单',
+	'workflows.newShell.tasksEmpty':
+		'这条对话的工具尚未提供任务清单。回复正文里的清单不会显示在这里。',
 	'workflows.newShell.tasksProgress': '{completed} / {total} 已完成',
 	'workflows.newShell.task.pending': '待办',
 	'workflows.newShell.task.in_progress': '进行中',

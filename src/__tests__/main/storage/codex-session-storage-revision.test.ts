@@ -16,6 +16,8 @@ vi.mock('../../../main/utils/remote-fs', () => ({
 import { CodexSessionStorage } from '../../../main/storage/codex-session-storage';
 import { CodexOutputParser } from '../../../main/parsers/codex-output-parser';
 import type { SshRemoteConfig } from '../../../shared/types';
+import { transcriptMessagesToLogEntries } from '../../../renderer/utils/transcriptMessages';
+import { latestAgentTaskList } from '../../../renderer/utils/agentTaskList';
 
 const id = '11111111-2222-4333-8444-555555555555';
 let root: string;
@@ -129,6 +131,52 @@ const readCold = () =>
 	});
 
 describe('Codex append-only refresh cursor', () => {
+	it('reads update_plan calls into the same latest task list after append and reopen', async () => {
+		// Source-derived contract, not a captured model run. See codex-plan.md.
+		const first = {
+			plan: [
+				{ step: 'First', status: 'in_progress' },
+				{ step: 'Second', status: 'pending' },
+			],
+		};
+		const call = row('response_item', {
+			type: 'function_call',
+			name: 'update_plan',
+			call_id: 'plan-first',
+			arguments: JSON.stringify(first),
+		});
+		const file = await transcript('a', call);
+		const initial = latestAgentTaskList(
+			transcriptMessagesToLogEntries((await readIncrementally()).messages)
+		);
+		expect(initial?.tasks.map((task) => task.status)).toEqual(['in_progress', 'pending']);
+		const done = { plan: first.plan.map((step) => ({ ...step, status: 'completed' })) };
+		const appended =
+			row('response_item', {
+				type: 'function_call_output',
+				call_id: 'plan-first',
+				output: 'Plan updated',
+			}) +
+			row('response_item', {
+				type: 'function_call',
+				name: 'update_plan',
+				call_id: 'plan-done',
+				arguments: JSON.stringify(done),
+			}) +
+			row('response_item', {
+				type: 'function_call_output',
+				call_id: 'plan-done',
+				output: 'Plan updated',
+			});
+		await fs.appendFile(file, appended);
+		const refreshed = await readIncrementally();
+		expect(refreshed).toEqual(await readCold());
+		const list = latestAgentTaskList(transcriptMessagesToLogEntries(refreshed.messages));
+		expect(list?.completed).toBe(2);
+		expect(list?.tasks).toHaveLength(2);
+		expect(await fs.readFile(file, 'utf8')).toBe(call + appended);
+	});
+
 	it('retains native model and effort per turn across cold and incremental reads', async () => {
 		const file = await transcript('a', message('before context'));
 		await readIncrementally();

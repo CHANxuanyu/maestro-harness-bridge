@@ -45,7 +45,8 @@ export const workflowsShell = {
 	'workflows.shell.terminalsNotStarted': '{count} terminals could not be started.',
 	'workflows.newShell.terminal': 'Terminal',
 	'workflows.newShell.tasks': 'Tasks',
-	'workflows.newShell.tasksEmpty': 'This conversation has no task list yet',
+	'workflows.newShell.tasksEmpty':
+		'The tools in this conversation have not provided a task list. Checklists in replies are not shown here.',
 	'workflows.newShell.tasksProgress': '{completed} / {total} completed',
 	'workflows.newShell.task.pending': 'Pending',
 	'workflows.newShell.task.in_progress': 'In progress',

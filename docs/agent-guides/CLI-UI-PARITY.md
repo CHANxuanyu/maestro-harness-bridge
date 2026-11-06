@@ -62,25 +62,42 @@ does not remove its command or write a saved preference.
 
 ## New shell conversation permissions, T1
 
-| UI action                                          | CLI                                                                    | Shared implementation                                                      |
-| -------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------- |
-| New conversation in the current conversation       | `tab new --agent <id>` uses project recency as specified for CLI entry | `createTab()`, `newConversationPermissionFields()`                         |
-| Project plus, palette or new conversation shortcut | `tab new --agent <id> [--prompt <text>]`                               | `createTab()`, `recentProjectConversation()`, both remote new-tab handlers |
-| Pick a tool for a new conversation                 | `tab new --agent <id> --provider <provider>`                           | `context:conversation`, `openHandoffTarget()`                              |
-| Change tool in an empty conversation               | `tab new --agent <id> --provider <provider> --replace-empty <tab>`     | `readHandoffSource()`, `openHandoffTarget()`                               |
-| Prepare handoff or review                          | `handoff <source-tab> <provider> [--review]`                           | Source permission snapshot and `openHandoffTarget()`                       |
-| Deliberately change permission                     | `tab permission <tab-id> <full                                         | standard                                                                   | readonly>` | `permissionModeFields()`; read with `tab show <tab-id> --json` |
+| UI action                                          | CLI                                                                    | Shared implementation                                                                 |
+| -------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| New conversation in the current conversation       | `tab new --agent <id>` uses project recency as specified for CLI entry | `createTab()`, `newConversationPermissionFields()`                                    |
+| Project plus, palette or new conversation shortcut | `tab new --agent <id> [--prompt <text>]`                               | `resolveProjectConversationPermission()`, `createTab()`, both remote new tab handlers |
+| Select a conversation, then create                 | `focus-agent <agent> --tab <tab>` followed by `tab new --agent <id>`   | `setActiveTab()`, also used by unified keyboard navigation                            |
+| Pick a tool for a new conversation                 | `tab new --agent <id> --provider <provider>`                           | `context:conversation`, `openHandoffTarget()`                                         |
+| Change tool in an empty conversation               | `tab new --agent <id> --provider <provider> --replace-empty <tab>`     | `readHandoffSource()`, `openHandoffTarget()`                                          |
+| Prepare handoff or review                          | `handoff <source-tab> <provider> [--review]`                           | Source permission snapshot and `openHandoffTarget()`                                  |
+| Deliberately change permission                     | `tab permission <tab-id> <full\|standard\|readonly>`                   | `permissionModeFields()`; read with `tab show <tab-id> --json`                        |
 
-Inheritance is gated by `newShell`. Conversation buttons carry the exact source;
-project and CLI entry points use the newest selection, message or creation time
-among known project conversations on the same host, including closed tabs still
-held in this window. Closing the last tab also preserves its permission in the
-automatic replacement. Provider changes preserve the
-mode when supported, tighten unsupported standard to readonly, and refuse a target
-with no equally strict mode. The permission snapshot travels between renderer
-owners along with handoff metadata. Review retains its existing readonly default.
-Manual changes only patch the new tab. Native history imports and compaction keep
-their existing handling. No new CLI verb or permission confirmation is introduced.
+Inheritance is gated by `newShell`. Conversation buttons carry the exact source.
+The browser sends `sourceTabId` to the owner and adopts the returned permission
+fields, including when an inventory update arrives before the response. A missing
+explicit source refuses creation. CLI creation retains the specified project scope.
+
+Project creation uses `resolveProjectConversationPermission()`. Main requests the
+compact permission and activity snapshot from each session's owning window in
+parallel, with a 250 ms limit. It checks the replying window and rejects a reply
+if ownership moved. Complete replies select the newest selection, message or
+creation time. Missing or timed out replies use the strictest known mode across
+local project copies and successful replies, including retained closed tabs.
+Projects on different SSH hosts remain separate; remote paths are not resolved
+locally. The provider creation route also bounds its source metadata hop to
+250 ms and lets the target use the same resolver after a missing reply.
+
+Closing the last tab preserves its permission in the automatic replacement.
+Provider changes preserve supported modes, tighten unsupported standard to readonly,
+and refuse a target without an equally strict mode. Handoff snapshots carry the
+source permission. Manual changes only patch the new tab. Native history imports,
+compaction and the classic shell keep their existing behavior. No new CLI verb,
+permission confirmation or user-facing text is introduced.
+
+Open gaps: local fallback cannot know a restriction that no reachable window or
+local copy has ever reported. It uses the strictest known mode as specified by the
+review, rather than claiming the unavailable owner's current permission is known.
+Electron and browser acceptance scenarios require an external run.
 
 ## New shell project opening, batch 2
 

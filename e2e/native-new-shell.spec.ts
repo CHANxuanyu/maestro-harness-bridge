@@ -603,6 +603,7 @@ test('new shell permission inheritance: readonly Codex stays readonly in a new c
 	native.scriptTurns([
 		{ answer: 'Source readonly turn complete' },
 		{ answer: 'New readonly turn complete' },
+		{ answer: 'Keyboard readonly turn complete' },
 	]);
 	const saved = (): Session =>
 		JSON.parse(
@@ -649,10 +650,131 @@ test('new shell permission inheritance: readonly Codex stays readonly in a new c
 			permissionMode: 'readonly',
 			readOnlyMode: true,
 		});
+		await native.page.locator(`[data-conversation-key$=":${newTabId}"] [data-tree-nav]`).click();
+		await expect(native.page.getByTitle(/^Full Access/)).toHaveText('Full Access');
+		await native.page.keyboard.press('ControlOrMeta+1');
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await native.page.keyboard.press('ControlOrMeta+t');
+		await expect(native.page.getByTestId('empty-conversation-picker')).toBeVisible();
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await native.send('Read after keyboard navigation');
+		await expect(native.output()).toContainText('Keyboard readonly turn complete');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		const keyboardCall = fs
+			.readFileSync(path.join(native.codex, 'fixture-invocations.jsonl'), 'utf8')
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line) as { args: string[] });
+		expect(keyboardCall).toHaveLength(3);
+		expect(keyboardCall[2].args[keyboardCall[2].args.indexOf('--sandbox') + 1]).toBe('read-only');
+		expect(keyboardCall[2].args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
 	} catch (error) {
 		failed = true;
 		throw error;
 	} finally {
+		await native.close(failed);
+	}
+});
+
+test('new shell permission inheritance: owner window and browser source stay readonly', async ({
+	browser,
+}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	seedNewShell(native);
+	const sessions = ['owner-a', 'owner-b'].map((id, index) =>
+		createMockSession({
+			id,
+			name: id,
+			toolType: 'codex',
+			cwd: fs.realpathSync(native.project),
+			projectRoot: fs.realpathSync(native.project),
+			customPath: path.resolve('e2e/fixtures/native/codex'),
+			customEnvVars: { CODEX_HOME: native.codex, MAESTRO_NATIVE_SCRIPT: native.script },
+			aiTabs: [
+				createMockAITab({
+					id: `${id}-tab`,
+					createdAt: index + 1,
+					permissionMode: 'full',
+					readOnlyMode: false,
+					saveToHistory: false,
+				}),
+			],
+			activeTabId: `${id}-tab`,
+			unifiedTabOrder: [{ type: 'ai', id: `${id}-tab` }],
+		})
+	);
+	fs.writeFileSync(path.join(native.data, 'maestro-sessions.json'), JSON.stringify({ sessions }));
+	const browserPage = await browser.newPage();
+	let failed = false;
+	try {
+		await native.start(home);
+		const opened = native.app.waitForEvent('window');
+		expect(
+			await native.page.evaluate(() => window.maestro.windows.create(['owner-b']))
+		).not.toBeNull();
+		const second = await opened;
+		await second.waitForLoadState('domcontentloaded');
+		await expect(second.getByTitle(/^Full Access/)).toHaveText('Full Access');
+		await second.getByTitle(/^Full Access/).click();
+		await second.getByRole('menuitemradio', { name: 'Read-Only', exact: true }).click();
+		await second.locator('[data-conversation-key$=":owner-b-tab"] [data-tree-nav]').click();
+		await expect(second.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		const created = await native.cli('tab', 'new', '--agent', 'owner-a');
+		expect(created.success).toBe(true);
+		expect((await native.cli('tab', 'show', created.tabId)).tab).toMatchObject({
+			permissionMode: 'readonly',
+			readOnly: true,
+		});
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+
+		const url = await native.page.evaluate(() => window.maestro.webserver.getUrl());
+		expect(url).toBeTruthy();
+		await browserPage.goto(url!);
+		await browserPage
+			.locator(`[data-conversation-key$=":${created.tabId}"] [data-tree-nav]`)
+			.click();
+		await expect(browserPage.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		// A newer full conversation arrives while the browser stays on its readonly source.
+		await native.cli('tab', 'permission', 'owner-b-tab', 'full');
+		const background = await second.evaluate(() =>
+			window.maestro.web.requestNewTab('owner-b', true, 'owner-b-tab')
+		);
+		expect(background).toMatchObject({ permissionMode: 'full', readOnlyMode: false });
+		await expect(browserPage.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await browserPage.getByTestId('sidebar-new-conversation').click();
+		await expect(browserPage.getByTestId('empty-conversation-picker')).toBeVisible();
+		await expect(browserPage.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(browserPage.getByTitle(/^Full Access/)).toHaveCount(0);
+		await expect
+			.poll(
+				async () =>
+					(
+						await native.page.evaluate(() =>
+							window.maestro.windows.getConversationPermissions(['owner-a'])
+						)
+					)[0]?.tabs.length
+			)
+			.toBe(3);
+		const snapshot = (
+			await native.page.evaluate(() =>
+				window.maestro.windows.getConversationPermissions(['owner-a'])
+			)
+		)[0]!;
+		expect(
+			snapshot.tabs.find((tab) => tab.id !== 'owner-a-tab' && tab.id !== created.tabId)
+		).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
+
+		expect((await native.cli('tab', 'show', created.tabId)).tab).toMatchObject({
+			permissionMode: 'readonly',
+			readOnly: true,
+		});
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await browserPage.close();
 		await native.close(failed);
 	}
 });

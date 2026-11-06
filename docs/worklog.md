@@ -2,6 +2,16 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-06：四条已审查分支的集成核对
+
+在 `codex/nov6-qa-batch` 从 `2ebe18308` 依次以非快进合并纳入新对话权限、停止续聊、Codex 任务清单和改动面板文件操作。四次合并提交为 `b48f230b5`、`a737b0f41`、`cc84c0857`、`b30af198e`。后三次的 CHANGELOG 与 worklog 冲突均保留双方新增段落；最后一次的 `e2e/native-new-shell.spec.ts` 保留完整权限继承和单文件操作场景。CLI 对等、规范工具登记、预加载类型、中英文消息及原生 CLI 夹具的自动合并均复核，无功能删减。
+
+四个分支的 `src/__tests__/setup.ts` 与起始主线完全相同；权限测试的局部窗口 mock、停止事件的第四个参数、Git 写入桥和 Codex 事件回放各自保留。权限快照与任务工具参数独立传递，只读沙箱和任务工具能同时启用；新会话不调用转录解码器，用户历史仍先解系统封装再调用 `stripTurnPrompt()`。任务结束快照不再把最终回答改成进度，主动停止仍通过 `interrupted` 跳过退出摘要。文件操作使用原对话目录和 SSH 主机，不受权限快照或转录刷新影响。没有发现需追加产品修复的集成问题。
+
+被测对象为合并后的源码 `b30af198e`，不是安装包。相关 Vitest 均使用 `--configLoader runner --no-cache`：38 个改动文件共 2097 条通过，16 个相邻共享模块文件共 835 条通过，3 个原生夹具文件共 12 条通过，总计 57 文件、2944 条，无失败、无跳过、无自动重试。renderer、main、CLI 三份 TypeScript 配置全部通过；四个相关 E2E 文件另用继承原严格选项的临时配置检查通过。修改文件的 Prettier 与 `git diff --check` 通过。Playwright 仅收集合成场景，3 文件共 12 条，不记作 Electron 执行通过。
+
+新界面权限继承、任务工具默认启用和文件操作控件仍由 `newShell` 控制。已有分支中的停止与转录修复、Codex 输出状态修复、Git 状态纠正及英文单数文案属于共享修复，旧界面同步受益。本次没有新用户动作、CLI 动词或文案，继承各分支已登记的 CLI 对等及缺口。不运行 Electron、真实模型、真实 SSH、其他平台或安装包；不推送、开 PR、打标签或发布。外部重建后可运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell.spec.ts e2e/native-stop-resume.spec.ts e2e/native-codex-plan.spec.ts --retries=0`；真实 Codex 诊断不属于本次授权范围。
+
 ## 2026-11-06：权限继承验收复用 Electron 浏览器
 
 `e2e/native-new-shell.spec.ts` 的所属窗口与网页来源场景移除 Playwright `browser` 夹具，通过 `native.app.evaluate()` 创建无 preload 的普通 `BrowserWindow`，加载原 web-desktop URL，并通过 Electron 的窗口事件取得 Page。窗口随 `native.close()` 清理，不再依赖单独安装 Chromium；未增加下载、安装或重试步骤。权限断言、产品实现、旧界面及 CLI 均不变。

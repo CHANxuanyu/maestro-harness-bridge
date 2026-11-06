@@ -2,6 +2,8 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.shell.synopsisFailed': '摘要生成失败',
+	'workflows.shell.synopsisNoFinalAnswer': '本轮没有可用于生成摘要的最终答复',
 	'workflows.shell.signInRequired': '需要重新登录',
 	'workflows.shell.signInRequiredBody':
 		'{tool} 不接受当前的登录凭据。重新登录后，这个对话可以接着做。',

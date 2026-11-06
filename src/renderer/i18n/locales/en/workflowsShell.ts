@@ -1,4 +1,6 @@
 export const workflowsShell = {
+	'workflows.shell.synopsisFailed': 'Synopsis failed',
+	'workflows.shell.synopsisNoFinalAnswer': 'No final answer is available for this turn',
 	'workflows.shell.signInRequired': 'Sign in again',
 	'workflows.shell.signInRequiredBody':
 		'{tool} rejected the saved credentials. Sign in again to pick this conversation back up.',

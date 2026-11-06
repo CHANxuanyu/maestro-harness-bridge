@@ -201,7 +201,7 @@ describe('ExitHandler', () => {
 				expect(parser.detectErrorFromExit).not.toHaveBeenCalled();
 				expect(matchSshErrorPattern).not.toHaveBeenCalled();
 				expect(errors).not.toHaveBeenCalled();
-				expect(exits).toHaveBeenCalledWith('test-session', 130);
+				expect(exits).toHaveBeenCalledWith('test-session', 130, undefined, true);
 				expect(proc.agentSessionId).toBe('same-native-id');
 			}
 		);

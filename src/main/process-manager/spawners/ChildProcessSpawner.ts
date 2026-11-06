@@ -636,7 +636,9 @@ export class ChildProcessSpawner {
 					// ended. Release it and report the exit so the turn settles.
 					if (this.processes.get(sessionId) === managedProcess) {
 						this.processes.delete(sessionId);
-						this.emitter.emit('exit', sessionId, code || 0);
+						if (managedProcess.interrupted)
+							this.emitter.emit('exit', sessionId, code || 0, undefined, true);
+						else this.emitter.emit('exit', sessionId, code || 0);
 					}
 				});
 			});

@@ -51,6 +51,7 @@ import { useSessionStore, updateSessionWith } from '../stores/sessionStore';
 import { getTabDisplayName } from '../utils/tabHelpers';
 import { captureQueuedTurnSettings } from '../utils/providerTabSessions';
 import { generateId } from '../utils/ids';
+import { appendTurnNote } from '../../shared/turnPrompt';
 
 // ============================================================================
 // Prompts
@@ -113,7 +114,7 @@ export function withConsultPendingNote(prompt: string, targets: ConsultHoldTarge
 		pendingNoteTemplate,
 		targets.map((t) => t.targetAgentName)
 	);
-	return `${prompt}\n\n---\n\n${note}`;
+	return appendTurnNote(prompt, note);
 }
 
 /** The agent-only note appended to a turn whose answer is handed off. */
@@ -132,7 +133,7 @@ export function withHandoffPendingNote(prompt: string, targets: ConsultHoldTarge
 		handoffNoteTemplate,
 		targets.map((t) => t.targetAgentName)
 	);
-	return `${prompt}\n\n---\n\n${note}`;
+	return appendTurnNote(prompt, note);
 }
 
 /** Every reply, verbatim, under a heading naming who said it. */

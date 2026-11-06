@@ -16,7 +16,11 @@ import type { AITab, LogEntry, QueuedItem, Session } from '../../../renderer/typ
 import type { ProjectHistoryConversation } from '../../../shared/projectHistory';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
-import { transcriptMessagesToLogEntries } from '../../../renderer/utils/transcriptMessages';
+import {
+	hasLegacyTranscriptEntries,
+	transcriptMessagesToLogEntries,
+} from '../../../renderer/utils/transcriptMessages';
+import { appendReadOnlyPrompt } from '../../../shared/readOnlyPrompt';
 
 const NATIVE = '00000000-0000-7000-a000-000000000001';
 
@@ -129,6 +133,145 @@ afterEach(() => {
 });
 
 describe('refreshNativeConversation', () => {
+	it.each(['codex', 'claude-code'] as const)(
+		'%s retains a genuine repeated send across consecutive refreshes of a stopped first turn',
+		async (toolType) => {
+			const sentAt = Date.parse('2026-11-06T12:00:00Z');
+			const prompt = 'Wait, then reply WAIT_DONE.';
+			const own: LogEntry = {
+				id: 'local-first',
+				source: 'user',
+				text: prompt,
+				timestamp: sentAt,
+				readOnly: true,
+			};
+			const stop: LogEntry = {
+				id: 'local-stop',
+				source: 'system',
+				text: 'Stopped by user',
+				timestamp: sentAt + 1000,
+			};
+			useSessionStore.setState({
+				sessions: [owner({ toolType, aiTabs: [tab({ logs: [own, stop] })] })],
+			});
+			const disk = [
+				msg(
+					'native-first',
+					'user',
+					appendReadOnlyPrompt(prompt),
+					new Date(sentAt + 200).toISOString()
+				),
+				msg('native-repeat', 'user', prompt, new Date(sentAt + 10000).toISOString()),
+			];
+			read.mockResolvedValue({ messages: disk, total: disk.length, hasMore: false });
+			const target = { sessionId: 'maestro-owner', tabId: 'tab-native' };
+			for (let refresh = 0; refresh < 3; refresh++) {
+				await refreshNativeConversation(target);
+				expect(
+					storedTab()!
+						.logs.filter((entry) => entry.source === 'user')
+						.map((entry) => entry.id)
+				).toEqual(['local-first', 'native-repeat']);
+				expect(storedTab()!.logs).toContain(stop);
+			}
+		}
+	);
+
+	it.each(['codex', 'claude-code'] as const)(
+		'%s widens past a shared tail to repair an old read-only duplicate',
+		async (toolType) => {
+			const sentAt = Date.parse('2026-11-06T12:00:00Z');
+			const prompt = 'Wait, then reply WAIT_DONE.';
+			const disk = [
+				msg(
+					'native-first',
+					'user',
+					appendReadOnlyPrompt(prompt),
+					new Date(sentAt + 200).toISOString()
+				),
+				...Array.from({ length: 650 }, (_, index) =>
+					msg(
+						`later-${index}`,
+						index % 2 ? 'assistant' : 'user',
+						`Later message ${index}`,
+						new Date(sentAt + (index + 1) * 60000).toISOString()
+					)
+				),
+			];
+			const native = transcriptMessagesToLogEntries(disk);
+			const own: LogEntry = {
+				id: 'local-first',
+				source: 'user',
+				text: prompt,
+				timestamp: sentAt,
+				readOnly: true,
+			};
+			const logs = [own, { ...native[0], text: disk[0].content }, ...native.slice(1)];
+			expect(hasLegacyTranscriptEntries(logs)).toBe(true);
+			useSessionStore.setState({ sessions: [owner({ toolType, aiTabs: [tab({ logs })] })] });
+			read.mockImplementation(async (_provider, _project, _id, options) => ({
+				messages: disk.slice(-options.limit),
+				total: disk.length,
+				hasMore: options.limit < disk.length,
+			}));
+			const target = { sessionId: 'maestro-owner', tabId: 'tab-native' };
+			expect(await refreshNativeConversation(target)).toMatchObject({
+				status: 'updated',
+				added: 0,
+			});
+			expect(read.mock.calls.map((call) => call[3].limit)).toEqual([500, logs.length]);
+			expect(read.mock.calls.every((call) => call[3].readOnly === true)).toBe(true);
+			expect(
+				storedTab()!.logs.filter((entry) => entry.source === 'user' && entry.text === prompt)
+			).toEqual([{ ...own, nativeTranscript: { messageId: 'native-first' } }]);
+			expect(hasLegacyTranscriptEntries(storedTab()!.logs)).toBe(false);
+			expect(storedTab()!.logs.slice(1)).toEqual(native.slice(1));
+			expect(storedTab()!.inputValue).toBe('half-typed draft');
+			expect(await refreshNativeConversation(target)).toEqual({ status: 'unchanged' });
+			expect(read.mock.calls.map((call) => call[3].limit)).toEqual([500, logs.length, 500]);
+		}
+	);
+
+	it('does not treat the first user in a partial window as the first send of the conversation', async () => {
+		const native = transcriptMessagesToLogEntries(DISK.slice(2));
+		const own: LogEntry = {
+			id: 'local-first',
+			source: 'user',
+			timestamp: native[0].timestamp - 10000,
+			text: native[0].text,
+		};
+		const logs = [own, ...native];
+		patchStoredTab({ logs });
+		read.mockResolvedValue({ messages: DISK.slice(2), total: 502, hasMore: true });
+		expect(
+			await refreshNativeConversation({ sessionId: 'maestro-owner', tabId: 'tab-native' })
+		).toEqual({ status: 'unchanged' });
+		expect(storedTab()!.logs).toBe(logs);
+	});
+
+	it('keeps the cache and reports failure when the widening budget cannot reach the old prompt', async () => {
+		const native = transcriptMessagesToLogEntries(DISK);
+		const logs = [
+			{
+				id: 'uncovered-user',
+				timestamp: 1,
+				source: 'user' as const,
+				text: appendReadOnlyPrompt('Old request'),
+			},
+			...native,
+		];
+		patchStoredTab({ logs });
+		read.mockResolvedValue({ messages: DISK, total: 100000, hasMore: true });
+		expect(
+			await refreshNativeConversation({ sessionId: 'maestro-owner', tabId: 'tab-native' })
+		).toMatchObject({ status: 'failed' });
+		expect(read.mock.calls.map((call) => call[3].limit)).toEqual([
+			500, 1000, 2000, 4000, 8000, 16000, 32000,
+		]);
+		expect(storedTab()!.logs).toBe(logs);
+		expect(hasLegacyTranscriptEntries(storedTab()!.logs)).toBe(true);
+	});
+
 	it('appends what was written outside Maestro to a non-empty open tab, and keeps everything local', async () => {
 		const result = await refreshNativeConversation({
 			sessionId: 'maestro-owner',

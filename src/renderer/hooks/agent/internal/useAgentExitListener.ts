@@ -131,7 +131,7 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 			timers.set(key, { timer, data, anyWork: true });
 		};
 
-		const unsubscribe = window.maestro.process.onExit(async (sessionId: string, code: number) => {
+		const unsubscribe = window.maestro.process.onExit(async (sessionId, code, _, stopped) => {
 			// Window scoping: only the window that owns the agent runs exit side
 			// effects (synopsis spawn, git refresh, history entry, queue dequeue).
 			// Events are broadcast to every window, so a non-owning window must bail
@@ -274,6 +274,12 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 						? currentSession.aiTabs?.find((tab) => tab.id === tabIdFromSession) ||
 							currentSession.orphanedThinkingTabs?.find((tab) => tab.id === tabIdFromSession)
 						: getActiveTab(currentSession);
+					if (stopped && completedTab) {
+						const key = `${actualSessionId}:${completedTab.id}`;
+						const pending = debounceTimersRef.current.get(key);
+						if (pending) clearTimeout(pending.timer);
+						debounceTimersRef.current.delete(key);
+					}
 					const logs = completedTab?.logs || [];
 					const lastUserLog = logs.filter((log) => log.source === 'user').pop();
 					// A progress note is narration, never the turn's reply.
@@ -362,7 +368,7 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 						),
 					};
 
-					if (shouldRunSynopsisOnExit(currentSession, completedTab)) {
+					if (!stopped && shouldRunSynopsisOnExit(currentSession, completedTab)) {
 						synopsisDidWork = turnDidMeaningfulWork(
 							logs,
 							!!currentSession.pendingAICommandForSynopsis,

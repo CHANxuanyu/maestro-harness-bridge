@@ -976,6 +976,11 @@ Do not derive persistence identity from a process-local counter or PID alone.
 `ManagedProcess.interrupted` is set, matching stdout/stderr handling. A user
 Stop must not emit `session_not_found` from teardown diagnostics and clear the
 native resume ID. Genuine errors on non-interrupted turns still propagate.
+The optional fourth `exit` / `process:exit` argument carries this interruption
+flag through preload. `useAgentExitListener` skips the stopped turn's synopsis
+and removes its pending debounce timer, even when the provider exits with code
+zero. Missing final output on an ordinary turn remains an error; do not infer
+cancellation from the exit code, translated log text, or lack of an answer.
 
 `codexToolResultStatus()` in `codex-output-parser.ts` is shared by live parsing
 and native-history storage. Codex's exact `aborted by user after Ns` result is

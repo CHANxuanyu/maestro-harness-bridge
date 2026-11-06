@@ -23,6 +23,7 @@
 
 import type { AITab, LogEntry, Session } from '../types';
 import type { ProjectHistoryConversation } from '../../shared/projectHistory';
+import { stripTurnPrompt } from '../../shared/turnPrompt';
 import { updateSessionWith, useSessionStore } from '../stores/sessionStore';
 import { hasPendingRetry } from '../stores/retryStore';
 import { logger } from '../utils/logger';
@@ -158,7 +159,7 @@ function upgradeAndMerge(
 	// A prompt Maestro sent whose native copy was written late (pre-turn context
 	// compaction) is tied to it here, and a duplicate an earlier refresh showed
 	// for it is repaired, before the merge decides what is new.
-	const own = bindDelayedOwnSends(loaded, upgradedLogs);
+	const own = bindDelayedOwnSends(loaded, upgradedLogs, partialWindow);
 	const merged = mergeNewerEntries(loaded, own.logs);
 	if (!merged) return null;
 	return { logs: merged.logs, added: merged.added, upgraded: upgrade.upgraded + own.bound };
@@ -233,7 +234,23 @@ async function refreshNow(target: NativeRefreshTarget): Promise<NativeRefreshRes
 			// Merge against the tab as it is NOW: a backfill may have prepended,
 			// and the merge only ever appends to whatever is there.
 			const current = locate(sessionId, tabId).tab;
-			merged = upgradeAndMerge(loaded, current?.logs ?? tab.logs ?? [], partialWindow);
+			const visible = current?.logs ?? tab.logs ?? [];
+			// A shared tail proves the splice, not that old prompt copies were
+			// repaired. Cover every cached wire suffix before consuming the refresh.
+			// Keep the ordinary 500-message path for already decoded conversations.
+			const readIds = new Set((result?.messages ?? []).map((message) => message.uuid));
+			const uncoveredPrompt = visible.some(
+				(entry) =>
+					entry.source === 'user' &&
+					stripTurnPrompt(entry.text) !== entry.text &&
+					!readIds.has(entry.nativeTranscript?.messageId ?? entry.id)
+			);
+			if (uncoveredPrompt) {
+				merged = null;
+				if (partialWindow) continue;
+				break;
+			}
+			merged = upgradeAndMerge(loaded, visible, partialWindow);
 			if (merged || !result?.hasMore) break;
 		}
 	} catch (error) {

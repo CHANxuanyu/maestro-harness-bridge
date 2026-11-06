@@ -15,7 +15,9 @@ vi.mock('../../../../../renderer/utils/runtimeContext', () => ({
 	isWebDesktop: () => mockIsWebDesktop,
 }));
 
-let handler: ((sessionId: string, code: number) => Promise<void>) | undefined;
+let handler:
+	| ((sessionId: string, code: number, signal?: number, interrupted?: boolean) => Promise<void>)
+	| undefined;
 const mockUnsubscribe = vi.fn();
 
 const mockProcess = {
@@ -431,6 +433,45 @@ describe('useAgentExitListener', () => {
 		deps.getBatchStateRef.current = (() => batchState) as any;
 		return { deps, spawn };
 	}
+
+	it.each(['codex', 'claude-code'] as const)(
+		'does not request a synopsis after stopping %s without a final answer',
+		async (toolType) => {
+			const { deps, spawn } = setupSynopsisRun({});
+			useSessionStore
+				.getState()
+				.setSessions((sessions) => sessions.map((session) => ({ ...session, toolType })));
+			spawn.mockResolvedValue({
+				success: false,
+				error: 'No final answer is available for this turn',
+			});
+			renderHook(() => useAgentExitListener(deps));
+			await act(async () => {
+				await handler!('sess-1-ai-tab-1', 0, undefined, true);
+			});
+			expect(spawn).not.toHaveBeenCalled();
+			expect(
+				useNotificationStore.getState().toasts.some((toast) => toast.title === 'Synopsis failed')
+			).toBe(false);
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].state).toBe('idle');
+		}
+	);
+
+	it('drops a pending debounced synopsis when the next turn is stopped', async () => {
+		const { deps, spawn } = setupSynopsisRun({});
+		useSettingsStore.setState({ synopsisDebounceSeconds: 60 });
+		const hook = renderHook(() => useAgentExitListener(deps));
+		await act(async () => {
+			await handler!('sess-1-ai-tab-1', 0);
+		});
+		expect(spawn).not.toHaveBeenCalled();
+		await act(async () => {
+			await handler!('sess-1-ai-tab-1', 0, undefined, true);
+		});
+		// Teardown flushes any pending timer immediately. It must find none.
+		hook.unmount();
+		expect(spawn).not.toHaveBeenCalled();
+	});
 
 	it('spawns the exit-path synopsis under the run model override, not the session model', async () => {
 		const { deps, spawn } = setupSynopsisRun({

@@ -108,6 +108,7 @@ describe('renderer benchmark failure isolation', () => {
 			freezeKeys?: boolean;
 			ids?: string[];
 			longTasks?: boolean;
+			keyDeliveryMs?: number;
 		} = {}
 	) {
 		const kill = vi.fn();
@@ -124,6 +125,8 @@ describe('renderer benchmark failure isolation', () => {
 		const renderer = {
 			window: {},
 			document: {
+				visibilityState: 'visible',
+				hasFocus: () => true,
 				addEventListener: (name: string, handler: (event: object) => void) =>
 					observers.set(name, handler),
 				removeEventListener: (name: string) => observers.delete(name),
@@ -151,7 +154,10 @@ describe('renderer benchmark failure isolation', () => {
 			keyboard: {
 				press: async () => {
 					if (options.freezeKeys) await new Promise(() => {});
-					observers.get('keydown')?.({ key: 'Shift', timeStamp: Date.now() });
+					const timeStamp = Date.now();
+					if (options.keyDeliveryMs)
+						await new Promise((resolve) => setTimeout(resolve, options.keyDeliveryMs));
+					observers.get('keydown')?.({ key: 'Shift', timeStamp });
 				},
 			},
 		};
@@ -187,6 +193,49 @@ describe('renderer benchmark failure isolation', () => {
 			},
 		};
 	}
+
+	it('waits for the next frame of a key delivered after the work finishes', async () => {
+		vi.stubEnv('MAESTRO_PERF_BEFORE_ENTRY', '');
+		vi.stubEnv('MAESTRO_PERF_ROUNDS', '1');
+		vi.stubEnv('MAESTRO_PERF_STAGES', 'switch');
+		harness.launch.mockResolvedValue(respondingApp({ keyDeliveryMs: 70 }).app);
+		const run = start();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(run.failure()).toBeUndefined();
+		expect(run.done()).toBe(true);
+		const result = JSON.parse(fs.readFileSync(path.join(output, 'perf-results.json'), 'utf8'));
+		const metrics = result.samples[0].metrics['large.switch.5000'];
+		expect(metrics.keyEventCount).toBe(1);
+		expect(metrics.keyDelayP95Ms).toBe(70);
+		expect(metrics.keyNextFrameP95Ms).toBe(86);
+	});
+
+	it('preserves chronological key and frame evidence alongside the percentile summary', async () => {
+		vi.stubEnv('MAESTRO_PERF_BEFORE_ENTRY', '');
+		vi.stubEnv('MAESTRO_PERF_ROUNDS', '1');
+		vi.stubEnv('MAESTRO_PERF_STAGES', 'stream');
+		harness.launch.mockResolvedValue(respondingApp({ keyDeliveryMs: 70 }).app);
+		const run = start();
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(run.failure()).toBeUndefined();
+		expect(run.done()).toBe(true);
+		const result = JSON.parse(fs.readFileSync(path.join(output, 'perf-results.json'), 'utf8'));
+		const sample = result.samples[0];
+		const stream = sample.observations['large.stream.100Hz'];
+		const metrics = sample.metrics['large.stream.100Hz'];
+		expect(stream.keyEvents).toHaveLength(metrics.keyEventCount);
+		expect(metrics.keyPaintCount).toBe(metrics.keyEventCount);
+		for (const [index, key] of stream.keyEvents.entries()) {
+			expect(key.handledMs - key.eventStartMs).toBe(70);
+			expect(key.nextFrameMs - key.eventStartMs).toBe(86);
+			expect(key.visibilityState).toBe('visible');
+			expect(key.focused).toBe(true);
+			if (index) expect(key.eventStartMs).toBeGreaterThan(stream.keyEvents[index - 1].eventStartMs);
+		}
+		expect(stream.frames).toHaveLength(metrics.frameCount);
+		expect(stream.frames[0].durationMs).toBe(16);
+		expect(stream.frames[1].startMs - stream.frames[0].startMs).toBe(16);
+	});
 
 	it('runs selected streaming dependencies successfully without native selection or empty startup', async () => {
 		vi.stubEnv('MAESTRO_PERF_BEFORE_ENTRY', '');

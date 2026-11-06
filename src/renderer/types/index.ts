@@ -265,6 +265,8 @@ export interface LogEntry {
 			// result but not whether it succeeded. Also neither running nor done.
 			status?: 'running' | 'completed' | 'error' | 'failed' | 'canceled' | 'unknown';
 			input?: unknown;
+			/** Explicit write targets retained before display arguments are capped. */
+			writePaths?: string[];
 			output?: unknown;
 		};
 		/**

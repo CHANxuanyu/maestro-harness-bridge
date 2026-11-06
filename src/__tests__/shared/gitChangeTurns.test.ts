@@ -32,6 +32,49 @@ const snapshot = (paths: string[], root = '/repo'): GitChanges => ({
 });
 
 describe('conversation changes by turn', () => {
+	it.each(['Write', 'apply_patch'])(
+		'retains %s paths before native display input is capped',
+		(name) => {
+			const input =
+				name === 'Write'
+					? { file_path: 'large.ts', content: 'x'.repeat(5000) }
+					: `*** Begin Patch\n*** Add File: large.ts\n+${'x'.repeat(5000)}\n*** End Patch`;
+			const logs = transcriptMessagesToLogEntries([
+				{
+					type: 'user',
+					content: 'Large write',
+					uuid: 'large-turn',
+					timestamp: '2026-11-06T09:00:00Z',
+				},
+				{
+					type: 'assistant',
+					content: '',
+					uuid: 'call',
+					timestamp: '2026-11-06T09:00:01Z',
+					toolUse: [{ type: 'tool_use', id: 'write', name, input }],
+				},
+				{
+					type: 'user',
+					content: '',
+					uuid: 'result',
+					timestamp: '2026-11-06T09:00:02Z',
+					toolUse: [{ type: 'tool_result', tool_use_id: 'write', content: 'ok' }],
+				},
+			]);
+			expect(typeof logs[1].metadata?.toolState?.input).toBe('string');
+			expect(String(logs[1].metadata?.toolState?.input).length).toBeLessThanOrEqual(4000);
+			expect(collectTurnWrites(logs)).toEqual([
+				{
+					turnId: 'large-turn',
+					title: 'Large write',
+					timestamp: Date.parse('2026-11-06T09:00:00Z'),
+					paths: ['large.ts'],
+				},
+			]);
+			logs[1].metadata!.toolState!.status = 'error';
+			expect(collectTurnWrites(logs)).toEqual([]);
+		}
+	);
 	it('keeps earlier writes attached to a currently renamed file, without attributing copies', () => {
 		const changes = snapshot(['new.ts', 'copy.ts']);
 		changes.files[0] = { ...changes.files[0], status: 'renamed', oldPath: 'old.ts' };

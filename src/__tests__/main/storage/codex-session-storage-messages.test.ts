@@ -208,6 +208,42 @@ describe('CodexSessionStorage - readSessionMessages', () => {
 	});
 	let storage: CodexSessionStorage;
 
+	it.each([false, true])(
+		'pairs legacy tool results with their original arguments (error: %s)',
+		async (isError) => {
+			vi.spyOn(storage as any, 'findSessionFile').mockResolvedValue('/native.jsonl');
+			const patch = '*** Begin Patch\n*** Add File: legacy.ts\n+ok\n*** End Patch';
+			vi.mocked(fs.readFile).mockResolvedValue(
+				[
+					{ type: 'tool_call', id: 'legacy-call', tool: 'apply_patch', args: patch },
+					{ type: 'tool_call', id: 'unanswered', tool: 'apply_patch', args: patch },
+					{
+						type: 'tool_result',
+						id: 'result-envelope',
+						call_id: 'legacy-call',
+						output: isError ? 'failed' : 'ok',
+						is_error: isError,
+					},
+				]
+					.map((item) => JSON.stringify({ type: 'item.completed', item }))
+					.join('\n')
+			);
+			const { messages } = await storage.readSessionMessages('/repo', 'native', { readOnly: true });
+			expect(messages).toHaveLength(2);
+			expect(messages[0]).toMatchObject({
+				uuid: 'legacy-call',
+				toolUse: [
+					{
+						id: 'legacy-call',
+						tool: 'apply_patch',
+						state: { input: patch, status: isError ? 'failed' : 'completed' },
+					},
+				],
+			});
+			expect(messages[1]).toMatchObject({ toolUse: [{ state: { status: 'unknown' } }] });
+		}
+	);
+
 	beforeEach(() => {
 		storage = new CodexSessionStorage();
 		vi.clearAllMocks();

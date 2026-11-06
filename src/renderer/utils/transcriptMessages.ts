@@ -17,6 +17,7 @@ import type { LogEntry } from '../types';
 import { stripTurnPrompt } from '../../shared/turnPrompt';
 import { stripEmbeddedSystemPrompt } from '../../shared/embeddedSystemPrompt';
 import { compactToolOutput } from '../../shared/toolOutput';
+import { toolInputWritePaths } from '../../shared/gitChangeTurns';
 import { generateId } from './ids';
 
 /**
@@ -423,6 +424,7 @@ export function transcriptMessagesToLogEntries(
 			// a cache hydrated by an older build holds this message under that id,
 			// and keeping it is what lets a refresh upgrade that entry in place.
 			const id = !hasBody && index === 0 ? messageId : `${messageId}:tool:${index}`;
+			const writePaths = toolInputWritePaths(call.name, call.input);
 			const input = capToolValue(call.input);
 			const output = capToolValue(call.output);
 			entries.push({
@@ -436,6 +438,7 @@ export function transcriptMessagesToLogEntries(
 					toolState: {
 						...(call.status ? { status: call.status } : {}),
 						...(input !== undefined ? { input } : {}),
+						...(writePaths.length ? { writePaths } : {}),
 						...(output !== undefined ? { output } : {}),
 					},
 				},

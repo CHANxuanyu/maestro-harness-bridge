@@ -7,7 +7,7 @@ export interface ChangeTurnEntry {
 	source: string;
 	text: string;
 	timestamp: number;
-	metadata?: { toolState?: { status?: string; input?: unknown } };
+	metadata?: { toolState?: { status?: string; input?: unknown; writePaths?: string[] } };
 }
 
 export interface TurnWrites {
@@ -35,9 +35,22 @@ export interface GitChangesByTurn extends GitChanges {
 /** Read only explicit write-tool arguments. Shell output and prose are never evidence. */
 function writtenPaths(entry: ChangeTurnEntry): string[] {
 	if (entry.source !== 'tool' || entry.metadata?.toolState?.status !== 'completed') return [];
-	const input = entry.metadata.toolState.input;
+	return (
+		entry.metadata.toolState.writePaths ??
+		toolInputWritePaths(entry.text, entry.metadata.toolState.input)
+	);
+}
+
+/** Extract explicit paths before display arguments are compacted, regardless of call status. */
+export function toolInputWritePaths(name: string, input: unknown): string[] {
+	if (typeof input === 'string' && input.trim().startsWith('{')) {
+		try {
+			input = JSON.parse(input);
+		} catch {
+			/* A custom tool may use plain text. */
+		}
+	}
 	const record = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
-	const name = entry.text;
 	let paths: unknown[] = [];
 	if (['Edit', 'Write', 'MultiEdit'].includes(name)) paths = [record.file_path];
 	else if (name === 'NotebookEdit') paths = [record.notebook_path];

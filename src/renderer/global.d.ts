@@ -2033,6 +2033,7 @@ interface MaestroAPI {
 			},
 			sshRemoteId?: string
 		) => Promise<{
+			toolOutputSource?: import('../shared/nativeToolOutput').NativeToolOutputTarget;
 			messages: Array<{
 				type: string;
 				role?: string;

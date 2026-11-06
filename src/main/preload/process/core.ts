@@ -103,6 +103,8 @@ export interface AgentError {
  * Tool execution event
  */
 export interface ToolExecutionEvent {
+	toolOutputSource?: import('../../../shared/nativeToolOutput').NativeToolOutputTarget;
+	nativeToolCallId?: string;
 	toolName: string;
 	state?: unknown;
 	timestamp: number;

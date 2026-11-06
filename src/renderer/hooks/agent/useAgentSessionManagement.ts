@@ -376,7 +376,8 @@ export function useAgentSessionManagement(
 					// against these entries to find where to splice older history in -
 					// so both paths must build entries the same way.
 					messages = transcriptMessagesToLogEntries(
-						stripSynopsisTurns(result.messages as TranscriptMessage[])
+						stripSynopsisTurns(result.messages as TranscriptMessage[]),
+						result.toolOutputSource
 					);
 				}
 

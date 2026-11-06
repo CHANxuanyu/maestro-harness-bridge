@@ -165,6 +165,26 @@ describe('ChildProcessSpawner', () => {
 		});
 	});
 
+	it('freezes the native output account from the actual spawn environment', () => {
+		vi.mocked(buildChildProcessEnv).mockReturnValueOnce({ CODEX_HOME: '/synthetic-account' });
+		const { processes, spawner } = createTestContext();
+		spawner.spawn(
+			createBaseConfig({
+				sessionId: 'owner-ai-tab',
+				toolType: 'codex',
+				projectPath: '/project',
+				agentSessionId: 'native',
+			})
+		);
+		expect(processes.get('owner-ai-tab')?.toolOutputSource).toEqual({
+			provider: 'codex',
+			projectPath: '/project',
+			ownerAgentId: 'owner',
+			nativeSessionId: 'native',
+			accountDir: '/synthetic-account',
+			sshRemoteId: undefined,
+		});
+	});
 	describe('isStreamJsonMode detection', () => {
 		it('should enable stream-json mode when args contain "stream-json"', () => {
 			const { processes, spawner } = createTestContext();

@@ -1,3 +1,5 @@
+import { resolveAgentAccountDir } from '../../../shared/agentAccountDir';
+import { resolveOwningMaestroSessionId } from '../../coworking/coworking-session-id';
 // src/main/process-manager/spawners/ChildProcessSpawner.ts
 
 import { spawn } from 'child_process';
@@ -461,6 +463,20 @@ export class ChildProcessSpawner {
 				config.sshStdinScript && sshConnectionArgs(finalArgs) ? newRemotePidFilePath() : undefined;
 
 			const managedProcess: ManagedProcess = {
+				...(['claude-code', 'codex'].includes(toolType)
+					? {
+							toolOutputSource: {
+								provider: toolType,
+								ownerAgentId: resolveOwningMaestroSessionId(sessionId),
+								projectPath: config.projectPath || cwd,
+								nativeSessionId: resumeSessionId,
+								sshRemoteId: config.sshRemoteId,
+								accountDir: config.sshRemoteId
+									? undefined
+									: resolveAgentAccountDir({ toolType }, { env, homeDir: os.homedir() }),
+							},
+						}
+					: {}),
 				sessionId,
 				toolType,
 				childProcess,

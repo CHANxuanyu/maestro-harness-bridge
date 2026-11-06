@@ -59,6 +59,70 @@ describe('native tool output on demand', () => {
 			status: 'not-found',
 		});
 	});
+	it.each([false, true])(
+		'maps an exec item to its unique native call (compressed=%s)',
+		async (compressed) => {
+			const text = 'build log\n'.repeat(800) + 'NATIVE TAIL';
+			const timestamp = Date.parse('2026-11-06T12:00:00Z');
+			const rows = [
+				{
+					type: 'response_item',
+					timestamp: new Date(timestamp).toISOString(),
+					payload: {
+						type: 'function_call',
+						name: 'exec_command',
+						call_id: 'call_native',
+						arguments: '{"cmd":"npm test"}',
+					},
+				},
+				codex(
+					`Wall time: 0.0100 seconds\nProcess exited with code 1\nOutput:\n${text}`,
+					'function_call_output',
+					'call_native'
+				),
+			];
+			const lookup = {
+				command: '/bin/zsh -lc "npm test"',
+				timestamp: timestamp + 50,
+				preview: compactToolOutput(text).output as string,
+			};
+			const result = await readNativeToolOutput(
+				await fixture(rows, compressed),
+				'codex',
+				'codex-process-item_7',
+				lookup
+			);
+			expect(result.status).toBe('found');
+			if (result.status === 'found') expect(result.text.endsWith('NATIVE TAIL')).toBe(true);
+			expect(
+				await readNativeToolOutput(
+					await fixture(rows, compressed),
+					'codex',
+					'codex-process-item_7',
+					{ ...lookup, command: 'different command' }
+				)
+			).toEqual({ status: 'not-found' });
+			const duplicated = rows.map((row) =>
+				JSON.parse(JSON.stringify(row).replaceAll('call_native', 'call_duplicate'))
+			);
+			expect(
+				await readNativeToolOutput(
+					await fixture([...rows, ...duplicated], compressed),
+					'codex',
+					'codex-process-item_7',
+					lookup
+				)
+			).toEqual({ status: 'not-found' });
+			expect(
+				await readNativeToolOutput(
+					await fixture(rows, compressed),
+					'codex',
+					'codex-process-item_7',
+					{ ...lookup, timestamp: timestamp + 60000 }
+				)
+			).toEqual({ status: 'not-found' });
+		}
+	);
 	it('retains the real Claude output length in the existing compact preview', () => {
 		const text = 'x'.repeat(9000) + 'final error';
 		expect(flattenToolResultContent(text)).toBe(compactToolOutput(text).output);

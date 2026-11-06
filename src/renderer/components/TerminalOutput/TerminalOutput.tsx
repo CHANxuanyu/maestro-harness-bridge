@@ -261,7 +261,7 @@ export const TerminalOutput = memo(
 		const activeTab = useMemo(() => getActiveTab(session), [session.aiTabs, session.activeTabId]);
 		const nativeToolOutputTarget = useMemo<NativeToolOutputTarget | undefined>(
 			() =>
-				activeTab?.agentSessionId
+				activeTab?.agentSessionId && !Object.keys(activeTab.providerSessions ?? {}).length
 					? {
 							provider: session.toolType,
 							projectPath: session.projectRoot || session.cwd,
@@ -279,6 +279,7 @@ export const TerminalOutput = memo(
 				session.id,
 				session.sessionSshRemoteConfig,
 				activeTab?.agentSessionId,
+				activeTab?.providerSessions,
 			]
 		);
 		const activeLogs = useMemo((): LogEntry[] => activeTab?.logs ?? [], [activeTab?.logs]);

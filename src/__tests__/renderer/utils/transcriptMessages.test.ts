@@ -1,3 +1,4 @@
+import { compactToolOutput } from '../../../shared/toolOutput';
 /**
  * Tests for the transcript message helpers that back scroll-to-top history
  * loading (issue #1407).
@@ -13,6 +14,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { LogEntry } from '../../../renderer/types';
 import {
 	isSynopsisRequest,
+	reconcileTranscriptEntries,
 	mergeNewerEntries,
 	selectOlderEntries,
 	stripSynopsisTurns,
@@ -467,4 +469,69 @@ describe('mergeNewerEntries', () => {
 		const loaded = [entry('n9', 'something else', 'user', 900)];
 		expect(mergeNewerEntries(loaded, visible)).toBeNull();
 	});
+});
+
+it('backfills native call identity onto a live exec card without replacing its display id', () => {
+	const source = {
+		provider: 'codex',
+		projectPath: '/project',
+		ownerAgentId: 'owner',
+		nativeSessionId: 'native',
+		accountDir: '/account',
+	};
+	const output = 'x'.repeat(8000) + 'FINAL ERROR';
+	const loaded = transcriptMessagesToLogEntries(
+		[
+			{
+				type: 'assistant',
+				uuid: 'call_native',
+				timestamp: new Date(1000).toISOString(),
+				content: '',
+				toolUse: [
+					{
+						tool: 'exec_command',
+						id: 'call_native',
+						state: {
+							status: 'completed',
+							input: { cmd: 'npm test' },
+							output: `Wall time: 0.01 seconds\nProcess exited with code 0\nOutput:\n${output}`,
+						},
+					},
+				],
+			},
+		],
+		source
+	);
+	const visible: LogEntry[] = [
+		{
+			id: 'tool-codex-run-item_7',
+			source: 'tool',
+			timestamp: 1050,
+			text: 'shell',
+			metadata: {
+				toolCallId: 'codex-run-item_7',
+				toolOutputSource: source,
+				toolState: {
+					status: 'completed',
+					input: { command: '/bin/zsh -lc "npm test"' },
+					output: compactToolOutput(output).output,
+				},
+			},
+		},
+	];
+	const result = reconcileTranscriptEntries(loaded, visible);
+	expect(result.upgraded).toBe(1);
+	expect(result.logs[0].id).toBe(visible[0].id);
+	expect(result.logs[0].metadata?.nativeToolCallId).toBe('call_native');
+	expect(result.logs[0].metadata?.toolOutputSource).toEqual(source);
+	expect(reconcileTranscriptEntries(loaded, result.logs).upgraded).toBe(0);
+	const ambiguous = [
+		...loaded,
+		{
+			...loaded[0],
+			id: 'other',
+			metadata: { ...loaded[0].metadata, toolCallId: 'other', nativeToolCallId: 'other' },
+		},
+	];
+	expect(reconcileTranscriptEntries(ambiguous, visible).upgraded).toBe(0);
 });

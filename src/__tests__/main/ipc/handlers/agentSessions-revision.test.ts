@@ -25,7 +25,10 @@ vi.mock('../../../../main/utils/logger', () => ({
 import { registerAgentSessionsHandlers } from '../../../../main/ipc/handlers/agentSessions';
 import { getSessionStorage, type AgentSessionStorage } from '../../../../main/agents';
 import { getSshRemoteById } from '../../../../main/stores';
-import { resolveAgentAccountDir } from '../../../../main/agents/provider-account-dirs';
+import {
+	readStoredSessions,
+	resolveAgentAccountDir,
+} from '../../../../main/agents/provider-account-dirs';
 import { restoreStarredTranscript } from '../../../../main/storage/starred-transcript-mirror';
 
 const handlers = new Map<string, (...args: any[]) => Promise<any>>();
@@ -66,6 +69,81 @@ describe('read-only transcript refresh IPC', () => {
 			readOnly: true,
 		});
 		expect(restoreStarredTranscript).not.toHaveBeenCalled();
+	});
+	it('validates a parked provider source and reads its original account', async () => {
+		const source = {
+			provider: 'claude-code',
+			projectPath: '/old-project',
+			nativeSessionId: 'old-native',
+			ownerAgentId: 'owner',
+			accountDir: '/old-account',
+		};
+		vi.mocked(readStoredSessions).mockReturnValueOnce([
+			{
+				id: 'owner',
+				toolType: 'codex',
+				aiTabs: [
+					{
+						id: 'tab',
+						agentSessionId: 'new-native',
+						providerSessions: { 'claude-code': { agentSessionId: 'old-native' } },
+						logs: [{ metadata: { toolCallId: 'old-call', toolOutputSource: source } }],
+					},
+				],
+			},
+		]);
+		await handlers.get('agentSessions:toolOutput')!({}, source, 'old-call');
+		expect(read).toHaveBeenCalledWith('/old-project', 'old-native', 'old-call', {
+			configDir: '/old-account',
+			readOnly: true,
+		});
+		expect(restoreStarredTranscript).not.toHaveBeenCalled();
+	});
+	it('resolves CLI card IDs using the same saved source as the UI', async () => {
+		const source = {
+			provider: 'claude-code',
+			projectPath: '/old-project',
+			nativeSessionId: 'old-native',
+			ownerAgentId: 'owner',
+			accountDir: '/old-account',
+		};
+		vi.mocked(readStoredSessions).mockReturnValueOnce([
+			{
+				id: 'owner',
+				toolType: 'codex',
+				aiTabs: [{ logs: [{ metadata: { toolCallId: 'old-call', toolOutputSource: source } }] }],
+			},
+		]);
+		await handlers.get('agentSessions:toolOutput')!(
+			{},
+			{
+				provider: 'codex',
+				projectPath: '/project',
+				nativeSessionId: 'new-native',
+				ownerAgentId: 'owner',
+			},
+			'old-call'
+		);
+		expect(read).toHaveBeenCalledWith('/old-project', 'old-native', 'old-call', {
+			configDir: '/old-account',
+			readOnly: true,
+		});
+	});
+	it('rejects an invented parked provider account', async () => {
+		expect(
+			await handlers.get('agentSessions:toolOutput')!(
+				{},
+				{
+					provider: 'claude-code',
+					projectPath: '/project',
+					nativeSessionId: 'invented',
+					ownerAgentId: 'owner',
+					accountDir: '/invented',
+				},
+				'call'
+			)
+		).toEqual({ status: 'not-found' });
+		expect(read).not.toHaveBeenCalled();
 	});
 	it('refuses unsupported remote tool output without reading local files', async () => {
 		const handler = handlers.get('agentSessions:toolOutput');

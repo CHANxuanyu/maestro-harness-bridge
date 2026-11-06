@@ -1,3 +1,4 @@
+import { nativeToolOutputMatches, nativeToolCommand } from '../../shared/nativeToolOutput';
 /**
  * Conversion between provider transcript messages (as returned by
  * `window.maestro.agentSessions.read`) and the `LogEntry` shape the AI
@@ -336,7 +337,10 @@ export function stripSynopsisTurns<T extends { type: string; role?: string; cont
  * The strip runs BEFORE the empty check: a turn that carried nothing but the
  * envelope has no user text to show and should drop out entirely.
  */
-export function transcriptMessagesToLogEntries(messages: TranscriptMessage[]): LogEntry[] {
+export function transcriptMessagesToLogEntries(
+	messages: TranscriptMessage[],
+	toolOutputSource?: import('../../shared/nativeToolOutput').NativeToolOutputTarget
+): LogEntry[] {
 	const entries: LogEntry[] = [];
 	// Where each tool call landed, so a result recorded in a LATER message (a
 	// `tool_result` block) completes the card for its call instead of drawing a
@@ -427,6 +431,7 @@ export function transcriptMessagesToLogEntries(messages: TranscriptMessage[]): L
 				text: toolEntryText(call),
 				metadata: {
 					...(call.callId ? { toolCallId: call.callId } : {}),
+					...(toolOutputSource ? { toolOutputSource, nativeToolCallId: call.callId } : {}),
 					toolState: {
 						...(call.status ? { status: call.status } : {}),
 						...(input !== undefined ? { input } : {}),
@@ -695,6 +700,66 @@ export function mergeNewerEntries(
 	};
 }
 
+/** Fill only native tool identity, including a partial refresh with no shared display IDs. */
+export function bindNativeToolCalls(
+	loaded: LogEntry[],
+	visible: LogEntry[]
+): { logs: LogEntry[]; bound: number } {
+	// A live exec item keeps its display identity. Native identity is filled only
+	// when a bounded preview and call time identify exactly one result in this source.
+	const nativeTools = new Map<number, LogEntry[]>();
+	for (const entry of loaded) {
+		if (entry.source !== 'tool' || !entry.metadata?.toolCallId || !Number.isFinite(entry.timestamp))
+			continue;
+		const bucket = Math.floor(entry.timestamp / 5000);
+		const entries = nativeTools.get(bucket) ?? [];
+		entries.push(entry);
+		nativeTools.set(bucket, entries);
+	}
+	let bound = 0;
+	const logs = visible.map((entry) => {
+		const source = entry.metadata?.toolOutputSource;
+		if (
+			!source ||
+			source.provider !== 'codex' ||
+			entry.source !== 'tool' ||
+			entry.metadata?.nativeToolCallId ||
+			entry.metadata?.toolState?.status === 'running' ||
+			!/^codex-.+-item_\d+$/.test(entry.metadata?.toolCallId ?? '') ||
+			typeof entry.metadata?.toolState?.output !== 'string'
+		)
+			return entry;
+		const bucket = Math.floor(entry.timestamp / 5000);
+		const candidates = [-1, 0, 1].flatMap((offset) => nativeTools.get(bucket + offset) ?? []);
+		const matches = candidates.filter((native) => {
+			const other = native.metadata?.toolOutputSource;
+			return (
+				other &&
+				source.provider === other.provider &&
+				source.nativeSessionId === other.nativeSessionId &&
+				source.accountDir === other.accountDir &&
+				source.sshRemoteId === other.sshRemoteId &&
+				Math.abs(native.timestamp - entry.timestamp) <= 5000 &&
+				!!nativeToolCommand(entry.metadata?.toolState?.input) &&
+				nativeToolCommand(entry.metadata?.toolState?.input) ===
+					nativeToolCommand(native.metadata?.toolState?.input) &&
+				typeof native.metadata?.toolState?.output === 'string' &&
+				nativeToolOutputMatches(
+					entry.metadata!.toolState!.output as string,
+					native.metadata.toolState.output
+				)
+			);
+		});
+		if (matches.length !== 1) return entry;
+		bound++;
+		return {
+			...entry,
+			metadata: { ...entry.metadata, nativeToolCallId: matches[0].metadata!.toolCallId },
+		};
+	});
+	return { logs: bound ? logs : visible, bound };
+}
+
 /**
  * Bring entries a tab already holds up to the current conversion, IN PLACE.
  *
@@ -734,6 +799,8 @@ export function reconcileTranscriptEntries(
 	visible: LogEntry[]
 ): { logs: LogEntry[]; upgraded: number } {
 	if (loaded.length === 0 || visible.length === 0) return { logs: visible, upgraded: 0 };
+	const binding = bindNativeToolCalls(loaded, visible);
+	visible = binding.logs;
 	const groups = new Map<string, LogEntry[]>();
 	const groupOfEntry = new Map<string, string>();
 	for (const entry of loaded) {
@@ -750,7 +817,7 @@ export function reconcileTranscriptEntries(
 	const emitted = new Set<string>();
 	const refused = new Set<string>();
 	const out: LogEntry[] = [];
-	let upgraded = 0;
+	let upgraded = binding.bound;
 	// Where the last rewritten group ended in `loaded`, and whether anything the
 	// conversation could contain (a live send or reply with a local id) sits
 	// between it and the next one. Native messages the old conversion dropped

@@ -110,3 +110,23 @@ it('shows a missing-record message without replacing the cached preview', async 
 	).toBeInTheDocument();
 	expect(log.metadata?.toolState?.output).toEqual(compactToolOutput('x'.repeat(9000)).output);
 });
+
+it('keeps the saved provider, conversation and account after a provider switch', async () => {
+	const original = { ...target, accountDir: '/original-account' };
+	const oldLog = {
+		...log,
+		metadata: { ...log.metadata, toolOutputSource: original, nativeToolCallId: 'native-call' },
+	};
+	read.mockResolvedValue({ status: 'not-found' });
+	render(
+		<ToolCallDetails
+			log={oldLog}
+			theme={mockTheme}
+			nativeToolOutputTarget={{ ...target, provider: 'codex', nativeSessionId: 'new-conversation' }}
+		/>
+	);
+	await act(async () => {
+		fireEvent.click(screen.getByRole('button', { name: /Show full output/ }));
+	});
+	expect(read).toHaveBeenCalledWith(original, 'native-call');
+});

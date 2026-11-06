@@ -8,14 +8,15 @@ let activeReads = 0;
 export async function readToolOutputFile(
 	file: string,
 	provider: 'claude-code' | 'codex',
-	toolCallId: string
+	toolCallId: string,
+	lookup?: import('../../shared/nativeToolOutput').NativeToolOutputLookup
 ): Promise<NativeToolOutputResult> {
 	if (activeReads >= 2) return { status: 'busy' };
 	activeReads++;
 	try {
 		return await new Promise<NativeToolOutputResult>((resolve) => {
 			const worker = new Worker(path.join(__dirname, 'native-tool-output-worker.js'), {
-				workerData: { file, provider, toolCallId },
+				workerData: { file, provider, toolCallId, lookup },
 				resourceLimits: { maxOldGenerationSizeMb: 512 },
 			});
 			let settled = false;

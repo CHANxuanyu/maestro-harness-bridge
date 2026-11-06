@@ -3,7 +3,12 @@ import path from 'node:path';
 import { readCodexRollout, MAX_CODEX_ROLLOUT_BYTES } from '../../shared/codexRollout';
 import { flattenToolResultContent } from '../parsers/claude-output-parser';
 import { codexToolOutputText } from '../../shared/codexToolOutput';
-import type { NativeToolOutputResult } from '../../shared/nativeToolOutput';
+import {
+	nativeToolOutputMatches,
+	nativeToolCommand,
+	type NativeToolOutputLookup,
+	type NativeToolOutputResult,
+} from '../../shared/nativeToolOutput';
 
 const MAX_TOOL_OUTPUT_BYTES = 2 * 1024 * 1024;
 
@@ -11,9 +16,16 @@ const MAX_TOOL_OUTPUT_BYTES = 2 * 1024 * 1024;
 export async function readNativeToolOutput(
 	file: string,
 	provider: 'claude-code' | 'codex',
-	toolCallId: string
+	toolCallId: string,
+	lookup?: NativeToolOutputLookup
 ): Promise<NativeToolOutputResult> {
-	const parent = await readToolOutputFromFile(file, provider, toolCallId);
+	const parent = await readToolOutputFromFile(
+		file,
+		provider,
+		toolCallId,
+		MAX_CODEX_ROLLOUT_BYTES,
+		lookup
+	);
 	if (provider !== 'claude-code' || parent.status !== 'not-found') return parent;
 	try {
 		const sessionDir = file.replace(/\.jsonl$/, '');
@@ -45,11 +57,15 @@ async function readToolOutputFromFile(
 	file: string,
 	provider: 'claude-code' | 'codex',
 	toolCallId: string,
-	maxBytes = MAX_CODEX_ROLLOUT_BYTES
+	maxBytes = MAX_CODEX_ROLLOUT_BYTES,
+	lookup?: NativeToolOutputLookup
 ): Promise<NativeToolOutputResult> {
 	try {
 		const content = await readCodexRollout(file, maxBytes);
 		let start = 0;
+		const candidates = new Set<string>();
+		let matched: NativeToolOutputResult | undefined;
+		let matches = 0;
 		while (start < content.length) {
 			const newline = content.indexOf('\n', start);
 			const end = newline < 0 ? content.length : newline;
@@ -75,9 +91,24 @@ async function readToolOutputFromFile(
 			} else if (provider === 'codex') {
 				const payload = row?.payload;
 				if (
+					lookup &&
+					row?.type === 'response_item' &&
+					payload?.type === 'function_call' &&
+					['exec_command', 'shell', 'shell_command'].includes(payload.name) &&
+					Math.abs(Date.parse(row.timestamp) - lookup.timestamp) <= 5000
+				) {
+					try {
+						const command = nativeToolCommand(JSON.parse(payload.arguments));
+						if (command && command === nativeToolCommand({ command: lookup.command }))
+							candidates.add(payload.call_id);
+					} catch {
+						/* An incomplete call is not identity evidence. */
+					}
+				}
+				if (
 					row?.type === 'response_item' &&
 					['function_call_output', 'custom_tool_call_output'].includes(payload?.type) &&
-					payload.call_id === toolCallId
+					(lookup ? candidates.has(payload.call_id) : payload.call_id === toolCallId)
 				) {
 					text = codexToolOutputText(payload.output);
 				} else if (
@@ -88,19 +119,23 @@ async function readToolOutputFromFile(
 					text = codexToolOutputText(row.item.output);
 				}
 			}
-			if (text === undefined) continue;
+			if (text === undefined || (lookup && !nativeToolOutputMatches(lookup.preview, text)))
+				continue;
 			const bytes = Buffer.from(text, 'utf8');
 			let offset = Math.max(0, bytes.length - MAX_TOOL_OUTPUT_BYTES);
 			// Never start the tail in the middle of a UTF-8 code point.
 			while (offset < bytes.length && (bytes[offset] & 0xc0) === 0x80) offset++;
-			return {
+			const result: NativeToolOutputResult = {
 				status: 'found',
 				text: bytes.subarray(offset).toString('utf8'),
 				totalBytes: bytes.length,
 				omittedBytes: offset,
 			};
+			if (!lookup) return result;
+			if (++matches > 1) return { status: 'not-found' };
+			matched = result;
 		}
-		return { status: 'not-found' };
+		return matched ?? { status: 'not-found' };
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return { status: 'not-found' };
 		if (

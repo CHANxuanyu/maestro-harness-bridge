@@ -1602,7 +1602,9 @@ export class CodexSessionStorage extends BaseSessionStorage {
 	) {
 		void projectPath;
 		const file = await this.findSessionFile(sessionId, options?.configDir, true);
-		return file ? readToolOutputFile(file, 'codex', toolCallId) : { status: 'not-found' as const };
+		return file
+			? readToolOutputFile(file, 'codex', toolCallId, options?.toolOutputLookup)
+			: { status: 'not-found' as const };
 	}
 
 	async readSessionMessages(

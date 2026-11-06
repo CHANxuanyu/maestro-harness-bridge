@@ -102,6 +102,7 @@ export interface PaginatedSessionsResult {
  * Session messages result with pagination info
  */
 export interface SessionMessagesResult {
+	toolOutputSource?: import('../../shared/nativeToolOutput').NativeToolOutputTarget;
 	messages: SessionMessage[];
 	total: number;
 	hasMore: boolean;
@@ -140,6 +141,7 @@ export interface SessionListOptions {
  * Options for reading session messages
  */
 export interface SessionReadOptions {
+	toolOutputLookup?: import('../../shared/nativeToolOutput').NativeToolOutputLookup;
 	/** Exact account pool selected by the conversation row. */
 	configDir?: string;
 	ownerAgentId?: string;

@@ -1,3 +1,8 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { readNativeToolOutput } from '../../../../main/storage/native-tool-output-reader';
+import { nativeToolCommand } from '../../../../shared/nativeToolOutput';
 /**
  * Tests for src/main/process-manager/handlers/StdoutHandler.ts
  *
@@ -171,6 +176,84 @@ describe('StdoutHandler', () => {
 	});
 
 	describe('Codex process-local tool identifiers', () => {
+		it('carries the spawn source through real exec command events without calling item IDs native IDs', async () => {
+			const source = {
+				provider: 'codex',
+				projectPath: '/project',
+				ownerAgentId: 'owner',
+				accountDir: '/account',
+			};
+			const { handler, emitter, sessionId } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				agentSessionId: 'native',
+				toolOutputSource: source,
+				outputParser: new CodexOutputParser(),
+			});
+			const events: any[] = [];
+			emitter.on('tool-execution', (_id, event) => events.push(event));
+			const item = {
+				id: 'item_7',
+				type: 'command_execution',
+				command: '/bin/zsh -lc "npm test"',
+				status: 'in_progress',
+			};
+			sendJsonLine(handler, sessionId, { type: 'item.started', item });
+			sendJsonLine(handler, sessionId, {
+				type: 'item.completed',
+				item: {
+					...item,
+					status: 'completed',
+					aggregated_output: 'x'.repeat(8000) + 'FINAL ERROR',
+					exit_code: 0,
+				},
+			});
+			expect(events).toHaveLength(2);
+			for (const event of events) {
+				expect(event.toolCallId).toMatch(/^codex-.+-item_7$/);
+				expect(event.nativeToolCallId).toBeUndefined();
+				expect(event.toolOutputSource).toEqual({ ...source, nativeSessionId: 'native' });
+			}
+			expect(events[1].state.output).toContain('8011 chars total');
+			const root = await fs.mkdtemp(path.join(os.tmpdir(), 'exec-output-chain-'));
+			onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
+			const file = path.join(root, 'rollout-native.jsonl');
+			await fs.writeFile(
+				file,
+				[
+					{
+						type: 'response_item',
+						timestamp: new Date(events[0].timestamp).toISOString(),
+						payload: {
+							type: 'function_call',
+							name: 'exec_command',
+							call_id: 'native-call',
+							arguments: '{"cmd":"npm test"}',
+						},
+					},
+					{
+						type: 'response_item',
+						payload: {
+							type: 'function_call_output',
+							call_id: 'native-call',
+							output:
+								'Wall time: 0.01 seconds\nProcess exited with code 0\nOutput:\n' +
+								'x'.repeat(8000) +
+								'FINAL ERROR',
+						},
+					},
+				]
+					.map((row) => JSON.stringify(row))
+					.join('\n')
+			);
+			const result = await readNativeToolOutput(file, 'codex', events[0].toolCallId, {
+				command: nativeToolCommand(events[0].state.input)!,
+				timestamp: events[0].timestamp,
+				preview: events[1].state.output,
+			});
+			expect(result.status).toBe('found');
+			if (result.status === 'found') expect(result.text.endsWith('FINAL ERROR')).toBe(true);
+		});
 		it('forwards command updates under the original call id while deduplicating starts', () => {
 			const { handler, emitter, sessionId } = createTestContext({
 				isStreamJsonMode: true,

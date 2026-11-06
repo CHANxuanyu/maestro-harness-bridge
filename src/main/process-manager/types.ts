@@ -91,6 +91,10 @@ export interface ProcessConfig {
  * Internal representation of a managed process
  */
 export interface ManagedProcess {
+	toolOutputSource?: Omit<
+		import('../../shared/nativeToolOutput').NativeToolOutputTarget,
+		'nativeSessionId'
+	> & { nativeSessionId?: string };
 	sessionId: string;
 	toolType: string;
 	ptyProcess?: IPty;
@@ -217,6 +221,8 @@ export interface ProcessManagerEvents {
 }
 
 export interface ToolExecution {
+	toolOutputSource?: import('../../shared/nativeToolOutput').NativeToolOutputTarget;
+	nativeToolCallId?: string;
 	toolName: string;
 	state: unknown;
 	timestamp: number;

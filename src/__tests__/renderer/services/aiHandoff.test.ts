@@ -824,3 +824,48 @@ describe('handoff renderer work without UI changes', () => {
 		expect(enqueuePromptForTab).not.toHaveBeenCalled();
 	});
 });
+
+describe('new shell permission boundaries', () => {
+	it.each(['handoff', 'review'] as const)('keeps readonly in a %s target', async (mode) => {
+		useSettingsStore.setState({ newShell: true });
+		sessions()[0].aiTabs[0].readOnlyMode = true;
+		const result = await openHandoffTarget(request({ mode }));
+		expect(result.success).toBe(true);
+		expect(sessions()[1].aiTabs.find((tab) => tab.id === result.tabId)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+	});
+
+	it('tightens standard to readonly when switching to Codex', async () => {
+		useSettingsStore.setState({ newShell: true });
+		sessions()[0].aiTabs[0].permissionMode = 'standard';
+		const result = await openHandoffTarget(request());
+		expect(sessions()[1].aiTabs.find((tab) => tab.id === result.tabId)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+	});
+
+	it('keeps permission when changing the tool in an empty conversation', async () => {
+		useSettingsStore.setState({ newShell: true });
+		sessions()[0].aiTabs = [
+			createMockAITab({
+				id: 'source-tab',
+				logs: [],
+				agentSessionId: null,
+				inputValue: '',
+				readOnlyMode: true,
+			}),
+		];
+		const result = await openHandoffTarget(
+			request({ newConversation: { replaceTabId: 'source-tab' } })
+		);
+		expect(result.success).toBe(true);
+		expect(
+			sessions()
+				.find((session) => session.id === result.agentId)
+				?.aiTabs.find((tab) => tab.id === result.tabId)
+		).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
+	});
+});

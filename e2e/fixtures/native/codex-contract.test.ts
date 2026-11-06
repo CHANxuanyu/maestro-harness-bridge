@@ -1,5 +1,8 @@
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import planEvents from './codex-plan-events.json';
 import path from 'node:path';
 import { createTurn } from './protocol.cjs';
 import { createNativeTempDir } from './temp-root.cjs';
@@ -103,4 +106,53 @@ it('Codex fixture retains explicitly configured effort', () => {
 	});
 	turn.finish('Answer');
 	expect(nativeIdentity('codex', turn.file).effort).toBe('high');
+});
+
+// Event ordering follows the observed 0.166.0-alpha.6 exec plan turn.
+// Text, usage and thread identity are synthetic; no captured private bytes are used.
+it('replays every plan event unchanged and permits a following turn', async () => {
+	const root = createNativeTempDir('maestro-codex-plan-replay-');
+	roots.push(root);
+	const script = path.join(root, 'scenario.json');
+	fs.writeFileSync(
+		script,
+		JSON.stringify({
+			turns: [
+				{ answer: planEvents[9].item!.text, codexExecEvents: planEvents },
+				{ answer: 'FOLLOW_UP: still here.' },
+			],
+		})
+	);
+	const exec = promisify(execFile);
+	const options = {
+		cwd: root,
+		env: { ...process.env, CODEX_HOME: root, MAESTRO_NATIVE_SCRIPT: script },
+	};
+	const first = await exec(
+		process.execPath,
+		[path.resolve('e2e/fixtures/native/codex'), 'exec', '--json', '--', 'Synthetic plan'],
+		options
+	);
+	expect(
+		first.stdout
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line))
+	).toEqual(planEvents);
+	const next = await exec(
+		process.execPath,
+		[
+			path.resolve('e2e/fixtures/native/codex'),
+			'exec',
+			'--json',
+			'resume',
+			planEvents[0].thread_id!,
+			'--',
+			'Synthetic follow-up',
+		],
+		options
+	);
+	expect(next.stdout).toContain('FOLLOW_UP: still here.');
+	expect(JSON.parse(next.stdout.split('\n')[0]).thread_id).toBe(planEvents[0].thread_id);
+	expect(fs.readFileSync(path.join(root, 'fixture-turn-count'), 'utf8')).toBe('2');
 });

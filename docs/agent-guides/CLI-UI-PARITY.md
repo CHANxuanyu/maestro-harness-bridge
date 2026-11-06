@@ -138,6 +138,11 @@ remain last. Opening Tasks still uses `tab panel <conversation> tasks`; this cha
 adds no UI action or CLI verb. `native-history read <agent> <native-id>` exposes the
 same read-only transcript used by the panel. The default-skipped real diagnostic is
 documented in [Codex plan verification](../verification/codex-plan.md).
+The review fix uses the same StdoutHandler for Send and `dispatch`: plan updates
+and completion snapshots preserve the pending final answer. No new UI action or
+CLI verb is added. The default synthetic Electron case sends two messages via
+`dispatch` and opens Tasks via `tab panel`; the opt-in login diagnostic sends once
+with `--ephemeral` and does not test native-history recovery.
 
 Open gap: there is no CLI result containing the normalized live Tasks panel list or
 its empty-state text. `tab show` exposes the panel selection, and native history

@@ -16,6 +16,8 @@ test.describe.configure({ retries: 0 });
 type PlanProbe = {
 	tools: Array<{ toolCallId?: string; state: unknown }>;
 	exits: number[];
+	answers: string[];
+	commentary: string[];
 };
 
 declare global {
@@ -25,26 +27,36 @@ declare global {
 }
 
 // eslint-disable-next-line no-empty-pattern
-test('codex: real task list from exec through the panel and native history', async ({}, info) => {
+test('codex: real task list and final answer through the panel', async ({}, info) => {
 	const executable = process.env.MAESTRO_E2E_CODEX_PATH;
 	const model = process.env.MAESTRO_E2E_CODEX_MODEL;
 	const mode = process.env.MAESTRO_E2E_CODEX_PLAN ?? 'enabled';
-	if (!executable || !path.isAbsolute(executable) || !model || !process.env.CODEX_API_KEY) {
+	const auth = process.env.MAESTRO_E2E_CODEX_AUTH ?? 'api-key';
+	if (auth !== 'api-key' && auth !== 'login')
+		throw new Error('MAESTRO_E2E_CODEX_AUTH must be api-key or login');
+	const login = auth === 'login';
+	if (login && (process.env.CODEX_API_KEY || process.env.OPENAI_API_KEY))
+		throw new Error('Login mode requires CODEX_API_KEY and OPENAI_API_KEY to be unset.');
+	if (
+		!executable ||
+		!path.isAbsolute(executable) ||
+		(!login && (!model || !process.env.CODEX_API_KEY))
+	) {
 		throw new Error(
-			'Set MAESTRO_E2E_CODEX_PATH, MAESTRO_E2E_CODEX_MODEL and CODEX_API_KEY. No account files are read.'
+			'Set an absolute MAESTRO_E2E_CODEX_PATH. API-key mode also requires MAESTRO_E2E_CODEX_MODEL and CODEX_API_KEY.'
 		);
 	}
 	if (mode !== 'enabled' && mode !== 'disabled')
 		throw new Error('MAESTRO_E2E_CODEX_PLAN must be enabled or disabled');
-	const native = new NativeApp(info, { providerCli: false });
+	const native = new NativeApp(info, { providerCli: false, inheritCodexHome: login });
 	let failed = false;
 	try {
-		const home = path.join(native.root, 'home');
-		fs.mkdirSync(home);
-		const cli = (...args: string[]) =>
-			native.cliWithEnv({ HOME: home, USERPROFILE: home }, ...args);
+		const home = login ? undefined : path.join(native.root, 'home');
+		if (home) fs.mkdirSync(home);
+		const homeEnv: Record<string, string> = home ? { HOME: home, USERPROFILE: home } : {};
+		const cli = (...args: string[]) => native.cliWithEnv(homeEnv, ...args);
 		const version = execFileSync(executable, ['--version'], {
-			env: { ...process.env, ...native.env, HOME: home, USERPROFILE: home },
+			env: { ...process.env, ...native.env, ...homeEnv },
 			cwd: native.project,
 			encoding: 'utf8',
 			timeout: 10_000,
@@ -54,31 +66,33 @@ test('codex: real task list from exec through the panel and native history', asy
 			process.env.MAESTRO_E2E_CODEX_EXPECT_VERSION ?? 'codex-cli 0.166.0-alpha.6'
 		);
 		info.annotations.push({ type: 'native-cli-version', description: version });
-		fs.writeFileSync(
-			path.join(native.codex, 'config.toml'),
-			[
-				'cli_auth_credentials_store = "file"',
-				'mcp_oauth_credentials_store = "file"',
-				'web_search = "disabled"',
-				// Built-in provider overrides are rejected by 0.166. Use the same
-				// public OpenAI endpoint with explicit zero request/stream retries.
-				'model_provider = "maestro_plan_e2e"',
-				'[features]',
-				'apps = false',
-				'plugins = false',
-				'hooks = false',
-				'multi_agent = false',
-				'code_mode = false',
-				'unbounded_connection_retries = false',
-				'[model_providers.maestro_plan_e2e]',
-				'name = "OpenAI plan diagnostic"',
-				'base_url = "https://api.openai.com/v1"',
-				'env_key = "CODEX_API_KEY"',
-				'wire_api = "responses"',
-				'request_max_retries = 0',
-				'stream_max_retries = 0',
-			].join('\n') + '\n'
-		);
+		if (!login) {
+			fs.writeFileSync(
+				path.join(native.codex, 'config.toml'),
+				[
+					'cli_auth_credentials_store = "file"',
+					'mcp_oauth_credentials_store = "file"',
+					'web_search = "disabled"',
+					// Built-in provider overrides are rejected by 0.166. Use the same
+					// public OpenAI endpoint with explicit zero request/stream retries.
+					'model_provider = "maestro_plan_e2e"',
+					'[features]',
+					'apps = false',
+					'plugins = false',
+					'hooks = false',
+					'multi_agent = false',
+					'code_mode = false',
+					'unbounded_connection_retries = false',
+					'[model_providers.maestro_plan_e2e]',
+					'name = "OpenAI plan diagnostic"',
+					'base_url = "https://api.openai.com/v1"',
+					'env_key = "CODEX_API_KEY"',
+					'wire_api = "responses"',
+					'request_max_retries = 0',
+					'stream_max_retries = 0',
+				].join('\n') + '\n'
+			);
+		}
 		const settingsFile = path.join(native.data, 'maestro-settings.json');
 		fs.writeFileSync(
 			settingsFile,
@@ -93,7 +107,8 @@ test('codex: real task list from exec through the panel and native history', asy
 		fs.writeFileSync(marker, 'Must remain unchanged.\n');
 		await native.start(home);
 		// Do not use createAgent()/realCliFor(): their general real-runtime fixture
-		// copies credentials from a user's account. This case only inherits CODEX_API_KEY.
+		// copies credentials from a user's account. Login mode leaves HOME and
+		// CODEX_HOME inherited and lets Codex use its own existing login.
 		const created = await cli(
 			'create-agent',
 			'Codex plan diagnostic',
@@ -103,11 +118,24 @@ test('codex: real task list from exec through the panel and native history', asy
 			native.project,
 			'--custom-path',
 			executable,
-			'--model',
-			model,
-			'--env',
-			`CODEX_HOME=${native.codex}`,
-			...(mode === 'disabled' ? ['--custom-args', '-c tools.update_plan.enabled=false'] : [])
+			...(model ? ['--model', model] : []),
+			...(login ? [] : ['--env', `CODEX_HOME=${native.codex}`]),
+			'--custom-args',
+			[
+				...(login
+					? [
+							'--ephemeral',
+							'-c web_search="disabled"',
+							'-c features.apps=false',
+							'-c features.plugins=false',
+							'-c features.hooks=false',
+							'-c features.multi_agent=false',
+							'-c features.code_mode=false',
+							'-c features.unbounded_connection_retries=false',
+						]
+					: []),
+				...(mode === 'disabled' ? ['-c tools.update_plan.enabled=false'] : []),
+			].join(' ')
 		);
 		expect(created.success).toBe(true);
 		const agentId = created.agentId as string;
@@ -124,8 +152,15 @@ test('codex: real task list from exec through the panel and native history', asy
 			'The tools in this conversation have not provided a task list.'
 		);
 		await native.page.evaluate((owner) => {
-			const probe: PlanProbe = { tools: [], exits: [] };
+			const probe: PlanProbe = { tools: [], exits: [], answers: [], commentary: [] };
 			window.__realCodexPlan = probe;
+			window.maestro.process.onData((sessionId, text) => {
+				if (sessionId.startsWith(`${owner}-ai-`)) probe.answers.push(text);
+			});
+			window.maestro.process.onThinkingChunk((sessionId, text, purpose) => {
+				if (sessionId.startsWith(`${owner}-ai-`) && purpose === 'commentary')
+					probe.commentary.push(text);
+			});
 			window.maestro.process.onToolExecution((sessionId, event: ToolExecutionEvent) => {
 				if (sessionId.startsWith(`${owner}-ai-`) && event.toolName === 'update_plan') {
 					probe.tools.push({ toolCallId: event.toolCallId, state: event.state });
@@ -157,10 +192,12 @@ test('codex: real task list from exec through the panel and native history', asy
 			mode === 'enabled' ? 'PLAN_CHECK_DONE 4 6' : 'PLAN_TOOL_UNAVAILABLE'
 		);
 		await info.attach('plan-ipc-events.json', {
-			body: JSON.stringify({ version, mode, model, ...probe }, null, 2),
+			body: JSON.stringify({ version, mode, auth, model, ...probe }, null, 2),
 			contentType: 'application/json',
 		});
 		if (mode === 'enabled') {
+			expect(probe.answers.join('')).toContain('PLAN_CHECK_DONE 4 6');
+			expect(probe.commentary.join('')).not.toContain('PLAN_CHECK_DONE 4 6');
 			const lists = probe.tools.map((event) =>
 				extractAgentTaskList((event.state as { input?: unknown })?.input)
 			);
@@ -181,19 +218,24 @@ test('codex: real task list from exec through the panel and native history', asy
 			);
 			await expect(native.page.getByTestId('tasks-panel')).toHaveCount(0);
 		}
-		const completed = await cli('tab', 'show', tabId, '--agent', agentId);
-		expect(completed.tab.agentSessionId).toBeTruthy();
-		const history = await cli('native-history', 'read', agentId, completed.tab.agentSessionId);
-		expect(history.success).toBe(true);
-		const historical = latestAgentTaskList(transcriptMessagesToLogEntries(history.result.messages));
-		if (mode === 'enabled') expect(historical?.completed).toBe(2);
-		else expect(historical).toBeNull();
-		await native.restart(home);
-		expect((await cli('focus-agent', agentId)).success).toBe(true);
-		expect((await cli('tab', 'panel', tabId, 'tasks', '--agent', agentId)).success).toBe(true);
-		if (mode === 'enabled')
-			await expect(native.page.getByTestId('tasks-progress')).toHaveText('2 / 2 completed');
-		else await expect(native.page.getByTestId('tasks-empty')).toBeVisible();
+		// Ephemeral login mode intentionally has no history read or restart assertion.
+		if (!login) {
+			const completed = await cli('tab', 'show', tabId, '--agent', agentId);
+			expect(completed.tab.agentSessionId).toBeTruthy();
+			const history = await cli('native-history', 'read', agentId, completed.tab.agentSessionId);
+			expect(history.success).toBe(true);
+			const historical = latestAgentTaskList(
+				transcriptMessagesToLogEntries(history.result.messages)
+			);
+			if (mode === 'enabled') expect(historical?.completed).toBe(2);
+			else expect(historical).toBeNull();
+			await native.restart(home);
+			expect((await cli('focus-agent', agentId)).success).toBe(true);
+			expect((await cli('tab', 'panel', tabId, 'tasks', '--agent', agentId)).success).toBe(true);
+			if (mode === 'enabled')
+				await expect(native.page.getByTestId('tasks-progress')).toHaveText('2 / 2 completed');
+			else await expect(native.page.getByTestId('tasks-empty')).toBeVisible();
+		}
 		expect(fs.readFileSync(marker, 'utf8')).toBe('Must remain unchanged.\n');
 		expect(fs.readdirSync(native.project)).toEqual(['read-only-marker.txt']);
 	} catch (error) {

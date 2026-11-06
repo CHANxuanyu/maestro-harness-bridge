@@ -919,3 +919,11 @@ Claude 切换失败属于产品的 CLI 路径。失败截图只显示 Codex 新�
 扩展 `e2e/native-tool-output.spec.ts` 的换工具场景：Claude 标准权限切到 Codex 后立即显示只读，合成续聊调用含 `--sandbox read-only` 和任务工具开关，不含绕过权限参数；继续验证旧回答、旧工具全文、CLI 回读、收起释放和全文不落盘。沙箱外需执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell.spec.ts e2e/native-stop-resume.spec.ts e2e/native-codex-plan.spec.ts e2e/native-tool-output.spec.ts --retries=0`。本轮未运行真实模型、真实账户、真实 SSH、浏览器会话、其他平台或发行包验收，未推送或创建 PR。
 
 旧界面没有增加全文按钮或权限继承规则。T6 原有共享变化包括统一工具预览截断标记、增加固定来源及原生调用元数据、刷新时补齐调用身份，仍保持 4000 字符缓存上限。全文读取的 SSH、视图折叠 CLI、旧缓存身份缺失和换工具 CLI 旧文案缺口仍按 parity 文档保留，不宣称已经补齐。
+
+## 2026-11-06：全量 Electron 七项失败复核，所属窗口目录修复
+
+验证对象为当前集成分支源码，没有制作安装包。七项原始失败现场保留在本机，不进入公开提交。项目移动场景的 trace 中，CLI 返回后所属副窗口的权限快照仍返回旧项目；代码确认 `update_session_cwd` 固定发给主窗口，而权限查询读取所属窗口。
+
+先增加主进程路由回归，修复前 4 项中 1 项失败：副窗口没有收到 `remote:updateSessionCwd`。随后沿用现有 `getWindowForSession` 路由，目录字段仍由 `withWorkingDirectory()` 统一更新。修复后路由、目录字段、权限来源 3 个相关文件共 46 项通过，均使用 `--configLoader runner --no-cache`。未改变权限规则，项目或主机不符及无响应来源仍不能授权放宽。该共享路由修复同时适用于旧界面；不解析 SSH 路径，不新增 CLI 动词或界面文字。
+
+`tsconfig.json` 与 `tsconfig.main.json` 类型检查通过，改动源码 ESLint、Prettier 与 diff 空白检查通过。沙箱内未启动 Electron。原有 `owner moved project cannot widen a new conversation` 必须由沙箱外验收，保留新项目快照、原来源 full 和新对话 readonly 三项断言。

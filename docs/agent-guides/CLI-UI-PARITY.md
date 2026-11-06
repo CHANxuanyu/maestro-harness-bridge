@@ -127,6 +127,11 @@ Projects on different SSH hosts remain separate; remote paths are not resolved
 locally. The provider creation route also bounds its source metadata hop to
 250 ms and lets the target use the same resolver after a missing reply.
 
+`update-agent <id> --cwd <path>` routes to the session's owning window, like
+`update-agent --provider`. The owner applies the existing `withWorkingDirectory()`
+transition used by directory editing, so permission snapshots report the current
+project. This routing correction applies to both shells; no action or verb is added.
+
 Closing the last tab preserves its permission in the automatic replacement.
 Provider changes preserve supported modes, tighten unsupported standard to readonly,
 and refuse a target without an equally strict mode. Handoff snapshots carry the

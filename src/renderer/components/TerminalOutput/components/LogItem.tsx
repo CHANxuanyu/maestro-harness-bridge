@@ -1295,7 +1295,7 @@ export const LogItem = memo(
 											onClick={() => onShowErrorDetails(log.agentError!)}
 											className={
 												newShell
-													? 'text-xs underline underline-offset-2 hover:opacity-80'
+													? 'order-last text-xs underline underline-offset-2 hover:opacity-80'
 													: 'flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity'
 											}
 											style={

@@ -204,15 +204,17 @@ function applySendFailure(
 	setters: SendStateSetters,
 	alreadyHandled: boolean
 ): void {
+	// onError clears this and carries only the text, so it is set here on both paths.
+	if (result.detectedError) {
+		setters.setDetectedError(result.detectedError);
+	}
+
 	if (alreadyHandled) {
 		return;
 	}
 
 	if (!result.success && result.error) {
 		setConversationError(result.error);
-		if (result.detectedError) {
-			setters.setDetectedError(result.detectedError);
-		}
 		setters.setErrorRetryCount((prev) => prev + 1);
 	}
 }

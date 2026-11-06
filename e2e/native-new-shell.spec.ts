@@ -415,3 +415,159 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 		fs.rmSync(native.root, { recursive: true, force: true });
 	}
 });
+
+const seedNewShell = (native: NativeApp, settings: Record<string, unknown> = {}) => {
+	const settingsFile = path.join(native.data, 'maestro-settings.json');
+	fs.writeFileSync(
+		settingsFile,
+		JSON.stringify({
+			...JSON.parse(fs.readFileSync(settingsFile, 'utf8')),
+			newShell: true,
+			defaultSaveToHistory: false,
+			crashReportingEnabled: false,
+			...settings,
+		})
+	);
+	fs.writeFileSync(
+		path.join(native.data, 'maestro-agent-configs.json'),
+		JSON.stringify({
+			configs: {
+				'claude-code': {
+					customPath: path.resolve('e2e/fixtures/native/claude'),
+					customEnvVars: { CLAUDE_CONFIG_DIR: native.claude, MAESTRO_NATIVE_SCRIPT: native.script },
+				},
+			},
+		})
+	);
+	return () => JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+};
+
+// eslint-disable-next-line no-empty-pattern
+test('new shell first run asks only the updates question', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	const settings = seedNewShell(native, {
+		typographyPromptSeen: false,
+		themePromptSeen: false,
+		updatesPromptSeen: false,
+		agentPowersPromptSeen: false,
+	});
+	let failed = false;
+	try {
+		await native.start(home);
+		const stderr: string[] = [];
+		native.app.process().stderr?.on('data', (chunk) => stderr.push(String(chunk)));
+		await expect(native.page.getByTestId('updates-choice-confirm')).toBeVisible();
+		await expect(native.page.getByTestId('project-start')).toBeAttached();
+		await native.page.getByTestId('updates-choice-confirm').click();
+		await expect(native.page.getByTestId('updates-choice-confirm')).toHaveCount(0);
+		await expect(native.page.getByTestId('typography-choice-confirm')).toHaveCount(0);
+		await expect(native.page.getByTestId('theme-choice-confirm')).toHaveCount(0);
+		await expect(native.page.getByTestId('agent-powers-confirm')).toHaveCount(0);
+		await expect(native.page.getByTestId('project-start')).toContainText('Claude Code installed');
+		await expect.poll(() => settings().updatesPromptSeen).toBe(true);
+		// Skipped, not answered: the old shell still asks these questions.
+		expect(settings().typographyPromptSeen).toBe(false);
+		expect(settings().themePromptSeen).toBe(false);
+		expect(settings().agentPowersPromptSeen).toBe(false);
+		expect(stderr.join('')).not.toContain('PluginsDisabled');
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await native.close(failed);
+	}
+});
+
+// eslint-disable-next-line no-empty-pattern
+test('new shell rejected login: dismiss, sign in from the card and replay the turn', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	seedNewShell(native);
+	let failed = false;
+	try {
+		await native.start(home);
+		// The dialog types a real login into a real shell. It must not get one here.
+		await native.app.evaluate(({ ipcMain }) => {
+			ipcMain.removeHandler('process:spawnTerminalTab');
+			ipcMain.handle('process:spawnTerminalTab', () => ({ pid: 1, success: true }));
+			ipcMain.removeHandler('process:write');
+			ipcMain.handle('process:write', () => true);
+		});
+		await native.app.evaluate(({ dialog }, project) => {
+			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [project] });
+		}, native.project);
+		await native.page.getByRole('button', { name: 'Open project folder', exact: true }).click();
+		await expect(native.input()).toBeFocused();
+		await native.cli('settings', 'set', 'uiLanguage', 'zh-CN');
+		await expect(native.page.locator('html')).toHaveAttribute('lang', /^zh/);
+		native.scriptTurns([{ authFailure: true, answer: '' }, { answer: 'Recovered after sign-in' }]);
+		const composer = native.page.locator('textarea:focus');
+		await composer.fill('Fix the cart');
+		await composer.press('Enter');
+
+		const dialog = native.page.getByRole('dialog', { name: 'Claude Code 需要重新登录' });
+		await expect(dialog).toBeVisible();
+		await expect(dialog).toContainText('当前工作已暂停，重新登录后恢复。');
+		await dialog.getByRole('button', { name: '稍后再说' }).click();
+		await expect(dialog).toHaveCount(0);
+
+		const card = native.page.getByLabel('终端输出', { exact: true });
+		await expect(card).toContainText('需要重新登录');
+		await expect(card).toContainText('Claude Code 不接受当前的登录凭据。');
+		await expect(card).not.toContainText('Authentication failed');
+		await card.getByRole('button', { name: '重新登录' }).click();
+		await expect(dialog).toBeVisible();
+		await dialog.getByTestId('reauth-resume').click();
+
+		await expect(card).toContainText('Recovered after sign-in');
+		await expect(card.getByRole('button', { name: '重新登录' })).toHaveCount(0);
+		expect(Number(fs.readFileSync(path.join(native.claude, 'fixture-turn-count'), 'utf8'))).toBe(2);
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await native.close(failed);
+	}
+});
+
+// eslint-disable-next-line no-empty-pattern
+test('old shell wizard names a rejected login instead of an exit code', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	seedNewShell(native, { newShell: false });
+	native.scriptTurns([{ authFailure: true, answer: '' }]);
+	let failed = false;
+	try {
+		await native.start(home);
+		await native.page.keyboard.press('Meta+Shift+N');
+		await expect(
+			native.page.getByRole('heading', { name: 'Create a Maestro Agent' })
+		).toBeVisible();
+		await native.page
+			.getByRole('button', { name: /Claude Code/ })
+			.first()
+			.click();
+		await native.page.getByRole('button', { name: 'Continue', exact: true }).click();
+		await native.page.locator('input[type="text"]').first().fill(native.project);
+		await native.page.getByRole('button', { name: 'Continue', exact: true }).click();
+		const message = native.page.getByPlaceholder('Describe your project...');
+		await message.fill('A cart');
+		await native.page.getByRole('button', { name: 'Send', exact: true }).click();
+		await expect(native.page.getByText('Authentication Required', { exact: true })).toBeVisible();
+		await expect(
+			native.page.getByText('Run "claude auth login" to sign in again, then try again.', {
+				exact: true,
+			})
+		).toBeVisible();
+		await expect(native.page.getByText(/Check the terminal/)).toHaveCount(0);
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await native.close(failed);
+	}
+});

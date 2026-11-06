@@ -42,6 +42,7 @@ export interface NativeScene {
 	toolDelay?: number;
 	exitGate?: string;
 	approval?: boolean;
+	authFailure?: boolean;
 }
 
 export class NativeApp {

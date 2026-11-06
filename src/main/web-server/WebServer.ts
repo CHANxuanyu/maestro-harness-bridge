@@ -1194,8 +1194,17 @@ export class WebServer {
 				this.callbackRegistry.selectSession(sessionId, tabId, focus),
 			selectTab: async (sessionId: string, tabId: string) =>
 				this.callbackRegistry.selectTab(sessionId, tabId),
-			newTab: async (sessionId: string, background?: boolean, sourceTabId?: string) =>
-				this.callbackRegistry.newTab(sessionId, background, ...(sourceTabId ? [sourceTabId] : [])),
+			newTab: async (
+				sessionId: string,
+				background?: boolean,
+				sourceTabId?: string,
+				sourcePermissionMode?: NewTabResult['permissionMode']
+			) =>
+				this.callbackRegistry.newTab(
+					sessionId,
+					background,
+					...(sourceTabId ? ([sourceTabId, sourcePermissionMode] as const) : [])
+				),
 			closeTab: async (sessionId: string, tabId: string) =>
 				this.callbackRegistry.closeTab(sessionId, tabId),
 			renameTab: async (sessionId: string, tabId: string, newName: string) =>
@@ -1510,12 +1519,13 @@ export class WebServer {
 	requestNewTab(
 		sessionId: string,
 		background?: boolean,
-		sourceTabId?: string
+		sourceTabId?: string,
+		sourcePermissionMode?: NewTabResult['permissionMode']
 	): Promise<NewTabResult | null> {
 		return this.callbackRegistry.newTab(
 			sessionId,
 			background,
-			...(sourceTabId ? [sourceTabId] : [])
+			...(sourceTabId ? ([sourceTabId, sourcePermissionMode] as const) : [])
 		);
 	}
 

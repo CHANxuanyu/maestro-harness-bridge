@@ -1,3 +1,4 @@
+import type { NewTabResult } from '../../types';
 /**
  * Tabs domain WebSocket message handlers.
  *
@@ -92,7 +93,10 @@ export function handleNewTab(
 			sessionId,
 			background,
 			...(typeof message.sourceTabId === 'string' && message.sourceTabId
-				? [message.sourceTabId]
+				? ([
+						message.sourceTabId,
+						message.sourcePermissionMode as NewTabResult['permissionMode'],
+					] as const)
 				: [])
 		)
 		.then((result) => {

@@ -1,3 +1,4 @@
+import { conversationPermissionSnapshot } from '../../../renderer/utils/newConversationPermissions';
 import { useOperationStore } from '../../../renderer/stores/operationStore';
 import { act, renderHook } from '@testing-library/react';
 import { useInputSync } from '../../../renderer/hooks/input/useInputSync';
@@ -889,7 +890,7 @@ describe('permission metadata across renderer owners', () => {
 			...window.maestro.windows,
 			getConversationPermissions: vi.fn(async (ids: string[]) =>
 				ids.map((sessionId, index) => ({
-					sessionId,
+					...conversationPermissionSnapshot(sessionId)!,
 					tabs: [
 						{
 							id: `${sessionId}-tab`,

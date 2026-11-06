@@ -69,7 +69,7 @@ describe('useAITabHandlers', () => {
 			await act(async () => {
 				result.current.handleNewAgentSession();
 			});
-			expect(requestNewTab).toHaveBeenCalledWith('session-1', false, 'source');
+			expect(requestNewTab).toHaveBeenCalledWith('session-1', false, 'source', 'readonly');
 			expect(getSession().aiTabs.find((tab) => tab.id === 'created')).toMatchObject({
 				permissionMode: 'readonly',
 				readOnlyMode: true,

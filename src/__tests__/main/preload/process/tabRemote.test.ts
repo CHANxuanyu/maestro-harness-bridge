@@ -51,8 +51,8 @@ describe('Process TabRemote Preload API', () => {
 		const callback = vi.fn();
 		api.onRemoteNewTab(callback);
 		const handler = mockOn.mock.calls.find(([channel]) => channel === 'remote:newTab')![1];
-		handler({}, 'owner', 'ack', false, 'readonly-source');
-		expect(callback).toHaveBeenCalledWith('owner', 'ack', false, 'readonly-source');
+		handler({}, 'owner', 'ack', false, 'readonly-source', 'readonly');
+		expect(callback).toHaveBeenCalledWith('owner', 'ack', false, 'readonly-source', 'readonly');
 		const response = { tabId: 'new', permissionMode: 'readonly' as const, readOnlyMode: true };
 		api.sendRemoteNewTabResponse('ack', response);
 		expect(mockSend).toHaveBeenCalledWith('ack', response);

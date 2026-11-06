@@ -360,7 +360,8 @@ export interface NewTabResult {
 export type NewTabCallback = (
 	sessionId: string,
 	background?: boolean,
-	sourceTabId?: string
+	sourceTabId?: string,
+	sourcePermissionMode?: NewTabResult['permissionMode']
 ) => Promise<NewTabResult | null>;
 export type CloseTabCallback = (sessionId: string, tabId: string) => Promise<boolean>;
 export interface RenameTabResult {

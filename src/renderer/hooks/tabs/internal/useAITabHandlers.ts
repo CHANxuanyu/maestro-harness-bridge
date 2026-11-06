@@ -1,3 +1,4 @@
+import { resolveTabPermissionMode } from '../../../../shared/agentMetadata';
 import { resolveProjectConversationPermission } from '../../../utils/newConversationPermissions';
 import { useTabStore } from '../../../stores/tabStore';
 import { useCallback, type RefObject } from 'react';
@@ -59,7 +60,13 @@ export function useAITabHandlers(
 				// keyed on the tab, so it keeps focus through the switch below.
 				inputRef?.current?.focus();
 				void window.maestro.web
-					.requestNewTab(activeSessionId, false, ...(sourceTabId ? [sourceTabId] : []))
+					.requestNewTab(
+						activeSessionId,
+						false,
+						...(sourceTabId
+							? ([sourceTabId, resolveTabPermissionMode(getActiveTab(target))] as const)
+							: [])
+					)
 					.then((result) => {
 						if (!result?.tabId) return;
 						// Draw the tab NOW rather than waiting to be told about it. The

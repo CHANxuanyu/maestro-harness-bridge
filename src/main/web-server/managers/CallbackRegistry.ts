@@ -477,10 +477,15 @@ export class CallbackRegistry {
 	async newTab(
 		sessionId: string,
 		background?: boolean,
-		sourceTabId?: string
+		sourceTabId?: string,
+		sourcePermissionMode?: NewTabResult['permissionMode']
 	): Promise<NewTabResult | null> {
 		if (!this.callbacks.newTab) return null;
-		return this.callbacks.newTab(sessionId, background, ...(sourceTabId ? [sourceTabId] : []));
+		return this.callbacks.newTab(
+			sessionId,
+			background,
+			...(sourceTabId ? ([sourceTabId, sourcePermissionMode] as const) : [])
+		);
 	}
 
 	async closeTab(sessionId: string, tabId: string): Promise<boolean> {

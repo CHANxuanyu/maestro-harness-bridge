@@ -21,6 +21,23 @@ export function newConversationPermissionFields(
 	return permissionModeFields(mode);
 }
 
+/** A browser source may tighten, but never widen, its owner's current copy. */
+export function remoteConversationPermissionFields(
+	source: Pick<AITab, 'permissionMode' | 'readOnlyMode'> | undefined,
+	requestedMode: unknown
+): ReturnType<typeof permissionModeFields> {
+	if (!source || !['full', 'standard', 'readonly'].includes(requestedMode as string))
+		return permissionModeFields('readonly');
+	const ownerMode = resolveTabPermissionMode(source);
+	return permissionModeFields(
+		ownerMode === 'readonly' || requestedMode === 'readonly'
+			? 'readonly'
+			: ownerMode === 'standard' || requestedMode === 'standard'
+				? 'standard'
+				: 'full'
+	);
+}
+
 /** Reopening validates against the current tool, including retained and orphan tabs. */
 export function restoreConversationPermissions(session: Session, tab: AITab): AITab | null {
 	if (!useSettingsStore.getState().newShell) return tab;

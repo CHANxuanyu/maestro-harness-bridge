@@ -110,8 +110,10 @@ does not remove its command or write a saved preference.
 | Deliberately change permission                     | `tab permission <tab-id> <full\|standard\|readonly>`                   | `permissionModeFields()`; read with `tab show <tab-id> --json`                        |
 
 Inheritance is gated by `newShell`. Conversation buttons carry the exact source.
-The browser sends `sourceTabId` to the owner and adopts the returned permission
-fields, including when an inventory update arrives before the response. A missing
+The browser sends `sourceTabId` and `sourcePermissionMode` to the owner.
+`remoteConversationPermissionFields()` chooses the stricter of the browser source
+and the current desktop copy, with missing or invalid browser metadata requiring
+readonly. The browser adopts the returned permission fields, including when an inventory update arrives before the response. A missing
 explicit source refuses creation. CLI creation retains the specified project scope.
 
 Project creation uses `resolveProjectConversationPermission()`. Main requests the

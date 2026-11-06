@@ -503,7 +503,8 @@ interface MaestroAPI {
 				sessionId: string,
 				responseChannel: string,
 				background?: boolean,
-				sourceTabId?: string
+				sourceTabId?: string,
+				sourcePermissionMode?: NewTabResult['permissionMode']
 			) => void
 		) => () => void;
 		sendRemoteNewTabResponse: (responseChannel: string, result: NewTabResult | null) => void;
@@ -1322,7 +1323,8 @@ interface MaestroAPI {
 		requestNewTab: (
 			sessionId: string,
 			background?: boolean,
-			sourceTabId?: string
+			sourceTabId?: string,
+			sourcePermissionMode?: NewTabResult['permissionMode']
 		) => Promise<NewTabResult | null>;
 		requestCloseTab: (sessionId: string, tabId: string) => Promise<boolean>;
 		broadcastUserInput: (

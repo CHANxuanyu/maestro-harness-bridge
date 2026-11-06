@@ -291,6 +291,7 @@ describe('owner permission resolution', () => {
 		async (change) => {
 			const target = createMockSession({
 				id: 'target',
+				groupId: change === 'host' ? 'project-group' : undefined,
 				cwd: '/project',
 				projectRoot: '/project',
 				aiTabs: [createMockAITab({ createdAt: 1, permissionMode: 'readonly' })],
@@ -300,7 +301,10 @@ describe('owner permission resolution', () => {
 				id: 'peer',
 				aiTabs: [createMockAITab({ createdAt: 100, permissionMode: 'full' })],
 			};
-			useSessionStore.setState({ sessions: [target, peer] });
+			useSessionStore.setState({
+				sessions: [target, peer],
+				groups: [{ id: 'project-group', name: 'Project', emoji: '', collapsed: false }],
+			});
 			const targetSnapshot = conversationPermissionSnapshot(target.id)!;
 			useSessionStore.setState({
 				sessions: [
@@ -314,6 +318,7 @@ describe('owner permission resolution', () => {
 				],
 			});
 			const peerSnapshot = conversationPermissionSnapshot(peer.id)!;
+			if (change === 'host') expect(peerSnapshot.projectKey).toBe(targetSnapshot.projectKey);
 			useSessionStore.setState({ sessions: [target, peer] });
 			vi.spyOn(window.maestro.windows, 'getConversationPermissions').mockResolvedValue([
 				targetSnapshot,

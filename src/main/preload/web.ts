@@ -64,12 +64,17 @@ export function createWebApi() {
 			ipcRenderer.invoke('web:releaseAutoRunStartClaim', sessionId) as Promise<boolean>,
 
 		// Create a tab in the Electron renderer, which owns canonical tab state.
-		requestNewTab: (sessionId: string, background = false, sourceTabId?: string) =>
+		requestNewTab: (
+			sessionId: string,
+			background = false,
+			sourceTabId?: string,
+			sourcePermissionMode?: NewTabResult['permissionMode']
+		) =>
 			ipcRenderer.invoke(
 				'web:requestNewTab',
 				sessionId,
 				background,
-				...(sourceTabId ? [sourceTabId] : [])
+				...(sourceTabId ? ([sourceTabId, sourcePermissionMode] as const) : [])
 			) as Promise<NewTabResult | null>,
 		requestCloseTab: (sessionId: string, tabId: string) =>
 			ipcRenderer.invoke('web:requestCloseTab', sessionId, tabId) as Promise<boolean>,

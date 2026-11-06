@@ -1056,9 +1056,10 @@ describe('WebSocketMessageHandler', () => {
 				type: 'new_tab',
 				sessionId: 'session-1',
 				sourceTabId: 'source',
+				sourcePermissionMode: 'readonly',
 			});
 			await vi.waitFor(() =>
-				expect(callbacks.newTab).toHaveBeenCalledWith('session-1', false, 'source')
+				expect(callbacks.newTab).toHaveBeenCalledWith('session-1', false, 'source', 'readonly')
 			);
 			expect(JSON.parse((client.socket.send as any).mock.calls[0][0])).toMatchObject({
 				type: 'new_tab_result',

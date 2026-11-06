@@ -34,7 +34,7 @@ describe('Windows Preload API', () => {
 	});
 
 	it('reads the owner snapshot and removes its request listener on teardown', async () => {
-		const snapshot = { sessionId: 'a', tabs: [] };
+		const snapshot = { sessionId: 'a', projectKey: 'path:local:/project', host: null, tabs: [] };
 		mockInvoke.mockResolvedValue([snapshot]);
 		expect(await api.getConversationPermissions(['a'])).toEqual([snapshot]);
 		expect(mockInvoke).toHaveBeenCalledWith('windows:getConversationPermissions', ['a']);

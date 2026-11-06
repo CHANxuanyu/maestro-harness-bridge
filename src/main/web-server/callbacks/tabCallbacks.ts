@@ -1,3 +1,4 @@
+import type { NewTabResult } from '../types';
 import { randomUUID } from 'crypto';
 import { ipcMain } from 'electron';
 import type { WebServer } from '../WebServer';
@@ -63,7 +64,12 @@ export function registerTabCallbacks(
 	});
 
 	server.setNewTabCallback(
-		async (sessionId: string, background?: boolean, sourceTabId?: string) => {
+		async (
+			sessionId: string,
+			background?: boolean,
+			sourceTabId?: string,
+			sourcePermissionMode?: NewTabResult['permissionMode']
+		) => {
 			logger.info(
 				`[Web→Desktop] New tab callback invoked: session=${sessionId}, background=${background === true}`,
 				'WebServer'
@@ -92,7 +98,7 @@ export function registerTabCallbacks(
 					sessionId,
 					responseChannel,
 					background === true,
-					...(sourceTabId ? [sourceTabId] : [])
+					...(sourceTabId ? ([sourceTabId, sourcePermissionMode] as const) : [])
 				);
 
 				// Timeout after 5 seconds - clean up the listener to prevent memory leak

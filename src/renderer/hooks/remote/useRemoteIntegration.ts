@@ -2,6 +2,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { isWebDesktop } from '../../utils/runtimeContext';
 import {
 	conversationPermissionSnapshot,
+	remoteConversationPermissionFields,
 	resolveProjectConversationPermission,
 } from '../../utils/newConversationPermissions';
 import type { NewTabResult } from '../../../main/web-server/types';
@@ -685,7 +686,8 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 				sessionId: string,
 				responseChannel: string,
 				background?: boolean,
-				sourceTabId?: string
+				sourceTabId?: string,
+				sourcePermissionMode?: NewTabResult['permissionMode']
 			) => {
 				const target = useSessionStore
 					.getState()
@@ -712,7 +714,10 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 						// a browser opens a background tab.
 						const result = createTab(s, {
 							permissionSource: sourceTabId
-								? s.aiTabs.find((tab) => tab.id === sourceTabId)
+								? remoteConversationPermissionFields(
+										s.aiTabs.find((tab) => tab.id === sourceTabId),
+										sourcePermissionMode
+									)
 								: projectPermission,
 							saveToHistory: defaultSaveToHistory,
 							showThinking: defaultShowThinking,

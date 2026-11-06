@@ -25,7 +25,8 @@ export function createTabRemoteApi() {
 				sessionId: string,
 				responseChannel: string,
 				background?: boolean,
-				sourceTabId?: string
+				sourceTabId?: string,
+				sourcePermissionMode?: NewTabResult['permissionMode']
 			) => void
 		): (() => void) => {
 			const handler = (
@@ -33,8 +34,16 @@ export function createTabRemoteApi() {
 				sessionId: string,
 				responseChannel: string,
 				background?: boolean,
-				sourceTabId?: string
-			) => callback(sessionId, responseChannel, background === true, sourceTabId);
+				sourceTabId?: string,
+				sourcePermissionMode?: NewTabResult['permissionMode']
+			) =>
+				callback(
+					sessionId,
+					responseChannel,
+					background === true,
+					sourceTabId,
+					sourcePermissionMode
+				);
 			ipcRenderer.on('remote:newTab', handler);
 			return () => ipcRenderer.removeListener('remote:newTab', handler);
 		},

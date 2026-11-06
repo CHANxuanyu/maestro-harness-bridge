@@ -927,3 +927,15 @@ Claude 切换失败属于产品的 CLI 路径。失败截图只显示 Codex 新�
 先增加主进程路由回归，修复前 4 项中 1 项失败：副窗口没有收到 `remote:updateSessionCwd`。随后沿用现有 `getWindowForSession` 路由，目录字段仍由 `withWorkingDirectory()` 统一更新。修复后路由、目录字段、权限来源 3 个相关文件共 46 项通过，均使用 `--configLoader runner --no-cache`。未改变权限规则，项目或主机不符及无响应来源仍不能授权放宽。该共享路由修复同时适用于旧界面；不解析 SSH 路径，不新增 CLI 动词或界面文字。
 
 `tsconfig.json` 与 `tsconfig.main.json` 类型检查通过，改动源码 ESLint、Prettier 与 diff 空白检查通过。沙箱内未启动 Electron。原有 `owner moved project cannot widen a new conversation` 必须由沙箱外验收，保留新项目快照、原来源 full 和新对话 readonly 三项断言。
+
+## 2026-11-06：全量 Electron 七项失败复核，场景与夹具修正
+
+继 `ceac61124` 的目录所属窗口修复后，复核其余六项。第 1 项是单数文案旧断言，改为精确的 `1 file changed +2 -1`，文件数和行数不变。第 2 项截图已恢复正确名称和只读控件，CLI 仍读到保存前的替代标签；新增标题断言，并等待同一组名称、权限和原生 ID 断言进入 CLI 列表。第 3 项真实返回值已经只读，Claude 控件显示 Plan-Mode，原断言错误寻找 Codex 的 Read-Only；改用 Claude 的精确控件，同时新增创建标签的 CLI 权限及激活状态断言。第 4 项界面已只读而 CLI 未收到新标签，改为轮询返回 ID 对应的只读记录，不重发创建动作。
+
+第 6 项失败发生在换工具之前。CLI 的 `active` 来自延迟保存的列表，而截图当前已是刚打开的历史对话。原场景可能给旧空标签设置标准权限，再读取新激活的完全访问历史标签。现在先等待活动记录的原生 ID 与刚打开的历史一致，再固定标签 ID 设置标准权限。权限写入后和换工具后仍立即精确回读，不以轮询掩盖写入失败。保留换到 Codex 后 readonly、真实合成启动参数 `--sandbox read-only`、无绕过参数、旧对话与全文不丢失的断言。未发现 T1 能力映射被 T6 覆盖的证据，权限实现不改。
+
+第 7 项 trace 已读到全文且 CLI 回读通过，随后截图只剩输入、没有结果。旧夹具只将工具结果移到子文件，父文件残留同 ID 的工具调用，正常原生刷新将卡片更新为无结果。先改夹具回归要求调用和结果一并归子文件，观察 3 项中 1 项失败，再修搬移逻辑，3 项通过。父文件仍保留用户消息、其他结果和回答，目标全文只在子文件中；界面和 CLI 全文、收起释放及全文不落盘断言不变。此场景验证缓存子工具卡片的读取，不宣称模拟真实 Claude Task 的完整事件时序。
+
+本轮相关单元测试另有 5 个文件 107 项和 2 个文件 53 项通过，覆盖 CLI 权限写入、工具切换、界面编辑、原生全文、转录更新和 CLI 读取桥接；加上上一提交的 46 项，合计 10 个源码测试文件 206 项，另有 1 个夹具文件 3 项，均使用 `--configLoader runner --no-cache`。`npx tsc --noEmit -p tsconfig.json` 通过。补充场景 TypeScript 检查启用 `allowJs` 识别现有 CJS 夹具，补齐超时注入回调的参数类型后通过；没有降低 TypeScript 的 strict 检查。所有改动文件 Prettier 和 diff 空白检查通过。现有 ESLint 配置不覆盖 e2e 文件，未把忽略警告算作检查通过。Playwright 仅以 `--list --reporter=list` 收集两个文件的 16 条场景，没有启动 Electron，原始失败截图与 trace 未覆盖。
+
+沙箱外由 Opus 串行运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell.spec.ts e2e/native-tool-output.spec.ts --workers=1 --retries=0`。不要同时运行其他 Electron 验收进程；这是为消除焦点干扰，现有证据不能证明七项由其他进程抢焦点造成。没有运行全量 Vitest、模型、真实账户、SSH 或其他平台。本提交只改测试、夹具和文档，旧界面产品行为不变；CLI 动词没有增加，列表延迟和已有的恢复、视图折叠 CLI 缺口已在 parity 文档记录。

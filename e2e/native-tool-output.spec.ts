@@ -3,7 +3,7 @@ import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { NativeApp } from './fixtures/native-app';
 import { nativeIdentity } from './fixtures/native-real';
-import { moveClaudeToolResultToChild } from './fixtures/native/tool-output';
+import { moveClaudeToolCallToChild } from './fixtures/native/tool-output';
 
 // Refuse real-provider mode before creating a fixture or reading any credentials.
 test.beforeAll(() => {
@@ -71,16 +71,32 @@ for (const scenario of [
 			const nativeId = seed?.id ?? nativeIdentity(provider, file).id;
 			if (!nativeId) throw new Error('Synthetic native identity missing');
 			if (mode === 'child') {
-				// Model a live child card whose result was saved only in its child JSONL.
-				const childFile = moveClaudeToolResultToChild(file, nativeId, 'full-output-call');
+				// Model a cached child card. Both the call and result belong to the child:
+				// an incomplete parent call would refresh over the cached result.
+				const childFile = moveClaudeToolCallToChild(file, nativeId, 'full-output-call');
 				expect(fs.readFileSync(childFile, 'utf8')).toContain(tail);
 				expect(fs.readFileSync(file, 'utf8')).not.toContain(tail);
+				expect(fs.readFileSync(file, 'utf8')).not.toContain('full-output-call');
 			}
 			if (mode === 'switch') {
-				await native.cli('tab', 'permission', 'active', 'standard');
-				expect((await native.cli('tab', 'show', 'active')).tab.permissionMode).toBe('standard');
+				// History selection reaches the disk-backed CLI inventory asynchronously.
+				// Bind the selected native conversation before mutating its permission.
+				await expect
+					.poll(async () => (await native.cli('tab', 'show', 'active', '--agent', ownerId)).tab)
+					.toMatchObject({ agentSessionId: nativeId, active: true });
+				const tabId = (await native.cli('tab', 'show', 'active', '--agent', ownerId)).tab.tabId;
+				expect(await native.cli('tab', 'permission', tabId, 'standard')).toMatchObject({
+					success: true,
+				});
+				expect((await native.cli('tab', 'show', tabId)).tab).toMatchObject({
+					agentSessionId: nativeId,
+					permissionMode: 'standard',
+					readOnly: false,
+				});
 				await native.cli('update-agent', ownerId, '--provider', 'codex', '--force');
-				expect((await native.cli('tab', 'show', 'active')).tab).toMatchObject({
+				expect((await native.cli('tab', 'show', tabId)).tab).toMatchObject({
+					tabId,
+					agentSessionId: null,
 					permissionMode: 'readonly',
 					readOnly: true,
 				});

@@ -633,6 +633,13 @@ operations in either shell. No new parity gap is introduced by these actions.
 
 ## Open gaps
 
+**CLI inventory timing (2026-11-06).** `session list` and `tab show` read the
+persisted desktop inventory. UI history selection, closed-tab restoration and
+`tab new` can precede its debounced save. Acceptance waits for the expected native
+identity or returned tab ID before reading or mutating it, then uses that exact ID.
+The permission write and provider switch still require immediate readback after
+their acknowledged save. There is no live-owner inventory read in these CLI verbs.
+
 **Provider switch wording (2026-11-06).** The existing CLI help, force warning and
 success text still describe the classic reset behavior. With `newShell` enabled,
 the operation preserves conversations as documented above. This round changes

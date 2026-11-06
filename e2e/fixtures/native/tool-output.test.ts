@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { createNativeTempDir } from './temp-root.cjs';
-import { moveClaudeToolResultToChild } from './tool-output';
+import { moveClaudeToolCallToChild } from './tool-output';
 import type { TestInfo } from '@playwright/test';
 vi.mock('node:child_process', async (original) => ({
 	...(await original<typeof import('node:child_process')>()),
@@ -20,7 +20,7 @@ const roots: string[] = [];
 afterEach(() => {
 	for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
-it('moves only the selected child result while retaining string user content in the parent', () => {
+it('moves the complete child call so parent refresh cannot replace its preview with a missing result', () => {
 	const root = createNativeTempDir('tool-output-child-');
 	roots.push(root);
 	const turn = createTurn({
@@ -45,21 +45,21 @@ it('moves only the selected child result while retaining string user content in 
 		.split('\n')
 		.map((line) => JSON.parse(line));
 	expect(original[0].message.content).toBe('String user message');
-	const child = moveClaudeToolResultToChild(turn.file, turn.id, tool.id);
+	const child = moveClaudeToolCallToChild(turn.file, turn.id, tool.id);
 	expect(
 		fs
 			.readFileSync(child, 'utf8')
 			.trim()
 			.split('\n')
 			.map((line) => JSON.parse(line))
-	).toEqual([original[2]]);
+	).toEqual([original[1], original[2]]);
 	expect(
 		fs
 			.readFileSync(turn.file, 'utf8')
 			.trim()
 			.split('\n')
 			.map((line) => JSON.parse(line))
-	).toEqual([original[0], original[1], original[3], original[4]]);
+	).toEqual([original[0], original[3], original[4]]);
 	expect(fs.readFileSync(child, 'utf8')).toContain('CHILD_TAIL');
 	expect(fs.readFileSync(turn.file, 'utf8')).not.toContain('CHILD_TAIL');
 });

@@ -149,7 +149,7 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 				.getByTitle(/^Show right panel/)
 				.click();
 			await native.page.locator('[data-tour="changes-tab"]').click();
-			await expect(native.page.getByTestId('changes-summary')).toHaveText('1 files changed +2 -1');
+			await expect(native.page.getByTestId('changes-summary')).toHaveText('1 file changed +2 -1');
 			await native.page
 				.getByTestId('changes-list')
 				.getByRole('button', { name: 'cart.ts', exact: true })
@@ -977,14 +977,19 @@ test('new shell permission review: restore closed standard Claude after switchin
 		);
 		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
 		await native.page.keyboard.press('ControlOrMeta+Shift+t');
+		await expect(native.page.locator('[data-shell-header="main"]')).toContainText(
+			'Closed standard source'
+		);
 		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
-		const restored = (await native.cli('tab', 'show', 'active', '--agent', owner)).tab;
-		expect(restored).toMatchObject({
-			permissionMode: 'readonly',
-			readOnly: true,
-			agentSessionId: null,
-			name: 'Closed standard source',
-		});
+		// The CLI inventory follows the renderer's debounced persistence.
+		await expect
+			.poll(async () => (await native.cli('tab', 'show', 'active', '--agent', owner)).tab)
+			.toMatchObject({
+				permissionMode: 'readonly',
+				readOnly: true,
+				agentSessionId: null,
+				name: 'Closed standard source',
+			});
 		native.scriptTurns([{ answer: 'Restored readonly conversation complete' }]);
 		await native.send('Synthetic restored conversation');
 		await expect(native.output()).toContainText('Restored readonly conversation complete');
@@ -1025,7 +1030,14 @@ test('new shell permission review: browser request tightens the desktop full sou
 			{ owner, sourceId: source.tabId }
 		);
 		expect(created).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
-		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		// Claude exposes readonly as plan mode; Codex calls the same field Read-Only.
+		await expect(native.page.getByTitle(/^Toggle plan mode/)).toHaveText('Plan-Mode');
+		await expect
+			.poll(async () => {
+				const list = await native.cli('session', 'list');
+				return list.sessions.find((tab: { tabId: string }) => tab.tabId === created!.tabId);
+			})
+			.toMatchObject({ permissionMode: 'readonly', readOnly: true, active: true });
 		expect((await native.cli('tab', 'show', source.tabId)).tab.permissionMode).toBe('full');
 	} catch (error) {
 		failed = true;
@@ -1085,7 +1097,7 @@ for (const scenario of ['timeout', 'moved project'] as const) {
 				// replacing its state or the real request timeout implementation.
 				await peerWindow.evaluate((win) => {
 					const send = win.webContents.send.bind(win.webContents);
-					win.webContents.send = (channel, ...args) => {
+					win.webContents.send = (channel: string, ...args: unknown[]) => {
 						if (channel !== 'windows:readConversationPermissions') send(channel, ...args);
 					};
 				});
@@ -1112,10 +1124,12 @@ for (const scenario of ['timeout', 'moved project'] as const) {
 			const created = await native.cli('tab', 'new', '--agent', 'owner-a');
 			expect(created.success).toBe(true);
 			await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
-			expect((await native.cli('tab', 'show', created.tabId)).tab).toMatchObject({
-				permissionMode: 'readonly',
-				readOnly: true,
-			});
+			await expect
+				.poll(async () => {
+					const list = await native.cli('session', 'list');
+					return list.sessions.find((tab: { tabId: string }) => tab.tabId === created.tabId);
+				})
+				.toMatchObject({ permissionMode: 'readonly', readOnly: true });
 		} catch (error) {
 			failed = true;
 			throw error;

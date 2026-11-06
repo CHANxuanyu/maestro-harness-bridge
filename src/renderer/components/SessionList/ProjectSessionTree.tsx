@@ -34,6 +34,7 @@ import {
 import { createPortal } from 'react-dom';
 import {
 	AlertCircle,
+	ArrowRightLeft,
 	ChevronDown,
 	ChevronRight,
 	GitBranch,
@@ -45,6 +46,7 @@ import {
 	Settings2,
 	PenSquare,
 	Star,
+	Trash2,
 	X,
 } from 'lucide-react';
 import type { Theme } from '../../types';
@@ -946,6 +948,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 										{
 											key: 'handoff',
 											label: t('workflows.conversations.handoff'),
+											icon: <ArrowRightLeft className="w-3.5 h-3.5" />,
 											onSelect: () => requestAiHandoff(conversation.ownerId!, conversation.tabId!),
 										},
 									]
@@ -975,6 +978,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 										{
 											key: 'worktree-cleanup',
 											label: t('workflows.git.removeWorktree'),
+											icon: <Trash2 className="w-3.5 h-3.5" />,
 											color: theme.colors.error,
 											onSelect: () => onDeleteWorktree(conversation),
 										},

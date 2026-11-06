@@ -28,10 +28,9 @@ interface AiDraftPayload {
  * never fired, or fired after the active tab had already moved and so stamped
  * the text onto the wrong tab.
  *
- * Writing back on an idle timer closes the window. It costs one render per
- * typing pause (not per keystroke), and it means no flush point is load
- * bearing any more - blur, submit and tab-switch just make the write happen
- * sooner.
+ * The idle timer bounds the normal write-back delay to one typing pause.
+ * Window saves must still flush the queued draft before persistence, since
+ * teardown can arrive before that timer, blur or visibilitychange.
  */
 const DRAFT_FLUSH_DELAY_MS = 300;
 
@@ -79,6 +78,8 @@ function resolveTargetTabId(target?: InputSyncTarget): string | undefined {
  * Return type for the useInputSync hook
  */
 export interface UseInputSyncReturn {
+	/** Write the queued AI draft to its original tab before a window save. */
+	flushAiDraft: () => void;
 	/**
 	 * Persist AI input value to a session tab. Called on blur/submit/tab-switch.
 	 *
@@ -221,6 +222,7 @@ export function useInputSync(deps: UseInputSyncDeps): UseInputSyncReturn {
 	);
 
 	return {
+		flushAiDraft: flushQueuedDraft,
 		syncAiInputToSession,
 		queueAiDraftFlush,
 		syncTerminalInputToSession,

@@ -176,11 +176,10 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 	const allShortcuts = [
 		...Object.values(shortcuts).map((sc) => ({ ...sc, isTabShortcut: false })),
 		...Object.values(tabShortcuts).map((sc) => ({ ...sc, isTabShortcut: true })),
-	];
+	].filter((sc) => shortcutAppliesToShell(sc, newShell));
 	const totalShortcuts = allShortcuts.length;
 	const unassignedCount = allShortcuts.filter((sc) => !sc.keys?.length).length;
 	const filteredShortcuts = allShortcuts.filter((sc) => {
-		if (!shortcutAppliesToShell(sc, newShell)) return false;
 		// The unassigned view is a mode, not another filter: someone asking "what
 		// can I still bind?" wants the whole list of them, not the intersection
 		// with whatever they last typed.

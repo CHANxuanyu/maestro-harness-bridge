@@ -51,6 +51,7 @@ import { useSurfaceFontFamily } from '../../hooks/ui/useSurfaceTypography';
 import { useThrottledCallback } from '../../hooks/utils/useThrottle';
 import { useTabStore } from '../../stores/tabStore';
 import { StoredFilePreview as TiledFilePane } from '../FilePreview/StoredFilePreview';
+import { PaneMissingTab } from './PaneMissingTab';
 import { outputSearchKeyFor } from '../../utils/outputSearch';
 import type { FileNode } from '../../types/fileTree';
 import type {
@@ -251,31 +252,6 @@ export interface TiledLayoutProps {
 	 * links, breadcrumb history). Same idea as paneChatActions, per-kind.
 	 */
 	paneFileActions?: PaneFileActions;
-}
-
-/**
- * Fallback shown when a leaf references a tab that no longer exists (e.g. the
- * underlying AI/file tab was closed while still in the layout). The layout
- * self-heals on the next edit; this keeps the pane from rendering blank.
- */
-function PaneMissingTab({ theme }: { theme: Theme }) {
-	const t = useT();
-	return (
-		<div
-			className="flex-1 flex items-center justify-center select-none"
-			style={{ backgroundColor: theme.colors.bgMain }}
-		>
-			<div
-				className="text-xs text-center px-4 py-2 rounded"
-				style={{
-					color: theme.colors.textDim,
-					border: `1px solid ${theme.colors.border}`,
-				}}
-			>
-				{t('workflows.shell.thisTabIsNoLongerAvailable')}
-			</div>
-		</div>
-	);
 }
 
 /**

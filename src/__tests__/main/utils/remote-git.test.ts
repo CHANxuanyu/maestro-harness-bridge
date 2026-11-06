@@ -295,6 +295,39 @@ describe('remote-git.ts', () => {
 			expect(options.env.PATH).toBe(process.env.PATH);
 		});
 
+		it.each([false, true])(
+			'forwards batch stdin with the read-only timeout (SSH: %s)',
+			async (ssh) => {
+				mockExecFileNoThrow.mockResolvedValue(successResult('object 42\n'));
+				await execGitReadOnly(
+					['cat-file', '--batch-check'],
+					'/repo',
+					ssh ? createSshRemote() : undefined,
+					'/remote',
+					5000,
+					'object\n'
+				);
+				expect(mockExecFileNoThrow.mock.calls[0][3]).toMatchObject({
+					input: 'object\n',
+					timeout: 5000,
+				});
+			}
+		);
+
+		it('shares identical batch requests but keeps different stdin independent', async () => {
+			mockExecFileNoThrow.mockResolvedValue(successResult('object 42\n'));
+			await Promise.all(
+				['first\n', 'first\n', 'second\n'].map((input) =>
+					execGitReadOnly(['cat-file', '--batch-check'], '/repo', undefined, undefined, 5000, input)
+				)
+			);
+			expect(mockExecFileNoThrow).toHaveBeenCalledTimes(2);
+			expect(mockExecFileNoThrow.mock.calls.map((call) => call[3]?.input)).toEqual([
+				'first\n',
+				'second\n',
+			]);
+		});
+
 		it('passes the timeout to the SSH invocation and the lock variable to the remote git', async () => {
 			mockExecFileNoThrow.mockResolvedValue(successResult(''));
 

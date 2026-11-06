@@ -37,7 +37,8 @@ describe('changes SSH transport', () => {
 		vi.mocked(execFileNoThrow).mockResolvedValue({
 			exitCode: 0,
 			stderr: '',
-			stdout: 'C:/Users/fixture/repo\0# branch.head topic\0? dir/file\0\0' + '1\t0\tdir/file\0\0',
+			stdout:
+				'C:/Users/fixture/repo\0\0\0# branch.head topic\0? dir/file\0\0' + '1\t0\tdir/file\0\0',
 		});
 		const result = await getGitChanges(cwd);
 		expect(result.root).toBe(path.win32.dirname(cwd));

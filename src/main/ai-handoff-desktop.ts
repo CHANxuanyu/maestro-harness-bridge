@@ -25,6 +25,7 @@ export function createDesktopAiHandoff(deps: {
 		getSessions: () => deps.sessionsStore.get('sessions', []),
 		getAgentConfig: (toolType) => deps.agentConfigsStore.get('configs', {})[toolType] ?? {},
 		getGlobalEnv: () => deps.settingsStore.get('shellEnvVars', {}),
+		getNewShell: () => deps.settingsStore.get('newShell', false),
 		env: deps.env ?? process.env,
 		preparePreset: async (config) => {
 			const env = {

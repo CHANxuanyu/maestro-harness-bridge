@@ -38,7 +38,8 @@ import {
 	noConversationFoundMessage,
 	sessionTranscriptPath,
 } from './session-watcher';
-import { installStopSignalHandlers, STOP_EXIT_CODES } from './stop-signals';
+import { installStopSignalHandlers, STOP_EXIT_CODES, type StopSignal } from './stop-signals';
+import { startStatusLifetime, STATUS_LIFETIME_MS } from './status-lifetime';
 import { cleanupStreamJsonImages, translateStreamJsonInput } from './stream-json-input';
 import { formatScreenTailReport, idleTimeoutMessage, readyTimeoutMessage } from './timeout-report';
 import { PROMPT_TAB_SPACES, TuiDriver } from './tui-driver';
@@ -95,12 +96,15 @@ const STATUS_DEBOUNCE_POLL_MS = 100;
 // Retry the /usage SEND, not the spawn: the TUI is still alive at the parse
 // point, so a re-send costs ~2.4s against a full claude boot.
 //
-// Wall-clock deadline measured from process start, NOT an attempt count. The
-// ceiling that actually matters is the caller's: claude-usage-sampler.ts kills
-// the probe at DEFAULT_TIMEOUT_MS (30s), and blowing through that turns a parse
-// flake into classifySpawnError -> 'timeout' - the same no-op for the consumer
-// with a worse diagnosis. Boot time varies by seconds, so only a deadline keeps
-// the total honest. 25s leaves room for driver.quit()'s QUIT_GRACE_MS on top.
+// Wall-clock retry deadline measured before boot, NOT an attempt count. The
+// caller's ceiling matters: claude-usage-sampler.ts kills the probe at
+// DEFAULT_TIMEOUT_MS (30s), and blowing through that turns a parse flake into
+// classifySpawnError -> 'timeout' - the same no-op for the consumer with a worse
+// diagnosis. Boot time varies by seconds, so only a deadline keeps the total
+// honest. 25s leaves room for driver.quit()'s QUIT_GRACE_MS on top.
+// This deadline only stops new retries. STATUS_LIFETIME_MS starts shutdown at
+// 28s, with terminate()'s bounded 1s grace to stop claude before the sampler's
+// 30s ceiling, even if the parent and its execFile timer have disappeared.
 const STATUS_RETRY_DEADLINE_MS = 25_000;
 // First re-send waits this long. Deliberately longer than the previous send's
 // last Enter re-tap (SEND_ENTER_DELAY_MS + SUBMIT_ENTER_RETRIES *
@@ -1062,6 +1066,7 @@ async function runMode(args: ParsedArgs): Promise<never> {
 }
 
 async function statusMode(args: ParsedArgs): Promise<never> {
+	const parentPpid = process.ppid;
 	const cwd = process.cwd();
 	const configDir = resolveConfigDir();
 	const binPath = resolveBinPath();
@@ -1085,10 +1090,11 @@ async function statusMode(args: ParsedArgs): Promise<never> {
 
 	const lines: string[] = [];
 	let lastLineAt = 0;
+	let parentGone = false;
 	driver.on('line', (line: string) => {
 		lines.push(line);
 		lastLineAt = Date.now();
-		if (args.streamThinking) {
+		if (args.streamThinking && !parentGone) {
 			process.stderr.write(`${line}\n`);
 		}
 	});
@@ -1102,40 +1108,74 @@ async function statusMode(args: ParsedArgs): Promise<never> {
 	});
 
 	let statusFinalized = false;
-	driver.on('workspace-untrusted', () => {
+	let statusReady = false;
+	driver.once('ready', () => {
+		statusReady = true;
+	});
+	// Synchronous backstop for EPIPE's process.exit(), main().catch(), and any
+	// other direct exit. kill() is a no-op after the PTY's exit was observed.
+	process.once('exit', () => driver.kill('SIGKILL'));
+	const finish = async (code: number, graceful = false, report?: () => void): Promise<void> => {
 		if (statusFinalized) return;
 		statusFinalized = true;
-		process.stderr.write(workspaceUntrustedHint(cwd));
-		driver.kill('SIGTERM');
-		process.exit(1);
+		lifetime.disarm();
+		report?.();
+		try {
+			if (graceful) await driver.quit();
+		} catch {
+			// A failed /quit still needs the bounded stop and the original exit code.
+		}
+		await driver.terminate();
+		process.exit(code);
+	};
+	// Armed before start(): boot, ready and retries share the same hard ceiling.
+	const lifetime = startStatusLifetime({
+		parentPpid,
+		getPpid: () => process.ppid,
+		isProcessAlive: (pid) => {
+			process.kill(pid, 0);
+			return true;
+		},
+		onEnd: (reason) => {
+			if (reason === 'parent-gone') {
+				parentGone = true;
+				void finish(129);
+				return;
+			}
+			void finish(statusReady ? 3 : 4, false, () => {
+				const message = statusReady
+					? `status probe exceeded its ${STATUS_LIFETIME_MS / 1000}s lifetime while reading /usage. Failing with timeout.`
+					: `status probe did not reach claude's input prompt within its ${STATUS_LIFETIME_MS / 1000}s lifetime; claude may be booting or parked on a startup modal. Failing with ready_timeout.`;
+				process.stderr.write(formatScreenTailReport(message, driver.getScreenTail()));
+			});
+		},
+	});
+	driver.on('workspace-untrusted', () => {
+		void finish(1, false, () => process.stderr.write(workspaceUntrustedHint(cwd)));
 	});
 	driver.on('exit', () => {
-		if (statusFinalized) return;
-		statusFinalized = true;
-		process.stderr.write('maestro-p: claude TUI exited before /usage panel could render\n');
-		process.exit(1);
+		void finish(1, false, () => {
+			process.stderr.write('maestro-p: claude TUI exited before /usage panel could render\n');
+		});
 	});
 
 	// Same Stop contract as run mode: quit the TUI, then exit with the stop code.
 	// The probe has no result envelope to write, so there is nothing to settle.
-	installStopSignalHandlers({
-		onStop: (signal) => {
-			if (statusFinalized) return;
-			statusFinalized = true;
-			void driver
-				.quit()
-				.catch(() => {
-					/* already gone; nothing to escalate against */
-				})
-				.finally(() => {
-					process.exit(STOP_EXIT_CODES[signal]);
-				});
-		},
-		onForce: (signal) => {
+	let stopping = false;
+	const stop = (signal: StopSignal | 'SIGHUP'): void => {
+		const code = signal === 'SIGHUP' ? 129 : STOP_EXIT_CODES[signal];
+		if (stopping) {
 			driver.kill('SIGKILL');
-			process.exit(STOP_EXIT_CODES[signal]);
-		},
+			process.exit(code);
+		}
+		stopping = true;
+		void finish(code, true);
+	};
+	installStopSignalHandlers({
+		onStop: stop,
+		onForce: stop,
 	});
+	process.on('SIGHUP', () => stop('SIGHUP'));
 	// A Stop may land mid-probe: stop sending /usage and wait for its exit.
 	const stopped = (): Promise<never> => new Promise<never>(() => undefined);
 
@@ -1234,30 +1274,29 @@ async function statusMode(args: ParsedArgs): Promise<never> {
 		retryDelay = Math.min(retryDelay * 2, STATUS_RETRY_MAX_DELAY_MS);
 	}
 
-	statusFinalized = true;
 	if (parsed) {
-		const emitter = new JsonEmitter();
-		emitter.emitStatus(parsed);
-		await driver.quit();
-		process.exit(0);
+		const snapshot = parsed;
+		await finish(0, true, () => new JsonEmitter().emitStatus(snapshot));
+		return stopped();
 	}
 
-	if (apiBilling) {
-		const { reason } = diagnoseApiUsageBilling(childEnv, configDir);
-		process.stderr.write(`maestro-p: ${reason} There is no plan usage to report.\n`);
-	} else {
-		// Report the attempt count and elapsed time, not just the failure. A
-		// consumer reading this has to decide whether the account is flaky or
-		// genuinely unparseable, and "gave up after 5 attempts" is a different
-		// diagnosis from "failed on the only attempt there was time for".
-		const elapsedMs = Date.now() - startedAt;
-		process.stderr.write(
-			`maestro-p: failed to parse /usage output after ${attempts} ` +
-				`attempt${attempts === 1 ? '' : 's'} over ${Math.round(elapsedMs / 100) / 10}s\n`
-		);
-	}
-	await driver.quit();
-	process.exit(1);
+	await finish(1, true, () => {
+		if (apiBilling) {
+			const { reason } = diagnoseApiUsageBilling(childEnv, configDir);
+			process.stderr.write(`maestro-p: ${reason} There is no plan usage to report.\n`);
+		} else {
+			// Report the attempt count and elapsed time, not just the failure. A
+			// consumer reading this has to decide whether the account is flaky or
+			// genuinely unparseable, and "gave up after 5 attempts" is a different
+			// diagnosis from "failed on the only attempt there was time for".
+			const elapsedMs = Date.now() - startedAt;
+			process.stderr.write(
+				`maestro-p: failed to parse /usage output after ${attempts} ` +
+					`attempt${attempts === 1 ? '' : 's'} over ${Math.round(elapsedMs / 100) / 10}s\n`
+			);
+		}
+	});
+	return stopped();
 }
 
 async function main(): Promise<void> {

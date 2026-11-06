@@ -34,6 +34,18 @@ describe('ModelEffortPills', () => {
 		);
 	}
 
+	it.each([false, true])('distinguishes inherited model and effort, new shell %s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		renderPills({ currentModel: '', currentEffort: '' });
+		expect(screen.getByTitle('Change model')).toHaveTextContent(
+			newShell ? 'Default model' : 'default'
+		);
+		expect(screen.getByTitle('Change effort level')).toHaveTextContent(
+			newShell ? 'Default effort' : 'default'
+		);
+		useSettingsStore.setState({ newShell: false });
+	});
+
 	it.each([false, true])(
 		'formats visible labels without changing selected values, new shell %s',
 		(newShell) => {

@@ -1,3 +1,4 @@
+import { shellActionVisible } from './newShellFeatures';
 /**
  * Shared keyboard shortcut type used by renderer, main (web server), and web client.
  */
@@ -43,5 +44,8 @@ export function shortcutAppliesToShell(shortcut: Shortcut, newShell: boolean): b
 			: shortcut.id === 'agentSwitcher'
 				? 'classic'
 				: shortcut.shell;
-	return !scope || scope === (newShell ? 'new' : 'classic');
+	return (
+		shellActionVisible(shortcut.id, newShell) &&
+		(!scope || scope === (newShell ? 'new' : 'classic'))
+	);
 }

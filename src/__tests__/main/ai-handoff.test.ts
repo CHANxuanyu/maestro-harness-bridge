@@ -69,6 +69,7 @@ describe('local AI handoff routing', () => {
 			sessionSshRemoteConfig: runners.find((item) => item.id === request.sourceAgentId)!
 				.sessionSshRemoteConfig,
 			sourceNativeSessionId: 'native-source',
+			sourceTitle: 'Shipping',
 			draft,
 		}));
 		openTarget.mockImplementation(async (request) => {
@@ -91,6 +92,24 @@ describe('local AI handoff routing', () => {
 				draft,
 			};
 		});
+	});
+
+	it('creates a provider conversation without reading context or sending', async () => {
+		const result = await service().command({
+			action: 'new-conversation',
+			sourceAgentId: 'claude-code',
+			targetProvider: 'codex',
+			replaceTabId: 'empty',
+		});
+		expect(result.success).toBe(true);
+		expect(readSource).not.toHaveBeenCalled();
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				newConversation: { replaceTabId: 'empty' },
+				send: false,
+				provider: 'codex',
+			})
+		);
 	});
 
 	it.each(pairs)('reuses the same-project %s -> %s runner without sending', async (from, to) => {
@@ -344,6 +363,7 @@ describe('local AI handoff routing', () => {
 					sourceTabId: 't',
 					sourceProvider: 'claude-code',
 					sourceNativeSessionId: 'native-source',
+					sourceTitle: 'Shipping',
 					createdAt: expect.any(Number),
 				},
 			})

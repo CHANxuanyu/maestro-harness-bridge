@@ -1,3 +1,5 @@
+import { shellFeatureVisible } from '../../../../shared/newShellFeatures';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -134,7 +136,8 @@ export function FileTreeContextMenu({
 	// 390px screen. This is a ROOM gate, not a capability gate: nothing about the
 	// graph is broken on a phone, every other client still offers it, and the
 	// palette and chord still reach it here for anyone who wants it anyway.
-	const showDocumentGraph = !usePhoneLayout();
+	const newShell = useSettingsStore((s) => s.newShell);
+	const showDocumentGraph = !usePhoneLayout() && shellFeatureVisible('documentGraph', newShell);
 	const isHtml = isFile && (nodeName.endsWith('.html') || nodeName.endsWith('.htm'));
 	const isMarkdown = isFile && (nodeName.endsWith('.md') || nodeName.endsWith('.markdown'));
 	// Media plays in the floating player, which only serves local files - over
@@ -144,7 +147,7 @@ export function FileTreeContextMenu({
 	// Same entry in three branches (folder, file, multi-selection): the count is
 	// already resolved per context, so the only thing that varies is the label.
 	const stageForAutoRunButton =
-		autoRunStagedCount > 0 ? (
+		shellFeatureVisible('autoRun', newShell) && autoRunStagedCount > 0 ? (
 			<button
 				onClick={onStageForAutoRun}
 				className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"

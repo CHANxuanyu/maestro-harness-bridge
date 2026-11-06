@@ -17,6 +17,7 @@ vi.mock('../../../cli/output/formatter', () => ({
 
 import {
 	tabNew,
+	tabPanel,
 	tabClose,
 	tabRename,
 	tabStar,
@@ -110,6 +111,30 @@ describe('tab commands', () => {
 			throw new Error('__exit__');
 		});
 	});
+
+	it('tab new --provider --replace-empty prepares without sending', async () => {
+		const payload = mockTab({ success: true, tabId: 'new-tool', agentId: 'target' });
+		await tabNew({ agent: 'agent-1', provider: 'codex', replaceEmpty: 'tab-aaaa' });
+		expect(payload()).toMatchObject({
+			type: 'ai_handoff',
+			action: 'new-conversation',
+			sourceAgentId: 'agent-1',
+			targetProvider: 'codex',
+			replaceTabId: 'tab-aaaa',
+		});
+		expect(payload()).not.toHaveProperty('send');
+	});
+	it.each(['files', 'changes', 'back', 'open', 'close', 'edit', 'preview', 'save'])(
+		'tab panel writes %s through the acknowledged tab patch',
+		async (action) => {
+			const payload = mockTab({ success: true });
+			await tabPanel('tab-aaaa', action, {});
+			expect(payload()).toMatchObject({
+				type: 'update_session_config',
+				configPatch: { tabId: 'tab-aaaa', newShellPanelAction: action },
+			});
+		}
+	);
 
 	it('tab new (no prompt) sends new_tab and prints the tab id', async () => {
 		const getPayload = mockTab({ success: true, tabId: 'tab-new' });

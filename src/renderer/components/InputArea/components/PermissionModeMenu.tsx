@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Eye } from 'lucide-react';
+import { Check, ChevronDown, Shield } from 'lucide-react';
 import type { Theme } from '../../../types';
 import { useT } from '../../../i18n';
 import { useClickOutside } from '../../../hooks/ui/useClickOutside';
@@ -62,7 +62,7 @@ export function PermissionModeMenu({
 				className="flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs whitespace-nowrap cursor-pointer transition-all opacity-80 hover:opacity-100 hover:bg-white/10"
 				style={{ color: mode === 'readonly' ? theme.colors.warning : theme.colors.textDim }}
 			>
-				<Eye className="w-3.5 h-3.5" />
+				<Shield className="w-3.5 h-3.5" />
 				<span>{permissionModeLabel(t, mode, agentId)}</span>
 				<ChevronDown className="w-3 h-3 opacity-70" />
 			</button>

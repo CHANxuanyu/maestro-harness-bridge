@@ -1,3 +1,4 @@
+import { shellActionVisible } from '../../../shared/newShellFeatures';
 import { shortcutAppliesToShell } from '../../../shared/shortcut-types';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useCallback } from 'react';
@@ -71,6 +72,7 @@ export function useKeyboardShortcutHelpers(
 	 */
 	const isTabShortcut = useCallback(
 		(e: KeyboardEvent, actionId: string): boolean =>
+			shellActionVisible(actionId, useSettingsStore.getState().newShell) &&
 			eventMatchesShortcutKeys(e, (tabShortcuts[actionId] || shortcuts[actionId])?.keys),
 		[tabShortcuts, shortcuts]
 	);

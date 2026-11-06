@@ -50,6 +50,11 @@ commands and keyboard bindings are unchanged.
 
 The conversation row menu uses `requestAiHandoff()`. Its CLI equivalent remains
 `handoff <source-tab> <provider>` for a draft, with `--list-targets` for discovery.
+Handoff and review reuse a target runner's sole tab only when it is idle with no
+messages, native session, draft, images, deferred history or queued work. The
+shared renderer service names the tab from the captured source conversation
+title. `handoff` returns that name as `title` in JSON and `Title:` in text output;
+the draft and explicit-send payload are unchanged. Both shells share this behavior.
 Moving account configuration to the project menu keeps `create-agent <name>` with
 `--cwd`, `--type`, `--group` or `--preset`. The footer and menu reuse `open settings`,
 `open notification-center`, `notify inbox` and `open feedback`. Hiding a control
@@ -285,74 +290,92 @@ it returns the whole `DesktopTabEntry`, so a verb that needs the current value
 (`tab thinking cycle`) reads it from the same call that resolved the tab instead
 of taking a second round trip or trusting a value the caller guessed.
 
+The new-shell panel state is stored on the AI conversation as `newShellPanel`,
+including its file reference, open state and file filter. `tab panel` uses the
+existing acknowledged tab-config patch and waits for persistence. `edit`,
+`preview`, `save`, `--content`, and `--line` address that remembered file without
+changing the classic shell's active file tab. Text save delegates to the same
+`saveFilePreview()` as the UI, including missing-file and untitled destination
+prompts. Image annotation retains its existing CLI parity limitation; this batch
+moves that existing editor into the panel and does not add an annotation command.
+`tab new --provider` requires the new shell and shares local target discovery and
+creation with the plus menu and empty-conversation picker. Existing CLI commands
+for hidden upstream features remain available.
+
 ## Covered
 
 Notification center history uses the live desktop `notificationStore` over a request-response bridge. Main owns durable append/read/clear mutations in `maestro-notification-history.json`; renderer snapshots are synchronized across windows, and CLI results await committed writes. `notify inbox list --unread` filters the snapshot, `read <id>` / `read-all` update read state, `clear` clears history, `dismiss [id]` dismisses one entry or clears visible toasts, and `activate <id>` / `link <id>` run the same entry and inline-link actions as the UI. Every result includes the resulting unread count and history. `detail <id>` / `collapse` expand and collapse the same in-inbox details view. The five opt-in inbox preferences are registered settings and can be changed with `settings set <key> <value>`. `open notification-center` and `notify inbox open` open the app-level popover even when the Main Panel header is absent.
 
-| Point-and-click action                                                   | CLI                                                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| Switch to the new shell (Settings, Display, New Shell)                   | `settings set newShell true` / `settings get newShell`                                           |
-| Ask another provider to review the current conversation changes          | `handoff <tab> <provider> --review [--send] [--json]`; read origin: `tab show <tab> --json`      |
-| Read conversation changes and a file diff                                | `changes [--agent <id>] [--tab <id>] [--file <path>] [--json]`                                   |
-| Open / close notification center                                         | `open notification-center`, `notify inbox open` / `close`                                        |
-| Read / clear / activate notification history                             | `notify inbox list`, `read`, `read-all`, `clear`, `activate`, `link`                             |
-| Dismiss one / all visible notifications                                  | `notify inbox dismiss [id]`                                                                      |
-| Expand / collapse full inbox details                                     | `notify inbox detail <id>` / `collapse`                                                          |
-| Bookmark / unbookmark an agent (Cmd+Shift+B)                             | `bookmark` / `unbookmark`, or `update-agent --bookmark`                                          |
-| Create / rename / remove an agent                                        | `create-agent`, `rename-agent`, `remove-agent`                                                   |
-| Edit Agent modal fields                                                  | `update-agent`, `settings agent set`                                                             |
-| Switch an agent's provider                                               | `update-agent --provider --force`                                                                |
-| Move an agent to a group                                                 | `update-agent --group`                                                                           |
-| Change working directory                                                 | `update-agent --cwd`                                                                             |
-| SSH remote execution config                                              | `update-agent --ssh-remote / --ssh-cwd`, `create-ssh-remote`                                     |
-| Edit an SSH remote, incl. its `ssh -o` list                              | `update-ssh-remote --ssh-option / --clear-ssh-options`                                           |
-| Focus an agent, switch AI/Shell mode                                     | `focus-agent`, `switch-mode`                                                                     |
-| Create / rename / remove a group                                         | `create-group`, `rename-group`, `remove-group`                                                   |
-| Group icon, color, and nesting                                           | `create-group --icon/--color/--parent`, `update-group`                                           |
-| Move an agent or a whole group to another window                         | `window move-agent`, `window move-group` (`--to new\|main\|<n>`); read: `window list`            |
-| Create a worktree agent                                                  | `create-worktree`                                                                                |
-| Select a conversation directly from a project in the sidebar             | `focus-agent <agent-id> --tab <tab-id>`; read: `session list --json`                             |
-| Switch between conversations and agent management in the sidebar         | `settings get/set sidebarNavigationMode` (`conversations` / `agents`)                            |
-| Collapse an automatic project section                                    | `settings get/set collapsedConversationProjects`                                                 |
-| New / close / rename a tab                                               | `tab new`, `tab close`, `tab rename`                                                             |
-| Star a tab (Cmd+Shift+S)                                                 | `tab star` / `tab unstar`                                                                        |
-| Mark a tab unread                                                        | `tab unread` / `tab read`                                                                        |
-| Toggle Save to History                                                   | `tab save-to-history`                                                                            |
-| Composer chips: thinking, read-only access                               | `tab thinking` (off/on/sticky/cycle), `tab read-only`                                            |
-| Model / effort pills on one tab                                          | `tab model`, `tab effort` (`inherit` clears the override)                                        |
-| Enter-to-send chip                                                       | `tab enter-to-send`                                                                              |
-| Read one tab's settings back                                             | `tab show`, or `session list --json`                                                             |
-| Move Tab to First / Last                                                 | `tab move <tab-id> first\|last\|<index>`                                                         |
-| Send a message, or run a shell command                                   | `send`, `dispatch`, `send-terminal`                                                              |
-| Consult another agent (`@mention`)                                       | `ask <agent> "<question>" --from <caller>`                                                       |
-| Continue with another AI (tab menu, palette, limit or login error)       | `handoff <source-tab> <provider>` (draft only); choices: `handoff <source-tab> --list-targets`   |
-| About Me: save, check native files, write approved files                 | `about-me set`, `about-me status`, `about-me apply --confirm <real file>`                        |
-| Open a file / URL / terminal tab                                         | `open-file`, `open-browser`, `open-terminal`                                                     |
-| Open a modal or dashboard                                                | `open <surface> [--tab]` (registry in `src/shared/uiSurfaces.ts`)                                |
-| Auto Run: start, stop, resume, skip, abort                               | `auto-run`, `stop-auto-run`, `resume-auto-run`, ...                                              |
-| Application language (system / English / Simplified Chinese)             | `settings get uiLanguage`, `settings set uiLanguage zh-CN`, `settings reset uiLanguage`          |
-| Follow system light and dark mode (Clay pair)                            | `settings get followSystemAppearance`, `settings set followSystemAppearance false`               |
-| Settings, theme, Encore features                                         | `settings`, `theme`, `set-theme`, `encore`                                                       |
-| Toasts and center flashes                                                | `notify toast`, `notify flash`                                                                   |
-| Save a pasted chat image (right-click)                                   | `image save` (`image list` to find it)                                                           |
-| Cue subscriptions and scheduled tasks                                    | `cue trigger`, `cue schedule`, `cue pipeline`                                                    |
-| Cue Model / Effort (graph node, Scheduled Tasks)                         | `cue model`, `cue schedule --tier --model --effort`; read: `cue model`, `cue list`               |
-| Snooze a tab, list / wake / dismiss what is parked                       | `snooze tab`, `snooze list`, `unsnooze`, `snooze dismiss`, `snooze reschedule`, `snooze history` |
-| Send Feedback modal (open / file / +1)                                   | `open feedback`, `feedback auth\|search\|submit\|subscribe`                                      |
-| Feedback: screenshots, support package box                               | `feedback submit --attach <png...> --support-package`                                            |
-| Feedback: Running as (account picker)                                    | `feedback accounts [--use <key> \| --clear]`                                                     |
-| Feedback: Log in to GitHub / Check Again                                 | `feedback login`, `feedback auth --fresh`                                                        |
-| Feedback: live self-diagnosis                                            | `feedback diagnose`                                                                              |
-| Feedback: Submit now (early exit)                                        | `feedback submit` (the caller supplies whatever fields it has)                                   |
-| Create Debug Package (support package)                                   | `support-package -o <dir> [--no-logs ...]`                                                       |
-| Start / End Performance Profiling                                        | `profiling start`, `profiling status`, `profiling stop -o <zip>`                                 |
-| Cue dashboard: subscription on/off switch                                | `cue enable <sub>`, `cue disable <sub>` (any event type)                                         |
-| Cue dashboard: activity log                                              | `cue activity [-a <agent>] [-n <limit>]`                                                         |
-| Auto Run panel: progress                                                 | `auto-run-status -a <agent>`                                                                     |
-| Auto Run: save as a playbook (documents must sit in the Auto Run folder) | `auto-run --save-as <name> <docs...>` (read back with `playbook <id> --dry-run`)                 |
-| Auto Run panel: Change folder                                            | `auto-run-folder <path> -a <agent>`                                                              |
-| Thought Stream: Steer Auto Run (send a note, cancel one, read replies)   | `steer-auto-run send <note> -a <agent>`, `steer-auto-run list`, `steer-auto-run cancel <id>`     |
-| Playbook Exchange: browse, README, install                               | `marketplace list`, `marketplace show <id>`, `marketplace import`                                |
+| Point-and-click action                                                      | CLI                                                                                                              |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Switch to the new shell (Settings, Display, New Shell)                      | `settings set newShell true` / `settings get newShell`                                                           |
+| Choose a tool from the new-shell plus menu / replace an empty conversation  | `tab new --agent <id> --provider <claude-code\|codex\|deepseek> [--replace-empty <tab>]`; prepares only, no send |
+| Open / close the conversation panel, select Changes / Files, return to tree | `tab panel <tab> <open\|close\|changes\|files\|back>`; inspect `tab show <tab> --json`                           |
+| Filter files in the conversation panel                                      | `tab panel <tab> files --filter <query>`; empty string clears it                                                 |
+| Open a tree, conversation-link or changed file in the right preview         | `open-file <path> --agent <id>`; then `tab panel <tab> files --line <number>` for a line target                  |
+| Refresh files / show hidden files                                           | `refresh-files --agent <id>` / `settings set showHiddenFiles true`                                               |
+| Edit / preview / save the right panel text buffer                           | `tab panel <tab> edit [--content <text>]`, `preview`, `save`; save uses the same FilePreview save function       |
+| Ask another provider to review the current conversation changes             | `handoff <tab> <provider> --review [--send] [--json]`; read origin: `tab show <tab> --json`                      |
+| Read conversation changes and a file diff                                   | `changes [--agent <id>] [--tab <id>] [--file <path>] [--json]`                                                   |
+| Open / close notification center                                            | `open notification-center`, `notify inbox open` / `close`                                                        |
+| Read / clear / activate notification history                                | `notify inbox list`, `read`, `read-all`, `clear`, `activate`, `link`                                             |
+| Dismiss one / all visible notifications                                     | `notify inbox dismiss [id]`                                                                                      |
+| Expand / collapse full inbox details                                        | `notify inbox detail <id>` / `collapse`                                                                          |
+| Bookmark / unbookmark an agent (Cmd+Shift+B)                                | `bookmark` / `unbookmark`, or `update-agent --bookmark`                                                          |
+| Create / rename / remove an agent                                           | `create-agent`, `rename-agent`, `remove-agent`                                                                   |
+| Edit Agent modal fields                                                     | `update-agent`, `settings agent set`                                                                             |
+| Switch an agent's provider                                                  | `update-agent --provider --force`                                                                                |
+| Move an agent to a group                                                    | `update-agent --group`                                                                                           |
+| Change working directory                                                    | `update-agent --cwd`                                                                                             |
+| SSH remote execution config                                                 | `update-agent --ssh-remote / --ssh-cwd`, `create-ssh-remote`                                                     |
+| Edit an SSH remote, incl. its `ssh -o` list                                 | `update-ssh-remote --ssh-option / --clear-ssh-options`                                                           |
+| Focus an agent, switch AI/Shell mode                                        | `focus-agent`, `switch-mode`                                                                                     |
+| Create / rename / remove a group                                            | `create-group`, `rename-group`, `remove-group`                                                                   |
+| Group icon, color, and nesting                                              | `create-group --icon/--color/--parent`, `update-group`                                                           |
+| Move an agent or a whole group to another window                            | `window move-agent`, `window move-group` (`--to new\|main\|<n>`); read: `window list`                            |
+| Create a worktree agent                                                     | `create-worktree`                                                                                                |
+| Select a conversation directly from a project in the sidebar                | `focus-agent <agent-id> --tab <tab-id>`; read: `session list --json`                                             |
+| Switch between conversations and agent management in the sidebar            | `settings get/set sidebarNavigationMode` (`conversations` / `agents`)                                            |
+| Collapse an automatic project section                                       | `settings get/set collapsedConversationProjects`                                                                 |
+| New / close / rename a tab                                                  | `tab new`, `tab close`, `tab rename`                                                                             |
+| Star a tab (Cmd+Shift+S)                                                    | `tab star` / `tab unstar`                                                                                        |
+| Mark a tab unread                                                           | `tab unread` / `tab read`                                                                                        |
+| Toggle Save to History                                                      | `tab save-to-history`                                                                                            |
+| Composer chips: thinking, read-only access                                  | `tab thinking` (off/on/sticky/cycle), `tab read-only`                                                            |
+| Model / effort pills on one tab                                             | `tab model`, `tab effort` (`inherit` clears the override)                                                        |
+| Enter-to-send chip                                                          | `tab enter-to-send`                                                                                              |
+| Read one tab's settings back                                                | `tab show`, or `session list --json`                                                                             |
+| Move Tab to First / Last                                                    | `tab move <tab-id> first\|last\|<index>`                                                                         |
+| Send a message, or run a shell command                                      | `send`, `dispatch`, `send-terminal`                                                                              |
+| Consult another agent (`@mention`)                                          | `ask <agent> "<question>" --from <caller>`                                                                       |
+| Continue with another AI (tab menu, palette, limit or login error)          | `handoff <source-tab> <provider>` (draft only); choices: `handoff <source-tab> --list-targets`                   |
+| About Me: save, check native files, write approved files                    | `about-me set`, `about-me status`, `about-me apply --confirm <real file>`                                        |
+| Open a file / URL / terminal tab                                            | `open-file`, `open-browser`, `open-terminal`                                                                     |
+| Open a modal or dashboard                                                   | `open <surface> [--tab]` (registry in `src/shared/uiSurfaces.ts`)                                                |
+| Auto Run: start, stop, resume, skip, abort                                  | `auto-run`, `stop-auto-run`, `resume-auto-run`, ...                                                              |
+| Application language (system / English / Simplified Chinese)                | `settings get uiLanguage`, `settings set uiLanguage zh-CN`, `settings reset uiLanguage`                          |
+| Follow system light and dark mode (Clay pair)                               | `settings get followSystemAppearance`, `settings set followSystemAppearance false`                               |
+| Settings, theme, Encore features                                            | `settings`, `theme`, `set-theme`, `encore`                                                                       |
+| Toasts and center flashes                                                   | `notify toast`, `notify flash`                                                                                   |
+| Save a pasted chat image (right-click)                                      | `image save` (`image list` to find it)                                                                           |
+| Cue subscriptions and scheduled tasks                                       | `cue trigger`, `cue schedule`, `cue pipeline`                                                                    |
+| Cue Model / Effort (graph node, Scheduled Tasks)                            | `cue model`, `cue schedule --tier --model --effort`; read: `cue model`, `cue list`                               |
+| Snooze a tab, list / wake / dismiss what is parked                          | `snooze tab`, `snooze list`, `unsnooze`, `snooze dismiss`, `snooze reschedule`, `snooze history`                 |
+| Send Feedback modal (open / file / +1)                                      | `open feedback`, `feedback auth\|search\|submit\|subscribe`                                                      |
+| Feedback: screenshots, support package box                                  | `feedback submit --attach <png...> --support-package`                                                            |
+| Feedback: Running as (account picker)                                       | `feedback accounts [--use <key> \| --clear]`                                                                     |
+| Feedback: Log in to GitHub / Check Again                                    | `feedback login`, `feedback auth --fresh`                                                                        |
+| Feedback: live self-diagnosis                                               | `feedback diagnose`                                                                                              |
+| Feedback: Submit now (early exit)                                           | `feedback submit` (the caller supplies whatever fields it has)                                                   |
+| Create Debug Package (support package)                                      | `support-package -o <dir> [--no-logs ...]`                                                                       |
+| Start / End Performance Profiling                                           | `profiling start`, `profiling status`, `profiling stop -o <zip>`                                                 |
+| Cue dashboard: subscription on/off switch                                   | `cue enable <sub>`, `cue disable <sub>` (any event type)                                                         |
+| Cue dashboard: activity log                                                 | `cue activity [-a <agent>] [-n <limit>]`                                                                         |
+| Auto Run panel: progress                                                    | `auto-run-status -a <agent>`                                                                                     |
+| Auto Run: save as a playbook (documents must sit in the Auto Run folder)    | `auto-run --save-as <name> <docs...>` (read back with `playbook <id> --dry-run`)                                 |
+| Auto Run panel: Change folder                                               | `auto-run-folder <path> -a <agent>`                                                                              |
+| Thought Stream: Steer Auto Run (send a note, cancel one, read replies)      | `steer-auto-run send <note> -a <agent>`, `steer-auto-run list`, `steer-auto-run cancel <id>`                     |
+| Playbook Exchange: browse, README, install                                  | `marketplace list`, `marketplace show <id>`, `marketplace import`                                                |
 
 ## Open gaps
 

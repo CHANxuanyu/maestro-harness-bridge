@@ -1,3 +1,4 @@
+import { useNewConversationTools, newShellConversation } from '../../services/newShellConversation';
 import { chooseProject } from '../../services/openProject';
 import { Spinner } from '../ui/Spinner';
 /**
@@ -666,7 +667,8 @@ const ProjectSection = memo(function ProjectSection({
 			// One configuration means there is nothing to choose; zero means the
 			// only useful next step is adding one.
 			if (project.agents.length === 0) onAddAgent();
-			else if (project.agents.length === 1) onNewConversation(project.agents[0].id);
+			else if (project.agents.length === 1 && !useSettingsStore.getState().newShell)
+				onNewConversation(project.agents[0].id);
 			else openMenu('new', project.key, e.currentTarget);
 		},
 		[project, onAddAgent, onNewConversation, openMenu]
@@ -737,8 +739,8 @@ const ProjectSection = memo(function ProjectSection({
 					type="button"
 					aria-label={`${t('workflows.conversations.new')}: ${project.name}`}
 					title={t('workflows.conversations.new')}
-					aria-haspopup={project.agents.length > 1 ? 'menu' : undefined}
-					aria-expanded={project.agents.length > 1 ? newMenuOpen : undefined}
+					aria-haspopup={newShell || project.agents.length > 1 ? 'menu' : undefined}
+					aria-expanded={newShell || project.agents.length > 1 ? newMenuOpen : undefined}
 					onClick={handleNew}
 					className="shrink-0 p-0.5 rounded outline-none focus-visible:ring-1 hover:bg-white/10"
 					style={{ color: theme.colors.textDim }}
@@ -917,6 +919,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	// Menu content is resolved from the CURRENT props on every render, so a
 	// project or conversation that changed while the menu was open is never
 	// acted on through a stale snapshot. A target that vanished closes it.
+	const newProject =
+		menu?.kind === 'new' ? projects.find((project) => project.key === menu.key) : undefined;
+	const newOwnerId = newProject?.agents[0]?.id;
+	const newTools = useNewConversationTools(newOwnerId);
+
 	let menuLabel = '';
 	let menuSections: TreeMenuSection[] | null = null;
 	if (menu) {
@@ -970,22 +977,32 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					{
 						key: 'choices',
 						// One row per provider; which configuration runs it is not asked.
-						items: project.agents.map((agent) => ({
-							key: agent.id,
-							label: t('workflows.conversations.newWith', {
-								provider: providerName(agent.provider),
-							}),
-							icon: (
-								<AgentLogo
-									agentId={agent.provider}
-									supported
-									detected
-									theme={theme}
-									className="w-4 h-4"
-								/>
-							),
-							onSelect: () => onNewConversation(agent.id),
-						})),
+						items: newShell
+							? newTools.map((provider) => ({
+									key: provider,
+									label: t('workflows.conversations.newWith', {
+										provider: provider === 'deepseek' ? 'DeepSeek' : providerName(provider),
+									}),
+									onSelect: () => {
+										if (newOwnerId) void newShellConversation(newOwnerId, provider);
+									},
+								}))
+							: project.agents.map((agent) => ({
+									key: agent.id,
+									label: t('workflows.conversations.newWith', {
+										provider: providerName(agent.provider),
+									}),
+									icon: (
+										<AgentLogo
+											agentId={agent.provider}
+											supported
+											detected
+											theme={theme}
+											className="w-4 h-4"
+										/>
+									),
+									onSelect: () => onNewConversation(agent.id),
+								})),
 					},
 					...(!newShell ? [addAgentSection] : []),
 				];

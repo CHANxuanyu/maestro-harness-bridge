@@ -81,7 +81,7 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 					>
 						<span>
 							{(newShell ? modelDisplayLabel(currentModel ?? '') : currentModel) ||
-								t('workflows.shell.default2')}
+								t(newShell ? 'workflows.shell.defaultModel' : 'workflows.shell.default2')}
 						</span>
 						<ChevronDown className="w-3 h-3 opacity-70" />
 					</button>
@@ -190,7 +190,7 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 					>
 						<span>
 							{(newShell ? effortDisplayLabel(t, currentEffort ?? '') : currentEffort) ||
-								t('workflows.shell.default2')}
+								t(newShell ? 'workflows.shell.defaultEffort' : 'workflows.shell.default2')}
 						</span>
 						<ChevronDown className="w-3 h-3 opacity-70" />
 					</button>

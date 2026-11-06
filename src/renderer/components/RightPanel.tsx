@@ -1,3 +1,7 @@
+import { shellRightPanelTab } from '../../shared/newShellPanel';
+import { StoredFilePreview } from './FilePreview/StoredFilePreview';
+import { useFilePreviewTabHandlers } from '../hooks/tabs/internal/useFilePreviewTabHandlers';
+import { rememberNewShellPanel } from '../stores/uiStore';
 import { useT } from '../i18n';
 import React, {
 	useRef,
@@ -152,6 +156,7 @@ interface RightPanelProps {
 export const RightPanel = memo(
 	forwardRef<RightPanelHandle, RightPanelProps>(function RightPanel(props, ref) {
 		const t = useT();
+		const fileHandlers = useFilePreviewTabHandlers();
 		// === State from stores (direct subscriptions - no prop drilling) ===
 		const session = useSessionStore(selectActiveSession);
 		const setSessions = useSessionStore((s) => s.setSessions);
@@ -168,13 +173,18 @@ export const RightPanel = memo(
 		// Changes view, so each maps a tab it does not have onto one it does. The
 		// stored value is left alone, so switching back restores the user's tab.
 		const newShell = useSettingsStore((s) => s.newShell);
-		const activeRightTab: RightPanelTab = newShell
-			? storedRightTab === 'files'
-				? 'files'
-				: 'changes'
-			: storedRightTab === 'changes'
-				? 'files'
-				: storedRightTab;
+		const panel = session?.aiTabs?.find((tab) => tab.id === session.activeTabId)?.newShellPanel;
+		const panelFile = session?.filePreviewTabs?.find((file) => file.id === panel?.fileTabId);
+		const activeRightTab = shellRightPanelTab(storedRightTab, newShell, panel);
+		useEffect(() => {
+			if (newShell && panel?.open !== undefined)
+				useUIStore.setState({ rightPanelOpen: panel.open, rightPanelManuallyOpened: true });
+		}, [newShell, session?.id, session?.activeTabId, panel?.open]);
+
+		useEffect(() => {
+			if (newShell) useFileExplorerStore.getState().setFileTreeFilter(panel?.filter ?? '');
+		}, [newShell, session?.id, session?.activeTabId, panel?.filter]);
+
 		const activeFocus = useUIStore((s) => s.activeFocus);
 		const setRightPanelOpen = useUIStore((s) => s.setRightPanelOpen);
 		const setActiveFocus = useUIStore((s) => s.setActiveFocus);
@@ -674,7 +684,11 @@ export const RightPanel = memo(
 						setActiveFocus('right');
 						// Only focus the container for file explorer, not for autorun (which has its own focus management)
 						// Skip when the filter input is focused - otherwise the container steals focus from it
-						if (activeRightTab === 'files' && e.target !== fileTreeFilterInputRef.current) {
+						if (
+							activeRightTab === 'files' &&
+							!(newShell && panelFile) &&
+							e.target !== fileTreeFilterInputRef.current
+						) {
 							fileTreeContainerRef.current?.focus();
 						}
 					}}
@@ -692,7 +706,7 @@ export const RightPanel = memo(
 				>
 					{activeRightTab === 'changes' && (
 						<div className="h-full">
-							<ChangesPanel theme={theme} session={session} />
+							<ChangesPanel theme={theme} session={session} onFileClick={props.onFileClick} />
 						</div>
 					)}
 
@@ -702,38 +716,63 @@ export const RightPanel = memo(
 						className="h-full"
 						style={{ display: activeRightTab === 'files' ? undefined : 'none' }}
 					>
-						<FileExplorerPanel
-							session={session}
-							theme={theme}
-							fileTreeFilter={fileTreeFilter}
-							setFileTreeFilter={setFileTreeFilter}
-							fileTreeFilterOpen={fileTreeFilterOpen}
-							setFileTreeFilterOpen={setFileTreeFilterOpen}
-							filteredFileTree={filteredFileTree}
-							selectedFileIndex={selectedFileIndex}
-							setSelectedFileIndex={setSelectedFileIndex}
-							activeFocus={activeFocus}
-							activeRightTab={activeRightTab}
-							setActiveFocus={setActiveFocus}
-							fileTreeFilterInputRef={fileTreeFilterInputRef}
-							toggleFolder={toggleFolder}
-							toggleFolderRecursive={toggleFolderRecursive}
-							handleFileClick={handleFileClick}
-							expandAllFolders={expandAllFolders}
-							collapseAllFolders={collapseAllFolders}
-							updateSessionWorkingDirectory={updateSessionWorkingDirectory}
-							refreshFileTree={refreshFileTree}
-							cancelFileTreeLoad={cancelFileTreeLoad}
-							setSessions={setSessions}
-							onAutoRefreshChange={onAutoRefreshChange}
-							onShowFlash={onShowFlash}
-							showHiddenFiles={showHiddenFiles}
-							fileExplorerIconTheme={fileExplorerIconTheme}
-							fileTreeBranchConnectors={fileTreeBranchConnectors}
-							setShowHiddenFiles={setShowHiddenFiles}
-							onFocusFileInGraph={onFocusFileInGraph}
-							onOpenBrowserTabAt={onOpenBrowserTabAt}
-						/>
+						{newShell && panelFile ? (
+							<StoredFilePreview
+								fileTabId={panelFile.id}
+								session={session}
+								theme={theme}
+								onBack={() => rememberNewShellPanel({ fileTabId: undefined })}
+								actions={{
+									onFileTabEditModeChange: fileHandlers.handleFileTabEditModeChange,
+									onFileTabEditContentChange: fileHandlers.handleFileTabEditContentChange,
+									onFileTabScrollPositionChange: fileHandlers.handleFileTabScrollPositionChange,
+									onFileTabSearchQueryChange: fileHandlers.handleFileTabSearchQueryChange,
+									onReloadFileTab: fileHandlers.handleReloadFileTab,
+									onFileClick: props.onFileClick,
+									fileTree: session.fileTree,
+								}}
+							/>
+						) : (
+							<FileExplorerPanel
+								session={session}
+								theme={theme}
+								fileTreeFilter={fileTreeFilter}
+								setFileTreeFilter={
+									newShell
+										? (value) => {
+												rememberNewShellPanel({ filter: value });
+												setFileTreeFilter(value);
+											}
+										: setFileTreeFilter
+								}
+								fileTreeFilterOpen={fileTreeFilterOpen}
+								setFileTreeFilterOpen={setFileTreeFilterOpen}
+								filteredFileTree={filteredFileTree}
+								selectedFileIndex={selectedFileIndex}
+								setSelectedFileIndex={setSelectedFileIndex}
+								activeFocus={activeFocus}
+								activeRightTab={activeRightTab}
+								setActiveFocus={setActiveFocus}
+								fileTreeFilterInputRef={fileTreeFilterInputRef}
+								toggleFolder={toggleFolder}
+								toggleFolderRecursive={toggleFolderRecursive}
+								handleFileClick={handleFileClick}
+								expandAllFolders={expandAllFolders}
+								collapseAllFolders={collapseAllFolders}
+								updateSessionWorkingDirectory={updateSessionWorkingDirectory}
+								refreshFileTree={refreshFileTree}
+								cancelFileTreeLoad={cancelFileTreeLoad}
+								setSessions={setSessions}
+								onAutoRefreshChange={onAutoRefreshChange}
+								onShowFlash={onShowFlash}
+								showHiddenFiles={showHiddenFiles}
+								fileExplorerIconTheme={fileExplorerIconTheme}
+								fileTreeBranchConnectors={fileTreeBranchConnectors}
+								setShowHiddenFiles={setShowHiddenFiles}
+								onFocusFileInGraph={onFocusFileInGraph}
+								onOpenBrowserTabAt={onOpenBrowserTabAt}
+							/>
+						)}
 					</div>
 
 					{activeRightTab === 'history' && (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { ProjectSessionTree } from '../../../renderer/components/SessionList/ProjectSessionTree';
 import type {
 	SidebarConversation,
@@ -173,6 +173,33 @@ it.each([false, true])(
 );
 
 describe('ProjectSessionTree', () => {
+	it.each([false, true])(
+		'uses available local tools from the shared plus path, new shell %s',
+		async (newShell) => {
+			useSettingsStore.setState({ newShell });
+			vi.mocked(window.maestro.context.conversation).mockResolvedValue({
+				success: true,
+				targets: [{ provider: 'claude-code' }, { provider: 'codex' }],
+			} as never);
+			const { props } = setup({ projects: [project({ agents: [CLAUDE_AGENT] })] });
+			const button = screen.getByRole('button', { name: 'New conversation: Maestro' });
+			if (newShell) expect(button).toHaveAttribute('aria-haspopup', 'menu');
+			fireEvent.click(button);
+			if (newShell) {
+				fireEvent.click(await screen.findByRole('menuitem', { name: 'New with Codex' }));
+				await waitFor(() =>
+					expect(window.maestro.context.conversation).toHaveBeenCalledWith({
+						action: 'new-conversation',
+						sourceAgentId: CLAUDE_AGENT.id,
+						targetProvider: 'codex',
+						replaceTabId: undefined,
+					})
+				);
+				expect(props.onNewConversation).not.toHaveBeenCalled();
+			} else expect(props.onNewConversation).toHaveBeenCalledWith(CLAUDE_AGENT.id);
+		}
+	);
+
 	beforeEach(() => useSettingsStore.setState({ newShell: false }));
 
 	it.each([false, true])(

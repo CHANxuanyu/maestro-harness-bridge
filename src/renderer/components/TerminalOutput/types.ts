@@ -22,6 +22,8 @@ export interface ToolSummary {
 }
 
 export interface LogItemProps {
+	/** Only the first user message of a conversation with a handoff origin. */
+	handoffOrigin?: import('../../../shared/aiHandoff').ConversationOrigin;
 	log: LogEntry;
 	index: number;
 	isTerminal: boolean;

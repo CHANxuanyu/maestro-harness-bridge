@@ -30,7 +30,7 @@ import { hasDraft } from '../../utils/tabHelpers';
 import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import { useModalStore } from '../../stores/modalStore';
 import { useUIStore } from '../../stores/uiStore';
-import { updateSessionWith, useSessionStore } from '../../stores/sessionStore';
+import { updateSessionWith } from '../../stores/sessionStore';
 import {
 	breakApartGroup,
 	findLeafById,
@@ -42,7 +42,6 @@ import {
 	updateGroupInSession,
 	updateSplitSizes,
 } from '../../utils/panelLayout';
-import { filePaneAttrs } from '../../utils/paneFocus';
 import { usePaneDrag } from '../../hooks/tabs/usePaneDrag';
 import { usePointerDrag } from '../../hooks/utils/usePointerDrag';
 import { safeClipboardWrite } from '../../utils/clipboard';
@@ -51,7 +50,7 @@ import { buildSessionDeepLink } from '../../../shared/deep-link-urls';
 import { useSurfaceFontFamily } from '../../hooks/ui/useSurfaceTypography';
 import { useThrottledCallback } from '../../hooks/utils/useThrottle';
 import { useTabStore } from '../../stores/tabStore';
-import { useFilePreviewHandlers } from '../../hooks/mainPanel/useFilePreviewHandlers';
+import { StoredFilePreview as TiledFilePane } from '../FilePreview/StoredFilePreview';
 import { outputSearchKeyFor } from '../../utils/outputSearch';
 import type { FileNode } from '../../types/fileTree';
 import type {
@@ -210,13 +209,6 @@ interface PaneSlotRegistry {
 }
 const PaneSlotContext = React.createContext<PaneSlotRegistry | null>(null);
 
-// Lazy-loaded to match MainPanelContent: FilePreview pulls the full markdown /
-// syntax-highlighting stack into the bundle, so it stays code-split behind first
-// open here too.
-const FilePreview = React.lazy(() =>
-	import('../FilePreview').then((m) => ({ default: m.FilePreview }))
-);
-
 /**
  * Recursive renderer for a tiled TabGroup. Walks the group's layout tree and
  * renders each leaf's referenced tab side by side. Leaves reference existing
@@ -282,132 +274,6 @@ function PaneMissingTab({ theme }: { theme: Theme }) {
 			>
 				{t('workflows.shell.thisTabIsNoLongerAvailable')}
 			</div>
-		</div>
-	);
-}
-
-/**
- * A tiled file-preview pane wired to behave IDENTICALLY to the single-view file tab.
- * The single view binds the app's tab-id-keyed file handlers to the ACTIVE file tab
- * through `useFilePreviewHandlers`; this pane runs that SAME hook against its own tab
- * id, so save (including the untitled / moved-on-disk prompts), edit-content
- * persistence, scroll memory, find-query memory, and reload all behave identically
- * without a second copy of that logic. Preview-tier and HTML-render mode go straight
- * to the tab-id-keyed store actions, as they already did.
- *
- * Reads its own tab reactively so edit-mode / content / scroll changes re-render just
- * this pane.
- */
-function TiledFilePane({
-	fileTabId,
-	session,
-	theme,
-	actions,
-}: {
-	fileTabId: string;
-	session: Session;
-	theme: Theme;
-	actions: PaneFileActions | null;
-}) {
-	const shortcuts = useSettingsStore((s) => s.shortcuts);
-	// Subscribe to THIS tab via the session store so edit-mode / edit-content / tier /
-	// html-mode changes re-render the pane (the session prop is a snapshot that alone
-	// wouldn't update). The tabStore setters below all mutate the ACTIVE session's file
-	// tabs, and a tiled file pane's session IS the active session (its group is active).
-	const fileTab = useSessionStore(
-		(s) =>
-			s.sessions
-				.find((x) => x.id === session.id)
-				?.filePreviewTabs?.find((t) => t.id === fileTabId) ?? null
-	);
-	const store = useTabStore.getState();
-
-	// Same binding the single view uses, pointed at THIS pane's tab instead of the
-	// active one. Gives the pane the identical file object, cwd, SSH id, and handlers.
-	const {
-		memoizedFilePreviewFile,
-		filePreviewCwd,
-		filePreviewSshRemoteId,
-		handleFilePreviewEditModeChange,
-		handleFilePreviewSave,
-		handleFilePreviewEditContentChange,
-		handleFilePreviewScrollPositionChange,
-		handleFilePreviewSearchQueryChange,
-		handleFilePreviewReload,
-	} = useFilePreviewHandlers({
-		activeSession: session,
-		activeFileTabId: fileTabId,
-		activeFileTab: fileTab,
-		onFileTabEditModeChange: actions?.onFileTabEditModeChange,
-		onFileTabEditContentChange: actions?.onFileTabEditContentChange,
-		onFileTabScrollPositionChange: actions?.onFileTabScrollPositionChange,
-		onFileTabSearchQueryChange: actions?.onFileTabSearchQueryChange,
-		onReloadFileTab: actions?.onReloadFileTab,
-	});
-
-	// Breadcrumb history, derived from THIS tab (the single view derives the same
-	// slices for the active tab in getTabDerivedState).
-	const history = fileTab?.navigationHistory ?? [];
-	const navIndex = fileTab?.navigationIndex ?? (history.length > 0 ? history.length - 1 : -1);
-	const navigateToIndex = actions?.onFileTabNavigateToIndex;
-	const goToIndex = React.useCallback(
-		(index: number) => navigateToIndex?.(index, fileTabId),
-		[navigateToIndex, fileTabId]
-	);
-
-	if (!fileTab || !memoizedFilePreviewFile) return <PaneMissingTab theme={theme} />;
-
-	return (
-		// Tagged with the tab id so the pane focus router can land the caret in THIS
-		// pane's editor when several file panes are tiled at once (see utils/paneFocus).
-		<div className="flex-1 overflow-hidden select-text" {...filePaneAttrs(fileTabId)}>
-			<React.Suspense fallback={null}>
-				<FilePreview
-					file={memoizedFilePreviewFile}
-					onClose={() => actions?.onFileTabClose?.(fileTabId)}
-					isTabMode={true}
-					theme={theme}
-					shortcuts={shortcuts}
-					markdownEditMode={fileTab.editMode ?? false}
-					setMarkdownEditMode={handleFilePreviewEditModeChange}
-					onSave={handleFilePreviewSave}
-					externalEditContent={fileTab.editContent}
-					onEditContentChange={handleFilePreviewEditContentChange}
-					previewTierOverride={fileTab.previewTierOverride}
-					onPreviewTierChange={(tier) => store.setFileTabPreviewTier(fileTabId, tier)}
-					htmlRenderMode={fileTab.htmlRenderMode}
-					onHtmlRenderModeChange={(value) => store.setFileTabHtmlRenderMode(fileTabId, value)}
-					sshRemoteId={filePreviewSshRemoteId}
-					// File/wiki links inside the document, resolved against the same tree
-					// and proximity cwd the single view uses.
-					fileTree={actions?.fileTree}
-					cwd={filePreviewCwd}
-					onFileClick={actions?.onFileClick}
-					onOpenFuzzySearch={actions?.onOpenFuzzySearch}
-					onShortcutUsed={actions?.onShortcutUsed}
-					// Scroll + find-query memory, so switching away and back lands where
-					// the user left off instead of jumping to the top with a cleared term.
-					initialScrollTop={fileTab.scrollTop}
-					onScrollPositionChange={handleFilePreviewScrollPositionChange}
-					initialSearchQuery={fileTab.searchQuery}
-					onSearchQueryChange={handleFilePreviewSearchQueryChange}
-					// On-disk change detection + reload.
-					lastModified={fileTab.lastModified}
-					onReloadFile={handleFilePreviewReload}
-					// Breadcrumb navigation across this tab's own visit history.
-					canGoBack={navIndex > 0}
-					canGoForward={navIndex < history.length - 1}
-					onNavigateBack={navigateToIndex ? () => goToIndex(navIndex - 1) : undefined}
-					onNavigateForward={navigateToIndex ? () => goToIndex(navIndex + 1) : undefined}
-					backHistory={history.slice(0, navIndex)}
-					forwardHistory={history.slice(navIndex + 1)}
-					currentHistoryIndex={navIndex}
-					onNavigateToIndex={navigateToIndex ? goToIndex : undefined}
-					// Transient deep-link scroll target, cleared once consumed.
-					pendingScrollToLine={fileTab.pendingScrollToLine}
-					onPendingScrollToLineConsumed={() => store.clearFileTabPendingScrollToLine(fileTabId)}
-				/>
-			</React.Suspense>
 		</div>
 	);
 }

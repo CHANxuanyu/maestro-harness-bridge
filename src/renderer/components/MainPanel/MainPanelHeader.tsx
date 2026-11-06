@@ -12,6 +12,7 @@ import {
 	Bookmark,
 	Brain,
 	Menu,
+	PanelLeft,
 	Command,
 	ArrowRightLeft,
 } from 'lucide-react';
@@ -413,7 +414,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 						aria-label={t('workflows.shell.showAgentsSidebar')}
 						title={t('workflows.shell.showSidebar')}
 					>
-						<Menu className="w-4 h-4" />
+						{newShell ? <PanelLeft className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
 					</button>
 				)}
 				{/* The minimized player's last resort.

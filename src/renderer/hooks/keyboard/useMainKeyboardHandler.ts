@@ -1,3 +1,5 @@
+import { shellRightPanelTab } from '../../../shared/newShellPanel';
+import { shellFeatureVisible } from '../../../shared/newShellFeatures';
 import { chooseProject } from '../../services/openProject';
 import { useEffect, useRef, useState } from 'react';
 import type { Session, AITab } from '../../types';
@@ -160,9 +162,23 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 			// Read all values from ref - this allows the handler to stay attached while still
 			// accessing current state values. Active Session is resolved at event time from
 			// the store so App does not need to push a live Session object onto this ref.
-			const ctx = keyboardHandlerRef.current;
+			let ctx = keyboardHandlerRef.current;
 			if (!ctx) return;
 			const activeSession = selectActiveSession(useSessionStore.getState());
+			const newShell = useSettingsStore.getState().newShell;
+			if (newShell)
+				ctx = {
+					...ctx,
+					activeGroupChatId: shellFeatureVisible('groupChat', newShell)
+						? ctx.activeGroupChatId
+						: null,
+					activeRightTab: shellRightPanelTab(
+						ctx.activeRightTab,
+						newShell,
+						activeSession?.aiTabs?.find((tab) => tab.id === activeSession.activeTabId)
+							?.newShellPanel
+					),
+				};
 
 			// Terminal focus recovery: if a key event reaches this window handler while in
 			// terminal mode, xterm's textarea likely lost focus. Recover early (before any

@@ -13,6 +13,7 @@ import { gitService } from '../../../renderer/services/git';
 import { useUIStore } from '../../../renderer/stores/uiStore';
 import { useCenterFlashStore } from '../../../renderer/stores/centerFlashStore';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { createMockAITab } from '../../helpers/mockTab';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useContextTimelineStore } from '../../../renderer/stores/contextTimelineStore';
 import { WindowProvider } from '../../../renderer/contexts/WindowContext';
@@ -608,6 +609,7 @@ describe('MainPanel', () => {
 			showUnreadOnly: false,
 		});
 		useSettingsStore.setState({
+			newShell: false,
 			fontFamily: 'monospace',
 			enterToSendAI: true,
 			chatRawTextMode: false,
@@ -805,6 +807,38 @@ describe('MainPanel', () => {
 			} as Partial<Session>);
 			renderMainPanel({ activeSession: session });
 			expect(screen.getByTestId('tab-bar')).toHaveAttribute('data-only-active-ai', 'true');
+		});
+
+		it('never draws a tab strip in the new shell even with an active file tab', () => {
+			useSettingsStore.setState({ newShell: true });
+			renderMainPanel({
+				activeSession: createSession({
+					aiTabs: [
+						createMockAITab({
+							id: 'tab-1',
+							logs: [{ id: 'question', source: 'user', timestamp: 1, text: 'Shipping' }],
+						}),
+					],
+					filePreviewTabs: [
+						{
+							id: 'file-1',
+							path: '/test/project/cart.ts',
+							name: 'cart',
+							extension: '.ts',
+							content: 'const n = 1;',
+							scrollTop: 0,
+							searchQuery: '',
+							editMode: false,
+							createdAt: 1,
+							lastModified: 1,
+						},
+					],
+					activeFileTabId: 'file-1',
+				}),
+			});
+			expect(screen.queryByTestId('tab-bar')).not.toBeInTheDocument();
+			expect(screen.getByTestId('terminal-output')).toBeInTheDocument();
+			useSettingsStore.setState({ newShell: false });
 		});
 
 		it('keeps the full strip and agent name in agents mode', () => {

@@ -4,6 +4,7 @@ import { getClaudeTokenSourceFields } from '../shared/claudeTokenMode';
 import { isDeepSeekAgent } from '../shared/agentPresets';
 import {
 	HANDOFF_PROVIDERS,
+	isHandoffProvider,
 	handoffLocation,
 	handoffRequestError,
 	type HandoffProvider,
@@ -131,12 +132,17 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			config = await deps.preparePreset(config);
 		return { config, runnerId: undefined };
 	}
-	async function targets(sourceAgentId: string): Promise<HandoffTargetsResult> {
+	async function targets(
+		sourceAgentId: string,
+		includeCurrent = false,
+		localOnly = false
+	): Promise<HandoffTargetsResult> {
 		const source = sourceFor(sourceAgentId);
 		if (!source) return failed('A Claude Code, Codex or DeepSeek source agent is required');
 		const targets: NonNullable<HandoffTargetsResult['targets']> = [];
 		for (const provider of HANDOFF_PROVIDERS) {
-			if (provider === providerOf(source)) continue;
+			if (!includeCurrent && provider === providerOf(source)) continue;
+			if (localOnly && source.sessionSshRemoteConfig?.enabled) continue;
 			const target = await selectTarget(source, provider);
 			if (target) targets.push({ provider, runnerId: target.runnerId });
 		}
@@ -193,6 +199,7 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 					sourceTabId: request.sourceTabId,
 					sourceProvider: provider,
 					sourceNativeSessionId: snapshot.sourceNativeSessionId,
+					sourceTitle: snapshot.sourceTitle,
 					createdAt: Date.now(),
 				},
 				provider: request.targetProvider,
@@ -207,7 +214,56 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 		});
 	}
 	async function command(request: HandoffCommand): Promise<HandoffCommandResult> {
-		if (request.action === 'targets') return targets(request.sourceAgentId);
+		if (request.action === 'targets')
+			return targets(request.sourceAgentId, request.includeCurrent, request.localOnly);
+		if (request.action === 'new-conversation') {
+			if (
+				!isHandoffProvider(request.targetProvider) ||
+				(request.replaceTabId !== undefined &&
+					(typeof request.replaceTabId !== 'string' || !request.replaceTabId))
+			)
+				return failed('Invalid conversation target', 'invalid-request');
+			const source = sourceFor(request.sourceAgentId);
+			if (!source) return failed('Source project not found');
+			if (request.replaceTabId && providerOf(source) === request.targetProvider)
+				return failed('Choose a different tool', 'invalid-request');
+			const location = handoffLocation(source);
+			if (source.sessionSshRemoteConfig?.enabled)
+				return failed('The new conversation picker requires a local project');
+			return queue.enqueue(
+				`new:${source.id}:${request.replaceTabId ?? request.targetProvider}`,
+				async () => {
+					const target = await selectTarget(source, request.targetProvider, true);
+					if (!target) return failed('The selected tool is unavailable');
+					return deps.openTarget({
+						newConversation: { replaceTabId: request.replaceTabId },
+						sourceAgentId: source.id,
+						cwd: location.cwd,
+						projectPath: source.projectRoot,
+						groupId: source.groupId,
+						provider: request.targetProvider,
+						...target,
+						mode: 'handoff',
+						origin: {
+							kind: 'handoff',
+							sourceSessionId: source.id,
+							sourceTabId: '',
+							sourceProvider: providerOf(source)!,
+							createdAt: Date.now(),
+						},
+						draft: {
+							text: '',
+							estimatedTokens: 0,
+							budgetTokens: 8000,
+							omittedEntries: 0,
+							omittedCharacters: 0,
+						},
+						send: false,
+						background: request.background === true,
+					});
+				}
+			);
+		}
 		if (request.action === 'prepare') return prepare(request);
 		return failed('Unknown handoff action', 'invalid-request');
 	}

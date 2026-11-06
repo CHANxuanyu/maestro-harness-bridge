@@ -227,6 +227,7 @@ import type { WebUserPublic } from '../shared/webLogin';
 interface MaestroAPI {
 	// Context merging API (for session context transfer and grooming)
 	context: {
+		conversation: import('../main/preload/context').ContextApi['conversation'];
 		handoff: import('../main/preload/context').ContextApi['handoff'];
 		handoffTargets: import('../main/preload/context').ContextApi['handoffTargets'];
 		onHandoffReadSource: import('../main/preload/context').ContextApi['onHandoffReadSource'];

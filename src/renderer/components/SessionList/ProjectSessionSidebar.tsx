@@ -136,7 +136,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 		const active = s.sessions.find((session) => session.id === s.activeSessionId);
 		return active &&
 			active.inputMode === 'ai' &&
-			!active.activeFileTabId &&
+			(newShell || !active.activeFileTabId) &&
 			!active.activeBrowserTabId &&
 			!active.activeTerminalTabId
 			? `${active.id}:${active.activeTabId}`

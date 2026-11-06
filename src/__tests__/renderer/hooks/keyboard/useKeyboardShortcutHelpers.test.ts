@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
+import { NEW_SHELL_HIDDEN_FEATURES } from '../../../../shared/newShellFeatures';
 /**
  * Tests for useKeyboardShortcutHelpers hook.
  *
@@ -40,6 +42,32 @@ function createKeyboardEvent(options: {
 }
 
 describe('useKeyboardShortcutHelpers', () => {
+	it.each([false, true])(
+		'blocks hidden feature shortcuts without rebinding them, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const shortcuts = Object.fromEntries(
+				NEW_SHELL_HIDDEN_FEATURES.flatMap((f) => f.actions).map((id) => [
+					id,
+					{ id, label: id, keys: ['Meta', 'k'] },
+				])
+			);
+			const { result } = renderHook(() =>
+				useKeyboardShortcutHelpers({ shortcuts, tabShortcuts: shortcuts })
+			);
+			for (const id of Object.keys(shortcuts)) {
+				expect(
+					result.current.isShortcut(createKeyboardEvent({ key: 'k', metaKey: true }), id)
+				).toBe(!newShell);
+				expect(
+					result.current.isTabShortcut(createKeyboardEvent({ key: 'k', metaKey: true }), id)
+				).toBe(!newShell);
+				expect(shortcuts[id].keys).toEqual(['Meta', 'k']);
+			}
+			useSettingsStore.setState({ newShell: false });
+		}
+	);
+
 	describe('Cross-platform keyboard shortcut support (Ctrl vs Cmd)', () => {
 		describe('Meta key equivalence', () => {
 			const shortcuts: Record<string, Shortcut> = {

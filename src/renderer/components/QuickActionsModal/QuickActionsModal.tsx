@@ -1,3 +1,4 @@
+import { shellActionVisible } from '../../../shared/newShellFeatures';
 import { useT } from '../../i18n';
 import React, { memo, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -92,6 +93,7 @@ import {
 
 export const QuickActionsModal = memo(function QuickActionsModal(props: QuickActionsModalProps) {
 	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const {
 		theme,
 		sessions,
@@ -990,7 +992,11 @@ export const QuickActionsModal = memo(function QuickActionsModal(props: QuickAct
 	const actions =
 		mode === 'agents' ? agentActions : mode === 'main' ? mainActionsWithPlugins : groupActions;
 
-	const filtered = filterAndSortQuickActions(actions, search, mode);
+	const filtered = filterAndSortQuickActions(
+		actions.filter((action) => shellActionVisible(action.id, newShell)),
+		search,
+		mode
+	);
 
 	// Use a ref for filtered actions so the onSelect callback stays stable
 	const filteredRef = useRef(filtered);

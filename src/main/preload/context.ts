@@ -10,6 +10,8 @@ import { ipcRenderer } from 'electron';
 import type { ClaudeTokenSourceFields } from '../../shared/claudeTokenMode';
 import type {
 	HandoffRequest,
+	HandoffCommand,
+	HandoffCommandResult,
 	HandoffResult,
 	HandoffTargetsResult,
 	HandoffReadRequest,
@@ -43,6 +45,8 @@ export interface StoredSessionResponse {
  */
 export function createContextApi() {
 	return {
+		conversation: (request: HandoffCommand): Promise<HandoffCommandResult> =>
+			ipcRenderer.invoke('context:conversation', request),
 		handoff: (request: HandoffRequest): Promise<HandoffResult> =>
 			ipcRenderer.invoke('context:handoff', request),
 		handoffTargets: (sourceAgentId: string): Promise<HandoffTargetsResult> =>

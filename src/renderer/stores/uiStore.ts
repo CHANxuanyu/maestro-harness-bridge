@@ -1,3 +1,4 @@
+import { patchNewShellPanel } from '../../shared/newShellPanel';
 /**
  * uiStore - Zustand store for centralized UI layout state management
  *
@@ -10,10 +11,26 @@
  * Can be used outside React via useUIStore.getState() / useUIStore.setState().
  */
 
+import { useSettingsStore } from './settingsStore';
+import { useSessionStore, updateAiTab } from './sessionStore';
 import { create } from 'zustand';
 import type { FocusArea, RightPanelTab, UnifiedTabRef, UsageDashboardViewMode } from '../types';
 import { notifyCenterFlash } from './centerFlashStore';
 import { isNarrowViewportNow } from '../hooks/ui/useViewportBreakpoint';
+
+/** Persist presentation on the conversation, without touching classic preferences. */
+export function rememberNewShellPanel(
+	patch: Partial<NonNullable<import('../types').AITab['newShellPanel']>>
+): void {
+	if (!useSettingsStore.getState().newShell) return;
+	const state = useSessionStore.getState();
+	const session = state.sessions.find((s) => s.id === state.activeSessionId);
+	if (session)
+		updateAiTab(session.id, session.activeTabId, (tab) => ({
+			...tab,
+			newShellPanel: patchNewShellPanel(tab.newShellPanel, patch),
+		}));
+}
 
 /**
  * Keyboard-selection cursor for the two Left Bar sections that are NOT plain
@@ -418,7 +435,7 @@ function persistHiddenPluginPanels(value: string[]): void {
 	window.maestro?.settings?.set('hiddenPluginPanels', value);
 }
 
-export const useUIStore = create<UIStore>()((set) => ({
+export const useUIStore = create<UIStore>()((set, get) => ({
 	// --- State ---
 	leftSidebarOpen: true,
 	leftSidebarHidden: false,
@@ -477,20 +494,25 @@ export const useUIStore = create<UIStore>()((set) => ({
 	setRightPanelOpen: (v) =>
 		set((s) => {
 			const open = resolve(v, s.rightPanelOpen);
+			rememberNewShellPanel({ open });
 			return { rightPanelOpen: open, rightPanelManuallyOpened: s.rightPanelManuallyOpened || open };
 		}),
-	toggleRightPanel: () =>
-		set((s) => ({
-			rightPanelOpen: !s.rightPanelOpen,
-			rightPanelManuallyOpened: s.rightPanelManuallyOpened || !s.rightPanelOpen,
-		})),
+	toggleRightPanel: () => get().setRightPanelOpen(!get().rightPanelOpen),
 	closeLeftSidebarForNavigation: () =>
 		set((s) => (s.leftSidebarOpen && isNarrowViewportNow() ? { leftSidebarOpen: false } : s)),
 	closeRightPanelForNavigation: () =>
 		set((s) => (s.rightPanelOpen && isNarrowViewportNow() ? { rightPanelOpen: false } : s)),
 
 	setActiveFocus: (v) => set((s) => ({ activeFocus: resolve(v, s.activeFocus) })),
-	setActiveRightTab: (v) => set((s) => ({ activeRightTab: resolve(v, s.activeRightTab) })),
+	setActiveRightTab: (v) =>
+		set((s) => {
+			const tab = resolve(v, s.activeRightTab);
+			if (useSettingsStore.getState().newShell && (tab === 'files' || tab === 'changes')) {
+				rememberNewShellPanel({ tab });
+				return s;
+			}
+			return { activeRightTab: tab };
+		}),
 
 	setZoomedPaneId: (id) => set({ zoomedPaneId: id }),
 	setPaneDrag: (drag) => set({ paneDrag: drag }),

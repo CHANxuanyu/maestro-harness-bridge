@@ -69,7 +69,7 @@ export async function handoff(
 				console.log(`${target.provider}${target.runnerId ? `\t${target.runnerId}` : ''}`);
 		} else if ('draft' in result) {
 			console.log(
-				`Agent: ${result.agentId}\nTab: ${result.tabId}\nState: ${result.state}\nEstimated tokens: ${result.draft?.estimatedTokens}\n\n${result.draft?.text}`
+				`Agent: ${result.agentId}\nTab: ${result.tabId}\nTitle: ${result.title ?? ''}\nState: ${result.state}\nEstimated tokens: ${result.draft?.estimatedTokens}\n\n${result.draft?.text}`
 			);
 		}
 	} catch (error) {

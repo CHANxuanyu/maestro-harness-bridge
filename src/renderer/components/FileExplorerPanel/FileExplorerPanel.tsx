@@ -2,6 +2,7 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from '
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
 	ChevronUp,
+	MoreHorizontal,
 	ChevronDown,
 	Folder,
 	RefreshCw,
@@ -45,6 +46,7 @@ import { DeleteFileModal } from './components/DeleteFileModal';
 import { MultiDeleteModal } from './components/MultiDeleteModal';
 import { MoveConflictModal } from './components/MoveConflictModal';
 import { FileTreeRow } from './components/FileTreeRow';
+import { FilterInput } from '../ui/FilterInput';
 import { EscCloseButton } from '../ui/EscCloseButton';
 import { FileTreeContextMenu } from './components/FileTreeContextMenu';
 
@@ -98,6 +100,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 		fileTreeContainerRef,
 	} = props;
 
+	const newShell = useSettingsStore((s) => s.newShell);
 	const shortcuts = useSettingsStore((s) => s.shortcuts);
 	const rightPanelWidth = useSettingsStore((s) => s.rightPanelWidth);
 	const dotfilesToggleHidden = useSettingsStore((s) => s.dotfilesToggleHidden);
@@ -525,7 +528,8 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 
 	return (
 		<div
-			className="flex flex-col h-full relative"
+			data-new-shell-files={newShell || undefined}
+			className={`flex flex-col h-full relative ${newShell ? '[&_[data-file-explorer-icon-theme]]:!text-inherit' : ''}`}
 			onDragEnter={handleRootDragEnter}
 			onDragOver={handleRootDragOver}
 			onDragOverCapture={handleDragOverCapture}
@@ -543,7 +547,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 			}
 		>
 			{/* File Tree Filter */}
-			{fileTreeFilterOpen && (
+			{!newShell && fileTreeFilterOpen && (
 				<div className="mb-3 pt-4">
 					<div className="relative">
 						<input
@@ -566,214 +570,261 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 				</div>
 			)}
 
-			{/* Header with CWD */}
-			<div
-				className="sticky top-0 z-10 text-xs font-bold pt-4 pb-2 mb-2"
-				style={{ backgroundColor: theme.colors.bgSidebar }}
-			>
-				{/* Toolbar row */}
-				<div className="flex gap-1 mb-2">
-					{/* Find files */}
+			{newShell && (
+				<div className="flex items-center gap-2 py-3">
+					<FilterInput
+						theme={theme}
+						value={fileTreeFilter}
+						onChange={setFileTreeFilter}
+						ref={fileTreeFilterInputRef}
+						placeholder={t('workflows.filePanel.filter')}
+						width="100%"
+					/>
+					<details className="relative">
+						<summary
+							className="list-none cursor-pointer p-1"
+							aria-label={t('workflows.shell.fileOptions')}
+							title={t('workflows.shell.fileOptions')}
+						>
+							<MoreHorizontal className="w-4 h-4" />
+						</summary>
+						<div
+							className="absolute right-0 z-20 p-2 rounded border whitespace-nowrap"
+							style={{ background: theme.colors.bgSidebar, borderColor: theme.colors.border }}
+						>
+							<button
+								role="menuitemcheckbox"
+								aria-checked={showHiddenFiles}
+								onClick={() => setShowHiddenFiles(!showHiddenFiles)}
+							>
+								{t(
+									showHiddenFiles
+										? 'workflows.filePanel.hideDotfiles'
+										: 'workflows.filePanel.showDotfiles'
+								)}
+							</button>
+						</div>
+					</details>
 					<button
-						onClick={() => {
-							if (fileTreeFilterOpen) {
-								if (fileTreeFilter.length === 0) {
-									setFileTreeFilterOpen(false);
-								} else {
-									fileTreeFilterInputRef?.current?.focus();
-								}
-							} else {
-								setFileTreeFilterOpen(true);
-								setTimeout(() => fileTreeFilterInputRef?.current?.focus(), 0);
-							}
-						}}
-						className="fx-btn fx-primary flex-1 flex items-center justify-center gap-1 py-0.5 px-2 rounded text-xs font-medium transition-colors hover:bg-white/10"
-						style={{
-							color: fileTreeFilterOpen ? theme.colors.accent : theme.colors.accent,
-							border: `1px solid ${theme.colors.accent}40`,
-							backgroundColor: fileTreeFilterOpen
-								? `${theme.colors.accent}25`
-								: `${theme.colors.accent}15`,
-						}}
-						title={t('workflows.filePanel.findFiles', {
-							shortcut: formatShortcutKeys(shortcuts.filterFiles?.keys ?? ['Meta', 'f']),
-						})}
+						onClick={handleRefresh}
+						disabled={isRefreshing}
+						title={t('workflows.filePanel.refreshTree')}
 					>
-						{!compact && <Search className="w-3 h-3" />}
-						{!iconOnly && t('workflows.filePanel.find')}
+						<RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
 					</button>
-					{/* Open in file manager - local sessions only */}
-					{!sshRemoteId && (
+				</div>
+			)}
+			{/* Header with CWD */}
+			{!newShell && (
+				<div
+					className="sticky top-0 z-10 text-xs font-bold pt-4 pb-2 mb-2"
+					style={{ backgroundColor: theme.colors.bgSidebar }}
+				>
+					{/* Toolbar row */}
+					<div className="flex gap-1 mb-2">
+						{/* Find files */}
 						<button
-							onClick={() =>
-								window.maestro?.shell?.openPath(session.fullPath || session.projectRoot)
-							}
+							onClick={() => {
+								if (fileTreeFilterOpen) {
+									if (fileTreeFilter.length === 0) {
+										setFileTreeFilterOpen(false);
+									} else {
+										fileTreeFilterInputRef?.current?.focus();
+									}
+								} else {
+									setFileTreeFilterOpen(true);
+									setTimeout(() => fileTreeFilterInputRef?.current?.focus(), 0);
+								}
+							}}
+							className="fx-btn fx-primary flex-1 flex items-center justify-center gap-1 py-0.5 px-2 rounded text-xs font-medium transition-colors hover:bg-white/10"
+							style={{
+								color: fileTreeFilterOpen ? theme.colors.accent : theme.colors.accent,
+								border: `1px solid ${theme.colors.accent}40`,
+								backgroundColor: fileTreeFilterOpen
+									? `${theme.colors.accent}25`
+									: `${theme.colors.accent}15`,
+							}}
+							title={t('workflows.filePanel.findFiles', {
+								shortcut: formatShortcutKeys(shortcuts.filterFiles?.keys ?? ['Meta', 'f']),
+							})}
+						>
+							{!compact && <Search className="w-3 h-3" />}
+							{!iconOnly && t('workflows.filePanel.find')}
+						</button>
+						{/* Open in file manager - local sessions only */}
+						{!sshRemoteId && (
+							<button
+								onClick={() =>
+									window.maestro?.shell?.openPath(session.fullPath || session.projectRoot)
+								}
+								className="fx-btn flex-1 flex items-center justify-center gap-1 py-0.5 px-2 rounded text-xs font-medium transition-colors hover:bg-white/10"
+								style={{
+									color: theme.colors.accent,
+									border: `1px solid ${theme.colors.accent}40`,
+									backgroundColor: `${theme.colors.accent}15`,
+								}}
+								title={t('common.openInFileManager', { manager: managerName })}
+							>
+								{!compact && <FolderOpen className="w-3 h-3" />}
+								{!iconOnly && t('workflows.filePanel.open')}
+							</button>
+						)}
+						{/* Show/hide dotfiles */}
+						{!dotfilesToggleHidden && (
+							<button
+								onClick={() => setShowHiddenFiles(!showHiddenFiles)}
+								className="fx-btn flex-1 flex items-center justify-center gap-1 py-0.5 px-2 rounded text-xs font-medium transition-colors hover:bg-white/10"
+								style={{
+									color: theme.colors.accent,
+									border: `1px solid ${theme.colors.accent}40`,
+									backgroundColor: showHiddenFiles
+										? `${theme.colors.accent}25`
+										: `${theme.colors.accent}15`,
+								}}
+								title={
+									showHiddenFiles
+										? t('workflows.filePanel.hideDotfiles')
+										: t('workflows.filePanel.showDotfiles')
+								}
+							>
+								{!compact &&
+									(showHiddenFiles ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />)}
+								{!iconOnly && '.files'}
+							</button>
+						)}
+						{/* Refresh */}
+						<button
+							ref={refreshButtonRef}
+							onClick={handleRefresh}
+							onMouseEnter={handleRefreshMouseEnter}
+							onMouseLeave={handleRefreshMouseLeave}
 							className="fx-btn flex-1 flex items-center justify-center gap-1 py-0.5 px-2 rounded text-xs font-medium transition-colors hover:bg-white/10"
+							style={{
+								color: theme.colors.accent,
+								border: `1px solid ${theme.colors.accent}40`,
+								backgroundColor:
+									autoRefreshInterval > 0 ? `${theme.colors.accent}25` : `${theme.colors.accent}15`,
+							}}
+							title={
+								autoRefreshInterval > 0
+									? t('workflows.filePanel.autoRefreshEvery', { seconds: autoRefreshInterval })
+									: t('workflows.filePanel.refreshTree')
+							}
+						>
+							{!compact && (
+								<RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+							)}
+							{!iconOnly && t('workflows.filePanel.refresh')}
+						</button>
+						{/* Expand all */}
+						<button
+							onClick={() => expandAllFolders(session.id, session, setSessions)}
+							className="flex items-center justify-center py-0.5 px-0.5 rounded text-xs font-medium transition-colors hover:bg-white/10"
 							style={{
 								color: theme.colors.accent,
 								border: `1px solid ${theme.colors.accent}40`,
 								backgroundColor: `${theme.colors.accent}15`,
 							}}
-							title={t('common.openInFileManager', { manager: managerName })}
+							title={t('workflows.filePanel.expandAll')}
 						>
-							{!compact && <FolderOpen className="w-3 h-3" />}
-							{!iconOnly && t('workflows.filePanel.open')}
+							<div className="flex flex-col items-center -space-y-1.5">
+								<ChevronUp className="w-3 h-3" />
+								<ChevronDown className="w-3 h-3" />
+							</div>
 						</button>
-					)}
-					{/* Show/hide dotfiles */}
-					{!dotfilesToggleHidden && (
+						{/* Collapse all */}
 						<button
-							onClick={() => setShowHiddenFiles(!showHiddenFiles)}
-							className="fx-btn flex-1 flex items-center justify-center gap-1 py-0.5 px-2 rounded text-xs font-medium transition-colors hover:bg-white/10"
+							onClick={() => collapseAllFolders(session.id, setSessions)}
+							className="flex items-center justify-center py-0.5 px-0.5 rounded text-xs font-medium transition-colors hover:bg-white/10"
 							style={{
 								color: theme.colors.accent,
 								border: `1px solid ${theme.colors.accent}40`,
-								backgroundColor: showHiddenFiles
-									? `${theme.colors.accent}25`
-									: `${theme.colors.accent}15`,
+								backgroundColor: `${theme.colors.accent}15`,
 							}}
-							title={
-								showHiddenFiles
-									? t('workflows.filePanel.hideDotfiles')
-									: t('workflows.filePanel.showDotfiles')
-							}
+							title={t('workflows.filePanel.collapseAll')}
 						>
-							{!compact &&
-								(showHiddenFiles ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />)}
-							{!iconOnly && '.files'}
+							<div className="flex flex-col items-center -space-y-1.5">
+								<ChevronDown className="w-3 h-3" />
+								<ChevronUp className="w-3 h-3" />
+							</div>
 						</button>
-					)}
-					{/* Refresh */}
-					<button
-						ref={refreshButtonRef}
-						onClick={handleRefresh}
-						onMouseEnter={handleRefreshMouseEnter}
-						onMouseLeave={handleRefreshMouseLeave}
-						className="fx-btn flex-1 flex items-center justify-center gap-1 py-0.5 px-2 rounded text-xs font-medium transition-colors hover:bg-white/10"
-						style={{
-							color: theme.colors.accent,
-							border: `1px solid ${theme.colors.accent}40`,
-							backgroundColor:
-								autoRefreshInterval > 0 ? `${theme.colors.accent}25` : `${theme.colors.accent}15`,
-						}}
-						title={
-							autoRefreshInterval > 0
-								? t('workflows.filePanel.autoRefreshEvery', { seconds: autoRefreshInterval })
-								: t('workflows.filePanel.refreshTree')
-						}
-					>
-						{!compact && <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />}
-						{!iconOnly && t('workflows.filePanel.refresh')}
-					</button>
-					{/* Expand all */}
-					<button
-						onClick={() => expandAllFolders(session.id, session, setSessions)}
-						className="flex items-center justify-center py-0.5 px-0.5 rounded text-xs font-medium transition-colors hover:bg-white/10"
-						style={{
-							color: theme.colors.accent,
-							border: `1px solid ${theme.colors.accent}40`,
-							backgroundColor: `${theme.colors.accent}15`,
-						}}
-						title={t('workflows.filePanel.expandAll')}
-					>
-						<div className="flex flex-col items-center -space-y-1.5">
-							<ChevronUp className="w-3 h-3" />
-							<ChevronDown className="w-3 h-3" />
-						</div>
-					</button>
-					{/* Collapse all */}
-					<button
-						onClick={() => collapseAllFolders(session.id, setSessions)}
-						className="flex items-center justify-center py-0.5 px-0.5 rounded text-xs font-medium transition-colors hover:bg-white/10"
-						style={{
-							color: theme.colors.accent,
-							border: `1px solid ${theme.colors.accent}40`,
-							backgroundColor: `${theme.colors.accent}15`,
-						}}
-						title={t('workflows.filePanel.collapseAll')}
-					>
-						<div className="flex flex-col items-center -space-y-1.5">
-							<ChevronDown className="w-3 h-3" />
-							<ChevronUp className="w-3 h-3" />
-						</div>
-					</button>
-				</div>
-				{/* Path row - doubles as a drop target for the workspace root. The path
+					</div>
+					{/* Path row - doubles as a drop target for the workspace root. The path
 				    points at the root working directory, so dropping a tree item (or an
 				    OS file) here moves/imports it to the root, same as the bottom
 				    receptacle. Uses '' as the destination, mirroring handleFolderDrop. */}
-				<div
-					className="flex items-center gap-1.5 min-w-0 overflow-hidden justify-center rounded transition-colors"
-					onDragEnter={(e) => handleFolderDragEnter(e, '')}
-					onDragOver={(e) => handleFolderDragOver(e, '')}
-					onDragLeave={handleFolderDragLeave}
-					onDrop={(e) => handleFolderDrop(e, '')}
-					style={
-						dragOverFolder === '' && !isExternalDrag
-							? {
-									outline: `1px dashed ${theme.colors.accent}`,
-									outlineOffset: '-2px',
-									backgroundColor: `${theme.colors.accent}20`,
-								}
-							: undefined
-					}
-				>
-					{session.sshRemote && (
-						<span
-							className="flex-shrink-0"
-							title={`SSH: ${session.sshRemote.name} (${session.sshRemote.host})`}
-							style={{ color: theme.colors.accent }}
-						>
-							<Server className="w-3.5 h-3.5" />
-						</span>
-					)}
-					{showTruncationWarning && truncationCollapsed && (
-						<button
-							type="button"
-							className="flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
-							style={{ color: theme.colors.warning }}
-							onClick={() => setTruncationCollapsedFor(null)}
-							aria-label={t('workflows.filePanel.scanWarning')}
-							title={t('workflows.filePanel.scanIncomplete')}
-						>
-							<AlertTriangle className="w-3.5 h-3.5" />
-						</button>
-					)}
-					<span
-						className="flex-shrink-0 cursor-pointer opacity-30 hover:opacity-70 transition-opacity"
-						style={{ color: theme.colors.accent }}
-						onClick={async () => {
-							if (await safeClipboardWrite(session.projectRoot)) {
-								flashCopiedToClipboard(session.projectRoot, t('workflows.filePanel.pathCopied'));
-							}
-						}}
-						title={t('workflows.filePanel.copyPath')}
-					>
-						<Copy className="w-3 h-3" />
-					</span>
-					<span
-						className="opacity-50 min-w-0 overflow-hidden whitespace-nowrap cursor-pointer"
-						style={{
-							direction: 'rtl',
-							textOverflow: 'ellipsis',
-							textAlign: 'center',
-						}}
-						title={
-							session.sshRemote
-								? `${session.sshRemote.host}:${session.projectRoot}`
-								: session.projectRoot
+					<div
+						className="flex items-center gap-1.5 min-w-0 overflow-hidden justify-center rounded transition-colors"
+						onDragEnter={(e) => handleFolderDragEnter(e, '')}
+						onDragOver={(e) => handleFolderDragOver(e, '')}
+						onDragLeave={handleFolderDragLeave}
+						onDrop={(e) => handleFolderDrop(e, '')}
+						style={
+							dragOverFolder === '' && !isExternalDrag
+								? {
+										outline: `1px dashed ${theme.colors.accent}`,
+										outlineOffset: '-2px',
+										backgroundColor: `${theme.colors.accent}20`,
+									}
+								: undefined
 						}
-						onDoubleClick={async () => {
-							if (await safeClipboardWrite(session.projectRoot)) {
-								flashCopiedToClipboard(session.projectRoot, t('workflows.filePanel.pathCopied'));
-							}
-						}}
 					>
-						<bdi>{session.projectRoot}</bdi>
-					</span>
+						{session.sshRemote && (
+							<span
+								className="flex-shrink-0"
+								title={`SSH: ${session.sshRemote.name} (${session.sshRemote.host})`}
+								style={{ color: theme.colors.accent }}
+							>
+								<Server className="w-3.5 h-3.5" />
+							</span>
+						)}
+						{showTruncationWarning && truncationCollapsed && (
+							<button
+								type="button"
+								className="flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
+								style={{ color: theme.colors.warning }}
+								onClick={() => setTruncationCollapsedFor(null)}
+								aria-label={t('workflows.filePanel.scanWarning')}
+								title={t('workflows.filePanel.scanIncomplete')}
+							>
+								<AlertTriangle className="w-3.5 h-3.5" />
+							</button>
+						)}
+						<span
+							className="flex-shrink-0 cursor-pointer opacity-30 hover:opacity-70 transition-opacity"
+							style={{ color: theme.colors.accent }}
+							onClick={async () => {
+								if (await safeClipboardWrite(session.projectRoot)) {
+									flashCopiedToClipboard(session.projectRoot, t('workflows.filePanel.pathCopied'));
+								}
+							}}
+							title={t('workflows.filePanel.copyPath')}
+						>
+							<Copy className="w-3 h-3" />
+						</span>
+						<span
+							className="opacity-50 min-w-0 overflow-hidden whitespace-nowrap cursor-pointer"
+							style={{
+								direction: 'rtl',
+								textOverflow: 'ellipsis',
+								textAlign: 'center',
+							}}
+							title={
+								session.sshRemote
+									? `${session.sshRemote.host}:${session.projectRoot}`
+									: session.projectRoot
+							}
+							onDoubleClick={async () => {
+								if (await safeClipboardWrite(session.projectRoot)) {
+									flashCopiedToClipboard(session.projectRoot, t('workflows.filePanel.pathCopied'));
+								}
+							}}
+						>
+							<bdi>{session.projectRoot}</bdi>
+						</span>
+					</div>
 				</div>
-			</div>
-
+			)}
 			{/* File tree content */}
 			{session.fileTreeError ? (
 				<div className="flex flex-col items-center justify-center gap-3 py-8">
@@ -901,9 +952,10 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 											selectedPaths={selectedPaths}
 											selectedPathsRef={selectedPathsRef}
 											setSelectedPaths={setSelectedPaths}
-											fileExplorerIconTheme={fileExplorerIconTheme}
+											fileExplorerIconTheme={newShell ? 'flat' : fileExplorerIconTheme}
 											fileTreeBranchConnectors={fileTreeBranchConnectors}
 											fileTreeFilter={fileTreeFilter}
+											newShell={newShell}
 											htmlDoubleClickOpensInBrowser={htmlDoubleClickOpensInBrowser}
 											sshRemoteId={sshRemoteId}
 											isTouchPointer={isTouchPointer}
@@ -1043,7 +1095,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 
 			{/* Status bar. `file-stats-container` enables the container query in index.css
 			    that swaps the label words for icons on narrow widths so the bar never wraps. */}
-			{session.fileTreeStats && (
+			{!newShell && session.fileTreeStats && (
 				<div
 					className="file-stats-container flex-shrink-0 flex items-center justify-center gap-3 px-3 py-1.5 text-xs rounded mt-3 mb-[7px] whitespace-nowrap"
 					style={{

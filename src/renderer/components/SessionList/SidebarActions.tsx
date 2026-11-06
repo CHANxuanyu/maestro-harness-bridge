@@ -59,6 +59,8 @@ export const SidebarActions = memo(function SidebarActions({
 		? ` (${formatShortcutKeys(shortcuts.filterUnreadAgents.keys)})`
 		: '';
 
+	if (newShell && !leftSidebarOpen) return null;
+
 	return (
 		<div
 			className="p-2 border-t flex gap-2 items-center shrink-0"

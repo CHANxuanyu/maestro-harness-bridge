@@ -78,6 +78,7 @@ const createDeps = (
 beforeEach(() => {
 	vi.clearAllMocks();
 	mockHasOpenModal.mockReturnValue(false);
+	useSettingsStore.setState({ newShell: false });
 
 	// Reset stores to default
 	useSessionStore.setState({
@@ -719,7 +720,8 @@ describe('useFileExplorerEffects', () => {
 			expect(useFileExplorerStore.getState().selectedFileIndex).toBe(0);
 		});
 
-		it('Enter on file calls handleFileClick', async () => {
+		it.each([false, true])('Enter on file opens it, new shell %s', async (newShell) => {
+			useSettingsStore.setState({ newShell });
 			const useFileExplorerEffects = await loadHook();
 			useUIStore.setState({ activeFocus: 'right', activeRightTab: 'files' });
 
@@ -747,7 +749,7 @@ describe('useFileExplorerEffects', () => {
 				window.dispatchEvent(event);
 			});
 
-			expect(handleFileClick).toHaveBeenCalledWith(flatList[0], 'src/index.ts');
+			expect(handleFileClick).toHaveBeenCalledExactlyOnceWith(flatList[0], 'src/index.ts');
 		});
 
 		it('Enter typed into a contenteditable editor does not open the selected file', async () => {

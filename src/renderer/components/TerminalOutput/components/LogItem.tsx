@@ -27,6 +27,7 @@ import {
 	formatTurnDuration,
 } from '../../../../shared/duration';
 import { getAgentDisplayName } from '../../../../shared/agentMetadata';
+import { DEEPSEEK_PRESET } from '../../../../shared/agentPresets';
 import { MessageActions } from './MessageActions';
 import { MessageInfoPanel, MessageMetaLine, type MessageInfoField } from './MessageMeta';
 import { ToolStatusLabel } from './ToolBadge';
@@ -75,6 +76,7 @@ const sameSubagentLogs = (prev?: LogEntry[], next?: LogEntry[]): boolean => {
 export const LogItem = memo(
 	({
 		log,
+		handoffOrigin,
 		index,
 		isTerminal,
 		isAIMode,
@@ -316,6 +318,60 @@ export const LogItem = memo(
 			) : (
 				<div className="whitespace-pre-wrap text-sm break-words">{linkifyNode(text, theme)}</div>
 			);
+
+		if (newShell && isAIMode && isUserMessage && handoffOrigin) {
+			const title =
+				handoffOrigin.sourceTitle ||
+				(handoffOrigin.sourceProvider === 'deepseek'
+					? DEEPSEEK_PRESET.name
+					: getAgentDisplayName(handoffOrigin.sourceProvider));
+			return (
+				<div
+					ref={logItemRef}
+					data-log-id={log.id}
+					data-log-index={index}
+					data-feed-row={feedLayout ? 'user' : undefined}
+					className={`${rowPadX} py-2`}
+				>
+					<div
+						className="rounded-lg border overflow-hidden"
+						style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgActivity }}
+					>
+						<button
+							type="button"
+							onClick={handleExpandToggle}
+							aria-expanded={isExpanded}
+							aria-controls={`${infoId}-handoff`}
+							className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left"
+							style={{ color: theme.colors.textMain }}
+						>
+							{isExpanded ? (
+								<ChevronDown className="w-4 h-4 shrink-0" aria-hidden="true" />
+							) : (
+								<ChevronRight className="w-4 h-4 shrink-0" aria-hidden="true" />
+							)}
+							<span className="truncate">
+								{t(
+									handoffOrigin.kind === 'review'
+										? 'workflows.handoff.reviewMessage'
+										: 'workflows.handoff.continuedMessage',
+									{ title }
+								)}
+							</span>
+						</button>
+						{isExpanded && (
+							<pre
+								id={`${infoId}-handoff`}
+								className="px-3 pb-3 whitespace-pre-wrap break-words text-sm"
+								style={{ color: theme.colors.textMain, fontFamily }}
+							>
+								{log.text}
+							</pre>
+						)}
+					</div>
+				</div>
+			);
+		}
 
 		// A slash command expands to a long authored prompt the user already knows,
 		// so its body starts COLLAPSED to the first line and the header pill toggles
@@ -1753,6 +1809,7 @@ export const LogItem = memo(
 			// An entry upgraded in place from an older cached conversion keeps its
 			// id and often its text, but changes what it draws as.
 			prevProps.log.source === nextProps.log.source &&
+			prevProps.handoffOrigin === nextProps.handoffOrigin &&
 			prevProps.log.nativeTranscript?.channel === nextProps.log.nativeTranscript?.channel &&
 			prevProps.log.metadata?.toolState === nextProps.log.metadata?.toolState &&
 			prevProps.log.delivered === nextProps.log.delivered &&

@@ -42,6 +42,41 @@ afterEach(() => {
 });
 
 describe('HamburgerMenuContent on a phone', () => {
+	it('uses a matching icon and description row for Open project and hides New Agent in the new shell', () => {
+		useSettingsStore.setState({ newShell: true });
+		renderMenu();
+		expect(screen.queryByText('New Agent')).not.toBeInTheDocument();
+		const open = screen.getByRole('button', { name: /Open project/ });
+		expect(open.querySelector('svg')).toBeInTheDocument();
+		expect(open).toHaveTextContent('Choose a folder to start or continue work');
+		expect(open.className).toBe(screen.getByRole('button', { name: /Command Palette/ }).className);
+	});
+	it.each([false, true])(
+		'hides upstream entries without rewriting flags, new shell %s',
+		(newShell) => {
+			const encoreFeatures = {
+				...useSettingsStore.getState().encoreFeatures,
+				usageStats: true,
+				directorNotes: true,
+				symphony: true,
+				maestroCue: true,
+			};
+			useSettingsStore.setState({ newShell, encoreFeatures });
+			renderMenu();
+			for (const name of [
+				'Usage Dashboard',
+				'Maestro Symphony',
+				'Maestro Cue',
+				'New Agent Wizard',
+				'Introductory Tour',
+			]) {
+				// Menu copy remains the classic labels whenever that shell is selected.
+				expect(!!screen.queryByText(name)).toBe(!newShell);
+			}
+			expect(useSettingsStore.getState().encoreFeatures).toEqual(encoreFeatures);
+		}
+	);
+
 	it.each([false, true])('offers Open Project only in newShell=%s', (newShell) => {
 		useSettingsStore.setState({ newShell });
 		const close = vi.fn();

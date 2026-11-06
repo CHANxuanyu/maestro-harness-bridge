@@ -72,6 +72,11 @@ describe('ToolbarControls', () => {
 				expect(!!screen.queryByTitle(title)).toBe(!newShell);
 			expect(screen.getByTitle('Attach Image')).toBeInTheDocument();
 			expect(screen.getByTitle(/^Full Access/)).toBeInTheDocument();
+			expect(
+				screen
+					.getByTitle(/^Full Access/)
+					.querySelector(newShell ? '[data-testid="shield-icon"]' : '[data-testid="eye-icon"]')
+			).not.toBeNull();
 			expect(setEnterToSend).not.toHaveBeenCalled();
 			expect(mockUpdateSessionWith).not.toHaveBeenCalled();
 		}

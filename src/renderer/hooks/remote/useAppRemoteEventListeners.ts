@@ -1,3 +1,13 @@
+import { saveFilePreview } from '../mainPanel/useFilePreviewHandlers';
+import { isImageFile } from '../../../shared/gitUtils';
+import { isParquetPreviewMarker } from '../../../shared/parquet/preview';
+import { isBinaryContent, isBinaryExtension } from '../../components/FilePreview/filePreviewUtils';
+import {
+	patchNewShellPanel,
+	changeNewShellPanel,
+	NEW_SHELL_PANEL_ACTIONS,
+	type NewShellPanelAction,
+} from '../../../shared/newShellPanel';
 /**
  * useAppRemoteEventListeners.ts
  *
@@ -32,7 +42,15 @@ import {
 	getTerminalTabDisplayName,
 	getTerminalSessionId,
 } from '../../utils/terminalTabHelpers';
-import type { Session, AITab, ToolType, Group, BatchRunConfig, BrowserTab } from '../../types';
+import type {
+	Session,
+	FilePreviewTab,
+	AITab,
+	ToolType,
+	Group,
+	BatchRunConfig,
+	BrowserTab,
+} from '../../types';
 import { logger } from '../../utils/logger';
 import { FILE_TREE_REFRESH_EVENT } from '../../utils/fileTreeRefresh';
 import {
@@ -1862,12 +1880,19 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			// land straight in the persisted tab, so a bad value (a string in
 			// `readOnlyMode`, a typo'd thinking mode) would be a permanently wrong
 			// chip rather than a rejected command.
-			const TAB_EDITABLE_KEYS: Record<string, 'boolean' | 'string' | 'thinking' | 'permission'> = {
+			const TAB_EDITABLE_KEYS: Record<
+				string,
+				'boolean' | 'string' | 'thinking' | 'permission' | 'panel' | 'line'
+			> = {
 				starred: 'boolean',
 				hasUnread: 'boolean',
 				saveToHistory: 'boolean',
 				readOnlyMode: 'boolean',
 				permissionMode: 'permission',
+				newShellPanelAction: 'panel',
+				newShellPanelFilter: 'string',
+				newShellFileContent: 'string',
+				newShellFileLine: 'line',
 				enterToSend: 'boolean',
 				showThinking: 'thinking',
 				customModel: 'string',
@@ -1881,18 +1906,22 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 				// `null` clears the field, which is how a tab drops an override and
 				// goes back to inheriting the agent's model/effort or the global
 				// enter-to-send setting. Distinct from `false`.
-				if (value === null && kind !== 'permission') {
+				if (value === null && kind !== 'permission' && kind !== 'panel' && kind !== 'line') {
 					tabPatch[key] = undefined;
 					continue;
 				}
 				const valid =
-					kind === 'boolean'
-						? typeof value === 'boolean'
-						: kind === 'string'
-							? typeof value === 'string'
-							: kind === 'permission'
-								? value === 'full' || value === 'standard' || value === 'readonly'
-								: asThinkingMode(value) !== undefined;
+					kind === 'line'
+						? typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+						: kind === 'panel'
+							? NEW_SHELL_PANEL_ACTIONS.includes(value as NewShellPanelAction)
+							: kind === 'boolean'
+								? typeof value === 'boolean'
+								: kind === 'string'
+									? typeof value === 'string'
+									: kind === 'permission'
+										? value === 'full' || value === 'standard' || value === 'readonly'
+										: asThinkingMode(value) !== undefined;
 				if (!valid) {
 					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
 						success: false,
@@ -1939,9 +1968,115 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 				}
 			}
 
+			const panelFileId = session.aiTabs.find((tab) => tab.id === targetTabId)?.newShellPanel
+				?.fileTabId;
+			let filePatch: Partial<FilePreviewTab> | undefined;
+			if (
+				['edit', 'preview', 'save'].includes(String(tabPatch.newShellPanelAction)) ||
+				tabPatch.newShellFileContent !== undefined ||
+				tabPatch.newShellFileLine !== undefined
+			) {
+				const file = session.filePreviewTabs?.find((tab) => tab.id === panelFileId);
+				if (!file) {
+					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+						success: false,
+						error: 'Open a file in this conversation first',
+					});
+					return;
+				}
+				const textEdit =
+					tabPatch.newShellFileContent !== undefined ||
+					['edit', 'save'].includes(String(tabPatch.newShellPanelAction));
+				if (
+					textEdit &&
+					(isImageFile(file.path) ||
+						isBinaryExtension(file.path) ||
+						isBinaryContent(file.content) ||
+						isParquetPreviewMarker(file.content))
+				) {
+					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+						success: false,
+						error: 'The remembered file is not editable text',
+					});
+					return;
+				}
+				filePatch = {
+					...(tabPatch.newShellPanelAction === 'edit'
+						? { editMode: true }
+						: tabPatch.newShellPanelAction === 'preview'
+							? { editMode: false }
+							: {}),
+					...(tabPatch.newShellFileContent !== undefined
+						? { editContent: tabPatch.newShellFileContent as string }
+						: {}),
+					...(tabPatch.newShellFileLine !== undefined
+						? { pendingScrollToLine: tabPatch.newShellFileLine as number }
+						: {}),
+				};
+				if (tabPatch.newShellPanelAction === 'save') {
+					try {
+						const saved = await saveFilePreview({
+							path: file.path,
+							content: filePatch.editContent ?? file.editContent ?? file.content,
+							activeSession: session,
+							activeFileTabId: file.id,
+							filePreviewSshRemoteId:
+								session.sshRemoteId ||
+								(session.sessionSshRemoteConfig?.enabled
+									? session.sessionSshRemoteConfig.remoteId
+									: undefined) ||
+								undefined,
+							onFileTabEditContentChange: (_id, editContent, content, lastModified) => {
+								filePatch = { ...filePatch, editContent, content, lastModified };
+							},
+						});
+						if (!saved) throw new Error('File save was cancelled');
+					} catch (error) {
+						window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+							success: false,
+							error: error instanceof Error ? error.message : String(error),
+						});
+						return;
+					}
+				}
+			}
+
 			const applyTabPatch = (s: Session): Session => ({
 				...s,
-				aiTabs: s.aiTabs.map((t) => (t.id === targetTabId ? { ...t, ...tabPatch } : t)),
+				...(filePatch
+					? {
+							filePreviewTabs: s.filePreviewTabs.map((file) =>
+								file.id === panelFileId ? { ...file, ...filePatch } : file
+							),
+						}
+					: {}),
+				aiTabs: s.aiTabs.map((t) => {
+					if (t.id !== targetTabId) return t;
+					const {
+						newShellPanelAction,
+						newShellPanelFilter,
+						newShellFileContent: _content,
+						newShellFileLine: _line,
+						...fields
+					} = tabPatch;
+					const panel = newShellPanelAction
+						? changeNewShellPanel(t.newShellPanel, newShellPanelAction as NewShellPanelAction)
+						: t.newShellPanel;
+					return {
+						...t,
+						...fields,
+						...(newShellPanelAction || newShellPanelFilter !== undefined
+							? {
+									newShellPanel: patchNewShellPanel(
+										panel,
+										newShellPanelFilter !== undefined
+											? { filter: newShellPanelFilter as string }
+											: {}
+									),
+								}
+							: {}),
+					};
+				}),
 			});
 
 			setSessions((prev: Session[]) =>
@@ -1949,9 +2084,17 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			);
 
 			try {
-				await window.maestro.sessions.setMany([applyTabPatch(session) as any], []);
+				const current =
+					useSessionStore.getState().sessions?.find((s) => s.id === sessionId) ?? session;
+				if ((await window.maestro.sessions.setMany([applyTabPatch(current) as any], [])) === false)
+					throw new Error('The tab config could not be saved');
 			} catch (persistErr) {
 				logger.error('[Remote] Failed to persist tab config:', undefined, persistErr);
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: false,
+					error: 'The tab config could not be saved',
+				});
+				return;
 			}
 
 			window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {

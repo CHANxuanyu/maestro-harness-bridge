@@ -21,6 +21,102 @@ interface UseFilePreviewHandlersParams {
 	onReloadFileTab?: (tabId: string) => void;
 }
 
+/** Shared by FilePreview and the CLI panel-save action. */
+export async function saveFilePreview({
+	path,
+	content,
+	activeSession,
+	activeFileTabId,
+	filePreviewSshRemoteId,
+	onFileTabEditContentChange,
+}: Pick<
+	UseFilePreviewHandlersParams,
+	'activeSession' | 'activeFileTabId' | 'onFileTabEditContentChange'
+> & {
+	path: string;
+	content: string;
+	filePreviewSshRemoteId?: string;
+}): Promise<boolean> {
+	let savePath = path;
+
+	// Untitled file - prompt for save location
+	if (!path) {
+		const chosen = await window.maestro.dialog.saveFile({
+			title: 'Save File',
+			defaultPath: activeSession?.fullPath ? `${activeSession.fullPath}/Untitled` : undefined,
+		});
+		if (!chosen) return false; // User cancelled
+		savePath = chosen;
+	} else {
+		// Existing file: the cached path may be stale if the file was moved,
+		// renamed, or deleted on disk since it was opened. A blind writeFile
+		// would silently recreate a ghost at the old location. Stat first; if
+		// it's gone, prompt for a destination instead of resurrecting it.
+		let stillExists = true;
+		try {
+			// stat returns null for a missing path (ENOENT) and throws only on
+			// genuine errors; treat both as "gone" so we never resurrect a ghost.
+			const st = await window.maestro.fs.stat(path, filePreviewSshRemoteId);
+			if (!st) stillExists = false;
+		} catch {
+			stillExists = false;
+		}
+		if (!stillExists) {
+			const chosen = await window.maestro.dialog.saveFile({
+				title: 'File moved or deleted on disk - choose where to save',
+				defaultPath: path,
+			});
+			if (!chosen) return false; // User cancelled
+			savePath = chosen;
+		}
+	}
+
+	await window.maestro.fs.writeFile(savePath, content, filePreviewSshRemoteId);
+
+	// Stamp the tab with the mtime our own write just produced. The tab's
+	// lastModified is what the change poller compares the disk against, so a
+	// tab left holding its pre-save timestamp reports "File changed on disk"
+	// for a change it made itself - every time FilePreview remounts.
+	let savedMtime = Date.now();
+	try {
+		const st = await window.maestro.fs.stat(savePath, filePreviewSshRemoteId);
+		if (st?.modifiedAt) savedMtime = new Date(st.modifiedAt).getTime();
+	} catch {
+		// Non-critical: the wall clock is never earlier than the write, so the
+		// worst case is that a later external edit goes unnoticed for a moment.
+	}
+
+	if (activeFileTabId) {
+		// Path changed (untitled save, or redirect after a move/delete): refresh
+		// the tab's metadata so it now tracks the real on-disk location.
+		if (savePath !== path) {
+			const fileName = savePath.split('/').pop() || 'Untitled';
+			const ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
+			const nameWithoutExt = ext ? fileName.slice(0, -ext.length) : fileName;
+			const sessionId = activeSession?.id;
+			if (sessionId) {
+				updateFileTab(sessionId, activeFileTabId, (tab) => ({
+					...tab,
+					path: savePath,
+					name: nameWithoutExt,
+					extension: ext,
+					content,
+					editContent: undefined,
+					lastModified: savedMtime,
+				}));
+			}
+
+			// A file just landed at a new on-disk location (untitled save, or
+			// redirect after a move/delete). The Files panel won't show it until
+			// its next refresh, so nudge the tree to pick it up now.
+			requestFileTreeRefresh(sessionId);
+		} else {
+			onFileTabEditContentChange?.(activeFileTabId, undefined, content, savedMtime);
+		}
+	}
+	return true;
+}
+
 /**
  * Memoized file preview callbacks and derived values.
  *
@@ -81,84 +177,14 @@ export function useFilePreviewHandlers({
 
 	const handleFilePreviewSave = useCallback(
 		async (path: string, content: string): Promise<boolean> => {
-			let savePath = path;
-
-			// Untitled file - prompt for save location
-			if (!path) {
-				const chosen = await window.maestro.dialog.saveFile({
-					title: 'Save File',
-					defaultPath: activeSession?.fullPath ? `${activeSession.fullPath}/Untitled` : undefined,
-				});
-				if (!chosen) return false; // User cancelled
-				savePath = chosen;
-			} else {
-				// Existing file: the cached path may be stale if the file was moved,
-				// renamed, or deleted on disk since it was opened. A blind writeFile
-				// would silently recreate a ghost at the old location. Stat first; if
-				// it's gone, prompt for a destination instead of resurrecting it.
-				let stillExists = true;
-				try {
-					// stat returns null for a missing path (ENOENT) and throws only on
-					// genuine errors; treat both as "gone" so we never resurrect a ghost.
-					const st = await window.maestro.fs.stat(path, filePreviewSshRemoteId);
-					if (!st) stillExists = false;
-				} catch {
-					stillExists = false;
-				}
-				if (!stillExists) {
-					const chosen = await window.maestro.dialog.saveFile({
-						title: 'File moved or deleted on disk - choose where to save',
-						defaultPath: path,
-					});
-					if (!chosen) return false; // User cancelled
-					savePath = chosen;
-				}
-			}
-
-			await window.maestro.fs.writeFile(savePath, content, filePreviewSshRemoteId);
-
-			// Stamp the tab with the mtime our own write just produced. The tab's
-			// lastModified is what the change poller compares the disk against, so a
-			// tab left holding its pre-save timestamp reports "File changed on disk"
-			// for a change it made itself - every time FilePreview remounts.
-			let savedMtime = Date.now();
-			try {
-				const st = await window.maestro.fs.stat(savePath, filePreviewSshRemoteId);
-				if (st?.modifiedAt) savedMtime = new Date(st.modifiedAt).getTime();
-			} catch {
-				// Non-critical: the wall clock is never earlier than the write, so the
-				// worst case is that a later external edit goes unnoticed for a moment.
-			}
-
-			if (activeFileTabId) {
-				// Path changed (untitled save, or redirect after a move/delete): refresh
-				// the tab's metadata so it now tracks the real on-disk location.
-				if (savePath !== path) {
-					const fileName = savePath.split('/').pop() || 'Untitled';
-					const ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
-					const nameWithoutExt = ext ? fileName.slice(0, -ext.length) : fileName;
-					const sessionId = activeSession?.id;
-					if (sessionId) {
-						updateFileTab(sessionId, activeFileTabId, (tab) => ({
-							...tab,
-							path: savePath,
-							name: nameWithoutExt,
-							extension: ext,
-							content,
-							editContent: undefined,
-							lastModified: savedMtime,
-						}));
-					}
-
-					// A file just landed at a new on-disk location (untitled save, or
-					// redirect after a move/delete). The Files panel won't show it until
-					// its next refresh, so nudge the tree to pick it up now.
-					requestFileTreeRefresh(sessionId);
-				} else {
-					onFileTabEditContentChange?.(activeFileTabId, undefined, content, savedMtime);
-				}
-			}
-			return true;
+			return saveFilePreview({
+				path,
+				content,
+				activeSession,
+				activeFileTabId,
+				filePreviewSshRemoteId,
+				onFileTabEditContentChange,
+			});
 		},
 		[
 			activeFileTabId,

@@ -11,11 +11,12 @@
  * closer ignores clicks inside `[data-hamburger-sheet]` for the same reason.
  */
 
-import React from 'react';
+import React, { useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { Theme } from '../../types';
 import { useT } from '../../i18n';
+import { useAnchoredMenuPosition } from '../../hooks';
 
 interface HamburgerDropdownProps {
 	theme: Theme;
@@ -23,6 +24,12 @@ interface HamburgerDropdownProps {
 	isPhone: boolean;
 	onClose: () => void;
 	dataTour?: string;
+	/**
+	 * Draw the desktop dropdown through a body portal, anchored to this element.
+	 * The new shell's button sits inside the scrolling Left Bar, which clips an
+	 * absolutely positioned menu at its own width.
+	 */
+	anchorRef?: RefObject<HTMLElement | null>;
 	children: React.ReactNode;
 }
 
@@ -31,9 +38,37 @@ export function HamburgerDropdown({
 	isPhone,
 	onClose,
 	dataTour,
+	anchorRef,
 	children,
 }: HamburgerDropdownProps) {
 	const t = useT();
+	const portalMenuRef = useRef<HTMLDivElement>(null);
+	const emptyAnchorRef = useRef<HTMLElement | null>(null);
+	const { left, top, maxHeight, ready } = useAnchoredMenuPosition(
+		portalMenuRef,
+		anchorRef ?? emptyAnchorRef
+	);
+	if (!isPhone && anchorRef) {
+		return createPortal(
+			<div
+				ref={portalMenuRef}
+				className="fixed w-[22rem] rounded-lg shadow-2xl z-[100] overflow-y-auto scrollbar-thin"
+				data-tour={dataTour}
+				data-hamburger-sheet
+				style={{
+					left,
+					top,
+					maxHeight,
+					opacity: ready ? 1 : 0,
+					backgroundColor: theme.colors.bgSidebar,
+					border: `1px solid ${theme.colors.border}`,
+				}}
+			>
+				{children}
+			</div>,
+			document.body
+		);
+	}
 	if (!isPhone) {
 		return (
 			<div

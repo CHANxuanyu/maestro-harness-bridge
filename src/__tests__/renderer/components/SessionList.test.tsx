@@ -578,6 +578,18 @@ describe('SessionList', () => {
 			}
 		);
 
+		it.each([false, true])(
+			'makes collapsed contents unfocusable only in the new shell %s',
+			(newShell) => {
+				useSettingsStore.setState({ newShell });
+				useUIStore.setState({ leftSidebarOpen: false });
+				const { container } = renderConversations();
+				const sidebar = container.querySelector('[data-panel="left"]')!;
+				expect(sidebar.hasAttribute('inert')).toBe(newShell);
+				expect(sidebar.getAttribute('tabindex')).toBe(newShell ? '-1' : '0');
+			}
+		);
+
 		it('renders the project tree with conversations, not the agent list', () => {
 			const { container } = renderConversations();
 
@@ -2144,6 +2156,23 @@ describe('SessionList', () => {
 			// Verify the max-height cap (scroll support) - a utility class since
 			// the HamburgerDropdown extraction.
 			expect(menuContainer).toHaveClass('max-h-[calc(100vh-120px)]');
+		});
+
+		it('portals the anchored desktop menu and ignores inside mousedown while closing outside', () => {
+			useUIStore.setState({ leftSidebarOpen: true });
+			useSettingsStore.setState({ newShell: true });
+			const { container } = render(<SessionList {...createDefaultProps({})} />);
+			fireEvent.click(screen.getByTitle('Menu'));
+			const menu = document.querySelector('[data-hamburger-sheet]') as HTMLElement;
+			expect(menu).toBeInTheDocument();
+			expect(menu.parentElement).toBe(document.body);
+			expect(container.contains(menu)).toBe(false);
+			expect(menu).toHaveClass('fixed');
+			fireEvent.mouseDown(screen.getByText('Keyboard Shortcuts'));
+			expect(menu).toBeInTheDocument();
+			fireEvent.mouseDown(document.body);
+			expect(menu).not.toBeInTheDocument();
+			useSettingsStore.setState({ newShell: false });
 		});
 
 		it('renders the hamburger menu as a full-screen sheet with a close button on phones', () => {

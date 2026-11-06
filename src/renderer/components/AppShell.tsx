@@ -1,3 +1,4 @@
+import { shellFeatureVisible } from '../../shared/newShellFeatures';
 import { ProjectStartView } from './ProjectStartView';
 import { chooseProject } from '../services/openProject';
 import { newShellSidebarInset } from '../utils/appTitleStrip';
@@ -306,11 +307,11 @@ export function AppShell({
 
 			{logViewer}
 
-			{groupChatView}
+			{shellFeatureVisible('groupChat', newShell) && groupChatView}
 
-			{hasSessions && !activeGroupChatId && !logViewerOpen && (
-				<MainPanel ref={mainPanelRef} {...mainPanelProps} />
-			)}
+			{hasSessions &&
+				(!shellFeatureVisible('groupChat', newShell) || !activeGroupChatId) &&
+				!logViewerOpen && <MainPanel ref={mainPanelRef} {...mainPanelProps} />}
 
 			<PluginPanelSlot
 				theme={theme}
@@ -318,17 +319,20 @@ export function AppShell({
 				className="flex flex-col flex-1 min-w-0 overflow-hidden"
 			/>
 
-			{!isMobileLandscape && hasSessions && !activeGroupChatId && !logViewerOpen && (
-				<ErrorBoundary>
-					<div
-						className="contents"
-						data-testid="right-drawer-swipe-host"
-						{...(isNarrowViewport ? drawerCloseSwipeHandlers : {})}
-					>
-						<RightPanel ref={rightPanelRef} {...rightPanelProps} />
-					</div>
-				</ErrorBoundary>
-			)}
+			{!isMobileLandscape &&
+				hasSessions &&
+				(!shellFeatureVisible('groupChat', newShell) || !activeGroupChatId) &&
+				!logViewerOpen && (
+					<ErrorBoundary>
+						<div
+							className="contents"
+							data-testid="right-drawer-swipe-host"
+							{...(isNarrowViewport ? drawerCloseSwipeHandlers : {})}
+						>
+							<RightPanel ref={rightPanelRef} {...rightPanelProps} />
+						</div>
+					</ErrorBoundary>
+				)}
 
 			<PluginPanelSlot theme={theme} placement="right" />
 

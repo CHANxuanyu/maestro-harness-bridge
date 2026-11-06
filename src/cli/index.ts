@@ -156,6 +156,7 @@ import {
 	tabThinking,
 	tabReadOnly,
 	tabPermission,
+	tabPanel,
 	tabModel,
 	tabEffort,
 	tabEnterToSend,
@@ -1567,12 +1568,29 @@ const tabTargetOptions = (cmd: Command): Command =>
 tab
 	.command('new')
 	.description('Open a new tab for an agent (optionally seeded with a prompt)')
+	.option(
+		'--provider <provider>',
+		'New shell: choose claude-code, codex or deepseek without sending'
+	)
+	.option(
+		'--replace-empty <tab-id>',
+		'Move an empty conversation and its draft to the chosen provider'
+	)
 	.requiredOption('-a, --agent <id>', 'Target agent ID')
 	.option('-p, --prompt <text>', 'Seed the new AI tab with this prompt')
 	.option('--background', 'Create the tab without moving the view (agent and tab stay put)')
 	.option('--focus', 'Switch to the new tab after creating it (default)')
 	.option('--json', 'Output as JSON (for scripting)')
 	.action((options) => tabNew(options));
+
+tabTargetOptions(tab.command('panel <tab-id> <action>'))
+	.description(
+		'New shell panel: changes, files, back, open, close, edit, preview or save; read with tab show'
+	)
+	.option('--filter <query>', 'Filter the conversation file tree; an empty string clears it')
+	.option('--content <text>', 'Set the remembered text file edit buffer before this action')
+	.option('--line <number>', 'Jump to a line in the remembered preview')
+	.action((tabId, action, options) => tabPanel(tabId, action, options));
 
 tabTargetOptions(tab.command('close <tab-id>'))
 	.description('Close a tab (owning agent is resolved automatically)')

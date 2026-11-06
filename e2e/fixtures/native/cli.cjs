@@ -105,6 +105,15 @@ async function run(provider) {
 		await delay(scene.toolDelay ?? 300);
 		turn.finishTool(tool, tool.status);
 	}
+	if (!stopped && persist && scene.writes) {
+		for (const [relative, content] of Object.entries(scene.writes)) {
+			const target = path.resolve(cwd, relative);
+			if (!target.startsWith(path.resolve(cwd) + path.sep))
+				throw new Error('Fixture write escapes project');
+			fs.mkdirSync(path.dirname(target), { recursive: true });
+			fs.writeFileSync(target, content);
+		}
+	}
 	if (!stopped) turn.finish(scene.answer);
 	if (provider === 'codex' && !stopped) await delay(1100);
 	// Hold the completed native writer before Maestro starts its exit synopsis.

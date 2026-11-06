@@ -2,6 +2,16 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.handoff.continuedTitle': '接手：{title}',
+	'workflows.handoff.reviewTitle': '复核：{title}',
+	'workflows.handoff.continuedMessage': '从「{title}」接手',
+	'workflows.handoff.reviewMessage': '复核「{title}」',
+	'workflows.projects.openHint': '选择文件夹，开始或继续项目工作',
+	'workflows.shell.newConversationFailed': '无法打开会话',
+	'workflows.shell.defaultModel': '默认模型',
+	'workflows.shell.defaultEffort': '默认强度',
+	'workflows.shell.backToFiles': '返回文件列表',
+	'workflows.shell.fileOptions': '文件选项',
 	'workflows.newShell.shortcut.prevTab': '上一个会话',
 	'workflows.newShell.shortcut.nextTab': '下一个会话',
 	'workflows.newShell.shortcut.toggleTabStar': '切换会话星标',

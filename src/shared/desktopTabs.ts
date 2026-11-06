@@ -14,6 +14,7 @@
  * global setting (enter-to-send) - it is NOT the same as `false`.
  */
 export interface DesktopTabEntry {
+	newShellPanel?: import('./newShellPanel').NewShellPanelState;
 	origin?: import('./aiHandoff').ConversationOrigin;
 	tabId: string;
 	sessionId: string;

@@ -150,6 +150,7 @@ export function registerSessionCallbacks(
 					saveToHistory: tab.saveToHistory === true,
 					readOnly: tab.readOnlyMode === true,
 					permissionMode: resolveTabPermissionMode(tab),
+					newShellPanel: tab.newShellPanel,
 					thinking: asThinkingMode(tab.showThinking) ?? 'off',
 					// `null` (not `false`) is the honest answer for the three
 					// inheriting fields: the tab has no override and follows the

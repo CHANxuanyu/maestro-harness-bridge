@@ -444,6 +444,7 @@ describe('SettingsModal', () => {
 		__resetLastOpenSettingsTabForTests();
 		useModalStore.getState().closeAll();
 		useSettingsStore.setState({
+			newShell: false,
 			encoreFeatures: {
 				directorNotes: false,
 				usageStats: true,
@@ -520,6 +521,25 @@ describe('SettingsModal', () => {
 	});
 
 	describe('tab navigation', () => {
+		it.each([false, true])(
+			'filters upstream settings tabs and search, new shell %s',
+			async (newShell) => {
+				useSettingsStore.setState({ newShell });
+				render(<SettingsModal {...createDefaultProps()} />);
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(50);
+				});
+				for (const title of ['Maestro Prompts', 'Plugins'])
+					expect(!!screen.queryByTitle(title)).toBe(!newShell);
+				const search = screen.getByPlaceholderText(/Search settings/);
+				fireEvent.change(search, { target: { value: 'inactivity' } });
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(50);
+				});
+				expect(!!screen.queryByText('Auto Run Inactivity Timeout')).toBe(!newShell);
+			}
+		);
+
 		it('should render all tab buttons', async () => {
 			render(<SettingsModal {...createDefaultProps()} />);
 

@@ -1,3 +1,4 @@
+import { createMockFileTab } from '../../../helpers/mockTab';
 /**
  * Covers the `update_session_config` allowlist in useAppRemoteEventListeners -
  * the single gate every CLI-driven per-agent edit passes through.
@@ -169,6 +170,93 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 		];
 		return session;
 	}
+
+	it.each([false, true])(
+		'sets a file buffer through its conversation without touching classic selection, new shell %s',
+		async (newShell) => {
+			const sessions = [twoTabSession()];
+			sessions[0].filePreviewTabs = [
+				createMockFileTab({ id: 'file', path: '/project/a.ts', content: 'before' }),
+			];
+			sessions[0].activeFileTabId = 'classic-file';
+			sessions[0].aiTabs[1].newShellPanel = { tab: 'files', fileTabId: 'file' };
+			const { useSettingsStore } = await import('../../../../renderer/stores/settingsStore');
+			vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell } as never);
+			const { setSessions } = setup(sessions);
+			dispatchPatch('session-1', {
+				tabId: 'tab-2',
+				newShellPanelAction: 'edit',
+				newShellFileContent: 'after',
+				newShellFileLine: 7,
+			});
+			await flush();
+			const updated = applyUpdate(setSessions, sessions)[0];
+			expect(updated.filePreviewTabs[0]).toMatchObject({
+				editMode: true,
+				editContent: 'after',
+				pendingScrollToLine: 7,
+			});
+			expect(updated.activeFileTabId).toBe('classic-file');
+			expect(setMany).toHaveBeenCalledWith([updated], []);
+			expect(ack).toHaveBeenCalledWith('ch', { success: true });
+		}
+	);
+
+	it('saves the file buffer through FilePreview and waits for its persisted result', async () => {
+		const sessions = [twoTabSession()];
+		sessions[0].filePreviewTabs = [
+			createMockFileTab({
+				id: 'file',
+				path: '/project/a.ts',
+				content: 'before',
+				editContent: 'after',
+			}),
+		];
+		sessions[0].aiTabs[1].newShellPanel = { tab: 'files', fileTabId: 'file' };
+		const writeFile = vi.fn().mockResolvedValue(true);
+		window.maestro.fs = {
+			stat: vi.fn().mockResolvedValue({ modifiedAt: new Date(1000).toISOString() }),
+			writeFile,
+		} as never;
+		setup(sessions);
+		dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'save' });
+		await flush();
+		expect(writeFile).toHaveBeenCalledWith('/project/a.ts', 'after', undefined);
+		expect(setMany.mock.calls[0][0][0].filePreviewTabs[0]).toMatchObject({
+			content: 'after',
+			editContent: undefined,
+			lastModified: 1000,
+		});
+		expect(ack).toHaveBeenCalledWith('ch', { success: true });
+	});
+
+	it('does not acknowledge a panel write when persistence fails', async () => {
+		setup([twoTabSession()]);
+		setMany.mockResolvedValueOnce(false);
+		dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'files' });
+		await flush();
+		expect(ack).toHaveBeenCalledWith('ch', {
+			success: false,
+			error: 'The tab config could not be saved',
+		});
+	});
+
+	it('persists the file-list back action without touching the classic file tab', async () => {
+		const sessions = [twoTabSession()];
+		sessions[0].activeFileTabId = 'classic-file';
+		sessions[0].aiTabs[1].newShellPanel = { tab: 'files', fileTabId: 'file', open: true };
+		const { setSessions } = setup(sessions);
+		dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'back' });
+		await flush();
+		const updated = applyUpdate(setSessions, sessions)[0];
+		expect(updated.aiTabs[1].newShellPanel).toEqual({
+			tab: 'files',
+			fileTabId: undefined,
+			open: true,
+		});
+		expect(updated.activeFileTabId).toBe('classic-file');
+		expect(setMany).toHaveBeenCalledWith([updated], []);
+	});
 
 	it.each(['full', 'standard', 'readonly'] as const)(
 		'sets %s with the same permission field patch as the composer',

@@ -12,6 +12,8 @@ export interface ConversationOrigin {
 	sourceSessionId: string;
 	sourceTabId: string;
 	sourceProvider: string;
+	/** Display title captured in the source window, retained after the source closes. */
+	sourceTitle?: string;
 	/** Source native ID, retained after its tab closes. */
 	sourceNativeSessionId?: string;
 	createdAt: number;
@@ -86,6 +88,7 @@ export interface HandoffReadRequest {
 }
 
 export interface HandoffSourceSnapshot {
+	sourceTitle?: string;
 	cwd: string;
 	sessionSshRemoteConfig?: AgentSshRemoteConfig;
 	sourceNativeSessionId?: string;
@@ -97,6 +100,7 @@ export interface HandoffSourceSnapshot {
 }
 
 export interface HandoffOpenRequest {
+	newConversation?: { replaceTabId?: string };
 	cwd: string;
 	sessionSshRemoteConfig?: AgentSshRemoteConfig;
 	mode: HandoffMode;
@@ -120,6 +124,7 @@ export interface HandoffResult {
 	/** Also returned on a failed save/send when a recoverable draft was created. */
 	agentId?: string;
 	tabId?: string;
+	title?: string;
 	createdAgent?: boolean;
 	state?: 'draft' | 'queued';
 	draft?: HandoffDraft;
@@ -134,7 +139,14 @@ export type HandoffReadResult =
 	| Pick<HandoffResult, 'success' | 'error' | 'code'>
 	| null;
 export type HandoffCommand =
-	| { action: 'targets'; sourceAgentId: string }
+	| { action: 'targets'; sourceAgentId: string; includeCurrent?: boolean; localOnly?: boolean }
+	| {
+			action: 'new-conversation';
+			sourceAgentId: string;
+			targetProvider: HandoffProvider;
+			replaceTabId?: string;
+			background?: boolean;
+	  }
 	| ({ action: 'prepare' } & HandoffRequest);
 export type HandoffCommandResult = HandoffResult | HandoffTargetsResult;
 export type HandoffCommandCallback = (request: HandoffCommand) => Promise<HandoffCommandResult>;

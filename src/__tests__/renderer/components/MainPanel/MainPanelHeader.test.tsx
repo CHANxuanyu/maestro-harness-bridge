@@ -212,6 +212,12 @@ it.each([false, true])(
 		const { container } = render(<MainPanelHeader {...defaultProps} />);
 		expect(container.firstElementChild).toHaveClass(newShell ? 'h-12' : 'h-16');
 		expect(!!screen.queryByRole('button', { name: 'Show agents sidebar' })).toBe(newShell);
+		if (newShell)
+			expect(
+				screen
+					.getByRole('button', { name: 'Show agents sidebar' })
+					.querySelector('[data-testid="panelleft-icon"]')
+			).not.toBeNull();
 	}
 );
 it.each(['darwin', 'linux', 'win32'])(

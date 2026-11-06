@@ -37,6 +37,15 @@ beforeEach(() => {
 });
 
 describe('SidebarActions', () => {
+	it.each([false, true])(
+		'removes collapsed footer focus targets only in new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const { container } = render(<SidebarActions {...createProps({ leftSidebarOpen: false })} />);
+			expect(container.querySelectorAll('button').length > 0).toBe(!newShell);
+		}
+	);
+
 	it('keeps only collapse, settings and notification center in the new shell', () => {
 		useSettingsStore.setState({ newShell: true });
 		useNotificationStore.setState({ history: [{ id: 'notice', read: false } as any] });

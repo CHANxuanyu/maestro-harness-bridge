@@ -1,3 +1,4 @@
+import { patchNewShellPanel } from '../../../../shared/newShellPanel';
 import { useCallback } from 'react';
 import {
 	selectActiveSession,
@@ -45,6 +46,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 		) => {
 			const openInNewTab = options?.openInNewTab ?? true;
 			const activate = options?.activate !== false;
+			const newShell = useSettingsStore.getState().newShell;
 			const activeSessionId =
 				options?.targetSessionId || useSessionStore.getState().activeSessionId;
 
@@ -57,7 +59,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 			// media file, which never becomes a tab at all. A background open
 			// (`activate: false`, the CLI / web `--background` path) changes nothing
 			// on screen by definition, so it must not move the drawer either.
-			if (activate) {
+			if (activate && !newShell) {
 				useUIStore.getState().closeRightPanelForNavigation();
 			}
 
@@ -94,7 +96,26 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 				}
 			}
 
+			if (newShell && activate && activeSessionId === useSessionStore.getState().activeSessionId)
+				useUIStore.getState().setRightPanelOpen(true);
 			updateSessionWith(activeSessionId, (s) => {
+				const focusFile = (id: string) =>
+					newShell
+						? {
+								aiTabs: s.aiTabs.map((tab) =>
+									tab.id === s.activeTabId
+										? {
+												...tab,
+												newShellPanel: patchNewShellPanel(tab.newShellPanel, {
+													tab: 'files',
+													fileTabId: id,
+													open: true,
+												}),
+											}
+										: tab
+								),
+							}
+						: fileTabFocusFields(id);
 				const existingTab = s.filePreviewTabs.find((tab) => tab.path === file.path);
 				if (existingTab) {
 					const updatedTabs = s.filePreviewTabs.map((tab) =>
@@ -121,7 +142,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 					// buildUnifiedTabs excludes group members from the standalone strip.
 					// Mirrors the group branch in setActiveTab for AI tabs.
 					const groupPane = findGroupPaneForTab(s, 'file', existingTab.id);
-					if (groupPane) {
+					if (groupPane && !newShell) {
 						return {
 							...s,
 							filePreviewTabs: updatedTabs,
@@ -141,7 +162,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 						filePreviewTabs: updatedTabs,
 						// A background re-open refreshes the tab's content in place and
 						// leaves the view alone; only an activating open brings it forward.
-						...(activate ? fileTabFocusFields(existingTab.id) : {}),
+						...(activate ? focusFile(existingTab.id) : {}),
 						activeTabId: s.activeTabId,
 						// Opening a standalone file takes over the panel, so leave any active
 						// tiled group.
@@ -150,7 +171,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 					};
 				}
 
-				if (!openInNewTab && s.activeFileTabId) {
+				if (!newShell && !openInNewTab && s.activeFileTabId) {
 					const currentTabId = s.activeFileTabId;
 					const currentTab = s.filePreviewTabs.find((tab) => tab.id === currentTabId);
 					const { extension, nameWithoutExtension } = getFileNameParts(file.name);
@@ -189,7 +210,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 						filePreviewTabs: updatedTabs,
 						// This branch rewrites the file tab that is ALREADY active, so
 						// activation only has to clear the surfaces that outrank it.
-						...(activate ? fileTabFocusFields(currentTabId) : {}),
+						...(activate ? focusFile(currentTabId) : {}),
 					};
 				}
 
@@ -222,7 +243,7 @@ export function useFilePreviewTabHandlers(): FilePreviewTabHandlersReturn {
 					...s,
 					filePreviewTabs: [...s.filePreviewTabs, newFileTab],
 					unifiedTabOrder: updatedUnifiedTabOrder,
-					...(activate ? fileTabFocusFields(newTabId) : {}),
+					...(activate ? focusFile(newTabId) : {}),
 				};
 			});
 		},

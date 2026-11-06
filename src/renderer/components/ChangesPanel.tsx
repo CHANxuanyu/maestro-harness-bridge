@@ -1,3 +1,4 @@
+import { joinPath } from '../../shared/formatters';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Diff, Hunk } from 'react-diff-view';
 import { ChevronDown, ChevronRight, RefreshCw, ShieldCheck } from 'lucide-react';
@@ -54,10 +55,16 @@ function splitPath(path: string): { dir: string; name: string } {
 interface ChangesPanelProps {
 	theme: Theme;
 	session: Session;
+	onFileClick?: (path: string) => void;
 }
 
-export const ChangesPanel = memo(function ChangesPanel({ theme, session }: ChangesPanelProps) {
+export const ChangesPanel = memo(function ChangesPanel({
+	theme,
+	session,
+	onFileClick,
+}: ChangesPanelProps) {
 	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const colorBlindMode = useSettingsStore((s) => s.colorBlindMode);
 	const cwd = resolveGitCwd(session);
 	const sshRemoteId = resolveGitSshRemoteId(session);
@@ -172,19 +179,38 @@ export const ChangesPanel = memo(function ChangesPanel({ theme, session }: Chang
 				{load.changes.files.map((file) => {
 					const { dir, name } = splitPath(file.path);
 					const state = open[file.path];
+					const Row = newShell ? 'div' : 'button';
+					const Name = newShell ? 'button' : 'span';
 					return (
 						<li key={file.path}>
-							<button
+							<Row
 								type="button"
-								onClick={() => void toggleFile(file)}
-								aria-expanded={!!state}
+								onClick={newShell ? undefined : () => void toggleFile(file)}
+								aria-expanded={newShell ? undefined : !!state}
 								className="w-full flex items-center gap-2 px-1 py-1 rounded text-left text-xs hover:bg-white/5"
 								title={file.oldPath ? `${file.oldPath} -> ${file.path}` : file.path}
 							>
-								{state ? (
-									<ChevronDown className="w-3 h-3 shrink-0" style={dim} />
+								{newShell ? (
+									<button
+										type="button"
+										aria-label={`Diff ${file.path}`}
+										aria-expanded={!!state}
+										onClick={() => void toggleFile(file)}
+									>
+										{state ? (
+											<ChevronDown className="w-3 h-3 shrink-0" style={dim} />
+										) : (
+											<ChevronRight className="w-3 h-3 shrink-0" style={dim} />
+										)}
+									</button>
 								) : (
-									<ChevronRight className="w-3 h-3 shrink-0" style={dim} />
+									<>
+										{state ? (
+											<ChevronDown className="w-3 h-3 shrink-0" style={dim} />
+										) : (
+											<ChevronRight className="w-3 h-3 shrink-0" style={dim} />
+										)}
+									</>
 								)}
 								<span
 									className="font-mono w-3 shrink-0 text-center"
@@ -193,10 +219,17 @@ export const ChangesPanel = memo(function ChangesPanel({ theme, session }: Chang
 								>
 									{STATUS_LETTER[file.status]}
 								</span>
-								<span className="min-w-0 flex-1 truncate">
+								<Name
+									className="min-w-0 flex-1 truncate text-left"
+									onClick={
+										newShell
+											? () => onFileClick?.(joinPath(load.changes.root, file.path))
+											: undefined
+									}
+								>
 									<span style={dim}>{dir}</span>
 									<span style={{ color: theme.colors.textMain }}>{name}</span>
-								</span>
+								</Name>
 								{file.additions === null ? (
 									<span className="shrink-0 font-mono" style={dim}>
 										{t('workflows.changes.noCounts')}
@@ -207,7 +240,7 @@ export const ChangesPanel = memo(function ChangesPanel({ theme, session }: Chang
 										<span style={{ color: delColor }}>-{file.deletions}</span>
 									</span>
 								)}
-							</button>
+							</Row>
 							{state && (
 								<div className="ml-5 mb-2 font-mono text-xs overflow-x-auto">
 									{state.kind === 'loading' && <p style={dim}>{t('workflows.changes.loading')}</p>}

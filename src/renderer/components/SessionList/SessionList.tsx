@@ -1372,8 +1372,9 @@ function SessionListInner(props: SessionListProps) {
 	return (
 		<div
 			ref={sidebarContainerRef}
-			tabIndex={0}
+			tabIndex={newShell && !leftSidebarOpen ? -1 : 0}
 			data-panel="left"
+			{...(newShell && !leftSidebarOpen ? { inert: '' } : {})}
 			data-collapsed={leftSidebarOpen ? 'false' : 'true'}
 			data-hidden={leftSidebarHidden ? 'true' : 'false'}
 			className={`chrome-sheen border-r flex flex-col shrink-0 ${sidebarTransitionClass} outline-none relative z-20 maestro-side-panel maestro-side-panel--left`}
@@ -1714,6 +1715,7 @@ function SessionListInner(props: SessionListProps) {
 												<HamburgerDropdown
 													theme={theme}
 													isPhone={isXs}
+													anchorRef={menuRef}
 													onClose={() => setMenuOpen(false)}
 													dataTour="hamburger-menu-contents"
 												>

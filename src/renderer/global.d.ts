@@ -432,6 +432,7 @@ interface MaestroAPI {
 				}>;
 			}) => void
 		) => () => void;
+		onPermissionResolved: (callback: (requestId: string) => void) => () => void;
 		respondPermission: (
 			requestId: string,
 			decision:

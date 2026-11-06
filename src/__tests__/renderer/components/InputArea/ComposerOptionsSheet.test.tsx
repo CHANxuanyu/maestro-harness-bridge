@@ -5,7 +5,8 @@
  * tap-to-cycle is a poor control for a three-state setting on a touchscreen.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ComposerOptionsSheet } from '../../../../renderer/components/InputArea/components/ComposerOptionsSheet';
 import { mockTheme } from '../../../helpers/mockTheme';
@@ -37,6 +38,20 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof ComposerOpti
 }
 
 describe('ComposerOptionsSheet', () => {
+	afterEach(() => useSettingsStore.setState({ newShell: false }));
+	it.each([false, true])('localizes only display values in newShell=%s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		const props = renderSheet({ currentModel: 'sonnet', availableModels: ['sonnet', 'opus'] });
+		expect(screen.getByTestId('composer-options-model')).toHaveTextContent(
+			newShell ? 'Sonnet' : 'sonnet'
+		);
+		expect(screen.getByTestId('composer-options-effort')).toHaveTextContent(
+			newShell ? 'High' : 'high'
+		);
+		fireEvent.click(screen.getByTestId('composer-options-model'));
+		fireEvent.click(screen.getByRole('button', { name: newShell ? 'Opus' : 'opus' }));
+		expect(props.onModelChange).toHaveBeenCalledWith('opus');
+	});
 	it('renders nothing while closed', () => {
 		renderSheet({ open: false });
 		expect(screen.queryByTestId('composer-options-sheet')).not.toBeInTheDocument();

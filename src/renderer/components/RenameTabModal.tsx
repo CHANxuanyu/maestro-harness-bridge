@@ -4,6 +4,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, MODAL_BUTTON_BASE_CLASS, MODAL_BUTTON_SECONDARY_CLASS } from './ui/Modal';
 import { FormInput } from './ui/FormInput';
 import { formatMetaKey } from '../utils/shortcutFormatter';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 import { useT } from '../i18n';
 
 interface RenameTabModalProps {
@@ -24,6 +25,7 @@ export const RenameTabModal = memo(function RenameTabModal(props: RenameTabModal
 	const { theme, initialName, agentSessionId, onClose, onRename, onAutoName, hasLogs, title } =
 		props;
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [value, setValue] = useState(initialName);
 
@@ -32,7 +34,7 @@ export const RenameTabModal = memo(function RenameTabModal(props: RenameTabModal
 		? t('workflows.renameTab.placeholderWithId', {
 				id: agentSessionId.split('-')[0].toUpperCase(),
 			})
-		: t('workflows.renameTab.placeholder');
+		: t(newShell ? 'workflows.newShell.renamePlaceholder' : 'workflows.renameTab.placeholder');
 
 	const handleRename = () => {
 		onRename(value.trim());
@@ -52,7 +54,7 @@ export const RenameTabModal = memo(function RenameTabModal(props: RenameTabModal
 	return (
 		<Modal
 			theme={theme}
-			title={title ?? t('workflows.renameTab.title')}
+			title={title ?? t(newShell ? 'workflows.newShell.renameTitle' : 'workflows.renameTab.title')}
 			priority={MODAL_PRIORITIES.RENAME_TAB}
 			onClose={onClose}
 			width={400}

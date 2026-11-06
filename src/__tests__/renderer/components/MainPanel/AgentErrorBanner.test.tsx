@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { AgentErrorBanner } from '../../../../renderer/components/MainPanel/AgentErrorBanner';
 import type { AgentError, Theme } from '../../../../renderer/types';
 
@@ -15,6 +16,13 @@ function makeError(overrides: Partial<AgentError> = {}): AgentError {
 }
 
 describe('AgentErrorBanner', () => {
+	beforeEach(() => useSettingsStore.setState({ newShell: false }));
+	it.each([false, true])('shows the banner only in the classic shell, new shell %s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		render(<AgentErrorBanner error={makeError()} theme={mockTheme} />);
+		expect(!!screen.queryByText('Something went wrong')).toBe(!newShell);
+	});
+
 	it('renders error message', () => {
 		render(<AgentErrorBanner error={makeError()} theme={mockTheme} />);
 		expect(screen.getByText('Something went wrong')).toBeInTheDocument();

@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { getT } from '../../../i18n';
 import type { RightPanelTab, Shortcut } from '../../../types';
 import type { QuickAction } from '../types';
@@ -32,6 +33,7 @@ export function buildSearchCommands({
 	searchAllTabsShortcut,
 }: BuildSearchCommandsArgs): QuickAction[] {
 	const t = getT();
+	const newShell = selectNewShellEnabled(useSettingsStore.getState());
 	return [
 		{
 			id: 'searchAgents',
@@ -50,7 +52,11 @@ export function buildSearchCommands({
 		},
 		{
 			id: 'searchMessages',
-			label: t('workflows.shell.searchMessagesThisTab'),
+			label: t(
+				newShell
+					? 'workflows.newShell.searchMessagesThisTab'
+					: 'workflows.shell.searchMessagesThisTab'
+			),
 			subtext: t('workflows.shell.searchMessagesInTheCurrentConversation'),
 			shortcut: FIXED_SHORTCUTS.searchOutput,
 			action: () => {
@@ -63,8 +69,16 @@ export function buildSearchCommands({
 			? [
 					{
 						id: 'searchAllTabs',
-						label: t('workflows.shell.searchMessagesAllAgentTabs'),
-						subtext: t('workflows.shell.searchEveryOpenTabInThisAgentAnd'),
+						label: t(
+							newShell
+								? 'workflows.newShell.searchMessagesAllAgentTabs'
+								: 'workflows.shell.searchMessagesAllAgentTabs'
+						),
+						subtext: t(
+							newShell
+								? 'workflows.newShell.searchEveryOpenTabInThisAgentAnd'
+								: 'workflows.shell.searchEveryOpenTabInThisAgentAnd'
+						),
 						shortcut: searchAllTabsShortcut,
 						action: () => {
 							setQuickActionOpen(false);

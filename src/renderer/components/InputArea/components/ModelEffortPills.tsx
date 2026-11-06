@@ -1,3 +1,5 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
+import { modelDisplayLabel, effortDisplayLabel } from '../../../utils/workflowLabels';
 import { useT } from '../../../i18n';
 import { memo, useState } from 'react';
 import type React from 'react';
@@ -10,6 +12,7 @@ const PICKER_CLASS =
 	'flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs whitespace-nowrap cursor-pointer transition-all opacity-80 hover:opacity-100 hover:bg-white/10';
 
 interface ModelEffortPillsProps {
+	allowModelSelection?: boolean;
 	isVisible: boolean;
 	theme: Theme;
 	/**
@@ -38,6 +41,7 @@ interface ModelEffortPillsProps {
 }
 
 export const ModelEffortPills = memo(function ModelEffortPills({
+	allowModelSelection = false,
 	isVisible,
 	theme,
 	shortcutKeys,
@@ -55,6 +59,7 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 	effortMenuRef,
 }: ModelEffortPillsProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const [typedModel, setTypedModel] = useState('');
 
 	if (!isVisible) {
@@ -63,7 +68,7 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 
 	return (
 		<>
-			{onModelChange && availableModels.length > 0 && (
+			{onModelChange && (allowModelSelection || availableModels.length > 0) && (
 				<div className="relative" ref={modelMenuRef} data-tour="model-selector">
 					<button
 						onClick={() => {
@@ -74,7 +79,10 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 						style={{ color: theme.colors.textDim }}
 						title={t('workflows.shell.changeModelvalue', { p0: shortcutSuffix(shortcutKeys) })}
 					>
-						<span>{currentModel || t('workflows.shell.default2')}</span>
+						<span>
+							{(newShell ? modelDisplayLabel(currentModel ?? '') : currentModel) ||
+								t(newShell ? 'workflows.shell.defaultModel' : 'workflows.shell.default2')}
+						</span>
 						<ChevronDown className="w-3 h-3 opacity-70" />
 					</button>
 					{modelMenuOpen && (
@@ -107,7 +115,8 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 													model === currentModel ? 'rgba(255,255,255,0.05)' : undefined,
 											}}
 										>
-											{model || t('workflows.shell.default')}
+											{(newShell ? modelDisplayLabel(model) : model) ||
+												t('workflows.shell.default')}
 										</button>
 									)
 								)}
@@ -179,7 +188,10 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 							p0: shortcutSuffix(shortcutKeys),
 						})}
 					>
-						<span>{currentEffort || t('workflows.shell.default2')}</span>
+						<span>
+							{(newShell ? effortDisplayLabel(t, currentEffort ?? '') : currentEffort) ||
+								t(newShell ? 'workflows.shell.defaultEffort' : 'workflows.shell.default2')}
+						</span>
 						<ChevronDown className="w-3 h-3 opacity-70" />
 					</button>
 					{effortMenuOpen && (
@@ -212,7 +224,8 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 												effort === currentEffort ? 'rgba(255,255,255,0.05)' : undefined,
 										}}
 									>
-										{effort || t('workflows.shell.default')}
+										{(newShell ? effortDisplayLabel(t, effort) : effort) ||
+											t('workflows.shell.default')}
 									</button>
 								))}
 							</div>

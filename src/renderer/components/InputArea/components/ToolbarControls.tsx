@@ -17,7 +17,7 @@ import {
 import type { Shortcut, Session, Theme, ThinkingMode } from '../../../types';
 import { formatEnterToSend, isMacOS } from '../../../utils/shortcutFormatter';
 import { resolveTabPermissionMode } from '../../../../shared/agentMetadata';
-import { useSettingsStore } from '../../../stores/settingsStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { shortcutSuffix } from '../../ui/ShortcutHint';
 import { updateSessionWith } from '../../../stores/sessionStore';
 import { captureException } from '../../../utils/sentry';
@@ -32,10 +32,13 @@ import {
 import { addStagedImageIfUnique } from '../utils/stagedImages';
 import { formatTerminalCwd } from '../utils/terminalPath';
 import { ComposerOptionsSheet } from './ComposerOptionsSheet';
+import { PermissionModeMenu } from './PermissionModeMenu';
 import { ModelEffortPills } from './ModelEffortPills';
 import { StopTurnButton } from '../../ui/StopTurnButton';
 
 interface ToolbarControlsProps {
+	contextUsage?: number;
+	hasModelSelectionCapability?: boolean;
 	session: Session;
 	theme: Theme;
 	isTerminalMode: boolean;
@@ -94,6 +97,8 @@ interface ToolbarControlsProps {
 }
 
 export const ToolbarControls = memo(function ToolbarControls({
+	contextUsage = 0,
+	hasModelSelectionCapability = false,
 	session,
 	theme,
 	isTerminalMode,
@@ -132,6 +137,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 	trailing,
 }: ToolbarControlsProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const isAiMode = session.inputMode === 'ai';
 	const { isNarrow: isNarrowViewport } = useViewportBreakpoint();
 	const phone = usePhoneLayout();
@@ -139,7 +145,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 	const [optionsSheetOpen, setOptionsSheetOpen] = useState(false);
 	// On a phone every toggle moves into the options sheet, so the inline group
 	// never renders there however the "..." was last left.
-	const showToggleGroup = !phone && (!isNarrowViewport || toolbarExpanded);
+	const showToggleGroup = !phone && (newShell || !isNarrowViewport || toolbarExpanded);
 
 	// Voice dictation is a primary touch affordance, so it stays in the always-
 	// visible left action group (next to attach-image) rather than the collapsing
@@ -147,7 +153,8 @@ export const ToolbarControls = memo(function ToolbarControls({
 	// targets would defeat the point. Shown only when the Web Speech API is
 	// supported AND the primary pointer is coarse (touch), so mouse/keyboard
 	// desktop users never see it.
-	const showVoiceButton = isAiMode && !!voiceSupported && !!onToggleVoiceInput && isCoarsePointer();
+	const showVoiceButton =
+		!newShell && isAiMode && !!voiceSupported && !!onToggleVoiceInput && isCoarsePointer();
 
 	const activeTab = session.aiTabs?.find((t) => t.id === session.activeTabId);
 	const rawPermissionMode: 'full' | 'standard' | 'readonly' = resolveTabPermissionMode(activeTab);
@@ -425,7 +432,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 						<ImageIcon className="w-4 h-4" />
 					</button>
 				)}
-				{isAiMode && onOpenPromptComposer && (
+				{!newShell && isAiMode && onOpenPromptComposer && (
 					<button
 						onClick={onOpenPromptComposer}
 						className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
@@ -465,7 +472,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 				)}
 				{imageFileInput}
 
-				{isNarrowViewport && (
+				{!newShell && isNarrowViewport && (
 					<button
 						type="button"
 						onClick={() => setToolbarExpanded((v) => !v)}
@@ -488,33 +495,43 @@ export const ToolbarControls = memo(function ToolbarControls({
 					className={`flex items-center gap-0.5 ${showToggleGroup ? '' : 'hidden'}`}
 					data-tour="toolbar-toggles"
 				>
-					{isAiMode && hasReadOnlyCapability && (
-						<button
-							onClick={() =>
-								handlePermissionModeChange(
-									nextPermissionMode(currentPermissionMode, hasStandardCapability)
-								)
-							}
-							className={`${ghost} ${currentPermissionMode === 'standard' ? 'opacity-60 hover:opacity-100' : ''}`}
-							style={{
-								color:
-									currentPermissionMode === 'readonly'
-										? theme.colors.warning
-										: currentPermissionMode === 'full'
-											? theme.colors.accent
-											: theme.colors.textDim,
-							}}
-							title={`${permissionModeTooltip(
-								t,
-								currentPermissionMode,
-								session.toolType
-							)}${shortcutSuffix(tabShortcuts.toggleReadOnlyMode?.keys)}`}
-						>
-							<Eye className="w-3.5 h-3.5" />
-							<span>{permissionModeLabel(t, currentPermissionMode, session.toolType)}</span>
-						</button>
-					)}
-					{isAiMode && supportsThinking && onToggleTabShowThinking && (
+					{isAiMode &&
+						hasReadOnlyCapability &&
+						(newShell ? (
+							<PermissionModeMenu
+								theme={theme}
+								agentId={session.toolType}
+								mode={currentPermissionMode}
+								hasStandardCapability={hasStandardCapability}
+								onChange={handlePermissionModeChange}
+							/>
+						) : (
+							<button
+								onClick={() =>
+									handlePermissionModeChange(
+										nextPermissionMode(currentPermissionMode, hasStandardCapability)
+									)
+								}
+								className={`${ghost} ${currentPermissionMode === 'standard' ? 'opacity-60 hover:opacity-100' : ''}`}
+								style={{
+									color:
+										currentPermissionMode === 'readonly'
+											? theme.colors.warning
+											: currentPermissionMode === 'full'
+												? theme.colors.accent
+												: theme.colors.textDim,
+								}}
+								title={`${permissionModeTooltip(
+									t,
+									currentPermissionMode,
+									session.toolType
+								)}${shortcutSuffix(tabShortcuts.toggleReadOnlyMode?.keys)}`}
+							>
+								<Eye className="w-3.5 h-3.5" />
+								<span>{permissionModeLabel(t, currentPermissionMode, session.toolType)}</span>
+							</button>
+						))}
+					{!newShell && isAiMode && supportsThinking && onToggleTabShowThinking && (
 						<button
 							onClick={onToggleTabShowThinking}
 							className={`${ghost} ${tabShowThinking !== 'off' ? '' : 'opacity-40 hover:opacity-100'}`}
@@ -540,7 +557,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 							{tabShowThinking === 'sticky' && <Pin className="w-2.5 h-2.5" />}
 						</button>
 					)}
-					{isAiMode && onToggleTabSaveToHistory && (
+					{!newShell && isAiMode && onToggleTabSaveToHistory && (
 						<button
 							onClick={onToggleTabSaveToHistory}
 							className={`${ghost} ${tabSaveToHistory ? '' : 'opacity-40 hover:opacity-100'}`}
@@ -554,23 +571,34 @@ export const ToolbarControls = memo(function ToolbarControls({
 							<History className="w-3.5 h-3.5" />
 						</button>
 					)}
-					<button
-						onClick={() => setEnterToSend(!enterToSend)}
-						className={`${ghost} opacity-40 hover:opacity-100`}
-						style={{ color: theme.colors.textDim }}
-						title={t('workflows.input.sendWith', {
-							key: enterToSend ? `${isMacOS() ? 'Cmd' : 'Ctrl'}+Enter` : 'Enter',
-						})}
-					>
-						<Keyboard className="w-3.5 h-3.5" />
-						<span className="text-2xs">{formatEnterToSend(enterToSend)}</span>
-					</button>
+					{!newShell && (
+						<button
+							onClick={() => setEnterToSend(!enterToSend)}
+							className={`${ghost} opacity-40 hover:opacity-100`}
+							style={{ color: theme.colors.textDim }}
+							title={t('workflows.input.sendWith', {
+								key: enterToSend ? `${isMacOS() ? 'Cmd' : 'Ctrl'}+Enter` : 'Enter',
+							})}
+						>
+							<Keyboard className="w-3.5 h-3.5" />
+							<span className="text-2xs">{formatEnterToSend(enterToSend)}</span>
+						</button>
+					)}
 				</div>
 			</div>
 
 			{/* Right: which model answers, then send, in the corner of the card. */}
 			<div className="ml-auto flex items-center gap-1">
+				{newShell && isAiMode && contextUsage >= 50 && (
+					<span
+						className="text-xs whitespace-nowrap tabular-nums"
+						style={{ color: theme.colors.textDim }}
+					>
+						{t('workflows.shell.contextUsage', { percent: Math.round(contextUsage) })}
+					</span>
+				)}
 				<ModelEffortPills
+					allowModelSelection={newShell && hasModelSelectionCapability}
 					isVisible={isAiMode}
 					theme={theme}
 					shortcutKeys={modelEffortKeys}

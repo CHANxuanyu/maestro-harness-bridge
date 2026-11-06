@@ -358,7 +358,8 @@ export const MainPanel = React.memo(
 			fileTabCanGoForward,
 			activeFileTabNavIndex,
 		} = useMemo(() => getTabDerivedState(activeSession), [activeSession]);
-		const activeFileTabId = activeSession?.activeFileTabId ?? null;
+		const newShell = useSettingsStore((s) => s.newShell);
+		const activeFileTabId = newShell ? null : (activeSession?.activeFileTabId ?? null);
 		const activeBrowserTabId = activeSession?.activeBrowserTabId ?? null;
 		const fileGistUrls = useTabStore((s) => s.fileGistUrls);
 		const hasGist = activeFileTab ? !!fileGistUrls[activeFileTab.path] : false;
@@ -399,12 +400,16 @@ export const MainPanel = React.memo(
 		// current conversation's chip as the way back from it. New conversation,
 		// tab search and the conversation's actions stay on the Left Bar, the
 		// command palette and their hotkeys.
+		// The new shell has no tab strip at all: files open in the right panel and
+		// conversations are chosen in the Left Bar, so a file tab left in the
+		// session must not bring the strip back.
 		const conversationStripRedundant =
-			conversationNavigation &&
-			(activeSession?.filePreviewTabs?.length ?? 0) === 0 &&
-			(activeSession?.terminalTabs?.length ?? 0) === 0 &&
-			(activeSession?.browserTabs?.length ?? 0) === 0 &&
-			(activeSession?.tabGroups?.length ?? 0) === 0;
+			newShell ||
+			(conversationNavigation &&
+				(activeSession?.filePreviewTabs?.length ?? 0) === 0 &&
+				(activeSession?.terminalTabs?.length ?? 0) === 0 &&
+				(activeSession?.browserTabs?.length ?? 0) === 0 &&
+				(activeSession?.tabGroups?.length ?? 0) === 0);
 
 		// SSH remote name for header display
 		const sshRemoteName = useSshRemoteName(

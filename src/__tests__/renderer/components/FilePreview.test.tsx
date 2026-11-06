@@ -226,6 +226,19 @@ const defaultProps = {
 };
 
 describe('FilePreview', () => {
+	it.each(['cart.ts', 'notes.md'])(
+		'hides the font overlay only for a panel preview of %s',
+		(name) => {
+			const file = { name, path: `/project/${name}`, content: 'Full content' };
+			const { rerender } = render(
+				<FilePreview {...defaultProps} file={file} onPanelBack={vi.fn()} />
+			);
+			expect(screen.queryByTestId('file-preview-font-scale')).not.toBeInTheDocument();
+			expect(screen.getByTitle('Back to files')).toBeInTheDocument();
+			rerender(<FilePreview {...defaultProps} file={file} />);
+			expect(screen.getByTestId('file-preview-font-scale')).toBeInTheDocument();
+		}
+	);
 	beforeEach(() => {
 		vi.clearAllMocks();
 		// Default every test to the Electron desktop build; the web-desktop tests

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act, within, waitFor } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { InputArea } from '../../../renderer/components/InputArea';
 import { useComposerInputStore } from '../../../renderer/stores/composerInputStore';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useAiCommandStore } from '../../../renderer/stores/aiCommandStore';
 import { formatEnterToSend } from '../../../renderer/utils/shortcutFormatter';
@@ -248,6 +249,23 @@ const createDefaultProps = (
 };
 
 describe('InputArea', () => {
+	beforeEach(() => useSettingsStore.setState({ newShell: false }));
+	it.each([false, true])(
+		'gates other conversations running above the input, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const busy = createMockSession({
+				id: 'other-session',
+				inputMode: 'ai',
+				state: 'busy',
+				busySource: 'ai',
+			});
+			useSessionStore.setState({ sessions: [busy] });
+			render(<InputArea {...createDefaultProps()} />);
+			expect(!!screen.queryByTestId('thinking-status-pill')).toBe(!newShell);
+		}
+	);
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 		useSessionStore.setState({ sessions: [], groups: [] });

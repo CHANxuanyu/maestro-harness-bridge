@@ -1,3 +1,5 @@
+import { shellFeatureVisible } from '../../shared/newShellFeatures';
+import { useSettingsStore } from '../stores/settingsStore';
 /**
  * usePluginContributions - the renderer's read seam for active plugin
  * contributions (themes, prompts, command macros, settings, ...).
@@ -65,5 +67,6 @@ export function usePluginContributions(): AggregatedContributions {
 		};
 	}, []);
 
-	return contributions;
+	const newShell = useSettingsStore((s) => s.newShell);
+	return shellFeatureVisible('plugins', newShell) ? contributions : EMPTY;
 }

@@ -1,3 +1,4 @@
+import { useOperationStore } from '../../stores/operationStore';
 import { useCallback, useRef } from 'react';
 import type {
 	Session,
@@ -327,6 +328,7 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 					? options.tabId
 					: getActiveTab(activeSession)?.id
 				: undefined;
+			if (targetTabId && useOperationStore.getState().tabReplacementLocks[targetTabId]) return;
 			const resolveTargetTab = (session: Session) =>
 				targetTabId ? session.aiTabs.find((tab) => tab.id === targetTabId) : getActiveTab(session);
 

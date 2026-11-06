@@ -1,4 +1,5 @@
 export const workflowsFiles = {
+	'workflows.files.readFailed': 'Could not read file: {name}',
 	'workflows.files.size': 'Size',
 	'workflows.files.lines': 'Lines',
 	'workflows.files.tokens': 'Tokens',

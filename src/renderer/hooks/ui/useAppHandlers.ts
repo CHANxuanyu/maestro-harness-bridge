@@ -14,6 +14,7 @@ import { isAbsolutePath } from '../../../shared/formatters';
 import { closeFileTab as closeFileTabHelper } from '../../utils/tabHelpers';
 import type { MediaOpenMode } from '../tabs/internal/types';
 import { logger } from '../../utils/logger';
+import { useT } from '../../i18n';
 
 /**
  * If a remote-file loading tab is still in flight in the target session,
@@ -200,6 +201,7 @@ function findSubtreeFolders(
  * @returns Handler functions and state
  */
 export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
+	const t = useT();
 	const {
 		setSessions,
 		setActiveFocus,
@@ -424,6 +426,7 @@ export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
 				]);
 
 				if (contentResult.status === 'rejected') {
+					useUIStore.getState().setFlashNotification(String(contentResult.reason));
 					logger.error(
 						`Failed to read file: ${
 							contentResult.reason instanceof Error
@@ -441,11 +444,23 @@ export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
 
 				const content = contentResult.value;
 
-				// content === null means either the file is missing or the SSH read
-				// was cancelled (user closed the loading tab). In both cases the tab
-				// has either been closed by the user or never existed; surface a
-				// closure for the loading tab if it's still hanging around.
+				// A cancelled SSH read also returns null. Match the request as well as
+				// the path so reopening the file cannot revive the old error.
 				if (content === null) {
+					if (
+						loadRequestId &&
+						onOpenFileTab &&
+						!useSessionStore
+							.getState()
+							.sessions.find((s) => s.id === targetSessionId)
+							?.filePreviewTabs.some(
+								(tab) => tab.path === fullPath && tab.loadRequestId === loadRequestId
+							)
+					)
+						return;
+					useUIStore
+						.getState()
+						.setFlashNotification(t('workflows.files.readFailed', { name: node.name }));
 					if (loadRequestId) {
 						closeLoadingTabIfStillLoading(targetSessionId, fullPath, loadRequestId);
 					}
@@ -481,6 +496,7 @@ export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
 				);
 				setActiveFocus('main');
 			} catch (error) {
+				useUIStore.getState().setFlashNotification(String(error));
 				logger.error(
 					`Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
 					undefined,
@@ -498,6 +514,7 @@ export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
 			setConfirmModalOpen,
 			setActiveFocus,
 			onOpenFileTab,
+			t,
 		]
 	);
 

@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import React from 'react';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { RenameTabModal } from '../../../renderer/components/RenameTabModal';
 import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
 import type { Theme } from '../../../renderer/types';
@@ -23,6 +24,7 @@ describe('RenameTabModal', () => {
 	let mockOnRename: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => {
+		useSettingsStore.setState({ newShell: false });
 		mockOnClose = vi.fn();
 		mockOnRename = vi.fn();
 	});
@@ -30,6 +32,27 @@ describe('RenameTabModal', () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
+	});
+
+	it.each([false, true])('uses conversation language only in the new shell %s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		render(
+			<TestWrapper>
+				<RenameTabModal
+					theme={mockTheme}
+					initialName=""
+					onClose={mockOnClose}
+					onRename={mockOnRename}
+				/>
+			</TestWrapper>
+		);
+		expect(screen.getByRole('dialog')).toHaveAccessibleName(
+			newShell ? 'Rename conversation' : 'Rename Tab'
+		);
+		expect(screen.getByRole('textbox')).toHaveAttribute(
+			'placeholder',
+			newShell ? 'Enter conversation name...' : 'Enter tab name...'
+		);
 	});
 
 	describe('Basic Rendering', () => {

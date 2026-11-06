@@ -1,3 +1,5 @@
+import { useSessionStore } from '../../../../../renderer/stores/sessionStore';
+import { createMockSession } from '../../../../helpers/mockSession';
 import { renderHook, act, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useFilePreviewTabHandlers } from '../../../../../renderer/hooks/tabs/internal/useFilePreviewTabHandlers';
@@ -15,8 +17,39 @@ import {
 } from './testUtils';
 
 describe('useFilePreviewTabHandlers', () => {
+	it.each([false, true])(
+		'no-switch file opens leave the visible conversation panel alone, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			setupSession();
+			useSessionStore.getState().addSession(
+				createMockSession({
+					id: 'other',
+					aiTabs: [createMockAITab({ id: 'other-tab' })],
+					activeTabId: 'other-tab',
+				})
+			);
+			useUIStore.setState({ rightPanelOpen: false });
+			const { result } = renderHook(() => useFilePreviewTabHandlers());
+			act(() =>
+				result.current.handleOpenFileTab(
+					{ path: '/p/a.ts', name: 'a.ts', content: 'a' },
+					{ targetSessionId: 'other' }
+				)
+			);
+			expect(useUIStore.getState().rightPanelOpen).toBe(false);
+			expect(getSession().aiTabs[0].newShellPanel).toBeUndefined();
+			const other = useSessionStore.getState().sessions.find((session) => session.id === 'other')!;
+			if (newShell)
+				expect(other.aiTabs[0].newShellPanel).toMatchObject({ tab: 'files', open: true });
+			else expect(other.activeFileTabId).toBe(other.filePreviewTabs[0].id);
+			useSettingsStore.setState({ newShell: false });
+		}
+	);
+
 	beforeEach(() => {
 		resetTabHandlerStores();
+		useSettingsStore.setState({ newShell: false });
 		useMediaPlaybackStore.setState({
 			items: [],
 			activeItemId: null,
@@ -30,6 +63,92 @@ describe('useFilePreviewTabHandlers', () => {
 
 	afterEach(() => {
 		cleanup();
+	});
+
+	it.each([false, true])('opens files in the correct surface, new shell %s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		setupSession({ aiTabs: [createMockAITab({ id: 'ai-1' })], activeTabId: 'ai-1' });
+		const { result } = renderHook(() => useFilePreviewTabHandlers());
+		act(() =>
+			result.current.handleOpenFileTab({
+				path: '/p/a.md',
+				name: 'a.md',
+				content: '# a',
+				pendingScrollToLine: 8,
+			})
+		);
+		const session = getSession();
+		const file = session.filePreviewTabs[0];
+		expect(file.pendingScrollToLine).toBe(8);
+		expect(session.activeTabId).toBe('ai-1');
+		if (newShell) {
+			expect(session.activeFileTabId).toBeFalsy();
+			expect(session.aiTabs[0].newShellPanel).toEqual({
+				tab: 'files',
+				fileTabId: file.id,
+				open: true,
+			});
+			expect(useUIStore.getState().rightPanelOpen).toBe(true);
+		} else {
+			expect(session.activeFileTabId).toBe(file.id);
+			expect(session.aiTabs[0].newShellPanel).toBeUndefined();
+		}
+		useSettingsStore.setState({ newShell: false });
+	});
+
+	it.each(['new', 'select'] as const)(
+		'routes %s files to the right panel in the new shell',
+		async (entry) => {
+			useSettingsStore.setState({ newShell: true });
+			setupSession({
+				aiTabs: [
+					createMockAITab({
+						id: 'ai-1',
+						inputValue: 'keep draft',
+						newShellPanel: { tab: 'changes', filter: 'keep' },
+					}),
+				],
+				activeTabId: 'ai-1',
+				filePreviewTabs: [createMockFileTab({ id: 'existing' })],
+			});
+			useUIStore.setState({ rightPanelOpen: false });
+			const { result } = renderHook(() => useFilePreviewTabHandlers());
+			await act(async () => {
+				if (entry === 'new') result.current.handleNewFileTab();
+				else await result.current.handleSelectFileTab('existing');
+			});
+			const session = getSession();
+			const file = entry === 'new' ? session.filePreviewTabs.at(-1)! : session.filePreviewTabs[0];
+			expect(session.aiTabs[0].newShellPanel).toEqual({
+				tab: 'files',
+				fileTabId: file.id,
+				filter: 'keep',
+				open: true,
+			});
+			expect(useUIStore.getState().rightPanelOpen).toBe(true);
+			expect(session.activeFileTabId).toBeFalsy();
+			expect(session.activeTabId).toBe('ai-1');
+			expect(session.aiTabs[0].inputValue).toBe('keep draft');
+			if (entry === 'new') expect(file.editMode).toBe(true);
+		}
+	);
+
+	it('preserves the conversation filter when opening a preview', () => {
+		useSettingsStore.setState({ newShell: true });
+		setupSession({
+			aiTabs: [createMockAITab({ id: 'ai-1', newShellPanel: { tab: 'files', filter: 'readme' } })],
+			activeTabId: 'ai-1',
+		});
+		const { result } = renderHook(() => useFilePreviewTabHandlers());
+		act(() =>
+			result.current.handleOpenFileTab({
+				path: '/p/README.md',
+				name: 'README.md',
+				content: '# docs',
+			})
+		);
+		expect(getSession().aiTabs[0].newShellPanel?.filter).toBe('readme');
+		useSettingsStore.setState({ newShell: false });
 	});
 
 	// -----------------------------------------------------------------------

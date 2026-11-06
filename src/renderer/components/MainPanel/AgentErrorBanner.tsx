@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import { useT } from '../../i18n';
 import React from 'react';
 import { AlertCircle, X } from 'lucide-react';
@@ -18,6 +19,8 @@ export const AgentErrorBanner = React.memo(function AgentErrorBanner({
 	onClear,
 }: AgentErrorBannerProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
+	if (newShell) return null;
 	return (
 		<div
 			className="flex items-center gap-3 px-4 py-2 border-b shrink-0"

@@ -1,4 +1,6 @@
 import { useT } from '../../../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
+import { modelDisplayLabel, effortDisplayLabel } from '../../../utils/workflowLabels';
 /**
  * ComposerOptionsSheet - everything the composer toolbar offers, on a phone.
  *
@@ -24,6 +26,7 @@ import { useT } from '../../../i18n';
 import { memo, useState } from 'react';
 import { Brain, Eye, Gauge, History, Sparkles } from 'lucide-react';
 import type { Theme, ThinkingMode } from '../../../types';
+import { permissionModes } from '../../../utils/tabHelpers';
 import { permissionModeLabel } from '../utils/displayLabels';
 import { THINKING_MODES } from '../../../../shared/types';
 import { PhoneBottomSheet } from '../../ui/PhoneBottomSheet';
@@ -81,6 +84,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 	onEffortChange,
 }: ComposerOptionsSheetProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const THINKING_LABELS: Record<ThinkingMode, string> = {
 		off: t('common.off'),
 		on: t('common.on'),
@@ -91,9 +95,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 
 	// `standard` is hidden for an agent with no working relay: offering it would
 	// let the user pick a mode whose tool approvals never arrive.
-	const permissionModes: PermissionMode[] = hasStandardCapability
-		? ['full', 'standard', 'readonly']
-		: ['full', 'readonly'];
+	const modes = permissionModes(hasStandardCapability);
 
 	// A leading '' is the "(default)" entry - the agent's own configured model.
 	const modelOptions = availableModels.includes('') ? availableModels : ['', ...availableModels];
@@ -151,7 +153,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 					theme={theme}
 					testId="composer-options-access"
 				>
-					{permissionModes.map((mode) => (
+					{modes.map((mode) => (
 						<PhoneSheetOptionRow
 							key={mode}
 							label={permissionModeLabel(t, mode, agentId)}
@@ -192,7 +194,10 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 				<PhoneSheetSection
 					icon={Gauge}
 					label={t('workflows.shell.effort')}
-					value={currentEffort || t('common.default')}
+					value={
+						(newShell ? effortDisplayLabel(t, currentEffort ?? '') : currentEffort) ||
+						t('common.default')
+					}
 					accent={theme.colors.warning}
 					expanded={expanded === 'effort'}
 					onToggle={() => toggle('effort')}
@@ -202,7 +207,9 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 					{availableEfforts.map((effort) => (
 						<PhoneSheetOptionRow
 							key={effort || '__default__'}
-							label={effort || t('workflows.shell.default')}
+							label={
+								(newShell ? effortDisplayLabel(t, effort) : effort) || t('workflows.shell.default')
+							}
 							selected={effort === currentEffort}
 							accent={theme.colors.warning}
 							onSelect={() => onEffortChange(effort)}
@@ -216,7 +223,9 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 				<PhoneSheetSection
 					icon={Sparkles}
 					label={t('workflows.shell.model')}
-					value={currentModel || t('common.default')}
+					value={
+						(newShell ? modelDisplayLabel(currentModel ?? '') : currentModel) || t('common.default')
+					}
 					accent={theme.colors.accent}
 					expanded={expanded === 'model'}
 					onToggle={() => toggle('model')}
@@ -226,7 +235,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 					{modelOptions.map((model) => (
 						<PhoneSheetOptionRow
 							key={model || '__default__'}
-							label={model || t('workflows.shell.default')}
+							label={(newShell ? modelDisplayLabel(model) : model) || t('workflows.shell.default')}
 							selected={model === currentModel}
 							accent={theme.colors.accent}
 							onSelect={() => onModelChange(model)}

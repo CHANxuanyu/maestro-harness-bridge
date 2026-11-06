@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	ALL_SEARCHABLE_SETTINGS,
@@ -11,7 +11,7 @@ import {
 	useSettingsSearch,
 } from '../../../renderer/components/Settings/SettingsSearch';
 import { localizeSearchableSetting } from '../../../renderer/i18n/settingsSearch';
-import { localizeShortcutLabel } from '../../../renderer/i18n/shortcutLabels';
+import { localizeShortcutLabel, useShortcutLabel } from '../../../renderer/i18n/shortcutLabels';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { mockTheme } from '../../helpers/mockTheme';
 
@@ -41,6 +41,25 @@ function Search({
 }
 
 describe('localized settings search', () => {
+	it.each(['en', 'zh-CN'] as const)(
+		'uses conversation labels in shortcut settings without rewriting bindings, %s',
+		(uiLanguage) => {
+			useSettingsStore.setState({ newShell: false, uiLanguage });
+			const source = { id: 'newTab', label: 'New Tab', keys: ['Meta', 't'] };
+			const snapshot = structuredClone(source);
+			const { result } = renderHook(() => useShortcutLabel());
+			expect(result.current(source)).toBe(uiLanguage === 'en' ? 'New Tab' : '新建标签页');
+			act(() => useSettingsStore.setState({ newShell: true }));
+			expect(result.current(source)).toBe(uiLanguage === 'en' ? 'New conversation' : '新建会话');
+			expect(source).toEqual(snapshot);
+			expect(result.current({ id: 'goToTab3', label: 'Go to Tab 3' })).toBe(
+				uiLanguage === 'en' ? 'Go to conversation 3' : '转到第 3 个会话'
+			);
+			act(() => useSettingsStore.setState({ newShell: false }));
+			expect(result.current(source)).toBe(uiLanguage === 'en' ? 'New Tab' : '新建标签页');
+		}
+	);
+
 	it.each([
 		['语言', 'general-language'],
 		['language', 'general-language'],

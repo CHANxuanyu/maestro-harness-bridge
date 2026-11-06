@@ -1,3 +1,4 @@
+import { useMessageGistStore } from '../../../../renderer/stores/messageGistStore';
 /**
  * The conversation feed (sidebarNavigationMode 'conversations'): what the user
  * observes in the transcript, driven through the real TerminalOutput and
@@ -98,6 +99,7 @@ const reply = (id: string, minutes: number, text: string, extra: Partial<LogEntr
 beforeEach(() => {
 	useSettingsStore.setState({
 		uiLanguage: 'en',
+		newShell: false,
 		sidebarNavigationMode: 'conversations',
 		showToolCalls: false,
 		showProviderModePill: false,
@@ -815,5 +817,90 @@ describe('conversation feed: the running turn', () => {
 		useSettingsStore.setState({ sidebarNavigationMode: 'agents' });
 		renderTranscript(logs, { session: runningSession() });
 		expect(screen.getByTestId('turn-running-status')).toHaveTextContent('Thinking...');
+	});
+});
+
+describe('new shell transcript cleanup', () => {
+	it.each([false, true])('localizes credit exhaustion in Chinese, new shell %s', (newShell) => {
+		useSettingsStore.setState({ newShell, uiLanguage: 'zh-CN' });
+		renderTranscript([
+			{
+				id: 'credit',
+				timestamp: at(1),
+				source: 'error',
+				text: 'Credit exhausted',
+				agentError: { type: 'token_exhaustion', message: 'Credit exhausted' } as any,
+			},
+		]);
+		expect(screen.getByText(newShell ? '额度已用尽' : 'Error')).toBeInTheDocument();
+	});
+
+	it.each([false, true])(
+		'keeps published answer actions hidden until hover or focus, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			useMessageGistStore.setState({
+				published: { a1: { gistUrl: 'https://example.test/gist' } as any },
+			});
+			const { container } = renderTranscript([reply('a1', 1, 'Answer')], {
+				ghCliAvailable: true,
+				onPublishMessageGist: vi.fn(),
+			});
+			const share = within(row(container, 'a1')).getByRole('button', { name: /Published as/ });
+			expect(share.classList.contains('opacity-100')).toBe(!newShell);
+			if (newShell)
+				expect(share).toHaveClass(
+					'opacity-0',
+					'group-hover:opacity-100',
+					'group-focus-within:opacity-100'
+				);
+		}
+	);
+
+	it.each([false, true])(
+		'reveals the latest answer actions only on hover or focus, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const { container } = renderTranscript([user('u1', 0, 'Question'), reply('a1', 1, 'Answer')]);
+			const copy = within(row(container, 'a1')).getByRole('button', { name: 'Copy' });
+			expect(copy.classList.contains('!opacity-100')).toBe(!newShell);
+			if (newShell) {
+				expect(copy).toHaveClass(
+					'opacity-0',
+					'group-hover:opacity-100',
+					'group-focus-within:opacity-100'
+				);
+				expect(copy).not.toHaveClass('hidden');
+				expect(copy).not.toHaveClass('[@media(hover:none)]:opacity-100');
+			}
+		}
+	);
+	it.each([false, true])('uses localized error and quota titles, new shell %s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		renderTranscript(
+			[
+				{
+					id: 'quota',
+					timestamp: at(1),
+					source: 'error',
+					text: 'No budget',
+					agentError: { type: 'rate_limited', parsedJson: {}, message: 'No budget' } as any,
+				},
+				{
+					id: 'error',
+					timestamp: at(2),
+					source: 'error',
+					text: 'Failed',
+					agentError: { type: 'unknown', message: 'Failed' } as any,
+				},
+			],
+			{ onShowErrorDetails: vi.fn() }
+		);
+		if (newShell) {
+			expect(screen.getByText('Quota exhausted')).toBeInTheDocument();
+			expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+			expect(screen.queryByText('Error')).toBeNull();
+			expect(screen.getByRole('button', { name: 'View details' })).toHaveClass('underline');
+		} else expect(screen.getAllByText('Error')).toHaveLength(2);
 	});
 });

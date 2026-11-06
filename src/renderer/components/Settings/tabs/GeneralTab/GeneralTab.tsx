@@ -1,3 +1,5 @@
+import { shellFeatureVisible } from '../../../../../shared/newShellFeatures';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { useSettings } from '../../../../hooks';
 import {
 	AboutMeSection,
@@ -37,6 +39,7 @@ export type { GeneralTabProps } from './types';
 export function GeneralTab({ theme, isOpen }: GeneralTabProps) {
 	const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'unknown';
 	const settings = useSettings();
+	const newShell = useSettingsStore((s) => s.newShell);
 
 	const shellState = useShellSettingsState({
 		setDefaultShell: settings.setDefaultShell,
@@ -108,13 +111,15 @@ export function GeneralTab({ theme, isOpen }: GeneralTabProps) {
 				crossAgentHandoffsWritable={settings.crossAgentHandoffsWritable}
 				setCrossAgentHandoffsWritable={settings.setCrossAgentHandoffsWritable}
 			/>
-			<AutoRunInactivitySection
-				theme={theme}
-				autoRunInactivityTimeoutMin={settings.autoRunInactivityTimeoutMin}
-				setAutoRunInactivityTimeoutMin={settings.setAutoRunInactivityTimeoutMin}
-				autoRunMaxTaskDurationMin={settings.autoRunMaxTaskDurationMin}
-				setAutoRunMaxTaskDurationMin={settings.setAutoRunMaxTaskDurationMin}
-			/>
+			{shellFeatureVisible('autoRun', newShell) && (
+				<AutoRunInactivitySection
+					theme={theme}
+					autoRunInactivityTimeoutMin={settings.autoRunInactivityTimeoutMin}
+					setAutoRunInactivityTimeoutMin={settings.setAutoRunInactivityTimeoutMin}
+					autoRunMaxTaskDurationMin={settings.autoRunMaxTaskDurationMin}
+					setAutoRunMaxTaskDurationMin={settings.setAutoRunMaxTaskDurationMin}
+				/>
+			)}
 			<AutoResumeSection
 				theme={theme}
 				autoResumeOnLimit={settings.autoResumeOnLimit}
@@ -124,15 +129,17 @@ export function GeneralTab({ theme, isOpen }: GeneralTabProps) {
 				autoResumeGiveUpDays={settings.autoResumeGiveUpDays}
 				setAutoResumeGiveUpDays={settings.setAutoResumeGiveUpDays}
 			/>
-			<HistorySection
-				theme={theme}
-				defaultSaveToHistory={settings.defaultSaveToHistory}
-				setDefaultSaveToHistory={settings.setDefaultSaveToHistory}
-				synopsisDebounceSeconds={settings.synopsisDebounceSeconds}
-				setSynopsisDebounceSeconds={settings.setSynopsisDebounceSeconds}
-				groupCueEntries={settings.groupCueEntries}
-				setGroupCueEntries={settings.setGroupCueEntries}
-			/>
+			{shellFeatureVisible('directorNotes', newShell) && (
+				<HistorySection
+					theme={theme}
+					defaultSaveToHistory={settings.defaultSaveToHistory}
+					setDefaultSaveToHistory={settings.setDefaultSaveToHistory}
+					synopsisDebounceSeconds={settings.synopsisDebounceSeconds}
+					setSynopsisDebounceSeconds={settings.setSynopsisDebounceSeconds}
+					groupCueEntries={settings.groupCueEntries}
+					setGroupCueEntries={settings.setGroupCueEntries}
+				/>
+			)}
 			<ThinkingModeSection
 				theme={theme}
 				defaultShowThinking={settings.defaultShowThinking}

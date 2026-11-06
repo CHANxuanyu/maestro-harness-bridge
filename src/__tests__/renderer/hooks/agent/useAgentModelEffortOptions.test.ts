@@ -20,6 +20,19 @@ beforeEach(() => {
 });
 
 describe('useAgentModelEffortOptions', () => {
+	it('keeps Codex reasoning options when its model cache is empty', async () => {
+		agents.getModels.mockResolvedValue([]);
+		agents.getConfigOptions.mockImplementation(async (_id, key) =>
+			key === 'reasoningEffort' ? ['', 'low', 'high', 'xhigh'] : []
+		);
+		agents.getConfig.mockResolvedValue({ reasoningEffort: 'high' });
+		const { result } = renderHook(() => useAgentModelEffortOptions('codex'));
+		await waitFor(() => expect(result.current.loaded).toBe(true));
+		expect(result.current.models).toEqual([]);
+		expect(result.current.efforts).toEqual(['', 'low', 'high', 'xhigh']);
+		expect(result.current.defaultEffort).toBe('high');
+	});
+
 	it('offers a DeepSeek preset only its own catalog, never Claude models', async () => {
 		const { result } = renderHook(() =>
 			useAgentModelEffortOptions('claude-code', {

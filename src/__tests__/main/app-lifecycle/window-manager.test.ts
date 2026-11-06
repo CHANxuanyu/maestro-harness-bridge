@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { EventEmitter } from 'node:events';
 // Type-only import (erased at runtime, so it does not interfere with the
 // per-test `vi.resetModules()` + dynamic `import()` pattern used below).
 import type { WindowManagerDependencies } from '../../../main/app-lifecycle/window-manager';
@@ -80,6 +81,9 @@ const mockFromPartition = vi.fn((partition: string) => {
 
 // Mock BrowserWindow instance methods
 const mockWebContents = {
+	isDestroyed: vi.fn(() => false),
+	once: vi.fn(),
+	removeListener: vi.fn(),
 	send: vi.fn(),
 	openDevTools: vi.fn(),
 	getType: vi.fn(() => 'window'),
@@ -94,6 +98,7 @@ const mockWebContents = {
 };
 
 const mockWindowInstance = {
+	close: vi.fn(),
 	loadURL: vi.fn(),
 	loadFile: vi.fn(),
 	maximize: vi.fn(),
@@ -122,6 +127,7 @@ let lastBrowserWindowOptions: Record<string, unknown> | null = null;
 
 // Create a class-based mock for BrowserWindow
 class MockBrowserWindow {
+	close = mockWindowInstance.close;
 	loadURL = mockWindowInstance.loadURL;
 	loadFile = mockWindowInstance.loadFile;
 	maximize = mockWindowInstance.maximize;
@@ -143,6 +149,7 @@ class MockBrowserWindow {
 
 // Mock ipcMain
 const mockHandle = vi.fn();
+const mockIpcEvents = new EventEmitter();
 
 // Mutable, faithful mock of Electron's `screen`. Tests mutate `mockScreen.displays`
 // to simulate display-configuration changes (e.g. a removed monitor) and the
@@ -209,6 +216,9 @@ vi.mock('electron', () => ({
 	BrowserWindow: MockBrowserWindow,
 	ipcMain: {
 		handle: (...args: unknown[]) => mockHandle(...args),
+		on: (...args: Parameters<EventEmitter['on']>) => mockIpcEvents.on(...args),
+		removeListener: (...args: Parameters<EventEmitter['removeListener']>) =>
+			mockIpcEvents.removeListener(...args),
 	},
 	Menu: {
 		buildFromTemplate: (...args: unknown[]) => mockBuildFromTemplate(...(args as [])),
@@ -292,6 +302,7 @@ describe('app-lifecycle/window-manager', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.resetModules(); // Reset module cache to clear devStubsRegistered flag
+		mockIpcEvents.removeAllListeners();
 		windowCloseHandler = null;
 		windowMoveHandler = null;
 		lastBrowserWindowOptions = null;
@@ -2494,6 +2505,133 @@ describe('app-lifecycle/window-manager', () => {
 		it('exposes createSecondaryWindow on the window manager', async () => {
 			const windowManager = await makeManager();
 			expect(typeof windowManager.createSecondaryWindow).toBe('function');
+		});
+
+		it('waits for the closing window save before closing and reclaiming its agents', async () => {
+			const registry = makeRegistry();
+			const manager = await makeManager({
+				windowRegistry: registry as unknown as Deps['windowRegistry'],
+			});
+			manager.createSecondaryWindow(['agent-a']);
+			const event = { preventDefault: vi.fn() };
+			const close = mockWindowInstance.on.mock.calls.find(([name]) => name === 'close')?.[1];
+			close?.(event as never);
+			expect(event.preventDefault).toHaveBeenCalledOnce();
+			expect(registry.reclaimSessionsToPrimary).not.toHaveBeenCalled();
+			expect(mockWindowInstance.close).not.toHaveBeenCalled();
+			const request = mockWebContents.send.mock.calls.find(
+				([name]) => name === 'app:requestQuitSave'
+			);
+			expect(request).toBeDefined();
+			close?.(event as never);
+			expect(mockWebContents.send).toHaveBeenCalledTimes(1);
+			mockIpcEvents.emit('app:quitSaveComplete', { sender: {} }, request![1], true);
+			mockIpcEvents.emit('app:quitSaveComplete', { sender: mockWebContents }, 'stale', true);
+			mockIpcEvents.emit(
+				'app:quitSaveComplete',
+				{ sender: mockWebContents },
+				request![1],
+				undefined
+			);
+			await Promise.resolve();
+			expect(mockWindowInstance.close).not.toHaveBeenCalled();
+			mockIpcEvents.emit('app:quitSaveComplete', { sender: mockWebContents }, request![1], true);
+			await Promise.resolve();
+			expect(mockWindowInstance.close).toHaveBeenCalledOnce();
+			const retry = { preventDefault: vi.fn() };
+			close?.(retry as never);
+			expect(retry.preventDefault).not.toHaveBeenCalled();
+			lastClosedHandler()!();
+			expect(registry.reclaimSessionsToPrimary).toHaveBeenCalledOnce();
+			expect(registry.remove).toHaveBeenCalledOnce();
+			expect(mockIpcEvents.listenerCount('app:quitSaveComplete')).toBe(0);
+		});
+
+		it('also saves a primary window before its native close destroys the renderer', async () => {
+			const manager = await makeManager();
+			manager.createWindow();
+			const event = { preventDefault: vi.fn() };
+			for (const [name, handler] of mockWindowInstance.on.mock.calls) {
+				if (name === 'close') handler(event as never);
+			}
+			expect(event.preventDefault).toHaveBeenCalledOnce();
+			expect(mockWindowInstance.close).not.toHaveBeenCalled();
+			const request = mockWebContents.send.mock.calls.find(
+				([name]) => name === 'app:requestQuitSave'
+			)!;
+			mockIpcEvents.emit('app:quitSaveComplete', { sender: mockWebContents }, request[1], true);
+			await Promise.resolve();
+			expect(mockWindowInstance.close).toHaveBeenCalledOnce();
+		});
+
+		it('bounds a close by the existing handover save deadline', async () => {
+			vi.useFakeTimers();
+			try {
+				const manager = await makeManager();
+				const { HANDOVER_SAVE_TIMEOUT_MS } =
+					await import('../../../main/app-lifecycle/handover-save');
+				manager.createSecondaryWindow(['agent-a']);
+				const close = mockWindowInstance.on.mock.calls.find(([name]) => name === 'close')![1];
+				close({ preventDefault: vi.fn() } as never);
+				await vi.advanceTimersByTimeAsync(HANDOVER_SAVE_TIMEOUT_MS - 1);
+				expect(mockWindowInstance.close).not.toHaveBeenCalled();
+				await vi.advanceTimersByTimeAsync(1);
+				expect(mockWindowInstance.close).toHaveBeenCalledOnce();
+				expect(mockIpcEvents.listenerCount('app:quitSaveComplete')).toBe(0);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		it.each(['failed', 'destroyed', 'render-process-gone', 'send-error'])(
+			'finishes a close and removes listeners when saving is %s',
+			async (outcome) => {
+				const manager = await makeManager();
+				manager.createSecondaryWindow(['agent-a']);
+				if (outcome === 'send-error') {
+					mockWebContents.send.mockImplementationOnce(() => {
+						throw new Error('disposed');
+					});
+				}
+				const close = mockWindowInstance.on.mock.calls.find(([name]) => name === 'close')![1];
+				close({ preventDefault: vi.fn() } as never);
+				if (outcome === 'failed') {
+					const request = mockWebContents.send.mock.calls.find(
+						([name]) => name === 'app:requestQuitSave'
+					)!;
+					mockIpcEvents.emit(
+						'app:quitSaveComplete',
+						{ sender: mockWebContents },
+						request[1],
+						false
+					);
+				} else if (outcome !== 'send-error') {
+					const handler = mockWebContents.once.mock.calls.find(([name]) => name === outcome)![1];
+					if (outcome === 'destroyed') mockWindowInstance.isDestroyed.mockReturnValue(true);
+					handler();
+				}
+				await Promise.resolve();
+				expect(mockWindowInstance.close).toHaveBeenCalledTimes(outcome === 'destroyed' ? 0 : 1);
+				expect(mockIpcEvents.listenerCount('app:quitSaveComplete')).toBe(0);
+				expect(mockWebContents.removeListener).toHaveBeenCalledWith(
+					'destroyed',
+					expect.any(Function)
+				);
+				expect(mockWebContents.removeListener).toHaveBeenCalledWith(
+					'render-process-gone',
+					expect.any(Function)
+				);
+			}
+		);
+
+		it('leaves the app quit save phase in charge of closing windows', async () => {
+			const manager = await makeManager({ getIsQuitting: () => true });
+			manager.createSecondaryWindow(['agent-a']);
+			const event = { preventDefault: vi.fn() };
+			const close = mockWindowInstance.on.mock.calls.find(([name]) => name === 'close')![1];
+			close(event as never);
+			expect(event.preventDefault).not.toHaveBeenCalled();
+			expect(mockWebContents.send).not.toHaveBeenCalled();
 		});
 
 		it('registers the primary window as isMain when a registry is provided', async () => {

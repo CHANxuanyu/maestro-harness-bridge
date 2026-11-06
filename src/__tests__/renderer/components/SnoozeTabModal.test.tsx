@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 /**
  * @fileoverview Keyboard commit paths for the Snooze Tab dialog.
  *
@@ -13,7 +14,7 @@
  * closed twice.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SnoozeTabModal } from '../../../renderer/components/SnoozeTabModal';
 import { mockTheme } from '../../helpers/mockTheme';
@@ -48,7 +49,21 @@ function enterExpression(value = '2 weeks') {
 	fireEvent.change(typeInput(), { target: { value } });
 }
 
+beforeEach(() => useSettingsStore.setState({ newShell: false, uiLanguage: 'en' }));
+
 describe('SnoozeTabModal keyboard commit', () => {
+	it.each([false, true])(
+		'names the reminder as a conversation only in the new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			setup({ tabLabel: 'Work' });
+			expect(screen.getByRole('dialog')).toHaveAccessibleName(
+				newShell ? 'Snooze conversation' : 'Snooze Tab'
+			);
+			if (newShell) expect(screen.getByRole('dialog').textContent).not.toMatch(/\btabs?\b/i);
+		}
+	);
+
 	it('commits on Cmd+Enter from the note textarea', () => {
 		const { onConfirm } = setup();
 		enterExpression();

@@ -1,3 +1,4 @@
+import { createMockAITab, createMockFileTab } from '../../helpers/mockTab';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { RightPanel, RightPanelHandle } from '../../../renderer/components/RightPanel';
@@ -44,6 +45,14 @@ function makeWindowState(partial: Partial<WindowState> & Pick<WindowState, 'id'>
 vi.mock('../../../renderer/stores/notificationStore', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../../../renderer/stores/notificationStore')>()),
 	notifyToast: vi.fn(),
+}));
+
+vi.mock('../../../renderer/components/FilePreview/StoredFilePreview', () => ({
+	StoredFilePreview: ({ fileTabId, onBack }: { fileTabId: string; onBack: () => void }) => (
+		<button data-testid="stored-file-preview" onClick={onBack}>
+			{fileTabId}
+		</button>
+	),
 }));
 
 // Mock child components
@@ -392,6 +401,70 @@ describe('RightPanel', () => {
 	});
 
 	describe('New shell', () => {
+		it.each([false, true])(
+			'shows the tree if a remembered file was closed, new shell %s',
+			(newShell) => {
+				useSettingsStore.setState({ newShell });
+				useSessionStore.setState({
+					sessions: [
+						{
+							...mockSession,
+							activeTabId: 'tab',
+							filePreviewTabs: [],
+							aiTabs: [
+								createMockAITab({
+									id: 'tab',
+									newShellPanel: { tab: 'files', fileTabId: 'closed-file', open: true },
+								}),
+							],
+						},
+					],
+				});
+				render(<RightPanel {...createDefaultProps()} />);
+				expect(screen.getByTestId('file-explorer-panel')).toBeVisible();
+				expect(screen.queryByTestId('stored-file-preview')).toBeNull();
+			}
+		);
+
+		it('restores each conversation panel, file and filter while preserving the classic tab', () => {
+			useSettingsStore.setState({ newShell: true });
+			useUIStore.setState({ activeRightTab: 'history' });
+			useSessionStore.setState({
+				sessions: [
+					{
+						...mockSession,
+						activeTabId: 'first',
+						filePreviewTabs: [createMockFileTab({ id: 'file-1' })],
+						aiTabs: [
+							createMockAITab({
+								id: 'first',
+								newShellPanel: { tab: 'files', fileTabId: 'file-1', filter: 'readme', open: true },
+							}),
+							createMockAITab({ id: 'second', newShellPanel: { tab: 'changes', open: false } }),
+						],
+					},
+				],
+			});
+			render(<RightPanel {...createDefaultProps()} />);
+			expect(screen.getByTestId('stored-file-preview')).toHaveTextContent('file-1');
+			expect(useFileExplorerStore.getState().fileTreeFilter).toBe('readme');
+			act(() => useSessionStore.getState().updateSession('session-1', { activeTabId: 'second' }));
+			expect(useUIStore.getState().rightPanelOpen).toBe(false);
+			act(() => useUIStore.getState().setRightPanelOpen(true));
+			expect(screen.getByTestId('changes-panel')).toBeVisible();
+			act(() => useSessionStore.getState().updateSession('session-1', { activeTabId: 'first' }));
+			expect(screen.getByTestId('stored-file-preview')).toHaveTextContent('file-1');
+			expect(useUIStore.getState().activeRightTab).toBe('history');
+			fireEvent.click(screen.getByTestId('stored-file-preview'));
+			expect(screen.getByTestId('file-explorer-panel')).toBeVisible();
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].newShellPanel).toEqual({
+				tab: 'files',
+				filter: 'readme',
+				open: true,
+			});
+			act(() => useSettingsStore.setState({ newShell: false }));
+			expect(screen.getByTestId('history-panel')).toBeVisible();
+		});
 		it('shows only Changes and Files, and Changes in place of a tab it does not have', () => {
 			useSettingsStore.setState({ newShell: true });
 			useUIStore.setState({ activeRightTab: 'history' });
@@ -653,6 +726,14 @@ describe('RightPanel', () => {
 
 			expect(useUIStore.getState().activeFocus).toBe('main');
 			outside.remove();
+		});
+
+		it('removes the outer focus ring and starts tabs at 48px in the new shell', () => {
+			useSettingsStore.setState({ newShell: true });
+			useUIStore.setState({ activeFocus: 'right' });
+			const { container } = render(<RightPanel {...createDefaultProps()} />);
+			expect((container.firstChild as HTMLElement).style.boxShadow).toBe('');
+			expect(container.querySelector('[data-shell-header="right"]')).toHaveClass('h-12');
 		});
 
 		it('should show focus ring when activeFocus is right', () => {

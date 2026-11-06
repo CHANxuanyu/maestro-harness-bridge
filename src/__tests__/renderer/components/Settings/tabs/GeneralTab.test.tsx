@@ -141,7 +141,32 @@ const mockShells: ShellInfo[] = [
 ];
 
 describe('GeneralTab', () => {
+	it.each([false, true])(
+		'hides upstream settings without changing values, new shell %s',
+		async (newShell) => {
+			useSettingsStore.setState({
+				newShell,
+				defaultSaveToHistory: true,
+				autoRunInactivityTimeoutMin: 45,
+			});
+			const { container } = render(<GeneralTab theme={mockTheme} isOpen />);
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(100);
+			});
+			for (const id of [
+				'general-history',
+				'general-autorun-inactivity-timeout',
+				'general-autorun-max-task-duration',
+			]) {
+				expect(!!container.querySelector(`[data-setting-id="${id}"]`)).toBe(!newShell);
+			}
+			expect(useSettingsStore.getState().defaultSaveToHistory).toBe(true);
+			expect(useSettingsStore.getState().autoRunInactivityTimeoutMin).toBe(45);
+		}
+	);
+
 	beforeEach(() => {
+		useSettingsStore.setState({ newShell: false });
 		vi.useFakeTimers();
 
 		// Reset window.maestro mocks

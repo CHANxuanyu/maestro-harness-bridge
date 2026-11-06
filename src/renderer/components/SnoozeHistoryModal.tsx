@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
  * SnoozeHistoryModal - the log of snoozes that have ended.
  *
@@ -51,6 +53,8 @@ const RESOLUTION_META: Record<
 };
 
 export function SnoozeHistoryModal({ theme, onClose, onJumpToTab }: SnoozeHistoryModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const entries = useSnoozeHistoryStore((state) => state.entries);
 	const sessions = useSessionStore((state) => state.sessions);
 
@@ -103,8 +107,14 @@ export function SnoozeHistoryModal({ theme, onClose, onJumpToTab }: SnoozeHistor
 						<History className="w-7 h-7 opacity-40" />
 						<div className="text-sm">No snooze history yet</div>
 						<div className="text-xs max-w-xs">
-							Once a snoozed tab comes back or you dismiss it, it shows up here with the note you
-							left yourself.
+							{newShell ? (
+								t('workflows.newShell.snoozeHistoryHint')
+							) : (
+								<>
+									Once a snoozed tab comes back or you dismiss it, it shows up here with the note
+									you left yourself.
+								</>
+							)}
 						</div>
 					</div>
 				) : (
@@ -120,8 +130,12 @@ export function SnoozeHistoryModal({ theme, onClose, onJumpToTab }: SnoozeHistor
 								const jumpTitle = !target
 									? `${entry.sessionName || 'That agent'} is no longer available`
 									: target.tabId
-										? `Jump to this tab in ${target.sessionName}`
-										: `Open ${target.sessionName} - that tab is no longer open`;
+										? newShell
+											? t('workflows.newShell.jumpConversation', { name: target.sessionName })
+											: `Jump to this tab in ${target.sessionName}`
+										: newShell
+											? t('workflows.newShell.conversationGone', { name: target.sessionName })
+											: `Open ${target.sessionName} - that tab is no longer open`;
 
 								return (
 									<div

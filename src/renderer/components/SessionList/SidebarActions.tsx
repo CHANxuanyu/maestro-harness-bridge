@@ -1,8 +1,18 @@
 import { memo } from 'react';
-import { PanelLeftClose, PanelLeftOpen, Bell, Bot, MessageSquarePlus } from 'lucide-react';
+import {
+	PanelLeftClose,
+	PanelLeftOpen,
+	Bell,
+	Settings,
+	Bot,
+	MessageSquarePlus,
+} from 'lucide-react';
 import type { Theme, Shortcut } from '../../types';
 import { formatShortcutKeys } from '../../utils/shortcutFormatter';
 import { useFeedbackDraftStore } from '../../stores/feedbackDraftStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
+import { NotificationCenter } from '../NotificationCenter';
+import { openUiSurface } from '../../utils/openUiSurface';
 import { useUIStore } from '../../stores/uiStore';
 import { PluginUiItemsSlot } from '../plugins/PluginUiItemsSlot';
 import { CornerDot } from '../ui/CornerDot';
@@ -38,6 +48,7 @@ export const SidebarActions = memo(function SidebarActions({
 	toggleShowUnreadAgentsOnly,
 }: SidebarActionsProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const compact = sidebarWidth < 320;
 	const feedbackMinimized = useFeedbackDraftStore((s) => s.isMinimized);
 	const setLeftSidebarOpen = useUIStore((s) => s.setLeftSidebarOpen);
@@ -48,12 +59,14 @@ export const SidebarActions = memo(function SidebarActions({
 		? ` (${formatShortcutKeys(shortcuts.filterUnreadAgents.keys)})`
 		: '';
 
+	if (newShell && !leftSidebarOpen) return null;
+
 	return (
 		<div
 			className="p-2 border-t flex gap-2 items-center shrink-0"
 			style={{ borderColor: theme.colors.border }}
 		>
-			<PluginUiItemsSlot surface="sidebar" />
+			{!newShell && <PluginUiItemsSlot surface="sidebar" />}
 			<button
 				type="button"
 				disabled={hasNoSessions && leftSidebarOpen}
@@ -77,7 +90,7 @@ export const SidebarActions = memo(function SidebarActions({
 				)}
 			</button>
 
-			{leftSidebarOpen && (
+			{!newShell && leftSidebarOpen && (
 				<div
 					className="flex-1 grid gap-2"
 					style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
@@ -123,8 +136,23 @@ export const SidebarActions = memo(function SidebarActions({
 				</div>
 			)}
 
+			{newShell && (
+				<div className="ml-auto flex items-center gap-2">
+					<button
+						type="button"
+						onClick={() => openUiSurface('settings')}
+						title={t('common.settings')}
+						aria-label={t('common.settings')}
+						className="p-2 rounded hover:bg-white/5"
+						style={{ color: theme.colors.textDim }}
+					>
+						<Settings className="w-4 h-4" />
+					</button>
+					<NotificationCenter theme={theme} dotOnly />
+				</div>
+			)}
 			{/* Unread agents filter toggle */}
-			{leftSidebarOpen && (
+			{!newShell && leftSidebarOpen && (
 				<button
 					type="button"
 					onClick={toggleShowUnreadAgentsOnly}

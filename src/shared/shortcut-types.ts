@@ -1,3 +1,4 @@
+import { shellActionVisible } from './newShellFeatures';
 /**
  * Shared keyboard shortcut type used by renderer, main (web server), and web client.
  */
@@ -31,4 +32,20 @@ export interface Shortcut {
 	 * it never affects key matching, only display.
 	 */
 	windowScoped?: boolean;
+	/** Mutually exclusive shell bindings; never changes the saved key combination. */
+	shell?: 'new' | 'classic';
+}
+
+export function shortcutAppliesToShell(shortcut: Shortcut, newShell: boolean): boolean {
+	// Saved shortcuts from before shell scoping contain only id, label and keys.
+	const scope =
+		shortcut.id === 'openProject'
+			? 'new'
+			: shortcut.id === 'agentSwitcher'
+				? 'classic'
+				: shortcut.shell;
+	return (
+		shellActionVisible(shortcut.id, newShell) &&
+		(!scope || scope === (newShell ? 'new' : 'classic'))
+	);
 }

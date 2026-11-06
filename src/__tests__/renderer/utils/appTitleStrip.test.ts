@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	APP_TITLE_STRIP_HEIGHT,
+	newShellSidebarInset,
 	appTitleStripText,
 	shouldShowAppTitleStrip,
 } from '../../../renderer/utils/appTitleStrip';
@@ -55,4 +56,21 @@ describe('appTitleStripText', () => {
 			'Native claude'
 		);
 	});
+});
+
+it('reserves macOS controls at all widths and removes padding with a native title bar', () => {
+	expect(newShellSidebarInset(false, true)).toBe(48);
+	expect(newShellSidebarInset(false, false)).toBe(12);
+	expect(newShellSidebarInset(true, true)).toBe(0);
+	expect(newShellSidebarInset(true, false)).toBe(0);
+	for (const isMdDownViewport of [false, true]) {
+		expect(
+			shouldShowAppTitleStrip({
+				newShell: true,
+				isMdDownViewport,
+				useNativeTitleBar: false,
+				isMobileLandscape: false,
+			})
+		).toBe(false);
+	}
 });

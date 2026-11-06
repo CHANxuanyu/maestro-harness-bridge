@@ -1,3 +1,4 @@
+import type { HandoffCommand } from '../../../shared/aiHandoff';
 /**
  * Context Merge IPC Handlers
  *
@@ -69,6 +70,13 @@ export interface ContextHandlerDependencies {
  */
 export function registerContextHandlers(deps: ContextHandlerDependencies): void {
 	const { getProcessManager, getAgentDetector, agentConfigsStore, settingsStore } = deps;
+	ipcMain.handle(
+		'context:conversation',
+		withIpcErrorLogging(handlerOpts('conversation'), async (request: HandoffCommand) =>
+			requireDependency(() => deps.aiHandoff ?? null, 'AI handoff').command(request)
+		)
+	);
+
 	ipcMain.handle(
 		'context:handoff',
 		withIpcErrorLogging(handlerOpts('handoff'), async (request: HandoffRequest) =>

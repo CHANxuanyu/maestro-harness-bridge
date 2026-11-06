@@ -737,6 +737,23 @@ describe('web-server/web-server-factory', () => {
 			return setter.mock.calls[0][0];
 		};
 
+		it('returns the effective permission mode for CLI readback', () => {
+			vi.mocked(mockSessionsStore.get).mockReturnValue([
+				{
+					id: 'a',
+					toolType: 'claude-code',
+					aiTabs: [
+						{ id: 'standard', permissionMode: 'standard' },
+						{ id: 'legacy', readOnlyMode: true },
+					],
+				},
+			]);
+			expect(getCallback()().map((entry: any) => entry.permissionMode)).toEqual([
+				'standard',
+				'readonly',
+			]);
+		});
+
 		it('returns the persisted conversation origin through the existing desktop tab read', () => {
 			const origin = {
 				kind: 'review',

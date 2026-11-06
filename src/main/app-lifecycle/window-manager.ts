@@ -31,6 +31,7 @@ import { resolveVisibleWindowPosition, resolveWindowSizeConstraints } from './wi
 import { resolveLinuxWindowIconPath } from './app-icon';
 import { resolveBundledCliPathSync } from '../maestro-cli-manager';
 import { MAESTRO_CLI_PATH_ARG_PREFIX } from '../../shared/maestro-cli';
+import { requestHandoverSave } from './handover-save';
 
 /** Bounds/state used to size and position a window at creation time. */
 interface WindowCreationBounds {
@@ -262,6 +263,22 @@ export function createWindowManager(deps: WindowManagerDependencies): WindowMana
 			fullScreen: bounds?.isFullScreen ?? false,
 			mode: isDevelopment ? 'development' : 'production',
 			isMain,
+		});
+
+		// Both the native close button and windows:close reach this event before
+		// DOM teardown. Keep ownership in place until the existing save request
+		// settles, then retry close once. App quit already saves every window.
+		let closeSavePending = false;
+		let closeSaveComplete = false;
+		browserWindow.on('close', (event) => {
+			if (getIsQuitting?.() || closeSaveComplete || !isWebContentsAvailable(browserWindow)) return;
+			event.preventDefault();
+			if (closeSavePending) return;
+			closeSavePending = true;
+			void requestHandoverSave(browserWindow.webContents).then(() => {
+				closeSaveComplete = true;
+				if (!browserWindow.isDestroyed()) browserWindow.close();
+			});
 		});
 
 		// Save window state before closing. Only the primary window backs the

@@ -1,3 +1,8 @@
+import { useOperationStore } from '../../../renderer/stores/operationStore';
+import { act, renderHook } from '@testing-library/react';
+import { useInputSync } from '../../../renderer/hooks/input/useInputSync';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { useComposerInputStore } from '../../../renderer/stores/composerInputStore';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { openHandoffTarget, readHandoffSource } from '../../../renderer/services/aiHandoff';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
@@ -6,6 +11,8 @@ import { createMockAITab } from '../../helpers/mockTab';
 import { gitService } from '../../../renderer/services/git';
 import { enqueuePromptForTab } from '../../../renderer/services/queuedPrompt';
 import type { HandoffOpenRequest } from '../../../shared/aiHandoff';
+import { requestTabAutoNameForMessage } from '../../../renderer/services/tabAutoNaming';
+import { setLiveDraft, clearLiveDraft } from '../../../renderer/utils/liveDraftStore';
 
 vi.mock('../../../renderer/services/git', () => ({ gitService: { getChanges: vi.fn() } }));
 
@@ -30,6 +37,7 @@ const request = (over: Partial<HandoffOpenRequest> = {}): HandoffOpenRequest => 
 		sourceSessionId: 'source',
 		sourceTabId: 'source-tab',
 		sourceProvider: 'claude-code',
+		sourceTitle: 'Original',
 		sourceNativeSessionId: 'native-original',
 		createdAt: 1,
 	},
@@ -43,6 +51,11 @@ const sessions = () => useSessionStore.getState().sessions;
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	useOperationStore.getState().resetAll();
+	clearLiveDraft('source-tab');
+	useSettingsStore.setState({ newShell: false, uiLanguage: 'en', automaticTabNamingEnabled: true });
+	useComposerInputStore.getState().loadAiDraft('', '', 'off');
+	clearLiveDraft('target-empty');
 	vi.mocked(window.maestro.sessions.setMany).mockResolvedValue(true);
 	vi.mocked(enqueuePromptForTab).mockReturnValue({ id: 'queue-item' } as never);
 	useSessionStore.setState({
@@ -88,6 +101,459 @@ beforeEach(() => {
 });
 
 describe('handoff renderer work without UI changes', () => {
+	it.each(['handoff', 'review'] as const)(
+		'reuses a sole empty target for %s in both shells',
+		async (mode) => {
+			for (const newShell of [false, true]) {
+				useSettingsStore.setState({ newShell });
+				useSessionStore.getState().updateSession('target', {
+					aiTabs: [
+						createMockAITab({ id: 'target-empty', logs: [], agentSessionId: null, inputValue: '' }),
+					],
+					activeTabId: 'target-empty',
+					unifiedTabOrder: [{ type: 'ai', id: 'target-empty' }],
+				});
+				const result = await openHandoffTarget(
+					request({ mode, origin: { ...request().origin, kind: mode }, background: false })
+				);
+				expect(result).toMatchObject({ success: true, tabId: 'target-empty', createdAgent: false });
+				const target = sessions()[1];
+				expect(target.aiTabs).toHaveLength(1);
+				expect(target.activeTabId).toBe('target-empty');
+				expect(target.unifiedTabOrder).toEqual([{ type: 'ai', id: 'target-empty' }]);
+				expect(target.aiTabs[0].inputValue).toBe(draft.text);
+			}
+		}
+	);
+
+	it.each([false, true])(
+		'keeps a reused composer draft across tab switches, new shell %s',
+		async (newShell) => {
+			useSettingsStore.setState({ newShell });
+			useSessionStore.getState().updateSession('target', {
+				aiTabs: [
+					createMockAITab({ id: 'target-empty', inputValue: '', logs: [], agentSessionId: null }),
+				],
+				activeTabId: 'target-empty',
+			});
+			useSessionStore.getState().setActiveSessionId('target');
+			useComposerInputStore.getState().loadAiDraft('target-empty', '', 'off');
+			const sync = renderHook(() =>
+				useInputSync({ setSessions: useSessionStore.getState().setSessions })
+			);
+			await act(() => openHandoffTarget(request({ background: false })));
+			expect(useComposerInputStore.getState().aiValue).toBe(draft.text);
+			act(() => {
+				const composer = useComposerInputStore.getState();
+				useSessionStore.getState().setActiveSessionId('source');
+				sync.result.current.syncAiInputToSession(composer.aiValue, {
+					tabId: composer.aiValueTabId!,
+				});
+				useComposerInputStore.getState().loadAiDraft('source-tab', 'Source draft', 'off');
+				useSessionStore.getState().setActiveSessionId('target');
+				useComposerInputStore
+					.getState()
+					.loadAiDraft('target-empty', sessions()[1].aiTabs[0].inputValue, 'off');
+			});
+			expect(sessions()[1].aiTabs[0].inputValue).toBe(draft.text);
+			expect(useComposerInputStore.getState().aiValue).toBe(draft.text);
+		}
+	);
+
+	it.each(['handoff', 'review'] as const)(
+		'preserves classic automatic naming for %s',
+		async (mode) => {
+			const result = await openHandoffTarget(request({ mode, send: true }));
+			const target = sessions()[1];
+			const tab = target.aiTabs.find((item) => item.id === result.tabId)!;
+			expect(tab.name).toBeNull();
+			expect(result.title).toBeUndefined();
+			requestTabAutoNameForMessage(target, tab.id, '# Handoff\nSource: internal');
+			expect(window.maestro.tabNaming.generateTabName).toHaveBeenCalledOnce();
+		}
+	);
+
+	it('keeps the first source title through consecutive handoffs', async () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+		useSessionStore.getState().updateSession('source', {
+			aiTabs: [
+				{
+					...sessions()[0].aiTabs[0],
+					name: '接手：Original',
+					origin: request().origin,
+				},
+			],
+		});
+		const snapshot = await readHandoffSource({
+			sourceAgentId: 'source',
+			sourceTabId: 'source-tab',
+			provider: 'claude-code',
+		});
+		expect(snapshot?.sourceTitle).toBe('Original');
+		const result = await openHandoffTarget(
+			request({
+				mode: 'review',
+				origin: { ...request().origin, kind: 'review', sourceTitle: snapshot?.sourceTitle },
+			})
+		);
+		expect(result.title).toBe('复核：Original');
+	});
+
+	it.each([
+		'message',
+		'native',
+		'draft',
+		'live draft',
+		'composer draft',
+		'image',
+		'busy',
+		'deferred',
+		'queued',
+		'multiple',
+	])('preserves a target with %s', async (reason) => {
+		const tab = createMockAITab({
+			id: 'target-empty',
+			logs: [],
+			agentSessionId: null,
+			inputValue: '',
+		});
+		if (reason === 'message')
+			tab.logs = [{ id: 'old', timestamp: 1, source: 'user', text: 'Keep me' }];
+		if (reason === 'native') tab.agentSessionId = 'native';
+		if (reason === 'draft') tab.inputValue = ' ';
+		if (reason === 'live draft') setLiveDraft(tab.id, 'unsaved');
+		if (reason === 'composer draft')
+			useComposerInputStore.getState().loadAiDraft(tab.id, 'unsaved', 'off');
+		if (reason === 'image') tab.stagedImages = ['data:image/png;base64,synthetic'];
+		if (reason === 'busy') tab.state = 'busy';
+		const tabs = reason === 'multiple' ? [tab, createMockAITab({ id: 'another' })] : [tab];
+		useSessionStore.getState().updateSession('target', {
+			aiTabs: tabs,
+			...(reason === 'deferred' ? { deferredContent: { tabIds: [tab.id] } } : {}),
+			...(reason === 'queued'
+				? {
+						executionQueue: [
+							{
+								id: 'queued',
+								tabId: tab.id,
+								type: 'message' as const,
+								text: 'Pending send',
+								timestamp: 1,
+							},
+						],
+					}
+				: {}),
+		});
+		const before = JSON.stringify(tabs);
+		const result = await openHandoffTarget(request());
+		expect(result.success).toBe(true);
+		expect(result.tabId).not.toBe(tab.id);
+		expect(sessions()[1].aiTabs).toHaveLength(tabs.length + 1);
+		expect(JSON.stringify(sessions()[1].aiTabs.slice(0, tabs.length))).toBe(before);
+	});
+
+	it.each([
+		['en', 'handoff', 'Continued: Original'],
+		['en', 'review', 'Review: Original'],
+		['zh-CN', 'handoff', '接手：Original'],
+		['zh-CN', 'review', '复核：Original'],
+	] as const)(
+		'names %s %s before sending and keeps it during automatic naming',
+		async (uiLanguage, mode, name) => {
+			useSettingsStore.setState({ uiLanguage, newShell: true });
+			const result = await openHandoffTarget(
+				request({ mode, origin: { ...request().origin, kind: mode }, send: true })
+			);
+			expect(result).toMatchObject({ success: true, title: name });
+			const target = sessions()[1];
+			const tab = target.aiTabs.find((item) => item.id === result.tabId)!;
+			expect(tab.name).toBe(name);
+			expect(tab.origin).toMatchObject({ kind: mode, sourceTitle: 'Original' });
+			const saved = vi.mocked(window.maestro.sessions.setMany).mock.calls[0][0] as ReturnType<
+				typeof sessions
+			>;
+			expect(saved[0].aiTabs.find((item) => item.id === tab.id)?.name).toBe(name);
+			requestTabAutoNameForMessage(target, tab.id, '# Handoff\nSource: internal');
+			expect(sessions()[1].aiTabs.find((item) => item.id === tab.id)?.name).toBe(name);
+			expect(window.maestro.tabNaming.generateTabName).not.toHaveBeenCalled();
+			expect(enqueuePromptForTab).toHaveBeenCalledWith({
+				sessionId: target.id,
+				tabId: tab.id,
+				text: draft.text,
+			});
+		}
+	);
+
+	it('retains the source title in a snapshot and uses the tool name when there is no title', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const snapshot = await readHandoffSource({
+			sourceAgentId: 'source',
+			sourceTabId: 'source-tab',
+			provider: 'claude-code',
+		});
+		expect(snapshot).toMatchObject({ sourceTitle: 'Original' });
+		useSessionStore.getState().updateSession('source', { aiTabs: [] });
+		const result = await openHandoffTarget(
+			request({ origin: { ...request().origin, sourceTitle: undefined } })
+		);
+		expect(result).toMatchObject({ title: 'Continued: Claude Code' });
+	});
+
+	it('keeps a captured title in a new runner when the source lives in another window', async () => {
+		useSettingsStore.setState({ newShell: true });
+		useSessionStore.setState({ sessions: [] });
+		const result = await openHandoffTarget(request({ runnerId: undefined }));
+		expect(result).toMatchObject({
+			success: true,
+			createdAgent: true,
+			title: 'Continued: Original',
+		});
+		expect(sessions()[0].aiTabs[0]).toMatchObject({
+			name: 'Continued: Original',
+			inputValue: draft.text,
+			origin: { sourceTitle: 'Original' },
+		});
+	});
+
+	it.each([false, true])(
+		'replaces only empty conversations with live drafts, new shell %s',
+		async (newShell) => {
+			useSettingsStore.setState({ newShell });
+			useSessionStore.getState().updateSession('source', {
+				aiTabs: [
+					createMockAITab({
+						id: 'source-tab',
+						logs: [],
+						agentSessionId: null,
+						inputValue: 'older',
+						customModel: 'source-only',
+						customEffort: 'high',
+					}),
+				],
+			});
+			useComposerInputStore.getState().loadAiDraft('source-tab', 'half written', 'off');
+			useSessionStore
+				.getState()
+				.updateSession('target', { customModel: 'target-model', customEffort: 'low' });
+			const result = await openHandoffTarget(
+				request({ newConversation: { replaceTabId: 'source-tab' }, background: false })
+			);
+			expect(result.success).toBe(newShell);
+			expect(enqueuePromptForTab).not.toHaveBeenCalled();
+			if (newShell) {
+				expect(sessions().find((s) => s.id === 'source')).toBeUndefined();
+				expect(window.maestro.sessions.setMany).toHaveBeenCalledWith(expect.any(Array), ['source']);
+				const tab = sessions()
+					.find((s) => s.id === 'target')!
+					.aiTabs.find((tab) => tab.id === result.tabId)!;
+				expect(tab.inputValue).toBe('half written');
+				expect(tab.origin).toBeUndefined();
+				expect(tab.handoffDraft).toBeUndefined();
+				expect(tab.customModel).toBeUndefined();
+				expect(tab.customEffort).toBeUndefined();
+				expect(sessions().find((s) => s.id === 'target')).toMatchObject({
+					customModel: 'target-model',
+					customEffort: 'low',
+				});
+			} else expect(sessions()[0].aiTabs).toHaveLength(1);
+			useSettingsStore.setState({ newShell: false });
+		}
+	);
+
+	it.each([
+		'message',
+		'busy',
+		'native',
+		'stored draft',
+		'live draft',
+		'composer draft',
+		'image',
+	] as const)('retains the source when %s changes during target persistence', async (change) => {
+		useSettingsStore.setState({ newShell: true });
+		useSessionStore.getState().updateSession('source', {
+			aiTabs: [
+				createMockAITab({
+					id: 'source-tab',
+					logs: [],
+					agentSessionId: null,
+					inputValue: 'draft',
+				}),
+			],
+		});
+		useComposerInputStore.getState().loadAiDraft('source-tab', 'draft', 'off');
+		let release!: (saved: boolean) => void;
+		vi.mocked(window.maestro.sessions.setMany).mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = resolve;
+				})
+		);
+		const pending = openHandoffTarget(
+			request({ newConversation: { replaceTabId: 'source-tab' }, background: false })
+		);
+		await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+		const source = sessions()[0];
+		const tab = source.aiTabs[0];
+		if (change === 'message')
+			tab.logs = [{ id: 'new', timestamp: 4, source: 'user', text: 'keep this' }];
+		if (change === 'busy') tab.state = 'busy';
+		if (change === 'native') tab.agentSessionId = 'new-native';
+		if (change === 'stored draft') tab.inputValue = 'changed draft';
+		if (change === 'live draft') setLiveDraft(tab.id, 'changed draft');
+		if (change === 'composer draft') useComposerInputStore.getState().setAiValue('changed draft');
+		if (change === 'image') tab.stagedImages = ['data:image/png;base64,new'];
+		useSessionStore.getState().updateSession(source.id, { aiTabs: [{ ...tab }] });
+		release(true);
+		await pending;
+		expect(sessions().find((s) => s.id === 'source')?.aiTabs).toEqual([tab]);
+		expect(
+			vi
+				.mocked(window.maestro.sessions.setMany)
+				.mock.calls.every(
+					([saved, removed]) =>
+						!removed?.includes('source') &&
+						!(saved as (typeof source)[]).some(
+							(s) => s.id === 'source' && !s.aiTabs.some((t) => t.id === 'source-tab')
+						)
+				)
+		).toBe(true);
+		expect(useSessionStore.getState().activeSessionId).toBe('source');
+	});
+
+	it('holds and releases the source send lock around failed persistence', async () => {
+		useSettingsStore.setState({ newShell: true });
+		useSessionStore.getState().updateSession('source', {
+			aiTabs: [createMockAITab({ id: 'source-tab', logs: [], agentSessionId: null })],
+		});
+		let release!: (saved: boolean) => void;
+		vi.mocked(window.maestro.sessions.setMany).mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = resolve;
+				})
+		);
+		const pending = openHandoffTarget(request({ newConversation: { replaceTabId: 'source-tab' } }));
+		await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+		const locked = useOperationStore.getState().tabReplacementLocks?.['source-tab'];
+		release(false);
+		expect((await pending).success).toBe(false);
+		expect(locked).toBe(1);
+		expect(useOperationStore.getState().tabReplacementLocks?.['source-tab']).toBeUndefined();
+		expect(sessions()[0].aiTabs[0].id).toBe('source-tab');
+	});
+
+	it.each(['composer', 'live draft', 'stored draft', 'other tab'] as const)(
+		'restores source changes during source persistence: %s',
+		async (change) => {
+			useSettingsStore.setState({ newShell: true });
+			useSessionStore.getState().updateSession('source', {
+				aiTabs: [
+					createMockAITab({
+						id: 'source-tab',
+						logs: [],
+						agentSessionId: null,
+						inputValue: 'draft',
+					}),
+				],
+			});
+			useComposerInputStore.getState().loadAiDraft('source-tab', 'draft', 'off');
+			let release!: (saved: boolean) => void;
+			vi.mocked(window.maestro.sessions.setMany)
+				.mockResolvedValueOnce(true)
+				.mockImplementationOnce(
+					() =>
+						new Promise((resolve) => {
+							release = resolve;
+						})
+				);
+			const pending = openHandoffTarget(
+				request({ newConversation: { replaceTabId: 'source-tab' }, background: false })
+			);
+			await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+			if (change === 'composer')
+				useComposerInputStore.getState().setAiValue('latest unsaved draft');
+			else if (change === 'live draft') setLiveDraft('source-tab', 'latest unsaved draft');
+			else if (change === 'stored draft')
+				useSessionStore.getState().updateSession('source', {
+					aiTabs: [{ ...sessions()[0].aiTabs[0], inputValue: 'latest unsaved draft' }],
+				});
+			else
+				useSessionStore.getState().updateSession('source', {
+					aiTabs: [
+						...sessions()[0].aiTabs,
+						createMockAITab({ id: 'new-other', inputValue: 'other content' }),
+					],
+				});
+			release(true);
+			await pending;
+			expect(vi.mocked(window.maestro.sessions.setMany).mock.calls[1][1]).toEqual([]);
+			const source = sessions().find((s) => s.id === 'source')!;
+			expect(source).toBeDefined();
+			const restored = vi
+				.mocked(window.maestro.sessions.setMany)
+				.mock.calls.at(-1)![0] as (typeof source)[];
+			expect(restored[0].id).toBe('source');
+			if (change !== 'other tab')
+				expect(restored[0].aiTabs[0].inputValue).toBe('latest unsaved draft');
+			else
+				expect(restored[0].aiTabs.find((t) => t.id === 'new-other')?.inputValue).toBe(
+					'other content'
+				);
+			expect(useSessionStore.getState().activeSessionId).toBe('source');
+		}
+	);
+
+	it('reads replacement text and images from the owning live composer', async () => {
+		useSettingsStore.setState({ newShell: true });
+		useSessionStore.getState().updateSession('source', {
+			aiTabs: [
+				createMockAITab({
+					id: 'source-tab',
+					logs: [],
+					agentSessionId: null,
+					inputValue: 'stale',
+					stagedImages: ['data:image/png;base64,live'],
+				}),
+			],
+		});
+		useComposerInputStore.getState().loadAiDraft('source-tab', 'latest draft', 'shell');
+		const snapshot = await readHandoffSource({
+			sourceAgentId: 'source',
+			sourceTabId: 'source-tab',
+			provider: 'claude-code',
+			emptyConversation: true,
+		});
+		expect(snapshot).toMatchObject({
+			draft: { text: 'latest draft' },
+			emptyConversation: { stagedImages: ['data:image/png;base64,live'], commandMode: 'shell' },
+		});
+	});
+
+	it('uses a remote owner snapshot without writing or deleting its stale mirror', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const before = JSON.stringify(sessions()[0]);
+		const result = await openHandoffTarget(
+			request({
+				newConversation: {
+					replaceTabId: 'source-tab',
+					source: { stagedImages: ['data:image/png;base64,live'], commandMode: 'shell' },
+				},
+				draft: { ...draft, text: 'latest draft' },
+			})
+		);
+		expect(result.success).toBe(true);
+		expect(JSON.stringify(sessions()[0])).toBe(before);
+		expect(sessions()[1].aiTabs.find((t) => t.id === result.tabId)).toMatchObject({
+			inputValue: 'latest draft',
+			stagedImages: ['data:image/png;base64,live'],
+			commandMode: 'shell',
+		});
+		expect(window.maestro.sessions.setMany).toHaveBeenCalledExactlyOnceWith(
+			[expect.objectContaining({ id: 'target' })],
+			[]
+		);
+	});
+
 	it('persists review origin and read-only mode before queueing', async () => {
 		const origin = { ...request().origin, kind: 'review' as const };
 		vi.mocked(window.maestro.agents.get).mockResolvedValue({

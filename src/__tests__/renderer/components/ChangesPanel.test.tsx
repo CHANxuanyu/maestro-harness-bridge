@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 /**
  * Tests for ChangesPanel - the new shell's view of what a conversation's
  * working directory changed against HEAD, and its entry to a review.
@@ -76,6 +77,25 @@ beforeEach(() => {
 });
 
 describe('ChangesPanel', () => {
+	it.each([false, true])(
+		'opens the file name while preserving diff disclosure, new shell %s',
+		async (newShell) => {
+			useSettingsStore.setState({ newShell });
+			changes.mockResolvedValue(twoFiles);
+			changeDiff.mockResolvedValue({ diff: patch, binary: false, tooLarge: false });
+			const onFileClick = vi.fn();
+			render(<ChangesPanel theme={mockTheme} session={session()} onFileClick={onFileClick} />);
+			fireEvent.click(await screen.findByText('app.ts'));
+			if (newShell) {
+				expect(onFileClick).toHaveBeenCalledWith('/project/src/app.ts');
+				expect(changeDiff).not.toHaveBeenCalled();
+				fireEvent.click(screen.getByRole('button', { name: 'Diff src/app.ts' }));
+			}
+			expect(await screen.findByText('new line two')).toBeInTheDocument();
+			useSettingsStore.setState({ newShell: false });
+		}
+	);
+
 	it('lists each change with its status and counts, and the totals', async () => {
 		changes.mockResolvedValue(twoFiles);
 		render(<ChangesPanel theme={mockTheme} session={session()} />);

@@ -31,6 +31,7 @@ export interface NativeTool {
 	gates?: string[];
 }
 export interface NativeScene {
+	writes?: Record<string, string>;
 	answer: string;
 	effort?: string;
 	tools?: NativeTool[];
@@ -186,7 +187,10 @@ export class NativeApp {
 		this.page = await this.app.firstWindow();
 		await this.page.waitForLoadState('domcontentloaded');
 		await expect(
-			this.page.getByText('Create your first agent', { exact: true }).or(this.input())
+			this.page
+				.getByText('Create your first agent', { exact: true })
+				.or(this.page.getByRole('button', { name: 'Open project folder', exact: true }))
+				.or(this.input())
 		).toBeVisible();
 	}
 	async close(failed = false) {
@@ -210,9 +214,9 @@ export class NativeApp {
 			await closed;
 		} else await this.app.close();
 	}
-	async restart() {
+	async restart(homeDir?: string) {
 		await this.close();
-		await this.start();
+		await this.start(homeDir);
 	}
 	async cli(...args: string[]) {
 		return this.cliWithEnv({}, ...args);
@@ -300,7 +304,7 @@ export class NativeApp {
 		return result.agentId as string;
 	}
 	input() {
-		return this.page.getByPlaceholder(/^Talking to /);
+		return this.page.getByPlaceholder(/^(Talking to |Message )/);
 	}
 	/**
 	 * Open the Right Bar (files, history, Auto Run) the way a user does: it

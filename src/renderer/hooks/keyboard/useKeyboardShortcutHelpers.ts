@@ -1,3 +1,6 @@
+import { shellActionVisible } from '../../../shared/newShellFeatures';
+import { shortcutAppliesToShell } from '../../../shared/shortcut-types';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useCallback } from 'react';
 import type { Shortcut } from '../../types';
 import { eventMatchesShortcutKeys } from '../../utils/shortcutMatch';
@@ -55,6 +58,8 @@ export function useKeyboardShortcutHelpers(
 	 */
 	const isShortcut = useCallback(
 		(e: KeyboardEvent, actionId: string): boolean =>
+			!!shortcuts[actionId] &&
+			shortcutAppliesToShell(shortcuts[actionId], useSettingsStore.getState().newShell) &&
 			eventMatchesShortcutKeys(e, shortcuts[actionId]?.keys),
 		[shortcuts]
 	);
@@ -67,6 +72,7 @@ export function useKeyboardShortcutHelpers(
 	 */
 	const isTabShortcut = useCallback(
 		(e: KeyboardEvent, actionId: string): boolean =>
+			shellActionVisible(actionId, useSettingsStore.getState().newShell) &&
 			eventMatchesShortcutKeys(e, (tabShortcuts[actionId] || shortcuts[actionId])?.keys),
 		[tabShortcuts, shortcuts]
 	);

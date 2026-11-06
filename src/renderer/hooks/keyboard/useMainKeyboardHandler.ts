@@ -1,3 +1,6 @@
+import { shellRightPanelTab } from '../../../shared/newShellPanel';
+import { shellFeatureVisible } from '../../../shared/newShellFeatures';
+import { chooseProject } from '../../services/openProject';
 import { useEffect, useRef, useState } from 'react';
 import type { Session, AITab } from '../../types';
 import {
@@ -159,9 +162,23 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 			// Read all values from ref - this allows the handler to stay attached while still
 			// accessing current state values. Active Session is resolved at event time from
 			// the store so App does not need to push a live Session object onto this ref.
-			const ctx = keyboardHandlerRef.current;
+			let ctx = keyboardHandlerRef.current;
 			if (!ctx) return;
 			const activeSession = selectActiveSession(useSessionStore.getState());
+			const newShell = useSettingsStore.getState().newShell;
+			if (newShell)
+				ctx = {
+					...ctx,
+					activeGroupChatId: shellFeatureVisible('groupChat', newShell)
+						? ctx.activeGroupChatId
+						: null,
+					activeRightTab: shellRightPanelTab(
+						ctx.activeRightTab,
+						newShell,
+						activeSession?.aiTabs?.find((tab) => tab.id === activeSession.activeTabId)
+							?.newShellPanel
+					),
+				};
 
 			// Terminal focus recovery: if a key event reaches this window handler while in
 			// terminal mode, xterm's textarea likely lost focus. Recover early (before any
@@ -632,7 +649,11 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 
 			// General shortcuts
 			// Only allow collapsing left sidebar when there are sessions (prevent collapse on empty state)
-			if (ctx.isShortcut(e, 'toggleSidebar')) {
+			if (useSettingsStore.getState().newShell && ctx.isShortcut(e, 'openProject')) {
+				e.preventDefault();
+				void chooseProject();
+				trackShortcut('openProject');
+			} else if (ctx.isShortcut(e, 'toggleSidebar')) {
 				if (useSessionStore.getState().sessions.length > 0 || !ctx.leftSidebarOpen) {
 					ctx.setLeftSidebarOpen((p: boolean) => !p);
 					trackShortcut('toggleSidebar');
@@ -718,7 +739,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					tileNewTabInSession(ctx.activeSessionId, matchedTile.kind);
 					trackShortcut(matchedTile.shortcutId);
 				}
-			} else if (ctx.isShortcut(e, 'agentSwitcher')) {
+			} else if (!useSettingsStore.getState().newShell && ctx.isShortcut(e, 'agentSwitcher')) {
 				e.preventDefault();
 				if (useSessionStore.getState().sessions.length > 0) {
 					ctx.setQuickActionOpen(true, 'agents');
@@ -726,7 +747,10 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				}
 			} else if (ctx.isShortcut(e, 'quickAction')) {
 				e.preventDefault();
-				if (useSessionStore.getState().sessions.length > 0) {
+				if (
+					useSessionStore.getState().sessions.length > 0 ||
+					useSettingsStore.getState().newShell
+				) {
 					ctx.setQuickActionOpen(true, 'main');
 					trackShortcut('quickAction');
 				}

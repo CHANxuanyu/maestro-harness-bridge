@@ -35,7 +35,8 @@ export const AGENT_DISPLAY_NAMES: Record<AgentId, string> = {
  * Get the human-readable display name for an agent.
  * Returns the raw id string as fallback for unknown agents.
  */
-export function getAgentDisplayName(agentId: AgentId | string): string {
+export function getAgentDisplayName(agentId: AgentId | string, style?: 'short'): string {
+	if (style === 'short' && agentId === 'claude-code') return 'Claude';
 	if (Object.prototype.hasOwnProperty.call(AGENT_DISPLAY_NAMES, agentId)) {
 		return AGENT_DISPLAY_NAMES[agentId as AgentId];
 	}

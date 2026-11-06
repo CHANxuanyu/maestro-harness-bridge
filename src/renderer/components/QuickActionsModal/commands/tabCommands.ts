@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
 import type { ActiveTabInfo, QuickAction } from '../types';
@@ -73,14 +74,19 @@ export function buildNewTabCommands({
 	newTerminalTabShortcut,
 }: BuildNewTabCommandsArgs): QuickAction[] {
 	const t = getT();
+	const newShell = selectNewShellEnabled(useSettingsStore.getState());
 	if (!activeSession) return [];
 	const commands: QuickAction[] = [];
 
 	if (onNewTab) {
 		commands.push({
 			id: 'newAiChat',
-			label: t('workflows.shell.newAiChatTab'),
-			subtext: t('workflows.shell.openANewAiChatTabInThe'),
+			label: t(newShell ? 'workflows.newShell.newAiChatTab' : 'workflows.shell.newAiChatTab'),
+			subtext: t(
+				newShell
+					? 'workflows.newShell.openANewAiChatTabInThe'
+					: 'workflows.shell.openANewAiChatTabInThe'
+			),
 			shortcut: newTabShortcut,
 			action: () => {
 				onNewTab();
@@ -92,8 +98,12 @@ export function buildNewTabCommands({
 	if (onNewFileTab) {
 		commands.push({
 			id: 'newFileTab',
-			label: t('workflows.shell.newFileTab'),
-			subtext: t('workflows.shell.openANewFileTabInTheActive'),
+			label: t(newShell ? 'workflows.newShell.newFileTab' : 'workflows.shell.newFileTab'),
+			subtext: t(
+				newShell
+					? 'workflows.newShell.openANewFileTabInTheActive'
+					: 'workflows.shell.openANewFileTabInTheActive'
+			),
 			shortcut: newFileTabShortcut,
 			action: () => {
 				onNewFileTab();
@@ -105,8 +115,12 @@ export function buildNewTabCommands({
 	if (onNewBrowserTab) {
 		commands.push({
 			id: 'newBrowserTab',
-			label: t('workflows.shell.newBrowserTab'),
-			subtext: t('workflows.shell.openANewBrowserTabInTheActive'),
+			label: t(newShell ? 'workflows.newShell.newBrowserTab' : 'workflows.shell.newBrowserTab'),
+			subtext: t(
+				newShell
+					? 'workflows.newShell.openANewBrowserTabInTheActive'
+					: 'workflows.shell.openANewBrowserTabInTheActive'
+			),
 			shortcut: newBrowserTabShortcut,
 			action: () => {
 				onNewBrowserTab();
@@ -118,8 +132,12 @@ export function buildNewTabCommands({
 	if (onNewTerminalTab) {
 		commands.push({
 			id: 'newTerminalTab',
-			label: t('workflows.shell.newTerminalTab'),
-			subtext: t('workflows.shell.openANewTerminalTabInTheActive'),
+			label: t(newShell ? 'workflows.newShell.newTerminalTab' : 'workflows.shell.newTerminalTab'),
+			subtext: t(
+				newShell
+					? 'workflows.newShell.openANewTerminalTabInTheActive'
+					: 'workflows.shell.openANewTerminalTabInTheActive'
+			),
 			shortcut: newTerminalTabShortcut,
 			action: () => {
 				onNewTerminalTab();
@@ -159,6 +177,7 @@ export function buildTabCommands({
 	toggleInputMode,
 }: BuildTabCommandsArgs): QuickAction[] {
 	const t = getT();
+	const newShell = selectNewShellEnabled(useSettingsStore.getState());
 	const commands: QuickAction[] = [];
 	const { isTerminalMode, hasActiveTab, activeUnifiedIndex, unifiedTabCount, activeTabType } =
 		activeTabInfo;
@@ -180,8 +199,12 @@ export function buildTabCommands({
 	if (onOpenTabSwitcher && activeSession?.aiTabs) {
 		commands.push({
 			id: 'tabSwitcher',
-			label: t('workflows.shell.tabSwitcher'),
-			subtext: t('workflows.shell.searchOpenTabsAcrossThisAgent'),
+			label: t(newShell ? 'workflows.newShell.tabSwitcher' : 'workflows.shell.tabSwitcher'),
+			subtext: t(
+				newShell
+					? 'workflows.newShell.searchOpenTabsAcrossThisAgent'
+					: 'workflows.shell.searchOpenTabsAcrossThisAgent'
+			),
 			shortcut: tabShortcuts?.tabSwitcher,
 			action: () => {
 				onOpenTabSwitcher();
@@ -193,7 +216,7 @@ export function buildTabCommands({
 	if (hasActiveTab && onRenameTab) {
 		commands.push({
 			id: 'renameTab',
-			label: t('workflows.shell.renameTab'),
+			label: t(newShell ? 'workflows.newShell.renameTab' : 'workflows.shell.renameTab'),
 			shortcut: tabShortcuts?.renameTab,
 			action: () => {
 				onRenameTab();
@@ -233,8 +256,18 @@ export function buildTabCommands({
 			id: 'toggleEnterToSend',
 			label: t('workflows.shell.toggleEnterToSend'),
 			subtext: effective
-				? t('workflows.shell.currentlyEnterSendsClickToSwitchThisTab', { p0: formatMetaKey() })
-				: t('workflows.shell.currentlyValueEnterSendsClickToSwitchThis', { p0: formatMetaKey() }),
+				? t(
+						newShell
+							? 'workflows.newShell.currentlyEnterSendsClickToSwitchThisTab'
+							: 'workflows.shell.currentlyEnterSendsClickToSwitchThisTab',
+						{ p0: formatMetaKey() }
+					)
+				: t(
+						newShell
+							? 'workflows.newShell.currentlyValueEnterSendsClickToSwitchThis'
+							: 'workflows.shell.currentlyValueEnterSendsClickToSwitchThis',
+						{ p0: formatMetaKey() }
+					),
 			action: () => {
 				onToggleTabEnterToSend();
 				setQuickActionOpen(false);
@@ -260,9 +293,13 @@ export function buildTabCommands({
 	if (hasActiveTab && onFocusActiveTab) {
 		commands.push({
 			id: 'focusActiveTab',
-			label: t('workflows.shell.focusActiveTab'),
+			label: t(newShell ? 'workflows.newShell.focusActiveTab' : 'workflows.shell.focusActiveTab'),
 			shortcut: shortcuts.focusActiveTab,
-			subtext: t('workflows.shell.bringTheCurrentTabHeaderIntoFocus'),
+			subtext: t(
+				newShell
+					? 'workflows.newShell.bringTheCurrentTabHeaderIntoFocus'
+					: 'workflows.shell.bringTheCurrentTabHeaderIntoFocus'
+			),
 			action: () => {
 				onFocusActiveTab();
 				setQuickActionOpen(false);
@@ -276,12 +313,17 @@ export function buildTabCommands({
 	if (isAiMode && closableTabCount > 0 && onCloseAllTabs) {
 		commands.push({
 			id: 'closeAllTabs',
-			label: t('workflows.shell.closeAllTabs'),
+			label: t(newShell ? 'workflows.newShell.closeAllTabs' : 'workflows.shell.closeAllTabs'),
 			shortcut: tabShortcuts?.closeAllTabs,
 			subtext:
 				closableTabCount === 1
-					? t('workflows.shell.close1Tab')
-					: t('workflows.shell.closeAllValueTabs', { p0: closableTabCount }),
+					? t(newShell ? 'workflows.newShell.close1Tab' : 'workflows.shell.close1Tab')
+					: t(
+							newShell
+								? 'workflows.newShell.closeAllValueTabs'
+								: 'workflows.shell.closeAllValueTabs',
+							{ p0: closableTabCount }
+						),
 			action: () => {
 				onCloseAllTabs();
 				setQuickActionOpen(false);
@@ -292,9 +334,14 @@ export function buildTabCommands({
 	if (hasActiveTab && unifiedTabCount > 1 && onCloseOtherTabs) {
 		commands.push({
 			id: 'closeOtherTabs',
-			label: t('workflows.shell.closeOtherTabs'),
+			label: t(newShell ? 'workflows.newShell.closeOtherTabs' : 'workflows.shell.closeOtherTabs'),
 			shortcut: tabShortcuts?.closeOtherTabs,
-			subtext: t('workflows.shell.keepOnlyCurrentTabCloseValueOthers', { p0: unifiedTabCount - 1 }),
+			subtext: t(
+				newShell
+					? 'workflows.newShell.keepOnlyCurrentTabCloseValueOthers'
+					: 'workflows.shell.keepOnlyCurrentTabCloseValueOthers',
+				{ p0: unifiedTabCount - 1 }
+			),
 			action: () => {
 				onCloseOtherTabs();
 				setQuickActionOpen(false);
@@ -305,7 +352,7 @@ export function buildTabCommands({
 	if (hasActiveTab && activeUnifiedIndex > 0 && onCloseTabsLeft) {
 		commands.push({
 			id: 'closeTabsLeft',
-			label: t('workflows.shell.closeTabsToLeft'),
+			label: t(newShell ? 'workflows.newShell.closeTabsToLeft' : 'workflows.shell.closeTabsToLeft'),
 			shortcut: tabShortcuts?.closeTabsLeft,
 			action: () => {
 				onCloseTabsLeft();
@@ -322,7 +369,9 @@ export function buildTabCommands({
 	) {
 		commands.push({
 			id: 'closeTabsRight',
-			label: t('workflows.shell.closeTabsToRight'),
+			label: t(
+				newShell ? 'workflows.newShell.closeTabsToRight' : 'workflows.shell.closeTabsToRight'
+			),
 			shortcut: tabShortcuts?.closeTabsRight,
 			action: () => {
 				onCloseTabsRight();
@@ -334,7 +383,7 @@ export function buildTabCommands({
 	if (hasActiveTab && unifiedTabCount > 1 && onCloseCurrentTab) {
 		commands.push({
 			id: 'closeCurrentTab',
-			label: t('workflows.shell.closeTab'),
+			label: t(newShell ? 'workflows.newShell.closeTab' : 'workflows.shell.closeTab'),
 			shortcut: tabShortcuts?.closeTab,
 			action: () => {
 				onCloseCurrentTab();
@@ -353,7 +402,11 @@ export function buildTabCommands({
 	if (modelEffortTabId) {
 		commands.push({
 			id: 'changeModelEffort',
-			label: t('workflows.shell.changeTabsModelAndEffort'),
+			label: t(
+				newShell
+					? 'workflows.newShell.changeTabsModelAndEffort'
+					: 'workflows.shell.changeTabsModelAndEffort'
+			),
 			subtext: t('workflows.shell.pickAModelAndEffortLevelWithThe'),
 			shortcut: shortcuts.openModelEffort,
 			action: () => {
@@ -378,7 +431,11 @@ export function buildTabCommands({
 		commands.push({
 			id: 'aiHandoff',
 			label: t('workflows.sessions.handoff.paletteLabel'),
-			subtext: t('workflows.sessions.handoff.paletteSubtext'),
+			subtext: t(
+				newShell
+					? 'workflows.sessions.handoff.conversationSubtext'
+					: 'workflows.sessions.handoff.paletteSubtext'
+			),
 			action: () => {
 				setQuickActionOpen(false);
 				requestAiHandoff(sessionId, modelEffortTabId);
@@ -397,8 +454,12 @@ export function buildTabCommands({
 		if (snoozeTarget) {
 			commands.push({
 				id: 'snoozeTab',
-				label: t('workflows.shell.snoozeTab'),
-				subtext: t('workflows.shell.hideThisTabUntilLaterThenGetA'),
+				label: t(newShell ? 'workflows.newShell.snoozeTab' : 'workflows.shell.snoozeTab'),
+				subtext: t(
+					newShell
+						? 'workflows.newShell.hideThisTabUntilLaterThenGetA'
+						: 'workflows.shell.hideThisTabUntilLaterThenGetA'
+				),
 				shortcut: tabShortcuts?.snoozeTab,
 				action: () => {
 					setQuickActionOpen(false);
@@ -410,8 +471,14 @@ export function buildTabCommands({
 
 	commands.push({
 		id: 'showSnoozedTabs',
-		label: t('workflows.shell.seeAllSnoozedTabs'),
-		subtext: t('workflows.shell.unsnoozeRescheduleOrDismissSnoozedTabs'),
+		label: t(
+			newShell ? 'workflows.newShell.seeAllSnoozedTabs' : 'workflows.shell.seeAllSnoozedTabs'
+		),
+		subtext: t(
+			newShell
+				? 'workflows.newShell.unsnoozeRescheduleOrDismissSnoozedTabs'
+				: 'workflows.shell.unsnoozeRescheduleOrDismissSnoozedTabs'
+		),
 		shortcut: shortcuts.showSnoozeList,
 		action: () => {
 			setQuickActionOpen(false);

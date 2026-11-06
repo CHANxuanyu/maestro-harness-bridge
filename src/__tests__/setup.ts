@@ -209,6 +209,7 @@ if (typeof window !== 'undefined') {
 // Mock window.maestro API (Electron IPC bridge)
 const mockMaestro = {
 	context: {
+		conversation: vi.fn().mockResolvedValue({ success: true, targets: [] }),
 		onHandoffReadSource: vi.fn().mockReturnValue(() => {}),
 		onHandoffOpenTarget: vi.fn().mockReturnValue(() => {}),
 		sendHandoffResponse: vi.fn(),

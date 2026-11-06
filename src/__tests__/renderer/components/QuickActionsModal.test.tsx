@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { logger } from '../../../renderer/utils/logger';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -200,8 +201,35 @@ const createDefaultProps = (
 });
 
 describe('QuickActionsModal', () => {
+	it.each([false, true])(
+		'filters upstream palette actions only in the new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			render(
+				<QuickActionsModal
+					{...createDefaultProps({
+						sessions: [createMockSession(), createMockSession({ id: 'second' })],
+						setUsageDashboardOpen: vi.fn(),
+						onOpenPlaybookExchange: vi.fn(),
+						onOpenSymphony: vi.fn(),
+						onOpenMaestroCue: vi.fn(),
+						onNewGroupChat: vi.fn(),
+						openWizard: vi.fn(),
+					})}
+				/>
+			);
+			const labels = Array.from(document.querySelectorAll('[data-action-label]'))
+				.map((row) => row.textContent)
+				.join('\n');
+			for (const label of ['Usage Dashboard', 'Maestro Symphony', 'Maestro Cue', 'New Group Chat'])
+				expect(labels.includes(label)).toBe(!newShell);
+			expect(labels).toContain('Settings');
+		}
+	);
+
 	beforeEach(() => {
 		vi.clearAllMocks();
+		useSettingsStore.setState({ newShell: false });
 		// Reset uiStore state used by search actions
 		useUIStore.setState({
 			sessionFilterOpen: false,

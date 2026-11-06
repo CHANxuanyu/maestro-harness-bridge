@@ -73,6 +73,7 @@ export interface TransferLastRequest {
 // ============================================================================
 
 export interface OperationStoreState {
+	tabReplacementLocks: Record<string, number>;
 	// --- Summarize (per-tab) ---
 	summarizeStates: Map<string, TabSummarizeState>;
 
@@ -90,6 +91,7 @@ export interface OperationStoreState {
 }
 
 export interface OperationStoreActions {
+	lockTabReplacement: (tabId: string) => () => void;
 	// --- Summarize ---
 	setSummarizeTabState: (tabId: string, state: TabSummarizeState) => void;
 	updateSummarizeTabState: (tabId: string, partial: Partial<TabSummarizeState>) => void;
@@ -160,6 +162,22 @@ const INITIAL_TRANSFER_STATE: Pick<
 
 export const useOperationStore = create<OperationStore>()((set) => ({
 	// --- State ---
+	tabReplacementLocks: {},
+	lockTabReplacement: (tabId) => {
+		set((s) => ({
+			tabReplacementLocks: {
+				...s.tabReplacementLocks,
+				[tabId]: (s.tabReplacementLocks[tabId] ?? 0) + 1,
+			},
+		}));
+		return () =>
+			set((s) => {
+				const next = { ...s.tabReplacementLocks };
+				if (next[tabId] > 1) next[tabId]--;
+				else delete next[tabId];
+				return { tabReplacementLocks: next };
+			});
+	},
 	summarizeStates: new Map(),
 	mergeStates: new Map(),
 	globalMergeInProgress: false,
@@ -245,6 +263,7 @@ export const useOperationStore = create<OperationStore>()((set) => ({
 	// --- Cross-cutting ---
 	resetAll: () =>
 		set({
+			tabReplacementLocks: {},
 			summarizeStates: new Map(),
 			mergeStates: new Map(),
 			globalMergeInProgress: false,

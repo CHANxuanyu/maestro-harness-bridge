@@ -224,7 +224,8 @@ test('claude handoff dialog: the palette prepares an unsent draft that the norma
 		};
 	}, codexId);
 	expect(stored.count).toBe(2);
-	expect(stored.codexTabs).toBe(2);
+	// The target's only conversation was blank, so the hand-off reuses it.
+	expect(stored.codexTabs).toBe(1);
 	expect(stored.draft).toMatchObject({
 		agentSessionId: null,
 		logs: [],

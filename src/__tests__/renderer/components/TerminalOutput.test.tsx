@@ -182,12 +182,92 @@ const createDefaultProps = (
 });
 
 describe('TerminalOutput', () => {
+	it.each([
+		['en', 'handoff', 'Continued from “Shipping”'],
+		['en', 'review', 'Review “Shipping”'],
+		['zh-CN', 'handoff', '从「Shipping」接手'],
+		['zh-CN', 'review', '复核「Shipping」'],
+	] as const)(
+		'collapses only the origin message in %s %s and expands the unchanged text',
+		(uiLanguage, kind, label) => {
+			useSettingsStore.setState({ newShell: true, uiLanguage });
+			const props = createDefaultProps();
+			const tab = props.session.tabs![0];
+			tab.origin = {
+				kind,
+				sourceSessionId: 'source',
+				sourceTabId: 'source-tab',
+				sourceProvider: 'codex',
+				sourceTitle: 'Shipping',
+				createdAt: 1,
+			};
+			const text =
+				'Edited transfer text\nSource: synthetic\nNative session: synthetic\n/project/cart.ts';
+			tab.logs = [
+				createLogEntry({ source: 'user', text }),
+				createLogEntry({ source: 'user', text: '# Handoff\nA later normal message' }),
+			];
+			const before = JSON.stringify(tab.logs);
+			render(<TerminalOutput {...props} />);
+			const button = screen.getByRole('button', { name: label });
+			expect(button).toHaveAttribute('aria-expanded', 'false');
+			expect(screen.queryByText(/Native session: synthetic/)).not.toBeInTheDocument();
+			expect(screen.getByText(/A later normal message/)).toBeVisible();
+			fireEvent.click(button);
+			expect(button).toHaveAttribute('aria-expanded', 'true');
+			expect(screen.getByText(/Native session: synthetic/).textContent).toBe(text);
+			fireEvent.click(button);
+			expect(screen.queryByText(/Native session: synthetic/)).not.toBeInTheDocument();
+			expect(JSON.stringify(tab.logs)).toBe(before);
+			useSettingsStore.setState({ newShell: false, uiLanguage: 'en' });
+		}
+	);
+
+	it.each([false, true])(
+		'keeps full ordinary messages without an origin in newShell=%s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const props = createDefaultProps();
+			props.session.tabs![0].logs = [
+				createLogEntry({ source: 'user', text: '# Handoff\nSource: a normal message' }),
+			];
+			render(<TerminalOutput {...props} />);
+			expect(screen.getByText(/Source: a normal message/)).toBeVisible();
+			useSettingsStore.setState({ newShell: false });
+		}
+	);
+
+	it('leaves the classic handoff message expanded even when origin is present', () => {
+		const props = createDefaultProps();
+		props.session.tabs![0].origin = {
+			kind: 'handoff',
+			sourceSessionId: 'source',
+			sourceTabId: 'source-tab',
+			sourceProvider: 'codex',
+			sourceTitle: 'Shipping',
+			createdAt: 1,
+		};
+		props.session.tabs![0].logs = [
+			createLogEntry({ source: 'user', text: 'Source: full handoff content' }),
+		];
+		render(<TerminalOutput {...props} />);
+		expect(screen.getByText('Source: full handoff content')).toBeVisible();
+		expect(
+			screen.queryByRole('button', { name: 'Continued from “Shipping”' })
+		).not.toBeInTheDocument();
+	});
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.useFakeTimers({ shouldAdvanceTime: true });
 		// The agents layout is the baseline these suites were written against; the
 		// conversation layout's live tool folding has its own cases.
-		useSettingsStore.setState({ showToolCalls: true, sidebarNavigationMode: 'agents' });
+		useSettingsStore.setState({
+			showToolCalls: true,
+			sidebarNavigationMode: 'agents',
+			newShell: false,
+			uiLanguage: 'en',
+		});
 		// A jump left behind by one test would fire inside the next one.
 		useUIStore.setState({ pendingLogJump: null });
 	});

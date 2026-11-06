@@ -181,6 +181,7 @@ export const FilePreview = React.memo(
 			initialSearchQuery,
 			onSearchQueryChange,
 			isTabMode,
+			onPanelBack,
 			lastModified,
 			onReloadFile,
 			previewTierOverride,
@@ -1513,7 +1514,7 @@ export const FilePreview = React.memo(
 				setJqError(null);
 				// Refocus container so keyboard navigation (arrow keys) still works
 				containerRef.current?.focus();
-			} else if (!isTabMode) {
+			} else if (!isTabMode || onPanelBack) {
 				// Only close the preview if NOT in tab mode (overlay behavior)
 				// Tabs should not close on Escape - use Cmd+W or close button
 				if (hasChanges) {
@@ -1524,7 +1525,7 @@ export const FilePreview = React.memo(
 				}
 			}
 			// In tab mode with no internal UI open, Escape does nothing
-		}, [showTocOverlay, searchOpen, hasChanges, onClose, isTabMode]);
+		}, [showTocOverlay, searchOpen, hasChanges, onClose, isTabMode, onPanelBack]);
 
 		// Register layer on mount - only for overlay mode (not tab mode)
 		// Tab mode: File preview is part of the main panel content, not an overlay
@@ -1925,6 +1926,7 @@ export const FilePreview = React.memo(
 
 				{/* Header */}
 				<FilePreviewHeader
+					onPanelBack={onPanelBack}
 					file={file}
 					theme={theme}
 					isMarkdown={isMarkdown}
@@ -2091,7 +2093,7 @@ export const FilePreview = React.memo(
 					    Sticky (not absolute) so it stays put while the pane scrolls
 					    without depending on a positioned ancestor. Drops below the
 					    find bar when that is open so the two never overlap. */}
-					{canScaleFont && (
+					{canScaleFont && !onPanelBack && (
 						<div
 							className={`sticky z-20 h-0 flex items-start justify-end pointer-events-none ${
 								searchOpen ? 'top-14' : 'top-0'

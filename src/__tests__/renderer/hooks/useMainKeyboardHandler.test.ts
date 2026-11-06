@@ -21,6 +21,8 @@ vi.mock('../../../renderer/services/tileNewTabAction', () => ({
 }));
 import { publishGitShortcutActions } from '../../../renderer/services/gitShortcutActions';
 import { getSidebarRevealToken } from '../../../renderer/utils/sidebarReveal';
+import { chooseProject } from '../../../renderer/services/openProject';
+vi.mock('../../../renderer/services/openProject', () => ({ chooseProject: vi.fn() }));
 
 /**
  * Creates a minimal mock context with all required handler functions.
@@ -4948,5 +4950,42 @@ describe('useMainKeyboardHandler - destination surface switching', () => {
 			activeSession: { id: 'test' },
 		});
 		expect(blockedWithModal).not.toHaveBeenCalled();
+	});
+});
+
+describe('new shell project entry shortcuts', () => {
+	afterEach(() => {
+		useSettingsStore.setState({ newShell: false });
+		vi.mocked(chooseProject).mockClear();
+	});
+	it.each([false, true])('routes project opening at startup only in newShell=%s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		const { result } = renderHook(() => useMainKeyboardHandler());
+		result.current.keyboardHandlerRef.current = createMockContext({
+			sessions: [],
+			isShortcut: (_event: KeyboardEvent, id: string) => id === 'openProject',
+		});
+		act(() => {
+			window.dispatchEvent(
+				new KeyboardEvent('keydown', { key: 'o', metaKey: true, bubbles: true })
+			);
+		});
+		expect(chooseProject).toHaveBeenCalledTimes(newShell ? 1 : 0);
+	});
+	it.each([false, true])('opens the palette without sessions only in newShell=%s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		const { result } = renderHook(() => useMainKeyboardHandler());
+		const open = vi.fn();
+		result.current.keyboardHandlerRef.current = createMockContext({
+			sessions: [],
+			setQuickActionOpen: open,
+			isShortcut: (_event: KeyboardEvent, id: string) => id === 'quickAction',
+		});
+		act(() => {
+			window.dispatchEvent(
+				new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })
+			);
+		});
+		expect(open).toHaveBeenCalledTimes(newShell ? 1 : 0);
 	});
 });

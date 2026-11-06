@@ -1,3 +1,4 @@
+import { useOperationStore } from '../../../renderer/stores/operationStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
@@ -120,6 +121,7 @@ describe('useInputProcessing', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		useOperationStore.getState().resetAll();
 		mockProcessQueuedItemRef.current.mockResolvedValue(undefined);
 		mockGetBatchState.mockReturnValue(defaultBatchState);
 		useSessionStore.setState({ sessions: [], activeSessionId: '' });
@@ -228,6 +230,19 @@ describe('useInputProcessing', () => {
 			// Should not call any state setters
 			expect(mockSetSessions).not.toHaveBeenCalled();
 		});
+	});
+
+	it('refuses to send or clear a draft while its source tab is being replaced', async () => {
+		const deps = createDeps({ inputValue: 'keep my draft' });
+		const tabId = deps.activeSession!.activeTabId;
+		useOperationStore.setState({ tabReplacementLocks: { [tabId]: 1 } });
+		const { result } = renderHook(() => useInputProcessing(deps));
+		await act(() => result.current.processInput());
+		expect(window.maestro.process.spawn).not.toHaveBeenCalled();
+		expect(mockProcessQueuedItemRef.current).not.toHaveBeenCalled();
+		expect(mockSetInputValue).not.toHaveBeenCalled();
+		expect(mockSetStagedImages).not.toHaveBeenCalled();
+		expect(mockSetSessions).not.toHaveBeenCalled();
 	});
 
 	describe('command mode', () => {

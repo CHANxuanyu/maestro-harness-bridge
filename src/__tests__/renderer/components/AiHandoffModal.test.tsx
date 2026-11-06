@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AiHandoffModal } from '../../../renderer/components/AiHandoffModal';
 import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { jumpToAgent } from '../../../renderer/services/agentNavigation';
 import { notifyToast } from '../../../renderer/stores/notificationStore';
@@ -72,6 +73,7 @@ function renderModal(onClose = vi.fn()) {
 }
 
 beforeEach(() => {
+	useSettingsStore.setState({ newShell: false });
 	vi.clearAllMocks();
 	Object.assign(window.maestro.context, { handoff, handoffTargets });
 	handoffTargets.mockResolvedValue({
@@ -82,6 +84,16 @@ beforeEach(() => {
 });
 
 describe('AiHandoffModal', () => {
+	it('describes a new provider conversation in its project without tab terminology', async () => {
+		useSettingsStore.setState({ newShell: true });
+		renderModal();
+		await screen.findByRole('radio', { name: /Codex/ });
+		expect(screen.getByText('Create a Codex conversation in project')).toBeInTheDocument();
+		expect(screen.getByText('Create a DeepSeek conversation in project')).toBeInTheDocument();
+		expect(screen.getByTestId('ai-handoff-modal').textContent).not.toMatch(/\btab\b/i);
+		expect(screen.getByText(/new conversation’s message box/)).toBeInTheDocument();
+	});
+
 	it('lists the other AIs and says where each draft will go', async () => {
 		renderModal();
 		// Named the way the header names the conversation, never by its id.

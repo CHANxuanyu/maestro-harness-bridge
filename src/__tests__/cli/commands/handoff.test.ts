@@ -31,6 +31,20 @@ describe('handoff CLI consent and result', () => {
 	});
 	afterEach(() => vi.restoreAllMocks());
 
+	it.each([false, true])('reports the handoff title in json=%s', async (json) => {
+		vi.mocked(sendSimpleCommand).mockResolvedValue({
+			success: true,
+			agentId: 'target',
+			tabId: 'tab',
+			state: 'draft',
+			title: 'Continued: Shipping',
+			draft: { text: 'Full draft', estimatedTokens: 3 },
+		});
+		await handoff('active', 'codex', { json });
+		if (json) expect(JSON.parse(output.mock.calls[0][0]).title).toBe('Continued: Shipping');
+		else expect(output.mock.calls[0][0]).toContain('Title: Continued: Shipping');
+	});
+
 	it('defaults to a background draft and returns the actual target IDs and preview', async () => {
 		await handoff('source-prefix', 'codex', { json: true });
 		expect(resolveTabEntry).toHaveBeenCalledWith('source-prefix', undefined);

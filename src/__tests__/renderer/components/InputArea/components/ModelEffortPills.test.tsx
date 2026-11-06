@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ModelEffortPills } from '../../../../../renderer/components/InputArea/components/ModelEffortPills';
@@ -32,6 +33,59 @@ describe('ModelEffortPills', () => {
 			/>
 		);
 	}
+
+	it.each([false, true])('distinguishes inherited model and effort, new shell %s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		renderPills({ currentModel: '', currentEffort: '' });
+		expect(screen.getByTitle('Change model')).toHaveTextContent(
+			newShell ? 'Default model' : 'default'
+		);
+		expect(screen.getByTitle('Change effort level')).toHaveTextContent(
+			newShell ? 'Default effort' : 'default'
+		);
+		useSettingsStore.setState({ newShell: false });
+	});
+
+	it.each([false, true])(
+		'formats visible labels without changing selected values, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const onModelChange = vi.fn();
+			const onEffortChange = vi.fn();
+			renderPills({
+				currentModel: 'sonnet',
+				currentEffort: 'high',
+				availableModels: ['opus'],
+				availableEfforts: ['low'],
+				modelMenuOpen: true,
+				effortMenuOpen: true,
+				onModelChange,
+				onEffortChange,
+			});
+			expect(screen.getByText(newShell ? 'Sonnet' : 'sonnet')).toBeInTheDocument();
+			expect(screen.getByText(newShell ? 'High' : 'high')).toBeInTheDocument();
+			fireEvent.click(screen.getByText(newShell ? 'Opus' : 'opus'));
+			fireEvent.click(screen.getByText(newShell ? 'Low' : 'low'));
+			expect(onModelChange).toHaveBeenCalledWith('opus');
+			expect(onEffortChange).toHaveBeenCalledWith('low');
+			useSettingsStore.setState({ newShell: false });
+		}
+	);
+
+	it.each([false, true])(
+		'keeps a model ID entry with an empty catalog only when explicitly supported, enabled %s',
+		(allowModelSelection) => {
+			const onModelChange = vi.fn();
+			renderPills({ availableModels: [], allowModelSelection, modelMenuOpen: true, onModelChange });
+			expect(!!screen.queryByTitle('Change model')).toBe(allowModelSelection);
+			if (allowModelSelection) {
+				const input = screen.getByRole('textbox');
+				fireEvent.change(input, { target: { value: 'preview-model' } });
+				fireEvent.keyDown(input, { key: 'Enter' });
+				expect(onModelChange).toHaveBeenCalledWith('preview-model');
+			}
+		}
+	);
 
 	it('renders nothing when not visible', () => {
 		renderPills({ isVisible: false });

@@ -1,3 +1,6 @@
+import { modelDisplayLabel, effortDisplayLabel } from '../utils/workflowLabels';
+import { useT } from '../i18n';
+import { useSettingsStore } from '../stores/settingsStore';
 /**
  * ModelEffortModal - keyboard-only tuning of an AI tab's model and reasoning
  * effort, drawn as a two-axis console rather than a dialog.
@@ -154,6 +157,8 @@ function findTypeaheadMatch(models: string[], query: string, from: number): numb
 }
 
 export function ModelEffortModal({ theme, tabId, onClose }: ModelEffortModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const activeSession = useSessionStore(selectActiveSession);
 	const tab = activeSession?.aiTabs.find((t) => t.id === tabId);
 	const agentId = activeSession?.toolType;
@@ -393,7 +398,9 @@ export function ModelEffortModal({ theme, tabId, onClose }: ModelEffortModalProp
 						'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, font-size 220ms ease, color 220ms ease',
 				}}
 			>
-				<span className="truncate">{model || DEFAULT_LABEL}</span>
+				<span className="truncate">
+					{(newShell ? modelDisplayLabel(model) : model) || DEFAULT_LABEL}
+				</span>
 				{isCurrent && !isSelected && (
 					<span
 						className="w-1 h-1 rounded-full shrink-0"
@@ -444,7 +451,7 @@ export function ModelEffortModal({ theme, tabId, onClose }: ModelEffortModalProp
 							'transform 180ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms ease, color 180ms ease, box-shadow 180ms ease',
 					}}
 				>
-					{effort || DEFAULT_LABEL}
+					{(newShell ? effortDisplayLabel(t, effort) : effort) || DEFAULT_LABEL}
 				</button>
 				<div className="h-[18px] flex items-end justify-center" aria-hidden>
 					{onScale && (

@@ -1,3 +1,5 @@
+import { NEW_SHELL_PANEL_ACTIONS, type NewShellPanelAction } from '../../shared/newShellPanel';
+import { isHandoffProvider } from '../../shared/aiHandoff';
 // Tab commands - manage an agent's AI tabs in the running desktop app: open a
 // new tab (optionally seeded with a prompt), close, rename, star/unstar, and
 // move. These mirror the tab bar and AI tab overlay menu via the new_tab,
@@ -30,6 +32,8 @@ import type { DesktopTabEntry } from '../../shared/desktopTabs';
 import { resolveBackgroundFlag } from '../../shared/focusPlacement';
 
 interface TabNewOptions {
+	provider?: string;
+	replaceEmpty?: string;
 	agent: string;
 	prompt?: string;
 	background?: boolean;
@@ -53,6 +57,28 @@ export async function tabNew(options: TabNewOptions): Promise<void> {
 	const background = resolveBackgroundFlag(options, 'tab-new');
 
 	try {
+		if (options.provider) {
+			if (!isHandoffProvider(options.provider) || prompt)
+				return failCommand('Choose claude-code, codex or deepseek without --prompt', options.json);
+			const owner = options.replaceEmpty
+				? await resolveTabOwner(options.replaceEmpty, options.agent)
+				: undefined;
+			const result = await sendSimpleCommand(
+				{
+					type: 'ai_handoff',
+					action: 'new-conversation',
+					sourceAgentId: sessionId,
+					targetProvider: options.provider,
+					replaceTabId: owner?.tabId,
+					background,
+				},
+				'ai_handoff_result'
+			);
+			reportResult(result, { json: options.json, successMessage: 'Opened provider conversation' });
+			return;
+		}
+		if (options.replaceEmpty)
+			return failCommand('--replace-empty requires --provider', options.json);
 		const payload = prompt
 			? { type: 'new_ai_tab_with_prompt', sessionId, prompt, background }
 			: { type: 'new_tab', sessionId, background };
@@ -330,6 +356,23 @@ export async function tabThinking(
 	);
 }
 
+/** Select a supported permission mode using the same fields as the composer. */
+export async function tabPermission(
+	tabId: string,
+	mode: string,
+	options: TabMutateOptions
+): Promise<void> {
+	if (!['full', 'standard', 'readonly'].includes(mode)) {
+		return failCommand('Permission mode must be full, standard, or readonly', options.json);
+	}
+	await tabFlag(
+		tabId,
+		{ permissionMode: mode },
+		(owner) => `Set permission mode for tab ${owner.tabId} to ${mode}`,
+		options
+	);
+}
+
 /** Put one tab into read-only / plan mode (the agent may not modify files). */
 export async function tabReadOnly(
 	tabId: string,
@@ -441,8 +484,39 @@ export async function tabShow(tabId: string, options: TabMutateOptions): Promise
 	row('Effort', inherited(entry.effort));
 	row('Thinking', entry.thinking ?? 'off');
 	row('Read-only', String(entry.readOnly ?? false));
+	row('Permission', entry.permissionMode ?? (entry.readOnly ? 'readonly' : 'full'));
 	row('Save to History', String(entry.saveToHistory ?? false));
 	row('Enter to send', inherited(entry.enterToSend));
 	row('Starred', String(entry.starred));
 	row('Unread', String(entry.hasUnread ?? false));
+}
+
+/** Presentation of this conversation, persisted through the existing tab patch route. */
+export async function tabPanel(
+	tabId: string,
+	action: string,
+	options: TabMutateOptions & { filter?: string; content?: string; line?: string }
+): Promise<void> {
+	if (!NEW_SHELL_PANEL_ACTIONS.includes(action as NewShellPanelAction))
+		return failCommand(
+			'Choose changes, files, back, open, close, edit, preview or save',
+			options.json
+		);
+	if (
+		options.line !== undefined &&
+		(!Number.isSafeInteger(Number(options.line)) || Number(options.line) < 1)
+	)
+		return failCommand('Line must be a positive integer', options.json);
+	const owner = await resolveTabOwner(tabId, options.agent);
+	await writeTabPatch(
+		owner,
+		{
+			...(options.content !== undefined ? { newShellFileContent: options.content } : {}),
+			...(options.line !== undefined ? { newShellFileLine: Number(options.line) } : {}),
+			newShellPanelAction: action,
+			...(options.filter !== undefined ? { newShellPanelFilter: options.filter } : {}),
+		},
+		`Panel: ${action}`,
+		options
+	);
 }

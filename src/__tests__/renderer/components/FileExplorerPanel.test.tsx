@@ -11,6 +11,7 @@ import { mockTheme } from '../../helpers/mockTheme';
 import { spyOnListeners, expectAllListenersRemoved } from '../../helpers/listenerLeakAssertions';
 // Mock lucide-react
 vi.mock('lucide-react', () => ({
+	MoreHorizontal: () => <span data-testid="more-horizontal" />,
 	ChevronRight: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
 		<span data-testid="chevron-right" className={className} style={style}>
 			▶
@@ -361,7 +362,12 @@ describe('FileExplorerPanel', () => {
 		// rightPanelWidth (384) is below RIGHT_PANEL_COMPACT_THRESHOLD (420),
 		// which would hide the icon and break tests that assert on it.
 		const { useSettingsStore } = await import('../../../renderer/stores/settingsStore');
-		useSettingsStore.setState({ rightPanelWidth: 500, uiLanguage: 'en' });
+		useSettingsStore.setState({
+			rightPanelWidth: 500,
+			uiLanguage: 'en',
+			newShell: false,
+			htmlDoubleClickOpensInBrowser: false,
+		});
 
 		defaultProps = {
 			session: createMockSession(),
@@ -398,6 +404,39 @@ describe('FileExplorerPanel', () => {
 		useSettingsStore.setState({ uiLanguage: 'system' });
 		vi.useRealTimers();
 	});
+
+	it.each([false, true])(
+		'renders the shell file toolbar without rewriting icon preferences, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell, fileExplorerIconTheme: 'rich' });
+			const { container } = render(
+				<FileExplorerPanel
+					{...defaultProps}
+					fileExplorerIconTheme="rich"
+					session={createMockSession({
+						fileTree: mockFileTree,
+						fileTreeStats: { fileCount: 4, folderCount: 2, totalSize: 100 },
+					})}
+				/>
+			);
+			expect(!!screen.queryByPlaceholderText('Filter files...')).toBe(newShell);
+			expect(!!screen.queryByText('/Users/test/project')).toBe(!newShell);
+			expect(!!container.querySelector('.file-stats-container')).toBe(!newShell);
+			expect(!!screen.queryByTitle('Expand all folders')).toBe(!newShell);
+			if (newShell) {
+				expect(container.querySelector('[data-file-explorer-icon-theme="rich"]')).toBeNull();
+				fireEvent.change(screen.getByRole('textbox'), { target: { value: 'readme' } });
+				expect(defaultProps.setFileTreeFilter).toHaveBeenCalledWith('readme');
+				fireEvent.click(screen.getByLabelText('File options'));
+				fireEvent.click(screen.getByRole('menuitemcheckbox'));
+				expect(defaultProps.setShowHiddenFiles).toHaveBeenCalledWith(true);
+				fireEvent.click(screen.getByTitle('Refresh file tree'));
+				expect(defaultProps.refreshFileTree).toHaveBeenCalled();
+			}
+			expect(useSettingsStore.getState().fileExplorerIconTheme).toBe('rich');
+			useSettingsStore.setState({ newShell: false });
+		}
+	);
 
 	it('switches file controls and counts without changing paths or actions', () => {
 		const session = createMockSession({
@@ -1204,6 +1243,76 @@ describe('FileExplorerPanel', () => {
 	});
 
 	describe('File and Folder Clicks', () => {
+		it('opens a file preview on a single click in the new shell', () => {
+			useSettingsStore.setState({ newShell: true });
+			render(<FileExplorerPanel {...defaultProps} />);
+			fireEvent.click(screen.getByText('README.md'));
+
+			expect(defaultProps.handleFileClick).toHaveBeenCalledExactlyOnceWith(
+				{ name: 'README.md', type: 'file' },
+				'README.md'
+			);
+			expect(defaultProps.setSelectedFileIndex).toHaveBeenCalled();
+			expect(defaultProps.setActiveFocus).toHaveBeenCalledWith('right');
+		});
+
+		it('only selects a file on a single click in the classic shell', () => {
+			render(<FileExplorerPanel {...defaultProps} />);
+			fireEvent.click(screen.getByText('README.md'));
+
+			expect(defaultProps.setSelectedFileIndex).toHaveBeenCalled();
+			expect(defaultProps.setActiveFocus).toHaveBeenCalledWith('right');
+			expect(defaultProps.handleFileClick).not.toHaveBeenCalled();
+		});
+
+		it.each(['ctrlKey', 'metaKey', 'shiftKey'])(
+			'keeps %s file clicks as selection gestures in the new shell',
+			(modifier) => {
+				useSettingsStore.setState({ newShell: true });
+				render(<FileExplorerPanel {...defaultProps} />);
+				fireEvent.click(screen.getByText('README.md'), { [modifier]: true });
+
+				expect(defaultProps.handleFileClick).not.toHaveBeenCalled();
+			}
+		);
+
+		it('opens only one preview for a double click in the new shell', () => {
+			useSettingsStore.setState({ newShell: true });
+			render(<FileExplorerPanel {...defaultProps} />);
+			const file = screen.getByText('README.md');
+			fireEvent.click(file, { detail: 1 });
+			fireEvent.click(file, { detail: 2 });
+			fireEvent.doubleClick(file, { detail: 2 });
+
+			expect(defaultProps.handleFileClick).toHaveBeenCalledTimes(1);
+		});
+
+		it('previews HTML on a single click in the new shell with the classic browser preference', () => {
+			useSettingsStore.setState({ newShell: true, htmlDoubleClickOpensInBrowser: true });
+			const onOpenBrowserTabAt = vi.fn();
+			render(<FileExplorerPanel {...defaultProps} onOpenBrowserTabAt={onOpenBrowserTabAt} />);
+			fireEvent.click(screen.getByText('index.html'));
+
+			expect(defaultProps.handleFileClick).toHaveBeenCalledExactlyOnceWith(
+				{ name: 'index.html', type: 'file' },
+				'index.html'
+			);
+			expect(onOpenBrowserTabAt).not.toHaveBeenCalled();
+		});
+
+		it('toggles folders without opening a preview in the new shell', () => {
+			useSettingsStore.setState({ newShell: true });
+			render(<FileExplorerPanel {...defaultProps} />);
+			fireEvent.click(screen.getByText('src'));
+
+			expect(defaultProps.toggleFolder).toHaveBeenCalledExactlyOnceWith(
+				'src',
+				'session-1',
+				expect.any(Function)
+			);
+			expect(defaultProps.handleFileClick).not.toHaveBeenCalled();
+		});
+
 		it('calls toggleFolder when clicking a folder', () => {
 			render(<FileExplorerPanel {...defaultProps} />);
 			const srcFolder = screen.getByText('src');

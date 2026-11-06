@@ -1,3 +1,5 @@
+import { shellSettingVisible } from '../../../shared/newShellFeatures';
+import { useSettingsStore } from '../../stores/settingsStore';
 /**
  * SettingsSearch - Cross-tab search for the Settings modal
  *
@@ -37,7 +39,10 @@ export function useSettingsSearch({
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const locale = useAppLocale();
-	const results = searchSettings(query, locale);
+	const newShell = useSettingsStore((s) => s.newShell);
+	const results = searchSettings(query, locale).filter((setting) =>
+		shellSettingVisible(setting.id, setting.tab, newShell)
+	);
 	const isActive = query.length > 0;
 
 	// Notify parent when search active state changes

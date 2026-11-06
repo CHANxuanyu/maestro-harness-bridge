@@ -15,6 +15,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { ShortcutsTab } from '../../../../../renderer/components/Settings/tabs/ShortcutsTab';
 import type { Shortcut } from '../../../../../renderer/types';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
+import { DEFAULT_SHORTCUTS } from '../../../../../renderer/constants/shortcuts';
 
 import { mockTheme } from '../../../../helpers/mockTheme';
 // Mock formatShortcutKeys
@@ -47,11 +49,13 @@ vi.mock('../../../../../renderer/hooks/settings/useSettings', () => ({
 describe('ShortcutsTab', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
+		useSettingsStore.setState({ newShell: false });
 	});
 
 	afterEach(() => {
 		vi.useRealTimers();
 		vi.clearAllMocks();
+		delete mockShortcuts.openProject;
 	});
 
 	it('should display shortcuts list', async () => {
@@ -101,6 +105,35 @@ describe('ShortcutsTab', () => {
 		// 3 general + 1 tab = 4 total
 		expect(screen.getByText('4')).toBeInTheDocument();
 	});
+
+	it.each([false, true])(
+		'counts only shortcuts for the current shell, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			mockShortcuts.openProject = { ...DEFAULT_SHORTCUTS.openProject };
+			render(<ShortcutsTab theme={mockTheme} />);
+			expect(screen.getByText(newShell ? '5' : '4')).toBeInTheDocument();
+			fireEvent.change(screen.getByPlaceholderText('Filter shortcuts...'), {
+				target: { value: 'Session' },
+			});
+			expect(screen.getByText(newShell ? '2 / 5' : '2 / 4')).toBeInTheDocument();
+		}
+	);
+
+	it.each([false, true])(
+		'counts unassigned openProject only in the new shell, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			mockShortcuts.openProject = { ...DEFAULT_SHORTCUTS.openProject, keys: [] };
+			render(<ShortcutsTab theme={mockTheme} />);
+			if (newShell) {
+				fireEvent.click(screen.getByRole('button', { name: 'Unassigned 1' }));
+				expect(screen.getByText('1 / 5')).toBeInTheDocument();
+			} else {
+				expect(screen.queryByRole('button', { name: 'Unassigned 1' })).not.toBeInTheDocument();
+			}
+		}
+	);
 
 	it('should show filtered count when filtering', async () => {
 		render(<ShortcutsTab theme={mockTheme} />);

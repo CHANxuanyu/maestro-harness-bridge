@@ -1,3 +1,6 @@
+import { useNewConversationTools, newShellConversation } from '../../services/newShellConversation';
+import { chooseProject } from '../../services/openProject';
+import { Spinner } from '../ui/Spinner';
 /**
  * ProjectSessionTree - the Left Bar's conversation-first navigation.
  *
@@ -53,12 +56,15 @@ import { getAgentDisplayName } from '../../../shared/agentMetadata';
 import { FilterInput } from '../ui/FilterInput';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { shortcutSuffix } from '../ui/ShortcutHint';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
+import { requestAiHandoff } from '../../services/aiHandoffEntry';
+import { readableTextOn } from '../../../shared/colorContrast';
 import { useFormatRelativeTime, useT, type TFunction } from '../../i18n';
 
 export type ProjectHistoryLoadStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
 
 export interface ProjectSessionTreeProps {
+	headerMenu?: ReactNode;
 	theme: Theme;
 	projects: SidebarProject[];
 	activeKey: string | null;
@@ -323,6 +329,7 @@ const StatusMark = memo(function StatusMark({
 	conversation: SidebarConversation;
 	t: TFunction;
 }) {
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const labels: string[] = [];
 	if (conversation.error) labels.push(t('workflows.conversations.error'));
 	if (conversation.busy) labels.push(t('workflows.conversations.busy'));
@@ -335,7 +342,9 @@ const StatusMark = memo(function StatusMark({
 	if (conversation.error) {
 		mark = <AlertCircle className="w-3 h-3" style={{ color: theme.colors.error }} />;
 	} else if (conversation.busy) {
-		mark = (
+		mark = newShell ? (
+			<Spinner size={12} color={theme.colors.warning} />
+		) : (
 			<span
 				className="block w-1.5 h-1.5 rounded-full animate-pulse"
 				style={{ backgroundColor: theme.colors.warning }}
@@ -658,13 +667,15 @@ const ProjectSection = memo(function ProjectSection({
 			// One configuration means there is nothing to choose; zero means the
 			// only useful next step is adding one.
 			if (project.agents.length === 0) onAddAgent();
-			else if (project.agents.length === 1) onNewConversation(project.agents[0].id);
+			else if (project.agents.length === 1 && !useSettingsStore.getState().newShell)
+				onNewConversation(project.agents[0].id);
 			else openMenu('new', project.key, e.currentTarget);
 		},
 		[project, onAddAgent, onNewConversation, openMenu]
 	);
 
 	// While searching, a project with nothing matching keeps only its header.
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const showEmpty = expanded && count === 0 && !searching && !historyLoading;
 	const showLoading = expanded && count === 0 && !searching && historyLoading;
 
@@ -697,7 +708,7 @@ const ProjectSection = memo(function ProjectSection({
 							style={{ color: theme.colors.textDim }}
 						/>
 					)}
-					{project.emoji && (
+					{!newShell && project.emoji && (
 						<span aria-hidden className="shrink-0">
 							{project.emoji}
 						</span>
@@ -728,8 +739,8 @@ const ProjectSection = memo(function ProjectSection({
 					type="button"
 					aria-label={`${t('workflows.conversations.new')}: ${project.name}`}
 					title={t('workflows.conversations.new')}
-					aria-haspopup={project.agents.length > 1 ? 'menu' : undefined}
-					aria-expanded={project.agents.length > 1 ? newMenuOpen : undefined}
+					aria-haspopup={newShell || project.agents.length > 1 ? 'menu' : undefined}
+					aria-expanded={newShell || project.agents.length > 1 ? newMenuOpen : undefined}
 					onClick={handleNew}
 					className="shrink-0 p-0.5 rounded outline-none focus-visible:ring-1 hover:bg-white/10"
 					style={{ color: theme.colors.textDim }}
@@ -810,6 +821,7 @@ const ProjectSection = memo(function ProjectSection({
 // ============================================================================
 
 export const ProjectSessionTree = memo(function ProjectSessionTree({
+	headerMenu,
 	theme,
 	projects,
 	activeKey,
@@ -836,6 +848,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	onAddAgent,
 }: ProjectSessionTreeProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const newTabKeys = useSettingsStore((s) => s.tabShortcuts.newTab?.keys);
 	const formatRelativeTime = useFormatRelativeTime();
 	const formatRelative = useCallback(
@@ -893,7 +906,9 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		items: [
 			{
 				key: 'add-agent',
-				label: t('workflows.conversations.addAgent'),
+				label: t(
+					newShell ? 'workflows.conversations.addAccount' : 'workflows.conversations.addAgent'
+				),
 				icon: <Plus className="w-3.5 h-3.5" />,
 				color: theme.colors.accent,
 				onSelect: onAddAgent,
@@ -904,6 +919,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	// Menu content is resolved from the CURRENT props on every render, so a
 	// project or conversation that changed while the menu was open is never
 	// acted on through a stale snapshot. A target that vanished closes it.
+	const newProject =
+		menu?.kind === 'new' ? projects.find((project) => project.key === menu.key) : undefined;
+	const newOwnerId = newProject?.agents[0]?.id;
+	const newTools = useNewConversationTools(newOwnerId);
+
 	let menuLabel = '';
 	let menuSections: TreeMenuSection[] | null = null;
 	if (menu) {
@@ -917,6 +937,15 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						key: 'conversation',
 						heading: conversationTitle(conversation, t),
 						items: [
+							...(newShell && conversation.ownerId && conversation.tabId
+								? [
+										{
+											key: 'handoff',
+											label: t('workflows.conversations.handoff'),
+											onSelect: () => requestAiHandoff(conversation.ownerId!, conversation.tabId!),
+										},
+									]
+								: []),
 							{
 								key: 'rename',
 								label: t('workflows.conversations.rename'),
@@ -925,7 +954,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 							},
 							{
 								key: 'close',
-								label: t('workflows.conversations.close'),
+								label: t(
+									newShell
+										? 'workflows.conversations.closeConversation'
+										: 'workflows.conversations.close'
+								),
 								detail: conversation.nativeSessionId
 									? t('workflows.conversations.closeKeepsHistory')
 									: undefined,
@@ -944,24 +977,34 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					{
 						key: 'choices',
 						// One row per provider; which configuration runs it is not asked.
-						items: project.agents.map((agent) => ({
-							key: agent.id,
-							label: t('workflows.conversations.newWith', {
-								provider: providerName(agent.provider),
-							}),
-							icon: (
-								<AgentLogo
-									agentId={agent.provider}
-									supported
-									detected
-									theme={theme}
-									className="w-4 h-4"
-								/>
-							),
-							onSelect: () => onNewConversation(agent.id),
-						})),
+						items: newShell
+							? newTools.map((provider) => ({
+									key: provider,
+									label: t('workflows.conversations.newWith', {
+										provider: provider === 'deepseek' ? 'DeepSeek' : providerName(provider),
+									}),
+									onSelect: () => {
+										if (newOwnerId) void newShellConversation(newOwnerId, provider);
+									},
+								}))
+							: project.agents.map((agent) => ({
+									key: agent.id,
+									label: t('workflows.conversations.newWith', {
+										provider: providerName(agent.provider),
+									}),
+									icon: (
+										<AgentLogo
+											agentId={agent.provider}
+											supported
+											detected
+											theme={theme}
+											className="w-4 h-4"
+										/>
+									),
+									onSelect: () => onNewConversation(agent.id),
+								})),
 					},
-					addAgentSection,
+					...(!newShell ? [addAgentSection] : []),
 				];
 			} else if (project) {
 				menuLabel = t('workflows.conversations.projectActions');
@@ -974,7 +1017,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						onSelect: onRetryHistory,
 					});
 				}
-				if (onManageAgents) {
+				if (!newShell && onManageAgents) {
 					items.push({
 						key: 'manage',
 						label: t('workflows.conversations.manageAgents'),
@@ -1004,33 +1047,45 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 				]
 			: null;
 
+	const newConversationButton = onNewConversationHere && (
+		<button
+			type="button"
+			onClick={onNewConversationHere}
+			className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-white/10"
+			style={{ color: theme.colors.textMain }}
+			title={t('workflows.conversations.newConversation') + shortcutSuffix(newTabKeys)}
+			data-testid="sidebar-new-conversation"
+		>
+			<PenSquare className="w-4 h-4 shrink-0" style={{ color: theme.colors.textDim }} />
+			<span className="truncate">{t('workflows.conversations.newConversation')}</span>
+		</button>
+	);
+
 	return (
 		<div className="flex flex-col min-w-0 gap-1 select-none">
 			<div className="px-2 pt-1 pb-2 flex flex-col gap-1.5">
 				{/* The first thing in the list is starting one, the way a chat app opens. */}
-				{onNewConversationHere && (
-					<button
-						type="button"
-						onClick={onNewConversationHere}
-						className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-white/10"
-						style={{ color: theme.colors.textMain }}
-						title={t('workflows.conversations.newConversation') + shortcutSuffix(newTabKeys)}
-						data-testid="sidebar-new-conversation"
-					>
-						<PenSquare className="w-4 h-4 shrink-0" style={{ color: theme.colors.textDim }} />
-						<span className="truncate">{t('workflows.conversations.newConversation')}</span>
-					</button>
+				{newShell ? (
+					<div className="flex items-center justify-between">
+						{newConversationButton}
+						{headerMenu}
+					</div>
+				) : (
+					newConversationButton
 				)}
 				<FilterInput
 					theme={theme}
 					value={search}
 					onChange={onSearchChange}
 					placeholder={t('workflows.conversations.search')}
+					placeholderColor={
+						newShell ? readableTextOn(theme.colors.textDim, [theme.colors.bgActivity]) : undefined
+					}
 					width="100%"
 					clearLabel={t('common.clear')}
 					onKeyDown={handleSearchKeyDown}
 				/>
-				{providerOptions && onProviderFilterChange && (
+				{!newShell && providerOptions && onProviderFilterChange && (
 					<div className="text-2xs">
 						<SegmentedControl
 							theme={theme}
@@ -1128,6 +1183,16 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					triggerRef={triggerRef}
 					onDismiss={dismissMenu}
 				/>
+			)}
+			{newShell && (
+				<button
+					type="button"
+					onClick={() => void chooseProject()}
+					className="mx-2 mt-2 px-2 py-2 rounded text-left text-xs focus-ring hover:bg-white/5"
+					style={{ color: theme.colors.textDim }}
+				>
+					{t('workflows.projects.open')}
+				</button>
 			)}
 		</div>
 	);

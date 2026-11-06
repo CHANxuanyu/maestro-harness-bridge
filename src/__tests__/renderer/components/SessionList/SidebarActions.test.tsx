@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SidebarActions } from '../../../../renderer/components/SessionList/SidebarActions';
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
+import { useNotificationStore } from '../../../../renderer/stores/notificationStore';
+import { useModalStore } from '../../../../renderer/stores/modalStore';
 import { useUIStore } from '../../../../renderer/stores/uiStore';
 
 import { mockTheme } from '../../../helpers/mockTheme';
@@ -28,10 +31,38 @@ function createProps(overrides: Partial<Parameters<typeof SidebarActions>[0]> = 
 // SidebarActions calls setLeftSidebarOpen via useUIStore.getState() rather than
 // taking the setter as a prop, so reset the store between tests.
 beforeEach(() => {
+	useSettingsStore.setState({ newShell: false });
+	useNotificationStore.setState({ history: [], notificationCenterOpen: false });
 	useUIStore.setState({ leftSidebarOpen: true, leftSidebarHidden: false });
 });
 
 describe('SidebarActions', () => {
+	it.each([false, true])(
+		'removes collapsed footer focus targets only in new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const { container } = render(<SidebarActions {...createProps({ leftSidebarOpen: false })} />);
+			expect(container.querySelectorAll('button').length > 0).toBe(!newShell);
+		}
+	);
+
+	it('keeps only collapse, settings and notification center in the new shell', () => {
+		useSettingsStore.setState({ newShell: true });
+		useNotificationStore.setState({ history: [{ id: 'notice', read: false } as any] });
+		const props = createProps({ openFeedback: vi.fn(), hasUnreadAgents: true });
+		render(<SidebarActions {...props} />);
+		expect(screen.getAllByRole('button')).toHaveLength(3);
+		expect(screen.queryByText('New Agent')).toBeNull();
+		expect(screen.queryByText('Feedback')).toBeNull();
+		fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+		expect(useModalStore.getState().modals.get('settings')?.open).toBe(true);
+		const bell = screen.getByTestId('notification-center-button');
+		expect(bell.querySelector('span.absolute.rounded-full')).not.toBeNull();
+		fireEvent.click(bell);
+		expect(useNotificationStore.getState().notificationCenterOpen).toBe(true);
+		expect(props.toggleShowUnreadAgentsOnly).not.toHaveBeenCalled();
+	});
+
 	it('renders collapse button, New Agent, and Feedback when sidebar is open', () => {
 		render(<SidebarActions {...createProps({ openFeedback: vi.fn() })} />);
 

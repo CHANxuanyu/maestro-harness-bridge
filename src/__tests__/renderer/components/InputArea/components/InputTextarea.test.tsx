@@ -4,6 +4,7 @@ import type { ComponentProps, RefObject } from 'react';
 import { InputTextarea } from '../../../../../renderer/components/InputArea/components/InputTextarea';
 import { KEYSTROKE_TEXTAREA_MAX_HEIGHT } from '../../../../../renderer/utils/textareaSizing';
 import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
+import { DEEPSEEK_PRESET } from '../../../../../shared/agentPresets';
 import { createInputAreaSession, inputAreaTheme } from '../_fixtures';
 
 /**
@@ -70,6 +71,33 @@ function renderTextarea(overrides: Partial<TextareaProps> = {}) {
 }
 
 describe('InputTextarea', () => {
+	beforeEach(() => useSettingsStore.setState({ newShell: false }));
+	it.each([
+		['claude-code', undefined, 'Claude'],
+		['codex', undefined, 'Codex'],
+		['claude-code', { ANTHROPIC_BASE_URL: DEEPSEEK_PRESET.baseUrl }, 'DeepSeek'],
+		['opencode', undefined, 'OpenCode'],
+	] as const)(
+		'names provider %s in the new composer without the conversation title',
+		(toolType, customEnvVars, provider) => {
+			useSettingsStore.setState({ newShell: true });
+			const { textarea } = renderTextarea({
+				session: createInputAreaSession({
+					toolType,
+					customEnvVars,
+					name: 'Private conversation title',
+				}),
+			});
+			expect(textarea.placeholder).toBe(`Message ${provider}`);
+		}
+	);
+	it('keeps the classic composer placeholder', () => {
+		const { textarea } = renderTextarea({
+			session: createInputAreaSession({ name: 'My conversation' }),
+		});
+		expect(textarea.placeholder).toContain('My conversation');
+	});
+
 	it('caps the textarea with the shared KEYSTROKE_TEXTAREA_MAX_HEIGHT constant', () => {
 		const { textarea } = renderTextarea();
 

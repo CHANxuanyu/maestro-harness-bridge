@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { ToolbarControls } from '../../../../../renderer/components/InputArea/components/ToolbarControls';
 import { usePhoneLayout } from '../../../../../renderer/hooks/ui/useViewportBreakpoint';
 import { createInputAreaSession, inputAreaTheme } from '../_fixtures';
@@ -19,6 +20,7 @@ vi.mock('../../../../../renderer/hooks/ui/useViewportBreakpoint', async (importO
 const mockedUsePhoneLayout = vi.mocked(usePhoneLayout);
 
 describe('ToolbarControls', () => {
+	beforeEach(() => useSettingsStore.setState({ newShell: false }));
 	afterEach(() => {
 		vi.restoreAllMocks();
 		restorePointer();
@@ -59,6 +61,68 @@ describe('ToolbarControls', () => {
 			/>
 		);
 	}
+
+	it.each([false, true])(
+		'gates the extra toolbar controls without changing their settings, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const setEnterToSend = vi.fn();
+			renderToolbar({ setEnterToSend });
+			for (const title of [/Open Prompt Composer/, /Show Thinking/, /Save to History/, /Switch to/])
+				expect(!!screen.queryByTitle(title)).toBe(!newShell);
+			expect(screen.getByTitle('Attach Image')).toBeInTheDocument();
+			expect(screen.getByTitle(/^Full Access/)).toBeInTheDocument();
+			expect(
+				screen
+					.getByTitle(/^Full Access/)
+					.querySelector(newShell ? '[data-testid="shield-icon"]' : '[data-testid="eye-icon"]')
+			).not.toBeNull();
+			expect(setEnterToSend).not.toHaveBeenCalled();
+			expect(mockUpdateSessionWith).not.toHaveBeenCalled();
+		}
+	);
+
+	it.each([true, false])(
+		'lists only supported permission modes and applies the selected fields, standard supported %s',
+		(hasStandardCapability) => {
+			useSettingsStore.setState({ newShell: true });
+			const session = createInputAreaSession();
+			renderToolbar({ session, hasStandardCapability });
+			const trigger = screen.getByTitle(/^Full Access/);
+			fireEvent.click(trigger);
+			expect(mockUpdateSessionWith).not.toHaveBeenCalled();
+			expect(screen.getAllByRole('menuitemradio')).toHaveLength(hasStandardCapability ? 3 : 2);
+			expect(screen.getByRole('menuitemradio', { name: 'Full Access' })).toHaveAttribute(
+				'aria-checked',
+				'true'
+			);
+			fireEvent.click(screen.getByRole('menuitemradio', { name: 'Plan-Mode' }));
+			const updated = mockUpdateSessionWith.mock.calls[0][1](session);
+			expect(updated.aiTabs[0]).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
+			expect(screen.queryByRole('menu')).toBeNull();
+			fireEvent.click(trigger);
+			fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+			expect(screen.queryByRole('menu')).toBeNull();
+			expect(trigger).toHaveFocus();
+		}
+	);
+
+	it.each([
+		[false, 62, false],
+		[true, 49, false],
+		[true, 50, true],
+		[true, 62, true],
+	])('context display for shell %s and usage %s', (newShell, contextUsage, visible) => {
+		useSettingsStore.setState({ newShell: newShell as boolean });
+		renderToolbar({ contextUsage, onModelChange: vi.fn(), availableModels: ['sonnet'] });
+		const context = screen.queryByText(`Context ${contextUsage}%`);
+		expect(!!context).toBe(visible);
+		if (context)
+			expect(
+				screen.getByTitle(/^Change model/).closest('[data-tour="model-selector"]')
+					?.previousElementSibling
+			).toBe(context);
+	});
 
 	it('renders terminal cwd in terminal mode', () => {
 		renderToolbar({

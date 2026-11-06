@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 /**
  * @fileoverview Tests for SnoozeHistoryModal's jump-to-tab behaviour.
  *
@@ -98,7 +99,15 @@ function seedSessions(tabIds: string[]) {
 }
 
 describe('SnoozeHistoryModal jump-to-tab', () => {
+	it.each([false, true])('keeps history wording scoped to the shell %s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		render(<SnoozeHistoryModal theme={mockTheme} onClose={vi.fn()} />);
+		if (newShell) expect(screen.getByRole('dialog').textContent).not.toMatch(/\btabs?\b/i);
+		else expect(screen.getByText(/Once a snoozed tab/)).toBeInTheDocument();
+	});
+
 	beforeEach(() => {
+		useSettingsStore.setState({ newShell: false, uiLanguage: 'en' });
 		useSnoozeHistoryStore.setState({ entries: [] });
 		useSessionStore.setState({ sessions: [], activeSessionId: '' });
 	});

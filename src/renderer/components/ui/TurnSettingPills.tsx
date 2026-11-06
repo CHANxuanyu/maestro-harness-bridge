@@ -1,3 +1,6 @@
+import { useT } from '../../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
+import { modelDisplayLabel, effortDisplayLabel } from '../../utils/workflowLabels';
 /**
  * TurnSettingPills - read-only badges naming the model and effort a turn ran under.
  *
@@ -36,6 +39,8 @@ export const TurnSettingPills = memo(function TurnSettingPills({
 	model,
 	effort,
 }: TurnSettingPillsProps) {
+	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	if (!model && !effort) return null;
 
 	return (
@@ -53,7 +58,7 @@ export const TurnSettingPills = memo(function TurnSettingPills({
 					data-turn-setting-pill
 				>
 					<Sparkles className="w-2.5 h-2.5 shrink-0" />
-					<span className="truncate">{model}</span>
+					<span className="truncate">{newShell ? modelDisplayLabel(model) : model}</span>
 				</span>
 			)}
 			{effort && (
@@ -69,7 +74,7 @@ export const TurnSettingPills = memo(function TurnSettingPills({
 					data-turn-setting-pill
 				>
 					<Gauge className="w-2.5 h-2.5 shrink-0" />
-					<span className="truncate">{effort}</span>
+					<span className="truncate">{newShell ? effortDisplayLabel(t, effort) : effort}</span>
 				</span>
 			)}
 		</>

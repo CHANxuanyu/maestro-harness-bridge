@@ -1,3 +1,4 @@
+import { EmptyConversationPicker } from '../EmptyConversationPicker';
 import { useT } from '../../i18n';
 import React from 'react';
 
@@ -312,6 +313,7 @@ export interface MainPanelContentProps {
 
 export const MainPanelContent = React.memo(function MainPanelContent(props: MainPanelContentProps) {
 	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const {
 		activeSession,
 		activeTab,
@@ -837,7 +839,7 @@ export const MainPanelContent = React.memo(function MainPanelContent(props: Main
 			) : /* Browser tabs render through the persistent keep-alive overlay block below (not
 			    inline) so their <webview> never remounts when switching tabs. Skip rendering
 			    inline content when loading a remote file - loading state takes over the area. */
-			activeSession.inputMode === 'ai' && activeFileTab?.isLoading ? (
+			activeSession.inputMode === 'ai' && activeFileTabId && activeFileTab?.isLoading ? (
 				<div
 					className="flex-1 flex items-center justify-center"
 					style={{ backgroundColor: theme.colors.bgMain }}
@@ -985,6 +987,11 @@ export const MainPanelContent = React.memo(function MainPanelContent(props: Main
 								}
 								setLightboxImage={setLightboxImage}
 							/>
+						) : newShell &&
+						  activeTab &&
+						  activeTab.logs.length === 0 &&
+						  activeTab.state === 'idle' ? (
+							<EmptyConversationPicker session={activeSession} tab={activeTab} theme={theme} />
 						) : (
 							<TerminalOutput
 								key={`${activeSession.id}-${activeSession.activeTabId}`}

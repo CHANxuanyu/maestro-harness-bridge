@@ -9,6 +9,7 @@ export interface FileStats {
 export interface FilePreviewProps {
 	file: { name: string; content: string; path: string } | null;
 	onClose: () => void;
+	onPanelBack?: () => void;
 	theme: any;
 	markdownEditMode: boolean;
 	setMarkdownEditMode: (value: boolean) => void;

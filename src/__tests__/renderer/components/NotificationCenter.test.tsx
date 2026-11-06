@@ -56,6 +56,24 @@ function seed(history: NotificationRecord[], open = false) {
 const items = () => screen.queryAllByTestId('notification-center-item');
 
 describe('NotificationCenter', () => {
+	it.each([false, true])(
+		'keeps the shared inbox trigger and uses a red dot only when requested: %s',
+		(dotOnly) => {
+			seed([record()]);
+			render(<NotificationCenter theme={mockTheme} dotOnly={dotOnly} />);
+			const trigger = screen.getByTestId('notification-center-button');
+			expect(trigger).toHaveAttribute('id', 'notification-center-trigger');
+			if (dotOnly) {
+				expect(screen.queryByTestId('notification-center-badge')).toBeNull();
+				expect(trigger.querySelector('span.absolute.rounded-full')).toHaveStyle({
+					backgroundColor: mockTheme.colors.error,
+				});
+			} else expect(screen.getByTestId('notification-center-badge')).toHaveTextContent('1');
+			fireEvent.click(trigger);
+			expect(useNotificationStore.getState().notificationCenterOpen).toBe(true);
+		}
+	);
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 		useSessionStore.setState(useSessionStore.getInitialState(), true);

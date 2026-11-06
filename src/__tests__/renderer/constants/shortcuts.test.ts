@@ -1,3 +1,4 @@
+import { shortcutAppliesToShell } from '../../../shared/shortcut-types';
 /**
  * Regression guard for keyboard shortcut wiring.
  *
@@ -142,6 +143,7 @@ describe('keyboard shortcut registry wiring', () => {
 		expect(windowScopedIds).toEqual(
 			[
 				'agentSwitcher',
+				'openProject',
 				'cycleNext',
 				'cyclePrev',
 				'paneClose',
@@ -232,35 +234,38 @@ describe('keyboard shortcut registry wiring', () => {
 	 * deliberately reuses Cmd+F across panels (each scoped to whichever panel has
 	 * focus), so the same rule there would be wrong.
 	 */
-	it('binds no two global shortcuts to the same combination', () => {
-		const MODIFIERS = ['meta', 'alt', 'shift', 'ctrl', 'command'];
-		const canonical = (keys: string[]): string => {
-			const lower = keys.map((k) => k.toLowerCase());
-			const mods = lower.filter((k) => MODIFIERS.includes(k)).sort();
-			const rest = lower.filter((k) => !MODIFIERS.includes(k));
-			return [...mods, ...rest].join('+');
-		};
+	it.each([false, true])(
+		'binds no two active global shortcuts to the same combination, new shell %s',
+		(newShell) => {
+			const MODIFIERS = ['meta', 'alt', 'shift', 'ctrl', 'command'];
+			const canonical = (keys: string[]): string => {
+				const lower = keys.map((k) => k.toLowerCase());
+				const mods = lower.filter((k) => MODIFIERS.includes(k)).sort();
+				const rest = lower.filter((k) => !MODIFIERS.includes(k));
+				return [...mods, ...rest].join('+');
+			};
 
-		const byCombo = new Map<string, string[]>();
-		for (const [id, shortcut] of Object.entries(DEFAULT_SHORTCUTS as Record<string, Shortcut>)) {
-			// An empty binding is the "unbound by default" convention (the media
-			// player, Show Snoozed Tabs), not a collision - every one of them would
-			// otherwise collide with every other.
-			if (shortcut.keys.length === 0) continue;
-			const combo = canonical(shortcut.keys);
-			if (!byCombo.has(combo)) byCombo.set(combo, []);
-			byCombo.get(combo)!.push(id);
+			const byCombo = new Map<string, string[]>();
+			for (const [id, shortcut] of Object.entries(DEFAULT_SHORTCUTS as Record<string, Shortcut>)) {
+				// An empty binding is the "unbound by default" convention (the media
+				// player, Show Snoozed Tabs), not a collision - every one of them would
+				// otherwise collide with every other.
+				if (!shortcutAppliesToShell(shortcut, newShell) || shortcut.keys.length === 0) continue;
+				const combo = canonical(shortcut.keys);
+				if (!byCombo.has(combo)) byCombo.set(combo, []);
+				byCombo.get(combo)!.push(id);
+			}
+
+			const collisions = [...byCombo.entries()]
+				.filter(([, ids]) => ids.length > 1)
+				.map(([combo, ids]) => `${combo} -> ${ids.join(', ')}`);
+
+			expect(
+				collisions,
+				`Two shortcuts on one combination: the earlier branch in useMainKeyboardHandler wins and the other silently never fires. ${collisions.join('; ')}`
+			).toEqual([]);
 		}
-
-		const collisions = [...byCombo.entries()]
-			.filter(([, ids]) => ids.length > 1)
-			.map(([combo, ids]) => `${combo} -> ${ids.join(', ')}`);
-
-		expect(
-			collisions,
-			`Two shortcuts on one combination: the earlier branch in useMainKeyboardHandler wins and the other silently never fires. ${collisions.join('; ')}`
-		).toEqual([]);
-	});
+	);
 });
 
 /**
@@ -283,34 +288,42 @@ describe('DEFAULT_SHORTCUTS / TAB_SHORTCUTS / FIXED_SHORTCUTS duplicate bindings
 	 * Chords that more than one action may legitimately claim, each with the
 	 * gate that keeps them apart. Add to this ONLY with the reason written down.
 	 */
-	const INTENTIONALLY_SHARED: { chord: string; ids: string[]; why: string }[] = [
-		{
-			chord: 'Meta+f',
-			ids: [
-				'filterFiles',
-				'filterSessions',
-				'filterHistory',
-				'searchLogs',
-				'searchOutput',
-				'searchDirectorNotes',
-			],
-			why: "Each is scoped to the surface that has focus (Files tab, Left Panel, History tab, System Log viewer, Main Window, Director's Notes). Only one of those surfaces is focused at a time.",
-		},
-		{
-			chord: 'Meta+e',
-			ids: ['toggleMarkdownMode', 'renameAgentSession'],
-			why: 'The Sessions Browser is a modal layer that blocks lower layers, and its own handler consumes the key before the app-level one runs. With the browser closed there is no session row to rename; with it open there is no markdown pane to flip.',
-		},
-		{
-			chord: 'Meta+Shift+k',
-			ids: ['clearTerminal', 'toggleShowThinking'],
-			why: 'Mutually exclusive by input mode: clearTerminal is gated on inputMode === "terminal" (useMainKeyboardHandler), toggleShowThinking is a tab shortcut reached only in AI mode.',
-		},
-	];
+	const INTENTIONALLY_SHARED: { chord: string; ids: string[]; why: string; newShell?: boolean }[] =
+		[
+			{
+				chord: 'Meta+f',
+				newShell: false,
+				ids: [
+					'filterFiles',
+					'filterSessions',
+					'filterHistory',
+					'searchLogs',
+					'searchOutput',
+					'searchDirectorNotes',
+				],
+				why: "Each is scoped to the surface that has focus (Files tab, Left Panel, History tab, System Log viewer, Main Window, Director's Notes). Only one of those surfaces is focused at a time.",
+			},
+			{
+				chord: 'Meta+f',
+				newShell: true,
+				ids: ['filterFiles', 'filterSessions', 'searchLogs', 'searchOutput'],
+				why: 'The new shell hides History and Director Notes. The remaining actions still follow focus in Files, the sidebar, or the main pane; the System Log modal blocks those lower layers.',
+			},
+			{
+				chord: 'Meta+e',
+				ids: ['toggleMarkdownMode', 'renameAgentSession'],
+				why: 'The Sessions Browser is a modal layer that blocks lower layers, and its own handler consumes the key before the app-level one runs. With the browser closed there is no session row to rename; with it open there is no markdown pane to flip.',
+			},
+			{
+				chord: 'Meta+Shift+k',
+				ids: ['clearTerminal', 'toggleShowThinking'],
+				why: 'Mutually exclusive by input mode: clearTerminal is gated on inputMode === "terminal" (useMainKeyboardHandler), toggleShowThinking is a tab shortcut reached only in AI mode.',
+			},
+		];
 
 	const normalize = (keys: string[]): string => [...keys].sort().join('+');
 
-	it('ships no unexplained duplicate binding', () => {
+	it.each([false, true])('ships no unexplained duplicate binding, new shell %s', (newShell) => {
 		const all = [
 			...Object.values(DEFAULT_SHORTCUTS),
 			...Object.values(TAB_SHORTCUTS),
@@ -320,7 +333,7 @@ describe('DEFAULT_SHORTCUTS / TAB_SHORTCUTS / FIXED_SHORTCUTS duplicate bindings
 		const byChord = new Map<string, string[]>();
 		for (const sc of all) {
 			// An unassigned action (keys: []) claims nothing and cannot collide.
-			if (!sc.keys?.length) continue;
+			if (!shortcutAppliesToShell(sc, newShell) || !sc.keys?.length) continue;
 			const chord = normalize(sc.keys);
 			byChord.set(chord, [...(byChord.get(chord) ?? []), sc.id]);
 		}
@@ -328,7 +341,9 @@ describe('DEFAULT_SHORTCUTS / TAB_SHORTCUTS / FIXED_SHORTCUTS duplicate bindings
 		const unexplained: string[] = [];
 		for (const [chord, ids] of byChord) {
 			if (ids.length < 2) continue;
-			const allowed = INTENTIONALLY_SHARED.find((g) => g.chord === chord);
+			const allowed = INTENTIONALLY_SHARED.find(
+				(g) => g.chord === chord && (g.newShell === undefined || g.newShell === newShell)
+			);
 			// The allowlist must match EXACTLY. Listing a chord does not license
 			// every future action to join that group - a new arrival is a new
 			// decision and has to be made deliberately.
@@ -511,4 +526,23 @@ describe('shortcut labels carry their family keyword', () => {
 		expect(en['workflows.shell.gitCreatePullRequest']).toBe('Git: Create Pull Request');
 		expect(en['workflows.shell.gitCreatePullRequestValue']).toBe('Git: Create Pull Request ({p0})');
 	});
+});
+
+it('keeps Cmd+O exclusive to one shell action without rewriting saved keys', () => {
+	expect(DEFAULT_SHORTCUTS.openProject.keys).toEqual(['Meta', 'o']);
+	expect(DEFAULT_SHORTCUTS.agentSwitcher.keys).toEqual(['Meta', 'o']);
+	for (const newShell of [false, true]) {
+		const active = [DEFAULT_SHORTCUTS.openProject, DEFAULT_SHORTCUTS.agentSwitcher].filter((sc) =>
+			shortcutAppliesToShell(sc, newShell)
+		);
+		expect(active.map((sc) => sc.id)).toEqual([newShell ? 'openProject' : 'agentSwitcher']);
+	}
+});
+it('scopes legacy saved shortcuts even when they predate the shell metadata', () => {
+	const savedSwitcher = { id: 'agentSwitcher', label: 'Saved label', keys: ['Meta', 'o'] };
+	const savedOpen = { id: 'openProject', label: 'Saved open', keys: ['Meta', 'o'] };
+	expect(shortcutAppliesToShell(savedSwitcher, true)).toBe(false);
+	expect(shortcutAppliesToShell(savedSwitcher, false)).toBe(true);
+	expect(shortcutAppliesToShell(savedOpen, false)).toBe(false);
+	expect(savedSwitcher.keys).toEqual(['Meta', 'o']);
 });

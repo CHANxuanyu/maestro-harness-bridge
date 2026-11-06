@@ -40,6 +40,7 @@ import { uploadPathlessFile } from '../../utils/osFileDrop';
 import { useComposerInputStore } from '../../stores/composerInputStore';
 import { useDebouncedValue } from '../utils';
 import { useInputSync } from './useInputSync';
+import { registerQuitSavePreparation } from '../../services/quitSave';
 import { useTabCompletion } from './useTabCompletion';
 import type { TabCompletionSuggestion } from './useTabCompletion';
 import { useAtMentionCompletion } from './useAtMentionCompletion';
@@ -395,9 +396,10 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 	// ====================================================================
 
 	// Input sync handlers (resolve session via getState inside callbacks)
-	const { syncAiInputToSession, queueAiDraftFlush, syncTerminalInputToSession } = useInputSync({
-		setSessions,
-	});
+	const { syncAiInputToSession, queueAiDraftFlush, syncTerminalInputToSession, flushAiDraft } =
+		useInputSync({
+			setSessions,
+		});
 
 	// Mirror the live AI draft out of the composer store on every keystroke:
 	//  - into liveDraftStore, so hasDraft() reflects what's on screen
@@ -451,6 +453,22 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 	const prevActiveSessionIdRef = useRef<string | undefined>(resolvedSessionId);
 	const didHydrateAiInputRef = useRef(false);
 	const didHydrateTerminalInputRef = useRef(false);
+
+	useEffect(
+		() =>
+			registerQuitSavePreparation(() => {
+				flushAiDraft();
+				// The displayed terminal draft still belongs to the previous session
+				// until the session switch effect loads its replacement.
+				if (didHydrateTerminalInputRef.current && prevActiveSessionIdRef.current) {
+					syncTerminalInputToSession(
+						useComposerInputStore.getState().terminalValue,
+						prevActiveSessionIdRef.current
+					);
+				}
+			}),
+		[flushAiDraft, syncTerminalInputToSession]
+	);
 
 	useEffect(() => {
 		if (!activeTabIdForInput || didHydrateAiInputRef.current) return;

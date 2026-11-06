@@ -36,6 +36,7 @@ import { FilePreviewActionsSheet } from './FilePreviewActionsSheet';
 import type { FilePreviewHeaderAction, FilePreviewHeaderStat } from './FilePreviewActionsSheet';
 
 interface FilePreviewHeaderProps {
+	onPanelBack?: () => void;
 	file: { name: string; content: string; path: string };
 	theme: any;
 	isMarkdown: boolean;
@@ -152,6 +153,7 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 	setWordWrap,
 	toolbarVisibility,
 	onDelete,
+	onPanelBack,
 }: FilePreviewHeaderProps) {
 	const uiText = useT();
 	const [showBackPopup, setShowBackPopup] = useState(false);
@@ -439,6 +441,39 @@ export const FilePreviewHeader = React.memo(function FilePreviewHeader({
 	const hasSheetContent = actions.length > 0 || !!directoryPath || stats.length > 0;
 	// Desktop only: on a phone these move into the sheet, which is the whole point.
 	const showStatsGroup = stats.length > 0 && showStatsBar && !phone;
+
+	if (onPanelBack)
+		return (
+			<div
+				className="flex items-center gap-2 px-3 h-10 shrink-0 border-b"
+				style={{ borderColor: theme.colors.border }}
+			>
+				<button onClick={onPanelBack} title={uiText('workflows.shell.backToFiles')}>
+					<ChevronLeft className="w-4 h-4" />
+				</button>
+				<span className="text-sm truncate flex-1" title={file.path}>
+					{file.name}
+				</span>
+				{isEditableText && (
+					<button
+						onClick={() => setMarkdownEditMode(!markdownEditMode)}
+						title={uiText('workflows.shell.edit')}
+					>
+						<Edit className="w-4 h-4" />
+					</button>
+				)}
+				{onSave && hasChanges && (
+					<button onClick={onSave} disabled={isSaving} title={uiText('workflows.shell.save')}>
+						<Save className="w-4 h-4" />
+					</button>
+				)}
+				{isImage && onEditImage && (
+					<button onClick={onEditImage} title={uiText('workflows.shell.edit')}>
+						<Edit className="w-4 h-4" />
+					</button>
+				)}
+			</div>
+		);
 
 	return (
 		<div className="shrink-0" style={{ backgroundColor: theme.colors.bgSidebar }}>

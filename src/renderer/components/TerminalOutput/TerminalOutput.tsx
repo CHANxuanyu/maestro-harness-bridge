@@ -259,6 +259,11 @@ export const TerminalOutput = memo(
 
 		const activeTab = useMemo(() => getActiveTab(session), [session.aiTabs, session.activeTabId]);
 		const activeLogs = useMemo((): LogEntry[] => activeTab?.logs ?? [], [activeTab?.logs]);
+		const originMessageId = useMemo(
+			() =>
+				activeTab?.origin ? activeLogs.find((entry) => entry.source === 'user')?.id : undefined,
+			[activeTab?.origin, activeLogs]
+		);
 		const transcriptDeferred =
 			!!activeTab && !!session.deferredContent?.tabIds.includes(activeTab.id);
 		// Collapse FIRST so tool logs still act as response boundaries
@@ -1215,6 +1220,7 @@ export const TerminalOutput = memo(
 								<LogItem
 									key={entry.id}
 									log={entry}
+									handoffOrigin={entry.id === originMessageId ? activeTab?.origin : undefined}
 									index={index}
 									isTerminal={isTerminal}
 									isAIMode={isAIMode}

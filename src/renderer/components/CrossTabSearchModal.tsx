@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 import { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
 import { Search, Star, MessageSquare, Bot, Wrench, Brain, AlertTriangle } from 'lucide-react';
 import type { AITab, LogEntry, Shortcut, Theme } from '../types';
@@ -108,6 +110,8 @@ export function CrossTabSearchModal({
 	onJump,
 	onClose,
 }: CrossTabSearchModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	// The corpus is the tabs the strip draws. A hidden consult tab holds a
 	// conversation the user never opened, so a hit inside one would jump them to a
 	// chipless transcript they can't get back from.
@@ -198,7 +202,9 @@ export function CrossTabSearchModal({
 			<div
 				role="dialog"
 				aria-modal="true"
-				aria-label="Search Messages (All Agent Tabs)"
+				aria-label={
+					newShell ? t('workflows.newShell.searchTitle') : 'Search Messages (All Agent Tabs)'
+				}
 				tabIndex={-1}
 				className={
 					phone
@@ -217,7 +223,15 @@ export function CrossTabSearchModal({
 						ref={inputRef}
 						className="flex-1 min-w-0 bg-transparent outline-none text-lg placeholder-opacity-50 select-text"
 						placeholder={
-							regexMode ? 'Regex across all open tabs…' : 'Search messages across all open tabs…'
+							newShell
+								? t(
+										regexMode
+											? 'workflows.newShell.regexPlaceholder'
+											: 'workflows.newShell.searchPlaceholder'
+									)
+								: regexMode
+									? 'Regex across all open tabs…'
+									: 'Search messages across all open tabs…'
 						}
 						style={{ color: theme.colors.textMain }}
 						value={query}
@@ -265,8 +279,17 @@ export function CrossTabSearchModal({
 					) : (
 						<>
 							<span>
-								{result.totalMatches} {result.totalMatches === 1 ? 'message' : 'messages'} in{' '}
-								{result.tabs.length} {result.tabs.length === 1 ? 'tab' : 'tabs'}
+								{newShell ? (
+									t('workflows.newShell.searchSummary', {
+										messages: result.totalMatches,
+										count: result.tabs.length,
+									})
+								) : (
+									<>
+										{result.totalMatches} {result.totalMatches === 1 ? 'message' : 'messages'} in{' '}
+										{result.tabs.length} {result.tabs.length === 1 ? 'tab' : 'tabs'}
+									</>
+								)}
 							</span>
 							{result.truncated && (
 								<span style={{ color: theme.colors.warning }}>
@@ -275,7 +298,11 @@ export function CrossTabSearchModal({
 							)}
 						</>
 					)}
-					<span className="ml-auto opacity-70">Searching {tabs.length} open tabs</span>
+					<span className="ml-auto opacity-70">
+						{newShell
+							? t('workflows.newShell.searching', { count: tabs.length })
+							: `Searching ${tabs.length} open tabs`}
+					</span>
 				</div>
 
 				{/* Results */}
@@ -284,7 +311,9 @@ export function CrossTabSearchModal({
 						<div className="px-4 py-10 text-center text-sm" style={{ color: theme.colors.textDim }}>
 							{debouncedQuery.trim() && !result.error
 								? 'No matching messages'
-								: 'Type to search every open tab in this agent'}
+								: newShell
+									? t('workflows.newShell.searchHint')
+									: 'Type to search every open tab in this agent'}
 						</div>
 					) : (
 						result.tabs.map((tabResult) => (

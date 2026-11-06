@@ -216,8 +216,11 @@ export function nativeToolIds(provider: Provider, file: string, commands: string
 			? records.flatMap((record) =>
 					Array.isArray(record.message?.content)
 						? record.message.content
-								.filter((item) => item.type === 'tool_use')
-								.map((item) => ({ id: item.id, command: item.input?.command }))
+								.filter((item: { type?: string }) => item.type === 'tool_use')
+								.map((item: { id: string; input?: { command?: string } }) => ({
+									id: item.id,
+									command: item.input?.command,
+								}))
 						: []
 				)
 			: records

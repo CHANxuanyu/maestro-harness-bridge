@@ -1,3 +1,5 @@
+import { isLimitError } from '../../../../shared/types';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import React, { useRef, useCallback, useId, useState, memo } from 'react';
 import {
 	ChevronDown,
@@ -25,6 +27,7 @@ import {
 	formatTurnDuration,
 } from '../../../../shared/duration';
 import { getAgentDisplayName } from '../../../../shared/agentMetadata';
+import { DEEPSEEK_PRESET } from '../../../../shared/agentPresets';
 import { MessageActions } from './MessageActions';
 import { MessageInfoPanel, MessageMetaLine, type MessageInfoField } from './MessageMeta';
 import { ToolStatusLabel } from './ToolBadge';
@@ -73,6 +76,7 @@ const sameSubagentLogs = (prev?: LogEntry[], next?: LogEntry[]): boolean => {
 export const LogItem = memo(
 	({
 		log,
+		handoffOrigin,
 		index,
 		isTerminal,
 		isAIMode,
@@ -133,6 +137,7 @@ export const LogItem = memo(
 		feedNested = false,
 	}: LogItemProps) => {
 		const t = useT();
+		const newShell = useSettingsStore(selectNewShellEnabled);
 		const locale = useAppLocale();
 		const formatRelative = useFormatRelativeTime();
 		// Ref for the log item container - used for scroll-into-view on expand
@@ -313,6 +318,60 @@ export const LogItem = memo(
 			) : (
 				<div className="whitespace-pre-wrap text-sm break-words">{linkifyNode(text, theme)}</div>
 			);
+
+		if (newShell && isAIMode && isUserMessage && handoffOrigin) {
+			const title =
+				handoffOrigin.sourceTitle ||
+				(handoffOrigin.sourceProvider === 'deepseek'
+					? DEEPSEEK_PRESET.name
+					: getAgentDisplayName(handoffOrigin.sourceProvider));
+			return (
+				<div
+					ref={logItemRef}
+					data-log-id={log.id}
+					data-log-index={index}
+					data-feed-row={feedLayout ? 'user' : undefined}
+					className={`${rowPadX} py-2`}
+				>
+					<div
+						className="rounded-lg border overflow-hidden"
+						style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgActivity }}
+					>
+						<button
+							type="button"
+							onClick={handleExpandToggle}
+							aria-expanded={isExpanded}
+							aria-controls={`${infoId}-handoff`}
+							className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left"
+							style={{ color: theme.colors.textMain }}
+						>
+							{isExpanded ? (
+								<ChevronDown className="w-4 h-4 shrink-0" aria-hidden="true" />
+							) : (
+								<ChevronRight className="w-4 h-4 shrink-0" aria-hidden="true" />
+							)}
+							<span className="truncate">
+								{t(
+									handoffOrigin.kind === 'review'
+										? 'workflows.handoff.reviewMessage'
+										: 'workflows.handoff.continuedMessage',
+									{ title }
+								)}
+							</span>
+						</button>
+						{isExpanded && (
+							<pre
+								id={`${infoId}-handoff`}
+								className="px-3 pb-3 whitespace-pre-wrap break-words text-sm"
+								style={{ color: theme.colors.textMain, fontFamily }}
+							>
+								{log.text}
+							</pre>
+						)}
+					</div>
+				</div>
+			);
+		}
 
 		// A slash command expands to a long authored prompt the user already knows,
 		// so its body starts COLLAPSED to the first line and the header pill toggles
@@ -1161,7 +1220,13 @@ export const LogItem = memo(
 							<div className="flex items-center gap-2">
 								<AlertCircle className="w-5 h-5" style={{ color: theme.colors.error }} />
 								<span className="text-sm font-medium" style={{ color: theme.colors.error }}>
-									Error
+									{newShell
+										? t(
+												log.agentError && isLimitError(log.agentError)
+													? 'workflows.shell.quotaExhausted'
+													: 'workflows.shell.errorTitle'
+											)
+										: 'Error'}
 								</span>
 							</div>
 							<div className="text-sm" style={{ color: theme.colors.textMain }}>
@@ -1183,15 +1248,23 @@ export const LogItem = memo(
 									{!!log.agentError?.parsedJson && onShowErrorDetails && (
 										<button
 											onClick={() => onShowErrorDetails(log.agentError!)}
-											className="flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity"
-											style={{
-												backgroundColor: theme.colors.error + '15',
-												borderColor: theme.colors.error + '40',
-												color: theme.colors.error,
-											}}
+											className={
+												newShell
+													? 'text-xs underline underline-offset-2 hover:opacity-80'
+													: 'flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity'
+											}
+											style={
+												newShell
+													? { color: theme.colors.textDim }
+													: {
+															backgroundColor: theme.colors.error + '15',
+															borderColor: theme.colors.error + '40',
+															color: theme.colors.error,
+														}
+											}
 										>
-											<Eye className="w-3 h-3" />
-											View Details
+											{!newShell && <Eye className="w-3 h-3" />}
+											{newShell ? t('workflows.shell.errorDetails') : 'View Details'}
 										</button>
 									)}
 									{/* A limit or a lost login leaves the user waiting on this
@@ -1202,9 +1275,11 @@ export const LogItem = memo(
 											onClick={() => requestAiHandoff(sessionId!, codexFollowupTabId!)}
 											className="flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity"
 											style={{
-												backgroundColor: theme.colors.accent + '15',
-												borderColor: theme.colors.accent + '40',
-												color: theme.colors.accent,
+												backgroundColor: newShell
+													? theme.colors.accent
+													: theme.colors.accent + '15',
+												borderColor: newShell ? theme.colors.accent : theme.colors.accent + '40',
+												color: newShell ? theme.colors.accentForeground : theme.colors.accent,
 											}}
 										>
 											<ArrowRightLeft className="w-3 h-3" />
@@ -1665,14 +1740,18 @@ export const LogItem = memo(
 						theme={theme}
 						align={feedAlign}
 						compact={feedKind === 'user'}
-						revealed={isLatestReply}
+						revealed={!newShell && isLatestReply}
 						infoOpen={infoOpen}
 						infoId={infoId}
 						onToggleInfo={toggleInfo}
 						turnSettingChange={feedKind === 'reply' ? turnSettingChange : undefined}
 						secondaryTextColor={secondary}
 						actions={
-							<MessageActions variant="inline" revealed={isLatestReply} {...messageActionProps} />
+							<MessageActions
+								variant="inline"
+								revealed={!newShell && isLatestReply}
+								{...messageActionProps}
+							/>
 						}
 						endControl={
 							<JumpToMessageTopButton
@@ -1730,6 +1809,7 @@ export const LogItem = memo(
 			// An entry upgraded in place from an older cached conversion keeps its
 			// id and often its text, but changes what it draws as.
 			prevProps.log.source === nextProps.log.source &&
+			prevProps.handoffOrigin === nextProps.handoffOrigin &&
 			prevProps.log.nativeTranscript?.channel === nextProps.log.nativeTranscript?.channel &&
 			prevProps.log.metadata?.toolState === nextProps.log.metadata?.toolState &&
 			prevProps.log.delivered === nextProps.log.delivered &&

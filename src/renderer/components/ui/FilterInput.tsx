@@ -41,6 +41,7 @@ export interface FilterInputProps {
 	/** Fired on every keystroke and when the clear button empties the box. */
 	onChange: (value: string) => void;
 	placeholder?: string;
+	placeholderColor?: string;
 	/** Short count shown to the right of the input, e.g. "12 of 77". */
 	resultLabel?: string;
 	/** Native tooltip / accessible label for the input. */
@@ -63,6 +64,7 @@ export const FilterInput = forwardRef<HTMLInputElement, FilterInputProps>(functi
 		value,
 		onChange,
 		placeholder = 'Filter...',
+		placeholderColor,
 		resultLabel,
 		title,
 		ariaLabel,
@@ -108,8 +110,13 @@ export const FilterInput = forwardRef<HTMLInputElement, FilterInputProps>(functi
 				placeholder={placeholder}
 				title={title}
 				aria-label={ariaLabel ?? placeholder}
-				className="flex-1 min-w-0 bg-transparent outline-none text-xs"
-				style={{ color: theme.colors.textMain }}
+				className={`flex-1 min-w-0 bg-transparent outline-none text-xs${placeholderColor ? ' placeholder:opacity-100 placeholder:text-[var(--placeholder-color)]' : ''}`}
+				style={
+					{
+						color: theme.colors.textMain,
+						...(placeholderColor ? { '--placeholder-color': placeholderColor } : {}),
+					} as React.CSSProperties
+				}
 				autoFocus={autoFocus}
 				spellCheck={false}
 			/>

@@ -18,6 +18,7 @@ export const shortcutLabelsZhCN: Readonly<Record<string, string>> = {
 	openMemoryViewer: '打开记忆查看器',
 	toggleMode: '新建终端标签页',
 	quickAction: '快速操作',
+	openProject: '打开项目',
 	agentSwitcher: '切换智能体',
 	help: '显示快捷键',
 	settings: '打开设置',

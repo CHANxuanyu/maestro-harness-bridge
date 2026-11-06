@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import { memo, useEffect, useRef, useState } from 'react';
 import type { Theme } from '../../types';
 import { captureException } from '../../utils/sentry';
@@ -47,6 +48,7 @@ export const CodeFence = memo(function CodeFence({
 	theme,
 	onCopy,
 }: CodeFenceProps) {
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	// What the picker shows / what Shiki renders. Starts from the fence tag
 	// (resolved against our local alias table so common short tags like `js`
 	// surface as `javascript` on first paint), overridden by detection on
@@ -175,7 +177,17 @@ export const CodeFence = memo(function CodeFence({
 			data-language={resolvedLang}
 		>
 			<div className="absolute top-2 left-2 z-10 flex items-center gap-1">
-				<LanguagePicker theme={theme} language={resolvedLang} onChange={handlePickerChange} />
+				{newShell ? (
+					<span
+						data-testid="code-language-label"
+						className="text-xs"
+						style={{ color: theme.colors.textDim }}
+					>
+						{resolvedLang}
+					</span>
+				) : (
+					<LanguagePicker theme={theme} language={resolvedLang} onChange={handlePickerChange} />
+				)}
 			</div>
 			{html ? (
 				// Shiki emits `<pre class="shiki" style="background:...">` with its own

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { openProjectCommand } from './commands/open-project';
 import { aboutMe } from './commands/about-me';
 // Maestro CLI
 // Command-line interface for Maestro
@@ -154,6 +155,8 @@ import {
 	tabSaveToHistory,
 	tabThinking,
 	tabReadOnly,
+	tabPermission,
+	tabPanel,
 	tabModel,
 	tabEffort,
 	tabEnterToSend,
@@ -315,8 +318,16 @@ list
 	.action(listSessions);
 
 program
-	.command('native-history <action> <agent> [conversation]')
-	.description('List or read native project history, or delete a whole Codex conversation')
+	.command('open-project <path>')
+	.description('Open a local project in the new shell, reusing its agent or creating one silently')
+	.option('--json', 'Output JSON')
+	.action(openProjectCommand);
+
+program
+	.command('native-history <action> [agent] [conversation]')
+	.description(
+		'List recent projects, list or read native project history, or delete a whole Codex conversation'
+	)
 	.option('--json', 'Output JSON')
 	.action(nativeHistory);
 
@@ -1557,12 +1568,29 @@ const tabTargetOptions = (cmd: Command): Command =>
 tab
 	.command('new')
 	.description('Open a new tab for an agent (optionally seeded with a prompt)')
+	.option(
+		'--provider <provider>',
+		'New shell: choose claude-code, codex or deepseek without sending'
+	)
+	.option(
+		'--replace-empty <tab-id>',
+		'Move an empty conversation and its draft to the chosen provider'
+	)
 	.requiredOption('-a, --agent <id>', 'Target agent ID')
 	.option('-p, --prompt <text>', 'Seed the new AI tab with this prompt')
 	.option('--background', 'Create the tab without moving the view (agent and tab stay put)')
 	.option('--focus', 'Switch to the new tab after creating it (default)')
 	.option('--json', 'Output as JSON (for scripting)')
 	.action((options) => tabNew(options));
+
+tabTargetOptions(tab.command('panel <tab-id> <action>'))
+	.description(
+		'New shell panel: changes, files, back, open, close, edit, preview or save; read with tab show'
+	)
+	.option('--filter <query>', 'Filter the conversation file tree; an empty string clears it')
+	.option('--content <text>', 'Set the remembered text file edit buffer before this action')
+	.option('--line <number>', 'Jump to a line in the remembered preview')
+	.action((tabId, action, options) => tabPanel(tabId, action, options));
 
 tabTargetOptions(tab.command('close <tab-id>'))
 	.description('Close a tab (owning agent is resolved automatically)')
@@ -1622,6 +1650,10 @@ tabTargetOptions(tab.command('thinking <tab-id> <mode>'))
 		}
 		return tabThinking(tabId, v as ThinkingMode | 'cycle', options);
 	});
+
+tabTargetOptions(tab.command('permission <tab-id> <mode>'))
+	.description('Set permission mode: full, standard, or readonly (provider support is validated)')
+	.action((tabId, mode, options) => tabPermission(tabId, mode, options));
 
 tabTargetOptions(tab.command('read-only <tab-id> <bool>'))
 	.description('Put the tab in read-only/plan mode so the agent cannot modify files')

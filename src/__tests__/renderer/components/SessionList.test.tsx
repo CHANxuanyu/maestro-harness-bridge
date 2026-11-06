@@ -359,6 +359,7 @@ describe('SessionList', () => {
 			// "Conversation sidebar" below). Most of this file exercises the agent
 			// management view behind "Manage agents", so it starts there.
 			sidebarNavigationMode: 'agents',
+			newShell: false,
 			collapsedConversationProjects: [],
 			shortcuts: defaultShortcuts,
 			leftSidebarWidth: 300,
@@ -556,6 +557,38 @@ describe('SessionList', () => {
 			Array.from(container.querySelectorAll('li[data-conversation-key]')).map((row) =>
 				row.getAttribute('data-conversation-key')
 			);
+
+		it.each([false, true])(
+			'keeps the menu beside New conversation and gates the header, groups and focus frame, new shell %s',
+			(newShell) => {
+				useSettingsStore.setState({ newShell });
+				useUIStore.setState({ activeFocus: 'sidebar' });
+				const { container } = renderConversations();
+				expect(!!screen.queryByRole('button', { name: 'Switch agent' })).toBe(!newShell);
+				expect(!!screen.queryByTitle(/enable web interface/)).toBe(!newShell);
+				expect(!!screen.queryByText('Group Chats')).toBe(!newShell);
+				const sidebar = container.querySelector('[data-panel="left"]') as HTMLElement;
+				expect(!!sidebar.style.boxShadow).toBe(!newShell);
+				if (newShell) {
+					const row = screen.getByTestId('sidebar-new-conversation').parentElement!;
+					expect(row).toContainElement(screen.getByTitle('Menu'));
+					fireEvent.click(screen.getByTitle('Menu'));
+					expect(screen.getByText('Feedback')).toBeInTheDocument();
+				}
+			}
+		);
+
+		it.each([false, true])(
+			'makes collapsed contents unfocusable only in the new shell %s',
+			(newShell) => {
+				useSettingsStore.setState({ newShell });
+				useUIStore.setState({ leftSidebarOpen: false });
+				const { container } = renderConversations();
+				const sidebar = container.querySelector('[data-panel="left"]')!;
+				expect(sidebar.hasAttribute('inert')).toBe(newShell);
+				expect(sidebar.getAttribute('tabindex')).toBe(newShell ? '-1' : '0');
+			}
+		);
 
 		it('renders the project tree with conversations, not the agent list', () => {
 			const { container } = renderConversations();
@@ -2123,6 +2156,23 @@ describe('SessionList', () => {
 			// Verify the max-height cap (scroll support) - a utility class since
 			// the HamburgerDropdown extraction.
 			expect(menuContainer).toHaveClass('max-h-[calc(100vh-120px)]');
+		});
+
+		it('portals the anchored desktop menu and ignores inside mousedown while closing outside', () => {
+			useUIStore.setState({ leftSidebarOpen: true });
+			useSettingsStore.setState({ newShell: true });
+			const { container } = render(<SessionList {...createDefaultProps({})} />);
+			fireEvent.click(screen.getByTitle('Menu'));
+			const menu = document.querySelector('[data-hamburger-sheet]') as HTMLElement;
+			expect(menu).toBeInTheDocument();
+			expect(menu.parentElement).toBe(document.body);
+			expect(container.contains(menu)).toBe(false);
+			expect(menu).toHaveClass('fixed');
+			fireEvent.mouseDown(screen.getByText('Keyboard Shortcuts'));
+			expect(menu).toBeInTheDocument();
+			fireEvent.mouseDown(document.body);
+			expect(menu).not.toBeInTheDocument();
+			useSettingsStore.setState({ newShell: false });
 		});
 
 		it('renders the hamburger menu as a full-screen sheet with a close button on phones', () => {

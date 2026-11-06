@@ -78,6 +78,7 @@ const defaultProps = {
 	fileExplorerIconTheme: 'vscode' as any,
 	fileTreeBranchConnectors: false,
 	fileTreeFilter: '',
+	newShell: false,
 	htmlDoubleClickOpensInBrowser: false,
 	sshRemoteId: undefined,
 	isTouchPointer: false,

@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
  * JumpToMessageTopButton
  *
@@ -47,6 +48,7 @@ export function JumpToMessageTopButton({
 	placement = 'overlay',
 	label,
 }: JumpToMessageTopButtonProps) {
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const [target, setTarget] = useState<HTMLElement | null>(null);
 	const [fullyVisible, setFullyVisible] = useState(false);
@@ -104,7 +106,7 @@ export function JumpToMessageTopButton({
 			}}
 			className={
 				placement === 'inline'
-					? 'p-1 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100'
+					? `p-1 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100${newShell ? '' : ' [@media(hover:none)]:opacity-100'}`
 					: 'absolute bottom-2 left-2 p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100'
 			}
 			style={{

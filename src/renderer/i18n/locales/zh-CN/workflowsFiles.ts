@@ -1,4 +1,5 @@
 export const workflowsFiles = {
+	'workflows.files.readFailed': '读不到文件：{name}',
 	'workflows.files.size': '大小',
 	'workflows.files.lines': '行数',
 	'workflows.files.tokens': '令牌',

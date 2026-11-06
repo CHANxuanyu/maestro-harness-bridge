@@ -8,6 +8,20 @@ describe('uiStore', () => {
 		resetStore(useUIStore);
 	});
 
+	it.each([false, true])('applies the 1180px panel default only in the new shell %s', (enabled) => {
+		useUIStore.setState({ rightPanelOpen: true, rightPanelManuallyOpened: false });
+		useUIStore.getState().applyNewShellPanelDefault(1180, enabled);
+		expect(useUIStore.getState().rightPanelOpen).toBe(true);
+		useUIStore.getState().applyNewShellPanelDefault(1179, enabled);
+		expect(useUIStore.getState().rightPanelOpen).toBe(!enabled);
+		useUIStore.getState().setRightPanelOpen(true);
+		useUIStore.getState().applyNewShellPanelDefault(900, enabled);
+		expect(useUIStore.getState().rightPanelOpen).toBe(true);
+		useUIStore.getState().setRightPanelOpen(false);
+		useUIStore.getState().applyNewShellPanelDefault(1400, enabled);
+		expect(useUIStore.getState().rightPanelOpen).toBe(false);
+	});
+
 	describe('initial state', () => {
 		it('has correct default values', () => {
 			const state = useUIStore.getState();

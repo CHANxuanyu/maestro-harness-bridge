@@ -41,6 +41,7 @@ interface FileTreeRowProps {
 	 */
 	fileTreeBranchConnectors: boolean;
 	fileTreeFilter: string;
+	newShell: boolean;
 	htmlDoubleClickOpensInBrowser: boolean;
 	sshRemoteId: string | undefined;
 	isTouchPointer: boolean;
@@ -107,6 +108,7 @@ export const FileTreeRow = memo(function FileTreeRow({
 	fileExplorerIconTheme,
 	fileTreeBranchConnectors,
 	fileTreeFilter,
+	newShell,
 	htmlDoubleClickOpensInBrowser,
 	sshRemoteId,
 	isTouchPointer,
@@ -370,12 +372,15 @@ export const FileTreeRow = memo(function FileTreeRow({
 					} else {
 						toggleFolder(fullPath, session.id, setSessions);
 					}
+				} else if (newShell) {
+					// A double click also emits a second click; open the preview only once.
+					if (e.detail <= 1) void handleFileClick(node, fullPath);
 				} else if (isTouchPointer) {
 					openFile();
 				}
 			}}
 			onDoubleClick={() => {
-				if (isTouchPointer) return;
+				if (newShell || isTouchPointer) return;
 				openFile();
 			}}
 			onContextMenu={(e) => handleContextMenu(e, node, fullPath, globalIndex)}

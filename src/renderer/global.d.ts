@@ -227,6 +227,7 @@ import type { WebUserPublic } from '../shared/webLogin';
 interface MaestroAPI {
 	// Context merging API (for session context transfer and grooming)
 	context: {
+		conversation: import('../main/preload/context').ContextApi['conversation'];
 		handoff: import('../main/preload/context').ContextApi['handoff'];
 		handoffTargets: import('../main/preload/context').ContextApi['handoffTargets'];
 		onHandoffReadSource: import('../main/preload/context').ContextApi['onHandoffReadSource'];
@@ -1939,6 +1940,10 @@ interface MaestroAPI {
 	};
 	// Agent Sessions API - all methods accept optional sshRemoteId for SSH remote session storage access
 	agentSessions: {
+		projects: import('../main/preload/sessions').AgentSessionsApi['projects'];
+		openProject: import('../main/preload/sessions').AgentSessionsApi['openProject'];
+		onOpenProject: import('../main/preload/sessions').AgentSessionsApi['onOpenProject'];
+		sendOpenProjectResponse: import('../main/preload/sessions').AgentSessionsApi['sendOpenProjectResponse'];
 		listProjectHistory: (
 			scopes: import('../shared/projectHistory').ProjectHistoryScope[]
 		) => Promise<import('../shared/projectHistory').ProjectHistoryResult>;

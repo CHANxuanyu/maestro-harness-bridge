@@ -12,6 +12,7 @@ import { mockTheme } from '../../../helpers/mockTheme';
 // Per-test settings overrides layered over the fixed defaults below.
 const settingsMocks = vi.hoisted(() => ({ overrides: {} as Record<string, unknown> }));
 vi.mock('../../../../renderer/stores/settingsStore', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../../../renderer/stores/settingsStore')>()),
 	// The real rule, so the header and the store cannot disagree about it.
 	selectConversationNavigation: (
 		await importOriginal<typeof import('../../../../renderer/stores/settingsStore')>()
@@ -123,7 +124,7 @@ let mockOpenModal: ReturnType<typeof vi.spyOn>;
 // The bell has its own test file. Rendering it for real here would load the
 // agent-navigation stores behind the narrow modalStore mock above.
 vi.mock('../../../../renderer/components/NotificationCenter', () => ({
-	NotificationCenter: () => null,
+	NotificationCenter: () => <button data-testid="notification-center-button" />,
 }));
 
 function makeSession(overrides: Partial<Session> = {}): Session {
@@ -202,7 +203,66 @@ function setViewportWidth(width: number): void {
 	});
 }
 
+it.each([false, true])(
+	'merges the header and reopens a collapsed sidebar only in new shell %s',
+	(newShell) => {
+		settingsMocks.overrides = { newShell, useNativeTitleBar: false };
+		uiMocks.state.leftSidebarOpen = false;
+		uiMocks.state.leftSidebarHidden = false;
+		const { container } = render(<MainPanelHeader {...defaultProps} />);
+		expect(container.firstElementChild).toHaveClass(newShell ? 'h-12' : 'h-16');
+		expect(!!screen.queryByRole('button', { name: 'Show agents sidebar' })).toBe(newShell);
+		if (newShell)
+			expect(
+				screen
+					.getByRole('button', { name: 'Show agents sidebar' })
+					.querySelector('[data-testid="panelleft-icon"]')
+			).not.toBeNull();
+	}
+);
+it.each(['darwin', 'linux', 'win32'])(
+	'reserves collapsed traffic-light space only for custom macOS chrome, %s',
+	(platform) => {
+		const previous = window.maestro.platform;
+		Object.defineProperty(window.maestro, 'platform', { value: platform, configurable: true });
+		try {
+			settingsMocks.overrides = { newShell: true, useNativeTitleBar: false };
+			uiMocks.state.leftSidebarOpen = false;
+			uiMocks.state.leftSidebarHidden = false;
+			const { container, rerender } = render(<MainPanelHeader {...defaultProps} />);
+			expect(container.firstElementChild).toHaveAttribute('data-shell-header', 'main');
+			expect(container.firstElementChild?.getAttribute('data-traffic-light-clearance')).toBe(
+				platform === 'darwin' ? 'true' : null
+			);
+			fireEvent.click(screen.getByRole('button', { name: 'Show agents sidebar' }));
+			expect(uiMocks.setLeftSidebarOpen).toHaveBeenCalledWith(true);
+			settingsMocks.overrides = { newShell: true, useNativeTitleBar: true };
+			rerender(<MainPanelHeader {...defaultProps} key="native-chrome" />);
+			expect(container.firstElementChild).not.toHaveAttribute('data-traffic-light-clearance');
+		} finally {
+			Object.defineProperty(window.maestro, 'platform', { value: previous, configurable: true });
+		}
+	}
+);
 describe('MainPanelHeader', () => {
+	it.each([false, true])(
+		'gates header statistics and auxiliary tools, new shell %s',
+		(newShell) => {
+			settingsMocks.overrides = { newShell };
+			setViewportWidth(700);
+			const { container } = render(<MainPanelHeader {...defaultProps} />);
+			for (const id of ['git-status-widget', 'header-context-widget', 'notification-center-button'])
+				expect(!!screen.queryByTestId(id)).toBe(!newShell);
+			for (const selector of [
+				'[data-tour="memory-viewer-button"]',
+				'[data-tour="agent-sessions-button"]',
+			])
+				expect(!!container.querySelector(selector)).toBe(!newShell);
+			expect(!!screen.queryByRole('button', { name: 'Quick Actions' })).toBe(!newShell);
+			expect(screen.getByTitle('main')).toBeInTheDocument();
+		}
+	);
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 		settingsMocks.overrides = {};

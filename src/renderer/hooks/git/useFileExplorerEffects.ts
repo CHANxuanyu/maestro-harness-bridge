@@ -1,3 +1,5 @@
+import { shellRightPanelTab } from '../../../shared/newShellPanel';
+import { useWindowOwnsSession } from '../../contexts/WindowContext';
 /**
  * useFileExplorerEffects - extracted from App.tsx (Phase 2.6)
  *
@@ -107,7 +109,20 @@ export function useFileExplorerEffects(
 	const setSessions = useMemo(() => useSessionStore.getState().setSessions, []);
 
 	const activeFocus = useUIStore((s) => s.activeFocus);
-	const activeRightTab = useUIStore((s) => s.activeRightTab);
+	const storedRightTab = useUIStore((s) => s.activeRightTab);
+	const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
+	const newShell = useSettingsStore((s) => s.newShell);
+	const panel = useSessionStore((s) => {
+		const session = selectActiveSession(s);
+		return session?.aiTabs.find((tab) => tab.id === session.activeTabId)?.newShellPanel;
+	});
+	const hasPanelFile = useSessionStore(
+		(s) => !!selectActiveSession(s)?.filePreviewTabs?.some((file) => file.id === panel?.fileTabId)
+	);
+	const ownsSession = useWindowOwnsSession(activeSessionId);
+	const activeRightTab = shellRightPanelTab(storedRightTab, newShell, panel);
+	const treeVisible =
+		ownsSession && rightPanelOpen && activeRightTab === 'files' && !(newShell && hasPanelFile);
 	const setActiveFocus = useMemo(() => useUIStore.getState().setActiveFocus, []);
 	const showHiddenFiles = useSettingsStore((s) => s.showHiddenFiles);
 
@@ -330,8 +345,7 @@ export function useFileExplorerEffects(
 			// the arrow keys drove the tree alongside the caret. Real focus wins.
 			if (isTextInputTarget(e.target)) return;
 
-			if (activeFocus !== 'right' || activeRightTab !== 'files' || flatFileList.length === 0)
-				return;
+			if (activeFocus !== 'right' || !treeVisible || flatFileList.length === 0) return;
 			if (!activeSessionId) return;
 
 			const expandedFolders = new Set(fileExplorerExpanded || []);
@@ -456,6 +470,7 @@ export function useFileExplorerEffects(
 	}, [
 		activeFocus,
 		activeRightTab,
+		treeVisible,
 		flatFileList,
 		selectedFileIndex,
 		activeSessionId,

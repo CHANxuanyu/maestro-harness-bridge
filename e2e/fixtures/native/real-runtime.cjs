@@ -29,6 +29,7 @@ function installedCli(provider, env = process.env, sharedAcceptance = false) {
 	return { executable: path.resolve(executable), version };
 }
 
+/** @returns {Record<string, string>} */
 function prepareCredentials(provider, destination, env = process.env) {
 	if (provider === 'omp') {
 		// v18.12.6 ai/README.md and env-api-key.ts. No native account files are copied.

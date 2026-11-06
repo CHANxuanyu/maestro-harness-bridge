@@ -98,6 +98,21 @@ describe('FilePreviewHeader on a phone', () => {
 		vi.clearAllMocks();
 	});
 
+	it('uses the panel back control, filename and existing edit/save callbacks', () => {
+		const onPanelBack = vi.fn(),
+			onSave = vi.fn(),
+			setMarkdownEditMode = vi.fn();
+		renderHeader({ onPanelBack, onSave, setMarkdownEditMode, hasChanges: true });
+		expect(screen.getByText('MEET-07-30.md')).toBeInTheDocument();
+		fireEvent.click(screen.getByTitle('Back to files'));
+		fireEvent.click(screen.getByTitle('Edit'));
+		fireEvent.click(screen.getByTitle('Save'));
+		expect(onPanelBack).toHaveBeenCalledOnce();
+		expect(setMarkdownEditMode).toHaveBeenCalledWith(true);
+		expect(onSave).toHaveBeenCalledOnce();
+		expect(screen.queryByText('/Users/pedram/Pedsidian/Meetings')).toBeNull();
+	});
+
 	it('draws one overflow button instead of the icon cluster', () => {
 		renderHeader();
 

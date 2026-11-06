@@ -34,6 +34,7 @@ import { clampModalSize, DEFAULT_MODAL_MIN_SIZE, getViewportSize } from '../util
 import { ResizeHandles } from './ui/ResizeHandles';
 import { useModalLayer } from '../hooks/ui/useModalLayer';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+import { CornerDot } from './ui/CornerDot';
 import { SegmentedControl } from './ui/SegmentedControl';
 import { toastAccentColor, ToastIcon } from './Toast';
 
@@ -41,11 +42,13 @@ type NotificationFilter = 'unread' | 'all';
 
 interface NotificationCenterProps {
 	theme: Theme;
+	dotOnly?: boolean;
 }
 
 /** Header bell with the live unread count and configurable shortcut hint. */
 export const NotificationCenter = memo(function NotificationCenter({
 	theme,
+	dotOnly = false,
 }: NotificationCenterProps) {
 	const t = useT();
 	const open = useNotificationStore((s) => s.notificationCenterOpen);
@@ -72,7 +75,8 @@ export const NotificationCenter = memo(function NotificationCenter({
 				data-testid="notification-center-button"
 			>
 				<Bell className="w-4 h-4" style={{ color: theme.colors.textDim }} />
-				{unreadCount > 0 && (
+				{unreadCount > 0 && dotOnly && <CornerDot color={theme.colors.error} size="md" />}
+				{unreadCount > 0 && !dotOnly && (
 					<span
 						className="absolute top-0.5 right-0.5 min-w-[14px] h-[14px] px-1 rounded-full text-3xs font-bold leading-[14px] text-center"
 						style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}

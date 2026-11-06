@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../stores/settingsStore';
+import { shellSettingsTabVisible } from '../../../shared/newShellFeatures';
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, memo } from 'react';
 import {
 	X,
@@ -216,9 +218,14 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 	// than a restore effect) avoids racing with the persist effect below - under
 	// React StrictMode a restore-via-effect double-fires and clobbers the saved
 	// value with the initial 'general' before the restored value lands.
-	const [activeTab, setActiveTab] = useState<SettingsTabId>(
+	const newShell = useSettingsStore((s) => s.newShell);
+	const tabItems = TAB_ITEMS.filter((tab) => shellSettingsTabVisible(tab.id, newShell));
+	const [storedActiveTab, setActiveTab] = useState<SettingsTabId>(
 		() => initialTab || lastOpenSettingsTab || 'general'
 	);
+	const activeTab = shellSettingsTabVisible(storedActiveTab, newShell)
+		? storedActiveTab
+		: 'general';
 	const resizableModal = useResizableModal({
 		resizeKey: 'settings',
 		defaultSize: { width: 980, height: 900 },
@@ -365,7 +372,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 		if (!isOpen) return;
 
 		const handleTabNavigation = (e: KeyboardEvent) => {
-			const tabs = TAB_ITEMS.map((t) => t.id);
+			const tabs = tabItems.map((t) => t.id);
 			const currentIndex = tabs.indexOf(activeTab);
 
 			if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === '[') {
@@ -381,7 +388,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 
 		window.addEventListener('keydown', handleTabNavigation);
 		return () => window.removeEventListener('keydown', handleTabNavigation);
-	}, [isOpen, activeTab]);
+	}, [isOpen, activeTab, newShell]);
 
 	if (!isOpen) return null;
 
@@ -454,7 +461,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 							style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}
 							aria-label={t('settings.tabsAria')}
 						>
-							{TAB_ITEMS.map((tab) => (
+							{tabItems.map((tab) => (
 								<SettingsTabButton
 									key={tab.id}
 									tab={tab}
@@ -472,7 +479,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 							style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}
 							aria-label={t('settings.tabsAria')}
 						>
-							{TAB_ITEMS.map((tab) => (
+							{tabItems.map((tab) => (
 								<SettingsTabButton
 									key={tab.id}
 									tab={tab}

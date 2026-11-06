@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
@@ -79,6 +80,14 @@ function fence() {
 function langOf() {
 	return fence()!.getAttribute('data-language');
 }
+
+it.each([false, true])('uses plain language text only in the new shell %s', async (newShell) => {
+	useSettingsStore.setState({ newShell });
+	render(<CodeFence {...defaultProps} language="typescript" code="const a = 1" />);
+	expect(!!screen.queryByTestId('lang-picker')).toBe(!newShell);
+	if (newShell) expect(screen.getByTestId('code-language-label')).toHaveTextContent('typescript');
+	useSettingsStore.setState({ newShell: false });
+});
 
 describe('CodeFence', () => {
 	beforeEach(() => {

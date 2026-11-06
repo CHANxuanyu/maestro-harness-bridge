@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Search, Star, FileText, Terminal, Globe, MessageSquare } from 'lucide-react';
 import type {
@@ -350,6 +352,8 @@ export function TabSwitcherModal({
 	onClose,
 	colorBlindMode,
 }: TabSwitcherModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	// Hidden cross-agent consult tabs are not open tabs. They hold the transcript of
 	// a question another agent's user asked, have no chip in the strip, and surface
 	// only when the user opens one from a response bubble. Listing one here offers a
@@ -771,7 +775,7 @@ export function TabSwitcherModal({
 				onClick={(e) => e.stopPropagation()}
 				role="dialog"
 				aria-modal="true"
-				aria-label="Tab Switcher"
+				aria-label={newShell ? t('workflows.newShell.switchTitle') : 'Tab Switcher'}
 				tabIndex={-1}
 				className={
 					phone
@@ -825,7 +829,9 @@ export function TabSwitcherModal({
 						className="flex-1 bg-transparent outline-none text-lg placeholder-opacity-50"
 						placeholder={
 							viewMode === 'open'
-								? 'Search open tabs...'
+								? newShell
+									? t('workflows.newShell.switchPlaceholder')
+									: 'Search open tabs...'
 								: viewMode === 'starred'
 									? 'Search starred sessions...'
 									: 'Search named sessions...'
@@ -862,7 +868,11 @@ export function TabSwitcherModal({
 								color: viewMode === 'open' ? theme.colors.accentForeground : theme.colors.textDim,
 							}}
 						>
-							Open Tabs ({tabs.length + fileTabs.length + terminalTabs.length + browserTabs.length})
+							{newShell
+								? t('workflows.newShell.openCount', {
+										count: tabs.length + fileTabs.length + terminalTabs.length + browserTabs.length,
+									})
+								: `Open Tabs (${tabs.length + fileTabs.length + terminalTabs.length + browserTabs.length})`}
 						</button>
 						<button
 							onClick={() => handleViewModeChange('all-named')}
@@ -913,7 +923,7 @@ export function TabSwitcherModal({
 							)
 						</button>
 						<span className="text-2xs opacity-50 ml-auto" style={{ color: theme.colors.textDim }}>
-							Tab / ⇧Tab to switch
+							{newShell ? t('workflows.newShell.switchListKeys') : 'Tab / ⇧Tab to switch'}
 						</span>
 					</div>
 				)}
@@ -1380,7 +1390,9 @@ export function TabSwitcherModal({
 							style={{ color: theme.colors.textDim }}
 						>
 							{viewMode === 'open'
-								? 'No open tabs'
+								? newShell
+									? t('workflows.newShell.noOpen')
+									: 'No open tabs'
 								: viewMode === 'starred'
 									? 'No starred sessions'
 									: 'No named sessions found'}
@@ -1396,7 +1408,13 @@ export function TabSwitcherModal({
 					>
 						<span>
 							{filteredItems.length}{' '}
-							{viewMode === 'open' ? 'tabs' : viewMode === 'starred' ? 'starred' : 'sessions'}
+							{viewMode === 'open'
+								? newShell
+									? t('workflows.newShell.conversations')
+									: 'tabs'
+								: viewMode === 'starred'
+									? 'starred'
+									: 'sessions'}
 						</span>
 						<span>{`↑↓ navigate • Enter select • ${formatShortcutKeys(['Meta'])}1-9 quick select`}</span>
 					</div>

@@ -14,6 +14,7 @@
  * global setting (enter-to-send) - it is NOT the same as `false`.
  */
 export interface DesktopTabEntry {
+	newShellPanel?: import('./newShellPanel').NewShellPanelState;
 	origin?: import('./aiHandoff').ConversationOrigin;
 	tabId: string;
 	sessionId: string;
@@ -36,6 +37,8 @@ export interface DesktopTabEntry {
 	saveToHistory: boolean;
 	/** Read-only / plan mode: the agent may not modify files. */
 	readOnly: boolean;
+	/** Effective permission mode, including legacy read-only sessions. */
+	permissionMode?: 'full' | 'standard' | 'readonly';
 	/** Thinking display: 'off' | 'on' (temporary) | 'sticky' (pinned). */
 	thinking: 'off' | 'on' | 'sticky';
 	/** Per-tab model override, or null to inherit the agent's model. */

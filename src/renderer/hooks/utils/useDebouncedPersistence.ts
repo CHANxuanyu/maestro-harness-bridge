@@ -587,6 +587,9 @@ export function useDebouncedPersistence(
 		// predate the latest change. Let it land, then diff once more; a pass
 		// with nothing new to write sends nothing.
 		while (flushingRef.current) await flushingRef.current;
+		// Draft preparation and persistence run in one operation, before React
+		// renders again. Read the store after preparation and any older write.
+		sessionsRef.current = useSessionStore.getState().sessions;
 		await persistSessions();
 	}, [initialLoadComplete, persistSessions]);
 

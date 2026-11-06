@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Group, Session, Theme } from '../../types';
 import type {
 	ProjectHistoryConversation,
@@ -25,7 +25,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useGroupChatStore } from '../../stores/groupChatStore';
 import { useModalStore, selectModalOpen } from '../../stores/modalStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import { useAITabHandlers } from '../../hooks/tabs/internal/useAITabHandlers';
 import { useProjectHistory } from '../../hooks/session/useProjectHistory';
 import {
@@ -41,6 +41,7 @@ import { hasLegacyTranscriptEntries } from '../../utils/transcriptMessages';
 import { isPhoneLayout } from '../../hooks/ui/useViewportBreakpoint';
 
 interface ProjectSessionSidebarProps {
+	headerMenu?: ReactNode;
 	theme: Theme;
 	sessions: Session[];
 	groups: Group[];
@@ -111,6 +112,7 @@ function activeTabIdNow(): string | undefined {
 }
 
 export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
+	headerMenu,
 	theme,
 	sessions,
 	groups,
@@ -120,6 +122,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	onAddAgent,
 	onResumeSession,
 }: ProjectSessionSidebarProps) {
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const [search, setSearch] = useState('');
 	const [providerFilter, setProviderFilter] = useState<string | null>(null);
 	const [rowLimits, setRowLimits] = useState<Record<string, number>>({});
@@ -133,7 +136,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 		const active = s.sessions.find((session) => session.id === s.activeSessionId);
 		return active &&
 			active.inputMode === 'ai' &&
-			!active.activeFileTabId &&
+			(newShell || !active.activeFileTabId) &&
 			!active.activeBrowserTabId &&
 			!active.activeTerminalTabId
 			? `${active.id}:${active.activeTabId}`
@@ -178,7 +181,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	);
 	// A filter for a provider that no longer has rows would hide everything.
 	const effectiveProviderFilter =
-		providerFilter && providers.includes(providerFilter) ? providerFilter : null;
+		!newShell && providerFilter && providers.includes(providerFilter) ? providerFilter : null;
 
 	const projects = useMemo(
 		() =>
@@ -401,6 +404,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 
 	return (
 		<ProjectSessionTree
+			headerMenu={headerMenu}
 			theme={theme}
 			projects={projects}
 			activeKey={groupChatActive || browsing ? null : activeKey}

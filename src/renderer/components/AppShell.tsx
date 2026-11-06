@@ -1,3 +1,10 @@
+import { shellFeatureVisible } from '../../shared/newShellFeatures';
+import { ProjectStartView } from './ProjectStartView';
+import { chooseProject } from '../services/openProject';
+import { newShellSidebarInset } from '../utils/appTitleStrip';
+import { useT } from '../i18n';
+import { readableTextOn } from '../../shared/colorContrast';
+import { useUIStore } from '../stores/uiStore';
 /**
  * AppShell - spatial layout for MaestroConsoleInner.
  *
@@ -28,6 +35,7 @@ import { ConcertoStageModal } from './Concerto/ConcertoStageModal';
 import { useCadenzaStore } from '../stores/cadenzaStore';
 import { useMovementStore } from '../stores/movementStore';
 import { selectActiveSession, useSessionStore } from '../stores/sessionStore';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 import type { Group, GroupChat, Theme } from '../types';
 
 type SessionListProps = ComponentProps<typeof SessionList>;
@@ -112,6 +120,29 @@ export function AppShell({
 	// PERF: Title chrome self-sources a narrow slice so App does not pass
 	// activeSession into the shell (busy/log flushes stay off this paint path when
 	// App's chrome equality ignores state).
+	const newShell = useSettingsStore(selectNewShellEnabled);
+	const t = useT();
+	useEffect(() => {
+		document.documentElement.dataset.newShell = String(newShell);
+		document.documentElement.style.setProperty(
+			'--new-shell-placeholder',
+			readableTextOn(theme.colors.textDim, [
+				theme.colors.bgMain,
+				theme.colors.bgSidebar,
+				theme.colors.bgActivity,
+			])
+		);
+		return () => {
+			delete document.documentElement.dataset.newShell;
+		};
+	}, [newShell, theme]);
+	useEffect(() => {
+		const update = () =>
+			useUIStore.getState().applyNewShellPanelDefault(window.innerWidth, newShell);
+		update();
+		window.addEventListener('resize', update);
+		return () => window.removeEventListener('resize', update);
+	}, [newShell]);
 	const titleGroupId = useSessionStore((s) => selectActiveSession(s)?.groupId);
 	const titleSessionName = useSessionStore((s) => selectActiveSession(s)?.name);
 	const sessionsReadOk = useSessionStore((s) => s.sessionsReadOk);
@@ -126,6 +157,7 @@ export function AppShell({
 	}, [concertoEnabled]);
 
 	const showTitleBar = shouldShowAppTitleStrip({
+		newShell,
 		isMobileLandscape,
 		useNativeTitleBar,
 		isMdDownViewport,
@@ -164,28 +196,29 @@ export function AppShell({
 						} as React.CSSProperties
 					}
 				>
-					{activeGroupChatId ? (
-						<span
-							className="text-xs select-none opacity-50"
-							style={{ color: theme.colors.textDim }}
-						>
-							Maestro Group Chat:{' '}
-							{groupChats.find((c) => c.id === activeGroupChatId)?.name || 'Unknown'}
-						</span>
-					) : (
-						hasTitleSession &&
-						titleSessionName && (
+					{!newShell &&
+						(activeGroupChatId ? (
 							<span
 								className="text-xs select-none opacity-50"
 								style={{ color: theme.colors.textDim }}
 							>
-								{appTitleStripText({
-									group: groups.find((g) => g.id === titleGroupId),
-									sessionName: titleSessionName,
-								})}
+								Maestro Group Chat:{' '}
+								{groupChats.find((c) => c.id === activeGroupChatId)?.name || 'Unknown'}
 							</span>
-						)
-					)}
+						) : (
+							hasTitleSession &&
+							titleSessionName && (
+								<span
+									className="text-xs select-none opacity-50"
+									style={{ color: theme.colors.textDim }}
+								>
+									{appTitleStripText({
+										group: groups.find((g) => g.id === titleGroupId),
+										sessionName: titleSessionName,
+									})}
+								</span>
+							)
+						))}
 				</div>
 			)}
 
@@ -197,7 +230,34 @@ export function AppShell({
 			) : null}
 
 			{!hasSessions && sessionsLoaded && sessionsReadOk && !isMobileLandscape ? (
-				<EmptyStateView theme={theme} {...emptyStateProps} />
+				newShell ? (
+					<>
+						<aside
+							className="shrink-0 w-[260px] border-r"
+							style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
+						>
+							<div
+								data-testid="sidebar-drag-inset"
+								style={
+									{
+										height: newShellSidebarInset(useNativeTitleBar),
+										WebkitAppRegion: 'drag',
+									} as React.CSSProperties
+								}
+							/>
+							<button
+								type="button"
+								className="m-3 px-2 py-2 text-sm rounded focus-ring"
+								onClick={() => void chooseProject()}
+							>
+								{t('workflows.projects.open')}
+							</button>
+						</aside>
+						<ProjectStartView theme={theme} />
+					</>
+				) : (
+					<EmptyStateView theme={theme} {...emptyStateProps} />
+				)
 			) : null}
 
 			{/* On a narrow viewport the panels are drawers, and on a phone they cover
@@ -247,11 +307,11 @@ export function AppShell({
 
 			{logViewer}
 
-			{groupChatView}
+			{shellFeatureVisible('groupChat', newShell) && groupChatView}
 
-			{hasSessions && !activeGroupChatId && !logViewerOpen && (
-				<MainPanel ref={mainPanelRef} {...mainPanelProps} />
-			)}
+			{hasSessions &&
+				(!shellFeatureVisible('groupChat', newShell) || !activeGroupChatId) &&
+				!logViewerOpen && <MainPanel ref={mainPanelRef} {...mainPanelProps} />}
 
 			<PluginPanelSlot
 				theme={theme}
@@ -259,17 +319,20 @@ export function AppShell({
 				className="flex flex-col flex-1 min-w-0 overflow-hidden"
 			/>
 
-			{!isMobileLandscape && hasSessions && !activeGroupChatId && !logViewerOpen && (
-				<ErrorBoundary>
-					<div
-						className="contents"
-						data-testid="right-drawer-swipe-host"
-						{...(isNarrowViewport ? drawerCloseSwipeHandlers : {})}
-					>
-						<RightPanel ref={rightPanelRef} {...rightPanelProps} />
-					</div>
-				</ErrorBoundary>
-			)}
+			{!isMobileLandscape &&
+				hasSessions &&
+				(!shellFeatureVisible('groupChat', newShell) || !activeGroupChatId) &&
+				!logViewerOpen && (
+					<ErrorBoundary>
+						<div
+							className="contents"
+							data-testid="right-drawer-swipe-host"
+							{...(isNarrowViewport ? drawerCloseSwipeHandlers : {})}
+						>
+							<RightPanel ref={rightPanelRef} {...rightPanelProps} />
+						</div>
+					</ErrorBoundary>
+				)}
 
 			<PluginPanelSlot theme={theme} placement="right" />
 

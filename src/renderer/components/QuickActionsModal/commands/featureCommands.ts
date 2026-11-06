@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
 import type { ActiveTabInfo, QuickAction } from '../types';
@@ -115,6 +116,7 @@ export function buildFeatureCommands({
 	shortcuts,
 }: BuildFeatureCommandsArgs): QuickAction[] {
 	const t = getT();
+	const newShell = selectNewShellEnabled(useSettingsStore.getState());
 	const commands: QuickAction[] = [
 		{
 			id: 'editClipboardImage',
@@ -154,6 +156,7 @@ export function buildFeatureCommands({
 			}),
 			action: () => {
 				const t = getT();
+				const newShell = selectNewShellEnabled(useSettingsStore.getState());
 				const newState = !audioFeedbackEnabled;
 				setAudioFeedbackEnabled(newState);
 				flash(
@@ -177,6 +180,7 @@ export function buildFeatureCommands({
 			}),
 			action: () => {
 				const t = getT();
+				const newShell = selectNewShellEnabled(useSettingsStore.getState());
 				const newState = !idleNotificationEnabled;
 				setIdleNotificationEnabled(newState);
 				flash(
@@ -200,6 +204,7 @@ export function buildFeatureCommands({
 			}),
 			action: () => {
 				const t = getT();
+				const newShell = selectNewShellEnabled(useSettingsStore.getState());
 				const newState = !showStarredSessionsSection;
 				setShowStarredSessionsSection(newState);
 				flash(
@@ -297,7 +302,11 @@ export function buildFeatureCommands({
 		commands.push({
 			id: 'summarizeAndContinue',
 			label: t('workflows.shell.contextCompact'),
-			subtext: t('workflows.shell.compactContextIntoAFreshTab'),
+			subtext: t(
+				newShell
+					? 'workflows.newShell.compactContextIntoAFreshTab'
+					: 'workflows.shell.compactContextIntoAFreshTab'
+			),
 			action: () => {
 				onSummarizeAndContinue();
 				setQuickActionOpen(false);

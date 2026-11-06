@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { LogEntry, Theme } from '../../../types';
 import { formatShortcutKeys } from '../../../utils/shortcutFormatter';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { useT } from '../../../i18n';
 
 export interface MessageActionsProps {
@@ -72,13 +73,14 @@ export function MessageActions({
 	scrollContainerRef,
 }: MessageActionsProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const inline = variant === 'inline';
 	const isUserMessage = log.source === 'user';
 
 	// Overlay: the original classes. Inline: full opacity when shown, so an icon
 	// the user can see is never also dimmed.
 	const hidden = inline
-		? `opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100${revealed ? ' !opacity-100' : ''}`
+		? `opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100${newShell ? '' : ' [@media(hover:none)]:opacity-100'}${revealed ? ' !opacity-100' : ''}`
 		: 'opacity-0 group-hover:opacity-50 hover:!opacity-100';
 	const button = inline
 		? `p-1 rounded transition-opacity hover:bg-white/10 ${hidden}`
@@ -192,7 +194,7 @@ export function MessageActions({
 					onClick={() => onPublishGist(log.text, log.id)}
 					className={
 						inline
-							? `p-1 rounded transition-opacity hover:bg-white/10 ${publishedGistUrl ? 'opacity-100' : hidden}`
+							? `p-1 rounded transition-opacity hover:bg-white/10 ${publishedGistUrl && !newShell ? 'opacity-100' : hidden}`
 							: `p-1.5 rounded hover:!opacity-100 ${
 									publishedGistUrl ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'
 								}`

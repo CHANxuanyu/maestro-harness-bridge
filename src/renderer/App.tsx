@@ -1,3 +1,4 @@
+import { openProjectTarget } from './services/openProject';
 import React, {
 	useState,
 	useEffect,
@@ -2524,6 +2525,23 @@ function MaestroConsoleInner() {
 		inputRef,
 		setCreateGroupModalOpen,
 	});
+
+	useEffect(
+		() =>
+			window.maestro.agentSessions.onOpenProject(async (target, channel) => {
+				try {
+					const result = await openProjectTarget(target, createNewSession);
+					window.maestro.agentSessions.sendOpenProjectResponse(channel, result);
+				} catch (error) {
+					window.maestro.agentSessions.sendOpenProjectResponse(channel, {
+						success: false,
+						code: 'unavailable',
+						error: String(error),
+					});
+				}
+			}),
+		[createNewSession]
+	);
 
 	const handleCloseGroupCreation = useCallback(() => {
 		clearPendingMoveToGroup();

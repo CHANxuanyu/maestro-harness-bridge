@@ -22,6 +22,59 @@ describe('EnvVarsEditor', () => {
 		mockSetEnvVars = vi.fn();
 	});
 
+	it('masks project secrets until revealed without changing the saved value', () => {
+		render(
+			<EnvVarsEditor
+				envVars={{ API_TOKEN: 'synthetic-secret', ENDPOINT: 'localhost' }}
+				setEnvVars={mockSetEnvVars}
+				theme={mockTheme}
+				maskSecrets
+			/>
+		);
+		const secret = screen.getByDisplayValue('synthetic-secret');
+		expect(secret).toHaveAttribute('type', 'password');
+		expect(screen.getByDisplayValue('localhost')).toHaveAttribute('type', 'text');
+		fireEvent.click(screen.getByTestId('env-reveal-API_TOKEN'));
+		expect(secret).toHaveAttribute('type', 'text');
+		fireEvent.click(screen.getByTestId('env-reveal-API_TOKEN'));
+		expect(secret).toHaveAttribute('type', 'password');
+		expect(mockSetEnvVars).not.toHaveBeenCalled();
+	});
+
+	it('keeps legacy editor values visible when masking is not requested', () => {
+		render(
+			<EnvVarsEditor
+				envVars={{ API_TOKEN: 'synthetic-secret' }}
+				setEnvVars={mockSetEnvVars}
+				theme={mockTheme}
+			/>
+		);
+		expect(screen.getByDisplayValue('synthetic-secret')).toHaveAttribute('type', 'text');
+		expect(screen.queryByTestId('env-reveal-API_TOKEN')).not.toBeInTheDocument();
+	});
+
+	it('reports invalid initial and edited rows so a parent cannot silently save dropped values', () => {
+		const validity = vi.fn();
+		render(
+			<EnvVarsEditor
+				envVars={{ 'BAD-NAME': 'value' }}
+				setEnvVars={mockSetEnvVars}
+				theme={mockTheme}
+				onValidityChange={validity}
+			/>
+		);
+		expect(validity).toHaveBeenLastCalledWith(false);
+		fireEvent.change(screen.getByDisplayValue('BAD-NAME'), { target: { value: 'GOOD_NAME' } });
+		expect(validity).toHaveBeenLastCalledWith(true);
+		mockSetEnvVars.mockClear();
+		fireEvent.change(screen.getByDisplayValue('value'), { target: { value: 'bad;value' } });
+		expect(validity).toHaveBeenLastCalledWith(false);
+		expect(mockSetEnvVars).not.toHaveBeenCalled();
+		expect(screen.getByDisplayValue('bad;value')).toBeInTheDocument();
+		fireEvent.click(screen.getByTitle('Remove variable'));
+		expect(validity).toHaveBeenLastCalledWith(true);
+	});
+
 	it('should render with empty env vars', () => {
 		render(<EnvVarsEditor envVars={{}} setEnvVars={mockSetEnvVars} theme={mockTheme} />);
 

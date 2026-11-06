@@ -1,4 +1,4 @@
-import { createMockFileTab } from '../../../helpers/mockTab';
+import { createMockAITab, createMockFileTab } from '../../../helpers/mockTab';
 /**
  * Covers the `update_session_config` allowlist in useAppRemoteEventListeners -
  * the single gate every CLI-driven per-agent edit passes through.
@@ -14,6 +14,8 @@ import { useAppRemoteEventListeners } from '../../../../renderer/hooks/remote/us
 import { createMockSession } from '../../../helpers/mockSession';
 import type { Session } from '../../../../renderer/types';
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
+import { compactToolOutput } from '../../../../shared/toolOutput';
 import { mkdtemp, readFile, rm, stat, writeFile as writeDiskFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -78,6 +80,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: false } as never);
 	(window as any).maestro = {
 		process: {
 			sendRemoteUpdateSessionConfigResponse: ack,
@@ -88,6 +91,122 @@ beforeEach(() => {
 });
 
 describe('maestro:remoteUpdateSessionConfig', () => {
+	it.each(['idle', 'busy'] as const)(
+		'keeps old tool cards and native identity on a new-shell provider switch while %s',
+		async (state) => {
+			vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as never);
+			const source = {
+				provider: 'claude-code',
+				nativeSessionId: 'claude-native',
+				projectPath: '/synthetic',
+				ownerAgentId: 'session-1',
+				accountDir: '/synthetic/claude',
+			};
+			const tab = createMockAITab({
+				id: 'old-tab',
+				agentSessionId: source.nativeSessionId,
+				state,
+				turnProvider: 'claude-code',
+				inputValue: 'draft',
+				saveToHistory: false,
+				logs: [
+					{
+						id: 'old-tool',
+						timestamp: 1,
+						source: 'tool',
+						text: 'Bash',
+						metadata: {
+							toolCallId: 'full-output-call',
+							nativeToolCallId: 'full-output-call',
+							toolOutputSource: source,
+							toolState: {
+								status: 'completed',
+								output: compactToolOutput('x'.repeat(9000) + 'OLD_TAIL').output,
+							},
+						},
+					},
+				],
+			});
+			const session = createMockSession({
+				id: 'session-1',
+				toolType: 'claude-code',
+				state,
+				aiPid: state === 'busy' ? 123 : 0,
+				aiTabs: [tab, createMockAITab({ id: 'other-tab' })],
+				activeTabId: tab.id,
+				filePreviewTabs: [createMockFileTab({ id: 'file' })],
+				customPath: '/synthetic/claude',
+				customEnvVars: { CLAUDE_CONFIG_DIR: source.accountDir },
+				customEnvVarsDisabled: { OLD_SETTING: 'old' },
+				customEffort: 'high',
+			});
+			const { setSessions } = setup([session]);
+			dispatchPatch(session.id, { toolType: 'codex' });
+			await flush();
+			const [updated] = applyUpdate(setSessions, [session]);
+			expect(updated.aiTabs.map((entry) => entry.id)).toEqual(['old-tab', 'other-tab']);
+			expect(updated.activeTabId).toBe(tab.id);
+			expect(updated.aiTabs[0]).toMatchObject({
+				agentSessionId: null,
+				logs: tab.logs,
+				inputValue: 'draft',
+				saveToHistory: false,
+				state,
+				turnProvider: 'claude-code',
+				providerSessions: { 'claude-code': { agentSessionId: source.nativeSessionId } },
+			});
+			expect(updated.filePreviewTabs).toBe(session.filePreviewTabs);
+			expect(updated.closedTabHistory).toBe(session.closedTabHistory);
+			expect(updated.unifiedTabOrder).toBe(session.unifiedTabOrder);
+			expect(updated.executionQueue).toBe(session.executionQueue);
+			expect(updated.state).toBe(state);
+			expect(updated.aiPid).toBe(session.aiPid);
+			expect(updated.toolType).toBe('codex');
+			expect(updated.customPath).toBeUndefined();
+			expect(updated.customEnvVars).toBeUndefined();
+			expect(updated.customEnvVarsDisabled).toBeUndefined();
+			expect(updated.customEffort).toBeUndefined();
+			expect(window.maestro.process.kill).not.toHaveBeenCalled();
+			expect(setMany).toHaveBeenCalledWith([updated], []);
+			expect(JSON.stringify(updated)).not.toContain('OLD_TAIL');
+			expect(ack).toHaveBeenCalledWith('ch', { success: true });
+		}
+	);
+
+	it('keeps the classic CLI provider reset behavior', async () => {
+		const tab = createMockAITab({ id: 'old-tab', agentSessionId: 'claude-native' });
+		const session = createMockSession({
+			id: 'session-1',
+			toolType: 'claude-code',
+			aiTabs: [tab],
+			activeTabId: tab.id,
+			state: 'busy',
+			aiPid: 123,
+		});
+		const { setSessions } = setup([session]);
+		dispatchPatch(session.id, { toolType: 'codex' });
+		await flush();
+		const [updated] = applyUpdate(setSessions, [session]);
+		expect(updated.aiTabs).toHaveLength(1);
+		expect(updated.aiTabs[0]).toMatchObject({
+			id: 'new-tab-id',
+			agentSessionId: null,
+			logs: [],
+			state: 'idle',
+		});
+		expect(updated.activeTabId).toBe('new-tab-id');
+		expect(updated).toMatchObject({
+			toolType: 'codex',
+			state: 'idle',
+			aiPid: 0,
+			closedTabHistory: [],
+			filePreviewTabs: [],
+			executionQueue: [],
+		});
+		expect(window.maestro.process.kill).toHaveBeenCalledWith('session-1-ai');
+		expect(setMany).toHaveBeenCalledWith([updated], []);
+	});
+
 	it('writes the bookmark flag so the CLI can pin an agent in the Left Bar', async () => {
 		const sessions = [createMockSession({ id: 'session-1', bookmarked: false })];
 		const { setSessions } = setup(sessions);

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { NativeApp } from './fixtures/native-app';
 import { nativeIdentity } from './fixtures/native-real';
+import { moveClaudeToolResultToChild } from './fixtures/native/tool-output';
 
 // Refuse real-provider mode before creating a fixture or reading any credentials.
 test.beforeAll(() => {
@@ -71,31 +72,9 @@ for (const scenario of [
 			if (!nativeId) throw new Error('Synthetic native identity missing');
 			if (mode === 'child') {
 				// Model a live child card whose result was saved only in its child JSONL.
-				const rows = fs
-					.readFileSync(file, 'utf8')
-					.trim()
-					.split('\n')
-					.map((line) => JSON.parse(line));
-				const isChildResult = (row: any) =>
-					row.message?.content?.some(
-						(block: any) => block.type === 'tool_result' && block.tool_use_id === 'full-output-call'
-					);
-				const directory = path.join(path.dirname(file), nativeId, 'subagents');
-				fs.mkdirSync(directory, { recursive: true });
-				fs.writeFileSync(
-					path.join(directory, 'agent-synthetic.jsonl'),
-					rows
-						.filter(isChildResult)
-						.map((row) => JSON.stringify(row))
-						.join('\n') + '\n'
-				);
-				fs.writeFileSync(
-					file,
-					rows
-						.filter((row) => !isChildResult(row))
-						.map((row) => JSON.stringify(row))
-						.join('\n') + '\n'
-				);
+				const childFile = moveClaudeToolResultToChild(file, nativeId, 'full-output-call');
+				expect(fs.readFileSync(childFile, 'utf8')).toContain(tail);
+				expect(fs.readFileSync(file, 'utf8')).not.toContain(tail);
 			}
 			if (mode === 'switch') {
 				await native.cli('update-agent', ownerId, '--provider', 'codex', '--force');
@@ -113,6 +92,7 @@ for (const scenario of [
 				await native.send('Continue in synthetic Codex');
 				await expect(native.output()).toContainText('Synthetic Codex continuation.');
 				await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+				await expect(native.output()).toContainText('Synthetic build finished.');
 			}
 			await native
 				.output()

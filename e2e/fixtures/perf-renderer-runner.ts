@@ -79,6 +79,14 @@ export interface PerfSample {
 	round: number;
 	size: string;
 	metrics: Metrics;
+	observations?: Record<
+		string,
+		{
+			startedAt: number;
+			timeOrigin: number;
+			longTasks: { startMs: number; durationMs: number }[];
+		}
+	>;
 	loadBefore: number[];
 	loadAfter?: number[];
 }

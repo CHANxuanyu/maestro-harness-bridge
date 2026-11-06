@@ -20,6 +20,7 @@ import {
 	rendererOptions,
 	stageBudgets,
 	type Metrics,
+	type PerfSample,
 	type StageName,
 	type StageScope,
 } from './fixtures/perf-renderer-runner';
@@ -48,7 +49,8 @@ async function observe(page: Page) {
 			keyDelays: [] as number[],
 			keyPaints: [] as number[],
 			onKey: undefined as ((event: KeyboardEvent) => void) | undefined,
-			tasks: [] as number[],
+			tasks: [] as { startTime: number; duration: number }[],
+			startedAt: performance.now(),
 			last: performance.now(),
 			raf: 0,
 			observer: undefined as PerformanceObserver | undefined,
@@ -66,7 +68,9 @@ async function observe(page: Page) {
 		};
 		document.addEventListener('keydown', state.onKey, true);
 		state.observer = new PerformanceObserver((list) =>
-			state.tasks.push(...list.getEntries().map((entry) => entry.duration))
+			state.tasks.push(
+				...list.getEntries().map(({ startTime, duration }) => ({ startTime, duration }))
+			)
 		);
 		state.observer.observe({ type: 'longtask', buffered: false });
 		(window as unknown as { __perf: typeof state }).__perf = state;
@@ -79,7 +83,8 @@ async function observed(page: Page) {
 			window as unknown as {
 				__perf: {
 					frames: number[];
-					tasks: number[];
+					tasks: { startTime: number; duration: number }[];
+					startedAt: number;
 					raf: number;
 					observer: PerformanceObserver;
 					keyDelays: number[];
@@ -89,7 +94,9 @@ async function observed(page: Page) {
 			}
 		).__perf;
 		cancelAnimationFrame(state.raf);
-		state.tasks.push(...state.observer.takeRecords().map((entry) => entry.duration));
+		state.tasks.push(
+			...state.observer.takeRecords().map(({ startTime, duration }) => ({ startTime, duration }))
+		);
 		state.observer.disconnect();
 		document.removeEventListener('keydown', state.onKey, true);
 		state.keyDelays.sort((a, b) => a - b);
@@ -108,8 +115,14 @@ async function observed(page: Page) {
 				0
 			),
 			longTaskCount: state.tasks.length,
-			longTaskMs: state.tasks.reduce((a, b) => a + b, 0),
-			maxLongTaskMs: Math.max(0, ...state.tasks),
+			longTaskMs: state.tasks.reduce((sum, task) => sum + task.duration, 0),
+			maxLongTaskMs: Math.max(0, ...state.tasks.map((task) => task.duration)),
+			startedAt: state.startedAt,
+			timeOrigin: performance.timeOrigin,
+			longTasks: state.tasks.map((task) => ({
+				startMs: task.startTime - state.startedAt,
+				durationMs: task.duration,
+			})),
 		};
 	});
 }
@@ -260,7 +273,7 @@ test('renderer performance: startup stages, full backfill and isolated streaming
 						let app: ElectronApplication | undefined;
 						let page: Page;
 						let poisoned = false;
-						const sample = {
+						const sample: PerfSample = {
 							variant: variant.name,
 							round,
 							size,
@@ -503,14 +516,25 @@ test('renderer performance: startup stages, full backfill and isolated streaming
 									);
 									const value = (rows: typeof after, key: string) =>
 										rows.metrics.find((metric) => metric.name === key)?.value ?? 0;
+									const { longTasks, startedAt, timeOrigin, ...observations } = await scope.step(
+										'renderer observations',
+										async () => {
+											const result = await observed(page);
+											observing = false;
+											return result;
+										}
+									);
+									(sample.observations ??= {})[name] = { longTasks, startedAt, timeOrigin };
 									return {
 										[name]: {
 											ms,
-											...(await scope.step('renderer observations', async () => {
-												const result = await observed(page);
-												observing = false;
-												return result;
-											})),
+											...observations,
+											layoutMs:
+												(value(after, 'LayoutDuration') - value(before, 'LayoutDuration')) * 1000,
+											styleMs:
+												(value(after, 'RecalcStyleDuration') -
+													value(before, 'RecalcStyleDuration')) *
+												1000,
 											rendererTaskMs:
 												(value(after, 'TaskDuration') - value(before, 'TaskDuration')) * 1000,
 											scriptMs:

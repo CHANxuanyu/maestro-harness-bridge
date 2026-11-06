@@ -43,7 +43,7 @@ import { groupSubagentToolLogs } from './utils/groupSubagentToolLogs';
 import { foldNativeToolRuns } from './utils/foldNativeToolRuns';
 import { foldTurnActivity, type TurnActivity } from './utils/foldTurnActivity';
 import { feedProseStyles } from './utils/feedProseStyles';
-import { TurnActivityFold } from './components/TurnActivityFold';
+import { MemoizedTurnActivityFold, TurnActivityFold } from './components/TurnActivityFold';
 import { TurnRunningStatus } from './components/TurnRunningStatus';
 import { trackShortcutUsage } from '../../utils/shortcutTracking';
 import { buildRenderedIdMap } from './utils/renderedLogIds';
@@ -1066,21 +1066,22 @@ export const TerminalOutput = memo(
 				const activity = turnActivityByHostId.get(log.id);
 				if (!activity) return renderRow(log, false);
 				// A finished turn's work, folded behind one row (foldTurnActivity).
+				const ActivityFold = newShell ? MemoizedTurnActivityFold : TurnActivityFold;
 				const foldKey = `turn:${log.id}`;
 				const open = expandedLogs.has(foldKey);
 				return (
-					<TurnActivityFold
+					<ActivityFold
 						key={foldKey}
 						hostId={log.id}
 						index={index}
 						activity={activity}
 						open={open}
-						onToggle={() => toggleExpanded(foldKey)}
+						onToggle={toggleExpanded}
 						theme={theme}
 						secondaryTextColor={feedSecondaryColor}
 					>
 						{open && activity.entries.map((entry) => renderRow(entry, true))}
-					</TurnActivityFold>
+					</ActivityFold>
 				);
 			};
 			const rows: ReturnType<typeof createRow>[] = [];
@@ -1091,6 +1092,7 @@ export const TerminalOutput = memo(
 				return rows.slice(start);
 			};
 		}, [
+			newShell,
 			rowLogs,
 			rowStartIndex,
 			originMessageId,

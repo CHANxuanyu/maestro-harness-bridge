@@ -1,6 +1,6 @@
 # 新界面 renderer 性能复测
 
-入口为 `e2e/perf-renderer.spec.ts`，第一轮的 `perf-new-shell.spec.ts` 保留原样。默认 3 轮，同轮交替 before 和 after，失败不重试。所有账户和应用数据都在独立临时目录，工具路径指向原生测试替身，不启动模型。本轮只改基准和回归，不改产品代码。
+入口为 `e2e/perf-renderer.spec.ts`，第一轮的 `perf-new-shell.spec.ts` 保留原样。默认 3 轮，同轮交替 before 和 after，失败不重试。所有账户和应用数据都在独立临时目录，工具路径指向原生测试替身，不启动模型。第四轮还修复首屏行构造与流式历史重绘。
 
 ## 准备与运行
 
@@ -102,3 +102,11 @@ npx playwright test e2e/perf-renderer.spec.ts --project=electron --list
 4. 单独一份诊断运行中途终止测试进程，确认已结束阶段仍在 JSON 或 JSONL。必要时清理该次诊断遗留的测试 Electron 和临时目录，不复用该次数据作为完整结果。
 
 这些是待跑的验收场景，不是已取得的 Electron 结果。
+
+## 第四轮长任务定位
+
+`longTaskMs` 是阶段中所有超过 50 ms 任务的累计值，`maxLongTaskMs` 才是最长单次任务。每个 sample 的 `observations[阶段名].longTasks` 保存 `startMs` 和 `durationMs`，起点是该项观察器启动时刻。`startedAt` 是 renderer 的 performance.now，`timeOrigin` 是其时间原点，可用于对齐单独采集的 trace。数字汇总另含 `layoutMs`、`styleMs`，原始任务数组不参与中位数计算。普通 Long Tasks API 不能定位 JavaScript 函数，调用栈归因仍用独立 trace。
+
+第四轮 before 固定使用可运行克隆 `~/Downloads/maestro-t4-perf-base/dist/main/index.js`，不要使用临时目录中的冻结构建。完整三轮对比同时覆盖打开 50 MiB、切换、完整回填、纯流式及启动；诊断 trace 另选 `stream`，不能与普通计时混算。
+
+流式回归还覆盖工具前的正文：collapseAiResponseLogs 每批会重建合并对象，因此活动行按全部浅层字段比较，不仅比较对象身份。该场景先复现 15000 次历史行重绘；不能用只有工具没有中间正文的简化语料替代。

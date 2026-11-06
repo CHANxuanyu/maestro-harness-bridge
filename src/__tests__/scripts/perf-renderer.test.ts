@@ -103,7 +103,12 @@ describe('renderer benchmark failure isolation', () => {
 	}
 
 	function respondingApp(
-		options: { freezeFrames?: boolean; freezeKeys?: boolean; ids?: string[] } = {}
+		options: {
+			freezeFrames?: boolean;
+			freezeKeys?: boolean;
+			ids?: string[];
+			longTasks?: boolean;
+		} = {}
 	) {
 		const kill = vi.fn();
 		const send = vi.fn();
@@ -132,7 +137,7 @@ describe('renderer benchmark failure isolation', () => {
 				observe() {}
 				disconnect() {}
 				takeRecords() {
-					return [];
+					return options.longTasks ? [{ startTime: Date.now() - 80, duration: 60 }] : [];
 				}
 			},
 		};
@@ -187,7 +192,7 @@ describe('renderer benchmark failure isolation', () => {
 		vi.stubEnv('MAESTRO_PERF_BEFORE_ENTRY', '');
 		vi.stubEnv('MAESTRO_PERF_ROUNDS', '1');
 		vi.stubEnv('MAESTRO_PERF_STAGES', 'stream');
-		const fake = respondingApp();
+		const fake = respondingApp({ longTasks: true });
 		harness.launch.mockResolvedValue(fake.app);
 		const run = start();
 		await vi.advanceTimersByTimeAsync(10_000);
@@ -196,6 +201,9 @@ describe('renderer benchmark failure isolation', () => {
 		expect(fake.send).toHaveBeenCalledTimes(300);
 		expect(harness.launch).toHaveBeenCalledOnce();
 		const result = JSON.parse(fs.readFileSync(path.join(output, 'perf-results.json'), 'utf8'));
+		const stream = result.samples[0].observations?.['large.stream.100Hz'];
+		expect(stream?.longTasks).toEqual([{ startMs: expect.any(Number), durationMs: 60 }]);
+		expect(stream.longTasks[0].startMs).toBeGreaterThan(0);
 		expect(result.stages.map((stage: { name: string }) => stage.name)).toEqual([
 			'prepare',
 			'startup',

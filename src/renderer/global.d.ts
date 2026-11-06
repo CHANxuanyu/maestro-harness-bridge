@@ -1835,6 +1835,7 @@ interface MaestroAPI {
 		deleteUser: (id: string) => Promise<void>;
 	};
 	agents: {
+		getNativeCommands: import('../main/preload/agents').AgentsApi['getNativeCommands'];
 		getPresets: import('../main/preload/agents').AgentsApi['getPresets'];
 		prepareDeepSeekPreset: import('../main/preload/agents').AgentsApi['prepareDeepSeekPreset'];
 		detect: (sshRemoteId?: string) => Promise<AgentConfig[]>;

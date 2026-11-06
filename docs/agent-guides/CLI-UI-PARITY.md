@@ -38,6 +38,37 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## Native command discovery, T10
+
+| UI action                                                         | CLI                                                         | Shared implementation                                        |
+| ----------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| Open `/` and inspect native commands for the current conversation | `maestro-cli tab commands <tab-id> [--agent <id>] [--json]` | `agents:getNativeCommands`, `createNativeCommandDiscovery()` |
+
+The composer opts in with `newShell` for Claude Code and Codex. The CLI resolves
+an exact tab, unique prefix or `active`, then asks the same IPC handler to resolve
+its stored owner. Results contain `commands` with `command`, `description`,
+`source` (`project`, `user`, `builtin`) and a Codex `prompt` when applicable.
+An unavailable read returns `warning` (`unavailable` or `remote-unavailable`)
+and the supported native builtins. The JSON warning is data, not a failed transport.
+This verb lists the native portion of `/`; Maestro's own workflow commands and
+Settings custom AI commands retain their existing configuration paths.
+
+Discovery uses the canonical account resolver and the execution cwd, including
+SSH overrides. The renderer presents its memory cache immediately and checks on
+reopening. Main caches directory listings and file bodies by metadata, with
+single flight per provider, account, cwd and SSH configuration. Project scope
+wins over user scope; within a scope, skills precede commands or prompts.
+Claude reads commands and skills, and Codex reads its existing skills and prompts
+locations. Codex bodies use the same lookup during command dispatch and queue
+draining. No discovery call starts a provider or writes native files.
+
+Open gaps: this file-based path does not inventory commands contributed through
+Claude plugin manifests or Codex plugin catalogs. Codex TUI-only builtins cannot
+be expanded by `codex exec`, so they are not offered as native commands. Other
+providers keep their existing discovery. Real SSH transport, Electron rendering
+and native command execution require external acceptance; the new synthetic
+Electron scenario is `e2e/native-commands.spec.ts`.
+
 ## Stop and read-only resume corrections (2026-11-06)
 
 No UI action or CLI verb is added. `tab permission <tab> readonly` and

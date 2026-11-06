@@ -162,6 +162,7 @@ import {
 	tabEffort,
 	tabEnterToSend,
 	tabShow,
+	tabCommands,
 } from './commands/tab';
 import { setBookmark } from './commands/bookmark';
 import { setTheme } from './commands/set-theme';
@@ -1571,6 +1572,12 @@ const tabTargetOptions = (cmd: Command): Command =>
 	cmd
 		.option('-a, --agent <id>', 'Whose active tab, when <tab-id> is "active"')
 		.option('--json', 'Output as JSON (for scripting)');
+
+tabTargetOptions(
+	tab
+		.command('commands <tab-id>')
+		.description('List native commands for this conversation account and project')
+).action((tabId, options) => tabCommands(tabId, options));
 
 tab
 	.command('new')

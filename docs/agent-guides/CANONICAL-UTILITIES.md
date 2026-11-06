@@ -294,3 +294,23 @@ For archived Claude desktop worktrees, `localProjectWorktree()` also accepts a r
 `bindNativeToolCalls()` 位于 `src/renderer/utils/transcriptMessages.ts`，复用同一匹配规则补齐原生调用 ID，保留实时卡片 ID。部分窗口刷新也调用它，不新增后台文件读取。工具来源由实际启动环境或原生读取结果固定到日志元数据，包含提供商、会话、项目和账户；读取旧卡片不可替换成当前提供商。后端校验已保存来源后才读取已停放提供商的账户，全文仍仅在组件局部状态中。
 
 - **Changing the provider of an existing conversation:** `switchSessionProvider()` in `src/renderer/utils/providerTabSessions.ts` shares the Edit Agent transition with the new-shell CLI. New-shell callers read target capabilities and pass them to this helper so every open AI tab uses `newConversationPermissionFields()`. Unsupported standard tightens to readonly; a null result refuses the entire switch before any tab is changed. A failed capability query also refuses the switch. Classic Edit Agent omits the capabilities argument to keep its existing behavior, and classic CLI retains its reset path. Keep native provider parking, logs and tool-output sources intact while applying permission fields.
+
+### Native command discovery for the new shell
+
+`createNativeCommandDiscovery()` in `src/main/agents/native-commands.ts` is the
+read-only entry for Claude and Codex commands. `agents:getNativeCommands` serves
+both `/` and `tab commands`. It uses `resolveAgentAccountDir()` with host-owned
+layers and `handoffLocation()` for the execution cwd. Remote paths go through
+`remote-fs.ts`, never local realpath. `getCodexSkillDirs()` and
+`getCodexPromptDirs()` accept a path implementation for remote POSIX paths.
+`parseCodexMarkdownDoc()` is reused for the common frontmatter fields.
+
+The cache is scoped to provider, resolved account, cwd and SSH configuration.
+A cached-only request performs no filesystem I/O. Refresh checks directory and
+file metadata, including nested directories, before reusing listings and bodies.
+Project entries claim names before user entries, even when a skill has
+`user-invocable: false`. Errors return supported native builtins plus a warning.
+The cache holds at most 64 contexts; scans accept 2048 directory entries, eight
+nested command levels, 256 KiB per file and 2 MiB of command bodies. SSH metadata
+uses the existing remote stat resolution. The new-shell hook keeps cached rows
+while refreshing and ignores late responses after changing conversation context.

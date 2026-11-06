@@ -188,6 +188,7 @@ describe('agents IPC handlers', () => {
 				'agents:getModels',
 				'agents:getConfigOptions',
 				'agents:discoverSlashCommands',
+				'agents:getNativeCommands',
 				// Capability snapshot bridge (status pill + reprobe + live events)
 				'agents:getSnapshot',
 				'agents:getAllSnapshots',

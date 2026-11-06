@@ -1208,6 +1208,15 @@ Switch an agent between "ai" and "terminal" mode
 
 Manage an agent's tabs in the desktop app
 
+## `maestro-cli tab commands <tab-id>`
+
+List native commands for this conversation account and project
+
+| Option             | Description                                    | Default |
+| ------------------ | ---------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
+| `--json`           | Output as JSON (for scripting)                 | -       |
+
 ## `maestro-cli tab new`
 
 Open a new tab for an agent (optionally seeded with a prompt)

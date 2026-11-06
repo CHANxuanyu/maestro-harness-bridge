@@ -231,6 +231,14 @@ export interface AgentSessionStorage {
 		sshConfig?: SshRemoteConfig
 	): Promise<SessionMessagesResult>;
 
+	/** Bounded on-demand read of one native result. Local providers only. */
+	readToolOutput?(
+		projectPath: string,
+		sessionId: string,
+		toolCallId: string,
+		options?: SessionReadOptions
+	): Promise<import('../../shared/nativeToolOutput').NativeToolOutputResult>;
+
 	/** Cheap read-only change probe. Null means unavailable, not an empty transcript. */
 	getTranscriptRevision?(
 		projectPath: string,

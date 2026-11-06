@@ -10,6 +10,7 @@ vi.mock('../../../../main/stores', () => ({ getSshRemoteById: vi.fn() }));
 vi.mock('../../../../main/agents/provider-account-dirs', () => ({
 	resolveAgentAccountDir: vi.fn().mockReturnValue('/owner-account'),
 	getProviderAccountDirs: vi.fn(),
+	readStoredSessions: vi.fn(() => [{ id: 'owner', toolType: 'codex' }]),
 }));
 vi.mock('../../../../main/storage/starred-transcript-mirror', () => ({
 	snapshotStarredTranscript: vi.fn(),
@@ -36,6 +37,7 @@ beforeEach(() => {
 	vi.mocked(getSessionStorage).mockReturnValue({
 		getTranscriptRevision: probe,
 		readSessionMessages: read,
+		readToolOutput: read,
 	} as unknown as AgentSessionStorage);
 	vi.mocked(ipcMain.handle).mockImplementation((channel, handler) => {
 		handlers.set(channel, handler);
@@ -45,6 +47,45 @@ beforeEach(() => {
 const invoke = (...args: any[]) =>
 	handlers.get('agentSessions:getTranscriptRevision')!({}, ...args);
 describe('read-only transcript refresh IPC', () => {
+	it('reads one tool from the selected owner account without restoring mirrors', async () => {
+		const handler = handlers.get('agentSessions:toolOutput');
+		expect(handler).toBeTypeOf('function');
+		await handler!(
+			{},
+			{
+				provider: 'codex',
+				projectPath: '/project',
+				nativeSessionId: 'native-id',
+				ownerAgentId: 'owner',
+			},
+			'call-1'
+		);
+		expect(resolveAgentAccountDir).toHaveBeenCalledWith('owner');
+		expect(read).toHaveBeenCalledWith('/project', 'native-id', 'call-1', {
+			configDir: '/owner-account',
+			readOnly: true,
+		});
+		expect(restoreStarredTranscript).not.toHaveBeenCalled();
+	});
+	it('refuses unsupported remote tool output without reading local files', async () => {
+		const handler = handlers.get('agentSessions:toolOutput');
+		expect(handler).toBeTypeOf('function');
+		expect(
+			await handler!(
+				{},
+				{
+					provider: 'codex',
+					projectPath: '~/remote',
+					nativeSessionId: 'id',
+					ownerAgentId: 'owner',
+					sshRemoteId: 'ssh',
+				},
+				'call-1'
+			)
+		).toEqual({ status: 'unsupported' });
+		expect(read).not.toHaveBeenCalled();
+		expect(resolveAgentAccountDir).not.toHaveBeenCalled();
+	});
 	it('uses the exact native ID and owner account without restoring content', async () => {
 		expect(await invoke('codex', '/project', 'native-id', { ownerAgentId: 'owner' })).toBe(
 			'opaque-revision'

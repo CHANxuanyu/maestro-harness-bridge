@@ -1,3 +1,7 @@
+import type {
+	NativeToolOutputTarget,
+	NativeToolOutputResult,
+} from '../../../shared/nativeToolOutput';
 import { createProjectOpener } from '../../open-project';
 import { createNativeProjectDiscovery } from '../../storage/native-projects';
 import { getAgentAccountDirLayers } from '../../agents/provider-account-dirs';
@@ -80,7 +84,11 @@ import {
 	LOCAL_SESSION_PARSE_CONCURRENCY,
 } from '../../utils/concurrency';
 import { countClaudeTranscriptMessages } from '../../../shared/claudeTranscriptMessages';
-import { resolveAgentAccountDir, getProviderAccountDirs } from '../../agents/provider-account-dirs';
+import {
+	resolveAgentAccountDir,
+	getProviderAccountDirs,
+	readStoredSessions,
+} from '../../agents/provider-account-dirs';
 import { getSessionsStore } from '../../stores/getters';
 import { CodexSessionStorage } from '../../storage/codex-session-storage';
 import { discoverProjectHistory } from '../../storage/project-history';
@@ -637,6 +645,41 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 					LOG_CONTEXT
 				);
 				return result;
+			}
+		)
+	);
+
+	ipcMain.handle(
+		'agentSessions:toolOutput',
+		withIpcErrorLogging(
+			handlerOpts('toolOutput'),
+			async (
+				target: NativeToolOutputTarget,
+				toolCallId: string
+			): Promise<NativeToolOutputResult> => {
+				if (!target || target.sshRemoteId || !['claude-code', 'codex'].includes(target.provider))
+					return { status: 'unsupported' };
+				if (
+					!target.ownerAgentId ||
+					!target.projectPath ||
+					!target.nativeSessionId ||
+					!toolCallId ||
+					/[\/\\\0]/.test(target.nativeSessionId)
+				)
+					return { status: 'not-found' };
+				const owner = readStoredSessions().find((session) => session.id === target.ownerAgentId);
+				if (!owner || owner.toolType !== target.provider) return { status: 'not-found' };
+				if ((owner.sessionSshRemoteConfig as { enabled?: boolean } | undefined)?.enabled)
+					return { status: 'unsupported' };
+				const storage = getSessionStorage(target.provider);
+				if (!storage?.readToolOutput) return { status: 'unsupported' };
+				const configDir = resolveAgentAccountDir(target.ownerAgentId);
+				if (!configDir) return { status: 'not-found' };
+				// No mirrored-file restoration and no writes to the session or its transcript.
+				return storage.readToolOutput(target.projectPath, target.nativeSessionId, toolCallId, {
+					configDir,
+					readOnly: true,
+				});
 			}
 		)
 	);

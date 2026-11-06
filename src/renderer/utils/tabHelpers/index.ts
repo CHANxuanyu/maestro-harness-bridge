@@ -2786,48 +2786,9 @@ export function navigateToUnifiedTabByIndex(
 			: session;
 
 	if (targetTabRef.type === 'ai') {
-		// Navigate to AI tab - verify it exists
-		const aiTab = session.aiTabs.find((tab) => tab.id === targetTabRef.id);
-		if (!aiTab) return null;
-
-		// If already active, no file/terminal/browser tab selected, and in AI mode, return current state.
-		// The other-ID checks are critical: without them, a stale browser/file/terminal selection
-		// causes the early return to fire and skip the clearing update below, leaving
-		// findActiveUnifiedTabIndex pointing at the wrong tab - the higher-priority ID wins
-		// visually and the user-perceived "current tab" never changes (Cmd+Shift+[ no-ops).
-		if (
-			session.activeTabId === targetTabRef.id &&
-			session.activeFileTabId === null &&
-			session.activeBrowserTabId === null &&
-			session.activeTerminalTabId === null &&
-			session.activeGroupId == null &&
-			session.inputMode === 'ai'
-		) {
-			return {
-				type: 'ai',
-				id: targetTabRef.id,
-				session: repairedSession,
-			};
-		}
-
-		// Set the AI tab as active, clear terminal/file selection, and ensure inputMode is 'ai'.
-		// inputMode must be explicitly set because navigating from a terminal tab leaves inputMode
-		// as 'terminal' in the spread - without this, MainPanel would continue rendering the
-		// terminal view even though an AI tab is now active. activeGroupId is cleared so an
-		// active tiled group stops taking over the panel when navigating to a standalone tab.
-		return {
-			type: 'ai',
-			id: targetTabRef.id,
-			session: {
-				...repairedSession,
-				activeTabId: targetTabRef.id,
-				activeFileTabId: null,
-				activeBrowserTabId: null,
-				activeTerminalTabId: null,
-				activeGroupId: null,
-				inputMode: 'ai',
-			},
-		};
+		const selected = setActiveTab(repairedSession, targetTabRef.id);
+		if (!selected) return null;
+		return { type: 'ai', id: targetTabRef.id, session: selected.session };
 	} else if (targetTabRef.type === 'file') {
 		// Navigate to file tab - verify it exists
 		const fileTab = session.filePreviewTabs.find((tab) => tab.id === targetTabRef.id);

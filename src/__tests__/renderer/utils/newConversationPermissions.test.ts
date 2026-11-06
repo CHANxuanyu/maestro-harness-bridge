@@ -8,6 +8,9 @@ import {
 	closeTab,
 	setActiveTab,
 	permissionModeFields,
+	navigateToUnifiedTabByIndex,
+	navigateToNextUnifiedTab,
+	navigateToPrevUnifiedTab,
 } from '../../../renderer/utils/tabHelpers';
 import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
 import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
@@ -25,6 +28,39 @@ beforeEach(() => {
 });
 
 describe('new conversation permission inheritance', () => {
+	it.each(['index', 'next', 'previous'] as const)(
+		'inherits the readonly conversation selected by keyboard %s navigation',
+		(navigation) => {
+			const readonly = createMockAITab({
+				id: 'readonly',
+				createdAt: 1,
+				lastSelectedAt: 1,
+				...permissionModeFields('readonly'),
+			});
+			const full = createMockAITab({
+				id: 'full',
+				createdAt: 2,
+				lastSelectedAt: 2,
+				...permissionModeFields('full'),
+			});
+			const session = createMockSession({
+				aiTabs: [readonly, full],
+				activeTabId: full.id,
+				unifiedTabOrder: [
+					{ type: 'ai', id: readonly.id },
+					{ type: 'ai', id: full.id },
+				],
+			});
+			const selected =
+				navigation === 'index'
+					? navigateToUnifiedTabByIndex(session, 0)
+					: navigation === 'next'
+						? navigateToNextUnifiedTab(session)
+						: navigateToPrevUnifiedTab(session);
+			expect(selected?.session.activeTabId).toBe(readonly.id);
+			expect(createTab(selected!.session)!.tab).toMatchObject(permissionModeFields('readonly'));
+		}
+	);
 	it.each(['full', 'standard', 'readonly'] as const)(
 		'inherits the current conversation %s permission without changing its source',
 		(mode) => {

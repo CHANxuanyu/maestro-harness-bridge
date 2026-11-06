@@ -472,8 +472,13 @@ optional `unstaged` flag for partially staged files, and `stagedCount` when the
 The panel uses the current conversation cwd, never a terminal's later cwd;
 SSH honors the configured host and working directory override. Main resolves
 the root through Git on that host and serializes writes per host and worktree.
-Renames include both paths, copies leave the source alone, unstaging preserves
-worktree contents, and revert restores both index and worktree against HEAD.
+Staging an indexed rename adds only its destination, including later edits and
+multi-file requests. Unstage and revert include both rename paths. Copies leave
+the source alone, unstaging preserves worktree contents, and revert restores
+both index and worktree against HEAD. A staged deletion with an untracked file
+at the same path stays one staged row with `unstaged: true`; group and commit
+counts include the deletion once. Unstage preserves the replacement on disk;
+revert restores the original HEAD file after confirmation.
 New files are deleted only after confirmation. Conflict rows offer stage to
 mark a resolved file, and never offer revert. Nested repositories and submodule
 revert are refused. A partially staged row stays in the staged group with an

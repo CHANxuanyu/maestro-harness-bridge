@@ -14,7 +14,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { applyGitChange, getGitChanges, parseGitChanges } from '../../../main/git-changes';
+import {
+	applyGitChange,
+	changesCommand,
+	getGitChanges,
+	parseGitChanges,
+} from '../../../main/git-changes';
 
 vi.mock('../../../main/utils/logger', () => ({
 	logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -107,6 +112,76 @@ describe('single file changes in isolated repositories', { timeout: 60_000 }, ()
 		expect(existsSync(path.join(cwd, 'tracked'))).toBe(false);
 		expect(readFileSync(path.join(cwd, 'new name'), 'utf8')).toBe('before\n');
 	});
+
+	it.each(['kept', 'recreated'] as const)(
+		'keeps the staged deletion when the same path is %s in the worktree',
+		async (kind) => {
+			if (kind === 'kept') git('rm', '--cached', 'tracked');
+			else {
+				git('rm', 'tracked');
+				write('tracked', 'replacement\n');
+			}
+			write('untouched', 'staged too\n');
+			git('add', 'untouched');
+			const snapshot = await getGitChanges(cwd);
+			expect(snapshot.files).toContainEqual(
+				expect.objectContaining({
+					path: 'tracked',
+					status: 'deleted',
+					staged: true,
+					unstaged: true,
+				})
+			);
+			expect(snapshot.totals.files).toBe(2);
+			expect(snapshot.files.filter((file) => file.staged)).toHaveLength(2);
+			const wire = git(...changesCommand());
+			expect(parseGitChanges(wire).files).toEqual(snapshot.files);
+			expect(parseGitChanges(wire, 1)).toMatchObject({ stagedCount: 2, truncated: true });
+		}
+	);
+
+	it.each(['kept', 'recreated'] as const)(
+		'unstages a deletion while preserving the %s file on disk',
+		async (kind) => {
+			git('rm', '--cached', 'tracked');
+			if (kind === 'recreated') write('tracked', 'replacement\n');
+			expect(await apply('unstage', 'tracked')).toMatchObject({ success: true });
+			expect(git('diff', '--cached', '--name-only')).toBe('');
+			expect(git('show', ':tracked')).toBe('before\n');
+			expect(readFileSync(path.join(cwd, 'tracked'), 'utf8')).toBe(
+				kind === 'kept' ? 'before\n' : 'replacement\n'
+			);
+			expect(git('status', '--porcelain')).toBe(kind === 'kept' ? '' : ' M tracked\n');
+		}
+	);
+
+	it('reverts the staged deletion and its replacement to HEAD', async () => {
+		git('rm', 'tracked');
+		write('tracked', 'replacement\n');
+		expect(await apply('revert', 'tracked')).toMatchObject({ success: true });
+		expect(git('status', '--porcelain')).toBe('');
+		expect(readFileSync(path.join(cwd, 'tracked'), 'utf8')).toBe('before\n');
+	});
+
+	it.each([false, true])(
+		'stages later edits to an indexed rename, multi-file request %s',
+		async (multiple) => {
+			const destination = '-renamed 中文.txt';
+			git('mv', '--', 'tracked', destination);
+			write(destination, 'before\nlater\n');
+			write('other.txt', 'other\n');
+			write('untouched', 'keep unstaged\n');
+			expect(git('status', '--porcelain=v2', '-z')).toContain('2 RM ');
+			expect(
+				await apply('stage', ...(multiple ? [destination, 'other.txt'] : [destination]))
+			).toMatchObject({ success: true });
+			expect(git('show', `:${destination}`)).toBe('before\nlater\n');
+			expect(git('diff', '--name-only', '-z')).toBe('untouched\0');
+			expect(git('ls-files', '-z', '--', 'tracked')).toBe('');
+			expect(git('ls-files', '-z', '--', 'other.txt')).toBe(multiple ? 'other.txt\0' : '');
+			expect(readFileSync(path.join(cwd, 'untouched'), 'utf8')).toBe('keep unstaged\n');
+		}
+	);
 
 	it('stages a deletion and resolves conflict only through explicit staging', async () => {
 		rmSync(path.join(cwd, 'untouched'));

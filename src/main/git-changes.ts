@@ -255,7 +255,14 @@ export function parseGitChanges(output: string, limit = MAX_FILES): GitChanges {
 			deletions: 0,
 		};
 		if (kind === '2') file.oldPath = slash(records.shift()!);
-		files.set(file.path, file);
+		const previous = files.get(file.path);
+		// Git reports a staged deletion and its untracked replacement separately.
+		// Keep the index identity so unstage and revert still operate on HEAD.
+		if (previous?.staged && file.status === 'untracked') previous.unstaged = true;
+		else {
+			if (file.staged && previous?.status === 'untracked') file.unstaged = true;
+			files.set(file.path, file);
+		}
 	}
 	while ((record = records.shift()) !== undefined && record !== '') {
 		const match = /^(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(record);
@@ -460,7 +467,13 @@ export async function applyGitChange(
 					throw new GitChangeValidationError('notStaged', `File is not staged: ${file}`, file);
 				return entry;
 			});
-			// Copies leave their source alone; a rename owns both index paths.
+			// An indexed rename has already removed its source. Add only destinations.
+			if (request.action === 'stage')
+				return {
+					success: true,
+					output: await run(['add', '--', ...selected.map((file) => file.path)]),
+				};
+			// Unstage and revert own both rename paths; copies leave their source alone.
 			const paths = [
 				...new Set(
 					selected.flatMap((file) =>
@@ -468,8 +481,6 @@ export async function applyGitChange(
 					)
 				),
 			];
-			if (request.action === 'stage')
-				return { success: true, output: await run(['add', '--', ...paths]) };
 			const head = await execGitReadOnly(
 				['rev-parse', '--verify', '--quiet', 'HEAD'],
 				root,

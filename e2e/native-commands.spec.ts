@@ -92,13 +92,17 @@ test('native commands refresh, preserve drafts and retain scoped plugin reports'
 				synopsis: { answer: 'Command completed' },
 			})
 		);
-		const scanGate = await native.app.evaluateHandle(holdNativeCommandScan, commands);
+		const scanGate = await native.app.evaluateHandle(holdNativeCommandScan, {
+			cwd: native.project,
+			accountDir: native.claude,
+		});
 		try {
 			await native.send('/deploy staging');
 			await expect(native.input()).toHaveValue('');
 			await expect.poll(() => scanGate.evaluate((gate) => gate.waiting)).toBe(true);
 			await native.input().press('Enter');
 			await native.input().fill('Keep this next draft');
+			expect(fs.existsSync(path.join(native.claude, 'fixture-turn-count'))).toBe(false);
 		} finally {
 			await scanGate.evaluate((gate) => gate.release());
 			await scanGate.dispose();

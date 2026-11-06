@@ -2,6 +2,16 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-06：T10 第四轮扫描夹具收尾
+
+外部 Electron 验收在 `holdNativeCommandScan` 中报 `ReferenceError: require is not defined`。先让既有夹具回归将待求值函数序列化到无 `require` 的 VM 上下文，确认 1 条失败且错误一致，再提交回归 `dd50167b5`。原单测直接调用函数，未覆盖 Playwright 的跨进程求值边界。
+
+扫描延迟改用 Playwright 传入的 `ipcMain`，临时包装已有 `agents:getNativeCommands` 处理函数，仅暂停目标临时账户和项目的本机 Claude 非缓存扫描。其他查询继续转发；释放时恢复原处理函数，保留参数、结果和错误，释放所有挂起请求，重复清理不覆盖之后的注册。Electron 场景保留原有草稿、次数、来源、正文和账户隔离断言，新增释放前没有合成回合启动的断言。测试夹具通过内部 `_invokeHandlers` 读取原函数，缺失时明确失败，实际 Electron 兼容性仍待外部验证。
+
+被测对象是当前源码与夹具，不是 Electron 或安装包。扫描夹具 6 条、输入处理 121 条回归通过，均使用 `--configLoader runner --no-cache`，没有新增跳过、放宽断言或自动重试。`npx tsc --noEmit -p tsconfig.json` 及 Electron spec、夹具的独立严格类型检查通过。Playwright 仅执行 `--list --retries=0`，成功列出 1 个场景。修改文件经 Prettier，修改的 TypeScript 文件经 ESLint，差异空白检查通过。
+
+本轮只改测试和验证文档，没有产品、文案、CLI 或新旧界面行为变化，因此不添加用户变更日志条目。CLI 对等文档已注明夹具调整，原有 Open gaps 保留。外部运行入口和限制见 `e2e/native-commands-review.md`。未运行 Electron、完整构建、真实提供方、模型、SSH 或发行包验收，依赖符号链接未修改，没有推送、开 PR、标签或发布。
+
 ## 2026-11-06：T10 第三轮 Electron 失败定位
 
 外部 Electron 场景停在首次 `/before User Before refresh` 可见性断言。trace 的按钮已包含命令、用户来源和描述，发现服务没有丢失命令；来源只用 CSS 边距与命令名隔开，可访问名称却连成 `/beforeUser Before refresh`。先补英文、中文的用户、项目、工具上报六条回归，确认 6 失败、4 通过，再在两个文本节点之间补空格。产品修复提交为 `745dba37b`。复用已有中英文来源文案，没有新增动作或 CLI 动词，`tab commands` 的结构不变。

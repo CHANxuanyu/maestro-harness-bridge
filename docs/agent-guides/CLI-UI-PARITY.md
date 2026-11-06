@@ -80,6 +80,11 @@ Source badges have a text separator from the command name, including English
 and Chinese accessible names. This presentation fix adds no action or CLI verb;
 `tab commands` still returns the command, description and source separately.
 
+The scan-delay fixture uses the Electron module passed to `evaluateHandle` and
+temporarily wraps `agents:getNativeCommands`. Cached reads and other contexts
+continue through the original handler. This test-only correction adds no UI
+action or CLI verb and preserves the draft and single-submission assertions.
+
 Open gaps: plugin commands appear after an existing Claude process reports them;
 there is no offline inventory of Claude plugin manifests or Codex plugin catalogs.
 Project Claude commands expand their selected Markdown body and `$ARGUMENTS`

@@ -895,3 +895,17 @@ Claude 切换失败属于产品的 CLI 路径。失败截图只显示 Codex 新�
 本轮七个相关 Vitest 文件共 166 项通过，均使用 `--configLoader runner --no-cache`：夹具三项，远程配置、界面编辑、提供方会话、全文卡片合计 144 项，原生读取和 CLI 桥接合计 19 项。`npx tsc --noEmit -p tsconfig.json`、三个改动产品文件的 ESLint、改动文件 Prettier、diff 空白检查通过。Playwright `--list` 确认五条场景。没有全量测试、真实模型、真实账户、SSH、其他操作系统或发行包验收。
 
 沙箱外仍须执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-tool-output.spec.ts`。脚本重建 main、renderer 和 CLI，使用临时合成记录，重试为零。现有 CLI 帮助、强制切换警告和成功文字仍描述旧界面重置行为，已在 CLI parity 的 Open gaps 留明；本轮没有新增界面文案或 CLI 动词。
+
+## 2026-11-06：T6 合入批次集成分支
+
+从四分支集成记录 `ff658c541` 出发，以 `git merge --no-ff` 合入工具全文分支末端 `1d4050074`，合并提交为 `aa85e6597`。冲突只有 CHANGELOG 和本记录的追加段落，完整保留两边内容。自动合并的任务事件、转录转换、原生读取来源、预加载声明和双语文案均作语义复核。五个来源末端仍是本分支祖先，来源新增的产品记录、工作记录和两份 canonical/parity 文档文字均保留。
+
+集成审查发现 T6 的 `switchSessionProvider()` 保留了标准权限字段，却未使用 T1 的目标能力映射。Codex 不支持标准档，参数构造会走非只读默认。先以 `20edff918` 提交回归，CLI 两项及界面编辑两项实际失败：标准档未收紧，目标没有只读能力时仍切换。新界面两条入口现在读取目标能力，统一通过既有 `newConversationPermissionFields()` 处理每个打开的 AI 标签；任一标签无法保留限制时拒绝整次切换。能力查询失败同样拒绝，不丢弃原对话、工具卡片或正在运行的回合。旧界面仍沿用原来的编辑和 CLI 路径。提示复用已有中英文权限文案。
+
+补充组合回归：Codex 的连续 todo_list 更新带固定来源，exec item ID 不误当原生调用 ID；工具结果及来源存在时，停止后的用户消息仍正确去内部附注，真实重复发送连续刷新后不丢失，工具卡片不重复。没有发现 T6 原生身份与 T2/T3 的其他冲突。
+
+验证对象为本分支本次修复的源码，未制作安装包。相关 Vitest 56 文件、3175 项通过，合成原生夹具 4 文件、15 项通过，均使用 `--configLoader runner --no-cache`，无跳过、无重试。三份 TypeScript 检查最终通过；渲染层首次发现可空能力参数的收窄错误，显式拒绝空值后通过，并重新检查远程配置 34 项。四份合成 Electron 文件的补充类型检查通过，Playwright 只收集到 17 场景，没有启动 Electron。所有本轮改动文件的 Prettier 和 diff 空白检查通过。
+
+扩展 `e2e/native-tool-output.spec.ts` 的换工具场景：Claude 标准权限切到 Codex 后立即显示只读，合成续聊调用含 `--sandbox read-only` 和任务工具开关，不含绕过权限参数；继续验证旧回答、旧工具全文、CLI 回读、收起释放和全文不落盘。沙箱外需执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell.spec.ts e2e/native-stop-resume.spec.ts e2e/native-codex-plan.spec.ts e2e/native-tool-output.spec.ts --retries=0`。本轮未运行真实模型、真实账户、真实 SSH、浏览器会话、其他平台或发行包验收，未推送或创建 PR。
+
+旧界面没有增加全文按钮或权限继承规则。T6 原有共享变化包括统一工具预览截断标记、增加固定来源及原生调用元数据、刷新时补齐调用身份，仍保持 4000 字符缓存上限。全文读取的 SSH、视图折叠 CLI、旧缓存身份缺失和换工具 CLI 旧文案缺口仍按 parity 文档保留，不宣称已经补齐。

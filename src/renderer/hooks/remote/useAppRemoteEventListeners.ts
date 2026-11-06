@@ -1857,9 +1857,27 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			typeof patchObj.toolType === 'string' ? (patchObj.toolType as ToolType) : undefined;
 		if (requestedToolType && requestedToolType !== session.toolType) {
 			if (useSettingsStore.getState().newShell) {
-				const updated = switchSessionProvider(session, requestedToolType);
+				const capabilities = await window.maestro.agents
+					.getCapabilities(requestedToolType)
+					.catch(() => null);
+				const current = sessionsRef.current.find((s) => s.id === sessionId);
+				const updated =
+					capabilities && current && current.toolType === session.toolType
+						? switchSessionProvider(current, requestedToolType, capabilities)
+						: null;
+				if (!capabilities || !updated) {
+					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+						success: false,
+						error: getT()('workflows.shell.permissionUnavailable'),
+					});
+					return;
+				}
 				setSessions((prev: Session[]) =>
-					prev.map((s) => (s.id === sessionId ? switchSessionProvider(s, requestedToolType) : s))
+					prev.map((s) =>
+						s.id === sessionId
+							? (switchSessionProvider(s, requestedToolType, capabilities) ?? s)
+							: s
+					)
 				);
 				try {
 					await window.maestro.sessions.setMany([updated as any], []);

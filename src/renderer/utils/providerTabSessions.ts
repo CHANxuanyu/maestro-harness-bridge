@@ -16,7 +16,8 @@
  */
 
 import type { AITab, ProviderTabSession, QueuedItem, QueuedTurnSettings, Session } from '../types';
-import type { ToolType } from '../../shared/types';
+import type { AgentCapabilities, ToolType } from '../../shared/types';
+import { newConversationPermissionFields } from './tabHelpers/focusFields';
 
 /**
  * Move a tab's live provider-specific state into `providerSessions` under
@@ -61,13 +62,33 @@ export function switchTabProvider(tab: AITab, fromProvider: ToolType, toProvider
 	};
 }
 
-/** Share the Edit Agent switch with the new-shell CLI without dropping conversations. */
-export function switchSessionProvider(session: Session, toProvider: ToolType): Session {
+/**
+ * Share the Edit Agent switch with the new-shell CLI without dropping conversations.
+ * New-shell callers supply target capabilities; classic edits omit them.
+ * A null result refuses the whole switch when any tab would gain permission.
+ */
+export function switchSessionProvider(
+	session: Session,
+	toProvider: ToolType,
+	permissionCapabilities?: Pick<
+		AgentCapabilities,
+		'supportsReadOnlyMode' | 'supportsStandardPermissionMode'
+	>
+): Session | null {
 	if (session.toolType === toProvider) return session;
+	const aiTabs: AITab[] = [];
+	for (const tab of session.aiTabs) {
+		const permissions = permissionCapabilities
+			? newConversationPermissionFields(tab, permissionCapabilities)
+			: {};
+		// Reject the whole transition before changing any conversation.
+		if (!permissions) return null;
+		aiTabs.push({ ...switchTabProvider(tab, session.toolType, toProvider), ...permissions });
+	}
 	return {
 		...session,
 		toolType: toProvider,
-		aiTabs: session.aiTabs.map((tab) => switchTabProvider(tab, session.toolType, toProvider)),
+		aiTabs,
 		customPath: undefined,
 		customArgs: undefined,
 		customEnvVars: undefined,

@@ -146,35 +146,54 @@ describe('StdoutHandler', () => {
 
 	// ── handleData dispatch routing ────────────────────────────────────────
 
-	it('forwards every consecutive todo_list update through the stdout deduplicator', () => {
-		const { handler, emitter, sessionId } = createTestContext({
-			isStreamJsonMode: true,
-			toolType: 'codex',
-			outputParser: new CodexOutputParser(),
-		});
-		const toolSpy = vi.fn();
-		emitter.on('tool-execution', toolSpy);
-		const types = ['item.started', 'item.updated', 'item.updated', 'item.completed'];
-		types.forEach((type, index) =>
-			sendJsonLine(handler, sessionId, {
-				type,
-				item: {
-					type: 'todo_list',
-					id: 'plan',
-					items: [{ text: `Revision ${index}`, completed: index === 3 }],
-				},
-			})
-		);
-		expect(toolSpy.mock.calls.map(([, event]) => event.state)).toEqual(
-			types.map((_, index) => ({
-				status: index === 3 ? 'completed' : 'running',
-				input: {
-					plan: [{ step: `Revision ${index}`, status: index === 3 ? 'completed' : 'pending' }],
-				},
-			}))
-		);
-		expect(new Set(toolSpy.mock.calls.map(([, event]) => event.toolCallId)).size).toBe(1);
-	});
+	it.each(['plan', 'item_2'])(
+		'forwards every todo_list update with output provenance for %s',
+		(itemId) => {
+			const toolOutputSource = {
+				provider: 'codex',
+				projectPath: '/project',
+				ownerAgentId: 'owner',
+				accountDir: '/account',
+			};
+			const { handler, emitter, sessionId } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				agentSessionId: 'native-plan',
+				toolOutputSource,
+				outputParser: new CodexOutputParser(),
+			});
+			const toolSpy = vi.fn();
+			emitter.on('tool-execution', toolSpy);
+			const types = ['item.started', 'item.updated', 'item.updated', 'item.completed'];
+			types.forEach((type, index) =>
+				sendJsonLine(handler, sessionId, {
+					type,
+					item: {
+						type: 'todo_list',
+						id: itemId,
+						items: [{ text: `Revision ${index}`, completed: index === 3 }],
+					},
+				})
+			);
+			expect(toolSpy.mock.calls.map(([, event]) => event.state)).toEqual(
+				types.map((_, index) => ({
+					status: index === 3 ? 'completed' : 'running',
+					input: {
+						plan: [{ step: `Revision ${index}`, status: index === 3 ? 'completed' : 'pending' }],
+					},
+				}))
+			);
+			expect(new Set(toolSpy.mock.calls.map(([, event]) => event.toolCallId)).size).toBe(1);
+			for (const [, event] of toolSpy.mock.calls) {
+				expect(event.toolOutputSource).toEqual({
+					...toolOutputSource,
+					nativeSessionId: 'native-plan',
+				});
+				expect(event.nativeToolCallId).toBe(itemId === 'item_2' ? undefined : itemId);
+				expect(event.state.output).toBeUndefined();
+			}
+		}
+	);
 
 	describe('Codex process-local tool identifiers', () => {
 		it('carries the spawn source through real exec command events without calling item IDs native IDs', async () => {

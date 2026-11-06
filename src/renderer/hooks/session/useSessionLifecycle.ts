@@ -16,6 +16,7 @@
  */
 
 import { useCallback, useEffect } from 'react';
+import { getT } from '../../i18n';
 import type { AdditionalDirectory, Session } from '../../types';
 import type { ToolType } from '../../../shared/types';
 import {
@@ -35,6 +36,7 @@ import {
 	getTerminalSessionId,
 } from '../../utils/terminalTabHelpers';
 import { useTabStore } from '../../stores/tabStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { collectLeafTabRefs, generateGroupName, resolveTabRefTitle } from '../../utils/panelLayout';
 import { resolveActiveNavTab } from './useNavigationHistory';
 import type { NavHistoryEntry } from './useNavigationHistory';
@@ -98,7 +100,7 @@ export interface SessionLifecycleReturn {
 		workingDirectory?: string,
 		/** Codex only: spend a reset credit automatically on quota exhaustion. Defaults off. */
 		codexAutoResetOnExhaustion?: boolean
-	) => void;
+	) => Promise<void>;
 	/** Rename the currently-selected tab (persists to agent session storage + history) */
 	handleRenameTab: (newName: string) => void;
 	/** Auto-name the currently-selected tab: close modal, show spinner, generate name via agent */
@@ -156,7 +158,7 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 	// ====================================================================
 
 	const handleSaveEditAgent = useCallback(
-		(
+		async (
 			sessionId: string,
 			name: string,
 			toolType?: ToolType,
@@ -190,6 +192,22 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 			/** Codex only: spend a reset credit automatically on quota exhaustion. Defaults off. */
 			codexAutoResetOnExhaustion?: boolean
 		) => {
+			const changingProvider = useSessionStore
+				.getState()
+				.sessions.find((s) => s.id === sessionId)?.toolType;
+			const checkPermissions =
+				useSettingsStore.getState().newShell && toolType && toolType !== changingProvider;
+			const capabilities = checkPermissions
+				? await window.maestro.agents.getCapabilities(toolType).catch(() => null)
+				: undefined;
+			if (checkPermissions && !capabilities) {
+				notifyToast({
+					color: 'yellow',
+					title: getT()('workflows.shell.permissionUnavailable'),
+					message: getT()('workflows.shell.permissionUnavailable'),
+				});
+				return;
+			}
 			// The dialog disables the field while the agent runs, but the agent can
 			// start between opening the dialog and saving. Say so rather than
 			// silently keeping the old directory.
@@ -241,7 +259,16 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 				// Park native identities and retain logs, tabs and running turns.
 				// The new-shell CLI uses the same provider transition.
 				if (toolType && toolType !== s.toolType) {
-					next = switchSessionProvider(next, toolType);
+					const switched = switchSessionProvider(next, toolType, capabilities ?? undefined);
+					if (!switched) {
+						notifyToast({
+							color: 'yellow',
+							title: getT()('workflows.shell.permissionUnavailable'),
+							message: getT()('workflows.shell.permissionUnavailable'),
+						});
+						return s;
+					}
+					next = switched;
 				}
 				return relocateTo ? withWorkingDirectory(next, relocateTo) : next;
 			});

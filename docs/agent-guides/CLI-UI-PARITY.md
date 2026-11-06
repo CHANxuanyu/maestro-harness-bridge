@@ -479,6 +479,12 @@ for hidden upstream features remain available.
 
 ## Tool output on demand (2026-11-06)
 
+集成权限补充：新界面的 `update-agent <id> --provider <provider> --force`
+和项目设置都向 `switchSessionProvider()` 传入目标工具能力，逐标签调用
+`newConversationPermissionFields()`。不支持标准权限时收紧为只读；任一标签
+无法保留限制或能力查询失败时拒绝整次切换，CLI 返回失败原因。用
+`tab show <tab-id> --json` 回读实际权限。旧界面的 CLI 重置和界面编辑行为不变。
+
 New-shell expanded tool cards read one completed Claude or Codex tool result with
 `maestro-cli native-history tool-output <session> <tool-call-id> [--json] [--copy]`.
 `<session>` accepts a desktop tab ID, its unique prefix, `active`, or the exact

@@ -134,9 +134,14 @@ afterEach(() => {
 });
 
 describe('refreshNativeConversation', () => {
-	it.each(['codex', 'claude-code'] as const)(
-		'%s retains a genuine repeated send across consecutive refreshes of a stopped first turn',
-		async (toolType) => {
+	it.each([
+		['codex', false],
+		['claude-code', false],
+		['codex', true],
+		['claude-code', true],
+	] as const)(
+		'%s retains a genuine repeated send across consecutive refreshes of a stopped first turn, tool=%s',
+		async (toolType, withTool) => {
 			const sentAt = Date.parse('2026-11-06T12:00:00Z');
 			const prompt = 'Wait, then reply WAIT_DONE.';
 			const own: LogEntry = {
@@ -155,6 +160,13 @@ describe('refreshNativeConversation', () => {
 			useSessionStore.setState({
 				sessions: [owner({ toolType, aiTabs: [tab({ logs: [own, stop] })] })],
 			});
+			const toolOutputSource = {
+				provider: toolType,
+				projectPath: '/project',
+				ownerAgentId: 'maestro-owner',
+				nativeSessionId: NATIVE,
+				accountDir: '/account',
+			};
 			const disk = [
 				msg(
 					'native-first',
@@ -162,9 +174,32 @@ describe('refreshNativeConversation', () => {
 					appendReadOnlyPrompt(prompt),
 					new Date(sentAt + 200).toISOString()
 				),
+				...(withTool
+					? [
+							{
+								...msg('native-tool', 'assistant', '', new Date(sentAt + 500).toISOString()),
+								toolUse: [
+									{
+										tool: 'exec_command',
+										id: 'call-native',
+										state: {
+											status: 'completed',
+											input: { cmd: 'npm test' },
+											output: 'x'.repeat(8000) + 'TAIL',
+										},
+									},
+								],
+							},
+						]
+					: []),
 				msg('native-repeat', 'user', prompt, new Date(sentAt + 10000).toISOString()),
 			];
-			read.mockResolvedValue({ messages: disk, total: disk.length, hasMore: false });
+			read.mockResolvedValue({
+				messages: disk,
+				total: disk.length,
+				hasMore: false,
+				toolOutputSource,
+			});
 			const target = { sessionId: 'maestro-owner', tabId: 'tab-native' };
 			for (let refresh = 0; refresh < 3; refresh++) {
 				await refreshNativeConversation(target);
@@ -174,6 +209,21 @@ describe('refreshNativeConversation', () => {
 						.map((entry) => entry.id)
 				).toEqual(['local-first', 'native-repeat']);
 				expect(storedTab()!.logs).toContain(stop);
+				if (withTool) {
+					const tools = storedTab()!.logs.filter((entry) => entry.source === 'tool');
+					expect(tools).toHaveLength(1);
+					expect(tools[0].metadata).toMatchObject({
+						toolCallId: 'call-native',
+						nativeToolCallId: 'call-native',
+						toolOutputSource,
+					});
+					expect(tools[0].metadata?.toolState?.output).not.toContain('TAIL');
+				}
+				expect(
+					storedTab()!
+						.logs.filter((entry) => entry.source === 'user')
+						.map((entry) => entry.text)
+				).toEqual([prompt, prompt]);
 			}
 		}
 	);

@@ -77,7 +77,14 @@ for (const scenario of [
 				expect(fs.readFileSync(file, 'utf8')).not.toContain(tail);
 			}
 			if (mode === 'switch') {
+				await native.cli('tab', 'permission', 'active', 'standard');
+				expect((await native.cli('tab', 'show', 'active')).tab.permissionMode).toBe('standard');
 				await native.cli('update-agent', ownerId, '--provider', 'codex', '--force');
+				expect((await native.cli('tab', 'show', 'active')).tab).toMatchObject({
+					permissionMode: 'readonly',
+					readOnly: true,
+				});
+				await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
 				await native.cli(
 					'update-agent',
 					ownerId,
@@ -93,6 +100,16 @@ for (const scenario of [
 				await expect(native.output()).toContainText('Synthetic Codex continuation.');
 				await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
 				await expect(native.output()).toContainText('Synthetic build finished.');
+				const invocations = fs
+					.readFileSync(path.join(native.codex, 'fixture-invocations.jsonl'), 'utf8')
+					.trim()
+					.split('\n')
+					.map((line) => JSON.parse(line) as { args: string[] });
+				expect(invocations).toHaveLength(1);
+				const { args } = invocations[0];
+				expect(args[args.indexOf('--sandbox') + 1]).toBe('read-only');
+				expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+				expect(args).toContain('tools.update_plan.enabled=true');
 			}
 			await native
 				.output()

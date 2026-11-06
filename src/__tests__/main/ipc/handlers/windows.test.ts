@@ -21,6 +21,8 @@ import { ipcMain, BrowserWindow } from 'electron';
 vi.mock('electron', () => ({
 	ipcMain: {
 		handle: vi.fn(),
+		on: vi.fn(),
+		removeListener: vi.fn(),
 	},
 	BrowserWindow: {
 		fromWebContents: vi.fn(),
@@ -51,6 +53,7 @@ vi.mock('../../../../main/utils/ipcHandler', () => ({
 import {
 	registerWindowsHandlers,
 	wireWindowRegistryBroadcast,
+	HANDOVER_SAVE_TIMEOUT_MS,
 	wireEmptySecondaryWindowAutoClose,
 } from '../../../../main/ipc/handlers/windows';
 import { WindowRegistry } from '../../../../main/window-registry';
@@ -70,6 +73,8 @@ function makeFakeWindow(overrides: Partial<Record<string, unknown>> = {}): Brows
 		webContents: {
 			send: vi.fn(),
 			isDestroyed: vi.fn(() => false),
+			once: vi.fn(),
+			removeListener: vi.fn(),
 		},
 		...overrides,
 	} as unknown as BrowserWindow;
@@ -78,6 +83,19 @@ function makeFakeWindow(overrides: Partial<Record<string, unknown>> = {}): Brows
 /** The mocked webContents.send for a fake window, typed for assertions. */
 function sendOf(win: BrowserWindow): ReturnType<typeof vi.fn> {
 	return (win as unknown as { webContents: { send: ReturnType<typeof vi.fn> } }).webContents.send;
+}
+
+/** Answer the save a move asked `win` for, as its renderer would. */
+function answerHandoverSave(win: BrowserWindow, saved = true) {
+	const request = sendOf(win).mock.calls.find(([channel]) => channel === 'app:requestQuitSave');
+	const onComplete = vi
+		.mocked(ipcMain.on)
+		.mock.calls.find(([channel]) => channel === 'app:quitSaveComplete')?.[1] as unknown as (
+		event: { sender: unknown },
+		id: unknown,
+		saved: unknown
+	) => void;
+	onComplete({ sender: win.webContents }, request?.[1], saved);
 }
 
 /** A fake IPC invoke event whose sender resolves to `browserWindow`. */
@@ -672,7 +690,7 @@ describe('Windows IPC Handlers', () => {
 	});
 
 	describe('wireWindowRegistryBroadcast', () => {
-		it('broadcasts a session move to every window with the change payload', () => {
+		it('broadcasts a session move to every window with the change payload', async () => {
 			const fromWin = makeFakeWindow();
 			const toWin = makeFakeWindow();
 			const from = registry.create({
@@ -685,6 +703,8 @@ describe('Windows IPC Handlers', () => {
 			// Wire AFTER creating windows so the 'created' events are not in scope.
 			wireWindowRegistryBroadcast(registry);
 			registry.moveSession('agent-1', from, to);
+			answerHandoverSave(fromWin);
+			await Promise.resolve();
 
 			const payload = {
 				type: 'session-moved',
@@ -695,6 +715,87 @@ describe('Windows IPC Handlers', () => {
 			};
 			expect(sendOf(fromWin)).toHaveBeenCalledWith('windows:sessionMoved', payload);
 			expect(sendOf(toWin)).toHaveBeenCalledWith('windows:sessionMoved', payload);
+		});
+
+		it('holds a move until the old owner has saved', async () => {
+			const fromWin = makeFakeWindow();
+			const toWin = makeFakeWindow();
+			const from = registry.create({
+				browserWindow: fromWin,
+				sessionIds: ['agent-1'],
+				isMain: true,
+			});
+			const to = registry.create({ browserWindow: toWin, sessionIds: [], isMain: false });
+
+			wireWindowRegistryBroadcast(registry);
+			registry.moveSession('agent-1', from, to);
+
+			expect(sendOf(fromWin)).toHaveBeenCalledWith('app:requestQuitSave', expect.any(String));
+			expect(sendOf(toWin)).not.toHaveBeenCalled();
+
+			answerHandoverSave(fromWin);
+			await Promise.resolve();
+			expect(sendOf(toWin)).toHaveBeenCalledWith(
+				'windows:sessionMoved',
+				expect.objectContaining({ type: 'session-moved', sessionId: 'agent-1' })
+			);
+		});
+
+		it('still announces the move when the old owner could not save', async () => {
+			const fromWin = makeFakeWindow();
+			const toWin = makeFakeWindow();
+			const from = registry.create({
+				browserWindow: fromWin,
+				sessionIds: ['agent-1'],
+				isMain: true,
+			});
+			const to = registry.create({ browserWindow: toWin, sessionIds: [], isMain: false });
+
+			wireWindowRegistryBroadcast(registry);
+			registry.moveSession('agent-1', from, to);
+			answerHandoverSave(fromWin, false);
+			await Promise.resolve();
+
+			expect(sendOf(toWin)).toHaveBeenCalledWith('windows:sessionMoved', expect.anything());
+		});
+
+		it('does not let a window that never answers hold the move', async () => {
+			vi.useFakeTimers();
+			try {
+				const fromWin = makeFakeWindow();
+				const toWin = makeFakeWindow();
+				const from = registry.create({
+					browserWindow: fromWin,
+					sessionIds: ['agent-1'],
+					isMain: true,
+				});
+				const to = registry.create({ browserWindow: toWin, sessionIds: [], isMain: false });
+
+				wireWindowRegistryBroadcast(registry);
+				registry.moveSession('agent-1', from, to);
+				await vi.advanceTimersByTimeAsync(HANDOVER_SAVE_TIMEOUT_MS);
+
+				expect(sendOf(toWin)).toHaveBeenCalledWith('windows:sessionMoved', expect.anything());
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		it('announces at once when the old owner has already closed', () => {
+			const fromWin = makeFakeWindow({ isDestroyed: vi.fn(() => true) });
+			const toWin = makeFakeWindow();
+			const from = registry.create({
+				browserWindow: fromWin,
+				sessionIds: ['agent-1'],
+				isMain: false,
+			});
+			const to = registry.create({ browserWindow: toWin, sessionIds: [], isMain: true });
+
+			wireWindowRegistryBroadcast(registry);
+			registry.moveSession('agent-1', from, to);
+
+			expect(sendOf(fromWin)).not.toHaveBeenCalled();
+			expect(sendOf(toWin)).toHaveBeenCalledWith('windows:sessionMoved', expect.anything());
 		});
 
 		it('broadcasts a sessions-changed (setSessionsForWindow) replacement', () => {

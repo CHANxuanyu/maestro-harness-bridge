@@ -834,6 +834,19 @@ describe('persistence IPC handlers', () => {
 	});
 
 	describe('sessions:getAll', () => {
+		it('waits for a save already in progress', async () => {
+			mockSessionsStore.get.mockReturnValue([{ id: 'agent', name: 'Before' }]);
+			mockSessionsStore.set.mockImplementation((_key: string, value: unknown) => {
+				mockSessionsStore.get.mockReturnValue(value);
+			});
+
+			const save = handlers.get('sessions:setMany')!({}, [{ id: 'agent', name: 'After' }], []);
+			const read = handlers.get('sessions:getAll')!({});
+			await save;
+
+			expect(await read).toEqual([expect.objectContaining({ id: 'agent', name: 'After' })]);
+		});
+
 		it('should load sessions from store', async () => {
 			const mockSessions = [
 				{ id: 'session-1', name: 'Session 1', cwd: '/test' },

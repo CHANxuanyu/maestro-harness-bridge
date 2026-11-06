@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createNativeTempDir } from '../../e2e/fixtures/native/temp-root.cjs';
 import { createCorpus } from './fixtures.mjs';
@@ -15,6 +16,7 @@ const option = (name, fallback) => (args.includes(name) ? args[args.indexOf(name
 const rounds = Number(option('--rounds', '7'));
 if (!Number.isInteger(rounds) || rounds < 3) throw Error('Use at least three rounds');
 const before = option('--before');
+const after = option('--after');
 const output = path.resolve(option('--output', 'native-perf.json'));
 const root = createNativeTempDir('maestro-perf-');
 try {
@@ -26,8 +28,18 @@ try {
 		await buildVariant(
 			repo,
 			path.join(root, `${variant}.cjs`),
-			variant === 'before' ? before : undefined
+			variant === 'before' ? before : after
 		);
+	const bundleSha256 = Object.fromEntries(
+		await Promise.all(
+			variants.map(async (variant) => [
+				variant,
+				createHash('sha256')
+					.update(await fs.readFile(path.join(root, `${variant}.cjs`)))
+					.digest('hex'),
+			])
+		)
+	);
 	const samples = [];
 	for (let round = 0; round < rounds; round++) {
 		for (const variant of round % 2 ? [...variants].reverse() : variants) {
@@ -59,7 +71,9 @@ try {
 			cwd: repo,
 			encoding: 'utf8',
 		}).trim(),
+		bundleSha256,
 		beforeRef: before ?? null,
+		afterRef: after ?? null,
 		node: process.version,
 		platform: process.platform,
 		arch: process.arch,

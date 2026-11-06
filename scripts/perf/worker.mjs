@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
 import { longMessages } from './fixtures.mjs';
 
 const [bundle, manifest, data] = process.argv.slice(2);
@@ -11,6 +12,7 @@ await fs.mkdir(data, { recursive: true });
 const api = createRequire(import.meta.url)(bundle);
 const corpus = JSON.parse(await fs.readFile(manifest, 'utf8'));
 const metrics = {};
+const outputDigests = {};
 const perf = new api.PerformanceMetrics('native-perf');
 async function measure(name, work) {
 	global.gc();
@@ -41,10 +43,13 @@ async function measure(name, work) {
 			? result.length
 			: (result?.total ?? result?.conversations?.length ?? 0),
 	};
+	outputDigests[name] = createHash('sha256')
+		.update(JSON.stringify(result ?? null))
+		.digest('hex');
 	return result;
 }
 
-const coldProjects = await measure('projects.bounded.cold', () =>
+await measure('projects.bounded.cold', () =>
 	api.createNativeProjectDiscovery({ accountDirs: async (p) => [corpus.accounts[p]] })()
 );
 const discover = api.createNativeProjectDiscovery({
@@ -52,7 +57,11 @@ const discover = api.createNativeProjectDiscovery({
 	maxFiles: 2500,
 	maxMs: 60000,
 });
-await measure('projects.full.cold', discover);
+const fullProjects = await measure('projects.full.cold', discover);
+assert.equal(
+	fullProjects.reduce((count, project) => count + project.sessionCount, 0),
+	2000
+);
 await measure('projects.full.warm', discover);
 const codex = new api.CodexSessionStorage();
 const claude = new api.ClaudeSessionStorage();
@@ -60,7 +69,7 @@ const project = corpus.projects[0];
 await measure('codex.list.cold', () =>
 	codex.listSessions(project, undefined, corpus.accounts.codex)
 );
-const codexList = await measure('codex.list.warm', () =>
+await measure('codex.list.warm', () =>
 	codex.listSessions(project, undefined, corpus.accounts.codex)
 );
 await measure('claude.list.cold', () =>
@@ -99,6 +108,8 @@ const history = await measure('history.20projects', () =>
 		},
 	})
 );
+assert.equal(history.conversations.length, 2000);
+assert.deepEqual(history.errors, []);
 const lists = new Map();
 for (const storage of [codex, claude])
 	for (const scope of scopes) {
@@ -128,15 +139,20 @@ const options = { configDir: corpus.accounts.codex, readOnly: true, limit: 500 }
 const opened = await measure('open.plain50MiB.cold', () =>
 	codex.readSessionMessages(project, plain.id, options)
 );
+assert.equal(opened.total, 3750);
+assert.equal(opened.messages.length, 500);
 await measure('open.plain50MiB.warm', () => codex.readSessionMessages(project, plain.id, options));
-await measure('open.zstd50MiB', () => codex.readSessionMessages(archive.cwd, archive.id, options));
+const compressed = await measure('open.zstd50MiB', () =>
+	codex.readSessionMessages(archive.cwd, archive.id, options)
+);
+assert.equal(compressed.total, 3750);
+assert.equal(compressed.messages.length, 500);
 const messages = longMessages();
 const entries = await measure('convert.5000', () => api.transcriptMessagesToLogEntries(messages));
+assert.equal(entries.length, 6250);
 await measure('reconcile.5000', () => api.reconcileTranscriptEntries(entries, entries));
 // Hash outside timing; a speedup must preserve complete semantic output.
-const digest = createHash('sha256')
-	.update(JSON.stringify({ coldProjects, codexList, history, opened, entries }))
-	.digest('hex');
+const digest = createHash('sha256').update(JSON.stringify(outputDigests)).digest('hex');
 process.stdout.write(
 	JSON.stringify({
 		metrics,

@@ -87,6 +87,8 @@ test('new shell startup, long transcript, switching, scrolling and synthetic str
 		: [{ name: 'baseline', entry: path.resolve('dist/main/index.js') }];
 	const root = createNativeTempDir('maestro-perf-e2e-');
 	const corpus = await createCorpus(path.join(root, 'corpus'));
+	// Put the large native conversation inside the sidebar's initial history window.
+	fs.utimesSync(corpus.files[0].file, 1795000000, 1795000000);
 	const samples: Array<{
 		variant: string;
 		round: number;
@@ -181,8 +183,21 @@ test('new shell startup, long transcript, switching, scrolling and synthetic str
 							XDG_CONFIG_HOME: path.join(data, 'config'),
 							XDG_DATA_HOME: path.join(data, 'xdg'),
 							XDG_CACHE_HOME: path.join(data, 'cache'),
+							XDG_STATE_HOME: path.join(data, 'state'),
+							COPILOT_HOME: path.join(data, 'copilot'),
+							GROK_HOME: path.join(data, 'grok'),
+							GROK_AUTH_PATH: path.join(data, 'grok', 'auth.json'),
+							PI_CODING_AGENT_DIR: path.join(data, 'omp'),
+							PI_CONFIG_DIR: path.join(data, 'pi'),
+							OMP_PROFILE: '',
+							PI_PROFILE: '',
+							OPENCODE_CONFIG_DIR: path.join(data, 'opencode'),
+							OPENCODE_CONFIG: '',
+							OPENCODE_CONFIG_CONTENT: '{}',
 							ELECTRON_DISABLE_GPU: '0',
 						});
+						const createdAt = await app.evaluate(() => process.getCreationTime());
+						expect(createdAt).not.toBeNull();
 						const page = await app.firstWindow();
 						const input = page.getByPlaceholder(/^(Talking to |Message )/);
 						if (size === 'empty') await expect(page.getByTestId('project-start')).toBeVisible();
@@ -191,7 +206,10 @@ test('new shell startup, long transcript, switching, scrolling and synthetic str
 								'Synthetic message 4999'
 							);
 						await painted(page);
-						metrics[`${size}.startup.usable`] = { ms: performance.now() - started };
+						metrics[`${size}.startup.usable`] = {
+							ms: Date.now() - createdAt!,
+							launchToReadyMs: performance.now() - started,
+						};
 						if (size === 'empty') {
 							await app.evaluate(({ dialog }, project) => {
 								dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [project] });
@@ -201,7 +219,10 @@ test('new shell startup, long transcript, switching, scrolling and synthetic str
 						// Readiness only: do not type or submit any prompt.
 						await expect(input).toBeEditable();
 						await painted(page);
-						metrics[`${size}.startup.inputEditable`] = { ms: performance.now() - started };
+						metrics[`${size}.startup.inputEditable`] = {
+							ms: Date.now() - createdAt!,
+							launchToReadyMs: performance.now() - started,
+						};
 						if (size === 'large') {
 							const cdp = await app.context().newCDPSession(page);
 							await cdp.send('Performance.enable');
@@ -213,6 +234,7 @@ test('new shell startup, long transcript, switching, scrolling and synthetic str
 								await painted(page);
 								const ms = performance.now() - begin;
 								const after = await cdp.send('Performance.getMetrics');
+								const mainMemory = await app!.evaluate(() => process.memoryUsage());
 								const value = (rows: typeof after, key: string) =>
 									rows.metrics.find((metric) => metric.name === key)?.value ?? 0;
 								metrics[name] = {
@@ -223,26 +245,31 @@ test('new shell startup, long transcript, switching, scrolling and synthetic str
 									scriptMs:
 										(value(after, 'ScriptDuration') - value(before, 'ScriptDuration')) * 1000,
 									heapBytes: value(after, 'JSHeapUsedSize'),
+									mainHeapBytes: mainMemory.heapUsed,
+									mainRssBytes: mainMemory.rss,
 									nodes: value(after, 'Nodes'),
 								};
 							};
-							await phase('large.open.native50MiB', async () => {
-								const result = await page.evaluate(
-									async ({ project, id, account }) =>
-										window.maestro.agentSessions.read('codex', project, id, {
-											configDir: account,
-											readOnly: true,
-											limit: 500,
-										}),
-									{ project: corpus.projects[0], id: corpus.files[0].id, account: accounts.codex }
-								);
-								expect(result.messages.length).toBe(500);
-							});
+							const nativeRow = page.locator(
+								`[data-conversation-kind="history"][data-conversation-key*="${corpus.files[0].id}"] [data-tree-nav]`
+							);
+							const historyStart = performance.now();
+							await expect(nativeRow).toBeVisible();
+							metrics['large.history.rowsReady'] = { ms: performance.now() - historyStart };
 							const trace = info.outputPath(`${variant.name}-${round}-trace.json`);
 							await app.evaluate(
 								({ contentTracing }, config) => contentTracing.startRecording(config),
 								buildTraceConfig()
 							);
+							await phase('large.open.native50MiB.firstPaint', async () => {
+								await nativeRow.click();
+								await expect(
+									page
+										.locator('.terminal-output')
+										.getByText('Synthetic message 4997', { exact: true })
+								).toBeVisible();
+								await expect(input).toBeEditable();
+							});
 							await phase('large.switch.5000', async () => {
 								await page.locator('[data-conversation-key$=":b"] [data-tree-nav]').click();
 								await expect(page.locator('[data-log-id]').last()).toContainText(
@@ -264,6 +291,8 @@ test('new shell startup, long transcript, switching, scrolling and synthetic str
 									});
 								});
 							});
+							await page.getByTitle('Scroll to bottom (click to pin)', { exact: true }).click();
+							await painted(page);
 							await phase('large.stream.100Hz', async () => {
 								await app!.evaluate(async ({ BrowserWindow }) => {
 									const web = BrowserWindow.getAllWindows().find(
@@ -279,11 +308,16 @@ test('new shell startup, long transcript, switching, scrolling and synthetic str
 							const buffer = await app.evaluate(({ contentTracing }) =>
 								contentTracing.getTraceBufferUsage()
 							);
-							expect(buffer.percentFull).toBeLessThan(0.98);
 							await app.evaluate(
 								({ contentTracing }, file) => contentTracing.stopRecording(file),
 								trace
 							);
+							expect(buffer.percentage).toBeLessThan(0.98);
+							await phase('large.backfill.remaining', async () => {
+								await expect(page.locator('[data-log-id="b-message-0"]')).toBeAttached({
+									timeout: 120_000,
+								});
+							});
 							await cdp.detach();
 						}
 						samples.push({
@@ -312,10 +346,10 @@ test('new shell startup, long transcript, switching, scrolling and synthetic str
 					samples,
 					summary: summarize(samples),
 					notes: [
-						'Startup begins immediately before electron.launch and includes launcher overhead.',
+						'Startup ms uses Electron process.getCreationTime; launchToReadyMs separately includes launcher overhead.',
 						'Empty input readiness includes opening a project after the start screen.',
 						'Streaming injects synthetic process:data events into the real preload and batcher, without spawning a provider.',
-						'Node open timing covers full parsing; Electron open.native50MiB covers IPC only. Startup/switch timings cover the persisted 5000-message view.',
+						'Native firstPaint measures sidebar selection through visible transcript and editable input; startup/switch use the persisted 5000-message view.',
 						'Frames are rAF gaps at a 60 Hz reference, not GPU present counters.',
 					],
 				},

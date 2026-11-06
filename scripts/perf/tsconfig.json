@@ -1,0 +1,13 @@
+{
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"allowJs": true,
+		"checkJs": false,
+		"lib": ["ES2024", "DOM", "DOM.Iterable"]
+	},
+	"include": [
+		"../../e2e/perf-new-shell.spec.ts",
+		"../../src/types/**/*",
+		"../../src/renderer/global.d.ts"
+	]
+}

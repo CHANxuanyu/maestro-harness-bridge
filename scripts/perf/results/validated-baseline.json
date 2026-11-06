@@ -1,0 +1,1543 @@
+{
+	"schema": 1,
+	"date": "2026-11-06T17:05:45.261Z",
+	"sourceCommit": "2bdac429dff7c7bf22a90b5da2054156814ff10d",
+	"bundleSha256": {
+		"baseline": "babb3e33c381a23a0824ae0248ce5dd104982411fa1fb6dc9f30e424266d1505"
+	},
+	"beforeRef": null,
+	"afterRef": "ad92dd648",
+	"node": "v24.21.0",
+	"platform": "darwin",
+	"arch": "arm64",
+	"cpu": "Apple M4",
+	"cpuCount": 10,
+	"totalMemBytes": 17179869184,
+	"corpus": {
+		"transcriptCount": 2000,
+		"largestExpandedBytes": 52428800,
+		"compressedCount": 250,
+		"projectCount": 20
+	},
+	"methodology": "Fresh process and metadata cache each sample; OS page cache is not flushed. AB then BA in alternating rounds. Timings exclude fixture generation, bundling, GC and output hashing. RSS is end-of-operation; maxRSS is process-wide high water. p95 is nearest rank, not a latency guarantee. Local non-Git projects; no SSH or model invocation.",
+	"samples": [
+		{
+			"round": 0,
+			"variant": "baseline",
+			"loadBefore": [4.91796875, 4.7998046875, 4.77197265625],
+			"metrics": {
+				"projects.bounded.cold": {
+					"ms": 220.417125,
+					"cpuMs": 277.623,
+					"heapDeltaBytes": 2763968,
+					"rssBytes": 86392832,
+					"maxDelayMs": 0.5599169999999987,
+					"count": 20
+				},
+				"projects.full.cold": {
+					"ms": 406.37754199999995,
+					"cpuMs": 483.339,
+					"heapDeltaBytes": 3886696,
+					"rssBytes": 91406336,
+					"maxDelayMs": 0.8672080000000051,
+					"count": 20
+				},
+				"projects.full.warm": {
+					"ms": 0.2245829999999387,
+					"cpuMs": 0.925,
+					"heapDeltaBytes": 63128,
+					"rssBytes": 91406336,
+					"maxDelayMs": 0,
+					"count": 20
+				},
+				"codex.list.cold": {
+					"ms": 356.92729199999997,
+					"cpuMs": 438.966,
+					"heapDeltaBytes": 7801104,
+					"rssBytes": 371884032,
+					"maxDelayMs": 69.21995900000002,
+					"count": 50
+				},
+				"codex.list.warm": {
+					"ms": 69.852083,
+					"cpuMs": 83.49,
+					"heapDeltaBytes": 2160192,
+					"rssBytes": 371539968,
+					"maxDelayMs": 0.35912500000017644,
+					"count": 50
+				},
+				"claude.list.cold": {
+					"ms": 10.681957999999895,
+					"cpuMs": 16.746,
+					"heapDeltaBytes": 2633728,
+					"rssBytes": 371556352,
+					"maxDelayMs": 1.0798339999998916,
+					"count": 50
+				},
+				"claude.list.warm": {
+					"ms": 3.3589170000000195,
+					"cpuMs": 5.191,
+					"heapDeltaBytes": 1069784,
+					"rssBytes": 371556352,
+					"maxDelayMs": 0,
+					"count": 50
+				},
+				"paths.local.2000": {
+					"ms": 50.248875,
+					"cpuMs": 52.776,
+					"heapDeltaBytes": 1719904,
+					"rssBytes": 371687424,
+					"maxDelayMs": 45.32095800000002,
+					"count": 0
+				},
+				"history.20projects": {
+					"ms": 1566.9531670000001,
+					"cpuMs": 1749.221,
+					"heapDeltaBytes": 33642352,
+					"rssBytes": 421396480,
+					"maxDelayMs": 5.218082999999751,
+					"count": 2000
+				},
+				"history.joinOnly.2000": {
+					"ms": 84.93437499999982,
+					"cpuMs": 91.495,
+					"heapDeltaBytes": 17242600,
+					"rssBytes": 430424064,
+					"maxDelayMs": 37.91987499999959,
+					"count": 2000
+				},
+				"open.plain50MiB.cold": {
+					"ms": 98.1795830000001,
+					"cpuMs": 158.517,
+					"heapDeltaBytes": 65838680,
+					"rssBytes": 468271104,
+					"maxDelayMs": 75.58449999999993,
+					"count": 3750
+				},
+				"open.plain50MiB.warm": {
+					"ms": 3.1679170000006707,
+					"cpuMs": 6.554,
+					"heapDeltaBytes": 1848424,
+					"rssBytes": 451428352,
+					"maxDelayMs": 0,
+					"count": 3750
+				},
+				"open.zstd50MiB": {
+					"ms": 84.94579200000044,
+					"cpuMs": 127.923,
+					"heapDeltaBytes": 58949880,
+					"rssBytes": 501284864,
+					"maxDelayMs": 65.41250000000036,
+					"count": 3750
+				},
+				"convert.5000": {
+					"ms": 9.239916000000449,
+					"cpuMs": 15.229,
+					"heapDeltaBytes": 28698816,
+					"rssBytes": 493289472,
+					"maxDelayMs": 4.345041999999921,
+					"count": 6250
+				},
+				"reconcile.5000": {
+					"ms": 18.659459000000425,
+					"cpuMs": 28.202,
+					"heapDeltaBytes": 18594856,
+					"rssBytes": 501399552,
+					"maxDelayMs": 13.778083000000152,
+					"count": 0
+				}
+			},
+			"digest": "3daccf198bc2e3a572f1a06fd76ba81f1ae5ed895093ca28600f0fb2df7c7140",
+			"loadAvg": [4.68408203125, 4.7529296875, 4.75537109375],
+			"freeMemBytes": 1934966784,
+			"resourceUsage": {
+				"userCPUTime": 2831198,
+				"systemCPUTime": 2363062,
+				"maxRSS": 496000,
+				"sharedMemorySize": 0,
+				"unsharedDataSize": 0,
+				"unsharedStackSize": 0,
+				"minorPageFault": 37807,
+				"majorPageFault": 85,
+				"swappedOut": 0,
+				"fsRead": 0,
+				"fsWrite": 0,
+				"ipcSent": 0,
+				"ipcReceived": 0,
+				"signalsCount": 0,
+				"voluntaryContextSwitches": 0,
+				"involuntaryContextSwitches": 162010
+			}
+		},
+		{
+			"round": 1,
+			"variant": "baseline",
+			"loadBefore": [4.68408203125, 4.7529296875, 4.75537109375],
+			"metrics": {
+				"projects.bounded.cold": {
+					"ms": 221.22354199999998,
+					"cpuMs": 277.962,
+					"heapDeltaBytes": 2700688,
+					"rssBytes": 86032384,
+					"maxDelayMs": 0.4824169999999981,
+					"count": 20
+				},
+				"projects.full.cold": {
+					"ms": 425.82033299999995,
+					"cpuMs": 507.377,
+					"heapDeltaBytes": 3862512,
+					"rssBytes": 91488256,
+					"maxDelayMs": 1.429124999999999,
+					"count": 20
+				},
+				"projects.full.warm": {
+					"ms": 0.11520900000004985,
+					"cpuMs": 0.447,
+					"heapDeltaBytes": 63128,
+					"rssBytes": 91504640,
+					"maxDelayMs": 0,
+					"count": 20
+				},
+				"codex.list.cold": {
+					"ms": 355.749417,
+					"cpuMs": 438.967,
+					"heapDeltaBytes": 7898816,
+					"rssBytes": 373014528,
+					"maxDelayMs": 69.54395799999998,
+					"count": 50
+				},
+				"codex.list.warm": {
+					"ms": 71.294666,
+					"cpuMs": 85.52,
+					"heapDeltaBytes": 2111168,
+					"rssBytes": 372588544,
+					"maxDelayMs": 1.1575830000001588,
+					"count": 50
+				},
+				"claude.list.cold": {
+					"ms": 10.930333000000019,
+					"cpuMs": 17.508,
+					"heapDeltaBytes": 2633704,
+					"rssBytes": 372654080,
+					"maxDelayMs": 0.9806659999999283,
+					"count": 50
+				},
+				"claude.list.warm": {
+					"ms": 3.3409580000000005,
+					"cpuMs": 5.085,
+					"heapDeltaBytes": 1069784,
+					"rssBytes": 372654080,
+					"maxDelayMs": 0,
+					"count": 50
+				},
+				"paths.local.2000": {
+					"ms": 49.37937499999998,
+					"cpuMs": 51.943,
+					"heapDeltaBytes": 1720240,
+					"rssBytes": 372801536,
+					"maxDelayMs": 44.463624999999865,
+					"count": 0
+				},
+				"history.20projects": {
+					"ms": 1652.8326250000002,
+					"cpuMs": 1778.642,
+					"heapDeltaBytes": 33743136,
+					"rssBytes": 421462016,
+					"maxDelayMs": 5.791334000000006,
+					"count": 2000
+				},
+				"history.joinOnly.2000": {
+					"ms": 88.50174999999945,
+					"cpuMs": 95.238,
+					"heapDeltaBytes": 17240248,
+					"rssBytes": 430964736,
+					"maxDelayMs": 39.872292000000016,
+					"count": 2000
+				},
+				"open.plain50MiB.cold": {
+					"ms": 104.0398750000004,
+					"cpuMs": 168.293,
+					"heapDeltaBytes": 65837312,
+					"rssBytes": 468402176,
+					"maxDelayMs": 76.0884589999996,
+					"count": 3750
+				},
+				"open.plain50MiB.warm": {
+					"ms": 3.2041659999995318,
+					"cpuMs": 6.65,
+					"heapDeltaBytes": 1848520,
+					"rssBytes": 451592192,
+					"maxDelayMs": 0,
+					"count": 3750
+				},
+				"open.zstd50MiB": {
+					"ms": 83.36650000000009,
+					"cpuMs": 128.168,
+					"heapDeltaBytes": 58949912,
+					"rssBytes": 501727232,
+					"maxDelayMs": 63.33675000000039,
+					"count": 3750
+				},
+				"convert.5000": {
+					"ms": 9.534040999999888,
+					"cpuMs": 19.463,
+					"heapDeltaBytes": 28699416,
+					"rssBytes": 493780992,
+					"maxDelayMs": 4.671624999999949,
+					"count": 6250
+				},
+				"reconcile.5000": {
+					"ms": 18.707415999999284,
+					"cpuMs": 28.539,
+					"heapDeltaBytes": 18605792,
+					"rssBytes": 501825536,
+					"maxDelayMs": 13.84979199999998,
+					"count": 0
+				}
+			},
+			"digest": "3daccf198bc2e3a572f1a06fd76ba81f1ae5ed895093ca28600f0fb2df7c7140",
+			"loadAvg": [4.548828125, 4.7236328125, 4.74462890625],
+			"freeMemBytes": 2010251264,
+			"resourceUsage": {
+				"userCPUTime": 2868355,
+				"systemCPUTime": 2392589,
+				"maxRSS": 496432,
+				"sharedMemorySize": 0,
+				"unsharedDataSize": 0,
+				"unsharedStackSize": 0,
+				"minorPageFault": 37837,
+				"majorPageFault": 84,
+				"swappedOut": 0,
+				"fsRead": 0,
+				"fsWrite": 0,
+				"ipcSent": 0,
+				"ipcReceived": 0,
+				"signalsCount": 0,
+				"voluntaryContextSwitches": 0,
+				"involuntaryContextSwitches": 163394
+			}
+		},
+		{
+			"round": 2,
+			"variant": "baseline",
+			"loadBefore": [4.548828125, 4.7236328125, 4.74462890625],
+			"metrics": {
+				"projects.bounded.cold": {
+					"ms": 219.699292,
+					"cpuMs": 279.204,
+					"heapDeltaBytes": 2675400,
+					"rssBytes": 86212608,
+					"maxDelayMs": 0.11499999999998067,
+					"count": 20
+				},
+				"projects.full.cold": {
+					"ms": 418.23558299999996,
+					"cpuMs": 501.892,
+					"heapDeltaBytes": 3964136,
+					"rssBytes": 91422720,
+					"maxDelayMs": 0.2874170000000049,
+					"count": 20
+				},
+				"projects.full.warm": {
+					"ms": 0.12866600000006656,
+					"cpuMs": 0.506,
+					"heapDeltaBytes": 63128,
+					"rssBytes": 91422720,
+					"maxDelayMs": 0,
+					"count": 20
+				},
+				"codex.list.cold": {
+					"ms": 367.58162500000014,
+					"cpuMs": 447.852,
+					"heapDeltaBytes": 7624080,
+					"rssBytes": 372768768,
+					"maxDelayMs": 64.15541700000006,
+					"count": 50
+				},
+				"codex.list.warm": {
+					"ms": 81.16575000000012,
+					"cpuMs": 93.024,
+					"heapDeltaBytes": 2042408,
+					"rssBytes": 372785152,
+					"maxDelayMs": 1.916791000000103,
+					"count": 50
+				},
+				"claude.list.cold": {
+					"ms": 12.4212500000001,
+					"cpuMs": 19.624,
+					"heapDeltaBytes": 2633728,
+					"rssBytes": 372916224,
+					"maxDelayMs": 2.094624999999951,
+					"count": 50
+				},
+				"claude.list.warm": {
+					"ms": 3.632916000000023,
+					"cpuMs": 5.739,
+					"heapDeltaBytes": 1069784,
+					"rssBytes": 372899840,
+					"maxDelayMs": 0,
+					"count": 50
+				},
+				"paths.local.2000": {
+					"ms": 53.378165999999965,
+					"cpuMs": 56.064,
+					"heapDeltaBytes": 1265608,
+					"rssBytes": 373047296,
+					"maxDelayMs": 48.55295799999999,
+					"count": 0
+				},
+				"history.20projects": {
+					"ms": 1583.3381250000002,
+					"cpuMs": 1754.014,
+					"heapDeltaBytes": 33697288,
+					"rssBytes": 422592512,
+					"maxDelayMs": 5.075791000000208,
+					"count": 2000
+				},
+				"history.joinOnly.2000": {
+					"ms": 86.55491699999948,
+					"cpuMs": 93.182,
+					"heapDeltaBytes": 17240168,
+					"rssBytes": 430948352,
+					"maxDelayMs": 39.11345900000015,
+					"count": 2000
+				},
+				"open.plain50MiB.cold": {
+					"ms": 105.0296670000007,
+					"cpuMs": 177.384,
+					"heapDeltaBytes": 65906848,
+					"rssBytes": 475611136,
+					"maxDelayMs": 81.49570800000038,
+					"count": 3750
+				},
+				"open.plain50MiB.warm": {
+					"ms": 3.00525000000016,
+					"cpuMs": 5.994,
+					"heapDeltaBytes": 1848680,
+					"rssBytes": 469254144,
+					"maxDelayMs": 0,
+					"count": 3750
+				},
+				"open.zstd50MiB": {
+					"ms": 85.61937500000022,
+					"cpuMs": 129.56,
+					"heapDeltaBytes": 58734312,
+					"rssBytes": 512311296,
+					"maxDelayMs": 65.13137499999993,
+					"count": 3750
+				},
+				"convert.5000": {
+					"ms": 9.851874999999382,
+					"cpuMs": 21.765,
+					"heapDeltaBytes": 28699864,
+					"rssBytes": 504758272,
+					"maxDelayMs": 5.009291999999732,
+					"count": 6250
+				},
+				"reconcile.5000": {
+					"ms": 19.38512499999979,
+					"cpuMs": 29.537,
+					"heapDeltaBytes": 18604400,
+					"rssBytes": 512868352,
+					"maxDelayMs": 14.53387500000008,
+					"count": 0
+				}
+			},
+			"digest": "3daccf198bc2e3a572f1a06fd76ba81f1ae5ed895093ca28600f0fb2df7c7140",
+			"loadAvg": [4.58447265625, 4.72802734375, 4.74609375],
+			"freeMemBytes": 1894219776,
+			"resourceUsage": {
+				"userCPUTime": 2915206,
+				"systemCPUTime": 2385467,
+				"maxRSS": 507200,
+				"sharedMemorySize": 0,
+				"unsharedDataSize": 0,
+				"unsharedStackSize": 0,
+				"minorPageFault": 38543,
+				"majorPageFault": 84,
+				"swappedOut": 0,
+				"fsRead": 0,
+				"fsWrite": 0,
+				"ipcSent": 0,
+				"ipcReceived": 0,
+				"signalsCount": 0,
+				"voluntaryContextSwitches": 1,
+				"involuntaryContextSwitches": 164306
+			}
+		},
+		{
+			"round": 3,
+			"variant": "baseline",
+			"loadBefore": [4.58447265625, 4.72802734375, 4.74609375],
+			"metrics": {
+				"projects.bounded.cold": {
+					"ms": 219.531166,
+					"cpuMs": 279.989,
+					"heapDeltaBytes": 2707064,
+					"rssBytes": 85966848,
+					"maxDelayMs": 0.931416999999982,
+					"count": 20
+				},
+				"projects.full.cold": {
+					"ms": 410.39695800000004,
+					"cpuMs": 493.055,
+					"heapDeltaBytes": 3899328,
+					"rssBytes": 91291648,
+					"maxDelayMs": 0.17354199999999764,
+					"count": 20
+				},
+				"projects.full.warm": {
+					"ms": 0.12637499999993906,
+					"cpuMs": 0.598,
+					"heapDeltaBytes": 63240,
+					"rssBytes": 91291648,
+					"maxDelayMs": 0,
+					"count": 20
+				},
+				"codex.list.cold": {
+					"ms": 351.259625,
+					"cpuMs": 436.327,
+					"heapDeltaBytes": 7946192,
+					"rssBytes": 372572160,
+					"maxDelayMs": 65.71783399999993,
+					"count": 50
+				},
+				"codex.list.warm": {
+					"ms": 69.3969169999998,
+					"cpuMs": 83.689,
+					"heapDeltaBytes": 2159240,
+					"rssBytes": 372260864,
+					"maxDelayMs": 0.39508299999988594,
+					"count": 50
+				},
+				"claude.list.cold": {
+					"ms": 10.932457999999997,
+					"cpuMs": 17.004,
+					"heapDeltaBytes": 2633904,
+					"rssBytes": 372326400,
+					"maxDelayMs": 0.9104999999999563,
+					"count": 50
+				},
+				"claude.list.warm": {
+					"ms": 3.3467500000001564,
+					"cpuMs": 5.214,
+					"heapDeltaBytes": 1069784,
+					"rssBytes": 372326400,
+					"maxDelayMs": 0,
+					"count": 50
+				},
+				"paths.local.2000": {
+					"ms": 49.62908400000015,
+					"cpuMs": 52.14,
+					"heapDeltaBytes": 1719696,
+					"rssBytes": 372473856,
+					"maxDelayMs": 44.72637499999996,
+					"count": 0
+				},
+				"history.20projects": {
+					"ms": 1617.9927080000002,
+					"cpuMs": 1764.599,
+					"heapDeltaBytes": 33715648,
+					"rssBytes": 422232064,
+					"maxDelayMs": 5.292249999999967,
+					"count": 2000
+				},
+				"history.joinOnly.2000": {
+					"ms": 91.81916699999965,
+					"cpuMs": 97.19,
+					"heapDeltaBytes": 17207576,
+					"rssBytes": 431423488,
+					"maxDelayMs": 41.695042000000285,
+					"count": 2000
+				},
+				"open.plain50MiB.cold": {
+					"ms": 106.50850000000082,
+					"cpuMs": 166.696,
+					"heapDeltaBytes": 65835208,
+					"rssBytes": 469368832,
+					"maxDelayMs": 84.19999999999982,
+					"count": 3750
+				},
+				"open.plain50MiB.warm": {
+					"ms": 4.62829099999999,
+					"cpuMs": 8.053,
+					"heapDeltaBytes": 1848912,
+					"rssBytes": 452526080,
+					"maxDelayMs": 0,
+					"count": 3750
+				},
+				"open.zstd50MiB": {
+					"ms": 87.8445840000004,
+					"cpuMs": 130.539,
+					"heapDeltaBytes": 58952368,
+					"rssBytes": 509542400,
+					"maxDelayMs": 66.17137500000081,
+					"count": 3750
+				},
+				"convert.5000": {
+					"ms": 11.055375000000822,
+					"cpuMs": 22.403,
+					"heapDeltaBytes": 28699648,
+					"rssBytes": 501776384,
+					"maxDelayMs": 6.222708000000239,
+					"count": 6250
+				},
+				"reconcile.5000": {
+					"ms": 26.223250000000007,
+					"cpuMs": 36.642,
+					"heapDeltaBytes": 18573344,
+					"rssBytes": 509968384,
+					"maxDelayMs": 21.374416999999994,
+					"count": 0
+				}
+			},
+			"digest": "3daccf198bc2e3a572f1a06fd76ba81f1ae5ed895093ca28600f0fb2df7c7140",
+			"loadAvg": [4.37744140625, 4.6826171875, 4.72998046875],
+			"freeMemBytes": 1522892800,
+			"resourceUsage": {
+				"userCPUTime": 2944198,
+				"systemCPUTime": 2423972,
+				"maxRSS": 504368,
+				"sharedMemorySize": 0,
+				"unsharedDataSize": 0,
+				"unsharedStackSize": 0,
+				"minorPageFault": 38294,
+				"majorPageFault": 84,
+				"swappedOut": 0,
+				"fsRead": 0,
+				"fsWrite": 0,
+				"ipcSent": 0,
+				"ipcReceived": 0,
+				"signalsCount": 0,
+				"voluntaryContextSwitches": 0,
+				"involuntaryContextSwitches": 167109
+			}
+		},
+		{
+			"round": 4,
+			"variant": "baseline",
+			"loadBefore": [4.37744140625, 4.6826171875, 4.72998046875],
+			"metrics": {
+				"projects.bounded.cold": {
+					"ms": 274.185375,
+					"cpuMs": 336.563,
+					"heapDeltaBytes": 2496288,
+					"rssBytes": 85901312,
+					"maxDelayMs": 0.13954199999994898,
+					"count": 20
+				},
+				"projects.full.cold": {
+					"ms": 445.45849999999996,
+					"cpuMs": 543.144,
+					"heapDeltaBytes": 3817272,
+					"rssBytes": 92061696,
+					"maxDelayMs": 0.09749999999996817,
+					"count": 20
+				},
+				"projects.full.warm": {
+					"ms": 0.10562499999991815,
+					"cpuMs": 0.786,
+					"heapDeltaBytes": 63240,
+					"rssBytes": 92061696,
+					"maxDelayMs": 0,
+					"count": 20
+				},
+				"codex.list.cold": {
+					"ms": 407.1240409999999,
+					"cpuMs": 490.088,
+					"heapDeltaBytes": 7876944,
+					"rssBytes": 372948992,
+					"maxDelayMs": 67.53604199999995,
+					"count": 50
+				},
+				"codex.list.warm": {
+					"ms": 76.20500000000015,
+					"cpuMs": 90.2,
+					"heapDeltaBytes": 2097824,
+					"rssBytes": 372441088,
+					"maxDelayMs": 0.8651250000000346,
+					"count": 50
+				},
+				"claude.list.cold": {
+					"ms": 10.937832999999955,
+					"cpuMs": 17.562,
+					"heapDeltaBytes": 2633640,
+					"rssBytes": 372490240,
+					"maxDelayMs": 1.3091669999998885,
+					"count": 50
+				},
+				"claude.list.warm": {
+					"ms": 3.915625000000091,
+					"cpuMs": 5.832,
+					"heapDeltaBytes": 1069784,
+					"rssBytes": 372490240,
+					"maxDelayMs": 0,
+					"count": 50
+				},
+				"paths.local.2000": {
+					"ms": 50.96612499999992,
+					"cpuMs": 53.525,
+					"heapDeltaBytes": 1170584,
+					"rssBytes": 372604928,
+					"maxDelayMs": 46.07041600000002,
+					"count": 0
+				},
+				"history.20projects": {
+					"ms": 1706.24,
+					"cpuMs": 1880.991,
+					"heapDeltaBytes": 33710096,
+					"rssBytes": 421232640,
+					"maxDelayMs": 5.669292000000041,
+					"count": 2000
+				},
+				"history.joinOnly.2000": {
+					"ms": 91.5044169999992,
+					"cpuMs": 97.733,
+					"heapDeltaBytes": 17207344,
+					"rssBytes": 430522368,
+					"maxDelayMs": 41.14249999999993,
+					"count": 2000
+				},
+				"open.plain50MiB.cold": {
+					"ms": 103.1464589999996,
+					"cpuMs": 181.222,
+					"heapDeltaBytes": 32085696,
+					"rssBytes": 466452480,
+					"maxDelayMs": 77.1065410000001,
+					"count": 3750
+				},
+				"open.plain50MiB.warm": {
+					"ms": 3.3909169999997175,
+					"cpuMs": 6.918,
+					"heapDeltaBytes": 1848680,
+					"rssBytes": 466567168,
+					"maxDelayMs": 0,
+					"count": 3750
+				},
+				"open.zstd50MiB": {
+					"ms": 84.96583399999963,
+					"cpuMs": 130.885,
+					"heapDeltaBytes": 58732840,
+					"rssBytes": 505135104,
+					"maxDelayMs": 65.37437499999942,
+					"count": 3750
+				},
+				"convert.5000": {
+					"ms": 9.364333000000443,
+					"cpuMs": 19.179,
+					"heapDeltaBytes": 28700248,
+					"rssBytes": 497598464,
+					"maxDelayMs": 4.486750000000029,
+					"count": 6250
+				},
+				"reconcile.5000": {
+					"ms": 18.953457999999955,
+					"cpuMs": 28.665,
+					"heapDeltaBytes": 18595216,
+					"rssBytes": 505708544,
+					"maxDelayMs": 14.081000000000131,
+					"count": 0
+				}
+			},
+			"digest": "3daccf198bc2e3a572f1a06fd76ba81f1ae5ed895093ca28600f0fb2df7c7140",
+			"loadAvg": [4.34716796875, 4.6708984375, 4.7255859375],
+			"freeMemBytes": 901824512,
+			"resourceUsage": {
+				"userCPUTime": 3076182,
+				"systemCPUTime": 2607650,
+				"maxRSS": 500224,
+				"sharedMemorySize": 0,
+				"unsharedDataSize": 0,
+				"unsharedStackSize": 0,
+				"minorPageFault": 38036,
+				"majorPageFault": 84,
+				"swappedOut": 0,
+				"fsRead": 0,
+				"fsWrite": 0,
+				"ipcSent": 0,
+				"ipcReceived": 0,
+				"signalsCount": 0,
+				"voluntaryContextSwitches": 0,
+				"involuntaryContextSwitches": 175545
+			}
+		},
+		{
+			"round": 5,
+			"variant": "baseline",
+			"loadBefore": [4.34716796875, 4.6708984375, 4.7255859375],
+			"metrics": {
+				"projects.bounded.cold": {
+					"ms": 280.718375,
+					"cpuMs": 316.785,
+					"heapDeltaBytes": 2518944,
+					"rssBytes": 86196224,
+					"maxDelayMs": 8.891708999999992,
+					"count": 20
+				},
+				"projects.full.cold": {
+					"ms": 460.50862499999994,
+					"cpuMs": 564.516,
+					"heapDeltaBytes": 3818392,
+					"rssBytes": 91537408,
+					"maxDelayMs": 1.5097079999999892,
+					"count": 20
+				},
+				"projects.full.warm": {
+					"ms": 0.19804099999998925,
+					"cpuMs": 0.917,
+					"heapDeltaBytes": 63184,
+					"rssBytes": 91537408,
+					"maxDelayMs": 0,
+					"count": 20
+				},
+				"codex.list.cold": {
+					"ms": 359.7724999999999,
+					"cpuMs": 450.822,
+					"heapDeltaBytes": 7758664,
+					"rssBytes": 372948992,
+					"maxDelayMs": 66.36429199999998,
+					"count": 50
+				},
+				"codex.list.warm": {
+					"ms": 71.12716699999987,
+					"cpuMs": 87.165,
+					"heapDeltaBytes": 2127152,
+					"rssBytes": 372424704,
+					"maxDelayMs": 1.2242909999999938,
+					"count": 50
+				},
+				"claude.list.cold": {
+					"ms": 10.544875000000047,
+					"cpuMs": 16.903,
+					"heapDeltaBytes": 2633816,
+					"rssBytes": 372490240,
+					"maxDelayMs": 0.9492089999998825,
+					"count": 50
+				},
+				"claude.list.warm": {
+					"ms": 3.3961249999999836,
+					"cpuMs": 5.003,
+					"heapDeltaBytes": 1069784,
+					"rssBytes": 372490240,
+					"maxDelayMs": 0,
+					"count": 50
+				},
+				"paths.local.2000": {
+					"ms": 50.745749999999816,
+					"cpuMs": 53.183,
+					"heapDeltaBytes": 1688792,
+					"rssBytes": 372637696,
+					"maxDelayMs": 45.84591699999987,
+					"count": 0
+				},
+				"history.20projects": {
+					"ms": 2154.278417,
+					"cpuMs": 1994.94,
+					"heapDeltaBytes": 33793368,
+					"rssBytes": 421920768,
+					"maxDelayMs": 10.880833000000166,
+					"count": 2000
+				},
+				"history.joinOnly.2000": {
+					"ms": 84.87354099999993,
+					"cpuMs": 91.487,
+					"heapDeltaBytes": 17177784,
+					"rssBytes": 430866432,
+					"maxDelayMs": 37.61558299999979,
+					"count": 2000
+				},
+				"open.plain50MiB.cold": {
+					"ms": 97.10691700000007,
+					"cpuMs": 136.799,
+					"heapDeltaBytes": 68454288,
+					"rssBytes": 473169920,
+					"maxDelayMs": 73.97541600000022,
+					"count": 3750
+				},
+				"open.plain50MiB.warm": {
+					"ms": 3.0460409999996045,
+					"cpuMs": 5.989,
+					"heapDeltaBytes": 1848424,
+					"rssBytes": 456589312,
+					"maxDelayMs": 0,
+					"count": 3750
+				},
+				"open.zstd50MiB": {
+					"ms": 83.02158300000065,
+					"cpuMs": 127.83,
+					"heapDeltaBytes": 58953936,
+					"rssBytes": 483950592,
+					"maxDelayMs": 64.48699999999917,
+					"count": 3750
+				},
+				"convert.5000": {
+					"ms": 10.99462500000027,
+					"cpuMs": 21.177,
+					"heapDeltaBytes": 28697752,
+					"rssBytes": 492830720,
+					"maxDelayMs": 6.115499999999884,
+					"count": 6250
+				},
+				"reconcile.5000": {
+					"ms": 18.18525000000045,
+					"cpuMs": 28.385,
+					"heapDeltaBytes": 18604400,
+					"rssBytes": 502251520,
+					"maxDelayMs": 13.302375000000211,
+					"count": 0
+				}
+			},
+			"digest": "3daccf198bc2e3a572f1a06fd76ba81f1ae5ed895093ca28600f0fb2df7c7140",
+			"loadAvg": [4.3193359375, 4.65966796875, 4.72119140625],
+			"freeMemBytes": 234831872,
+			"resourceUsage": {
+				"userCPUTime": 2935202,
+				"systemCPUTime": 2637519,
+				"maxRSS": 496848,
+				"sharedMemorySize": 0,
+				"unsharedDataSize": 0,
+				"unsharedStackSize": 0,
+				"minorPageFault": 37834,
+				"majorPageFault": 84,
+				"swappedOut": 0,
+				"fsRead": 0,
+				"fsWrite": 0,
+				"ipcSent": 0,
+				"ipcReceived": 0,
+				"signalsCount": 0,
+				"voluntaryContextSwitches": 0,
+				"involuntaryContextSwitches": 174143
+			}
+		},
+		{
+			"round": 6,
+			"variant": "baseline",
+			"loadBefore": [4.3193359375, 4.65966796875, 4.72119140625],
+			"metrics": {
+				"projects.bounded.cold": {
+					"ms": 224.89245799999998,
+					"cpuMs": 283.691,
+					"heapDeltaBytes": 2572160,
+					"rssBytes": 86048768,
+					"maxDelayMs": 0.3394169999999974,
+					"count": 20
+				},
+				"projects.full.cold": {
+					"ms": 410.523708,
+					"cpuMs": 489.124,
+					"heapDeltaBytes": 3884728,
+					"rssBytes": 91570176,
+					"maxDelayMs": 0.13783300000000054,
+					"count": 20
+				},
+				"projects.full.warm": {
+					"ms": 0.10254099999997379,
+					"cpuMs": 0.438,
+					"heapDeltaBytes": 63240,
+					"rssBytes": 91586560,
+					"maxDelayMs": 0,
+					"count": 20
+				},
+				"codex.list.cold": {
+					"ms": 355.890708,
+					"cpuMs": 443.996,
+					"heapDeltaBytes": 5954456,
+					"rssBytes": 262651904,
+					"maxDelayMs": 78.05062499999997,
+					"count": 50
+				},
+				"codex.list.warm": {
+					"ms": 69.51304200000004,
+					"cpuMs": 83.533,
+					"heapDeltaBytes": 2214456,
+					"rssBytes": 262160384,
+					"maxDelayMs": 0.4367500000000746,
+					"count": 50
+				},
+				"claude.list.cold": {
+					"ms": 10.609375,
+					"cpuMs": 17.017,
+					"heapDeltaBytes": 2634160,
+					"rssBytes": 262225920,
+					"maxDelayMs": 1.3323750000001837,
+					"count": 50
+				},
+				"claude.list.warm": {
+					"ms": 3.3468749999999545,
+					"cpuMs": 5.078,
+					"heapDeltaBytes": 1069784,
+					"rssBytes": 262225920,
+					"maxDelayMs": 0,
+					"count": 50
+				},
+				"paths.local.2000": {
+					"ms": 49.83162500000003,
+					"cpuMs": 52.193,
+					"heapDeltaBytes": 1451600,
+					"rssBytes": 262373376,
+					"maxDelayMs": 44.93241699999999,
+					"count": 0
+				},
+				"history.20projects": {
+					"ms": 1605.257291,
+					"cpuMs": 1749.956,
+					"heapDeltaBytes": 34341256,
+					"rssBytes": 309166080,
+					"maxDelayMs": 5.101333000000068,
+					"count": 2000
+				},
+				"history.joinOnly.2000": {
+					"ms": 88.88645900000029,
+					"cpuMs": 95.117,
+					"heapDeltaBytes": 17166920,
+					"rssBytes": 320323584,
+					"maxDelayMs": 40.41841699999986,
+					"count": 2000
+				},
+				"open.plain50MiB.cold": {
+					"ms": 104.54270799999995,
+					"cpuMs": 170.428,
+					"heapDeltaBytes": 65834272,
+					"rssBytes": 358023168,
+					"maxDelayMs": 81.30091600000014,
+					"count": 3750
+				},
+				"open.plain50MiB.warm": {
+					"ms": 3.1812500000005457,
+					"cpuMs": 6.837,
+					"heapDeltaBytes": 1848424,
+					"rssBytes": 341196800,
+					"maxDelayMs": 0,
+					"count": 3750
+				},
+				"open.zstd50MiB": {
+					"ms": 82.4467080000004,
+					"cpuMs": 127.335,
+					"heapDeltaBytes": 58921888,
+					"rssBytes": 391921664,
+					"maxDelayMs": 62.151457999999366,
+					"count": 3750
+				},
+				"convert.5000": {
+					"ms": 9.440291000000798,
+					"cpuMs": 21.598,
+					"heapDeltaBytes": 28700328,
+					"rssBytes": 384204800,
+					"maxDelayMs": 4.550459000000046,
+					"count": 6250
+				},
+				"reconcile.5000": {
+					"ms": 19.247666999999637,
+					"cpuMs": 29.185,
+					"heapDeltaBytes": 18594856,
+					"rssBytes": 392298496,
+					"maxDelayMs": 14.360499999999774,
+					"count": 0
+				}
+			},
+			"digest": "3daccf198bc2e3a572f1a06fd76ba81f1ae5ed895093ca28600f0fb2df7c7140",
+			"loadAvg": [5.33447265625, 4.8642578125, 4.79296875],
+			"freeMemBytes": 1968095232,
+			"resourceUsage": {
+				"userCPUTime": 2915835,
+				"systemCPUTime": 2450003,
+				"maxRSS": 389472,
+				"sharedMemorySize": 0,
+				"unsharedDataSize": 0,
+				"unsharedStackSize": 0,
+				"minorPageFault": 31036,
+				"majorPageFault": 165,
+				"swappedOut": 0,
+				"fsRead": 0,
+				"fsWrite": 0,
+				"ipcSent": 0,
+				"ipcReceived": 0,
+				"signalsCount": 0,
+				"voluntaryContextSwitches": 1,
+				"involuntaryContextSwitches": 167079
+			}
+		}
+	],
+	"summary": {
+		"baseline:projects.bounded.cold": {
+			"ms": {
+				"n": 7,
+				"median": 221.22354199999998,
+				"p95": 280.718375
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 279.989,
+				"p95": 336.563
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 2675400,
+				"p95": 2763968
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 86048768,
+				"p95": 86392832
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 0.4824169999999981,
+				"p95": 8.891708999999992
+			},
+			"count": {
+				"n": 7,
+				"median": 20,
+				"p95": 20
+			}
+		},
+		"baseline:projects.full.cold": {
+			"ms": {
+				"n": 7,
+				"median": 418.23558299999996,
+				"p95": 460.50862499999994
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 501.892,
+				"p95": 564.516
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 3884728,
+				"p95": 3964136
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 91488256,
+				"p95": 92061696
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 0.2874170000000049,
+				"p95": 1.5097079999999892
+			},
+			"count": {
+				"n": 7,
+				"median": 20,
+				"p95": 20
+			}
+		},
+		"baseline:projects.full.warm": {
+			"ms": {
+				"n": 7,
+				"median": 0.12637499999993906,
+				"p95": 0.2245829999999387
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 0.598,
+				"p95": 0.925
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 63184,
+				"p95": 63240
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 91504640,
+				"p95": 92061696
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 0,
+				"p95": 0
+			},
+			"count": {
+				"n": 7,
+				"median": 20,
+				"p95": 20
+			}
+		},
+		"baseline:codex.list.cold": {
+			"ms": {
+				"n": 7,
+				"median": 356.92729199999997,
+				"p95": 407.1240409999999
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 443.996,
+				"p95": 490.088
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 7801104,
+				"p95": 7946192
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 372768768,
+				"p95": 373014528
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 67.53604199999995,
+				"p95": 78.05062499999997
+			},
+			"count": {
+				"n": 7,
+				"median": 50,
+				"p95": 50
+			}
+		},
+		"baseline:codex.list.warm": {
+			"ms": {
+				"n": 7,
+				"median": 71.12716699999987,
+				"p95": 81.16575000000012
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 85.52,
+				"p95": 93.024
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 2127152,
+				"p95": 2214456
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 372424704,
+				"p95": 372785152
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 0.8651250000000346,
+				"p95": 1.916791000000103
+			},
+			"count": {
+				"n": 7,
+				"median": 50,
+				"p95": 50
+			}
+		},
+		"baseline:claude.list.cold": {
+			"ms": {
+				"n": 7,
+				"median": 10.930333000000019,
+				"p95": 12.4212500000001
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 17.017,
+				"p95": 19.624
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 2633728,
+				"p95": 2634160
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 372490240,
+				"p95": 372916224
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 1.0798339999998916,
+				"p95": 2.094624999999951
+			},
+			"count": {
+				"n": 7,
+				"median": 50,
+				"p95": 50
+			}
+		},
+		"baseline:claude.list.warm": {
+			"ms": {
+				"n": 7,
+				"median": 3.3589170000000195,
+				"p95": 3.915625000000091
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 5.191,
+				"p95": 5.832
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 1069784,
+				"p95": 1069784
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 372490240,
+				"p95": 372899840
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 0,
+				"p95": 0
+			},
+			"count": {
+				"n": 7,
+				"median": 50,
+				"p95": 50
+			}
+		},
+		"baseline:paths.local.2000": {
+			"ms": {
+				"n": 7,
+				"median": 50.248875,
+				"p95": 53.378165999999965
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 52.776,
+				"p95": 56.064
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 1688792,
+				"p95": 1720240
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 372604928,
+				"p95": 373047296
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 45.32095800000002,
+				"p95": 48.55295799999999
+			},
+			"count": {
+				"n": 7,
+				"median": 0,
+				"p95": 0
+			}
+		},
+		"baseline:history.20projects": {
+			"ms": {
+				"n": 7,
+				"median": 1617.9927080000002,
+				"p95": 2154.278417
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 1764.599,
+				"p95": 1994.94
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 33715648,
+				"p95": 34341256
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 421462016,
+				"p95": 422592512
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 5.292249999999967,
+				"p95": 10.880833000000166
+			},
+			"count": {
+				"n": 7,
+				"median": 2000,
+				"p95": 2000
+			}
+		},
+		"baseline:history.joinOnly.2000": {
+			"ms": {
+				"n": 7,
+				"median": 88.50174999999945,
+				"p95": 91.81916699999965
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 95.117,
+				"p95": 97.733
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 17207576,
+				"p95": 17242600
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 430866432,
+				"p95": 431423488
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 39.872292000000016,
+				"p95": 41.695042000000285
+			},
+			"count": {
+				"n": 7,
+				"median": 2000,
+				"p95": 2000
+			}
+		},
+		"baseline:open.plain50MiB.cold": {
+			"ms": {
+				"n": 7,
+				"median": 104.0398750000004,
+				"p95": 106.50850000000082
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 168.293,
+				"p95": 181.222
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 65837312,
+				"p95": 68454288
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 468402176,
+				"p95": 475611136
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 77.1065410000001,
+				"p95": 84.19999999999982
+			},
+			"count": {
+				"n": 7,
+				"median": 3750,
+				"p95": 3750
+			}
+		},
+		"baseline:open.plain50MiB.warm": {
+			"ms": {
+				"n": 7,
+				"median": 3.1812500000005457,
+				"p95": 4.62829099999999
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 6.65,
+				"p95": 8.053
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 1848520,
+				"p95": 1848912
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 452526080,
+				"p95": 469254144
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 0,
+				"p95": 0
+			},
+			"count": {
+				"n": 7,
+				"median": 3750,
+				"p95": 3750
+			}
+		},
+		"baseline:open.zstd50MiB": {
+			"ms": {
+				"n": 7,
+				"median": 84.94579200000044,
+				"p95": 87.8445840000004
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 128.168,
+				"p95": 130.885
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 58949880,
+				"p95": 58953936
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 501727232,
+				"p95": 512311296
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 65.13137499999993,
+				"p95": 66.17137500000081
+			},
+			"count": {
+				"n": 7,
+				"median": 3750,
+				"p95": 3750
+			}
+		},
+		"baseline:convert.5000": {
+			"ms": {
+				"n": 7,
+				"median": 9.534040999999888,
+				"p95": 11.055375000000822
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 21.177,
+				"p95": 22.403
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 28699648,
+				"p95": 28700328
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 493780992,
+				"p95": 504758272
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 4.671624999999949,
+				"p95": 6.222708000000239
+			},
+			"count": {
+				"n": 7,
+				"median": 6250,
+				"p95": 6250
+			}
+		},
+		"baseline:reconcile.5000": {
+			"ms": {
+				"n": 7,
+				"median": 18.953457999999955,
+				"p95": 26.223250000000007
+			},
+			"cpuMs": {
+				"n": 7,
+				"median": 28.665,
+				"p95": 36.642
+			},
+			"heapDeltaBytes": {
+				"n": 7,
+				"median": 18595216,
+				"p95": 18605792
+			},
+			"rssBytes": {
+				"n": 7,
+				"median": 502251520,
+				"p95": 512868352
+			},
+			"maxDelayMs": {
+				"n": 7,
+				"median": 14.081000000000131,
+				"p95": 21.374416999999994
+			},
+			"count": {
+				"n": 7,
+				"median": 0,
+				"p95": 0
+			}
+		}
+	}
+}

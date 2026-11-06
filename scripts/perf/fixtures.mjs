@@ -37,9 +37,9 @@ export async function createCorpus(root) {
 			prompt: 'Synthetic question',
 		});
 		turn.finish('Synthetic answer');
-		const file = compressed
-			? path.join(accounts.codex, 'archived_sessions', path.basename(turn.file) + '.zst')
-			: turn.file;
+		// Session storage discovers compressed rollouts inside the date tree.
+		// archived_sessions is a separate project-discovery surface, tested there.
+		const file = compressed ? `${turn.file}.zst` : turn.file;
 		const rows = (await fs.readFile(turn.file, 'utf8')).trimEnd().split('\n');
 		if (i < 2) {
 			rows.splice(1);

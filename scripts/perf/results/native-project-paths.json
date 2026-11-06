@@ -3051,5 +3051,10 @@
 				"p95": 0
 			}
 		}
-	}
+	},
+	"supersededBy": "validated-native-project-paths.json",
+	"validationLimitations": [
+		"Initial corpus placed 250 compressed rollouts outside the session adapter date tree. Project discovery covered 2000 files, but project history returned only 1750 conversations.",
+		"open.zstd50MiB returned zero messages and is not a valid compressed-read measurement. Preserve these samples as preliminary evidence only; use the validated results."
+	]
 }

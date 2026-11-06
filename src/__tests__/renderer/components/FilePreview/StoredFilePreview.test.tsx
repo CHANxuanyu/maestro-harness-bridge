@@ -85,14 +85,12 @@ describe('stored FilePreview binding', () => {
 		async (newShell, uiLanguage, sshRemoteId) => {
 			useSettingsStore.setState({ newShell, uiLanguage });
 			useCenterFlashStore.setState({ active: null });
-			useSessionStore
-				.getState()
-				.updateSession('owner', {
-					cwd: '/project',
-					fullPath: '/project',
-					filePreviewTabs: [],
-					sshRemoteId,
-				});
+			useSessionStore.getState().updateSession('owner', {
+				cwd: '/project',
+				fullPath: '/project',
+				filePreviewTabs: [],
+				sshRemoteId,
+			});
 			vi.mocked(window.maestro.fs.readFile).mockResolvedValue(null);
 			const { result } = renderHook(() => {
 				const tabs = useFilePreviewTabHandlers();
@@ -118,14 +116,12 @@ describe('stored FilePreview binding', () => {
 		async (newShell) => {
 			useSettingsStore.setState({ newShell });
 			useCenterFlashStore.setState({ active: null });
-			useSessionStore
-				.getState()
-				.updateSession('owner', {
-					cwd: '/project',
-					fullPath: '/project',
-					filePreviewTabs: [],
-					sshRemoteId: 'remote',
-				});
+			useSessionStore.getState().updateSession('owner', {
+				cwd: '/project',
+				fullPath: '/project',
+				filePreviewTabs: [],
+				sshRemoteId: 'remote',
+			});
 			let finishRead!: (content: null) => void;
 			vi.mocked(window.maestro.fs.readFile).mockReturnValue(
 				new Promise((resolve) => {

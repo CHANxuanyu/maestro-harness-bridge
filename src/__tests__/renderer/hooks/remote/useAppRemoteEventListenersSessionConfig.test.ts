@@ -341,6 +341,34 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 	}
 
 	it.each([false, true])(
+		'gates and persists CLI change grouping only on the requested conversation, new shell %s',
+		async (newShell) => {
+			const sessions = [twoTabSession()];
+			vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell } as never);
+			const { setSessions } = setup(sessions);
+			dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'changes-turns' });
+			await flush();
+			if (newShell) {
+				const updated = applyUpdate(setSessions, sessions)[0];
+				expect(updated.aiTabs[0].newShellPanel).toEqual(sessions[0].aiTabs[0].newShellPanel);
+				expect(updated.aiTabs[1].newShellPanel).toEqual({
+					tab: 'changes',
+					open: true,
+					changesView: 'turn',
+				});
+				expect(setMany).toHaveBeenCalled();
+				expect(ack).toHaveBeenCalledWith('ch', expect.objectContaining({ success: true }));
+			} else {
+				expect(setSessions).not.toHaveBeenCalled();
+				expect(setMany).not.toHaveBeenCalled();
+				expect(ack).toHaveBeenCalledWith('ch', {
+					success: false,
+					error: 'This panel requires the new shell',
+				});
+			}
+		}
+	);
+	it.each([false, true])(
 		'sets a file buffer through its conversation without touching classic selection, new shell %s',
 		async (newShell) => {
 			const sessions = [twoTabSession()];

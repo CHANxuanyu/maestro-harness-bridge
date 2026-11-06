@@ -6,6 +6,17 @@ import {
 } from '../../shared/newShellPanel';
 
 describe('conversation panel state', () => {
+	it('persists the grouping choice across panel switches and restart without affecting other conversations', () => {
+		const turn = changeNewShellPanel(undefined, 'changes-turns');
+		expect(turn).toEqual({ tab: 'changes', open: true, changesView: 'turn' });
+		const restored = JSON.parse(JSON.stringify(changeNewShellPanel(turn, 'files')));
+		expect(changeNewShellPanel(restored, 'changes')).toEqual(turn);
+		expect(changeNewShellPanel(restored, 'changes-files')).toEqual({
+			...turn,
+			changesView: 'file',
+		});
+		expect(changeNewShellPanel(undefined, 'changes')).toEqual({ tab: 'changes', open: true });
+	});
 	it.each([false, true])(
 		'resolves keyboard and panel selection without changing classic preference, new shell %s',
 		(newShell) => {

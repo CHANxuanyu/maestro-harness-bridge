@@ -26,7 +26,11 @@ import { generateDiffViewStyles } from '../utils/markdownConfig';
 import { useModalStore } from '../stores/modalStore';
 import { requestFileTreeRefresh } from '../utils/fileTreeRefresh';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useT } from '../i18n';
+import { updateAiTab } from '../stores/sessionStore';
+import { changeNewShellPanel } from '../../shared/newShellPanel';
+import { collectTurnWrites, groupChangesByTurn } from '../../shared/gitChangeTurns';
+import { SegmentedControl } from './ui/SegmentedControl';
+import { useT, useAppLocale } from '../i18n';
 import 'react-diff-view/style/index.css';
 
 /**
@@ -80,6 +84,7 @@ export const ChangesPanel = memo(function ChangesPanel({
 	onFileClick,
 }: ChangesPanelProps) {
 	const t = useT();
+	const locale = useAppLocale();
 	const newShell = useSettingsStore((s) => s.newShell);
 	const colorBlindMode = useSettingsStore((s) => s.colorBlindMode);
 	const cwd = newShell ? session.cwd : resolveGitCwd(session);
@@ -227,6 +232,18 @@ export const ChangesPanel = memo(function ChangesPanel({
 
 	const activeTab = session.aiTabs.find((tab) => tab.id === session.activeTabId);
 	const changes = load.kind === 'ready' ? load.changes : null;
+	const byTurn = newShell && activeTab?.newShellPanel?.changesView === 'turn';
+	const turnWrites = useMemo(
+		() => (newShell ? collectTurnWrites(activeTab?.logs ?? []) : []),
+		[newShell, activeTab?.logs]
+	);
+	const turnChanges = useMemo(
+		() =>
+			byTurn && changes
+				? groupChangesByTurn(changes, turnWrites, remoteCwd || cwd, !!sshRemoteId)
+				: null,
+		[byTurn, changes, turnWrites, remoteCwd, cwd, sshRemoteId]
+	);
 	const stagedCount =
 		changes?.stagedCount ??
 		changes?.files.filter((file) => file.staged && file.status !== 'conflicted').length ??
@@ -267,6 +284,12 @@ export const ChangesPanel = memo(function ChangesPanel({
 					{t('workflows.changes.timedOut')}
 				</p>
 			);
+		if (byTurn && !turnChanges?.hasWriteRecords)
+			return (
+				<p className="text-xs px-1 py-3" style={dim}>
+					{t('workflows.changes.noWriteRecords')}
+				</p>
+			);
 		if (!hasChanges)
 			return (
 				<p className="text-xs px-1 py-3" style={dim}>
@@ -275,33 +298,76 @@ export const ChangesPanel = memo(function ChangesPanel({
 			);
 		return (
 			<ul className="flex flex-col" data-testid="changes-list">
-				{(newShell && stagedCount > 0
-					? [
-							{
-								label: 'staged',
-								files: load.changes.files.filter(
-									(file) => file.staged && file.status !== 'conflicted'
-								),
-								count: stagedCount,
-							},
-							{
-								label: 'unstaged',
-								files: load.changes.files.filter(
-									(file) => !file.staged || file.status === 'conflicted'
-								),
-								count: load.changes.totals.files - stagedCount,
-							},
-						]
-					: [{ label: '', files: load.changes.files, count: load.changes.totals.files }]
+				{(turnChanges
+					? turnChanges.groups.map((group) => ({
+							label: group.turnId ?? 'other',
+							title:
+								group.turnId === null
+									? t('workflows.changes.other')
+									: group.title || t('workflows.changes.untitledTurn'),
+							timestamp: group.timestamp,
+							files: group.files,
+							count: group.files.length,
+						}))
+					: newShell && stagedCount > 0
+						? [
+								{
+									label: 'staged',
+									title: '',
+									timestamp: null,
+									files: load.changes.files.filter(
+										(file) => file.staged && file.status !== 'conflicted'
+									),
+									count: stagedCount,
+								},
+								{
+									label: 'unstaged',
+									title: '',
+									timestamp: null,
+									files: load.changes.files.filter(
+										(file) => !file.staged || file.status === 'conflicted'
+									),
+									count: load.changes.totals.files - stagedCount,
+								},
+							]
+						: [
+								{
+									label: '',
+									title: '',
+									timestamp: null,
+									files: load.changes.files,
+									count: load.changes.totals.files,
+								},
+							]
 				).map((group) => (
 					<Fragment key={group.label}>
 						{group.label && (
-							<li className="px-1 pt-3 pb-1 text-xs font-medium" style={dim}>
-								{t(
-									group.label === 'staged'
-										? 'workflows.changes.staged'
-										: 'workflows.changes.unstaged',
-									{ count: group.count }
+							<li
+								className="px-1 pt-3 pb-1 text-xs font-medium"
+								style={dim}
+								data-testid="changes-group-title"
+							>
+								{byTurn ? (
+									<>
+										<span className="block truncate" title={group.title}>
+											{group.title}
+										</span>
+										{group.timestamp !== null && Number.isFinite(group.timestamp) && (
+											<time
+												className="block text-2xs"
+												dateTime={new Date(group.timestamp).toISOString()}
+											>
+												{new Date(group.timestamp).toLocaleString(locale)}
+											</time>
+										)}
+									</>
+								) : (
+									t(
+										group.label === 'staged'
+											? 'workflows.changes.staged'
+											: 'workflows.changes.unstaged',
+										{ count: group.count }
+									)
 								)}
 							</li>
 						)}
@@ -457,6 +523,33 @@ export const ChangesPanel = memo(function ChangesPanel({
 	return (
 		<div className="h-full flex flex-col min-h-0" data-testid="changes-panel">
 			<style>{diffStyles}</style>
+			{newShell && (
+				<div className="py-2">
+					<SegmentedControl
+						value={byTurn ? 'turn' : 'file'}
+						theme={theme}
+						ariaLabel={t('workflows.changes.groupBy')}
+						options={[
+							{ value: 'file', label: t('workflows.changes.byFile') },
+							{ value: 'turn', label: t('workflows.changes.byTurn') },
+						]}
+						onChange={(view) =>
+							updateAiTab(session.id, session.activeTabId, (tab) => ({
+								...tab,
+								newShellPanel: changeNewShellPanel(
+									tab.newShellPanel,
+									view === 'turn' ? 'changes-turns' : 'changes-files'
+								),
+							}))
+						}
+					/>
+				</div>
+			)}
+			{byTurn && (
+				<p className="text-xs pb-2" style={dim}>
+					{t('workflows.changes.currentDiff')}
+				</p>
+			)}
 			<div className="flex items-center gap-2 py-2 text-xs" style={dim}>
 				<span className="flex-1 min-w-0 truncate" data-testid="changes-summary">
 					{changes && hasChanges

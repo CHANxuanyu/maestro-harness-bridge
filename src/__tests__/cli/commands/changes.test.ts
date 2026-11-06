@@ -10,6 +10,70 @@ import { resolveTabEntry } from '../../../cli/services/session-command';
 
 describe('changes CLI', () => {
 	afterEach(() => vi.restoreAllMocks());
+	it('groups the selected tab records with the same current remote Git snapshot', async () => {
+		vi.mocked(resolveTabEntry).mockResolvedValue({ agentId: 'agent', tabId: 'selected' } as never);
+		const file = { path: 'a.ts', status: 'modified', staged: false, additions: 1, deletions: 0 };
+		const sendCommand = vi
+			.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				result: [
+					{
+						id: 'agent',
+						cwd: '/local',
+						sshRemoteId: 'remote',
+						sessionSshRemoteConfig: {
+							enabled: true,
+							remoteId: 'remote',
+							workingDirOverride: '/remote/repo',
+						},
+						aiTabs: [
+							{ id: 'other', logs: [] },
+							{
+								id: 'selected',
+								logs: [
+									{ id: 'u', source: 'user', timestamp: 10, text: 'Fix a\nDetails' },
+									{
+										id: 't',
+										source: 'tool',
+										timestamp: 11,
+										text: 'Write',
+										metadata: {
+											toolState: { status: 'completed', input: { file_path: '/remote/repo/a.ts' } },
+										},
+									},
+								],
+							},
+						],
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				result: {
+					root: '/remote/repo',
+					files: [file],
+					totals: { files: 1, additions: 1, deletions: 0 },
+					truncated: false,
+					branch: 'main',
+				},
+			});
+		vi.mocked(withMaestroClient).mockImplementation(async (callback) =>
+			callback({ sendCommand } as never)
+		);
+		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+		await changes({ tab: 'selected', byTurn: true, json: true });
+		expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({
+			hasWriteRecords: true,
+			diffScope: 'current',
+			groups: [{ turnId: 'u', title: 'Fix a', timestamp: 10, files: [file] }],
+		});
+		expect(sendCommand).toHaveBeenLastCalledWith(
+			{ type: 'bridge.invoke', channel: 'git:changes', args: ['/local', 'remote', '/remote/repo'] },
+			'bridge.response',
+			25000
+		);
+	});
 	it.each([undefined, 'src/a.ts'])(
 		'reads the same IPC for the selected SSH worktree, file=%s',
 		async (file) => {

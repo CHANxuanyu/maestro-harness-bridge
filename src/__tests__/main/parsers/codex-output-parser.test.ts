@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterAll } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import planEvents from '../../../../e2e/fixtures/native/codex-plan-events.json';
 import { CodexOutputParser } from '../../../main/parsers/codex-output-parser';
 import { compactToolOutput } from '../../../shared/toolOutput';
@@ -6,6 +9,15 @@ import {
 	classifyRetryableError,
 	tokenExhaustionResetAt,
 } from '../../../shared/retryClassification';
+
+// The parser constructor probes account configuration even for synthetic events.
+// Isolate it before describe constructs any parser, not in a later beforeEach.
+const parserAccount = mkdtempSync(join(tmpdir(), 'maestro-codex-parser-'));
+vi.stubEnv('CODEX_HOME', parserAccount);
+afterAll(() => {
+	vi.unstubAllEnvs();
+	rmSync(parserAccount, { recursive: true, force: true });
+});
 
 describe('CodexOutputParser', () => {
 	const parser = new CodexOutputParser();

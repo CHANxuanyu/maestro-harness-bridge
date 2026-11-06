@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ChangesPanel } from '../../../renderer/components/ChangesPanel';
 import { useModalStore } from '../../../renderer/stores/modalStore';
+import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import * as turnGrouping from '../../../shared/gitChangeTurns';
 import type { GitChangedFile, GitChanges } from '../../../shared/gitChanges';
 import type { Session } from '../../../renderer/types';
 import { createMockAITab, createMockSession } from '../../helpers';
@@ -77,6 +79,115 @@ beforeEach(() => {
 });
 
 describe('ChangesPanel', () => {
+	it('reuses the tool index while Git and commit input change', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const collect = vi.spyOn(turnGrouping, 'collectTurnWrites');
+		const source = session();
+		changes.mockResolvedValue(twoFiles);
+		const { unmount } = render(<ChangesPanel theme={mockTheme} session={source} />);
+		try {
+			await screen.findByText('app.ts');
+			const reads = collect.mock.calls.length;
+			fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), {
+				target: { value: 'Draft' },
+			});
+			fireEvent.click(screen.getByRole('button', { name: 'Refresh changes' }));
+			await waitFor(() => expect(changes).toHaveBeenCalledTimes(2));
+			expect(collect).toHaveBeenCalledTimes(reads);
+		} finally {
+			unmount();
+			collect.mockRestore();
+			useSettingsStore.setState({ newShell: false });
+		}
+	});
+	it.each(['en', 'zh-CN'] as const)(
+		'uses localized grouping controls and guidance in %s',
+		async (locale) => {
+			useSettingsStore.setState({ newShell: true, uiLanguage: locale });
+			const source = session();
+			source.aiTabs[0].newShellPanel = { tab: 'changes', changesView: 'turn' };
+			changes.mockResolvedValue(twoFiles);
+			const { unmount } = render(<ChangesPanel theme={mockTheme} session={source} />);
+			try {
+				expect(
+					screen.getByRole('radio', { name: locale === 'en' ? 'By turn' : '按回合' })
+				).toHaveAttribute('aria-checked', 'true');
+				expect(
+					await screen.findByText(
+						locale === 'en'
+							? 'No recorded file writes in this conversation. Switch to By file to see workspace changes.'
+							: '这条对话还没有文件写入记录。切回“按文件”可查看工作区改动。'
+					)
+				).toBeInTheDocument();
+			} finally {
+				unmount();
+				useSettingsStore.setState({ newShell: false, uiLanguage: 'en' });
+			}
+		}
+	);
+	it('remembers the turn view on this conversation and shows current diffs under each recorded turn', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const source = session();
+		source.aiTabs[0].logs.push(
+			{
+				id: 't1',
+				timestamp: 2,
+				source: 'tool',
+				text: 'Edit',
+				metadata: {
+					toolState: { status: 'completed', input: { file_path: '/project/src/app.ts' } },
+				},
+			},
+			{ id: 'u2', timestamp: 3, source: 'user', text: 'Polish the app\nDetails' },
+			{
+				id: 't2',
+				timestamp: 4,
+				source: 'tool',
+				text: 'Write',
+				metadata: { toolState: { status: 'completed', input: { file_path: 'src/app.ts' } } },
+			}
+		);
+		useSessionStore.setState({ sessions: [source], activeSessionId: source.id });
+		changes.mockResolvedValue(twoFiles);
+		changeDiff.mockResolvedValue({ diff: patch, binary: false, tooLarge: false });
+		const { rerender } = render(<ChangesPanel theme={mockTheme} session={source} />);
+		await screen.findByText('app.ts');
+		expect(screen.getByRole('radio', { name: 'By file' })).toHaveAttribute('aria-checked', 'true');
+		fireEvent.click(screen.getByRole('radio', { name: 'By turn' }));
+		const updated = useSessionStore.getState().sessions[0];
+		expect(updated.aiTabs[0].newShellPanel?.changesView).toBe('turn');
+		rerender(<ChangesPanel theme={mockTheme} session={updated} />);
+		expect(screen.getAllByTestId('changes-group-title').map((el) => el.textContent)).toEqual([
+			expect.stringContaining('Polish the app'),
+			expect.stringContaining('Fix the app'),
+			'Other changes',
+		]);
+		expect(screen.getAllByText('app.ts')).toHaveLength(2);
+		expect(
+			screen.getByText('Each file shows its current diff, not a diff for that turn.')
+		).toBeInTheDocument();
+		fireEvent.click(screen.getAllByRole('button', { name: 'Diff src/app.ts' })[0]);
+		await screen.findAllByText('new line two');
+		expect(changeDiff).toHaveBeenCalledWith('/project', 'src/app.ts', undefined, undefined);
+		useSettingsStore.setState({ newShell: false });
+	});
+
+	it('explains missing write records and gates the view behind newShell', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const source = session();
+		source.aiTabs[0].newShellPanel = { tab: 'changes', changesView: 'turn' };
+		changes.mockResolvedValue(twoFiles);
+		const { rerender } = render(<ChangesPanel theme={mockTheme} session={source} />);
+		expect(
+			await screen.findByText(
+				'No recorded file writes in this conversation. Switch to By file to see workspace changes.'
+			)
+		).toBeInTheDocument();
+		useSettingsStore.setState({ newShell: false });
+		rerender(<ChangesPanel theme={mockTheme} session={source} />);
+		expect(screen.queryByRole('radio', { name: 'By turn' })).not.toBeInTheDocument();
+		expect(await screen.findByText('app.ts')).toBeInTheDocument();
+	});
 	it.each([false, true])(
 		'opens the file name while preserving diff disclosure, new shell %s',
 		async (newShell) => {
@@ -205,6 +316,61 @@ describe('ChangesPanel', () => {
 
 describe('new shell single file actions', () => {
 	const applyChange = vi.fn();
+	it.each(['file', 'turn'] as const)(
+		'uses identical stage, unstage, revert and commit actions in the %s view',
+		async (changesView) => {
+			const source = session();
+			source.aiTabs[0].newShellPanel = { tab: 'changes', changesView };
+			source.aiTabs[0].logs.push({
+				id: 'write',
+				source: 'tool',
+				timestamp: 2,
+				text: 'Edit',
+				metadata: { toolState: { status: 'completed', input: { file_path: 'src/app.ts' } } },
+			});
+			changes.mockResolvedValue(twoFiles);
+			render(<ChangesPanel theme={mockTheme} session={source} />);
+			changes.mockResolvedValue({ ...twoFiles, files: [{ ...twoFiles.files[0], staged: true }] });
+			fireEvent.click(await screen.findByRole('button', { name: 'Stage src/app.ts' }));
+			await screen.findByRole('button', { name: 'Unstage src/app.ts' });
+			expect(applyChange).toHaveBeenLastCalledWith(
+				'/project',
+				{ action: 'stage', paths: ['src/app.ts'] },
+				undefined,
+				undefined
+			);
+			changes.mockResolvedValue(twoFiles);
+			fireEvent.click(screen.getByRole('button', { name: 'Unstage src/app.ts' }));
+			await screen.findByRole('button', { name: 'Stage src/app.ts' });
+			expect(applyChange).toHaveBeenLastCalledWith(
+				'/project',
+				{ action: 'unstage', paths: ['src/app.ts'] },
+				undefined,
+				undefined
+			);
+			changes.mockResolvedValue({ ...twoFiles, files: [{ ...twoFiles.files[0], staged: true }] });
+			fireEvent.click(screen.getByRole('button', { name: 'Revert src/app.ts' }));
+			const confirmation = useModalStore.getState().getData('confirm')!;
+			await act(async () => confirmation.onConfirm());
+			expect(applyChange).toHaveBeenLastCalledWith(
+				'/project',
+				{ action: 'revert', paths: ['src/app.ts'], confirmed: true },
+				undefined,
+				undefined
+			);
+			const input = screen.getByRole('textbox', { name: 'Commit message' });
+			fireEvent.change(input, { target: { value: 'Commit changes' } });
+			changes.mockResolvedValue(clean);
+			fireEvent.click(screen.getByRole('button', { name: 'Commit 1 file' }));
+			await waitFor(() => expect(input).toHaveValue(''));
+			expect(applyChange).toHaveBeenLastCalledWith(
+				'/project',
+				{ action: 'commit', message: 'Commit changes' },
+				undefined,
+				undefined
+			);
+		}
+	);
 	beforeEach(() => {
 		useSettingsStore.setState({ newShell: true });
 		useModalStore.getState().closeModal('confirm');

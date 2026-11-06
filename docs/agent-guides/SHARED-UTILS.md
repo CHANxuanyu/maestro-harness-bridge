@@ -6,6 +6,13 @@ All utilities in Maestro organized by category. Each entry lists the file path, 
 
 Worktree paths: `normalizeWorktreePath(path, posix?)` and `isPathAtOrUnderRoot(path, root)` in `src/shared/worktreePaths.ts` provide shared comparison rules. The renderer's `worktreeDedup.ts` re-exports the normalizer. SSH callers use POSIX normalization, preserving case, literal backslashes, and the root directory while collapsing duplicate and trailing slashes for comparison.
 
+Conversation changes by turn: `collectTurnWrites()` and `groupChangesByTurn()` in
+`src/shared/gitChangeTurns.ts` serve both the new shell panel and `changes --by-turn`.
+Build the tool index when logs change, then intersect it with each Git snapshot.
+Only successful explicit write tools count. Do not parse terminal commands or
+invent paths. Each group opens the current file diff; there are no saved turn
+diffs. Native messages first pass through `transcriptMessagesToLogEntries()`.
+
 Local native history aliases: `localProjectPathCandidates(projectPath)` in `src/main/storage/local-project-paths.ts` returns saved and physical local paths without a persistent cache. Readers retain legacy records and missing project history. SSH must keep its own path semantics; this helper does not select accounts or modify native records.
 
 Remote worktree aliases: `resolveWorktreeAliasesRemote(paths, sshRemote)` in `src/main/utils/remote-git.ts` provides the shared main-process probe for saved children and Git registry paths. It reports physical paths, missing candidates, and unresolved aliases independently; `resolveWorktreePathsRemote()` also uses it for configured scans.

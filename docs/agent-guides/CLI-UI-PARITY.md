@@ -624,7 +624,46 @@ hook failures return their original diagnostics, with no automatic retry.
 The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
+## New shell changes by turn (2026-11-06)
+
+| UI action                                      | CLI action                                                                                                        | Shared implementation                                                                                  |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Read changes grouped by conversation turn      | `changes --by-turn --tab <id> --json`                                                                             | `collectTurnWrites()` and `groupChangesByTurn()` in `src/shared/gitChangeTurns.ts`, over `git:changes` |
+| Choose By file or By turn on this conversation | `tab panel <id> changes-files` or `tab panel <id> changes-turns`                                                  | `changeNewShellPanel()`, persisted in `AITab.newShellPanel.changesView`                                |
+| Open a diff, stage, unstage, revert or commit  | Existing `changes --file`, `changes stage`, `changes unstage`, `changes revert --yes`, `changes commit --message` | Existing Git handlers and panel actions                                                                |
+
+The new panel actions require `newShell`. Reading `--by-turn` is read only and
+does not change the view preference. It cannot be combined with `--file` or a
+write action. JSON keeps the Git snapshot and adds `groups`, `hasWriteRecords`
+and `diffScope: "current"`. A group's `turnId: null` means Other changes; its
+title is empty so the renderer can localize it. Each recorded group carries the
+user message's first line, capped at 120 characters, and its timestamp.
+
+The UI memoizes the tool index by the conversation log array. CLI reads the
+selected tab's persisted logs through `sessions:getAll`, so an in-flight update
+can lag the visible conversation until normal persistence completes. Neither
+surface scans or writes native files for grouping. Both use only available
+records with explicit successful tool status, intersect with the current Git
+snapshot, and retain a file in every matching turn. Renames use Git's `oldPath`;
+copies do not inherit the source file's turns. The 500-file Git limit still
+applies. Paths are matched lexically against the conversation cwd and Git root,
+with SSH POSIX spelling preserved. Unresolved aliases, home expansions, parent
+traversal and missing or truncated tool inputs remain unmatched rather than
+being guessed. Native history outside the loaded log window is not scanned.
+
+The synthetic T8 scenario in `e2e/native-new-shell.spec.ts` checks two recorded
+turns, Other changes, shared current diffs, staging, CLI output, independent
+conversation preferences and restart. It has been authored but not executed in
+the sandbox.
+
 ## Open gaps
+
+**Turn grouping freshness (2026-11-06).** `changes --by-turn` uses the same
+grouping functions but reads persisted tab logs. There is no CLI request to
+flush an in-flight renderer log update or backfill native history before this
+read. The result can lag the panel until persistence completes, and both views
+cover only the records already loaded for the conversation. The new selection
+actions themselves have full CLI parity.
 
 **Provider switch wording (2026-11-06).** The existing CLI help, force warning and
 success text still describe the classic reset behavior. With `newShell` enabled,

@@ -290,14 +290,15 @@ Show, stage, apply or inspect the shared native instruction profile
 
 Read, stage, unstage, revert or commit changes in a conversation working directory
 
-| Option             | Description                                         | Default |
-| ------------------ | --------------------------------------------------- | ------- |
-| `-a, --agent <id>` | Agent whose active tab to use                       | -       |
-| `--tab <id>`       | Conversation tab, exact ID, prefix or active        | -       |
-| `--file <path>`    | Read the diff for one repository-relative file      | -       |
-| `--json`           | Output the shared changes or diff structure as JSON | -       |
-| `--message <text>` | Commit message for the staged files                 | -       |
-| `--yes`            | Explicitly confirm destructive revert               | -       |
+| Option             | Description                                          | Default |
+| ------------------ | ---------------------------------------------------- | ------- |
+| `-a, --agent <id>` | Agent whose active tab to use                        | -       |
+| `--tab <id>`       | Conversation tab, exact ID, prefix or active         | -       |
+| `--file <path>`    | Read the diff for one repository-relative file       | -       |
+| `--by-turn`        | Group current changes by recorded conversation turns | -       |
+| `--json`           | Output the shared changes or diff structure as JSON  | -       |
+| `--message <text>` | Commit message for the staged files                  | -       |
+| `--yes`            | Explicitly confirm destructive revert                | -       |
 
 ## `maestro-cli handoff <tab> [provider]`
 
@@ -1224,7 +1225,7 @@ Open a new tab for an agent (optionally seeded with a prompt)
 
 ## `maestro-cli tab panel <tab-id> <action>`
 
-New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show
+New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show
 
 | Option             | Description                                                                                                                                                               | Default |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |

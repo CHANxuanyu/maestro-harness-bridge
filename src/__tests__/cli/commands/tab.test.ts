@@ -139,6 +139,8 @@ describe('tab commands', () => {
 	it.each([
 		'files',
 		'changes',
+		'changes-files',
+		'changes-turns',
 		'terminal',
 		'tasks',
 		'back',

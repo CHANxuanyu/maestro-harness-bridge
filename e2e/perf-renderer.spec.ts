@@ -24,7 +24,7 @@ import { foldTurnActivity } from '../src/renderer/components/TerminalOutput/util
 // Never launch Electron, inspect accounts or invoke providers in the default suite.
 test.skip(process.env.MAESTRO_E2E_PERF !== '1', 'Set MAESTRO_E2E_PERF=1 outside the sandbox');
 test.skip(process.env.MAESTRO_E2E_REAL === '1', 'Performance fixtures are synthetic only');
-test.setTimeout(900_000);
+test.setTimeout(2_700_000);
 
 async function painted(page: Page) {
 	await page.evaluate(

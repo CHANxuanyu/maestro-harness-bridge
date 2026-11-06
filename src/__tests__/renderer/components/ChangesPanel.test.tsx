@@ -78,6 +78,26 @@ beforeEach(() => {
 
 describe('ChangesPanel', () => {
 	it.each([false, true])(
+		'scopes same-directory conversation refresh to new shell %s',
+		async (newShell) => {
+			useSettingsStore.setState({ newShell });
+			changes.mockResolvedValue(twoFiles);
+			changeDiff.mockResolvedValue({ diff: patch, binary: false, tooLarge: false });
+			const { rerender } = render(<ChangesPanel theme={mockTheme} session={session()} />);
+			fireEvent.click(
+				await screen.findByRole('button', { name: newShell ? 'Diff src/app.ts' : /app\.ts/ })
+			);
+			expect(await screen.findByText('new line two')).toBeInTheDocument();
+			await act(async () =>
+				rerender(<ChangesPanel theme={mockTheme} session={session({ activeTabId: 'tab-2' })} />)
+			);
+			expect(changes).toHaveBeenCalledTimes(newShell ? 2 : 1);
+			if (newShell) expect(screen.queryByText('new line two')).not.toBeInTheDocument();
+			else expect(screen.getByText('new line two')).toBeInTheDocument();
+		}
+	);
+
+	it.each([false, true])(
 		'opens the file name while preserving diff disclosure, new shell %s',
 		async (newShell) => {
 			useSettingsStore.setState({ newShell });

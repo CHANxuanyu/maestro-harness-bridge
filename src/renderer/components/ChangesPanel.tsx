@@ -89,6 +89,7 @@ export const ChangesPanel = memo(function ChangesPanel({
 			? session.sessionSshRemoteConfig.workingDirOverride || undefined
 			: undefined;
 	const context = JSON.stringify([session.id, session.activeTabId, cwd, sshRemoteId, remoteCwd]);
+	const refreshContext = newShell ? context : JSON.stringify([cwd, sshRemoteId, remoteCwd]);
 	const contextRef = useRef(context);
 	contextRef.current = context;
 	const [message, setMessage] = useState('');
@@ -120,7 +121,7 @@ export const ChangesPanel = memo(function ChangesPanel({
 		} finally {
 			if (request === requestRef.current) setRefreshing(false);
 		}
-	}, [cwd, sshRemoteId, remoteCwd, context]);
+	}, [cwd, sshRemoteId, remoteCwd, refreshContext]);
 
 	useEffect(() => {
 		mountedRef.current = true;

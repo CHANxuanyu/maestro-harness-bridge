@@ -125,6 +125,8 @@ test('codex: real task list and final answer through the panel', async ({}, info
 				...(login
 					? [
 							'--ephemeral',
+							// Tool availability does not depend on effort; keep the diagnostic short.
+							'-c model_reasoning_effort="low"',
 							'-c web_search="disabled"',
 							'-c features.apps=false',
 							'-c features.plugins=false',

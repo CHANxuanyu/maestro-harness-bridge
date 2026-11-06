@@ -239,6 +239,103 @@ test('claude l: an answer in a second window that lands just before quit is save
 	await native.start();
 });
 
+// A window holds a live copy of the agents it owns and a stale copy of the rest,
+// so an agent that changes window must arrive with what its old owner last saved.
+test('claude m: an agent keeps its conversation when it changes window', async ({ native }) => {
+	test.skip(native.real, 'Window bookkeeping only; claude k covers the real CLI');
+	const firstAnswer = 'Answer before the move.';
+	const secondAnswer = 'Answer after the move.';
+	native.scriptTurns([{ answer: firstAnswer }, { answer: secondAnswer }]);
+	await native.createAgent('claude');
+	const moving = await native.createAgent('claude');
+	const other = await native.createAgent('claude');
+	const { page } = native;
+	const savedTab = (id: string) => {
+		const { sessions } = JSON.parse(
+			fs.readFileSync(path.join(native.data, 'maestro-sessions.json'), 'utf8')
+		) as {
+			sessions: {
+				id: string;
+				aiTabs?: {
+					inputValue?: string;
+					agentSessionId?: string | null;
+					logs?: { text?: string }[];
+				}[];
+			}[];
+		};
+		return sessions.find((session) => session.id === id)?.aiTabs?.[0];
+	};
+	const savedTexts = (id: string) => (savedTab(id)?.logs ?? []).map((log) => log.text?.trim());
+	const list = () => page.evaluate(() => window.maestro.windows.list());
+	const mainWindowId = (await list()).find((entry) => entry.isMain)?.id as string;
+
+	// The product's move: create the window, then transfer ownership out of the source.
+	const opened = native.app.waitForEvent('window');
+	const created = await page.evaluate((id) => window.maestro.windows.create([id]), other);
+	const second = await opened;
+	await second.waitForLoadState('domcontentloaded');
+	const secondId = created?.id as string;
+	await page.evaluate(
+		([id, from, to]) => window.maestro.windows.moveSession(id, from, to),
+		[other, mainWindowId, secondId]
+	);
+	const secondInput = second.getByPlaceholder(/^Talking to /);
+	const secondOutput = second.getByLabel('Terminal output', { exact: true });
+	await expect(secondInput).toBeVisible();
+
+	// Into an existing window, with a draft typed just before the move.
+	expect((await native.cli('focus-agent', moving)).success).toBe(true);
+	await native.send('Turn before the move');
+	await expect(native.output().getByText(firstAnswer, { exact: true })).toBeVisible();
+	await expect(page.getByTestId('stop-turn-button')).toHaveCount(0);
+	await native.input().fill('Draft before the move');
+	// Reaching Move to Window takes focus out of the composer, which saves the draft.
+	await native.input().blur();
+	await page.evaluate(
+		([id, from, to]) => window.maestro.windows.moveSession(id, from, to),
+		[moving, mainWindowId, secondId]
+	);
+	// A window follows a focus request only once it has learned it owns the agent.
+	await expect(async () => {
+		expect((await native.cli('focus-agent', moving)).success).toBe(true);
+		await expect(secondOutput.getByText(firstAnswer, { exact: true })).toBeVisible({
+			timeout: 1000,
+		});
+	}).toPass();
+	await expect(secondInput).toHaveValue('Draft before the move');
+	const nativeId = savedTab(moving)?.agentSessionId;
+	expect(nativeId).toBeTruthy();
+
+	// The first edit in the new window writes this copy, so it must be the real one.
+	await secondInput.fill('Turn after the move');
+	await secondInput.press('Enter');
+	await expect(secondOutput.getByText(secondAnswer, { exact: true })).toBeVisible();
+	await expect(second.getByTestId('stop-turn-button')).toHaveCount(0);
+	await secondInput.fill('Draft before the window closes');
+
+	// Closing the window hands its agents back to the main window.
+	await page.evaluate((id) => window.maestro.windows.close(id), secondId);
+	await expect.poll(async () => (await list()).length).toBe(1);
+	await expect(async () => {
+		expect((await native.cli('focus-agent', moving)).success).toBe(true);
+		await expect(native.output().getByText(secondAnswer, { exact: true })).toBeVisible({
+			timeout: 1000,
+		});
+	}).toPass();
+	await expect(native.output().getByText(firstAnswer, { exact: true })).toBeVisible();
+	await expect(native.input()).toHaveValue('Draft before the window closes');
+
+	await native.input().fill('Draft after the window closed');
+	await expect.poll(() => savedTab(moving)?.inputValue).toBe('Draft after the window closed');
+	expect(savedTab(moving)?.agentSessionId).toBe(nativeId);
+	expect(savedTexts(moving)).toEqual(expect.arrayContaining([firstAnswer, secondAnswer]));
+
+	await native.restart();
+	expect((await native.cli('focus-agent', moving)).success).toBe(true);
+	await expect(native.output().getByText(secondAnswer, { exact: true })).toBeVisible();
+	await expect(native.input()).toHaveValue('Draft after the window closed');
+});
+
 test('codex e: default effort information matches the native record', async ({ native }) => {
 	native.scriptTurns([]);
 	const turn = await native.externalTurn('codex', 'Default effort history', {

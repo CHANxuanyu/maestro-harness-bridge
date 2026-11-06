@@ -376,7 +376,8 @@ function diffSessions(
  */
 export function useDebouncedPersistence(
 	initialLoadComplete: React.MutableRefObject<boolean>,
-	delay: number = DEFAULT_DEBOUNCE_DELAY
+	delay: number = DEFAULT_DEBOUNCE_DELAY,
+	ownsSession?: (sessionId: string) => boolean
 ): UseDebouncedPersistenceReturn {
 	// Track if there are pending changes
 	const [isPending, setIsPending] = useState(false);
@@ -386,6 +387,14 @@ export function useDebouncedPersistence(
 
 	// Store the latest sessions in a ref for access in flush callbacks
 	const sessionsRef = useRef<Session[]>(useSessionStore.getState().sessions);
+
+	// An agent lives in exactly one window, but every window holds a copy of the
+	// whole tree. Live events reach only the owner, so the other copies are stale,
+	// and background updates here still give them a new identity. Writing one
+	// lands an old conversation over the owner's save, so a window writes only
+	// what it owns. Undefined (web-desktop, tests) writes everything.
+	const ownsSessionRef = useRef(ownsSession);
+	ownsSessionRef.current = ownsSession;
 
 	// Store the timer ID for cleanup
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -444,8 +453,12 @@ export function useDebouncedPersistence(
 			throw new Error(SESSIONS_NOT_READ_MESSAGE);
 		}
 		const current = sessionsRef.current;
+		const ownedOnly = (sessions: Session[]) => {
+			const owns = ownsSessionRef.current;
+			return owns ? sessions.filter((session) => owns(session.id)) : sessions;
+		};
 		if (previouslyPersistedRef.current === null) {
-			const sessionsForPersistence = current.map(prepareSessionForPersistence);
+			const sessionsForPersistence = ownedOnly(current).map(prepareSessionForPersistence);
 			const tombstones = mountedSessionsRef.current
 				? diffSessions(mountedSessionsRef.current, current).tombstones
 				: [];
@@ -461,7 +474,7 @@ export function useDebouncedPersistence(
 			return;
 		}
 		const { dirty, tombstones } = diffSessions(previouslyPersistedRef.current, current);
-		const sessionsToPersist = startupBaselineNeedsFullFlushRef.current ? current : dirty;
+		const sessionsToPersist = ownedOnly(startupBaselineNeedsFullFlushRef.current ? current : dirty);
 		if (sessionsToPersist.length === 0 && tombstones.length === 0) {
 			// Nothing changed - safe to advance the baseline (it would be
 			// identical anyway).

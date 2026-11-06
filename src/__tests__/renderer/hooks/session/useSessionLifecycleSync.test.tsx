@@ -11,15 +11,30 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import { useComposerInputStore } from '../../../../renderer/stores/composerInputStore';
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { useSessionLifecycleSync } from '../../../../renderer/hooks/session/useSessionLifecycleSync';
 import type { Session } from '../../../../renderer/types';
 import { createMockSession, resetStore } from '../../../helpers';
 
 type Payload = { added?: Session[]; removedIds?: string[] };
+type WindowChange = {
+	type: string;
+	sessionId?: string;
+	fromWindowId?: string;
+	toWindowId?: string;
+};
+
+const runtime = vi.hoisted(() => ({ webDesktop: false }));
+vi.mock('../../../../renderer/utils/runtimeContext', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../../../renderer/utils/runtimeContext')>()),
+	isWebDesktop: () => runtime.webDesktop,
+}));
 
 describe('useSessionLifecycleSync', () => {
 	let handler: ((payload: Payload) => void) | null;
+	let windowChange: ((change: WindowChange) => void) | null;
+	let storedSessions: Session[];
 	let unsubscribe: ReturnType<typeof vi.fn>;
 	let setActiveSessionId: ReturnType<typeof vi.fn>;
 	// Stands in for the startup restore pass: tags the session so the test can
@@ -32,6 +47,9 @@ describe('useSessionLifecycleSync', () => {
 		// loading; the hook deliberately holds deltas until then.
 		useSessionStore.setState({ initialLoadComplete: true });
 		handler = null;
+		windowChange = null;
+		storedSessions = [];
+		runtime.webDesktop = false;
 		unsubscribe = vi.fn();
 		setActiveSessionId = vi.fn();
 		restoreSession.mockClear();
@@ -42,8 +60,106 @@ describe('useSessionLifecycleSync', () => {
 					return unsubscribe;
 				},
 				setActiveSessionId,
+				getAll: vi.fn(async () => storedSessions),
+			},
+			windows: {
+				onSessionMoved: (cb: (change: WindowChange) => void) => {
+					windowChange = cb;
+					return vi.fn();
+				},
+				getState: vi.fn(async () => ({ id: 'this-window' })),
 			},
 		};
+	});
+
+	describe('an agent moving between windows', () => {
+		const moved = { type: 'session-moved', sessionId: 'a', fromWindowId: 'other' };
+
+		beforeEach(() => {
+			useSessionStore.setState({
+				sessions: [createMockSession({ id: 'a', name: 'Stale copy' })],
+				activeSessionId: 'a',
+			});
+			storedSessions = [createMockSession({ id: 'a', name: 'Saved by the old owner' })];
+		});
+
+		it('reloads the agent from the store when it arrives in this window', async () => {
+			const reattachLiveTurns = vi.fn();
+			renderHook(() => useSessionLifecycleSync(restoreSession, reattachLiveTurns));
+			windowChange!({ ...moved, toWindowId: 'this-window' });
+
+			await waitFor(() => {
+				expect(useSessionStore.getState().sessions[0].name).toBe(
+					'Saved by the old owner (restored)'
+				);
+			});
+			expect(reattachLiveTurns).toHaveBeenCalledTimes(1);
+		});
+
+		it('shows the saved draft when the composer already holds this agent', async () => {
+			const tab = { id: 'tab', inputValue: 'Saved draft', commandMode: 'off' };
+			storedSessions = [createMockSession({ id: 'a', aiTabs: [tab] as Session['aiTabs'] })];
+			useComposerInputStore.getState().loadAiDraft('tab', 'Stale draft', 'off');
+			renderHook(() => useSessionLifecycleSync(restoreSession));
+			windowChange!({ ...moved, toWindowId: 'this-window' });
+
+			await waitFor(() => {
+				expect(useComposerInputStore.getState().aiValue).toBe('Saved draft');
+			});
+		});
+
+		it('leaves the composer alone while it holds another agent', async () => {
+			const tab = { id: 'tab', inputValue: 'Saved draft', commandMode: 'off' };
+			storedSessions = [createMockSession({ id: 'a', aiTabs: [tab] as Session['aiTabs'] })];
+			useComposerInputStore.getState().loadAiDraft('other-tab', 'Typing here', 'off');
+			renderHook(() => useSessionLifecycleSync(restoreSession));
+			windowChange!({ ...moved, toWindowId: 'this-window' });
+
+			await waitFor(() => {
+				expect(restoreSession).toHaveBeenCalled();
+			});
+			await Promise.resolve();
+			expect(useComposerInputStore.getState().aiValue).toBe('Typing here');
+		});
+
+		it('leaves its copy alone when the agent went to another window', async () => {
+			renderHook(() => useSessionLifecycleSync(restoreSession));
+			windowChange!({ ...moved, toWindowId: 'somewhere-else' });
+
+			await vi.waitFor(() => {
+				expect(window.maestro.windows.getState).toHaveBeenCalled();
+			});
+			await Promise.resolve();
+			expect(useSessionStore.getState().sessions[0].name).toBe('Stale copy');
+			expect(restoreSession).not.toHaveBeenCalled();
+		});
+
+		it('ignores other window changes', async () => {
+			renderHook(() => useSessionLifecycleSync(restoreSession));
+			windowChange!({ type: 'sessions-changed', toWindowId: 'this-window' });
+			await Promise.resolve();
+
+			expect(window.maestro.windows.getState).not.toHaveBeenCalled();
+		});
+
+		it('keeps the agent when the store no longer has it', async () => {
+			storedSessions = [];
+			renderHook(() => useSessionLifecycleSync(restoreSession));
+			windowChange!({ ...moved, toWindowId: 'this-window' });
+
+			await vi.waitFor(() => {
+				expect(window.maestro.sessions.getAll).toHaveBeenCalled();
+			});
+			await Promise.resolve();
+			expect(useSessionStore.getState().sessions[0].name).toBe('Stale copy');
+		});
+
+		it('does not follow window moves in a web-desktop client', () => {
+			runtime.webDesktop = true;
+			renderHook(() => useSessionLifecycleSync(restoreSession));
+
+			expect(windowChange).toBeNull();
+		});
 	});
 
 	it('adds an agent another client created', async () => {

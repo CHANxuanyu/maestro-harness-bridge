@@ -552,6 +552,41 @@ Notification center history uses the live desktop `notificationStore` over a req
 | Thought Stream: Steer Auto Run (send a note, cancel one, read replies)      | `steer-auto-run send <note> -a <agent>`, `steer-auto-run list`, `steer-auto-run cancel <id>`                     |
 | Playbook Exchange: browse, README, install                                  | `marketplace list`, `marketplace show <id>`, `marketplace import`                                                |
 
+## New shell single file changes (2026-11-06)
+
+| UI action                     | CLI                                                   | Shared implementation                                     |
+| ----------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
+| Stage a changed file          | `changes stage <path>... [--agent <id>] [--tab <id>]` | `git:applyChange` calls `applyGitChange()`                |
+| Unstage a file                | `changes unstage <path>...`                           | The same request with `action: 'unstage'`                 |
+| Confirm reverting a file      | `changes revert <path>... --yes`                      | The same request with `action: 'revert', confirmed: true` |
+| Commit the staged files       | `changes commit --message <text>`                     | The same request with `action: 'commit'`                  |
+| Refresh or inspect the result | `changes [--file <path>] [--json]`                    | Existing `git:changes` and `git:changeDiff` handlers      |
+
+Every write also accepts `--agent`, `--tab` and `--json`. Paths are exact names
+relative to the repository root, not globs or directories. Put options before
+`--` when a name begins with a hyphen, for example
+`changes stage --tab <id> -- -new.txt`. `changes --json` exposes `staged`, an
+optional `unstaged` flag for partially staged files, and `stagedCount` when the
+500-file display limit hides rows. The count covers the whole index.
+
+The panel uses the current conversation cwd, never a terminal's later cwd;
+SSH honors the configured host and working directory override. Main resolves
+the root through Git on that host and serializes writes per host and worktree.
+Staging an indexed rename adds only its destination, including later edits and
+multi-file requests. Unstage and revert include both rename paths. Copies leave
+the source alone, unstaging preserves worktree contents, and revert restores
+both index and worktree against HEAD. A staged deletion with an untracked file
+at the same path stays one staged row with `unstaged: true`; group and commit
+counts include the deletion once. Unstage preserves the replacement on disk;
+revert restores the original HEAD file after confirmation.
+New files are deleted only after confirmation. Conflict rows offer stage to
+mark a resolved file, and never offer revert. Nested repositories and submodule
+revert are refused. A partially staged row stays in the staged group with an
+additional indicator; committing includes only the index contents. Git and
+hook failures return their original diagnostics, with no automatic retry.
+The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
+operations in either shell. No new parity gap is introduced by these actions.
+
 ## Open gaps
 
 **Project native history (2026-10-16).** The desktop bridge exposes `agentSessions:listProjectHistory`, but CLI `sessions <agent-id>` is still provider scoped. One-click native-history open with automatic runner creation uses the canonical renderer resume flow and has no dedicated CLI verb yet. Adding a WS renderer action is outside this local sidebar acceptance change; this is an explicit parity gap, not a covered action. The same gap covers the external-transcript catch-up: selecting an open native conversation in the project tree (or returning to the window while it is on screen and a history scan reports newer native activity) re-reads the transcript and appends what was written outside Maestro (`refreshNativeConversation()` in `src/renderer/services/refreshNativeConversation.ts`, read-only, same tab/account/host/native id). No CLI verb triggers or reports that refresh yet; the read half is reachable through `sessions`/`agentSessions:read`, but nothing lets an agent fold newer native messages into an open tab. Since 2026-10-23 the desktop also runs the same refresh automatically for the visible local Codex tab when its transcript revision changes (`useNativeTranscriptFollow()` in `src/renderer/hooks/session/useNativeTranscriptFollow.ts`, over `agentSessions.getTranscriptRevision`). That is background upkeep, not a user action, so it adds no row and changes no CLI verb.

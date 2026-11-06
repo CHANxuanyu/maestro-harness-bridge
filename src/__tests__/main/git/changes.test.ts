@@ -298,7 +298,7 @@ describe('combined changes on a real repository', { timeout: 60_000 }, () => {
 		}
 		expect((await getGitChanges(cwd)).files[0]).toMatchObject({
 			status: 'conflicted',
-			staged: true,
+			staged: false,
 		});
 		git('merge', '--abort');
 		git('checkout', '--detach');

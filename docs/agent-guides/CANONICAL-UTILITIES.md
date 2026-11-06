@@ -260,6 +260,17 @@ The tracker at [DEDUP-TRACKER.md](DEDUP-TRACKER.md) lists all known duplication 
 
 Untracked directories (including nested repositories), symlinks and unreadable files remain in the list with null counts and empty file diffs. Directory paths retain Git's trailing slash. Per-entry untracked read failures do not fail the snapshot. Local roots are normalized with the platform path module, while SSH roots retain exactly what the remote prints; only file paths use the shared slash separator convention. Do not normalize an SSH root with the local platform path module.
 
+`applyGitChange()` in the same module owns stage, unstage, revert and commit.
+Both the panel and `changes` CLI call `git:applyChange`. It validates exact
+changed paths before writing, uses `--literal-pathspecs` and `--`, resolves the
+repository root on the executing host, and uses `createKeyedWriteQueue()` to
+serialize this service's writes per host and worktree. Do not introduce a
+renderer shell command or a second CLI Git mutation path. Revert includes the
+index and working copy, requires explicit confirmation, rejects conflicts and
+submodules, and treats rename sources differently from copy sources. Commit
+never stages implicitly. Application refusals carry a translation reason;
+Git and hook diagnostics stay verbatim.
+
 ## Handoff execution context
 
 `handoffLocation()` in `src/shared/aiHandoff.ts` resolves only the configured execution directory and builds its host-scoped comparison key. The sidebar project root is grouping metadata, not a spawn directory. An SSH override wins over cwd, a missing remote ID fails, and remote paths are never passed through local realpath or path.resolve. Main routing and renderer target insertion share this check so worktrees and identically named directories on different hosts cannot be mixed.

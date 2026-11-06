@@ -18,6 +18,7 @@ export interface AppConfirmModalsProps {
 	confirmModalOnConfirm: (() => void) | null;
 	confirmModalTitle?: string;
 	confirmModalDestructive?: boolean;
+	confirmModalConfirmLabel?: string;
 	onCloseConfirmModal: () => void;
 
 	// Quit Confirm Modal
@@ -53,6 +54,7 @@ export const AppConfirmModals = memo(function AppConfirmModals({
 	confirmModalOnConfirm,
 	confirmModalTitle,
 	confirmModalDestructive,
+	confirmModalConfirmLabel,
 	onCloseConfirmModal,
 	// Quit Confirm Modal
 	quitConfirmModalOpen,
@@ -90,6 +92,7 @@ export const AppConfirmModals = memo(function AppConfirmModals({
 					theme={theme}
 					title={confirmModalTitle}
 					destructive={confirmModalDestructive}
+					confirmLabel={confirmModalConfirmLabel}
 					message={confirmModalMessage}
 					onConfirm={confirmModalOnConfirm}
 					onClose={onCloseConfirmModal}

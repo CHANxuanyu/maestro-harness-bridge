@@ -1,6 +1,6 @@
-import React, { createRef, memo } from 'react';
+import React, { createRef, memo, useRef } from 'react';
 import { act, render, cleanup, fireEvent } from '@testing-library/react';
-import { beforeEach, afterEach, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import type { LogEntry } from '../../../../renderer/types';
 import type { TerminalOutputProps } from '../../../../renderer/components/TerminalOutput/types';
 import { createMockSession } from '../../../helpers/mockSession';
@@ -9,6 +9,11 @@ import { mockTheme } from '../../../helpers/mockTheme';
 import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { formatElapsedTickerCompact } from '../../../../shared/duration';
 import { getClaudeTokenMode } from '../../../../shared/claudeTokenMode';
+import { useSessionStore } from '../../../../renderer/stores/sessionStore';
+import { useComposerInputStore } from '../../../../renderer/stores/composerInputStore';
+import { useAgentDataListener } from '../../../../renderer/hooks/agent/internal/useAgentDataListener';
+import { useBatchedSessionUpdates } from '../../../../renderer/hooks/session/useBatchedSessionUpdates';
+import { useInputAreaTextChange } from '../../../../renderer/components/InputArea/hooks/useInputAreaTextChange';
 
 vi.mock('../../../../shared/duration', async (original) => {
 	const actual = await original<typeof import('../../../../shared/duration')>();
@@ -58,6 +63,8 @@ beforeEach(() => {
 });
 afterEach(() => {
 	cleanup();
+	vi.useRealTimers();
+	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
 });
 
@@ -225,4 +232,175 @@ it.each([
 		expect(fold.querySelector('[data-turn-activity-steps]')).toBeNull();
 	},
 	60_000
+);
+
+it.each([true, false])(
+	'keeps ordinary typing independent of 100 Hz stream batches (newShell=%s)',
+	(newShell) => {
+		vi.useFakeTimers({
+			toFake: [
+				'setInterval',
+				'clearInterval',
+				'setTimeout',
+				'clearTimeout',
+				'Date',
+				'requestAnimationFrame',
+				'cancelAnimationFrame',
+			],
+		});
+		useSettingsStore.setState({ newShell });
+		const historyTurns = 100;
+		const history: LogEntry[] = Array.from({ length: historyTurns }, (_, turn) => [
+			{
+				id: `user-${turn}`,
+				source: 'user' as const,
+				text: `Question ${turn}`,
+				timestamp: turn * 4000,
+				delivered: true,
+			},
+			{ id: `tool-${turn}`, source: 'tool' as const, text: 'Read', timestamp: turn * 4000 + 1000 },
+			{
+				id: `reply-${turn}`,
+				source: 'stdout' as const,
+				text: `Reply ${turn}`,
+				timestamp: turn * 4000 + 2000,
+			},
+		]).flat();
+		const session = createMockSession({
+			id: 'typing-session',
+			activeTabId: 'typing-tab',
+			aiTabs: [
+				createMockAITab({
+					id: 'typing-tab',
+					state: 'busy',
+					logs: [
+						...history,
+						{
+							id: 'current-user',
+							source: 'user',
+							text: 'Continue',
+							timestamp: historyTurns * 4000,
+							delivered: true,
+						},
+					],
+				}),
+			],
+		});
+		useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+		useComposerInputStore.getState().loadAiDraft('typing-tab', '', 'off');
+		let onData!: (sessionId: string, data: string) => void;
+		const previousOnData = window.maestro.process.onData;
+		onTestFinished(() => {
+			window.maestro.process.onData = previousOnData;
+		});
+		window.maestro.process.onData = vi.fn((callback) => {
+			onData = callback;
+			return vi.fn();
+		});
+		const props = outputProps(session);
+		const transcriptRenders = vi.fn();
+		const setPickerOpen = vi.fn();
+		const setPickerIndex = vi.fn();
+		function Transcript() {
+			const current = useSessionStore((state) => state.sessions[0]);
+			// Count subscription renders, not Profiler commits that include React bailouts.
+			transcriptRenders();
+			return <TerminalOutput {...props} session={current} />;
+		}
+		function Composer() {
+			const value = useComposerInputStore((state) => state.aiValue);
+			const keystrokeResizeScheduledRef = useRef(false);
+			const onChange = useInputAreaTextChange({
+				isTerminalMode: false,
+				slashCommandOpen: false,
+				commandMode: 'off',
+				setCommandMode: useComposerInputStore.getState().setAiCommandMode,
+				getPreviousValue: () => useComposerInputStore.getState().aiValue,
+				keystrokeResizeScheduledRef,
+				setInputValue: useComposerInputStore.getState().setAiValue,
+				setSlashCommandOpen: setPickerOpen,
+				setSelectedSlashCommandIndex: setPickerIndex,
+			});
+			return <textarea aria-label="Draft" value={value} onChange={onChange} />;
+		}
+		function Harness() {
+			const batchedUpdater = useBatchedSessionUpdates();
+			const activeHiddenToolRef = useRef(new Map());
+			useAgentDataListener({ batchedUpdater, activeHiddenToolRef });
+			return (
+				<>
+					<Transcript />
+					<Composer />
+				</>
+			);
+		}
+		const view = render(<Harness />);
+		let ticks = 0;
+		while (idle.size && ticks++ < history.length) {
+			const [id, callback] = idle.entries().next().value!;
+			idle.delete(id);
+			act(callback);
+		}
+		act(() => vi.advanceTimersByTime(0));
+		expect(view.container.querySelectorAll('[data-feed-row="turn-activity"]')).toHaveLength(
+			historyTurns
+		);
+		transcriptRenders.mockClear();
+		vi.mocked(formatElapsedTickerCompact).mockClear();
+		const storeUpdates = vi.fn();
+		const unsubscribe = useSessionStore.subscribe((state, previous) => {
+			if (state.sessions !== previous.sessions) storeUpdates();
+		});
+		onTestFinished(unsubscribe);
+		const input = view.getByRole('textbox', { name: 'Draft' });
+		let draft = '';
+		const type = () => {
+			draft += 'x';
+			fireEvent.change(input, { target: { value: draft } });
+		};
+		for (let batch = 0; batch < 15; batch++) {
+			for (let chunk = 0; chunk < 20; chunk++) {
+				act(() => {
+					if (chunk > 0) vi.advanceTimersByTime(10);
+					onData('typing-session-ai-typing-tab', ` chunk-${batch * 20 + chunk}`);
+				});
+			}
+			act(() => vi.advanceTimersByTime(9));
+			expect(storeUpdates).toHaveBeenCalledTimes(batch);
+			const before = transcriptRenders.mock.calls.length;
+			// Cycle through input just before a flush, in the same React batch,
+			// and immediately after it. This checks ordering, not browser latency.
+			if (batch % 3 === 0) {
+				act(type);
+				expect(transcriptRenders).toHaveBeenCalledTimes(before);
+				act(() => vi.advanceTimersByTime(1));
+			} else if (batch % 3 === 1) {
+				act(() => {
+					vi.advanceTimersByTime(1);
+					type();
+				});
+			} else {
+				act(() => vi.advanceTimersByTime(1));
+				const afterFlush = transcriptRenders.mock.calls.length;
+				act(type);
+				expect(transcriptRenders).toHaveBeenCalledTimes(afterFlush);
+			}
+			expect(storeUpdates).toHaveBeenCalledTimes(batch + 1);
+			expect(transcriptRenders).toHaveBeenCalledTimes(before + 1);
+			expect(input).toHaveValue(draft);
+			expect(useComposerInputStore.getState().aiValue).toBe(draft);
+		}
+		const finalLogs = useSessionStore.getState().sessions[0].aiTabs[0].logs;
+		expect(finalLogs.slice(0, history.length)).toEqual(history);
+		expect(
+			finalLogs
+				.slice(history.length + 1)
+				.map((log) => log.text)
+				.join('')
+		).toBe(Array.from({ length: 300 }, (_, i) => ` chunk-${i}`).join(''));
+		expect(transcriptRenders).toHaveBeenCalledTimes(15);
+		expect(vi.mocked(formatElapsedTickerCompact)).toHaveBeenCalledTimes(
+			newShell ? 0 : historyTurns * 15
+		);
+	}
 );

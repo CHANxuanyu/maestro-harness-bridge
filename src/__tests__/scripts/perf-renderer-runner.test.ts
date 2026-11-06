@@ -116,7 +116,9 @@ describe('renderer benchmark selection', () => {
 		expect(rendererOptions({ MAESTRO_PERF_STARTUP_TRACE: '1' }).diagnostic).toBe(true);
 	});
 	it('runs only selected phases and their necessary dependencies', () => {
-		const config = rendererOptions({ MAESTRO_PERF_STAGES: 'stream' });
+		const config = rendererOptions({ MAESTRO_PERF_STAGES: 'stream', MAESTRO_PERF_ROUNDS: '7' });
+		expect(config.rounds).toBe(7);
+		expect(config.diagnostic).toBe(false);
 		expect([...config.stages]).toEqual(['startup', 'switch', 'backfill', 'ids', 'stream']);
 		expect(config.sizes).toEqual(['large']);
 		expect(rendererOptions({ MAESTRO_PERF_STAGES: 'startup' }).sizes).toEqual(['empty', 'large']);

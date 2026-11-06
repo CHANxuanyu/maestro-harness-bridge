@@ -74,19 +74,25 @@ export function rendererOptions(env: NodeJS.ProcessEnv) {
 }
 
 export type Metrics = Record<string, Record<string, number>>;
+export interface RendererObservation {
+	startedAt: number;
+	timeOrigin: number;
+	longTasks: { startMs: number; durationMs: number }[];
+	frames: { startMs: number; durationMs: number }[];
+	keyEvents: {
+		eventStartMs: number;
+		handledMs: number;
+		nextFrameMs?: number;
+		visibilityState: DocumentVisibilityState;
+		focused: boolean;
+	}[];
+}
 export interface PerfSample {
 	variant: string;
 	round: number;
 	size: string;
 	metrics: Metrics;
-	observations?: Record<
-		string,
-		{
-			startedAt: number;
-			timeOrigin: number;
-			longTasks: { startMs: number; durationMs: number }[];
-		}
-	>;
+	observations?: Record<string, RendererObservation>;
 	loadBefore: number[];
 	loadAfter?: number[];
 }
@@ -132,7 +138,7 @@ export class RendererRun {
 		const serialized = JSON.stringify(
 			{
 				...this.metadata,
-				schema: 3,
+				schema: 4,
 				complete: this.complete,
 				samples: this.samples,
 				stages: this.stages,

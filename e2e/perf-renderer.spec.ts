@@ -21,6 +21,7 @@ import {
 	stageBudgets,
 	type Metrics,
 	type PerfSample,
+	type RendererObservation,
 	type StageName,
 	type StageScope,
 } from './fixtures/perf-renderer-runner';
@@ -45,9 +46,8 @@ async function painted(page: Page) {
 async function observe(page: Page) {
 	await page.evaluate(() => {
 		const state = {
-			frames: [] as number[],
-			keyDelays: [] as number[],
-			keyPaints: [] as number[],
+			frames: [] as RendererObservation['frames'],
+			keyEvents: [] as RendererObservation['keyEvents'],
 			onKey: undefined as ((event: KeyboardEvent) => void) | undefined,
 			tasks: [] as { startTime: number; duration: number }[],
 			startedAt: performance.now(),
@@ -56,15 +56,23 @@ async function observe(page: Page) {
 			observer: undefined as PerformanceObserver | undefined,
 		};
 		const frame = (now: number) => {
-			state.frames.push(now - state.last);
+			state.frames.push({ startMs: state.last - state.startedAt, durationMs: now - state.last });
 			state.last = now;
 			state.raf = requestAnimationFrame(frame);
 		};
 		state.raf = requestAnimationFrame(frame);
 		state.onKey = (event: KeyboardEvent) => {
 			if (event.key !== 'Shift') return;
-			state.keyDelays.push(performance.now() - event.timeStamp);
-			requestAnimationFrame(() => state.keyPaints.push(performance.now() - event.timeStamp));
+			const key: RendererObservation['keyEvents'][number] = {
+				eventStartMs: event.timeStamp - state.startedAt,
+				handledMs: performance.now() - state.startedAt,
+				visibilityState: document.visibilityState,
+				focused: document.hasFocus(),
+			};
+			state.keyEvents.push(key);
+			requestAnimationFrame(() => {
+				key.nextFrameMs = performance.now() - state.startedAt;
+			});
 		};
 		document.addEventListener('keydown', state.onKey, true);
 		state.observer = new PerformanceObserver((list) =>
@@ -82,13 +90,12 @@ async function observed(page: Page) {
 		const state = (
 			window as unknown as {
 				__perf: {
-					frames: number[];
+					frames: RendererObservation['frames'];
 					tasks: { startTime: number; duration: number }[];
 					startedAt: number;
 					raf: number;
 					observer: PerformanceObserver;
-					keyDelays: number[];
-					keyPaints: number[];
+					keyEvents: RendererObservation['keyEvents'];
 					onKey: (event: KeyboardEvent) => void;
 				};
 			}
@@ -99,14 +106,22 @@ async function observed(page: Page) {
 		);
 		state.observer.disconnect();
 		document.removeEventListener('keydown', state.onKey, true);
-		state.keyDelays.sort((a, b) => a - b);
-		state.keyPaints.sort((a, b) => a - b);
-		const frames = state.frames.sort((a, b) => a - b);
+		const keyDelays = state.keyEvents
+			.map((key) => key.handledMs - key.eventStartMs)
+			.sort((a, b) => a - b);
+		const keyPaints = state.keyEvents
+			.filter((key) => key.nextFrameMs !== undefined)
+			.map((key) => key.nextFrameMs! - key.eventStartMs)
+			.sort((a, b) => a - b);
+		if (keyPaints.length !== keyDelays.length)
+			throw Error('Key probe finished before every key reached its next frame');
+		const frames = state.frames.map((frame) => frame.durationMs).sort((a, b) => a - b);
 		return {
-			keyEventCount: state.keyDelays.length,
-			keyDelayP95Ms: state.keyDelays[Math.ceil(state.keyDelays.length * 0.95) - 1] ?? 0,
-			keyDelayMaxMs: state.keyDelays.at(-1) ?? 0,
-			keyNextFrameP95Ms: state.keyPaints[Math.ceil(state.keyPaints.length * 0.95) - 1] ?? 0,
+			keyEventCount: keyDelays.length,
+			keyPaintCount: keyPaints.length,
+			keyDelayP95Ms: keyDelays[Math.ceil(keyDelays.length * 0.95) - 1] ?? 0,
+			keyDelayMaxMs: keyDelays.at(-1) ?? 0,
+			keyNextFrameP95Ms: keyPaints[Math.ceil(keyPaints.length * 0.95) - 1] ?? 0,
 			frameCount: frames.length,
 			frameP95Ms: frames[Math.ceil(frames.length * 0.95) - 1] ?? 0,
 			maxFrameMs: frames.at(-1) ?? 0,
@@ -119,6 +134,8 @@ async function observed(page: Page) {
 			maxLongTaskMs: Math.max(0, ...state.tasks.map((task) => task.duration)),
 			startedAt: state.startedAt,
 			timeOrigin: performance.timeOrigin,
+			keyEvents: state.keyEvents,
+			frames: state.frames,
 			longTasks: state.tasks.map((task) => ({
 				startMs: task.startTime - state.startedAt,
 				durationMs: task.duration,
@@ -504,9 +521,11 @@ test('renderer performance: startup stages, full backfill and isolated streaming
 									// Observe rejection immediately, then propagate it at drain time.
 									void probe.catch(() => {});
 									await scope.step(name, work);
-									await scope.step('two painted frames', () => painted(page));
 									stopProbe();
 									await scope.step('key probe drain', () => probe!);
+									// A late key can arrive after work completes. Its next-frame callback
+									// must settle before observations are summarized.
+									await scope.step('two painted frames', () => painted(page));
 									const ms = performance.now() - begin;
 									const after = await scope.step('CDP metrics after', () =>
 										cdp.send('Performance.getMetrics')
@@ -516,15 +535,19 @@ test('renderer performance: startup stages, full backfill and isolated streaming
 									);
 									const value = (rows: typeof after, key: string) =>
 										rows.metrics.find((metric) => metric.name === key)?.value ?? 0;
-									const { longTasks, startedAt, timeOrigin, ...observations } = await scope.step(
-										'renderer observations',
-										async () => {
+									const { longTasks, startedAt, timeOrigin, keyEvents, frames, ...observations } =
+										await scope.step('renderer observations', async () => {
 											const result = await observed(page);
 											observing = false;
 											return result;
-										}
-									);
-									(sample.observations ??= {})[name] = { longTasks, startedAt, timeOrigin };
+										});
+									(sample.observations ??= {})[name] = {
+										longTasks,
+										startedAt,
+										timeOrigin,
+										keyEvents,
+										frames,
+									};
 									return {
 										[name]: {
 											ms,

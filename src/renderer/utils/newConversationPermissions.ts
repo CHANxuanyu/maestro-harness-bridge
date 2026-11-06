@@ -1,3 +1,9 @@
+import { getParentDir } from '../../shared/formatters';
+import {
+	refreshConversationArchives,
+	useConversationArchiveStore,
+} from '../stores/conversationArchiveStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import type { ConversationPermissionSnapshot } from '../../shared/window-types';
 import { resolveTabPermissionMode } from '../../shared/agentMetadata';
 import { permissionModeFields } from './tabHelpers/focusFields';
@@ -24,7 +30,7 @@ function projectSessions(session: Session): Session[] {
 }
 
 function knownConversations(session: Session): AITab[] {
-	return visibleAiTabs([
+	const tabs = visibleAiTabs([
 		...new Map([
 			...(session.closedTabHistory ?? []).map(({ tab }) => [tab.id, tab] as const),
 			...(session.unifiedClosedTabHistory ?? []).flatMap((entry) =>
@@ -33,6 +39,51 @@ function knownConversations(session: Session): AITab[] {
 			...session.aiTabs.map((tab) => [tab.id, tab] as const),
 		]).values(),
 	]);
+	if (!useSettingsStore.getState().newShell) return tabs;
+	const archives = useConversationArchiveStore
+		.getState()
+		.records.filter(
+			(record) =>
+				record.sshRemoteId === sessionHost(session) &&
+				(record.projectPath === (session.projectRoot || session.cwd) ||
+					record.projectPath === session.cwd ||
+					(!record.sshRemoteId &&
+						record.worktree?.commonDir &&
+						getParentDir(record.worktree.commonDir) === (session.projectRoot || session.cwd)))
+		);
+	return [
+		...tabs.map((tab) =>
+			archives.some(
+				(record) =>
+					record.ownerIds.includes(session.id) && record.nativeSessionId === tab.agentSessionId
+			)
+				? { ...tab, archived: true }
+				: tab
+		),
+		...archives
+			.filter(
+				(record) =>
+					!(
+						record.provider === session.toolType &&
+						tabs.some((tab) => tab.agentSessionId === record.nativeSessionId)
+					)
+			)
+			.map(
+				(record): AITab => ({
+					id: record.key,
+					agentSessionId: record.nativeSessionId,
+					archived: true,
+					...permissionModeFields(record.permissionMode),
+					name: record.title,
+					starred: false,
+					logs: [],
+					inputValue: '',
+					stagedImages: [],
+					createdAt: record.archivedAt,
+					state: 'idle',
+				})
+			),
+	];
 }
 
 function conversationActivity(tab: AITab): number {
@@ -48,8 +99,18 @@ export function recentProjectConversation(
 ): { session: Session; tab: AITab } | undefined {
 	let recent: { session: Session; tab: AITab } | undefined;
 	let latest = -Infinity;
+	let strictest: { session: Session; tab: AITab } | undefined;
 	for (const owner of projectSessions(session)) {
 		for (const tab of knownConversations(owner)) {
+			if (tab.archived) {
+				const rank = { full: 0, standard: 1, readonly: 2 };
+				if (
+					!strictest ||
+					rank[resolveTabPermissionMode(tab)] > rank[resolveTabPermissionMode(strictest.tab)]
+				)
+					strictest = { session: owner, tab };
+				continue;
+			}
 			const activity = conversationActivity(tab);
 			if (activity > latest) {
 				recent = { session: owner, tab };
@@ -57,7 +118,7 @@ export function recentProjectConversation(
 			}
 		}
 	}
-	return recent;
+	return recent ?? strictest;
 }
 
 /** Called in the owner without persistence, transcripts, or another window request. */
@@ -72,6 +133,7 @@ export function conversationPermissionSnapshot(
 					id: tab.id,
 					...permissionModeFields(resolveTabPermissionMode(tab)),
 					lastActivity: conversationActivity(tab),
+					...(tab.archived ? { archived: true } : {}),
 				})),
 			}
 		: null;
@@ -81,6 +143,7 @@ export function conversationPermissionSnapshot(
 export async function resolveProjectConversationPermission(
 	session: Session
 ): Promise<ReturnType<typeof permissionModeFields>> {
+	if (useSettingsStore.getState().newShell) await refreshConversationArchives();
 	const owners = projectSessions(session);
 	let snapshots: Array<ConversationPermissionSnapshot | null> | undefined;
 	try {
@@ -94,11 +157,29 @@ export async function resolveProjectConversationPermission(
 		snapshots?.length === owners.length &&
 		snapshots.every((snapshot, index) => snapshot?.sessionId === owners[index].id);
 	if (complete) {
-		const latest = snapshots!
-			.flatMap((snapshot) => snapshot!.tabs)
-			.reduce<
-				ConversationPermissionSnapshot['tabs'][number] | undefined
-			>((recent, tab) => (!recent || tab.lastActivity > recent.lastActivity ? tab : recent), undefined);
+		const inventory = [
+			...snapshots!.flatMap((snapshot) => snapshot!.tabs),
+			...owners
+				.flatMap(knownConversations)
+				.filter((tab) => tab.archived)
+				.map((tab) => ({
+					id: tab.id,
+					archived: true,
+					...permissionModeFields(resolveTabPermissionMode(tab)),
+					lastActivity: conversationActivity(tab),
+				})),
+		];
+		const active = inventory.filter((tab) => !tab.archived);
+		if (active.length === 0 && inventory.length > 0) {
+			const modes = inventory.map(resolveTabPermissionMode);
+			return permissionModeFields(
+				modes.includes('readonly') ? 'readonly' : modes.includes('standard') ? 'standard' : 'full'
+			);
+		}
+		const latest = active.reduce<ConversationPermissionSnapshot['tabs'][number] | undefined>(
+			(recent, tab) => (!recent || tab.lastActivity > recent.lastActivity ? tab : recent),
+			undefined
+		);
 		return permissionModeFields(resolveTabPermissionMode(latest));
 	}
 	// Do not guess recency from a stale peer. Retain every known restriction,

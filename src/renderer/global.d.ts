@@ -1968,13 +1968,18 @@ interface MaestroAPI {
 	};
 	// Agent Sessions API - all methods accept optional sshRemoteId for SSH remote session storage access
 	agentSessions: {
+		archives: import('../main/preload/sessions').AgentSessionsApi['archives'];
+		archiveConversation: import('../main/preload/sessions').AgentSessionsApi['archiveConversation'];
+		onArchivesChanged: import('../main/preload/sessions').AgentSessionsApi['onArchivesChanged'];
+		onConversationLifecycle: import('../main/preload/sessions').AgentSessionsApi['onConversationLifecycle'];
 		toolOutput: import('../main/preload/sessions').AgentSessionsApi['toolOutput'];
 		projects: import('../main/preload/sessions').AgentSessionsApi['projects'];
 		openProject: import('../main/preload/sessions').AgentSessionsApi['openProject'];
 		onOpenProject: import('../main/preload/sessions').AgentSessionsApi['onOpenProject'];
 		sendOpenProjectResponse: import('../main/preload/sessions').AgentSessionsApi['sendOpenProjectResponse'];
 		listProjectHistory: (
-			scopes: import('../shared/projectHistory').ProjectHistoryScope[]
+			scopes: import('../shared/projectHistory').ProjectHistoryScope[],
+			options?: { archived?: boolean }
 		) => Promise<import('../shared/projectHistory').ProjectHistoryResult>;
 		list: (
 			agentId: string,

@@ -371,3 +371,95 @@ describe('owner permission resolution', () => {
 		expect(conversationPermissionSnapshot('missing')).toBeNull();
 	});
 });
+
+describe('archived conversation permissions', () => {
+	it('excludes archived tabs from recency and uses the strictest archive when nothing else remains', async () => {
+		const archivedStrict = createMockAITab({
+			id: 'strict',
+			createdAt: 10,
+			permissionMode: 'readonly',
+			archived: true,
+		});
+		const archivedFull = createMockAITab({
+			id: 'full',
+			createdAt: 20,
+			permissionMode: 'full',
+			archived: true,
+		});
+		const normal = createMockAITab({ id: 'normal', createdAt: 1, permissionMode: 'standard' });
+		const session = createMockSession({ aiTabs: [normal, archivedStrict, archivedFull] });
+		useSessionStore.setState({ sessions: [session] });
+		expect(createTab(session)!.tab.permissionMode).toBe('standard');
+		session.aiTabs = [archivedStrict, archivedFull];
+		expect(createTab(session)!.tab.permissionMode).toBe('readonly');
+		vi.spyOn(window.maestro.windows, 'getConversationPermissions').mockImplementation(async () => [
+			conversationPermissionSnapshot(session.id),
+		]);
+		expect(await resolveProjectConversationPermission(session)).toEqual(
+			permissionModeFields('readonly')
+		);
+	});
+});
+
+it('retains archive permissions after restart even when only a different provider is configured', async () => {
+	const { useConversationArchiveStore } =
+		await import('../../../renderer/stores/conversationArchiveStore');
+	const target = createMockSession({
+		id: 'new-tool',
+		toolType: 'codex',
+		projectRoot: '/project',
+		cwd: '/project',
+		aiTabs: [],
+	});
+	useSessionStore.setState({ sessions: [target] });
+	useConversationArchiveStore.setState({
+		records: [
+			{
+				key: 'saved',
+				provider: 'claude-code',
+				projectPath: '/project',
+				nativeSessionId: 'saved',
+				ownerIds: [],
+				permissionMode: 'readonly',
+				archivedAt: 1,
+			},
+		] as never,
+	});
+	try {
+		expect(createTab(target)!.tab.permissionMode).toBe('readonly');
+	} finally {
+		useConversationArchiveStore.setState({ records: [] });
+	}
+});
+
+it('keeps worktree archive restrictions in the parent project', async () => {
+	const { useConversationArchiveStore } =
+		await import('../../../renderer/stores/conversationArchiveStore');
+	const target = createMockSession({
+		id: 'main',
+		toolType: 'codex',
+		projectRoot: '/project',
+		cwd: '/project',
+		aiTabs: [],
+	});
+	useSessionStore.setState({ sessions: [target] });
+	useConversationArchiveStore.setState({
+		records: [
+			{
+				key: 'worktree',
+				provider: 'codex',
+				projectPath: '/worktree',
+				worktree: { path: '/worktree', commonDir: '/project/.git' },
+				nativeSessionId: 'native',
+				ownerIds: ['main'],
+				permissionMode: 'readonly',
+				archivedAt: 1,
+			},
+		] as never,
+	});
+	try {
+		expect(createTab(target)!.tab.permissionMode).toBe('readonly');
+	} finally {
+		useConversationArchiveStore.setState({ records: [] });
+	}
+});

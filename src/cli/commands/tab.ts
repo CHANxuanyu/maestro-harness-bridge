@@ -1,3 +1,4 @@
+import { invokeNativeHistory } from '../services/agent-sessions';
 import { NEW_SHELL_PANEL_ACTIONS, type NewShellPanelAction } from '../../shared/newShellPanel';
 import { isHandoffProvider } from '../../shared/aiHandoff';
 // Tab commands - manage an agent's AI tabs in the running desktop app: open a
@@ -149,6 +150,20 @@ export async function tabCompact(
 		successMessage: 'Started context compaction',
 		extraPayload: { background: resolveBackgroundFlag(options, 'tab-compact') },
 	}));
+}
+
+export async function tabArchive(tabId: string, options: TabMutateOptions): Promise<void> {
+	try {
+		const tab = await resolveTabEntry(tabId, options.agent);
+		if (!tab.agentSessionId) throw new Error('A native conversation ID is required');
+		const result = await invokeNativeHistory<{ success: boolean }>(
+			'agentSessions:archiveConversation',
+			[{ ownerId: tab.agentId, nativeSessionId: tab.agentSessionId }, 'archive']
+		);
+		reportResult(result, { json: options.json, successMessage: 'Archived conversation' });
+	} catch (error) {
+		failCommand(error instanceof Error ? error.message : String(error), options.json);
+	}
 }
 
 export async function tabClose(tabId: string, options: TabMutateOptions): Promise<void> {

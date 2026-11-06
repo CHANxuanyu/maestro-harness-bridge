@@ -2,6 +2,17 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.archive.archive': '归档',
+	'workflows.archive.unarchive': '取消归档',
+	'workflows.archive.archived': '已归档 {count}',
+	'workflows.archive.delete': '删除对话',
+	'workflows.archive.deleteConfirm': '删除“{title}”？这会删除原生记录，且无法恢复。',
+	'workflows.archive.running':
+		'这条对话正在运行或有待发送的消息。请先停止或等待完成，再归档或删除。',
+	'workflows.archive.failed': '未能更改对话。请检查所属窗口和账户是否可用。',
+	'workflows.archive.error': '未能更改对话',
+	'workflows.archive.keepsHistory': '保留原生记录，不修改文件',
+
 	'workflows.shell.synopsisFailed': '摘要生成失败',
 	'workflows.shell.synopsisNoFinalAnswer': '本轮没有可用于生成摘要的最终答复',
 	'workflows.shell.signInRequired': '需要重新登录',

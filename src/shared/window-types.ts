@@ -172,5 +172,6 @@ export interface ConversationPermissionSnapshot {
 		permissionMode: 'full' | 'standard' | 'readonly';
 		readOnlyMode: boolean;
 		lastActivity: number;
+		archived?: boolean;
 	}>;
 }

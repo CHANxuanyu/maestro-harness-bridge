@@ -1,3 +1,4 @@
+import type { ArchivedConversation } from '../../shared/conversationArchive';
 import type { Group, Session } from '../types';
 import type { ProjectHistoryConversation, ProjectHistoryScope } from '../../shared/projectHistory';
 import { getBasename } from '../../shared/formatters';
@@ -60,6 +61,7 @@ export interface SidebarAgentChoice {
 }
 
 export interface SidebarProject {
+	archivedConversations?: ArchivedConversation[];
 	key: string;
 	groupId?: string;
 	name: string;
@@ -79,6 +81,7 @@ export interface SidebarProject {
 export { sessionProjectKey } from './nativeConversationMatch';
 
 interface ProjectSessionTreeOptions {
+	archives?: ArchivedConversation[];
 	sessions: Session[];
 	/** Already in the user's sidebar group order. */
 	groups: Group[];
@@ -196,6 +199,7 @@ function aliasFor(
  * row per native conversation. Nothing here copies or imports a transcript.
  */
 export function buildProjectSessionTree({
+	archives = [],
 	sessions,
 	groups,
 	groupsPlusEnabled = false,
@@ -234,6 +238,16 @@ export function buildProjectSessionTree({
 	// the same native id in two account pools stays two conversations.
 	const historyByKey = new Map<string, ProjectHistoryConversation>();
 	for (const record of history) {
+		if (
+			archives.some(
+				(item) =>
+					item.key === record.key ||
+					(record.key.startsWith('local:') &&
+						item.ownerIds.includes(record.ownerId ?? '') &&
+						item.nativeSessionId === record.nativeSessionId)
+			)
+		)
+			continue;
 		const existing = historyByKey.get(record.key);
 		if (!existing || record.modifiedAt > existing.modifiedAt) historyByKey.set(record.key, record);
 	}
@@ -272,6 +286,13 @@ export function buildProjectSessionTree({
 		}
 		const runner = runnerAccount(session);
 		for (const tab of visibleAiTabs(session.aiTabs)) {
+			if (
+				archives.some(
+					(item) =>
+						item.ownerIds.includes(session.id) && item.nativeSessionId === tab.agentSessionId
+				)
+			)
+				continue;
 			const record = tab.agentSessionId
 				? (matchRecordForTab(runner, tab.agentSessionId, records) ?? undefined)
 				: undefined;
@@ -345,6 +366,10 @@ export function buildProjectSessionTree({
 	}
 
 	for (const project of projects.values()) {
+		if (archives.length)
+			project.archivedConversations = archives.filter(
+				(record) => record.projectKey === project.key
+			);
 		const rows = (rowsByProject.get(project.key) ?? []).filter((row) => {
 			if (providerFilter && row.provider !== providerFilter) return false;
 			if (unreadOnly && !row.unread && !row.busy && !row.error) return false;
@@ -378,7 +403,7 @@ export function buildProjectSessionTree({
 				groupsPlusEnabled && group?.parentGroupId ? groupById.get(group.parentGroupId) : undefined;
 			if (!filtering && project.depth > 0 && parent?.collapsed) return false;
 			if (filtering) {
-				if (project.totalCount > 0) return true;
+				if (project.totalCount > 0 || project.archivedConversations?.length) return true;
 				return (
 					groupsPlusEnabled &&
 					groups.some(

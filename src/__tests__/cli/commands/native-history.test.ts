@@ -6,6 +6,7 @@ vi.mock('../../../cli/services/storage', () => ({
 	resolveAgentId: vi.fn(),
 }));
 vi.mock('../../../cli/services/session-command', () => ({
+	reportResult: vi.fn(),
 	resolveTabEntry: vi.fn(),
 	listDesktopTabs: vi.fn(),
 	failCommand: vi.fn((message: string) => {
@@ -82,4 +83,46 @@ it('reports a missing result as a failed command', async () => {
 it('copies only the bounded returned text through the desktop clipboard handler', async () => {
 	await nativeHistory('tool-output', 'tab', 'call-1', { json: true, copy: true });
 	expect(invokeNativeHistory).toHaveBeenLastCalledWith('clipboard:writeText', ['TAIL']);
+});
+
+it.each(['archive', 'unarchive'])(
+	'routes %s through the shared conversation operation',
+	async (action) => {
+		const { resolveAgentId } = await import('../../../cli/services/storage');
+		vi.mocked(resolveAgentId).mockReturnValue('owner');
+		await nativeHistory(action, 'owner', 'native-id', { json: true });
+		expect(invokeNativeHistory).toHaveBeenCalledWith('agentSessions:archiveConversation', [
+			{ ownerId: 'owner', nativeSessionId: 'native-id' },
+			action,
+		]);
+	}
+);
+it('requests only archived history with --archived', async () => {
+	const { resolveAgentId, readSessions } = await import('../../../cli/services/storage');
+	vi.mocked(resolveAgentId).mockReturnValue('owner');
+	vi.mocked(readSessions).mockReturnValue([{ id: 'owner' }] as never);
+	await nativeHistory('list', 'owner', undefined, { archived: true, json: true });
+	expect(invokeNativeHistory).toHaveBeenCalledWith('agentSessions:listProjectHistory', [
+		expect.any(Array),
+		{ archived: true },
+	]);
+});
+
+it('lists archives across projects without an agent argument', async () => {
+	await nativeHistory('list', undefined, undefined, { archived: true, json: true });
+	expect(invokeNativeHistory).toHaveBeenCalledWith('agentSessions:archives', []);
+});
+it('requires explicit confirmation before deleting native records', async () => {
+	await expect(nativeHistory('delete', 'owner', 'native-id', { json: true })).rejects.toThrow(
+		'cannot be undone'
+	);
+	expect(invokeNativeHistory).not.toHaveBeenCalled();
+});
+it('archives a resolved open tab through the same native operation', async () => {
+	const { tabArchive } = await import('../../../cli/commands/tab');
+	await tabArchive('tab', { json: true });
+	expect(invokeNativeHistory).toHaveBeenCalledWith('agentSessions:archiveConversation', [
+		{ ownerId: 'owner', nativeSessionId: 'native-id' },
+		'archive',
+	]);
 });

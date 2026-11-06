@@ -1430,6 +1430,13 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		const sessions: AgentSessionInfo[] = [];
 		const currentFilePaths = new Set<string>();
 		let cacheUpdated = false;
+		// Many transcripts share a cwd. Resolve its membership once for this list,
+		// including negative results, without retaining filesystem state across calls.
+		const worktrees = new Map<string, Awaited<ReturnType<typeof localProjectWorktree>>>();
+		const worktreeFor = async (cwd: string) => {
+			if (!worktrees.has(cwd)) worktrees.set(cwd, await localProjectWorktree(projectPath, cwd));
+			return worktrees.get(cwd);
+		};
 
 		for (const { filePath, filename } of allSessionFiles) {
 			currentFilePaths.add(filePath);
@@ -1450,7 +1457,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 				if (
 					cached.session.projectPath &&
 					(isSessionForProject(cached.session.projectPath, projectPath) ||
-						(await localProjectWorktree(projectPath, cached.session.projectPath)))
+						(await worktreeFor(cached.session.projectPath)))
 				) {
 					sessions.push(cached.session);
 				}
@@ -1469,7 +1476,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 				if (
 					session.projectPath &&
 					(isSessionForProject(session.projectPath, projectPath) ||
-						(await localProjectWorktree(projectPath, session.projectPath)))
+						(await worktreeFor(session.projectPath)))
 				) {
 					sessions.push(session);
 				}
@@ -1502,8 +1509,8 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		}
 
 		for (let i = 0; i < sessions.length; i++) {
-			const worktree = await localProjectWorktree(projectPath, sessions[i].projectPath);
-			if (worktree && !worktree.isMain) sessions[i] = { ...sessions[i], worktree };
+			const worktree = await worktreeFor(sessions[i].projectPath);
+			if (worktree && !worktree.isMain) sessions[i] = { ...sessions[i], worktree: { ...worktree } };
 		}
 
 		// Titles are indexed separately from rollouts and can change without transcript writes.

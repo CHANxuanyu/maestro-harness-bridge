@@ -16,6 +16,7 @@ vi.mock('../../../main/utils/logger', () => ({
 vi.mock('../../../main/utils/sentry', () => ({ captureException() {} }));
 
 import { CodexSessionStorage } from '../../../main/storage/codex-session-storage';
+import * as localPaths from '../../../main/storage/local-project-paths';
 
 beforeEach(async () => {
 	isolation.home = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-search-'));
@@ -23,6 +24,34 @@ beforeEach(async () => {
 afterEach(async () => {
 	vi.restoreAllMocks();
 	await fs.rm(isolation.home, { recursive: true, force: true });
+});
+
+it('resolves each recorded cwd once per list and refreshes missing worktrees on the next list', async () => {
+	const project = path.join(isolation.home, 'project');
+	const worktree = path.join(project, '.claude', 'worktrees', 'feature');
+	const other = path.join(isolation.home, 'unrelated');
+	const account = path.join(isolation.home, 'selected-account');
+	await fs.mkdir(worktree, { recursive: true });
+	await fs.mkdir(other);
+	const expected = Array.from({ length: 8 }, () => createSession('codex', account, worktree, 4));
+	for (let i = 0; i < 8; i++) createSession('codex', account, other, 4);
+	const membership = vi.spyOn(localPaths, 'localProjectWorktree');
+	const storage = new CodexSessionStorage();
+	const first = await storage.listSessions(project, undefined, account);
+	expect(first.map((session) => session.sessionId).sort()).toEqual(
+		expected.map((fixture) => fixture.id).sort()
+	);
+	expect(first.every((session) => session.worktree?.missing === false)).toBe(true);
+	expect(membership).toHaveBeenCalledTimes(2);
+	await fs.rmdir(worktree);
+	membership.mockClear();
+	const second = await storage.listSessions(project, undefined, account);
+	expect(second.map((session) => session.sessionId).sort()).toEqual(
+		expected.map((fixture) => fixture.id).sort()
+	);
+	expect(second.every((session) => session.worktree?.missing === true)).toBe(true);
+	expect(first.every((session) => session.worktree?.missing === false)).toBe(true);
+	expect(membership).toHaveBeenCalledTimes(2);
 });
 
 it('searches a project without walking the same account directories for every result', async () => {

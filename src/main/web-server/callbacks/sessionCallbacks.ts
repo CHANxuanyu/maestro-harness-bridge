@@ -133,7 +133,16 @@ export function registerSessionCallbacks(
 						: tab.state === 'idle'
 							? ('idle' as const)
 							: ('unknown' as const);
+				const sources = new Map<
+					string,
+					import('../../../shared/nativeToolOutput').NativeToolOutputTarget
+				>();
+				for (const log of tab.logs ?? []) {
+					const source = log.metadata?.toolOutputSource;
+					if (source) sources.set(JSON.stringify(source), source);
+				}
 				entries.push({
+					...(sources.size ? { toolOutputSources: [...sources.values()] } : {}),
 					origin: tab.origin,
 					tabId: tab.id,
 					sessionId: tab.id,

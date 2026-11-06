@@ -11,6 +11,7 @@
  * @see https://github.com/anthropics/claude-code
  */
 
+import { compactToolOutput } from '../../shared/toolOutput';
 import type { ToolType, AgentError } from '../../shared/types';
 import type { AgentOutputParser, ParsedEvent } from './agent-output-parser';
 import { aggregateModelUsage, type ModelStats } from './usage-aggregator';
@@ -103,17 +104,14 @@ interface ClaudeRawMessage {
 const MAX_TOOL_NAME_ENTRIES = 500;
 
 /**
- * Maximum tool_result output length forwarded over IPC. Tool output can be
- * megabytes (a full file read); the badge only shows a preview.
- */
-const MAX_TOOL_OUTPUT_CHARS = 4000;
-
-/**
  * Flatten a tool_result `content` field into display text.
  * Claude sends either a plain string or an array of `{ type: 'text', text }`
- * blocks. Output is truncated to MAX_TOOL_OUTPUT_CHARS.
+ * blocks. Compact previews use the shared persistence cap.
  */
-export function flattenToolResultContent(content: ClaudeContentBlock['content']): string {
+export function flattenToolResultContent(
+	content: ClaudeContentBlock['content'],
+	compact = true
+): string {
 	let text: string;
 	if (typeof content === 'string') {
 		text = content;
@@ -126,7 +124,7 @@ export function flattenToolResultContent(content: ClaudeContentBlock['content'])
 		text = '';
 	}
 
-	return text.length > MAX_TOOL_OUTPUT_CHARS ? `${text.slice(0, MAX_TOOL_OUTPUT_CHARS)}...` : text;
+	return compact ? (compactToolOutput(text).output as string) : text;
 }
 
 /** Exact native interrupt results verified in Claude Code 2.1.63 and 2.1.310. */

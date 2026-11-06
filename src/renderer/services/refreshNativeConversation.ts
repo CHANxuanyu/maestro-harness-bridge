@@ -36,6 +36,7 @@ import { resolveSessionProjectPath } from '../components/AgentSessionsBrowser/ut
 import {
 	TRANSCRIPT_RESUME_READ_LIMIT,
 	bindDelayedOwnSends,
+	bindNativeToolCalls,
 	mergeNewerEntries,
 	reconcileTranscriptEntries,
 	stripSynopsisTurns,
@@ -148,6 +149,8 @@ function upgradeAndMerge(
 	// envelope removal must not rewrite entries outside this window. Keep that
 	// prefix verbatim, including object identity; full reads retain the existing
 	// upgrade behavior. Without a shared id only the ordered merge can help.
+	const tools = bindNativeToolCalls(loaded, visible);
+	visible = tools.logs;
 	const loadedIds = new Set(loaded.map((entry) => entry.id));
 	const windowStart = partialWindow ? visible.findIndex((entry) => loadedIds.has(entry.id)) : 0;
 	const upgrade =
@@ -162,7 +165,11 @@ function upgradeAndMerge(
 	const own = bindDelayedOwnSends(loaded, upgradedLogs, partialWindow);
 	const merged = mergeNewerEntries(loaded, own.logs);
 	if (!merged) return null;
-	return { logs: merged.logs, added: merged.added, upgraded: upgrade.upgraded + own.bound };
+	return {
+		logs: merged.logs,
+		added: merged.added,
+		upgraded: tools.bound + upgrade.upgraded + own.bound,
+	};
 }
 
 const inFlight = new Map<string, Promise<NativeRefreshResult>>();
@@ -220,7 +227,8 @@ async function refreshNow(target: NativeRefreshTarget): Promise<NativeRefreshRes
 				sshRemoteId
 			);
 			loaded = transcriptMessagesToLogEntries(
-				stripSynopsisTurns((result?.messages ?? []) as TranscriptMessage[])
+				stripSynopsisTurns((result?.messages ?? []) as TranscriptMessage[]),
+				result.toolOutputSource
 			);
 			partialWindow = result?.hasMore === true;
 			// An unreadable transcript comes back empty from several adapters

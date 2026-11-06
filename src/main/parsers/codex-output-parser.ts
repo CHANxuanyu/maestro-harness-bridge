@@ -1,3 +1,4 @@
+import { compactToolOutput } from '../../shared/toolOutput';
 /**
  * Codex CLI Output Parser
  *
@@ -1048,13 +1049,10 @@ export class CodexOutputParser implements AgentOutputParser {
 		return text.replace(/(\*\*[^*]+\*\*)/g, '\n\n$1');
 	}
 
-	// Maximum length for tool output to prevent oversized log entries
-	private static readonly MAX_TOOL_OUTPUT_LENGTH = 10000;
-
 	/**
 	 * Decode tool output which may be a string or byte array
 	 * Codex sometimes returns command output as byte arrays
-	 * Large outputs are truncated to MAX_TOOL_OUTPUT_LENGTH
+	 * Large outputs use the shared persistence cap
 	 */
 	private decodeToolOutput(output: string | number[] | undefined): string {
 		let decoded: string;
@@ -1081,14 +1079,7 @@ export class CodexOutputParser implements AgentOutputParser {
 			decoded = String(output);
 		}
 
-		if (decoded.length > CodexOutputParser.MAX_TOOL_OUTPUT_LENGTH) {
-			const originalLength = decoded.length;
-			decoded =
-				decoded.substring(0, CodexOutputParser.MAX_TOOL_OUTPUT_LENGTH) +
-				`\n... [output truncated, ${originalLength} chars total]`;
-		}
-
-		return decoded;
+		return compactToolOutput(decoded).output as string;
 	}
 
 	/**

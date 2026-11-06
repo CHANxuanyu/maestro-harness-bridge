@@ -23,6 +23,7 @@ import { createNativeTempDir } from './native/temp-root.cjs';
 const exec = promisify(execFile);
 export type Provider = 'claude' | 'codex' | 'opencode' | 'grok' | 'omp' | 'copilot';
 export interface NativeTool {
+	itemId?: string;
 	name?: string;
 	input?: Record<string, unknown>;
 	id: string;
@@ -230,7 +231,12 @@ export class NativeApp {
 			process.execPath,
 			[path.resolve('dist/cli/maestro-cli.js'), ...args, '--json'],
 			{ env: { ...process.env, ...this.env, ...env } }
-		);
+		).catch((error: Error & { stdout?: string; stderr?: string }) => {
+			throw new Error(
+				`${error.message}\nstdout:\n${error.stdout ?? ''}\nstderr:\n${error.stderr ?? ''}`,
+				{ cause: error }
+			);
+		});
 		return JSON.parse(result.stdout);
 	}
 	async createAgent(

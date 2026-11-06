@@ -1,3 +1,5 @@
+import { useSettingsStore, selectNewShellEnabled } from '../../../stores/settingsStore';
+import type { NativeToolOutputTarget } from '../../../../shared/nativeToolOutput';
 import React from 'react';
 import {
 	Bot,
@@ -183,10 +185,12 @@ export const ToolActivityLine = React.memo(function ToolActivityLine({
 export const ToolBadge = React.memo(function ToolBadge({
 	log,
 	theme,
+	nativeToolOutputTarget,
 	part = 'all',
 	feedLayout = false,
 	secondaryTextColor,
 }: {
+	nativeToolOutputTarget?: NativeToolOutputTarget;
 	log: LogEntry;
 	theme: Theme;
 	/**
@@ -204,9 +208,13 @@ export const ToolBadge = React.memo(function ToolBadge({
 	part?: 'all' | 'header' | 'details';
 }) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	// The unfolded card shows the whole stored input and result, not the
 	// eight-line preview the inline badge uses.
-	if (part === 'details') return <ToolCallDetails log={log} theme={theme} />;
+	if (part === 'details')
+		return (
+			<ToolCallDetails log={log} theme={theme} nativeToolOutputTarget={nativeToolOutputTarget} />
+		);
 	const feedStatus = feedLayout ? toolStatusKind(log.metadata?.toolState?.status) : undefined;
 	const showDetails = part === 'all';
 	// Extract tool input details for display
@@ -315,7 +323,10 @@ export const ToolBadge = React.memo(function ToolBadge({
 					</span>
 				)}
 			</div>
-			{showDetails && (
+			{showDetails && newShell && (
+				<ToolCallDetails log={log} theme={theme} nativeToolOutputTarget={nativeToolOutputTarget} />
+			)}
+			{showDetails && !newShell && (
 				<>
 					{taskList && <AgentTaskListCard theme={theme} taskList={taskList} />}
 					{toolSummary?.detail && (

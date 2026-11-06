@@ -766,6 +766,16 @@ export class StdoutHandler {
 			managedProcess.streamedText = '';
 		}
 
+		const outputSource = managedProcess.toolOutputSource;
+		const outputSessionId =
+			managedProcess.toolType === 'claude-code'
+				? outputSource?.nativeSessionId || managedProcess.agentSessionId
+				: managedProcess.agentSessionId || outputSource?.nativeSessionId;
+		const toolOutputSource =
+			outputSource && outputSessionId
+				? { ...outputSource, nativeSessionId: outputSessionId }
+				: undefined;
+
 		// Handle tool execution events (OpenCode, Codex)
 		if (event.type === 'tool_use' && event.toolName) {
 			const toolStatus = getToolStatus(event.toolState);
@@ -790,6 +800,11 @@ export class StdoutHandler {
 				state: event.toolState,
 				timestamp: Date.now(),
 				toolCallId: scopeCodexToolId(managedProcess, event.toolCallId),
+				...(toolOutputSource ? { toolOutputSource } : {}),
+				...(event.toolCallId &&
+				!(managedProcess.toolType === 'codex' && /^item_\d+$/.test(event.toolCallId))
+					? { nativeToolCallId: event.toolCallId }
+					: {}),
 				parentToolUseId: scopeCodexToolId(managedProcess, event.parentToolUseId),
 			});
 		}
@@ -815,6 +830,11 @@ export class StdoutHandler {
 					state: result.toolState,
 					timestamp: Date.now(),
 					toolCallId: scopeCodexToolId(managedProcess, result.toolCallId),
+					...(toolOutputSource ? { toolOutputSource } : {}),
+					...(result.toolCallId &&
+					!(managedProcess.toolType === 'codex' && /^item_\d+$/.test(result.toolCallId))
+						? { nativeToolCallId: result.toolCallId }
+						: {}),
 					parentToolUseId: scopeCodexToolId(managedProcess, result.parentToolUseId),
 				});
 			}
@@ -836,6 +856,10 @@ export class StdoutHandler {
 					state: { status: 'running', input: tool.input },
 					timestamp: Date.now(),
 					toolCallId: scopeCodexToolId(managedProcess, tool.id),
+					...(toolOutputSource ? { toolOutputSource } : {}),
+					...(tool.id && !(managedProcess.toolType === 'codex' && /^item_\d+$/.test(tool.id))
+						? { nativeToolCallId: tool.id }
+						: {}),
 					parentToolUseId: scopeCodexToolId(managedProcess, event.parentToolUseId),
 				});
 			}

@@ -22,6 +22,7 @@ export interface ToolSummary {
 }
 
 export interface LogItemProps {
+	nativeToolOutputTarget?: import('../../../shared/nativeToolOutput').NativeToolOutputTarget;
 	/** Only the first user message of a conversation with a handoff origin. */
 	handoffOrigin?: import('../../../shared/aiHandoff').ConversationOrigin;
 	log: LogEntry;

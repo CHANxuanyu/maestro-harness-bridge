@@ -477,6 +477,37 @@ moves that existing editor into the panel and does not add an annotation command
 creation with the plus menu and empty-conversation picker. Existing CLI commands
 for hidden upstream features remain available.
 
+## Tool output on demand (2026-11-06)
+
+New-shell expanded tool cards read one completed Claude or Codex tool result with
+`maestro-cli native-history tool-output <session> <tool-call-id> [--json] [--copy]`.
+`<session>` accepts a desktop tab ID, its unique prefix, `active`, or the exact
+native ID from project history with one unambiguous owning account. `--copy` copies the returned text through the
+same desktop `clipboard:writeText` handler used by the card.
+
+Both surfaces call `agentSessions:toolOutput`, which resolves the owner's account
+with `resolveAgentAccountDir()` and uses the provider's existing history lookup.
+The reader runs in a bounded worker, uses `readCodexRollout()` for plain JSONL and
+zstd, returns at most the last 2 MiB, and reports the number of omitted UTF-8 bytes.
+Cards retain their provider, native session and account source. The tab list exposes
+these compact sources so CLI reads can still address parked provider conversations.
+When a newly opened tab has not reached persistence yet, an exact native ID resolves
+through `agentSessions:listProjectHistory`. Ambiguous accounts are refused.
+Codex exec item IDs stay scoped for display; a unique command, call time within five
+seconds and bounded output preview map them to a native call on demand. Native refresh
+fills that call ID without replacing the card. Claude searches only the parent's
+`subagents` directory, at most 128 entries and 100 MiB across the parent and children.
+No result is written to session state or native files. Missing records, read limits
+and unavailable readers are explicit results. The CLI requires the running desktop.
+
+With `newShell` enabled, `update-agent <id> --provider <provider> --force`
+shares `switchSessionProvider()` with Edit Agent. It parks each tab's native
+identity through `switchTabProvider()` and retains transcripts, tool sources,
+drafts, file tabs and running turns. Provider overrides are cleared for the next
+turn. The classic CLI keeps its existing reset behavior. The tool-output Electron
+scenario verifies the old Claude answer remains after the Codex continuation,
+then reads the old result through both the card and `native-history tool-output`.
+
 ## Covered
 
 Notification center history uses the live desktop `notificationStore` over a request-response bridge. Main owns durable append/read/clear mutations in `maestro-notification-history.json`; renderer snapshots are synchronized across windows, and CLI results await committed writes. `notify inbox list --unread` filters the snapshot, `read <id>` / `read-all` update read state, `clear` clears history, `dismiss [id]` dismisses one entry or clears visible toasts, and `activate <id>` / `link <id>` run the same entry and inline-link actions as the UI. Every result includes the resulting unread count and history. `detail <id>` / `collapse` expand and collapse the same in-inbox details view. The five opt-in inbox preferences are registered settings and can be changed with `settings set <key> <value>`. `open notification-center` and `notify inbox open` open the app-level popover even when the Main Panel header is absent.
@@ -588,6 +619,23 @@ The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
 ## Open gaps
+
+**Provider switch wording (2026-11-06).** The existing CLI help, force warning and
+success text still describe the classic reset behavior. With `newShell` enabled,
+the operation preserves conversations as documented above. This round changes
+the transition and its tests, not the CLI text or localization infrastructure.
+
+**On-demand tool output (2026-11-06).** SSH is unavailable because existing remote
+readers transfer the transcript before selecting a result. The card hides this
+action and the API refuses remote requests instead of reading local files. The
+view-local full-output hide button has no CLI fold-state verb; CLI reading and
+copying are covered, but do not expand or collapse a desktop card. Older cached
+Claude cards without a call ID need a native refresh. Cards from a previously mixed
+provider history without saved source identity are not offered a guessed target.
+Codex exec lookup refuses ambiguous evidence, missing commands, unsupported command
+wrappers or native call times more than five seconds from the live start event.
+Legacy filename lookup inspects at most 64 KiB of metadata;
+nonstandard records with later identity metadata may not be found.
 
 **Project native history (2026-10-16).** The desktop bridge exposes `agentSessions:listProjectHistory`, but CLI `sessions <agent-id>` is still provider scoped. One-click native-history open with automatic runner creation uses the canonical renderer resume flow and has no dedicated CLI verb yet. Adding a WS renderer action is outside this local sidebar acceptance change; this is an explicit parity gap, not a covered action. The same gap covers the external-transcript catch-up: selecting an open native conversation in the project tree (or returning to the window while it is on screen and a history scan reports newer native activity) re-reads the transcript and appends what was written outside Maestro (`refreshNativeConversation()` in `src/renderer/services/refreshNativeConversation.ts`, read-only, same tab/account/host/native id). No CLI verb triggers or reports that refresh yet; the read half is reachable through `sessions`/`agentSessions:read`, but nothing lets an agent fold newer native messages into an open tab. Since 2026-10-23 the desktop also runs the same refresh automatically for the visible local Codex tab when its transcript revision changes (`useNativeTranscriptFollow()` in `src/renderer/hooks/session/useNativeTranscriptFollow.ts`, over `agentSessions.getTranscriptRevision`). That is background upkeep, not a user action, so it adds no row and changes no CLI verb.
 

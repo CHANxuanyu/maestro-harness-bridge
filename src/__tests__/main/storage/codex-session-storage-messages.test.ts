@@ -362,6 +362,7 @@ describe('CodexSessionStorage - readSessionMessages', () => {
 		const toolUseArr = shellMsg!.toolUse as any[];
 		expect(toolUseArr.length).toBe(1);
 		expect(toolUseArr[0].tool).toBe('shell_command');
+		expect(toolUseArr[0].id).toBe('call_abc123');
 		expect(toolUseArr[0].state).toBeDefined();
 		expect(toolUseArr[0].state.status).toBe('completed');
 		expect(toolUseArr[0].state.input).toBeDefined();
@@ -500,7 +501,11 @@ describe('CodexSessionStorage - readSessionMessages', () => {
 		const orphanMsg = result.messages.find((m) => m.uuid === 'call_nonexistent');
 		expect(orphanMsg).toBeDefined();
 		expect(orphanMsg!.toolUse).toEqual([
-			{ tool: 'unknown', state: { status: 'completed', output: 'Orphaned output text' } },
+			{
+				id: 'call_nonexistent',
+				tool: 'unknown',
+				state: { status: 'completed', output: 'Orphaned output text' },
+			},
 		]);
 	});
 

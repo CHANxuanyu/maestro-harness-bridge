@@ -61,6 +61,27 @@ export function switchTabProvider(tab: AITab, fromProvider: ToolType, toProvider
 	};
 }
 
+/** Share the Edit Agent switch with the new-shell CLI without dropping conversations. */
+export function switchSessionProvider(session: Session, toProvider: ToolType): Session {
+	if (session.toolType === toProvider) return session;
+	return {
+		...session,
+		toolType: toProvider,
+		aiTabs: session.aiTabs.map((tab) => switchTabProvider(tab, session.toolType, toProvider)),
+		customPath: undefined,
+		customArgs: undefined,
+		customEnvVars: undefined,
+		customEnvVarsDisabled: undefined,
+		customModel: undefined,
+		customEffort: undefined,
+		customContextWindow: undefined,
+		contextWindowSource: undefined,
+		enableMaestroP: undefined,
+		maestroPPath: undefined,
+		maestroPMode: undefined,
+	};
+}
+
 /**
  * The provider that owns this tab's most recent turn.
  *

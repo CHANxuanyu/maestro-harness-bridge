@@ -851,3 +851,47 @@ Codex 第一版让“稍后再说”保留登录故障记录，以便之后恢�
 `e2e/native-new-shell.spec.ts` 扩展原有只读发送场景，增加完全访问对话切回只读后按快捷键新建，再核对合成 Codex 的实际参数；新增双窗口和浏览器场景，覆盖在所属窗口收紧后从另一窗口执行 CLI 新建，以及浏览器停在只读来源时有较新的完全访问对话仍正确新建。按任务限制未运行 Electron、Playwright、真实模型、真实 SSH、Windows 或完整 Vitest。
 
 限制：回退只保证不超过已知最严格档位，无法知道所有可用副本都未收到的权限变更。250 毫秒是 IPC 定时预算，主进程事件循环本身被阻塞时不能保证真实时钟上限。普通创建只读权限与工具能力映射仍使用上一轮的共用函数，原生历史与压缩续接未改动。Electron 和浏览器实跑交由外部验收。
+
+## 2026-11-06：新界面工具输出按需读取
+
+基于 `2ebe18308e387ff9dd0c3cb0dcdff9b95b1e95b0` 的任务分支源码。保留 `compactToolOutput()` 的 4000 字符缓存上限，新增 `agentSessions:toolOutput` 和 `maestro-cli native-history tool-output`，在指定拥有者账户的原生记录中按工具调用 ID 读取。Claude JSONL 与 Codex rollout、zstd 都使用受限读取，完整解析放在主进程启动的独立 worker 中，最多同时读取两条，单次 30 秒，原始或解压后的记录上限 100 MiB，返回末尾最多 2 MiB UTF-8 文本及省略字节数。
+
+新入口仅在 `newShell` 下的已展开工具详情里显示，运行中、未截断、SSH 和无调用 ID 的卡片不显示。读取、复制、收起和找不到记录都有中英文文案，全文只在组件局部状态中，卡片收起即卸载。复制 CLI 为同一命令加 `--copy`；视图折叠状态的 CLI 缺口保留在 parity 文档。
+
+先提交失败回归。实际观察到 Claude 二次截断丢失真实长度、界面没有全文入口、IPC 未注册、CLI 不认识动作、Codex 历史未携带调用 ID，以及 Codex 旧解析器先截到 10000 字符的失败。修复两家的解析器使用统一缓存压缩，保留原始长度，并让原生和实时日志携带工具 ID。旧测试中精确的旧截断字符串及工具对象形状随新契约更新，未放宽断言、跳过或自动重试。
+
+本机源码验证：18 个相关 Vitest 文件 595 项通过，最后补齐实时展开卡片后又运行两个受影响界面文件，63 项通过。所有 Vitest 使用 `--configLoader runner --no-cache`。渲染层、主进程和 CLI 类型检查通过；改动的可检查源码 ESLint、Prettier 和 diff 空白检查通过，仓库配置忽略单元测试的 ESLint。真实 Node worker 回归覆盖读取、并发上限和完成后释放。未进行完整 Vitest、安装包构建、真实模型或账户验收。
+
+新增 `e2e/native-tool-output.spec.ts` 的 Claude、Codex 两条合成历史场景，验证点击前看不到末尾、点击后可见、CLI 返回末尾、收起释放、关闭后缓存未保存全文。只运行了 Playwright `--list`，确认发现两条，未启动 Electron。需要在沙箱外构建并运行，不能把此记录当成 Electron 通过。
+
+限制：SSH 尚无远端按调用 ID 提取并限量返回的接口；超过读取上限的整份转录明确拒绝。CLI 的原生 ID 需要对应已打开的对话以确定账户。旧缓存缺失工具 ID 时需要原生刷新，Codex 进程局部 `item_N` 不能直接映射成 rollout 调用 ID；不扫描父会话之外的 Claude 子会话转录。旧式文件名或归档 worktree 的身份定位只看前 64 KiB，非标准记录可能找不到。旧界面没有新增入口，但两家解析器统一了预览的截断标记和长度，这是为正确识别可读取全文所必需的共享行为变化。
+
+## 2026-11-06：工具全文二轮审查修复
+
+本轮从上一轮工具全文源码 `f685f9e64` 开始，未制作安装包。三项独立审查均成立：实时 Codex 的进程内卡片 ID 不等于 rollout 调用 ID；Claude 子工具结果不在父 JSONL；切换提供商后旧卡片不能沿用当前会话及账户。
+
+实时事件和原生读取结果现在携带固定的来源身份，全文读取校验已保存来源，支持同一标签上已停放的提供商。Codex 保留卡片关联 ID，另存原生调用 ID；尚未映射时在点击后按命令、五秒内的调用时间及有界预览唯一定位，拒绝歧义和不匹配的命令。完整与部分窗口刷新均可补齐身份，卡片 ID 不变，不新增后台读取。Claude 在 worker 内查找父会话的 `subagents`，不跟随目录或文件符号链接，最多检查 128 个目录项，总读取预算包含父文件及子文件，仍为 100 MiB。
+
+CLI 夹具失败异常现在包含 stdout 和 stderr。新增测试直接使用实际桌面列表回调、标签解析函数、`invokeNativeHistory()` 及桥接分发，仅替换网络传输、存储和最终读取结果。确认列表已有 `agentSessionId`，桥接也放行 `agentSessions:toolOutput`，这两处没有缺失。复现的是刚打开历史页时，列表尚未收到延迟保存的原生 ID；现按精确 ID 回到已有项目历史解析账户，无需等待或重试，也可按旧卡片来源找到已切换的会话。原来的 CLI 单元测试同时 mock 了标签解析、列表和 IPC 调用，因此没有覆盖该窗口。Opus 先前两次 Electron 失败没有具体 stdout/stderr，本轮不能认定原始退出原因已经由 Electron 验证。
+
+回归均先观察失败再修复：子转录读取返回 `not-found`，Codex 普通及 zstd 映射返回 `not-found`，卡片改查新提供商，后台拒绝旧来源，事件遗漏来源，部分窗口刷新不补齐调用 ID，以及未落盘和已停放会话的 CLI 解析失败。另补不同命令即使输出相同也拒绝匹配，修复前该回归错误返回全文。
+
+最终相关 Vitest：19 个文件 514 项通过，另一个夹具文件 2 项通过，均使用 `--configLoader runner --no-cache`。渲染层、主进程、CLI 三份 TypeScript 检查通过；改动源码 ESLint、Prettier 与 diff 空白检查通过。没有运行全量测试、真实模型、真实账户或 Electron。
+
+`e2e/native-tool-output.spec.ts` 现在有五条合成场景：两家历史、Claude 子转录、Claude 切换到 Codex 并继续后读取旧输出、实时 Codex 的不同 exec item ID 与 rollout call ID。子转录场景在临时夹具加载预览后，将结果移到所属子文件，验证按需读取路径，不宣称覆盖真实 Claude Task 的完整时序。Playwright `--list` 确认发现五条。沙箱外运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-tool-output.spec.ts`，脚本会重建 main、renderer 和 CLI。
+
+旧界面没有全文入口变化。共享行为仅增加来源及调用身份元数据、刷新时补齐身份，以及共用 shell 包装规范化；4000 字符缓存限制保持不变，全文不进入会话状态。SSH 仍不提供入口；旧的混合提供商缓存若没有来源身份则不猜目标；Codex 匹配依赖受支持的命令形式和时间窗口。真实平台、官方工具版本、性能基准及打包后的 worker 尚待验收。
+
+## 2026-11-06：工具全文第三轮 Electron 失败修复
+
+以二轮源码 `d36a6c041` 为起点，验证对象为修复源码 `c1e96fb73`，没有制作安装包。Opus 提供的上轮 Electron 结果为三条通过、两条失败，本轮没有重跑 Electron。
+
+Claude 子转录失败属于场景种子代码：合成协议的用户消息 `content` 是字符串，搬移工具结果的筛选直接调用 `.some()`，尚未进入全文读取即抛错。将原搬移逻辑抽到测试夹具，先用真实合成协议产物观察同样异常，再增加数组判断。回归精确核对父文件保留用户消息和其他结果，子文件只含目标结果。Electron 同时断言末尾只在子文件中，保留原有界面及 CLI 全文、收起释放、不落盘检查。
+
+Claude 切换失败属于产品的 CLI 路径。失败截图只显示 Codex 新问答，旧 Claude 对话仍在左栏历史中；trace 的切换前文本有旧回答和失败步骤，切换后文本只有新回答。不是活动已经展开或选择器层级问题。CLI 的 `remoteUpdateSessionConfig` 分支仍删除标签，而界面编辑流程已经通过 `switchTabProvider()` 保留日志。新增闲置和运行中回归均先观察到旧标签被 `new-tab-id` 替换，旧界面重置回归同时通过。
+
+新界面 CLI 与编辑流程现共用 `switchSessionProvider()`，保留标签、日志、工具来源、草稿、文件标签和运行中的回合，清除下一回合的工具配置。新行为仅由 `newShell` 开启；旧界面 CLI 仍重置，界面编辑流程仅抽取既有逻辑。Electron 增加继续 Codex 后旧 Claude 回答仍在当前流中的断言，未放宽原全文断言。
+
+本轮七个相关 Vitest 文件共 166 项通过，均使用 `--configLoader runner --no-cache`：夹具三项，远程配置、界面编辑、提供方会话、全文卡片合计 144 项，原生读取和 CLI 桥接合计 19 项。`npx tsc --noEmit -p tsconfig.json`、三个改动产品文件的 ESLint、改动文件 Prettier、diff 空白检查通过。Playwright `--list` 确认五条场景。没有全量测试、真实模型、真实账户、SSH、其他操作系统或发行包验收。
+
+沙箱外仍须执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-tool-output.spec.ts`。脚本重建 main、renderer 和 CLI，使用临时合成记录，重试为零。现有 CLI 帮助、强制切换警告和成功文字仍描述旧界面重置行为，已在 CLI parity 的 Open gaps 留明；本轮没有新增界面文案或 CLI 动词。

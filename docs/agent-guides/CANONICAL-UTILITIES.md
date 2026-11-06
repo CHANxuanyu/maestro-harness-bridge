@@ -1,5 +1,7 @@
 # Canonical Utilities - Full Rationale
 
+- **On-demand native tool results:** `readToolOutputFile()` in `src/main/storage/native-tool-output.ts` runs `readNativeToolOutput()` in a disposable worker. Use `agentSessions:toolOutput` from UI and CLI so owner account selection, the 100 MiB native read cap, 2 MiB UTF-8 tail and read-only behavior stay shared. `codexToolOutputText()` in `src/shared/codexToolOutput.ts` is the native text decoder; the storage wrapper still applies `compactToolOutput()`. Claude uses `flattenToolResultContent(content, false)` only inside the bounded worker. Full text never enters session state. Do not add a second transcript parser or full-output persistence path.
+
 The complete, reasoned entry for every commonly-reimplemented function in the codebase. The always-loaded index in [CLAUDE.md](../../CLAUDE.md#commonly-reimplemented-functions-do-not-add-new-copies) lists each entry as one line (name, canonical symbols, path); this file carries the why - the failure each canonical implementation replaced, the invariants it protects, and the traps that made the duplicates subtly wrong. Read the matching entry here BEFORE extending or working around one of these utilities.
 
 Grep-verified 2026-09-04 (`npm run docs:verify` checks that every path below still resolves).
@@ -284,3 +286,9 @@ Git and hook diagnostics stay verbatim.
 `localProjectWorktrees()`, `localProjectWorktree()` and `nativeSessionResumeCwd()` extend `src/main/storage/local-project-paths.ts`. The first two share a bounded 30-second Git registry cache keyed by physical local project cwd. A single read-only common-dir query and worktree registry query cover every transcript in that repository. Transcript cwd is authoritative, never reconstructed from Claude's lossy folder encoding. The resume helper resolves the selected native conversation in its original account and rejects an unavailable cwd before a process starts. SSH paths never enter these helpers.
 
 For archived Claude desktop worktrees, `localProjectWorktree()` also accepts a recorded cwd at or under `<project>/.claude/worktrees/<name>` using `isPathAtOrUnderRoot()`. The first directory under that root identifies the worktree even when Git no longer lists it or its folder is gone. Claude storage enumerates matching encoded directories only as candidates, then confirms the transcript cwd for listing, pagination and fallback reads. Codex uses the same membership helper for `session_meta.cwd`. A similarly prefixed sibling project is excluded. Missing directories remain readable and the existing resume guard explains why sending is unavailable.
+
+## 工具全文来源与原生调用映射
+
+`NativeToolOutputTarget`、`NativeToolOutputLookup`、`nativeToolCommand()` 和 `nativeToolOutputMatches()` 位于 `src/shared/nativeToolOutput.ts`。实时工具的 `toolCallId` 是卡片关联 ID，Codex 的 `item_N` 经过进程隔离，不可直接当作 rollout 的 `call_id`。`nativeToolCallId` 独立保存原生身份；未取得时，只在用户点击后，按同一原生会话里的命令、五秒内的调用时间及有界预览唯一匹配，拒绝歧义。`nativeToolCommand()` 也供工具活动标签去掉 shell 包装，不另建命令规范化副本。
+
+`bindNativeToolCalls()` 位于 `src/renderer/utils/transcriptMessages.ts`，复用同一匹配规则补齐原生调用 ID，保留实时卡片 ID。部分窗口刷新也调用它，不新增后台文件读取。工具来源由实际启动环境或原生读取结果固定到日志元数据，包含提供商、会话、项目和账户；读取旧卡片不可替换成当前提供商。后端校验已保存来源后才读取已停放提供商的账户，全文仍仅在组件局部状态中。

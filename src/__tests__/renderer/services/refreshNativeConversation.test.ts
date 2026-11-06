@@ -1,3 +1,4 @@
+import { compactToolOutput } from '../../../shared/toolOutput';
 /**
  * Catching an already-open native conversation up with its transcript after
  * it continued outside Maestro (another app, a CLI run). The refresh is
@@ -1078,4 +1079,59 @@ describe('nativeConversationLooksNewer', () => {
 		expect(nativeConversationLooksNewer(cached, tonight, tonight)).toBe(false);
 		expect(nativeConversationLooksNewer(cached, Date.parse('2026-10-16T14:00:00Z'))).toBe(false);
 	});
+});
+
+it('fills the native call ID on a partial refresh with no shared display IDs', async () => {
+	const source = {
+		provider: 'codex',
+		projectPath: '/project',
+		nativeSessionId: NATIVE,
+		ownerAgentId: 'maestro-owner',
+		accountDir: '/account',
+	};
+	const output = 'x'.repeat(8000) + 'FINAL ERROR';
+	const logs: LogEntry[] = [
+		{ id: 'local-user', source: 'user', text: 'Run tests', timestamp: 1000 },
+		{
+			id: 'tool-codex-run-item_7',
+			source: 'tool',
+			text: 'shell',
+			timestamp: 2000,
+			metadata: {
+				toolCallId: 'codex-run-item_7',
+				toolOutputSource: source,
+				toolState: {
+					status: 'completed',
+					input: { command: 'npm test' },
+					output: compactToolOutput(output).output,
+				},
+			},
+		},
+		{ id: 'local-answer', source: 'stdout', text: 'Done', timestamp: 3000 },
+	];
+	useSessionStore.setState({ sessions: [owner({ aiTabs: [tab({ logs })] })] });
+	read.mockResolvedValue({
+		messages: [
+			msg('native-user', 'user', 'Run tests', new Date(1000).toISOString()),
+			{
+				...msg('call_native', 'assistant', '', new Date(2000).toISOString()),
+				toolUse: [
+					{
+						id: 'call_native',
+						tool: 'exec_command',
+						state: { status: 'completed', input: { cmd: 'npm test' }, output },
+					},
+				],
+			},
+			msg('native-answer', 'assistant', 'Done', new Date(3000).toISOString()),
+		],
+		total: 1000,
+		hasMore: true,
+		toolOutputSource: source,
+	});
+	expect(
+		await refreshNativeConversation({ sessionId: 'maestro-owner', tabId: 'tab-native' })
+	).toMatchObject({ status: 'updated', added: 0, upgraded: 1 });
+	expect(storedTab()?.logs[1].metadata?.nativeToolCallId).toBe('call_native');
+	expect(storedTab()?.logs.map((log) => log.id)).toEqual(logs.map((log) => log.id));
 });

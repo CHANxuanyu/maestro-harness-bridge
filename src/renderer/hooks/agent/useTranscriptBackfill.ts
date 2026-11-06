@@ -162,7 +162,8 @@ export function useTranscriptBackfill(
 					windowRef.current = nextWindow;
 
 					const loaded = transcriptMessagesToLogEntries(
-						stripSynopsisTurns((result.messages ?? []) as TranscriptMessage[])
+						stripSynopsisTurns((result.messages ?? []) as TranscriptMessage[]),
+						result.toolOutputSource
 					);
 					const older = selectOlderEntries(loaded, visible);
 

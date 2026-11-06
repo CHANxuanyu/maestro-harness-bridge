@@ -325,11 +325,12 @@ program
 	.action(openProjectCommand);
 
 program
-	.command('native-history <action> [agent] [conversation]')
+	.command('native-history <action> [session] [conversation-or-tool-call-id]')
 	.description(
-		'List recent projects, list or read native project history, or delete a whole Codex conversation'
+		'List projects, list/read/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an exact native history ID)'
 	)
 	.option('--json', 'Output JSON')
+	.option('--copy', 'Copy the returned tool output to the desktop clipboard')
 	.action(nativeHistory);
 
 list

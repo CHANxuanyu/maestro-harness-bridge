@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import planEvents from '../../../../e2e/fixtures/native/codex-plan-events.json';
 import { CodexOutputParser } from '../../../main/parsers/codex-output-parser';
+import { compactToolOutput } from '../../../shared/toolOutput';
 import {
 	classifyRetryableError,
 	tokenExhaustionResetAt,
@@ -857,7 +858,7 @@ describe('CodexOutputParser', () => {
 	});
 
 	describe('tool output truncation', () => {
-		it('should truncate tool output exceeding 10000 chars', () => {
+		it('uses the persistence cap without losing the original output length', () => {
 			const p = new CodexOutputParser();
 			const longOutput = 'x'.repeat(15000);
 			const line = JSON.stringify({
@@ -865,14 +866,12 @@ describe('CodexOutputParser', () => {
 				item: { type: 'tool_result', output: longOutput },
 			});
 			const event = p.parseJsonLine(line);
-			expect(event?.toolState?.output).toContain('... [output truncated, 15000 chars total]');
-			// The truncated output should start with 10000 'x' chars
-			expect(event?.toolState?.output?.startsWith('x'.repeat(10000))).toBe(true);
+			expect(event?.toolState?.output).toBe(compactToolOutput(longOutput).output);
 		});
 
 		it('should not truncate tool output within limit', () => {
 			const p = new CodexOutputParser();
-			const shortOutput = 'x'.repeat(5000);
+			const shortOutput = 'x'.repeat(4000);
 			const line = JSON.stringify({
 				type: 'item.completed',
 				item: { type: 'tool_result', output: shortOutput },

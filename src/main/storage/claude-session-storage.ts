@@ -1,3 +1,5 @@
+import { readCodexRollout } from '../../shared/codexRollout';
+import { readToolOutputFile } from './native-tool-output';
 /**
  * Claude Code Session Storage Implementation
  *
@@ -619,7 +621,8 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 	private async locateLocalSessionFile(
 		projectPath: string,
 		sessionId: string,
-		configDir?: string
+		configDir?: string,
+		boundedLookup = false
 	): Promise<string> {
 		const defaultFile = path.join(
 			this.getEncodedProjectDir(projectPath, configDir),
@@ -639,6 +642,24 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 				const candidate = path.join(dir, `${sessionId}.jsonl`);
 				try {
 					const stats = await fs.stat(candidate);
+					if (boundedLookup) {
+						// An on-demand lookup must not parse a whole archived worktree on main.
+						const prefix = await readCodexRollout(candidate, undefined, { prefixBytes: 65536 });
+						for (const line of prefix.split('\n')) {
+							let row;
+							try {
+								row = JSON.parse(line);
+							} catch {
+								continue;
+							}
+							if (
+								typeof row?.cwd === 'string' &&
+								(await localProjectWorktree(projectPath, row.cwd))
+							)
+								return candidate;
+						}
+						continue;
+					}
 					const session = await parseSessionFile(candidate, sessionId, '', stats);
 					if (session && (await localProjectWorktree(projectPath, session.projectPath)))
 						return candidate;
@@ -1142,6 +1163,21 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			totalCount,
 			nextCursor,
 		};
+	}
+
+	async readToolOutput(
+		projectPath: string,
+		sessionId: string,
+		toolCallId: string,
+		options?: SessionReadOptions
+	) {
+		const file = await this.locateLocalSessionFile(
+			projectPath,
+			sessionId,
+			options?.configDir,
+			true
+		);
+		return readToolOutputFile(file, 'claude-code', toolCallId);
 	}
 
 	async readSessionMessages(

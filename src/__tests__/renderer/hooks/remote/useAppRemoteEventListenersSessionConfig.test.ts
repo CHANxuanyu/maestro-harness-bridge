@@ -87,10 +87,60 @@ beforeEach(() => {
 			kill: vi.fn().mockResolvedValue(undefined),
 		},
 		sessions: { setMany },
+		agents: {
+			getCapabilities: vi.fn().mockResolvedValue({ supportsReadOnlyMode: true }),
+		},
 	};
 });
 
 describe('maestro:remoteUpdateSessionConfig', () => {
+	it('tightens every new-shell tab when the next provider cannot keep standard permission', async () => {
+		vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as never);
+		const session = createMockSession({
+			toolType: 'claude-code',
+			aiTabs: [
+				createMockAITab({ id: 'standard', permissionMode: 'standard', readOnlyMode: false }),
+				createMockAITab({ id: 'readonly', readOnlyMode: true }),
+				createMockAITab({ id: 'full', permissionMode: 'full', readOnlyMode: false }),
+			],
+		});
+		const { setSessions } = setup([session]);
+		dispatchPatch(session.id, { toolType: 'codex' });
+		await flush();
+		const [updated] = applyUpdate(setSessions, [session]);
+		expect(
+			updated.aiTabs.map(({ permissionMode, readOnlyMode }) => ({ permissionMode, readOnlyMode }))
+		).toEqual([
+			{ permissionMode: 'readonly', readOnlyMode: true },
+			{ permissionMode: 'readonly', readOnlyMode: true },
+			{ permissionMode: 'full', readOnlyMode: false },
+		]);
+		expect(session.aiTabs[0].permissionMode).toBe('standard');
+		expect(setMany).toHaveBeenCalledWith([updated], []);
+		expect(ack).toHaveBeenCalledWith('ch', { success: true });
+	});
+
+	it('refuses the entire new-shell provider switch when one tab cannot retain its restriction', async () => {
+		vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as never);
+		vi.mocked(window.maestro.agents.getCapabilities).mockResolvedValue({
+			supportsReadOnlyMode: false,
+		} as never);
+		const session = createMockSession({
+			toolType: 'claude-code',
+			aiTabs: [createMockAITab({ permissionMode: 'readonly', readOnlyMode: true })],
+		});
+		const { setSessions } = setup([session]);
+		dispatchPatch(session.id, { toolType: 'gemini' });
+		await flush();
+		expect(setSessions).not.toHaveBeenCalled();
+		expect(setMany).not.toHaveBeenCalled();
+		expect(window.maestro.process.kill).not.toHaveBeenCalled();
+		expect(ack).toHaveBeenCalledWith('ch', {
+			success: false,
+			error: 'This tool cannot preserve the source conversation permissions.',
+		});
+	});
+
 	it.each(['idle', 'busy'] as const)(
 		'keeps old tool cards and native identity on a new-shell provider switch while %s',
 		async (state) => {

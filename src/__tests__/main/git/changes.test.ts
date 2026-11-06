@@ -23,11 +23,15 @@ vi.mock('../../../main/utils/logger', () => ({
 	logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-describe('combined changes on a real repository', () => {
+// Each case spawns git a dozen times, which takes well over the default 10 s on
+// the Windows runner.
+describe('combined changes on a real repository', { timeout: 60_000 }, () => {
 	let cwd: string;
 	const git = (...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' });
 	beforeEach(() => {
-		cwd = realpathSync(mkdtempSync(path.join(tmpdir(), 'maestro-changes-')));
+		// .native, because only it expands a Windows 8.3 name like RUNNER~1, which
+		// is how the temp directory arrives on the runner and not how git reports it.
+		cwd = realpathSync.native(mkdtempSync(path.join(tmpdir(), 'maestro-changes-')));
 		git('init', '-b', 'main');
 		git('config', 'user.email', 'fixture@example.test');
 		git('config', 'user.name', 'Fixture');

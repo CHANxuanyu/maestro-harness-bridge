@@ -13,7 +13,7 @@
 
 `origin` 在某些已有本机 checkout 指向上游，而 `fork` 指向本项目。GitHub CLI 命令显式带 `--repo CHANxuanyu/maestro-harness-bridge`；推送前核对 `git remote -v`，不能凭 remote 名猜目的地。
 
-主线要求 PR、解决所有审查对话及六项 GitHub Actions 检查：`HB release policy`、`lint-and-format`、Linux 两个分片、Windows 两个分片。要求基于最新主线测试，不允许用本机单平台通过代替。PR 与合并后的提交是不同身份，发版使用**合并后实际源码提交**的完整 CI。
+主线要求 PR、解决所有审查对话及七项 GitHub Actions 检查：`HB release policy`、`lint-and-format`、Linux 两个分片、Windows 两个分片、`Native resume E2E (Linux)`。要求基于最新主线测试，不允许用本机单平台通过代替。PR 与合并后的提交是不同身份，发版使用**合并后实际源码提交**的完整 CI。
 
 目前为单人维护，外部批准人数设为 0，避免作者无法批准自己的 PR。仍须在 PR 中留下实际审查、测试和未验项；规则无日常绕过名单。以后有第二位长期维护者，再通过治理 PR 增加外部审批。合并方式保留现状，不改写已发布历史。未合并或来源不明的分支不自动删除。
 
@@ -22,7 +22,7 @@
 ## 版本编号
 
 - 对外预览沿用 `X.Y.Z-hb.N`，Git 标签为 `vX.Y.Z-hb.N`，GitHub Release 必须为 **prerelease**，不标记稳定版 Latest。
-- `N` 在同一基线上单调递增。每个公开安装包必须有新编号，即使只是构建修复；失败但已经占用的编号不复用。`hb.1` 保留为未发布失败候选，不能补发。
+- `N` 在同一基线上单调递增。每个公开安装包必须有新编号，即使只是构建修复；失败但已经占用的编号不复用。`hb.1` 保留为未发布失败候选；`hb.5` 从未打标签或发布，编号作废。两者列入 `reservedUnpublishedTags`，版本标签解析和资产/发布核验会拒绝，不能补发；该字段不会创建或修改标签。
 - 开发预览使用 `X.Y.Z-hb.N-dev.M`，明确标注开发包；不能冒用正式 HB 标签。基础 `X.Y.Z` 是既定产品基线，不因同步一笔上游提交就自动更改。
 - 只有准备新安装包时才 bump。治理、文档等修改可先进入 Unreleased，不为本制度单独生成 hb.5 安装包。主线源码不等于最近发布包，复现发布必须检出对应标签。
 - 发布候选的 `package.json`、`package-lock.json` 两处版本、产品 changelog、README 与分支入口、版本验收文档必须一致。`node scripts/hb-release.mjs check` 自动检查这些关系。

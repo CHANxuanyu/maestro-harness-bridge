@@ -20,9 +20,9 @@
 
 ## 下载与试用
 
-当前源码正在准备 `1.0.1-hb.6` 候选，尚无发行附件。hb.5 从未发布，编号作废；hb.6 是 hb.4 之后拟发布的第一个公开包，包含累计接续改进、DeepSeek 预设、换个 AI 继续、关于我同步及界面改版。[候选说明](release-notes/v1.0.1-hb.6.md)与[Mac 验收及后续发布顺序](verification/v1.0.1-hb.6.md#mac-后续顺序)单独留档。本轮仅完成发布制度第 1 步的本地准备；后续应从审查合并后 CI 全绿的实际提交冻结构建，不能用本地叠加分支或 PR 合成 merge SHA 代替。
+最新公开版为 [v1.0.1-hb.6](https://github.com/CHANxuanyu/maestro-harness-bridge/releases/tag/v1.0.1-hb.6)，2026-11-06 发布，为不可变预发布，不标记 Latest。hb.5 从未打标签或发布，编号作废；hb.6 是 hb.4 之后的第一个公开包，包含累计接续改进、DeepSeek 预设、换个 AI 继续、关于我同步及界面改版。[公开版本说明](release-notes/v1.0.1-hb.6.md)与[本版验收记录](verification/v1.0.1-hb.6.md)记录实际构建提交、CI、包身份及未验项。
 
-`v1.0.1-hb.4` 为预览版，macOS Apple Silicon 是本轮验证目标。下载 Release 的 mac-arm64 ZIP，校验随附 SHA-256 清单，再解压应用。应用采用临时签名，未做 Apple Developer ID 公证；系统可能要求通过“系统设置 → 隐私与安全性”确认打开。
+macOS Apple Silicon 是本版验证目标。下载 Release 的 mac-arm64 ZIP，校验随附 SHA-256 清单，再解压应用。应用采用临时签名，未做 Apple Developer ID 公证；系统可能要求通过“系统设置 → 隐私与安全性”确认打开。
 
 应用名 `Maestro I18n`、bundle ID `com.maestro.i18n.local` 与上游 Maestro 分开。默认配置目录为 `~/Library/Application Support/Maestro I18n`。现有同名试用版应先正常退出、备份该目录，再替换应用；不要同时启动两个同名版本。
 
@@ -33,7 +33,7 @@
 ```sh
 git clone https://github.com/CHANxuanyu/maestro-harness-bridge.git
 cd maestro-harness-bridge
-git checkout v1.0.1-hb.4
+git checkout v1.0.1-hb.6
 npm ci
 npm run lint
 npm run test
@@ -50,4 +50,4 @@ npm run package:harness-bridge:mac
 
 Codex 和 Claude TUI / Dynamic 的后台历史条目改为最终回答首段的本地摘录。Claude API 摘要续接携带 `--no-session-persistence`，启动入口遇到该参数时跳过转录清理；普通 API 续接继续清理。若原生转录残留 thinking 空壳导致摘要最终被 API 拒绝，Maestro 走 `Synopsis failed`，不重试、不回退成本地摘录；下一次正常 API 回合清理后，这个原因造成的拒绝就不再出现。原生 Claude Code 2.1.310 对该 400 会在同一 CLI 进程内去掉请求里的 thinking 再发一次 HTTP 请求；Maestro 的单次启动不保证原生 CLI 内部只请求一次，详见[完成记录](roadmap/backend-followups.md#完成记录)。
 
-hb.6 候选的真实模式、发行包 GUI、双端顺序接续与重启保存均待执行；历史开发构建记录不代替本次包的勾选。这些源码变化尚未成为公开安装包，hb.4 下载包保持原状。新候选连接器包含命令增量和版本准入检查，不能沿用旧包“连接器实现相同”的结论。
+hb.6 已发布。同提交开发构建选定的六条真实模式一次通过，发行 ZIP 解压副本的 41 条脚本验收一次通过，包含正常双窗口退出、换窗口与重启保存；这不是人工逐项操作或发行包真实模型验收。完整双端顺序写入、DeepSeek 真实网关、三家偏好加载及人工剩余项仍未验。日常安装位置替换后版本、签名和 app.asar 已核对，但尚未启动，原配置升级启动未验。连接器包含相对 hb.4 累计的命令增量和版本准入检查，包验证通过，未激活，真实共享未测。

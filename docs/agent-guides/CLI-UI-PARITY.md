@@ -567,3 +567,7 @@ still missing. Grouped, highest value first:
 `maestro-cli native-history list <agent>` returns the project sidebar's native conversation records through `agentSessions:listProjectHistory`. `read <agent> <conversation>` uses the canonical read-only transcript adapter. `delete <agent> <conversation>` removes a whole Codex conversation in the selected local or SSH account. Partial native-message deletion returns a read-only error. These verbs require the desktop app. Pianola's offline learning scan uses the bounded shared Codex rollout decoder.
 
 Packaged CLI storage and discovery use the shipped product identity. `settings set` uses the live `settings:set` IPC handler when the desktop is running and waits for its acknowledgement. Offline writes keep the same value validation and product-directory checks.
+
+## New shell transcript performance (2026-11-06)
+
+Progressive row element reuse changes rendering work only. No new UI action or CLI verb is introduced. Existing conversation selection, transcript search and jumps retain their current paths and existing gaps; this change does not claim to close native resume or refresh gaps.

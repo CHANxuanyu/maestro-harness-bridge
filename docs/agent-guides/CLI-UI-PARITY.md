@@ -637,7 +637,9 @@ operations in either shell. No new parity gap is introduced by these actions.
 
 取消归档仅将记录的 `archived` 设为 `false`，保留权限、原活动时间及项目归属；旧记录未带该字段时仍视为已归档。默认归档接口和 `native-history list --archived` 只返回已归档项，渲染层以 `includeUnarchived` 读取完整权限库存。浏览器和桌面均初始读取并订阅同一事件，只有桌面处理标签关闭。`projectHistoryScopeFor()` 统一目录边界、最具体项目、工作树和主机归属，子目录归档也有恢复入口。
 
-T9 第三轮仅修正验收入口，没有新增 CLI 动作。`tab new` 确认渲染层创建完成时，`tab show` 读取的主进程持久化库存可能尚未更新；验收先确认页面中的同一标签，再等待该 ID 可读，仍同时断言 `permissionMode: readonly` 和 `readOnly: true`。`test:e2e` 现在同时构建 `web-desktop`，网页归档场景用无 preload 的 Electron `BrowserWindow` 检查 HTTP 200、网页运行环境、刷新和双向同步，不需要单独安装 Chromium。
+T9 第三轮仅修正验收入口，没有新增 CLI 动作。`tab new` 确认渲染层创建完成时，`tab show` 读取的主进程持久化库存可能尚未更新；验收先确认页面中的同一标签，再等待该 ID 可读，仍同时断言 `permissionMode: readonly` 和 `readOnly: true`。`test:e2e` 同时构建 `web-desktop`。
+
+T9 第四轮将子目录归档的 Electron 验收收敛为桌面左栏操作、归档和取消归档后的重启保留，以及 `native-history archive|unarchive` 的桌面同步。浏览器归档读取、保留取消归档权限元数据、实时增删、重新挂载后的读取与订阅和卸载退订，由 `src/__tests__/renderer/hooks/useRemoteIntegration.test.ts` 覆盖。移除验收中的额外 `BrowserWindow`，产品实现和 CLI 动作均不变；修改后的 Electron 场景待外部执行，浏览器整页及跨窗口同步不在本轮验收范围。
 
 权限继承排除归档项的最近活动；没有普通对话时使用归档中最严格的已知档位。没有 Maestro 权限记录的原生历史保守记为只读。空项目不会在重启时被当作损坏数据补出高权限对话。新界面关闭时不启用归档过滤或新增菜单；归档写操作要求 `newShell`。既有 CLI 删除增加 `--yes` 确认，这是两种界面共用的安全收紧。Claude 不提供原生删除。
 

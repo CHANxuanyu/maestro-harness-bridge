@@ -90,7 +90,7 @@
 - Codex 提供删除并明确确认原生记录不可恢复，沿用现有原生删除实现；Claude 不提供删除。新入口均受 `newShell` 控制。
 - CLI 对应 `tab archive`、`native-history archive|unarchive`、`native-history list --archived`，删除使用 `native-history delete --yes`。边界见 [CLI-UI-PARITY.md](../agent-guides/CLI-UI-PARITY.md#new-shell-conversation-archive-and-native-deletion-2026-11-06)。
 - 审查修复：取消归档保留权限元数据及原活动时间，不重新打开也不会放宽新对话权限；项目子目录和工作树共用扫描归属规则。浏览器读取和订阅归档状态，关闭标签仍由所属桌面窗口处理。
-- 合成 Electron 场景在 `e2e/native-conversation-archive.spec.ts`，覆盖原有往返、取消归档后的权限及浏览器子目录归档同步，本轮仅收集，尚未启动执行。
+- 合成 Electron 场景在 `e2e/native-conversation-archive.spec.ts`，覆盖桌面归档往返、取消归档后的权限，以及子目录归档和取消归档后的重启保留。第四轮移除额外浏览器窗口，修改后的场景待沙箱外执行；浏览器归档读取、实时订阅、重新挂载和退订由 `useRemoteIntegration.test.ts` 单元回归覆盖，不宣称浏览器整页验收通过。
 
 ## 三家工具能做什么
 

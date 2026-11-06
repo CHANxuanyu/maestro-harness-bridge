@@ -47,6 +47,7 @@ describe('local AI handoff routing', () => {
 			getSessions: () => runners,
 			getAgentConfig: (id) => configs[id] ?? {},
 			getGlobalEnv: () => globalEnv,
+			getNewShell: () => true,
 			env: {},
 			isAvailable: available,
 			readSource,

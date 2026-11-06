@@ -8,16 +8,15 @@ import { createMockFileTab } from '../../../helpers/mockTab';
  * renderer's debounced persistence), and anything outside the allowlist is
  * dropped rather than written into Session internals.
  */
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { useAppRemoteEventListeners } from '../../../../renderer/hooks/remote/useAppRemoteEventListeners';
 import { createMockSession } from '../../../helpers/mockSession';
 import type { Session } from '../../../../renderer/types';
+import { useSessionStore } from '../../../../renderer/stores/sessionStore';
+import { mkdtemp, readFile, rm, stat, writeFile as writeDiskFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
-vi.mock('../../../../renderer/stores/sessionStore', () => ({
-	useSessionStore: Object.assign(vi.fn(), { getState: vi.fn(() => ({})) }),
-	selectSessionById: vi.fn(),
-}));
 vi.mock('../../../../renderer/stores/settingsStore', () => ({
 	useSettingsStore: Object.assign(vi.fn(), { getState: vi.fn(() => ({})) }),
 }));
@@ -36,6 +35,7 @@ const ack = vi.fn();
 const setMany = vi.fn().mockResolvedValue(undefined);
 
 function setup(sessions: Session[]) {
+	useSessionStore.setState({ sessions });
 	const sessionsRef = { current: sessions };
 	const setSessions = vi.fn();
 
@@ -202,32 +202,137 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 		}
 	);
 
-	it('saves the file buffer through FilePreview and waits for its persisted result', async () => {
+	it.each([undefined, 'remote'])(
+		'saves the file buffer through FilePreview and waits for its persisted result on host %s',
+		async (sshRemoteId) => {
+			const sessions = [twoTabSession()];
+			sessions[0].sshRemoteId = sshRemoteId;
+			sessions[0].filePreviewTabs = [
+				createMockFileTab({
+					id: 'file',
+					path: '/project/a.ts',
+					content: 'before',
+					editContent: 'after',
+				}),
+			];
+			sessions[0].aiTabs[1].newShellPanel = { tab: 'files', fileTabId: 'file' };
+			const writeFile = vi.fn().mockResolvedValue(true);
+			window.maestro.fs = {
+				stat: vi.fn().mockResolvedValue({ modifiedAt: new Date(1000).toISOString() }),
+				writeFile,
+			} as never;
+			setup(sessions);
+			dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'save' });
+			await flush();
+			expect(writeFile).toHaveBeenCalledWith('/project/a.ts', 'after', sshRemoteId);
+			expect(setMany.mock.calls[0][0][0].filePreviewTabs[0]).toMatchObject({
+				content: 'after',
+				editContent: undefined,
+				lastModified: 1000,
+			});
+			expect(ack).toHaveBeenCalledWith('ch', { success: true });
+		}
+	);
+
+	it('writes real file bytes before acknowledging the CLI panel save', async () => {
+		const dir = await mkdtemp(join(process.cwd(), '.panel-save-'));
+		try {
+			const path = join(dir, 'a.ts');
+			await writeDiskFile(path, 'before');
+			const sessions = [twoTabSession()];
+			sessions[0].filePreviewTabs = [
+				createMockFileTab({ id: 'file', path, content: 'before', editContent: 'after' }),
+			];
+			sessions[0].aiTabs[1].newShellPanel = { tab: 'files', fileTabId: 'file' };
+			let releaseWrite!: () => void;
+			const gate = new Promise<void>((resolve) => {
+				releaseWrite = resolve;
+			});
+			const writeFile = vi.fn(async (filePath: string, content: string) => {
+				await gate;
+				await writeDiskFile(filePath, content, 'utf8');
+				return { success: true };
+			});
+			window.maestro.fs = {
+				stat: vi.fn(async (filePath: string) => ({
+					modifiedAt: (await stat(filePath)).mtime.toISOString(),
+				})),
+				writeFile,
+			} as never;
+			setup(sessions);
+			dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'save' });
+			await waitFor(() => expect(writeFile).toHaveBeenCalledOnce());
+			expect(ack).not.toHaveBeenCalled();
+			expect(setMany).not.toHaveBeenCalled();
+			expect(await readFile(path, 'utf8')).toBe('before');
+			releaseWrite();
+			await waitFor(() => expect(ack).toHaveBeenCalledWith('ch', { success: true }));
+			expect(await readFile(path, 'utf8')).toBe('after');
+			expect(setMany.mock.calls[0][0][0].filePreviewTabs[0]).toMatchObject({
+				content: 'after',
+				editContent: undefined,
+			});
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it.each([undefined, 'remote'])(
+		'rejects loading and closed file saves on host %s',
+		async (sshRemoteId) => {
+			const sessions = [twoTabSession()];
+			sessions[0].sshRemoteId = sshRemoteId;
+			sessions[0].filePreviewTabs = [
+				createMockFileTab({ id: 'file', path: '/project/a.ts', isLoading: true }),
+			];
+			sessions[0].aiTabs[1].newShellPanel = { tab: 'files', fileTabId: 'file' };
+			const writeFile = vi.fn();
+			const stat = vi.fn(async () => {
+				useSessionStore.setState({ sessions: [{ ...sessions[0], filePreviewTabs: [] }] });
+				return { modifiedAt: new Date(1000).toISOString() };
+			});
+			window.maestro.fs = { stat, writeFile } as never;
+			setup(sessions);
+			dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'save' });
+			await flush();
+			expect(stat).not.toHaveBeenCalled();
+			expect(ack).toHaveBeenLastCalledWith('ch', {
+				success: false,
+				error: 'File save was cancelled',
+			});
+			sessions[0].filePreviewTabs[0].isLoading = false;
+			dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'save' });
+			await flush();
+			expect(stat).toHaveBeenCalledOnce();
+			expect(writeFile).not.toHaveBeenCalled();
+			expect(setMany).not.toHaveBeenCalled();
+			expect(ack).toHaveBeenLastCalledWith('ch', {
+				success: false,
+				error: 'File save was cancelled',
+			});
+			expect(ack).toHaveBeenCalledTimes(2);
+		}
+	);
+
+	it('returns a file write failure to the CLI without acknowledging success', async () => {
 		const sessions = [twoTabSession()];
 		sessions[0].filePreviewTabs = [
-			createMockFileTab({
-				id: 'file',
-				path: '/project/a.ts',
-				content: 'before',
-				editContent: 'after',
-			}),
+			createMockFileTab({ id: 'file', path: '/project/a.ts', editContent: 'after' }),
 		];
 		sessions[0].aiTabs[1].newShellPanel = { tab: 'files', fileTabId: 'file' };
-		const writeFile = vi.fn().mockResolvedValue(true);
 		window.maestro.fs = {
 			stat: vi.fn().mockResolvedValue({ modifiedAt: new Date(1000).toISOString() }),
-			writeFile,
+			writeFile: vi.fn().mockRejectedValue(new Error('fixture write failed')),
 		} as never;
 		setup(sessions);
 		dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'save' });
 		await flush();
-		expect(writeFile).toHaveBeenCalledWith('/project/a.ts', 'after', undefined);
-		expect(setMany.mock.calls[0][0][0].filePreviewTabs[0]).toMatchObject({
-			content: 'after',
-			editContent: undefined,
-			lastModified: 1000,
+		expect(ack).toHaveBeenCalledExactlyOnceWith('ch', {
+			success: false,
+			error: 'fixture write failed',
 		});
-		expect(ack).toHaveBeenCalledWith('ch', { success: true });
+		expect(setMany).not.toHaveBeenCalled();
+		expect(useSessionStore.getState().sessions[0].filePreviewTabs[0].editContent).toBe('after');
 	});
 
 	it('does not acknowledge a panel write when persistence fails', async () => {

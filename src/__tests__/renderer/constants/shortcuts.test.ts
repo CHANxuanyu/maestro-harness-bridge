@@ -288,30 +288,38 @@ describe('DEFAULT_SHORTCUTS / TAB_SHORTCUTS / FIXED_SHORTCUTS duplicate bindings
 	 * Chords that more than one action may legitimately claim, each with the
 	 * gate that keeps them apart. Add to this ONLY with the reason written down.
 	 */
-	const INTENTIONALLY_SHARED: { chord: string; ids: string[]; why: string }[] = [
-		{
-			chord: 'Meta+f',
-			ids: [
-				'filterFiles',
-				'filterSessions',
-				'filterHistory',
-				'searchLogs',
-				'searchOutput',
-				'searchDirectorNotes',
-			],
-			why: "Each is scoped to the surface that has focus (Files tab, Left Panel, History tab, System Log viewer, Main Window, Director's Notes). Only one of those surfaces is focused at a time.",
-		},
-		{
-			chord: 'Meta+e',
-			ids: ['toggleMarkdownMode', 'renameAgentSession'],
-			why: 'The Sessions Browser is a modal layer that blocks lower layers, and its own handler consumes the key before the app-level one runs. With the browser closed there is no session row to rename; with it open there is no markdown pane to flip.',
-		},
-		{
-			chord: 'Meta+Shift+k',
-			ids: ['clearTerminal', 'toggleShowThinking'],
-			why: 'Mutually exclusive by input mode: clearTerminal is gated on inputMode === "terminal" (useMainKeyboardHandler), toggleShowThinking is a tab shortcut reached only in AI mode.',
-		},
-	];
+	const INTENTIONALLY_SHARED: { chord: string; ids: string[]; why: string; newShell?: boolean }[] =
+		[
+			{
+				chord: 'Meta+f',
+				newShell: false,
+				ids: [
+					'filterFiles',
+					'filterSessions',
+					'filterHistory',
+					'searchLogs',
+					'searchOutput',
+					'searchDirectorNotes',
+				],
+				why: "Each is scoped to the surface that has focus (Files tab, Left Panel, History tab, System Log viewer, Main Window, Director's Notes). Only one of those surfaces is focused at a time.",
+			},
+			{
+				chord: 'Meta+f',
+				newShell: true,
+				ids: ['filterFiles', 'filterSessions', 'searchLogs', 'searchOutput'],
+				why: 'The new shell hides History and Director Notes. The remaining actions still follow focus in Files, the sidebar, or the main pane; the System Log modal blocks those lower layers.',
+			},
+			{
+				chord: 'Meta+e',
+				ids: ['toggleMarkdownMode', 'renameAgentSession'],
+				why: 'The Sessions Browser is a modal layer that blocks lower layers, and its own handler consumes the key before the app-level one runs. With the browser closed there is no session row to rename; with it open there is no markdown pane to flip.',
+			},
+			{
+				chord: 'Meta+Shift+k',
+				ids: ['clearTerminal', 'toggleShowThinking'],
+				why: 'Mutually exclusive by input mode: clearTerminal is gated on inputMode === "terminal" (useMainKeyboardHandler), toggleShowThinking is a tab shortcut reached only in AI mode.',
+			},
+		];
 
 	const normalize = (keys: string[]): string => [...keys].sort().join('+');
 
@@ -333,7 +341,9 @@ describe('DEFAULT_SHORTCUTS / TAB_SHORTCUTS / FIXED_SHORTCUTS duplicate bindings
 		const unexplained: string[] = [];
 		for (const [chord, ids] of byChord) {
 			if (ids.length < 2) continue;
-			const allowed = INTENTIONALLY_SHARED.find((g) => g.chord === chord);
+			const allowed = INTENTIONALLY_SHARED.find(
+				(g) => g.chord === chord && (g.newShell === undefined || g.newShell === newShell)
+			);
 			// The allowlist must match EXACTLY. Listing a chord does not license
 			// every future action to join that group - a new arrival is a new
 			// decision and has to be made deliberately.

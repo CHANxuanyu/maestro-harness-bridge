@@ -24,6 +24,7 @@ interface HandoffDependencies {
 	getSessions: () => HandoffRunner[];
 	getAgentConfig: (toolType: string) => HandoffRunnerConfig;
 	getGlobalEnv: () => Record<string, string>;
+	getNewShell: () => boolean;
 	env: Record<string, string | undefined>;
 	isAvailable: (
 		config: HandoffOpenRequest['config'],
@@ -217,6 +218,8 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 		if (request.action === 'targets')
 			return targets(request.sourceAgentId, request.includeCurrent, request.localOnly);
 		if (request.action === 'new-conversation') {
+			if (!deps.getNewShell())
+				return failed('Only an empty conversation in the new shell can change tools');
 			if (
 				!isHandoffProvider(request.targetProvider) ||
 				(request.replaceTabId !== undefined &&
@@ -233,6 +236,8 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			return queue.enqueue(
 				`new:${source.id}:${request.replaceTabId ?? request.targetProvider}`,
 				async () => {
+					if (!deps.getNewShell())
+						return failed('Only an empty conversation in the new shell can change tools');
 					const target = await selectTarget(source, request.targetProvider, true);
 					if (!target) return failed('The selected tool is unavailable');
 					return deps.openTarget({

@@ -8,6 +8,7 @@ import { useFilePreviewHandlers } from '../../hooks/mainPanel/useFilePreviewHand
 import { filePaneAttrs } from '../../utils/paneFocus';
 import { useT } from '../../i18n';
 import { Spinner } from '../ui/Spinner';
+import { PaneMissingTab } from '../MainPanel/PaneMissingTab';
 const FilePreview = React.lazy(() =>
 	import('../FilePreview').then((m) => ({ default: m.FilePreview }))
 );
@@ -71,7 +72,7 @@ export function StoredFilePreview({
 		[navigateToIndex, fileTabId]
 	);
 
-	if (!fileTab || !memoizedFilePreviewFile) return null;
+	if (!fileTab || !memoizedFilePreviewFile) return <PaneMissingTab theme={theme} />;
 	if (fileTab.isLoading)
 		return (
 			<div role="status" className="flex flex-1 items-center justify-center gap-3">

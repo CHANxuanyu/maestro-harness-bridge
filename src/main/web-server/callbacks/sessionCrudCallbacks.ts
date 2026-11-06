@@ -7,9 +7,9 @@ import { isWebContentsAvailable } from '../../utils/safe-send';
 
 export function registerSessionCrudCallbacks(
 	server: WebServer,
-	deps: Pick<WebServerFactoryDependencies, 'getMainWindow'>
+	deps: Pick<WebServerFactoryDependencies, 'getMainWindow' | 'getWindowForSession'>
 ): void {
-	const { getMainWindow } = deps;
+	const { getMainWindow, getWindowForSession } = deps;
 
 	// Set up callback for web server to create a session
 	// Uses IPC request-response pattern - renderer creates the session and responds with sessionId
@@ -279,7 +279,7 @@ export function registerSessionCrudCallbacks(
 	// disk. Applied even while the agent runs (these are spawn-time settings).
 	server.setUpdateSessionConfigCallback(
 		async (sessionId: string, configPatch: Record<string, unknown>) => {
-			const mainWindow = getMainWindow();
+			const mainWindow = getWindowForSession?.(sessionId) ?? getMainWindow();
 			if (!mainWindow) {
 				logger.warn('mainWindow is null for updateSessionConfig', 'WebServer');
 				return { success: false, error: 'Desktop window unavailable' };

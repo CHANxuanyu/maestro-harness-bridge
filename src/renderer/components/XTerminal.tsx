@@ -224,6 +224,8 @@ export interface XTerminalHandle {
 }
 
 export interface XTerminalProps {
+	/** Current PTY identity, used to republish the grid after a restart. */
+	ptyPid?: number;
 	/** IPC routing key - format: `{sessionId}-terminal-{tabId}` */
 	sessionId: string;
 	/** Active Maestro theme */
@@ -258,6 +260,7 @@ export interface XTerminalProps {
 export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal(
 	{
 		sessionId,
+		ptyPid,
 		theme,
 		fontFamily,
 		fontSize = 12,
@@ -847,6 +850,13 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
 			searchAddonRef.current = null;
 		};
 	}, []); // Mount once - other effects handle dynamic prop changes
+
+	useEffect(() => {
+		if (!ptyPid) return;
+		// A replacement PTY has not received the retained xterm's grid yet.
+		lastSentSizeRef.current = null;
+		pushPtySizeRef.current();
+	}, [ptyPid]);
 
 	// IPC: receive data from PTY → write to terminal
 	useEffect(() => {

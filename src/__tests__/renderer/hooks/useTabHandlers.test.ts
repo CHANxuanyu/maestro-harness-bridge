@@ -20,6 +20,8 @@ import {
 	createMockFileTab as createBaseMockFileTab,
 } from '../../helpers/mockTab';
 import { createMockSession } from '../../helpers/mockSession';
+import { getT } from '../../../renderer/i18n';
+import { workflowsShell as zhCnShell } from '../../../renderer/i18n/locales/zh-CN/workflowsShell';
 import { setLiveDraft, clearLiveDraft, getLiveDraft } from '../../../renderer/utils/liveDraftStore';
 
 // ============================================================================
@@ -2561,6 +2563,27 @@ describe('useTerminalTabHandlers - handleCloseTerminalTab', () => {
 			.sessions.find((s) => s.id === 'test-session') as Session;
 		expect(session.terminalTabs).toHaveLength(0);
 		expect(killSpy).toHaveBeenCalledWith('test-session-terminal-term-1');
+	});
+
+	it('words the busy confirm through the catalog', async () => {
+		setupTerminalSession();
+		(window as any).maestro.process.isTerminalBusy = vi.fn().mockResolvedValue(true);
+
+		const { result } = renderHook(() => useTerminalTabHandlers());
+		await act(async () => {
+			result.current.handleCloseTerminalTab('term-1');
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		const modal = useModalStore.getState().getData('confirm');
+		expect(modal?.message).toBe(getT()('workflows.shell.closeRunningTerminal'));
+		expect(zhCnShell['workflows.shell.closeRunningTerminal']).toBe(
+			'这个终端正在运行命令。要关闭它并停止命令吗？'
+		);
+		expect(zhCnShell['workflows.shell.closeRunningTerminals']).toBe(
+			'这些终端正在运行命令。要关闭它们并停止命令吗？'
+		);
 	});
 
 	it('opens a destructive confirm modal and only closes on confirm when the PTY is busy', async () => {

@@ -1,4 +1,27 @@
 export const workflowsShell = {
+	'workflows.newShell.terminalEmpty': 'No terminal open',
+	'workflows.newShell.terminalStartFailed': 'Terminal did not start: {reason}',
+	'workflows.shell.terminalStartFailed': 'Failed to start terminal',
+	'workflows.shell.terminalsStartFailed': 'Failed to start {count} terminals',
+	'workflows.shell.terminalsNotStarted': '{count} terminals could not be started.',
+	'workflows.newShell.terminal': 'Terminal',
+	'workflows.newShell.tasks': 'Tasks',
+	'workflows.newShell.tasksEmpty': 'This conversation has no task list yet',
+	'workflows.newShell.tasksProgress': '{completed} / {total} completed',
+	'workflows.newShell.task.pending': 'Pending',
+	'workflows.newShell.task.in_progress': 'In progress',
+	'workflows.newShell.task.completed': 'Completed',
+	'workflows.newShell.previousHostTerminals':
+		'{count} terminals are still running on the previous host',
+	'workflows.newShell.terminalOwnershipFailed':
+		'Window ownership could not be confirmed. The terminal was not started',
+	'workflows.newShell.terminalExited': 'Terminal exited',
+	'workflows.newShell.restartTerminal': 'Restart',
+	'workflows.newShell.newTerminal': 'New terminal',
+	'workflows.newShell.closeTerminal': 'Close terminal',
+	'workflows.newShell.selectTerminal': 'Select terminal',
+	'workflows.newShell.goToTerminal': 'Open terminal panel',
+	'workflows.newShell.goToTasks': 'Open tasks panel',
 	'workflows.handoff.continuedTitle': 'Continued: {title}',
 	'workflows.handoff.reviewTitle': 'Review: {title}',
 	'workflows.handoff.continuedMessage': 'Continued from “{title}”',
@@ -578,6 +601,10 @@ export const workflowsShell = {
 	'workflows.shell.closeFindBar': 'Close find bar',
 	'workflows.shell.noAgentsCreateOneToGetStarted': 'No agents. Create one to get started.',
 	'workflows.shell.loading': 'Loading',
+	'workflows.shell.closeRunningTerminal':
+		'This terminal is running a command. Close it and stop the command?',
+	'workflows.shell.closeRunningTerminals':
+		'These terminals are running commands. Close them and stop the commands?',
 	'workflows.shell.fetchingFromRemoteServer': 'Fetching from remote server...',
 	'workflows.shell.showAgentsSidebar': 'Show agents sidebar',
 	'workflows.shell.showSidebar': 'Show sidebar',

@@ -1,3 +1,7 @@
+import { getWindowContext } from '../contexts/WindowContext';
+import { spawnPtyForTab } from '../services/terminalSpawn';
+import { useSettingsStore } from './settingsStore';
+import { openPanelTerminal, selectPanelTerminal } from '../services/newShellTerminal';
 /**
  * tabStore - Zustand store for tab operations and tab-specific UI state
  *
@@ -60,6 +64,9 @@ import {
 	closeTerminalTab as closeTerminalTabHelper,
 	selectTerminalTab as selectTerminalTabHelper,
 	restartTerminalTab as restartTerminalTabHelper,
+	panelTerminalHostMatches,
+	updateTerminalTabPid,
+	updateTerminalTabState,
 	renameTerminalTab as renameTerminalTabHelper,
 	setTerminalTabStartupCommand as setTerminalTabStartupCommandHelper,
 	getTerminalSessionId,
@@ -355,11 +362,11 @@ export interface TabStoreActions {
 	selectTerminalTab: (tabId: string) => void;
 
 	/**
-	 * Restart an exited terminal tab in the active session.
-	 * Resets the tab to a spawnable state and selects it; the spawn effects in
-	 * TerminalView re-create the PTY (re-running any configured startup command).
+	 * Restart a terminal through its real owner after checking host and window.
+	 * The new shell starts its PTY here, including hidden panels; the classic
+	 * shell retains its TerminalView spawn effect. Existing output stays mounted.
 	 */
-	restartTerminalTab: (tabId: string) => void;
+	restartTerminalTab: (tabId: string) => Promise<void>;
 
 	/**
 	 * Rename a terminal tab in the active session.
@@ -770,14 +777,20 @@ export const useTabStore = create<TabStore>()((set) => ({
 	createTerminalTab: (options?) => {
 		const session = getActiveSession();
 		if (!session) return;
+		if (useSettingsStore.getState().newShell) {
+			openPanelTerminal(session.id, { ...options, additional: true });
+			return;
+		}
 		const tab = createTerminalTabHelper(options?.shell, options?.cwd, options?.name);
 		const updatedSession = addTerminalTabHelper(session, tab);
 		updateActiveSession({ ...updatedSession, inputMode: 'terminal' });
 	},
 
 	closeTerminalTab: (tabId, reason = 'user-action') => {
-		const session = getActiveSession();
-		if (!session) return;
+		const session = useSessionStore
+			.getState()
+			.sessions.find((s) => s.terminalTabs?.some((tab) => tab.id === tabId));
+		if (!session || getWindowContext()?.ownsSession(session.id, true) === false) return;
 		const tab = (session.terminalTabs || []).find((t) => t.id === tabId);
 		const updatedSession = closeTerminalTabHelper(session, tabId);
 		if (updatedSession === session) return; // Tab not found
@@ -797,26 +810,89 @@ export const useTabStore = create<TabStore>()((set) => ({
 		});
 		// Kill the PTY process after confirming the tab will be removed
 		window.maestro.process.kill(getTerminalSessionId(session.id, tabId));
-		updateActiveSession(updatedSession);
+		if (useSettingsStore.getState().newShell) {
+			useSessionStore.getState().setSessions((prev) => {
+				const next = prev.map((s) =>
+					s.id === session.id
+						? {
+								...updatedSession,
+								inputMode: s.inputMode,
+								activeTabId: s.activeTabId,
+								activeFileTabId: s.activeFileTabId,
+								activeBrowserTabId: s.activeBrowserTabId,
+							}
+						: s
+				);
+				return next.map((s) => {
+					if (!s.aiTabs?.some((tab) => tab.newShellPanel?.terminalTabId === tabId)) return s;
+					if (getWindowContext()?.ownsSession(s.id, true) === false) return s;
+					return {
+						...s,
+						aiTabs: s.aiTabs.map((tab) =>
+							tab.newShellPanel?.terminalTabId === tabId
+								? { ...tab, newShellPanel: { ...tab.newShellPanel, terminalTabId: undefined } }
+								: tab
+						),
+					};
+				});
+			});
+		} else updateSessionWith(session.id, () => updatedSession);
 	},
 
 	selectTerminalTab: (tabId) => {
 		const session = getActiveSession();
 		if (!session) return;
+		if (useSettingsStore.getState().newShell) {
+			selectPanelTerminal(session.id, tabId);
+			return;
+		}
 		const updatedSession = selectTerminalTabHelper(session, tabId);
 		updateActiveSession({ ...updatedSession, inputMode: 'terminal' });
 	},
 
-	restartTerminalTab: (tabId) => {
-		const session = getActiveSession();
-		if (!session) return;
-		const updatedSession = restartTerminalTabHelper(session, tabId);
-		if (updatedSession === session) return; // Tab not found
-		// Defensive: kill any lingering PTY for this tab before the spawn effects
-		// re-create it. On a clean exit the process map entry is already gone, so
-		// this is a no-op (and emits no exit event) in the common case.
-		window.maestro.process.kill(getTerminalSessionId(session.id, tabId));
-		updateActiveSession({ ...updatedSession, inputMode: 'terminal' });
+	restartTerminalTab: async (tabId) => {
+		const session = useSessionStore
+			.getState()
+			.sessions.find((s) => s.terminalTabs?.some((t) => t.id === tabId));
+		if (!session || getWindowContext()?.ownsSession(session.id, true) === false) return;
+		const tab = session.terminalTabs.find((t) => t.id === tabId)!;
+		if (!panelTerminalHostMatches(session, tab))
+			throw new Error(
+				'Terminal host no longer matches its owner. Restore the original host before restarting.'
+			);
+		const killing = window.maestro.process.kill(getTerminalSessionId(session.id, tabId));
+		if (!useSettingsStore.getState().newShell) {
+			updateSessionWith(session.id, (s) => ({
+				...restartTerminalTabHelper(s, tabId),
+				inputMode: 'terminal',
+			}));
+			await killing;
+			return;
+		}
+		await killing;
+		const owner = useSessionStore.getState().sessions.find((s) => s.id === session.id);
+		const currentTab = owner?.terminalTabs.find((t) => t.id === tabId);
+		if (!owner || !currentTab || getWindowContext()?.ownsSession(owner.id, true) === false) return;
+		if (!panelTerminalHostMatches(owner, currentTab))
+			throw new Error(
+				'Terminal host no longer matches its owner. Restore the original host before restarting.'
+			);
+		updateSessionWith(owner.id, (s) => ({
+			...restartTerminalTabHelper(s, tabId),
+			activeFileTabId: s.activeFileTabId,
+			activeBrowserTabId: s.activeBrowserTabId,
+		}));
+		let failure: string | undefined;
+		await spawnPtyForTab({
+			session: owner,
+			tab: { ...currentTab, pid: 0, state: 'idle', exitCode: undefined },
+			onPid: (id, pid) => updateSessionWith(owner.id, (s) => updateTerminalTabPid(s, id, pid)),
+			onSpawnFailure: (id, _persistent, message) => {
+				updateSessionWith(owner.id, (s) => updateTerminalTabState(s, id, 'exited'));
+				failure = message;
+			},
+		});
+		if (failure) throw new Error(failure);
 	},
 
 	renameTerminalTab: (tabId, name) => {

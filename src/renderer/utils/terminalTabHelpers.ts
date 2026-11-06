@@ -1,7 +1,9 @@
-// Terminal tab helper functions - pure functions for managing TerminalTab state in Maestro sessions.
-// Follows the same pattern as tabHelpers: take a Session, return a new Session (immutable).
-// No React hooks, no side effects, no IPC.
+// Terminal tab state helpers return immutable Session updates.
+// Panel selectors consult the existing window context for terminal ownership.
+// No React hooks or IPC.
 
+import { handoffLocation } from '../../shared/aiHandoff';
+import { getWindowContext } from '../contexts/WindowContext';
 import { Session, TerminalTab, ClosedTabEntry, UnifiedTabRef } from '../types';
 import { generateId } from './ids';
 import {
@@ -75,10 +77,77 @@ export function hasRunningTerminalProcess(session: Session): boolean {
 	return (session.terminalTabs || []).some((tab) => tab.state === 'busy');
 }
 
+/** Same effective directory and host rules as handoff, including legacy SSH sessions. */
+export function panelTerminalLocation(session: Session, cwd?: string) {
+	const ssh = session.sessionSshRemoteConfig?.enabled
+		? session.sessionSshRemoteConfig
+		: session.sshRemoteId
+			? { enabled: true, remoteId: session.sshRemoteId, workingDirOverride: session.remoteCwd }
+			: undefined;
+	return handoffLocation({
+		cwd: cwd || session.cwd,
+		sessionSshRemoteConfig: ssh
+			? {
+					...ssh,
+					workingDirOverride: cwd || ssh.workingDirOverride || session.remoteCwd || session.cwd,
+				}
+			: undefined,
+	});
+}
+
+/** Terminals stay owned by their original agent so process IDs and CLI addressing remain stable. */
+export function panelTerminals(sessions: Session[], source: Session, cwd?: string) {
+	const ownsSession = getWindowContext()?.ownsSession;
+	if (ownsSession && !ownsSession(source.id, true)) return [];
+	let location: ReturnType<typeof panelTerminalLocation>;
+	try {
+		location = panelTerminalLocation(source, cwd);
+	} catch {
+		return [];
+	}
+	return sessions.flatMap((session) =>
+		(session.terminalTabs || []).flatMap((tab) => {
+			try {
+				if (ownsSession && !ownsSession(session.id, true)) return [];
+				if (!panelTerminalHostMatches(session, tab)) return [];
+				return (tab.panelLocationKey ||
+					panelTerminalLocation(session, tab.cwd || undefined).key) === location.key
+					? [{ session, tab }]
+					: [];
+			} catch {
+				return [];
+			}
+		})
+	);
+}
+
+/** Compare only hosts: an explicit terminal cwd need not match its owner's directory. */
+export function panelTerminalHostMatches(session: Session, tab: TerminalTab): boolean {
+	return (
+		!tab.panelLocationKey ||
+		tab.panelLocationKey.split('\0')[0] ===
+			panelTerminalLocation(session, tab.cwd || undefined).key.split('\0')[0]
+	);
+}
+
+/** Running terminals left behind when this agent changed hosts, available only for closing. */
+export function previousHostTerminals(source: Session) {
+	if (getWindowContext()?.ownsSession(source.id, true) === false) return [];
+	return (source.terminalTabs || []).flatMap((tab) => {
+		if (!tab.pid || tab.state === 'exited') return [];
+		try {
+			return panelTerminalHostMatches(source, tab) ? [] : [{ session: source, tab }];
+		} catch {
+			return tab.panelLocationKey ? [{ session: source, tab }] : [];
+		}
+	});
+}
+
 /**
  * Resolve which terminal tab a remote caller (CLI / web) meant.
  *
- * `ref` is matched as an id first and searched across ALL sessions, because tab
+ * In the new shell, every address is resolved only within the eligible panel pool.
+ * Classic `ref` is matched as an id first and searched across ALL sessions, because tab
  * ids are unique and `open-terminal` hands one back without the caller having to
  * remember which agent owns it. Only if no id matches do we fall back to a
  * display-name match, and that one is scoped to `targetSessionId` - names are
@@ -94,9 +163,32 @@ export function hasRunningTerminalProcess(session: Session): boolean {
 export function resolveTerminalTab(
 	sessions: Session[],
 	targetSessionId: string,
-	ref?: string
+	ref?: string,
+	newShell = false
 ): { session: Session; tab: TerminalTab } | null {
 	const trimmedRef = ref?.trim();
+	if (newShell) {
+		const source = sessions.find((s) => s.id === targetSessionId);
+		if (!source) return null;
+		const pool = panelTerminals(sessions, source);
+		if (trimmedRef) {
+			const byId = pool.find(({ tab }) => tab.id === trimmedRef);
+			if (byId) return byId;
+			const byName = pool.filter(
+				({ session, tab }) =>
+					getTerminalTabDisplayName(tab, session.terminalTabs.indexOf(tab)).toLowerCase() ===
+					trimmedRef.toLowerCase()
+			);
+			return byName.length === 1 ? byName[0] : null;
+		}
+		const selected = source.aiTabs?.find((tab) => tab.id === source.activeTabId)?.newShellPanel
+			?.terminalTabId;
+		return (
+			pool.find(({ tab }) => tab.id === selected) ||
+			pool.find(({ tab }) => tab.id === source.activeTerminalTabId) ||
+			(pool.length === 1 ? pool[0] : null)
+		);
+	}
 
 	if (trimmedRef) {
 		for (const session of sessions) {

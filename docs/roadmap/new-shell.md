@@ -121,7 +121,11 @@ DeepSeek 实际跑的是 Claude Code，只是接口地址指向 DeepSeek，所�
 
 ### hb.8：面板补齐
 
-- 终端、任务、预览三个面板。
+- 终端、任务已实现源码，预览待做。2026-11-06 本批把右栏扩为改动、文件、终端、任务，沿用 360 像素最小宽度和每条会话的 `newShellPanel`。
+- 终端首次打开才启动；切换会话、切换面板或收起右栏保留 XTerminal。按规范化目录与 SSH 主机共享默认终端，worktree 单独匹配，顶部一行短路径、新建、关闭，多终端用下拉选择。字体、主题、宽度变化后的 fit 均沿用现有终端实现。
+- 任务沿用 `agentTaskList.ts` 读取当前会话最新的顶层清单，Claude 与 DeepSeek 的 TodoWrite、Codex 的 update_plan 共用显示，Codex exec 的 todo_list 增量归一为同一工具输入。原生历史沿用转录适配器，只读，无清单时显示普通居中文字。
+- 终端快捷键沿用 `⌘/Ctrl+J`，任务使用 `⌘/Ctrl+Shift+7`，均有命令面板和右栏按钮；终端聚焦时关闭、查找、清屏沿用既有动作。CLI 沿用终端读写与新建动词，补 `tab panel terminal|tasks|terminal-select|terminal-close`；旧界面保留原入口。
+- 原生验收用例已补终端执行命令、切换会话后的输出保留与合成 TodoWrite 显示。Electron / Playwright 尚待用户运行，本批不宣称通过真人或发行包验收。
 - 改动按回合分组，能看出哪一轮改了什么。
 - 两条会话分屏。
 - 项目设置完整替代智能体配置。

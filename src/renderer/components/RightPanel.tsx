@@ -1,3 +1,5 @@
+import { NewShellTerminalPanel, type NewShellTerminalPanelHandle } from './NewShellTerminalPanel';
+import { TasksPanel } from './TasksPanel';
 import { shellRightPanelTab } from '../../shared/newShellPanel';
 import { StoredFilePreview } from './FilePreview/StoredFilePreview';
 import { useFilePreviewTabHandlers } from '../hooks/tabs/internal/useFilePreviewTabHandlers';
@@ -58,7 +60,7 @@ import { PluginUiItemsSlot } from './plugins/PluginUiItemsSlot';
 import { autoRunActiveElapsedMs } from '../hooks/batch/useTimeTracking';
 import { useIsMirroredBatchRun } from '../hooks/batch/useAutoRunStateMirror';
 
-export interface RightPanelHandle {
+export interface RightPanelHandle extends NewShellTerminalPanelHandle {
 	refreshHistoryPanel: () => void;
 	focusAutoRun: () => void;
 	/**
@@ -169,9 +171,7 @@ export const RightPanel = memo(
 
 		const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
 		const storedRightTab = useUIStore((s) => s.activeRightTab);
-		// The new shell shows Changes and Files only, and the classic shell has no
-		// Changes view, so each maps a tab it does not have onto one it does. The
-		// stored value is left alone, so switching back restores the user's tab.
+		// Conversation panels and the classic panel keep separate selections.
 		const newShell = useSettingsStore((s) => s.newShell);
 		const panel = session?.aiTabs?.find((tab) => tab.id === session.activeTabId)?.newShellPanel;
 		const panelFile = session?.filePreviewTabs?.find((file) => file.id === panel?.fileTabId);
@@ -281,6 +281,7 @@ export const RightPanel = memo(
 		const autoRunContentVersion = session?.autoRunContentVersion ?? 0;
 
 		const historyPanelRef = useRef<HistoryPanelHandle>(null);
+		const terminalPanelRef = useRef<NewShellTerminalPanelHandle>(null);
 		const autoRunRef = useRef<AutoRunHandle>(null);
 		const {
 			panelRef,
@@ -294,6 +295,11 @@ export const RightPanel = memo(
 			setWidth: setRightPanelWidth,
 			side: 'right',
 		});
+
+		useEffect(() => {
+			if (newShell && rightPanelOpen && activeRightTab === 'tasks' && activeFocus === 'right')
+				panelRef.current?.focus();
+		}, [newShell, rightPanelOpen, activeRightTab, activeFocus]);
 
 		// Elapsed time for Auto Run display - active run time, excluding sleep and pauses
 		const [elapsedTime, setElapsedTime] = useState<string>('');
@@ -454,6 +460,9 @@ export const RightPanel = memo(
 		useImperativeHandle(
 			ref,
 			() => ({
+				clearActiveTerminal: () => terminalPanelRef.current?.clearActiveTerminal(),
+				openTerminalSearch: () => terminalPanelRef.current?.openTerminalSearch(),
+				closeActiveTerminal: () => terminalPanelRef.current?.closeActiveTerminal(),
 				refreshHistoryPanel: () => {
 					historyPanelRef.current?.refreshHistory();
 				},
@@ -555,6 +564,7 @@ export const RightPanel = memo(
 				ref={panelRef}
 				tabIndex={0}
 				data-panel="right"
+				{...(newShell && !rightPanelOpen ? { inert: '' } : {})}
 				data-open={rightPanelOpen ? 'true' : 'false'}
 				className={`chrome-sheen border-l flex flex-col ${rightPanelTransitionClass} outline-none relative ${rightPanelOpen ? '' : 'w-0 overflow-hidden opacity-0'} maestro-side-panel maestro-side-panel--right`}
 				style={
@@ -574,6 +584,14 @@ export const RightPanel = memo(
 								: undefined,
 					} as React.CSSProperties
 				}
+				onKeyDown={(event) => {
+					if (newShell && event.key === 'Escape') {
+						event.stopPropagation();
+						event.preventDefault();
+						setRightPanelOpen(false);
+						setActiveFocus('main');
+					}
+				}}
 				onClick={() => setActiveFocus('right')}
 				onFocus={() => setActiveFocus('right')}
 				onBlur={(e) => {
@@ -611,28 +629,34 @@ export const RightPanel = memo(
 					style={{ borderColor: theme.colors.border }}
 				>
 					{(newShell
-						? (['changes', 'files'] as const)
+						? (['changes', 'files', 'terminal', 'tasks'] as const)
 						: (['files', 'history', ...(autoRunDisabled ? [] : ['autorun'])] as const)
 					).map((tab) => {
 						const label =
-							tab === 'changes'
-								? t('workflows.changes.tab')
-								: tab === 'autorun'
-									? t('workflows.shell.autoRun')
-									: tab === 'files'
-										? t('workflows.labels.files')
-										: t('workflows.shell.history');
+							tab === 'terminal' || tab === 'tasks'
+								? t(`workflows.newShell.${tab}`)
+								: tab === 'changes'
+									? t('workflows.changes.tab')
+									: tab === 'autorun'
+										? t('workflows.shell.autoRun')
+										: tab === 'files'
+											? t('workflows.labels.files')
+											: t('workflows.shell.history');
 						// Each of these three tabs has its own chord. Surfacing it on the
 						// header the user is already clicking is the cheapest place to
 						// teach it.
 						const jumpShortcut =
-							tab === 'changes'
-								? undefined
-								: tab === 'files'
-									? shortcuts.goToFiles
-									: tab === 'history'
-										? shortcuts.goToHistory
-										: shortcuts.goToAutoRun;
+							tab === 'terminal'
+								? shortcuts.toggleMode
+								: tab === 'tasks'
+									? shortcuts.goToTasks
+									: tab === 'files'
+										? shortcuts.goToFiles
+										: tab === 'history'
+											? shortcuts.goToHistory
+											: tab === 'autorun'
+												? shortcuts.goToAutoRun
+												: undefined;
 						return (
 							<button
 								key={tab}
@@ -642,7 +666,7 @@ export const RightPanel = memo(
 								// Bar header, not the smallest. Deliberately a different
 								// constant from the filter pills below it: a heading sits above
 								// its content, a control that labels rows sits below them.
-								className="flex-1 font-bold border-b-2 transition-colors"
+								className="flex-1 min-w-0 whitespace-nowrap font-bold border-b-2 transition-colors"
 								style={{
 									fontSize: RIGHT_PANEL_TAB_FONT_SIZE,
 									lineHeight: RIGHT_PANEL_TAB_LINE_HEIGHT,
@@ -678,7 +702,7 @@ export const RightPanel = memo(
 				{/* Tab Content */}
 				<div
 					ref={fileTreeContainerRef}
-					className="flex-1 px-4 pb-4 overflow-y-auto overflow-x-hidden outline-none scrollbar-thin"
+					className="relative flex-1 min-h-0 px-4 pb-4 overflow-y-auto overflow-x-hidden outline-none scrollbar-thin"
 					tabIndex={-1}
 					onClick={(e) => {
 						setActiveFocus('right');
@@ -704,6 +728,20 @@ export const RightPanel = memo(
 						}
 					}}
 				>
+					{newShell && (
+						<NewShellTerminalPanel
+							ref={terminalPanelRef}
+							session={session}
+							theme={theme}
+							visible={rightPanelOpen && activeRightTab === 'terminal'}
+						/>
+					)}
+					{newShell && activeRightTab === 'tasks' && (
+						<TasksPanel
+							logs={session.aiTabs.find((tab) => tab.id === session.activeTabId)?.logs || []}
+							theme={theme}
+						/>
+					)}
 					{activeRightTab === 'changes' && (
 						<div className="h-full">
 							<ChangesPanel theme={theme} session={session} onFileClick={props.onFileClick} />

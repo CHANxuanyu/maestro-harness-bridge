@@ -49,6 +49,16 @@ export function openUiSurface(surfaceId: string, tabId?: string): OpenUiSurfaceR
 	const actions = getModalActions();
 
 	switch (surface.id) {
+		case 'terminal-panel':
+		case 'tasks-panel':
+			if (!useSettingsStore.getState().newShell)
+				return { ok: false, error: 'This panel requires the new shell' };
+			useUIStore
+				.getState()
+				.setActiveRightTab(surface.id === 'terminal-panel' ? 'terminal' : 'tasks');
+			useUIStore.getState().setRightPanelOpen(true);
+			useUIStore.getState().setActiveFocus('right');
+			return { ok: true };
 		case 'notification-center':
 			useNotificationStore.getState().setNotificationCenterOpen(true);
 			return { ok: true };

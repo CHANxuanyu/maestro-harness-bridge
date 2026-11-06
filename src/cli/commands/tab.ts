@@ -495,13 +495,15 @@ export async function tabShow(tabId: string, options: TabMutateOptions): Promise
 export async function tabPanel(
 	tabId: string,
 	action: string,
-	options: TabMutateOptions & { filter?: string; content?: string; line?: string }
+	options: TabMutateOptions & {
+		filter?: string;
+		content?: string;
+		line?: string;
+		terminal?: string;
+	}
 ): Promise<void> {
 	if (!NEW_SHELL_PANEL_ACTIONS.includes(action as NewShellPanelAction))
-		return failCommand(
-			'Choose changes, files, back, open, close, edit, preview or save',
-			options.json
-		);
+		return failCommand(`Choose ${NEW_SHELL_PANEL_ACTIONS.join(', ')}`, options.json);
 	if (
 		options.line !== undefined &&
 		(!Number.isSafeInteger(Number(options.line)) || Number(options.line) < 1)
@@ -514,6 +516,7 @@ export async function tabPanel(
 			...(options.content !== undefined ? { newShellFileContent: options.content } : {}),
 			...(options.line !== undefined ? { newShellFileLine: Number(options.line) } : {}),
 			newShellPanelAction: action,
+			...(options.terminal !== undefined ? { newShellTerminalId: options.terminal } : {}),
 			...(options.filter !== undefined ? { newShellPanelFilter: options.filter } : {}),
 		},
 		`Panel: ${action}`,

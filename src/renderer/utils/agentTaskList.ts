@@ -1,3 +1,5 @@
+import type { LogEntry } from '../types';
+
 /**
  * Agent task list extraction.
  *
@@ -118,4 +120,26 @@ export function summarizeAgentTaskList(list: AgentTaskList): string {
 	const label = inProgress?.activeForm || inProgress?.content || tasks[0]?.content;
 	if (!label) return `${tasks.length} tasks`;
 	return `${label} (${completed}/${tasks.length})`;
+}
+
+/** Latest top-level checklist, including a provider explicitly clearing its list. */
+export function latestAgentTaskList(logs: readonly LogEntry[]): AgentTaskList | null {
+	for (let index = logs.length - 1; index >= 0; index--) {
+		const log = logs[index];
+		if (log.source !== 'tool' || log.metadata?.parentToolUseId) continue;
+		const input = log.metadata?.toolState?.input;
+		const list = extractAgentTaskList(input);
+		if (list) return list;
+		if (
+			input &&
+			typeof input === 'object' &&
+			TASK_ARRAY_KEYS.some(
+				(key) =>
+					Array.isArray((input as Record<string, unknown>)[key]) &&
+					((input as Record<string, unknown>)[key] as unknown[]).length === 0
+			)
+		)
+			return null;
+	}
+	return null;
 }

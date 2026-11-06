@@ -1,3 +1,4 @@
+import { notifyToast } from '../../stores/notificationStore';
 import { useT } from '../../i18n';
 import React, { useCallback, memo, useMemo } from 'react';
 import {
@@ -148,7 +149,9 @@ export const TerminalTabItem = memo(function TerminalTabItem({
 	const handleRestartClick = useCallback(
 		(e: React.MouseEvent) => {
 			e.stopPropagation();
-			restartTerminalTab(tab.id);
+			void restartTerminalTab(tab.id).catch((error) =>
+				notifyToast({ type: 'error', title: 'Failed to restart terminal', message: String(error) })
+			);
 		},
 		[restartTerminalTab, tab.id]
 	);

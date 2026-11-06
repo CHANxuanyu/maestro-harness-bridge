@@ -1,3 +1,4 @@
+import { openUiSurface } from '../../utils/openUiSurface';
 import { shellRightPanelTab } from '../../../shared/newShellPanel';
 import { shellFeatureVisible } from '../../../shared/newShellFeatures';
 import { chooseProject } from '../../services/openProject';
@@ -179,6 +180,10 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 							?.newShellPanel
 					),
 				};
+
+			// On Windows and Linux, focused xterm intentionally keeps Ctrl+W, Ctrl+F and Ctrl+J for the shell.
+			const panelTerminalFocused =
+				newShell && ctx.activeFocus === 'right' && ctx.activeRightTab === 'terminal';
 
 			// Terminal focus recovery: if a key event reaches this window handler while in
 			// terminal mode, xterm's textarea likely lost focus. Recover early (before any
@@ -714,7 +719,9 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				trackShortcut('navForward');
 			} else if (ctx.isShortcut(e, 'toggleMode')) {
 				e.preventDefault();
-				if (ctx.activeSessionId) {
+				if (useSettingsStore.getState().newShell) {
+					openUiSurface('terminal-panel');
+				} else if (ctx.activeSessionId) {
 					// Cmd+J always opens a new terminal tab (analogous to Cmd+T for AI tabs).
 					// handleOpenTerminalTab creates the tab and sets inputMode:'terminal' automatically.
 					// Safe in wizard tabs - it creates a new tab rather than disrupting wizard state.
@@ -754,7 +761,16 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					ctx.setQuickActionOpen(true, 'main');
 					trackShortcut('quickAction');
 				}
-			} else if (ctx.isShortcut(e, 'clearTerminal') && activeSession?.inputMode === 'terminal') {
+			} else if (
+				ctx.isShortcut(e, 'clearTerminal') &&
+				(panelTerminalFocused || activeSession?.inputMode === 'terminal')
+			) {
+				if (panelTerminalFocused) {
+					e.preventDefault();
+					ctx.rightPanelRef?.current?.clearActiveTerminal();
+					trackShortcut('clearTerminal');
+					return;
+				}
 				// Clears the active xterm buffer in terminal mode
 				e.preventDefault();
 				ctx.mainPanelRef?.current?.clearActiveTerminal();
@@ -819,6 +835,10 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					ctx.setEditAgentSession(activeSession);
 					trackShortcut('agentSettings');
 				}
+			} else if (useSettingsStore.getState().newShell && ctx.isShortcut(e, 'goToTasks')) {
+				e.preventDefault();
+				openUiSurface('tasks-panel');
+				trackShortcut('goToTasks');
 			} else if (ctx.isShortcut(e, 'goToFiles')) {
 				e.preventDefault();
 				ctx.setRightPanelOpen(true);
@@ -1185,7 +1205,10 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				if (requestEditLastQueuedMessage()) trackShortcut('editLastQueuedMessage');
 			} else if (ctx.isShortcut(e, 'jumpToTerminal')) {
 				e.preventDefault();
-				if (activeSession && !ctx.activeGroupChatId) {
+				if (useSettingsStore.getState().newShell) {
+					openUiSurface('terminal-panel');
+					trackShortcut('jumpToTerminal');
+				} else if (activeSession && !ctx.activeGroupChatId) {
 					const result = ctx.navigateToClosestTerminalTab(activeSession);
 					if (result) {
 						ctx.setSessions((prev: Session[]) =>
@@ -1375,6 +1398,11 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				// Cmd+W: Close the active tab (AI, file, browser, or terminal) via unified handler
 				if (ctx.isTabShortcut(e, 'closeTab')) {
 					e.preventDefault();
+					if (panelTerminalFocused) {
+						ctx.rightPanelRef?.current?.closeActiveTerminal();
+						trackShortcut('closeTab');
+						return;
+					}
 					const closeResult = ctx.handleCloseCurrentTab();
 
 					if (closeResult.type === 'file') {
@@ -1666,6 +1694,12 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 			// and must not also open in-tab Find, group Find, Files filter, or
 			// terminal/browser find.
 			if (e.key === 'f' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+				if (panelTerminalFocused) {
+					e.preventDefault();
+					ctx.rightPanelRef?.current?.openTerminalSearch();
+					trackShortcut('searchTerminal');
+					return;
+				}
 				// Browser-tab in-page find takes precedence whenever a browser tab is
 				// the active tab. Routed both here (when webview isn't focused) and via
 				// `onBrowserTabShortcutKey` (when it is).

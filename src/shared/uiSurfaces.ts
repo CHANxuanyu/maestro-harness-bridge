@@ -63,6 +63,24 @@ export const CUE_MODAL_TABS: UiSurfaceTab[] = [
 
 export const UI_SURFACES: UiSurface[] = [
 	{
+		id: 'terminal-panel',
+		label: 'Terminal Panel',
+		modal: 'terminalPanel',
+		description: 'New shell working-directory terminal panel.',
+		shortcutId: 'toggleMode',
+		commandPalette: 'Open terminal panel',
+		click: 'Right panel Terminal tab',
+	},
+	{
+		id: 'tasks-panel',
+		label: 'Tasks Panel',
+		modal: 'tasksPanel',
+		description: 'New shell conversation task list.',
+		shortcutId: 'goToTasks',
+		commandPalette: 'Open tasks panel',
+		click: 'Right panel Tasks tab',
+	},
+	{
 		id: 'notification-center',
 		shortcutId: 'openNotificationCenter',
 		label: 'Notification Center',

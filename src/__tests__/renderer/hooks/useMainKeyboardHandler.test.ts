@@ -4989,3 +4989,75 @@ describe('new shell project entry shortcuts', () => {
 		expect(open).toHaveBeenCalledTimes(newShell ? 1 : 0);
 	});
 });
+
+describe('new shell panel shortcuts', () => {
+	afterEach(() => useSettingsStore.setState({ newShell: false }));
+	it.each(['toggleMode', 'jumpToTerminal', 'goToTasks'])(
+		'opens the conversation panel for %s without changing the center or creating a shell',
+		(action) => {
+			useSettingsStore.setState({ newShell: true });
+			const session = {
+				id: 'panels',
+				inputMode: 'ai',
+				activeTabId: 'chat',
+				aiTabs: [{ id: 'chat', logs: [] }],
+				terminalTabs: [],
+			};
+			useUIStore.setState({ rightPanelOpen: false, activeRightTab: 'files' });
+			const create = vi.fn();
+			const navigate = vi.fn();
+			const { result } = renderHook(() => useMainKeyboardHandler());
+			result.current.keyboardHandlerRef.current = createMockContext({
+				activeSession: session,
+				activeSessionId: session.id,
+				handleOpenTerminalTab: create,
+				navigateToClosestTerminalTab: navigate,
+				isShortcut: (_event: KeyboardEvent, id: string) => id === action,
+			});
+			act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', metaKey: true })));
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].newShellPanel).toMatchObject({
+				tab: action === 'goToTasks' ? 'tasks' : 'terminal',
+				open: true,
+			});
+			expect(useUIStore.getState().activeFocus).toBe('right');
+			expect(useSessionStore.getState().sessions[0].inputMode).toBe('ai');
+			expect(create).not.toHaveBeenCalled();
+			expect(navigate).not.toHaveBeenCalled();
+		}
+	);
+});
+
+describe('new shell terminal focus routing', () => {
+	afterEach(() => useSettingsStore.setState({ newShell: false }));
+	it.each([
+		['closeTab', 'closeActiveTerminal', 'w'],
+		['clearTerminal', 'clearActiveTerminal', 'k'],
+		['searchTerminal', 'openTerminalSearch', 'f'],
+	])('routes %s to the terminal panel and leaves the conversation alone', (action, method, key) => {
+		useSettingsStore.setState({ newShell: true });
+		const right = vi.fn();
+		const closeConversation = vi.fn().mockReturnValue({ type: 'none' });
+		const clearMain = vi.fn();
+		const { result } = renderHook(() => useMainKeyboardHandler());
+		result.current.keyboardHandlerRef.current = createMockContext({
+			activeSession: {
+				id: 'focused-terminal',
+				inputMode: 'ai',
+				activeTabId: 'chat',
+				aiTabs: [{ id: 'chat', logs: [], newShellPanel: { tab: 'terminal', open: true } }],
+			},
+			activeSessionId: 'focused-terminal',
+			activeFocus: 'right',
+			activeRightTab: 'files',
+			rightPanelRef: { current: { [method]: right } },
+			mainPanelRef: { current: { clearActiveTerminal: clearMain } },
+			handleCloseCurrentTab: closeConversation,
+			isShortcut: (_event: KeyboardEvent, id: string) => id === action,
+			isTabShortcut: (_event: KeyboardEvent, id: string) => id === action,
+		});
+		act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key, metaKey: true })));
+		expect(right).toHaveBeenCalledTimes(1);
+		expect(closeConversation).not.toHaveBeenCalled();
+		expect(clearMain).not.toHaveBeenCalled();
+	});
+});

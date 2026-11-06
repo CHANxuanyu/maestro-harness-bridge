@@ -217,7 +217,7 @@ export const settingsDisplay = {
 	'settings.display.newShell.heading': 'New Shell (preview)',
 	'settings.display.newShell.title': 'Use the new shell',
 	'settings.display.newShell.description':
-		'Projects and conversations on the left, one conversation in the middle, and its changes and files on the right. Switches immediately; nothing running is interrupted.',
+		'Projects and conversations on the left, one conversation in the middle, and its changes and files on the right. Switches immediately; nothing running is interrupted. Switching clears the contents of open terminals; running processes are unaffected.',
 	'settings.display.fileEdit.heading': 'File Edit & Preview',
 	'settings.display.fileEdit.lineNumbers': 'Show line numbers in the editor',
 	'settings.display.fileEdit.lineNumbersDescription':

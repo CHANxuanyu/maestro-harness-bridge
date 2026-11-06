@@ -20,7 +20,9 @@
  * live xterm buffer, the handler cannot. That is the `onSpawnFailure` hook.
  */
 
-import { getTerminalSessionId } from '../utils/terminalTabHelpers';
+import { getWindowContext } from '../contexts/WindowContext';
+import { getTerminalSessionId, panelTerminalHostMatches } from '../utils/terminalTabHelpers';
+import { useSessionStore } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { captureException } from '../utils/sentry';
 import type { Session, TerminalTab } from '../types';
@@ -77,7 +79,15 @@ export interface SpawnPtyForTabOptions {
  * concurrent calls for the same tab collapse to one spawn.
  */
 export async function spawnPtyForTab(options: SpawnPtyForTabOptions): Promise<void> {
-	const { session, tab, cols, rows, onPid, onSpawnFailure } = options;
+	const { tab, cols, rows, onPid, onSpawnFailure } = options;
+	const session =
+		useSessionStore.getState().sessions.find((s) => s.id === options.session.id) || options.session;
+	const windowContext = getWindowContext();
+	if (
+		windowContext?.ownsSession(session.id, true) === false &&
+		(useSettingsStore.getState().newShell || windowContext.ownershipStatus !== 'error')
+	)
+		return;
 	const tabId = tab.id;
 	const terminalSessionId = getTerminalSessionId(session.id, tabId);
 
@@ -122,6 +132,10 @@ export async function spawnPtyForTab(options: SpawnPtyForTabOptions): Promise<vo
 				}
 			: undefined;
 
+	if (effectiveSshConfig && tab.panelLocationKey && tab.cwd) {
+		effectiveSshConfig.workingDirOverride = tab.startupCommandCwd || tab.cwd;
+	}
+
 	// When a startup command is configured, spawn the PTY in its configured cwd
 	// (if any) so the command runs in the right directory. Otherwise keep the
 	// existing fallback chain.
@@ -137,6 +151,14 @@ export async function spawnPtyForTab(options: SpawnPtyForTabOptions): Promise<vo
 	const { defaultShell, shellArgs, shellEnvVars } = useSettingsStore.getState();
 
 	try {
+		if (!panelTerminalHostMatches(session, tab)) {
+			onSpawnFailure(
+				tabId,
+				true,
+				'Terminal host no longer matches its owner. Restore the original host before restarting.'
+			);
+			return;
+		}
 		const result = await window.maestro.process.spawnTerminalTab({
 			sessionId: terminalSessionId,
 			cwd: spawnCwd,

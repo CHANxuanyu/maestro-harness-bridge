@@ -31,6 +31,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -69,6 +70,8 @@ interface WindowScope {
 }
 
 export interface WindowContextValue {
+	/** Whether both registry reads succeeded, are pending, or failed. */
+	ownershipStatus: 'loading' | 'ready' | 'error';
 	/** This window's stable ID. `null` only briefly before the first hydrate. */
 	windowId: string | null;
 	/** True for the primary window (loaded without a `windowId` param). */
@@ -89,9 +92,10 @@ export interface WindowContextValue {
 	 * Whether THIS window should surface the given agent's tab strip. The primary
 	 * window is the catch-all owner (every agent no secondary window has claimed);
 	 * a secondary window owns exactly the agents in its scoped `sessionIds`. The
-	 * main tab bar uses this to scope which agent's tabs it renders.
+	 * main tab bar uses this to scope which agent's tabs it renders. Terminal
+	 * actions require hydrated ownership before touching a restored process.
 	 */
-	ownsSession: (sessionId: string) => boolean;
+	ownsSession: (sessionId: string, requireHydrated?: boolean) => boolean;
 	/**
 	 * If the given agent is currently surfaced by a DIFFERENT window than this
 	 * one, returns that window's id plus its human-facing number (1-based, primary
@@ -226,6 +230,13 @@ function removeFromScope(prev: WindowScope, sessionId: string): WindowScope {
 	};
 }
 
+let currentWindowContext: { current: WindowContextValue } | undefined;
+
+/** Let store actions use the same ownership predicate as window-scoped components. */
+export function getWindowContext(): WindowContextValue | undefined {
+	return currentWindowContext?.current;
+}
+
 export function WindowProvider({ children }: { children: ReactNode }) {
 	// Window scoping is a DESKTOP display concept: it decides which Electron
 	// window surfaces an agent. A web-desktop client is not a window - it
@@ -246,6 +257,9 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 	// source for cross-window ownership: which window surfaces an agent and its
 	// 1-based number. Empty (single-window common case) until the first hydrate.
 	const [windows, setWindows] = useState<WindowInfo[]>([]);
+	const [ownershipStatus, setOwnershipStatus] = useState<WindowContextValue['ownershipStatus']>(
+		windowScoped ? 'loading' : 'ready'
+	);
 	// True while a tab from another window is being dragged over this one as a
 	// dock target (driven by the `windows:highlightDropZone` push). Transient
 	// drag-feedback state; cleared by the source window on drag end.
@@ -268,11 +282,15 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 			window.maestro.windows.getState().catch(() => null),
 			window.maestro.windows.list().catch(() => null),
 		]);
-		if (!state) return;
+		if (!state || !allWindows) {
+			setOwnershipStatus('error');
+			return;
+		}
 		// The primary window has no URL param, so adopt the registry's id for it.
 		setWindowId((prev) => prev ?? state.id);
 		setScope({ sessionIds: state.sessionIds, activeSessionId: state.activeSessionId });
-		setWindows(allWindows ?? []);
+		setWindows(allWindows);
+		setOwnershipStatus('ready');
 	}, [windowScoped]);
 
 	useEffect(() => {
@@ -401,16 +419,17 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 	}, [isMainWindow, windowNumber, ownName]);
 
 	const ownsSession = useCallback(
-		(sessionId: string): boolean => {
+		(sessionId: string, requireHydrated = false): boolean => {
 			// A web-desktop client mirrors every agent - permit-all by design.
 			if (!windowScoped) return true;
+			if (requireHydrated && ownershipStatus !== 'ready') return false;
 			// The primary window surfaces every agent that no secondary window has
 			// explicitly claimed; a secondary window owns exactly its scoped set.
 			return isMainWindow
 				? !sessionsOwnedElsewhere.has(sessionId)
 				: scope.sessionIds.includes(sessionId);
 		},
-		[windowScoped, isMainWindow, sessionsOwnedElsewhere, scope.sessionIds]
+		[windowScoped, ownershipStatus, isMainWindow, sessionsOwnedElsewhere, scope.sessionIds]
 	);
 
 	const getSessionWindow = useCallback(
@@ -658,6 +677,7 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 			sessionIds: scope.sessionIds,
 			activeSessionId: scope.activeSessionId,
 			ownsSession,
+			ownershipStatus,
 			getSessionWindow,
 			windows,
 			openSession,
@@ -677,6 +697,7 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 			scope.sessionIds,
 			scope.activeSessionId,
 			ownsSession,
+			ownershipStatus,
 			getSessionWindow,
 			windows,
 			openSession,
@@ -697,6 +718,12 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 	// the subscription stable while the methods it calls track the latest state.
 	const valueRef = useRef(value);
 	valueRef.current = value;
+	useLayoutEffect(() => {
+		currentWindowContext = valueRef;
+		return () => {
+			if (currentWindowContext === valueRef) currentWindowContext = undefined;
+		};
+	}, []);
 	useEffect(() => {
 		if (!windowScoped || !isMainWindow) return;
 		const subscribe = window.maestro?.windows?.onRemoteCommand;

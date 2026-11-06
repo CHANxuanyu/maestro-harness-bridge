@@ -8,6 +8,36 @@ import {
 describe('CodexOutputParser', () => {
 	const parser = new CodexOutputParser();
 
+	it.each(['item.started', 'item.updated', 'item.completed'])(
+		'forwards %s checklist updates',
+		(type) => {
+			const event = new CodexOutputParser().parseJsonObject({
+				type,
+				item: {
+					id: 'plan-1',
+					type: 'todo_list',
+					items: [
+						{ text: 'Done', completed: true },
+						{ text: 'Next', completed: false },
+					],
+				},
+			});
+			expect(event).toMatchObject({
+				type: 'tool_use',
+				toolName: 'update_plan',
+				toolCallId: 'plan-1',
+				toolState: {
+					input: {
+						plan: [
+							{ step: 'Done', status: 'completed' },
+							{ step: 'Next', status: 'pending' },
+						],
+					},
+				},
+			});
+		}
+	);
+
 	it.each([
 		[
 			'*** Begin Patch\n*** Add File: example.ts\n+export {};\n*** End Patch',

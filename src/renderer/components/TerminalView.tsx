@@ -8,6 +8,9 @@ import {
 	useState,
 	useMemo,
 } from 'react';
+import { getT } from '../i18n';
+import { useSettingsStore } from '../stores/settingsStore';
+import { useWindowContextOptional } from '../contexts/WindowContext';
 import { XTerminal, XTerminalHandle } from './XTerminal';
 import { TerminalSearchBar } from './TerminalSearchBar';
 import { TerminalTouchBar } from './TerminalTouchBar';
@@ -57,6 +60,7 @@ interface TerminalViewProps {
 	fontSize?: number;
 	onTabStateChange: (tabId: string, state: TerminalTab['state'], exitCode?: number) => void;
 	onTabPidChange: (tabId: string, pid: number) => void;
+	onSpawnFailure?: (tabId: string, message: string) => void;
 	searchOpen?: boolean;
 	onSearchClose?: () => void;
 	/** Whether the terminal panel is currently visible (inputMode === 'terminal'). Used to trigger repaint when returning from AI mode. */
@@ -96,6 +100,7 @@ export const TerminalView = memo(
 			fontSize,
 			onTabStateChange,
 			onTabPidChange,
+			onSpawnFailure,
 			searchOpen,
 			onSearchClose,
 			isVisible,
@@ -106,6 +111,8 @@ export const TerminalView = memo(
 		},
 		ref
 	) {
+		const windowContext = useWindowContextOptional();
+		const newShell = useSettingsStore((s) => s.newShell);
 		// Map of tabId → XTerminalHandle ref for each tab instance
 		const terminalRefs = useRef<Map<string, XTerminalHandle>>(new Map());
 		// Track previous tab states to detect transitions (for exit message)
@@ -114,8 +121,6 @@ export const TerminalView = memo(
 		// ref rather than on the tab so it stays out of the persisted session snapshot;
 		// it is only needed for the keep-or-close decision on the very next render.
 		const exitSignalsRef = useRef<Map<string, number | undefined>>(new Map());
-		// Track which tabs have already had the loading message written to avoid duplicates
-		const loadingWrittenRef = useRef<Set<string>>(new Set());
 		// Dedup spawn-failure toasts: batch rapid failures into a single notification
 		const spawnFailureCountRef = useRef(0);
 		const spawnFailureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -126,6 +131,8 @@ export const TerminalView = memo(
 		onTabPidChangeRef.current = onTabPidChange;
 		const onTabStateChangeRef = useRef(onTabStateChange);
 		onTabStateChangeRef.current = onTabStateChange;
+		const onSpawnFailureRef = useRef(onSpawnFailure);
+		onSpawnFailureRef.current = onSpawnFailure;
 
 		// Touch key bar (coarse-pointer devices only). Evaluated once per render;
 		// the pointer type does not change during a session.
@@ -167,11 +174,17 @@ export const TerminalView = memo(
 				spawnFailureCountRef.current = 0;
 				spawnFailureLastMessageRef.current = null;
 				spawnFailureTimerRef.current = null;
+				const t = getT();
 				notifyToast({
 					type: 'error',
-					title: count > 1 ? `Failed to start ${count} terminals` : 'Failed to start terminal',
+					title:
+						count > 1
+							? t('workflows.shell.terminalsStartFailed', { count })
+							: t('workflows.shell.terminalStartFailed'),
 					message:
-						count > 1 ? `${count} terminals could not be started. ${lastMessage}` : lastMessage,
+						count > 1
+							? `${t('workflows.shell.terminalsNotStarted', { count })} ${lastMessage}`
+							: lastMessage,
 				});
 			}, 200);
 		}, []);
@@ -190,17 +203,21 @@ export const TerminalView = memo(
 					message,
 					decision: isPersistent ? 'keep-for-restart' : 'close',
 				});
+				// Stop another spawn while the panel renders the error before deferred close.
+				onTabStateChangeRef.current(tabId, 'exited');
+				onSpawnFailureRef.current?.(tabId, message);
 				if (isPersistent) {
-					onTabStateChangeRef.current(tabId, 'exited');
 					terminalRefs.current
 						.get(tabId)
-						?.write('\r\n\x1b[2m[failed to start] - restart from the tab menu\x1b[0m\r\n');
+						?.write(
+							`\r\n\x1b[2m[failed to start]${newShell ? '' : ' - restart from the tab menu'}\x1b[0m\r\n`
+						);
 				} else {
 					setTimeout(() => closeTerminalTab(tabId, 'spawn-failure'), 0);
 				}
 				notifySpawnFailure(message);
 			},
-			[session.id, closeTerminalTab, notifySpawnFailure]
+			[session.id, closeTerminalTab, notifySpawnFailure, newShell]
 		);
 
 		const activeTab = getActiveTerminalTab(session);
@@ -322,14 +339,20 @@ export const TerminalView = memo(
 					spawnPtyForTab(tab);
 				}
 			}
-		}, [session.terminalTabs, activeTab?.id, paneRects, spawnPtyForTab]);
+		}, [
+			session.terminalTabs,
+			activeTab?.id,
+			paneRects,
+			spawnPtyForTab,
+			windowContext?.ownsSession,
+		]);
 
 		// Focus and repaint the active terminal when the active tab changes.
 		// The refresh() call is necessary because switching tabs uses CSS visibility: hidden
 		// rather than unmounting, so xterm.js's ResizeObserver never fires - the WebGL/canvas
 		// renderer won't repaint unless explicitly told to after the element becomes visible.
 		useEffect(() => {
-			if (activeTab) {
+			if (activeTab && isVisible !== false) {
 				// Short delay so the DOM visibility change applies before fitting/repainting
 				const timer = setTimeout(() => {
 					const handle = terminalRefs.current.get(activeTab.id);
@@ -338,22 +361,7 @@ export const TerminalView = memo(
 				}, 50);
 				return () => clearTimeout(timer);
 			}
-		}, [activeTab?.id]);
-
-		// Repaint + focus when the terminal panel becomes visible again (e.g. returning from AI mode).
-		// activeTab?.id doesn't change in this case, so the effect above won't fire - we need an
-		// explicit refresh here. The display:none → display:flex transition can wipe the WebGL/canvas
-		// framebuffer, so we must tell xterm.js to redraw from its internal buffer.
-		useEffect(() => {
-			if (isVisible && activeTab) {
-				const timer = setTimeout(() => {
-					const handle = terminalRefs.current.get(activeTab.id);
-					handle?.refresh();
-					handle?.focus();
-				}, 50);
-				return () => clearTimeout(timer);
-			}
-		}, [isVisible]);
+		}, [activeTab?.id, isVisible]);
 
 		// Close search when the active terminal tab changes.
 		// Intentionally depends only on activeTab?.id - we want to close search when
@@ -428,9 +436,9 @@ export const TerminalView = memo(
 					});
 					if (age < 2000 && !wasKilled) {
 						// Exited almost immediately - surface as a startup failure toast.
-						notifySpawnFailure(
-							`Shell exited immediately${tab.exitCode != null ? ` (exit code: ${tab.exitCode})` : ''}.`
-						);
+						const message = `Shell exited immediately${tab.exitCode != null ? ` (exit code: ${tab.exitCode})` : ''}.`;
+						onSpawnFailureRef.current?.(tabId, message);
+						notifySpawnFailure(message);
 					}
 					if (keepTab) {
 						// Keep the tab; show a visible notice instead of a silent dead husk.
@@ -439,7 +447,9 @@ export const TerminalView = memo(
 							: `process exited${tab.exitCode != null ? ` (code ${tab.exitCode})` : ''}`;
 						terminalRefs.current
 							.get(tabId)
-							?.write(`\r\n\x1b[2m[${reason}] - restart from the tab menu\x1b[0m\r\n`);
+							?.write(
+								`\r\n\x1b[2m[${reason}]${newShell ? '' : ' - restart from the tab menu'}\x1b[0m\r\n`
+							);
 					} else {
 						// Close on next tick to avoid mutating state mid-render.
 						setTimeout(() => closeTerminalTab(tabId, 'pty-exit'), 0);
@@ -453,6 +463,7 @@ export const TerminalView = memo(
 			session.sshRemoteId,
 			closeTerminalTab,
 			notifySpawnFailure,
+			newShell,
 		]);
 
 		const terminalTabs = session.terminalTabs || [];
@@ -555,24 +566,12 @@ export const TerminalView = memo(
 									ref={(handle) => {
 										if (handle) {
 											terminalRefs.current.set(tab.id, handle);
-											// Write loading indicator once per idle cycle - guard prevents duplicate writes on re-renders
-											if (
-												tab.pid === 0 &&
-												tab.state === 'idle' &&
-												!loadingWrittenRef.current.has(tab.id)
-											) {
-												loadingWrittenRef.current.add(tab.id);
-												setTimeout(() => {
-													handle.write('\x1b[2mStarting terminal...\x1b[0m');
-												}, 0);
-											}
 										} else {
 											terminalRefs.current.delete(tab.id);
-											// Do NOT clear loadingWrittenRef here - React calls inline ref callbacks with
-											// null then the new handle on re-renders; clearing it would cause repeated writes.
 										}
 									}}
 									sessionId={terminalSessionId}
+									ptyPid={tab.pid}
 									theme={theme}
 									fontFamily={fontFamily}
 									fontSize={fontSize}

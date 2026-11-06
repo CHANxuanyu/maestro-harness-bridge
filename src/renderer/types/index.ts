@@ -71,8 +71,8 @@ import type { MindMapLayoutType } from '../components/DocumentGraph/layoutTypes'
 
 export type SessionState = 'idle' | 'busy' | 'waiting_input' | 'connecting' | 'error';
 export type FileChangeType = 'modified' | 'added' | 'deleted';
-/** `changes` exists only in the new shell, which shows Changes and Files alone. */
-export type RightPanelTab = 'changes' | 'files' | 'history' | 'autorun';
+/** Changes, Terminal and Tasks belong to the new shell; History and Auto Run to classic. */
+export type RightPanelTab = 'changes' | 'files' | 'history' | 'autorun' | 'terminal' | 'tasks';
 /**
  * Tabs in the Usage Dashboard modal. Shared so the in-memory uiStore can
  * remember the last-selected tab across dashboard opens (resets on restart).
@@ -1041,6 +1041,8 @@ export interface FilePreviewTab {
  * buffer. The PTY process is identified by pid (0 = not yet spawned / lazy init).
  */
 export interface TerminalTab {
+	/** Initial directory and host for new shell sharing; unaffected by shell cd. */
+	panelLocationKey?: string;
 	id: string; // Unique tab ID (UUID)
 	name: string | null; // User-defined name; null displays "Terminal N" (auto-numbered)
 	shellType: string; // Shell binary name, e.g. 'zsh', 'bash', 'sh'

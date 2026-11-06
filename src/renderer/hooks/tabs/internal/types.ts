@@ -128,7 +128,7 @@ export interface TabHandlersReturn
 
 export interface TerminalTabHandlersReturn {
 	handleOpenTerminalTab: (options?: { shell?: string; cwd?: string; name?: string | null }) => void;
-	handleCloseTerminalTab: (tabId: string) => void;
+	handleCloseTerminalTab: (tabId: string | string[]) => void;
 	handleSelectTerminalTab: (tabId: string) => void;
 	handleRenameTerminalTab: (tabId: string, name: string) => void;
 }

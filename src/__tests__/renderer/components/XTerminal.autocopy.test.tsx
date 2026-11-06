@@ -460,3 +460,31 @@ describe('XTerminal sticky-Ctrl (touch key bar)', () => {
 		expect(onData).toHaveBeenCalledWith('c');
 	});
 });
+
+describe('XTerminal restarted PTY size', () => {
+	it('resends an unchanged grid when the PTY PID changes without replacing the xterm', async () => {
+		mockTerminalInstances.length = 0;
+		window.maestro.process.onData = vi.fn().mockReturnValue(() => {});
+		window.maestro.process.resize = vi.fn().mockResolvedValue(true);
+		const ref = React.createRef<import('../../../renderer/components/XTerminal').XTerminalHandle>();
+		const props = { sessionId: 'owner-terminal-tab', theme, fontFamily: 'Menlo', ptyPid: 41 };
+		const view = render(<XTerminal {...props} ref={ref} />);
+		const term = mockTerminalInstances[0] as unknown as { cols: number; rows: number };
+		term.cols = 132;
+		term.rows = 43;
+		await act(async () => ref.current!.syncSize());
+		expect(window.maestro.process.resize).toHaveBeenLastCalledWith('owner-terminal-tab', 132, 43);
+		vi.mocked(window.maestro.process.resize).mockClear();
+		await act(async () => ref.current!.syncSize());
+		expect(window.maestro.process.resize).not.toHaveBeenCalled();
+		await act(async () => view.rerender(<XTerminal {...props} ptyPid={42} ref={ref} />));
+		expect(window.maestro.process.resize).toHaveBeenCalledExactlyOnceWith(
+			'owner-terminal-tab',
+			132,
+			43
+		);
+		expect(mockTerminalInstances).toHaveLength(1);
+		await act(async () => view.rerender(<XTerminal {...props} ptyPid={42} ref={ref} />));
+		expect(window.maestro.process.resize).toHaveBeenCalledTimes(1);
+	});
+});

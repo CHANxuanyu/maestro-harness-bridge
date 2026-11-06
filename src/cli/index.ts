@@ -340,7 +340,10 @@ list
 list
 	.command('terminals')
 	.description('List open terminal tabs in the desktop app (all agents unless --agent is given)')
-	.option('-a, --agent <id>', 'Only list terminals belonging to this agent')
+	.option(
+		'-a, --agent <id>',
+		'List this agent’s terminals; new shell also includes its directory pool and terminals still running on its previous host'
+	)
 	.option('--json', 'Output as JSON (for scripting)')
 	.action(listTerminals);
 
@@ -1585,7 +1588,11 @@ tab
 
 tabTargetOptions(tab.command('panel <tab-id> <action>'))
 	.description(
-		'New shell panel: changes, files, back, open, close, edit, preview or save; read with tab show'
+		'New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
+	)
+	.option(
+		'--terminal <id>',
+		'Terminal to select, close or restart; defaults to the conversation selection. Terminals still running on a previous host can only be closed from their owner conversation'
 	)
 	.option('--filter <query>', 'Filter the conversation file tree; an empty string clears it')
 	.option('--content <text>', 'Set the remembered text file edit buffer before this action')

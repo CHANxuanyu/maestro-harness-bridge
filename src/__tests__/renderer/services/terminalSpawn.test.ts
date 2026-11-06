@@ -21,6 +21,7 @@ vi.stubGlobal('window', {
 	maestro: { process: { spawnTerminalTab, write } },
 });
 
+import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { spawnPtyForTab, isSpawnInFlight } from '../../../renderer/services/terminalSpawn';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import type { Session, TerminalTab } from '../../../renderer/types';
@@ -38,6 +39,7 @@ let onSpawnFailure: (tabId: string, isPersistent: boolean, message: string) => v
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	useSessionStore.setState({ sessions: [] });
 	onPid = vi.fn();
 	onSpawnFailure = vi.fn();
 	spawnTerminalTab.mockResolvedValue({ success: true, pid: 4242 });
@@ -56,6 +58,53 @@ describe('spawnPtyForTab', () => {
 		});
 		expect(onPid).toHaveBeenCalledWith('tab-1', 4242);
 		expect(onSpawnFailure).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		['ssh:h1\0/repo', { enabled: true, remoteId: 'h2' }],
+		['ssh:h1\0/repo', undefined],
+		['local\0/repo', { enabled: true, remoteId: 'h1' }],
+	])('refuses host drift before spawning %s', async (panelLocationKey, ssh) => {
+		await spawnPtyForTab({
+			session: session({ sessionSshRemoteConfig: ssh }),
+			tab: tab({ panelLocationKey, cwd: '/repo', startupCommand: 'echo must-not-run' }),
+			onPid,
+			onSpawnFailure,
+		});
+		expect(spawnTerminalTab).not.toHaveBeenCalled();
+		expect(write).not.toHaveBeenCalled();
+		expect(onSpawnFailure).toHaveBeenCalledWith('tab-1', true, expect.stringMatching(/host/i));
+		expect(isSpawnInFlight('sess-1', 'tab-1')).toBe(false);
+	});
+
+	it('checks the current owner even when the view passes an older session snapshot', async () => {
+		const old = session({ sessionSshRemoteConfig: { enabled: true, remoteId: 'h1' } });
+		useSessionStore.setState({
+			sessions: [{ ...old, sessionSshRemoteConfig: { enabled: true, remoteId: 'h2' } }],
+		});
+		await spawnPtyForTab({
+			session: old,
+			tab: tab({ panelLocationKey: 'ssh:h1\0/repo', cwd: '/repo' }),
+			onPid,
+			onSpawnFailure,
+		});
+		expect(spawnTerminalTab).not.toHaveBeenCalled();
+		expect(onSpawnFailure).toHaveBeenCalledWith('tab-1', true, expect.stringMatching(/host/i));
+	});
+
+	it('allows an explicit directory on the same host', async () => {
+		await spawnPtyForTab({
+			session: session({ sessionSshRemoteConfig: { enabled: true, remoteId: 'h1' } }),
+			tab: tab({ panelLocationKey: 'ssh:h1\0/other', cwd: '/other' }),
+			onPid,
+			onSpawnFailure,
+		});
+		expect(spawnTerminalTab).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cwd: '/other',
+				sessionSshRemoteConfig: { enabled: true, remoteId: 'h1', workingDirOverride: '/other' },
+			})
+		);
 	});
 
 	it('runs a startup command once the shell is up', async () => {

@@ -278,7 +278,14 @@ interface CodexPayload {
  */
 interface CodexItem {
 	id?: string;
-	type?: 'reasoning' | 'agent_message' | 'tool_call' | 'tool_result' | 'command_execution';
+	type?:
+		| 'reasoning'
+		| 'agent_message'
+		| 'tool_call'
+		| 'tool_result'
+		| 'command_execution'
+		| 'todo_list';
+	items?: Array<{ text: string; completed: boolean }>;
 	text?: string;
 	phase?: string;
 	channel?: string;
@@ -863,6 +870,7 @@ export class CodexOutputParser implements AgentOutputParser {
 	 * Transform a command start or an update containing output accumulated so far.
 	 */
 	private transformItemStarted(item: CodexItem, msg: CodexRawMessage): ParsedEvent {
+		if (item.type === 'todo_list') return this.transformItemCompleted(item, msg);
 		if (item.type === 'command_execution') {
 			return {
 				type: 'tool_use',
@@ -896,6 +904,23 @@ export class CodexOutputParser implements AgentOutputParser {
 	 */
 	private transformItemCompleted(item: CodexItem, msg: CodexRawMessage): ParsedEvent {
 		switch (item.type) {
+			case 'todo_list':
+				return {
+					type: 'tool_use',
+					isPartial: msg.type === 'item.updated',
+					toolName: 'update_plan',
+					toolCallId: item.id,
+					toolState: {
+						status: msg.type === 'item.completed' ? 'completed' : 'running',
+						input: {
+							plan: (item.items || []).map((task) => ({
+								step: task.text,
+								status: task.completed ? 'completed' : 'pending',
+							})),
+						},
+					},
+					raw: msg,
+				};
 			case 'reasoning':
 				// Reasoning shows model's thinking process.
 				// Format reasoning text: add line breaks before ** SECTION ** markers

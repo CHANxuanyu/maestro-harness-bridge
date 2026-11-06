@@ -1178,68 +1178,69 @@ export const MainPanelContent = React.memo(function MainPanelContent(props: Main
 		     switching between sessions (or to AI mode) does not destroy the xterm.js
 		     scrollback buffer. visibility:hidden (not display:none) keeps the canvas
 		     at non-zero dimensions so the WebGL context is never lost or cleared. */}
-			{mountedTerminalSessionIds.map((sessionId) => {
-				const isCurrentSession = sessionId === activeSession.id;
-				const session = isCurrentSession
-					? activeSession
-					: mountedTerminalSessionsRef.current.get(sessionId);
-				if (!session) return null;
-				// Tiling: this session has terminal tabs that are leaves in the active
-				// group. Each such tab's layer is positioned onto its pane rect (below,
-				// inside TerminalView), so the overlay must be shown even though inputMode
-				// isn't 'terminal'. Only the current session can own the active group.
-				const hasTerminalPanes = isCurrentSession && terminalPaneRects.size > 0;
-				const isTerminalVisible = isCurrentSession && session.inputMode === 'terminal';
-				// Overlay shows for standalone terminal mode OR when tiling terminal panes.
-				// It always spans the full panel (inset-0) so the pane rects - which are
-				// panel-relative - map straight onto the absolutely-positioned tab layers.
-				const overlayShown = isTerminalVisible || hasTerminalPanes;
-				return (
-					<div
-						key={sessionId}
-						className={`absolute inset-0 flex flex-col${overlayShown ? '' : ' terminal-hidden'}`}
-						style={{
-							visibility: overlayShown ? 'visible' : 'hidden',
-							// Standalone terminal captures input across the whole panel. The tiled
-							// overlay wrapper is click-through (none) so clicks on other panes and
-							// dividers land; its positioned pane layers re-enable pointerEvents:auto
-							// over their own rects (set inside TerminalView).
-							pointerEvents: isTerminalVisible ? 'auto' : 'none',
-							zIndex: overlayShown ? 1 : -1,
-						}}
-					>
-						<TerminalView
-							ref={(handle) => {
-								if (handle) terminalViewRefs.current.set(sessionId, handle);
-								else terminalViewRefs.current.delete(sessionId);
+			{!newShell &&
+				mountedTerminalSessionIds.map((sessionId) => {
+					const isCurrentSession = sessionId === activeSession.id;
+					const session = isCurrentSession
+						? activeSession
+						: mountedTerminalSessionsRef.current.get(sessionId);
+					if (!session) return null;
+					// Tiling: this session has terminal tabs that are leaves in the active
+					// group. Each such tab's layer is positioned onto its pane rect (below,
+					// inside TerminalView), so the overlay must be shown even though inputMode
+					// isn't 'terminal'. Only the current session can own the active group.
+					const hasTerminalPanes = isCurrentSession && terminalPaneRects.size > 0;
+					const isTerminalVisible = isCurrentSession && session.inputMode === 'terminal';
+					// Overlay shows for standalone terminal mode OR when tiling terminal panes.
+					// It always spans the full panel (inset-0) so the pane rects - which are
+					// panel-relative - map straight onto the absolutely-positioned tab layers.
+					const overlayShown = isTerminalVisible || hasTerminalPanes;
+					return (
+						<div
+							key={sessionId}
+							className={`absolute inset-0 flex flex-col${overlayShown ? '' : ' terminal-hidden'}`}
+							style={{
+								visibility: overlayShown ? 'visible' : 'hidden',
+								// Standalone terminal captures input across the whole panel. The tiled
+								// overlay wrapper is click-through (none) so clicks on other panes and
+								// dividers land; its positioned pane layers re-enable pointerEvents:auto
+								// over their own rects (set inside TerminalView).
+								pointerEvents: isTerminalVisible ? 'auto' : 'none',
+								zIndex: overlayShown ? 1 : -1,
 							}}
-							session={session}
-							theme={theme}
-							fontFamily={terminalFontFamily}
-							// The terminal's own resolved size. This used to be a
-							// hard-coded 0.85 of the interface size, which is exactly
-							// the per-surface ratio the terminal size setting now
-							// expresses explicitly and lets the user change.
-							fontSize={terminal.fontSize}
-							onTabStateChange={createTabStateChangeHandler(sessionId)}
-							onTabPidChange={createTabPidChangeHandler(sessionId)}
-							searchOpen={isCurrentSession ? terminalSearchOpen : false}
-							onSearchClose={isCurrentSession ? () => setTerminalSearchOpen(false) : undefined}
-							paneRects={hasTerminalPanes ? terminalPaneRects : undefined}
-							onPaneMouseDown={
-								hasTerminalPanes
-									? (tid) => focusTiledPaneByTab({ type: 'terminal', id: tid })
-									: undefined
-							}
-							// Visible in standalone terminal mode OR when tiling terminal panes,
-							// so XTerminal keeps its WebGL renderer alive and repaints on show.
-							isVisible={isTerminalVisible || hasTerminalPanes}
-							onCopySelection={onTerminalCopySelection}
-							onSendSelectionToAgent={onTerminalSendSelectionToAgent}
-						/>
-					</div>
-				);
-			})}
+						>
+							<TerminalView
+								ref={(handle) => {
+									if (handle) terminalViewRefs.current.set(sessionId, handle);
+									else terminalViewRefs.current.delete(sessionId);
+								}}
+								session={session}
+								theme={theme}
+								fontFamily={terminalFontFamily}
+								// The terminal's own resolved size. This used to be a
+								// hard-coded 0.85 of the interface size, which is exactly
+								// the per-surface ratio the terminal size setting now
+								// expresses explicitly and lets the user change.
+								fontSize={terminal.fontSize}
+								onTabStateChange={createTabStateChangeHandler(sessionId)}
+								onTabPidChange={createTabPidChangeHandler(sessionId)}
+								searchOpen={isCurrentSession ? terminalSearchOpen : false}
+								onSearchClose={isCurrentSession ? () => setTerminalSearchOpen(false) : undefined}
+								paneRects={hasTerminalPanes ? terminalPaneRects : undefined}
+								onPaneMouseDown={
+									hasTerminalPanes
+										? (tid) => focusTiledPaneByTab({ type: 'terminal', id: tid })
+										: undefined
+								}
+								// Visible in standalone terminal mode OR when tiling terminal panes,
+								// so XTerminal keeps its WebGL renderer alive and repaints on show.
+								isVisible={isTerminalVisible || hasTerminalPanes}
+								onCopySelection={onTerminalCopySelection}
+								onSendSelectionToAgent={onTerminalSendSelectionToAgent}
+							/>
+						</div>
+					);
+				})}
 			{/* Browser tabs are kept alive as persistent overlays so their <webview> guest
 			    contents survive switching tabs. Which tabs stay mounted is decided by
 			    useBrowserTabMounting (the browserTabKeepAlive setting); under 'off' only the

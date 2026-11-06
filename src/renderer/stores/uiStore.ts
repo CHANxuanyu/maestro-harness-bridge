@@ -507,7 +507,10 @@ export const useUIStore = create<UIStore>()((set, get) => ({
 	setActiveRightTab: (v) =>
 		set((s) => {
 			const tab = resolve(v, s.activeRightTab);
-			if (useSettingsStore.getState().newShell && (tab === 'files' || tab === 'changes')) {
+			if (
+				useSettingsStore.getState().newShell &&
+				(tab === 'files' || tab === 'changes' || tab === 'terminal' || tab === 'tasks')
+			) {
 				rememberNewShellPanel({ tab });
 				return s;
 			}

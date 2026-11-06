@@ -174,6 +174,23 @@ describe('Windows IPC Handlers', () => {
 		expect(ipcMain.removeListener).toHaveBeenCalledWith(request[2], listener);
 	});
 
+	it('queries the primary owner for a session without an explicit registry assignment', async () => {
+		const primary = makeFakeWindow();
+		registry.create({ windowId: 'primary', browserWindow: primary, isMain: true });
+		const pending = handlers.get('windows:getConversationPermissions')!({}, ['default-owned']);
+		const request = sendOf(primary).mock.calls[0];
+		expect(request?.slice(0, 2)).toEqual(['windows:readConversationPermissions', 'default-owned']);
+		const listener = vi
+			.mocked(ipcMain.on)
+			.mock.calls.find(([channel]) => channel === request[2])![1];
+		const snapshot = {
+			sessionId: 'default-owned',
+			tabs: [{ id: 'latest', permissionMode: 'full', readOnlyMode: false, lastActivity: 1 }],
+		};
+		listener({ sender: primary.webContents } as never, snapshot);
+		expect(await pending).toEqual([snapshot]);
+	});
+
 	it('discards permission replies if the session changed owner during the request', async () => {
 		const oldOwner = makeFakeWindow();
 		const newOwner = makeFakeWindow();

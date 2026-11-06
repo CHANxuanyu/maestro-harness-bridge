@@ -217,7 +217,7 @@ export function registerWindowsHandlers(deps: WindowsHandlerDependencies): void 
 		const registry = getWindowRegistry();
 		return Promise.all(
 			sessionIds.map(async (sessionId) => {
-				const ownerId = registry?.getWindowForSession(sessionId);
+				const ownerId = registry?.getWindowForSession(sessionId) ?? registry?.getPrimary()?.id;
 				const owner = ownerId ? registry?.get(ownerId)?.browserWindow : undefined;
 				if (!owner || !isWebContentsAvailable(owner)) return null;
 				try {
@@ -231,8 +231,8 @@ export function registerWindowsHandlers(deps: WindowsHandlerDependencies): void 
 							verifySender: true,
 						}
 					);
-					return registry?.getWindowForSession(sessionId) === ownerId &&
-						snapshot?.sessionId === sessionId
+					return (registry?.getWindowForSession(sessionId) ?? registry?.getPrimary()?.id) ===
+						ownerId && snapshot?.sessionId === sessionId
 						? snapshot
 						: null;
 				} catch {

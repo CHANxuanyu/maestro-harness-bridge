@@ -4,6 +4,30 @@ import { SlashCommandPopover } from '../../../../../renderer/components/InputAre
 import { createItemRefs, inputAreaTheme } from '../_fixtures';
 
 describe('SlashCommandPopover', () => {
+	it('labels command sources and keeps the read failure notice visible', () => {
+		render(
+			<SlashCommandPopover
+				isOpen
+				commands={[
+					{ command: '/review', description: 'Review', source: 'project' },
+					{ command: '/user', description: 'User command', source: 'user' },
+				]}
+				warning="remote-unavailable"
+				inputValueLower="/"
+				selectedIndex={0}
+				itemRefs={createItemRefs<HTMLButtonElement>()}
+				theme={inputAreaTheme}
+				setInputValue={vi.fn()}
+				setSlashCommandOpen={vi.fn()}
+				setSelectedSlashCommandIndex={vi.fn()}
+				inputRef={{ current: null }}
+			/>
+		);
+		expect(screen.getByText('Project')).toBeInTheDocument();
+		expect(screen.getByText('User')).toBeInTheDocument();
+		expect(screen.getByRole('status')).toHaveTextContent('Could not read commands on the SSH host');
+	});
+
 	const commands = [
 		{ command: '/clear', description: 'Clear chat history' },
 		{ command: '/help', description: 'Show help' },

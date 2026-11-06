@@ -1,3 +1,4 @@
+import { conversationNativeCommands } from '../../services/nativeCommands';
 import { appendReadOnlyPrompt } from '../../../shared/readOnlyPrompt';
 import { useOperationStore } from '../../stores/operationStore';
 import { useCallback, useRef } from 'react';
@@ -501,7 +502,7 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 						firstSpaceIndex === -1 ? '' : commandText.substring(firstSpaceIndex + 1).trim();
 
 					// Check custom AI commands first, then agent-discovered commands with prompts
-					const matchingAgentCommand = activeSession.agentCommands?.find(
+					const matchingAgentCommand = (await conversationNativeCommands(activeSession)).find(
 						(cmd) => cmd.command === baseCommand && cmd.prompt
 					);
 					const matchingCustomCommand =

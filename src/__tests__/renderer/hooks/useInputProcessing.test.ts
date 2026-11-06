@@ -598,6 +598,55 @@ describe('useInputProcessing', () => {
 	});
 
 	describe('custom AI commands', () => {
+		it('resolves a Codex command from the current account instead of persisted commands', async () => {
+			vi.useFakeTimers();
+			useSettingsStore.setState({ newShell: true });
+			const session = createMockSession({
+				toolType: 'codex',
+				customEnvVars: { CODEX_HOME: '/temporary/codex-b' },
+				agentCommands: [
+					{ command: '/project-command', description: 'Stale', prompt: 'Old account' },
+				],
+			});
+			const read = vi.fn().mockResolvedValue({
+				commands: [
+					{
+						command: '/project-command',
+						description: 'Current account',
+						prompt: 'Current prompt',
+						source: 'project',
+					},
+				],
+			});
+			window.maestro.agents.getNativeCommands = read;
+			try {
+				const deps = createDeps({ activeSession: session, inputValue: '/project-command' });
+				const { result } = renderHook(() => useInputProcessing(deps));
+				await act(async () => {
+					await result.current.processInput();
+				});
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(50);
+				});
+				expect(read).toHaveBeenCalledWith(
+					expect.objectContaining({
+						toolType: 'codex',
+						customEnvVars: { CODEX_HOME: '/temporary/codex-b' },
+					})
+				);
+				expect(mockProcessQueuedItemRef.current).toHaveBeenCalledWith(
+					session.id,
+					expect.objectContaining({
+						command: '/project-command',
+						commandDescription: 'Current account',
+					})
+				);
+			} finally {
+				useSettingsStore.setState({ newShell: false });
+				vi.useRealTimers();
+			}
+		});
+
 		const customCommands: CustomAICommand[] = [
 			{
 				id: 'commit',

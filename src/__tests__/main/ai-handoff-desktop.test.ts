@@ -78,6 +78,7 @@ describe('handoff desktop ownership routing', () => {
 				return {
 					sourceAgentId: 'source',
 					sourceTabId: 'source-tab',
+					sourcePermission: { permissionMode: 'readonly', readOnlyMode: true },
 					cwd: '/project',
 					projectPath: '/project',
 					draft,
@@ -201,6 +202,38 @@ describe('handoff desktop ownership routing', () => {
 			newConversation: { source: { stagedImages: ['live-image'] } },
 		});
 	});
+
+	it('reads project permission metadata from the source owner for CLI provider creation', async () => {
+		const result = await api().command({
+			action: 'new-conversation',
+			sourceAgentId: 'source',
+			targetProvider: 'codex',
+		});
+		expect(result.success).toBe(true);
+		expect(vi.mocked(requestFromRenderer).mock.calls[0][0]).toBe(sourceWindow);
+		expect(vi.mocked(requestFromRenderer).mock.calls[0][2].args?.[0]).toMatchObject({
+			permissionOnly: true,
+			sourceTabId: '',
+		});
+		expect(vi.mocked(requestFromRenderer).mock.calls[1][2].args?.[0]).toMatchObject({
+			sourcePermission: { permissionMode: 'readonly', readOnlyMode: true },
+		});
+	});
+
+	it.each(['handoff', 'review'] as const)(
+		'carries the source permission through %s routing',
+		async (mode) => {
+			await api().prepare({
+				sourceAgentId: 'source',
+				sourceTabId: 'source-tab',
+				targetProvider: 'codex',
+				mode,
+			});
+			expect(vi.mocked(requestFromRenderer).mock.calls[1][2].args?.[0]).toMatchObject({
+				sourcePermission: { permissionMode: 'readonly', readOnlyMode: true },
+			});
+		}
+	);
 
 	it('creates a missing project runner in the source window', async () => {
 		const otherProject = { ...target, projectRoot: '/other', cwd: '/other' };

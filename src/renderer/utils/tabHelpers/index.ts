@@ -18,6 +18,8 @@ import {
 	ThinkingMode,
 	QueuedItem,
 } from '../../types';
+import { recentProjectConversation } from '../newConversationPermissions';
+import { getCachedCapabilities } from '../../hooks/agent/useAgentCapabilities';
 import { generateId } from '../ids';
 import { getAutoRunFolderPath } from '../existingDocsDetector';
 import { createTerminalTab, nextTerminalCoworkingId } from '../terminalTabHelpers';
@@ -42,6 +44,7 @@ import {
 	terminalTabFocusFields,
 	toggleReadOnlyModeFields,
 	permissionModeFields,
+	newConversationPermissionFields,
 	permissionModes,
 	nextPermissionMode,
 	cycleShowThinkingFields,
@@ -65,6 +68,7 @@ export {
 	terminalTabFocusFields,
 	toggleReadOnlyModeFields,
 	permissionModeFields,
+	newConversationPermissionFields,
 	permissionModes,
 	nextPermissionMode,
 	cycleShowThinkingFields,
@@ -997,6 +1001,9 @@ export function settleTabThinkingState(session: Session, tabId: string): Session
  * Options for creating a new AI tab.
  */
 export interface CreateTabOptions {
+	/** Explicit conversation context; omitted for project, keyboard and CLI entry points. */
+	permissionSource?: Pick<AITab, 'permissionMode' | 'readOnlyMode'>;
+
 	agentSessionId?: string | null; // Claude Code session UUID (null for new tabs)
 	logs?: LogEntry[]; // Initial conversation history
 	name?: string | null; // User-defined name (null = show UUID octet)
@@ -1066,6 +1073,22 @@ export function createTab(
 		id,
 	} = options;
 
+	let permissions = {};
+	if (useSettingsStore.getState().newShell && !agentSessionId && logs.length === 0) {
+		const recent = options.permissionSource ? undefined : recentProjectConversation(session);
+		const source = options.permissionSource ?? recent?.tab;
+		const capabilities = getCachedCapabilities(session.toolType);
+		const fields = newConversationPermissionFields(
+			source,
+			capabilities ??
+				(recent && recent.session.toolType !== session.toolType
+					? { supportsStandardPermissionMode: false, supportsReadOnlyMode: false }
+					: undefined)
+		);
+		if (!fields) return null;
+		permissions = fields;
+	}
+
 	// Create the new tab with default values
 	const newTab: AITab = {
 		id: id ?? generateId(),
@@ -1080,6 +1103,7 @@ export function createTab(
 		state: 'idle',
 		saveToHistory,
 		showThinking,
+		...permissions,
 	};
 
 	// Update the session with the new tab added. When `activate` is true (the
@@ -1254,6 +1278,7 @@ export function closeTab(
 	let freshTabId = '';
 	if (visibleUpdatedTabs.length === 0 && otherTabCount === 0) {
 		const freshTab: AITab = {
+			...(useSettingsStore.getState().newShell ? newConversationPermissionFields(tabToClose) : {}),
 			id: generateId(),
 			agentSessionId: null,
 			name: null,
@@ -2360,6 +2385,14 @@ export function setActiveTab(session: Session, tabId: string): SetActiveTabResul
 		return null;
 	}
 
+	if (useSettingsStore.getState().newShell) {
+		session = {
+			...session,
+			aiTabs: session.aiTabs.map((tab) =>
+				tab.id === tabId ? { ...tab, lastSelectedAt: Date.now() } : tab
+			),
+		};
+	}
 	const targetTab = session.aiTabs.find((tab) => tab.id === tabId);
 	if (!targetTab) {
 		return null;

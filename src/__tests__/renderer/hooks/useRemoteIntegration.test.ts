@@ -475,6 +475,7 @@ describe('useRemoteIntegration', () => {
 	};
 
 	beforeEach(() => {
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 		onRemoteCommandHandler = undefined;
 		onRemoteSwitchModeHandler = undefined;
@@ -1175,6 +1176,34 @@ describe('useRemoteIntegration', () => {
 			expect(useSessionStore.getState().sessions[0].activeTabId).toBe('visible-tab');
 		});
 	});
+
+	it.each([false, true])(
+		'CLI tab new inherits recent project permissions, with prompt %s',
+		(withPrompt) => {
+			useSettingsStore.setState({ newShell: true });
+			const older = createMockTab({ id: 'old', createdAt: 1, permissionMode: 'full' });
+			const latest = createMockTab({ id: 'recent', createdAt: 2, readOnlyMode: true });
+			const session = createMockSession({
+				id: 'session-1',
+				aiTabs: [older, latest],
+				activeTabId: older.id,
+			});
+			const deps = createDeps({ sessions: [session] });
+			renderHook(() => useRemoteIntegration(deps));
+			act(() => {
+				if (withPrompt)
+					onRemoteNewAITabWithPromptHandler?.(session.id, 'Synthetic prompt', 'ack', true);
+				else onRemoteNewTabHandler?.(session.id, 'ack', true);
+			});
+			const updated = useSessionStore.getState().sessions[0];
+			expect(updated.aiTabs.at(-1)).toMatchObject({
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
+			expect(updated.activeTabId).toBe(older.id);
+			expect(updated.aiTabs.slice(0, 2)).toEqual([older, latest]);
+		}
+	);
 
 	describe('remote new tab', () => {
 		it('commits the new tab before responding with its ID', () => {

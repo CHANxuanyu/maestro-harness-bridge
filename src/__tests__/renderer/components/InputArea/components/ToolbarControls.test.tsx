@@ -62,6 +62,16 @@ describe('ToolbarControls', () => {
 		);
 	}
 
+	it('shows inherited standard immediately while target capabilities are loading', () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = createInputAreaSession();
+		session.aiTabs[0].permissionMode = 'standard';
+		session.aiTabs[0].readOnlyMode = false;
+		renderToolbar({ session, hasStandardCapability: false });
+		expect(screen.getByTitle(/^Standard:/)).toHaveTextContent('Standard');
+		expect(screen.queryByTitle(/^Full Access/)).toBeNull();
+	});
+
 	it.each([false, true])(
 		'gates the extra toolbar controls without changing their settings, new shell %s',
 		(newShell) => {

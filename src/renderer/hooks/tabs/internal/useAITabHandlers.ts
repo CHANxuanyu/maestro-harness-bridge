@@ -38,65 +38,69 @@ export function useAITabHandlers(
 ): AITabHandlersReturn {
 	const { endWizard: endInlineWizard } = useInlineWizardContext();
 
-	const createNewAITab = useCallback(() => {
-		const { activeSessionId } = useSessionStore.getState();
-		const { defaultSaveToHistory, defaultShowThinking } = useSettingsStore.getState();
-		if (!activeSessionId) return;
+	const createNewAITab = useCallback(
+		(fromConversation = false) => {
+			const { activeSessionId } = useSessionStore.getState();
+			const { defaultSaveToHistory, defaultShowThinking } = useSettingsStore.getState();
+			if (!activeSessionId) return;
 
-		if (isWebDesktop()) {
-			// Focus the composer SYNCHRONOUSLY, inside the tap that asked for the
-			// tab. iOS raises the on-screen keyboard only for a focus() that runs
-			// in the user gesture's own call stack, and the tab itself is minted by
-			// the desktop a WebSocket round trip away - so a focus deferred until
-			// the answer lands moves the caret and leaves the keyboard down, which
-			// on a phone means tapping the composer anyway. The textarea is not
-			// keyed on the tab, so it keeps focus through the switch below.
-			inputRef?.current?.focus();
-			void window.maestro.web
-				.requestNewTab(activeSessionId, false)
-				.then((result) => {
-					if (!result?.tabId) return;
-					// Draw the tab NOW rather than waiting to be told about it. The
-					// desktop owns the tab inventory and publishes it from a 500ms
-					// poll (`useRemoteIntegration`), so a client that only reacted to
-					// the broadcast sat there doing nothing for up to half a second
-					// after the tap. The answer already carries the id the desktop
-					// minted, so adopt it: the inventory sync that follows matches on
-					// id and keeps the tab this client already has.
-					updateSessionWith(activeSessionId, (session) => {
-						// The broadcast can win the race. Then the tab is already here
-						// and all that is left is to make it the visible one - an
-						// inventory snapshot deliberately never moves a browser
-						// client's tab, since that focus belongs to whoever holds this
-						// client, not to whoever is at the desktop.
-						if (session.aiTabs.some((tab) => tab.id === result.tabId)) {
-							return { ...session, ...aiTabFocusFields(result.tabId) };
-						}
-						const created = createTab(session, {
-							id: result.tabId,
-							saveToHistory: defaultSaveToHistory,
-							showThinking: defaultShowThinking,
+			if (isWebDesktop()) {
+				// Focus the composer SYNCHRONOUSLY, inside the tap that asked for the
+				// tab. iOS raises the on-screen keyboard only for a focus() that runs
+				// in the user gesture's own call stack, and the tab itself is minted by
+				// the desktop a WebSocket round trip away - so a focus deferred until
+				// the answer lands moves the caret and leaves the keyboard down, which
+				// on a phone means tapping the composer anyway. The textarea is not
+				// keyed on the tab, so it keeps focus through the switch below.
+				inputRef?.current?.focus();
+				void window.maestro.web
+					.requestNewTab(activeSessionId, false)
+					.then((result) => {
+						if (!result?.tabId) return;
+						// Draw the tab NOW rather than waiting to be told about it. The
+						// desktop owns the tab inventory and publishes it from a 500ms
+						// poll (`useRemoteIntegration`), so a client that only reacted to
+						// the broadcast sat there doing nothing for up to half a second
+						// after the tap. The answer already carries the id the desktop
+						// minted, so adopt it: the inventory sync that follows matches on
+						// id and keeps the tab this client already has.
+						updateSessionWith(activeSessionId, (session) => {
+							// The broadcast can win the race. Then the tab is already here
+							// and all that is left is to make it the visible one - an
+							// inventory snapshot deliberately never moves a browser
+							// client's tab, since that focus belongs to whoever holds this
+							// client, not to whoever is at the desktop.
+							if (session.aiTabs.some((tab) => tab.id === result.tabId)) {
+								return { ...session, ...aiTabFocusFields(result.tabId) };
+							}
+							const created = createTab(session, {
+								id: result.tabId,
+								saveToHistory: defaultSaveToHistory,
+								showThinking: defaultShowThinking,
+							});
+							return created?.session ?? session;
 						});
-						return created?.session ?? session;
-					});
-				})
-				.catch((error) =>
-					logger.error('[useAITabHandlers] Failed to create desktop tab:', undefined, error)
-				);
-			return;
-		}
+					})
+					.catch((error) =>
+						logger.error('[useAITabHandlers] Failed to create desktop tab:', undefined, error)
+					);
+				return;
+			}
 
-		updateSessionWith(activeSessionId, (session) => {
-			const result = createTab(session, {
-				saveToHistory: defaultSaveToHistory,
-				showThinking: defaultShowThinking,
+			updateSessionWith(activeSessionId, (session) => {
+				const result = createTab(session, {
+					permissionSource: fromConversation ? (getActiveTab(session) ?? undefined) : undefined,
+					saveToHistory: defaultSaveToHistory,
+					showThinking: defaultShowThinking,
+				});
+				return result?.session ?? session;
 			});
-			return result?.session ?? session;
-		});
-	}, [inputRef]);
+		},
+		[inputRef]
+	);
 
 	const handleNewAgentSession = useCallback(() => {
-		createNewAITab();
+		createNewAITab(true);
 		useModalStore.getState().closeModal('agentSessions');
 	}, [createNewAITab]);
 
@@ -221,7 +225,7 @@ export function useAITabHandlers(
 		[performTabClose]
 	);
 
-	const handleNewTab = createNewAITab;
+	const handleNewTab = useCallback(() => createNewAITab(), [createNewAITab]);
 
 	// "Close all" means every tab the user can see. Hidden consult tabs (unopened
 	// cross-agent @mentions) have no chip, so closing one here would silently

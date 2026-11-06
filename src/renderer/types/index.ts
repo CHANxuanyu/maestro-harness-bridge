@@ -863,6 +863,8 @@ export interface AITab {
 	stagedImages: string[]; // Staged images (base64) for this tab
 	usageStats?: UsageStats; // Token usage for this tab
 	createdAt: number; // Timestamp for ordering
+	/** Most recent explicit selection in the new shell. */
+	lastSelectedAt?: number;
 	state: 'idle' | 'busy'; // Tab-level state for write-mode tracking
 	readOnlyMode?: boolean; // When true, agent operates in plan/read-only mode
 	permissionMode?: 'full' | 'standard' | 'readonly'; // Controls agent permission handling: full (bypass all), standard (default permission model), readonly (plan mode)

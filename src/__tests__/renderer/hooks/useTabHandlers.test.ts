@@ -146,6 +146,7 @@ describe('useTabHandlers', () => {
 			modals: new Map(),
 		});
 		useSettingsStore.setState({
+			newShell: false,
 			defaultSaveToHistory: true,
 			defaultShowThinking: undefined,
 			fileTabAutoRefreshEnabled: false,
@@ -199,6 +200,24 @@ describe('useTabHandlers', () => {
 	// ========================================================================
 
 	describe('AI tab operations', () => {
+		it.each(['handleNewAgentSession', 'handleNewTab'] as const)(
+			'%s inherits from its conversation or project scope',
+			(entry) => {
+				useSettingsStore.setState({ newShell: true });
+				const current = createMockAITab({ id: 'current', createdAt: 1, readOnlyMode: true });
+				const latest = createMockAITab({ id: 'latest', createdAt: 2, permissionMode: 'standard' });
+				const { result } = renderWithSession([current, latest], [], current.id);
+				act(() => result.current[entry]());
+				const created = getSession().aiTabs.at(-1)!;
+				expect(created).toMatchObject(
+					entry === 'handleNewAgentSession'
+						? { permissionMode: 'readonly', readOnlyMode: true }
+						: { permissionMode: 'standard', readOnlyMode: false }
+				);
+				expect(getSession().aiTabs[0]).toEqual(current);
+			}
+		);
+
 		it('handleNewAgentSession creates a new tab', () => {
 			const tab = createMockAITab({ id: 'tab-1' });
 			const { result } = renderWithSession([tab]);

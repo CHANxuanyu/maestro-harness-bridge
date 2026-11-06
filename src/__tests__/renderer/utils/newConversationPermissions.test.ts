@@ -3,11 +3,24 @@ import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
-import { createTab, setActiveTab, permissionModeFields } from '../../../renderer/utils/tabHelpers';
+import {
+	createTab,
+	closeTab,
+	setActiveTab,
+	permissionModeFields,
+} from '../../../renderer/utils/tabHelpers';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
+import { newConversationPermissionFields } from '../../../renderer/utils/tabHelpers/focusFields';
+import { buildAgentArgs } from '../../../main/utils/agent-args';
+import { getAgentDefinition } from '../../../main/agents/definitions';
+import type { AgentConfig } from '../../../main/agents';
 import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
 
 beforeEach(() => {
 	useSettingsStore.setState({ newShell: true });
+	for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
+		setCapabilitiesCache(id, capabilities);
 	useSessionStore.setState({ sessions: [], groups: [] });
 });
 
@@ -114,4 +127,86 @@ describe('new conversation permission inheritance', () => {
 		useSettingsStore.setState({ newShell: true });
 		expect(createTab(session, { agentSessionId: 'native' })!.tab.permissionMode).toBeUndefined();
 	});
+});
+
+describe('permission choices across tools', () => {
+	it.each(['claude-code', 'codex'] as const)('preserves full and readonly for %s', (tool) => {
+		for (const mode of ['full', 'readonly'] as const)
+			expect(
+				newConversationPermissionFields(permissionModeFields(mode), AGENT_CAPABILITIES[tool])
+			).toEqual(permissionModeFields(mode));
+	});
+	it('keeps standard for Claude and DeepSeek but tightens it for Codex', () => {
+		expect(
+			newConversationPermissionFields(
+				permissionModeFields('standard'),
+				AGENT_CAPABILITIES['claude-code']
+			)
+		).toEqual(permissionModeFields('standard'));
+		expect(
+			newConversationPermissionFields(permissionModeFields('standard'), AGENT_CAPABILITIES.codex)
+		).toEqual(permissionModeFields('readonly'));
+	});
+	it('refuses to widen when the target has no equally strict permission', () => {
+		expect(
+			newConversationPermissionFields(permissionModeFields('readonly'), {
+				supportsReadOnlyMode: false,
+			})
+		).toBeNull();
+		expect(
+			newConversationPermissionFields(permissionModeFields('standard'), {
+				supportsReadOnlyMode: false,
+				supportsStandardPermissionMode: false,
+			})
+		).toBeNull();
+	});
+});
+
+it('sends the inherited readonly fields as Codex sandbox arguments, and allows a deliberate later change', () => {
+	const source = createMockAITab({ readOnlyMode: true });
+	const result = createTab(createMockSession({ toolType: 'codex', aiTabs: [source] }), {
+		permissionSource: source,
+	})!;
+	const agent = {
+		...getAgentDefinition('codex')!,
+		capabilities: AGENT_CAPABILITIES.codex,
+		available: true,
+	} as AgentConfig;
+	const args = buildAgentArgs(agent, {
+		baseArgs: [],
+		prompt: 'Synthetic request',
+		permissionMode: resolveTabPermissionMode(result.tab),
+		readOnlyMode: result.tab.readOnlyMode,
+	});
+	expect(args[args.indexOf('--sandbox') + 1]).toBe('read-only');
+	expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+	Object.assign(result.tab, permissionModeFields('full'));
+	expect(
+		buildAgentArgs(agent, {
+			baseArgs: [],
+			prompt: 'Synthetic request',
+			permissionMode: result.tab.permissionMode,
+			readOnlyMode: result.tab.readOnlyMode,
+		})
+	).toContain('--dangerously-bypass-approvals-and-sandbox');
+	expect(source.readOnlyMode).toBe(true);
+});
+
+it('keeps readonly in the automatic conversation created after closing the last tab', () => {
+	const source = createMockAITab({ id: 'last', readOnlyMode: true });
+	const session = createMockSession({ aiTabs: [source], activeTabId: source.id });
+	const closed = closeTab(session, source.id)!;
+	expect(closed.session.aiTabs[0]).toMatchObject({
+		permissionMode: 'readonly',
+		readOnlyMode: true,
+	});
+});
+
+it('can inherit from a recently closed project conversation when only file tabs remain', () => {
+	const source = createMockAITab({ readOnlyMode: true });
+	const session = createMockSession({
+		aiTabs: [],
+		closedTabHistory: [{ tab: source, index: 0, closedAt: 1 }],
+	});
+	expect(createTab(session)!.tab).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
 });

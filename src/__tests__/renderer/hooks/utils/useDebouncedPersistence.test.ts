@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import fs from 'node:fs';
 import {
 	useDebouncedPersistence,
 	DEFAULT_DEBOUNCE_DELAY,
@@ -15,6 +16,13 @@ import type {
 } from '../../../../renderer/types';
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { resetStore } from '../../../helpers/resetStores';
+import { appendReadOnlyPrompt } from '../../../../shared/readOnlyPrompt';
+import { MAX_PERSISTED_SESSION_LOGS } from '../../../../shared/deferredSessionContent';
+import {
+	refreshNativeConversation,
+	resetNativeConversationRefreshes,
+} from '../../../../renderer/services/refreshNativeConversation';
+import { transcriptMessagesToLogEntries } from '../../../../renderer/utils/transcriptMessages';
 
 // The renderer sentry module only exports these two helpers, so a full mock is
 // safe and avoids pulling @sentry/electron/renderer into jsdom. Lets us assert
@@ -568,6 +576,83 @@ describe('useDebouncedPersistence', () => {
 		});
 
 		describe('log truncation', () => {
+			it.each(['claude-code', 'codex'] as const)(
+				'%s repairs the full cached conversation before persisting only its tail',
+				async (toolType) => {
+					resetNativeConversationRefreshes();
+					const prompt = 'Wait for @Reviewer in parallel, then report the result.';
+					const wire =
+						appendReadOnlyPrompt(prompt) +
+						'\n\n---\n\n' +
+						fs
+							.readFileSync('src/prompts/cross-agent-consult-pending.md', 'utf8')
+							.replaceAll('{{CONSULTED_AGENTS}}', 'Reviewer');
+					const sentAt = Date.parse('2026-11-06T12:00:00Z');
+					const messages = [
+						wire,
+						prompt,
+						...Array.from({ length: 650 }, (_, i) => `Later ${i}`),
+					].map((content, i) => ({
+						uuid: `native-${i}`,
+						role: i < 2 || i % 2 === 0 ? 'user' : 'assistant',
+						type: i < 2 || i % 2 === 0 ? 'user' : 'assistant',
+						content,
+						timestamp: new Date(sentAt + i * 1000).toISOString(),
+					}));
+					const canonical = transcriptMessagesToLogEntries(messages);
+					const own: LogEntry = {
+						id: 'cached-local-send',
+						source: 'user',
+						text: prompt,
+						timestamp: sentAt - 200,
+						readOnly: true,
+					};
+					const logs = [own, { ...canonical[0], text: wire }, ...canonical.slice(1)];
+					const tab = makeTab({ id: 'cached-tab', agentSessionId: 'native-session', logs });
+					seedSessions([makeSession({ id: 'owner', toolType, aiTabs: [tab] })]);
+					const read = vi
+						.spyOn(window.maestro.agentSessions, 'read')
+						.mockImplementation(async (_provider, _cwd, _id, options) => ({
+							messages: messages.slice(-options!.limit!),
+							total: messages.length,
+							hasMore: options!.limit! < messages.length,
+						}));
+					const { result, unmount } = renderPersistence(makeInitialLoadRef(true));
+					try {
+						await act(async () => {
+							expect(
+								await refreshNativeConversation({ sessionId: 'owner', tabId: tab.id })
+							).toMatchObject({ status: 'updated', added: 0 });
+						});
+						expect(read.mock.calls.map((call) => call[3]!.limit)).toEqual([500, logs.length]);
+						expect(read.mock.calls.every((call) => call[3]!.readOnly)).toBe(true);
+						const repaired = useSessionStore.getState().sessions[0].aiTabs[0].logs;
+						expect(repaired).toEqual([
+							{ ...own, nativeTranscript: { messageId: 'native-0' } },
+							...canonical.slice(1),
+						]);
+						expect(
+							repaired.filter((entry) => entry.text === prompt).map((entry) => entry.id)
+						).toEqual(['cached-local-send', 'native-1']);
+						await act(async () => {
+							await result.current.flushNow(useSessionStore.getState().sessions);
+						});
+						const persisted = vi.mocked(window.maestro.sessions.setAll).mock
+							.calls[0][0] as Session[];
+						const saved = persisted[0].aiTabs[0].logs;
+						expect(saved).toEqual(canonical.slice(-MAX_PERSISTED_SESSION_LOGS));
+						// The old Electron assertion inspected this bounded disk cache.
+						// Neither early send belongs here, although both remain in memory.
+						expect(saved.filter((entry) => entry.text.startsWith(prompt))).toEqual([]);
+						expect(useSessionStore.getState().sessions[0].aiTabs[0].logs).toBe(repaired);
+					} finally {
+						unmount();
+						read.mockRestore();
+						resetNativeConversationRefreshes();
+					}
+				}
+			);
+
 			it('should compact oversized tool output before persistence', () => {
 				const oversizedOutput = 'x'.repeat(50_000);
 				const tab = makeTab({

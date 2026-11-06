@@ -15,6 +15,7 @@
  * directly.
  */
 
+import { getT } from '../../../../i18n';
 import { logger } from '../../../../utils/logger';
 import { notifyToast } from '../../../../stores/notificationStore';
 import { useSessionStore } from '../../../../stores/sessionStore';
@@ -124,7 +125,7 @@ export async function runExitSynopsis(
 				if (result.error) {
 					notifyToast({
 						color: 'yellow',
-						title: 'Synopsis failed',
+						title: getT()('workflows.shell.synopsisFailed'),
 						message: result.error,
 						group: synopsisData.groupName,
 						project: synopsisData.projectName,

@@ -1,3 +1,4 @@
+import { useTabStore } from '../../../stores/tabStore';
 import { getT } from '../../../i18n';
 import type React from 'react';
 import { buildSessionDeepLink } from '../../../../shared/deep-link-urls';
@@ -167,17 +168,7 @@ export function buildActiveTabContextCommands({
 				: t('workflows.shell.starSession'),
 			shortcut: toggleTabStarShortcut,
 			action: () => {
-				setSessions((prev) =>
-					prev.map((session) => {
-						if (session.id !== activeSessionId) return session;
-						return {
-							...session,
-							aiTabs: session.aiTabs.map((tab) =>
-								tab.id === activeTab.id ? { ...tab, starred: !tab.starred } : tab
-							),
-						};
-					})
-				);
+				useTabStore.getState().starTab(activeTab.id, activeSessionId);
 				setQuickActionOpen(false);
 			},
 		});

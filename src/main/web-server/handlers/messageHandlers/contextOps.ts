@@ -1,3 +1,4 @@
+import { readBackgroundField } from '../../../../shared/focusPlacement';
 /**
  * Context Ops domain WebSocket message handlers.
  *
@@ -130,7 +131,11 @@ export function handleSummarizeContext(
 	}
 
 	ctx.callbacks
-		.summarizeContext(sessionId)
+		.summarizeContext(
+			sessionId,
+			typeof message.tabId === 'string' ? message.tabId : undefined,
+			readBackgroundField(message)
+		)
 		.then((success) => {
 			ctx.send(client, {
 				type: 'summarize_context_result',

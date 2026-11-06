@@ -7,7 +7,7 @@ import { isWebContentsAvailable } from '../../utils/safe-send';
 
 export function registerContextOpsCallbacks(
 	server: WebServer,
-	deps: Pick<WebServerFactoryDependencies, 'getMainWindow' | 'aiHandoff'>
+	deps: Pick<WebServerFactoryDependencies, 'getMainWindow' | 'getWindowForSession' | 'aiHandoff'>
 ): void {
 	const { getMainWindow } = deps;
 	if (deps.aiHandoff) server.setHandoffCommandCallback(deps.aiHandoff.command);
@@ -105,40 +105,47 @@ export function registerContextOpsCallbacks(
 	});
 
 	// Summarize context - uses IPC request-response pattern
-	server.setSummarizeContextCallback(async (sessionId: string) => {
-		const mainWindow = getMainWindow();
-		if (!mainWindow) {
-			logger.warn('mainWindow is null for summarizeContext', 'WebServer');
-			return false;
-		}
-
-		return new Promise((resolve) => {
-			const responseChannel = `remote:summarizeContext:response:${randomUUID()}`;
-			let resolved = false;
-
-			const handleResponse = (_event: Electron.IpcMainEvent, result: any) => {
-				if (resolved) return;
-				resolved = true;
-				clearTimeout(timeoutId);
-				resolve(result ?? false);
-			};
-
-			ipcMain.once(responseChannel, handleResponse);
-			if (!isWebContentsAvailable(mainWindow)) {
-				logger.warn('webContents is not available for summarizeContext', 'WebServer');
-				ipcMain.removeListener(responseChannel, handleResponse);
-				resolve(false);
-				return;
+	server.setSummarizeContextCallback(
+		async (sessionId: string, tabId?: string, background?: boolean) => {
+			const mainWindow = deps.getWindowForSession?.(sessionId) ?? getMainWindow();
+			if (!mainWindow) {
+				logger.warn('mainWindow is null for summarizeContext', 'WebServer');
+				return false;
 			}
-			mainWindow.webContents.send('remote:summarizeContext', sessionId, responseChannel);
 
-			const timeoutId = setTimeout(() => {
-				if (resolved) return;
-				resolved = true;
-				ipcMain.removeListener(responseChannel, handleResponse);
-				logger.warn(`summarizeContext callback timed out for session ${sessionId}`, 'WebServer');
-				resolve(false);
-			}, 60000);
-		});
-	});
+			return new Promise((resolve) => {
+				const responseChannel = `remote:summarizeContext:response:${randomUUID()}`;
+				let resolved = false;
+
+				const handleResponse = (_event: Electron.IpcMainEvent, result: any) => {
+					if (resolved) return;
+					resolved = true;
+					clearTimeout(timeoutId);
+					resolve(result ?? false);
+				};
+
+				ipcMain.once(responseChannel, handleResponse);
+				if (!isWebContentsAvailable(mainWindow)) {
+					logger.warn('webContents is not available for summarizeContext', 'WebServer');
+					ipcMain.removeListener(responseChannel, handleResponse);
+					resolve(false);
+					return;
+				}
+				mainWindow.webContents.send(
+					'remote:summarizeContext',
+					sessionId,
+					responseChannel,
+					...(tabId !== undefined || background !== undefined ? [tabId, background] : [])
+				);
+
+				const timeoutId = setTimeout(() => {
+					if (resolved) return;
+					resolved = true;
+					ipcMain.removeListener(responseChannel, handleResponse);
+					logger.warn(`summarizeContext callback timed out for session ${sessionId}`, 'WebServer');
+					resolve(false);
+				}, 60000);
+			});
+		}
+	);
 }

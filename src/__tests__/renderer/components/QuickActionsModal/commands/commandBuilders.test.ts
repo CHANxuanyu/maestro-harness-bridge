@@ -1,3 +1,4 @@
+import { useSessionStore } from '../../../../../renderer/stores/sessionStore';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockSession } from '../../../../helpers/mockSession';
 import { buildAgentPanelCommands } from '../../../../../renderer/components/QuickActionsModal/commands/agentPanelCommands';
@@ -341,6 +342,44 @@ describe('QuickActions command builders', () => {
 				setHistorySearchFilterOpen: vi.fn(),
 			}).map((a) => a.id)
 		).toEqual(['searchAgents', 'searchMessages', 'searchFiles', 'searchHistory']);
+	});
+
+	it('pins through the palette using the same live state and native persistence', () => {
+		window.maestro.agentSessions.setSessionStarred = vi.fn().mockResolvedValue({ success: true });
+		const session = createMockSession({
+			id: 'pin-owner',
+			toolType: 'codex',
+			projectRoot: '/repo',
+			activeTabId: 'pin-tab',
+			aiTabs: [createMockAITab({ id: 'pin-tab', agentSessionId: 'native', starred: false })],
+		});
+		useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+		const commands = buildActiveTabContextCommands({
+			activeSession: session,
+			activeSessionId: session.id,
+			activeTabType: 'ai',
+			setSessions,
+			setQuickActionOpen: close,
+			safeClipboardWrite: async () => true,
+			flashCopiedToClipboard: vi.fn(),
+		});
+		const command = commands.find((c) => c.id === 'toggleStarTab')!;
+		command.action();
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].starred).toBe(true);
+		expect(window.maestro.agentSessions.setSessionStarred).toHaveBeenCalledWith(
+			'codex',
+			'/repo',
+			'native',
+			true
+		);
+		command.action();
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].starred).toBe(false);
+		expect(window.maestro.agentSessions.setSessionStarred).toHaveBeenCalledWith(
+			'codex',
+			'/repo',
+			'native',
+			false
+		);
 	});
 
 	it('builds tab-type-aware Context / Buffer / Content commands', () => {

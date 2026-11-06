@@ -63,6 +63,13 @@ export const CUE_MODAL_TABS: UiSurfaceTab[] = [
 
 export const UI_SURFACES: UiSurface[] = [
 	{
+		id: 'worktree-cleanup',
+		label: 'Remove Worktree',
+		modal: 'deleteWorktree',
+		description: 'Open the existing cleanup confirmation for the active worktree agent.',
+		click: 'Worktree conversation context menu',
+	},
+	{
 		id: 'terminal-panel',
 		label: 'Terminal Panel',
 		modal: 'terminalPanel',

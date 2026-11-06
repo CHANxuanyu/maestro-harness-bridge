@@ -147,6 +147,24 @@ describe('project conversation navigation', () => {
 			};
 		}
 
+		it('keeps an open conversation unpinned while history still has an old star', () => {
+			const session = createMockSession({
+				id: 'owner',
+				toolType: 'codex',
+				projectRoot: '/p',
+				groupId: project.id,
+				aiTabs: [createMockAITab({ id: 'tab', agentSessionId: NATIVE, starred: false })],
+			});
+			const rows = buildProjectSessionTree({
+				sessions: [session],
+				groups: [project],
+				history: [record({ ownerId: session.id, starred: true })],
+			})[0].conversations;
+			expect(rows).toHaveLength(1);
+			expect(rows[0].history?.starred).toBe(true);
+			expect(rows[0].starred).toBe(false);
+		});
+
 		it('shows a DeepSeek preset as its own provider beside Claude Code', () => {
 			const deepseekDir = '/data/accounts/deepseek-1';
 			const claude = createMockSession({

@@ -506,6 +506,15 @@ interface MaestroAPI {
 			responseChannel: string,
 			result: { success: boolean; error?: string }
 		) => void;
+		onRemoteSummarizeContext: (
+			callback: (
+				sessionId: string,
+				responseChannel: string,
+				tabId?: string,
+				background?: boolean
+			) => void
+		) => () => void;
+		sendRemoteSummarizeContextResponse: (responseChannel: string, accepted: boolean) => void;
 		onRemoteStarTab: (
 			callback: (sessionId: string, tabId: string, starred: boolean) => void
 		) => () => void;

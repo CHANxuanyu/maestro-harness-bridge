@@ -8,6 +8,7 @@
  * produce - including the modal layer stack and Escape handling.
  */
 
+import { selectActiveSession, useSessionStore } from '../stores/sessionStore';
 import type { CueModalData, ModalId } from '../stores/modalStore';
 import { getModalActions, useModalStore } from '../stores/modalStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -49,6 +50,13 @@ export function openUiSurface(surfaceId: string, tabId?: string): OpenUiSurfaceR
 	const actions = getModalActions();
 
 	switch (surface.id) {
+		case 'worktree-cleanup': {
+			const session = selectActiveSession(useSessionStore.getState());
+			if (!session?.parentSessionId || !session.worktreeBranch)
+				return { ok: false, error: 'The active agent is not a worktree' };
+			actions.setDeleteWorktreeSession(session);
+			return { ok: true };
+		}
 		case 'terminal-panel':
 		case 'tasks-panel':
 			if (!useSettingsStore.getState().newShell)

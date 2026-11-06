@@ -1,3 +1,4 @@
+import { getWindowContext } from '../../contexts/WindowContext';
 /**
  * useSummarizeAndContinue Hook
  *
@@ -15,7 +16,7 @@
  * State lives in operationStore (Zustand); this hook owns orchestration only.
  */
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import type { Session, LogEntry } from '../../types';
 import type { SummarizeProgress, SummarizeResult } from '../../types/contextMerge';
 import { contextSummarizationService } from '../../services/contextSummarizer';
@@ -160,9 +161,12 @@ export function useSummarizeAndContinue(): UseSummarizeAndContinueResult {
 	 */
 	const startSummarize = useCallback(
 		async (
-			sourceTabId: string
+			sourceTabId: string,
+			sessionId?: string
 		): Promise<{ newTabId: string; updatedSession: Session; systemLogEntry: LogEntry } | null> => {
-			const session = selectActiveSession(useSessionStore.getState());
+			const session = sessionId
+				? useSessionStore.getState().sessions.find((s) => s.id === sessionId)
+				: selectActiveSession(useSessionStore.getState());
 			if (!session) {
 				return null;
 			}
@@ -241,6 +245,18 @@ export function useSummarizeAndContinue(): UseSummarizeAndContinueResult {
 				if (!tabResult) {
 					throw new Error('Failed to create compacted tab');
 				}
+
+				// Keep optional overrides absent instead of materializing tab defaults.
+				// The legacy read-only flag must survive even without permissionMode.
+				Object.assign(tabResult.tab, {
+					customModel: sourceTab.customModel,
+					customEffort: sourceTab.customEffort,
+					permissionMode: sourceTab.permissionMode,
+					readOnlyMode: sourceTab.readOnlyMode,
+					showThinking: sourceTab.showThinking,
+					enterToSend: sourceTab.enterToSend,
+					saveToHistory: sourceTab.saveToHistory,
+				});
 
 				// Calculate final result
 				const finalResult: SummarizeResult = {
@@ -346,14 +362,24 @@ export function useSummarizeAndContinue(): UseSummarizeAndContinueResult {
 	 * shows toast notification. Extracted from App.tsx wrapper (Tier 3E).
 	 */
 	const handleSummarizeAndContinue = useCallback(
-		(tabId?: string) => {
-			const session = selectActiveSession(useSessionStore.getState());
-			if (!session || session.inputMode !== 'ai') return;
+		(tabId?: string, sessionId?: string, background = false) => {
+			const session = sessionId
+				? useSessionStore.getState().sessions.find((s) => s.id === sessionId)
+				: selectActiveSession(useSessionStore.getState());
+			if (!session || (!sessionId && session.inputMode !== 'ai')) return false;
+			const windowContext = getWindowContext();
+			if (windowContext && !windowContext.ownsSession(session.id)) return false;
 
 			const targetTabId = tabId || session.activeTabId;
 			const targetTab = session.aiTabs.find((t) => t.id === targetTabId);
 
-			if (!targetTab || !canSummarize(session.contextUsage, targetTab.logs)) {
+			if (
+				!targetTab ||
+				targetTab.state === 'busy' ||
+				getTabSummarizeState(targetTabId)?.state === 'summarizing'
+			)
+				return false;
+			if (!canSummarize(session.contextUsage, targetTab.logs)) {
 				notifyToast({
 					type: 'warning',
 					title: 'Cannot Compact',
@@ -361,7 +387,7 @@ export function useSummarizeAndContinue(): UseSummarizeAndContinueResult {
 					sessionId: session.id,
 					tabId: targetTabId,
 				});
-				return;
+				return false;
 			}
 
 			// Store session info for toast navigation
@@ -369,7 +395,7 @@ export function useSummarizeAndContinue(): UseSummarizeAndContinueResult {
 			const sourceSessionName = session.name;
 			const { setSessions } = useSessionStore.getState();
 
-			startSummarize(targetTabId)
+			startSummarize(targetTabId, session.id)
 				.then((result) => {
 					if (result) {
 						// Apply only deterministic deltas to the live session (avoid stale snapshot spread)
@@ -392,7 +418,7 @@ export function useSummarizeAndContinue(): UseSummarizeAndContinueResult {
 								}
 								return {
 									...s,
-									activeTabId: result.newTabId,
+									activeTabId: background ? s.activeTabId : result.newTabId,
 									aiTabs: updatedTabs.map((tab) =>
 										tab.id === targetTabId
 											? { ...tab, logs: [...tab.logs, result.systemLogEntry] }
@@ -401,6 +427,8 @@ export function useSummarizeAndContinue(): UseSummarizeAndContinueResult {
 								};
 							})
 						);
+
+						if (sessionId && !background) useSessionStore.getState().setActiveSessionId(sessionId);
 
 						// Show success notification with click-to-navigate
 						const reductionPercent = result.systemLogEntry.text.match(/(\d+)%/)?.[1] ?? '0';
@@ -447,8 +475,20 @@ export function useSummarizeAndContinue(): UseSummarizeAndContinueResult {
 					});
 					clearTabState(targetTabId);
 				});
+			return true;
 		},
-		[canSummarize, startSummarize, clearTabState]
+		[canSummarize, startSummarize, clearTabState, getTabSummarizeState]
+	);
+
+	useEffect(
+		() =>
+			window.maestro.process.onRemoteSummarizeContext?.(
+				(sessionId, responseChannel, tabId, background) => {
+					const accepted = handleSummarizeAndContinue(tabId, sessionId, background);
+					window.maestro.process.sendRemoteSummarizeContextResponse(responseChannel, accepted);
+				}
+			),
+		[handleSummarizeAndContinue]
 	);
 
 	return {

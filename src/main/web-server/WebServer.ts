@@ -1359,8 +1359,8 @@ export class WebServer {
 			handoffCommand: (request: HandoffCommand) => this.callbackRegistry.handoffCommand(request),
 			transferContext: async (sourceSessionId: string, targetSessionId: string) =>
 				this.callbackRegistry.transferContext(sourceSessionId, targetSessionId),
-			summarizeContext: async (sessionId: string) =>
-				this.callbackRegistry.summarizeContext(sessionId),
+			summarizeContext: async (sessionId: string, tabId?: string, background?: boolean) =>
+				this.callbackRegistry.summarizeContext(sessionId, tabId, background),
 			createGist: async (
 				sessionId: string,
 				description: string,

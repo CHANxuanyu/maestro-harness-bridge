@@ -130,6 +130,30 @@ startup and show an error without starting a terminal in the new shell.
 terminal ID. Tasks are read-only, extracted from the latest top-level TodoWrite or
 update_plan in the conversation; native-history reads expose the source tool data.
 
+## New shell daily completion
+
+| UI action                          | CLI                                         | Shared implementation                                                                      |
+| ---------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Compact context in either shell    | `tab compact <tab-id>`                      | `summarize_context`, owner window routing, `useSummarizeAndContinue()`                     |
+| Open worktree cleanup confirmation | `open worktree-cleanup`                     | `getModalActions().setDeleteWorktreeSession()` and the existing cleanup modal and handlers |
+| Pin or unpin an open conversation  | `tab star <tab-id>` / `tab unstar <tab-id>` | `tabStore.starTab()` and `persistTabStarred()`                                             |
+
+Compaction resolves the named tab without selecting its agent. It defaults to
+background placement; `--focus` selects the compacted conversation when ready.
+The reply acknowledges acceptance, not model completion. Missing, busy, already
+compacting and undersized targets are rejected. Completion and failure use the
+existing notifications, and `session list --json` exposes the resulting tab.
+The new conversation preserves optional execution overrides without replacing
+absent fields with defaults, including the legacy read-only permission flag.
+The composer command mode and native conversation identity are not copied.
+
+Cleanup opens the current worktree agent's existing confirmation. To target a
+specific owner, use `focus-agent <agent-id>` first. Opening does not remove files
+or confirm deletion. The conversation menu passes its own worktree owner into
+the same flow without changing selection; non-worktree conversations omit it.
+Pinning accepts conversations without a native ID and preserves the current
+selection. Open tab state takes precedence over a stale history star.
+
 ## Focus belongs to the human (`--background` / `--focus`)
 
 An agent may create a surface. It may not decide the human should be looking at
@@ -471,21 +495,17 @@ a design constraint; they are simply not built yet.
    trip, so that section reads "unavailable". The Feedback modal's own support
    package checkbox has the same gap today. Closing it needs a main-to-renderer
    request with a response channel.
-9. **Context: Compact, Merge Into, Send to Agent.** The HB `handoff` command
+9. **Context: Merge Into, Send to Agent.** The HB `handoff` command
    now provides the new three-provider handoff through its own shared service
    (`ai_handoff`, `context.handoff`): draft by default, same-project runner reuse,
    explicit `--send`. The UI entries (tab menu, palette, error modal, the
    transcript's limit and login errors, a live outage card) call the same
    `context.handoff` without `send`; the note above a draft's composer is view
-   state with no verb. The older generic compact/merge/transfer paths below
-   remain separate gaps.
-   The WS messages
-   (`summarize_context`, `merge_context`, `transfer_context`) and the preload
-   listeners exist, but NO renderer code subscribes to
-   `onRemoteSummarizeContext` / `onRemoteMergeContext` /
-   `onRemoteTransferContext`, so every call times out. Closing it means wiring
-   those listeners to the same hooks the tab overlay menu uses, then adding
-   `tab compact / merge / transfer`. Do not wrap the dead messages.
+   state with no verb.
+   Compaction now has `tab compact` and a renderer subscriber to the shared
+   hook, as recorded above. The generic merge/transfer paths remain gaps:
+   `merge_context` and `transfer_context` have preload listeners but no
+   renderer subscribers. They still need the shared hooks wired and CLI verbs.
 10. **Interrupt, precisely.** Beyond "no CLI verb": the only backend (REST
     `POST /api/session/:id/interrupt` -> `remote:interrupt`) signals the
     legacy `${sessionId}-ai` process id, which misses per-tab processes

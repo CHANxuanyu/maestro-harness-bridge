@@ -10,6 +10,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ProjectHistoryConversation } from '../../../../shared/projectHistory';
 import type { Group, Session } from '../../../../renderer/types';
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { useUIStore } from '../../../../renderer/stores/uiStore';
 // vi.mock calls below are hoisted above these imports.
 import { ProjectSessionSidebar } from '../../../../renderer/components/SessionList/ProjectSessionSidebar';
@@ -121,10 +122,11 @@ function owner(): Session {
 	});
 }
 
-function renderSidebar(sessions: Session[]) {
+function renderSidebar(sessions: Session[], onDeleteWorktree = vi.fn()) {
 	return render(
 		<ProjectSessionSidebar
 			theme={mockTheme}
+			onDeleteWorktree={onDeleteWorktree}
 			sessions={sessions}
 			groups={[GROUP]}
 			groupsPlusEnabled={false}
@@ -317,4 +319,68 @@ it('labels a worktree by its folder and says when that folder is gone', () => {
 			'This worktree no longer exists, so the conversation is read-only',
 		].join('\n')
 	);
+});
+
+describe('daily conversation actions', () => {
+	it('opens the existing cleanup flow for the right-clicked worktree only', () => {
+		useSettingsStore.setState({ newShell: true });
+		const main = owner();
+		const child = createMockSession({
+			id: 'child',
+			parentSessionId: main.id,
+			worktreeBranch: 'feature',
+			aiTabs: [createMockAITab({ id: 'child-tab', name: 'Worktree conversation' })],
+		});
+		useSessionStore.setState({ sessions: [main, child], activeSessionId: main.id });
+		const cleanup = vi.fn();
+		const { container } = renderSidebar([main, child], cleanup);
+		fireEvent.contextMenu(
+			container.querySelector('[data-conversation-key="child:child-tab"] button[data-tree-nav]')!
+		);
+		fireEvent.click(screen.getByRole('menuitem', { name: 'workflows.git.removeWorktree' }));
+		expect(cleanup).toHaveBeenCalledExactlyOnceWith(child);
+		expect(useSessionStore.getState().activeSessionId).toBe(main.id);
+		fireEvent.contextMenu(rowButton(container));
+		expect(
+			screen.queryByRole('menuitem', { name: 'workflows.git.removeWorktree' })
+		).not.toBeInTheDocument();
+	});
+});
+
+it('pins and unpins a background conversation without changing focus', () => {
+	useSettingsStore.setState({ newShell: true });
+	const main = owner();
+	const other = createMockSession({
+		id: 'other',
+		aiTabs: [createMockAITab({ id: 'other-tab', name: 'Other conversation' })],
+	});
+	useSessionStore.setState({ sessions: [main, other], activeSessionId: main.id });
+	const { container, rerender } = renderSidebar([main, other]);
+	fireEvent.contextMenu(
+		container.querySelector('[data-conversation-key="other:other-tab"] button[data-tree-nav]')!
+	);
+	fireEvent.click(screen.getByRole('menuitem', { name: 'workflows.conversations.pin' }));
+	expect(
+		useSessionStore.getState().sessions.find((s) => s.id === other.id)!.aiTabs[0].starred
+	).toBe(true);
+	expect(useSessionStore.getState().activeSessionId).toBe(main.id);
+	rerender(
+		<ProjectSessionSidebar
+			theme={mockTheme}
+			sessions={useSessionStore.getState().sessions}
+			groups={[GROUP]}
+			groupsPlusEnabled={false}
+			unreadOnly={false}
+			onToggleGroup={vi.fn()}
+			onAddAgent={vi.fn()}
+		/>
+	);
+	fireEvent.contextMenu(
+		container.querySelector('[data-conversation-key="other:other-tab"] button[data-tree-nav]')!
+	);
+	fireEvent.click(screen.getByRole('menuitem', { name: 'workflows.conversations.unpin' }));
+	expect(
+		useSessionStore.getState().sessions.find((s) => s.id === other.id)!.aiTabs[0].starred
+	).toBe(false);
+	expect(useSessionStore.getState().activeSessionId).toBe(main.id);
 });

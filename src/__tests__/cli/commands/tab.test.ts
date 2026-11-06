@@ -17,6 +17,7 @@ vi.mock('../../../cli/output/formatter', () => ({
 
 import {
 	tabNew,
+	tabCompact,
 	tabPanel,
 	tabClose,
 	tabRename,
@@ -109,6 +110,17 @@ describe('tab commands', () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
 			throw new Error('__exit__');
+		});
+	});
+
+	it('compacts the named tab in the background through summarize_context', async () => {
+		const payload = mockTab({ success: true });
+		await tabCompact('tab-cccc', { background: true });
+		expect(payload()).toMatchObject({
+			type: 'summarize_context',
+			sessionId: 'agent-1',
+			tabId: 'tab-cccc',
+			background: true,
 		});
 	});
 

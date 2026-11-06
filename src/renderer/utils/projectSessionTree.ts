@@ -43,6 +43,7 @@ export interface SidebarConversation {
 	unread: boolean;
 	error: boolean;
 	starred: boolean;
+	canDeleteWorktree?: boolean;
 	createdAt: number;
 	/** Newest activity we know about; what rows sort and display by. */
 	modifiedAt: number;
@@ -321,7 +322,8 @@ export function buildProjectSessionTree({
 				busy: tab.state === 'busy',
 				unread: !!tab.hasUnread,
 				error: !!tab.agentError,
-				starred: tab.starred || !!record?.starred,
+				starred: tab.starred,
+				canDeleteWorktree: !!(session.parentSessionId && session.worktreeBranch),
 				createdAt: tab.createdAt,
 				modifiedAt: Math.max(tab.createdAt, record?.modifiedAt ?? 0),
 				...(record ? { history: record } : {}),

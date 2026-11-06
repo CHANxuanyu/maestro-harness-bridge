@@ -1233,6 +1233,17 @@ New shell panel: changes, files, terminal, tasks, terminal-select, terminal-clos
 | `--content <text>` | Set the remembered text file edit buffer before this action                                                                                                               | -       |
 | `--line <number>`  | Jump to a line in the remembered preview                                                                                                                                  | -       |
 
+## `maestro-cli tab compact <tab-id>`
+
+Start context compaction in a fresh conversation; observe completion in the desktop
+
+| Option             | Description                                       | Default |
+| ------------------ | ------------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active"    | -       |
+| `--json`           | Output as JSON (for scripting)                    | -       |
+| `--background`     | Keep the current agent and tab selected (default) | -       |
+| `--focus`          | Select the compacted conversation when ready      | -       |
+
 ## `maestro-cli tab close <tab-id>`
 
 Close a tab (owning agent is resolved automatically)

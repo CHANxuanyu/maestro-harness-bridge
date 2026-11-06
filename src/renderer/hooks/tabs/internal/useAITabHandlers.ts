@@ -1,3 +1,4 @@
+import { useTabStore } from '../../../stores/tabStore';
 import { useCallback, type RefObject } from 'react';
 import { useInlineWizardContext } from '../../../contexts/InlineWizardContext';
 import { useModalStore } from '../../../stores/modalStore';
@@ -10,7 +11,6 @@ import {
 } from '../../../stores/sessionStore';
 import { clearLiveDraft } from '../../../utils/liveDraftStore';
 import { logger } from '../../../utils/logger';
-import { persistTabStarred } from '../../../utils/starredSessions';
 import { isWebDesktop } from '../../../utils/runtimeContext';
 import { requestDesktopTabClose } from '../../../services/desktopTabClose';
 import { noteDesktopAiTabSelection } from '../../../utils/desktopTabSelectionSync';
@@ -327,13 +327,7 @@ export function useAITabHandlers(
 	);
 
 	const handleTabStar = useCallback((tabId: string, starred: boolean) => {
-		const session = selectActiveSession(useSessionStore.getState());
-		if (!session) return;
-		const tabToStar = session.aiTabs.find((t) => t.id === tabId);
-		if (!tabToStar?.agentSessionId) return;
-
-		persistTabStarred(session, tabToStar, starred);
-		updateAiTab(session.id, tabId, (t) => ({ ...t, starred }));
+		useTabStore.getState().starTab(tabId, undefined, starred);
 	}, []);
 
 	const handleTabMarkUnread = useCallback((tabId: string) => {

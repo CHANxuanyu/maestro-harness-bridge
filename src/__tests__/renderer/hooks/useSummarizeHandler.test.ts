@@ -129,6 +129,9 @@ beforeEach(() => {
 		initialLoadComplete: false,
 	});
 
+	window.maestro.process.onRemoteSummarizeContext = vi.fn(() => vi.fn());
+	window.maestro.process.sendRemoteSummarizeContextResponse = vi.fn();
+
 	// Default: canSummarize returns true
 	(contextSummarizationService.canSummarize as ReturnType<typeof vi.fn>).mockReturnValue(true);
 });
@@ -140,6 +143,68 @@ afterEach(() => {
 // ============================================================================
 // Tests
 // ============================================================================
+
+describe('compacted conversation settings', () => {
+	it.each([
+		{
+			customModel: 'chosen-model',
+			customEffort: 'high',
+			permissionMode: 'standard' as const,
+			readOnlyMode: false,
+			showThinking: 'sticky' as const,
+			enterToSend: false,
+			saveToHistory: false,
+		},
+		{
+			permissionMode: 'readonly' as const,
+			readOnlyMode: true,
+			showThinking: 'on' as const,
+			enterToSend: true,
+		},
+		{ readOnlyMode: true },
+		{},
+	])('preserves explicit settings and inheritance: %j', async (settings) => {
+		const actual = await vi.importActual<typeof import('../../../renderer/utils/tabHelpers')>(
+			'../../../renderer/utils/tabHelpers'
+		);
+		vi.mocked(createTabAtPosition).mockImplementationOnce(actual.createTabAtPosition);
+		const source = createMockTab({
+			...settings,
+			saveToHistory: settings.saveToHistory,
+			commandMode: 'shell',
+		});
+		seedActiveSession(
+			createMockSession({
+				aiTabs: [source],
+				activeTabId: source.id,
+				customModel: 'agent-model',
+				customEffort: 'medium',
+			})
+		);
+		const { result } = renderHook(() => useSummarizeAndContinue());
+		await act(async () => {
+			const compacted = await result.current.startSummarize(source.id);
+			expect(compacted).not.toBeNull();
+			const tab = compacted!.updatedSession.aiTabs.find((tab) => tab.id === compacted!.newTabId)!;
+			for (const key of [
+				'customModel',
+				'customEffort',
+				'permissionMode',
+				'readOnlyMode',
+				'showThinking',
+				'enterToSend',
+				'saveToHistory',
+			] as const) {
+				expect(tab[key], key).toBe(source[key]);
+			}
+			expect(tab.commandMode).toBeUndefined();
+			expect(tab.agentSessionId).toBeNull();
+			expect(tab.inputValue).toBe('');
+			expect(compacted!.updatedSession.customModel).toBe('agent-model');
+			expect(compacted!.updatedSession.customEffort).toBe('medium');
+		});
+	});
+});
 
 describe('handleSummarizeAndContinue (Tier 3E)', () => {
 	it('returns when no session is provided', async () => {
@@ -355,3 +420,49 @@ describe('handleSummarizeAndContinue (Tier 3E)', () => {
 		consoleSpy.mockRestore();
 	});
 });
+
+it('accepts CLI compaction for the named background tab through the same handler', async () => {
+	const active = createMockSession({ id: 'active' });
+	const target = createMockSession({
+		id: 'target',
+		aiTabs: [createMockTab({ id: 'target-tab', permissionMode: 'standard' })],
+		activeTabId: 'target-tab',
+	});
+	useSessionStore.setState({ sessions: [active, target], activeSessionId: active.id });
+	renderHook(() => useSummarizeAndContinue());
+	const listener = vi.mocked(window.maestro.process.onRemoteSummarizeContext).mock.calls[0]?.[0];
+	expect(listener).toBeTypeOf('function');
+	await act(async () => {
+		listener!(target.id, 'reply', 'target-tab', true);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
+	expect(window.maestro.process.sendRemoteSummarizeContextResponse).toHaveBeenCalledWith(
+		'reply',
+		true
+	);
+	expect(useSessionStore.getState().activeSessionId).toBe(active.id);
+	const updated = useSessionStore.getState().sessions.find((s) => s.id === target.id)!;
+	expect(updated.activeTabId).toBe('target-tab');
+	expect(updated.aiTabs.at(-1)?.permissionMode).toBe('standard');
+});
+
+it.each(['missing', 'busy', 'too-small'])(
+	'rejects CLI compaction of %s targets without invoking the summarizer',
+	(reason) => {
+		const session = createMockSession();
+		if (reason === 'busy') session.aiTabs[0].state = 'busy';
+		if (reason === 'too-small')
+			vi.mocked(contextSummarizationService.canSummarize).mockReturnValue(false);
+		seedActiveSession(session);
+		renderHook(() => useSummarizeAndContinue());
+		const listener = vi.mocked(window.maestro.process.onRemoteSummarizeContext).mock.calls[0][0];
+		act(() =>
+			listener(session.id, 'reply', reason === 'missing' ? 'absent' : session.aiTabs[0].id, true)
+		);
+		expect(window.maestro.process.sendRemoteSummarizeContextResponse).toHaveBeenCalledWith(
+			'reply',
+			false
+		);
+		expect(contextSummarizationService.summarizeContext).not.toHaveBeenCalled();
+	}
+);

@@ -108,9 +108,25 @@ terminal's original host. `panelTerminals()` and the CLI terminal resolver share
 this rule; `WindowContext.ownsSession` supplies ownership. An explicit additional
 terminal always belongs to the current conversation's agent. `--cwd` determines
 its pool, even when the owner's directory differs. Starting or restarting refuses
-a changed host. Closing clears references to that terminal without changing the
-panel tab or open state; it never starts a replacement. `list terminals --agent` lists that directory's shared terminals with their
-actual owner IDs. `tab show --json` returns `newShellPanel`, including the selected
+a changed host. The owner's panel shows how many terminals are still running on
+the previous host and offers Close, with one busy confirmation for the batch.
+Those terminals are excluded from selection, restart and input. From the owner's
+conversation, `terminal-close --terminal <id>` explicitly closes them;
+`terminal-select` and `terminal-restart` explain that only closing is available.
+`list terminals` includes them, and `list terminals --agent` includes both the
+agent's eligible directory pool and its own terminals still running on the previous
+host, with their actual owner IDs and no active marker on the previous host.
+Panel mutations use the existing window registry lookup to reach the agent's
+window, falling back to the primary window when no owner is found. A terminal in
+another window is rejected with an ownership error. Restart republishes the
+retained xterm's current grid when its new PID arrives.
+
+Closing clears references without changing the panel tab or open state. Automatic
+opening happens once per visit, when the panel becomes visible or the conversation
+changes. Ownership refresh may complete a pending opening but cannot reopen a
+terminal closed during that visit. Failed ownership reads permit classic terminal
+startup and show an error without starting a terminal in the new shell.
+`tab show --json` returns `newShellPanel`, including the selected
 terminal ID. Tasks are read-only, extracted from the latest top-level TodoWrite or
 update_plan in the conversation; native-history reads expose the source tool data.
 

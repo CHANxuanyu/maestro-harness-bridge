@@ -551,6 +551,7 @@ export const TerminalView = memo(
 										}
 									}}
 									sessionId={terminalSessionId}
+									ptyPid={tab.pid}
 									theme={theme}
 									fontFamily={fontFamily}
 									fontSize={fontSize}

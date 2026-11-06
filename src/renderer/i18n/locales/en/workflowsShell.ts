@@ -6,6 +6,10 @@ export const workflowsShell = {
 	'workflows.newShell.task.pending': 'Pending',
 	'workflows.newShell.task.in_progress': 'In progress',
 	'workflows.newShell.task.completed': 'Completed',
+	'workflows.newShell.previousHostTerminals':
+		'{count} terminals are still running on the previous host',
+	'workflows.newShell.terminalOwnershipFailed':
+		'Window ownership could not be confirmed. The terminal was not started',
 	'workflows.newShell.terminalExited': 'Terminal exited',
 	'workflows.newShell.restartTerminal': 'Restart',
 	'workflows.newShell.newTerminal': 'New terminal',

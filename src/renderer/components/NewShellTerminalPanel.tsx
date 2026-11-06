@@ -17,7 +17,7 @@ import { useRemoteTerminalBufferResponder } from '../hooks/terminal/useRemoteTer
 import { useCoworkingBufferResponder } from '../hooks/coworking/useCoworkingBufferResponder';
 import { useSurfaceTypography } from '../hooks/ui/useSurfaceTypography';
 import { useTerminalTabHandlers } from '../hooks/tabs/internal/useTerminalTabHandlers';
-import { getTerminalTabDisplayName } from '../utils/terminalTabHelpers';
+import { getTerminalTabDisplayName, previousHostTerminals } from '../utils/terminalTabHelpers';
 import {
 	TerminalView,
 	createTabPidChangeHandler,
@@ -58,12 +58,17 @@ export const NewShellTerminalPanel = forwardRef<
 	} catch {
 		/* The opening effect displays invalid remote configuration errors. */
 	}
+	const previousHost = previousHostTerminals(source);
 	const selected = pool.find((item) => item.tab.id === panel?.terminalTabId) || pool[0];
-	// Only a visit opens a shell. Closing the last shell does not immediately reopen it.
+	// Ownership refreshes may finish a pending visit, but cannot start a new one.
+	const openedThisVisit = useRef(false);
 	useEffect(() => {
-		if (!newShell || !visible) return;
+		openedThisVisit.current = false;
+	}, [newShell, visible, source.id, source.activeTabId]);
+	useEffect(() => {
+		if (!newShell || !visible || openedThisVisit.current) return;
 		try {
-			openPanelTerminal(source.id);
+			if (openPanelTerminal(source.id)) openedThisVisit.current = true;
 			setError('');
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -94,6 +99,10 @@ export const NewShellTerminalPanel = forwardRef<
 		if (selected) mounted.terminalViewRefs.current.get(selected.session.id)?.focusActiveTerminal();
 		else panelRef.current?.focus();
 	}, [visible, selected?.tab.id, activeFocus]);
+	const displayedError =
+		windowContext?.ownershipStatus === 'error'
+			? t('workflows.newShell.terminalOwnershipFailed')
+			: error;
 	if (!newShell) return null;
 	return (
 		<div
@@ -155,6 +164,24 @@ export const NewShellTerminalPanel = forwardRef<
 					<X className="w-4 h-4" />
 				</button>
 			</div>
+			{previousHost.length > 0 && (
+				<div
+					className="flex items-center gap-2 px-3 py-1 text-xs"
+					style={{ color: theme.colors.textDim }}
+				>
+					<span role="status">
+						{t('workflows.newShell.previousHostTerminals', { count: previousHost.length })}
+					</span>
+					<button
+						className="px-2 py-1 rounded"
+						style={{ color: theme.colors.accent }}
+						onClick={() => handleCloseTerminalTab(previousHost.map(({ tab }) => tab.id))}
+					>
+						{t('common.close')}
+					</button>
+				</div>
+			)}
+
 			{selected?.tab.state === 'exited' && (
 				<div
 					className="flex items-center gap-2 px-3 py-1 text-xs"
@@ -180,9 +207,9 @@ export const NewShellTerminalPanel = forwardRef<
 				</div>
 			)}
 
-			{error && (
+			{displayedError && (
 				<p role="alert" className="px-3 text-sm" style={{ color: theme.colors.error }}>
-					{error}
+					{displayedError}
 				</p>
 			)}
 			<div className="relative flex-1 min-h-0">
@@ -191,7 +218,12 @@ export const NewShellTerminalPanel = forwardRef<
 					if (!owner?.terminalTabs?.length || windowContext?.ownsSession(owner.id, true) === false)
 						return null;
 					const shown = visible && selected?.session.id === id;
-					const viewSession = shown ? { ...owner, activeTerminalTabId: selected.tab.id } : owner;
+					const previousIds = new Set(previousHostTerminals(owner).map(({ tab }) => tab.id));
+					const viewSession = {
+						...owner,
+						terminalTabs: owner.terminalTabs.filter((tab) => !previousIds.has(tab.id)),
+						activeTerminalTabId: shown ? selected.tab.id : owner.activeTerminalTabId,
+					};
 					return (
 						<div
 							key={id}

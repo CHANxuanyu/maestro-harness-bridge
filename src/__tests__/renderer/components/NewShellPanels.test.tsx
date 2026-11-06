@@ -1,3 +1,4 @@
+import { useModalStore } from '../../../renderer/stores/modalStore';
 import { useTabStore } from '../../../renderer/stores/tabStore';
 import { transcriptMessagesToLogEntries } from '../../../renderer/utils/transcriptMessages';
 import { resolveTerminalTab } from '../../../renderer/utils/terminalTabHelpers';
@@ -14,7 +15,7 @@ import {
 	screen,
 	waitFor,
 } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRef, forwardRef, useEffect, useImperativeHandle } from 'react';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
@@ -37,9 +38,11 @@ import type { LogEntry } from '../../../renderer/types';
 
 vi.unmock('lucide-react');
 
+afterEach(() => window.history.replaceState({}, '', '/'));
+
 const lifecycle = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), clear: vi.fn() }));
 vi.mock('../../../renderer/components/XTerminal', () => ({
-	XTerminal: forwardRef(({ sessionId }: { sessionId: string }, ref) => {
+	XTerminal: forwardRef(({ sessionId, ptyPid }: { sessionId: string; ptyPid?: number }, ref) => {
 		useEffect(() => {
 			lifecycle.mount(sessionId);
 			return () => lifecycle.unmount(sessionId);
@@ -54,7 +57,11 @@ vi.mock('../../../renderer/components/XTerminal', () => ({
 			getSize: () => ({ cols: 40, rows: 20 }),
 			getBuffer: () => 'retained output',
 		}));
-		return <div data-testid="terminal-instance">{sessionId}</div>;
+		return (
+			<div data-testid="terminal-instance" data-pty-pid={ptyPid}>
+				{sessionId}
+			</div>
+		);
 	}),
 }));
 
@@ -71,7 +78,7 @@ const first = () =>
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	useSettingsStore.setState({ newShell: true });
+	useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
 	useSessionStore.setState({ sessions: [first()], activeSessionId: 'first' });
 	window.maestro.process.spawnTerminalTab = vi.fn().mockResolvedValue({ success: true, pid: 42 });
 	window.maestro.process.kill = vi.fn().mockResolvedValue(true);
@@ -154,6 +161,56 @@ describe('new shell terminals', () => {
 		expect(resolveTerminalTab(sessions, b.id, undefined, true)).toBeNull();
 		expect(openPanelTerminal(b.id, { additional: true })!.session.id).toBe(b.id);
 	});
+
+	it.each([
+		[false, 'en', '2 terminals are still running on the previous host', 'Close'],
+		[true, 'en', '2 terminals are still running on the previous host', 'Close'],
+		[true, 'zh-CN', '有 2 个终端还在上一台主机上运行', '关闭'],
+	] as const)(
+		'closes previous host terminals through their owner with busy=%s and locale=%s',
+		async (busy, uiLanguage, message, closeLabel) => {
+			useSettingsStore.setState({ uiLanguage });
+			const owner = createMockSession({
+				...first(),
+				sessionSshRemoteConfig: { enabled: true, remoteId: 'h1' },
+			});
+			useSessionStore.getState().setSessions([owner]);
+			const one = openPanelTerminal(owner.id)!;
+			const two = openPanelTerminal(owner.id, { additional: true })!;
+			useSessionStore.getState().updateSession(owner.id, {
+				terminalTabs: [one.tab, two.tab].map((tab) => ({ ...tab, pid: 41, state: 'busy' })),
+				sessionSshRemoteConfig: { enabled: true, remoteId: 'h2' },
+			});
+			window.maestro.process.isTerminalBusy = vi.fn().mockResolvedValue(busy);
+			render(<NewShellTerminalPanel session={owner} theme={mockTheme} visible />);
+			await waitFor(() => expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(1));
+			expect(screen.getByRole('status')).toHaveTextContent(message);
+			expect(screen.queryByRole('combobox')).toBeNull();
+			expect(screen.queryByText(`first-terminal-${one.tab.id}`)).toBeNull();
+			expect(screen.queryByText(`first-terminal-${two.tab.id}`)).toBeNull();
+			expect(selectPanelTerminal(owner.id, one.tab.id)).toBe(false);
+			expect(window.maestro.process.kill).not.toHaveBeenCalled();
+			fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${closeLabel}$`) }));
+			await waitFor(() => expect(window.maestro.process.isTerminalBusy).toHaveBeenCalledTimes(2));
+			for (const terminal of [one, two])
+				expect(window.maestro.process.isTerminalBusy).toHaveBeenCalledWith(
+					`first-terminal-${terminal.tab.id}`
+				);
+			if (busy) {
+				await waitFor(() => expect(useModalStore.getState().isOpen('confirm')).toBe(true));
+				expect(window.maestro.process.kill).not.toHaveBeenCalled();
+				act(() => useModalStore.getState().getData('confirm')!.onConfirm());
+			}
+			await waitFor(() => expect(window.maestro.process.kill).toHaveBeenCalledTimes(2));
+			for (const terminal of [one, two])
+				expect(window.maestro.process.kill).toHaveBeenCalledWith(
+					`first-terminal-${terminal.tab.id}`
+				);
+			expect(screen.queryByRole('status')).toBeNull();
+			expect(useSessionStore.getState().sessions[0].terminalTabs).toHaveLength(1);
+			expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(1);
+		}
+	);
 
 	it('registers explicit cwd in its actual pool without requiring the owner directory to match', () => {
 		const a = first();
@@ -238,6 +295,59 @@ describe('new shell terminals', () => {
 		view.unmount();
 	});
 
+	it('opens once per visit and ignores ownership refresh after the last terminal closes', async () => {
+		vi.mocked(window.maestro.windows.getState).mockImplementation(
+			async () =>
+				({
+					id: 'primary',
+					sessionIds: ['first'],
+					activeSessionId: 'first',
+				}) as Awaited<ReturnType<typeof window.maestro.windows.getState>>
+		);
+		vi.mocked(window.maestro.windows.list).mockImplementation(async () => [
+			{ id: 'primary', isMain: true, sessionIds: ['first'], activeSessionId: 'first' },
+		]);
+		const view = render(
+			<WindowProvider>
+				<NewShellTerminalPanel session={first()} theme={mockTheme} visible />
+			</WindowProvider>
+		);
+		await waitFor(() => expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(1));
+		act(() =>
+			useTabStore
+				.getState()
+				.closeTerminalTab(useSessionStore.getState().sessions[0].terminalTabs[0].id)
+		);
+		expect(useSessionStore.getState().sessions[0].terminalTabs).toEqual([]);
+		const refresh = vi.mocked(window.maestro.windows.onSessionMoved).mock.lastCall![0];
+		await act(async () => refresh({} as never));
+		expect(useSessionStore.getState().sessions[0].terminalTabs).toEqual([]);
+		expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(1);
+		view.rerender(
+			<WindowProvider>
+				<NewShellTerminalPanel session={first()} theme={mockTheme} visible={false} />
+			</WindowProvider>
+		);
+		view.rerender(
+			<WindowProvider>
+				<NewShellTerminalPanel session={first()} theme={mockTheme} visible />
+			</WindowProvider>
+		);
+		await waitFor(() => expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(2));
+		act(() => {
+			useTabStore
+				.getState()
+				.closeTerminalTab(useSessionStore.getState().sessions[0].terminalTabs[0].id);
+			useSessionStore.getState().updateSession('first', {
+				aiTabs: [createMockAITab({ id: 'next-conversation' })],
+				activeTabId: 'next-conversation',
+			});
+		});
+		await waitFor(() => expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(3));
+		await act(async () => refresh({} as never));
+		expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(3);
+	});
+
 	it('starts a classic restored terminal once window ownership finishes loading', async () => {
 		const terminal = openPanelTerminal('first')!;
 		useSettingsStore.setState({ newShell: false });
@@ -274,6 +384,92 @@ describe('new shell terminals', () => {
 		);
 	});
 
+	it.each(['rejection', 'null', 'list failure'])(
+		'starts classic terminals after ownership %s',
+		async (failure) => {
+			const terminal = openPanelTerminal('first')!;
+			useSettingsStore.setState({ newShell: false });
+			vi.mocked(window.maestro.windows.getState).mockResolvedValue({
+				id: 'primary',
+				sessionIds: ['first'],
+				activeSessionId: 'first',
+			} as Awaited<ReturnType<typeof window.maestro.windows.getState>>);
+			vi.mocked(window.maestro.windows.list).mockResolvedValue([]);
+			if (failure === 'rejection')
+				vi.mocked(window.maestro.windows.getState).mockRejectedValue(new Error('fixture failure'));
+			else if (failure === 'null')
+				vi.mocked(window.maestro.windows.getState).mockResolvedValue(null);
+			else vi.mocked(window.maestro.windows.list).mockRejectedValue(new Error('fixture failure'));
+			render(
+				<WindowProvider>
+					<TerminalView
+						session={terminal.session}
+						theme={mockTheme}
+						fontFamily="monospace"
+						onTabPidChange={vi.fn()}
+						onTabStateChange={vi.fn()}
+						isVisible
+					/>
+				</WindowProvider>
+			);
+			await waitFor(() =>
+				expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledExactlyOnceWith(
+					expect.objectContaining({ sessionId: `first-terminal-${terminal.tab.id}` })
+				)
+			);
+		}
+	);
+
+	it.each([
+		[
+			'rejection',
+			'en',
+			'/',
+			'Window ownership could not be confirmed. The terminal was not started',
+		],
+		['null', 'zh-CN', '/', '无法确认窗口归属，终端没有启动'],
+		[
+			'list failure',
+			'en',
+			'/',
+			'Window ownership could not be confirmed. The terminal was not started',
+		],
+		['null', 'zh-CN', '/?windowId=secondary', '无法确认窗口归属，终端没有启动'],
+	])(
+		'shows new shell ownership %s in %s at %s and can recover',
+		async (failure, locale, url, message) => {
+			useSettingsStore.setState({ uiLanguage: locale as 'en' | 'zh-CN' });
+			window.history.replaceState({}, '', url);
+			vi.mocked(window.maestro.windows.getState).mockResolvedValue({
+				id: url === '/' ? 'primary' : 'secondary',
+				sessionIds: ['first'],
+				activeSessionId: 'first',
+			} as Awaited<ReturnType<typeof window.maestro.windows.getState>>);
+			vi.mocked(window.maestro.windows.list).mockResolvedValue([]);
+			if (failure === 'rejection')
+				vi.mocked(window.maestro.windows.getState).mockRejectedValueOnce(
+					new Error('fixture failure')
+				);
+			else if (failure === 'null')
+				vi.mocked(window.maestro.windows.getState).mockResolvedValueOnce(null);
+			else
+				vi.mocked(window.maestro.windows.list).mockRejectedValueOnce(new Error('fixture failure'));
+			render(
+				<WindowProvider>
+					<NewShellTerminalPanel session={first()} theme={mockTheme} visible />
+				</WindowProvider>
+			);
+			await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(message));
+			expect(window.maestro.process.spawnTerminalTab).not.toHaveBeenCalled();
+			expect(useSessionStore.getState().sessions[0].terminalTabs).toEqual([]);
+			await act(async () =>
+				vi.mocked(window.maestro.windows.onSessionMoved).mock.lastCall![0]({} as never)
+			);
+			await waitFor(() => expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(1));
+			expect(screen.queryByRole('alert')).toBeNull();
+		}
+	);
+
 	it('restarts an exited shared terminal in its real owner without clearing output', async () => {
 		const b = createMockSession({ ...first(), id: 'second' });
 		useSessionStore.getState().setSessions([first(), b]);
@@ -297,6 +493,21 @@ describe('new shell terminals', () => {
 		expect(lifecycle.clear).not.toHaveBeenCalled();
 		expect(lifecycle.unmount).not.toHaveBeenCalled();
 		expect(useSessionStore.getState().sessions[0].inputMode).toBe('ai');
+	});
+
+	it('delivers the restarted PID to the retained xterm for an unchanged panel size', async () => {
+		const terminal = openPanelTerminal('first')!;
+		useSessionStore.getState().updateSession('first', {
+			terminalTabs: [{ ...terminal.tab, pid: 41, state: 'busy' }],
+		});
+		render(<NewShellTerminalPanel session={first()} theme={mockTheme} visible />);
+		const instance = screen.getByTestId('terminal-instance');
+		await act(async () => useTabStore.getState().restartTerminalTab(terminal.tab.id));
+		expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(1);
+		expect(instance).toHaveAttribute('data-pty-pid', '42');
+		expect(screen.getByTestId('terminal-instance')).toBe(instance);
+		expect(lifecycle.clear).not.toHaveBeenCalled();
+		expect(lifecycle.unmount).not.toHaveBeenCalled();
 	});
 
 	it('spawns SSH worktrees remotely and never shares with local or another host', async () => {

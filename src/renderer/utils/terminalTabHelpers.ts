@@ -130,6 +130,19 @@ export function panelTerminalHostMatches(session: Session, tab: TerminalTab): bo
 	);
 }
 
+/** Running terminals left behind when this agent changed hosts, available only for closing. */
+export function previousHostTerminals(source: Session) {
+	if (getWindowContext()?.ownsSession(source.id, true) === false) return [];
+	return (source.terminalTabs || []).flatMap((tab) => {
+		if (!tab.pid || tab.state === 'exited') return [];
+		try {
+			return panelTerminalHostMatches(source, tab) ? [] : [{ session: source, tab }];
+		} catch {
+			return tab.panelLocationKey ? [{ session: source, tab }] : [];
+		}
+	});
+}
+
 /**
  * Resolve which terminal tab a remote caller (CLI / web) meant.
  *

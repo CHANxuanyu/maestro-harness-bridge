@@ -82,7 +82,12 @@ export async function spawnPtyForTab(options: SpawnPtyForTabOptions): Promise<vo
 	const { tab, cols, rows, onPid, onSpawnFailure } = options;
 	const session =
 		useSessionStore.getState().sessions.find((s) => s.id === options.session.id) || options.session;
-	if (getWindowContext()?.ownsSession(session.id, true) === false) return;
+	const windowContext = getWindowContext();
+	if (
+		windowContext?.ownsSession(session.id, true) === false &&
+		(useSettingsStore.getState().newShell || windowContext.ownershipStatus !== 'error')
+	)
+		return;
 	const tabId = tab.id;
 	const terminalSessionId = getTerminalSessionId(session.id, tabId);
 

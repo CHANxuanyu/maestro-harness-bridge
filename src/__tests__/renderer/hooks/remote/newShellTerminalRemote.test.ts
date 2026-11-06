@@ -1,3 +1,4 @@
+import { WindowProvider, useWindowContext } from '../../../../renderer/contexts/WindowContext';
 import { createElement, forwardRef } from 'react';
 import { render, screen } from '@testing-library/react';
 import { NewShellTerminalPanel } from '../../../../renderer/components/NewShellTerminalPanel';
@@ -38,6 +39,7 @@ beforeEach(() => {
 		sendRemoteUpdateSessionConfigResponse: ack,
 		sendRemoteOpenTerminalTabResponse: opened,
 		sendRemoteListTerminalTabsResponse: listed,
+		sendRemoteWriteTerminalTabResponse: vi.fn(),
 		spawnTerminalTab: vi.fn().mockResolvedValue({ success: true, pid: 41 }),
 		kill: vi.fn().mockResolvedValue(true),
 	});
@@ -289,6 +291,151 @@ describe('new shell terminal CLI bridge', () => {
 			expect(saved).not.toHaveBeenCalled();
 		}
 	);
+
+	it.each(['terminal-select', 'terminal-close', 'terminal-restart'])(
+		'only permits closing a previous host terminal from its owner: %s',
+		async (action) => {
+			useSessionStore
+				.getState()
+				.updateSession('first', { sessionSshRemoteConfig: { enabled: true, remoteId: 'h1' } });
+			const terminal = openPanelTerminal('first')!;
+			useSessionStore.getState().updateSession('first', {
+				terminalTabs: [{ ...terminal.tab, pid: 41, state: 'busy' }],
+				sessionSshRemoteConfig: { enabled: true, remoteId: 'h2' },
+			});
+
+			act(() =>
+				window.dispatchEvent(
+					new CustomEvent('maestro:remoteUpdateSessionConfig', {
+						detail: {
+							sessionId: 'first',
+							responseChannel: 'ack',
+							configPatch: {
+								tabId: 'first-conversation',
+								newShellPanelAction: action,
+								newShellTerminalId: terminal.tab.id,
+							},
+						},
+					})
+				)
+			);
+			await waitFor(() =>
+				expect(ack).toHaveBeenCalledWith(
+					'ack',
+					action === 'terminal-close'
+						? { success: true }
+						: { success: false, error: expect.stringContaining('previous host') }
+				)
+			);
+			expect(window.maestro.process.spawnTerminalTab).not.toHaveBeenCalled();
+			if (action === 'terminal-close') {
+				expect(window.maestro.process.kill).toHaveBeenCalledWith(
+					`first-terminal-${terminal.tab.id}`
+				);
+				expect(useSessionStore.getState().sessions[0].terminalTabs).toEqual([]);
+				expect(
+					saved.mock.lastCall![0].find((s: { id: string }) => s.id === 'first').terminalTabs
+				).toEqual([]);
+			} else {
+				expect(window.maestro.process.kill).not.toHaveBeenCalled();
+				expect(saved).not.toHaveBeenCalled();
+			}
+		}
+	);
+
+	it('lists previous host terminals globally and for their owner without marking them active', () => {
+		const terminal = openPanelTerminal('first')!;
+		useSessionStore.getState().updateSession('first', {
+			terminalTabs: [{ ...terminal.tab, pid: 41, state: 'busy' }],
+			sessionSshRemoteConfig: { enabled: true, remoteId: 'h2' },
+		});
+		for (const sessionId of [undefined, 'first']) {
+			act(() =>
+				window.dispatchEvent(
+					new CustomEvent('maestro:listTerminalTabs', {
+						detail: { sessionId, responseChannel: 'list' },
+					})
+				)
+			);
+			expect(listed.mock.lastCall![1]).toEqual([
+				expect.objectContaining({
+					tabId: terminal.tab.id,
+					agentId: 'first',
+					pid: 41,
+					active: false,
+				}),
+			]);
+		}
+	});
+
+	it.each(['terminal-select', 'terminal-close', 'terminal-restart'])(
+		'explains another window owns the terminal for %s',
+		async (action) => {
+			const terminal = openPanelTerminal('second')!;
+			vi.mocked(window.maestro.windows.getState).mockResolvedValue({
+				id: 'primary',
+				sessionIds: ['first'],
+				activeSessionId: 'first',
+			} as Awaited<ReturnType<typeof window.maestro.windows.getState>>);
+			vi.mocked(window.maestro.windows.list).mockResolvedValue([
+				{ id: 'primary', isMain: true, sessionIds: ['first'], activeSessionId: 'first' },
+				{ id: 'secondary', isMain: false, sessionIds: ['second'], activeSessionId: 'second' },
+			]);
+			const context = renderHook(() => useWindowContext(), { wrapper: WindowProvider });
+			await waitFor(() => expect(context.result.current.ownsSession('second', true)).toBe(false));
+			await waitFor(() => expect(context.result.current.ownsSession('first', true)).toBe(true));
+			act(() =>
+				window.dispatchEvent(
+					new CustomEvent('maestro:remoteUpdateSessionConfig', {
+						detail: {
+							sessionId: 'first',
+							responseChannel: 'ack',
+							configPatch: {
+								tabId: 'first-conversation',
+								newShellPanelAction: action,
+								newShellTerminalId: terminal.tab.id,
+							},
+						},
+					})
+				)
+			);
+			await waitFor(() =>
+				expect(ack).toHaveBeenCalledWith('ack', {
+					success: false,
+					error: 'Error: Target terminal belongs to another window',
+				})
+			);
+			expect(window.maestro.process.spawnTerminalTab).not.toHaveBeenCalled();
+			expect(window.maestro.process.kill).not.toHaveBeenCalled();
+			expect(saved).not.toHaveBeenCalled();
+		}
+	);
+
+	it('refuses CLI input to a terminal left on the previous host', () => {
+		const terminal = openPanelTerminal('first')!;
+		useSessionStore.getState().updateSession('first', {
+			terminalTabs: [{ ...terminal.tab, pid: 41, state: 'busy' }],
+			sessionSshRemoteConfig: { enabled: true, remoteId: 'h2' },
+		});
+		act(() =>
+			window.dispatchEvent(
+				new CustomEvent('maestro:writeTerminalTab', {
+					detail: {
+						sessionId: 'first',
+						tabRef: terminal.tab.id,
+						data: 'must-not-run',
+						responseChannel: 'write',
+					},
+				})
+			)
+		);
+		expect(window.maestro.process.sendRemoteWriteTerminalTabResponse).toHaveBeenCalledWith(
+			'write',
+			false,
+			{ error: `No terminal tab matching "${terminal.tab.id}"` }
+		);
+		expect(window.maestro.process.write).not.toHaveBeenCalled();
+	});
 
 	it('rejects panel mutations in the classic shell', async () => {
 		useSettingsStore.setState({ newShell: false });

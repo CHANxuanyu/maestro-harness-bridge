@@ -1,3 +1,5 @@
+import { getWindowContext } from '../../contexts/WindowContext';
+import { previousHostTerminals } from '../../utils/terminalTabHelpers';
 import {
 	openPanelTerminal,
 	panelTerminals,
@@ -640,7 +642,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 		const source = sessionsRef.current.find((s) => s.id === sessionId);
 		const entries =
 			useSettingsStore.getState().newShell && source
-				? panelTerminals(sessionsRef.current, source)
+				? [...panelTerminals(sessionsRef.current, source), ...previousHostTerminals(source)]
 				: sessions.flatMap((session) =>
 						(session.terminalTabs || []).map((tab) => ({ session, tab }))
 					);
@@ -656,10 +658,14 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			pid: tab.pid,
 			state: tab.state,
 			active:
-				source && useSettingsStore.getState().newShell
+				(!useSettingsStore.getState().newShell ||
+					panelTerminals(sessionsRef.current, source || session).some(
+						(item) => item.tab.id === tab.id
+					)) &&
+				(source && useSettingsStore.getState().newShell
 					? source.aiTabs.find((t) => t.id === source.activeTabId)?.newShellPanel?.terminalTabId ===
 						tab.id
-					: session.activeTerminalTabId === tab.id,
+					: session.activeTerminalTabId === tab.id),
 			startupCommand: tab.startupCommand ?? null,
 		}));
 		window.maestro.process.sendRemoteListTerminalTabsResponse(responseChannel, tabs);
@@ -2026,10 +2032,27 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 						const targetTab = session.aiTabs.find((tab) => tab.id === targetTabId)!;
 						const terminalId =
 							tabPatch.newShellTerminalId || targetTab.newShellPanel?.terminalTabId;
-						const target = panelTerminals(useSessionStore.getState().sessions, session).find(
+						let target = panelTerminals(useSessionStore.getState().sessions, session).find(
 							(item) => item.tab.id === terminalId
 						);
-						if (!target) throw new Error('Terminal not found in this conversation directory');
+						const previousHost = previousHostTerminals(session).find(
+							(item) => item.tab.id === terminalId
+						);
+						if (!target && previousHost) {
+							if (action !== 'terminal-close')
+								throw new Error(
+									'Terminal is still running on the previous host. It can only be closed.'
+								);
+							target = previousHost;
+						}
+						if (!target) {
+							const owner = useSessionStore
+								.getState()
+								.sessions.find((s) => s.terminalTabs?.some((tab) => tab.id === terminalId));
+							if (owner && getWindowContext()?.getSessionWindow(owner.id))
+								throw new Error('Target terminal belongs to another window');
+							throw new Error('Terminal not found in this conversation directory');
+						}
 						panelTerminalOwnerId = target.session.id;
 						if (action === 'terminal-close') useTabStore.getState().closeTerminalTab(target.tab.id);
 						else if (action === 'terminal-restart')

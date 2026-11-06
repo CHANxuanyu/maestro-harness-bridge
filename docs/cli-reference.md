@@ -136,10 +136,10 @@ List all configured SSH remotes
 
 List open terminal tabs in the desktop app (all agents unless --agent is given)
 
-| Option             | Description                                 | Default |
-| ------------------ | ------------------------------------------- | ------- |
-| `-a, --agent <id>` | Only list terminals belonging to this agent | -       |
-| `--json`           | Output as JSON (for scripting)              | -       |
+| Option             | Description                                                                                                              | Default |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------- |
+| `-a, --agent <id>` | List this agent’s terminals; new shell also includes its directory pool and terminals still running on its previous host | -       |
+| `--json`           | Output as JSON (for scripting)                                                                                           | -       |
 
 ## `maestro-cli open-project <path>`
 
@@ -1224,14 +1224,14 @@ Open a new tab for an agent (optionally seeded with a prompt)
 
 New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show
 
-| Option             | Description                                                         | Default |
-| ------------------ | ------------------------------------------------------------------- | ------- |
-| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active"                      | -       |
-| `--json`           | Output as JSON (for scripting)                                      | -       |
-| `--terminal <id>`  | Terminal to select or close; defaults to the conversation selection | -       |
-| `--filter <query>` | Filter the conversation file tree; an empty string clears it        | -       |
-| `--content <text>` | Set the remembered text file edit buffer before this action         | -       |
-| `--line <number>`  | Jump to a line in the remembered preview                            | -       |
+| Option             | Description                                                                                                                                                               | Default |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active"                                                                                                                            | -       |
+| `--json`           | Output as JSON (for scripting)                                                                                                                                            | -       |
+| `--terminal <id>`  | Terminal to select, close or restart; defaults to the conversation selection. Terminals still running on a previous host can only be closed from their owner conversation | -       |
+| `--filter <query>` | Filter the conversation file tree; an empty string clears it                                                                                                              | -       |
+| `--content <text>` | Set the remembered text file edit buffer before this action                                                                                                               | -       |
+| `--line <number>`  | Jump to a line in the remembered preview                                                                                                                                  | -       |
 
 ## `maestro-cli tab close <tab-id>`
 

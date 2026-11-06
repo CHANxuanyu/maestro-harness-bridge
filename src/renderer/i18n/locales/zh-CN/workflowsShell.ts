@@ -9,6 +9,8 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.newShell.task.pending': '待办',
 	'workflows.newShell.task.in_progress': '进行中',
 	'workflows.newShell.task.completed': '完成',
+	'workflows.newShell.previousHostTerminals': '有 {count} 个终端还在上一台主机上运行',
+	'workflows.newShell.terminalOwnershipFailed': '无法确认窗口归属，终端没有启动',
 	'workflows.newShell.terminalExited': '终端已退出',
 	'workflows.newShell.restartTerminal': '重新启动',
 	'workflows.newShell.newTerminal': '新建终端',

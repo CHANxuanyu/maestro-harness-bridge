@@ -18,35 +18,35 @@ export function useTerminalTabHandlers(): TerminalTabHandlersReturn {
 	);
 
 	const handleCloseTerminalTab = useCallback(
-		(tabId: string) => {
-			const session = useSessionStore
-				.getState()
-				.sessions.find((s) => s.terminalTabs?.some((tab) => tab.id === tabId));
-			if (!session) {
-				closeTerminalTab(tabId);
-				return;
-			}
-			const ptySessionId = getTerminalSessionId(session.id, tabId);
-			window.maestro.process
-				.isTerminalBusy(ptySessionId)
-				.then((busy) => {
-					if (busy) {
-						useModalStore.getState().openModal('confirm', {
-							message: 'This terminal is running a command. Close it and stop the command?',
-							onConfirm: () => closeTerminalTab(tabId),
-							destructive: true,
-						});
-					} else {
-						closeTerminalTab(tabId);
-					}
-				})
-				.catch((err) => {
+		(tabId: string | string[]) => {
+			const tabIds = Array.isArray(tabId) ? tabId : [tabId];
+			const close = () => tabIds.forEach((id) => closeTerminalTab(id));
+			const checks = tabIds.map((id) => {
+				const session = useSessionStore
+					.getState()
+					.sessions.find((s) => s.terminalTabs?.some((tab) => tab.id === id));
+				if (!session) return Promise.resolve(false);
+				const ptySessionId = getTerminalSessionId(session.id, id);
+				return window.maestro.process.isTerminalBusy(ptySessionId).catch((err) => {
 					captureMessage('isTerminalBusy IPC failed, closing tab without prompt', {
 						level: 'warning',
-						extra: { ptySessionId, tabId, err: String(err) },
+						extra: { ptySessionId, tabId: id, err: String(err) },
 					});
-					closeTerminalTab(tabId);
+					return false;
 				});
+			});
+			void Promise.all(checks).then((busy) => {
+				if (busy.some(Boolean)) {
+					useModalStore.getState().openModal('confirm', {
+						message:
+							tabIds.length > 1
+								? 'These terminals are running commands. Close them and stop the commands?'
+								: 'This terminal is running a command. Close it and stop the command?',
+						onConfirm: close,
+						destructive: true,
+					});
+				} else close();
+			});
 		},
 		[closeTerminalTab]
 	);

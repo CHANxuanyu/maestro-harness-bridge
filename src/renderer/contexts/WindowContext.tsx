@@ -70,6 +70,8 @@ interface WindowScope {
 }
 
 export interface WindowContextValue {
+	/** Whether both registry reads succeeded, are pending, or failed. */
+	ownershipStatus: 'loading' | 'ready' | 'error';
 	/** This window's stable ID. `null` only briefly before the first hydrate. */
 	windowId: string | null;
 	/** True for the primary window (loaded without a `windowId` param). */
@@ -255,6 +257,9 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 	// source for cross-window ownership: which window surfaces an agent and its
 	// 1-based number. Empty (single-window common case) until the first hydrate.
 	const [windows, setWindows] = useState<WindowInfo[]>([]);
+	const [ownershipStatus, setOwnershipStatus] = useState<WindowContextValue['ownershipStatus']>(
+		windowScoped ? 'loading' : 'ready'
+	);
 	// True while a tab from another window is being dragged over this one as a
 	// dock target (driven by the `windows:highlightDropZone` push). Transient
 	// drag-feedback state; cleared by the source window on drag end.
@@ -277,11 +282,15 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 			window.maestro.windows.getState().catch(() => null),
 			window.maestro.windows.list().catch(() => null),
 		]);
-		if (!state) return;
+		if (!state || !allWindows) {
+			setOwnershipStatus('error');
+			return;
+		}
 		// The primary window has no URL param, so adopt the registry's id for it.
 		setWindowId((prev) => prev ?? state.id);
 		setScope({ sessionIds: state.sessionIds, activeSessionId: state.activeSessionId });
-		setWindows(allWindows ?? []);
+		setWindows(allWindows);
+		setOwnershipStatus('ready');
 	}, [windowScoped]);
 
 	useEffect(() => {
@@ -413,14 +422,14 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 		(sessionId: string, requireHydrated = false): boolean => {
 			// A web-desktop client mirrors every agent - permit-all by design.
 			if (!windowScoped) return true;
-			if (requireHydrated && !windowId) return false;
+			if (requireHydrated && ownershipStatus !== 'ready') return false;
 			// The primary window surfaces every agent that no secondary window has
 			// explicitly claimed; a secondary window owns exactly its scoped set.
 			return isMainWindow
 				? !sessionsOwnedElsewhere.has(sessionId)
 				: scope.sessionIds.includes(sessionId);
 		},
-		[windowScoped, windowId, isMainWindow, sessionsOwnedElsewhere, scope.sessionIds]
+		[windowScoped, ownershipStatus, isMainWindow, sessionsOwnedElsewhere, scope.sessionIds]
 	);
 
 	const getSessionWindow = useCallback(
@@ -668,6 +677,7 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 			sessionIds: scope.sessionIds,
 			activeSessionId: scope.activeSessionId,
 			ownsSession,
+			ownershipStatus,
 			getSessionWindow,
 			windows,
 			openSession,
@@ -687,6 +697,7 @@ export function WindowProvider({ children }: { children: ReactNode }) {
 			scope.sessionIds,
 			scope.activeSessionId,
 			ownsSession,
+			ownershipStatus,
 			getSessionWindow,
 			windows,
 			openSession,

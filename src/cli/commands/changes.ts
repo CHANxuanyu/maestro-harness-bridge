@@ -1,6 +1,11 @@
 import { withMaestroClient } from '../services/maestro-client';
 import { resolveTabEntry, failCommand } from '../services/session-command';
-import type { GitChanges, GitFileChangeDiff } from '../../shared/gitChanges';
+import type {
+	GitChanges,
+	GitFileChangeDiff,
+	GitChangeRequest,
+	GitChangeResult,
+} from '../../shared/gitChanges';
 import type { AgentSshRemoteConfig } from '../../shared/types';
 
 interface ChangesOptions {
@@ -8,39 +13,76 @@ interface ChangesOptions {
 	tab?: string;
 	file?: string;
 	json?: boolean;
+	action?: string;
+	paths?: string[];
+	message?: string;
+	yes?: boolean;
 }
 
 /** Resolve the live tab first, then invoke the same IPC handlers as the panel. */
 export async function changes(options: ChangesOptions): Promise<void> {
 	try {
+		let request: GitChangeRequest | undefined;
+		if (options.action) {
+			if (options.file !== undefined)
+				throw new Error('--file is only available when reading changes');
+			if (options.action === 'commit') {
+				if (!options.message?.trim() || options.paths?.length)
+					throw new Error('Use changes commit --message <text>');
+				request = { action: 'commit', message: options.message };
+			} else if (
+				options.action === 'stage' ||
+				options.action === 'unstage' ||
+				options.action === 'revert'
+			) {
+				if (!options.paths?.length)
+					throw new Error('At least one repository-relative path is required');
+				if (options.action === 'revert' && !options.yes)
+					throw new Error('Revert deletes changes; pass --yes to confirm');
+				request = {
+					action: options.action,
+					paths: options.paths,
+					...(options.action === 'revert' ? { confirmed: true } : {}),
+				};
+			} else throw new Error(`Unknown changes action: ${options.action}`);
+		}
 		const tab = await resolveTabEntry(options.tab ?? 'active', options.agent);
 		const result = await withMaestroClient(async (client) => {
 			const invoke = async <T>(channel: string, args: unknown[]): Promise<T> => {
 				const reply = await client.sendCommand<{ ok: boolean; result: T; error?: string }>(
 					{ type: 'bridge.invoke', channel, args },
 					'bridge.response',
-					options.file === undefined ? 25000 : 45000
+					request ? 180000 : options.file === undefined ? 25000 : 45000
 				);
 				if (!reply.ok) throw new Error(reply.error ?? `Failed to invoke ${channel}`);
 				return reply.result;
 			};
 			const sessions = await invoke<
-				Array<{ id: string; cwd: string; sessionSshRemoteConfig?: AgentSshRemoteConfig }>
+				Array<{
+					id: string;
+					cwd: string;
+					sshRemoteId?: string;
+					sessionSshRemoteConfig?: AgentSshRemoteConfig;
+				}>
 			>('sessions:getAll', []);
 			const session = sessions.find((item) => item.id === tab.agentId);
 			if (!session) throw new Error('The selected agent is no longer available');
 			const ssh = session.sessionSshRemoteConfig;
-			if (ssh?.enabled && !ssh.remoteId)
+			if (ssh?.enabled && !ssh.remoteId && !session.sshRemoteId)
 				throw new Error('SSH is enabled but no remote is configured');
 			const context = [
-				ssh?.enabled ? ssh.remoteId : undefined,
+				session.sshRemoteId || (ssh?.enabled ? ssh.remoteId : undefined),
 				ssh?.enabled ? ssh.workingDirOverride || session.cwd : undefined,
 			];
+			if (request)
+				return invoke<GitChangeResult>('git:applyChange', [session.cwd, request, ...context]);
 			return options.file !== undefined
 				? invoke<GitFileChangeDiff>('git:changeDiff', [session.cwd, options.file, ...context])
 				: invoke<GitChanges>('git:changes', [session.cwd, ...context]);
 		});
+		if ('success' in result && !result.success) throw new Error(result.error);
 		if (options.json) console.log(JSON.stringify(result));
+		else if ('success' in result) console.log(result.output);
 		else if ('diff' in result)
 			console.log(
 				result.tooLarge

@@ -1,4 +1,5 @@
 import { logger } from '../../../utils/logger';
+import { registerChangesHandlers } from './changes';
 import { registerReadHandlers } from './read';
 import { registerBranchHandlers } from './branch';
 import { registerStreamingHandlers } from './streaming';
@@ -15,6 +16,7 @@ export type { GitHandlerDependencies } from './shared';
  * These handlers provide Git operations used across the application, split by
  * domain across this directory:
  * - read.ts: status, diff, log, graph, show, showFile, commitCount, getRepoRoot, etc.
+ * - changes.ts: conversation changes, file diffs and explicit file mutations
  * - branch.ts: branch/tag listing, switch, checkout, init, commitAll, getDefaultBranch
  * - streaming.ts: runCommand/cancelCommand (push/pull/fetch with live progress)
  * - worktree.ts: worktree create/checkout/list/remove
@@ -25,6 +27,7 @@ export type { GitHandlerDependencies } from './shared';
  */
 export function registerGitHandlers(deps: GitHandlerDependencies): void {
 	registerReadHandlers();
+	registerChangesHandlers();
 	registerBranchHandlers(deps);
 	registerStreamingHandlers();
 	registerWorktreeHandlers(deps);

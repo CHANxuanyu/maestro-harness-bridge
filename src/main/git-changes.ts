@@ -1,6 +1,9 @@
 import path from 'path';
 import fs from 'fs/promises';
 import type {
+	GitChangeRequest,
+	GitChangeFailureReason,
+	GitChangeResult,
 	GitChangedFile,
 	GitChanges,
 	GitChangeStatus,
@@ -8,9 +11,10 @@ import type {
 } from '../shared/gitChanges';
 import type { SshRemoteConfig } from '../shared/types';
 import { isNotAGitRepositoryError } from '../shared/gitUtils';
-import { execGitReadOnly, isGitTimeout } from './utils/remote-git';
+import { execGit, execGitReadOnly, isGitTimeout } from './utils/remote-git';
 import { shellEscape } from './utils/shell-escape';
 import { LOCAL_SESSION_READ_CONCURRENCY, mapWithConcurrency } from './utils/concurrency';
+import { createKeyedWriteQueue } from './utils/atomic-json-store';
 import type { ExecResult } from './utils/execFile';
 
 const MAX_BYTES = 1024 * 1024;
@@ -245,7 +249,8 @@ export function parseGitChanges(output: string, limit = MAX_FILES): GitChanges {
 		const file: GitChangedFile = {
 			path: slash(filePath),
 			status,
-			staged: kind !== '?' && xy[0] !== '.',
+			staged: kind !== '?' && kind !== 'u' && xy[0] !== '.',
+			...(kind !== '?' && kind !== 'u' && xy[0] !== '.' && xy[1] !== '.' ? { unstaged: true } : {}),
 			additions: 0,
 			deletions: 0,
 		};
@@ -278,7 +283,8 @@ export function parseGitChanges(output: string, limit = MAX_FILES): GitChanges {
 		deletions: all.reduce((sum, file) => sum + (file.deletions ?? 0), 0),
 	};
 	result.files = all.slice(0, limit);
-	result.truncated = all.length > MAX_FILES;
+	result.truncated = all.length > limit;
+	if (result.truncated) result.stagedCount = all.filter((file) => file.staged).length;
 	return result;
 }
 
@@ -349,4 +355,174 @@ export async function getGitChangeDiff(
 	const diff = result.stdout.slice(separator + 2);
 	const tooLarge = Buffer.byteLength(diff) > MAX_BYTES;
 	return { diff: binary || tooLarge ? '' : diff, binary, tooLarge };
+}
+
+const changeWrites = createKeyedWriteQueue();
+
+/** Keep application refusals translatable while passing Git diagnostics through unchanged. */
+class GitChangeValidationError extends Error {
+	constructor(
+		readonly reason: GitChangeFailureReason,
+		message: string,
+		readonly file?: string
+	) {
+		super(message);
+	}
+}
+
+/** Exact repository-relative paths only. Never allow Git pathspec magic or directory scope. */
+export async function applyGitChange(
+	cwd: string,
+	request: GitChangeRequest,
+	sshRemote?: SshRemoteConfig,
+	remoteCwd?: string
+): Promise<GitChangeResult> {
+	try {
+		if (!request || !['stage', 'unstage', 'revert', 'commit'].includes(request.action))
+			throw new GitChangeValidationError('invalidAction', 'Unknown changes action');
+		if (request.action === 'commit') {
+			if (
+				typeof request.message !== 'string' ||
+				!request.message.trim() ||
+				request.message.includes('\0')
+			)
+				throw new GitChangeValidationError('messageRequired', 'A commit message is required');
+		} else {
+			if (request.action === 'revert' && request.confirmed !== true)
+				throw new GitChangeValidationError(
+					'confirmationRequired',
+					'Revert requires explicit confirmation'
+				);
+			if (
+				!Array.isArray(request.paths) ||
+				request.paths.length === 0 ||
+				request.paths.some(
+					(file) =>
+						typeof file !== 'string' ||
+						!file ||
+						file.startsWith('/') ||
+						/^[a-z]:/i.test(file) ||
+						file.includes('\0') ||
+						file.includes('\\') ||
+						file.split('/').some((part) => !part || part === '.' || part === '..')
+				)
+			)
+				throw new GitChangeValidationError(
+					'invalidPaths',
+					'Exact repository-relative file paths are required'
+				);
+		}
+		const rootResult = await execGitReadOnly(
+			['rev-parse', '--show-toplevel'],
+			cwd,
+			sshRemote,
+			remoteCwd ?? cwd
+		);
+		if (rootResult.exitCode !== 0) throw new Error(rootResult.stderr || rootResult.stdout);
+		// Git prints the host's root. In particular, never resolve an SSH path locally.
+		const root = rootResult.stdout.replace(/\r?\n$/, '');
+		return await changeWrites.enqueue(JSON.stringify([sshRemote?.id ?? '', root]), async () => {
+			const run = async (args: string[]) => {
+				const result = await execGit(['--literal-pathspecs', ...args], root, sshRemote, root, {
+					timeout: 120_000,
+				});
+				if (result.exitCode !== 0)
+					throw new Error(result.stderr || result.stdout || `Git exited with ${result.exitCode}`);
+				return result.stdout;
+			};
+			if (request.action === 'commit') {
+				// No -a: later worktree edits must never enter this commit implicitly.
+				return { success: true, output: await run(['commit', '-m', request.message]) };
+			}
+			const snapshot = await execGitReadOnly(
+				['status', '--porcelain=v2', '-z', '--untracked-files=all'],
+				root,
+				sshRemote,
+				root
+			);
+			if (snapshot.exitCode !== 0) throw new Error(snapshot.stderr || snapshot.stdout);
+			const files = parseGitChanges('\0' + snapshot.stdout + '\0', Infinity).files;
+			const selected = [...new Set(request.paths)].map((file) => {
+				const entry = files.find((item) => item.path === file);
+				if (!entry)
+					throw new GitChangeValidationError(
+						'notChanged',
+						`File is no longer changed: ${file}`,
+						file
+					);
+				if (request.action === 'revert' && entry.status === 'conflicted')
+					throw new GitChangeValidationError(
+						'conflicted',
+						`Cannot revert a conflicted file: ${file}`,
+						file
+					);
+				if (request.action === 'unstage' && !entry.staged)
+					throw new GitChangeValidationError('notStaged', `File is not staged: ${file}`, file);
+				return entry;
+			});
+			// Copies leave their source alone; a rename owns both index paths.
+			const paths = [
+				...new Set(
+					selected.flatMap((file) =>
+						file.status === 'renamed' && file.oldPath ? [file.oldPath, file.path] : [file.path]
+					)
+				),
+			];
+			if (request.action === 'stage')
+				return { success: true, output: await run(['add', '--', ...paths]) };
+			const head = await execGitReadOnly(
+				['rev-parse', '--verify', '--quiet', 'HEAD'],
+				root,
+				sshRemote,
+				root
+			);
+			if (head.exitCode !== 0 && head.exitCode !== 1)
+				throw new Error(head.stderr || 'Could not read HEAD');
+			if (request.action === 'unstage')
+				return {
+					success: true,
+					output: await run(
+						head.exitCode === 0
+							? ['reset', '-q', 'HEAD', '--', ...paths]
+							: ['rm', '--cached', '-f', '--', ...paths]
+					),
+				};
+			// A submodule is a repository, not a single file. Do not report a partial restore.
+			const entries = await execGitReadOnly(
+				['--literal-pathspecs', 'ls-files', '--stage', '-z', '--', ...paths],
+				root,
+				sshRemote,
+				root
+			);
+			if (entries.exitCode !== 0) throw new Error(entries.stderr || entries.stdout);
+			if (entries.stdout.split('\0').some((entry) => entry.startsWith('160000 ')))
+				throw new GitChangeValidationError(
+					'submodule',
+					'Cannot revert a submodule from the file changes panel'
+				);
+			const tracked = paths.filter(
+				(file) => !selected.some((entry) => entry.path === file && entry.status === 'untracked')
+			);
+			const untracked = selected
+				.filter((file) => file.status === 'untracked')
+				.map((file) => file.path);
+			let output = '';
+			if (tracked.length)
+				output += await run(
+					head.exitCode === 0
+						? ['restore', '--source=HEAD', '--staged', '--worktree', '--', ...tracked]
+						: ['rm', '-f', '--', ...tracked]
+				);
+			if (untracked.length) output += await run(['clean', '-f', '--', ...untracked]);
+			return { success: true, output };
+		});
+	} catch (error) {
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+			...(error instanceof GitChangeValidationError
+				? { reason: error.reason, file: error.file }
+				: {}),
+		};
+	}
 }

@@ -13,8 +13,8 @@ vi.mock('../../../main/utils/logger', () => ({
 	logger: { debug: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 import { execFileNoThrow } from '../../../main/utils/execFile';
-import { getGitChanges, getGitChangeDiff } from '../../../main/git-changes';
-import { shellEscapeRemotePath } from '../../../main/utils/shell-escape';
+import { getGitChanges, getGitChangeDiff, applyGitChange } from '../../../main/git-changes';
+import { shellEscapeRemotePath, shellEscape } from '../../../main/utils/shell-escape';
 import type { SshRemoteConfig } from '../../../shared/types';
 
 const remote: SshRemoteConfig = {
@@ -95,6 +95,60 @@ describe('changes SSH transport', () => {
 		expect(args.join(' ')).toContain('ConnectTimeout=45');
 		expect(args.join(' ')).toContain('GIT_OPTIONAL_LOCKS');
 		expect(options).toMatchObject({ timeout: 20000 });
+	});
+	it('writes only over SSH with literal paths at the remote worktree root', async () => {
+		const normalize = vi.spyOn(path, 'normalize');
+		vi.mocked(execFileNoThrow)
+			.mockResolvedValueOnce({ exitCode: 0, stdout: '/remote/tree\n', stderr: '' })
+			.mockResolvedValueOnce({ exitCode: 0, stdout: '? -中文 file\0', stderr: '' })
+			.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+		expect(
+			await applyGitChange(
+				'/unused',
+				{ action: 'stage', paths: ['-中文 file'] },
+				remote,
+				'~/remote tree'
+			)
+		).toMatchObject({ success: true });
+		expect(normalize).not.toHaveBeenCalled();
+		const calls = vi.mocked(execFileNoThrow).mock.calls;
+		expect(calls).toHaveLength(3);
+		expect(calls.every(([command, , cwd]) => command === 'ssh' && cwd === undefined)).toBe(true);
+		expect(calls[0][1].join(' ')).toContain(shellEscapeRemotePath('~/remote tree'));
+		const command = calls[2][1].join(' ');
+		expect(command).toContain("'/remote/tree'");
+		expect(command).toContain(
+			shellEscape("git '--literal-pathspecs' 'add' '--' '-中文 file'").slice(1, -1)
+		);
+		expect(command).toContain('ConnectTimeout=45');
+		expect(calls[2][3]).toMatchObject({ timeout: 120000 });
+	});
+	it('preserves a copy source when reverting the copied destination', async () => {
+		vi.mocked(execFileNoThrow)
+			.mockResolvedValueOnce({ exitCode: 0, stdout: '/remote/tree\n', stderr: '' })
+			.mockResolvedValueOnce({
+				exitCode: 0,
+				stdout: '2 C. N... 100644 100644 100644 abc abc C100 copy\0source\0',
+				stderr: '',
+			})
+			.mockResolvedValueOnce({ exitCode: 0, stdout: 'abc', stderr: '' })
+			.mockResolvedValueOnce({ exitCode: 0, stdout: '100644 abc 0\tcopy\0', stderr: '' })
+			.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+		expect(
+			await applyGitChange(
+				'/unused',
+				{ action: 'revert', paths: ['copy'], confirmed: true },
+				remote,
+				'/remote/tree'
+			)
+		).toMatchObject({ success: true });
+		const args = vi.mocked(execFileNoThrow).mock.calls.at(-1)![1].join(' ');
+		expect(args).toContain(
+			shellEscape(
+				"git '--literal-pathspecs' 'restore' '--source=HEAD' '--staged' '--worktree' '--' 'copy'"
+			).slice(1, -1)
+		);
+		expect(args).not.toContain(shellEscape("'source'").slice(1, -1));
 	});
 	it('returns timedOut for both reads and propagates other execution failures', async () => {
 		vi.mocked(execFileNoThrow).mockResolvedValue({

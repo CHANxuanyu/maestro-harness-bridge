@@ -424,6 +424,7 @@ describe('process IPC handlers', () => {
 				'process:spawnTerminalTab',
 				'process:runCommand',
 				'permission:respond',
+				'permission:list',
 				'process:cancelCommand',
 			];
 
@@ -454,6 +455,38 @@ describe('process IPC handlers', () => {
 	});
 
 	describe('process:spawn', () => {
+		it.each([
+			['--dangerously-skip-permissions'],
+			['--permission-mode', 'bypassPermissions'],
+			['--permission-mode=acceptEdits'],
+			['--permission-prompt-tool', 'mcp__other__approve'],
+		])('refuses conflicting standard permission arguments: %j', async (...args) => {
+			mockSettingsStore.get.mockImplementation((key, fallback) =>
+				key === 'newShell' ? true : fallback
+			);
+			mockAgentDetector.getAgent.mockResolvedValue({
+				id: 'claude-code',
+				interactiveCommand: 'maestro-p',
+				interactiveModeArgs: [],
+			});
+			await expect(
+				handlers.get('process:spawn')!(
+					{},
+					{
+						sessionId: 'standard-conflict',
+						toolType: 'claude-code',
+						command: 'claude',
+						cwd: '/tmp/approval-project',
+						args,
+						prompt: 'synthetic approval',
+						permissionMode: 'standard',
+						sessionCustomEnvVars: { CLAUDE_CONFIG_DIR: '/tmp/approval-account' },
+					}
+				)
+			).rejects.toThrow('CLAUDE_STANDARD_CONFLICTING_ARGUMENTS');
+			expect(mockProcessManager.spawn).not.toHaveBeenCalled();
+		});
+
 		it.each([false, true])('gates task tool opt-in on newShell=%s', async (newShell) => {
 			mockSettingsStore.get.mockImplementation((key, defaultValue) =>
 				key === 'newShell' ? newShell : defaultValue

@@ -286,6 +286,14 @@ Show, stage, apply or inspect the shared native instruction profile
 | `--confirm <path>` | Approve this exact resolved file from status (repeatable) | `[]`    |
 | `--json`           | Output JSON including per-file states                     | -       |
 
+## `maestro-cli permission <action> [request-id]`
+
+List or answer a pending Claude tool approval: list, allow, deny
+
+| Option   | Description | Default |
+| -------- | ----------- | ------- |
+| `--json` | Output JSON | -       |
+
 ## `maestro-cli changes [action] [paths]`
 
 Read, stage, unstage, revert or commit changes in a conversation working directory

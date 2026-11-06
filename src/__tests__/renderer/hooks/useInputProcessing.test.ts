@@ -1376,6 +1376,33 @@ describe('useInputProcessing', () => {
 			).toBe(false);
 		});
 
+		it('explains standard permission refusal in Chinese and releases the unsent turn', async () => {
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+			const session = createMockSession({ state: 'idle' });
+			vi.mocked(window.maestro.process.spawn).mockRejectedValue(
+				new Error('Error invoking remote method: CLAUDE_STANDARD_REQUIRES_LOCAL_PRINT')
+			);
+			const deps = createDeps({
+				activeSession: session,
+				sessionsRef: { current: [session] },
+				inputValue: 'synthetic approval',
+			});
+			const { result } = renderHook(() => useInputProcessing(deps));
+			await act(async () => {
+				await result.current.processInput();
+				await Promise.resolve();
+				await Promise.resolve();
+			});
+			const [live] = useSessionStore.getState().sessions;
+			expect(live.aiTabs[0].state).toBe('idle');
+			expect(live.aiTabs[0].logs.some((log) => log.text?.includes('标准权限需要本机 Claude'))).toBe(
+				true
+			);
+			expect(
+				live.aiTabs[0].logs.some((log) => log.text?.includes('CLAUDE_STANDARD_REQUIRES'))
+			).toBe(false);
+		});
+
 		it('still reports a genuine spawn failure and frees the tab', async () => {
 			// The other half of the branch: nothing is running, so the tab must be
 			// released and the user told, rather than silently re-queued forever.

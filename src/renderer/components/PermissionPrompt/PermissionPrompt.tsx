@@ -26,6 +26,10 @@ import {
 	type PermissionRequestUI,
 } from '../../stores/permissionRequestStore';
 import { QuestionPrompt } from './QuestionPrompt';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { parseSessionId } from '../../utils/sessionIdParser';
+import { conversationDisplayTitle } from '../../utils/conversationTitle';
 
 interface PermissionPromptProps {
 	theme: Theme;
@@ -51,33 +55,48 @@ function describeAction(request: PermissionRequestUI): string {
 
 function PermissionPromptInner({ theme }: PermissionPromptProps) {
 	const uiText = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const enqueue = usePermissionRequestStore((s) => s.enqueue);
 	const respond = usePermissionRequestStore((s) => s.respond);
+	const resolve = usePermissionRequestStore((s) => s.resolve);
 	const clearSession = usePermissionRequestStore((s) => s.clearSession);
 	const request = usePermissionRequestStore(selectActivePermissionRequest);
+	const responding = usePermissionRequestStore(
+		(s) => !!request && s.responding.includes(request.requestId)
+	);
+	const failed = usePermissionRequestStore(
+		(s) => !!request && s.failed.includes(request.requestId)
+	);
+	const session = useSessionStore((s) =>
+		request
+			? s.sessions.find((item) => item.id === parseSessionId(request.sessionId).baseSessionId)
+			: undefined
+	);
 
 	// Wire the IPC listeners once.
 	useEffect(() => {
 		const offRequest = window.maestro?.process?.onPermissionRequest?.((req) => enqueue(req));
+		const offResolved = window.maestro?.process?.onPermissionResolved?.(resolve);
 		const offExit = window.maestro?.process?.onExit?.((sessionId: string) =>
 			clearSession(sessionId)
 		);
 		return () => {
 			offRequest?.();
+			offResolved?.();
 			offExit?.();
 		};
-	}, [enqueue, clearSession]);
+	}, [enqueue, resolve, clearSession]);
 
 	const isOpen = !!request;
 	const isQuestion = !!request && request.kind === 'question' && !!request.questions?.length;
 
 	const onDeny = () => {
-		if (request) {
+		if (request && !responding) {
 			respond(request.requestId, { behavior: 'deny', message: 'Denied by user.' });
 		}
 	};
 	const onAllow = () => {
-		if (request) {
+		if (request && !responding) {
 			respond(request.requestId, { behavior: 'allow' });
 		}
 	};
@@ -146,7 +165,8 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 		);
 	}
 
-	const action = describeAction(request);
+	const action = newShell ? JSON.stringify(request.input, null, 2) : describeAction(request);
+	const tab = session?.aiTabs?.find((item) => item.id === request.tabId);
 
 	return createPortal(
 		<div
@@ -155,26 +175,49 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 		>
 			<div
 				role="dialog"
+				aria-modal="true"
+				data-testid="permission-prompt"
+				key={request.requestId}
 				aria-label={uiText('workflows.sessions.permissionRequest')}
-				className="w-[520px] max-w-[90vw] rounded-xl shadow-2xl border p-5"
+				className={
+					newShell
+						? 'w-[560px] max-w-[90vw] rounded-lg shadow-lg border p-5'
+						: 'w-[520px] max-w-[90vw] rounded-xl shadow-2xl border p-5'
+				}
 				style={{
-					backgroundColor: theme.colors.bgSidebar,
+					backgroundColor: newShell ? theme.colors.bgMain : theme.colors.bgSidebar,
 					borderColor: theme.colors.border,
 					color: theme.colors.textMain,
 				}}
 			>
 				<div className="flex items-center gap-2 mb-3">
-					<ShieldQuestion className="w-5 h-5" style={{ color: theme.colors.accent }} />
+					{!newShell && (
+						<ShieldQuestion className="w-5 h-5" style={{ color: theme.colors.accent }} />
+					)}
 					<h2 className="text-sm font-semibold">
 						{uiText('workflows.sessions.permissionRequired')}
 					</h2>
 				</div>
+				{newShell && (
+					<div
+						className="text-xs mb-3 select-text break-words"
+						style={{ color: theme.colors.textDim }}
+					>
+						<p>
+							{uiText('workflows.sessions.approvalConversation', {
+								title: conversationDisplayTitle(tab) ?? request.tabId ?? request.sessionId,
+							})}
+						</p>
+						{session?.cwd && <p>{session.cwd}</p>}
+						<p className="mt-2">{uiText('workflows.sessions.approvalScope')}</p>
+					</div>
+				)}
 				<p className="text-xs mb-2" style={{ color: theme.colors.textDim }}>
 					{uiText('workflows.sessions.claudeWantsToUse')}{' '}
 					<span className="font-semibold" style={{ color: theme.colors.textMain }}>
 						{request.toolName}
 					</span>
-					.
+					{!newShell && '.'}
 				</p>
 				<pre
 					className="text-xs rounded-md p-3 mb-4 overflow-auto max-h-48 select-text whitespace-pre-wrap break-words"
@@ -186,18 +229,24 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 				>
 					{action}
 				</pre>
+				{failed && (
+					<p role="alert" className="text-xs mb-3" style={{ color: theme.colors.error }}>
+						{uiText('workflows.sessions.approvalSendFailed')}
+					</p>
+				)}
 				<div className="flex justify-end gap-2">
 					{/* Deny is the default-focused action: this is a fail-safe prompt, so a
 					    stray Enter/Space must NOT approve a potentially destructive tool
 					    call. Matches the Escape-denies behavior above. */}
 					<button
 						onClick={onDeny}
+						disabled={responding}
 						autoFocus
 						className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md cursor-pointer transition-colors"
 						style={{
 							backgroundColor: 'transparent',
-							color: theme.colors.error,
-							border: `1px solid ${theme.colors.error}60`,
+							color: newShell ? theme.colors.textMain : theme.colors.error,
+							border: `1px solid ${newShell ? theme.colors.border : `${theme.colors.error}60`}`,
 						}}
 					>
 						<X className="w-3.5 h-3.5" />
@@ -205,6 +254,7 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 					</button>
 					<button
 						onClick={onAllow}
+						disabled={responding}
 						className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md cursor-pointer transition-colors"
 						style={{
 							backgroundColor: theme.colors.accent,
@@ -213,7 +263,7 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 						}}
 					>
 						<Check className="w-3.5 h-3.5" />
-						{uiText('workflows.sessions.allow')}
+						{uiText(newShell ? 'workflows.sessions.allowOnce' : 'workflows.sessions.allow')}
 					</button>
 				</div>
 			</div>

@@ -14,6 +14,19 @@
  */
 export const AGENT_ALREADY_RUNNING_PREFIX = 'Agent process already running for session';
 
+/** Stable refusal identifiers translated by the renderer after IPC wrapping. */
+export const CLAUDE_STANDARD_PERMISSION_ERRORS = {
+	remote: 'CLAUDE_STANDARD_REQUIRES_LOCAL_PRINT',
+	tuiBinary: 'CLAUDE_STANDARD_REQUIRES_CLAUDE_BINARY',
+	conflictingArgs: 'CLAUDE_STANDARD_CONFLICTING_ARGUMENTS',
+} as const;
+
+/** Match a standard approval refusal after Electron wraps the error. */
+export function isClaudeStandardPermissionError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error ?? '');
+	return Object.values(CLAUDE_STANDARD_PERMISSION_ERRORS).some((code) => message.includes(code));
+}
+
 /** The exact message `ProcessManager.spawn` throws for an owned session. */
 export function agentAlreadyRunningMessage(sessionId: string): string {
 	return `${AGENT_ALREADY_RUNNING_PREFIX} ${sessionId}`;

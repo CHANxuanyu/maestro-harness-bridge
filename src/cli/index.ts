@@ -18,6 +18,7 @@ import { dispatch } from './commands/dispatch';
 import { ask } from './commands/ask';
 import { handoff } from './commands/handoff';
 import { changes } from './commands/changes';
+import { permissionCommand } from './commands/permission';
 import { queueList, queueRemove } from './commands/queue';
 import {
 	snoozeDismiss,
@@ -547,6 +548,12 @@ program
 	)
 	.option('--json', 'Output JSON including per-file states')
 	.action(aboutMe);
+
+program
+	.command('permission <action> [request-id]')
+	.description('List or answer a pending Claude tool approval: list, allow, deny')
+	.option('--json', 'Output JSON')
+	.action(permissionCommand);
 
 program
 	.command('changes [action] [paths...]')

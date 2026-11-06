@@ -83,6 +83,14 @@ export function PermissionModeMenu({
 						else handleKeyDown(event);
 					}}
 				>
+					{agentId === 'claude-code' && hasStandardCapability && (
+						<p
+							className="w-64 px-3 py-2 text-xs whitespace-normal"
+							style={{ color: theme.colors.textDim }}
+						>
+							{t('workflows.sessions.standardPrintNotice')}
+						</p>
+					)}
 					{modes.map((option, index) => (
 						<button
 							key={option}

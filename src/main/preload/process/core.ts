@@ -293,9 +293,13 @@ export function createProcessCoreApi() {
 			return () => ipcRenderer.removeListener('process:permission-request', handler);
 		},
 
-		/**
-		 * Send the user's allow/deny decision for a relayed permission request.
-		 */
+		onPermissionResolved: (callback: (requestId: string) => void): (() => void) => {
+			const handler = (_: unknown, requestId: string) => callback(requestId);
+			ipcRenderer.on('process:permission-resolved', handler);
+			return () => ipcRenderer.removeListener('process:permission-resolved', handler);
+		},
+
+		/** Send the user's decision through the same handler as maestro-cli. */
 		respondPermission: (
 			requestId: string,
 			decision:

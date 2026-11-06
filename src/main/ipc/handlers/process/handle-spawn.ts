@@ -60,6 +60,7 @@ import { applyLocalInteractiveSpawnDecision } from './apply-local-interactive-sp
 import { persistClaudeInteractiveMode } from './persist-claude-interactive-mode';
 import { wrapSpawnForSsh } from './wrap-spawn-for-ssh';
 import { preparePermissionRelayArgs } from '../../../permission-relay';
+import { CLAUDE_STANDARD_PERMISSION_ERRORS } from '../../../../shared/processErrors';
 import {
 	primeOmpModelCatalog,
 	computeOmpCatalogKey,
@@ -255,6 +256,25 @@ export async function handleProcessSpawn(
 		sessionCustomEnvVars: config.sessionCustomEnvVars,
 	});
 	finalArgs = configResolution.args;
+	// Explicit custom permission flags must not silently override the menu.
+	if (
+		isClaudeCode &&
+		settingsStore.get('newShell', false) &&
+		config.permissionMode === 'standard'
+	) {
+		if (
+			finalArgs.some(
+				(arg, index) =>
+					arg === '--dangerously-skip-permissions' ||
+					arg.startsWith('--dangerously-skip-permissions=') ||
+					arg === '--permission-prompt-tool' ||
+					arg.startsWith('--permission-prompt-tool=') ||
+					(arg === '--permission-mode' && finalArgs[index + 1] !== 'default') ||
+					(arg.startsWith('--permission-mode=') && arg !== '--permission-mode=default')
+			)
+		)
+			throw new Error(CLAUDE_STANDARD_PERMISSION_ERRORS.conflictingArgs);
+	}
 
 	if (configResolution.modelSource === 'session' && config.sessionCustomModel) {
 		logger.debug(`Using session-level model for ${config.toolType}`, LOG_CONTEXT, {
@@ -451,8 +471,8 @@ export async function handleProcessSpawn(
 	// injects `--permission-prompt-tool` + `--mcp-config` pointing at a
 	// stdio bridge that dials Maestro's loopback socket for a user
 	// decision. Not applicable to full/read-only modes, non-claude agents,
-	// or the interactive (maestro-p/TUI) path, which renders its own
-	// native prompts.
+	// or the interactive (maestro-p/TUI) path. New shell standard turns
+	// resolve to local print before reaching this point.
 	// ========================================================================
 	if (isClaudeCode && claudeResolvedMode === 'api' && config.permissionMode === 'standard') {
 		if (isSshEnabled) {

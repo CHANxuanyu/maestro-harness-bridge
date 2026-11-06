@@ -38,6 +38,29 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## Claude standard approval, U4 (2026-11-07)
+
+| UI action                                 | CLI                                      | Shared implementation                                                |
+| ----------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
+| Read the pending tool and full input      | `permission list [--json]`               | `permission:list`, `listPermissionRequests()`; excludes relay tokens |
+| Allow the displayed tool once             | `permission allow <request-id> [--json]` | `permission:respond`, `resolvePermissionResponse()`                  |
+| Deny the displayed tool, including Escape | `permission deny <request-id> [--json]`  | Same response handler with a deny decision                           |
+| Set the conversation permission           | Existing `tab permission <tab> standard` | Existing permission field update and desktop spawn path              |
+
+Commands require the running desktop. IDs are exact: a settled request returns
+failure rather than answering a later request. JSON list returns an array;
+allow and deny return `true`, and failures use `{ success: false, error }` with
+exit code 1. The renderer waits for acknowledgement and removes requests settled
+by CLI, timeout, process exit or bridge disconnect. A failed delivery remains
+visible for a deliberate retry. No persistent allow rule is written.
+
+New shell standard Claude turns use local print even with a saved interactive
+or dynamic preference. Direct maestro-p, SSH and conflicting permission args
+fail before spawn. Classic mode selection is unchanged. The existing shared
+relay also receives lifetime and failed-delivery fixes in the classic shell.
+Synthetic Electron coverage is in `e2e/native-claude-permission.spec.ts` and
+execution instructions are in `e2e/claude-standard-approval.md`.
+
 ## Stop and read-only resume corrections (2026-11-06)
 
 No UI action or CLI verb is added. `tab permission <tab> readonly` and
@@ -648,6 +671,12 @@ The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
 ## Open gaps
+
+Claude approval: the modal covers the composer Stop button. Escape denies only
+the current tool. U4 tests the existing interrupt IPC while approval is pending;
+it does not add a direct Stop action or close the existing full Stop parity gap.
+`permission` covers tool allow/deny only; a structured AskUserQuestion answer
+command, cross-window routing and browser prompt delivery are not verified here.
 
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no
 `tab fork --at` verb; this remains the Composer backlog below. The palette and

@@ -62,6 +62,15 @@ describe('ToolbarControls', () => {
 		);
 	}
 
+	it('explains the local print approval route in the new shell permission menu', () => {
+		useSettingsStore.setState({ newShell: true });
+		renderToolbar();
+		fireEvent.click(screen.getByTitle(/^Full Access/));
+		expect(screen.getByRole('menu')).toHaveTextContent(
+			'TUI approval and SSH are not supported yet'
+		);
+	});
+
 	it('shows inherited standard immediately while target capabilities are loading', () => {
 		useSettingsStore.setState({ newShell: true });
 		const session = createInputAreaSession();

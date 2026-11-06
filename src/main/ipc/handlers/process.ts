@@ -28,6 +28,7 @@ import type { SpawnProcessConfig } from './process/spawn-types';
 import {
 	initPermissionRelay,
 	resolvePermissionResponse,
+	listPermissionRequests,
 	type PermissionDecision,
 } from '../../permission-relay';
 import { releaseConcertoHtmlDocument, restoreConcertoHtmlDocument } from '../../concerto-html';
@@ -144,6 +145,8 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 			}
 		)
 	);
+
+	ipcMain.handle('permission:list', () => listPermissionRequests());
 
 	// Renderer -> main: the user's allow/deny decision for a relayed request.
 	ipcMain.handle(

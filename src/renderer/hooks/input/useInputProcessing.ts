@@ -40,9 +40,13 @@ import {
 	hasWorkAheadOfNewMessage,
 } from '../../utils/executionQueue';
 import { probeSessionAiProcesses } from '../../services/process';
-import { isAgentAlreadyRunningError } from '../../../shared/processErrors';
+import { getT } from '../../i18n';
+import {
+	isAgentAlreadyRunningError,
+	isClaudeStandardPermissionError,
+} from '../../../shared/processErrors';
 import { hasPendingRetry, noteDirectDispatch } from '../../stores/retryStore';
-import { resolveForceParallel } from '../../stores/settingsStore';
+import { resolveForceParallel, useSettingsStore } from '../../stores/settingsStore';
 import {
 	useSessionStore,
 	selectActiveSession,
@@ -1653,7 +1657,10 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 							id: generateId(),
 							timestamp: Date.now(),
 							source: 'system',
-							text: `Error: Failed to spawn agent process - ${(error as Error).message}`,
+							text:
+								useSettingsStore.getState().newShell && isClaudeStandardPermissionError(error)
+									? getT()('workflows.sessions.standardSpawnRefused')
+									: `Error: Failed to spawn agent process - ${(error as Error).message}`,
 						};
 						updateSessionWith(resolvedSessionId, (s) => {
 							const errorTabId = targetTabId ?? s.activeTabId;

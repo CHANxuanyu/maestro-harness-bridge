@@ -188,6 +188,17 @@ export const workflowsSessions = {
 	'workflows.sessions.claudeWantsToUse': 'Claude Code wants to use',
 	'workflows.sessions.deny': 'Deny',
 	'workflows.sessions.allow': 'Allow',
+	'workflows.sessions.allowOnce': 'Allow once',
+	'workflows.sessions.approvalConversation': 'Conversation: {title}',
+	'workflows.sessions.approvalScope':
+		'Only this tool call will be approved. Review its full input below.',
+	'workflows.sessions.approvalSendFailed':
+		'Your decision could not be delivered. Please try again.',
+	'workflows.sessions.permissionMessageHeld': 'Your message is held in the queue.',
+	'workflows.sessions.standardSpawnRefused':
+		'Standard permissions require local Claude print. Disable SSH, select the Claude executable instead of maestro-p, and remove custom permission overrides.',
+	'workflows.sessions.standardPrintNotice':
+		'Standard permissions use Claude print with approval prompts. TUI approval and SSH are not supported yet.',
 	'workflows.sessions.customAnswer': 'Other (type a custom answer)',
 	'workflows.sessions.submitAnswer': 'Submit answer',
 	'workflows.sessions.noRecordedSession': 'No session recorded for this entry',

@@ -33,6 +33,7 @@ import type { SelectModeInput, SelectModeResult, UsageSnapshot } from './claude-
 import type { ClaudeTokenMode } from '../../shared/claudeTokenMode';
 import { isBlankEnvValue } from '../../shared/agentEnvironment';
 import { effectiveAgentCustomEnvVars } from '../../shared/providerProfiles';
+import { CLAUDE_STANDARD_PERMISSION_ERRORS } from '../../shared/processErrors';
 
 const LOG_CONTEXT = 'ClaudeSpawnCore';
 
@@ -178,6 +179,8 @@ export interface ResolveClaudeSpawnModeCoreInput {
 	agent: ResolverAgent | null;
 	/** Canonical token mode for this spawn (see getClaudeTokenMode). */
 	tokenMode: ClaudeTokenMode;
+	/** Require the local print permission relay instead of unattended TUI execution. */
+	requirePermissionRelay?: boolean;
 	/**
 	 * SSH-enabled spawn. Interactive (TUI) mode runs maestro-p on the remote
 	 * host; it falls back to API when the remote probe says maestro-p is absent.
@@ -258,6 +261,30 @@ export function resolveClaudeSpawnModeCore(
 	// Non-Claude agents never route through maestro-p.
 	if (!isClaudeCode) {
 		return { mode: 'api', reason: 'auto', maestroPBinPath: null };
+	}
+
+	if (input.requirePermissionRelay) {
+		if (sshEnabled) {
+			throw new Error(CLAUDE_STANDARD_PERMISSION_ERRORS.remote);
+		}
+		if (d.isMaestroPBinaryPath(command) || d.isMaestroPBinaryPath(sessionCustomPath)) {
+			throw new Error(CLAUDE_STANDARD_PERMISSION_ERRORS.tuiBinary);
+		}
+		// maestro-p cannot relay human approval and may add permission bypass.
+		// Keep the saved source preference, but run this standard turn via print.
+		return {
+			mode: 'api',
+			reason: 'auto',
+			maestroPBinPath: null,
+			configDirKey: d.resolveConfigDirKey(
+				mergeClaudeSpawnEnvLayers({
+					agentDefaultEnvVars: agent?.defaultEnvVars,
+					globalShellEnvVars: input.globalShellEnvVars,
+					agentCustomEnvVars: input.agentCustomEnvVars,
+					sessionCustomEnvVars: input.sessionCustomEnvVars,
+				})
+			),
+		};
 	}
 
 	const envForKey = mergeClaudeSpawnEnvLayers({

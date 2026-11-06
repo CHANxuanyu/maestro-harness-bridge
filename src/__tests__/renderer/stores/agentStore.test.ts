@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 /**
  * Tests for agentStore - Agent lifecycle orchestration store
  *
@@ -2089,6 +2090,30 @@ describe('agentStore', () => {
 			expect(updated.aiTabs[0].logs).toHaveLength(1);
 			expect(updated.aiTabs[0].logs[0].source).toBe('user');
 			expect(updated.aiTabs[0].logs[0].aiCommand?.command).toBe('/implement');
+		});
+
+		it('keeps a refused standard permission send queued with a Chinese explanation', async () => {
+			const previous = useSettingsStore.getState();
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+			try {
+				mockSpawn.mockRejectedValueOnce(new Error('CLAUDE_STANDARD_REQUIRES_LOCAL_PRINT'));
+				const session = createMockSession({ id: 'session-1', state: 'busy' });
+				useSessionStore.getState().setSessions([session]);
+				const item = createQueuedItem({ tabId: session.activeTabId, text: 'Synthetic approval' });
+				await expect(
+					useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps)
+				).rejects.toThrow('CLAUDE_STANDARD_REQUIRES_LOCAL_PRINT');
+				const updated = useSessionStore.getState().sessions[0];
+				expect(updated.executionQueue.some((queued) => queued.id === item.id)).toBe(true);
+				expect(
+					updated.aiTabs[0].logs.some((log) => log.text.includes('标准权限需要本机 Claude'))
+				).toBe(true);
+				expect(updated.aiTabs[0].logs.some((log) => log.text.includes('消息已保留在队列'))).toBe(
+					true
+				);
+			} finally {
+				useSettingsStore.setState({ newShell: previous.newShell, uiLanguage: previous.uiLanguage });
+			}
 		});
 
 		it('handles spawn error gracefully', async () => {

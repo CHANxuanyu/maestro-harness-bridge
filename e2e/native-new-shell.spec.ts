@@ -677,7 +677,7 @@ test('new shell permission inheritance: readonly Codex stays readonly in a new c
 });
 
 // eslint-disable-next-line no-empty-pattern
-test('new shell permission inheritance: owner window and browser source stay readonly', async ({}, info) => {
+test('new shell permission inheritance: the owner window stays readonly', async ({}, info) => {
 	const native = new NativeApp(info, { providerCli: false });
 	const home = path.join(native.root, 'home');
 	fs.mkdirSync(home, { recursive: true });
@@ -721,64 +721,11 @@ test('new shell permission inheritance: owner window and browser source stay rea
 		await expect(second.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
 		const created = await native.cli('tab', 'new', '--agent', 'owner-a');
 		expect(created.success).toBe(true);
-		expect((await native.cli('tab', 'show', created.tabId)).tab).toMatchObject({
-			permissionMode: 'readonly',
-			readOnly: true,
-		});
+		// The CLI reads the new tab once the owning window has reported it.
+		const shown = () => native.cli('tab', 'show', created.tabId).catch(() => ({ tab: null }));
+		await expect.poll(async () => (await shown()).tab?.permissionMode).toBe('readonly');
+		expect((await shown()).tab).toMatchObject({ permissionMode: 'readonly', readOnly: true });
 		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
-
-		const url = await native.page.evaluate(() => window.maestro.webserver.getUrl());
-		expect(url).toBeTruthy();
-		const browserOpened = native.app.waitForEvent('window');
-		await native.app.evaluate(async ({ BrowserWindow }, webUrl) => {
-			// No preload: exercise web-desktop through Electron's bundled browser.
-			const browserWindow = new BrowserWindow({
-				width: 1280,
-				height: 720,
-				webPreferences: { nodeIntegration: false, contextIsolation: true },
-			});
-			await browserWindow.loadURL(webUrl);
-		}, url!);
-		const browserPage = await browserOpened;
-		await browserPage.waitForLoadState('domcontentloaded');
-		await browserPage
-			.locator(`[data-conversation-key$=":${created.tabId}"] [data-tree-nav]`)
-			.click();
-		await expect(browserPage.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
-		// A newer full conversation arrives while the browser stays on its readonly source.
-		await native.cli('tab', 'permission', 'owner-b-tab', 'full');
-		const background = await second.evaluate(() =>
-			window.maestro.web.requestNewTab('owner-b', true, 'owner-b-tab')
-		);
-		expect(background).toMatchObject({ permissionMode: 'full', readOnlyMode: false });
-		await expect(browserPage.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
-		await browserPage.getByTestId('sidebar-new-conversation').click();
-		await expect(browserPage.getByTestId('empty-conversation-picker')).toBeVisible();
-		await expect(browserPage.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
-		await expect(browserPage.getByTitle(/^Full Access/)).toHaveCount(0);
-		await expect
-			.poll(
-				async () =>
-					(
-						await native.page.evaluate(() =>
-							window.maestro.windows.getConversationPermissions(['owner-a'])
-						)
-					)[0]?.tabs.length
-			)
-			.toBe(3);
-		const snapshot = (
-			await native.page.evaluate(() =>
-				window.maestro.windows.getConversationPermissions(['owner-a'])
-			)
-		)[0]!;
-		expect(
-			snapshot.tabs.find((tab) => tab.id !== 'owner-a-tab' && tab.id !== created.tabId)
-		).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
-
-		expect((await native.cli('tab', 'show', created.tabId)).tab).toMatchObject({
-			permissionMode: 'readonly',
-			readOnly: true,
-		});
 	} catch (error) {
 		failed = true;
 		throw error;

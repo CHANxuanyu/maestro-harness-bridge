@@ -37,6 +37,7 @@ import { logger } from '../utils/logger';
 import { captureException } from '../utils/sentry';
 import { isExpectedSessionReadError } from '../utils/session-read-errors';
 import { fileFingerprint } from './session-info-cache';
+import { mapWithConcurrency, LOCAL_SESSION_READ_CONCURRENCY } from '../utils/concurrency';
 import {
 	readFileRemote,
 	readBinaryFileRemoteAsBase64,
@@ -1428,7 +1429,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		};
 
 		const sessions: AgentSessionInfo[] = [];
-		const currentFilePaths = new Set<string>();
+		const currentFilePaths = new Set(allSessionFiles.map(({ filePath }) => filePath));
 		let cacheUpdated = false;
 		// Many transcripts share a cwd. Resolve its membership once for this list,
 		// including negative results, without retaining filesystem state across calls.
@@ -1438,19 +1439,27 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			return worktrees.get(cwd);
 		};
 
-		for (const { filePath, filename } of allSessionFiles) {
-			currentFilePaths.add(filePath);
-			let stats: { size: number; mtimeMs: number };
-
-			try {
-				const fileStat = await fs.stat(filePath);
-				if (fileStat.size === 0) continue;
-				stats = { size: fileStat.size, mtimeMs: fileStat.mtimeMs };
-			} catch (error) {
-				logger.error(`Error stating Codex session file: ${filename}`, LOG_CONTEXT, error);
-				captureException(error, { operation: 'codexStorage:statSessionFile', filename });
-				continue;
+		// Overlap metadata I/O only. Whole transcripts are still read and parsed
+		// one at a time so large histories cannot multiply the memory budget.
+		const sessionFiles = await mapWithConcurrency(
+			allSessionFiles,
+			LOCAL_SESSION_READ_CONCURRENCY,
+			async ({ filePath, filename }) => {
+				try {
+					const stat = await fs.stat(filePath);
+					return stat.size === 0
+						? null
+						: { filePath, filename, stats: { size: stat.size, mtimeMs: stat.mtimeMs } };
+				} catch (error) {
+					logger.error(`Error stating Codex session file: ${filename}`, LOG_CONTEXT, error);
+					captureException(error, { operation: 'codexStorage:statSessionFile', filename });
+					return null;
+				}
 			}
+		);
+		for (const file of sessionFiles) {
+			if (!file) continue;
+			const { filePath, filename, stats } = file;
 
 			const cached = cache.sessions[filePath];
 			if (cached && cached.fileMtimeMs >= stats.mtimeMs) {

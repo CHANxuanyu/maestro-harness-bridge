@@ -7,6 +7,7 @@ export interface ChangeTurnEntry {
 	source: string;
 	text: string;
 	timestamp: number;
+	nativeTranscript?: { messageId: string };
 	metadata?: { toolState?: { status?: string; input?: unknown; writePaths?: string[] } };
 }
 
@@ -15,6 +16,12 @@ export interface TurnWrites {
 	title: string;
 	timestamp: number;
 	paths: string[];
+}
+
+/** Small persistent evidence, independent of the display log budget. */
+export interface ChangeTurnIndex {
+	turns: TurnWrites[];
+	current?: TurnWrites;
 }
 
 export interface GitChangeTurnGroup {
@@ -73,6 +80,16 @@ export function toolInputWritePaths(name: string, input: unknown): string[] {
 	);
 }
 
+function turnFromUser(entry: ChangeTurnEntry): TurnWrites {
+	const firstLine = entry.text.split(/\r?\n/, 1)[0];
+	return {
+		turnId: entry.nativeTranscript?.messageId ?? entry.id,
+		title: firstLine.length > 120 ? firstLine.slice(0, 119) + '…' : firstLine,
+		timestamp: entry.timestamp,
+		paths: [],
+	};
+}
+
 /** Build this index only when logs change, independently of Git refreshes or UI state. */
 export function collectTurnWrites(logs: readonly ChangeTurnEntry[]): TurnWrites[] {
 	const turns: TurnWrites[] = [];
@@ -80,13 +97,7 @@ export function collectTurnWrites(logs: readonly ChangeTurnEntry[]): TurnWrites[
 	let paths = new Set<string>();
 	for (const entry of logs) {
 		if (entry.source === 'user') {
-			const firstLine = entry.text.split(/\r?\n/, 1)[0];
-			current = {
-				turnId: entry.id,
-				title: firstLine.length > 120 ? firstLine.slice(0, 119) + '…' : firstLine,
-				timestamp: entry.timestamp,
-				paths: [],
-			};
+			current = turnFromUser(entry);
 			turns.push(current);
 			paths = new Set();
 		} else if (current) {
@@ -97,6 +108,36 @@ export function collectTurnWrites(logs: readonly ChangeTurnEntry[]): TurnWrites[
 		}
 	}
 	return turns.filter((turn) => turn.paths.length > 0).reverse();
+}
+
+/** Retain successful writes before a save trims the logs, including the open turn's identity. */
+export function updateTurnWriteIndex(
+	logs: readonly ChangeTurnEntry[],
+	previous?: ChangeTurnIndex
+): ChangeTurnIndex {
+	const current = previous?.current;
+	const entries =
+		current && logs[0]?.source !== 'user'
+			? [
+					{ id: current.turnId, source: 'user', text: current.title, timestamp: current.timestamp },
+					...logs.filter((entry) => entry.timestamp >= current.timestamp),
+				]
+			: logs;
+	const fresh = collectTurnWrites(entries);
+	const turns = new Map((previous?.turns ?? []).map((turn) => [turn.turnId, turn]));
+	for (const turn of fresh) {
+		const prior = turns.get(turn.turnId);
+		turns.set(
+			turn.turnId,
+			prior ? { ...turn, paths: [...new Set([...prior.paths, ...turn.paths])] } : turn
+		);
+	}
+	const lastUser = [...logs].reverse().find((entry) => entry.source === 'user');
+	const latest = lastUser ? turnFromUser(lastUser) : current;
+	return {
+		turns: [...turns.values()].sort((a, b) => b.timestamp - a.timestamp),
+		...(latest ? { current: latest } : {}),
+	};
 }
 
 /** Lexical matching only. Never resolve a remote path on the local filesystem. */

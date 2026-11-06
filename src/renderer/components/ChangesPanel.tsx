@@ -28,7 +28,11 @@ import { requestFileTreeRefresh } from '../utils/fileTreeRefresh';
 import { useSettingsStore } from '../stores/settingsStore';
 import { updateAiTab } from '../stores/sessionStore';
 import { changeNewShellPanel } from '../../shared/newShellPanel';
-import { collectTurnWrites, groupChangesByTurn } from '../../shared/gitChangeTurns';
+import {
+	updateTurnWriteIndex,
+	groupChangesByTurn,
+	type TurnWrites,
+} from '../../shared/gitChangeTurns';
 import { SegmentedControl } from './ui/SegmentedControl';
 import { useT, useAppLocale } from '../i18n';
 import 'react-diff-view/style/index.css';
@@ -86,6 +90,15 @@ export const ChangesPanel = memo(function ChangesPanel({
 	const t = useT();
 	const locale = useAppLocale();
 	const newShell = useSettingsStore((s) => s.newShell);
+	const activeTab = session.aiTabs.find((tab) => tab.id === session.activeTabId);
+	const byTurn = newShell && activeTab?.newShellPanel?.changesView === 'turn';
+	const nativeId = newShell ? activeTab?.agentSessionId : undefined;
+	const nativeGrouping = !!(
+		byTurn &&
+		nativeId &&
+		['claude-code', 'codex'].includes(session.toolType)
+	);
+	const [nativeWrites, setNativeWrites] = useState<TurnWrites[]>([]);
 	const colorBlindMode = useSettingsStore((s) => s.colorBlindMode);
 	const cwd = newShell ? session.cwd : resolveGitCwd(session);
 	const sshRemoteId = resolveGitSshRemoteId(session);
@@ -112,8 +125,20 @@ export const ChangesPanel = memo(function ChangesPanel({
 		const request = ++requestRef.current;
 		setRefreshing(true);
 		try {
-			const changes = await gitService.getChanges(cwd, sshRemoteId, remoteCwd);
+			const [changes, native] = await Promise.all([
+				gitService.getChanges(cwd, sshRemoteId, remoteCwd),
+				nativeGrouping
+					? window.maestro.agentSessions.turnWrites(
+							session.toolType,
+							sshRemoteId ? session.remoteCwd || remoteCwd || cwd : session.projectRoot || cwd,
+							nativeId!,
+							{ ownerAgentId: session.id },
+							sshRemoteId
+						)
+					: Promise.resolve([]),
+			]);
 			if (request !== requestRef.current) return;
+			setNativeWrites(native);
 			// A timeout is no answer; keep what is on screen.
 			setLoad((previous) =>
 				changes.timedOut && previous.kind === 'ready' ? previous : { kind: 'ready', changes }
@@ -125,11 +150,22 @@ export const ChangesPanel = memo(function ChangesPanel({
 		} finally {
 			if (request === requestRef.current) setRefreshing(false);
 		}
-	}, [cwd, sshRemoteId, remoteCwd, context]);
+	}, [
+		cwd,
+		sshRemoteId,
+		remoteCwd,
+		context,
+		nativeGrouping,
+		nativeId,
+		session.toolType,
+		session.projectRoot,
+		session.remoteCwd,
+	]);
 
 	useEffect(() => {
 		mountedRef.current = true;
 		setLoad({ kind: 'loading' });
+		setNativeWrites([]);
 		setOpen({});
 		setMessage('');
 		setActionError('');
@@ -230,19 +266,23 @@ export const ChangesPanel = memo(function ChangesPanel({
 		});
 	};
 
-	const activeTab = session.aiTabs.find((tab) => tab.id === session.activeTabId);
 	const changes = load.kind === 'ready' ? load.changes : null;
-	const byTurn = newShell && activeTab?.newShellPanel?.changesView === 'turn';
 	const turnWrites = useMemo(
-		() => (newShell ? collectTurnWrites(activeTab?.logs ?? []) : []),
-		[newShell, activeTab?.logs]
+		() =>
+			newShell ? updateTurnWriteIndex(activeTab?.logs ?? [], activeTab?.changeTurnIndex).turns : [],
+		[newShell, activeTab?.logs, activeTab?.changeTurnIndex]
 	);
 	const turnChanges = useMemo(
 		() =>
 			byTurn && changes
-				? groupChangesByTurn(changes, turnWrites, remoteCwd || cwd, !!sshRemoteId)
+				? groupChangesByTurn(
+						changes,
+						nativeWrites.length ? nativeWrites : turnWrites,
+						remoteCwd || cwd,
+						!!sshRemoteId
+					)
 				: null,
-		[byTurn, changes, turnWrites, remoteCwd, cwd, sshRemoteId]
+		[byTurn, changes, turnWrites, nativeWrites, remoteCwd, cwd, sshRemoteId]
 	);
 	const stagedCount =
 		changes?.stagedCount ??
@@ -269,7 +309,11 @@ export const ChangesPanel = memo(function ChangesPanel({
 		if (load.kind === 'error')
 			return (
 				<p className="text-xs px-1 py-3" style={{ color: theme.colors.error }} role="alert">
-					{t('workflows.changes.failed', { error: load.message })}
+					{t('workflows.changes.failed', {
+						error: load.message.includes('TURN_WRITES_INCOMPLETE')
+							? t('workflows.changes.historyIncomplete')
+							: load.message,
+					})}
 				</p>
 			);
 		if (load.changes.notARepo)

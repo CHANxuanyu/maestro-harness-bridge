@@ -1,3 +1,4 @@
+import { encodeClaudeProjectPath } from '../src/shared/pathUtils';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -1026,6 +1027,14 @@ test('new shell T8: group two synthetic write turns and preserve the conversatio
 		},
 	]);
 	const tabId = 't8-recorded-turns';
+	logs.push(
+		...Array.from({ length: 150 }, (_, index) => ({
+			id: `t8-later-${index}`,
+			source: 'stdout' as const,
+			text: 'Later progress',
+			timestamp: Date.parse('2026-11-06T09:02:00Z') + index,
+		}))
+	);
 	const runner = createMockSession({
 		id: 't8-project',
 		name: 'T8 fixture',
@@ -1121,6 +1130,19 @@ test('new shell T8: group two synthetic write turns and preserve the conversatio
 			'aria-checked',
 			'true'
 		);
+		const afterRestart = await native.cli('changes', '--by-turn', '--tab', tabId);
+		expect(afterRestart.groups).toEqual(grouped.groups);
+		const saved = JSON.parse(
+			fs.readFileSync(path.join(native.data, 'maestro-sessions.json'), 'utf8')
+		)
+			.sessions.find((item: Session) => item.id === runner.id)
+			.aiTabs.find((tab: AITab) => tab.id === tabId);
+		expect(saved.logs).toHaveLength(100);
+		expect(saved.logs.some((entry: { id: string }) => entry.id === 'round-1')).toBe(false);
+		expect(saved.changeTurnIndex.turns.map((turn: { turnId: string }) => turn.turnId)).toEqual([
+			'round-2',
+			'round-1',
+		]);
 		expect(fs.existsSync(path.join(native.claude, 'fixture-turn-count'))).toBe(false);
 		expect(fs.existsSync(path.join(native.codex, 'fixture-turn-count'))).toBe(false);
 	} catch (error) {
@@ -1131,3 +1153,197 @@ test('new shell T8: group two synthetic write turns and preserve the conversatio
 		fs.rmSync(native.root, { recursive: true, force: true });
 	}
 });
+
+for (const provider of ['claude-code', 'codex'] as const) {
+	// eslint-disable-next-line no-empty-pattern
+	test(`new shell T8: ${provider} indexes long native history without scrolling`, async ({}, info) => {
+		const native = new NativeApp(info, { providerCli: false });
+		const isolatedHome = path.join(native.root, 'home');
+		fs.mkdirSync(isolatedHome, { recursive: true });
+		seedNewShell(native);
+		execFileSync('git', ['init', '-b', 'main'], {
+			cwd: native.project,
+			env: {
+				...process.env,
+				HOME: isolatedHome,
+				USERPROFILE: isolatedHome,
+				GIT_CONFIG_NOSYSTEM: '1',
+				GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+			},
+		});
+		fs.writeFileSync(path.join(native.project, 'early.ts'), 'x'.repeat(5000));
+		const nativeId = '11111111-2222-4333-8444-555555555555';
+		const timestamp = '2026-11-06T09:00:00Z';
+		const userText = 'Early native round';
+		const patch = `*** Begin Patch\n*** Add File: early.ts\n+${'x'.repeat(5000)}\n*** End Patch`;
+		const records =
+			provider === 'claude-code'
+				? [
+						{
+							type: 'user',
+							uuid: 'early-user',
+							timestamp,
+							cwd: native.project,
+							sessionId: nativeId,
+							message: { role: 'user', content: userText },
+						},
+						{
+							type: 'assistant',
+							uuid: 'early-tool',
+							timestamp,
+							message: {
+								role: 'assistant',
+								content: [
+									{
+										type: 'tool_use',
+										id: 'large-write',
+										name: 'Write',
+										input: {
+											file_path: path.join(native.project, 'early.ts'),
+											content: 'x'.repeat(5000),
+										},
+									},
+								],
+							},
+						},
+						{
+							type: 'user',
+							uuid: 'early-result',
+							timestamp,
+							message: {
+								role: 'user',
+								content: [{ type: 'tool_result', tool_use_id: 'large-write', content: 'ok' }],
+							},
+						},
+						...Array.from({ length: 600 }, (_, index) => ({
+							type: 'assistant',
+							uuid: `later-${index}`,
+							timestamp,
+							message: {
+								role: 'assistant',
+								content: [{ type: 'text', text: `Progress ${index}` }],
+							},
+						})),
+					]
+				: [
+						{
+							type: 'session_meta',
+							timestamp,
+							payload: { id: nativeId, cwd: native.project, timestamp },
+						},
+						{
+							type: 'response_item',
+							timestamp,
+							payload: {
+								type: 'message',
+								id: 'early-user',
+								role: 'user',
+								content: [{ type: 'input_text', text: userText }],
+							},
+						},
+						{
+							type: 'item.completed',
+							timestamp,
+							item: { type: 'tool_call', id: 'large-write', tool: 'apply_patch', args: patch },
+						},
+						{
+							type: 'item.completed',
+							timestamp,
+							item: {
+								type: 'tool_result',
+								id: 'result-envelope',
+								call_id: 'large-write',
+								output: 'ok',
+								is_error: false,
+							},
+						},
+						...Array.from({ length: 600 }, (_, index) => ({
+							type: 'response_item',
+							timestamp,
+							payload: {
+								type: 'message',
+								id: `later-${index}`,
+								role: 'assistant',
+								content: [{ type: 'output_text', text: `Progress ${index}` }],
+							},
+						})),
+					];
+		const transcriptDir =
+			provider === 'claude-code'
+				? path.join(native.claude, 'projects', encodeClaudeProjectPath(native.project))
+				: path.join(native.codex, 'sessions', '2026', '11', '06');
+		fs.mkdirSync(transcriptDir, { recursive: true });
+		const transcript = path.join(
+			transcriptDir,
+			provider === 'claude-code'
+				? `${nativeId}.jsonl`
+				: `rollout-2026-11-06T09-00-00-${nativeId}.jsonl`
+		);
+		const bytes = Buffer.from(records.map((record) => JSON.stringify(record)).join('\n') + '\n');
+		fs.writeFileSync(transcript, bytes);
+		const tabId = 'long-history';
+		const runner = createMockSession({
+			id: 't8-native-project',
+			name: 'Long native history',
+			toolType: provider,
+			cwd: native.project,
+			fullPath: native.project,
+			projectRoot: native.project,
+			isGitRepo: true,
+			customPath: path.resolve(`e2e/fixtures/native/${provider === 'codex' ? 'codex' : 'claude'}`),
+			customEnvVars:
+				provider === 'codex' ? { CODEX_HOME: native.codex } : { CLAUDE_CONFIG_DIR: native.claude },
+			aiTabs: [
+				createMockAITab({
+					id: tabId,
+					agentSessionId: nativeId,
+					name: 'Long native history',
+					logs: transcriptMessagesToLogEntries(
+						Array.from({ length: 100 }, (_, index) => ({
+							type: 'assistant',
+							uuid: `later-${500 + index}`,
+							content: `Progress ${500 + index}`,
+							timestamp,
+						}))
+					),
+					newShellPanel: { tab: 'changes', changesView: 'turn', open: true },
+				}),
+			],
+			activeTabId: tabId,
+			unifiedTabOrder: [{ type: 'ai', id: tabId }],
+		});
+		fs.writeFileSync(
+			path.join(native.data, 'maestro-sessions.json'),
+			JSON.stringify({ sessions: [runner], activeSessionId: runner.id })
+		);
+		let failed = false;
+		try {
+			await native.start(isolatedHome);
+			await native.page.locator(`[data-conversation-key$=":${tabId}"] [data-tree-nav]`).click();
+			await expect(native.page.getByTestId('changes-group-title')).toContainText(userText);
+			const grouped = await native.cli('changes', '--by-turn', '--tab', tabId);
+			expect(grouped.groups).toEqual([
+				expect.objectContaining({
+					turnId: 'early-user',
+					title: userText,
+					files: [expect.objectContaining({ path: 'early.ts' })],
+				}),
+			]);
+			await native.restart(isolatedHome);
+			await native.page.locator(`[data-conversation-key$=":${tabId}"] [data-tree-nav]`).click();
+			await expect(native.page.getByTestId('changes-group-title')).toContainText(userText);
+			expect((await native.cli('changes', '--by-turn', '--tab', tabId)).groups).toEqual(
+				grouped.groups
+			);
+			expect(fs.readFileSync(transcript)).toEqual(bytes);
+			expect(fs.existsSync(path.join(native.claude, 'fixture-turn-count'))).toBe(false);
+			expect(fs.existsSync(path.join(native.codex, 'fixture-turn-count'))).toBe(false);
+		} catch (error) {
+			failed = true;
+			throw error;
+		} finally {
+			if (native.app) await native.close(failed);
+			fs.rmSync(native.root, { recursive: true, force: true });
+		}
+	});
+}

@@ -2031,6 +2031,13 @@ interface MaestroAPI {
 		 * success). Stat-only while unchanged; never creates or restores a file.
 		 * Optional: older preloads and the web-desktop bridge do not expose it.
 		 */
+		turnWrites: (
+			agentId: string,
+			projectPath: string,
+			sessionId: string,
+			options?: { configDir?: string; ownerAgentId?: string },
+			sshRemoteId?: string
+		) => Promise<import('../shared/gitChangeTurns').TurnWrites[]>;
 		getTranscriptRevision?: (
 			agentId: string,
 			projectPath: string,

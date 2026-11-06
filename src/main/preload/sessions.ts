@@ -234,6 +234,22 @@ export function createClaudeApi() {
  */
 export function createAgentSessionsApi() {
 	return {
+		turnWrites: (
+			agentId: string,
+			projectPath: string,
+			sessionId: string,
+			options?: { configDir?: string; ownerAgentId?: string },
+			sshRemoteId?: string
+		): Promise<import('../../shared/gitChangeTurns').TurnWrites[]> =>
+			ipcRenderer.invoke(
+				'agentSessions:turnWrites',
+				agentId,
+				projectPath,
+				sessionId,
+				options,
+				sshRemoteId
+			),
+
 		toolOutput: (
 			target: NativeToolOutputTarget,
 			toolCallId: string

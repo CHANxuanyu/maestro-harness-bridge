@@ -126,7 +126,7 @@ DeepSeek 实际跑的是 Claude Code，只是接口地址指向 DeepSeek，所�
 - 任务沿用 `agentTaskList.ts` 读取当前会话最新的顶层清单，Claude 与 DeepSeek 的 TodoWrite、Codex 的 update_plan 共用显示，Codex exec 的 todo_list 增量归一为同一工具输入。原生历史沿用转录适配器，只读，无清单时显示普通居中文字。
 - 终端快捷键沿用 `⌘/Ctrl+J`，任务使用 `⌘/Ctrl+Shift+7`，均有命令面板和右栏按钮；终端聚焦时关闭、查找、清屏沿用既有动作。CLI 沿用终端读写与新建动词，补 `tab panel terminal|tasks|terminal-select|terminal-close`；旧界面保留原入口。
 - 原生验收用例已补终端执行命令、切换会话后的输出保留与合成 TodoWrite 显示。Electron / Playwright 尚待用户运行，本批不宣称通过真人或发行包验收。
-- 改动按回合分组已实现源码。面板默认按文件，每条对话记住切换选择；从成功的 Claude 写入工具、Codex apply_patch 和 file_change 记录归类当前仍有改动的文件，最新回合在上，未归类文件在底部“其他改动”。各组均打开当前差异，不保存逐轮差异。CLI 为 `changes --by-turn --tab <id> --json`，界面切换为 `tab panel <id> changes-files|changes-turns`。合成两轮工具记录的 Electron 场景已补，尚待外部运行。
+- 改动按回合分组已实现源码。面板默认按文件，每条对话记住切换选择；从成功的 Claude 写入工具、Codex apply_patch 和 file_change 记录归类当前仍有改动的文件，最新回合在上，未归类文件在底部“其他改动”。各组均打开当前差异，不保存逐轮差异。CLI 为 `changes --by-turn --tab <id> --json`，界面切换为 `tab panel <id> changes-files|changes-turns`。已补独立于日志裁剪的写入索引与完整原生历史只读索引，长参数和旧格式 Codex 工具结果保留路径归属，按 Git 实际执行目录处理 SSH 主目录写法及本机目录别名。合成两轮及两家长历史的 Electron 场景已补，尚待外部运行。
 - 两条会话分屏。
 - 项目设置完整替代智能体配置。
 - 子任务挂在父会话下面：@提及和 maestro-cli 派出的活能点开、插话、接着聊；来源标签关掉以后也能按原生 id 挂回去。

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { collectTurnWrites, groupChangesByTurn } from '../../shared/gitChangeTurns';
+import {
+	collectTurnWrites,
+	groupChangesByTurn,
+	updateTurnWriteIndex,
+} from '../../shared/gitChangeTurns';
 import { transcriptMessagesToLogEntries } from '../../renderer/utils/transcriptMessages';
 import type { LogEntry } from '../../renderer/types';
 import type { GitChanges } from '../../shared/gitChanges';
@@ -32,6 +36,23 @@ const snapshot = (paths: string[], root = '/repo'): GitChanges => ({
 });
 
 describe('conversation changes by turn', () => {
+	it('updates a retained open turn after its user message leaves the saved window', () => {
+		const first = updateTurnWriteIndex([user('first', 1), tool('Write', { file_path: 'a.ts' })]);
+		const next = updateTurnWriteIndex(
+			[tool('Write', { file_path: 'b.ts' }), user('second', 10)],
+			first
+		);
+		expect(next.turns).toEqual([
+			{ turnId: 'first', title: 'first', timestamp: 1, paths: ['a.ts', 'b.ts'] },
+		]);
+		expect(next.current?.turnId).toBe('second');
+		expect(
+			updateTurnWriteIndex(
+				[{ ...tool('Write', { file_path: 'c.ts' }), timestamp: 11 }],
+				next
+			).turns.map((turn) => turn.paths)
+		).toEqual([['c.ts'], ['a.ts', 'b.ts']]);
+	});
 	it.each(['~/repo/sub', '$HOME/repo/sub', '/alias/repo/sub'])(
 		'uses execution cwd for the %s alias',
 		(cwd) => {

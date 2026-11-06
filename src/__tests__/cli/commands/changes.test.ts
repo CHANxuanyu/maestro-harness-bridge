@@ -9,6 +9,106 @@ import { withMaestroClient } from '../../../cli/services/maestro-client';
 import { resolveTabEntry } from '../../../cli/services/session-command';
 
 describe('changes CLI', () => {
+	it('uses the shared complete native index from the selected account and remote host', async () => {
+		vi.mocked(resolveTabEntry).mockResolvedValue({ agentId: 'agent', tabId: 'selected' } as never);
+		const file = { path: 'a.ts', status: 'modified', staged: false, additions: 1, deletions: 0 };
+		const sendCommand = vi
+			.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				result: [
+					{
+						id: 'agent',
+						cwd: '/local',
+						toolType: 'codex',
+						sessionSshRemoteConfig: {
+							enabled: true,
+							remoteId: 'remote',
+							workingDirOverride: '~/repo',
+						},
+						aiTabs: [{ id: 'selected', agentSessionId: 'long-native', logs: [] }],
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				result: {
+					root: '/home/dev/repo',
+					executionCwd: '/home/dev/repo',
+					files: [file],
+					totals: { files: 1, additions: 1, deletions: 0 },
+					truncated: false,
+					branch: 'main',
+				},
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				result: [{ turnId: 'early', title: 'Native early turn', timestamp: 1, paths: ['a.ts'] }],
+			});
+		vi.mocked(withMaestroClient).mockImplementation(async (callback) =>
+			callback({ sendCommand } as never)
+		);
+		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+		await changes({ tab: 'selected', byTurn: true, json: true });
+		expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({
+			hasWriteRecords: true,
+			groups: [{ turnId: 'early', files: [file] }],
+		});
+		expect(sendCommand).toHaveBeenLastCalledWith(
+			{
+				type: 'bridge.invoke',
+				channel: 'agentSessions:turnWrites',
+				args: ['codex', '~/repo', 'long-native', { ownerAgentId: 'agent' }, 'remote'],
+			},
+			'bridge.response',
+			25000
+		);
+	});
+	it('reads the retained early turn after persisted logs are trimmed', async () => {
+		vi.mocked(resolveTabEntry).mockResolvedValue({ agentId: 'agent', tabId: 'selected' } as never);
+		const file = { path: 'a.ts', status: 'modified', staged: false, additions: 1, deletions: 0 };
+		const sendCommand = vi
+			.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				result: [
+					{
+						id: 'agent',
+						cwd: '/repo',
+						aiTabs: [
+							{
+								id: 'selected',
+								logs: [],
+								changeTurnIndex: {
+									turns: [
+										{ turnId: 'early', title: 'Early change', timestamp: 1, paths: ['a.ts'] },
+									],
+								},
+							},
+						],
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				result: {
+					root: '/repo',
+					files: [file],
+					totals: { files: 1, additions: 1, deletions: 0 },
+					truncated: false,
+					branch: 'main',
+				},
+			});
+		vi.mocked(withMaestroClient).mockImplementation(async (callback) =>
+			callback({ sendCommand } as never)
+		);
+		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+		await changes({ tab: 'selected', byTurn: true, json: true });
+		expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({
+			hasWriteRecords: true,
+			groups: [{ turnId: 'early', files: [file] }],
+		});
+	});
 	afterEach(() => vi.restoreAllMocks());
 	it('groups the selected tab records with the same current remote Git snapshot', async () => {
 		vi.mocked(resolveTabEntry).mockResolvedValue({ agentId: 'agent', tabId: 'selected' } as never);

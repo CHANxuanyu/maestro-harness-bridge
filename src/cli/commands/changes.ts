@@ -8,7 +8,9 @@ import type {
 } from '../../shared/gitChanges';
 import type { AgentSshRemoteConfig } from '../../shared/types';
 import {
-	collectTurnWrites,
+	updateTurnWriteIndex,
+	type ChangeTurnIndex,
+	type TurnWrites,
 	groupChangesByTurn,
 	type ChangeTurnEntry,
 	type GitChangesByTurn,
@@ -72,7 +74,15 @@ export async function changes(options: ChangesOptions): Promise<void> {
 				Array<{
 					id: string;
 					cwd: string;
-					aiTabs?: Array<{ id: string; logs: ChangeTurnEntry[] }>;
+					toolType?: string;
+					projectRoot?: string;
+					remoteCwd?: string;
+					aiTabs?: Array<{
+						id: string;
+						logs: ChangeTurnEntry[];
+						agentSessionId?: string;
+						changeTurnIndex?: ChangeTurnIndex;
+					}>;
 					sshRemoteId?: string;
 					sessionSshRemoteConfig?: AgentSshRemoteConfig;
 				}>
@@ -92,9 +102,22 @@ export async function changes(options: ChangesOptions): Promise<void> {
 				const selected = session.aiTabs?.find((item) => item.id === tab.tabId);
 				if (!selected) throw new Error('The selected conversation is no longer available');
 				const snapshot = await invoke<GitChanges>('git:changes', [session.cwd, ...context]);
+				const retained = updateTurnWriteIndex(selected.logs, selected.changeTurnIndex).turns;
+				const native =
+					selected.agentSessionId && ['claude-code', 'codex'].includes(session.toolType ?? '')
+						? await invoke<TurnWrites[]>('agentSessions:turnWrites', [
+								session.toolType,
+								context[0]
+									? session.remoteCwd || context[1] || session.cwd
+									: session.projectRoot || session.cwd,
+								selected.agentSessionId,
+								{ ownerAgentId: session.id },
+								context[0],
+							])
+						: [];
 				return groupChangesByTurn(
 					snapshot,
-					collectTurnWrites(selected.logs),
+					native.length ? native : retained,
 					context[1] || session.cwd,
 					!!context[0]
 				);

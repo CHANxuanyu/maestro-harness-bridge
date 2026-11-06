@@ -1,3 +1,4 @@
+import { createNativeTurnWriteReader } from '../../storage/turn-write-index';
 import { nativeToolCommand } from '../../../shared/nativeToolOutput';
 import { MAX_PERSISTED_TOOL_OUTPUT_CHARS } from '../../../shared/toolOutput';
 import type {
@@ -599,6 +600,32 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 	);
 
 	// ============ Read Session Messages ============
+
+	const readTurnWrites = createNativeTurnWriteReader();
+	ipcMain.handle(
+		'agentSessions:turnWrites',
+		withIpcErrorLogging(
+			handlerOpts('turnWrites'),
+			async (
+				agentId: string,
+				projectPath: string,
+				sessionId: string,
+				options?: Pick<SessionReadOptions, 'configDir' | 'ownerAgentId'>,
+				sshRemoteId?: string
+			) => {
+				if (!['claude-code', 'codex'].includes(agentId)) return [];
+				const storage = getSessionStorage(agentId);
+				if (!storage) return [];
+				const remote = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+				if (sshRemoteId && (!remote || !remote.enabled))
+					throw new Error('SSH remote is unavailable');
+				const configDir =
+					options?.configDir ??
+					(options?.ownerAgentId ? resolveAgentAccountDir(options.ownerAgentId) : undefined);
+				return readTurnWrites(agentId, storage, projectPath, sessionId, { configDir }, remote);
+			}
+		)
+	);
 
 	ipcMain.handle(
 		'agentSessions:read',

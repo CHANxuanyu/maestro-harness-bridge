@@ -147,6 +147,7 @@ export const workflowsFiles = {
 	'workflows.changes.tab': '改动',
 	'workflows.changes.groupBy': '改动分组方式',
 	'workflows.changes.byFile': '按文件',
+	'workflows.changes.historyIncomplete': '未能读取完整对话记录，请刷新后重试。',
 	'workflows.changes.byTurn': '按回合',
 	'workflows.changes.other': '其他改动',
 	'workflows.changes.untitledTurn': '未命名回合',

@@ -628,7 +628,7 @@ operations in either shell. No new parity gap is introduced by these actions.
 
 | UI action                                      | CLI action                                                                                                        | Shared implementation                                                                                  |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Read changes grouped by conversation turn      | `changes --by-turn --tab <id> --json`                                                                             | `collectTurnWrites()` and `groupChangesByTurn()` in `src/shared/gitChangeTurns.ts`, over `git:changes` |
+| Read changes grouped by conversation turn      | `changes --by-turn --tab <id> --json`                                                                             | `updateTurnWriteIndex()` and `groupChangesByTurn()`, with `agentSessions:turnWrites` and `git:changes` |
 | Choose By file or By turn on this conversation | `tab panel <id> changes-files` or `tab panel <id> changes-turns`                                                  | `changeNewShellPanel()`, persisted in `AITab.newShellPanel.changesView`                                |
 | Open a diff, stage, unstage, revert or commit  | Existing `changes --file`, `changes stage`, `changes unstage`, `changes revert --yes`, `changes commit --message` | Existing Git handlers and panel actions                                                                |
 
@@ -639,31 +639,37 @@ and `diffScope: "current"`. A group's `turnId: null` means Other changes; its
 title is empty so the renderer can localize it. Each recorded group carries the
 user message's first line, capped at 120 characters, and its timestamp.
 
-The UI memoizes the tool index by the conversation log array. CLI reads the
-selected tab's persisted logs through `sessions:getAll`, so an in-flight update
-can lag the visible conversation until normal persistence completes. Neither
-surface scans or writes native files for grouping. Both use only available
-records with explicit successful tool status, intersect with the current Git
-snapshot, and retain a file in every matching turn. Renames use Git's `oldPath`;
-copies do not inherit the source file's turns. The 500-file Git limit still
-applies. Paths are matched lexically against the conversation cwd and Git root,
-with SSH POSIX spelling preserved. Unresolved aliases, home expansions, parent
-traversal and missing or truncated tool inputs remain unmatched rather than
-being guessed. Native history outside the loaded log window is not scanned.
+The UI memoizes the live index by the log array. New-shell persistence saves
+`AITab.changeTurnIndex` before trimming the displayed logs to 100 entries.
+Both surfaces obtain complete Claude and Codex native indexes from the same
+read-only `agentSessions:turnWrites` handler, scoped to the selected owner,
+account and SSH host. Native indexes take precedence when they contain writes;
+otherwise the retained live index supplies the evidence. No native file is
+created, restored or edited. The main-process cache holds up to 32 identities,
+uses the existing transcript revision probes, and incrementally converts the
+open turns while reusing closed turns from the canonical storage readers.
+Remote Claude has no revision probe and is read only on an explicit refresh.
 
-The synthetic T8 scenario in `e2e/native-new-shell.spec.ts` checks two recorded
-turns, Other changes, shared current diffs, staging, CLI output, independent
-conversation preferences and restart. It has been authored but not executed in
-the sandbox.
+Both surfaces intersect recorded successful writes with current Git changes.
+Renames use Git's `oldPath`; copies do not inherit the source file's turns.
+Git's 500-file limit remains. `executionCwd` comes from Git on the execution
+host and maps the selected cwd alias, including SSH `~` and `$HOME`, without
+local resolution of remote paths. Explicit write paths survive display input
+truncation. Unrecognized path aliases and parent traversal remain unmatched.
+
+The synthetic T8 scenarios in `e2e/native-new-shell.spec.ts` cover two turns,
+Other changes, shared diffs, staging, CLI parity and restart with 150 later
+logs, plus each provider's early native write before 600 later messages and
+5000-character tool inputs. The Codex fixture uses legacy call/result records.
+They have been authored but not executed in the sandbox.
 
 ## Open gaps
 
-**Turn grouping freshness (2026-11-06).** `changes --by-turn` uses the same
-grouping functions but reads persisted tab logs. There is no CLI request to
-flush an in-flight renderer log update or backfill native history before this
-read. The result can lag the panel until persistence completes, and both views
-cover only the records already loaded for the conversation. The new selection
-actions themselves have full CLI parity.
+**Turn grouping freshness (2026-11-06 review fix).** For conversations without
+readable native write records, CLI still reads the persisted independent index.
+A live write can lag until normal persistence completes. Early writes no longer
+disappear permanently after log trimming, and native indexing no longer depends
+on scrolling through history. No new UI action or CLI verb was added.
 
 **Provider switch wording (2026-11-06).** The existing CLI help, force warning and
 success text still describe the classic reset behavior. With `newShell` enabled,

@@ -17,6 +17,7 @@ import { mockTheme } from '../../helpers/mockTheme';
 
 const changes = vi.fn();
 const changeDiff = vi.fn();
+const nativeTurnWrites = vi.fn().mockResolvedValue([]);
 
 const twoFiles: GitChanges = {
 	root: '/project',
@@ -75,19 +76,85 @@ function session(overrides: Partial<Session> = {}): Session {
 beforeEach(() => {
 	vi.clearAllMocks();
 	Object.assign(window.maestro.git, { changes, changeDiff });
+	Object.assign(window.maestro.agentSessions, { turnWrites: nativeTurnWrites });
+	nativeTurnWrites.mockResolvedValue([]);
 	useModalStore.getState().closeModal('aiHandoff');
 });
 
 describe('ChangesPanel', () => {
+	it('keeps the default file view independent of native history availability', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const source = session({ toolType: 'codex' });
+		source.aiTabs[0].agentSessionId = 'missing-native';
+		nativeTurnWrites.mockRejectedValue(new Error('history unavailable'));
+		changes.mockResolvedValue(twoFiles);
+		const { unmount } = render(<ChangesPanel theme={mockTheme} session={source} />);
+		try {
+			await screen.findByText('app.ts');
+			expect(nativeTurnWrites).not.toHaveBeenCalled();
+		} finally {
+			unmount();
+			useSettingsStore.setState({ newShell: false });
+		}
+	});
+	it('loads early native turns without expanding the displayed history and leaves classic mode alone', async () => {
+		const source = session({ toolType: 'codex', projectRoot: '/project' });
+		source.aiTabs[0].agentSessionId = 'long-native';
+		source.aiTabs[0].logs = [];
+		source.aiTabs[0].newShellPanel = { tab: 'changes', changesView: 'turn' };
+		changes.mockResolvedValue(twoFiles);
+		nativeTurnWrites.mockResolvedValue([
+			{ turnId: 'early', title: 'Native early turn', timestamp: 1, paths: ['src/app.ts'] },
+		]);
+		useSettingsStore.setState({ newShell: false });
+		const classic = render(<ChangesPanel theme={mockTheme} session={source} />);
+		await screen.findByText('app.ts');
+		expect(nativeTurnWrites).not.toHaveBeenCalled();
+		classic.unmount();
+		useSettingsStore.setState({ newShell: true });
+		const modern = render(<ChangesPanel theme={mockTheme} session={source} />);
+		try {
+			await screen.findByText('Native early turn');
+			expect(nativeTurnWrites).toHaveBeenCalledWith(
+				'codex',
+				'/project',
+				'long-native',
+				{ ownerAgentId: 'agent-1' },
+				undefined
+			);
+			expect(source.aiTabs[0].logs).toEqual([]);
+		} finally {
+			modern.unmount();
+			useSettingsStore.setState({ newShell: false });
+		}
+	});
+	it('shows an early write retained independently of the displayed log window', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const source = session();
+		source.aiTabs[0].logs = [];
+		source.aiTabs[0].changeTurnIndex = {
+			turns: [{ turnId: 'early', title: 'Early change', timestamp: 1, paths: ['src/app.ts'] }],
+		};
+		source.aiTabs[0].newShellPanel = { tab: 'changes', changesView: 'turn' };
+		changes.mockResolvedValue(twoFiles);
+		const { unmount } = render(<ChangesPanel theme={mockTheme} session={source} />);
+		try {
+			await screen.findByText('Early change');
+		} finally {
+			unmount();
+			useSettingsStore.setState({ newShell: false });
+		}
+	});
 	it('reuses the tool index while Git and commit input change', async () => {
 		useSettingsStore.setState({ newShell: true });
-		const collect = vi.spyOn(turnGrouping, 'collectTurnWrites');
+		const collect = vi.spyOn(turnGrouping, 'updateTurnWriteIndex');
 		const source = session();
 		changes.mockResolvedValue(twoFiles);
 		const { unmount } = render(<ChangesPanel theme={mockTheme} session={source} />);
 		try {
 			await screen.findByText('app.ts');
 			const reads = collect.mock.calls.length;
+			expect(reads).toBeGreaterThan(0);
 			fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), {
 				target: { value: 'Draft' },
 			});

@@ -844,6 +844,7 @@ export interface ProviderTabSession {
 // AI Tab for multi-tab support within a Maestro session
 // Each tab represents a separate AI agent conversation (Claude Code, OpenCode, etc.)
 export interface AITab {
+	changeTurnIndex?: import('../../shared/gitChangeTurns').ChangeTurnIndex;
 	newShellPanel?: import('../../shared/newShellPanel').NewShellPanelState;
 	origin?: ConversationOrigin;
 	id: string; // Unique tab ID (generated UUID)

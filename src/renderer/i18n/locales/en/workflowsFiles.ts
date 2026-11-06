@@ -155,6 +155,8 @@ export const workflowsFiles = {
 	'workflows.changes.tab': 'Changes',
 	'workflows.changes.groupBy': 'Group changes',
 	'workflows.changes.byFile': 'By file',
+	'workflows.changes.historyIncomplete':
+		'The full conversation history could not be read. Refresh to try again.',
 	'workflows.changes.byTurn': 'By turn',
 	'workflows.changes.other': 'Other changes',
 	'workflows.changes.untitledTurn': 'Untitled turn',

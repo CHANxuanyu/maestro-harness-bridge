@@ -21,10 +21,10 @@ Remote worktree aliases: `resolveWorktreeAliasesRemote(paths, sshRemote)` in `sr
 
 ## IDs & UUIDs
 
-| Function       | File                        | Signature      | Process  | Purpose                                                                                    |
-| -------------- | --------------------------- | -------------- | -------- | ------------------------------------------------------------------------------------------ |
-| `generateUUID` | `src/shared/uuid.ts`        | `() => string` | Both     | RFC 4122 v4 UUID via Math.random(). Used for session IDs, history entry IDs.               |
-| `generateId`   | `src/renderer/utils/ids.ts` | `() => string` | Renderer | Wrapper around `crypto.randomUUID()`. Cryptographically secure. Used for UI-generated IDs. |
+| Function       | File                                                                   | Signature      | Process | Purpose                                                                                    |
+| -------------- | ---------------------------------------------------------------------- | -------------- | ------- | ------------------------------------------------------------------------------------------ |
+| `generateUUID` | `src/shared/uuid.ts`                                                   | `() => string` | Both    | RFC 4122 v4 UUID via Math.random(). Used for session IDs, history entry IDs.               |
+| `generateId`   | `src/shared/uuid.ts` (renderer re-export: `src/renderer/utils/ids.ts`) | `() => string` | Both    | Wrapper around `crypto.randomUUID()`. Cryptographically secure. Used for UI-generated IDs. |
 
 ---
 
@@ -1164,3 +1164,17 @@ unreadable).
 | `blendColors(c1, c2, ratio)`                         | Mix two colors; `ratio` is how much of `c2` lands in the result.                                                          |
 | `transparentize(color, bg, alpha)`                   | Flatten a tint into an opaque color, for renderers that only accept solid fills (SVG/canvas).                             |
 | `AA_CONTRAST` / `AA_LARGE_CONTRAST`                  | 4.5 (normal text) and 3 (large text) thresholds.                                                                          |
+
+### Complete turn write history (2026-11-06 review fix)
+
+`updateTurnWriteIndex()` in `src/shared/gitChangeTurns.ts` retains write evidence
+before display logs are trimmed. `toolInputWritePaths()` extracts explicit paths
+before tool arguments are capped. Do not parse truncated display input again.
+The native conversion lives in `src/shared/transcriptEntries.ts`, re-exported
+from `src/renderer/utils/transcriptMessages.ts` for existing callers. Both
+display and the main-process `createNativeTurnWriteReader()` reuse that converter.
+`agentSessions:turnWrites` reads the full selected native history with
+`readOnly: true`, using existing account and SSH resolution and revision caches.
+The converter also uses the existing `generateId()` implementation from
+`src/shared/uuid.ts`, re-exported at `src/renderer/utils/ids.ts`; its behavior
+is unchanged and the main process has no renderer runtime dependency.

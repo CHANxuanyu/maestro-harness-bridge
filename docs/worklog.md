@@ -2,6 +2,20 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-06：T8 第二轮审查修复
+
+四条审查意见均成立。被测对象为 `codex/changes-by-turn` 本克隆源码，未构建发行包。先补回归再修：长 Claude Write 和 Codex 补丁得到空索引，旧格式 Codex 成功和失败结果各多出孤立记录，目录别名无法归组，保存 100 条日志后早期回合丢失，CLI 和面板遗漏早期分组。失败证据保存在任务私有报告旁，不提交原始日志。
+
+`toolInputWritePaths()` 在展示裁剪之前保留明确路径，状态仍必须成功。旧格式 Codex 的结果按调用标识回填原工具，缺失结果保留未知，后续消息计数不变。Git 查询带回执行主机上的实际子目录，匹配 SSH 主目录写法和已知 cwd 别名，不对远程路径做本机 realpath。
+
+新界面持久化在日志裁剪之前保存 `changeTurnIndex`。两端通过 `agentSessions:turnWrites` 读取完整原生写入索引，复用账户解析、SSH 传输及只读增量存储，不写入或恢复原生文件。纯转换器移到 `src/shared/transcriptEntries.ts`，旧 renderer 导出路径保留。主进程缓存最多 32 个身份，历史未变时复用；追加时只转换仍开放的回合及新增消息，并保留等待迟到结果的写入。默认按文件不读取原生索引，避免原生记录不可用影响文件操作。
+
+相关最终验证为 18 个不同 Vitest 文件、406 条通过。均使用 `--configLoader runner --no-cache`，不放宽断言，不自动重试。renderer、main、CLI 三份 TypeScript 配置通过；Electron 用例另用继承严格选项且支持 CJS 夹具和 ES2024 的临时配置检查通过。修改的产品源码及 Electron 用例的 ESLint、修改文件的 Prettier 和 `git diff --check` 通过。Electron 场景仅完成收集，共三条，未启动应用。
+
+没有新增 CLI 动词，既有 `changes --by-turn --tab <id> --json` 使用相同持久化索引、完整原生索引和分组逻辑。`CLI-UI-PARITY.md` 已更新，尚无原生记录时仍可能短暂等待正常保存。旧界面不开启新索引读取或持久化；共享的旧格式工具结果关联、隐藏路径字段和新增 Git 元数据也适用于旧界面，分别用于恢复正确状态、避免展示裁剪损失证据和提供执行路径。
+
+扩展原有 T8 场景验证 150 条后续日志裁剪与重启，新写 Claude、Codex 两条超过 600 条消息和 5000 字符参数的原生历史场景；Codex 使用旧格式工具调用与结果。由 Opus 在沙箱外运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell.spec.ts --grep 'new shell T8' --retries=0`。本轮未验证真实 SSH、Windows/Linux、真实模型或安装包；旧缓存已经丢失且没有可读原生记录的证据无法重建。没有推送、PR、标签、上传或发布。
+
 ## 2026-11-06：T8 改动按回合分组
 
 被测对象为 `codex/changes-by-turn` 本克隆源码，未打包、未安装。新界面改动面板增加按文件和按回合切换，选择保存到当前对话的 `newShellPanel.changesView`。共享 `collectTurnWrites()` 从成功工具记录建立索引，`groupChangesByTurn()` 与当前 Git 文件清单求交集，同文件保留在每个对应回合，其他文件放到底部。显示用户消息第一行和时间，明确所有入口打开当前差异，原有暂存、撤销、提交入口共用。索引按日志引用缓存，刷新 Git 或修改提交说明不会重扫工具历史。

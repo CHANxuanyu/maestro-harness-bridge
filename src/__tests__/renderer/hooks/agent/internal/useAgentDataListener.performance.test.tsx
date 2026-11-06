@@ -126,3 +126,37 @@ it('flushes pending output on teardown after a shell switch without dropping ano
 	expect(a.logs.map((log) => log.text)).toEqual(['a', 'tail']);
 	expect(b.logs.map((log) => log.text)).toEqual(['b', 'Working']);
 });
+
+it.each([false, true])(
+	'cleans only placeholders observed before the latest data (laterData=%s)',
+	(laterData) => {
+		useSettingsStore.setState({ newShell: true });
+		const oldPlaceholder: LogEntry = {
+			id: buildHiddenProgressLogId('tab'),
+			source: 'system',
+			text: 'First tool',
+			timestamp: 1,
+		};
+		const session = createMockSession({
+			id: 'perf',
+			activeTabId: 'tab',
+			aiTabs: [createMockAITab({ id: 'tab', logs: [oldPlaceholder] })],
+		});
+		useSessionStore.setState({ sessions: [session] });
+		const { result } = renderHook(() => {
+			const batchedUpdater = useBatchedSessionUpdates();
+			useAgentDataListener({ batchedUpdater, activeHiddenToolRef: { current: new Map() } });
+			return batchedUpdater;
+		});
+		act(() => onData('perf-ai-tab', 'First answer'));
+		const nextPlaceholder = { ...oldPlaceholder, text: 'Second tool' };
+		useSessionStore.setState({
+			sessions: [{ ...session, aiTabs: [{ ...session.aiTabs[0], logs: [nextPlaceholder] }] }],
+		});
+		if (laterData) act(() => onData('perf-ai-tab', 'Second answer'));
+		act(() => result.current.flushNow());
+		const finalLogs = useSessionStore.getState().sessions[0].aiTabs[0].logs;
+		if (laterData) expect(finalLogs).not.toContain(nextPlaceholder);
+		else expect(finalLogs).toContain(nextPlaceholder);
+	}
+);

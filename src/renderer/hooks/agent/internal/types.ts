@@ -28,7 +28,7 @@ export interface BatchedUpdater {
 		data: string,
 		isStderr?: boolean
 	) => void;
-	markDelivered: (sessionId: string, tabId: string) => void;
+	markDelivered: (sessionId: string, tabId: string, logsAtDelivery?: LogEntry[]) => void;
 	markUnread: (sessionId: string, tabId: string, unread: boolean) => void;
 	updateUsage: (sessionId: string, tabId: string | null, usage: UsageStats) => void;
 	updateContextUsage: (sessionId: string, percentage: number) => void;

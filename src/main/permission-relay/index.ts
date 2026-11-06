@@ -3,8 +3,10 @@ export {
 	initPermissionRelay,
 	preparePermissionRelayArgs,
 	resolvePermissionResponse,
+	listPermissionRequests,
 	cleanupSessionRelay,
 	PERMISSION_REQUEST_CHANNEL,
+	PERMISSION_RESOLVED_CHANNEL,
 } from './integration';
 export { permissionRelayServer } from './PermissionRelayServer';
 export { parseQuestionRequest } from './question-request';

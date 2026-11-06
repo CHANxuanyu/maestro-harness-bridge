@@ -5,6 +5,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createTurn, transcriptPath } = require('./protocol.cjs');
+const { permissionServer, requestPermission } = require('./claude-permission.cjs');
 const { setTimeout: delay } = require('node:timers/promises');
 
 async function run(provider) {
@@ -52,6 +53,7 @@ async function run(provider) {
 	const count = fs.existsSync(stateFile) ? Number(fs.readFileSync(stateFile, 'utf8')) : 0;
 	const scene = persist ? script.scene || script.turns[count] : script.synopsis;
 	if (!scene) throw new Error(`No scripted turn ${count}; unexpected invocation`);
+	const approvalServer = scene.approval && provider === 'claude' ? permissionServer(args) : null;
 	if (persist) {
 		fs.appendFileSync(
 			path.join(configDir, 'fixture-invocations.jsonl'),
@@ -105,8 +107,10 @@ async function run(provider) {
 	});
 	const tools = scene.tools || [];
 	let stopped = false;
+	const approvalAbort = new AbortController();
 	process.once('SIGINT', () => {
 		stopped = true;
+		approvalAbort.abort();
 		for (const tool of tools) turn.finishTool(tool, 'canceled');
 		// Reproduce the stale exit diagnostic covered by ExitHandler's Stop
 		// regressions. Exact provider messages: src/shared/agentErrorPatterns.ts.
@@ -119,6 +123,24 @@ async function run(provider) {
 		process.exitCode = 130;
 	});
 	for (const tool of tools) turn.startTool(tool);
+	if (approvalServer) {
+		if (!tools.length) throw new Error('Approval fixture requires a proposed tool');
+		for (const tool of tools) {
+			let decision;
+			try {
+				decision = await requestPermission(approvalServer, tool, configDir, approvalAbort.signal);
+			} catch (error) {
+				if (stopped) return;
+				throw error;
+			}
+			if (stopped) return;
+			if (decision.behavior === 'deny') {
+				for (const pending of tools) turn.finishTool(pending, 'canceled');
+				turn.finish(`Permission denied: ${decision.message}`);
+				return;
+			}
+		}
+	}
 	if (scene.waitForStop) {
 		while (!stopped) await delay(25);
 		return;
@@ -142,6 +164,11 @@ async function run(provider) {
 				throw new Error('Fixture write escapes project');
 			fs.mkdirSync(path.dirname(target), { recursive: true });
 			fs.writeFileSync(target, content);
+			if (approvalServer)
+				fs.appendFileSync(
+					path.join(configDir, 'fixture-permission-writes.jsonl'),
+					`${JSON.stringify({ target })}\n`
+				);
 		}
 	}
 	if (!stopped) turn.finish(scene.answer);

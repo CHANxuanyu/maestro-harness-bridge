@@ -22,7 +22,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger';
-import { createPending, lookupBinding } from './registry';
+import { createPending, lookupBinding, resolvePending } from './registry';
 import { parseQuestionRequest } from './question-request';
 import type { BridgeToServerMessage, PermissionRequest, ServerToBridgeMessage } from './types';
 
@@ -35,11 +35,18 @@ export class PermissionRelayServer {
 	private server: net.Server | null = null;
 	private socketPath: string | null = null;
 	private onRequest: OnPermissionRequest | null = null;
+	private onResolved: ((requestId: string) => void) | null = null;
+	private connections = new Map<net.Socket, Set<string>>();
 	private starting: Promise<string> | null = null;
 
 	/** Set the callback that surfaces requests to the user (renderer). */
 	setOnRequest(cb: OnPermissionRequest): void {
 		this.onRequest = cb;
+	}
+
+	/** Notify the UI when a request is answered, expired, or cancelled. */
+	setOnResolved(cb: (requestId: string) => void): void {
+		this.onResolved = cb;
 	}
 
 	/** True once the socket is listening. */
@@ -134,7 +141,18 @@ export class PermissionRelayServer {
 
 	private handleConnection(socket: net.Socket): void {
 		let buffer = '';
+		const requests = new Set<string>();
+		this.connections.set(socket, requests);
 		socket.setEncoding('utf8');
+		socket.on('close', () => {
+			this.connections.delete(socket);
+			for (const requestId of requests) {
+				resolvePending(requestId, {
+					behavior: 'deny',
+					message: 'Permission relay disconnected.',
+				});
+			}
+		});
 
 		socket.on('data', (chunk: string) => {
 			buffer += chunk;
@@ -227,8 +245,25 @@ export class PermissionRelayServer {
 		};
 
 		const decisionPromise = createPending(requestId, msg.token);
-		this.onRequest(request);
+		const requests = this.connections.get(socket);
+		requests?.add(requestId);
+		try {
+			this.onRequest(request);
+		} catch (e) {
+			logger.warn('Failed to deliver permission request', LOG_CONTEXT, {
+				error: e instanceof Error ? e.message : String(e),
+			});
+			resolvePending(requestId, { behavior: 'deny', message: 'Permission UI unavailable.' });
+		}
 		const decision = await decisionPromise;
+		requests?.delete(requestId);
+		try {
+			this.onResolved?.(requestId);
+		} catch (e) {
+			logger.warn('Failed to deliver permission resolution', LOG_CONTEXT, {
+				error: e instanceof Error ? e.message : String(e),
+			});
+		}
 
 		this.send(socket, {
 			type: 'permission-response',
@@ -252,6 +287,13 @@ export class PermissionRelayServer {
 
 	/** Stop the server and remove the socket file. */
 	stop(): void {
+		for (const [socket, requests] of this.connections) {
+			for (const requestId of requests) {
+				resolvePending(requestId, { behavior: 'deny', message: 'Permission relay stopped.' });
+			}
+			socket.destroy();
+		}
+		this.connections.clear();
 		if (this.server) {
 			this.server.close();
 			this.server = null;

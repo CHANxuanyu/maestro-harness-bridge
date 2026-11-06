@@ -15,15 +15,17 @@ import { logger } from '../utils/logger';
 import { permissionRelayServer } from './PermissionRelayServer';
 import { registerSpawn, resolvePending } from './registry';
 import { buildRelayArgs, resolveBridgeScriptPath } from './spawn-args';
-import type { PermissionDecision } from './types';
+import type { PermissionDecision, PermissionRequest } from './types';
 
 const LOG_CONTEXT = '[PermissionRelay]';
 
 /** IPC channel: main -> renderer, "please decide on this request". */
 export const PERMISSION_REQUEST_CHANNEL = 'process:permission-request';
+export const PERMISSION_RESOLVED_CHANNEL = 'process:permission-resolved';
 
 /** Per-spawn token cleanups, keyed by the (compound) spawn session id. */
 const sessionCleanups = new Map<string, () => void>();
+const visibleRequests = new Map<string, Omit<PermissionRequest, 'token'>>();
 
 let initialized = false;
 
@@ -42,6 +44,8 @@ export function initPermissionRelay(
 	initialized = true;
 
 	permissionRelayServer.setOnRequest((request) => {
+		const { token: _token, ...visibleRequest } = request;
+		visibleRequests.set(request.requestId, visibleRequest);
 		const win = getMainWindow();
 		if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
 			// No window to prompt: deny so the agent gets a clear answer instead
@@ -53,7 +57,7 @@ export function initPermissionRelay(
 			return;
 		}
 		try {
-			win.webContents.send(PERMISSION_REQUEST_CHANNEL, request);
+			win.webContents.send(PERMISSION_REQUEST_CHANNEL, visibleRequest);
 		} catch (e) {
 			// The destroyed-window guard above covers the realistic case; this
 			// catches a rare teardown race between the check and the send. Deny so
@@ -65,6 +69,21 @@ export function initPermissionRelay(
 			resolvePending(request.requestId, {
 				behavior: 'deny',
 				message: 'Failed to deliver permission request to the Maestro window.',
+			});
+		}
+	});
+	permissionRelayServer.setOnResolved((requestId) => {
+		visibleRequests.delete(requestId);
+		const win = getMainWindow();
+		if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
+			return;
+		}
+		try {
+			win.webContents.send(PERMISSION_RESOLVED_CHANNEL, requestId);
+		} catch (e) {
+			logger.debug('Failed to deliver permission resolution to renderer', LOG_CONTEXT, {
+				requestId,
+				error: e instanceof Error ? e.message : String(e),
 			});
 		}
 	});
@@ -85,6 +104,11 @@ export function resolvePermissionResponse(
 	decision: PermissionDecision
 ): boolean {
 	return resolvePending(requestId, decision);
+}
+
+/** Read the same pending requests shown by the desktop, without spawn credentials. */
+export function listPermissionRequests(): Omit<PermissionRequest, 'token'>[] {
+	return [...visibleRequests.values()];
 }
 
 /** Clean up a spawn's relay binding (on process exit or re-spawn). */
@@ -123,13 +147,20 @@ export async function preparePermissionRelayArgs(params: {
 		tabId: params.tabId,
 	});
 
-	const { args, configPath } = buildRelayArgs(
-		params.execPath,
-		bridgeScriptPath,
-		socketPath,
-		token,
-		params.userDataDir
-	);
+	let relayArgs: ReturnType<typeof buildRelayArgs>;
+	try {
+		relayArgs = buildRelayArgs(
+			params.execPath,
+			bridgeScriptPath,
+			socketPath,
+			token,
+			params.userDataDir
+		);
+	} catch (error) {
+		cleanup();
+		throw error;
+	}
+	const { args, configPath } = relayArgs;
 
 	// Wrap the registry cleanup so process exit also deletes the temp MCP config.
 	sessionCleanups.set(params.sessionId, () => {

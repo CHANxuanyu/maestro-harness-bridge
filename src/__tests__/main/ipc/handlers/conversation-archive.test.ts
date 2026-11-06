@@ -29,6 +29,9 @@ vi.mock('../../../../main/agents', () => ({
 	getAllSessionStorages: vi.fn(),
 }));
 vi.mock('../../../../main/stores', () => ({ getSshRemoteById: vi.fn() }));
+vi.mock('../../../../main/prompt-manager', () => ({
+	getPrompt: () => 'Synthetic internal prompt',
+}));
 vi.mock('../../../../main/web-server/callbacks/remoteRequest', () => ({
 	requestFromRenderer: (...args: any[]) => state.request(...args),
 }));
@@ -41,6 +44,8 @@ vi.mock('fs/promises', async (original) => ({
 	default: { ...(await original<object>()), realpath: async (value: string) => value },
 }));
 import { registerAgentSessionsHandlers } from '../../../../main/ipc/handlers/agentSessions';
+import { getAllSessionStorages } from '../../../../main/agents';
+import { getProviderAccountDirs } from '../../../../main/agents/provider-account-dirs';
 
 beforeEach(() => {
 	state.settings = { newShell: true, archivedConversations: [] };
@@ -51,7 +56,7 @@ beforeEach(() => {
 		projectRoot: '/synthetic-project',
 	}));
 	state.processes = [];
-	state.request.mockReset().mockResolvedValue({ permissionMode: 'standard' });
+	state.request.mockReset().mockResolvedValue({ permissionMode: 'standard', lastActivity: 7 });
 	registerAgentSessionsHandlers({
 		getMainWindow: () => state.windows[0] as never,
 		getWindowForSession: (id) => state.windows[id === 'one' ? 0 : 1] as never,
@@ -80,6 +85,7 @@ it('asks both owner windows before committing and stores the exact account ident
 	expect(state.settings.archivedConversations[0]).toMatchObject({
 		key: JSON.stringify(['codex', 'local', '/synthetic-account/sessions', 'native']),
 		permissionMode: 'standard',
+		modifiedAt: 7,
 	});
 });
 it('does not archive if another window reports the conversation running', async () => {
@@ -98,4 +104,46 @@ it('keeps archive mutations behind newShell', async () => {
 	state.settings.newShell = false;
 	await expect(archive()).rejects.toThrow('conversation-new-shell-required');
 	expect(state.settings.archivedConversations).toEqual([]);
+});
+
+it('keeps unarchived permission metadata out of CLI archive lists and restores normal discovery', async () => {
+	const native = {
+		sessionId: 'native',
+		projectPath: '/synthetic-project/packages/api',
+		timestamp: '2026-11-06T10:00:00Z',
+		modifiedAt: '2026-11-06T10:00:00Z',
+		messageCount: 2,
+		firstUserMessage: 'Synthetic conversation',
+	};
+	vi.mocked(getAllSessionStorages).mockReturnValue([
+		{
+			agentId: 'codex',
+			listSessions: vi.fn().mockResolvedValue([native]),
+		},
+	] as never);
+	vi.mocked(getProviderAccountDirs).mockResolvedValue(['/synthetic-account']);
+	const scopes = [{ projectKey: 'project', projectPath: '/synthetic-project', ownerIds: ['one'] }];
+	const list = state.handlers.get('agentSessions:listProjectHistory')!;
+	const archives = state.handlers.get('agentSessions:archives')!;
+	await archive();
+	expect((await list({}, scopes)).conversations).toEqual([]);
+	expect((await list({}, scopes, { archived: true })).conversations).toHaveLength(1);
+	await state.handlers.get('agentSessions:archiveConversation')!(
+		{},
+		{ ownerId: 'one', nativeSessionId: 'native' },
+		'unarchive'
+	);
+	expect(await archives({})).toEqual([]);
+	expect(await archives({}, { includeUnarchived: true })).toEqual([
+		expect.objectContaining({
+			nativeSessionId: 'native',
+			archived: false,
+			permissionMode: 'standard',
+		}),
+	]);
+	expect((await list({}, scopes)).conversations).toHaveLength(1);
+	expect((await list({}, scopes, { archived: true })).conversations).toEqual([]);
+	await archive();
+	state.settings.newShell = false;
+	expect((await list({}, scopes)).conversations).toHaveLength(1);
 });

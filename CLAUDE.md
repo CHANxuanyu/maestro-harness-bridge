@@ -60,6 +60,7 @@ This guide has been split into focused sub-documents for progressive disclosure:
 ### Commonly-reimplemented functions (do NOT add new copies)
 
 - **Handoff execution context:** `handoffLocation()` in `src/shared/aiHandoff.ts` compares the effective cwd and SSH host without resolving remote paths locally.
+- **Native history project membership:** `projectHistoryScopeFor()` in `src/shared/projectHistory.ts` shares host, subdirectory and worktree membership across discovery, archive display and permission inheritance.
 - **New conversation permissions:** `newConversationPermissionFields()` in `src/renderer/utils/tabHelpers/focusFields.ts`, with `recentProjectConversation()` in `src/renderer/utils/newConversationPermissions.ts`, keeps new shell creation and handoff from widening source permissions. See [CANONICAL-UTILITIES.md](docs/agent-guides/CANONICAL-UTILITIES.md).
 - **Conversation changes:** `getGitChanges()`, `getGitChangeDiff()`, `changesCommand()` and `parseGitChanges()` in `src/main/git-changes.ts`; shared wire types in `src/shared/gitChanges.ts`. Both the panel and CLI use the same IPC handlers.
 

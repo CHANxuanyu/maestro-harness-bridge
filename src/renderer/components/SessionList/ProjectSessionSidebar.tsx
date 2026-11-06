@@ -1,7 +1,7 @@
-import { getParentDir } from '../../../shared/formatters';
 import { requestConversationAction } from '../../services/conversationArchive';
 import { useConversationArchiveStore } from '../../stores/conversationArchiveStore';
 import type { ConversationArchiveTarget } from '../../../shared/conversationArchive';
+import { projectHistoryScopeFor } from '../../../shared/projectHistory';
 import { useTabStore } from '../../stores/tabStore';
 import { type ReactNode, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Group, Session, Theme } from '../../types';
@@ -166,18 +166,12 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const archives = useMemo(
 		() =>
 			newShell
-				? archiveRecords.map((record) => ({
-						...record,
-						projectKey:
-							scopes.find(
-								(scope) =>
-									(scope.projectPath === record.projectPath ||
-										(!record.sshRemoteId &&
-											record.worktree?.commonDir &&
-											getParentDir(record.worktree.commonDir) === scope.projectPath)) &&
-									scope.sshRemoteId === record.sshRemoteId
-							)?.projectKey ?? '',
-					}))
+				? archiveRecords
+						.filter((record) => record.archived !== false)
+						.map((record) => ({
+							...record,
+							projectKey: projectHistoryScopeFor(scopes, record)?.projectKey ?? '',
+						}))
 				: [],
 		[archiveRecords, scopes, newShell]
 	);
@@ -446,6 +440,8 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 					provider: conversation.history.provider,
 					nativeSessionId: conversation.history.nativeSessionId,
 					projectPath: conversation.history.projectPath,
+					projectKey: conversation.history.projectKey,
+					lastActivity: conversation.history.modifiedAt,
 					worktree: conversation.history.worktree,
 					accountDir: conversation.history.accountDir,
 					sshRemoteId: conversation.history.sshRemoteId,

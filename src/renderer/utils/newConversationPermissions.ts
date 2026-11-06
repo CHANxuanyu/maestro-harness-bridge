@@ -1,4 +1,4 @@
-import { getParentDir } from '../../shared/formatters';
+import { projectHistoryScopeFor } from '../../shared/projectHistory';
 import {
 	refreshConversationArchives,
 	useConversationArchiveStore,
@@ -9,7 +9,11 @@ import { resolveTabPermissionMode } from '../../shared/agentMetadata';
 import { permissionModeFields } from './tabHelpers/focusFields';
 import type { AITab, Session } from '../types';
 import { useSessionStore } from '../stores/sessionStore';
-import { sessionProjectKey, sessionHost } from './nativeConversationMatch';
+import {
+	buildProjectHistoryScopes,
+	sessionProjectKey,
+	sessionHost,
+} from './nativeConversationMatch';
 import { visibleAiTabs } from './unifiedTabOrderUtils';
 
 /** Keep project membership and retained conversation inventory in one place. */
@@ -40,22 +44,27 @@ function knownConversations(session: Session): AITab[] {
 		]).values(),
 	]);
 	if (!useSettingsStore.getState().newShell) return tabs;
+	const state = useSessionStore.getState();
+	const scopes = buildProjectHistoryScopes(
+		[...state.sessions.filter((owner) => owner.id !== session.id), session],
+		state.groups
+	);
+	const projectKey = scopes.find((scope) => scope.ownerIds.includes(session.id))?.projectKey;
 	const archives = useConversationArchiveStore
 		.getState()
 		.records.filter(
 			(record) =>
 				record.sshRemoteId === sessionHost(session) &&
-				(record.projectPath === (session.projectRoot || session.cwd) ||
-					record.projectPath === session.cwd ||
-					(!record.sshRemoteId &&
-						record.worktree?.commonDir &&
-						getParentDir(record.worktree.commonDir) === (session.projectRoot || session.cwd)))
+				!!projectKey &&
+				projectHistoryScopeFor(scopes, record)?.projectKey === projectKey
 		);
 	return [
 		...tabs.map((tab) =>
 			archives.some(
 				(record) =>
-					record.ownerIds.includes(session.id) && record.nativeSessionId === tab.agentSessionId
+					record.archived !== false &&
+					record.ownerIds.includes(session.id) &&
+					record.nativeSessionId === tab.agentSessionId
 			)
 				? { ...tab, archived: true }
 				: tab
@@ -64,7 +73,7 @@ function knownConversations(session: Session): AITab[] {
 			.filter(
 				(record) =>
 					!(
-						record.provider === session.toolType &&
+						record.ownerIds.includes(session.id) &&
 						tabs.some((tab) => tab.agentSessionId === record.nativeSessionId)
 					)
 			)
@@ -72,21 +81,21 @@ function knownConversations(session: Session): AITab[] {
 				(record): AITab => ({
 					id: record.key,
 					agentSessionId: record.nativeSessionId,
-					archived: true,
+					archived: record.archived !== false,
 					...permissionModeFields(record.permissionMode),
 					name: record.title,
 					starred: false,
 					logs: [],
 					inputValue: '',
 					stagedImages: [],
-					createdAt: record.archivedAt,
+					createdAt: record.modifiedAt ?? record.archivedAt,
 					state: 'idle',
 				})
 			),
 	];
 }
 
-function conversationActivity(tab: AITab): number {
+export function conversationActivity(tab: AITab): number {
 	return tab.logs.reduce(
 		(time, log) => Math.max(time, log.timestamp),
 		Math.max(tab.createdAt, tab.lastSelectedAt ?? 0)
@@ -157,14 +166,19 @@ export async function resolveProjectConversationPermission(
 		snapshots?.length === owners.length &&
 		snapshots.every((snapshot, index) => snapshot?.sessionId === owners[index].id);
 	if (complete) {
+		const retainedKeys = new Set(
+			useSettingsStore.getState().newShell
+				? useConversationArchiveStore.getState().records.map((record) => record.key)
+				: []
+		);
 		const inventory = [
 			...snapshots!.flatMap((snapshot) => snapshot!.tabs),
 			...owners
 				.flatMap(knownConversations)
-				.filter((tab) => tab.archived)
+				.filter((tab) => tab.archived || retainedKeys.has(tab.id))
 				.map((tab) => ({
 					id: tab.id,
-					archived: true,
+					archived: tab.archived,
 					...permissionModeFields(resolveTabPermissionMode(tab)),
 					lastActivity: conversationActivity(tab),
 				})),

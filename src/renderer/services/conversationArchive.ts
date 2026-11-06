@@ -10,6 +10,7 @@ import { resolveTabPermissionMode } from '../../shared/agentMetadata';
 import { useModalStore } from '../stores/modalStore';
 import { getT } from '../i18n';
 import { refreshConversationArchives } from '../stores/conversationArchiveStore';
+import { conversationActivity } from '../utils/newConversationPermissions';
 
 /** Runs synchronously in each owning window, checking again immediately before closure. */
 export function conversationLifecycle(
@@ -66,6 +67,7 @@ export function conversationLifecycle(
 		);
 	}
 	return {
+		lastActivity: retained.length ? Math.max(...retained.map(conversationActivity)) : undefined,
 		permissionMode: modes.includes('readonly')
 			? 'readonly'
 			: modes.includes('standard')

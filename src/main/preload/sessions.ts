@@ -260,7 +260,8 @@ export function createAgentSessionsApi() {
 		},
 		sendOpenProjectResponse: (channel: string, result: OpenProjectResult) =>
 			ipcRenderer.send(channel, result),
-		archives: (): Promise<ArchivedConversation[]> => ipcRenderer.invoke('agentSessions:archives'),
+		archives: (options?: { includeUnarchived?: boolean }): Promise<ArchivedConversation[]> =>
+			ipcRenderer.invoke('agentSessions:archives', options),
 		archiveConversation: (
 			target: ConversationArchiveTarget,
 			action: ConversationArchiveAction

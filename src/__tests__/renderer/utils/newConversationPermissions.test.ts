@@ -134,6 +134,107 @@ it('inherits archived permissions from a project subdirectory without matching a
 	expect(createTab(remote)!.tab.permissionMode).toBe('full');
 });
 
+it('treats unarchived metadata as ordinary recency while keeping classic creation unchanged', () => {
+	const owner = createMockSession({
+		id: 'owner',
+		toolType: 'codex',
+		cwd: '/repo',
+		projectRoot: '/repo',
+		aiTabs: [],
+	});
+	useSessionStore.setState({ sessions: [owner] });
+	useConversationArchiveStore.setState({
+		records: [
+			{
+				key: 'hidden',
+				provider: 'codex',
+				projectPath: '/repo',
+				nativeSessionId: 'hidden',
+				ownerIds: ['owner'],
+				archivedAt: 100,
+				permissionMode: 'readonly',
+			},
+			{
+				key: 'restored',
+				provider: 'codex',
+				projectPath: '/repo',
+				nativeSessionId: 'restored',
+				ownerIds: ['owner'],
+				archivedAt: 1,
+				archived: false,
+				permissionMode: 'full',
+			},
+		] as ArchivedConversation[],
+	});
+	expect(createTab(owner)!.tab.permissionMode).toBe('full');
+	useConversationArchiveStore.setState({
+		records: useConversationArchiveStore
+			.getState()
+			.records.map((record) => ({ ...record, permissionMode: 'readonly' })),
+	});
+	const current = {
+		...owner,
+		aiTabs: [createMockAITab({ id: 'newer', createdAt: 200, permissionMode: 'full' })],
+	};
+	expect(createTab(current)!.tab.permissionMode).toBe('full');
+	useSettingsStore.setState({ newShell: false });
+	expect(createTab(owner)!.tab.permissionMode).toBeUndefined();
+});
+
+it('does not widen a newer readonly conversation using the time an older full conversation was archived', () => {
+	const owner = createMockSession({
+		id: 'owner',
+		toolType: 'codex',
+		cwd: '/repo',
+		projectRoot: '/repo',
+		aiTabs: [createMockAITab({ createdAt: 20, permissionMode: 'readonly' })],
+	});
+	useSessionStore.setState({ sessions: [owner] });
+	useConversationArchiveStore.setState({
+		records: [
+			{
+				key: 'old-full',
+				provider: 'codex',
+				projectPath: '/repo',
+				nativeSessionId: 'native',
+				ownerIds: ['owner'],
+				archivedAt: 100,
+				modifiedAt: 10,
+				archived: false,
+				permissionMode: 'full',
+			},
+		] as ArchivedConversation[],
+	});
+	expect(createTab(owner)!.tab.permissionMode).toBe('readonly');
+});
+
+it('assigns nested archive permissions to the same most specific project as discovery', () => {
+	const parent = createMockSession({
+		id: 'parent',
+		toolType: 'codex',
+		cwd: '/repo',
+		projectRoot: '/repo',
+		aiTabs: [],
+	});
+	const nested = { ...parent, id: 'nested', cwd: '/repo/packages', projectRoot: '/repo/packages' };
+	useSessionStore.setState({ sessions: [parent, nested] });
+	useConversationArchiveStore.setState({
+		records: [
+			{
+				key: 'native',
+				provider: 'codex',
+				projectPath: '/repo/packages/api',
+				nativeSessionId: 'native',
+				ownerIds: ['parent', 'nested'],
+				archivedAt: 1,
+				permissionMode: 'readonly',
+			},
+		] as ArchivedConversation[],
+	});
+	expect(createTab(parent)!.tab.permissionMode).toBe('full');
+	expect(createTab(nested)!.tab.permissionMode).toBe('readonly');
+});
+
 describe('new conversation permission inheritance', () => {
 	it.each(['index', 'next', 'previous'] as const)(
 		'inherits the readonly conversation selected by keyboard %s navigation',

@@ -53,12 +53,15 @@ export function createConversationArchive(deps: ArchiveDependencies) {
 		}
 		return matches;
 	}
-	async function list(): Promise<ArchivedConversation[]> {
+	async function list(options?: { includeUnarchived?: boolean }): Promise<ArchivedConversation[]> {
 		return Promise.all(
-			deps.read().map(async (record) => ({
-				...record,
-				ownerIds: await matchingOwners(record, record.key),
-			}))
+			deps
+				.read()
+				.filter((record) => options?.includeUnarchived || record.archived !== false)
+				.map(async (record) => ({
+					...record,
+					ownerIds: await matchingOwners(record, record.key),
+				}))
 		);
 	}
 	async function change(input: ConversationArchiveTarget, action: ConversationArchiveAction) {
@@ -80,6 +83,7 @@ export function createConversationArchive(deps: ArchiveDependencies) {
 						accountDir: deps.accountDir(owner.id),
 						sshRemoteId: host(owner),
 						title: input.title,
+						lastActivity: input.lastActivity,
 					}
 				: input;
 			if (!target.provider || !target.projectPath) throw new Error('conversation-target-invalid');
@@ -90,7 +94,8 @@ export function createConversationArchive(deps: ArchiveDependencies) {
 			const existing = before.find((row) => row.key === key);
 			const remaining = before.filter((row) => row.key !== key);
 			if (action === 'unarchive') {
-				deps.write(remaining);
+				// Keep permissions independently of visibility after the original tabs were closed.
+				if (existing) deps.write([...remaining, { ...existing, archived: false }]);
 				return { success: true };
 			}
 			const ownerIds = await matchingOwners(target, key);
@@ -99,7 +104,8 @@ export function createConversationArchive(deps: ArchiveDependencies) {
 			if (checked.error) throw new Error(checked.error);
 			const record: ArchivedConversation = {
 				key,
-				projectKey: '',
+				archived: true,
+				projectKey: target.projectKey || existing?.projectKey || '',
 				projectPath: target.projectPath,
 				worktree: target.worktree,
 				provider: target.provider,
@@ -108,7 +114,8 @@ export function createConversationArchive(deps: ArchiveDependencies) {
 					checked.title || target.title || existing?.title || target.nativeSessionId.slice(0, 8),
 				preview: '',
 				createdAt: 0,
-				modifiedAt: Date.now(),
+				modifiedAt:
+					checked.lastActivity ?? target.lastActivity ?? existing?.modifiedAt ?? Date.now(),
 				messageCount: 0,
 				starred: false,
 				accountDir: target.accountDir,
@@ -124,6 +131,7 @@ export function createConversationArchive(deps: ArchiveDependencies) {
 				const closed = await deps.lifecycle({ ...request, phase: 'close' });
 				if (closed.error) throw new Error(closed.error);
 				if (action === 'archive') {
+					record.modifiedAt = Math.max(record.modifiedAt, closed.lastActivity ?? 0);
 					const modes = [record.permissionMode, closed.permissionMode];
 					record.permissionMode = modes.includes('readonly')
 						? 'readonly'

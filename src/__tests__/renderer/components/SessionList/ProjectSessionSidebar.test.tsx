@@ -191,8 +191,8 @@ it.each([undefined, 'remote'])(
 			archiveConversation: change,
 			archives: vi.fn().mockResolvedValue([]),
 		};
+		const { unmount } = renderSidebar([session]);
 		try {
-			renderSidebar([session]);
 			fireEvent.click(screen.getByRole('button', { name: 'Archived 1', exact: true }));
 			fireEvent.click(screen.getByRole('button', { name: 'Unarchive', exact: true }));
 			expect(change).toHaveBeenCalledWith(
@@ -201,6 +201,7 @@ it.each([undefined, 'remote'])(
 			);
 			await act(async () => {});
 		} finally {
+			unmount();
 			window.maestro.agentSessions = original;
 			useSettingsStore.setState({ newShell: false });
 		}

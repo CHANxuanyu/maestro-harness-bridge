@@ -322,6 +322,7 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 		if (isWebDesktop() || !archiveSessionsLoaded || !archiveNewShell) return;
 		const sessions = useSessionStore.getState().sessions;
 		for (const record of archivedConversations) {
+			if (record.archived === false) continue;
 			const ownerIds = record.ownerIds.filter((id) =>
 				sessions.some(
 					(session) =>
@@ -340,9 +341,9 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 	}, [archivedConversations, archiveSessionsLoaded, archiveNewShell]);
 
 	useEffect(() => {
-		if (isWebDesktop()) return;
-		const stopLifecycle =
-			window.maestro.agentSessions.onConversationLifecycle?.(conversationLifecycle);
+		const stopLifecycle = !isWebDesktop()
+			? window.maestro.agentSessions.onConversationLifecycle?.(conversationLifecycle)
+			: undefined;
 		const stopChanges = window.maestro.agentSessions.onArchivesChanged?.((records) =>
 			useConversationArchiveStore.setState({ records })
 		);

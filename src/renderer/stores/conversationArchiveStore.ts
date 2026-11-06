@@ -8,5 +8,6 @@ export const useConversationArchiveStore = create<{ records: ArchivedConversatio
 
 export async function refreshConversationArchives(): Promise<void> {
 	const api = window.maestro.agentSessions.archives;
-	if (api) useConversationArchiveStore.setState({ records: await api() });
+	if (api)
+		useConversationArchiveStore.setState({ records: await api({ includeUnarchived: true }) });
 }

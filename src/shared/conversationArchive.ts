@@ -7,11 +7,15 @@ export interface ConversationArchiveTarget {
 	provider?: string;
 	nativeSessionId: string;
 	projectPath?: string;
+	projectKey?: string;
 	accountDir?: string;
 	sshRemoteId?: string;
 	title?: string;
+	lastActivity?: number;
 }
 export interface ArchivedConversation extends ProjectHistoryConversation {
+	/** Missing on legacy records means archived. False retains permission metadata only. */
+	archived?: boolean;
 	permissionMode: 'full' | 'standard' | 'readonly';
 	archivedAt: number;
 	/** Recomputed from current account configuration, never trusted from disk. */
@@ -27,4 +31,5 @@ export interface ConversationLifecycleResult {
 	error?: string;
 	permissionMode?: 'full' | 'standard' | 'readonly';
 	title?: string;
+	lastActivity?: number;
 }

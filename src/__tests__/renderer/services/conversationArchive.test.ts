@@ -9,6 +9,24 @@ beforeEach(() => {
 	useSettingsStore.setState({ newShell: true });
 	window.maestro.tabs = { ...window.maestro.tabs, closed: vi.fn() };
 });
+it('retains actual conversation activity so unarchive does not make an old permission most recent', () => {
+	const tab = createMockAITab({
+		id: 'old',
+		agentSessionId: 'native',
+		createdAt: 1,
+		lastSelectedAt: 2,
+		logs: [{ id: 'log', timestamp: 3, source: 'assistant', text: 'Synthetic reply' }],
+	});
+	useSessionStore.setState({ sessions: [createMockSession({ id: 'owner', aiTabs: [tab] })] });
+	expect(
+		conversationLifecycle({
+			ownerIds: ['owner'],
+			nativeSessionId: 'native',
+			phase: 'close',
+			action: 'archive',
+		})
+	).toMatchObject({ lastActivity: 3 });
+});
 it.each(['busy', 'queued', 'orphan'] as const)(
 	'rejects a %s conversation without closing its tabs',
 	(kind) => {

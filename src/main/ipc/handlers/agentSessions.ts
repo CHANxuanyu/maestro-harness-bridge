@@ -470,6 +470,9 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 			}
 			const modes = results.map((result) => result.permissionMode);
 			return {
+				lastActivity: results.some((result) => result.lastActivity !== undefined)
+					? Math.max(...results.map((result) => result.lastActivity ?? 0))
+					: undefined,
 				permissionMode: modes.includes('readonly')
 					? 'readonly'
 					: modes.includes('standard')
@@ -490,7 +493,9 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 	});
 	ipcMain.handle(
 		'agentSessions:archives',
-		withIpcErrorLogging(handlerOpts('archives'), () => archive.list())
+		withIpcErrorLogging(handlerOpts('archives'), (options?: { includeUnarchived?: boolean }) =>
+			archive.list(options)
+		)
 	);
 	ipcMain.handle(
 		'agentSessions:archiveConversation',
@@ -502,7 +507,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 				try {
 					return await archive.change(target, action);
 				} finally {
-					const records = await archive.list();
+					const records = await archive.list({ includeUnarchived: true });
 					createSafeSend(() => BrowserWindow.getAllWindows())(
 						'agentSessions:archivesChanged',
 						records
@@ -586,6 +591,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 							? new Set(
 									getSettingsStore()
 										.get('archivedConversations', [])
+										.filter((row: ArchivedConversation) => row.archived !== false)
 										.map((row: ArchivedConversation) => row.key)
 								)
 							: undefined,
@@ -618,7 +624,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 					const result = await archive.change({ ownerId, nativeSessionId: nativeId }, 'delete');
 					createSafeSend(() => BrowserWindow.getAllWindows())(
 						'agentSessions:archivesChanged',
-						await archive.list()
+						await archive.list({ includeUnarchived: true })
 					);
 					return result;
 				}

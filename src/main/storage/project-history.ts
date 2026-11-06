@@ -8,6 +8,7 @@ import type {
 	ProjectHistoryConversation,
 } from '../../shared/projectHistory';
 import { getProviderProfileConfig } from '../../shared/providerProfiles';
+import { projectHistoryScopeFor } from '../../shared/projectHistory';
 
 interface HistoryOwner {
 	id?: string;
@@ -169,21 +170,11 @@ export async function discoverProjectHistory(
 							)
 								continue;
 							const nativePath = normalize(native.projectPath || projectPath, scope.sshRemoteId);
-							const exactScope = orderedScopes.find(
-								(candidate) =>
-									candidate.sshRemoteId === scope.sshRemoteId &&
-									normalize(candidate.projectPath, candidate.sshRemoteId) === nativePath
-							);
-							const mainScope =
-								!scope.sshRemoteId && native.worktree?.commonDir
-									? orderedScopes.find(
-											(candidate) =>
-												!candidate.sshRemoteId &&
-												normalize(candidate.projectPath) ===
-													path.dirname(native.worktree!.commonDir!)
-										)
-									: undefined;
-							const owningScope = exactScope || mainScope;
+							const owningScope = projectHistoryScopeFor(orderedScopes, {
+								projectPath: nativePath,
+								sshRemoteId: scope.sshRemoteId,
+								worktree: native.worktree,
+							});
 							if (owningScope && owningScope.projectKey !== scope.projectKey) continue;
 							const origin =
 								deps.origins?.[provider]?.[nativePath]?.[native.sessionId] ||

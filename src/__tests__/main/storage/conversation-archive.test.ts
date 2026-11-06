@@ -50,7 +50,8 @@ it('rejects running conversations without persisting or deleting anything', asyn
 	expect(deps.deleteNative).not.toHaveBeenCalled();
 });
 it('retains permission metadata after unarchive and another restart', async () => {
-	const { deps, service } = fixture();
+	const { deps, service, lifecycle } = fixture();
+	lifecycle.mockResolvedValue({ permissionMode: 'readonly', lastActivity: 7 });
 	const target = { ownerId: 'owner', nativeSessionId: 'native' };
 	await service.change(target, 'archive');
 	await service.change(target, 'unarchive');
@@ -60,6 +61,7 @@ it('retains permission metadata after unarchive and another restart', async () =
 		expect.objectContaining({
 			nativeSessionId: 'native',
 			permissionMode: 'readonly',
+			modifiedAt: 7,
 			archived: false,
 		}),
 	]);

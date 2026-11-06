@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { useT } from '../../../i18n';
 import { useCallback, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Session } from '../../../types';
@@ -57,6 +59,8 @@ export function useFileOperations({
 	onShowFlash,
 }: UseFileOperationsArgs): UseFileOperationsResult {
 	// Rename modal state
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const [renameModal, setRenameModal] = useState<RenameModalState | null>(null);
 	const [renameValue, setRenameValue] = useState('');
 	const [renameError, setRenameError] = useState<string | null>(null);
@@ -94,7 +98,9 @@ export function useFileOperations({
 		}
 
 		if (newName.includes('/') || newName.includes('\\')) {
-			setRenameError('Name cannot contain slashes');
+			setRenameError(
+				newShell ? t('workflows.newShellCopy.panels.noSlashes') : 'Name cannot contain slashes'
+			);
 			return;
 		}
 
@@ -133,11 +139,21 @@ export function useFileOperations({
 			);
 
 			setRenameModal(null);
-			onShowFlash?.(`Renamed to "${newName}"`);
+			onShowFlash?.(
+				newShell
+					? t('workflows.newShellCopy.panels.renamed', { name: newName })
+					: `Renamed to "${newName}"`
+			);
 		} catch (error) {
-			setRenameError(error instanceof Error ? error.message : 'Rename failed');
+			setRenameError(
+				error instanceof Error
+					? error.message
+					: newShell
+						? t('workflows.newShellCopy.panels.renameFailed')
+						: 'Rename failed'
+			);
 		}
-	}, [renameModal, renameValue, session.id, onShowFlash, sshRemoteId, setSessions]);
+	}, [newShell, t, renameModal, renameValue, session.id, onShowFlash, sshRemoteId, setSessions]);
 
 	const openNewFileModal = useCallback(
 		(parentFolderPath: string, parentFolderAbsolutePath: string) => {
@@ -166,7 +182,9 @@ export function useFileOperations({
 		const isFolder = newFileModal.kind === 'folder';
 		const name = newFileValue.trim();
 		if (name.includes('/') || name.includes('\\')) {
-			setNewFileError('Name cannot contain slashes');
+			setNewFileError(
+				newShell ? t('workflows.newShellCopy.panels.noSlashes') : 'Name cannot contain slashes'
+			);
 			return;
 		}
 
@@ -177,7 +195,11 @@ export function useFileOperations({
 			children = children.find((c) => c.name === part)?.children;
 		}
 		if (children?.some((c) => c.name === name)) {
-			setNewFileError(`"${name}" already exists in this folder`);
+			setNewFileError(
+				newShell
+					? t('workflows.newShellCopy.panels.nameExists', { name })
+					: `"${name}" already exists in this folder`
+			);
 			return;
 		}
 
@@ -192,13 +214,23 @@ export function useFileOperations({
 			await refreshFileTree(session.id);
 			expandFolder(newFileModal.parentFolderPath);
 			setNewFileModal(null);
-			onShowFlash?.(`Created "${name}"`);
+			onShowFlash?.(
+				newShell ? t('workflows.newShellCopy.panels.created', { name }) : `Created "${name}"`
+			);
 		} catch (error) {
-			setNewFileError(error instanceof Error ? error.message : 'Create failed');
+			setNewFileError(
+				error instanceof Error
+					? error.message
+					: newShell
+						? t('workflows.newShellCopy.panels.createFailed')
+						: 'Create failed'
+			);
 		} finally {
 			setIsCreatingFile(false);
 		}
 	}, [
+		newShell,
+		t,
 		newFileModal,
 		newFileValue,
 		session.fileTree,
@@ -292,13 +324,26 @@ export function useFileOperations({
 			);
 
 			setDeleteModal(null);
-			onShowFlash?.(`Deleted "${deleteModal.node.name}"`);
+			onShowFlash?.(
+				newShell
+					? t('workflows.newShellCopy.panels.deleted', { name: deleteModal.node.name })
+					: `Deleted "${deleteModal.node.name}"`
+			);
 		} catch (error) {
-			onShowFlash?.(`Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			onShowFlash?.(
+				newShell
+					? t('workflows.newShellCopy.panels.deleteFailed', {
+							reason:
+								error instanceof Error
+									? error.message
+									: t('workflows.newShellCopy.panels.unknownError'),
+						})
+					: `Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+			);
 		} finally {
 			setIsDeleting(false);
 		}
-	}, [deleteModal, session.id, onShowFlash, sshRemoteId, setSessions]);
+	}, [newShell, t, deleteModal, session.id, onShowFlash, sshRemoteId, setSessions]);
 
 	return {
 		renameModal,
@@ -315,7 +360,11 @@ export function useFileOperations({
 		setRenameValue: (v: string) => {
 			setRenameValue(v);
 			setRenameError(
-				v.trim().includes('/') || v.trim().includes('\\') ? 'Name cannot contain slashes' : null
+				v.trim().includes('/') || v.trim().includes('\\')
+					? newShell
+						? t('workflows.newShellCopy.panels.noSlashes')
+						: 'Name cannot contain slashes'
+					: null
 			);
 		},
 		handleRename,

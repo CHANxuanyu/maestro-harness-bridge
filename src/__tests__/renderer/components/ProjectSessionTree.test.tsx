@@ -50,7 +50,10 @@ const EN: Record<string, string> = {
 vi.mock('../../../renderer/i18n', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../../../renderer/i18n')>();
 	const t = (key: string, params?: Record<string, unknown>) =>
-		(EN[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? ''));
+		(EN[key] ?? actual.getTranslator('en')(key as keyof typeof actual.CATALOGS.en)).replace(
+			/\{(\w+)\}/g,
+			(_, name) => String(params?.[name] ?? '')
+		);
 	return { ...actual, useT: () => t };
 });
 
@@ -186,7 +189,9 @@ describe('ProjectSessionTree', () => {
 			if (newShell) expect(button).toHaveAttribute('aria-haspopup', 'menu');
 			fireEvent.click(button);
 			if (newShell) {
-				fireEvent.click(await screen.findByRole('menuitem', { name: 'New with Codex' }));
+				fireEvent.click(
+					await screen.findByRole('menuitem', { name: 'New conversation with Codex' })
+				);
 				await waitFor(() =>
 					expect(window.maestro.context.conversation).toHaveBeenCalledWith({
 						action: 'new-conversation',
@@ -255,7 +260,7 @@ describe('ProjectSessionTree', () => {
 					colors: { ...mockTheme.colors, bgActivity: background, textDim: '#888888' },
 				},
 			});
-			const input = screen.getByPlaceholderText('Search conversations...');
+			const input = screen.getByPlaceholderText('Search conversations…');
 			const foreground = input.style.getPropertyValue('--placeholder-color');
 			expect(foreground).not.toBe('');
 			expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(4.5);

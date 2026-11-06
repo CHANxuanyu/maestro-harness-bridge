@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { useT } from '../../../i18n';
 import {
 	forwardRef,
 	useCallback,
@@ -75,6 +77,8 @@ export const TextPreviewFast = forwardRef<TextPreviewFastHandle, TextPreviewFast
 		},
 		ref
 	) {
+		const t = useT();
+		const newShell = useSettingsStore((s) => s.newShell);
 		const isCode = isCodeLanguage(language);
 		const scrollRef = useRef<HTMLDivElement | null>(null);
 		const [pages, setPages] = useState<TextPage[]>([]);
@@ -268,7 +272,7 @@ export const TextPreviewFast = forwardRef<TextPreviewFastHandle, TextPreviewFast
 						data-testid="text-fast-skeleton"
 						style={{ padding: '24px', color: theme.colors.textDim, fontSize: '0.8125rem' }}
 					>
-						Parsing large file…
+						{newShell ? t('workflows.newShellCopy.panels.parsingFile') : 'Parsing large file\u2026'}
 					</div>
 				) : (
 					<div style={{ height: `${totalSize}px`, width: '100%', position: 'relative' }}>

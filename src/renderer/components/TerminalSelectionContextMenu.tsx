@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { useSettingsStore } from '../stores/settingsStore';
 /**
  * TerminalSelectionContextMenu - Right-click menu for selected text.
  *
@@ -40,6 +42,8 @@ export function TerminalSelectionContextMenu({
 	onSendToAgent,
 	onQuote,
 }: TerminalSelectionContextMenuProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const menuRef = useRef<HTMLDivElement>(null);
 	const onDismissRef = useRef(onDismiss);
 	onDismissRef.current = onDismiss;
@@ -96,7 +100,7 @@ export function TerminalSelectionContextMenu({
 					style={{ color: theme.colors.textMain }}
 				>
 					<Quote className="w-3.5 h-3.5" />
-					Quote in Message
+					{newShell ? t('workflows.newShellCopy.panels.quoteMessage') : 'Quote in Message'}
 				</button>
 			)}
 			{onCopy && (
@@ -106,7 +110,7 @@ export function TerminalSelectionContextMenu({
 					style={{ color: theme.colors.textMain }}
 				>
 					<Copy className="w-3.5 h-3.5" />
-					Copy to Clipboard
+					{newShell ? t('workflows.shell.copyToClipboard') : 'Copy to Clipboard'}
 				</button>
 			)}
 			{onSendToAgent && (
@@ -116,7 +120,7 @@ export function TerminalSelectionContextMenu({
 					style={{ color: theme.colors.textMain }}
 				>
 					<Send className="w-3.5 h-3.5" />
-					Send to Agent
+					{newShell ? t('workflows.newShellCopy.panels.sendConversation') : 'Send to Agent'}
 				</button>
 			)}
 		</div>

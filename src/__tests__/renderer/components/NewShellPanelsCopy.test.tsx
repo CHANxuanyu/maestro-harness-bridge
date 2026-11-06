@@ -1,6 +1,13 @@
+import { TerminalSearchBar } from '../../../renderer/components/TerminalSearchBar';
+import { TerminalSelectionContextMenu } from '../../../renderer/components/TerminalSelectionContextMenu';
+import { LinkContextMenu } from '../../../renderer/components/LinkContextMenu';
+import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
+import { MarkdownImage } from '../../../renderer/components/FilePreview/MarkdownImage';
+import { useFileOperations } from '../../../renderer/components/FileExplorerPanel/hooks/useFileOperations';
+import { createMockSession } from '../../helpers';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { mockTheme } from '../../helpers/mockTheme';
 import { NewFileModal } from '../../../renderer/components/FileExplorerPanel/components/NewFileModal';
@@ -33,6 +40,97 @@ afterEach(() => {
 });
 
 describe('new shell panel copy', () => {
+	it('localizes an image read failure without a diagnostic message', async () => {
+		const read = vi.spyOn(window.maestro.fs, 'readFile').mockRejectedValueOnce(new Error(''));
+		render(
+			<MarkdownImage
+				src="u6-missing.png"
+				markdownFilePath="/tmp/u6-copy/readme.md"
+				theme={mockTheme}
+			/>
+		);
+		expect(await screen.findByText('图片加载失败：未知错误')).toBeVisible();
+		read.mockRestore();
+	});
+
+	it('localizes terminal search without changing search callbacks', () => {
+		const onSearch = vi.fn(() => false);
+		const onClose = vi.fn();
+		render(
+			<LayerStackProvider>
+				<TerminalSearchBar
+					theme={mockTheme}
+					isOpen
+					onSearch={onSearch}
+					onClose={onClose}
+					onSearchNext={vi.fn(() => false)}
+					onSearchPrevious={vi.fn(() => false)}
+				/>
+			</LayerStackProvider>
+		);
+		fireEvent.change(screen.getByPlaceholderText('搜索终端内容'), { target: { value: 'missing' } });
+		expect(onSearch).toHaveBeenCalledWith('missing');
+		expect(screen.getByText('未找到匹配内容')).toBeVisible();
+		expect(screen.getByRole('button', { name: '上一个匹配项' })).toBeVisible();
+		fireEvent.click(screen.getByRole('button', { name: '关闭搜索' }));
+		expect(onClose).toHaveBeenCalledTimes(1);
+	});
+	it('uses conversation terminology for terminal selection and link menus', () => {
+		render(
+			<TerminalSelectionContextMenu
+				theme={mockTheme}
+				menu={{ x: 0, y: 0, selection: 'raw fixture' }}
+				onDismiss={vi.fn()}
+				onCopy={vi.fn()}
+				onQuote={vi.fn()}
+				onSendToAgent={vi.fn()}
+			/>
+		);
+		expect(screen.getByRole('button', { name: '引用到消息' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: '复制到剪贴板' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: '发送到其他对话' })).toBeInTheDocument();
+		render(
+			<LinkContextMenu
+				theme={mockTheme}
+				menu={{ x: 0, y: 0, url: 'https://example.invalid' }}
+				onDismiss={vi.fn()}
+			/>
+		);
+		expect(screen.getByRole('button', { name: '复制链接' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: '在 Maestro 浏览器中打开' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: '在系统浏览器中打开' })).toBeInTheDocument();
+	});
+
+	it('explains blocked remote images without fetching them', () => {
+		render(
+			<MarkdownImage
+				src="https://example.invalid/a.png"
+				markdownFilePath="/tmp/readme.md"
+				theme={mockTheme}
+			/>
+		);
+		expect(screen.getByText('远程图片未加载')).toBeVisible();
+	});
+	it('localizes file name validation without changing the file operation', async () => {
+		const write = vi.spyOn(window.maestro.fs, 'writeFile');
+		const { result } = renderHook(() =>
+			useFileOperations({
+				session: createMockSession({ fileTree: [] }),
+				sshRemoteId: 'remote-test',
+				setSessions: vi.fn(),
+				refreshFileTree: vi.fn(),
+				expandFolder: vi.fn(),
+			})
+		);
+		act(() => {
+			result.current.openNewFileModal('', '/tmp/project');
+			result.current.setNewFileValue('bad/name');
+		});
+		await act(() => result.current.handleCreateNewFile());
+		expect(result.current.newFileError).toBe('名称不能包含斜杠');
+		expect(write).not.toHaveBeenCalled();
+		write.mockRestore();
+	});
 	it('localizes the file creation dialog', () => {
 		render(
 			<NewFileModal

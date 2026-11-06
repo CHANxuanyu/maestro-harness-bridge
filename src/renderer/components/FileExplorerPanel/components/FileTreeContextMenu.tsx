@@ -1,3 +1,4 @@
+import { localizedFileManagerName } from '../../../i18n/platformLabels';
 import { useT } from '../../../i18n';
 import { shellFeatureVisible } from '../../../../shared/newShellFeatures';
 import { useSettingsStore } from '../../../stores/settingsStore';
@@ -535,7 +536,13 @@ export function FileTreeContextMenu({
 								style={{ color: theme.colors.textMain }}
 							>
 								<FolderOpen className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								<span>{getRevealLabel(platform)}</span>
+								<span>
+									{newShell
+										? t('settings.display.toolbar.revealInFolder', {
+												manager: localizedFileManagerName(t, platform),
+											})
+										: getRevealLabel(platform)}
+								</span>
 							</button>
 						)}
 

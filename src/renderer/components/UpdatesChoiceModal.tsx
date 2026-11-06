@@ -1,19 +1,8 @@
 import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
- * UpdatesChoiceModal - the first-run step for how Maestro stays current.
- *
- * Three switches and one install that already exist in Settings -> General,
- * where they sit among dozens of other controls and nobody finds them. The one
- * worth interrupting a first run for is the release candidate channel: a user
- * who wants new features early has to learn the channel exists before they can
- * opt into it. Crash reporting and the Maestro CLI ride along because both pay
- * off most when they are on from day one.
- *
- * Every switch writes straight to the setting it shows, and the modal reads the
- * live store rather than holding local copies. That is what makes the
- * returning-user case correct with no extra branch: someone who already turned
- * release candidates on, or crash reports off, sees their own answer here
- * rather than the shipped default pushed back at them.
+ * Update preferences shown during first use. New shell copy is neutral;
+ * the classic shell retains its existing release-candidate recommendation.
+ * Rows use the saved settings directly and preserve the user's choices.
  */
 
 import { useRef } from 'react';

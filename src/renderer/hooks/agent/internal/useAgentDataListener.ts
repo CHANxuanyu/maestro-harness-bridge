@@ -18,6 +18,7 @@
 
 import { useEffect } from 'react';
 import { updateAiTab, updateSessionWith, useSessionStore } from '../../../stores/sessionStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { REGEX_AI_TAB } from '../../../utils/sessionIdParser';
 import { getActiveTab, getWriteModeTab } from '../../../utils/tabHelpers';
 import { logger } from '../../../utils/logger';
@@ -101,7 +102,13 @@ export function useAgentDataListener(deps: UseAgentDataListenerDeps): void {
 			// chunk of a turn; for the thousands of chunks that follow it doesn't, so
 			// we skip the full prev.map() allocation and store notification entirely
 			// instead of mapping every session just to return `prev` unchanged.
-			if (targetTab && removeHiddenProgressLog(targetTab.logs, targetTabId) !== targetTab.logs) {
+			// New shell removes the placeholder with the first batched answer.
+			// Do not scan the entire transcript for every incoming data fragment.
+			if (
+				!useSettingsStore.getState().newShell &&
+				targetTab &&
+				removeHiddenProgressLog(targetTab.logs, targetTabId) !== targetTab.logs
+			) {
 				updateAiTab(actualSessionId, targetTabId, (tab) => ({
 					...tab,
 					logs: removeHiddenProgressLog(tab.logs, targetTabId!),

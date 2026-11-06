@@ -571,3 +571,5 @@ Packaged CLI storage and discovery use the shipped product identity. `settings s
 ## New shell transcript performance (2026-11-06)
 
 Progressive row element reuse changes rendering work only. No new UI action or CLI verb is introduced. Existing conversation selection, transcript search and jumps retain their current paths and existing gaps; this change does not claim to close native resume or refresh gaps.
+
+New shell stdout placeholder cleanup now shares the existing 200 ms output batch, including final flush. It adds no user action. CLI and UI initiated turns continue through the same process listener and session batcher.

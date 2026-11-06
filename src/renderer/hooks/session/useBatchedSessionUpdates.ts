@@ -16,6 +16,8 @@
 import { useRef, useCallback, useEffect, useMemo } from 'react';
 import type { Session, SessionState, UsageStats, LogEntry } from '../../types';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { removeHiddenProgressLog } from '../agent/internal/helpers/exitTabCleanup';
 import { canAppendToLogEntry, isTransientActivityEntry } from '../../utils/logEntries';
 import { currentActivityRetention } from '../../utils/activityRetention';
 import { isAiTabHidden } from '../../utils/unifiedTabOrderUtils';
@@ -97,6 +99,8 @@ interface SessionAccumulator {
 	contextUsage?: number;
 	// Tabs to mark as delivered
 	deliveredTabs?: Set<string>;
+	// Capture the new shell choice at ingestion, including a shell switch before flush.
+	hiddenProgressTabs?: Set<string>;
 	// Cycle metrics (accumulated)
 	cycleBytesDelta?: number;
 	cycleTokensDelta?: number;
@@ -273,7 +277,10 @@ export function useBatchedSessionUpdates(
 								// Entries read back from the provider transcript are history,
 								// not this turn's scratch state, so they always stay; so do the
 								// live turn's tool calls when the layout keeps them.
-								const existingLogs = tab.logs.filter((log) => {
+								const visibleLogs = acc.hiddenProgressTabs?.has(tab.id)
+									? removeHiddenProgressLog(tab.logs, tab.id)
+									: tab.logs;
+								const existingLogs = visibleLogs.filter((log) => {
 									if (isTransientActivityEntry(log, retention)) {
 										return tab.showThinking === 'sticky';
 									}
@@ -755,6 +762,10 @@ export function useBatchedSessionUpdates(
 				acc.deliveredTabs = new Set();
 			}
 			acc.deliveredTabs.add(tabId);
+			if (useSettingsStore.getState().newShell) {
+				acc.hiddenProgressTabs ??= new Set();
+				acc.hiddenProgressTabs.add(tabId);
+			}
 			hasPendingRef.current = true;
 		},
 		[getAccumulator]

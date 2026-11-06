@@ -83,6 +83,15 @@
 - CLI：`tab new --agent <id> --provider <provider> [--replace-empty <tab>]`；`tab panel <tab> <changes|files|back|open|close|edit|preview|save>`，可带 `--filter`、`--line`、`--content`。文件打开和刷新沿用 `open-file`、`refresh-files`，隐藏文件沿用 `settings set showHiddenFiles`。文本保存复用 FilePreview 保存函数。
 - `e2e/native-new-shell.spec.ts` 按 hb.7 演示覆盖打开项目、Claude 改动、Codex 交接、DeepSeek 复核、三段会话切换、正常退出重启、恢复旧界面；检查界面、项目文件、原生转录和保存的会话数据。只使用合成提供方，真实模式跳过。本批按要求只写用例和做类型检查，Electron / Playwright 尚待用户运行，不宣称已完成 hb.7 真人验收。
 
+## 左栏内容搜索（2026-11-06）
+
+- 只在新界面启用。本机原生历史内容搜索与现有标题结果并列，输入至少两个字符，防抖 250 毫秒；两组依次为“对话”和“对话内容”。内容行显示标题、项目和一行高亮片段，上下键选择，回车打开，Esc 先清空搜索并回到搜索框。
+- 内容搜索共用会话浏览器的解析和片段工具，读取 Claude 与 Codex 本机账户，支持 Codex 压缩归档。不扫描 SSH 内容；新界面里的远程记录只按标题匹配。
+- 主进程解析账户，worker 扫描内容。新输入终止旧任务，旧返回不能覆盖新结果。单文件 8 MiB，总原始字节和展开字节合计 64 MiB，最多枚举 1024 个文件和 8192 个目录项，最多返回 50 条对话。扫描软预算 2500 毫秒，worker 硬上限 4000 毫秒，含账户发现的请求总预算 5000 毫秒。触及预算时提示搜索不完整，不能当成已搜索全部历史。
+- 点击内容结果沿用原生打开与只读补读，把早于默认加载窗口的命中消息补入当前对话，再通过现有跳转机制滚动和短暂高亮。不启动模型，不改原生历史。
+- CLI `maestro-cli native-history search <text> [--project <path>] [--json]` 通过桌面应用调用同一实现。点击结果后的打开、滚动和高亮，以及界面清空搜索的 CLI 对等仍列在 `CLI-UI-PARITY.md` 的 Open gaps。
+- 合成 Electron 场景位于 `e2e/native-sidebar-search.spec.ts`，分别覆盖 Claude 和 Codex 压缩归档中早于默认加载窗口的命中消息、CLI 结果、键盘操作、高亮及原生字节不变。沙箱内只做类型检查和场景收集，实际运行待 Opus。
+
 ## 三家工具能做什么
 
 界面只显示当前工具真正支持的控件，不支持的直接不出现。2026-11-05 已按附录 D 核对各家命令行的帮助和参数（记录在 [hb.7 能力核对](../verification/hb7-capabilities.md)）。标“待实测”的项必须真实调用模型才能确定，会产生费用，先问用户。

@@ -294,3 +294,32 @@ For archived Claude desktop worktrees, `localProjectWorktree()` also accepts a r
 `bindNativeToolCalls()` 位于 `src/renderer/utils/transcriptMessages.ts`，复用同一匹配规则补齐原生调用 ID，保留实时卡片 ID。部分窗口刷新也调用它，不新增后台文件读取。工具来源由实际启动环境或原生读取结果固定到日志元数据，包含提供商、会话、项目和账户；读取旧卡片不可替换成当前提供商。后端校验已保存来源后才读取已停放提供商的账户，全文仍仅在组件局部状态中。
 
 - **Changing the provider of an existing conversation:** `switchSessionProvider()` in `src/renderer/utils/providerTabSessions.ts` shares the Edit Agent transition with the new-shell CLI. New-shell callers read target capabilities and pass them to this helper so every open AI tab uses `newConversationPermissionFields()`. Unsupported standard tightens to readonly; a null result refuses the entire switch before any tab is changed. A failed capability query also refuses the switch. Classic Edit Agent omits the capabilities argument to keep its existing behavior, and classic CLI retains its reset path. Keep native provider parking, logs and tool-output sources intact while applying permission fields.
+
+## Native conversation content search (2026-11-06)
+
+`parseNativeSearchMessages()` and `extractMatchPreview()` in
+`src/shared/sessionSearch.ts` are shared by the Claude and Codex session-browser
+adapters and the new bounded search worker. Do not introduce another JSONL body
+search parser or snippet implementation. `collectNativeHistoryFiles()` in
+`src/main/storage/native-history-files.ts` is the bounded file discovery shared
+with recent-project discovery. Codex archives continue to use
+`preferPlainCodexRollouts()` and `readCodexRollout()`.
+
+`runNativeHistorySearch()` owns worker termination, concurrency and hard timeout.
+`agentSessions:searchNativeHistory` resolves local provider accounts with the same
+resolver as recent projects, never an SSH account path. It does not log the query
+or retain result text. The reader limits each file to 8 MiB, total source plus
+expanded bytes to 64 MiB, enumeration to 1024 files and 8192 entries, and scan time
+to 2500 ms. Worker lifetime is capped at 4000 ms; the complete IPC request has a
+5000 ms deadline including account discovery. At most two workers run together.
+A result cap is 50 conversations, one first body match per conversation. `limited`
+means coverage is incomplete; it is not proof of additional matching results.
+
+`openNativeHistorySearchHit()` in
+`src/renderer/services/openNativeHistorySearchHit.ts` uses canonical native
+resume, refresh, transcript conversion and `selectOlderEntries()`, then requests
+`pendingLogJump`. It preserves current logs and rechecks account, native identity
+and active tab after reads. Existing live messages may retain local IDs; the
+exported `sameLiveMessage()` in `transcriptMessages.ts` is the shared text and
+clock comparison. Only a unique live match may substitute for a native ID.
+Ambiguous repeats report failure rather than jumping to a guessed message.

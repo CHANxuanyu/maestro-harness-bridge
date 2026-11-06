@@ -115,41 +115,37 @@ it('refuses SSH content targets before opening or reading a local transcript', a
 });
 
 it('locates a unique live entry whose local ID differs from the native message', async () => {
-	useSessionStore
-		.getState()
-		.setSessions((sessions) =>
-			sessions.map((session) => ({
-				...session,
-				aiTabs: session.aiTabs.map((tab) => ({
-					...tab,
-					logs: [
-						{ id: 'live', source: 'stdout' as const, text: 'the hidden needle', timestamp: 1 },
-						...tab.logs,
-					],
-				})),
-			}))
-		);
+	useSessionStore.getState().setSessions((sessions) =>
+		sessions.map((session) => ({
+			...session,
+			aiTabs: session.aiTabs.map((tab) => ({
+				...tab,
+				logs: [
+					{ id: 'live', source: 'stdout' as const, text: 'the hidden needle', timestamp: 1 },
+					...tab.logs,
+				],
+			})),
+		}))
+	);
 	expect(await openNativeHistorySearchHit(hit, vi.fn())).toBe(true);
 	expect(useUIStore.getState().pendingLogJump?.logId).toBe('live');
 });
 
 it('does not guess between repeated live messages', async () => {
-	useSessionStore
-		.getState()
-		.setSessions((sessions) =>
-			sessions.map((session) => ({
-				...session,
-				aiTabs: session.aiTabs.map((tab) => ({
-					...tab,
-					logs: ['first', 'second'].map((id) => ({
-						id,
-						source: 'stdout' as const,
-						text: 'the hidden needle',
-						timestamp: 1,
-					})),
+	useSessionStore.getState().setSessions((sessions) =>
+		sessions.map((session) => ({
+			...session,
+			aiTabs: session.aiTabs.map((tab) => ({
+				...tab,
+				logs: ['first', 'second'].map((id) => ({
+					id,
+					source: 'stdout' as const,
+					text: 'the hidden needle',
+					timestamp: 1,
 				})),
-			}))
-		);
+			})),
+		}))
+	);
 	expect(await openNativeHistorySearchHit(hit, vi.fn())).toBe(false);
 	expect(useUIStore.getState().pendingLogJump).toBeNull();
 });

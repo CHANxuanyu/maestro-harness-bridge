@@ -38,6 +38,27 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## New shell conversation content search (2026-11-06)
+
+| UI action                                  | CLI                                                                    | Shared implementation                                                                             |
+| ------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Search local native conversation content   | `maestro-cli native-history search <text> [--project <path>] [--json]` | `agentSessions:searchNativeHistory`, `runNativeHistorySearch()`, `searchNativeHistoryFiles()`     |
+| Open a content hit and jump to its message | Open gap below                                                         | `openNativeHistorySearchHit()`, canonical native resume and transcript backfill, `pendingLogJump` |
+
+The desktop app must be running. The CLI supports relative local project paths.
+The optional project filter compares physical local directories; SSH paths are
+never passed to local resolution. Both callers receive `hits`, `truncated`, and
+optional `limited`, `cancelled`, or `unavailable` flags. Each hit contains the
+conversation identity, owning account, snippet and message locator.
+
+The new shell starts content search after 250 ms for at least two characters.
+Changing or clearing the query cancels the prior request, including account
+discovery still in progress, and ignores late replies. The worker terminates
+before its cancellation promise resolves. Search supports local Claude and Codex,
+including compressed archives; SSH conversations retain title matching only.
+Existing session-browser search reuses the extracted `sessionSearch.ts` parser
+and snippet helper and keeps its old API and behavior.
+
 ## Stop and read-only resume corrections (2026-11-06)
 
 No UI action or CLI verb is added. `tab permission <tab> readonly` and
@@ -625,6 +646,15 @@ The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
 ## Open gaps
+
+**Native content search navigation (2026-11-06).** Content retrieval has the CLI
+command above. Opening a returned hit, creating a compatible runner when needed,
+and scrolling or flashing its message still have no acknowledged CLI command.
+They extend the existing native-history open gap below. The implementation is
+`openNativeHistorySearchHit()`; a future CLI entry must route to that service in
+the owning renderer. `native-history read` returns text but does not perform this
+UI action. Cancelling or clearing the sidebar search is also view-local; the
+internal cancellation IPC has no standalone CLI verb.
 
 **Provider switch wording (2026-11-06).** The existing CLI help, force warning and
 success text still describe the classic reset behavior. With `newShell` enabled,

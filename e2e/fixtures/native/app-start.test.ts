@@ -23,9 +23,11 @@ let native: NativeApp;
 beforeEach(() => {
 	vi.resetAllMocks();
 	vi.stubEnv('MAESTRO_E2E_REAL', '1');
+	const locator = { or: () => locator };
 	const page = {
 		waitForLoadState: vi.fn(),
-		getByText: () => ({ or: vi.fn() }),
+		getByText: () => locator,
+		getByRole: () => locator,
 		getByPlaceholder: vi.fn(),
 	};
 	mocks.launch.mockResolvedValue({

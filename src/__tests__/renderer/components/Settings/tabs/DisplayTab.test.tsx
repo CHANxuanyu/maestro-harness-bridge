@@ -874,6 +874,21 @@ describe('DisplayTab', () => {
 	});
 
 	describe('New shell', () => {
+		it('shows the terminal-content warning in Chinese', async () => {
+			useSettingsStore.setState({ uiLanguage: 'zh-CN' });
+			try {
+				render(<DisplayTab theme={mockTheme} />);
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(50);
+				});
+				expect(document.querySelector('[data-setting-id="display-new-shell"]')).toHaveTextContent(
+					'切换时，已打开终端里的内容会清空，运行中的进程不受影响。'
+				);
+			} finally {
+				act(() => useSettingsStore.setState({ uiLanguage: 'en' }));
+			}
+		});
+
 		it('switches the new shell on and off from its own row', async () => {
 			useSettingsStore.setState({ newShell: false });
 			render(<DisplayTab theme={mockTheme} />);
@@ -882,6 +897,9 @@ describe('DisplayTab', () => {
 			});
 
 			const section = document.querySelector('[data-setting-id="display-new-shell"]')!;
+			expect(section).toHaveTextContent(
+				'Switching clears the contents of open terminals; running processes are unaffected.'
+			);
 			const toggle = within(section as HTMLElement).getByRole('switch', {
 				name: 'Use the new shell',
 			});

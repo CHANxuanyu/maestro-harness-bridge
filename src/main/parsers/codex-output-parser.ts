@@ -907,6 +907,7 @@ export class CodexOutputParser implements AgentOutputParser {
 			case 'todo_list':
 				return {
 					type: 'tool_use',
+					isPartial: msg.type === 'item.updated',
 					toolName: 'update_plan',
 					toolCallId: item.id,
 					toolState: {

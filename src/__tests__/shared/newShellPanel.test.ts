@@ -26,6 +26,13 @@ describe('conversation panel state', () => {
 			expect(shellRightPanelTab('history', false, panel)).toBe('history');
 		}
 	);
+	it.each([false, true])('closing a terminal preserves tasks and open=%s', (open) => {
+		const previous = { tab: 'tasks' as const, open, terminalTabId: 'closed', filter: 'keep' };
+		expect(changeNewShellPanel(previous, 'terminal-close')).toEqual({
+			...previous,
+			terminalTabId: undefined,
+		});
+	});
 	const file = { tab: 'files' as const, fileTabId: 'f', open: true, filter: 'src' };
 	it('remembers a file across panel switches and a serialized restart', () => {
 		const stored = JSON.parse(JSON.stringify(changeNewShellPanel(file, 'changes')));

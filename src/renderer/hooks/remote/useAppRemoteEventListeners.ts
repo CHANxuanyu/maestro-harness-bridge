@@ -2010,7 +2010,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 
 			let panelTerminalOwnerId: string | undefined;
 			if (
-				['terminal', 'tasks', 'terminal-select', 'terminal-close'].includes(
+				['terminal', 'tasks', 'terminal-select', 'terminal-close', 'terminal-restart'].includes(
 					String(tabPatch.newShellPanelAction)
 				)
 			) {
@@ -2018,7 +2018,11 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 					if (!useSettingsStore.getState().newShell)
 						throw new Error('This panel requires the new shell');
 					const action = tabPatch.newShellPanelAction;
-					if (action === 'terminal-select' || action === 'terminal-close') {
+					if (
+						action === 'terminal-select' ||
+						action === 'terminal-close' ||
+						action === 'terminal-restart'
+					) {
 						const targetTab = session.aiTabs.find((tab) => tab.id === targetTabId)!;
 						const terminalId =
 							tabPatch.newShellTerminalId || targetTab.newShellPanel?.terminalTabId;
@@ -2028,6 +2032,8 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 						if (!target) throw new Error('Terminal not found in this conversation directory');
 						panelTerminalOwnerId = target.session.id;
 						if (action === 'terminal-close') useTabStore.getState().closeTerminalTab(target.tab.id);
+						else if (action === 'terminal-restart')
+							await useTabStore.getState().restartTerminalTab(target.tab.id);
 						else selectPanelTerminal(sessionId, target.tab.id, targetTabId);
 					}
 				} catch (error) {
@@ -2132,7 +2138,11 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 						...fields
 					} = tabPatch;
 					const panel = newShellPanelAction
-						? changeNewShellPanel(t.newShellPanel, newShellPanelAction as NewShellPanelAction)
+						? changeNewShellPanel(
+								t.newShellPanel,
+								newShellPanelAction as NewShellPanelAction,
+								_terminalId as string | undefined
+							)
 						: t.newShellPanel;
 					return {
 						...t,

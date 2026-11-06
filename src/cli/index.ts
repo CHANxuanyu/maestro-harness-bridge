@@ -1585,7 +1585,7 @@ tab
 
 tabTargetOptions(tab.command('panel <tab-id> <action>'))
 	.description(
-		'New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, back, open, close, edit, preview or save; read with tab show'
+		'New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
 	)
 	.option('--terminal <id>', 'Terminal to select or close; defaults to the conversation selection')
 	.option('--filter <query>', 'Filter the conversation file tree; an empty string clears it')

@@ -12,6 +12,7 @@ export const NEW_SHELL_PANEL_ACTIONS = [
 	'tasks',
 	'terminal-select',
 	'terminal-close',
+	'terminal-restart',
 	'back',
 	'open',
 	'close',
@@ -29,8 +30,15 @@ export function patchNewShellPanel(
 }
 export function changeNewShellPanel(
 	previous: NewShellPanelState | undefined,
-	action: NewShellPanelAction
+	action: NewShellPanelAction,
+	terminalId?: string
 ): NewShellPanelState {
+	if (action === 'terminal-close')
+		return patchNewShellPanel(
+			previous,
+			!terminalId || previous?.terminalTabId === terminalId ? { terminalTabId: undefined } : {}
+		);
+	if (action === 'terminal-restart') return patchNewShellPanel(previous, {});
 	return patchNewShellPanel(
 		previous,
 		action === 'back'

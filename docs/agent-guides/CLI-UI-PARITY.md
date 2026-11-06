@@ -81,14 +81,15 @@ and refresh gaps below remain separate.
 
 ## New shell terminal and tasks panels (hb.8)
 
-| UI action                                   | CLI                                                                                                                   | Shared implementation                                                                                         |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Open Terminal or Tasks                      | `tab panel <conversation> terminal` / `tasks`; `open terminal-panel` / `open tasks-panel` for the active conversation | `newShellPanel`, `openUiSurface`, right panel                                                                 |
-| Open an additional terminal                 | `open-terminal --agent <id> [--cwd <path>] [--background]`                                                            | `openPanelTerminal()`, `terminalTabHelpers`, `terminalSpawn`                                                  |
-| Select a terminal in the directory dropdown | `tab panel <conversation> terminal-select --terminal <id>`                                                            | `selectPanelTerminal()`                                                                                       |
-| Close a terminal                            | `tab panel <conversation> terminal-close [--terminal <id>]`                                                           | `tabStore.closeTerminalTab()`; GUI checks whether a command is busy, CLI explicitly closes the named terminal |
-| Read or write terminal output               | `list terminals [--agent <id>]`, `read-terminal [--tab <id>]`, `send-terminal [--tab <id>]`                           | Existing terminal resolver, PTY and mounted `TerminalView` buffer                                             |
-| Collapse the panel                          | `tab panel <conversation> close`                                                                                      | Persisted `newShellPanel.open`                                                                                |
+| UI action                                   | CLI                                                                                                                   | Shared implementation                                                                                               |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Open Terminal or Tasks                      | `tab panel <conversation> terminal` / `tasks`; `open terminal-panel` / `open tasks-panel` for the active conversation | `newShellPanel`, `openUiSurface`, right panel                                                                       |
+| Open an additional terminal                 | `open-terminal --agent <id> [--cwd <path>] [--background]`                                                            | `openPanelTerminal()`, `terminalTabHelpers`, `terminalSpawn`                                                        |
+| Select a terminal in the directory dropdown | `tab panel <conversation> terminal-select --terminal <id>`                                                            | `selectPanelTerminal()`                                                                                             |
+| Close a terminal                            | `tab panel <conversation> terminal-close [--terminal <id>]`                                                           | `tabStore.closeTerminalTab()`; GUI checks whether a command is busy, CLI explicitly closes the named terminal       |
+| Restart an exited terminal                  | `tab panel <conversation> terminal-restart --terminal <id>`                                                           | `tabStore.restartTerminalTab()` resolves the real owner, checks its host and window, and retains the mounted output |
+| Read or write terminal output               | `list terminals [--agent <id>]`, `read-terminal [--tab <id>]`, `send-terminal [--tab <id>]`                           | Existing terminal resolver, PTY and mounted `TerminalView` buffer                                                   |
+| Collapse the panel                          | `tab panel <conversation> close`                                                                                      | Persisted `newShellPanel.open`                                                                                      |
 
 Terminal and Tasks entries require `newShell`; classic tabs and bindings keep their
 existing behavior. Cmd/Ctrl+J opens the directory terminal panel, and
@@ -97,12 +98,18 @@ these are in-place panel switches, so they use the menu exception in UI-PATTERNS
 The panel width uses the existing persisted `rightPanelWidth`. Escape from panel
 chrome or Tasks collapses the panel; while xterm owns input, Escape retains its
 terminal meaning. The existing panel-collapse shortcut remains available there. While Terminal has
-focus, Cmd/Ctrl+W closes its selected terminal, Cmd/Ctrl+F opens its existing search
-bar, and the clear-terminal binding clears its xterm buffer through TerminalView.
+focus on macOS, Cmd+W closes its selected terminal and Cmd+F opens its existing search
+bar. On Windows and Linux, focused xterm intentionally retains Ctrl+W, Ctrl+F and
+Ctrl+J as shell input. The clear-terminal binding clears its buffer through TerminalView.
 
-The default terminal is shared by normalized working directory and SSH remote ID,
-with worktrees kept separate. An explicit additional-terminal action creates a
-second one. `list terminals --agent` lists that directory's shared terminals with their
+The default terminal is shared by normalized working directory and SSH remote ID
+within one window, with worktrees kept separate. The owner must still use the
+terminal's original host. `panelTerminals()` and the CLI terminal resolver share
+this rule; `WindowContext.ownsSession` supplies ownership. An explicit additional
+terminal always belongs to the current conversation's agent. `--cwd` determines
+its pool, even when the owner's directory differs. Starting or restarting refuses
+a changed host. Closing clears references to that terminal without changing the
+panel tab or open state; it never starts a replacement. `list terminals --agent` lists that directory's shared terminals with their
 actual owner IDs. `tab show --json` returns `newShellPanel`, including the selected
 terminal ID. Tasks are read-only, extracted from the latest top-level TodoWrite or
 update_plan in the conversation; native-history reads expose the source tool data.

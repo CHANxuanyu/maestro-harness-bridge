@@ -9,6 +9,8 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.newShell.task.pending': '待办',
 	'workflows.newShell.task.in_progress': '进行中',
 	'workflows.newShell.task.completed': '完成',
+	'workflows.newShell.terminalExited': '终端已退出',
+	'workflows.newShell.restartTerminal': '重新启动',
 	'workflows.newShell.newTerminal': '新建终端',
 	'workflows.newShell.closeTerminal': '关闭终端',
 	'workflows.newShell.selectTerminal': '切换终端',

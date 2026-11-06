@@ -181,6 +181,17 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
+it('keeps startup decoration out of xterm without clearing real output', async () => {
+	const tab = makeTab({ pid: 0, state: 'idle' });
+	const session = makeSession([tab]);
+	render(<TerminalView {...defaultProps} session={session} isVisible />);
+	await act(async () => {
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	});
+	expect(mockWrite).not.toHaveBeenCalled();
+	expect(mockXtermClear).not.toHaveBeenCalled();
+});
+
 describe('TerminalView - isVisible repaint behaviour', () => {
 	it('calls refresh() and focus() when isVisible becomes true', async () => {
 		const tab = makeTab({ pid: 1234, state: 'idle' });

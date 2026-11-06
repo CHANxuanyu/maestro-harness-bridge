@@ -8,6 +8,7 @@ import {
 	useState,
 	useMemo,
 } from 'react';
+import { useWindowContextOptional } from '../contexts/WindowContext';
 import { XTerminal, XTerminalHandle } from './XTerminal';
 import { TerminalSearchBar } from './TerminalSearchBar';
 import { TerminalTouchBar } from './TerminalTouchBar';
@@ -106,6 +107,7 @@ export const TerminalView = memo(
 		},
 		ref
 	) {
+		const windowContext = useWindowContextOptional();
 		// Map of tabId → XTerminalHandle ref for each tab instance
 		const terminalRefs = useRef<Map<string, XTerminalHandle>>(new Map());
 		// Track previous tab states to detect transitions (for exit message)
@@ -114,8 +116,6 @@ export const TerminalView = memo(
 		// ref rather than on the tab so it stays out of the persisted session snapshot;
 		// it is only needed for the keep-or-close decision on the very next render.
 		const exitSignalsRef = useRef<Map<string, number | undefined>>(new Map());
-		// Track which tabs have already had the loading message written to avoid duplicates
-		const loadingWrittenRef = useRef<Set<string>>(new Set());
 		// Dedup spawn-failure toasts: batch rapid failures into a single notification
 		const spawnFailureCountRef = useRef(0);
 		const spawnFailureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -322,7 +322,13 @@ export const TerminalView = memo(
 					spawnPtyForTab(tab);
 				}
 			}
-		}, [session.terminalTabs, activeTab?.id, paneRects, spawnPtyForTab]);
+		}, [
+			session.terminalTabs,
+			activeTab?.id,
+			paneRects,
+			spawnPtyForTab,
+			windowContext?.ownsSession,
+		]);
 
 		// Focus and repaint the active terminal when the active tab changes.
 		// The refresh() call is necessary because switching tabs uses CSS visibility: hidden
@@ -540,21 +546,8 @@ export const TerminalView = memo(
 									ref={(handle) => {
 										if (handle) {
 											terminalRefs.current.set(tab.id, handle);
-											// Write loading indicator once per idle cycle - guard prevents duplicate writes on re-renders
-											if (
-												tab.pid === 0 &&
-												tab.state === 'idle' &&
-												!loadingWrittenRef.current.has(tab.id)
-											) {
-												loadingWrittenRef.current.add(tab.id);
-												setTimeout(() => {
-													handle.write('\x1b[2mStarting terminal...\x1b[0m');
-												}, 0);
-											}
 										} else {
 											terminalRefs.current.delete(tab.id);
-											// Do NOT clear loadingWrittenRef here - React calls inline ref callbacks with
-											// null then the new handle on re-renders; clearing it would cause repeated writes.
 										}
 									}}
 									sessionId={terminalSessionId}

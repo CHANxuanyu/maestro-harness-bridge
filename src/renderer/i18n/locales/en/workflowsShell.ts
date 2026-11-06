@@ -6,6 +6,8 @@ export const workflowsShell = {
 	'workflows.newShell.task.pending': 'Pending',
 	'workflows.newShell.task.in_progress': 'In progress',
 	'workflows.newShell.task.completed': 'Completed',
+	'workflows.newShell.terminalExited': 'Terminal exited',
+	'workflows.newShell.restartTerminal': 'Restart',
 	'workflows.newShell.newTerminal': 'New terminal',
 	'workflows.newShell.closeTerminal': 'Close terminal',
 	'workflows.newShell.selectTerminal': 'Select terminal',

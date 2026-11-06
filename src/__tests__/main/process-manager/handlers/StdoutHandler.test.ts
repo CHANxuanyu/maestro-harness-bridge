@@ -140,6 +140,36 @@ describe('StdoutHandler', () => {
 
 	// ── handleData dispatch routing ────────────────────────────────────────
 
+	it('forwards every consecutive todo_list update through the stdout deduplicator', () => {
+		const { handler, emitter, sessionId } = createTestContext({
+			isStreamJsonMode: true,
+			toolType: 'codex',
+			outputParser: new CodexOutputParser(),
+		});
+		const toolSpy = vi.fn();
+		emitter.on('tool-execution', toolSpy);
+		const types = ['item.started', 'item.updated', 'item.updated', 'item.completed'];
+		types.forEach((type, index) =>
+			sendJsonLine(handler, sessionId, {
+				type,
+				item: {
+					type: 'todo_list',
+					id: 'plan',
+					items: [{ text: `Revision ${index}`, completed: index === 3 }],
+				},
+			})
+		);
+		expect(toolSpy.mock.calls.map(([, event]) => event.state)).toEqual(
+			types.map((_, index) => ({
+				status: index === 3 ? 'completed' : 'running',
+				input: {
+					plan: [{ step: `Revision ${index}`, status: index === 3 ? 'completed' : 'pending' }],
+				},
+			}))
+		);
+		expect(new Set(toolSpy.mock.calls.map(([, event]) => event.toolCallId)).size).toBe(1);
+	});
+
 	describe('Codex process-local tool identifiers', () => {
 		it('forwards command updates under the original call id while deduplicating starts', () => {
 			const { handler, emitter, sessionId } = createTestContext({

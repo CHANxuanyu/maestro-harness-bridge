@@ -1,3 +1,5 @@
+import { useWindowContextOptional } from '../contexts/WindowContext';
+import { useTabStore } from '../stores/tabStore';
 import { useUIStore } from '../stores/uiStore';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
@@ -39,6 +41,7 @@ export const NewShellTerminalPanel = forwardRef<
 	}
 >(function NewShellTerminalPanel({ session, theme, visible }, ref) {
 	const t = useT();
+	const windowContext = useWindowContextOptional();
 	const newShell = useSettingsStore((s) => s.newShell);
 	const activeFocus = useUIStore((s) => s.activeFocus);
 	const sessions = useSessionStore((s) => s.sessions);
@@ -65,7 +68,7 @@ export const NewShellTerminalPanel = forwardRef<
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		}
-	}, [newShell, visible, source.id, source.activeTabId]);
+	}, [newShell, visible, source.id, source.activeTabId, windowContext?.ownsSession]);
 
 	const mounted = useTerminalMounting(newShell && visible ? selected?.session || null : null);
 	useImperativeHandle(ref, () => ({
@@ -152,6 +155,31 @@ export const NewShellTerminalPanel = forwardRef<
 					<X className="w-4 h-4" />
 				</button>
 			</div>
+			{selected?.tab.state === 'exited' && (
+				<div
+					className="flex items-center gap-2 px-3 py-1 text-xs"
+					style={{ color: theme.colors.textDim }}
+				>
+					<span role="status">
+						{t('workflows.newShell.terminalExited')}
+						{selected.tab.exitCode !== undefined ? ` (${selected.tab.exitCode})` : ''}
+					</span>
+					<button
+						className="px-2 py-1 rounded"
+						style={{ color: theme.colors.accent }}
+						onClick={() => {
+							setError('');
+							void useTabStore
+								.getState()
+								.restartTerminalTab(selected.tab.id)
+								.catch((err) => setError(String(err)));
+						}}
+					>
+						{t('workflows.newShell.restartTerminal')}
+					</button>
+				</div>
+			)}
+
 			{error && (
 				<p role="alert" className="px-3 text-sm" style={{ color: theme.colors.error }}>
 					{error}
@@ -160,7 +188,8 @@ export const NewShellTerminalPanel = forwardRef<
 			<div className="relative flex-1 min-h-0">
 				{mounted.mountedTerminalSessionIds.map((id) => {
 					const owner = sessions.find((s) => s.id === id);
-					if (!owner?.terminalTabs?.length) return null;
+					if (!owner?.terminalTabs?.length || windowContext?.ownsSession(owner.id, true) === false)
+						return null;
 					const shown = visible && selected?.session.id === id;
 					const viewSession = shown ? { ...owner, activeTerminalTabId: selected.tab.id } : owner;
 					return (

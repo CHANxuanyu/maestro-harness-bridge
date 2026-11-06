@@ -144,7 +144,7 @@ describe('tab commands', () => {
 		});
 	});
 
-	it.each(['terminal-select', 'terminal-close'])(
+	it.each(['terminal-select', 'terminal-close', 'terminal-restart'])(
 		'%s targets the requested terminal',
 		async (action) => {
 			const payload = mockTab({ success: true });

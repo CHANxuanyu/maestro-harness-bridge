@@ -1,45 +1,16 @@
-import { handoffLocation } from '../../shared/aiHandoff';
+import { getWindowContext } from '../contexts/WindowContext';
 import { patchNewShellPanel } from '../../shared/newShellPanel';
 import { useSessionStore, updateAiTab, updateSessionWith } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUIStore } from '../stores/uiStore';
-import { addTerminalTab, createTerminalTab } from '../utils/terminalTabHelpers';
-import type { Session } from '../types';
+import {
+	addTerminalTab,
+	createTerminalTab,
+	panelTerminalLocation,
+	panelTerminals,
+} from '../utils/terminalTabHelpers';
 
-/** Same effective directory and host rules as handoff, including legacy SSH sessions. */
-export function panelTerminalLocation(session: Session, cwd?: string) {
-	const ssh = session.sessionSshRemoteConfig?.enabled
-		? session.sessionSshRemoteConfig
-		: session.sshRemoteId
-			? { enabled: true, remoteId: session.sshRemoteId, workingDirOverride: session.remoteCwd }
-			: undefined;
-	return handoffLocation({
-		cwd: cwd || session.cwd,
-		sessionSshRemoteConfig: ssh
-			? {
-					...ssh,
-					workingDirOverride: cwd || ssh.workingDirOverride || session.remoteCwd || session.cwd,
-				}
-			: undefined,
-	});
-}
-
-/** Terminals stay owned by their original agent so process IDs and CLI addressing remain stable. */
-export function panelTerminals(sessions: Session[], source: Session, cwd?: string) {
-	const location = panelTerminalLocation(source, cwd);
-	return sessions.flatMap((session) =>
-		(session.terminalTabs || []).flatMap((tab) => {
-			try {
-				return (tab.panelLocationKey ||
-					panelTerminalLocation(session, tab.cwd || undefined).key) === location.key
-					? [{ session, tab }]
-					: [];
-			} catch {
-				return [];
-			}
-		})
-	);
-}
+export { panelTerminalLocation, panelTerminals } from '../utils/terminalTabHelpers';
 
 export function selectPanelTerminal(sessionId: string, tabId: string, conversationId?: string) {
 	const { sessions } = useSessionStore.getState();
@@ -77,19 +48,19 @@ export function openPanelTerminal(
 	if (!useSettingsStore.getState().newShell) return null;
 	const { sessions } = useSessionStore.getState();
 	const source = sessions.find((s) => s.id === sessionId);
-	if (!source) return null;
+	if (!source || getWindowContext()?.ownsSession(source.id, true) === false) return null;
 	const location = panelTerminalLocation(source, options.cwd);
-	const pool = panelTerminals(sessions, source);
+	const pool = panelTerminals(sessions, source, options.cwd);
 	const selected = source.aiTabs?.find((t) => t.id === source.activeTabId)?.newShellPanel
 		?.terminalTabId;
 	let target = options.additional
 		? undefined
 		: pool.find((item) => item.tab.id === selected) || pool[0];
 	if (!target) {
-		const owner = pool[0]?.session || source;
+		const owner = source;
 		const tab = {
 			...createTerminalTab(options.shell, location.cwd, options.name),
-			panelLocationKey: panelTerminalLocation(source).key,
+			panelLocationKey: location.key,
 			...(options.command?.trim() ? { startupCommand: options.command.trim() } : {}),
 		};
 		updateSessionWith(owner.id, (s) => addTerminalTab(s, tab, { activate: false }));
@@ -99,9 +70,7 @@ export function openPanelTerminal(
 		updateSessionWith(target.session.id, (s) => ({
 			...s,
 			terminalTabs: s.terminalTabs.map((tab) =>
-				tab.id === target.tab.id
-					? { ...tab, panelLocationKey: panelTerminalLocation(source).key }
-					: tab
+				tab.id === target.tab.id ? { ...tab, panelLocationKey: location.key } : tab
 			),
 		}));
 	}

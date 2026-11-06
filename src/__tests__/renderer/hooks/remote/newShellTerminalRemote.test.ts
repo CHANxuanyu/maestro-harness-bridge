@@ -1,3 +1,9 @@
+import { createElement, forwardRef } from 'react';
+import { render, screen } from '@testing-library/react';
+import { NewShellTerminalPanel } from '../../../../renderer/components/NewShellTerminalPanel';
+import { LayerStackProvider } from '../../../../renderer/contexts/LayerStackContext';
+import { mockTheme } from '../../../helpers/mockTheme';
+import { useUIStore } from '../../../../renderer/stores/uiStore';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockSession } from '../../../helpers/mockSession';
@@ -6,6 +12,8 @@ import { useAppRemoteEventListeners } from '../../../../renderer/hooks/remote/us
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { openPanelTerminal } from '../../../../renderer/services/newShellTerminal';
+
+vi.mock('../../../../renderer/components/XTerminal', () => ({ XTerminal: forwardRef(() => null) }));
 
 const ack = vi.fn();
 const saved = vi.fn().mockResolvedValue(true);
@@ -100,7 +108,7 @@ describe('new shell terminal CLI bridge', () => {
 		const newId = opened.mock.calls[0][2];
 		expect(newId).not.toBe(first.tab.id);
 		expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledWith(
-			expect.objectContaining({ sessionId: `first-terminal-${newId}`, cwd: '/project' })
+			expect.objectContaining({ sessionId: `second-terminal-${newId}`, cwd: '/project' })
 		);
 		expect(useSessionStore.getState().activeSessionId).toBe('first');
 		expect(useSessionStore.getState().sessions[0].aiTabs[0].newShellPanel).toEqual(selectedBefore);
@@ -140,13 +148,147 @@ describe('new shell terminal CLI bridge', () => {
 			await waitFor(() => expect(ack).toHaveBeenCalledWith('ack', { success: true }));
 		}
 		expect(window.maestro.process.kill).toHaveBeenCalledWith(`first-terminal-${first.tab.id}`);
-		expect(useSessionStore.getState().sessions[1].aiTabs[0].newShellPanel?.terminalTabId).toBe(
-			second.tab.id
-		);
+		expect(
+			useSessionStore.getState().sessions[1].aiTabs[0].newShellPanel?.terminalTabId
+		).toBeUndefined();
+		expect(useSessionStore.getState().sessions[0].terminalTabs.map((tab) => tab.id)).toEqual([
+			second.tab.id,
+		]);
 		expect(
 			saved.mock.lastCall![0].find((s: { id: string }) => s.id === 'first').terminalTabs
 		).toHaveLength(1);
 	});
+
+	it.each([false, true])(
+		'closing the last terminal preserves tasks with open=%s and does not spawn',
+		async (open) => {
+			const terminal = openPanelTerminal('first')!;
+			useSessionStore.getState().updateSession('first', {
+				aiTabs: [
+					createMockAITab({
+						id: 'first-conversation',
+						newShellPanel: {
+							tab: 'tasks',
+							open,
+							terminalTabId: terminal.tab.id,
+						},
+					}),
+				],
+			});
+			useUIStore.setState({ rightPanelOpen: open });
+			render(
+				createElement(() => {
+					const source = useSessionStore((s) => s.sessions[0]);
+					const panel = source.aiTabs[0].newShellPanel;
+					return createElement(NewShellTerminalPanel, {
+						session: source,
+						theme: mockTheme,
+						visible: panel?.tab === 'terminal' && panel.open === true,
+					});
+				}),
+				{ wrapper: LayerStackProvider }
+			);
+			act(() =>
+				window.dispatchEvent(
+					new CustomEvent('maestro:remoteUpdateSessionConfig', {
+						detail: {
+							sessionId: 'first',
+							responseChannel: 'ack',
+							configPatch: {
+								tabId: 'first-conversation',
+								newShellPanelAction: 'terminal-close',
+								newShellTerminalId: terminal.tab.id,
+							},
+						},
+					})
+				)
+			);
+			await waitFor(() => expect(ack).toHaveBeenCalledWith('ack', { success: true }));
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].newShellPanel).toEqual({
+				tab: 'tasks',
+				open,
+				terminalTabId: undefined,
+			});
+			expect(useSessionStore.getState().sessions[0].terminalTabs).toEqual([]);
+			expect(useUIStore.getState().rightPanelOpen).toBe(open);
+			expect(screen.getByTestId('terminal-panel')).not.toBeVisible();
+			expect(window.maestro.process.spawnTerminalTab).not.toHaveBeenCalled();
+		}
+	);
+
+	it('restarts the shared owner from the CLI even while its panel is hidden', async () => {
+		const terminal = openPanelTerminal('first')!;
+		useSessionStore.getState().updateSession('first', {
+			terminalTabs: [{ ...terminal.tab, state: 'exited', exitCode: 1 }],
+		});
+		act(() =>
+			window.dispatchEvent(
+				new CustomEvent('maestro:remoteUpdateSessionConfig', {
+					detail: {
+						sessionId: 'second',
+						responseChannel: 'ack',
+						configPatch: {
+							tabId: 'second-conversation',
+							newShellPanelAction: 'terminal-restart',
+							newShellTerminalId: terminal.tab.id,
+						},
+					},
+				})
+			)
+		);
+		await waitFor(() => expect(ack).toHaveBeenCalledWith('ack', { success: true }));
+		expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledWith(
+			expect.objectContaining({
+				sessionId: `first-terminal-${terminal.tab.id}`,
+			})
+		);
+		expect(useSessionStore.getState().sessions[0].terminalTabs[0]).toMatchObject({
+			id: terminal.tab.id,
+			pid: 41,
+			state: 'idle',
+		});
+		expect(
+			saved.mock.lastCall![0].find((s: { id: string }) => s.id === 'first').terminalTabs[0].pid
+		).toBe(41);
+	});
+
+	it.each(['terminal-select', 'terminal-close', 'terminal-restart'])(
+		'rejects %s after the shared owner changes host',
+		async (action) => {
+			for (const id of ['first', 'second'])
+				useSessionStore.getState().updateSession(id, {
+					sessionSshRemoteConfig: { enabled: true, remoteId: 'h1' },
+				});
+			const terminal = openPanelTerminal('first')!;
+			useSessionStore
+				.getState()
+				.updateSession('first', { sessionSshRemoteConfig: { enabled: true, remoteId: 'h2' } });
+			act(() =>
+				window.dispatchEvent(
+					new CustomEvent('maestro:remoteUpdateSessionConfig', {
+						detail: {
+							sessionId: 'second',
+							responseChannel: 'ack',
+							configPatch: {
+								tabId: 'second-conversation',
+								newShellPanelAction: action,
+								newShellTerminalId: terminal.tab.id,
+							},
+						},
+					})
+				)
+			);
+			await waitFor(() =>
+				expect(ack).toHaveBeenCalledWith('ack', {
+					success: false,
+					error: expect.stringContaining('Terminal not found'),
+				})
+			);
+			expect(window.maestro.process.spawnTerminalTab).not.toHaveBeenCalled();
+			expect(window.maestro.process.kill).not.toHaveBeenCalled();
+			expect(saved).not.toHaveBeenCalled();
+		}
+	);
 
 	it('rejects panel mutations in the classic shell', async () => {
 		useSettingsStore.setState({ newShell: false });

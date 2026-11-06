@@ -1222,7 +1222,7 @@ Open a new tab for an agent (optionally seeded with a prompt)
 
 ## `maestro-cli tab panel <tab-id> <action>`
 
-New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, back, open, close, edit, preview or save; read with tab show
+New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show
 
 | Option             | Description                                                         | Default |
 | ------------------ | ------------------------------------------------------------------- | ------- |

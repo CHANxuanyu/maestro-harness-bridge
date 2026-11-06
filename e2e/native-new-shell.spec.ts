@@ -289,8 +289,8 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 			const terminal = native.page.getByTestId('terminal-panel');
 			await expect(terminal).toBeVisible();
 			await expect
-				.poll(() => saved().find((s) => s.id === claudeId)?.terminalTabs?.[0]?.pid || 0)
-				.toBeGreaterThan(0);
+				.poll(() => saved().find((s) => s.id === claudeId)?.terminalTabs?.[0]?.id || '')
+				.not.toBe('');
 			const terminalId = saved().find((s) => s.id === claudeId)!.terminalTabs[0].id;
 			const input = terminal.locator('.xterm-helper-textarea').first();
 			await input.focus();
@@ -328,6 +328,24 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 			await expect(terminal).toBeVisible();
 			await expect.poll(readBuffer).toMatch(/(?:^|\n)HB8_TERMINAL_RETAINED\r?(?:\n|$)/);
 			expect(saved().find((s) => s.id === claudeId)!.terminalTabs[0].id).toBe(terminalId);
+			await terminal.getByRole('button', { name: 'New terminal' }).click();
+			const selector = terminal.getByRole('combobox', { name: 'Select terminal' });
+			await expect(selector).toBeVisible();
+			await expect(selector.locator('option')).toHaveCount(2);
+			const secondTerminalId = await selector.inputValue();
+			expect(secondTerminalId).not.toBe(terminalId);
+			await selector.selectOption(terminalId);
+			await expect(selector).toHaveValue(terminalId);
+			await expect.poll(() => savedTab(claudeTab)?.newShellPanel?.terminalTabId).toBe(terminalId);
+			await expect.poll(readBuffer).toMatch(/(?:^|\n)HB8_TERMINAL_RETAINED\r?(?:\n|$)/);
+			await selector.selectOption(secondTerminalId);
+			await expect(selector).toHaveValue(secondTerminalId);
+			await expect
+				.poll(() => savedTab(claudeTab)?.newShellPanel?.terminalTabId)
+				.toBe(secondTerminalId);
+			await selector.selectOption(terminalId);
+			await expect(selector).toHaveValue(terminalId);
+
 			await native.page.locator('[data-tour="tasks-tab"]').click();
 			await expect(native.page.getByTestId('tasks-progress')).toHaveText('1 / 3 completed');
 			await expect(native.page.getByTestId('tasks-panel')).toContainText('Review shipping');

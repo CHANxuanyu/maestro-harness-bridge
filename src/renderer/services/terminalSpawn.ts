@@ -20,7 +20,9 @@
  * live xterm buffer, the handler cannot. That is the `onSpawnFailure` hook.
  */
 
-import { getTerminalSessionId } from '../utils/terminalTabHelpers';
+import { getWindowContext } from '../contexts/WindowContext';
+import { getTerminalSessionId, panelTerminalHostMatches } from '../utils/terminalTabHelpers';
+import { useSessionStore } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { captureException } from '../utils/sentry';
 import type { Session, TerminalTab } from '../types';
@@ -77,7 +79,10 @@ export interface SpawnPtyForTabOptions {
  * concurrent calls for the same tab collapse to one spawn.
  */
 export async function spawnPtyForTab(options: SpawnPtyForTabOptions): Promise<void> {
-	const { session, tab, cols, rows, onPid, onSpawnFailure } = options;
+	const { tab, cols, rows, onPid, onSpawnFailure } = options;
+	const session =
+		useSessionStore.getState().sessions.find((s) => s.id === options.session.id) || options.session;
+	if (getWindowContext()?.ownsSession(session.id, true) === false) return;
 	const tabId = tab.id;
 	const terminalSessionId = getTerminalSessionId(session.id, tabId);
 
@@ -141,6 +146,14 @@ export async function spawnPtyForTab(options: SpawnPtyForTabOptions): Promise<vo
 	const { defaultShell, shellArgs, shellEnvVars } = useSettingsStore.getState();
 
 	try {
+		if (!panelTerminalHostMatches(session, tab)) {
+			onSpawnFailure(
+				tabId,
+				true,
+				'Terminal host no longer matches its owner. Restore the original host before restarting.'
+			);
+			return;
+		}
 		const result = await window.maestro.process.spawnTerminalTab({
 			sessionId: terminalSessionId,
 			cwd: spawnCwd,

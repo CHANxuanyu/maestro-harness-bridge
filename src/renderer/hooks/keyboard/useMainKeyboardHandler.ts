@@ -181,6 +181,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					),
 				};
 
+			// On Windows and Linux, focused xterm intentionally keeps Ctrl+W, Ctrl+F and Ctrl+J for the shell.
 			const panelTerminalFocused =
 				newShell && ctx.activeFocus === 'right' && ctx.activeRightTab === 'terminal';
 

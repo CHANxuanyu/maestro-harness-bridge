@@ -1,3 +1,4 @@
+import { Check, CircleDot, Circle } from 'lucide-react';
 import { useMemo } from 'react';
 import { latestAgentTaskList } from '../utils/agentTaskList';
 import type { LogEntry, Theme } from '../types';
@@ -30,18 +31,30 @@ export function TasksPanel({ logs, theme }: { logs: LogEntry[]; theme: Theme }) 
 			</p>
 			<ul className="space-y-2">
 				{list.tasks.map((task, index) => (
-					<li
-						key={index}
-						className="flex items-start gap-2 break-words"
-						style={{
-							color: task.status === 'in_progress' ? theme.colors.accent : theme.colors.textMain,
-							opacity: task.status === 'completed' ? 0.5 : 1,
-						}}
-					>
-						<span className="shrink-0" aria-label={t(`workflows.newShell.task.${task.status}`)}>
-							{task.status === 'completed' ? '✓' : task.status === 'in_progress' ? '▸' : '○'}
+					<li key={index} className="flex items-start gap-2 break-words">
+						<span
+							className="w-4 h-4 shrink-0 flex items-center justify-center mt-0.5"
+							style={{
+								color: task.status === 'in_progress' ? theme.colors.accent : theme.colors.textDim,
+							}}
+							aria-label={t(`workflows.newShell.task.${task.status}`)}
+						>
+							{task.status === 'completed' ? (
+								<Check size={16} />
+							) : task.status === 'in_progress' ? (
+								<CircleDot size={16} />
+							) : (
+								<Circle size={16} />
+							)}
 						</span>
-						<span className="min-w-0 break-words">{task.content}</span>
+						<span
+							className={`min-w-0 break-words${task.status === 'in_progress' ? ' font-medium' : ''}`}
+							style={{
+								color: task.status === 'completed' ? theme.colors.textDim : theme.colors.textMain,
+							}}
+						>
+							{task.content}
+						</span>
 					</li>
 				))}
 			</ul>

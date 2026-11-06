@@ -181,6 +181,9 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					),
 				};
 
+			const panelTerminalFocused =
+				newShell && ctx.activeFocus === 'right' && ctx.activeRightTab === 'terminal';
+
 			// Terminal focus recovery: if a key event reaches this window handler while in
 			// terminal mode, xterm's textarea likely lost focus. Recover early (before any
 			// global shortcut/navigation logic) so arrow keys and editor escape paths still
@@ -757,7 +760,16 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					ctx.setQuickActionOpen(true, 'main');
 					trackShortcut('quickAction');
 				}
-			} else if (ctx.isShortcut(e, 'clearTerminal') && activeSession?.inputMode === 'terminal') {
+			} else if (
+				ctx.isShortcut(e, 'clearTerminal') &&
+				(panelTerminalFocused || activeSession?.inputMode === 'terminal')
+			) {
+				if (panelTerminalFocused) {
+					e.preventDefault();
+					ctx.rightPanelRef?.current?.clearActiveTerminal();
+					trackShortcut('clearTerminal');
+					return;
+				}
 				// Clears the active xterm buffer in terminal mode
 				e.preventDefault();
 				ctx.mainPanelRef?.current?.clearActiveTerminal();
@@ -1385,6 +1397,11 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				// Cmd+W: Close the active tab (AI, file, browser, or terminal) via unified handler
 				if (ctx.isTabShortcut(e, 'closeTab')) {
 					e.preventDefault();
+					if (panelTerminalFocused) {
+						ctx.rightPanelRef?.current?.closeActiveTerminal();
+						trackShortcut('closeTab');
+						return;
+					}
 					const closeResult = ctx.handleCloseCurrentTab();
 
 					if (closeResult.type === 'file') {
@@ -1676,6 +1693,12 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 			// and must not also open in-tab Find, group Find, Files filter, or
 			// terminal/browser find.
 			if (e.key === 'f' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+				if (panelTerminalFocused) {
+					e.preventDefault();
+					ctx.rightPanelRef?.current?.openTerminalSearch();
+					trackShortcut('searchTerminal');
+					return;
+				}
 				// Browser-tab in-page find takes precedence whenever a browser tab is
 				// the active tab. Routed both here (when webview isn't focused) and via
 				// `onBrowserTabShortcutKey` (when it is).

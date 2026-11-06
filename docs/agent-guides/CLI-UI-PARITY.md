@@ -96,7 +96,9 @@ Cmd/Ctrl+Shift+7 opens Tasks. Both have palette entries and right-panel buttons;
 these are in-place panel switches, so they use the menu exception in UI-PATTERNS.
 The panel width uses the existing persisted `rightPanelWidth`. Escape from panel
 chrome or Tasks collapses the panel; while xterm owns input, Escape retains its
-terminal meaning. The existing panel-collapse shortcut remains available there.
+terminal meaning. The existing panel-collapse shortcut remains available there. While Terminal has
+focus, Cmd/Ctrl+W closes its selected terminal, Cmd/Ctrl+F opens its existing search
+bar, and the clear-terminal binding clears its xterm buffer through TerminalView.
 
 The default terminal is shared by normalized working directory and SSH remote ID,
 with worktrees kept separate. An explicit additional-terminal action creates a

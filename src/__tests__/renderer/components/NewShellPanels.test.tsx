@@ -8,18 +8,21 @@ import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext
 import type { ReactElement } from 'react';
 import { act, render as renderView, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { forwardRef, useEffect, useImperativeHandle } from 'react';
+import { createRef, forwardRef, useEffect, useImperativeHandle } from 'react';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 import { mockTheme } from '../../helpers/mockTheme';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
-import { NewShellTerminalPanel } from '../../../renderer/components/NewShellTerminalPanel';
+import {
+	NewShellTerminalPanel,
+	type NewShellTerminalPanelHandle,
+} from '../../../renderer/components/NewShellTerminalPanel';
 import { TasksPanel } from '../../../renderer/components/TasksPanel';
 import { openPanelTerminal, panelTerminals } from '../../../renderer/services/newShellTerminal';
 import type { LogEntry } from '../../../renderer/types';
 
-const lifecycle = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn() }));
+const lifecycle = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), clear: vi.fn() }));
 vi.mock('../../../renderer/components/XTerminal', () => ({
 	XTerminal: forwardRef(({ sessionId }: { sessionId: string }, ref) => {
 		useEffect(() => {
@@ -27,6 +30,7 @@ vi.mock('../../../renderer/components/XTerminal', () => ({
 			return () => lifecycle.unmount(sessionId);
 		}, []);
 		useImperativeHandle(ref, () => ({
+			clear: lifecycle.clear,
 			search: vi.fn(),
 			write: vi.fn(),
 			refresh: vi.fn(),
@@ -78,6 +82,26 @@ describe('new shell terminals', () => {
 		expect(lifecycle.mount).toHaveBeenCalledTimes(1);
 		expect(lifecycle.unmount).not.toHaveBeenCalled();
 		expect(window.maestro.process.kill).not.toHaveBeenCalled();
+	});
+
+	it('routes terminal search, clear and close through the mounted shared view', async () => {
+		const ref = createRef<NewShellTerminalPanelHandle>();
+		render(<NewShellTerminalPanel ref={ref} session={first()} theme={mockTheme} visible />);
+		await waitFor(() => expect(window.maestro.process.spawnTerminalTab).toHaveBeenCalledTimes(1));
+		const terminalId = useSessionStore.getState().sessions[0].terminalTabs[0].id;
+		act(() => ref.current!.clearActiveTerminal());
+		expect(lifecycle.clear).toHaveBeenCalledTimes(1);
+		expect(window.maestro.process.write).toHaveBeenCalledWith(
+			`first-terminal-${terminalId}`,
+			'\x0c'
+		);
+		act(() => ref.current!.openTerminalSearch());
+		expect(screen.getByPlaceholderText('Search...')).toBeVisible();
+		window.maestro.process.isTerminalBusy = vi.fn().mockResolvedValue(false);
+		act(() => ref.current!.closeActiveTerminal());
+		await waitFor(() => expect(screen.queryByTestId('terminal-instance')).toBeNull());
+		expect(window.maestro.process.kill).toHaveBeenCalledWith(`first-terminal-${terminalId}`);
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].id).toBe('conversation');
 	});
 
 	it('shares a directory across providers, keeps worktrees separate, and creates a second only explicitly', () => {

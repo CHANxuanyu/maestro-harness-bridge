@@ -1,5 +1,5 @@
 import { useUIStore } from '../stores/uiStore';
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { truncatePath } from '../../shared/formatters';
 import { useSessionStore } from '../stores/sessionStore';
@@ -24,15 +24,20 @@ import {
 import { useT } from '../i18n';
 import type { Session, Theme } from '../types';
 
-export function NewShellTerminalPanel({
-	session,
-	theme,
-	visible,
-}: {
-	session: Session;
-	theme: Theme;
-	visible: boolean;
-}) {
+export interface NewShellTerminalPanelHandle {
+	clearActiveTerminal(): void;
+	openTerminalSearch(): void;
+	closeActiveTerminal(): void;
+}
+
+export const NewShellTerminalPanel = forwardRef<
+	NewShellTerminalPanelHandle,
+	{
+		session: Session;
+		theme: Theme;
+		visible: boolean;
+	}
+>(function NewShellTerminalPanel({ session, theme, visible }, ref) {
 	const t = useT();
 	const newShell = useSettingsStore((s) => s.newShell);
 	const activeFocus = useUIStore((s) => s.activeFocus);
@@ -63,6 +68,21 @@ export function NewShellTerminalPanel({
 	}, [newShell, visible, source.id, source.activeTabId]);
 
 	const mounted = useTerminalMounting(newShell && visible ? selected?.session || null : null);
+	useImperativeHandle(ref, () => ({
+		clearActiveTerminal() {
+			if (selected)
+				mounted.terminalViewRefs.current.get(selected.session.id)?.clearActiveTerminal();
+		},
+		openTerminalSearch() {
+			mounted.setTerminalSearchOpen(true);
+		},
+		closeActiveTerminal() {
+			if (selected) handleCloseTerminalTab(selected.tab.id);
+		},
+	}));
+	useEffect(() => {
+		mounted.setTerminalSearchOpen(false);
+	}, [source.id, source.activeTabId, visible]);
 	useRemoteTerminalBufferResponder(mounted.terminalViewRefs, newShell);
 	useCoworkingBufferResponder(mounted.terminalViewRefs, newShell);
 	const panelRef = useRef<HTMLDivElement>(null);
@@ -164,6 +184,8 @@ export function NewShellTerminalPanel({
 								fontSize={typography.fontSize}
 								onTabPidChange={createTabPidChangeHandler(id)}
 								onTabStateChange={createTabStateChangeHandler(id)}
+								searchOpen={shown && mounted.terminalSearchOpen}
+								onSearchClose={() => mounted.setTerminalSearchOpen(false)}
 								isVisible={shown}
 							/>
 						</div>
@@ -172,4 +194,4 @@ export function NewShellTerminalPanel({
 			</div>
 		</div>
 	);
-}
+});

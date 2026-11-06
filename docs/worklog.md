@@ -597,10 +597,10 @@ hb.6 源码 `72545fdad` 的真实 Codex 验收中，`codex b: parallel tools` �
 
 ## 2026-11-06：新界面终端与任务面板
 
-在 `codex/hb8-panels` 实现右栏四页签，仅由 `newShell` 启用。终端复用 `TerminalView`、`XTerminal` 和现有创建、启动、关闭路径，第一次访问才启动；同目录及 SSH 主机共享默认终端，worktree 分开，切换会话或收起面板保留挂载与输出。任务复用 `agentTaskList.ts`，显示 Claude、DeepSeek 的 TodoWrite 和 Codex 的 update_plan；Codex exec 的 todo_list 事件补上增量转换。快捷键、命令面板、CLI 路径与每条会话的面板状态同步补齐。
+在 `codex/hb8-panels` 实现右栏四页签，仅由 `newShell` 启用。终端复用 `TerminalView`、`XTerminal` 和现有创建、启动、关闭路径，第一次访问才启动；同目录及 SSH 主机共享默认终端，worktree 分开，切换会话或收起面板保留挂载与输出。任务复用 `agentTaskList.ts`，显示 Claude、DeepSeek 的 TodoWrite 和 Codex 的 update_plan；Codex exec 的 todo_list 事件补上增量转换。快捷键、命令面板、CLI 路径与每条会话的面板状态同步补齐。右栏终端聚焦时，关闭、查找、清屏快捷键转给已有终端句柄，不操作中间的 AI 会话。
 
-验证对象为本分支开发源码，未构建发行包。最终相关 Vitest 使用 `--configLoader runner --no-cache`，29 个文件、1144 条全部通过，0 跳过；`npm run lint` 通过。改动的产品源码 ESLint 通过；原生 E2E 及夹具用独立 TypeScript 配置静态检查通过。CLI 参考从命令树重新生成。
+验证对象为本分支开发源码，未构建发行包。最终相关 Vitest 使用 `--configLoader runner --no-cache`，29 个文件、1148 条全部通过，0 跳过；`npm run lint` 通过。改动的产品源码 ESLint 通过；原生 E2E 及夹具用独立 TypeScript 配置静态检查通过。CLI 参考从命令树重新生成。
 
-测试先于实现加入。Codex 增量清单回归在修复前 168 通过、3 失败；补终端跳转接线前键盘回归 162 通过、1 失败。扩展检查发现旧有快捷键冲突测试把新界面已隐藏的动作留在期望集合；还原基线快捷键表可复现同一失败，现两边按相同界面作用域过滤，仍严格比较完整集合。两个终端焦点测试移出异步 act 内的等待，使效果提交后再等定时器，断言不变；远程配置测试补齐已有保存路径需要的 sessions mock。
+测试先于实现加入。Codex 增量清单回归在修复前 168 通过、3 失败；补终端跳转接线前键盘回归 162 通过、1 失败；关闭、查找、清屏的焦点回归在修复前 163 通过、3 失败。扩展检查发现旧有快捷键冲突测试把新界面已隐藏的动作留在期望集合；还原基线快捷键表可复现同一失败，现两边按相同界面作用域过滤，仍严格比较完整集合。两个终端焦点测试移出异步 act 内的等待，使效果提交后再等定时器，断言不变；远程配置测试补齐已有保存路径需要的 sessions mock。
 
 `e2e/native-new-shell.spec.ts` 已增加真实终端命令输出在会话切换后的保留检查，以及合成 TodoWrite 的任务面板检查。本轮按约束未运行 Playwright、Electron、真实 SSH 或模型；360 像素、深浅主题和拖宽的原生视觉验收待用户运行。Codex exec 的 todo_list 只提供完成布尔值，未完成项显示待办；含 in_progress 的 update_plan 按原状态显示。没有本轮发行包或真人验收结论。

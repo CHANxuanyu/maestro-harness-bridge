@@ -1,4 +1,4 @@
-import { NewShellTerminalPanel } from './NewShellTerminalPanel';
+import { NewShellTerminalPanel, type NewShellTerminalPanelHandle } from './NewShellTerminalPanel';
 import { TasksPanel } from './TasksPanel';
 import { shellRightPanelTab } from '../../shared/newShellPanel';
 import { StoredFilePreview } from './FilePreview/StoredFilePreview';
@@ -60,7 +60,7 @@ import { PluginUiItemsSlot } from './plugins/PluginUiItemsSlot';
 import { autoRunActiveElapsedMs } from '../hooks/batch/useTimeTracking';
 import { useIsMirroredBatchRun } from '../hooks/batch/useAutoRunStateMirror';
 
-export interface RightPanelHandle {
+export interface RightPanelHandle extends NewShellTerminalPanelHandle {
 	refreshHistoryPanel: () => void;
 	focusAutoRun: () => void;
 	/**
@@ -281,6 +281,7 @@ export const RightPanel = memo(
 		const autoRunContentVersion = session?.autoRunContentVersion ?? 0;
 
 		const historyPanelRef = useRef<HistoryPanelHandle>(null);
+		const terminalPanelRef = useRef<NewShellTerminalPanelHandle>(null);
 		const autoRunRef = useRef<AutoRunHandle>(null);
 		const {
 			panelRef,
@@ -459,6 +460,9 @@ export const RightPanel = memo(
 		useImperativeHandle(
 			ref,
 			() => ({
+				clearActiveTerminal: () => terminalPanelRef.current?.clearActiveTerminal(),
+				openTerminalSearch: () => terminalPanelRef.current?.openTerminalSearch(),
+				closeActiveTerminal: () => terminalPanelRef.current?.closeActiveTerminal(),
 				refreshHistoryPanel: () => {
 					historyPanelRef.current?.refreshHistory();
 				},
@@ -726,6 +730,7 @@ export const RightPanel = memo(
 				>
 					{newShell && (
 						<NewShellTerminalPanel
+							ref={terminalPanelRef}
 							session={session}
 							theme={theme}
 							visible={rightPanelOpen && activeRightTab === 'terminal'}

@@ -57,7 +57,14 @@ discovery still in progress, and ignores late replies. The worker terminates
 before its cancellation promise resolves. Search supports local Claude and Codex,
 including compressed archives; SSH conversations retain title matching only.
 Existing session-browser search reuses the extracted `sessionSearch.ts` parser
-and snippet helper and keeps its old API and behavior.
+and snippet helper and keeps its API. Codex search now uses the same desktop
+envelope and prompt decoding as displayed messages, so hidden injected context
+no longer matches. Both UI and CLI find legacy Codex headers with an environment
+`<cwd>` fallback and use account-scoped `session_index.jsonl` titles. Index reads
+consume the existing byte budget; oversized or unreadable indexes report `limited`.
+Without an indexed name, the title comes from the first displayed user request.
+Native content jumps carry `revealTurnActivity`; only `newShell` expands the
+containing turn and flashes the body after it mounts.
 
 ## Stop and read-only resume corrections (2026-11-06)
 
@@ -655,6 +662,9 @@ They extend the existing native-history open gap below. The implementation is
 the owning renderer. `native-history read` returns text but does not perform this
 UI action. Cancelling or clearing the sidebar search is also view-local; the
 internal cancellation IPC has no standalone CLI verb.
+The review fix also expands a folded turn before flashing its matched body.
+That expansion belongs to the same unresolved navigation action, with no new
+CLI verb in this round.
 
 **Provider switch wording (2026-11-06).** The existing CLI help, force warning and
 success text still describe the classic reset behavior. With `newShell` enabled,

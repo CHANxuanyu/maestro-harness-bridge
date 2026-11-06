@@ -6,7 +6,8 @@ import type { Session, Theme, AITab, FilePreviewTab } from '../../../../renderer
 
 import { mockTheme } from '../../../helpers/mockTheme';
 // Mock stores
-vi.mock('../../../../renderer/stores/settingsStore', () => ({
+vi.mock('../../../../renderer/stores/settingsStore', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../../../renderer/stores/settingsStore')>()),
 	useSettingsStore: Object.assign(
 		vi.fn((selector) =>
 			selector({

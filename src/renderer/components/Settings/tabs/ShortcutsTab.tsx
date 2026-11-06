@@ -1,3 +1,5 @@
+import { shortcutAppliesToShell } from '../../../../shared/shortcut-types';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { useI18n, type MessageKey } from '../../../i18n';
 import { useShortcutLabel } from '../../../i18n/shortcutLabels';
 /**
@@ -40,6 +42,7 @@ export interface ShortcutsTabProps {
 
 export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: ShortcutsTabProps) {
 	const { t, tRich } = useI18n();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const shortcutLabel = useShortcutLabel();
 	const { shortcuts, setShortcuts, tabShortcuts, setTabShortcuts } = useSettings();
 
@@ -151,7 +154,12 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 			...Object.values(shortcuts),
 			...Object.values(tabShortcuts),
 			...Object.values(FIXED_SHORTCUTS),
-		].find((sc) => sc.id !== actionId && shortcutKeysEqual(sc.keys, keys));
+		].find(
+			(sc) =>
+				shortcutAppliesToShell(sc, newShell) &&
+				sc.id !== actionId &&
+				shortcutKeysEqual(sc.keys, keys)
+		);
 
 		if (conflict) {
 			// Name the LABEL, not the id: the user picked this action from a list of
@@ -172,6 +180,7 @@ export function ShortcutsTab({ theme, hasNoAgents, onRecordingChange }: Shortcut
 	const totalShortcuts = allShortcuts.length;
 	const unassignedCount = allShortcuts.filter((sc) => !sc.keys?.length).length;
 	const filteredShortcuts = allShortcuts.filter((sc) => {
+		if (!shortcutAppliesToShell(sc, newShell)) return false;
 		// The unassigned view is a mode, not another filter: someone asking "what
 		// can I still bind?" wants the whole list of them, not the intersection
 		// with whatever they last typed.

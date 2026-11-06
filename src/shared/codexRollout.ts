@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
-import { zstdDecompressSync } from 'node:zlib';
+import { zstdDecompressSync, createZstdDecompress } from 'node:zlib';
 
 /** The same bound applies to native bytes and decompressed transcript bytes. */
 export const MAX_CODEX_ROLLOUT_BYTES = 100 * 1024 * 1024;
@@ -49,8 +49,36 @@ export function decodeCodexRollout(
 /** Read-only, bounded in memory. Never materializes a native archive on disk. */
 export async function readCodexRollout(
 	file: string,
-	maxBytes = MAX_CODEX_ROLLOUT_BYTES
+	maxBytes = MAX_CODEX_ROLLOUT_BYTES,
+	options?: { prefixBytes: number }
 ): Promise<string> {
+	if (options) {
+		const limit = options.prefixBytes;
+		if (!Number.isSafeInteger(limit) || limit <= 0 || limit > maxBytes)
+			throw new RangeError('Invalid rollout prefix limit');
+		const source = fs.createReadStream(file, {
+			end: maxBytes - 1,
+			highWaterMark: Math.min(limit, 16384),
+		});
+		const decoder = file.endsWith('.zst') ? createZstdDecompress() : undefined;
+		const stream = decoder ? source.pipe(decoder) : source;
+		// pipe does not forward source errors to the decoder.
+		source.on('error', (error) => decoder?.destroy(error));
+		const chunks: Buffer[] = [];
+		let size = 0;
+		try {
+			for await (const chunk of stream) {
+				const bytes = Buffer.from(chunk).subarray(0, limit - size);
+				chunks.push(bytes);
+				size += bytes.length;
+				if (size === limit) break;
+			}
+			return Buffer.concat(chunks, size).toString('utf8');
+		} finally {
+			source.destroy();
+			decoder?.destroy();
+		}
+	}
 	const handle = await fsp.open(file, 'r');
 	try {
 		const stat = await handle.stat();

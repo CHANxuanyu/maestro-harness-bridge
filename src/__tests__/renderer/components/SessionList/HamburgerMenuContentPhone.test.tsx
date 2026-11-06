@@ -13,6 +13,9 @@ import { HamburgerMenuContent } from '../../../../renderer/components/SessionLis
 import { usePhoneLayout } from '../../../../renderer/hooks/ui/useViewportBreakpoint';
 import { useNotificationStore } from '../../../../renderer/stores/notificationStore';
 import { mockTheme } from '../../../helpers/mockTheme';
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
+import { chooseProject } from '../../../../renderer/services/openProject';
+vi.mock('../../../../renderer/services/openProject', () => ({ chooseProject: vi.fn() }));
 
 vi.mock('../../../../renderer/hooks/ui/useViewportBreakpoint', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../../../../renderer/hooks/ui/useViewportBreakpoint')>()),
@@ -34,9 +37,23 @@ function renderMenu(setMenuOpen = vi.fn()) {
 
 afterEach(() => {
 	mockedUsePhoneLayout.mockReturnValue(false);
+	useSettingsStore.setState({ newShell: false });
+	vi.mocked(chooseProject).mockClear();
 });
 
 describe('HamburgerMenuContent on a phone', () => {
+	it.each([false, true])('offers Open Project only in newShell=%s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		const close = vi.fn();
+		renderMenu(close);
+		const button = screen.queryByRole('button', { name: /Open project/ });
+		expect(!!button).toBe(newShell);
+		if (newShell) {
+			fireEvent.click(button!);
+			expect(chooseProject).toHaveBeenCalledOnce();
+			expect(close).toHaveBeenCalledWith(false);
+		}
+	});
 	it.each([false, true])('opens notification history without a header on phone=%s', (phone) => {
 		mockedUsePhoneLayout.mockReturnValue(phone);
 		useNotificationStore.getState().setNotificationCenterOpen(false);

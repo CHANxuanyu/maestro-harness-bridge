@@ -5,7 +5,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { TurnSettingPills } from '../../../../renderer/components/ui/TurnSettingPills';
 import { mockTheme } from '../../../helpers/mockTheme';
 
@@ -14,6 +15,16 @@ function renderPills(props: Partial<React.ComponentProps<typeof TurnSettingPills
 }
 
 describe('TurnSettingPills', () => {
+	afterEach(() => useSettingsStore.setState({ newShell: false, uiLanguage: 'system' }));
+	it.each([false, true])(
+		'preserves raw tool values while translating Chinese labels in newShell=%s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell, uiLanguage: 'zh-CN' });
+			const { getByTestId } = renderPills({ model: 'sonnet', effort: 'high' });
+			expect(getByTestId('turn-model-pill')).toHaveTextContent(newShell ? 'Sonnet' : 'sonnet');
+			expect(getByTestId('turn-effort-pill')).toHaveTextContent(newShell ? '高' : 'high');
+		}
+	);
 	it('renders nothing when the turn ran on the agent defaults', () => {
 		const { container } = renderPills();
 		expect(container.firstElementChild).toBeNull();

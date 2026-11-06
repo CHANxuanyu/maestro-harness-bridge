@@ -559,7 +559,7 @@ export const RightPanel = memo(
 						backgroundColor: theme.colors.bgSidebar,
 						borderColor: theme.colors.border,
 						boxShadow:
-							activeFocus === 'right'
+							!newShell && activeFocus === 'right'
 								? `inset 1px 0 0 ${theme.colors.accent}, inset -1px 0 0 ${theme.colors.accent}, inset 0 -1px 0 ${theme.colors.accent}`
 								: undefined,
 					} as React.CSSProperties
@@ -595,7 +595,11 @@ export const RightPanel = memo(
 				)}
 
 				{/* Tab Header */}
-				<div className="flex border-b h-16" style={{ borderColor: theme.colors.border }}>
+				<div
+					data-shell-header={newShell ? 'right' : undefined}
+					className={`flex border-b shrink-0 ${newShell ? 'h-12' : 'h-16'}`}
+					style={{ borderColor: theme.colors.border }}
+				>
 					{(newShell
 						? (['changes', 'files'] as const)
 						: (['files', 'history', ...(autoRunDisabled ? [] : ['autorun'])] as const)

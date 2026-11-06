@@ -203,6 +203,41 @@ function setViewportWidth(width: number): void {
 	});
 }
 
+it.each([false, true])(
+	'merges the header and reopens a collapsed sidebar only in new shell %s',
+	(newShell) => {
+		settingsMocks.overrides = { newShell, useNativeTitleBar: false };
+		uiMocks.state.leftSidebarOpen = false;
+		uiMocks.state.leftSidebarHidden = false;
+		const { container } = render(<MainPanelHeader {...defaultProps} />);
+		expect(container.firstElementChild).toHaveClass(newShell ? 'h-12' : 'h-16');
+		expect(!!screen.queryByRole('button', { name: 'Show agents sidebar' })).toBe(newShell);
+	}
+);
+it.each(['darwin', 'linux', 'win32'])(
+	'reserves collapsed traffic-light space only for custom macOS chrome, %s',
+	(platform) => {
+		const previous = window.maestro.platform;
+		Object.defineProperty(window.maestro, 'platform', { value: platform, configurable: true });
+		try {
+			settingsMocks.overrides = { newShell: true, useNativeTitleBar: false };
+			uiMocks.state.leftSidebarOpen = false;
+			uiMocks.state.leftSidebarHidden = false;
+			const { container, rerender } = render(<MainPanelHeader {...defaultProps} />);
+			expect(container.firstElementChild).toHaveAttribute('data-shell-header', 'main');
+			expect(container.firstElementChild?.getAttribute('data-traffic-light-clearance')).toBe(
+				platform === 'darwin' ? 'true' : null
+			);
+			fireEvent.click(screen.getByRole('button', { name: 'Show agents sidebar' }));
+			expect(uiMocks.setLeftSidebarOpen).toHaveBeenCalledWith(true);
+			settingsMocks.overrides = { newShell: true, useNativeTitleBar: true };
+			rerender(<MainPanelHeader {...defaultProps} key="native-chrome" />);
+			expect(container.firstElementChild).not.toHaveAttribute('data-traffic-light-clearance');
+		} finally {
+			Object.defineProperty(window.maestro, 'platform', { value: previous, configurable: true });
+		}
+	}
+);
 describe('MainPanelHeader', () => {
 	it.each([false, true])(
 		'gates header statistics and auxiliary tools, new shell %s',

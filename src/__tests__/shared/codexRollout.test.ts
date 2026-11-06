@@ -35,3 +35,12 @@ it.each(['.jsonl', '.jsonl.zst'])('caps both source and expanded bytes with %s',
 	expect(await readCodexRollout(file, 4096)).toBe(text);
 	expect(readCodexRolloutSync(file, 4096)).toBe(text);
 });
+
+it.each(['.jsonl', '.jsonl.zst'])('reads only a bounded prefix with %s', async (suffix) => {
+	const file = path.join(root, `rollout-prefix${suffix}`);
+	const content = 'metadata\n' + 'x'.repeat(1024 * 1024);
+	await fs.writeFile(file, suffix.endsWith('.zst') ? zstdCompressSync(content) : content);
+	expect(await readCodexRollout(file, 16384, { prefixBytes: 128 })).toBe(content.slice(0, 128));
+	await expect(readCodexRollout(file, 128, { prefixBytes: 129 })).rejects.toThrow(RangeError);
+	await expect(readCodexRollout(file, 128, { prefixBytes: 0 })).rejects.toThrow(RangeError);
+});

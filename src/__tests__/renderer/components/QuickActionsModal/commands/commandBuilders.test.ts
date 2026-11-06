@@ -29,12 +29,38 @@ import { createGroupFromTabRefs } from '../../../../../renderer/utils/panelLayou
 import { createMockAITab } from '../../../../helpers/mockTab';
 import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { useModalStore } from '../../../../../renderer/stores/modalStore';
+import { chooseProject } from '../../../../../renderer/services/openProject';
+vi.mock('../../../../../renderer/services/openProject', () => ({ chooseProject: vi.fn() }));
 
 const noop = () => {};
 const setSessions = vi.fn();
 const close = vi.fn();
 
 describe('QuickActions command builders', () => {
+	it.each([false, true])('opens a project from the palette only in newShell=%s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		const closePalette = vi.fn();
+		vi.mocked(chooseProject).mockClear();
+		const commands = buildNavigationCommands({
+			activeSession: undefined,
+			activeSessionId: '',
+			setQuickActionOpen: closePalette,
+			setLeftSidebarOpen: noop,
+			setRightPanelOpen: noop,
+			addNewSession: noop,
+			deleteSession: noop,
+			getOpenInLabel: () => '',
+			platform: 'darwin',
+			shortcuts: {},
+		});
+		const command = commands.find((item) => item.id === 'openProject');
+		expect(!!command).toBe(newShell);
+		if (command) {
+			command.action();
+			expect(chooseProject).toHaveBeenCalledOnce();
+			expect(closePalette).toHaveBeenCalledWith(false);
+		}
+	});
 	beforeEach(() => useSettingsStore.setState({ newShell: false }));
 	it.each([false, true])(
 		'keeps command actions and shortcuts while naming conversations, new shell %s',

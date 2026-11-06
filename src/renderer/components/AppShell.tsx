@@ -1,3 +1,9 @@
+import { ProjectStartView } from './ProjectStartView';
+import { chooseProject } from '../services/openProject';
+import { newShellSidebarInset } from '../utils/appTitleStrip';
+import { useT } from '../i18n';
+import { readableTextOn } from '../../shared/colorContrast';
+import { useUIStore } from '../stores/uiStore';
 /**
  * AppShell - spatial layout for MaestroConsoleInner.
  *
@@ -114,6 +120,28 @@ export function AppShell({
 	// activeSession into the shell (busy/log flushes stay off this paint path when
 	// App's chrome equality ignores state).
 	const newShell = useSettingsStore(selectNewShellEnabled);
+	const t = useT();
+	useEffect(() => {
+		document.documentElement.dataset.newShell = String(newShell);
+		document.documentElement.style.setProperty(
+			'--new-shell-placeholder',
+			readableTextOn(theme.colors.textDim, [
+				theme.colors.bgMain,
+				theme.colors.bgSidebar,
+				theme.colors.bgActivity,
+			])
+		);
+		return () => {
+			delete document.documentElement.dataset.newShell;
+		};
+	}, [newShell, theme]);
+	useEffect(() => {
+		const update = () =>
+			useUIStore.getState().applyNewShellPanelDefault(window.innerWidth, newShell);
+		update();
+		window.addEventListener('resize', update);
+		return () => window.removeEventListener('resize', update);
+	}, [newShell]);
 	const titleGroupId = useSessionStore((s) => selectActiveSession(s)?.groupId);
 	const titleSessionName = useSessionStore((s) => selectActiveSession(s)?.name);
 	const sessionsReadOk = useSessionStore((s) => s.sessionsReadOk);
@@ -128,6 +156,7 @@ export function AppShell({
 	}, [concertoEnabled]);
 
 	const showTitleBar = shouldShowAppTitleStrip({
+		newShell,
 		isMobileLandscape,
 		useNativeTitleBar,
 		isMdDownViewport,
@@ -200,7 +229,34 @@ export function AppShell({
 			) : null}
 
 			{!hasSessions && sessionsLoaded && sessionsReadOk && !isMobileLandscape ? (
-				<EmptyStateView theme={theme} {...emptyStateProps} />
+				newShell ? (
+					<>
+						<aside
+							className="shrink-0 w-[260px] border-r"
+							style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
+						>
+							<div
+								data-testid="sidebar-drag-inset"
+								style={
+									{
+										height: newShellSidebarInset(useNativeTitleBar),
+										WebkitAppRegion: 'drag',
+									} as React.CSSProperties
+								}
+							/>
+							<button
+								type="button"
+								className="m-3 px-2 py-2 text-sm rounded focus-ring"
+								onClick={() => void chooseProject()}
+							>
+								{t('workflows.projects.open')}
+							</button>
+						</aside>
+						<ProjectStartView theme={theme} />
+					</>
+				) : (
+					<EmptyStateView theme={theme} {...emptyStateProps} />
+				)
 			) : null}
 
 			{/* On a narrow viewport the panels are drawers, and on a phone they cover

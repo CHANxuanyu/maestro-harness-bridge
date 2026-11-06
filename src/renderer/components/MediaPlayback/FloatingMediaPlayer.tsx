@@ -156,7 +156,9 @@ export const FloatingMediaPlayer = memo(function FloatingMediaPlayer({
 	const useNativeTitleBar = useSettingsStore((s) => s.useNativeTitleBar);
 	const isMobileLandscape = useMobileLandscape();
 	const { isMdDown: isMdDownViewport } = useViewportBreakpoint();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const topInset = shouldShowAppTitleStrip({
+		newShell,
 		isMobileLandscape,
 		useNativeTitleBar,
 		isMdDownViewport,

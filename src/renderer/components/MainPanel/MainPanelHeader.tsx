@@ -1,3 +1,4 @@
+import { isMacOSPlatform } from '../../utils/platformUtils';
 import { useT } from '../../i18n';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 // Menu + Command are rc-only: the narrow-viewport sidebar opener and the Quick
@@ -166,6 +167,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 	// The new shell has no tab menu to hold "Continue with another AI", so the
 	// header carries it.
 	const newShell = useSettingsStore(selectNewShellEnabled);
+	const nativeTitleBar = useSettingsStore((s) => s.useNativeTitleBar);
 	// Asked only in the new shell, so the classic header does no extra work.
 	const canHandOff = useCanHandOffTab(
 		newShell ? activeSession?.id : undefined,
@@ -180,7 +182,8 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 	// it. Surface the inline hamburger in that case too - not just when the
 	// sidebar is fully hidden. On the Electron desktop app isWebDesktop() is
 	// false, so this reduces to the original leftSidebarHidden-only behavior.
-	const showSidebarOpener = leftSidebarHidden || (isWebDesktop() && isXs && !leftSidebarOpen);
+	const showSidebarOpener =
+		leftSidebarHidden || ((newShell || (isWebDesktop() && isXs)) && !leftSidebarOpen);
 
 	// Claude Max plan usage (5-hour / weekly windows). Shown for any Claude
 	// Code session - the source account is always derivable from session env
@@ -379,10 +382,16 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 	return (
 		<div
 			ref={headerRef}
-			className={`chrome-sheen header-container h-16 border-b flex items-center justify-between px-6 shrink-0 relative z-20 ${isCurrentSessionAutoMode ? 'header-auto-mode' : ''}`}
+			data-shell-header={newShell ? 'main' : undefined}
+			data-traffic-light-clearance={
+				newShell && showSidebarOpener && !nativeTitleBar && isMacOSPlatform() ? 'true' : undefined
+			}
+			className={`chrome-sheen header-container ${newShell ? 'h-12' : 'h-16'} border-b flex items-center justify-between px-6 shrink-0 relative z-20 ${isCurrentSessionAutoMode ? 'header-auto-mode' : ''}`}
 			style={{
 				borderColor: theme.colors.border,
 				backgroundColor: theme.colors.bgSidebar,
+				paddingLeft:
+					newShell && showSidebarOpener && !nativeTitleBar && isMacOSPlatform() ? 84 : undefined,
 			}}
 			data-tour="header-controls"
 		>

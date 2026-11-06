@@ -6,11 +6,17 @@ import type { ProjectHistoryResult } from '../../shared/projectHistory';
 /** Drive the same native history list and read paths as the project sidebar. */
 export async function nativeHistory(
 	action: string,
-	agentArg: string,
+	agentArg: string | undefined,
 	nativeId: string | undefined,
 	options: { json?: boolean }
 ): Promise<void> {
 	try {
+		if (action === 'projects') {
+			const result = await invokeNativeHistory('agentSessions:projects', []);
+			console.log(JSON.stringify({ success: true, result }, null, options.json ? undefined : 2));
+			return;
+		}
+		if (!agentArg) throw new Error('An agent is required');
 		const agentId = resolveAgentId(agentArg);
 		const agent = getSessionById(agentId);
 		if (!agent) throw new Error('Agent not found');

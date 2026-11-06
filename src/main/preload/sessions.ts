@@ -1,3 +1,4 @@
+import type { NativeProject, OpenProjectTarget, OpenProjectResult } from '../../shared/projects';
 /**
  * Preload API for agent sessions
  *
@@ -232,6 +233,19 @@ export function createClaudeApi() {
  */
 export function createAgentSessionsApi() {
 	return {
+		projects: (): Promise<NativeProject[]> => ipcRenderer.invoke('agentSessions:projects'),
+		openProject: (path: string): Promise<OpenProjectResult> =>
+			ipcRenderer.invoke('agentSessions:openProject', path),
+		onOpenProject: (callback: (target: OpenProjectTarget, channel: string) => void) => {
+			const handler = (_event: unknown, target: OpenProjectTarget, channel: string) =>
+				callback(target, channel);
+			ipcRenderer.on('agentSessions:openProjectTarget', handler);
+			return () => {
+				ipcRenderer.removeListener('agentSessions:openProjectTarget', handler);
+			};
+		},
+		sendOpenProjectResponse: (channel: string, result: OpenProjectResult) =>
+			ipcRenderer.send(channel, result),
 		listProjectHistory: (scopes: ProjectHistoryScope[]): Promise<ProjectHistoryResult> =>
 			ipcRenderer.invoke('agentSessions:listProjectHistory', scopes),
 		list: (agentId: string, projectPath: string, sshRemoteId?: string) =>

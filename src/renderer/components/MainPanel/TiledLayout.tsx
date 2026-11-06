@@ -27,7 +27,7 @@ import {
 import { TerminalOutput, type TerminalOutputProps } from '../TerminalOutput';
 import { WizardIndicator } from '../SessionList/WizardIndicator';
 import { hasDraft } from '../../utils/tabHelpers';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import { useModalStore } from '../../stores/modalStore';
 import { useUIStore } from '../../stores/uiStore';
 import { updateSessionWith, useSessionStore } from '../../stores/sessionStore';
@@ -1064,6 +1064,7 @@ function PaneFrame({
 }) {
 	const t = useT();
 	const title = resolveTabRefTitle(session, node.tab);
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	// Zoom/maximize: a single pane can temporarily fill the whole panel. When any
 	// pane is zoomed, `zoomedPaneId` is set (this pane is the maximized one iff it
 	// matches). Transient UI-store state - not persisted, not part of the layout.
@@ -1115,8 +1116,8 @@ function PaneFrame({
 			style={{
 				// Accent ring on the focused pane; a plain border otherwise. Same
 				// accent token active/selected states use elsewhere - no hardcoded colors.
-				border: `1px solid ${isFocused ? theme.colors.accent : theme.colors.border}`,
-				boxShadow: isFocused ? `inset 0 0 0 1px ${theme.colors.accent}` : undefined,
+				border: `1px solid ${isFocused && !newShell ? theme.colors.accent : theme.colors.border}`,
+				boxShadow: isFocused && !newShell ? `inset 0 0 0 1px ${theme.colors.accent}` : undefined,
 			}}
 		>
 			{/* Title bar - brighter (accent text) when this pane holds focus. Also a

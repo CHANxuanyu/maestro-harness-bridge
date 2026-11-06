@@ -1,3 +1,4 @@
+import { chooseProject } from '../../../services/openProject';
 import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
@@ -69,6 +70,17 @@ export function buildNavigationCommands({
 			action: addNewSession,
 		},
 	];
+
+	if (newShell)
+		commands.push({
+			id: 'openProject',
+			label: t('workflows.projects.open'),
+			shortcut: useSettingsStore.getState().shortcuts.openProject,
+			action: () => {
+				setQuickActionOpen(false);
+				void chooseProject();
+			},
+		});
 
 	if (openWizard) {
 		commands.push({

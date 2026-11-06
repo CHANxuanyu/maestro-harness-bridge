@@ -1,3 +1,5 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
+import { modelDisplayLabel, effortDisplayLabel } from '../../../utils/workflowLabels';
 import { useT } from '../../../i18n';
 import { memo, useState } from 'react';
 import type React from 'react';
@@ -57,6 +59,7 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 	effortMenuRef,
 }: ModelEffortPillsProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const [typedModel, setTypedModel] = useState('');
 
 	if (!isVisible) {
@@ -76,7 +79,10 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 						style={{ color: theme.colors.textDim }}
 						title={t('workflows.shell.changeModelvalue', { p0: shortcutSuffix(shortcutKeys) })}
 					>
-						<span>{currentModel || t('workflows.shell.default2')}</span>
+						<span>
+							{(newShell ? modelDisplayLabel(currentModel ?? '') : currentModel) ||
+								t('workflows.shell.default2')}
+						</span>
 						<ChevronDown className="w-3 h-3 opacity-70" />
 					</button>
 					{modelMenuOpen && (
@@ -109,7 +115,8 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 													model === currentModel ? 'rgba(255,255,255,0.05)' : undefined,
 											}}
 										>
-											{model || t('workflows.shell.default')}
+											{(newShell ? modelDisplayLabel(model) : model) ||
+												t('workflows.shell.default')}
 										</button>
 									)
 								)}
@@ -181,7 +188,10 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 							p0: shortcutSuffix(shortcutKeys),
 						})}
 					>
-						<span>{currentEffort || t('workflows.shell.default2')}</span>
+						<span>
+							{(newShell ? effortDisplayLabel(t, currentEffort ?? '') : currentEffort) ||
+								t('workflows.shell.default2')}
+						</span>
 						<ChevronDown className="w-3 h-3 opacity-70" />
 					</button>
 					{effortMenuOpen && (
@@ -214,7 +224,8 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 												effort === currentEffort ? 'rgba(255,255,255,0.05)' : undefined,
 										}}
 									>
-										{effort || t('workflows.shell.default')}
+										{(newShell ? effortDisplayLabel(t, effort) : effort) ||
+											t('workflows.shell.default')}
 									</button>
 								))}
 							</div>

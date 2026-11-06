@@ -280,6 +280,22 @@ Read changes against HEAD in a conversation working directory
 | `--file <path>`    | Read the diff for one repository-relative file      | -       |
 | `--json`           | Output the shared changes or diff structure as JSON | -       |
 
+## `maestro-cli open-project <path>`
+
+Open a local project in the new shell, reusing its agent or creating one silently
+
+| Option   | Description | Default |
+| -------- | ----------- | ------- |
+| `--json` | Output JSON | -       |
+
+## `maestro-cli native-history <action> [agent] [conversation]`
+
+List recent projects, list or read native project history, or delete a whole Codex conversation
+
+| Option   | Description | Default |
+| -------- | ----------- | ------- |
+| `--json` | Output JSON | -       |
+
 ## `maestro-cli handoff <tab> [provider]`
 
 Prepare a new conversation with another AI in the same project

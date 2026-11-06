@@ -1,3 +1,5 @@
+import { shortcutAppliesToShell } from '../../shared/shortcut-types';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { X, Award, CheckCircle, Trophy, ExternalLink, Settings } from 'lucide-react';
 import { GhostIconButton } from './ui/GhostIconButton';
@@ -118,8 +120,10 @@ export function ShortcutsHelpModal({
 		color: theme.colors.textDim,
 	};
 
+	const newShell = useSettingsStore((s) => s.newShell);
 	const filteredShortcuts = Object.values(allShortcuts)
 		.filter((sc) => {
+			if (!shortcutAppliesToShell(sc, newShell)) return false;
 			if (filterShortcutKeys.length > 0) {
 				return shortcutKeysEqual(sc.keys, filterShortcutKeys);
 			}

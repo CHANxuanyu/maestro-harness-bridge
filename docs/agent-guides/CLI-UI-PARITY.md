@@ -55,6 +55,25 @@ Moving account configuration to the project menu keeps `create-agent <name>` wit
 `open notification-center`, `notify inbox` and `open feedback`. Hiding a control
 does not remove its command or write a saved preference.
 
+## New shell project opening, batch 2
+
+| UI action                                                      | CLI                                            | Shared implementation                                                                                                  |
+| -------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Start screen recent projects                                   | `maestro-cli native-history projects [--json]` | `agentSessions:projects`, `createNativeProjectDiscovery()`                                                             |
+| Sidebar, start screen, menu, palette, Cmd/Ctrl+O: open project | `maestro-cli open-project <path> [--json]`     | `agentSessions:openProject`, `createProjectOpener()`, renderer `openProjectTarget()` and existing `createNewSession()` |
+
+Both verbs require the running desktop bridge. Project discovery is read-only,
+account-aware and bounded, with a 30-second in-memory cache. Its session counts
+cover the files scanned within the budget, and activity is the transcript mtime.
+Opening requires `newShell`; it focuses the existing local project owner, resolving
+symlink aliases, or silently creates one using the first available provider.
+Non-Git directories are supported. No installed provider means no creation.
+The returned session ID is acknowledged after persistence, and opening never
+sends a prompt. Cmd/Ctrl+O is scoped to opening in the new shell and to the existing
+agent switcher in the classic shell, without overwriting saved shortcuts.
+This opens a project, not a particular archived conversation; the native resume
+and refresh gaps below remain separate.
+
 ## Focus belongs to the human (`--background` / `--focus`)
 
 An agent may create a surface. It may not decide the human should be looking at

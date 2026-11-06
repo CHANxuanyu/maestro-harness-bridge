@@ -52,6 +52,8 @@ export interface UIStoreState {
 	leftSidebarOpen: boolean;
 	leftSidebarHidden: boolean;
 	rightPanelOpen: boolean;
+	rightPanelManuallyOpened: boolean;
+	applyNewShellPanelDefault: (width: number, enabled: boolean) => void;
 
 	// Focus
 	activeFocus: FocusArea;
@@ -422,6 +424,11 @@ export const useUIStore = create<UIStore>()((set) => ({
 	leftSidebarHidden: false,
 	// The Right Bar opens on demand, as in a conversation-first layout.
 	rightPanelOpen: false,
+	rightPanelManuallyOpened: false,
+	applyNewShellPanelDefault: (width, enabled) =>
+		set((s) =>
+			enabled && width < 1180 && !s.rightPanelManuallyOpened ? { rightPanelOpen: false } : s
+		),
 	activeFocus: 'main',
 	activeRightTab: 'files',
 	zoomedPaneId: null,
@@ -467,8 +474,16 @@ export const useUIStore = create<UIStore>()((set) => ({
 			if (s.leftSidebarOpen) return { leftSidebarOpen: false, leftSidebarHidden: false };
 			return { leftSidebarOpen: false, leftSidebarHidden: true };
 		}),
-	setRightPanelOpen: (v) => set((s) => ({ rightPanelOpen: resolve(v, s.rightPanelOpen) })),
-	toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
+	setRightPanelOpen: (v) =>
+		set((s) => {
+			const open = resolve(v, s.rightPanelOpen);
+			return { rightPanelOpen: open, rightPanelManuallyOpened: s.rightPanelManuallyOpened || open };
+		}),
+	toggleRightPanel: () =>
+		set((s) => ({
+			rightPanelOpen: !s.rightPanelOpen,
+			rightPanelManuallyOpened: s.rightPanelManuallyOpened || !s.rightPanelOpen,
+		})),
 	closeLeftSidebarForNavigation: () =>
 		set((s) => (s.leftSidebarOpen && isNarrowViewportNow() ? { leftSidebarOpen: false } : s)),
 	closeRightPanelForNavigation: () =>

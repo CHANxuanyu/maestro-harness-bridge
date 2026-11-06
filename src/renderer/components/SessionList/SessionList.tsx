@@ -1,3 +1,4 @@
+import { newShellSidebarInset } from '../../utils/appTitleStrip';
 import React, {
 	useState,
 	useEffect,
@@ -279,6 +280,7 @@ function SessionListInner(props: SessionListProps) {
 	const groups = useSessionStore((s) => s.groups);
 	const activeSessionId = useSessionStore((s) => s.activeSessionId);
 	const newShell = useSettingsStore(selectNewShellEnabled);
+	const nativeTitleBar = useSettingsStore((s) => s.useNativeTitleBar);
 	const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen);
 	const activeFocus = useUIStore((s) => s.activeFocus);
 	const selectedSidebarIndex = useUIStore((s) => s.selectedSidebarIndex);
@@ -1377,7 +1379,8 @@ function SessionListInner(props: SessionListProps) {
 			className={`chrome-sheen border-r flex flex-col shrink-0 ${sidebarTransitionClass} outline-none relative z-20 maestro-side-panel maestro-side-panel--left`}
 			style={
 				{
-					width: leftSidebarOpen ? `${leftSidebarWidthState}px` : '64px',
+					width: leftSidebarOpen ? `${leftSidebarWidthState}px` : newShell ? '0px' : '64px',
+					overflow: newShell && !leftSidebarOpen ? 'hidden' : undefined,
 					backgroundColor: theme.colors.bgSidebar,
 					borderColor: theme.colors.border,
 					boxShadow:
@@ -1429,6 +1432,18 @@ function SessionListInner(props: SessionListProps) {
 				/>
 			)}
 
+			{newShell && (
+				<div
+					data-testid="sidebar-drag-inset"
+					className="shrink-0"
+					style={
+						{
+							height: newShellSidebarInset(nativeTitleBar),
+							WebkitAppRegion: 'drag',
+						} as React.CSSProperties
+					}
+				/>
+			)}
 			{/* Branding Header */}
 			{!newShell && (
 				<div

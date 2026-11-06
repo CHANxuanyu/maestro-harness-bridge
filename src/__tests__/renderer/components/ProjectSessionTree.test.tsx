@@ -160,6 +160,18 @@ function rowsOf(header: HTMLElement) {
 	return list ? within(list).queryAllByRole('listitem') : [];
 }
 
+it.each([false, true])(
+	'distinguishes busy shape and omits project emoji only in new shell %s',
+	(newShell) => {
+		useSettingsStore.setState({ newShell });
+		setup({ projects: [project({ conversations: [conversation({ busy: true })] })] });
+		expect(!!screen.queryByText('🎹')).toBe(!newShell);
+		const mark = screen.getByTitle('Working');
+		expect(!!mark.querySelector('.animate-spin')).toBe(newShell);
+		expect(!!mark.querySelector('.animate-pulse')).toBe(!newShell);
+	}
+);
+
 describe('ProjectSessionTree', () => {
 	beforeEach(() => useSettingsStore.setState({ newShell: false }));
 

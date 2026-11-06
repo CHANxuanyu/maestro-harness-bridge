@@ -2694,3 +2694,29 @@ html[data-fx-toolbar='on'] .fx-btn.fx-primary {
 	color: #16171f !important;
 	font-weight: 600 !important;
 }
+
+/* The new shell merges window chrome into the panel headers. */
+html[data-new-shell='true'] input::placeholder,
+html[data-new-shell='true'] textarea::placeholder {
+	font-style: normal !important;
+	opacity: 1 !important;
+	color: var(--new-shell-placeholder) !important;
+}
+
+[data-shell-header] {
+	-webkit-app-region: drag;
+}
+[data-shell-header] button,
+[data-shell-header] a,
+[data-shell-header] input,
+[data-shell-header] [role='button'],
+[data-shell-header] [role='tab'],
+[data-shell-header] [role='menu'],
+[data-shell-header] [role='dialog'] {
+	-webkit-app-region: no-drag;
+}
+
+/* The narrow-header padding rule must also leave the macOS controls clear. */
+html[data-new-shell='true'] [data-traffic-light-clearance='true'] {
+	padding-left: 84px !important;
+}

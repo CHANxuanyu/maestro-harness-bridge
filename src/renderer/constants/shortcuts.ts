@@ -75,8 +75,17 @@ export const DEFAULT_SHORTCUTS = {
 		keys: ['Meta', 'k'],
 		windowScoped: true,
 	},
+	// Cmd+O is context-scoped: classic switches agents, new shell opens projects.
+	openProject: {
+		id: 'openProject',
+		label: 'Open Project',
+		keys: ['Meta', 'o'],
+		windowScoped: true,
+		shell: 'new',
+	},
 	agentSwitcher: {
 		id: 'agentSwitcher',
+		shell: 'classic',
 		label: 'Switch Agent',
 		keys: ['Meta', 'o'],
 		windowScoped: true,

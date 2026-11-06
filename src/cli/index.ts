@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { openProjectCommand } from './commands/open-project';
 import { aboutMe } from './commands/about-me';
 // Maestro CLI
 // Command-line interface for Maestro
@@ -316,8 +317,16 @@ list
 	.action(listSessions);
 
 program
-	.command('native-history <action> <agent> [conversation]')
-	.description('List or read native project history, or delete a whole Codex conversation')
+	.command('open-project <path>')
+	.description('Open a local project in the new shell, reusing its agent or creating one silently')
+	.option('--json', 'Output JSON')
+	.action(openProjectCommand);
+
+program
+	.command('native-history <action> [agent] [conversation]')
+	.description(
+		'List recent projects, list or read native project history, or delete a whole Codex conversation'
+	)
 	.option('--json', 'Output JSON')
 	.action(nativeHistory);
 

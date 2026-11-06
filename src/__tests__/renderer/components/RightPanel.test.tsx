@@ -655,6 +655,14 @@ describe('RightPanel', () => {
 			outside.remove();
 		});
 
+		it('removes the outer focus ring and starts tabs at 48px in the new shell', () => {
+			useSettingsStore.setState({ newShell: true });
+			useUIStore.setState({ activeFocus: 'right' });
+			const { container } = render(<RightPanel {...createDefaultProps()} />);
+			expect((container.firstChild as HTMLElement).style.boxShadow).toBe('');
+			expect(container.querySelector('[data-shell-header="right"]')).toHaveClass('h-12');
+		});
+
 		it('should show focus ring when activeFocus is right', () => {
 			useUIStore.setState({ activeFocus: 'right' });
 			const props = createDefaultProps();

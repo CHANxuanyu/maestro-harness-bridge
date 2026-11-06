@@ -1,3 +1,4 @@
+import { isMacOSPlatform } from './platformUtils';
 import { isWebDesktop } from './runtimeContext';
 
 /**
@@ -10,6 +11,7 @@ export const APP_TITLE_STRIP_HEIGHT = 40;
 
 export interface AppTitleStripConditions {
 	isMobileLandscape: boolean;
+	newShell?: boolean;
 	useNativeTitleBar: boolean;
 	isMdDownViewport: boolean;
 	/** Override for tests; defaults to the live `isWebDesktop()` answer. */
@@ -26,6 +28,7 @@ export interface AppTitleStripConditions {
 export function shouldShowAppTitleStrip(conditions: AppTitleStripConditions): boolean {
 	const webDesktop = conditions.isWebDesktop ?? isWebDesktop();
 	return (
+		!conditions.newShell &&
 		!conditions.isMobileLandscape &&
 		!conditions.useNativeTitleBar &&
 		!conditions.isMdDownViewport &&
@@ -47,4 +50,9 @@ export function appTitleStripText(input: {
 	if (input.group) parts.push(`${input.group.emoji ?? ''} ${input.group.name}`.trim());
 	parts.push(input.sessionName);
 	return parts.join(' \u00b7 ');
+}
+
+/** Reserved locally in the sidebar, independent of viewport width. */
+export function newShellSidebarInset(useNativeTitleBar: boolean, mac = isMacOSPlatform()): number {
+	return useNativeTitleBar ? 0 : mac ? 48 : 12;
 }

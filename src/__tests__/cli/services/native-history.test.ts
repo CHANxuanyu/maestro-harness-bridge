@@ -14,7 +14,8 @@ it('uses the desktop native reader and propagates compressed conversation errors
 	]);
 	expect(sendSimpleCommand).toHaveBeenCalledWith(
 		{ type: 'bridge.invoke', channel: 'agentSessions:listProjectHistory', args: [[]] },
-		'bridge.response'
+		'bridge.response',
+		undefined
 	);
 	vi.mocked(sendSimpleCommand).mockResolvedValueOnce({
 		ok: false,
@@ -22,5 +23,18 @@ it('uses the desktop native reader and propagates compressed conversation errors
 	});
 	await expect(invokeNativeHistory('agentSessions:read', [])).rejects.toThrow(
 		'Cannot transfer compressed Codex conversation'
+	);
+});
+
+it('allows project creation to wait for the renderer acknowledgement', async () => {
+	sendSimpleCommand.mockResolvedValueOnce({
+		ok: true,
+		result: { success: true, sessionId: 'owner' },
+	});
+	await invokeNativeHistory('agentSessions:openProject', ['/project'], 45000);
+	expect(sendSimpleCommand).toHaveBeenLastCalledWith(
+		{ type: 'bridge.invoke', channel: 'agentSessions:openProject', args: ['/project'] },
+		'bridge.response',
+		45000
 	);
 });

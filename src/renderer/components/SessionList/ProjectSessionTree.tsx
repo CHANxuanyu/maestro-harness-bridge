@@ -1,3 +1,5 @@
+import { chooseProject } from '../../services/openProject';
+import { Spinner } from '../ui/Spinner';
 /**
  * ProjectSessionTree - the Left Bar's conversation-first navigation.
  *
@@ -326,6 +328,7 @@ const StatusMark = memo(function StatusMark({
 	conversation: SidebarConversation;
 	t: TFunction;
 }) {
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const labels: string[] = [];
 	if (conversation.error) labels.push(t('workflows.conversations.error'));
 	if (conversation.busy) labels.push(t('workflows.conversations.busy'));
@@ -338,7 +341,9 @@ const StatusMark = memo(function StatusMark({
 	if (conversation.error) {
 		mark = <AlertCircle className="w-3 h-3" style={{ color: theme.colors.error }} />;
 	} else if (conversation.busy) {
-		mark = (
+		mark = newShell ? (
+			<Spinner size={12} color={theme.colors.warning} />
+		) : (
 			<span
 				className="block w-1.5 h-1.5 rounded-full animate-pulse"
 				style={{ backgroundColor: theme.colors.warning }}
@@ -668,6 +673,7 @@ const ProjectSection = memo(function ProjectSection({
 	);
 
 	// While searching, a project with nothing matching keeps only its header.
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const showEmpty = expanded && count === 0 && !searching && !historyLoading;
 	const showLoading = expanded && count === 0 && !searching && historyLoading;
 
@@ -700,7 +706,7 @@ const ProjectSection = memo(function ProjectSection({
 							style={{ color: theme.colors.textDim }}
 						/>
 					)}
-					{project.emoji && (
+					{!newShell && project.emoji && (
 						<span aria-hidden className="shrink-0">
 							{project.emoji}
 						</span>
@@ -1160,6 +1166,16 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					triggerRef={triggerRef}
 					onDismiss={dismissMenu}
 				/>
+			)}
+			{newShell && (
+				<button
+					type="button"
+					onClick={() => void chooseProject()}
+					className="mx-2 mt-2 px-2 py-2 rounded text-left text-xs focus-ring hover:bg-white/5"
+					style={{ color: theme.colors.textDim }}
+				>
+					{t('workflows.projects.open')}
+				</button>
 			)}
 		</div>
 	);

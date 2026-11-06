@@ -267,6 +267,14 @@ export function setupIpcHandlers(deps: IpcBootstrapDependencies): void {
 	// Pass the shared claudeSessionOriginsStore so session names/stars are consistent
 	initializeSessionStorages({ claudeSessionOriginsStore: deps.claudeSessionOriginsStore });
 	registerAgentSessionsHandlers({
+		getWindowForSession: (sessionId) => {
+			const ownerId = deps.windowRegistry.getWindowForSession(sessionId);
+			return (
+				(ownerId ? deps.windowRegistry.get(ownerId) : deps.windowRegistry.getPrimary())
+					?.browserWindow ?? deps.getMainWindow()
+			);
+		},
+		getAgentDetector: deps.getAgentDetector,
 		getMainWindow: deps.getMainWindow,
 		agentSessionOriginsStore: deps.agentSessionOriginsStore,
 	});

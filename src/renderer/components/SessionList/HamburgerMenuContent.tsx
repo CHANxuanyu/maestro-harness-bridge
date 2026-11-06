@@ -1,3 +1,4 @@
+import { chooseProject } from '../../services/openProject';
 import {
 	Bell,
 	MessageSquarePlus,
@@ -79,6 +80,19 @@ export function HamburgerMenuContent({
 
 	return (
 		<div className="p-1">
+			{newShell && (
+				<button
+					type="button"
+					onClick={() => {
+						setMenuOpen(false);
+						void chooseProject();
+					}}
+					className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded hover:bg-white/5 text-left"
+				>
+					<span>{t('workflows.projects.open')}</span>
+					<ShortcutHint theme={theme} keys={shortcuts.openProject?.keys ?? []} />
+				</button>
+			)}
 			{newShell && (
 				<button
 					onClick={() => {

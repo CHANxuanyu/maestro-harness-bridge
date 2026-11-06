@@ -1,3 +1,12 @@
+import { createProjectOpener } from '../../open-project';
+import { createNativeProjectDiscovery } from '../../storage/native-projects';
+import { getAgentAccountDirLayers } from '../../agents/provider-account-dirs';
+import { resolveAgentAccountDir as resolveAccountDir } from '../../../shared/agentAccountDir';
+import { getSettingsStore } from '../../stores/getters';
+import { requestFromRenderer } from '../../web-server/callbacks/remoteRequest';
+import { isWebContentsAvailable } from '../../utils/safe-send';
+import type { AgentDetector } from '../../agents';
+import type { OpenProjectResult } from '../../../shared/projects';
 import {
 	readCodexRollout,
 	preferPlainCodexRollouts,
@@ -131,6 +140,8 @@ export interface AgentSessionOriginsData {
  * Dependencies required for agent sessions handlers
  */
 export interface AgentSessionsHandlerDependencies {
+	getAgentDetector?: () => AgentDetector | null;
+	getWindowForSession?: (sessionId: string) => BrowserWindow | null;
 	getMainWindow: () => BrowserWindow | null;
 	agentSessionOriginsStore?: Store<AgentSessionOriginsData>;
 }
@@ -402,6 +413,66 @@ function aggregateProviderStats(
 export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDependencies): void {
 	const getMainWindow = deps?.getMainWindow;
 	const safeSend = createSafeSend(getMainWindow ?? (() => null));
+	const nativeProjects = createNativeProjectDiscovery({
+		accountDirs: async (provider) => {
+			const dirs = await getProviderAccountDirs(provider);
+			const layers = getAgentAccountDirLayers(provider);
+			const effectiveDefault = resolveAccountDir({ toolType: provider }, layers);
+			if (effectiveDefault) dirs.push(effectiveDefault);
+			for (const owner of getSessionsStore().get('sessions', [])) {
+				if (owner.toolType !== provider || owner.sessionSshRemoteConfig?.enabled) continue;
+				const dir = resolveAgentAccountDir(owner.id);
+				if (dir) dirs.push(dir);
+			}
+			return [...new Set(dirs)];
+		},
+	});
+	const openProject = createProjectOpener({
+		sessions: () => getSessionsStore().get('sessions', []),
+		detect: async () => (await deps?.getAgentDetector?.()?.detectAgents()) ?? [],
+		open: async (target) => {
+			const win = target.sessionId
+				? (deps?.getWindowForSession?.(target.sessionId) ?? getMainWindow?.())
+				: ((target.requesterWindowId ? BrowserWindow.fromId(target.requesterWindowId) : null) ??
+					getMainWindow?.());
+			const fallback: OpenProjectResult = {
+				success: false,
+				code: 'unavailable',
+				error: 'The project window is unavailable',
+			};
+			if (!isWebContentsAvailable(win)) return fallback;
+			const result = await requestFromRenderer(win, 'agentSessions:openProjectTarget', {
+				args: [target],
+				fallback,
+				timeoutMs: 30000,
+			});
+			if (result.success && isWebContentsAvailable(win)) {
+				if (win.isMinimized()) win.restore();
+				win.show();
+				win.focus();
+			}
+			return result;
+		},
+	});
+	ipcMain.handle(
+		'agentSessions:projects',
+		withIpcErrorLogging(handlerOpts('projects'), nativeProjects)
+	);
+	const openHandler = withIpcErrorLogging(
+		handlerOpts('openProject'),
+		async (directory: string, requesterWindowId?: number) => {
+			if (!getSettingsStore().get('newShell', false))
+				throw new Error('Open Project requires the new shell');
+			return openProject(directory, requesterWindowId);
+		}
+	);
+	ipcMain.handle('agentSessions:openProject', (event, directory: string) =>
+		openHandler(
+			event,
+			directory,
+			event.sender ? BrowserWindow.fromWebContents(event.sender)?.id : undefined
+		)
+	);
 
 	ipcMain.handle(
 		'agentSessions:listProjectHistory',

@@ -1,3 +1,4 @@
+import { chooseProject } from '../../services/openProject';
 import { useEffect, useRef, useState } from 'react';
 import type { Session, AITab } from '../../types';
 import {
@@ -632,7 +633,11 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 
 			// General shortcuts
 			// Only allow collapsing left sidebar when there are sessions (prevent collapse on empty state)
-			if (ctx.isShortcut(e, 'toggleSidebar')) {
+			if (useSettingsStore.getState().newShell && ctx.isShortcut(e, 'openProject')) {
+				e.preventDefault();
+				void chooseProject();
+				trackShortcut('openProject');
+			} else if (ctx.isShortcut(e, 'toggleSidebar')) {
 				if (useSessionStore.getState().sessions.length > 0 || !ctx.leftSidebarOpen) {
 					ctx.setLeftSidebarOpen((p: boolean) => !p);
 					trackShortcut('toggleSidebar');
@@ -718,7 +723,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					tileNewTabInSession(ctx.activeSessionId, matchedTile.kind);
 					trackShortcut(matchedTile.shortcutId);
 				}
-			} else if (ctx.isShortcut(e, 'agentSwitcher')) {
+			} else if (!useSettingsStore.getState().newShell && ctx.isShortcut(e, 'agentSwitcher')) {
 				e.preventDefault();
 				if (useSessionStore.getState().sessions.length > 0) {
 					ctx.setQuickActionOpen(true, 'agents');
@@ -726,7 +731,10 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				}
 			} else if (ctx.isShortcut(e, 'quickAction')) {
 				e.preventDefault();
-				if (useSessionStore.getState().sessions.length > 0) {
+				if (
+					useSessionStore.getState().sessions.length > 0 ||
+					useSettingsStore.getState().newShell
+				) {
 					ctx.setQuickActionOpen(true, 'main');
 					trackShortcut('quickAction');
 				}

@@ -70,9 +70,25 @@ function makeSession() {
 }
 
 describe('tiled AI pane chat wiring', () => {
+	it.each([false, true])(
+		'keeps pane focus routing but removes the outer ring only in newShell=%s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const session = makeSession();
+			useSessionStore.getState().setSessions([session]);
+			const { container } = render(
+				<TiledLayout group={makeGroup()} session={session} theme={theme} />
+			);
+			const pane = container.querySelector<HTMLElement>('[data-pane-leaf-id="leaf-1"]')!;
+			expect(pane.style.boxShadow).toBe(newShell ? '' : `inset 0 0 0 1px ${theme.colors.accent}`);
+			expect(pane.style.borderColor).toBe(newShell ? 'rgb(49, 50, 68)' : 'rgb(137, 180, 250)');
+		}
+	);
+
 	beforeEach(() => {
 		chatProps.length = 0;
 		useSettingsStore.setState({ uiLanguage: 'en' });
+		useSettingsStore.setState({ newShell: false });
 		useModalStore.getState().closeAll();
 		vi.mocked(notifyCenterFlash).mockClear();
 		useSessionStore.getState().setSessions([]);
@@ -82,6 +98,7 @@ describe('tiled AI pane chat wiring', () => {
 	afterEach(() => {
 		cleanup();
 		useSettingsStore.setState({ uiLanguage: 'system' });
+		useSettingsStore.setState({ newShell: false });
 	});
 
 	it('gives every AI pane the same queue actions the single view has', () => {

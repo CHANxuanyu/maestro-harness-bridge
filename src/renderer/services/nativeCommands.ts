@@ -19,10 +19,15 @@ export async function conversationNativeCommands(session: Session) {
 		!selectNewShellEnabled(useSettingsStore.getState()) ||
 		!['claude-code', 'codex'].includes(session.toolType)
 	)
-		return session.agentCommands ?? [];
+		return { commands: session.agentCommands ?? [], warning: undefined };
 	try {
-		return (await window.maestro.agents.getNativeCommands(nativeCommandContext(session))).commands;
+		return await window.maestro.agents.getNativeCommands(nativeCommandContext(session));
 	} catch {
-		return nativeBuiltinCommands(session.toolType);
+		return {
+			commands: nativeBuiltinCommands(session.toolType),
+			warning: nativeCommandContext(session).sessionSshRemoteConfig?.enabled
+				? ('remote-unavailable' as const)
+				: ('unavailable' as const),
+		};
 	}
 }

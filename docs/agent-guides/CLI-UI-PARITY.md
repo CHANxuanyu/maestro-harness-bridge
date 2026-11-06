@@ -50,6 +50,8 @@ its stored owner. Results contain `commands` with `command`, `description`,
 `source` (`project`, `user`, `builtin`) and a Codex `prompt` when applicable.
 An unavailable read returns `warning` (`unavailable` or `remote-unavailable`)
 and the supported native builtins. The JSON warning is data, not a failed transport.
+Queued native command execution preserves read failures and holds the item for
+manual resend through the existing queue controls, including CLI queue actions.
 This verb lists the native portion of `/`; Maestro's own workflow commands and
 Settings custom AI commands retain their existing configuration paths.
 

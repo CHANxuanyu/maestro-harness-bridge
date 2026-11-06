@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 /**
  * Tests for agentStore - Agent lifecycle orchestration store
  *
@@ -1242,6 +1243,7 @@ describe('agentStore', () => {
 
 		beforeEach(() => {
 			mockGetAgent.mockResolvedValue(mockAgent);
+			useSettingsStore.setState({ newShell: false });
 		});
 
 		it('spawns agent with queued message text', async () => {
@@ -1797,6 +1799,34 @@ describe('agentStore', () => {
 			expect(spawnCall.readOnlyMode).toBe(false);
 			expect(spawnCall.permissionMode).toBe('full');
 		});
+
+		it.each(['warning', 'rejection'])(
+			'holds a queued native command on discovery %s',
+			async (failure) => {
+				useSettingsStore.setState({ newShell: true });
+				const session = createMockSession({
+					id: 'native-queue',
+					toolType: 'codex',
+					state: 'busy',
+					sessionSshRemoteConfig: { enabled: true, remoteId: 'fixture' },
+				});
+				useSessionStore.getState().setSessions([session]);
+				window.maestro.agents.getNativeCommands =
+					failure === 'warning'
+						? vi.fn().mockResolvedValue({ commands: [], warning: 'remote-unavailable' })
+						: vi.fn().mockRejectedValue(new Error('IPC unavailable'));
+				const item = createQueuedItem({ type: 'command', command: '/deploy', text: undefined });
+				await expect(
+					useAgentStore.getState().processQueuedItem(session.id, item, defaultDeps)
+				).rejects.toThrow();
+				expect(mockSpawn).not.toHaveBeenCalled();
+				const updated = useSessionStore.getState().sessions[0];
+				expect(updated.executionQueue).toEqual([
+					expect.objectContaining({ id: item.id, command: '/deploy', paused: true }),
+				]);
+				expect(updated.state).toBe('idle');
+			}
+		);
 
 		it('processes slash command and spawns agent', async () => {
 			const session = createMockSession({

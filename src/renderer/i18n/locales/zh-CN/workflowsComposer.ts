@@ -1,4 +1,6 @@
 export const workflowsComposer = {
+	'workflows.nativeCommands.queuedUnavailable':
+		'暂时无法读取原生命令，这条命令已保留在队列中。连接恢复后可重新发送。',
 	'workflows.nativeCommands.project': '项目',
 	'workflows.nativeCommands.user': '用户',
 	'workflows.nativeCommands.unavailable': '无法读取原生命令，暂时只显示内置命令。',

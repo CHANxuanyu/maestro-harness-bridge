@@ -56,6 +56,10 @@
 					{
 						"context": "HB release policy",
 						"integration_id": 15368
+					},
+					{
+						"context": "Native resume E2E (Linux)",
+						"integration_id": 15368
 					}
 				]
 			}

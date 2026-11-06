@@ -61,6 +61,7 @@ const mockSyncTerminalInputToSession = vi.fn();
 
 vi.mock('../../../renderer/hooks/input/useInputSync', () => ({
 	useInputSync: vi.fn(() => ({
+		flushAiDraft: vi.fn(),
 		syncAiInputToSession: mockSyncAiInputToSession,
 		queueAiDraftFlush: mockQueueAiDraftFlush,
 		syncTerminalInputToSession: mockSyncTerminalInputToSession,
@@ -98,6 +99,13 @@ import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useGroupChatStore } from '../../../renderer/stores/groupChatStore';
 import { useUIStore } from '../../../renderer/stores/uiStore';
 import { useFileExplorerStore } from '../../../renderer/stores/fileExplorerStore';
+import { useDebouncedPersistence } from '../../../renderer/hooks/utils/useDebouncedPersistence';
+import { confirmQuitAfterSave } from '../../../renderer/services/quitSave';
+
+vi.mock('../../../renderer/utils/sentry', () => ({
+	captureException: vi.fn(),
+	captureMessage: vi.fn(),
+}));
 
 function createDefaultBatchState(): BatchRunState {
 	return {
@@ -214,6 +222,86 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('composer draft ownership', () => {
+	it.each([
+		{ entry: 'request', images: false },
+		{ entry: 'request', images: true },
+		{ entry: 'confirm', images: false },
+		{ entry: 'confirm', images: true },
+	])(
+		'saves live drafts before $entry completes without blur, timers or another render, images $images',
+		async ({ entry, images }) => {
+			vi.useFakeTimers();
+			const actual = await vi.importActual<
+				typeof import('../../../renderer/hooks/input/useInputSync')
+			>('../../../renderer/hooks/input/useInputSync');
+			const previous = vi.mocked(useInputSync).getMockImplementation()!;
+			vi.mocked(useInputSync).mockImplementation(actual.useInputSync);
+			const session = baseCreateMockSession({
+				id: 'session-a',
+				activeTabId: 'a1',
+				aiTabs: [createMockAITab({ id: 'a1', inputValue: 'Draft before the move' })],
+				terminalDraftInput: 'old terminal draft',
+			});
+			const peer = baseCreateMockSession({ id: 'peer' });
+			useSessionStore.setState({ sessions: [session, peer], sessionsReadOk: true });
+			let saveRequest: () => void | Promise<void>;
+			vi.mocked(window.maestro.app.onQuitSaveRequest).mockImplementation((save) => {
+				saveRequest = save;
+				return vi.fn();
+			});
+			vi.mocked(window.maestro.sessions.setAll).mockResolvedValue(true);
+			vi.mocked(window.maestro.sessions.setMany).mockResolvedValue(true);
+			const loaded = { current: true };
+			const harness = renderHook(() => ({
+				input: useInputHandlers(createMockDeps()),
+				persistence: useDebouncedPersistence(loaded, undefined, (id) => id === session.id),
+			}));
+			try {
+				await act(async () => {
+					harness.result.current.persistence.flushNow(useSessionStore.getState().sessions);
+				});
+				vi.mocked(window.maestro.sessions.setMany).mockClear();
+				let finishSave!: (saved: boolean) => void;
+				vi.mocked(window.maestro.sessions.setMany).mockImplementationOnce(
+					() => new Promise((resolve) => (finishSave = resolve))
+				);
+				let completed = false;
+				await act(async () => {
+					useComposerInputStore.getState().setAiValue('Draft before the window closes');
+					useComposerInputStore.getState().setAiCommandMode('shell');
+					useComposerInputStore.getState().setTerminalValue('latest terminal draft');
+					if (images) {
+						harness.result.current.input.setStagedImages(['maestro-image://draft-image']);
+					} else {
+						expect(harness.result.current.persistence.isPending).toBe(false);
+					}
+					expect(useSessionStore.getState().sessions[0].aiTabs[0].inputValue).toBe(
+						'Draft before the move'
+					);
+					const saving = Promise.resolve(
+						entry === 'request' ? saveRequest!() : confirmQuitAfterSave()
+					).then(() => (completed = true));
+					const written = vi.mocked(window.maestro.sessions.setMany).mock.calls[0][0] as Session[];
+					expect(written.map((s) => s.id)).toEqual([session.id]);
+					expect(written[0].aiTabs[0]).toMatchObject({
+						inputValue: 'Draft before the window closes',
+						commandMode: 'shell',
+						stagedImages: images ? ['maestro-image://draft-image'] : [],
+					});
+					expect(written[0].terminalDraftInput).toBe('latest terminal draft');
+					expect(completed).toBe(false);
+					finishSave(true);
+					await saving;
+				});
+				expect(completed).toBe(true);
+			} finally {
+				harness.unmount();
+				vi.mocked(useInputSync).mockImplementation(previous);
+				vi.useRealTimers();
+			}
+		}
+	);
+
 	it.each([false, true])(
 		'retains a reused handoff draft through actual tab-switch effects, new shell %s',
 		async (newShell) => {

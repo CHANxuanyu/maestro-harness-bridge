@@ -70,6 +70,7 @@ const mockSyncTerminalInputToSession = vi.fn();
 
 vi.mock('../../../renderer/hooks/input/useInputSync', () => ({
 	useInputSync: vi.fn(() => ({
+		flushAiDraft: vi.fn(),
 		syncAiInputToSession: mockSyncAiInputToSession,
 		queueAiDraftFlush: mockQueueAiDraftFlush,
 		syncTerminalInputToSession: mockSyncTerminalInputToSession,

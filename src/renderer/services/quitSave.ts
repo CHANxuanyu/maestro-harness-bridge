@@ -18,6 +18,9 @@
  * asks EVERY app window to save (`app:requestQuitSave`) and waits for each
  * answer, five seconds in all, before its cleanup. `answerQuitSaveRequests()`
  * is each window's answer, mounted by the same persistence hook.
+ * Agent moves and window closes reuse that request. The input hook registers
+ * draft preparation here so both entry points land live text in the session
+ * store synchronously before persistence takes its snapshot.
  */
 
 import { logger } from '../utils/logger';
@@ -31,6 +34,15 @@ import { logger } from '../utils/logger';
 export const QUIT_SAVE_TIMEOUT_MS = 3000;
 
 let saveBeforeQuit: (() => Promise<void>) | null = null;
+let prepareQuitSave: (() => void) | null = null;
+
+/** Land live composer drafts in the session store before the registered save reads it. */
+export function registerQuitSavePreparation(prepare: () => void): () => void {
+	prepareQuitSave = prepare;
+	return () => {
+		if (prepareQuitSave === prepare) prepareQuitSave = null;
+	};
+}
 
 /** Register the flush that must land before quit. Returns an unregister. */
 export function registerQuitSave(save: () => Promise<void>): () => void {
@@ -44,9 +56,10 @@ export function registerQuitSave(save: () => Promise<void>): () => void {
  * Run the registered save. Rejects when it fails or does not settle within
  * QUIT_SAVE_TIMEOUT_MS, so a caller can tell a save from a give-up.
  */
-function runRegisteredSave(): Promise<void> {
+async function runRegisteredSave(): Promise<void> {
 	const save = saveBeforeQuit;
 	if (!save) return Promise.resolve();
+	prepareQuitSave?.();
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	return Promise.race([
 		save(),

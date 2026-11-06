@@ -30,6 +30,7 @@ import { useEventListener } from '../utils/useEventListener';
 import { generateId } from '../../utils/ids';
 import { useSessionStore, selectSessionById } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { switchSessionProvider } from '../../utils/providerTabSessions';
 import { PLAYBOOKS_DIR } from '../../../shared/maestro-paths';
 import { permissionModeFields } from '../../utils/tabHelpers/focusFields';
 import { asThinkingMode } from '../../../shared/types';
@@ -1850,15 +1851,26 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 
 		const patchObj = configPatch as Record<string, unknown>;
 
-		// Provider switch (toolType change) is destructive and handled separately
-		// from plain settings edits: it resets tabs, clears provider-specific
-		// config, and kills the running agent process - mirroring the Edit Agent
-		// modal's toolType-change branch. The CLI gates this behind --force. When a
-		// toolType is present and actually differs, do the switch and ignore any
-		// other keys in the same patch (the CLI sends it exclusively).
+		// Provider changes are sent separately from other config edits.
+		// New shell shares the Edit Agent transition; classic CLI keeps its reset.
 		const requestedToolType =
 			typeof patchObj.toolType === 'string' ? (patchObj.toolType as ToolType) : undefined;
 		if (requestedToolType && requestedToolType !== session.toolType) {
+			if (useSettingsStore.getState().newShell) {
+				const updated = switchSessionProvider(session, requestedToolType);
+				setSessions((prev: Session[]) =>
+					prev.map((s) => (s.id === sessionId ? switchSessionProvider(s, requestedToolType) : s))
+				);
+				try {
+					await window.maestro.sessions.setMany([updated as any], []);
+				} catch (persistErr) {
+					logger.error('[Remote] Failed to persist provider switch:', undefined, persistErr);
+				}
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: true,
+				});
+				return;
+			}
 			const newTabId = generateId();
 			const freshTab: AITab = {
 				id: newTabId,

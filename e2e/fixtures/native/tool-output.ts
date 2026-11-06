@@ -9,7 +9,8 @@ export function moveClaudeToolResultToChild(file: string, nativeId: string, tool
 		.split('\n')
 		.map((line) => JSON.parse(line));
 	const isChildResult = (row: any) =>
-		row.message?.content?.some(
+		Array.isArray(row.message?.content) &&
+		row.message.content.some(
 			(block: any) => block.type === 'tool_result' && block.tool_use_id === toolCallId
 		);
 	const directory = path.join(path.dirname(file), nativeId, 'subagents');

@@ -400,6 +400,14 @@ fills that call ID without replacing the card. Claude searches only the parent's
 No result is written to session state or native files. Missing records, read limits
 and unavailable readers are explicit results. The CLI requires the running desktop.
 
+With `newShell` enabled, `update-agent <id> --provider <provider> --force`
+shares `switchSessionProvider()` with Edit Agent. It parks each tab's native
+identity through `switchTabProvider()` and retains transcripts, tool sources,
+drafts, file tabs and running turns. Provider overrides are cleared for the next
+turn. The classic CLI keeps its existing reset behavior. The tool-output Electron
+scenario verifies the old Claude answer remains after the Codex continuation,
+then reads the old result through both the card and `native-history tool-output`.
+
 ## Covered
 
 Notification center history uses the live desktop `notificationStore` over a request-response bridge. Main owns durable append/read/clear mutations in `maestro-notification-history.json`; renderer snapshots are synchronized across windows, and CLI results await committed writes. `notify inbox list --unread` filters the snapshot, `read <id>` / `read-all` update read state, `clear` clears history, `dismiss [id]` dismisses one entry or clears visible toasts, and `activate <id>` / `link <id>` run the same entry and inline-link actions as the UI. Every result includes the resulting unread count and history. `detail <id>` / `collapse` expand and collapse the same in-inbox details view. The five opt-in inbox preferences are registered settings and can be changed with `settings set <key> <value>`. `open notification-center` and `notify inbox open` open the app-level popover even when the Main Panel header is absent.
@@ -476,6 +484,11 @@ Notification center history uses the live desktop `notificationStore` over a req
 | Playbook Exchange: browse, README, install                                  | `marketplace list`, `marketplace show <id>`, `marketplace import`                                                |
 
 ## Open gaps
+
+**Provider switch wording (2026-11-06).** The existing CLI help, force warning and
+success text still describe the classic reset behavior. With `newShell` enabled,
+the operation preserves conversations as documented above. This round changes
+the transition and its tests, not the CLI text or localization infrastructure.
 
 **On-demand tool output (2026-11-06).** SSH is unavailable because existing remote
 readers transfer the transcript before selecting a result. The card hides this

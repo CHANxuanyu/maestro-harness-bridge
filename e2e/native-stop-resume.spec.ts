@@ -3,6 +3,8 @@ import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { NativeApp } from './fixtures/native-app';
 import type { Session } from '../src/renderer/types';
+import { appendReadOnlyPrompt } from '../src/shared/readOnlyPrompt';
+import { transcriptMessagesToLogEntries } from '../src/renderer/utils/transcriptMessages';
 
 // This regression must never discover credentials or invoke a real provider.
 for (const provider of ['claude', 'codex'] as const) {
@@ -107,6 +109,137 @@ for (const provider of ['claude', 'codex'] as const) {
 					.filter((entry) => entry.source === 'user')
 					.some((entry) => entry.text.includes(internalText))
 			).toBe(false);
+		} catch (error) {
+			failed = true;
+			throw error;
+		} finally {
+			if (failed && !closed && native.app) await native.close(true);
+		}
+	});
+
+	// eslint-disable-next-line no-empty-pattern
+	test(`${provider} repairs an old mentioned turn beyond the tail window and keeps a real repeat`, async ({}, info) => {
+		if (process.env.MAESTRO_E2E_REAL === '1') {
+			throw new Error('This regression requires synthetic providers. Unset MAESTRO_E2E_REAL.');
+		}
+		const native = new NativeApp(info, { providerCli: false });
+		native.scriptTurns([]);
+		const home = path.join(native.root, 'home');
+		fs.mkdirSync(home, { recursive: true });
+		const settingsFile = path.join(native.data, 'maestro-settings.json');
+		fs.writeFileSync(
+			settingsFile,
+			JSON.stringify({
+				...JSON.parse(fs.readFileSync(settingsFile, 'utf8')),
+				newShell: true,
+				defaultSaveToHistory: false,
+				crashReportingEnabled: false,
+			})
+		);
+		const prompt = 'Wait for @Reviewer in parallel, then report the result.';
+		const wire =
+			appendReadOnlyPrompt(prompt) +
+			'\n\n---\n\n' +
+			fs
+				.readFileSync(path.resolve('src/prompts/cross-agent-consult-pending.md'), 'utf8')
+				.split('{{CONSULTED_AGENTS}}')
+				.join('Reviewer');
+		const seed = await native.externalTurn(provider, wire, { answer: '' });
+		await native.externalTurn(provider, prompt, { answer: 'The genuine repeat stays.' }, seed.id);
+		for (let index = 0; index < 325; index++) {
+			await native.externalTurn(
+				provider,
+				`Later question ${index}`,
+				{ answer: `Later answer ${index}` },
+				seed.id
+			);
+		}
+		const bytes = fs.readFileSync(seed.file);
+		const sessionsFile = path.join(native.data, 'maestro-sessions.json');
+		const saved = (): { sessions: Session[] } => JSON.parse(fs.readFileSync(sessionsFile, 'utf8'));
+		let failed = false;
+		let closed = true;
+		try {
+			await native.start(home);
+			closed = false;
+			const agentId = await native.createAgent(provider);
+			const result = await native.page.evaluate(
+				async ({ tool, cwd, id, ownerAgentId }) =>
+					window.maestro.agentSessions.read(tool, cwd, id, {
+						limit: 2000,
+						offset: 0,
+						readOnly: true,
+						ownerAgentId,
+					}),
+				{
+					tool: provider === 'claude' ? 'claude-code' : 'codex',
+					cwd: native.project,
+					id: seed.id,
+					ownerAgentId: agentId,
+				}
+			);
+			expect(result.messages.length).toBeGreaterThan(500);
+			await native.close();
+			closed = true;
+			// Seed only the temporary Maestro cache as an older build left it.
+			// The fixture's native file is never rewritten during repair.
+			const state = saved();
+			const session = state.sessions.find((item) => item.id === agentId)!;
+			const tab = session.aiTabs.find((item) => item.id === session.activeTabId)!;
+			const canonical = transcriptMessagesToLogEntries(result.messages);
+			const first = canonical.find((entry) => entry.source === 'user')!;
+			const own = {
+				id: 'cached-local-send',
+				source: 'user' as const,
+				timestamp: first.timestamp - 200,
+				text: prompt,
+				readOnly: true,
+			};
+			tab.agentSessionId = seed.id;
+			tab.logs = [
+				own,
+				...canonical.map((entry) => (entry.id === first.id ? { ...entry, text: wire } : entry)),
+			];
+			fs.writeFileSync(sessionsFile, JSON.stringify(state));
+			await native.start(home);
+			closed = false;
+			const conversation = native.page.locator(
+				`[data-conversation-key="${agentId}:${tab.id}"] [data-tree-nav]`
+			);
+			await conversation.click();
+			await expect
+				.poll(() => {
+					const logs = saved()
+						.sessions.find((item) => item.id === agentId)!
+						.aiTabs.find((item) => item.id === tab.id)!.logs;
+					return logs
+						.filter((entry) => entry.source === 'user' && entry.text.startsWith(prompt))
+						.map((entry) => entry.text);
+				})
+				.toEqual([prompt, prompt]);
+			await native.restart(home);
+			await native.page
+				.locator(`[data-conversation-key="${agentId}:${tab.id}"] [data-tree-nav]`)
+				.click();
+			await expect(native.output()).not.toContainText('IMPORTANT: You are in read-only/plan mode.');
+			await expect(native.output()).not.toContainText('[Maestro] This message also mentions');
+			await native.close();
+			closed = true;
+			const logs = saved()
+				.sessions.find((item) => item.id === agentId)!
+				.aiTabs.find((item) => item.id === tab.id)!.logs;
+			expect(
+				logs
+					.filter((entry) => entry.source === 'user' && entry.text.startsWith(prompt))
+					.map((entry) => entry.text)
+			).toEqual([prompt, prompt]);
+			expect(
+				logs.some((entry) => entry.text.includes('IMPORTANT: You are in read-only/plan mode.'))
+			).toBe(false);
+			expect(
+				logs.some((entry) => entry.text.includes('[Maestro] This message also mentions'))
+			).toBe(false);
+			expect(fs.readFileSync(seed.file)).toEqual(bytes);
 		} catch (error) {
 			failed = true;
 			throw error;

@@ -58,6 +58,16 @@ not share the desktop handler's multi-tab, queue and synopsis cancellation work.
 Closing that gap requires an acknowledged command routed to the same owner and
 interrupt implementation. This correction adds no separate stop implementation.
 
+The review follow-up keeps these same actions. Consecutive refreshes preserve
+genuine repeated sends; an old cached internal prompt outside the newest 500
+messages makes the same read-only service widen its window. `withMentionTurnNotes()`
+now uses the shared `appendTurnNote()` envelope, including editable templates;
+`stripTurnPrompt()` decodes it and the historical default note order before
+native messages enter resume, backfill or refresh. No new CLI verb or UI control
+is added. The native refresh and Stop entries under Open gaps remain open, and
+raw native-history reads still expose provider wire content. Old custom notes
+without the new envelope cannot be identified safely and remain unchanged.
+
 ## New shell cleanup, batch 1
 
 The new shell permission menu and the phone options sheet share `permissionModes()`

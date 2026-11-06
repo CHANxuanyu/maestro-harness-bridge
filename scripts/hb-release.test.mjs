@@ -13,8 +13,17 @@ import {
 } from './hb-release.mjs';
 
 const hash = (value) => createHash('sha256').update(value).digest('hex');
-const version = '1.0.1-hb.5';
+const version = '1.0.1-hb.6';
 const sourceCommit = 'a'.repeat(40);
+const requiredCiJobNames = [
+	'HB release policy',
+	'lint-and-format',
+	'Test (ubuntu-latest, shard 1/2)',
+	'Test (ubuntu-latest, shard 2/2)',
+	'Test (windows-latest, shard 1/2)',
+	'Test (windows-latest, shard 2/2)',
+	'Native resume E2E (Linux)',
+];
 function evidence(change = () => {}) {
 	const appName = `Maestro-I18n-${version}-mac-arm64.zip`;
 	const connectorName = `Maestro-Codex-Shared-${version}.zip`;
@@ -67,7 +76,7 @@ test('coherent package evidence with explicit limited GUI scope passes', () => {
 	assert.equal(assetNames(version).length, 5);
 });
 test('rejects upstream, development and reserved failed-candidate tags', () => {
-	for (const tag of ['v1.0.1', 'v1.0.1-hb.5-dev.1', 'v1.0.1-hb.1', 'v1.0.1-hb.05']) {
+	for (const tag of ['v1.0.1', 'v1.0.1-hb.6-dev.1', 'v1.0.1-hb.1', 'v1.0.1-hb.5', 'v1.0.1-hb.05']) {
 		assert.throws(() => versionFromTag(tag));
 	}
 });
@@ -109,7 +118,7 @@ test('rejects versions or source commits from a different build', () => {
 	assert.throws(() =>
 		verify(
 			evidence((build) => {
-				build.version = '1.0.1-hb.6';
+				build.version = '1.0.1-hb.7';
 			})
 		)
 	);
@@ -146,6 +155,24 @@ test('rejects failed tests, missing GUI scope, privacy failures and personal pat
 		/Private path/
 	);
 });
+test('checked-in release policy requires all seven workflow jobs', () => {
+	assert.deepEqual([...policy.requiredCiJobs].sort(), [...requiredCiJobNames].sort());
+});
+for (const missingName of requiredCiJobNames) {
+	test(`release CI rejects a missing required job: ${missingName}`, () => {
+		const ci = {
+			headSha: sourceCommit,
+			headBranch: policy.defaultBranch,
+			event: 'push',
+			status: 'completed',
+			conclusion: 'success',
+			jobs: requiredCiJobNames
+				.filter((name) => name !== missingName)
+				.map((name) => ({ name, conclusion: 'success' })),
+		};
+		assert.throws(() => checkCi(ci, sourceCommit), { message: `Missing CI: ${missingName}` });
+	});
+}
 test('release CI must complete for the exact integration source, with all required jobs', () => {
 	const ci = {
 		headSha: sourceCommit,
@@ -153,7 +180,7 @@ test('release CI must complete for the exact integration source, with all requir
 		event: 'push',
 		status: 'completed',
 		conclusion: 'success',
-		jobs: policy.requiredCiJobs.map((name) => ({ name, conclusion: 'success' })),
+		jobs: requiredCiJobNames.map((name) => ({ name, conclusion: 'success' })),
 	};
 	checkCi(ci, sourceCommit);
 	for (const patch of [
@@ -194,10 +221,7 @@ test('checked-in default-branch rules require all CI jobs and PRs without a solo
 	);
 	const checks = ruleset.rules.find((rule) => rule.type === 'required_status_checks').parameters
 		.required_status_checks;
-	assert.deepEqual(
-		checks.map((check) => check.context).sort(),
-		[...policy.requiredCiJobs, 'HB release policy'].sort()
-	);
+	assert.deepEqual(checks.map((check) => check.context).sort(), [...policy.requiredCiJobs].sort());
 	assert(checks.every((check) => check.integration_id === 15368));
 });
 

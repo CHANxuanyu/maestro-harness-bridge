@@ -32,6 +32,32 @@ const snapshot = (paths: string[], root = '/repo'): GitChanges => ({
 });
 
 describe('conversation changes by turn', () => {
+	it.each(['~/repo/sub', '$HOME/repo/sub', '/alias/repo/sub'])(
+		'uses execution cwd for the %s alias',
+		(cwd) => {
+			const changes = {
+				...snapshot(['sub/a.ts', 'sub/b.ts', 'outside.ts'], '/home/dev/repo'),
+				executionCwd: '/home/dev/repo/sub',
+			};
+			const result = groupChangesByTurn(
+				changes,
+				collectTurnWrites([
+					user('alias', 1),
+					tool('Write', { file_path: 'a.ts' }),
+					tool('Write', { file_path: `${cwd}/b.ts` }),
+					tool('Write', { file_path: '~/another/outside.ts' }),
+				]),
+				cwd,
+				true
+			);
+			expect(
+				result.groups.map((group) => [group.turnId, group.files.map((file) => file.path)])
+			).toEqual([
+				['alias', ['sub/a.ts', 'sub/b.ts']],
+				[null, ['outside.ts']],
+			]);
+		}
+	);
 	it.each(['Write', 'apply_patch'])(
 		'retains %s paths before native display input is capped',
 		(name) => {

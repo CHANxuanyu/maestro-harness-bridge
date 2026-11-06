@@ -122,7 +122,8 @@ export function groupChangesByTurn(
 	posix = false
 ): GitChangesByTurn {
 	const root = normalizeWorktreePath(changes.root, posix);
-	const workingDir = normalizeWorktreePath(cwd, posix);
+	const alias = normalizeWorktreePath(cwd, posix);
+	const workingDir = normalizeWorktreePath(changes.executionCwd ?? cwd, posix);
 	const files = new Map(changes.files.map((file) => [file.path, file]));
 	for (const file of changes.files) {
 		if (file.status === 'renamed' && file.oldPath && !files.has(file.oldPath))
@@ -133,7 +134,12 @@ export function groupChangesByTurn(
 	for (const turn of turns) {
 		const matched = new Set<GitChangedFile>();
 		for (const raw of turn.paths) {
-			const path = repositoryPath(raw, root, workingDir, posix);
+			const normalized = normalizeWorktreePath(raw, posix);
+			const resolved =
+				changes.executionCwd && isPathAtOrUnderRoot(normalized, alias)
+					? workingDir + normalized.slice(alias.length)
+					: raw;
+			const path = repositoryPath(resolved, root, workingDir, posix);
 			const file = path === null ? undefined : files.get(path);
 			if (file) {
 				matched.add(file);

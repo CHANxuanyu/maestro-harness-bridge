@@ -32,6 +32,7 @@ export function changesCommand(file?: string, oldPath?: string, local = false): 
 			? [
 					'root=$(git rev-parse --show-toplevel) || exit $?',
 					'printf "%s\\0" "$root"',
+					'printf "# maestro.cwd %s/%s\\0" "$root" "${GIT_PREFIX%/}"',
 					'git status --porcelain=v2 -z --branch --untracked-files=all || exit $?',
 					'printf "\\0"',
 					base,
@@ -89,6 +90,7 @@ export function changesCommand(file?: string, oldPath?: string, local = false): 
 			// batch size query never has to encode a filename on a stdin line.
 			'git diff --no-ext-diff --no-textconv --no-renames --raw --no-abbrev -z "$base" -- || exit $?',
 			'printf "\\0"',
+			'printf "# maestro.cwd %s/%s\\0" "$root" "${GIT_PREFIX%/}"',
 			'git status --porcelain=v2 -z --branch --untracked-files=all || exit $?',
 			'printf "\\0"',
 			`${numstat} "$base" -- || exit $?`,
@@ -219,6 +221,10 @@ export function parseGitChanges(output: string, limit = MAX_FILES): GitChanges {
 	const files = new Map<string, GitChangedFile>();
 	let record: string | undefined;
 	while ((record = records.shift()) !== undefined && record !== '') {
+		if (record.startsWith('# maestro.cwd ')) {
+			result.executionCwd = record.slice(14).replace(/\/$/, '') || '/';
+			continue;
+		}
 		if (record.startsWith('# branch.head ')) {
 			const branch = record.slice(14);
 			result.branch = branch === '(detached)' ? null : branch;

@@ -70,7 +70,15 @@ describe('creation boundary', () => {
 		expect(window.maestro.windows.getConversationPermissions).not.toHaveBeenCalled();
 		expect(useSessionStore.getState().sessions[0].aiTabs[1].permissionMode).toBeUndefined();
 	});
-	it.each(['open', 'closed', 'unifiedClosed', 'orphan', 'snoozed', 'snoozedGroup'] as const)(
+	it.each([
+		'open',
+		'hidden',
+		'closed',
+		'unifiedClosed',
+		'orphan',
+		'snoozed',
+		'snoozedGroup',
+	] as const)(
 		'uses the strictest known %s conversation even when full access was selected later',
 		(location) => {
 			const strict = createMockAITab({
@@ -85,6 +93,7 @@ describe('creation boundary', () => {
 			});
 			let session = createMockSession({ aiTabs: [recent], activeTabId: recent.id });
 			if (location === 'open') session.aiTabs.push(strict);
+			if (location === 'hidden') session.aiTabs.push({ ...strict, hidden: true });
 			if (location === 'closed')
 				session.closedTabHistory = [{ tab: strict, index: 0, closedAt: 1 }];
 			if (location === 'unifiedClosed')

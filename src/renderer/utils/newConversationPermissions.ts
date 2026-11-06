@@ -86,8 +86,8 @@ function projectSessions(session: Session): Session[] {
 	);
 }
 
-function knownConversations(session: Session): AITab[] {
-	return visibleAiTabs([
+function knownConversations(session: Session, includeHidden = false): AITab[] {
+	const tabs = [
 		...new Map([
 			...(session.closedTabHistory ?? []).map(({ tab }) => [tab.id, tab] as const),
 			...(session.unifiedClosedTabHistory ?? []).flatMap((entry) =>
@@ -105,12 +105,13 @@ function knownConversations(session: Session): AITab[] {
 			...(session.orphanedThinkingTabs ?? []).map((tab) => [tab.id, tab] as const),
 			...session.aiTabs.map((tab) => [tab.id, tab] as const),
 		]).values(),
-	]);
+	];
+	return includeHidden ? tabs : visibleAiTabs(tabs);
 }
 
 /** Last defense for callers without a resolved source. Only an empty owner uses project recency. */
 export function fallbackConversationPermissionSource(session: Session): AITab | undefined {
-	const known = knownConversations(session);
+	const known = knownConversations(session, true);
 	return (
 		known.find((tab) => resolveTabPermissionMode(tab) === 'readonly') ??
 		known.find((tab) => resolveTabPermissionMode(tab) === 'standard') ??

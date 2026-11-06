@@ -142,8 +142,8 @@ permission confirmation or user-facing text is introduced.
 Review follow-up (2026-11-06): `createTab()` treats initial logs as new context,
 not native history. Without an explicit source it takes the strictest known
 conversation in this owner; only an empty owner falls back to project recency.
-The inventory includes closed, orphaned and snoozed conversations, including
-snoozed group members. Missing capabilities refuse restricted creation.
+The fallback inventory includes hidden, closed, orphaned and snoozed conversations,
+including snoozed group members. Project recency still excludes hidden consults. Missing capabilities refuse restricted creation.
 `tileNewTabInSession()` resolves project owners before passing permissions to
 `tileNewTab()`. Forking passes its exact source to `createTabAtPosition()` and
 uses the validated fields in the first spawn. The call-site inventory test covers

@@ -23,10 +23,15 @@ import {
 } from '../../../renderer/utils/newConversationPermissions';
 import type { AgentConfig } from '../../../main/agents';
 import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
+import { createConversationArchive } from '../../../main/storage/conversation-archive';
+import { conversationLifecycle } from '../../../renderer/services/conversationArchive';
+import { useConversationArchiveStore } from '../../../renderer/stores/conversationArchiveStore';
+import type { ArchivedConversation } from '../../../shared/conversationArchive';
 
 afterEach(() => vi.restoreAllMocks());
 
 beforeEach(() => {
+	useConversationArchiveStore.setState({ records: [] });
 	window.maestro.windows = {
 		...window.maestro.windows,
 		getConversationPermissions: vi.fn().mockResolvedValue([]),
@@ -35,6 +40,98 @@ beforeEach(() => {
 	for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
 		setCapabilitiesCache(id, capabilities);
 	useSessionStore.setState({ sessions: [], groups: [] });
+});
+
+it.each(['unavailable', 'empty', 'live'] as const)(
+	'keeps readonly after archive and unarchive without reopening with %s owner snapshots',
+	async (snapshot) => {
+		const owner = createMockSession({
+			id: 'owner',
+			toolType: 'codex',
+			cwd: '/repo',
+			projectRoot: '/repo',
+			aiTabs: [
+				createMockAITab({ id: 'only', agentSessionId: 'native', permissionMode: 'readonly' }),
+			],
+		});
+		useSessionStore.setState({ sessions: [owner] });
+		let records: ArchivedConversation[] = [];
+		const service = createConversationArchive({
+			read: () => records,
+			write: (value) => {
+				records = structuredClone(value);
+			},
+			owners: () => useSessionStore.getState().sessions,
+			accountDir: () => '/synthetic-account',
+			realpath: async (value) => value,
+			lifecycle: async (request) => conversationLifecycle(request),
+			deleteNative: vi.fn(),
+		});
+		await service.change({ ownerId: owner.id, nativeSessionId: 'native' }, 'archive');
+		await service.change({ ownerId: owner.id, nativeSessionId: 'native' }, 'unarchive');
+		const current = useSessionStore.getState().sessions[0];
+		expect(current.aiTabs).toEqual([]);
+		expect(current.closedTabHistory ?? []).toEqual([]);
+		useConversationArchiveStore.setState({
+			records: await service.list({ includeUnarchived: true }),
+		});
+		window.maestro.agentSessions.archives = vi.fn((options) => service.list(options));
+		vi.mocked(window.maestro.windows.getConversationPermissions).mockImplementation(async () =>
+			snapshot === 'unavailable'
+				? [null]
+				: snapshot === 'empty'
+					? [{ sessionId: owner.id, tabs: [] }]
+					: [conversationPermissionSnapshot(owner.id)]
+		);
+		try {
+			expect(createTab(current)!.tab.permissionMode).toBe('readonly');
+			expect(await resolveProjectConversationPermission(current)).toEqual(
+				permissionModeFields('readonly')
+			);
+			expect(conversationPermissionSnapshot(owner.id)?.tabs).toEqual([
+				expect.objectContaining({ permissionMode: 'readonly' }),
+			]);
+		} finally {
+			delete (window.maestro.agentSessions as Partial<typeof window.maestro.agentSessions>)
+				.archives;
+			useConversationArchiveStore.setState({ records: [] });
+		}
+	}
+);
+
+it('inherits archived permissions from a project subdirectory without matching a sibling or another SSH host', () => {
+	const owner = createMockSession({
+		id: 'owner',
+		toolType: 'codex',
+		cwd: '/repo',
+		projectRoot: '/repo',
+		aiTabs: [],
+	});
+	useSessionStore.setState({ sessions: [owner] });
+	useConversationArchiveStore.setState({
+		records: [
+			{
+				key: 'subdirectory',
+				provider: 'codex',
+				nativeSessionId: 'native',
+				projectPath: '/repo/packages/api',
+				ownerIds: ['owner'],
+				permissionMode: 'readonly',
+				archivedAt: 1,
+			},
+		] as ArchivedConversation[],
+	});
+	expect(createTab(owner)!.tab.permissionMode).toBe('readonly');
+	for (const projectPath of ['/repo-sibling', '/other']) {
+		const other = { ...owner, id: projectPath, cwd: projectPath, projectRoot: projectPath };
+		expect(createTab(other)!.tab.permissionMode).toBe('full');
+	}
+	const remote = {
+		...owner,
+		id: 'remote',
+		sessionSshRemoteConfig: { enabled: true, remoteId: 'remote' },
+	};
+	expect(createTab(remote)!.tab.permissionMode).toBe('full');
 });
 
 describe('new conversation permission inheritance', () => {

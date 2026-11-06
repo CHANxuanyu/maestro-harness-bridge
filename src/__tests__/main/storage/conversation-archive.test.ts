@@ -49,6 +49,25 @@ it('rejects running conversations without persisting or deleting anything', asyn
 	expect(await service.list()).toEqual([]);
 	expect(deps.deleteNative).not.toHaveBeenCalled();
 });
+it('retains permission metadata after unarchive and another restart', async () => {
+	const { deps, service } = fixture();
+	const target = { ownerId: 'owner', nativeSessionId: 'native' };
+	await service.change(target, 'archive');
+	await service.change(target, 'unarchive');
+	const restarted = createConversationArchive(deps);
+	expect(await restarted.list()).toEqual([]);
+	expect(await restarted.list({ includeUnarchived: true })).toEqual([
+		expect.objectContaining({
+			nativeSessionId: 'native',
+			permissionMode: 'readonly',
+			archived: false,
+		}),
+	]);
+	await restarted.change(target, 'archive');
+	expect(await restarted.list()).toHaveLength(1);
+	await restarted.change(target, 'delete');
+	expect(await restarted.list({ includeUnarchived: true })).toEqual([]);
+});
 it('separates accounts and hosts and never resolves a remote path locally', async () => {
 	const { deps } = fixture();
 	const realpath = vi.fn(async (value: string) => value);

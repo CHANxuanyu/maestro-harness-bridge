@@ -27,6 +27,9 @@ import {
 	noteDesktopAiTabSelection,
 } from '../../../renderer/utils/desktopTabSelectionSync';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { useConversationArchiveStore } from '../../../renderer/stores/conversationArchiveStore';
+import * as runtimeContext from '../../../renderer/utils/runtimeContext';
+import type { ArchivedConversation } from '../../../shared/conversationArchive';
 
 // The planner's verdict is the seam under test: a queued CLI prompt must carry
 // it as the same flags a composer-queued message does.
@@ -481,6 +484,7 @@ describe('useRemoteIntegration', () => {
 	};
 
 	beforeEach(() => {
+		useConversationArchiveStore.setState({ records: [] });
 		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 		onRemoteCommandHandler = undefined;
@@ -531,6 +535,7 @@ describe('useRemoteIntegration', () => {
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		clearConcertoDesignerFramesForTests();
 		window.maestro = originalMaestro;
 	});
@@ -567,6 +572,47 @@ describe('useRemoteIntegration', () => {
 			defaultShowThinking: 'off' as const,
 		};
 	};
+
+	it('loads and subscribes to browser archives without handling desktop tab lifecycle', async () => {
+		vi.spyOn(runtimeContext, 'isWebDesktop').mockReturnValue(true);
+		useSettingsStore.setState({ newShell: true });
+		useSessionStore.setState({ sessionsLoaded: true });
+		const records = [
+			{ key: 'native', nativeSessionId: 'native', ownerIds: ['owner'] },
+		] as ArchivedConversation[];
+		const archives = vi.fn().mockResolvedValue(records);
+		let changed: ((records: ArchivedConversation[]) => void) | undefined;
+		const stop = vi.fn();
+		const lifecycle = vi.fn();
+		window.maestro.agentSessions = {
+			...window.maestro.agentSessions,
+			archives,
+			onArchivesChanged: vi.fn((callback) => {
+				changed = callback;
+				return stop;
+			}),
+			onConversationLifecycle: lifecycle,
+		};
+		const session = createMockSession({
+			id: 'owner',
+			aiTabs: [createMockTab({ agentSessionId: 'native' })],
+		});
+		const deps = createDeps({ sessions: [session] });
+		const { unmount } = renderHook(() => useRemoteIntegration(deps));
+		try {
+			await act(async () => {});
+			expect(useConversationArchiveStore.getState().records).toEqual(records);
+			expect(archives).toHaveBeenCalledOnce();
+			expect(changed).toBeTypeOf('function');
+			act(() => changed!([]));
+			expect(useConversationArchiveStore.getState().records).toEqual([]);
+			expect(lifecycle).not.toHaveBeenCalled();
+			expect(useSessionStore.getState().sessions[0].aiTabs).toHaveLength(1);
+		} finally {
+			unmount();
+		}
+		expect(stop).toHaveBeenCalledOnce();
+	});
 
 	describe('active session broadcast', () => {
 		it('broadcasts active session when live mode is enabled', () => {

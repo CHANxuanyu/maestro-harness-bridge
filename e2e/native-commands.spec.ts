@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { NativeApp } from './fixtures/native-app';
+import { holdNativeCommandScan } from './fixtures/native/command-scan-gate';
 import { createMockSession } from '../src/__tests__/helpers/mockSession';
 import { createMockAITab } from '../src/__tests__/helpers/mockTab';
 
@@ -91,30 +92,17 @@ test('native commands refresh, preserve drafts and retain scoped plugin reports'
 				synopsis: { answer: 'Command completed' },
 			})
 		);
-		await native.page.evaluate(() => {
-			const original = window.maestro.agents.getNativeCommands;
-			let release!: () => void;
-			const pending = new Promise<void>((resolve) => {
-				release = resolve;
-			});
-			window.maestro.agents.getNativeCommands = async (...args) => {
-				if (!args[1]) await pending;
-				return original(...args);
-			};
-			window.addEventListener(
-				't10:release-command-scan',
-				() => {
-					window.maestro.agents.getNativeCommands = original;
-					release();
-				},
-				{ once: true }
-			);
-		});
-		await native.send('/deploy staging');
-		await expect(native.input()).toHaveValue('');
-		await native.input().press('Enter');
-		await native.input().fill('Keep this next draft');
-		await native.page.evaluate(() => window.dispatchEvent(new Event('t10:release-command-scan')));
+		const scanGate = await native.app.evaluateHandle(holdNativeCommandScan, commands);
+		try {
+			await native.send('/deploy staging');
+			await expect(native.input()).toHaveValue('');
+			await expect.poll(() => scanGate.evaluate((gate) => gate.waiting)).toBe(true);
+			await native.input().press('Enter');
+			await native.input().fill('Keep this next draft');
+		} finally {
+			await scanGate.evaluate((gate) => gate.release());
+			await scanGate.dispose();
+		}
 		await expect(
 			native.output().getByText('Project command completed', { exact: true })
 		).toBeVisible();

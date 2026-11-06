@@ -50,7 +50,7 @@ describe('useAgentErrorRecovery', () => {
 		expect(authAction.label).toBe('Re-authenticate');
 		// The login runs inside Maestro now, so the description names the command
 		// rather than telling the user to go find a terminal.
-		expect(authAction.description).toBe('Run "claude /login" here');
+		expect(authAction.description).toBe('Run "claude auth login" here');
 		expect(authAction.primary).toBe(true);
 		expect(newSessionAction.id).toBe('new-session');
 

@@ -57,6 +57,20 @@ async function run(provider) {
 		// Cleanup checks the actual child PID, outside the native transcript.
 		fs.writeFileSync(path.join(configDir, 'fixture-process'), String(process.pid));
 	}
+	if (scene.authFailure) {
+		// Claude Code reports a rejected login as a synthetic assistant message, then
+		// a failed result, and exits 1. Parser source: claude-output-parser.ts.
+		const text = 'Failed to authenticate. API Error: 401 Invalid authentication credentials';
+		const line = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
+		line({
+			type: 'assistant',
+			error: 'authentication_failed',
+			message: { model: '<synthetic>', role: 'assistant', content: [{ type: 'text', text }] },
+		});
+		line({ type: 'result', subtype: 'success', is_error: true, result: text });
+		process.exitCode = 1;
+		return;
+	}
 	const turn = createTurn({
 		provider,
 		configDir,

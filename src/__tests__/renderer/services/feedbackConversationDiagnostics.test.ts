@@ -56,6 +56,7 @@ function installProcessMocks(agent: unknown) {
 				listeners.data = cb;
 				return () => {};
 			}),
+			onAgentError: vi.fn(() => vi.fn()),
 			onExit: vi.fn((cb: ExitCallback) => {
 				listeners.exit = cb;
 				return () => {};

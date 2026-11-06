@@ -30,6 +30,7 @@ const mockMaestro = {
 			capturedDataCallback = cb;
 			return vi.fn(); // cleanup function
 		}),
+		onAgentError: vi.fn(() => vi.fn()),
 		onExit: vi.fn((cb) => {
 			capturedExitCallback = cb;
 			return vi.fn(); // cleanup function

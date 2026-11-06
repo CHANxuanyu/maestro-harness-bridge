@@ -52,13 +52,13 @@ const ERROR_TITLES: Record<AgentErrorType, string> = {
 
 /** What to do about it, for every type whose remedy does not depend on the agent. */
 const RECOVERY_HINTS: Record<AgentErrorType, string> = {
-	auth_expired: 'Sign in to your provider again, then start the wizard over.',
-	token_exhaustion: 'Start the wizard again with a fresh conversation.',
+	auth_expired: 'Sign in to your provider again, then try again.',
+	token_exhaustion: 'Start a fresh conversation and try again.',
 	rate_limited: 'Wait a moment, then try again.',
 	network_error: 'Check your internet connection, then try again.',
 	agent_crashed: 'Try again. If it keeps happening, check the agent installation.',
 	permission_denied: 'The agent was refused access. Check the folder permissions, then try again.',
-	session_not_found: 'Start the wizard again with a fresh conversation.',
+	session_not_found: 'Start a fresh conversation and try again.',
 	session_busy: 'Release this session in the other Codex app or CLI, or use a native Codex fork.',
 	hitl_gate: 'The agent is waiting on a human review step. Try again once it is cleared.',
 	unknown: 'Try again. If the problem persists, check the debug logs below.',
@@ -96,7 +96,24 @@ function recoveryHintFor(type: AgentErrorType, agentType: ToolType): string {
 
 	const command = formatAgentLoginCommand(login);
 	const followUp = login.followUp ? `, then type ${login.followUp}` : '';
-	return `Run "${command}"${followUp} to sign in again, then start the wizard over.`;
+	return `Run "${command}"${followUp} to sign in again, then try again.`;
+}
+
+/** Present structured errors even when the provider sends no display text. */
+export function wizardErrorFromAgentError(
+	error: { type: string; message: string },
+	agentType: ToolType
+): WizardError {
+	const type = Object.prototype.hasOwnProperty.call(ERROR_TITLES, error.type)
+		? (error.type as AgentErrorType)
+		: 'unknown';
+	return {
+		type,
+		title: ERROR_TITLES[type],
+		message: error.message,
+		recoveryHint: recoveryHintFor(type, agentType),
+		canRetry: RETRYABLE_TYPES.has(type),
+	};
 }
 
 /**
@@ -114,13 +131,7 @@ export function detectWizardError(output: string, agentType: ToolType): WizardEr
 	const match = matchErrorPattern(getErrorPatterns(agentType), output, { minLength: 0 });
 	if (!match) return null;
 
-	return {
-		type: match.type,
-		title: ERROR_TITLES[match.type] ?? ERROR_TITLES.unknown,
-		message: match.message,
-		recoveryHint: recoveryHintFor(match.type, agentType),
-		canRetry: RETRYABLE_TYPES.has(match.type),
-	};
+	return wizardErrorFromAgentError(match, agentType);
 }
 
 /**
@@ -155,5 +166,5 @@ export function createGenericErrorMessage(output: string, exitCode: number): str
 	}
 
 	// Default message
-	return `Agent exited with code ${exitCode}. Check the terminal for details.`;
+	return `Agent exited with code ${exitCode}. Please try again. If the problem persists, check the agent installation and sign-in status.`;
 }

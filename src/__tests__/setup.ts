@@ -249,6 +249,7 @@ const mockMaestro = {
 		isTerminalBusy: vi.fn().mockResolvedValue(false),
 		broadcastUserInput: vi.fn().mockResolvedValue(undefined),
 		onOutput: vi.fn().mockReturnValue(() => {}),
+		onAgentError: vi.fn().mockReturnValue(() => {}),
 		onExit: vi.fn().mockReturnValue(() => {}),
 		onUserInput: vi.fn().mockReturnValue(() => {}),
 		sendRemoteCommandReceipt: vi.fn(),

@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 /**
  * @file usePluginKeybindings.test.ts
  * @description The keyboard half of the summon path: a contributed chord must
@@ -65,6 +66,11 @@ async function mountWithChords(keybindings = [OVERLAY_CHORD]) {
 }
 
 beforeEach(() => {
+	useSettingsStore.setState({
+		settingsLoaded: true,
+		newShell: false,
+		encoreFeatures: { ...useSettingsStore.getState().encoreFeatures, plugins: true },
+	});
 	window.maestro.plugins = pluginBridge as unknown as typeof window.maestro.plugins;
 	pluginBridge.contributions.mockReset().mockResolvedValue(EMPTY);
 	pluginBridge.onChanged.mockClear();

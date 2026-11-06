@@ -4,11 +4,9 @@ import { useSettingsStore } from '../stores/settingsStore';
  * usePluginContributions - the renderer's read seam for active plugin
  * contributions (themes, prompts, command macros, settings, ...).
  *
- * Fetches the aggregated contributions over IPC on mount and re-fetches whenever
- * the plugin registry changes (install/uninstall/enable/disable). When the
- * `plugins` Encore flag is off the IPC rejects with 'PluginsDisabled'; that is
- * treated as "feature off" and the hook returns empty buckets, so consumers can
- * call it unconditionally and merge nothing when plugins are disabled.
+ * Fetches contributions and subscribes to registry changes only after settings
+ * load and the current shell allows enabled plugins. Disabled consumers get
+ * empty buckets without sending requests that main would reject.
  */
 
 import { useState, useEffect } from 'react';
@@ -33,13 +31,20 @@ const EMPTY: AggregatedContributions = {
 };
 
 export function usePluginContributions(): AggregatedContributions {
+	const settingsLoaded = useSettingsStore((s) => s.settingsLoaded);
+	const pluginsEnabled = useSettingsStore((s) => s.encoreFeatures.plugins === true);
+	const newShell = useSettingsStore((s) => s.newShell);
+	const enabled = settingsLoaded && pluginsEnabled && shellFeatureVisible('plugins', newShell);
 	const [contributions, setContributions] = useState<AggregatedContributions>(EMPTY);
 
 	useEffect(() => {
 		// The plugins API is absent in the web build (and before the preload bridge
 		// is ready); treat that exactly like feature-off and stay on empty buckets.
 		const plugins = window.maestro?.plugins;
-		if (!plugins) return;
+		if (!enabled || !plugins) {
+			setContributions(EMPTY);
+			return;
+		}
 
 		let cancelled = false;
 		let requestGeneration = 0;
@@ -65,8 +70,7 @@ export function usePluginContributions(): AggregatedContributions {
 			requestGeneration++;
 			unsubscribe();
 		};
-	}, []);
+	}, [enabled]);
 
-	const newShell = useSettingsStore((s) => s.newShell);
-	return shellFeatureVisible('plugins', newShell) ? contributions : EMPTY;
+	return enabled ? contributions : EMPTY;
 }

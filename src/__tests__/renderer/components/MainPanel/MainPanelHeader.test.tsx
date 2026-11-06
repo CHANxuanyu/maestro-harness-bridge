@@ -20,6 +20,7 @@ vi.mock('../../../../renderer/stores/settingsStore', async (importOriginal) => (
 	useSettingsStore: vi.fn((selector) =>
 		selector({
 			...settingsMocks.overrides,
+			encoreFeatures: {},
 			shortcuts: {
 				agentSessions: { keys: ['Meta', 'Shift', 'l'] },
 				toggleRightPanel: { keys: ['Meta', 'b'] },

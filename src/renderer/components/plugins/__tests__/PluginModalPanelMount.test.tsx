@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../stores/settingsStore';
 /**
  * @file PluginModalPanelMount.test.tsx
  * @description The renderer half of the summon path. The mount is the single
@@ -88,6 +89,11 @@ function renderMount() {
 }
 
 beforeEach(() => {
+	useSettingsStore.setState({
+		settingsLoaded: true,
+		newShell: false,
+		encoreFeatures: { ...useSettingsStore.getState().encoreFeatures, plugins: true },
+	});
 	// Structurally-compatible test double; the real bridge carries management
 	// methods this path never calls.
 	window.maestro.plugins = pluginBridge as unknown as typeof window.maestro.plugins;

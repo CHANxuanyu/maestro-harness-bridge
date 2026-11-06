@@ -172,6 +172,13 @@ interface ParsedDocument {
 }
 
 import { PLAYBOOKS_DIR } from '../../../../shared/maestro-paths';
+import {
+	detectWizardError,
+	wizardErrorFromAgentError,
+	formatWizardError,
+	createGenericErrorMessage,
+	type WizardError,
+} from './wizardErrorDetection';
 import { logger } from '../../../utils/logger';
 import { createPlaybookDocumentEmitter } from '../../../services/inlineWizardDocumentGeneration';
 import {
@@ -589,6 +596,7 @@ class PhaseGenerator {
 	private outputBuffer = '';
 	private dataListenerCleanup?: () => void;
 	private exitListenerCleanup?: () => void;
+	private agentErrorListenerCleanup?: () => void;
 	private currentWatchPath?: string;
 	private pollIntervalId?: ReturnType<typeof setInterval>;
 
@@ -872,6 +880,7 @@ class PhaseGenerator {
 		});
 
 		return new Promise<GenerationResult>((resolve) => {
+			let agentError: WizardError | null = null;
 			let timeoutId: ReturnType<typeof setTimeout>;
 			let lastDataTime = Date.now();
 			let dataChunks = 0;
@@ -957,6 +966,10 @@ class PhaseGenerator {
 				}
 			});
 
+			this.agentErrorListenerCleanup = window.maestro.process.onAgentError((sid, error) => {
+				if (sid === sessionId) agentError = wizardErrorFromAgentError(error, config.agentType);
+			});
+
 			// Set up exit listener
 			this.exitListenerCleanup = window.maestro.process.onExit((sid: string, code: number) => {
 				if (sid === sessionId) {
@@ -982,7 +995,10 @@ class PhaseGenerator {
 						bufferSize: this.outputBuffer.length,
 					});
 
-					if (code === 0) {
+					const detectedError =
+						(code === 0 && this.outputBuffer.trim() ? null : agentError) ??
+						(code !== 0 ? detectWizardError(this.outputBuffer, config.agentType) : null);
+					if (code === 0 && !detectedError) {
 						// Try to extract result from stream-json format
 						const extracted = extractResultFromStreamJson(this.outputBuffer);
 						const output = extracted || this.outputBuffer;
@@ -1016,7 +1032,9 @@ class PhaseGenerator {
 
 						resolve({
 							success: false,
-							error: `Agent exited with code ${code}`,
+							error: detectedError
+								? formatWizardError(detectedError)
+								: createGenericErrorMessage(this.outputBuffer, code),
 							rawOutput: this.outputBuffer,
 						});
 					}
@@ -1255,6 +1273,8 @@ class PhaseGenerator {
 	 * Clean up listeners and file watcher
 	 */
 	private cleanup(): void {
+		this.agentErrorListenerCleanup?.();
+		this.agentErrorListenerCleanup = undefined;
 		// Stop the periodic disk-poll backstop for document streaming
 		if (this.pollIntervalId !== undefined) {
 			clearInterval(this.pollIntervalId);

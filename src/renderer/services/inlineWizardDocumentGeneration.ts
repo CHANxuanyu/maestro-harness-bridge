@@ -15,6 +15,13 @@ import type {
 	InlineWizardMessage,
 } from '../hooks/batch/inlineWizard/types';
 import type { ExistingDocument } from '../utils/existingDocsDetector';
+import {
+	detectWizardError,
+	wizardErrorFromAgentError,
+	formatWizardError,
+	createGenericErrorMessage,
+	type WizardError,
+} from '../components/Wizard/services/wizardErrorDetection';
 import { logger } from '../utils/logger';
 import { substituteTemplateVariables, type TemplateContext } from '../utils/templateVariables';
 import { extractGrokTextFromJsonl, getGrokTextDelta } from '../utils/grokWizard';
@@ -976,6 +983,8 @@ export async function generateInlineDocuments(
 		const result = await new Promise<{ success: boolean; rawOutput: string; error?: string }>(
 			(resolve) => {
 				let outputBuffer = '';
+				let agentError: WizardError | null = null;
+				let agentErrorListenerCleanup: (() => void) | undefined;
 				let dataListenerCleanup: (() => void) | undefined;
 				let exitListenerCleanup: (() => void) | undefined;
 				let fileWatcherCleanup: (() => void) | undefined;
@@ -1024,6 +1033,8 @@ export async function generateInlineDocuments(
 				}, GENERATION_TIMEOUT);
 
 				function cleanupAll() {
+					agentErrorListenerCleanup?.();
+					agentErrorListenerCleanup = undefined;
 					if (dataListenerCleanup) {
 						dataListenerCleanup();
 						dataListenerCleanup = undefined;
@@ -1113,6 +1124,13 @@ export async function generateInlineDocuments(
 					}
 				);
 
+				agentErrorListenerCleanup = window.maestro.process.onAgentError(
+					(receivedSessionId, error) => {
+						if (receivedSessionId === sessionId)
+							agentError = wizardErrorFromAgentError(error, agentType);
+					}
+				);
+
 				// Set up exit listener
 				exitListenerCleanup = window.maestro.process.onExit(
 					(receivedSessionId: string, code: number) => {
@@ -1122,7 +1140,10 @@ export async function generateInlineDocuments(
 
 							logger.info('[InlineWizardDocGen] Agent exited with code:', undefined, code);
 
-							if (code === 0) {
+							const detectedError =
+								(code === 0 && outputBuffer.trim() ? null : agentError) ??
+								(code !== 0 ? detectWizardError(outputBuffer, agentType) : null);
+							if (code === 0 && !detectedError) {
 								resolve({
 									success: true,
 									rawOutput: outputBuffer,
@@ -1131,7 +1152,9 @@ export async function generateInlineDocuments(
 								resolve({
 									success: false,
 									rawOutput: outputBuffer,
-									error: `Agent exited with code ${code}`,
+									error: detectedError
+										? formatWizardError(detectedError)
+										: createGenericErrorMessage(outputBuffer, code),
 								});
 							}
 						}

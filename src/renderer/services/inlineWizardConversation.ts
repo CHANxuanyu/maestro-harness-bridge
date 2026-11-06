@@ -12,6 +12,13 @@
 import type { ToolType, ProcessConfig } from '../types';
 import type { InlineWizardMessage } from '../hooks/batch/inlineWizard/types';
 import type { ExistingDocument as BaseExistingDocument } from '../utils/existingDocsDetector';
+import {
+	detectWizardError,
+	wizardErrorFromAgentError,
+	formatWizardError,
+	createGenericErrorMessage,
+	type WizardError,
+} from '../components/Wizard/services/wizardErrorDetection';
 import { logger } from '../utils/logger';
 import { extractGrokTextFromJsonl, GROK_WIZARD_DISCOVERY_ARGS } from '../utils/grokWizard';
 import {
@@ -682,6 +689,8 @@ export async function sendWizardMessage(
 		// Spawn agent and collect output
 		const result = await new Promise<InlineWizardSendResult>((resolve) => {
 			let outputBuffer = '';
+			let agentError: WizardError | null = null;
+			let agentErrorListenerCleanup: (() => void) | undefined;
 			let dataListenerCleanup: (() => void) | undefined;
 			let exitListenerCleanup: (() => void) | undefined;
 
@@ -730,6 +739,8 @@ export async function sendWizardMessage(
 			let toolExecutionListenerCleanup: (() => void) | undefined;
 
 			function cleanupListeners() {
+				agentErrorListenerCleanup?.();
+				agentErrorListenerCleanup = undefined;
 				if (dataListenerCleanup) {
 					dataListenerCleanup();
 					dataListenerCleanup = undefined;
@@ -806,12 +817,31 @@ export async function sendWizardMessage(
 				);
 			}
 
+			agentErrorListenerCleanup = window.maestro.process.onAgentError(
+				(receivedSessionId, error) => {
+					if (receivedSessionId === session.sessionId)
+						agentError = wizardErrorFromAgentError(error, session.agentType);
+				}
+			);
+
 			// Set up exit listener
 			exitListenerCleanup = window.maestro.process.onExit(
 				(receivedSessionId: string, code: number) => {
 					if (receivedSessionId === session.sessionId) {
 						clearTimeout(timeoutId);
 						cleanupListeners();
+
+						const detectedError =
+							(code === 0 && outputBuffer.trim() ? null : agentError) ??
+							(code !== 0 ? detectWizardError(outputBuffer, session.agentType) : null);
+						if (detectedError) {
+							resolve({
+								success: false,
+								error: formatWizardError(detectedError),
+								rawOutput: outputBuffer,
+							});
+							return;
+						}
 
 						// Extract the Claude agent session ID from output (for resume capability)
 						const agentSessionId = extractAgentSessionIdFromOutput(outputBuffer);
@@ -839,7 +869,7 @@ export async function sendWizardMessage(
 						} else {
 							resolve({
 								success: false,
-								error: `Agent exited with code ${code}`,
+								error: createGenericErrorMessage(outputBuffer, code),
 								rawOutput: outputBuffer,
 								agentSessionId: agentSessionId || undefined,
 							});

@@ -1,4 +1,43 @@
 export const workflowsShell = {
+	'workflows.shell.signInRequired': 'Sign in again',
+	'workflows.shell.signInRequiredBody':
+		'{tool} rejected the saved credentials. Sign in again to pick this conversation back up.',
+	'workflows.shell.signInAgain': 'Sign in',
+	'workflows.reauth.userTitle': 'Sign in to {tool} again.',
+	'workflows.reauth.failureTitle': 'Please reauthenticate {tool}.',
+	'workflows.reauth.genericProvider': 'the provider',
+	'workflows.reauth.userBody':
+		'Run the {tool} login below. Every agent on this provider shares the credential store, so signing in once covers all of them. Nothing is stopped and no turn is interrupted.',
+	'workflows.reauth.failureBody':
+		'{tool} rejected its stored credentials{pipeline}. {scope} Their queued messages are held, not lost.',
+	'workflows.reauth.pipelineImpact': ', taking Cue pipelines down with it',
+	'workflows.reauth.singleImpact': 'This agent is stopped until you log in again.',
+	'workflows.reauth.multipleImpact':
+		'All {count} agents on this provider are stopped until you log in again.',
+	'workflows.reauth.fixCredentialClose': 'Fix the credential this agent presents, then close.',
+	'workflows.reauth.fixCredentialResume': 'Fix the credential this agent presents, then resume.',
+	'workflows.reauth.exitedClose': 'The login session ended.',
+	'workflows.reauth.exitedResume':
+		'The login session ended. Resume to re-run everything that failed.',
+	'workflows.reauth.runningClose': 'Complete the provider login above, then close this dialog.',
+	'workflows.reauth.runningResume': 'Complete the provider login above, then resume.',
+	'workflows.reauth.starting': 'Starting the login shell...',
+	'workflows.reauth.readingLogin':
+		"Reading this agent's environment to work out how it signs in...",
+	'workflows.reauth.noLoginCommand':
+		'{tool} has no login command Maestro can run. Re-authenticate it from a terminal, then resume.',
+	'workflows.reauth.cancel': 'Cancel',
+	'workflows.reauth.notNow': 'Not Now',
+	'workflows.reauth.done': 'Done',
+	'workflows.reauth.resumeSingle': 'Resume Agent',
+	'workflows.reauth.resumeMultiple': 'Resume {count} Agents',
+	'workflows.reauth.environment': 'Environment for {name}',
+	'workflows.reauth.readingEnvironment': 'Reading environment...',
+	'workflows.reauth.noEnvironment': 'No environment variables are set for {name}.',
+	'workflows.reauth.followUp': 'then type {command}',
+	'workflows.reauth.credentialSet': '{name} set',
+	'workflows.reauth.credentialUnset': '{name} unset',
+
 	'workflows.newShell.terminalEmpty': 'No terminal open',
 	'workflows.newShell.terminalStartFailed': 'Terminal did not start: {reason}',
 	'workflows.shell.terminalStartFailed': 'Failed to start terminal',
@@ -1641,7 +1680,7 @@ export const workflowsShell = {
 	'workflows.projects.description':
 		'Your Claude Code and Codex conversations are all here. No migration needed.',
 	'workflows.projects.recent': 'Recent projects',
-	'workflows.projects.ready': '{tool} ready',
+	'workflows.projects.installed': '{tool} installed',
 	'workflows.projects.notInstalled': '{tool} not installed',
 	'workflows.projects.install': 'Install Claude Code or Codex, then open a project.',
 	'workflows.effort.low': 'Low',

@@ -242,7 +242,10 @@ test('codex: real task list and final answer through the panel', async ({}, info
 			else await expect(native.page.getByTestId('tasks-empty')).toBeVisible();
 		}
 		expect(fs.readFileSync(marker, 'utf8')).toBe('Must remain unchanged.\n');
-		expect(fs.readdirSync(native.project)).toEqual(['read-only-marker.txt']);
+		// Maestro keeps its own .maestro folder in a project; Codex must add nothing else.
+		expect(fs.readdirSync(native.project).filter((name) => name !== '.maestro')).toEqual([
+			'read-only-marker.txt',
+		]);
 	} catch (error) {
 		failed = true;
 		throw error;

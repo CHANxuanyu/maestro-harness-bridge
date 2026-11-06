@@ -38,6 +38,7 @@ import {
 	terminalTabFocusFields,
 } from './tabHelpers';
 import { closeTerminalTab } from './terminalTabHelpers';
+import { restoreConversationPermissions } from './newConversationPermissions';
 import {
 	collectLeafTabRefs,
 	countLeaves,
@@ -441,12 +442,17 @@ export function wakeSnoozedTab(
 	snoozeId: string,
 	resolution: 'woke' | 'unsnoozed' = 'woke'
 ): WakeSnoozedTabResult | null {
-	const entry = session.snoozedTabs?.find((s) => s.id === snoozeId);
+	let entry = session.snoozedTabs?.find((s) => s.id === snoozeId);
 	if (!entry) return null;
 	// A group rebuilds a layout, not a tab. Callers that do not care which kind
 	// they woke should call wakeSnooze(); this one stays single-tab so the
 	// per-kind switches below never have to answer for a group.
 	if (isSnoozedGroup(entry)) return null;
+	if (entry.type === 'ai') {
+		const tab = restoreConversationPermissions(session, entry.tab);
+		if (!tab) return null;
+		entry = { ...entry, tab };
+	}
 
 	const remaining = (session.snoozedTabs || []).filter((s) => s.id !== snoozeId);
 
@@ -456,6 +462,11 @@ export function wakeSnoozedTab(
 	const existing = isSameSnoozedTab(entry, session);
 
 	if (existing) {
+		const restored =
+			entry.type === 'ai'
+				? restoreConversationPermissions(session, existing as AITab, entry.tab)
+				: undefined;
+		if (restored === null) return null;
 		return {
 			session: {
 				...session,
@@ -470,6 +481,7 @@ export function wakeSnoozedTab(
 								t.id === existing.id
 									? {
 											...t,
+											...restored,
 											hasUnread: true,
 											logs: [...t.logs, buildSnoozeReturnLog(entry, resolution)],
 										}
@@ -932,14 +944,41 @@ export function wakeSnoozedTabGroup(
 ): WakeSnoozedTabGroupResult | null {
 	const found = session.snoozedTabs?.find((s) => s.id === snoozeId);
 	if (!found || !isSnoozedGroup(found)) return null;
-	const entry = found;
+	const members: SnoozedGroupMember[] = [];
+	for (const member of found.members) {
+		if (member.type !== 'ai') {
+			members.push(member);
+			continue;
+		}
+		const tab = restoreConversationPermissions(session, member.tab);
+		// Validate the entire group before restoring any pane or consuming its snooze.
+		if (!tab) return null;
+		members.push({ ...member, tab });
+	}
+	const entry = { ...found, members };
 	const remaining = (session.snoozedTabs || []).filter((s) => s.id !== snoozeId);
 
 	// Already open? Focus it rather than restoring a second copy.
 	const existingGroup = session.tabGroups?.find((g) => g.id === entry.group.id);
 	if (existingGroup) {
+		const aiTabs = [...session.aiTabs];
+		for (const ref of collectLeafTabRefs(existingGroup.layout)) {
+			if (ref.type !== 'ai') continue;
+			const index = aiTabs.findIndex((tab) => tab.id === ref.id);
+			if (index < 0) continue;
+			const saved = entry.members.find(
+				(member) => member.type === 'ai' && member.tab.id === ref.id
+			);
+			const tab = restoreConversationPermissions(
+				session,
+				aiTabs[index],
+				saved?.type === 'ai' ? saved.tab : undefined
+			);
+			if (!tab) return null;
+			aiTabs[index] = tab;
+		}
 		return {
-			session: { ...session, snoozedTabs: remaining, activeGroupId: existingGroup.id },
+			session: { ...session, aiTabs, snoozedTabs: remaining, activeGroupId: existingGroup.id },
 			entry,
 			groupId: existingGroup.id,
 			droppedMembers: [],

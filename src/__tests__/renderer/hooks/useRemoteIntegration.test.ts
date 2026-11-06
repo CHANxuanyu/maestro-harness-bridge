@@ -1,4 +1,6 @@
 import { conversationPermissionSnapshot } from '../../../renderer/utils/newConversationPermissions';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 // Pull in Window.maestro. Test files sit outside tsconfig.json include, so the
@@ -482,6 +484,8 @@ describe('useRemoteIntegration', () => {
 	};
 
 	beforeEach(() => {
+		for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
+			setCapabilitiesCache(id, capabilities);
 		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 		onRemoteCommandHandler = undefined;

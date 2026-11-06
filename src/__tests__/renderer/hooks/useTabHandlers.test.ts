@@ -1,4 +1,6 @@
 import { conversationPermissionSnapshot } from '../../../renderer/utils/newConversationPermissions';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 /**
  * Tests for useTabHandlers hook
  *
@@ -137,6 +139,8 @@ function renderWithSession(
 
 describe('useTabHandlers', () => {
 	beforeEach(() => {
+		for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
+			setCapabilitiesCache(id, capabilities);
 		// Reset all stores
 		useSessionStore.setState({
 			sessions: [],

@@ -136,8 +136,24 @@ Closing the last tab preserves its permission in the automatic replacement.
 Provider changes preserve supported modes, tighten unsupported standard to readonly,
 and refuse a target without an equally strict mode. Handoff snapshots carry the
 source permission. Manual changes only patch the new tab. Native history imports,
-compaction and the classic shell keep their existing behavior. No new CLI verb,
+the classic shell keep their existing behavior. Context-bearing creation also crosses the permission boundary; existing compaction source overrides remain in place. No new CLI verb,
 permission confirmation or user-facing text is introduced.
+
+Review follow-up (2026-11-06): `createTab()` treats initial logs as new context,
+not native history. Without an explicit source it takes the strictest known
+conversation in this owner; only an empty owner falls back to project recency.
+The inventory includes closed, orphaned and snoozed conversations, including
+snoozed group members. Missing capabilities refuse restricted creation.
+`tileNewTabInSession()` resolves project owners before passing permissions to
+`tileNewTab()`. Forking passes its exact source to `createTabAtPosition()` and
+uses the validated fields in the first spawn. The call-site inventory test covers
+`createTab`, its import aliases and `createTabAtPosition`; a new call requires review.
+
+`unsnooze <id>` and `snooze wake <id>` share `wakeSnoozeNow()` and the tab store
+with the UI. Single and group restore use `restoreConversationPermissions()`,
+as does the scheduler. A group is validated as a whole. Unsupported restrictions
+retain the snooze and suppress wake prompts; an already open duplicate is also
+validated against its saved permission ceiling. No CLI verb or user text is added.
 
 Open gaps: local fallback cannot know a restriction that no reachable window or
 local copy has ever reported. It uses the strictest known mode as specified by the
@@ -632,6 +648,15 @@ The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
 ## Open gaps
+
+**Fork and create-in-tile actions (2026-11-06).** Message forking still has no
+`tab fork --at` verb; this remains the Composer backlog below. The palette and
+shortcut for creating a conversation directly in a tile share
+`tileNewTabInSession()`, but there is no CLI action calling that service.
+`tab new` covers the same project permission resolution, not the tiling action.
+This permission repair does not add either command. Scheduled wake refusal has
+no new diagnostic UI; the retained snooze can be woken manually after selecting
+a tool that can preserve the restriction.
 
 **CLI inventory timing (2026-11-06).** `session list` and `tab show` read the
 persisted desktop inventory. UI history selection, closed-tab restoration and

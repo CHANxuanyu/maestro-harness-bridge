@@ -102,7 +102,7 @@ describe('new conversation permission inheritance', () => {
 		}
 	});
 
-	it('uses the latest project conversation across tools instead of the target runner active tab', () => {
+	it('uses the resolved latest project conversation across tools instead of the target runner active tab', async () => {
 		const older = createMockAITab({ createdAt: 1, permissionMode: 'full' });
 		const recent = createMockAITab({ createdAt: 2, permissionMode: 'readonly' });
 		const target = createMockSession({
@@ -120,10 +120,17 @@ describe('new conversation permission inheritance', () => {
 			aiTabs: [recent],
 		});
 		useSessionStore.setState({ sessions: [target, source] });
-		expect(createTab(target)!.tab).toMatchObject(permissionModeFields('readonly'));
+		vi.mocked(window.maestro.windows.getConversationPermissions).mockResolvedValue([
+			conversationPermissionSnapshot(target.id),
+			conversationPermissionSnapshot(source.id),
+		]);
+		expect(
+			createTab(target, { permissionSource: await resolveProjectConversationPermission(target) })!
+				.tab
+		).toMatchObject(permissionModeFields('readonly'));
 	});
 
-	it('uses recent activity and a newly selected older conversation', () => {
+	it('uses recent activity only with a resolved project source, while the fallback stays strict', async () => {
 		const old = createMockAITab({
 			id: 'old',
 			createdAt: 1,
@@ -134,7 +141,16 @@ describe('new conversation permission inheritance', () => {
 		const session = createMockSession({ aiTabs: [old, newer], activeTabId: newer.id });
 		expect(createTab(session)!.tab.permissionMode).toBe('readonly');
 		const selected = setActiveTab(session, newer.id)!.session;
-		expect(createTab(selected)!.tab.permissionMode).toBe('full');
+		useSessionStore.setState({ sessions: [selected] });
+		vi.mocked(window.maestro.windows.getConversationPermissions).mockResolvedValue([
+			conversationPermissionSnapshot(selected.id),
+		]);
+		expect(
+			createTab(selected, {
+				permissionSource: await resolveProjectConversationPermission(selected),
+			})!.tab.permissionMode
+		).toBe('full');
+		expect(createTab(selected)!.tab.permissionMode).toBe('readonly');
 	});
 
 	it('ignores other projects, remote hosts and hidden consult tabs', () => {

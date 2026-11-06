@@ -38,6 +38,7 @@ import {
 	type DropZone,
 } from '../../utils/panelLayout';
 import { createTab } from '../../utils/tabHelpers';
+import type { CreateTabOptions } from '../../utils/tabHelpers';
 import { insertAfterActiveInUnifiedTabOrder } from '../../utils/unifiedTabOrderUtils';
 import {
 	addTerminalTab,
@@ -56,6 +57,7 @@ export type TileableTabKind = 'ai' | 'file' | 'terminal' | 'browser';
  * tests do not need a live store).
  */
 export interface TileNewTabDefaults {
+	permissionSource?: CreateTabOptions['permissionSource'];
 	/** AI tabs: `defaultSaveToHistory`. */
 	saveToHistory: boolean;
 	/** AI tabs: `defaultShowThinking`. */
@@ -79,6 +81,7 @@ function createInactiveTab(
 	switch (kind) {
 		case 'ai': {
 			const result = createTab(session, {
+				permissionSource: defaults.permissionSource,
 				saveToHistory: defaults.saveToHistory,
 				showThinking: defaults.showThinking,
 				activate: false,

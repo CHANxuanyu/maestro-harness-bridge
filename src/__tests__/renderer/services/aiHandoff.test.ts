@@ -1,4 +1,6 @@
 import { conversationPermissionSnapshot } from '../../../renderer/utils/newConversationPermissions';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 import { useOperationStore } from '../../../renderer/stores/operationStore';
 import { act, renderHook } from '@testing-library/react';
 import { useInputSync } from '../../../renderer/hooks/input/useInputSync';
@@ -51,6 +53,8 @@ const request = (over: Partial<HandoffOpenRequest> = {}): HandoffOpenRequest => 
 const sessions = () => useSessionStore.getState().sessions;
 
 beforeEach(() => {
+	for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
+		setCapabilitiesCache(id, capabilities);
 	window.maestro.windows = {
 		...window.maestro.windows,
 		getConversationPermissions: vi.fn().mockResolvedValue([]),

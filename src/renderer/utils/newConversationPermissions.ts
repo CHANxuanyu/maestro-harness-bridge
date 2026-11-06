@@ -39,10 +39,16 @@ export function remoteConversationPermissionFields(
 }
 
 /** Reopening validates against the current tool, including retained and orphan tabs. */
-export function restoreConversationPermissions(session: Session, tab: AITab): AITab | null {
+export function restoreConversationPermissions(
+	session: Session,
+	tab: AITab,
+	permissionCeiling?: Pick<AITab, 'permissionMode' | 'readOnlyMode'>
+): AITab | null {
 	if (!useSettingsStore.getState().newShell) return tab;
 	const permissions = newConversationPermissionFields(
-		tab,
+		permissionCeiling
+			? remoteConversationPermissionFields(tab, resolveTabPermissionMode(permissionCeiling))
+			: tab,
 		getCachedCapabilities(session.toolType) ?? {
 			supportsReadOnlyMode: false,
 			supportsStandardPermissionMode: false,
@@ -87,9 +93,30 @@ function knownConversations(session: Session): AITab[] {
 			...(session.unifiedClosedTabHistory ?? []).flatMap((entry) =>
 				entry.type === 'ai' ? [[entry.tab.id, entry.tab] as const] : []
 			),
+			...(session.snoozedTabs ?? []).flatMap((entry) =>
+				entry.type === 'ai'
+					? [[entry.tab.id, entry.tab] as const]
+					: entry.type === 'group'
+						? entry.members.flatMap((member) =>
+								member.type === 'ai' ? [[member.tab.id, member.tab] as const] : []
+							)
+						: []
+			),
+			...(session.orphanedThinkingTabs ?? []).map((tab) => [tab.id, tab] as const),
 			...session.aiTabs.map((tab) => [tab.id, tab] as const),
 		]).values(),
 	]);
+}
+
+/** Last defense for callers without a resolved source. Only an empty owner uses project recency. */
+export function fallbackConversationPermissionSource(session: Session): AITab | undefined {
+	const known = knownConversations(session);
+	return (
+		known.find((tab) => resolveTabPermissionMode(tab) === 'readonly') ??
+		known.find((tab) => resolveTabPermissionMode(tab) === 'standard') ??
+		known[0] ??
+		recentProjectConversation(session)?.tab
+	);
 }
 
 function conversationActivity(tab: AITab): number {

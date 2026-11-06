@@ -19,7 +19,7 @@ import {
 	QueuedItem,
 } from '../../types';
 import {
-	recentProjectConversation,
+	fallbackConversationPermissionSource,
 	restoreConversationPermissions,
 } from '../newConversationPermissions';
 import { getCachedCapabilities } from '../../hooks/agent/useAgentCapabilities';
@@ -1004,7 +1004,7 @@ export function settleTabThinkingState(session: Session, tabId: string): Session
  * Options for creating a new AI tab.
  */
 export interface CreateTabOptions {
-	/** Explicit conversation context; omitted for project, keyboard and CLI entry points. */
+	/** Exact source or resolved project permissions. Missing sources use the strictest known mode. */
 	permissionSource?: Pick<AITab, 'permissionMode' | 'readOnlyMode'>;
 
 	agentSessionId?: string | null; // Claude Code session UUID (null for new tabs)
@@ -1077,16 +1077,14 @@ export function createTab(
 	} = options;
 
 	let permissions = {};
-	if (useSettingsStore.getState().newShell && !agentSessionId && logs.length === 0) {
-		const recent = options.permissionSource ? undefined : recentProjectConversation(session);
-		const source = options.permissionSource ?? recent?.tab;
-		const capabilities = getCachedCapabilities(session.toolType);
+	if (useSettingsStore.getState().newShell && !agentSessionId) {
+		const source = options.permissionSource ?? fallbackConversationPermissionSource(session);
 		const fields = newConversationPermissionFields(
 			source,
-			capabilities ??
-				(recent && recent.session.toolType !== session.toolType
-					? { supportsStandardPermissionMode: false, supportsReadOnlyMode: false }
-					: undefined)
+			getCachedCapabilities(session.toolType) ?? {
+				supportsStandardPermissionMode: false,
+				supportsReadOnlyMode: false,
+			}
 		);
 		if (!fields) return null;
 		permissions = fields;

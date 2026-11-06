@@ -19,6 +19,7 @@ import {
 	MaxOutputLinesSection,
 	MessageAlignmentSection,
 	ModalLayoutSection,
+	NewShellSection,
 	SavedTypographySection,
 	TabOptionsSection,
 	TypographyResetSection,
@@ -122,6 +123,8 @@ export function DisplayTab({ theme }: DisplayTabProps) {
 				fileTreeBranchConnectors={settings.fileTreeBranchConnectors}
 				setFileTreeBranchConnectors={settings.setFileTreeBranchConnectors}
 			/>
+			<NewShellSection theme={theme} />
+
 			<WindowChromeSection
 				theme={theme}
 				useNativeTitleBar={settings.useNativeTitleBar}

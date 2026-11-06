@@ -44,7 +44,8 @@ describe('handoff CLI consent and result', () => {
 				send: false,
 				background: true,
 			}),
-			'ai_handoff_result'
+			'ai_handoff_result',
+			75000
 		);
 		expect(JSON.parse(output.mock.calls[0][0])).toMatchObject({
 			success: true,
@@ -52,6 +53,26 @@ describe('handoff CLI consent and result', () => {
 			tabId: 'new-tab',
 			state: 'draft',
 			draft: { text: 'The draft', estimatedTokens: 3 },
+		});
+	});
+
+	it('forwards --review and returns the target agent, tab and mode', async () => {
+		vi.mocked(sendSimpleCommand).mockResolvedValue({
+			success: true,
+			agentId: 'reviewer',
+			tabId: 'review-tab',
+			mode: 'review',
+		});
+		await handoff('active', 'codex', { review: true, send: true, json: true });
+		expect(sendSimpleCommand).toHaveBeenCalledWith(
+			expect.objectContaining({ mode: 'review', send: true }),
+			'ai_handoff_result',
+			75000
+		);
+		expect(JSON.parse(output.mock.calls[0][0])).toMatchObject({
+			agentId: 'reviewer',
+			tabId: 'review-tab',
+			mode: 'review',
 		});
 	});
 
@@ -73,7 +94,8 @@ describe('handoff CLI consent and result', () => {
 				instruction: 'Review the parser',
 				budgetTokens: 2048,
 			}),
-			'ai_handoff_result'
+			'ai_handoff_result',
+			75000
 		);
 	});
 
@@ -85,7 +107,8 @@ describe('handoff CLI consent and result', () => {
 		await handoff('active', undefined, { listTargets: true, json: true });
 		expect(sendSimpleCommand).toHaveBeenCalledExactlyOnceWith(
 			{ type: 'ai_handoff', action: 'targets', sourceAgentId: 'source-agent' },
-			'ai_handoff_result'
+			'ai_handoff_result',
+			75000
 		);
 		expect(JSON.parse(output.mock.calls[0][0]).targets).toEqual([
 			{ provider: 'codex', runnerId: 'existing' },

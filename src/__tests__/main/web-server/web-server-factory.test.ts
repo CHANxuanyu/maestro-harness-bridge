@@ -737,6 +737,26 @@ describe('web-server/web-server-factory', () => {
 			return setter.mock.calls[0][0];
 		};
 
+		it('returns the persisted conversation origin through the existing desktop tab read', () => {
+			const origin = {
+				kind: 'review',
+				sourceSessionId: 'source',
+				sourceTabId: 'tab',
+				sourceProvider: 'claude-code',
+				sourceNativeSessionId: 'native',
+				createdAt: 1,
+			};
+			vi.mocked(mockSessionsStore.get).mockReturnValue([
+				{
+					id: 'reviewer',
+					name: 'Codex',
+					toolType: 'codex',
+					aiTabs: [{ id: 'review-tab', state: 'idle', origin }],
+				},
+			]);
+			expect(getCallback()()[0].origin).toEqual(origin);
+		});
+
 		it('reports a persisted busy tab as busy without a managed process', () => {
 			vi.mocked(mockSessionsStore.get).mockReturnValue([
 				{

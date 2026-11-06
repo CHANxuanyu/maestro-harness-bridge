@@ -51,6 +51,7 @@ export interface MaestroSettings {
 	conductorProfile?: string;
 	aboutMeApplied?: Record<string, AboutMeApplied>;
 	uiLanguage: UiLanguagePreference;
+	newShell: boolean;
 	sidebarNavigationMode: 'conversations' | 'agents';
 	collapsedConversationProjects: string[];
 	activeThemeId: string;

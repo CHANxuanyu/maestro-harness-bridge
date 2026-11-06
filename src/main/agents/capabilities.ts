@@ -35,9 +35,11 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
 	 * Claude Code - Full-featured AI coding assistant from Anthropic
 	 * https://github.com/anthropics/claude-code
 	 */
+	// DeepSeek uses this harness. Help confirms plan/effort flags, but cannot
+	// verify the DeepSeek model's image input or reasoning behavior.
 	'claude-code': {
 		supportsResume: true, // --resume flag
-		supportsReadOnlyMode: true, // --permission-mode plan
+		supportsReadOnlyMode: true, // --permission-mode plan; help checked with Claude Code 2.1.317 (2026-11-05)
 		supportsStandardPermissionMode: true, // standard mode via the permission relay (--permission-prompt-tool)
 		supportsJsonOutput: true, // --output-format stream-json
 		supportsSessionId: true, // session_id in JSON output
@@ -107,9 +109,11 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
 	 * Verified capabilities based on CLI testing (v0.111.0+) and documentation review.
 	 * See .maestro/playbooks/Codex-Support.md for investigation details.
 	 */
+	// Read-only sandbox support is not evidence of a dedicated planning workflow
+	// or of model-driven maestro-cli access to the local WebSocket bridge.
 	codex: {
 		supportsResume: true, // exec resume <id> (v0.30.0+) - Verified
-		supportsReadOnlyMode: true, // --sandbox read-only - Verified
+		supportsReadOnlyMode: true, // --sandbox read-only; exec help checked with Codex CLI 0.166.0-alpha.6 (2026-11-05)
 		supportsJsonOutput: true, // --json flag - Verified
 		supportsSessionId: true, // thread_id in thread.started event - Verified
 		supportsImageInput: true, // -i, --image flag - Documented

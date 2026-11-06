@@ -775,6 +775,15 @@ describe('agent-switch window scoping', () => {
 		// An empty tab has nothing to hand over; a room is not the agent's tab.
 		expect(ids({ activeSession: { ...session, activeTabId: 'tab-2' } })).not.toContain('aiHandoff');
 		expect(ids({ activeGroupChatId: 'chat-1' })).not.toContain('aiHandoff');
+		// SSH hands off on its own host, but only when it names a remote.
+		expect(
+			ids({
+				activeSession: {
+					...session,
+					sessionSshRemoteConfig: { enabled: true, remoteId: 'remote-1' },
+				} as never,
+			})
+		).toContain('aiHandoff');
 		expect(
 			ids({
 				activeSession: { ...session, sessionSshRemoteConfig: { enabled: true } } as never,

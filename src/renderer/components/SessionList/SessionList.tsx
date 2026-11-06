@@ -48,7 +48,11 @@ import { useLiveOverlay, useResizablePanel, useViewportBreakpoint } from '../../
 import { useGitFileStatus } from '../../contexts/GitStatusContext';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
-import { selectGroupsPlusEnabled, useSettingsStore } from '../../stores/settingsStore';
+import {
+	selectConversationNavigation,
+	selectGroupsPlusEnabled,
+	useSettingsStore,
+} from '../../stores/settingsStore';
 import { useBatchStore, selectActiveBatchSessionIds } from '../../stores/batchStore';
 import { useActiveOutageSessionSignature } from '../../stores/retryStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -294,8 +298,7 @@ function SessionListInner(props: SessionListProps) {
 	const webInterfaceCustomPort = useSettingsStore((s) => s.webInterfaceCustomPort);
 	const ungroupedCollapsed = useSettingsStore((s) => s.ungroupedCollapsed);
 	const starredSectionCollapsed = useSettingsStore((s) => s.starredSessionsCollapsed);
-	const sidebarNavigationMode = useSettingsStore((s) => s.sidebarNavigationMode);
-	const conversationSidebar = sidebarNavigationMode === 'conversations';
+	const conversationSidebar = useSettingsStore(selectConversationNavigation);
 	const showStarredSessionsSection = useSettingsStore((s) => s.showStarredSessionsSection);
 	const pianolaEnabled = useSettingsStore((s) => s.encoreFeatures?.pianola);
 	// Memoized so a sidebar re-render that changes no agent (a folder toggle, the

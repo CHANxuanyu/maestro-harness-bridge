@@ -133,6 +133,7 @@ export function registerSessionCallbacks(
 							? ('idle' as const)
 							: ('unknown' as const);
 				entries.push({
+					origin: tab.origin,
 					tabId: tab.id,
 					sessionId: tab.id,
 					agentId: s.id,

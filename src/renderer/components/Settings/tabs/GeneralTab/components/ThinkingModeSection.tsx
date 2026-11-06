@@ -3,7 +3,10 @@ import type { Theme, ThinkingMode } from '../../../../../types';
 import { ToggleButtonGroup } from '../../../../ToggleButtonGroup';
 import { ToggleSwitch } from '../../../../ui/ToggleSwitch';
 import { SettingsSectionHeading } from '../../../SettingsSectionHeading';
-import { useSettingsStore } from '../../../../../stores/settingsStore';
+import {
+	selectConversationNavigation,
+	useSettingsStore,
+} from '../../../../../stores/settingsStore';
 import { useT } from '../../../../../i18n';
 
 interface ThinkingModeSectionProps {
@@ -26,7 +29,7 @@ export function ThinkingModeSection({
 	// row and lists a running turn's calls one line each, so this switch does
 	// nothing there. It still governs the agents view, so it stays a live
 	// control; the note says where it applies.
-	const conversationsView = useSettingsStore((s) => s.sidebarNavigationMode === 'conversations');
+	const conversationsView = useSettingsStore(selectConversationNavigation);
 	// Tool-call visibility is independent of the thinking mode. The two settings
 	// live under one heading because they both shape how much of the agent's work
 	// the transcript shows, but neither gates the other: thinking On with tools

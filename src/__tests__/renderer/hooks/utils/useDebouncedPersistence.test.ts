@@ -158,6 +158,24 @@ describe('useDebouncedPersistence', () => {
 		vi.useRealTimers();
 	});
 
+	it('retains handoff and review origins in the persisted tab tree', () => {
+		const initialLoadRef = makeInitialLoadRef(true);
+		const origin = {
+			kind: 'review' as const,
+			sourceSessionId: 'source',
+			sourceTabId: 'source-tab',
+			sourceProvider: 'claude-code',
+			sourceNativeSessionId: 'native',
+			createdAt: 1,
+		};
+		const session = makeSession();
+		session.aiTabs[0].origin = origin;
+		const { result } = renderPersistence(initialLoadRef);
+		act(() => result.current.flushNow([session]));
+		const saved = vi.mocked(window.maestro.sessions.setAll).mock.calls[0][0] as Session[];
+		expect(JSON.parse(JSON.stringify(saved))[0].aiTabs[0].origin).toEqual(origin);
+	});
+
 	// -----------------------------------------------------------------------
 	// Regression: never write a session tree that was never read
 	// -----------------------------------------------------------------------

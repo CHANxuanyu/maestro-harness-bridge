@@ -3,8 +3,11 @@ import { openHandoffTarget, readHandoffSource } from '../../../renderer/services
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
+import { gitService } from '../../../renderer/services/git';
 import { enqueuePromptForTab } from '../../../renderer/services/queuedPrompt';
 import type { HandoffOpenRequest } from '../../../shared/aiHandoff';
+
+vi.mock('../../../renderer/services/git', () => ({ gitService: { getChanges: vi.fn() } }));
 
 vi.mock('../../../renderer/services/queuedPrompt', () => ({ enqueuePromptForTab: vi.fn() }));
 
@@ -20,6 +23,16 @@ const request = (over: Partial<HandoffOpenRequest> = {}): HandoffOpenRequest => 
 	runnerId: 'target',
 	provider: 'codex',
 	projectPath: '/project',
+	cwd: '/project',
+	mode: 'handoff',
+	origin: {
+		kind: 'handoff',
+		sourceSessionId: 'source',
+		sourceTabId: 'source-tab',
+		sourceProvider: 'claude-code',
+		sourceNativeSessionId: 'native-original',
+		createdAt: 1,
+	},
 	config: { toolType: 'codex' },
 	draft,
 	send: false,
@@ -38,6 +51,7 @@ beforeEach(() => {
 				id: 'source',
 				name: 'Claude',
 				toolType: 'claude-code',
+				cwd: '/project',
 				projectRoot: '/project',
 				activeTabId: 'source-tab',
 				aiTabs: [
@@ -56,6 +70,7 @@ beforeEach(() => {
 			createMockSession({
 				id: 'target',
 				toolType: 'codex',
+				cwd: '/project',
 				projectRoot: '/project',
 				activeTabId: 'target-old',
 				aiTabs: [
@@ -73,6 +88,86 @@ beforeEach(() => {
 });
 
 describe('handoff renderer work without UI changes', () => {
+	it('persists review origin and read-only mode before queueing', async () => {
+		const origin = { ...request().origin, kind: 'review' as const };
+		vi.mocked(window.maestro.agents.get).mockResolvedValue({
+			capabilities: { supportsReadOnlyMode: true },
+		} as never);
+		const result = await openHandoffTarget(request({ mode: 'review', origin, send: true }));
+		expect(result).toMatchObject({ success: true, mode: 'review' });
+		const saved = vi.mocked(window.maestro.sessions.setMany).mock.calls[0][0] as ReturnType<
+			typeof sessions
+		>;
+		expect(saved[0].aiTabs.find((tab) => tab.id === result.tabId)).toMatchObject({
+			origin,
+			readOnlyMode: true,
+			permissionMode: 'readonly',
+		});
+	});
+
+	it('reads review changes in the SSH worktree and records the native source', async () => {
+		useSessionStore.setState({
+			sessions: sessions().map((session) =>
+				session.id === 'source'
+					? {
+							...session,
+							sessionSshRemoteConfig: {
+								enabled: true,
+								remoteId: 'remote',
+								workingDirOverride: '/remote/tree',
+							},
+						}
+					: session
+			),
+		});
+		vi.mocked(gitService.getChanges).mockResolvedValue({
+			root: '/remote/tree',
+			branch: 'topic',
+			files: [],
+			totals: { files: 0, additions: 0, deletions: 0 },
+			truncated: false,
+		});
+		const snapshot = await readHandoffSource({
+			sourceAgentId: 'source',
+			sourceTabId: 'source-tab',
+			provider: 'claude-code',
+			mode: 'review',
+		});
+		expect(snapshot).toMatchObject({
+			cwd: '/remote/tree',
+			sourceNativeSessionId: 'native-original',
+		});
+		expect(gitService.getChanges).toHaveBeenCalledWith('/project', 'remote', '/remote/tree');
+		expect(snapshot?.draft.text).toContain('git diff HEAD');
+	});
+
+	it('creates an SSH reviewer in the effective worktree and refuses a stale runner', async () => {
+		const ssh = { enabled: true, remoteId: 'remote', workingDirOverride: '/remote/tree' };
+		vi.mocked(window.maestro.agents.get).mockResolvedValue({
+			capabilities: { supportsReadOnlyMode: false },
+		} as never);
+		const stale = await openHandoffTarget(
+			request({ cwd: '/remote/tree', sessionSshRemoteConfig: ssh, mode: 'review' })
+		);
+		expect(stale).toMatchObject({ success: false, code: 'unavailable' });
+		const result = await openHandoffTarget(
+			request({
+				runnerId: undefined,
+				cwd: '/remote/tree',
+				sessionSshRemoteConfig: ssh,
+				mode: 'review',
+			})
+		);
+		const target = sessions().find((item) => item.id === result.agentId)!;
+		expect(target).toMatchObject({
+			cwd: '/remote/tree',
+			shellCwd: '/remote/tree',
+			sessionSshRemoteConfig: ssh,
+		});
+		expect(target.aiTabs.find((tab) => tab.id === result.tabId)?.readOnlyMode).not.toBe(true);
+		expect(window.maestro.agents.get).toHaveBeenCalledWith('codex', 'remote');
+	});
+
 	it('extracts exactly the named source without changing drafts, history or selection', async () => {
 		const before = JSON.stringify(sessions());
 		const snapshot = await readHandoffSource({
@@ -120,6 +215,7 @@ describe('handoff renderer work without UI changes', () => {
 			logs: [],
 			state: 'idle',
 		});
+		expect(tab.origin).toEqual(request().origin);
 		expect(target.unifiedTabOrder).toContainEqual({ type: 'ai', id: tab.id });
 		expect(target.activeTabId).toBe('target-old');
 		expect(JSON.stringify(sessions()[0])).toBe(sourceBefore);

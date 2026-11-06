@@ -26,7 +26,7 @@ describe('AI handoff entry points', () => {
 		expect(canHandOffTab(createMockSession({ aiTabs: [tab] }), tab)).toBe(true);
 	});
 
-	it('withholds it from an empty tab, an SSH agent and a missing tab', () => {
+	it('withholds it from empty and missing tabs and SSH without a remote, and supports SSH with one', () => {
 		const empty = createMockAITab({ id: 'tab-1', logs: [] });
 		expect(canHandOffTab(createMockSession({ aiTabs: [empty] }), empty)).toBe(false);
 		// Tool rows and blank text are not a conversation to hand over.
@@ -39,12 +39,14 @@ describe('AI handoff entry points', () => {
 		});
 		expect(canHandOffTab(createMockSession({ aiTabs: [toolsOnly] }), toolsOnly)).toBe(false);
 		const tab = talked();
-		expect(
-			canHandOffTab(
-				createMockSession({ aiTabs: [tab], sessionSshRemoteConfig: { enabled: true } } as never),
-				tab
-			)
-		).toBe(false);
+		const ssh = (remoteId: string | null) =>
+			createMockSession({
+				aiTabs: [tab],
+				sessionSshRemoteConfig: { enabled: true, remoteId },
+			} as never);
+		expect(canHandOffTab(ssh('remote-1'), tab)).toBe(true);
+		// SSH that names no remote could never reach a host.
+		expect(canHandOffTab(ssh(null), tab)).toBe(false);
 		expect(canHandOffTab(createMockSession({ aiTabs: [tab] }), undefined)).toBe(false);
 	});
 
@@ -76,6 +78,16 @@ describe('AI handoff entry points', () => {
 		expect(useModalStore.getState().modals.get('aiHandoff')).toMatchObject({
 			open: true,
 			data: { sessionId: 'agent-1', tabId: 'tab-1' },
+		});
+		// A plain handoff carries no mode, so the dialog keeps its handoff wording.
+		expect(useModalStore.getState().modals.get('aiHandoff')?.data).not.toHaveProperty('mode');
+	});
+
+	it('opens the same dialog in review mode for the Changes panel', () => {
+		requestAiHandoff('agent-1', 'tab-1', 'review');
+		expect(useModalStore.getState().modals.get('aiHandoff')).toMatchObject({
+			open: true,
+			data: { sessionId: 'agent-1', tabId: 'tab-1', mode: 'review' },
 		});
 	});
 });

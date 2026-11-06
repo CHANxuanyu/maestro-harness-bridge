@@ -10,6 +10,7 @@
  */
 
 import { ipcRenderer } from 'electron';
+import type { GitChanges, GitFileChangeDiff } from '../../shared/gitChanges';
 import type {
 	GitCommandOutputChunk,
 	GitRunCommandResult,
@@ -167,6 +168,15 @@ export interface GitWorktreeCheckoutResult {
  */
 export function createGitApi() {
 	return {
+		changes: (cwd: string, sshRemoteId?: string, remoteCwd?: string): Promise<GitChanges> =>
+			ipcRenderer.invoke('git:changes', cwd, sshRemoteId, remoteCwd),
+		changeDiff: (
+			cwd: string,
+			file: string,
+			sshRemoteId?: string,
+			remoteCwd?: string
+		): Promise<GitFileChangeDiff> =>
+			ipcRenderer.invoke('git:changeDiff', cwd, file, sshRemoteId, remoteCwd),
 		/**
 		 * Get git status for a repository
 		 */

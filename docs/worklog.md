@@ -13,6 +13,82 @@
 - **安装边界：** 验收时日常旧包仍运行，验的是 ZIP 解压副本；之后用户退出旧版，才替换日常安装位置。替换后版本、签名与 app.asar 已核对，但没有启动过，原配置升级启动未验。后续安装事实由用户提供。
 - **开放问题：** DeepSeek 真实网关与三家偏好加载缺密钥，完整真实套件、发行包真实模型、共享/交接真实场景、完整跨应用写入、新包真实 worktree/压缩历史、日常试用和真实错误入口未验。更新退出、无响应副窗口、移动中的回合、长历史绘制性能及界面人工剩余项保留空框。运行中 CLI 设置刷新竞态、快速退出后的 Claude 用量探针残留计划下一版修复；浏览器后写入覆盖、保存超时与既有界面缺口仍存在，不能把脚本通过说成全部人工验收通过。
 
+## 2026-11-05：hb.7 新界面第一阶段（界面）
+
+在 `codex/hb7-shell-ui`（基于 `codex/hb7-backend`）上做新界面第一阶段，全部在 `newShell` 开关后面，旧界面不变。设置的“显示”里加了开关；右栏在新界面下只有“改动”和“文件”，“改动”面板用附录 B 的两个只读调用，回合结束、切换会话和手动刷新时重读，git 超时保留上一次的结果；底部按钮以复核模式打开现有的交接对话框。顶栏在新界面下加“交给…”。新增共享选择器 `selectConversationNavigation()`：新界面总是按会话导航，旧界面照旧跟随侧栏设置，六处原来各自判断的地方都改用它。
+
+新增和改动的测试：`ChangesPanel`（9 条，含 SSH、超时保留、回合结束刷新、复核入口）、右栏新界面三条、顶栏三条、交接对话框复核模式、入口复核模式、选择器两条、显示设置开关一条。七组临时反证（去掉回合结束刷新、去掉超时保留、复核改成交接、右栏忽略开关、顶栏去掉两道判断、选择器忽略开关、对话框丢掉 mode）各只让对应测试失败，反证改动未提交。
+
+用临时的 Electron 场景（假 Claude 命令行、临时 git 仓库，用完已删除）在 Clay 浅色、Dracula 深色和 GitHub 浅色下截图核对：改动列表、行数、逐行差异和复核对话框显示正常。核对时发现一个已有问题：命令行写设置后，若应用刚在 500 毫秒内写过一次设置，文件监听会把这次外部修改当成自己的写入丢掉，界面不会更新（场景里回合结束时写入的用量统计正好触发）。这不是新界面引入的，记为后续给 Codex 的后端事项。
+
+## 2026-11-05：hb.7 后端，Opus 复核修正
+
+在 `codex/hb7-backend` 的 `5f5ce0ae8` 上重新阅读附录 C 第 2 项后修正四项问题。未跟踪的嵌套仓库保留 Git 的末尾 `/`，符号链接（含悬空链接）与不可读文件均保留 untracked 状态、null 行数和空差异，单条读取失败不再中断清单。混合临时仓库同时放置这些条目、普通未跟踪文件和已修改文件，核对正常文件的 2 增 1 删及完整 totals。复核草稿明确要求对已跟踪改动执行 `git diff HEAD`，直接阅读清单里的未跟踪文件。root 本机使用平台 path.normalize，SSH 保留远端原样，文件路径仍用 `/`。
+
+先只改测试运行三文件，14 失败、21 通过；失败覆盖目录、悬空链接、不可读文件、链接行数/差异、复核文案及路径契约。实现后同一命令 35/35；原有 18 文件命令重跑为 951/951、无跳过。既有 root 断言改为严格比较原生路径，文件路径及其余旧断言保留，没有放宽为可选结果。Windows 用隔离的 path 默认导出注入 path.win32，不修改 process.platform；实际 POSIX 权限与符号链接用例仅在非 Windows 运行，本机均已执行。
+
+`npm run lint`、修改源文件 ESLint、测试专用 dash ESLint、`npm run format:check:all`、`npm run docs:verify` 和 `git diff --check` 均通过；文档检查 653 条路径、0 缺失。精确命令和结果追加在[后端核对报告](verification/hb7-backend.md#opus-review-corrections)。被测对象为本地源码，无远端操作、真实模式、账户目录访问、Electron、发行包或模型调用；真实 Windows、SSH 和 GUI 仍未验。
+
+## 2026-11-05：hb.7 后端 D，帮助核对与最终验证
+
+在本克隆 gitignored scratch 中为每次命令创建新的 HOME、CLAUDE_CONFIG_DIR、CODEX_HOME，只执行版本、帮助与 feature flags 列表。Claude Code 为 2.1.317，Codex CLI 为 0.166.0-alpha.6。帮助确认 plan 权限参数和只读 sandbox 参数；已有 capability 布尔值不变，在字段旁记录核对版本。不以帮助输出声称 DeepSeek 图片或推理能力已通过，也不声称 Codex 已能在沙箱里调用 Maestro。该项仅审计与注释，没有行为改动，未造一个没有行为意义的失败测试；修改前既有 capability 测试为 25/25。
+
+最终被测对象是本地源码，没有发行包。合并一次运行全部触及的测试及 capability 回归，18 文件、938/938、无跳过；`npm run lint` 三个配置、修改源文件 ESLint、测试专用 dash ESLint、全仓 `npm run format:check:all` 和 `npm run docs:verify` 均通过，路径检查为 653 条、0 缺失。构建后的 CLI 在隔离目录实跑 settings set/get newShell，返回 true 和 boolean；生成 CLI reference 后已格式化；起始失败、精确最终命令、CLI parity 两行和限制存于[后端核对报告](verification/hb7-backend.md)，[能力核对](verification/hb7-capabilities.md)逐项区分 flag 与模型行为。
+
+Electron、真实 SSH、Windows、安装包和付费调用均未验。既有 DeepSeek 预设工厂只支持本机新账户，SSH 上缺少同目录 preset runner 时明确失败，未改成在本机运行。Opus 后续询问用户再验证 DeepSeek 图片、推理强度和 Codex 派活；本轮没有真实账户写入、模型请求、推送或发布。
+
+## 2026-11-05：hb.7 后端 C，交接和复核
+
+交接按执行 cwd 与 SSH remoteId 匹配目标，不再按项目分组路径复用其他 worktree，也不从其他项目复制配置。缺失目标取工具全局配置；本机 DeepSeek 从全局网关配置调用既有隔离预设，SSH 上没有对应预设 runner 时明确失败，因为既有工厂只创建本机账户目录，本轮不发明远程账户创建协议。
+
+`ai_handoff prepare` 默认 handoff，可指定 review。复核沿用预算器，固定包含来源目标摘录、`git:changes` 文件清单、自己执行 `git diff HEAD` 与只报告问题不改文件的要求。支持时先设置只读权限再保存、排队；两种模式均记录 ConversationOrigin，保存 native id，`session list` 和 `tab show --json` 返回来源。CLI 增加 `--review` 并等待有界 git/SSH 读取，Covered 增加复核行。
+
+先运行失败测试，确认旧实现误用其他项目配置、拒绝 SSH、缺少 review 和 origin；新增与回归测试覆盖目标复用、新建、全局配置、SSH 命令生成、预算、持久化及既有读取路径。仅测本地源码与合成账户字段，预设创建在测试中 mock，没有发模型请求、启动 Electron 或访问真实账户。真实 SSH、Windows 和发行包验收留给 Opus；后续核对条目记录公共检查结果。
+
+## 2026-11-05：hb.7 后端 B，改动接口
+
+新增共享改动类型、`git:changes` / `git:changeDiff`、预加载、渲染服务与 `changes` CLI。CLI 通过现有 bridge.invoke 调用同一 IPC，按选中标签所属智能体的 cwd 与 SSH 配置读取。状态与行数一次 git 调用及 SSH 连接；逐文件差异先读状态取得改名来源，再读取正文。无 HEAD 按空树，完整 totals 在 500 条截断前计算，二进制与大文件、超时、非仓库均明确返回。
+
+先添加用例并确认缺少模块时失败；真实临时仓库覆盖暂存与未暂存、未跟踪、改名、删除、冲突、空树、大文件、text attributes、超大差异和截断合计。SSH 用命令生成及解析测试，不连接主机；Windows 风格路径测试不修改 process.platform。测试及公共检查汇总见后续核对条目。被测对象仅本地源码，没有 Electron、真实 SSH 或 Windows 验收，没有安装包。
+
+## 2026-11-05：hb.7 后端 A，新界面设置
+
+在 `codex/hb7-backend` 本地源码上登记 `newShell`，默认 false，含主进程默认、元数据、渲染 store 的加载与保存和设置搜索。先写失败测试：通用 CLI 两条均失败，store 新用例失败；实现后相关两文件通过。CLI 使用隔离临时数据，不访问真实账户。外壳 UI 由 Opus 实现，本轮不启动 Electron，不构建发行包，不推送。
+
+## 2026-11-05：新界面规格定稿
+
+用户确认了新界面的五个界面决定和目标用户，全部按推荐执行。规格存为[新界面](roadmap/new-shell.md)，附 hb.7 的后端接口：新界面开关、改动面板的只读调用、交接的复核模式和来源记录、能力核对。本条只改文档，没有改代码，没有运行真实模式，也没有访问真实账户。
+
+## 2026-11-05：设置监听不再遗漏紧邻的外部写入
+
+本轮基于 `72545fdad`，在无远端的 `codex/settings-watcher-shadow` 本地分支修复设置监听。被测对象是本克隆源码，未启动 Electron、打包、安装或访问真实账户目录。
+
+- **实现：** 两个既有监听文件改用成功写入字节的 SHA-256，删除 500ms 时间屏蔽及其旧接口。写入前发现外部内容时保留待通知标记，避免 electron-store 读回并保留该值后将其误判为纯内部写入。事件发生时确认外部变更，后续内部事件不会取消已排队的 300ms 通知；所有窗口和主进程回调共用该决定。未增加监听器或轮询。
+- **失败先行：** 新增真实临时文件及 conf 存储回归，修复前 10 条中 8 失败、2 通过，覆盖两个文件的 100ms 外部写入、延迟内部事件及两种交错事件顺序。修复后同一组 10/10；相关四文件 42/42，无跳过。旧时间接口测试改为内容不变量，保留自身写入、连续输入、独立文件、返回值和异常断言，新增全文赋值及序列化后外部替换覆盖。
+- **端到端：** 新增 `e2e/native-settings-watcher.spec.ts`，先经 IPC 显式保存设置，再立即运行 CLI 将界面语言切为简体中文，并断言窗口中的创建智能体文字切换。文件时间断言要求两次写入间隔小于 500ms，避免 CLI 启动过慢使旧实现假通过。Playwright 列举成功，Electron 执行交给 Opus。
+
+最终相关回归为 31 文件 945/945，无跳过；与四文件 42 条重叠，不累计计数。三个 TypeScript 项目、全部触及代码和测试的 ESLint、全仓 Prettier、647 条文档路径（0 缺失）、差异空白检查通过。实际命令如下：
+
+```sh
+npm run test -- src/__tests__/main/app-lifecycle/settings-watcher-content.test.ts
+npm run test -- src/__tests__/main/app-lifecycle/settings-watcher.test.ts src/__tests__/main/app-lifecycle/settings-watcher-content.test.ts src/__tests__/main/stores/write-tracker.test.ts src/__tests__/main/stores/instances.test.ts
+npm run test -- src/__tests__/main/app-lifecycle src/__tests__/main/stores src/__tests__/cli/services/storage.test.ts src/__tests__/renderer/hooks/useSettings.test.ts src/__tests__/renderer/stores/settingsStore.test.ts
+npm run lint
+node node_modules/eslint/bin/eslint.js --ignore-pattern '!src/__tests__/**' src/main/app-lifecycle/settings-watcher.ts src/main/stores/write-tracker.ts src/__tests__/main/app-lifecycle/settings-watcher.test.ts src/__tests__/main/app-lifecycle/settings-watcher-content.test.ts src/__tests__/main/stores/write-tracker.test.ts src/__tests__/main/stores/instances.test.ts e2e/native-settings-watcher.spec.ts
+npm run format:check:all
+npm run docs:verify
+node node_modules/@playwright/test/cli.js test --project=native e2e/native-settings-watcher.spec.ts --list
+git diff --check
+```
+
+首条单元命令在修改生产代码前失败（8 失败、2 通过），修改后通过（10/10）；第二条 42/42，第三条 945/945。ESLint 显式取消测试目录的默认忽略，没有减少检查规则；Playwright 仅列举 1 条回归，未启动应用。Opus 应在沙箱外运行：
+
+```sh
+MAESTRO_E2E_REAL=0 node scripts/native-e2e.mjs --grep "settings watcher: immediate CLI write after an app write updates the window"
+```
+
+该命令会先构建 main、renderer 和 CLI，再执行合成账户夹具。原生 GUI、Linux/Windows CI 和发行包均未验证，不能用本地单元通过替代。
+
 ## 2026-11-05：额度探针退出残留
 
 被测对象为基于 `78760e641` 的 `codex/status-probe-leak` 本地源码。hb.6 的构建来源不变，本修复进入下一版。
@@ -529,3 +605,11 @@ hb.6 源码 `72545fdad` 的真实 Codex 验收中，`codex b: parallel tools` �
 ## 2026-11-04：OpenCode 假程序的数据库锁（Opus）
 
 #45 在 Linux 的 Electron 测试里出现一次 `opencode c` 失败：`database is locked`，发生在测试轮询 OpenCode 数据库表是否建好的时候。新文件起初处于回滚日志模式，假 OpenCode 建表期间读者被锁在外面，SQLite 立即报错而不等待；写入方切换到 WAL 时同理。给假程序的读写连接都加 5 秒忙等待。先补回归测试：另一个进程在建表期间持锁 200 毫秒，修复前报 `database is locked`，修复后通过。假程序测试 43 条、OpenCode 的 8 个 Electron 场景均通过。属于测试工具问题，产品代码不变。
+
+## 2026-11-06：改动面板的本地批量读取
+
+Windows 上数百个未跟踪文件会触发逐文件 `wc` 和 `git diff --no-index`，超过 20 秒查询预算后返回子目录兜底。现在本地一次获取未跟踪列表，在 Node 中以 64 KiB 异步分块、最多 16 个并发读取；已跟踪文件用异步 `stat` 和一次 `cat-file --batch-check` 检查两端大小。SSH 脚本及共享解析格式不变。
+
+先补真实仓库的进程数量回归，旧实现对 32 个未跟踪文件启动 40 次 Git，对 32 个已跟踪改动启动 39 次 Git，均超过 12 次上限。修复后通过。增加本地与旧 shell 结果对照，覆盖空文件、无末尾换行、二进制前缀边界、大小边界、重命名与删除、换行及引号文件名、符号链接和不可读文件，并验证读取并发及句柄清理。原 501 文件测试断言保持不变，临时仓库清理加入 Windows 重试。
+
+本机 macOS arm64 源码验证：改动查询目录 31 条测试通过，连同 Git 工具测试共 143 条通过；`npm run lint`、改动源码 ESLint 和格式检查通过。Vitest 使用 `--configLoader runner --no-cache`。501 个子目录文件加原测试的 3 个边界条目，各测 3 次查询，中位数从 5.020 秒降至 0.088 秒。验证对象是本分支源码，未构建安装包，未运行 Windows、Playwright 或 Electron 验收。

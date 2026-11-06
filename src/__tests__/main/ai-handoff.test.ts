@@ -63,6 +63,12 @@ describe('local AI handoff routing', () => {
 			sourceAgentId: request.sourceAgentId,
 			sourceTabId: request.sourceTabId,
 			projectPath: runners.find((item) => item.id === request.sourceAgentId)!.projectRoot,
+			cwd:
+				runners.find((item) => item.id === request.sourceAgentId)!.sessionSshRemoteConfig
+					?.workingDirOverride || runners.find((item) => item.id === request.sourceAgentId)!.cwd,
+			sessionSshRemoteConfig: runners.find((item) => item.id === request.sourceAgentId)!
+				.sessionSshRemoteConfig,
+			sourceNativeSessionId: 'native-source',
 			draft,
 		}));
 		openTarget.mockImplementation(async (request) => {
@@ -110,6 +116,7 @@ describe('local AI handoff routing', () => {
 			runner('claude-code'),
 			runner('codex', { projectRoot: '/other', cwd: '/other', customModel: 'target-model' }),
 		];
+		configs.codex = { customModel: 'global-model' };
 		const api = service();
 		const request = {
 			sourceAgentId: 'claude-code',
@@ -123,7 +130,7 @@ describe('local AI handoff routing', () => {
 		expect(
 			runners.filter((item) => item.projectRoot === '/project' && item.toolType === 'codex')
 		).toHaveLength(1);
-		expect(openTarget.mock.calls[0][0].config.customModel).toBe('target-model');
+		expect(openTarget.mock.calls[0][0].config.customModel).toBe('global-model');
 	});
 
 	it('copies the target account and model, never the source configuration', async () => {
@@ -139,6 +146,11 @@ describe('local AI handoff routing', () => {
 				enableMaestroP: false,
 			}),
 		];
+		configs['claude-code'] = {
+			customEnvVars: deepseekEnv,
+			customModel: 'deepseek-flash[1m]',
+			enableMaestroP: false,
+		};
 		await service().prepare({
 			sourceAgentId: 'codex',
 			sourceTabId: 't',
@@ -168,6 +180,78 @@ describe('local AI handoff routing', () => {
 		expect(result).toEqual({ success: true, targets: [] });
 		expect(readSource).not.toHaveBeenCalled();
 		expect(openTarget).not.toHaveBeenCalled();
+	});
+
+	it('reuses only a target on the same SSH host and effective directory', async () => {
+		const ssh = { enabled: true, remoteId: 'host-a', workingDirOverride: '/remote/tree' };
+		runners = [
+			runner('claude-code', { sessionSshRemoteConfig: ssh }),
+			runner('codex', { id: 'wrong-host', sessionSshRemoteConfig: { ...ssh, remoteId: 'host-b' } }),
+			runner('codex', {
+				id: 'right-host',
+				cwd: '/other-local-metadata',
+				sessionSshRemoteConfig: ssh,
+			}),
+		];
+		expect(
+			await service().prepare({
+				sourceAgentId: 'claude-code',
+				sourceTabId: 't',
+				targetProvider: 'codex',
+			})
+		).toMatchObject({ success: true, agentId: 'right-host', mode: 'handoff' });
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				runnerId: 'right-host',
+				cwd: '/remote/tree',
+				origin: expect.objectContaining({ kind: 'handoff' }),
+			})
+		);
+	});
+
+	it('does not confuse an SSH remote named local with the local machine', async () => {
+		runners = [
+			runner('claude-code', { sessionSshRemoteConfig: { enabled: true, remoteId: 'local' } }),
+			runner('codex'),
+		];
+		await service().prepare({
+			sourceAgentId: 'claude-code',
+			sourceTabId: 't',
+			targetProvider: 'codex',
+		});
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				runnerId: undefined,
+				sessionSshRemoteConfig: { enabled: true, remoteId: 'local' },
+			})
+		);
+	});
+
+	it('fails clearly for a missing remote DeepSeek preset and rejects an unknown mode', async () => {
+		runners = [
+			runner('codex', {
+				sessionSshRemoteConfig: {
+					enabled: true,
+					remoteId: 'host',
+					workingDirOverride: '/remote/tree',
+				},
+			}),
+		];
+		configs['claude-code'] = { customEnvVars: deepseekEnv };
+		const request = {
+			sourceAgentId: 'codex',
+			sourceTabId: 't',
+			targetProvider: 'deepseek' as const,
+		};
+		expect(await service().prepare(request)).toMatchObject({
+			success: false,
+			error: expect.stringContaining('existing preset runner'),
+		});
+		expect(openTarget).not.toHaveBeenCalled();
+		expect(await service().prepare({ ...request, mode: 'invalid' } as never)).toMatchObject({
+			success: false,
+			code: 'invalid-request',
+		});
 	});
 
 	it('identifies the actual inherited gateway without layering the provider record over a session override', async () => {
@@ -217,15 +301,52 @@ describe('local AI handoff routing', () => {
 		expect(openTarget).not.toHaveBeenCalled();
 	});
 
-	it('rejects a remote source before reading or opening a local target', async () => {
-		runners[0].sessionSshRemoteConfig = { enabled: true, remoteId: 'remote' };
+	it('keeps an SSH source on its host and effective worktree directory', async () => {
+		runners[0].sessionSshRemoteConfig = {
+			enabled: true,
+			remoteId: 'remote',
+			workingDirOverride: '/remote/worktree',
+		};
 		const result = await service().prepare({
 			sourceAgentId: 'claude-code',
 			sourceTabId: 't',
 			targetProvider: 'codex',
 		});
-		expect(result.success).toBe(false);
-		expect(readSource).not.toHaveBeenCalled();
-		expect(openTarget).not.toHaveBeenCalled();
+		expect(result.success).toBe(true);
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				runnerId: undefined,
+				cwd: '/remote/worktree',
+				sessionSshRemoteConfig: runners[0].sessionSshRemoteConfig,
+			})
+		);
+	});
+
+	it('never reuses a project-root target for a source in a worktree and stamps review origin', async () => {
+		runners[0].cwd = '/project/worktree';
+		configs.codex = { customModel: 'global-model' };
+		const result = await service().prepare({
+			sourceAgentId: 'claude-code',
+			sourceTabId: 't',
+			targetProvider: 'codex',
+			mode: 'review',
+		});
+		expect(result).toMatchObject({ success: true, mode: 'review' });
+		expect(readSource).toHaveBeenCalledWith(expect.objectContaining({ mode: 'review' }));
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cwd: '/project/worktree',
+				runnerId: undefined,
+				config: expect.objectContaining({ customModel: 'global-model' }),
+				origin: {
+					kind: 'review',
+					sourceSessionId: 'claude-code',
+					sourceTabId: 't',
+					sourceProvider: 'claude-code',
+					sourceNativeSessionId: 'native-source',
+					createdAt: expect.any(Number),
+				},
+			})
+		);
 	});
 });

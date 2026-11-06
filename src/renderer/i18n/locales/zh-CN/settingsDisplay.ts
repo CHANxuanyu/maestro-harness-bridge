@@ -186,6 +186,10 @@ export const settingsDisplay: AreaTranslation<typeof en> = {
 	'settings.display.modal.title': '已保存的弹窗尺寸',
 	'settings.display.modal.description': '清除自定义的对话框尺寸。',
 
+	'settings.display.newShell.heading': '新界面（预览）',
+	'settings.display.newShell.title': '使用新界面',
+	'settings.display.newShell.description':
+		'左栏是项目和会话，中间一次看一条会话，右侧是这条会话的改动和文件。立即切换，不会打断正在运行的回合。',
 	'settings.display.fileEdit.heading': '文件编辑与预览',
 	'settings.display.fileEdit.lineNumbers': '在编辑器中显示行号',
 	'settings.display.fileEdit.lineNumbersDescription':

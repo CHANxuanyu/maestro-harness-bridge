@@ -54,6 +54,13 @@ function entry(tabId: string, agentId: string, over: Record<string, unknown> = {
 		readOnly: false,
 		thinking: 'off' as const,
 		model: null,
+		origin: {
+			kind: 'review',
+			sourceSessionId: 'source',
+			sourceTabId: 'source-tab',
+			sourceProvider: 'codex',
+			createdAt: 1,
+		},
 		effort: null,
 		enterToSend: null,
 		...over,
@@ -330,5 +337,10 @@ describe('tab commands', () => {
 		const printed = JSON.parse(consoleSpy.mock.calls.at(-1)?.[0] as string);
 		expect(printed.tab.tabId).toBe('tab-bbbb');
 		expect(printed.tab.model).toBe('opus');
+		expect(printed.tab.origin).toMatchObject({
+			kind: 'review',
+			sourceSessionId: 'source',
+			sourceTabId: 'source-tab',
+		});
 	});
 });

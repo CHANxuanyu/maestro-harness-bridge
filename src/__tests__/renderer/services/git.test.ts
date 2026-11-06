@@ -9,6 +9,8 @@ import { logger } from '../../../renderer/utils/logger';
 
 // Mock the window.maestro.git object
 const mockGit = {
+	changes: vi.fn(),
+	changeDiff: vi.fn(),
 	isRepo: vi.fn(),
 	status: vi.fn(),
 	branch: vi.fn(),
@@ -38,6 +40,15 @@ beforeEach(() => {
 });
 
 describe('gitService', () => {
+	test('preserves changes response flags and propagates unexpected failures', async () => {
+		mockGit.changes.mockResolvedValue({ timedOut: true });
+		expect(await gitService.getChanges('/local', 'remote', '/tree')).toEqual({ timedOut: true });
+		expect(mockGit.changes).toHaveBeenCalledWith('/local', 'remote', '/tree');
+		mockGit.changeDiff.mockRejectedValue(new Error('SSH unavailable'));
+		await expect(gitService.getChangeDiff('/local', 'file', 'remote', '/tree')).rejects.toThrow(
+			'SSH unavailable'
+		);
+	});
 	describe('isRepo', () => {
 		test('returns true when directory is a git repository', async () => {
 			mockGit.isRepo.mockResolvedValue(true);

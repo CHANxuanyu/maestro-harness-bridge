@@ -27,6 +27,19 @@ describe('Git Preload API', () => {
 		api = createGitApi();
 	});
 
+	it('forwards both changes reads with the exact SSH context', async () => {
+		await api.changes('/local', 'remote', '/remote/tree');
+		expect(mockInvoke).toHaveBeenLastCalledWith('git:changes', '/local', 'remote', '/remote/tree');
+		await api.changeDiff('/local', 'file', 'remote', '/remote/tree');
+		expect(mockInvoke).toHaveBeenLastCalledWith(
+			'git:changeDiff',
+			'/local',
+			'file',
+			'remote',
+			'/remote/tree'
+		);
+	});
+
 	describe('status', () => {
 		it('should invoke git:status with cwd', async () => {
 			mockInvoke.mockResolvedValue('M src/file.ts');

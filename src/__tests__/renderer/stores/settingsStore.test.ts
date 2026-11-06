@@ -9,6 +9,7 @@ import {
 	resolveForceParallel,
 	FILE_PREVIEW_TOOLBAR_BUTTON_KEYS,
 	DEFAULT_FILE_PREVIEW_TOOLBAR_VISIBILITY,
+	selectConversationNavigation,
 } from '../../../renderer/stores/settingsStore';
 import type { SettingsStoreState } from '../../../renderer/stores/settingsStore';
 import { SETTINGS_METADATA } from '../../../shared/settingsMetadata';
@@ -183,6 +184,7 @@ function resetStore() {
 
 describe('settingsStore', () => {
 	it.each([
+		['newShell', 'setNewShell'],
 		['notificationCenterLarge', 'setNotificationCenterLarge'],
 		['notificationCenterDetails', 'setNotificationCenterDetails'],
 		['notificationCenterKeyboardNavigation', 'setNotificationCenterKeyboardNavigation'],
@@ -3632,5 +3634,27 @@ describe('settingsStore', () => {
 				expect(description).toContain(value);
 			}
 		});
+	});
+});
+
+describe('selectConversationNavigation', () => {
+	const state = (overrides: Partial<SettingsStoreState>) =>
+		({ ...useSettingsStore.getState(), ...overrides }) as SettingsStoreState;
+
+	it('follows the sidebar navigation setting in the classic shell', () => {
+		expect(
+			selectConversationNavigation(
+				state({ newShell: false, sidebarNavigationMode: 'conversations' })
+			)
+		).toBe(true);
+		expect(
+			selectConversationNavigation(state({ newShell: false, sidebarNavigationMode: 'agents' }))
+		).toBe(false);
+	});
+
+	it('always navigates by conversation in the new shell', () => {
+		expect(
+			selectConversationNavigation(state({ newShell: true, sidebarNavigationMode: 'agents' }))
+		).toBe(true);
 	});
 });

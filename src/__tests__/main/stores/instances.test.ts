@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 
 // Use vi.hoisted to create mock state that's accessible in both mock factory and tests
 // This ensures proper scoping and avoids potential test interference
-const { mockStoreConstructorCalls } = vi.hoisted(() => ({
+const { mockStoreConstructorCalls, mockStoreContents } = vi.hoisted(() => ({
 	mockStoreConstructorCalls: [] as Array<Record<string, unknown>>,
+	mockStoreContents: new Map<string, string>(),
 }));
 
 // Mock electron
@@ -14,18 +17,28 @@ vi.mock('electron', () => ({
 }));
 
 // Mock electron-store with a class that tracks constructor calls
-vi.mock('electron-store', () => {
+vi.mock('electron-store', async () => {
+	const { default: path } = await import('path');
 	return {
 		default: class MockStore {
 			options: Record<string, unknown>;
+			path: string;
+			_serialize = JSON.stringify;
 			constructor(options: Record<string, unknown>) {
 				this.options = options;
+				this.path = path.resolve(String(options.cwd ?? '/mock/user/data'), `${options.name}.json`);
+				mockStoreContents.set(this.path, '{}');
 				mockStoreConstructorCalls.push(options);
 			}
 			get() {
 				return undefined;
 			}
-			set() {}
+			set(key: string, value: unknown) {
+				this._write({ [key]: value });
+			}
+			_write(value: unknown) {
+				mockStoreContents.set(this.path, this._serialize(value));
+			}
 		},
 	};
 });
@@ -43,7 +56,7 @@ import {
 } from '../../../main/stores/instances';
 import { getCustomSyncPath } from '../../../main/stores/utils';
 import {
-	hadRecentInternalWrite,
+	consumeExternalStoreChange,
 	resetInternalWriteTracking,
 } from '../../../main/stores/write-tracker';
 
@@ -53,8 +66,14 @@ describe('stores/instances', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mockStoreConstructorCalls.length = 0; // Clear tracked constructor calls
-		mockedGetCustomSyncPath.mockReturnValue(undefined);
+		mockStoreContents.clear();
 		resetInternalWriteTracking();
+		const readFileSync = fs.readFileSync;
+		vi.spyOn(fs, 'readFileSync').mockImplementation(((file, ...args) => {
+			const content = mockStoreContents.get(String(file));
+			return content === undefined ? readFileSync(file, ...args) : Buffer.from(content);
+		}) as typeof fs.readFileSync);
+		mockedGetCustomSyncPath.mockReturnValue(undefined);
 	});
 
 	afterEach(() => {
@@ -152,18 +171,31 @@ describe('stores/instances', () => {
 		// Without this wiring the settings file watcher can't tell our own writes
 		// from an external edit, and every settings:set bounces back to the
 		// renderer as an "external change" that reloads over live typing.
-		it('instruments the watched stores so their writes are stamped', () => {
+		it('instruments both watched store instances with the correct file names', () => {
 			initializeStores({ productionDataPath: '/mock/production/path' });
 			const { settingsStore, agentConfigsStore } = getStoreInstances();
 
 			settingsStore!.set('fontSize', 16);
 
-			expect(hadRecentInternalWrite('maestro-settings.json')).toBe(true);
-			expect(hadRecentInternalWrite('maestro-agent-configs.json')).toBe(false);
+			expect(consumeExternalStoreChange('maestro-settings.json', settingsStore!.path)).toBe(false);
+			expect(
+				consumeExternalStoreChange('maestro-agent-configs.json', agentConfigsStore!.path)
+			).toBe(false);
 
 			agentConfigsStore!.set('configs', {});
 
-			expect(hadRecentInternalWrite('maestro-agent-configs.json')).toBe(true);
+			expect(
+				consumeExternalStoreChange('maestro-agent-configs.json', agentConfigsStore!.path)
+			).toBe(false);
+			mockStoreContents.set(settingsStore!.path, '{"fontSize":18}');
+			expect(consumeExternalStoreChange('maestro-settings.json', settingsStore!.path)).toBe(true);
+			expect(
+				consumeExternalStoreChange('maestro-agent-configs.json', agentConfigsStore!.path)
+			).toBe(false);
+			expect(settingsStore!.path).toBe(path.resolve('/mock/user/data', 'maestro-settings.json'));
+			expect(agentConfigsStore!.path).toBe(
+				path.resolve('/mock/production/path', 'maestro-agent-configs.json')
+			);
 		});
 
 		it('should log startup paths', () => {

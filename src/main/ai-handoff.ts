@@ -1,11 +1,10 @@
-import path from 'node:path';
 import { createKeyedWriteQueue } from '../shared/keyedWriteQueue';
-import { normalizeWorktreePath } from '../shared/worktreePaths';
 import { effectiveAgentCustomEnvVars } from '../shared/providerProfiles';
 import { getClaudeTokenSourceFields } from '../shared/claudeTokenMode';
 import { isDeepSeekAgent } from '../shared/agentPresets';
 import {
 	HANDOFF_PROVIDERS,
+	handoffLocation,
 	handoffRequestError,
 	type HandoffProvider,
 	type HandoffRunner,
@@ -25,14 +24,13 @@ interface HandoffDependencies {
 	getAgentConfig: (toolType: string) => HandoffRunnerConfig;
 	getGlobalEnv: () => Record<string, string>;
 	env: Record<string, string | undefined>;
-	isAvailable: (config: HandoffOpenRequest['config']) => Promise<boolean>;
+	isAvailable: (
+		config: HandoffOpenRequest['config'],
+		location: Pick<HandoffRunner, 'cwd' | 'sessionSshRemoteConfig'>
+	) => Promise<boolean>;
+	preparePreset?: (config: HandoffOpenRequest['config']) => Promise<HandoffOpenRequest['config']>;
 	readSource: (request: HandoffReadRequest) => Promise<HandoffReadResult>;
 	openTarget: (request: HandoffOpenRequest) => Promise<HandoffResult>;
-}
-
-function projectKey(project: string): string {
-	const normalized = normalizeWorktreePath(path.resolve(project), process.platform !== 'win32');
-	return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
 /** One instance serves both IPC and CLI so concurrent creation shares a queue. */
@@ -60,11 +58,8 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			? 'deepseek'
 			: 'claude-code';
 	};
-	const local = (runner: HandoffRunner) => !runner.sessionSshRemoteConfig?.enabled;
 	function sourceFor(id: string) {
-		return deps
-			.getSessions()
-			.find((runner) => runner.id === id && local(runner) && providerOf(runner));
+		return deps.getSessions().find((runner) => runner.id === id && providerOf(runner));
 	}
 	function configFor(
 		runner: Pick<HandoffRunner, 'toolType'> & HandoffRunnerConfig
@@ -96,18 +91,16 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			config.customEnvVarsDisabled = { ...runner.customEnvVarsDisabled };
 		return config;
 	}
-	async function selectTarget(source: HandoffRunner, provider: HandoffProvider) {
-		const candidates = deps
+	async function selectTarget(source: HandoffRunner, provider: HandoffProvider, create = false) {
+		const location = handoffLocation(source);
+		const sameProject = deps
 			.getSessions()
-			.filter((runner) => local(runner) && providerOf(runner) === provider);
-		const sameProject = candidates.filter(
-			(runner) =>
-				projectKey(runner.projectRoot || runner.cwd) ===
-				projectKey(source.projectRoot || source.cwd)
-		);
+			.filter(
+				(runner) => providerOf(runner) === provider && handoffLocation(runner).key === location.key
+			);
 		// An unavailable runner already in this project is not permission to add
 		// another one. The user can repair its configured CLI path.
-		const pool = sameProject.length ? sameProject : candidates;
+		const pool = sameProject;
 		for (const runner of pool) {
 			const config = configFor(runner);
 			if (provider === 'deepseek') {
@@ -118,7 +111,7 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 				)
 					continue;
 			}
-			if (await deps.isAvailable(config))
+			if (await deps.isAvailable(config, source))
 				return { config, runnerId: sameProject.length ? runner.id : undefined };
 		}
 		if (sameProject.length) return null;
@@ -127,18 +120,20 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 		if (providerOf(defaults) !== provider) return null;
 		if (provider === 'deepseek') {
 			const env = effectiveEnv(defaults);
-			if (
-				!(env.ANTHROPIC_AUTH_TOKEN?.trim() || env.ANTHROPIC_API_KEY?.trim()) ||
-				!env.CLAUDE_CONFIG_DIR?.trim()
-			)
-				return null;
+			if (!(env.ANTHROPIC_AUTH_TOKEN?.trim() || env.ANTHROPIC_API_KEY?.trim())) return null;
 		}
-		const config = configFor(defaults);
-		return (await deps.isAvailable(config)) ? { config, runnerId: undefined } : null;
+		let config = configFor(defaults);
+		// The existing DeepSeek preset creates a local isolated account only.
+		// A remote target must already have a host-specific preset runner.
+		if (provider === 'deepseek' && source.sessionSshRemoteConfig?.enabled) return null;
+		if (!(await deps.isAvailable(config, source))) return null;
+		if (create && provider === 'deepseek' && deps.preparePreset)
+			config = await deps.preparePreset(config);
+		return { config, runnerId: undefined };
 	}
 	async function targets(sourceAgentId: string): Promise<HandoffTargetsResult> {
 		const source = sourceFor(sourceAgentId);
-		if (!source) return failed('A local Claude Code, Codex or DeepSeek source agent is required');
+		if (!source) return failed('A Claude Code, Codex or DeepSeek source agent is required');
 		const targets: NonNullable<HandoffTargetsResult['targets']> = [];
 		for (const provider of HANDOFF_PROVIDERS) {
 			if (provider === providerOf(source)) continue;
@@ -151,11 +146,14 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 		const invalid = handoffRequestError(request);
 		if (invalid) return failed(invalid, 'invalid-request');
 		const source = sourceFor(request.sourceAgentId);
-		if (!source) return failed('A local Claude Code, Codex or DeepSeek source agent is required');
-		const project = projectKey(source.projectRoot || source.cwd);
-		return queue.enqueue(`${project}:${request.targetProvider}`, async () => {
-			const current = sourceFor(request.sourceAgentId);
-			if (!current || projectKey(current.projectRoot || current.cwd) !== project)
+		if (!source) return failed('A Claude Code, Codex or DeepSeek source agent is required');
+		if (source.sessionSshRemoteConfig?.enabled && !source.sessionSshRemoteConfig.remoteId)
+			return failed('SSH is enabled but no remote is configured');
+		const location = handoffLocation(source);
+		const mode = request.mode ?? 'handoff';
+		return queue.enqueue(`${location.key}:${request.targetProvider}`, async () => {
+			let current = sourceFor(request.sourceAgentId);
+			if (!current || handoffLocation(current).key !== location.key)
 				return failed('The source agent changed while preparing the handoff');
 			const provider = providerOf(current)!;
 			if (provider === request.targetProvider)
@@ -164,18 +162,39 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 				sourceAgentId: request.sourceAgentId,
 				sourceTabId: request.sourceTabId,
 				provider,
+				mode,
 				budgetTokens: request.budgetTokens,
 				instruction: request.instruction,
 			});
 			if (!snapshot) return failed('The source tab is no longer available');
 			if ('success' in snapshot) return snapshot;
-			if (projectKey(snapshot.projectPath) !== project)
+			if (handoffLocation(snapshot).key !== location.key)
 				return failed('The source project changed while preparing the handoff');
-			const target = await selectTarget(current, request.targetProvider);
+			current = sourceFor(request.sourceAgentId);
+			if (
+				!current ||
+				handoffLocation(current).key !== location.key ||
+				providerOf(current) !== provider
+			)
+				return failed('The source agent changed while reading the conversation');
+			const target = await selectTarget(current, request.targetProvider, true);
 			if (!target)
-				return failed('The target provider is unavailable or has no configured local account');
-			return deps.openTarget({
+				return failed(
+					'The target provider cannot run in the source directory on the same host. Check its global settings and account; an SSH DeepSeek target needs an existing preset runner on that host.'
+				);
+			const result = await deps.openTarget({
 				sourceAgentId: current.id,
+				cwd: location.cwd,
+				sessionSshRemoteConfig: current.sessionSshRemoteConfig,
+				mode,
+				origin: {
+					kind: mode,
+					sourceSessionId: current.id,
+					sourceTabId: request.sourceTabId,
+					sourceProvider: provider,
+					sourceNativeSessionId: snapshot.sourceNativeSessionId,
+					createdAt: Date.now(),
+				},
 				provider: request.targetProvider,
 				...target,
 				projectPath: snapshot.projectPath,
@@ -184,6 +203,7 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 				send: request.send === true,
 				background: request.background === true,
 			});
+			return { ...result, mode };
 		});
 	}
 	async function command(request: HandoffCommand): Promise<HandoffCommandResult> {

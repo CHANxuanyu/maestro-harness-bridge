@@ -1,4 +1,4 @@
-import { useSettingsStore } from '../stores/settingsStore';
+import { selectConversationNavigation, useSettingsStore } from '../stores/settingsStore';
 import type { ActivityRetention } from './logEntries';
 
 /**
@@ -9,5 +9,5 @@ import type { ActivityRetention } from './logEntries';
  * switch applies from the next clear on.
  */
 export function currentActivityRetention(): ActivityRetention {
-	return { keepTools: useSettingsStore.getState().sidebarNavigationMode === 'conversations' };
+	return { keepTools: selectConversationNavigation(useSettingsStore.getState()) };
 }

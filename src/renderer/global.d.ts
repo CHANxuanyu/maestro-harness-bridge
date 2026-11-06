@@ -1330,6 +1330,17 @@ interface MaestroAPI {
 	};
 	// Git API - all methods accept optional sshRemoteId and remoteCwd for remote execution via SSH
 	git: {
+		changes: (
+			cwd: string,
+			sshRemoteId?: string,
+			remoteCwd?: string
+		) => Promise<import('../shared/gitChanges').GitChanges>;
+		changeDiff: (
+			cwd: string,
+			file: string,
+			sshRemoteId?: string,
+			remoteCwd?: string
+		) => Promise<import('../shared/gitChanges').GitFileChangeDiff>;
 		status: (
 			cwd: string,
 			sshRemoteId?: string,

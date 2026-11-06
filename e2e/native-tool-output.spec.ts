@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { NativeApp } from './fixtures/native-app';
+import { nativeIdentity } from './fixtures/native-real';
 
 // Refuse real-provider mode before creating a fixture or reading any credentials.
 test.beforeAll(() => {
@@ -9,9 +10,16 @@ test.beforeAll(() => {
 		throw new Error('Tool output acceptance uses synthetic history only');
 });
 
-for (const provider of ['claude', 'codex'] as const) {
+for (const scenario of [
+	{ provider: 'claude', mode: 'history' },
+	{ provider: 'codex', mode: 'history' },
+	{ provider: 'claude', mode: 'child' },
+	{ provider: 'claude', mode: 'switch' },
+	{ provider: 'codex', mode: 'live' },
+] as const) {
+	const { provider, mode } = scenario;
 	// eslint-disable-next-line no-empty-pattern
-	test(`${provider} full tool output is read on demand and never saved`, async ({}, info) => {
+	test(`${provider} ${mode} full tool output is read on demand and never saved`, async ({}, info) => {
 		const native = new NativeApp(info, { providerCli: false });
 		const home = path.join(native.root, 'home');
 		fs.mkdirSync(home, { recursive: true });
@@ -29,17 +37,83 @@ for (const provider of ['claude', 'codex'] as const) {
 		let failed = false;
 		let closed = false;
 		try {
-			const seed = await native.externalTurn(provider, 'Synthetic full output history', {
+			const scene = {
 				answer: 'Synthetic build finished.',
-				tools: [{ id: 'full-output-call', command: 'synthetic build', output, status: 'failed' }],
-			});
+				tools: [
+					{
+						id: 'full-output-call',
+						itemId: 'item_7',
+						command: 'synthetic build',
+						output,
+						status: 'failed' as const,
+					},
+				],
+			};
+			const seed =
+				mode === 'live'
+					? undefined
+					: await native.externalTurn(provider, 'Synthetic full output history', scene);
+			if (mode === 'live') native.scriptTurns([scene]);
 			await native.start(home);
-			await native.createAgent(provider);
-			await native.page
-				.locator('[data-conversation-kind="history"] button[data-tree-nav]')
-				.filter({ hasText: 'Synthetic full output history' })
-				.click();
+			const ownerId = await native.createAgent(provider);
+			if (mode === 'live') {
+				await native.send('Synthetic full output live turn');
+			} else {
+				await native.page
+					.locator('[data-conversation-kind="history"] button[data-tree-nav]')
+					.filter({ hasText: 'Synthetic full output history' })
+					.click();
+			}
 			await expect(native.output()).toContainText('Synthetic build finished.');
+			await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+			const file = await native.oneTranscript(provider);
+			const nativeId = seed?.id ?? nativeIdentity(provider, file).id;
+			if (!nativeId) throw new Error('Synthetic native identity missing');
+			if (mode === 'child') {
+				// Model a live child card whose result was saved only in its child JSONL.
+				const rows = fs
+					.readFileSync(file, 'utf8')
+					.trim()
+					.split('\n')
+					.map((line) => JSON.parse(line));
+				const isChildResult = (row: any) =>
+					row.message?.content?.some(
+						(block: any) => block.type === 'tool_result' && block.tool_use_id === 'full-output-call'
+					);
+				const directory = path.join(path.dirname(file), nativeId, 'subagents');
+				fs.mkdirSync(directory, { recursive: true });
+				fs.writeFileSync(
+					path.join(directory, 'agent-synthetic.jsonl'),
+					rows
+						.filter(isChildResult)
+						.map((row) => JSON.stringify(row))
+						.join('\n') + '\n'
+				);
+				fs.writeFileSync(
+					file,
+					rows
+						.filter((row) => !isChildResult(row))
+						.map((row) => JSON.stringify(row))
+						.join('\n') + '\n'
+				);
+			}
+			if (mode === 'switch') {
+				await native.cli('update-agent', ownerId, '--provider', 'codex', '--force');
+				await native.cli(
+					'update-agent',
+					ownerId,
+					'--custom-path',
+					path.resolve('e2e/fixtures/native/codex'),
+					'--env',
+					`CODEX_HOME=${native.codex}`,
+					'--env',
+					`MAESTRO_NATIVE_SCRIPT=${native.script}`
+				);
+				native.scriptTurns([{ answer: 'Synthetic Codex continuation.' }]);
+				await native.send('Continue in synthetic Codex');
+				await expect(native.output()).toContainText('Synthetic Codex continuation.');
+				await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+			}
 			await native
 				.output()
 				.locator('[data-feed-row="turn-activity"] button[aria-expanded="false"]')
@@ -55,7 +129,7 @@ for (const provider of ['claude', 'codex'] as const) {
 				.click();
 			const full = native.page.getByTestId('native-tool-output');
 			await expect(full).toContainText(tail);
-			const cli = await native.cli('native-history', 'tool-output', seed.id, 'full-output-call');
+			const cli = await native.cli('native-history', 'tool-output', nativeId, 'full-output-call');
 			expect(cli.result.text).toContain(tail);
 			await native.output().getByRole('button', { name: 'Hide full output' }).click();
 			await expect(full).toHaveCount(0);

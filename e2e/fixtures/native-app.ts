@@ -23,6 +23,7 @@ import { createNativeTempDir } from './native/temp-root.cjs';
 const exec = promisify(execFile);
 export type Provider = 'claude' | 'codex' | 'opencode' | 'grok' | 'omp' | 'copilot';
 export interface NativeTool {
+	itemId?: string;
 	name?: string;
 	input?: Record<string, unknown>;
 	id: string;

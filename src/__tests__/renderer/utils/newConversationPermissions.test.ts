@@ -6,6 +6,10 @@ import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import {
 	createTab,
 	closeTab,
+	reopenClosedTab,
+	reopenUnifiedClosedTab,
+	reopenClosedAiTabById,
+	restoreOrphanedTab,
 	setActiveTab,
 	permissionModeFields,
 	navigateToUnifiedTabByIndex,
@@ -22,6 +26,7 @@ import {
 	resolveProjectConversationPermission,
 } from '../../../renderer/utils/newConversationPermissions';
 import type { AgentConfig } from '../../../main/agents';
+import { switchSessionProvider } from '../../../renderer/utils/providerTabSessions';
 import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
 
 afterEach(() => vi.restoreAllMocks());
@@ -433,5 +438,80 @@ describe('owner permission resolution', () => {
 			],
 		});
 		expect(conversationPermissionSnapshot('missing')).toBeNull();
+	});
+});
+
+describe('closed conversation permission validation', () => {
+	it.each(['legacy', 'unified', 'targeted', 'orphan'] as const)(
+		'revalidates %s restoration after changing from Claude to Codex',
+		(path) => {
+			const closed = createMockAITab({
+				id: 'closed',
+				agentSessionId: null,
+				...permissionModeFields('standard'),
+			});
+			const session = createMockSession({
+				toolType: 'claude-code',
+				aiTabs: [createMockAITab({ ...permissionModeFields('standard') })],
+				closedTabHistory: [{ tab: closed, index: 0, closedAt: 1 }],
+				unifiedClosedTabHistory: [{ type: 'ai', tab: closed, unifiedIndex: 0, closedAt: 1 }],
+				...(path === 'orphan' ? { orphanedThinkingTabs: [closed] } : {}),
+			});
+			const switched = switchSessionProvider(session, 'codex', AGENT_CAPABILITIES.codex)!;
+			const result =
+				path === 'legacy'
+					? reopenClosedTab(switched)
+					: path === 'unified'
+						? reopenUnifiedClosedTab(switched)
+						: path === 'orphan'
+							? restoreOrphanedTab(switched, closed.id)
+							: reopenClosedAiTabById(switched, closed.id);
+			expect(result).not.toBeNull();
+			const restored = result!.session.aiTabs.find(
+				(tab) => tab.id === result!.session.activeTabId
+			)!;
+			expect(restored).toMatchObject(permissionModeFields('readonly'));
+			const args = buildAgentArgs(
+				{
+					...getAgentDefinition('codex')!,
+					capabilities: AGENT_CAPABILITIES.codex,
+					available: true,
+				} as AgentConfig,
+				{
+					baseArgs: [],
+					prompt: 'Synthetic request',
+					permissionMode: restored.permissionMode,
+					readOnlyMode: restored.readOnlyMode,
+				}
+			);
+			expect(args[args.indexOf('--sandbox') + 1]).toBe('read-only');
+			expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+			expect(closed.permissionMode).toBe('standard');
+		}
+	);
+
+	it('keeps closed history intact when the current tool cannot preserve its restriction', () => {
+		setCapabilitiesCache('codex', { ...AGENT_CAPABILITIES.codex, supportsReadOnlyMode: false });
+		const closed = createMockAITab({ ...permissionModeFields('standard') });
+		const session = createMockSession({
+			toolType: 'codex',
+			closedTabHistory: [{ tab: closed, index: 0, closedAt: 1 }],
+			unifiedClosedTabHistory: [{ type: 'ai', tab: closed, unifiedIndex: 0, closedAt: 1 }],
+		});
+		expect(reopenClosedTab(session)).toBeNull();
+		expect(reopenUnifiedClosedTab(session)).toBeNull();
+		expect(reopenClosedAiTabById(session, closed.id)).toBeNull();
+		expect(session.closedTabHistory).toHaveLength(1);
+		expect(session.unifiedClosedTabHistory).toHaveLength(1);
+	});
+
+	it('leaves classic closed conversation permissions unchanged', () => {
+		useSettingsStore.setState({ newShell: false });
+		const closed = createMockAITab({ ...permissionModeFields('standard') });
+		const session = createMockSession({
+			toolType: 'codex',
+			closedTabHistory: [{ tab: closed, index: 0, closedAt: 1 }],
+		});
+		expect(reopenClosedTab(session)!.tab).toMatchObject(permissionModeFields('standard'));
 	});
 });

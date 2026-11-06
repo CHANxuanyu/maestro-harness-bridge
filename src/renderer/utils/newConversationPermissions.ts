@@ -1,10 +1,38 @@
 import type { ConversationPermissionSnapshot } from '../../shared/window-types';
 import { resolveTabPermissionMode } from '../../shared/agentMetadata';
 import { permissionModeFields } from './tabHelpers/focusFields';
+import type { AgentCapabilities } from '../../shared/types';
+import { useSettingsStore } from '../stores/settingsStore';
+import { getCachedCapabilities } from '../hooks/agent/useAgentCapabilities';
 import type { AITab, Session } from '../types';
 import { useSessionStore } from '../stores/sessionStore';
 import { sessionProjectKey, sessionHost } from './nativeConversationMatch';
 import { visibleAiTabs } from './unifiedTabOrderUtils';
+
+/** New conversations may keep or tighten the source permission, never widen it. */
+export function newConversationPermissionFields(
+	source?: Pick<AITab, 'permissionMode' | 'readOnlyMode'>,
+	capabilities?: Pick<AgentCapabilities, 'supportsReadOnlyMode' | 'supportsStandardPermissionMode'>
+): ReturnType<typeof permissionModeFields> | null {
+	let mode = resolveTabPermissionMode(source);
+	if (mode === 'standard' && capabilities && !capabilities.supportsStandardPermissionMode)
+		mode = 'readonly';
+	if (mode === 'readonly' && capabilities && !capabilities.supportsReadOnlyMode) return null;
+	return permissionModeFields(mode);
+}
+
+/** Reopening validates against the current tool, including retained and orphan tabs. */
+export function restoreConversationPermissions(session: Session, tab: AITab): AITab | null {
+	if (!useSettingsStore.getState().newShell) return tab;
+	const permissions = newConversationPermissionFields(
+		tab,
+		getCachedCapabilities(session.toolType) ?? {
+			supportsReadOnlyMode: false,
+			supportsStandardPermissionMode: false,
+		}
+	);
+	return permissions ? { ...tab, ...permissions } : null;
+}
 
 function permissionProjectIdentity(session: Session) {
 	const state = useSessionStore.getState();

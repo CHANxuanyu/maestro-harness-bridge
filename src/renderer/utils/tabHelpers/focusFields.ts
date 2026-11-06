@@ -1,6 +1,4 @@
 import type { Session, AITab, LogEntry, ThinkingMode } from '../../types';
-import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
-import type { AgentCapabilities } from '../../../shared/types';
 import { nextThinkingMode } from '../../../shared/types';
 
 /**
@@ -76,17 +74,7 @@ export function permissionModeFields(mode: 'full' | 'standard' | 'readonly'): {
 	return { permissionMode: mode, readOnlyMode: mode === 'readonly' };
 }
 
-/** New conversations may keep or tighten the source permission, never widen it. */
-export function newConversationPermissionFields(
-	source?: Pick<AITab, 'permissionMode' | 'readOnlyMode'>,
-	capabilities?: Pick<AgentCapabilities, 'supportsReadOnlyMode' | 'supportsStandardPermissionMode'>
-): ReturnType<typeof permissionModeFields> | null {
-	let mode = resolveTabPermissionMode(source);
-	if (mode === 'standard' && capabilities && !capabilities.supportsStandardPermissionMode)
-		mode = 'readonly';
-	if (mode === 'readonly' && capabilities && !capabilities.supportsReadOnlyMode) return null;
-	return permissionModeFields(mode);
-}
+export { newConversationPermissionFields } from '../newConversationPermissions';
 
 /** Supported permission choices shared by the cycle and both composer menus. */
 export function permissionModes(

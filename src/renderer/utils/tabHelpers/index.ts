@@ -18,7 +18,10 @@ import {
 	ThinkingMode,
 	QueuedItem,
 } from '../../types';
-import { recentProjectConversation } from '../newConversationPermissions';
+import {
+	recentProjectConversation,
+	restoreConversationPermissions,
+} from '../newConversationPermissions';
 import { getCachedCapabilities } from '../../hooks/agent/useAgentCapabilities';
 import { generateId } from '../ids';
 import { getAutoRunFolderPath } from '../existingDocsDetector';
@@ -1509,7 +1512,9 @@ export function restoreOrphanedTab(
 	session: Session,
 	tabId: string
 ): RestoreOrphanedTabResult | null {
-	const orphan = session.orphanedThinkingTabs?.find((tab) => tab.id === tabId);
+	const retained = session.orphanedThinkingTabs?.find((tab) => tab.id === tabId);
+	if (!retained) return null;
+	const orphan = restoreConversationPermissions(session, retained);
 	if (!orphan) return null;
 	const remainingOrphans = (session.orphanedThinkingTabs ?? []).filter((tab) => tab.id !== tabId);
 	return {
@@ -1567,7 +1572,8 @@ export function reopenClosedTab(session: Session): ReopenTabResult | null {
 
 	// Pop the most recently closed tab from history
 	const [closedTabEntry, ...remainingHistory] = session.closedTabHistory;
-	const tabToRestore = closedTabEntry.tab;
+	const tabToRestore = restoreConversationPermissions(session, closedTabEntry.tab);
+	if (!tabToRestore) return null;
 
 	// If this closed tab is still tracked as an orphan (i.e., it was busy when
 	// closed and its agent is still streaming), pull it back from orphans
@@ -1956,7 +1962,10 @@ function restoreClosedAiTab(
 	session: Session,
 	tabToRestore: AITab,
 	unifiedIndex: number
-): ReopenUnifiedClosedTabResult {
+): ReopenUnifiedClosedTabResult | null {
+	const validated = restoreConversationPermissions(session, tabToRestore);
+	if (!validated) return null;
+	tabToRestore = validated;
 	// If this closed tab is still tracked as an orphan, restore the orphan
 	// (preserving its original ID so the still-running agent re-attaches)
 	// instead of creating a duplicate tab with a fresh ID.
@@ -2073,6 +2082,7 @@ export function reopenClosedAiTabById(
 			...unifiedHistory.slice(unifiedIdx + 1),
 		];
 		const result = restoreClosedAiTab(session, entry.tab, entry.unifiedIndex);
+		if (!result) return null;
 		return {
 			...result,
 			session: { ...result.session, unifiedClosedTabHistory: remainingHistory },
@@ -2090,6 +2100,7 @@ export function reopenClosedAiTabById(
 			...legacyHistory.slice(legacyIdx + 1),
 		];
 		const result = restoreClosedAiTab(session, entry.tab, session.unifiedTabOrder.length);
+		if (!result) return null;
 		return {
 			...result,
 			session: { ...result.session, closedTabHistory: remainingLegacy },
@@ -2152,6 +2163,7 @@ export function reopenUnifiedClosedTab(session: Session): ReopenUnifiedClosedTab
 		// Restoring an AI tab. The shared helper handles orphan re-attach and
 		// duplicate detection; we layer on the popped history afterward.
 		const result = restoreClosedAiTab(session, closedEntry.tab, closedEntry.unifiedIndex);
+		if (!result) return null;
 		return {
 			...result,
 			session: { ...result.session, unifiedClosedTabHistory: remainingHistory },

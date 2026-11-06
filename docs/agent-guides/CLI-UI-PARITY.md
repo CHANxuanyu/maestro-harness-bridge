@@ -662,7 +662,10 @@ a design constraint; they are simply not built yet.
    gap: an agent that starts a runaway turn on another agent cannot stop it.
    The 2026-11-06 Stop/synopsis correction preserves this gap; the legacy remote
    interrupt callback is not the desktop interrupt implementation.
-2. **Reopen a closed tab.** `closedTabHistory` and `unifiedClosedTabHistory` are
+2. **Reopen a closed tab.** New-shell restore now revalidates permissions against
+   the current tool through `restoreConversationPermissions()` and the same
+   `newConversationPermissionFields()` used by creation. This fix adds no CLI verb.
+   `closedTabHistory` and `unifiedClosedTabHistory` are
    runtime-only and never persisted, so the CLI cannot see the stack to restore
    from it. Closing this means persisting that history first.
 3. **Duplicate an agent.** The context menu's "Duplicate..." opens a modal with

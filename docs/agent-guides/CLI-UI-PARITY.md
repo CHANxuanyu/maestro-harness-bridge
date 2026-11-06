@@ -589,3 +589,7 @@ Startup now defers local Git metadata refresh only in the new shell. It uses the
 existing gitService and background refresh path, with no new user action or CLI
 verb. The new shell splash also removes decorative waits after the existing data,
 paint and font readiness gates. Classic startup and SSH refresh remain unchanged.
+
+## U7 流式输入调查（2026-11-07）
+
+本轮只修补合成 renderer 基准的逐键记录与尾帧收尾，并增加输入和流式批次的源码回归，没有新增界面动作或 maestro-cli 动词。UI 与 CLI 发起的回合仍共用原有 process listener 和 session batcher；产品内采集沿用 `profiling start/status/stop`。七轮 stream 命令见 [renderer 性能复测](../perf-renderer.md#u7流式期间按键延迟调查)。Open gaps 中既有的视图交互缺口保持原状，本轮不声称补齐。

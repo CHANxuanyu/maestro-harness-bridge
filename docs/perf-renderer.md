@@ -58,7 +58,7 @@ MAESTRO_E2E_PERF=1 MAESTRO_PERF_ROUNDS=1 MAESTRO_PERF_STAGES=ids MAESTRO_PERF_BE
 
 每次状态变化都有两份记录：
 
-- `perf-results.json`：schema 3，通过临时文件和 rename 更新，包含已完成阶段的指标、失败和汇总。中途被杀时 `complete` 为 false；`complete: true` 只表示调度结束，不表示通过。
+- `perf-results.json`：schema 4，通过临时文件和 rename 更新，包含已完成阶段的指标、失败和汇总。中途被杀时 `complete` 为 false；`complete: true` 只表示调度结束，不表示通过。
 - `perf-results.jsonl`：按 START、END 追加独立 JSON 对象。若进程恰好在更新快照时被杀，可恢复已写出的记录；忽略被截断的最后一行。
 
 汇总只纳入通过阶段的指标，失败没有补零。查看每个分布的 `n` 和阶段状态，不能把缺失的 before 样本当作改善。落盘在测量阶段边界完成，`durationMs` 还包含探针和 trace 收尾，不能代替各项指标的 `ms`。
@@ -110,3 +110,33 @@ npx playwright test e2e/perf-renderer.spec.ts --project=electron --list
 第四轮 before 固定使用可运行克隆 `~/Downloads/maestro-t4-perf-base/dist/main/index.js`，不要使用临时目录中的冻结构建。完整三轮对比同时覆盖打开 50 MiB、切换、完整回填、纯流式及启动；诊断 trace 另选 `stream`，不能与普通计时混算。
 
 流式回归还覆盖工具前的正文：collapseAiResponseLogs 每批会重建合并对象，因此活动行按全部浅层字段比较，不仅比较对象身份。该场景先复现 15000 次历史行重绘；不能用只有工具没有中间正文的简化语料替代。
+
+## U7：流式期间按键延迟调查
+
+同轮三份流式样本的按键事件等待 p95，before 为 85.3、81.1、95.4 ms，after 为 154.1、151.2、182.8 ms。每份只有 32 或 33 个按键，p95 是第二大的等待值。after 的脚本时间与长任务数量下降，不能据此否定按键退化，也不能从这些汇总值判定是批处理挤占同一帧。
+
+本轮仅修补基准与测试，没有修改产品调度。jsdom 使用真实 data listener、200 ms batcher、草稿 store、输入 change hook 和 TerminalOutput，在批次前、同一 React 批次、批次后穿插输入，检查会话更新次数、订阅渲染次数和全部 300 片正文。历史活动行复用仍按严格次数检查。此测试不模拟浏览器事件队列、布局或 GPU，不能产出真实按键延迟。
+
+修复了两项可复现的基准问题：先排空最后一个按键，再等待两帧，避免末次 next-frame 回调漏计；帧间隔的 startMs 记录前一帧时间，而非区间结束时间。schema 4 保留原有百分位，并增加：
+
+- `observations[阶段].keyEvents`：按到达顺序保存 eventStartMs、handledMs、nextFrameMs，以及该键处理时的 visibilityState、focused。
+- `observations[阶段].frames`：按时间顺序保存 startMs 与 durationMs，可与 longTasks 对齐。
+- `metrics[阶段].keyPaintCount`：必须等于 keyEventCount。缺失下一帧记录直接失败，不补零。
+
+相对时间均以同一观察器的 startedAt 为起点，配合 timeOrigin 对齐独立 trace。下一帧仍是 rAF 代理，不能称为像素呈现时间。尾帧漏计影响 next-frame 指标，不能解释原始 keyDelayP95Ms 上升；原始三轮仍是待核实的退化信号。
+
+Opus 在外部使用同一份修正后的 spec，对冻结的 before 和 after 构建跑七轮，只选择 stream。其启动、切换、完整回填和 ID 校验是必要前置，不运行 native、scroll 或空数据启动。不要将旧脚本三轮结果与新脚本七轮直接混算。
+
+```sh
+MAESTRO_E2E_PERF=1 MAESTRO_PERF_ROUNDS=7 MAESTRO_PERF_STAGES=stream MAESTRO_PERF_TRACE=0 MAESTRO_PERF_STARTUP_TRACE=0 MAESTRO_PERF_BEFORE_ENTRY=/absolute/before/dist/main/index.js MAESTRO_PERF_ENTRY=/absolute/after/dist/main/index.js npx playwright test e2e/perf-renderer.spec.ts --project=electron --workers=1 --retries=0 --output=/absolute/results/perf-renderer-u7-stream-7
+```
+
+检查 before、after 各七份流式样本及全部依赖通过，schema 为 4，按键与尾帧计数相等，关注高延迟按键对应的帧间隔、长任务、前台与焦点状态。报告每轮值及七轮中位数，不只摘一个汇总值。出现失焦、后台或失败样本时保留并注明，不自动丢弃或重试。两构建七轮只选 stream 的现有总期限为 45 分 25 秒；这是失败上限，不是预期耗时。
+
+若仍有稳定退化，另跑一轮 stream trace，输出到另一个新目录。普通计时不要开启 trace，诊断数据不计入七轮结论。
+
+```sh
+MAESTRO_E2E_PERF=1 MAESTRO_PERF_ROUNDS=1 MAESTRO_PERF_STAGES=stream MAESTRO_PERF_TRACE=1 MAESTRO_PERF_STARTUP_TRACE=0 MAESTRO_PERF_BEFORE_ENTRY=/absolute/before/dist/main/index.js MAESTRO_PERF_ENTRY=/absolute/after/dist/main/index.js npx playwright test e2e/perf-renderer.spec.ts --project=electron --workers=1 --retries=0 --output=/absolute/results/perf-renderer-u7-stream-trace
+```
+
+Electron 七轮和独立 trace 尚未执行。没有足够证据修改 200 ms 刷新周期、放弃历史行复用或声称按键延迟已恢复。

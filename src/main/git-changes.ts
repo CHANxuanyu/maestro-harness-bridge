@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs/promises';
 import type {
 	GitChangedFile,
 	GitChanges,
@@ -9,17 +10,20 @@ import type { SshRemoteConfig } from '../shared/types';
 import { isNotAGitRepositoryError } from '../shared/gitUtils';
 import { execGitReadOnly, isGitTimeout } from './utils/remote-git';
 import { shellEscape } from './utils/shell-escape';
+import { LOCAL_SESSION_READ_CONCURRENCY, mapWithConcurrency } from './utils/concurrency';
+import type { ExecResult } from './utils/execFile';
 
 const MAX_BYTES = 1024 * 1024;
 const MAX_FILES = 500;
+const BINARY_PREFIX_BYTES = 8000;
 const slash = (value: string) => value.replace(/\\/g, '/');
 
 /** Git's shell aliases use its bundled sh on Windows, and the remote sh over SSH. */
-export function changesCommand(file?: string, oldPath?: string): string[] {
+export function changesCommand(file?: string, oldPath?: string, local = false): string[] {
 	const numstat = 'git diff --no-ext-diff --no-textconv --numstat -z';
 	const base =
 		'base=$(git rev-parse --verify HEAD 2>/dev/null) || base=$(git hash-object -t tree --stdin < /dev/null) || exit $?';
-	const script =
+	let script =
 		file === undefined
 			? [
 					'root=$(git rev-parse --show-toplevel) || exit $?',
@@ -70,6 +74,24 @@ export function changesCommand(file?: string, oldPath?: string): string[] {
 					'printf "patch\\0%s\\0\\0%s" "$stats" "${patch%.}"',
 					'fi',
 				];
+	if (file === undefined && local) {
+		script = [
+			'root=$(git rev-parse --show-toplevel) || exit $?',
+			'printf "%s\\0" "$root"',
+			base,
+			'git ls-files --others --exclude-standard -z || exit $?',
+			'printf "\\0"',
+			// Raw records carry HEAD object IDs and NUL-delimited paths, so the
+			// batch size query never has to encode a filename on a stdin line.
+			'git diff --no-ext-diff --no-textconv --no-renames --raw --no-abbrev -z "$base" -- || exit $?',
+			'printf "\\0"',
+			'git status --porcelain=v2 -z --branch --untracked-files=all || exit $?',
+			'printf "\\0"',
+			`${numstat} "$base" -- || exit $?`,
+			'printf "\\0"',
+		];
+	}
+
 	return [
 		'--literal-pathspecs',
 		'-c',
@@ -78,6 +100,102 @@ export function changesCommand(file?: string, oldPath?: string): string[] {
 		`alias.maestro-changes=!f() {\n${script.join('\n')}\n}; f`,
 		'maestro-changes',
 	];
+}
+
+/** Count in small asynchronous chunks, including an unterminated final line. */
+async function untrackedNumstat(root: string, file: string): Promise<string> {
+	const unknown = `-\t-\t${file}\0`;
+	try {
+		const filePath = path.join(root, file);
+		const stat = await fs.lstat(filePath);
+		if (!stat.isFile() || stat.size > MAX_BYTES) return unknown;
+		const handle = await fs.open(filePath, 'r');
+		try {
+			const buffer = Buffer.allocUnsafe(64 * 1024);
+			let size = 0;
+			let lines = 0;
+			let lastByte = 10;
+			while (true) {
+				const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+				if (bytesRead === 0) break;
+				// Git's buffer_is_binary checks only the first 8000 bytes.
+				if (
+					size < BINARY_PREFIX_BYTES &&
+					buffer.subarray(0, Math.min(bytesRead, BINARY_PREFIX_BYTES - size)).includes(0)
+				)
+					return unknown;
+				size += bytesRead;
+				if (size > MAX_BYTES) return unknown;
+				for (let index = 0; index < bytesRead; index++) {
+					if (buffer[index] === 10) lines++;
+				}
+				lastByte = buffer[bytesRead - 1];
+			}
+			return `${lines + (lastByte === 10 ? 0 : 1)}\t0\t${file}\0`;
+		} finally {
+			await handle.close();
+		}
+	} catch {
+		// Unreadable or concurrently removed entries still belong in status.
+		return unknown;
+	}
+}
+
+/** Replace only local per-file shell work, then restore the shared wire format. */
+async function readLocalChanges(cwd: string): Promise<ExecResult> {
+	const result = await execGitReadOnly(changesCommand(undefined, undefined, true), cwd);
+	if (result.exitCode !== 0) return result;
+	const records = result.stdout.split('\0');
+	const root = records.shift()!;
+	const untrackedEnd = records.indexOf('');
+	const rawEnd = records.indexOf('', untrackedEnd + 1);
+	const untracked = records.slice(0, untrackedEnd);
+	const tracked = [];
+	for (let index = untrackedEnd + 1; index < rawEnd; index += 2) {
+		tracked.push({ file: records[index + 1], oid: records[index].split(' ')[2] });
+	}
+	const oids = [...new Set(tracked.map(({ oid }) => oid).filter((oid) => !/^0+$/.test(oid)))];
+	const sizes = new Map<string, number>();
+	if (oids.length) {
+		const batch = await execGitReadOnly(
+			['cat-file', '--batch-check=%(objectname) %(objectsize)'],
+			root,
+			undefined,
+			undefined,
+			undefined,
+			oids.join('\n') + '\n'
+		);
+		if (batch.exitCode !== 0) return batch;
+		for (const line of batch.stdout.trim().split('\n')) {
+			const [oid, size] = line.split(' ');
+			sizes.set(oid, Number(size) || 0);
+		}
+	}
+	const trackedStats = await mapWithConcurrency(
+		tracked,
+		LOCAL_SESSION_READ_CONCURRENCY,
+		async ({ file, oid }) => {
+			let size = 0;
+			try {
+				// Follow tracked symlinks, matching the shell's -f and wc checks.
+				const stat = await fs.stat(path.join(root, file));
+				if (stat.isFile()) size = stat.size;
+			} catch {
+				// A deletion has no worktree size, but still needs its HEAD size.
+			}
+			return size > MAX_BYTES || (sizes.get(oid) ?? 0) > MAX_BYTES ? `-\t-\t${file}\0` : '';
+		}
+	);
+	const untrackedStats = await mapWithConcurrency(
+		untracked,
+		LOCAL_SESSION_READ_CONCURRENCY,
+		(file) => untrackedNumstat(root, file)
+	);
+	const wire = `${root}\0${records.slice(rawEnd + 1).join('\0')}`;
+	return {
+		...result,
+		stdout: wire.slice(0, -1) + untrackedStats.join('') + trackedStats.join('') + '\0',
+	};
 }
 
 function emptyChanges(root: string): GitChanges {
@@ -164,13 +282,15 @@ export function parseGitChanges(output: string, limit = MAX_FILES): GitChanges {
 	return result;
 }
 
-/** One bounded read-only git invocation, also one SSH connection. */
+/** Bounded read-only queries locally, or one unchanged shell query over SSH. */
 export async function getGitChanges(
 	cwd: string,
 	sshRemote?: SshRemoteConfig,
 	remoteCwd?: string
 ): Promise<GitChanges> {
-	const result = await execGitReadOnly(changesCommand(), cwd, sshRemote, remoteCwd ?? cwd);
+	const result = sshRemote
+		? await execGitReadOnly(changesCommand(), cwd, sshRemote, remoteCwd ?? cwd)
+		: await readLocalChanges(cwd);
 	const fallbackRoot = sshRemote ? (remoteCwd ?? cwd) : path.normalize(cwd);
 	if (isGitTimeout(result)) return { ...emptyChanges(fallbackRoot), timedOut: true };
 	if (result.exitCode !== 0) {
@@ -199,7 +319,7 @@ export async function getGitChangeDiff(
 	)
 		throw new Error('A repository-relative file path is required');
 	// Include the source path of a rename so git can pair both sides. The
-	// changes snapshot itself still uses one invocation and one SSH connection.
+	// remote changes snapshot itself still uses one invocation and one SSH connection.
 	const snapshot = await execGitReadOnly(
 		['status', '--porcelain=v2', '-z', '--untracked-files=no'],
 		cwd,

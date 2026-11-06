@@ -29,6 +29,8 @@ export interface RemoteGitOptions {
 	timeout?: number;
 	/** Extra environment for the remote git, merged over the remote's `remoteEnv` */
 	env?: Record<string, string>;
+	/** Optional stdin for batch queries. */
+	input?: string;
 }
 
 /**
@@ -55,7 +57,7 @@ export async function execGitRemote(
 	args: string[],
 	options: RemoteGitOptions
 ): Promise<ExecResult> {
-	const { sshRemote, remoteCwd, timeout, env } = options;
+	const { sshRemote, remoteCwd, timeout, env, input } = options;
 
 	if (!remoteCwd) {
 		logger.warn('No remote working directory specified for git command', LOG_CONTEXT);
@@ -79,9 +81,13 @@ export async function execGitRemote(
 	});
 
 	// Execute the SSH command
-	const result = timeout
-		? await execFileNoThrow(sshCommand.command, sshCommand.args, undefined, { timeout })
-		: await execFileNoThrow(sshCommand.command, sshCommand.args);
+	const result =
+		timeout || input !== undefined
+			? await execFileNoThrow(sshCommand.command, sshCommand.args, undefined, {
+					...(timeout ? { timeout } : {}),
+					...(input !== undefined ? { input } : {}),
+				})
+			: await execFileNoThrow(sshCommand.command, sshCommand.args);
 
 	if (result.exitCode !== 0) {
 		logger.debug(`Remote git command failed: ${result.stderr}`, LOG_CONTEXT, {
@@ -109,24 +115,26 @@ export async function execGit(
 	localCwd: string,
 	sshRemote?: SshRemoteConfig | null,
 	remoteCwd?: string,
-	options: { timeout?: number; env?: Record<string, string> } = {}
+	options: { timeout?: number; env?: Record<string, string>; input?: string } = {}
 ): Promise<ExecResult> {
-	const { timeout, env } = options;
+	const { timeout, env, input } = options;
 	if (sshRemote) {
 		return execGitRemote(args, {
 			sshRemote,
 			remoteCwd,
 			...(timeout ? { timeout } : {}),
 			...(env ? { env } : {}),
+			...(input !== undefined ? { input } : {}),
 		});
 	}
 
 	// Local execution. `env` replaces the child's environment wholesale, so
 	// extra variables are layered over this process's own.
-	if (!timeout && !env) return execFileNoThrow('git', args, localCwd);
+	if (!timeout && !env && input === undefined) return execFileNoThrow('git', args, localCwd);
 	return execFileNoThrow('git', args, localCwd, {
 		...(timeout ? { timeout } : {}),
 		...(env ? { env: { ...process.env, ...env } } : {}),
+		...(input !== undefined ? { input } : {}),
 	});
 }
 
@@ -183,14 +191,21 @@ export async function execGitReadOnly(
 	localCwd: string,
 	sshRemote?: SshRemoteConfig | null,
 	remoteCwd?: string,
-	timeoutMs: number = READ_ONLY_GIT_TIMEOUT_MS
+	timeoutMs: number = READ_ONLY_GIT_TIMEOUT_MS,
+	input?: string
 ): Promise<ExecResult> {
-	const key = [sshRemote?.id ?? '', sshRemote ? (remoteCwd ?? '') : localCwd, ...args].join('\0');
+	const key = JSON.stringify([
+		sshRemote?.id ?? '',
+		sshRemote ? (remoteCwd ?? '') : localCwd,
+		args,
+		input,
+	]);
 	let run = readOnlyGitInFlight.get(key);
 	if (!run) {
 		run = execGit(args, localCwd, sshRemote, remoteCwd, {
 			timeout: timeoutMs,
 			env: NO_OPTIONAL_LOCKS_ENV,
+			...(input !== undefined ? { input } : {}),
 		}).finally(() => {
 			readOnlyGitInFlight.delete(key);
 		});

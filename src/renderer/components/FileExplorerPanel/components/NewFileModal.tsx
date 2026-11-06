@@ -1,3 +1,5 @@
+import { useT } from '../../../i18n';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { useRef } from 'react';
 import { Modal, ModalFooter } from '../../ui/Modal';
 import { FormInput } from '../../ui/FormInput';
@@ -27,13 +29,24 @@ export function NewFileModal({
 	onClose,
 	onCreate,
 }: NewFileModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const noun = kind === 'folder' ? 'folder' : 'file';
 
 	return (
 		<Modal
 			theme={theme}
-			title={`New ${noun} in ${parentFolderLabel}`}
+			title={
+				newShell
+					? t(
+							kind === 'folder'
+								? 'workflows.newShellCopy.panels.newFolderIn'
+								: 'workflows.newShellCopy.panels.newFileIn',
+							{ folder: parentFolderLabel }
+						)
+					: `New ${noun} in ${parentFolderLabel}`
+			}
 			priority={MODAL_PRIORITIES.RENAME_INSTANCE}
 			onClose={isCreating ? () => {} : onClose}
 			initialFocusRef={inputRef}
@@ -42,7 +55,18 @@ export function NewFileModal({
 					theme={theme}
 					onCancel={isCreating ? () => {} : onClose}
 					onConfirm={onCreate}
-					confirmLabel={isCreating ? 'Creating...' : 'Create'}
+					cancelLabel={newShell ? t('common.cancel') : undefined}
+					confirmLabel={
+						newShell
+							? t(
+									isCreating
+										? 'workflows.newShellCopy.panels.creating'
+										: 'workflows.newShellCopy.panels.create'
+								)
+							: isCreating
+								? 'Creating...'
+								: 'Create'
+					}
 					confirmDisabled={isCreating || !value.trim()}
 				/>
 			}
@@ -53,7 +77,15 @@ export function NewFileModal({
 				value={value}
 				onChange={setValue}
 				onSubmit={onCreate}
-				placeholder={`Enter ${noun} name...`}
+				placeholder={
+					newShell
+						? t(
+								kind === 'folder'
+									? 'workflows.newShellCopy.panels.folderName'
+									: 'workflows.newShellCopy.panels.fileName'
+							)
+						: `Enter ${noun} name...`
+				}
 				error={error || undefined}
 				submitEnabled={Boolean(value.trim()) && !isCreating}
 			/>

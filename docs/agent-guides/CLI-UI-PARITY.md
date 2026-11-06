@@ -647,6 +647,16 @@ hook failures return their original diagnostics, with no automatic retry.
 The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
+## New shell copy audit (2026-11-07)
+
+This copy-only change adds no UI action or CLI verb. Language selection still
+uses `settings set uiLanguage en|zh-CN`; shell selection still uses
+`settings set newShell true|false`. File operations, conversation creation,
+permission selection, handoff, retry and update preferences keep their existing
+handlers and stored values. New shell labels are separate from classic labels.
+Provider diagnostics remain verbatim. Existing presentation and recovery gaps
+below remain open.
+
 ## Open gaps
 
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no

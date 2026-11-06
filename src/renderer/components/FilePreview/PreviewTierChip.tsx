@@ -1,3 +1,5 @@
+import { useT } from '../../i18n';
+import { useSettingsStore } from '../../stores/settingsStore';
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Zap, Sparkles, Database } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -59,6 +61,8 @@ export const PreviewTierChip: React.FC<PreviewTierChipProps> = ({
 	headerBtnClass,
 	headerIconClass,
 }) => {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const [open, setOpen] = useState(false);
 	const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -101,12 +105,21 @@ export const PreviewTierChip: React.FC<PreviewTierChipProps> = ({
 		color: override ? theme.colors.accent : theme.colors.textDim,
 	};
 
-	const triggerTitle = override
-		? `Forced ${TIER_META[effective].label} preview · click to change`
-		: `Auto · ${TIER_META[effective].label} preview · click to change`;
-	const hoverLabel = override
-		? `Forced ${TIER_META[effective].label} preview`
-		: `Auto · ${TIER_META[effective].label} preview`;
+	const triggerTitle = newShell
+		? t(
+				override
+					? 'workflows.newShellCopy.panels.forcedPreview'
+					: 'workflows.newShellCopy.panels.autoPreview',
+				{ mode: t(`workflows.newShellCopy.panels.tier.${effective}`) }
+			)
+		: override
+			? `Forced ${TIER_META[effective].label} preview · click to change`
+			: `Auto · ${TIER_META[effective].label} preview · click to change`;
+	const hoverLabel = newShell
+		? triggerTitle
+		: override
+			? `Forced ${TIER_META[effective].label} preview`
+			: `Auto · ${TIER_META[effective].label} preview`;
 
 	return (
 		<div ref={wrapperRef} className="relative" data-testid="preview-tier-chip">
@@ -136,8 +149,16 @@ export const PreviewTierChip: React.FC<PreviewTierChipProps> = ({
 					title={triggerTitle}
 				>
 					<Icon className="w-3 h-3" />
-					<span>{TIER_META[effective].label}</span>
-					{!override && <span style={{ color: theme.colors.textDim, opacity: 0.7 }}>· auto</span>}
+					<span>
+						{newShell
+							? t(`workflows.newShellCopy.panels.tier.${effective}`)
+							: TIER_META[effective].label}
+					</span>
+					{!override && (
+						<span style={{ color: theme.colors.textDim, opacity: 0.7 }}>
+							{newShell ? t('workflows.newShellCopy.panels.auto') : <>· auto</>}
+						</span>
+					)}
 					<ChevronDown className="w-3 h-3 opacity-70" />
 				</button>
 			)}
@@ -164,16 +185,28 @@ export const PreviewTierChip: React.FC<PreviewTierChipProps> = ({
 							borderColor: theme.colors.border,
 						}}
 					>
-						Currently rendering:{' '}
+						{newShell ? (
+							t('workflows.newShellCopy.panels.currentPreview')
+						) : (
+							<>Currently rendering:</>
+						)}{' '}
 						<span style={{ color: theme.colors.accent, fontWeight: 600 }}>
-							{TIER_META[effective].label}
+							{newShell
+								? t(`workflows.newShellCopy.panels.tier.${effective}`)
+								: TIER_META[effective].label}
 						</span>
 					</div>
 					<MenuRow
 						theme={theme}
 						active={!override}
-						label="Auto"
-						description={`Auto picks ${TIER_META[autoTier].label} for this file`}
+						label={newShell ? t('workflows.newShellCopy.panels.auto') : 'Auto'}
+						description={
+							newShell
+								? t('workflows.newShellCopy.panels.autoPicks', {
+										mode: t(`workflows.newShellCopy.panels.tier.${autoTier}`),
+									})
+								: `Auto picks ${TIER_META[autoTier].label} for this file`
+						}
 						onClick={() => select(undefined)}
 					/>
 					{(['rich', 'fast', 'giant'] as const).map((tier) => {
@@ -183,8 +216,14 @@ export const PreviewTierChip: React.FC<PreviewTierChipProps> = ({
 								key={tier}
 								theme={theme}
 								active={override === tier}
-								label={TIER_META[tier].label}
-								description={TIER_DESCRIPTION[tier]}
+								label={
+									newShell ? t(`workflows.newShellCopy.panels.tier.${tier}`) : TIER_META[tier].label
+								}
+								description={
+									newShell
+										? t(`workflows.newShellCopy.panels.tierDescription.${tier}`)
+										: TIER_DESCRIPTION[tier]
+								}
 								icon={<TierIcon className="w-3.5 h-3.5" />}
 								onClick={() => select(tier)}
 							/>

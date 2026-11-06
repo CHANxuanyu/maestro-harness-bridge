@@ -103,12 +103,12 @@ export const workflowsShell = {
 		'The conversation stays hidden until then. When it returns, a notification stays until you dismiss it. Snoozed conversations are listed under Search. Missed reminders appear on the next launch.',
 	'workflows.newShell.snoozeNote': 'The notification includes your note.',
 	'workflows.newShell.wakeExplanation':
-		'Your prompt is sent when the conversation returns, so the agent starts without you. It waits if the agent is busy and also runs if you restore the conversation early.',
+		'Your prompt is sent when the conversation returns, so work starts automatically. It waits if the conversation is busy and also runs if you restore the conversation early.',
 	'workflows.newShell.snoozedTitle': 'Snoozed conversations',
 	'workflows.newShell.snoozedEmpty': 'No snoozed conversations',
 	'workflows.newShell.snoozedHint':
 		'Snooze a conversation from the command palette to hide it until later. A notification appears when it returns.',
-	'workflows.newShell.wakePromptTitle': 'Sent to the agent when this conversation returns',
+	'workflows.newShell.wakePromptTitle': 'Message sent when this conversation returns',
 	'workflows.newShell.dismissSnooze': 'Dismiss and discard this conversation',
 	'workflows.newShell.snoozeHistoryHint':
 		'Restored or dismissed conversations appear here with your notes.',
@@ -130,17 +130,18 @@ export const workflowsShell = {
 	'workflows.newShell.regexPlaceholder': 'Regex across open conversations…',
 	'workflows.newShell.searching': 'Searching {count} open conversations',
 	'workflows.newShell.searchSummary': '{messages} messages in {count} conversations',
-	'workflows.newShell.searchHint': 'Type to search every open conversation in this agent',
+	'workflows.newShell.searchHint': 'Type to search every open conversation with the current tool',
 	'workflows.newShell.newAiChatTab': 'New conversation',
-	'workflows.newShell.openANewAiChatTabInThe': 'Start a new conversation in the active agent',
+	'workflows.newShell.openANewAiChatTabInThe': 'Start a new conversation in the current project',
 	'workflows.newShell.newFileTab': 'New file',
-	'workflows.newShell.openANewFileTabInTheActive': 'Open a new file in the active agent',
+	'workflows.newShell.openANewFileTabInTheActive': 'Open a new file in the current project',
 	'workflows.newShell.newBrowserTab': 'New browser page',
-	'workflows.newShell.openANewBrowserTabInTheActive': 'Open a browser page in the active agent',
+	'workflows.newShell.openANewBrowserTabInTheActive': 'Open a browser page in the current project',
 	'workflows.newShell.newTerminalTab': 'New terminal',
-	'workflows.newShell.openANewTerminalTabInTheActive': 'Open a terminal in the active agent',
+	'workflows.newShell.openANewTerminalTabInTheActive': 'Open a terminal in the current project',
 	'workflows.newShell.tabSwitcher': 'Switch conversation',
-	'workflows.newShell.searchOpenTabsAcrossThisAgent': 'Search open conversations in this agent',
+	'workflows.newShell.searchOpenTabsAcrossThisAgent':
+		'Search open conversations with the current tool',
 	'workflows.newShell.renameTab': 'Rename conversation',
 	'workflows.newShell.currentlyEnterSendsClickToSwitchThisTab':
 		'Currently: Enter sends · switch this conversation to {p0}+Enter',
@@ -167,7 +168,7 @@ export const workflowsShell = {
 	'workflows.newShell.searchMessagesThisTab': 'Search: Messages in this conversation',
 	'workflows.newShell.searchMessagesAllAgentTabs': 'Search: Messages in all conversations',
 	'workflows.newShell.searchEveryOpenTabInThisAgentAnd':
-		'Search open conversations in this agent and jump to a result',
+		'Search open conversations with the current tool and jump to a result',
 	'workflows.newShell.nextUnreadDraftTab': 'Next unread or draft conversation',
 	'workflows.newShell.previousUnreadDraftTab': 'Previous unread or draft conversation',
 	'workflows.newShell.walkBackwardsAlsoTheSecondPressOfFocus':

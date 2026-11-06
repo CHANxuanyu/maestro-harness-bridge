@@ -1245,7 +1245,9 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 					parentFolderLabel={
 						newFileModal.parentFolderPath
 							? `"${newFileModal.parentFolderPath}"`
-							: 'the project root'
+							: newShell
+								? t('workflows.newShellCopy.panels.projectRoot')
+								: 'the project root'
 					}
 					value={newFileValue}
 					setValue={setNewFileValue}
@@ -1263,7 +1265,9 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 					destFolderLabel={
 						moveConflict.destFolderRelativePath
 							? `"${moveConflict.destFolderRelativePath}"`
-							: 'the project root'
+							: newShell
+								? t('workflows.newShellCopy.panels.projectRoot')
+								: 'the project root'
 					}
 					conflicts={moveConflict.conflicts}
 					nonConflictingCount={moveConflict.nonConflicting.length}
@@ -1298,9 +1302,15 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
 							{t('workflows.filePanel.dropImport')}
 						</span>
 						<span className="text-sm" style={{ color: theme.colors.textDim }}>
-							{dragOverFolder
-								? `Copies into "${getBasename(dragOverFolder)}".`
-								: 'Copies into this workspace.'}{' '}
+							{newShell
+								? dragOverFolder
+									? t('workflows.newShellCopy.panels.copyInto', {
+											folder: getBasename(dragOverFolder),
+										})
+									: t('workflows.newShellCopy.panels.copyProject')
+								: dragOverFolder
+									? `Copies into "${getBasename(dragOverFolder)}".`
+									: 'Copies into this workspace.'}{' '}
 							{t('workflows.filePanel.originalsStay')}
 						</span>
 					</div>

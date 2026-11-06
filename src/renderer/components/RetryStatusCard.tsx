@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
  * RetryStatusCard - the collapsed Agent Resilience "outage" bubble in the chat
  * transcript. When an agent turn fails with a recoverable upstream error and
@@ -66,6 +67,7 @@ export function RetryStatusCard({
 	fallbackText,
 }: RetryStatusCardProps): React.ReactElement | null {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const outage = useRetryStore((s) => s.outages[outageId]);
 
 	// What the retry is ACTUALLY doing, which the outage record cannot say. See
@@ -119,10 +121,18 @@ export function RetryStatusCard({
 	// a window still reads sensibly.
 	const strategyLabel =
 		outage.strategy === 'availability'
-			? 'Service overloaded'
+			? newShell
+				? t('workflows.newShellCopy.feedback.retry.overloaded')
+				: 'Service overloaded'
 			: outage.quota
-				? `${describeQuotaWindow(outage.quota)} reached`
-				: 'Plan quota exhausted';
+				? newShell
+					? t('workflows.newShellCopy.feedback.retry.limitReached', {
+							window: t(`workflows.newShellCopy.feedback.quota.${outage.quota.window}`),
+						})
+					: `${describeQuotaWindow(outage.quota)} reached`
+				: newShell
+					? t('workflows.newShellCopy.feedback.retry.quota')
+					: 'Plan quota exhausted';
 	// `attempts` is the 0-indexed count of the next resend, so it doubles as the
 	// number of retries already dispatched. Guard the plural.
 	const retryCount = outage.attempts;
@@ -134,7 +144,13 @@ export function RetryStatusCard({
 		// it (the same correction `resolveOutage` makes for the Usage Dashboard).
 		const sentCount = retryCount + 1;
 		const headline =
-			outage.strategy === 'availability' ? 'Connection recovered.' : 'Quota restored.';
+			outage.strategy === 'availability'
+				? newShell
+					? t('workflows.newShellCopy.feedback.retry.recovered')
+					: 'Connection recovered.'
+				: newShell
+					? t('workflows.newShellCopy.feedback.retry.quotaRestored')
+					: 'Quota restored.';
 		return (
 			<div
 				className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm select-none"
@@ -149,8 +165,27 @@ export function RetryStatusCard({
 				<span>
 					<span className="font-medium">{headline}</span>{' '}
 					<span style={{ color: theme.colors.textDim }}>
-						{strategyLabel} cleared after {sentCount} {sentCount === 1 ? 'retry' : 'retries'}
-						{totalMs > 0 ? ` over ${formatDurationHuman(totalMs)}` : ''}.
+						{newShell ? (
+							t(
+								sentCount === 1
+									? 'workflows.newShellCopy.feedback.retry.recoveredOne'
+									: 'workflows.newShellCopy.feedback.retry.recoveredMany',
+								{
+									count: sentCount,
+									duration:
+										totalMs > 0
+											? t('workflows.newShellCopy.feedback.retry.duration', {
+													duration: formatDurationHuman(totalMs),
+												})
+											: '',
+								}
+							)
+						) : (
+							<>
+								{strategyLabel} cleared after {sentCount} {sentCount === 1 ? 'retry' : 'retries'}
+								{totalMs > 0 ? ` over ${formatDurationHuman(totalMs)}` : ''}.
+							</>
+						)}
 					</span>
 				</span>
 			</div>
@@ -171,9 +206,15 @@ export function RetryStatusCard({
 				<X className="w-4 h-4 flex-shrink-0" style={{ color: theme.colors.error }} />
 				<span>
 					<span className="font-medium" style={{ color: theme.colors.textMain }}>
-						Auto-retry ended.
+						{newShell ? t('workflows.newShellCopy.feedback.retry.ended') : 'Auto-retry ended.'}
 					</span>{' '}
-					The resend failed with a different error: {outage.failureMessage}
+					{newShell ? (
+						t('workflows.newShellCopy.feedback.retry.failed', {
+							message: outage.failureMessage ?? '',
+						})
+					) : (
+						<>The resend failed with a different error: {outage.failureMessage}</>
+					)}
 				</span>
 			</div>
 		);
@@ -193,10 +234,21 @@ export function RetryStatusCard({
 				<X className="w-4 h-4 flex-shrink-0" style={{ color: theme.colors.textDim }} />
 				<span>
 					<span className="font-medium" style={{ color: theme.colors.textMain }}>
-						Auto-retry stopped.
+						{newShell ? t('workflows.newShellCopy.feedback.retry.stopped') : 'Auto-retry stopped.'}
 					</span>{' '}
-					{strategyLabel} was not resolved after {retryCount}{' '}
-					{retryCount === 1 ? 'retry' : 'retries'}.
+					{newShell ? (
+						t(
+							retryCount === 1
+								? 'workflows.newShellCopy.feedback.retry.stoppedOne'
+								: 'workflows.newShellCopy.feedback.retry.stoppedMany',
+							{ count: retryCount }
+						)
+					) : (
+						<>
+							{strategyLabel} was not resolved after {retryCount}{' '}
+							{retryCount === 1 ? 'retry' : 'retries'}.
+						</>
+					)}
 				</span>
 			</div>
 		);
@@ -236,7 +288,7 @@ export function RetryStatusCard({
 					{strategyLabel}
 				</span>
 				<span className="text-xs" style={{ color: theme.colors.textDim }}>
-					auto-retrying
+					{newShell ? t('workflows.newShellCopy.feedback.retry.active') : 'auto-retrying'}
 				</span>
 			</div>
 
@@ -246,15 +298,29 @@ export function RetryStatusCard({
 			<QuotaLimitEvidence detail={outage.quota} theme={theme} hideWindowName />
 
 			<div className="flex items-center gap-6 flex-wrap">
-				<StatBlock label="Retries" value={String(retryCount)} color={theme.colors.textMain} />
 				<StatBlock
-					label="Failing for"
+					label={newShell ? t('workflows.newShellCopy.feedback.retry.count') : 'Retries'}
+					value={String(retryCount)}
+					color={theme.colors.textMain}
+				/>
+				<StatBlock
+					label={newShell ? t('workflows.newShellCopy.feedback.retry.elapsed') : 'Failing for'}
 					value={formatDurationHuman(elapsedMs)}
 					color={theme.colors.textMain}
 				/>
 				<StatBlock
-					label="Next attempt"
-					value={isFiring ? 'now…' : `in ${formatDurationHuman(remainingMs)}`}
+					label={newShell ? t('workflows.newShellCopy.feedback.retry.next') : 'Next attempt'}
+					value={
+						newShell
+							? isFiring
+								? t('workflows.newShellCopy.feedback.retry.now')
+								: t('workflows.newShellCopy.feedback.retry.in', {
+										duration: formatDurationHuman(remainingMs),
+									})
+							: isFiring
+								? 'now…'
+								: `in ${formatDurationHuman(remainingMs)}`
+					}
 					color={theme.colors.textMain}
 				/>
 			</div>
@@ -270,20 +336,26 @@ export function RetryStatusCard({
 						color: outageColor,
 						border: `1px solid ${outageColor}40`,
 					}}
-					title="Skip the timer and retry immediately"
+					title={
+						newShell
+							? t('workflows.newShellCopy.feedback.retry.nowTitle')
+							: 'Skip the timer and retry immediately'
+					}
 				>
 					{isFiring ? <Zap className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
-					Try now
+					{newShell ? t('workflows.newShellCopy.feedback.retry.tryNow') : 'Try now'}
 				</button>
 				<button
 					type="button"
 					onClick={() => cancelRetry(outage.sessionId, outage.tabId)}
 					className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors hover:bg-white/10"
 					style={{ color: theme.colors.textDim }}
-					title="Stop auto-retrying"
+					title={
+						newShell ? t('workflows.newShellCopy.feedback.retry.stopTitle') : 'Stop auto-retrying'
+					}
 				>
 					<X className="w-3.5 h-3.5" />
-					Stop
+					{newShell ? t('workflows.newShellCopy.feedback.retry.stop') : 'Stop'}
 				</button>
 				{canHandOff && (
 					<button

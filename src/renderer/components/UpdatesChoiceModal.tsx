@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
  * UpdatesChoiceModal - the first-run step for how Maestro stays current.
  *
@@ -127,6 +128,7 @@ export function UpdatesChoiceModal({
 	onBack,
 }: UpdatesChoiceModalProps) {
 	const confirmRef = useRef<HTMLButtonElement>(null);
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const t = useT();
 
 	// Hidden when the bridge exposes no CLI namespace, where an install button
@@ -143,7 +145,11 @@ export function UpdatesChoiceModal({
 	return (
 		<Modal
 			theme={theme}
-			title={t('workflows.updatesChoice.title')}
+			title={
+				newShell
+					? t('workflows.newShellCopy.feedback.updates.title')
+					: t('workflows.updatesChoice.title')
+			}
 			headerIcon={<FlaskConical className="w-4 h-4" style={{ color: theme.colors.accent }} />}
 			priority={MODAL_PRIORITIES.UPDATES_CHOICE}
 			onClose={onDismiss}
@@ -173,7 +179,9 @@ export function UpdatesChoiceModal({
 		>
 			<div className="space-y-4 select-none">
 				<p className="text-sm leading-relaxed" style={{ color: theme.colors.textMain }}>
-					{t('workflows.updatesChoice.intro')}
+					{newShell
+						? t('workflows.newShellCopy.feedback.updates.intro')
+						: t('workflows.updatesChoice.intro')}
 				</p>
 
 				<div className="space-y-2">
@@ -190,17 +198,25 @@ export function UpdatesChoiceModal({
 						theme={theme}
 						icon={FlaskConical}
 						title={t('workflows.updatesChoice.beta')}
-						description={t('workflows.updatesChoice.betaDescription')}
+						description={
+							newShell
+								? t('workflows.newShellCopy.feedback.updates.betaDescription')
+								: t('workflows.updatesChoice.betaDescription')
+						}
 						checked={enableBetaUpdates}
 						onChange={onEnableBetaUpdatesChange}
-						recommended
+						recommended={!newShell}
 						testId="updates-choice-beta"
 					/>
 					<PreferenceRow
 						theme={theme}
 						icon={Bug}
 						title={t('workflows.updatesChoice.crashReports')}
-						description={t('workflows.updatesChoice.crashReportsDescription')}
+						description={
+							newShell
+								? t('workflows.newShellCopy.feedback.updates.crashReportsDescription')
+								: t('workflows.updatesChoice.crashReportsDescription')
+						}
 						checked={crashReportingEnabled}
 						onChange={onCrashReportingEnabledChange}
 						testId="updates-choice-crash-reports"
@@ -221,13 +237,15 @@ export function UpdatesChoiceModal({
 									style={{ color: theme.colors.textMain }}
 								>
 									{t('workflows.updatesChoice.cliTitle')}
-									{!cliInstalled && <RecommendedBadge theme={theme} />}
+									{!newShell && !cliInstalled && <RecommendedBadge theme={theme} />}
 								</div>
 								<div
 									className="text-xs leading-snug mt-0.5"
 									style={{ color: theme.colors.textDim }}
 								>
-									{t('workflows.updatesChoice.cliDescription')}
+									{newShell
+										? t('workflows.newShellCopy.feedback.updates.cliDescription')
+										: t('workflows.updatesChoice.cliDescription')}
 								</div>
 							</div>
 							{cliInstalled ? (

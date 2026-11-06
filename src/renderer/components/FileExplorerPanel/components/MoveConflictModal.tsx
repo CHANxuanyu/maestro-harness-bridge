@@ -1,3 +1,5 @@
+import { useT } from '../../../i18n';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import React, { useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Modal } from '../../ui/Modal';
@@ -31,6 +33,8 @@ export function MoveConflictModal({
 	onAutoRenameAll,
 	onSkipConflicts,
 }: MoveConflictModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const cancelButtonRef = useRef<HTMLButtonElement>(null);
 	const isSingle = conflicts.length === 1 && nonConflictingCount === 0;
 	const conflictCount = conflicts.length;
@@ -85,6 +89,32 @@ export function MoveConflictModal({
 		);
 		autoRenameDescription = `${verb === 'import' ? 'Import' : 'Move'} conflicting items with auto-suffixed names so nothing is overwritten.`;
 		overwriteDescription = 'Replace the existing items at the destination. Cannot be undone.';
+	}
+
+	if (newShell) {
+		title = t('workflows.newShellCopy.panels.nameConflict');
+		bodyText = isSingle
+			? t('workflows.newShellCopy.panels.conflictOne', {
+					name: conflicts[0].sourceName,
+					folder: destFolderLabel,
+				})
+			: t('workflows.newShellCopy.panels.conflictMany', {
+					count: conflictCount,
+					folder: destFolderLabel,
+					other: nonConflictingCount,
+				});
+		autoRenameLabel = isSingle
+			? t('workflows.newShellCopy.panels.renameTo', { name: conflicts[0].autoRenameName })
+			: t('workflows.newShellCopy.panels.renameConflicts', { count: conflictCount });
+		overwriteLabel = isSingle
+			? t('workflows.newShellCopy.panels.overwrite')
+			: t('workflows.newShellCopy.panels.overwriteCount', { count: conflictCount });
+		autoRenameDescription = t(
+			operation === 'copy'
+				? 'workflows.newShellCopy.panels.importRenamed'
+				: 'workflows.newShellCopy.panels.moveRenamed'
+		);
+		overwriteDescription = t('workflows.newShellCopy.panels.overwriteHelp');
 	}
 
 	return (
@@ -157,11 +187,25 @@ export function MoveConflictModal({
 							}}
 						>
 							<div className="font-medium">
-								Skip conflicts, {verb} {nonConflictingCount} other
-								{nonConflictingCount === 1 ? '' : 's'}
+								{newShell ? (
+									t('workflows.newShellCopy.panels.skipConflicts', { count: nonConflictingCount })
+								) : (
+									<>
+										Skip conflicts, {verb} {nonConflictingCount} other
+										{nonConflictingCount === 1 ? '' : 's'}
+									</>
+								)}
 							</div>
 							<div className="text-xs mt-0.5" style={{ color: theme.colors.textDim }}>
-								Leave the existing items alone and only {verb} the non-conflicting selection.
+								{newShell ? (
+									t(
+										operation === 'copy'
+											? 'workflows.newShellCopy.panels.importOthers'
+											: 'workflows.newShellCopy.panels.moveOthers'
+									)
+								) : (
+									<>Leave the existing items alone and only {verb} the non-conflicting selection.</>
+								)}
 							</div>
 						</button>
 					)}
@@ -176,7 +220,7 @@ export function MoveConflictModal({
 							color: theme.colors.textDim,
 						}}
 					>
-						<div className="font-medium">Cancel</div>
+						<div className="font-medium">{newShell ? t('common.cancel') : 'Cancel'}</div>
 					</button>
 				</div>
 			</div>

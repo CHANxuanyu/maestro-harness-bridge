@@ -1,3 +1,5 @@
+import { useT } from '../../i18n';
+import { useSettingsStore } from '../../stores/settingsStore';
 /**
  * ImageSaveModal - Destination picker for saving an edited image back to disk.
  *
@@ -57,6 +59,8 @@ export function ImageSaveModal({
 	onCancel,
 	isSaving = false,
 }: ImageSaveModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const [phase, setPhase] = useState<'choose' | 'name'>('choose');
 	const inputRef = useRef<HTMLInputElement>(null);
 
@@ -78,7 +82,7 @@ export function ImageSaveModal({
 		return (
 			<Modal
 				theme={theme}
-				title="Save to a new file"
+				title={newShell ? t('workflows.newShellCopy.panels.saveAs') : 'Save to a new file'}
 				priority={MODAL_PRIORITIES.IMAGE_SAVE}
 				onClose={onCancel}
 				headerIcon={<FilePlus2 className="w-4 h-4" style={{ color: theme.colors.accent }} />}
@@ -88,8 +92,14 @@ export function ImageSaveModal({
 						theme={theme}
 						onCancel={() => setPhase('choose')}
 						onConfirm={handleSaveAs}
-						cancelLabel="Back"
-						confirmLabel={isSaving ? 'Saving...' : 'Save'}
+						cancelLabel={newShell ? t('workflows.newShellCopy.panels.back') : 'Back'}
+						confirmLabel={
+							newShell
+								? t(isSaving ? 'workflows.files.saving' : 'workflows.files.save')
+								: isSaving
+									? 'Saving...'
+									: 'Save'
+						}
 						confirmDisabled={!isValid || isSaving}
 					/>
 				}
@@ -97,14 +107,20 @@ export function ImageSaveModal({
 				<FormInput
 					ref={inputRef}
 					theme={theme}
-					label="File name"
+					label={newShell ? t('workflows.newShellCopy.panels.fileNameLabel') : 'File name'}
 					value={newName}
 					onChange={setNewName}
 					onSubmit={handleSaveAs}
 					submitEnabled={isValid && !isSaving}
 					selectOnFocus
-					placeholder="Enter file name..."
-					helperText="Saved alongside the original file, in the same folder."
+					placeholder={
+						newShell ? t('workflows.newShellCopy.panels.fileName') : 'Enter file name...'
+					}
+					helperText={
+						newShell
+							? t('workflows.newShellCopy.panels.saveAlongside')
+							: 'Saved alongside the original file, in the same folder.'
+					}
 				/>
 			</Modal>
 		);
@@ -113,7 +129,7 @@ export function ImageSaveModal({
 	return (
 		<Modal
 			theme={theme}
-			title="Save edited image"
+			title={newShell ? t('workflows.newShellCopy.panels.saveImage') : 'Save edited image'}
 			priority={MODAL_PRIORITIES.IMAGE_SAVE}
 			onClose={onCancel}
 			headerIcon={<Save className="w-4 h-4" style={{ color: theme.colors.accent }} />}
@@ -124,7 +140,7 @@ export function ImageSaveModal({
 					className="px-4 py-2 rounded border hover:bg-white/5 transition-colors outline-none"
 					style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
 				>
-					Cancel
+					{newShell ? t('common.cancel') : <>Cancel</>}{' '}
 				</button>
 			}
 		>
@@ -151,15 +167,26 @@ export function ImageSaveModal({
 					)}
 					<span className="min-w-0">
 						<span className="block text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Overwrite the existing file
+							{newShell ? (
+								t('workflows.newShellCopy.panels.overwrite')
+							) : (
+								<>Overwrite the existing file</>
+							)}{' '}
 						</span>
 						<span
 							className="block text-xs mt-0.5 truncate"
 							style={{ color: canOverwrite ? theme.colors.textDim : theme.colors.warning }}
 						>
-							{canOverwrite
-								? `Replace ${fileName}`
-								: `Can't write ${originalExtension.toUpperCase()}, will create ${fallbackFileName} instead`}
+							{newShell
+								? canOverwrite
+									? t('workflows.newShellCopy.panels.replaceName', { name: fileName })
+									: t('workflows.newShellCopy.panels.saveUnsupportedFormat', {
+											format: originalExtension.toUpperCase(),
+											name: fallbackFileName,
+										})
+								: canOverwrite
+									? `Replace ${fileName}`
+									: `Can't write ${originalExtension.toUpperCase()}, will create ${fallbackFileName} instead`}
 						</span>
 					</span>
 				</button>
@@ -177,10 +204,14 @@ export function ImageSaveModal({
 					/>
 					<span className="min-w-0">
 						<span className="block text-sm font-medium" style={{ color: theme.colors.textMain }}>
-							Save to a new file
+							{newShell ? t('workflows.newShellCopy.panels.saveAs') : <>Save to a new file</>}{' '}
 						</span>
 						<span className="block text-xs mt-0.5" style={{ color: theme.colors.textDim }}>
-							Keep the original and write a copy
+							{newShell ? (
+								t('workflows.newShellCopy.panels.keepOriginal')
+							) : (
+								<>Keep the original and write a copy</>
+							)}{' '}
 						</span>
 					</span>
 				</button>

@@ -1,3 +1,7 @@
+import newShellPanelsCopy from './newShellPanelsCopy';
+import newShellFeedbackCopy from './newShellFeedbackCopy';
+import newShellNavigationCopy from './newShellNavigationCopy';
+import newShellComposerCopy from './newShellComposerCopy';
 import { workflowsFiles } from './workflowsFiles';
 import { workflowsComposer } from './workflowsComposer';
 /**
@@ -20,6 +24,10 @@ import { workflowsSessions } from './workflowsSessions';
 
 const settings = { ...baseSettings, ...settingsFinish, ...settingsExtras };
 const workflows = {
+	...newShellPanelsCopy,
+	...newShellFeedbackCopy,
+	...newShellNavigationCopy,
+	...newShellComposerCopy,
 	...baseWorkflows,
 	...workflowsShell,
 	...workflowsSessions,

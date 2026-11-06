@@ -1,3 +1,5 @@
+import { useT } from '../../../i18n';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { useEffect, useState } from 'react';
 import { Clock, RotateCw } from 'lucide-react';
 import type { Theme } from '../../../types';
@@ -9,6 +11,8 @@ interface RetryCountdownProps {
 }
 
 export function RetryCountdown({ retryAt, theme, onRetryNow }: RetryCountdownProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const [secondsLeft, setSecondsLeft] = useState(() =>
 		Math.max(0, Math.ceil((retryAt - Date.now()) / 1000))
 	);
@@ -26,7 +30,13 @@ export function RetryCountdown({ retryAt, theme, onRetryNow }: RetryCountdownPro
 		<div className="flex flex-col items-center gap-2 mt-3">
 			<div className="flex items-center gap-1.5 text-xs" style={{ color: theme.colors.textDim }}>
 				<Clock className="w-3.5 h-3.5" />
-				<span>Retrying in {secondsLeft}s...</span>
+				<span>
+					{newShell ? (
+						t('workflows.newShellCopy.panels.retryIn', { seconds: secondsLeft })
+					) : (
+						<>Retrying in {secondsLeft}s...</>
+					)}
+				</span>
 			</div>
 			<button
 				onClick={onRetryNow}
@@ -34,7 +44,7 @@ export function RetryCountdown({ retryAt, theme, onRetryNow }: RetryCountdownPro
 				style={{ color: theme.colors.accent }}
 			>
 				<RotateCw className="w-3.5 h-3.5" />
-				Retry Now
+				{newShell ? t('workflows.newShellCopy.panels.retryNow') : <>Retry Now</>}{' '}
 			</button>
 		</div>
 	);

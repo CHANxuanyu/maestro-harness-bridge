@@ -60,6 +60,28 @@ Moving account configuration to the project menu keeps `create-agent <name>` wit
 `open notification-center`, `notify inbox` and `open feedback`. Hiding a control
 does not remove its command or write a saved preference.
 
+## New shell conversation permissions, T1
+
+| UI action                                          | CLI                                                                    | Shared implementation                                                      |
+| -------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------- |
+| New conversation in the current conversation       | `tab new --agent <id>` uses project recency as specified for CLI entry | `createTab()`, `newConversationPermissionFields()`                         |
+| Project plus, palette or new conversation shortcut | `tab new --agent <id> [--prompt <text>]`                               | `createTab()`, `recentProjectConversation()`, both remote new-tab handlers |
+| Pick a tool for a new conversation                 | `tab new --agent <id> --provider <provider>`                           | `context:conversation`, `openHandoffTarget()`                              |
+| Change tool in an empty conversation               | `tab new --agent <id> --provider <provider> --replace-empty <tab>`     | `readHandoffSource()`, `openHandoffTarget()`                               |
+| Prepare handoff or review                          | `handoff <source-tab> <provider> [--review]`                           | Source permission snapshot and `openHandoffTarget()`                       |
+| Deliberately change permission                     | `tab permission <tab-id> <full                                         | standard                                                                   | readonly>` | `permissionModeFields()`; read with `tab show <tab-id> --json` |
+
+Inheritance is gated by `newShell`. Conversation buttons carry the exact source;
+project and CLI entry points use the newest selection, message or creation time
+among known project conversations on the same host, including closed tabs still
+held in this window. Closing the last tab also preserves its permission in the
+automatic replacement. Provider changes preserve the
+mode when supported, tighten unsupported standard to readonly, and refuse a target
+with no equally strict mode. The permission snapshot travels between renderer
+owners along with handoff metadata. Review retains its existing readonly default.
+Manual changes only patch the new tab. Native history imports and compaction keep
+their existing handling. No new CLI verb or permission confirmation is introduced.
+
 ## New shell project opening, batch 2
 
 | UI action                                                      | CLI                                            | Shared implementation                                                                                                  |

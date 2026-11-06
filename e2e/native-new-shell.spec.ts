@@ -571,3 +571,88 @@ test('old shell wizard names a rejected login instead of an exit code', async ({
 		await native.close(failed);
 	}
 });
+
+// eslint-disable-next-line no-empty-pattern
+test('new shell permission inheritance: readonly Codex stays readonly in a new conversation', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	seedNewShell(native);
+	const tab = createMockAITab({
+		id: 'permission-source',
+		permissionMode: 'readonly',
+		readOnlyMode: true,
+		saveToHistory: false,
+	});
+	const session = createMockSession({
+		id: 'permission-codex',
+		name: 'Codex',
+		toolType: 'codex',
+		cwd: fs.realpathSync(native.project),
+		projectRoot: fs.realpathSync(native.project),
+		customPath: path.resolve('e2e/fixtures/native/codex'),
+		customEnvVars: { CODEX_HOME: native.codex, MAESTRO_NATIVE_SCRIPT: native.script },
+		aiTabs: [tab],
+		activeTabId: tab.id,
+		unifiedTabOrder: [{ type: 'ai', id: tab.id }],
+	});
+	fs.writeFileSync(
+		path.join(native.data, 'maestro-sessions.json'),
+		JSON.stringify({ sessions: [session] })
+	);
+	native.scriptTurns([
+		{ answer: 'Source readonly turn complete' },
+		{ answer: 'New readonly turn complete' },
+	]);
+	const saved = (): Session =>
+		JSON.parse(
+			fs.readFileSync(path.join(native.data, 'maestro-sessions.json'), 'utf8')
+		).sessions.find((item: Session) => item.id === session.id);
+	let failed = false;
+	try {
+		await native.start(home);
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await native.send('Read the source project');
+		await expect(native.output()).toContainText('Source readonly turn complete');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		await native.page.getByTestId('sidebar-new-conversation').click();
+		await expect(native.page.getByTestId('empty-conversation-picker')).toBeVisible();
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.page.getByTitle(/^Full Access/)).toHaveCount(0);
+		await expect.poll(() => saved().aiTabs.length).toBe(2);
+		const newTabId = saved().activeTabId;
+		expect(newTabId).not.toBe(tab.id);
+		expect(saved().aiTabs.find((item) => item.id === newTabId)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+		await native.send('Read the project in the new conversation');
+		await expect(native.output()).toContainText('New readonly turn complete');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		const invocations = fs
+			.readFileSync(path.join(native.codex, 'fixture-invocations.jsonl'), 'utf8')
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line) as { args: string[] });
+		expect(invocations).toHaveLength(2);
+		for (const { args } of invocations) {
+			expect(args[args.indexOf('--sandbox') + 1]).toBe('read-only');
+			expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+		}
+		await native.page.getByTitle(/^Toggle Read-Only mode/).click();
+		await native.page.getByRole('menuitemradio', { name: 'Full Access', exact: true }).click();
+		await expect(native.page.getByTitle(/^Full Access/)).toHaveText('Full Access');
+		await native.page.locator(`[data-conversation-key$=":${tab.id}"] [data-tree-nav]`).click();
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.output()).toContainText('Source readonly turn complete');
+		expect(saved().aiTabs.find((item) => item.id === tab.id)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await native.close(failed);
+	}
+});

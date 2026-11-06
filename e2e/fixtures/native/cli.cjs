@@ -53,6 +53,10 @@ async function run(provider) {
 	const scene = persist ? script.scene || script.turns[count] : script.synopsis;
 	if (!scene) throw new Error(`No scripted turn ${count}; unexpected invocation`);
 	if (persist) {
+		fs.appendFileSync(
+			path.join(configDir, 'fixture-invocations.jsonl'),
+			`${JSON.stringify({ args })}\n`
+		);
 		fs.writeFileSync(stateFile, String(count + 1));
 		// Cleanup checks the actual child PID, outside the native transcript.
 		fs.writeFileSync(path.join(configDir, 'fixture-process'), String(process.pid));

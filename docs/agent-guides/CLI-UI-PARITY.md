@@ -584,3 +584,8 @@ Opening and switching conversations use the existing UI and CLI selection paths.
 Lazy row construction changes no action, command, message or IPC contract.
 The progressive window still hydrates the full history and retains search and jump targets.
 No new CLI verb or parity gap is introduced.
+
+Startup now defers local Git metadata refresh only in the new shell. It uses the
+existing gitService and background refresh path, with no new user action or CLI
+verb. The new shell splash also removes decorative waits after the existing data,
+paint and font readiness gates. Classic startup and SSH refresh remain unchanged.

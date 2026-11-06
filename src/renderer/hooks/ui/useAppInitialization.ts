@@ -128,17 +128,21 @@ export function useAppInitialization(): AppInitializationReturn {
 			window.__updateSplash?.(90, 'The concertmaster rises...');
 			// Wait for React to render the UI with loaded data before hiding splash.
 			// Double rAF ensures at least one full paint cycle has completed,
-			// then a short delay lets the file tree and heavy components settle.
+			// The classic shell also retains its existing settling delay.
 			requestAnimationFrame(() => {
 				requestAnimationFrame(() => {
 					window.__updateSplash?.(95, 'Maestro takes the podium...');
-					setTimeout(() => {
-						window.__hideSplash?.();
-					}, 150);
+					if (newShell) {
+						window.__hideSplash?.(true);
+					} else {
+						setTimeout(() => {
+							window.__hideSplash?.();
+						}, 150);
+					}
 				});
 			});
 		}
-	}, [settingsLoaded, sessionsLoaded, initialFileTreeReady]);
+	}, [settingsLoaded, sessionsLoaded, initialFileTreeReady, newShell]);
 
 	// --- GitHub CLI availability check ---
 	useEffect(() => {

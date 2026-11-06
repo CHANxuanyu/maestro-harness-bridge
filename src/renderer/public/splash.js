@@ -50,13 +50,28 @@
 	};
 
 	// Function for React to call when ready
-	window.__hideSplash = function () {
+	window.__hideSplash = function (newShell) {
 		performance.mark('maestro:renderer.ready');
 		clearInterval(interval);
 
 		// Complete the progress bar
 		if (progressBar) progressBar.style.width = '100%';
 		if (progressText) progressText.textContent = 'Curtain up';
+
+		// The new shell is already painted. Keep font readiness but do not hold
+		// an interactive conversation behind the classic decorative animation.
+		if (newShell) {
+			var reveal = function () {
+				var splash = document.getElementById('initial-splash');
+				if (splash && splash.parentNode) {
+					splash.parentNode.removeChild(splash);
+					performance.mark('maestro:renderer.splashRemoved');
+				}
+			};
+			if (document.fonts && document.fonts.ready) document.fonts.ready.then(reveal);
+			else reveal();
+			return;
+		}
 
 		// Helper to fade out the splash
 		function fadeOut() {

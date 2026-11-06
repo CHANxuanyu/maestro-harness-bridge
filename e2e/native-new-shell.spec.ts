@@ -676,9 +676,8 @@ test('new shell permission inheritance: readonly Codex stays readonly in a new c
 	}
 });
 
-test('new shell permission inheritance: owner window and browser source stay readonly', async ({
-	browser,
-}, info) => {
+// eslint-disable-next-line no-empty-pattern
+test('new shell permission inheritance: owner window and browser source stay readonly', async ({}, info) => {
 	const native = new NativeApp(info, { providerCli: false });
 	const home = path.join(native.root, 'home');
 	fs.mkdirSync(home, { recursive: true });
@@ -706,7 +705,6 @@ test('new shell permission inheritance: owner window and browser source stay rea
 		})
 	);
 	fs.writeFileSync(path.join(native.data, 'maestro-sessions.json'), JSON.stringify({ sessions }));
-	const browserPage = await browser.newPage();
 	let failed = false;
 	try {
 		await native.start(home);
@@ -731,7 +729,18 @@ test('new shell permission inheritance: owner window and browser source stay rea
 
 		const url = await native.page.evaluate(() => window.maestro.webserver.getUrl());
 		expect(url).toBeTruthy();
-		await browserPage.goto(url!);
+		const browserOpened = native.app.waitForEvent('window');
+		await native.app.evaluate(async ({ BrowserWindow }, webUrl) => {
+			// No preload: exercise web-desktop through Electron's bundled browser.
+			const browserWindow = new BrowserWindow({
+				width: 1280,
+				height: 720,
+				webPreferences: { nodeIntegration: false, contextIsolation: true },
+			});
+			await browserWindow.loadURL(webUrl);
+		}, url!);
+		const browserPage = await browserOpened;
+		await browserPage.waitForLoadState('domcontentloaded');
 		await browserPage
 			.locator(`[data-conversation-key$=":${created.tabId}"] [data-tree-nav]`)
 			.click();
@@ -774,7 +783,6 @@ test('new shell permission inheritance: owner window and browser source stay rea
 		failed = true;
 		throw error;
 	} finally {
-		await browserPage.close();
 		await native.close(failed);
 	}
 });

@@ -186,6 +186,15 @@ for (const [provider, scenario] of [
 			await expect(flashed).not.toHaveAttribute('data-feed-row', 'turn-activity');
 			await expect(native.output().getByText(phrase, { exact: true })).toBeInViewport();
 			if (scenario === 'legacy-title') {
+				// Wait for the opened tab to reach the CLI before resolving the active tab.
+				await expect
+					.poll(async () => (await native.cli('session', 'list')).sessions)
+					.toContainEqual(
+						expect.objectContaining({
+							agentSessionId: initial.id,
+							active: true,
+						})
+					);
 				await expect
 					.poll(async () => (await native.cli('tab', 'show', 'active')).tab)
 					.toMatchObject({

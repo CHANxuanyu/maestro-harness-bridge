@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 /**
  * Tests for useSummarizeAndContinue - handleSummarizeAndContinue (Tier 3E)
  *
@@ -118,6 +119,7 @@ function seedActiveSession(session: Session | null) {
 // ============================================================================
 
 beforeEach(() => {
+	useSettingsStore.setState({ newShell: false });
 	vi.clearAllMocks();
 
 	// Reset stores
@@ -164,6 +166,7 @@ describe('compacted conversation settings', () => {
 		{ readOnlyMode: true },
 		{},
 	])('preserves explicit settings and inheritance: %j', async (settings) => {
+		useSettingsStore.setState({ newShell: true });
 		const actual = await vi.importActual<typeof import('../../../renderer/utils/tabHelpers')>(
 			'../../../renderer/utils/tabHelpers'
 		);

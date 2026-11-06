@@ -8,6 +8,7 @@
  */
 
 import { ipcRenderer } from 'electron';
+import type { NewTabResult } from '../web-server/types';
 
 /**
  * Auto Run state for broadcasting
@@ -63,10 +64,13 @@ export function createWebApi() {
 			ipcRenderer.invoke('web:releaseAutoRunStartClaim', sessionId) as Promise<boolean>,
 
 		// Create a tab in the Electron renderer, which owns canonical tab state.
-		requestNewTab: (sessionId: string, background = false) =>
-			ipcRenderer.invoke('web:requestNewTab', sessionId, background) as Promise<{
-				tabId: string;
-			} | null>,
+		requestNewTab: (sessionId: string, background = false, sourceTabId?: string) =>
+			ipcRenderer.invoke(
+				'web:requestNewTab',
+				sessionId,
+				background,
+				...(sourceTabId ? [sourceTabId] : [])
+			) as Promise<NewTabResult | null>,
 		requestCloseTab: (sessionId: string, tabId: string) =>
 			ipcRenderer.invoke('web:requestCloseTab', sessionId, tabId) as Promise<boolean>,
 

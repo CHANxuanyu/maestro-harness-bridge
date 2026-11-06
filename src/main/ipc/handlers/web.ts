@@ -368,10 +368,16 @@ export function registerWebHandlers(deps: WebHandlerDependencies): void {
 	);
 
 	// Broadcast tab changes to web clients
-	ipcMain.handle('web:requestNewTab', async (_, sessionId: string, background = false) => {
-		const webServer = getWebServer();
-		return webServer?.requestNewTab(sessionId, background) ?? null;
-	});
+	ipcMain.handle(
+		'web:requestNewTab',
+		async (_, sessionId: string, background = false, sourceTabId?: string) => {
+			const webServer = getWebServer();
+			return (
+				webServer?.requestNewTab(sessionId, background, ...(sourceTabId ? [sourceTabId] : [])) ??
+				null
+			);
+		}
+	);
 	ipcMain.handle('web:requestCloseTab', async (_, sessionId: string, tabId: string) => {
 		return getWebServer()?.requestCloseTab(sessionId, tabId) ?? false;
 	});

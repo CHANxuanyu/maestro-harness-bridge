@@ -19,7 +19,13 @@ import { isWebContentsAvailable } from '../../utils/safe-send';
 export function requestFromRenderer<T>(
 	win: BrowserWindow,
 	requestChannel: string,
-	options: { fallback: T; parse?: (raw: unknown) => T; timeoutMs?: number; args?: unknown[] }
+	options: {
+		fallback: T;
+		parse?: (raw: unknown) => T;
+		timeoutMs?: number;
+		args?: unknown[];
+		verifySender?: boolean;
+	}
 ): Promise<T> {
 	const { fallback, parse = (raw) => raw as T, timeoutMs = 3000, args = [] } = options;
 	return new Promise<T>((resolve) => {
@@ -32,13 +38,17 @@ export function requestFromRenderer<T>(
 			ipcMain.removeListener(responseChannel, onReply);
 			resolve(value);
 		};
-		const onReply = (_event: Electron.IpcMainEvent, raw: unknown) => finish(parse(raw));
+		const onReply = (event: Electron.IpcMainEvent, raw: unknown) => {
+			if (options.verifySender && event.sender !== win.webContents) return;
+			finish(parse(raw));
+		};
 		// Arm the timeout BEFORE listening/sending: a renderer that replies
 		// synchronously to `webContents.send` would otherwise run `finish()`
 		// while `timeoutId` is still in its temporal dead zone, and the
 		// `clearTimeout(timeoutId)` inside it would throw a ReferenceError.
 		const timeoutId = setTimeout(() => finish(fallback), timeoutMs);
-		ipcMain.once(responseChannel, onReply);
+		if (options.verifySender) ipcMain.on(responseChannel, onReply);
+		else ipcMain.once(responseChannel, onReply);
 		win.webContents.send(requestChannel, ...args, responseChannel);
 	});
 }

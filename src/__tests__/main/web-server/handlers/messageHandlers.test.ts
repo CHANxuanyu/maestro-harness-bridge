@@ -1046,6 +1046,28 @@ describe('WebSocketMessageHandler', () => {
 	});
 
 	describe('New Tab (Web → Desktop)', () => {
+		it('carries the browser source id and actual permissions through the wire result', async () => {
+			vi.mocked(callbacks.newTab).mockResolvedValue({
+				tabId: 'created',
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
+			handler.handleMessage(client, {
+				type: 'new_tab',
+				sessionId: 'session-1',
+				sourceTabId: 'source',
+			});
+			await vi.waitFor(() =>
+				expect(callbacks.newTab).toHaveBeenCalledWith('session-1', false, 'source')
+			);
+			expect(JSON.parse((client.socket.send as any).mock.calls[0][0])).toMatchObject({
+				type: 'new_tab_result',
+				tabId: 'created',
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
+		});
+
 		it('should create new tab and return tabId', async () => {
 			handler.handleMessage(client, {
 				type: 'new_tab',

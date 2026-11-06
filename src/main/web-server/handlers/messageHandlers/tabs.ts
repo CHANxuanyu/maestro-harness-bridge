@@ -88,13 +88,22 @@ export function handleNewTab(
 	}
 
 	ctx.callbacks
-		.newTab(sessionId, background)
+		.newTab(
+			sessionId,
+			background,
+			...(typeof message.sourceTabId === 'string' && message.sourceTabId
+				? [message.sourceTabId]
+				: [])
+		)
 		.then((result) => {
 			ctx.send(client, {
 				type: 'new_tab_result',
 				success: !!result,
 				sessionId,
 				tabId: result?.tabId,
+				...(result?.permissionMode
+					? { permissionMode: result.permissionMode, readOnlyMode: result.readOnlyMode }
+					: {}),
 				background,
 				requestId: message.requestId,
 			});

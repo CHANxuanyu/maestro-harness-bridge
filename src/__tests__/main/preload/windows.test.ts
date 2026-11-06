@@ -10,11 +10,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock electron ipcRenderer
 const mockInvoke = vi.fn();
+const mockSend = vi.fn();
 const mockOn = vi.fn();
 const mockRemoveListener = vi.fn();
 
 vi.mock('electron', () => ({
 	ipcRenderer: {
+		send: (...args: unknown[]) => mockSend(...args),
 		invoke: (...args: unknown[]) => mockInvoke(...args),
 		on: (...args: unknown[]) => mockOn(...args),
 		removeListener: (...args: unknown[]) => mockRemoveListener(...args),
@@ -29,6 +31,23 @@ describe('Windows Preload API', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		api = createWindowsApi();
+	});
+
+	it('reads the owner snapshot and removes its request listener on teardown', async () => {
+		const snapshot = { sessionId: 'a', tabs: [] };
+		mockInvoke.mockResolvedValue([snapshot]);
+		expect(await api.getConversationPermissions(['a'])).toEqual([snapshot]);
+		expect(mockInvoke).toHaveBeenCalledWith('windows:getConversationPermissions', ['a']);
+		const read = vi.fn(() => snapshot);
+		const stop = api.onReadConversationPermissions(read);
+		const handler = mockOn.mock.calls.find(
+			([channel]) => channel === 'windows:readConversationPermissions'
+		)![1];
+		handler({}, 'a', 'response');
+		expect(read).toHaveBeenCalledWith('a');
+		expect(mockSend).toHaveBeenCalledWith('response', snapshot);
+		stop();
+		expect(mockRemoveListener).toHaveBeenCalledWith('windows:readConversationPermissions', handler);
 	});
 
 	it('create forwards sessionIds and bounds', async () => {

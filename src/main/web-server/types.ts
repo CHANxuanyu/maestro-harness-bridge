@@ -352,10 +352,16 @@ export type SelectSessionCallback = (
  * Tab operation callbacks for multi-tab support.
  */
 export type SelectTabCallback = (sessionId: string, tabId: string) => Promise<boolean>;
+export interface NewTabResult {
+	tabId: string;
+	permissionMode?: 'full' | 'standard' | 'readonly';
+	readOnlyMode?: boolean;
+}
 export type NewTabCallback = (
 	sessionId: string,
-	background?: boolean
-) => Promise<{ tabId: string } | null>;
+	background?: boolean,
+	sourceTabId?: string
+) => Promise<NewTabResult | null>;
 export type CloseTabCallback = (sessionId: string, tabId: string) => Promise<boolean>;
 export interface RenameTabResult {
 	success: boolean;

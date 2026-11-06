@@ -214,6 +214,7 @@ import type { TemplateContext } from '../shared/templateVariables';
 // Data Directory Configuration (MUST happen before any Store initialization)
 // ============================================================================
 // Store type definitions are imported from ./stores/types.ts
+performance.mark('maestro:main.modulesReady');
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 // Electron 41 / Chromium 138 forbid ES module imports from `file://` URLs (the
@@ -306,6 +307,7 @@ recordUserDataProduct(app.getPath('userData'), (message) => {
 // All stores are initialized via initializeStores() from ./stores module
 
 const { syncPath, bootstrapStore } = initializeStores({ productionDataPath });
+performance.mark('maestro:main.storesReady');
 
 // Point the session image store at the sync path so pasted conversation images
 // live alongside the sessions file (in <syncPath>/session-images/) rather than
@@ -819,6 +821,7 @@ if (!gotSingleInstanceLock) {
 app
 	.whenReady()
 	.then(async () => {
+		performance.mark('maestro:main.ready');
 		// Serve agent-authored Concerto mockups as real documents with their own
 		// CSP. A srcdoc frame would inherit Maestro's renderer CSP and block the
 		// inline scripts that make mockups interactive.
@@ -2865,6 +2868,7 @@ app
 			},
 		});
 
+		performance.mark('maestro:main.coreReady');
 		logger.info('Core services initialized', 'Startup');
 
 		// Initialize history manager (handles migration from legacy format if needed)
@@ -2909,6 +2913,8 @@ app
 			}
 		);
 
+		performance.mark('maestro:main.historyReady');
+
 		// Initialize stats database for usage tracking
 		logger.info('Initializing stats database', 'Startup');
 		try {
@@ -2921,6 +2927,8 @@ app
 			logger.error(`Failed to initialize stats database: ${error}`, 'Startup');
 			logger.warn('Continuing without stats - usage tracking will be unavailable', 'Startup');
 		}
+
+		performance.mark('maestro:main.statsReady');
 
 		// Set up IPC handlers
 		logger.debug('Setting up IPC handlers', 'Startup');
@@ -2964,6 +2972,8 @@ app
 			getAgentConfigForAgent,
 			getCustomEnvVarsForAgent,
 		});
+
+		performance.mark('maestro:main.ipcReady');
 
 		// Set up process event listeners
 		logger.debug('Setting up process event listeners', 'Startup');
@@ -3076,7 +3086,9 @@ app
 		// Restore the saved multi-window layout (or a single primary window when
 		// there is nothing saved - backward compatible).
 		logger.info('Restoring window layout', 'Startup');
+		performance.mark('maestro:main.windowStart');
 		restoreWindows();
+		performance.mark('maestro:main.windowCreated');
 
 		// Wire the global "summon Maestro" hotkey. Register the saved binding (if
 		// any) and re-register live when the setting changes from any source

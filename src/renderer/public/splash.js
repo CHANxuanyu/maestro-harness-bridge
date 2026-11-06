@@ -1,4 +1,5 @@
 (function () {
+	performance.mark('maestro:renderer.document');
 	var progress = 0;
 	var progressBar = document.getElementById('splash-progress');
 	var progressText = document.getElementById('splash-text');
@@ -50,6 +51,7 @@
 
 	// Function for React to call when ready
 	window.__hideSplash = function () {
+		performance.mark('maestro:renderer.ready');
 		clearInterval(interval);
 
 		// Complete the progress bar
@@ -65,6 +67,7 @@
 				setTimeout(function () {
 					if (splash && splash.parentNode) {
 						splash.parentNode.removeChild(splash);
+						performance.mark('maestro:renderer.splashRemoved');
 					}
 				}, 500);
 			}

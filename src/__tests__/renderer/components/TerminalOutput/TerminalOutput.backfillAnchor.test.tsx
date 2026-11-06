@@ -400,13 +400,21 @@ async function mountScrolledIntoHistory(logs: LogEntry[] = current, scrollTop = 
 // Both layouts: the agents layout is the baseline these cases were written
 // against, and the conversation layout draws the same rows as a feed (no
 // bubbles, a meta line under each message). The anchor must hold in both.
-describe.each(['agents', 'conversations'] as const)(
-	'TerminalOutput (%s layout): loading earlier history keeps the reading position',
-	(navigationMode) => {
+describe.each([
+	{ navigationMode: 'agents', newShell: false },
+	{ navigationMode: 'conversations', newShell: false },
+	{ navigationMode: 'conversations', newShell: true },
+] as const)(
+	'TerminalOutput ($navigationMode, newShell=$newShell): loading earlier history keeps the reading position',
+	({ navigationMode, newShell }) => {
 		beforeEach(() => {
 			vi.useFakeTimers({ shouldAdvanceTime: true });
 			// Tool calls folded into runs (the default).
-			useSettingsStore.setState({ showToolCalls: false, sidebarNavigationMode: navigationMode });
+			useSettingsStore.setState({
+				newShell,
+				showToolCalls: false,
+				sidebarNavigationMode: navigationMode,
+			});
 			backfill.onPrepend = undefined;
 			backfill.isLoading = false;
 			backfill.reachedStart = false;

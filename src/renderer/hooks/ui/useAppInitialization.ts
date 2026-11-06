@@ -124,6 +124,7 @@ export function useAppInitialization(): AppInitializationReturn {
 			window.__updateSplash?.(80, 'Indexing the score...');
 		}
 		if (settingsLoaded && sessionsLoaded && initialFileTreeReady) {
+			performance.mark('maestro:renderer.dataReady');
 			window.__updateSplash?.(90, 'The concertmaster rises...');
 			// Wait for React to render the UI with loaded data before hiding splash.
 			// Double rAF ensures at least one full paint cycle has completed,

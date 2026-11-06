@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { flattenToolResultContent } from '../../main/parsers/claude-output-parser';
 import {
 	MAX_PERSISTED_TOOL_OUTPUT_CHARS,
 	compactSessionToolOutputs,
@@ -6,6 +7,10 @@ import {
 } from '../../shared/toolOutput';
 
 describe('tool output compaction', () => {
+	it('preserves the original Claude output length before storage', () => {
+		const text = 'x'.repeat(9000) + 'final error';
+		expect(flattenToolResultContent(text)).toBe(compactToolOutput(text).output);
+	});
 	it('bounds oversized strings and objects', () => {
 		const oversized = 'x'.repeat(MAX_PERSISTED_TOOL_OUTPUT_CHARS + 100);
 

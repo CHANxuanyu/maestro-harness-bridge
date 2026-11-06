@@ -19,6 +19,8 @@ vi.mock('../../../main/utils/remote-fs', () => ({
 }));
 import { CodexSessionStorage } from '../../../main/storage/codex-session-storage';
 import { transcriptMessagesToLogEntries } from '../../../renderer/utils/transcriptMessages';
+import { searchNativeHistoryFiles } from '../../../main/storage/native-history-search-reader';
+import { embedSystemPromptInPrompt } from '../../../shared/embeddedSystemPrompt';
 
 const id = '11111111-2222-4333-8444-555555555555';
 let account: string;
@@ -59,6 +61,120 @@ afterEach(async () => {
 });
 const read = (storage = new CodexSessionStorage(), readOnly = false) =>
 	storage.readSessionMessages(isolation.root, id, { configDir: account, readOnly });
+
+it.each(['older-answer', 'wrapped-user', 'folded-progress', 'legacy-title'])(
+	'opens the archived search hit through the native reader: %s',
+	async (scenario) => {
+		const phrase = 'The amber lighthouse remembers this sentence';
+		const rows = content
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line));
+		rows[1].payload.content[0].text =
+			scenario === 'wrapped-user'
+				? embedSystemPromptInPrompt('# Maestro System Context', phrase)
+				: 'Archive conversation';
+		rows[2].payload.content[0].text =
+			scenario === 'wrapped-user' || scenario === 'folded-progress' ? 'Archive ready' : phrase;
+		if (scenario === 'folded-progress') {
+			rows.splice(
+				2,
+				0,
+				...['Opening the archive', phrase].map((text) => ({
+					type: 'response_item',
+					payload: {
+						type: 'message',
+						role: 'assistant',
+						channel: 'commentary',
+						content: [{ type: 'output_text', text }],
+					},
+				}))
+			);
+		}
+		for (let index = 0; index < 310; index++) {
+			for (const role of ['user', 'assistant'])
+				rows.push({
+					type: 'response_item',
+					payload: {
+						type: 'message',
+						role,
+						content: [
+							{
+								type: role === 'user' ? 'input_text' : 'output_text',
+								text: `Later ${role} ${index}`,
+							},
+						],
+					},
+				});
+		}
+		const title = 'Named conversation from an unopened project';
+		if (scenario === 'legacy-title') {
+			rows[0] = { id };
+			rows.splice(1, 0, {
+				type: 'message',
+				role: 'user',
+				content: [
+					{
+						type: 'input_text',
+						text: `<environment_context><cwd>${isolation.root}</cwd></environment_context>`,
+					},
+				],
+			});
+			await fs.writeFile(
+				path.join(account, 'session_index.jsonl'),
+				JSON.stringify({ id, thread_name: title })
+			);
+		}
+		const archive = path.join(account, 'archived_sessions');
+		await fs.mkdir(archive);
+		const archivedFile = path.join(archive, path.basename(file) + '.zst');
+		const bytes = zstdCompressSync(
+			rows
+				.map((row) =>
+					JSON.stringify(
+						scenario === 'legacy-title' && row.type === 'response_item' ? row.payload : row
+					)
+				)
+				.join('\n') + '\n'
+		);
+		await fs.writeFile(archivedFile, bytes);
+		// An account containing only archived history must also be readable.
+		await fs.rm(path.join(account, 'sessions'), { recursive: true });
+		const results = await searchNativeHistoryFiles({
+			query: phrase,
+			accounts: [{ provider: 'codex', accountDir: account }],
+		});
+		expect(results.hits).toHaveLength(1);
+		const hit = results.hits[0];
+		expect(hit.conversation.nativeSessionId).toBe(id);
+		if (scenario === 'legacy-title') expect(hit.conversation.title).toBe(title);
+		const storage = new CodexSessionStorage();
+		const recent = await storage.readSessionMessages(hit.conversation.projectPath, id, {
+			configDir: hit.conversation.accountDir,
+			readOnly: true,
+			limit: 500,
+		});
+		expect(recent.messages).toHaveLength(500);
+		expect(recent.hasMore).toBe(true);
+		expect(recent.messages.some((message) => message.content.includes(phrase))).toBe(false);
+		const full = await storage.readSessionMessages(hit.conversation.projectPath, id, {
+			configDir: hit.conversation.accountDir,
+			readOnly: true,
+			limit: 100000,
+		});
+		const visible = transcriptMessagesToLogEntries(full.messages);
+		const matches = visible.filter((entry) => entry.text === hit.message.text);
+		expect(matches).toHaveLength(1);
+		expect(matches[0].text).toBe(phrase);
+		expect(matches[0].source === 'user').toBe(scenario === 'wrapped-user');
+		expect(
+			await storage.getTranscriptRevision(isolation.root, id, { configDir: account })
+		).toBeTypeOf('string');
+		expect(await fs.readFile(archivedFile)).toEqual(bytes);
+		expect(await fs.readdir(archive)).toEqual([path.basename(archivedFile)]);
+		await expect(fs.stat(path.join(account, 'sessions'))).rejects.toThrow();
+	}
+);
 
 it('lists, looks up, searches and renders compressed rollouts exactly like plain rollouts', async () => {
 	await fs.writeFile(file, content);

@@ -207,6 +207,29 @@ startup and show an error without starting a terminal in the new shell.
 terminal ID. Tasks are read-only, extracted from the latest top-level TodoWrite or
 update_plan in the conversation; native-history reads expose the source tool data.
 
+Codex plan verification (2026-11-06): enabling `newShell` via `settings set newShell true`
+also opts desktop Codex conversation spawns into `tools.update_plan.enabled=true`.
+`dispatch <agent> <message> --tab <conversation>` uses that same spawn path and
+`buildAgentArgs()` as Send, including resume and SSH. Custom CLI config overrides
+remain last. Opening Tasks still uses `tab panel <conversation> tasks`; this change
+adds no UI action or CLI verb. `native-history read <agent> <native-id>` exposes the
+same read-only transcript used by the panel. The default-skipped real diagnostic is
+documented in [Codex plan verification](../verification/codex-plan.md).
+The review fix uses the same StdoutHandler for Send and `dispatch`: plan updates
+and completion snapshots preserve the pending final answer. No new UI action or
+CLI verb is added. The default synthetic Electron case sends two messages via
+`NativeApp.send` and opens Tasks via `tab panel`. The real diagnostic fills the
+same composer and presses Enter once, preserving its plan prompt without the
+generic real-workload suffix. `NativeApp.cli` appends `--json`, which `dispatch`
+does not accept, so neither scenario submits messages through that wrapper.
+The opt-in login diagnostic uses `--ephemeral` and does not test native-history
+recovery. Product Send and CLI `dispatch` still share their existing implementation.
+
+Open gap: there is no CLI result containing the normalized live Tasks panel list or
+its empty-state text. `tab show` exposes the panel selection, and native history
+exposes source tool calls; neither is a live panel snapshot. Standalone offline CLI
+jobs do not inherit the new shell tool opt-in.
+
 ## New shell daily completion
 
 | UI action                          | CLI                                         | Shared implementation                                                                      |

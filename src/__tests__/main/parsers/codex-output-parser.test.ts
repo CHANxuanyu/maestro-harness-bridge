@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import planEvents from '../../../../e2e/fixtures/native/codex-plan-events.json';
 import { CodexOutputParser } from '../../../main/parsers/codex-output-parser';
 import {
 	classifyRetryableError,
@@ -7,6 +8,68 @@ import {
 
 describe('CodexOutputParser', () => {
 	const parser = new CodexOutputParser();
+
+	it('preserves the observed exec plan sequence and final result classification', () => {
+		const parser = new CodexOutputParser();
+		const events = planEvents.map((event) => parser.parseJsonObject(event));
+		expect(events[9]).toMatchObject({ type: 'result', text: planEvents[9].item!.text });
+		expect(events[10]).toMatchObject({
+			type: 'tool_use',
+			toolName: 'update_plan',
+			toolCallId: 'item_1',
+			toolState: { status: 'completed' },
+		});
+		expect(
+			events
+				.filter((event) => event?.toolName === 'update_plan')
+				.map((event) => ({
+					status: (event!.toolState as { status: string }).status,
+					partial: event!.isPartial,
+				}))
+		).toEqual([
+			{ status: 'running', partial: false },
+			{ status: 'running', partial: true },
+			{ status: 'running', partial: true },
+			{ status: 'completed', partial: false },
+		]);
+		expect(events[11]?.type).toBe('usage');
+	});
+
+	it.each([
+		undefined,
+		null,
+		{},
+		[{ text: 'Step', completed: 'false' }],
+		[{ text: 'Step' }],
+		[{ completed: true }],
+		[null],
+	])('does not invent or clear a plan from malformed todo_list items: %j', (items) => {
+		const event = new CodexOutputParser().parseJsonObject({
+			type: 'item.updated',
+			item: { id: 'plan', type: 'todo_list', items },
+		});
+		expect(event?.type).toBe('system');
+		expect(event?.toolState).toBeUndefined();
+	});
+
+	it('keeps unfinished steps pending when the exec turn completes', () => {
+		const event = new CodexOutputParser().parseJsonObject({
+			type: 'item.completed',
+			item: { id: 'plan', type: 'todo_list', items: [{ text: 'Unfinished', completed: false }] },
+		});
+		expect(event?.toolState).toEqual({
+			status: 'completed',
+			input: { plan: [{ step: 'Unfinished', status: 'pending' }] },
+		});
+	});
+
+	it('preserves an explicitly empty exec task list', () => {
+		const event = new CodexOutputParser().parseJsonObject({
+			type: 'item.updated',
+			item: { id: 'plan', type: 'todo_list', items: [] },
+		});
+		expect(event?.toolState?.input).toEqual({ plan: [] });
+	});
 
 	it.each(['item.started', 'item.updated', 'item.completed'])(
 		'forwards %s checklist updates',

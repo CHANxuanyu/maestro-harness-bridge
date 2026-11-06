@@ -240,6 +240,7 @@ export async function handleProcessSpawn(
 		permissionMode: config.permissionMode,
 		agentSessionId: config.agentSessionId,
 		additionalDirectories: config.sessionAdditionalDirectories,
+		enableTaskList: settingsStore.get('newShell', false),
 	});
 
 	// ========================================================================

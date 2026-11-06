@@ -33,6 +33,7 @@ export interface NativeTool {
 	gates?: string[];
 }
 export interface NativeScene {
+	codexExecEvents?: Record<string, unknown>[];
 	writes?: Record<string, string>;
 	answer: string;
 	effort?: string;
@@ -74,7 +75,7 @@ export class NativeApp {
 	readonly control = path.join(this.root, 'control.json');
 	constructor(
 		private info: TestInfo,
-		private options: { providerCli?: boolean } = {}
+		private options: { providerCli?: boolean; inheritCodexHome?: boolean } = {}
 	) {
 		for (const dir of [
 			this.data,
@@ -125,7 +126,7 @@ export class NativeApp {
 			...this.credentials,
 			CLAUDE_CONFIG_DIR: this.claude,
 			CLAUDE_SECURESTORAGE_CONFIG_DIR: this.claude,
-			CODEX_HOME: this.codex,
+			...(this.options.inheritCodexHome ? {} : { CODEX_HOME: this.codex }),
 			COPILOT_HOME: this.copilot,
 			COPILOT_AUTO_UPDATE: 'false',
 			GROK_HOME: this.grok,

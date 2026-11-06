@@ -75,6 +75,18 @@ async function run(provider) {
 		process.exitCode = 1;
 		return;
 	}
+	if (provider === 'codex' && scene.codexExecEvents) {
+		// Replay the observed exec ordering verbatim. Only seed the minimal
+		// synthetic history needed for a following resume, without extra stdout.
+		const replayId = scene.codexExecEvents[0].thread_id;
+		if (id && id !== replayId) throw new Error('Replay thread does not match resume');
+		const turn = createTurn({ provider, configDir, cwd, id: replayId, prompt, persist });
+		for (const event of scene.codexExecEvents) {
+			process.stdout.write(`${JSON.stringify(event)}\n`);
+		}
+		turn.finish(scene.answer);
+		return;
+	}
 	const turn = createTurn({
 		provider,
 		configDir,

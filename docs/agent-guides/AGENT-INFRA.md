@@ -429,8 +429,10 @@ message boundaries are not concatenated across channels.
 
 Progress is never accumulated into `streamedText`: otherwise an interrupted
 turn can report its progress as the final answer. For older Codex exec output
-without phase metadata, a subsequent tool event reveals the pending message
-as progress before forwarding the tool. The last result remains the final
+without phase metadata, only a new running tool call reveals the pending message
+as progress before forwarding the tool. Partial updates and terminal tool states
+do not establish progress: exec can send a todo_list completion after the final
+answer and before turn.completed. The last result remains the final
 answer at turn completion. Codex command failures retain `failed` status,
 including completed command events whose exit code is nonzero.
 

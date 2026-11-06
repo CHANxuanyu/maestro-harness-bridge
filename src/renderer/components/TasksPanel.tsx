@@ -11,7 +11,7 @@ export function TasksPanel({ logs, theme }: { logs: LogEntry[]; theme: Theme }) 
 		return (
 			<div
 				data-testid="tasks-empty"
-				className="h-full flex items-center justify-center text-sm"
+				className="h-full flex items-center justify-center px-4 text-center text-sm"
 				style={{ color: theme.colors.textDim }}
 			>
 				{t('workflows.newShell.tasksEmpty')}

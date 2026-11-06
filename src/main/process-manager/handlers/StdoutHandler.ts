@@ -751,12 +751,14 @@ export class StdoutHandler {
 			}
 		}
 
-		// Older exec streams omit message phases. A subsequent tool proves the
-		// pending message was progress, so reveal it before the tool starts and
-		// keep it out of ExitHandler's final-answer fallback after an interruption.
+		// Unphased exec text is progress only when a new tool starts. Updates
+		// and completion snapshots can follow the final answer, notably todo_list
+		// at turn completion, and must leave that answer pending for delivery.
 		if (
 			managedProcess.toolType === 'codex' &&
 			event.type === 'tool_use' &&
+			getToolStatus(event.toolState) === 'running' &&
+			!event.isPartial &&
 			managedProcess.streamedText &&
 			!managedProcess.resultEmitted
 		) {

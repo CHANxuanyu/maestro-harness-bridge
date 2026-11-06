@@ -15,6 +15,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { logger } from '../../../renderer/utils/logger';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { TabSwitcherModal } from '../../../renderer/components/TabSwitcherModal';
 import { formatShortcutKeys } from '../../../renderer/utils/shortcutFormatter';
 import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
@@ -105,6 +106,7 @@ describe('TabSwitcherModal', () => {
 	let theme: Theme;
 
 	beforeEach(() => {
+		useSettingsStore.setState({ newShell: false });
 		theme = createTestTheme();
 		vi.clearAllMocks();
 
@@ -119,6 +121,30 @@ describe('TabSwitcherModal', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
+
+	it.each([false, true])(
+		'uses conversation names in the switcher only in the new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			renderWithLayerStack(
+				<TabSwitcherModal
+					theme={theme}
+					tabs={[]}
+					activeTabId=""
+					onTabSelect={vi.fn()}
+					onClose={vi.fn()}
+				/>
+			);
+			expect(screen.getByRole('dialog')).toHaveAccessibleName(
+				newShell ? 'Switch conversation' : 'Tab Switcher'
+			);
+			expect(screen.getByRole('textbox')).toHaveAttribute(
+				'placeholder',
+				newShell ? 'Search open conversations...' : 'Search open tabs...'
+			);
+			if (newShell) expect(screen.getByRole('dialog').textContent).not.toMatch(/\btabs?\b/i);
+		}
+	);
 
 	describe('pure helper functions', () => {
 		describe('formatTokens', () => {

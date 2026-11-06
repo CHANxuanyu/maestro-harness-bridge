@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
 import type { QuickAction } from '../types';
@@ -59,6 +60,7 @@ export function buildNavigationCommands({
 	shortcuts,
 }: BuildNavigationCommandsArgs): QuickAction[] {
 	const t = getT();
+	const newShell = selectNewShellEnabled(useSettingsStore.getState());
 	const commands: QuickAction[] = [
 		{
 			id: 'new',
@@ -95,7 +97,9 @@ export function buildNavigationCommands({
 		},
 		{
 			id: 'nextUnreadTab',
-			label: t('workflows.shell.nextUnreadDraftTab'),
+			label: t(
+				newShell ? 'workflows.newShell.nextUnreadDraftTab' : 'workflows.shell.nextUnreadDraftTab'
+			),
 			shortcut: shortcuts.nextUnreadTab,
 			action: () => {
 				// Delegate to the shared App.tsx callback so this matches the
@@ -107,10 +111,18 @@ export function buildNavigationCommands({
 		},
 		{
 			id: 'previousUnreadTab',
-			label: t('workflows.shell.previousUnreadDraftTab'),
+			label: t(
+				newShell
+					? 'workflows.newShell.previousUnreadDraftTab'
+					: 'workflows.shell.previousUnreadDraftTab'
+			),
 			// previousUnreadTab ships unbound, so name the chord that actually
 			// reaches it today: Focus Active Tab pressed a second time.
-			subtext: t('workflows.shell.walkBackwardsAlsoTheSecondPressOfFocus'),
+			subtext: t(
+				newShell
+					? 'workflows.newShell.walkBackwardsAlsoTheSecondPressOfFocus'
+					: 'workflows.shell.walkBackwardsAlsoTheSecondPressOfFocus'
+			),
 			shortcut: shortcuts.previousUnreadTab?.keys?.length
 				? shortcuts.previousUnreadTab
 				: shortcuts.focusActiveTab,
@@ -127,7 +139,11 @@ export function buildNavigationCommands({
 			label: areUnreadFiltersActive()
 				? t('workflows.shell.unreadOnlyOff')
 				: t('workflows.shell.unreadOnlyOn'),
-			subtext: t('workflows.shell.filterBothTheAgentListAndTheTab'),
+			subtext: t(
+				newShell
+					? 'workflows.newShell.filterBothTheAgentListAndTheTab'
+					: 'workflows.shell.filterBothTheAgentListAndTheTab'
+			),
 			shortcut: shortcuts.toggleUnreadFilters,
 			action: () => {
 				toggleAllUnreadFilters();

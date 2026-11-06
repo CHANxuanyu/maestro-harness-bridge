@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
 import type { QuickAction } from '../types';
@@ -25,6 +26,7 @@ export function buildTabGroupCommands({
 	setQuickActionOpen,
 }: BuildTabGroupCommandsArgs): QuickAction[] {
 	const t = getT();
+	const newShell = selectNewShellEnabled(useSettingsStore.getState());
 	const commands: QuickAction[] = [];
 	const groupId = activeSession?.activeGroupId;
 	if (!activeSession || !groupId) return commands;
@@ -33,7 +35,7 @@ export function buildTabGroupCommands({
 
 	commands.push({
 		id: 'renameTabGroup',
-		label: t('workflows.shell.renameTabGroup'),
+		label: t(newShell ? 'workflows.newShell.renameTabGroup' : 'workflows.shell.renameTabGroup'),
 		subtext: t('workflows.shell.renameValue', { p0: group.name }),
 		action: () => {
 			// Reuse the shared rename-tab modal, seeded with the group id. On commit,
@@ -48,8 +50,14 @@ export function buildTabGroupCommands({
 
 	commands.push({
 		id: 'breakApartTabGroup',
-		label: t('workflows.shell.breakApartTabGroup'),
-		subtext: t('workflows.shell.returnItsPanesToTheTabBarAs'),
+		label: t(
+			newShell ? 'workflows.newShell.breakApartTabGroup' : 'workflows.shell.breakApartTabGroup'
+		),
+		subtext: t(
+			newShell
+				? 'workflows.newShell.returnItsPanesToTheTabBarAs'
+				: 'workflows.shell.returnItsPanesToTheTabBarAs'
+		),
 		action: () => {
 			useModalStore.getState().openModal('confirm', {
 				title: t('workflows.shell.breakApartGroup'),

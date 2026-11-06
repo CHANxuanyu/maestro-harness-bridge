@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 /**
  * @fileoverview SnoozedTabsModal layering with its history log.
  *
@@ -7,7 +8,7 @@
  * dropping the user out of both instead of back to the list.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SnoozedTabsModal } from '../../../renderer/components/SnoozedTabsModal';
 import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
@@ -23,7 +24,21 @@ function renderList() {
 	return { onClose };
 }
 
+beforeEach(() => useSettingsStore.setState({ newShell: false, uiLanguage: 'en' }));
+
 describe('SnoozedTabsModal history layering', () => {
+	it.each([false, true])(
+		'names the reminder list as conversations only in the new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			renderList();
+			expect(screen.getByRole('dialog')).toHaveAccessibleName(
+				newShell ? 'Snoozed conversations' : 'Snoozed Tabs'
+			);
+			if (newShell) expect(screen.getByRole('dialog').textContent).not.toMatch(/\btabs?\b/i);
+		}
+	);
+
 	it('returns to the snoozed tabs list when Escape closes the history', async () => {
 		const { onClose } = renderList();
 

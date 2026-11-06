@@ -9,6 +9,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { CrossTabSearchModal } from '../../../renderer/components/CrossTabSearchModal';
 import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
 import { MOUNT_FOCUS_DELAY_MS } from '../../../renderer/hooks/utils/useFocusAfterRender';
@@ -64,8 +65,27 @@ function renderModal(props: Partial<React.ComponentProps<typeof CrossTabSearchMo
 
 describe('CrossTabSearchModal', () => {
 	beforeEach(() => {
+		useSettingsStore.setState({ newShell: false });
 		vi.useFakeTimers({ shouldAdvanceTime: true });
 	});
+
+	it.each([false, true])(
+		'names the search scope as conversations only in the new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			renderModal();
+			const dialog = screen.getByRole('dialog');
+			expect(dialog).toHaveAccessibleName(
+				newShell ? 'Search conversations' : 'Search Messages (All Agent Tabs)'
+			);
+			if (newShell) {
+				expect(dialog.textContent).not.toMatch(/\btabs?\b/i);
+				expect(screen.getByRole('textbox').getAttribute('placeholder')).toBe(
+					'Search messages across open conversations…'
+				);
+			}
+		}
+	);
 
 	it('prompts for a query before anything has been typed', () => {
 		renderModal();

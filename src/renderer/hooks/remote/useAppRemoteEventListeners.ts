@@ -13,6 +13,7 @@ import { generateId } from '../../utils/ids';
 import { useSessionStore, selectSessionById } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { PLAYBOOKS_DIR } from '../../../shared/maestro-paths';
+import { permissionModeFields } from '../../utils/tabHelpers/focusFields';
 import { asThinkingMode } from '../../../shared/types';
 import { resolveAutoRunDocumentNames } from '../../../shared/autoRunDocumentPaths';
 import {
@@ -1861,11 +1862,12 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			// land straight in the persisted tab, so a bad value (a string in
 			// `readOnlyMode`, a typo'd thinking mode) would be a permanently wrong
 			// chip rather than a rejected command.
-			const TAB_EDITABLE_KEYS: Record<string, 'boolean' | 'string' | 'thinking'> = {
+			const TAB_EDITABLE_KEYS: Record<string, 'boolean' | 'string' | 'thinking' | 'permission'> = {
 				starred: 'boolean',
 				hasUnread: 'boolean',
 				saveToHistory: 'boolean',
 				readOnlyMode: 'boolean',
+				permissionMode: 'permission',
 				enterToSend: 'boolean',
 				showThinking: 'thinking',
 				customModel: 'string',
@@ -1879,7 +1881,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 				// `null` clears the field, which is how a tab drops an override and
 				// goes back to inheriting the agent's model/effort or the global
 				// enter-to-send setting. Distinct from `false`.
-				if (value === null) {
+				if (value === null && kind !== 'permission') {
 					tabPatch[key] = undefined;
 					continue;
 				}
@@ -1888,7 +1890,9 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 						? typeof value === 'boolean'
 						: kind === 'string'
 							? typeof value === 'string'
-							: asThinkingMode(value) !== undefined;
+							: kind === 'permission'
+								? value === 'full' || value === 'standard' || value === 'readonly'
+								: asThinkingMode(value) !== undefined;
 				if (!valid) {
 					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
 						success: false,
@@ -1913,6 +1917,26 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 					error: 'Tab not found',
 				});
 				return;
+			}
+
+			if (tabPatch.permissionMode !== undefined) {
+				const mode = tabPatch.permissionMode as 'full' | 'standard' | 'readonly';
+				try {
+					const capabilities = await window.maestro.agents.getCapabilities(session.toolType);
+					if (
+						(mode === 'standard' && !capabilities?.supportsStandardPermissionMode) ||
+						(mode === 'readonly' && !capabilities?.supportsReadOnlyMode)
+					) {
+						throw new Error('Permission mode is not supported by this provider');
+					}
+					Object.assign(tabPatch, permissionModeFields(mode));
+				} catch (error) {
+					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					});
+					return;
+				}
 			}
 
 			const applyTabPatch = (s: Session): Session => ({

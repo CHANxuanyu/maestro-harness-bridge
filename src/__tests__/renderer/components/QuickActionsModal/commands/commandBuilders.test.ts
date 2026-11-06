@@ -27,6 +27,7 @@ import { buildTabGroupCommands } from '../../../../../renderer/components/QuickA
 import { buildSupportCommands } from '../../../../../renderer/components/QuickActionsModal/commands/supportCommands';
 import { createGroupFromTabRefs } from '../../../../../renderer/utils/panelLayout';
 import { createMockAITab } from '../../../../helpers/mockTab';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { useModalStore } from '../../../../../renderer/stores/modalStore';
 
 const noop = () => {};
@@ -34,6 +35,50 @@ const setSessions = vi.fn();
 const close = vi.fn();
 
 describe('QuickActions command builders', () => {
+	beforeEach(() => useSettingsStore.setState({ newShell: false }));
+	it.each([false, true])(
+		'keeps command actions and shortcuts while naming conversations, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const onNewTab = vi.fn();
+			const onRenameTab = vi.fn();
+			const activeSession = createMockSession();
+			const added = buildNewTabCommands({
+				activeSession,
+				onNewTab,
+				setQuickActionOpen: close,
+				newTabShortcut: ['Meta', 't'],
+			});
+			expect(added[0].label).toBe(newShell ? 'New conversation' : 'New AI Chat Tab');
+			expect(added[0].shortcut).toEqual(['Meta', 't']);
+			added[0].action();
+			expect(onNewTab).toHaveBeenCalledOnce();
+			const commands = buildTabCommands({
+				activeSession,
+				isAiMode: true,
+				activeTabInfo: {
+					isTerminalMode: false,
+					hasActiveTab: true,
+					activeUnifiedIndex: 0,
+					unifiedTabCount: 2,
+					activeTabType: 'ai',
+				},
+				enterToSendAI: true,
+				onRenameTab,
+				onCloseOtherTabs: vi.fn(),
+				setQuickActionOpen: close,
+				shortcuts: {},
+				toggleInputMode: vi.fn(),
+			});
+			expect(commands.find((item) => item.id === 'renameTab')?.label).toBe(
+				newShell ? 'Rename conversation' : 'Rename Tab'
+			);
+			if (newShell)
+				for (const item of commands)
+					expect(`${item.label} ${item.subtext ?? ''}`).not.toMatch(/\btabs?\b/i);
+		}
+	);
+
 	it('builds session jump and management commands', () => {
 		const session = createMockSession({ id: 's1', name: 'Atlas', bookmarked: true });
 		const jump = buildSessionJumpCommands({

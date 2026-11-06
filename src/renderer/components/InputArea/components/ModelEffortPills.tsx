@@ -10,6 +10,7 @@ const PICKER_CLASS =
 	'flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs whitespace-nowrap cursor-pointer transition-all opacity-80 hover:opacity-100 hover:bg-white/10';
 
 interface ModelEffortPillsProps {
+	allowModelSelection?: boolean;
 	isVisible: boolean;
 	theme: Theme;
 	/**
@@ -38,6 +39,7 @@ interface ModelEffortPillsProps {
 }
 
 export const ModelEffortPills = memo(function ModelEffortPills({
+	allowModelSelection = false,
 	isVisible,
 	theme,
 	shortcutKeys,
@@ -63,7 +65,7 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 
 	return (
 		<>
-			{onModelChange && availableModels.length > 0 && (
+			{onModelChange && (allowModelSelection || availableModels.length > 0) && (
 				<div className="relative" ref={modelMenuRef} data-tour="model-selector">
 					<button
 						onClick={() => {

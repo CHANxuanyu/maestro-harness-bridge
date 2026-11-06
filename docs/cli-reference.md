@@ -1282,6 +1282,15 @@ Set the thinking display: off, on, sticky, or cycle
 | `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
 | `--json`           | Output as JSON (for scripting)                 | -       |
 
+## `maestro-cli tab permission <tab-id> <mode>`
+
+Set permission mode: full, standard, or readonly (provider support is validated)
+
+| Option             | Description                                    | Default |
+| ------------------ | ---------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
+| `--json`           | Output as JSON (for scripting)                 | -       |
+
 ## `maestro-cli tab read-only <tab-id> <bool>`
 
 Put the tab in read-only/plan mode so the agent cannot modify files

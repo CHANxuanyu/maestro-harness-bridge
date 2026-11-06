@@ -28,6 +28,7 @@ import { ConcertoStageModal } from './Concerto/ConcertoStageModal';
 import { useCadenzaStore } from '../stores/cadenzaStore';
 import { useMovementStore } from '../stores/movementStore';
 import { selectActiveSession, useSessionStore } from '../stores/sessionStore';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 import type { Group, GroupChat, Theme } from '../types';
 
 type SessionListProps = ComponentProps<typeof SessionList>;
@@ -112,6 +113,7 @@ export function AppShell({
 	// PERF: Title chrome self-sources a narrow slice so App does not pass
 	// activeSession into the shell (busy/log flushes stay off this paint path when
 	// App's chrome equality ignores state).
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const titleGroupId = useSessionStore((s) => selectActiveSession(s)?.groupId);
 	const titleSessionName = useSessionStore((s) => selectActiveSession(s)?.name);
 	const sessionsReadOk = useSessionStore((s) => s.sessionsReadOk);
@@ -164,28 +166,29 @@ export function AppShell({
 						} as React.CSSProperties
 					}
 				>
-					{activeGroupChatId ? (
-						<span
-							className="text-xs select-none opacity-50"
-							style={{ color: theme.colors.textDim }}
-						>
-							Maestro Group Chat:{' '}
-							{groupChats.find((c) => c.id === activeGroupChatId)?.name || 'Unknown'}
-						</span>
-					) : (
-						hasTitleSession &&
-						titleSessionName && (
+					{!newShell &&
+						(activeGroupChatId ? (
 							<span
 								className="text-xs select-none opacity-50"
 								style={{ color: theme.colors.textDim }}
 							>
-								{appTitleStripText({
-									group: groups.find((g) => g.id === titleGroupId),
-									sessionName: titleSessionName,
-								})}
+								Maestro Group Chat:{' '}
+								{groupChats.find((c) => c.id === activeGroupChatId)?.name || 'Unknown'}
 							</span>
-						)
-					)}
+						) : (
+							hasTitleSession &&
+							titleSessionName && (
+								<span
+									className="text-xs select-none opacity-50"
+									style={{ color: theme.colors.textDim }}
+								>
+									{appTitleStripText({
+										group: groups.find((g) => g.id === titleGroupId),
+										sessionName: titleSessionName,
+									})}
+								</span>
+							)
+						))}
 				</div>
 			)}
 

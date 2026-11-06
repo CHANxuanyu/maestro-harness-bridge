@@ -359,6 +359,7 @@ describe('SessionList', () => {
 			// "Conversation sidebar" below). Most of this file exercises the agent
 			// management view behind "Manage agents", so it starts there.
 			sidebarNavigationMode: 'agents',
+			newShell: false,
 			collapsedConversationProjects: [],
 			shortcuts: defaultShortcuts,
 			leftSidebarWidth: 300,
@@ -556,6 +557,26 @@ describe('SessionList', () => {
 			Array.from(container.querySelectorAll('li[data-conversation-key]')).map((row) =>
 				row.getAttribute('data-conversation-key')
 			);
+
+		it.each([false, true])(
+			'keeps the menu beside New conversation and gates the header, groups and focus frame, new shell %s',
+			(newShell) => {
+				useSettingsStore.setState({ newShell });
+				useUIStore.setState({ activeFocus: 'sidebar' });
+				const { container } = renderConversations();
+				expect(!!screen.queryByRole('button', { name: 'Switch agent' })).toBe(!newShell);
+				expect(!!screen.queryByTitle(/enable web interface/)).toBe(!newShell);
+				expect(!!screen.queryByText('Group Chats')).toBe(!newShell);
+				const sidebar = container.querySelector('[data-panel="left"]') as HTMLElement;
+				expect(!!sidebar.style.boxShadow).toBe(!newShell);
+				if (newShell) {
+					const row = screen.getByTestId('sidebar-new-conversation').parentElement!;
+					expect(row).toContainElement(screen.getByTitle('Menu'));
+					fireEvent.click(screen.getByTitle('Menu'));
+					expect(screen.getByText('Feedback')).toBeInTheDocument();
+				}
+			}
+		);
 
 		it('renders the project tree with conversations, not the agent list', () => {
 			const { container } = renderConversations();

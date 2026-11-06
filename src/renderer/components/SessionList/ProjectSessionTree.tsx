@@ -53,12 +53,15 @@ import { getAgentDisplayName } from '../../../shared/agentMetadata';
 import { FilterInput } from '../ui/FilterInput';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { shortcutSuffix } from '../ui/ShortcutHint';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
+import { requestAiHandoff } from '../../services/aiHandoffEntry';
+import { readableTextOn } from '../../../shared/colorContrast';
 import { useFormatRelativeTime, useT, type TFunction } from '../../i18n';
 
 export type ProjectHistoryLoadStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
 
 export interface ProjectSessionTreeProps {
+	headerMenu?: ReactNode;
 	theme: Theme;
 	projects: SidebarProject[];
 	activeKey: string | null;
@@ -810,6 +813,7 @@ const ProjectSection = memo(function ProjectSection({
 // ============================================================================
 
 export const ProjectSessionTree = memo(function ProjectSessionTree({
+	headerMenu,
 	theme,
 	projects,
 	activeKey,
@@ -836,6 +840,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	onAddAgent,
 }: ProjectSessionTreeProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const newTabKeys = useSettingsStore((s) => s.tabShortcuts.newTab?.keys);
 	const formatRelativeTime = useFormatRelativeTime();
 	const formatRelative = useCallback(
@@ -893,7 +898,9 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		items: [
 			{
 				key: 'add-agent',
-				label: t('workflows.conversations.addAgent'),
+				label: t(
+					newShell ? 'workflows.conversations.addAccount' : 'workflows.conversations.addAgent'
+				),
 				icon: <Plus className="w-3.5 h-3.5" />,
 				color: theme.colors.accent,
 				onSelect: onAddAgent,
@@ -917,6 +924,15 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						key: 'conversation',
 						heading: conversationTitle(conversation, t),
 						items: [
+							...(newShell && conversation.ownerId && conversation.tabId
+								? [
+										{
+											key: 'handoff',
+											label: t('workflows.conversations.handoff'),
+											onSelect: () => requestAiHandoff(conversation.ownerId!, conversation.tabId!),
+										},
+									]
+								: []),
 							{
 								key: 'rename',
 								label: t('workflows.conversations.rename'),
@@ -925,7 +941,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 							},
 							{
 								key: 'close',
-								label: t('workflows.conversations.close'),
+								label: t(
+									newShell
+										? 'workflows.conversations.closeConversation'
+										: 'workflows.conversations.close'
+								),
 								detail: conversation.nativeSessionId
 									? t('workflows.conversations.closeKeepsHistory')
 									: undefined,
@@ -961,7 +981,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 							onSelect: () => onNewConversation(agent.id),
 						})),
 					},
-					addAgentSection,
+					...(!newShell ? [addAgentSection] : []),
 				];
 			} else if (project) {
 				menuLabel = t('workflows.conversations.projectActions');
@@ -974,7 +994,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						onSelect: onRetryHistory,
 					});
 				}
-				if (onManageAgents) {
+				if (!newShell && onManageAgents) {
 					items.push({
 						key: 'manage',
 						label: t('workflows.conversations.manageAgents'),
@@ -1004,33 +1024,45 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 				]
 			: null;
 
+	const newConversationButton = onNewConversationHere && (
+		<button
+			type="button"
+			onClick={onNewConversationHere}
+			className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-white/10"
+			style={{ color: theme.colors.textMain }}
+			title={t('workflows.conversations.newConversation') + shortcutSuffix(newTabKeys)}
+			data-testid="sidebar-new-conversation"
+		>
+			<PenSquare className="w-4 h-4 shrink-0" style={{ color: theme.colors.textDim }} />
+			<span className="truncate">{t('workflows.conversations.newConversation')}</span>
+		</button>
+	);
+
 	return (
 		<div className="flex flex-col min-w-0 gap-1 select-none">
 			<div className="px-2 pt-1 pb-2 flex flex-col gap-1.5">
 				{/* The first thing in the list is starting one, the way a chat app opens. */}
-				{onNewConversationHere && (
-					<button
-						type="button"
-						onClick={onNewConversationHere}
-						className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-white/10"
-						style={{ color: theme.colors.textMain }}
-						title={t('workflows.conversations.newConversation') + shortcutSuffix(newTabKeys)}
-						data-testid="sidebar-new-conversation"
-					>
-						<PenSquare className="w-4 h-4 shrink-0" style={{ color: theme.colors.textDim }} />
-						<span className="truncate">{t('workflows.conversations.newConversation')}</span>
-					</button>
+				{newShell ? (
+					<div className="flex items-center justify-between">
+						{newConversationButton}
+						{headerMenu}
+					</div>
+				) : (
+					newConversationButton
 				)}
 				<FilterInput
 					theme={theme}
 					value={search}
 					onChange={onSearchChange}
 					placeholder={t('workflows.conversations.search')}
+					placeholderColor={
+						newShell ? readableTextOn(theme.colors.textDim, [theme.colors.bgActivity]) : undefined
+					}
 					width="100%"
 					clearLabel={t('common.clear')}
 					onKeyDown={handleSearchKeyDown}
 				/>
-				{providerOptions && onProviderFilterChange && (
+				{!newShell && providerOptions && onProviderFilterChange && (
 					<div className="text-2xs">
 						<SegmentedControl
 							theme={theme}

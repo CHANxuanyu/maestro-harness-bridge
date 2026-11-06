@@ -170,6 +170,42 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 		return session;
 	}
 
+	it.each(['full', 'standard', 'readonly'] as const)(
+		'sets %s with the same permission field patch as the composer',
+		async (permissionMode) => {
+			window.maestro.agents = {
+				getCapabilities: vi
+					.fn()
+					.mockResolvedValue({ supportsStandardPermissionMode: true, supportsReadOnlyMode: true }),
+			} as any;
+			const sessions = [twoTabSession()];
+			const { setSessions } = setup(sessions);
+			dispatchPatch('session-1', { tabId: 'tab-2', permissionMode });
+			await flush();
+			expect(applyUpdate(setSessions, sessions)[0].aiTabs[1]).toMatchObject({
+				permissionMode,
+				readOnlyMode: permissionMode === 'readonly',
+			});
+			expect(setMany).toHaveBeenCalled();
+			expect(ack).toHaveBeenCalledWith('ch', { success: true });
+		}
+	);
+	it('rejects an unsupported permission mode before changing the tab', async () => {
+		window.maestro.agents = {
+			getCapabilities: vi
+				.fn()
+				.mockResolvedValue({ supportsStandardPermissionMode: false, supportsReadOnlyMode: true }),
+		} as any;
+		const { setSessions } = setup([twoTabSession()]);
+		dispatchPatch('session-1', { tabId: 'tab-2', permissionMode: 'standard' });
+		await flush();
+		expect(setSessions).not.toHaveBeenCalled();
+		expect(ack).toHaveBeenCalledWith('ch', {
+			success: false,
+			error: 'Permission mode is not supported by this provider',
+		});
+	});
+
 	it('patches only the targeted tab', async () => {
 		const sessions = [twoTabSession()];
 		const { setSessions } = setup(sessions);

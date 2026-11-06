@@ -25,6 +25,7 @@ import {
 	tabSaveToHistory,
 	tabThinking,
 	tabReadOnly,
+	tabPermission,
 	tabModel,
 	tabEffort,
 	tabEnterToSend,
@@ -279,6 +280,15 @@ describe('tab commands', () => {
 		await tabThinking('tab-aaaa', 'cycle', {});
 		expect(getPayload().configPatch).toEqual({ tabId: 'tab-aaaa', showThinking: 'sticky' });
 	});
+
+	it.each(['full', 'standard', 'readonly'] as const)(
+		'tab permission writes %s through the shared config channel',
+		async (mode) => {
+			const getPayload = mockTab({ success: true });
+			await tabPermission('tab-cccc', mode, {});
+			expect(getPayload().configPatch).toEqual({ tabId: 'tab-cccc', permissionMode: mode });
+		}
+	);
 
 	it('tab read-only, model, effort and enter-to-send write their own field', async () => {
 		const getReadOnly = mockTab({ success: true });

@@ -1,5 +1,10 @@
 /** Agent setup, native session history, and permission UI. */
 export const workflowsSessions = {
+	'workflows.sessions.handoff.conversationIntro':
+		'Turns this conversation into a draft for another AI. The draft opens in the new conversation’s message box, and nothing is sent until you press Send.',
+	'workflows.sessions.handoff.newConversation': 'Create a {provider} conversation in {project}',
+	'workflows.sessions.handoff.conversationSubtext':
+		'Hand this conversation to another AI as a draft',
 	'workflows.sessions.sessionInUse': 'Session In Use',
 	'workflows.sessions.codexSessionBusy':
 		'This Codex session is in use by another Codex app or CLI. Release it there before resuming, or use a native Codex fork to continue in an independent session. Your existing history is preserved.',

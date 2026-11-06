@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import {
 	useComposerInputStore,
 	selectAiComposerValue,
@@ -162,6 +162,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 	const ownsSession = useWindowContextOptional()?.ownsSession;
 	const thinkingItems = useThinkingItems(ownsSession);
 
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const spellCheckEnabled = useSettingsStore((state) => state.spellCheck);
 	const openAnnotator = useImageAnnotatorStore((state) => state.openAnnotator);
 	const {
@@ -555,7 +556,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 
 			{/* ThinkingStatusPill - AI mode only. It renders nothing when no work is running: it also
 			    watches Auto Runs on OTHER agents, which only it subscribes to. */}
-			{session.inputMode === 'ai' && (
+			{!newShell && session.inputMode === 'ai' && (
 				<ThinkingStatusPill
 					thinkingItems={thinkingItems}
 					theme={theme}
@@ -726,6 +727,8 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 						/>
 
 						<ToolbarControls
+							contextUsage={contextUsage}
+							hasModelSelectionCapability={hasCapability('supportsModelSelection')}
 							session={session}
 							theme={theme}
 							isTerminalMode={isTerminalMode}

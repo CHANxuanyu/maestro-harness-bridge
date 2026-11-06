@@ -2,6 +2,7 @@ import type { WebServer } from '../WebServer';
 import type { WebServerFactoryDependencies } from '../web-server-factory';
 import type { StoredSession } from '../../stores/types';
 import type { Group } from '../../../shared/types';
+import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
 import { asThinkingMode } from '../../../shared/types';
 import { getSessionIdsBusyWithCli } from '../../../shared/cli-activity';
 import { isAiTabProcessActive } from '../../utils/agent-busy';
@@ -148,6 +149,7 @@ export function registerSessionCallbacks(
 					hasUnread: tab.hasUnread === true,
 					saveToHistory: tab.saveToHistory === true,
 					readOnly: tab.readOnlyMode === true,
+					permissionMode: resolveTabPermissionMode(tab),
 					thinking: asThinkingMode(tab.showThinking) ?? 'off',
 					// `null` (not `false`) is the honest answer for the three
 					// inheriting fields: the tab has no override and follows the

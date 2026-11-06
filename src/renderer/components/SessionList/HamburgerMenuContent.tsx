@@ -1,5 +1,6 @@
 import {
 	Bell,
+	MessageSquarePlus,
 	Wand2,
 	Plus,
 	Settings,
@@ -21,7 +22,7 @@ import {
 } from 'lucide-react';
 import type { Theme } from '../../types';
 import { formatShortcutKeys } from '../../utils/shortcutFormatter';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import { getModalActions } from '../../stores/modalStore';
 import { buildMaestroUrl } from '../../utils/buildMaestroUrl';
 import { openUiSurface } from '../../utils/openUiSurface';
@@ -48,6 +49,7 @@ export function HamburgerMenuContent({
 	setMenuOpen,
 }: HamburgerMenuContentProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const shortcuts = useSettingsStore((s) => s.shortcuts);
 	const encoreFeatures = useSettingsStore((s) => s.encoreFeatures);
 	// A phone has no keyboard and no room for a guided tour's anchored
@@ -77,6 +79,18 @@ export function HamburgerMenuContent({
 
 	return (
 		<div className="p-1">
+			{newShell && (
+				<button
+					onClick={() => {
+						openUiSurface('feedback');
+						setMenuOpen(false);
+					}}
+					className="w-full flex items-center gap-3 px-3 py-2 rounded hover:bg-white/5 text-left"
+				>
+					<MessageSquarePlus className="w-5 h-5" style={{ color: theme.colors.accent }} />
+					<span>{t('workflows.sidebar.feedback')}</span>
+				</button>
+			)}
 			{onNewAgentSession && (
 				<button
 					onClick={() => {

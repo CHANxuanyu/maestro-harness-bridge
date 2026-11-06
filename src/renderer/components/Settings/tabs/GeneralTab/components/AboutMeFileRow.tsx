@@ -109,7 +109,7 @@ export function AboutMeFileRow({
 	const provider = file.deepseek ? 'deepseek' : (file.providers[0] ?? 'claude-code');
 	const providerLabel = file.deepseek
 		? getAgentDisplayName('deepseek')
-		: file.providers.map(getAgentDisplayName).join(' + ');
+		: file.providers.map((provider) => getAgentDisplayName(provider)).join(' + ');
 	// Joined to one string so the row re-renders only when a name changes,
 	// not on every session update while Settings is open.
 	const agentNames = useSessionStore((store) =>

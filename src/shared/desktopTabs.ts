@@ -36,6 +36,8 @@ export interface DesktopTabEntry {
 	saveToHistory: boolean;
 	/** Read-only / plan mode: the agent may not modify files. */
 	readOnly: boolean;
+	/** Effective permission mode, including legacy read-only sessions. */
+	permissionMode?: 'full' | 'standard' | 'readonly';
 	/** Thinking display: 'off' | 'on' (temporary) | 'sticky' (pinned). */
 	thinking: 'off' | 'on' | 'sticky';
 	/** Per-tab model override, or null to inherit the agent's model. */

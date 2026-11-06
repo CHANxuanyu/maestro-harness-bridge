@@ -38,6 +38,23 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## New shell cleanup, batch 1
+
+The new shell permission menu and the phone options sheet share `permissionModes()`
+and `permissionModeFields()` with the existing permission cycle. The new
+`tab permission <tab-id> <full|standard|readonly>` command uses the allowlisted
+`update_session_config` path, validates provider capabilities and applies the same
+field patch. `tab show <tab-id> --json` and `session list --json` return the effective
+`permissionMode`, including the legacy read-only fallback. Existing `tab read-only`
+commands and keyboard bindings are unchanged.
+
+The conversation row menu uses `requestAiHandoff()`. Its CLI equivalent remains
+`handoff <source-tab> <provider>` for a draft, with `--list-targets` for discovery.
+Moving account configuration to the project menu keeps `create-agent <name>` with
+`--cwd`, `--type`, `--group` or `--preset`. The footer and menu reuse `open settings`,
+`open notification-center`, `notify inbox` and `open feedback`. Hiding a control
+does not remove its command or write a saved preference.
+
 ## Focus belongs to the human (`--background` / `--focus`)
 
 An agent may create a surface. It may not decide the human should be looking at

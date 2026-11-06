@@ -9,8 +9,10 @@ import React, {
 	useState,
 } from 'react';
 import type { Session, Group, Theme } from '../../../types';
+import { sessionProviderId } from '../../../../shared/agentPresets';
+import { getAgentDisplayName } from '../../../../shared/agentMetadata';
 import { getProviderDisplayName } from '../../../utils/sessionValidation';
-import { useSettingsStore } from '../../../stores/settingsStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { tokenizeMentions } from '../../../../shared/mentionPatterns';
 import { getMentionChipColors } from '../../MentionChip';
 import {
@@ -99,6 +101,7 @@ export const InputTextarea = memo(function InputTextarea({
 	handleDrop,
 }: InputTextareaProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const colorBlindMode = useSettingsStore((state) => state.colorBlindMode);
 
 	// The chip overlay is an AI-mode enhancement. In terminal mode (shell
@@ -333,10 +336,14 @@ export const InputTextarea = memo(function InputTextarea({
 								? t('workflows.shell.describeWhatYouWantToAccomplishEscFor')
 								: isCommandModeDraft
 									? t('workflows.shell.runShellCommandForAiCommandEscFor')
-									: t('workflows.shell.talkingToValuePoweredByValue', {
-											p0: session.name,
-											p1: getProviderDisplayName(session.toolType),
-										})
+									: newShell
+										? t('workflows.shell.messageProvider', {
+												provider: getAgentDisplayName(sessionProviderId(session), 'short'),
+											})
+										: t('workflows.shell.talkingToValuePoweredByValue', {
+												p0: session.name,
+												p1: getProviderDisplayName(session.toolType),
+											})
 				}
 				value={inputValue}
 				// Read-only, not disabled: a disabled textarea cannot hold focus, and

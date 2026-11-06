@@ -1,3 +1,5 @@
+import { isLimitError } from '../../../../shared/types';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import React, { useRef, useCallback, useId, useState, memo } from 'react';
 import {
 	ChevronDown,
@@ -133,6 +135,7 @@ export const LogItem = memo(
 		feedNested = false,
 	}: LogItemProps) => {
 		const t = useT();
+		const newShell = useSettingsStore(selectNewShellEnabled);
 		const locale = useAppLocale();
 		const formatRelative = useFormatRelativeTime();
 		// Ref for the log item container - used for scroll-into-view on expand
@@ -1161,7 +1164,13 @@ export const LogItem = memo(
 							<div className="flex items-center gap-2">
 								<AlertCircle className="w-5 h-5" style={{ color: theme.colors.error }} />
 								<span className="text-sm font-medium" style={{ color: theme.colors.error }}>
-									Error
+									{newShell
+										? t(
+												log.agentError && isLimitError(log.agentError)
+													? 'workflows.shell.quotaExhausted'
+													: 'workflows.shell.errorTitle'
+											)
+										: 'Error'}
 								</span>
 							</div>
 							<div className="text-sm" style={{ color: theme.colors.textMain }}>
@@ -1183,15 +1192,23 @@ export const LogItem = memo(
 									{!!log.agentError?.parsedJson && onShowErrorDetails && (
 										<button
 											onClick={() => onShowErrorDetails(log.agentError!)}
-											className="flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity"
-											style={{
-												backgroundColor: theme.colors.error + '15',
-												borderColor: theme.colors.error + '40',
-												color: theme.colors.error,
-											}}
+											className={
+												newShell
+													? 'text-xs underline underline-offset-2 hover:opacity-80'
+													: 'flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity'
+											}
+											style={
+												newShell
+													? { color: theme.colors.textDim }
+													: {
+															backgroundColor: theme.colors.error + '15',
+															borderColor: theme.colors.error + '40',
+															color: theme.colors.error,
+														}
+											}
 										>
-											<Eye className="w-3 h-3" />
-											View Details
+											{!newShell && <Eye className="w-3 h-3" />}
+											{newShell ? t('workflows.shell.errorDetails') : 'View Details'}
 										</button>
 									)}
 									{/* A limit or a lost login leaves the user waiting on this
@@ -1202,9 +1219,11 @@ export const LogItem = memo(
 											onClick={() => requestAiHandoff(sessionId!, codexFollowupTabId!)}
 											className="flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity"
 											style={{
-												backgroundColor: theme.colors.accent + '15',
-												borderColor: theme.colors.accent + '40',
-												color: theme.colors.accent,
+												backgroundColor: newShell
+													? theme.colors.accent
+													: theme.colors.accent + '15',
+												borderColor: newShell ? theme.colors.accent : theme.colors.accent + '40',
+												color: newShell ? theme.colors.accentForeground : theme.colors.accent,
 											}}
 										>
 											<ArrowRightLeft className="w-3 h-3" />
@@ -1665,14 +1684,18 @@ export const LogItem = memo(
 						theme={theme}
 						align={feedAlign}
 						compact={feedKind === 'user'}
-						revealed={isLatestReply}
+						revealed={!newShell && isLatestReply}
 						infoOpen={infoOpen}
 						infoId={infoId}
 						onToggleInfo={toggleInfo}
 						turnSettingChange={feedKind === 'reply' ? turnSettingChange : undefined}
 						secondaryTextColor={secondary}
 						actions={
-							<MessageActions variant="inline" revealed={isLatestReply} {...messageActionProps} />
+							<MessageActions
+								variant="inline"
+								revealed={!newShell && isLatestReply}
+								{...messageActionProps}
+							/>
 						}
 						endControl={
 							<JumpToMessageTopButton

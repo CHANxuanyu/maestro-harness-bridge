@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
  * SnoozeTabModal - pick when a snoozed AI tab should come back.
  *
@@ -70,6 +72,8 @@ export function SnoozeTabModal({
 	onClose,
 	onConfirm,
 }: SnoozeTabModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const isEditing = initialWakeAt != null;
 
 	const [expression, setExpression] = useState('');
@@ -166,7 +170,13 @@ export function SnoozeTabModal({
 	return (
 		<Modal
 			theme={theme}
-			title={isEditing ? 'Reschedule Snooze' : 'Snooze Tab'}
+			title={
+				isEditing
+					? 'Reschedule Snooze'
+					: newShell
+						? t('workflows.newShell.snoozeTitle')
+						: 'Snooze Tab'
+			}
 			headerIcon={<Clock className="w-4 h-4" style={{ color: theme.colors.accent }} />}
 			priority={MODAL_PRIORITIES.SNOOZE_TAB}
 			onClose={onClose}
@@ -385,10 +395,19 @@ export function SnoozeTabModal({
 				>
 					<BellRing className="w-3.5 h-3.5 shrink-0 mt-0.5" />
 					<span>
-						The tab disappears from the tab bar until then. When it returns you get a notification
-						that stays until you dismiss it{note.trim() ? ', including your note' : ''}. Snoozed
-						tabs are listed under Search, and wakes missed while Maestro was closed fire on next
-						launch.
+						{newShell ? (
+							<>
+								{t('workflows.newShell.snoozeExplanation')}
+								{note.trim() ? ` ${t('workflows.newShell.snoozeNote')}` : ''}
+							</>
+						) : (
+							<>
+								The tab disappears from the tab bar until then. When it returns you get a
+								notification that stays until you dismiss it
+								{note.trim() ? ', including your note' : ''}. Snoozed tabs are listed under Search,
+								and wakes missed while Maestro was closed fire on next launch.
+							</>
+						)}
 					</span>
 				</div>
 
@@ -402,8 +421,15 @@ export function SnoozeTabModal({
 					>
 						<Play className="w-3.5 h-3.5 shrink-0 mt-0.5" />
 						<span>
-							Your prompt is sent as soon as the tab is back, so the agent starts without you. It
-							waits its turn if the agent is mid-task, and it also runs if you unsnooze early.
+							{newShell ? (
+								t('workflows.newShell.wakeExplanation')
+							) : (
+								<>
+									Your prompt is sent as soon as the tab is back, so the agent starts without you.
+									It waits its turn if the agent is mid-task, and it also runs if you unsnooze
+									early.
+								</>
+							)}
 						</span>
 					</div>
 				)}

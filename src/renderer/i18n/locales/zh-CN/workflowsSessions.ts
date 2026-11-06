@@ -1,5 +1,9 @@
 /** Agent setup, native session history, and permission UI. */
 export const workflowsSessions = {
+	'workflows.sessions.handoff.conversationIntro':
+		'把这段对话整理成草稿，交给另一家 AI。草稿放在新会话的输入框里，你按发送之前不会发出。',
+	'workflows.sessions.handoff.newConversation': '在 {project} 里新建 {provider} 会话',
+	'workflows.sessions.handoff.conversationSubtext': '把这段对话整理成草稿，交给另一家 AI',
 	'workflows.sessions.sessionInUse': '会话正在被占用',
 	'workflows.sessions.codexSessionBusy':
 		'这条 Codex 会话正在被另一个 Codex 应用或命令行占用。请先在原程序中释放会话，再重试接续；也可用 Codex 原生分叉创建独立分支继续。已有历史会保留。',

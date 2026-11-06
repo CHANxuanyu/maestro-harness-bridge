@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
  * SnoozedTabsModal - every snoozed tab, across every agent, soonest first.
  *
@@ -40,6 +42,8 @@ export interface SnoozedTabsModalProps {
 }
 
 export function SnoozedTabsModal({ theme, onClose, onJumpToTab }: SnoozedTabsModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const sessions = useSessionStore((state) => state.sessions);
 
 	// Snooze currently being rescheduled, if any.
@@ -102,7 +106,7 @@ export function SnoozedTabsModal({ theme, onClose, onJumpToTab }: SnoozedTabsMod
 		<>
 			<Modal
 				theme={theme}
-				title="Snoozed Tabs"
+				title={newShell ? t('workflows.newShell.snoozedTitle') : 'Snoozed Tabs'}
 				headerIcon={<Clock className="w-4 h-4" style={{ color: theme.colors.accent }} />}
 				priority={MODAL_PRIORITIES.SNOOZED_TABS}
 				onClose={onClose}
@@ -136,10 +140,18 @@ export function SnoozedTabsModal({ theme, onClose, onJumpToTab }: SnoozedTabsMod
 							style={{ color: theme.colors.textDim }}
 						>
 							<Clock className="w-7 h-7 opacity-40" />
-							<div className="text-sm">No snoozed tabs</div>
+							<div className="text-sm">
+								{newShell ? t('workflows.newShell.snoozedEmpty') : 'No snoozed tabs'}
+							</div>
 							<div className="text-xs max-w-xs">
-								Snooze a tab from its hover menu to hide it until later. It comes back with a
-								notification you have to dismiss.
+								{newShell ? (
+									t('workflows.newShell.snoozedHint')
+								) : (
+									<>
+										Snooze a tab from its hover menu to hide it until later. It comes back with a
+										notification you have to dismiss.
+									</>
+								)}
 							</div>
 						</div>
 					) : (
@@ -219,7 +231,11 @@ export function SnoozedTabsModal({ theme, onClose, onJumpToTab }: SnoozedTabsMod
 													<div
 														className="flex items-start gap-1.5 text-xs mt-1.5"
 														style={{ color: theme.colors.accent }}
-														title="Sent to the agent when this tab comes back"
+														title={
+															newShell
+																? t('workflows.newShell.wakePromptTitle')
+																: 'Sent to the agent when this tab comes back'
+														}
 													>
 														<Play className="w-3 h-3 shrink-0 mt-0.5" />
 														<span>{entry.wakePrompt}</span>
@@ -250,7 +266,11 @@ export function SnoozedTabsModal({ theme, onClose, onJumpToTab }: SnoozedTabsMod
 												<button
 													type="button"
 													onClick={() => handleDismiss(sessionId, entry.id)}
-													title="Dismiss - discard this tab entirely"
+													title={
+														newShell
+															? t('workflows.newShell.dismissSnooze')
+															: 'Dismiss - discard this tab entirely'
+													}
 													className="p-1.5 rounded hover:bg-white/10 transition-colors"
 													style={{ color: theme.colors.textDim }}
 												>

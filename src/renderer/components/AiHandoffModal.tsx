@@ -28,6 +28,8 @@ import { Modal, ModalFooter } from './ui/Modal';
 import { RadioGroup } from './ui/RadioGroup';
 import { Spinner } from './ui/Spinner';
 import { AgentLogo } from './Wizard/screens/AgentSelectionScreen/components/AgentLogo';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
+import { getBasename } from '../../shared/formatters';
 import { useSessionStore } from '../stores/sessionStore';
 import { notifyToast } from '../stores/notificationStore';
 import { jumpToAgent } from '../services/agentNavigation';
@@ -65,6 +67,7 @@ export function AiHandoffModal({
 	onClose,
 }: AiHandoffModalProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const review = mode === 'review';
 	const tab = useSessionStore((state) =>
 		state.sessions.find((session) => session.id === sessionId)?.aiTabs.find((x) => x.id === tabId)
@@ -161,6 +164,13 @@ export function AiHandoffModal({
 			? sessions.find((session) => session.id === target.runnerId)
 			: undefined;
 		const provider = getAgentDisplayName(target.provider);
+		if (newShell) {
+			const source = sessions.find((session) => session.id === sessionId);
+			return t('workflows.sessions.handoff.newConversation', {
+				provider,
+				project: getBasename(source?.projectRoot || source?.cwd || ''),
+			});
+		}
 		return target.runnerId
 			? t('workflows.sessions.handoff.newTab', { name: runner?.name ?? provider })
 			: t('workflows.sessions.handoff.newRunner', { provider });
@@ -203,7 +213,13 @@ export function AiHandoffModal({
 		>
 			<div className="flex flex-col gap-4 select-none" onKeyDown={handleKeyDown}>
 				<p className="text-sm leading-relaxed" style={dim}>
-					{t(review ? 'workflows.sessions.review.intro' : 'workflows.sessions.handoff.intro')}
+					{t(
+						review
+							? 'workflows.sessions.review.intro'
+							: newShell
+								? 'workflows.sessions.handoff.conversationIntro'
+								: 'workflows.sessions.handoff.intro'
+					)}
 				</p>
 
 				{targets === null ? (

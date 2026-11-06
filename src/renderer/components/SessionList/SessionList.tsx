@@ -50,6 +50,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import {
 	selectConversationNavigation,
+	selectNewShellEnabled,
 	selectGroupsPlusEnabled,
 	useSettingsStore,
 } from '../../stores/settingsStore';
@@ -277,6 +278,7 @@ function SessionListInner(props: SessionListProps) {
 	);
 	const groups = useSessionStore((s) => s.groups);
 	const activeSessionId = useSessionStore((s) => s.activeSessionId);
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen);
 	const activeFocus = useUIStore((s) => s.activeFocus);
 	const selectedSidebarIndex = useUIStore((s) => s.selectedSidebarIndex);
@@ -1379,7 +1381,7 @@ function SessionListInner(props: SessionListProps) {
 					backgroundColor: theme.colors.bgSidebar,
 					borderColor: theme.colors.border,
 					boxShadow:
-						activeFocus === 'sidebar' && !activeGroupChatId
+						!newShell && activeFocus === 'sidebar' && !activeGroupChatId
 							? `inset -1px 0 0 ${theme.colors.accent}, inset 1px 0 0 ${theme.colors.accent}, inset 0 -1px 0 ${theme.colors.accent}`
 							: undefined,
 				} as React.CSSProperties
@@ -1428,13 +1430,14 @@ function SessionListInner(props: SessionListProps) {
 			)}
 
 			{/* Branding Header */}
-			<div
-				className="p-4 border-b flex items-center justify-between h-16 shrink-0 relative z-20"
-				style={{ borderColor: theme.colors.border }}
-			>
-				{leftSidebarOpen ? (
-					<>
-						{/* Three zones, left to right: identity, indicators, menu. The
+			{!newShell && (
+				<div
+					className="p-4 border-b flex items-center justify-between h-16 shrink-0 relative z-20"
+					style={{ borderColor: theme.colors.border }}
+				>
+					{leftSidebarOpen ? (
+						<>
+							{/* Three zones, left to right: identity, indicators, menu. The
 						    indicator band is the flexible one, so it centers itself in
 						    whatever the other two leave behind and reads as its own group
 						    rather than as a tail on the wordmark.
@@ -1445,209 +1448,214 @@ function SessionListInner(props: SessionListProps) {
 						    now-playing pill's filename, which can be clipped without looking
 						    broken. The wordmark is drawn in full or dropped entirely - see
 						    `showWordmark`. */}
-						<div className="flex items-center gap-2 shrink-0">
-							<button
-								type="button"
-								onClick={() => {
-									if (sessions.length > 0) {
-										getModalActions().setQuickActionOpen(true, 'agents');
-									}
-								}}
-								className="flex items-center justify-center rounded hover:bg-white/10 transition-colors p-0.5 -m-0.5"
-								title={t('workflows.sidebar.switchAgent')}
-								aria-label={t('workflows.sidebar.switchAgent')}
-							>
-								<BusyWand
-									busy={isAnyBusy}
-									profiling={profilingActive}
-									sizeClass="w-5 h-5"
-									color={theme.colors.accent}
-								/>
-							</button>
-							{showWordmark && (
-								<Wordmark
-									as="h1"
-									className="text-lg shrink-0 whitespace-nowrap"
-									style={{ color: theme.colors.textMain }}
-								/>
-							)}
-						</div>
+							<div className="flex items-center gap-2 shrink-0">
+								<button
+									type="button"
+									onClick={() => {
+										if (sessions.length > 0) {
+											getModalActions().setQuickActionOpen(true, 'agents');
+										}
+									}}
+									className="flex items-center justify-center rounded hover:bg-white/10 transition-colors p-0.5 -m-0.5"
+									title={t('workflows.sidebar.switchAgent')}
+									aria-label={t('workflows.sidebar.switchAgent')}
+								>
+									<BusyWand
+										busy={isAnyBusy}
+										profiling={profilingActive}
+										sizeClass="w-5 h-5"
+										color={theme.colors.accent}
+									/>
+								</button>
+								{showWordmark && (
+									<Wordmark
+										as="h1"
+										className="text-lg shrink-0 whitespace-nowrap"
+										style={{ color: theme.colors.textMain }}
+									/>
+								)}
+							</div>
 
-						{/* Indicator band. `flex-1` is what centers it: it takes the space
+							{/* Indicator band. `flex-1` is what centers it: it takes the space
 						    the identity and menu zones do not, and centers its contents in
 						    that. Anything status-shaped added to the header belongs here,
 						    not beside the wordmark. `min-w-0` so the now-playing filename
 						    stays the row's shrink target. */}
-						<div
-							data-testid="sidebar-header-indicators"
-							className="flex flex-1 items-center justify-center gap-2 min-w-0"
-						>
-							{/* Badge Level Indicator */}
-							{autoRunStats && autoRunStats.currentBadgeLevel > 0 && (
-								<button
-									onClick={() => setAboutModalOpen(true)}
-									className="flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-bold transition-colors hover:bg-white/10"
-									title={t('workflows.sidebar.badgeTitle', {
-										badge: getBadgeForTime(autoRunStats.cumulativeTimeMs)?.name || 'Apprentice',
-									})}
-									style={{
-										color: autoRunStats.currentBadgeLevel >= 8 ? '#FFD700' : theme.colors.accent,
-									}}
-								>
-									<Trophy className="w-3 h-3" />
-									<span>{autoRunStats.currentBadgeLevel}</span>
-								</button>
-							)}
-							{/* Now playing - only while the floating player is hidden, so the
+							<div
+								data-testid="sidebar-header-indicators"
+								className="flex flex-1 items-center justify-center gap-2 min-w-0"
+							>
+								{/* Badge Level Indicator */}
+								{autoRunStats && autoRunStats.currentBadgeLevel > 0 && (
+									<button
+										onClick={() => setAboutModalOpen(true)}
+										className="flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-bold transition-colors hover:bg-white/10"
+										title={t('workflows.sidebar.badgeTitle', {
+											badge: getBadgeForTime(autoRunStats.cumulativeTimeMs)?.name || 'Apprentice',
+										})}
+										style={{
+											color: autoRunStats.currentBadgeLevel >= 8 ? '#FFD700' : theme.colors.accent,
+										}}
+									>
+										<Trophy className="w-3 h-3" />
+										<span>{autoRunStats.currentBadgeLevel}</span>
+									</button>
+								)}
+								{/* Now playing - only while the floating player is hidden, so the
 							    user can always see that audio is coming from Maestro and get
 							    the widget back with one click. Sheds its label on a narrow
 							    sidebar, the same way the LIVE pill below does. */}
-							<NowPlayingIndicator theme={theme} compact={nowPlayingCompact} />
-							{/* Global LIVE Toggle - hidden in the web-desktop bundle, where
+								<NowPlayingIndicator theme={theme} compact={nowPlayingCompact} />
+								{/* Global LIVE Toggle - hidden in the web-desktop bundle, where
 							    toggling it would kill the webserver the user's browser is
 							    currently connected to. */}
-							{!isWebDesktop() && (
-								<div className="ml-2 relative z-10" ref={liveOverlayRef} data-tour="remote-control">
-									<button
-										onClick={() => {
-											if (!isLiveMode) {
-												void toggleGlobalLive();
-												setLiveOverlayOpen(true);
-											} else {
-												setLiveOverlayOpen(!liveOverlayOpen);
-											}
-										}}
-										className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-2xs font-bold transition-colors ${
-											isLiveMode
-												? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
-												: 'text-gray-500 hover:bg-white/10'
-										}`}
-										title={
-											isLiveMode
-												? t('workflows.sidebar.liveActiveTitle')
-												: t('workflows.sidebar.liveEnableTitle')
-										}
+								{!isWebDesktop() && (
+									<div
+										className="ml-2 relative z-10"
+										ref={liveOverlayRef}
+										data-tour="remote-control"
 									>
-										<Radio className={`w-3 h-3 ${isLiveMode ? 'animate-pulse' : ''}`} />
-										{/* The badge is an indicator and the wordmark is the yield ahead of
+										<button
+											onClick={() => {
+												if (!isLiveMode) {
+													void toggleGlobalLive();
+													setLiveOverlayOpen(true);
+												} else {
+													setLiveOverlayOpen(!liveOverlayOpen);
+												}
+											}}
+											className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-2xs font-bold transition-colors ${
+												isLiveMode
+													? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
+													: 'text-gray-500 hover:bg-white/10'
+											}`}
+											title={
+												isLiveMode
+													? t('workflows.sidebar.liveActiveTitle')
+													: t('workflows.sidebar.liveEnableTitle')
+											}
+										>
+											<Radio className={`w-3 h-3 ${isLiveMode ? 'animate-pulse' : ''}`} />
+											{/* The badge is an indicator and the wordmark is the yield ahead of
 										    it: once the wordmark has been dropped the row already holds more
 										    width than the badge costs, so charging for it either way is what
 										    left a 256px sidebar showing a bare radio dot beside the space the
 										    wordmark had just vacated. */}
-										{leftSidebarWidthState >=
-											LIVE_LABEL_MIN_WIDTH +
-												headerTextDelta.liveLabel +
-												headerTextDelta.wordmark +
-												(showWordmark ? headerBadgeWidth : 0) &&
-											(isLiveMode ? t('workflows.sidebar.live') : t('workflows.sidebar.offline'))}
-									</button>
+											{leftSidebarWidthState >=
+												LIVE_LABEL_MIN_WIDTH +
+													headerTextDelta.liveLabel +
+													headerTextDelta.wordmark +
+													(showWordmark ? headerBadgeWidth : 0) &&
+												(isLiveMode ? t('workflows.sidebar.live') : t('workflows.sidebar.offline'))}
+										</button>
 
-									{/* LIVE Overlay with URL and QR Code */}
-									{isLiveMode && liveOverlayOpen && webInterfaceUrl && (
-										<LiveOverlayPanel
-											theme={theme}
-											webInterfaceUrl={webInterfaceUrl}
-											tunnelStatus={tunnelStatus}
-											tunnelUrl={tunnelUrl}
-											tunnelError={tunnelError}
-											cloudflaredInstalled={cloudflaredInstalled}
-											activeUrlTab={activeUrlTab}
-											setActiveUrlTab={setActiveUrlTab}
-											copyFlash={copyFlash}
-											setCopyFlash={setCopyFlash}
-											handleTunnelToggle={handleTunnelToggle}
-											persistentWebLink={persistentWebLink}
-											setPersistentWebLink={setPersistentWebLink}
-											webInterfaceUseCustomPort={webInterfaceUseCustomPort}
-											webInterfaceCustomPort={webInterfaceCustomPort}
-											setWebInterfaceUseCustomPort={setWebInterfaceUseCustomPort}
-											setWebInterfaceCustomPort={setWebInterfaceCustomPort}
-											isLiveMode={isLiveMode}
-											toggleGlobalLive={toggleGlobalLive}
-											setLiveOverlayOpen={setLiveOverlayOpen}
-											restartWebServer={restartWebServer}
-											restartTunnel={restartTunnel}
-										/>
-									)}
-								</div>
-							)}
-						</div>
-						<div className="flex items-center shrink-0">
-							{/* Hamburger Menu */}
-							<div className="relative z-30" ref={menuRef} data-tour="hamburger-menu">
-								<GhostIconButton
-									onClick={() => setMenuOpen(!menuOpen)}
-									padding="p-2"
-									title={t('workflows.emptyState.menu')}
-									color={theme.colors.textDim}
-								>
-									<Menu className="w-4 h-4" />
-								</GhostIconButton>
-								{/* Menu Overlay */}
-								{menuOpen && (
-									<HamburgerDropdown
-										theme={theme}
-										isPhone={isXs}
-										onClose={() => setMenuOpen(false)}
-										dataTour="hamburger-menu-contents"
-									>
-										<HamburgerMenuContent
-											theme={theme}
-											onNewAgentSession={onNewAgentSession}
-											openWizard={openWizard}
-											startTour={startTour}
-											setMenuOpen={setMenuOpen}
-										/>
-									</HamburgerDropdown>
+										{/* LIVE Overlay with URL and QR Code */}
+										{isLiveMode && liveOverlayOpen && webInterfaceUrl && (
+											<LiveOverlayPanel
+												theme={theme}
+												webInterfaceUrl={webInterfaceUrl}
+												tunnelStatus={tunnelStatus}
+												tunnelUrl={tunnelUrl}
+												tunnelError={tunnelError}
+												cloudflaredInstalled={cloudflaredInstalled}
+												activeUrlTab={activeUrlTab}
+												setActiveUrlTab={setActiveUrlTab}
+												copyFlash={copyFlash}
+												setCopyFlash={setCopyFlash}
+												handleTunnelToggle={handleTunnelToggle}
+												persistentWebLink={persistentWebLink}
+												setPersistentWebLink={setPersistentWebLink}
+												webInterfaceUseCustomPort={webInterfaceUseCustomPort}
+												webInterfaceCustomPort={webInterfaceCustomPort}
+												setWebInterfaceUseCustomPort={setWebInterfaceUseCustomPort}
+												setWebInterfaceCustomPort={setWebInterfaceCustomPort}
+												isLiveMode={isLiveMode}
+												toggleGlobalLive={toggleGlobalLive}
+												setLiveOverlayOpen={setLiveOverlayOpen}
+												restartWebServer={restartWebServer}
+												restartTunnel={restartTunnel}
+											/>
+										)}
+									</div>
 								)}
 							</div>
-						</div>
-					</>
-				) : (
-					// The collapsed rail gets the pill too, in its compact form.
-					//
-					// It used to be left out on the grounds that a 64px icon strip is
-					// for agents and a media control there competes with them. That
-					// reasoning ignored what minimizing MEANS: the pill is the only
-					// place the widget parks, so on the rail "minimize" hid the player
-					// with nothing left on screen and no way back - the user reads that
-					// as the player having closed itself, which is precisely what the
-					// minimize/close split exists to prevent. A control the user can
-					// always get back to is worth more than 24px of rail.
-					//
-					// The compact form is the transport and the restore button and
-					// nothing else, which fits the rail's width without a label to clip.
-					<div className="w-full flex flex-col items-center gap-2 relative z-30" ref={menuRef}>
-						<GhostIconButton
-							onClick={() => setMenuOpen(!menuOpen)}
-							padding="p-2"
-							title={t('workflows.emptyState.menu')}
-						>
-							<BusyWand
-								busy={isAnyBusy}
-								profiling={profilingActive}
-								sizeClass="w-6 h-6"
-								color={theme.colors.accent}
-							/>
-						</GhostIconButton>
-						{/* Renders nothing unless the player is actually minimized, so
-						    the rail is unchanged for anyone not playing anything. */}
-						<NowPlayingIndicator theme={theme} compact />
-						{/* Menu Overlay for Collapsed Sidebar */}
-						{menuOpen && (
-							<HamburgerDropdown theme={theme} isPhone={isXs} onClose={() => setMenuOpen(false)}>
-								<HamburgerMenuContent
-									theme={theme}
-									onNewAgentSession={onNewAgentSession}
-									openWizard={openWizard}
-									startTour={startTour}
-									setMenuOpen={setMenuOpen}
+							<div className="flex items-center shrink-0">
+								{/* Hamburger Menu */}
+								<div className="relative z-30" ref={menuRef} data-tour="hamburger-menu">
+									<GhostIconButton
+										onClick={() => setMenuOpen(!menuOpen)}
+										padding="p-2"
+										title={t('workflows.emptyState.menu')}
+										color={theme.colors.textDim}
+									>
+										<Menu className="w-4 h-4" />
+									</GhostIconButton>
+									{/* Menu Overlay */}
+									{menuOpen && (
+										<HamburgerDropdown
+											theme={theme}
+											isPhone={isXs}
+											onClose={() => setMenuOpen(false)}
+											dataTour="hamburger-menu-contents"
+										>
+											<HamburgerMenuContent
+												theme={theme}
+												onNewAgentSession={onNewAgentSession}
+												openWizard={openWizard}
+												startTour={startTour}
+												setMenuOpen={setMenuOpen}
+											/>
+										</HamburgerDropdown>
+									)}
+								</div>
+							</div>
+						</>
+					) : (
+						// The collapsed rail gets the pill too, in its compact form.
+						//
+						// It used to be left out on the grounds that a 64px icon strip is
+						// for agents and a media control there competes with them. That
+						// reasoning ignored what minimizing MEANS: the pill is the only
+						// place the widget parks, so on the rail "minimize" hid the player
+						// with nothing left on screen and no way back - the user reads that
+						// as the player having closed itself, which is precisely what the
+						// minimize/close split exists to prevent. A control the user can
+						// always get back to is worth more than 24px of rail.
+						//
+						// The compact form is the transport and the restore button and
+						// nothing else, which fits the rail's width without a label to clip.
+						<div className="w-full flex flex-col items-center gap-2 relative z-30" ref={menuRef}>
+							<GhostIconButton
+								onClick={() => setMenuOpen(!menuOpen)}
+								padding="p-2"
+								title={t('workflows.emptyState.menu')}
+							>
+								<BusyWand
+									busy={isAnyBusy}
+									profiling={profilingActive}
+									sizeClass="w-6 h-6"
+									color={theme.colors.accent}
 								/>
-							</HamburgerDropdown>
-						)}
-					</div>
-				)}
-			</div>
+							</GhostIconButton>
+							{/* Renders nothing unless the player is actually minimized, so
+						    the rail is unchanged for anyone not playing anything. */}
+							<NowPlayingIndicator theme={theme} compact />
+							{/* Menu Overlay for Collapsed Sidebar */}
+							{menuOpen && (
+								<HamburgerDropdown theme={theme} isPhone={isXs} onClose={() => setMenuOpen(false)}>
+									<HamburgerMenuContent
+										theme={theme}
+										onNewAgentSession={onNewAgentSession}
+										openWizard={openWizard}
+										startTour={startTour}
+										setMenuOpen={setMenuOpen}
+									/>
+								</HamburgerDropdown>
+							)}
+						</div>
+					)}
+				</div>
+			)}
 
 			{/* SIDEBAR CONTENT: EXPANDED */}
 			{leftSidebarOpen ? (
@@ -1676,6 +1684,36 @@ function SessionListInner(props: SessionListProps) {
 							}}
 						>
 							<ProjectSessionSidebar
+								headerMenu={
+									newShell ? (
+										<div ref={menuRef} className="relative z-30" data-tour="hamburger-menu">
+											<GhostIconButton
+												onClick={() => setMenuOpen(!menuOpen)}
+												padding="p-2"
+												title={t('workflows.emptyState.menu')}
+												color={theme.colors.textDim}
+											>
+												<Menu className="w-4 h-4" />
+											</GhostIconButton>
+											{menuOpen && (
+												<HamburgerDropdown
+													theme={theme}
+													isPhone={isXs}
+													onClose={() => setMenuOpen(false)}
+													dataTour="hamburger-menu-contents"
+												>
+													<HamburgerMenuContent
+														theme={theme}
+														onNewAgentSession={onNewAgentSession}
+														openWizard={openWizard}
+														startTour={startTour}
+														setMenuOpen={setMenuOpen}
+													/>
+												</HamburgerDropdown>
+											)}
+										</div>
+									) : undefined
+								}
 								theme={theme}
 								sessions={conversationSessions}
 								groups={displayGroups}
@@ -2418,7 +2456,8 @@ function SessionListInner(props: SessionListProps) {
 					<div className="flex-grow min-h-4" />
 
 					{/* GROUP CHATS SECTION - Only show when at least 2 AI agents exist */}
-					{onNewGroupChat &&
+					{!newShell &&
+						onNewGroupChat &&
 						onOpenGroupChat &&
 						onEditGroupChat &&
 						onRenameGroupChat &&

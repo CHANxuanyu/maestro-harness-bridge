@@ -22,7 +22,11 @@ import { NotificationCenter } from '../NotificationCenter';
 import { requestAiHandoff, useCanHandOffTab } from '../../services/aiHandoffEntry';
 import { useHoverTooltip } from '../../hooks';
 import { useGitAgentActions } from '../../hooks/git/useGitAgentActions';
-import { selectConversationNavigation, useSettingsStore } from '../../stores/settingsStore';
+import {
+	selectConversationNavigation,
+	selectNewShellEnabled,
+	useSettingsStore,
+} from '../../stores/settingsStore';
 import { NowPlayingIndicator } from '../MediaPlayback/NowPlayingIndicator';
 import { useUIStore } from '../../stores/uiStore';
 import { getModalActions } from '../../stores/modalStore';
@@ -161,7 +165,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 	const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
 	// The new shell has no tab menu to hold "Continue with another AI", so the
 	// header carries it.
-	const newShell = useSettingsStore((s) => s.newShell);
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	// Asked only in the new shell, so the classic header does no extra work.
 	const canHandOff = useCanHandOffTab(
 		newShell ? activeSession?.id : undefined,
@@ -411,7 +415,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 				    screen: the sidebar opener beside it exists for the same reason.
 				    Self-gating (it draws nothing unless the player is minimized) and
 				    compact, since the header has no room for a filename. */}
-				{showSidebarOpener && <NowPlayingIndicator theme={theme} compact />}
+				{!newShell && showSidebarOpener && <NowPlayingIndicator theme={theme} compact />}
 				<div className="flex items-center gap-2 text-sm font-medium min-w-0 overflow-hidden">
 					{/* With the Left Bar listing conversations, the header names the
 					    CONVERSATION in view and marks which provider runs it; the agent
@@ -455,7 +459,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 							<span className="header-session-name truncate">{activeSession.name}</span>
 						)
 					)}
-					{activeSession.bookmarked && (
+					{!newShell && activeSession.bookmarked && (
 						<Bookmark
 							className="w-3.5 h-3.5 shrink-0"
 							style={{ color: theme.colors.accent }}
@@ -476,7 +480,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 						    GIT/LOCAL badge). For git repos the branch name is rendered in a separate
 						    badge just after this pill (see below) so SSH/container agents still surface
 						    the branch the same way local agents do. */}
-						{activeSession.sessionSshRemoteConfig?.enabled && sshRemoteName ? (
+						{!newShell && activeSession.sessionSshRemoteConfig?.enabled && sshRemoteName ? (
 							<button
 								className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-purple-500/30 text-purple-500 bg-purple-500/10 min-w-0 outline-none ${
 									activeSession.isGitRepo ? 'cursor-pointer hover:bg-purple-500/20' : ''
@@ -516,7 +520,8 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 						    replaces the GIT/branch badge, so without this remote agents lose the
 						    branch name that local agents show. Render it alongside the host pill,
 						    styled like the local git badge, reusing the same git-log click. */}
-						{activeSession.sessionSshRemoteConfig?.enabled &&
+						{!newShell &&
+							activeSession.sessionSshRemoteConfig?.enabled &&
 							sshRemoteName &&
 							activeSession.isGitRepo && (
 								<button
@@ -539,17 +544,19 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 				</div>
 
 				{/* Git Status Widget - compact mode handled via CSS container queries */}
-				<GitStatusWidget
-					sessionId={activeSession.id}
-					isGitRepo={activeSession.isGitRepo}
-					theme={theme}
-					onViewDiff={handleViewGitDiff}
-					onViewLog={() => setGitLogOpen?.(true)}
-				/>
+				{!newShell && (
+					<GitStatusWidget
+						sessionId={activeSession.id}
+						isGitRepo={activeSession.isGitRepo}
+						theme={theme}
+						onViewDiff={handleViewGitDiff}
+						onViewLog={() => setGitLogOpen?.(true)}
+					/>
+				)}
 			</div>
 
 			{/* Center: AUTO Mode Indicator - only show for current session */}
-			{isCurrentSessionAutoMode && (
+			{!newShell && isCurrentSessionAutoMode && (
 				<button
 					onClick={() => {
 						if (isCurrentSessionStopping) return;
@@ -604,7 +611,8 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 			<div className="flex items-center gap-3 justify-end shrink-0">
 				{/* Session UUID Pill - click to copy full UUID, hidden at narrow widths via CSS container query */}
 				{/* Hide when file preview tab is focused - session stats are only relevant for AI tabs */}
-				{showSessionIdPill &&
+				{!newShell &&
+					showSessionIdPill &&
 					activeSession.inputMode === 'ai' &&
 					!activeFileTabId &&
 					activeTab?.agentSessionId &&
@@ -640,7 +648,8 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 
 				{/* Cost Tracker - styled as pill, hidden at narrow widths via CSS container query */}
 				{/* Hide when file preview tab is focused - cost tracking is only relevant for AI tabs */}
-				{showSessionCostPill &&
+				{!newShell &&
+					showSessionCostPill &&
 					activeSession.inputMode === 'ai' &&
 					!activeFileTabId &&
 					(activeTab?.agentSessionId || activeTab?.usageStats) &&
@@ -655,7 +664,8 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 
 				{/* Context Window Widget with Tooltip - only show when context window is configured and agent supports usage stats */}
 				{/* Hide when file preview tab is focused - context usage is only relevant for AI tabs */}
-				{activeSession.inputMode === 'ai' &&
+				{!newShell &&
+					activeSession.inputMode === 'ai' &&
 					!activeFileTabId &&
 					(activeTab?.agentSessionId || activeTab?.usageStats) &&
 					hasCapability('supportsUsageStats') &&
@@ -1046,11 +1056,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 					)}
 
 				{/* Notification center - every toast, kept after it leaves the screen */}
-				<NotificationCenter theme={theme} />
-				<PluginUiItemsSlot surface="toolbar" />
+				{!newShell && <NotificationCenter theme={theme} />}
+				{!newShell && <PluginUiItemsSlot surface="toolbar" />}
 
 				{/* Memory Viewer Button - only show if agent maintains per-project memory */}
-				{hasCapability('supportsProjectMemory') && (
+				{!newShell && hasCapability('supportsProjectMemory') && (
 					<button
 						onClick={() => setMemoryViewerOpen(true)}
 						className="header-secondary-btn p-2 rounded hover:bg-white/5"
@@ -1066,7 +1076,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 				)}
 
 				{/* Agent Sessions Button - only show if agent supports session storage */}
-				{hasCapability('supportsSessionStorage') && (
+				{!newShell && hasCapability('supportsSessionStorage') && (
 					<button
 						onClick={() => {
 							setActiveAgentSessionId(null);
@@ -1087,7 +1097,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 				{/* Quick Actions / command palette opener. Cmd+K is keyboard-only, so
 				    surface a tap target on narrow (phone / small tablet) viewports where
 				    there is no keyboard. Hidden on wide layouts, where Cmd+K suffices. */}
-				{isNarrow && (
+				{!newShell && isNarrow && (
 					<button
 						onClick={() => getModalActions().setQuickActionOpen(true)}
 						className="p-2 rounded hover:bg-white/5"
@@ -1105,7 +1115,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 						onClick={() => requestAiHandoff(activeSession.id, activeTab.id)}
 						className="flex items-center gap-1.5 px-2 py-1 rounded text-xs hover:bg-white/5"
 						style={{ color: theme.colors.textDim }}
-						title={t('workflows.sessions.handoff.paletteSubtext')}
+						title={t('workflows.sessions.handoff.conversationSubtext')}
 						data-testid="header-handoff"
 					>
 						<ArrowRightLeft className="w-3.5 h-3.5" />

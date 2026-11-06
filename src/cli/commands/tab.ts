@@ -330,6 +330,23 @@ export async function tabThinking(
 	);
 }
 
+/** Select a supported permission mode using the same fields as the composer. */
+export async function tabPermission(
+	tabId: string,
+	mode: string,
+	options: TabMutateOptions
+): Promise<void> {
+	if (!['full', 'standard', 'readonly'].includes(mode)) {
+		return failCommand('Permission mode must be full, standard, or readonly', options.json);
+	}
+	await tabFlag(
+		tabId,
+		{ permissionMode: mode },
+		(owner) => `Set permission mode for tab ${owner.tabId} to ${mode}`,
+		options
+	);
+}
+
 /** Put one tab into read-only / plan mode (the agent may not modify files). */
 export async function tabReadOnly(
 	tabId: string,
@@ -441,6 +458,7 @@ export async function tabShow(tabId: string, options: TabMutateOptions): Promise
 	row('Effort', inherited(entry.effort));
 	row('Thinking', entry.thinking ?? 'off');
 	row('Read-only', String(entry.readOnly ?? false));
+	row('Permission', entry.permissionMode ?? (entry.readOnly ? 'readonly' : 'full'));
 	row('Save to History', String(entry.saveToHistory ?? false));
 	row('Enter to send', inherited(entry.enterToSend));
 	row('Starred', String(entry.starred));

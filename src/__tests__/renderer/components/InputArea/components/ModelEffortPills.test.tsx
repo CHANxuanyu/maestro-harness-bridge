@@ -33,6 +33,21 @@ describe('ModelEffortPills', () => {
 		);
 	}
 
+	it.each([false, true])(
+		'keeps a model ID entry with an empty catalog only when explicitly supported, enabled %s',
+		(allowModelSelection) => {
+			const onModelChange = vi.fn();
+			renderPills({ availableModels: [], allowModelSelection, modelMenuOpen: true, onModelChange });
+			expect(!!screen.queryByTitle('Change model')).toBe(allowModelSelection);
+			if (allowModelSelection) {
+				const input = screen.getByRole('textbox');
+				fireEvent.change(input, { target: { value: 'preview-model' } });
+				fireEvent.keyDown(input, { key: 'Enter' });
+				expect(onModelChange).toHaveBeenCalledWith('preview-model');
+			}
+		}
+	);
+
 	it('renders nothing when not visible', () => {
 		renderPills({ isVisible: false });
 

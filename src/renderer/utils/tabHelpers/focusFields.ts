@@ -74,6 +74,13 @@ export function permissionModeFields(mode: 'full' | 'standard' | 'readonly'): {
 	return { permissionMode: mode, readOnlyMode: mode === 'readonly' };
 }
 
+/** Supported permission choices shared by the cycle and both composer menus. */
+export function permissionModes(
+	hasStandardCapability: boolean
+): Array<'full' | 'standard' | 'readonly'> {
+	return hasStandardCapability ? ['full', 'standard', 'readonly'] : ['full', 'readonly'];
+}
+
 /**
  * The next mode in the composer's permission cycle.
  *
@@ -86,9 +93,9 @@ export function nextPermissionMode(
 	current: 'full' | 'standard' | 'readonly',
 	hasStandardCapability: boolean
 ): 'full' | 'standard' | 'readonly' {
-	if (current === 'full') return hasStandardCapability ? 'standard' : 'readonly';
-	if (current === 'standard') return 'readonly';
-	return 'full';
+	const modes = permissionModes(hasStandardCapability);
+	if (current === 'standard' && !hasStandardCapability) return 'readonly';
+	return modes[(modes.indexOf(current) + 1) % modes.length];
 }
 
 /**

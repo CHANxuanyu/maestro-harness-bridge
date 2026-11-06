@@ -24,6 +24,7 @@ import { useT } from '../../../i18n';
 import { memo, useState } from 'react';
 import { Brain, Eye, Gauge, History, Sparkles } from 'lucide-react';
 import type { Theme, ThinkingMode } from '../../../types';
+import { permissionModes } from '../../../utils/tabHelpers';
 import { permissionModeLabel } from '../utils/displayLabels';
 import { THINKING_MODES } from '../../../../shared/types';
 import { PhoneBottomSheet } from '../../ui/PhoneBottomSheet';
@@ -91,9 +92,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 
 	// `standard` is hidden for an agent with no working relay: offering it would
 	// let the user pick a mode whose tool approvals never arrive.
-	const permissionModes: PermissionMode[] = hasStandardCapability
-		? ['full', 'standard', 'readonly']
-		: ['full', 'readonly'];
+	const modes = permissionModes(hasStandardCapability);
 
 	// A leading '' is the "(default)" entry - the agent's own configured model.
 	const modelOptions = availableModels.includes('') ? availableModels : ['', ...availableModels];
@@ -151,7 +150,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 					theme={theme}
 					testId="composer-options-access"
 				>
-					{permissionModes.map((mode) => (
+					{modes.map((mode) => (
 						<PhoneSheetOptionRow
 							key={mode}
 							label={permissionModeLabel(t, mode, agentId)}

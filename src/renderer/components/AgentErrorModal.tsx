@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
  * AgentErrorModal - Displays agent errors with recovery options
  *
@@ -136,6 +137,7 @@ export function AgentErrorModal({
 	onJumpToAgent,
 }: AgentErrorModalProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const primaryButtonRef = useRef<HTMLButtonElement>(null);
 	const [showJsonDetails, setShowJsonDetails] = useState(false);
 
@@ -191,9 +193,13 @@ export function AgentErrorModal({
 									borderColor: theme.colors.border,
 									color: theme.colors.textMain,
 								}}
-								title="Switch to the failing agent and tab"
+								title={
+									newShell
+										? t('workflows.newShell.jumpErrorTitle')
+										: 'Switch to the failing agent and tab'
+								}
 							>
-								<span>Jump to failing tab</span>
+								<span>{newShell ? t('workflows.newShell.jumpError') : 'Jump to failing tab'}</span>
 								<ArrowRight className="w-3 h-3" />
 							</button>
 						)}

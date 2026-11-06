@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { getT } from '../../../i18n';
 import type { RightPanelTab } from '../../../types';
 import type { QuickAction } from '../types';
@@ -31,10 +32,11 @@ export function buildRightPanelCommands({
 	shortcuts,
 }: BuildRightPanelCommandsArgs): QuickAction[] {
 	const t = getT();
+	const newShell = selectNewShellEnabled(useSettingsStore.getState());
 	const commands: QuickAction[] = [
 		{
 			id: 'goToFiles',
-			label: t('workflows.shell.goToFilesTab'),
+			label: t(newShell ? 'workflows.newShell.goToFilesTab' : 'workflows.shell.goToFilesTab'),
 			shortcut: shortcuts.goToFiles,
 			action: () => {
 				setRightPanelOpen(true);
@@ -44,7 +46,7 @@ export function buildRightPanelCommands({
 		},
 		{
 			id: 'goToHistory',
-			label: t('workflows.shell.goToHistoryTab'),
+			label: t(newShell ? 'workflows.newShell.goToHistoryTab' : 'workflows.shell.goToHistoryTab'),
 			shortcut: shortcuts.goToHistory,
 			action: () => {
 				setRightPanelOpen(true);
@@ -57,7 +59,7 @@ export function buildRightPanelCommands({
 	if (!autoRunDisabled) {
 		commands.push({
 			id: 'goToAutoRun',
-			label: t('workflows.shell.goToAutoRunTab'),
+			label: t(newShell ? 'workflows.newShell.goToAutoRunTab' : 'workflows.shell.goToAutoRunTab'),
 			shortcut: shortcuts.goToAutoRun,
 			action: () => {
 				setRightPanelOpen(true);

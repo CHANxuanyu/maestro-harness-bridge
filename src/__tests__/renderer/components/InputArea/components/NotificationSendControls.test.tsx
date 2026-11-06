@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { NotificationSendControls } from '../../../../../renderer/components/InputArea/components/NotificationSendControls';
 import { inputAreaTheme } from '../_fixtures';
 
@@ -12,6 +13,20 @@ vi.mock('../../../../../renderer/components/NotificationPopover', () => ({
 }));
 
 describe('NotificationSendControls', () => {
+	beforeEach(() => useSettingsStore.setState({ newShell: false }));
+	it.each([false, true])('gates the composer bell while keeping Send, new shell %s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		render(
+			<NotificationSendControls
+				theme={inputAreaTheme}
+				isTerminalMode={false}
+				processInput={vi.fn()}
+			/>
+		);
+		expect(!!screen.queryByTitle('Notification Settings')).toBe(!newShell);
+		expect(screen.getByTitle('Send message')).toBeInTheDocument();
+	});
+
 	it('toggles notification popover', () => {
 		render(
 			<NotificationSendControls

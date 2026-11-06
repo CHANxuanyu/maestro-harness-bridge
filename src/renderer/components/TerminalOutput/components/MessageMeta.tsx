@@ -3,6 +3,7 @@ import { ArrowLeftRight, Info } from 'lucide-react';
 import type { Theme } from '../../../types';
 import { TurnSettingPills } from '../../ui/TurnSettingPills';
 import type { TurnSettingChange } from '../utils/turnSettingChanges';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { useT } from '../../../i18n';
 
 /**
@@ -51,6 +52,7 @@ export function MessageMetaLine({
 	secondaryTextColor: string;
 }) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const infoLabel = infoOpen
 		? t('workflows.transcript.hideMessageInfo')
 		: t('workflows.transcript.messageInfo');
@@ -94,9 +96,9 @@ export function MessageMetaLine({
 					title={infoLabel}
 					data-message-info-toggle=""
 					className={`p-1 rounded transition-opacity hover:bg-white/10 outline-none focus-visible:ring-1 ${
-						infoOpen || revealed
+						!newShell && (infoOpen || revealed)
 							? 'opacity-100'
-							: 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100'
+							: `opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100${newShell ? '' : ' [@media(hover:none)]:opacity-100'}`
 					}`}
 					style={{ color: infoOpen ? theme.colors.accent : secondaryTextColor }}
 				>

@@ -1,16 +1,22 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ProjectSessionTree } from '../../../renderer/components/SessionList/ProjectSessionTree';
 import type {
 	SidebarConversation,
 	SidebarProject,
 } from '../../../renderer/utils/projectSessionTree';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { useModalStore } from '../../../renderer/stores/modalStore';
+import { contrastRatio } from '../../../shared/colorContrast';
 import { mockTheme } from '../../helpers/mockTheme';
 
 // Pin the English copy so the tests do not depend on the catalog keys landing
 // in the same change.
 const EN: Record<string, string> = {
+	'workflows.conversations.closeConversation': 'Close conversation',
+	'workflows.conversations.addAccount': 'Add account or configuration',
+	'workflows.conversations.handoff': 'Hand off…',
 	'workflows.conversations.search': 'Search conversations...',
 	'workflows.conversations.new': 'New conversation',
 	'workflows.conversations.newWith': 'New with {provider}',
@@ -155,6 +161,69 @@ function rowsOf(header: HTMLElement) {
 }
 
 describe('ProjectSessionTree', () => {
+	beforeEach(() => useSettingsStore.setState({ newShell: false }));
+
+	it.each([false, true])(
+		'gates provider filters and project configuration entries, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			setup({ providers: ['claude-code', 'codex'] });
+			expect(!!screen.queryByTestId('conversation-provider-filter')).toBe(!newShell);
+			fireEvent.click(screen.getByRole('button', { name: 'New conversation: Maestro' }));
+			expect(!!screen.queryByText('Add provider configuration')).toBe(!newShell);
+			fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+			fireEvent.click(screen.getByRole('button', { name: 'Project actions: Maestro' }));
+			expect(!!screen.queryByText('Manage agents')).toBe(!newShell);
+			expect(
+				screen.getByText(newShell ? 'Add account or configuration' : 'Add provider configuration')
+			).toBeInTheDocument();
+		}
+	);
+
+	it.each([false, true])(
+		'names and hands off the exact conversation from either row menu, new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			setup();
+			for (const open of [
+				() => fireEvent.contextMenu(screen.getByRole('button', { name: /^Codex Fix bug/ })),
+				() =>
+					fireEvent.click(
+						screen.getAllByRole('button', { name: 'Conversation actions: Fix bug' })[1]
+					),
+			]) {
+				open();
+				expect(screen.getByText(newShell ? 'Close conversation' : 'Close tab')).toBeInTheDocument();
+				expect(!!screen.queryByText('Hand off…')).toBe(newShell);
+				if (newShell) {
+					fireEvent.click(screen.getByText('Hand off…'));
+					expect(useModalStore.getState().modals.get('aiHandoff')).toMatchObject({
+						open: true,
+						data: { sessionId: 'owner-codex', tabId: 'tab-9' },
+					});
+				} else fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+			}
+		}
+	);
+
+	it.each(['#181818', '#fafafa'])(
+		'gives the new search placeholder AA contrast on %s',
+		(background) => {
+			useSettingsStore.setState({ newShell: true });
+			setup({
+				theme: {
+					...mockTheme,
+					colors: { ...mockTheme.colors, bgActivity: background, textDim: '#888888' },
+				},
+			});
+			const input = screen.getByPlaceholderText('Search conversations...');
+			const foreground = input.style.getPropertyValue('--placeholder-color');
+			expect(foreground).not.toBe('');
+			expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(4.5);
+			expect(input).toHaveClass('placeholder:opacity-100');
+		}
+	);
+
 	it('lists conversations directly under the project, with no agent level in between', () => {
 		setup();
 		const header = projectHeader();

@@ -154,6 +154,7 @@ import {
 	tabSaveToHistory,
 	tabThinking,
 	tabReadOnly,
+	tabPermission,
 	tabModel,
 	tabEffort,
 	tabEnterToSend,
@@ -1622,6 +1623,10 @@ tabTargetOptions(tab.command('thinking <tab-id> <mode>'))
 		}
 		return tabThinking(tabId, v as ThinkingMode | 'cycle', options);
 	});
+
+tabTargetOptions(tab.command('permission <tab-id> <mode>'))
+	.description('Set permission mode: full, standard, or readonly (provider support is validated)')
+	.action((tabId, mode, options) => tabPermission(tabId, mode, options));
 
 tabTargetOptions(tab.command('read-only <tab-id> <bool>'))
 	.description('Put the tab in read-only/plan mode so the agent cannot modify files')

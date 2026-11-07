@@ -1837,6 +1837,7 @@ interface MaestroAPI {
 		deleteUser: (id: string) => Promise<void>;
 	};
 	agents: {
+		getNativeCommands: import('../main/preload/agents').AgentsApi['getNativeCommands'];
 		getPresets: import('../main/preload/agents').AgentsApi['getPresets'];
 		prepareDeepSeekPreset: import('../main/preload/agents').AgentsApi['prepareDeepSeekPreset'];
 		detect: (sshRemoteId?: string) => Promise<AgentConfig[]>;
@@ -1970,13 +1971,22 @@ interface MaestroAPI {
 	};
 	// Agent Sessions API - all methods accept optional sshRemoteId for SSH remote session storage access
 	agentSessions: {
+		archives: import('../main/preload/sessions').AgentSessionsApi['archives'];
+		archiveConversation: import('../main/preload/sessions').AgentSessionsApi['archiveConversation'];
+		onArchivesChanged: import('../main/preload/sessions').AgentSessionsApi['onArchivesChanged'];
+		onConversationLifecycle: import('../main/preload/sessions').AgentSessionsApi['onConversationLifecycle'];
 		toolOutput: import('../main/preload/sessions').AgentSessionsApi['toolOutput'];
 		projects: import('../main/preload/sessions').AgentSessionsApi['projects'];
 		openProject: import('../main/preload/sessions').AgentSessionsApi['openProject'];
 		onOpenProject: import('../main/preload/sessions').AgentSessionsApi['onOpenProject'];
 		sendOpenProjectResponse: import('../main/preload/sessions').AgentSessionsApi['sendOpenProjectResponse'];
+		searchNativeHistory: (
+			request: import('../shared/nativeHistorySearch').NativeHistorySearchRequest
+		) => Promise<import('../shared/nativeHistorySearch').NativeHistorySearchResult>;
+		cancelNativeHistorySearch: (requestId: string) => Promise<void>;
 		listProjectHistory: (
-			scopes: import('../shared/projectHistory').ProjectHistoryScope[]
+			scopes: import('../shared/projectHistory').ProjectHistoryScope[],
+			options?: { archived?: boolean }
 		) => Promise<import('../shared/projectHistory').ProjectHistoryResult>;
 		list: (
 			agentId: string,
@@ -2033,6 +2043,13 @@ interface MaestroAPI {
 		 * success). Stat-only while unchanged; never creates or restores a file.
 		 * Optional: older preloads and the web-desktop bridge do not expose it.
 		 */
+		turnWrites: (
+			agentId: string,
+			projectPath: string,
+			sessionId: string,
+			options?: { configDir?: string; ownerAgentId?: string },
+			sshRemoteId?: string
+		) => Promise<import('../shared/gitChangeTurns').TurnWrites[]>;
 		getTranscriptRevision?: (
 			agentId: string,
 			projectPath: string,

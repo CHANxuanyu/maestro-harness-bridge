@@ -129,7 +129,7 @@ describe('useInputProcessing', () => {
 		// updateAiTab through mockSetSessions - so leaving it on makes the naming
 		// spinner the first setSessions call in every unrelated test. The naming
 		// describes below switch it back on for themselves.
-		useSettingsStore.setState({ automaticTabNamingEnabled: false } as any);
+		useSettingsStore.setState({ automaticTabNamingEnabled: false, newShell: false } as any);
 
 		// Mock window.maestro.process.spawn
 		window.maestro = {
@@ -597,7 +597,108 @@ describe('useInputProcessing', () => {
 		});
 	});
 
+	describe('native command scan submission', () => {
+		it.each(['new draft', 'repeat submit'])(
+			'preserves %s while discovery is pending',
+			async (action) => {
+				useSettingsStore.setState({ newShell: true });
+				let finish!: (value: any) => void;
+				const pending = new Promise<any>((resolve) => {
+					finish = resolve;
+				});
+				window.maestro.agents.getNativeCommands = vi.fn(() => pending);
+				let draft = '/deploy';
+				const session = createMockSession({ toolType: 'codex', state: 'busy' });
+				const deps = createDeps({
+					activeSession: session,
+					getInputValue: () => (action === 'repeat submit' ? '/deploy' : draft),
+					setInputValue: vi.fn((value: string) => {
+						draft = value;
+					}),
+				});
+				const { result } = renderHook(() => useInputProcessing(deps));
+				let first!: Promise<void>;
+				let second: Promise<void> | undefined;
+				act(() => {
+					first = result.current.processInput();
+				});
+				const draftDuringScan = draft;
+				if (action === 'new draft') draft = 'Keep this draft';
+				else
+					act(() => {
+						second = result.current.processInput();
+					});
+				await act(async () => {
+					finish({
+						commands: [
+							{
+								command: '/deploy',
+								description: 'Deploy',
+								prompt: 'Deploy safely',
+								source: 'project',
+							},
+						],
+					});
+					// Both calls share the discovery promise, as the real main-process cache does.
+					await Promise.all([first, second]);
+				});
+				expect(draftDuringScan).toBe('');
+				expect(draft).toBe(action === 'new draft' ? 'Keep this draft' : '');
+				expect(useSessionStore.getState().sessions[0].executionQueue).toHaveLength(1);
+			}
+		);
+	});
+
 	describe('custom AI commands', () => {
+		it('resolves a Codex command from the current account instead of persisted commands', async () => {
+			vi.useFakeTimers();
+			useSettingsStore.setState({ newShell: true });
+			const session = createMockSession({
+				toolType: 'codex',
+				customEnvVars: { CODEX_HOME: '/temporary/codex-b' },
+				agentCommands: [
+					{ command: '/project-command', description: 'Stale', prompt: 'Old account' },
+				],
+			});
+			const read = vi.fn().mockResolvedValue({
+				commands: [
+					{
+						command: '/project-command',
+						description: 'Current account',
+						prompt: 'Current prompt',
+						source: 'project',
+					},
+				],
+			});
+			window.maestro.agents.getNativeCommands = read;
+			try {
+				const deps = createDeps({ activeSession: session, inputValue: '/project-command' });
+				const { result } = renderHook(() => useInputProcessing(deps));
+				await act(async () => {
+					await result.current.processInput();
+				});
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(50);
+				});
+				expect(read).toHaveBeenCalledWith(
+					expect.objectContaining({
+						toolType: 'codex',
+						customEnvVars: { CODEX_HOME: '/temporary/codex-b' },
+					})
+				);
+				expect(mockProcessQueuedItemRef.current).toHaveBeenCalledWith(
+					session.id,
+					expect.objectContaining({
+						command: '/project-command',
+						commandDescription: 'Current account',
+					})
+				);
+			} finally {
+				useSettingsStore.setState({ newShell: false });
+				vi.useRealTimers();
+			}
+		});
+
 		const customCommands: CustomAICommand[] = [
 			{
 				id: 'commit',
@@ -2738,7 +2839,7 @@ describe('useInputProcessing', () => {
 				aiTabs: [newTab],
 				activeTabId: newTab.id,
 			});
-			useSettingsStore.setState({ automaticTabNamingEnabled: false } as any);
+			useSettingsStore.setState({ automaticTabNamingEnabled: false, newShell: false } as any);
 			const deps = createDeps({
 				activeSession: session,
 				sessionsRef: { current: [session] },

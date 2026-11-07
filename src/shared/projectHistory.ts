@@ -1,3 +1,6 @@
+import { getParentDir } from './formatters';
+import { isPathAtOrUnderRoot, normalizeWorktreePath } from './worktreePaths';
+
 /** A native conversation's recorded Git worktree. */
 export interface NativeWorktree {
 	path: string;
@@ -50,4 +53,31 @@ export interface ProjectHistoryError {
 export interface ProjectHistoryResult {
 	conversations: ProjectHistoryConversation[];
 	errors: ProjectHistoryError[];
+}
+
+/** Shared project membership for discovery, archive display and permission inheritance. */
+export function projectHistoryScopeFor(
+	scopes: readonly ProjectHistoryScope[],
+	record: Pick<ProjectHistoryConversation, 'projectPath' | 'sshRemoteId' | 'worktree'> & {
+		projectKey?: string;
+	}
+): ProjectHistoryScope | undefined {
+	const remote = !!record.sshRemoteId;
+	const nativePath = normalizeWorktreePath(record.projectPath, remote);
+	const candidates = scopes
+		.filter((scope) => scope.sshRemoteId === record.sshRemoteId)
+		.map((scope) => ({ scope, path: normalizeWorktreePath(scope.projectPath, remote) }))
+		.sort((a, b) => b.path.length - a.path.length);
+	const exact = candidates.find((candidate) => candidate.path === nativePath);
+	const mainPath =
+		!remote && record.worktree?.commonDir
+			? normalizeWorktreePath(getParentDir(record.worktree.commonDir))
+			: undefined;
+	return (
+		exact?.scope ??
+		candidates.find((candidate) => candidate.path === mainPath)?.scope ??
+		candidates.find((candidate) => isPathAtOrUnderRoot(nativePath, candidate.path))?.scope ??
+		// Native adapters can recognize local aliases that the renderer cannot resolve.
+		candidates.find((candidate) => candidate.scope.projectKey === record.projectKey)?.scope
+	);
 }

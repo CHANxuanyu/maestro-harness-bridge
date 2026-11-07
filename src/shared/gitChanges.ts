@@ -25,6 +25,8 @@ export interface GitChangedFile {
 export interface GitChanges {
 	/** Repository root in native local path form, or exactly as Git prints it over SSH. */
 	root: string;
+	/** Actual working directory reported by Git on the execution host, with / separators. */
+	executionCwd?: string;
 	branch: string | null;
 	files: GitChangedFile[];
 	totals: { files: number; additions: number; deletions: number };

@@ -20,6 +20,7 @@ export interface SdkProcessController {
  * Configuration for spawning a new process
  */
 export interface ProcessConfig {
+	nativeCommandScopeKey?: string;
 	sessionId: string;
 	toolType: string;
 	cwd: string;
@@ -91,6 +92,7 @@ export interface ProcessConfig {
  * Internal representation of a managed process
  */
 export interface ManagedProcess {
+	nativeCommandScopeKey?: string;
 	toolOutputSource?: Omit<
 		import('../../shared/nativeToolOutput').NativeToolOutputTarget,
 		'nativeSessionId'

@@ -1,3 +1,4 @@
+import { parseNativeSearchMessages } from '../../shared/sessionSearch';
 import { readCodexRollout } from '../../shared/codexRollout';
 import { readToolOutputFile } from './native-tool-output';
 /**
@@ -1240,27 +1241,7 @@ export class ClaudeSessionStorage extends BaseSessionStorage {
 			return [];
 		}
 
-		const lines = content.split('\n').filter((l) => l.trim());
-		const searchableMessages: SearchableMessage[] = [];
-
-		for (const line of lines) {
-			try {
-				const entry = JSON.parse(line);
-				if (entry.type === 'user' || entry.type === 'assistant') {
-					const textContent = extractTextFromContent(entry.message?.content);
-					if (textContent.trim()) {
-						searchableMessages.push({
-							role: entry.type as 'user' | 'assistant',
-							textContent,
-						});
-					}
-				}
-			} catch {
-				// Skip malformed lines
-			}
-		}
-
-		return searchableMessages;
+		return parseNativeSearchMessages(content, 'claude-code').messages;
 	}
 
 	getSessionPath(

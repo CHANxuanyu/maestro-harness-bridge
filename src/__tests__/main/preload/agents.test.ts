@@ -23,6 +23,18 @@ describe('Agents Preload API', () => {
 		api = createAgentsApi();
 	});
 
+	it('forwards the native command context and cache-only flag', async () => {
+		const context = {
+			toolType: 'codex',
+			cwd: '/temporary/project',
+			customEnvVars: { CODEX_HOME: '/temporary/account' },
+		};
+		const snapshot = { commands: [], warning: 'remote-unavailable' };
+		mockInvoke.mockResolvedValue(snapshot);
+		expect(await api.getNativeCommands(context, true)).toEqual(snapshot);
+		expect(mockInvoke).toHaveBeenCalledWith('agents:getNativeCommands', context, true);
+	});
+
 	describe('detect', () => {
 		it('should invoke agents:detect', async () => {
 			const mockAgents = [

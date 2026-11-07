@@ -36,6 +36,7 @@ const probe = vi.fn().mockResolvedValue('opaque-revision');
 const read = vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false });
 beforeEach(() => {
 	vi.clearAllMocks();
+	read.mockResolvedValue({ messages: [], total: 0, hasMore: false });
 	handlers.clear();
 	vi.mocked(getSessionStorage).mockReturnValue({
 		getTranscriptRevision: probe,
@@ -50,6 +51,54 @@ beforeEach(() => {
 const invoke = (...args: any[]) =>
 	handlers.get('agentSessions:getTranscriptRevision')!({}, ...args);
 describe('read-only transcript refresh IPC', () => {
+	it('indexes complete native history independently of the 500-message display window and shares revision cache', async () => {
+		const handler = handlers.get('agentSessions:turnWrites');
+		expect(handler).toBeTypeOf('function');
+		const messages = [
+			{ type: 'user', uuid: 'early', content: 'Early change', timestamp: '2026-11-06T09:00:00Z' },
+			{
+				type: 'assistant',
+				uuid: 'write',
+				content: '',
+				timestamp: '2026-11-06T09:00:01Z',
+				toolUse: [{ tool: 'Write', state: { status: 'completed', input: { file_path: 'a.ts' } } }],
+			},
+			...Array.from({ length: 600 }, (_, i) => ({
+				type: 'assistant',
+				uuid: `later-${i}`,
+				content: 'Progress',
+				timestamp: '2026-11-06T09:00:02Z',
+			})),
+		];
+		read.mockImplementation(async (_project, _native, options) => ({
+			messages: messages.slice(-options.limit),
+			total: messages.length,
+			hasMore: options.limit < messages.length,
+		}));
+		const args = [{}, 'codex', '/project', 'long-native', { ownerAgentId: 'owner' }];
+		const first = await handler!(...args);
+		expect(first).toEqual([
+			{
+				turnId: 'early',
+				title: 'Early change',
+				timestamp: Date.parse('2026-11-06T09:00:00Z'),
+				paths: ['a.ts'],
+			},
+		]);
+		expect(read).toHaveBeenCalledWith(
+			'/project',
+			'long-native',
+			expect.objectContaining({
+				readOnly: true,
+				configDir: '/owner-account',
+				limit: Number.MAX_SAFE_INTEGER,
+			}),
+			undefined
+		);
+		expect(await handler!(...args)).toEqual(first);
+		expect(read).toHaveBeenCalledTimes(1);
+		expect(restoreStarredTranscript).not.toHaveBeenCalled();
+	});
 	it('reads one tool from the selected owner account without restoring mirrors', async () => {
 		const handler = handlers.get('agentSessions:toolOutput');
 		expect(handler).toBeTypeOf('function');

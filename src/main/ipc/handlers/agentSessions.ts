@@ -1,3 +1,19 @@
+import { createNativeTurnWriteReader } from '../../storage/turn-write-index';
+import type { ProcessManager } from '../../process-manager';
+import { REGEX_AI_SUFFIX } from '../../constants';
+import { createConversationArchive } from '../../storage/conversation-archive';
+import type {
+	ArchivedConversation,
+	ConversationArchiveTarget,
+	ConversationArchiveAction,
+	ConversationLifecycleResult,
+} from '../../../shared/conversationArchive';
+
+import { runNativeHistorySearch } from '../../storage/native-history-search';
+import type {
+	NativeHistorySearchRequest,
+	NativeHistorySearchAccount,
+} from '../../../shared/nativeHistorySearch';
 import { nativeToolCommand } from '../../../shared/nativeToolOutput';
 import { MAX_PERSISTED_TOOL_OUTPUT_CHARS } from '../../../shared/toolOutput';
 import type {
@@ -150,6 +166,7 @@ export interface AgentSessionOriginsData {
  * Dependencies required for agent sessions handlers
  */
 export interface AgentSessionsHandlerDependencies {
+	getProcessManager?: () => ProcessManager | null;
 	getAgentDetector?: () => AgentDetector | null;
 	getWindowForSession?: (sessionId: string) => BrowserWindow | null;
 	getMainWindow: () => BrowserWindow | null;
@@ -421,22 +438,180 @@ function aggregateProviderStats(
  * Register all agent sessions IPC handlers.
  */
 export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDependencies): void {
-	const getMainWindow = deps?.getMainWindow;
-	const safeSend = createSafeSend(getMainWindow ?? (() => null));
-	const nativeProjects = createNativeProjectDiscovery({
-		accountDirs: async (provider) => {
-			const dirs = await getProviderAccountDirs(provider);
-			const layers = getAgentAccountDirLayers(provider);
-			const effectiveDefault = resolveAccountDir({ toolType: provider }, layers);
-			if (effectiveDefault) dirs.push(effectiveDefault);
-			for (const owner of getSessionsStore().get('sessions', [])) {
-				if (owner.toolType !== provider || owner.sessionSshRemoteConfig?.enabled) continue;
-				const dir = resolveAgentAccountDir(owner.id);
-				if (dir) dirs.push(dir);
+	const archive = createConversationArchive({
+		read: () => getSettingsStore().get('archivedConversations', []),
+		write: (records) => {
+			getSettingsStore().set('archivedConversations', records);
+		},
+		owners: () => getSessionsStore().get('sessions', []),
+		accountDir: resolveAgentAccountDir,
+		lifecycle: async (request) => {
+			const running = deps
+				?.getProcessManager?.()
+				?.getAll()
+				.some(
+					(process) =>
+						!process.isTerminal &&
+						request.ownerIds.includes(process.sessionId.replace(REGEX_AI_SUFFIX, '')) &&
+						(process.agentSessionId === request.nativeSessionId ||
+							process.toolOutputSource?.nativeSessionId === request.nativeSessionId)
+				);
+			if (running) throw new Error('conversation-running');
+			const results: ConversationLifecycleResult[] = [];
+			// Query every owner, including peers in other windows. An unavailable
+			// window is not proof that a conversation is idle.
+			for (const ownerId of request.ownerIds) {
+				const win = deps?.getWindowForSession?.(ownerId) ?? deps?.getMainWindow();
+				if (!isWebContentsAvailable(win)) throw new Error('conversation-owner-unavailable');
+				const result = await requestFromRenderer<ConversationLifecycleResult>(
+					win!,
+					'agentSessions:conversationLifecycle',
+					{
+						args: [{ ...request, ownerIds: [ownerId] }],
+						verifySender: true,
+						fallback: { error: 'conversation-owner-unavailable' },
+					}
+				);
+				if (result.error) throw new Error(result.error);
+				results.push(result);
 			}
-			return [...new Set(dirs)];
+			const modes = results.map((result) => result.permissionMode);
+			return {
+				lastActivity: results.some((result) => result.lastActivity !== undefined)
+					? Math.max(...results.map((result) => result.lastActivity ?? 0))
+					: undefined,
+				permissionMode: modes.includes('readonly')
+					? 'readonly'
+					: modes.includes('standard')
+						? 'standard'
+						: modes.includes('full')
+							? 'full'
+							: undefined,
+				title: results.find((result) => result.title)?.title,
+			};
+		},
+		deleteNative: async (target) => {
+			const sshConfig = target.sshRemoteId ? getSshRemoteById(target.sshRemoteId) : undefined;
+			if (target.sshRemoteId && !sshConfig) throw new Error('SSH remote is unavailable');
+			const storage = getSessionStorage('codex');
+			if (!(storage instanceof CodexSessionStorage)) throw new Error('Codex storage unavailable');
+			return storage.deleteSession(target.nativeSessionId, target.accountDir, sshConfig);
 		},
 	});
+	ipcMain.handle(
+		'agentSessions:archives',
+		withIpcErrorLogging(handlerOpts('archives'), (options?: { includeUnarchived?: boolean }) =>
+			archive.list(options)
+		)
+	);
+	ipcMain.handle(
+		'agentSessions:archiveConversation',
+		withIpcErrorLogging(
+			handlerOpts('archiveConversation'),
+			async (target: ConversationArchiveTarget, action: ConversationArchiveAction) => {
+				if (!getSettingsStore().get('newShell', false))
+					throw new Error('conversation-new-shell-required');
+				try {
+					return await archive.change(target, action);
+				} finally {
+					const records = await archive.list({ includeUnarchived: true });
+					createSafeSend(() => BrowserWindow.getAllWindows())(
+						'agentSessions:archivesChanged',
+						records
+					);
+				}
+			}
+		)
+	);
+
+	const getMainWindow = deps?.getMainWindow;
+	const safeSend = createSafeSend(getMainWindow ?? (() => null));
+	const nativeAccountDirs = async (provider: string) => {
+		const dirs = await getProviderAccountDirs(provider);
+		const layers = getAgentAccountDirLayers(provider);
+		const effectiveDefault = resolveAccountDir({ toolType: provider }, layers);
+		if (effectiveDefault) dirs.push(effectiveDefault);
+		for (const owner of getSessionsStore().get('sessions', [])) {
+			if (owner.toolType !== provider || owner.sessionSshRemoteConfig?.enabled) continue;
+			const dir = resolveAgentAccountDir(owner.id);
+			if (dir) dirs.push(dir);
+		}
+		return [...new Set(dirs)];
+	};
+	const nativeProjects = createNativeProjectDiscovery({ accountDirs: nativeAccountDirs });
+	const searches = new Map<string, AbortController>();
+	ipcMain.handle('agentSessions:cancelNativeHistorySearch', (event, requestId: string) => {
+		searches.get(`${event.sender?.id ?? 'bridge'}:${requestId}`)?.abort();
+	});
+	ipcMain.handle(
+		'agentSessions:searchNativeHistory',
+		async (event, request: NativeHistorySearchRequest) => {
+			if (
+				!request ||
+				typeof request.query !== 'string' ||
+				request.query.length > 256 ||
+				(request.projectPath !== undefined &&
+					(typeof request.projectPath !== 'string' || !path.isAbsolute(request.projectPath))) ||
+				(request.requestId !== undefined &&
+					(typeof request.requestId !== 'string' || request.requestId.length > 128))
+			)
+				throw new Error('Invalid native history search');
+			if (request.query.trim().length < 2) return { hits: [], truncated: false };
+			const key = request.requestId
+				? `${event.sender?.id ?? 'bridge'}:${request.requestId}`
+				: undefined;
+			const controller = new AbortController();
+			if (key) {
+				searches.get(key)?.abort();
+				searches.set(key, controller);
+			}
+			let timedOut = false;
+			const timeout = setTimeout(() => {
+				timedOut = true;
+				controller.abort();
+			}, 5000);
+			let onAbort = () => {};
+			const cancelled = new Promise<null>((resolve) => {
+				onAbort = () => resolve(null);
+				controller.signal.addEventListener('abort', onAbort, { once: true });
+			});
+			const stopped = () =>
+				timedOut
+					? { hits: [], truncated: true, limited: true }
+					: { hits: [], truncated: false, cancelled: true };
+			try {
+				const accounts: NativeHistorySearchAccount[] = [];
+				for (const provider of ['claude-code', 'codex'] as const) {
+					if (controller.signal.aborted) return stopped();
+					const directories = await Promise.race([nativeAccountDirs(provider), cancelled]);
+					if (!directories || controller.signal.aborted) return stopped();
+					for (const accountDir of directories.slice(0, 64))
+						accounts.push({ provider, accountDir });
+				}
+				const result = await runNativeHistorySearch(
+					{ query: request.query, projectPath: request.projectPath, accounts },
+					controller.signal
+				);
+				if (timedOut) return stopped();
+				if (!getSettingsStore().get('newShell', false)) return result;
+				const archivedKeys = new Set(
+					getSettingsStore()
+						.get('archivedConversations', [])
+						.filter((record) => record.archived !== false)
+						.map((record) => record.key)
+				);
+				return {
+					...result,
+					hits: result.hits.filter((hit) => !archivedKeys.has(hit.conversation.key)),
+				};
+			} finally {
+				clearTimeout(timeout);
+				controller.signal.removeEventListener('abort', onAbort);
+				if (key && searches.get(key) === controller) searches.delete(key);
+			}
+		}
+	);
+
 	const openProject = createProjectOpener({
 		sessions: () => getSessionsStore().get('sessions', []),
 		detect: async () => (await deps?.getAgentDetector?.()?.detectAgents()) ?? [],
@@ -486,21 +661,36 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 
 	ipcMain.handle(
 		'agentSessions:listProjectHistory',
-		withIpcErrorLogging(handlerOpts('listProjectHistory'), async (scopes: ProjectHistoryScope[]) =>
-			discoverProjectHistory(scopes, {
-				storages: getAllSessionStorages(),
-				owners: getSessionsStore().get('sessions', []),
-				accountDirs: getProviderAccountDirs,
-				ownerAccountDir: resolveAgentAccountDir,
-				remote: getSshRemoteById,
-				origins: deps?.agentSessionOriginsStore?.get('origins', {}),
-				internalPromptPrefixes: [getPrompt('tab-naming').trim().slice(0, 180)],
-				onError: (error, provider) => {
-					logger.warn(`Project history unavailable for ${provider}: ${String(error)}`, LOG_CONTEXT);
-					if (!isExpectedSessionReadError(error))
-						void captureException(error, { operation: 'projectHistory', provider });
-				},
-			})
+		withIpcErrorLogging(
+			handlerOpts('listProjectHistory'),
+			async (scopes: ProjectHistoryScope[], options?: { archived?: boolean }) =>
+				discoverProjectHistory(scopes, {
+					archivedKeys:
+						getSettingsStore().get('newShell', false) || options?.archived
+							? new Set(
+									getSettingsStore()
+										.get('archivedConversations', [])
+										.filter((row: ArchivedConversation) => row.archived !== false)
+										.map((row: ArchivedConversation) => row.key)
+								)
+							: undefined,
+					archivedOnly: options?.archived,
+					storages: getAllSessionStorages(),
+					owners: getSessionsStore().get('sessions', []),
+					accountDirs: getProviderAccountDirs,
+					ownerAccountDir: resolveAgentAccountDir,
+					remote: getSshRemoteById,
+					origins: deps?.agentSessionOriginsStore?.get('origins', {}),
+					internalPromptPrefixes: [getPrompt('tab-naming').trim().slice(0, 180)],
+					onError: (error, provider) => {
+						logger.warn(
+							`Project history unavailable for ${provider}: ${String(error)}`,
+							LOG_CONTEXT
+						);
+						if (!isExpectedSessionReadError(error))
+							void captureException(error, { operation: 'projectHistory', provider });
+					},
+				})
 		)
 	);
 
@@ -509,6 +699,14 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 		withIpcErrorLogging(
 			handlerOpts('deleteCodexConversation'),
 			async (ownerId: string, nativeId: string) => {
+				if (getSettingsStore().get('newShell', false)) {
+					const result = await archive.change({ ownerId, nativeSessionId: nativeId }, 'delete');
+					createSafeSend(() => BrowserWindow.getAllWindows())(
+						'agentSessions:archivesChanged',
+						await archive.list({ includeUnarchived: true })
+					);
+					return result;
+				}
 				const owner = getSessionsStore()
 					.get('sessions', [])
 					.find((session) => session.id === ownerId);
@@ -599,6 +797,32 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 	);
 
 	// ============ Read Session Messages ============
+
+	const readTurnWrites = createNativeTurnWriteReader();
+	ipcMain.handle(
+		'agentSessions:turnWrites',
+		withIpcErrorLogging(
+			handlerOpts('turnWrites'),
+			async (
+				agentId: string,
+				projectPath: string,
+				sessionId: string,
+				options?: Pick<SessionReadOptions, 'configDir' | 'ownerAgentId'>,
+				sshRemoteId?: string
+			) => {
+				if (!['claude-code', 'codex'].includes(agentId)) return [];
+				const storage = getSessionStorage(agentId);
+				if (!storage) return [];
+				const remote = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+				if (sshRemoteId && (!remote || !remote.enabled))
+					throw new Error('SSH remote is unavailable');
+				const configDir =
+					options?.configDir ??
+					(options?.ownerAgentId ? resolveAgentAccountDir(options.ownerAgentId) : undefined);
+				return readTurnWrites(agentId, storage, projectPath, sessionId, { configDir }, remote);
+			}
+		)
+	);
 
 	ipcMain.handle(
 		'agentSessions:read',

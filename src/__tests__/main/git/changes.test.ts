@@ -50,6 +50,18 @@ describe('combined changes on a real repository', { timeout: 60_000 }, () => {
 		vi.restoreAllMocks();
 		rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	});
+	it('reports the actual subdirectory from Git for local and remote command forms', async () => {
+		mkdirSync(path.join(cwd, 'sub'));
+		writeFileSync(path.join(cwd, 'sub', 'a.ts'), 'ok');
+		const sub = path.join(cwd, 'sub');
+		const local = await getGitChanges(sub);
+		const shell = parseGitChanges(
+			execFileSync('git', changesCommand(), { cwd: sub, encoding: 'utf8' })
+		);
+		for (const changes of [local, shell]) {
+			expect(changes).toMatchObject({ executionCwd: path.join(cwd, 'sub').replace(/\\/g, '/') });
+		}
+	});
 
 	it.each(['untracked', 'tracked'] as const)(
 		'uses a bounded number of git processes for many %s files',

@@ -1,3 +1,4 @@
+import { rememberNativeCommands } from '../../agents/native-commands';
 // src/main/process-manager/handlers/StdoutHandler.ts
 
 import { EventEmitter } from 'events';
@@ -715,6 +716,7 @@ export class StdoutHandler {
 		// Extract slash commands
 		const slashCommands = outputParser.extractSlashCommands(event);
 		if (slashCommands) {
+			rememberNativeCommands(managedProcess.nativeCommandScopeKey, slashCommands);
 			this.emitter.emit('slash-commands', sessionId, slashCommands);
 		}
 
@@ -1002,6 +1004,7 @@ export class StdoutHandler {
 		}
 
 		if (msgRecord.type === 'system' && msgRecord.subtype === 'init' && msgRecord.slash_commands) {
+			rememberNativeCommands(managedProcess.nativeCommandScopeKey, msgRecord.slash_commands);
 			this.emitter.emit('slash-commands', sessionId, msgRecord.slash_commands);
 		}
 

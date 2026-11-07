@@ -884,7 +884,8 @@ export async function readFileRemoteAbortable(
 export async function statRemote(
 	filePath: string,
 	sshRemote: SshRemoteConfig,
-	deps: RemoteFsDeps = defaultDeps
+	deps: RemoteFsDeps = defaultDeps,
+	options: { followSymlinks?: boolean } = {}
 ): Promise<RemoteFsResult<RemoteStatResult>> {
 	const escapedPath = shellEscapeRemotePath(filePath);
 	// Use stat with format string:
@@ -894,7 +895,8 @@ export async function statRemote(
 	// Note: GNU stat vs BSD stat have different format specifiers
 	// We try GNU format first (Linux), then BSD format (macOS)
 	// BSD stat requires $'...' ANSI-C quoting to interpret \n as newlines
-	const remoteCommand = `stat --printf='%s\\n%F\\n%Y' ${escapedPath} 2>/dev/null || stat -f $'%z\\n%HT\\n%m' ${escapedPath}`;
+	const follow = options.followSymlinks ? ' -L' : '';
+	const remoteCommand = `stat${follow} --printf='%s\\n%F\\n%Y' ${escapedPath} 2>/dev/null || stat${follow} -f $'%z\\n%HT\\n%m' ${escapedPath}`;
 
 	const result = await execRemoteCommand(sshRemote, remoteCommand, deps);
 

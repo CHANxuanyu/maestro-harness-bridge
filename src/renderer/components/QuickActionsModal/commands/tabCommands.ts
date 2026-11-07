@@ -1,3 +1,4 @@
+import { requestConversationAction } from '../../../services/conversationArchive';
 import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { getT } from '../../../i18n';
 import type { Session } from '../../../types';
@@ -211,6 +212,29 @@ export function buildTabCommands({
 				setQuickActionOpen(false);
 			},
 		});
+	}
+
+	const nativeTab = activeSession?.aiTabs.find((tab) => tab.id === activeSession.activeTabId);
+	if (newShell && !activeGroupChatId && isAiMode && nativeTab?.agentSessionId && activeSession) {
+		for (const action of activeSession.toolType === 'codex'
+			? (['archive', 'delete'] as const)
+			: (['archive'] as const)) {
+			commands.push({
+				id: `${action}Conversation`,
+				label: t(`workflows.archive.${action}`),
+				action: () => {
+					setQuickActionOpen(false);
+					requestConversationAction(
+						{
+							ownerId: activeSession.id,
+							nativeSessionId: nativeTab.agentSessionId!,
+							title: nativeTab.name ?? undefined,
+						},
+						action
+					);
+				},
+			});
+		}
 	}
 
 	if (hasActiveTab && onRenameTab) {

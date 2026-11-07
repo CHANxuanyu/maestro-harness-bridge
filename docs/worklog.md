@@ -100,6 +100,60 @@ Playwright 仅收集 3 条场景，尚未执行修改后的 Electron 流程。Op
 
 `e2e/native-conversation-archive.spec.ts` 使用合成历史验证界面归档、正常重启、界面取消归档和 CLI 往返，并逐次比较原生文件字节。该场景与真实多窗口、SSH、外部原生应用并发写入仍待沙箱外验收。不声称能够识别独立原生 CLI 的运行状态；无匹配工具账户配置的归档项，CLI 修改前需要先有配置。边界已记入 CLI 对等文档的 Open gaps。
 
+## 2026-11-07：T10 第五轮插件上报保留
+
+外部 Electron 验收停在 `/plugin:review Reported by tool` 不可见，扫描、草稿和项目正文已通过。现场截图没有插件候选项，trace 没有提供方原始 stdout。沿合成场景、进程初始化和缓存链路定位：项目命令完成后自动启动不持久化的摘要，摘要的空 `slash_commands` 用相同账户和项目键替换了主回合的插件上报。
+
+先提交回归 `354164360`，串起实际 spawn 处理函数、合成 init、Claude 解析器、stdout 处理和缓存查询，实际得到 2 失败、129 通过：摘要空列表清空插件，摘要另一条命令替换插件。修复仅调整 `handle-spawn.ts` 中命令缓存的发布资格，带 `--no-session-persistence` 的辅助回合不再取得缓存键。后续正式回合仍可更新或清空上报，账户、项目和 SSH 隔离及文件优先级沿用原实现。旧 `process:slash-commands` 事件照常发出，旧界面的发现和展示没有改动；共享的 CLI 查询会保留主回合命令，这是同一缓存修复的预期行为。
+
+相关 6 个 Vitest 文件共 326 项、合成 init 夹具 1 项通过，均使用 `--configLoader runner --no-cache`，没有跳过或自动重试。新增中英文检查覆盖 `/plugin` 过滤、高亮和空描述下的完整可访问名称，继续使用已有来源文案。渲染层与主进程 TypeScript 检查、Electron spec 的独立严格类型检查通过。产品处理函数和 Electron spec 的 ESLint、所有改动文件的 Prettier 与差异空白检查通过。被测对象为本分支源码和合成夹具，没有构建安装包。
+
+Electron 用例新增等待自动摘要历史记录后再检查插件，防止读取早于覆盖而偶然通过；原按钮名称、草稿、正文、单回合和账户隔离断言保留。Playwright 仅收集到 1 个场景，未启动 Electron。沙箱外入口为 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-commands.spec.ts --retries=0`。没有新增 CLI 动词，沿用 `tab commands` 的同一发现接口，对等文档和验收说明已更新。真实提供方、模型、真实 SSH、其他平台和发行包未验证，没有推送、PR、标签或发布，依赖符号链接未修改。
+
+## 2026-11-06：T10 第四轮扫描夹具收尾
+
+外部 Electron 验收在 `holdNativeCommandScan` 中报 `ReferenceError: require is not defined`。先让既有夹具回归将待求值函数序列化到无 `require` 的 VM 上下文，确认 1 条失败且错误一致，再提交回归 `dd50167b5`。原单测直接调用函数，未覆盖 Playwright 的跨进程求值边界。
+
+扫描延迟改用 Playwright 传入的 `ipcMain`，临时包装已有 `agents:getNativeCommands` 处理函数，仅暂停目标临时账户和项目的本机 Claude 非缓存扫描。其他查询继续转发；释放时恢复原处理函数，保留参数、结果和错误，释放所有挂起请求，重复清理不覆盖之后的注册。Electron 场景保留原有草稿、次数、来源、正文和账户隔离断言，新增释放前没有合成回合启动的断言。测试夹具通过内部 `_invokeHandlers` 读取原函数，缺失时明确失败，实际 Electron 兼容性仍待外部验证。
+
+被测对象是当前源码与夹具，不是 Electron 或安装包。扫描夹具 6 条、输入处理 121 条回归通过，均使用 `--configLoader runner --no-cache`，没有新增跳过、放宽断言或自动重试。`npx tsc --noEmit -p tsconfig.json` 及 Electron spec、夹具的独立严格类型检查通过。Playwright 仅执行 `--list --retries=0`，成功列出 1 个场景。修改文件经 Prettier，修改的 TypeScript 文件经 ESLint，差异空白检查通过。
+
+本轮只改测试和验证文档，没有产品、文案、CLI 或新旧界面行为变化，因此不添加用户变更日志条目。CLI 对等文档已注明夹具调整，原有 Open gaps 保留。外部运行入口和限制见 `e2e/native-commands-review.md`。未运行 Electron、完整构建、真实提供方、模型、SSH 或发行包验收，依赖符号链接未修改，没有推送、开 PR、标签或发布。
+
+## 2026-11-06：T10 第三轮 Electron 失败定位
+
+外部 Electron 场景停在首次 `/before User Before refresh` 可见性断言。trace 的按钮已包含命令、用户来源和描述，发现服务没有丢失命令；来源只用 CSS 边距与命令名隔开，可访问名称却连成 `/beforeUser Before refresh`。先补英文、中文的用户、项目、工具上报六条回归，确认 6 失败、4 通过，再在两个文本节点之间补空格。产品修复提交为 `745dba37b`。复用已有中英文来源文案，没有新增动作或 CLI 动词，`tab commands` 的结构不变。
+
+同时修正后半段场景的扫描延迟方式：不再改写 `contextBridge` 的只读方法，改为测试主进程暂时阻塞指定临时目录的 `stat`，确认扫描进入后才输入下一份草稿，并在 `finally` 释放和恢复。新夹具回归验证其他目录仍可读取、目标请求确实挂起、恢复后待处理请求完成。原有可见性、来源、正文、次数和账户隔离断言全部保留。E2E 入口缺少网页包构建的回归先失败 1 条，再补 `build:web-desktop`，避免依赖旧构建残留。
+
+最终被测对象为当前源码和测试夹具，4 个相关源码测试文件共 76 条通过，2 个夹具文件共 2 条通过，均使用 `--configLoader runner --no-cache`，未启用自动重试或新增跳过。`npx tsc --noEmit -p tsconfig.json` 通过；Electron spec 和新增夹具的独立严格类型检查通过。修改文件经 Prettier，产品组件、Electron spec、扫描夹具和构建脚本相关 ESLint 检查通过，差异空白检查通过。未运行完整构建、Electron、真实提供方、模型、SSH 或发行包，修复后 Electron 结果仍待外部确认。运行入口和场景细节见 `e2e/native-commands-review.md`。
+
+旧界面没有来源标记的命令渲染不变，旧发现与执行路径不变。共享变更仅为 E2E 入口补建网页包，作用于测试构建，不改变应用运行行为。依赖符号链接未修改，没有推送、开 PR、标签或发布，私人现场和交付报告不进入公共提交。
+
+## 2026-11-06：T10 第二轮审查修复
+
+核实并修复五项意见。新界面在命令扫描前接管草稿并登记重复提交保护，等待期间的新草稿不再被清空；发现服务保留读取失败状态，出队时经既有恢复路径暂停并保留命令。Claude 项目命令传入发现时选中的正文和参数，避免裸命令被个人同名技能抢先解析。SSH 发现显式选择 `stat -L`，其他远程 stat 调用默认行为保持不变。原生初始化上报的命令按启动时的账户、项目和 SSH 配置保存，文件发现优先，界面和 CLI 查询共用合并结果，读取失败时缓存也只展示内置项。
+
+生产修复提交为 `375e1fead` 和 `7978f1afd`。修复前分别确认三组回归失败：提交与队列组 4 条失败，来源与符号链接组 3 条失败，原生上报组 3 条失败。相关源码回归去重为 10 个文件、776 条通过，另有 1 个合成协议夹具文件、1 条通过。全部最终文件运行使用 `--configLoader runner --no-cache`，没有新增跳过或放宽断言。初次只筛选协议夹具新用例，8 条不相关场景未选中；随后将新用例拆到独立文件整文件验证，避免启动假 CLI 子进程。没有跑全量 Vitest 或自动重试。
+
+`npx tsc --noEmit -p tsconfig.json` 和主进程类型检查通过。Electron spec 的独立类型检查保持严格选项，补入现有窗口声明、ES2024 库与 JS 夹具声明后通过；未改变项目类型配置。修改文件经 Prettier，修改的产品代码和 Electron spec 经 ESLint，`git diff --check` 通过。
+
+被测对象为当前分支源码，不是 Electron 或发行包。合成 Electron 场景扩展了新增命令刷新、扫描期间草稿保护、项目正文、插件报告与账户切换；尚未执行。外部运行命令及队列失败、SSH 符号链接、旧界面对照步骤写在 `e2e/native-commands-review.md`。本轮没有启动 Electron、真实提供方、模型或 SSH 连接，也没有写原生账户、推送、开 PR 或发布。
+
+本轮无新 CLI 动词，`tab commands` 返回增加 `reported` 来源，项目 Claude 项增加选定的 `prompt`。Open gaps 明确保留：原生技能 frontmatter、动态插值和相对附件未实现完整等价；插件离线发现、CLI 队列强制发送及忙碌 `dispatch --queue` 的原生命令展开未补齐。旧界面的展示与裸命令执行沿用原路径；共享层只采集按作用域隔离的命令报告，以及增加默认关闭的远程 stat 可选参数。私有报告与日志不进入公共提交。
+
+## 2026-11-06：T10 原生命令按账户发现和刷新
+
+在 `codex/native-commands-refresh` 为新界面的 Claude Code 和 Codex 增加只读命令发现。账户复用规范解析器，目录取对话实际 cwd，SSH 使用远程工作目录覆盖与远程文件接口。项目命令覆盖用户同名命令，隐藏项目 skill 也占据名字，避免用户版本重新出现。目录列表与文件正文按修改时间和大小缓存，每次打开 `/` 先呈现已有结果，再检查新增、修改和删除；切换账户后丢弃旧请求的迟到结果。读取失败保留内置项并显示中英文提示。CLI `tab commands` 与界面原生命令部分共用 `agents:getNativeCommands`，不启动提供方。
+
+后端与 CLI 提交为 `790a47d48`。旧界面的发现、会话缓存与执行优先级保持原路径；共享的 Claude 内置描述表仅移位，Codex 路径工具只新增可选的 POSIX 路径实现参数，默认行为保持不变。新界面的 Codex 命令分发和队列读取当前账户的提示词，避免显示新命令却执行旧账户缓存。
+
+修复前的界面回归为 1 失败、80 通过：开启新界面并指定账户后，仍调用没有账户参数的旧命令接口。补充的隐藏项目 skill 优先级回归为 1 失败、11 通过，确认低优先级用户 skill 会重新出现在列表。两项均保留原断言修复。最终相关 Vitest 使用 `--configLoader runner --no-cache`，12 个文件、705 条通过，无跳过。renderer、main、CLI 三份 TypeScript 无输出检查通过；新增 Electron 场景通过沿用严格选项并加载现有 JS 夹具的独立类型检查。CLI bundle 构建成功，命令参考由当前命令树生成，仅保留本任务新增段落。修改文件经 Prettier，产品源码与 E2E 的 ESLint、差异空白检查通过。
+
+被测对象为本分支源码及 CLI bundle，不是安装包。`e2e/native-commands.spec.ts` 覆盖临时账户新增命令、重新打开 `/`、项目覆盖用户、来源标记、CLI 返回和没有提供方回合，尚未执行 Electron。由外部运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-commands.spec.ts --retries=0`。没有启动真实提供方、真实 SSH、其他平台或安装包验收，没有推送、开 PR、打标签或发布，依赖符号链接保持不变。
+
+Open gaps 已登记：文件发现覆盖 Claude commands/skills 与现有 Codex skills/prompts，不枚举两家插件目录贡献的命令，也不把 Codex TUI 专有命令当作 exec 提示词。SSH 复用既有秒级 stat，真实远端连接和命令执行仍待外部验收。公共记录不含私有账户目录、原始日志或交付报告。
+
 ## 2026-11-06：四条已审查分支的集成核对
 
 在 `codex/nov6-qa-batch` 从 `2ebe18308` 依次以非快进合并纳入新对话权限、停止续聊、Codex 任务清单和改动面板文件操作。四次合并提交为 `b48f230b5`、`a737b0f41`、`cc84c0857`、`b30af198e`。后三次的 CHANGELOG 与 worklog 冲突均保留双方新增段落；最后一次的 `e2e/native-new-shell.spec.ts` 保留完整权限继承和单文件操作场景。CLI 对等、规范工具登记、预加载类型、中英文消息及原生 CLI 夹具的自动合并均复核，无功能删减。
@@ -1071,3 +1125,15 @@ Electron 场景保留搜到内容、点击后正文入视口、消息高亮、�
 旧界面不新增内容搜索或自动展开。必要的共享行为变化是本机 Codex 原生历史列表、读取、版本探测及显式整条删除也识别同账户归档，避免搜索和打开各自发现不同文件；删除仅在明确调用原删除动作时发生。SSH 发现未改，内容搜索仍不读取远程历史，不对远程路径作本地解析。
 
 Opus 仍须在沙箱外执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-sidebar-search.spec.ts --retries=0`，由脚本重建 main、renderer、CLI 并用 Electron 跑五条合成场景，不依赖单独安装 Chromium。本轮没有启动 Electron，未验证修复后的真实滚动、高亮、跨应用继续写入、真实账户与模型、真实 SSH、其他平台或发行包；未推送、开 PR、打标签或发布。
+
+## 2026-11-07：T10 换账户后的原生命令刷新
+
+验证对象为本次修复源码，基线 `937cfdeda`，未制作安装包。现场 Electron 记录在换账户后仍找到 `/plugin:review`，期望为零。单元回归先提交为 `733ff13b6`：菜单打开和关闭两种情况均失败，原有四项通过。回归使用真实 session store 和 App 的 `activeSessionChromeEquality()`，证明 store 环境已更新，但传入命令 hook 的会话快照仍是旧值。
+
+根因是 chrome 比较器有意忽略 `customEnvVars`，命令 hook 却从这份快照构造账户键和 IPC 参数。CLI 的配置处理已更新并保存环境，主进程的上报命令也仍正确保存在启动时冻结的账户键下。旧 `session.agentCommands` 虽然保留报告，新界面原生命令发现并不读取它。本次仅让 `useNativeCommands()` 在新界面支持原生命令发现时直接订阅当前会话的环境，不修改全局比较器、报告保存方式或 CLI 实现。
+
+五个相关 Vitest 文件共 199 项最终通过，使用 `--configLoader runner --no-cache`，该次无跳过、无重试。覆盖账户切换后的菜单缓存、配置保存、CLI 使用的实际 IPC 处理函数、主进程账户与 SSH 隔离，以及 `tab commands` 的桥接调用。补充 IPC 用例首次因种子缺少标签失败，使用既有 `createMockAITab()` 补齐后通过。`npx tsc --noEmit -p tsconfig.json` 通过；产品 hook 与 Electron 场景 ESLint 无错误，三个单元测试文件被仓库既有 ESLint 配置忽略。改动文件 Prettier 与 diff 空白检查通过。
+
+`e2e/native-commands.spec.ts` 保留原断言，增加新账户命令在界面与 CLI 出现、保持菜单打开切回原账户、原插件命令恢复，以及查询不额外启动回合的检查。Playwright `--list` 收集到一条场景，没有启动 Electron。Opus 需在沙箱外运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-commands.spec.ts --retries=0`；脚本会重建 main、renderer、web-desktop 和 CLI。
+
+没有新增界面动作、CLI 动词或用户文案。旧界面保留既有命令报告与发现行为，回归确认账户环境更新不会触发此次新增订阅的重绘或发现调用。没有修改 SSH 路径处理，真实 SSH、真实工具、其他平台、发行包和完整 Electron 链路仍未验证。未运行全量 Vitest，未推送、创建 PR、打标签或发布。

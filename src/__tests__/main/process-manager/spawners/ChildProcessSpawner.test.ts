@@ -165,6 +165,12 @@ describe('ChildProcessSpawner', () => {
 		});
 	});
 
+	it('carries the frozen command scope into the process that reports commands', () => {
+		const { processes, spawner } = createTestContext();
+		spawner.spawn(createBaseConfig({ nativeCommandScopeKey: 'isolated-command-scope' }));
+		expect(processes.get('test-session')?.nativeCommandScopeKey).toBe('isolated-command-scope');
+	});
+
 	it('freezes the native output account from the actual spawn environment', () => {
 		vi.mocked(buildChildProcessEnv).mockReturnValueOnce({ CODEX_HOME: '/synthetic-account' });
 		const { processes, spawner } = createTestContext();

@@ -356,3 +356,27 @@ deletion share that discovery and `preferPlainCodexRollouts()`; cache pruning
 covers both roots within the selected account. Opening a search hit still reads
 and decodes through this storage adapter, without restoring or expanding a file
 on disk. SSH discovery remains unchanged and content search remains local only.
+
+### Native command discovery for the new shell
+
+`createNativeCommandDiscovery()` in `src/main/agents/native-commands.ts` is the
+read-only entry for Claude and Codex commands. `agents:getNativeCommands` serves
+both `/` and `tab commands`. It uses `resolveAgentAccountDir()` with host-owned
+layers and `handoffLocation()` for the execution cwd. Remote paths go through
+`remote-fs.ts`, never local realpath. `getCodexSkillDirs()` and
+`getCodexPromptDirs()` accept a path implementation for remote POSIX paths.
+`parseCodexMarkdownDoc()` is reused for the common frontmatter fields.
+
+The cache is scoped to provider, resolved account, cwd and SSH configuration.
+A cached-only request performs no filesystem I/O. Refresh checks directory and
+file metadata, including nested directories, before reusing listings and bodies.
+Project entries claim names before user entries, even when a skill has
+`user-invocable: false`. Errors return supported native builtins plus a warning.
+The cache holds at most 64 contexts; scans accept 2048 directory entries, eight
+nested command levels, 256 KiB per file and 2 MiB of command bodies. SSH metadata
+uses the existing remote stat resolution. The new-shell hook keeps cached rows
+while refreshing and ignores late responses after changing conversation context.
+The hook subscribes to the current session's `customEnvVars` directly when native
+discovery is enabled. App's chrome equality deliberately omits that field, so
+the passed session snapshot alone cannot identify an account change. Keep this
+subscription narrow and leave the classic shell's stored command report intact.

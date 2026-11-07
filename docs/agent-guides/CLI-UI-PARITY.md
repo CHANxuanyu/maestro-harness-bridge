@@ -75,6 +75,82 @@ take precedence over compressed copies. The Electron scenario checks CLI content
 before clicking, retains the body-in-viewport and flash assertions, and polls the
 persisted tab name after opening. These reads do not close the navigation gap.
 
+## Native command discovery, T10
+
+| UI action                                                         | CLI                                                         | Shared implementation                                        |
+| ----------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| Open `/` and inspect native commands for the current conversation | `maestro-cli tab commands <tab-id> [--agent <id>] [--json]` | `agents:getNativeCommands`, `createNativeCommandDiscovery()` |
+
+The composer opts in with `newShell` for Claude Code and Codex. The CLI resolves
+an exact tab, unique prefix or `active`, then asks the same IPC handler to resolve
+its stored owner. Results contain `commands` with `command`, `description`,
+`source` (`project`, `user`, `builtin`, `reported`) and a `prompt` for Codex
+commands and selected Claude project commands.
+An unavailable read returns `warning` (`unavailable` or `remote-unavailable`)
+and the supported native builtins. The JSON warning is data, not a failed transport.
+Queued native command execution preserves read failures and holds the item for
+manual resend through the existing queue controls. CLI can inspect and remove
+held items with `queue list` and `queue remove`; force-send remains an open gap.
+This verb lists the native portion of `/`; Maestro's own workflow commands and
+Settings custom AI commands retain their existing configuration paths.
+
+Discovery uses the canonical account resolver and the execution cwd, including
+SSH overrides. The renderer presents its memory cache immediately and checks on
+reopening. Main caches directory listings and file bodies by metadata, with
+single flight per provider, account, cwd and SSH configuration. Project scope
+wins over user scope; within a scope, skills precede commands or prompts.
+Claude reads commands and skills, and Codex reads its existing skills and prompts
+locations. Codex and Claude project bodies use the same lookup during command
+dispatch and queue draining. This makes the chosen Claude project body explicit,
+since native Claude prefers a personal skill over a same-named project skill.
+SSH discovery follows command directory symlinks through remote `stat -L`; other
+remote stat callers retain their existing behavior.
+
+Native init reports are captured with the account, cwd and SSH configuration
+frozen at spawn. UI and CLI reads merge that scoped report with file discovery,
+which wins on collisions. Reports have the label `reported`, because the init
+event does not identify a file scope. Failed reads show only native builtins,
+including cached reads after the failure. No discovery call starts a provider or
+writes native files.
+
+Spawns with `--no-session-persistence`, including automatic Claude synopses,
+do not publish into that inventory. Their reduced or empty init reports must
+not replace the conversation's plugin commands. A later persistent turn still
+replaces the report, including with an empty list. This correction adds no UI
+action or CLI verb: `/` and `tab commands` consume the same retained inventory.
+Legacy `process:slash-commands` notifications are unchanged.
+
+Account changes through `update-agent <id> --env CLAUDE_CONFIG_DIR=<directory>`
+refresh the new-shell list even when App retains its chrome session snapshot.
+`useNativeCommands()` subscribes directly to the current session's environment;
+its cache key and IPC request use that value. `tab commands` continues to resolve
+the stored owner through the same discovery handler. Reports remain attached to
+their original account scope, and switching back restores them. The legacy
+`session.agentCommands` report is preserved and does not enter new-shell
+discovery. No action or CLI verb is added; classic-shell behavior is unchanged.
+
+Source badges have a text separator from the command name, including English
+and Chinese accessible names. This presentation fix adds no action or CLI verb;
+`tab commands` still returns the command, description and source separately.
+
+The scan-delay fixture uses the Electron module passed to `evaluateHandle` and
+temporarily wraps `agents:getNativeCommands`. Cached reads and other contexts
+continue through the original handler. This test-only correction adds no UI
+action or CLI verb and preserves the draft and single-submission assertions.
+
+Open gaps: plugin commands appear after an existing Claude process reports them;
+there is no offline inventory of Claude plugin manifests or Codex plugin catalogs.
+Project Claude commands expand their selected Markdown body and `$ARGUMENTS`
+through Maestro; native skill frontmatter execution controls, indexed arguments,
+dynamic shell interpolation and relative supporting-file semantics are not
+reimplemented or verified here. CLI queue force-send has no equivalent yet.
+Busy `dispatch --queue` stores a message and does not expand a native command
+body through the composer; use normal dispatch when idle for this path. Codex TUI-only builtins cannot
+be expanded by `codex exec`, so they are not offered as native commands. Other
+providers keep their existing discovery. Real SSH transport, Electron rendering
+and native command execution require external acceptance; the new synthetic
+Electron scenario is `e2e/native-commands.spec.ts`.
+
 ## Stop and read-only resume corrections (2026-11-06)
 
 No UI action or CLI verb is added. `tab permission <tab> readonly` and

@@ -1,4 +1,6 @@
 import { invokeNativeHistory } from '../services/agent-sessions';
+
+import type { NativeCommandSnapshot } from '../../shared/nativeCommands';
 import { NEW_SHELL_PANEL_ACTIONS, type NewShellPanelAction } from '../../shared/newShellPanel';
 import { isHandoffProvider } from '../../shared/aiHandoff';
 // Tab commands - manage an agent's AI tabs in the running desktop app: open a
@@ -549,4 +551,34 @@ export async function tabPanel(
 		`Panel: ${action}`,
 		options
 	);
+}
+
+/** The same account-scoped, read-only discovery used when the composer opens. */
+export async function tabCommands(tabId: string, options: TabMutateOptions): Promise<void> {
+	try {
+		const owner = await resolveTabOwner(tabId, options.agent);
+		const reply = await sendSimpleCommand<{
+			success: boolean;
+			ok: boolean;
+			result: NativeCommandSnapshot;
+			error?: string;
+		}>(
+			{
+				type: 'bridge.invoke',
+				channel: 'agents:getNativeCommands',
+				args: [{ sessionId: owner.agentId, tabId: owner.tabId }],
+			},
+			'bridge.response',
+			60000
+		);
+		if (!reply.ok) throw new Error(reply.error || 'Command discovery failed');
+		if (options.json) console.log(JSON.stringify(reply.result));
+		else {
+			for (const command of reply.result.commands)
+				console.log(`${command.command}\t${command.source}\t${command.description}`);
+			if (reply.result.warning) console.log(reply.result.warning);
+		}
+	} catch (error) {
+		failCommand(error instanceof Error ? error.message : String(error), options.json);
+	}
 }

@@ -10,6 +10,7 @@ import type {
 } from '../../types/contextMerge';
 
 export interface SlashCommand {
+	source?: import('../../../shared/nativeCommands').NativeCommand['source'];
 	command: string;
 	description: string;
 	terminalOnly?: boolean;

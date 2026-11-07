@@ -39,11 +39,12 @@ export function getCodexHome(env?: Record<string, string | undefined>): string {
  */
 export function getCodexSkillDirs(
 	cwd?: string,
-	env?: Record<string, string | undefined>
+	env?: Record<string, string | undefined>,
+	paths: Pick<typeof path, 'join'> = path
 ): string[] {
 	const dirs: string[] = [];
-	if (cwd) dirs.push(path.join(cwd, '.codex', 'skills'));
-	dirs.push(path.join(getCodexHome(env), 'skills'));
+	if (cwd) dirs.push(paths.join(cwd, '.codex', 'skills'));
+	dirs.push(paths.join(getCodexHome(env), 'skills'));
 	return dirs;
 }
 
@@ -52,11 +53,12 @@ export function getCodexSkillDirs(
  */
 export function getCodexPromptDirs(
 	cwd?: string,
-	env?: Record<string, string | undefined>
+	env?: Record<string, string | undefined>,
+	paths: Pick<typeof path, 'join'> = path
 ): string[] {
 	const dirs: string[] = [];
-	if (cwd) dirs.push(path.join(cwd, '.codex', 'prompts'));
-	dirs.push(path.join(getCodexHome(env), 'prompts'));
+	if (cwd) dirs.push(paths.join(cwd, '.codex', 'prompts'));
+	dirs.push(paths.join(getCodexHome(env), 'prompts'));
 	return dirs;
 }
 

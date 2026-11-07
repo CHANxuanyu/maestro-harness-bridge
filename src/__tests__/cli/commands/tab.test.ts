@@ -32,6 +32,7 @@ import {
 	tabEffort,
 	tabEnterToSend,
 	tabShow,
+	tabCommands,
 } from '../../../cli/commands/tab';
 import { withMaestroClient } from '../../../cli/services/maestro-client';
 import { resolveAgentId, readActiveAgentId } from '../../../cli/services/storage';
@@ -99,6 +100,21 @@ function mockTab(result: Record<string, unknown>) {
 }
 
 describe('tab commands', () => {
+	it('reads account scoped native commands through the shared IPC handler', async () => {
+		const result = {
+			commands: [{ command: '/review', description: 'Project review', source: 'project' }],
+			warning: 'remote-unavailable',
+		};
+		const captured = mockTab({ ok: true, result });
+		await tabCommands('tab-aaaa', { json: true });
+		expect(captured()).toEqual({
+			type: 'bridge.invoke',
+			channel: 'agents:getNativeCommands',
+			args: [{ sessionId: 'agent-1', tabId: 'tab-aaaa' }],
+		});
+		expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result));
+	});
+
 	let consoleSpy: MockInstance;
 	let processExitSpy: MockInstance;
 

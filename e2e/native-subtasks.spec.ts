@@ -100,7 +100,7 @@ test('new shell subtasks: mention, queued reply, CLI dispatch and closed parent'
 		const consultNativeId = savedTab(child.id)!.consultOrigin!.nativeSessionIds![0];
 		expect(savedTab(child.id)?.agentSessionId).toBeFalsy();
 		expect(
-			(await native.cli('native-history', 'list')).result.conversations.map(
+			(await native.cli('native-history', 'list', workerId)).result.conversations.map(
 				(record: { nativeSessionId: string }) => record.nativeSessionId
 			)
 		).toContain(consultNativeId);

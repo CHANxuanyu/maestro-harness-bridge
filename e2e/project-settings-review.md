@@ -6,7 +6,7 @@
 
 ```sh
 npm run build
-MAESTRO_E2E_REAL=0 npx playwright test e2e/project-settings.spec.ts --workers=1 --retries=0
+MAESTRO_E2E_REAL=0 npx playwright test e2e/native-project-settings.spec.ts --workers=1 --retries=0
 ```
 
 `project-settings.spec.ts` 使用 `NativeApp` 的临时项目、Maestro 数据和工具账户，明确拒绝真实模式。不会向对话发送提示，不调用真实模型，不读取个人账户。用例失败后保留失败结果和 trace，不自动重试。

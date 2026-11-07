@@ -144,7 +144,7 @@ CLI 没有新增动作。普通对话停止、草稿附件和阅读位置的命�
 
 被测对象是本克隆源码。相关 Vitest 25 文件、1616 条通过；最后的工具切换与本地化改动后，相关 5 文件、152 条通过，使用 `--configLoader runner --no-cache`，无跳过或自动重试。renderer、main、CLI 三份 TypeScript 配置通过，修改产品代码的 ESLint、Prettier 和 `git diff --check` 通过。`docs:verify` 检查 670 个路径，零缺失。CLI bundle 构建通过，参考页在带产品标识的临时数据目录生成；未将已有原生历史章节漂移纳入本任务。
 
-新增 `e2e/project-settings.spec.ts`，只成功收集 1 条场景，并通过包含既有 CJS 夹具的严格类型检查，没有执行 Electron。先前直接套 renderer 配置检查夹具时，缺少 CJS 声明且 ES2020 库不覆盖夹具已有 API；补充 `allowJs` 与 ES2023 库，没有降低 strict 选项。外部命令及人工补充见 `e2e/project-settings-review.md`。未构建发行包、运行真实模型或真实 SSH，也未推送或开 PR。
+新增 `e2e/native-project-settings.spec.ts`，只成功收集 1 条场景，并通过包含既有 CJS 夹具的严格类型检查，没有执行 Electron。先前直接套 renderer 配置检查夹具时，缺少 CJS 声明且 ES2020 库不覆盖夹具已有 API；补充 `allowJs` 与 ES2023 库，没有降低 strict 选项。外部命令及人工补充见 `e2e/project-settings-review.md`。未构建发行包、运行真实模型或真实 SSH，也未推送或开 PR。
 
 共用修正是带提示的新建按所属窗口路由，旧界面副窗口也受益。CLI 为项目新建保留更长等待，旧界面桌面回调仍为 5 秒，其余新行为受 `newShell` 控制。分屏直接新建的默认工具与独立环境，以及弹窗展示状态的 CLI 对等仍保留明确缺口，不改动并行分屏任务。
 

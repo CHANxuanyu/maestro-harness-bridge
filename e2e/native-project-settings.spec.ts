@@ -7,12 +7,12 @@ import { createMockAITab } from '../src/__tests__/helpers/mockTab';
 import type { Session } from '../src/renderer/types';
 
 test.setTimeout(120_000);
+test.skip(process.env.MAESTRO_E2E_REAL === '1', 'Project settings use synthetic providers only');
 
 // All accounts, project files and Maestro data belong to NativeApp's temporary root.
 // No prompts are sent, and no real provider CLI is used.
 // eslint-disable-next-line no-empty-pattern
 test('project defaults: UI, CLI, future conversations, restart and classic shell', async ({}, info) => {
-	expect(process.env.MAESTRO_E2E_REAL).not.toBe('1');
 	const native = new NativeApp(info, { providerCli: false });
 	const home = path.join(native.root, 'home');
 	fs.mkdirSync(home, { recursive: true });

@@ -90,6 +90,24 @@ test('project defaults: UI, CLI, future conversations, restart and classic shell
 			(await native.cli('project', 'settings', 'show', '--path', native.project, '--show-secrets'))
 				.settings.envVars.API_TOKEN
 		).toBe('synthetic-project-token');
+		expect(shown.settings.modelProvider).toBe('codex');
+		const publicSettings = await native.page.evaluate(async () => ({
+			all: await window.maestro.settings.getAll(),
+			one: await window.maestro.settings.get('projectSettings'),
+		}));
+		expect(JSON.stringify(publicSettings)).not.toContain('synthetic-project-token');
+		await expect(native.cli('settings', 'set', 'projectSettings', '{}')).rejects.toThrow(
+			'project settings set'
+		);
+		const bypass = await native.page.evaluate(async () => {
+			try {
+				await window.maestro.settings.set('projectSettings', {});
+				return 'accepted';
+			} catch (error) {
+				return String(error);
+			}
+		});
+		expect(bypass).toContain('project settings set');
 		const created = await native.cli('tab', 'new', '--agent', owner.id);
 		expect(created.success).toBe(true);
 		expect(created.sessionId).not.toBe(owner.id);
@@ -118,7 +136,9 @@ test('project defaults: UI, CLI, future conversations, restart and classic shell
 			'--ssh-remote',
 			'fixture-a',
 			'--model',
-			'remote-a'
+			'remote-a',
+			'--model-provider',
+			'codex'
 		);
 		expect(
 			(
@@ -133,11 +153,39 @@ test('project defaults: UI, CLI, future conversations, restart and classic shell
 				)
 			).settings
 		).toEqual({});
+		await native.cli(
+			'project',
+			'settings',
+			'set',
+			'--path',
+			native.project,
+			'--provider',
+			'inherit',
+			'--model-provider',
+			'codex',
+			'--model',
+			'project-model'
+		);
 		await native.restart(home);
 		expect(
 			(await native.cli('project', 'settings', 'show', '--path', native.project)).settings
 				.defaultModel
 		).toBe('project-model');
+		const afterRestart = await native.cli('tab', 'new', '--agent', owner.id);
+		expect(afterRestart.success).toBe(true);
+		await expect
+			.poll(
+				() =>
+					saved().find((session) => session.id === afterRestart.sessionId)?.customEnvVars?.API_TOKEN
+			)
+			.toBe('synthetic-project-token');
+		const restartedTab = saved()
+			.find((session) => session.id === afterRestart.sessionId)
+			?.aiTabs.find((tab) => tab.id === afterRestart.tabId);
+		expect(restartedTab).toMatchObject({
+			customModel: 'project-model',
+			permissionMode: 'readonly',
+		});
 		await native.cli('settings', 'set', 'uiLanguage', 'zh-CN');
 		await native.page.getByRole('button', { name: /^project\s+\d+$/i }).click({ button: 'right' });
 		await expect(

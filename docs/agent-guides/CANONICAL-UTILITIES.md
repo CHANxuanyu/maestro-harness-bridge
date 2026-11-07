@@ -258,6 +258,21 @@ The tracker at [DEDUP-TRACKER.md](DEDUP-TRACKER.md) lists all known duplication 
 
 ## Conversation changes
 
+### Conversation children
+
+`findConversationParent()` in `src/shared/conversationChildren.ts` is shared by
+the project tree and `maestro-cli tab children`. Exact source tab identity wins;
+native fallback requires the same source owner and provider and refuses ambiguous
+matches. The renderer must first establish the history owner's account and SSH
+identity with `matchRecordForTab()`. Never match a bare native ID across accounts
+or resolve an SSH path locally to find a parent.
+
+`captureConversationSourceNativeId()` in
+`src/renderer/services/agentDelegation.ts` fills missing source native IDs once.
+Both normal session-ID events and consult completion call it, including a nested
+consult whose own children were dispatched before its native ID was announced.
+It does not replace an already captured ID after a provider resume failure.
+
 `getGitChanges()`, `getGitChangeDiff()`, `changesCommand()` and `parseGitChanges()` in `src/main/git-changes.ts` own the read-only changes wire format. Types live in `src/shared/gitChanges.ts`. SSH keeps one bounded shell query and inherits the canonical builder, optional-lock environment and timeout. Locally, one metadata query lists untracked paths and raw HEAD object IDs; one `cat-file --batch-check` query reads old sizes by object ID, never newline-delimited filenames. `execGitReadOnly()` accepts batch stdin and includes it in the single-flight key. Untracked contents use 64 KiB asynchronous reads through `mapWithConcurrency()`, capped at 16 open files; binary detection checks only the first 8000 bytes, and an unterminated final line counts once. Local results are assembled into the same NUL wire format before parsing. Do not restore per-file `wc`, `diff --no-index` or `cat-file` processes in the local snapshot. NUL records preserve quoted names and rename sources. Counts are null for binary and files over 1 MiB, totals precede the 500-file limit, and unborn repositories compare with the empty tree. Do not join staged and unstaged numstats, since that double-counts intermediate edits. File diffs first read status for rename sources, then include both paths in the patch query. Unexpected execution failures propagate; only explicit timeout and non-repository results become flags.
 
 Untracked directories (including nested repositories), symlinks and unreadable files remain in the list with null counts and empty file diffs. Directory paths retain Git's trailing slash. Per-entry untracked read failures do not fail the snapshot. Local roots are normalized with the platform path module, while SSH roots retain exactly what the remote prints; only file paths use the shared slash separator convention. Do not normalize an SSH root with the local platform path module.

@@ -647,7 +647,49 @@ hook failures return their original diagnostics, with no automatic retry.
 The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
+## New shell conversation children (2026-11-07)
+
+| UI action                                               | CLI                                                                    | Shared implementation                                                                                    |
+| ------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Inspect a parent's child conversations and their status | `tab children <tab-id> [--agent <id>] [--json]`                        | `findConversationParent()` in `shared/conversationChildren.ts`; open tab inventory                       |
+| Select a child conversation                             | `tab select <tab-id> [--json]` or `focus-agent <agent> --tab <tab>`    | `select_tab` / remote selection and `setActiveTab()`; new shell reveals the hidden tab and clears unread |
+| Ask another conversation to do work                     | `ask <target> <question>` or `dispatch "@Target ..." --agent <source>` | Existing mention planner and `sendCrossAgentRequest()`                                                   |
+| Delegate into a new child                               | `dispatch <prompt> --agent <target> --new-tab` from a stamped caller   | Existing accepted-dispatch notice and `recordAgentDelegation()`                                          |
+| Add a reply while a child works                         | `dispatch <prompt> --agent <child-owner> --tab <child-tab> --queue`    | Existing execution queue; consult completion releases the child's tab barrier                            |
+| Continue an idle child                                  | `send <prompt> --tab <child-tab>`                                      | Existing composer send and captured native session ID                                                    |
+| Rename, star or close a child                           | `tab rename`, `tab star`, `tab close`                                  | Existing tab actions, also used by nested row menus                                                      |
+
+Origins are created only under `newShell`. A source native ID arriving later is
+filled once by `captureConversationSourceNativeId()`, shared by normal provider
+events and consult completions. The tree checks account and SSH identity with
+`matchRecordForTab()` before offering a history parent. No remote path is resolved
+locally. `tab children` returns direct children including hidden consults, product
+provider markers, busy/error state and origin metadata. Like `tab show`, it reads
+the persisted inventory, so its existing save-delay limitation remains.
+
+Background consults still have no tab chip and raise no unread. Selecting one is
+an explicit reveal. A busy consult tab is not reused for another simultaneous
+consult in the new shell. Completion and failure settle existing subtask state
+even if the user switched back to the classic shell meanwhile. These children
+keep the full consult detail instead of spawning a second summary writer.
+
+Plain dispatch into an existing conversation keeps that conversation's current
+origin. A command without caller identity creates no guessed parent. The new CLI
+help strings share the English and Chinese catalogs and follow the process
+locale. The classic CLI inventory now suppresses stale unread on hidden tabs and
+adds optional provider/hidden/error/consult-origin fields; desktop classic
+navigation and ordinary consults retain their previous behavior.
+
 ## Open gaps
+
+**Subtask disclosure and archived sources (2026-11-07).** The disclosure button
+keeps local React state. `tab children` reads the same parent relation but does
+not expand or collapse the desktop tree. It resolves an open parent tab; after
+closing the source, reopen its native history row and pass the new tab ID.
+The existing native-history open gap below still applies. A pre-feature consult
+without a captured source native ID can only attach while its original source
+tab is open. CLI dispatch provenance currently follows the caller-window notice;
+writing a child owned by another window is not guaranteed by this change.
 
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no
 `tab fork --at` verb; this remains the Composer backlog below. The palette and

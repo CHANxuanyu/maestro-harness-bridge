@@ -53,7 +53,9 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 		),
 	});
 	const providerOf = (runner: Pick<HandoffRunner, 'toolType' | 'customEnvVars'>): string | null =>
-		runner.toolType === 'terminal' ? null : agentProviderId(runner.toolType, effectiveEnv(runner));
+		runner.toolType === 'terminal'
+			? null
+			: agentProviderId(runner.toolType, effectiveEnv(runner) as Record<string, string>);
 
 	function sourceFor(id: string) {
 		return deps

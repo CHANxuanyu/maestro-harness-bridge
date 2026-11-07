@@ -56,6 +56,59 @@ describe('project settings persistence', () => {
 		);
 	});
 
+	it('matches local Windows case variants while preserving POSIX and SSH case', async () => {
+		expect(projectSettingsKey({ projectPath: 'C:\\Work\\Repo\\' })).toBe(
+			projectSettingsKey({ projectPath: 'c:/work/repo' })
+		);
+		expect(projectSettingsKey({ projectPath: '\\\\Server\\Share\\Repo' })).toBe(
+			projectSettingsKey({ projectPath: '//server/share/repo' })
+		);
+		for (const sshRemoteId of [undefined, 'remote']) {
+			expect(projectSettingsKey({ projectPath: '/Work/Repo', sshRemoteId })).not.toBe(
+				projectSettingsKey({ projectPath: '/work/repo', sshRemoteId })
+			);
+		}
+		expect(projectSettingsKey({ projectPath: 'C:/Work/Repo', sshRemoteId: 'remote' })).not.toBe(
+			projectSettingsKey({ projectPath: 'c:/work/repo', sshRemoteId: 'remote' })
+		);
+	});
+
+	it('reads and updates saved mixed-case Windows keys without losing settings or host isolation', async () => {
+		values.projectSettings = {
+			'[null,"C:/Work/Repo"]': {
+				defaultPermissionMode: 'readonly',
+				fullAccessAcknowledged: true,
+				envVars: { TOKEN: 'synthetic-only' },
+			},
+			'["remote","C:/Work/Repo"]': { defaultPermissionMode: 'standard' },
+		};
+		const api = service();
+		const target = { projectPath: 'c:/work/repo/' };
+		expect((await api.command({ action: 'show', scope: target })).settings).toEqual({
+			defaultPermissionMode: 'readonly',
+			fullAccessAcknowledged: true,
+			envVars: { TOKEN: 'synthetic-only' },
+		});
+		await api.command({ action: 'set', scope: target, patch: { defaultProvider: 'codex' } });
+		expect(
+			(await api.command({ action: 'show', scope: { projectPath: 'C:/WORK/REPO' } })).settings
+		).toEqual({
+			defaultProvider: 'codex',
+			defaultPermissionMode: 'readonly',
+			fullAccessAcknowledged: true,
+			envVars: { TOKEN: 'synthetic-only' },
+		});
+		expect(Object.keys(values.projectSettings as object)).toHaveLength(2);
+		expect(
+			(
+				await api.command({
+					action: 'show',
+					scope: { projectPath: 'C:/Work/Repo', sshRemoteId: 'remote' },
+				})
+			).settings.defaultPermissionMode
+		).toBe('standard');
+	});
+
 	it('requires the full access explanation once per project and remembers it when resetting defaults', async () => {
 		const api = service();
 		const request = { action: 'set', scope, patch: { defaultPermissionMode: 'full' } };

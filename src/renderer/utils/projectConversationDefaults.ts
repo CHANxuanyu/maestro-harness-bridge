@@ -1,4 +1,7 @@
-import { projectSettingsKey, type ProjectSettingsScope } from '../../shared/projectSettings';
+import {
+	projectSettingsKeysForScope,
+	type ProjectSettingsScope,
+} from '../../shared/projectSettings';
 import { sessionProviderId } from '../../shared/agentPresets';
 import { handoffLocation } from '../../shared/aiHandoff';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -25,7 +28,12 @@ export function projectSettingsForSession(
 ) {
 	const settings = useSettingsStore.getState();
 	return settings.newShell
-		? settings.projectSettings?.[projectSettingsKey(projectSettingsScopeForSession(session))]
+		? settings.projectSettings?.[
+				projectSettingsKeysForScope(
+					settings.projectSettings ?? {},
+					projectSettingsScopeForSession(session)
+				)[0]
+			]
 		: undefined;
 }
 

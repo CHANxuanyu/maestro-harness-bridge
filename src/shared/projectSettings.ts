@@ -63,7 +63,7 @@ export interface ProjectSettingsResult {
 export function projectSettingsKey(scope: ProjectSettingsScope): string {
 	return JSON.stringify([
 		scope.sshRemoteId ?? null,
-		normalizeWorktreePath(scope.projectPath, !!scope.sshRemoteId),
+		normalizeWorktreePath(scope.projectPath, !!scope.sshRemoteId, true),
 	]);
 }
 
@@ -81,4 +81,32 @@ export function publicProjectSettingsMap(settings: ProjectSettingsMap): ProjectS
 /** Dot notation must not bypass the service's confirmation and validation. */
 export function isProjectSettingsKey(key: string): boolean {
 	return key === 'projectSettings' || key.startsWith('projectSettings.');
+}
+
+/** Canonical spelling first, then compatible keys saved before Windows case folding. */
+export function projectSettingsKeysForScope(
+	settings: ProjectSettingsMap,
+	scope: ProjectSettingsScope
+): string[] {
+	const canonical = projectSettingsKey(scope);
+	const aliases = Object.keys(settings).filter((key) => {
+		if (key === canonical) return false;
+		try {
+			const parsed = JSON.parse(key);
+			return (
+				Array.isArray(parsed) &&
+				parsed.length === 2 &&
+				(parsed[0] === null || typeof parsed[0] === 'string') &&
+				typeof parsed[1] === 'string' &&
+				projectSettingsKey({ projectPath: parsed[1], sshRemoteId: parsed[0] ?? undefined }) ===
+					canonical
+			);
+		} catch {
+			return false;
+		}
+	});
+	return [
+		...(Object.prototype.hasOwnProperty.call(settings, canonical) ? [canonical] : []),
+		...aliases,
+	];
 }

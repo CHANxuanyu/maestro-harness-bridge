@@ -87,3 +87,13 @@ it('never treats legacy unbound model names as defaults for all tools', () => {
 	expect(created.tab.customModel).toBeUndefined();
 	expect(created.tab.customEffort).toBeUndefined();
 });
+
+it('uses a saved mixed-case Windows project restriction when the local conversation uses another spelling', () => {
+	useSettingsStore.setState({
+		projectSettings: { '[null,"C:/Work/Repo"]': { defaultPermissionMode: 'readonly' } },
+	});
+	const session = createMockSession({ cwd: 'c:/work/repo', projectRoot: 'c:/work/repo' });
+	expect(
+		createTab(session, { permissionSource: { permissionMode: 'full' } })!.tab.permissionMode
+	).toBe('readonly');
+});

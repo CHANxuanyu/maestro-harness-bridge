@@ -2,6 +2,7 @@ import { isValidAgentId } from '../shared/agentIds';
 import { DEEPSEEK_PRESET } from '../shared/agentPresets';
 import {
 	projectSettingsKey,
+	projectSettingsKeysForScope,
 	type ProjectSettingsErrorCode,
 	type ProjectSettings,
 	type ProjectSettingsCommand,
@@ -57,7 +58,8 @@ export function createProjectSettingsService(deps: {
 				};
 				const key = projectSettingsKey(scope);
 				const stored = deps.settingsStore.get<ProjectSettingsMap>('projectSettings', {});
-				settings = { ...(stored[key] ?? {}) };
+				const storedKeys = projectSettingsKeysForScope(stored, scope);
+				settings = { ...(stored[storedKeys[0]] ?? {}) };
 				if (command.action === 'show') return { success: true, scope, settings };
 				if (!command.patch || typeof command.patch !== 'object' || Array.isArray(command.patch))
 					return failure('invalidPatch');
@@ -136,7 +138,9 @@ export function createProjectSettingsService(deps: {
 					next.fullAccessAcknowledged = true;
 				}
 				try {
-					deps.settingsStore.set('projectSettings', { ...stored, [key]: next });
+					const updated = { ...stored };
+					for (const alias of storedKeys) delete updated[alias];
+					deps.settingsStore.set('projectSettings', { ...updated, [key]: next });
 				} catch {
 					return failure('saveFailed');
 				}

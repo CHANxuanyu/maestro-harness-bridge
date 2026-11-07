@@ -87,7 +87,17 @@ export async function projectSettings(
 			'bridge.response'
 		);
 		if (!reply.ok) throw new Error(reply.error ?? t('workflows.projectSettings.cli.requestFailed'));
-		const result = reply.result;
+		const result = {
+			...reply.result,
+			...(reply.result.errorCode
+				? {
+						error: t(
+							`workflows.projectSettings.errors.${reply.result.errorCode}`,
+							reply.result.params
+						),
+					}
+				: {}),
+		};
 		const shown = {
 			...result,
 			settings: {

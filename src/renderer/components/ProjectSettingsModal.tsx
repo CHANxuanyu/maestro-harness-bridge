@@ -42,7 +42,7 @@ export function ProjectSettingsModal({
 	const [acknowledged, setAcknowledged] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [validEnvironment, setValidEnvironment] = useState(true);
-	const [error, setError] = useState(false);
+	const [error, setError] = useState<string>();
 	const scopedSessions = sessions.filter(
 		(session) => projectSettingsKey(projectSettingsScopeForSession(session)) === scopeKey
 	);
@@ -74,21 +74,25 @@ export function ProjectSettingsModal({
 		if (!scope) return;
 		let stale = false;
 		setLoadedScope('');
-		setError(false);
+		setError(undefined);
 		setAcknowledged(false);
 		void window.maestro.settings
 			.projectSettings({ action: 'show', scope })
 			.then((result) => {
 				if (stale) return;
 				if (!result.success) {
-					setError(true);
+					setError(
+						result.errorCode
+							? t(`workflows.projectSettings.errors.${result.errorCode}`, result.params)
+							: t('workflows.projectSettings.failed')
+					);
 					return;
 				}
 				setDraft(result.settings);
 				setLoadedScope(scopeKey);
 			})
 			.catch(() => {
-				if (!stale) setError(true);
+				if (!stale) setError(t('workflows.projectSettings.failed'));
 			});
 		return () => {
 			stale = true;
@@ -98,7 +102,7 @@ export function ProjectSettingsModal({
 	const save = async () => {
 		if (!ready || saving || !validEnvironment || (needsAcknowledgement && !acknowledged)) return;
 		setSaving(true);
-		setError(false);
+		setError(undefined);
 		try {
 			const result = await window.maestro.settings.projectSettings({
 				action: 'set',
@@ -113,7 +117,11 @@ export function ProjectSettingsModal({
 				acknowledgeFullAccess: needsAcknowledgement && acknowledged,
 			});
 			if (!result.success) {
-				setError(true);
+				setError(
+					result.errorCode
+						? t(`workflows.projectSettings.errors.${result.errorCode}`, result.params)
+						: t('workflows.projectSettings.failed')
+				);
 				return;
 			}
 			useSettingsStore.setState((state) => ({
@@ -121,7 +129,7 @@ export function ProjectSettingsModal({
 			}));
 			onClose();
 		} catch {
-			setError(true);
+			setError(t('workflows.projectSettings.failed'));
 		} finally {
 			setSaving(false);
 		}
@@ -177,7 +185,7 @@ export function ProjectSettingsModal({
 				</label>
 				{error && (
 					<p role="alert" className="text-sm" style={{ color: theme.colors.error }}>
-						{t('workflows.projectSettings.failed')}
+						{error}
 					</p>
 				)}
 				{!ready && !error && <p role="status">{t('workflows.projectSettings.loading')}</p>}

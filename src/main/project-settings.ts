@@ -1,9 +1,8 @@
-import { getTranslator } from '../renderer/i18n/translate';
-import { resolveAppLocale } from '../shared/i18n';
 import { isValidAgentId } from '../shared/agentIds';
 import { DEEPSEEK_PRESET } from '../shared/agentPresets';
 import {
 	projectSettingsKey,
+	type ProjectSettingsErrorCode,
 	type ProjectSettings,
 	type ProjectSettingsCommand,
 	type ProjectSettingsMap,
@@ -21,13 +20,23 @@ export function createProjectSettingsService(deps: {
 		async command(input: unknown): Promise<ProjectSettingsResult> {
 			let scope: ProjectSettingsScope = { projectPath: '' };
 			let settings: ProjectSettings = {};
+			const failure = (
+				errorCode: ProjectSettingsErrorCode,
+				params?: Record<string, string>
+			): ProjectSettingsResult => ({
+				success: false,
+				scope,
+				settings,
+				code:
+					errorCode === 'fullAccessRequired'
+						? 'full-access-confirmation-required'
+						: errorCode === 'saveFailed'
+							? 'persistence-failed'
+							: 'invalid-request',
+				errorCode,
+				...(params ? { params } : {}),
+			});
 			try {
-				const t = getTranslator(
-					resolveAppLocale(
-						deps.settingsStore.get('uiLanguage'),
-						Intl.DateTimeFormat().resolvedOptions().locale
-					)
-				);
 				const command = input as ProjectSettingsCommand;
 				if (
 					!command ||
@@ -41,7 +50,7 @@ export function createProjectSettingsService(deps: {
 							!command.scope.sshRemoteId.trim() ||
 							command.scope.sshRemoteId.includes('\0')))
 				)
-					throw new Error(t('workflows.projectSettings.errors.scopeRequired'));
+					return failure('scopeRequired');
 				scope = {
 					projectPath: command.scope.projectPath,
 					...(command.scope.sshRemoteId ? { sshRemoteId: command.scope.sshRemoteId } : {}),
@@ -51,7 +60,7 @@ export function createProjectSettingsService(deps: {
 				settings = { ...(stored[key] ?? {}) };
 				if (command.action === 'show') return { success: true, scope, settings };
 				if (!command.patch || typeof command.patch !== 'object' || Array.isArray(command.patch))
-					throw new Error(t('workflows.projectSettings.errors.invalidPatch'));
+					return failure('invalidPatch');
 				const next = { ...settings };
 				if (
 					'defaultProvider' in command.patch &&
@@ -70,7 +79,7 @@ export function createProjectSettingsService(deps: {
 							'envVars',
 						].includes(field)
 					)
-						throw new Error(t('workflows.projectSettings.errors.unknownSetting', { field }));
+						return failure('unknownSetting', { field });
 					if (value === null) {
 						delete next[field as keyof ProjectSettings];
 						continue;
@@ -87,7 +96,7 @@ export function createProjectSettingsService(deps: {
 									entry.includes('\0')
 							)
 						)
-							throw new Error(t('workflows.projectSettings.errors.invalidEnvironment'));
+							return failure('invalidEnvironment');
 						next.envVars = { ...value };
 						continue;
 					}
@@ -97,51 +106,32 @@ export function createProjectSettingsService(deps: {
 						value.includes('\0') ||
 						value.length > 512
 					)
-						throw new Error(t('workflows.projectSettings.errors.invalidSetting', { field }));
+						return failure('invalidSetting', { field });
 					if (
 						field === 'defaultProvider' &&
 						(value === 'terminal' || (!isValidAgentId(value) && value !== DEEPSEEK_PRESET.id))
 					)
-						throw new Error(t('workflows.projectSettings.errors.unknownProvider'));
+						return failure('unknownProvider');
 					if (
 						field === 'defaultPermissionMode' &&
 						!['full', 'standard', 'readonly'].includes(value)
 					)
-						throw new Error(t('workflows.projectSettings.errors.invalidPermission'));
+						return failure('invalidPermission');
 					Object.assign(next, { [field]: value });
 				}
 				if (next.defaultPermissionMode === 'full' && !settings.fullAccessAcknowledged) {
-					if (command.acknowledgeFullAccess !== true)
-						return {
-							success: false,
-							scope,
-							settings,
-							code: 'full-access-confirmation-required',
-							error: t('workflows.projectSettings.errors.fullAccessRequired'),
-						};
+					if (command.acknowledgeFullAccess !== true) return failure('fullAccessRequired');
 					next.fullAccessAcknowledged = true;
 				}
 				try {
 					deps.settingsStore.set('projectSettings', { ...stored, [key]: next });
 				} catch {
-					return {
-						success: false,
-						scope,
-						settings,
-						code: 'persistence-failed',
-						error: t('workflows.projectSettings.errors.saveFailed'),
-					};
+					return failure('saveFailed');
 				}
 				deps.onChanged?.();
 				return { success: true, scope, settings: next };
-			} catch (error) {
-				return {
-					success: false,
-					scope,
-					settings,
-					code: 'invalid-request',
-					error: error instanceof Error ? error.message : String(error),
-				};
+			} catch {
+				return failure('requestFailed');
 			}
 		},
 	};

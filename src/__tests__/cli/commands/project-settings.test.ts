@@ -164,4 +164,24 @@ describe('project settings CLI', () => {
 		expect(JSON.parse(vi.mocked(console.log).mock.calls[0][0])).toEqual(failure);
 		expect(process.exit).toHaveBeenCalledWith(1);
 	});
+
+	it('translates a service error code with parameters at the CLI boundary', async () => {
+		vi.mocked(readSettingValue).mockReturnValue('zh-CN');
+		vi.mocked(sendSimpleCommand).mockResolvedValue({
+			ok: true,
+			result: {
+				success: false,
+				scope,
+				settings: {},
+				code: 'invalid-request',
+				errorCode: 'invalidSetting',
+				params: { field: 'defaultModel' },
+			},
+		});
+		await projectSettings('set', { path: scope.projectPath, model: 'bad', json: true });
+		expect(JSON.parse(vi.mocked(console.log).mock.calls[0][0]).error).toBe(
+			'项目设置无效：defaultModel'
+		);
+		expect(process.exit).toHaveBeenCalledWith(1);
+	});
 });

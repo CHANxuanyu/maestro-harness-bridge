@@ -32,11 +32,26 @@ export type ProjectSettingsCommand =
 			acknowledgeFullAccess?: boolean;
 	  };
 
+export type ProjectSettingsErrorCode =
+	| 'scopeRequired'
+	| 'invalidPatch'
+	| 'unknownSetting'
+	| 'invalidEnvironment'
+	| 'invalidSetting'
+	| 'unknownProvider'
+	| 'invalidPermission'
+	| 'fullAccessRequired'
+	| 'saveFailed'
+	| 'requestFailed';
+
 export interface ProjectSettingsResult {
 	success: boolean;
 	scope: ProjectSettingsScope;
 	settings: ProjectSettings;
 	code?: 'invalid-request' | 'full-access-confirmation-required' | 'persistence-failed';
+	errorCode?: ProjectSettingsErrorCode;
+	params?: Record<string, string>;
+	/** Localized by the caller, never by the main service. */
 	error?: string;
 }
 

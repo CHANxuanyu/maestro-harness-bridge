@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProjectSettingsService } from '../../main/project-settings';
 import { projectSettingsKey } from '../../shared/projectSettings';
+import { getTranslator, hasTranslation } from '../../renderer/i18n/translate';
 
 describe('project settings persistence', () => {
 	let values: Record<string, unknown>;
@@ -148,16 +149,39 @@ describe('project settings persistence', () => {
 		).toEqual({});
 	});
 
-	it('localizes the first full access explanation for the current language', async () => {
+	it('returns translatable error codes without loading renderer translations in main', async () => {
 		values.uiLanguage = 'zh-CN';
 		const result = await service().command({
 			action: 'set',
 			scope,
 			patch: { defaultPermissionMode: 'full' },
 		});
-		expect(result.error).toBe(
-			'完全访问允许新对话无需确认即可读写文件和运行命令。请先确认你已了解，这个项目只需确认一次。'
-		);
+		expect(result).toMatchObject({ errorCode: 'fullAccessRequired' });
+		expect(result.error).toBeUndefined();
+		const cases = [
+			[{}, 'scopeRequired'],
+			[{ action: 'set', scope }, 'invalidPatch'],
+			[{ action: 'set', scope, patch: { unknown: 'value' } }, 'unknownSetting'],
+			[{ action: 'set', scope, patch: { envVars: [] } }, 'invalidEnvironment'],
+			[{ action: 'set', scope, patch: { defaultModel: '' } }, 'invalidSetting'],
+			[{ action: 'set', scope, patch: { defaultProvider: 'terminal' } }, 'unknownProvider'],
+			[{ action: 'set', scope, patch: { defaultPermissionMode: 'bad' } }, 'invalidPermission'],
+		] as const;
+		for (const [input, errorCode] of cases) {
+			expect(await service().command(input)).toMatchObject({ errorCode });
+		}
+		for (const errorCode of [
+			...cases.map((entry) => entry[1]),
+			'fullAccessRequired',
+			'saveFailed',
+			'requestFailed',
+		] as const) {
+			const key = `workflows.projectSettings.errors.${errorCode}` as const;
+			for (const locale of ['en', 'zh-CN'] as const) {
+				expect(hasTranslation(locale, key)).toBe(true);
+				expect(getTranslator(locale)(key, { field: 'defaultModel' })).not.toContain('{field}');
+			}
+		}
 	});
 
 	it('reports persistence failure without announcing a change', async () => {

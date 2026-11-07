@@ -52,6 +52,7 @@ describe('permission relay Electron integration', () => {
 		await expect(
 			integration.preparePermissionRelayArgs({
 				sessionId: 'conversation-ai-tab',
+				cwd: path.join(root, 'project'),
 				userDataDir: path.join(root, 'missing-parent'),
 				execPath: process.execPath,
 			})
@@ -64,6 +65,7 @@ describe('permission relay Electron integration', () => {
 		integration.initPermissionRelay(() => null, processManager);
 		const args = await integration.preparePermissionRelayArgs({
 			sessionId: 'conversation-ai-tab',
+			cwd: path.join(root, 'project'),
 			userDataDir: root,
 			execPath: process.execPath,
 		});
@@ -72,6 +74,19 @@ describe('permission relay Electron integration', () => {
 		processManager.emit('exit', 'conversation-ai-tab', 0);
 		expect(fs.existsSync(configPath)).toBe(false);
 		expect(registry.relayRegistryStats()).toEqual({ bindings: 0, pending: 0 });
+	});
+
+	it('keeps the effective execution directory in the spawn binding', async () => {
+		const cwd = path.join(root, 'project', '.claude', 'worktrees', 'approval');
+		const args = await integration.preparePermissionRelayArgs({
+			sessionId: 'conversation-ai-tab',
+			cwd,
+			userDataDir: root,
+			execPath: process.execPath,
+		});
+		const config = JSON.parse(fs.readFileSync(args[args.indexOf('--mcp-config') + 1], 'utf8'));
+		const token = config.mcpServers.maestro_permissions.env.MAESTRO_RELAY_TOKEN;
+		expect(registry.lookupBinding(token)).toMatchObject({ cwd });
 	});
 
 	it('lists pending requests without relay credentials and broadcasts resolution', () => {
@@ -86,6 +101,7 @@ describe('permission relay Electron integration', () => {
 			token: 'private-spawn-token',
 			sessionId: 'conversation-ai-tab',
 			tabId: 'tab',
+			cwd: path.join(root, 'worktree'),
 			toolName: 'Write',
 			input: { content: 'approved' },
 			createdAt: 1,

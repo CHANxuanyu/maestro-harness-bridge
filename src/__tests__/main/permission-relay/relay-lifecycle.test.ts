@@ -56,7 +56,11 @@ describe('permission relay request lifetime without OS sockets', () => {
 			}),
 		});
 		transport.accept!(socket as unknown as Socket);
-		const binding = registerSpawn({ sessionId: 'conversation-ai-tab', tabId: 'tab' });
+		const binding = registerSpawn({
+			sessionId: 'conversation-ai-tab',
+			tabId: 'tab',
+			cwd: '/temporary-project/.claude/worktrees/approval',
+		});
 		cleanup = binding.cleanup;
 		server.setOnRequest((request) => {
 			captured = request;
@@ -68,6 +72,7 @@ describe('permission relay request lifetime without OS sockets', () => {
 				token: binding.token,
 				requestId: 'bridge-1',
 				toolName: 'Write',
+				cwd: '/untrusted-bridge-directory',
 				input: { file_path: '/temporary-project/approved.txt', content: 'approved' },
 			}) + '\n'
 		);
@@ -78,6 +83,10 @@ describe('permission relay request lifetime without OS sockets', () => {
 		server.stop();
 		vi.useRealTimers();
 		expect(relayRegistryStats()).toEqual({ bindings: 0, pending: 0 });
+	});
+
+	it('uses the spawn-bound cwd rather than bridge-supplied metadata', () => {
+		expect(captured).toMatchObject({ cwd: '/temporary-project/.claude/worktrees/approval' });
 	});
 
 	it('invalidates a disconnected bridge request before a late approval can land', async () => {

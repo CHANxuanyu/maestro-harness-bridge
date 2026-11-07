@@ -25,6 +25,9 @@ import { buildAgentArgs } from '../../../../main/utils/agent-args';
 import { encodeClaudeProjectPath } from '../../../../shared/pathUtils';
 import { stripThinkingFromTranscript } from '../../../../main/agents/claude-transcript-sanitizer';
 import { checkCustomPath } from '../../../../main/agents/path-prober';
+import { getSessionStorage } from '../../../../main/agents';
+import { nativeSessionResumeCwd } from '../../../../main/storage/local-project-paths';
+import { preparePermissionRelayArgs } from '../../../../main/permission-relay';
 import { getChildProcesses } from '../../../../main/process-manager/utils/childProcessInfo';
 import { probeClaudeSlashCommandsCached } from '../../../../main/agents/claude-slash-command-probe';
 import {
@@ -40,11 +43,24 @@ import {
 
 // Mock electron's ipcMain
 vi.mock('electron', () => ({
+	app: { getPath: () => '/temporary-app-data' },
 	ipcMain: {
 		handle: vi.fn(),
 		on: vi.fn(),
 		removeHandler: vi.fn(),
 	},
+}));
+
+vi.mock('../../../../main/agents', async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	getSessionStorage: vi.fn(() => null),
+}));
+vi.mock('../../../../main/storage/local-project-paths', () => ({
+	nativeSessionResumeCwd: vi.fn(),
+}));
+vi.mock('../../../../main/permission-relay', async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	preparePermissionRelayArgs: vi.fn().mockResolvedValue(['--mcp-config', '/temporary-relay.json']),
 }));
 
 // Mock the logger
@@ -455,6 +471,37 @@ describe('process IPC handlers', () => {
 	});
 
 	describe('process:spawn', () => {
+		it('binds approval to the resolved native worktree cwd', async () => {
+			mockSettingsStore.get.mockImplementation((key, fallback) =>
+				key === 'newShell' ? true : fallback
+			);
+			mockAgentDetector.getAgent.mockResolvedValue({
+				id: 'claude-code',
+				interactiveCommand: 'maestro-p',
+				interactiveModeArgs: [],
+			});
+			const cwd = '/temporary-project/.claude/worktrees/approval';
+			vi.mocked(getSessionStorage).mockReturnValueOnce({} as never);
+			vi.mocked(nativeSessionResumeCwd).mockResolvedValueOnce(cwd);
+			mockProcessManager.spawn.mockReturnValue({ pid: 4244, success: true });
+			await handlers.get('process:spawn')!(
+				{},
+				{
+					sessionId: 'owner-ai-tab',
+					toolType: 'claude-code',
+					command: 'claude',
+					cwd: '/temporary-project',
+					agentSessionId: 'native-worktree',
+					args: ['--print'],
+					prompt: 'synthetic approval',
+					permissionMode: 'standard',
+					sessionCustomEnvVars: { CLAUDE_CONFIG_DIR: '/temporary-account' },
+				}
+			);
+			expect(mockProcessManager.spawn).toHaveBeenCalledWith(expect.objectContaining({ cwd }));
+			expect(preparePermissionRelayArgs).toHaveBeenCalledWith(expect.objectContaining({ cwd }));
+		});
+
 		it.each([
 			['--dangerously-skip-permissions'],
 			['--permission-mode', 'bypassPermissions'],

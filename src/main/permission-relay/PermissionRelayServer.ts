@@ -238,6 +238,7 @@ export class PermissionRelayServer {
 			token: msg.token,
 			sessionId: binding.sessionId,
 			tabId: binding.tabId,
+			cwd: binding.cwd,
 			toolName: msg.toolName,
 			input,
 			createdAt: Date.now(),

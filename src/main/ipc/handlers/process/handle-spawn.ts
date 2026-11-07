@@ -499,6 +499,7 @@ export async function handleProcessSpawn(
 			const relayArgs = await preparePermissionRelayArgs({
 				sessionId: config.sessionId,
 				tabId: config.tabId,
+				cwd: config.cwd,
 				userDataDir: app.getPath('userData'),
 				execPath: process.execPath,
 			});

@@ -208,7 +208,7 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 								title: conversationDisplayTitle(tab) ?? request.tabId ?? request.sessionId,
 							})}
 						</p>
-						{session?.cwd && <p>{session.cwd}</p>}
+						{request.cwd && <p>{request.cwd}</p>}
 						<p className="mt-2">{uiText('workflows.sessions.approvalScope')}</p>
 					</div>
 				)}

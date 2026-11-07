@@ -31,6 +31,7 @@ export interface PermissionRequestUI {
 	requestId: string;
 	sessionId: string;
 	tabId?: string;
+	cwd?: string;
 	toolName: string;
 	input: Record<string, unknown>;
 	createdAt: number;

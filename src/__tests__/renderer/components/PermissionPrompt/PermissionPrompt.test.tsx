@@ -4,7 +4,10 @@ import { PermissionPrompt } from '../../../../renderer/components/PermissionProm
 import { LayerStackProvider } from '../../../../renderer/contexts/LayerStackContext';
 import { usePermissionRequestStore } from '../../../../renderer/stores/permissionRequestStore';
 import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
+import { useSessionStore } from '../../../../renderer/stores/sessionStore';
+import type { PermissionRequestUI } from '../../../../renderer/stores/permissionRequestStore';
 import { resetStores } from '../../../helpers/resetStores';
+import { createMockSession } from '../../../helpers/mockSession';
 import { mockTheme } from '../../../helpers/mockTheme';
 
 const request = {
@@ -22,7 +25,10 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	resolved = undefined;
 	useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
-	resetStores(usePermissionRequestStore);
+	resetStores(usePermissionRequestStore, useSessionStore);
+	useSessionStore.setState({
+		sessions: [createMockSession({ id: 'session', cwd: '/temporary-project' })],
+	});
 	Object.assign(window.maestro.process, {
 		onPermissionRequest: vi.fn(() => vi.fn()),
 		onPermissionResolved: vi.fn((cb) => {
@@ -36,12 +42,12 @@ beforeEach(() => {
 });
 afterEach(() => {
 	cleanup();
-	resetStores(usePermissionRequestStore, useSettingsStore);
+	resetStores(usePermissionRequestStore, useSettingsStore, useSessionStore);
 	vi.restoreAllMocks();
 });
 
-function showPrompt() {
-	usePermissionRequestStore.getState().enqueue(request);
+function showPrompt(payload: PermissionRequestUI = request) {
+	usePermissionRequestStore.getState().enqueue(payload);
 	return render(
 		<LayerStackProvider>
 			<PermissionPrompt theme={mockTheme} />
@@ -50,6 +56,16 @@ function showPrompt() {
 }
 
 describe('Claude approval prompt', () => {
+	it('shows the actual worktree cwd instead of the owning project record', () => {
+		const cwd = '/temporary-project/.claude/worktrees/approval';
+		showPrompt({ ...request, cwd });
+		expect(screen.getByText(cwd, { exact: true })).toBeInTheDocument();
+		expect(screen.queryByText('/temporary-project', { exact: true })).not.toBeInTheDocument();
+	});
+	it('does not claim a project directory when older requests omit execution context', () => {
+		showPrompt();
+		expect(screen.queryByText('/temporary-project', { exact: true })).not.toBeInTheDocument();
+	});
 	it('shows the complete proposed file input before allowing once in the new shell', () => {
 		showPrompt();
 		expect(screen.getByRole('dialog', { name: '权限请求' })).toHaveTextContent('待审批内容');

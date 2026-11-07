@@ -130,6 +130,7 @@ export function cleanupSessionRelay(sessionId: string): void {
 export async function preparePermissionRelayArgs(params: {
 	sessionId: string;
 	tabId?: string;
+	cwd: string;
 	userDataDir: string;
 	execPath: string;
 }): Promise<string[]> {
@@ -145,6 +146,7 @@ export async function preparePermissionRelayArgs(params: {
 	const { token, cleanup } = registerSpawn({
 		sessionId: params.sessionId,
 		tabId: params.tabId,
+		cwd: params.cwd,
 	});
 
 	let relayArgs: ReturnType<typeof buildRelayArgs>;

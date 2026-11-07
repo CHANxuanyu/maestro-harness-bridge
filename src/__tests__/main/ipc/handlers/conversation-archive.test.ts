@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { beforeEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
 	handlers: new Map<string, (...args: any[]) => any>(),
@@ -83,7 +84,7 @@ it('asks both owner windows before committing and stores the exact account ident
 		[1, 'close'],
 	]);
 	expect(state.settings.archivedConversations[0]).toMatchObject({
-		key: JSON.stringify(['codex', 'local', '/synthetic-account/sessions', 'native']),
+		key: JSON.stringify(['codex', 'local', path.join('/synthetic-account', 'sessions'), 'native']),
 		permissionMode: 'standard',
 		modifiedAt: 7,
 	});

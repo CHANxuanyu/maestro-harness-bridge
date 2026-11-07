@@ -572,7 +572,7 @@ describe('process IPC handlers', () => {
 			expect(JSON.parse(mockProcessManager.spawn.mock.calls[0][0].nativeCommandScopeKey)).toEqual([
 				'claude-code',
 				'/temporary/project',
-				'/temporary/provider-account',
+				path.resolve('/temporary/provider-account'),
 				null,
 			]);
 		});

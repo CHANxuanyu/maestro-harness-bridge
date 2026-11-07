@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../../../cli/services/agent-sessions', () => ({ invokeNativeHistory: vi.fn() }));
 vi.mock('../../../cli/services/storage', () => ({
@@ -130,6 +131,6 @@ it('archives a resolved open tab through the same native operation', async () =>
 it('searches native history through the same desktop implementation with an optional project', async () => {
 	await nativeHistory('search', 'secret phrase', undefined, { json: true, project: '/project' });
 	expect(invokeNativeHistory).toHaveBeenCalledWith('agentSessions:searchNativeHistory', [
-		{ query: 'secret phrase', projectPath: '/project' },
+		{ query: 'secret phrase', projectPath: path.resolve('/project') },
 	]);
 });

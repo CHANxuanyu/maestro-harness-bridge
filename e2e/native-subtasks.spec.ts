@@ -221,10 +221,11 @@ test('new shell subtasks: mention, queued reply, CLI dispatch and closed parent'
 					`[data-conversation-kind="history"][data-native-session-id="${nativeId}"]`
 				)
 			).toHaveCount(0);
+			// The parent's own title quotes the same sentence, so match the child exactly.
 			await expect(
 				native.page
-					.locator('[data-conversation-key] > div')
-					.filter({ hasText: 'Inspect interrupted work.' })
+					.locator('[data-conversation-key]')
+					.getByText('Inspect interrupted work.', { exact: true })
 			).toHaveCount(1);
 			await native.cli('tab', 'close', stopped.id);
 			await expect(

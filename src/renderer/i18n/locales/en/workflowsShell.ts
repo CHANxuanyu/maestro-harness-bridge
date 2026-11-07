@@ -475,6 +475,13 @@ export const workflowsShell = {
 	'workflows.shell.typeToQueueMessage': 'Type to queue message...',
 	'workflows.shell.typeAMessageToMentionAgent': 'Type a message... (@ to mention agent)',
 	'workflows.shell.openPromptComposervalue': 'Open Prompt Composer{p0}',
+	'workflows.shell.crossHostDropUnsupported':
+		'Dragging files between different hosts is not supported.',
+	'workflows.shell.invalidFileDropOrigin':
+		'The source location of this file could not be read. Please drag it again.',
+	'workflows.shell.confirmForceStopConversation':
+		'This conversation could not be stopped gracefully. Force stop it? Unsaved work may be lost.',
+	'workflows.shell.stopConversationFailed': 'Could not stop this conversation. Please try again.',
 	'workflows.shell.attachImage': 'Attach Image',
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify':
 		"Toggle Read-Only mode (agents won't modify files)",

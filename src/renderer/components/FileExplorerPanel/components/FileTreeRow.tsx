@@ -8,7 +8,7 @@ import type { Session, Theme, FocusArea, FileChangeType } from '../../../types';
 import type { FileNode } from '../../../types/fileTree';
 import type { FileExplorerIconTheme } from '../../../utils/fileExplorerIcons/shared';
 import type { FlattenedNode } from '../types';
-import { FILE_TREE_SINGLE_MIME, FILE_TREE_MULTI_MIME } from '../types';
+import { FILE_TREE_SINGLE_MIME, FILE_TREE_MULTI_MIME, FILE_TREE_ORIGIN_MIME } from '../types';
 import { parentDirOf } from '../utils/pathHelpers';
 import { CONNECTOR_ARM_WIDTH, INDENT_STEP, guideLeft, rowPaddingLeft } from '../utils/treeLines';
 
@@ -276,6 +276,15 @@ export const FileTreeRow = memo(function FileTreeRow({
 				// all the in-app drag wiring below so move/@mention stays untouched for
 				// a plain drag.
 				if (onOsDragOut(e, sources)) return;
+				if (newShell) {
+					e.dataTransfer.setData(
+						FILE_TREE_ORIGIN_MIME,
+						JSON.stringify({
+							root: session.fullPath,
+							sshRemoteId: sshRemoteId ?? null,
+						})
+					);
+				}
 
 				if (isPartOfMultiSelection) {
 					// Single-path MIME stays populated for the receivers (AI input,

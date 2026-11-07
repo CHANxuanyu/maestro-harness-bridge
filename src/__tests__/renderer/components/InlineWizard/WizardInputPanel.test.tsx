@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 /**
  * Tests for WizardInputPanel.tsx
  *
@@ -12,7 +13,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useRef, useState } from 'react';
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { WizardInputPanel } from '../../../../renderer/components/InlineWizard/WizardInputPanel';
 import {
 	formatShortcutKeys,
@@ -33,7 +34,9 @@ vi.mock('../../../../renderer/contexts/LayerStackContext', () => ({
 
 // Mock sessionStore for tab close on Escape
 const mockSetSessions = vi.fn();
+const mockUpdateAiTab = vi.fn();
 vi.mock('../../../../renderer/stores/sessionStore', () => ({
+	updateAiTab: (...args: unknown[]) => mockUpdateAiTab(...args),
 	useSessionStore: {
 		getState: () => ({
 			setSessions: mockSetSessions,
@@ -98,7 +101,28 @@ describe('WizardInputPanel', () => {
 	};
 
 	beforeEach(() => {
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
+	});
+
+	it('opens its own wizard image picker and pins the selected conversation', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const left = render(<WizardInputPanel {...defaultProps} />);
+		const session = createMockSession({ id: 'right-owner', activeTabId: 'right-tab' });
+		const right = render(<WizardInputPanel {...defaultProps} session={session} />);
+		const leftInput = left.container.querySelector('input[type="file"]')!;
+		const rightInput = right.container.querySelector('input[type="file"]')!;
+		const leftClick = vi.spyOn(leftInput, 'click');
+		const rightClick = vi.spyOn(rightInput, 'click');
+		fireEvent.click(right.container.querySelector('[title="Attach Image"]')!);
+		expect(rightClick).toHaveBeenCalledOnce();
+		expect(leftClick).not.toHaveBeenCalled();
+		fireEvent.change(rightInput, {
+			target: { files: [new File(['pixels'], 'image.png', { type: 'image/png' })] },
+		});
+		await waitFor(() =>
+			expect(mockUpdateAiTab).toHaveBeenCalledWith('right-owner', 'right-tab', expect.any(Function))
+		);
 	});
 
 	describe('layout', () => {

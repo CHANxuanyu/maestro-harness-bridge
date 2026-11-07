@@ -458,6 +458,11 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.shell.typeToQueueMessage': '输入要加入队列的消息...',
 	'workflows.shell.typeAMessageToMentionAgent': '输入消息...（输入 @ 提及智能体）',
 	'workflows.shell.openPromptComposervalue': '打开提示词编辑器{p0}',
+	'workflows.shell.crossHostDropUnsupported': '暂不支持在不同主机的对话之间拖入文件。',
+	'workflows.shell.invalidFileDropOrigin': '无法读取文件的来源位置，请重新拖入。',
+	'workflows.shell.confirmForceStopConversation':
+		'未能正常停止这条对话。要强制停止吗？未保存的工作可能丢失。',
+	'workflows.shell.stopConversationFailed': '未能停止这条对话，请重试。',
 	'workflows.shell.attachImage': '添加图片',
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify': '切换只读模式（智能体不会修改文件）',
 	'workflows.shell.readOnly': '只读',

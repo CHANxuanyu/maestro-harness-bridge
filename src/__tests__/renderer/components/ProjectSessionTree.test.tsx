@@ -45,6 +45,8 @@ const EN: Record<string, string> = {
 	'workflows.conversations.busy': 'Working',
 	'workflows.conversations.unread': 'Unread',
 	'workflows.conversations.error': 'Needs attention',
+	'workflows.conversations.expandChildren': 'Show subtasks: {title}',
+	'workflows.conversations.collapseChildren': 'Hide subtasks: {title}',
 };
 
 vi.mock('../../../renderer/i18n', async (importOriginal) => {
@@ -173,6 +175,104 @@ it.each([false, true])(
 );
 
 describe('ProjectSessionTree', () => {
+	it('keeps completed subtasks collapsed and opens them through the same row callback', () => {
+		useSettingsStore.setState({ newShell: true });
+		const child = { ...codexFix, title: 'Review the tests' };
+		const parent = conversation({ children: [child] });
+		const { props } = setup({ projects: [project({ conversations: [parent] })] });
+		expect(screen.queryByRole('button', { name: 'Codex Review the tests' })).toBeNull();
+		const disclosure = screen.getByRole('button', { name: 'Show subtasks: Fix bug' });
+		expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+		fireEvent.click(disclosure);
+		const childButton = screen.getByRole('button', { name: 'Codex Review the tests' });
+		expect(childButton).toHaveStyle({ paddingLeft: '32px' });
+		expect(within(childButton).getByRole('img', { name: 'Codex' })).toBeInTheDocument();
+		fireEvent.click(childButton);
+		expect(props.onSelectConversation).toHaveBeenCalledWith(child);
+		fireEvent.click(screen.getByRole('button', { name: 'Hide subtasks: Fix bug' }));
+		expect(screen.queryByRole('button', { name: 'Codex Review the tests' })).toBeNull();
+	});
+
+	it('automatically reveals running subtasks and their state without unread marks', () => {
+		useSettingsStore.setState({ newShell: true });
+		const child = { ...codexFix, title: 'Review the tests', busy: false };
+		const tree = (busy: boolean) => [
+			project({ conversations: [conversation({ children: [{ ...child, busy }] })] }),
+		];
+		const { rerender } = setup({ projects: tree(false) });
+		expect(screen.queryByRole('button', { name: /Codex Review the tests/ })).toBeNull();
+		rerender({ projects: tree(true) });
+		const childButton = screen.getByRole('button', { name: 'Codex Review the tests Working' });
+		expect(within(childButton).getByTitle('Working')).toBeInTheDocument();
+		expect(screen.queryByTitle('Unread')).toBeNull();
+		expect(screen.getByRole('button', { name: 'Hide subtasks: Fix bug' })).toHaveAttribute(
+			'aria-expanded',
+			'true'
+		);
+		rerender({ projects: tree(false) });
+		expect(screen.queryByRole('button', { name: /Codex Review the tests/ })).toBeNull();
+	});
+
+	it('keeps a selected completed descendant visible and resolves its own menu actions', () => {
+		useSettingsStore.setState({ newShell: true });
+		const child = { ...codexFix, title: 'Review the tests' };
+		const { props } = setup({
+			projects: [project({ conversations: [conversation({ children: [child] })] })],
+			activeKey: child.key,
+		});
+		expect(screen.getByRole('button', { name: 'Codex Review the tests' })).toHaveAttribute(
+			'aria-current',
+			'page'
+		);
+		fireEvent.click(screen.getByRole('button', { name: 'Conversation actions: Review the tests' }));
+		fireEvent.click(screen.getByRole('menuitem', { name: 'Rename conversation' }));
+		expect(props.onRenameConversation).toHaveBeenCalledWith(child);
+	});
+
+	it('lets a user collapse running subtasks and expands them again on the next run', () => {
+		useSettingsStore.setState({ newShell: true });
+		const tree = (busy: boolean) => [
+			project({ conversations: [conversation({ children: [{ ...codexFix, busy }] })] }),
+		];
+		const { rerender } = setup({ projects: tree(true) });
+		fireEvent.click(screen.getByRole('button', { name: 'Hide subtasks: Fix bug' }));
+		expect(screen.queryByRole('button', { name: 'Codex Fix bug Working' })).toBeNull();
+		rerender({ projects: tree(false) });
+		rerender({ projects: tree(true) });
+		expect(screen.getByRole('button', { name: 'Codex Fix bug Working' })).toBeInTheDocument();
+	});
+
+	it('reveals nested descendants during search and when a grandchild is working', () => {
+		useSettingsStore.setState({ newShell: true });
+		const grandchild = conversation({ key: 'deep:tab-3', title: 'Check edge cases', busy: true });
+		const parent = conversation({ children: [{ ...codexFix, children: [grandchild] }] });
+		const { rerender } = setup({ projects: [project({ conversations: [parent] })] });
+		expect(
+			screen.getByRole('button', { name: 'Claude Code Check edge cases Working' })
+		).toHaveStyle({
+			paddingLeft: '44px',
+		});
+		rerender({
+			search: 'edge',
+			projects: [
+				project({
+					conversations: [conversation({ children: [{ ...grandchild, busy: false }] })],
+				}),
+			],
+		});
+		expect(
+			screen.getByRole('button', { name: 'Claude Code Check edge cases' })
+		).toBeInTheDocument();
+	});
+
+	it('does not expose children or their disclosure in the old shell', () => {
+		useSettingsStore.setState({ newShell: false });
+		setup({ projects: [project({ conversations: [conversation({ children: [codexFix] })] })] });
+		expect(screen.queryByRole('button', { name: /subtasks:/ })).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Codex Fix bug' })).toBeNull();
+		expect(screen.getByRole('button', { name: 'Claude Code Fix bug' })).toBeInTheDocument();
+	});
+
 	it.each([false, true])(
 		'uses available local tools from the shared plus path, new shell %s',
 		async (newShell) => {

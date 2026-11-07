@@ -46,6 +46,40 @@ beforeEach(() => {
 });
 
 describe('useAgentSessionIdListener', () => {
+	it('fills a child origin after its parent receives the first native id and keeps that identity stable', async () => {
+		const origin = {
+			kind: 'subtask' as const,
+			sourceSessionId: 'sess-1',
+			sourceTabId: 'tab-1',
+			sourceProvider: 'codex',
+			createdAt: 10,
+		};
+		useSessionStore.setState({
+			sessions: [
+				createMockSession({
+					id: 'sess-1',
+					toolType: 'codex',
+					aiTabs: [createMockAITab({ id: 'tab-1' })],
+				}),
+				createMockSession({
+					id: 'child',
+					aiTabs: [
+						createMockAITab({ id: 'child-tab', origin }),
+						createMockAITab({ id: 'other-tab', origin: { ...origin, sourceTabId: 'unrelated' } }),
+					],
+				}),
+			],
+		});
+		renderHook(() => useAgentSessionIdListener({ batchedUpdater: makeBatched() }));
+		await handler!('sess-1-ai-tab-1', 'native-parent');
+		let children = useSessionStore.getState().sessions[1].aiTabs;
+		expect(children[0].origin?.sourceNativeSessionId).toBe('native-parent');
+		expect(children[1].origin?.sourceNativeSessionId).toBeUndefined();
+		await handler!('sess-1-ai-tab-1', 'replacement-native-parent');
+		children = useSessionStore.getState().sessions[1].aiTabs;
+		expect(children[0].origin?.sourceNativeSessionId).toBe('native-parent');
+	});
+
 	it('captures agent session id on the targeted tab', async () => {
 		const tab = createMockAITab({ id: 'tab-1', awaitingSessionId: true });
 		const session = createMockSession({

@@ -10,6 +10,7 @@ import { isSelfContainedCard } from '../../../renderer/utils/logEntries';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 import type { AgentDelegationNotice } from '../../../shared/agentDelegation';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 
 const proxmox = () =>
 	createMockSession({ id: 'proxmox', name: '🖥 Proxmox', toolType: 'claude-code' });
@@ -93,7 +94,46 @@ describe('buildDelegationLogEntry', () => {
 
 describe('recordAgentDelegation / settleAgentDelegation', () => {
 	beforeEach(() => {
+		useSettingsStore.setState({ newShell: false });
 		useSessionStore.setState({ sessions: [proxmox(), maestro()] } as never);
+	});
+
+	it.each([false, true])(
+		'records dispatched new tabs as children only in newShell=%s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const caller = maestro();
+			caller.aiTabs[0].agentSessionId = 'source-native';
+			caller.aiTabs[0].name = 'Parent conversation';
+			const child = createMockAITab({ id: 'child', state: 'busy' });
+			const target = { ...proxmox(), aiTabs: [child] };
+			useSessionStore.setState({ sessions: [caller, target] });
+			recordAgentDelegation(
+				notice({ newTab: true, targetTabId: child.id, prompt: 'Fix the bug. Then check tests.' })
+			);
+			const result = useSessionStore.getState().sessions[1].aiTabs[0];
+			if (newShell) {
+				expect(result.origin).toMatchObject({
+					kind: 'subtask',
+					sourceSessionId: caller.id,
+					sourceTabId: 'caller-tab',
+					sourceNativeSessionId: 'source-native',
+					sourceProvider: caller.toolType,
+				});
+				expect(result.name).toBe('Fix the bug.');
+			} else {
+				expect(result.origin).toBeUndefined();
+				expect(result.name).toBe(child.name);
+			}
+		}
+	);
+
+	it('keeps existing conversation provenance when dispatch does not create a tab', () => {
+		useSettingsStore.setState({ newShell: true });
+		const child = createMockAITab({ id: 'child', name: 'Existing' });
+		useSessionStore.setState({ sessions: [maestro(), { ...proxmox(), aiTabs: [child] }] });
+		recordAgentDelegation(notice({ targetTabId: child.id }));
+		expect(useSessionStore.getState().sessions[1].aiTabs[0]).toBe(child);
 	});
 
 	it('appends the pill to the delegating tab only', () => {

@@ -192,6 +192,7 @@ test('new shell subtasks: mention, queued reply, CLI dispatch and closed parent'
 
 		await test.step('a first consult stopped before success claims its history without becoming resumable', async () => {
 			const freshParent = await native.cli('tab', 'new', '--agent', parentId);
+			await expect.poll(() => savedTab(freshParent.tabId)?.id).toBe(freshParent.tabId);
 			await native.cli('tab', 'select', freshParent.tabId);
 			scene({ answer: 'Unfinished first consult.', waitForStop: true });
 			await native.send('@Worker Inspect interrupted work. Then report.');

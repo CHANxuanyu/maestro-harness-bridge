@@ -10,6 +10,7 @@ import type {
 } from '../../types/contextMerge';
 
 export interface SlashCommand {
+	source?: import('../../../shared/nativeCommands').NativeCommand['source'];
 	command: string;
 	description: string;
 	terminalOnly?: boolean;
@@ -25,6 +26,8 @@ export interface AtMentionSuggestion {
 }
 
 export interface InputAreaProps {
+	/** Explicit display owner for a new-shell split pane. */
+	composerTargetTabId?: string;
 	session: Session;
 	theme: Theme;
 	setInputValue: (value: string) => void;

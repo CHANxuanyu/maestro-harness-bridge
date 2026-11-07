@@ -1043,13 +1043,15 @@ function PaneFrame({
  *   - No `pointercancel` and no unmount cleanup, so a gesture the system took
  *     over, or a group/tab switch mid-drag, leaked the listeners permanently.
  */
-function SplitDivider({
+export function SplitDivider({
 	direction,
 	theme,
 	onDrag,
 	onCommit,
 	onCancel,
+	separatorProps,
 }: {
+	separatorProps?: React.HTMLAttributes<HTMLDivElement> & { 'data-testid'?: string };
 	direction: 'row' | 'column';
 	theme: Theme;
 	/** clientX/Y delta from drag start; returns nothing (caller applies to DOM). */
@@ -1085,6 +1087,7 @@ function SplitDivider({
 
 	return (
 		<div
+			{...separatorProps}
 			onPointerDown={onPointerDown}
 			className={`shrink-0 ${isRow ? 'cursor-col-resize' : 'cursor-row-resize'}`}
 			style={{

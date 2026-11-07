@@ -264,8 +264,8 @@ function harness(
 ) {
 	const processManager = new FakeProcessManager();
 	const chunks: CrossAgentResponseChunk[] = [];
-	const dispatch = () =>
-		startCrossAgentRequest(request(), {
+	const dispatch = (fields: Partial<CrossAgentRequest> = {}) =>
+		startCrossAgentRequest(request(fields), {
 			processManager: processManager as never,
 			agentDetector: {
 				getAgent: async () => ({
@@ -541,6 +541,21 @@ describe('cancelCrossAgentRequestsForSource', () => {
 		cancelCrossAgentRequestsForSource('src');
 		vi.useRealTimers();
 		vi.clearAllMocks();
+	});
+
+	it('cancels only the named source tab while another consult finishes normally', async () => {
+		const left = harness();
+		const right = harness();
+		await left.dispatch({ requestId: 'left', sourceTabId: 'left-tab' });
+		await right.dispatch({ requestId: 'right', sourceTabId: 'right-tab' });
+		expect(cancelCrossAgentRequestsForSource('src', 'left-tab')).toBe(1);
+		expect(left.processManager.kill).toHaveBeenCalledExactlyOnceWith('cross-agent-left');
+		expect(right.processManager.kill).not.toHaveBeenCalled();
+		expect(right.chunks).toEqual([]);
+		right.processManager.emit('data', 'cross-agent-right', 'complete answer');
+		right.processManager.emit('exit', 'cross-agent-right', 0);
+		expect(right.chunks.at(-1)).toMatchObject({ chunk: 'complete answer', done: true });
+		expect(right.chunks.at(-1)?.canceled).not.toBe(true);
 	});
 
 	it('kills a running consult and settles it as canceled, not as a failure', async () => {

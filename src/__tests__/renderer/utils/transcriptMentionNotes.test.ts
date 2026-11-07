@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { appendReadOnlyPrompt } from '../../../shared/readOnlyPrompt';
+import { stripTurnPrompt } from '../../../shared/turnPrompt';
 import {
 	bindDelayedOwnSends,
 	hasLegacyTranscriptEntries,
@@ -93,5 +94,14 @@ describe('read-only turns with mention notes', () => {
 		} finally {
 			vi.restoreAllMocks();
 		}
+	});
+});
+
+describe('legacy notes from a Windows checkout', () => {
+	it('decodes a note whose prompt file had CRLF line endings', () => {
+		const note = consultTemplate
+			.replace('{{CONSULTED_AGENTS}}', 'Reviewer')
+			.replace(/\r?\n/g, '\r\n');
+		expect(stripTurnPrompt(`Check this\n\n---\n\n${note}`)).toBe('Check this');
 	});
 });

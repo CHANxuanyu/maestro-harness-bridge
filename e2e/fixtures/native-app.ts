@@ -49,6 +49,7 @@ export interface NativeScene {
 
 export class NativeApp {
 	readonly root = createNativeTempDir('maestro-native-e2e-');
+	readonly syntheticHome = path.join(this.root, 'synthetic-home');
 	readonly data = path.join(this.root, 'maestro');
 	readonly project = path.join(this.root, 'project');
 	readonly claude = path.join(this.root, 'claude');
@@ -87,6 +88,7 @@ export class NativeApp {
 			this.grok,
 			this.omp,
 			this.copilot,
+			this.syntheticHome,
 		])
 			fs.mkdirSync(dir, { recursive: true });
 		const productFile = path.resolve('dist/maestro-product.json');
@@ -183,9 +185,12 @@ export class NativeApp {
 		}
 		// A history-boundary case needs a synthetic default account as well as the selected one.
 		// Scope HOME to this child process so the test never seeds the user's default directory.
+		// Synthetic runs never see the real home: a provider's store there, such as an
+		// OpenCode database from the desktop app, would be read instead of the fixture's.
+		const home = homeDir ?? (this.real ? undefined : this.syntheticHome);
 		this.app = await launchElectronApp(path.resolve('dist/main/index.js'), this.data, {
 			...this.env,
-			...(homeDir ? { HOME: homeDir } : {}),
+			...(home ? { HOME: home } : {}),
 		});
 		this.boot++;
 		await this.app.context().tracing.start({ screenshots: true, snapshots: true });

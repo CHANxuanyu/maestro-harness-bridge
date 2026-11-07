@@ -19,6 +19,8 @@ import {
 	tabNew,
 	tabCompact,
 	tabPanel,
+	tabSplit,
+	tabUnsplit,
 	tabClose,
 	tabRename,
 	tabStar,
@@ -32,6 +34,7 @@ import {
 	tabEffort,
 	tabEnterToSend,
 	tabShow,
+	tabCommands,
 } from '../../../cli/commands/tab';
 import { withMaestroClient } from '../../../cli/services/maestro-client';
 import { resolveAgentId, readActiveAgentId } from '../../../cli/services/storage';
@@ -99,6 +102,21 @@ function mockTab(result: Record<string, unknown>) {
 }
 
 describe('tab commands', () => {
+	it('reads account scoped native commands through the shared IPC handler', async () => {
+		const result = {
+			commands: [{ command: '/review', description: 'Project review', source: 'project' }],
+			warning: 'remote-unavailable',
+		};
+		const captured = mockTab({ ok: true, result });
+		await tabCommands('tab-aaaa', { json: true });
+		expect(captured()).toEqual({
+			type: 'bridge.invoke',
+			channel: 'agents:getNativeCommands',
+			args: [{ sessionId: 'agent-1', tabId: 'tab-aaaa' }],
+		});
+		expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result));
+	});
+
 	let consoleSpy: MockInstance;
 	let processExitSpy: MockInstance;
 
@@ -124,6 +142,61 @@ describe('tab commands', () => {
 		});
 	});
 
+	it('splits the exact conversation resolved from a unique prefix', async () => {
+		const payload = mockTab({ success: true });
+		await tabSplit('tab-bb', { json: true });
+		expect(payload()).toMatchObject({
+			type: 'update_session_config',
+			sessionId: 'agent-2',
+			configPatch: { tabId: 'tab-bbbb', newShellSplitAction: 'split' },
+		});
+		expect(JSON.parse(consoleSpy.mock.calls[0][0])).toMatchObject({ success: true });
+	});
+
+	it('unsplits the focused conversation without requiring a tab argument', async () => {
+		vi.mocked(readActiveAgentId).mockReturnValue('agent-1');
+		const payload = mockTab({ success: true });
+		await tabUnsplit({});
+		expect(payload()).toMatchObject({
+			type: 'update_session_config',
+			sessionId: 'agent-1',
+			configPatch: { tabId: 'tab-aaaa', newShellSplitAction: 'unsplit' },
+		});
+	});
+
+	it('split forwards a numeric left pane ratio through the shared action', async () => {
+		const payload = mockTab({ success: true });
+		await tabSplit('tab-bbbb', { ratio: '0.6' });
+		expect(payload()).toMatchObject({
+			configPatch: {
+				tabId: 'tab-bbbb',
+				newShellSplitAction: 'split',
+				newShellSplitRatio: 0.6,
+			},
+		});
+	});
+
+	it('rejects a nonnumeric split ratio before requesting a mutation', async () => {
+		const payload = mockTab({ success: true });
+		await expect(tabSplit('tab-bbbb', { ratio: 'wide' })).rejects.toThrow('__exit__');
+		expect(payload()).toEqual({});
+	});
+
+	it('unsplit can address a particular conversation window with --agent', async () => {
+		const payload = mockTab({ success: true });
+		await tabUnsplit({ agent: 'agent-2' });
+		expect(payload()).toMatchObject({
+			sessionId: 'agent-2',
+			configPatch: { tabId: 'tab-bbbb', newShellSplitAction: 'unsplit' },
+		});
+	});
+
+	it('reports a refused split instead of printing success', async () => {
+		mockTab({ success: false, error: 'Window too narrow' });
+		await expect(tabSplit('tab-bbbb', { json: true })).rejects.toThrow('__exit__');
+		expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('"success":true'));
+	});
+
 	it('tab new --provider --replace-empty prepares without sending', async () => {
 		const payload = mockTab({ success: true, tabId: 'new-tool', agentId: 'target' });
 		await tabNew({ agent: 'agent-1', provider: 'codex', replaceEmpty: 'tab-aaaa' });
@@ -139,6 +212,8 @@ describe('tab commands', () => {
 	it.each([
 		'files',
 		'changes',
+		'changes-files',
+		'changes-turns',
 		'terminal',
 		'tasks',
 		'back',

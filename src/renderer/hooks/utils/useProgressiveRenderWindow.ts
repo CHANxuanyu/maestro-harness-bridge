@@ -120,7 +120,8 @@ export function useProgressiveRenderWindow(
 	// alternative to a reset useEffect, which would render one wasted full-list
 	// frame (the exact frame this hook exists to avoid) before snapping back.
 	const prevResetKeyRef = useRef(resetKey);
-	if (prevResetKeyRef.current !== resetKey) {
+	const resetting = prevResetKeyRef.current !== resetKey;
+	if (resetting) {
 		prevResetKeyRef.current = resetKey;
 		setStartIndex(Math.max(0, totalCount - initial));
 	}
@@ -154,7 +155,9 @@ export function useProgressiveRenderWindow(
 	// Clamp downward only: never re-hide an entry that has already been rendered,
 	// but do reveal more when the list shrinks below the current window.
 	return {
-		startIndex: Math.min(startIndex, Math.max(0, totalCount - initial)),
+		startIndex: resetting
+			? Math.max(0, totalCount - initial)
+			: Math.min(startIndex, Math.max(0, totalCount - initial)),
 		revealTo,
 		absorbPrepend,
 	};

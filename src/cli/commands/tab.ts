@@ -1,4 +1,7 @@
 import { PROJECT_CONVERSATION_TIMEOUT_MS } from '../../shared/projectSettings';
+import { invokeNativeHistory } from '../services/agent-sessions';
+
+import type { NativeCommandSnapshot } from '../../shared/nativeCommands';
 import { NEW_SHELL_PANEL_ACTIONS, type NewShellPanelAction } from '../../shared/newShellPanel';
 import { isHandoffProvider } from '../../shared/aiHandoff';
 // Tab commands - manage an agent's AI tabs in the running desktop app: open a
@@ -164,6 +167,20 @@ export async function tabCompact(
 		successMessage: 'Started context compaction',
 		extraPayload: { background: resolveBackgroundFlag(options, 'tab-compact') },
 	}));
+}
+
+export async function tabArchive(tabId: string, options: TabMutateOptions): Promise<void> {
+	try {
+		const tab = await resolveTabEntry(tabId, options.agent);
+		if (!tab.agentSessionId) throw new Error('A native conversation ID is required');
+		const result = await invokeNativeHistory<{ success: boolean }>(
+			'agentSessions:archiveConversation',
+			[{ ownerId: tab.agentId, nativeSessionId: tab.agentSessionId }, 'archive']
+		);
+		reportResult(result, { json: options.json, successMessage: 'Archived conversation' });
+	} catch (error) {
+		failCommand(error instanceof Error ? error.message : String(error), options.json);
+	}
 }
 
 export async function tabClose(tabId: string, options: TabMutateOptions): Promise<void> {
@@ -518,6 +535,36 @@ export async function tabShow(tabId: string, options: TabMutateOptions): Promise
 	row('Unread', String(entry.hasUnread ?? false));
 }
 
+/** Open an existing conversation beside the current one in the new shell. */
+export async function tabSplit(
+	tabId: string,
+	options: TabMutateOptions & { ratio?: string }
+): Promise<void> {
+	const ratio = options.ratio === undefined ? undefined : Number(options.ratio);
+	if (ratio !== undefined && !Number.isFinite(ratio)) {
+		return failCommand('Ratio must be a number', options.json);
+	}
+	await tabFlag(
+		tabId,
+		{
+			newShellSplitAction: 'split',
+			...(ratio !== undefined ? { newShellSplitRatio: ratio } : {}),
+		},
+		() => 'Opened conversation on the right',
+		options
+	);
+}
+
+/** Return the addressed window to its focused conversation. */
+export async function tabUnsplit(options: TabMutateOptions): Promise<void> {
+	await tabFlag(
+		'active',
+		{ newShellSplitAction: 'unsplit' },
+		() => 'Returned to one conversation',
+		options
+	);
+}
+
 /** Presentation of this conversation, persisted through the existing tab patch route. */
 export async function tabPanel(
 	tabId: string,
@@ -549,4 +596,34 @@ export async function tabPanel(
 		`Panel: ${action}`,
 		options
 	);
+}
+
+/** The same account-scoped, read-only discovery used when the composer opens. */
+export async function tabCommands(tabId: string, options: TabMutateOptions): Promise<void> {
+	try {
+		const owner = await resolveTabOwner(tabId, options.agent);
+		const reply = await sendSimpleCommand<{
+			success: boolean;
+			ok: boolean;
+			result: NativeCommandSnapshot;
+			error?: string;
+		}>(
+			{
+				type: 'bridge.invoke',
+				channel: 'agents:getNativeCommands',
+				args: [{ sessionId: owner.agentId, tabId: owner.tabId }],
+			},
+			'bridge.response',
+			60000
+		);
+		if (!reply.ok) throw new Error(reply.error || 'Command discovery failed');
+		if (options.json) console.log(JSON.stringify(reply.result));
+		else {
+			for (const command of reply.result.commands)
+				console.log(`${command.command}\t${command.source}\t${command.description}`);
+			if (reply.result.warning) console.log(reply.result.warning);
+		}
+	} catch (error) {
+		failCommand(error instanceof Error ? error.message : String(error), options.json);
+	}
 }

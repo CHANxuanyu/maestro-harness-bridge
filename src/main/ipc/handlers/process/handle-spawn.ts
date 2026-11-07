@@ -1,3 +1,5 @@
+import { nativeCommandScope, rememberNativeCommands } from '../../../agents/native-commands';
+import { getAgentAccountDirLayers } from '../../../agents/provider-account-dirs';
 import { app, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import * as os from 'os';
@@ -981,8 +983,27 @@ export async function handleProcessSpawn(
 		}
 	}
 
+	// Non-persisting helpers can report a reduced command set. Their init must
+	// not replace the conversation's scoped inventory after a completed turn.
+	const nativeCommandScopeKey =
+		config.toolType === 'claude-code' && !config.args.includes('--no-session-persistence')
+			? nativeCommandScope(
+					{
+						toolType: config.toolType,
+						cwd: config.cwd,
+						customEnvVars: config.sessionCustomEnvVars,
+						sessionSshRemoteConfig: config.sessionSshRemoteConfig,
+					},
+					getAgentAccountDirLayers(config.toolType, {
+						agentLevelEnvVars: claudeEnvLayers.agentCustomEnvVars ?? {},
+						globalShellEnvVars,
+					}),
+					sshRemoteUsed ?? undefined
+				).key
+			: undefined;
 	const result = processManager.spawn({
 		...config,
+		nativeCommandScopeKey,
 		command: commandToSpawn,
 		args: argsToSpawn,
 		// When using SSH, use user's home directory as local cwd
@@ -1069,6 +1090,7 @@ export async function handleProcessSpawn(
 		void probeClaudeSlashCommandsCached(interactiveClaudeBinPath, config.cwd, probeEnv).then(
 			(commands) => {
 				if (commands && commands.length > 0) {
+					rememberNativeCommands(nativeCommandScopeKey, commands);
 					safeSend('process:slash-commands', config.sessionId, commands);
 				}
 			}

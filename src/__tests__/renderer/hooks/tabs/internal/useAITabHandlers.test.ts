@@ -7,6 +7,10 @@ import { useAITabHandlers } from '../../../../../renderer/hooks/tabs/internal/us
 import { useNotificationStore } from '../../../../../renderer/stores/notificationStore';
 import { useModalStore } from '../../../../../renderer/stores/modalStore';
 import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
+import {
+	DEFAULT_CAPABILITIES,
+	primeCapabilitiesCache,
+} from '../../../../../renderer/hooks/agent/useAgentCapabilities';
 import { getLiveDraft, setLiveDraft } from '../../../../../renderer/utils/liveDraftStore';
 import {
 	clearDesktopAiTabSelections,
@@ -65,6 +69,14 @@ describe('useAITabHandlers', () => {
 						: []),
 				],
 			});
+			vi.mocked(window.maestro.agents.getAllCapabilities).mockResolvedValueOnce({
+				'claude-code': {
+					...DEFAULT_CAPABILITIES,
+					supportsReadOnlyMode: true,
+					supportsStandardPermissionMode: true,
+				},
+			});
+			await primeCapabilitiesCache();
 			const requestNewTab = vi
 				.fn()
 				.mockResolvedValue({ tabId: 'created', permissionMode: 'readonly', readOnlyMode: true });

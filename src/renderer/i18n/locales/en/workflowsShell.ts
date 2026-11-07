@@ -57,7 +57,31 @@ export const workflowsShell = {
 	'workflows.projectSettings.environment': 'Environment variables',
 	'workflows.projectSettings.environmentHelp':
 		'These values apply to future conversations. Existing account and tool configuration is retained unless overridden here.',
-
+	'workflows.split.openRight': 'Open on the right',
+	'workflows.split.openRightTitle': 'Open on the right: {title}',
+	'workflows.split.chooseConversation': 'Choose a conversation to open on the right',
+	'workflows.split.unsplit': 'Exit split view',
+	'workflows.split.closePane': 'Close this pane',
+	'workflows.split.resize': 'Resize split view',
+	'workflows.split.narrow':
+		'This window is too narrow. Widen it to view two conversations side by side.',
+	'workflows.split.disabled': 'Turn on the new interface first',
+	'workflows.split.missing': 'This conversation could not be found',
+	'workflows.split.same': 'The same conversation cannot be opened twice',
+	'workflows.split.invalidRatio': 'The split ratio must be between 0.2 and 0.8',
+	'workflows.shell.splitInvalidRequest': 'Invalid conversation split request',
+	'workflows.archive.archive': 'Archive',
+	'workflows.archive.unarchive': 'Unarchive',
+	'workflows.archive.archived': 'Archived {count}',
+	'workflows.archive.delete': 'Delete conversation',
+	'workflows.archive.deleteConfirm':
+		'Delete “{title}”? This deletes its native history and cannot be undone.',
+	'workflows.archive.running':
+		'This conversation is running or has queued messages. Stop it or wait for it to finish before archiving or deleting.',
+	'workflows.archive.failed':
+		'The conversation could not be changed. Its owner window or account may be unavailable.',
+	'workflows.archive.error': 'Conversation could not be changed',
+	'workflows.archive.keepsHistory': 'Keeps the native history unchanged',
 	'workflows.shell.synopsisFailed': 'Synopsis failed',
 	'workflows.shell.synopsisNoFinalAnswer': 'No final answer is available for this turn',
 	'workflows.shell.signInRequired': 'Sign in again',
@@ -249,6 +273,18 @@ export const workflowsShell = {
 	'workflows.conversations.closeConversation': 'Close conversation',
 	'workflows.conversations.addAccount': 'Add account or configuration',
 	'workflows.conversations.handoff': 'Hand off…',
+	'workflows.conversations.contentSearchPlaceholder': 'Search conversations...',
+	'workflows.conversations.contentSearchLimited': 'Search reached its limit. Narrow your search.',
+	'workflows.conversations.titleResults': 'Conversations',
+	'workflows.conversations.contentResults': 'Conversation content',
+	'workflows.conversations.remoteContentExcluded':
+		'Remote conversations are searched by title only.',
+	'workflows.conversations.searchingContent': 'Searching conversation content...',
+	'workflows.conversations.contentSearchFailed':
+		'Could not search conversation content. Try again.',
+	'workflows.conversations.moreContentResults': 'More results are available. Narrow your search.',
+	'workflows.conversations.noContentMatches': 'No matching conversation content',
+	'workflows.conversations.contentOpenFailed': 'Could not locate this message. Search again.',
 	'workflows.conversations.search': 'Search conversations...',
 	'workflows.conversations.new': 'New conversation',
 	'workflows.conversations.newWith': 'New with {provider}',
@@ -497,6 +533,13 @@ export const workflowsShell = {
 	'workflows.shell.typeToQueueMessage': 'Type to queue message...',
 	'workflows.shell.typeAMessageToMentionAgent': 'Type a message... (@ to mention agent)',
 	'workflows.shell.openPromptComposervalue': 'Open Prompt Composer{p0}',
+	'workflows.shell.crossHostDropUnsupported':
+		'Dragging files between different hosts is not supported.',
+	'workflows.shell.invalidFileDropOrigin':
+		'The source location of this file could not be read. Please drag it again.',
+	'workflows.shell.confirmForceStopConversation':
+		'This conversation could not be stopped gracefully. Force stop it? Unsaved work may be lost.',
+	'workflows.shell.stopConversationFailed': 'Could not stop this conversation. Please try again.',
 	'workflows.shell.attachImage': 'Attach Image',
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify':
 		"Toggle Read-Only mode (agents won't modify files)",

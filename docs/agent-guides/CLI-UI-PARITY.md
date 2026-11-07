@@ -1293,3 +1293,14 @@ paint and font readiness gates. Classic startup and SSH refresh remain unchanged
 ## U7 流式输入调查（2026-11-07）
 
 本轮只修补合成 renderer 基准的逐键记录与尾帧收尾，并增加输入和流式批次的源码回归，没有新增界面动作或 maestro-cli 动词。UI 与 CLI 发起的回合仍共用原有 process listener 和 session batcher；产品内采集沿用 `profiling start/status/stop`。七轮 stream 命令见 [renderer 性能复测](../perf-renderer.md#u7流式期间按键延迟调查)。Open gaps 中既有的视图交互缺口保持原状，本轮不声称补齐。
+
+### Codex 原型审批归属补充（2026-11-07）
+
+`codex-turn permissions` 和 `codex-turn permission` 与桌面审批共用请求归属校验。
+浏览器调用明确拒绝，包括未开启网页登录的浏览器。CLI 必须通过服务端认证的
+`trustedCli` 身份，按桌面用户和主窗口身份查询及响应，因此不能处理其他窗口或
+浏览器用户的请求。桌面只能处理原始所属窗口中的请求；关闭窗口后不能批准。
+
+Open gaps：CLI 暂不选择其他窗口；浏览器原型审批尚未支持。Claude 的既有
+`permission:respond` 同样收紧为所属用户和窗口校验，以阻止猜到 requestId 的
+浏览器用户批准桌面请求。

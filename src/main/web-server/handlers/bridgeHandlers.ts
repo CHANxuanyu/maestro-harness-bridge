@@ -40,6 +40,7 @@ interface BridgeFakeEvent {
 	frameId: number;
 	processId: number;
 	type: 'bridge';
+	trustedCli?: boolean;
 }
 
 const FAKE_EVENT: BridgeFakeEvent = {
@@ -193,7 +194,9 @@ export async function handleBridgeInvoke(
 		// handler performs still reads the same account from `getActingUser()`.
 		// `client.user` is undefined for maestro-cli (admitted by its secret) and
 		// for every client when the gate is off, which reads as "the desktop".
-		let result = await runAsActingUser(client.user, () => handler(FAKE_EVENT, ...args));
+		let result = await runAsActingUser(client.user, () =>
+			handler({ ...FAKE_EVENT, trustedCli: client.trustedCli === true }, ...args)
+		);
 		if (channel === 'settings:projectSettings' && !client.trustedCli) {
 			const response = result as ProjectSettingsResult;
 			result = {

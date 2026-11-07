@@ -1452,3 +1452,10 @@ Opus 仍须在沙箱外执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native
 `e2e/native-commands.spec.ts` 保留原断言，增加新账户命令在界面与 CLI 出现、保持菜单打开切回原账户、原插件命令恢复，以及查询不额外启动回合的检查。Playwright `--list` 收集到一条场景，没有启动 Electron。Opus 需在沙箱外运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-commands.spec.ts --retries=0`；脚本会重建 main、renderer、web-desktop 和 CLI。
 
 没有新增界面动作、CLI 动词或用户文案。旧界面保留既有命令报告与发现行为，回归确认账户环境更新不会触发此次新增订阅的重绘或发现调用。没有修改 SSH 路径处理，真实 SSH、真实工具、其他平台、发行包和完整 Electron 链路仍未验证。未运行全量 Vitest，未推送、创建 PR、打标签或发布。
+
+## 2026-11-07：U5 原型审查修复，审批归属
+
+审批列表及响应先补合成回归，修复前两项失败：另一用户能读取请求，无身份响应返回 true。
+修复把请求绑定到启动用户及原始窗口，列表和响应共用 pending 归属判断；浏览器拒绝，
+可信 CLI 以桌面主窗口身份调用同一校验。Claude 同入口存在相同问题，已一并收紧。
+相关三文件 175 项通过，未运行 Electron 或真实会话。其余审查项继续单独修复。

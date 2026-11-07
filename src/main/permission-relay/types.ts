@@ -1,3 +1,4 @@
+import type { BrowserWindow } from 'electron';
 /**
  * Shared types for the Claude Code permission relay.
  *
@@ -77,7 +78,13 @@ export interface PermissionRequest {
 }
 
 /** Identifies which session/tab a spawn's relay token belongs to. */
+export interface PermissionCaller {
+	userId?: string;
+	webContentsId: number;
+}
+
 export interface RelaySpawnBinding {
+	owner?: { userId?: string; window: BrowserWindow | null };
 	sessionId: string;
 	tabId?: string;
 }

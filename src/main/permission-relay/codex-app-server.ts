@@ -1,14 +1,18 @@
 import type { BrowserWindow } from 'electron';
 import { randomUUID } from 'crypto';
 import { isWebContentsAvailable } from '../utils/safe-send';
-import { createPending, registerSpawn, resolvePending } from './registry';
-import type { PermissionRequest } from './types';
+import { createPending, registerSpawn, resolvePending, ownsPending } from './registry';
+import { getActingUser } from '../web-server/auth/acting-user';
+import type { PermissionCaller, PermissionRequest } from './types';
 import type { CodexAppServerApproval } from '../process-manager/CodexAppServerSession';
 
 const visibleRequests = new Map<string, Omit<PermissionRequest, 'token'>>();
 
-export function listCodexAppServerPermissions(): Omit<PermissionRequest, 'token'>[] {
-	return [...visibleRequests.values()];
+export function listCodexAppServerPermissions(
+	caller?: PermissionCaller
+): Omit<PermissionRequest, 'token'>[] {
+	if (!caller) throw new Error('Codex approvals are unavailable for this caller.');
+	return [...visibleRequests.values()].filter((request) => ownsPending(request.requestId, caller));
 }
 
 /** App-server answers share the existing prompt and decision registry, without a socket. */
@@ -17,11 +21,14 @@ export function prepareCodexAppServerPermissions(options: {
 	tabId?: string;
 	getMainWindow: () => BrowserWindow | null;
 }) {
-	const { token, cleanup } = registerSpawn(options);
+	const window = options.getMainWindow();
+	const { token, cleanup } = registerSpawn({
+		...options,
+		owner: { userId: getActingUser()?.id, window },
+	});
 	const ids = new Map<string, string>();
 	let disposed = false;
 	const send = (channel: string, data: unknown) => {
-		const window = options.getMainWindow();
 		if (!window || !isWebContentsAvailable(window)) return false;
 		window.webContents.send(channel, data);
 		return true;

@@ -13,7 +13,7 @@
  */
 
 import { randomBytes } from 'crypto';
-import type { PermissionDecision, RelaySpawnBinding } from './types';
+import type { PermissionCaller, PermissionDecision, RelaySpawnBinding } from './types';
 import { RELAY_DECISION_TIMEOUT_MS } from './types';
 
 interface PendingRequest {
@@ -107,4 +107,20 @@ export function resolvePending(requestId: string, decision: PermissionDecision):
 /** Test/inspection helper: current counts. */
 export function relayRegistryStats(): { bindings: number; pending: number } {
 	return { bindings: bindings.size, pending: pending.size };
+}
+
+/** User decisions require the original live window and the same acting user. */
+export function ownsPending(requestId: string, caller?: PermissionCaller): boolean {
+	const req = pending.get(requestId);
+	const owner = req && bindings.get(req.token)?.owner;
+	const win = owner?.window;
+	return !!(
+		caller &&
+		owner &&
+		win &&
+		!win.isDestroyed() &&
+		!win.webContents.isDestroyed() &&
+		owner.userId === caller.userId &&
+		win.webContents.id === caller.webContentsId
+	);
 }

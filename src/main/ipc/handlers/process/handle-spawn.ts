@@ -85,6 +85,7 @@ export interface SpawnHandlerDependencies {
 	agentConfigsStore: Store<AgentConfigsData>;
 	settingsStore: Store<MaestroSettings>;
 	getMainWindow: () => BrowserWindow | null;
+	getPermissionWindow?: () => BrowserWindow | null;
 	safeSend?: (channel: string, ...args: unknown[]) => void;
 	sessionsStore: Store<{ sessions: unknown[] }>;
 	interactiveReplayController?: InteractiveReplayController<ProcessSpawnConfig>;
@@ -490,6 +491,7 @@ export async function handleProcessSpawn(
 				tabId: config.tabId,
 				userDataDir: app.getPath('userData'),
 				execPath: process.execPath,
+				getPermissionWindow: deps.getPermissionWindow ?? getMainWindow,
 			});
 			finalArgs = [...finalArgs, ...relayArgs];
 		} catch (e) {
@@ -1037,7 +1039,7 @@ export async function handleProcessSpawn(
 			...prepareCodexAppServerPermissions({
 				sessionId: config.sessionId,
 				tabId: codexAppServerTabId,
-				getMainWindow,
+				getMainWindow: deps.getPermissionWindow ?? getMainWindow,
 			}),
 		};
 	}

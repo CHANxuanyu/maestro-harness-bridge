@@ -3,6 +3,7 @@ export {
 	initPermissionRelay,
 	preparePermissionRelayArgs,
 	resolvePermissionResponse,
+	permissionCaller,
 	cleanupSessionRelay,
 	PERMISSION_REQUEST_CHANNEL,
 } from './integration';

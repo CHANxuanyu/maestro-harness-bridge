@@ -29,6 +29,7 @@ import type { SpawnProcessConfig } from './process/spawn-types';
 import {
 	initPermissionRelay,
 	resolvePermissionResponse,
+	permissionCaller,
 	type PermissionDecision,
 } from '../../permission-relay';
 import { releaseConcertoHtmlDocument, restoreConcertoHtmlDocument } from '../../concerto-html';
@@ -147,19 +148,18 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 	);
 
 	// Renderer -> main: the user's allow/deny decision for a relayed request.
-	ipcMain.handle(
-		'permission:respond',
-		(_event, requestId: string, decision: PermissionDecision) => {
-			return resolvePermissionResponse(requestId, decision);
-		}
-	);
+	ipcMain.handle('permission:respond', (event, requestId: string, decision: PermissionDecision) => {
+		return resolvePermissionResponse(requestId, decision, permissionCaller(event, getMainWindow));
+	});
 
 	// Spawn a new process for a session
 	// Supports agent-specific argument builders for batch mode, JSON output, resume, read-only mode, YOLO mode
-	ipcMain.handle(
-		'process:spawn',
+	ipcMain.handle('process:spawn', (event, config: SpawnProcessConfig) =>
 		withIpcErrorLogging(handlerOpts('spawn'), (config: SpawnProcessConfig) =>
 			handleProcessSpawn(config, {
+				getPermissionWindow: event.sender
+					? () => BrowserWindow.fromWebContents(event.sender)
+					: getMainWindow,
 				getProcessManager,
 				getAgentDetector,
 				agentConfigsStore,
@@ -169,10 +169,12 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 				sessionsStore: deps.sessionsStore,
 				interactiveReplayController: deps.interactiveReplayController,
 			})
-		)
+		)(event, config)
 	);
 
-	ipcMain.handle('process:codex-permissions', () => listCodexAppServerPermissions());
+	ipcMain.handle('process:codex-permissions', (event) =>
+		listCodexAppServerPermissions(permissionCaller(event, getMainWindow))
+	);
 
 	ipcMain.handle(
 		'process:steer',

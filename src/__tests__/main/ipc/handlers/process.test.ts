@@ -1,3 +1,5 @@
+import { prepareCodexAppServerPermissions } from '../../../../main/permission-relay/codex-app-server';
+import { createPending, registerSpawn } from '../../../../main/permission-relay/registry';
 /**
  * Tests for the process IPC handlers
  *
@@ -389,6 +391,7 @@ describe('process IPC handlers', () => {
 		const mockMainWindow = {
 			isDestroyed: vi.fn().mockReturnValue(false),
 			webContents: {
+				id: 11,
 				send: vi.fn(),
 				isDestroyed: vi.fn().mockReturnValue(false),
 			},
@@ -463,6 +466,77 @@ describe('process IPC handlers', () => {
 				'Invalid Concerto HTML restore request'
 			);
 		});
+	});
+
+	it('rejects browser approvals for both users and permits only the owning desktop or trusted CLI', async () => {
+		const win = deps.getMainWindow()!;
+		const bridge = prepareCodexAppServerPermissions({
+			sessionId: 'owner-ai-tab',
+			getMainWindow: () => win,
+		});
+		const decision = bridge.onPermissionRequest({
+			requestId: '1',
+			method: 'item/commandExecution/requestApproval',
+			threadId: 't',
+			turnId: 'turn',
+			itemId: 'item',
+		});
+		const id = (win.webContents.send as any).mock.calls[0][1].requestId;
+		try {
+			for (const user of [
+				undefined,
+				{ id: 'a', username: 'a', displayName: 'A' },
+				{ id: 'b', username: 'b', displayName: 'B' },
+			]) {
+				runAsActingUser(user, () => {
+					expect(() => handlers.get('process:codex-permissions')!({ type: 'bridge' })).toThrow(
+						'unavailable'
+					);
+					expect(
+						handlers.get('permission:respond')!({ type: 'bridge' }, id, { behavior: 'allow' })
+					).toBe(false);
+				});
+			}
+			expect(
+				handlers.get('permission:respond')!({ sender: { id: 22 } }, id, { behavior: 'allow' })
+			).toBe(false);
+			expect(
+				handlers.get('process:codex-permissions')!({ type: 'bridge', trustedCli: true })
+			).toHaveLength(1);
+			expect(
+				handlers.get('permission:respond')!({ type: 'bridge', trustedCli: true }, id, {
+					behavior: 'allow',
+				})
+			).toBe(true);
+			await expect(decision).resolves.toBe('accept');
+		} finally {
+			bridge.onDispose();
+		}
+	});
+
+	it('applies the same owner check to Claude relay responses', async () => {
+		const binding = registerSpawn({ sessionId: 'claude', owner: { window: deps.getMainWindow() } });
+		const pending = createPending('claude-request', binding.token);
+		try {
+			expect(
+				handlers.get('permission:respond')!({ type: 'bridge' }, 'claude-request', {
+					behavior: 'allow',
+				})
+			).toBe(false);
+			expect(
+				handlers.get('permission:respond')!({ sender: { id: 22 } }, 'claude-request', {
+					behavior: 'allow',
+				})
+			).toBe(false);
+			expect(
+				handlers.get('permission:respond')!({ sender: { id: 11 } }, 'claude-request', {
+					behavior: 'allow',
+				})
+			).toBe(true);
+			await expect(pending).resolves.toEqual({ behavior: 'allow' });
+		} finally {
+			binding.cleanup();
+		}
 	});
 
 	describe('Codex app-server opt-in', () => {

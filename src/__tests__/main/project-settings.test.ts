@@ -112,6 +112,54 @@ describe('project settings persistence', () => {
 		expect(values).toEqual(before);
 	});
 
+	it('clears the previous tool model and effort on a tool change unless replacements are explicit', async () => {
+		const api = service();
+		await api.command({
+			action: 'set',
+			scope,
+			patch: {
+				defaultProvider: 'claude-code',
+				defaultModel: 'opus',
+				defaultReasoningEffort: 'high',
+			},
+		});
+		expect(
+			(await api.command({ action: 'set', scope, patch: { defaultProvider: 'codex' } })).settings
+		).toEqual({ defaultProvider: 'codex' });
+		expect(
+			(
+				await api.command({
+					action: 'set',
+					scope,
+					patch: {
+						defaultModel: 'custom-model',
+						defaultReasoningEffort: 'medium',
+						defaultProvider: 'claude-code',
+					},
+				})
+			).settings
+		).toEqual({
+			defaultProvider: 'claude-code',
+			defaultModel: 'custom-model',
+			defaultReasoningEffort: 'medium',
+		});
+		expect(
+			(await api.command({ action: 'set', scope, patch: { defaultProvider: null } })).settings
+		).toEqual({});
+	});
+
+	it('localizes the first full access explanation for the current language', async () => {
+		values.uiLanguage = 'zh-CN';
+		const result = await service().command({
+			action: 'set',
+			scope,
+			patch: { defaultPermissionMode: 'full' },
+		});
+		expect(result.error).toBe(
+			'完全访问允许新对话无需确认即可读写文件和运行命令。请先确认你已了解，这个项目只需确认一次。'
+		);
+	});
+
 	it('reports persistence failure without announcing a change', async () => {
 		const api = createProjectSettingsService({
 			settingsStore: {

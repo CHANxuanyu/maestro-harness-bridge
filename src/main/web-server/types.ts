@@ -353,6 +353,7 @@ export type SelectSessionCallback = (
  */
 export type SelectTabCallback = (sessionId: string, tabId: string) => Promise<boolean>;
 export interface NewTabResult {
+	sessionId?: string;
 	tabId: string;
 	permissionMode?: 'full' | 'standard' | 'readonly';
 	readOnlyMode?: boolean;
@@ -512,6 +513,7 @@ export type NoteAgentDelegationCallback = (notice: AgentDelegationNotice) => voi
  * one from a missing tab id.
  */
 export type NewAITabWithPromptResult = {
+	sessionId?: string;
 	success: boolean;
 	tabId?: string;
 	queued?: boolean;

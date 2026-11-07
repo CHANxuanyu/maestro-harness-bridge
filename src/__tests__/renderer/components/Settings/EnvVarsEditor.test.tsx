@@ -75,6 +75,21 @@ describe('EnvVarsEditor', () => {
 		expect(validity).toHaveBeenLastCalledWith(true);
 	});
 
+	it('blocks saving an unfinished named value in a project editor', () => {
+		const validity = vi.fn();
+		render(
+			<EnvVarsEditor
+				theme={mockTheme}
+				envVars={{}}
+				setEnvVars={mockSetEnvVars}
+				onValidityChange={validity}
+			/>
+		);
+		fireEvent.click(screen.getByText('Add Variable'));
+		fireEvent.change(screen.getByPlaceholderText('value'), { target: { value: 'unfinished' } });
+		expect(validity).toHaveBeenLastCalledWith(false);
+	});
+
 	it('should render with empty env vars', () => {
 		render(<EnvVarsEditor envVars={{}} setEnvVars={mockSetEnvVars} theme={mockTheme} />);
 

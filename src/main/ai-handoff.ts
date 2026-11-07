@@ -1,3 +1,4 @@
+import { isValidAgentId, type AgentId } from '../shared/agentIds';
 import { createKeyedWriteQueue } from '../shared/keyedWriteQueue';
 import { effectiveAgentCustomEnvVars } from '../shared/providerProfiles';
 import { getClaudeTokenSourceFields } from '../shared/claudeTokenMode';
@@ -51,24 +52,25 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			deps.getAgentConfig(runner.toolType).customEnvVars
 		),
 	});
-	const providerOf = (
-		runner: Pick<HandoffRunner, 'toolType' | 'customEnvVars'>
-	): HandoffProvider | null => {
+	const providerOf = (runner: Pick<HandoffRunner, 'toolType' | 'customEnvVars'>): string | null => {
 		if (runner.toolType === 'codex') return 'codex';
-		if (runner.toolType !== 'claude-code') return null;
+		if (runner.toolType !== 'claude-code')
+			return runner.toolType === 'terminal' ? null : runner.toolType;
 		return isDeepSeekAgent(runner.toolType, effectiveEnv(runner) as Record<string, string>)
 			? 'deepseek'
 			: 'claude-code';
 	};
 	function sourceFor(id: string) {
-		return deps.getSessions().find((runner) => runner.id === id && providerOf(runner));
+		return deps
+			.getSessions()
+			.find((runner) => runner.id === id && isHandoffProvider(providerOf(runner)));
 	}
 	function configFor(
 		runner: Pick<HandoffRunner, 'toolType'> & HandoffRunnerConfig
 	): HandoffOpenRequest['config'] {
 		const defaults = deps.getAgentConfig(runner.toolType);
 		const config: HandoffOpenRequest['config'] = {
-			toolType: runner.toolType as 'claude-code' | 'codex',
+			toolType: runner.toolType as AgentId,
 			...getClaudeTokenSourceFields(runner),
 		};
 		// Copy configuration only, never tabs, native IDs, queue, paths or source
@@ -93,7 +95,12 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			config.customEnvVarsDisabled = { ...runner.customEnvVarsDisabled };
 		return config;
 	}
-	async function selectTarget(source: HandoffRunner, provider: HandoffProvider, create = false) {
+	async function selectTarget(
+		source: HandoffRunner,
+		provider: string,
+		create = false,
+		preferSource = false
+	) {
 		const location = handoffLocation(source);
 		const sameProject = deps
 			.getSessions()
@@ -102,7 +109,10 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			);
 		// An unavailable runner already in this project is not permission to add
 		// another one. The user can repair its configured CLI path.
-		const pool = sameProject;
+		const pool =
+			preferSource && sameProject.some((runner) => runner.id === source.id)
+				? [source, ...sameProject.filter((runner) => runner.id !== source.id)]
+				: sameProject;
 		for (const runner of pool) {
 			const config = configFor(runner);
 			if (provider === 'deepseek') {
@@ -117,7 +127,7 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 				return { config, runnerId: sameProject.length ? runner.id : undefined };
 		}
 		if (sameProject.length) return null;
-		const toolType = provider === 'codex' ? 'codex' : 'claude-code';
+		const toolType = provider === 'deepseek' ? 'claude-code' : provider;
 		const defaults = { toolType, ...deps.getAgentConfig(toolType) };
 		if (providerOf(defaults) !== provider) return null;
 		if (provider === 'deepseek') {
@@ -162,7 +172,7 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			let current = sourceFor(request.sourceAgentId);
 			if (!current || handoffLocation(current).key !== location.key)
 				return failed('The source agent changed while preparing the handoff');
-			const provider = providerOf(current)!;
+			const provider = providerOf(current) as HandoffProvider;
 			if (provider === request.targetProvider)
 				return failed('Choose a different target provider', 'invalid-request');
 			const snapshot = await deps.readSource({
@@ -222,27 +232,41 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			if (!deps.getNewShell())
 				return failed('Only an empty conversation in the new shell can change tools');
 			if (
-				!isHandoffProvider(request.targetProvider) ||
+				(!isHandoffProvider(request.targetProvider) &&
+					(!isValidAgentId(request.targetProvider) || request.targetProvider === 'terminal')) ||
+				(request.prompt !== undefined &&
+					(typeof request.prompt !== 'string' || !!request.replaceTabId)) ||
 				(request.replaceTabId !== undefined &&
 					(typeof request.replaceTabId !== 'string' || !request.replaceTabId))
 			)
 				return failed('Invalid conversation target', 'invalid-request');
-			const source = sourceFor(request.sourceAgentId);
+			const source = deps
+				.getSessions()
+				.find((runner) => runner.id === request.sourceAgentId && providerOf(runner));
 			if (!source) return failed('Source project not found');
 			if (request.replaceTabId && providerOf(source) === request.targetProvider)
 				return failed('Choose a different tool', 'invalid-request');
 			const location = handoffLocation(source);
-			if (source.sessionSshRemoteConfig?.enabled)
-				return failed('The new conversation picker requires a local project');
 			return queue.enqueue(
 				`new:${source.id}:${request.replaceTabId ?? request.targetProvider}`,
 				async () => {
 					if (!deps.getNewShell())
 						return failed('Only an empty conversation in the new shell can change tools');
-					const target = await selectTarget(source, request.targetProvider, true);
+					const target = await selectTarget(
+						source,
+						request.targetProvider,
+						true,
+						!!request.sourceTabId
+					);
 					if (!target) return failed('The selected tool is unavailable');
 					return deps.openTarget({
-						newConversation: { replaceTabId: request.replaceTabId },
+						newConversation: {
+							replaceTabId: request.replaceTabId,
+							...(request.sourceTabId ? { sourceTabId: request.sourceTabId } : {}),
+							...(request.prompt ? { prompt: request.prompt } : {}),
+						},
+						permissionCeiling: request.sourcePermission,
+						sessionSshRemoteConfig: source.sessionSshRemoteConfig,
 						sourceAgentId: source.id,
 						cwd: location.cwd,
 						projectPath: source.projectRoot,

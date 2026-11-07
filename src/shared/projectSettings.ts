@@ -1,5 +1,8 @@
 import { normalizeWorktreePath } from './worktreePaths';
 
+/** Allows an SSH tool probe and the owning window to persist a new conversation. */
+export const PROJECT_CONVERSATION_TIMEOUT_MS = 60_000;
+
 /** Defaults belong to one project path on one host, never to a sidebar group. */
 export interface ProjectSettingsScope {
 	projectPath: string;

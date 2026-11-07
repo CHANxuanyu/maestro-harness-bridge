@@ -1,3 +1,4 @@
+import { projectConversationFields } from '../projectConversationDefaults';
 // Tab helper functions for AI multi-tab support
 // These helpers manage AITab state within Maestro sessions
 
@@ -1005,7 +1006,10 @@ export function settleTabThinkingState(session: Session, tabId: string): Session
  */
 export interface CreateTabOptions {
 	/** Exact source or resolved project permissions. Missing sources use the strictest known mode. */
-	permissionSource?: Pick<AITab, 'permissionMode' | 'readOnlyMode'>;
+	permissionSource?: Pick<
+		AITab,
+		'permissionMode' | 'readOnlyMode' | 'customModel' | 'customEffort'
+	>;
 
 	agentSessionId?: string | null; // Claude Code session UUID (null for new tabs)
 	logs?: LogEntry[]; // Initial conversation history
@@ -1079,7 +1083,8 @@ export function createTab(
 	let permissions = {};
 	if (useSettingsStore.getState().newShell && !agentSessionId) {
 		const source = options.permissionSource ?? fallbackConversationPermissionSource(session);
-		const fields = newConversationPermissionFields(
+		const fields = projectConversationFields(
+			session,
 			source,
 			getCachedCapabilities(session.toolType) ?? {
 				supportsStandardPermissionMode: false,

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { openProjectCommand } from './commands/open-project';
 import { aboutMe } from './commands/about-me';
-import { projectSettings } from './commands/project-settings';
+import { projectSettings, projectSettingsTranslator } from './commands/project-settings';
 // Maestro CLI
 // Command-line interface for Maestro
 
@@ -549,30 +549,29 @@ program
 	.option('--json', 'Output JSON including per-file states')
 	.action(aboutMe);
 
+const projectSettingsT = projectSettingsTranslator();
+
 program
 	.command('project')
-	.description('Manage project defaults for future conversations in the new interface')
+	.description(projectSettingsT('workflows.projectSettings.cli.projectHelp'))
 	.command('settings <action>')
-	.description('Show or set defaults stored by Maestro for one project and host')
-	.requiredOption('--path <path>', 'Project directory; remote paths are kept on the specified host')
-	.option('--ssh-remote <id>', 'SSH host identity; omit for local projects')
-	.option('--provider <id>', 'Default tool, or inherit to clear')
-	.option('--model <id>', 'Default model, or inherit to clear')
-	.option('--effort <level>', 'Default reasoning effort, or inherit to clear')
-	.option('--permission <mode>', 'full, standard, readonly, or inherit to clear')
+	.description(projectSettingsT('workflows.projectSettings.cli.settingsHelp'))
+	.requiredOption('--path <path>', projectSettingsT('workflows.projectSettings.cli.pathHelp'))
+	.option('--ssh-remote <id>', projectSettingsT('workflows.projectSettings.cli.sshHelp'))
+	.option('--provider <id>', projectSettingsT('workflows.projectSettings.cli.providerHelp'))
+	.option('--model <id>', projectSettingsT('workflows.projectSettings.cli.modelHelp'))
+	.option('--effort <level>', projectSettingsT('workflows.projectSettings.cli.effortHelp'))
+	.option('--permission <mode>', projectSettingsT('workflows.projectSettings.cli.permissionHelp'))
 	.option(
 		'--env <NAME=VALUE>',
-		'Replace project environment variables; repeat for every entry',
+		projectSettingsT('workflows.projectSettings.cli.envHelp'),
 		(value: string, previous: string[]) => [...previous, value],
 		[]
 	)
-	.option('--clear-env', 'Remove the project environment override')
-	.option(
-		'--acknowledge-full-access',
-		'Acknowledge once that full access permits reading, writing and commands without approval'
-	)
-	.option('--show-secrets', 'Reveal environment credentials in output')
-	.option('--json', 'Output the settings snapshot as JSON')
+	.option('--clear-env', projectSettingsT('workflows.projectSettings.cli.clearEnvHelp'))
+	.option('--acknowledge-full-access', projectSettingsT('workflows.projectSettings.cli.ackHelp'))
+	.option('--show-secrets', projectSettingsT('workflows.projectSettings.cli.secretsHelp'))
+	.option('--json', projectSettingsT('workflows.projectSettings.cli.jsonHelp'))
 	.action(projectSettings);
 
 program

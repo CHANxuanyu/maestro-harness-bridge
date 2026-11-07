@@ -14,6 +14,8 @@ import { mockTheme } from '../../helpers/mockTheme';
 // Pin the English copy so the tests do not depend on the catalog keys landing
 // in the same change.
 const EN: Record<string, string> = {
+	'workflows.projectSettings.title': 'Project settings',
+	'workflows.projectSettings.newConversation': 'New with project defaults',
 	'workflows.conversations.closeConversation': 'Close conversation',
 	'workflows.conversations.addAccount': 'Add account or configuration',
 	'workflows.conversations.handoff': 'Hand off…',
@@ -173,6 +175,32 @@ it.each([false, true])(
 );
 
 describe('ProjectSessionTree', () => {
+	it('offers project default creation through the same project action', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const { props } = setup();
+		fireEvent.click(screen.getByRole('button', { name: 'New conversation: Maestro' }));
+		fireEvent.click(await screen.findByRole('menuitem', { name: 'New with project defaults' }));
+		expect(props.onNewConversation).toHaveBeenCalledWith(CLAUDE_AGENT.id);
+	});
+	it.each([false, true])(
+		'opens project settings from the project context menu only in new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const onProjectSettings = vi.fn();
+			setup({ onProjectSettings });
+			fireEvent.contextMenu(projectHeader(), { clientX: 40, clientY: 80 });
+			if (newShell) {
+				fireEvent.click(screen.getByRole('menuitem', { name: 'Project settings' }));
+				expect(onProjectSettings).toHaveBeenCalledWith(
+					expect.objectContaining({ key: 'project-maestro' })
+				);
+			} else {
+				expect(
+					screen.queryByRole('menuitem', { name: 'Project settings' })
+				).not.toBeInTheDocument();
+			}
+		}
+	);
 	it.each([false, true])(
 		'uses available local tools from the shared plus path, new shell %s',
 		async (newShell) => {

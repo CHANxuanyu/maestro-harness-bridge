@@ -1,3 +1,5 @@
+import { getTranslator } from '../renderer/i18n/translate';
+import { resolveAppLocale } from '../shared/i18n';
 import { isValidAgentId } from '../shared/agentIds';
 import { DEEPSEEK_PRESET } from '../shared/agentPresets';
 import {
@@ -20,6 +22,12 @@ export function createProjectSettingsService(deps: {
 			let scope: ProjectSettingsScope = { projectPath: '' };
 			let settings: ProjectSettings = {};
 			try {
+				const t = getTranslator(
+					resolveAppLocale(
+						deps.settingsStore.get('uiLanguage'),
+						Intl.DateTimeFormat().resolvedOptions().locale
+					)
+				);
 				const command = input as ProjectSettingsCommand;
 				if (
 					!command ||
@@ -33,7 +41,7 @@ export function createProjectSettingsService(deps: {
 							!command.scope.sshRemoteId.trim() ||
 							command.scope.sshRemoteId.includes('\0')))
 				)
-					throw new Error('A project path and an optional SSH host are required');
+					throw new Error(t('workflows.projectSettings.errors.scopeRequired'));
 				scope = {
 					projectPath: command.scope.projectPath,
 					...(command.scope.sshRemoteId ? { sshRemoteId: command.scope.sshRemoteId } : {}),
@@ -43,8 +51,15 @@ export function createProjectSettingsService(deps: {
 				settings = { ...(stored[key] ?? {}) };
 				if (command.action === 'show') return { success: true, scope, settings };
 				if (!command.patch || typeof command.patch !== 'object' || Array.isArray(command.patch))
-					throw new Error('Project settings must be an object');
+					throw new Error(t('workflows.projectSettings.errors.invalidPatch'));
 				const next = { ...settings };
+				if (
+					'defaultProvider' in command.patch &&
+					(command.patch.defaultProvider ?? undefined) !== settings.defaultProvider
+				) {
+					delete next.defaultModel;
+					delete next.defaultReasoningEffort;
+				}
 				for (const [field, value] of Object.entries(command.patch)) {
 					if (
 						![
@@ -55,7 +70,7 @@ export function createProjectSettingsService(deps: {
 							'envVars',
 						].includes(field)
 					)
-						throw new Error(`Unknown project setting: ${field}`);
+						throw new Error(t('workflows.projectSettings.errors.unknownSetting', { field }));
 					if (value === null) {
 						delete next[field as keyof ProjectSettings];
 						continue;
@@ -72,7 +87,7 @@ export function createProjectSettingsService(deps: {
 									entry.includes('\0')
 							)
 						)
-							throw new Error('Environment values must use valid names and string values');
+							throw new Error(t('workflows.projectSettings.errors.invalidEnvironment'));
 						next.envVars = { ...value };
 						continue;
 					}
@@ -82,17 +97,17 @@ export function createProjectSettingsService(deps: {
 						value.includes('\0') ||
 						value.length > 512
 					)
-						throw new Error(`Invalid project setting: ${field}`);
+						throw new Error(t('workflows.projectSettings.errors.invalidSetting', { field }));
 					if (
 						field === 'defaultProvider' &&
 						(value === 'terminal' || (!isValidAgentId(value) && value !== DEEPSEEK_PRESET.id))
 					)
-						throw new Error('Unknown conversation tool');
+						throw new Error(t('workflows.projectSettings.errors.unknownProvider'));
 					if (
 						field === 'defaultPermissionMode' &&
 						!['full', 'standard', 'readonly'].includes(value)
 					)
-						throw new Error('Permission must be full, standard or readonly');
+						throw new Error(t('workflows.projectSettings.errors.invalidPermission'));
 					Object.assign(next, { [field]: value });
 				}
 				if (next.defaultPermissionMode === 'full' && !settings.fullAccessAcknowledged) {
@@ -102,8 +117,7 @@ export function createProjectSettingsService(deps: {
 							scope,
 							settings,
 							code: 'full-access-confirmation-required',
-							error:
-								'Full access lets new conversations read, write and run commands without approval. Acknowledge this once for this project.',
+							error: t('workflows.projectSettings.errors.fullAccessRequired'),
 						};
 					next.fullAccessAcknowledged = true;
 				}
@@ -115,7 +129,7 @@ export function createProjectSettingsService(deps: {
 						scope,
 						settings,
 						code: 'persistence-failed',
-						error: 'Project settings could not be saved',
+						error: t('workflows.projectSettings.errors.saveFailed'),
 					};
 				}
 				deps.onChanged?.();

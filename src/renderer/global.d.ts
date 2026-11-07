@@ -1,5 +1,5 @@
 import type { ConversationPermissionSnapshot } from '../shared/window-types';
-import type { NewTabResult } from '../main/web-server/types';
+import type { NewTabResult, NewAITabWithPromptResult } from '../main/web-server/types';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Global type declarations for the renderer process.
@@ -269,6 +269,9 @@ interface MaestroAPI {
 		cancelGrooming: () => Promise<void>;
 	};
 	settings: {
+		projectSettings: (
+			command: import('../shared/projectSettings').ProjectSettingsCommand
+		) => Promise<import('../shared/projectSettings').ProjectSettingsResult>;
 		aboutMe: (
 			command: import('../shared/aboutMe').AboutMeCommand
 		) => Promise<import('../shared/aboutMe').AboutMeResult>;
@@ -779,7 +782,7 @@ interface MaestroAPI {
 		) => () => void;
 		sendRemoteNewAITabWithPromptResponse: (
 			responseChannel: string,
-			result: { success: boolean; tabId?: string; queued?: boolean; error?: string }
+			result: NewAITabWithPromptResult
 		) => void;
 		/** Cross-agent consult asked for over the CLI (`maestro-cli ask`). The
 		 *  reply is the consulted agent's ANSWER, so it can arrive minutes later. */

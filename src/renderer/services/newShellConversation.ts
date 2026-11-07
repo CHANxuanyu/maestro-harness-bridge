@@ -1,12 +1,23 @@
+import { isValidAgentId } from '../../shared/agentIds';
+import { projectSettingsForSession } from '../utils/projectConversationDefaults';
+import { sessionProviderId } from '../../shared/agentPresets';
+import type { Session } from '../types';
 import { useOperationStore } from '../stores/operationStore';
 import { getT } from '../i18n';
 import { captureException } from '../utils/sentry';
 import { useEffect, useState } from 'react';
-import type { HandoffProvider, HandoffTargetsResult } from '../../shared/aiHandoff';
+import {
+	isHandoffProvider,
+	type HandoffProvider,
+	type HandoffTargetsResult,
+	type HandoffSourceSnapshot,
+	type HandoffResult,
+	type HandoffCommand,
+} from '../../shared/aiHandoff';
 import { useSettingsStore } from '../stores/settingsStore';
 import { notifyToast } from '../stores/notificationStore';
 
-/** The plus menu and empty conversation use the same configured, local tools. */
+/** The plus menu and empty conversation use the same configured tools on the project host. */
 export function useNewConversationTools(sourceAgentId: string | undefined) {
 	const newShell = useSettingsStore((s) => s.newShell);
 	const [result, setResult] = useState<{ source: string; tools: HandoffProvider[] }>();
@@ -14,7 +25,7 @@ export function useNewConversationTools(sourceAgentId: string | undefined) {
 		if (!newShell || !sourceAgentId) return;
 		let cancelled = false;
 		void window.maestro.context
-			.conversation({ action: 'targets', sourceAgentId, includeCurrent: true, localOnly: true })
+			.conversation({ action: 'targets', sourceAgentId, includeCurrent: true, localOnly: false })
 			.then((value) => {
 				if (!cancelled)
 					setResult({
@@ -35,14 +46,23 @@ export function useNewConversationTools(sourceAgentId: string | undefined) {
 
 export async function newShellConversation(
 	sourceAgentId: string,
-	targetProvider: HandoffProvider,
-	replaceTabId?: string
+	targetProvider: string,
+	replaceTabId?: string,
+	options?: Omit<
+		Extract<HandoffCommand, { action: 'new-conversation' }>,
+		'action' | 'sourceAgentId' | 'targetProvider' | 'replaceTabId'
+	>
 ) {
 	const unlock = replaceTabId
 		? useOperationStore.getState().lockTabReplacement(replaceTabId)
 		: undefined;
 	const result = await window.maestro.context
-		.conversation({ action: 'new-conversation', sourceAgentId, targetProvider, replaceTabId })
+		.conversation({
+			action: 'new-conversation',
+			sourceAgentId,
+			targetProvider,
+			...(options ?? { replaceTabId }),
+		})
 		.catch((error) => {
 			captureException(error, { tags: { context: 'newShellConversation' } });
 			return {
@@ -59,4 +79,32 @@ export async function newShellConversation(
 			message: result.error ?? getT()('workflows.shell.newConversationFailed'),
 		});
 	return result;
+}
+
+/** Project entry points share this route with remote tab creation and the CLI. */
+export async function newProjectConversation(
+	session: Session,
+	sourceTabId?: string,
+	background = false,
+	sourcePermission?: HandoffSourceSnapshot['sourcePermission'],
+	prompt?: string
+) {
+	if (!useSettingsStore.getState().newShell) return null;
+	const project = projectSettingsForSession(session);
+	if (
+		(!project || !Object.keys(project).some((key) => key !== 'fullAccessAcknowledged')) &&
+		!session.projectSettingsBaseEnv
+	)
+		return null;
+	const provider = sourceTabId
+		? sessionProviderId(session)
+		: project?.defaultProvider || sessionProviderId(session);
+	if (!isHandoffProvider(provider) && (!isValidAgentId(provider) || provider === 'terminal'))
+		return null;
+	return newShellConversation(session.id, provider, undefined, {
+		sourceTabId,
+		background,
+		...(prompt ? { prompt } : {}),
+		...(sourcePermission ? { sourcePermission } : {}),
+	}) as Promise<HandoffResult>;
 }

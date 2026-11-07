@@ -1,3 +1,4 @@
+import type { AgentId } from './agentIds';
 import type { AgentSshRemoteConfig } from './types';
 import { normalizeWorktreePath } from './worktreePaths';
 import type { ClaudeTokenSourceFields } from './claudeTokenMode';
@@ -93,6 +94,11 @@ export interface HandoffReadRequest {
 
 export interface HandoffSourceSnapshot {
 	sourcePermission?: { permissionMode: 'full' | 'standard' | 'readonly'; readOnlyMode: boolean };
+	sourceDefaults?: {
+		customModel?: string;
+		customEffort?: string;
+		customEnvVars?: Record<string, string>;
+	};
 	emptyConversation?: { stagedImages?: string[]; commandMode?: 'off' | 'shell' | 'ai' };
 	sourceTitle?: string;
 	cwd: string;
@@ -108,7 +114,12 @@ export interface HandoffSourceSnapshot {
 export interface HandoffOpenRequest {
 	/** Captured in the source owner, including when the target lives in another window. */
 	sourcePermission?: HandoffSourceSnapshot['sourcePermission'];
+	sourceDefaults?: HandoffSourceSnapshot['sourceDefaults'];
+	permissionCeiling?: HandoffSourceSnapshot['sourcePermission'];
 	newConversation?: {
+		/** An explicit CLI prompt, delivered by the target owner after persistence. */
+		prompt?: string;
+		sourceTabId?: string;
 		replaceTabId?: string;
 		/** Supplied by the source owner across windows. The target must retain the source. */
 		source?: NonNullable<HandoffSourceSnapshot['emptyConversation']>;
@@ -118,17 +129,19 @@ export interface HandoffOpenRequest {
 	mode: HandoffMode;
 	origin: ConversationOrigin;
 	sourceAgentId: string;
-	provider: HandoffProvider;
+	provider: string;
 	runnerId?: string;
 	projectPath: string;
 	groupId?: string;
-	config: HandoffRunnerConfig & { toolType: 'claude-code' | 'codex' };
+	config: HandoffRunnerConfig & { toolType: AgentId };
 	draft: HandoffDraft;
 	send: boolean;
 	background: boolean;
 }
 
 export interface HandoffResult {
+	permissionMode?: 'full' | 'standard' | 'readonly';
+	readOnlyMode?: boolean;
 	mode?: HandoffMode;
 	success: boolean;
 	error?: string;
@@ -155,8 +168,11 @@ export type HandoffCommand =
 	| {
 			action: 'new-conversation';
 			sourceAgentId: string;
-			targetProvider: HandoffProvider;
+			targetProvider: string;
 			replaceTabId?: string;
+			sourceTabId?: string;
+			prompt?: string;
+			sourcePermission?: HandoffSourceSnapshot['sourcePermission'];
 			background?: boolean;
 	  }
 	| ({ action: 'prepare' } & HandoffRequest);

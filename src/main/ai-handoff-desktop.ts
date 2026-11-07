@@ -88,7 +88,10 @@ export function createDesktopAiHandoff(deps: {
 			if (!isWebContentsAvailable(win)) return fallback;
 			const sourceWindow = deps.getWindowForSession(request.sourceAgentId);
 			if (request.newConversation && sourceWindow?.id !== win.id) {
-				if (!isWebContentsAvailable(sourceWindow) && request.newConversation.replaceTabId)
+				if (
+					!isWebContentsAvailable(sourceWindow) &&
+					(request.newConversation.replaceTabId || request.newConversation.sourceTabId)
+				)
 					return fallback;
 				const snapshot = isWebContentsAvailable(sourceWindow)
 					? await requestFromRenderer<HandoffReadResult>(
@@ -99,7 +102,10 @@ export function createDesktopAiHandoff(deps: {
 								args: [
 									{
 										sourceAgentId: request.sourceAgentId,
-										sourceTabId: request.newConversation.replaceTabId ?? '',
+										sourceTabId:
+											request.newConversation.replaceTabId ??
+											request.newConversation.sourceTabId ??
+											'',
 										provider: request.origin.sourceProvider,
 										emptyConversation: !!request.newConversation.replaceTabId,
 										permissionOnly: !request.newConversation.replaceTabId,
@@ -115,7 +121,7 @@ export function createDesktopAiHandoff(deps: {
 					(request.newConversation.replaceTabId && !snapshot.emptyConversation) ||
 					handoffLocation(snapshot).key !== handoffLocation(request).key
 				) {
-					if (request.newConversation.replaceTabId)
+					if (request.newConversation.replaceTabId || request.newConversation.sourceTabId)
 						return {
 							...fallback,
 							error: 'The source conversation could not be read from its owner',
@@ -127,6 +133,9 @@ export function createDesktopAiHandoff(deps: {
 						...request,
 						draft: snapshot.draft,
 						sourcePermission: snapshot.sourcePermission,
+						sourceDefaults: request.newConversation.sourceTabId
+							? snapshot.sourceDefaults
+							: undefined,
 						newConversation: { ...request.newConversation, source: snapshot.emptyConversation },
 					};
 			}

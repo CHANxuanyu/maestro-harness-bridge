@@ -103,7 +103,7 @@ export function handleNewTab(
 			ctx.send(client, {
 				type: 'new_tab_result',
 				success: !!result,
-				sessionId,
+				sessionId: result?.sessionId ?? sessionId,
 				tabId: result?.tabId,
 				...(result?.permissionMode
 					? { permissionMode: result.permissionMode, readOnlyMode: result.readOnlyMode }
@@ -743,7 +743,7 @@ export function handleNewAITabWithPrompt(
 			let callbackId: string | undefined;
 			if (result.success && result.tabId) {
 				const armed = armDispatchCallback(ctx, message, {
-					agentId: sessionId,
+					agentId: result.sessionId ?? sessionId,
 					tabId: result.tabId,
 					prompt,
 					isNewTab: true,
@@ -757,7 +757,7 @@ export function handleNewAITabWithPrompt(
 			ctx.send(client, {
 				type: 'new_ai_tab_with_prompt_result',
 				success: result.success,
-				sessionId,
+				sessionId: result.sessionId ?? sessionId,
 				...(result.tabId ? { tabId: result.tabId } : {}),
 				// `queued` distinguishes "the turn is running now" from "the agent
 				// was mid-turn, so the prompt is waiting its place in the queue" -
@@ -771,7 +771,7 @@ export function handleNewAITabWithPrompt(
 			});
 			if (result.success && result.tabId) {
 				noteDispatchDelegation(ctx, message, {
-					targetSessionId: sessionId,
+					targetSessionId: result.sessionId ?? sessionId,
 					targetTabId: result.tabId,
 					prompt,
 					newTab: true,

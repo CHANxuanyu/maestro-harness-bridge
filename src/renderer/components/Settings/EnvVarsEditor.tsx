@@ -143,7 +143,7 @@ export function EnvVarsEditor({
 	// Validate environment variable format
 	const validateEntry = (entry: EnvVarEntry): string | null => {
 		if (!entry.key.trim()) {
-			return null; // Empty keys are OK (will be ignored)
+			return onValidityChange && entry.value ? t('settings.finish.env.invalidName') : null;
 		}
 		// Check for valid variable name format (alphanumeric and underscore)
 		if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.key)) {

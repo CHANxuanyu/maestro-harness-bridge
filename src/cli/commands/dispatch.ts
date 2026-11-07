@@ -1,3 +1,4 @@
+import { PROJECT_CONVERSATION_TIMEOUT_MS } from '../../shared/projectSettings';
 // Dispatch command - hand off a prompt to the Maestro desktop app and return
 // addressable tab/session IDs so callers (Maestro-Discord, Cue) can address
 // the same tab on follow-up calls without owning a persistent channel.
@@ -348,6 +349,7 @@ export async function runDispatch(
 			if (options.newTab) {
 				const result = await client.sendCommand<{
 					success?: boolean;
+					sessionId?: string;
 					tabId?: string;
 					callbackId?: string;
 					queued?: boolean;
@@ -363,7 +365,8 @@ export async function runDispatch(
 						...callback.fields,
 						...caller,
 					},
-					'new_ai_tab_with_prompt_result'
+					'new_ai_tab_with_prompt_result',
+					PROJECT_CONVERSATION_TIMEOUT_MS + 5000
 				);
 				// An explicit refusal is reported with the desktop's OWN reason.
 				// `sendCommand` resolves on any reply, success or not, so a refusal
@@ -385,6 +388,7 @@ export async function runDispatch(
 					throw new Error('NEW_TAB_NO_ID: new_ai_tab_with_prompt acknowledged without a tabId');
 				}
 				return {
+					agentId: result.sessionId ?? agentId,
 					tabId: result.tabId,
 					callbackId: result.callbackId,
 					queued: result.queued === true,
@@ -410,7 +414,7 @@ export async function runDispatch(
 				},
 				'command_result'
 			);
-			return { tabId: result.tabId, callbackId: result.callbackId, queued: false };
+			return { agentId, tabId: result.tabId, callbackId: result.callbackId, queued: false };
 		});
 		// `--tab <tabId>` is the authoritative target; the desktop handler
 		// echoes it back when we pass one. If the desktop omitted it (older
@@ -418,11 +422,11 @@ export async function runDispatch(
 		// supplied so callers can still chain dispatches deterministically.
 		const resolvedTabId = dispatched.tabId ?? options.tab ?? null;
 		if (callback.callerAgentId && !dispatched.callbackId) {
-			return callbackNotArmedResponse(agentId, resolvedTabId);
+			return callbackNotArmedResponse(dispatched.agentId, resolvedTabId);
 		}
 		return {
 			success: true,
-			agentId,
+			agentId: dispatched.agentId,
 			sessionId: resolvedTabId,
 			tabId: resolvedTabId,
 			// `--new-tab` at a working agent creates the tab and queues the prompt

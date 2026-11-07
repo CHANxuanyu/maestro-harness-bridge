@@ -1,3 +1,4 @@
+import { readSettingValue } from '../../../cli/services/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectSettings } from '../../../cli/commands/project-settings';
 import { sendSimpleCommand } from '../../../cli/services/session-command';
@@ -6,6 +7,11 @@ import { maskEnvValue } from '../../../shared/agentEnvironment';
 vi.mock('../../../cli/services/session-command', async (original) => ({
 	...(await original<typeof import('../../../cli/services/session-command')>()),
 	sendSimpleCommand: vi.fn(),
+}));
+
+vi.mock('../../../cli/services/storage', async (original) => ({
+	...(await original<typeof import('../../../cli/services/storage')>()),
+	readSettingValue: vi.fn(() => 'en'),
 }));
 
 describe('project settings CLI', () => {
@@ -20,6 +26,7 @@ describe('project settings CLI', () => {
 	};
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(readSettingValue).mockReturnValue('en');
 		vi.spyOn(console, 'log').mockImplementation(() => {});
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
@@ -134,6 +141,14 @@ describe('project settings CLI', () => {
 		await projectSettings(action, options);
 		expect(sendSimpleCommand).not.toHaveBeenCalled();
 		expect(process.exit).toHaveBeenCalledWith(1);
+	});
+
+	it('localizes new command errors using the saved UI language', async () => {
+		vi.mocked(readSettingValue).mockReturnValue('zh-CN');
+		await projectSettings('set', { path: '/tmp/project', json: true });
+		expect(JSON.parse(vi.mocked(console.log).mock.calls[0][0]).error).toBe(
+			'请至少指定一项项目设置。'
+		);
 	});
 
 	it('retains structured failure and returns a failing exit status', async () => {

@@ -1,3 +1,6 @@
+import { useSessionStore } from '../../../../../renderer/stores/sessionStore';
+import { setCapabilitiesCache } from '../../../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../../../main/agents/capabilities';
 import { renderHook, act, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAITabHandlers } from '../../../../../renderer/hooks/tabs/internal/useAITabHandlers';
@@ -30,7 +33,8 @@ vi.mock('../../../../../renderer/utils/runtimeContext', () => runtimeMocks);
 describe('useAITabHandlers', () => {
 	beforeEach(() => {
 		resetTabHandlerStores();
-		useSettingsStore.setState({ newShell: false });
+		for (const [id, caps] of Object.entries(AGENT_CAPABILITIES)) setCapabilitiesCache(id, caps);
+		useSettingsStore.setState({ newShell: false, projectSettings: {} });
 		clearDesktopAiTabSelections();
 		inlineWizardMocks.endWizard.mockClear();
 		runtimeMocks.isWebDesktop.mockReturnValue(false);
@@ -80,6 +84,76 @@ describe('useAITabHandlers', () => {
 			});
 		}
 	);
+
+	it.each([false, true])(
+		'selects the project owner without inserting its tab into the source: inventory arrived %s',
+		async (inventoryArrived) => {
+			setupSession({ id: 'session-1', aiTabs: [createMockAITab({ id: 'source-tab' })] });
+			const owner = {
+				...getSession(),
+				id: 'project-owner',
+				toolType: 'codex' as const,
+				aiTabs: [
+					createMockAITab({ id: 'project-tab', permissionMode: 'readonly', readOnlyMode: true }),
+				],
+				activeTabId: 'project-tab',
+			};
+			if (inventoryArrived) useSessionStore.getState().addSession(owner);
+			useSettingsStore.setState({ newShell: true });
+			runtimeMocks.isWebDesktop.mockReturnValue(true);
+			window.maestro.web.requestNewTab = vi
+				.fn()
+				.mockResolvedValue({
+					sessionId: 'project-owner',
+					tabId: 'project-tab',
+					permissionMode: 'readonly',
+					readOnlyMode: true,
+				});
+			const { result } = renderHook(() => useAITabHandlers());
+			await act(async () => {
+				result.current.handleNewTab();
+			});
+			expect(
+				useSessionStore
+					.getState()
+					.sessions.find((s) => s.id === 'session-1')
+					?.aiTabs.map((t) => t.id)
+			).toEqual(['source-tab']);
+			expect(useSessionStore.getState().activeSessionId).toBe('project-owner');
+			if (!inventoryArrived) act(() => useSessionStore.getState().addSession(owner));
+			expect(
+				useSessionStore.getState().sessions.find((s) => s.id === 'project-owner')?.activeTabId
+			).toBe('project-tab');
+		}
+	);
+
+	it('uses the shared project creation route for the default tool', async () => {
+		setupSession({
+			id: 'session-1',
+			cwd: '/project',
+			projectRoot: '/project',
+			aiTabs: [createMockAITab({ id: 'current' })],
+		});
+		useSettingsStore.setState({
+			newShell: true,
+			projectSettings: { '[null,"/project"]': { defaultProvider: 'codex' } },
+		});
+		window.maestro.context.conversation = vi
+			.fn()
+			.mockResolvedValue({ success: true, agentId: 'new-owner', tabId: 'new-tab' });
+		const { result } = renderHook(() => useAITabHandlers());
+		await act(async () => {
+			result.current.handleNewTab();
+		});
+		expect(window.maestro.context.conversation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				action: 'new-conversation',
+				targetProvider: 'codex',
+				sourceAgentId: 'session-1',
+			})
+		);
+		expect(getSession().aiTabs.map((tab) => tab.id)).toEqual(['current']);
+	});
 
 	it('creates a new AI tab with default settings', () => {
 		setupSession({

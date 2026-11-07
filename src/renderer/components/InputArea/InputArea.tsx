@@ -1,4 +1,7 @@
-import { codexAppServerEnabled } from '../../../shared/codexAppServer';
+import {
+	codexAppServerEnabled,
+	effectiveStandardPermissionCapability,
+} from '../../../shared/codexAppServer';
 import { useT } from '../../i18n';
 import { useNativeCommands } from '../../hooks/input/useNativeCommands';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -465,12 +468,10 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 	const draftIsSubmitting = () =>
 		appServerEligible &&
 		!isTerminalMode &&
-		useComposerInputStore
-			.getState()
-			.isSubmitting(submissionKey, {
-				text: useComposerInputStore.getState().aiValue,
-				images: stagedImages,
-			});
+		useComposerInputStore.getState().isSubmitting(submissionKey, {
+			text: useComposerInputStore.getState().aiValue,
+			images: stagedImages,
+		});
 	const processInput = () => {
 		if (!draftIsSubmitting()) processInputProp();
 	};
@@ -812,9 +813,11 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 							isTerminalMode={isTerminalMode}
 							canAttachImages={canAttachImages}
 							hasReadOnlyCapability={hasCapability('supportsReadOnlyMode')}
-							hasStandardCapability={
-								hasCapability('supportsStandardPermissionMode') || appServerEligible
-							}
+							hasStandardCapability={effectiveStandardPermissionCapability(
+								capabilities,
+								{ newShell, codexAppServer },
+								!!session.sessionSshRemoteConfig?.enabled
+							)}
 							enterToSend={enterToSend}
 							setEnterToSend={setEnterToSend}
 							setStagedImages={setStagedImages}

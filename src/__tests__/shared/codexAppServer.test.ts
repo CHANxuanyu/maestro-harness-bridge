@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { codexAppServerEnabled } from '../../shared/codexAppServer';
+import {
+	codexAppServerEnabled,
+	effectiveStandardPermissionCapability,
+} from '../../shared/codexAppServer';
 import { getAgentCapabilities } from '../../main/agents/capabilities';
 
 describe('Codex prototype capability gate', () => {
@@ -21,5 +24,24 @@ describe('Codex prototype capability gate', () => {
 				})
 			).toBe(false);
 		}
+	);
+});
+
+it.each([false, true])('shares effective standard capability for prototype=%s', (enabled) => {
+	const settings = { newShell: true, codexAppServer: enabled };
+	expect(effectiveStandardPermissionCapability(getAgentCapabilities('codex'), settings)).toBe(
+		enabled
+	);
+	expect(effectiveStandardPermissionCapability(getAgentCapabilities('codex'), settings, true)).toBe(
+		false
+	);
+	expect(
+		effectiveStandardPermissionCapability(getAgentCapabilities('codex'), {
+			...settings,
+			newShell: false,
+		})
+	).toBe(false);
+	expect(effectiveStandardPermissionCapability(getAgentCapabilities('claude-code'), settings)).toBe(
+		true
 	);
 });

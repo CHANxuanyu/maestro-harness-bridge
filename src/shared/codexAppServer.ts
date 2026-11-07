@@ -14,6 +14,20 @@ export function codexAppServerEnabled(
 	);
 }
 
+/** Standard mode is available only when the chosen transport can relay approvals. */
+export function effectiveStandardPermissionCapability(
+	capabilities:
+		| Pick<AgentCapabilities, 'supportsStandardPermissionMode' | 'supportsCodexAppServer'>
+		| undefined,
+	settings: { newShell?: boolean; codexAppServer?: boolean },
+	remote = false
+): boolean {
+	return (
+		capabilities?.supportsStandardPermissionMode === true ||
+		codexAppServerEnabled(capabilities, settings, remote)
+	);
+}
+
 /** Shared with the renderer catalogs because spawn refusals originate in main. */
 export const CODEX_APP_SERVER_MESSAGES = {
 	en: {

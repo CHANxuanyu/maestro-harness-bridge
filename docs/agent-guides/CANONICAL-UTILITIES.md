@@ -419,3 +419,7 @@ subscription narrow and leave the classic shell's stored command report intact.
 统一管理普通发送和 Codex 本轮追加的在途草稿，以 sessionId、tabId 和原有文字及附件
 匹配规则防重。普通发送原先在 `useInputProcessing` 内的登记已迁入此处。追加确认前
 保留草稿，结束时释放登记；不能在按钮内另建一份只能挡住自身的提交锁。
+
+Codex 原型的标准权限能力统一取 `effectiveStandardPermissionCapability()`
+（`src/shared/codexAppServer.ts`）。只有新界面、原型开关和本地执行同时满足才增加
+Codex 的标准能力；咨询调用 `projectConversationFields(..., false)` 保持自己的限制。

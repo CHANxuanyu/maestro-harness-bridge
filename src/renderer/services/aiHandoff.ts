@@ -282,7 +282,11 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 					)
 				: resolvedSourcePermission;
 			const permissions = newShell
-				? newConversationPermissionFields(sourcePermission, capabilities)
+				? newConversationPermissionFields(
+						sourcePermission,
+						capabilities,
+						!!request.sessionSshRemoteConfig?.enabled
+					)
 				: {};
 			if (
 				!permissions ||

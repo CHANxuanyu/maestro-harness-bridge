@@ -44,7 +44,11 @@ export function projectConversationFields(
 		'cwd' | 'projectRoot' | 'sessionSshRemoteConfig' | 'toolType' | 'customEnvVars'
 	>,
 	source?: Pick<AITab, 'permissionMode' | 'readOnlyMode' | 'customModel' | 'customEffort'>,
-	capabilities?: Pick<AgentCapabilities, 'supportsReadOnlyMode' | 'supportsStandardPermissionMode'>
+	capabilities?: Pick<
+		AgentCapabilities,
+		'supportsReadOnlyMode' | 'supportsStandardPermissionMode' | 'supportsCodexAppServer'
+	>,
+	allowAppServer = true
 ) {
 	const project = projectSettingsForSession(session);
 	const permission = project?.defaultPermissionMode
@@ -53,7 +57,11 @@ export function projectConversationFields(
 				project.defaultPermissionMode
 			)
 		: source;
-	const fields = newConversationPermissionFields(permission, capabilities);
+	const fields = newConversationPermissionFields(
+		permission,
+		capabilities,
+		!allowAppServer || !!session.sessionSshRemoteConfig?.enabled
+	);
 	if (!fields) return null;
 	const modelDefaults =
 		(project?.modelProvider ?? project?.defaultProvider) === sessionProviderId(session)

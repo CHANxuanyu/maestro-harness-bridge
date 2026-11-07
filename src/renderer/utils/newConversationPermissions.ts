@@ -1,3 +1,4 @@
+import { effectiveStandardPermissionCapability } from '../../shared/codexAppServer';
 import { projectHistoryScopeFor } from '../../shared/projectHistory';
 import {
 	refreshConversationArchives,
@@ -21,10 +22,18 @@ import { visibleAiTabs } from './unifiedTabOrderUtils';
 /** New conversations may keep or tighten the source permission, never widen it. */
 export function newConversationPermissionFields(
 	source?: Pick<AITab, 'permissionMode' | 'readOnlyMode'>,
-	capabilities?: Pick<AgentCapabilities, 'supportsReadOnlyMode' | 'supportsStandardPermissionMode'>
+	capabilities?: Pick<
+		AgentCapabilities,
+		'supportsReadOnlyMode' | 'supportsStandardPermissionMode' | 'supportsCodexAppServer'
+	>,
+	remote = true
 ): ReturnType<typeof permissionModeFields> | null {
 	let mode = resolveTabPermissionMode(source);
-	if (mode === 'standard' && capabilities && !capabilities.supportsStandardPermissionMode)
+	if (
+		mode === 'standard' &&
+		capabilities &&
+		!effectiveStandardPermissionCapability(capabilities, useSettingsStore.getState(), remote)
+	)
 		mode = 'readonly';
 	if (mode === 'readonly' && capabilities && !capabilities.supportsReadOnlyMode) return null;
 	return permissionModeFields(mode);
@@ -54,15 +63,33 @@ export function restoreConversationPermissions(
 	permissionCeiling?: Pick<AITab, 'permissionMode' | 'readOnlyMode'>
 ): AITab | null {
 	if (!useSettingsStore.getState().newShell) return tab;
+	const source = permissionCeiling
+		? remoteConversationPermissionFields(tab, resolveTabPermissionMode(permissionCeiling))
+		: tab;
+	const capabilities = getCachedCapabilities(session.toolType) ?? {
+		supportsReadOnlyMode: false,
+		supportsStandardPermissionMode: false,
+	};
 	const permissions = newConversationPermissionFields(
-		permissionCeiling
-			? remoteConversationPermissionFields(tab, resolveTabPermissionMode(permissionCeiling))
-			: tab,
-		getCachedCapabilities(session.toolType) ?? {
-			supportsReadOnlyMode: false,
-			supportsStandardPermissionMode: false,
-		}
+		source,
+		capabilities,
+		!!session.sessionSshRemoteConfig?.enabled
 	);
+	// Keep a saved prototype choice when its transport is unavailable. Spawn must
+	// report the existing explicit refusal instead of silently changing the mode.
+	if (
+		tab.turnProvider === 'codex' &&
+		capabilities.supportsReadOnlyMode &&
+		capabilities.supportsCodexAppServer &&
+		resolveTabPermissionMode(source) === 'standard' &&
+		!effectiveStandardPermissionCapability(
+			capabilities,
+			useSettingsStore.getState(),
+			!!session.sessionSshRemoteConfig?.enabled
+		)
+	)
+		return { ...tab, ...permissionModeFields('standard') };
+
 	return permissions ? { ...tab, ...permissions } : null;
 }
 

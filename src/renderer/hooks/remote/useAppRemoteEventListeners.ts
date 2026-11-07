@@ -1,4 +1,4 @@
-import { codexAppServerEnabled } from '../../../shared/codexAppServer';
+import { effectiveStandardPermissionCapability } from '../../../shared/codexAppServer';
 import { getT } from '../../i18n';
 import { splitConversation, unsplitConversation } from '../../services/newShellSplit';
 import { getWindowContext } from '../../contexts/WindowContext';
@@ -2066,8 +2066,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 					const capabilities = await window.maestro.agents.getCapabilities(session.toolType);
 					if (
 						(mode === 'standard' &&
-							!capabilities?.supportsStandardPermissionMode &&
-							!codexAppServerEnabled(
+							!effectiveStandardPermissionCapability(
 								capabilities,
 								useSettingsStore.getState(),
 								!!session.sessionSshRemoteConfig?.enabled

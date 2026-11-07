@@ -56,10 +56,12 @@ const EN: Record<string, string> = {
 vi.mock('../../../renderer/i18n', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../../../renderer/i18n')>();
 	const t = (key: string, params?: Record<string, unknown>) =>
-		(EN[key] ?? actual.getTranslator('en')(key as keyof typeof actual.CATALOGS.en)).replace(
-			/\{(\w+)\}/g,
-			(_, name) => String(params?.[name] ?? '')
-		);
+		(
+			EN[key] ??
+			(key.startsWith('workflows.newShellCopy.')
+				? actual.getTranslator('en')(key as keyof typeof actual.CATALOGS.en)
+				: key)
+		).replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? ''));
 	return { ...actual, useT: () => t };
 });
 
@@ -400,7 +402,7 @@ describe('ProjectSessionTree', () => {
 					colors: { ...mockTheme.colors, bgActivity: background, textDim: '#888888' },
 				},
 			});
-			const input = screen.getByPlaceholderText('Search conversations…');
+			const input = screen.getByPlaceholderText('Search conversations...');
 			const foreground = input.style.getPropertyValue('--placeholder-color');
 			expect(foreground).not.toBe('');
 			expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(4.5);

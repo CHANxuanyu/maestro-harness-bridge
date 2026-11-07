@@ -3,9 +3,10 @@ import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { NativeApp } from './fixtures/native-app';
 
+test.skip(process.env.MAESTRO_E2E_REAL === '1', 'Copy checks use synthetic data only');
+
 // No provider creation or prompt sending. All settings and account homes are temporary.
 test('new shell copy: update preferences remain neutral and keep saved choices', async ({}, info) => {
-	expect(process.env.MAESTRO_E2E_REAL).not.toBe('1');
 	const native = new NativeApp(info, { providerCli: false });
 	const homeDir = path.join(native.root, 'home');
 	fs.mkdirSync(homeDir);

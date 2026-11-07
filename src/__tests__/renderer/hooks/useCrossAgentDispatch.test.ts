@@ -467,18 +467,16 @@ describe('new-shell consult conversations', () => {
 
 	it('reports an unsupported permission ceiling without dispatching a process', () => {
 		setCapabilitiesCache('codex', { ...AGENT_CAPABILITIES.codex, supportsReadOnlyMode: false });
-		useSessionStore
-			.getState()
-			.setSessions((sessions) =>
-				sessions.map((session) =>
-					session.id === 'src'
-						? {
-								...session,
-								aiTabs: session.aiTabs.map((tab) => ({ ...tab, permissionMode: 'readonly' })),
-							}
-						: session
-				)
-			);
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === 'src'
+					? {
+							...session,
+							aiTabs: session.aiTabs.map((tab) => ({ ...tab, permissionMode: 'readonly' })),
+						}
+					: session
+			)
+		);
 		sendCrossAgentRequest({
 			sourceSessionId: 'src',
 			sourceTabId: 'tab',
@@ -494,18 +492,16 @@ describe('new-shell consult conversations', () => {
 	});
 
 	it('inherits only permissions from a different provider, keeping the target project model', () => {
-		useSessionStore
-			.getState()
-			.setSessions((sessions) =>
-				sessions.map((session) =>
-					session.id === 'src'
-						? {
-								...session,
-								aiTabs: session.aiTabs.map((tab) => ({ ...tab, customModel: 'parent-model' })),
-							}
-						: session
-				)
-			);
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === 'src'
+					? {
+							...session,
+							aiTabs: session.aiTabs.map((tab) => ({ ...tab, customModel: 'parent-model' })),
+						}
+					: session
+			)
+		);
 		useSettingsStore.setState({
 			projectSettings: {
 				'[null,"/test/project"]': { modelProvider: 'codex', defaultModel: 'target-model' },

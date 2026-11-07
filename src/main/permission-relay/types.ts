@@ -77,13 +77,14 @@ export interface PermissionRequest {
 	questions?: ParsedQuestion[];
 }
 
-/** Identifies which session/tab a spawn's relay token belongs to. */
-export interface PermissionCaller {
+/** Caller identity derived from authenticated bridge metadata or Electron IPC. */
+export type PermissionCaller = {
 	userId?: string;
-	webContentsId: number;
-}
+} & ({ type: 'browser' } | { type?: 'desktop'; webContentsId: number });
 
+/** Identifies which session/tab a spawn's relay token belongs to. */
 export interface RelaySpawnBinding {
+	provider?: 'codex';
 	owner?: { userId?: string; window: BrowserWindow | null };
 	sessionId: string;
 	tabId?: string;

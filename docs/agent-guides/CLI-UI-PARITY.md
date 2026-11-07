@@ -1297,13 +1297,19 @@ paint and font readiness gates. Classic startup and SSH refresh remain unchanged
 ### Codex 原型审批归属补充（2026-11-07）
 
 `codex-turn permissions` 和 `permission-respond` 与桌面审批共用请求归属校验。
-浏览器调用明确拒绝，包括未开启网页登录的浏览器。CLI 必须通过服务端认证的
+Codex 原型的浏览器调用明确拒绝，包括未开启网页登录的浏览器。CLI 必须通过服务端认证的
 `trustedCli` 身份，按桌面用户和主窗口身份查询及响应，因此不能处理其他窗口或
 浏览器用户的请求。桌面只能处理原始所属窗口中的请求；关闭窗口后不能批准。
 
-Open gaps：CLI 暂不选择其他窗口；浏览器原型审批尚未支持。Claude 的既有
-`permission:respond` 同样收紧为所属用户和窗口校验，以阻止猜到 requestId 的
-浏览器用户批准桌面请求。
+Claude 的既有浏览器审批继续通过 `permission:respond`，CLI 对应
+`maestro-cli permission-respond <request-id> <allow|deny>`，共用同一响应及 pending 校验。
+仅当请求所属用户和调用方用户都存在且不同时拒绝；桌面发起、无所属用户的请求，
+允许已通过服务端认证的浏览器客户端响应，包括副窗口发起的请求。浏览器不校验窗口，
+桌面和可信 CLI 仍校验原始窗口。用户、客户端类型只取服务端元数据，不取请求参数。
+重复、结束和超时请求均失败。此修复同时恢复旧界面的既有浏览器用法，没有新增动词。
+
+Open gaps：CLI 暂不选择其他窗口；`codex-turn permissions` 只列 Codex 原型请求，
+Claude 请求仍需从已有审批事件取得 requestId；浏览器 Codex 原型审批尚未支持。
 
 Codex 标准权限的输入栏、项目设置、新建、继承、恢复及 `tab permission` 共用
 `effectiveStandardPermissionCapability()`。`project settings set --permission standard`

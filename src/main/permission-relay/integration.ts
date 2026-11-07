@@ -164,7 +164,8 @@ export function permissionCaller(
 	event: { type?: string; trustedCli?: boolean; sender?: { id: number } },
 	getMainWindow: () => BrowserWindow | null
 ): PermissionCaller | undefined {
-	if (event.type === 'bridge' && !event.trustedCli) return undefined;
+	if (event.type === 'bridge' && !event.trustedCli)
+		return { type: 'browser', userId: getActingUser()?.id };
 	const webContentsId =
 		event.type === 'bridge' ? getMainWindow()?.webContents.id : event.sender?.id;
 	return webContentsId === undefined ? undefined : { userId: getActingUser()?.id, webContentsId };

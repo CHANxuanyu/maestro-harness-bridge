@@ -109,18 +109,24 @@ export function relayRegistryStats(): { bindings: number; pending: number } {
 	return { bindings: bindings.size, pending: pending.size };
 }
 
-/** User decisions require the original live window and the same acting user. */
+/** Codex keeps strict ownership; Claude also accepts authenticated browser decisions. */
 export function ownsPending(requestId: string, caller?: PermissionCaller): boolean {
 	const req = pending.get(requestId);
-	const owner = req && bindings.get(req.token)?.owner;
-	const win = owner?.window;
+	const binding = req && bindings.get(req.token);
+	const owner = binding?.owner;
+	if (!caller || !owner) return false;
+	if (binding.provider === 'codex') {
+		if (caller.type === 'browser' || owner.userId !== caller.userId) return false;
+	} else {
+		if (owner.userId && caller.userId && owner.userId !== caller.userId) return false;
+		// Browser calls are forwarded through the main window, regardless of origin.
+		if (caller.type === 'browser') return true;
+	}
+	const win = owner.window;
 	return !!(
-		caller &&
-		owner &&
 		win &&
 		!win.isDestroyed() &&
 		!win.webContents.isDestroyed() &&
-		owner.userId === caller.userId &&
 		win.webContents.id === caller.webContentsId
 	);
 }

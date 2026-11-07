@@ -15,7 +15,7 @@ export function listCodexAppServerPermissions(
 		'workflows.shell.codexAppServerApprovalUnavailable'
 	]
 ): Omit<PermissionRequest, 'token'>[] {
-	if (!caller) throw new Error(unavailableMessage);
+	if (!caller || caller.type === 'browser') throw new Error(unavailableMessage);
 	return [...visibleRequests.values()].filter((request) => ownsPending(request.requestId, caller));
 }
 
@@ -28,6 +28,7 @@ export function prepareCodexAppServerPermissions(options: {
 	const window = options.getMainWindow();
 	const { token, cleanup } = registerSpawn({
 		...options,
+		provider: 'codex',
 		owner: { userId: getActingUser()?.id, window },
 	});
 	const ids = new Map<string, string>();

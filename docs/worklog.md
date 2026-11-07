@@ -1456,8 +1456,9 @@ Opus 仍须在沙箱外执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native
 ## 2026-11-07：U5 原型审查修复，审批归属
 
 审批列表及响应先补合成回归，修复前两项失败：另一用户能读取请求，无身份响应返回 true。
-修复把请求绑定到启动用户及原始窗口，列表和响应共用 pending 归属判断；浏览器拒绝，
-可信 CLI 以桌面主窗口身份调用同一校验。Claude 同入口存在相同问题，已一并收紧。
+修复把请求绑定到启动用户及原始窗口，列表和响应共用 pending 归属判断；Codex 原型拒绝浏览器，
+可信 CLI 以桌面主窗口身份调用同一校验。第三轮纠正 Claude 的误收紧：浏览器可批准桌面
+主窗口及副窗口请求，仅双方用户都存在且不同时拒绝；桌面调用继续校验原始窗口。
 相关三文件 175 项通过，未运行 Electron 或真实会话。其余审查项继续单独修复。
 
 ## 2026-11-07：U5 原型审查修复，追加防重
@@ -1505,7 +1506,35 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-codex-app-server.spec.ts --wor
 ```
 
 旧界面与关闭原型时 Codex 的 exec 参数、环境和 SSH 分支未修改，nativeCommandScopeKey
-保留。共有行为变化是 Claude 审批也收紧到所属用户和窗口，以及普通发送登记迁入共享
-composer store，原匹配规则不变。CLI 仍仅处理主窗口审批，浏览器审批明确拒绝。
+保留。共有行为变化是 Claude 审批增加用户归属判断，以及普通发送登记迁入共享
+composer store，原匹配规则不变。第三轮恢复 Claude 浏览器审批，仅双方用户都存在且不同
+时拒绝，浏览器不校验窗口。CLI 仍仅处理主窗口审批，Codex 原型仍明确拒绝浏览器审批。
 真实提供方协议兼容、模型及沙箱效果、真实 SSH、跨平台进程树、重启历史、发行包和
 Electron 多窗口展示未验证。没有推送、开 PR、打标签或发布。
+
+## 2026-11-07：U5 第三轮，恢复 Claude 浏览器审批
+
+验证对象为任务分支源码，基线 `f3d87e44c`，回归提交 `72958b085`。没有构建或运行发行包。
+修复前四个相关 Vitest 文件为 12 项失败、189 项通过：新旧界面下，浏览器批准无用户归属的
+桌面请求、同用户请求、副窗口请求以及未启用网页登录时的请求，均应成功却返回 false。
+用户 B 批准用户 A 的请求、Codex 浏览器审批、桌面及可信 CLI 原有校验均通过。
+
+仅在现有 relay 中区分请求提供方与调用方类型。Codex 注册由服务端标记，仍拒绝全部浏览器
+响应和列表查询，CLI 与桌面继续要求同用户及原始存活窗口。Claude 只在双方用户都存在且
+不同时拒绝，浏览器不做窗口校验；桌面及可信 CLI 保留原始存活窗口校验。身份来自认证后
+的 bridge 元数据和 acting user，不接受请求参数伪造。pending 清理、超时及重复响应逻辑未改。
+
+修复后四个相关文件 201 项通过，命令使用 `--configLoader runner --no-cache`，无跳过、
+无重试。覆盖新旧界面、主副窗口、两用户隔离、认证元数据不可由消息及额外参数覆盖、
+重复响应、进程结束、超时，以及原有 Codex 与 CLI 行为。`tsconfig.json`、
+`tsconfig.main.json`、`tsconfig.cli.json` 三份 noEmit 检查通过；改动文件 Prettier 及
+diff 空白检查通过。没有运行全量 Vitest。
+
+没有新增界面动作、CLI 动词或用户文案。既有 `permission-respond` 与界面共用
+`permission:respond` 和 `ownsPending()`。CLI 对等文档已纠正，并保留其他窗口选择、
+Claude 请求列表和浏览器 Codex 原型审批的 Open gaps。必要的共享行为变化是恢复旧界面的
+Claude 浏览器审批，不能放在 `newShell` 开关后。SSH 路径及启动逻辑未改。
+
+沙箱外验收交接见 [Claude 浏览器审批验收](../e2e/claude-browser-permissions.md)。
+本轮未启动 Electron、操作浏览器、调用模型或读取个人账户。真实网页认证与事件传递、
+Electron 多窗口、真实 Claude、SSH、其他平台及发行包仍未验证。未推送、开 PR、打标签或发布。

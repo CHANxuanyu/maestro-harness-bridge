@@ -33,8 +33,9 @@ export function splitConversationExists(ref: SplitConversationRef): boolean {
 export function focusSplitConversation(ref: SplitConversationRef): void {
 	requireNewShell();
 	if (!splitConversationExists(ref)) throw new Error(getT()('workflows.split.missing'));
-	const active = selectActiveSession(useSessionStore.getState());
-	if (active?.id !== ref.sessionId || active.activeTabId !== ref.tabId)
+	const state = useSessionStore.getState();
+	const active = selectActiveSession(state);
+	if (state.activeSessionId !== ref.sessionId || active?.activeTabId !== ref.tabId)
 		jumpToAgent(ref.sessionId, { tabId: ref.tabId });
 	useUIStore.getState().setActiveFocus('main');
 }
@@ -65,14 +66,21 @@ export async function splitConversation(
 		if (!splitConversationExists(right)) throw new Error(getT()('workflows.split.missing'));
 		const saved = useSettingsStore.getState().newShellSplit;
 		const active = selectActiveSession(useSessionStore.getState());
+		const activeInSaved =
+			saved &&
+			active &&
+			[saved.left, saved.right].some(
+				(ref) => ref.sessionId === active.id && ref.tabId === active.activeTabId
+			);
 		const left =
-			saved && splitConversationExists(saved.left)
+			activeInSaved && splitConversationExists(saved.left)
 				? saved.left
 				: active && { sessionId: active.id, tabId: active.activeTabId };
 		if (!left || !splitConversationExists(left)) throw new Error(getT()('workflows.split.missing'));
 		if (left.tabId === right.tabId) throw new Error(getT()('workflows.split.same'));
-		await saveSplit({ left, right, ratio: ratio ?? saved?.ratio ?? 0.5 });
-		focusSplitConversation(right);
+		await saveSplit({ left, right, ratio: ratio ?? (activeInSaved ? saved.ratio : 0.5) });
+		const resizing = ratio !== undefined && activeInSaved && saved.right.tabId === tabId;
+		if (!resizing) focusSplitConversation(right);
 	});
 }
 

@@ -25,6 +25,8 @@ export interface AtMentionSuggestion {
 }
 
 export interface InputAreaProps {
+	/** Explicit display owner for a new-shell split pane. */
+	composerTargetTabId?: string;
 	session: Session;
 	theme: Theme;
 	setInputValue: (value: string) => void;

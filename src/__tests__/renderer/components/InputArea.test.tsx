@@ -276,6 +276,20 @@ describe('InputArea', () => {
 		mockUpdateSessionWith.mockClear();
 	});
 
+	it('keeps the unfocused split composer draft separate from the live composer', () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = createMockSession();
+		session.aiTabs[0].inputValue = 'Saved left draft';
+		const props = createDefaultProps({ session, inputValue: 'Live right draft' });
+		useComposerInputStore.setState({ aiValueTabId: 'another-tab' });
+		render(<InputArea {...props} composerTargetTabId={session.activeTabId} />);
+		expect(screen.getByRole('textbox')).toHaveValue('Saved left draft');
+		act(() =>
+			useComposerInputStore.getState().loadAiDraft(session.activeTabId, 'Live left draft', 'off')
+		);
+		expect(screen.getByRole('textbox')).toHaveValue('Live left draft');
+	});
+
 	describe('Basic Rendering', () => {
 		it('renders the input textarea', () => {
 			const props = createDefaultProps();

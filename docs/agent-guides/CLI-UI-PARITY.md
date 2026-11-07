@@ -59,6 +59,21 @@ cannot be combined with permission or model changes. The acknowledged
 layout before reporting success. Service errors, including a narrow window,
 are returned to the CLI.
 
+`NewShellSplitContent` reuses `MainPanelContent`, `InputArea` and the pointer
+capture divider exported by `TiledLayout`. `tileNewTab()` creates new tabs inside
+one owner, so it cannot represent these two existing conversations across owners.
+The split keeps references rather than cloning conversations or inheriting new
+permissions. Background pane drafts, scroll positions and models stay keyed to
+that pane; only the focused pane claims App's input and transcript refs.
+
+The default shortcut opens the same palette picker: `Alt+Cmd+\` on macOS,
+`Ctrl+Alt+\` elsewhere. Arrow keys on the divider resize through the same service
+as dragging and `--ratio`. Resizing an existing pair keeps focus. A window below
+1180 pixels or a center below 720 pixels shows one conversation and an explanation,
+retaining the saved pair. Selecting a third conversation shows it alone; a new
+split from there uses that conversation as its left pane. The saved references and
+ratio load through `readNewShellSplit()`; malformed values are discarded.
+
 ## Stop and read-only resume corrections (2026-11-06)
 
 No UI action or CLI verb is added. `tab permission <tab> readonly` and
@@ -669,6 +684,14 @@ The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
 ## Open gaps
+
+**New shell split limits (2026-11-07).** Split targets must already be open tabs;
+native history entries must first be opened with the existing history action.
+Conversations owned by another window cannot be split into this window. There is
+one saved split pair in settings, so independent saved pairs per window are not
+implemented. Existing external native transcript following still follows only
+the focused conversation; this change does not add a second background reader.
+All new visible split actions have the CLI equivalents listed above.
 
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no
 `tab fork --at` verb; this remains the Composer backlog below. The palette and

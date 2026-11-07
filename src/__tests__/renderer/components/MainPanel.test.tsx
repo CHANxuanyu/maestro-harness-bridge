@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import type {
 	Theme,
 	Session,
@@ -130,6 +130,9 @@ vi.mock('../../../renderer/components/TerminalOutput', () => ({
 vi.mock('../../../renderer/components/InputArea', () => ({
 	InputArea: (props: {
 		session: { name: string };
+		inputRef?: React.RefObject<HTMLInputElement>;
+		processInput?: () => void;
+		handleInterrupt?: () => void;
 		onInputFocus: () => void;
 		availableModels?: string[];
 	}) => {
@@ -139,7 +142,21 @@ vi.mock('../../../renderer/components/InputArea', () => ({
 				'data-testid': 'input-area',
 				'data-available-models': JSON.stringify(props.availableModels ?? []),
 			},
-			React.createElement('input', { 'data-testid': 'input-field', onFocus: props.onInputFocus }),
+			React.createElement('input', {
+				'data-testid': 'input-field',
+				onFocus: props.onInputFocus,
+				ref: props.inputRef,
+			}),
+			React.createElement(
+				'button',
+				{ 'data-testid': 'pane-send', onClick: props.processInput },
+				'Test send'
+			),
+			React.createElement(
+				'button',
+				{ 'data-testid': 'pane-stop', onClick: props.handleInterrupt },
+				'Test stop'
+			),
 			`Input for ${props.session?.name}`
 		);
 	},
@@ -610,6 +627,7 @@ describe('MainPanel', () => {
 		});
 		useSettingsStore.setState({
 			newShell: false,
+			newShellSplit: null,
 			fontFamily: 'monospace',
 			enterToSendAI: true,
 			chatRawTextMode: false,
@@ -671,6 +689,136 @@ describe('MainPanel', () => {
 
 	afterEach(() => {
 		vi.useRealTimers();
+	});
+
+	it('renders two existing conversations, focuses each pane and closes a pane without closing tabs', async () => {
+		Object.defineProperty(window, 'innerWidth', { value: 1800, configurable: true });
+		const left = createSession({
+			id: 'left',
+			name: 'Left provider',
+			aiTabs: [createMockAITab({ id: 'left-tab', name: 'Left conversation' })],
+			activeTabId: 'left-tab',
+		});
+		const right = createSession({
+			id: 'right',
+			name: 'Right provider',
+			toolType: 'codex',
+			aiTabs: [createMockAITab({ id: 'right-tab', name: 'Right conversation' })],
+			activeTabId: 'right-tab',
+		});
+		useSessionStore.setState({ sessions: [left, right], activeSessionId: 'left' });
+		useSettingsStore.setState({
+			newShell: true,
+			newShellSplit: {
+				left: { sessionId: 'left', tabId: 'left-tab' },
+				right: { sessionId: 'right', tabId: 'right-tab' },
+				ratio: 0.5,
+			},
+		});
+		render(<MainPanel {...defaultProps} />);
+		const panes = screen.getAllByTestId('new-shell-split-pane');
+		expect(panes).toHaveLength(2);
+		expect(within(panes[0]).getByText('Input for Left provider')).toBeInTheDocument();
+		expect(within(panes[1]).getByText('Input for Right provider')).toBeInTheDocument();
+		fireEvent.focus(within(panes[1]).getByTestId('input-field'));
+		expect(useSessionStore.getState().activeSessionId).toBe('right');
+		fireEvent.click(within(panes[1]).getByRole('button', { name: 'Close this pane' }));
+		await waitFor(() => expect(screen.queryByTestId('new-shell-split-divider')).toBeNull());
+		expect(useSessionStore.getState().activeSessionId).toBe('left');
+		expect(useSessionStore.getState().sessions.flatMap((s) => s.aiTabs)).toHaveLength(2);
+	});
+
+	function seedSplit(sameOwner = false) {
+		Object.defineProperty(window, 'innerWidth', { value: 1800, configurable: true });
+		const tabs = [
+			createMockAITab({ id: 'left-tab', name: 'Left conversation' }),
+			createMockAITab({ id: 'right-tab', name: 'Right conversation' }),
+		];
+		const left = createSession({
+			id: 'left',
+			name: 'Left provider',
+			aiTabs: sameOwner ? tabs : [tabs[0]],
+			activeTabId: 'left-tab',
+		});
+		const right = createSession({
+			id: 'right',
+			name: 'Right provider',
+			toolType: 'codex',
+			aiTabs: [tabs[1]],
+			activeTabId: 'right-tab',
+		});
+		const split = {
+			left: { sessionId: 'left', tabId: 'left-tab' },
+			right: { sessionId: sameOwner ? 'left' : 'right', tabId: 'right-tab' },
+			ratio: 0.5,
+		};
+		useSessionStore.setState({
+			sessions: sameOwner ? [left] : [left, right],
+			activeSessionId: 'left',
+			sessionsReadOk: true,
+		});
+		useSettingsStore.setState({ newShell: true, newShellSplit: split });
+		return split;
+	}
+
+	it('routes send and stop from either pane after updating active focus, including two tabs of one owner', () => {
+		seedSplit(true);
+		const targets: string[] = [];
+		const action = () => targets.push(useSessionStore.getState().sessions[0].activeTabId);
+		render(<MainPanel {...defaultProps} processInput={action} handleInterrupt={action} />);
+		const panes = screen.getAllByTestId('new-shell-split-pane');
+		fireEvent.click(within(panes[1]).getByTestId('pane-send'));
+		fireEvent.click(within(panes[0]).getByTestId('pane-stop'));
+		expect(targets).toEqual(['right-tab', 'left-tab']);
+		expect(defaultProps.inputRef.current).toBe(within(panes[0]).getByTestId('input-field'));
+		expect(screen.getAllByTestId('new-shell-split-pane')).toHaveLength(2);
+	});
+
+	it('restores saved proportions, explains a narrow window, and restores the pair when widened', () => {
+		const split = seedSplit();
+		useSettingsStore.setState({ newShellSplit: { ...split, ratio: 0.6 } });
+		render(<MainPanel {...defaultProps} />);
+		expect(screen.getAllByTestId('new-shell-split-pane')[0].parentElement).toHaveStyle({
+			flexGrow: '0.6',
+		});
+		act(() => {
+			Object.defineProperty(window, 'innerWidth', { value: 900, configurable: true });
+			window.dispatchEvent(new Event('resize'));
+		});
+		expect(screen.getByTestId('new-shell-split-notice')).toHaveTextContent('too narrow');
+		expect(screen.queryByTestId('new-shell-split-divider')).toBeNull();
+		expect(screen.getAllByTestId('input-area')).toHaveLength(1);
+		expect(useSettingsStore.getState().newShellSplit?.ratio).toBe(0.6);
+		act(() => {
+			Object.defineProperty(window, 'innerWidth', { value: 1800, configurable: true });
+			window.dispatchEvent(new Event('resize'));
+		});
+		expect(screen.getAllByTestId('new-shell-split-pane')).toHaveLength(2);
+	});
+
+	it('persists divider keyboard resizing without moving focus and preserves a saved pair in classic mode', async () => {
+		seedSplit();
+		render(<MainPanel {...defaultProps} />);
+		fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize split view' }), {
+			key: 'ArrowRight',
+		});
+		await waitFor(() => expect(useSettingsStore.getState().newShellSplit?.ratio).toBe(0.55));
+		expect(useSessionStore.getState().activeSessionId).toBe('left');
+		act(() => useSettingsStore.setState({ newShell: false }));
+		expect(screen.queryByTestId('new-shell-split-layout')).toBeNull();
+		expect(screen.getAllByTestId('input-area')).toHaveLength(1);
+		expect(useSettingsStore.getState().newShellSplit?.ratio).toBe(0.55);
+	});
+
+	it('collapses a saved pair when one conversation is removed, preserving the survivor', async () => {
+		seedSplit();
+		render(<MainPanel {...defaultProps} />);
+		act(() =>
+			useSessionStore.getState().setSessions((sessions) => sessions.filter((s) => s.id === 'right'))
+		);
+		await waitFor(() => expect(useSettingsStore.getState().newShellSplit).toBeNull());
+		expect(useSessionStore.getState().activeSessionId).toBe('right');
+		expect(screen.getByText('Input for Right provider')).toBeInTheDocument();
 	});
 
 	describe('Render conditions', () => {

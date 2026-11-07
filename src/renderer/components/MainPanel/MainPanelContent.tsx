@@ -84,6 +84,9 @@ const FilePreview = React.lazy(() =>
 const PANE_FOCUS_DELAY_MS = 50;
 
 export interface MainPanelContentProps {
+	/** Split panes use their own draft while only one consumes global focus requests. */
+	composerTargetTabId?: string;
+	focusedPane?: boolean;
 	// Core state (guaranteed by parent guard)
 	activeSession: Session;
 	activeTab: AITab | null;
@@ -491,7 +494,7 @@ export const MainPanelContent = React.memo(function MainPanelContent(props: Main
 	const shortcuts = useSettingsStore((s) => s.shortcuts);
 	const maxOutputLines = useSettingsStore((s) => s.maxOutputLines);
 	// Self-sourced from uiStore
-	const activeFocus = useUIStore((s) => s.activeFocus);
+	const activeFocus = useUIStore((s) => (props.focusedPane === false ? 'right' : s.activeFocus));
 	// Output ("Find") search is scoped per agent+AI-tab. Read this window's slot
 	// by its key so the Find bar doesn't follow the user to other agents/tabs.
 	const outputSearchKey = outputSearchKeyFor(activeSession.id, activeSession.activeTabId);
@@ -520,7 +523,9 @@ export const MainPanelContent = React.memo(function MainPanelContent(props: Main
 	// original behavior); 'recent'/'all' keep extra webviews mounted but hidden so their
 	// page state survives switching away. All mounted tabs render through the persistent
 	// overlay block below (mirroring the terminal keep-alive overlay).
-	const mountedBrowserTabIds = useBrowserTabMounting(activeSession);
+	const mountedBrowserTabIds = useBrowserTabMounting(
+		props.composerTargetTabId ? null : activeSession
+	);
 
 	// Self-heal tiled groups when a member tab is closed. Closing a tab removes it
 	// from aiTabs/filePreviewTabs/etc. but the per-kind close paths don't touch group
@@ -644,7 +649,7 @@ export const MainPanelContent = React.memo(function MainPanelContent(props: Main
 	// killed a few ms in, always before its first 50ms attempt, so NO pane ever took
 	// focus. A ref survives that re-run; a superseded request still cancels the one
 	// before it, which is all the cleanup was there for.
-	const focusRequest = useUIStore((s) => s.focusRequest);
+	const focusRequest = useUIStore((s) => (props.focusedPane === false ? null : s.focusRequest));
 	const focusRetryRef = React.useRef<(() => void) | null>(null);
 	React.useEffect(() => () => focusRetryRef.current?.(), []);
 	React.useEffect(() => {
@@ -1067,6 +1072,7 @@ export const MainPanelContent = React.memo(function MainPanelContent(props: Main
 			{shouldShowInputArea && (
 				<div data-tour="input-area" ref={inputAreaAvoidRef} className="relative z-[3] shrink-0">
 					<InputArea
+						composerTargetTabId={props.composerTargetTabId}
 						session={activeSession}
 						theme={theme}
 						setInputValue={setInputValue}

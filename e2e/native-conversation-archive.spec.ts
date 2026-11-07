@@ -156,7 +156,7 @@ test('unarchive without reopening retains readonly after another restart', async
 		await expect(
 			native.page.locator(`[data-conversation-key="${owner.id}:${created.tabId}"]`)
 		).toBeVisible();
-		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 		// Creation is acknowledged before debounced persistence updates the CLI inventory.
 		await expect
 			.poll(async () => {

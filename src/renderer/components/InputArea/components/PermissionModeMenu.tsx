@@ -59,6 +59,7 @@ export function PermissionModeMenu({
 					setOpen(!open);
 				}}
 				aria-haspopup="menu"
+				data-testid="composer-permission"
 				aria-expanded={open}
 				title={permissionModeTooltip(t, mode, agentId, newShell)}
 				className="flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs whitespace-nowrap cursor-pointer transition-all opacity-80 hover:opacity-100 hover:bg-white/10"

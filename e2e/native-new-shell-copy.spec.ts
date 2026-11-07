@@ -41,7 +41,9 @@ test('new shell copy: update preferences remain neutral and keep saved choices',
 			expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8'))[key]).toBe(false);
 		}
 		await native.cliWithEnv({ HOME: homeDir }, 'settings', 'set', 'newShell', 'false');
-		await expect(modal.getByText('推荐', { exact: true })).toBeVisible();
+		await expect(
+			modal.getByTestId('updates-choice-beta').getByText('推荐', { exact: true })
+		).toBeVisible();
 		await expect(
 			modal.getByRole('heading', { name: '抢先体验最新功能', exact: true })
 		).toBeVisible();

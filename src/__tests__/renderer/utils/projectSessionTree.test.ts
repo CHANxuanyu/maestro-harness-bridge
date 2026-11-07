@@ -645,3 +645,56 @@ describe('project conversation navigation', () => {
 		).toBe(true);
 	});
 });
+
+it('matches SSH history only by title when the new shell requests it, preserving classic preview matches', () => {
+	const history: ProjectHistoryConversation[] = [
+		{
+			key: 'remote-row',
+			projectKey: 'group:project',
+			projectPath: '/remote',
+			provider: 'codex',
+			nativeSessionId: 'remote-native',
+			title: 'Remote title',
+			preview: 'secret preview',
+			createdAt: 1,
+			modifiedAt: 2,
+			messageCount: 2,
+			starred: false,
+			sshRemoteId: 'ssh',
+		},
+	];
+	const base = { sessions: [], groups: [project], history, search: 'secret preview' };
+	expect(buildProjectSessionTree(base).flatMap((p) => p.conversations)).toHaveLength(1);
+	expect(
+		buildProjectSessionTree({ ...base, remoteTitleOnly: true }).flatMap((p) => p.conversations)
+	).toHaveLength(0);
+	expect(
+		buildProjectSessionTree({ ...base, remoteTitleOnly: true, search: 'Remote title' }).flatMap(
+			(p) => p.conversations
+		)
+	).toHaveLength(1);
+});
+
+it.each([false, true])(
+	'searches an open conversation with remoteTitleOnly and SSH=%s',
+	(remote) => {
+		const owner = createMockSession({
+			id: 'search-owner',
+			name: 'Configuration needle',
+			cwd: remote ? '~/project' : '/project',
+			sessionSshRemoteConfig: remote ? { enabled: true, remoteId: 'host' } : undefined,
+			aiTabs: [createMockAITab({ id: 'open', name: 'Conversation title' })],
+		});
+		const options = { sessions: [owner], groups: [], remoteTitleOnly: true };
+		expect(
+			buildProjectSessionTree({ ...options, search: 'Conversation title' }).flatMap(
+				(item) => item.conversations
+			)
+		).toHaveLength(1);
+		expect(
+			buildProjectSessionTree({ ...options, search: 'Configuration needle' }).flatMap(
+				(item) => item.conversations
+			)
+		).toHaveLength(remote ? 0 : 1);
+	}
+);

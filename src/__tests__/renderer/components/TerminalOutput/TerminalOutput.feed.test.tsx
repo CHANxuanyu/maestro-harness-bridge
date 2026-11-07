@@ -2,6 +2,7 @@ import { useAuthOutageStore, reportAuthFailure } from '../../../../renderer/stor
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { useModalStore } from '../../../../renderer/stores/modalStore';
 import { useMessageGistStore } from '../../../../renderer/stores/messageGistStore';
+import { useUIStore } from '../../../../renderer/stores/uiStore';
 /**
  * The conversation feed (sidebarNavigationMode 'conversations'): what the user
  * observes in the transcript, driven through the real TerminalOutput and
@@ -23,6 +24,7 @@ import { LayerStackProvider } from '../../../../renderer/contexts/LayerStackCont
 import { createMockSession } from '../../../helpers/mockSession';
 import { createMockAITab } from '../../../helpers/mockTab';
 import { mockTheme } from '../../../helpers/mockTheme';
+import { compactToolOutput } from '../../../../shared/toolOutput';
 
 vi.mock('react-markdown', () => ({
 	default: ({ children }: { children: string }) => (
@@ -100,6 +102,7 @@ const reply = (id: string, minutes: number, text: string, extra: Partial<LogEntr
 	({ id, timestamp: at(minutes), source: 'stdout', text, ...extra }) as LogEntry;
 
 beforeEach(() => {
+	useUIStore.setState({ pendingLogJump: null });
 	useSettingsStore.setState({
 		uiLanguage: 'en',
 		newShell: false,
@@ -465,6 +468,103 @@ describe('conversation feed: tools', () => {
 		metadata: { toolState: { status: 'completed', input: { path }, output } },
 	});
 
+	it.each([
+		{ finished: false, change: 'project' },
+		{ finished: true, change: 'project' },
+		{ finished: false, change: 'source' },
+		{ finished: true, change: 'source' },
+		{ finished: false, change: 'call' },
+		{ finished: true, change: 'call' },
+	])(
+		'reads full tool output through the row renderer with finished=$finished and change=$change',
+		async ({ finished, change }) => {
+			useSettingsStore.setState({ newShell: true });
+			const tool = call('t1', 1, 'large.txt', compactToolOutput('x'.repeat(9000)).output);
+			tool.metadata!.toolCallId = 'native-call-1';
+			const logs = [
+				user('u1', 0, 'Read the file'),
+				tool,
+				...(finished ? [reply('a1', 2, 'Done')] : []),
+			];
+			const session = sessionWith(logs);
+			session.aiTabs[0].agentSessionId = 'native-conversation';
+			const read = vi.fn().mockResolvedValue({
+				status: 'found',
+				text: 'FULL OUTPUT TAIL',
+				totalBytes: 9000,
+				omittedBytes: 0,
+			});
+			const originalRead = window.maestro.agentSessions.toolOutput;
+			window.maestro.agentSessions.toolOutput = read;
+			try {
+				const { container, rerenderWith } = renderTranscript(logs, { session });
+				if (finished) {
+					fireEvent.click(within(row(container, 't1')).getByRole('button', { name: /Worked for/ }));
+				}
+				fireEvent.click(screen.getByRole('button', { name: 'Show details for read_file' }));
+				expect(read).not.toHaveBeenCalled();
+				await act(async () => {
+					fireEvent.click(screen.getByRole('button', { name: /Show full output/ }));
+				});
+				expect(read).toHaveBeenLastCalledWith(
+					{
+						provider: 'codex',
+						projectPath: session.projectRoot || session.cwd,
+						nativeSessionId: 'native-conversation',
+						ownerAgentId: session.id,
+						sshRemoteId: undefined,
+					},
+					'native-call-1'
+				);
+				expect(screen.getByTestId('native-tool-output')).toHaveTextContent('FULL OUTPUT TAIL');
+				// A changed source must invalidate cached row props and release the old full output.
+				const savedSource = {
+					provider: 'claude-code',
+					projectPath: '/synthetic-original',
+					nativeSessionId: 'original-conversation',
+					ownerAgentId: session.id,
+				};
+				const nextLogs = logs.map((entry) =>
+					entry === tool && change !== 'project'
+						? {
+								...entry,
+								metadata: {
+									...entry.metadata,
+									...(change === 'source'
+										? { toolOutputSource: savedSource }
+										: { nativeToolCallId: 'bound-call-1' }),
+								},
+							}
+						: entry
+				);
+				const nextSession = {
+					...session,
+					...(change === 'project'
+						? { cwd: '/synthetic-next', projectRoot: '/synthetic-next' }
+						: {}),
+					aiTabs: [{ ...session.aiTabs[0], logs: nextLogs }],
+				};
+				rerenderWith(nextLogs, { session: nextSession });
+				expect(screen.queryByTestId('native-tool-output')).toBeNull();
+				await act(async () => {
+					fireEvent.click(screen.getByRole('button', { name: /Show full output/ }));
+				});
+				expect(read).toHaveBeenLastCalledWith(
+					change === 'source'
+						? savedSource
+						: expect.objectContaining({
+								projectPath:
+									change === 'project' ? '/synthetic-next' : session.projectRoot || session.cwd,
+							}),
+					change === 'call' ? 'bound-call-1' : 'native-call-1'
+				);
+				expect(tool.metadata!.toolState!.output).toBe(compactToolOutput('x'.repeat(9000)).output);
+			} finally {
+				window.maestro.agentSessions.toolOutput = originalRead;
+			}
+		}
+	);
+
 	it("folds a finished turn's work behind one row above its answer", () => {
 		const { container } = renderTranscript([
 			user('u1', 0, 'Read both files'),
@@ -639,6 +739,51 @@ describe('conversation feed: tools', () => {
 			expect(row(container, 't1').querySelector('[data-tool-activity="read"]')).not.toBeNull()
 		);
 	});
+
+	it.each(['p1', 'p2'])(
+		'reveals and flashes the actual content hit %s inside a finished turn',
+		async (logId) => {
+			useSettingsStore.setState({ newShell: true });
+			const jump = vi.spyOn(
+				await import('../../../../renderer/utils/jumpHighlight'),
+				'jumpToElement'
+			);
+			jump.mockImplementation((resolve) => {
+				resolve()?.classList.add('jump-flash');
+				return () => {};
+			});
+			try {
+				const { container } = renderTranscript([
+					user('u1', 0, 'Read it'),
+					reply('p1', 1, 'First progress', {
+						nativeTranscript: { messageId: 'p1', channel: 'commentary' },
+					}),
+					reply('p2', 2, 'Hidden amber lighthouse', {
+						nativeTranscript: { messageId: 'p2', channel: 'commentary' },
+					}),
+					reply('a1', 3, 'Done', { nativeTranscript: { messageId: 'a1', channel: 'final' } }),
+				]);
+				expect(screen.queryByText('Hidden amber lighthouse')).toBeNull();
+				act(() =>
+					useUIStore.getState().setPendingLogJump({
+						sessionId: 'session-1',
+						tabId: 'tab-1',
+						logId,
+						...{ revealTurnActivity: true },
+					})
+				);
+				expect(screen.getByText('Hidden amber lighthouse')).toBeVisible();
+				const flashed = container.querySelector('.jump-flash');
+				expect(flashed).toHaveAttribute('data-log-id', logId);
+				expect(flashed).not.toHaveAttribute('data-feed-row', 'turn-activity');
+				expect(flashed).toHaveTextContent(
+					logId === 'p1' ? 'First progress' : 'Hidden amber lighthouse'
+				);
+			} finally {
+				jump.mockRestore();
+			}
+		}
+	);
 
 	it('states a stopped run in words, not only a glyph', () => {
 		const { container } = renderTranscript([

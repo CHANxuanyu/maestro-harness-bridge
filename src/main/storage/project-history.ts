@@ -8,6 +8,7 @@ import type {
 	ProjectHistoryConversation,
 } from '../../shared/projectHistory';
 import { getProviderProfileConfig } from '../../shared/providerProfiles';
+import { projectHistoryScopeFor } from '../../shared/projectHistory';
 
 interface HistoryOwner {
 	id?: string;
@@ -29,6 +30,8 @@ interface Origin {
 	starred?: boolean;
 }
 export interface ProjectHistoryDependencies {
+	archivedKeys?: ReadonlySet<string>;
+	archivedOnly?: boolean;
 	storages: AgentSessionStorage[];
 	owners: HistoryOwner[];
 	accountDirs: (provider: string) => Promise<string[]>;
@@ -56,6 +59,21 @@ function timestamp(value: string): number {
 }
 function cleanTitle(value: string): string {
 	return value.replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
+/** Canonical transcript pool shared by discovery and Maestro archive identity. */
+export async function nativeHistoryPool(
+	provider: string,
+	directory?: string,
+	remote?: string,
+	realpath: (directory: string) => Promise<string> = fs.realpath
+): Promise<string> {
+	if (!directory) return 'default';
+	if (remote) return path.posix.normalize(directory);
+	const subdir = getProviderProfileConfig(provider)?.sessionsSubdir;
+	return realpath(subdir ? path.join(directory, subdir) : directory).catch(() =>
+		path.resolve(directory)
+	);
 }
 
 /** Read metadata through native adapters, never launch a model or copy its transcript. */
@@ -90,14 +108,7 @@ export async function discoverProjectHistory(
 		const key = JSON.stringify([provider, remote, directory]);
 		let pending = poolPromises.get(key);
 		if (!pending) {
-			const subdir = getProviderProfileConfig(provider)?.sessionsSubdir;
-			pending = !directory
-				? Promise.resolve('default')
-				: remote
-					? Promise.resolve(path.posix.normalize(directory))
-					: (deps.realpath || fs.realpath)(subdir ? path.join(directory, subdir) : directory).catch(
-							() => path.resolve(directory)
-						);
+			pending = nativeHistoryPool(provider, directory, remote, deps.realpath);
 			poolPromises.set(key, pending);
 		}
 		return pending;
@@ -159,21 +170,11 @@ export async function discoverProjectHistory(
 							)
 								continue;
 							const nativePath = normalize(native.projectPath || projectPath, scope.sshRemoteId);
-							const exactScope = orderedScopes.find(
-								(candidate) =>
-									candidate.sshRemoteId === scope.sshRemoteId &&
-									normalize(candidate.projectPath, candidate.sshRemoteId) === nativePath
-							);
-							const mainScope =
-								!scope.sshRemoteId && native.worktree?.commonDir
-									? orderedScopes.find(
-											(candidate) =>
-												!candidate.sshRemoteId &&
-												normalize(candidate.projectPath) ===
-													path.dirname(native.worktree!.commonDir!)
-										)
-									: undefined;
-							const owningScope = exactScope || mainScope;
+							const owningScope = projectHistoryScopeFor(orderedScopes, {
+								projectPath: nativePath,
+								sshRemoteId: scope.sshRemoteId,
+								worktree: native.worktree,
+							});
 							if (owningScope && owningScope.projectKey !== scope.projectKey) continue;
 							const origin =
 								deps.origins?.[provider]?.[nativePath]?.[native.sessionId] ||
@@ -186,6 +187,8 @@ export async function discoverProjectHistory(
 								native.sessionId,
 							]);
 							if (rows.has(key)) continue;
+							if (deps.archivedOnly ? !deps.archivedKeys?.has(key) : deps.archivedKeys?.has(key))
+								continue;
 							let compatible: HistoryOwner | undefined;
 							const compatibleOwners = deps.owners
 								.filter(

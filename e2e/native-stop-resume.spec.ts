@@ -8,12 +8,11 @@ import { transcriptMessagesToLogEntries } from '../src/renderer/utils/transcript
 import { MAX_PERSISTED_SESSION_LOGS } from '../src/shared/deferredSessionContent';
 
 // This regression must never discover credentials or invoke a real provider.
+test.skip(process.env.MAESTRO_E2E_REAL === '1', 'synthetic providers only');
+
 for (const provider of ['claude', 'codex'] as const) {
 	// eslint-disable-next-line no-empty-pattern
 	test(`${provider} read-only Stop, normal restart and continuation`, async ({}, info) => {
-		if (process.env.MAESTRO_E2E_REAL === '1') {
-			throw new Error('This regression requires synthetic providers. Unset MAESTRO_E2E_REAL.');
-		}
 		const native = new NativeApp(info, { providerCli: false });
 		const home = path.join(native.root, 'home');
 		fs.mkdirSync(home, { recursive: true });
@@ -120,9 +119,6 @@ for (const provider of ['claude', 'codex'] as const) {
 
 	// eslint-disable-next-line no-empty-pattern
 	test(`${provider} repairs an old mentioned turn beyond the tail window and keeps a real repeat`, async ({}, info) => {
-		if (process.env.MAESTRO_E2E_REAL === '1') {
-			throw new Error('This regression requires synthetic providers. Unset MAESTRO_E2E_REAL.');
-		}
 		const native = new NativeApp(info, { providerCli: false });
 		native.scriptTurns([]);
 		const home = path.join(native.root, 'home');

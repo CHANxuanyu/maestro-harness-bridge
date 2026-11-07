@@ -4,9 +4,12 @@ export interface NewShellPanelState {
 	fileTabId?: string;
 	filter?: string;
 	open?: boolean;
+	changesView?: 'file' | 'turn';
 }
 export const NEW_SHELL_PANEL_ACTIONS = [
 	'changes',
+	'changes-files',
+	'changes-turns',
 	'files',
 	'terminal',
 	'tasks',
@@ -33,6 +36,12 @@ export function changeNewShellPanel(
 	action: NewShellPanelAction,
 	terminalId?: string
 ): NewShellPanelState {
+	if (action === 'changes-files' || action === 'changes-turns')
+		return patchNewShellPanel(previous, {
+			tab: 'changes',
+			open: true,
+			changesView: action === 'changes-turns' ? 'turn' : 'file',
+		});
 	if (action === 'terminal-close')
 		return patchNewShellPanel(
 			previous,

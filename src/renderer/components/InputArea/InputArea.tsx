@@ -1,3 +1,4 @@
+import { useNativeCommands } from '../../hooks/input/useNativeCommands';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import {
@@ -232,6 +233,8 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 			showQueueingBorder: readOnly || autoRunActive,
 		};
 	}, [tabReadOnlyMode, isAutoModeActive, session.inputMode]);
+
+	const nativeCommands = useNativeCommands(session, slashCommandOpen, false);
 
 	// Filter slash commands based on input and current mode
 	const isTerminalMode = session.inputMode === 'terminal';
@@ -600,6 +603,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 			/>
 
 			<SlashCommandPopover
+				warning={nativeCommands.supported ? nativeCommands.warning : undefined}
 				isOpen={slashCommandOpen}
 				commands={filteredSlashCommands}
 				inputValueLower={inputValueLower}

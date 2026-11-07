@@ -1,3 +1,5 @@
+import { encodeClaudeProjectPath } from '../src/shared/pathUtils';
+import { transcriptMessagesToLogEntries } from '../src/renderer/utils/transcriptMessages';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -814,7 +816,9 @@ test('new shell T5: stage commit and revert single files in a real worktree', as
 		const stage = panel.getByRole('button', { name: 'Stage tracked.txt', exact: true });
 		// Keyboard focus reveals the same affordance as pointer hover.
 		await stage.focus();
-		await expect(stage.locator('..')).toHaveCSS('opacity', '1');
+		// :focus-within depends on OS window focus, which the Linux runner never has
+		// even when document.hasFocus() says yes, so check the wiring instead.
+		await expect(stage.locator('..')).toHaveClass(/group-focus-within\/changed-file:opacity-100/);
 		await stage.press('Enter');
 		await expect(panel.getByText('Staged (1)', { exact: true })).toBeVisible();
 		expect(git(worktree, 'diff', '--cached', '--name-only')).toBe('tracked.txt\n');
@@ -1135,6 +1139,404 @@ for (const scenario of ['timeout', 'moved project'] as const) {
 			throw error;
 		} finally {
 			await native.close(failed);
+		}
+	});
+}
+
+// eslint-disable-next-line no-empty-pattern
+test('new shell T8: group two synthetic write turns and preserve the conversation choice', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const isolatedHome = path.join(native.root, 'home');
+	fs.mkdirSync(isolatedHome, { recursive: true });
+	seedNewShell(native);
+	const git = (...args: string[]) =>
+		execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
+			cwd: native.project,
+			encoding: 'utf8',
+			env: {
+				...process.env,
+				HOME: isolatedHome,
+				USERPROFILE: isolatedHome,
+				GIT_CONFIG_NOSYSTEM: '1',
+				GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+			},
+		});
+	git('init', '-b', 'main');
+	git('config', 'user.name', 'Fixture');
+	git('config', 'user.email', 'fixture@example.invalid');
+	git('config', 'commit.gpgsign', 'false');
+	fs.writeFileSync(path.join(native.project, 'first.ts'), 'before\n');
+	fs.writeFileSync(path.join(native.project, 'second.ts'), 'before\n');
+	git('add', '.');
+	git('commit', '-m', 'Synthetic baseline');
+	fs.writeFileSync(path.join(native.project, 'first.ts'), 'first round then second round\n');
+	fs.writeFileSync(path.join(native.project, 'second.ts'), 'second round\n');
+	fs.writeFileSync(path.join(native.project, 'manual.txt'), 'manual change\n');
+	const logs = transcriptMessagesToLogEntries([
+		{
+			type: 'user',
+			uuid: 'round-1',
+			timestamp: '2026-11-06T09:00:00Z',
+			content: 'First round\nMore detail',
+		},
+		{
+			type: 'assistant',
+			uuid: 'write-1',
+			timestamp: '2026-11-06T09:00:01Z',
+			content: '',
+			toolUse: [
+				{
+					type: 'tool_use',
+					id: 'edit-first',
+					name: 'Edit',
+					input: { file_path: path.join(native.project, 'first.ts') },
+				},
+			],
+		},
+		{
+			type: 'user',
+			uuid: 'result-1',
+			timestamp: '2026-11-06T09:00:02Z',
+			content: '',
+			toolUse: [{ type: 'tool_result', tool_use_id: 'edit-first', content: 'Updated' }],
+		},
+		{ type: 'user', uuid: 'round-2', timestamp: '2026-11-06T09:01:00Z', content: 'Second round' },
+		{
+			type: 'assistant',
+			uuid: 'write-2',
+			timestamp: '2026-11-06T09:01:01Z',
+			content: '',
+			toolUse: [
+				{
+					tool: 'apply_patch',
+					id: 'patch-two',
+					state: {
+						status: 'completed',
+						input:
+							'*** Begin Patch\n*** Update File: first.ts\n@@\n-before\n+first round then second round\n*** Update File: second.ts\n@@\n-before\n+second round\n*** End Patch',
+					},
+				},
+			],
+		},
+	]);
+	const tabId = 't8-recorded-turns';
+	logs.push(
+		...Array.from({ length: 150 }, (_, index) => ({
+			id: `t8-later-${index}`,
+			source: 'stdout' as const,
+			text: 'Later progress',
+			timestamp: Date.parse('2026-11-06T09:02:00Z') + index,
+		}))
+	);
+	const runner = createMockSession({
+		id: 't8-project',
+		name: 'T8 fixture',
+		cwd: native.project,
+		fullPath: native.project,
+		projectRoot: native.project,
+		isGitRepo: true,
+		customPath: path.resolve('e2e/fixtures/native/claude'),
+		customEnvVars: { CLAUDE_CONFIG_DIR: native.claude },
+		aiTabs: [
+			createMockAITab({
+				id: tabId,
+				name: 'Recorded turns',
+				logs,
+				newShellPanel: { tab: 'changes', open: true },
+			}),
+			createMockAITab({
+				id: 't8-empty',
+				name: 'No writes',
+				logs: [],
+				newShellPanel: { tab: 'changes', open: true },
+			}),
+		],
+		activeTabId: tabId,
+		unifiedTabOrder: [
+			{ type: 'ai', id: tabId },
+			{ type: 'ai', id: 't8-empty' },
+		],
+	});
+	fs.writeFileSync(
+		path.join(native.data, 'maestro-sessions.json'),
+		JSON.stringify({ sessions: [runner], activeSessionId: runner.id })
+	);
+	const select = async (id: string) =>
+		native.page.locator(`[data-conversation-key$=":${id}"] [data-tree-nav]`).click();
+	let failed = false;
+	try {
+		await native.start(isolatedHome);
+		await select(tabId);
+		const panel = native.page.getByTestId('changes-panel');
+		await expect(panel.getByRole('radio', { name: 'By file', exact: true })).toHaveAttribute(
+			'aria-checked',
+			'true'
+		);
+		await panel.getByRole('radio', { name: 'By turn', exact: true }).click();
+		const headings = panel.getByTestId('changes-group-title');
+		await expect(headings).toHaveCount(3);
+		await expect(headings.nth(0)).toContainText('Second round');
+		await expect(headings.nth(1)).toContainText('First round');
+		await expect(headings.nth(2)).toHaveText('Other changes');
+		await expect(panel.getByRole('button', { name: 'first.ts', exact: true })).toHaveCount(2);
+		await expect(panel.getByRole('button', { name: 'second.ts', exact: true })).toHaveCount(1);
+		await panel.getByRole('button', { name: 'Diff first.ts', exact: true }).first().click();
+		await expect(
+			panel.getByText('first round then second round', { exact: true }).first()
+		).toBeVisible();
+		await panel.getByRole('button', { name: 'Stage first.ts', exact: true }).first().click();
+		await expect(panel.getByRole('button', { name: 'Unstage first.ts', exact: true })).toHaveCount(
+			2
+		);
+		expect(git('diff', '--cached', '--name-only').trim()).toBe('first.ts');
+		const grouped = await native.cli('changes', '--by-turn', '--tab', tabId);
+		expect(grouped).toMatchObject({ diffScope: 'current', hasWriteRecords: true });
+		expect(
+			grouped.groups.map((group: { turnId: string | null; files: Array<{ path: string }> }) => [
+				group.turnId,
+				group.files.map((file) => file.path),
+			])
+		).toEqual([
+			['round-2', ['first.ts', 'second.ts']],
+			['round-1', ['first.ts']],
+			[null, ['manual.txt']],
+		]);
+		await select('t8-empty');
+		await expect(panel.getByRole('radio', { name: 'By file', exact: true })).toHaveAttribute(
+			'aria-checked',
+			'true'
+		);
+		await native.cli('tab', 'panel', 't8-empty', 'changes-turns');
+		await expect(panel).toContainText('No recorded file writes in this conversation.');
+		await select(tabId);
+		await expect(headings).toHaveCount(3);
+		await native.cli('tab', 'panel', tabId, 'changes-files');
+		await expect(panel.getByRole('radio', { name: 'By file', exact: true })).toHaveAttribute(
+			'aria-checked',
+			'true'
+		);
+		await native.cli('tab', 'panel', tabId, 'changes-turns');
+		await native.restart(isolatedHome);
+		await select(tabId);
+		await expect(native.page.getByTestId('changes-group-title')).toHaveCount(3);
+		await expect(native.page.getByRole('radio', { name: 'By turn', exact: true })).toHaveAttribute(
+			'aria-checked',
+			'true'
+		);
+		const afterRestart = await native.cli('changes', '--by-turn', '--tab', tabId);
+		expect(afterRestart.groups).toEqual(grouped.groups);
+		const saved = JSON.parse(
+			fs.readFileSync(path.join(native.data, 'maestro-sessions.json'), 'utf8')
+		)
+			.sessions.find((item: Session) => item.id === runner.id)
+			.aiTabs.find((tab: AITab) => tab.id === tabId);
+		expect(saved.logs).toHaveLength(100);
+		expect(saved.logs.some((entry: { id: string }) => entry.id === 'round-1')).toBe(false);
+		expect(saved.changeTurnIndex.turns.map((turn: { turnId: string }) => turn.turnId)).toEqual([
+			'round-2',
+			'round-1',
+		]);
+		expect(fs.existsSync(path.join(native.claude, 'fixture-turn-count'))).toBe(false);
+		expect(fs.existsSync(path.join(native.codex, 'fixture-turn-count'))).toBe(false);
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		if (native.app) await native.close(failed);
+		fs.rmSync(native.root, { recursive: true, force: true });
+	}
+});
+
+for (const provider of ['claude-code', 'codex'] as const) {
+	// eslint-disable-next-line no-empty-pattern
+	test(`new shell T8: ${provider} indexes long native history without scrolling`, async ({}, info) => {
+		const native = new NativeApp(info, { providerCli: false });
+		const isolatedHome = path.join(native.root, 'home');
+		fs.mkdirSync(isolatedHome, { recursive: true });
+		seedNewShell(native);
+		execFileSync('git', ['init', '-b', 'main'], {
+			cwd: native.project,
+			env: {
+				...process.env,
+				HOME: isolatedHome,
+				USERPROFILE: isolatedHome,
+				GIT_CONFIG_NOSYSTEM: '1',
+				GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+			},
+		});
+		fs.writeFileSync(path.join(native.project, 'early.ts'), 'x'.repeat(5000));
+		const nativeId = '11111111-2222-4333-8444-555555555555';
+		const timestamp = '2026-11-06T09:00:00Z';
+		const userText = 'Early native round';
+		const patch = `*** Begin Patch\n*** Add File: early.ts\n+${'x'.repeat(5000)}\n*** End Patch`;
+		const records =
+			provider === 'claude-code'
+				? [
+						{
+							type: 'user',
+							uuid: 'early-user',
+							timestamp,
+							cwd: native.project,
+							sessionId: nativeId,
+							message: { role: 'user', content: userText },
+						},
+						{
+							type: 'assistant',
+							uuid: 'early-tool',
+							timestamp,
+							message: {
+								role: 'assistant',
+								content: [
+									{
+										type: 'tool_use',
+										id: 'large-write',
+										name: 'Write',
+										input: {
+											file_path: path.join(native.project, 'early.ts'),
+											content: 'x'.repeat(5000),
+										},
+									},
+								],
+							},
+						},
+						{
+							type: 'user',
+							uuid: 'early-result',
+							timestamp,
+							message: {
+								role: 'user',
+								content: [{ type: 'tool_result', tool_use_id: 'large-write', content: 'ok' }],
+							},
+						},
+						...Array.from({ length: 600 }, (_, index) => ({
+							type: 'assistant',
+							uuid: `later-${index}`,
+							timestamp,
+							message: {
+								role: 'assistant',
+								content: [{ type: 'text', text: `Progress ${index}` }],
+							},
+						})),
+					]
+				: [
+						{
+							type: 'session_meta',
+							timestamp,
+							payload: { id: nativeId, cwd: native.project, timestamp },
+						},
+						{
+							type: 'response_item',
+							timestamp,
+							payload: {
+								type: 'message',
+								id: 'early-user',
+								role: 'user',
+								content: [{ type: 'input_text', text: userText }],
+							},
+						},
+						{
+							type: 'item.completed',
+							timestamp,
+							item: { type: 'tool_call', id: 'large-write', tool: 'apply_patch', args: patch },
+						},
+						{
+							type: 'item.completed',
+							timestamp,
+							item: {
+								type: 'tool_result',
+								id: 'result-envelope',
+								call_id: 'large-write',
+								output: 'ok',
+								is_error: false,
+							},
+						},
+						...Array.from({ length: 600 }, (_, index) => ({
+							type: 'response_item',
+							timestamp,
+							payload: {
+								type: 'message',
+								id: `later-${index}`,
+								role: 'assistant',
+								content: [{ type: 'output_text', text: `Progress ${index}` }],
+							},
+						})),
+					];
+		const transcriptDir =
+			provider === 'claude-code'
+				? path.join(native.claude, 'projects', encodeClaudeProjectPath(native.project))
+				: path.join(native.codex, 'sessions', '2026', '11', '06');
+		fs.mkdirSync(transcriptDir, { recursive: true });
+		const transcript = path.join(
+			transcriptDir,
+			provider === 'claude-code'
+				? `${nativeId}.jsonl`
+				: `rollout-2026-11-06T09-00-00-${nativeId}.jsonl`
+		);
+		const bytes = Buffer.from(records.map((record) => JSON.stringify(record)).join('\n') + '\n');
+		fs.writeFileSync(transcript, bytes);
+		const tabId = 'long-history';
+		const runner = createMockSession({
+			id: 't8-native-project',
+			name: 'Long native history',
+			toolType: provider,
+			cwd: native.project,
+			fullPath: native.project,
+			projectRoot: native.project,
+			isGitRepo: true,
+			customPath: path.resolve(`e2e/fixtures/native/${provider === 'codex' ? 'codex' : 'claude'}`),
+			customEnvVars:
+				provider === 'codex' ? { CODEX_HOME: native.codex } : { CLAUDE_CONFIG_DIR: native.claude },
+			aiTabs: [
+				createMockAITab({
+					id: tabId,
+					agentSessionId: nativeId,
+					name: 'Long native history',
+					logs: transcriptMessagesToLogEntries(
+						Array.from({ length: 100 }, (_, index) => ({
+							type: 'assistant',
+							uuid: `later-${500 + index}`,
+							content: `Progress ${500 + index}`,
+							timestamp,
+						}))
+					),
+					newShellPanel: { tab: 'changes', changesView: 'turn', open: true },
+				}),
+			],
+			activeTabId: tabId,
+			unifiedTabOrder: [{ type: 'ai', id: tabId }],
+		});
+		fs.writeFileSync(
+			path.join(native.data, 'maestro-sessions.json'),
+			JSON.stringify({ sessions: [runner], activeSessionId: runner.id })
+		);
+		let failed = false;
+		try {
+			await native.start(isolatedHome);
+			await native.page.locator(`[data-conversation-key$=":${tabId}"] [data-tree-nav]`).click();
+			await expect(native.page.getByTestId('changes-group-title')).toContainText(userText);
+			const grouped = await native.cli('changes', '--by-turn', '--tab', tabId);
+			expect(grouped.groups).toEqual([
+				expect.objectContaining({
+					turnId: 'early-user',
+					title: userText,
+					files: [expect.objectContaining({ path: 'early.ts' })],
+				}),
+			]);
+			await native.restart(isolatedHome);
+			await native.page.locator(`[data-conversation-key$=":${tabId}"] [data-tree-nav]`).click();
+			await expect(native.page.getByTestId('changes-group-title')).toContainText(userText);
+			expect((await native.cli('changes', '--by-turn', '--tab', tabId)).groups).toEqual(
+				grouped.groups
+			);
+			expect(fs.readFileSync(transcript)).toEqual(bytes);
+			expect(fs.existsSync(path.join(native.claude, 'fixture-turn-count'))).toBe(false);
+			expect(fs.existsSync(path.join(native.codex, 'fixture-turn-count'))).toBe(false);
+		} catch (error) {
+			failed = true;
+			throw error;
+		} finally {
+			if (native.app) await native.close(failed);
+			fs.rmSync(native.root, { recursive: true, force: true });
 		}
 	});
 }

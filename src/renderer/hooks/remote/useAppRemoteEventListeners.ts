@@ -2081,6 +2081,16 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 
 			let panelTerminalOwnerId: string | undefined;
 			if (
+				['changes-files', 'changes-turns'].includes(String(tabPatch.newShellPanelAction)) &&
+				!useSettingsStore.getState().newShell
+			) {
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: false,
+					error: 'This panel requires the new shell',
+				});
+				return;
+			}
+			if (
 				['terminal', 'tasks', 'terminal-select', 'terminal-close', 'terminal-restart'].includes(
 					String(tabPatch.newShellPanelAction)
 				)

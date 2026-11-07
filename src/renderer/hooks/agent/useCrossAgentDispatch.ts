@@ -24,11 +24,16 @@ import { updateSessionWith, updateAiTab, useSessionStore } from '../../stores/se
 import { useCrossAgentInFlightStore } from '../../stores/crossAgentInFlightStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { createTab } from '../../utils/tabHelpers';
+import { projectConversationFields } from '../../utils/projectConversationDefaults';
+import { remoteConversationPermissionFields } from '../../utils/newConversationPermissions';
+import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
+import { getCachedCapabilities } from './useAgentCapabilities';
 import { conversationDisplayTitle } from '../../utils/conversationTitle';
 import { applyQueuedItemRelease } from '../../utils/executionQueue';
 import { sessionProviderId } from '../../../shared/agentPresets';
 import { captureConversationSourceNativeId } from '../../services/agentDelegation';
 import { generateId } from '../../utils/ids';
+import { getT } from '../../i18n';
 import { logger } from '../../utils/logger';
 import {
 	deriveConsultSubject,
@@ -245,7 +250,11 @@ export function ensureConsultTab(opts: {
 	sourceTabId: string;
 	sourceAgentName: string;
 	question: string;
-}): { targetTabId: string; resumeAgentSessionId?: string } | null {
+}): {
+	targetTabId: string;
+	resumeAgentSessionId?: string;
+	permissionMode?: ReturnType<typeof resolveTabPermissionMode>;
+} | null {
 	const questionEntry: LogEntry = {
 		id: generateId(),
 		timestamp: Date.now(),
@@ -253,7 +262,9 @@ export function ensureConsultTab(opts: {
 		text: opts.question,
 	};
 	const source = useSessionStore.getState().sessions.find((s) => s.id === opts.sourceSessionId);
-	const sourceTab = source?.aiTabs.find((tab) => tab.id === opts.sourceTabId);
+	const sourceTab = [...(source?.aiTabs ?? []), ...(source?.orphanedThinkingTabs ?? [])].find(
+		(tab) => tab.id === opts.sourceTabId
+	);
 	const origin =
 		useSettingsStore.getState().newShell && source && sourceTab
 			? {
@@ -269,6 +280,7 @@ export function ensureConsultTab(opts: {
 
 	let resolvedTabId: string | null = null;
 	let resumeAgentSessionId: string | undefined;
+	let permissionMode: ReturnType<typeof resolveTabPermissionMode> | undefined;
 
 	updateSessionWith(opts.targetSessionId, (session) => {
 		const existing = session.aiTabs.find(
@@ -277,6 +289,20 @@ export function ensureConsultTab(opts: {
 				t.consultOrigin?.sourceSessionId === opts.sourceSessionId &&
 				t.consultOrigin?.sourceTabId === opts.sourceTabId
 		);
+		const permissions = useSettingsStore.getState().newShell
+			? projectConversationFields(
+					session,
+					existing
+						? remoteConversationPermissionFields(sourceTab, resolveTabPermissionMode(existing))
+						: (sourceTab ?? { permissionMode: 'readonly' }),
+					getCachedCapabilities(session.toolType) ?? {
+						supportsReadOnlyMode: false,
+						supportsStandardPermissionMode: false,
+					}
+				)
+			: undefined;
+		if (permissions === null) return session;
+		permissionMode = permissions?.permissionMode;
 		if (existing) {
 			resolvedTabId = existing.id;
 			resumeAgentSessionId = existing.agentSessionId ?? undefined;
@@ -286,6 +312,12 @@ export function ensureConsultTab(opts: {
 					t.id === existing.id
 						? {
 								...t,
+								...(permissions
+									? {
+											permissionMode: permissions.permissionMode,
+											readOnlyMode: permissions.readOnlyMode,
+										}
+									: {}),
 								...(origin && !t.origin
 									? {
 											origin,
@@ -315,6 +347,7 @@ export function ensureConsultTab(opts: {
 				: buildConsultTabName(opts.sourceAgentName),
 			logs: [questionEntry],
 			saveToHistory: false,
+			permissionSource: permissions ?? undefined,
 		});
 		if (!created) return session;
 		resolvedTabId = created.tab.id;
@@ -345,7 +378,11 @@ export function ensureConsultTab(opts: {
 	});
 
 	if (!resolvedTabId) return null;
-	return { targetTabId: resolvedTabId, resumeAgentSessionId };
+	return {
+		targetTabId: resolvedTabId,
+		resumeAgentSessionId,
+		...(permissionMode ? { permissionMode } : {}),
+	};
 }
 
 /** Release the same tab barrier used by normal sends so queued replies can run. */
@@ -675,6 +712,18 @@ export function sendCrossAgentRequest(opts: SendCrossAgentRequestOptions): void 
 		sourceAgentName: opts.sourceAgentName,
 		question: opts.userPrompt,
 	});
+	if (!consult && useSettingsStore.getState().newShell) {
+		const error = getT()('workflows.shell.consultPermissionUnavailable');
+		settleConsultHold({
+			sourceSessionId: opts.sourceSessionId,
+			sourceTabId: opts.sourceTabId,
+			targetSessionId: opts.targetSessionId,
+			text: '',
+			error,
+		});
+		opts.onComplete?.({ text: '', error });
+		return;
+	}
 	if (consult) {
 		updateSessionWith(opts.targetSessionId, (session) => {
 			const tab = session.aiTabs.find((candidate) => candidate.id === consult.targetTabId);
@@ -707,6 +756,7 @@ export function sendCrossAgentRequest(opts: SendCrossAgentRequestOptions): void 
 			targetSessionId: opts.targetSessionId,
 			targetTabId: consult?.targetTabId,
 			resumeAgentSessionId: consult?.resumeAgentSessionId,
+			...(consult?.permissionMode ? { permissionMode: consult.permissionMode } : {}),
 			userPrompt: opts.userPrompt,
 			transcript,
 			strategy,

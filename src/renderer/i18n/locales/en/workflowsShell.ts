@@ -1,4 +1,6 @@
 export const workflowsShell = {
+	'workflows.shell.consultPermissionUnavailable':
+		'This tool cannot preserve the source conversation’s permissions.',
 	'workflows.projectSettings.errors.requestFailed': 'Project settings request failed',
 	'workflows.projectSettings.errors.useService':
 		'Use project settings set to change project settings',

@@ -20,6 +20,8 @@ import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 import { resetStore } from '../../helpers/resetStores';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 import type { CrossAgentResponseChunk } from '../../../shared/crossAgentTypes';
 
 /**
@@ -368,6 +370,7 @@ describe('new-shell consult conversations', () => {
 	beforeEach(() => {
 		resetStore(useSettingsStore);
 		useSettingsStore.setState({ newShell: true });
+		for (const [id, caps] of Object.entries(AGENT_CAPABILITIES)) setCapabilitiesCache(id, caps);
 		useCrossAgentInFlightStore.setState({ requests: {} });
 		useSessionStore.setState({
 			sessions: [
@@ -397,6 +400,74 @@ describe('new-shell consult conversations', () => {
 		window.maestro.history = { add: vi.fn().mockResolvedValue(undefined) } as never;
 	});
 	afterEach(() => resetStore(useSettingsStore));
+
+	it.each(['readonly', 'standard'] as const)(
+		'bounds new and reused consults by the parent %s permission',
+		(mode) => {
+			useSessionStore
+				.getState()
+				.setSessions((sessions) =>
+					sessions.map((session) =>
+						session.id === 'src'
+							? {
+									...session,
+									aiTabs: session.aiTabs.map((tab) => ({ ...tab, permissionMode: mode })),
+								}
+							: { ...session, toolType: 'claude-code' }
+					)
+				);
+			const options = {
+				targetSessionId: 'tgt',
+				sourceSessionId: 'src',
+				sourceTabId: 'tab',
+				sourceAgentName: 'Source',
+				question: 'Inspect files.',
+			};
+			const first = ensureConsultTab(options)!;
+			const child = () =>
+				useSessionStore
+					.getState()
+					.sessions.find((session) => session.id === 'tgt')!
+					.aiTabs.find((tab) => tab.id === first.targetTabId)!;
+			expect(child().permissionMode).toBe(mode);
+			useSettingsStore.setState({
+				projectSettings: { '[null,"/test/project"]': { defaultPermissionMode: 'readonly' } },
+			});
+			expect(ensureConsultTab(options)!.targetTabId).toBe(first.targetTabId);
+			expect(child().permissionMode).toBe('readonly');
+			send.mockImplementation(() => new Promise(() => {}));
+			sendCrossAgentRequest({ ...options, userPrompt: options.question, sourceLogs: [] });
+			expect(send.mock.calls[0][0].permissionMode).toBe('readonly');
+		}
+	);
+
+	it('keeps an existing readonly child restricted when the parent and project allow full access', () => {
+		const options = {
+			targetSessionId: 'tgt',
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			question: 'Inspect files.',
+		};
+		const first = ensureConsultTab(options)!;
+		useSessionStore
+			.getState()
+			.setSessions((sessions) =>
+				sessions.map((session) =>
+					session.id === 'tgt'
+						? {
+								...session,
+								aiTabs: session.aiTabs.map((tab) =>
+									tab.id === first.targetTabId ? { ...tab, permissionMode: 'readonly' } : tab
+								),
+							}
+						: session
+				)
+			);
+		send.mockImplementation(() => new Promise(() => {}));
+		sendCrossAgentRequest({ ...options, userPrompt: options.question, sourceLogs: [] });
+		expect(send.mock.calls[0][0].permissionMode).toBe('readonly');
+	});
 
 	it('captures the parent native id and first sentence without revealing or creating unread', () => {
 		const result = ensureConsultTab({

@@ -345,6 +345,18 @@ describe('startCrossAgentRequest dispatch lifecycle', () => {
 		expect(config.args).not.toContain('plan');
 	});
 
+	it.each(['readonly', 'standard'] as const)(
+		'enforces the saved %s ceiling even when writes are enabled',
+		async (permissionMode) => {
+			const { dispatch, emitExit } = harness({ writable: true });
+			await dispatch({ permissionMode } as Partial<CrossAgentRequest>);
+			const config = vi.mocked(spawnGroupChatAgent).mock.calls[0][0];
+			expect(config.args).not.toContain('--dangerously-skip-permissions');
+			if (permissionMode === 'readonly') expect(config.readOnlyMode).toBe(true);
+			emitExit(0);
+		}
+	);
+
 	it('spawns the binary the agent is configured with, not the auto-detected one', async () => {
 		// Detection probes known install dirs before PATH, so a stale nvm stub can
 		// win over the codex the user pointed the agent at. The tab honors

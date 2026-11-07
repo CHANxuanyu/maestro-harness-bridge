@@ -40,3 +40,10 @@ describe('resolveCrossAgentWritable', () => {
 		expect(resolveCrossAgentWritable({ handoffAnswer: '' }, store({}))).toBe(true);
 	});
 });
+
+it('does not let a global write switch widen a new-shell consult permission', () => {
+	const settings = store({ newShell: true, crossAgentMentionsWritable: true });
+	expect(resolveCrossAgentWritable({ permissionMode: 'readonly' } as never, settings)).toBe(false);
+	expect(resolveCrossAgentWritable({}, settings)).toBe(false);
+	expect(resolveCrossAgentWritable({ permissionMode: 'standard' } as never, settings)).toBe(true);
+});

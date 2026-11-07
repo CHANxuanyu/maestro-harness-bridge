@@ -70,9 +70,14 @@ export interface CrossAgentHandlerDependencies {
  * (`crossAgentHandoffsWritable`, default on). Exported for unit testing.
  */
 export function resolveCrossAgentWritable(
-	request: Pick<CrossAgentRequest, 'handoffAnswer'>,
+	request: Pick<CrossAgentRequest, 'handoffAnswer' | 'permissionMode'>,
 	settingsStore: Pick<SettingsStoreInterface, 'get'>
 ): boolean {
+	if (
+		settingsStore.get('newShell', false) &&
+		(!request.permissionMode || request.permissionMode === 'readonly')
+	)
+		return false;
 	if (request.handoffAnswer !== undefined) {
 		return settingsStore.get('crossAgentHandoffsWritable', true) as boolean;
 	}
@@ -139,6 +144,9 @@ export function registerCrossAgentHandlers(deps: CrossAgentHandlerDependencies):
 				const requestId = generateUUID();
 				const request: CrossAgentRequest = {
 					requestId,
+					permissionMode: settingsStore.get('newShell', false)
+						? (payload.permissionMode ?? 'readonly')
+						: undefined,
 					sourceSessionId: payload.sourceSessionId,
 					sourceAgentName: payload.sourceAgentName,
 					sourceTabId: payload.sourceTabId,

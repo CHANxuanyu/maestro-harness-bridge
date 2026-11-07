@@ -2,6 +2,7 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.shell.consultPermissionUnavailable': '这个工具无法保持来源对话的权限限制。',
 	'workflows.projectSettings.errors.requestFailed': '项目设置请求失败。',
 	'workflows.projectSettings.errors.useService': '请使用 project settings set 修改项目设置。',
 	'workflows.projectSettings.environmentDesktopOnly': '请在桌面应用中查看和编辑环境变量。',

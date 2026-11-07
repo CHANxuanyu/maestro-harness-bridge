@@ -365,7 +365,8 @@ export async function startCrossAgentRequest(
 	opts: StartCrossAgentRequestOptions
 ): Promise<void> {
 	const { processManager, agentDetector, sshStore, getTargetSession, onChunk } = opts;
-	const writable = opts.writable ?? false;
+	const permissionMode = opts.writable ? (request.permissionMode ?? 'full') : 'readonly';
+	const writable = permissionMode !== 'readonly';
 
 	const target = getTargetSession(request.targetSessionId);
 
@@ -470,7 +471,7 @@ export async function startCrossAgentRequest(
 		//
 		// `permissionMode` is therefore stated explicitly at both ends, keeping the
 		// args in agreement with the cwdGrant text above.
-		permissionMode: writable ? 'full' : 'readonly',
+		permissionMode,
 		agentSessionId: request.resumeAgentSessionId,
 	});
 	const configResolution = applyAgentConfigOverrides(agent, baseArgs, {

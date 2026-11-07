@@ -514,28 +514,149 @@ describe('process IPC handlers', () => {
 		}
 	});
 
-	it('applies the same owner check to Claude relay responses', async () => {
+	it.each([{ sender: { id: 11 } }, { type: 'bridge', trustedCli: true }])(
+		'preserves Claude desktop window and trusted CLI checks for %j',
+		async (event) => {
+			const binding = registerSpawn({
+				sessionId: 'claude',
+				owner: { window: deps.getMainWindow() },
+			});
+			const pending = createPending('claude-request', binding.token);
+			try {
+				expect(
+					handlers.get('permission:respond')!({}, 'claude-request', {
+						behavior: 'allow',
+					})
+				).toBe(false);
+				expect(
+					handlers.get('permission:respond')!({ sender: { id: 22 } }, 'claude-request', {
+						behavior: 'allow',
+					})
+				).toBe(false);
+				expect(
+					handlers.get('permission:respond')!(event, 'claude-request', {
+						behavior: 'allow',
+					})
+				).toBe(true);
+				await expect(pending).resolves.toEqual({ behavior: 'allow' });
+			} finally {
+				binding.cleanup();
+			}
+		}
+	);
+
+	describe.each([false, true])('Claude browser approvals with newShell=%s', (newShell) => {
+		it.each([
+			{
+				name: 'desktop main window without web login',
+				windowId: 11,
+				ownerId: undefined,
+				callerId: undefined,
+				allowed: true,
+			},
+			{
+				name: 'desktop main window with web login',
+				windowId: 11,
+				ownerId: undefined,
+				callerId: 'a',
+				allowed: true,
+			},
+			{
+				name: 'desktop secondary window',
+				windowId: 22,
+				ownerId: undefined,
+				callerId: 'b',
+				allowed: true,
+			},
+			{ name: 'same user main window', windowId: 11, ownerId: 'a', callerId: 'a', allowed: true },
+			{
+				name: 'same user secondary window',
+				windowId: 22,
+				ownerId: 'a',
+				callerId: 'a',
+				allowed: true,
+			},
+			{ name: 'another user', windowId: 11, ownerId: 'a', callerId: 'b', allowed: false },
+			{
+				name: 'user owned request without web login',
+				windowId: 11,
+				ownerId: 'a',
+				callerId: undefined,
+				allowed: true,
+			},
+		])('$name', async ({ windowId, ownerId, callerId, allowed }) => {
+			mockSettingsStore.get.mockImplementation((key, fallback) =>
+				key === 'newShell' ? newShell : fallback
+			);
+			const mainWindow = deps.getMainWindow()!;
+			const binding = registerSpawn({
+				sessionId: 'claude',
+				owner: {
+					userId: ownerId,
+					window: {
+						...mainWindow,
+						webContents: { ...mainWindow.webContents, id: windowId },
+					} as any,
+				},
+			});
+			const pending = createPending('claude-browser-request', binding.token);
+			const user = callerId
+				? { id: callerId, username: callerId, displayName: callerId }
+				: undefined;
+			try {
+				runAsActingUser(user, () => {
+					expect(
+						handlers.get('permission:respond')!(
+							{ type: 'bridge' },
+							'claude-browser-request',
+							{ behavior: 'allow' },
+							{ userId: ownerId, webContentsId: windowId, trustedCli: true }
+						)
+					).toBe(allowed);
+				});
+				if (allowed) {
+					await expect(pending).resolves.toEqual({ behavior: 'allow' });
+					expect(
+						runAsActingUser(user, () =>
+							handlers.get('permission:respond')!({ type: 'bridge' }, 'claude-browser-request', {
+								behavior: 'allow',
+							})
+						)
+					).toBe(false);
+				} else {
+					expect(
+						runAsActingUser({ id: 'a', username: 'a', displayName: 'A' }, () =>
+							handlers.get('permission:respond')!(
+								{ sender: { id: windowId } },
+								'claude-browser-request',
+								{ behavior: 'allow' }
+							)
+						)
+					).toBe(true);
+					await expect(pending).resolves.toEqual({ behavior: 'allow' });
+				}
+			} finally {
+				binding.cleanup();
+			}
+		});
+	});
+
+	it.each(['exit', 'timeout'])('rejects Claude browser approvals after %s', async (reason) => {
+		vi.useFakeTimers();
 		const binding = registerSpawn({ sessionId: 'claude', owner: { window: deps.getMainWindow() } });
-		const pending = createPending('claude-request', binding.token);
+		const pending = createPending('claude-ended-request', binding.token);
 		try {
+			if (reason === 'exit') binding.cleanup();
+			else await vi.advanceTimersByTimeAsync(300_000);
+			await expect(pending).resolves.toMatchObject({ behavior: 'deny' });
 			expect(
-				handlers.get('permission:respond')!({ type: 'bridge' }, 'claude-request', {
+				handlers.get('permission:respond')!({ type: 'bridge' }, 'claude-ended-request', {
 					behavior: 'allow',
 				})
 			).toBe(false);
-			expect(
-				handlers.get('permission:respond')!({ sender: { id: 22 } }, 'claude-request', {
-					behavior: 'allow',
-				})
-			).toBe(false);
-			expect(
-				handlers.get('permission:respond')!({ sender: { id: 11 } }, 'claude-request', {
-					behavior: 'allow',
-				})
-			).toBe(true);
-			await expect(pending).resolves.toEqual({ behavior: 'allow' });
 		} finally {
 			binding.cleanup();
+			vi.useRealTimers();
 		}
 	});
 

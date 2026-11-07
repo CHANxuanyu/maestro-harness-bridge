@@ -265,6 +265,8 @@ export interface LogEntry {
 			// result but not whether it succeeded. Also neither running nor done.
 			status?: 'running' | 'completed' | 'error' | 'failed' | 'canceled' | 'unknown';
 			input?: unknown;
+			/** Explicit write targets retained before display arguments are capped. */
+			writePaths?: string[];
 			output?: unknown;
 		};
 		/**
@@ -842,6 +844,7 @@ export interface ProviderTabSession {
 // AI Tab for multi-tab support within a Maestro session
 // Each tab represents a separate AI agent conversation (Claude Code, OpenCode, etc.)
 export interface AITab {
+	changeTurnIndex?: import('../../shared/gitChangeTurns').ChangeTurnIndex;
 	newShellPanel?: import('../../shared/newShellPanel').NewShellPanelState;
 	origin?: ConversationOrigin;
 	id: string; // Unique tab ID (generated UUID)

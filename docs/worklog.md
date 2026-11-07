@@ -26,6 +26,34 @@
 
 被测对象是本克隆源码，产品修复提交为 `3b0188b48`、`7940ea665`、`4539461f3`。未构建或验收发行包。新增四条 Electron 场景并成功收集，没有启动 Electron；实际浏览器控制、SSH 主机切换和旧界面人工验收步骤见 `e2e/new-shell-permission-review.md`。浏览器接口 Electron 场景仅覆盖真实 IPC 路由，不宣称已验证真实浏览器点击。没有新增 CLI 动作，原有关闭恢复的 CLI 缺口保留在对等表中。没有新用户文案，无需新增翻译。没有访问个人账户、运行模型、推送或发布。
 
+## 2026-11-06：T8 第二轮审查修复
+
+四条审查意见均成立。被测对象为 `codex/changes-by-turn` 本克隆源码，未构建发行包。先补回归再修：长 Claude Write 和 Codex 补丁得到空索引，旧格式 Codex 成功和失败结果各多出孤立记录，目录别名无法归组，保存 100 条日志后早期回合丢失，CLI 和面板遗漏早期分组。失败证据保存在任务私有报告旁，不提交原始日志。
+
+`toolInputWritePaths()` 在展示裁剪之前保留明确路径，状态仍必须成功。旧格式 Codex 的结果按调用标识回填原工具，缺失结果保留未知，后续消息计数不变。Git 查询带回执行主机上的实际子目录，匹配 SSH 主目录写法和已知 cwd 别名，不对远程路径做本机 realpath。
+
+新界面持久化在日志裁剪之前保存 `changeTurnIndex`。两端通过 `agentSessions:turnWrites` 读取完整原生写入索引，复用账户解析、SSH 传输及只读增量存储，不写入或恢复原生文件。纯转换器移到 `src/shared/transcriptEntries.ts`，旧 renderer 导出路径保留。主进程缓存最多 32 个身份，历史未变时复用；追加时只转换仍开放的回合及新增消息，并保留等待迟到结果的写入。默认按文件不读取原生索引，避免原生记录不可用影响文件操作。
+
+相关最终验证为 18 个不同 Vitest 文件、406 条通过。均使用 `--configLoader runner --no-cache`，不放宽断言，不自动重试。renderer、main、CLI 三份 TypeScript 配置通过；Electron 用例另用继承严格选项且支持 CJS 夹具和 ES2024 的临时配置检查通过。修改的产品源码及 Electron 用例的 ESLint、修改文件的 Prettier 和 `git diff --check` 通过。Electron 场景仅完成收集，共三条，未启动应用。
+
+没有新增 CLI 动词，既有 `changes --by-turn --tab <id> --json` 使用相同持久化索引、完整原生索引和分组逻辑。`CLI-UI-PARITY.md` 已更新，尚无原生记录时仍可能短暂等待正常保存。旧界面不开启新索引读取或持久化；共享的旧格式工具结果关联、隐藏路径字段和新增 Git 元数据也适用于旧界面，分别用于恢复正确状态、避免展示裁剪损失证据和提供执行路径。
+
+扩展原有 T8 场景验证 150 条后续日志裁剪与重启，新写 Claude、Codex 两条超过 600 条消息和 5000 字符参数的原生历史场景；Codex 使用旧格式工具调用与结果。由 Opus 在沙箱外运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell.spec.ts --grep 'new shell T8' --retries=0`。本轮未验证真实 SSH、Windows/Linux、真实模型或安装包；旧缓存已经丢失且没有可读原生记录的证据无法重建。没有推送、PR、标签、上传或发布。
+
+## 2026-11-06：T8 改动按回合分组
+
+被测对象为 `codex/changes-by-turn` 本克隆源码，未打包、未安装。新界面改动面板增加按文件和按回合切换，选择保存到当前对话的 `newShellPanel.changesView`。共享 `collectTurnWrites()` 从成功工具记录建立索引，`groupChangesByTurn()` 与当前 Git 文件清单求交集，同文件保留在每个对应回合，其他文件放到底部。显示用户消息第一行和时间，明确所有入口打开当前差异，原有暂存、撤销、提交入口共用。索引按日志引用缓存，刷新 Git 或修改提交说明不会重扫工具历史。
+
+先写回归并运行：共享模块缺失导致导入失败，Codex 文件事件三条断言得到 `system` 而非工具记录；原生读取文件事件返回空列表；面板两条回归缺少切换控件与无记录说明，CLI 未返回分组。补充边界回归分别确认重命名丢失先前回合，以及没有结果的旧 Codex 调用误报成功，再实施修复。未放宽业务断言或跳过测试。
+
+相关 Vitest 最终共 8 个不同文件、366 条通过，均使用 `--configLoader runner --no-cache`。包括两家写入记录、失败与未知状态、跨回合同文件、重命名、其他改动、SSH 路径、视图偏好、中英文、两种视图的同一组写操作、CLI 和重渲染缓存。解析器测试补入临时账户目录隔离后，其 184 条再次通过。渲染层、主进程、CLI 三份 `tsc --noEmit` 检查通过；本次产品源码及 Electron 用例的 ESLint、修改文件的 Prettier、`git diff --check` 通过。CLI 构建成功，命令参考仅更新本次新增项。
+
+CLI 新增 `changes --by-turn --tab <id> --json` 及 `tab panel <id> changes-files|changes-turns`，对等登记已更新。前者读取已持久化对话日志和当前 Git 状态，可能短暂落后于尚未持久化的界面更新。未读取加载窗口之外的原生历史；截断输入、无法对应的路径和状态未知的工具不推测归属；Git 500 文件上限保持不变。
+
+新控件与偏好切换均由 `newShell` 限定，旧界面无布局或操作变化。必要的共享变化是保留 Codex `file_change` 工具事件，以及将无关联结果的旧 `tool_call` 状态从成功改为未知，以免归组到失败或未完成的写入。旧界面也会读到这些修正后的工具记录，不改原生文件。
+
+`e2e/native-new-shell.spec.ts` 新增 T8 合成日志场景，覆盖两轮文件写入、同文件多组、其他改动、当前差异、暂存、CLI 输出、两条对话偏好隔离和正常重启。Playwright `--list` 发现一条场景，未执行 Electron。由外部运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell.spec.ts --grep 'new shell T8' --retries=0`。本轮没有真实模型调用、SSH 主机实测、Windows/Linux 实测或发行包验收，没有推送、PR、标签或发布。测试执行的隔离疏漏与后续修正如实记录在任务私有报告中。
+
 ## 2026-11-06：四条已审查分支的集成核对
 
 在 `codex/nov6-qa-batch` 从 `2ebe18308` 依次以非快进合并纳入新对话权限、停止续聊、Codex 任务清单和改动面板文件操作。四次合并提交为 `b48f230b5`、`a737b0f41`、`cc84c0857`、`b30af198e`。后三次的 CHANGELOG 与 worklog 冲突均保留双方新增段落；最后一次的 `e2e/native-new-shell.spec.ts` 保留完整权限继承和单文件操作场景。CLI 对等、规范工具登记、预加载类型、中英文消息及原生 CLI 夹具的自动合并均复核，无功能删减。

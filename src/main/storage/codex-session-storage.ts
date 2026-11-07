@@ -768,18 +768,21 @@ function parseCodexTranscript(
 				messageIndex++;
 			}
 
+			const legacyResult = entry.type === 'item.completed' && entry.item?.type === 'tool_result';
 			if (
-				entry.type === 'response_item' &&
-				(payload?.type === 'function_call_output' || payload?.type === 'custom_tool_call_output')
+				legacyResult ||
+				(entry.type === 'response_item' &&
+					(payload?.type === 'function_call_output' || payload?.type === 'custom_tool_call_output'))
 			) {
-				const callId = payload.call_id;
-				const outputText = codexToolOutputText(payload.output);
+				const result = legacyResult ? entry.item : payload;
+				const callId = result.call_id ?? result.tool_call_id ?? result.id;
+				const outputText = codexToolOutputText(result.output);
 				const matchingIdx = callId ? (toolCalls.get(callId) ?? -1) : -1;
 				const toolName =
 					matchingIdx >= 0
 						? (messages[matchingIdx].toolUse as CodexToolUseEntry[])[0].tool
 						: undefined;
-				const status = codexToolResultStatus(payload, toolName);
+				const status = codexToolResultStatus(result, toolName);
 				if (matchingIdx >= 0) {
 					const matchingMsg = messages[matchingIdx];
 					const toolEntries = matchingMsg.toolUse as CodexToolUseEntry[];
@@ -793,18 +796,20 @@ function parseCodexTranscript(
 							...toolEntries.slice(1),
 						],
 					};
+					// Preserve the legacy counter used by following messages without native IDs.
+					if (legacyResult) messageIndex++;
 				} else {
 					// Even an orphan result is a tool card, never an assistant answer.
 					appendMessage({
 						type: 'assistant',
 						role: 'assistant',
-						content: `Tool: ${payload.name || 'unknown'}`,
+						content: `Tool: ${result.name || result.tool || 'unknown'}`,
 						timestamp: entry.timestamp || '',
 						uuid: callId || `codex-msg-${messageIndex}`,
 						toolUse: [
 							{
 								id: callId,
-								tool: payload.name || 'unknown',
+								tool: result.name || result.tool || 'unknown',
 								state: { status, output: outputText },
 							},
 						],
@@ -829,6 +834,33 @@ function parseCodexTranscript(
 				messageIndex++;
 			}
 
+			if (entry.type === 'item.completed' && entry.item?.type === 'file_change') {
+				appendMessage({
+					type: 'assistant',
+					role: 'assistant',
+					content: 'Tool: file_change',
+					...turnContext,
+					timestamp: entry.timestamp || '',
+					uuid: entry.item.id || `codex-msg-${messageIndex}`,
+					toolUse: [
+						{
+							id: entry.item.id,
+							tool: 'file_change',
+							state: {
+								status:
+									entry.item.status === 'completed'
+										? 'completed'
+										: entry.item.status === 'failed'
+											? 'failed'
+											: 'unknown',
+								input: { changes: entry.item.changes },
+							},
+						},
+					],
+				});
+				messageIndex++;
+			}
+
 			if (entry.type === 'item.completed' && entry.item?.type === 'tool_call') {
 				appendMessage({
 					type: 'assistant',
@@ -836,32 +868,14 @@ function parseCodexTranscript(
 					content: `Tool: ${entry.item.tool}`,
 					...turnContext,
 					timestamp: entry.timestamp || '',
-					uuid: entry.item.id || `codex-msg-${messageIndex}`,
+					uuid: entry.item.call_id || entry.item.id || `codex-msg-${messageIndex}`,
 					toolUse: [
 						{
+							id: entry.item.call_id || entry.item.id,
 							tool: entry.item.tool,
 							args: entry.item.args,
-							state: { status: 'completed', input: entry.item.args },
-						},
-					],
-				});
-				messageIndex++;
-			}
-
-			if (entry.type === 'item.completed' && entry.item?.type === 'tool_result') {
-				const output = codexToolOutputText(entry.item.output);
-				appendMessage({
-					type: 'assistant',
-					role: 'assistant',
-					content: `Tool: ${entry.item.tool || 'unknown'}`,
-					...turnContext,
-					timestamp: entry.timestamp || '',
-					uuid: entry.item.id || `codex-msg-${messageIndex}`,
-					toolUse: [
-						{
-							id: entry.item.id,
-							tool: entry.item.tool || 'unknown',
-							state: { status: entry.item.is_error ? 'failed' : 'completed', output },
+							// Completing the call envelope does not prove execution succeeded.
+							state: { status: 'unknown', input: entry.item.args },
 						},
 					],
 				});

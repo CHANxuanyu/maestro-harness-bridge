@@ -554,6 +554,7 @@ program
 	.option('-a, --agent <id>', 'Agent whose active tab to use')
 	.option('--tab <id>', 'Conversation tab, exact ID, prefix or active')
 	.option('--file <path>', 'Read the diff for one repository-relative file')
+	.option('--by-turn', 'Group current changes by recorded conversation turns')
 	.option('--json', 'Output the shared changes or diff structure as JSON')
 	.option('--message <text>', 'Commit message for the staged files')
 	.option('--yes', 'Explicitly confirm destructive revert')
@@ -1592,7 +1593,7 @@ tab
 
 tabTargetOptions(tab.command('panel <tab-id> <action>'))
 	.description(
-		'New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
+		'New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
 	)
 	.option(
 		'--terminal <id>',

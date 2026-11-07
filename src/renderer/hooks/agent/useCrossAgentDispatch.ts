@@ -292,9 +292,10 @@ export function ensureConsultTab(opts: {
 		const permissions = useSettingsStore.getState().newShell
 			? projectConversationFields(
 					session,
-					existing
-						? remoteConversationPermissionFields(sourceTab, resolveTabPermissionMode(existing))
-						: (sourceTab ?? { permissionMode: 'readonly' }),
+					remoteConversationPermissionFields(
+						sourceTab,
+						resolveTabPermissionMode(existing ?? sourceTab)
+					),
 					getCachedCapabilities(session.toolType) ?? {
 						supportsReadOnlyMode: false,
 						supportsStandardPermissionMode: false,
@@ -721,6 +722,18 @@ export function sendCrossAgentRequest(opts: SendCrossAgentRequestOptions): void 
 	});
 	if (!consult && useSettingsStore.getState().newShell) {
 		const error = getT()('workflows.shell.consultPermissionUnavailable');
+		updateAiTab(
+			opts.sourceSessionId,
+			opts.sourceTabId,
+			(tab) => ({
+				...tab,
+				logs: [
+					...tab.logs,
+					{ id: generateId(), timestamp: Date.now(), source: 'error', text: error },
+				],
+			}),
+			{ includeOrphans: true }
+		);
 		settleConsultHold({
 			sourceSessionId: opts.sourceSessionId,
 			sourceTabId: opts.sourceTabId,
@@ -879,24 +892,23 @@ export function useCrossAgentDispatch(
 		const sourceTabId = tracked.sourceTabId;
 
 		// 1. The attribution bubble on the SOURCE tab (what the user reads inline).
-		updateSessionWith(tracked.sourceSessionId, (session) => {
-			const tab = session.aiTabs.find((t) => t.id === sourceTabId);
-			if (!tab) return session; // Source tab was closed; nothing to update.
+		updateAiTab(
+			tracked.sourceSessionId,
+			sourceTabId,
+			(tab) => {
+				const existingIndex = tab.logs.findIndex((l) => l.id === entryId);
+				const timestamp = existingIndex >= 0 ? tab.logs[existingIndex].timestamp : Date.now();
+				const entry = buildCrossAgentLogEntry(entryId, timestamp, displayText, chunk);
 
-			const existingIndex = tab.logs.findIndex((l) => l.id === entryId);
-			const timestamp = existingIndex >= 0 ? tab.logs[existingIndex].timestamp : Date.now();
-			const entry = buildCrossAgentLogEntry(entryId, timestamp, displayText, chunk);
+				const nextLogs =
+					existingIndex >= 0
+						? tab.logs.map((l, i) => (i === existingIndex ? entry : l))
+						: [...tab.logs, entry];
 
-			const nextLogs =
-				existingIndex >= 0
-					? tab.logs.map((l, i) => (i === existingIndex ? entry : l))
-					: [...tab.logs, entry];
-
-			return {
-				...session,
-				aiTabs: session.aiTabs.map((t) => (t.id === tab.id ? { ...t, logs: nextLogs } : t)),
-			};
-		});
+				return { ...tab, logs: nextLogs };
+			},
+			{ includeOrphans: true }
+		);
 
 		// 2. The persisted copy on the TARGET's consult tab (what the jump arrow
 		// lands on, and what makes the target "remember it was consulted"). Written

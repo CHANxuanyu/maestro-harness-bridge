@@ -457,7 +457,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 					getCrossAgentTargetState(ownerId, tab.id)?.busy ||
 					sessions
 						.find((session) => session.id === ownerId)
-						?.executionQueue?.some((item) => item.tabId === tab.id)
+						?.executionQueue?.some((item: { tabId?: string }) => item.tabId === tab.id)
 			);
 			const running = deps
 				?.getProcessManager?.()

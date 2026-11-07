@@ -465,6 +465,65 @@ describe('new-shell consult conversations', () => {
 		expect(send.mock.calls[0][0].permissionMode).toBe('readonly');
 	});
 
+	it('reports an unsupported permission ceiling without dispatching a process', () => {
+		setCapabilitiesCache('codex', { ...AGENT_CAPABILITIES.codex, supportsReadOnlyMode: false });
+		useSessionStore
+			.getState()
+			.setSessions((sessions) =>
+				sessions.map((session) =>
+					session.id === 'src'
+						? {
+								...session,
+								aiTabs: session.aiTabs.map((tab) => ({ ...tab, permissionMode: 'readonly' })),
+							}
+						: session
+				)
+			);
+		sendCrossAgentRequest({
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			targetSessionId: 'tgt',
+			userPrompt: 'Inspect files.',
+			sourceLogs: [],
+		});
+		expect(send).not.toHaveBeenCalled();
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].logs.at(-1)).toMatchObject({
+			source: 'error',
+		});
+	});
+
+	it('inherits only permissions from a different provider, keeping the target project model', () => {
+		useSessionStore
+			.getState()
+			.setSessions((sessions) =>
+				sessions.map((session) =>
+					session.id === 'src'
+						? {
+								...session,
+								aiTabs: session.aiTabs.map((tab) => ({ ...tab, customModel: 'parent-model' })),
+							}
+						: session
+				)
+			);
+		useSettingsStore.setState({
+			projectSettings: {
+				'[null,"/test/project"]': { modelProvider: 'codex', defaultModel: 'target-model' },
+			},
+		});
+		const created = ensureConsultTab({
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			targetSessionId: 'tgt',
+			question: 'Inspect files.',
+		})!;
+		expect(
+			useSessionStore.getState().sessions[1].aiTabs.find((tab) => tab.id === created.targetTabId)
+				?.customModel
+		).toBe('target-model');
+	});
+
 	it('captures the parent native id and first sentence without revealing or creating unread', () => {
 		const result = ensureConsultTab({
 			targetSessionId: 'tgt',
@@ -570,6 +629,28 @@ describe('new-shell consult conversations', () => {
 			hook.unmount();
 		}
 	);
+
+	it('keeps the reply on a source tab that closed while still running', () => {
+		const hook = renderHook(() => useCrossAgentDispatch());
+		useSessionStore
+			.getState()
+			.setSessions((sessions) =>
+				sessions.map((session) =>
+					session.id === 'src'
+						? { ...session, aiTabs: [], orphanedThinkingTabs: session.aiTabs }
+						: session
+				)
+			);
+		act(() =>
+			receiveChunk(
+				chunk({ requestId: 'closed-source', done: true, chunk: 'Reply for the closed parent' })
+			)
+		);
+		expect(useSessionStore.getState().sessions[0].orphanedThinkingTabs?.[0].logs.at(-1)?.text).toBe(
+			'Reply for the closed parent'
+		);
+		hook.unmount();
+	});
 
 	it('holds a running child busy and releases its queue on completion without a competing synopsis', async () => {
 		const synopsis = vi.fn();

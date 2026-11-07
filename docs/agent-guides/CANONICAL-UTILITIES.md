@@ -294,3 +294,9 @@ For archived Claude desktop worktrees, `localProjectWorktree()` also accepts a r
 `bindNativeToolCalls()` 位于 `src/renderer/utils/transcriptMessages.ts`，复用同一匹配规则补齐原生调用 ID，保留实时卡片 ID。部分窗口刷新也调用它，不新增后台文件读取。工具来源由实际启动环境或原生读取结果固定到日志元数据，包含提供商、会话、项目和账户；读取旧卡片不可替换成当前提供商。后端校验已保存来源后才读取已停放提供商的账户，全文仍仅在组件局部状态中。
 
 - **Changing the provider of an existing conversation:** `switchSessionProvider()` in `src/renderer/utils/providerTabSessions.ts` shares the Edit Agent transition with the new-shell CLI. New-shell callers read target capabilities and pass them to this helper so every open AI tab uses `newConversationPermissionFields()`. Unsupported standard tightens to readonly; a null result refuses the entire switch before any tab is changed. A failed capability query also refuses the switch. Classic Edit Agent omits the capabilities argument to keep its existing behavior, and classic CLI retains its reset path. Keep native provider parking, logs and tool-output sources intact while applying permission fields.
+
+## 项目对话默认设置
+
+`projectSettingsKey()` 位于 `src/shared/projectSettings.ts`，以规范化项目路径和 SSH 主机标识隔离配置，不对远程路径做本机解析。
+`projectSettingsScopeForSession()`、`projectSettingsForSession()` 和 `projectConversationFields()` 位于 `src/renderer/utils/projectConversationDefaults.ts`，统一定位项目、检查新界面开关、冻结新对话模型与强度，并复用既有权限收紧函数。
+`newProjectConversation()` 位于 `src/renderer/services/newShellConversation.ts`，桌面默认新建和 CLI 回调共用。环境不同的对话通过 `openHandoffTarget()` 创建独立配置，`Session.projectSettingsBaseEnv` 保留应用项目变量之前的环境。清空项目变量时回到这一层，不能把上一次项目覆盖当成工具默认值。已有对话不读新的项目设置，原生导入仍走既有路径。

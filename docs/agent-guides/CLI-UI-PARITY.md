@@ -38,6 +38,28 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## 项目设置，U2，2026-11-07
+
+| 界面动作                         | CLI                                                                                                    | 共用实现                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| 项目行右键打开设置，切换项目位置 | `project settings show --path <path> [--ssh-remote <id>]`                                              | `settings:projectSettings`、`createProjectSettingsService()`              |
+| 保存默认工具、模型、强度、权限   | `project settings set --path <path> --provider <id> --model <id> --effort <level> --permission <mode>` | 同一 IPC 服务验证并写 Maestro 设置                                        |
+| 清空某项默认值                   | 对应选项传 `inherit`                                                                                   | 同一服务删除对应覆盖值                                                    |
+| 首次选择完全访问                 | `--permission full --acknowledge-full-access`                                                          | 每个项目与主机单独记录一次说明确认                                        |
+| 编辑或删除项目环境变量           | 重复 `--env NAME=VALUE` 替换项目变量；`--clear-env` 清空覆盖                                           | 同一服务保存；既有环境编辑器用于界面输入                                  |
+| 查看遮盖或明文变量               | `show` 默认遮盖，`--show-secrets` 显示原值                                                             | `isSecretEnvKey()`、`maskEnvValue()`                                      |
+| 按项目默认设置新建对话           | `tab new --agent <id> [--prompt <text>]`、`dispatch <id> <prompt> --new-tab`                           | `newProjectConversation()`、`context:conversation`、`openHandoffTarget()` |
+| 明确选择新对话工具               | `tab new --agent <id> --provider <provider>`                                                           | 同一 `context:conversation` 服务，SSH 传递原主机和执行目录                |
+
+`project settings` 需要运行中的 Maestro。它只保存 Maestro 数据，不读写原生配置。
+设置可以由 CLI 预先保存，只有 `newShell` 开启后的新对话采用。已有对话和原生历史导入不重新套用。
+当前对话的显式模型、强度和环境优先于项目，项目优先于既有工具默认配置；权限使用两者中更严格的值，继续按目标能力校验。
+项目入口选择项目默认工具，从当前对话新建保留当前工具。明确选工具的入口采用该工具的模型与强度，不复制另一家的模型名。切换项目默认工具时，共享设置服务清除上一工具的模型与强度，除非同次提交明确提供新值。
+环境变化通过独立的内部配置承载，保留旧对话的账户、SSH、停用变量和原生身份；记录原始环境以便清空项目覆盖后恢复。
+CLI `tab new` 返回实际 `sessionId`，`dispatch --new-tab` 返回实际 `agentId`，保留其既有 `sessionId` 等于 `tabId` 的约定。带提示的新建由目标所属窗口持久化后排队，来源窗口不会向自己的会话重复投递。
+
+本轮共用修正：带提示的新建回调按来源所属窗口路由，旧界面也由此修正副窗口投递目标；新界面新建回调允许 60 秒，CLI 留出 65 秒等待；旧界面回调仍为 5 秒。其余新行为均受 `newShell` 控制。
+
 ## Stop and read-only resume corrections (2026-11-06)
 
 No UI action or CLI verb is added. `tab permission <tab> readonly` and
@@ -648,6 +670,8 @@ The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
 ## Open gaps
+
+**项目设置的展示状态，U2。** 打开、关闭弹窗和切换位置选择框没有 CLI 窗口状态动词；读取、修改、清空、确认和变量显示都有上表对应动作。分屏直接新建仍使用既有分屏路径，只继承同一内部配置的环境，模型和权限经过 `createTab()` 应用项目默认值；项目默认工具与环境需先经项目新建动作创建，再分屏。分屏动作本身的 CLI 缺口仍见下条。浏览器按实际归属选中新对话的两种消息顺序已做单元回归，手机实际点击仍需单独验收。
 
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no
 `tab fork --at` verb; this remains the Composer backlog below. The palette and

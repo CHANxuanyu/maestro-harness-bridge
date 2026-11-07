@@ -1,3 +1,5 @@
+import { useAgentCapabilities } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { getAgentCapabilities } from '../../../main/agents/capabilities';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -2839,4 +2841,72 @@ describe('InputArea on a phone', () => {
 		expect(screen.queryByTestId('phone-composer-handle')).not.toBeInTheDocument();
 		expect(screen.getByRole('textbox')).toBeInTheDocument();
 	});
+});
+
+describe('InputArea Codex current-turn instructions', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		useSettingsStore.setState({ newShell: true, codexAppServer: true, uiLanguage: 'en' });
+		window.maestro.process.steer = vi.fn();
+		const capabilities = getAgentCapabilities('codex');
+		vi.mocked(useAgentCapabilities).mockReturnValue({
+			capabilities,
+			loading: false,
+			error: null,
+			refresh: vi.fn(),
+			hasCapability: (key) => !!capabilities[key],
+		});
+	});
+
+	it.each(['accepted', 'rejected', 'changed-draft', 'changed-tab'])(
+		'clears only an unchanged accepted draft: %s',
+		async (outcome) => {
+			const session = createMockSession({
+				id: 'owner',
+				toolType: 'codex',
+				state: 'busy',
+				busySource: 'ai',
+				aiTabs: [{ id: 'tab-1', logs: [], state: 'busy' }] as never,
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: session.id, groups: [] });
+			const props = createDefaultProps({
+				session,
+				inputValue: 'Please also check types',
+				showFlashNotification: vi.fn(),
+			});
+			useComposerInputStore.setState({ aiValueTabId: 'tab-1' });
+			let settle!: (value: any) => void;
+			vi.mocked(window.maestro.process.steer).mockImplementation(
+				() =>
+					new Promise((resolve) => {
+						settle = resolve;
+					})
+			);
+			render(<InputArea {...props} />);
+			fireEvent.click(screen.getByRole('button', { name: 'Add to this turn' }));
+			expect(window.maestro.process.steer).toHaveBeenCalledExactlyOnceWith(
+				'owner-ai-tab-1',
+				'Please also check types'
+			);
+			expect(props.setInputValue).not.toHaveBeenCalled();
+			if (outcome === 'changed-draft')
+				act(() => useComposerInputStore.setState({ aiValue: 'A newer draft' }));
+			if (outcome === 'changed-tab')
+				act(() => useComposerInputStore.setState({ aiValueTabId: 'tab-2' }));
+			await act(async () =>
+				settle(
+					outcome === 'rejected'
+						? { success: false, error: 'Turn ended' }
+						: { success: true, turnId: 'turn-1' }
+				)
+			);
+			if (outcome === 'accepted') expect(props.setInputValue).toHaveBeenCalledWith('');
+			else expect(props.setInputValue).not.toHaveBeenCalled();
+			expect(props.processInput).not.toHaveBeenCalled();
+			if (outcome === 'rejected')
+				expect(screen.getByRole('alert')).toHaveTextContent(
+					'Could not add instructions to this turn'
+				);
+		}
+	);
 });

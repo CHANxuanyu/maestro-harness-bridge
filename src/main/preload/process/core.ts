@@ -180,6 +180,12 @@ export function createProcessCoreApi() {
 		write: (sessionId: string, data: string): Promise<boolean> =>
 			ipcRenderer.invoke('process:write', sessionId, data),
 
+		steer: (
+			sessionId: string,
+			text: string
+		): Promise<{ success: true; turnId: string } | { success: false; error: string }> =>
+			ipcRenderer.invoke('process:steer', sessionId, text),
+
 		onPermissionResolved: (callback: (requestId: string) => void): (() => void) => {
 			const handler = (_: unknown, requestId: string) => callback(requestId);
 			ipcRenderer.on('process:permission-resolved', handler);
@@ -282,6 +288,7 @@ export function createProcessCoreApi() {
 		 */
 		onPermissionRequest: (
 			callback: (request: {
+				provider?: 'codex';
 				requestId: string;
 				sessionId: string;
 				tabId?: string;

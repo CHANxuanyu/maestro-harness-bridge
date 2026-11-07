@@ -1,0 +1,104 @@
+#!/usr/bin/env node
+'use strict';
+
+// Synthetic stdio peer only. No provider binary, credentials, network or shell tools.
+const fs = require('node:fs');
+const path = require('node:path');
+const readline = require('node:readline');
+const { randomUUID } = require('node:crypto');
+const root = process.env.MAESTRO_APP_SERVER_FIXTURE_ROOT;
+if (!root || !fs.statSync(root).isDirectory())
+	throw new Error('An isolated fixture root is required');
+if (process.argv.includes('--version')) {
+	process.stdout.write('codex-cli synthetic-app-server\n');
+	process.exit(0);
+}
+if (process.argv[2] !== 'app-server') throw new Error('Only synthetic app-server is supported');
+const receipt = (value) =>
+	fs.appendFileSync(path.join(root, 'app-server-receipts.jsonl'), JSON.stringify(value) + '\n');
+const send = (message) => process.stdout.write(JSON.stringify(message) + '\n');
+let threadId, turnId, prompt, approval;
+const notify = (method, params) => send({ method, params: { threadId, turnId, ...params } });
+const finish = (text, status = 'completed') => {
+	if (text) {
+		notify('item/agentMessage/delta', { itemId: 'answer', delta: text });
+		notify('item/completed', {
+			item: { id: 'answer', type: 'agentMessage', text, phase: 'final_answer' },
+		});
+	}
+	notify('turn/completed', { turn: { id: turnId, status } });
+};
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+	const message = JSON.parse(line);
+	receipt(message);
+	const p = message.params || {};
+	const reply = (result) => send({ id: message.id, result });
+	if (message.method === 'initialize') reply({ userAgent: 'synthetic-app-server' });
+	else if (message.method === 'thread/start' || message.method === 'thread/resume') {
+		threadId = p.threadId || randomUUID();
+		reply({ thread: { id: threadId, status: { type: 'idle' } }, model: 'fixture-model' });
+	} else if (message.method === 'turn/start') {
+		turnId = randomUUID();
+		prompt = p.input.map((item) => item.text || '').join('\n');
+		reply({ turn: { id: turnId, status: 'inProgress' } });
+		if (prompt.includes('U5_HOLD')) return;
+		const file = prompt.includes('file approval');
+		approval = { id: 900, file };
+		notify('item/started', {
+			item: file
+				? {
+						id: 'tool',
+						type: 'fileChange',
+						status: 'inProgress',
+						changes: [
+							{
+								path: path.join(root, 'approved.txt'),
+								kind: { type: 'add' },
+								diff: '+synthetic\n',
+							},
+						],
+					}
+				: {
+						id: 'tool',
+						type: 'commandExecution',
+						command: 'printf synthetic',
+						status: 'inProgress',
+					},
+		});
+		send({
+			id: 900,
+			method: file ? 'item/fileChange/requestApproval' : 'item/commandExecution/requestApproval',
+			params: {
+				threadId,
+				turnId,
+				itemId: 'tool',
+				...(file ? {} : { command: 'printf synthetic', cwd: root }),
+				reason: 'Synthetic approval',
+			},
+		});
+	} else if (message.method === 'turn/steer') {
+		if (p.expectedTurnId !== turnId)
+			return send({ id: message.id, error: { code: -32000, message: 'Turn changed' } });
+		reply({ turnId });
+		finish('Synthetic steer accepted: ' + p.input[0].text);
+	} else if (message.method === 'turn/interrupt') {
+		reply({});
+		finish('', 'interrupted');
+	} else if (message.id === approval?.id && message.result) {
+		const accepted = message.result.decision === 'accept';
+		if (accepted) fs.writeFileSync(path.join(root, 'approved.txt'), 'synthetic\n');
+		notify('serverRequest/resolved', { requestId: approval.id });
+		notify('item/completed', {
+			item: {
+				id: 'tool',
+				type: approval.file ? 'fileChange' : 'commandExecution',
+				command: 'printf synthetic',
+				aggregatedOutput: accepted ? 'synthetic\n' : '',
+				changes: [],
+				status: accepted ? 'completed' : 'declined',
+			},
+		});
+		approval = undefined;
+		finish(accepted ? 'Synthetic approval accepted' : 'Synthetic approval denied');
+	}
+});

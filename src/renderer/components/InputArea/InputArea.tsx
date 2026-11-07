@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { codexAppServerEnabled } from '../../../shared/codexAppServer';
+import { useT } from '../../i18n';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import {
 	useComposerInputStore,
@@ -59,6 +61,7 @@ import {
 export const PHONE_COMPOSER_COLLAPSED_KEY = 'phone.composer.collapsed';
 
 export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
+	const t = useT();
 	const {
 		session,
 		theme,
@@ -162,6 +165,9 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 	const ownsSession = useWindowContextOptional()?.ownsSession;
 	const thinkingItems = useThinkingItems(ownsSession);
 
+	const codexAppServer = useSettingsStore((state) => state.codexAppServer);
+	const [steerError, setSteerError] = useState<string | null>(null);
+	useEffect(() => setSteerError(null), [session.id, session.activeTabId]);
 	const newShell = useSettingsStore(selectNewShellEnabled);
 	const spellCheckEnabled = useSettingsStore((state) => state.spellCheck);
 	const openAnnotator = useImageAnnotatorStore((state) => state.openAnnotator);
@@ -175,7 +181,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 	} = useModelEffortMenus();
 
 	// Get agent capabilities for conditional feature rendering
-	const { hasCapability } = useAgentCapabilities(session.toolType);
+	const { capabilities, hasCapability } = useAgentCapabilities(session.toolType);
 
 	// PERF: Memoize activeTab lookup to avoid O(n) search on every render
 	const activeTab = useMemo(
@@ -431,6 +437,35 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 	);
 	const composerStop =
 		stopPlacement === 'composer' && session.inputMode === 'ai' ? handleInterrupt : undefined;
+
+	const appServerEligible = codexAppServerEnabled(
+		capabilities,
+		{ newShell, codexAppServer },
+		!!session.sessionSshRemoteConfig?.enabled
+	);
+	const canSteer =
+		appServerEligible &&
+		!isTerminalMode &&
+		!isShellCommandDraft &&
+		!isAiCommandDraft &&
+		!stagedImages.length &&
+		activeTab?.state === 'busy';
+	const steerTurn = async () => {
+		const draft = useComposerInputStore.getState();
+		const text = draft.aiValue;
+		const tabId = session.activeTabId;
+		if (!canSteer || !text.trim() || !tabId) return;
+		setSteerError(null);
+		try {
+			const result = await window.maestro.process.steer(`${session.id}-ai-${tabId}`, text);
+			if (!result.success) throw new Error(result.error);
+			const current = useComposerInputStore.getState();
+			if (current.aiValueTabId === tabId && current.aiValue === text) setInputValue('');
+			showFlashNotification?.(t('workflows.shell.steerAccepted'));
+		} catch {
+			setSteerError(t('workflows.shell.steerFailed'));
+		}
+	};
 
 	// Show summarization progress overlay when active for this tab
 	if (isSummarizing && session.inputMode === 'ai' && onCancelSummarize) {
@@ -734,7 +769,9 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 							isTerminalMode={isTerminalMode}
 							canAttachImages={canAttachImages}
 							hasReadOnlyCapability={hasCapability('supportsReadOnlyMode')}
-							hasStandardCapability={hasCapability('supportsStandardPermissionMode')}
+							hasStandardCapability={
+								hasCapability('supportsStandardPermissionMode') || appServerEligible
+							}
 							enterToSend={enterToSend}
 							setEnterToSend={setEnterToSend}
 							setStagedImages={setStagedImages}
@@ -774,11 +811,17 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 										processInput={processInput}
 										onStop={composerStop}
 										hasDraft={hasDraft}
+										onSteer={canSteer ? steerTurn : undefined}
 									/>
 								)
 							}
 						/>
 					</div>
+					{newShell && steerError && (
+						<div role="alert" className="text-xs px-3 py-1" style={{ color: theme.colors.error }}>
+							{steerError}
+						</div>
+					)}
 					{/* Context Warning Sash - AI mode only, appears below input when context usage is high */}
 					{session.inputMode === 'ai' && contextWarningsEnabled && onSummarizeAndContinue && (
 						<ContextWarningSash

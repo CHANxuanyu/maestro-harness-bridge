@@ -56,6 +56,7 @@ export interface ParsedQuestion {
  * the session/tab) that produced it.
  */
 export interface PermissionRequest {
+	provider?: 'codex';
 	requestId: string;
 	token: string;
 	sessionId: string;

@@ -1,3 +1,4 @@
+import type { CodexAppServerSession, CodexAppServerSettings } from './CodexAppServerSession';
 import type { ChildProcess } from 'child_process';
 import type { IPty } from 'node-pty';
 import type { OpencodeClient } from '@opencode-ai/sdk';
@@ -20,6 +21,7 @@ export interface SdkProcessController {
  * Configuration for spawning a new process
  */
 export interface ProcessConfig {
+	codexAppServer?: CodexAppServerSettings;
 	sessionId: string;
 	toolType: string;
 	cwd: string;
@@ -91,6 +93,7 @@ export interface ProcessConfig {
  * Internal representation of a managed process
  */
 export interface ManagedProcess {
+	codexAppServerController?: CodexAppServerSession;
 	toolOutputSource?: Omit<
 		import('../../shared/nativeToolOutput').NativeToolOutputTarget,
 		'nativeSessionId'

@@ -40,6 +40,7 @@ import {
 
 // Mock electron's ipcMain
 vi.mock('electron', () => ({
+	app: { getLocale: () => 'en' },
 	ipcMain: {
 		handle: vi.fn(),
 		on: vi.fn(),
@@ -306,6 +307,7 @@ describe('process IPC handlers', () => {
 	let mockProcessManager: {
 		spawn: ReturnType<typeof vi.fn>;
 		write: ReturnType<typeof vi.fn>;
+		steer: ReturnType<typeof vi.fn>;
 		interrupt: ReturnType<typeof vi.fn>;
 		kill: ReturnType<typeof vi.fn>;
 		resize: ReturnType<typeof vi.fn>;
@@ -343,6 +345,7 @@ describe('process IPC handlers', () => {
 		mockProcessManager = {
 			spawn: vi.fn(),
 			write: vi.fn(),
+			steer: vi.fn(),
 			interrupt: vi.fn(),
 			kill: vi.fn(),
 			resize: vi.fn(),
@@ -415,6 +418,9 @@ describe('process IPC handlers', () => {
 				'concerto-html:restore',
 				'process:spawn',
 				'process:write',
+				'process:steer',
+				'process:codex-stop',
+				'process:codex-permissions',
 				'process:broadcast-user-input',
 				'process:interrupt',
 				'process:kill',
@@ -450,6 +456,167 @@ describe('process IPC handlers', () => {
 			await expect(handler!({}, 'bogus', '', null)).rejects.toThrow(
 				'Invalid Concerto HTML restore request'
 			);
+		});
+	});
+
+	describe('Codex app-server opt-in', () => {
+		it.each([
+			[false, false],
+			[true, false],
+			[false, true],
+			[true, true],
+		])('requires both newShell=%s and codexAppServer=%s', async (newShell, codexAppServer) => {
+			mockSettingsStore.get.mockImplementation((key, fallback) =>
+				key === 'newShell' ? newShell : key === 'codexAppServer' ? codexAppServer : fallback
+			);
+			mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+			mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+			await handlers.get('process:spawn')!(
+				{},
+				{
+					sessionId: 'project-ai-tab',
+					tabId: 'tab',
+					toolType: 'codex',
+					cwd: '/fixture/project',
+					command: 'codex',
+					args: [],
+					prompt: 'synthetic prompt',
+				}
+			);
+			const spawn = mockProcessManager.spawn.mock.calls[0][0];
+			if (newShell && codexAppServer) {
+				expect(spawn.args).toEqual(['app-server']);
+				expect(spawn.codexAppServer).toMatchObject({
+					approvalPolicy: 'on-request',
+					sandbox: 'workspace-write',
+					onPermissionRequest: expect.any(Function),
+					onDispose: expect.any(Function),
+				});
+				spawn.codexAppServer.onDispose();
+			} else {
+				expect(spawn.codexAppServer).toBeUndefined();
+				expect(spawn.args).toEqual([]);
+			}
+		});
+
+		it.each([
+			['project-ai-tab', 'user', true],
+			['project-ai-tab', 'auto', false],
+			['background-synopsis', 'user', false],
+		])(
+			'selects only ordinary desktop turns without a separate tabId: %s %s',
+			async (sessionId, querySource, enabled) => {
+				mockSettingsStore.get.mockImplementation((key, fallback) =>
+					key === 'newShell' || key === 'codexAppServer' ? true : fallback
+				);
+				mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+				mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+				await handlers.get('process:spawn')!(
+					{},
+					{
+						sessionId,
+						querySource,
+						toolType: 'codex',
+						cwd: '/fixture/project',
+						command: 'codex',
+						args: [],
+						prompt: 'fixture',
+					}
+				);
+				const spawn = mockProcessManager.spawn.mock.calls[0][0];
+				if (enabled) {
+					expect(spawn.args).toEqual(['app-server']);
+					expect(spawn.tabId).toBe('tab');
+					spawn.codexAppServer.onDispose();
+				} else {
+					expect(spawn.codexAppServer).toBeUndefined();
+					expect(spawn.args).toEqual([]);
+				}
+			}
+		);
+
+		it('refuses a saved Codex standard turn when its approval transport is off', async () => {
+			mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+			mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+			await expect(
+				handlers.get('process:spawn')!(
+					{},
+					{
+						sessionId: 'project-ai-tab',
+						tabId: 'tab',
+						toolType: 'codex',
+						cwd: '/fixture/project',
+						command: 'codex',
+						args: [],
+						prompt: 'fixture',
+						permissionMode: 'standard',
+					}
+				)
+			).rejects.toThrow('requires the local app-server prototype');
+			expect(mockProcessManager.spawn).not.toHaveBeenCalled();
+		});
+
+		it.each([
+			['en', false, 'Codex standard permission requires the local app-server prototype'],
+			[
+				'zh-CN',
+				false,
+				'Codex 标准权限需要开启本地交互通路原型。请开启新界面和原型开关，或明确改用只读权限。',
+			],
+			[
+				'en',
+				true,
+				'The Codex app-server prototype does not support custom CLI arguments. Remove them before starting this turn.',
+			],
+			['zh-CN', true, 'Codex 交互通路原型暂不支持自定义命令行参数，请清空后再发送。'],
+		])(
+			'localizes prototype spawn refusals in %s (custom arguments: %s)',
+			async (locale, custom, message) => {
+				mockSettingsStore.get.mockImplementation((key, fallback) =>
+					key === 'uiLanguage'
+						? locale
+						: key === 'newShell' || key === 'codexAppServer'
+							? custom
+							: fallback
+				);
+				mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+				await expect(
+					handlers.get('process:spawn')!(
+						{},
+						{
+							sessionId: 'project-ai-tab',
+							tabId: 'tab',
+							toolType: 'codex',
+							cwd: '/fixture/project',
+							command: 'codex',
+							args: [],
+							prompt: 'fixture',
+							permissionMode: 'standard',
+							sessionCustomArgs: custom ? '--fixture-unsupported' : undefined,
+						}
+					)
+				).rejects.toThrow(message);
+				expect(mockProcessManager.spawn).not.toHaveBeenCalled();
+			}
+		);
+
+		it('waits for the steering receipt and returns its turn id', async () => {
+			mockSettingsStore.get.mockImplementation((key, fallback) =>
+				key === 'newShell' || key === 'codexAppServer' ? true : fallback
+			);
+			mockProcessManager.steer.mockResolvedValue({ turnId: 'turn-fixture' });
+			expect(await handlers.get('process:steer')!({}, 'project-ai-tab', 'adjust')).toEqual({
+				success: true,
+				turnId: 'turn-fixture',
+			});
+			expect(mockProcessManager.steer).toHaveBeenCalledExactlyOnceWith('project-ai-tab', 'adjust');
+		});
+
+		it('refuses steering with the prototype disabled', async () => {
+			expect(await handlers.get('process:steer')!({}, 'project-ai-tab', 'adjust')).toMatchObject({
+				success: false,
+			});
+			expect(mockProcessManager.steer).not.toHaveBeenCalled();
 		});
 	});
 

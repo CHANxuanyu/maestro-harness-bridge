@@ -415,8 +415,14 @@ interface MaestroAPI {
 		onExit: (
 			callback: (sessionId: string, code: number, signal?: number, interrupted?: boolean) => void
 		) => () => void;
+		steer: ReturnType<typeof import('../main/preload/process/core').createProcessCoreApi>['steer'];
+		onPermissionResolved: ReturnType<
+			typeof import('../main/preload/process/core').createProcessCoreApi
+		>['onPermissionResolved'];
+
 		onPermissionRequest: (
 			callback: (request: {
+				provider?: 'codex';
 				requestId: string;
 				sessionId: string;
 				tabId?: string;

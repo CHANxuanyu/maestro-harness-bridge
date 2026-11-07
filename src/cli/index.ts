@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+import {
+	codexTurnSteer,
+	codexTurnStop,
+	permissionRespond,
+	codexPermissions,
+} from './commands/codex-turn';
 import { openProjectCommand } from './commands/open-project';
 import { aboutMe } from './commands/about-me';
 // Maestro CLI
@@ -323,6 +329,25 @@ program
 	.description('Open a local project in the new shell, reusing its agent or creating one silently')
 	.option('--json', 'Output JSON')
 	.action(openProjectCommand);
+
+const codexTurn = program
+	.command('codex-turn')
+	.description('Control a running local Codex app-server prototype turn');
+codexTurn
+	.command('steer <process-id> <text>')
+	.option('--json', 'Output JSON')
+	.action(codexTurnSteer);
+codexTurn
+	.command('permissions')
+	.description('List pending prototype approvals')
+	.option('--json', 'Output JSON')
+	.action(codexPermissions);
+codexTurn.command('stop <process-id>').option('--json', 'Output JSON').action(codexTurnStop);
+program
+	.command('permission-respond <request-id> <decision>')
+	.description('Answer a pending permission request with allow or deny')
+	.option('--json', 'Output JSON')
+	.action(permissionRespond);
 
 program
 	.command('native-history <action> [session] [conversation-or-tool-call-id]')

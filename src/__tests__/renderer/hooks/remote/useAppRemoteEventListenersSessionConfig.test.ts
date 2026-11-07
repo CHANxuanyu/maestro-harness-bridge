@@ -690,3 +690,22 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 		});
 	});
 });
+
+it('allows CLI standard permission for the enabled local Codex prototype', async () => {
+	vi.mocked(useSettingsStore.getState).mockReturnValue({
+		newShell: true,
+		codexAppServer: true,
+	} as never);
+	vi.mocked(window.maestro.agents.getCapabilities).mockResolvedValue({
+		supportsCodexAppServer: true,
+	} as never);
+	const session = createMockSession({
+		id: 'session-1',
+		toolType: 'codex',
+		aiTabs: [createMockAITab({ id: 'tab-2' })],
+	});
+	setup([session]);
+	dispatchPatch('session-1', { tabId: 'tab-2', permissionMode: 'standard' });
+	await flush();
+	expect(ack).toHaveBeenCalledWith('ch', { success: true });
+});

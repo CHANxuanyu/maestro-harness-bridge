@@ -1,7 +1,9 @@
+import { CODEX_APP_SERVER_MESSAGES } from '../../../../shared/codexAppServer';
 import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	...CODEX_APP_SERVER_MESSAGES['zh-CN'],
 	'workflows.shell.synopsisFailed': '摘要生成失败',
 	'workflows.shell.synopsisNoFinalAnswer': '本轮没有可用于生成摘要的最终答复',
 	'workflows.shell.signInRequired': '需要重新登录',
@@ -429,6 +431,10 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify': '切换只读模式（智能体不会修改文件）',
 	'workflows.shell.readOnly': '只读',
 	'workflows.shell.notificationSettings': '通知设置',
+	'workflows.shell.steerTurn': '补充到本轮',
+	'workflows.shell.steerPending': '正在发送补充…',
+	'workflows.shell.steerAccepted': '补充指令已被本轮接受',
+	'workflows.shell.steerFailed': '未能补充到本轮',
 	'workflows.shell.queueMessage': '加入消息队列',
 	'workflows.shell.sendMessage': '发送消息',
 	'workflows.shell.edit': '编辑',

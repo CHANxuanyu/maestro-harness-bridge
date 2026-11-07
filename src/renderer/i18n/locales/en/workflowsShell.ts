@@ -1,4 +1,7 @@
+import { CODEX_APP_SERVER_MESSAGES } from '../../../../shared/codexAppServer';
+
 export const workflowsShell = {
+	...CODEX_APP_SERVER_MESSAGES['en'],
 	'workflows.shell.synopsisFailed': 'Synopsis failed',
 	'workflows.shell.synopsisNoFinalAnswer': 'No final answer is available for this turn',
 	'workflows.shell.signInRequired': 'Sign in again',
@@ -443,6 +446,10 @@ export const workflowsShell = {
 		"Toggle Read-Only mode (agents won't modify files)",
 	'workflows.shell.readOnly': 'Read-Only',
 	'workflows.shell.notificationSettings': 'Notification Settings',
+	'workflows.shell.steerTurn': 'Add to this turn',
+	'workflows.shell.steerPending': 'Sending instructions…',
+	'workflows.shell.steerAccepted': 'Instructions accepted for this turn',
+	'workflows.shell.steerFailed': 'Could not add instructions to this turn',
 	'workflows.shell.queueMessage': 'Queue message',
 	'workflows.shell.sendMessage': 'Send message',
 	'workflows.shell.edit': 'Edit',

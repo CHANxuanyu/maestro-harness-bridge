@@ -823,11 +823,16 @@ T9 第四轮将子目录归档的 Electron 验收收敛为桌面左栏操作、�
 `native-history search` and sidebar content search share the archive filter in
 `agentSessions:searchNativeHistory`. With `newShell` enabled, both exclude Maestro
 archive keys, scoped to provider, host, account pool and native ID. The sidebar
-also removes already displayed hits when archive metadata changes. Unarchive
-allows the next search to find the conversation again. Codex `archived_sessions`
+also removes already displayed hits when archive metadata changes, cancels any
+pending search and refreshes the unchanged query after archive or unarchive.
+Search identities use `nativeHistoryPool()`, shared with discovery and archive,
+including account aliases that share a transcript directory. Codex `archived_sessions`
 is native storage and remains searchable unless Maestro has archived that exact
 identity. The scan and result budgets remain unchanged; filtering can return
 fewer than 50 hits. This repair adds no UI action, CLI verb or localized copy.
+
+The shared CLI result identity now matches discovery even with `newShell` off;
+classic-shell result membership and the archive filter's opt-in remain unchanged.
 
 Project creation still resolves authoritative owner snapshots, excludes archived
 conversations from recency and uses the strictest archive when no ordinary

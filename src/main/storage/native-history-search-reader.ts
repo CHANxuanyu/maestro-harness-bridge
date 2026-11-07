@@ -10,6 +10,7 @@ import type {
 	NativeHistorySearchResult,
 } from '../../shared/nativeHistorySearch';
 import { collectNativeHistoryFiles } from './native-history-files';
+import { nativeHistoryPool } from './project-history';
 
 export interface NativeHistorySearchInput extends NativeHistorySearchRequest {
 	accounts: NativeHistorySearchAccount[];
@@ -86,7 +87,12 @@ export async function searchNativeHistoryFiles(
 					? codexRolloutSessionId(path.basename(file.file))
 					: path.basename(file.file, '.jsonl'));
 			const pool = await fs.realpath(file.pool);
-			const key = JSON.stringify([provider, 'local', pool, nativeSessionId]);
+			const key = JSON.stringify([
+				provider,
+				'local',
+				await nativeHistoryPool(provider, file.pool),
+				nativeSessionId,
+			]);
 			if (result.hits.some((hit) => hit.conversation.key === key)) continue;
 			if (result.hits.length === 50) {
 				result.truncated = true;

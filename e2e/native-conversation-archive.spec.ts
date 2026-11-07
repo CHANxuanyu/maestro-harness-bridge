@@ -66,9 +66,13 @@ test('archive conversation, restart and unarchive without changing native histor
 		).toContain(archived.id);
 		await native.restart(home);
 		await expect(row()).toHaveCount(0);
+		const reopenedSearch = native.page.getByPlaceholder('Search conversations...', { exact: true });
+		await reopenedSearch.fill('Archive this conversation');
+		await expect(native.page.locator('[data-content-hit]')).toHaveCount(0);
 		await native.page.getByRole('button', { name: 'Archived 1', exact: true }).click();
 		await native.page.getByRole('button', { name: 'Unarchive', exact: true }).click();
 		await expect(row()).toBeVisible();
+		await expect(native.page.locator('[data-content-hit]')).toHaveCount(1);
 		expect(
 			(await native.cli('native-history', 'search', 'Archive this conversation')).result.hits
 		).toHaveLength(1);
@@ -78,8 +82,11 @@ test('archive conversation, restart and unarchive without changing native histor
 		expect(fs.readFileSync(archived.file)).toEqual(before);
 		await native.cli('native-history', 'archive', owner, archived.id);
 		await expect(row()).toHaveCount(0);
+		await expect(native.page.locator('[data-content-hit]')).toHaveCount(0);
 		await native.cli('native-history', 'unarchive', owner, archived.id);
 		await expect(row()).toBeVisible();
+		await expect(native.page.locator('[data-content-hit]')).toHaveCount(1);
+		await expect(reopenedSearch).toHaveValue('Archive this conversation');
 		expect(fs.readFileSync(archived.file)).toEqual(before);
 	} catch (error) {
 		failed = true;

@@ -5,6 +5,8 @@ import { zstdCompressSync } from 'node:zlib';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { searchNativeHistoryFiles } from '../../../main/storage/native-history-search-reader';
 import { embedSystemPromptInPrompt } from '../../../shared/embeddedSystemPrompt';
+import { createConversationArchive } from '../../../main/storage/conversation-archive';
+import type { ArchivedConversation } from '../../../shared/conversationArchive';
 
 let root: string;
 let accounts: Array<{ provider: 'claude-code' | 'codex'; accountDir: string }>;
@@ -19,6 +21,42 @@ afterEach(async () => {
 	vi.restoreAllMocks();
 	await fs.rm(root, { recursive: true, force: true });
 });
+
+it.each(['claude-code', 'codex'] as const)(
+	'%s content hits use the same identity as Maestro archives, including shared transcript pools',
+	async (provider) => {
+		const id = '00000000-0000-0000-0000-000000000001';
+		const file = await seed(provider, id, 'amber lighthouse');
+		const accountDir = accounts.find((account) => account.provider === provider)!.accountDir;
+		const subdir = provider === 'codex' ? 'sessions' : 'projects';
+		await fs.mkdir(path.join(accountDir, subdir), { recursive: true });
+		if (provider === 'codex') {
+			await fs.rename(file, path.join(accountDir, subdir, path.basename(file)));
+		}
+		const alias = path.join(root, 'shared-account');
+		await fs.mkdir(alias);
+		await fs.symlink(path.join(accountDir, subdir), path.join(alias, subdir), 'junction');
+		let records: ArchivedConversation[] = [];
+		const archive = createConversationArchive({
+			read: () => records,
+			write: (next) => {
+				records = next;
+			},
+			owners: () => [],
+			accountDir: () => undefined,
+			lifecycle: async () => ({}),
+			deleteNative: vi.fn(),
+		});
+		await archive.change(
+			{ provider, nativeSessionId: id, accountDir: alias, projectPath: root },
+			'archive'
+		);
+		const result = await searchNativeHistoryFiles({ query: 'amber lighthouse', accounts });
+		expect(result.truncated).toBe(false);
+		expect(result.hits).toHaveLength(1);
+		expect(result.hits[0].conversation.key).toBe((await archive.list())[0].key);
+	}
+);
 
 it('bounds title index bytes and reports incomplete metadata without dropping a body hit', async () => {
 	const id = '00000000-0000-0000-0000-000000000001';

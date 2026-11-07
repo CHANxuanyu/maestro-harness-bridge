@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { generateId } from '../../utils/ids';
 import type { NativeHistorySearchResult } from '../../../shared/nativeHistorySearch';
+import { useConversationArchiveStore } from '../../stores/conversationArchiveStore';
 
 /** Content searches are local and opt in; no work runs in the classic shell. */
 export function useNativeHistorySearch(query: string, enabled: boolean) {
+	const archiveRecords = useConversationArchiveStore((state) => (enabled ? state.records : null));
 	const [state, setState] = useState<{
 		query: string;
 		result: NativeHistorySearchResult;
@@ -38,7 +40,7 @@ export function useNativeHistorySearch(query: string, enabled: boolean) {
 			if (started)
 				void window.maestro.agentSessions.cancelNativeHistorySearch(requestId).catch(() => {});
 		};
-	}, [query, enabled]);
+	}, [query, enabled, archiveRecords]);
 	return enabled && query.trim().length >= 2 && state.query === query
 		? state
 		: { result: { hits: [], truncated: false }, searching: false };

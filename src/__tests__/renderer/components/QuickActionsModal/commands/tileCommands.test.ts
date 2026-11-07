@@ -12,6 +12,7 @@ vi.mock('../../../../../renderer/utils/runtimeContext', () => ({
 	isWebDesktop: () => isWebDesktop(),
 }));
 vi.mock('../../../../../renderer/stores/sessionStore', () => ({
+	useSessionStore: { getState: () => ({ sessions: [] }) },
 	updateSessionWith: (id: string, updater: (s: Session) => Session) =>
 		updateSessionWith(id, updater),
 }));
@@ -119,26 +120,26 @@ describe('buildTileCommands', () => {
 		expect(file?.shortcut?.keys).toEqual(['Meta', 'Shift', 'y']);
 	});
 
-	it('closes the palette and commits one session update', () => {
+	it('closes the palette and commits one session update', async () => {
 		const { actions, setQuickActionOpen } = build(session());
 		updateSessionWith.mockImplementation(() => undefined);
 		actions[0].action();
 		expect(setQuickActionOpen).toHaveBeenCalledWith(false);
-		expect(updateSessionWith).toHaveBeenCalledTimes(1);
+		await vi.waitFor(() => expect(updateSessionWith).toHaveBeenCalledTimes(1));
 		expect(updateSessionWith.mock.calls[0][0]).toBe('sess-1');
 	});
 
-	it('focuses the freshly tiled pane', () => {
+	it('focuses the freshly tiled pane', async () => {
 		const { actions } = build(session());
 		updateSessionWith.mockImplementation(
 			(_id: string, updater: (s: Session) => Session) => void updater(session())
 		);
 		actions.find((a) => a.id === 'tileBelow:terminal')!.action();
-		expect(requestPaneFocus).toHaveBeenCalledTimes(1);
+		await vi.waitFor(() => expect(requestPaneFocus).toHaveBeenCalledTimes(1));
 		expect(notifyCenterFlash).not.toHaveBeenCalled();
 	});
 
-	it('flashes instead of silently doing nothing when the tile cannot be built', () => {
+	it('flashes instead of silently doing nothing when the tile cannot be built', async () => {
 		const { actions } = build(session());
 		// The session went tab-less between opening the palette and picking the entry.
 		updateSessionWith.mockImplementation(
@@ -146,7 +147,9 @@ describe('buildTileCommands', () => {
 				void updater(session({ aiTabs: [], unifiedTabOrder: [] }))
 		);
 		actions[0].action();
+		await vi.waitFor(() =>
+			expect(notifyCenterFlash).toHaveBeenCalledWith(expect.objectContaining({ color: 'yellow' }))
+		);
 		expect(requestPaneFocus).not.toHaveBeenCalled();
-		expect(notifyCenterFlash).toHaveBeenCalledWith(expect.objectContaining({ color: 'yellow' }));
 	});
 });

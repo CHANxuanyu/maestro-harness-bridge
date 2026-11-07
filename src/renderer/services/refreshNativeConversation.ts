@@ -23,6 +23,7 @@
 
 import type { AITab, LogEntry, Session } from '../types';
 import type { ProjectHistoryConversation } from '../../shared/projectHistory';
+import { stripTurnPrompt } from '../../shared/turnPrompt';
 import { updateSessionWith, useSessionStore } from '../stores/sessionStore';
 import { hasPendingRetry } from '../stores/retryStore';
 import { logger } from '../utils/logger';
@@ -35,6 +36,7 @@ import { resolveSessionProjectPath } from '../components/AgentSessionsBrowser/ut
 import {
 	TRANSCRIPT_RESUME_READ_LIMIT,
 	bindDelayedOwnSends,
+	bindNativeToolCalls,
 	mergeNewerEntries,
 	reconcileTranscriptEntries,
 	stripSynopsisTurns,
@@ -147,6 +149,8 @@ function upgradeAndMerge(
 	// envelope removal must not rewrite entries outside this window. Keep that
 	// prefix verbatim, including object identity; full reads retain the existing
 	// upgrade behavior. Without a shared id only the ordered merge can help.
+	const tools = bindNativeToolCalls(loaded, visible);
+	visible = tools.logs;
 	const loadedIds = new Set(loaded.map((entry) => entry.id));
 	const windowStart = partialWindow ? visible.findIndex((entry) => loadedIds.has(entry.id)) : 0;
 	const upgrade =
@@ -158,10 +162,14 @@ function upgradeAndMerge(
 	// A prompt Maestro sent whose native copy was written late (pre-turn context
 	// compaction) is tied to it here, and a duplicate an earlier refresh showed
 	// for it is repaired, before the merge decides what is new.
-	const own = bindDelayedOwnSends(loaded, upgradedLogs);
+	const own = bindDelayedOwnSends(loaded, upgradedLogs, partialWindow);
 	const merged = mergeNewerEntries(loaded, own.logs);
 	if (!merged) return null;
-	return { logs: merged.logs, added: merged.added, upgraded: upgrade.upgraded + own.bound };
+	return {
+		logs: merged.logs,
+		added: merged.added,
+		upgraded: tools.bound + upgrade.upgraded + own.bound,
+	};
 }
 
 const inFlight = new Map<string, Promise<NativeRefreshResult>>();
@@ -219,7 +227,8 @@ async function refreshNow(target: NativeRefreshTarget): Promise<NativeRefreshRes
 				sshRemoteId
 			);
 			loaded = transcriptMessagesToLogEntries(
-				stripSynopsisTurns((result?.messages ?? []) as TranscriptMessage[])
+				stripSynopsisTurns((result?.messages ?? []) as TranscriptMessage[]),
+				result.toolOutputSource
 			);
 			partialWindow = result?.hasMore === true;
 			// An unreadable transcript comes back empty from several adapters
@@ -233,7 +242,23 @@ async function refreshNow(target: NativeRefreshTarget): Promise<NativeRefreshRes
 			// Merge against the tab as it is NOW: a backfill may have prepended,
 			// and the merge only ever appends to whatever is there.
 			const current = locate(sessionId, tabId).tab;
-			merged = upgradeAndMerge(loaded, current?.logs ?? tab.logs ?? [], partialWindow);
+			const visible = current?.logs ?? tab.logs ?? [];
+			// A shared tail proves the splice, not that old prompt copies were
+			// repaired. Cover every cached wire suffix before consuming the refresh.
+			// Keep the ordinary 500-message path for already decoded conversations.
+			const readIds = new Set((result?.messages ?? []).map((message) => message.uuid));
+			const uncoveredPrompt = visible.some(
+				(entry) =>
+					entry.source === 'user' &&
+					stripTurnPrompt(entry.text) !== entry.text &&
+					!readIds.has(entry.nativeTranscript?.messageId ?? entry.id)
+			);
+			if (uncoveredPrompt) {
+				merged = null;
+				if (partialWindow) continue;
+				break;
+			}
+			merged = upgradeAndMerge(loaded, visible, partialWindow);
 			if (merged || !result?.hasMore) break;
 		}
 	} catch (error) {

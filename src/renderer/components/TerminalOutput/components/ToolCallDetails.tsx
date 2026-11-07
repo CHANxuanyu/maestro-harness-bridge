@@ -1,3 +1,7 @@
+import { nativeToolCommand } from '../../../../shared/nativeToolOutput';
+import type { NativeToolOutputTarget } from '../../../../shared/nativeToolOutput';
+import { NativeToolOutput } from './NativeToolOutput';
+import { useSettingsStore, selectNewShellEnabled } from '../../../stores/settingsStore';
 import React from 'react';
 import type { LogEntry, Theme } from '../../../types';
 import { CollapsibleJsonViewer } from '../../CollapsibleJsonViewer';
@@ -29,12 +33,32 @@ const JSON_STRING_LIMIT = 4000;
 export const ToolCallDetails = React.memo(function ToolCallDetails({
 	log,
 	theme,
+	nativeToolOutputTarget: fallbackTarget,
 }: {
 	log: LogEntry;
 	theme: Theme;
+	nativeToolOutputTarget?: NativeToolOutputTarget;
 }) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const toolState = log.metadata?.toolState;
+	const originalChars = storedToolValueTruncation(toolState?.output);
+	const toolCallId = log.metadata?.nativeToolCallId ?? log.metadata?.toolCallId;
+	const source = log.metadata?.toolOutputSource ?? fallbackTarget;
+	const nativeToolOutputTarget =
+		source &&
+		source.provider === 'codex' &&
+		!log.metadata?.nativeToolCallId &&
+		/^codex-.+-item_\d+$/.test(toolCallId ?? '')
+			? {
+					...source,
+					lookup: {
+						command: nativeToolCommand(toolState?.input) ?? '',
+						preview: String(toolState?.output ?? ''),
+						timestamp: log.timestamp,
+					},
+				}
+			: source;
 	const input = toolState?.input;
 	const output = toolState?.output;
 	const taskList = extractAgentTaskList(input);
@@ -63,6 +87,22 @@ export const ToolCallDetails = React.memo(function ToolCallDetails({
 					followOutput={toolState?.status === 'running'}
 				/>
 			)}
+			{newShell &&
+				originalChars !== null &&
+				toolCallId &&
+				toolState?.status !== 'running' &&
+				nativeToolOutputTarget &&
+				!nativeToolOutputTarget.sshRemoteId &&
+				['claude-code', 'codex'].includes(nativeToolOutputTarget.provider) &&
+				typeof window.maestro?.agentSessions?.toolOutput === 'function' && (
+					<NativeToolOutput
+						key={JSON.stringify([nativeToolOutputTarget, toolCallId])}
+						target={nativeToolOutputTarget}
+						toolCallId={toolCallId}
+						originalChars={originalChars}
+						theme={theme}
+					/>
+				)}
 		</div>
 	);
 });
@@ -76,11 +116,13 @@ export const ToolCallDetails = React.memo(function ToolCallDetails({
 export const ToolCallFold = React.memo(function ToolCallFold({
 	log,
 	theme,
+	nativeToolOutputTarget,
 	renderHeader,
 }: {
 	log: LogEntry;
 	theme: Theme;
 	renderHeader: (log: LogEntry) => React.ReactNode;
+	nativeToolOutputTarget?: NativeToolOutputTarget;
 }) {
 	const t = useT();
 	const [open, setOpen] = React.useState(false);
@@ -104,7 +146,11 @@ export const ToolCallFold = React.memo(function ToolCallFold({
 			</button>
 			{open && (
 				<div className="pl-4 select-text">
-					<ToolCallDetails log={log} theme={theme} />
+					<ToolCallDetails
+						log={log}
+						theme={theme}
+						nativeToolOutputTarget={nativeToolOutputTarget}
+					/>
 				</div>
 			)}
 		</div>

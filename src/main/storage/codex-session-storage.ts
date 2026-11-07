@@ -57,6 +57,8 @@ import { BaseSessionStorage } from './base-session-storage';
 import type { SearchableMessage } from './base-session-storage';
 import { ModelUsageAccumulator } from '../../shared/modelUsage';
 import { CodexTokenCounts } from '../../shared/codexTokenUsage';
+import { codexToolOutputText as nativeCodexToolOutputText } from '../../shared/codexToolOutput';
+import { readToolOutputFile } from './native-tool-output';
 import { compactToolOutput } from '../../shared/toolOutput';
 import { extractReasoningSummaryText, codexToolResultStatus } from '../parsers/codex-output-parser';
 
@@ -148,6 +150,7 @@ interface CodexMessageContent {
  * Provides type safety for the tool call / tool output merge logic.
  */
 interface CodexToolUseEntry {
+	id?: string;
 	tool?: string;
 	name?: string;
 	args?: unknown;
@@ -317,19 +320,7 @@ function unwrapCodexImageRequest(content: CodexMessageContent[] | undefined): st
 
 /** Displayable text only: image/audio blobs in a tool result must not enter the cache. */
 function codexToolOutputText(output: unknown): string {
-	let text: string;
-	if (typeof output === 'string') text = output;
-	else if (Array.isArray(output)) {
-		text = output.every((value) => typeof value === 'number')
-			? Buffer.from(output).toString('utf-8')
-			: output
-					.flatMap((value) =>
-						value && typeof value === 'object' && typeof value.text === 'string' ? [value.text] : []
-					)
-					.join('\n');
-	} else if (output == null) text = '';
-	else text = JSON.stringify(output);
-	return compactToolOutput(text).output as string;
+	return compactToolOutput(nativeCodexToolOutputText(output)).output as string;
 }
 
 function extractCwdFromText(text: string): string | null {
@@ -760,6 +751,7 @@ function parseCodexTranscript(
 					}
 				}
 				const toolInfo: CodexToolUseEntry = {
+					id: payload.call_id,
 					tool: payload.name || 'unknown',
 					args: input,
 					state: { status: 'running', input: parsedInput },
@@ -809,7 +801,13 @@ function parseCodexTranscript(
 						content: `Tool: ${payload.name || 'unknown'}`,
 						timestamp: entry.timestamp || '',
 						uuid: callId || `codex-msg-${messageIndex}`,
-						toolUse: [{ tool: payload.name || 'unknown', state: { status, output: outputText } }],
+						toolUse: [
+							{
+								id: callId,
+								tool: payload.name || 'unknown',
+								state: { status, output: outputText },
+							},
+						],
 						...turnContext,
 					});
 					messageIndex++;
@@ -861,6 +859,7 @@ function parseCodexTranscript(
 					uuid: entry.item.id || `codex-msg-${messageIndex}`,
 					toolUse: [
 						{
+							id: entry.item.id,
 							tool: entry.item.tool || 'unknown',
 							state: { status: entry.item.is_error ? 'failed' : 'completed', output },
 						},
@@ -1595,6 +1594,19 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		return sessions;
 	}
 
+	async readToolOutput(
+		projectPath: string,
+		sessionId: string,
+		toolCallId: string,
+		options?: SessionReadOptions
+	) {
+		void projectPath;
+		const file = await this.findSessionFile(sessionId, options?.configDir, true);
+		return file
+			? readToolOutputFile(file, 'codex', toolCallId, options?.toolOutputLookup)
+			: { status: 'not-found' as const };
+	}
+
 	async readSessionMessages(
 		_projectPath: string,
 		sessionId: string,
@@ -1749,7 +1761,11 @@ export class CodexSessionStorage extends BaseSessionStorage {
 	/**
 	 * Find the file path for a session by ID (async)
 	 */
-	private async findSessionFile(sessionId: string, accountDir?: string): Promise<string | null> {
+	private async findSessionFile(
+		sessionId: string,
+		accountDir?: string,
+		boundedLookup = false
+	): Promise<string | null> {
 		const allFiles = await this.findAllSessionFiles(accountDir);
 
 		// Resolve modern filenames before inspecting any legacy transcript. Otherwise
@@ -1761,7 +1777,11 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		for (const { filePath } of allFiles) {
 			// Also check by reading first line for session ID
 			try {
-				const content = await readCodexRollout(filePath);
+				const content = await readCodexRollout(
+					filePath,
+					undefined,
+					boundedLookup ? { prefixBytes: 65536 } : undefined
+				);
 				const firstLine = content.split('\n')[0];
 				if (firstLine) {
 					const metadata = JSON.parse(firstLine) as CodexSessionMetadata;

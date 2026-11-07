@@ -4,6 +4,10 @@ import { useAITabHandlers } from '../../../../../renderer/hooks/tabs/internal/us
 import { useNotificationStore } from '../../../../../renderer/stores/notificationStore';
 import { useModalStore } from '../../../../../renderer/stores/modalStore';
 import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
+import {
+	DEFAULT_CAPABILITIES,
+	primeCapabilitiesCache,
+} from '../../../../../renderer/hooks/agent/useAgentCapabilities';
 import { getLiveDraft, setLiveDraft } from '../../../../../renderer/utils/liveDraftStore';
 import {
 	clearDesktopAiTabSelections,
@@ -30,6 +34,7 @@ vi.mock('../../../../../renderer/utils/runtimeContext', () => runtimeMocks);
 describe('useAITabHandlers', () => {
 	beforeEach(() => {
 		resetTabHandlerStores();
+		useSettingsStore.setState({ newShell: false });
 		clearDesktopAiTabSelections();
 		inlineWizardMocks.endWizard.mockClear();
 		runtimeMocks.isWebDesktop.mockReturnValue(false);
@@ -38,6 +43,55 @@ describe('useAITabHandlers', () => {
 	afterEach(() => {
 		cleanup();
 	});
+
+	it.each([false, true])(
+		'browser creation keeps source and returned permissions when inventory won: %s',
+		async (inventoryWon) => {
+			useSettingsStore.setState({ newShell: true });
+			runtimeMocks.isWebDesktop.mockReturnValue(true);
+			setupSession({
+				id: 'session-1',
+				activeTabId: 'source',
+				aiTabs: [
+					createMockAITab({
+						id: 'source',
+						createdAt: 1,
+						permissionMode: 'readonly',
+						readOnlyMode: true,
+					}),
+					createMockAITab({ id: 'background', createdAt: 2, permissionMode: 'full' }),
+					...(inventoryWon
+						? [createMockAITab({ id: 'created', createdAt: 3, permissionMode: 'full' })]
+						: []),
+				],
+			});
+			vi.mocked(window.maestro.agents.getAllCapabilities).mockResolvedValueOnce({
+				'claude-code': {
+					...DEFAULT_CAPABILITIES,
+					supportsReadOnlyMode: true,
+					supportsStandardPermissionMode: true,
+				},
+			});
+			await primeCapabilitiesCache();
+			const requestNewTab = vi
+				.fn()
+				.mockResolvedValue({ tabId: 'created', permissionMode: 'readonly', readOnlyMode: true });
+			window.maestro.web.requestNewTab = requestNewTab;
+			const { result } = renderHook(() => useAITabHandlers());
+			await act(async () => {
+				result.current.handleNewAgentSession();
+			});
+			expect(requestNewTab).toHaveBeenCalledWith('session-1', false, 'source', 'readonly');
+			expect(getSession().aiTabs.find((tab) => tab.id === 'created')).toMatchObject({
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
+			expect(getSession().aiTabs.find((tab) => tab.id === 'source')).toMatchObject({
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
+		}
+	);
 
 	it('creates a new AI tab with default settings', () => {
 		setupSession({

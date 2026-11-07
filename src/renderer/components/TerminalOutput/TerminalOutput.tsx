@@ -1,3 +1,4 @@
+import type { NativeToolOutputTarget } from '../../../shared/nativeToolOutput';
 import React, {
 	useRef,
 	useMemo,
@@ -258,6 +259,29 @@ export const TerminalOutput = memo(
 		const ansiConverter = useAnsiConverter(theme);
 
 		const activeTab = useMemo(() => getActiveTab(session), [session.aiTabs, session.activeTabId]);
+		const nativeToolOutputTarget = useMemo<NativeToolOutputTarget | undefined>(
+			() =>
+				activeTab?.agentSessionId && !Object.keys(activeTab.providerSessions ?? {}).length
+					? {
+							provider: session.toolType,
+							projectPath: session.projectRoot || session.cwd,
+							nativeSessionId: activeTab.agentSessionId,
+							ownerAgentId: session.id,
+							sshRemoteId: session.sessionSshRemoteConfig?.enabled
+								? session.sessionSshRemoteConfig.remoteId || 'unavailable'
+								: undefined,
+						}
+					: undefined,
+			[
+				session.toolType,
+				session.projectRoot,
+				session.cwd,
+				session.id,
+				session.sessionSshRemoteConfig,
+				activeTab?.agentSessionId,
+				activeTab?.providerSessions,
+			]
+		);
 		const activeLogs = useMemo((): LogEntry[] => activeTab?.logs ?? [], [activeTab?.logs]);
 		const originMessageId = useMemo(
 			() =>
@@ -1220,6 +1244,7 @@ export const TerminalOutput = memo(
 								<LogItem
 									key={entry.id}
 									log={entry}
+									nativeToolOutputTarget={nativeToolOutputTarget}
 									handoffOrigin={entry.id === originMessageId ? activeTab?.origin : undefined}
 									index={index}
 									isTerminal={isTerminal}

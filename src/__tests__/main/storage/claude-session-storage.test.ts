@@ -1,3 +1,4 @@
+import { compactToolOutput } from '../../../shared/toolOutput';
 /**
  * Tests for ClaudeSessionStorage
  *
@@ -719,7 +720,7 @@ describe('ClaudeSessionStorage', () => {
 					{ status: 'failed', output: 'denied' },
 					{ status: 'completed', output: 'firstsecond' },
 					{ status: 'completed', output: '' },
-					{ status: 'completed', output: 'x'.repeat(4000) + '...' },
+					{ status: 'completed', output: compactToolOutput('x'.repeat(4100)).output },
 				]);
 
 				const full = await storage.readSessionMessages(

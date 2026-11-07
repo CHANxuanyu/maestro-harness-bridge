@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { getT } from '../../i18n';
 import {
 	autoRunMaestroPMaxWaitSeconds,
 	getClaudeTokenMode,
@@ -826,7 +827,7 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 							};
 						}
 					}
-					return { success: false, error: 'No final answer is available for this turn' };
+					return { success: false, error: getT()('workflows.shell.synopsisNoFinalAnswer') };
 				}
 				const agent = await window.maestro.agents.get(toolType);
 				if (!agent) {

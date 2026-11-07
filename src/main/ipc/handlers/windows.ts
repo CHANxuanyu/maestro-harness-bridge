@@ -14,6 +14,7 @@
 
 import { BrowserWindow, ipcMain } from 'electron';
 import type {
+	ConversationPermissionSnapshot,
 	WindowBounds,
 	WindowHighlightDropZonePayload,
 	WindowInfo,
@@ -26,6 +27,8 @@ import type { WindowManager } from '../../app-lifecycle/window-manager';
 import { registeredWindowToWindowState } from '../../window-state-persistence';
 import { requireDependency, withIpcErrorLogging } from '../../utils/ipcHandler';
 import { logger } from '../../utils/logger';
+import { requestFromRenderer } from '../../web-server/callbacks/remoteRequest';
+import { isWebContentsAvailable } from '../../utils/safe-send';
 import { requestHandoverSave } from '../../app-lifecycle/handover-save';
 
 export { HANDOVER_SAVE_TIMEOUT_MS } from '../../app-lifecycle/handover-save';
@@ -209,6 +212,35 @@ export function wireEmptySecondaryWindowAutoClose(registry: WindowRegistry): () 
  */
 export function registerWindowsHandlers(deps: WindowsHandlerDependencies): void {
 	const { getWindowRegistry, getWindowManager } = deps;
+
+	ipcMain.handle('windows:getConversationPermissions', async (_event, sessionIds: string[]) => {
+		const registry = getWindowRegistry();
+		return Promise.all(
+			sessionIds.map(async (sessionId) => {
+				const ownerId = registry?.getWindowForSession(sessionId) ?? registry?.getPrimary()?.id;
+				const owner = ownerId ? registry?.get(ownerId)?.browserWindow : undefined;
+				if (!owner || !isWebContentsAvailable(owner)) return null;
+				try {
+					const snapshot = await requestFromRenderer<ConversationPermissionSnapshot | null>(
+						owner,
+						'windows:readConversationPermissions',
+						{
+							fallback: null,
+							timeoutMs: 250,
+							args: [sessionId],
+							verifySender: true,
+						}
+					);
+					return (registry?.getWindowForSession(sessionId) ?? registry?.getPrimary()?.id) ===
+						ownerId && snapshot?.sessionId === sessionId
+						? snapshot
+						: null;
+				} catch {
+					return null;
+				}
+			})
+		);
+	});
 
 	// Create a secondary window (optionally owning some agents / sized to bounds).
 	// The window manager builds + registers the window; we return its WindowInfo.

@@ -439,7 +439,11 @@ export class ExitHandler {
 		if (this.processes.get(sessionId) === managedProcess) {
 			this.processes.delete(sessionId);
 		}
-		this.emitter.emit('exit', sessionId, code);
+		if (managedProcess.interrupted) {
+			this.emitter.emit('exit', sessionId, code, undefined, true);
+		} else {
+			this.emitter.emit('exit', sessionId, code);
+		}
 	}
 
 	/**

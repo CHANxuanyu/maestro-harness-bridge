@@ -1,5 +1,5 @@
 import { ipcRenderer } from 'electron';
-import type { AITabData } from '../../web-server/types';
+import type { AITabData, NewTabResult } from '../../web-server/types';
 import type { MediaOpenMode } from '../../../shared/mediaTypes';
 import type { SnoozeCommandRequest, SnoozeCommandResult } from '../../../shared/snoozeCommands';
 
@@ -21,14 +21,29 @@ export function createTabRemoteApi() {
 		 * Subscribe to remote new tab from web interface
 		 */
 		onRemoteNewTab: (
-			callback: (sessionId: string, responseChannel: string, background?: boolean) => void
+			callback: (
+				sessionId: string,
+				responseChannel: string,
+				background?: boolean,
+				sourceTabId?: string,
+				sourcePermissionMode?: NewTabResult['permissionMode']
+			) => void
 		): (() => void) => {
 			const handler = (
 				_: unknown,
 				sessionId: string,
 				responseChannel: string,
-				background?: boolean
-			) => callback(sessionId, responseChannel, background === true);
+				background?: boolean,
+				sourceTabId?: string,
+				sourcePermissionMode?: NewTabResult['permissionMode']
+			) =>
+				callback(
+					sessionId,
+					responseChannel,
+					background === true,
+					sourceTabId,
+					sourcePermissionMode
+				);
 			ipcRenderer.on('remote:newTab', handler);
 			return () => ipcRenderer.removeListener('remote:newTab', handler);
 		},
@@ -36,7 +51,7 @@ export function createTabRemoteApi() {
 		/**
 		 * Send response for remote new tab
 		 */
-		sendRemoteNewTabResponse: (responseChannel: string, result: { tabId: string } | null): void => {
+		sendRemoteNewTabResponse: (responseChannel: string, result: NewTabResult | null): void => {
 			ipcRenderer.send(responseChannel, result);
 		},
 

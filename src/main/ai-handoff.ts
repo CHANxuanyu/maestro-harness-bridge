@@ -191,6 +191,7 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 				);
 			const result = await deps.openTarget({
 				sourceAgentId: current.id,
+				sourcePermission: snapshot.sourcePermission,
 				cwd: location.cwd,
 				sessionSshRemoteConfig: current.sessionSshRemoteConfig,
 				mode,

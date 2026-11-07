@@ -270,6 +270,14 @@ describe('Process Core Preload API', () => {
 	});
 
 	describe('onExit', () => {
+		it('forwards deliberate interruption to the renderer callback', () => {
+			const callback = vi.fn();
+			api.onExit(callback);
+			const listener = mockOn.mock.calls.find(([channel]) => channel === 'process:exit')![1];
+			listener({}, 'sess-ai-tab', 0, undefined, true);
+			expect(callback).toHaveBeenCalledWith('sess-ai-tab', 0, undefined, true);
+		});
+
 		it('should register event listener for process:exit', () => {
 			const callback = vi.fn();
 

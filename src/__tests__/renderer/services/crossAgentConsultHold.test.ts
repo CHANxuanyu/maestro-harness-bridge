@@ -106,7 +106,7 @@ describe('pending note', () => {
 		await loadCrossAgentConsultPrompts(true);
 
 		expect(withConsultPendingNote('do the thing', [BACKEND])).toBe(
-			'do the thing\n\n---\n\nConsulting Backend.'
+			'do the thing\n\n---\n\n<!-- maestro-internal-note -->\nConsulting Backend.\n<!-- /maestro-internal-note:19 -->'
 		);
 	});
 
@@ -298,7 +298,7 @@ describe('hand-off note', () => {
 		await loadCrossAgentConsultPrompts(true);
 
 		expect(withHandoffPendingNote('do it', [BACKEND, API])).toBe(
-			'do it\n\n---\n\nForwarding to Backend and API.'
+			'do it\n\n---\n\n<!-- maestro-internal-note -->\nForwarding to Backend and API.\n<!-- /maestro-internal-note:30 -->'
 		);
 		expect(withHandoffPendingNote('do it', [])).toBe('do it');
 	});

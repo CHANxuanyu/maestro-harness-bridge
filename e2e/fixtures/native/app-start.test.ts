@@ -76,3 +76,23 @@ it('keeps title parsing and cached provider preparation for existing tests', asy
 	]);
 	expect(mocks.launch.mock.calls[0][2].SYNTHETIC_CREDENTIAL).toBe('fixture-token');
 });
+
+it.each([undefined, '/synthetic/existing-codex-home'])(
+	'login diagnostics inherit CODEX_HOME (%s) without preparing an account',
+	async (codexHome) => {
+		vi.stubEnv('CODEX_HOME', codexHome);
+		native = new NativeApp({ title: 'codex plan login' } as TestInfo, {
+			providerCli: false,
+			inheritCodexHome: true,
+		});
+		await native.start();
+		const overrides = mocks.launch.mock.calls[0][2];
+		expect(overrides).not.toHaveProperty('CODEX_HOME');
+		expect(overrides).not.toHaveProperty('HOME');
+		expect(overrides).not.toHaveProperty('CODEX_API_KEY');
+		expect(overrides).not.toHaveProperty('OPENAI_API_KEY');
+		expect(process.env.CODEX_HOME).toBe(codexHome);
+		expect(mocks.prepareCredentials).not.toHaveBeenCalled();
+		expect(mocks.installedCli).not.toHaveBeenCalled();
+	}
+);

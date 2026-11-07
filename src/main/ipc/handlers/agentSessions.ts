@@ -1,3 +1,9 @@
+import { nativeToolCommand } from '../../../shared/nativeToolOutput';
+import { MAX_PERSISTED_TOOL_OUTPUT_CHARS } from '../../../shared/toolOutput';
+import type {
+	NativeToolOutputTarget,
+	NativeToolOutputResult,
+} from '../../../shared/nativeToolOutput';
 import { createProjectOpener } from '../../open-project';
 import { createNativeProjectDiscovery } from '../../storage/native-projects';
 import { getAgentAccountDirLayers } from '../../agents/provider-account-dirs';
@@ -80,7 +86,11 @@ import {
 	LOCAL_SESSION_PARSE_CONCURRENCY,
 } from '../../utils/concurrency';
 import { countClaudeTranscriptMessages } from '../../../shared/claudeTranscriptMessages';
-import { resolveAgentAccountDir, getProviderAccountDirs } from '../../agents/provider-account-dirs';
+import {
+	resolveAgentAccountDir,
+	getProviderAccountDirs,
+	readStoredSessions,
+} from '../../agents/provider-account-dirs';
 import { getSessionsStore } from '../../stores/getters';
 import { CodexSessionStorage } from '../../storage/codex-session-storage';
 import { discoverProjectHistory } from '../../storage/project-history';
@@ -636,7 +646,124 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 					`Read ${result.messages.length} messages for session ${sessionId} (agent: ${agentId})${sshRemoteId ? ' (remote via SSH)' : ''}`,
 					LOG_CONTEXT
 				);
-				return result;
+				return {
+					...result,
+					...(options?.ownerAgentId && configDir
+						? {
+								toolOutputSource: {
+									provider: agentId,
+									projectPath,
+									nativeSessionId: sessionId,
+									ownerAgentId: options.ownerAgentId,
+									accountDir: configDir,
+									sshRemoteId,
+								},
+							}
+						: {}),
+				};
+			}
+		)
+	);
+
+	ipcMain.handle(
+		'agentSessions:toolOutput',
+		withIpcErrorLogging(
+			handlerOpts('toolOutput'),
+			async (
+				target: NativeToolOutputTarget,
+				toolCallId: string
+			): Promise<NativeToolOutputResult> => {
+				if (!target || target.sshRemoteId || !['claude-code', 'codex'].includes(target.provider))
+					return { status: 'unsupported' };
+				if (
+					!target.ownerAgentId ||
+					!target.projectPath ||
+					!target.nativeSessionId ||
+					!toolCallId ||
+					/[\/\\\0]/.test(target.nativeSessionId)
+				)
+					return { status: 'not-found' };
+				const owner = readStoredSessions().find((session) => session.id === target.ownerAgentId);
+				if (!owner) return { status: 'not-found' };
+				if ((owner.sessionSshRemoteConfig as { enabled?: boolean } | undefined)?.enabled)
+					return { status: 'unsupported' };
+				const logs = (Array.isArray(owner.aiTabs) ? owner.aiTabs : []).flatMap((tab) =>
+					Array.isArray(tab.logs) ? tab.logs : []
+				);
+				// CLI tab selectors can name a card from a provider parked on that tab.
+				const matchingLogs = logs.filter(
+					(log) =>
+						log.metadata?.toolCallId === toolCallId || log.metadata?.nativeToolCallId === toolCallId
+				);
+				if (
+					!target.accountDir &&
+					matchingLogs.length === 1 &&
+					matchingLogs[0].metadata?.toolOutputSource
+				) {
+					const log = matchingLogs[0];
+					target = log.metadata.toolOutputSource;
+					toolCallId = log.metadata.nativeToolCallId ?? toolCallId;
+					if (
+						target.provider === 'codex' &&
+						!log.metadata.nativeToolCallId &&
+						/^codex-.+-item_\d+$/.test(toolCallId)
+					) {
+						target = {
+							...target,
+							lookup: {
+								command: nativeToolCommand(log.metadata.toolState?.input) ?? '',
+								preview: String(log.metadata.toolState?.output ?? ''),
+								timestamp: log.timestamp,
+							},
+						};
+					}
+				}
+				if (target.sshRemoteId) return { status: 'unsupported' };
+				if (
+					target.lookup &&
+					(typeof target.lookup.preview !== 'string' ||
+						target.lookup.preview.length > MAX_PERSISTED_TOOL_OUTPUT_CHARS ||
+						typeof target.lookup.command !== 'string' ||
+						!target.lookup.command ||
+						target.lookup.command.length > 16384 ||
+						!Number.isFinite(target.lookup.timestamp))
+				)
+					return { status: 'not-found' };
+				const storage = getSessionStorage(target.provider);
+				if (!storage?.readToolOutput) return { status: 'unsupported' };
+				const savedSource = (Array.isArray(owner.aiTabs) ? owner.aiTabs : []).some((tab) =>
+					(Array.isArray(tab.logs) ? tab.logs : []).some(
+						(log: { metadata?: { toolOutputSource?: NativeToolOutputTarget } }) => {
+							const source = log.metadata?.toolOutputSource;
+							return (
+								source &&
+								source.provider === target.provider &&
+								source.nativeSessionId === target.nativeSessionId &&
+								source.ownerAgentId === target.ownerAgentId &&
+								source.projectPath === target.projectPath &&
+								source.accountDir === target.accountDir &&
+								!source.sshRemoteId
+							);
+						}
+					)
+				);
+				const currentAccount =
+					owner.toolType === target.provider
+						? resolveAgentAccountDir(target.ownerAgentId)
+						: undefined;
+				if (
+					!savedSource &&
+					(!currentAccount || (target.accountDir && target.accountDir !== currentAccount))
+				)
+					return { status: 'not-found' };
+				const configDir = savedSource ? target.accountDir : currentAccount;
+				if (!configDir) return { status: 'not-found' };
+				// No mirrored-file restoration and no writes to the session or its transcript.
+				return storage.readToolOutput(target.projectPath, target.nativeSessionId, toolCallId, {
+					configDir,
+					readOnly: true,
+					...(target.lookup ? { toolOutputLookup: target.lookup } : {}),
+				});
 			}
 		)
 	);

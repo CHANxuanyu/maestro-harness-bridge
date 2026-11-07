@@ -158,11 +158,12 @@ export const ToolbarControls = memo(function ToolbarControls({
 
 	const activeTab = session.aiTabs?.find((t) => t.id === session.activeTabId);
 	const rawPermissionMode: 'full' | 'standard' | 'readonly' = resolveTabPermissionMode(activeTab);
-	// Hide `standard` for agents without a working relay: if a stale tab is
-	// somehow in `standard`, display it as `full` so we never surface a
-	// non-functional mode.
+	// New conversations already carry a supported permission. Keep that value
+	// visible while capabilities load; retain the classic fallback.
 	const currentPermissionMode: 'full' | 'standard' | 'readonly' =
-		rawPermissionMode === 'standard' && !hasStandardCapability ? 'full' : rawPermissionMode;
+		!newShell && rawPermissionMode === 'standard' && !hasStandardCapability
+			? 'full'
+			: rawPermissionMode;
 
 	// Advertise the full-screen model/effort switcher from inside the dropdowns
 	// the user already opened, which is where they are thinking about the

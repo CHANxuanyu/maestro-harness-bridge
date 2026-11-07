@@ -15,7 +15,12 @@ import type {
 	GitStreamingOperation,
 } from '../../shared/gitUtils';
 import { createIpcMethod } from './ipcWrapper';
-import type { GitChanges, GitFileChangeDiff } from '../../shared/gitChanges';
+import type {
+	GitChanges,
+	GitFileChangeDiff,
+	GitChangeRequest,
+	GitChangeResult,
+} from '../../shared/gitChanges';
 
 export interface GitStatus {
 	files: Array<{
@@ -67,6 +72,14 @@ export interface GitSwitchResult {
  * When sshRemoteId is provided, operations execute on the remote host via SSH.
  */
 export const gitService = {
+	applyChange(
+		cwd: string,
+		request: GitChangeRequest,
+		sshRemoteId?: string,
+		remoteCwd?: string
+	): Promise<GitChangeResult> {
+		return window.maestro.git.applyChange(cwd, request, sshRemoteId, remoteCwd);
+	},
 	getChanges(cwd: string, sshRemoteId?: string, remoteCwd?: string): Promise<GitChanges> {
 		return window.maestro.git.changes(cwd, sshRemoteId, remoteCwd);
 	},

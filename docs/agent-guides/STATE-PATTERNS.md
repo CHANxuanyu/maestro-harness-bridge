@@ -8,6 +8,13 @@ Complete reference for Maestro's frontend state management: all Zustand stores, 
 
 ## Store Architecture
 
+Provider switching: `switchSessionProvider()` in
+`src/renderer/utils/providerTabSessions.ts` is shared by Edit Agent and the
+new-shell `update-agent --provider` handler. It clears provider overrides and
+uses `switchTabProvider()` to park native identities while preserving logs and
+their tool-output sources. Running turns retain their captured `turnProvider`.
+The classic CLI reset remains a separate compatibility path.
+
 Maestro uses Zustand stores to replace React Context providers. Each store:
 
 - Uses **selector-based subscriptions** (components only re-render when their slice changes)

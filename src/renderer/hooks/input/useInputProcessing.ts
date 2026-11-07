@@ -1,3 +1,4 @@
+import { appendReadOnlyPrompt } from '../../../shared/readOnlyPrompt';
 import { useOperationStore } from '../../stores/operationStore';
 import { useCallback, useRef } from 'react';
 import type {
@@ -1571,8 +1572,7 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 
 						// For read-only mode, append instruction to return plan in response instead of writing files
 						if (isReadOnly) {
-							effectivePrompt +=
-								'\n\n---\n\nIMPORTANT: You are in read-only/plan mode. Do NOT write a plan file. Instead, return your plan directly to the user in beautiful markdown formatting.';
+							effectivePrompt = appendReadOnlyPrompt(effectivePrompt);
 						}
 
 						// Check for pending merged context that needs to be injected

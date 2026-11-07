@@ -2,6 +2,8 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.shell.synopsisFailed': '摘要生成失败',
+	'workflows.shell.synopsisNoFinalAnswer': '本轮没有可用于生成摘要的最终答复',
 	'workflows.shell.signInRequired': '需要重新登录',
 	'workflows.shell.signInRequiredBody':
 		'{tool} 不接受当前的登录凭据。重新登录后，这个对话可以接着做。',
@@ -45,7 +47,8 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.shell.terminalsNotStarted': '{count} 个终端没有启动。',
 	'workflows.newShell.terminal': '终端',
 	'workflows.newShell.tasks': '任务',
-	'workflows.newShell.tasksEmpty': '这条会话还没有任务清单',
+	'workflows.newShell.tasksEmpty':
+		'这条对话的工具尚未提供任务清单。回复正文里的清单不会显示在这里。',
 	'workflows.newShell.tasksProgress': '{completed} / {total} 已完成',
 	'workflows.newShell.task.pending': '待办',
 	'workflows.newShell.task.in_progress': '进行中',
@@ -64,6 +67,7 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.handoff.continuedMessage': '从「{title}」接手',
 	'workflows.handoff.reviewMessage': '复核「{title}」',
 	'workflows.projects.openHint': '选择文件夹，开始或继续项目工作',
+	'workflows.shell.permissionUnavailable': '这个工具无法保留来源对话的权限。',
 	'workflows.shell.newConversationFailed': '无法打开会话',
 	'workflows.shell.defaultModel': '默认模型',
 	'workflows.shell.defaultEffort': '默认强度',
@@ -1520,6 +1524,16 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.transcript.toolCanceled': '未完成即已停止',
 	'workflows.transcript.toolInput': '输入',
 	'workflows.transcript.toolResult': '结果',
+	'workflows.transcript.fullToolOutput': '显示完整输出（约 {size} KB）',
+	'workflows.transcript.fullToolOutputLoading': '正在读取完整输出…',
+	'workflows.transcript.fullToolOutputMissing': '原始记录里找不到这段输出',
+	'workflows.transcript.fullToolOutputTooLarge': '原始记录超过 100 MB 读取上限',
+	'workflows.transcript.fullToolOutputUnavailable': '暂时无法读取原始记录，请收起后重新展开再试。',
+	'workflows.transcript.fullToolOutputCopy': '复制输出',
+	'workflows.transcript.fullToolOutputHide': '收起完整输出',
+	'workflows.transcript.fullToolOutputCopied': '已复制',
+	'workflows.transcript.fullToolOutputCopyFailed': '复制失败',
+	'workflows.transcript.fullToolOutputOmitted': '仅显示末尾 2 MB，已省略开头 {bytes} 字节。',
 	'workflows.transcript.toolValueTruncated': '保存时已截短（完整长度 {count} 个字符）',
 	'workflows.transcript.speakerUser': '你',
 	'workflows.transcript.speakerAssistant': '助手',

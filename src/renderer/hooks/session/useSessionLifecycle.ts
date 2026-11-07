@@ -16,6 +16,7 @@
  */
 
 import { useCallback, useEffect } from 'react';
+import { getT } from '../../i18n';
 import type { AdditionalDirectory, Session } from '../../types';
 import type { ToolType } from '../../../shared/types';
 import {
@@ -24,7 +25,7 @@ import {
 	updateSessionWith,
 	updateAiTab,
 } from '../../stores/sessionStore';
-import { switchTabProvider } from '../../utils/providerTabSessions';
+import { switchSessionProvider } from '../../utils/providerTabSessions';
 import { useGroupChatStore } from '../../stores/groupChatStore';
 import { useModalStore } from '../../stores/modalStore';
 import { notifyToast } from '../../stores/notificationStore';
@@ -35,6 +36,7 @@ import {
 	getTerminalSessionId,
 } from '../../utils/terminalTabHelpers';
 import { useTabStore } from '../../stores/tabStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { collectLeafTabRefs, generateGroupName, resolveTabRefTitle } from '../../utils/panelLayout';
 import { resolveActiveNavTab } from './useNavigationHistory';
 import type { NavHistoryEntry } from './useNavigationHistory';
@@ -98,7 +100,7 @@ export interface SessionLifecycleReturn {
 		workingDirectory?: string,
 		/** Codex only: spend a reset credit automatically on quota exhaustion. Defaults off. */
 		codexAutoResetOnExhaustion?: boolean
-	) => void;
+	) => Promise<void>;
 	/** Rename the currently-selected tab (persists to agent session storage + history) */
 	handleRenameTab: (newName: string) => void;
 	/** Auto-name the currently-selected tab: close modal, show spinner, generate name via agent */
@@ -156,7 +158,7 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 	// ====================================================================
 
 	const handleSaveEditAgent = useCallback(
-		(
+		async (
 			sessionId: string,
 			name: string,
 			toolType?: ToolType,
@@ -190,6 +192,22 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 			/** Codex only: spend a reset credit automatically on quota exhaustion. Defaults off. */
 			codexAutoResetOnExhaustion?: boolean
 		) => {
+			const changingProvider = useSessionStore
+				.getState()
+				.sessions.find((s) => s.id === sessionId)?.toolType;
+			const checkPermissions =
+				useSettingsStore.getState().newShell && toolType && toolType !== changingProvider;
+			const capabilities = checkPermissions
+				? await window.maestro.agents.getCapabilities(toolType).catch(() => null)
+				: undefined;
+			if (checkPermissions && !capabilities) {
+				notifyToast({
+					color: 'yellow',
+					title: getT()('workflows.shell.permissionUnavailable'),
+					message: getT()('workflows.shell.permissionUnavailable'),
+				});
+				return;
+			}
 			// The dialog disables the field while the agent runs, but the agent can
 			// start between opening the dialog and saving. Say so rather than
 			// silently keeping the old directory.
@@ -237,42 +255,21 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 					codexAutoResetOnExhaustion,
 				};
 
-				// If the provider changed, park each tab's provider-specific state and
-				// restore whatever the incoming provider left behind. Tabs, transcripts,
-				// closed-tab history, and file preview tabs are all preserved: none of
-				// them are provider-specific, and switching back has to land the user on
-				// the same conversation they left.
+				let next = { ...s, ...updatedFields };
+				// Park native identities and retain logs, tabs and running turns.
+				// The new-shell CLI uses the same provider transition.
 				if (toolType && toolType !== s.toolType) {
-					Object.assign(updatedFields, {
-						toolType,
-						aiTabs: s.aiTabs.map((tab) => switchTabProvider(tab, s.toolType, toolType)),
-						// Clear provider-specific overrides. These are agent-level config,
-						// not per-tab conversation state, so they are not parked - the edit
-						// modal already resets its own fields on a provider switch.
-						customPath: undefined,
-						customArgs: undefined,
-						customEnvVars: undefined,
-						customEnvVarsDisabled: undefined,
-						customModel: undefined,
-						customEffort: undefined,
-						customContextWindow: undefined,
-						// Provenance describes the value cleared above, so it must not
-						// outlive it: a stale 'user-edited' would make the new
-						// provider's window look deliberate (finding AD1).
-						contextWindowSource: undefined,
-						enableMaestroP: undefined,
-						maestroPPath: undefined,
-						maestroPMode: undefined,
-					});
-
-					// Any turn already in flight keeps running under the provider it was
-					// sent with: settings are codified at send, and this change applies from
-					// the next message. So the agent process is deliberately left alone, and
-					// the session's busy state with it. `turnProvider` on each tab is what
-					// keeps that turn's late events attributed to the old provider.
+					const switched = switchSessionProvider(next, toolType, capabilities ?? undefined);
+					if (!switched) {
+						notifyToast({
+							color: 'yellow',
+							title: getT()('workflows.shell.permissionUnavailable'),
+							message: getT()('workflows.shell.permissionUnavailable'),
+						});
+						return s;
+					}
+					next = switched;
 				}
-
-				const next = { ...s, ...updatedFields };
 				return relocateTo ? withWorkingDirectory(next, relocateTo) : next;
 			});
 		},

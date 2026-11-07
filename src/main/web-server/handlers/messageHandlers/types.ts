@@ -10,6 +10,7 @@ import type {
 
 import { WebSocket } from 'ws';
 import type {
+	NewTabCallback,
 	AutoRunDocument,
 	AutoRunState,
 	WebSettings,
@@ -143,7 +144,7 @@ export interface MessageHandlerCallbacks {
 	) => Promise<boolean>;
 	selectSession: (sessionId: string, tabId?: string, focus?: boolean) => Promise<boolean>;
 	selectTab: (sessionId: string, tabId: string) => Promise<boolean>;
-	newTab: (sessionId: string, background?: boolean) => Promise<{ tabId: string } | null>;
+	newTab: NewTabCallback;
 	closeTab: (sessionId: string, tabId: string) => Promise<boolean>;
 	renameTab: (
 		sessionId: string,

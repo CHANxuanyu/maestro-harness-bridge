@@ -10,11 +10,12 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, renderHook, screen } from '@testing-library/react';
 import { AppConfirmModals } from '../../../renderer/components/AppModals';
 import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
 import type { Theme, Session } from '../../../renderer/types';
 import { createMockSession as baseCreateMockSession } from '../../helpers/mockSession';
+import { useModalActions, useModalStore } from '../../../renderer/stores/modalStore';
 
 // Mock lucide-react
 vi.mock('lucide-react', async (importOriginal) => ({
@@ -105,6 +106,35 @@ describe('AppConfirmModals', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
+
+	it.each([undefined, 'Revert changes', 'Delete file', '撤销改动', '删除文件'])(
+		'passes the stored confirmation label %s to the visible button',
+		(confirmLabel) => {
+			useModalStore.getState().openModal('confirm', {
+				message: 'tracked.txt',
+				onConfirm: vi.fn(),
+				confirmLabel,
+			});
+			const actions = renderHook(() => useModalActions());
+			const view = renderWithLayerStack(
+				<AppConfirmModals
+					{...defaultProps}
+					{...actions.result.current}
+					sessions={[]}
+					onQuitWhenIdle={vi.fn()}
+				/>
+			);
+			try {
+				expect(
+					screen.getByRole('button', { name: confirmLabel ?? 'Confirm', exact: true })
+				).toBeVisible();
+			} finally {
+				view.unmount();
+				actions.unmount();
+				useModalStore.getState().closeModal('confirm');
+			}
+		}
+	);
 
 	describe('quit confirmation agent list', () => {
 		it('includes busy AI agents in quit modal', () => {

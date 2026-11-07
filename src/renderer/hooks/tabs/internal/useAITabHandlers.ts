@@ -1,3 +1,5 @@
+import { resolveTabPermissionMode } from '../../../../shared/agentMetadata';
+import { resolveProjectConversationPermission } from '../../../utils/newConversationPermissions';
 import { useTabStore } from '../../../stores/tabStore';
 import { useCallback, type RefObject } from 'react';
 import { useInlineWizardContext } from '../../../contexts/InlineWizardContext';
@@ -21,6 +23,7 @@ import {
 	createTab,
 	cycleShowThinkingFields,
 	getActiveTab,
+	permissionModeFields,
 	getInitialRenameValue,
 	getTabDisplayName,
 	hasActiveWizard,
@@ -38,65 +41,92 @@ export function useAITabHandlers(
 ): AITabHandlersReturn {
 	const { endWizard: endInlineWizard } = useInlineWizardContext();
 
-	const createNewAITab = useCallback(() => {
-		const { activeSessionId } = useSessionStore.getState();
-		const { defaultSaveToHistory, defaultShowThinking } = useSettingsStore.getState();
-		if (!activeSessionId) return;
+	const createNewAITab = useCallback(
+		async (fromConversation = false) => {
+			const { activeSessionId, sessions } = useSessionStore.getState();
+			const { defaultSaveToHistory, defaultShowThinking } = useSettingsStore.getState();
+			const target = sessions.find((session) => session.id === activeSessionId);
+			if (!target) return;
+			const newShell = useSettingsStore.getState().newShell;
+			const sourceTabId = newShell && fromConversation ? getActiveTab(target)?.id : undefined;
 
-		if (isWebDesktop()) {
-			// Focus the composer SYNCHRONOUSLY, inside the tap that asked for the
-			// tab. iOS raises the on-screen keyboard only for a focus() that runs
-			// in the user gesture's own call stack, and the tab itself is minted by
-			// the desktop a WebSocket round trip away - so a focus deferred until
-			// the answer lands moves the caret and leaves the keyboard down, which
-			// on a phone means tapping the composer anyway. The textarea is not
-			// keyed on the tab, so it keeps focus through the switch below.
-			inputRef?.current?.focus();
-			void window.maestro.web
-				.requestNewTab(activeSessionId, false)
-				.then((result) => {
-					if (!result?.tabId) return;
-					// Draw the tab NOW rather than waiting to be told about it. The
-					// desktop owns the tab inventory and publishes it from a 500ms
-					// poll (`useRemoteIntegration`), so a client that only reacted to
-					// the broadcast sat there doing nothing for up to half a second
-					// after the tap. The answer already carries the id the desktop
-					// minted, so adopt it: the inventory sync that follows matches on
-					// id and keeps the tab this client already has.
-					updateSessionWith(activeSessionId, (session) => {
-						// The broadcast can win the race. Then the tab is already here
-						// and all that is left is to make it the visible one - an
-						// inventory snapshot deliberately never moves a browser
-						// client's tab, since that focus belongs to whoever holds this
-						// client, not to whoever is at the desktop.
-						if (session.aiTabs.some((tab) => tab.id === result.tabId)) {
-							return { ...session, ...aiTabFocusFields(result.tabId) };
-						}
-						const created = createTab(session, {
-							id: result.tabId,
-							saveToHistory: defaultSaveToHistory,
-							showThinking: defaultShowThinking,
+			if (isWebDesktop()) {
+				// Focus the composer SYNCHRONOUSLY, inside the tap that asked for the
+				// tab. iOS raises the on-screen keyboard only for a focus() that runs
+				// in the user gesture's own call stack, and the tab itself is minted by
+				// the desktop a WebSocket round trip away - so a focus deferred until
+				// the answer lands moves the caret and leaves the keyboard down, which
+				// on a phone means tapping the composer anyway. The textarea is not
+				// keyed on the tab, so it keeps focus through the switch below.
+				inputRef?.current?.focus();
+				void window.maestro.web
+					.requestNewTab(
+						activeSessionId,
+						false,
+						...(sourceTabId
+							? ([sourceTabId, resolveTabPermissionMode(getActiveTab(target))] as const)
+							: [])
+					)
+					.then((result) => {
+						if (!result?.tabId) return;
+						// Draw the tab NOW rather than waiting to be told about it. The
+						// desktop owns the tab inventory and publishes it from a 500ms
+						// poll (`useRemoteIntegration`), so a client that only reacted to
+						// the broadcast sat there doing nothing for up to half a second
+						// after the tap. The answer already carries the id the desktop
+						// minted, so adopt it: the inventory sync that follows matches on
+						// id and keeps the tab this client already has.
+						updateSessionWith(activeSessionId, (session) => {
+							// The broadcast can win the race. Then the tab is already here
+							// and all that is left is to make it the visible one - an
+							// inventory snapshot deliberately never moves a browser
+							// client's tab, since that focus belongs to whoever holds this
+							// client, not to whoever is at the desktop.
+							if (session.aiTabs.some((tab) => tab.id === result.tabId)) {
+								return {
+									...session,
+									...aiTabFocusFields(result.tabId),
+									aiTabs: session.aiTabs.map((tab) =>
+										tab.id === result.tabId && newShell && result.permissionMode
+											? { ...tab, ...permissionModeFields(result.permissionMode) }
+											: tab
+									),
+								};
+							}
+							const created = createTab(session, {
+								id: result.tabId,
+								permissionSource: newShell && result.permissionMode ? result : undefined,
+								saveToHistory: defaultSaveToHistory,
+								showThinking: defaultShowThinking,
+							});
+							return created?.session ?? session;
 						});
-						return created?.session ?? session;
-					});
-				})
-				.catch((error) =>
-					logger.error('[useAITabHandlers] Failed to create desktop tab:', undefined, error)
-				);
-			return;
-		}
+					})
+					.catch((error) =>
+						logger.error('[useAITabHandlers] Failed to create desktop tab:', undefined, error)
+					);
+				return;
+			}
 
-		updateSessionWith(activeSessionId, (session) => {
-			const result = createTab(session, {
-				saveToHistory: defaultSaveToHistory,
-				showThinking: defaultShowThinking,
+			const projectPermission =
+				newShell && !sourceTabId ? await resolveProjectConversationPermission(target) : undefined;
+
+			updateSessionWith(activeSessionId, (session) => {
+				const result = createTab(session, {
+					permissionSource: sourceTabId
+						? session.aiTabs.find((tab) => tab.id === sourceTabId)
+						: projectPermission,
+					saveToHistory: defaultSaveToHistory,
+					showThinking: defaultShowThinking,
+				});
+				return result?.session ?? session;
 			});
-			return result?.session ?? session;
-		});
-	}, [inputRef]);
+		},
+		[inputRef]
+	);
 
 	const handleNewAgentSession = useCallback(() => {
-		createNewAITab();
+		createNewAITab(true);
 		useModalStore.getState().closeModal('agentSessions');
 	}, [createNewAITab]);
 
@@ -221,7 +251,7 @@ export function useAITabHandlers(
 		[performTabClose]
 	);
 
-	const handleNewTab = createNewAITab;
+	const handleNewTab = useCallback(() => createNewAITab(), [createNewAITab]);
 
 	// "Close all" means every tab the user can see. Hidden consult tabs (unopened
 	// cross-agent @mentions) have no chip, so closing one here would silently

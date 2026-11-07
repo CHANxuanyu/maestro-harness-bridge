@@ -22,6 +22,8 @@ import {
 } from '../../../renderer/hooks/session/useSessionLifecycle';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { useModalStore } from '../../../renderer/stores/modalStore';
+import { resetStore } from '../../helpers/resetStores';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useUIStore } from '../../../renderer/stores/uiStore';
 import type { Session, AITab } from '../../../renderer/types';
 import { createMockFileTab, createMockAITab } from '../../helpers/mockTab';
@@ -29,7 +31,10 @@ import { createMockSession as baseCreateMockSession } from '../../helpers/mockSe
 import { createGroupFromTabRefs } from '../../../renderer/utils/panelLayout';
 import { notifyToast } from '../../../renderer/stores/notificationStore';
 
-vi.mock('../../../renderer/stores/notificationStore', () => ({ notifyToast: vi.fn() }));
+vi.mock('../../../renderer/stores/notificationStore', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../../renderer/stores/notificationStore')>()),
+	notifyToast: vi.fn(),
+}));
 
 // ============================================================================
 // Test Helpers
@@ -90,6 +95,7 @@ function createDeps(overrides: Partial<SessionLifecycleDeps> = {}): SessionLifec
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	resetStore(useSettingsStore);
 	vi.useFakeTimers();
 
 	// Reset stores
@@ -112,6 +118,7 @@ beforeEach(() => {
 
 	// Mock window.maestro APIs
 	(window as any).maestro = {
+		agents: { getCapabilities: vi.fn().mockResolvedValue({ supportsReadOnlyMode: true }) },
 		process: {
 			kill: vi.fn().mockResolvedValue(undefined),
 		},
@@ -160,6 +167,46 @@ describe('useSessionLifecycle', () => {
 	// ======================================================================
 
 	describe('handleSaveEditAgent', () => {
+		it('tightens standard permission on a new-shell edit without changing the old conversation object', async () => {
+			useSettingsStore.setState({ newShell: true });
+			const session = createMockSession({
+				toolType: 'claude-code',
+				aiTabs: [createMockAITab({ permissionMode: 'standard', readOnlyMode: false })],
+			});
+			useSessionStore.setState({ sessions: [session] });
+			const { result } = renderHook(() => useSessionLifecycle(createDeps()));
+			await act(async () => {
+				await result.current.handleSaveEditAgent(session.id, session.name, 'codex');
+			});
+			expect(useSessionStore.getState().sessions[0].aiTabs[0]).toMatchObject({
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
+			expect(session.aiTabs[0].permissionMode).toBe('standard');
+		});
+
+		it('refuses a new-shell edit when the target cannot retain read-only permission', async () => {
+			useSettingsStore.setState({ newShell: true });
+			vi.mocked(window.maestro.agents.getCapabilities).mockResolvedValue({
+				supportsReadOnlyMode: false,
+			} as never);
+			const session = createMockSession({
+				toolType: 'claude-code',
+				aiTabs: [createMockAITab({ permissionMode: 'readonly', readOnlyMode: true })],
+			});
+			useSessionStore.setState({ sessions: [session] });
+			const { result } = renderHook(() => useSessionLifecycle(createDeps()));
+			await act(async () => {
+				await result.current.handleSaveEditAgent(session.id, 'Changed name', 'gemini');
+			});
+			expect(useSessionStore.getState().sessions[0]).toBe(session);
+			expect(notifyToast).toHaveBeenCalledWith(
+				expect.objectContaining({
+					message: 'This tool cannot preserve the source conversation permissions.',
+				})
+			);
+		});
+
 		it('updates session with all agent configuration fields', () => {
 			const session = createMockSession({ id: 'session-1', name: 'Old Name' });
 			useSessionStore.setState({ sessions: [session], activeSessionId: 'session-1' });

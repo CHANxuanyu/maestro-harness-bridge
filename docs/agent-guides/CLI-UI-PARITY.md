@@ -38,6 +38,43 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## Stop and read-only resume corrections (2026-11-06)
+
+No UI action or CLI verb is added. `tab permission <tab> readonly` and
+`tab read-only <tab> true` retain the existing permission implementation;
+`send` and `dispatch` into an open conversation still reach `useInputProcessing`.
+That path now uses `appendReadOnlyPrompt()` in `src/shared/readOnlyPrompt.ts`.
+Resume, backfill and refresh decode the same suffix in
+`transcriptMessagesToLogEntries()`, including history written by older builds.
+Standalone CLI and Auto Run contain no copy of this suffix and are unchanged.
+Native files remain untouched. The CLI's raw native-history read still returns
+provider content rather than the renderer's normalized conversation entries.
+
+Stop forwards the existing `ManagedProcess.interrupted` flag through exit IPC,
+so the exit listener does not request a synopsis after deliberate cancellation.
+The existing CLI Stop gap below remains open. A new command cannot simply reuse
+the old remote interrupt callback: it constructs a legacy process id and does
+not share the desktop handler's multi-tab, queue and synopsis cancellation work.
+Closing that gap requires an acknowledged command routed to the same owner and
+interrupt implementation. This correction adds no separate stop implementation.
+
+The review follow-up keeps these same actions. Consecutive refreshes preserve
+genuine repeated sends; an old cached internal prompt outside the newest 500
+messages makes the same read-only service widen its window. `withMentionTurnNotes()`
+now uses the shared `appendTurnNote()` envelope, including editable templates;
+`stripTurnPrompt()` decodes it and the historical default note order before
+native messages enter resume, backfill or refresh. No new CLI verb or UI control
+is added. The native refresh and Stop entries under Open gaps remain open, and
+raw native-history reads still expose provider wire content. Old custom notes
+without the new envelope cannot be identified safely and remain unchanged.
+
+The third-round Electron correction changes acceptance checks only. Full
+conversation assertions cover both repaired sends and their distinct identities;
+the persisted cache is checked against its exact 100-entry tail, followed by
+native backfill after restart. Selecting the conversation still uses the existing
+refresh service. No UI action, CLI verb or production implementation changes,
+and the native refresh and Stop gaps below remain open.
+
 ## New shell cleanup, batch 1
 
 The new shell permission menu and the phone options sheet share `permissionModes()`
@@ -59,6 +96,69 @@ Moving account configuration to the project menu keeps `create-agent <name>` wit
 `--cwd`, `--type`, `--group` or `--preset`. The footer and menu reuse `open settings`,
 `open notification-center`, `notify inbox` and `open feedback`. Hiding a control
 does not remove its command or write a saved preference.
+
+## New shell conversation permissions, T1
+
+| UI action                                          | CLI                                                                    | Shared implementation                                                                 |
+| -------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| New conversation in the current conversation       | `tab new --agent <id>` uses project recency as specified for CLI entry | `createTab()`, `newConversationPermissionFields()`                                    |
+| Project plus, palette or new conversation shortcut | `tab new --agent <id> [--prompt <text>]`                               | `resolveProjectConversationPermission()`, `createTab()`, both remote new tab handlers |
+| Select a conversation, then create                 | `focus-agent <agent> --tab <tab>` followed by `tab new --agent <id>`   | `setActiveTab()`, also used by unified keyboard navigation                            |
+| Pick a tool for a new conversation                 | `tab new --agent <id> --provider <provider>`                           | `context:conversation`, `openHandoffTarget()`                                         |
+| Change tool in an empty conversation               | `tab new --agent <id> --provider <provider> --replace-empty <tab>`     | `readHandoffSource()`, `openHandoffTarget()`                                          |
+| Prepare handoff or review                          | `handoff <source-tab> <provider> [--review]`                           | Source permission snapshot and `openHandoffTarget()`                                  |
+| Deliberately change permission                     | `tab permission <tab-id> <full\|standard\|readonly>`                   | `permissionModeFields()`; read with `tab show <tab-id> --json`                        |
+
+Inheritance is gated by `newShell`. Conversation buttons carry the exact source.
+The browser sends `sourceTabId` and `sourcePermissionMode` to the owner.
+`remoteConversationPermissionFields()` chooses the stricter of the browser source
+and the current desktop copy, with missing or invalid browser metadata requiring
+readonly. The browser adopts the returned permission fields, including when an inventory update arrives before the response. A missing
+explicit source refuses creation. CLI creation retains the specified project scope.
+
+Project creation uses `resolveProjectConversationPermission()`. Main requests the
+compact permission and activity snapshot from each session's owning window in
+parallel, with a 250 ms limit. Unassigned sessions follow the existing primary
+window ownership rule. It checks the replying window and rejects a reply
+if ownership moved. Complete replies select the newest selection, message or
+creation time after checking each authoritative project and host identity. Missing
+or timed out replies require readonly, even if every cached copy says full access.
+Projects on different SSH hosts remain separate; remote paths are not resolved
+locally. The provider creation route also bounds its source metadata hop to
+250 ms and lets the target use the same resolver after a missing reply.
+
+`update-agent <id> --cwd <path>` routes to the session's owning window, like
+`update-agent --provider`. The owner applies the existing `withWorkingDirectory()`
+transition used by directory editing, so permission snapshots report the current
+project. This routing correction applies to both shells; no action or verb is added.
+
+Closing the last tab preserves its permission in the automatic replacement.
+Provider changes preserve supported modes, tighten unsupported standard to readonly,
+and refuse a target without an equally strict mode. Handoff snapshots carry the
+source permission. Manual changes only patch the new tab. Native history imports,
+the classic shell keep their existing behavior. Context-bearing creation also crosses the permission boundary; existing compaction source overrides remain in place. No new CLI verb,
+permission confirmation or user-facing text is introduced.
+
+Review follow-up (2026-11-06): `createTab()` treats initial logs as new context,
+not native history. Without an explicit source it takes the strictest known
+conversation in this owner; only an empty owner falls back to project recency.
+The fallback inventory includes hidden, closed, orphaned and snoozed conversations,
+including snoozed group members. Project recency still excludes hidden consults. Missing capabilities refuse restricted creation.
+`tileNewTabInSession()` resolves project owners before passing permissions to
+`tileNewTab()`. Forking passes its exact source to `createTabAtPosition()` and
+uses the validated fields in the first spawn. The call-site inventory test covers
+`createTab`, its import aliases and `createTabAtPosition`; a new call requires review.
+
+`unsnooze <id>` and `snooze wake <id>` share `wakeSnoozeNow()` and the tab store
+with the UI. Single and group restore use `restoreConversationPermissions()`,
+as does the scheduler. A group is validated as a whole. Unsupported restrictions
+retain the snooze and suppress wake prompts; an already open duplicate is also
+validated against its saved permission ceiling. No CLI verb or user text is added.
+
+Open gaps: local fallback cannot know a restriction that no reachable window or
+local copy has ever reported. It uses the strictest known mode as specified by the
+review, rather than claiming the unavailable owner's current permission is known.
+Electron and browser acceptance scenarios require an external run.
 
 ## New shell project opening, batch 2
 
@@ -129,6 +229,29 @@ startup and show an error without starting a terminal in the new shell.
 `tab show --json` returns `newShellPanel`, including the selected
 terminal ID. Tasks are read-only, extracted from the latest top-level TodoWrite or
 update_plan in the conversation; native-history reads expose the source tool data.
+
+Codex plan verification (2026-11-06): enabling `newShell` via `settings set newShell true`
+also opts desktop Codex conversation spawns into `tools.update_plan.enabled=true`.
+`dispatch <agent> <message> --tab <conversation>` uses that same spawn path and
+`buildAgentArgs()` as Send, including resume and SSH. Custom CLI config overrides
+remain last. Opening Tasks still uses `tab panel <conversation> tasks`; this change
+adds no UI action or CLI verb. `native-history read <agent> <native-id>` exposes the
+same read-only transcript used by the panel. The default-skipped real diagnostic is
+documented in [Codex plan verification](../verification/codex-plan.md).
+The review fix uses the same StdoutHandler for Send and `dispatch`: plan updates
+and completion snapshots preserve the pending final answer. No new UI action or
+CLI verb is added. The default synthetic Electron case sends two messages via
+`NativeApp.send` and opens Tasks via `tab panel`. The real diagnostic fills the
+same composer and presses Enter once, preserving its plan prompt without the
+generic real-workload suffix. `NativeApp.cli` appends `--json`, which `dispatch`
+does not accept, so neither scenario submits messages through that wrapper.
+The opt-in login diagnostic uses `--ephemeral` and does not test native-history
+recovery. Product Send and CLI `dispatch` still share their existing implementation.
+
+Open gap: there is no CLI result containing the normalized live Tasks panel list or
+its empty-state text. `tab show` exposes the panel selection, and native history
+exposes source tool calls; neither is a live panel snapshot. Standalone offline CLI
+jobs do not inherit the new shell tool opt-in.
 
 ## New shell daily completion
 
@@ -377,6 +500,43 @@ moves that existing editor into the panel and does not add an annotation command
 creation with the plus menu and empty-conversation picker. Existing CLI commands
 for hidden upstream features remain available.
 
+## Tool output on demand (2026-11-06)
+
+集成权限补充：新界面的 `update-agent <id> --provider <provider> --force`
+和项目设置都向 `switchSessionProvider()` 传入目标工具能力，逐标签调用
+`newConversationPermissionFields()`。不支持标准权限时收紧为只读；任一标签
+无法保留限制或能力查询失败时拒绝整次切换，CLI 返回失败原因。用
+`tab show <tab-id> --json` 回读实际权限。旧界面的 CLI 重置和界面编辑行为不变。
+
+New-shell expanded tool cards read one completed Claude or Codex tool result with
+`maestro-cli native-history tool-output <session> <tool-call-id> [--json] [--copy]`.
+`<session>` accepts a desktop tab ID, its unique prefix, `active`, or the exact
+native ID from project history with one unambiguous owning account. `--copy` copies the returned text through the
+same desktop `clipboard:writeText` handler used by the card.
+
+Both surfaces call `agentSessions:toolOutput`, which resolves the owner's account
+with `resolveAgentAccountDir()` and uses the provider's existing history lookup.
+The reader runs in a bounded worker, uses `readCodexRollout()` for plain JSONL and
+zstd, returns at most the last 2 MiB, and reports the number of omitted UTF-8 bytes.
+Cards retain their provider, native session and account source. The tab list exposes
+these compact sources so CLI reads can still address parked provider conversations.
+When a newly opened tab has not reached persistence yet, an exact native ID resolves
+through `agentSessions:listProjectHistory`. Ambiguous accounts are refused.
+Codex exec item IDs stay scoped for display; a unique command, call time within five
+seconds and bounded output preview map them to a native call on demand. Native refresh
+fills that call ID without replacing the card. Claude searches only the parent's
+`subagents` directory, at most 128 entries and 100 MiB across the parent and children.
+No result is written to session state or native files. Missing records, read limits
+and unavailable readers are explicit results. The CLI requires the running desktop.
+
+With `newShell` enabled, `update-agent <id> --provider <provider> --force`
+shares `switchSessionProvider()` with Edit Agent. It parks each tab's native
+identity through `switchTabProvider()` and retains transcripts, tool sources,
+drafts, file tabs and running turns. Provider overrides are cleared for the next
+turn. The classic CLI keeps its existing reset behavior. The tool-output Electron
+scenario verifies the old Claude answer remains after the Codex continuation,
+then reads the old result through both the card and `native-history tool-output`.
+
 ## Covered
 
 Notification center history uses the live desktop `notificationStore` over a request-response bridge. Main owns durable append/read/clear mutations in `maestro-notification-history.json`; renderer snapshots are synchronized across windows, and CLI results await committed writes. `notify inbox list --unread` filters the snapshot, `read <id>` / `read-all` update read state, `clear` clears history, `dismiss [id]` dismisses one entry or clears visible toasts, and `activate <id>` / `link <id>` run the same entry and inline-link actions as the UI. Every result includes the resulting unread count and history. `detail <id>` / `collapse` expand and collapse the same in-inbox details view. The five opt-in inbox preferences are registered settings and can be changed with `settings set <key> <value>`. `open notification-center` and `notify inbox open` open the app-level popover even when the Main Panel header is absent.
@@ -452,7 +612,75 @@ Notification center history uses the live desktop `notificationStore` over a req
 | Thought Stream: Steer Auto Run (send a note, cancel one, read replies)      | `steer-auto-run send <note> -a <agent>`, `steer-auto-run list`, `steer-auto-run cancel <id>`                     |
 | Playbook Exchange: browse, README, install                                  | `marketplace list`, `marketplace show <id>`, `marketplace import`                                                |
 
+## New shell single file changes (2026-11-06)
+
+| UI action                     | CLI                                                   | Shared implementation                                     |
+| ----------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
+| Stage a changed file          | `changes stage <path>... [--agent <id>] [--tab <id>]` | `git:applyChange` calls `applyGitChange()`                |
+| Unstage a file                | `changes unstage <path>...`                           | The same request with `action: 'unstage'`                 |
+| Confirm reverting a file      | `changes revert <path>... --yes`                      | The same request with `action: 'revert', confirmed: true` |
+| Commit the staged files       | `changes commit --message <text>`                     | The same request with `action: 'commit'`                  |
+| Refresh or inspect the result | `changes [--file <path>] [--json]`                    | Existing `git:changes` and `git:changeDiff` handlers      |
+
+Every write also accepts `--agent`, `--tab` and `--json`. Paths are exact names
+relative to the repository root, not globs or directories. Put options before
+`--` when a name begins with a hyphen, for example
+`changes stage --tab <id> -- -new.txt`. `changes --json` exposes `staged`, an
+optional `unstaged` flag for partially staged files, and `stagedCount` when the
+500-file display limit hides rows. The count covers the whole index.
+
+The panel uses the current conversation cwd, never a terminal's later cwd;
+SSH honors the configured host and working directory override. Main resolves
+the root through Git on that host and serializes writes per host and worktree.
+Staging an indexed rename adds only its destination, including later edits and
+multi-file requests. Unstage and revert include both rename paths. Copies leave
+the source alone, unstaging preserves worktree contents, and revert restores
+both index and worktree against HEAD. A staged deletion with an untracked file
+at the same path stays one staged row with `unstaged: true`; group and commit
+counts include the deletion once. Unstage preserves the replacement on disk;
+revert restores the original HEAD file after confirmation.
+New files are deleted only after confirmation. Conflict rows offer stage to
+mark a resolved file, and never offer revert. Nested repositories and submodule
+revert are refused. A partially staged row stays in the staged group with an
+additional indicator; committing includes only the index contents. Git and
+hook failures return their original diagnostics, with no automatic retry.
+The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
+operations in either shell. No new parity gap is introduced by these actions.
+
 ## Open gaps
+
+**Fork and create-in-tile actions (2026-11-06).** Message forking still has no
+`tab fork --at` verb; this remains the Composer backlog below. The palette and
+shortcut for creating a conversation directly in a tile share
+`tileNewTabInSession()`, but there is no CLI action calling that service.
+`tab new` covers the same project permission resolution, not the tiling action.
+This permission repair does not add either command. Scheduled wake refusal has
+no new diagnostic UI; the retained snooze can be woken manually after selecting
+a tool that can preserve the restriction.
+
+**CLI inventory timing (2026-11-06).** `session list` and `tab show` read the
+persisted desktop inventory. UI history selection, closed-tab restoration and
+`tab new` can precede its debounced save. Acceptance waits for the expected native
+identity or returned tab ID before reading or mutating it, then uses that exact ID.
+The permission write and provider switch still require immediate readback after
+their acknowledged save. There is no live-owner inventory read in these CLI verbs.
+
+**Provider switch wording (2026-11-06).** The existing CLI help, force warning and
+success text still describe the classic reset behavior. With `newShell` enabled,
+the operation preserves conversations as documented above. This round changes
+the transition and its tests, not the CLI text or localization infrastructure.
+
+**On-demand tool output (2026-11-06).** SSH is unavailable because existing remote
+readers transfer the transcript before selecting a result. The card hides this
+action and the API refuses remote requests instead of reading local files. The
+view-local full-output hide button has no CLI fold-state verb; CLI reading and
+copying are covered, but do not expand or collapse a desktop card. Older cached
+Claude cards without a call ID need a native refresh. Cards from a previously mixed
+provider history without saved source identity are not offered a guessed target.
+Codex exec lookup refuses ambiguous evidence, missing commands, unsupported command
+wrappers or native call times more than five seconds from the live start event.
+Legacy filename lookup inspects at most 64 KiB of metadata;
+nonstandard records with later identity metadata may not be found.
 
 **Project native history (2026-10-16).** The desktop bridge exposes `agentSessions:listProjectHistory`, but CLI `sessions <agent-id>` is still provider scoped. One-click native-history open with automatic runner creation uses the canonical renderer resume flow and has no dedicated CLI verb yet. Adding a WS renderer action is outside this local sidebar acceptance change; this is an explicit parity gap, not a covered action. The same gap covers the external-transcript catch-up: selecting an open native conversation in the project tree (or returning to the window while it is on screen and a history scan reports newer native activity) re-reads the transcript and appends what was written outside Maestro (`refreshNativeConversation()` in `src/renderer/services/refreshNativeConversation.ts`, read-only, same tab/account/host/native id). No CLI verb triggers or reports that refresh yet; the read half is reachable through `sessions`/`agentSessions:read`, but nothing lets an agent fold newer native messages into an open tab. Since 2026-10-23 the desktop also runs the same refresh automatically for the visible local Codex tab when its transcript revision changes (`useNativeTranscriptFollow()` in `src/renderer/hooks/session/useNativeTranscriptFollow.ts`, over `agentSessions.getTranscriptRevision`). That is background upkeep, not a user action, so it adds no row and changes no CLI verb.
 
@@ -471,7 +699,12 @@ a design constraint; they are simply not built yet.
 1. **Interrupt a running turn.** Escape stops a busy agent in the UI. There is
    no CLI equivalent and no WS message behind one. This is the largest remaining
    gap: an agent that starts a runaway turn on another agent cannot stop it.
-2. **Reopen a closed tab.** `closedTabHistory` and `unifiedClosedTabHistory` are
+   The 2026-11-06 Stop/synopsis correction preserves this gap; the legacy remote
+   interrupt callback is not the desktop interrupt implementation.
+2. **Reopen a closed tab.** New-shell restore now revalidates permissions against
+   the current tool through `restoreConversationPermissions()` and the same
+   `newConversationPermissionFields()` used by creation. This fix adds no CLI verb.
+   `closedTabHistory` and `unifiedClosedTabHistory` are
    runtime-only and never persisted, so the CLI cannot see the stack to restore
    from it. Closing this means persisting that history first.
 3. **Duplicate an agent.** The context menu's "Duplicate..." opens a modal with

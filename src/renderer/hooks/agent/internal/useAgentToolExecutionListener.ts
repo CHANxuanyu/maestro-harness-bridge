@@ -36,6 +36,8 @@ export function useAgentToolExecutionListener(): void {
 					state?: unknown;
 					timestamp: number;
 					toolCallId?: string;
+					nativeToolCallId?: string;
+					toolOutputSource?: import('../../../../shared/nativeToolOutput').NativeToolOutputTarget;
 					parentToolUseId?: string;
 				}
 			) => {
@@ -127,6 +129,13 @@ export function useAgentToolExecutionListener(): void {
 								metadata: {
 									...existing.metadata,
 									toolState: mergedState,
+									...(toolEvent.toolCallId ? { toolCallId: toolEvent.toolCallId } : {}),
+									...(toolEvent.nativeToolCallId
+										? { nativeToolCallId: toolEvent.nativeToolCallId }
+										: {}),
+									...(toolEvent.toolOutputSource
+										? { toolOutputSource: toolEvent.toolOutputSource }
+										: {}),
 									...(mergedParentToolUseId ? { parentToolUseId: mergedParentToolUseId } : {}),
 								},
 								...(isInteractive ? { renderStyle: 'text-stream' as const } : {}),
@@ -144,6 +153,13 @@ export function useAgentToolExecutionListener(): void {
 								text: toolEvent.toolName,
 								metadata: {
 									toolState: newState,
+									...(toolEvent.toolCallId ? { toolCallId: toolEvent.toolCallId } : {}),
+									...(toolEvent.nativeToolCallId
+										? { nativeToolCallId: toolEvent.nativeToolCallId }
+										: {}),
+									...(toolEvent.toolOutputSource
+										? { toolOutputSource: toolEvent.toolOutputSource }
+										: {}),
 									...(toolEvent.parentToolUseId
 										? { parentToolUseId: toolEvent.parentToolUseId }
 										: {}),

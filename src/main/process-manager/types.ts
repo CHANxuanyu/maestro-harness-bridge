@@ -91,6 +91,10 @@ export interface ProcessConfig {
  * Internal representation of a managed process
  */
 export interface ManagedProcess {
+	toolOutputSource?: Omit<
+		import('../../shared/nativeToolOutput').NativeToolOutputTarget,
+		'nativeSessionId'
+	> & { nativeSessionId?: string };
 	sessionId: string;
 	toolType: string;
 	ptyProcess?: IPty;
@@ -204,7 +208,7 @@ export interface ProcessManagerEvents {
 	/** `signal` is set only when the process was terminated by a signal
 	 *  (WIFSIGNALED). node-pty reports those with `code` 0, so the code alone
 	 *  cannot distinguish a clean exit from a kill. */
-	exit: (sessionId: string, code: number, signal?: number) => void;
+	exit: (sessionId: string, code: number, signal?: number, interrupted?: boolean) => void;
 	spawn: (config: ProcessConfig) => void;
 	'command-exit': (sessionId: string, code: number) => void;
 	usage: (sessionId: string, stats: UsageStats) => void;
@@ -217,6 +221,8 @@ export interface ProcessManagerEvents {
 }
 
 export interface ToolExecution {
+	toolOutputSource?: import('../../shared/nativeToolOutput').NativeToolOutputTarget;
+	nativeToolCallId?: string;
 	toolName: string;
 	state: unknown;
 	timestamp: number;

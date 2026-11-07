@@ -5,6 +5,7 @@ import { notifyToast } from '../../stores/notificationStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { captureException } from '../../utils/sentry';
 import { prepareMaestroSystemPrompt } from '../../utils/spawnHelpers';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 /**
  * Fork conversation at a log id into a new AI tab.
@@ -107,6 +108,7 @@ You are continuing this conversation from the fork point above. Briefly acknowle
 		};
 
 		const tabResult = createTabAtPosition(session, {
+			permissionSource: sourceTab,
 			afterTabId: sourceTab.id,
 			name: forkTabName,
 			logs: [forkNotice, userContextLog],
@@ -116,6 +118,9 @@ You are continuing this conversation from the fork point above. Briefly acknowle
 
 		const newTabId = tabResult.tab.id;
 		const sourceTabId = sourceTab.id;
+		const permissions = useSettingsStore.getState().newShell
+			? { permissionMode: tabResult.tab.permissionMode, readOnlyMode: tabResult.tab.readOnlyMode }
+			: {};
 
 		// 5. Commit new tab onto the live session (avoid stale snapshot spread).
 		//    Mark the tab as busy since we're about to spawn.
@@ -202,6 +207,7 @@ You are continuing this conversation from the fork point above. Briefly acknowle
 
 				const spawnSessionId = `${session.id}-ai-${newTabId}`;
 				await window.maestro.process.spawn({
+					...permissions,
 					sessionId: spawnSessionId,
 					toolType: session.toolType,
 					cwd: session.cwd,

@@ -1,3 +1,8 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import {
+	DEFAULT_CAPABILITIES,
+	primeCapabilitiesCache,
+} from '../../../renderer/hooks/agent/useAgentCapabilities';
 /**
  * Tests for useSummarizeAndContinue - handleSummarizeAndContinue (Tier 3E)
  *
@@ -118,6 +123,7 @@ function seedActiveSession(session: Session | null) {
 // ============================================================================
 
 beforeEach(() => {
+	useSettingsStore.setState({ newShell: false });
 	vi.clearAllMocks();
 
 	// Reset stores
@@ -164,6 +170,15 @@ describe('compacted conversation settings', () => {
 		{ readOnlyMode: true },
 		{},
 	])('preserves explicit settings and inheritance: %j', async (settings) => {
+		useSettingsStore.setState({ newShell: true });
+		vi.mocked(window.maestro.agents.getAllCapabilities).mockResolvedValueOnce({
+			'claude-code': {
+				...DEFAULT_CAPABILITIES,
+				supportsReadOnlyMode: true,
+				supportsStandardPermissionMode: true,
+			},
+		});
+		await primeCapabilitiesCache();
 		const actual = await vi.importActual<typeof import('../../../renderer/utils/tabHelpers')>(
 			'../../../renderer/utils/tabHelpers'
 		);

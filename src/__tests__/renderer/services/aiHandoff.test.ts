@@ -1,3 +1,6 @@
+import { conversationPermissionSnapshot } from '../../../renderer/utils/newConversationPermissions';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 import { useOperationStore } from '../../../renderer/stores/operationStore';
 import { act, renderHook } from '@testing-library/react';
 import { useInputSync } from '../../../renderer/hooks/input/useInputSync';
@@ -50,6 +53,12 @@ const request = (over: Partial<HandoffOpenRequest> = {}): HandoffOpenRequest => 
 const sessions = () => useSessionStore.getState().sessions;
 
 beforeEach(() => {
+	for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
+		setCapabilitiesCache(id, capabilities);
+	window.maestro.windows = {
+		...window.maestro.windows,
+		getConversationPermissions: vi.fn().mockResolvedValue([]),
+	};
 	vi.clearAllMocks();
 	useOperationStore.getState().resetAll();
 	clearLiveDraft('source-tab');
@@ -294,7 +303,10 @@ describe('handoff renderer work without UI changes', () => {
 		expect(snapshot).toMatchObject({ sourceTitle: 'Original' });
 		useSessionStore.getState().updateSession('source', { aiTabs: [] });
 		const result = await openHandoffTarget(
-			request({ origin: { ...request().origin, sourceTitle: undefined } })
+			request({
+				origin: { ...request().origin, sourceTitle: undefined },
+				sourcePermission: snapshot?.sourcePermission,
+			})
 		);
 		expect(result).toMatchObject({ title: 'Continued: Claude Code' });
 	});
@@ -302,7 +314,12 @@ describe('handoff renderer work without UI changes', () => {
 	it('keeps a captured title in a new runner when the source lives in another window', async () => {
 		useSettingsStore.setState({ newShell: true });
 		useSessionStore.setState({ sessions: [] });
-		const result = await openHandoffTarget(request({ runnerId: undefined }));
+		const result = await openHandoffTarget(
+			request({
+				runnerId: undefined,
+				sourcePermission: { permissionMode: 'readonly', readOnlyMode: true },
+			})
+		);
 		expect(result).toMatchObject({
 			success: true,
 			createdAgent: true,
@@ -823,4 +840,165 @@ describe('handoff renderer work without UI changes', () => {
 		expect(sessions()[1].aiTabs.every((tab) => tab.agentSessionId === null)).toBe(true);
 		expect(enqueuePromptForTab).not.toHaveBeenCalled();
 	});
+});
+
+describe('new shell permission boundaries', () => {
+	it.each(['handoff', 'review'] as const)('keeps readonly in a %s target', async (mode) => {
+		useSettingsStore.setState({ newShell: true });
+		sessions()[0].aiTabs[0].readOnlyMode = true;
+		const result = await openHandoffTarget(request({ mode }));
+		expect(result.success).toBe(true);
+		expect(sessions()[1].aiTabs.find((tab) => tab.id === result.tabId)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+	});
+
+	it('tightens standard to readonly when switching to Codex', async () => {
+		useSettingsStore.setState({ newShell: true });
+		sessions()[0].aiTabs[0].permissionMode = 'standard';
+		const result = await openHandoffTarget(request());
+		expect(sessions()[1].aiTabs.find((tab) => tab.id === result.tabId)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+	});
+
+	it('keeps permission when changing the tool in an empty conversation', async () => {
+		useSettingsStore.setState({ newShell: true });
+		sessions()[0].aiTabs = [
+			createMockAITab({
+				id: 'source-tab',
+				logs: [],
+				agentSessionId: null,
+				inputValue: '',
+				readOnlyMode: true,
+			}),
+		];
+		const result = await openHandoffTarget(
+			request({ newConversation: { replaceTabId: 'source-tab' } })
+		);
+		expect(result.success).toBe(true);
+		expect(
+			sessions()
+				.find((session) => session.id === result.agentId)
+				?.aiTabs.find((tab) => tab.id === result.tabId)
+		).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
+	});
+});
+
+describe('permission metadata across renderer owners', () => {
+	it('project provider creation uses fresh owner permissions instead of stale full copies', async () => {
+		useSettingsStore.setState({ newShell: true });
+		window.maestro.windows = {
+			...window.maestro.windows,
+			getConversationPermissions: vi.fn(async (ids: string[]) =>
+				ids.map((sessionId, index) => ({
+					...conversationPermissionSnapshot(sessionId)!,
+					tabs: [
+						{
+							id: `${sessionId}-tab`,
+							lastActivity: index + 1,
+							permissionMode: 'readonly' as const,
+							readOnlyMode: true,
+						},
+					],
+				}))
+			),
+		};
+		const result = await openHandoffTarget(
+			request({ newConversation: {}, origin: { ...request().origin, sourceTabId: '' } })
+		);
+		expect(result.success).toBe(true);
+		expect(
+			sessions()
+				.find((session) => session.id === result.agentId)
+				?.aiTabs.find((tab) => tab.id === result.tabId)
+		).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
+		expect(window.maestro.windows.getConversationPermissions).toHaveBeenCalled();
+	});
+
+	it('captures legacy permission without reading history or building a handoff', async () => {
+		sessions()[0].aiTabs[0].readOnlyMode = true;
+		const result = await readHandoffSource({
+			sourceAgentId: 'source',
+			sourceTabId: 'source-tab',
+			provider: 'claude-code',
+			permissionOnly: true,
+		});
+		expect(result).toMatchObject({
+			sourcePermission: { permissionMode: 'readonly', readOnlyMode: true },
+			draft: { text: '' },
+		});
+		expect(gitService.getChanges).not.toHaveBeenCalled();
+	});
+	it('carries the exact handoff source permission even if another tab is more recent', async () => {
+		sessions()[0].aiTabs[0].permissionMode = 'standard';
+		sessions()[0].aiTabs.push(createMockAITab({ permissionMode: 'full' }));
+		const result = await readHandoffSource({
+			sourceAgentId: 'source',
+			sourceTabId: 'source-tab',
+			provider: 'claude-code',
+		});
+		expect(result?.sourcePermission).toEqual({ permissionMode: 'standard', readOnlyMode: false });
+	});
+	it('uses the snapshot when the empty source is in another window', async () => {
+		useSettingsStore.setState({ newShell: true });
+		useSessionStore.setState({ sessions: [sessions()[1]] });
+		const result = await openHandoffTarget(
+			request({
+				sourcePermission: { permissionMode: 'readonly', readOnlyMode: true },
+				newConversation: { replaceTabId: 'remote-empty', source: { stagedImages: [] } },
+			})
+		);
+		expect(result.success).toBe(true);
+		expect(sessions()[0].aiTabs.find((tab) => tab.id === result.tabId)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+	});
+	it('inherits the latest project permission from the project plus provider picker', async () => {
+		useSettingsStore.setState({ newShell: true });
+		sessions()[0].aiTabs[0].readOnlyMode = true;
+		sessions()[0].aiTabs[0].createdAt = 20;
+		sessions()[1].aiTabs[0].createdAt = 1;
+		const result = await openHandoffTarget(
+			request({ newConversation: {}, origin: { ...request().origin, sourceTabId: '' } })
+		);
+		expect(result.success).toBe(true);
+		expect(sessions()[1].aiTabs.find((tab) => tab.id === result.tabId)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+	});
+	it('preserves standard in a supported Claude or DeepSeek target', async () => {
+		useSettingsStore.setState({ newShell: true });
+		vi.mocked(window.maestro.agents.getCapabilities).mockResolvedValueOnce({
+			supportsStandardPermissionMode: true,
+			supportsReadOnlyMode: true,
+		} as never);
+		const result = await openHandoffTarget(
+			request({
+				runnerId: undefined,
+				config: { toolType: 'claude-code' },
+				provider: 'deepseek',
+				sourcePermission: { permissionMode: 'standard', readOnlyMode: false },
+			})
+		);
+		expect(result.success).toBe(true);
+		expect(
+			sessions()
+				.find((session) => session.id === result.agentId)
+				?.aiTabs.find((tab) => tab.id === result.tabId)
+		).toMatchObject({ permissionMode: 'standard', readOnlyMode: false });
+	});
+});
+
+it('refuses a new shell handoff when neither the source nor its permission snapshot is available', async () => {
+	useSettingsStore.setState({ newShell: true });
+	useSessionStore.getState().updateSession('source', { aiTabs: [] });
+	const before = sessions()[1].aiTabs;
+	const result = await openHandoffTarget(request());
+	expect(result).toMatchObject({ success: false, code: 'unavailable' });
+	expect(sessions()[1].aiTabs).toEqual(before);
 });

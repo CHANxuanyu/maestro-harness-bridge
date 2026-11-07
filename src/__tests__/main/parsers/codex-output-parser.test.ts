@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import planEvents from '../../../../e2e/fixtures/native/codex-plan-events.json';
 import { CodexOutputParser } from '../../../main/parsers/codex-output-parser';
+import { compactToolOutput } from '../../../shared/toolOutput';
 import {
 	classifyRetryableError,
 	tokenExhaustionResetAt,
@@ -7,6 +9,68 @@ import {
 
 describe('CodexOutputParser', () => {
 	const parser = new CodexOutputParser();
+
+	it('preserves the observed exec plan sequence and final result classification', () => {
+		const parser = new CodexOutputParser();
+		const events = planEvents.map((event) => parser.parseJsonObject(event));
+		expect(events[9]).toMatchObject({ type: 'result', text: planEvents[9].item!.text });
+		expect(events[10]).toMatchObject({
+			type: 'tool_use',
+			toolName: 'update_plan',
+			toolCallId: 'item_1',
+			toolState: { status: 'completed' },
+		});
+		expect(
+			events
+				.filter((event) => event?.toolName === 'update_plan')
+				.map((event) => ({
+					status: (event!.toolState as { status: string }).status,
+					partial: event!.isPartial,
+				}))
+		).toEqual([
+			{ status: 'running', partial: false },
+			{ status: 'running', partial: true },
+			{ status: 'running', partial: true },
+			{ status: 'completed', partial: false },
+		]);
+		expect(events[11]?.type).toBe('usage');
+	});
+
+	it.each([
+		undefined,
+		null,
+		{},
+		[{ text: 'Step', completed: 'false' }],
+		[{ text: 'Step' }],
+		[{ completed: true }],
+		[null],
+	])('does not invent or clear a plan from malformed todo_list items: %j', (items) => {
+		const event = new CodexOutputParser().parseJsonObject({
+			type: 'item.updated',
+			item: { id: 'plan', type: 'todo_list', items },
+		});
+		expect(event?.type).toBe('system');
+		expect(event?.toolState).toBeUndefined();
+	});
+
+	it('keeps unfinished steps pending when the exec turn completes', () => {
+		const event = new CodexOutputParser().parseJsonObject({
+			type: 'item.completed',
+			item: { id: 'plan', type: 'todo_list', items: [{ text: 'Unfinished', completed: false }] },
+		});
+		expect(event?.toolState).toEqual({
+			status: 'completed',
+			input: { plan: [{ step: 'Unfinished', status: 'pending' }] },
+		});
+	});
+
+	it('preserves an explicitly empty exec task list', () => {
+		const event = new CodexOutputParser().parseJsonObject({
+			type: 'item.updated',
+			item: { id: 'plan', type: 'todo_list', items: [] },
+		});
+		expect(event?.toolState?.input).toEqual({ plan: [] });
+	});
 
 	it.each(['item.started', 'item.updated', 'item.completed'])(
 		'forwards %s checklist updates',
@@ -794,7 +858,7 @@ describe('CodexOutputParser', () => {
 	});
 
 	describe('tool output truncation', () => {
-		it('should truncate tool output exceeding 10000 chars', () => {
+		it('uses the persistence cap without losing the original output length', () => {
 			const p = new CodexOutputParser();
 			const longOutput = 'x'.repeat(15000);
 			const line = JSON.stringify({
@@ -802,14 +866,12 @@ describe('CodexOutputParser', () => {
 				item: { type: 'tool_result', output: longOutput },
 			});
 			const event = p.parseJsonLine(line);
-			expect(event?.toolState?.output).toContain('... [output truncated, 15000 chars total]');
-			// The truncated output should start with 10000 'x' chars
-			expect(event?.toolState?.output?.startsWith('x'.repeat(10000))).toBe(true);
+			expect(event?.toolState?.output).toBe(compactToolOutput(longOutput).output);
 		});
 
 		it('should not truncate tool output within limit', () => {
 			const p = new CodexOutputParser();
-			const shortOutput = 'x'.repeat(5000);
+			const shortOutput = 'x'.repeat(4000);
 			const line = JSON.stringify({
 				type: 'item.completed',
 				item: { type: 'tool_result', output: shortOutput },

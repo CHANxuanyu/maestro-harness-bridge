@@ -270,6 +270,7 @@ function harness(
 	overrides: {
 		getTargetSession?: () => CrossAgentTargetSession | null;
 		writable?: boolean;
+		agentAvailable?: boolean;
 	} = {}
 ) {
 	const processManager = new FakeProcessManager();
@@ -284,7 +285,7 @@ function harness(
 					command: 'claude',
 					path: 'claude',
 					args: [],
-					available: true,
+					available: overrides.agentAvailable ?? true,
 					// Mirrors the real claude-code definition. Both permission branches
 					// have to be present or `buildAgentArgs` emits nothing either way
 					// and the flag assertions below silently pass on any input.
@@ -378,6 +379,30 @@ describe('startCrossAgentRequest dispatch lifecycle', () => {
 
 		const config = vi.mocked(spawnGroupChatAgent).mock.calls[0][0];
 		expect(config.command).toBe('/opt/custom/claude');
+	});
+
+	it('consults an agent that only exists at its customPath', async () => {
+		// Detection only knows standard installs. The tab spawns customPath without
+		// asking it, so a detection miss must not refuse the same agent here.
+		const { chunks, dispatch } = harness({
+			agentAvailable: false,
+			getTargetSession: () => ({ ...targetSession(), customPath: '/opt/custom/claude' }),
+		});
+		await dispatch();
+
+		expect(chunks.some((chunk) => chunk.error)).toBe(false);
+		expect(vi.mocked(spawnGroupChatAgent).mock.calls[0][0].command).toBe('/opt/custom/claude');
+	});
+
+	it('reports an agent with neither a detected binary nor a customPath', async () => {
+		const { chunks, dispatch } = harness({ agentAvailable: false });
+		await dispatch();
+
+		expect(chunks.at(-1)).toMatchObject({
+			done: true,
+			error: expect.stringContaining('available'),
+		});
+		expect(vi.mocked(spawnGroupChatAgent)).not.toHaveBeenCalled();
 	});
 
 	it('falls back to the detected binary when the agent has no customPath', async () => {

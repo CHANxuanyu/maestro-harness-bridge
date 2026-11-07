@@ -475,7 +475,9 @@ export async function startCrossAgentRequest(
 	}
 
 	const agent = await agentDetector.getAgent(target.toolType);
-	if (!agent || !agent.available) {
+	// Detection only knows standard installs. A configured customPath runs anyway,
+	// exactly as it does for the agent's own tabs.
+	if (!agent || (!agent.available && !target.customPath)) {
 		emitError(`${getAgentDisplayName(target.toolType)} is not available.`);
 		return;
 	}

@@ -252,6 +252,12 @@ If your use case does NOT match an existing utility, prefer extending the canoni
 
 The tracker at [DEDUP-TRACKER.md](DEDUP-TRACKER.md) lists all known duplication findings.
 
+## Synthetic renderer benchmark stages
+
+`RendererRun.stage()` and `rendererOptions()` in `e2e/fixtures/perf-renderer-runner.ts` are the test-only home for renderer benchmark budgets, stage selection and incremental results. The old spec could spend its entire 45-minute test deadline inside an unresolved renderer or cleanup promise and wrote no results until every sample finished. Each stage now records START and END, atomically replaces a JSON snapshot and appends an independent JSONL event; only successful stages contribute metrics. The JSON guard is the existing `assertSerializedJsonIsSafe()`.
+
+Every asynchronous transport operation must use `StageScope.step()`. Its abort check prevents a late response from initiating more work or publishing success. A timeout must terminate the Electron child owned by that sample, record dependent phases as blocked and proceed to independent samples. Never silently count a blocked phase as passed, retry it automatically, or start isolated streaming before full row ID validation succeeds. This runner is not the product's idle process watchdog. Commands, sample caps and trace limitations are in [perf-renderer.md](../perf-renderer.md).
+
 ## Native test temporary directories
 
 `nativeTempRoot()` and `createNativeTempDir(prefix)` in `e2e/fixtures/native/temp-root.cjs` select `MAESTRO_E2E_TEMP_ROOT`, then the short macOS temporary root or the system temporary root. They resolve the root physically before creating directories. Use them for native fixture and Electron acceptance directories; OMP uses the same root for its containment guard. A symlinked temporary path must not produce a different Claude project key from the child process cwd.

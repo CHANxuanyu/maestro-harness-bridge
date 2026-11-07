@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createElement, StrictMode } from 'react';
 import { renderHook, act, cleanup } from '@testing-library/react';
 
 const runtime = vi.hoisted(() => ({ web: false }));
@@ -35,6 +36,7 @@ import {
 	updateSessionWith,
 	useSessionStore,
 } from '../../../renderer/stores/sessionStore';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useGroupChatStore } from '../../../renderer/stores/groupChatStore';
 import { gitService } from '../../../renderer/services/git';
 import type { BrowserTab, Session } from '../../../renderer/types';
@@ -109,6 +111,7 @@ const mockGetDeferredContent = vi.fn();
 const mockGroupsGetAll = vi.fn();
 const mockGroupChatList = vi.fn();
 const mockAgentsGet = vi.fn();
+const mockGetSetting = vi.fn();
 
 // ============================================================================
 // Setup / Teardown
@@ -118,6 +121,9 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	idCounter = 0;
 	runtime.web = false;
+	useSettingsStore.setState({ newShell: false, settingsLoaded: false });
+	mockGetSetting.mockResolvedValue(false);
+	window.maestro.settings.get = mockGetSetting;
 
 	useSessionStore.setState({
 		sessions: [],
@@ -1111,6 +1117,65 @@ describe('restoreSession - Runtime state reset', () => {
 // ============================================================================
 
 describe('restoreSession - Git info (local sessions)', () => {
+	it.each([false, true])(
+		'makes the new shell ready before local git refresh (StrictMode=%s)',
+		async (strict) => {
+			vi.useFakeTimers();
+			try {
+				mockGetSetting.mockResolvedValue(true);
+				const session = createMockSession({ gitBranches: ['saved'], gitTags: ['saved-tag'] });
+				mockGetAll.mockResolvedValue([session]);
+				let resolveGit!: (value: boolean) => void;
+				mockGitService.isRepo.mockImplementationOnce(
+					() =>
+						new Promise<boolean>((resolve) => {
+							resolveGit = resolve;
+						})
+				);
+				renderHook(() => useSessionRestoration(), {
+					wrapper: strict ? ({ children }) => createElement(StrictMode, null, children) : undefined,
+				});
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(1);
+				});
+				expect(useSessionStore.getState().sessionsLoaded).toBe(true);
+				expect(useSessionStore.getState().sessions[0].gitBranches).toEqual(['saved']);
+				expect(mockGitService.isRepo).not.toHaveBeenCalled();
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(40);
+				});
+				expect(mockGitService.isRepo).toHaveBeenCalledWith(session.cwd, undefined);
+				await act(async () => {
+					resolveGit(true);
+				});
+				expect(useSessionStore.getState().sessions[0].gitBranches).toEqual(['main', 'feature-1']);
+			} finally {
+				mockGitService.isRepo.mockReset().mockResolvedValue(true);
+				vi.useRealTimers();
+			}
+		}
+	);
+
+	it('cancels the deferred local refresh when restoration unmounts', async () => {
+		vi.useFakeTimers();
+		try {
+			mockGetSetting.mockResolvedValue(true);
+			mockGetAll.mockResolvedValue([createMockSession()]);
+			const { unmount } = renderHook(() => useSessionRestoration());
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(1);
+			});
+			expect(useSessionStore.getState().sessionsLoaded).toBe(true);
+			unmount();
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(50);
+			});
+			expect(mockGitService.isRepo).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('fetches git info synchronously for local sessions', async () => {
 		const session = createMockSession({
 			sshRemoteId: undefined,
@@ -1348,6 +1413,50 @@ describe('validateAgentInBackground', () => {
 // ============================================================================
 
 describe('fetchGitInfoInBackground', () => {
+	it('does not mark a local git refresh failure as an SSH connection failure', async () => {
+		const { result } = renderHook(() => useSessionRestoration());
+		await act(async () => {});
+		useSessionStore.setState({ sessions: [createMockSession({ sshConnectionFailed: false })] });
+		mockGitService.isRepo.mockRejectedValueOnce(new Error('local git unavailable'));
+		await act(async () => {
+			await result.current.fetchGitInfoInBackground('session-1', '/projects/myapp', undefined);
+		});
+		expect(useSessionStore.getState().sessions[0].sshConnectionFailed).toBe(false);
+	});
+
+	it.each(['cwd', 'ssh'])('discards a late local refresh after the %s changes', async (change) => {
+		const { result } = renderHook(() => useSessionRestoration());
+		await act(async () => {});
+		useSessionStore.setState({ sessions: [createMockSession({ gitBranches: ['saved'] })] });
+		let resolveGit!: (value: boolean) => void;
+		mockGitService.isRepo.mockImplementationOnce(
+			() =>
+				new Promise<boolean>((resolve) => {
+					resolveGit = resolve;
+				})
+		);
+		const refresh = result.current.fetchGitInfoInBackground(
+			'session-1',
+			'/projects/myapp',
+			undefined
+		);
+		useSessionStore.setState({
+			sessions: [
+				createMockSession({
+					gitBranches: ['new-location'],
+					...(change === 'cwd'
+						? { cwd: '/other' }
+						: { sessionSshRemoteConfig: { enabled: true, remoteId: 'new-remote' } }),
+				}),
+			],
+		});
+		await act(async () => {
+			resolveGit(true);
+			await refresh;
+		});
+		expect(useSessionStore.getState().sessions[0].gitBranches).toEqual(['new-location']);
+	});
+
 	it('fetches git info and updates session in store', async () => {
 		const { result } = renderHook(() => useSessionRestoration());
 

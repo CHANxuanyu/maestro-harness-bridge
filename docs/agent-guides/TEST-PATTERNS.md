@@ -937,3 +937,7 @@ describe('myStore', () => {
 8. **Use `waitFor`** for async assertions and `act` for state updates.
 9. **Mock external libraries** (react-markdown, lucide-react) to avoid rendering complexity.
 10. **Test file naming**: `ComponentName.test.tsx` for components, `useHookName.test.ts` for hooks, `storeName.test.ts` for stores.
+
+## Renderer benchmark stages
+
+`e2e/fixtures/perf-renderer-runner.ts` owns the synthetic renderer benchmark stage budgets, selection dependencies and incremental results. `RendererRun.stage()` bounds asynchronous transport work, records failures and blocked dependencies, and checkpoints JSON plus an append-only JSONL journal. Use `StageScope.step()` for renderer, CDP and Electron waits so a late response cannot start another action after cancellation. Only successful stage metrics reach `scripts/perf/summary.mjs`. This is test infrastructure, not a product process supervisor. See [renderer benchmark commands](../perf-renderer.md).

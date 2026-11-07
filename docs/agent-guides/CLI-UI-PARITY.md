@@ -845,6 +845,10 @@ inventory remains unchanged. The archive tests exercise project recency through
 
 ## Open gaps
 
+2026-11-07 性能分支合并保留主线工具全文和任务面板动作。消息行复用仍传递全文来源，来源或原生调用身份更新时清除旧全文；读取继续共用 `agentSessions:toolOutput` 与 `native-history tool-output`，本轮没有新增 UI 动作或 CLI 动词。以下全文收起状态和 SSH 等既有缺口保持原状。
+
+2026-11-06 性能基准没有新增界面动作或 CLI 动词。Codex 列表的目录判断优化位于共享存储适配器，桌面项目列表、`sessions` 和 `native-history list` 沿用同一实现。性能采集继续使用 `profiling start/status/stop`；离线合成基准见 `scripts/perf/README.md`。本轮没有填补下列既有交互缺口。
+
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no
 `tab fork --at` verb; this remains the Composer backlog below. The palette and
 shortcut for creating a conversation directly in a tile share
@@ -1016,3 +1020,29 @@ still missing. Grouped, highest value first:
 `maestro-cli native-history list <agent>` returns the project sidebar's native conversation records through `agentSessions:listProjectHistory`. `read <agent> <conversation>` uses the canonical read-only transcript adapter. `delete <agent> <conversation>` removes a whole Codex conversation in the selected local or SSH account. Partial native-message deletion returns a read-only error. These verbs require the desktop app. Pianola's offline learning scan uses the bounded shared Codex rollout decoder.
 
 Packaged CLI storage and discovery use the shipped product identity. `settings set` uses the live `settings:set` IPC handler when the desktop is running and waits for its acknowledgement. Offline writes keep the same value validation and product-directory checks.
+
+## New shell transcript performance (2026-11-06)
+
+Progressive row element reuse changes rendering work only. No new UI action or CLI verb is introduced. Existing conversation selection, transcript search and jumps retain their current paths and existing gaps; this change does not claim to close native resume or refresh gaps.
+
+New shell stdout placeholder cleanup now shares the existing 200 ms output batch, including final flush. It adds no user action. CLI and UI initiated turns continue through the same process listener and session batcher.
+
+## Renderer benchmark runner (2026-11-06)
+
+T4 第三轮只修改离线合成基准，不增加界面动作或 maestro-cli 动词。阶段选择使用 `MAESTRO_PERF_STAGES`，运行命令、依赖和结果读回见 [renderer 性能复测](../perf-renderer.md)。产品内性能采集仍走既有 `profiling start/status/stop`，本轮没有填补 Open gaps 中的交互缺口。
+
+## T4 fourth round rendering
+
+Opening and switching conversations use the existing UI and CLI selection paths.
+Lazy row construction changes no action, command, message or IPC contract.
+The progressive window still hydrates the full history and retains search and jump targets.
+No new CLI verb or parity gap is introduced.
+
+Startup now defers local Git metadata refresh only in the new shell. It uses the
+existing gitService and background refresh path, with no new user action or CLI
+verb. The new shell splash also removes decorative waits after the existing data,
+paint and font readiness gates. Classic startup and SSH refresh remain unchanged.
+
+## U7 流式输入调查（2026-11-07）
+
+本轮只修补合成 renderer 基准的逐键记录与尾帧收尾，并增加输入和流式批次的源码回归，没有新增界面动作或 maestro-cli 动词。UI 与 CLI 发起的回合仍共用原有 process listener 和 session batcher；产品内采集沿用 `profiling start/status/stop`。七轮 stream 命令见 [renderer 性能复测](../perf-renderer.md#u7流式期间按键延迟调查)。Open gaps 中既有的视图交互缺口保持原状，本轮不声称补齐。

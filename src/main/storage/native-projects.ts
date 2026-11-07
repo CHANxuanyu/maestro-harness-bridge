@@ -31,6 +31,9 @@ export function createNativeProjectDiscovery(deps: {
 		});
 		const projects = new Map<string, NativeProject>();
 		const seenFiles = new Set<string>();
+		// Reuse successful cwd checks only within this scan. The next scan resolves
+		// aliases again, and warm responses still check that each directory exists.
+		const projectPaths = new Map<string, string>();
 		for (const file of selected.sort((a, b) => b.mtime - a.mtime)) {
 			if (Date.now() > deadline) break;
 			try {
@@ -57,8 +60,12 @@ export function createNativeProjectDiscovery(deps: {
 					}
 				}
 				if (!cwd) continue;
-				const physical = await fs.realpath(cwd);
-				if (!(await fs.stat(physical)).isDirectory()) continue;
+				let physical = projectPaths.get(cwd);
+				if (!physical) {
+					physical = await fs.realpath(cwd);
+					if (!(await fs.stat(physical)).isDirectory()) continue;
+					projectPaths.set(cwd, physical);
+				}
 				const key = normalizeWorktreePath(physical);
 				const project = projects.get(key) ?? {
 					path: physical,

@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Session, SessionState, ToolType, LogEntry } from '../../types';
 import { isLimitError } from '../../../shared/types';
 import { updateSessionWith, useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useGroupChatStore } from '../../stores/groupChatStore';
 import { gitService } from '../../services/git';
 import { generateId } from '../../utils/ids';
@@ -87,7 +88,7 @@ export interface SessionRestorationReturn {
 	/** Proxy ref that bridges .current API to sessionStore boolean */
 	initialLoadComplete: React.MutableRefObject<boolean>;
 	/** Restore a persisted session (migration + corruption recovery + runtime reset) */
-	restoreSession: (session: Session) => Promise<Session>;
+	restoreSession: (session: Session, deferLocalGit?: boolean) => Promise<Session>;
 	/** Fetch git info in background for SSH remote sessions */
 	fetchGitInfoInBackground: (
 		sessionId: string,
@@ -373,14 +374,16 @@ export function useSessionRestoration(): SessionRestorationReturn {
 
 				setSessions((prev) =>
 					prev.map((s) =>
-						s.id === sessionId
+						s.id === sessionId &&
+						// A deferred local result belongs to its original directory and host.
+						(sshRemoteId || (s.cwd === cwd && !s.sshRemoteId && !s.sessionSshRemoteConfig?.enabled))
 							? {
 									...s,
 									isGitRepo,
 									gitBranches,
 									gitTags,
 									gitRefsCacheTime,
-									sshConnectionFailed: false,
+									...(sshRemoteId ? { sshConnectionFailed: false } : {}),
 								}
 							: s
 					)
@@ -391,16 +394,19 @@ export function useSessionRestoration(): SessionRestorationReturn {
 					undefined,
 					error
 				);
-				setSessions((prev) =>
-					prev.map((s) => (s.id === sessionId ? { ...s, sshConnectionFailed: true } : s))
-				);
+				if (sshRemoteId) {
+					setSessions((prev) =>
+						prev.map((s) => (s.id === sessionId ? { ...s, sshConnectionFailed: true } : s))
+					);
+				}
 			}
 		},
 		[]
 	);
 
 	// --- restoreSession ---
-	const restoreSession = useCallback(async (session: Session): Promise<Session> => {
+	// Only startup defers local Git; it schedules the refresh after restoration.
+	const restoreSession = useCallback(async (session: Session, defer = false): Promise<Session> => {
 		try {
 			// Migration: tag snoozes parked before SnoozedTabEntry carried a kind.
 			// An untagged entry falls through every per-kind switch, and the wake
@@ -584,7 +590,7 @@ export function useSessionRestoration(): SessionRestorationReturn {
 			let gitTags = correctedSession.gitTags;
 			let gitRefsCacheTime = correctedSession.gitRefsCacheTime;
 
-			if (!isRemoteSession) {
+			if (!isRemoteSession && !defer) {
 				const GIT_TIMEOUT_MS = 5000;
 				// NOTE: On timeout, the inner git operations continue running in the
 				// background until the OS/filesystem eventually resolves/rejects them.
@@ -817,25 +823,48 @@ export function useSessionRestoration(): SessionRestorationReturn {
 	// Use a ref to prevent duplicate execution in React Strict Mode
 	const sessionLoadStarted = useRef(false);
 	const sessionLoadInFlight = useRef(false);
+	const restorationMounted = useRef(false);
+	const gitFrame = useRef<number | undefined>(undefined);
 	useEffect(() => {
-		if (sessionLoadStarted.current) {
-			return;
-		}
+		restorationMounted.current = true;
+		const cleanup = () => {
+			restorationMounted.current = false;
+			if (gitFrame.current !== undefined) cancelAnimationFrame(gitFrame.current);
+		};
+		if (sessionLoadStarted.current) return cleanup;
 		sessionLoadStarted.current = true;
 
 		const loadSessionsAndGroups = async () => {
 			if (sessionLoadInFlight.current) return;
 			sessionLoadInFlight.current = true;
 			setSessionsLoaded(false);
+			const deferredGit: Session[] = [];
 			try {
 				window.__updateSplash?.(50, 'Seating the musicians...');
-				const savedSessions = isWebDesktop()
-					? await window.maestro.sessions.getBootstrap()
-					: await window.maestro.sessions.getAll();
+				// Settings hydrate independently. Read the saved switch if they have not
+				// arrived yet so a cold launch cannot accidentally take the classic path.
+				const settings = useSettingsStore.getState();
+				const [savedSessions, deferLocalGit] = await Promise.all([
+					isWebDesktop()
+						? window.maestro.sessions.getBootstrap()
+						: window.maestro.sessions.getAll(),
+					isWebDesktop()
+						? false
+						: settings.settingsLoaded
+							? settings.newShell
+							: window.maestro.settings
+									.get('newShell')
+									.then((value) => value === true)
+									.catch(() => false),
+				]);
+				performance.mark('maestro:renderer.sessionsRead');
 
 				// Handle sessions
 				if (savedSessions && savedSessions.length > 0) {
-					const restoredSessions = await Promise.all(savedSessions.map((s) => restoreSession(s)));
+					const restoredSessions = await Promise.all(
+						savedSessions.map((s) => restoreSession(s, deferLocalGit))
+					);
+					performance.mark('maestro:renderer.sessionsRestored');
 					setSessions(restoredSessions);
 
 					// Restore persisted active session ID, falling back to first session.
@@ -877,6 +906,8 @@ export function useSessionRestoration(): SessionRestorationReturn {
 						// For remote sessions, also fetch git info in background
 						if (sshRemoteId) {
 							fetchGitInfoInBackground(session.id, session.cwd, sshRemoteId);
+						} else if (deferLocalGit) {
+							deferredGit.push(session);
 						}
 					}
 				} else {
@@ -950,10 +981,22 @@ export function useSessionRestoration(): SessionRestorationReturn {
 				// Mark sessions as loaded for splash screen coordination
 				setSessionsLoaded(true);
 				sessionLoadInFlight.current = false;
+				if (restorationMounted.current && deferredGit.length) {
+					// Let restored conversations commit before starting nonessential Git reads.
+					gitFrame.current = requestAnimationFrame(() => {
+						gitFrame.current = requestAnimationFrame(() => {
+							if (!restorationMounted.current) return;
+							for (const session of deferredGit) {
+								void fetchGitInfoInBackground(session.id, session.cwd, undefined);
+							}
+						});
+					});
+				}
 			}
 		};
 		retrySessionLoad.current = () => void loadSessionsAndGroups();
 		void loadSessionsAndGroups();
+		return cleanup;
 	}, []);
 
 	// --- Peer client sync ---

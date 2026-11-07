@@ -149,6 +149,38 @@ Open a local project in the new shell, reusing its agent or creating one silentl
 | -------- | ----------- | ------- |
 | `--json` | Output JSON | -       |
 
+## `maestro-cli codex-turn`
+
+Control a running local Codex app-server prototype turn
+
+## `maestro-cli codex-turn steer <process-id> <text>`
+
+| Option   | Description | Default |
+| -------- | ----------- | ------- |
+| `--json` | Output JSON | -       |
+
+## `maestro-cli codex-turn permissions`
+
+List pending prototype approvals
+
+| Option   | Description | Default |
+| -------- | ----------- | ------- |
+| `--json` | Output JSON | -       |
+
+## `maestro-cli codex-turn stop <process-id>`
+
+| Option   | Description | Default |
+| -------- | ----------- | ------- |
+| `--json` | Output JSON | -       |
+
+## `maestro-cli permission-respond <request-id> <decision>`
+
+Answer a pending permission request with allow or deny
+
+| Option   | Description | Default |
+| -------- | ----------- | ------- |
+| `--json` | Output JSON | -       |
+
 ## `maestro-cli native-history <action> [agent] [conversation]`
 
 List recent projects, list or read native project history, or delete a whole Codex conversation

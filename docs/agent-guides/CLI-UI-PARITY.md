@@ -649,6 +649,17 @@ operations in either shell. No new parity gap is introduced by these actions.
 
 ## Open gaps
 
+**Codex prototype controls (2026-11-07).** `codex-turn stop` interrupts only the
+addressed local app-server process through `ProcessManager.interrupt()`. The
+composer Stop also cancels the project's queued work and cross-agent consults;
+that wider existing Stop action is still not CLI-covered. Approval prompts use
+the main window only. Secondary-window ownership and web-desktop approval/steer
+controls have not been integrated or verified. There is no CLI draft editor:
+`steer` takes explicit text and leaves the desktop draft alone. The composer
+shows the affordance from opt-in eligibility; if the current turn started with
+exec before the setting changed, the main process refuses steering and the draft
+is retained. No RPC is sent to that exec process.
+
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no
 `tab fork --at` verb; this remains the Composer backlog below. The palette and
 shortcut for creating a conversation directly in a tile share
@@ -799,9 +810,32 @@ still missing. Grouped, highest value first:
 
 Packaged CLI storage and discovery use the shipped product identity. `settings set` uses the live `settings:set` IPC handler when the desktop is running and waits for its acknowledgement. Offline writes keep the same value validation and product-directory checks.
 
-## Codex app-server prototype settings (2026-11-07)
+## Codex app-server prototype (2026-11-07)
 
-`settings set codexAppServer true|false` uses the existing settings service. The
-default is false and the switch is visible only with `newShell`. This setting
-alone does not enable the transport in the classic shell. Runtime actions are
-recorded with the prototype implementation.
+Both `newShell` and `codexAppServer` must be true; the latter defaults to false.
+Only local user turns with a conversation tab use this path. SSH and Auto Run
+stay on exec. A saved Codex `standard` turn without the local approval transport
+is refused, including after either setting is disabled, so it cannot inherit
+exec's bypass arguments. Full and read-only exec behavior is unchanged.
+
+| UI action                             | CLI action                                                                  | Shared implementation                                                                    |
+| ------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Enable the prototype                  | `settings set codexAppServer true` after `settings set newShell true`       | Existing settings service and persisted defaults                                         |
+| Choose standard permission            | `tab permission <tab-id> standard --agent <owner-id>`                       | Shared eligibility gate, existing tab permission action, explicit spawn policy           |
+| Create, resume and send a turn        | Existing `tab new` and `dispatch <owner-id> <text> --tab <tab-id>`          | Existing renderer dispatch and `process:spawn`; app-server selected in `handle-spawn.ts` |
+| Add ordinary text to the running turn | `codex-turn steer <process-id> <text>`                                      | `process:steer`, `ProcessManager.steer()`, exact `turn/steer` acknowledgement            |
+| Read pending approvals                | `codex-turn permissions`                                                    | The same pending registry used to render `PermissionPrompt`                              |
+| Allow or deny one approval            | `permission-respond <request-id> <decision>`, decision is `allow` or `deny` | Existing `permission:respond` and permission relay registry                              |
+| Stop the running prototype process    | `codex-turn stop <process-id>`                                              | `ProcessManager.interrupt()` and `turn/interrupt`; wider Stop gap above                  |
+
+All four new commands support `--json` and require a running desktop bridge.
+The process ID is the full `<owner-id>-ai-<tab-id>` string, not a native Codex
+thread ID. Pending-approval listings include both `sessionId` (the process ID)
+and `requestId`. Otherwise obtain the owner and tab from existing `session list --json` command and construct that process ID.
+A successful steer receipt means accepted by the same turn, not completed.
+Failure or timeout keeps the draft, does not queue it, and never retries it.
+The CLI returns nonzero on rejection. A stale permission request is rejected.
+Unknown protocol requests are not treated as implicit approval.
+
+Synthetic validation and unresolved protocol/version limits are recorded in
+[the prototype note](../verification/codex-app-server-prototype.md).

@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { openProjectCommand } from './commands/open-project';
 import { aboutMe } from './commands/about-me';
+import { resolveAppLocale } from '../shared/i18n';
+import { workflowsShell as enShell } from '../renderer/i18n/locales/en/workflowsShell';
+import { workflowsShell as zhShell } from '../renderer/i18n/locales/zh-CN/workflowsShell';
 // Maestro CLI
 // Command-line interface for Maestro
 
@@ -162,6 +165,8 @@ import {
 	tabEffort,
 	tabEnterToSend,
 	tabShow,
+	tabChildren,
+	tabSelect,
 } from './commands/tab';
 import { setBookmark } from './commands/bookmark';
 import { setTheme } from './commands/set-theme';
@@ -1661,6 +1666,24 @@ tabTargetOptions(tab.command('save-to-history <tab-id> <bool>'))
 tabTargetOptions(tab.command('show <tab-id>'))
 	.description("Show one tab's settings (model, effort, thinking, access, history)")
 	.action((tabId, options) => tabShow(tabId, options));
+
+tabTargetOptions(tab.command('children <tab-id>'))
+	.description(
+		(resolveAppLocale('system', Intl.DateTimeFormat().resolvedOptions().locale) === 'zh-CN'
+			? zhShell
+			: enShell)['workflows.conversations.childrenCommand'] ??
+			enShell['workflows.conversations.childrenCommand']
+	)
+	.action((tabId, options) => tabChildren(tabId, options));
+
+tabTargetOptions(tab.command('select <tab-id>'))
+	.description(
+		(resolveAppLocale('system', Intl.DateTimeFormat().resolvedOptions().locale) === 'zh-CN'
+			? zhShell
+			: enShell)['workflows.conversations.selectCommand'] ??
+			enShell['workflows.conversations.selectCommand']
+	)
+	.action((tabId, options) => tabSelect(tabId, options));
 
 tabTargetOptions(tab.command('thinking <tab-id> <mode>'))
 	.description('Set the thinking display: off, on, sticky, or cycle')

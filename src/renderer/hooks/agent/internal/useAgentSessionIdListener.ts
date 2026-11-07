@@ -22,6 +22,8 @@ import { logger } from '../../../utils/logger';
 import { useOwnedSessionGate } from './useOwnedSessionGate';
 import type { LogEntry } from '../../../types';
 import type { BatchedUpdater } from './types';
+import { captureConversationSourceNativeId } from '../../../services/agentDelegation';
+import { sessionProviderId } from '../../../../shared/agentPresets';
 
 export interface UseAgentSessionIdListenerDeps {
 	batchedUpdater: BatchedUpdater;
@@ -41,6 +43,7 @@ export function useAgentSessionIdListener(deps: UseAgentSessionIdListenerDeps): 
 				const tabId = parsed.tabId ?? undefined;
 
 				let resumeFailureDetected = false;
+				let originSource: { tabId: string; nativeId: string } | undefined;
 
 				const session = useSessionStore.getState().sessions.find((s) => s.id === actualSessionId);
 				if (session) {
@@ -160,6 +163,7 @@ export function useAgentSessionIdListener(deps: UseAgentSessionIdListenerDeps): 
 							return { ...s, aiTabs: updatedAiTabs, agentSessionId };
 						}
 
+						originSource = { tabId: targetTab.id, nativeId: agentSessionId };
 						const updatedAiTabs = s.aiTabs.map((tab) => {
 							if (tab.id !== targetTab.id) return tab;
 							const newName = tab.name && tab.name !== 'New Session' ? tab.name : null;
@@ -175,6 +179,14 @@ export function useAgentSessionIdListener(deps: UseAgentSessionIdListenerDeps): 
 							? { ...s, aiTabs: updatedAiTabs }
 							: { ...s, aiTabs: updatedAiTabs, agentSessionId };
 					});
+					if (originSource) {
+						captureConversationSourceNativeId(
+							actualSessionId,
+							originSource.tabId,
+							originSource.nativeId,
+							sessionProviderId(session)
+						);
+					}
 				}
 
 				if (resumeFailureDetected) {

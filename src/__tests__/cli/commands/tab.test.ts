@@ -154,6 +154,20 @@ describe('tab commands', () => {
 		expect(payload()).toEqual({ type: 'select_tab', sessionId: 'agent-2', tabId: 'tab-bbbb' });
 	});
 
+	it('lists an older consult with a live source without inventing a native identity', async () => {
+		const source = entry('source-tab', 'source');
+		const child = entry('old-consult', 'worker', {
+			origin: undefined,
+			consultOrigin: { sourceSessionId: 'source', sourceTabId: 'source-tab' },
+			hidden: true,
+		});
+		vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+			action({ sendCommand: vi.fn().mockResolvedValue({ sessions: [source, child] }) } as never)
+		);
+		await tabChildren('source-tab', { json: true });
+		expect(JSON.parse(consoleSpy.mock.calls[0][0]).children).toEqual([child]);
+	});
+
 	it('compacts the named tab in the background through summarize_context', async () => {
 		const payload = mockTab({ success: true });
 		await tabCompact('tab-cccc', { background: true });

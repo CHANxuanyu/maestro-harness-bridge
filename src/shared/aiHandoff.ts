@@ -8,7 +8,7 @@ export type HandoffProvider = (typeof HANDOFF_PROVIDERS)[number];
 export const DEFAULT_HANDOFF_BUDGET = 8000;
 
 export interface ConversationOrigin {
-	kind: 'handoff' | 'review';
+	kind: 'handoff' | 'review' | 'subtask';
 	sourceSessionId: string;
 	sourceTabId: string;
 	sourceProvider: string;

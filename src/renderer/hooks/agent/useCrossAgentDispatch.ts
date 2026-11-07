@@ -22,7 +22,12 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { HistoryEntry, LogEntry, Session, ToolType } from '../../types';
 import { updateSessionWith, updateAiTab, useSessionStore } from '../../stores/sessionStore';
 import { useCrossAgentInFlightStore } from '../../stores/crossAgentInFlightStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { createTab } from '../../utils/tabHelpers';
+import { conversationDisplayTitle } from '../../utils/conversationTitle';
+import { applyQueuedItemRelease } from '../../utils/executionQueue';
+import { sessionProviderId } from '../../../shared/agentPresets';
+import { captureConversationSourceNativeId } from '../../services/agentDelegation';
 import { generateId } from '../../utils/ids';
 import { logger } from '../../utils/logger';
 import {
@@ -247,6 +252,20 @@ export function ensureConsultTab(opts: {
 		source: 'user',
 		text: opts.question,
 	};
+	const source = useSessionStore.getState().sessions.find((s) => s.id === opts.sourceSessionId);
+	const sourceTab = source?.aiTabs.find((tab) => tab.id === opts.sourceTabId);
+	const origin =
+		useSettingsStore.getState().newShell && source && sourceTab
+			? {
+					kind: 'subtask' as const,
+					sourceSessionId: source.id,
+					sourceTabId: sourceTab.id,
+					sourceProvider: sessionProviderId(source),
+					sourceNativeSessionId: sourceTab.agentSessionId ?? undefined,
+					sourceTitle: conversationDisplayTitle(sourceTab) ?? undefined,
+					createdAt: questionEntry.timestamp,
+				}
+			: undefined;
 
 	let resolvedTabId: string | null = null;
 	let resumeAgentSessionId: string | undefined;
@@ -254,6 +273,7 @@ export function ensureConsultTab(opts: {
 	updateSessionWith(opts.targetSessionId, (session) => {
 		const existing = session.aiTabs.find(
 			(t) =>
+				(!origin || t.state !== 'busy') &&
 				t.consultOrigin?.sourceSessionId === opts.sourceSessionId &&
 				t.consultOrigin?.sourceTabId === opts.sourceTabId
 		);
@@ -263,7 +283,22 @@ export function ensureConsultTab(opts: {
 			return {
 				...session,
 				aiTabs: session.aiTabs.map((t) =>
-					t.id === existing.id ? { ...t, logs: [...t.logs, questionEntry] } : t
+					t.id === existing.id
+						? {
+								...t,
+								...(origin && !t.origin
+									? {
+											origin,
+											name: deriveConsultSubject(
+												t.logs.find((log) => log.source === 'user')?.text ?? opts.question,
+												80,
+												true
+											),
+										}
+									: {}),
+								logs: [...t.logs, questionEntry],
+							}
+						: t
 				),
 			};
 		}
@@ -275,7 +310,9 @@ export function ensureConsultTab(opts: {
 		// activeGroupId in particular would silently pop the target out of a tiled
 		// group it was displaying.
 		const created = createTab(session, {
-			name: buildConsultTabName(opts.sourceAgentName),
+			name: origin
+				? deriveConsultSubject(opts.question, 80, true)
+				: buildConsultTabName(opts.sourceAgentName),
 			logs: [questionEntry],
 			saveToHistory: false,
 		});
@@ -294,6 +331,7 @@ export function ensureConsultTab(opts: {
 				t.id === created.tab.id
 					? {
 							...t,
+							...(origin ? { origin } : {}),
 							// Hidden until the user opens it from the attribution header.
 							hidden: true,
 							consultOrigin: {
@@ -308,6 +346,54 @@ export function ensureConsultTab(opts: {
 
 	if (!resolvedTabId) return null;
 	return { targetTabId: resolvedTabId, resumeAgentSessionId };
+}
+
+/** Release the same tab barrier used by normal sends so queued replies can run. */
+function settleSubtaskConsult(
+	sessionId: string,
+	tabId: string | undefined,
+	error?: string,
+	recordError = false
+): void {
+	if (!tabId) return;
+	updateSessionWith(sessionId, (session) => {
+		const tab = session.aiTabs.find((candidate) => candidate.id === tabId);
+		if (tab?.origin?.kind !== 'subtask') return session;
+		const released = applyQueuedItemRelease(session, tabId);
+		return {
+			...released,
+			aiTabs: released.aiTabs.map((candidate) =>
+				candidate.id === tabId
+					? {
+							...candidate,
+							hasUnread: false,
+							agentError: error
+								? {
+										type: 'unknown' as const,
+										message: error,
+										recoverable: true,
+										agentId: session.toolType,
+										timestamp: Date.now(),
+									}
+								: undefined,
+							...(recordError && error
+								? {
+										logs: [
+											...candidate.logs,
+											{
+												id: generateId(),
+												timestamp: Date.now(),
+												source: 'error' as const,
+												text: error,
+											},
+										],
+									}
+								: {}),
+						}
+					: candidate
+			),
+		};
+	});
 }
 
 /** Per-request tracking so streamed chunks land on one stable LogEntry. */
@@ -488,6 +574,9 @@ function recordConsultHistory(
 			logger.warn('[useCrossAgentDispatch] Failed to record consult history', undefined, err);
 		});
 
+	// An open child can resume immediately. A second writer used only to shorten
+	// its history detail must not race that continuation on the same native id.
+	if (consultTab?.origin?.kind === 'subtask') return;
 	void enrichConsultDetail({
 		spawnBackgroundSynopsis,
 		target,
@@ -586,6 +675,28 @@ export function sendCrossAgentRequest(opts: SendCrossAgentRequestOptions): void 
 		sourceAgentName: opts.sourceAgentName,
 		question: opts.userPrompt,
 	});
+	if (consult) {
+		updateSessionWith(opts.targetSessionId, (session) => {
+			const tab = session.aiTabs.find((candidate) => candidate.id === consult.targetTabId);
+			if (tab?.origin?.kind !== 'subtask') return session;
+			return {
+				...session,
+				state: 'busy',
+				busySource: session.state === 'busy' ? session.busySource : 'ai',
+				aiTabs: session.aiTabs.map((candidate) =>
+					candidate.id === tab.id
+						? {
+								...candidate,
+								state: 'busy',
+								thinkingStartTime: Date.now(),
+								hasUnread: false,
+								agentError: undefined,
+							}
+						: candidate
+				),
+			};
+		});
+	}
 
 	// Fire-and-forget: never await before the caller clears the input.
 	void window.maestro.crossAgent
@@ -661,6 +772,7 @@ export function sendCrossAgentRequest(opts: SendCrossAgentRequestOptions): void 
 			// settle a caller blocked on the answer - or the source turn's consult
 			// hold, which would otherwise wait on this target forever.
 			const error = err instanceof Error ? err.message : String(err);
+			settleSubtaskConsult(opts.targetSessionId, consult?.targetTabId, error, true);
 			settleConsultHold({
 				sourceSessionId: opts.sourceSessionId,
 				sourceTabId: opts.sourceTabId,
@@ -760,6 +872,18 @@ export function useCrossAgentDispatch(
 		}
 
 		if (chunk.done) {
+			const target = useSessionStore
+				.getState()
+				.sessions.find((s) => s.id === chunk.targetSessionId);
+			if (target && targetTabId && chunk.targetAgentSessionId) {
+				captureConversationSourceNativeId(
+					target.id,
+					targetTabId,
+					chunk.targetAgentSessionId,
+					sessionProviderId(target)
+				);
+			}
+			settleSubtaskConsult(chunk.targetSessionId, targetTabId, chunk.error);
 			// The target now has a durable record of the consult, attributed to the
 			// caller so its History shows who consulted it (and about what).
 			recordConsultHistory(tracked, chunk, spawnSynopsisRef.current);

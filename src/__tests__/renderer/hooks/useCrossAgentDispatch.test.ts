@@ -454,6 +454,24 @@ describe('new-shell consult conversations', () => {
 		let target = useSessionStore.getState().sessions.find((s) => s.id === 'tgt')!;
 		expect(target.aiTabs.find((t) => t.id === targetTabId)?.state).toBe('busy');
 		expect(target.state).toBe('busy');
+		useSessionStore.getState().setSessions((sessions) => [
+			...sessions,
+			createMockSession({
+				id: 'grandchild-owner',
+				aiTabs: [
+					createMockAITab({
+						id: 'grandchild',
+						origin: {
+							kind: 'subtask',
+							sourceSessionId: target.id,
+							sourceTabId: targetTabId,
+							sourceProvider: target.toolType,
+							createdAt: 1,
+						},
+					}),
+				],
+			}),
+		]);
 		useSettingsStore.setState({ newShell: false });
 		act(() =>
 			receiveChunk(
@@ -474,7 +492,43 @@ describe('new-shell consult conversations', () => {
 		});
 		expect(target.state).toBe('idle');
 		expect(synopsis).not.toHaveBeenCalled();
+		expect(
+			useSessionStore.getState().sessions.find((s) => s.id === 'grandchild-owner')?.aiTabs[0].origin
+				?.sourceNativeSessionId
+		).toBe('native-child');
 		hook.unmount();
+	});
+
+	it('does not resume a child that the user is already continuing', () => {
+		const options = {
+			targetSessionId: 'tgt',
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			question: '@Codex Check the queue.',
+		};
+		const first = ensureConsultTab(options)!;
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === 'tgt'
+					? {
+							...session,
+							aiTabs: session.aiTabs.map((tab) =>
+								tab.id === first.targetTabId
+									? {
+											...tab,
+											state: 'busy',
+											agentSessionId: 'being-continued',
+										}
+									: tab
+							),
+						}
+					: session
+			)
+		);
+		const next = ensureConsultTab(options)!;
+		expect(next.targetTabId).not.toBe(first.targetTabId);
+		expect(next.resumeAgentSessionId).toBeUndefined();
 	});
 
 	it('settles a failed dispatch into an idle child with its failure recorded', async () => {

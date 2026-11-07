@@ -3,6 +3,7 @@ import type { WebServerFactoryDependencies } from '../web-server-factory';
 import type { StoredSession } from '../../stores/types';
 import type { Group } from '../../../shared/types';
 import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
+import { sessionProviderId } from '../../../shared/agentPresets';
 import { asThinkingMode } from '../../../shared/types';
 import { getSessionIdsBusyWithCli } from '../../../shared/cli-activity';
 import { isAiTabProcessActive } from '../../utils/agent-busy';
@@ -144,6 +145,10 @@ export function registerSessionCallbacks(
 				entries.push({
 					...(sources.size ? { toolOutputSources: [...sources.values()] } : {}),
 					origin: tab.origin,
+					consultOrigin: tab.consultOrigin,
+					provider: sessionProviderId(s),
+					hidden: tab.hidden === true,
+					error: !!tab.agentError,
 					tabId: tab.id,
 					sessionId: tab.id,
 					agentId: s.id,
@@ -155,7 +160,7 @@ export function registerSessionCallbacks(
 					createdAt: typeof tab.createdAt === 'number' ? tab.createdAt : 0,
 					starred: tab.starred === true,
 					active: isActiveTab,
-					hasUnread: tab.hasUnread === true,
+					hasUnread: tab.hidden !== true && tab.hasUnread === true,
 					saveToHistory: tab.saveToHistory === true,
 					readOnly: tab.readOnlyMode === true,
 					permissionMode: resolveTabPermissionMode(tab),

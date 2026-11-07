@@ -14,6 +14,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ipcMain } from 'electron';
 import {
@@ -27,6 +29,10 @@ import { stripThinkingFromTranscript } from '../../../../main/agents/claude-tran
 import { checkCustomPath } from '../../../../main/agents/path-prober';
 import { getChildProcesses } from '../../../../main/process-manager/utils/childProcessInfo';
 import { probeClaudeSlashCommandsCached } from '../../../../main/agents/claude-slash-command-probe';
+import { createNativeCommandDiscovery } from '../../../../main/agents/native-commands';
+import { StdoutHandler } from '../../../../main/process-manager/handlers/StdoutHandler';
+import { ClaudeOutputParser } from '../../../../main/parsers/claude-output-parser';
+import type { ManagedProcess } from '../../../../main/process-manager/types';
 import {
 	primeOmpModelCatalog,
 	computeOmpCatalogKey,
@@ -570,6 +576,69 @@ describe('process IPC handlers', () => {
 				null,
 			]);
 		});
+
+		it.each([{ synopsisCommands: [] }, { synopsisCommands: ['plugin:summary'] }])(
+			'keeps conversation plugin reports after a non-persisting synopsis reports $synopsisCommands',
+			async ({ synopsisCommands }) => {
+				const root = fs.mkdtempSync(path.join(os.tmpdir(), 'command-synopsis-'));
+				try {
+					const { createTurn } = createRequire(import.meta.url)(
+						'../../../../../e2e/fixtures/native/protocol.cjs'
+					);
+					const context = {
+						toolType: 'claude-code',
+						cwd: path.join(root, 'project'),
+						customEnvVars: { CLAUDE_CONFIG_DIR: path.join(root, 'account') },
+					};
+					const read = createNativeCommandDiscovery({ layers: () => ({ homeDir: root, env: {} }) });
+					const processes = new Map<string, ManagedProcess>();
+					const emitter = new EventEmitter();
+					const reports = vi.fn();
+					emitter.on('slash-commands', reports);
+					const stdout = new StdoutHandler({
+						processes,
+						emitter,
+						bufferManager: { emitDataBuffered: vi.fn() } as any,
+					});
+					mockAgentDetector.getAgent.mockResolvedValue({ id: 'claude-code', requiresPty: false });
+					mockProcessManager.spawn.mockReturnValue({ pid: 1000, success: true });
+					for (const [index, commands] of [['plugin:review'], synopsisCommands, []].entries()) {
+						const persist = index !== 1;
+						const sessionId = persist ? 'commands-ai-tab' : 'commands-synopsis-123';
+						await handlers.get('process:spawn')!({} as any, {
+							sessionId,
+							toolType: context.toolType,
+							cwd: context.cwd,
+							command: 'fixture-only',
+							args: persist ? [] : ['--no-session-persistence'],
+							sessionCustomEnvVars: context.customEnvVars,
+						});
+						processes.set(sessionId, {
+							...mockProcessManager.spawn.mock.lastCall![0],
+							isStreamJsonMode: true,
+							outputParser: new ClaudeOutputParser(),
+						} as ManagedProcess);
+						createTurn({
+							provider: 'claude',
+							configDir: context.customEnvVars.CLAUDE_CONFIG_DIR,
+							cwd: context.cwd,
+							prompt: 'Fixture prompt',
+							persist,
+							slashCommands: commands,
+							emit: (event: unknown) => stdout.handleData(sessionId, `${JSON.stringify(event)}\n`),
+						});
+						expect(reports).toHaveBeenLastCalledWith(sessionId, commands);
+						expect(
+							(await read(context, true)).commands.filter((c) => c.source === 'reported')
+						).toEqual(
+							index < 2 ? [{ command: '/plugin:review', description: '', source: 'reported' }] : []
+						);
+					}
+				} finally {
+					fs.rmSync(root, { recursive: true, force: true });
+				}
+			}
+		);
 
 		it('should pass environment variables to spawn', async () => {
 			const mockAgent = {

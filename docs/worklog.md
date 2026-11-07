@@ -2,6 +2,16 @@
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
 
+## 2026-11-07：T10 第五轮插件上报保留
+
+外部 Electron 验收停在 `/plugin:review Reported by tool` 不可见，扫描、草稿和项目正文已通过。现场截图没有插件候选项，trace 没有提供方原始 stdout。沿合成场景、进程初始化和缓存链路定位：项目命令完成后自动启动不持久化的摘要，摘要的空 `slash_commands` 用相同账户和项目键替换了主回合的插件上报。
+
+先提交回归 `354164360`，串起实际 spawn 处理函数、合成 init、Claude 解析器、stdout 处理和缓存查询，实际得到 2 失败、129 通过：摘要空列表清空插件，摘要另一条命令替换插件。修复仅调整 `handle-spawn.ts` 中命令缓存的发布资格，带 `--no-session-persistence` 的辅助回合不再取得缓存键。后续正式回合仍可更新或清空上报，账户、项目和 SSH 隔离及文件优先级沿用原实现。旧 `process:slash-commands` 事件照常发出，旧界面的发现和展示没有改动；共享的 CLI 查询会保留主回合命令，这是同一缓存修复的预期行为。
+
+相关 6 个 Vitest 文件共 326 项、合成 init 夹具 1 项通过，均使用 `--configLoader runner --no-cache`，没有跳过或自动重试。新增中英文检查覆盖 `/plugin` 过滤、高亮和空描述下的完整可访问名称，继续使用已有来源文案。渲染层与主进程 TypeScript 检查、Electron spec 的独立严格类型检查通过。产品处理函数和 Electron spec 的 ESLint、所有改动文件的 Prettier 与差异空白检查通过。被测对象为本分支源码和合成夹具，没有构建安装包。
+
+Electron 用例新增等待自动摘要历史记录后再检查插件，防止读取早于覆盖而偶然通过；原按钮名称、草稿、正文、单回合和账户隔离断言保留。Playwright 仅收集到 1 个场景，未启动 Electron。沙箱外入口为 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-commands.spec.ts --retries=0`。没有新增 CLI 动词，沿用 `tab commands` 的同一发现接口，对等文档和验收说明已更新。真实提供方、模型、真实 SSH、其他平台和发行包未验证，没有推送、PR、标签或发布，依赖符号链接未修改。
+
 ## 2026-11-06：T10 第四轮扫描夹具收尾
 
 外部 Electron 验收在 `holdNativeCommandScan` 中报 `ReferenceError: require is not defined`。先让既有夹具回归将待求值函数序列化到无 `require` 的 VM 上下文，确认 1 条失败且错误一致，再提交回归 `dd50167b5`。原单测直接调用函数，未覆盖 Playwright 的跨进程求值边界。

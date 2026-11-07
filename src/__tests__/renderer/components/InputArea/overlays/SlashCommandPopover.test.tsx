@@ -11,6 +11,28 @@ afterEach(() => {
 
 describe('SlashCommandPopover', () => {
 	it.each([
+		['en', 'Reported by tool'],
+		['zh-CN', '工具上报'],
+	] as const)('keeps the filtered plugin command accessible name in %s', (uiLanguage, label) => {
+		useSettingsStore.setState({ uiLanguage });
+		render(
+			<SlashCommandPopover
+				isOpen
+				commands={[{ command: '/plugin:review', description: '', source: 'reported' }]}
+				inputValueLower="/plugin"
+				selectedIndex={0}
+				itemRefs={createItemRefs<HTMLButtonElement>()}
+				theme={inputAreaTheme}
+				setInputValue={vi.fn()}
+				setSlashCommandOpen={vi.fn()}
+				setSelectedSlashCommandIndex={vi.fn()}
+				inputRef={{ current: null }}
+			/>
+		);
+		expect(screen.getByRole('button')).toHaveAccessibleName(`/plugin:review ${label}`);
+	});
+
+	it.each([
 		['en', 'user', 'User'],
 		['en', 'project', 'Project'],
 		['en', 'reported', 'Reported by tool'],

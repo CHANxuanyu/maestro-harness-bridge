@@ -1,6 +1,6 @@
-# 原生命令第四轮验收
+# 原生命令第五轮验收
 
-只用临时目录和合成提供方，不读取个人账户，不调用模型。第三轮已修复命令名与来源的文本分隔。本轮外部 Electron 验收停在 `holdNativeCommandScan`，报 `ReferenceError: require is not defined`。夹具原本在主进程求值函数里调用 `require`，直接在 Node 测试进程调用的旧单测没有覆盖这个边界。本轮先将函数序列化到没有 `require` 的 VM 上下文，确认同样失败，再改为使用 Playwright 传入的 Electron 模块。修复后的 Electron 场景仍待外部运行。
+只用临时目录和合成提供方，不读取个人账户，不调用模型。外部 Electron 验收已通过扫描、草稿保留和项目正文，停在 `/plugin:review Reported by tool` 不可见。合成主回合上报插件后，项目命令触发的自动摘要会在同一账户和项目下上报空列表，覆盖主回合的命令缓存。单元回归串起实际 spawn 处理函数、合成 init、Claude 解析器、stdout 处理和命令查询，先复现摘要清空或替换插件，再修复缓存发布范围。带 `--no-session-persistence` 的辅助回合不再写这份缓存，正式回合仍可更新或清空。修复后的 Electron 场景仍待外部运行。
 
 ## 自动场景
 
@@ -11,6 +11,8 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-commands.spec.ts --retries=0
 ```
 
 该场景覆盖新增命令后重新打开列表、项目覆盖用户、CLI 查询、扫描期间重复按发送和继续写草稿、项目正文与参数进入合成转录、原生初始化报告的插件命令在界面和 CLI 都可见，以及换账户后旧插件消失。合成提供方只写临时目录；场景开始的发现检查不启动回合，后段只运行仓库内的假提供方。
+
+本轮增加等待自动摘要的 `Command completed` 历史记录，再检查插件按钮完整名称和 CLI 的 `source: reported`。这样不能靠在摘要覆盖缓存之前碰巧读取成功。原有可见性断言和账户隔离断言均保留。英文 `Reported by tool` 和中文“工具上报”继续使用已有 i18n，单元检查同时覆盖输入 `/plugin` 时的高亮和空描述。
 
 保留原来的完整按钮名称、来源、正文、草稿保留和单回合断言。延迟扫描使用传入的 `ipcMain`，临时包装 `agents:getNativeCommands` 处理函数，仅暂停指定临时账户、项目的本机 Claude 非缓存查询。缓存查询、其他账户、其他项目、其他工具及 SSH 请求照常转发。使用 `expect.poll` 确认请求已进入等待，再重复按发送、输入下一份草稿；释放前额外断言合成提供方尚未启动回合。`finally` 恢复原处理函数并释放所有挂起请求，原参数、结果和拒绝原因保持不变。不要改写 `contextBridge` 暴露的只读方法。此处没有新建标签后的立即 CLI 读取；`NativeApp.cli` 已自动添加 `--json`，按返回对象断言。
 

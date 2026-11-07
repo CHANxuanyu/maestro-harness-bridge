@@ -124,6 +124,17 @@ test('native commands refresh, preserve drafts and retain scoped plugin reports'
 			.join('\n');
 		expect(history).toContain('Project deployment staging');
 		expect(history).not.toContain('Personal deployment must not run');
+		// The automatic synopsis reports an empty command list. Check after it
+		// finishes so an early lookup cannot hide an overwritten plugin report.
+		await expect
+			.poll(() =>
+				native.page.evaluate(
+					async ({ project, agentId }) =>
+						(await window.maestro.history.getAll(project, agentId)).map((entry) => entry.summary),
+					{ project: native.project, agentId: session.id }
+				)
+			)
+			.toContain('Command completed');
 		await native.input().fill('/plugin');
 		await expect(
 			native.page.getByRole('button', { name: '/plugin:review Reported by tool' })

@@ -76,6 +76,13 @@ event does not identify a file scope. Failed reads show only native builtins,
 including cached reads after the failure. No discovery call starts a provider or
 writes native files.
 
+Spawns with `--no-session-persistence`, including automatic Claude synopses,
+do not publish into that inventory. Their reduced or empty init reports must
+not replace the conversation's plugin commands. A later persistent turn still
+replaces the report, including with an empty list. This correction adds no UI
+action or CLI verb: `/` and `tab commands` consume the same retained inventory.
+Legacy `process:slash-commands` notifications are unchanged.
+
 Source badges have a text separator from the command name, including English
 and Chinese accessible names. This presentation fix adds no action or CLI verb;
 `tab commands` still returns the command, description and source separately.

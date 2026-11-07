@@ -983,8 +983,10 @@ export async function handleProcessSpawn(
 		}
 	}
 
+	// Non-persisting helpers can report a reduced command set. Their init must
+	// not replace the conversation's scoped inventory after a completed turn.
 	const nativeCommandScopeKey =
-		config.toolType === 'claude-code'
+		config.toolType === 'claude-code' && !config.args.includes('--no-session-persistence')
 			? nativeCommandScope(
 					{
 						toolType: config.toolType,

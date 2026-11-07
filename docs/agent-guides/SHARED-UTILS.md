@@ -17,6 +17,12 @@ Local native history aliases: `localProjectPathCandidates(projectPath)` in `src/
 
 Remote worktree aliases: `resolveWorktreeAliasesRemote(paths, sshRemote)` in `src/main/utils/remote-git.ts` provides the shared main-process probe for saved children and Git registry paths. It reports physical paths, missing candidates, and unresolved aliases independently; `resolveWorktreePathsRemote()` also uses it for configured scans.
 
+Consult and handoff envelopes: `buildCrossAgentPrompt()` and
+`stripCrossAgentPrompt()` in `src/shared/crossAgentPrompt.ts` share the persisted
+wire templates across the router, native transcript display, search and history
+metadata. Decode only user messages and complete envelopes. See the canonical
+entry before adding another reader or changing the wire format.
+
 ---
 
 ## IDs & UUIDs

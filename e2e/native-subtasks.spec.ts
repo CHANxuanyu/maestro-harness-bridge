@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { NativeApp, type NativeScene } from './fixtures/native-app';
+import { createTurn } from './fixtures/native/protocol.cjs';
 import type { Session } from '../src/renderer/types';
 
 test.skip(process.env.MAESTRO_E2E_REAL === '1', 'Subtask acceptance uses synthetic providers only');
@@ -37,6 +38,25 @@ test('new shell subtasks: mention, queued reply, CLI dispatch and closed parent'
 				process.sessionId.startsWith('cross-agent-')
 			)
 		);
+	// A changing native title proves the sidebar scanned after the consult wrote
+	// its record. This avoids passing absence checks against an older snapshot.
+	const historyMarker = createTurn({
+		provider: 'claude',
+		configDir: native.claude,
+		cwd: native.project,
+		prompt: 'History refresh marker',
+	});
+	let historyScan = 0;
+	const refreshHistory = async () => {
+		const title = `History refresh marker ${++historyScan}`;
+		fs.appendFileSync(
+			historyMarker.file,
+			JSON.stringify({ type: 'custom-title', customTitle: title }) + '\n'
+		);
+		await native.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+		await expect(native.page.getByText(title, { exact: true })).toBeVisible();
+	};
+
 	let failed = false;
 	try {
 		await native.start(home);
@@ -76,6 +96,27 @@ test('new shell subtasks: mention, queued reply, CLI dispatch and closed parent'
 		await expect(childRow).toBeVisible();
 		await expect(childRow.getByRole('img', { name: 'Codex' })).toBeVisible();
 		await expect(childRow.getByTitle('Working')).toBeVisible();
+		await expect.poll(() => savedTab(child.id)?.consultOrigin?.nativeSessionIds?.[0]).toBeTruthy();
+		const consultNativeId = savedTab(child.id)!.consultOrigin!.nativeSessionIds![0];
+		expect(savedTab(child.id)?.agentSessionId).toBeFalsy();
+		expect(
+			(await native.cli('native-history', 'list')).result.conversations.map(
+				(record: { nativeSessionId: string }) => record.nativeSessionId
+			)
+		).toContain(consultNativeId);
+		await refreshHistory();
+		await expect(
+			native.page.locator('[data-conversation-key]').filter({ hasText: 'You are being consulted' })
+		).toHaveCount(0);
+		await expect(
+			native.page.locator(
+				`[data-conversation-kind="history"][data-native-session-id="${consultNativeId}"]`
+			)
+		).toHaveCount(0);
+		await expect(
+			native.page.locator('[data-conversation-key] > div').filter({ hasText: 'Inspect the queue.' })
+		).toHaveCount(1);
+
 		expect(
 			(await native.cli('tab', 'children', parentTab)).children.map(
 				(tab: { tabId: string }) => tab.tabId
@@ -130,6 +171,67 @@ test('new shell subtasks: mention, queued reply, CLI dispatch and closed parent'
 				).state
 			).toBe('idle');
 			expect(savedTab(parentTab)?.agentSessionId).toBe(parentNativeId);
+			await expect.poll(() => savedTab(child.id)?.agentSessionId).toBeNull();
+			await refreshHistory();
+			await expect(
+				native.page
+					.locator('[data-conversation-key]')
+					.filter({ hasText: 'You are being consulted' })
+			).toHaveCount(0);
+			await expect(
+				native.page.locator(
+					`[data-conversation-kind="history"][data-native-session-id="${consultNativeId}"]`
+				)
+			).toHaveCount(0);
+			await expect(
+				native.page
+					.locator('[data-conversation-key] > div')
+					.filter({ hasText: 'Inspect the queue.' })
+			).toHaveCount(1);
+		});
+
+		await test.step('a first consult stopped before success claims its history without becoming resumable', async () => {
+			const freshParent = await native.cli('tab', 'new', '--agent', parentId);
+			await native.cli('tab', 'select', freshParent.tabId);
+			scene({ answer: 'Unfinished first consult.', waitForStop: true });
+			await native.send('@Worker Inspect interrupted work. Then report.');
+			await expect.poll(async () => (await activeConsults()).length).toBe(1);
+			const interrupted = () =>
+				saved()
+					.find((session) => session.id === workerId)!
+					.aiTabs.find((tab) => tab.origin?.sourceTabId === freshParent.tabId);
+			await expect.poll(() => interrupted()?.consultOrigin?.nativeSessionIds?.[0]).toBeTruthy();
+			const stopped = interrupted()!;
+			const nativeId = stopped.consultOrigin!.nativeSessionIds![0];
+			expect(stopped.agentSessionId).toBeFalsy();
+			await native.cli('tab', 'select', stopped.id);
+			await native.page.getByTestId('stop-turn-button').click();
+			await expect.poll(async () => (await activeConsults()).length).toBe(0);
+			await expect.poll(() => savedTab(stopped.id)?.state).toBe('idle');
+			expect(savedTab(stopped.id)?.agentSessionId).toBeNull();
+			await refreshHistory();
+			await expect(
+				native.page
+					.locator('[data-conversation-key]')
+					.filter({ hasText: 'You are being consulted' })
+			).toHaveCount(0);
+			await expect(
+				native.page.locator(
+					`[data-conversation-kind="history"][data-native-session-id="${nativeId}"]`
+				)
+			).toHaveCount(0);
+			await expect(
+				native.page
+					.locator('[data-conversation-key] > div')
+					.filter({ hasText: 'Inspect interrupted work.' })
+			).toHaveCount(1);
+			await native.cli('tab', 'close', stopped.id);
+			await expect(
+				native.page
+					.locator(`[data-conversation-kind="history"][data-native-session-id="${nativeId}"]`)
+					.getByText('Inspect interrupted work.', { exact: true })
+			).toBeVisible();
+			await native.cli('tab', 'close', freshParent.tabId);
 		});
 
 		await test.step('CLI delegation records the same parent and first sentence', async () => {
@@ -204,6 +306,26 @@ test('new shell subtasks: mention, queued reply, CLI dispatch and closed parent'
 				restoredParent.locator(`[data-conversation-key="${workerId}:${child.id}"]`)
 			).toBeVisible();
 			expect(savedTab(child.id)?.origin?.sourceNativeSessionId).toBe(parentNativeId);
+		});
+		await test.step('closing the child leaves a clean native title and reopening shows the question', async () => {
+			await native.cli('tab', 'close', child.id);
+			await expect.poll(() => savedTab(child.id)).toBeUndefined();
+			await refreshHistory();
+			const historyRow = native.page.locator(
+				`[data-conversation-kind="history"][data-native-session-id="${consultNativeId}"]`
+			);
+			await expect(historyRow).toHaveCount(1);
+			await expect(historyRow.getByText('Inspect the queue.', { exact: true })).toBeVisible();
+			await expect(
+				native.page
+					.locator('[data-conversation-key]')
+					.filter({ hasText: 'You are being consulted' })
+			).toHaveCount(0);
+			await historyRow.locator(':scope > div > button[data-tree-nav]').last().click();
+			await expect(native.output()).toContainText(
+				'@Worker Inspect the queue. Then inspect shutdown.'
+			);
+			await expect(native.output()).not.toContainText('You are being consulted');
 		});
 	} catch (error) {
 		failed = true;

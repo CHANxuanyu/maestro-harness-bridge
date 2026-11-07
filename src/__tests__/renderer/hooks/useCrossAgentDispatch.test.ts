@@ -414,16 +414,14 @@ describe('new-shell consult conversations', () => {
 			};
 			const { targetTabId } = ensureConsultTab(options)!;
 			if (resumed)
-				useSessionStore
-					.getState()
-					.setSessions((sessions) =>
-						sessions.map((session) => ({
-							...session,
-							aiTabs: session.aiTabs.map((tab) =>
-								tab.id === targetTabId ? { ...tab, agentSessionId: 'native-child' } : tab
-							),
-						}))
-					);
+				useSessionStore.getState().setSessions((sessions) =>
+					sessions.map((session) => ({
+						...session,
+						aiTabs: session.aiTabs.map((tab) =>
+							tab.id === targetTabId ? { ...tab, agentSessionId: 'native-child' } : tab
+						),
+					}))
+				);
 			const child = () =>
 				useSessionStore
 					.getState()

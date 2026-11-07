@@ -886,6 +886,17 @@ cancellation. Stopping a child leaves its siblings, including closed siblings,
 running. This uses the desktop interrupt service; the existing CLI Stop gap below
 remains open. No new CLI verb was added in this review correction.
 
+咨询历史展示修复（2026-11-07，U3 第三轮）没有新增界面动作或 CLI 动词。
+`ask`、带 @提及的 `dispatch` 和界面派发继续使用 `sendCrossAgentRequest()` 与同一路由。
+原生 ID 到达时立即通过 `targetNativeSessionId` 通知显示认领，存入
+`consultOrigin.nativeSessionIds`；`targetAgentSessionId` 仍只表示成功后的续聊资格。
+停止或失败也清除旧续聊资格，防止复用被中断的咨询。显示认领仅在 `newShell` 的树中生效。
+
+`tab close` 和原生历史打开沿用原入口；`native-history list`、`native-history search`
+与界面读取同一份清理后的标题和搜索正文。生产信封及 `stripCrossAgentPrompt()`
+位于 `shared/crossAgentPrompt.ts`，兼容旧记录，不改写原生文件。
+没有新增 CLI 对等缺口，下列停止、折叠和历史打开的既有缺口仍保留。
+
 ## Open gaps
 
 **Subtask disclosure and archived sources (2026-11-07).** The disclosure button

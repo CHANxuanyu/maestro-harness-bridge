@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { readSettingValue } from '../../../cli/services/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectSettings } from '../../../cli/commands/project-settings';
@@ -121,7 +122,7 @@ describe('project settings CLI', () => {
 				args: [
 					{
 						action: 'set',
-						scope: { projectPath: '/tmp/project' },
+						scope: { projectPath: path.resolve('/tmp/project') },
 						patch: { defaultModel: null, defaultPermissionMode: null, envVars: null },
 					},
 				],

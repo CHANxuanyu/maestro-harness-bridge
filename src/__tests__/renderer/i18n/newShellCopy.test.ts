@@ -7,7 +7,7 @@ describe('new shell copy audit', () => {
 		// FileTreeContextMenu tests separately prove Auto Run and Document Graph are hidden.
 		expect(
 			scanNewShellCopy().map((item: { file: string; kind: string; text: string }) => [
-				item.file.split('/').pop(),
+				item.file.split(/[\\/]/).pop(),
 				item.kind,
 				item.text,
 			])

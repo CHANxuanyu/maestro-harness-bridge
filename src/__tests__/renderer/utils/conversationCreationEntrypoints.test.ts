@@ -30,7 +30,7 @@ it('requires a permission review when a conversation creation call is added or m
 			'exact source, validated first spawn',
 		],
 		'hooks/agent/useSummarizeAndContinue.ts:createTabAtPosition': [
-			'strictest known fallback, then existing source overrides',
+			'exact source through project resolution; classic overrides preserved',
 		],
 	};
 	const actual: Record<string, number> = {};

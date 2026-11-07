@@ -38,6 +38,32 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## 项目设置，U2，2026-11-07
+
+| 界面动作                         | CLI                                                                                                    | 共用实现                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| 项目行右键打开设置，切换项目位置 | `project settings show --path <path> [--ssh-remote <id>]`                                              | `settings:projectSettings`、`createProjectSettingsService()`              |
+| 保存默认工具、模型、强度、权限   | `project settings set --path <path> --provider <id> --model <id> --effort <level> --permission <mode>` | 同一 IPC 服务验证并写 Maestro 设置                                        |
+| 清空某项默认值                   | 对应选项传 `inherit`                                                                                   | 同一服务删除对应覆盖值                                                    |
+| 首次选择完全访问                 | `--permission full --acknowledge-full-access`                                                          | 每个项目与主机单独记录一次说明确认                                        |
+| 编辑或删除项目环境变量           | 重复 `--env NAME=VALUE` 替换项目变量；`--clear-env` 清空覆盖                                           | 同一服务保存；既有环境编辑器用于界面输入                                  |
+| 查看遮盖或明文变量               | `show` 默认遮盖，`--show-secrets` 显示原值                                                             | `isSecretEnvKey()`、`maskEnvValue()`                                      |
+| 按项目默认设置新建对话           | `tab new --agent <id> [--prompt <text>]`、`dispatch <id> <prompt> --new-tab`                           | `newProjectConversation()`、`context:conversation`、`openHandoffTarget()` |
+| 明确选择新对话工具               | `tab new --agent <id> --provider <provider>`                                                           | 同一 `context:conversation` 服务，SSH 传递原主机和执行目录                |
+
+模型和强度所属工具通过 `--model-provider <id>` 单独保存，默认工具选择“沿用”时也必须确定归属；显式 `--provider` 可以提供归属。界面保存当前模型控件对应的工具。旧数据有默认工具时继续兼容；没有任何工具归属的旧模型需重新保存后应用，不推断它适用于所有工具。
+
+通用 `settings set projectSettings` 及其点路径一律拒绝，提示改用 `project settings set`；IPC 的 `settings:set` 同样拒绝。`settings:getAll`、`settings:get` 和 CLI `settings get projectSettings` 只返回无环境值的投影；通用点路径读取不能获取变量原值，应使用 `project settings show`。桌面设置窗口读取专用服务，CLI 通过启动时密钥验证的连接访问同一服务，默认遮盖，`--show-secrets` 显示原值。普通浏览器的专用服务响应也移除环境值，保存其他字段不会清空环境；环境编辑需在桌面或 CLI 完成。
+
+`project settings` 需要运行中的 Maestro。它只保存 Maestro 数据，不读写原生配置。
+设置可以由 CLI 预先保存，只有 `newShell` 开启后的新对话采用。已有对话和原生历史导入不重新套用。
+当前对话的显式模型、强度和环境优先于项目，项目优先于既有工具默认配置；权限使用两者中更严格的值，继续按目标能力校验。
+项目入口选择项目默认工具，从当前对话新建保留当前工具。未指定工具时由主进程依据 `effectiveAgentCustomEnvVars()` 解析实际工具身份，提供方默认环境中的 DeepSeek 与前端入口采用同一结果。明确选工具的入口采用该工具的模型与强度，不复制另一家的模型名。切换项目默认工具时，共享设置服务清除上一工具的模型与强度，除非同次提交明确提供新值。
+环境变化通过独立的内部配置承载，保留旧对话的账户、SSH、停用变量和原生身份；记录原始环境以便清空项目覆盖后恢复。
+CLI `tab new` 返回实际 `sessionId`，`dispatch --new-tab` 返回实际 `agentId`，保留其既有 `sessionId` 等于 `tabId` 的约定。带提示的新建由目标所属窗口持久化后排队，来源窗口不会向自己的会话重复投递。
+
+本轮共用修正：带提示的新建回调按来源所属窗口路由，旧界面也由此修正副窗口投递目标；新界面新建回调允许 60 秒，CLI 留出 65 秒等待；旧界面回调仍为 5 秒。其余新行为均受 `newShell` 控制。
+
 ## New shell conversation split (2026-11-06)
 
 | UI action                              | CLI                                                   | Shared implementation                                               |
@@ -889,6 +915,10 @@ inventory remains unchanged. The archive tests exercise project recency through
 `resolveProjectConversationPermission()` and assert the strict fallback separately.
 
 ## Open gaps
+
+**项目设置的展示状态，U2。** 打开、关闭弹窗和切换位置选择框没有 CLI 窗口状态动词；读取、修改、清空、确认和变量显示都有上表对应动作。新界面可达的“在下方新建 AI 对话”在项目有默认值时共用 `newProjectConversation()`，再将返回的实际归属交给 U1 的 `splitConversation()` 在右侧显示。CLI 可按顺序调用 `tab new` 和 `tab split`，没有原子化的新建并分屏命令。普通浏览器暂不编辑项目环境值；手机实际点击仍需验收。
+
+**向导入口，U2 二轮。** `handleLaunchWizardTab()` 仅由旧 Auto Run 工具栏使用，新界面隐藏 Auto Run、向导命令和快捷键，因此未增加项目环境创建逻辑。启动模型已改为优先使用新标签解析出的模型。若未来开放该入口，必须先接入统一项目创建服务，并补齐 CLI 对等及 Electron 验收。
 
 **New shell split limits (2026-11-07).** Split targets must already be open tabs;
 native history entries must first be opened with the existing history action.

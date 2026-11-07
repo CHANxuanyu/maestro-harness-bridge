@@ -1,3 +1,4 @@
+import { PROJECT_CONVERSATION_TIMEOUT_MS } from '../../shared/projectSettings';
 import { invokeNativeHistory } from '../services/agent-sessions';
 
 import type { NativeCommandSnapshot } from '../../shared/nativeCommands';
@@ -75,7 +76,8 @@ export async function tabNew(options: TabNewOptions): Promise<void> {
 					replaceTabId: owner?.tabId,
 					background,
 				},
-				'ai_handoff_result'
+				'ai_handoff_result',
+				PROJECT_CONVERSATION_TIMEOUT_MS + 5000
 			);
 			reportResult(result, { json: options.json, successMessage: 'Opened provider conversation' });
 			return;
@@ -86,17 +88,30 @@ export async function tabNew(options: TabNewOptions): Promise<void> {
 			? { type: 'new_ai_tab_with_prompt', sessionId, prompt, background }
 			: { type: 'new_tab', sessionId, background };
 		const responseType = prompt ? 'new_ai_tab_with_prompt_result' : 'new_tab_result';
-		const result = await sendSimpleCommand(payload, responseType);
+		const result = await sendSimpleCommand(
+			payload,
+			responseType,
+			PROJECT_CONVERSATION_TIMEOUT_MS + 5000
+		);
 
 		if (!result.success) {
 			failCommand((result.error as string) || 'Failed to create tab', options.json);
 		}
 		const tabId = result.tabId as string | undefined;
 		if (options.json) {
-			console.log(JSON.stringify({ success: true, sessionId, tabId: tabId ?? null, background }));
+			console.log(
+				JSON.stringify({
+					success: true,
+					sessionId: result.sessionId ?? sessionId,
+					tabId: tabId ?? null,
+					background,
+				})
+			);
 		} else {
 			console.log(
-				formatSuccess(`Opened new tab for ${sessionId}${background ? ' (background tab)' : ''}`)
+				formatSuccess(
+					`Opened new tab for ${result.sessionId ?? sessionId}${background ? ' (background tab)' : ''}`
+				)
 			);
 			if (tabId) console.log(`  Tab: ${tabId}`);
 		}

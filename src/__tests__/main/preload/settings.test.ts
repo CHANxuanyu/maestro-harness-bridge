@@ -38,6 +38,19 @@ describe('Settings Preload API', () => {
 			api = createSettingsApi();
 		});
 
+		it('routes project defaults and the full access acknowledgement through the shared handler', async () => {
+			const command = {
+				action: 'set' as const,
+				scope: { projectPath: '~/work/project', sshRemoteId: 'synthetic-host' },
+				patch: { defaultPermissionMode: 'full' as const },
+				acknowledgeFullAccess: true,
+			};
+			const result = { success: true, scope: command.scope, settings: command.patch };
+			mockInvoke.mockResolvedValue(result);
+			expect(await api.projectSettings(command)).toEqual(result);
+			expect(mockInvoke).toHaveBeenCalledExactlyOnceWith('settings:projectSettings', command);
+		});
+
 		it('passes the complete About Me consent snapshot to the dedicated handler', async () => {
 			const command = {
 				action: 'apply' as const,

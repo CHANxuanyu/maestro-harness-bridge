@@ -1,3 +1,6 @@
+import { getT } from '../../i18n';
+import { newProjectConversation } from '../../services/newShellConversation';
+import { projectSettingsForSession } from '../../utils/projectConversationDefaults';
 import { conversationLifecycle } from '../../services/conversationArchive';
 import {
 	refreshConversationArchives,
@@ -744,6 +747,33 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 					window.maestro.process.sendRemoteNewTabResponse(responseChannel, null);
 					return;
 				}
+				if (projectSettingsForSession(target)) {
+					const created = await newProjectConversation(
+						target,
+						sourceTabId,
+						background,
+						sourceTabId
+							? remoteConversationPermissionFields(
+									target.aiTabs.find((tab) => tab.id === sourceTabId),
+									sourcePermissionMode
+								)
+							: undefined
+					);
+					if (created) {
+						window.maestro.process.sendRemoteNewTabResponse(
+							responseChannel,
+							created.success && created.tabId
+								? {
+										tabId: created.tabId,
+										sessionId: created.agentId,
+										permissionMode: created.permissionMode,
+										readOnlyMode: created.readOnlyMode,
+									}
+								: null
+						);
+						return;
+					}
+				}
 				const projectPermission =
 					newShell && !sourceTabId ? await resolveProjectConversationPermission(target) : undefined;
 				let response: NewTabResult | null = null;
@@ -820,12 +850,17 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 		// was not, rather than leaving the CLI to infer one from a missing tab id.
 		const unsubscribeNewTabWithPrompt = window.maestro.process.onRemoteNewAITabWithPrompt(
 			async (sessionId: string, prompt: string, responseChannel: string, background?: boolean) => {
+				const requestedSessionId = sessionId;
 				const ack = (result: {
 					success: boolean;
 					tabId?: string;
 					queued?: boolean;
 					error?: string;
-				}) => window.maestro.process.sendRemoteNewAITabWithPromptResponse(responseChannel, result);
+				}) =>
+					window.maestro.process.sendRemoteNewAITabWithPromptResponse(responseChannel, {
+						...result,
+						...(sessionId !== requestedSessionId ? { sessionId } : {}),
+					});
 				// A missing agent is the one unrecoverable case: there is nothing to
 				// create the tab on. Check before creating so we never leave an
 				// orphan tab behind a failed ack.
@@ -844,6 +879,28 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 				// no flag able to express what the caller wanted and turned every
 				// dispatch at a working agent into a dropped prompt (#1602). The
 				// prompt is queued below instead.
+				const projectCreated = projectSettingsForSession(targetSession)
+					? await newProjectConversation(targetSession, undefined, background, undefined, prompt)
+					: null;
+				if (
+					projectCreated &&
+					(!projectCreated.success || !projectCreated.agentId || !projectCreated.tabId)
+				) {
+					ack({
+						success: false,
+						error: projectCreated.error ?? getT()('workflows.shell.newConversationFailed'),
+					});
+					return;
+				}
+				if (projectCreated?.agentId) {
+					sessionId = projectCreated.agentId;
+					ack({
+						success: true,
+						tabId: projectCreated.tabId,
+						queued: projectCreated.state === 'queued',
+					});
+					return;
+				}
 				const permissionSource = useSettingsStore.getState().newShell
 					? await resolveProjectConversationPermission(targetSession)
 					: undefined;

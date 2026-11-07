@@ -490,7 +490,7 @@ describe('useRemoteIntegration', () => {
 		for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
 			setCapabilitiesCache(id, capabilities);
 		useConversationArchiveStore.setState({ records: [] });
-		useSettingsStore.setState({ newShell: false });
+		useSettingsStore.setState({ newShell: false, projectSettings: {} });
 		vi.clearAllMocks();
 		onRemoteCommandHandler = undefined;
 		onRemoteSwitchModeHandler = undefined;
@@ -1279,6 +1279,53 @@ describe('useRemoteIntegration', () => {
 	});
 
 	it.each([false, true])(
+		'CLI creation uses project defaults and returns the actual owner, prompt %s',
+		async (withPrompt) => {
+			useSettingsStore.setState({
+				newShell: true,
+				projectSettings: { '[null,"/project"]': { defaultProvider: 'codex' } },
+			});
+			const session = createMockSession({
+				id: 'session-1',
+				cwd: '/project',
+				projectRoot: '/project',
+			});
+			const deps = createDeps({ sessions: [session] });
+			window.maestro.context.conversation = vi.fn().mockImplementation(async () => {
+				useSessionStore.getState().addSession(
+					createMockSession({
+						id: 'project-owner',
+						activeTabId: 'project-tab',
+						aiTabs: [createMockTab({ id: 'project-tab', permissionMode: 'readonly' })],
+					})
+				);
+				return { success: true, agentId: 'project-owner', tabId: 'project-tab' };
+			});
+			renderHook(() => useRemoteIntegration(deps));
+			await act(async () => {
+				if (withPrompt)
+					await onRemoteNewAITabWithPromptHandler?.(session.id, 'Synthetic prompt', 'ack', true);
+				else await onRemoteNewTabHandler?.(session.id, 'ack', true);
+			});
+			expect(window.maestro.context.conversation).toHaveBeenCalledWith(
+				expect.objectContaining({ targetProvider: 'codex', background: true })
+			);
+			if (withPrompt)
+				expect(window.maestro.context.conversation).toHaveBeenCalledWith(
+					expect.objectContaining({ prompt: 'Synthetic prompt' })
+				);
+			const response = withPrompt
+				? mockProcess.sendRemoteNewAITabWithPromptResponse
+				: mockProcess.sendRemoteNewTabResponse;
+			expect(response).toHaveBeenCalledWith(
+				'ack',
+				expect.objectContaining({ sessionId: 'project-owner', tabId: 'project-tab' })
+			);
+			expect(useSessionStore.getState().sessions[0].aiTabs).toEqual(session.aiTabs);
+		}
+	);
+
+	it.each([false, true])(
 		'CLI tab new inherits recent project permissions, with prompt %s',
 		async (withPrompt) => {
 			useSettingsStore.setState({ newShell: true });
@@ -1453,7 +1500,7 @@ describe('useRemoteIntegration', () => {
 	);
 
 	it('classic creation ignores the added browser permission field', async () => {
-		useSettingsStore.setState({ newShell: false });
+		useSettingsStore.setState({ newShell: false, projectSettings: {} });
 		const source = createMockTab({ id: 'source', permissionMode: 'full' });
 		const session = createMockSession({ id: 'session-1', aiTabs: [source] });
 		renderHook(() => useRemoteIntegration(createDeps({ sessions: [session] })));

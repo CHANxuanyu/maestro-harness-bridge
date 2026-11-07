@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { openProjectCommand } from './commands/open-project';
 import { aboutMe } from './commands/about-me';
+import { projectSettings, projectSettingsTranslator } from './commands/project-settings';
 // Maestro CLI
 // Command-line interface for Maestro
 
@@ -554,6 +555,35 @@ program
 	)
 	.option('--json', 'Output JSON including per-file states')
 	.action(aboutMe);
+
+const projectSettingsT = projectSettingsTranslator();
+
+program
+	.command('project')
+	.description(projectSettingsT('workflows.projectSettings.cli.projectHelp'))
+	.command('settings <action>')
+	.description(projectSettingsT('workflows.projectSettings.cli.settingsHelp'))
+	.requiredOption('--path <path>', projectSettingsT('workflows.projectSettings.cli.pathHelp'))
+	.option('--ssh-remote <id>', projectSettingsT('workflows.projectSettings.cli.sshHelp'))
+	.option('--provider <id>', projectSettingsT('workflows.projectSettings.cli.providerHelp'))
+	.option('--model <id>', projectSettingsT('workflows.projectSettings.cli.modelHelp'))
+	.option(
+		'--model-provider <id>',
+		projectSettingsT('workflows.projectSettings.cli.modelProviderHelp')
+	)
+	.option('--effort <level>', projectSettingsT('workflows.projectSettings.cli.effortHelp'))
+	.option('--permission <mode>', projectSettingsT('workflows.projectSettings.cli.permissionHelp'))
+	.option(
+		'--env <NAME=VALUE>',
+		projectSettingsT('workflows.projectSettings.cli.envHelp'),
+		(value: string, previous: string[]) => [...previous, value],
+		[]
+	)
+	.option('--clear-env', projectSettingsT('workflows.projectSettings.cli.clearEnvHelp'))
+	.option('--acknowledge-full-access', projectSettingsT('workflows.projectSettings.cli.ackHelp'))
+	.option('--show-secrets', projectSettingsT('workflows.projectSettings.cli.secretsHelp'))
+	.option('--json', projectSettingsT('workflows.projectSettings.cli.jsonHelp'))
+	.action(projectSettings);
 
 program
 	.command('changes [action] [paths...]')

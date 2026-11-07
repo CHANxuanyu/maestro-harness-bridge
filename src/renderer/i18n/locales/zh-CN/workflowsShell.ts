@@ -2,6 +2,63 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.projectSettings.errors.requestFailed': '项目设置请求失败。',
+	'workflows.projectSettings.errors.useService': '请使用 project settings set 修改项目设置。',
+	'workflows.projectSettings.environmentDesktopOnly': '请在桌面应用中查看和编辑环境变量。',
+	'workflows.projectSettings.errors.modelProviderRequired':
+		'请用 --model-provider 指定模型所属工具，或选择默认工具。',
+	'workflows.projectSettings.cli.modelProviderHelp': '沿用当前工具时，指定模型和强度所属的工具',
+	'workflows.projectSettings.errors.useReadService':
+		'请使用 project settings show 读取项目设置；加 --show-secrets 可显示环境变量原值。',
+	'workflows.projectSettings.errors.scopeRequired': '需要项目路径；SSH 项目还需提供主机标识。',
+	'workflows.projectSettings.errors.invalidPatch': '项目设置必须是一个对象。',
+	'workflows.projectSettings.errors.unknownSetting': '未知项目设置：{field}',
+	'workflows.projectSettings.errors.invalidEnvironment': '环境变量必须使用有效名称和文本值。',
+	'workflows.projectSettings.errors.invalidSetting': '项目设置无效：{field}',
+	'workflows.projectSettings.errors.unknownProvider': '未知对话工具。',
+	'workflows.projectSettings.errors.invalidPermission': '权限必须是 full、standard 或 readonly。',
+	'workflows.projectSettings.errors.fullAccessRequired':
+		'完全访问允许新对话无需确认即可读写文件和运行命令。请先确认你已了解，这个项目只需确认一次。',
+	'workflows.projectSettings.errors.saveFailed': '无法保存项目设置。',
+	'workflows.projectSettings.cli.usage':
+		'请使用 project settings show|set --path <project> [--ssh-remote <id>]。',
+	'workflows.projectSettings.cli.conflictingEnv': '--clear-env 和 --env 只能选择一个。',
+	'workflows.projectSettings.cli.envFormat': '--env 的格式应为 NAME=VALUE。',
+	'workflows.projectSettings.cli.setOnly': '修改选项需要使用 project settings set。',
+	'workflows.projectSettings.cli.emptyPatch': '请至少指定一项项目设置。',
+	'workflows.projectSettings.cli.requestFailed': '项目设置请求失败。',
+	'workflows.projectSettings.cli.projectHelp': '管理新界面中之后新建对话的项目默认设置',
+	'workflows.projectSettings.cli.settingsHelp': '查看或保存 Maestro 中某个项目和主机的默认设置',
+	'workflows.projectSettings.cli.pathHelp': '项目目录；远程路径按指定主机处理',
+	'workflows.projectSettings.cli.sshHelp': 'SSH 主机标识；本机项目省略此项',
+	'workflows.projectSettings.cli.providerHelp': '默认工具，传 inherit 清空',
+	'workflows.projectSettings.cli.modelHelp': '默认模型，传 inherit 清空',
+	'workflows.projectSettings.cli.effortHelp': '默认推理强度，传 inherit 清空',
+	'workflows.projectSettings.cli.permissionHelp': 'full、standard、readonly，或传 inherit 清空',
+	'workflows.projectSettings.cli.envHelp': '替换项目环境变量，每个变量重复传入此选项',
+	'workflows.projectSettings.cli.clearEnvHelp': '清空项目环境变量覆盖',
+	'workflows.projectSettings.cli.ackHelp': '确认已了解完全访问允许无需批准即可读写文件和运行命令',
+	'workflows.projectSettings.cli.secretsHelp': '在输出中显示环境变量的凭据原值',
+	'workflows.projectSettings.cli.jsonHelp': '以 JSON 输出设置快照',
+
+	'workflows.projectSettings.newConversation': '按项目默认设置新建',
+	'workflows.projectSettings.title': '项目设置',
+	'workflows.projectSettings.description':
+		'只影响所选主机上这个项目之后新建的对话。当前对话的选择优先；项目权限只能收紧，不能放宽继承的权限。',
+	'workflows.projectSettings.location': '项目位置',
+	'workflows.projectSettings.local': '本机',
+	'workflows.projectSettings.failed': '无法读取或保存项目设置，改动尚未保存。',
+	'workflows.projectSettings.loading': '正在读取项目设置…',
+	'workflows.projectSettings.provider': '默认工具',
+	'workflows.projectSettings.model': '默认模型',
+	'workflows.projectSettings.effort': '默认强度',
+	'workflows.projectSettings.permission': '默认权限',
+	'workflows.projectSettings.inherit': '沿用已有默认设置',
+	'workflows.projectSettings.fullAccess':
+		'我已了解：完全访问允许新对话无需确认即可读写文件和运行命令。',
+	'workflows.projectSettings.environment': '环境变量',
+	'workflows.projectSettings.environmentHelp':
+		'这些值用于之后新建的对话。已有账户和工具配置会保留，除非在这里覆盖。',
 	'workflows.split.openRight': '在右侧打开',
 	'workflows.split.openRightTitle': '在右侧打开：{title}',
 	'workflows.split.chooseConversation': '选择要在右侧打开的对话',

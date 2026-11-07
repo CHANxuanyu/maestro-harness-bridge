@@ -1,3 +1,8 @@
+import {
+	projectConversationFields,
+	projectSettingsForSession,
+	projectSettingsScopeForSession,
+} from '../utils/projectConversationDefaults';
 import { useOperationStore } from '../stores/operationStore';
 import { useSessionStore, updateAiTab, updateSessionWith } from '../stores/sessionStore';
 import { useUIStore } from '../stores/uiStore';
@@ -10,7 +15,10 @@ import { useComposerInputStore } from '../stores/composerInputStore';
 import { createTab, createMergedSession, focusAiTabInSession } from '../utils/tabHelpers';
 import { extractTabContext } from '../utils/contextExtractor';
 import { handoffLocation } from '../../shared/aiHandoff';
-import { resolveProjectConversationPermission } from '../utils/newConversationPermissions';
+import {
+	remoteConversationPermissionFields,
+	resolveProjectConversationPermission,
+} from '../utils/newConversationPermissions';
 import {
 	permissionModeFields,
 	newConversationPermissionFields,
@@ -87,6 +95,13 @@ export async function readHandoffSource(
 			sourceAgentId: session.id,
 			sourceTabId: tab?.id ?? '',
 			sourcePermission: permissionModeFields(resolveTabPermissionMode(source)),
+			sourceDefaults: tab
+				? {
+						customModel: tab.customModel ?? session.customModel,
+						customEffort: tab.customEffort ?? session.customEffort,
+						customEnvVars: session.customEnvVars,
+					}
+				: undefined,
 			cwd: handoffLocation(session).cwd,
 			projectPath: session.projectRoot || session.cwd,
 			sessionSshRemoteConfig: session.sessionSshRemoteConfig,
@@ -203,14 +218,16 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 			if (request.newConversation) {
 				request = {
 					...request,
-					send: false,
+					send: !!request.newConversation.prompt,
 					draft: {
 						...request.draft,
-						text: request.newConversation.source
-							? request.draft.text
-							: replacement
-								? replacementDraft(replacement).text
-								: '',
+						text:
+							request.newConversation.prompt ??
+							(request.newConversation.source
+								? request.draft.text
+								: replacement
+									? replacementDraft(replacement).text
+									: ''),
 					},
 				};
 			}
@@ -233,12 +250,37 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 							)
 						)?.capabilities
 					: undefined;
-			const sourcePermission =
+			const inheritedTab = request.newConversation?.sourceTabId
+				? sourceSession?.aiTabs.find((tab) => tab.id === request.newConversation?.sourceTabId)
+				: undefined;
+			if (request.newConversation?.sourceTabId && !inheritedTab && !request.sourceDefaults)
+				return {
+					success: false,
+					code: 'unavailable',
+					error: getT()('workflows.shell.permissionUnavailable'),
+				};
+			const inherited =
+				request.sourceDefaults ??
+				(inheritedTab && sourceSession
+					? {
+							customModel: inheritedTab.customModel ?? sourceSession.customModel,
+							customEffort: inheritedTab.customEffort ?? sourceSession.customEffort,
+							customEnvVars: sourceSession.customEnvVars,
+						}
+					: undefined);
+			const resolvedSourcePermission =
 				request.sourcePermission ??
+				inheritedTab ??
 				replacement ??
 				(request.newConversation
 					? sourceSession && (await resolveProjectConversationPermission(sourceSession))
 					: sourceSession?.aiTabs.find((tab) => tab.id === request.origin.sourceTabId));
+			const sourcePermission = request.permissionCeiling
+				? remoteConversationPermissionFields(
+						resolvedSourcePermission,
+						request.permissionCeiling.permissionMode
+					)
+				: resolvedSourcePermission;
 			const permissions = newShell
 				? newConversationPermissionFields(sourcePermission, capabilities)
 				: {};
@@ -268,8 +310,42 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 								: 'workflows.handoff.continuedTitle',
 							{ title: sourceTitle }
 						);
+			const projectOwner = {
+				...request.config,
+				cwd: request.cwd,
+				projectRoot: request.projectPath,
+				sessionSshRemoteConfig: request.sessionSshRemoteConfig,
+			};
+			let project = projectSettingsForSession(projectOwner);
+			if (project?.envVars) {
+				const response = await window.maestro.settings.projectSettings({
+					action: 'show',
+					scope: projectSettingsScopeForSession(projectOwner),
+				});
+				if (!response.success || response.environmentRedacted)
+					return {
+						success: false,
+						code: 'unavailable',
+						error: getT()('workflows.projectSettings.failed'),
+					};
+				project = response.settings;
+			}
+			const projectFields = newShell
+				? projectConversationFields(
+						projectOwner,
+						{ ...permissionModeFields(resolveTabPermissionMode(sourcePermission)), ...inherited },
+						capabilities
+					)
+				: {};
+			if (!projectFields)
+				return {
+					success: false,
+					code: 'unavailable',
+					error: getT()('workflows.shell.permissionUnavailable'),
+				};
 			const tabFields = {
 				...permissions,
+				...projectFields,
 				...(title ? { name: title } : {}),
 				...(transferredDraft
 					? {
@@ -297,6 +373,26 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 					code: 'unavailable',
 					error: 'The selected target runner is no longer available in this project',
 				};
+			const baseEnvironment =
+				target?.projectSettingsBaseEnv ??
+				target?.customEnvVars ??
+				request.config.customEnvVars ??
+				{};
+			const hasProjectEnvironment =
+				newShell && (!!project?.envVars || !!target?.projectSettingsBaseEnv);
+			if (hasProjectEnvironment) {
+				const env = { ...baseEnvironment, ...project?.envVars, ...inherited?.customEnvVars };
+				request = { ...request, config: { ...request.config, customEnvVars: env } };
+				if (
+					target &&
+					Object.keys({ ...target.customEnvVars, ...env }).some(
+						(key) => target!.customEnvVars?.[key] !== env[key]
+					)
+				) {
+					// Keep old native conversations attached to their original account.
+					target = undefined;
+				}
+			}
 			const createdAgent = !target;
 			const settings = useSettingsStore.getState();
 			const source = state.sessions.find((session) => session.id === request.sourceAgentId);
@@ -328,6 +424,7 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				target = {
 					...created.session,
 					...request.config,
+					...(hasProjectEnvironment ? { projectSettingsBaseEnv: { ...baseEnvironment } } : {}),
 					projectRoot: request.projectPath,
 					sessionSshRemoteConfig: request.sessionSshRemoteConfig
 						? { ...request.sessionSshRemoteConfig }
@@ -400,6 +497,12 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				tabId,
 				title,
 				createdAgent,
+				...(newShell
+					? {
+							permissionMode: target.aiTabs.find((tab) => tab.id === tabId)?.permissionMode,
+							readOnlyMode: target.aiTabs.find((tab) => tab.id === tabId)?.readOnlyMode,
+						}
+					: {}),
 				state: 'draft',
 				draft: request.draft,
 			};

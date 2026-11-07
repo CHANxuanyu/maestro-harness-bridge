@@ -1,4 +1,5 @@
 import type { AboutMeCommand, AboutMeResult } from '../../shared/aboutMe';
+import type { ProjectSettingsCommand, ProjectSettingsResult } from '../../shared/projectSettings';
 /**
  * Preload API for settings and persistence
  *
@@ -24,6 +25,8 @@ type StoredSession = Record<string, unknown>;
  */
 export function createSettingsApi() {
 	return {
+		projectSettings: (command: ProjectSettingsCommand): Promise<ProjectSettingsResult> =>
+			ipcRenderer.invoke('settings:projectSettings', command),
 		aboutMe: (command: AboutMeCommand): Promise<AboutMeResult> =>
 			ipcRenderer.invoke('settings:aboutMe', command),
 		get: (key: string) => ipcRenderer.invoke('settings:get', key),

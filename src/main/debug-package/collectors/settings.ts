@@ -125,7 +125,25 @@ function sanitizeObject(obj: unknown, sanitizedFields: string[], prefix: string 
 		for (const [key, value] of Object.entries(obj)) {
 			const fullKey = prefix ? `${prefix}.${key}` : key;
 
-			if (isSensitiveKey(key)) {
+			if (key === 'projectSettings' && value && typeof value === 'object') {
+				const projects: Record<string, unknown> = {};
+				for (const [index, [scopeKey, settings]] of Object.entries(value).entries()) {
+					let path = '';
+					try {
+						const scope = JSON.parse(scopeKey);
+						if (Array.isArray(scope) && typeof scope[1] === 'string') path = scope[1];
+					} catch {
+						/* Invalid legacy keys disclose no identity. */
+					}
+					const safeKey = `project-${index + 1}:${redactPath(path)}`;
+					projects[safeKey] = sanitizeObject(settings, sanitizedFields, `${fullKey}.${safeKey}`);
+				}
+				result[key] = projects;
+				sanitizedFields.push(fullKey);
+			} else if (['envvars', 'shellenvvars', 'shellenvvarsdisabled'].includes(key.toLowerCase())) {
+				result[key] = '[REDACTED]';
+				sanitizedFields.push(fullKey);
+			} else if (isSensitiveKey(key)) {
 				result[key] = '[REDACTED]';
 				sanitizedFields.push(fullKey);
 			} else if (typeof value === 'string' && isPathKey(key)) {

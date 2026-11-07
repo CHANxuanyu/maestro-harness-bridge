@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
 import { Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 import { GhostIconButton } from '../ui/GhostIconButton';
 import { isAbsolutePath } from '../../../shared/formatters';
+import { isSecretEnvKey } from '../../../shared/agentEnvironment';
 import type { Theme } from '../../types';
 import { AuthPathValueInput } from '../shared/AuthPathValueInput';
 import { EMPTY_KNOWN_AUTH_DIRS, type KnownAuthDirs } from '../../../shared/authPaths';
@@ -104,6 +105,10 @@ export interface EnvVarsEditorProps {
 	setDisabledEnvVars?: (vars: Record<string, string>) => void;
 	/** Variable NAMES already set on agents or here, offered back in the name field. */
 	knownEnvVarKeys?: KnownEnvVarKeys;
+	/** Opt in for project settings while retaining the existing editor elsewhere. */
+	maskSecrets?: boolean;
+	/** Prevent a parent save from discarding invalid or unfinished edits. */
+	onValidityChange?: (valid: boolean) => void;
 }
 
 export function EnvVarsEditor({
@@ -116,6 +121,8 @@ export function EnvVarsEditor({
 	disabledEnvVars,
 	setDisabledEnvVars,
 	knownEnvVarKeys = EMPTY_KNOWN_ENV_VAR_KEYS,
+	maskSecrets = false,
+	onValidityChange,
 }: EnvVarsEditorProps) {
 	const t = useT();
 	// The toggle needs both halves to round-trip a parked variable; with only
@@ -131,11 +138,12 @@ export function EnvVarsEditor({
 	const [validationErrors, setValidationErrors] = useState<Record<number, string>>({});
 	// Id of the row added by "Add Variable", so only THAT row takes the caret.
 	const [focusEntryId, setFocusEntryId] = useState<number | null>(null);
+	const [revealedKeys, setRevealedKeys] = useState<Set<string>>(() => new Set());
 
 	// Validate environment variable format
 	const validateEntry = (entry: EnvVarEntry): string | null => {
 		if (!entry.key.trim()) {
-			return null; // Empty keys are OK (will be ignored)
+			return onValidityChange && entry.value ? t('settings.finish.env.invalidName') : null;
 		}
 		// Check for valid variable name format (alphanumeric and underscore)
 		if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.key)) {
@@ -185,9 +193,15 @@ export function EnvVarsEditor({
 		});
 
 		setValidationErrors(errors);
+		if (onValidityChange && Object.keys(errors).length > 0) return;
 		setEnvVars(newEnvVars);
 		setDisabledEnvVars?.(newDisabledEnvVars);
 	};
+
+	const valid = entries.every((entry) => validateEntry(entry) === null);
+	useEffect(() => {
+		onValidityChange?.(valid);
+	}, [valid, onValidityChange]);
 
 	// Sync from parent when envVars changes externally (e.g., on modal open)
 	useEffect(() => {
@@ -257,6 +271,8 @@ export function EnvVarsEditor({
 				{entries.map((entry) => {
 					const error = validationErrors[entry.id];
 					const off = !entry.enabled;
+					const secret = maskSecrets && isSecretEnvKey(entry.key);
+					const revealed = revealedKeys.has(entry.key);
 					return (
 						<div key={entry.id}>
 							<div className="flex gap-2 items-center">
@@ -298,6 +314,7 @@ export function EnvVarsEditor({
 									=
 								</span>
 								<AuthPathValueInput
+									type={secret && !revealed ? 'password' : 'text'}
 									envVarKey={entry.key}
 									value={entry.value}
 									knownAuthDirs={knownAuthDirs}
@@ -311,6 +328,35 @@ export function EnvVarsEditor({
 										textDecoration: off ? 'line-through' : undefined,
 									}}
 								/>
+								{secret && (
+									<GhostIconButton
+										testId={`env-reveal-${entry.key}`}
+										title={t(
+											revealed
+												? 'settings.finish.env.hideValue'
+												: 'settings.finish.env.revealValue',
+											{ key: entry.key }
+										)}
+										ariaLabel={t(
+											revealed
+												? 'settings.finish.env.hideValue'
+												: 'settings.finish.env.revealValue',
+											{ key: entry.key }
+										)}
+										onClick={() =>
+											setRevealedKeys((current) => {
+												const next = new Set(current);
+												if (next.has(entry.key)) next.delete(entry.key);
+												else next.add(entry.key);
+												return next;
+											})
+										}
+										padding="p-2"
+										color={theme.colors.textDim}
+									>
+										{revealed ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+									</GhostIconButton>
+								)}
 								<GhostIconButton
 									onClick={() => removeEntry(entry.id)}
 									padding="p-2"

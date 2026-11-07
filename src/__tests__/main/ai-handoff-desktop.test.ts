@@ -219,6 +219,23 @@ describe('handoff desktop ownership routing', () => {
 		expect(result.success).toBe(true);
 	});
 
+	it('refuses explicit conversation inheritance when its source window does not answer', async () => {
+		vi.mocked(requestFromRenderer).mockResolvedValueOnce(null as never);
+		expect(
+			await api().command({
+				action: 'new-conversation',
+				sourceAgentId: 'source',
+				sourceTabId: 'current',
+				targetProvider: 'codex',
+			})
+		).toMatchObject({ success: false });
+		expect(
+			vi
+				.mocked(requestFromRenderer)
+				.mock.calls.every(([, channel]) => channel !== 'context:openHandoffTarget')
+		).toBe(true);
+	});
+
 	it('reads project permission metadata from the source owner for CLI provider creation', async () => {
 		const result = await api().command({
 			action: 'new-conversation',

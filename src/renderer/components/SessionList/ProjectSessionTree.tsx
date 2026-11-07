@@ -120,6 +120,7 @@ export interface ProjectSessionTreeProps {
 	onShowMore?: (project: SidebarProject) => void;
 	/** The secondary management view (agent configurations). */
 	onManageAgents?: () => void;
+	onProjectSettings?: (project: SidebarProject) => void;
 	onAddAgent: () => void;
 }
 
@@ -714,6 +715,17 @@ const ProjectSection = memo(function ProjectSection({
 					aria-controls={listId}
 					onClick={() => onToggleProject(project)}
 					onKeyDown={handleHeaderKeyDown}
+					onContextMenu={
+						newShell
+							? (event) => {
+									event.preventDefault();
+									openMenu('project', project.key, event.currentTarget, {
+										x: event.clientX,
+										y: event.clientY,
+									});
+								}
+							: undefined
+					}
 					className="flex-1 min-w-0 flex items-center gap-1 py-2 rounded text-left text-xs font-semibold outline-none focus-visible:ring-1 hover:bg-white/5"
 					style={{ color: theme.colors.textMain }}
 				>
@@ -920,6 +932,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	onTogglePin,
 	onShowMore,
 	onManageAgents,
+	onProjectSettings,
 	onAddAgent,
 }: ProjectSessionTreeProps) {
 	const t = useT();
@@ -1137,15 +1150,24 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						key: 'choices',
 						// One row per provider; which configuration runs it is not asked.
 						items: newShell
-							? newTools.map((provider) => ({
-									key: provider,
-									label: t('workflows.conversations.newWith', {
-										provider: provider === 'deepseek' ? 'DeepSeek' : providerName(provider),
-									}),
-									onSelect: () => {
-										if (newOwnerId) void newShellConversation(newOwnerId, provider);
+							? [
+									{
+										key: 'project-defaults',
+										label: t('workflows.projectSettings.newConversation'),
+										onSelect: () => {
+											if (newOwnerId) onNewConversation(newOwnerId);
+										},
 									},
-								}))
+									...newTools.map((provider) => ({
+										key: provider,
+										label: t('workflows.conversations.newWith', {
+											provider: provider === 'deepseek' ? 'DeepSeek' : providerName(provider),
+										}),
+										onSelect: () => {
+											if (newOwnerId) void newShellConversation(newOwnerId, provider);
+										},
+									})),
+								]
 							: project.agents.map((agent) => ({
 									key: agent.id,
 									label: t('workflows.conversations.newWith', {
@@ -1168,6 +1190,14 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 			} else if (project) {
 				menuLabel = t('workflows.conversations.projectActions');
 				const items: TreeMenuItem[] = [];
+				if (newShell && onProjectSettings && project.agents.length > 0) {
+					items.push({
+						key: 'project-settings',
+						label: t('workflows.projectSettings.title'),
+						icon: <Settings2 className="w-3.5 h-3.5" />,
+						onSelect: () => onProjectSettings(project),
+					});
+				}
 				if (onRetryHistory) {
 					items.push({
 						key: 'refresh',

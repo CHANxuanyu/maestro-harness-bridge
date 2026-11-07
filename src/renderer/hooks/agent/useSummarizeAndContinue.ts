@@ -1,4 +1,5 @@
 import { getWindowContext } from '../../contexts/WindowContext';
+import { useSettingsStore } from '../../stores/settingsStore';
 /**
  * useSummarizeAndContinue Hook
  *
@@ -237,6 +238,7 @@ export function useSummarizeAndContinue(): UseSummarizeAndContinueResult {
 
 				const tabResult = createTabAtPosition(session, {
 					afterTabId: sourceTabId,
+					permissionSource: sourceTab,
 					name: compactedTabName,
 					logs: summarizeResult.summarizedLogs,
 					saveToHistory: sourceTab.saveToHistory,
@@ -246,13 +248,16 @@ export function useSummarizeAndContinue(): UseSummarizeAndContinueResult {
 					throw new Error('Failed to create compacted tab');
 				}
 
-				// Keep optional overrides absent instead of materializing tab defaults.
-				// The legacy read-only flag must survive even without permissionMode.
+				// Classic compaction keeps its original optional overrides. New shell
+				// creation has already resolved source and project restrictions above.
+				if (!useSettingsStore.getState().newShell)
+					Object.assign(tabResult.tab, {
+						customModel: sourceTab.customModel,
+						customEffort: sourceTab.customEffort,
+						permissionMode: sourceTab.permissionMode,
+						readOnlyMode: sourceTab.readOnlyMode,
+					});
 				Object.assign(tabResult.tab, {
-					customModel: sourceTab.customModel,
-					customEffort: sourceTab.customEffort,
-					permissionMode: sourceTab.permissionMode,
-					readOnlyMode: sourceTab.readOnlyMode,
 					showThinking: sourceTab.showThinking,
 					enterToSend: sourceTab.enterToSend,
 					saveToHistory: sourceTab.saveToHistory,

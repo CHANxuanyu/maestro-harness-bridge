@@ -192,6 +192,33 @@ describe('Debug Package Collectors', () => {
 	});
 
 	describe('collectSettings', () => {
+		it('redacts every project environment value and path key from the whole debug result', async () => {
+			const { collectSettings } = await import('../../../main/debug-package/collectors/settings');
+			const projectSettings = {
+				'["private-host","/tmp/private-project"]': {
+					defaultPermissionMode: 'readonly',
+					envVars: {
+						GITHUB_TOKEN: 'synthetic-private-token',
+						API_TOKEN: 'synthetic-api-value',
+						ORDINARY: 'synthetic-ordinary-value',
+					},
+				},
+			};
+			const result = await collectSettings({ store: { projectSettings } } as never);
+			const serialized = JSON.stringify(result);
+			for (const privateValue of [
+				'private-host',
+				'private-project',
+				'synthetic-private-token',
+				'synthetic-api-value',
+				'synthetic-ordinary-value',
+			])
+				expect(serialized).not.toContain(privateValue);
+			expect(serialized).toContain('readonly');
+			expect(projectSettings['["private-host","/tmp/private-project"]'].envVars.GITHUB_TOKEN).toBe(
+				'synthetic-private-token'
+			);
+		});
 		it('should sanitize sensitive keys in settings', async () => {
 			const { collectSettings } = await import('../../../main/debug-package/collectors/settings');
 

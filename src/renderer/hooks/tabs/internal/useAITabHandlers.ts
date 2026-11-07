@@ -1,3 +1,5 @@
+import { newProjectConversation } from '../../../services/newShellConversation';
+import { projectSettingsForSession } from '../../../utils/projectConversationDefaults';
 import { resolveTabPermissionMode } from '../../../../shared/agentMetadata';
 import { resolveProjectConversationPermission } from '../../../utils/newConversationPermissions';
 import { useTabStore } from '../../../stores/tabStore';
@@ -69,6 +71,12 @@ export function useAITabHandlers(
 					)
 					.then((result) => {
 						if (!result?.tabId) return;
+						const ownerId = newShell ? (result.sessionId ?? activeSessionId) : activeSessionId;
+						if (ownerId !== activeSessionId) {
+							// Lifecycle sync may still be restoring the newly persisted owner.
+							// Select its identity now and let that shared path add its data.
+							useSessionStore.getState().setActiveSessionId(ownerId);
+						}
 						// Draw the tab NOW rather than waiting to be told about it. The
 						// desktop owns the tab inventory and publishes it from a 500ms
 						// poll (`useRemoteIntegration`), so a client that only reacted to
@@ -76,7 +84,7 @@ export function useAITabHandlers(
 						// after the tap. The answer already carries the id the desktop
 						// minted, so adopt it: the inventory sync that follows matches on
 						// id and keeps the tab this client already has.
-						updateSessionWith(activeSessionId, (session) => {
+						updateSessionWith(ownerId, (session) => {
 							// The broadcast can win the race. Then the tab is already here
 							// and all that is left is to make it the visible one - an
 							// inventory snapshot deliberately never moves a browser
@@ -106,6 +114,11 @@ export function useAITabHandlers(
 						logger.error('[useAITabHandlers] Failed to create desktop tab:', undefined, error)
 					);
 				return;
+			}
+
+			if (projectSettingsForSession(target)) {
+				const created = await newProjectConversation(target, sourceTabId);
+				if (created) return;
 			}
 
 			const projectPermission =

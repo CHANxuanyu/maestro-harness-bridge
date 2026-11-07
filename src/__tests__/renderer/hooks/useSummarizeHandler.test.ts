@@ -1,3 +1,5 @@
+import { permissionModeFields } from '../../../renderer/utils/tabHelpers/focusFields';
+import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import {
 	DEFAULT_CAPABILITIES,
@@ -123,7 +125,7 @@ function seedActiveSession(session: Session | null) {
 // ============================================================================
 
 beforeEach(() => {
-	useSettingsStore.setState({ newShell: false });
+	useSettingsStore.setState({ newShell: false, projectSettings: {} });
 	vi.clearAllMocks();
 
 	// Reset stores
@@ -204,14 +206,13 @@ describe('compacted conversation settings', () => {
 			for (const key of [
 				'customModel',
 				'customEffort',
-				'permissionMode',
-				'readOnlyMode',
 				'showThinking',
 				'enterToSend',
 				'saveToHistory',
 			] as const) {
 				expect(tab[key], key).toBe(source[key]);
 			}
+			expect(tab).toMatchObject(permissionModeFields(resolveTabPermissionMode(source)));
 			expect(tab.commandMode).toBeUndefined();
 			expect(tab.agentSessionId).toBeNull();
 			expect(tab.inputValue).toBe('');
@@ -481,3 +482,50 @@ it.each(['missing', 'busy', 'too-small'])(
 		expect(contextSummarizationService.summarizeContext).not.toHaveBeenCalled();
 	}
 );
+
+it('keeps project restrictions and model defaults when summarizing a full access source', async () => {
+	useSettingsStore.setState({
+		newShell: true,
+		projectSettings: {
+			'[null,"/projects/test"]': {
+				defaultProvider: 'claude-code',
+				defaultModel: 'project-model',
+				defaultReasoningEffort: 'high',
+				defaultPermissionMode: 'readonly',
+			},
+		},
+	});
+	vi.mocked(window.maestro.agents.getAllCapabilities).mockResolvedValueOnce({
+		'claude-code': {
+			...DEFAULT_CAPABILITIES,
+			supportsReadOnlyMode: true,
+			supportsStandardPermissionMode: true,
+		},
+	});
+	await primeCapabilitiesCache();
+	const actual = await vi.importActual<typeof import('../../../renderer/utils/tabHelpers')>(
+		'../../../renderer/utils/tabHelpers'
+	);
+	vi.mocked(createTabAtPosition).mockImplementationOnce(actual.createTabAtPosition);
+	const source = createMockTab({
+		permissionMode: 'full',
+		readOnlyMode: false,
+		customModel: undefined,
+		customEffort: undefined,
+	});
+	seedActiveSession(createMockSession({ aiTabs: [source], activeTabId: source.id }));
+	const { result } = renderHook(() => useSummarizeAndContinue());
+	await act(async () => {
+		const compacted = await result.current.startSummarize(source.id);
+		expect(compacted).not.toBeNull();
+		expect(
+			compacted!.updatedSession.aiTabs.find((tab) => tab.id === compacted!.newTabId)
+		).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+			customModel: 'project-model',
+			customEffort: 'high',
+		});
+		expect(compacted!.updatedSession.aiTabs.find((tab) => tab.id === source.id)).toEqual(source);
+	});
+});

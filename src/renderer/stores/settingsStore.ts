@@ -1,3 +1,4 @@
+import type { ProjectSettings } from '../../shared/projectSettings';
 /**
  * settingsStore - Zustand store for all persistent application settings
  *
@@ -426,6 +427,7 @@ export interface SettingsStoreState
 	groupChatSortAlphabetical: boolean;
 	starredSessionsCollapsed: boolean;
 	newShell: boolean;
+	projectSettings: Record<string, ProjectSettings>;
 	newShellSplit: import('../../shared/newShellSplit').NewShellSplit | null;
 	sidebarNavigationMode: 'conversations' | 'agents';
 	collapsedConversationProjects: string[];
@@ -813,6 +815,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		groupChatSortAlphabetical: false,
 		starredSessionsCollapsed: false,
 		newShell: false,
+		projectSettings: {},
 		newShellSplit: null,
 		sidebarNavigationMode: 'conversations',
 		collapsedConversationProjects: [],
@@ -2315,6 +2318,8 @@ export async function loadAllSettings(): Promise<void> {
 			patch.groupChatSortAlphabetical = allSettings['groupChatSortAlphabetical'] as boolean;
 
 		if (allSettings['newShell'] !== undefined) patch.newShell = allSettings['newShell'] === true;
+		if (allSettings['projectSettings'] && typeof allSettings['projectSettings'] === 'object')
+			patch.projectSettings = allSettings['projectSettings'] as Record<string, ProjectSettings>;
 		patch.newShellSplit = readNewShellSplit(allSettings['newShellSplit']);
 		if (allSettings['sidebarNavigationMode'] !== undefined)
 			patch.sidebarNavigationMode =

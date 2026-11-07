@@ -1,4 +1,10 @@
 import { requestConversationAction } from '../../services/conversationArchive';
+
+import type {
+	NativeHistorySearchHit,
+	NativeHistorySearchResult,
+} from '../../../shared/nativeHistorySearch';
+import { highlightMatches } from '../../utils/highlightMatches';
 import { useNewConversationTools, newShellConversation } from '../../services/newShellConversation';
 import { chooseProject } from '../../services/openProject';
 import { Spinner } from '../ui/Spinner';
@@ -74,6 +80,11 @@ export interface ProjectSessionTreeProps {
 	projects: SidebarProject[];
 	activeKey: string | null;
 	search: string;
+	contentSearch?: NativeHistorySearchResult;
+	contentSearching?: boolean;
+	contentOpening?: boolean;
+	contentOpenFailed?: boolean;
+	onSelectContent?: (hit: NativeHistorySearchHit) => void;
 	onSearchChange: (value: string) => void;
 	/** Providers with at least one conversation; the filter shows only for two or more. */
 	providers?: string[];
@@ -879,6 +890,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	projects,
 	activeKey,
 	search,
+	contentSearch,
+	contentSearching,
+	contentOpening,
+	contentOpenFailed,
+	onSelectContent,
 	onSearchChange,
 	providers = [],
 	providerFilter = null,
@@ -915,7 +931,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	const historyLoading = historyStatus === 'idle' || historyStatus === 'loading';
 	const [menu, setMenu] = useState<MenuState | null>(null);
 	const triggerRef = useRef<HTMLElement | null>(null);
-	const treeRef = useRef<HTMLUListElement>(null);
+	const treeRef = useRef<HTMLDivElement>(null);
 	const searching = search.trim().length > 0;
 
 	const openMenu = useCallback<OpenMenu>((kind, key, trigger, point) => {
@@ -933,7 +949,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		if (restoreFocus) triggerRef.current?.focus();
 	}, []);
 
-	const handleTreeKeyDown = useCallback((e: ReactKeyboardEvent<HTMLUListElement>) => {
+	const handleTreeKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
 		if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
 		const target = e.target as HTMLElement;
 		if (!target.hasAttribute(NAV_ATTR)) return;
@@ -949,14 +965,26 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		items[next].focus();
 	}, []);
 
-	const handleSearchKeyDown = useCallback((e: ReactKeyboardEvent<HTMLInputElement>) => {
-		if (e.key !== 'ArrowDown') return;
-		const first = treeRef.current?.querySelector<HTMLElement>(`[${NAV_ATTR}]`);
-		if (first) {
-			e.preventDefault();
-			first.focus();
-		}
-	}, []);
+	const handleSearchKeyDown = useCallback(
+		(e: ReactKeyboardEvent<HTMLInputElement>) => {
+			if (!newShell && e.key !== 'ArrowDown') return;
+			if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(e.key)) return;
+			const items = Array.from(
+				treeRef.current?.querySelectorAll<HTMLElement>(
+					newShell && searching
+						? '[data-conversation-key] [data-tree-nav], [data-content-hit]'
+						: `[${NAV_ATTR}]`
+				) ?? []
+			);
+			const item = e.key === 'ArrowUp' ? items.at(-1) : items[0];
+			if (item) {
+				e.preventDefault();
+				if (e.key === 'Enter') item.click();
+				else item.focus();
+			}
+		},
+		[newShell, searching]
+	);
 
 	const addAgentSection: TreeMenuSection = {
 		key: 'add-agent',
@@ -1178,7 +1206,19 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	);
 
 	return (
-		<div className="flex flex-col min-w-0 gap-1 select-none">
+		<div
+			ref={treeRef}
+			onKeyDown={handleTreeKeyDown}
+			onKeyDownCapture={(event) => {
+				if (newShell && searching && !menu && event.key === 'Escape') {
+					event.preventDefault();
+					event.stopPropagation();
+					onSearchChange('');
+					treeRef.current?.querySelector('input')?.focus();
+				}
+			}}
+			className="flex flex-col min-w-0 gap-1 select-none"
+		>
 			<div className="px-2 pt-1 pb-2 flex flex-col gap-1.5">
 				{/* The first thing in the list is starting one, the way a chat app opens. */}
 				{newShell ? (
@@ -1193,7 +1233,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					theme={theme}
 					value={search}
 					onChange={onSearchChange}
-					placeholder={t('workflows.conversations.search')}
+					placeholder={t(
+						newShell
+							? 'workflows.conversations.contentSearchPlaceholder'
+							: 'workflows.conversations.search'
+					)}
 					placeholderColor={
 						newShell ? readableTextOn(theme.colors.textDim, [theme.colors.bgActivity]) : undefined
 					}
@@ -1240,6 +1284,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 				/>
 			)}
 
+			{newShell && searching && (
+				<h3 className="px-3 pt-2 text-xs" style={{ color: theme.colors.textDim }}>
+					{t('workflows.conversations.titleResults')}
+				</h3>
+			)}
 			{filtering && totalConversations === 0 ? (
 				<p className="px-3 py-2 text-xs italic" style={{ color: theme.colors.textDim }}>
 					{historyLoading
@@ -1262,7 +1311,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					</button>
 				</div>
 			) : (
-				<ul ref={treeRef} className="flex flex-col px-1" onKeyDown={handleTreeKeyDown}>
+				<ul className="flex flex-col px-1">
 					{projects.map((project) => (
 						<ProjectSection
 							key={project.key}
@@ -1287,6 +1336,78 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						/>
 					))}
 				</ul>
+			)}
+
+			{newShell && search.trim().length >= 2 && (
+				<section
+					aria-label={t('workflows.conversations.contentResults')}
+					className="px-2 pt-2"
+					style={{ color: theme.colors.textMain }}
+				>
+					<h3 className="px-1 text-xs" style={{ color: theme.colors.textDim }}>
+						{t('workflows.conversations.contentResults')}
+					</h3>
+					<p className="px-1 py-1 text-2xs" style={{ color: theme.colors.textDim }}>
+						{t('workflows.conversations.remoteContentExcluded')}
+					</p>
+					{contentSearching && (
+						<p role="status" className="px-1 text-xs">
+							{t('workflows.conversations.searchingContent')}
+						</p>
+					)}
+					{contentSearch?.unavailable && (
+						<p role="status" className="px-1 text-xs">
+							{t('workflows.conversations.contentSearchFailed')}
+						</p>
+					)}
+					{contentOpening && (
+						<p role="status" className="px-1 text-xs">
+							{t('workflows.conversations.opening')}
+						</p>
+					)}
+					{contentOpenFailed && (
+						<p role="alert" className="px-1 text-xs">
+							{t('workflows.conversations.contentOpenFailed')}
+						</p>
+					)}
+					{contentSearch?.hits.map((hit) => (
+						<button
+							key={hit.conversation.key}
+							type="button"
+							data-tree-nav
+							data-content-hit
+							className="w-full text-left rounded px-1 py-2 focus-ring hover:bg-white/5"
+							onClick={() => onSelectContent?.(hit)}
+						>
+							<span className="block truncate text-xs">{hit.conversation.title}</span>
+							<span
+								className="block truncate text-2xs"
+								title={hit.conversation.projectPath}
+								style={{ color: theme.colors.textDim }}
+							>
+								{hit.conversation.projectPath}
+							</span>
+							<span className="block truncate text-xs">
+								{highlightMatches(hit.matchPreview, search.trim(), theme.colors.accent)}
+							</span>
+						</button>
+					))}
+					{contentSearch?.truncated && (
+						<p role="status" className="px-1 text-xs">
+							{t(
+								contentSearch.limited
+									? 'workflows.conversations.contentSearchLimited'
+									: 'workflows.conversations.moreContentResults'
+							)}
+						</p>
+					)}
+					{!contentSearching &&
+						!contentSearch?.unavailable &&
+						!contentSearch?.truncated &&
+						contentSearch?.hits.length === 0 && (
+							<p className="px-1 text-xs">{t('workflows.conversations.noContentMatches')}</p>
+						)}
+				</section>
 			)}
 
 			{menu && menuSections && (

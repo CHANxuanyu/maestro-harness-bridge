@@ -38,6 +38,43 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## New shell conversation content search (2026-11-06)
+
+| UI action                                  | CLI                                                                    | Shared implementation                                                                             |
+| ------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Search local native conversation content   | `maestro-cli native-history search <text> [--project <path>] [--json]` | `agentSessions:searchNativeHistory`, `runNativeHistorySearch()`, `searchNativeHistoryFiles()`     |
+| Open a content hit and jump to its message | Open gap below                                                         | `openNativeHistorySearchHit()`, canonical native resume and transcript backfill, `pendingLogJump` |
+
+The desktop app must be running. The CLI supports relative local project paths.
+The optional project filter compares physical local directories; SSH paths are
+never passed to local resolution. Both callers receive `hits`, `truncated`, and
+optional `limited`, `cancelled`, or `unavailable` flags. Each hit contains the
+conversation identity, owning account, snippet and message locator.
+
+The new shell starts content search after 250 ms for at least two characters.
+Changing or clearing the query cancels the prior request, including account
+discovery still in progress, and ignores late replies. The worker terminates
+before its cancellation promise resolves. Search supports local Claude and Codex,
+including compressed archives; SSH conversations retain title matching only.
+Existing session-browser search reuses the extracted `sessionSearch.ts` parser
+and snippet helper and keeps its API. Codex search now uses the same desktop
+envelope and prompt decoding as displayed messages, so hidden injected context
+no longer matches. Both UI and CLI find legacy Codex headers with an environment
+`<cwd>` fallback and use account-scoped `session_index.jsonl` titles. Index reads
+consume the existing byte budget; oversized or unreadable indexes report `limited`.
+Without an indexed name, the title comes from the first displayed user request.
+Native content jumps carry `revealTurnActivity`; only `newShell` expands the
+containing turn and flashes the body after it mounts.
+
+The third-round correction adds no action or CLI verb. Local Codex history
+discovery now includes `archived_sessions` as well as `sessions`, so an archived
+content hit can pass the canonical read used by resume and backfill.
+`native-history read <agent> <native-id>` uses that same reader; `list` and explicit
+conversation deletion share its account-scoped discovery. Plain rollouts still
+take precedence over compressed copies. The Electron scenario checks CLI content
+before clicking, retains the body-in-viewport and flash assertions, and polls the
+persisted tab name after opening. These reads do not close the navigation gap.
+
 ## Stop and read-only resume corrections (2026-11-06)
 
 No UI action or CLI verb is added. `tab permission <tab> readonly` and
@@ -732,6 +769,18 @@ on scrolling through history. No new UI action or CLI verb was added.
 - T9：自动发现但尚无匹配工具及账户配置的历史，可在界面直接归档或取消归档。CLI 的修改命令使用 `<agent>` 指定账户，需要先有匹配的配置；暂未提供直接按账户目录修改的参数。全局 `native-history list --archived` 仍可读取这些条目。
 - T9：运行状态拒绝覆盖 Maestro 管理的进程、窗口标签和队列。尚未接入其他应用或独立原生 CLI 的活动探测，不声称能识别这些外部进程是否正在写同一历史。
 - T9：跨窗口先全部检查，再逐个关闭。若后一个窗口在关闭时失败，归档标记回退，但已关闭窗口的标签不自动恢复；尚未提供跨窗口事务式回滚。
+
+**Native content search navigation (2026-11-06).** Content retrieval has the CLI
+command above. Opening a returned hit, creating a compatible runner when needed,
+and scrolling or flashing its message still have no acknowledged CLI command.
+They extend the existing native-history open gap below. The implementation is
+`openNativeHistorySearchHit()`; a future CLI entry must route to that service in
+the owning renderer. `native-history read` returns text but does not perform this
+UI action. Cancelling or clearing the sidebar search is also view-local; the
+internal cancellation IPC has no standalone CLI verb.
+The review fix also expands a folded turn before flashing its matched body.
+That expansion belongs to the same unresolved navigation action, with no new
+CLI verb in this round.
 
 **Provider switch wording (2026-11-06).** The existing CLI help, force warning and
 success text still describe the classic reset behavior. With `newShell` enabled,

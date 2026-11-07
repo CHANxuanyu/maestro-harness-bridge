@@ -1979,6 +1979,10 @@ interface MaestroAPI {
 		openProject: import('../main/preload/sessions').AgentSessionsApi['openProject'];
 		onOpenProject: import('../main/preload/sessions').AgentSessionsApi['onOpenProject'];
 		sendOpenProjectResponse: import('../main/preload/sessions').AgentSessionsApi['sendOpenProjectResponse'];
+		searchNativeHistory: (
+			request: import('../shared/nativeHistorySearch').NativeHistorySearchRequest
+		) => Promise<import('../shared/nativeHistorySearch').NativeHistorySearchResult>;
+		cancelNativeHistorySearch: (requestId: string) => Promise<void>;
 		listProjectHistory: (
 			scopes: import('../shared/projectHistory').ProjectHistoryScope[],
 			options?: { archived?: boolean }

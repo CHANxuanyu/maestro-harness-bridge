@@ -88,6 +88,7 @@ interface ProjectSessionTreeOptions {
 	groupsPlusEnabled?: boolean;
 	collapsedProjects?: string[];
 	search?: string;
+	remoteTitleOnly?: boolean;
 	unreadOnly?: boolean;
 	/** Native conversations from `agentSessions.listProjectHistory`. */
 	history?: ProjectHistoryConversation[];
@@ -171,6 +172,7 @@ export function buildProjectSessionTree({
 	groupsPlusEnabled = false,
 	collapsedProjects = [],
 	search = '',
+	remoteTitleOnly = false,
 	unreadOnly = false,
 	history = [],
 	providerFilter = null,
@@ -340,6 +342,11 @@ export function buildProjectSessionTree({
 			if (providerFilter && row.provider !== providerFilter) return false;
 			if (unreadOnly && !row.unread && !row.busy && !row.error) return false;
 			if (!query) return true;
+			const owner = row.ownerId ? ownerById.get(row.ownerId) : undefined;
+			if (remoteTitleOnly && (row.history?.sshRemoteId || (owner && sessionHost(owner))))
+				return [row.title, row.nativeTitle ?? '', row.history?.title ?? ''].some((value) =>
+					value.toLocaleLowerCase().includes(query)
+				);
 			return [
 				row.title,
 				row.nativeTitle ?? '',

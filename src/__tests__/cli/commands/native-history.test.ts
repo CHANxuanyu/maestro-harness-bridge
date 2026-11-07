@@ -126,3 +126,10 @@ it('archives a resolved open tab through the same native operation', async () =>
 		'archive',
 	]);
 });
+
+it('searches native history through the same desktop implementation with an optional project', async () => {
+	await nativeHistory('search', 'secret phrase', undefined, { json: true, project: '/project' });
+	expect(invokeNativeHistory).toHaveBeenCalledWith('agentSessions:searchNativeHistory', [
+		{ query: 'secret phrase', projectPath: '/project' },
+	]);
+});

@@ -976,7 +976,7 @@ function liveTurnShowsTools(logs: LogEntry[], at: number): boolean {
 }
 
 /** Same text AND written close enough in time to be the same live message. */
-function sameLiveMessage(local: LogEntry, disk: LogEntry): boolean {
+export function sameLiveMessage(local: LogEntry, disk: LogEntry): boolean {
 	return (
 		sameTextEntry(local, disk) && Math.abs(local.timestamp - disk.timestamp) <= clockWindowMs(local)
 	);

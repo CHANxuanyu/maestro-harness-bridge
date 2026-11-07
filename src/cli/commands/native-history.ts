@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { invokeNativeHistory } from '../services/agent-sessions';
 import { getSessionById, readSessions, resolveAgentId } from '../services/storage';
 import type { NativeToolOutputTarget, NativeToolOutputResult } from '../../shared/nativeToolOutput';
@@ -9,9 +10,21 @@ export async function nativeHistory(
 	action: string,
 	agentArg: string | undefined,
 	nativeId: string | undefined,
-	options: { json?: boolean; copy?: boolean; archived?: boolean; yes?: boolean }
+	options: { json?: boolean; copy?: boolean; archived?: boolean; yes?: boolean; project?: string }
 ): Promise<void> {
 	try {
+		if (action === 'search') {
+			if (!agentArg || agentArg.trim().length < 2)
+				throw new Error('Search needs at least two characters');
+			const result = await invokeNativeHistory('agentSessions:searchNativeHistory', [
+				{
+					query: agentArg,
+					projectPath: options.project ? path.resolve(options.project) : undefined,
+				},
+			]);
+			console.log(JSON.stringify({ success: true, result }, null, options.json ? undefined : 2));
+			return;
+		}
 		if (action === 'projects') {
 			const result = await invokeNativeHistory('agentSessions:projects', []);
 			console.log(JSON.stringify({ success: true, result }, null, options.json ? undefined : 2));
@@ -154,7 +167,7 @@ export async function nativeHistory(
 			]);
 		} else
 			throw new Error(
-				'Action must be projects, list, read, tool-output, archive, unarchive or delete'
+				'Action must be projects, search, list, read, tool-output, archive, unarchive or delete'
 			);
 		console.log(JSON.stringify({ success: true, result }, null, options.json ? undefined : 2));
 	} catch (error) {

@@ -2,6 +2,10 @@ import { requestConversationAction } from '../../services/conversationArchive';
 import { useConversationArchiveStore } from '../../stores/conversationArchiveStore';
 import type { ConversationArchiveTarget } from '../../../shared/conversationArchive';
 import { projectHistoryScopeFor } from '../../../shared/projectHistory';
+
+import { useNativeHistorySearch } from '../../hooks/session/useNativeHistorySearch';
+import { openNativeHistorySearchHit } from '../../services/openNativeHistorySearchHit';
+import type { NativeHistorySearchHit } from '../../../shared/nativeHistorySearch';
 import { useTabStore } from '../../stores/tabStore';
 import { type ReactNode, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Group, Session, Theme } from '../../types';
@@ -132,6 +136,10 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const newShell = useSettingsStore(selectNewShellEnabled);
 	const archiveRecords = useConversationArchiveStore((state) => state.records);
 	const [search, setSearch] = useState('');
+	const contentSearch = useNativeHistorySearch(search, newShell);
+	const [contentOpening, setContentOpening] = useState(false);
+	const [contentOpenFailed, setContentOpenFailed] = useState(false);
+	const contentOpenTicket = useRef(0);
 	const [providerFilter, setProviderFilter] = useState<string | null>(null);
 	const [rowLimits, setRowLimits] = useState<Record<string, number>>({});
 	const [pendingKeys, setPendingKeys] = useState<Record<string, true>>({});
@@ -203,6 +211,23 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 		return extra.length > 0 ? [...history.conversations, ...extra] : history.conversations;
 	}, [sessions, groups, history.conversations, archiveRecords]);
 
+	const contentResults = useMemo(
+		() => ({
+			...contentSearch.result,
+			hits: contentSearch.result.hits.map((hit) => {
+				const known = mergedHistory.find(
+					(record) =>
+						!record.sshRemoteId &&
+						record.provider === hit.conversation.provider &&
+						record.nativeSessionId === hit.conversation.nativeSessionId &&
+						record.accountDir === hit.conversation.accountDir
+				);
+				return known ? { ...hit, conversation: known } : hit;
+			}),
+		}),
+		[contentSearch.result, mergedHistory]
+	);
+
 	const providers = useMemo(
 		() => providersInHistory(sessions, mergedHistory),
 		[sessions, mergedHistory]
@@ -220,6 +245,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 				groupsPlusEnabled,
 				collapsedProjects,
 				search,
+				remoteTitleOnly: newShell,
 				unreadOnly,
 				history: mergedHistory,
 				providerFilter: effectiveProviderFilter,
@@ -232,6 +258,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 			groupsPlusEnabled,
 			collapsedProjects,
 			search,
+			newShell,
 			unreadOnly,
 			mergedHistory,
 			effectiveProviderFilter,
@@ -453,6 +480,34 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 					title: conversation.title,
 				};
 
+	const selectContent = useCallback(
+		async (hit: NativeHistorySearchHit) => {
+			if (!onResumeSession) return;
+			const ticket = ++contentOpenTicket.current;
+			setContentOpening(true);
+			setContentOpenFailed(false);
+			const known = mergedHistory.find(
+				(record) =>
+					record.provider === hit.conversation.provider &&
+					record.nativeSessionId === hit.conversation.nativeSessionId &&
+					!record.sshRemoteId &&
+					record.accountDir === hit.conversation.accountDir
+			);
+			const success = await openNativeHistorySearchHit(
+				known ? { ...hit, conversation: known } : hit,
+				onResumeSession
+			);
+			if (ticket !== contentOpenTicket.current) return;
+			setContentOpening(false);
+			setContentOpenFailed(!success);
+			if (success) {
+				useUIStore.getState().setActiveFocus('main');
+				useUIStore.getState().closeLeftSidebarForNavigation();
+			}
+		},
+		[onResumeSession, mergedHistory]
+	);
+
 	return (
 		<ProjectSessionTree
 			headerMenu={headerMenu}
@@ -460,6 +515,11 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 			projects={projects}
 			activeKey={groupChatActive || browsing ? null : activeKey}
 			search={search}
+			contentSearch={contentResults}
+			contentSearching={contentSearch.searching}
+			contentOpening={contentOpening}
+			contentOpenFailed={contentOpenFailed}
+			onSelectContent={selectContent}
 			onSearchChange={setSearch}
 			providers={providers}
 			providerFilter={effectiveProviderFilter}

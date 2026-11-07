@@ -6,6 +6,8 @@ import {
 	NEW_SHELL_SPLIT_MIN_WIDTH,
 	type SplitConversationRef,
 } from '../../../shared/newShellSplit';
+import { sessionProviderId } from '../../../shared/agentPresets';
+import { getAgentDisplayName } from '../../../shared/agentMetadata';
 import { useT } from '../../i18n';
 import { useWindowContextOptional } from '../../contexts/WindowContext';
 import { useAgentCapabilities } from '../../hooks/agent/useAgentCapabilities';
@@ -26,6 +28,7 @@ import { useTabStore } from '../../stores/tabStore';
 import { conversationDisplayTitle } from '../../utils/conversationTitle';
 import { aiTabFocusFields } from '../../utils/tabFocusFields';
 import type { Session } from '../../types';
+import { AgentLogo } from '../Wizard/screens/AgentSelectionScreen/components/AgentLogo';
 import { MainPanelContent, type MainPanelContentProps } from './MainPanelContent';
 import { SplitDivider } from './TiledLayout';
 
@@ -59,6 +62,7 @@ function ConversationPane({
 		[owner, target.tabId]
 	);
 	const tab = owner.aiTabs.find((item) => item.id === target.tabId)!;
+	const provider = sessionProviderId(owner);
 	const { hasCapability } = useAgentCapabilities(owner.toolType);
 	const options = useAgentModelEffortOptions(owner.toolType, owner.customEnvVars);
 	const { model, effort } = resolveModelEffort(tab, owner, options);
@@ -81,16 +85,28 @@ function ConversationPane({
 		>
 			<div
 				className="flex items-center gap-2 h-9 px-3 shrink-0 border-b"
-				style={{ borderColor: content.theme.colors.border, color: content.theme.colors.textMain }}
+				style={{
+					borderColor: content.theme.colors.border,
+					// The tool mark and title carry which pane owns the right panel.
+					boxShadow: focused ? `inset 0 -2px 0 ${content.theme.colors.accent}` : undefined,
+					color: focused ? content.theme.colors.textMain : content.theme.colors.textDim,
+				}}
 			>
 				<span
-					className="w-1.5 h-1.5 rounded-full shrink-0"
-					aria-hidden
-					style={{
-						backgroundColor: focused ? content.theme.colors.accent : content.theme.colors.border,
-					}}
-				/>
-				<span className="text-xs truncate flex-1">
+					role="img"
+					className="shrink-0 inline-flex"
+					title={getAgentDisplayName(provider)}
+					aria-label={getAgentDisplayName(provider)}
+				>
+					<AgentLogo
+						agentId={provider}
+						supported
+						detected
+						theme={content.theme}
+						className="w-3.5 h-3.5"
+					/>
+				</span>
+				<span className={`text-xs truncate flex-1 ${focused ? 'font-medium' : ''}`}>
 					{conversationDisplayTitle(tab) ?? t('workflows.conversations.newConversation')}
 				</span>
 				<button

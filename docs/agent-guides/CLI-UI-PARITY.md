@@ -56,10 +56,22 @@ visible for a deliberate retry. No persistent allow rule is written.
 
 New shell standard Claude turns use local print even with a saved interactive
 or dynamic preference. Direct maestro-p, SSH and conflicting permission args
-fail before spawn. Classic mode selection is unchanged. The existing shared
+fail before spawn. Classic permission policy is unchanged. The existing shared
 relay also receives lifetime and failed-delivery fixes in the classic shell.
 Synthetic Electron coverage is in `e2e/native-claude-permission.spec.ts` and
 execution instructions are in `e2e/claude-standard-approval.md`.
+
+The U4 review fixes add no action or verb. `permission list` carries the same
+effective spawn `cwd` and `tabId` as the prompt. The relay derives a missing
+tab ID from the compound process ID with `REGEX_AI_TAB_ID`, including forced
+parallel suffixes; an explicit tab ID wins. The new shell prompt also uses
+`parseSessionId()` for older events and never substitutes the saved project
+directory for an absent execution directory. Worktree direct and queued sends
+are covered by two additional synthetic Electron scenarios, pending execution.
+Windows installer `maestro-p.cmd` entries now use the shared TUI detector, so
+new shell standard mode rejects them before spawn. This detector correction
+also applies to classic mode and CLI resolution; the classic permission policy
+and TUI bypass behavior are otherwise unchanged.
 
 ## Stop and read-only resume corrections (2026-11-06)
 

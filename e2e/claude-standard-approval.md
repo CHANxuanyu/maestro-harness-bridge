@@ -8,7 +8,7 @@
 MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-claude-permission.spec.ts --retries=0
 ```
 
-命令构建主进程、renderer 和 CLI，再运行 7 条场景。全部使用 `NativeApp` 的临时项目、临时应用数据及合成 Claude；真实模式在建立夹具前直接报错。`claude-permission.cjs` 启动应用实际配置的 MCP bridge，通过 initialize、tools/list、tools/call 请求审批，不调用模型。每个场景保留首次失败，不自动重试。
+命令构建主进程、renderer 和 CLI，再运行 9 条场景。全部使用 `NativeApp` 的临时项目、临时应用数据及合成 Claude；真实模式在建立夹具前直接报错。`claude-permission.cjs` 启动应用实际配置的 MCP bridge，通过 initialize、tools/list、tools/call 请求审批，不调用模型。每个场景保留首次失败，不自动重试。
 
 覆盖内容：
 
@@ -19,8 +19,12 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-claude-permission.spec.ts --re
 5. 等待审批时通过现有 `process.interrupt` 中断，bridge 退出、请求消失、临时 MCP 配置删除，无写入且能继续。
 6. 不回应审批，等待真实的 300 秒超时。无需缩短生产超时或注入测试后门。界面收起、返回拒绝、无写入、迟到批准被拒绝，能继续。此用例单独允许 390 秒。
 7. 旧界面的 API/print 路径仍显示原来的 Allow 按钮，审批和收尾工作。
+8. 从主项目打开工作树原生历史，保持主项目记录的目录不变，通过输入框发送相对路径 Bash 请求。审批与 CLI 必须显示工作树实际目录、命名后的对话和同一个 tabId；批准后只在工作树出现文件。
+9. 同样的工作树历史先运行一个被夹具暂缓退出的回合，再用 `dispatch --tab <id> --queue` 排队审批请求。确认返回 queued，释放夹具后检查相同目录、对话归属与文件落点。
 
-六条新界面场景先保存 interactive token source，确认实际参数仍为 print 并携带 relay，不包含跳过权限参数。新弹窗切中文，检查完整工具输入、项目路径和默认焦点；CLI 列表不得包含认证 token。全部场景检查 bridge 退出记录、MCP 配置删除和迟到批准失败。停止场景验证进程中断链路，不冒充点击输入框停止按钮的验收。
+原有六条新界面场景先保存 interactive token source，确认实际参数仍为 print 并携带 relay，不包含跳过权限参数。新弹窗切中文，检查完整工具输入、项目路径、命名后的对话和默认焦点；CLI 列表不得包含认证 token。原有七条场景检查 bridge 退出记录、MCP 配置删除和迟到批准失败。新增两条工作树场景验证相对路径工具输入与实际落盘位置，不执行真实 shell 命令。停止场景验证进程中断链路，不冒充点击输入框停止按钮的验收。
+
+Windows 外部补验：把 Claude 自定义路径指向安装器生成的 `maestro-p.cmd`，开启新界面并选择标准权限，确认发送被拒绝且没有启动 TUI。分别检查配置中直接填写 `.cmd`，以及路径探测最终解析为 `.cmd` 的情况。本轮只用纯函数回归验证 Windows 路径识别与拒绝分支，没有在 Windows 上执行。
 
 ## TUI 与 SSH 边界
 
@@ -28,7 +32,7 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-claude-permission.spec.ts --re
 
 `newShell=true` 时，标准权限固定走本机 print，不改写已保存的 token source 偏好；显式 maestro-p 路径、SSH，以及冲突的自定义权限参数会拒绝启动。权限菜单说明 TUI 和 SSH 暂不支持，启动拒绝有中英文解释。不会通过本地 realpath 解析远程目录，也不为了判断标准审批去探测远程 maestro-p。
 
-旧界面 TUI 路径没有改变，仍存在上述绕过风险。完全访问与只读的模式选择保留原逻辑。自定义包装脚本内部行为、原生 Claude 的预先允许规则、hooks 和 settings 内容不在这次参数检查的保证范围内。标准权限只对 Claude 自身决定需要询问的工具请求弹窗，不承诺每个工具都询问。
+旧界面 TUI 的权限策略没有改变，仍存在上述绕过风险。本轮共享路径识别补齐 `.cmd`，旧界面与 CLI 也会把该安装入口识别为 TUI；标准权限拒绝它的约束仍只在新界面生效。完全访问与只读的权限策略保留原逻辑。自定义包装脚本内部行为、原生 Claude 的预先允许规则、hooks 和 settings 内容不在这次参数检查的保证范围内。标准权限只对 Claude 自身决定需要询问的工具请求弹窗，不承诺每个工具都询问。
 
 ## 最少一次真实验证，另行授权后执行
 

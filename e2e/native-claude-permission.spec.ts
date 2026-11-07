@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { NativeApp, type NativeScene } from './fixtures/native-app';
+import { createTurn } from './fixtures/native/protocol.cjs';
 import { RELAY_DECISION_TIMEOUT_MS } from '../src/main/permission-relay/types';
 import type { PermissionRequest } from '../src/main/permission-relay/types';
 
@@ -79,6 +80,7 @@ for (const outcome of [
 			// A saved TUI preference must still run standard approval through print.
 			await native.cli('update-agent', owner, '--token-source', newShell ? 'interactive' : 'api');
 			const tab = (await native.cli('tab', 'show', 'active', '--agent', owner)).tab;
+			await native.cli('tab', 'rename', tab.tabId, '审批所属对话');
 			await native.send('Perform the synthetic approval write');
 			const dialog = native.page.getByTestId('permission-prompt');
 			await expect(dialog).toBeVisible();
@@ -87,6 +89,7 @@ for (const outcome of [
 				await expect(dialog).toContainText('只批准这一次工具调用');
 				await expect(dialog).toContainText(content.trim());
 				await expect(dialog).toContainText(native.project);
+				await expect(dialog).toContainText('对话：审批所属对话');
 				await expect(dialog.getByRole('button', { name: '拒绝', exact: true })).toBeFocused();
 			}
 			expect(fs.existsSync(marker)).toBe(false);
@@ -94,6 +97,7 @@ for (const outcome of [
 			expect(requests).toHaveLength(1);
 			const request = requests[0];
 			expect(request.tabId).toBe(tab.tabId);
+			expect(request.cwd).toBe(native.project);
 			expect(request.input).toEqual({ file_path: marker, content });
 			expect(request).not.toHaveProperty('token');
 			const invocation = rows('fixture-invocations.jsonl')[0];
@@ -169,6 +173,111 @@ for (const outcome of [
 			}
 			await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
 			expect((await native.cli('tab', 'show', tab.tabId)).tab.permissionMode).toBe('standard');
+			expect(await native.cli('permission', 'list')).toEqual([]);
+		} catch (error) {
+			failed = true;
+			throw error;
+		} finally {
+			if (native.app) await native.close(failed);
+		}
+	});
+}
+
+for (const delivery of ['direct', 'queued'] as const) {
+	// eslint-disable-next-line no-empty-pattern
+	test(`Claude standard approval: worktree ${delivery}`, async ({}, info) => {
+		test.setTimeout(90_000);
+		const native = new NativeApp(info, { providerCli: false });
+		const home = path.join(native.root, 'home');
+		const cwd = path.join(native.project, '.claude', 'worktrees', 'approval');
+		fs.mkdirSync(home);
+		fs.mkdirSync(cwd, { recursive: true });
+		const historyTitle = 'Worktree approval history';
+		const seed = createTurn({
+			provider: 'claude',
+			configDir: native.claude,
+			cwd,
+			prompt: historyTitle,
+		});
+		seed.finish('Synthetic worktree history ready.');
+		const settingsFile = path.join(native.data, 'maestro-settings.json');
+		fs.writeFileSync(
+			settingsFile,
+			JSON.stringify({
+				...JSON.parse(fs.readFileSync(settingsFile, 'utf8')),
+				newShell: true,
+				defaultSaveToHistory: false,
+				crashReportingEnabled: false,
+			})
+		);
+		const exitGate = path.join(native.root, 'release-first-turn');
+		const content = 'approved\n';
+		const marker = path.join(cwd, 'marker.txt');
+		const command = 'echo approved > marker.txt';
+		native.scriptTurns([
+			...(delivery === 'queued' ? [{ answer: 'QUEUE_READY', exitGate }] : []),
+			{
+				approval: true,
+				answer: 'WORKTREE_APPROVAL_COMPLETED',
+				writes: { 'marker.txt': content },
+				tools: [
+					{ id: 'relative-write', name: 'Bash', command, input: { command }, output: 'done' },
+				],
+			},
+		]);
+		let failed = false;
+		try {
+			await native.start(home);
+			const owner = await native.createAgent('claude');
+			await native.page
+				.locator('[data-conversation-kind="history"] button[data-tree-nav]')
+				.filter({ hasText: historyTitle })
+				.click();
+			await expect(
+				native.page.getByText('Synthetic worktree history ready.', { exact: true })
+			).toBeVisible();
+			const tab = (await native.cli('tab', 'show', 'active', '--agent', owner)).tab;
+			expect(tab.agentSessionId).toBe(seed.id);
+			expect((await native.cli('show-agent', owner)).cwd).toBe(native.project);
+			await native.cli('tab', 'rename', tab.tabId, '工作树审批对话');
+			await native.cli('tab', 'permission', tab.tabId, 'standard');
+			if (delivery === 'queued') {
+				await native.send('Hold the first synthetic turn');
+				await expect(native.page.getByText('QUEUE_READY', { exact: true })).toBeVisible();
+				await expect(native.page.getByTestId('stop-turn-button')).toBeVisible();
+				const queued = await native.cli(
+					'dispatch',
+					owner,
+					'Run the queued approval',
+					'--tab',
+					tab.tabId,
+					'--queue'
+				);
+				expect(queued.queued).toBe(true);
+				fs.writeFileSync(exitGate, 'release');
+			} else {
+				await native.send('Run the direct approval');
+			}
+			const dialog = native.page.getByTestId('permission-prompt');
+			await expect(dialog).toBeVisible();
+			await expect(dialog).toContainText('工作树审批对话');
+			await expect(dialog.getByText(cwd, { exact: true })).toBeVisible();
+			await expect(dialog.getByText(native.project, { exact: true })).toHaveCount(0);
+			await expect(dialog).toContainText(command);
+			const requests: Omit<PermissionRequest, 'token'>[] = await native.cli('permission', 'list');
+			expect(requests).toHaveLength(1);
+			expect(requests[0]).toMatchObject({ tabId: tab.tabId, cwd, input: { command } });
+			expect(requests[0]).not.toHaveProperty('token');
+			expect(fs.existsSync(marker)).toBe(false);
+			expect(fs.existsSync(path.join(native.project, 'marker.txt'))).toBe(false);
+			await dialog.getByRole('button', { name: 'Allow once', exact: true }).click();
+			await expect(dialog).toHaveCount(0);
+			await expect(
+				native.page.getByText('WORKTREE_APPROVAL_COMPLETED', { exact: true })
+			).toBeVisible();
+			await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+			expect(fs.readFileSync(marker, 'utf8')).toBe(content);
+			expect(fs.existsSync(path.join(native.project, 'marker.txt'))).toBe(false);
 			expect(await native.cli('permission', 'list')).toEqual([]);
 		} catch (error) {
 			failed = true;

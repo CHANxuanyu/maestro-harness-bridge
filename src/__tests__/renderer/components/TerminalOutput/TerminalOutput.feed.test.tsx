@@ -23,6 +23,7 @@ import { LayerStackProvider } from '../../../../renderer/contexts/LayerStackCont
 import { createMockSession } from '../../../helpers/mockSession';
 import { createMockAITab } from '../../../helpers/mockTab';
 import { mockTheme } from '../../../helpers/mockTheme';
+import { compactToolOutput } from '../../../../shared/toolOutput';
 
 vi.mock('react-markdown', () => ({
 	default: ({ children }: { children: string }) => (
@@ -464,6 +465,103 @@ describe('conversation feed: tools', () => {
 		nativeTranscript: { messageId: id },
 		metadata: { toolState: { status: 'completed', input: { path }, output } },
 	});
+
+	it.each([
+		{ finished: false, change: 'project' },
+		{ finished: true, change: 'project' },
+		{ finished: false, change: 'source' },
+		{ finished: true, change: 'source' },
+		{ finished: false, change: 'call' },
+		{ finished: true, change: 'call' },
+	])(
+		'reads full tool output through the row renderer with finished=$finished and change=$change',
+		async ({ finished, change }) => {
+			useSettingsStore.setState({ newShell: true });
+			const tool = call('t1', 1, 'large.txt', compactToolOutput('x'.repeat(9000)).output);
+			tool.metadata!.toolCallId = 'native-call-1';
+			const logs = [
+				user('u1', 0, 'Read the file'),
+				tool,
+				...(finished ? [reply('a1', 2, 'Done')] : []),
+			];
+			const session = sessionWith(logs);
+			session.aiTabs[0].agentSessionId = 'native-conversation';
+			const read = vi.fn().mockResolvedValue({
+				status: 'found',
+				text: 'FULL OUTPUT TAIL',
+				totalBytes: 9000,
+				omittedBytes: 0,
+			});
+			const originalRead = window.maestro.agentSessions.toolOutput;
+			window.maestro.agentSessions.toolOutput = read;
+			try {
+				const { container, rerenderWith } = renderTranscript(logs, { session });
+				if (finished) {
+					fireEvent.click(within(row(container, 't1')).getByRole('button', { name: /Worked for/ }));
+				}
+				fireEvent.click(screen.getByRole('button', { name: 'Show details for read_file' }));
+				expect(read).not.toHaveBeenCalled();
+				await act(async () => {
+					fireEvent.click(screen.getByRole('button', { name: /Show full output/ }));
+				});
+				expect(read).toHaveBeenLastCalledWith(
+					{
+						provider: 'codex',
+						projectPath: session.projectRoot || session.cwd,
+						nativeSessionId: 'native-conversation',
+						ownerAgentId: session.id,
+						sshRemoteId: undefined,
+					},
+					'native-call-1'
+				);
+				expect(screen.getByTestId('native-tool-output')).toHaveTextContent('FULL OUTPUT TAIL');
+				// A changed source must invalidate cached row props and release the old full output.
+				const savedSource = {
+					provider: 'claude-code',
+					projectPath: '/synthetic-original',
+					nativeSessionId: 'original-conversation',
+					ownerAgentId: session.id,
+				};
+				const nextLogs = logs.map((entry) =>
+					entry === tool && change !== 'project'
+						? {
+								...entry,
+								metadata: {
+									...entry.metadata,
+									...(change === 'source'
+										? { toolOutputSource: savedSource }
+										: { nativeToolCallId: 'bound-call-1' }),
+								},
+							}
+						: entry
+				);
+				const nextSession = {
+					...session,
+					...(change === 'project'
+						? { cwd: '/synthetic-next', projectRoot: '/synthetic-next' }
+						: {}),
+					aiTabs: [{ ...session.aiTabs[0], logs: nextLogs }],
+				};
+				rerenderWith(nextLogs, { session: nextSession });
+				expect(screen.queryByTestId('native-tool-output')).toBeNull();
+				await act(async () => {
+					fireEvent.click(screen.getByRole('button', { name: /Show full output/ }));
+				});
+				expect(read).toHaveBeenLastCalledWith(
+					change === 'source'
+						? savedSource
+						: expect.objectContaining({
+								projectPath:
+									change === 'project' ? '/synthetic-next' : session.projectRoot || session.cwd,
+							}),
+					change === 'call' ? 'bound-call-1' : 'native-call-1'
+				);
+				expect(tool.metadata!.toolState!.output).toBe(compactToolOutput('x'.repeat(9000)).output);
+			} finally {
+				window.maestro.agentSessions.toolOutput = originalRead;
+			}
+		}
+	);
 
 	it("folds a finished turn's work behind one row above its answer", () => {
 		const { container } = renderTranscript([

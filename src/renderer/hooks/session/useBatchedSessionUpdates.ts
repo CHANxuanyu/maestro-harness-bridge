@@ -16,8 +16,10 @@
 import { useRef, useCallback, useEffect, useMemo } from 'react';
 import type { Session, SessionState, UsageStats, LogEntry } from '../../types';
 import { useSessionStore } from '../../stores/sessionStore';
+import { removeHiddenProgressLog } from '../agent/internal/helpers/exitTabCleanup';
 import { canAppendToLogEntry, isTransientActivityEntry } from '../../utils/logEntries';
 import { currentActivityRetention } from '../../utils/activityRetention';
+import { buildHiddenProgressLogId } from '../../utils/hiddenProgress';
 import { isAiTabHidden } from '../../utils/unifiedTabOrderUtils';
 
 // Default flush interval in milliseconds. 200ms is the sweet spot we landed on:
@@ -97,6 +99,8 @@ interface SessionAccumulator {
 	contextUsage?: number;
 	// Tabs to mark as delivered
 	deliveredTabs?: Set<string>;
+	// Capture the new shell choice at ingestion, including a shell switch before flush.
+	hiddenProgressTabs?: Map<string, { logs: LogEntry[]; placeholder?: LogEntry }>;
 	// Cycle metrics (accumulated)
 	cycleBytesDelta?: number;
 	cycleTokensDelta?: number;
@@ -127,7 +131,7 @@ export interface BatchedUpdater {
 	/** Reset context window percentage to a specific value (bypasses high water mark) */
 	resetContextUsage: (sessionId: string, percentage: number) => void;
 	/** Mark user message as delivered (batched) */
-	markDelivered: (sessionId: string, tabId: string) => void;
+	markDelivered: (sessionId: string, tabId: string, logsAtDelivery?: LogEntry[]) => void;
 	/** Update bytes received in current cycle (batched, accumulated) */
 	updateCycleBytes: (sessionId: string, bytes: number) => void;
 	/** Update tokens in current cycle (batched, accumulated) */
@@ -273,7 +277,14 @@ export function useBatchedSessionUpdates(
 								// Entries read back from the provider transcript are history,
 								// not this turn's scratch state, so they always stay; so do the
 								// live turn's tool calls when the layout keeps them.
-								const existingLogs = tab.logs.filter((log) => {
+								// Only clear the placeholder seen when data arrived. A later tool
+								// may replace it before this batch is flushed.
+								const placeholder = acc.hiddenProgressTabs?.get(tab.id)?.placeholder;
+								const visibleLogs =
+									placeholder && tab.logs.includes(placeholder)
+										? removeHiddenProgressLog(tab.logs, tab.id)
+										: tab.logs;
+								const existingLogs = visibleLogs.filter((log) => {
 									if (isTransientActivityEntry(log, retention)) {
 										return tab.showThinking === 'sticky';
 									}
@@ -749,12 +760,22 @@ export function useBatchedSessionUpdates(
 	);
 
 	const markDelivered = useCallback(
-		(sessionId: string, tabId: string) => {
+		(sessionId: string, tabId: string, logsAtDelivery?: LogEntry[]) => {
 			const acc = getAccumulator(sessionId);
 			if (!acc.deliveredTabs) {
 				acc.deliveredTabs = new Set();
 			}
 			acc.deliveredTabs.add(tabId);
+			if (logsAtDelivery && acc.hiddenProgressTabs?.get(tabId)?.logs !== logsAtDelivery) {
+				// Immutable store snapshots: look once per changed array, not per
+				// fragment. This snapshot lives only until the current batch flushes.
+				acc.hiddenProgressTabs ??= new Map();
+				const id = buildHiddenProgressLogId(tabId);
+				acc.hiddenProgressTabs.set(tabId, {
+					logs: logsAtDelivery,
+					placeholder: logsAtDelivery.find((log) => log.id === id),
+				});
+			}
 			hasPendingRef.current = true;
 		},
 		[getAccumulator]

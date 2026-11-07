@@ -14,6 +14,7 @@ beforeEach(async () => {
 	await fs.mkdir(project);
 });
 afterEach(async () => {
+	vi.restoreAllMocks();
 	await fs.rm(root, { recursive: true, force: true });
 });
 async function transcript(provider: string, name: string, cwd = project, account = 'account') {
@@ -57,6 +58,37 @@ it('omits missing directories, including directories removed after caching', asy
 	expect(await discover()).toHaveLength(1);
 	await fs.rmdir(project);
 	expect(await discover()).toEqual([]);
+});
+
+it('resolves a shared cwd once per scan and follows a retargeted alias after expiry', async () => {
+	const alias = path.join(root, 'project-alias');
+	const replacement = path.join(root, 'replacement');
+	await fs.mkdir(replacement);
+	await fs.symlink(project, alias, 'junction');
+	for (let i = 0; i < 8; i++) await transcript('claude-code', `${i}.jsonl`, alias);
+	const realpath = vi.spyOn(fs, 'realpath');
+	const started = Date.now();
+	const now = vi.spyOn(Date, 'now').mockReturnValue(started);
+	const discover = createNativeProjectDiscovery({
+		accountDirs: async () => [path.join(root, 'account')],
+	});
+	expect(await discover()).toEqual([
+		{ path: project, tools: ['claude-code'], lastActivity: expect.any(Number), sessionCount: 8 },
+	]);
+	expect(realpath.mock.calls.filter(([file]) => file === alias)).toHaveLength(1);
+	await fs.unlink(alias);
+	await fs.symlink(replacement, alias, 'junction');
+	now.mockReturnValue(started + 31000);
+	realpath.mockClear();
+	expect(await discover()).toEqual([
+		{
+			path: replacement,
+			tools: ['claude-code'],
+			lastActivity: expect.any(Number),
+			sessionCount: 8,
+		},
+	]);
+	expect(realpath.mock.calls.filter(([file]) => file === alias)).toHaveLength(1);
 });
 it('reads compressed archived rollouts once, and reads the head of large plain files', async () => {
 	const file = await transcript('codex', 'rollout-20261106-abc.jsonl.zst');

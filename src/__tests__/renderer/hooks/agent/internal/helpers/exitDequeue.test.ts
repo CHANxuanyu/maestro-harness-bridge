@@ -31,6 +31,28 @@ function tab(overrides: Partial<AITab> = {}): AITab {
 type MinSession = Pick<Session, 'executionQueue' | 'state' | 'agentError' | 'aiTabs'>;
 
 describe('chooseNextQueuedItem', () => {
+	it('limits a stopped conversation dequeue to its own queue', () => {
+		const background = item({ id: 'background', tabId: 'tab-2', readOnlyMode: true });
+		const own = item({ id: 'own', tabId: 'tab-1', readOnlyMode: true });
+		const session: MinSession = {
+			state: 'busy',
+			aiTabs: [tab(), tab({ id: 'tab-2', state: 'busy' })],
+			executionQueue: [background, own],
+		};
+		expect(chooseNextQueuedItem(session, 'tab-1', () => false, 'tab-1')).toEqual({
+			action: 'dequeue',
+			item: own,
+		});
+		expect(
+			chooseNextQueuedItem(
+				{ ...session, executionQueue: [background] },
+				'tab-1',
+				() => false,
+				'tab-1'
+			)
+		).toEqual({ action: 'none', item: null });
+	});
+
 	it('returns "none" when the queue is empty', () => {
 		const session: MinSession = {
 			executionQueue: [],

@@ -3280,7 +3280,7 @@ interface MaestroAPI {
 			request: import('../shared/crossAgentTypes').CrossAgentSendRequest
 		) => Promise<{ requestId: string }>;
 		/** Stop every consult this source agent still has in flight (Stop button). */
-		cancel: (sourceSessionId: string) => Promise<{ canceled: number }>;
+		cancel: (sourceSessionId: string, sourceTabId?: string) => Promise<{ canceled: number }>;
 		/** Subscribe to streamed cross-agent response chunks. Returns a cleanup fn. */
 		onChunk: (
 			handler: (chunk: import('../shared/crossAgentTypes').CrossAgentResponseChunk) => void

@@ -2,6 +2,18 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.split.openRight': '在右侧打开',
+	'workflows.split.openRightTitle': '在右侧打开：{title}',
+	'workflows.split.chooseConversation': '选择要在右侧打开的对话',
+	'workflows.split.unsplit': '退出分屏',
+	'workflows.split.closePane': '关闭此栏',
+	'workflows.split.resize': '调整分屏宽度',
+	'workflows.split.narrow': '窗口太窄，扩大窗口后可并排查看两条对话。',
+	'workflows.split.disabled': '请先开启新界面',
+	'workflows.split.missing': '找不到这条对话',
+	'workflows.split.same': '同一条对话不能重复打开',
+	'workflows.split.invalidRatio': '分屏比例须在 0.2 到 0.8 之间',
+	'workflows.shell.splitInvalidRequest': '对话分屏请求无效',
 	'workflows.archive.archive': '归档',
 	'workflows.archive.unarchive': '取消归档',
 	'workflows.archive.archived': '已归档 {count}',
@@ -446,6 +458,11 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.shell.typeToQueueMessage': '输入要加入队列的消息...',
 	'workflows.shell.typeAMessageToMentionAgent': '输入消息...（输入 @ 提及智能体）',
 	'workflows.shell.openPromptComposervalue': '打开提示词编辑器{p0}',
+	'workflows.shell.crossHostDropUnsupported': '暂不支持在不同主机的对话之间拖入文件。',
+	'workflows.shell.invalidFileDropOrigin': '无法读取文件的来源位置，请重新拖入。',
+	'workflows.shell.confirmForceStopConversation':
+		'未能正常停止这条对话。要强制停止吗？未保存的工作可能丢失。',
+	'workflows.shell.stopConversationFailed': '未能停止这条对话，请重试。',
 	'workflows.shell.attachImage': '添加图片',
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify': '切换只读模式（智能体不会修改文件）',
 	'workflows.shell.readOnly': '只读',

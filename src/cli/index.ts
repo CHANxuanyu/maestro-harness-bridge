@@ -159,6 +159,8 @@ import {
 	tabReadOnly,
 	tabPermission,
 	tabPanel,
+	tabSplit,
+	tabUnsplit,
 	tabModel,
 	tabEffort,
 	tabEnterToSend,
@@ -1601,6 +1603,15 @@ tab
 	.option('--focus', 'Switch to the new tab after creating it (default)')
 	.option('--json', 'Output as JSON (for scripting)')
 	.action((options) => tabNew(options));
+
+tabTargetOptions(tab.command('split <tab-id>'))
+	.description('Open an existing conversation on the right (requires the new shell)')
+	.option('--ratio <fraction>', 'Left pane share of the split width, for example 0.5')
+	.action((tabId, options) => tabSplit(tabId, options));
+
+tabTargetOptions(tab.command('unsplit'))
+	.description('Return the current conversation window to one pane (requires the new shell)')
+	.action((options) => tabUnsplit(options));
 
 tabTargetOptions(tab.command('panel <tab-id> <action>'))
 	.description(

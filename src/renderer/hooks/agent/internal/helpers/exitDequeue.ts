@@ -48,10 +48,11 @@ export interface QueueDecision {
 export function queueIsHeldByRetry(
 	session: Pick<Session, 'executionQueue'> | undefined,
 	exitingTabId: string | undefined,
-	isRetryPending: (tabId: string) => boolean
+	isRetryPending: (tabId: string) => boolean,
+	onlyTabId?: string
 ): boolean {
 	if (exitingTabId && isRetryPending(exitingTabId)) return true;
-	const nextItem = session ? nextRunnableQueueItem(session.executionQueue) : undefined;
+	const nextItem = session ? nextRunnableQueueItem(session.executionQueue, onlyTabId) : undefined;
 	return !!nextItem?.tabId && isRetryPending(nextItem.tabId);
 }
 
@@ -65,11 +66,12 @@ export function chooseNextQueuedItem(
 	 * the exiting tab and the queued item's own target tab, which are not always
 	 * the same tab.
 	 */
-	isRetryPending: (tabId: string) => boolean = () => false
+	isRetryPending: (tabId: string) => boolean = () => false,
+	onlyTabId?: string
 ): QueueDecision {
 	// Paused items are held by the user - skip them and run the first runnable
 	// item. If everything is held (or the queue is empty), there's nothing to do.
-	const nextItem = nextRunnableQueueItem(session.executionQueue);
+	const nextItem = nextRunnableQueueItem(session.executionQueue, onlyTabId);
 	if (!nextItem) {
 		return { action: 'none', item: null };
 	}
@@ -80,7 +82,7 @@ export function chooseNextQueuedItem(
 
 	// Agent Resilience holds the queue while a retry is counting down; see
 	// queueIsHeldByRetry above for which tabs it checks and why.
-	if (queueIsHeldByRetry(session, exitingTabId, isRetryPending)) {
+	if (queueIsHeldByRetry(session, exitingTabId, isRetryPending, onlyTabId)) {
 		return { action: 'wait', item: nextItem };
 	}
 	const otherTabsBusy = !!session.aiTabs?.some(

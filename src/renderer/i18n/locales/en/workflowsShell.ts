@@ -1,4 +1,17 @@
 export const workflowsShell = {
+	'workflows.split.openRight': 'Open on the right',
+	'workflows.split.openRightTitle': 'Open on the right: {title}',
+	'workflows.split.chooseConversation': 'Choose a conversation to open on the right',
+	'workflows.split.unsplit': 'Exit split view',
+	'workflows.split.closePane': 'Close this pane',
+	'workflows.split.resize': 'Resize split view',
+	'workflows.split.narrow':
+		'This window is too narrow. Widen it to view two conversations side by side.',
+	'workflows.split.disabled': 'Turn on the new interface first',
+	'workflows.split.missing': 'This conversation could not be found',
+	'workflows.split.same': 'The same conversation cannot be opened twice',
+	'workflows.split.invalidRatio': 'The split ratio must be between 0.2 and 0.8',
+	'workflows.shell.splitInvalidRequest': 'Invalid conversation split request',
 	'workflows.archive.archive': 'Archive',
 	'workflows.archive.unarchive': 'Unarchive',
 	'workflows.archive.archived': 'Archived {count}',
@@ -462,6 +475,13 @@ export const workflowsShell = {
 	'workflows.shell.typeToQueueMessage': 'Type to queue message...',
 	'workflows.shell.typeAMessageToMentionAgent': 'Type a message... (@ to mention agent)',
 	'workflows.shell.openPromptComposervalue': 'Open Prompt Composer{p0}',
+	'workflows.shell.crossHostDropUnsupported':
+		'Dragging files between different hosts is not supported.',
+	'workflows.shell.invalidFileDropOrigin':
+		'The source location of this file could not be read. Please drag it again.',
+	'workflows.shell.confirmForceStopConversation':
+		'This conversation could not be stopped gracefully. Force stop it? Unsaved work may be lost.',
+	'workflows.shell.stopConversationFailed': 'Could not stop this conversation. Please try again.',
 	'workflows.shell.attachImage': 'Attach Image',
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify':
 		"Toggle Read-Only mode (agents won't modify files)",

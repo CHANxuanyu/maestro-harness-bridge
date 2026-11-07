@@ -67,6 +67,8 @@ import { SegmentedControl } from '../ui/SegmentedControl';
 import { shortcutSuffix } from '../ui/ShortcutHint';
 import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import { requestAiHandoff } from '../../services/aiHandoffEntry';
+import { splitConversation } from '../../services/newShellSplit';
+import { notifyCenterFlash } from '../../stores/centerFlashStore';
 import { readableTextOn } from '../../../shared/colorContrast';
 import { useFormatRelativeTime, useT, type TFunction } from '../../i18n';
 
@@ -1024,6 +1026,19 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						items: [
 							...(newShell && conversation.ownerId && conversation.tabId
 								? [
+										{
+											key: 'split',
+											label: t('workflows.split.openRight'),
+											onSelect: () => {
+												void splitConversation(conversation.ownerId!, conversation.tabId!).catch(
+													(error) =>
+														notifyCenterFlash({
+															color: 'yellow',
+															message: error instanceof Error ? error.message : String(error),
+														})
+												);
+											},
+										},
 										{
 											key: 'handoff',
 											label: t('workflows.conversations.handoff'),

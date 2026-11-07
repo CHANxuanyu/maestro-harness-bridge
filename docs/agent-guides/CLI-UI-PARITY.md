@@ -38,6 +38,51 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## New shell conversation split (2026-11-06)
+
+| UI action                              | CLI                                                   | Shared implementation                                               |
+| -------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------- |
+| Open a conversation on the right       | `tab split <tab-id> [--agent <id>] [--json]`          | `splitConversation()` in `src/renderer/services/newShellSplit.ts`   |
+| Drag the divider                       | `tab split <right-tab-id> --ratio <fraction>`         | The same split service persists the left pane share                 |
+| Return to the focused conversation     | `tab unsplit [--agent <id>] [--json]`                 | `unsplitConversation()` in the same service                         |
+| Select the other pane                  | `focus-agent <agent-id> --tab <tab-id>`               | Existing conversation selection and focused conversation state      |
+| Close one pane while keeping the other | Select the surviving conversation, then `tab unsplit` | The same focus and unsplit actions; neither conversation is deleted |
+
+The row context menu, keyboard bindings and command palette call these services.
+The CLI resolves exact or unique-prefix conversation IDs through the existing
+desktop tab list. `unsplit` addresses the active conversation unless `--agent`
+selects a particular owner. Both commands require the new shell and a running
+desktop application. The renderer validates the split action separately from
+ordinary tab configuration; split fields are never stored on an AI tab and
+cannot be combined with permission or model changes. The acknowledged
+`update_session_config` transport waits for the shared service to save the
+layout before reporting success. Service errors, including a narrow window,
+are returned to the CLI.
+
+`NewShellSplitContent` reuses `MainPanelContent`, `InputArea` and the pointer
+capture divider exported by `TiledLayout`. `tileNewTab()` creates new tabs inside
+one owner, so it cannot represent these two existing conversations across owners.
+The split keeps references rather than cloning conversations or inheriting new
+permissions. Background pane drafts, scroll positions and models stay keyed to
+that pane; only the focused pane claims App's input and transcript refs.
+
+The default shortcut opens the same palette picker: `Alt+Cmd+\` on macOS,
+`Ctrl+Alt+\` elsewhere. Arrow keys on the divider resize through the same service
+as dragging and `--ratio`. Resizing an existing pair keeps focus. A window below
+1180 pixels or a center below 720 pixels shows one conversation and an explanation,
+retaining the saved pair. Selecting a third conversation shows it alone; a new
+split from there uses that conversation as its left pane. The saved references and
+ratio load through `readNewShellSplit()`; malformed values are discarded.
+
+The 2026-11-07 review correction binds each pane's Stop and Escape to its session
+and tab. New shell single-pane Stop has the same conversation scope. Classic
+Stop keeps its whole-agent scope. A stopped process exit only dequeues that
+conversation's work. Closed busy orphan tabs remain included in Stop.
+File pickers use component refs, and image reads retain their destination tab.
+File-tree drags retain the source root and SSH host; a different host is rejected.
+Unfocused scroll writes use `updateAiTab(sessionId, tabId, updater)` and reaching
+the bottom still clears unread. No new CLI verb is added; the gaps below apply.
+
 ## New shell conversation content search (2026-11-06)
 
 | UI action                                  | CLI                                                                    | Shared implementation                                                                             |
@@ -845,6 +890,14 @@ inventory remains unchanged. The archive tests exercise project recency through
 
 ## Open gaps
 
+**New shell split limits (2026-11-07).** Split targets must already be open tabs;
+native history entries must first be opened with the existing history action.
+Conversations owned by another window cannot be split into this window. There is
+one saved split pair in settings, so independent saved pairs per window are not
+implemented. Existing external native transcript following still follows only
+the focused conversation; this change does not add a second background reader.
+All new visible split actions have the CLI equivalents listed above.
+
 2026-11-07 性能分支合并保留主线工具全文和任务面板动作。消息行复用仍传递全文来源，来源或原生调用身份更新时清除旧全文；读取继续共用 `agentSessions:toolOutput` 与 `native-history tool-output`，本轮没有新增 UI 动作或 CLI 动词。以下全文收起状态和 SSH 等既有缺口保持原状。
 
 2026-11-06 性能基准没有新增界面动作或 CLI 动词。Codex 列表的目录判断优化位于共享存储适配器，桌面项目列表、`sessions` 和 `native-history list` 沿用同一实现。性能采集继续使用 `profiling start/status/stop`；离线合成基准见 `scripts/perf/README.md`。本轮没有填补下列既有交互缺口。
@@ -918,7 +971,9 @@ This presentation-only phase adds no CLI verb or session protocol. Neither half 
 Ranked by how often an agent is likely to hit them. None of these are blocked by
 a design constraint; they are simply not built yet.
 
-1. **Interrupt a running turn.** Escape stops a busy agent in the UI. There is
+1. **Interrupt a running turn.** In the new shell, Stop and Escape stop the named
+   conversation, including its forced parallel processes and busy orphan tabs.
+   Classic Stop remains agent-wide. There is
    no CLI equivalent and no WS message behind one. This is the largest remaining
    gap: an agent that starts a runaway turn on another agent cannot stop it.
    The 2026-11-06 Stop/synopsis correction preserves this gap; the legacy remote
@@ -965,7 +1020,18 @@ a design constraint; they are simply not built yet.
     `POST /api/session/:id/interrupt` -> `remote:interrupt`) signals the
     legacy `${sessionId}-ai` process id, which misses per-tab processes
     (`${sessionId}-ai-${tabId}`). Fix the renderer handler to take a tab id,
-    then add `interrupt <agent> [--tab]`.
+    then add `interrupt <agent> [--tab]`. The 2026-11-07 new shell correction fixes
+    the desktop callback and source-tab consult cancellation, but deliberately
+    leaves this legacy remote transport and the missing CLI verb as Open gaps.
+    A normal conversation stop must not be confused with `group-chat stop` or
+    `stop-auto-run`, which control different workflows.
+
+    **Composer attachments and reading position:** there is still no CLI action
+    to open a file picker, stage an image on a draft, insert a dropped file
+    reference, or set the transcript scroll position and bottom/unread state.
+    `image list/save` reads or exports existing images; it does not attach one.
+    The new source-host rejection and per-pane scroll fix do not close these gaps.
+
 11. **Expand a diagram or image to the pan/zoom viewer.** The viewer opens on
     an element already rendered in a transcript or document
     (`openZoomViewer(element)`), and a transcript element has no address the

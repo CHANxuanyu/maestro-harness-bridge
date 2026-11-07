@@ -19,6 +19,7 @@ interface NotificationSendControlsProps {
 	/** The composer holds something to send; while running it is queued. */
 	hasDraft?: boolean;
 	onSteer?: () => Promise<void>;
+	submitting?: boolean;
 }
 
 export const NotificationSendControls = memo(function NotificationSendControls({
@@ -28,6 +29,7 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 	onStop,
 	hasDraft = false,
 	onSteer,
+	submitting = false,
 }: NotificationSendControlsProps) {
 	const t = useT();
 	const newShell = useSettingsStore(selectNewShellEnabled);
@@ -64,9 +66,9 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 			{newShell && onSteer && hasDraft && (
 				<button
 					type="button"
-					disabled={steering}
+					disabled={steering || submitting}
 					onClick={async () => {
-						if (steeringRef.current) return;
+						if (steeringRef.current || submitting) return;
 						steeringRef.current = true;
 						setSteering(true);
 						try {
@@ -94,7 +96,10 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 			{(!onStop || hasDraft) && (
 				<button
 					type="button"
-					onClick={() => processInput()}
+					disabled={submitting}
+					onClick={() => {
+						if (!submitting) processInput();
+					}}
 					className="flex h-8 w-8 items-center justify-center rounded-full shadow-sm transition-all hover:opacity-90 cursor-pointer"
 					style={{
 						backgroundColor: theme.colors.accent,

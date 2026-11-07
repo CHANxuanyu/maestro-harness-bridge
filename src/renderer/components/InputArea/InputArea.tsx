@@ -85,11 +85,11 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 		selectedSlashCommandIndex,
 		setSelectedSlashCommandIndex,
 		inputRef,
-		handleInputKeyDown,
+		handleInputKeyDown: handleInputKeyDownProp,
 		handlePaste,
 		handleDrop,
 		toggleInputMode,
-		processInput,
+		processInput: processInputProp,
 		handleInterrupt,
 		onInputFocus,
 		onInputBlur,
@@ -455,6 +455,32 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 		{ newShell, codexAppServer },
 		!!session.sessionSshRemoteConfig?.enabled
 	);
+	const submissionKey = `${session.id}:${session.activeTabId ?? ''}`;
+	const submitting = useComposerInputStore(
+		(state) =>
+			appServerEligible &&
+			!isTerminalMode &&
+			state.isSubmitting(submissionKey, { text: state.aiValue, images: stagedImages })
+	);
+	const draftIsSubmitting = () =>
+		appServerEligible &&
+		!isTerminalMode &&
+		useComposerInputStore
+			.getState()
+			.isSubmitting(submissionKey, {
+				text: useComposerInputStore.getState().aiValue,
+				images: stagedImages,
+			});
+	const processInput = () => {
+		if (!draftIsSubmitting()) processInputProp();
+	};
+	const handleInputKeyDown: typeof handleInputKeyDownProp = (...args) => {
+		if (args[0].key === 'Enter' && draftIsSubmitting()) {
+			args[0].preventDefault();
+			return;
+		}
+		handleInputKeyDownProp(...args);
+	};
 	const canSteer =
 		appServerEligible &&
 		!isTerminalMode &&
@@ -466,7 +492,9 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 		const draft = useComposerInputStore.getState();
 		const text = draft.aiValue;
 		const tabId = session.activeTabId;
-		if (!canSteer || !text.trim() || !tabId) return;
+		if (!canSteer || !text.trim() || !tabId || draftIsSubmitting()) return;
+		const submitted = { text, images: stagedImages };
+		draft.beginSubmission(submissionKey, submitted);
 		setSteerError(null);
 		try {
 			const result = await window.maestro.process.steer(`${session.id}-ai-${tabId}`, text);
@@ -476,6 +504,8 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 			showFlashNotification?.(t('workflows.shell.steerAccepted'));
 		} catch {
 			setSteerError(t('workflows.shell.steerFailed'));
+		} finally {
+			useComposerInputStore.getState().endSubmission(submissionKey, submitted);
 		}
 	};
 
@@ -825,6 +855,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 										onStop={composerStop}
 										hasDraft={hasDraft}
 										onSteer={canSteer ? steerTurn : undefined}
+										submitting={submitting}
 									/>
 								)
 							}

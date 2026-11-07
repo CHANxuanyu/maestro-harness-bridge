@@ -1,3 +1,4 @@
+import { useComposerInputStore } from '../../../renderer/stores/composerInputStore';
 import { useOperationStore } from '../../../renderer/stores/operationStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
@@ -1559,6 +1560,32 @@ describe('useInputProcessing', () => {
 					.getState()
 					.sessions[0].aiTabs[0].logs.filter((log) => log.source === 'user')
 					.map((log) => log.text);
+
+			it('does not send or queue a draft registered by steering, and releases it after failure', async () => {
+				const session = createMockSession({ state: 'idle' });
+				const { composer, getInputValue, setInputValue } = liveComposer('only once');
+				const deps = createDeps({
+					activeSession: session,
+					sessionsRef: { current: [session] },
+					getInputValue,
+					setInputValue,
+				});
+				const { result } = renderHook(() => useInputProcessing(deps));
+				const key = `${session.id}:${session.activeTabId}`;
+				const submitted = { text: composer.draft, images: [] };
+				useComposerInputStore.getState().beginSubmission(key, submitted);
+				await act(async () => {
+					await result.current.processInput();
+				});
+				expect(window.maestro.process.spawn).not.toHaveBeenCalled();
+				expect(composer.draft).toBe('only once');
+				expect(useSessionStore.getState().sessions[0].executionQueue).toHaveLength(0);
+				useComposerInputStore.getState().endSubmission(key, submitted);
+				await act(async () => {
+					await result.current.processInput();
+				});
+				expect(window.maestro.process.spawn).toHaveBeenCalledTimes(1);
+			});
 
 			it('clears the composer before the probe, so a second Enter sends nothing', async () => {
 				const resolveProbe = pendingProbe();

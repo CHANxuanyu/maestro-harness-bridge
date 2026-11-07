@@ -2872,7 +2872,7 @@ describe('InputArea Codex current-turn instructions', () => {
 		});
 	});
 
-	it.each(['accepted', 'rejected', 'changed-draft', 'changed-tab'])(
+	it.each(['accepted', 'rejected', 'timed-out', 'changed-draft', 'changed-tab'])(
 		'clears only an unchanged accepted draft: %s',
 		async (outcome) => {
 			const session = createMockSession({
@@ -2903,24 +2903,32 @@ describe('InputArea Codex current-turn instructions', () => {
 				'Please also check types'
 			);
 			expect(props.setInputValue).not.toHaveBeenCalled();
+			fireEvent.click(screen.getByTitle('Queue message'));
+			fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+			expect(props.processInput).not.toHaveBeenCalled();
+			expect(props.handleInputKeyDown).not.toHaveBeenCalled();
 			if (outcome === 'changed-draft')
 				act(() => useComposerInputStore.setState({ aiValue: 'A newer draft' }));
 			if (outcome === 'changed-tab')
 				act(() => useComposerInputStore.setState({ aiValueTabId: 'tab-2' }));
 			await act(async () =>
 				settle(
-					outcome === 'rejected'
-						? { success: false, error: 'Turn ended' }
+					outcome === 'rejected' || outcome === 'timed-out'
+						? { success: false, error: outcome === 'timed-out' ? 'RPC timed out' : 'Turn ended' }
 						: { success: true, turnId: 'turn-1' }
 				)
 			);
 			if (outcome === 'accepted') expect(props.setInputValue).toHaveBeenCalledWith('');
 			else expect(props.setInputValue).not.toHaveBeenCalled();
 			expect(props.processInput).not.toHaveBeenCalled();
-			if (outcome === 'rejected')
+			if (outcome === 'rejected' || outcome === 'timed-out') {
 				expect(screen.getByRole('alert')).toHaveTextContent(
 					'Could not add instructions to this turn'
 				);
+				fireEvent.click(screen.getByTitle('Queue message'));
+				expect(props.processInput).toHaveBeenCalledTimes(1);
+				expect(window.maestro.process.steer).toHaveBeenCalledTimes(1);
+			}
 		}
 	);
 });

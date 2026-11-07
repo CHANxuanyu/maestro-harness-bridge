@@ -412,3 +412,10 @@ The hook subscribes to the current session's `customEnvVars` directly when nativ
 discovery is enabled. App's chrome equality deliberately omits that field, so
 the passed session snapshot alone cannot identify an account change. Keep this
 subscription narrow and leave the classic shell's stored command report intact.
+
+## 输入草稿提交登记
+
+`useComposerInputStore` 的 `isSubmitting()`、`beginSubmission()`、`endSubmission()`
+统一管理普通发送和 Codex 本轮追加的在途草稿，以 sessionId、tabId 和原有文字及附件
+匹配规则防重。普通发送原先在 `useInputProcessing` 内的登记已迁入此处。追加确认前
+保留草稿，结束时释放登记；不能在按钮内另建一份只能挡住自身的提交锁。

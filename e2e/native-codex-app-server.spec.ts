@@ -4,9 +4,13 @@ import { test, expect } from '@playwright/test';
 import { NativeApp } from './fixtures/native-app';
 
 test.setTimeout(120_000);
+test.skip(
+	process.env.MAESTRO_E2E_REAL === '1',
+	'The prototype runs against a synthetic app-server only'
+);
+
 // eslint-disable-next-line no-empty-pattern
 test('Codex prototype synthetic approval, steering, resume and stop', async ({}, info) => {
-	if (process.env.MAESTRO_E2E_REAL === '1') throw new Error('This test requires synthetic mode');
 	const native = new NativeApp(info, { providerCli: false });
 	const home = path.join(native.root, 'isolated-home');
 	fs.mkdirSync(home);

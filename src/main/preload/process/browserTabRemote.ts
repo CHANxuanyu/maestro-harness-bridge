@@ -1,3 +1,4 @@
+import type { NewAITabWithPromptResult } from '../../web-server/types';
 import { ipcRenderer } from 'electron';
 
 export function createBrowserTabRemoteApi() {
@@ -273,7 +274,7 @@ export function createBrowserTabRemoteApi() {
 		 */
 		sendRemoteNewAITabWithPromptResponse: (
 			responseChannel: string,
-			result: { success: boolean; tabId?: string; queued?: boolean; error?: string }
+			result: NewAITabWithPromptResult
 		): void => {
 			ipcRenderer.send(responseChannel, result);
 		},

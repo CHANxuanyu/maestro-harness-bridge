@@ -94,6 +94,7 @@ async function run(provider) {
 		id,
 		prompt,
 		effort: scene.effort,
+		slashCommands: scene.slashCommands,
 		// Claude Code 2.1.310: --model wins over ANTHROPIC_MODEL. DeepSeek's
 		// official integration uses [1m] as a Claude context hint; the gateway
 		// reports the underlying model ID (api-docs.deepseek.com/guides/anthropic_api/).

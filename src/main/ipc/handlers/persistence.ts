@@ -1,4 +1,6 @@
+import { isProjectSettingsKey, publicProjectSettingsMap } from '../../../shared/projectSettings';
 import type { AboutMeService } from '../../about-me';
+import { createProjectSettingsService } from '../../project-settings';
 /**
  * Persistence IPC Handlers
  *
@@ -359,6 +361,16 @@ export function registerPersistenceHandlers(
 	};
 
 	// Settings management
+	const projectSettings = createProjectSettingsService({
+		settingsStore,
+		onChanged: () => {
+			notifyPeerWindows(undefined);
+			broadcastBridgeEvent('settings:externalChange', []);
+		},
+	});
+	ipcMain.handle('settings:projectSettings', (_, command: unknown) =>
+		projectSettings.command(command)
+	);
 	if (deps.aboutMe) {
 		ipcMain.handle('settings:aboutMe', (event, command: unknown) =>
 			deps.aboutMe!.command(command, senderWebContentsIdOf(event))
@@ -366,12 +378,19 @@ export function registerPersistenceHandlers(
 	}
 
 	ipcMain.handle('settings:get', async (_, key: string) => {
+		if (isProjectSettingsKey(key)) {
+			return key === 'projectSettings'
+				? publicProjectSettingsMap(settingsStore.get('projectSettings', {}))
+				: undefined;
+		}
 		const value = settingsStore.get(key);
 		logger.debug(`Settings read: ${key}`, 'Settings', { key, value });
 		return value;
 	});
 
 	ipcMain.handle('settings:set', async (event, key: string, value: any) => {
+		if (isProjectSettingsKey(key))
+			throw new Error('Use project settings set to change project settings');
 		assertValidUiLanguageSetting(key, value);
 		// `usageStats` holds lifetime high-water marks, so a write may only ever
 		// raise them. Enforcing that here - against the value on disk rather than
@@ -462,7 +481,12 @@ export function registerPersistenceHandlers(
 	ipcMain.handle('settings:getAll', async () => {
 		const settings = settingsStore.store;
 		logger.debug('All settings retrieved', 'Settings', { count: Object.keys(settings).length });
-		return settings;
+		return {
+			...settings,
+			...(settings.projectSettings
+				? { projectSettings: publicProjectSettingsMap(settings.projectSettings) }
+				: {}),
+		};
 	});
 
 	// Sessions persistence

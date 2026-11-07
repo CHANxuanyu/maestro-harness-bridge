@@ -1,3 +1,4 @@
+import { createNativeCommandDiscovery } from '../../../../main/agents/native-commands';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -140,6 +141,56 @@ function sendJsonLine(handler: StdoutHandler, sessionId: string, obj: Record<str
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('StdoutHandler', () => {
+	it.each([false, true])(
+		'includes reported plugin commands in scoped discovery with parser=%s',
+		async (parsed) => {
+			const root = await fs.mkdtemp(path.join(os.tmpdir(), 'command-reports-'));
+			onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
+			const context = {
+				toolType: 'claude-code',
+				cwd: path.join(root, 'project'),
+				customEnvVars: { CLAUDE_CONFIG_DIR: path.join(root, 'account') },
+			};
+			const read = createNativeCommandDiscovery({ layers: () => ({ homeDir: root, env: {} }) });
+			await read(context);
+			const { handler, sessionId } = createTestContext({
+				isStreamJsonMode: true,
+				outputParser: parsed ? new ClaudeOutputParser() : undefined,
+				nativeCommandScopeKey: JSON.stringify([
+					'claude-code',
+					context.cwd,
+					context.customEnvVars.CLAUDE_CONFIG_DIR,
+					null,
+				]),
+			} as Partial<ManagedProcess>);
+			sendJsonLine(handler, sessionId, {
+				type: 'system',
+				subtype: 'init',
+				slash_commands: ['plugin:review', 'compact'],
+			});
+			const commands = (await read(context, true)).commands;
+			expect(commands).toContainEqual({
+				command: '/plugin:review',
+				description: '',
+				source: 'reported',
+			});
+			expect(commands.filter((c) => c.command === '/compact')).toHaveLength(1);
+			expect(
+				(
+					await read({
+						...context,
+						customEnvVars: { CLAUDE_CONFIG_DIR: path.join(root, 'other-account') },
+					})
+				).commands.some((c) => c.command === '/plugin:review')
+			).toBe(false);
+			expect(
+				(await read({ ...context, cwd: path.join(root, 'other-project') })).commands.some(
+					(c) => c.command === '/plugin:review'
+				)
+			).toBe(false);
+		}
+	);
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});

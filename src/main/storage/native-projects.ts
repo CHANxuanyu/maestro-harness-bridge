@@ -1,10 +1,7 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
-import {
-	readCodexRollout,
-	isCodexRollout,
-	preferPlainCodexRollouts,
-} from '../../shared/codexRollout';
+import fs from 'node:fs/promises';
+import { readCodexRollout } from '../../shared/codexRollout';
+import { collectNativeHistoryFiles } from './native-history-files';
 import { normalizeWorktreePath } from '../../shared/worktreePaths';
 import type { NativeProject } from '../../shared/projects';
 import { isExpectedSessionReadError } from '../utils/session-read-errors';
@@ -21,57 +18,22 @@ export function createNativeProjectDiscovery(deps: {
 	async function scan(): Promise<NativeProject[]> {
 		const deadline = Date.now() + (deps.maxMs ?? 1500);
 		const maxFiles = deps.maxFiles ?? 1024;
-		let remainingEntries = deps.maxEntries ?? 8192;
-		const files: Array<{ file: string; provider: string; pool: string; mtime: number }> = [];
-		async function walk(
-			directory: string,
-			provider: string,
-			pool: string,
-			depth: number
-		): Promise<void> {
-			if (depth < 0 || files.length >= maxFiles || remainingEntries <= 0 || Date.now() > deadline)
-				return;
-			try {
-				const dir = await fs.opendir(directory);
-				for await (const entry of dir) {
-					if (--remainingEntries < 0 || files.length >= maxFiles || Date.now() > deadline) break;
-					const file = path.join(directory, entry.name);
-					if (entry.isDirectory()) await walk(file, provider, pool, depth - 1);
-					else if (
-						entry.isFile() &&
-						(provider === 'codex' ? isCodexRollout(entry.name) : entry.name.endsWith('.jsonl'))
-					) {
-						const stat = await fs.stat(file);
-						files.push({ file, provider, pool, mtime: stat.mtimeMs });
-					}
-				}
-			} catch (error) {
-				if (!isExpectedSessionReadError(error)) throw error;
-			}
+		const remainingEntries = deps.maxEntries ?? 8192;
+		const accounts = [];
+		for (const provider of ['claude-code', 'codex'] as const) {
+			for (const accountDir of await deps.accountDirs(provider))
+				accounts.push({ provider, accountDir });
 		}
-		for (const provider of ['claude-code', 'codex']) {
-			for (const account of (await deps.accountDirs(provider)).slice(0, 64)) {
-				if (provider === 'claude-code')
-					await walk(path.join(account, 'projects'), provider, account, 1);
-				else {
-					await walk(path.join(account, 'sessions'), provider, account, 4);
-					await walk(path.join(account, 'archived_sessions'), provider, account, 4);
-				}
-			}
-		}
-		const selected = files.filter((file) => file.provider !== 'codex');
-		for (const pool of new Set(
-			files.filter((file) => file.provider === 'codex').map((file) => file.pool)
-		)) {
-			selected.push(
-				...preferPlainCodexRollouts(
-					files.filter((file) => file.provider === 'codex' && file.pool === pool),
-					(file) => path.basename(file.file)
-				)
-			);
-		}
+		const { files: selected } = await collectNativeHistoryFiles(accounts, {
+			maxFiles,
+			maxEntries: remainingEntries,
+			deadline,
+		});
 		const projects = new Map<string, NativeProject>();
 		const seenFiles = new Set<string>();
+		// Reuse successful cwd checks only within this scan. The next scan resolves
+		// aliases again, and warm responses still check that each directory exists.
+		const projectPaths = new Map<string, string>();
 		for (const file of selected.sort((a, b) => b.mtime - a.mtime)) {
 			if (Date.now() > deadline) break;
 			try {
@@ -98,8 +60,12 @@ export function createNativeProjectDiscovery(deps: {
 					}
 				}
 				if (!cwd) continue;
-				const physical = await fs.realpath(cwd);
-				if (!(await fs.stat(physical)).isDirectory()) continue;
+				let physical = projectPaths.get(cwd);
+				if (!physical) {
+					physical = await fs.realpath(cwd);
+					if (!(await fs.stat(physical)).isDirectory()) continue;
+					projectPaths.set(cwd, physical);
+				}
 				const key = normalizeWorktreePath(physical);
 				const project = projects.get(key) ?? {
 					path: physical,

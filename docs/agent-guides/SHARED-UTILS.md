@@ -6,18 +6,31 @@ All utilities in Maestro organized by category. Each entry lists the file path, 
 
 Worktree paths: `normalizeWorktreePath(path, posix?)` and `isPathAtOrUnderRoot(path, root)` in `src/shared/worktreePaths.ts` provide shared comparison rules. The renderer's `worktreeDedup.ts` re-exports the normalizer. SSH callers use POSIX normalization, preserving case, literal backslashes, and the root directory while collapsing duplicate and trailing slashes for comparison.
 
+Conversation changes by turn: `collectTurnWrites()` and `groupChangesByTurn()` in
+`src/shared/gitChangeTurns.ts` serve both the new shell panel and `changes --by-turn`.
+Build the tool index when logs change, then intersect it with each Git snapshot.
+Only successful explicit write tools count. Do not parse terminal commands or
+invent paths. Each group opens the current file diff; there are no saved turn
+diffs. Native messages first pass through `transcriptMessagesToLogEntries()`.
+
 Local native history aliases: `localProjectPathCandidates(projectPath)` in `src/main/storage/local-project-paths.ts` returns saved and physical local paths without a persistent cache. Readers retain legacy records and missing project history. SSH must keep its own path semantics; this helper does not select accounts or modify native records.
 
 Remote worktree aliases: `resolveWorktreeAliasesRemote(paths, sshRemote)` in `src/main/utils/remote-git.ts` provides the shared main-process probe for saved children and Git registry paths. It reports physical paths, missing candidates, and unresolved aliases independently; `resolveWorktreePathsRemote()` also uses it for configured scans.
+
+Consult and handoff envelopes: `buildCrossAgentPrompt()` and
+`stripCrossAgentPrompt()` in `src/shared/crossAgentPrompt.ts` share the persisted
+wire templates across the router, native transcript display, search and history
+metadata. Decode only user messages and complete envelopes. See the canonical
+entry before adding another reader or changing the wire format.
 
 ---
 
 ## IDs & UUIDs
 
-| Function       | File                        | Signature      | Process  | Purpose                                                                                    |
-| -------------- | --------------------------- | -------------- | -------- | ------------------------------------------------------------------------------------------ |
-| `generateUUID` | `src/shared/uuid.ts`        | `() => string` | Both     | RFC 4122 v4 UUID via Math.random(). Used for session IDs, history entry IDs.               |
-| `generateId`   | `src/renderer/utils/ids.ts` | `() => string` | Renderer | Wrapper around `crypto.randomUUID()`. Cryptographically secure. Used for UI-generated IDs. |
+| Function       | File                                                                   | Signature      | Process | Purpose                                                                                    |
+| -------------- | ---------------------------------------------------------------------- | -------------- | ------- | ------------------------------------------------------------------------------------------ |
+| `generateUUID` | `src/shared/uuid.ts`                                                   | `() => string` | Both    | RFC 4122 v4 UUID via Math.random(). Used for session IDs, history entry IDs.               |
+| `generateId`   | `src/shared/uuid.ts` (renderer re-export: `src/renderer/utils/ids.ts`) | `() => string` | Both    | Wrapper around `crypto.randomUUID()`. Cryptographically secure. Used for UI-generated IDs. |
 
 ---
 
@@ -1157,3 +1170,17 @@ unreadable).
 | `blendColors(c1, c2, ratio)`                         | Mix two colors; `ratio` is how much of `c2` lands in the result.                                                          |
 | `transparentize(color, bg, alpha)`                   | Flatten a tint into an opaque color, for renderers that only accept solid fills (SVG/canvas).                             |
 | `AA_CONTRAST` / `AA_LARGE_CONTRAST`                  | 4.5 (normal text) and 3 (large text) thresholds.                                                                          |
+
+### Complete turn write history (2026-11-06 review fix)
+
+`updateTurnWriteIndex()` in `src/shared/gitChangeTurns.ts` retains write evidence
+before display logs are trimmed. `toolInputWritePaths()` extracts explicit paths
+before tool arguments are capped. Do not parse truncated display input again.
+The native conversion lives in `src/shared/transcriptEntries.ts`, re-exported
+from `src/renderer/utils/transcriptMessages.ts` for existing callers. Both
+display and the main-process `createNativeTurnWriteReader()` reuse that converter.
+`agentSessions:turnWrites` reads the full selected native history with
+`readOnly: true`, using existing account and SSH resolution and revision caches.
+The converter also uses the existing `generateId()` implementation from
+`src/shared/uuid.ts`, re-exported at `src/renderer/utils/ids.ts`; its behavior
+is unchanged and the main process has no renderer runtime dependency.

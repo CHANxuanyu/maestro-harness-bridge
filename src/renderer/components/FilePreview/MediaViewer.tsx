@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import React, {
 	useCallback,
 	useEffect,
@@ -204,6 +205,8 @@ export const MediaViewer = memo(function MediaViewer({
 	const rateButtonRef = useRef<HTMLButtonElement>(null);
 	const rateMenuRef = useRef<HTMLDivElement>(null);
 
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const playbackRate = useSettingsStore((s) => s.mediaPlaybackRate);
 	const setPlaybackRate = useSettingsStore((s) => s.setMediaPlaybackRate);
 
@@ -605,10 +608,14 @@ export const MediaViewer = memo(function MediaViewer({
 				<AlertTriangle className="w-12 h-12" style={{ color: theme.colors.textDim }} />
 				<div className="text-center">
 					<p className="text-lg font-medium" style={{ color: theme.colors.textMain }}>
-						File Not Found
+						{newShell ? t('workflows.newShellCopy.panels.missingFile') : 'File Not Found'}
 					</p>
 					<p className="text-sm mt-1" style={{ color: theme.colors.textDim }}>
-						{name} is no longer on disk. It was moved, renamed, or deleted.
+						{newShell ? (
+							t('workflows.newShellCopy.panels.missingMedia', { name })
+						) : (
+							<>{name} is no longer on disk. It was moved, renamed, or deleted.</>
+						)}
 					</p>
 				</div>
 			</div>
@@ -621,12 +628,26 @@ export const MediaViewer = memo(function MediaViewer({
 				<AlertTriangle className="w-12 h-12" style={{ color: theme.colors.textDim }} />
 				<div className="text-center">
 					<p className="text-lg font-medium" style={{ color: theme.colors.textMain }}>
-						{isRemote ? 'Cannot Play This Stream' : 'Cannot Play This File'}
+						{newShell
+							? t(
+									isRemote
+										? 'workflows.newShellCopy.panels.streamFailed'
+										: 'workflows.newShellCopy.panels.mediaFailed'
+								)
+							: isRemote
+								? 'Cannot Play This Stream'
+								: 'Cannot Play This File'}
 					</p>
 					<p className="text-sm mt-1" style={{ color: theme.colors.textDim }}>
-						{isRemote
-							? 'The URL did not return playable media, the server refused the request, or the format is not a progressive MP4 / plain audio file.'
-							: 'The codec inside this container is not supported.'}
+						{newShell
+							? t(
+									isRemote
+										? 'workflows.newShellCopy.panels.streamReason'
+										: 'workflows.newShellCopy.panels.mediaReason'
+								)
+							: isRemote
+								? 'The URL did not return playable media, the server refused the request, or the format is not a progressive MP4 / plain audio file.'
+								: 'The codec inside this container is not supported.'}
 					</p>
 					<button
 						onClick={openExternally}
@@ -634,7 +655,15 @@ export const MediaViewer = memo(function MediaViewer({
 						style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}
 					>
 						<ExternalLink className="w-4 h-4" />
-						{isRemote ? 'Open in Browser' : 'Open in Default App'}
+						{newShell
+							? t(
+									isRemote
+										? 'workflows.newShellCopy.panels.externalBrowser'
+										: 'workflows.newShellCopy.panels.openDefault'
+								)
+							: isRemote
+								? 'Open in Browser'
+								: 'Open in Default App'}
 					</button>
 				</div>
 			</div>
@@ -714,7 +743,7 @@ export const MediaViewer = memo(function MediaViewer({
 						value={seekable ? Math.min(currentTime, duration) : 0}
 						disabled={!seekable}
 						onChange={(e) => seekTo(Number(e.target.value))}
-						aria-label="Seek"
+						aria-label={newShell ? t('workflows.newShellCopy.panels.seek') : 'Seek'}
 						className="flex-1 h-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
 						style={{ accentColor: theme.colors.accent }}
 					/>
@@ -731,8 +760,12 @@ export const MediaViewer = memo(function MediaViewer({
 					{onPrev && (
 						<GhostIconButton
 							onClick={onPrev}
-							title="Previous media file"
-							ariaLabel="Previous media file"
+							title={
+								newShell ? t('workflows.newShellCopy.panels.previousMedia') : 'Previous media file'
+							}
+							ariaLabel={
+								newShell ? t('workflows.newShellCopy.panels.previousMedia') : 'Previous media file'
+							}
 							color={theme.colors.textDim}
 						>
 							<SkipBack className="w-4 h-4" />
@@ -740,8 +773,16 @@ export const MediaViewer = memo(function MediaViewer({
 					)}
 					<GhostIconButton
 						onClick={() => seekBy(-SKIP_SECONDS)}
-						title={`Back ${SKIP_SECONDS}s (Left arrow)`}
-						ariaLabel={`Back ${SKIP_SECONDS} seconds`}
+						title={
+							newShell
+								? t('workflows.newShellCopy.panels.backSecondsHint', { seconds: SKIP_SECONDS })
+								: `Back ${SKIP_SECONDS}s (Left arrow)`
+						}
+						ariaLabel={
+							newShell
+								? t('workflows.newShellCopy.panels.backSeconds', { seconds: SKIP_SECONDS })
+								: `Back ${SKIP_SECONDS} seconds`
+						}
 						color={theme.colors.textDim}
 					>
 						<RotateCcw className="w-4 h-4" />
@@ -749,8 +790,28 @@ export const MediaViewer = memo(function MediaViewer({
 
 					<GhostIconButton
 						onClick={togglePlay}
-						title={playing ? 'Pause (Space)' : 'Play (Space)'}
-						ariaLabel={playing ? 'Pause' : 'Play'}
+						title={
+							newShell
+								? t(
+										playing
+											? 'workflows.newShellCopy.panels.pauseHint'
+											: 'workflows.newShellCopy.panels.playHint'
+									)
+								: playing
+									? 'Pause (Space)'
+									: 'Play (Space)'
+						}
+						ariaLabel={
+							newShell
+								? t(
+										playing
+											? 'workflows.newShellCopy.panels.pause'
+											: 'workflows.newShellCopy.panels.play'
+									)
+								: playing
+									? 'Pause'
+									: 'Play'
+						}
 						color={theme.colors.textMain}
 						padding="p-1.5"
 					>
@@ -759,8 +820,16 @@ export const MediaViewer = memo(function MediaViewer({
 
 					<GhostIconButton
 						onClick={() => seekBy(SKIP_SECONDS)}
-						title={`Forward ${SKIP_SECONDS}s (Right arrow)`}
-						ariaLabel={`Forward ${SKIP_SECONDS} seconds`}
+						title={
+							newShell
+								? t('workflows.newShellCopy.panels.forwardSecondsHint', { seconds: SKIP_SECONDS })
+								: `Forward ${SKIP_SECONDS}s (Right arrow)`
+						}
+						ariaLabel={
+							newShell
+								? t('workflows.newShellCopy.panels.forwardSeconds', { seconds: SKIP_SECONDS })
+								: `Forward ${SKIP_SECONDS} seconds`
+						}
 						color={theme.colors.textDim}
 					>
 						<RotateCw className="w-4 h-4" />
@@ -769,8 +838,10 @@ export const MediaViewer = memo(function MediaViewer({
 					{onNext && (
 						<GhostIconButton
 							onClick={onNext}
-							title="Next media file"
-							ariaLabel="Next media file"
+							title={newShell ? t('workflows.newShellCopy.panels.nextMedia') : 'Next media file'}
+							ariaLabel={
+								newShell ? t('workflows.newShellCopy.panels.nextMedia') : 'Next media file'
+							}
 							color={theme.colors.textDim}
 						>
 							<SkipForward className="w-4 h-4" />
@@ -780,8 +851,28 @@ export const MediaViewer = memo(function MediaViewer({
 					<div className="flex items-center gap-1 ml-2">
 						<GhostIconButton
 							onClick={toggleMute}
-							title={muted ? 'Unmute (M)' : 'Mute (M)'}
-							ariaLabel={muted ? 'Unmute' : 'Mute'}
+							title={
+								newShell
+									? t(
+											muted
+												? 'workflows.newShellCopy.panels.unmuteHint'
+												: 'workflows.newShellCopy.panels.muteHint'
+										)
+									: muted
+										? 'Unmute (M)'
+										: 'Mute (M)'
+							}
+							ariaLabel={
+								newShell
+									? t(
+											muted
+												? 'workflows.newShellCopy.panels.unmute'
+												: 'workflows.newShellCopy.panels.mute'
+										)
+									: muted
+										? 'Unmute'
+										: 'Mute'
+							}
 							color={theme.colors.textDim}
 						>
 							{muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -793,7 +884,7 @@ export const MediaViewer = memo(function MediaViewer({
 							step={0.01}
 							value={muted ? 0 : volume}
 							onChange={(e) => changeVolume(Number(e.target.value))}
-							aria-label="Volume"
+							aria-label={newShell ? t('workflows.newShellCopy.panels.volume') : 'Volume'}
 							className="w-20 h-1 cursor-pointer"
 							style={{ accentColor: theme.colors.accent }}
 						/>
@@ -803,8 +894,18 @@ export const MediaViewer = memo(function MediaViewer({
 
 					<GhostIconButton
 						onClick={toggleLoop}
-						title={looping ? 'Looping on (L)' : 'Loop (L)'}
-						ariaLabel="Toggle loop"
+						title={
+							newShell
+								? t(
+										looping
+											? 'workflows.newShellCopy.panels.loopOn'
+											: 'workflows.newShellCopy.panels.loopOff'
+									)
+								: looping
+									? 'Looping on (L)'
+									: 'Loop (L)'
+						}
+						ariaLabel={newShell ? t('workflows.newShellCopy.panels.toggleLoop') : 'Toggle loop'}
 						color={looping ? theme.colors.accent : theme.colors.textDim}
 					>
 						<Repeat className="w-4 h-4" />
@@ -815,8 +916,12 @@ export const MediaViewer = memo(function MediaViewer({
 						<button
 							ref={rateButtonRef}
 							onClick={() => setRateMenuOpen((o) => !o)}
-							title="Playback speed (, and . to step). Persists across files."
-							aria-label="Playback speed"
+							title={
+								newShell
+									? t('workflows.newShellCopy.panels.rateHint')
+									: 'Playback speed (, and . to step). Persists across files.'
+							}
+							aria-label={newShell ? t('workflows.newShellCopy.panels.rate') : 'Playback speed'}
 							className="px-2 py-1 rounded text-xs font-mono hover:bg-white/10 transition-colors min-w-[3rem]"
 							style={{
 								color: playbackRate === 1 ? theme.colors.textDim : theme.colors.accent,
@@ -841,8 +946,10 @@ export const MediaViewer = memo(function MediaViewer({
 					{isVideo && (
 						<GhostIconButton
 							onClick={enterFullscreen}
-							title="Fullscreen (F)"
-							ariaLabel="Fullscreen"
+							title={newShell ? t('workflows.newShellCopy.panels.fullscreen') : 'Fullscreen (F)'}
+							ariaLabel={
+								newShell ? t('workflows.newShellCopy.panels.fullscreenLabel') : 'Fullscreen'
+							}
 							color={theme.colors.textDim}
 						>
 							<Maximize className="w-4 h-4" />
@@ -851,8 +958,28 @@ export const MediaViewer = memo(function MediaViewer({
 
 					<GhostIconButton
 						onClick={openExternally}
-						title={isRemote ? 'Open in browser' : 'Open in default app'}
-						ariaLabel={isRemote ? 'Open in browser' : 'Open in default app'}
+						title={
+							newShell
+								? t(
+										isRemote
+											? 'workflows.newShellCopy.panels.externalBrowser'
+											: 'workflows.newShellCopy.panels.openDefault'
+									)
+								: isRemote
+									? 'Open in browser'
+									: 'Open in default app'
+						}
+						ariaLabel={
+							newShell
+								? t(
+										isRemote
+											? 'workflows.newShellCopy.panels.externalBrowser'
+											: 'workflows.newShellCopy.panels.openDefault'
+									)
+								: isRemote
+									? 'Open in browser'
+									: 'Open in default app'
+						}
 						color={theme.colors.textDim}
 					>
 						<ExternalLink className="w-4 h-4" />

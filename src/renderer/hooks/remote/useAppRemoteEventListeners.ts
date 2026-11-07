@@ -1,5 +1,6 @@
 import { codexAppServerEnabled } from '../../../shared/codexAppServer';
 import { getT } from '../../i18n';
+import { splitConversation, unsplitConversation } from '../../services/newShellSplit';
 import { getWindowContext } from '../../contexts/WindowContext';
 import { previousHostTerminals } from '../../utils/terminalTabHelpers';
 import {
@@ -1851,6 +1852,35 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 		}
 
 		const patchObj = configPatch as Record<string, unknown>;
+		if ('newShellSplitAction' in patchObj) {
+			try {
+				const action = patchObj.newShellSplitAction;
+				const ratio = patchObj.newShellSplitRatio;
+				if (
+					(action !== 'split' && action !== 'unsplit') ||
+					typeof patchObj.tabId !== 'string' ||
+					!session.aiTabs.some((tab) => tab.id === patchObj.tabId) ||
+					(ratio !== undefined && (typeof ratio !== 'number' || !Number.isFinite(ratio))) ||
+					(action === 'unsplit' && ratio !== undefined) ||
+					Object.keys(patchObj).some(
+						(key) => !['tabId', 'newShellSplitAction', 'newShellSplitRatio'].includes(key)
+					)
+				) {
+					throw new Error(getT()('workflows.shell.splitInvalidRequest'));
+				}
+				if (action === 'split') await splitConversation(sessionId, patchObj.tabId, ratio);
+				else await unsplitConversation();
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: true,
+				});
+			} catch (error) {
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+			return;
+		}
 
 		// Provider changes are sent separately from other config edits.
 		// New shell shares the Edit Agent transition; classic CLI keeps its reset.
@@ -2057,6 +2087,16 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			}
 
 			let panelTerminalOwnerId: string | undefined;
+			if (
+				['changes-files', 'changes-turns'].includes(String(tabPatch.newShellPanelAction)) &&
+				!useSettingsStore.getState().newShell
+			) {
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: false,
+					error: 'This panel requires the new shell',
+				});
+				return;
+			}
 			if (
 				['terminal', 'tasks', 'terminal-select', 'terminal-close', 'terminal-restart'].includes(
 					String(tabPatch.newShellPanelAction)

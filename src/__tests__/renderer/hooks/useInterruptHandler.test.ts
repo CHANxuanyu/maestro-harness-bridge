@@ -151,7 +151,7 @@ beforeEach(() => {
 	});
 	// The agent layout's scratch-state contract is the baseline below; the
 	// conversation layout keeps tool calls on Stop and has its own cases.
-	useSettingsStore.setState({ sidebarNavigationMode: 'agents' });
+	useSettingsStore.setState({ sidebarNavigationMode: 'agents', newShell: false });
 });
 
 afterEach(() => {
@@ -184,6 +184,174 @@ describe('useInterruptHandler', () => {
 	// ========================================================================
 	// AI mode interrupt
 	// ========================================================================
+	describe('new shell conversation stop', () => {
+		it.each([false, true])(
+			'only interrupts the target and busy orphans, force kill %s',
+			async (forceKill) => {
+				useSettingsStore.setState({ newShell: true });
+				const handoff = {
+					message: 'pending',
+					targets: [{ targetSessionId: 'consult', targetAgentName: 'Consult' }],
+				};
+				const left = createTab({
+					id: 'left',
+					state: 'busy',
+					pendingMentionHandoff: handoff,
+					awaitingSessionId: true,
+					autoSendOnActivate: true,
+				});
+				const right = createTab({
+					id: 'right',
+					state: 'busy',
+					pendingMentionHandoff: handoff,
+					inputValue: 'keep draft',
+					stagedImages: ['image'],
+					logs: [{ id: 'output', timestamp: 1, source: 'ai', text: 'keep output' }],
+				});
+				const orphan = createTab({ id: 'orphan', state: 'busy', pendingMentionHandoff: handoff });
+				const queue = [
+					{
+						id: 'right-queued',
+						tabId: 'right',
+						type: 'message' as const,
+						text: 'keep queued',
+						timestamp: 1,
+						readOnlyMode: true,
+					},
+				];
+				const session = createSession({
+					aiTabs: [left, right],
+					orphanedThinkingTabs: [orphan],
+					activeTabId: 'left',
+					state: 'busy',
+					busySource: 'ai',
+					executionQueue: queue,
+				});
+				useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+				mockMaestro.process.getActiveProcesses.mockResolvedValueOnce(
+					['left', 'right', 'orphan'].map((id) => ({ sessionId: `${session.id}-ai-${id}-fp-123` }))
+				);
+				if (forceKill) {
+					mockMaestro.process.interrupt.mockRejectedValueOnce(new Error('interrupt failed'));
+					window.confirm = vi.fn().mockReturnValue(true);
+				}
+				const deps = createDeps({ sessionsRef: { current: [session] } });
+				const { result } = renderHook(() => useInterruptHandler(deps));
+				await act(async () => {
+					await result.current.handleInterrupt();
+				});
+				expect(mockMaestro.process.interrupt.mock.calls.map(([id]) => id).sort()).toEqual(
+					['left', 'orphan']
+						.flatMap((id) => [`${session.id}-ai-${id}`, `${session.id}-ai-${id}-fp-123`])
+						.sort()
+				);
+				if (forceKill)
+					expect(mockMaestro.process.kill.mock.calls).toEqual(
+						mockMaestro.process.interrupt.mock.calls
+					);
+				const updated = useSessionStore.getState().sessions[0];
+				expect(updated.aiTabs[1]).toBe(right);
+				expect(updated.executionQueue).toEqual(queue);
+				expect(updated.state).toBe('busy');
+				expect(updated.aiTabs[0]).toMatchObject({
+					state: 'idle',
+					awaitingSessionId: false,
+					autoSendOnActivate: false,
+				});
+				expect(updated.aiTabs[0].pendingMentionHandoff).toBeUndefined();
+				expect(updated.orphanedThinkingTabs?.[0]).toMatchObject({
+					state: 'idle',
+					pendingMentionHandoff: undefined,
+				});
+				expect(vi.mocked(deps.cancelPendingSynopsis).mock.calls).toEqual([
+					[session.id, 'left'],
+					[session.id, 'orphan'],
+				]);
+				expect(mockMaestro.crossAgent.cancel.mock.calls).toEqual([
+					[session.id, 'left'],
+					[session.id, 'orphan'],
+				]);
+				expect(deps.processQueuedItem).not.toHaveBeenCalled();
+			}
+		);
+
+		it('keeps sibling orphan consults running when stopping one child', async () => {
+			useSettingsStore.setState({ newShell: true });
+			const origin = {
+				kind: 'subtask' as const,
+				sourceSessionId: 'parent',
+				sourceTabId: 'parent-tab',
+				sourceProvider: 'codex',
+				createdAt: 1,
+			};
+			const tab = createTab({ id: 'child', state: 'busy', origin });
+			const sibling = createTab({ id: 'sibling', state: 'busy', origin });
+			const session = createSession({
+				aiTabs: [tab],
+				activeTabId: tab.id,
+				orphanedThinkingTabs: [sibling],
+				state: 'busy',
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+			const { result } = renderHook(() =>
+				useInterruptHandler(createDeps({ sessionsRef: { current: [session] } }))
+			);
+			await act(async () => {
+				await result.current.handleInterrupt();
+			});
+			expect(mockMaestro.crossAgent.cancel.mock.calls).toEqual([[session.id, tab.id]]);
+			expect(mockMaestro.process.interrupt.mock.calls).toEqual([[session.id + '-ai-child']]);
+			expect(useSessionStore.getState().sessions[0].orphanedThinkingTabs?.[0]).toBe(sibling);
+		});
+
+		it('keeps a child busy if cancellation could not be confirmed', async () => {
+			useSettingsStore.setState({ newShell: true });
+			const tab = createTab({ id: 'child', state: 'busy' });
+			const session = createSession({ aiTabs: [tab], activeTabId: tab.id, state: 'busy' });
+			useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+			mockMaestro.crossAgent.cancel.mockRejectedValueOnce(new Error('bridge down'));
+			const { result } = renderHook(() =>
+				useInterruptHandler(createDeps({ sessionsRef: { current: [session] } }))
+			);
+			await act(async () => {
+				await result.current.handleInterrupt();
+			});
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].state).toBe('busy');
+		});
+
+		it('pins an explicit pane target through asynchronous cancellation and focus changes', async () => {
+			useSettingsStore.setState({ newShell: true });
+			const left = createSession({
+				id: 'left-owner',
+				state: 'busy',
+				aiTabs: [createTab({ id: 'left-tab', state: 'busy' })],
+				activeTabId: 'left-tab',
+			});
+			const right = createSession({
+				id: 'right-owner',
+				state: 'busy',
+				aiTabs: [createTab({ id: 'right-tab', state: 'busy' })],
+				activeTabId: 'right-tab',
+			});
+			useSessionStore.setState({ sessions: [left, right], activeSessionId: right.id });
+			const deps = createDeps({
+				sessionsRef: { current: [left, right] },
+				cancelPendingSynopsis: vi.fn(async () => {
+					useSessionStore.getState().setActiveSessionId(right.id);
+				}),
+			});
+			const { result } = renderHook(() => useInterruptHandler(deps));
+			await act(async () => {
+				await result.current.handleInterrupt({ sessionId: left.id, tabId: 'left-tab' });
+			});
+			expect(mockMaestro.process.interrupt).toHaveBeenCalledExactlyOnceWith(
+				'left-owner-ai-left-tab'
+			);
+			expect(useSessionStore.getState().sessions[1]).toBe(right);
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].state).toBe('idle');
+		});
+	});
+
 	describe('AI mode interrupt', () => {
 		it('sends SIGINT to the correct AI process target', async () => {
 			const tab = createTab({ id: 'tab-ai-1', state: 'busy' });

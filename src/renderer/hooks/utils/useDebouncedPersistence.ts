@@ -1,3 +1,4 @@
+import { updateTurnWriteIndex } from '../../../shared/gitChangeTurns';
 /**
  * useDebouncedPersistence.ts
  *
@@ -39,6 +40,7 @@ import {
 	sanitizeBrowserTabForPersistence,
 } from '../../utils/browserTabPersistence';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { logger } from '../../utils/logger';
 import { captureException } from '../../utils/sentry';
 import { compactSessionToolOutputs } from '../../../shared/toolOutput';
@@ -139,6 +141,9 @@ const prepareSessionForPersistence = (session: Session): Session => {
 	// Truncate logs and reset runtime state in each tab
 	const truncatedTabs = tabsToProcess.map((tab) => ({
 		...tab,
+		...(useSettingsStore.getState().newShell
+			? { changeTurnIndex: updateTurnWriteIndex(tab.logs, tab.changeTurnIndex) }
+			: {}),
 		logs:
 			tab.logs.length > MAX_PERSISTED_SESSION_LOGS
 				? tab.logs.slice(-MAX_PERSISTED_SESSION_LOGS)
@@ -228,6 +233,9 @@ const prepareSessionForPersistence = (session: Session): Session => {
 					...entry,
 					tab: {
 						...entry.tab,
+						...(useSettingsStore.getState().newShell
+							? { changeTurnIndex: updateTurnWriteIndex(entry.tab.logs, entry.tab.changeTurnIndex) }
+							: {}),
 						logs:
 							entry.tab.logs.length > MAX_PERSISTED_SESSION_LOGS
 								? entry.tab.logs.slice(-MAX_PERSISTED_SESSION_LOGS)

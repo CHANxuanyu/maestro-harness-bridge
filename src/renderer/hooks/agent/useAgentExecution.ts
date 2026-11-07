@@ -29,6 +29,7 @@ import { isFailedSynopsisResponse } from '../../../shared/synopsis';
 import { stripAnsiCodes } from '../../../shared/stringUtils';
 import { truncateText } from '../../../shared/formatters';
 import type { SessionMessagesResult } from '../../../main/agents/session-storage';
+import { generateId } from '../../utils/ids';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { logger } from '../../utils/logger';
 import { armEffortFallback, settleEffortFallback } from '../../services/effortRejection';
@@ -173,7 +174,7 @@ export interface UseAgentExecutionReturn {
 	/** Show success flash notification (center screen, auto-dismisses after 2 seconds) */
 	showSuccessFlash: (message: string) => void;
 	/** Cancel all pending synopsis processes for a given maestro session ID */
-	cancelPendingSynopsis: (maestroSessionId: string) => Promise<void>;
+	cancelPendingSynopsis: (maestroSessionId: string, tabId?: string) => Promise<void>;
 }
 
 /**
@@ -212,8 +213,8 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 	);
 
 	// Track active synopsis session IDs for cancellation
-	// Map: maestroSessionId -> Set of active synopsis process session IDs
-	const activeSynopsisSessionsRef = useRef<Map<string, Set<string>>>(new Map());
+	// Map: maestroSessionId -> process ID -> originating tab ID
+	const activeSynopsisSessionsRef = useRef<Map<string, Map<string, string | undefined>>>(new Map());
 	const accumulateUsageStats = useCallback(
 		(current: UsageStats | undefined, usageStats: UsageStats): UsageStats => ({
 			...usageStats,
@@ -769,6 +770,8 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 				};
 			}
 		): Promise<AgentSpawnResult> => {
+			const newShell = useSettingsStore.getState().newShell;
+			const targetSessionId = `${sessionId}-synopsis-${newShell ? generateId() : Date.now()}`;
 			try {
 				const owner = sessionsRef.current.find((session) => session.id === sessionId);
 				const effectiveSessionSshRemoteConfig =
@@ -829,7 +832,23 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 					}
 					return { success: false, error: getT()('workflows.shell.synopsisNoFinalAnswer') };
 				}
+				const trackSynopsis = () => {
+					if (!activeSynopsisSessionsRef.current.has(sessionId))
+						activeSynopsisSessionsRef.current.set(sessionId, new Map());
+					activeSynopsisSessionsRef.current
+						.get(sessionId)!
+						.set(
+							targetSessionId,
+							[...(owner?.aiTabs ?? []), ...(owner?.orphanedThinkingTabs ?? [])].find(
+								(tab) => tab.agentSessionId === resumeAgentSessionId
+							)?.id
+						);
+				};
+				// Register before provider lookup so a new shell Stop cannot miss a pending spawn.
+				if (newShell) trackSynopsis();
 				const agent = await window.maestro.agents.get(toolType);
+				if (newShell && !activeSynopsisSessionsRef.current.get(sessionId)?.has(targetSessionId))
+					return { success: false };
 				if (!agent) {
 					logger.error(`[spawnBackgroundSynopsis] Agent not found for toolType: ${toolType}`);
 					return { success: false };
@@ -860,16 +879,8 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 					? sessionConfig?.customModel
 					: (cheapSynopsis.model ?? sessionConfig?.customModel);
 
-				// Use a unique target ID for background synopsis
-				const targetSessionId = `${sessionId}-synopsis-${Date.now()}`;
-
-				// Track this synopsis session for potential cancellation
-				if (!activeSynopsisSessionsRef.current.has(sessionId)) {
-					activeSynopsisSessionsRef.current.set(sessionId, new Set());
-				}
-				activeSynopsisSessionsRef.current.get(sessionId)!.add(targetSessionId);
-
-				return new Promise((resolve) => {
+				if (!newShell) trackSynopsis();
+				return await new Promise((resolve) => {
 					let agentSessionId: string | undefined;
 					let responseText = '';
 					let synopsisUsageStats: UsageStats | undefined;
@@ -1033,6 +1044,8 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 			} catch (error) {
 				logger.error('Error spawning background synopsis:', undefined, error);
 				return { success: false };
+			} finally {
+				activeSynopsisSessionsRef.current.get(sessionId)?.delete(targetSessionId);
 			}
 		},
 		[accumulateUsageStats, sessionsRef]
@@ -1042,43 +1055,52 @@ export function useAgentExecution(deps: UseAgentExecutionDeps): UseAgentExecutio
 	 * Cancel all pending synopsis processes for a given maestro session ID.
 	 * Called when user clicks Stop to prevent synopsis from running after interruption.
 	 */
-	const cancelPendingSynopsis = useCallback(async (maestroSessionId: string): Promise<void> => {
-		const synopsisSessions = activeSynopsisSessionsRef.current.get(maestroSessionId);
-		if (!synopsisSessions || synopsisSessions.size === 0) {
-			return;
-		}
-
-		logger.info('[cancelPendingSynopsis] Cancelling synopsis sessions for', undefined, [
-			maestroSessionId,
-			{
-				count: synopsisSessions.size,
-				sessionIds: Array.from(synopsisSessions),
-			},
-		]);
-
-		// Kill all active synopsis processes for this session
-		const killPromises = Array.from(synopsisSessions).map(async (synopsisSessionId) => {
-			try {
-				await window.maestro.process.kill(synopsisSessionId);
-				logger.info(
-					'[cancelPendingSynopsis] Killed synopsis session:',
-					undefined,
-					synopsisSessionId
-				);
-			} catch (error) {
-				// Process may have already exited
-				logger.warn('[cancelPendingSynopsis] Failed to kill synopsis session:', undefined, [
-					synopsisSessionId,
-					error,
-				]);
+	const cancelPendingSynopsis = useCallback(
+		async (maestroSessionId: string, tabId?: string): Promise<void> => {
+			const synopsisSessions = activeSynopsisSessionsRef.current.get(maestroSessionId);
+			if (!synopsisSessions || synopsisSessions.size === 0) {
+				return;
 			}
-		});
 
-		await Promise.all(killPromises);
+			const targets = [...synopsisSessions]
+				.filter(([, ownerTabId]) => !tabId || ownerTabId === tabId)
+				.map(([id]) => id);
+			// Remove pending tab registrations before awaiting kill so provider lookup cannot revive them.
+			if (tabId) for (const id of targets) synopsisSessions.delete(id);
+			logger.info('[cancelPendingSynopsis] Cancelling synopsis sessions for', undefined, [
+				maestroSessionId,
+				{
+					count: targets.length,
+					sessionIds: targets,
+				},
+			]);
 
-		// Clear the tracking set
-		activeSynopsisSessionsRef.current.delete(maestroSessionId);
-	}, []);
+			// Kill all active synopsis processes for this session
+			const killPromises = targets.map(async (synopsisSessionId) => {
+				try {
+					await window.maestro.process.kill(synopsisSessionId);
+					logger.info(
+						'[cancelPendingSynopsis] Killed synopsis session:',
+						undefined,
+						synopsisSessionId
+					);
+				} catch (error) {
+					// Process may have already exited
+					logger.warn('[cancelPendingSynopsis] Failed to kill synopsis session:', undefined, [
+						synopsisSessionId,
+						error,
+					]);
+				}
+			});
+
+			await Promise.all(killPromises);
+
+			// Preserve other conversations and any synopsis registered during the cancellation.
+			for (const id of targets) synopsisSessions.delete(id);
+			if (synopsisSessions.size === 0) activeSynopsisSessionsRef.current.delete(maestroSessionId);
+		},
+		[]
+	);
 
 	/**
 	 * Show flash notification (bottom-right, auto-dismisses after 2 seconds).

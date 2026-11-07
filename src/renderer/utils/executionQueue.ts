@@ -100,10 +100,11 @@ export function dropConsultHold(queue: QueuedItem[], tabId: string | undefined):
  *   until the reply lands, while other tabs carry on;
  * - a paused item is simply skipped.
  */
-function firstRunnableQueueIndex(queue: QueuedItem[]): number {
+function firstRunnableQueueIndex(queue: QueuedItem[], onlyTabId?: string): number {
 	const consultBlockedTabs = new Set<string>();
 	for (let index = 0; index < queue.length; index += 1) {
 		const item = queue[index];
+		if (onlyTabId && item.tabId !== onlyTabId) continue;
 		if (item.waitingForConnection) return -1;
 		if (item.awaitingConsult) {
 			consultBlockedTabs.add(item.tabId);
@@ -123,8 +124,11 @@ export function releaseConnectionHeldQueueItems(queue: QueuedItem[]): QueuedItem
 }
 
 /** The first item that would actually run, or undefined if all are held/empty. */
-export function nextRunnableQueueItem(queue: QueuedItem[]): QueuedItem | undefined {
-	const index = firstRunnableQueueIndex(queue);
+export function nextRunnableQueueItem(
+	queue: QueuedItem[],
+	onlyTabId?: string
+): QueuedItem | undefined {
+	const index = firstRunnableQueueIndex(queue, onlyTabId);
 	return index >= 0 ? queue[index] : undefined;
 }
 
@@ -139,11 +143,14 @@ export function hasRunnableQueueItem(queue: QueuedItem[]): boolean {
  * the dequeued item plus the remaining queue. When nothing is runnable, `item`
  * is null and `remaining` is the queue unchanged.
  */
-export function takeNextRunnableQueueItem(queue: QueuedItem[]): {
+export function takeNextRunnableQueueItem(
+	queue: QueuedItem[],
+	onlyTabId?: string
+): {
 	item: QueuedItem | null;
 	remaining: QueuedItem[];
 } {
-	const index = firstRunnableQueueIndex(queue);
+	const index = firstRunnableQueueIndex(queue, onlyTabId);
 	if (index < 0) return { item: null, remaining: queue };
 	return {
 		item: queue[index],

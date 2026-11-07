@@ -74,7 +74,11 @@ export const SidebarActions = memo(function SidebarActions({
 				className={`flex items-center justify-center p-2 rounded transition-colors w-8 h-8 shrink-0 ${hasNoSessions && leftSidebarOpen ? 'opacity-20 cursor-not-allowed' : 'hover:bg-white/5'}`}
 				title={
 					hasNoSessions && leftSidebarOpen
-						? t('workflows.sidebar.addAgentToCollapse')
+						? t(
+								newShell
+									? 'workflows.newShellCopy.navigation.openProjectToCollapse'
+									: 'workflows.sidebar.addAgentToCollapse'
+							)
 						: (leftSidebarOpen
 								? t('workflows.sidebar.collapseSidebar')
 								: t('workflows.sidebar.expandSidebar')) + toggleSidebarShortcutLabel

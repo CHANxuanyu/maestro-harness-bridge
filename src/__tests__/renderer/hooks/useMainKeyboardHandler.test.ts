@@ -4954,6 +4954,27 @@ describe('useMainKeyboardHandler - destination surface switching', () => {
 });
 
 describe('new shell project entry shortcuts', () => {
+	it.each([false, true])(
+		'opens split selection from the shortcut only in newShell=%s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			useModalStore.getState().closeModal('quickAction');
+			const { result } = renderHook(() => useMainKeyboardHandler());
+			result.current.keyboardHandlerRef.current = createMockContext({
+				activeSession: { id: 'split-owner', activeTabId: 'source' },
+				isShortcut: (_event: KeyboardEvent, id: string) => id === 'splitConversation',
+			});
+			act(() => {
+				window.dispatchEvent(
+					new KeyboardEvent('keydown', { key: '\\', metaKey: true, altKey: true, bubbles: true })
+				);
+			});
+			const modal = useModalStore.getState().modals.get('quickAction');
+			expect(modal?.open === true).toBe(newShell);
+			if (newShell)
+				expect(modal?.data).toEqual({ initialMode: 'main', initialSearch: 'Open on the right' });
+		}
+	);
 	afterEach(() => {
 		useSettingsStore.setState({ newShell: false });
 		vi.mocked(chooseProject).mockClear();

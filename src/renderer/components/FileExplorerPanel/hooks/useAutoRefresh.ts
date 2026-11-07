@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { useT } from '../../../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Session } from '../../../types';
@@ -37,6 +39,8 @@ export function useAutoRefresh({
 	onAutoRefreshChange,
 	onShowFlash,
 }: UseAutoRefreshArgs): UseAutoRefreshResult {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [overlayOpen, setOverlayOpen] = useState(false);
 	const [overlayPosition, setOverlayPosition] = useState<{ top: number; left: number } | null>(
@@ -72,15 +76,19 @@ export function useAutoRefresh({
 			if (changes && onShowFlash) {
 				const message =
 					changes.totalChanges === 0
-						? 'No changes detected'
-						: `Detected ${changes.totalChanges} change${changes.totalChanges === 1 ? '' : 's'}`;
+						? newShell
+							? t('workflows.newShellCopy.panels.noChanges')
+							: 'No changes detected'
+						: newShell
+							? t('workflows.newShellCopy.panels.detectedChanges', { count: changes.totalChanges })
+							: `Detected ${changes.totalChanges} change${changes.totalChanges === 1 ? '' : 's'}`;
 				onShowFlash(message);
 			}
 		} finally {
 			// Keep spinner visible for at least 500ms for visual feedback
 			setTimeout(() => setIsRefreshing(false), 500);
 		}
-	}, [refreshFileTree, sessionId, onShowFlash]);
+	}, [newShell, t, refreshFileTree, sessionId, onShowFlash]);
 
 	// Auto-refresh timer - uses refs to avoid resetting timer when callbacks change
 	useEffect(() => {

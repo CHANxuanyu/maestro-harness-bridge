@@ -33,7 +33,7 @@ import {
 	updateSessionWith,
 	updateAiTab,
 } from '../../stores/sessionStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { getModalActions, useModalStore } from '../../stores/modalStore';
 import { notifyToast } from '../../stores/notificationStore';
@@ -221,9 +221,11 @@ export function useWizardHandlers(deps: UseWizardHandlersDeps): UseWizardHandler
 	// ========================================================================
 	// Slash command discovery effect
 	// ========================================================================
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	useEffect(() => {
 		const currentSession = selectActiveSession(useSessionStore.getState());
 		if (!currentSession) return;
+		if (newShell && ['claude-code', 'codex'].includes(currentSession.toolType)) return;
 		if (
 			currentSession.toolType !== 'claude-code' &&
 			currentSession.toolType !== 'opencode' &&
@@ -328,6 +330,7 @@ export function useWizardHandlers(deps: UseWizardHandlersDeps): UseWizardHandler
 			cancelled = true;
 		};
 	}, [
+		newShell,
 		activeSessionId,
 		activeToolType,
 		activeCwd,
@@ -954,7 +957,7 @@ export function useWizardHandlers(deps: UseWizardHandlersDeps): UseWizardHandler
 					customPath: currentSession.customPath,
 					customArgs: currentSession.customArgs,
 					customEnvVars: currentSession.customEnvVars,
-					customModel: currentSession.customModel,
+					customModel: newTab.customModel ?? currentSession.customModel,
 					claudeTokenSource: getClaudeTokenSourceFields(currentSession),
 				}
 			);

@@ -1,3 +1,5 @@
+import { getT } from '../i18n';
+import { conversationNativeCommands } from '../services/nativeCommands';
 /**
  * agentStore - Zustand store for agent lifecycle orchestration
  *
@@ -482,6 +484,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
 		// the consult just fired, and an auto-retry of this turn must not re-fire it.
 		noteDispatch(sessionId, { ...item, tabId: targetTab.id, crossAgentMention: undefined }, deps);
 
+		let commandDiscoveryFailed = false;
 		try {
 			// Get agent configuration for this session's tool type
 			const agent = await window.maestro.agents.get(session.toolType);
@@ -576,7 +579,8 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
 			} else if (item.type === 'command' && item.command) {
 				// Process a slash command - find matching command
 				// Check user-defined commands first, then agent-discovered commands with prompts
-				const matchingAgentCommand = session.agentCommands?.find(
+				const native = await conversationNativeCommands(session);
+				const matchingAgentCommand = native.commands.find(
 					(cmd) => cmd.command === item.command && cmd.prompt
 				);
 				const matchingCommand =
@@ -591,6 +595,11 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
 								prompt: matchingAgentCommand.prompt!,
 							}
 						: undefined);
+
+				if (!matchingCommand && native.warning) {
+					commandDiscoveryFailed = true;
+					throw new Error(getT()('workflows.nativeCommands.queuedUnavailable'));
+				}
 
 				if (matchingCommand) {
 					let gitBranch: string | undefined;
@@ -756,7 +765,9 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
 				id: generateId(),
 				timestamp: Date.now(),
 				source: 'error',
-				text: `Error: Failed to send queued ${item.type} - ${error.message}. The message is held in the queue.`,
+				text: commandDiscoveryFailed
+					? getT()('workflows.nativeCommands.queuedUnavailable')
+					: `Error: Failed to send queued ${item.type} - ${error.message}. The message is held in the queue.`,
 			};
 			useSessionStore.getState().setSessions((prev) =>
 				prev.map((s) => {

@@ -49,6 +49,7 @@ export interface NativeScene {
 
 export class NativeApp {
 	readonly root = createNativeTempDir('maestro-native-e2e-');
+	readonly syntheticHome = path.join(this.root, 'synthetic-home');
 	readonly data = path.join(this.root, 'maestro');
 	readonly project = path.join(this.root, 'project');
 	readonly claude = path.join(this.root, 'claude');
@@ -87,6 +88,7 @@ export class NativeApp {
 			this.grok,
 			this.omp,
 			this.copilot,
+			this.syntheticHome,
 		])
 			fs.mkdirSync(dir, { recursive: true });
 		const productFile = path.resolve('dist/maestro-product.json');
@@ -183,9 +185,12 @@ export class NativeApp {
 		}
 		// A history-boundary case needs a synthetic default account as well as the selected one.
 		// Scope HOME to this child process so the test never seeds the user's default directory.
+		// Synthetic runs never see the real home: a provider's store there, such as an
+		// OpenCode database from the desktop app, would be read instead of the fixture's.
+		const home = homeDir ?? (this.real ? undefined : this.syntheticHome);
 		this.app = await launchElectronApp(path.resolve('dist/main/index.js'), this.data, {
 			...this.env,
-			...(homeDir ? { HOME: homeDir } : {}),
+			...(home ? { HOME: home } : {}),
 		});
 		this.boot++;
 		await this.app.context().tracing.start({ screenshots: true, snapshots: true });
@@ -227,10 +232,19 @@ export class NativeApp {
 		return this.cliWithEnv({}, ...args);
 	}
 	async cliWithEnv(env: Record<string, string>, ...args: string[]) {
+		return this.runCli(env, [...args, '--json']);
+	}
+	/** `dispatch` always prints JSON and has no `--json` flag. */
+	async dispatchWithEnv(env: Record<string, string>, ...args: string[]) {
+		return this.runCli(env, ['dispatch', ...args]);
+	}
+	private async runCli(env: Record<string, string>, args: string[]) {
 		const result = await exec(
 			process.execPath,
-			[path.resolve('dist/cli/maestro-cli.js'), ...args, '--json'],
-			{ env: { ...process.env, ...this.env, ...env } }
+			[path.resolve('dist/cli/maestro-cli.js'), ...args],
+			{
+				env: { ...process.env, ...this.env, ...env },
+			}
 		).catch((error: Error & { stdout?: string; stderr?: string }) => {
 			throw new Error(
 				`${error.message}\nstdout:\n${error.stdout ?? ''}\nstderr:\n${error.stderr ?? ''}`,

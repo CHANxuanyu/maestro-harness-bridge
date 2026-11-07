@@ -30,7 +30,7 @@ it('requires a permission review when a conversation creation call is added or m
 			'exact source, validated first spawn',
 		],
 		'hooks/agent/useSummarizeAndContinue.ts:createTabAtPosition': [
-			'strictest known fallback, then existing source overrides',
+			'exact source through project resolution; classic overrides preserved',
 		],
 	};
 	const actual: Record<string, number> = {};
@@ -83,4 +83,5 @@ it('requires a permission review when a conversation creation call is added or m
 	).toEqual(
 		Object.fromEntries(Object.entries(reviewed).map(([file, calls]) => [file, calls.length]))
 	);
-});
+	// Parses every renderer file; the Windows runner needs well over the default.
+}, 60_000);

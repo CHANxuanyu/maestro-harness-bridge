@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ipcMain, app, BrowserWindow } from 'electron';
+import { logger } from '../../../../main/utils/logger';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import {
@@ -185,10 +186,63 @@ describe('persistence IPC handlers', () => {
 		expect(mockSettingsStore.set).not.toHaveBeenCalled();
 	});
 
+	it('saves project settings through the registered handler and broadcasts the update', async () => {
+		mockSettingsStore.get.mockImplementation((_key, fallback) => fallback);
+		const result = await handlers.get('settings:projectSettings')!(
+			{},
+			{
+				action: 'set',
+				scope: { projectPath: '~/project', sshRemoteId: 'fixture' },
+				patch: { modelProvider: 'codex', defaultModel: 'fixture-model' },
+			}
+		);
+		expect(result).toMatchObject({ success: true, settings: { defaultModel: 'fixture-model' } });
+		expect(mockSettingsStore.set).toHaveBeenCalledExactlyOnceWith('projectSettings', {
+			'["fixture","~/project"]': { modelProvider: 'codex', defaultModel: 'fixture-model' },
+		});
+		expect(broadcastBridgeEvent).toHaveBeenCalledExactlyOnceWith('settings:externalChange', []);
+		expect(mockSessionsStore.set).not.toHaveBeenCalled();
+	});
+
+	it('removes project environment values from general settings reads and logs', async () => {
+		const projectSettings = {
+			'[null,"/tmp/private-project"]': {
+				defaultPermissionMode: 'readonly',
+				envVars: { GITHUB_TOKEN: 'synthetic-private-token', ORDINARY: 'synthetic-private-value' },
+			},
+		};
+		mockSettingsStore.store.projectSettings = projectSettings;
+		mockSettingsStore.get.mockReturnValue(projectSettings);
+		const all = await handlers.get('settings:getAll')!({});
+		const one = await handlers.get('settings:get')!({}, 'projectSettings');
+		expect(all.projectSettings['[null,"/tmp/private-project"]']).toEqual({
+			defaultPermissionMode: 'readonly',
+			envVars: {},
+		});
+		expect(one).toEqual(all.projectSettings);
+		expect(await handlers.get('settings:get')!({}, 'projectSettings.any.envVars')).toBeUndefined();
+		expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain('synthetic-private');
+		expect(projectSettings['[null,"/tmp/private-project"]'].envVars.GITHUB_TOKEN).toBe(
+			'synthetic-private-token'
+		);
+	});
+
+	it.each(['projectSettings', 'projectSettings.any.defaultPermissionMode'])(
+		'refuses generic writes to %s before persistence or logging',
+		async (key) => {
+			await expect(
+				handlers.get('settings:set')!({}, key, { defaultPermissionMode: 'full' })
+			).rejects.toThrow('project settings set');
+			expect(mockSettingsStore.set).not.toHaveBeenCalled();
+			expect(logger.info).not.toHaveBeenCalled();
+		}
+	);
+
 	describe('registration', () => {
 		it('should register all persistence handlers', () => {
 			const expectedChannels = [
 				'settings:aboutMe',
+				'settings:projectSettings',
 				'settings:get',
 				'settings:set',
 				'settings:getAll',

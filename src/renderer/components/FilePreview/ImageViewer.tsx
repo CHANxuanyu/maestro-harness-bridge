@@ -1,3 +1,5 @@
+import { useT } from '../../i18n';
+import { useSettingsStore } from '../../stores/settingsStore';
 import React, { useState, useCallback, useEffect, memo } from 'react';
 import { ZoomIn, ZoomOut, Maximize2, ImageOff } from 'lucide-react';
 
@@ -17,6 +19,8 @@ interface ImageViewerProps {
  * and a toolbar with zoom controls + fit-to-view reset.
  */
 export const ImageViewer = memo(function ImageViewer({ src, alt, theme }: ImageViewerProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const { containerRef, zoom, dragging, transform, onMouseDown, zoomIn, zoomOut, fitToView } =
 		usePanZoom({ resetKey: src });
 	const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
@@ -47,7 +51,11 @@ export const ImageViewer = memo(function ImageViewer({ src, alt, theme }: ImageV
 				className="flex items-center justify-center gap-2 py-1.5 shrink-0 border-b"
 				style={{ borderColor: theme.colors.border }}
 			>
-				<GhostIconButton onClick={zoomOut} title="Zoom out" color={theme.colors.textDim}>
+				<GhostIconButton
+					onClick={zoomOut}
+					title={newShell ? t('workflows.newShellCopy.panels.zoomOut') : 'Zoom out'}
+					color={theme.colors.textDim}
+				>
 					<ZoomOut className="w-4 h-4" />
 				</GhostIconButton>
 				<span
@@ -56,10 +64,18 @@ export const ImageViewer = memo(function ImageViewer({ src, alt, theme }: ImageV
 				>
 					{zoomPercent}%
 				</span>
-				<GhostIconButton onClick={zoomIn} title="Zoom in" color={theme.colors.textDim}>
+				<GhostIconButton
+					onClick={zoomIn}
+					title={newShell ? t('workflows.newShellCopy.panels.zoomIn') : 'Zoom in'}
+					color={theme.colors.textDim}
+				>
 					<ZoomIn className="w-4 h-4" />
 				</GhostIconButton>
-				<GhostIconButton onClick={fitToView} title="Fit to view" color={theme.colors.textDim}>
+				<GhostIconButton
+					onClick={fitToView}
+					title={newShell ? t('workflows.newShellCopy.panels.fit') : 'Fit to view'}
+					color={theme.colors.textDim}
+				>
 					<Maximize2 className="w-4 h-4" />
 				</GhostIconButton>
 				{naturalSize && (
@@ -119,7 +135,11 @@ export const ImageViewer = memo(function ImageViewer({ src, alt, theme }: ImageV
 					<div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
 						<ImageOff className="w-10 h-10" style={{ color: theme.colors.textDim }} />
 						<span className="text-sm" style={{ color: theme.colors.textDim }}>
-							Failed to load image
+							{newShell ? (
+								t('workflows.newShellCopy.panels.imageFailed')
+							) : (
+								<>Failed to load image</>
+							)}{' '}
 						</span>
 					</div>
 				)}

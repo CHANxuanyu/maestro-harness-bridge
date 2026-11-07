@@ -43,7 +43,8 @@ function stripTurnNote(prompt: string): string {
 	const separator = '\n\n---\n\n';
 	const start = prompt.lastIndexOf(separator);
 	if (start < 0) return prompt;
-	const note = prompt.slice(start + separator.length);
+	// A Windows checkout loads the prompt files with CRLF, and the wire keeps it.
+	const note = prompt.slice(start + separator.length).replace(/\r\n/g, '\n');
 	for (const { template, token } of LEGACY_NOTES) {
 		const [prefix, following] = template.split(token);
 		if (!note.startsWith(prefix)) continue;

@@ -22,6 +22,7 @@ export interface SdkProcessController {
  */
 export interface ProcessConfig {
 	codexAppServer?: CodexAppServerSettings;
+	nativeCommandScopeKey?: string;
 	sessionId: string;
 	toolType: string;
 	cwd: string;
@@ -94,6 +95,7 @@ export interface ProcessConfig {
  */
 export interface ManagedProcess {
 	codexAppServerController?: CodexAppServerSession;
+	nativeCommandScopeKey?: string;
 	toolOutputSource?: Omit<
 		import('../../shared/nativeToolOutput').NativeToolOutputTarget,
 		'nativeSessionId'

@@ -168,7 +168,16 @@ export function describeQuotaWindow(detail: QuotaLimitDetail | undefined): strin
  * `overageStatus` is combined with `status` here and must never be read alone;
  * see the trap described in this module's header.
  */
-export function describeQuotaRemedy(detail: QuotaLimitDetail | undefined): string | undefined {
+export function describeQuotaRemedy(
+	detail: QuotaLimitDetail | undefined,
+	messages?: {
+		outOfCredits: string;
+		extraRejected: string;
+		exhausted: string;
+		extraInUse: string;
+		extraAvailable: string;
+	}
+): string | undefined {
 	if (!detail) return undefined;
 
 	const hardStopped = detail.status === 'rejected';
@@ -179,19 +188,31 @@ export function describeQuotaRemedy(detail: QuotaLimitDetail | undefined): strin
 		// The turn was actually cut off. Whatever `overageStatus` says, extra usage
 		// did not save it, so the only remedy left is the clock.
 		if (detail.overageDisabledReason === 'out_of_credits') {
-			return 'Extra usage is out of credits, so nothing can extend this window. It clears at the reset time.';
+			return (
+				messages?.outOfCredits ??
+				'Extra usage is out of credits, so nothing can extend this window. It clears at the reset time.'
+			);
 		}
 		if (detail.overageStatus === 'rejected') {
-			return 'Extra usage will not cover this either. Nothing to enable - it clears at the reset time.';
+			return (
+				messages?.extraRejected ??
+				'Extra usage will not cover this either. Nothing to enable - it clears at the reset time.'
+			);
 		}
-		return 'This window is fully exhausted. Nothing in Maestro can extend it - it clears at the reset time.';
+		return (
+			messages?.exhausted ??
+			'This window is fully exhausted. Nothing in Maestro can extend it - it clears at the reset time.'
+		);
 	}
 
 	if (detail.overageInUse === true) {
-		return 'Paid extra usage is covering the overflow, so this turn should not be cut off.';
+		return (
+			messages?.extraInUse ??
+			'Paid extra usage is covering the overflow, so this turn should not be cut off.'
+		);
 	}
 	if (overageAvailable) {
-		return 'Paid extra usage is available to cover the overflow.';
+		return messages?.extraAvailable ?? 'Paid extra usage is available to cover the overflow.';
 	}
 
 	return undefined;

@@ -23,7 +23,7 @@
  * attributed bubble, and no follow-up turn is sent back to the source agent.
  */
 
-import type { ConsultHoldTarget, LogEntry, MentionHandoff } from '../types';
+import type { ConsultHoldTarget, LogEntry, MentionHandoff, Session } from '../types';
 import { updateAiTab, updateSessionWith, useSessionStore } from '../stores/sessionStore';
 import { sendCrossAgentRequest } from '../hooks/agent/useCrossAgentDispatch';
 import { isSelfContainedCard } from '../utils/logEntries';
@@ -78,8 +78,20 @@ export function armMentionHandoff(sessionId: string, tabId: string, handoff: Men
 	updateAiTab(sessionId, tabId, (tab) => ({ ...tab, pendingMentionHandoff: handoff }));
 }
 
-/** Clear every armed hand-off on an agent (Stop is agent-level). */
-export function dropMentionHandoffs(sessionId: string): void {
+/** Classic Stop clears the agent; new shell Stop supplies its conversation. */
+export function dropMentionHandoffs(sessionId: string, tabId?: string): void {
+	if (tabId) {
+		const clear = (tab: Session['aiTabs'][number]) =>
+			tab.id === tabId && tab.pendingMentionHandoff
+				? { ...tab, pendingMentionHandoff: undefined }
+				: tab;
+		updateSessionWith(sessionId, (session) => ({
+			...session,
+			aiTabs: session.aiTabs.map(clear),
+			orphanedThinkingTabs: session.orphanedThinkingTabs?.map(clear),
+		}));
+		return;
+	}
 	const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
 	if (!session?.aiTabs.some((t) => t.pendingMentionHandoff)) return;
 	updateSessionWith(sessionId, (s) => ({

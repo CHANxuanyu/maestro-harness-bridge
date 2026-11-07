@@ -146,7 +146,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 				<PhoneSheetSection
 					icon={Eye}
 					label={t('workflows.shell.access')}
-					value={permissionModeLabel(t, permissionMode, agentId)}
+					value={permissionModeLabel(t, permissionMode, agentId, newShell)}
 					accent={permissionMode === 'readonly' ? theme.colors.warning : theme.colors.accent}
 					expanded={expanded === 'access'}
 					onToggle={() => toggle('access')}
@@ -156,7 +156,7 @@ export const ComposerOptionsSheet = memo(function ComposerOptionsSheet({
 					{modes.map((mode) => (
 						<PhoneSheetOptionRow
 							key={mode}
-							label={permissionModeLabel(t, mode, agentId)}
+							label={permissionModeLabel(t, mode, agentId, newShell)}
 							selected={mode === permissionMode}
 							accent={mode === 'readonly' ? theme.colors.warning : theme.colors.accent}
 							onSelect={() => onPermissionModeChange(mode)}

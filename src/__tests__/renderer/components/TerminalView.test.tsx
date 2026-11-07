@@ -1000,6 +1000,39 @@ describe('TerminalView — PTY window size', () => {
 });
 
 describe('TerminalView startup feedback', () => {
+	it('localizes new shell notices while retaining raw spawn errors', async () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+		const onSpawnFailure = vi.fn();
+		maestro().process.spawnTerminalTab.mockRejectedValueOnce(new Error('PTY unavailable'));
+		const tab = makeTab({ pid: 0, startupCommand: 'echo fixture' });
+		await act(async () => {
+			render(
+				<TerminalView
+					{...defaultProps}
+					session={makeSession([tab])}
+					onSpawnFailure={onSpawnFailure}
+					isVisible
+				/>
+			);
+		});
+		expect(onSpawnFailure).toHaveBeenCalledWith('tab-1', 'PTY unavailable');
+		expect(mockWrite).toHaveBeenCalledWith('\r\n\x1b[2m[启动失败]\x1b[0m\r\n');
+	});
+	it('localizes a new shell exit code without changing tab lifetime', () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+		const tab = makeTab({ startupCommand: 'echo fixture', createdAt: Date.now() - 5000 });
+		const view = render(<TerminalView {...defaultProps} session={makeSession([tab])} isVisible />);
+		view.rerender(
+			<TerminalView
+				{...defaultProps}
+				session={makeSession([{ ...tab, state: 'exited', exitCode: 17 }])}
+				isVisible
+			/>
+		);
+		expect(mockWrite).toHaveBeenCalledWith('\r\n\x1b[2m[进程已退出（退出码 17）]\x1b[0m\r\n');
+		expect(mockCloseTerminalTab).not.toHaveBeenCalled();
+	});
+
 	afterEach(() => vi.useRealTimers());
 
 	it.each([false, true])(

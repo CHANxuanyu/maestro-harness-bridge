@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { useSettingsStore } from '../stores/settingsStore';
 /**
  * TerminalTouchBar - compact on-screen key bar for the terminal on touch devices.
  *
@@ -41,6 +43,8 @@ export const TerminalTouchBar = memo(function TerminalTouchBar({
 	onToggleCtrl,
 	onKey,
 }: TerminalTouchBarProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const { colors } = theme;
 	// Phone: eight keys share the row width instead of each claiming 44px plus
 	// padding, which ran the Enter key off the right edge and left the bar
@@ -111,7 +115,7 @@ export const TerminalTouchBar = memo(function TerminalTouchBar({
 			}}
 			// The bar is a controls strip; keep native drag-select off the whole row.
 			role="toolbar"
-			aria-label="Terminal keys"
+			aria-label={newShell ? t('workflows.newShellCopy.panels.terminalKeys') : 'Terminal keys'}
 		>
 			<button
 				{...keyProps(() => onKey(TERMINAL_KEY_SEQUENCES.esc))}
@@ -138,28 +142,28 @@ export const TerminalTouchBar = memo(function TerminalTouchBar({
 			<button
 				{...keyProps(() => onKey(TERMINAL_KEY_SEQUENCES.up))}
 				style={buttonBase}
-				aria-label="Up"
+				aria-label={newShell ? t('workflows.newShellCopy.panels.keyUp') : 'Up'}
 			>
 				<ArrowUp size={ICON_SIZE} />
 			</button>
 			<button
 				{...keyProps(() => onKey(TERMINAL_KEY_SEQUENCES.down))}
 				style={buttonBase}
-				aria-label="Down"
+				aria-label={newShell ? t('workflows.newShellCopy.panels.keyDown') : 'Down'}
 			>
 				<ArrowDown size={ICON_SIZE} />
 			</button>
 			<button
 				{...keyProps(() => onKey(TERMINAL_KEY_SEQUENCES.left))}
 				style={buttonBase}
-				aria-label="Left"
+				aria-label={newShell ? t('workflows.newShellCopy.panels.keyLeft') : 'Left'}
 			>
 				<ArrowLeft size={ICON_SIZE} />
 			</button>
 			<button
 				{...keyProps(() => onKey(TERMINAL_KEY_SEQUENCES.right))}
 				style={buttonBase}
-				aria-label="Right"
+				aria-label={newShell ? t('workflows.newShellCopy.panels.keyRight') : 'Right'}
 			>
 				<ArrowRight size={ICON_SIZE} />
 			</button>

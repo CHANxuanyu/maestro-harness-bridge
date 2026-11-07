@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useFileContextMenu } from '../../../../../renderer/components/FileExplorerPanel/hooks/useFileContextMenu';
 import type { FileNode } from '../../../../../renderer/types/fileTree';
@@ -125,6 +126,35 @@ const mockMaestro = {
 (window as any).maestro = mockMaestro;
 
 describe('useFileContextMenu', () => {
+	afterEach(() => useSettingsStore.setState({ newShell: false, uiLanguage: 'en' }));
+	it.each(['missing detail', 'non-Error rejection'])(
+		'localizes the batch delete fallback: %s',
+		async (failure) => {
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+			const onShowFlash = vi.fn();
+			if (failure === 'missing detail')
+				mockMaestro.fs.deleteMany.mockResolvedValueOnce({
+					results: [{ path: '/project/README.md', success: false }],
+				});
+			else mockMaestro.fs.deleteMany.mockRejectedValueOnce('synthetic rejection');
+			const { result } = renderHook(() =>
+				useFileContextMenu({
+					...defaultArgs,
+					selectedPathsRef: { current: new Set(['README.md']) },
+					onShowFlash,
+				})
+			);
+			act(() => result.current.handleOpenDeleteMulti());
+			await act(async () => {
+				const deletion = result.current.handleDeleteMulti();
+				if (failure === 'non-Error rejection')
+					await expect(deletion).rejects.toBe('synthetic rejection');
+				else await deletion;
+			});
+			expect(onShowFlash).toHaveBeenCalledWith('删除失败：未知错误');
+		}
+	);
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});

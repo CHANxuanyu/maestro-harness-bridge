@@ -163,8 +163,14 @@ function stripMentions(message: string): string {
  * message carries no prose beyond the mention - callers fall back to the source
  * agent's name so the entry is never left blank.
  */
-export function deriveConsultSubject(userPrompt: string, maxLen = 60): string {
-	let subject = stripMentions(userPrompt).replace(/\s+/g, ' ').trim();
+export function deriveConsultSubject(
+	userPrompt: string,
+	maxLen = 60,
+	firstSentence = false
+): string {
+	let subject = stripMentions(userPrompt).trim();
+	if (firstSentence) subject = subject.split(/\n|(?<=[。！？])|(?<=[.!?])\s/)[0];
+	subject = subject.replace(/\s+/g, ' ').trim();
 	if (!subject) return '';
 	if (subject.length > maxLen) {
 		subject = `${subject.slice(0, maxLen - 1).trimEnd()}…`;

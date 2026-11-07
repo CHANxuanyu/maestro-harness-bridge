@@ -479,6 +479,7 @@ export class ChildProcessSpawner {
 				config.sshStdinScript && sshConnectionArgs(finalArgs) ? newRemotePidFilePath() : undefined;
 
 			const managedProcess: ManagedProcess = {
+				nativeCommandScopeKey: config.nativeCommandScopeKey,
 				...(['claude-code', 'codex'].includes(toolType)
 					? {
 							toolOutputSource: {

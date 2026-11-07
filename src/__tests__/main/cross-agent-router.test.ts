@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
+import { transcriptMessagesToLogEntries } from '../../shared/transcriptEntries';
+import { parseNativeSearchMessages } from '../../shared/sessionSearch';
 import {
 	serializeTranscript,
 	buildCrossAgentPrompt,
@@ -7,6 +9,14 @@ import {
 	cancelCrossAgentRequestsForSource,
 	type CrossAgentTargetSession,
 } from '../../main/cross-agent/cross-agent-router';
+import * as consultRouter from '../../main/cross-agent/cross-agent-router';
+import { registerSessionCallbacks } from '../../main/web-server/callbacks/sessionCallbacks';
+
+vi.mock('../../shared/cli-activity', () => ({ getSessionIdsBusyWithCli: () => new Set() }));
+vi.mock('../../main/storage/session-image-store', () => ({
+	isImageRef: () => false,
+	resolveToDataUrlSync: vi.fn(),
+}));
 import type {
 	CrossAgentRequest,
 	CrossAgentResponseChunk,
@@ -246,7 +256,9 @@ const HARD_MS = 30 * 60 * 1000;
 
 /** Minimal ProcessManager stand-in: the router only uses on/off/kill. */
 class FakeProcessManager extends EventEmitter {
-	kill = vi.fn();
+	kill = vi.fn((sessionId: string) => {
+		this.emit('exit', sessionId, 0);
+	});
 }
 
 const targetSession = (): CrossAgentTargetSession => ({
@@ -260,12 +272,13 @@ function harness(
 	overrides: {
 		getTargetSession?: () => CrossAgentTargetSession | null;
 		writable?: boolean;
+		agentAvailable?: boolean;
 	} = {}
 ) {
 	const processManager = new FakeProcessManager();
 	const chunks: CrossAgentResponseChunk[] = [];
-	const dispatch = () =>
-		startCrossAgentRequest(request(), {
+	const dispatch = (fields: Partial<CrossAgentRequest> = {}) =>
+		startCrossAgentRequest(request(fields), {
 			processManager: processManager as never,
 			agentDetector: {
 				getAgent: async () => ({
@@ -274,7 +287,7 @@ function harness(
 					command: 'claude',
 					path: 'claude',
 					args: [],
-					available: true,
+					available: overrides.agentAvailable ?? true,
 					// Mirrors the real claude-code definition. Both permission branches
 					// have to be present or `buildAgentArgs` emits nothing either way
 					// and the flag assertions below silently pass on any input.
@@ -345,6 +358,18 @@ describe('startCrossAgentRequest dispatch lifecycle', () => {
 		expect(config.args).not.toContain('plan');
 	});
 
+	it.each(['readonly', 'standard'] as const)(
+		'enforces the saved %s ceiling even when writes are enabled',
+		async (permissionMode) => {
+			const { dispatch, emitExit } = harness({ writable: true });
+			await dispatch({ permissionMode } as Partial<CrossAgentRequest>);
+			const config = vi.mocked(spawnGroupChatAgent).mock.calls[0][0];
+			expect(config.args).not.toContain('--dangerously-skip-permissions');
+			if (permissionMode === 'readonly') expect(config.readOnlyMode).toBe(true);
+			emitExit(0);
+		}
+	);
+
 	it('spawns the binary the agent is configured with, not the auto-detected one', async () => {
 		// Detection probes known install dirs before PATH, so a stale nvm stub can
 		// win over the codex the user pointed the agent at. The tab honors
@@ -356,6 +381,30 @@ describe('startCrossAgentRequest dispatch lifecycle', () => {
 
 		const config = vi.mocked(spawnGroupChatAgent).mock.calls[0][0];
 		expect(config.command).toBe('/opt/custom/claude');
+	});
+
+	it('consults an agent that only exists at its customPath', async () => {
+		// Detection only knows standard installs. The tab spawns customPath without
+		// asking it, so a detection miss must not refuse the same agent here.
+		const { chunks, dispatch } = harness({
+			agentAvailable: false,
+			getTargetSession: () => ({ ...targetSession(), customPath: '/opt/custom/claude' }),
+		});
+		await dispatch();
+
+		expect(chunks.some((chunk) => chunk.error)).toBe(false);
+		expect(vi.mocked(spawnGroupChatAgent).mock.calls[0][0].command).toBe('/opt/custom/claude');
+	});
+
+	it('reports an agent with neither a detected binary nor a customPath', async () => {
+		const { chunks, dispatch } = harness({ agentAvailable: false });
+		await dispatch();
+
+		expect(chunks.at(-1)).toMatchObject({
+			done: true,
+			error: expect.stringContaining('available'),
+		});
+		expect(vi.mocked(spawnGroupChatAgent)).not.toHaveBeenCalled();
 	});
 
 	it('falls back to the detected binary when the agent has no customPath', async () => {
@@ -543,6 +592,89 @@ describe('cancelCrossAgentRequestsForSource', () => {
 		vi.clearAllMocks();
 	});
 
+	it('waits for process exit before releasing a stopped consult', async () => {
+		const { dispatch, processManager, chunks, emitExit } = harness();
+		await dispatch({ targetTabId: 'child' });
+		processManager.kill.mockImplementation(() => {});
+		expect(cancelCrossAgentRequestsForSource('src', 'tab')).toBe(1);
+		expect(processManager.kill).toHaveBeenCalledWith('cross-agent-r1');
+		expect(chunks).toEqual([]);
+		emitExit(0);
+		expect(chunks).toHaveLength(1);
+		expect(chunks[0].canceled).toBe(true);
+	});
+
+	it('stops only the addressed child and acknowledges only after its process exits', async () => {
+		const left = harness();
+		const right = harness();
+		await left.dispatch({ requestId: 'child-left', targetTabId: 'left' });
+		await right.dispatch({ requestId: 'child-right', targetTabId: 'right' });
+		left.processManager.kill.mockImplementation(() => {});
+		let acknowledged = false;
+		const stop = consultRouter
+			.cancelCrossAgentRequestsForConversation('tgt', 'left')
+			.then((count) => {
+				acknowledged = true;
+				return count;
+			});
+		await Promise.resolve();
+		expect(left.processManager.kill).toHaveBeenCalledWith('cross-agent-child-left');
+		expect(right.processManager.kill).not.toHaveBeenCalled();
+		expect(acknowledged).toBe(false);
+		expect(left.chunks).toEqual([]);
+		left.processManager.emit('exit', 'cross-agent-child-left', 0);
+		expect(await stop).toBe(1);
+		expect(right.chunks).toEqual([]);
+		right.processManager.emit('exit', 'cross-agent-child-right', 0);
+	});
+
+	it('lists live consult state and terminal errors despite idle sanitized persistence', async () => {
+		const { dispatch, emitExit, processManager } = harness();
+		let list: () => Array<{ state: string; error: boolean }>;
+		registerSessionCallbacks(
+			{
+				setGetSessionsCallback: vi.fn(),
+				setGetSessionHistoryCallback: vi.fn(),
+				setGetSessionDetailCallback: vi.fn(),
+				setListDesktopSessionsCallback: (callback: typeof list) => {
+					list = callback;
+				},
+			} as never,
+			{
+				sessionsStore: {
+					get: () => [
+						{
+							id: 'tgt',
+							toolType: 'claude-code',
+							aiTabs: [{ id: 'child', state: 'idle', logs: [] }],
+						},
+					],
+				},
+				groupsStore: { get: () => [] },
+				getProcessManager: () => Object.assign(processManager, { get: () => undefined }),
+			} as never
+		);
+		await dispatch({ targetTabId: 'child' });
+		expect(list!()[0]).toMatchObject({ state: 'busy', error: false });
+		emitExit(1);
+		expect(list!()[0]).toMatchObject({ state: 'idle', error: true });
+	});
+
+	it('cancels only the named source tab while another consult finishes normally', async () => {
+		const left = harness();
+		const right = harness();
+		await left.dispatch({ requestId: 'left', sourceTabId: 'left-tab' });
+		await right.dispatch({ requestId: 'right', sourceTabId: 'right-tab' });
+		expect(cancelCrossAgentRequestsForSource('src', 'left-tab')).toBe(1);
+		expect(left.processManager.kill).toHaveBeenCalledExactlyOnceWith('cross-agent-left');
+		expect(right.processManager.kill).not.toHaveBeenCalled();
+		expect(right.chunks).toEqual([]);
+		right.processManager.emit('data', 'cross-agent-right', 'complete answer');
+		right.processManager.emit('exit', 'cross-agent-right', 0);
+		expect(right.chunks.at(-1)).toMatchObject({ chunk: 'complete answer', done: true });
+		expect(right.chunks.at(-1)?.canceled).not.toBe(true);
+	});
+
 	it('kills a running consult and settles it as canceled, not as a failure', async () => {
 		const { chunks, dispatch, processManager, emitData } = harness();
 		await dispatch();
@@ -643,4 +775,115 @@ describe('cancelCrossAgentRequestsForSource', () => {
 		expect(chunks).toHaveLength(1);
 		expect(chunks[0].canceled).toBe(true);
 	});
+});
+
+describe('consult envelopes in native history', () => {
+	const question = '@Worker Inspect the queue. Then inspect shutdown.';
+	const display = (content: string, type = 'user') =>
+		transcriptMessagesToLogEntries([
+			{ uuid: 'consult-user', type, content, timestamp: '2026-11-07T00:00:00Z' },
+		]);
+
+	it.each([false, true])('round trips a consult with write access %s', (writable) => {
+		for (const transcript of [[], [entry('user', 'Earlier context')]]) {
+			const content = buildCrossAgentPrompt(
+				request({ userPrompt: question, transcript, sourceCwd: '~/remote/project' }),
+				writable
+			);
+			expect(display(content)[0].text).toBe(question);
+			expect(display(content, 'assistant')[0].text).toBe(content);
+		}
+	});
+
+	it.each([false, true])('round trips a handoff with write access %s', (writable) => {
+		for (const sourceAgentName of [undefined, 'Source']) {
+			const content = buildCrossAgentPrompt(
+				request({
+					userPrompt: question,
+					sourceAgentName,
+					handoffAnswer: 'Internal result',
+					sourceCwd: '/project',
+					transcript: [entry('ai', 'Earlier context')],
+				}),
+				writable
+			);
+			expect(display(content)[0].text).toBe(question);
+		}
+	});
+
+	it('preserves envelope prose and markers quoted by the user', () => {
+		const inner = buildCrossAgentPrompt(request({ userPrompt: 'Quoted question' }));
+		for (const quoted of [
+			'Explain this:\n' + inner,
+			'```\n' + inner + '\n```',
+			'> ' + inner.replace(/\n/g, '\n> '),
+		]) {
+			expect(display(quoted)[0].text).toBe(quoted);
+			expect(display(buildCrossAgentPrompt(request({ userPrompt: quoted })))[0].text).toBe(quoted);
+		}
+	});
+
+	it('preserves incomplete envelopes and drops a complete empty question', () => {
+		const content = buildCrossAgentPrompt(request({ userPrompt: '' }));
+		const prefix = '**Question from the user (relayed via the source agent):**';
+		const incomplete = content.slice(0, content.indexOf('\n\n' + prefix));
+		expect(display(incomplete)[0].text).toBe(incomplete);
+		expect(display(content)).toEqual([]);
+	});
+
+	it.each(['claude-code', 'codex'] as const)(
+		'searches only the user question for %s',
+		(provider) => {
+			const content = buildCrossAgentPrompt(
+				request({ userPrompt: question, transcript: [entry('user', 'Hidden context')] })
+			);
+			const row =
+				provider === 'claude-code'
+					? { type: 'user', message: { content } }
+					: {
+							type: 'response_item',
+							payload: {
+								type: 'message',
+								role: 'user',
+								content: [{ type: 'input_text', text: content }],
+							},
+						};
+			expect(
+				parseNativeSearchMessages(JSON.stringify(row), provider).messages.map((m) => m.textContent)
+			).toEqual([question]);
+		}
+	);
+});
+
+describe('consult native display identity', () => {
+	it.each(['stop', 'failure', 'success'] as const)(
+		'announces identity before %s without granting early resume',
+		async (ending) => {
+			const { dispatch, processManager, chunks, emitData, emitExit } = harness();
+			await dispatch({ targetTabId: 'child' });
+			try {
+				processManager.emit('session-id', 'cross-agent-unrelated', 'wrong-id');
+				expect(chunks).toEqual([]);
+				processManager.emit('session-id', 'cross-agent-r1', 'native-child');
+				expect(chunks).toEqual([
+					expect.objectContaining({
+						targetNativeSessionId: 'native-child',
+						targetTabId: 'child',
+						done: false,
+						chunk: '',
+					}),
+				]);
+				expect(chunks[0].targetAgentSessionId).toBeUndefined();
+				emitData('answer');
+				if (ending === 'stop') cancelCrossAgentRequestsForSource('src');
+				else emitExit(ending === 'failure' ? 1 : 0);
+				expect(chunks.at(-1)).toMatchObject({ done: true, targetNativeSessionId: 'native-child' });
+				expect(chunks.at(-1)?.targetAgentSessionId).toBe(
+					ending === 'success' ? 'native-child' : undefined
+				);
+			} finally {
+				emitExit(1);
+			}
+		}
+	);
 });

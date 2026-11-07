@@ -278,6 +278,20 @@ describe('InputArea', () => {
 		mockUpdateSessionWith.mockClear();
 	});
 
+	it('keeps the unfocused split composer draft separate from the live composer', () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = createMockSession();
+		session.aiTabs[0].inputValue = 'Saved left draft';
+		const props = createDefaultProps({ session, inputValue: 'Live right draft' });
+		useComposerInputStore.setState({ aiValueTabId: 'another-tab' });
+		render(<InputArea {...props} composerTargetTabId={session.activeTabId} />);
+		expect(screen.getByRole('textbox')).toHaveValue('Saved left draft');
+		act(() =>
+			useComposerInputStore.getState().loadAiDraft(session.activeTabId, 'Live left draft', 'off')
+		);
+		expect(screen.getByRole('textbox')).toHaveValue('Live left draft');
+	});
+
 	describe('Basic Rendering', () => {
 		it('renders the input textarea', () => {
 			const props = createDefaultProps();
@@ -2001,7 +2015,7 @@ describe('InputArea', () => {
 			render(<InputArea {...props} />);
 
 			// Get the hidden file input
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 			expect(fileInput).toBeInTheDocument();
 			expect(fileInput).toHaveAttribute('type', 'file');
 			expect(fileInput).toHaveAttribute('accept', 'image/*');
@@ -2014,7 +2028,7 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 			const clickSpy = vi.spyOn(fileInput, 'click');
 
 			fireEvent.click(screen.getByTitle('Attach Image'));
@@ -2030,7 +2044,7 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 
 			// Create a mock file
 			const file = new File(['fake image content'], 'test.png', { type: 'image/png' });
@@ -2054,7 +2068,7 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 
 			// Create multiple mock files
 			const file1 = new File(['image1'], 'test1.png', { type: 'image/png' });
@@ -2079,7 +2093,7 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 			const file = new File(['content'], 'test.png', { type: 'image/png' });
 
 			await act(async () => {
@@ -2099,7 +2113,7 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 
 			// Trigger with empty/null files
 			await act(async () => {

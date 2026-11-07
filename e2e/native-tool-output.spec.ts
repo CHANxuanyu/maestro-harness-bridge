@@ -5,11 +5,8 @@ import { NativeApp } from './fixtures/native-app';
 import { nativeIdentity } from './fixtures/native-real';
 import { moveClaudeToolCallToChild } from './fixtures/native/tool-output';
 
-// Refuse real-provider mode before creating a fixture or reading any credentials.
-test.beforeAll(() => {
-	if (process.env.MAESTRO_E2E_REAL === '1')
-		throw new Error('Tool output acceptance uses synthetic history only');
-});
+// Skip before creating a fixture or reading any credentials.
+test.skip(process.env.MAESTRO_E2E_REAL === '1', 'tool output acceptance uses synthetic history');
 
 for (const scenario of [
 	{ provider: 'claude', mode: 'history' },
@@ -100,7 +97,7 @@ for (const scenario of [
 					permissionMode: 'readonly',
 					readOnly: true,
 				});
-				await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+				await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 				await native.cli(
 					'update-agent',
 					ownerId,

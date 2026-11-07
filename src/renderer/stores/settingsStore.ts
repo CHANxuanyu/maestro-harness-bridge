@@ -1,3 +1,4 @@
+import type { ProjectSettings } from '../../shared/projectSettings';
 /**
  * settingsStore - Zustand store for all persistent application settings
  *
@@ -15,6 +16,7 @@
  */
 
 import { create } from 'zustand';
+import { readNewShellSplit } from '../../shared/newShellSplit';
 import type { BrowserConfirmPolicy } from '../../shared/coworkingBrowser';
 import { isWindowsPlatform } from '../utils/platformUtils';
 import type {
@@ -426,6 +428,8 @@ export interface SettingsStoreState
 	starredSessionsCollapsed: boolean;
 	newShell: boolean;
 	codexAppServer: boolean;
+	projectSettings: Record<string, ProjectSettings>;
+	newShellSplit: import('../../shared/newShellSplit').NewShellSplit | null;
 	sidebarNavigationMode: 'conversations' | 'agents';
 	collapsedConversationProjects: string[];
 	tourCompleted: boolean;
@@ -814,6 +818,8 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		starredSessionsCollapsed: false,
 		newShell: false,
 		codexAppServer: false,
+		projectSettings: {},
+		newShellSplit: null,
 		sidebarNavigationMode: 'conversations',
 		collapsedConversationProjects: [],
 		tourCompleted: false,
@@ -2321,6 +2327,9 @@ export async function loadAllSettings(): Promise<void> {
 		if (allSettings['newShell'] !== undefined) patch.newShell = allSettings['newShell'] === true;
 		if (allSettings['codexAppServer'] !== undefined)
 			patch.codexAppServer = allSettings['codexAppServer'] === true;
+		if (allSettings['projectSettings'] && typeof allSettings['projectSettings'] === 'object')
+			patch.projectSettings = allSettings['projectSettings'] as Record<string, ProjectSettings>;
+		patch.newShellSplit = readNewShellSplit(allSettings['newShellSplit']);
 		if (allSettings['sidebarNavigationMode'] !== undefined)
 			patch.sidebarNavigationMode =
 				allSettings['sidebarNavigationMode'] === 'agents' ? 'agents' : 'conversations';

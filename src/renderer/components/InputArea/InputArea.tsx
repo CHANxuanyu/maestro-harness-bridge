@@ -1,5 +1,6 @@
 import { codexAppServerEnabled } from '../../../shared/codexAppServer';
 import { useT } from '../../i18n';
+import { useNativeCommands } from '../../hooks/input/useNativeCommands';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import {
@@ -40,6 +41,7 @@ import { SlashCommandPopover } from './overlays/SlashCommandPopover';
 import { TabCompletionPopover } from './overlays/TabCompletionPopover';
 import type { InputAreaProps } from './types';
 import { filterCommandHistory, getCurrentCommandHistory } from './utils/commandHistory';
+import { normalizeComposerCommandMode } from '../../utils/shellCommandInput';
 import { resolveCommandCwd } from '../../services/shellCommand';
 import { CommandModeBar } from './components/CommandModeBar';
 import { MentionRoutingBar } from './components/MentionRoutingBar';
@@ -199,7 +201,11 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 
 	// PERF: Memoize derived state to avoid recalculation on every render
 	const isResumingSession = !!activeTab?.agentSessionId;
-	const commandMode = useComposerInputStore(selectAiCommandMode);
+	const commandMode = useComposerInputStore((state) =>
+		props.composerTargetTabId && state.aiValueTabId !== props.composerTargetTabId
+			? normalizeComposerCommandMode(activeTab?.commandMode)
+			: selectAiCommandMode(state)
+	);
 	const canAttachImages = useMemo(() => {
 		// Neither command rung has anywhere to put an image: one pipes the draft to
 		// a shell, the other asks for a command line. Hide the affordance rather
@@ -234,14 +240,20 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 		};
 	}, [tabReadOnlyMode, isAutoModeActive, session.inputMode]);
 
+	const nativeCommands = useNativeCommands(session, slashCommandOpen, false);
+
 	// Filter slash commands based on input and current mode
 	const isTerminalMode = session.inputMode === 'terminal';
 
 	// Live composer text. This is the SOLE subscriber to the draft store: a
 	// keystroke re-renders only this (memoized) leaf, not App. See
 	// useComposerInputStore / CLAUDE-PERFORMANCE.md.
-	const inputValue = useComposerInputStore(
-		isTerminalMode ? selectTerminalComposerValue : selectAiComposerValue
+	const inputValue = useComposerInputStore((state) =>
+		isTerminalMode
+			? selectTerminalComposerValue(state)
+			: props.composerTargetTabId && state.aiValueTabId !== props.composerTargetTabId
+				? (activeTab?.inputValue ?? '')
+				: selectAiComposerValue(state)
 	);
 
 	// Command mode: the AI composer is holding a shell command line, so it picks
@@ -626,6 +638,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 			/>
 
 			<SlashCommandPopover
+				warning={nativeCommands.supported ? nativeCommands.warning : undefined}
 				isOpen={slashCommandOpen}
 				commands={filteredSlashCommands}
 				inputValueLower={inputValueLower}

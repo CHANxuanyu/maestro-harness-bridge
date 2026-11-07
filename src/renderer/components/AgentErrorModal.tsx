@@ -1,3 +1,4 @@
+import { getErrorTitleForType } from '../hooks/agent/internal/helpers/errorTitles';
 import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
  * AgentErrorModal - Displays agent errors with recovery options
@@ -155,8 +156,9 @@ export function AgentErrorModal({
 
 	const errorColor = getErrorColor(error, theme);
 	const errorIcon = getErrorIcon(error.type);
-	const errorTitle =
-		error.type === 'session_busy'
+	const errorTitle = newShell
+		? getErrorTitleForType(error.type, t)
+		: error.type === 'session_busy'
 			? t('workflows.sessions.sessionInUse')
 			: getErrorTitle(error.type);
 
@@ -238,7 +240,11 @@ export function AgentErrorModal({
 								<ChevronRight className="w-3 h-3" />
 							)}
 							<Code2 className="w-3 h-3" />
-							<span>Error Details (JSON)</span>
+							<span>
+								{newShell
+									? t('workflows.newShellCopy.feedback.error.details')
+									: 'Error Details (JSON)'}
+							</span>
 						</button>
 						{showJsonDetails && (
 							<div className="px-2 pb-2">
@@ -305,7 +311,7 @@ export function AgentErrorModal({
 						className="w-full text-center text-sm py-2 rounded hover:bg-white/5 transition-colors"
 						style={{ color: theme.colors.textDim }}
 					>
-						Dismiss
+						{newShell ? t('workflows.newShellCopy.feedback.dismiss') : 'Dismiss'}
 					</button>
 				</div>
 			)}

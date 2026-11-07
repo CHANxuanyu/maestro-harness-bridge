@@ -17,6 +17,11 @@ export interface DesktopTabEntry {
 	toolOutputSources?: import('./nativeToolOutput').NativeToolOutputTarget[];
 	newShellPanel?: import('./newShellPanel').NewShellPanelState;
 	origin?: import('./aiHandoff').ConversationOrigin;
+	consultOrigin?: Pick<import('./aiHandoff').ConversationOrigin, 'sourceSessionId' | 'sourceTabId'>;
+	/** Product marker, including presets such as DeepSeek. */
+	provider?: string;
+	hidden?: boolean;
+	error?: boolean;
 	tabId: string;
 	sessionId: string;
 	/** Maestro agent (Left Bar entity) ID this tab belongs to. */

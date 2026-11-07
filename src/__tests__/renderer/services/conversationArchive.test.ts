@@ -105,3 +105,58 @@ it('refuses an unavailable owner window', () => {
 		})
 	).toEqual({ error: 'conversation-owner-unavailable' });
 });
+
+it.each(['open', 'orphan', 'grandchild'] as const)(
+	'refuses to archive a parent with a running %s descendant',
+	(kind) => {
+		const parent = createMockAITab({ id: 'parent', agentSessionId: 'parent-native' });
+		const child = createMockAITab({
+			id: 'child',
+			agentSessionId: 'child-native',
+			state: kind === 'grandchild' ? 'idle' : 'busy',
+			origin: {
+				kind: 'subtask',
+				sourceSessionId: 'parent-owner',
+				sourceTabId: 'parent',
+				sourceNativeSessionId: 'parent-native',
+				sourceProvider: 'claude-code',
+				createdAt: 1,
+			},
+		});
+		const grandchild = createMockAITab({
+			id: 'grandchild',
+			state: 'busy',
+			origin: {
+				kind: 'subtask',
+				sourceSessionId: 'child-owner',
+				sourceTabId: 'child',
+				sourceNativeSessionId: 'child-native',
+				sourceProvider: 'claude-code',
+				createdAt: 1,
+			},
+		});
+		useSessionStore.setState({
+			sessions: [
+				createMockSession({ id: 'parent-owner', aiTabs: [parent] }),
+				createMockSession({
+					id: 'child-owner',
+					aiTabs: kind === 'orphan' ? [] : [child],
+					orphanedThinkingTabs: kind === 'orphan' ? [child] : [],
+				}),
+				createMockSession({
+					id: 'grandchild-owner',
+					aiTabs: kind === 'grandchild' ? [grandchild] : [],
+				}),
+			],
+		});
+		expect(
+			conversationLifecycle({
+				ownerIds: ['parent-owner'],
+				nativeSessionId: 'parent-native',
+				phase: 'close',
+				action: 'archive',
+			})
+		).toEqual({ error: 'conversation-running' });
+		expect(useSessionStore.getState().sessions[0].aiTabs).toEqual([parent]);
+	}
+);

@@ -392,33 +392,63 @@ interface ConversationRowProps {
 	theme: Theme;
 	conversation: SidebarConversation;
 	depth: number;
-	active: boolean;
-	menuOpen: boolean;
-	pending: boolean;
-	failed: boolean;
+	activeKey: string | null;
+	openMenuState: MenuState | null;
+	pendingKeys: Record<string, true>;
+	failedKeys: Record<string, true>;
+	newShell: boolean;
+	searching: boolean;
 	t: TFunction;
 	formatRelative: (value: number) => string;
 	onSelect: (conversation: SidebarConversation) => void;
 	openMenu: OpenMenu;
 }
 
+/** A descendant can own the current selection, work in progress, or a row menu. */
+function findConversation(
+	rows: SidebarConversation[],
+	predicate: (row: SidebarConversation) => boolean
+): SidebarConversation | undefined {
+	for (const row of rows) {
+		if (predicate(row)) return row;
+		const child = row.children && findConversation(row.children, predicate);
+		if (child) return child;
+	}
+	return undefined;
+}
+
 const ConversationRow = memo(function ConversationRow({
 	theme,
 	conversation,
 	depth,
-	active,
-	menuOpen,
-	pending,
-	failed,
+	activeKey,
+	openMenuState,
+	pendingKeys,
+	failedKeys,
+	newShell,
+	searching,
 	t,
 	formatRelative,
 	onSelect,
 	openMenu,
 }: ConversationRowProps) {
+	const childrenId = useId();
+	const [childrenExpanded, setChildrenExpanded] = useState(false);
+	const [autoExpansionDismissed, setAutoExpansionDismissed] = useState(false);
+	const children = newShell ? conversation.children : undefined;
+	const active = conversation.key === activeKey;
+	const menuOpen = openMenuState?.kind === 'row' && openMenuState.key === conversation.key;
+	const pending = !!pendingKeys[conversation.key];
+	const failed = !!failedKeys[conversation.key];
+	const hasChildren = !!children?.length;
+	const forceExpanded =
+		!!children &&
+		(searching || !!findConversation(children, (child) => child.busy || child.key === activeKey));
+	useEffect(() => setAutoExpansionDismissed(false), [forceExpanded]);
+	const expanded = childrenExpanded || (forceExpanded && !autoExpansionDismissed);
 	const title = conversationTitle(conversation, t);
 	const worktree = conversation.history?.worktree;
 	const isOpen = conversation.kind === 'open';
-	const newShell = useSettingsStore(selectNewShellEnabled);
 	const hasMenu = isOpen || (newShell && !!conversation.nativeSessionId);
 	const indent = 4 + depth * DEPTH_INDENT + 16;
 
@@ -438,6 +468,32 @@ const ConversationRow = memo(function ConversationRow({
 			data-native-session-id={conversation.nativeSessionId ?? undefined}
 		>
 			<div className="group relative flex items-center">
+				{hasChildren && (
+					<button
+						type="button"
+						data-tree-nav=""
+						aria-label={t(
+							expanded
+								? 'workflows.conversations.collapseChildren'
+								: 'workflows.conversations.expandChildren',
+							{ title }
+						)}
+						aria-expanded={expanded}
+						aria-controls={childrenId}
+						onClick={() => {
+							setChildrenExpanded(!expanded);
+							setAutoExpansionDismissed(expanded);
+						}}
+						className="absolute rounded p-0.5 outline-none focus-visible:ring-1 hover:bg-white/10"
+						style={{ left: indent - 18, color: theme.colors.textDim }}
+					>
+						{expanded ? (
+							<ChevronDown aria-hidden className="w-3.5 h-3.5" />
+						) : (
+							<ChevronRight aria-hidden className="w-3.5 h-3.5" />
+						)}
+					</button>
+				)}
 				<button
 					type="button"
 					data-tree-nav=""
@@ -569,6 +625,28 @@ const ConversationRow = memo(function ConversationRow({
 						{t('workflows.conversations.retry')}
 					</button>
 				</div>
+			)}
+			{hasChildren && expanded && (
+				<ul id={childrenId} className="flex flex-col">
+					{children!.map((child) => (
+						<ConversationRow
+							key={child.key}
+							theme={theme}
+							conversation={child}
+							depth={depth + 1}
+							activeKey={activeKey}
+							openMenuState={openMenuState}
+							pendingKeys={pendingKeys}
+							failedKeys={failedKeys}
+							newShell={newShell}
+							searching={searching}
+							t={t}
+							formatRelative={formatRelative}
+							onSelect={onSelect}
+							openMenu={openMenu}
+						/>
+					))}
+				</ul>
 			)}
 		</li>
 	);
@@ -790,10 +868,12 @@ const ProjectSection = memo(function ProjectSection({
 							theme={theme}
 							conversation={conversation}
 							depth={project.depth}
-							active={conversation.key === activeKey}
-							menuOpen={openMenuState?.kind === 'row' && openMenuState.key === conversation.key}
-							pending={!!pendingKeys[conversation.key]}
-							failed={!!failedKeys[conversation.key]}
+							activeKey={activeKey}
+							openMenuState={openMenuState}
+							pendingKeys={pendingKeys}
+							failedKeys={failedKeys}
+							newShell={newShell}
+							searching={searching}
 							t={t}
 							formatRelative={formatRelative}
 							onSelect={onSelectConversation}
@@ -1028,7 +1108,10 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	let menuSections: TreeMenuSection[] | null = null;
 	if (menu) {
 		if (menu.kind === 'row') {
-			const conversation = projects.flatMap((p) => p.conversations).find((c) => c.key === menu.key);
+			const conversation = findConversation(
+				projects.flatMap((p) => p.conversations),
+				(row) => row.key === menu.key
+			);
 			// Open tabs keep their existing tab actions.
 			if (conversation && conversation.kind === 'open') {
 				menuLabel = t('workflows.conversations.more');

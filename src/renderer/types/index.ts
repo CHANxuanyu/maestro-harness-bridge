@@ -905,6 +905,8 @@ export interface AITab {
 		sourceSessionId: string;
 		/** The AI tab within the calling agent the mention was typed in. */
 		sourceTabId: string;
+		/** Native records claimed by this consult, including stopped attempts. Never used to resume. */
+		nativeSessionIds?: string[];
 	};
 	/**
 	 * When true, the tab exists as a data container but is NOT surfaced in the tab

@@ -35,6 +35,7 @@ import { logger } from '../../utils/logger';
 import {
 	startCrossAgentRequest,
 	cancelCrossAgentRequestsForSource,
+	cancelCrossAgentRequestsForConversation,
 	type CrossAgentTargetSession,
 } from '../../cross-agent/cross-agent-router';
 
@@ -70,9 +71,14 @@ export interface CrossAgentHandlerDependencies {
  * (`crossAgentHandoffsWritable`, default on). Exported for unit testing.
  */
 export function resolveCrossAgentWritable(
-	request: Pick<CrossAgentRequest, 'handoffAnswer'>,
+	request: Pick<CrossAgentRequest, 'handoffAnswer' | 'permissionMode'>,
 	settingsStore: Pick<SettingsStoreInterface, 'get'>
 ): boolean {
+	if (
+		settingsStore.get('newShell', false) &&
+		(!request.permissionMode || request.permissionMode === 'readonly')
+	)
+		return false;
 	if (request.handoffAnswer !== undefined) {
 		return settingsStore.get('crossAgentHandoffsWritable', true) as boolean;
 	}
@@ -139,6 +145,9 @@ export function registerCrossAgentHandlers(deps: CrossAgentHandlerDependencies):
 				const requestId = generateUUID();
 				const request: CrossAgentRequest = {
 					requestId,
+					permissionMode: settingsStore.get('newShell', false)
+						? (payload.permissionMode ?? 'readonly')
+						: undefined,
 					sourceSessionId: payload.sourceSessionId,
 					sourceAgentName: payload.sourceAgentName,
 					sourceTabId: payload.sourceTabId,
@@ -217,10 +226,13 @@ export function registerCrossAgentHandlers(deps: CrossAgentHandlerDependencies):
 				// not just the tab process. Addressed by source agent (never by request
 				// id) because the renderer only learns a request id once `send` resolves,
 				// and a Stop pressed before that would otherwise miss a live consult.
-				const canceled = cancelCrossAgentRequestsForSource(
-					payload.sourceSessionId,
-					payload.sourceTabId
-				);
+				const canceled =
+					settingsStore.get('newShell', false) && payload.sourceTabId
+						? await cancelCrossAgentRequestsForConversation(
+								payload.sourceSessionId,
+								payload.sourceTabId
+							)
+						: cancelCrossAgentRequestsForSource(payload.sourceSessionId, payload.sourceTabId);
 				if (canceled > 0) {
 					logger.info(`${LOG_CONTEXT} Stopped in-flight consults`, LOG_CONTEXT, {
 						sourceSessionId: payload.sourceSessionId,

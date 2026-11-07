@@ -246,6 +246,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const projects = useMemo(
 		() =>
 			buildProjectSessionTree({
+				newShell,
 				archives,
 				sessions,
 				groups,
@@ -259,6 +260,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 				rowLimits,
 			}),
 		[
+			newShell,
 			archives,
 			sessions,
 			groups,

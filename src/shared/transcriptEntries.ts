@@ -1,3 +1,4 @@
+import { stripCrossAgentPrompt } from './crossAgentPrompt';
 import { stripTurnPrompt } from './turnPrompt';
 import { stripEmbeddedSystemPrompt } from './embeddedSystemPrompt';
 import { compactToolOutput } from './toolOutput';
@@ -283,7 +284,9 @@ export function transcriptMessagesToLogEntries(
 		attachResults(results);
 
 		if (msg.type === 'user') {
-			const text = stripTurnPrompt(stripEmbeddedSystemPrompt(msg.content ?? ''));
+			const text = stripCrossAgentPrompt(
+				stripTurnPrompt(stripEmbeddedSystemPrompt(msg.content ?? ''))
+			);
 			if (!images && (isInternalDesktopEnvelope(text) || !text.trim())) continue;
 			entries.push({
 				id: messageId,

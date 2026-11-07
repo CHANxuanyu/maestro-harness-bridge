@@ -2403,10 +2403,11 @@ export function setActiveTab(session: Session, tabId: string): SetActiveTabResul
 	}
 
 	if (useSettingsStore.getState().newShell) {
+		session = revealAiTab(session, tabId);
 		session = {
 			...session,
 			aiTabs: session.aiTabs.map((tab) =>
-				tab.id === tabId ? { ...tab, lastSelectedAt: Date.now() } : tab
+				tab.id === tabId ? { ...tab, lastSelectedAt: Date.now(), hasUnread: false } : tab
 			),
 		};
 	}

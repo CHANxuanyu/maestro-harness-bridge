@@ -831,6 +831,92 @@ hook failures return their original diagnostics, with no automatic retry.
 The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
+## New shell conversation children (2026-11-07)
+
+| UI action                                               | CLI                                                                 | Shared implementation                                                                                    |
+| ------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Inspect a parent's child conversations and their status | `tab children <tab-id> [--agent <id>] [--json]`                     | `findConversationParent()` in `shared/conversationChildren.ts`; open tab inventory                       |
+| Select a child conversation                             | `tab select <tab-id> [--json]` or `focus-agent <agent> --tab <tab>` | `select_tab` / remote selection and `setActiveTab()`; new shell reveals the hidden tab and clears unread |
+| Ask another conversation to do work                     | `ask <target> <question>` or `dispatch <source> "@Target ..."`      | Existing mention planner and `sendCrossAgentRequest()`                                                   |
+| Delegate into a new child                               | `dispatch <target> <prompt> --new-tab` from a stamped caller        | Existing accepted-dispatch notice and `recordAgentDelegation()`                                          |
+| Add a reply while a child works                         | `dispatch <child-owner> <prompt> --tab <child-tab> --queue`         | Existing execution queue; consult completion releases the child's tab barrier                            |
+| Continue an idle child                                  | `send <prompt> --tab <child-tab>`                                   | Existing composer send and captured native session ID                                                    |
+| Rename, star or close a child                           | `tab rename`, `tab star`, `tab close`                               | Existing tab actions, also used by nested row menus                                                      |
+
+Origins are created only under `newShell`. A source native ID arriving later is
+filled once by `captureConversationSourceNativeId()`, shared by normal provider
+events and consult completions. The tree checks account and SSH identity with
+`matchRecordForTab()` before offering a history parent. No remote path is resolved
+locally. `tab children` returns direct children including hidden consults, product
+provider markers, busy/error state and origin metadata. The tab inventory and
+origin metadata still wait for persistence. Running consults and their terminal
+errors come from the main-process consult registry; persisted error logs retain
+the failure after restart. Normal managed processes take precedence when the
+child is continued.
+
+Background consults still have no tab chip and raise no unread. Selecting one is
+an explicit reveal. A busy consult tab is not reused for another simultaneous
+consult in the new shell. Completion and failure settle existing subtask state
+even if the user switched back to the classic shell meanwhile. These children
+keep the full consult detail instead of spawning a second summary writer.
+
+Plain dispatch into an existing conversation keeps that conversation's current
+origin. A command without caller identity creates no guessed parent. The new CLI
+help strings share the English and Chinese catalogs and follow the process
+locale. The classic CLI inventory now suppresses stale unread on hidden tabs and
+adds optional provider/hidden/error/consult-origin fields; desktop classic
+navigation and ordinary consults retain their previous behavior.
+
+Consult creation and reuse intersect the source permission, the target project's
+default, and the existing child's restriction through the canonical permission
+functions. Execution carries that ceiling; the global write switch can only
+tighten it. A closed running child saves its reply and native identity into the
+retained tab, and remains in the orphan collection while queued work exists.
+
+Archive and unarchive use the existing `tab archive <tab-id>` and
+`native-history archive|unarchive <owner> <native-id>` routes. The shared
+`conversationBranch()` check refuses archive while a descendant is running or
+queued. The tree resolves archived parents before filtering, so completed
+children stay hidden with their parent and return on unarchive. A child can be
+archived independently.
+
+New shell Stop addresses both outgoing consults and the incoming consult on the
+selected child. The main registry waits for process exit before acknowledging
+cancellation. Stopping a child leaves its siblings, including closed siblings,
+running. This uses the desktop interrupt service; the existing CLI Stop gap below
+remains open. No new CLI verb was added in this review correction.
+
+咨询历史展示修复（2026-11-07，U3 第三轮）没有新增界面动作或 CLI 动词。
+`ask`、带 @提及的 `dispatch` 和界面派发继续使用 `sendCrossAgentRequest()` 与同一路由。
+原生 ID 到达时立即通过 `targetNativeSessionId` 通知显示认领，存入
+`consultOrigin.nativeSessionIds`；`targetAgentSessionId` 仍只表示成功后的续聊资格。
+停止或失败也清除旧续聊资格，防止复用被中断的咨询。显示认领仅在 `newShell` 的树中生效。
+
+`tab close` 和原生历史打开沿用原入口；`native-history list`、`native-history search`
+与界面读取同一份清理后的标题和搜索正文。生产信封及 `stripCrossAgentPrompt()`
+位于 `shared/crossAgentPrompt.ts`，兼容旧记录，不改写原生文件。
+没有新增 CLI 对等缺口，下列停止、折叠和历史打开的既有缺口仍保留。
+
+## Open gaps
+
+**Subtask disclosure and archived sources (2026-11-07).** The disclosure button
+keeps local React state. `tab children` reads the same parent relation but does
+not expand or collapse the desktop tree. It resolves an open parent tab; after
+closing the source, reopen its native history row and pass the new tab ID.
+The existing native-history open gap below still applies. A pre-feature consult
+without a captured source native ID can only attach while its original source
+tab is open.
+
+**Cross-window CLI child provenance, U3 review item 6 (2026-11-07).** Confirmed
+and deferred under the review's small-change limit. The accepted-dispatch notice
+routes to the caller window, where `recordAgentDelegation()` patches the target
+tab. A missing target snapshot drops the patch, and persistence excludes targets
+owned by another window. Fixing this needs source identity in the new-tab request,
+target-owner storage and acknowledgment, across the dispatch handler, callback,
+preload and renderer request path. This review does not claim cross-window
+attachment or restart recovery. The source must be transferred before the target
+acknowledges creation; broadcasting the existing caller notice is insufficient.
+
 ## New shell changes by turn (2026-11-06)
 
 | UI action                                      | CLI action                                                                                                        | Shared implementation                                                                                  |

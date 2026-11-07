@@ -104,7 +104,8 @@ async function collectInterruptTargets(
 	session: Session,
 	primaryTargetId: string,
 	includeAiTabs: boolean,
-	onlyTabId?: string
+	onlyTabId?: string,
+	includeOrphans = true
 ): Promise<string[]> {
 	const targets = [primaryTargetId];
 	if (!includeAiTabs) return targets;
@@ -113,7 +114,7 @@ async function collectInterruptTargets(
 		if (
 			onlyTabId &&
 			tab.id !== onlyTabId &&
-			!session.orphanedThinkingTabs?.some((orphan) => orphan.id === tab.id)
+			!(includeOrphans && session.orphanedThinkingTabs?.some((orphan) => orphan.id === tab.id))
 		)
 			continue;
 		const tabTargetId = `${session.id}-ai-${tab.id}`;
@@ -145,26 +146,36 @@ async function interruptConversation(
 	tabId: string,
 	deps: UseInterruptHandlerDeps
 ): Promise<void> {
-	if (!session.aiTabs.some((tab) => tab.id === tabId)) return;
+	const target = session.aiTabs.find((tab) => tab.id === tabId);
+	if (!target) return;
+	const includeOrphans = target.origin?.kind !== 'subtask';
 	const stoppedTabs = new Set([
 		tabId,
-		...(session.orphanedThinkingTabs ?? [])
+		...(includeOrphans ? (session.orphanedThinkingTabs ?? []) : [])
 			.filter((tab) => tab.state === 'busy')
 			.map((tab) => tab.id),
 	]);
 	for (const id of stoppedTabs) {
 		dropMentionHandoffs(session.id, id);
 		// Side-effect cancellation is tab-scoped even while main is still spawning a consult.
-		await Promise.allSettled([
+		const cancellations = await Promise.allSettled([
 			deps.cancelPendingSynopsis(session.id, id),
 			window.maestro.crossAgent.cancel(session.id, id),
 		]);
+		if (cancellations[1].status === 'rejected') {
+			notifyCenterFlash({
+				color: 'yellow',
+				message: getT()('workflows.shell.stopConversationFailed'),
+			});
+			return;
+		}
 	}
 	const processIds = await collectInterruptTargets(
 		session,
 		`${session.id}-ai-${tabId}`,
 		true,
-		tabId
+		tabId,
+		includeOrphans
 	);
 	const results = await Promise.allSettled(
 		processIds.map((id) => window.maestro.process.interrupt(id))

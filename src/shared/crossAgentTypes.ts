@@ -79,6 +79,8 @@ export interface CrossAgentTranscriptEntry {
  * so the target agent can answer with context.
  */
 export interface CrossAgentRequest {
+	/** Saved child permission ceiling, resolved by the owning renderer. */
+	permissionMode?: ReturnType<typeof import('./agentMetadata').resolveTabPermissionMode>;
 	/** Correlates the dispatch with its streamed response chunks. */
 	requestId: string;
 	/** The agent (session) the user typed the mention in. */
@@ -171,6 +173,8 @@ export interface CrossAgentResponseChunk {
 	 * report one.
 	 */
 	targetAgentSessionId?: string;
+	/** Native display ownership, reported immediately, including failed or stopped runs. Never a resume grant. */
+	targetNativeSessionId?: string;
 	/** The response text for this chunk (may be the whole response). */
 	chunk: string;
 	/** True once the target agent has finished (or errored). */

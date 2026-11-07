@@ -34,6 +34,8 @@ import {
 	tabEffort,
 	tabEnterToSend,
 	tabShow,
+	tabChildren,
+	tabSelect,
 	tabCommands,
 } from '../../../cli/commands/tab';
 import { withMaestroClient } from '../../../cli/services/maestro-client';
@@ -129,6 +131,59 @@ describe('tab commands', () => {
 		processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
 			throw new Error('__exit__');
 		});
+	});
+
+	it('lists hidden child conversations through the same scoped parent identity', async () => {
+		const source = entry('reopened', 'source', { agentSessionId: 'native', toolType: 'codex' });
+		const childOrigin = {
+			kind: 'subtask',
+			sourceSessionId: 'source',
+			sourceTabId: 'closed',
+			sourceProvider: 'codex',
+			sourceNativeSessionId: 'native',
+			createdAt: 1,
+		};
+		const child = entry('hidden-child', 'worker', {
+			origin: childOrigin,
+			hidden: true,
+			name: 'Check the first case.',
+			state: 'busy',
+		});
+		const unrelated = entry('unrelated', 'worker', {
+			origin: { ...childOrigin, sourceSessionId: 'another-account' },
+		});
+		vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+			action({
+				sendCommand: vi.fn().mockResolvedValue({ sessions: [source, child, unrelated] }),
+			} as never)
+		);
+		await tabChildren('reopened', { json: true });
+		expect(JSON.parse(consoleSpy.mock.calls[0][0])).toEqual({
+			success: true,
+			tabId: 'reopened',
+			agentId: 'source',
+			children: [child],
+		});
+	});
+
+	it('selects a child through the existing tab navigation transport', async () => {
+		const payload = mockTab({ success: true });
+		await tabSelect('tab-bbbb', { json: true });
+		expect(payload()).toEqual({ type: 'select_tab', sessionId: 'agent-2', tabId: 'tab-bbbb' });
+	});
+
+	it('lists an older consult with a live source without inventing a native identity', async () => {
+		const source = entry('source-tab', 'source');
+		const child = entry('old-consult', 'worker', {
+			origin: undefined,
+			consultOrigin: { sourceSessionId: 'source', sourceTabId: 'source-tab' },
+			hidden: true,
+		});
+		vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+			action({ sendCommand: vi.fn().mockResolvedValue({ sessions: [source, child] }) } as never)
+		);
+		await tabChildren('source-tab', { json: true });
+		expect(JSON.parse(consoleSpy.mock.calls[0][0]).children).toEqual([child]);
 	});
 
 	it('compacts the named tab in the background through summarize_context', async () => {

@@ -1,4 +1,6 @@
 export const workflowsShell = {
+	'workflows.shell.consultPermissionUnavailable':
+		'This tool cannot preserve the source conversation’s permissions.',
 	'workflows.projectSettings.errors.requestFailed': 'Project settings request failed',
 	'workflows.projectSettings.errors.useService':
 		'Use project settings set to change project settings',
@@ -315,6 +317,11 @@ export const workflowsShell = {
 	'workflows.conversations.worktreeGone':
 		'This worktree no longer exists, so the conversation is read-only',
 	'workflows.conversations.showMore': 'Show {count} more',
+	'workflows.conversations.expandChildren': 'Show subtasks: {title}',
+	'workflows.conversations.collapseChildren': 'Hide subtasks: {title}',
+	'workflows.conversations.childrenCommand':
+		'List direct child conversations, including hidden subtasks',
+	'workflows.conversations.selectCommand': 'Select a conversation in the desktop',
 	'workflows.conversations.loadingHistory': 'Loading conversation history...',
 	'workflows.conversations.refreshingHistory': 'Refreshing conversation history',
 	'workflows.conversations.historyLoadFailed': "Couldn't load conversation history",

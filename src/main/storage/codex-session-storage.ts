@@ -1,3 +1,5 @@
+import { stripCrossAgentPrompt } from '../../shared/crossAgentPrompt';
+import { deriveConsultSubject } from '../../shared/crossAgentContext';
 import { parseNativeSearchMessages } from '../../shared/sessionSearch';
 /**
  * Codex CLI Session Storage Implementation
@@ -105,7 +107,8 @@ function getCodexSessionsDir(accountDir?: string): string {
 // One clean slate here retires the ones that predate the scoped prune.
 // Version 6 includes native source attribution and the first user request.
 // Version 7 excludes native desktop control envelopes from conversation previews.
-const CODEX_SESSION_CACHE_VERSION = 8;
+// Version 9 decodes consult envelopes before deriving titles and previews.
+const CODEX_SESSION_CACHE_VERSION = 9;
 const CODEX_SESSION_CACHE_FILENAME = 'codex-sessions-cache.json';
 
 /**
@@ -262,6 +265,7 @@ async function parseSessionFile(
 		// Count messages and find first assistant response (preferred) or user message (fallback)
 		let firstAssistantMessage = '';
 		let firstUserMessage = '';
+		let consultTitle: string | undefined;
 		let userMessageCount = 0;
 		let assistantMessageCount = 0;
 		const tokenCounts = new CodexTokenCounts();
@@ -303,7 +307,9 @@ async function parseSessionFile(
 							const text = extractTextFromContent(entry.content);
 							// Capture first user message as fallback preview (skip system context)
 							if (!firstUserMessage && text.trim() && !isSystemContextMessage(text)) {
-								firstUserMessage = text;
+								firstUserMessage = stripCrossAgentPrompt(text);
+								if (firstUserMessage !== text)
+									consultTitle = deriveConsultSubject(firstUserMessage, 80, true);
 							}
 							// Fallback: extract cwd from message content if not in session_meta
 							if (!sessionProjectPath) {
@@ -334,7 +340,9 @@ async function parseSessionFile(
 							const text = extractTextFromContent(entry.payload.content);
 							// Capture first user message as fallback preview (skip system context)
 							if (!firstUserMessage && text.trim() && !isSystemContextMessage(text)) {
-								firstUserMessage = text;
+								firstUserMessage = stripCrossAgentPrompt(text);
+								if (firstUserMessage !== text)
+									consultTitle = deriveConsultSubject(firstUserMessage, 80, true);
 							}
 							// Fallback: extract cwd from message content if not in session_meta
 							if (!sessionProjectPath) {
@@ -409,6 +417,7 @@ async function parseSessionFile(
 
 		return {
 			sessionId: metadataSessionId,
+			sessionName: consultTitle,
 			origin:
 				typeof metadata?.payload?.source === 'object' && metadata.payload.source?.subagent
 					? 'auto'
@@ -1091,6 +1100,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			// Count messages and find first assistant response (preferred) or user message (fallback)
 			let firstAssistantMessage = '';
 			let firstUserMessage = '';
+			let consultTitle: string | undefined;
 			let userMessageCount = 0;
 			let assistantMessageCount = 0;
 			const tokenCounts = new CodexTokenCounts();
@@ -1118,7 +1128,9 @@ export class CodexSessionStorage extends BaseSessionStorage {
 							if (entry.content) {
 								const text = extractTextFromContent(entry.content);
 								if (!firstUserMessage && text.trim() && !isSystemContextMessage(text)) {
-									firstUserMessage = text;
+									firstUserMessage = stripCrossAgentPrompt(text);
+									if (firstUserMessage !== text)
+										consultTitle = deriveConsultSubject(firstUserMessage, 80, true);
 								}
 								if (!sessionProjectPath) {
 									const cwd = extractCwdFromText(text);
@@ -1145,7 +1157,9 @@ export class CodexSessionStorage extends BaseSessionStorage {
 							if (entry.payload.content) {
 								const text = extractTextFromContent(entry.payload.content);
 								if (!firstUserMessage && text.trim() && !isSystemContextMessage(text)) {
-									firstUserMessage = text;
+									firstUserMessage = stripCrossAgentPrompt(text);
+									if (firstUserMessage !== text)
+										consultTitle = deriveConsultSubject(firstUserMessage, 80, true);
 								}
 								if (!sessionProjectPath) {
 									const cwd = extractCwdFromText(text);
@@ -1207,6 +1221,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 
 			return {
 				sessionId: metadataSessionId,
+				sessionName: consultTitle,
 				origin:
 					typeof metadata?.payload?.source === 'object' && metadata.payload.source?.subagent
 						? 'auto'

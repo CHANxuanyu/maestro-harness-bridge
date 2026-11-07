@@ -4,6 +4,7 @@ import { invokeNativeHistory } from '../services/agent-sessions';
 import type { NativeCommandSnapshot } from '../../shared/nativeCommands';
 import { NEW_SHELL_PANEL_ACTIONS, type NewShellPanelAction } from '../../shared/newShellPanel';
 import { isHandoffProvider } from '../../shared/aiHandoff';
+import { findConversationParent } from '../../shared/conversationChildren';
 // Tab commands - manage an agent's AI tabs in the running desktop app: open a
 // new tab (optionally seeded with a prompt), close, rename, star/unstar, and
 // move. These mirror the tab bar and AI tab overlay menu via the new_tab,
@@ -189,6 +190,55 @@ export async function tabClose(tabId: string, options: TabMutateOptions): Promis
 		responseType: 'close_tab_result',
 		successMessage: `Closed tab ${owner.tabId}`,
 	}));
+}
+
+export async function tabSelect(tabId: string, options: TabMutateOptions): Promise<void> {
+	await tabAction(tabId, options, (owner) => ({
+		type: 'select_tab',
+		responseType: 'select_tab_result',
+		successMessage: owner.tabId,
+	}));
+}
+
+/** Direct children use the same source identity rule as the project tree. */
+export async function tabChildren(tabId: string, options: TabMutateOptions): Promise<void> {
+	try {
+		const source = await resolveTabEntry(tabId, options.agent);
+		const tabs = await listDesktopTabs();
+		const candidates = tabs.map((tab) => ({
+			key: `${tab.agentId}:${tab.tabId}`,
+			ownerId: tab.agentId,
+			tabId: tab.tabId,
+			provider: tab.provider ?? tab.toolType,
+			nativeSessionId: tab.agentSessionId,
+		}));
+		const key = `${source.agentId}:${source.tabId}`;
+		const children = tabs.filter(
+			(tab) =>
+				findConversationParent(
+					tab.origin ?? tab.consultOrigin,
+					candidates.filter((candidate) => candidate.key !== `${tab.agentId}:${tab.tabId}`)
+				)?.key === key
+		);
+		if (options.json) {
+			console.log(
+				JSON.stringify({ success: true, tabId: source.tabId, agentId: source.agentId, children })
+			);
+		} else {
+			for (const child of children) {
+				console.log(
+					[
+						child.tabId,
+						child.provider ?? child.toolType,
+						child.error ? 'error' : child.state,
+						child.name ?? '',
+					].join('\t')
+				);
+			}
+		}
+	} catch (error) {
+		failCommand(error instanceof Error ? error.message : String(error), options.json);
+	}
 }
 
 export async function tabRename(

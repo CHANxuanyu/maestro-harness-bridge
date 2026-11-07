@@ -1362,6 +1362,24 @@ Show one tab's settings (model, effort, thinking, access, history)
 | `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
 | `--json`           | Output as JSON (for scripting)                 | -       |
 
+## `maestro-cli tab children <tab-id>`
+
+List direct child conversations, including hidden subtasks
+
+| Option             | Description                                    | Default |
+| ------------------ | ---------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
+| `--json`           | Output as JSON (for scripting)                 | -       |
+
+## `maestro-cli tab select <tab-id>`
+
+Select a conversation in the desktop
+
+| Option             | Description                                    | Default |
+| ------------------ | ---------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
+| `--json`           | Output as JSON (for scripting)                 | -       |
+
 ## `maestro-cli tab thinking <tab-id> <mode>`
 
 Set the thinking display: off, on, sticky, or cycle

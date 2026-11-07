@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
 import {
 	accumulateCrossAgentChunk,
 	buildCrossAgentLogEntry,
@@ -6,6 +7,7 @@ import {
 	ensureConsultTab,
 	buildConsultHistoryEntry,
 	sendCrossAgentRequest,
+	useCrossAgentDispatch,
 } from '../../../renderer/hooks/agent/useCrossAgentDispatch';
 import { useCrossAgentInFlightStore } from '../../../renderer/stores/crossAgentInFlightStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
@@ -15,6 +17,11 @@ import {
 	revealAiTab,
 } from '../../../renderer/utils/tabHelpers';
 import { createMockSession } from '../../helpers/mockSession';
+import { createMockAITab } from '../../helpers/mockTab';
+import { resetStore } from '../../helpers/resetStores';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 import type { CrossAgentResponseChunk } from '../../../shared/crossAgentTypes';
 
 /**
@@ -159,6 +166,7 @@ describe('buildConsultTabName', () => {
 
 describe('ensureConsultTab', () => {
 	beforeEach(() => {
+		resetStore(useSettingsStore);
 		useSessionStore.setState({ sessions: [] } as never);
 	});
 
@@ -353,6 +361,470 @@ describe('ensureConsultTab', () => {
 			question: 'anyone home?',
 		});
 		expect(result).toBeNull();
+	});
+});
+
+describe('new-shell consult conversations', () => {
+	let receiveChunk: (value: CrossAgentResponseChunk) => void;
+	let send: ReturnType<typeof vi.fn>;
+	beforeEach(() => {
+		resetStore(useSettingsStore);
+		useSettingsStore.setState({ newShell: true });
+		for (const [id, caps] of Object.entries(AGENT_CAPABILITIES)) setCapabilitiesCache(id, caps);
+		useCrossAgentInFlightStore.setState({ requests: {} });
+		useSessionStore.setState({
+			sessions: [
+				createMockSession({
+					id: 'src',
+					name: 'Source',
+					aiTabs: [createMockAITab({ id: 'tab', name: 'Parent', agentSessionId: 'native-parent' })],
+					activeTabId: 'tab',
+				}),
+				createMockSession({
+					id: 'tgt',
+					name: 'Codex',
+					toolType: 'codex',
+					aiTabs: [createMockAITab({ id: 'main', permissionMode: 'full' })],
+					activeTabId: 'main',
+				}),
+			],
+		});
+		send = vi.fn().mockResolvedValue({ requestId: 'new-shell-request' });
+		window.maestro.crossAgent = {
+			send,
+			onChunk: vi.fn((callback) => {
+				receiveChunk = callback;
+				return vi.fn();
+			}),
+		} as never;
+		window.maestro.history = { add: vi.fn().mockResolvedValue(undefined) } as never;
+	});
+	afterEach(() => resetStore(useSettingsStore));
+
+	it.each([false, true])(
+		'keeps display identity after Stop, with a previous resume binding %s',
+		async (resumed) => {
+			const hook = renderHook(() => useCrossAgentDispatch());
+			const options = {
+				targetSessionId: 'tgt',
+				sourceSessionId: 'src',
+				sourceTabId: 'tab',
+				sourceAgentName: 'Source',
+				question: 'Inspect the queue.',
+			};
+			const { targetTabId } = ensureConsultTab(options)!;
+			if (resumed)
+				useSessionStore.getState().setSessions((sessions) =>
+					sessions.map((session) => ({
+						...session,
+						aiTabs: session.aiTabs.map((tab) =>
+							tab.id === targetTabId ? { ...tab, agentSessionId: 'native-child' } : tab
+						),
+					}))
+				);
+			const child = () =>
+				useSessionStore
+					.getState()
+					.sessions.find((s) => s.id === 'tgt')!
+					.aiTabs.find((t) => t.id === targetTabId)!;
+			try {
+				act(() =>
+					receiveChunk(
+						chunk({
+							requestId: 'identity-stop-' + resumed,
+							targetTabId,
+							chunk: '',
+							done: false,
+							targetNativeSessionId: 'native-child',
+						})
+					)
+				);
+				expect(child().consultOrigin?.nativeSessionIds).toEqual(['native-child']);
+				expect(child().logs.map((log) => log.text)).toEqual(['Inspect the queue.']);
+				expect(child().agentSessionId).toBe(resumed ? 'native-child' : null);
+				act(() =>
+					receiveChunk(
+						chunk({
+							requestId: 'identity-stop-' + resumed,
+							targetTabId,
+							chunk: '',
+							done: true,
+							canceled: true,
+							targetNativeSessionId: 'native-child',
+						})
+					)
+				);
+				expect(child().agentSessionId).toBeNull();
+				expect(child().consultOrigin?.nativeSessionIds).toEqual(['native-child']);
+				expect(ensureConsultTab(options)?.resumeAgentSessionId).toBeUndefined();
+			} finally {
+				hook.unmount();
+			}
+		}
+	);
+
+	it.each(['readonly', 'standard'] as const)(
+		'bounds new and reused consults by the parent %s permission',
+		(mode) => {
+			useSessionStore.getState().setSessions((sessions) =>
+				sessions.map((session) =>
+					session.id === 'src'
+						? {
+								...session,
+								aiTabs: session.aiTabs.map((tab) => ({ ...tab, permissionMode: mode })),
+							}
+						: { ...session, toolType: 'claude-code' }
+				)
+			);
+			const options = {
+				targetSessionId: 'tgt',
+				sourceSessionId: 'src',
+				sourceTabId: 'tab',
+				sourceAgentName: 'Source',
+				question: 'Inspect files.',
+			};
+			const first = ensureConsultTab(options)!;
+			const child = () =>
+				useSessionStore
+					.getState()
+					.sessions.find((session) => session.id === 'tgt')!
+					.aiTabs.find((tab) => tab.id === first.targetTabId)!;
+			expect(child().permissionMode).toBe(mode);
+			useSettingsStore.setState({
+				projectSettings: { '[null,"/test/project"]': { defaultPermissionMode: 'readonly' } },
+			});
+			expect(ensureConsultTab(options)!.targetTabId).toBe(first.targetTabId);
+			expect(child().permissionMode).toBe('readonly');
+			send.mockImplementation(() => new Promise(() => {}));
+			sendCrossAgentRequest({ ...options, userPrompt: options.question, sourceLogs: [] });
+			expect(send.mock.calls[0][0].permissionMode).toBe('readonly');
+		}
+	);
+
+	it('keeps an existing readonly child restricted when the parent and project allow full access', () => {
+		const options = {
+			targetSessionId: 'tgt',
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			question: 'Inspect files.',
+		};
+		const first = ensureConsultTab(options)!;
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === 'tgt'
+					? {
+							...session,
+							aiTabs: session.aiTabs.map((tab) =>
+								tab.id === first.targetTabId ? { ...tab, permissionMode: 'readonly' } : tab
+							),
+						}
+					: session
+			)
+		);
+		send.mockImplementation(() => new Promise(() => {}));
+		sendCrossAgentRequest({ ...options, userPrompt: options.question, sourceLogs: [] });
+		expect(send.mock.calls[0][0].permissionMode).toBe('readonly');
+	});
+
+	it('reports an unsupported permission ceiling without dispatching a process', () => {
+		setCapabilitiesCache('codex', { ...AGENT_CAPABILITIES.codex, supportsReadOnlyMode: false });
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === 'src'
+					? {
+							...session,
+							aiTabs: session.aiTabs.map((tab) => ({ ...tab, permissionMode: 'readonly' })),
+						}
+					: session
+			)
+		);
+		sendCrossAgentRequest({
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			targetSessionId: 'tgt',
+			userPrompt: 'Inspect files.',
+			sourceLogs: [],
+		});
+		expect(send).not.toHaveBeenCalled();
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].logs.at(-1)).toMatchObject({
+			source: 'error',
+		});
+	});
+
+	it('inherits only permissions from a different provider, keeping the target project model', () => {
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === 'src'
+					? {
+							...session,
+							aiTabs: session.aiTabs.map((tab) => ({ ...tab, customModel: 'parent-model' })),
+						}
+					: session
+			)
+		);
+		useSettingsStore.setState({
+			projectSettings: {
+				'[null,"/test/project"]': { modelProvider: 'codex', defaultModel: 'target-model' },
+			},
+		});
+		const created = ensureConsultTab({
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			targetSessionId: 'tgt',
+			question: 'Inspect files.',
+		})!;
+		expect(
+			useSessionStore.getState().sessions[1].aiTabs.find((tab) => tab.id === created.targetTabId)
+				?.customModel
+		).toBe('target-model');
+	});
+
+	it('captures the parent native id and first sentence without revealing or creating unread', () => {
+		const result = ensureConsultTab({
+			targetSessionId: 'tgt',
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			question: '@Codex 检查队列。再检查停止行为。',
+		})!;
+		const target = useSessionStore.getState().sessions.find((s) => s.id === 'tgt')!;
+		const tab = target.aiTabs.find((t) => t.id === result.targetTabId)!;
+		expect(tab.origin).toMatchObject({
+			kind: 'subtask',
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceProvider: 'claude-code',
+			sourceNativeSessionId: 'native-parent',
+			sourceTitle: 'Parent',
+		});
+		expect(tab.name).toBe('检查队列。');
+		expect(tab.hidden).toBe(true);
+		expect(tab.hasUnread).toBeFalsy();
+		expect(target.activeTabId).toBe('main');
+	});
+
+	it('keeps the first dispatch title when the same conversation is consulted again', () => {
+		const options = {
+			targetSessionId: 'tgt',
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+		};
+		const first = ensureConsultTab({ ...options, question: '@Codex Check the queue. Then stop.' })!;
+		const second = ensureConsultTab({ ...options, question: '@Codex Check something else.' })!;
+		expect(second.targetTabId).toBe(first.targetTabId);
+		const target = useSessionStore.getState().sessions.find((s) => s.id === 'tgt')!;
+		expect(target.aiTabs.find((t) => t.id === first.targetTabId)?.name).toBe('Check the queue.');
+	});
+
+	it.each([false, true])(
+		'finishes a closed consult and retains it only while queued work remains: %s',
+		async (queued) => {
+			send.mockResolvedValue({ requestId: 'closed-consult-' + queued });
+			const hook = renderHook(() => useCrossAgentDispatch());
+			sendCrossAgentRequest({
+				sourceSessionId: 'src',
+				sourceTabId: 'tab',
+				sourceAgentName: 'Source',
+				targetSessionId: 'tgt',
+				userPrompt: 'Inspect files.',
+				sourceLogs: [],
+			});
+			await act(async () => {
+				await Promise.resolve();
+			});
+			const targetTabId = send.mock.calls[0][0].targetTabId;
+			useSessionStore.getState().setSessions((sessions) =>
+				sessions.map((session) => {
+					if (session.id !== 'tgt') return session;
+					const child = session.aiTabs.find((tab) => tab.id === targetTabId)!;
+					return {
+						...session,
+						aiTabs: session.aiTabs.filter((tab) => tab.id !== targetTabId),
+						orphanedThinkingTabs: [child],
+						closedTabHistory: [{ tab: child, closedAt: 1, index: 1 }],
+						executionQueue: queued
+							? [
+									{
+										id: 'queued',
+										type: 'message',
+										tabId: targetTabId,
+										text: 'Continue',
+										timestamp: 1,
+									},
+								]
+							: [],
+					};
+				})
+			);
+			act(() =>
+				receiveChunk(
+					chunk({
+						requestId: 'closed-consult-' + queued,
+						targetTabId,
+						done: true,
+						chunk: 'Final answer',
+						targetAgentSessionId: 'closed-native',
+					})
+				)
+			);
+			const target = useSessionStore.getState().sessions.find((session) => session.id === 'tgt')!;
+			const retained = target.closedTabHistory![0].tab;
+			expect(retained).toMatchObject({
+				agentSessionId: 'closed-native',
+				state: 'idle',
+				hasUnread: false,
+			});
+			expect(retained.logs.at(-1)?.text).toBe('Final answer');
+			expect(target.state).toBe('idle');
+			if (queued) {
+				expect(target.orphanedThinkingTabs?.[0]).toEqual(retained);
+				expect(target.executionQueue[0].tabId).toBe(targetTabId);
+			} else expect(target.orphanedThinkingTabs ?? []).toHaveLength(0);
+			hook.unmount();
+		}
+	);
+
+	it('keeps the reply on a source tab that closed while still running', () => {
+		const hook = renderHook(() => useCrossAgentDispatch());
+		useSessionStore
+			.getState()
+			.setSessions((sessions) =>
+				sessions.map((session) =>
+					session.id === 'src'
+						? { ...session, aiTabs: [], orphanedThinkingTabs: session.aiTabs }
+						: session
+				)
+			);
+		act(() =>
+			receiveChunk(
+				chunk({ requestId: 'closed-source', done: true, chunk: 'Reply for the closed parent' })
+			)
+		);
+		expect(useSessionStore.getState().sessions[0].orphanedThinkingTabs?.[0].logs.at(-1)?.text).toBe(
+			'Reply for the closed parent'
+		);
+		hook.unmount();
+	});
+
+	it('holds a running child busy and releases its queue on completion without a competing synopsis', async () => {
+		const synopsis = vi.fn();
+		const hook = renderHook(() => useCrossAgentDispatch(synopsis));
+		sendCrossAgentRequest({
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			targetSessionId: 'tgt',
+			userPrompt: '@Codex Check the queue.',
+			sourceLogs: [],
+		});
+		await act(async () => {
+			await Promise.resolve();
+		});
+		const targetTabId = send.mock.calls[0][0].targetTabId;
+		let target = useSessionStore.getState().sessions.find((s) => s.id === 'tgt')!;
+		expect(target.aiTabs.find((t) => t.id === targetTabId)?.state).toBe('busy');
+		expect(target.state).toBe('busy');
+		useSessionStore.getState().setSessions((sessions) => [
+			...sessions,
+			createMockSession({
+				id: 'grandchild-owner',
+				aiTabs: [
+					createMockAITab({
+						id: 'grandchild',
+						origin: {
+							kind: 'subtask',
+							sourceSessionId: target.id,
+							sourceTabId: targetTabId,
+							sourceProvider: target.toolType,
+							createdAt: 1,
+						},
+					}),
+				],
+			}),
+		]);
+		useSettingsStore.setState({ newShell: false });
+		act(() =>
+			receiveChunk(
+				chunk({
+					requestId: 'new-shell-request',
+					targetTabId,
+					done: true,
+					chunk: 'Done',
+					targetAgentSessionId: 'native-child',
+				})
+			)
+		);
+		target = useSessionStore.getState().sessions.find((s) => s.id === 'tgt')!;
+		expect(target.aiTabs.find((t) => t.id === targetTabId)).toMatchObject({
+			state: 'idle',
+			agentSessionId: 'native-child',
+			hasUnread: false,
+		});
+		expect(target.state).toBe('idle');
+		expect(synopsis).not.toHaveBeenCalled();
+		expect(
+			useSessionStore.getState().sessions.find((s) => s.id === 'grandchild-owner')?.aiTabs[0].origin
+				?.sourceNativeSessionId
+		).toBe('native-child');
+		hook.unmount();
+	});
+
+	it('does not resume a child that the user is already continuing', () => {
+		const options = {
+			targetSessionId: 'tgt',
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			question: '@Codex Check the queue.',
+		};
+		const first = ensureConsultTab(options)!;
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === 'tgt'
+					? {
+							...session,
+							aiTabs: session.aiTabs.map((tab) =>
+								tab.id === first.targetTabId
+									? {
+											...tab,
+											state: 'busy',
+											agentSessionId: 'being-continued',
+										}
+									: tab
+							),
+						}
+					: session
+			)
+		);
+		const next = ensureConsultTab(options)!;
+		expect(next.targetTabId).not.toBe(first.targetTabId);
+		expect(next.resumeAgentSessionId).toBeUndefined();
+	});
+
+	it('settles a failed dispatch into an idle child with its failure recorded', async () => {
+		send.mockRejectedValueOnce(new Error('bridge down'));
+		const onComplete = vi.fn();
+		sendCrossAgentRequest({
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			targetSessionId: 'tgt',
+			userPrompt: '@Codex Check the queue.',
+			sourceLogs: [],
+			onComplete,
+		});
+		await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+		const target = useSessionStore.getState().sessions.find((s) => s.id === 'tgt')!;
+		const tab = target.aiTabs.find((t) => t.id === send.mock.calls[0][0].targetTabId)!;
+		expect(tab.state).toBe('idle');
+		expect(target.state).toBe('idle');
+		expect(tab.agentError?.message).toBe('bridge down');
+		expect(tab.logs.at(-1)).toMatchObject({ source: 'error', text: 'bridge down' });
+		expect(tab.hasUnread).toBe(false);
 	});
 });
 

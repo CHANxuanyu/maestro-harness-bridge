@@ -26,7 +26,8 @@
  *   consult resumes (the target remembers prior consults from that source tab)
  *   while the forwarded transcript still supplies the source's latest context.
  *   We capture the target's provider session id off its output stream (the
- *   `session-id` event) and hand it back on the terminal chunk.
+ *   `session-id` event) and report display ownership immediately. Resume
+ *   permission is granted separately on successful completion.
  * - Non-blocking by contract: `startCrossAgentRequest` returns once the spawn is
  *   initiated; the response arrives later via `onChunk`.
  */
@@ -35,11 +36,9 @@ import type { ProcessManager } from '../process-manager';
 import type { AgentDetector } from '../agents';
 import type { SshRemoteSettingsStore } from '../utils/ssh-remote-resolver';
 import type { AgentSshRemoteConfig, ToolType } from '../../shared/types';
-import type {
-	CrossAgentRequest,
-	CrossAgentResponseChunk,
-	CrossAgentTranscriptEntry,
-} from '../../shared/crossAgentTypes';
+import type { CrossAgentRequest, CrossAgentResponseChunk } from '../../shared/crossAgentTypes';
+import { buildCrossAgentPrompt } from '../../shared/crossAgentPrompt';
+export { buildCrossAgentPrompt, serializeTranscript } from '../../shared/crossAgentPrompt';
 import { CROSS_AGENT_SESSION_PREFIX } from '../../shared/crossAgentTypes';
 import { spawnGroupChatAgent } from '../group-chat/spawnGroupChatAgent';
 import { extractTextFromStreamJson } from '../group-chat/output-parser';
@@ -103,6 +102,9 @@ const CROSS_AGENT_MAX_DURATION_MS = 30 * 60 * 1000;
  * agent fan out?" without that race.
  */
 interface ActiveConsult {
+	targetSessionId: string;
+	targetTabId?: string;
+	done: Promise<void>;
 	sourceTabId: string;
 	/** The agent the mention was typed in - what Stop is addressed to. */
 	sourceSessionId: string;
@@ -111,6 +113,28 @@ interface ActiveConsult {
 }
 
 const activeConsults = new Map<string, ActiveConsult>();
+
+/** Runtime evidence survives the persistence sanitizer, but never a restart. */
+const targetStates = new Map<string, { busy: boolean; error: boolean; updatedAt: number }>();
+
+export function getCrossAgentTargetState(sessionId: string, tabId: string) {
+	return targetStates.get(JSON.stringify([sessionId, tabId]));
+}
+
+/** New shell Stop includes incoming work on this exact child and awaits real exit. */
+export async function cancelCrossAgentRequestsForConversation(
+	sessionId: string,
+	tabId: string
+): Promise<number> {
+	const doomed = [...activeConsults.values()].filter(
+		(consult) =>
+			(consult.sourceSessionId === sessionId && consult.sourceTabId === tabId) ||
+			(consult.targetSessionId === sessionId && consult.targetTabId === tabId)
+	);
+	for (const consult of doomed) consult.cancel();
+	await Promise.all(doomed.map((consult) => consult.done));
+	return doomed.length;
+}
 
 /**
  * Stop every consult the given source agent still has in flight, optionally limited to one source tab.
@@ -189,168 +213,6 @@ export interface StartCrossAgentRequestOptions {
 	onChunk: (chunk: CrossAgentResponseChunk) => void;
 }
 
-/** Header prepended to a consult that forwards the source agent's transcript. */
-const CONSULT_HEADER =
-	'You are being consulted by another agent in Maestro. Below is the conversation transcript so far, followed by a question.';
-
-/**
- * Header for a consult with no transcript behind it - `maestro-cli ask`, whose
- * whole point is a FRESH context: the calling agent writes a self-contained
- * question rather than relaying a conversation. Announcing a transcript that
- * isn't there sends the target hunting for context it will never find.
- */
-const CONSULT_HEADER_NO_TRANSCRIPT =
-	'You are being consulted by another agent in Maestro. There is no prior conversation to read - the question below is self-contained.';
-
-/**
- * Access grant appended to the header when the source agent forwards its working
- * directory. The consult runs in the TARGET agent's own cwd, so this is the only
- * pointer it has to the user's project.
- *
- * Consults only; a hand-off uses `handoffGrant`. Two modes, gated by the
- * `crossAgentMentionsWritable` setting (default off).
- * The user-facing names for them are CONSULT and DELEGATION, so the grant text
- * uses those words rather than only "read-only" / "read/write":
- * - Consult (read-only, default): grant read but not write. This is advisory text
- *   ONLY; the real enforcement is `readOnlyMode: true` on the spawn below
- *   (`--permission-mode plan` for Claude Code, `--sandbox read-only` for Codex,
- *   ...). Both must stay in agreement: consults used to spawn read-write while
- *   saying this, and targets took the write path anyway. We also tell the target
- *   how the user can lift the restriction, so a "make this change" request gets a
- *   useful answer instead of a silent no-op.
- * - Delegation (read/write): the user opted in, so we drop the write prohibition
- *   and let the target edit files (spawns with `readOnlyMode: false`).
- */
-function cwdGrant(sourceCwd: string, writable: boolean): string {
-	if (writable) {
-		return (
-			`The user is working in the directory \`${sourceCwd}\`. ` +
-			'You have permission to READ and MODIFY files under that directory to answer. ' +
-			'The user has enabled read/write cross-agent mentions, so this is a DELEGATION rather ' +
-			'than a consult: you may apply changes directly.'
-		);
-	}
-	return (
-		`The user is working in the directory \`${sourceCwd}\`. ` +
-		'You have permission to READ files under that directory to inform your answer. ' +
-		'Do NOT modify or create files: this is a one-shot READ-ONLY consultation, so if changes ' +
-		'are needed, describe them in your reply and let the user apply them. If the user is asking ' +
-		'you to make changes directly, tell them cross-agent mentions are consults (read-only) by ' +
-		'default and they can turn them into delegations in Settings > General > Cross-Agent ' +
-		'Mentions (set Consult or Delegate to Read/Write).'
-	);
-}
-
-/**
- * Access grant for a HAND-OFF. Not `cwdGrant`: that text calls the request a
- * consultation and points at the SOURCE directory as the place to change, while
- * a hand-off asks the target to act on a result in its OWN workspace (where it
- * runs). Gated by `crossAgentHandoffsWritable` (default on), separately from
- * consults, because passing work on is the point of a hand-off. Same contract as
- * `cwdGrant`: the text must agree with `permissionMode` on the spawn below.
- */
-function handoffGrant(sourceCwd: string | undefined, writable: boolean): string {
-	const source = sourceCwd
-		? `The source agent worked in \`${sourceCwd}\`; you may READ files there for context. `
-		: '';
-	if (writable) {
-		return (
-			source +
-			'You may READ and MODIFY files in your own workspace to act on the result: save what ' +
-			"you learn, update notes, apply changes. Do not modify the source agent's files."
-		);
-	}
-	return (
-		source +
-		'This hand-off is READ-ONLY: do not modify or create files. Describe what you would ' +
-		'change, and tell the user hand-offs can write when Settings > General > Cross-Agent ' +
-		'Mentions > Hand-offs is set to Read/Write.'
-	);
-}
-
-/** Prefix for the relayed user question, appended after the transcript. */
-const QUESTION_PREFIX = '**Question from the user (relayed via the source agent):**';
-
-/**
- * Header for a HAND-OFF: the source agent already did the work, and the user
- * asked for its result to come to this agent. Saying so up front matters - the
- * consult header reads as "answer this question", and a target that thinks it
- * is being asked will redo the work instead of acting on the result.
- */
-function handoffHeader(sourceAgentName: string | undefined, hasTranscript: boolean): string {
-	const source = sourceAgentName ? `the agent "${sourceAgentName}"` : 'another agent';
-	const context = hasTranscript
-		? "Below is the conversation that led up to it, then the user's instruction, then the result."
-		: "Below is the user's instruction, then the result.";
-	return (
-		`You are receiving a hand-off in Maestro. The user asked ${source} to do some work and ` +
-		`forward the result to you. ${context} Act on the result as the instruction asks; do not ` +
-		'redo the work it describes.'
-	);
-}
-
-/** Prefixes for the two halves of a hand-off. */
-const HANDOFF_INSTRUCTION_PREFIX = "**The user's instruction (relayed via the source agent):**";
-const handoffResultPrefix = (sourceAgentName: string | undefined) =>
-	`**Result from ${sourceAgentName ? sourceAgentName : 'the source agent'}:**`;
-
-/** Human-readable role label for a transcript entry's source. */
-function roleLabel(source: string): string {
-	switch (source) {
-		case 'user':
-			return '**User:**';
-		case 'ai':
-			return '**Assistant:**';
-		case 'system':
-			return '**System:**';
-		default:
-			// tool / thinking / stdout / stderr / error - only surfaced when they
-			// carry visible text (see serializeTranscript), labelled generically.
-			return '**Note:**';
-	}
-}
-
-/**
- * Serialize a windowed transcript into a single human-readable block.
- * Entries with no visible text are dropped; tool/thinking entries only survive
- * if they carry visible text.
- */
-export function serializeTranscript(transcript: CrossAgentTranscriptEntry[]): string {
-	const parts: string[] = [];
-	for (const entry of transcript) {
-		const text = entry.text?.trim();
-		if (!text) continue;
-		parts.push(`${roleLabel(entry.source)} ${text}`);
-	}
-	return parts.join('\n');
-}
-
-/**
- * Build the full outgoing prompt: header + serialized transcript + the relayed
- * user question. Exported for unit testing.
- */
-export function buildCrossAgentPrompt(request: CrossAgentRequest, writable = false): string {
-	const transcriptBlock = serializeTranscript(request.transcript);
-	if (request.handoffAnswer !== undefined) {
-		const intro = handoffHeader(request.sourceAgentName, !!transcriptBlock);
-		const header = `${intro}\n\n${handoffGrant(request.sourceCwd, writable)}`;
-		return [
-			header,
-			...(transcriptBlock ? [transcriptBlock] : []),
-			`${HANDOFF_INSTRUCTION_PREFIX}\n${request.userPrompt}`,
-			`${handoffResultPrefix(request.sourceAgentName)}\n${request.handoffAnswer}`,
-		].join('\n\n');
-	}
-	const intro = transcriptBlock ? CONSULT_HEADER : CONSULT_HEADER_NO_TRANSCRIPT;
-	const header = request.sourceCwd ? `${intro}\n\n${cwdGrant(request.sourceCwd, writable)}` : intro;
-	const sections = [header];
-	if (transcriptBlock) {
-		sections.push(transcriptBlock);
-	}
-	sections.push(`${QUESTION_PREFIX}\n${request.userPrompt}`);
-	return sections.join('\n\n');
-}
-
 /**
  * Dispatch a cross-agent request to the target agent without blocking the
  * caller. Response text is streamed back via `opts.onChunk`; the promise
@@ -364,10 +226,35 @@ export async function startCrossAgentRequest(
 	request: CrossAgentRequest,
 	opts: StartCrossAgentRequestOptions
 ): Promise<void> {
-	const { processManager, agentDetector, sshStore, getTargetSession, onChunk } = opts;
-	const writable = opts.writable ?? false;
+	const { processManager, agentDetector, sshStore, getTargetSession } = opts;
+	let resolveDone!: () => void;
+	const done = new Promise<void>((resolve) => {
+		resolveDone = resolve;
+	});
+	const targetKey = JSON.stringify([request.targetSessionId, request.targetTabId]);
+	if (request.targetTabId)
+		targetStates.set(targetKey, { busy: true, error: false, updatedAt: Date.now() });
+	const onChunk = (chunk: CrossAgentResponseChunk) => {
+		if (chunk.done) {
+			if (request.targetTabId) {
+				targetStates.delete(targetKey);
+				targetStates.set(targetKey, { busy: false, error: !!chunk.error, updatedAt: Date.now() });
+				// Completed evidence is bounded. Running registrations are never evicted.
+				for (const [key, status] of targetStates) {
+					if (targetStates.size <= 2048) break;
+					if (!status.busy) targetStates.delete(key);
+				}
+			}
+			resolveDone();
+		}
+		opts.onChunk(chunk);
+	};
+	const permissionMode = opts.writable ? (request.permissionMode ?? 'full') : 'readonly';
+	const writable = permissionMode !== 'readonly';
 
 	const target = getTargetSession(request.targetSessionId);
+	// Display ownership is independent of whether this run may be resumed.
+	let capturedAgentSessionId: string | undefined = request.resumeAgentSessionId;
 
 	// Base fields shared by every chunk we emit for this request. targetToolType
 	// / name fall back to the raw id when the session can't be resolved.
@@ -377,6 +264,7 @@ export async function startCrossAgentRequest(
 		sourceTabId: request.sourceTabId,
 		targetSessionId: request.targetSessionId,
 		targetTabId: request.targetTabId,
+		...(capturedAgentSessionId ? { targetNativeSessionId: capturedAgentSessionId } : {}),
 		targetAgentName: target?.name ?? request.targetSessionId,
 		targetToolType: (target?.toolType ?? 'claude-code') as ToolType,
 		chunk: '',
@@ -402,6 +290,9 @@ export async function startCrossAgentRequest(
 	 */
 	let cancelRequested = false;
 	const registration: ActiveConsult = {
+		targetSessionId: request.targetSessionId,
+		targetTabId: request.targetTabId,
+		done,
 		sourceTabId: request.sourceTabId,
 		sourceSessionId: request.sourceSessionId,
 		cancel: () => {
@@ -424,7 +315,9 @@ export async function startCrossAgentRequest(
 	}
 
 	const agent = await agentDetector.getAgent(target.toolType);
-	if (!agent || !agent.available) {
+	// Detection only knows standard installs. A configured customPath runs anyway,
+	// exactly as it does for the agent's own tabs.
+	if (!agent || (!agent.available && !target.customPath)) {
 		emitError(`${getAgentDisplayName(target.toolType)} is not available.`);
 		return;
 	}
@@ -470,7 +363,7 @@ export async function startCrossAgentRequest(
 		//
 		// `permissionMode` is therefore stated explicitly at both ends, keeping the
 		// args in agreement with the cwdGrant text above.
-		permissionMode: writable ? 'full' : 'readonly',
+		permissionMode,
 		agentSessionId: request.resumeAgentSessionId,
 	});
 	const configResolution = applyAgentConfigOverrides(agent, baseArgs, {
@@ -489,11 +382,9 @@ export async function startCrossAgentRequest(
 	// emitting 'exit', so by the time onExit fires our buffer is complete.
 	let buffer = '';
 	let settled = false;
-	// The target's own provider session id, captured from its output stream (the
-	// same `session-id` event the desktop/group-chat listeners consume). Forwarded
-	// on the terminal chunk so the renderer stores it on the consult tab and
-	// resumes it on the next mention from this source tab.
-	let capturedAgentSessionId: string | undefined = request.resumeAgentSessionId;
+	let spawning = false;
+	let spawned = false;
+	let termination: { message: string; canceled: boolean } | undefined;
 	// Assigned once the consult is actually under way (see below). Held on a const
 	// object so `cleanup` can close over it without a `let` that trips prefer-const.
 	const watch: { dog?: IdleWatchdog } = {};
@@ -514,7 +405,9 @@ export async function startCrossAgentRequest(
 	};
 
 	const onSessionId = (sid: string, agentSessionId: string): void => {
-		if (sid === sessionId && agentSessionId) capturedAgentSessionId = agentSessionId;
+		if (sid !== sessionId || !agentSessionId || settled) return;
+		capturedAgentSessionId = agentSessionId;
+		onChunk(baseChunk({ chunk: '', done: false }));
 	};
 
 	const cleanup = (): void => {
@@ -528,6 +421,10 @@ export async function startCrossAgentRequest(
 
 	const onExit = (sid: string, code: number): void => {
 		if (sid !== sessionId || settled) return;
+		if (termination) {
+			finishTerminated();
+			return;
+		}
 		settled = true;
 		cleanup();
 		try {
@@ -593,31 +490,30 @@ export async function startCrossAgentRequest(
 	 * failure of the target, while Stop is the user's own decision and must not be
 	 * reported as the target failing to answer.
 	 */
-	const settleTerminated = (message: string, canceled = false): void => {
-		if (settled) return;
+	const finishTerminated = (): void => {
+		if (settled || !termination) return;
 		settled = true;
 		cleanup();
-		try {
-			processManager.kill(sessionId);
-		} catch {
-			// Process may already be gone - nothing to kill.
-		}
 		let partial = '';
 		try {
 			partial = extractTextFromStreamJson(buffer, target.toolType).trim();
 		} catch {
-			// A stream truncated mid-object may not parse; the error still lands.
+			// A truncated stream still produces the terminal reason.
 		}
-		logger.warn(`${LOG_CONTEXT} ${message}`, LOG_CONTEXT, {
-			requestId: request.requestId,
-			targetSessionId: request.targetSessionId,
-			partialChars: partial.length,
-		});
 		onChunk(
-			canceled
+			termination.canceled
 				? baseChunk({ chunk: partial, done: true, canceled: true })
-				: baseChunk({ chunk: partial, done: true, error: message })
+				: baseChunk({ chunk: partial, done: true, error: termination.message })
 		);
+	};
+
+	const settleTerminated = (message: string, canceled = false): void => {
+		if (settled || termination) return;
+		termination = { message, canceled };
+		watch.dog?.disarm();
+		// Keep the exit listener and registry until the spawned process has exited.
+		if (spawned) processManager.kill(sessionId);
+		else if (!spawning) finishTerminated();
 	};
 
 	processManager.on('data', onData);
@@ -652,6 +548,7 @@ export async function startCrossAgentRequest(
 	}
 
 	try {
+		spawning = true;
 		const spawnResult = await spawnGroupChatAgent({
 			sessionId,
 			agentId: target.toolType,
@@ -680,7 +577,12 @@ export async function startCrossAgentRequest(
 		// rather than throwing (see ChildProcessSpawner). Such a process emits no
 		// 'exit' event, so without this check the only listener that ever fires is the
 		// timeout - the user waits the full budget for a process that never existed.
+		spawning = false;
 		if (!spawnResult.success) {
+			if (termination) {
+				finishTerminated();
+				return;
+			}
 			if (!settled) {
 				settled = true;
 				cleanup();
@@ -688,16 +590,9 @@ export async function startCrossAgentRequest(
 			}
 			return;
 		}
-		// Stop can land between `registration.cancel` going live and the spawn
-		// resolving. `settleTerminated` already killed a process id that did not
-		// exist yet, so the one we just created has to be killed here or it survives
-		// the Stop that was meant to end it.
-		if (settled) {
-			try {
-				processManager.kill(sessionId);
-			} catch {
-				// Already gone - nothing to kill.
-			}
+		spawned = true;
+		if (termination) {
+			processManager.kill(sessionId);
 			return;
 		}
 		logger.info(`${LOG_CONTEXT} Dispatched to ${target.name}`, LOG_CONTEXT, {
@@ -706,7 +601,12 @@ export async function startCrossAgentRequest(
 			transcriptEntries: request.transcript.length,
 		});
 	} catch (err) {
-		// Spawn failed - tear down listeners and surface a single error chunk.
+		// Spawn failed before a process was created.
+		spawning = false;
+		if (termination) {
+			finishTerminated();
+			return;
+		}
 		if (!settled) {
 			settled = true;
 			cleanup();

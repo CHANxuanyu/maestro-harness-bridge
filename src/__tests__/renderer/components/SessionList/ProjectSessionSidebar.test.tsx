@@ -17,6 +17,7 @@ import { ProjectSessionSidebar } from '../../../../renderer/components/SessionLi
 import { createMockSession } from '../../../helpers/mockSession';
 import { createMockAITab } from '../../../helpers/mockTab';
 import { mockTheme } from '../../../helpers/mockTheme';
+import { setActiveTab } from '../../../../renderer/utils/tabHelpers';
 import { useConversationArchiveStore } from '../../../../renderer/stores/conversationArchiveStore';
 
 const EN: Record<string, string> = {
@@ -148,6 +149,7 @@ function rowButton(container: HTMLElement): HTMLElement {
 }
 
 beforeEach(() => {
+	useSettingsStore.setState({ newShell: false });
 	useConversationArchiveStore.setState({ records: [] });
 	refreshNativeConversation.mockReset();
 	refreshNativeConversation.mockResolvedValue({ status: 'updated', added: 2 });
@@ -155,6 +157,55 @@ beforeEach(() => {
 	setHistory([record()]);
 	const sessions = [owner()];
 	useSessionStore.setState({ sessions, activeSessionId: 'maestro-owner' } as never);
+});
+
+it('reveals a running hidden subtask when its new shell row is selected', () => {
+	useSettingsStore.setState({ newShell: true });
+	tabHandlers.handleTabSelect.mockImplementation((tabId: string) => {
+		const store = useSessionStore.getState();
+		store.setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === store.activeSessionId
+					? (setActiveTab(session, tabId)?.session ?? session)
+					: session
+			)
+		);
+	});
+	const source = owner();
+	const child = createMockSession({
+		id: 'consult-owner',
+		toolType: 'claude-code',
+		groupId: GROUP.id,
+		aiTabs: [
+			createMockAITab({
+				id: 'consult-tab',
+				hidden: true,
+				state: 'busy',
+				name: 'Check the parser.',
+				origin: {
+					kind: 'review',
+					sourceSessionId: source.id,
+					sourceTabId: source.activeTabId,
+					sourceProvider: 'codex',
+					createdAt: 2,
+				},
+			}),
+		],
+	});
+	const sessions = [source, child];
+	useSessionStore.setState({ sessions, activeSessionId: source.id });
+	const { container } = renderSidebar(sessions);
+	const row = container.querySelector(
+		'[data-conversation-key="consult-owner:consult-tab"] button[data-tree-nav]'
+	);
+	expect(row).not.toBeNull();
+	fireEvent.click(row!);
+	const selected = useSessionStore.getState().sessions.find((s) => s.id === child.id)!;
+	expect(useSessionStore.getState().activeSessionId).toBe(child.id);
+	expect(selected.activeTabId).toBe('consult-tab');
+	expect(selected.aiTabs[0].hidden).toBe(false);
+	expect(selected.aiTabs[0].hasUnread).toBe(false);
+	useSettingsStore.setState({ newShell: false });
 });
 
 it.each([undefined, 'remote'])(

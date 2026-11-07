@@ -95,7 +95,11 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 	let claudeLogs: AITab['logs'] = [];
 	const edited = 'export const shipping = 0;\nexport const threshold = 80;\n';
 	const select = async (id: string) => {
-		await native.page.locator(`[data-conversation-key$=":${id}"] [data-tree-nav]`).click();
+		const row = native.page.locator(`[data-conversation-key$=":${id}"]`);
+		const folded = native.page.getByRole('button', { name: /^Show subtasks: / });
+		// A finished review folds under the conversation it reviewed.
+		while (!(await row.count()) && (await folded.count())) await folded.first().click();
+		await row.locator(':scope > div > button[data-tree-nav]').last().click();
 	};
 	try {
 		await native.start(home);

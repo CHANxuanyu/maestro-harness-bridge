@@ -51,7 +51,8 @@ const LOG_CONTEXT = '[SessionInfoCache]';
  */
 // v5: native conversation titles and first user requests for project history.
 // v6: preserve provider-native titles independently of Maestro display names.
-export const SESSION_INFO_CACHE_VERSION = 7;
+// v8: recover consult questions before deriving native titles and previews.
+export const SESSION_INFO_CACHE_VERSION = 8;
 
 /** One source file to resolve: its identity within the scope plus its fingerprint. */
 export interface SessionFileRef {

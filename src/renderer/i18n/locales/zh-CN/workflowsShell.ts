@@ -2,6 +2,7 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.shell.consultPermissionUnavailable': '这个工具无法保持来源对话的权限限制。',
 	'workflows.projectSettings.errors.requestFailed': '项目设置请求失败。',
 	'workflows.projectSettings.errors.useService': '请使用 project settings set 修改项目设置。',
 	'workflows.projectSettings.environmentDesktopOnly': '请在桌面应用中查看和编辑环境变量。',
@@ -289,6 +290,10 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.conversations.worktree': '在工作副本中运行：{path}',
 	'workflows.conversations.worktreeGone': '该工作副本已删除，此会话只能查看',
 	'workflows.conversations.showMore': '再显示 {count} 个',
+	'workflows.conversations.expandChildren': '展开子任务：{title}',
+	'workflows.conversations.collapseChildren': '收起子任务：{title}',
+	'workflows.conversations.childrenCommand': '列出直接发起的子对话，包括隐藏的子任务',
+	'workflows.conversations.selectCommand': '在桌面中选中一条对话',
 	'workflows.conversations.loadingHistory': '正在加载历史会话...',
 	'workflows.conversations.refreshingHistory': '正在刷新历史会话',
 	'workflows.conversations.historyLoadFailed': '无法加载历史会话',

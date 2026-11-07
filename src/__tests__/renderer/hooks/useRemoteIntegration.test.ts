@@ -1257,6 +1257,30 @@ describe('useRemoteIntegration', () => {
 			expect(useSessionStore.getState().sessions[0].activeTabId).toBe('tab-1');
 		});
 
+		it.each(['tab', 'session'])(
+			'reveals a new-shell child through remote %s selection',
+			(entry) => {
+				useSettingsStore.setState({ newShell: true });
+				const hiddenTab = createMockTab({ id: 'hidden-child', hidden: true, hasUnread: false });
+				const visibleTab = createMockTab({ id: 'visible' });
+				const session = createMockSession({
+					id: 'session-1',
+					aiTabs: [visibleTab, hiddenTab],
+					activeTabId: visibleTab.id,
+				});
+				const deps = createDeps({ sessions: [session], activeSessionId: session.id });
+				renderHook(() => useRemoteIntegration(deps));
+				act(() => {
+					if (entry === 'tab') onRemoteSelectTabHandler?.(session.id, hiddenTab.id);
+					else onRemoteSelectSessionHandler?.(session.id, hiddenTab.id);
+				});
+				const selected = useSessionStore.getState().sessions[0];
+				expect(selected.activeTabId).toBe(hiddenTab.id);
+				expect(selected.aiTabs.find((tab) => tab.id === hiddenTab.id)?.hidden).not.toBe(true);
+				expect(selected.aiTabs.find((tab) => tab.id === hiddenTab.id)?.hasUnread).toBe(false);
+			}
+		);
+
 		it('repairs a removed active tab with a visible tab instead of a hidden consult', () => {
 			const hiddenTab = createMockTab({ id: 'hidden-tab', hidden: true });
 			const removedTab = createMockTab({ id: 'removed-tab' });

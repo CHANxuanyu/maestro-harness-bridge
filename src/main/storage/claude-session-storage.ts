@@ -1,3 +1,5 @@
+import { stripCrossAgentPrompt } from '../../shared/crossAgentPrompt';
+import { deriveConsultSubject } from '../../shared/crossAgentContext';
 import { parseNativeSearchMessages } from '../../shared/sessionSearch';
 import { readCodexRollout } from '../../shared/codexRollout';
 import { readToolOutputFile } from './native-tool-output';
@@ -127,6 +129,7 @@ function parseSessionContent(
 
 		let firstAssistantMessage = '';
 		let firstUserMessage = '';
+		let consultTitle: string | undefined;
 		let timestamp = new Date(stats.mtimeMs).toISOString();
 
 		const messageCount = countClaudeTranscriptMessages(content);
@@ -155,7 +158,9 @@ function parseSessionContent(
 				const entry = JSON.parse(lines[i]);
 				// Capture first user message as fallback
 				if (!firstUserMessage && entry.type === 'user' && entry.message?.content) {
-					const textContent = extractTextFromContent(entry.message.content);
+					const raw = extractTextFromContent(entry.message.content);
+					const textContent = stripCrossAgentPrompt(raw);
+					if (textContent !== raw) consultTitle = deriveConsultSubject(textContent, 80, true);
 					if (textContent.trim()) {
 						firstUserMessage = textContent;
 						timestamp = entry.timestamp || timestamp;
@@ -227,7 +232,7 @@ function parseSessionContent(
 			sessionId,
 			projectPath: recordedCwd || projectPath,
 			timestamp,
-			sessionName: nativeTitle,
+			sessionName: nativeTitle || consultTitle,
 			nativeTitle,
 			firstUserMessage: firstUserMessage.slice(
 				0,

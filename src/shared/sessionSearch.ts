@@ -1,3 +1,4 @@
+import { stripCrossAgentPrompt } from './crossAgentPrompt';
 import { hasEmbeddedSystemPrompt, stripEmbeddedSystemPrompt } from './embeddedSystemPrompt';
 import { stripTurnPrompt } from './turnPrompt';
 import { codexSessionMetadata, extractCwdFromText } from './codexSessionMetadata';
@@ -106,6 +107,7 @@ export function parseNativeSearchMessages(content: string, provider: 'claude-cod
 					)
 				);
 			}
+			if (role === 'user') textContent = stripCrossAgentPrompt(textContent);
 			if (textContent.trim())
 				messages.push({
 					role,

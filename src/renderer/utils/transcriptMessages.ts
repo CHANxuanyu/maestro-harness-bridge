@@ -1,3 +1,4 @@
+import { stripCrossAgentPrompt } from '../../shared/crossAgentPrompt';
 import {
 	transcriptMessagesToLogEntries as convertNativeEntries,
 	isInternalDesktopEnvelope,
@@ -919,7 +920,8 @@ function sameRenderedEntry(a: LogEntry, b: LogEntry): boolean {
 export function hasLegacyTranscriptEntries(logs: LogEntry[] | undefined): boolean {
 	return (logs ?? []).some(
 		(entry) =>
-			(entry.source === 'user' && stripTurnPrompt(entry.text) !== entry.text) ||
+			(entry.source === 'user' &&
+				stripCrossAgentPrompt(stripTurnPrompt(entry.text)) !== entry.text) ||
 			(!entry.nativeTranscript &&
 				((entry.source === 'stdout' && !entry.metadata && /^Tool: \S+$/.test(entry.text.trim())) ||
 					(entry.source === 'user' && isInternalDesktopEnvelope(entry.text))))

@@ -7,6 +7,10 @@ const state = vi.hoisted(() => ({
 	windows: [{ webContents: { send: vi.fn() } }, { webContents: { send: vi.fn() } }],
 	request: vi.fn(),
 	processes: [] as any[],
+	consults: new Map<string, { busy: boolean }>(),
+}));
+vi.mock('../../../../main/cross-agent/cross-agent-router', () => ({
+	getCrossAgentTargetState: (owner: string, tab: string) => state.consults.get(owner + ':' + tab),
 }));
 vi.mock('electron', () => ({
 	ipcMain: { handle: (key: string, fn: any) => state.handlers.set(key, fn) },
@@ -57,6 +61,7 @@ beforeEach(() => {
 		projectRoot: '/synthetic-project',
 	}));
 	state.processes = [];
+	state.consults.clear();
 	state.request.mockReset().mockResolvedValue({ permissionMode: 'standard', lastActivity: 7 });
 	registerAgentSessionsHandlers({
 		getMainWindow: () => state.windows[0] as never,
@@ -148,3 +153,34 @@ it('keeps unarchived permission metadata out of CLI archive lists and restores n
 	state.settings.newShell = false;
 	expect((await list({}, scopes)).conversations).toHaveLength(1);
 });
+
+it.each(['managed', 'consult'] as const)(
+	'refuses a running %s descendant despite sanitized idle copies',
+	async (kind) => {
+		state.owners[0].aiTabs = [{ id: 'parent-tab', agentSessionId: 'native', state: 'idle' }];
+		state.owners.push({
+			id: 'child-owner',
+			toolType: 'claude-code',
+			cwd: '/child',
+			aiTabs: [
+				{
+					id: 'child-tab',
+					state: 'idle',
+					origin: {
+						kind: 'subtask',
+						sourceSessionId: 'one',
+						sourceTabId: 'parent-tab',
+						sourceNativeSessionId: 'native',
+						sourceProvider: 'codex',
+						createdAt: 1,
+					},
+				},
+			],
+		});
+		if (kind === 'managed')
+			state.processes = [{ sessionId: 'child-owner-ai-child-tab-fp-1', isTerminal: false }];
+		else state.consults.set('child-owner:child-tab', { busy: true });
+		await expect(archive()).rejects.toThrow('conversation-running');
+		expect(state.settings.archivedConversations).toEqual([]);
+	}
+);

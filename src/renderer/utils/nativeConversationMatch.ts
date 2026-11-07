@@ -19,7 +19,7 @@
  */
 
 import type { Group, Session } from '../types';
-import type { ProjectHistoryConversation } from '../../shared/projectHistory';
+import type { ProjectHistoryConversation, ProjectHistoryScope } from '../../shared/projectHistory';
 import { getProviderProfileConfig } from '../../shared/providerProfiles';
 
 export type AccountEvidence = 'same' | 'different' | 'unknown';
@@ -162,4 +162,38 @@ export function sessionProjectKey(
 	const ssh = session.sessionSshRemoteConfig;
 	const host = ssh?.enabled ? ssh.remoteId || session.sshRemoteId || session.id : 'local';
 	return { key: `path:${host}:${session.projectRoot || session.cwd}` };
+}
+
+/**
+ * One scope per project + host + path, so a manual group spanning several
+ * repositories asks for every one of them. Ordered, so its JSON is a stable key.
+ */
+export function buildProjectHistoryScopes(
+	sessions: Session[],
+	groups: Group[]
+): ProjectHistoryScope[] {
+	const groupById = new Map(groups.map((group) => [group.id, group]));
+	const ownerById = new Map(sessions.map((session) => [session.id, session]));
+	const scopes = new Map<string, ProjectHistoryScope>();
+	for (const session of sessions) {
+		if (session.toolType === 'terminal') continue;
+		const projectPath = session.projectRoot || session.cwd;
+		if (!projectPath) continue;
+		const { key: projectKey } = sessionProjectKey(session, ownerById, groupById);
+		const sshRemoteId = sessionHost(session);
+		const id = `${projectKey}\0${sshRemoteId ?? ''}\0${projectPath}`;
+		let scope = scopes.get(id);
+		if (!scope) {
+			scope = { projectKey, projectPath, ...(sshRemoteId ? { sshRemoteId } : {}), ownerIds: [] };
+			scopes.set(id, scope);
+		}
+		scope.ownerIds.push(session.id);
+	}
+	return [...scopes.values()]
+		.map((scope) => ({ ...scope, ownerIds: [...scope.ownerIds].sort() }))
+		.sort((a, b) =>
+			`${a.projectKey}\0${a.sshRemoteId ?? ''}\0${a.projectPath}`.localeCompare(
+				`${b.projectKey}\0${b.sshRemoteId ?? ''}\0${b.projectPath}`
+			)
+		);
 }

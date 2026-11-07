@@ -2429,3 +2429,18 @@ describe('restoreSession - Terminal tab persistence', () => {
 		expect(mixedRestored!.inputMode).toBe('ai');
 	});
 });
+
+it('preserves a project deliberately emptied by archiving instead of recovering a full-access tab', async () => {
+	const session = createMockSession({
+		aiTabs: [],
+		activeTabId: '',
+		conversationArchiveEmpty: true,
+	});
+	const { result } = renderHook(() => useSessionRestoration());
+	let restored: Session;
+	await act(async () => {
+		restored = await result.current.restoreSession(session);
+	});
+	expect(restored!.aiTabs).toEqual([]);
+	expect(restored!.state).not.toBe('error');
+});

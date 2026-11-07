@@ -17,6 +17,7 @@ import { ProjectSessionSidebar } from '../../../../renderer/components/SessionLi
 import { createMockSession } from '../../../helpers/mockSession';
 import { createMockAITab } from '../../../helpers/mockTab';
 import { mockTheme } from '../../../helpers/mockTheme';
+import { useConversationArchiveStore } from '../../../../renderer/stores/conversationArchiveStore';
 
 const EN: Record<string, string> = {
 	'workflows.conversations.refreshFailed': "Couldn't load newer messages; showing the saved copy",
@@ -25,6 +26,8 @@ const EN: Record<string, string> = {
 	'workflows.conversations.worktree': 'Ran in worktree {path}',
 	'workflows.conversations.worktreeGone':
 		'This worktree no longer exists, so the conversation is read-only',
+	'workflows.archive.archived': 'Archived {count}',
+	'workflows.archive.unarchive': 'Unarchive',
 };
 
 vi.mock('../../../../renderer/i18n', async (importOriginal) => {
@@ -145,6 +148,7 @@ function rowButton(container: HTMLElement): HTMLElement {
 }
 
 beforeEach(() => {
+	useConversationArchiveStore.setState({ records: [] });
 	refreshNativeConversation.mockReset();
 	refreshNativeConversation.mockResolvedValue({ status: 'updated', added: 2 });
 	Object.values(tabHandlers).forEach((fn) => fn.mockReset());
@@ -152,6 +156,57 @@ beforeEach(() => {
 	const sessions = [owner()];
 	useSessionStore.setState({ sessions, activeSessionId: 'maestro-owner' } as never);
 });
+
+it.each([undefined, 'remote'])(
+	'shows and unarchives native subdirectory history on host %s',
+	async (sshRemoteId) => {
+		useSettingsStore.setState({ newShell: true });
+		const session = createMockSession({
+			id: 'project',
+			groupId: GROUP.id,
+			toolType: 'codex',
+			projectRoot: '/repo',
+			cwd: '/repo',
+			aiTabs: [],
+			sessionSshRemoteConfig: sshRemoteId ? { enabled: true, remoteId: sshRemoteId } : undefined,
+		});
+		const archived = {
+			...record({
+				projectKey: '',
+				projectPath: '/repo/packages/api',
+				sshRemoteId,
+				ownerId: undefined,
+			}),
+			ownerIds: ['project'],
+			archivedAt: 1,
+			permissionMode: 'readonly' as const,
+		};
+		useSessionStore.setState({ sessions: [session] });
+		setHistory([]);
+		useConversationArchiveStore.setState({ records: [archived] });
+		const original = window.maestro.agentSessions;
+		const change = vi.fn().mockResolvedValue({ success: true });
+		window.maestro.agentSessions = {
+			...original,
+			archiveConversation: change,
+			archives: vi.fn().mockResolvedValue([]),
+		};
+		const { unmount } = renderSidebar([session]);
+		try {
+			fireEvent.click(screen.getByRole('button', { name: 'Archived 1', exact: true }));
+			fireEvent.click(screen.getByRole('button', { name: 'Unarchive', exact: true }));
+			expect(change).toHaveBeenCalledWith(
+				expect.objectContaining({ projectPath: '/repo/packages/api', sshRemoteId }),
+				'unarchive'
+			);
+			await act(async () => {});
+		} finally {
+			unmount();
+			window.maestro.agentSessions = original;
+			useSettingsStore.setState({ newShell: false });
+		}
+	}
+);
 
 describe('ProjectSessionSidebar native refresh', () => {
 	it('selecting an open native conversation re-reads it with its own record, in place', async () => {

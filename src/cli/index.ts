@@ -149,6 +149,7 @@ import {
 	tabNew,
 	tabCompact,
 	tabClose,
+	tabArchive,
 	tabRename,
 	tabStar,
 	tabMove,
@@ -327,10 +328,12 @@ program
 program
 	.command('native-history <action> [session] [conversation-or-tool-call-id]')
 	.description(
-		'List projects, list/read/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an exact native history ID)'
+		'List projects, list/read/archive/unarchive/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an exact native history ID)'
 	)
 	.option('--json', 'Output JSON')
 	.option('--copy', 'Copy the returned tool output to the desktop clipboard')
+	.option('--archived', 'List archived native conversations')
+	.option('--yes', 'Confirm irreversible deletion of native history')
 	.action(nativeHistory);
 
 list
@@ -1614,6 +1617,10 @@ tabTargetOptions(
 	.option('--background', 'Keep the current agent and tab selected (default)')
 	.option('--focus', 'Select the compacted conversation when ready')
 	.action((tabId, options) => tabCompact(tabId, options));
+
+tabTargetOptions(tab.command('archive <tab-id>'))
+	.description('Archive a native conversation and close its tabs')
+	.action((tabId, options) => tabArchive(tabId, options));
 
 tabTargetOptions(tab.command('close <tab-id>'))
 	.description('Close a tab (owning agent is resolved automatically)')

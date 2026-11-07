@@ -83,6 +83,15 @@
 - CLI：`tab new --agent <id> --provider <provider> [--replace-empty <tab>]`；`tab panel <tab> <changes|files|back|open|close|edit|preview|save>`，可带 `--filter`、`--line`、`--content`。文件打开和刷新沿用 `open-file`、`refresh-files`，隐藏文件沿用 `settings set showHiddenFiles`。文本保存复用 FilePreview 保存函数。
 - `e2e/native-new-shell.spec.ts` 按 hb.7 演示覆盖打开项目、Claude 改动、Codex 交接、DeepSeek 复核、三段会话切换、正常退出重启、恢复旧界面；检查界面、项目文件、原生转录和保存的会话数据。只使用合成提供方，真实模式跳过。本批按要求只写用例和做类型检查，Electron / Playwright 尚待用户运行，不宣称已完成 hb.7 真人验收。
 
+## 归档与删除对话（2026-11-06，T9）
+
+- 新界面的对话右键和命令面板提供归档。归档仅保存 Maestro 标记，关闭同一工具、账户和主机下的打开标签，原生文件保持不变。运行中或排队中的对话拒绝归档。
+- 项目列表底部显示“已归档 N”，展开后可以取消归档。状态由主进程保存并广播，换窗口和重启后仍保留。扫描、缓存投影和权限继承均识别归档状态；无普通对话时保留归档中的最严格权限。
+- Codex 提供删除并明确确认原生记录不可恢复，沿用现有原生删除实现；Claude 不提供删除。新入口均受 `newShell` 控制。
+- CLI 对应 `tab archive`、`native-history archive|unarchive`、`native-history list --archived`，删除使用 `native-history delete --yes`。边界见 [CLI-UI-PARITY.md](../agent-guides/CLI-UI-PARITY.md#new-shell-conversation-archive-and-native-deletion-2026-11-06)。
+- 审查修复：取消归档保留权限元数据及原活动时间，不重新打开也不会放宽新对话权限；项目子目录和工作树共用扫描归属规则。浏览器读取和订阅归档状态，关闭标签仍由所属桌面窗口处理。
+- 合成 Electron 场景在 `e2e/native-conversation-archive.spec.ts`，覆盖桌面归档往返、取消归档后的权限，以及子目录归档和取消归档后的重启保留。第四轮移除额外浏览器窗口，修改后的场景待沙箱外执行；浏览器归档读取、实时订阅、重新挂载和退订由 `useRemoteIntegration.test.ts` 单元回归覆盖，不宣称浏览器整页验收通过。
+
 ## 三家工具能做什么
 
 界面只显示当前工具真正支持的控件，不支持的直接不出现。2026-11-05 已按附录 D 核对各家命令行的帮助和参数（记录在 [hb.7 能力核对](../verification/hb7-capabilities.md)）。标“待实测”的项必须真实调用模型才能确定，会产生费用，先问用户。

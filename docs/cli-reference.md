@@ -149,13 +149,16 @@ Open a local project in the new shell, reusing its agent or creating one silentl
 | -------- | ----------- | ------- |
 | `--json` | Output JSON | -       |
 
-## `maestro-cli native-history <action> [agent] [conversation]`
+## `maestro-cli native-history <action> [session] [conversation-or-tool-call-id]`
 
-List recent projects, list or read native project history, or delete a whole Codex conversation
+List projects, list/read/archive/unarchive/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an exact native history ID)
 
-| Option   | Description | Default |
-| -------- | ----------- | ------- |
-| `--json` | Output JSON | -       |
+| Option       | Description                                            | Default |
+| ------------ | ------------------------------------------------------ | ------- |
+| `--json`     | Output JSON                                            | -       |
+| `--copy`     | Copy the returned tool output to the desktop clipboard | -       |
+| `--archived` | List archived native conversations                     | -       |
+| `--yes`      | Confirm irreversible deletion of native history        | -       |
 
 ## `maestro-cli show`
 
@@ -1246,6 +1249,15 @@ Start context compaction in a fresh conversation; observe completion in the desk
 | `--json`           | Output as JSON (for scripting)                    | -       |
 | `--background`     | Keep the current agent and tab selected (default) | -       |
 | `--focus`          | Select the compacted conversation when ready      | -       |
+
+## `maestro-cli tab archive <tab-id>`
+
+Archive a native conversation and close its tabs
+
+| Option             | Description                                    | Default |
+| ------------------ | ---------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
+| `--json`           | Output as JSON (for scripting)                 | -       |
 
 ## `maestro-cli tab close <tab-id>`
 

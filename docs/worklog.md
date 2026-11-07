@@ -54,6 +54,52 @@ CLI 新增 `changes --by-turn --tab <id> --json` 及 `tab panel <id> changes-fil
 
 `e2e/native-new-shell.spec.ts` 新增 T8 合成日志场景，覆盖两轮文件写入、同文件多组、其他改动、当前差异、暂存、CLI 输出、两条对话偏好隔离和正常重启。Playwright `--list` 发现一条场景，未执行 Electron。由外部运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell.spec.ts --grep 'new shell T8' --retries=0`。本轮没有真实模型调用、SSH 主机实测、Windows/Linux 实测或发行包验收，没有推送、PR、标签或发布。测试执行的隔离疏漏与后续修正如实记录在任务私有报告中。
 
+## 2026-11-06：T9 第四轮归档验收范围调整
+
+用户提供的外部失败为 `e2e/native-conversation-archive.spec.ts` 第三条在 `native.app.waitForEvent('window')` 超时，当时网页包已经构建。本轮未在沙箱内重新启动 Electron，修复前失败证据来自该外部结果。按第一阶段范围将第三条改为桌面子目录归档：左栏显示已归档，重启后仍可展开并取消归档，再次重启仍能看到恢复的历史，CLI 归档和取消归档实时更新桌面。保留原生文件字节不变检查，移除额外浏览器窗口和该场景的网页包前置检查。
+
+先补强并提交浏览器单元回归 `6ffbbeb38`，再调整 Electron 场景。现有浏览器产品实现无需修复，单元回归在原实现上通过，没有伪造本机失败结果。回归覆盖 `includeUnarchived: true` 读取、取消归档权限元数据、实时增删、重新挂载后的读取及订阅、两次卸载的退订，并确认浏览器不处理桌面标签关闭。全部使用合成数据与测试替身。
+
+相关 Vitest 共 5 文件、164 条通过，使用 `--configLoader runner --no-cache`，无跳过、无自动重试。`npx tsc --noEmit -p tsconfig.json` 通过。补充的 E2E 临时严格类型检查通过；最初同时纳入完整 hook 测试文件时，报出三个原有未使用变量和临时配置漏掉的资源声明。随后补齐声明，单独检查 E2E，没有改动类型严格选项，也未宣称完整 hook 文件类型检查通过。E2E 的 ESLint、修改文件的 Prettier 与差异检查通过；hook 测试文件被仓库 ESLint 配置忽略。
+
+Playwright 仅收集 3 条场景，尚未执行修改后的 Electron 流程。Opus 在沙箱外执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-conversation-archive.spec.ts --retries=0`。现有构建脚本仍构建 web-desktop，本轮没有改动它。浏览器整页与真实跨窗口同步不属于本轮通过结果，单元重新挂载不能代替整页验收。
+
+被测对象为当前分支源码，没有构建新安装包。本轮仅修改测试与验收文档，没有删除或修改产品代码，没有新增 CLI 动作或用户文案，旧界面不受影响，因此 CHANGELOG 不新增产品变化。CLI 对等文档与路线图已更新，原有 Open gaps 保留。未运行真实账户、模型、SSH、其他平台或发行包，未推送、开 PR 或发布。
+
+## 2026-11-06：T9 第三轮 Electron 失败定位
+
+外部结果为 3 条中 1 条通过、2 条失败。只读场景的 trace 已出现与 `tab new` 返回 ID 完全一致的打开对话及 Read-Only 控件；`tab show` 读取主进程持久化库存，而创建确认发生在渲染层更新后、默认两秒防抖保存前，因此判定为读取时序。场景现在先确认同一对话行，再以 `expect.poll` 等待该 ID 可读，只容忍该 ID 暂时不存在，随后仍严格检查两项只读字段、归档库存为空和原生文件字节不变。创建只执行一次，没有增加测试重试。
+
+网页场景的 trace 网络记录为 HTTP 503，页面正文是 `Web-Desktop bundle not built`，并未进入归档界面。`scripts/native-e2e.mjs` 原来只构建 main、renderer 和 CLI，现补上 web-desktop。先提交失败回归 `1efdcd8c4`，两条分别证明缺少网页构建和网页构建失败时没有阻止启动验收；修复后两条通过。网页仍使用无 preload 的 Electron `BrowserWindow`，明确桌面尺寸并检查网页产物、HTTP 200、web-desktop 与 newShell 标记，再保留原有刷新、CLI 变更、网页取消归档和原生文件不变断言，无需安装 Chromium。
+
+相关 Vitest 共 5 文件、161 条通过，均使用 `--configLoader runner --no-cache`，没有跳过或自动重试。`npx tsc --noEmit -p tsconfig.json` 通过；E2E 与新增脚本测试的临时严格类型配置补齐原有 Window 声明后通过。首次临时类型配置漏掉该声明导致检查失败，未改动产品类型或降低严格选项。Playwright 仅收集 3 条场景，未启动 Electron。修改文件的 Prettier、适用的 ESLint 和差异检查通过。
+
+被测对象是当前分支验收源码和本地 `dist/web-desktop` 构建产物，不是发行包。为避免默认 Vite 配置加载器写入共享 node_modules，本机使用 runner；直接使用 runner 因现有配置依赖 `__dirname` 失败，随后仅在构建进程提供该变量并把缓存放在临时目录，成功构建网页包。原配置的字体路径、CSS、动态导入和体积警告仍保留。没有运行完整 E2E 构建链，网页运行与修复后的三条 Electron 结果待外部确认。
+
+本轮没有产品实现、用户文案、设置或 CLI 行为变化，旧界面不受影响，CHANGELOG 不新增产品变化。CLI 对等文档补充验收方式，原有 Open gaps 不变。Opus 在沙箱外执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-conversation-archive.spec.ts --retries=0`，入口会自动构建网页包；直接运行 Playwright 时需先完成构建。未运行真实账户、模型、SSH、其他平台或安装包，未推送或发布。
+
+## 2026-11-06：T9 归档第二轮审查修复
+
+三条审查意见均复现。取消归档改为保留独立的权限元数据，仅更新 `archived` 状态；默认归档读取和原生扫描过滤不包含已恢复项，权限解析读取完整库存。归档时保存原活动时间，避免较旧的完全访问对话在取消归档后压过较新的只读对话。未带新状态字段的旧归档仍按已归档读取。
+
+`projectHistoryScopeFor()` 统一扫描、归档展示与权限的项目归属，覆盖子目录、最具体项目、工作树和 SSH 主机。自动历史归档保留原项目键，目录别名可回到原项目；远程路径不调用本机 realpath。浏览器读取并订阅归档元数据，桌面仍独占标签关闭处理。沿用现有 CLI 动作和翻译，本轮没有新增用户动作或文案。
+
+先提交失败回归 `178994bf4`，干净基线为 8 条失败、148 条通过；修复过程中另外复现原活动时间遗漏的 2 条失败。被测产品源码为 `4a784bd925367b68a4b84b876425241b620fd7bb`。最终 12 个相关 Vitest 文件、353 条通过，使用 `--configLoader runner --no-cache`，无跳过、无自动重试。renderer、main、CLI TypeScript 配置通过，修改产品源码与 E2E 的 ESLint、修改文件的 Prettier 和 `git diff --check` 通过。
+
+合成 Electron 文件 `e2e/native-conversation-archive.spec.ts` 共收集 3 条，新增取消归档后不打开便新建的权限场景，以及浏览器刷新、同步和子目录取消归档场景。浏览器使用无 preload 的 Electron 窗口加载 web-desktop，不依赖另装 Chromium。E2E 临时严格类型配置通过；未启动 Electron，未运行真实账户、模型、SSH 或发行包。外部先运行 `npm run build:web-desktop`，再运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-conversation-archive.spec.ts --retries=0`。
+
+新界面关闭时仍不提供归档菜单、不启用归档过滤和权限元数据继承。共享扫描只提取项目归属规则，不新增原生写入；旧扫描行为由相关回归检查。已被旧实现取消归档并删除的权限记录无法凭空恢复；真实多窗口并发和 SSH 仍待外部验收。CLI 未配置账户、独立原生进程活动探测和跨窗口关闭回滚的原有缺口继续保留在对等文档。
+
+## 2026-11-06：T9 对话归档和删除
+
+新界面左栏和命令面板加入归档，项目底部显示归档列表与取消归档。Maestro 设置保存工具、主机、账户历史目录和原生 ID，不修改原生文件；打开标签经原关闭实现移除，原生扫描和缓存投影共同过滤归档项。主进程检查仍在运行的进程，再查询所属窗口的忙碌状态及队列，关闭前再次确认。Codex 删除沿用 `CodexSessionStorage.deleteSession()`，界面明确确认不可恢复，Claude 不提供删除。CLI 增加归档、取消归档、归档列表和标签归档；原有删除增加 `--yes`。
+
+先写回归并观察失败：扫描错误保留 Codex 归档项，最近权限错误取到归档中的 full；继续补出空项目恢复为高权限默认对话、换工具后丢失归档限制、关闭前权限变严未保留，以及工作树归档未计入父项目等失败。修复后，普通对话优先按最近活动继承；仅剩归档时保留最严格的档位，无原生权限元数据时使用只读。特意清空的项目不触发损坏恢复。
+
+被测产品源码提交为 `1052600ea1a0e21b2737fe44ab61587aac15b88f`。13 个相关 Vitest 文件、300 条通过，均使用 `--configLoader runner --no-cache`，无跳过、无自动重试。renderer、main、CLI 三份 TypeScript 配置通过；修改源码及 E2E 的 ESLint、修改文件的 Prettier 与 `git diff --check` 通过。新 Electron 场景仅收集 1 条，未运行。E2E 的首次临时类型配置缺少 CJS 夹具推导和现代标准库，失败；补齐 `allowJs` 与 ES2024、保留 TypeScript 严格选项后通过，不修改测试断言。
+
+`e2e/native-conversation-archive.spec.ts` 使用合成历史验证界面归档、正常重启、界面取消归档和 CLI 往返，并逐次比较原生文件字节。该场景与真实多窗口、SSH、外部原生应用并发写入仍待沙箱外验收。不声称能够识别独立原生 CLI 的运行状态；无匹配工具账户配置的归档项，CLI 修改前需要先有配置。边界已记入 CLI 对等文档的 Open gaps。
+
 ## 2026-11-06：四条已审查分支的集成核对
 
 在 `codex/nov6-qa-batch` 从 `2ebe18308` 依次以非快进合并纳入新对话权限、停止续聊、Codex 任务清单和改动面板文件操作。四次合并提交为 `b48f230b5`、`a737b0f41`、`cc84c0857`、`b30af198e`。后三次的 CHANGELOG 与 worklog 冲突均保留双方新增段落；最后一次的 `e2e/native-new-shell.spec.ts` 保留完整权限继承和单文件操作场景。CLI 对等、规范工具登记、预加载类型、中英文消息及原生 CLI 夹具的自动合并均复核，无功能删减。

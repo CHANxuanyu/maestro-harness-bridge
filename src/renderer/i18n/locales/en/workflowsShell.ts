@@ -1,4 +1,16 @@
 export const workflowsShell = {
+	'workflows.archive.archive': 'Archive',
+	'workflows.archive.unarchive': 'Unarchive',
+	'workflows.archive.archived': 'Archived {count}',
+	'workflows.archive.delete': 'Delete conversation',
+	'workflows.archive.deleteConfirm':
+		'Delete “{title}”? This deletes its native history and cannot be undone.',
+	'workflows.archive.running':
+		'This conversation is running or has queued messages. Stop it or wait for it to finish before archiving or deleting.',
+	'workflows.archive.failed':
+		'The conversation could not be changed. Its owner window or account may be unavailable.',
+	'workflows.archive.error': 'Conversation could not be changed',
+	'workflows.archive.keepsHistory': 'Keeps the native history unchanged',
 	'workflows.shell.synopsisFailed': 'Synopsis failed',
 	'workflows.shell.synopsisNoFinalAnswer': 'No final answer is available for this turn',
 	'workflows.shell.signInRequired': 'Sign in again',

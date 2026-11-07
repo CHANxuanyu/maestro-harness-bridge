@@ -1,3 +1,10 @@
+import type {
+	ArchivedConversation,
+	ConversationArchiveTarget,
+	ConversationArchiveAction,
+	ConversationLifecycleRequest,
+	ConversationLifecycleResult,
+} from '../../shared/conversationArchive';
 import type { NativeToolOutputTarget, NativeToolOutputResult } from '../../shared/nativeToolOutput';
 import type { NativeProject, OpenProjectTarget, OpenProjectResult } from '../../shared/projects';
 /**
@@ -269,8 +276,42 @@ export function createAgentSessionsApi() {
 		},
 		sendOpenProjectResponse: (channel: string, result: OpenProjectResult) =>
 			ipcRenderer.send(channel, result),
-		listProjectHistory: (scopes: ProjectHistoryScope[]): Promise<ProjectHistoryResult> =>
-			ipcRenderer.invoke('agentSessions:listProjectHistory', scopes),
+		archives: (options?: { includeUnarchived?: boolean }): Promise<ArchivedConversation[]> =>
+			ipcRenderer.invoke('agentSessions:archives', options),
+		archiveConversation: (
+			target: ConversationArchiveTarget,
+			action: ConversationArchiveAction
+		): Promise<{ success: boolean }> =>
+			ipcRenderer.invoke('agentSessions:archiveConversation', target, action),
+		onArchivesChanged: (callback: (records: ArchivedConversation[]) => void) => {
+			const handler = (_event: Electron.IpcRendererEvent, records: ArchivedConversation[]) =>
+				callback(records);
+			ipcRenderer.on('agentSessions:archivesChanged', handler);
+			return () => ipcRenderer.removeListener('agentSessions:archivesChanged', handler);
+		},
+		onConversationLifecycle: (
+			callback: (request: ConversationLifecycleRequest) => ConversationLifecycleResult
+		) => {
+			const handler = (
+				_event: Electron.IpcRendererEvent,
+				request: ConversationLifecycleRequest,
+				channel: string
+			) => {
+				if (!channel.startsWith('agentSessions:conversationLifecycle:response:')) return;
+				try {
+					ipcRenderer.send(channel, callback(request));
+				} catch {
+					ipcRenderer.send(channel, { error: 'conversation-owner-unavailable' });
+				}
+			};
+			ipcRenderer.on('agentSessions:conversationLifecycle', handler);
+			return () => ipcRenderer.removeListener('agentSessions:conversationLifecycle', handler);
+		},
+		listProjectHistory: (
+			scopes: ProjectHistoryScope[],
+			options?: { archived?: boolean }
+		): Promise<ProjectHistoryResult> =>
+			ipcRenderer.invoke('agentSessions:listProjectHistory', scopes, options),
 		list: (agentId: string, projectPath: string, sshRemoteId?: string) =>
 			ipcRenderer.invoke('agentSessions:list', agentId, projectPath, sshRemoteId),
 

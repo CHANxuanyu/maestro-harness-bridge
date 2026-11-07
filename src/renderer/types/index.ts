@@ -845,6 +845,8 @@ export interface ProviderTabSession {
 // Each tab represents a separate AI agent conversation (Claude Code, OpenCode, etc.)
 export interface AITab {
 	changeTurnIndex?: import('../../shared/gitChangeTurns').ChangeTurnIndex;
+	/** Retained permission inventory only; archived tabs are never rendered. */
+	archived?: boolean;
 	newShellPanel?: import('../../shared/newShellPanel').NewShellPanelState;
 	origin?: ConversationOrigin;
 	id: string; // Unique tab ID (generated UUID)
@@ -1365,6 +1367,8 @@ export interface SnoozedGroupPayload {
 export type SnoozedGroupEntry = SnoozedGroupPayload & SnoozedTabEntryBase;
 
 export interface Session {
+	/** Archive or delete deliberately left this project without an open conversation. */
+	conversationArchiveEmpty?: boolean;
 	id: string;
 	/** Browser-only marker. Main restores omitted content on every partial save. */
 	deferredContent?: import('../../shared/deferredSessionContent').DeferredSessionContent;

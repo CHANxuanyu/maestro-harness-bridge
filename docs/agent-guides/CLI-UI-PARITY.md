@@ -686,6 +686,25 @@ logs, plus each provider's early native write before 600 later messages and
 5000-character tool inputs. The Codex fixture uses legacy call/result records.
 They have been authored but not executed in the sandbox.
 
+## New shell conversation archive and native deletion (2026-11-06)
+
+| 界面动作                     | CLI                                                                  | 共用实现                                                             |
+| ---------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 对话右键或命令面板归档       | `tab archive <tab-id>`；`native-history archive <agent> <native-id>` | `agentSessions:archiveConversation` 与 `createConversationArchive()` |
+| 项目底部展开已归档列表       | `native-history list --archived`；限定项目时加 `<agent>`             | 主进程归档元数据与 `listProjectHistory` 的归档过滤                   |
+| 取消归档                     | `native-history unarchive <agent> <native-id>`                       | 同一归档服务，取消标记并保留权限元数据                               |
+| Codex 对话右键或命令面板删除 | `native-history delete <agent> <native-id> --yes`                    | 新界面复用同一服务，再调用原有 `CodexSessionStorage.deleteSession()` |
+
+归档写入 Maestro 设置的 `archivedConversations`，以工具、主机、规范账户历史目录和原生 ID 为身份。主进程检查仍在运行的进程，并向每个所属窗口请求实时检查及标签关闭。忙碌、排队或窗口无法确认时拒绝；关闭采用原标签实现，不调用模型、不写原生历史。项目扫描、缓存条目和打开标签的投影都排除归档项。工作树归档仍显示在所属项目下。
+
+取消归档仅将记录的 `archived` 设为 `false`，保留权限、原活动时间及项目归属；旧记录未带该字段时仍视为已归档。默认归档接口和 `native-history list --archived` 只返回已归档项，渲染层以 `includeUnarchived` 读取完整权限库存。浏览器和桌面均初始读取并订阅同一事件，只有桌面处理标签关闭。`projectHistoryScopeFor()` 统一目录边界、最具体项目、工作树和主机归属，子目录归档也有恢复入口。
+
+T9 第三轮仅修正验收入口，没有新增 CLI 动作。`tab new` 确认渲染层创建完成时，`tab show` 读取的主进程持久化库存可能尚未更新；验收先确认页面中的同一标签，再等待该 ID 可读，仍同时断言 `permissionMode: readonly` 和 `readOnly: true`。`test:e2e` 同时构建 `web-desktop`。
+
+T9 第四轮将子目录归档的 Electron 验收收敛为桌面左栏操作、归档和取消归档后的重启保留，以及 `native-history archive|unarchive` 的桌面同步。浏览器归档读取、保留取消归档权限元数据、实时增删、重新挂载后的读取与订阅和卸载退订，由 `src/__tests__/renderer/hooks/useRemoteIntegration.test.ts` 覆盖。移除验收中的额外 `BrowserWindow`，产品实现和 CLI 动作均不变；修改后的 Electron 场景待外部执行，浏览器整页及跨窗口同步不在本轮验收范围。
+
+权限继承排除归档项的最近活动；没有普通对话时使用归档中最严格的已知档位。没有 Maestro 权限记录的原生历史保守记为只读。空项目不会在重启时被当作损坏数据补出高权限对话。新界面关闭时不启用归档过滤或新增菜单；归档写操作要求 `newShell`。既有 CLI 删除增加 `--yes` 确认，这是两种界面共用的安全收紧。Claude 不提供原生删除。
+
 ## Open gaps
 
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no
@@ -709,6 +728,10 @@ readable native write records, CLI still reads the persisted independent index.
 A live write can lag until normal persistence completes. Early writes no longer
 disappear permanently after log trimming, and native indexing no longer depends
 on scrolling through history. No new UI action or CLI verb was added.
+
+- T9：自动发现但尚无匹配工具及账户配置的历史，可在界面直接归档或取消归档。CLI 的修改命令使用 `<agent>` 指定账户，需要先有匹配的配置；暂未提供直接按账户目录修改的参数。全局 `native-history list --archived` 仍可读取这些条目。
+- T9：运行状态拒绝覆盖 Maestro 管理的进程、窗口标签和队列。尚未接入其他应用或独立原生 CLI 的活动探测，不声称能识别这些外部进程是否正在写同一历史。
+- T9：跨窗口先全部检查，再逐个关闭。若后一个窗口在关闭时失败，归档标记回退，但已关闭窗口的标签不自动恢复；尚未提供跨窗口事务式回滚。
 
 **Provider switch wording (2026-11-06).** The existing CLI help, force warning and
 success text still describe the classic reset behavior. With `newShell` enabled,

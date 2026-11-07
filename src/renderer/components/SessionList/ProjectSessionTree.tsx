@@ -1,3 +1,4 @@
+import { requestConversationAction } from '../../services/conversationArchive';
 import { useNewConversationTools, newShellConversation } from '../../services/newShellConversation';
 import { chooseProject } from '../../services/openProject';
 import { Spinner } from '../ui/Spinner';
@@ -66,6 +67,8 @@ import { useFormatRelativeTime, useT, type TFunction } from '../../i18n';
 export type ProjectHistoryLoadStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
 
 export interface ProjectSessionTreeProps {
+	onArchiveConversation?: (conversation: SidebarConversation) => void;
+	onDeleteConversation?: (conversation: SidebarConversation) => void;
 	headerMenu?: ReactNode;
 	theme: Theme;
 	projects: SidebarProject[];
@@ -401,16 +404,17 @@ const ConversationRow = memo(function ConversationRow({
 	const title = conversationTitle(conversation, t);
 	const worktree = conversation.history?.worktree;
 	const isOpen = conversation.kind === 'open';
+	const newShell = useSettingsStore(selectNewShellEnabled);
+	const hasMenu = isOpen || (newShell && !!conversation.nativeSessionId);
 	const indent = 4 + depth * DEPTH_INDENT + 16;
 
 	const handleContextMenu = useCallback(
 		(e: ReactMouseEvent<HTMLButtonElement>) => {
-			// Only an open tab has actions (rename, close tab).
-			if (!isOpen) return;
+			if (!hasMenu) return;
 			e.preventDefault();
 			openMenu('row', conversation.key, e.currentTarget, { x: e.clientX, y: e.clientY });
 		},
-		[isOpen, openMenu, conversation.key]
+		[hasMenu, openMenu, conversation.key]
 	);
 
 	return (
@@ -510,7 +514,7 @@ const ConversationRow = memo(function ConversationRow({
 					) : null}
 					<StatusMark theme={theme} conversation={conversation} t={t} />
 				</button>
-				{isOpen && (
+				{hasMenu && (
 					<button
 						type="button"
 						aria-label={`${t('workflows.conversations.more')}: ${title}`}
@@ -643,6 +647,7 @@ const ProjectSection = memo(function ProjectSection({
 	openMenu,
 }: ProjectSectionProps) {
 	const listId = useId();
+	const [archivesExpanded, setArchivesExpanded] = useState(false);
 	// A search reveals matches inside collapsed projects; the stored collapse
 	// state is left alone so clearing the search restores the user's layout.
 	const expanded = searching || !project.collapsed;
@@ -814,6 +819,50 @@ const ProjectSection = memo(function ProjectSection({
 							/>
 						</li>
 					)}
+					{newShell && !!project.archivedConversations?.length && (
+						<li style={{ paddingLeft: rowIndent, color: theme.colors.textDim }}>
+							<button
+								type="button"
+								data-tree-nav=""
+								aria-expanded={archivesExpanded}
+								className="w-full text-left py-1.5 text-xs rounded focus-visible:ring-1"
+								onClick={() => setArchivesExpanded((value) => !value)}
+							>
+								{t('workflows.archive.archived', { count: project.archivedConversations.length })}
+							</button>
+							{archivesExpanded && (
+								<ul>
+									{project.archivedConversations.map((record) => (
+										<li key={record.key} className="flex items-center gap-2 py-1 text-xs">
+											<span className="truncate flex-1" title={record.title}>
+												{record.title}
+											</span>
+											<button
+												type="button"
+												data-tree-nav=""
+												className="shrink-0 rounded focus-visible:ring-1"
+												style={{ color: theme.colors.accent }}
+												onClick={() =>
+													requestConversationAction(
+														{
+															provider: record.provider,
+															nativeSessionId: record.nativeSessionId,
+															projectPath: record.projectPath,
+															accountDir: record.accountDir,
+															sshRemoteId: record.sshRemoteId,
+														},
+														'unarchive'
+													)
+												}
+											>
+												{t('workflows.archive.unarchive')}
+											</button>
+										</li>
+									))}
+								</ul>
+							)}
+						</li>
+					)}
 				</ul>
 			)}
 		</li>
@@ -847,6 +896,8 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	onNewConversationHere,
 	onRenameConversation,
 	onCloseConversation,
+	onArchiveConversation,
+	onDeleteConversation,
 	onDeleteWorktree,
 	onTogglePin,
 	onShowMore,
@@ -935,7 +986,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	if (menu) {
 		if (menu.kind === 'row') {
 			const conversation = projects.flatMap((p) => p.conversations).find((c) => c.key === menu.key);
-			// Only an open tab has actions; native history is never deleted from here.
+			// Open tabs keep their existing tab actions.
 			if (conversation && conversation.kind === 'open') {
 				menuLabel = t('workflows.conversations.more');
 				menuSections = [
@@ -1000,6 +1051,39 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						],
 					},
 				];
+			}
+			if (newShell && conversation?.nativeSessionId) {
+				menuLabel = t('workflows.conversations.more');
+				menuSections ??= [];
+				menuSections.push({
+					key: 'native-history',
+					items: [
+						...(onArchiveConversation
+							? [
+									{
+										key: 'archive',
+										label: t('workflows.archive.archive'),
+										detail: t(
+											conversation.busy
+												? 'workflows.archive.running'
+												: 'workflows.archive.keepsHistory'
+										),
+										onSelect: () => onArchiveConversation(conversation),
+									},
+								]
+							: []),
+						...(conversation.provider === 'codex' && onDeleteConversation
+							? [
+									{
+										key: 'delete-native',
+										label: t('workflows.archive.delete'),
+										color: theme.colors.error,
+										onSelect: () => onDeleteConversation(conversation),
+									},
+								]
+							: []),
+					],
+				});
 			}
 		} else {
 			const project = projects.find((p) => p.key === menu.key);

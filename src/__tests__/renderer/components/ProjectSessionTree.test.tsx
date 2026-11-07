@@ -478,3 +478,68 @@ describe('ProjectSessionTree', () => {
 		expect(props.onRetryHistory).toHaveBeenCalled();
 	});
 });
+
+it('offers archive and native delete on Codex history only in the new shell', () => {
+	useSettingsStore.setState({ newShell: true });
+	const archive = vi.fn();
+	const remove = vi.fn();
+	setup({
+		projects: [project({ conversations: [historyRow()] })],
+		onArchiveConversation: archive,
+		onDeleteConversation: remove,
+	});
+	fireEvent.contextMenu(screen.getByText('Old investigation').closest('button')!);
+	fireEvent.click(screen.getByText('workflows.archive.archive'));
+	expect(archive).toHaveBeenCalledWith(expect.objectContaining({ nativeSessionId: 'native-1' }));
+	fireEvent.contextMenu(screen.getByText('Old investigation').closest('button')!);
+	expect(screen.getByText('workflows.archive.delete')).toBeTruthy();
+});
+
+it('never offers native deletion for Claude, and hides archive actions in the classic shell', () => {
+	useSettingsStore.setState({ newShell: true });
+	const row = conversation({ nativeSessionId: 'claude-native' });
+	const { rerender } = setup({
+		projects: [project({ conversations: [row] })],
+		onArchiveConversation: vi.fn(),
+		onDeleteConversation: vi.fn(),
+	});
+	fireEvent.contextMenu(screen.getByText('Fix bug').closest('button')!);
+	expect(screen.queryByText('workflows.archive.delete')).toBeNull();
+	expect(screen.getByText('workflows.archive.archive')).toBeTruthy();
+	fireEvent.keyDown(document, { key: 'Escape' });
+	useSettingsStore.setState({ newShell: false });
+	rerender({ projects: [project({ conversations: [row] })] });
+	fireEvent.contextMenu(screen.getByText('Fix bug').closest('button')!);
+	expect(screen.queryByText('workflows.archive.archive')).toBeNull();
+});
+it('expands archived conversations at the bottom of their project and unarchives through the shared operation', async () => {
+	useSettingsStore.setState({ newShell: true });
+	window.maestro.agentSessions.archiveConversation = vi.fn().mockResolvedValue({ success: true });
+	setup({
+		projects: [
+			project({
+				archivedConversations: [
+					{
+						key: 'archive',
+						title: 'Archived item',
+						provider: 'codex',
+						nativeSessionId: 'native',
+						projectPath: '/p',
+						accountDir: '/synthetic-account',
+						ownerIds: [],
+					},
+				] as never,
+			}),
+		],
+	});
+	expect(screen.queryByText('Archived item')).toBeNull();
+	fireEvent.click(screen.getByText('workflows.archive.archived'));
+	expect(screen.getByText('Archived item')).toBeTruthy();
+	fireEvent.click(screen.getByText('workflows.archive.unarchive'));
+	await waitFor(() =>
+		expect(window.maestro.agentSessions.archiveConversation).toHaveBeenCalledWith(
+			expect.objectContaining({ nativeSessionId: 'native', accountDir: '/synthetic-account' }),
+			'unarchive'
+		)
+	);
+});

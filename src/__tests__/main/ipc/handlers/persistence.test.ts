@@ -185,10 +185,29 @@ describe('persistence IPC handlers', () => {
 		expect(mockSettingsStore.set).not.toHaveBeenCalled();
 	});
 
+	it('saves project settings through the registered handler and broadcasts the update', async () => {
+		mockSettingsStore.get.mockImplementation((_key, fallback) => fallback);
+		const result = await handlers.get('settings:projectSettings')!(
+			{},
+			{
+				action: 'set',
+				scope: { projectPath: '~/project', sshRemoteId: 'fixture' },
+				patch: { defaultModel: 'fixture-model' },
+			}
+		);
+		expect(result).toMatchObject({ success: true, settings: { defaultModel: 'fixture-model' } });
+		expect(mockSettingsStore.set).toHaveBeenCalledExactlyOnceWith('projectSettings', {
+			'["fixture","~/project"]': { defaultModel: 'fixture-model' },
+		});
+		expect(broadcastBridgeEvent).toHaveBeenCalledExactlyOnceWith('settings:externalChange', []);
+		expect(mockSessionsStore.set).not.toHaveBeenCalled();
+	});
+
 	describe('registration', () => {
 		it('should register all persistence handlers', () => {
 			const expectedChannels = [
 				'settings:aboutMe',
+				'settings:projectSettings',
 				'settings:get',
 				'settings:set',
 				'settings:getAll',

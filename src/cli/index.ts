@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { openProjectCommand } from './commands/open-project';
 import { aboutMe } from './commands/about-me';
+import { projectSettings } from './commands/project-settings';
 // Maestro CLI
 // Command-line interface for Maestro
 
@@ -547,6 +548,32 @@ program
 	)
 	.option('--json', 'Output JSON including per-file states')
 	.action(aboutMe);
+
+program
+	.command('project')
+	.description('Manage project defaults for future conversations in the new interface')
+	.command('settings <action>')
+	.description('Show or set defaults stored by Maestro for one project and host')
+	.requiredOption('--path <path>', 'Project directory; remote paths are kept on the specified host')
+	.option('--ssh-remote <id>', 'SSH host identity; omit for local projects')
+	.option('--provider <id>', 'Default tool, or inherit to clear')
+	.option('--model <id>', 'Default model, or inherit to clear')
+	.option('--effort <level>', 'Default reasoning effort, or inherit to clear')
+	.option('--permission <mode>', 'full, standard, readonly, or inherit to clear')
+	.option(
+		'--env <NAME=VALUE>',
+		'Replace project environment variables; repeat for every entry',
+		(value: string, previous: string[]) => [...previous, value],
+		[]
+	)
+	.option('--clear-env', 'Remove the project environment override')
+	.option(
+		'--acknowledge-full-access',
+		'Acknowledge once that full access permits reading, writing and commands without approval'
+	)
+	.option('--show-secrets', 'Reveal environment credentials in output')
+	.option('--json', 'Output the settings snapshot as JSON')
+	.action(projectSettings);
 
 program
 	.command('changes [action] [paths...]')

@@ -286,6 +286,28 @@ Show, stage, apply or inspect the shared native instruction profile
 | `--confirm <path>` | Approve this exact resolved file from status (repeatable) | `[]`    |
 | `--json`           | Output JSON including per-file states                     | -       |
 
+## `maestro-cli project`
+
+Manage project defaults for future conversations in the new interface
+
+## `maestro-cli project settings <action>`
+
+Show or set defaults stored by Maestro for one project and host
+
+| Option                      | Description                                                                              | Default |
+| --------------------------- | ---------------------------------------------------------------------------------------- | ------- |
+| `--path <path>`             | Project directory; remote paths are kept on the specified host                           | -       |
+| `--ssh-remote <id>`         | SSH host identity; omit for local projects                                               | -       |
+| `--provider <id>`           | Default tool, or inherit to clear                                                        | -       |
+| `--model <id>`              | Default model, or inherit to clear                                                       | -       |
+| `--effort <level>`          | Default reasoning effort, or inherit to clear                                            | -       |
+| `--permission <mode>`       | full, standard, readonly, or inherit to clear                                            | -       |
+| `--env <NAME=VALUE>`        | Replace project environment variables; repeat for every entry                            | `[]`    |
+| `--clear-env`               | Remove the project environment override                                                  | -       |
+| `--acknowledge-full-access` | Acknowledge once that full access permits reading, writing and commands without approval | -       |
+| `--show-secrets`            | Reveal environment credentials in output                                                 | -       |
+| `--json`                    | Output the settings snapshot as JSON                                                     | -       |
+
 ## `maestro-cli changes [action] [paths]`
 
 Read, stage, unstage, revert or commit changes in a conversation working directory

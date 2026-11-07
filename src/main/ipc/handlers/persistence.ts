@@ -1,4 +1,5 @@
 import type { AboutMeService } from '../../about-me';
+import { createProjectSettingsService } from '../../project-settings';
 /**
  * Persistence IPC Handlers
  *
@@ -359,6 +360,16 @@ export function registerPersistenceHandlers(
 	};
 
 	// Settings management
+	const projectSettings = createProjectSettingsService({
+		settingsStore,
+		onChanged: () => {
+			notifyPeerWindows(undefined);
+			broadcastBridgeEvent('settings:externalChange', []);
+		},
+	});
+	ipcMain.handle('settings:projectSettings', (_, command: unknown) =>
+		projectSettings.command(command)
+	);
 	if (deps.aboutMe) {
 		ipcMain.handle('settings:aboutMe', (event, command: unknown) =>
 			deps.aboutMe!.command(command, senderWebContentsIdOf(event))

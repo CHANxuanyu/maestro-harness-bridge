@@ -1,4 +1,5 @@
 import type { AboutMeApplied } from '../../shared/aboutMe';
+import type { ProjectSettingsMap } from '../../shared/projectSettings';
 /**
  * Store type definitions
  *
@@ -50,6 +51,7 @@ export interface BootstrapSettings {
 export interface MaestroSettings {
 	conductorProfile?: string;
 	aboutMeApplied?: Record<string, AboutMeApplied>;
+	projectSettings?: ProjectSettingsMap;
 	uiLanguage: UiLanguagePreference;
 	newShell: boolean;
 	sidebarNavigationMode: 'conversations' | 'agents';

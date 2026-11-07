@@ -10,6 +10,12 @@ export interface ConversationParentCandidate {
 	nativeSessionId: string | null;
 }
 
+/**
+ * A hand-off moves the work, so it stays a peer of the conversation it continued.
+ * Nested, archiving the old thread would hide the one the user is working in.
+ */
+const isMovedWork = (origin: { kind?: ConversationOrigin['kind'] }) => origin.kind === 'handoff';
+
 /** One parent for the sidebar and CLI, without guessing across runner accounts or hosts. */
 export function findConversationParent<T extends ConversationParentCandidate>(
 	origin:
@@ -17,7 +23,7 @@ export function findConversationParent<T extends ConversationParentCandidate>(
 		| undefined,
 	candidates: readonly T[]
 ): T | null {
-	if (!origin) return null;
+	if (!origin || isMovedWork(origin)) return null;
 	const owned = candidates.filter((candidate) => candidate.ownerId === origin.sourceSessionId);
 	const exact = owned.find((candidate) => candidate.tabId === origin.sourceTabId);
 	if (exact) return exact;
@@ -61,7 +67,7 @@ export function conversationBranch<
 			const entry = { ownerId: owner.id, provider, tab };
 			if (rootOwner && tab.agentSessionId === nativeSessionId) pending.push(entry);
 			const origin = tab.origin ?? tab.consultOrigin;
-			if (!origin) continue;
+			if (!origin || (tab.origin && isMovedWork(tab.origin))) continue;
 			const keys = [JSON.stringify(['tab', origin.sourceSessionId, origin.sourceTabId])];
 			if (tab.origin?.sourceNativeSessionId)
 				keys.push(

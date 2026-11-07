@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ConversationOrigin } from '../../shared/aiHandoff';
-import { findConversationParent } from '../../shared/conversationChildren';
+import { conversationBranch, findConversationParent } from '../../shared/conversationChildren';
 
 const origin: ConversationOrigin = {
 	kind: 'review',
@@ -19,6 +19,40 @@ const parent = {
 };
 
 describe('conversation parent identity', () => {
+	it('keeps a hand-off as a peer of the conversation it continued', () => {
+		const candidates = [
+			{ key: 'a:t', ownerId: 'a', tabId: 't', provider: 'claude-code', nativeSessionId: 'n' },
+		];
+		const origin = { sourceSessionId: 'a', sourceTabId: 't', sourceProvider: 'claude-code' };
+		expect(findConversationParent({ ...origin, kind: 'handoff' }, candidates)).toBeNull();
+		expect(findConversationParent({ ...origin, kind: 'review' }, candidates)?.key).toBe('a:t');
+		expect(findConversationParent({ ...origin, kind: 'subtask' }, candidates)?.key).toBe('a:t');
+	});
+
+	it('leaves a hand-off out of the branch an archive hides or blocks on', () => {
+		const origin = {
+			sourceSessionId: 'a',
+			sourceTabId: 't',
+			sourceProvider: 'claude-code',
+			createdAt: 1,
+		};
+		const sessions = [
+			{
+				id: 'a',
+				toolType: 'claude-code',
+				aiTabs: [
+					{ id: 't', agentSessionId: 'n' },
+					{ id: 'moved', origin: { ...origin, kind: 'handoff' as const } },
+					{ id: 'review', origin: { ...origin, kind: 'review' as const } },
+				],
+			},
+		];
+		expect(conversationBranch(sessions, ['a'], 'n').map(({ tab }) => tab.id)).toEqual([
+			't',
+			'review',
+		]);
+	});
+
 	it('prefers the exact source tab over a reopened copy', () => {
 		const exact = { ...parent, key: 'original', tabId: 'original-tab' };
 		expect(findConversationParent(origin, [parent, exact])).toBe(exact);

@@ -8,6 +8,8 @@ export const workflowsShell = {
 		'Specify the tool that owns the model with --model-provider or select a default tool.',
 	'workflows.projectSettings.cli.modelProviderHelp':
 		'Tool owning the model and effort when the default tool is inherited',
+	'workflows.projectSettings.errors.useReadService':
+		'Use project settings show to read project settings; add --show-secrets to reveal environment values.',
 	'workflows.projectSettings.errors.scopeRequired':
 		'A project path and an optional SSH host are required',
 	'workflows.projectSettings.errors.invalidPatch': 'Project settings must be an object',

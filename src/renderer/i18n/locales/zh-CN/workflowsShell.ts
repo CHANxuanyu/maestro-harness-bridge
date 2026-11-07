@@ -8,6 +8,8 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.projectSettings.errors.modelProviderRequired':
 		'请用 --model-provider 指定模型所属工具，或选择默认工具。',
 	'workflows.projectSettings.cli.modelProviderHelp': '沿用当前工具时，指定模型和强度所属的工具',
+	'workflows.projectSettings.errors.useReadService':
+		'请使用 project settings show 读取项目设置；加 --show-secrets 可显示环境变量原值。',
 	'workflows.projectSettings.errors.scopeRequired': '需要项目路径；SSH 项目还需提供主机标识。',
 	'workflows.projectSettings.errors.invalidPatch': '项目设置必须是一个对象。',
 	'workflows.projectSettings.errors.unknownSetting': '未知项目设置：{field}',

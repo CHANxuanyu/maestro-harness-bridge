@@ -223,6 +223,8 @@ export interface CliActivity {
  * Web client connection info.
  */
 export interface WebClient {
+	/** Set only from the per-boot CLI secret at WebSocket upgrade. */
+	trustedCli?: boolean;
 	socket: WebSocket;
 	id: string;
 	connectedAt: number;

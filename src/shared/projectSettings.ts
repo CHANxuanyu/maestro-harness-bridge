@@ -49,6 +49,7 @@ export interface ProjectSettingsResult {
 	scope: ProjectSettingsScope;
 	settings: ProjectSettings;
 	code?: 'invalid-request' | 'full-access-confirmation-required' | 'persistence-failed';
+	environmentRedacted?: boolean;
 	errorCode?: ProjectSettingsErrorCode;
 	params?: Record<string, string>;
 	/** Localized by the caller, never by the main service. */
@@ -61,4 +62,20 @@ export function projectSettingsKey(scope: ProjectSettingsScope): string {
 		scope.sshRemoteId ?? null,
 		normalizeWorktreePath(scope.projectPath, !!scope.sshRemoteId),
 	]);
+}
+
+/** Keep the presence of environment defaults for creation routing without exposing values. */
+export function publicProjectSettings(settings: ProjectSettings): ProjectSettings {
+	return { ...settings, ...(settings.envVars ? { envVars: {} } : {}) };
+}
+
+export function publicProjectSettingsMap(settings: ProjectSettingsMap): ProjectSettingsMap {
+	return Object.fromEntries(
+		Object.entries(settings).map(([key, value]) => [key, publicProjectSettings(value)])
+	);
+}
+
+/** Dot notation must not bypass the service's confirmation and validation. */
+export function isProjectSettingsKey(key: string): boolean {
+	return key === 'projectSettings' || key.startsWith('projectSettings.');
 }

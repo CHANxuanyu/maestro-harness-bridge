@@ -1,3 +1,4 @@
+import { projectSettingsKey } from '../../../shared/projectSettings';
 import { conversationPermissionSnapshot } from '../../../renderer/utils/newConversationPermissions';
 import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
 import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
@@ -60,6 +61,11 @@ beforeEach(() => {
 		getConversationPermissions: vi.fn().mockResolvedValue([]),
 	};
 	vi.clearAllMocks();
+	window.maestro.settings.projectSettings = vi.fn(async (command) => ({
+		success: true,
+		scope: command.scope,
+		settings: useSettingsStore.getState().projectSettings[projectSettingsKey(command.scope)] ?? {},
+	}));
 	useOperationStore.getState().resetAll();
 	clearLiveDraft('source-tab');
 	useSettingsStore.setState({
@@ -1127,4 +1133,23 @@ it('clears a project environment override for future conversations without chang
 	expect(sessions().find((session) => session.id === 'target')?.customEnvVars?.PROJECT_VALUE).toBe(
 		'old'
 	);
+});
+
+it('loads project environment through the dedicated service after general settings hydration redacts it', async () => {
+	useSettingsStore.setState({
+		newShell: true,
+		projectSettings: { '[null,"/project"]': { envVars: {} } },
+	});
+	vi.mocked(window.maestro.settings.projectSettings).mockResolvedValueOnce({
+		success: true,
+		scope: { projectPath: '/project' },
+		settings: { envVars: { PROJECT_TOKEN: 'synthetic-private-token' } },
+	});
+	const result = await openHandoffTarget(
+		request({ newConversation: {}, sourcePermission: { permissionMode: 'full' } })
+	);
+	expect(result.success).toBe(true);
+	expect(sessions().find((session) => session.id === result.agentId)?.customEnvVars).toEqual({
+		PROJECT_TOKEN: 'synthetic-private-token',
+	});
 });

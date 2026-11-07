@@ -3,6 +3,8 @@ import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.projectSettings.errors.requestFailed': '项目设置请求失败。',
+	'workflows.projectSettings.errors.useService': '请使用 project settings set 修改项目设置。',
+	'workflows.projectSettings.environmentDesktopOnly': '请在桌面应用中查看和编辑环境变量。',
 	'workflows.projectSettings.errors.scopeRequired': '需要项目路径；SSH 项目还需提供主机标识。',
 	'workflows.projectSettings.errors.invalidPatch': '项目设置必须是一个对象。',
 	'workflows.projectSettings.errors.unknownSetting': '未知项目设置：{field}',

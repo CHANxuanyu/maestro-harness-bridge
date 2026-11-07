@@ -1,6 +1,7 @@
 import {
 	projectConversationFields,
 	projectSettingsForSession,
+	projectSettingsScopeForSession,
 } from '../utils/projectConversationDefaults';
 import { useOperationStore } from '../stores/operationStore';
 import { useSessionStore, updateAiTab, updateSessionWith } from '../stores/sessionStore';
@@ -315,7 +316,20 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				projectRoot: request.projectPath,
 				sessionSshRemoteConfig: request.sessionSshRemoteConfig,
 			};
-			const project = projectSettingsForSession(projectOwner);
+			let project = projectSettingsForSession(projectOwner);
+			if (project?.envVars) {
+				const response = await window.maestro.settings.projectSettings({
+					action: 'show',
+					scope: projectSettingsScopeForSession(projectOwner),
+				});
+				if (!response.success || response.environmentRedacted)
+					return {
+						success: false,
+						code: 'unavailable',
+						error: getT()('workflows.projectSettings.failed'),
+					};
+				project = response.settings;
+			}
 			const projectFields = newShell
 				? projectConversationFields(
 						projectOwner,

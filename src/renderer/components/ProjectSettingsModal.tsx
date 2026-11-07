@@ -41,6 +41,7 @@ export function ProjectSettingsModal({
 	const [draft, setDraft] = useState<ProjectSettings>({});
 	const [acknowledged, setAcknowledged] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const [environmentRedacted, setEnvironmentRedacted] = useState(false);
 	const [validEnvironment, setValidEnvironment] = useState(true);
 	const [error, setError] = useState<string>();
 	const scopedSessions = sessions.filter(
@@ -89,6 +90,7 @@ export function ProjectSettingsModal({
 					return;
 				}
 				setDraft(result.settings);
+				setEnvironmentRedacted(!!result.environmentRedacted);
 				setLoadedScope(scopeKey);
 			})
 			.catch(() => {
@@ -112,7 +114,7 @@ export function ProjectSettingsModal({
 					defaultModel: draft.defaultModel?.trim() || null,
 					defaultReasoningEffort: draft.defaultReasoningEffort || null,
 					defaultPermissionMode: draft.defaultPermissionMode || null,
-					envVars: draft.envVars ?? {},
+					...(environmentRedacted ? {} : { envVars: draft.envVars ?? {} }),
 				},
 				acknowledgeFullAccess: needsAcknowledgement && acknowledged,
 			});
@@ -302,16 +304,20 @@ export function ProjectSettingsModal({
 								<span>{t('workflows.projectSettings.fullAccess')}</span>
 							</label>
 						)}
-						<EnvVarsEditor
-							key={scopeKey}
-							theme={theme}
-							envVars={draft.envVars ?? {}}
-							setEnvVars={(envVars) => setDraft((current) => ({ ...current, envVars }))}
-							label={t('workflows.projectSettings.environment')}
-							description={t('workflows.projectSettings.environmentHelp')}
-							maskSecrets
-							onValidityChange={setValidEnvironment}
-						/>
+						{environmentRedacted ? (
+							<p>{t('workflows.projectSettings.environmentDesktopOnly')}</p>
+						) : (
+							<EnvVarsEditor
+								key={scopeKey}
+								theme={theme}
+								envVars={draft.envVars ?? {}}
+								setEnvVars={(envVars) => setDraft((current) => ({ ...current, envVars }))}
+								label={t('workflows.projectSettings.environment')}
+								description={t('workflows.projectSettings.environmentHelp')}
+								maskSecrets
+								onValidityChange={setValidEnvironment}
+							/>
+						)}
 					</fieldset>
 				)}
 			</div>

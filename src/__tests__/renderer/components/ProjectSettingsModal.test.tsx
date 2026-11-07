@@ -120,3 +120,18 @@ it('does not save an invalid environment draft or close after a failed save', as
 	expect(close).not.toHaveBeenCalled();
 	expect(screen.getByDisplayValue('test-secret-value')).toBeInTheDocument();
 });
+
+it('preserves hidden environment values when saving other settings from a browser', async () => {
+	api.mockResolvedValue({
+		success: true,
+		scope,
+		settings: { defaultProvider: 'codex', envVars: {} },
+		environmentRedacted: true,
+	});
+	const close = setup();
+	await screen.findByText('View and edit environment variables in the desktop app.');
+	fireEvent.change(screen.getByLabelText('Default model'), { target: { value: 'test-model' } });
+	fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+	await waitFor(() => expect(close).toHaveBeenCalled());
+	expect(api.mock.calls.at(-1)![0].patch).not.toHaveProperty('envVars');
+});

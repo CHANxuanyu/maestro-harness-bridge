@@ -29,3 +29,18 @@ it('retains offline file writes when the desktop is closed', async () => {
 	expect(writeSettingValue).toHaveBeenCalledWith('activeThemeId', 'clay-dark');
 	expect(invokeNativeHistory).not.toHaveBeenCalled();
 });
+
+it.each([true, false])(
+	'rejects project settings writes online=%s without reaching either storage route',
+	async (online) => {
+		vi.mocked(isCliServerRunning).mockReturnValue(online);
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+		for (const key of ['projectSettings', 'projectSettings.any.defaultPermissionMode'])
+			await settingsSet(key, '{"defaultPermissionMode":"full"}', { json: true });
+		expect(writeSettingValue).not.toHaveBeenCalled();
+		expect(invokeNativeHistory).not.toHaveBeenCalled();
+		expect(process.exit).toHaveBeenCalledWith(1);
+		expect(JSON.stringify(vi.mocked(console.error).mock.calls)).toContain('project settings set');
+	}
+);

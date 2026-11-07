@@ -1,3 +1,5 @@
+import { isProjectSettingsKey } from '../../shared/projectSettings';
+import { projectSettingsTranslator } from './project-settings';
 // Set a single setting value
 // Supports dot-notation, auto type coercion, --raw for explicit JSON
 
@@ -50,6 +52,8 @@ export function settingsSet(
 	options: SettingsSetOptions
 ): void | Promise<void> {
 	try {
+		if (isProjectSettingsKey(key))
+			throw new Error(projectSettingsTranslator()('workflows.projectSettings.errors.useService'));
 		const oldValue = readSettingValue(key);
 		const topKey = key.split('.')[0];
 		const meta = SETTINGS_METADATA[topKey];

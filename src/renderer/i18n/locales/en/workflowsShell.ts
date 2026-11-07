@@ -1,5 +1,9 @@
 export const workflowsShell = {
 	'workflows.projectSettings.errors.requestFailed': 'Project settings request failed',
+	'workflows.projectSettings.errors.useService':
+		'Use project settings set to change project settings',
+	'workflows.projectSettings.environmentDesktopOnly':
+		'View and edit environment variables in the desktop app.',
 	'workflows.projectSettings.errors.scopeRequired':
 		'A project path and an optional SSH host are required',
 	'workflows.projectSettings.errors.invalidPatch': 'Project settings must be an object',

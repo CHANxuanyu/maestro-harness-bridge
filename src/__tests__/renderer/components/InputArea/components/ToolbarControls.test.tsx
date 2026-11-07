@@ -103,8 +103,8 @@ describe('ToolbarControls', () => {
 		session.aiTabs[0].permissionMode = 'standard';
 		session.aiTabs[0].readOnlyMode = false;
 		renderToolbar({ session, hasStandardCapability: false });
-		expect(screen.getByTitle(/^Standard:/)).toHaveTextContent('Standard');
-		expect(screen.queryByTitle(/^Full Access/)).toBeNull();
+		expect(screen.getByTitle(/^Use the tool/)).toHaveTextContent('Standard');
+		expect(screen.queryByTitle(/^Read, write/)).toBeNull();
 	});
 
 	it.each([false, true])(
@@ -116,11 +116,12 @@ describe('ToolbarControls', () => {
 			for (const title of [/Open Prompt Composer/, /Show Thinking/, /Save to History/, /Switch to/])
 				expect(!!screen.queryByTitle(title)).toBe(!newShell);
 			expect(screen.getByTitle('Attach Image')).toBeInTheDocument();
-			expect(screen.getByTitle(/^Full Access/)).toBeInTheDocument();
+			const permission = screen.getByTitle(newShell ? /^Read, write/ : /^Full Access/);
+			expect(permission).toHaveTextContent('Full Access');
 			expect(
-				screen
-					.getByTitle(/^Full Access/)
-					.querySelector(newShell ? '[data-testid="shield-icon"]' : '[data-testid="eye-icon"]')
+				permission.querySelector(
+					newShell ? '[data-testid="shield-icon"]' : '[data-testid="eye-icon"]'
+				)
 			).not.toBeNull();
 			expect(setEnterToSend).not.toHaveBeenCalled();
 			expect(mockUpdateSessionWith).not.toHaveBeenCalled();
@@ -133,7 +134,7 @@ describe('ToolbarControls', () => {
 			useSettingsStore.setState({ newShell: true });
 			const session = createInputAreaSession();
 			renderToolbar({ session, hasStandardCapability });
-			const trigger = screen.getByTitle(/^Full Access/);
+			const trigger = screen.getByTitle(/^Read, write/);
 			fireEvent.click(trigger);
 			expect(mockUpdateSessionWith).not.toHaveBeenCalled();
 			expect(screen.getAllByRole('menuitemradio')).toHaveLength(hasStandardCapability ? 3 : 2);
@@ -141,7 +142,7 @@ describe('ToolbarControls', () => {
 				'aria-checked',
 				'true'
 			);
-			fireEvent.click(screen.getByRole('menuitemradio', { name: 'Plan-Mode' }));
+			fireEvent.click(screen.getByRole('menuitemradio', { name: 'Plan mode' }));
 			const updated = mockUpdateSessionWith.mock.calls[0][1](session);
 			expect(updated.aiTabs[0]).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
 			expect(screen.queryByRole('menu')).toBeNull();

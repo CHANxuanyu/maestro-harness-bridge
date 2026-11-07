@@ -833,15 +833,15 @@ operations in either shell. No new parity gap is introduced by these actions.
 
 ## New shell conversation children (2026-11-07)
 
-| UI action                                               | CLI                                                                    | Shared implementation                                                                                    |
-| ------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Inspect a parent's child conversations and their status | `tab children <tab-id> [--agent <id>] [--json]`                        | `findConversationParent()` in `shared/conversationChildren.ts`; open tab inventory                       |
-| Select a child conversation                             | `tab select <tab-id> [--json]` or `focus-agent <agent> --tab <tab>`    | `select_tab` / remote selection and `setActiveTab()`; new shell reveals the hidden tab and clears unread |
-| Ask another conversation to do work                     | `ask <target> <question>` or `dispatch "@Target ..." --agent <source>` | Existing mention planner and `sendCrossAgentRequest()`                                                   |
-| Delegate into a new child                               | `dispatch <prompt> --agent <target> --new-tab` from a stamped caller   | Existing accepted-dispatch notice and `recordAgentDelegation()`                                          |
-| Add a reply while a child works                         | `dispatch <prompt> --agent <child-owner> --tab <child-tab> --queue`    | Existing execution queue; consult completion releases the child's tab barrier                            |
-| Continue an idle child                                  | `send <prompt> --tab <child-tab>`                                      | Existing composer send and captured native session ID                                                    |
-| Rename, star or close a child                           | `tab rename`, `tab star`, `tab close`                                  | Existing tab actions, also used by nested row menus                                                      |
+| UI action                                               | CLI                                                                 | Shared implementation                                                                                    |
+| ------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Inspect a parent's child conversations and their status | `tab children <tab-id> [--agent <id>] [--json]`                     | `findConversationParent()` in `shared/conversationChildren.ts`; open tab inventory                       |
+| Select a child conversation                             | `tab select <tab-id> [--json]` or `focus-agent <agent> --tab <tab>` | `select_tab` / remote selection and `setActiveTab()`; new shell reveals the hidden tab and clears unread |
+| Ask another conversation to do work                     | `ask <target> <question>` or `dispatch <source> "@Target ..."`      | Existing mention planner and `sendCrossAgentRequest()`                                                   |
+| Delegate into a new child                               | `dispatch <target> <prompt> --new-tab` from a stamped caller        | Existing accepted-dispatch notice and `recordAgentDelegation()`                                          |
+| Add a reply while a child works                         | `dispatch <child-owner> <prompt> --tab <child-tab> --queue`         | Existing execution queue; consult completion releases the child's tab barrier                            |
+| Continue an idle child                                  | `send <prompt> --tab <child-tab>`                                   | Existing composer send and captured native session ID                                                    |
+| Rename, star or close a child                           | `tab rename`, `tab star`, `tab close`                               | Existing tab actions, also used by nested row menus                                                      |
 
 Origins are created only under `newShell`. A source native ID arriving later is
 filled once by `captureConversationSourceNativeId()`, shared by normal provider

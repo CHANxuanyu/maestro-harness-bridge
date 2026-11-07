@@ -134,15 +134,13 @@ test('new shell subtasks: mention, queued reply, CLI dispatch and closed parent'
 
 		await test.step('CLI delegation records the same parent and first sentence', async () => {
 			scene({ answer: 'CLI child finished.' });
-			const result = await native.cliWithEnv(
+			const result = await native.dispatchWithEnv(
 				{
 					MAESTRO_CALLER_AGENT_ID: parentId,
 					MAESTRO_CALLER_TAB_ID: parentTab,
 				},
-				'dispatch',
-				'Check CLI delegation. Then report.',
-				'--agent',
 				workerId,
+				'Check CLI delegation. Then report.',
 				'--new-tab'
 			);
 			expect(result.success).toBe(true);

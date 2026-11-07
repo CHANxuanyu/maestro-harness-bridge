@@ -232,10 +232,19 @@ export class NativeApp {
 		return this.cliWithEnv({}, ...args);
 	}
 	async cliWithEnv(env: Record<string, string>, ...args: string[]) {
+		return this.runCli(env, [...args, '--json']);
+	}
+	/** `dispatch` always prints JSON and has no `--json` flag. */
+	async dispatchWithEnv(env: Record<string, string>, ...args: string[]) {
+		return this.runCli(env, ['dispatch', ...args]);
+	}
+	private async runCli(env: Record<string, string>, args: string[]) {
 		const result = await exec(
 			process.execPath,
-			[path.resolve('dist/cli/maestro-cli.js'), ...args, '--json'],
-			{ env: { ...process.env, ...this.env, ...env } }
+			[path.resolve('dist/cli/maestro-cli.js'), ...args],
+			{
+				env: { ...process.env, ...this.env, ...env },
+			}
 		).catch((error: Error & { stdout?: string; stderr?: string }) => {
 			throw new Error(
 				`${error.message}\nstdout:\n${error.stdout ?? ''}\nstderr:\n${error.stderr ?? ''}`,

@@ -1,3 +1,5 @@
+import type { ConversationPermissionSnapshot } from '../shared/window-types';
+import type { NewTabResult } from '../main/web-server/types';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Global type declarations for the renderer process.
@@ -410,7 +412,9 @@ interface MaestroAPI {
 			}) => void
 		) => () => void;
 		/** `signal` is set only when the process was killed by a signal, never on a clean exit. */
-		onExit: (callback: (sessionId: string, code: number, signal?: number) => void) => () => void;
+		onExit: (
+			callback: (sessionId: string, code: number, signal?: number, interrupted?: boolean) => void
+		) => () => void;
 		onPermissionRequest: (
 			callback: (request: {
 				requestId: string;
@@ -495,9 +499,15 @@ interface MaestroAPI {
 			) => void
 		) => () => void;
 		onRemoteNewTab: (
-			callback: (sessionId: string, responseChannel: string, background?: boolean) => void
+			callback: (
+				sessionId: string,
+				responseChannel: string,
+				background?: boolean,
+				sourceTabId?: string,
+				sourcePermissionMode?: NewTabResult['permissionMode']
+			) => void
 		) => () => void;
-		sendRemoteNewTabResponse: (responseChannel: string, result: { tabId: string } | null) => void;
+		sendRemoteNewTabResponse: (responseChannel: string, result: NewTabResult | null) => void;
 		onRemoteCloseTab: (callback: (sessionId: string, tabId: string) => void) => () => void;
 		onRemoteRenameTab: (
 			callback: (sessionId: string, tabId: string, newName: string, responseChannel: string) => void
@@ -1310,7 +1320,12 @@ interface MaestroAPI {
 	web: {
 		claimAutoRunStart: (sessionId: string) => Promise<boolean>;
 		releaseAutoRunStartClaim: (sessionId: string) => Promise<boolean>;
-		requestNewTab: (sessionId: string, background?: boolean) => Promise<{ tabId: string } | null>;
+		requestNewTab: (
+			sessionId: string,
+			background?: boolean,
+			sourceTabId?: string,
+			sourcePermissionMode?: NewTabResult['permissionMode']
+		) => Promise<NewTabResult | null>;
 		requestCloseTab: (sessionId: string, tabId: string) => Promise<boolean>;
 		broadcastUserInput: (
 			sessionId: string,
@@ -1340,6 +1355,12 @@ interface MaestroAPI {
 	};
 	// Git API - all methods accept optional sshRemoteId and remoteCwd for remote execution via SSH
 	git: {
+		applyChange: (
+			cwd: string,
+			request: import('../shared/gitChanges').GitChangeRequest,
+			sshRemoteId?: string,
+			remoteCwd?: string
+		) => Promise<import('../shared/gitChanges').GitChangeResult>;
 		changes: (
 			cwd: string,
 			sshRemoteId?: string,
@@ -1949,6 +1970,7 @@ interface MaestroAPI {
 	};
 	// Agent Sessions API - all methods accept optional sshRemoteId for SSH remote session storage access
 	agentSessions: {
+		toolOutput: import('../main/preload/sessions').AgentSessionsApi['toolOutput'];
 		projects: import('../main/preload/sessions').AgentSessionsApi['projects'];
 		openProject: import('../main/preload/sessions').AgentSessionsApi['openProject'];
 		onOpenProject: import('../main/preload/sessions').AgentSessionsApi['onOpenProject'];
@@ -2032,6 +2054,7 @@ interface MaestroAPI {
 			},
 			sshRemoteId?: string
 		) => Promise<{
+			toolOutputSource?: import('../shared/nativeToolOutput').NativeToolOutputTarget;
 			messages: Array<{
 				type: string;
 				role?: string;
@@ -4948,6 +4971,12 @@ interface MaestroAPI {
 	// Multi-window API - enumerate/create/focus/close windows and inspect or
 	// move the agents (sessions) each window owns. `sessionIds` are agent IDs.
 	windows: {
+		getConversationPermissions: (
+			sessionIds: string[]
+		) => Promise<Array<ConversationPermissionSnapshot | null>>;
+		onReadConversationPermissions: (
+			read: (sessionId: string) => ConversationPermissionSnapshot | null
+		) => () => void;
 		create: (
 			sessionIds?: string[],
 			bounds?: Partial<{

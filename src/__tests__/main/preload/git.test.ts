@@ -28,6 +28,19 @@ describe('Git Preload API', () => {
 	});
 
 	it('forwards both changes reads with the exact SSH context', async () => {
+		await api.applyChange(
+			'/local',
+			{ action: 'stage', paths: ['-中文 file'] },
+			'remote',
+			'/remote/tree'
+		);
+		expect(mockInvoke).toHaveBeenLastCalledWith(
+			'git:applyChange',
+			'/local',
+			{ action: 'stage', paths: ['-中文 file'] },
+			'remote',
+			'/remote/tree'
+		);
 		await api.changes('/local', 'remote', '/remote/tree');
 		expect(mockInvoke).toHaveBeenLastCalledWith('git:changes', '/local', 'remote', '/remote/tree');
 		await api.changeDiff('/local', 'file', 'remote', '/remote/tree');

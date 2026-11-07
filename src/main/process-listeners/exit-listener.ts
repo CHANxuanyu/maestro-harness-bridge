@@ -4,7 +4,7 @@
  * This is the largest and most complex listener with routing, recovery, and synthesis logic.
  */
 
-import type { ProcessManager } from '../process-manager';
+import type { ProcessManager, ProcessManagerEvents } from '../process-manager';
 import { captureException } from '../utils/sentry';
 import { GROUP_CHAT_PREFIX, type ProcessListenerDependencies } from './types';
 import { extractCopilotUsageFromDisk } from '../group-chat/copilot-usage-extractor';
@@ -117,7 +117,7 @@ export function setupExitListener(
 		}
 	}
 
-	processManager.on('exit', (sessionId: string, code: number, signal?: number) => {
+	const onExit: ProcessManagerEvents['exit'] = (sessionId, code, signal, interrupted) => {
 		// Remove power block reason for this session
 		// This allows system sleep when no AI sessions are active
 		powerManager.removeBlockReason(`session:${sessionId}`);
@@ -579,7 +579,8 @@ export function setupExitListener(
 			});
 		}
 
-		safeSend('process:exit', sessionId, code, signal);
+		if (interrupted) safeSend('process:exit', sessionId, code, signal, true);
+		else safeSend('process:exit', sessionId, code, signal);
 
 		// Broadcast exit to web clients
 		const webServer = getWebServer();
@@ -605,5 +606,6 @@ export function setupExitListener(
 				});
 			}
 		}
-	});
+	};
+	processManager.on('exit', onExit);
 }

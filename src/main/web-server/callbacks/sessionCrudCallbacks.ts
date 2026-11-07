@@ -176,7 +176,7 @@ export function registerSessionCrudCallbacks(
 	// structured result so the renderer can refuse mid-flight updates (e.g.
 	// while the agent process is alive) without losing the reason.
 	server.setUpdateSessionCwdCallback(async (sessionId: string, newCwd: string) => {
-		const mainWindow = getMainWindow();
+		const mainWindow = getWindowForSession?.(sessionId) ?? getMainWindow();
 		if (!mainWindow) {
 			logger.warn('mainWindow is null for updateSessionCwd', 'WebServer');
 			return { success: false, error: 'Desktop window unavailable' };

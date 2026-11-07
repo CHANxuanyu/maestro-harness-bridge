@@ -1,3 +1,6 @@
+import { conversationPermissionSnapshot } from '../../../renderer/utils/newConversationPermissions';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 // Pull in Window.maestro. Test files sit outside tsconfig.json include, so the
@@ -86,7 +89,13 @@ describe('useRemoteIntegration', () => {
 		  ) => void)
 		| undefined;
 	let onRemoteNewTabHandler:
-		| ((sessionId: string, responseChannel: string, background?: boolean) => void)
+		| ((
+				sessionId: string,
+				responseChannel: string,
+				background?: boolean,
+				sourceTabId?: string,
+				sourcePermissionMode?: 'full' | 'standard' | 'readonly'
+		  ) => void | Promise<void>)
 		| undefined;
 	let onRemoteCloseTabHandler: ((sessionId: string, tabId: string) => void) | undefined;
 	let onRemoteRenameTabHandler:
@@ -475,6 +484,9 @@ describe('useRemoteIntegration', () => {
 	};
 
 	beforeEach(() => {
+		for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
+			setCapabilitiesCache(id, capabilities);
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 		onRemoteCommandHandler = undefined;
 		onRemoteSwitchModeHandler = undefined;
@@ -1174,6 +1186,232 @@ describe('useRemoteIntegration', () => {
 
 			expect(useSessionStore.getState().sessions[0].activeTabId).toBe('visible-tab');
 		});
+	});
+
+	it.each([false, true])(
+		'CLI tab new inherits recent project permissions, with prompt %s',
+		async (withPrompt) => {
+			useSettingsStore.setState({ newShell: true });
+			const older = createMockTab({ id: 'old', createdAt: 1, permissionMode: 'full' });
+			const latest = createMockTab({ id: 'recent', createdAt: 2, readOnlyMode: true });
+			const session = createMockSession({
+				id: 'session-1',
+				aiTabs: [older, latest],
+				activeTabId: older.id,
+			});
+			const deps = createDeps({ sessions: [session] });
+			renderHook(() => useRemoteIntegration(deps));
+			await act(async () => {
+				if (withPrompt)
+					await onRemoteNewAITabWithPromptHandler?.(session.id, 'Synthetic prompt', 'ack', true);
+				else await onRemoteNewTabHandler?.(session.id, 'ack', true);
+			});
+			const updated = useSessionStore.getState().sessions[0];
+			expect(updated.aiTabs.at(-1)).toMatchObject({
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
+			expect(updated.activeTabId).toBe(older.id);
+			expect(updated.aiTabs.slice(0, 2)).toEqual([older, latest]);
+		}
+	);
+
+	it.each(['tab', 'session', 'session-active'] as const)(
+		'remote selection through %s updates the next CLI creation source',
+		async (entry) => {
+			useSettingsStore.setState({ newShell: true });
+			const session = createMockSession({
+				id: 'session-1',
+				activeTabId: entry === 'session-active' ? 'readonly' : 'full',
+				aiTabs: [
+					createMockTab({
+						id: 'readonly',
+						createdAt: 1,
+						permissionMode: 'readonly',
+						readOnlyMode: true,
+					}),
+					createMockTab({ id: 'full', createdAt: 2, permissionMode: 'full' }),
+				],
+			});
+			window.maestro.windows = {
+				...window.maestro.windows,
+				getConversationPermissions: vi.fn(async (ids: string[]) =>
+					ids.map(conversationPermissionSnapshot)
+				),
+			};
+			renderHook(() => useRemoteIntegration(createDeps({ sessions: [session] })));
+			act(() => {
+				if (entry === 'tab') onRemoteSelectTabHandler?.(session.id, 'readonly');
+				else
+					onRemoteSelectSessionHandler?.(
+						session.id,
+						entry === 'session-active' ? undefined : 'readonly'
+					);
+			});
+			await act(async () => {
+				await onRemoteNewTabHandler?.(session.id, 'ack', true);
+			});
+			expect(useSessionStore.getState().sessions[0].aiTabs.at(-1)).toMatchObject({
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
+		}
+	);
+
+	it.each(['fresh', 'unavailable'] as const)(
+		'CLI new reads owner permissions or falls back to readonly: %s',
+		async (state) => {
+			useSettingsStore.setState({ newShell: true });
+			const target = createMockSession({
+				id: 'target',
+				aiTabs: [createMockTab({ id: 'target-tab', createdAt: 20, permissionMode: 'full' })],
+			});
+			const peer = createMockSession({
+				id: 'peer',
+				aiTabs: [
+					createMockTab({
+						id: 'peer-tab',
+						createdAt: 10,
+						permissionMode: state === 'fresh' ? 'full' : 'readonly',
+					}),
+				],
+			});
+			const getConversationPermissions = vi.fn().mockResolvedValue(
+				state === 'fresh'
+					? [
+							{
+								sessionId: target.id,
+								projectKey: 'path:local:/test/project',
+								host: null,
+								tabs: [
+									{
+										id: 'target-tab',
+										lastActivity: 20,
+										permissionMode: 'full',
+										readOnlyMode: false,
+									},
+								],
+							},
+							{
+								sessionId: peer.id,
+								projectKey: 'path:local:/test/project',
+								host: null,
+								tabs: [
+									{
+										id: 'peer-tab',
+										lastActivity: 30,
+										permissionMode: 'readonly',
+										readOnlyMode: true,
+									},
+								],
+							},
+						]
+					: [null, null]
+			);
+			window.maestro.windows = {
+				...window.maestro.windows,
+				getConversationPermissions,
+			} as typeof window.maestro.windows;
+			renderHook(() => useRemoteIntegration(createDeps({ sessions: [target, peer] })));
+			await act(async () => {
+				await onRemoteNewTabHandler?.(target.id, 'ack', true);
+			});
+			expect(useSessionStore.getState().sessions[0].aiTabs.at(-1)).toMatchObject({
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
+			expect(getConversationPermissions).toHaveBeenCalledWith(['target', 'peer']);
+		}
+	);
+
+	it.each([
+		['full', 'readonly', 'readonly'],
+		['full', 'standard', 'standard'],
+		['readonly', 'full', 'readonly'],
+		['standard', 'full', 'standard'],
+		['full', 'full', 'full'],
+		['full', undefined, 'readonly'],
+		['full', 'invalid' as never, 'readonly'],
+	] as const)(
+		'remote creation keeps the stricter of desktop %s and browser %s',
+		async (desktop, browser, expected) => {
+			useSettingsStore.setState({ newShell: true });
+			const source = createMockTab({
+				id: 'source',
+				permissionMode: desktop,
+				readOnlyMode: desktop === 'readonly',
+			});
+			const session = createMockSession({
+				id: 'session-1',
+				toolType: 'claude-code',
+				aiTabs: [source],
+			});
+			renderHook(() => useRemoteIntegration(createDeps({ sessions: [session] })));
+			await act(async () => {
+				await onRemoteNewTabHandler?.(session.id, 'ack', false, source.id, browser);
+			});
+			expect(useSessionStore.getState().sessions[0].aiTabs.at(-1)).toMatchObject({
+				permissionMode: expected,
+				readOnlyMode: expected === 'readonly',
+			});
+			expect(mockProcess.sendRemoteNewTabResponse).toHaveBeenCalledWith(
+				'ack',
+				expect.objectContaining({ permissionMode: expected, readOnlyMode: expected === 'readonly' })
+			);
+			expect(useSessionStore.getState().sessions[0].aiTabs[0]).toEqual(source);
+		}
+	);
+
+	it('classic creation ignores the added browser permission field', async () => {
+		useSettingsStore.setState({ newShell: false });
+		const source = createMockTab({ id: 'source', permissionMode: 'full' });
+		const session = createMockSession({ id: 'session-1', aiTabs: [source] });
+		renderHook(() => useRemoteIntegration(createDeps({ sessions: [session] })));
+		await act(async () => {
+			await onRemoteNewTabHandler?.(session.id, 'ack', false, source.id, 'readonly');
+		});
+		const created = useSessionStore.getState().sessions[0].aiTabs.at(-1)!;
+		expect(created.permissionMode).toBeUndefined();
+		expect(created.readOnlyMode).toBeUndefined();
+	});
+
+	it('remote creation inherits the explicit browser source instead of newer background activity', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = createMockSession({
+			id: 'session-1',
+			aiTabs: [
+				createMockTab({
+					id: 'source',
+					createdAt: 1,
+					permissionMode: 'readonly',
+					readOnlyMode: true,
+				}),
+				createMockTab({ id: 'background', createdAt: 2, permissionMode: 'full' }),
+			],
+		});
+		renderHook(() => useRemoteIntegration(createDeps({ sessions: [session] })));
+		await act(async () => {
+			await onRemoteNewTabHandler?.(session.id, 'ack', false, 'source');
+		});
+		expect(useSessionStore.getState().sessions[0].aiTabs.at(-1)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+		expect(mockProcess.sendRemoteNewTabResponse).toHaveBeenCalledWith(
+			'ack',
+			expect.objectContaining({ permissionMode: 'readonly', readOnlyMode: true })
+		);
+	});
+
+	it('refuses a missing explicit browser source instead of falling back to full access', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = createMockSession({ id: 'session-1' });
+		renderHook(() => useRemoteIntegration(createDeps({ sessions: [session] })));
+		await act(async () => {
+			await onRemoteNewTabHandler?.(session.id, 'ack', false, 'closed-source');
+		});
+		expect(useSessionStore.getState().sessions[0].aiTabs).toEqual(session.aiTabs);
+		expect(mockProcess.sendRemoteNewTabResponse).toHaveBeenCalledWith('ack', null);
 	});
 
 	describe('remote new tab', () => {

@@ -74,6 +74,8 @@ export function permissionModeFields(mode: 'full' | 'standard' | 'readonly'): {
 	return { permissionMode: mode, readOnlyMode: mode === 'readonly' };
 }
 
+export { newConversationPermissionFields } from '../newConversationPermissions';
+
 /** Supported permission choices shared by the cycle and both composer menus. */
 export function permissionModes(
 	hasStandardCapability: boolean

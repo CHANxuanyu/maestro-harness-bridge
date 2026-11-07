@@ -10,13 +10,17 @@ import { useComposerInputStore } from '../stores/composerInputStore';
 import { createTab, createMergedSession, focusAiTabInSession } from '../utils/tabHelpers';
 import { extractTabContext } from '../utils/contextExtractor';
 import { handoffLocation } from '../../shared/aiHandoff';
-import { permissionModeFields } from '../utils/tabHelpers/focusFields';
+import { resolveProjectConversationPermission } from '../utils/newConversationPermissions';
+import {
+	permissionModeFields,
+	newConversationPermissionFields,
+} from '../utils/tabHelpers/focusFields';
 import { gitService } from './git';
 import { noteDesktopAiTabSelection } from '../utils/desktopTabSelectionSync';
 import { captureException } from '../utils/sentry';
 import { mergeDeferredItems } from '../../shared/deferredSessionContent';
 import { createKeyedWriteQueue } from '../../shared/keyedWriteQueue';
-import { getAgentDisplayName } from '../../shared/agentMetadata';
+import { getAgentDisplayName, resolveTabPermissionMode } from '../../shared/agentMetadata';
 import { DEEPSEEK_PRESET, sessionProviderId } from '../../shared/agentPresets';
 import { buildHandoffDraft } from './aiHandoffContext';
 import { enqueuePromptForTab } from './queuedPrompt';
@@ -75,13 +79,34 @@ export async function readHandoffSource(
 		.getState()
 		.sessions.find((item) => item.id === request.sourceAgentId);
 	let tab = session?.aiTabs.find((item) => item.id === request.sourceTabId);
-	if (!session || !tab) return null;
+	if (!session) return null;
+	if (request.permissionOnly) {
+		if (request.sourceTabId && !tab) return null;
+		const source = tab ?? (await resolveProjectConversationPermission(session));
+		return {
+			sourceAgentId: session.id,
+			sourceTabId: tab?.id ?? '',
+			sourcePermission: permissionModeFields(resolveTabPermissionMode(source)),
+			cwd: handoffLocation(session).cwd,
+			projectPath: session.projectRoot || session.cwd,
+			sessionSshRemoteConfig: session.sessionSshRemoteConfig,
+			draft: {
+				text: '',
+				estimatedTokens: 0,
+				budgetTokens: 8000,
+				omittedEntries: 0,
+				omittedCharacters: 0,
+			},
+		};
+	}
+	if (!tab) return null;
 	if (request.emptyConversation) {
 		if (!useSettingsStore.getState().newShell || !canReplaceConversation(session, tab)) return null;
 		const draft = replacementDraft(tab);
 		return {
 			sourceAgentId: session.id,
 			sourceTabId: tab.id,
+			sourcePermission: permissionModeFields(resolveTabPermissionMode(tab)),
 			cwd: handoffLocation(session).cwd,
 			projectPath: session.projectRoot || session.cwd,
 			sessionSshRemoteConfig: session.sessionSshRemoteConfig,
@@ -139,6 +164,7 @@ export async function readHandoffSource(
 				: getAgentDisplayName(session.toolType)),
 		sourceAgentId: session.id,
 		sourceTabId: tab.id,
+		sourcePermission: permissionModeFields(resolveTabPermissionMode(tab)),
 		projectPath: session.projectRoot || session.cwd,
 		groupId: session.groupId,
 		draft: buildHandoffDraft(source, { ...request, changes }),
@@ -194,15 +220,37 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 			const transferredDraft =
 				request.newConversation?.source ??
 				(replacement ? replacementDraft(replacement) : undefined);
-			const agent =
-				request.mode === 'review'
-					? await window.maestro.agents.get(
-							request.config.toolType,
-							request.sessionSshRemoteConfig?.enabled
-								? request.sessionSshRemoteConfig.remoteId!
-								: undefined
-						)
+			const newShell = useSettingsStore.getState().newShell;
+			const capabilities = newShell
+				? await window.maestro.agents.getCapabilities(request.config.toolType)
+				: request.mode === 'review'
+					? (
+							await window.maestro.agents.get(
+								request.config.toolType,
+								request.sessionSshRemoteConfig?.enabled
+									? request.sessionSshRemoteConfig.remoteId!
+									: undefined
+							)
+						)?.capabilities
 					: undefined;
+			const sourcePermission =
+				request.sourcePermission ??
+				replacement ??
+				(request.newConversation
+					? sourceSession && (await resolveProjectConversationPermission(sourceSession))
+					: sourceSession?.aiTabs.find((tab) => tab.id === request.origin.sourceTabId));
+			const permissions = newShell
+				? newConversationPermissionFields(sourcePermission, capabilities)
+				: {};
+			if (
+				!permissions ||
+				(newShell && !sourcePermission && (!request.newConversation || !sourceSession))
+			)
+				return {
+					success: false,
+					code: 'unavailable',
+					error: getT()('workflows.shell.permissionUnavailable'),
+				};
 			const sourceTitle =
 				request.origin.sourceTitle?.trim() ||
 				conversationDisplayTitle(
@@ -221,6 +269,7 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 							{ title: sourceTitle }
 						);
 			const tabFields = {
+				...permissions,
 				...(title ? { name: title } : {}),
 				...(transferredDraft
 					? {
@@ -229,7 +278,7 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 						}
 					: {}),
 				origin: request.newConversation ? undefined : { ...request.origin, sourceTitle },
-				...(request.mode === 'review' && agent?.capabilities?.supportsReadOnlyMode
+				...(request.mode === 'review' && capabilities?.supportsReadOnlyMode
 					? permissionModeFields('readonly')
 					: {}),
 			};
@@ -315,6 +364,7 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				const created = reusable
 					? { tab: empty, session: target }
 					: createTab(target, {
+							permissionSource: permissions,
 							activate: false,
 							saveToHistory: settings.defaultSaveToHistory,
 							showThinking: settings.defaultShowThinking,

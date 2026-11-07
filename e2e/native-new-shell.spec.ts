@@ -149,7 +149,7 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 				.getByTitle(/^Show right panel/)
 				.click();
 			await native.page.locator('[data-tour="changes-tab"]').click();
-			await expect(native.page.getByTestId('changes-summary')).toHaveText('1 files changed +2 -1');
+			await expect(native.page.getByTestId('changes-summary')).toHaveText('1 file changed +2 -1');
 			await native.page
 				.getByTestId('changes-list')
 				.getByRole('button', { name: 'cart.ts', exact: true })
@@ -571,3 +571,572 @@ test('old shell wizard names a rejected login instead of an exit code', async ({
 		await native.close(failed);
 	}
 });
+
+// eslint-disable-next-line no-empty-pattern
+test('new shell permission inheritance: readonly Codex stays readonly in a new conversation', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	seedNewShell(native);
+	const tab = createMockAITab({
+		id: 'permission-source',
+		permissionMode: 'readonly',
+		readOnlyMode: true,
+		saveToHistory: false,
+	});
+	const session = createMockSession({
+		id: 'permission-codex',
+		name: 'Codex',
+		toolType: 'codex',
+		cwd: fs.realpathSync(native.project),
+		projectRoot: fs.realpathSync(native.project),
+		customPath: path.resolve('e2e/fixtures/native/codex'),
+		customEnvVars: { CODEX_HOME: native.codex, MAESTRO_NATIVE_SCRIPT: native.script },
+		aiTabs: [tab],
+		activeTabId: tab.id,
+		unifiedTabOrder: [{ type: 'ai', id: tab.id }],
+	});
+	fs.writeFileSync(
+		path.join(native.data, 'maestro-sessions.json'),
+		JSON.stringify({ sessions: [session] })
+	);
+	native.scriptTurns([
+		{ answer: 'Source readonly turn complete' },
+		{ answer: 'New readonly turn complete' },
+		{ answer: 'Keyboard readonly turn complete' },
+	]);
+	const saved = (): Session =>
+		JSON.parse(
+			fs.readFileSync(path.join(native.data, 'maestro-sessions.json'), 'utf8')
+		).sessions.find((item: Session) => item.id === session.id);
+	let failed = false;
+	try {
+		await native.start(home);
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await native.send('Read the source project');
+		await expect(native.output()).toContainText('Source readonly turn complete');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		await native.page.getByTestId('sidebar-new-conversation').click();
+		await expect(native.page.getByTestId('empty-conversation-picker')).toBeVisible();
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.page.getByTitle(/^Full Access/)).toHaveCount(0);
+		await expect.poll(() => saved().aiTabs.length).toBe(2);
+		const newTabId = saved().activeTabId;
+		expect(newTabId).not.toBe(tab.id);
+		expect(saved().aiTabs.find((item) => item.id === newTabId)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+		await native.send('Read the project in the new conversation');
+		await expect(native.output()).toContainText('New readonly turn complete');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		const invocations = fs
+			.readFileSync(path.join(native.codex, 'fixture-invocations.jsonl'), 'utf8')
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line) as { args: string[] });
+		expect(invocations).toHaveLength(2);
+		for (const { args } of invocations) {
+			expect(args[args.indexOf('--sandbox') + 1]).toBe('read-only');
+			expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+		}
+		await native.page.getByTitle(/^Toggle Read-Only mode/).click();
+		await native.page.getByRole('menuitemradio', { name: 'Full Access', exact: true }).click();
+		await expect(native.page.getByTitle(/^Full Access/)).toHaveText('Full Access');
+		await native.page.locator(`[data-conversation-key$=":${tab.id}"] [data-tree-nav]`).click();
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.output()).toContainText('Source readonly turn complete');
+		expect(saved().aiTabs.find((item) => item.id === tab.id)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+		await native.page.locator(`[data-conversation-key$=":${newTabId}"] [data-tree-nav]`).click();
+		await expect(native.page.getByTitle(/^Full Access/)).toHaveText('Full Access');
+		await native.page.keyboard.press('ControlOrMeta+1');
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await native.page.keyboard.press('ControlOrMeta+t');
+		await expect(native.page.getByTestId('empty-conversation-picker')).toBeVisible();
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await native.send('Read after keyboard navigation');
+		await expect(native.output()).toContainText('Keyboard readonly turn complete');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		const keyboardCall = fs
+			.readFileSync(path.join(native.codex, 'fixture-invocations.jsonl'), 'utf8')
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line) as { args: string[] });
+		expect(keyboardCall).toHaveLength(3);
+		expect(keyboardCall[2].args[keyboardCall[2].args.indexOf('--sandbox') + 1]).toBe('read-only');
+		expect(keyboardCall[2].args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await native.close(failed);
+	}
+});
+
+// eslint-disable-next-line no-empty-pattern
+test('new shell permission inheritance: the owner window stays readonly', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	seedNewShell(native);
+	const sessions = ['owner-a', 'owner-b'].map((id, index) =>
+		createMockSession({
+			id,
+			name: id,
+			toolType: 'codex',
+			cwd: fs.realpathSync(native.project),
+			projectRoot: fs.realpathSync(native.project),
+			customPath: path.resolve('e2e/fixtures/native/codex'),
+			customEnvVars: { CODEX_HOME: native.codex, MAESTRO_NATIVE_SCRIPT: native.script },
+			aiTabs: [
+				createMockAITab({
+					id: `${id}-tab`,
+					createdAt: index + 1,
+					permissionMode: 'full',
+					readOnlyMode: false,
+					saveToHistory: false,
+				}),
+			],
+			activeTabId: `${id}-tab`,
+			unifiedTabOrder: [{ type: 'ai', id: `${id}-tab` }],
+		})
+	);
+	fs.writeFileSync(path.join(native.data, 'maestro-sessions.json'), JSON.stringify({ sessions }));
+	let failed = false;
+	try {
+		await native.start(home);
+		const opened = native.app.waitForEvent('window');
+		expect(
+			await native.page.evaluate(() => window.maestro.windows.create(['owner-b']))
+		).not.toBeNull();
+		const second = await opened;
+		await second.waitForLoadState('domcontentloaded');
+		await expect(second.getByTitle(/^Full Access/)).toHaveText('Full Access');
+		await second.getByTitle(/^Full Access/).click();
+		await second.getByRole('menuitemradio', { name: 'Read-Only', exact: true }).click();
+		await second.locator('[data-conversation-key$=":owner-b-tab"] [data-tree-nav]').click();
+		await expect(second.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		const created = await native.cli('tab', 'new', '--agent', 'owner-a');
+		expect(created.success).toBe(true);
+		// The CLI reads the new tab once the owning window has reported it.
+		const shown = () => native.cli('tab', 'show', created.tabId).catch(() => ({ tab: null }));
+		await expect.poll(async () => (await shown()).tab?.permissionMode).toBe('readonly');
+		expect((await shown()).tab).toMatchObject({ permissionMode: 'readonly', readOnly: true });
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await native.close(failed);
+	}
+});
+
+// eslint-disable-next-line no-empty-pattern
+test('new shell T5: stage commit and revert single files in a real worktree', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const isolatedHome = path.join(native.root, 'home');
+	const worktree = path.join(native.root, 'worktree');
+	fs.mkdirSync(isolatedHome, { recursive: true });
+	// All Git configuration belongs to this fixture, including the app child's Git.
+	fs.writeFileSync(
+		path.join(isolatedHome, '.gitconfig'),
+		'[user]\n\tname = Fixture\n\temail = fixture@example.invalid\n[commit]\n\tgpgsign = false\n'
+	);
+	const git = (cwd: string, ...args: string[]) =>
+		execFileSync('git', args, {
+			cwd,
+			encoding: 'utf8',
+			env: {
+				...process.env,
+				HOME: isolatedHome,
+				USERPROFILE: isolatedHome,
+				GIT_CONFIG_NOSYSTEM: '1',
+				GIT_CONFIG_GLOBAL: path.join(isolatedHome, '.gitconfig'),
+			},
+		});
+	git(native.project, 'init', '-b', 'main');
+	git(native.project, 'config', 'user.name', 'Fixture');
+	git(native.project, 'config', 'user.email', 'fixture@example.invalid');
+	git(native.project, 'config', 'commit.gpgsign', 'false');
+	git(native.project, 'config', 'core.hooksPath', path.join(native.root, 'hooks'));
+	fs.writeFileSync(path.join(native.project, 'tracked.txt'), 'before\n');
+	git(native.project, 'add', '.');
+	git(native.project, 'commit', '-m', 'baseline');
+	git(native.project, 'worktree', 'add', '-b', 'topic', worktree);
+	fs.writeFileSync(path.join(native.project, 'tracked.txt'), 'main tree stays dirty\n');
+	fs.writeFileSync(path.join(worktree, 'tracked.txt'), 'staged content\n');
+	fs.writeFileSync(path.join(worktree, '-新 文件.txt'), 'new file\n');
+	const settingsFile = path.join(native.data, 'maestro-settings.json');
+	fs.writeFileSync(
+		settingsFile,
+		JSON.stringify({
+			...JSON.parse(fs.readFileSync(settingsFile, 'utf8')),
+			newShell: true,
+			defaultSaveToHistory: false,
+			crashReportingEnabled: false,
+		})
+	);
+	const tabId = 't5-conversation';
+	const runner = createMockSession({
+		id: 't5-project',
+		name: 'T5 fixture',
+		cwd: worktree,
+		fullPath: worktree,
+		projectRoot: worktree,
+		isGitRepo: true,
+		customPath: path.resolve('e2e/fixtures/native/claude'),
+		customEnvVars: { CLAUDE_CONFIG_DIR: native.claude },
+		aiTabs: [
+			createMockAITab({
+				id: tabId,
+				name: 'Review changes',
+				logs: [],
+				newShellPanel: { tab: 'changes', open: true },
+			}),
+		],
+		activeTabId: tabId,
+		unifiedTabOrder: [{ type: 'ai', id: tabId }],
+	});
+	fs.writeFileSync(
+		path.join(native.data, 'maestro-sessions.json'),
+		JSON.stringify({ sessions: [runner], activeSessionId: runner.id })
+	);
+	let failed = false;
+	try {
+		await native.start(isolatedHome);
+		await native.page.locator(`[data-conversation-key$=":${tabId}"] [data-tree-nav]`).click();
+		const panel = native.page.getByTestId('changes-panel');
+		await expect(panel).toBeVisible();
+		await expect(panel.getByRole('button', { name: 'Commit', exact: true })).toBeDisabled();
+		const stage = panel.getByRole('button', { name: 'Stage tracked.txt', exact: true });
+		// Keyboard focus reveals the same affordance as pointer hover.
+		await stage.focus();
+		// :focus-within depends on OS window focus, which the Linux runner never has
+		// even when document.hasFocus() says yes, so check the wiring instead.
+		await expect(stage.locator('..')).toHaveClass(/group-focus-within\/changed-file:opacity-100/);
+		await stage.press('Enter');
+		await expect(panel.getByText('Staged (1)', { exact: true })).toBeVisible();
+		expect(git(worktree, 'diff', '--cached', '--name-only')).toBe('tracked.txt\n');
+		await panel.getByRole('button', { name: 'Unstage tracked.txt', exact: true }).click();
+		await expect(panel.getByText('Staged (1)', { exact: true })).toHaveCount(0);
+		expect(git(worktree, 'diff', '--cached', '--name-only')).toBe('');
+		await panel.getByText('tracked.txt', { exact: true }).hover();
+		await stage.click();
+		await expect(panel.getByText('Staged (1)', { exact: true })).toBeVisible();
+		fs.writeFileSync(path.join(worktree, 'tracked.txt'), 'later unstaged content\n');
+		const input = panel.getByRole('textbox', { name: 'Commit message' });
+		await input.fill('T5 commit');
+		await input.press('ControlOrMeta+Enter');
+		await expect(input).toHaveValue('');
+		expect(git(worktree, 'show', 'HEAD:tracked.txt')).toBe('staged content\n');
+		expect(git(worktree, 'status', '--porcelain', '--', 'tracked.txt')).toBe(' M tracked.txt\n');
+		await panel.getByText('tracked.txt', { exact: true }).hover();
+		await panel.getByRole('button', { name: 'Revert tracked.txt', exact: true }).click();
+		const confirm = native.page.getByRole('dialog', { name: 'Revert file changes' });
+		await expect(confirm).toContainText('tracked.txt');
+		await confirm.getByRole('button', { name: 'Revert changes', exact: true }).click();
+		await expect(
+			panel.getByRole('button', { name: 'Revert tracked.txt', exact: true })
+		).toHaveCount(0);
+		expect(fs.readFileSync(path.join(worktree, 'tracked.txt'), 'utf8')).toBe('staged content\n');
+		await panel.getByText('-新 文件.txt', { exact: true }).hover();
+		await panel.getByRole('button', { name: 'Revert -新 文件.txt', exact: true }).click();
+		await expect(confirm).toContainText('delete this new file');
+		await expect(confirm).toContainText('-新 文件.txt');
+		await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+		expect(fs.existsSync(path.join(worktree, '-新 文件.txt'))).toBe(true);
+		await panel.getByText('-新 文件.txt', { exact: true }).hover();
+		await panel.getByRole('button', { name: 'Revert -新 文件.txt', exact: true }).click();
+		await confirm.getByRole('button', { name: 'Delete file', exact: true }).click();
+		await expect(panel.getByText('No changes against the last commit.')).toBeVisible();
+		expect(fs.existsSync(path.join(worktree, '-新 文件.txt'))).toBe(false);
+		expect(git(worktree, 'status', '--porcelain')).toBe('');
+		expect(git(native.project, 'diff', '--cached', '--name-only')).toBe('');
+		expect(fs.readFileSync(path.join(native.project, 'tracked.txt'), 'utf8')).toBe(
+			'main tree stays dirty\n'
+		);
+
+		// CLI readback and writes use the same selected worktree and IPC implementation.
+		fs.writeFileSync(path.join(worktree, 'cli file.txt'), 'cli content\n');
+		expect(await native.cli('changes', 'stage', 'cli file.txt', '--tab', tabId)).toMatchObject({
+			success: true,
+		});
+		expect((await native.cli('changes', '--tab', tabId)).files).toContainEqual(
+			expect.objectContaining({ path: 'cli file.txt', staged: true })
+		);
+		expect(await native.cli('changes', 'unstage', 'cli file.txt', '--tab', tabId)).toMatchObject({
+			success: true,
+		});
+		await expect(native.cli('changes', 'revert', 'cli file.txt', '--tab', tabId)).rejects.toThrow();
+		expect(fs.existsSync(path.join(worktree, 'cli file.txt'))).toBe(true);
+		expect(
+			await native.cli('changes', 'revert', 'cli file.txt', '--yes', '--tab', tabId)
+		).toMatchObject({ success: true });
+		expect(git(worktree, 'status', '--porcelain')).toBe('');
+		fs.writeFileSync(path.join(worktree, 'cli file.txt'), 'cli content\n');
+		await native.cli('changes', 'stage', 'cli file.txt', '--tab', tabId);
+		expect(
+			await native.cli('changes', 'commit', '--message', 'CLI commit', '--tab', tabId)
+		).toMatchObject({ success: true });
+		expect(git(worktree, 'show', 'HEAD:cli file.txt')).toBe('cli content\n');
+		expect(git(worktree, 'status', '--porcelain')).toBe('');
+
+		// A staged deletion and its same-name worktree file must stay one staged row.
+		git(worktree, 'rm', '--cached', 'tracked.txt');
+		await panel.getByRole('button', { name: 'Refresh changes' }).click();
+		await expect(panel.getByText('Staged (1)', { exact: true })).toBeVisible();
+		await expect(panel.getByTestId('changes-summary')).toContainText('1 file changed');
+		await expect(panel.getByText('tracked.txt', { exact: true })).toHaveCount(1);
+		await input.fill('staged deletion');
+		await expect(panel.getByRole('button', { name: 'Commit 1 file', exact: true })).toBeEnabled();
+		await panel.getByText('tracked.txt', { exact: true }).hover();
+		await panel.getByRole('button', { name: 'Unstage tracked.txt', exact: true }).click();
+		await expect(panel.getByText('No changes against the last commit.')).toBeVisible();
+		expect(git(worktree, 'status', '--porcelain')).toBe('');
+		expect(fs.readFileSync(path.join(worktree, 'tracked.txt'), 'utf8')).toBe('staged content\n');
+
+		git(worktree, 'rm', 'tracked.txt');
+		fs.writeFileSync(path.join(worktree, 'tracked.txt'), 'replacement\n');
+		expect((await native.cli('changes', '--tab', tabId)).files).toContainEqual(
+			expect.objectContaining({
+				path: 'tracked.txt',
+				status: 'deleted',
+				staged: true,
+				unstaged: true,
+			})
+		);
+		expect(await native.cli('changes', 'unstage', 'tracked.txt', '--tab', tabId)).toMatchObject({
+			success: true,
+		});
+		expect(git(worktree, 'status', '--porcelain')).toBe(' M tracked.txt\n');
+		expect(fs.readFileSync(path.join(worktree, 'tracked.txt'), 'utf8')).toBe('replacement\n');
+		expect(
+			await native.cli('changes', 'revert', 'tracked.txt', '--yes', '--tab', tabId)
+		).toMatchObject({ success: true });
+
+		// RM must stage successfully alone and together with another changed path.
+		const renamed = '改名 file.txt';
+		git(worktree, 'mv', '--', 'tracked.txt', renamed);
+		fs.writeFileSync(path.join(worktree, renamed), 'staged content\nlater\n');
+		expect(git(worktree, 'status', '--porcelain=v2', '-z')).toContain('2 RM ');
+		expect(await native.cli('changes', 'stage', renamed, '--tab', tabId)).toMatchObject({
+			success: true,
+		});
+		expect(git(worktree, 'show', `:${renamed}`)).toBe('staged content\nlater\n');
+		fs.writeFileSync(path.join(worktree, renamed), 'staged content\nlater\nbatch\n');
+		fs.writeFileSync(path.join(worktree, 'cli file.txt'), 'cli content\nbatch\n');
+		expect(
+			await native.cli('changes', 'stage', renamed, 'cli file.txt', '--tab', tabId)
+		).toMatchObject({ success: true });
+		expect(git(worktree, 'show', `:${renamed}`)).toBe('staged content\nlater\nbatch\n');
+		expect(git(worktree, 'show', ':cli file.txt')).toBe('cli content\nbatch\n');
+		expect(git(worktree, 'diff', '--name-only')).toBe('');
+		await panel.getByRole('button', { name: 'Refresh changes' }).click();
+		await expect(panel.getByText('Staged (2)', { exact: true })).toBeVisible();
+		await expect(panel.getByRole('button', { name: 'Commit 2 files', exact: true })).toBeEnabled();
+		expect(git(native.project, 'diff', '--cached', '--name-only')).toBe('');
+		expect(fs.readFileSync(path.join(native.project, 'tracked.txt'), 'utf8')).toBe(
+			'main tree stays dirty\n'
+		);
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		if (native.app) await native.close(failed);
+		fs.rmSync(native.root, { recursive: true, force: true });
+	}
+});
+
+// eslint-disable-next-line no-empty-pattern
+test('new shell permission review: restore closed standard Claude after switching to Codex', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	seedNewShell(native);
+	let failed = false;
+	try {
+		await native.start(home);
+		const owner = await native.createAgent('claude');
+		await native.cli('tab', 'permission', 'active', 'standard', '--agent', owner);
+		expect((await native.cli('tab', 'show', 'active', '--agent', owner)).tab.permissionMode).toBe(
+			'standard'
+		);
+		await native.cli('tab', 'rename', 'active', 'Closed standard source', '--agent', owner);
+		await native.cli('tab', 'close', 'active', '--agent', owner);
+		await native.cli('update-agent', owner, '--provider', 'codex', '--force');
+		await native.cli(
+			'update-agent',
+			owner,
+			'--custom-path',
+			path.resolve('e2e/fixtures/native/codex'),
+			'--env',
+			`CODEX_HOME=${native.codex}`,
+			'--env',
+			`MAESTRO_NATIVE_SCRIPT=${native.script}`
+		);
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await native.page.keyboard.press('ControlOrMeta+Shift+t');
+		await expect(native.page.locator('[data-shell-header="main"]')).toContainText(
+			'Closed standard source'
+		);
+		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		// The CLI inventory follows the renderer's debounced persistence.
+		await expect
+			.poll(async () => (await native.cli('tab', 'show', 'active', '--agent', owner)).tab)
+			.toMatchObject({
+				permissionMode: 'readonly',
+				readOnly: true,
+				agentSessionId: null,
+				name: 'Closed standard source',
+			});
+		native.scriptTurns([{ answer: 'Restored readonly conversation complete' }]);
+		await native.send('Synthetic restored conversation');
+		await expect(native.output()).toContainText('Restored readonly conversation complete');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		const invocations = fs
+			.readFileSync(path.join(native.codex, 'fixture-invocations.jsonl'), 'utf8')
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line) as { args: string[] });
+		expect(invocations).toHaveLength(1);
+		expect(invocations[0].args[invocations[0].args.indexOf('--sandbox') + 1]).toBe('read-only');
+		expect(invocations[0].args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await native.close(failed);
+	}
+});
+
+// This exercises the browser's real IPC route. The separate acceptance checklist
+// also covers the browser-local permission control and its WebSocket transport.
+// eslint-disable-next-line no-empty-pattern
+test('new shell permission review: browser request tightens the desktop full source', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const home = path.join(native.root, 'home');
+	fs.mkdirSync(home, { recursive: true });
+	seedNewShell(native);
+	let failed = false;
+	try {
+		await native.start(home);
+		const owner = await native.createAgent('claude');
+		await native.cli('tab', 'permission', 'active', 'full', '--agent', owner);
+		const source = (await native.cli('tab', 'show', 'active', '--agent', owner)).tab;
+		expect(source.permissionMode).toBe('full');
+		const created = await native.page.evaluate(
+			({ owner, sourceId }) => window.maestro.web.requestNewTab(owner, false, sourceId, 'readonly'),
+			{ owner, sourceId: source.tabId }
+		);
+		expect(created).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
+		// Claude exposes readonly as plan mode; Codex calls the same field Read-Only.
+		await expect(native.page.getByTitle(/^Toggle plan mode/)).toHaveText('Plan-Mode');
+		await expect
+			.poll(async () => {
+				const list = await native.cli('session', 'list');
+				return list.sessions.find((tab: { tabId: string }) => tab.tabId === created!.tabId);
+			})
+			.toMatchObject({ permissionMode: 'readonly', readOnly: true, active: true });
+		expect((await native.cli('tab', 'show', source.tabId)).tab.permissionMode).toBe('full');
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		await native.close(failed);
+	}
+});
+
+for (const scenario of ['timeout', 'moved project'] as const) {
+	// eslint-disable-next-line no-empty-pattern
+	test(`new shell permission review: owner ${scenario} cannot widen a new conversation`, async ({}, info) => {
+		const native = new NativeApp(info, { providerCli: false });
+		const home = path.join(native.root, 'home');
+		fs.mkdirSync(home, { recursive: true });
+		seedNewShell(native);
+		const project = fs.realpathSync(native.project);
+		const sessions = ['owner-a', 'owner-b'].map((id, index) =>
+			createMockSession({
+				id,
+				name: id,
+				toolType: 'codex',
+				cwd: project,
+				projectRoot: project,
+				customPath: path.resolve('e2e/fixtures/native/codex'),
+				customEnvVars: { CODEX_HOME: native.codex, MAESTRO_NATIVE_SCRIPT: native.script },
+				aiTabs: [
+					createMockAITab({
+						id: `${id}-tab`,
+						createdAt: index + 1,
+						permissionMode: 'full',
+						readOnlyMode: false,
+						saveToHistory: false,
+					}),
+				],
+				activeTabId: `${id}-tab`,
+				unifiedTabOrder: [{ type: 'ai', id: `${id}-tab` }],
+			})
+		);
+		fs.writeFileSync(path.join(native.data, 'maestro-sessions.json'), JSON.stringify({ sessions }));
+		let failed = false;
+		try {
+			await native.start(home);
+			const opened = native.app.waitForEvent('window');
+			expect(
+				await native.page.evaluate(() => window.maestro.windows.create(['owner-b']))
+			).not.toBeNull();
+			const second = await opened;
+			await second.waitForLoadState('domcontentloaded');
+			await expect(second.getByTitle(/^Full Access/)).toHaveText('Full Access');
+			if (scenario === 'timeout') {
+				await second.getByTitle(/^Full Access/).click();
+				await second.getByRole('menuitemradio', { name: 'Read-Only', exact: true }).click();
+				await expect(second.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+				const peerWindow = await native.app.browserWindow(second);
+				// Drop only the permission query to reproduce a silent owner without
+				// replacing its state or the real request timeout implementation.
+				await peerWindow.evaluate((win) => {
+					const send = win.webContents.send.bind(win.webContents);
+					win.webContents.send = (channel: string, ...args: unknown[]) => {
+						if (channel !== 'windows:readConversationPermissions') send(channel, ...args);
+					};
+				});
+				const replies = await native.page.evaluate(() =>
+					window.maestro.windows.getConversationPermissions(['owner-a', 'owner-b'])
+				);
+				expect(replies[0]?.tabs[0].permissionMode).toBe('full');
+				expect(replies[1]).toBeNull();
+			} else {
+				await native.cli('tab', 'permission', 'owner-a-tab', 'readonly');
+				const otherProject = path.join(native.root, 'other-project');
+				fs.mkdirSync(otherProject);
+				await native.cli('update-agent', 'owner-b', '--cwd', otherProject);
+				await second.locator('[data-conversation-key$=":owner-b-tab"] [data-tree-nav]').click();
+				const [snapshot] = await native.page.evaluate(() =>
+					window.maestro.windows.getConversationPermissions(['owner-b'])
+				);
+				expect(snapshot).toMatchObject({
+					projectKey: `path:local:${fs.realpathSync(otherProject)}`,
+					host: null,
+				});
+				expect(snapshot!.tabs[0].permissionMode).toBe('full');
+			}
+			const created = await native.cli('tab', 'new', '--agent', 'owner-a');
+			expect(created.success).toBe(true);
+			await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+			await expect
+				.poll(async () => {
+					const list = await native.cli('session', 'list');
+					return list.sessions.find((tab: { tabId: string }) => tab.tabId === created.tabId);
+				})
+				.toMatchObject({ permissionMode: 'readonly', readOnly: true });
+		} catch (error) {
+			failed = true;
+			throw error;
+		} finally {
+			await native.close(failed);
+		}
+	});
+}

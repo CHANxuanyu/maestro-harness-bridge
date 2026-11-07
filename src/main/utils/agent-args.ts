@@ -39,6 +39,8 @@ type BuildAgentArgsOptions = {
 	 * "stdin is not a terminal".
 	 */
 	forceBatchMode?: boolean;
+	/** Opt into the provider task tool for new shell conversation turns. */
+	enableTaskList?: boolean;
 };
 
 type AgentConfigOverrides = {
@@ -283,6 +285,12 @@ export function buildAgentArgs(
 	// append after this function returns.
 	return [
 		...dedupedArgs,
+		// Codex 0.163.0-alpha.11.1 and 0.166.0-alpha.6 default this tool off.
+		// Keep repeatable config flags outside dedupe and before the resume selector.
+		// See docs/verification/codex-plan.md for the pinned upstream contract.
+		...(agent.id === 'codex' && inBatchMode && options.enableTaskList
+			? ['-c', 'tools.update_plan.enabled=true']
+			: []),
 		...buildAdditionalDirArgs(agent, options.additionalDirectories),
 		...resumeArgs,
 	];

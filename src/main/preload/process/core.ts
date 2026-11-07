@@ -103,6 +103,8 @@ export interface AgentError {
  * Tool execution event
  */
 export interface ToolExecutionEvent {
+	toolOutputSource?: import('../../../shared/nativeToolOutput').NativeToolOutputTarget;
+	nativeToolCallId?: string;
 	toolName: string;
 	state?: unknown;
 	timestamp: number;
@@ -249,12 +251,21 @@ export function createProcessCoreApi() {
 		/**
 		 * Subscribe to process exit events.
 		 * `signal` is present only when the process was killed by a signal.
+		 * `interrupted` identifies deliberate Stop, including an exit with code 0.
 		 */
 		onExit: (
-			callback: (sessionId: string, code: number, signal?: number) => void
+			callback: (sessionId: string, code: number, signal?: number, interrupted?: boolean) => void
 		): (() => void) => {
-			const handler = (_: unknown, sessionId: string, code: number, signal?: number) =>
-				callback(sessionId, code, signal);
+			const handler = (
+				_: unknown,
+				sessionId: string,
+				code: number,
+				signal?: number,
+				interrupted?: boolean
+			) => {
+				if (interrupted) callback(sessionId, code, signal, true);
+				else callback(sessionId, code, signal);
+			};
 			ipcRenderer.on('process:exit', handler);
 			return () => ipcRenderer.removeListener('process:exit', handler);
 		},

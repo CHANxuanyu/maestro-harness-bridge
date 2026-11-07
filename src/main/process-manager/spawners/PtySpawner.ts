@@ -248,7 +248,9 @@ export class PtySpawner {
 				const currentProcess = this.processes.get(sessionId);
 				if (currentProcess && currentProcess !== managedProcess) return;
 				if (currentProcess === managedProcess) this.processes.delete(sessionId);
-				this.emitter.emit('exit', sessionId, exitCode, signal);
+				if (managedProcess.interrupted)
+					this.emitter.emit('exit', sessionId, exitCode, signal, true);
+				else this.emitter.emit('exit', sessionId, exitCode, signal);
 			});
 
 			logger.debug('[ProcessManager] PTY process created', 'ProcessManager', {

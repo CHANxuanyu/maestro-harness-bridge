@@ -1,3 +1,4 @@
+import { nativeToolOutputMatches, nativeToolCommand } from '../../shared/nativeToolOutput';
 /**
  * Conversion between provider transcript messages (as returned by
  * `window.maestro.agentSessions.read`) and the `LogEntry` shape the AI
@@ -13,6 +14,7 @@
  */
 
 import type { LogEntry } from '../types';
+import { stripTurnPrompt } from '../../shared/turnPrompt';
 import { stripEmbeddedSystemPrompt } from '../../shared/embeddedSystemPrompt';
 import { compactToolOutput } from '../../shared/toolOutput';
 import { generateId } from './ids';
@@ -336,7 +338,10 @@ export function stripSynopsisTurns<T extends { type: string; role?: string; cont
  * The strip runs BEFORE the empty check: a turn that carried nothing but the
  * envelope has no user text to show and should drop out entirely.
  */
-export function transcriptMessagesToLogEntries(messages: TranscriptMessage[]): LogEntry[] {
+export function transcriptMessagesToLogEntries(
+	messages: TranscriptMessage[],
+	toolOutputSource?: import('../../shared/nativeToolOutput').NativeToolOutputTarget
+): LogEntry[] {
 	const entries: LogEntry[] = [];
 	// Where each tool call landed, so a result recorded in a LATER message (a
 	// `tool_result` block) completes the card for its call instead of drawing a
@@ -377,7 +382,7 @@ export function transcriptMessagesToLogEntries(messages: TranscriptMessage[]): L
 		attachResults(results);
 
 		if (msg.type === 'user') {
-			const text = stripEmbeddedSystemPrompt(msg.content ?? '');
+			const text = stripTurnPrompt(stripEmbeddedSystemPrompt(msg.content ?? ''));
 			if (!images && (isInternalDesktopEnvelope(text) || !text.trim())) continue;
 			entries.push({
 				id: messageId,
@@ -426,6 +431,8 @@ export function transcriptMessagesToLogEntries(messages: TranscriptMessage[]): L
 				source: 'tool',
 				text: toolEntryText(call),
 				metadata: {
+					...(call.callId ? { toolCallId: call.callId } : {}),
+					...(toolOutputSource ? { toolOutputSource, nativeToolCallId: call.callId } : {}),
 					toolState: {
 						...(call.status ? { status: call.status } : {}),
 						...(input !== undefined ? { input } : {}),
@@ -694,6 +701,66 @@ export function mergeNewerEntries(
 	};
 }
 
+/** Fill only native tool identity, including a partial refresh with no shared display IDs. */
+export function bindNativeToolCalls(
+	loaded: LogEntry[],
+	visible: LogEntry[]
+): { logs: LogEntry[]; bound: number } {
+	// A live exec item keeps its display identity. Native identity is filled only
+	// when a bounded preview and call time identify exactly one result in this source.
+	const nativeTools = new Map<number, LogEntry[]>();
+	for (const entry of loaded) {
+		if (entry.source !== 'tool' || !entry.metadata?.toolCallId || !Number.isFinite(entry.timestamp))
+			continue;
+		const bucket = Math.floor(entry.timestamp / 5000);
+		const entries = nativeTools.get(bucket) ?? [];
+		entries.push(entry);
+		nativeTools.set(bucket, entries);
+	}
+	let bound = 0;
+	const logs = visible.map((entry) => {
+		const source = entry.metadata?.toolOutputSource;
+		if (
+			!source ||
+			source.provider !== 'codex' ||
+			entry.source !== 'tool' ||
+			entry.metadata?.nativeToolCallId ||
+			entry.metadata?.toolState?.status === 'running' ||
+			!/^codex-.+-item_\d+$/.test(entry.metadata?.toolCallId ?? '') ||
+			typeof entry.metadata?.toolState?.output !== 'string'
+		)
+			return entry;
+		const bucket = Math.floor(entry.timestamp / 5000);
+		const candidates = [-1, 0, 1].flatMap((offset) => nativeTools.get(bucket + offset) ?? []);
+		const matches = candidates.filter((native) => {
+			const other = native.metadata?.toolOutputSource;
+			return (
+				other &&
+				source.provider === other.provider &&
+				source.nativeSessionId === other.nativeSessionId &&
+				source.accountDir === other.accountDir &&
+				source.sshRemoteId === other.sshRemoteId &&
+				Math.abs(native.timestamp - entry.timestamp) <= 5000 &&
+				!!nativeToolCommand(entry.metadata?.toolState?.input) &&
+				nativeToolCommand(entry.metadata?.toolState?.input) ===
+					nativeToolCommand(native.metadata?.toolState?.input) &&
+				typeof native.metadata?.toolState?.output === 'string' &&
+				nativeToolOutputMatches(
+					entry.metadata!.toolState!.output as string,
+					native.metadata.toolState.output
+				)
+			);
+		});
+		if (matches.length !== 1) return entry;
+		bound++;
+		return {
+			...entry,
+			metadata: { ...entry.metadata, nativeToolCallId: matches[0].metadata!.toolCallId },
+		};
+	});
+	return { logs: bound ? logs : visible, bound };
+}
+
 /**
  * Bring entries a tab already holds up to the current conversion, IN PLACE.
  *
@@ -733,6 +800,8 @@ export function reconcileTranscriptEntries(
 	visible: LogEntry[]
 ): { logs: LogEntry[]; upgraded: number } {
 	if (loaded.length === 0 || visible.length === 0) return { logs: visible, upgraded: 0 };
+	const binding = bindNativeToolCalls(loaded, visible);
+	visible = binding.logs;
 	const groups = new Map<string, LogEntry[]>();
 	const groupOfEntry = new Map<string, string>();
 	for (const entry of loaded) {
@@ -749,7 +818,7 @@ export function reconcileTranscriptEntries(
 	const emitted = new Set<string>();
 	const refused = new Set<string>();
 	const out: LogEntry[] = [];
-	let upgraded = 0;
+	let upgraded = binding.bound;
 	// Where the last rewritten group ended in `loaded`, and whether anything the
 	// conversation could contain (a live send or reply with a local id) sits
 	// between it and the next one. Native messages the old conversion dropped
@@ -932,16 +1001,22 @@ function liveTurnMatchesNative(
  * A bound send keeps its local id, timestamp, images and delivery, and gains
  * `nativeTranscript.messageId` of its native copy; a cached native copy of it
  * is removed from the tab (it is the same occurrence, not a turn). Nothing
- * else moves. Anything that fails a check is left exactly as it was: a
+ * else moves. For an already cached duplicate inside the live clock window,
+ * the next visible user boundary and the native id suffice; a stopped turn may
+ * have neither a delivery stamp nor a final answer. Without an earlier anchor,
+ * only the first native user boundary of a complete read can establish the match.
+ * Anything that fails a check is left exactly as it was: a
  * genuinely repeated prompt, a second native message with the same words, and
  * a later external turn all keep their own entries. Idempotent.
  */
 export function bindDelayedOwnSends(
 	loaded: LogEntry[],
-	visible: LogEntry[]
+	visible: LogEntry[],
+	partialWindow = false
 ): { logs: LogEntry[]; bound: number } {
 	if (loaded.length === 0 || visible.length === 0) return { logs: visible, bound: 0 };
 	const loadedIndex = new Map(loaded.map((entry, index) => [entry.id, index]));
+	const visibleIndex = new Map(visible.map((entry, index) => [entry.id, index]));
 	const userIndexByMessageId = new Map<string, number>();
 	loaded.forEach((entry, index) => {
 		if (entry.source === 'user') {
@@ -966,6 +1041,7 @@ export function bindDelayedOwnSends(
 	const drop = new Set<string>();
 	// Index in `loaded` the walk has reached, or -1 while the position is unknown.
 	let cursor = -1;
+	const firstNativeUser = nextNativeUser(-1);
 	for (let v = 0; v < visible.length; v++) {
 		const entry = visible[v];
 		if (drop.has(entry.id)) continue;
@@ -979,20 +1055,40 @@ export function bindDelayedOwnSends(
 			cursor = userIndexByMessageId.get(entry.nativeTranscript!.messageId) ?? -1;
 			continue;
 		}
-		if (cursor < 0) continue;
-		const n = nextNativeUser(cursor);
+		let n = cursor >= 0 ? nextNativeUser(cursor) : -1;
+		if (cursor < 0 && !partialWindow) {
+			// Without a shared anchor, account for the first native send before
+			// considering a later cached boundary. A previous refresh may have
+			// paired that first send by text and appended a genuine repeat. Using
+			// the repeat as the anchor here would delete it on the next refresh.
+			if (firstNativeUser >= 0 && sameLiveMessage(entry, loaded[firstNativeUser])) {
+				n = firstNativeUser;
+			}
+		}
+
 		if (n < 0) {
 			cursor = -1;
 			continue;
 		}
 		const native = loaded[n];
+		const messageId = native.nativeTranscript?.messageId ?? native.id;
+		const cachedAt = visibleIndex.get(native.id) ?? -1;
 		if (sameLiveMessage(entry, native)) {
-			// The ordinary in-window pairing: the merge handles it as before.
+			// An old refresh may already have persisted this native copy next to
+			// the local send. Stop need not produce delivery or a final answer.
+			if (
+				!entry.nativeTranscript &&
+				!claimed.has(messageId) &&
+				cachedAt > v &&
+				!visible.slice(v + 1, cachedAt).some((between) => isTurnBoundary(between))
+			) {
+				claimed.add(messageId);
+				stamp.set(entry.id, messageId);
+				drop.add(native.id);
+			}
 			cursor = n;
 			continue;
 		}
-		const messageId = native.nativeTranscript?.messageId ?? native.id;
-		const cachedAt = visible.findIndex((candidate) => candidate.id === native.id);
 		const bindable =
 			isUnboundOwnSend(entry) &&
 			!claimed.has(messageId) &&
@@ -1133,9 +1229,10 @@ function sameRenderedEntry(a: LogEntry, b: LogEntry): boolean {
 export function hasLegacyTranscriptEntries(logs: LogEntry[] | undefined): boolean {
 	return (logs ?? []).some(
 		(entry) =>
-			!entry.nativeTranscript &&
-			((entry.source === 'stdout' && !entry.metadata && /^Tool: \S+$/.test(entry.text.trim())) ||
-				(entry.source === 'user' && isInternalDesktopEnvelope(entry.text)))
+			(entry.source === 'user' && stripTurnPrompt(entry.text) !== entry.text) ||
+			(!entry.nativeTranscript &&
+				((entry.source === 'stdout' && !entry.metadata && /^Tool: \S+$/.test(entry.text.trim())) ||
+					(entry.source === 'user' && isInternalDesktopEnvelope(entry.text))))
 	);
 }
 

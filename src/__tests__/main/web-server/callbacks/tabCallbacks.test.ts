@@ -16,6 +16,7 @@ vi.mock('../../../../main/utils/safe-send', () => ({
 	isWebContentsAvailable: vi.fn(() => true),
 }));
 
+import type { NewTabCallback } from '../../../../main/web-server/types';
 import { registerTabCallbacks } from '../../../../main/web-server/callbacks/tabCallbacks';
 
 type RenameCallback = (
@@ -26,6 +27,7 @@ type RenameCallback = (
 
 function setup() {
 	let renameCallback: RenameCallback | undefined;
+	let newTabCallback: NewTabCallback | undefined;
 	const webContents = {
 		send: vi.fn(),
 		once: vi.fn(),
@@ -39,7 +41,11 @@ function setup() {
 					? (callback: RenameCallback) => {
 							renameCallback = callback;
 						}
-					: () => {},
+					: prop === 'setNewTabCallback'
+						? (callback: NewTabCallback) => {
+								newTabCallback = callback;
+							}
+						: () => {},
 		}
 	);
 
@@ -51,7 +57,7 @@ function setup() {
 		} as never
 	);
 
-	return { renameCallback: renameCallback!, webContents };
+	return { renameCallback: renameCallback!, newTabCallback: newTabCallback!, webContents };
 }
 
 /**
@@ -79,6 +85,26 @@ function respond(
 describe('tab callbacks', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+	});
+
+	it('forwards browser source permission to the owner and returns its actual result', async () => {
+		const { newTabCallback, webContents } = setup();
+		const pending = newTabCallback('owner', false, 'source', 'readonly');
+		const channel = webContents.send.mock.calls[0][2];
+		expect(webContents.send).toHaveBeenCalledWith(
+			'remote:newTab',
+			'owner',
+			channel,
+			false,
+			'source',
+			'readonly'
+		);
+		const response = { tabId: 'created', permissionMode: 'readonly', readOnlyMode: true };
+		vi.mocked(ipcMain.once).mock.calls.find(([name]) => name === channel)![1](
+			{} as never,
+			response
+		);
+		expect(await pending).toEqual(response);
 	});
 
 	it('waits for renderer rename persistence before reporting success', async () => {

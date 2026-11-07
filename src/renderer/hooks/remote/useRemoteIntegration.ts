@@ -1,3 +1,11 @@
+import { useSettingsStore } from '../../stores/settingsStore';
+import { isWebDesktop } from '../../utils/runtimeContext';
+import {
+	conversationPermissionSnapshot,
+	remoteConversationPermissionFields,
+	resolveProjectConversationPermission,
+} from '../../utils/newConversationPermissions';
+import type { NewTabResult } from '../../../main/web-server/types';
 import { useTabStore } from '../../stores/tabStore';
 import { dispatchToastClickAction } from '../../services/toastClickActions';
 import { jumpToAgent } from '../../services/agentNavigation';
@@ -16,6 +24,7 @@ import {
 	createTab,
 	closeTab,
 	getActiveTab,
+	setActiveTab,
 	getRepairedUnifiedTabOrder,
 	hasActiveWizard,
 	visibleAiTabs,
@@ -303,6 +312,10 @@ async function buildSessionGistBody(session: Session, agentSessionId: string): P
  */
 export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteIntegrationReturn {
 	useEffect(() => {
+		if (isWebDesktop()) return;
+		return window.maestro.windows?.onReadConversationPermissions?.(conversationPermissionSnapshot);
+	}, []);
+	useEffect(() => {
 		const stopRead = window.maestro.context.onHandoffReadSource(async (request, channel) => {
 			try {
 				window.maestro.context.sendHandoffResponse(channel, await readHandoffSource(request));
@@ -569,8 +582,10 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 				setActiveSessionId(sessionId);
 
 				// If tabId provided, also switch to that tab
-				if (tabId) {
+				if (tabId || useSettingsStore.getState().newShell) {
 					updateSessionWith(sessionId, (s) => {
+						if (useSettingsStore.getState().newShell)
+							return setActiveTab(s, tabId ?? s.activeTabId)?.session ?? s;
 						// Check if tab exists
 						if (!s.aiTabs.some((t) => t.id === tabId)) {
 							return s;
@@ -639,6 +654,8 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 
 					const targetExists = updatedSession.aiTabs.some((tab) => tab.id === tabId);
 					if (!isInventorySync) {
+						if (useSettingsStore.getState().newShell)
+							return setActiveTab(updatedSession, tabId)?.session ?? updatedSession;
 						return targetExists
 							? { ...updatedSession, ...aiTabFocusFields(tabId) }
 							: updatedSession;
@@ -665,21 +682,58 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 
 		// Handle remote new tab from web interface
 		const unsubscribeNewTab = window.maestro.process.onRemoteNewTab(
-			(sessionId: string, responseChannel: string, background?: boolean) => {
+			async (
+				sessionId: string,
+				responseChannel: string,
+				background?: boolean,
+				sourceTabId?: string,
+				sourcePermissionMode?: NewTabResult['permissionMode']
+			) => {
+				const target = useSessionStore
+					.getState()
+					.sessions.find((session) => session.id === sessionId);
+				const newShell = useSettingsStore.getState().newShell;
+				if (
+					!target ||
+					(newShell && sourceTabId && !target.aiTabs.some((tab) => tab.id === sourceTabId))
+				) {
+					window.maestro.process.sendRemoteNewTabResponse(responseChannel, null);
+					return;
+				}
+				const projectPermission =
+					newShell && !sourceTabId ? await resolveProjectConversationPermission(target) : undefined;
+				let response: NewTabResult | null = null;
 				let newTabId: string | null = null;
 
 				flushSync(() => {
 					updateSessionWith(sessionId, (s) => {
+						if (newShell && sourceTabId && !s.aiTabs.some((tab) => tab.id === sourceTabId))
+							return s;
 						// Use createTab helper. `activate: false` appends the tab without
 						// touching any active-* id, so it shows up in the tab bar the way
 						// a browser opens a background tab.
 						const result = createTab(s, {
+							permissionSource: sourceTabId
+								? remoteConversationPermissionFields(
+										s.aiTabs.find((tab) => tab.id === sourceTabId),
+										sourcePermissionMode
+									)
+								: projectPermission,
 							saveToHistory: defaultSaveToHistory,
 							showThinking: defaultShowThinking,
 							activate: !background,
 						});
 						if (!result) return s;
 						newTabId = result.tab.id;
+						response = {
+							tabId: newTabId,
+							...(newShell
+								? {
+										permissionMode: result.tab.permissionMode,
+										readOnlyMode: result.tab.readOnlyMode,
+									}
+								: {}),
+						};
 						return result.session;
 					});
 				});
@@ -699,7 +753,7 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 
 				// Send response back with the new tab ID
 				if (newTabId) {
-					window.maestro.process.sendRemoteNewTabResponse(responseChannel, { tabId: newTabId });
+					window.maestro.process.sendRemoteNewTabResponse(responseChannel, response);
 				} else {
 					window.maestro.process.sendRemoteNewTabResponse(responseChannel, null);
 				}
@@ -721,7 +775,7 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 		// success when a tab was actually created - and reports the REASON when it
 		// was not, rather than leaving the CLI to infer one from a missing tab id.
 		const unsubscribeNewTabWithPrompt = window.maestro.process.onRemoteNewAITabWithPrompt(
-			(sessionId: string, prompt: string, responseChannel: string, background?: boolean) => {
+			async (sessionId: string, prompt: string, responseChannel: string, background?: boolean) => {
 				const ack = (result: {
 					success: boolean;
 					tabId?: string;
@@ -746,10 +800,14 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 				// no flag able to express what the caller wanted and turned every
 				// dispatch at a working agent into a dropped prompt (#1602). The
 				// prompt is queued below instead.
+				const permissionSource = useSettingsStore.getState().newShell
+					? await resolveProjectConversationPermission(targetSession)
+					: undefined;
 				let createdTabId: string | undefined;
 				flushSync(() => {
 					updateSessionWith(sessionId, (s) => {
 						const result = createTab(s, {
+							permissionSource,
 							saveToHistory: defaultSaveToHistory,
 							showThinking: defaultShowThinking,
 							// Background dispatch is the default (`--focus` opts into the

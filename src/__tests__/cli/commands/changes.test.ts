@@ -54,3 +54,73 @@ describe('changes CLI', () => {
 		}
 	);
 });
+
+describe('changes write CLI', () => {
+	afterEach(() => vi.restoreAllMocks());
+	it.each(['stage', 'unstage', 'revert', 'commit'] as const)(
+		'routes %s to the shared operation with SSH context',
+		async (action) => {
+			vi.mocked(resolveTabEntry).mockResolvedValue({ agentId: 'agent', tabId: 'tab' } as never);
+			const sendCommand = vi
+				.fn()
+				.mockResolvedValueOnce({
+					ok: true,
+					result: [
+						{
+							id: 'agent',
+							cwd: '/worktree',
+							sessionSshRemoteConfig: {
+								enabled: true,
+								remoteId: 'remote',
+								workingDirOverride: '~/remote tree',
+							},
+						},
+					],
+				})
+				.mockResolvedValueOnce({ ok: true, result: { success: true, output: 'done' } });
+			vi.mocked(withMaestroClient).mockImplementation(async (callback) =>
+				callback({ sendCommand } as never)
+			);
+			vi.spyOn(console, 'log').mockImplementation(() => {});
+			await changes({
+				tab: 'tab',
+				json: true,
+				action,
+				paths: action === 'commit' ? [] : ['-中文 file'],
+				message: 'message',
+				yes: true,
+			});
+			expect(sendCommand).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					channel: 'git:applyChange',
+					args: [
+						'/worktree',
+						action === 'commit'
+							? { action, message: 'message' }
+							: {
+									action,
+									paths: ['-中文 file'],
+									...(action === 'revert' ? { confirmed: true } : {}),
+								},
+						'remote',
+						'~/remote tree',
+					],
+				}),
+				'bridge.response',
+				180000
+			);
+		}
+	);
+	it('rejects revert without --yes before connecting', async () => {
+		vi.mocked(withMaestroClient).mockClear();
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+			throw new Error('exited');
+		});
+		await expect(changes({ action: 'revert', paths: ['file'], json: true })).rejects.toThrow(
+			'exited'
+		);
+		expect(exit).toHaveBeenCalledWith(1);
+		expect(withMaestroClient).not.toHaveBeenCalled();
+	});
+});

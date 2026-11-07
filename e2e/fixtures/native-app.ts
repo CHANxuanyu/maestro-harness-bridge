@@ -23,6 +23,7 @@ import { createNativeTempDir } from './native/temp-root.cjs';
 const exec = promisify(execFile);
 export type Provider = 'claude' | 'codex' | 'opencode' | 'grok' | 'omp' | 'copilot';
 export interface NativeTool {
+	itemId?: string;
 	name?: string;
 	input?: Record<string, unknown>;
 	id: string;
@@ -33,6 +34,7 @@ export interface NativeTool {
 	gates?: string[];
 }
 export interface NativeScene {
+	codexExecEvents?: Record<string, unknown>[];
 	writes?: Record<string, string>;
 	answer: string;
 	effort?: string;
@@ -47,6 +49,7 @@ export interface NativeScene {
 
 export class NativeApp {
 	readonly root = createNativeTempDir('maestro-native-e2e-');
+	readonly syntheticHome = path.join(this.root, 'synthetic-home');
 	readonly data = path.join(this.root, 'maestro');
 	readonly project = path.join(this.root, 'project');
 	readonly claude = path.join(this.root, 'claude');
@@ -74,7 +77,7 @@ export class NativeApp {
 	readonly control = path.join(this.root, 'control.json');
 	constructor(
 		private info: TestInfo,
-		private options: { providerCli?: boolean } = {}
+		private options: { providerCli?: boolean; inheritCodexHome?: boolean } = {}
 	) {
 		for (const dir of [
 			this.data,
@@ -85,6 +88,7 @@ export class NativeApp {
 			this.grok,
 			this.omp,
 			this.copilot,
+			this.syntheticHome,
 		])
 			fs.mkdirSync(dir, { recursive: true });
 		const productFile = path.resolve('dist/maestro-product.json');
@@ -125,7 +129,7 @@ export class NativeApp {
 			...this.credentials,
 			CLAUDE_CONFIG_DIR: this.claude,
 			CLAUDE_SECURESTORAGE_CONFIG_DIR: this.claude,
-			CODEX_HOME: this.codex,
+			...(this.options.inheritCodexHome ? {} : { CODEX_HOME: this.codex }),
 			COPILOT_HOME: this.copilot,
 			COPILOT_AUTO_UPDATE: 'false',
 			GROK_HOME: this.grok,
@@ -181,9 +185,12 @@ export class NativeApp {
 		}
 		// A history-boundary case needs a synthetic default account as well as the selected one.
 		// Scope HOME to this child process so the test never seeds the user's default directory.
+		// Synthetic runs never see the real home: a provider's store there, such as an
+		// OpenCode database from the desktop app, would be read instead of the fixture's.
+		const home = homeDir ?? (this.real ? undefined : this.syntheticHome);
 		this.app = await launchElectronApp(path.resolve('dist/main/index.js'), this.data, {
 			...this.env,
-			...(homeDir ? { HOME: homeDir } : {}),
+			...(home ? { HOME: home } : {}),
 		});
 		this.boot++;
 		await this.app.context().tracing.start({ screenshots: true, snapshots: true });
@@ -229,7 +236,12 @@ export class NativeApp {
 			process.execPath,
 			[path.resolve('dist/cli/maestro-cli.js'), ...args, '--json'],
 			{ env: { ...process.env, ...this.env, ...env } }
-		);
+		).catch((error: Error & { stdout?: string; stderr?: string }) => {
+			throw new Error(
+				`${error.message}\nstdout:\n${error.stdout ?? ''}\nstderr:\n${error.stderr ?? ''}`,
+				{ cause: error }
+			);
+		});
 		return JSON.parse(result.stdout);
 	}
 	async createAgent(

@@ -580,6 +580,13 @@ describe('CallbackRegistry', () => {
 			expect(await registry.newTab('session-1')).toEqual({ tabId: 'new-tab-1' });
 		});
 
+		it('preserves the browser source permission through the registry', async () => {
+			const callback = vi.fn().mockResolvedValue({ tabId: 'created' });
+			registry.setNewTabCallback(callback);
+			await registry.newTab('owner', false, 'source', 'readonly');
+			expect(callback).toHaveBeenCalledWith('owner', false, 'source', 'readonly');
+		});
+
 		it('returns null when callback resolves to null', async () => {
 			registry.setNewTabCallback(async () => null);
 			expect(await registry.newTab('session-1')).toBeNull();

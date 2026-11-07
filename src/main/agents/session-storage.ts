@@ -102,6 +102,7 @@ export interface PaginatedSessionsResult {
  * Session messages result with pagination info
  */
 export interface SessionMessagesResult {
+	toolOutputSource?: import('../../shared/nativeToolOutput').NativeToolOutputTarget;
 	messages: SessionMessage[];
 	total: number;
 	hasMore: boolean;
@@ -140,6 +141,7 @@ export interface SessionListOptions {
  * Options for reading session messages
  */
 export interface SessionReadOptions {
+	toolOutputLookup?: import('../../shared/nativeToolOutput').NativeToolOutputLookup;
 	/** Exact account pool selected by the conversation row. */
 	configDir?: string;
 	ownerAgentId?: string;
@@ -230,6 +232,14 @@ export interface AgentSessionStorage {
 		options?: SessionReadOptions,
 		sshConfig?: SshRemoteConfig
 	): Promise<SessionMessagesResult>;
+
+	/** Bounded on-demand read of one native result. Local providers only. */
+	readToolOutput?(
+		projectPath: string,
+		sessionId: string,
+		toolCallId: string,
+		options?: SessionReadOptions
+	): Promise<import('../../shared/nativeToolOutput').NativeToolOutputResult>;
 
 	/** Cheap read-only change probe. Null means unavailable, not an empty transcript. */
 	getTranscriptRevision?(

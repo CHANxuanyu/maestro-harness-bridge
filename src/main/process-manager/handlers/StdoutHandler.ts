@@ -751,18 +751,30 @@ export class StdoutHandler {
 			}
 		}
 
-		// Older exec streams omit message phases. A subsequent tool proves the
-		// pending message was progress, so reveal it before the tool starts and
-		// keep it out of ExitHandler's final-answer fallback after an interruption.
+		// Unphased exec text is progress only when a new tool starts. Updates
+		// and completion snapshots can follow the final answer, notably todo_list
+		// at turn completion, and must leave that answer pending for delivery.
 		if (
 			managedProcess.toolType === 'codex' &&
 			event.type === 'tool_use' &&
+			getToolStatus(event.toolState) === 'running' &&
+			!event.isPartial &&
 			managedProcess.streamedText &&
 			!managedProcess.resultEmitted
 		) {
 			this.emitter.emit('thinking-chunk', sessionId, managedProcess.streamedText, 'commentary');
 			managedProcess.streamedText = '';
 		}
+
+		const outputSource = managedProcess.toolOutputSource;
+		const outputSessionId =
+			managedProcess.toolType === 'claude-code'
+				? outputSource?.nativeSessionId || managedProcess.agentSessionId
+				: managedProcess.agentSessionId || outputSource?.nativeSessionId;
+		const toolOutputSource =
+			outputSource && outputSessionId
+				? { ...outputSource, nativeSessionId: outputSessionId }
+				: undefined;
 
 		// Handle tool execution events (OpenCode, Codex)
 		if (event.type === 'tool_use' && event.toolName) {
@@ -788,6 +800,11 @@ export class StdoutHandler {
 				state: event.toolState,
 				timestamp: Date.now(),
 				toolCallId: scopeCodexToolId(managedProcess, event.toolCallId),
+				...(toolOutputSource ? { toolOutputSource } : {}),
+				...(event.toolCallId &&
+				!(managedProcess.toolType === 'codex' && /^item_\d+$/.test(event.toolCallId))
+					? { nativeToolCallId: event.toolCallId }
+					: {}),
 				parentToolUseId: scopeCodexToolId(managedProcess, event.parentToolUseId),
 			});
 		}
@@ -813,6 +830,11 @@ export class StdoutHandler {
 					state: result.toolState,
 					timestamp: Date.now(),
 					toolCallId: scopeCodexToolId(managedProcess, result.toolCallId),
+					...(toolOutputSource ? { toolOutputSource } : {}),
+					...(result.toolCallId &&
+					!(managedProcess.toolType === 'codex' && /^item_\d+$/.test(result.toolCallId))
+						? { nativeToolCallId: result.toolCallId }
+						: {}),
 					parentToolUseId: scopeCodexToolId(managedProcess, result.parentToolUseId),
 				});
 			}
@@ -834,6 +856,10 @@ export class StdoutHandler {
 					state: { status: 'running', input: tool.input },
 					timestamp: Date.now(),
 					toolCallId: scopeCodexToolId(managedProcess, tool.id),
+					...(toolOutputSource ? { toolOutputSource } : {}),
+					...(tool.id && !(managedProcess.toolType === 'codex' && /^item_\d+$/.test(tool.id))
+						? { nativeToolCallId: tool.id }
+						: {}),
 					parentToolUseId: scopeCodexToolId(managedProcess, event.parentToolUseId),
 				});
 			}

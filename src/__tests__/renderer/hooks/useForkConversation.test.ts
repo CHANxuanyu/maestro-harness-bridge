@@ -42,6 +42,10 @@ vi.mock('../../../renderer/utils/spawnHelpers', () => ({
 
 import { useForkConversation } from '../../../renderer/hooks/agent/useForkConversation';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
+import { permissionModeFields } from '../../../renderer/utils/tabHelpers';
 
 // ============================================================================
 // Helpers
@@ -129,6 +133,37 @@ afterEach(() => {
 // ============================================================================
 
 describe('useForkConversation', () => {
+	it.each(['readonly', 'standard', 'full'] as const)(
+		'validates the exact source %s permission and passes it to the first Codex spawn',
+		async (mode) => {
+			useSettingsStore.setState({ newShell: true });
+			setCapabilitiesCache('codex', AGENT_CAPABILITIES.codex);
+			const source = buildSourceTab(permissionModeFields(mode));
+			const session = buildSession({
+				toolType: 'codex',
+				aiTabs: [source, createMockAITab({ ...permissionModeFields('readonly') })],
+			});
+			const { fork, getSessions } = mountHook([session], session.id);
+			fork('log-2');
+			const expected = permissionModeFields(mode === 'standard' ? 'readonly' : mode);
+			expect(getSessions()[0].aiTabs[1]).toMatchObject(expected);
+			await waitFor(() => expect(window.maestro.process.spawn).toHaveBeenCalledTimes(1));
+			expect(window.maestro.process.spawn).toHaveBeenCalledWith(expect.objectContaining(expected));
+		}
+	);
+
+	it('refuses a fork before creating a tab or spawning if the restriction cannot be preserved', () => {
+		useSettingsStore.setState({ newShell: true });
+		setCapabilitiesCache('codex', { ...AGENT_CAPABILITIES.codex, supportsReadOnlyMode: false });
+		const source = buildSourceTab(permissionModeFields('readonly'));
+		const session = buildSession({ toolType: 'codex', aiTabs: [source] });
+		const { fork, getSessions } = mountHook([session], session.id);
+		fork('log-2');
+		expect(getSessions()[0]).toEqual(session);
+		expect(window.maestro.agents.get).not.toHaveBeenCalled();
+		expect(window.maestro.process.spawn).not.toHaveBeenCalled();
+	});
+
 	describe('session-level invariants', () => {
 		it('creates a new tab in the existing session (does NOT create a new session)', () => {
 			const session = buildSession();

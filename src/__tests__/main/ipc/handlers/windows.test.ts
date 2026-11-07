@@ -15,12 +15,13 @@
  * requireDependency throws on a null dependency, mirroring the real behavior.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ipcMain, BrowserWindow } from 'electron';
 
 vi.mock('electron', () => ({
 	ipcMain: {
 		handle: vi.fn(),
+		once: vi.fn(),
 		on: vi.fn(),
 		removeListener: vi.fn(),
 	},
@@ -138,6 +139,71 @@ describe('Windows IPC Handlers', () => {
 		});
 
 		register();
+	});
+
+	afterEach(() => vi.useRealTimers());
+
+	it('reads permission metadata from each owner and bounds unavailable peers to 250 ms', async () => {
+		vi.useFakeTimers();
+		const owner = makeFakeWindow();
+		const stalled = makeFakeWindow();
+		registry.create({ windowId: 'owner', browserWindow: owner, isMain: true, sessionIds: ['a'] });
+		registry.create({
+			windowId: 'stalled',
+			browserWindow: stalled,
+			isMain: false,
+			sessionIds: ['b'],
+		});
+		const read = handlers.get('windows:getConversationPermissions');
+		expect(read).toBeTypeOf('function');
+		const pending = read!({}, ['a', 'b', 'missing']);
+		const request = sendOf(owner).mock.calls[0];
+		expect(request.slice(0, 2)).toEqual(['windows:readConversationPermissions', 'a']);
+		const listener = vi
+			.mocked(ipcMain.on)
+			.mock.calls.find(([channel]) => channel === request[2])![1];
+		const snapshot = {
+			sessionId: 'a',
+			tabs: [{ id: 'readonly', permissionMode: 'readonly', readOnlyMode: true, lastActivity: 42 }],
+		};
+		listener({ sender: stalled.webContents } as never, { sessionId: 'a', tabs: [] });
+		expect(ipcMain.removeListener).not.toHaveBeenCalledWith(request[2], listener);
+		listener({ sender: owner.webContents } as never, snapshot);
+		await vi.advanceTimersByTimeAsync(250);
+		expect(await pending).toEqual([snapshot, null, null]);
+		expect(ipcMain.removeListener).toHaveBeenCalledWith(request[2], listener);
+	});
+
+	it('queries the primary owner for a session without an explicit registry assignment', async () => {
+		const primary = makeFakeWindow();
+		registry.create({ windowId: 'primary', browserWindow: primary, isMain: true });
+		const pending = handlers.get('windows:getConversationPermissions')!({}, ['default-owned']);
+		const request = sendOf(primary).mock.calls[0];
+		expect(request?.slice(0, 2)).toEqual(['windows:readConversationPermissions', 'default-owned']);
+		const listener = vi
+			.mocked(ipcMain.on)
+			.mock.calls.find(([channel]) => channel === request[2])![1];
+		const snapshot = {
+			sessionId: 'default-owned',
+			tabs: [{ id: 'latest', permissionMode: 'full', readOnlyMode: false, lastActivity: 1 }],
+		};
+		listener({ sender: primary.webContents } as never, snapshot);
+		expect(await pending).toEqual([snapshot]);
+	});
+
+	it('discards permission replies if the session changed owner during the request', async () => {
+		const oldOwner = makeFakeWindow();
+		const newOwner = makeFakeWindow();
+		registry.create({ windowId: 'old', browserWindow: oldOwner, isMain: true, sessionIds: ['a'] });
+		registry.create({ windowId: 'new', browserWindow: newOwner, sessionIds: [] });
+		const pending = handlers.get('windows:getConversationPermissions')!({}, ['a']);
+		registry.moveSession('a', 'old', 'new');
+		const request = sendOf(oldOwner).mock.calls[0];
+		const listener = vi
+			.mocked(ipcMain.on)
+			.mock.calls.find(([channel]) => channel === request[2])![1];
+		listener({ sender: oldOwner.webContents } as never, { sessionId: 'a', tabs: [] });
+		expect(await pending).toEqual([null]);
 	});
 
 	describe('handler registration', () => {

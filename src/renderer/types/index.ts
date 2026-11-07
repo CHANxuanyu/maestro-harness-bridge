@@ -253,6 +253,10 @@ export interface LogEntry {
 	agentError?: AgentError;
 	// For tool execution entries - stores tool state and details
 	metadata?: {
+		/** Correlation identity, scoped per process for Codex exec item counters. */
+		toolCallId?: string;
+		nativeToolCallId?: string;
+		toolOutputSource?: import('../../shared/nativeToolOutput').NativeToolOutputTarget;
 		toolState?: {
 			// 'canceled': the call was still running when the user stopped the
 			// turn. Kept in the conversation layout so the record stays readable,
@@ -863,6 +867,8 @@ export interface AITab {
 	stagedImages: string[]; // Staged images (base64) for this tab
 	usageStats?: UsageStats; // Token usage for this tab
 	createdAt: number; // Timestamp for ordering
+	/** Most recent explicit selection in the new shell. */
+	lastSelectedAt?: number;
 	state: 'idle' | 'busy'; // Tab-level state for write-mode tracking
 	readOnlyMode?: boolean; // When true, agent operates in plan/read-only mode
 	permissionMode?: 'full' | 'standard' | 'readonly'; // Controls agent permission handling: full (bypass all), standard (default permission model), readonly (plan mode)

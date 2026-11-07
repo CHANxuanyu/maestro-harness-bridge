@@ -91,6 +91,7 @@ import type {
 	SelectSessionCallback,
 	SelectTabCallback,
 	NewTabCallback,
+	NewTabResult,
 	CloseTabCallback,
 	RenameTabCallback,
 	StarTabCallback,
@@ -1193,8 +1194,17 @@ export class WebServer {
 				this.callbackRegistry.selectSession(sessionId, tabId, focus),
 			selectTab: async (sessionId: string, tabId: string) =>
 				this.callbackRegistry.selectTab(sessionId, tabId),
-			newTab: async (sessionId: string, background?: boolean) =>
-				this.callbackRegistry.newTab(sessionId, background),
+			newTab: async (
+				sessionId: string,
+				background?: boolean,
+				sourceTabId?: string,
+				sourcePermissionMode?: NewTabResult['permissionMode']
+			) =>
+				this.callbackRegistry.newTab(
+					sessionId,
+					background,
+					...(sourceTabId ? ([sourceTabId, sourcePermissionMode] as const) : [])
+				),
 			closeTab: async (sessionId: string, tabId: string) =>
 				this.callbackRegistry.closeTab(sessionId, tabId),
 			renameTab: async (sessionId: string, tabId: string, newName: string) =>
@@ -1506,8 +1516,17 @@ export class WebServer {
 		this.broadcastService.broadcastTabsChange(sessionId, aiTabs, activeTabId, activeTabChanged);
 	}
 
-	requestNewTab(sessionId: string, background?: boolean): Promise<{ tabId: string } | null> {
-		return this.callbackRegistry.newTab(sessionId, background);
+	requestNewTab(
+		sessionId: string,
+		background?: boolean,
+		sourceTabId?: string,
+		sourcePermissionMode?: NewTabResult['permissionMode']
+	): Promise<NewTabResult | null> {
+		return this.callbackRegistry.newTab(
+			sessionId,
+			background,
+			...(sourceTabId ? ([sourceTabId, sourcePermissionMode] as const) : [])
+		);
 	}
 
 	requestCloseTab(sessionId: string, tabId: string): Promise<boolean> {

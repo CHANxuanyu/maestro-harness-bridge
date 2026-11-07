@@ -325,11 +325,12 @@ program
 	.action(openProjectCommand);
 
 program
-	.command('native-history <action> [agent] [conversation]')
+	.command('native-history <action> [session] [conversation-or-tool-call-id]')
 	.description(
-		'List recent projects, list or read native project history, or delete a whole Codex conversation'
+		'List projects, list/read/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an exact native history ID)'
 	)
 	.option('--json', 'Output JSON')
+	.option('--copy', 'Copy the returned tool output to the desktop clipboard')
 	.action(nativeHistory);
 
 list
@@ -548,13 +549,15 @@ program
 	.action(aboutMe);
 
 program
-	.command('changes')
-	.description('Read changes against HEAD in a conversation working directory')
+	.command('changes [action] [paths...]')
+	.description('Read, stage, unstage, revert or commit changes in a conversation working directory')
 	.option('-a, --agent <id>', 'Agent whose active tab to use')
 	.option('--tab <id>', 'Conversation tab, exact ID, prefix or active')
 	.option('--file <path>', 'Read the diff for one repository-relative file')
 	.option('--json', 'Output the shared changes or diff structure as JSON')
-	.action(changes);
+	.option('--message <text>', 'Commit message for the staged files')
+	.option('--yes', 'Explicitly confirm destructive revert')
+	.action((action, paths, options) => changes({ ...options, action, paths }));
 
 program
 	.command('handoff <tab> [provider]')

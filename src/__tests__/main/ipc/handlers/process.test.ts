@@ -21,6 +21,7 @@ import {
 	ProcessHandlerDependencies,
 } from '../../../../main/ipc/handlers/process';
 import { getDefaultShell } from '../../../../main/stores/defaults';
+import { buildAgentArgs } from '../../../../main/utils/agent-args';
 import { encodeClaudeProjectPath } from '../../../../shared/pathUtils';
 import { stripThinkingFromTranscript } from '../../../../main/agents/claude-transcript-sanitizer';
 import { checkCustomPath } from '../../../../main/agents/path-prober';
@@ -453,6 +454,27 @@ describe('process IPC handlers', () => {
 	});
 
 	describe('process:spawn', () => {
+		it.each([false, true])('gates task tool opt-in on newShell=%s', async (newShell) => {
+			mockSettingsStore.get.mockImplementation((key, defaultValue) =>
+				key === 'newShell' ? newShell : defaultValue
+			);
+			mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+			mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+			await handlers.get('process:spawn')!({} as any, {
+				sessionId: 'plan-opt-in',
+				toolType: 'codex',
+				cwd: '/test/project',
+				command: 'codex',
+				args: [],
+				prompt: 'Use the plan tool',
+				readOnlyMode: true,
+			});
+			expect(buildAgentArgs).toHaveBeenCalledWith(
+				expect.objectContaining({ id: 'codex' }),
+				expect.objectContaining({ enableTaskList: newShell, readOnlyMode: true })
+			);
+		});
+
 		it('should spawn PTY process with correct args', async () => {
 			const mockAgent = {
 				id: 'claude-code',

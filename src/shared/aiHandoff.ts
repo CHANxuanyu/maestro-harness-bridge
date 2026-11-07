@@ -79,6 +79,8 @@ export interface HandoffRequest {
 }
 
 export interface HandoffReadRequest {
+	/** Read permission metadata only; an empty tab id selects the latest project conversation. */
+	permissionOnly?: boolean;
 	/** Read a draft for a tool change in the source owner. */
 	emptyConversation?: boolean;
 	mode?: HandoffMode;
@@ -90,6 +92,7 @@ export interface HandoffReadRequest {
 }
 
 export interface HandoffSourceSnapshot {
+	sourcePermission?: { permissionMode: 'full' | 'standard' | 'readonly'; readOnlyMode: boolean };
 	emptyConversation?: { stagedImages?: string[]; commandMode?: 'off' | 'shell' | 'ai' };
 	sourceTitle?: string;
 	cwd: string;
@@ -103,6 +106,8 @@ export interface HandoffSourceSnapshot {
 }
 
 export interface HandoffOpenRequest {
+	/** Captured in the source owner, including when the target lives in another window. */
+	sourcePermission?: HandoffSourceSnapshot['sourcePermission'];
 	newConversation?: {
 		replaceTabId?: string;
 		/** Supplied by the source owner across windows. The target must retain the source. */

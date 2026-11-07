@@ -10,6 +10,7 @@ import {
 	openTabIdentity,
 	runnerAccount,
 	sessionHost,
+	sessionProjectKey,
 } from './nativeConversationMatch';
 
 /** Rows a project shows before "Show more", and how many each press adds. */
@@ -75,6 +76,8 @@ export interface SidebarProject {
 	agents: SidebarAgentChoice[];
 }
 
+export { sessionProjectKey } from './nativeConversationMatch';
+
 interface ProjectSessionTreeOptions {
 	sessions: Session[];
 	/** Already in the user's sidebar group order. */
@@ -115,24 +118,6 @@ function historyProviderId(
 				session.customEnvVars?.CLAUDE_CONFIG_DIR === record.accountDir
 		);
 	return deepseekAccount ? DEEPSEEK_PRESET.id : record.provider;
-}
-
-/**
- * The project a runner belongs to. Its group wins (a worktree inherits its
- * parent's), otherwise host + path, since one path on two hosts is two projects.
- */
-export function sessionProjectKey(
-	session: Session,
-	ownerById: Map<string, Session>,
-	groupById: Map<string, Group>
-): { key: string; group?: Group } {
-	const parent = session.parentSessionId ? ownerById.get(session.parentSessionId) : undefined;
-	const groupId = session.groupId || parent?.groupId;
-	const group = groupId ? groupById.get(groupId) : undefined;
-	if (group) return { key: `group:${group.id}`, group };
-	const ssh = session.sessionSshRemoteConfig;
-	const host = ssh?.enabled ? ssh.remoteId || session.sshRemoteId || session.id : 'local';
-	return { key: `path:${host}:${sessionPath(session)}` };
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { NativeToolOutputTarget, NativeToolOutputResult } from '../../shared/nativeToolOutput';
 import type { NativeProject, OpenProjectTarget, OpenProjectResult } from '../../shared/projects';
 /**
  * Preload API for agent sessions
@@ -233,6 +234,12 @@ export function createClaudeApi() {
  */
 export function createAgentSessionsApi() {
 	return {
+		toolOutput: (
+			target: NativeToolOutputTarget,
+			toolCallId: string
+		): Promise<NativeToolOutputResult> =>
+			ipcRenderer.invoke('agentSessions:toolOutput', target, toolCallId),
+
 		projects: (): Promise<NativeProject[]> => ipcRenderer.invoke('agentSessions:projects'),
 		openProject: (path: string): Promise<OpenProjectResult> =>
 			ipcRenderer.invoke('agentSessions:openProject', path),

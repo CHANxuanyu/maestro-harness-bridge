@@ -18,6 +18,11 @@ import {
 	ThinkingMode,
 	QueuedItem,
 } from '../../types';
+import {
+	fallbackConversationPermissionSource,
+	restoreConversationPermissions,
+} from '../newConversationPermissions';
+import { getCachedCapabilities } from '../../hooks/agent/useAgentCapabilities';
 import { generateId } from '../ids';
 import { getAutoRunFolderPath } from '../existingDocsDetector';
 import { createTerminalTab, nextTerminalCoworkingId } from '../terminalTabHelpers';
@@ -42,6 +47,7 @@ import {
 	terminalTabFocusFields,
 	toggleReadOnlyModeFields,
 	permissionModeFields,
+	newConversationPermissionFields,
 	permissionModes,
 	nextPermissionMode,
 	cycleShowThinkingFields,
@@ -65,6 +71,7 @@ export {
 	terminalTabFocusFields,
 	toggleReadOnlyModeFields,
 	permissionModeFields,
+	newConversationPermissionFields,
 	permissionModes,
 	nextPermissionMode,
 	cycleShowThinkingFields,
@@ -997,6 +1004,9 @@ export function settleTabThinkingState(session: Session, tabId: string): Session
  * Options for creating a new AI tab.
  */
 export interface CreateTabOptions {
+	/** Exact source or resolved project permissions. Missing sources use the strictest known mode. */
+	permissionSource?: Pick<AITab, 'permissionMode' | 'readOnlyMode'>;
+
 	agentSessionId?: string | null; // Claude Code session UUID (null for new tabs)
 	logs?: LogEntry[]; // Initial conversation history
 	name?: string | null; // User-defined name (null = show UUID octet)
@@ -1066,6 +1076,20 @@ export function createTab(
 		id,
 	} = options;
 
+	let permissions = {};
+	if (useSettingsStore.getState().newShell && !agentSessionId) {
+		const source = options.permissionSource ?? fallbackConversationPermissionSource(session);
+		const fields = newConversationPermissionFields(
+			source,
+			getCachedCapabilities(session.toolType) ?? {
+				supportsStandardPermissionMode: false,
+				supportsReadOnlyMode: false,
+			}
+		);
+		if (!fields) return null;
+		permissions = fields;
+	}
+
 	// Create the new tab with default values
 	const newTab: AITab = {
 		id: id ?? generateId(),
@@ -1080,6 +1104,7 @@ export function createTab(
 		state: 'idle',
 		saveToHistory,
 		showThinking,
+		...permissions,
 	};
 
 	// Update the session with the new tab added. When `activate` is true (the
@@ -1254,6 +1279,7 @@ export function closeTab(
 	let freshTabId = '';
 	if (visibleUpdatedTabs.length === 0 && otherTabCount === 0) {
 		const freshTab: AITab = {
+			...(useSettingsStore.getState().newShell ? newConversationPermissionFields(tabToClose) : {}),
 			id: generateId(),
 			agentSessionId: null,
 			name: null,
@@ -1484,7 +1510,9 @@ export function restoreOrphanedTab(
 	session: Session,
 	tabId: string
 ): RestoreOrphanedTabResult | null {
-	const orphan = session.orphanedThinkingTabs?.find((tab) => tab.id === tabId);
+	const retained = session.orphanedThinkingTabs?.find((tab) => tab.id === tabId);
+	if (!retained) return null;
+	const orphan = restoreConversationPermissions(session, retained);
 	if (!orphan) return null;
 	const remainingOrphans = (session.orphanedThinkingTabs ?? []).filter((tab) => tab.id !== tabId);
 	return {
@@ -1542,7 +1570,8 @@ export function reopenClosedTab(session: Session): ReopenTabResult | null {
 
 	// Pop the most recently closed tab from history
 	const [closedTabEntry, ...remainingHistory] = session.closedTabHistory;
-	const tabToRestore = closedTabEntry.tab;
+	const tabToRestore = restoreConversationPermissions(session, closedTabEntry.tab);
+	if (!tabToRestore) return null;
 
 	// If this closed tab is still tracked as an orphan (i.e., it was busy when
 	// closed and its agent is still streaming), pull it back from orphans
@@ -1931,7 +1960,10 @@ function restoreClosedAiTab(
 	session: Session,
 	tabToRestore: AITab,
 	unifiedIndex: number
-): ReopenUnifiedClosedTabResult {
+): ReopenUnifiedClosedTabResult | null {
+	const validated = restoreConversationPermissions(session, tabToRestore);
+	if (!validated) return null;
+	tabToRestore = validated;
 	// If this closed tab is still tracked as an orphan, restore the orphan
 	// (preserving its original ID so the still-running agent re-attaches)
 	// instead of creating a duplicate tab with a fresh ID.
@@ -2048,6 +2080,7 @@ export function reopenClosedAiTabById(
 			...unifiedHistory.slice(unifiedIdx + 1),
 		];
 		const result = restoreClosedAiTab(session, entry.tab, entry.unifiedIndex);
+		if (!result) return null;
 		return {
 			...result,
 			session: { ...result.session, unifiedClosedTabHistory: remainingHistory },
@@ -2065,6 +2098,7 @@ export function reopenClosedAiTabById(
 			...legacyHistory.slice(legacyIdx + 1),
 		];
 		const result = restoreClosedAiTab(session, entry.tab, session.unifiedTabOrder.length);
+		if (!result) return null;
 		return {
 			...result,
 			session: { ...result.session, closedTabHistory: remainingLegacy },
@@ -2127,6 +2161,7 @@ export function reopenUnifiedClosedTab(session: Session): ReopenUnifiedClosedTab
 		// Restoring an AI tab. The shared helper handles orphan re-attach and
 		// duplicate detection; we layer on the popped history afterward.
 		const result = restoreClosedAiTab(session, closedEntry.tab, closedEntry.unifiedIndex);
+		if (!result) return null;
 		return {
 			...result,
 			session: { ...result.session, unifiedClosedTabHistory: remainingHistory },
@@ -2360,6 +2395,14 @@ export function setActiveTab(session: Session, tabId: string): SetActiveTabResul
 		return null;
 	}
 
+	if (useSettingsStore.getState().newShell) {
+		session = {
+			...session,
+			aiTabs: session.aiTabs.map((tab) =>
+				tab.id === tabId ? { ...tab, lastSelectedAt: Date.now() } : tab
+			),
+		};
+	}
 	const targetTab = session.aiTabs.find((tab) => tab.id === tabId);
 	if (!targetTab) {
 		return null;
@@ -2753,48 +2796,9 @@ export function navigateToUnifiedTabByIndex(
 			: session;
 
 	if (targetTabRef.type === 'ai') {
-		// Navigate to AI tab - verify it exists
-		const aiTab = session.aiTabs.find((tab) => tab.id === targetTabRef.id);
-		if (!aiTab) return null;
-
-		// If already active, no file/terminal/browser tab selected, and in AI mode, return current state.
-		// The other-ID checks are critical: without them, a stale browser/file/terminal selection
-		// causes the early return to fire and skip the clearing update below, leaving
-		// findActiveUnifiedTabIndex pointing at the wrong tab - the higher-priority ID wins
-		// visually and the user-perceived "current tab" never changes (Cmd+Shift+[ no-ops).
-		if (
-			session.activeTabId === targetTabRef.id &&
-			session.activeFileTabId === null &&
-			session.activeBrowserTabId === null &&
-			session.activeTerminalTabId === null &&
-			session.activeGroupId == null &&
-			session.inputMode === 'ai'
-		) {
-			return {
-				type: 'ai',
-				id: targetTabRef.id,
-				session: repairedSession,
-			};
-		}
-
-		// Set the AI tab as active, clear terminal/file selection, and ensure inputMode is 'ai'.
-		// inputMode must be explicitly set because navigating from a terminal tab leaves inputMode
-		// as 'terminal' in the spread - without this, MainPanel would continue rendering the
-		// terminal view even though an AI tab is now active. activeGroupId is cleared so an
-		// active tiled group stops taking over the panel when navigating to a standalone tab.
-		return {
-			type: 'ai',
-			id: targetTabRef.id,
-			session: {
-				...repairedSession,
-				activeTabId: targetTabRef.id,
-				activeFileTabId: null,
-				activeBrowserTabId: null,
-				activeTerminalTabId: null,
-				activeGroupId: null,
-				inputMode: 'ai',
-			},
-		};
+		const selected = setActiveTab(repairedSession, targetTabRef.id);
+		if (!selected) return null;
+		return { type: 'ai', id: targetTabRef.id, session: selected.session };
 	} else if (targetTabRef.type === 'file') {
 		// Navigate to file tab - verify it exists
 		const fileTab = session.filePreviewTabs.find((tab) => tab.id === targetTabRef.id);

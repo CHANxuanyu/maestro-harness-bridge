@@ -211,6 +211,19 @@ describe('web handlers', () => {
 			expect(result).toEqual({ tabId: 'tab-2' });
 		});
 
+		it('forwards the browser permission with its source tab', async () => {
+			const handler = registeredHandlers.get('web:requestNewTab');
+			expect(await handler!({}, 'session-123', false, 'source', 'readonly')).toEqual({
+				tabId: 'tab-2',
+			});
+			expect(mockWebServer.requestNewTab).toHaveBeenCalledWith(
+				'session-123',
+				false,
+				'source',
+				'readonly'
+			);
+		});
+
 		it('returns null when the web server is unavailable', async () => {
 			webServerRef.current = null;
 			const handler = registeredHandlers.get('web:requestNewTab');

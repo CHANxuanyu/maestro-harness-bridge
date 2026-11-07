@@ -18,7 +18,7 @@
  *    could be meant; with several candidates it merges nothing (no false merge).
  */
 
-import type { Session } from '../types';
+import type { Group, Session } from '../types';
 import type { ProjectHistoryConversation } from '../../shared/projectHistory';
 import { getProviderProfileConfig } from '../../shared/providerProfiles';
 
@@ -144,4 +144,22 @@ export function runnerCanOpenRecord(
 	if (evidence === 'different') return false;
 	if (requireProof && record.accountDir) return evidence === 'same';
 	return true;
+}
+
+/**
+ * The project a runner belongs to. Its group wins (a worktree inherits its
+ * parent's), otherwise host + path, since one path on two hosts is two projects.
+ */
+export function sessionProjectKey(
+	session: Session,
+	ownerById: Map<string, Session>,
+	groupById: Map<string, Group>
+): { key: string; group?: Group } {
+	const parent = session.parentSessionId ? ownerById.get(session.parentSessionId) : undefined;
+	const groupId = session.groupId || parent?.groupId;
+	const group = groupId ? groupById.get(groupId) : undefined;
+	if (group) return { key: `group:${group.id}`, group };
+	const ssh = session.sessionSshRemoteConfig;
+	const host = ssh?.enabled ? ssh.remoteId || session.sshRemoteId || session.id : 'local';
+	return { key: `path:${host}:${session.projectRoot || session.cwd}` };
 }

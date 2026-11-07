@@ -428,3 +428,41 @@ describe('useAgentToolExecutionListener: stable scoped call ids', () => {
 		]);
 	});
 });
+
+it('keeps native source and call identity separate from the scoped display id', () => {
+	const tab = createMockAITab({ id: 'tab-1', agentSessionId: 'native' });
+	useSessionStore.setState({
+		sessions: [createMockSession({ id: 'sess-1', toolType: 'codex', aiTabs: [tab] })],
+	});
+	renderHook(() => useAgentToolExecutionListener());
+	const source = {
+		provider: 'codex',
+		projectPath: '/project',
+		nativeSessionId: 'native',
+		ownerAgentId: 'sess-1',
+		accountDir: '/account',
+	};
+	handler!('sess-1-ai-tab-1', {
+		toolName: 'shell',
+		toolCallId: 'codex-run-item_7',
+		timestamp: 1000,
+		toolOutputSource: source,
+		state: { status: 'running' },
+	});
+	handler!('sess-1-ai-tab-1', {
+		toolName: 'shell',
+		toolCallId: 'codex-run-item_7',
+		nativeToolCallId: 'call_native',
+		timestamp: 2000,
+		toolOutputSource: source,
+		state: { status: 'completed', output: 'result' },
+	});
+	const entry = useSessionStore.getState().sessions[0].aiTabs[0].logs[0];
+	expect(entry.id).toBe('tool-codex-run-item_7');
+	expect(entry.timestamp).toBe(1000);
+	expect(entry.metadata).toMatchObject({
+		toolCallId: 'codex-run-item_7',
+		nativeToolCallId: 'call_native',
+		toolOutputSource: source,
+	});
+});

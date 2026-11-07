@@ -286,9 +286,9 @@ Show, stage, apply or inspect the shared native instruction profile
 | `--confirm <path>` | Approve this exact resolved file from status (repeatable) | `[]`    |
 | `--json`           | Output JSON including per-file states                     | -       |
 
-## `maestro-cli changes`
+## `maestro-cli changes [action] [paths]`
 
-Read changes against HEAD in a conversation working directory
+Read, stage, unstage, revert or commit changes in a conversation working directory
 
 | Option             | Description                                         | Default |
 | ------------------ | --------------------------------------------------- | ------- |
@@ -296,6 +296,8 @@ Read changes against HEAD in a conversation working directory
 | `--tab <id>`       | Conversation tab, exact ID, prefix or active        | -       |
 | `--file <path>`    | Read the diff for one repository-relative file      | -       |
 | `--json`           | Output the shared changes or diff structure as JSON | -       |
+| `--message <text>` | Commit message for the staged files                 | -       |
+| `--yes`            | Explicitly confirm destructive revert               | -       |
 
 ## `maestro-cli handoff <tab> [provider]`
 

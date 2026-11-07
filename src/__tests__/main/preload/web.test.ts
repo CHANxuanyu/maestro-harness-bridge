@@ -62,6 +62,19 @@ describe('Web Preload API', () => {
 			});
 		});
 
+		it('carries a browser source id and preserves the created permission fields', async () => {
+			const response = { tabId: 'created', permissionMode: 'readonly', readOnlyMode: true };
+			mockInvoke.mockResolvedValue(response);
+			expect(await api.requestNewTab('session-123', false, 'source', 'readonly')).toEqual(response);
+			expect(mockInvoke).toHaveBeenCalledWith(
+				'web:requestNewTab',
+				'session-123',
+				false,
+				'source',
+				'readonly'
+			);
+		});
+
 		describe('requestCloseTab', () => {
 			it('forwards the agent and tab ids to the desktop', async () => {
 				mockInvoke.mockResolvedValue(true);

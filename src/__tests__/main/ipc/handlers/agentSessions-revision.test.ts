@@ -10,6 +10,7 @@ vi.mock('../../../../main/stores', () => ({ getSshRemoteById: vi.fn() }));
 vi.mock('../../../../main/agents/provider-account-dirs', () => ({
 	resolveAgentAccountDir: vi.fn().mockReturnValue('/owner-account'),
 	getProviderAccountDirs: vi.fn(),
+	readStoredSessions: vi.fn(() => [{ id: 'owner', toolType: 'codex' }]),
 }));
 vi.mock('../../../../main/storage/starred-transcript-mirror', () => ({
 	snapshotStarredTranscript: vi.fn(),
@@ -24,7 +25,10 @@ vi.mock('../../../../main/utils/logger', () => ({
 import { registerAgentSessionsHandlers } from '../../../../main/ipc/handlers/agentSessions';
 import { getSessionStorage, type AgentSessionStorage } from '../../../../main/agents';
 import { getSshRemoteById } from '../../../../main/stores';
-import { resolveAgentAccountDir } from '../../../../main/agents/provider-account-dirs';
+import {
+	readStoredSessions,
+	resolveAgentAccountDir,
+} from '../../../../main/agents/provider-account-dirs';
 import { restoreStarredTranscript } from '../../../../main/storage/starred-transcript-mirror';
 
 const handlers = new Map<string, (...args: any[]) => Promise<any>>();
@@ -36,6 +40,7 @@ beforeEach(() => {
 	vi.mocked(getSessionStorage).mockReturnValue({
 		getTranscriptRevision: probe,
 		readSessionMessages: read,
+		readToolOutput: read,
 	} as unknown as AgentSessionStorage);
 	vi.mocked(ipcMain.handle).mockImplementation((channel, handler) => {
 		handlers.set(channel, handler);
@@ -45,6 +50,120 @@ beforeEach(() => {
 const invoke = (...args: any[]) =>
 	handlers.get('agentSessions:getTranscriptRevision')!({}, ...args);
 describe('read-only transcript refresh IPC', () => {
+	it('reads one tool from the selected owner account without restoring mirrors', async () => {
+		const handler = handlers.get('agentSessions:toolOutput');
+		expect(handler).toBeTypeOf('function');
+		await handler!(
+			{},
+			{
+				provider: 'codex',
+				projectPath: '/project',
+				nativeSessionId: 'native-id',
+				ownerAgentId: 'owner',
+			},
+			'call-1'
+		);
+		expect(resolveAgentAccountDir).toHaveBeenCalledWith('owner');
+		expect(read).toHaveBeenCalledWith('/project', 'native-id', 'call-1', {
+			configDir: '/owner-account',
+			readOnly: true,
+		});
+		expect(restoreStarredTranscript).not.toHaveBeenCalled();
+	});
+	it('validates a parked provider source and reads its original account', async () => {
+		const source = {
+			provider: 'claude-code',
+			projectPath: '/old-project',
+			nativeSessionId: 'old-native',
+			ownerAgentId: 'owner',
+			accountDir: '/old-account',
+		};
+		vi.mocked(readStoredSessions).mockReturnValueOnce([
+			{
+				id: 'owner',
+				toolType: 'codex',
+				aiTabs: [
+					{
+						id: 'tab',
+						agentSessionId: 'new-native',
+						providerSessions: { 'claude-code': { agentSessionId: 'old-native' } },
+						logs: [{ metadata: { toolCallId: 'old-call', toolOutputSource: source } }],
+					},
+				],
+			},
+		]);
+		await handlers.get('agentSessions:toolOutput')!({}, source, 'old-call');
+		expect(read).toHaveBeenCalledWith('/old-project', 'old-native', 'old-call', {
+			configDir: '/old-account',
+			readOnly: true,
+		});
+		expect(restoreStarredTranscript).not.toHaveBeenCalled();
+	});
+	it('resolves CLI card IDs using the same saved source as the UI', async () => {
+		const source = {
+			provider: 'claude-code',
+			projectPath: '/old-project',
+			nativeSessionId: 'old-native',
+			ownerAgentId: 'owner',
+			accountDir: '/old-account',
+		};
+		vi.mocked(readStoredSessions).mockReturnValueOnce([
+			{
+				id: 'owner',
+				toolType: 'codex',
+				aiTabs: [{ logs: [{ metadata: { toolCallId: 'old-call', toolOutputSource: source } }] }],
+			},
+		]);
+		await handlers.get('agentSessions:toolOutput')!(
+			{},
+			{
+				provider: 'codex',
+				projectPath: '/project',
+				nativeSessionId: 'new-native',
+				ownerAgentId: 'owner',
+			},
+			'old-call'
+		);
+		expect(read).toHaveBeenCalledWith('/old-project', 'old-native', 'old-call', {
+			configDir: '/old-account',
+			readOnly: true,
+		});
+	});
+	it('rejects an invented parked provider account', async () => {
+		expect(
+			await handlers.get('agentSessions:toolOutput')!(
+				{},
+				{
+					provider: 'claude-code',
+					projectPath: '/project',
+					nativeSessionId: 'invented',
+					ownerAgentId: 'owner',
+					accountDir: '/invented',
+				},
+				'call'
+			)
+		).toEqual({ status: 'not-found' });
+		expect(read).not.toHaveBeenCalled();
+	});
+	it('refuses unsupported remote tool output without reading local files', async () => {
+		const handler = handlers.get('agentSessions:toolOutput');
+		expect(handler).toBeTypeOf('function');
+		expect(
+			await handler!(
+				{},
+				{
+					provider: 'codex',
+					projectPath: '~/remote',
+					nativeSessionId: 'id',
+					ownerAgentId: 'owner',
+					sshRemoteId: 'ssh',
+				},
+				'call-1'
+			)
+		).toEqual({ status: 'unsupported' });
+		expect(read).not.toHaveBeenCalled();
+		expect(resolveAgentAccountDir).not.toHaveBeenCalled();
+	});
 	it('uses the exact native ID and owner account without restoring content', async () => {
 		expect(await invoke('codex', '/project', 'native-id', { ownerAgentId: 'owner' })).toBe(
 			'opaque-revision'

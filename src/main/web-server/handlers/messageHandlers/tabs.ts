@@ -1,3 +1,4 @@
+import type { NewTabResult } from '../../types';
 /**
  * Tabs domain WebSocket message handlers.
  *
@@ -88,13 +89,25 @@ export function handleNewTab(
 	}
 
 	ctx.callbacks
-		.newTab(sessionId, background)
+		.newTab(
+			sessionId,
+			background,
+			...(typeof message.sourceTabId === 'string' && message.sourceTabId
+				? ([
+						message.sourceTabId,
+						message.sourcePermissionMode as NewTabResult['permissionMode'],
+					] as const)
+				: [])
+		)
 		.then((result) => {
 			ctx.send(client, {
 				type: 'new_tab_result',
 				success: !!result,
 				sessionId,
 				tabId: result?.tabId,
+				...(result?.permissionMode
+					? { permissionMode: result.permissionMode, readOnlyMode: result.readOnlyMode }
+					: {}),
 				background,
 				requestId: message.requestId,
 			});

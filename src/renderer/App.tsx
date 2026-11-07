@@ -309,6 +309,7 @@ function MaestroConsoleInner() {
 		setConfirmModalOnConfirm,
 		confirmModalTitle,
 		confirmModalDestructive,
+		confirmModalConfirmLabel,
 		// Rename Instance Modal
 		renameInstanceModalOpen,
 		setRenameInstanceModalOpen,
@@ -3428,6 +3429,7 @@ function MaestroConsoleInner() {
 						confirmModalOnConfirm={confirmModalOnConfirm}
 						confirmModalTitle={confirmModalTitle}
 						confirmModalDestructive={confirmModalDestructive}
+						confirmModalConfirmLabel={confirmModalConfirmLabel}
 						onCloseConfirmModal={handleCloseConfirmModal}
 						onConfirmQuit={handleConfirmQuit}
 						onCancelQuit={handleCancelQuit}

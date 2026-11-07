@@ -78,6 +78,7 @@ const sameSubagentLogs = (prev?: LogEntry[], next?: LogEntry[]): boolean => {
 export const LogItem = memo(
 	({
 		log,
+		nativeToolOutputTarget,
 		handoffOrigin,
 		index,
 		isTerminal,
@@ -707,6 +708,7 @@ export const LogItem = memo(
 								{/* Each call unfolds on its own to its full input and result. */}
 								{toolRun.map((entry) => (
 									<ToolCallFold
+										nativeToolOutputTarget={nativeToolOutputTarget}
 										key={entry.id}
 										log={entry}
 										theme={theme}
@@ -773,7 +775,12 @@ export const LogItem = memo(
 						</button>
 						{isExpanded && (
 							<div className="pl-[1.375rem] pb-1 select-text text-xs" data-native-tool-details="">
-								<ToolBadge log={log} theme={theme} part="details" />
+								<ToolBadge
+									log={log}
+									theme={theme}
+									part="details"
+									nativeToolOutputTarget={nativeToolOutputTarget}
+								/>
 							</div>
 						)}
 					</div>
@@ -834,7 +841,12 @@ export const LogItem = memo(
 						</button>
 						{isExpanded && (
 							<div className="pl-4 select-text" data-native-tool-details="">
-								<ToolBadge log={log} theme={theme} part="details" />
+								<ToolBadge
+									log={log}
+									theme={theme}
+									part="details"
+									nativeToolOutputTarget={nativeToolOutputTarget}
+								/>
 							</div>
 						)}
 					</div>
@@ -1485,6 +1497,7 @@ export const LogItem = memo(
 							}}
 						>
 							<ToolBadge
+								nativeToolOutputTarget={nativeToolOutputTarget}
 								log={log}
 								theme={theme}
 								feedLayout={feedLayout}
@@ -1513,6 +1526,7 @@ export const LogItem = memo(
 										>
 											{subagentLogs.map((child) => (
 												<ToolBadge
+													nativeToolOutputTarget={nativeToolOutputTarget}
 													key={child.id}
 													log={child}
 													theme={theme}

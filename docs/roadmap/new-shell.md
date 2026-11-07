@@ -223,11 +223,12 @@ export interface GitFileChangeDiff {
 }
 ```
 
-- IPC：`git:changes(cwd, sshRemoteId?, remoteCwd?)` 返回 `GitChanges`，`git:changeDiff(cwd, path, sshRemoteId?, remoteCwd?)` 返回 `GitFileChangeDiff`。处理函数放在 `src/main/ipc/handlers/git/read.ts`，走 `execGitReadOnly()` 和现有的 SSH 路径；预加载在 `src/main/preload/git.ts`；渲染层在 `src/renderer/services/git.ts` 加 `getChanges()` 和 `getChangeDiff()`。
+- IPC：`git:changes(cwd, sshRemoteId?, remoteCwd?)` 返回 `GitChanges`，`git:changeDiff(cwd, path, sshRemoteId?, remoteCwd?)` 返回 `GitFileChangeDiff`。处理函数放在 `src/main/ipc/handlers/git/changes.ts`，走 `execGitReadOnly()` 和现有的 SSH 路径；预加载在 `src/main/preload/git.ts`；渲染层在 `src/renderer/services/git.ts` 加 `getChanges()` 和 `getChangeDiff()`。
 - 状态和行数一次往返：同一条命令里跑 `git status --porcelain=v2 -z` 和 `git diff HEAD --numstat -z`，未跟踪文件的行数也在这条命令里数，超过 1 MiB 或二进制的记 null。
 - 还没有提交的新仓库（没有 HEAD）按空树比较，不报错。
 - 命令行：`maestro-cli changes [--agent <id>] [--tab <id>] [--file <path>] [--json]`，输出同样的结构。只读，不改工作区。
 - 什么时候刷新由界面决定：回合结束、切到这条会话、手动刷新。后端不加文件监听。
+- 2026-11-06 补单文件收尾：`git:applyChange(cwd, request, sshRemoteId?, remoteCwd?)` 统一处理暂存、取消暂存、确认撤销和提交。CLI 为 `changes stage|unstage|revert <path>...` 与 `changes commit --message <text>`，撤销必须带 `--yes`。新界面按暂存状态分组，撤销说明文件名和删除新文件的后果；冲突文件不提供撤销。提交只包含暂存区，失败保留 Git 原始诊断。完整边界与对等关系见 [CLI-UI-PARITY.md](../agent-guides/CLI-UI-PARITY.md#new-shell-single-file-changes-2026-11-06)。
 
 ### C. 交接和复核
 

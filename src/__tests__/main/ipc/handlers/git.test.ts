@@ -232,6 +232,16 @@ describe('Git IPC handlers', () => {
 	});
 
 	it('registers changes reads and refuses an unresolved SSH remote', async () => {
+		expect(handlers.has('git:applyChange')).toBe(true);
+		await expect(
+			handlers.get('git:applyChange')!(
+				{},
+				'/local',
+				{ action: 'stage', paths: ['file'] },
+				'missing',
+				'/remote'
+			)
+		).rejects.toThrow('SSH remote unavailable');
 		expect(handlers.has('git:changes')).toBe(true);
 		expect(handlers.has('git:changeDiff')).toBe(true);
 		await expect(handlers.get('git:changes')!({}, '/local', 'missing', '/remote')).rejects.toThrow(
@@ -247,6 +257,7 @@ describe('Git IPC handlers', () => {
 			const expectedChannels = [
 				'git:changes',
 				'git:changeDiff',
+				'git:applyChange',
 				'git:status',
 				'git:diff',
 				'git:isRepo',

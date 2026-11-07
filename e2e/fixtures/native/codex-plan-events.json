@@ -1,0 +1,133 @@
+[
+	{
+		"type": "thread.started",
+		"thread_id": "11111111-1111-4111-8111-111111111111"
+	},
+	{
+		"type": "turn.started"
+	},
+	{
+		"type": "item.completed",
+		"item": {
+			"id": "item_0",
+			"type": "agent_message",
+			"text": "I will check the sample and report its label.\n"
+		}
+	},
+	{
+		"type": "item.started",
+		"item": {
+			"id": "item_1",
+			"type": "todo_list",
+			"items": [
+				{
+					"text": "Read the sample",
+					"completed": false
+				},
+				{
+					"text": "Report the label",
+					"completed": false
+				}
+			]
+		}
+	},
+	{
+		"type": "item.started",
+		"item": {
+			"id": "item_2",
+			"type": "command_execution",
+			"command": "cat sample.txt",
+			"aggregated_output": "",
+			"exit_code": null,
+			"status": "in_progress"
+		}
+	},
+	{
+		"type": "item.completed",
+		"item": {
+			"id": "item_2",
+			"type": "command_execution",
+			"command": "cat sample.txt",
+			"aggregated_output": "SYNTHETIC_LABEL\nsecond row\n",
+			"exit_code": 0,
+			"status": "completed"
+		}
+	},
+	{
+		"type": "item.updated",
+		"item": {
+			"id": "item_1",
+			"type": "todo_list",
+			"items": [
+				{
+					"text": "Read the sample",
+					"completed": true
+				},
+				{
+					"text": "Report the label",
+					"completed": false
+				}
+			]
+		}
+	},
+	{
+		"type": "item.completed",
+		"item": {
+			"id": "item_3",
+			"type": "agent_message",
+			"text": "The sample label is SYNTHETIC_LABEL.\n"
+		}
+	},
+	{
+		"type": "item.updated",
+		"item": {
+			"id": "item_1",
+			"type": "todo_list",
+			"items": [
+				{
+					"text": "Read the sample",
+					"completed": true
+				},
+				{
+					"text": "Report the label",
+					"completed": true
+				}
+			]
+		}
+	},
+	{
+		"type": "item.completed",
+		"item": {
+			"id": "item_4",
+			"type": "agent_message",
+			"text": "PLAN_FINAL: SYNTHETIC_LABEL. Both steps are complete."
+		}
+	},
+	{
+		"type": "item.completed",
+		"item": {
+			"id": "item_1",
+			"type": "todo_list",
+			"items": [
+				{
+					"text": "Read the sample",
+					"completed": true
+				},
+				{
+					"text": "Report the label",
+					"completed": true
+				}
+			]
+		}
+	},
+	{
+		"type": "turn.completed",
+		"usage": {
+			"input_tokens": 100,
+			"cached_input_tokens": 80,
+			"cache_write_input_tokens": 0,
+			"output_tokens": 22,
+			"reasoning_output_tokens": 0
+		}
+	}
+]

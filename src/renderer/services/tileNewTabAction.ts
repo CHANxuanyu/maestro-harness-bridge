@@ -11,11 +11,12 @@
  */
 
 import { notifyCenterFlash } from '../stores/centerFlashStore';
-import { updateSessionWith } from '../stores/sessionStore';
+import { updateSessionWith, useSessionStore } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUIStore } from '../stores/uiStore';
 import { findLeafByTabRef, type DropZone } from '../utils/panelLayout';
 import { tileNewTab, type TileableTabKind } from '../hooks/tabs/tileNewTab';
+import { resolveProjectConversationPermission } from '../utils/newConversationPermissions';
 
 /**
  * Create a `kind` tab, tile it into `zone` of the view currently on screen, and
@@ -25,11 +26,16 @@ import { tileNewTab, type TileableTabKind } from '../hooks/tabs/tileNewTab';
  * against it flashes "Nothing here to tile with" and returns false, so a caller
  * that owns a key event can still decide whether to swallow it.
  */
-export function tileNewTabInSession(
+export async function tileNewTabInSession(
 	sessionId: string,
 	kind: TileableTabKind,
 	zone: DropZone = 'bottom'
-): boolean {
+): Promise<boolean> {
+	const target = useSessionStore.getState().sessions.find((session) => session.id === sessionId);
+	const permissionSource =
+		target && kind === 'ai' && useSettingsStore.getState().newShell
+			? await resolveProjectConversationPermission(target)
+			: undefined;
 	// Captured inside the updater so focus is only requested when the tile
 	// actually landed.
 	let paneId: string | null = null;
@@ -38,6 +44,7 @@ export function tileNewTabInSession(
 			s,
 			kind,
 			{
+				permissionSource,
 				saveToHistory: useSettingsStore.getState().defaultSaveToHistory,
 				showThinking: useSettingsStore.getState().defaultShowThinking,
 				browserHomeUrl: useSettingsStore.getState().browserHomeUrl,

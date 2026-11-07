@@ -919,4 +919,32 @@ describe('latest conversation tasks', () => {
 		expect(screen.getByTestId('tasks-empty')).toBeInTheDocument();
 		expect(screen.queryByRole('list')).toBeNull();
 	});
+
+	it.each([
+		[
+			'en',
+			'The tools in this conversation have not provided a task list. Checklists in replies are not shown here.',
+		],
+		['zh-CN', '这条对话的工具尚未提供任务清单。回复正文里的清单不会显示在这里。'],
+	] as const)(
+		'explains missing tool data in %s without turning prose into tasks',
+		(uiLanguage, text) => {
+			useSettingsStore.setState({ uiLanguage });
+			render(
+				<TasksPanel
+					logs={[
+						{
+							id: 'prose-plan',
+							timestamp: 1,
+							source: 'stdout',
+							text: 'I have no update_plan tool.\n- [x] First\n- [x] Second',
+						},
+					]}
+					theme={mockTheme}
+				/>
+			);
+			expect(screen.getByTestId('tasks-empty')).toHaveTextContent(text);
+			expect(screen.queryByRole('list')).toBeNull();
+		}
+	);
 });

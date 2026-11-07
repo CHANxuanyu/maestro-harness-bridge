@@ -1,3 +1,8 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { readNativeToolOutput } from '../../../../main/storage/native-tool-output-reader';
+import { nativeToolCommand } from '../../../../shared/nativeToolOutput';
 /**
  * Tests for src/main/process-manager/handlers/StdoutHandler.ts
  *
@@ -14,6 +19,7 @@
 
 import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest';
 import { EventEmitter } from 'events';
+import planEvents from '../../../../../e2e/fixtures/native/codex-plan-events.json';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -140,37 +146,134 @@ describe('StdoutHandler', () => {
 
 	// ── handleData dispatch routing ────────────────────────────────────────
 
-	it('forwards every consecutive todo_list update through the stdout deduplicator', () => {
-		const { handler, emitter, sessionId } = createTestContext({
-			isStreamJsonMode: true,
-			toolType: 'codex',
-			outputParser: new CodexOutputParser(),
-		});
-		const toolSpy = vi.fn();
-		emitter.on('tool-execution', toolSpy);
-		const types = ['item.started', 'item.updated', 'item.updated', 'item.completed'];
-		types.forEach((type, index) =>
-			sendJsonLine(handler, sessionId, {
-				type,
-				item: {
-					type: 'todo_list',
-					id: 'plan',
-					items: [{ text: `Revision ${index}`, completed: index === 3 }],
-				},
-			})
-		);
-		expect(toolSpy.mock.calls.map(([, event]) => event.state)).toEqual(
-			types.map((_, index) => ({
-				status: index === 3 ? 'completed' : 'running',
-				input: {
-					plan: [{ step: `Revision ${index}`, status: index === 3 ? 'completed' : 'pending' }],
-				},
-			}))
-		);
-		expect(new Set(toolSpy.mock.calls.map(([, event]) => event.toolCallId)).size).toBe(1);
-	});
+	it.each(['plan', 'item_2'])(
+		'forwards every todo_list update with output provenance for %s',
+		(itemId) => {
+			const toolOutputSource = {
+				provider: 'codex',
+				projectPath: '/project',
+				ownerAgentId: 'owner',
+				accountDir: '/account',
+			};
+			const { handler, emitter, sessionId } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				agentSessionId: 'native-plan',
+				toolOutputSource,
+				outputParser: new CodexOutputParser(),
+			});
+			const toolSpy = vi.fn();
+			emitter.on('tool-execution', toolSpy);
+			const types = ['item.started', 'item.updated', 'item.updated', 'item.completed'];
+			types.forEach((type, index) =>
+				sendJsonLine(handler, sessionId, {
+					type,
+					item: {
+						type: 'todo_list',
+						id: itemId,
+						items: [{ text: `Revision ${index}`, completed: index === 3 }],
+					},
+				})
+			);
+			expect(toolSpy.mock.calls.map(([, event]) => event.state)).toEqual(
+				types.map((_, index) => ({
+					status: index === 3 ? 'completed' : 'running',
+					input: {
+						plan: [{ step: `Revision ${index}`, status: index === 3 ? 'completed' : 'pending' }],
+					},
+				}))
+			);
+			expect(new Set(toolSpy.mock.calls.map(([, event]) => event.toolCallId)).size).toBe(1);
+			for (const [, event] of toolSpy.mock.calls) {
+				expect(event.toolOutputSource).toEqual({
+					...toolOutputSource,
+					nativeSessionId: 'native-plan',
+				});
+				expect(event.nativeToolCallId).toBe(itemId === 'item_2' ? undefined : itemId);
+				expect(event.state.output).toBeUndefined();
+			}
+		}
+	);
 
 	describe('Codex process-local tool identifiers', () => {
+		it('carries the spawn source through real exec command events without calling item IDs native IDs', async () => {
+			const source = {
+				provider: 'codex',
+				projectPath: '/project',
+				ownerAgentId: 'owner',
+				accountDir: '/account',
+			};
+			const { handler, emitter, sessionId } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				agentSessionId: 'native',
+				toolOutputSource: source,
+				outputParser: new CodexOutputParser(),
+			});
+			const events: any[] = [];
+			emitter.on('tool-execution', (_id, event) => events.push(event));
+			const item = {
+				id: 'item_7',
+				type: 'command_execution',
+				command: '/bin/zsh -lc "npm test"',
+				status: 'in_progress',
+			};
+			sendJsonLine(handler, sessionId, { type: 'item.started', item });
+			sendJsonLine(handler, sessionId, {
+				type: 'item.completed',
+				item: {
+					...item,
+					status: 'completed',
+					aggregated_output: 'x'.repeat(8000) + 'FINAL ERROR',
+					exit_code: 0,
+				},
+			});
+			expect(events).toHaveLength(2);
+			for (const event of events) {
+				expect(event.toolCallId).toMatch(/^codex-.+-item_7$/);
+				expect(event.nativeToolCallId).toBeUndefined();
+				expect(event.toolOutputSource).toEqual({ ...source, nativeSessionId: 'native' });
+			}
+			expect(events[1].state.output).toContain('8011 chars total');
+			const root = await fs.mkdtemp(path.join(os.tmpdir(), 'exec-output-chain-'));
+			onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
+			const file = path.join(root, 'rollout-native.jsonl');
+			await fs.writeFile(
+				file,
+				[
+					{
+						type: 'response_item',
+						timestamp: new Date(events[0].timestamp).toISOString(),
+						payload: {
+							type: 'function_call',
+							name: 'exec_command',
+							call_id: 'native-call',
+							arguments: '{"cmd":"npm test"}',
+						},
+					},
+					{
+						type: 'response_item',
+						payload: {
+							type: 'function_call_output',
+							call_id: 'native-call',
+							output:
+								'Wall time: 0.01 seconds\nProcess exited with code 0\nOutput:\n' +
+								'x'.repeat(8000) +
+								'FINAL ERROR',
+						},
+					},
+				]
+					.map((row) => JSON.stringify(row))
+					.join('\n')
+			);
+			const result = await readNativeToolOutput(file, 'codex', events[0].toolCallId, {
+				command: nativeToolCommand(events[0].state.input)!,
+				timestamp: events[0].timestamp,
+				preview: events[1].state.output,
+			});
+			expect(result.status).toBe('found');
+			if (result.status === 'found') expect(result.text.endsWith('FINAL ERROR')).toBe(true);
+		});
 		it('forwards command updates under the original call id while deduplicating starts', () => {
 			const { handler, emitter, sessionId } = createTestContext({
 				isStreamJsonMode: true,
@@ -1175,6 +1278,63 @@ describe('StdoutHandler', () => {
 	});
 
 	describe('Codex public progress delivery', () => {
+		it('keeps the observed final answer out of commentary after the plan completion snapshot', () => {
+			const { handler, emitter, sessionId, proc, bufferManager } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'codex',
+				outputParser: new CodexOutputParser(),
+			});
+			const progress = vi.fn();
+			const tools = vi.fn();
+			emitter.on('thinking-chunk', progress);
+			emitter.on('tool-execution', tools);
+			for (const event of planEvents) sendJsonLine(handler, sessionId, event);
+			const final = planEvents[9].item!.text;
+			expect(bufferManager.emitDataBuffered).toHaveBeenCalledExactlyOnceWith(sessionId, final);
+			expect(proc.resultEmitted).toBe(true);
+			expect(progress.mock.calls).toEqual([
+				[sessionId, planEvents[2].item!.text, 'commentary'],
+				[sessionId, planEvents[7].item!.text, 'commentary'],
+			]);
+			expect(
+				tools.mock.calls
+					.filter(([, event]) => event.toolName === 'update_plan')
+					.map(
+						([, event]) =>
+							event.state.input.plan.filter(
+								(task: { status: string }) => task.status === 'completed'
+							).length
+					)
+			).toEqual([0, 1, 2, 2]);
+		});
+
+		it.each(['item.updated', 'item.completed'])(
+			'keeps the final answer when only a plan %s follows it',
+			(type) => {
+				const { handler, emitter, sessionId, bufferManager } = createTestContext({
+					isStreamJsonMode: true,
+					toolType: 'codex',
+					outputParser: new CodexOutputParser(),
+				});
+				const progress = vi.fn();
+				emitter.on('thinking-chunk', progress);
+				for (const event of [
+					planEvents[0],
+					planEvents[1],
+					planEvents[3],
+					planEvents[9],
+					{ ...planEvents[10], type },
+					planEvents[11],
+				])
+					sendJsonLine(handler, sessionId, event);
+				expect(bufferManager.emitDataBuffered).toHaveBeenCalledExactlyOnceWith(
+					sessionId,
+					planEvents[9].item!.text
+				);
+				expect(progress).not.toHaveBeenCalled();
+			}
+		);
+
 		it('delivers explicit commentary before tools without using it as an interrupted final answer', () => {
 			const { handler, emitter, sessionId, proc, bufferManager } = createTestContext({
 				isStreamJsonMode: true,

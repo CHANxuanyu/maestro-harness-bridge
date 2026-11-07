@@ -102,7 +102,7 @@ function createTurn({
 				emit({
 					type: 'item.started',
 					item: {
-						id: tool.id,
+						id: tool.itemId ?? tool.id,
 						type: 'command_execution',
 						command: tool.command,
 						aggregated_output: '',
@@ -163,7 +163,7 @@ function createTurn({
 				emit({
 					type: 'item.completed',
 					item: {
-						id: tool.id,
+						id: tool.itemId ?? tool.id,
 						type: 'command_execution',
 						command: tool.command,
 						aggregated_output: output,

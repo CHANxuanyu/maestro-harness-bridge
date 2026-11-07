@@ -121,6 +121,18 @@ describe('Exit Listener', () => {
 	});
 
 	describe('Regular Process Exit', () => {
+		it('forwards deliberate interruption separately from the exit code', () => {
+			setupListener();
+			eventHandlers.get('exit')?.('sess-ai-tab', 0, undefined, true);
+			expect(mockDeps.safeSend).toHaveBeenCalledWith(
+				'process:exit',
+				'sess-ai-tab',
+				0,
+				undefined,
+				true
+			);
+		});
+
 		it('should forward exit event to renderer for non-group-chat sessions', () => {
 			setupListener();
 			const handler = eventHandlers.get('exit');

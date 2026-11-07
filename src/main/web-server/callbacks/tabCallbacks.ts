@@ -1,3 +1,4 @@
+import type { NewTabResult } from '../types';
 import { randomUUID } from 'crypto';
 import { ipcMain } from 'electron';
 import type { WebServer } from '../WebServer';
@@ -62,47 +63,55 @@ export function registerTabCallbacks(
 		return true;
 	});
 
-	server.setNewTabCallback(async (sessionId: string, background?: boolean) => {
-		logger.info(
-			`[Web→Desktop] New tab callback invoked: session=${sessionId}, background=${background === true}`,
-			'WebServer'
-		);
-		const targetWindow = resolveSessionWindow(sessionId);
-		if (!isWebContentsAvailable(targetWindow)) {
-			logger.warn('No owning window is available for newTab', 'WebServer');
-			return null;
-		}
-
-		// Use invoke for synchronous response with tab ID
-		return new Promise((resolve) => {
-			const responseChannel = `remote:newTab:response:${randomUUID()}`;
-			let resolved = false;
-
-			const handleResponse = (_event: Electron.IpcMainEvent, result: any) => {
-				if (resolved) return;
-				resolved = true;
-				clearTimeout(timeoutId);
-				resolve(result);
-			};
-
-			ipcMain.once(responseChannel, handleResponse);
-			targetWindow.webContents.send(
-				'remote:newTab',
-				sessionId,
-				responseChannel,
-				background === true
+	server.setNewTabCallback(
+		async (
+			sessionId: string,
+			background?: boolean,
+			sourceTabId?: string,
+			sourcePermissionMode?: NewTabResult['permissionMode']
+		) => {
+			logger.info(
+				`[Web→Desktop] New tab callback invoked: session=${sessionId}, background=${background === true}`,
+				'WebServer'
 			);
+			const targetWindow = resolveSessionWindow(sessionId);
+			if (!isWebContentsAvailable(targetWindow)) {
+				logger.warn('No owning window is available for newTab', 'WebServer');
+				return null;
+			}
 
-			// Timeout after 5 seconds - clean up the listener to prevent memory leak
-			const timeoutId = setTimeout(() => {
-				if (resolved) return;
-				resolved = true;
-				ipcMain.removeListener(responseChannel, handleResponse);
-				logger.warn(`newTab callback timed out for session ${sessionId}`, 'WebServer');
-				resolve(null);
-			}, 5000);
-		});
-	});
+			// Use invoke for synchronous response with tab ID
+			return new Promise((resolve) => {
+				const responseChannel = `remote:newTab:response:${randomUUID()}`;
+				let resolved = false;
+
+				const handleResponse = (_event: Electron.IpcMainEvent, result: any) => {
+					if (resolved) return;
+					resolved = true;
+					clearTimeout(timeoutId);
+					resolve(result);
+				};
+
+				ipcMain.once(responseChannel, handleResponse);
+				targetWindow.webContents.send(
+					'remote:newTab',
+					sessionId,
+					responseChannel,
+					background === true,
+					...(sourceTabId ? ([sourceTabId, sourcePermissionMode] as const) : [])
+				);
+
+				// Timeout after 5 seconds - clean up the listener to prevent memory leak
+				const timeoutId = setTimeout(() => {
+					if (resolved) return;
+					resolved = true;
+					ipcMain.removeListener(responseChannel, handleResponse);
+					logger.warn(`newTab callback timed out for session ${sessionId}`, 'WebServer');
+					resolve(null);
+				}, 5000);
+			});
+		}
+	);
 
 	server.setCloseTabCallback(async (sessionId: string, tabId: string) => {
 		logger.info(

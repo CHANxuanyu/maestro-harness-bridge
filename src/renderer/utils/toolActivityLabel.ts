@@ -1,3 +1,4 @@
+import { nativeToolCommand } from '../../shared/nativeToolOutput';
 /**
  * toolActivityLabel - turn a raw agent tool call into ONE short line of plain
  * English ("Read src/App.tsx", "Ran npm test", "Edited themes.ts").
@@ -57,12 +58,6 @@ export interface ToolActivityLabel {
 	 */
 	targetIsCode: boolean;
 }
-
-/**
- * `bash -lc "npm test"` reads as `npm test`: Codex wraps most commands in a
- * login shell, and the wrapper says nothing about what ran.
- */
-const SHELL_WRAPPER = /^(?:\/bin\/)?(?:ba|z)?sh\s+-l?c\s+(['"]?)([\s\S]*)\1$/;
 
 /** The files an `apply_patch` body touches, from its `*** Update File:` headers. */
 function patchedFiles(patch: string | undefined): string | undefined {
@@ -237,7 +232,7 @@ export function describeToolActivity(toolName: string, input: unknown): ToolActi
 			return {
 				kind: 'run',
 				verb: 'Ran',
-				target: shorten(command?.replace(SHELL_WRAPPER, '$2'), false),
+				target: shorten(nativeToolCommand({ command }), false),
 				targetIsCode: true,
 			};
 

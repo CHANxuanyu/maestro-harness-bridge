@@ -1,4 +1,6 @@
 export const workflowsShell = {
+	'workflows.shell.synopsisFailed': 'Synopsis failed',
+	'workflows.shell.synopsisNoFinalAnswer': 'No final answer is available for this turn',
 	'workflows.shell.signInRequired': 'Sign in again',
 	'workflows.shell.signInRequiredBody':
 		'{tool} rejected the saved credentials. Sign in again to pick this conversation back up.',
@@ -45,7 +47,8 @@ export const workflowsShell = {
 	'workflows.shell.terminalsNotStarted': '{count} terminals could not be started.',
 	'workflows.newShell.terminal': 'Terminal',
 	'workflows.newShell.tasks': 'Tasks',
-	'workflows.newShell.tasksEmpty': 'This conversation has no task list yet',
+	'workflows.newShell.tasksEmpty':
+		'The tools in this conversation have not provided a task list. Checklists in replies are not shown here.',
 	'workflows.newShell.tasksProgress': '{completed} / {total} completed',
 	'workflows.newShell.task.pending': 'Pending',
 	'workflows.newShell.task.in_progress': 'In progress',
@@ -66,6 +69,8 @@ export const workflowsShell = {
 	'workflows.handoff.continuedMessage': 'Continued from “{title}”',
 	'workflows.handoff.reviewMessage': 'Review “{title}”',
 	'workflows.projects.openHint': 'Choose a folder to start or continue work',
+	'workflows.shell.permissionUnavailable':
+		'This tool cannot preserve the source conversation permissions.',
 	'workflows.shell.newConversationFailed': 'Could not open conversation',
 	'workflows.shell.defaultModel': 'Default model',
 	'workflows.shell.defaultEffort': 'Default effort',
@@ -1607,6 +1612,20 @@ export const workflowsShell = {
 	'workflows.transcript.toolCanceled': 'Stopped before it finished',
 	'workflows.transcript.toolInput': 'Input',
 	'workflows.transcript.toolResult': 'Result',
+	'workflows.transcript.fullToolOutput': 'Show full output (about {size} KB)',
+	'workflows.transcript.fullToolOutputLoading': 'Loading full output…',
+	'workflows.transcript.fullToolOutputMissing':
+		'This output could not be found in the original record',
+	'workflows.transcript.fullToolOutputTooLarge':
+		'The original record exceeds the 100 MB read limit',
+	'workflows.transcript.fullToolOutputUnavailable':
+		'Could not read the original record. Collapse and reopen to try again.',
+	'workflows.transcript.fullToolOutputCopy': 'Copy output',
+	'workflows.transcript.fullToolOutputHide': 'Hide full output',
+	'workflows.transcript.fullToolOutputCopied': 'Copied',
+	'workflows.transcript.fullToolOutputCopyFailed': 'Could not copy output',
+	'workflows.transcript.fullToolOutputOmitted':
+		'Showing the last 2 MB. Omitted {bytes} bytes from the beginning.',
 	'workflows.transcript.toolValueTruncated': 'Shortened when saved ({count} characters in full)',
 	'workflows.transcript.speakerUser': 'You',
 	'workflows.transcript.speakerAssistant': 'Assistant',

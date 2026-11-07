@@ -52,6 +52,8 @@ interface PermissionRequestState {
 	respond: (requestId: string, decision: PermissionDecision) => void;
 	/** Drop all requests for a session (e.g. when its process exits). */
 	clearSession: (sessionId: string) => void;
+	/** Remove an externally resolved request without replying again. */
+	dismiss: (requestId: string) => void;
 }
 
 /**
@@ -80,6 +82,8 @@ export const usePermissionRequestStore = create<PermissionRequestState>((set) =>
 		sendDecision(requestId, decision);
 		set((state) => ({ queue: state.queue.filter((r) => r.requestId !== requestId) }));
 	},
+	dismiss: (requestId) =>
+		set((state) => ({ queue: state.queue.filter((request) => request.requestId !== requestId) })),
 	clearSession: (sessionId) =>
 		set((state) => {
 			// Explicitly deny any queued requests for the exiting session so the

@@ -214,6 +214,9 @@ export const settingsDisplay = {
 	'settings.display.modal.description': 'Clear custom dialog dimensions.',
 
 	// File edit & preview
+	'settings.display.codexAppServer.title': 'Codex interactive prototype',
+	'settings.display.codexAppServer.description':
+		'Use the experimental connection for local Codex conversations from the next turn. Supports tool approval and adding instructions to the current turn. Off by default; SSH is not supported.',
 	'settings.display.newShell.heading': 'New Shell (preview)',
 	'settings.display.newShell.title': 'Use the new shell',
 	'settings.display.newShell.description':

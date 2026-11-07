@@ -798,3 +798,10 @@ still missing. Grouped, highest value first:
 `maestro-cli native-history list <agent>` returns the project sidebar's native conversation records through `agentSessions:listProjectHistory`. `read <agent> <conversation>` uses the canonical read-only transcript adapter. `delete <agent> <conversation>` removes a whole Codex conversation in the selected local or SSH account. Partial native-message deletion returns a read-only error. These verbs require the desktop app. Pianola's offline learning scan uses the bounded shared Codex rollout decoder.
 
 Packaged CLI storage and discovery use the shipped product identity. `settings set` uses the live `settings:set` IPC handler when the desktop is running and waits for its acknowledgement. Offline writes keep the same value validation and product-directory checks.
+
+## Codex app-server prototype settings (2026-11-07)
+
+`settings set codexAppServer true|false` uses the existing settings service. The
+default is false and the switch is visible only with `newShell`. This setting
+alone does not enable the transport in the classic shell. Runtime actions are
+recorded with the prototype implementation.

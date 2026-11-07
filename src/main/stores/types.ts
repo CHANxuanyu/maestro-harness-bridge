@@ -52,6 +52,7 @@ export interface MaestroSettings {
 	aboutMeApplied?: Record<string, AboutMeApplied>;
 	uiLanguage: UiLanguagePreference;
 	newShell: boolean;
+	codexAppServer: boolean;
 	sidebarNavigationMode: 'conversations' | 'agents';
 	collapsedConversationProjects: string[];
 	activeThemeId: string;

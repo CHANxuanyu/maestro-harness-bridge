@@ -15,6 +15,8 @@ export function NewShellSection({ theme }: { theme: Theme }) {
 	const t = useT();
 	const newShell = useSettingsStore((s) => s.newShell);
 	const setNewShell = useSettingsStore((s) => s.setNewShell);
+	const codexAppServer = useSettingsStore((s) => s.codexAppServer);
+	const setCodexAppServer = useSettingsStore((s) => s.setCodexAppServer);
 	return (
 		<div data-setting-id="display-new-shell">
 			<SettingsSectionHeading icon={Columns3}>
@@ -29,6 +31,16 @@ export function NewShellSection({ theme }: { theme: Theme }) {
 					onChange={setNewShell}
 					ariaLabel={t('settings.display.newShell.title')}
 				/>
+				{newShell && (
+					<ToggleSettingRow
+						theme={theme}
+						title={t('settings.display.codexAppServer.title')}
+						description={t('settings.display.codexAppServer.description')}
+						checked={codexAppServer}
+						onChange={setCodexAppServer}
+						ariaLabel={t('settings.display.codexAppServer.title')}
+					/>
+				)}
 			</SectionCard>
 		</div>
 	);

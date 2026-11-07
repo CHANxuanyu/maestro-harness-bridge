@@ -53,20 +53,23 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 	const uiText = useT();
 	const enqueue = usePermissionRequestStore((s) => s.enqueue);
 	const respond = usePermissionRequestStore((s) => s.respond);
+	const dismiss = usePermissionRequestStore((s) => s.dismiss);
 	const clearSession = usePermissionRequestStore((s) => s.clearSession);
 	const request = usePermissionRequestStore(selectActivePermissionRequest);
 
 	// Wire the IPC listeners once.
 	useEffect(() => {
 		const offRequest = window.maestro?.process?.onPermissionRequest?.((req) => enqueue(req));
+		const offResolved = window.maestro?.process?.onPermissionResolved?.(dismiss);
 		const offExit = window.maestro?.process?.onExit?.((sessionId: string) =>
 			clearSession(sessionId)
 		);
 		return () => {
 			offRequest?.();
+			offResolved?.();
 			offExit?.();
 		};
-	}, [enqueue, clearSession]);
+	}, [enqueue, clearSession, dismiss]);
 
 	const isOpen = !!request;
 	const isQuestion = !!request && request.kind === 'question' && !!request.questions?.length;

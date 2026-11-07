@@ -57,6 +57,12 @@ export type SettingCategory =
 // ============================================================================
 
 export const SETTINGS_METADATA: Record<string, SettingMetadata> = {
+	codexAppServer: {
+		description: 'Enable the local Codex interactive prototype in the new shell',
+		type: 'boolean',
+		default: false,
+		category: 'advanced',
+	},
 	newShell: {
 		description: 'Use the new conversation shell',
 		type: 'boolean',

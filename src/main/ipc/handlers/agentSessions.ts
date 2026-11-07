@@ -1,3 +1,6 @@
+import type { StoredSession } from '../../stores/types';
+import { conversationBranch } from '../../../shared/conversationChildren';
+import { getCrossAgentTargetState } from '../../cross-agent/cross-agent-router';
 import { createNativeTurnWriteReader } from '../../storage/turn-write-index';
 import type { ProcessManager } from '../../process-manager';
 import { REGEX_AI_SUFFIX } from '../../constants';
@@ -446,17 +449,29 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 		owners: () => getSessionsStore().get('sessions', []),
 		accountDir: resolveAgentAccountDir,
 		lifecycle: async (request) => {
+			const sessions = getSessionsStore().get('sessions', []) as StoredSession[];
+			const branch = conversationBranch(sessions, request.ownerIds, request.nativeSessionId);
+			const branchProcesses = new Set(branch.map(({ ownerId, tab }) => `${ownerId}-ai-${tab.id}`));
+			const branchBusy = branch.some(
+				({ ownerId, tab }) =>
+					getCrossAgentTargetState(ownerId, tab.id)?.busy ||
+					sessions
+						.find((session) => session.id === ownerId)
+						?.executionQueue?.some((item) => item.tabId === tab.id)
+			);
 			const running = deps
 				?.getProcessManager?.()
 				?.getAll()
 				.some(
 					(process) =>
 						!process.isTerminal &&
-						request.ownerIds.includes(process.sessionId.replace(REGEX_AI_SUFFIX, '')) &&
-						(process.agentSessionId === request.nativeSessionId ||
-							process.toolOutputSource?.nativeSessionId === request.nativeSessionId)
+						(branchProcesses.has(process.sessionId) ||
+							[...branchProcesses].some((id) => process.sessionId.startsWith(id + '-fp-')) ||
+							(request.ownerIds.includes(process.sessionId.replace(REGEX_AI_SUFFIX, '')) &&
+								(process.agentSessionId === request.nativeSessionId ||
+									process.toolOutputSource?.nativeSessionId === request.nativeSessionId)))
 				);
-			if (running) throw new Error('conversation-running');
+			if (running || branchBusy) throw new Error('conversation-running');
 			const results: ConversationLifecycleResult[] = [];
 			// Query every owner, including peers in other windows. An unavailable
 			// window is not proof that a conversation is idle.

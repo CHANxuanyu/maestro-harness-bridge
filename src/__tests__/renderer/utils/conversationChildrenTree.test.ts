@@ -125,6 +125,92 @@ describe('new shell conversation children', () => {
 		});
 	});
 
+	it('hides descendants of an archived parent and restores them when unarchived', () => {
+		const archived = {
+			...history,
+			archivedAt: 10,
+			permissionMode: 'readonly' as const,
+			ownerIds: [parent.id],
+		};
+		const sessions = [
+			{ ...parent, aiTabs: [], customEnvVars: { CLAUDE_CONFIG_DIR: '/account' } },
+			child,
+		];
+		const hidden = buildProjectSessionTree({
+			sessions,
+			groups: [],
+			newShell: true,
+			archives: [archived],
+		});
+		expect(hidden.flatMap((project) => project.conversations)).toEqual([]);
+		const restored = buildProjectSessionTree({
+			sessions,
+			groups: [],
+			newShell: true,
+			history: [history],
+		});
+		expect(restored[0].conversations[0].children?.[0].tabId).toBe('child-tab');
+	});
+
+	it('allows a child to be archived without hiding its parent', () => {
+		const nativeChild = {
+			...child,
+			aiTabs: [{ ...child.aiTabs[0], agentSessionId: 'child-native' }],
+		};
+		const archive = {
+			...history,
+			key: 'child-archive',
+			provider: 'codex' as const,
+			projectKey: 'path:local:/child',
+			projectPath: '/child',
+			nativeSessionId: 'child-native',
+			archivedAt: 10,
+			permissionMode: 'readonly' as const,
+			ownerIds: [child.id],
+		};
+		const tree = buildProjectSessionTree({
+			sessions: [parent, nativeChild],
+			groups: [],
+			newShell: true,
+			archives: [archive],
+		});
+		expect(tree[0].conversations[0].tabId).toBe('parent-tab');
+		expect(tree[0].conversations[0].children ?? []).toEqual([]);
+		expect(tree[1].conversations).toEqual([]);
+	});
+
+	it('indexes 5000 history identities once instead of scanning them for each of 1000 children', () => {
+		const reads = (count: number) => {
+			let identityReads = 0;
+			const records = Array.from({ length: 5000 }, (_, i) => ({
+				...history,
+				key: 'history-' + i,
+				get nativeSessionId() {
+					identityReads++;
+					return i === 0 ? 'parent-native' : 'native-' + i;
+				},
+			}));
+			const children = {
+				...child,
+				aiTabs: Array.from({ length: count }, (_, i) => ({ ...child.aiTabs[0], id: 'child-' + i })),
+			};
+			const tree = buildProjectSessionTree({
+				sessions: [{ ...parent, aiTabs: [] }, children],
+				groups: [],
+				newShell: true,
+				history: records,
+			});
+			expect(
+				tree[0].conversations.find((row) => row.nativeSessionId === 'parent-native')?.children
+			).toHaveLength(count);
+			return identityReads;
+		};
+		const small = reads(250);
+		const large = reads(1000);
+		expect(large).toBeLessThan(30000);
+		expect(large).toBeLessThan(small * 1.6);
+	});
+
 	it('refreshes the sidebar when origin metadata changes', () => {
 		const changed = {
 			...child,

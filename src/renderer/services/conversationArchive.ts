@@ -10,6 +10,7 @@ import { resolveTabPermissionMode } from '../../shared/agentMetadata';
 import { useModalStore } from '../stores/modalStore';
 import { getT } from '../i18n';
 import { refreshConversationArchives } from '../stores/conversationArchiveStore';
+import { conversationBranch } from '../../shared/conversationChildren';
 import { conversationActivity } from '../utils/newConversationPermissions';
 
 /** Runs synchronously in each owning window, checking again immediately before closure. */
@@ -19,15 +20,13 @@ export function conversationLifecycle(
 	const state = useSessionStore.getState();
 	const owners = request.ownerIds.map((id) => state.sessions.find((session) => session.id === id));
 	if (owners.some((owner) => !owner)) return { error: 'conversation-owner-unavailable' };
-	const tabs = owners.flatMap((owner) =>
-		[...owner!.aiTabs, ...(owner!.orphanedThinkingTabs ?? [])].filter(
-			(tab) => tab.agentSessionId === request.nativeSessionId
-		)
-	);
+	const branch = conversationBranch(state.sessions, request.ownerIds, request.nativeSessionId);
 	if (
-		tabs.some((tab) => tab.state === 'busy') ||
-		owners.some((owner) =>
-			owner!.executionQueue?.some((item) => tabs.some((tab) => tab.id === item.tabId))
+		branch.some(({ tab }) => tab.state === 'busy') ||
+		branch.some(({ ownerId, tab }) =>
+			state.sessions
+				.find((owner) => owner.id === ownerId)
+				?.executionQueue?.some((item) => item.tabId === tab.id)
 		)
 	)
 		return { error: 'conversation-running' };

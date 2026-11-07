@@ -2,7 +2,7 @@ export { buildProjectHistoryScopes } from './nativeConversationMatch';
 import type { ArchivedConversation } from '../../shared/conversationArchive';
 import type { ConversationOrigin, Group, Session } from '../types';
 import { findConversationParent } from '../../shared/conversationChildren';
-import type { ProjectHistoryConversation, ProjectHistoryScope } from '../../shared/projectHistory';
+import type { ProjectHistoryConversation } from '../../shared/projectHistory';
 import { getBasename } from '../../shared/formatters';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
 import { DEEPSEEK_PRESET, sessionProviderId } from '../../shared/agentPresets';
@@ -132,12 +132,8 @@ function historyProviderId(
 /** A readable title: never a bare id when a name or the first message exists. */
 export function historyTitle(conversation: ProjectHistoryConversation): string {
 	const title = conversation.title?.trim();
-	if (
-		title &&
-		title !== conversation.nativeSessionId &&
-		!isSessionIdLabel(title, conversation.nativeSessionId)
-	)
-		return title;
+	const nativeSessionId = conversation.nativeSessionId;
+	if (title && title !== nativeSessionId && !isSessionIdLabel(title, nativeSessionId)) return title;
 	return conversation.preview?.trim().split('\n')[0] ?? '';
 }
 
@@ -212,8 +208,9 @@ export function buildProjectSessionTree({
 	// Main's key (provider + host + account pool + native id) is the identity;
 	// the same native id in two account pools stays two conversations.
 	const historyByKey = new Map<string, ProjectHistoryConversation>();
-	for (const record of history) {
+	for (const record of newShell ? [...history, ...archives] : history) {
 		if (
+			!newShell &&
 			archives.some(
 				(item) =>
 					item.key === record.key ||
@@ -227,6 +224,31 @@ export function buildProjectSessionTree({
 		if (!existing || record.modifiedAt > existing.modifiedAt) historyByKey.set(record.key, record);
 	}
 	const records = [...historyByKey.values()];
+	const recordsByNative = new Map<string, ProjectHistoryConversation[]>();
+	for (const record of records) {
+		const id = record.nativeSessionId;
+		const bucket = recordsByNative.get(id);
+		if (bucket) bucket.push(record);
+		else recordsByNative.set(id, [record]);
+	}
+	const matchedRecords = new Map<string, ProjectHistoryConversation | null>();
+	const recordFor = (session: Session, nativeId: string) => {
+		const key = JSON.stringify([session.id, nativeId]);
+		if (!matchedRecords.has(key))
+			matchedRecords.set(
+				key,
+				matchRecordForTab(runnerAccount(session), nativeId, recordsByNative.get(nativeId) ?? [])
+			);
+		return matchedRecords.get(key) ?? null;
+	};
+	const archivedKeys = new Set(archives.map((record) => record.key));
+	const archivedNative = new Set(
+		archives.flatMap((record) =>
+			record.ownerIds.map((id) => JSON.stringify([id, record.nativeSessionId]))
+		)
+	);
+	const archivedRows = new Set<string>();
+
 	// Record keys claimed by an open tab, and identities of open tabs no record names.
 	const claimed = new Set<string>();
 
@@ -263,6 +285,7 @@ export function buildProjectSessionTree({
 		for (const tab of session.aiTabs) {
 			if (isAiTabHidden(tab) && !(newShell && (tab.origin || tab.consultOrigin))) continue;
 			if (
+				!newShell &&
 				archives.some(
 					(item) =>
 						item.ownerIds.includes(session.id) && item.nativeSessionId === tab.agentSessionId
@@ -270,7 +293,7 @@ export function buildProjectSessionTree({
 			)
 				continue;
 			const record = tab.agentSessionId
-				? (matchRecordForTab(runner, tab.agentSessionId, records) ?? undefined)
+				? (recordFor(session, tab.agentSessionId) ?? undefined)
 				: undefined;
 			const identity = record
 				? record.key
@@ -308,6 +331,11 @@ export function buildProjectSessionTree({
 						: undefined);
 				if (origin) origins.set(`${session.id}:${tab.id}`, origin);
 			}
+			if (
+				archivedNative.has(JSON.stringify([session.id, tab.agentSessionId])) ||
+				(record && archivedKeys.has(record.key))
+			)
+				archivedRows.add(`${session.id}:${tab.id}`);
 			rowsByProject.get(key)!.push({
 				key: `${session.id}:${tab.id}`,
 				kind: 'open',
@@ -336,6 +364,12 @@ export function buildProjectSessionTree({
 		const rows = rowsByProject.get(record.projectKey);
 		// A scope the window no longer has (agent removed mid-load) has nowhere to go.
 		if (!rows) continue;
+		if (
+			archivedKeys.has(record.key) ||
+			(record.key.startsWith('local:') &&
+				archivedNative.has(JSON.stringify([record.ownerId, record.nativeSessionId])))
+		)
+			archivedRows.add(`history:${record.key}`);
 		const owner = record.ownerId ? ownerById.get(record.ownerId) : undefined;
 		const title = historyTitle(record);
 		rows.push({
@@ -364,28 +398,53 @@ export function buildProjectSessionTree({
 	const allRows = [...rowsByProject.values()].flat();
 	const parents = new Map<string, string>();
 	if (newShell) {
+		const tabsByIdentity = new Map<string, SidebarConversation>();
+		const nativeRows = new Map<string, SidebarConversation[]>();
+		const rowsByHistory = new Map<string, SidebarConversation>();
+		for (const candidate of allRows) {
+			if (candidate.history) rowsByHistory.set(candidate.history.key, candidate);
+			if (candidate.kind !== 'open') continue;
+			tabsByIdentity.set(JSON.stringify([candidate.ownerId, candidate.tabId]), candidate);
+			if (candidate.nativeSessionId) {
+				const key = JSON.stringify([
+					candidate.ownerId,
+					candidate.provider,
+					candidate.nativeSessionId,
+				]);
+				const bucket = nativeRows.get(key);
+				if (bucket) bucket.push(candidate);
+				else nativeRows.set(key, [candidate]);
+			}
+		}
 		for (const row of allRows) {
 			const origin = origins.get(row.key);
 			if (!origin) continue;
-			const source = ownerById.get(origin.sourceSessionId);
-			const sourceRecord =
-				source && origin.sourceNativeSessionId
-					? matchRecordForTab(runnerAccount(source), origin.sourceNativeSessionId, records)
-					: null;
-			// Account and SSH identity belong to the canonical native matcher. A
-			// record that merely shares a native id cannot become a parent.
-			const candidates = allRows
-				.filter((candidate) => candidate.key !== row.key)
-				.map((candidate) => ({
-					...candidate,
-					ownerId:
-						candidate.kind === 'history'
-							? candidate.history?.key === sourceRecord?.key
-								? origin.sourceSessionId
-								: null
-							: candidate.ownerId,
-				}));
-			const parent = findConversationParent(origin, candidates);
+			const exact = tabsByIdentity.get(
+				JSON.stringify([origin.sourceSessionId, origin.sourceTabId])
+			);
+			const candidates =
+				exact && exact.key !== row.key
+					? [exact]
+					: [
+							...(nativeRows.get(
+								JSON.stringify([
+									origin.sourceSessionId,
+									origin.sourceProvider,
+									origin.sourceNativeSessionId,
+								])
+							) ?? []),
+						];
+			if (!exact && origin.sourceNativeSessionId) {
+				const source = ownerById.get(origin.sourceSessionId);
+				const record = source ? recordFor(source, origin.sourceNativeSessionId) : null;
+				const historyParent = record ? rowsByHistory.get(record.key) : undefined;
+				if (historyParent?.kind === 'history')
+					candidates.push({ ...historyParent, ownerId: origin.sourceSessionId });
+			}
+			const parent = findConversationParent(
+				origin,
+				candidates.filter((candidate) => candidate.key !== row.key)
+			);
 			if (!parent) continue;
 			let ancestor: string | undefined = parent.key;
 			while (ancestor && ancestor !== row.key) ancestor = parents.get(ancestor);
@@ -428,6 +487,7 @@ export function buildProjectSessionTree({
 		const filterRows = (input: SidebarConversation[]): SidebarConversation[] =>
 			input
 				.flatMap((row) => {
+					if (archivedRows.has(row.key)) return [];
 					const children = row.children ? filterRows(row.children) : undefined;
 					if (!matches(row) && !children?.length) return [];
 					return [{ ...row, ...(children ? { children } : {}) }];

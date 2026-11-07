@@ -848,8 +848,11 @@ filled once by `captureConversationSourceNativeId()`, shared by normal provider
 events and consult completions. The tree checks account and SSH identity with
 `matchRecordForTab()` before offering a history parent. No remote path is resolved
 locally. `tab children` returns direct children including hidden consults, product
-provider markers, busy/error state and origin metadata. Like `tab show`, it reads
-the persisted inventory, so its existing save-delay limitation remains.
+provider markers, busy/error state and origin metadata. The tab inventory and
+origin metadata still wait for persistence. Running consults and their terminal
+errors come from the main-process consult registry; persisted error logs retain
+the failure after restart. Normal managed processes take precedence when the
+child is continued.
 
 Background consults still have no tab chip and raise no unread. Selecting one is
 an explicit reveal. A busy consult tab is not reused for another simultaneous
@@ -864,6 +867,25 @@ locale. The classic CLI inventory now suppresses stale unread on hidden tabs and
 adds optional provider/hidden/error/consult-origin fields; desktop classic
 navigation and ordinary consults retain their previous behavior.
 
+Consult creation and reuse intersect the source permission, the target project's
+default, and the existing child's restriction through the canonical permission
+functions. Execution carries that ceiling; the global write switch can only
+tighten it. A closed running child saves its reply and native identity into the
+retained tab, and remains in the orphan collection while queued work exists.
+
+Archive and unarchive use the existing `tab archive <tab-id>` and
+`native-history archive|unarchive <owner> <native-id>` routes. The shared
+`conversationBranch()` check refuses archive while a descendant is running or
+queued. The tree resolves archived parents before filtering, so completed
+children stay hidden with their parent and return on unarchive. A child can be
+archived independently.
+
+New shell Stop addresses both outgoing consults and the incoming consult on the
+selected child. The main registry waits for process exit before acknowledging
+cancellation. Stopping a child leaves its siblings, including closed siblings,
+running. This uses the desktop interrupt service; the existing CLI Stop gap below
+remains open. No new CLI verb was added in this review correction.
+
 ## Open gaps
 
 **Subtask disclosure and archived sources (2026-11-07).** The disclosure button
@@ -872,8 +894,17 @@ not expand or collapse the desktop tree. It resolves an open parent tab; after
 closing the source, reopen its native history row and pass the new tab ID.
 The existing native-history open gap below still applies. A pre-feature consult
 without a captured source native ID can only attach while its original source
-tab is open. CLI dispatch provenance currently follows the caller-window notice;
-writing a child owned by another window is not guaranteed by this change.
+tab is open.
+
+**Cross-window CLI child provenance, U3 review item 6 (2026-11-07).** Confirmed
+and deferred under the review's small-change limit. The accepted-dispatch notice
+routes to the caller window, where `recordAgentDelegation()` patches the target
+tab. A missing target snapshot drops the patch, and persistence excludes targets
+owned by another window. Fixing this needs source identity in the new-tab request,
+target-owner storage and acknowledgment, across the dispatch handler, callback,
+preload and renderer request path. This review does not claim cross-window
+attachment or restart recovery. The source must be transferred before the target
+acknowledges creation; broadcasting the existing caller notice is insufficient.
 
 ## New shell changes by turn (2026-11-06)
 

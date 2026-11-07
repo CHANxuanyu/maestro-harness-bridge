@@ -867,6 +867,27 @@ export function useCrossAgentDispatch(
 	spawnSynopsisRef.current = spawnBackgroundSynopsis;
 
 	const applyChunk = useCallback((chunk: CrossAgentResponseChunk): void => {
+		if (chunk.targetTabId && chunk.targetNativeSessionId) {
+			const nativeId = chunk.targetNativeSessionId;
+			updateAiTab(
+				chunk.targetSessionId,
+				chunk.targetTabId,
+				(tab) => {
+					if (!tab.consultOrigin || tab.consultOrigin.nativeSessionIds?.includes(nativeId))
+						return tab;
+					return {
+						...tab,
+						consultOrigin: {
+							...tab.consultOrigin,
+							nativeSessionIds: [...(tab.consultOrigin.nativeSessionIds ?? []), nativeId],
+						},
+					};
+				},
+				{ includeOrphans: true }
+			);
+			// Identity events do not create an empty answer or alter classic UI state.
+			if (!chunk.done && !chunk.chunk) return;
+		}
 		const map = pendingRequests;
 		let tracked = map.get(chunk.requestId);
 		if (!tracked) {
@@ -935,10 +956,11 @@ export function useCrossAgentDispatch(
 							: [...tab.logs, answer];
 					// On success, store the target's captured provider session id so the
 					// next mention from this source tab resumes it (continuity).
-					const agentSessionId =
-						chunk.done && chunk.targetAgentSessionId
-							? chunk.targetAgentSessionId
-							: tab.agentSessionId;
+					const agentSessionId = chunk.done
+						? chunk.error || chunk.canceled
+							? null
+							: (chunk.targetAgentSessionId ?? tab.agentSessionId)
+						: tab.agentSessionId;
 					return { ...tab, logs: nextLogs, agentSessionId };
 				},
 				{ includeOrphans: true }

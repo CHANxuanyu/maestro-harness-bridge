@@ -173,6 +173,8 @@ export interface CrossAgentResponseChunk {
 	 * report one.
 	 */
 	targetAgentSessionId?: string;
+	/** Native display ownership, reported immediately, including failed or stopped runs. Never a resume grant. */
+	targetNativeSessionId?: string;
 	/** The response text for this chunk (may be the whole response). */
 	chunk: string;
 	/** True once the target agent has finished (or errored). */

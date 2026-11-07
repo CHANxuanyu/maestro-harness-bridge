@@ -303,6 +303,13 @@ export function buildProjectSessionTree({
 			// A second tab on the same native conversation (another runner) adds no row.
 			if (identity && claimed.has(identity)) continue;
 			if (identity) claimed.add(identity);
+			if (newShell) {
+				for (const nativeId of tab.consultOrigin?.nativeSessionIds ?? []) {
+					const consultRecord = recordFor(session, nativeId);
+					claimed.add(consultRecord?.key ?? openTabIdentity(runner, nativeId));
+				}
+			}
+
 			const recordTitle = record ? historyTitle(record) : '';
 			// Never the provider id label. Before the tab is named or its native
 			// record is scanned, the row uses the first thing the user said, like

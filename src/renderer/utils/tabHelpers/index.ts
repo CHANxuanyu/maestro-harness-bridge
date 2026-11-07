@@ -1174,6 +1174,8 @@ function resolveUnreadFilterFallbackRef(session: Session, tabId: string): Unifie
  * Options for closing a tab.
  */
 export interface CloseTabOptions {
+	/** Archive and delete leave the project empty until the user creates a conversation. */
+	skipReplacement?: boolean;
 	/** If true, skip adding to closed tab history (e.g., for wizard tabs) */
 	skipHistory?: boolean;
 	/**
@@ -1277,7 +1279,7 @@ export function closeTab(
 	let fallbackRef: UnifiedTabRef | null = null;
 	let createdFreshTab = false;
 	let freshTabId = '';
-	if (visibleUpdatedTabs.length === 0 && otherTabCount === 0) {
+	if (visibleUpdatedTabs.length === 0 && otherTabCount === 0 && !options.skipReplacement) {
 		const freshTab: AITab = {
 			...(useSettingsStore.getState().newShell ? newConversationPermissionFields(tabToClose) : {}),
 			id: generateId(),

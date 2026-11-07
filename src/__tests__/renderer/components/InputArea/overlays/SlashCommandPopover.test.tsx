@@ -1,9 +1,90 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SlashCommandPopover } from '../../../../../renderer/components/InputArea/overlays/SlashCommandPopover';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { createItemRefs, inputAreaTheme } from '../_fixtures';
 
+afterEach(() => {
+	cleanup();
+	useSettingsStore.setState({ uiLanguage: 'en' });
+});
+
 describe('SlashCommandPopover', () => {
+	it.each([
+		['en', 'Reported by tool'],
+		['zh-CN', '工具上报'],
+	] as const)('keeps the filtered plugin command accessible name in %s', (uiLanguage, label) => {
+		useSettingsStore.setState({ uiLanguage });
+		render(
+			<SlashCommandPopover
+				isOpen
+				commands={[{ command: '/plugin:review', description: '', source: 'reported' }]}
+				inputValueLower="/plugin"
+				selectedIndex={0}
+				itemRefs={createItemRefs<HTMLButtonElement>()}
+				theme={inputAreaTheme}
+				setInputValue={vi.fn()}
+				setSlashCommandOpen={vi.fn()}
+				setSelectedSlashCommandIndex={vi.fn()}
+				inputRef={{ current: null }}
+			/>
+		);
+		expect(screen.getByRole('button')).toHaveAccessibleName(`/plugin:review ${label}`);
+	});
+
+	it.each([
+		['en', 'user', 'User'],
+		['en', 'project', 'Project'],
+		['en', 'reported', 'Reported by tool'],
+		['zh-CN', 'user', '用户'],
+		['zh-CN', 'project', '项目'],
+		['zh-CN', 'reported', '工具上报'],
+	] as const)('separates the %s %s source from the command name', (uiLanguage, source, label) => {
+		useSettingsStore.setState({ uiLanguage });
+		render(
+			<SlashCommandPopover
+				isOpen
+				commands={[{ command: '/before', description: 'Before refresh', source }]}
+				inputValueLower="/"
+				selectedIndex={0}
+				itemRefs={createItemRefs<HTMLButtonElement>()}
+				theme={inputAreaTheme}
+				setInputValue={vi.fn()}
+				setSlashCommandOpen={vi.fn()}
+				setSelectedSlashCommandIndex={vi.fn()}
+				inputRef={{ current: null }}
+			/>
+		);
+		const button = screen.getByRole('button');
+		// A CSS margin does not separate adjacent inline text in Chromium's accessible name.
+		expect(button.firstElementChild?.textContent).toBe(`/before ${label}`);
+		expect(button).toHaveAccessibleName(`/before ${label} Before refresh`);
+	});
+
+	it('labels command sources and keeps the read failure notice visible', () => {
+		render(
+			<SlashCommandPopover
+				isOpen
+				commands={[
+					{ command: '/review', description: 'Review', source: 'project' },
+					{ command: '/user', description: 'User command', source: 'user' },
+				]}
+				warning="remote-unavailable"
+				inputValueLower="/"
+				selectedIndex={0}
+				itemRefs={createItemRefs<HTMLButtonElement>()}
+				theme={inputAreaTheme}
+				setInputValue={vi.fn()}
+				setSlashCommandOpen={vi.fn()}
+				setSelectedSlashCommandIndex={vi.fn()}
+				inputRef={{ current: null }}
+			/>
+		);
+		expect(screen.getByText('Project')).toBeInTheDocument();
+		expect(screen.getByText('User')).toBeInTheDocument();
+		expect(screen.getByRole('status')).toHaveTextContent('Could not read commands on the SSH host');
+	});
+
 	const commands = [
 		{ command: '/clear', description: 'Clear chat history' },
 		{ command: '/help', description: 'Show help' },

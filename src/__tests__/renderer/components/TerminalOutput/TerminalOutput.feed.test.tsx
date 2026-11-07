@@ -2,6 +2,7 @@ import { useAuthOutageStore, reportAuthFailure } from '../../../../renderer/stor
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { useModalStore } from '../../../../renderer/stores/modalStore';
 import { useMessageGistStore } from '../../../../renderer/stores/messageGistStore';
+import { useUIStore } from '../../../../renderer/stores/uiStore';
 /**
  * The conversation feed (sidebarNavigationMode 'conversations'): what the user
  * observes in the transcript, driven through the real TerminalOutput and
@@ -100,6 +101,7 @@ const reply = (id: string, minutes: number, text: string, extra: Partial<LogEntr
 	({ id, timestamp: at(minutes), source: 'stdout', text, ...extra }) as LogEntry;
 
 beforeEach(() => {
+	useUIStore.setState({ pendingLogJump: null });
 	useSettingsStore.setState({
 		uiLanguage: 'en',
 		newShell: false,
@@ -639,6 +641,51 @@ describe('conversation feed: tools', () => {
 			expect(row(container, 't1').querySelector('[data-tool-activity="read"]')).not.toBeNull()
 		);
 	});
+
+	it.each(['p1', 'p2'])(
+		'reveals and flashes the actual content hit %s inside a finished turn',
+		async (logId) => {
+			useSettingsStore.setState({ newShell: true });
+			const jump = vi.spyOn(
+				await import('../../../../renderer/utils/jumpHighlight'),
+				'jumpToElement'
+			);
+			jump.mockImplementation((resolve) => {
+				resolve()?.classList.add('jump-flash');
+				return () => {};
+			});
+			try {
+				const { container } = renderTranscript([
+					user('u1', 0, 'Read it'),
+					reply('p1', 1, 'First progress', {
+						nativeTranscript: { messageId: 'p1', channel: 'commentary' },
+					}),
+					reply('p2', 2, 'Hidden amber lighthouse', {
+						nativeTranscript: { messageId: 'p2', channel: 'commentary' },
+					}),
+					reply('a1', 3, 'Done', { nativeTranscript: { messageId: 'a1', channel: 'final' } }),
+				]);
+				expect(screen.queryByText('Hidden amber lighthouse')).toBeNull();
+				act(() =>
+					useUIStore.getState().setPendingLogJump({
+						sessionId: 'session-1',
+						tabId: 'tab-1',
+						logId,
+						...{ revealTurnActivity: true },
+					})
+				);
+				expect(screen.getByText('Hidden amber lighthouse')).toBeVisible();
+				const flashed = container.querySelector('.jump-flash');
+				expect(flashed).toHaveAttribute('data-log-id', logId);
+				expect(flashed).not.toHaveAttribute('data-feed-row', 'turn-activity');
+				expect(flashed).toHaveTextContent(
+					logId === 'p1' ? 'First progress' : 'Hidden amber lighthouse'
+				);
+			} finally {
+				jump.mockRestore();
+			}
+		}
+	);
 
 	it('states a stopped run in words, not only a glyph', () => {
 		const { container } = renderTranscript([

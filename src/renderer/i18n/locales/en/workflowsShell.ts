@@ -1,4 +1,16 @@
 export const workflowsShell = {
+	'workflows.archive.archive': 'Archive',
+	'workflows.archive.unarchive': 'Unarchive',
+	'workflows.archive.archived': 'Archived {count}',
+	'workflows.archive.delete': 'Delete conversation',
+	'workflows.archive.deleteConfirm':
+		'Delete “{title}”? This deletes its native history and cannot be undone.',
+	'workflows.archive.running':
+		'This conversation is running or has queued messages. Stop it or wait for it to finish before archiving or deleting.',
+	'workflows.archive.failed':
+		'The conversation could not be changed. Its owner window or account may be unavailable.',
+	'workflows.archive.error': 'Conversation could not be changed',
+	'workflows.archive.keepsHistory': 'Keeps the native history unchanged',
 	'workflows.shell.synopsisFailed': 'Synopsis failed',
 	'workflows.shell.synopsisNoFinalAnswer': 'No final answer is available for this turn',
 	'workflows.shell.signInRequired': 'Sign in again',
@@ -190,6 +202,18 @@ export const workflowsShell = {
 	'workflows.conversations.closeConversation': 'Close conversation',
 	'workflows.conversations.addAccount': 'Add account or configuration',
 	'workflows.conversations.handoff': 'Hand off…',
+	'workflows.conversations.contentSearchPlaceholder': 'Search conversations...',
+	'workflows.conversations.contentSearchLimited': 'Search reached its limit. Narrow your search.',
+	'workflows.conversations.titleResults': 'Conversations',
+	'workflows.conversations.contentResults': 'Conversation content',
+	'workflows.conversations.remoteContentExcluded':
+		'Remote conversations are searched by title only.',
+	'workflows.conversations.searchingContent': 'Searching conversation content...',
+	'workflows.conversations.contentSearchFailed':
+		'Could not search conversation content. Try again.',
+	'workflows.conversations.moreContentResults': 'More results are available. Narrow your search.',
+	'workflows.conversations.noContentMatches': 'No matching conversation content',
+	'workflows.conversations.contentOpenFailed': 'Could not locate this message. Search again.',
 	'workflows.conversations.search': 'Search conversations...',
 	'workflows.conversations.new': 'New conversation',
 	'workflows.conversations.newWith': 'New with {provider}',

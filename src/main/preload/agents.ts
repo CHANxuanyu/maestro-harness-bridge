@@ -1,3 +1,4 @@
+import type { NativeCommandRequest, NativeCommandSnapshot } from '../../shared/nativeCommands';
 /**
  * Preload API for agent management
  *
@@ -58,6 +59,11 @@ export interface AgentRefreshResult {
  */
 export function createAgentsApi() {
 	return {
+		getNativeCommands: (
+			request: NativeCommandRequest,
+			cachedOnly?: boolean
+		): Promise<NativeCommandSnapshot> =>
+			ipcRenderer.invoke('agents:getNativeCommands', request, cachedOnly),
 		getPresets: (): Promise<Array<typeof DEEPSEEK_PRESET>> =>
 			ipcRenderer.invoke('agents:getPresets'),
 		prepareDeepSeekPreset: (request: DeepSeekPresetRequest): Promise<PreparedAgentPreset> =>

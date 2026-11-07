@@ -75,18 +75,8 @@ export function isLikelyConcatenatedToolNames(text: string): boolean {
 /**
  * Built-in Claude Code slash commands with their descriptions
  */
-export const CLAUDE_BUILTIN_COMMANDS: Record<string, string> = {
-	compact: 'Summarize conversation to reduce context usage',
-	context: 'Show current context window usage',
-	cost: 'Show session cost and token usage',
-	init: 'Initialize CLAUDE.md with codebase info',
-	'pr-comments': 'Address PR review comments',
-	'release-notes': 'Generate release notes from changes',
-	todos: 'Find and list TODO comments in codebase',
-	review: 'Review code changes',
-	'security-review': 'Review code for security issues',
-	plan: 'Create an implementation plan',
-};
+export { CLAUDE_BUILTIN_COMMANDS } from '../../shared/nativeCommands';
+import { CLAUDE_BUILTIN_COMMANDS } from '../../shared/nativeCommands';
 
 /**
  * Built-in OpenCode slash commands with their descriptions

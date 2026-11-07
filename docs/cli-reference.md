@@ -149,13 +149,16 @@ Open a local project in the new shell, reusing its agent or creating one silentl
 | -------- | ----------- | ------- |
 | `--json` | Output JSON | -       |
 
-## `maestro-cli native-history <action> [agent] [conversation]`
+## `maestro-cli native-history <action> [session] [conversation-or-tool-call-id]`
 
-List recent projects, list or read native project history, or delete a whole Codex conversation
+List projects, list/read/archive/unarchive/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an exact native history ID)
 
-| Option   | Description | Default |
-| -------- | ----------- | ------- |
-| `--json` | Output JSON | -       |
+| Option       | Description                                            | Default |
+| ------------ | ------------------------------------------------------ | ------- |
+| `--json`     | Output JSON                                            | -       |
+| `--copy`     | Copy the returned tool output to the desktop clipboard | -       |
+| `--archived` | List archived native conversations                     | -       |
+| `--yes`      | Confirm irreversible deletion of native history        | -       |
 
 ## `maestro-cli show`
 
@@ -290,14 +293,15 @@ Show, stage, apply or inspect the shared native instruction profile
 
 Read, stage, unstage, revert or commit changes in a conversation working directory
 
-| Option             | Description                                         | Default |
-| ------------------ | --------------------------------------------------- | ------- |
-| `-a, --agent <id>` | Agent whose active tab to use                       | -       |
-| `--tab <id>`       | Conversation tab, exact ID, prefix or active        | -       |
-| `--file <path>`    | Read the diff for one repository-relative file      | -       |
-| `--json`           | Output the shared changes or diff structure as JSON | -       |
-| `--message <text>` | Commit message for the staged files                 | -       |
-| `--yes`            | Explicitly confirm destructive revert               | -       |
+| Option             | Description                                          | Default |
+| ------------------ | ---------------------------------------------------- | ------- |
+| `-a, --agent <id>` | Agent whose active tab to use                        | -       |
+| `--tab <id>`       | Conversation tab, exact ID, prefix or active         | -       |
+| `--file <path>`    | Read the diff for one repository-relative file       | -       |
+| `--by-turn`        | Group current changes by recorded conversation turns | -       |
+| `--json`           | Output the shared changes or diff structure as JSON  | -       |
+| `--message <text>` | Commit message for the staged files                  | -       |
+| `--yes`            | Explicitly confirm destructive revert                | -       |
 
 ## `maestro-cli handoff <tab> [provider]`
 
@@ -1208,6 +1212,15 @@ Switch an agent between "ai" and "terminal" mode
 
 Manage an agent's tabs in the desktop app
 
+## `maestro-cli tab commands <tab-id>`
+
+List native commands for this conversation account and project
+
+| Option             | Description                                    | Default |
+| ------------------ | ---------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
+| `--json`           | Output as JSON (for scripting)                 | -       |
+
 ## `maestro-cli tab new`
 
 Open a new tab for an agent (optionally seeded with a prompt)
@@ -1224,7 +1237,7 @@ Open a new tab for an agent (optionally seeded with a prompt)
 
 ## `maestro-cli tab panel <tab-id> <action>`
 
-New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show
+New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show
 
 | Option             | Description                                                                                                                                                               | Default |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -1245,6 +1258,15 @@ Start context compaction in a fresh conversation; observe completion in the desk
 | `--json`           | Output as JSON (for scripting)                    | -       |
 | `--background`     | Keep the current agent and tab selected (default) | -       |
 | `--focus`          | Select the compacted conversation when ready      | -       |
+
+## `maestro-cli tab archive <tab-id>`
+
+Archive a native conversation and close its tabs
+
+| Option             | Description                                    | Default |
+| ------------------ | ---------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
+| `--json`           | Output as JSON (for scripting)                 | -       |
 
 ## `maestro-cli tab close <tab-id>`
 

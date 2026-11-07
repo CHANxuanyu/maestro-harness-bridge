@@ -1,3 +1,8 @@
+import { conversationLifecycle } from '../../services/conversationArchive';
+import {
+	refreshConversationArchives,
+	useConversationArchiveStore,
+} from '../../stores/conversationArchiveStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { isWebDesktop } from '../../utils/runtimeContext';
 import {
@@ -311,6 +316,45 @@ async function buildSessionGistBody(session: Session, agentSessionId: string): P
  * @returns Empty object (all functionality via side effects)
  */
 export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteIntegrationReturn {
+	const archivedConversations = useConversationArchiveStore((state) => state.records);
+	const archiveSessionsLoaded = useSessionStore((state) => state.sessionsLoaded);
+	const archiveNewShell = useSettingsStore((state) => state.newShell);
+	useEffect(() => {
+		if (isWebDesktop() || !archiveSessionsLoaded || !archiveNewShell) return;
+		const sessions = useSessionStore.getState().sessions;
+		for (const record of archivedConversations) {
+			if (record.archived === false) continue;
+			const ownerIds = record.ownerIds.filter((id) =>
+				sessions.some(
+					(session) =>
+						session.id === id &&
+						session.aiTabs.some((tab) => tab.agentSessionId === record.nativeSessionId)
+				)
+			);
+			if (ownerIds.length)
+				conversationLifecycle({
+					ownerIds,
+					nativeSessionId: record.nativeSessionId,
+					action: 'archive',
+					phase: 'close',
+				});
+		}
+	}, [archivedConversations, archiveSessionsLoaded, archiveNewShell]);
+
+	useEffect(() => {
+		const stopLifecycle = !isWebDesktop()
+			? window.maestro.agentSessions.onConversationLifecycle?.(conversationLifecycle)
+			: undefined;
+		const stopChanges = window.maestro.agentSessions.onArchivesChanged?.((records) =>
+			useConversationArchiveStore.setState({ records })
+		);
+		void refreshConversationArchives().catch(() => {});
+		return () => {
+			stopLifecycle?.();
+			stopChanges?.();
+		};
+	}, []);
+
 	useEffect(() => {
 		if (isWebDesktop()) return;
 		return window.maestro.windows?.onReadConversationPermissions?.(conversationPermissionSnapshot);

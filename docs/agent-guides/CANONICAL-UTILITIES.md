@@ -8,7 +8,7 @@ Grep-verified 2026-09-04 (`npm run docs:verify` checks that every path below sti
 
 - **Status probe lifetime and teardown:** `startStatusLifetime()` in `src/maestro-p/status-lifetime.ts` owns the status-only wall-clock ceiling through `createIdleWatchdog()` and an unref'd parent poll. Its injected parent queries distinguish reparenting and ESRCH from EPERM. Captured PID 0 or 1 disables parent detection. Disarming or reporting one outcome cancels both timers. `TuiDriver.terminate()` in `src/maestro-p/tui-driver.ts` waits 1s after SIGTERM for PTY exit, then sends SIGKILL through `kill()` / `killPty()`, preserving Windows signal handling. Status mode uses it after normal `quit()`, directly for deadline or parent loss, and retains a synchronous exit backstop for EPIPE. Do not alter run mode's `quit()` contract or rely on the parent's timeout surviving its process.
 
-- **Native conversation display and refresh:** `transcriptMessagesToLogEntries()`, `reconcileTranscriptEntries()`, `mergeNewerEntries()` and `isProgressNoteEntry()` in `src/renderer/utils/transcriptMessages.ts` are shared by resume, backfill and existing-tab refresh. Keep native identity, timestamps, tool structure, public progress and images instead of flattening tools into assistant text. Reconcile proven same-message entries in place, while respecting user deletions and local sends. The service `src/renderer/services/refreshNativeConversation.ts` owns busy, queue, retry, account and host guards; do not bypass it with a second read-and-replace path. Live progress uses `LogEntry.purpose`, stored progress uses `nativeTranscript.channel`; use `isProgressNoteEntry()` so neither is counted or merged as the final answer. Activity clear points use `currentActivityRetention()` in `src/renderer/utils/activityRetention.ts` with `isTransientActivityEntry()` and `settleRunningToolEntries()` in `src/renderer/utils/logEntries.ts`: conversation mode retains live tool results after final output, Stop and exit, while temporary reasoning can clear. A stopped call is canceled, and a call missing its terminal result becomes unknown after exit; neither is labeled successful. Native history is retained regardless of live clear policy. `conversationDisplayTitle()` in `src/renderer/utils/conversationTitle.ts` chooses the actual conversation title for the header; agent configuration is secondary. Backend `unwrapCodexImageRequest()` in `src/main/storage/codex-session-storage.ts` recognizes complete desktop image envelopes against inline image parts, preserving request Markdown and native IDs; use this storage path instead of renderer text filtering.
+- **Native conversation display and refresh:** `transcriptMessagesToLogEntries()`, `reconcileTranscriptEntries()`, `mergeNewerEntries()` and `isProgressNoteEntry()` in `src/renderer/utils/transcriptMessages.ts` are shared by resume, backfill and existing-tab refresh. Keep native identity, timestamps, tool structure, public progress and images instead of flattening tools into assistant text. Reconcile proven same-message entries in place, while respecting user deletions and local sends. The service `src/renderer/services/refreshNativeConversation.ts` owns busy, queue, retry, account and host guards; do not bypass it with a second read-and-replace path. Live progress uses `LogEntry.purpose`, stored progress uses `nativeTranscript.channel`; use `isProgressNoteEntry()` so neither is counted or merged as the final answer. Activity clear points use `currentActivityRetention()` in `src/renderer/utils/activityRetention.ts` with `isTransientActivityEntry()` and `settleRunningToolEntries()` in `src/renderer/utils/logEntries.ts`: conversation mode retains live tool results after final output, Stop and exit, while temporary reasoning can clear. A stopped call is canceled, and a call missing its terminal result becomes unknown after exit; neither is labeled successful. Native history is retained regardless of live clear policy. `conversationDisplayTitle()` in `src/renderer/utils/conversationTitle.ts` chooses the actual conversation title for the header; agent configuration is secondary. Backend `unwrapCodexImageRequest()` in `src/shared/codexSessionText.ts` recognizes complete desktop image envelopes against inline image parts, preserving request Markdown and native IDs; use this storage path instead of renderer text filtering. The pure native conversion is implemented in `src/shared/transcriptEntries.ts` and re-exported at the existing renderer path; the complete turn-write index uses the same converter.
 - **Read-only prompt suffix and mention notes:** `READ_ONLY_PROMPT_SUFFIX`, `appendReadOnlyPrompt()` and `stripReadOnlyPrompt()` in `src/shared/readOnlyPrompt.ts` own the exact read-only suffix already stored by native providers. `appendTurnNote()` and `stripTurnPrompt()` in `src/shared/turnPrompt.ts` own the reversible envelope for editable consult and handoff notes, and decode the historical default notes appended after the read-only suffix. Frozen legacy templates are wire compatibility data, not another source for outgoing prompts. Only user messages are decoded, after the embedded system envelope, in `transcriptMessagesToLogEntries()`. Partial notes, unknown legacy custom templates and assistant explanations remain intact. `hasLegacyTranscriptEntries()` uses the same decoder; `refreshNativeConversation()` widens its read until it covers cached internal prompts, even when the newest 500 messages already share an anchor. Exhausting the existing bounded read budget preserves the cache and reports failure instead of consuming the upgrade.
 - **Binding a cached local/native prompt duplicate:** `bindDelayedOwnSends()` uses native identity and one-to-one conversation order. Without a shared anchor it can account for the first native user of a complete read, never skip it in favor of the next visible repeated message. A partial read cannot establish that first-turn proof. Inside the live clock window a stopped turn need not have a final answer or delivery stamp; outside it the original delayed-send proof still applies. Preserve distinct repeated sends and use indexes rather than rescanning long histories for each local send.
 
@@ -294,3 +294,91 @@ For archived Claude desktop worktrees, `localProjectWorktree()` also accepts a r
 `bindNativeToolCalls()` 位于 `src/renderer/utils/transcriptMessages.ts`，复用同一匹配规则补齐原生调用 ID，保留实时卡片 ID。部分窗口刷新也调用它，不新增后台文件读取。工具来源由实际启动环境或原生读取结果固定到日志元数据，包含提供商、会话、项目和账户；读取旧卡片不可替换成当前提供商。后端校验已保存来源后才读取已停放提供商的账户，全文仍仅在组件局部状态中。
 
 - **Changing the provider of an existing conversation:** `switchSessionProvider()` in `src/renderer/utils/providerTabSessions.ts` shares the Edit Agent transition with the new-shell CLI. New-shell callers read target capabilities and pass them to this helper so every open AI tab uses `newConversationPermissionFields()`. Unsupported standard tightens to readonly; a null result refuses the entire switch before any tab is changed. A failed capability query also refuses the switch. Classic Edit Agent omits the capabilities argument to keep its existing behavior, and classic CLI retains its reset path. Keep native provider parking, logs and tool-output sources intact while applying permission fields.
+
+## Conversation archive identity and lifecycle
+
+`nativeHistoryPool()` in `src/main/storage/project-history.ts` is the shared account-pool identity for discovery and archive metadata. Local accounts resolve the provider's transcript subtree; SSH accounts only normalize the remote path string. `createConversationArchive()` in `src/main/storage/conversation-archive.ts` serializes mutations, stores only Maestro metadata, checks and closes every owning window, and delegates Codex deletion to the existing storage adapter. Do not add a second native history archive file or edit provider transcripts to hide a conversation.
+
+`conversationLifecycle()` in `src/renderer/services/conversationArchive.ts` performs live tab and queue checks and calls canonical `closeTab()`. `requestConversationAction()` supplies the shared menu and palette confirmation. Permissions remain in `newConversationPermissions.ts`; the persisted archive inventory survives after closed-tab caches have been discarded. Unknown native permission is retained as readonly. An intentionally empty project carries `conversationArchiveEmpty`, which keeps restoration from manufacturing an unrestricted conversation.
+
+`projectHistoryScopeFor()` in `src/shared/projectHistory.ts` is shared by native discovery, archive display and permission inheritance. It matches the host, prefers an exact scope, then the local worktree main repository, then the most specific ancestor at a directory boundary. A saved project key retains adapter-recognized aliases when no path matches. SSH paths are compared as POSIX strings and never resolved locally. `buildProjectHistoryScopes()` lives in `nativeConversationMatch.ts` and is re-exported by `projectSessionTree.ts`.
+
+The strict `createTab()` fallback includes archive metadata alongside hidden, closed, orphaned and snoozed conversations. Project recency still prefers ordinary conversations; missing owner replies require readonly before archive recency is considered.
+
+Archive records retain permission metadata with `archived: false` after unarchive. Legacy records without the flag remain archived. Default lists and scan filters exclude unarchived metadata; renderer hydration explicitly requests it for permission inheritance. `conversationActivity()` in `newConversationPermissions.ts` is also used by the archive lifecycle to preserve the original activity in `modifiedAt`. Do not use `archivedAt` as fresh activity after unarchive: an old full-access conversation must not outrank a newer readonly one just because it was archived later.
+
+## Native conversation content search (2026-11-06)
+
+`parseNativeSearchMessages()` and `extractMatchPreview()` in
+`src/shared/sessionSearch.ts` are shared by the Claude and Codex session-browser
+adapters and the new bounded search worker. Do not introduce another JSONL body
+search parser or snippet implementation. `collectNativeHistoryFiles()` in
+`src/main/storage/native-history-files.ts` is the bounded file discovery shared
+with recent-project discovery. Codex archives continue to use
+`preferPlainCodexRollouts()` and `readCodexRollout()`.
+
+`runNativeHistorySearch()` owns worker termination, concurrency and hard timeout.
+`agentSessions:searchNativeHistory` resolves local provider accounts with the same
+resolver as recent projects, never an SSH account path. It does not log the query
+or retain result text. The reader limits each file to 8 MiB, total source plus
+expanded bytes to 64 MiB, enumeration to 1024 files and 8192 entries, and scan time
+to 2500 ms. Worker lifetime is capped at 4000 ms; the complete IPC request has a
+5000 ms deadline including account discovery. At most two workers run together.
+A result cap is 50 conversations, one first body match per conversation. `limited`
+means coverage is incomplete; it is not proof of additional matching results.
+
+`openNativeHistorySearchHit()` in
+`src/renderer/services/openNativeHistorySearchHit.ts` uses canonical native
+resume, refresh, transcript conversion and `selectOlderEntries()`, then requests
+`pendingLogJump`. It preserves current logs and rechecks account, native identity
+and active tab after reads. Existing live messages may retain local IDs; the
+exported `sameLiveMessage()` in `transcriptMessages.ts` is the shared text and
+clock comparison. Only a unique live match may substitute for a native ID.
+Ambiguous repeats report failure rather than jumping to a guessed message.
+
+Codex text extraction, context classification and desktop image or question
+unwrapping live in `src/shared/codexSessionText.ts`, extracted from the native
+storage reader. Search also applies `stripEmbeddedSystemPrompt()` and
+`stripTurnPrompt()` exactly as transcript display does. Search retains native
+message IDs when supplied; without one it uses the cleaned text locator rather
+than inventing a second counter for the storage reader's generated IDs.
+`codexSessionMetadata()`, `extractCwdFromText()` and `parseCodexSessionTitles()` in
+`src/shared/codexSessionMetadata.ts` serve the reader and search. Legacy headers
+retain their ID, environment messages supply missing cwd, and the last complete
+indexed title wins within its account. The worker reads each matching account's
+title index once, with the same per-file and total byte budgets as rollouts.
+The native search jump sets `revealTurnActivity`; `TerminalOutput` uses it only
+with `newShell`, expands the containing turn, then targets the body row rather
+than the fold header, including when both carry the same first-message ID.
+
+Local `CodexSessionStorage` discovery includes the account's native
+`archived_sessions` root and its date directories, even without a `sessions`
+directory. Listing, reads, revision lookup and explicit whole-conversation
+deletion share that discovery and `preferPlainCodexRollouts()`; cache pruning
+covers both roots within the selected account. Opening a search hit still reads
+and decodes through this storage adapter, without restoring or expanding a file
+on disk. SSH discovery remains unchanged and content search remains local only.
+
+### Native command discovery for the new shell
+
+`createNativeCommandDiscovery()` in `src/main/agents/native-commands.ts` is the
+read-only entry for Claude and Codex commands. `agents:getNativeCommands` serves
+both `/` and `tab commands`. It uses `resolveAgentAccountDir()` with host-owned
+layers and `handoffLocation()` for the execution cwd. Remote paths go through
+`remote-fs.ts`, never local realpath. `getCodexSkillDirs()` and
+`getCodexPromptDirs()` accept a path implementation for remote POSIX paths.
+`parseCodexMarkdownDoc()` is reused for the common frontmatter fields.
+
+The cache is scoped to provider, resolved account, cwd and SSH configuration.
+A cached-only request performs no filesystem I/O. Refresh checks directory and
+file metadata, including nested directories, before reusing listings and bodies.
+Project entries claim names before user entries, even when a skill has
+`user-invocable: false`. Errors return supported native builtins plus a warning.
+The cache holds at most 64 contexts; scans accept 2048 directory entries, eight
+nested command levels, 256 KiB per file and 2 MiB of command bodies. SSH metadata
+uses the existing remote stat resolution. The new-shell hook keeps cached rows
+while refreshing and ignores late responses after changing conversation context.
+The hook subscribes to the current session's `customEnvVars` directly when native
+discovery is enabled. App's chrome equality deliberately omits that field, so
+the passed session snapshot alone cannot identify an account change. Keep this
+subscription narrow and leave the classic shell's stored command report intact.

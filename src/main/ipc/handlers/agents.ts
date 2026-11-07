@@ -1,3 +1,6 @@
+import { createNativeCommandDiscovery } from '../../agents/native-commands';
+import { getAgentAccountDirLayers } from '../../agents/provider-account-dirs';
+import type { NativeCommandRequest } from '../../../shared/nativeCommands';
 import { ipcMain } from 'electron';
 import { prepareDeepSeekPreset } from '../../agents/deepseek-preset';
 import { DEEPSEEK_PRESET, type DeepSeekPresetRequest } from '../../../shared/agentPresets';
@@ -1029,6 +1032,40 @@ async function discoverOpenCodeSlashCommandsRemote(
 
 export function registerAgentsHandlers(deps: AgentsHandlerDependencies): void {
 	const { getAgentDetector, agentConfigsStore, settingsStore, sessionsStore } = deps;
+	const readNativeCommands = createNativeCommandDiscovery({
+		layers: (toolType) =>
+			getAgentAccountDirLayers(toolType, {
+				agentLevelEnvVars: agentConfigsStore.get('configs', {})[toolType]?.customEnvVars ?? {},
+				globalShellEnvVars: settingsStore?.get('shellEnvVars', {}) ?? {},
+			}),
+		remote: (id) => getSshRemoteById(settingsStore, id) ?? undefined,
+	});
+	ipcMain.handle(
+		'agents:getNativeCommands',
+		withIpcErrorLogging(
+			handlerOpts('getNativeCommands'),
+			async (request: NativeCommandRequest, cachedOnly?: boolean) => {
+				if ('sessionId' in request) {
+					const session = sessionsStore
+						?.get('sessions', [])
+						.find((s) => s.id === request.sessionId);
+					if (
+						!session ||
+						!(session.aiTabs as Array<{ id: string }> | undefined)?.some(
+							(t) => t.id === request.tabId
+						)
+					)
+						throw new Error('Conversation is no longer available');
+					return readNativeCommands(
+						session as unknown as import('../../../shared/nativeCommands').NativeCommandContext,
+						cachedOnly
+					);
+				}
+				return readNativeCommands(request, cachedOnly);
+			}
+		)
+	);
+
 	ipcMain.handle('agents:getPresets', () => [DEEPSEEK_PRESET]);
 	ipcMain.handle(
 		'agents:prepareDeepSeekPreset',

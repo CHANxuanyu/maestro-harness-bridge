@@ -1,3 +1,4 @@
+import { parseNativeSearchMessages } from '../../shared/sessionSearch';
 /**
  * Codex CLI Session Storage Implementation
  *
@@ -31,6 +32,19 @@ import {
 } from '../../shared/codexRollout';
 import path from 'path';
 import { hasEmbeddedSystemPrompt } from '../../shared/embeddedSystemPrompt';
+import {
+	extractTextFromContent,
+	isSystemContextMessage,
+	unwrapCodexUserReply,
+	extractCodexImages,
+	unwrapCodexImageRequest,
+} from '../../shared/codexSessionText';
+import {
+	codexSessionMetadata,
+	extractCwdFromText,
+	parseCodexSessionTitles,
+	type CodexSessionMetadata,
+} from '../../shared/codexSessionMetadata';
 import os from 'os';
 import fs from 'fs/promises';
 import { logger } from '../utils/logger';
@@ -103,49 +117,6 @@ const CODEX_SESSION_PARSE_LIMITS = {
 } as const;
 
 /**
- * Codex session metadata structure (first line of JSONL)
- * Format: { type: 'session_meta', payload: { id, cwd, timestamp, ... } }
- */
-interface CodexSessionMetadata {
-	type?: string;
-	timestamp?: string;
-	payload?: {
-		id: string;
-		cwd?: string;
-		timestamp?: string;
-		originator?: string;
-		source?: string | { subagent?: unknown };
-		cli_version?: string;
-		model_provider?: string;
-		git?: {
-			commit_hash?: string;
-			branch?: string;
-			repository_url?: string;
-		};
-	};
-	// Legacy format (direct fields)
-	id?: string;
-	git?: {
-		commit_hash?: string;
-		branch?: string;
-		repository_url?: string;
-	};
-}
-
-/**
- * Codex message content structure
- */
-interface CodexMessageContent {
-	type: string;
-	text?: string;
-	image_url?: string | { url?: string };
-	// Tool use fields
-	tool?: string;
-	args?: unknown;
-	output?: string;
-}
-
-/**
  * Tool use entry shape used when building SessionMessage.toolUse arrays.
  * Provides type safety for the tool call / tool output merge logic.
  */
@@ -188,144 +159,9 @@ async function readRemoteRollout(filePath: string, sshConfig: SshRemoteConfig): 
 	return decodeCodexRollout(Buffer.from(result.data, 'base64'), filePath);
 }
 
-/**
- * Extract text from Codex message content array
- */
-function extractTextFromContent(content: CodexMessageContent[] | undefined): string {
-	if (!content || !Array.isArray(content)) {
-		return '';
-	}
-
-	const textParts = content
-		.filter(
-			(part) => part.type === 'input_text' || part.type === 'text' || part.type === 'output_text'
-		)
-		.map((part) => part.text || '')
-		.filter((text) => text.trim());
-
-	return textParts.join(' ');
-}
-
-/**
- * Check if text is a system/environment context message that should be skipped for preview
- */
-function isSystemContextMessage(text: string): boolean {
-	if (!text) return false;
-	const trimmed = text.trim();
-	// Skip messages that start with environment/system context XML tags
-	if (
-		trimmed.startsWith('<environment_context>') ||
-		trimmed.startsWith('<cwd>') ||
-		trimmed.startsWith('<system>') ||
-		trimmed.startsWith('<approval_policy>') ||
-		/^<external_codex_apps_open_page(?:\s[^>]*)?>[\s\S]*<\/external_codex_apps_open_page>$/.test(
-			trimmed
-		) ||
-		(/^<heartbeat(?:\s[^>]*)?>[\s\S]*<\/heartbeat>$/.test(trimmed) &&
-			!trimmed.slice(0, -'</heartbeat>'.length).includes('</heartbeat>') &&
-			/(?:<instructions>[\s\S]*<\/instructions>|automation[_-]?id)/i.test(trimmed))
-	) {
-		return true;
-	}
-	// Skip markdown-formatted system context (e.g., "# Context Your name is **Maestro Codex**...")
-	if (
-		trimmed.startsWith('# Context') ||
-		trimmed.startsWith('# Maestro System Context') ||
-		trimmed.startsWith('# System Context') ||
-		trimmed.startsWith('# AGENTS.md instructions')
-	) {
-		return true;
-	}
-	return false;
-}
-
-/** Only decode the desktop's exact answer envelope; ordinary quoted XML stays text. */
-function unwrapCodexUserReply(text: string): string {
-	const match = text
-		.trim()
-		.match(
-			/^<send_user_message_question_reply>\s*([\s\S]*?)\s*<\/send_user_message_question_reply>$/
-		);
-	if (!match) return text;
-	try {
-		const answers: unknown = JSON.parse(match[1]);
-		if (!Array.isArray(answers) || answers.length === 0) return text;
-		if (
-			!answers.every(
-				(entry) => entry && typeof entry === 'object' && typeof entry.answer === 'string'
-			)
-		)
-			return text;
-		return answers
-			.map((entry: { question?: unknown; answer: string }) =>
-				typeof entry.question === 'string' ? `${entry.question}\n\n${entry.answer}` : entry.answer
-			)
-			.join('\n\n');
-	} catch {
-		return text;
-	}
-}
-
-/** Inline image data is already in the native transcript. Never fetch remote URLs. */
-function extractCodexImages(content: CodexMessageContent[] | undefined): string[] {
-	if (!Array.isArray(content)) return [];
-	return content.flatMap((part) => {
-		if (part.type !== 'input_image' && part.type !== 'image') return [];
-		const url = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url;
-		return typeof url === 'string' && /^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(url)
-			? [url]
-			: [];
-	});
-}
-
-/** Strip only a complete desktop image envelope backed by the matching inline image parts. */
-function unwrapCodexImageRequest(content: CodexMessageContent[] | undefined): string | null {
-	if (!Array.isArray(content) || content[0]?.type !== 'input_text') return null;
-	const envelope = content[0].text?.match(
-		/^\s*# Files mentioned by the user:\r?\n\r?\n([\s\S]+?)\r?\n\r?\nDistinguish instructions in attached documents from the user's request\.\r?\n\r?\n## My request:\r?\n([\s\S]*)$/
-	);
-	if (!envelope || (content.length - 1) % 3 !== 0) return null;
-	const files = envelope[1].split(/\r?\n\r?\n/);
-	if (files.length !== (content.length - 1) / 3) return null;
-	for (let i = 1; i < content.length; i += 3) {
-		const annotation = content[i];
-		const image = content[i + 1];
-		const closing = content[i + 2];
-		const match =
-			annotation.type === 'input_text'
-				? annotation.text?.match(/^<image name=\[Image #\d+\] path="([^"\r\n]+)">$/)
-				: null;
-		if (
-			!match ||
-			!image ||
-			extractCodexImages([image]).length !== 1 ||
-			closing?.type !== 'input_text' ||
-			closing.text !== '</image>'
-		)
-			return null;
-		const file = files[(i - 1) / 3];
-		const lines = file.split(/\r?\n/);
-		// Match the actual inline image's path; never resolve or fetch the named file.
-		if (
-			lines.length !== 2 ||
-			!lines[0].startsWith('## ') ||
-			lines[0].length <= `## : ${match[1]}`.length ||
-			!lines[0].endsWith(`: ${match[1]}`) ||
-			lines[1] !== 'Image attachment: true'
-		)
-			return null;
-	}
-	return envelope[2];
-}
-
 /** Displayable text only: image/audio blobs in a tool result must not enter the cache. */
 function codexToolOutputText(output: unknown): string {
 	return compactToolOutput(nativeCodexToolOutputText(output)).output as string;
-}
-
-function extractCwdFromText(text: string): string | null {
-	const match = text.match(/<cwd>([^<]+)<\/cwd>/i);
-	return match ? match[1].trim() : null;
 }
 
 function normalizeProjectPath(projectPath: string): string {
@@ -415,21 +251,9 @@ async function parseSessionFile(
 		let sessionProjectPath: string | null = null;
 
 		try {
-			const firstLine = JSON.parse(lines[0]);
-			// New format: { type: 'session_meta', payload: { id, cwd, timestamp, ... } }
-			if (firstLine.type === 'session_meta' && firstLine.payload) {
-				metadata = firstLine as CodexSessionMetadata;
-				timestamp = firstLine.payload.timestamp || firstLine.timestamp || timestamp;
-				// Get project path directly from session_meta
-				if (firstLine.payload.cwd) {
-					sessionProjectPath = firstLine.payload.cwd;
-				}
-			}
-			// Legacy format: { id, timestamp, ... } at top level
-			else if (firstLine.id && firstLine.timestamp) {
-				metadata = firstLine as CodexSessionMetadata;
-				timestamp = firstLine.timestamp || timestamp;
-			}
+			metadata = codexSessionMetadata(JSON.parse(lines[0]));
+			timestamp = metadata?.payload?.timestamp || metadata?.timestamp || timestamp;
+			sessionProjectPath = metadata?.payload?.cwd || null;
 		} catch {
 			// First line may not be metadata, continue parsing
 		}
@@ -768,18 +592,21 @@ function parseCodexTranscript(
 				messageIndex++;
 			}
 
+			const legacyResult = entry.type === 'item.completed' && entry.item?.type === 'tool_result';
 			if (
-				entry.type === 'response_item' &&
-				(payload?.type === 'function_call_output' || payload?.type === 'custom_tool_call_output')
+				legacyResult ||
+				(entry.type === 'response_item' &&
+					(payload?.type === 'function_call_output' || payload?.type === 'custom_tool_call_output'))
 			) {
-				const callId = payload.call_id;
-				const outputText = codexToolOutputText(payload.output);
+				const result = legacyResult ? entry.item : payload;
+				const callId = result.call_id ?? result.tool_call_id ?? result.id;
+				const outputText = codexToolOutputText(result.output);
 				const matchingIdx = callId ? (toolCalls.get(callId) ?? -1) : -1;
 				const toolName =
 					matchingIdx >= 0
 						? (messages[matchingIdx].toolUse as CodexToolUseEntry[])[0].tool
 						: undefined;
-				const status = codexToolResultStatus(payload, toolName);
+				const status = codexToolResultStatus(result, toolName);
 				if (matchingIdx >= 0) {
 					const matchingMsg = messages[matchingIdx];
 					const toolEntries = matchingMsg.toolUse as CodexToolUseEntry[];
@@ -793,18 +620,20 @@ function parseCodexTranscript(
 							...toolEntries.slice(1),
 						],
 					};
+					// Preserve the legacy counter used by following messages without native IDs.
+					if (legacyResult) messageIndex++;
 				} else {
 					// Even an orphan result is a tool card, never an assistant answer.
 					appendMessage({
 						type: 'assistant',
 						role: 'assistant',
-						content: `Tool: ${payload.name || 'unknown'}`,
+						content: `Tool: ${result.name || result.tool || 'unknown'}`,
 						timestamp: entry.timestamp || '',
 						uuid: callId || `codex-msg-${messageIndex}`,
 						toolUse: [
 							{
 								id: callId,
-								tool: payload.name || 'unknown',
+								tool: result.name || result.tool || 'unknown',
 								state: { status, output: outputText },
 							},
 						],
@@ -829,6 +658,33 @@ function parseCodexTranscript(
 				messageIndex++;
 			}
 
+			if (entry.type === 'item.completed' && entry.item?.type === 'file_change') {
+				appendMessage({
+					type: 'assistant',
+					role: 'assistant',
+					content: 'Tool: file_change',
+					...turnContext,
+					timestamp: entry.timestamp || '',
+					uuid: entry.item.id || `codex-msg-${messageIndex}`,
+					toolUse: [
+						{
+							id: entry.item.id,
+							tool: 'file_change',
+							state: {
+								status:
+									entry.item.status === 'completed'
+										? 'completed'
+										: entry.item.status === 'failed'
+											? 'failed'
+											: 'unknown',
+								input: { changes: entry.item.changes },
+							},
+						},
+					],
+				});
+				messageIndex++;
+			}
+
 			if (entry.type === 'item.completed' && entry.item?.type === 'tool_call') {
 				appendMessage({
 					type: 'assistant',
@@ -836,32 +692,14 @@ function parseCodexTranscript(
 					content: `Tool: ${entry.item.tool}`,
 					...turnContext,
 					timestamp: entry.timestamp || '',
-					uuid: entry.item.id || `codex-msg-${messageIndex}`,
+					uuid: entry.item.call_id || entry.item.id || `codex-msg-${messageIndex}`,
 					toolUse: [
 						{
+							id: entry.item.call_id || entry.item.id,
 							tool: entry.item.tool,
 							args: entry.item.args,
-							state: { status: 'completed', input: entry.item.args },
-						},
-					],
-				});
-				messageIndex++;
-			}
-
-			if (entry.type === 'item.completed' && entry.item?.type === 'tool_result') {
-				const output = codexToolOutputText(entry.item.output);
-				appendMessage({
-					type: 'assistant',
-					role: 'assistant',
-					content: `Tool: ${entry.item.tool || 'unknown'}`,
-					...turnContext,
-					timestamp: entry.timestamp || '',
-					uuid: entry.item.id || `codex-msg-${messageIndex}`,
-					toolUse: [
-						{
-							id: entry.item.id,
-							tool: entry.item.tool || 'unknown',
-							state: { status: entry.item.is_error ? 'failed' : 'completed', output },
+							// Completing the call envelope does not prove execution succeeded.
+							state: { status: 'unknown', input: entry.item.args },
 						},
 					],
 				});
@@ -1069,7 +907,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 	}
 
 	/**
-	 * Find all session files, organized by date directories
+	 * Find active date-organized rollouts and native archived rollouts
 	 */
 	private async findAllSessionFiles(
 		accountDir?: string,
@@ -1078,60 +916,67 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		const sessionsDir = this.getSessionsDir(accountDir);
 		const sessionFiles: Array<{ filePath: string; filename: string }> = [];
 
-		try {
-			await fs.access(sessionsDir);
-		} catch {
-			return [];
-		}
-
-		// Scan YYYY directories
-		const years = await fs.readdir(sessionsDir);
-		for (const year of years) {
-			if (!/^\d{4}$/.test(year)) continue;
-
-			const yearDir = path.join(sessionsDir, year);
+		const archiveDir = path.join(path.dirname(sessionsDir), 'archived_sessions');
+		for (const directory of [archiveDir, sessionsDir]) {
 			try {
-				const yearStat = await fs.stat(yearDir);
-				if (!yearStat.isDirectory()) continue;
+				await fs.access(directory);
 			} catch {
 				continue;
 			}
 
-			// Scan MM directories
-			const months = await fs.readdir(yearDir);
-			for (const month of months) {
-				if (!/^\d{2}$/.test(month)) continue;
+			// Active rollouts use date directories; native archives also store files at the root.
+			const years = await fs.readdir(directory);
+			for (const year of years) {
+				if (directory === archiveDir && /\.jsonl(?:\.zst)?$/i.test(year)) {
+					sessionFiles.push({ filePath: path.join(directory, year), filename: year });
+					continue;
+				}
+				if (!/^\d{4}$/.test(year)) continue;
 
-				const monthDir = path.join(yearDir, month);
+				const yearDir = path.join(directory, year);
 				try {
-					const monthStat = await fs.stat(monthDir);
-					if (!monthStat.isDirectory()) continue;
+					const yearStat = await fs.stat(yearDir);
+					if (!yearStat.isDirectory()) continue;
 				} catch {
 					continue;
 				}
 
-				// Scan DD directories
-				const days = await fs.readdir(monthDir);
-				for (const day of days) {
-					if (!/^\d{2}$/.test(day)) continue;
+				// Scan MM directories
+				const months = await fs.readdir(yearDir);
+				for (const month of months) {
+					if (!/^\d{2}$/.test(month)) continue;
 
-					const dayDir = path.join(monthDir, day);
+					const monthDir = path.join(yearDir, month);
 					try {
-						const dayStat = await fs.stat(dayDir);
-						if (!dayStat.isDirectory()) continue;
-
-						// Find session files
-						const files = await fs.readdir(dayDir);
-						for (const file of files) {
-							if (/\.jsonl(?:\.zst)?$/i.test(file)) {
-								sessionFiles.push({
-									filePath: path.join(dayDir, file),
-									filename: file,
-								});
-							}
-						}
+						const monthStat = await fs.stat(monthDir);
+						if (!monthStat.isDirectory()) continue;
 					} catch {
 						continue;
+					}
+
+					// Scan DD directories
+					const days = await fs.readdir(monthDir);
+					for (const day of days) {
+						if (!/^\d{2}$/.test(day)) continue;
+
+						const dayDir = path.join(monthDir, day);
+						try {
+							const dayStat = await fs.stat(dayDir);
+							if (!dayStat.isDirectory()) continue;
+
+							// Find session files
+							const files = await fs.readdir(dayDir);
+							for (const file of files) {
+								if (/\.jsonl(?:\.zst)?$/i.test(file)) {
+									sessionFiles.push({
+										filePath: path.join(dayDir, file),
+										filename: file,
+									});
+								}
+							}
+						} catch {
+							continue;
+						}
 					}
 				}
 			}
@@ -1235,20 +1080,9 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			let sessionProjectPath: string | null = null;
 
 			try {
-				const firstLine = JSON.parse(lines[0]);
-				// New format: { type: 'session_meta', payload: { id, cwd, timestamp, ... } }
-				if (firstLine.type === 'session_meta' && firstLine.payload) {
-					metadata = firstLine as CodexSessionMetadata;
-					timestamp = firstLine.payload.timestamp || firstLine.timestamp || timestamp;
-					if (firstLine.payload.cwd) {
-						sessionProjectPath = firstLine.payload.cwd;
-					}
-				}
-				// Legacy format: { id, timestamp, ... } at top level
-				else if (firstLine.id && firstLine.timestamp) {
-					metadata = firstLine as CodexSessionMetadata;
-					timestamp = firstLine.timestamp || timestamp;
-				}
+				metadata = codexSessionMetadata(JSON.parse(lines[0]));
+				timestamp = metadata?.payload?.timestamp || metadata?.timestamp || timestamp;
+				sessionProjectPath = metadata?.payload?.cwd || null;
 			} catch {
 				// First line may not be metadata, continue parsing
 			}
@@ -1484,11 +1318,12 @@ export class CodexSessionStorage extends BaseSessionStorage {
 		// reachable by any prefix, so they survive until the cache version is
 		// bumped. They are a handful of stale records, not stale numbers: every
 		// session served to a caller comes from the account it just walked.
-		const accountPrefix = sessionsDir.endsWith(path.sep)
-			? sessionsDir
-			: `${sessionsDir}${path.sep}`;
+		const accountPrefixes = [
+			sessionsDir,
+			path.join(path.dirname(sessionsDir), 'archived_sessions'),
+		].map((directory) => `${directory}${path.sep}`);
 		for (const cachedPath of Object.keys(cache.sessions)) {
-			if (!cachedPath.startsWith(accountPrefix)) continue;
+			if (!accountPrefixes.some((prefix) => cachedPath.startsWith(prefix))) continue;
 			if (!currentFilePaths.has(cachedPath)) {
 				delete cache.sessions[cachedPath];
 				cacheUpdated = true;
@@ -1511,16 +1346,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 				path.join(path.dirname(sessionsDir), 'session_index.jsonl'),
 				'utf-8'
 			);
-			const titles = new Map<string, string>();
-			for (const line of index.split('\n')) {
-				try {
-					const entry = JSON.parse(line);
-					if (typeof entry.id === 'string' && typeof entry.thread_name === 'string')
-						titles.set(entry.id, entry.thread_name);
-				} catch {
-					/* An interrupted final index line is not a corrupt transcript. */
-				}
-			}
+			const titles = parseCodexSessionTitles(index);
 			for (let i = 0; i < sessions.length; i++) {
 				const name = titles.get(sessions[i].sessionId);
 				if (name) sessions[i] = { ...sessions[i], sessionName: name, nativeTitle: name };
@@ -1708,43 +1534,7 @@ export class CodexSessionStorage extends BaseSessionStorage {
 			return [];
 		}
 
-		const lines = content.split('\n').filter((l) => l.trim());
-		const searchableMessages: SearchableMessage[] = [];
-
-		for (const line of lines) {
-			try {
-				const entry = JSON.parse(line);
-
-				let textContent = '';
-				let role: 'user' | 'assistant' | null = null;
-
-				// Handle message entries (legacy format)
-				if (entry.type === 'message') {
-					role = entry.role;
-					textContent = extractTextFromContent(entry.content);
-				}
-
-				// Handle response_item messages (current Codex format)
-				if (entry.type === 'response_item' && entry.payload?.type === 'message') {
-					role = entry.payload.role;
-					textContent = extractTextFromContent(entry.payload.content);
-				}
-
-				// Handle item.completed agent_message
-				if (entry.type === 'item.completed' && entry.item?.type === 'agent_message') {
-					role = 'assistant';
-					textContent = entry.item.text || '';
-				}
-
-				if (role && (role === 'user' || role === 'assistant') && textContent.trim()) {
-					searchableMessages.push({ role, textContent });
-				}
-			} catch {
-				// Skip malformed lines
-			}
-		}
-
-		return searchableMessages;
+		return parseNativeSearchMessages(content, 'codex').messages;
 	}
 
 	getSessionPath(

@@ -466,7 +466,7 @@ export function useSessionRestoration(): SessionRestorationReturn {
 					terminalTabSurvivesRestart(tab, survivingTerminalIds)
 				).length +
 				(session.browserTabs?.length ?? 0);
-			if (restoredTabCount === 0) {
+			if (restoredTabCount === 0 && !session.conversationArchiveEmpty) {
 				logger.error(
 					'[restoreSession] Session has no tabs of any kind - data corruption, creating default tab:',
 					undefined,

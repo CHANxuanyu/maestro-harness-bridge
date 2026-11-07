@@ -61,10 +61,17 @@ export function useAgentSessionIdListener(deps: UseAgentSessionIdListenerDeps): 
 						// because the file does not exist. So once a claude-code tab/session has an
 						// agentSessionId, treat it as immutable and ignore subsequent fork IDs.
 						const isClaudeCode = s.toolType === 'claude-code';
+						const targetKey =
+							tabId &&
+							s.orphanedThinkingTabs?.some((tab) => tab.id === tabId) &&
+							!s.aiTabs.some((tab) => tab.id === tabId)
+								? 'orphanedThinkingTabs'
+								: 'aiTabs';
+						const targetTabs = s[targetKey] ?? [];
 
 						let targetTab;
 						if (tabId) {
-							targetTab = s.aiTabs?.find((tab) => tab.id === tabId);
+							targetTab = targetTabs.find((tab) => tab.id === tabId);
 							if (!targetTab) {
 								logger.info(
 									'[onSessionId] Tab was closed, storing session ID at session level only:',
@@ -110,23 +117,23 @@ export function useAgentSessionIdListener(deps: UseAgentSessionIdListenerDeps): 
 									agentSessionId: agentSessionId.substring(0, 8),
 								}
 							);
-							const updatedAiTabs = s.aiTabs.map((tab) =>
+							const updatedAiTabs = targetTabs.map((tab) =>
 								tab.id === targetTab.id
 									? updateProviderSlot(tab, s, owningProvider, { agentSessionId })
 									: tab
 							);
 							// The session-level field tracks the CURRENT provider, so it is left
 							// alone here for the same reason.
-							return { ...s, aiTabs: updatedAiTabs };
+							return { ...s, [targetKey]: updatedAiTabs };
 						}
 
 						if (targetTab.agentSessionId && targetTab.agentSessionId !== agentSessionId) {
 							if (isClaudeCode) {
-								const updatedAiTabs = s.aiTabs.map((tab) => {
+								const updatedAiTabs = targetTabs.map((tab) => {
 									if (tab.id !== targetTab.id) return tab;
 									return { ...tab, awaitingSessionId: false };
 								});
-								return { ...s, aiTabs: updatedAiTabs };
+								return { ...s, [targetKey]: updatedAiTabs };
 							}
 
 							logger.warn(
@@ -149,7 +156,7 @@ export function useAgentSessionIdListener(deps: UseAgentSessionIdListenerDeps): 
 								text: '⚠️ Session resume failed - agent started a new session. Previous context was lost.',
 							};
 
-							const updatedAiTabs = s.aiTabs.map((tab) => {
+							const updatedAiTabs = targetTabs.map((tab) => {
 								if (tab.id !== targetTab.id) return tab;
 								return {
 									...tab,
@@ -160,11 +167,11 @@ export function useAgentSessionIdListener(deps: UseAgentSessionIdListenerDeps): 
 								};
 							});
 
-							return { ...s, aiTabs: updatedAiTabs, agentSessionId };
+							return { ...s, [targetKey]: updatedAiTabs, agentSessionId };
 						}
 
 						originSource = { tabId: targetTab.id, nativeId: agentSessionId };
-						const updatedAiTabs = s.aiTabs.map((tab) => {
+						const updatedAiTabs = targetTabs.map((tab) => {
 							if (tab.id !== targetTab.id) return tab;
 							const newName = tab.name && tab.name !== 'New Session' ? tab.name : null;
 							return {
@@ -176,8 +183,8 @@ export function useAgentSessionIdListener(deps: UseAgentSessionIdListenerDeps): 
 						});
 
 						return isClaudeCode
-							? { ...s, aiTabs: updatedAiTabs }
-							: { ...s, aiTabs: updatedAiTabs, agentSessionId };
+							? { ...s, [targetKey]: updatedAiTabs }
+							: { ...s, [targetKey]: updatedAiTabs, agentSessionId };
 					});
 					if (originSource) {
 						captureConversationSourceNativeId(

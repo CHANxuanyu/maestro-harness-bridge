@@ -80,6 +80,37 @@ describe('useAgentSessionIdListener', () => {
 		expect(children[0].origin?.sourceNativeSessionId).toBe('native-parent');
 	});
 
+	it('backfills children when the parent closed before its native identity arrived', async () => {
+		const origin = {
+			kind: 'subtask' as const,
+			sourceSessionId: 'sess-1',
+			sourceTabId: 'tab-1',
+			sourceProvider: 'codex',
+			createdAt: 1,
+		};
+		useSessionStore.setState({
+			sessions: [
+				createMockSession({
+					id: 'sess-1',
+					toolType: 'codex',
+					aiTabs: [],
+					orphanedThinkingTabs: [
+						createMockAITab({ id: 'tab-1', state: 'busy', awaitingSessionId: true }),
+					],
+				}),
+				createMockSession({ id: 'child', aiTabs: [createMockAITab({ id: 'child-tab', origin })] }),
+			],
+		});
+		renderHook(() => useAgentSessionIdListener({ batchedUpdater: makeBatched() }));
+		await handler!('sess-1-ai-tab-1', 'late-parent');
+		expect(useSessionStore.getState().sessions[0].orphanedThinkingTabs?.[0].agentSessionId).toBe(
+			'late-parent'
+		);
+		expect(useSessionStore.getState().sessions[1].aiTabs[0].origin?.sourceNativeSessionId).toBe(
+			'late-parent'
+		);
+	});
+
 	it('captures agent session id on the targeted tab', async () => {
 		const tab = createMockAITab({ id: 'tab-1', awaitingSessionId: true });
 		const session = createMockSession({

@@ -394,40 +394,45 @@ function settleSubtaskConsult(
 ): void {
 	if (!tabId) return;
 	updateSessionWith(sessionId, (session) => {
-		const tab = session.aiTabs.find((candidate) => candidate.id === tabId);
+		const tab = [...session.aiTabs, ...(session.orphanedThinkingTabs ?? [])].find(
+			(candidate) => candidate.id === tabId
+		);
 		if (tab?.origin?.kind !== 'subtask') return session;
 		const released = applyQueuedItemRelease(session, tabId);
+		const finished = {
+			...tab,
+			state: 'idle' as const,
+			thinkingStartTime: undefined,
+			hasUnread: false,
+			agentError: error
+				? {
+						type: 'unknown' as const,
+						message: error,
+						recoverable: true,
+						agentId: session.toolType,
+						timestamp: Date.now(),
+					}
+				: undefined,
+			logs:
+				recordError && error
+					? [
+							...tab.logs,
+							{ id: generateId(), timestamp: Date.now(), source: 'error' as const, text: error },
+						]
+					: tab.logs,
+		};
+		const queued = released.executionQueue.some((item) => item.tabId === tabId);
 		return {
 			...released,
-			aiTabs: released.aiTabs.map((candidate) =>
-				candidate.id === tabId
-					? {
-							...candidate,
-							hasUnread: false,
-							agentError: error
-								? {
-										type: 'unknown' as const,
-										message: error,
-										recoverable: true,
-										agentId: session.toolType,
-										timestamp: Date.now(),
-									}
-								: undefined,
-							...(recordError && error
-								? {
-										logs: [
-											...candidate.logs,
-											{
-												id: generateId(),
-												timestamp: Date.now(),
-												source: 'error' as const,
-												text: error,
-											},
-										],
-									}
-								: {}),
-						}
-					: candidate
+			aiTabs: released.aiTabs.map((candidate) => (candidate.id === tabId ? finished : candidate)),
+			orphanedThinkingTabs: released.orphanedThinkingTabs?.flatMap((candidate) =>
+				candidate.id === tabId ? (queued ? [finished] : []) : [candidate]
+			),
+			closedTabHistory: released.closedTabHistory?.map((entry) =>
+				entry.tab.id === tabId ? { ...entry, tab: finished } : entry
+			),
+			unifiedClosedTabHistory: released.unifiedClosedTabHistory?.map((entry) =>
+				entry.type === 'ai' && entry.tab.id === tabId ? { ...entry, tab: finished } : entry
 			),
 		};
 	});
@@ -585,7 +590,9 @@ function recordConsultHistory(
 		tracked.sourceAgentName ??
 		state.sessions.find((s) => s.id === chunk.sourceSessionId)?.name ??
 		'another agent';
-	const consultTab = target.aiTabs.find((t) => t.id === tracked.targetTabId);
+	const consultTab = [...target.aiTabs, ...(target.orphanedThinkingTabs ?? [])].find(
+		(t) => t.id === tracked.targetTabId
+	);
 
 	const entryId = generateId();
 	const historySessionId = chunk.targetSessionId;
@@ -898,27 +905,32 @@ export function useCrossAgentDispatch(
 		const targetTabId = tracked.targetTabId;
 		if (targetTabId) {
 			const answerId = tracked.targetLogEntryId;
-			updateAiTab(chunk.targetSessionId, targetTabId, (tab) => {
-				const existingIndex = tab.logs.findIndex((l) => l.id === answerId);
-				const timestamp = existingIndex >= 0 ? tab.logs[existingIndex].timestamp : Date.now();
-				const answer: LogEntry = {
-					id: answerId,
-					timestamp,
-					source: chunk.error ? 'error' : 'ai',
-					text: displayText,
-				};
-				const nextLogs =
-					existingIndex >= 0
-						? tab.logs.map((l, i) => (i === existingIndex ? answer : l))
-						: [...tab.logs, answer];
-				// On success, store the target's captured provider session id so the
-				// next mention from this source tab resumes it (continuity).
-				const agentSessionId =
-					chunk.done && chunk.targetAgentSessionId
-						? chunk.targetAgentSessionId
-						: tab.agentSessionId;
-				return { ...tab, logs: nextLogs, agentSessionId };
-			});
+			updateAiTab(
+				chunk.targetSessionId,
+				targetTabId,
+				(tab) => {
+					const existingIndex = tab.logs.findIndex((l) => l.id === answerId);
+					const timestamp = existingIndex >= 0 ? tab.logs[existingIndex].timestamp : Date.now();
+					const answer: LogEntry = {
+						id: answerId,
+						timestamp,
+						source: chunk.error ? 'error' : 'ai',
+						text: displayText,
+					};
+					const nextLogs =
+						existingIndex >= 0
+							? tab.logs.map((l, i) => (i === existingIndex ? answer : l))
+							: [...tab.logs, answer];
+					// On success, store the target's captured provider session id so the
+					// next mention from this source tab resumes it (continuity).
+					const agentSessionId =
+						chunk.done && chunk.targetAgentSessionId
+							? chunk.targetAgentSessionId
+							: tab.agentSessionId;
+					return { ...tab, logs: nextLogs, agentSessionId };
+				},
+				{ includeOrphans: true }
+			);
 		}
 
 		if (chunk.done) {
@@ -933,10 +945,10 @@ export function useCrossAgentDispatch(
 					sessionProviderId(target)
 				);
 			}
-			settleSubtaskConsult(chunk.targetSessionId, targetTabId, chunk.error);
 			// The target now has a durable record of the consult, attributed to the
 			// caller so its History shows who consulted it (and about what).
 			recordConsultHistory(tracked, chunk, spawnSynopsisRef.current);
+			settleSubtaskConsult(chunk.targetSessionId, targetTabId, chunk.error);
 			map.delete(chunk.requestId);
 			const completion: CrossAgentCompletion = {
 				text: accumulated,

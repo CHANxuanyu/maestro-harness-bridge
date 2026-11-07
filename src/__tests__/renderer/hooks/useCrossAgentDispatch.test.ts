@@ -404,18 +404,16 @@ describe('new-shell consult conversations', () => {
 	it.each(['readonly', 'standard'] as const)(
 		'bounds new and reused consults by the parent %s permission',
 		(mode) => {
-			useSessionStore
-				.getState()
-				.setSessions((sessions) =>
-					sessions.map((session) =>
-						session.id === 'src'
-							? {
-									...session,
-									aiTabs: session.aiTabs.map((tab) => ({ ...tab, permissionMode: mode })),
-								}
-							: { ...session, toolType: 'claude-code' }
-					)
-				);
+			useSessionStore.getState().setSessions((sessions) =>
+				sessions.map((session) =>
+					session.id === 'src'
+						? {
+								...session,
+								aiTabs: session.aiTabs.map((tab) => ({ ...tab, permissionMode: mode })),
+							}
+						: { ...session, toolType: 'claude-code' }
+				)
+			);
 			const options = {
 				targetSessionId: 'tgt',
 				sourceSessionId: 'src',
@@ -450,20 +448,18 @@ describe('new-shell consult conversations', () => {
 			question: 'Inspect files.',
 		};
 		const first = ensureConsultTab(options)!;
-		useSessionStore
-			.getState()
-			.setSessions((sessions) =>
-				sessions.map((session) =>
-					session.id === 'tgt'
-						? {
-								...session,
-								aiTabs: session.aiTabs.map((tab) =>
-									tab.id === first.targetTabId ? { ...tab, permissionMode: 'readonly' } : tab
-								),
-							}
-						: session
-				)
-			);
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === 'tgt'
+					? {
+							...session,
+							aiTabs: session.aiTabs.map((tab) =>
+								tab.id === first.targetTabId ? { ...tab, permissionMode: 'readonly' } : tab
+							),
+						}
+					: session
+			)
+		);
 		send.mockImplementation(() => new Promise(() => {}));
 		sendCrossAgentRequest({ ...options, userPrompt: options.question, sourceLogs: [] });
 		expect(send.mock.calls[0][0].permissionMode).toBe('readonly');
@@ -506,6 +502,74 @@ describe('new-shell consult conversations', () => {
 		const target = useSessionStore.getState().sessions.find((s) => s.id === 'tgt')!;
 		expect(target.aiTabs.find((t) => t.id === first.targetTabId)?.name).toBe('Check the queue.');
 	});
+
+	it.each([false, true])(
+		'finishes a closed consult and retains it only while queued work remains: %s',
+		async (queued) => {
+			send.mockResolvedValue({ requestId: 'closed-consult-' + queued });
+			const hook = renderHook(() => useCrossAgentDispatch());
+			sendCrossAgentRequest({
+				sourceSessionId: 'src',
+				sourceTabId: 'tab',
+				sourceAgentName: 'Source',
+				targetSessionId: 'tgt',
+				userPrompt: 'Inspect files.',
+				sourceLogs: [],
+			});
+			await act(async () => {
+				await Promise.resolve();
+			});
+			const targetTabId = send.mock.calls[0][0].targetTabId;
+			useSessionStore.getState().setSessions((sessions) =>
+				sessions.map((session) => {
+					if (session.id !== 'tgt') return session;
+					const child = session.aiTabs.find((tab) => tab.id === targetTabId)!;
+					return {
+						...session,
+						aiTabs: session.aiTabs.filter((tab) => tab.id !== targetTabId),
+						orphanedThinkingTabs: [child],
+						closedTabHistory: [{ tab: child, closedAt: 1, index: 1 }],
+						executionQueue: queued
+							? [
+									{
+										id: 'queued',
+										type: 'message',
+										tabId: targetTabId,
+										text: 'Continue',
+										timestamp: 1,
+									},
+								]
+							: [],
+					};
+				})
+			);
+			act(() =>
+				receiveChunk(
+					chunk({
+						requestId: 'closed-consult-' + queued,
+						targetTabId,
+						done: true,
+						chunk: 'Final answer',
+						targetAgentSessionId: 'closed-native',
+					})
+				)
+			);
+			const target = useSessionStore.getState().sessions.find((session) => session.id === 'tgt')!;
+			const retained = target.closedTabHistory![0].tab;
+			expect(retained).toMatchObject({
+				agentSessionId: 'closed-native',
+				state: 'idle',
+				hasUnread: false,
+			});
+			expect(retained.logs.at(-1)?.text).toBe('Final answer');
+			expect(target.state).toBe('idle');
+			if (queued) {
+				expect(target.orphanedThinkingTabs?.[0]).toEqual(retained);
+				expect(target.executionQueue[0].tabId).toBe(targetTabId);
+			} else expect(target.orphanedThinkingTabs ?? []).toHaveLength(0);
+			hook.unmount();
+		}
+	);
 
 	it('holds a running child busy and releases its queue on completion without a competing synopsis', async () => {
 		const synopsis = vi.fn();

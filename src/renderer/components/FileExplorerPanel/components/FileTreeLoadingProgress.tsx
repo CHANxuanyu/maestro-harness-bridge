@@ -1,3 +1,5 @@
+import { useT } from '../../../i18n';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { Spinner } from '../../ui/Spinner';
 import type { Theme } from '../../../types';
 
@@ -18,6 +20,8 @@ export function FileTreeLoadingProgress({
 	isRemote,
 	onCancel,
 }: FileTreeLoadingProgressProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const currentFolder = progress?.currentDirectory
 		? progress.currentDirectory.split('/').pop() || progress.currentDirectory
 		: '';
@@ -28,19 +32,36 @@ export function FileTreeLoadingProgress({
 
 			<div className="text-center">
 				<div className="text-xs" style={{ color: theme.colors.textMain }}>
-					{isRemote ? 'Loading remote files...' : 'Loading files...'}
+					{newShell
+						? t(
+								isRemote
+									? 'workflows.newShellCopy.panels.loadingRemote'
+									: 'workflows.newShellCopy.panels.loadingFiles'
+							)
+						: isRemote
+							? 'Loading remote files...'
+							: 'Loading files...'}
 				</div>
 
 				{progress && (progress.directoriesScanned > 0 || progress.filesFound > 0) && (
 					<div className="text-xs mt-2 font-mono" style={{ color: theme.colors.textDim }}>
-						<span style={{ color: theme.colors.accent }}>
-							{progress.filesFound.toLocaleString()}
-						</span>
-						{' files in '}
-						<span style={{ color: theme.colors.accent }}>
-							{progress.directoriesScanned.toLocaleString()}
-						</span>
-						{' folders'}
+						{newShell ? (
+							t('workflows.newShellCopy.panels.scanProgress', {
+								files: progress.filesFound.toLocaleString(),
+								folders: progress.directoriesScanned.toLocaleString(),
+							})
+						) : (
+							<>
+								<span style={{ color: theme.colors.accent }}>
+									{progress.filesFound.toLocaleString()}
+								</span>
+								{' files in '}
+								<span style={{ color: theme.colors.accent }}>
+									{progress.directoriesScanned.toLocaleString()}
+								</span>
+								{' folders'}
+							</>
+						)}
 					</div>
 				)}
 
@@ -50,7 +71,11 @@ export function FileTreeLoadingProgress({
 						style={{ color: theme.colors.textDim }}
 						title={progress?.currentDirectory}
 					>
-						scanning: {currentFolder}/
+						{newShell ? (
+							t('workflows.newShellCopy.panels.scanning', { folder: currentFolder })
+						) : (
+							<>scanning: {currentFolder}/</>
+						)}
 					</div>
 				)}
 
@@ -61,7 +86,7 @@ export function FileTreeLoadingProgress({
 						className="text-xs-plus mt-3 underline-offset-2 hover:underline transition-opacity"
 						style={{ color: theme.colors.textDim }}
 					>
-						Stop loading
+						{newShell ? t('workflows.newShellCopy.panels.stopLoading') : <>Stop loading</>}{' '}
 					</button>
 				)}
 			</div>

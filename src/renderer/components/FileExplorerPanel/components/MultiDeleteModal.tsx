@@ -1,3 +1,5 @@
+import { useT } from '../../../i18n';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { AlertTriangle, Trash2 } from 'lucide-react';
 import { Modal, ModalFooter } from '../../ui/Modal';
 import { MODAL_PRIORITIES } from '../../../constants/modalPriorities';
@@ -19,12 +21,18 @@ export function MultiDeleteModal({
 	onClose,
 	onDelete,
 }: MultiDeleteModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const guardedClose = isDeleting ? () => {} : onClose;
 
 	return (
 		<Modal
 			theme={theme}
-			title={`Delete ${modal.nodes.length} items`}
+			title={
+				newShell
+					? t('workflows.newShellCopy.panels.deleteCount', { count: modal.nodes.length })
+					: `Delete ${modal.nodes.length} items`
+			}
 			priority={MODAL_PRIORITIES.CONFIRM}
 			onClose={guardedClose}
 			headerIcon={<Trash2 className="w-4 h-4" style={{ color: theme.colors.error }} />}
@@ -33,7 +41,18 @@ export function MultiDeleteModal({
 					theme={theme}
 					onCancel={guardedClose}
 					onConfirm={onDelete}
-					confirmLabel={isDeleting ? 'Deleting...' : 'Delete'}
+					cancelLabel={newShell ? t('common.cancel') : undefined}
+					confirmLabel={
+						newShell
+							? t(
+									isDeleting
+										? 'workflows.newShellCopy.panels.deleting'
+										: 'workflows.newShellCopy.panels.delete'
+								)
+							: isDeleting
+								? 'Deleting...'
+								: 'Delete'
+					}
 					confirmDisabled={isDeleting}
 					destructive
 				/>
@@ -48,7 +67,11 @@ export function MultiDeleteModal({
 				</div>
 				<div className="min-w-0 flex-1">
 					<p style={{ color: theme.colors.textMain }}>
-						Delete the following {modal.nodes.length} items? This action cannot be undone.
+						{newShell ? (
+							t('workflows.newShellCopy.panels.deleteCountConfirm', { count: modal.nodes.length })
+						) : (
+							<>Delete the following {modal.nodes.length} items? This action cannot be undone.</>
+						)}
 					</p>
 					<div
 						className="text-xs rounded border px-2 py-1.5 mt-3 max-h-40 overflow-auto font-mono"

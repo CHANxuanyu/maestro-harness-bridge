@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { useT } from '../../../i18n';
 import { useCallback, useRef } from 'react';
 import type { Session } from '../../../types';
 import { captureException } from '../../../utils/sentry';
@@ -41,6 +43,8 @@ export function useOsFileDragOut({
 	// Maps a remote workspace-relative path -> the local temp path it was
 	// downloaded to. Lives for the panel's lifetime so a second Option-drag of
 	// the same file is instant. Keyed by relative path (stable per session).
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const remoteTempCache = useRef<Map<string, string>>(new Map());
 
 	const handleOsDragStart = useCallback(
@@ -77,7 +81,11 @@ export function useOsFileDragOut({
 				(r) => findNodeAtPath(session.fileTree, r)?.type !== 'folder'
 			);
 			if (fileRels.length === 0) {
-				onShowFlash?.('Drag-out over SSH supports files, not folders');
+				onShowFlash?.(
+					newShell
+						? t('workflows.newShellCopy.panels.sshDragFolders')
+						: 'Drag-out over SSH supports files, not folders'
+				);
 				return true;
 			}
 
@@ -100,8 +108,12 @@ export function useOsFileDragOut({
 			// second drag hits the cache branch above and drags the real bytes.
 			onShowFlash?.(
 				uncached.length === 1
-					? `Preparing "${basenameOf(uncached[0])}" for drag-out…`
-					: `Preparing ${uncached.length} files for drag-out…`
+					? newShell
+						? t('workflows.newShellCopy.panels.prepareDragFile', { name: basenameOf(uncached[0]) })
+						: `Preparing "${basenameOf(uncached[0])}" for drag-out…`
+					: newShell
+						? t('workflows.newShellCopy.panels.prepareDragFiles', { count: uncached.length })
+						: `Preparing ${uncached.length} files for drag-out…`
 			);
 			void (async () => {
 				let ready = 0;
@@ -119,16 +131,28 @@ export function useOsFileDragOut({
 					}
 				}
 				if (ready === 0) {
-					onShowFlash?.('Failed to prepare file for drag-out');
+					onShowFlash?.(
+						newShell
+							? t('workflows.newShellCopy.panels.prepareDragFailed')
+							: 'Failed to prepare file for drag-out'
+					);
 				} else if (fileRels.length === 1) {
-					onShowFlash?.(`Ready - drag "${basenameOf(fileRels[0])}" to Finder again`);
+					onShowFlash?.(
+						newShell
+							? t('workflows.newShellCopy.panels.dragReadyFile', { name: basenameOf(fileRels[0]) })
+							: `Ready - drag "${basenameOf(fileRels[0])}" to Finder again`
+					);
 				} else {
-					onShowFlash?.(`Ready - drag again to copy ${ready} file${ready > 1 ? 's' : ''} out`);
+					onShowFlash?.(
+						newShell
+							? t('workflows.newShellCopy.panels.dragReadyFiles', { count: ready })
+							: `Ready - drag again to copy ${ready} file${ready > 1 ? 's' : ''} out`
+					);
 				}
 			})();
 			return true;
 		},
-		[session.fullPath, session.fileTree, sshRemoteId, onShowFlash]
+		[newShell, t, session.fullPath, session.fileTree, sshRemoteId, onShowFlash]
 	);
 
 	return { handleOsDragStart };

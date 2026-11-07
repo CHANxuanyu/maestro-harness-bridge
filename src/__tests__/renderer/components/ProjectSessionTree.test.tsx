@@ -56,7 +56,12 @@ const EN: Record<string, string> = {
 vi.mock('../../../renderer/i18n', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../../../renderer/i18n')>();
 	const t = (key: string, params?: Record<string, unknown>) =>
-		(EN[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? ''));
+		(
+			EN[key] ??
+			(key.startsWith('workflows.newShellCopy.')
+				? actual.getTranslator('en')(key as keyof typeof actual.CATALOGS.en)
+				: key)
+		).replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? ''));
 	return { ...actual, useT: () => t };
 });
 
@@ -326,7 +331,9 @@ describe('ProjectSessionTree', () => {
 			if (newShell) expect(button).toHaveAttribute('aria-haspopup', 'menu');
 			fireEvent.click(button);
 			if (newShell) {
-				fireEvent.click(await screen.findByRole('menuitem', { name: 'New with Codex' }));
+				fireEvent.click(
+					await screen.findByRole('menuitem', { name: 'New conversation with Codex' })
+				);
 				await waitFor(() =>
 					expect(window.maestro.context.conversation).toHaveBeenCalledWith({
 						action: 'new-conversation',

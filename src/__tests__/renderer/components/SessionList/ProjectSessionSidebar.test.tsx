@@ -465,7 +465,7 @@ it('pins and unpins a background conversation without changing focus', () => {
 	fireEvent.contextMenu(
 		container.querySelector('[data-conversation-key="other:other-tab"] button[data-tree-nav]')!
 	);
-	fireEvent.click(screen.getByRole('menuitem', { name: 'workflows.conversations.pin' }));
+	fireEvent.click(screen.getByRole('menuitem', { name: 'workflows.newShellCopy.navigation.pin' }));
 	expect(
 		useSessionStore.getState().sessions.find((s) => s.id === other.id)!.aiTabs[0].starred
 	).toBe(true);
@@ -484,7 +484,9 @@ it('pins and unpins a background conversation without changing focus', () => {
 	fireEvent.contextMenu(
 		container.querySelector('[data-conversation-key="other:other-tab"] button[data-tree-nav]')!
 	);
-	fireEvent.click(screen.getByRole('menuitem', { name: 'workflows.conversations.unpin' }));
+	fireEvent.click(
+		screen.getByRole('menuitem', { name: 'workflows.newShellCopy.navigation.unpin' })
+	);
 	expect(
 		useSessionStore.getState().sessions.find((s) => s.id === other.id)!.aiTabs[0].starred
 	).toBe(false);

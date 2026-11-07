@@ -97,7 +97,7 @@ for (const scenario of [
 					permissionMode: 'readonly',
 					readOnly: true,
 				});
-				await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+				await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 				await native.cli(
 					'update-agent',
 					ownerId,

@@ -618,14 +618,14 @@ test('new shell permission inheritance: readonly Codex stays readonly in a new c
 	let failed = false;
 	try {
 		await native.start(home);
-		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 		await native.send('Read the source project');
 		await expect(native.output()).toContainText('Source readonly turn complete');
 		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
 		await native.page.getByTestId('sidebar-new-conversation').click();
 		await expect(native.page.getByTestId('empty-conversation-picker')).toBeVisible();
-		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
-		await expect(native.page.getByTitle(/^Full Access/)).toHaveCount(0);
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
+		await expect(native.page.getByTestId('composer-permission')).not.toHaveText('Full Access');
 		await expect.poll(() => saved().aiTabs.length).toBe(2);
 		const newTabId = saved().activeTabId;
 		expect(newTabId).not.toBe(tab.id);
@@ -646,23 +646,23 @@ test('new shell permission inheritance: readonly Codex stays readonly in a new c
 			expect(args[args.indexOf('--sandbox') + 1]).toBe('read-only');
 			expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
 		}
-		await native.page.getByTitle(/^Toggle Read-Only mode/).click();
+		await native.page.getByTestId('composer-permission').click();
 		await native.page.getByRole('menuitemradio', { name: 'Full Access', exact: true }).click();
-		await expect(native.page.getByTitle(/^Full Access/)).toHaveText('Full Access');
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Full Access');
 		await native.page.locator(`[data-conversation-key$=":${tab.id}"] [data-tree-nav]`).click();
-		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 		await expect(native.output()).toContainText('Source readonly turn complete');
 		expect(saved().aiTabs.find((item) => item.id === tab.id)).toMatchObject({
 			permissionMode: 'readonly',
 			readOnlyMode: true,
 		});
 		await native.page.locator(`[data-conversation-key$=":${newTabId}"] [data-tree-nav]`).click();
-		await expect(native.page.getByTitle(/^Full Access/)).toHaveText('Full Access');
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Full Access');
 		await native.page.keyboard.press('ControlOrMeta+1');
-		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 		await native.page.keyboard.press('ControlOrMeta+t');
 		await expect(native.page.getByTestId('empty-conversation-picker')).toBeVisible();
-		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 		await native.send('Read after keyboard navigation');
 		await expect(native.output()).toContainText('Keyboard readonly turn complete');
 		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
@@ -720,18 +720,18 @@ test('new shell permission inheritance: the owner window stays readonly', async 
 		).not.toBeNull();
 		const second = await opened;
 		await second.waitForLoadState('domcontentloaded');
-		await expect(second.getByTitle(/^Full Access/)).toHaveText('Full Access');
-		await second.getByTitle(/^Full Access/).click();
-		await second.getByRole('menuitemradio', { name: 'Read-Only', exact: true }).click();
+		await expect(second.getByTestId('composer-permission')).toHaveText('Full Access');
+		await second.getByTestId('composer-permission').click();
+		await second.getByRole('menuitemradio', { name: 'Read only', exact: true }).click();
 		await second.locator('[data-conversation-key$=":owner-b-tab"] [data-tree-nav]').click();
-		await expect(second.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(second.getByTestId('composer-permission')).toHaveText('Read only');
 		const created = await native.cli('tab', 'new', '--agent', 'owner-a');
 		expect(created.success).toBe(true);
 		// The CLI reads the new tab once the owning window has reported it.
 		const shown = () => native.cli('tab', 'show', created.tabId).catch(() => ({ tab: null }));
 		await expect.poll(async () => (await shown()).tab?.permissionMode).toBe('readonly');
 		expect((await shown()).tab).toMatchObject({ permissionMode: 'readonly', readOnly: true });
-		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 	} catch (error) {
 		failed = true;
 		throw error;
@@ -983,12 +983,12 @@ test('new shell permission review: restore closed standard Claude after switchin
 			'--env',
 			`MAESTRO_NATIVE_SCRIPT=${native.script}`
 		);
-		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 		await native.page.keyboard.press('ControlOrMeta+Shift+t');
 		await expect(native.page.locator('[data-shell-header="main"]')).toContainText(
 			'Closed standard source'
 		);
-		await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 		// The CLI inventory follows the renderer's debounced persistence.
 		await expect
 			.poll(async () => (await native.cli('tab', 'show', 'active', '--agent', owner)).tab)
@@ -1038,8 +1038,8 @@ test('new shell permission review: browser request tightens the desktop full sou
 			{ owner, sourceId: source.tabId }
 		);
 		expect(created).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
-		// Claude exposes readonly as plan mode; Codex calls the same field Read-Only.
-		await expect(native.page.getByTitle(/^Toggle plan mode/)).toHaveText('Plan-Mode');
+		// Claude exposes readonly as plan mode; Codex calls the same field Read only.
+		await expect(native.page.getByTestId('composer-permission')).toHaveText('Plan mode');
 		await expect
 			.poll(async () => {
 				const list = await native.cli('session', 'list');
@@ -1095,11 +1095,11 @@ for (const scenario of ['timeout', 'moved project'] as const) {
 			).not.toBeNull();
 			const second = await opened;
 			await second.waitForLoadState('domcontentloaded');
-			await expect(second.getByTitle(/^Full Access/)).toHaveText('Full Access');
+			await expect(second.getByTestId('composer-permission')).toHaveText('Full Access');
 			if (scenario === 'timeout') {
-				await second.getByTitle(/^Full Access/).click();
-				await second.getByRole('menuitemradio', { name: 'Read-Only', exact: true }).click();
-				await expect(second.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+				await second.getByTestId('composer-permission').click();
+				await second.getByRole('menuitemradio', { name: 'Read only', exact: true }).click();
+				await expect(second.getByTestId('composer-permission')).toHaveText('Read only');
 				const peerWindow = await native.app.browserWindow(second);
 				// Drop only the permission query to reproduce a silent owner without
 				// replacing its state or the real request timeout implementation.
@@ -1131,7 +1131,7 @@ for (const scenario of ['timeout', 'moved project'] as const) {
 			}
 			const created = await native.cli('tab', 'new', '--agent', 'owner-a');
 			expect(created.success).toBe(true);
-			await expect(native.page.getByTitle(/^Toggle Read-Only mode/)).toHaveText('Read-Only');
+			await expect(native.page.getByTestId('composer-permission')).toHaveText('Read only');
 			await expect
 				.poll(async () => {
 					const list = await native.cli('session', 'list');

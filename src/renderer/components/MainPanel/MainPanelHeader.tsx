@@ -411,7 +411,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 						}}
 						className="shrink-0 p-1 rounded hover:bg-white/5 transition-colors"
 						style={{ color: theme.colors.textDim }}
-						aria-label={t('workflows.shell.showAgentsSidebar')}
+						aria-label={t(
+							newShell
+								? 'workflows.newShellCopy.navigation.showProjects'
+								: 'workflows.shell.showAgentsSidebar'
+						)}
 						title={t('workflows.shell.showSidebar')}
 					>
 						{newShell ? <PanelLeft className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
@@ -452,13 +456,26 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 								/>
 							</span>
 							<span className="truncate" style={{ color: theme.colors.textMain }}>
-								{conversationHeading || t('workflows.conversations.newConversation')}
+								{conversationHeading ||
+									t(
+										newShell
+											? 'workflows.newShellCopy.navigation.newConversation'
+											: 'workflows.conversations.newConversation'
+									)}
 							</span>
 							{activeTab?.state === 'busy' && (
 								<span
 									role="status"
-									aria-label={t('workflows.conversations.busy')}
-									title={t('workflows.conversations.busy')}
+									aria-label={t(
+										newShell
+											? 'workflows.newShellCopy.navigation.busy'
+											: 'workflows.conversations.busy'
+									)}
+									title={t(
+										newShell
+											? 'workflows.newShellCopy.navigation.busy'
+											: 'workflows.conversations.busy'
+									)}
 									className="w-2 h-2 rounded-full shrink-0 animate-pulse"
 									style={{ backgroundColor: theme.colors.warning }}
 								/>

@@ -831,6 +831,30 @@ hook failures return their original diagnostics, with no automatic retry.
 The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
+## New shell copy audit (2026-11-07)
+
+This copy-only change adds no UI action or CLI verb. Language selection still
+uses `settings set uiLanguage en|zh-CN`; shell selection still uses
+`settings set newShell true|false`. File operations, conversation creation,
+permission selection, handoff, retry and update preferences keep their existing
+handlers and stored values. New shell labels are separate from classic labels.
+Terminal search, selection menus, file preview and file-operation feedback use
+the same callbacks as before. Update toggles still use `settings set
+checkForUpdatesOnStartup|enableBetaUpdates|crashReportingEnabled <boolean>`.
+Provider diagnostics remain verbatim. Existing presentation and recovery gaps
+below remain open.
+
+## Open gaps
+
+**Copy audit presentation controls (2026-11-07).** The existing terminal search
+query and next/previous match, file preview tier, image zoom, and media
+playback/volume controls still have no CLI verbs operating their mounted UI
+state. `read-terminal` exposes output, `open-file` opens a file, and `--queue`
+adds media, but none controls those presentation states. Terminal selection
+quoting and link context-menu presentation also lack a shared CLI UI action.
+The copy audit translates these existing controls only; it does not close these
+gaps or add separate implementations. Error recovery remains in the backlog below.
+
 ## New shell conversation children (2026-11-07)
 
 | UI action                                               | CLI                                                                 | Shared implementation                                                                                    |

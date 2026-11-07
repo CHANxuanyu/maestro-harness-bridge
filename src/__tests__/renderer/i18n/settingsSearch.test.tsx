@@ -50,10 +50,10 @@ describe('localized settings search', () => {
 			const { result } = renderHook(() => useShortcutLabel());
 			expect(result.current(source)).toBe(uiLanguage === 'en' ? 'New Tab' : '新建标签页');
 			act(() => useSettingsStore.setState({ newShell: true }));
-			expect(result.current(source)).toBe(uiLanguage === 'en' ? 'New conversation' : '新建会话');
+			expect(result.current(source)).toBe(uiLanguage === 'en' ? 'New conversation' : '新建对话');
 			expect(source).toEqual(snapshot);
 			expect(result.current({ id: 'goToTab3', label: 'Go to Tab 3' })).toBe(
-				uiLanguage === 'en' ? 'Go to conversation 3' : '转到第 3 个会话'
+				uiLanguage === 'en' ? 'Go to conversation 3' : '转到第 3 条对话'
 			);
 			act(() => useSettingsStore.setState({ newShell: false }));
 			expect(result.current(source)).toBe(uiLanguage === 'en' ? 'New Tab' : '新建标签页');

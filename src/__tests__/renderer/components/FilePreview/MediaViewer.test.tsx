@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 /**
  * MediaViewer failure-state tests.
  *
@@ -5,12 +6,14 @@
  * reach the media element as the same failure, and the card used to blame the
  * codec for either - which reads as a broken build rather than a deleted file.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { MediaViewer } from '../../../../renderer/components/FilePreview/MediaViewer';
 import { mockTheme } from '../../../helpers/mockTheme';
 import { buildMediaStreamUrl } from '../../../../shared/mediaTypes';
+
+afterEach(() => useSettingsStore.setState({ newShell: false, uiLanguage: 'en' }));
 
 const readFile = vi.fn();
 const stat = vi.fn();
@@ -34,6 +37,19 @@ const renderViewer = (path: string) =>
 	);
 
 describe('MediaViewer failure states', () => {
+	it.each([true, false])('gates Chinese missing-file feedback on newShell=%s', async (newShell) => {
+		useSettingsStore.setState({ newShell, uiLanguage: 'zh-CN' });
+		readFile.mockResolvedValue(null);
+		renderViewer('/tmp/gone.mp3');
+		expect(await screen.findByText(newShell ? '找不到文件' : 'File Not Found')).toBeVisible();
+		expect(
+			screen.getByText(
+				newShell
+					? 'gone.mp3 已被移动、重命名或删除。'
+					: 'gone.mp3 is no longer on disk. It was moved, renamed, or deleted.'
+			)
+		).toBeVisible();
+	});
 	it('reports a deleted file as missing rather than an unsupported codec', async () => {
 		readFile.mockResolvedValue(null);
 

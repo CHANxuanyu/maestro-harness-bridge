@@ -194,6 +194,7 @@ export const FilePreview = React.memo(
 		ref
 	) {
 		const uiText = useT();
+		const newShell = useSettingsStore((s) => s.newShell);
 		const [showTocOverlay, setShowTocOverlay] = useState(false);
 		// The `#` heading palette - a filtered, keyboard-driven twin of the ToC.
 		const [showHeadingPalette, setShowHeadingPalette] = useState(false);
@@ -1341,7 +1342,9 @@ export const FilePreview = React.memo(
 			void writeEditedImage(
 				siblingImagePath(imageFallbackName),
 				false,
-				`Saved as ${imageFallbackName}`
+				useSettingsStore.getState().newShell
+					? getT()('workflows.newShellCopy.panels.savedAs', { name: imageFallbackName })
+					: `Saved as ${imageFallbackName}`
 			);
 		}, [file, canOverwriteImage, imageFallbackName, siblingImagePath, writeEditedImage]);
 
@@ -1350,7 +1353,13 @@ export const FilePreview = React.memo(
 				if (!file) return;
 				const targetPath = siblingImagePath(newName);
 				const isNewPath = getBasename(targetPath) !== getBasename(file.path);
-				void writeEditedImage(targetPath, !isNewPath, `Saved as ${newName}`);
+				void writeEditedImage(
+					targetPath,
+					!isNewPath,
+					useSettingsStore.getState().newShell
+						? getT()('workflows.newShellCopy.panels.savedAs', { name: newName })
+						: `Saved as ${newName}`
+				);
 			},
 			[file, siblingImagePath, writeEditedImage]
 		);
@@ -1620,7 +1629,12 @@ export const FilePreview = React.memo(
 				try {
 					const ok = await safeClipboardWrite(url);
 					if (ok) {
-						flashCopiedToClipboard(url, `Deep Link Copied (L${lineNumber})`);
+						flashCopiedToClipboard(
+							url,
+							useSettingsStore.getState().newShell
+								? getT()('workflows.newShellCopy.panels.lineLinkCopied', { line: lineNumber })
+								: `Deep Link Copied (L${lineNumber})`
+						);
 					} else {
 						failClipboardToast(getT()('workflows.files.deepLinkFailed'));
 					}
@@ -2217,7 +2231,9 @@ export const FilePreview = React.memo(
 										}}
 										placeholder={
 											searchMode === 'jq'
-												? 'jq filter - .field, select(.x == "y"), keys, contains("...")'
+												? newShell
+													? uiText('workflows.newShellCopy.panels.jqPlaceholder')
+													: 'jq filter - .field, select(.x == "y"), keys, contains("...")'
 												: searchKind === 'line'
 													? uiText('workflows.files.goLine')
 													: searchKind === 'regex'

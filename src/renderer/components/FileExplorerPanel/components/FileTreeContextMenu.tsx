@@ -1,3 +1,5 @@
+import { localizedFileManagerName } from '../../../i18n/platformLabels';
+import { useT } from '../../../i18n';
 import { shellFeatureVisible } from '../../../../shared/newShellFeatures';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import React, { useMemo } from 'react';
@@ -111,6 +113,7 @@ export function FileTreeContextMenu({
 	onOpenRename,
 	onOpenDelete,
 }: FileTreeContextMenuProps) {
+	const t = useT();
 	// node === null is the empty-space / workspace-root menu (no row under the
 	// cursor). It only offers "New Folder", targeting the workspace root.
 	const node = contextMenu.node;
@@ -191,7 +194,7 @@ export function FileTreeContextMenu({
 							style={{ color: theme.colors.textMain }}
 						>
 							<FilePlus className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-							<span>New File</span>
+							<span>{newShell ? t('workflows.newShellCopy.panels.newFile') : 'New File'}</span>
 						</button>
 						<button
 							onClick={onOpenNewFolder}
@@ -199,7 +202,7 @@ export function FileTreeContextMenu({
 							style={{ color: theme.colors.textMain }}
 						>
 							<FolderPlus className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-							<span>New Folder</span>
+							<span>{newShell ? t('workflows.newShellCopy.panels.newFolder') : 'New Folder'}</span>
 						</button>
 					</>
 				) : isMultiSelectionContext && selectedCount > 1 ? (
@@ -210,7 +213,13 @@ export function FileTreeContextMenu({
 							style={{ color: theme.colors.textMain }}
 						>
 							<FileText className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-							<span>Preview {selectedCount} items</span>
+							<span>
+								{newShell ? (
+									t('workflows.newShellCopy.panels.previewCount', { count: selectedCount })
+								) : (
+									<>Preview {selectedCount} items</>
+								)}
+							</span>
 						</button>
 						{/* Opening the selection already plays the first media file and
 						    queues the rest. This is the other half: add everything to the
@@ -222,7 +231,13 @@ export function FileTreeContextMenu({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ListPlus className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-								<span>Add {queueableCount} to Play Queue</span>
+								<span>
+									{newShell ? (
+										t('workflows.newShellCopy.panels.queueCount', { count: queueableCount })
+									) : (
+										<>Add {queueableCount} to Play Queue</>
+									)}
+								</span>
 							</button>
 						)}
 						{!sshRemoteId && (
@@ -232,7 +247,13 @@ export function FileTreeContextMenu({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ExternalLink className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-								<span>Open {selectedCount} in Default App</span>
+								<span>
+									{newShell ? (
+										t('workflows.newShellCopy.panels.openCount', { count: selectedCount })
+									) : (
+										<>Open {selectedCount} in Default App</>
+									)}
+								</span>
 							</button>
 						)}
 						{showDocumentGraph && selectedMarkdownCount > 1 && onGraphSelection && (
@@ -253,7 +274,13 @@ export function FileTreeContextMenu({
 							style={{ color: theme.colors.error }}
 						>
 							<Trash2 className="w-3.5 h-3.5" />
-							<span>Delete {selectedCount} items</span>
+							<span>
+								{newShell ? (
+									t('workflows.newShellCopy.panels.deleteCount', { count: selectedCount })
+								) : (
+									<>Delete {selectedCount} items</>
+								)}
+							</span>
 						</button>
 					</>
 				) : (
@@ -267,7 +294,7 @@ export function FileTreeContextMenu({
 									style={{ color: theme.colors.textMain }}
 								>
 									<FilePlus className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-									<span>New File</span>
+									<span>{newShell ? t('workflows.newShellCopy.panels.newFile') : 'New File'}</span>
 								</button>
 								<button
 									onClick={onOpenNewFolder}
@@ -275,7 +302,9 @@ export function FileTreeContextMenu({
 									style={{ color: theme.colors.textMain }}
 								>
 									<FolderPlus className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-									<span>New Folder</span>
+									<span>
+										{newShell ? t('workflows.newShellCopy.panels.newFolder') : 'New Folder'}
+									</span>
 								</button>
 								{/* New Agent Here - opens the New Agent modal with this folder
 								    pre-filled as the working directory. Hidden over SSH: the
@@ -289,7 +318,11 @@ export function FileTreeContextMenu({
 										style={{ color: theme.colors.textMain }}
 									>
 										<Bot className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-										<span>New Agent Here</span>
+										<span>
+											{newShell
+												? t('workflows.newShellCopy.panels.newConversationHere')
+												: 'New Agent Here'}
+										</span>
 									</button>
 								)}
 								{showDocumentGraph && onGraphFolder && (
@@ -310,8 +343,16 @@ export function FileTreeContextMenu({
 									>
 										<Files className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
 										<span>
-											Preview All {previewableCount} {previewableCount === 1 ? 'File' : 'Files'} in
-											Folder
+											{newShell ? (
+												t('workflows.newShellCopy.panels.previewFolder', {
+													count: previewableCount,
+												})
+											) : (
+												<>
+													Preview All {previewableCount} {previewableCount === 1 ? 'File' : 'Files'}{' '}
+													in Folder
+												</>
+											)}
 										</span>
 									</button>
 								)}
@@ -322,7 +363,7 @@ export function FileTreeContextMenu({
 									style={{ color: theme.colors.textMain }}
 								>
 									<FileArchive className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-									<span>Compress</span>
+									<span>{newShell ? t('workflows.newShellCopy.panels.compress') : 'Compress'}</span>
 								</button>
 								<div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
 							</>
@@ -341,7 +382,7 @@ export function FileTreeContextMenu({
 									style={{ color: theme.colors.textMain }}
 								>
 									<FilePlus className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-									<span>New File</span>
+									<span>{newShell ? t('workflows.newShellCopy.panels.newFile') : 'New File'}</span>
 								</button>
 								<button
 									onClick={onOpenNewFolder}
@@ -349,7 +390,9 @@ export function FileTreeContextMenu({
 									style={{ color: theme.colors.textMain }}
 								>
 									<FolderPlus className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-									<span>New Folder</span>
+									<span>
+										{newShell ? t('workflows.newShellCopy.panels.newFolder') : 'New Folder'}
+									</span>
 								</button>
 								<div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
 							</>
@@ -369,7 +412,17 @@ export function FileTreeContextMenu({
 								) : (
 									<FileText className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
 								)}
-								<span>{isMedia ? 'Play' : 'Preview'}</span>
+								<span>
+									{newShell
+										? t(
+												isMedia
+													? 'workflows.newShellCopy.panels.play'
+													: 'workflows.newShellCopy.panels.preview'
+											)
+										: isMedia
+											? 'Play'
+											: 'Preview'}
+								</span>
 							</button>
 						)}
 
@@ -380,7 +433,9 @@ export function FileTreeContextMenu({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ListPlus className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-								<span>Add to Play Queue</span>
+								<span>
+									{newShell ? t('workflows.newShellCopy.panels.addQueue') : 'Add to Play Queue'}
+								</span>
 							</button>
 						)}
 
@@ -406,7 +461,11 @@ export function FileTreeContextMenu({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Globe className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-								<span>Open in Maestro Browser</span>
+								<span>
+									{newShell
+										? t('workflows.newShellCopy.panels.openBrowser')
+										: 'Open in Maestro Browser'}
+								</span>
 							</button>
 						)}
 
@@ -418,7 +477,11 @@ export function FileTreeContextMenu({
 								style={{ color: theme.colors.textMain }}
 							>
 								<ExternalLink className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-								<span>Open in Default App</span>
+								<span>
+									{newShell
+										? t('workflows.newShellCopy.panels.openDefault')
+										: 'Open in Default App'}
+								</span>
 							</button>
 						)}
 
@@ -432,7 +495,9 @@ export function FileTreeContextMenu({
 								style={{ color: theme.colors.textMain }}
 							>
 								<Download className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-								<span>Download File</span>
+								<span>
+									{newShell ? t('workflows.newShellCopy.panels.download') : 'Download File'}
+								</span>
 							</button>
 						)}
 
@@ -448,7 +513,7 @@ export function FileTreeContextMenu({
 							style={{ color: theme.colors.textMain }}
 						>
 							<Copy className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							<span>Copy Path</span>
+							<span>{newShell ? t('workflows.newShellCopy.panels.copyPath') : 'Copy Path'}</span>
 						</button>
 
 						{/* Copy File Name option - just the leaf name, no directory */}
@@ -458,7 +523,9 @@ export function FileTreeContextMenu({
 							style={{ color: theme.colors.textMain }}
 						>
 							<FileText className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							<span>Copy File Name</span>
+							<span>
+								{newShell ? t('workflows.newShellCopy.panels.copyName') : 'Copy File Name'}
+							</span>
 						</button>
 
 						{/* Reveal in Finder / Explorer - local-only, hidden over SSH */}
@@ -469,7 +536,13 @@ export function FileTreeContextMenu({
 								style={{ color: theme.colors.textMain }}
 							>
 								<FolderOpen className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-								<span>{getRevealLabel(platform)}</span>
+								<span>
+									{newShell
+										? t('settings.display.toolbar.revealInFolder', {
+												manager: localizedFileManagerName(t, platform),
+											})
+										: getRevealLabel(platform)}
+								</span>
 							</button>
 						)}
 
@@ -483,7 +556,7 @@ export function FileTreeContextMenu({
 							style={{ color: theme.colors.textMain }}
 						>
 							<Edit2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-							<span>Rename</span>
+							<span>{newShell ? t('workflows.newShellCopy.panels.rename') : 'Rename'}</span>
 						</button>
 
 						{/* Delete option */}
@@ -493,7 +566,7 @@ export function FileTreeContextMenu({
 							style={{ color: theme.colors.error }}
 						>
 							<Trash2 className="w-3.5 h-3.5" />
-							<span>Delete</span>
+							<span>{newShell ? t('workflows.newShellCopy.panels.delete') : 'Delete'}</span>
 						</button>
 					</>
 				)}

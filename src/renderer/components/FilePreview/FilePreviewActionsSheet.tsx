@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useT } from '../../i18n';
 /**
  * FilePreviewActionsSheet - the file preview header's toolbar, on a phone.
  *
@@ -84,6 +86,8 @@ export function FilePreviewActionsSheet({
 	stats,
 	actions,
 }: FilePreviewActionsSheetProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const [tierExpanded, setTierExpanded] = useState(false);
 
 	// The path and the stats are what the header gives up to become one line, so
@@ -123,7 +127,7 @@ export function FilePreviewActionsSheet({
 			open={open}
 			onClose={onClose}
 			theme={theme}
-			ariaLabel="File actions"
+			ariaLabel={newShell ? t('workflows.newShellCopy.panels.fileActions') : 'File actions'}
 			// Taller than the composer sheet: this is a menu the user came to read,
 			// and it can carry a dozen rows plus an expanded tier list.
 			maxHeight="80dvh"
@@ -140,11 +144,13 @@ export function FilePreviewActionsSheet({
 						<PhoneSheetSection
 							key={action.key}
 							icon={TIER_META[effective].icon}
-							label="Preview mode"
+							label={newShell ? t('workflows.newShellCopy.panels.previewMode') : 'Preview mode'}
 							value={
-								action.override
-									? TIER_META[effective].label
-									: `${TIER_META[effective].label} · auto`
+								newShell
+									? t(`workflows.newShellCopy.panels.tier.${effective}`)
+									: action.override
+										? TIER_META[effective].label
+										: `${TIER_META[effective].label} · auto`
 							}
 							accent={action.override ? theme.colors.accent : theme.colors.textDim}
 							expanded={tierExpanded}
@@ -153,8 +159,14 @@ export function FilePreviewActionsSheet({
 							testId="file-preview-actions-tier"
 						>
 							<PhoneSheetOptionRow
-								label="Auto"
-								description={`Auto picks ${TIER_META[action.autoTier].label} for this file`}
+								label={newShell ? t('workflows.newShellCopy.panels.auto') : 'Auto'}
+								description={
+									newShell
+										? t('workflows.newShellCopy.panels.autoPicks', {
+												mode: t(`workflows.newShellCopy.panels.tier.${action.autoTier}`),
+											})
+										: `Auto picks ${TIER_META[action.autoTier].label} for this file`
+								}
 								selected={!action.override}
 								accent={theme.colors.accent}
 								onSelect={() => {
@@ -166,8 +178,16 @@ export function FilePreviewActionsSheet({
 							{(['rich', 'fast', 'giant'] as const).map((tier) => (
 								<PhoneSheetOptionRow
 									key={tier}
-									label={TIER_META[tier].label}
-									description={TIER_DESCRIPTION[tier]}
+									label={
+										newShell
+											? t(`workflows.newShellCopy.panels.tier.${tier}`)
+											: TIER_META[tier].label
+									}
+									description={
+										newShell
+											? t(`workflows.newShellCopy.panels.tierDescription.${tier}`)
+											: TIER_DESCRIPTION[tier]
+									}
 									selected={action.override === tier}
 									accent={theme.colors.accent}
 									onSelect={() => {

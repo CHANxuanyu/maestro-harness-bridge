@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { useT } from '../../../i18n';
 import { useCallback, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Session } from '../../../types';
@@ -83,6 +85,8 @@ export function useDragToMove({
 	onShowFlash,
 	setSelectedPaths,
 }: UseDragToMoveArgs): UseDragToMoveResult {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
 	const [isExternalDrag, setIsExternalDrag] = useState(false);
 	const [internalDragActive, setInternalDragActive] = useState(false);
@@ -175,15 +179,50 @@ export function useDragToMove({
 
 				if (succeeded > 0 && failed === 0) {
 					if (succeeded === 1) {
-						onShowFlash?.(`${doneVerb} "${moves[0].sourceName}"`);
+						onShowFlash?.(
+							newShell
+								? t('workflows.newShellCopy.panels.transferOne', {
+										operation: t(
+											operation === 'copy'
+												? 'workflows.newShellCopy.panels.imported'
+												: 'workflows.newShellCopy.panels.moved'
+										),
+										name: moves[0].sourceName,
+									})
+								: `${doneVerb} "${moves[0].sourceName}"`
+						);
 					} else {
-						onShowFlash?.(`${doneVerb} ${succeeded} items`);
+						onShowFlash?.(
+							newShell
+								? t('workflows.newShellCopy.panels.transferMany', {
+										operation: t(
+											operation === 'copy'
+												? 'workflows.newShellCopy.panels.imported'
+												: 'workflows.newShellCopy.panels.moved'
+										),
+										count: succeeded,
+									})
+								: `${doneVerb} ${succeeded} items`
+						);
 					}
 				} else if (succeeded > 0 && failed > 0) {
-					onShowFlash?.(`${doneVerb} ${succeeded}, ${failed} failed`);
+					onShowFlash?.(
+						newShell
+							? t('workflows.newShellCopy.panels.transferPartial', { count: succeeded, failed })
+							: `${doneVerb} ${succeeded}, ${failed} failed`
+					);
 				} else if (failed > 0) {
-					const msg = lastError instanceof Error ? lastError.message : 'Unknown error';
-					onShowFlash?.(`${failVerb} failed: ${msg}`);
+					const msg =
+						lastError instanceof Error
+							? lastError.message
+							: newShell
+								? t('workflows.newShellCopy.panels.unknownError')
+								: 'Unknown error';
+					onShowFlash?.(
+						newShell
+							? t('workflows.newShellCopy.panels.transferFailed', { reason: msg })
+							: `${failVerb} failed: ${msg}`
+					);
 				}
 			} finally {
 				// Clear multi-selection - attempted move paths may now be stale.
@@ -192,7 +231,16 @@ export function useDragToMove({
 				setMoveConflict(null);
 			}
 		},
-		[sshRemoteId, refreshFileTree, session.id, onShowFlash, expandFolder, setSelectedPaths]
+		[
+			newShell,
+			t,
+			sshRemoteId,
+			refreshFileTree,
+			session.id,
+			onShowFlash,
+			expandFolder,
+			setSelectedPaths,
+		]
 	);
 
 	// Import OS files/folders (dragged in from Finder/Explorer) into a tree folder.

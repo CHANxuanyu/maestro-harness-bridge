@@ -156,8 +156,19 @@ function providerName(provider: string): string {
 	return getAgentDisplayName(provider);
 }
 
-function conversationTitle(conversation: SidebarConversation, t: TFunction): string {
-	return conversation.title || t('workflows.conversations.newConversation');
+function conversationTitle(
+	conversation: SidebarConversation,
+	t: TFunction,
+	newShell: boolean
+): string {
+	return (
+		conversation.title ||
+		t(
+			newShell
+				? 'workflows.newShellCopy.navigation.newConversation'
+				: 'workflows.conversations.newConversation'
+		)
+	);
 }
 
 // ============================================================================
@@ -352,9 +363,18 @@ const StatusMark = memo(function StatusMark({
 }) {
 	const newShell = useSettingsStore(selectNewShellEnabled);
 	const labels: string[] = [];
-	if (conversation.error) labels.push(t('workflows.conversations.error'));
-	if (conversation.busy) labels.push(t('workflows.conversations.busy'));
-	if (conversation.unread) labels.push(t('workflows.conversations.unread'));
+	if (conversation.error)
+		labels.push(
+			t(newShell ? 'workflows.newShellCopy.navigation.error' : 'workflows.conversations.error')
+		);
+	if (conversation.busy)
+		labels.push(
+			t(newShell ? 'workflows.newShellCopy.navigation.busy' : 'workflows.conversations.busy')
+		);
+	if (conversation.unread)
+		labels.push(
+			t(newShell ? 'workflows.newShellCopy.navigation.unread' : 'workflows.conversations.unread')
+		);
 	if (labels.length === 0) return null;
 
 	// One visible mark, by severity: an error outranks work in progress, which
@@ -446,7 +466,7 @@ const ConversationRow = memo(function ConversationRow({
 		(searching || !!findConversation(children, (child) => child.busy || child.key === activeKey));
 	useEffect(() => setAutoExpansionDismissed(false), [forceExpanded]);
 	const expanded = childrenExpanded || (forceExpanded && !autoExpansionDismissed);
-	const title = conversationTitle(conversation, t);
+	const title = conversationTitle(conversation, t, newShell);
 	const worktree = conversation.history?.worktree;
 	const isOpen = conversation.kind === 'open';
 	const hasMenu = isOpen || (newShell && !!conversation.nativeSessionId);
@@ -502,10 +522,34 @@ const ConversationRow = memo(function ConversationRow({
 					aria-label={[
 						providerName(conversation.provider),
 						title,
-						conversation.error ? t('workflows.conversations.error') : '',
-						conversation.busy ? t('workflows.conversations.busy') : '',
-						conversation.unread ? t('workflows.conversations.unread') : '',
-						pending ? t('workflows.conversations.opening') : '',
+						conversation.error
+							? t(
+									newShell
+										? 'workflows.newShellCopy.navigation.error'
+										: 'workflows.conversations.error'
+								)
+							: '',
+						conversation.busy
+							? t(
+									newShell
+										? 'workflows.newShellCopy.navigation.busy'
+										: 'workflows.conversations.busy'
+								)
+							: '',
+						conversation.unread
+							? t(
+									newShell
+										? 'workflows.newShellCopy.navigation.unread'
+										: 'workflows.conversations.unread'
+								)
+							: '',
+						pending
+							? t(
+									newShell
+										? 'workflows.newShellCopy.navigation.opening'
+										: 'workflows.conversations.opening'
+								)
+							: '',
 					]
 						.filter(Boolean)
 						.join(' ')}
@@ -549,9 +593,20 @@ const ConversationRow = memo(function ConversationRow({
 								opacity: worktree.missing ? 0.6 : undefined,
 							}}
 							title={[
-								t('workflows.conversations.worktree', { path: worktree.path }),
+								t(
+									newShell
+										? 'workflows.newShellCopy.navigation.worktree'
+										: 'workflows.conversations.worktree',
+									{ path: worktree.path }
+								),
 								worktree.branch,
-								worktree.missing ? t('workflows.conversations.worktreeGone') : undefined,
+								worktree.missing
+									? t(
+											newShell
+												? 'workflows.newShellCopy.navigation.worktreeGone'
+												: 'workflows.conversations.worktreeGone'
+										)
+									: undefined,
 							]
 								.filter(Boolean)
 								.join('\n')}
@@ -587,10 +642,12 @@ const ConversationRow = memo(function ConversationRow({
 				{hasMenu && (
 					<button
 						type="button"
-						aria-label={`${t('workflows.conversations.more')}: ${title}`}
+						aria-label={`${t(newShell ? 'workflows.newShellCopy.navigation.more' : 'workflows.conversations.more')}: ${title}`}
 						aria-haspopup="menu"
 						aria-expanded={menuOpen}
-						title={t('workflows.conversations.more')}
+						title={t(
+							newShell ? 'workflows.newShellCopy.navigation.more' : 'workflows.conversations.more'
+						)}
 						onClick={(e) => openMenu('row', conversation.key, e.currentTarget)}
 						className={`absolute right-1 p-0.5 rounded outline-none focus-visible:opacity-100 group-hover:opacity-100 hover:bg-white/10 transition-opacity ${
 							menuOpen ? 'opacity-100' : 'opacity-0'
@@ -611,8 +668,12 @@ const ConversationRow = memo(function ConversationRow({
 						{t(
 							// An open tab still shows its saved copy; only the catch-up failed.
 							isOpen
-								? 'workflows.conversations.refreshFailed'
-								: 'workflows.conversations.openFailed'
+								? newShell
+									? 'workflows.newShellCopy.navigation.refreshFailed'
+									: 'workflows.conversations.refreshFailed'
+								: newShell
+									? 'workflows.newShellCopy.navigation.openFailed'
+									: 'workflows.conversations.openFailed'
 						)}
 					</span>
 					<button
@@ -622,7 +683,9 @@ const ConversationRow = memo(function ConversationRow({
 						style={{ color: theme.colors.accent }}
 					>
 						<RotateCw aria-hidden className="w-3 h-3" />
-						{t('workflows.conversations.retry')}
+						{t(
+							newShell ? 'workflows.newShellCopy.navigation.retry' : 'workflows.conversations.retry'
+						)}
 					</button>
 				</div>
 			)}
@@ -666,6 +729,7 @@ function HistoryNotice({
 	onRetry?: () => void;
 	t: TFunction;
 }) {
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	return (
 		<div
 			role="status"
@@ -686,7 +750,9 @@ function HistoryNotice({
 					style={{ color: theme.colors.accent }}
 				>
 					<RotateCw aria-hidden className="w-3 h-3" />
-					{t('workflows.conversations.retry')}
+					{t(
+						newShell ? 'workflows.newShellCopy.navigation.retry' : 'workflows.conversations.retry'
+					)}
 				</button>
 			)}
 		</div>
@@ -835,8 +901,12 @@ const ProjectSection = memo(function ProjectSection({
 				</button>
 				<button
 					type="button"
-					aria-label={`${t('workflows.conversations.projectActions')}: ${project.name}`}
-					title={t('workflows.conversations.projectActions')}
+					aria-label={`${t(newShell ? 'workflows.newShellCopy.navigation.projectActions' : 'workflows.conversations.projectActions')}: ${project.name}`}
+					title={t(
+						newShell
+							? 'workflows.newShellCopy.navigation.projectActions'
+							: 'workflows.conversations.projectActions'
+					)}
 					aria-haspopup="menu"
 					aria-expanded={projectMenuOpen}
 					onClick={(e) => openMenu('project', project.key, e.currentTarget)}
@@ -849,8 +919,10 @@ const ProjectSection = memo(function ProjectSection({
 				</button>
 				<button
 					type="button"
-					aria-label={`${t('workflows.conversations.new')}: ${project.name}`}
-					title={t('workflows.conversations.new')}
+					aria-label={`${t(newShell ? 'workflows.newShellCopy.navigation.new' : 'workflows.conversations.new')}: ${project.name}`}
+					title={t(
+						newShell ? 'workflows.newShellCopy.navigation.new' : 'workflows.conversations.new'
+					)}
 					aria-haspopup={newShell || project.agents.length > 1 ? 'menu' : undefined}
 					aria-expanded={newShell || project.agents.length > 1 ? newMenuOpen : undefined}
 					onClick={handleNew}
@@ -889,7 +961,12 @@ const ProjectSection = memo(function ProjectSection({
 								className="w-full text-left py-1.5 rounded text-2xs outline-none focus-visible:ring-1 hover:bg-white/5"
 								style={{ paddingLeft: rowIndent, color: theme.colors.accent }}
 							>
-								{t('workflows.conversations.showMore', { count: project.hiddenCount })}
+								{t(
+									newShell
+										? 'workflows.newShellCopy.navigation.showMore'
+										: 'workflows.conversations.showMore',
+									{ count: project.hiddenCount }
+								)}
 							</button>
 						</li>
 					)}
@@ -900,7 +977,11 @@ const ProjectSection = memo(function ProjectSection({
 							style={{ paddingLeft: rowIndent, color: theme.colors.textDim }}
 						>
 							<Loader2 aria-hidden className="w-3 h-3 animate-spin" />
-							{t('workflows.conversations.loadingHistory')}
+							{t(
+								newShell
+									? 'workflows.newShellCopy.navigation.loadingHistory'
+									: 'workflows.conversations.loadingHistory'
+							)}
 						</li>
 					)}
 					{showEmpty && (
@@ -908,7 +989,11 @@ const ProjectSection = memo(function ProjectSection({
 							className="py-1 text-xs italic"
 							style={{ paddingLeft: rowIndent, color: theme.colors.textDim }}
 						>
-							{t('workflows.conversations.empty')}
+							{t(
+								newShell
+									? 'workflows.newShellCopy.navigation.empty'
+									: 'workflows.conversations.empty'
+							)}
 						</li>
 					)}
 					{errors && errors.length > 0 && (
@@ -918,9 +1003,14 @@ const ProjectSection = memo(function ProjectSection({
 								indent={rowIndent}
 								t={t}
 								onRetry={onRetryHistory}
-								message={t('workflows.conversations.historyUnavailableFor', {
-									providers: [...new Set(errors.map((e) => providerName(e.provider)))].join(', '),
-								})}
+								message={t(
+									newShell
+										? 'workflows.newShellCopy.navigation.historyUnavailableFor'
+										: 'workflows.conversations.historyUnavailableFor',
+									{
+										providers: [...new Set(errors.map((e) => providerName(e.provider)))].join(', '),
+									}
+								)}
 							/>
 						</li>
 					)}
@@ -1087,7 +1177,9 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 			{
 				key: 'add-agent',
 				label: t(
-					newShell ? 'workflows.conversations.addAccount' : 'workflows.conversations.addAgent'
+					newShell
+						? 'workflows.newShellCopy.navigation.addAccount'
+						: 'workflows.conversations.addAgent'
 				),
 				icon: <Plus className="w-3.5 h-3.5" />,
 				color: theme.colors.accent,
@@ -1114,11 +1206,13 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 			);
 			// Open tabs keep their existing tab actions.
 			if (conversation && conversation.kind === 'open') {
-				menuLabel = t('workflows.conversations.more');
+				menuLabel = t(
+					newShell ? 'workflows.newShellCopy.navigation.more' : 'workflows.conversations.more'
+				);
 				menuSections = [
 					{
 						key: 'conversation',
-						heading: conversationTitle(conversation, t),
+						heading: conversationTitle(conversation, t, newShell),
 						items: [
 							...(newShell && conversation.ownerId && conversation.tabId
 								? [
@@ -1137,7 +1231,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 										},
 										{
 											key: 'handoff',
-											label: t('workflows.conversations.handoff'),
+											label: t(
+												newShell
+													? 'workflows.newShellCopy.navigation.handoff'
+													: 'workflows.conversations.handoff'
+											),
 											icon: <ArrowRightLeft className="w-3.5 h-3.5" />,
 											onSelect: () => requestAiHandoff(conversation.ownerId!, conversation.tabId!),
 										},
@@ -1149,8 +1247,12 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 											key: 'pin',
 											label: t(
 												conversation.starred
-													? 'workflows.conversations.unpin'
-													: 'workflows.conversations.pin'
+													? newShell
+														? 'workflows.newShellCopy.navigation.unpin'
+														: 'workflows.conversations.unpin'
+													: newShell
+														? 'workflows.newShellCopy.navigation.pin'
+														: 'workflows.conversations.pin'
 											),
 											icon: <Star className="w-3.5 h-3.5" />,
 											onSelect: () => onTogglePin(conversation),
@@ -1159,7 +1261,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 								: []),
 							{
 								key: 'rename',
-								label: t('workflows.conversations.rename'),
+								label: t(
+									newShell
+										? 'workflows.newShellCopy.navigation.rename'
+										: 'workflows.conversations.rename'
+								),
 								icon: <Pencil className="w-3.5 h-3.5" />,
 								onSelect: () => onRenameConversation(conversation),
 							},
@@ -1178,11 +1284,15 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 								key: 'close',
 								label: t(
 									newShell
-										? 'workflows.conversations.closeConversation'
+										? 'workflows.newShellCopy.navigation.closeConversation'
 										: 'workflows.conversations.close'
 								),
 								detail: conversation.nativeSessionId
-									? t('workflows.conversations.closeKeepsHistory')
+									? t(
+											newShell
+												? 'workflows.newShellCopy.navigation.closeKeepsHistory'
+												: 'workflows.conversations.closeKeepsHistory'
+										)
 									: undefined,
 								icon: <X className="w-3.5 h-3.5" />,
 								onSelect: () => onCloseConversation(conversation),
@@ -1227,7 +1337,9 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		} else {
 			const project = projects.find((p) => p.key === menu.key);
 			if (project && menu.kind === 'new') {
-				menuLabel = t('workflows.conversations.new');
+				menuLabel = t(
+					newShell ? 'workflows.newShellCopy.navigation.new' : 'workflows.conversations.new'
+				);
 				menuSections = [
 					{
 						key: 'choices',
@@ -1243,7 +1355,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 									},
 									...newTools.map((provider) => ({
 										key: provider,
-										label: t('workflows.conversations.newWith', {
+										label: t('workflows.newShellCopy.navigation.newWith', {
 											provider: provider === 'deepseek' ? 'DeepSeek' : providerName(provider),
 										}),
 										onSelect: () => {
@@ -1253,9 +1365,14 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 								]
 							: project.agents.map((agent) => ({
 									key: agent.id,
-									label: t('workflows.conversations.newWith', {
-										provider: providerName(agent.provider),
-									}),
+									label: t(
+										newShell
+											? 'workflows.newShellCopy.navigation.newWith'
+											: 'workflows.conversations.newWith',
+										{
+											provider: providerName(agent.provider),
+										}
+									),
 									icon: (
 										<AgentLogo
 											agentId={agent.provider}
@@ -1271,7 +1388,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					...(!newShell ? [addAgentSection] : []),
 				];
 			} else if (project) {
-				menuLabel = t('workflows.conversations.projectActions');
+				menuLabel = t(
+					newShell
+						? 'workflows.newShellCopy.navigation.projectActions'
+						: 'workflows.conversations.projectActions'
+				);
 				const items: TreeMenuItem[] = [];
 				if (newShell && onProjectSettings && project.agents.length > 0) {
 					items.push({
@@ -1284,7 +1405,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 				if (onRetryHistory) {
 					items.push({
 						key: 'refresh',
-						label: t('workflows.conversations.refreshHistory'),
+						label: t(
+							newShell
+								? 'workflows.newShellCopy.navigation.refreshHistory'
+								: 'workflows.conversations.refreshHistory'
+						),
 						icon: <RotateCw className="w-3.5 h-3.5" />,
 						onSelect: onRetryHistory,
 					});
@@ -1292,7 +1417,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 				if (!newShell && onManageAgents) {
 					items.push({
 						key: 'manage',
-						label: t('workflows.conversations.manageAgents'),
+						label: t(
+							newShell
+								? 'workflows.newShellCopy.navigation.manageAgents'
+								: 'workflows.conversations.manageAgents'
+						),
 						icon: <Settings2 className="w-3.5 h-3.5" />,
 						onSelect: onManageAgents,
 					});
@@ -1311,7 +1440,14 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	const providerOptions =
 		providers.length > 1
 			? [
-					{ value: ALL_PROVIDERS, label: t('workflows.conversations.allProviders') },
+					{
+						value: ALL_PROVIDERS,
+						label: t(
+							newShell
+								? 'workflows.newShellCopy.navigation.allProviders'
+								: 'workflows.conversations.allProviders'
+						),
+					},
 					...providers.map((provider) => ({
 						value: provider,
 						label: providerName(provider),
@@ -1325,11 +1461,23 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 			onClick={onNewConversationHere}
 			className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-white/10"
 			style={{ color: theme.colors.textMain }}
-			title={t('workflows.conversations.newConversation') + shortcutSuffix(newTabKeys)}
+			title={
+				t(
+					newShell
+						? 'workflows.newShellCopy.navigation.newConversation'
+						: 'workflows.conversations.newConversation'
+				) + shortcutSuffix(newTabKeys)
+			}
 			data-testid="sidebar-new-conversation"
 		>
 			<PenSquare className="w-4 h-4 shrink-0" style={{ color: theme.colors.textDim }} />
-			<span className="truncate">{t('workflows.conversations.newConversation')}</span>
+			<span className="truncate">
+				{t(
+					newShell
+						? 'workflows.newShellCopy.navigation.newConversation'
+						: 'workflows.conversations.newConversation'
+				)}
+			</span>
 		</button>
 	);
 
@@ -1377,7 +1525,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					<div className="text-2xs">
 						<SegmentedControl
 							theme={theme}
-							ariaLabel={t('workflows.conversations.providerFilter')}
+							ariaLabel={t(
+								newShell
+									? 'workflows.newShellCopy.navigation.providerFilter'
+									: 'workflows.conversations.providerFilter'
+							)}
 							value={providerFilter ?? ALL_PROVIDERS}
 							options={providerOptions}
 							onChange={(value) => onProviderFilterChange(value === ALL_PROVIDERS ? null : value)}
@@ -1394,12 +1546,20 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					style={{ color: theme.colors.textDim }}
 				>
 					<Loader2 aria-hidden className="w-3 h-3 animate-spin" />
-					{t('workflows.conversations.loadingHistory')}
+					{t(
+						newShell
+							? 'workflows.newShellCopy.navigation.loadingHistory'
+							: 'workflows.conversations.loadingHistory'
+					)}
 				</p>
 			)}
 			{historyRefreshing && (
 				<span className="sr-only" role="status">
-					{t('workflows.conversations.refreshingHistory')}
+					{t(
+						newShell
+							? 'workflows.newShellCopy.navigation.refreshingHistory'
+							: 'workflows.conversations.refreshingHistory'
+					)}
 				</span>
 			)}
 			{historyFailure && (
@@ -1408,7 +1568,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					indent={12}
 					t={t}
 					onRetry={onRetryHistory}
-					message={t('workflows.conversations.historyLoadFailed')}
+					message={t(
+						newShell
+							? 'workflows.newShellCopy.navigation.historyLoadFailed'
+							: 'workflows.conversations.historyLoadFailed'
+					)}
 				/>
 			)}
 
@@ -1420,13 +1584,23 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 			{filtering && totalConversations === 0 ? (
 				<p className="px-3 py-2 text-xs italic" style={{ color: theme.colors.textDim }}>
 					{historyLoading
-						? t('workflows.conversations.loadingHistory')
-						: t('workflows.conversations.noMatches')}
+						? t(
+								newShell
+									? 'workflows.newShellCopy.navigation.loadingHistory'
+									: 'workflows.conversations.loadingHistory'
+							)
+						: t(
+								newShell
+									? 'workflows.newShellCopy.navigation.noMatches'
+									: 'workflows.conversations.noMatches'
+							)}
 				</p>
 			) : projects.length === 0 ? (
 				<div className="px-3 py-2 flex flex-col items-start gap-1">
 					<p className="text-xs italic" style={{ color: theme.colors.textDim }}>
-						{t('workflows.conversations.empty')}
+						{t(
+							newShell ? 'workflows.newShellCopy.navigation.empty' : 'workflows.conversations.empty'
+						)}
 					</p>
 					<button
 						type="button"
@@ -1435,7 +1609,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						style={{ color: theme.colors.accent }}
 					>
 						<Plus aria-hidden className="w-3.5 h-3.5" />
-						{t('workflows.conversations.addAgent')}
+						{t(
+							newShell
+								? 'workflows.newShellCopy.navigation.addAgent'
+								: 'workflows.conversations.addAgent'
+						)}
 					</button>
 				</div>
 			) : (

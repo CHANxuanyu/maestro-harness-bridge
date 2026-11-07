@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { useT } from '../../../i18n';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Session, Theme } from '../../../types';
 import type { FileNode } from '../../../types/fileTree';
@@ -124,6 +126,8 @@ export function useFileContextMenu({
 	refreshFileTree,
 	sshRemoteId,
 }: UseFileContextMenuArgs): UseFileContextMenuResult {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 	const [multiDeleteModal, setMultiDeleteModal] = useState<MultiDeleteModalState | null>(null);
 	const [isMultiDeleting, setIsMultiDeleting] = useState(false);
@@ -247,7 +251,13 @@ export function useFileContextMenu({
 			}
 		} catch (error) {
 			if (isMissingFileError(error)) {
-				onShowFlash?.(`File not found: "${menu?.node?.name ?? 'Unknown file'}"`);
+				onShowFlash?.(
+					newShell
+						? t('workflows.newShellCopy.panels.fileMissing', {
+								name: menu?.node?.name ?? t('workflows.newShellCopy.panels.unknownFile'),
+							})
+						: `File not found: "${menu?.node?.name ?? 'Unknown file'}"`
+				);
 				return;
 			}
 			captureException(error, {
@@ -263,7 +273,7 @@ export function useFileContextMenu({
 		} finally {
 			setContextMenu(null);
 		}
-	}, [contextMenu, handleFileClick, session, onShowFlash]);
+	}, [newShell, t, contextMenu, handleFileClick, session, onShowFlash]);
 
 	const handlePreviewAllInFolder = useCallback(() => {
 		const menu = contextMenu;
@@ -276,7 +286,11 @@ export function useFileContextMenu({
 
 			const files = collectPreviewableFiles(folderNode, folderPath);
 			if (files.length === 0) {
-				onShowFlash?.(`No previewable files in "${folderNode.name}"`);
+				onShowFlash?.(
+					newShell
+						? t('workflows.newShellCopy.panels.noPreviewInFolder', { name: folderNode.name })
+						: `No previewable files in "${folderNode.name}"`
+				);
 				return;
 			}
 
@@ -284,11 +298,20 @@ export function useFileContextMenu({
 				try {
 					await openFilesInOrder(files);
 					onShowFlash?.(
-						`Opened ${files.length} file${files.length !== 1 ? 's' : ''} from "${folderNode.name}"`
+						newShell
+							? t('workflows.newShellCopy.panels.openedFolder', {
+									name: folderNode.name,
+									count: files.length,
+								})
+							: `Opened ${files.length} file${files.length !== 1 ? 's' : ''} from "${folderNode.name}"`
 					);
 				} catch (error) {
 					if (isMissingFileError(error)) {
-						onShowFlash?.(`A file in "${folderNode.name}" was no longer available`);
+						onShowFlash?.(
+							newShell
+								? t('workflows.newShellCopy.panels.unavailableInFolder', { name: folderNode.name })
+								: `A file in "${folderNode.name}" was no longer available`
+						);
 						return;
 					}
 					captureException(error, {
@@ -306,7 +329,12 @@ export function useFileContextMenu({
 
 			if (files.length > PREVIEW_ALL_CONFIRM_THRESHOLD) {
 				useModalStore.getState().openModal('confirm', {
-					message: `Preview all ${files.length} files under "${folderNode.name}"? This opens a tab for each file.`,
+					message: newShell
+						? t('workflows.newShellCopy.panels.previewFolderConfirm', {
+								name: folderNode.name,
+								count: files.length,
+							})
+						: `Preview all ${files.length} files under "${folderNode.name}"? This opens a tab for each file.`,
 					onConfirm: () => void openAll(),
 				});
 				return;
@@ -315,7 +343,7 @@ export function useFileContextMenu({
 		} finally {
 			setContextMenu(null);
 		}
-	}, [contextMenu, openFilesInOrder, session.id, onShowFlash]);
+	}, [newShell, t, contextMenu, openFilesInOrder, session.id, onShowFlash]);
 
 	const resolveSelectedNodes = useCallback((): { node: FileNode; path: string }[] => {
 		const result: { node: FileNode; path: string }[] = [];
@@ -408,17 +436,29 @@ export function useFileContextMenu({
 			({ node }) => node.type === 'file' && !shouldOpenExternally(node.name)
 		);
 		if (previewable.length === 0) {
-			onShowFlash?.('No previewable files in selection');
+			onShowFlash?.(
+				newShell
+					? t('workflows.newShellCopy.panels.noPreviewSelection')
+					: 'No previewable files in selection'
+			);
 			return;
 		}
 
 		const openAll = async () => {
 			try {
 				await openFilesInOrder(previewable);
-				onShowFlash?.(`Opened ${previewable.length} file${previewable.length !== 1 ? 's' : ''}`);
+				onShowFlash?.(
+					newShell
+						? t('workflows.newShellCopy.panels.openedFiles', { count: previewable.length })
+						: `Opened ${previewable.length} file${previewable.length !== 1 ? 's' : ''}`
+				);
 			} catch (error) {
 				if (isMissingFileError(error)) {
-					onShowFlash?.('A selected file was no longer available');
+					onShowFlash?.(
+						newShell
+							? t('workflows.newShellCopy.panels.unavailableSelection')
+							: 'A selected file was no longer available'
+					);
 					return;
 				}
 				captureException(error, {
@@ -434,13 +474,17 @@ export function useFileContextMenu({
 
 		if (previewable.length > PREVIEW_ALL_CONFIRM_THRESHOLD) {
 			useModalStore.getState().openModal('confirm', {
-				message: `Preview all ${previewable.length} selected files? This opens a tab for each file.`,
+				message: newShell
+					? t('workflows.newShellCopy.panels.previewSelectionConfirm', {
+							count: previewable.length,
+						})
+					: `Preview all ${previewable.length} selected files? This opens a tab for each file.`,
 				onConfirm: () => void openAll(),
 			});
 			return;
 		}
 		await openAll();
-	}, [resolveSelectedNodes, openFilesInOrder, session.id, onShowFlash]);
+	}, [newShell, t, resolveSelectedNodes, openFilesInOrder, session.id, onShowFlash]);
 
 	/**
 	 * Line media up behind whatever is playing, without taking the player over.
@@ -465,7 +509,11 @@ export function useFileContextMenu({
 
 		const media = candidates.filter(({ node }) => isMediaFile(node.name));
 		if (media.length === 0) {
-			onShowFlash?.('No playable media in selection');
+			onShowFlash?.(
+				newShell
+					? t('workflows.newShellCopy.panels.noMediaSelection')
+					: 'No playable media in selection'
+			);
 			return;
 		}
 
@@ -473,10 +521,18 @@ export function useFileContextMenu({
 			for (const file of media) {
 				await handleFileClick(file.node, file.path, { mediaMode: 'queue' });
 			}
-			onShowFlash?.(`Queued ${media.length} file${media.length !== 1 ? 's' : ''}`);
+			onShowFlash?.(
+				newShell
+					? t('workflows.newShellCopy.panels.queuedFiles', { count: media.length })
+					: `Queued ${media.length} file${media.length !== 1 ? 's' : ''}`
+			);
 		} catch (error) {
 			if (isMissingFileError(error)) {
-				onShowFlash?.('A selected file was no longer available');
+				onShowFlash?.(
+					newShell
+						? t('workflows.newShellCopy.panels.unavailableSelection')
+						: 'A selected file was no longer available'
+				);
 				return;
 			}
 			captureException(error, {
@@ -488,7 +544,7 @@ export function useFileContextMenu({
 			});
 			throw error;
 		}
-	}, [contextMenu, resolveSelectedNodes, handleFileClick, session.id, onShowFlash]);
+	}, [newShell, t, contextMenu, resolveSelectedNodes, handleFileClick, session.id, onShowFlash]);
 
 	const handleOpenInDefaultAppMulti = useCallback(() => {
 		const selectedNodes = resolveSelectedNodes();
@@ -496,7 +552,9 @@ export function useFileContextMenu({
 
 		const files = selectedNodes.filter(({ node }) => node.type === 'file');
 		if (files.length === 0) {
-			onShowFlash?.('No files in selection');
+			onShowFlash?.(
+				newShell ? t('workflows.newShellCopy.panels.noFilesSelection') : 'No files in selection'
+			);
 			return;
 		}
 
@@ -505,18 +563,24 @@ export function useFileContextMenu({
 				const absolutePath = `${session.fullPath}/${file.path}`;
 				void window.maestro?.shell?.openPath(absolutePath);
 			}
-			onShowFlash?.(`Opened ${files.length} file${files.length !== 1 ? 's' : ''}`);
+			onShowFlash?.(
+				newShell
+					? t('workflows.newShellCopy.panels.openedFiles', { count: files.length })
+					: `Opened ${files.length} file${files.length !== 1 ? 's' : ''}`
+			);
 		};
 
 		if (files.length > PREVIEW_ALL_CONFIRM_THRESHOLD) {
 			useModalStore.getState().openModal('confirm', {
-				message: `Open all ${files.length} selected files in their default apps?`,
+				message: newShell
+					? t('workflows.newShellCopy.panels.openAppsConfirm', { count: files.length })
+					: `Open all ${files.length} selected files in their default apps?`,
 				onConfirm: () => openAll(),
 			});
 			return;
 		}
 		openAll();
-	}, [resolveSelectedNodes, session.fullPath, onShowFlash]);
+	}, [newShell, t, resolveSelectedNodes, session.fullPath, onShowFlash]);
 
 	const handleOpenDeleteMulti = useCallback(() => {
 		const nodes = resolveSelectedNodes();
@@ -562,12 +626,12 @@ export function useFileContextMenu({
 					continue;
 				}
 				failed++;
-				lastError = result.error ?? 'Unknown error';
+				lastError = result.error ?? null;
 				// The batch resolves with per-path outcomes instead of throwing,
 				// so report each failure here to keep the Sentry breadcrumb the
 				// per-file loop used to produce.
 				const item = nodesByAbsolutePath.get(result.path);
-				captureException(new Error(lastError), {
+				captureException(new Error(lastError ?? 'Unknown error'), {
 					extra: {
 						action: 'delete-multi',
 						path: item?.path,
@@ -582,11 +646,25 @@ export function useFileContextMenu({
 
 			await refreshFileTree(session.id);
 			if (succeeded > 0 && failed === 0) {
-				onShowFlash?.(`Deleted ${succeeded} item${succeeded !== 1 ? 's' : ''}`);
+				onShowFlash?.(
+					newShell
+						? t('workflows.newShellCopy.panels.deletedItems', { count: succeeded })
+						: `Deleted ${succeeded} item${succeeded !== 1 ? 's' : ''}`
+				);
 			} else if (succeeded > 0 && failed > 0) {
-				onShowFlash?.(`Deleted ${succeeded}, ${failed} failed`);
+				onShowFlash?.(
+					newShell
+						? t('workflows.newShellCopy.panels.deletePartial', { count: succeeded, failed })
+						: `Deleted ${succeeded}, ${failed} failed`
+				);
 			} else if (failed > 0) {
-				onShowFlash?.(`Delete failed: ${lastError ?? 'Unknown error'}`);
+				onShowFlash?.(
+					newShell
+						? t('workflows.newShellCopy.panels.deleteFailed', {
+								reason: lastError ?? t('workflows.newShellCopy.panels.unknownError'),
+							})
+						: `Delete failed: ${lastError ?? 'Unknown error'}`
+				);
 			}
 		} catch (error) {
 			captureException(error, {
@@ -596,8 +674,21 @@ export function useFileContextMenu({
 					sshRemoteId,
 				},
 			});
-			const msg = error instanceof Error ? error.message : 'Unknown error';
-			onShowFlash?.(batchCompleted ? `Delete refresh failed: ${msg}` : `Delete failed: ${msg}`);
+			const msg =
+				error instanceof Error
+					? error.message
+					: newShell
+						? t('workflows.newShellCopy.panels.unknownError')
+						: 'Unknown error';
+			onShowFlash?.(
+				batchCompleted
+					? newShell
+						? t('workflows.newShellCopy.panels.deleteRefreshFailed', { reason: msg })
+						: `Delete refresh failed: ${msg}`
+					: newShell
+						? t('workflows.newShellCopy.panels.deleteFailed', { reason: msg })
+						: `Delete failed: ${msg}`
+			);
 			throw error;
 		} finally {
 			setSelectedPaths(new Set());
@@ -605,6 +696,8 @@ export function useFileContextMenu({
 			setIsMultiDeleting(false);
 		}
 	}, [
+		newShell,
+		t,
 		multiDeleteModal,
 		session.fullPath,
 		session.id,
@@ -645,13 +738,17 @@ export function useFileContextMenu({
 		try {
 			const destPath = await window.maestro.dialog.saveFile({
 				defaultPath: fileName,
-				title: 'Download File',
+				title: newShell ? t('workflows.newShellCopy.panels.download') : 'Download File',
 			});
 			// User cancelled the save dialog.
 			if (!destPath) return;
 
 			await window.maestro.fs.downloadRemoteFile(remotePath, sshRemoteId, destPath);
-			onShowFlash?.(`Downloaded "${fileName}"`);
+			onShowFlash?.(
+				newShell
+					? t('workflows.newShellCopy.panels.downloaded', { name: fileName })
+					: `Downloaded "${fileName}"`
+			);
 		} catch (error) {
 			captureException(error, {
 				extra: {
@@ -663,9 +760,18 @@ export function useFileContextMenu({
 					sshRemoteId,
 				},
 			});
-			onShowFlash?.(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			onShowFlash?.(
+				newShell
+					? t('workflows.newShellCopy.panels.downloadFailed', {
+							reason:
+								error instanceof Error
+									? error.message
+									: t('workflows.newShellCopy.panels.unknownError'),
+						})
+					: `Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+			);
 		}
-	}, [contextMenu, session.fullPath, session.id, sshRemoteId, onShowFlash]);
+	}, [newShell, t, contextMenu, session.fullPath, session.id, sshRemoteId, onShowFlash]);
 
 	const handleOpenInDefaultApp = useCallback(() => {
 		if (contextMenu) {
@@ -763,7 +869,7 @@ export function useFileContextMenu({
 			const result = await window.maestro.fs.compressFolder(absolutePath, { sshRemoteId });
 			notifyToast({
 				color: 'green',
-				title: 'Folder compressed',
+				title: newShell ? t('workflows.newShellCopy.panels.compressed') : 'Folder compressed',
 				message: `"${folderName}" -> ${result.name}`,
 			});
 			// The archive lands in the parent directory, which is usually on screen -
@@ -781,11 +887,19 @@ export function useFileContextMenu({
 			});
 			notifyToast({
 				color: 'red',
-				title: 'Compress failed',
-				message: `Could not compress "${folderName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+				title: newShell ? t('workflows.newShellCopy.panels.compressFailed') : 'Compress failed',
+				message: newShell
+					? t('workflows.newShellCopy.panels.compressReason', {
+							name: folderName,
+							reason:
+								error instanceof Error
+									? error.message
+									: t('workflows.newShellCopy.panels.unknownError'),
+						})
+					: `Could not compress "${folderName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
 			});
 		}
-	}, [contextMenu, session.fullPath, session.id, sshRemoteId, refreshFileTree]);
+	}, [newShell, t, contextMenu, session.fullPath, session.id, sshRemoteId, refreshFileTree]);
 
 	const handleOpenRename = useCallback(() => {
 		if (contextMenu && contextMenu.node) {

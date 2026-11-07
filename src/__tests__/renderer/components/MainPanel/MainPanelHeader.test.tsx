@@ -212,11 +212,13 @@ it.each([false, true])(
 		uiMocks.state.leftSidebarHidden = false;
 		const { container } = render(<MainPanelHeader {...defaultProps} />);
 		expect(container.firstElementChild).toHaveClass(newShell ? 'h-12' : 'h-16');
-		expect(!!screen.queryByRole('button', { name: 'Show agents sidebar' })).toBe(newShell);
+		expect(!!screen.queryByRole('button', { name: 'Show projects and conversations' })).toBe(
+			newShell
+		);
 		if (newShell)
 			expect(
 				screen
-					.getByRole('button', { name: 'Show agents sidebar' })
+					.getByRole('button', { name: 'Show projects and conversations' })
 					.querySelector('[data-testid="panelleft-icon"]')
 			).not.toBeNull();
 	}
@@ -235,7 +237,7 @@ it.each(['darwin', 'linux', 'win32'])(
 			expect(container.firstElementChild?.getAttribute('data-traffic-light-clearance')).toBe(
 				platform === 'darwin' ? 'true' : null
 			);
-			fireEvent.click(screen.getByRole('button', { name: 'Show agents sidebar' }));
+			fireEvent.click(screen.getByRole('button', { name: 'Show projects and conversations' }));
 			expect(uiMocks.setLeftSidebarOpen).toHaveBeenCalledWith(true);
 			settingsMocks.overrides = { newShell: true, useNativeTitleBar: true };
 			rerender(<MainPanelHeader {...defaultProps} key="native-chrome" />);

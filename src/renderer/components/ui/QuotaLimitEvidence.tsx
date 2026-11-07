@@ -1,3 +1,5 @@
+import { useI18n } from '../../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 /**
  * QuotaLimitEvidence - the "which limit, and can I do anything about it?" rows
  * shown under a plan-limit notice.
@@ -43,9 +45,22 @@ export function QuotaLimitEvidence({
 	theme,
 	hideWindowName,
 }: QuotaLimitEvidenceProps): React.ReactElement | null {
+	const { t, locale } = useI18n();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	if (!detail) return null;
 
-	const remedy = describeQuotaRemedy(detail);
+	const remedy = describeQuotaRemedy(
+		detail,
+		newShell
+			? {
+					outOfCredits: t('workflows.newShellCopy.feedback.quota.outOfCredits'),
+					extraRejected: t('workflows.newShellCopy.feedback.quota.extraRejected'),
+					exhausted: t('workflows.newShellCopy.feedback.quota.exhausted'),
+					extraInUse: t('workflows.newShellCopy.feedback.quota.extraInUse'),
+					extraAvailable: t('workflows.newShellCopy.feedback.quota.extraAvailable'),
+				}
+			: undefined
+	);
 	const showWindow = !hideWindowName;
 	// `resetsAt` in the past means the sample is stale rather than that the window
 	// is open, and `formatFutureTime` renders that as "just now" - which would
@@ -63,11 +78,25 @@ export function QuotaLimitEvidence({
 		>
 			{showWindow && (
 				<span>
-					<span style={{ color: theme.colors.textMain }}>{describeQuotaWindow(detail)}</span>
+					<span style={{ color: theme.colors.textMain }}>
+						{newShell
+							? t(`workflows.newShellCopy.feedback.quota.${detail.window}`)
+							: describeQuotaWindow(detail)}
+					</span>
 					{detail.window === 'unknown' && detail.windowRaw ? ` (${detail.windowRaw})` : ''}
 				</span>
 			)}
-			{resetsAt !== undefined && <span>Resets {formatFutureTime(resetsAt)}.</span>}
+			{resetsAt !== undefined && (
+				<span>
+					{newShell ? (
+						t('workflows.newShellCopy.feedback.quota.resets', {
+							time: new Date(resetsAt).toLocaleString(locale),
+						})
+					) : (
+						<>Resets {formatFutureTime(resetsAt)}.</>
+					)}
+				</span>
+			)}
 			{remedy !== undefined && <span data-testid="quota-limit-remedy">{remedy}</span>}
 		</div>
 	);

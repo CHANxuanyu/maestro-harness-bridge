@@ -195,3 +195,10 @@ describe('multi-term highlighting', () => {
 		]);
 	});
 });
+
+it('highlights a content snippet consisting entirely of the query', () => {
+	const container = renderHighlight('Exact phrase', 'exact phrase');
+	expect(container.querySelectorAll('mark')).toHaveLength(1);
+	expect(container.querySelector('mark')).toHaveTextContent('Exact phrase');
+	expect(container.textContent).toBe('Exact phrase');
+});

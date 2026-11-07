@@ -14,6 +14,10 @@
  */
 
 import { updateAiTab, useSessionStore } from '../stores/sessionStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { sessionProviderId } from '../../shared/agentPresets';
+import { deriveConsultSubject } from '../../shared/crossAgentContext';
+import { conversationDisplayTitle } from '../utils/conversationTitle';
 import { getActiveTab } from '../utils/tabHelpers';
 import { generateId } from '../utils/ids';
 import { truncateText } from '../../shared/formatters';
@@ -108,8 +112,55 @@ export function recordAgentDelegation(
 	if (!tab) return null;
 
 	const entry = buildDelegationLogEntry(notice, target, options.pending ? 'pending' : undefined);
+	if (useSettingsStore.getState().newShell && notice.newTab && notice.targetTabId) {
+		updateAiTab(target.id, notice.targetTabId, (child) =>
+			child.origin
+				? child
+				: {
+						...child,
+						name: deriveConsultSubject(notice.prompt, 80, true),
+						origin: {
+							kind: 'subtask',
+							sourceSessionId: caller.id,
+							sourceTabId: tab.id,
+							sourceProvider: sessionProviderId(caller),
+							sourceNativeSessionId: tab.agentSessionId ?? undefined,
+							sourceTitle: conversationDisplayTitle(tab) ?? undefined,
+							createdAt: entry.timestamp,
+						},
+					}
+		);
+	}
 	updateAiTab(caller.id, tab.id, (t) => ({ ...t, logs: [...t.logs, entry] }));
 	return { sessionId: caller.id, tabId: tab.id, entryId: entry.id };
+}
+
+/** A first turn may delegate before its provider announces the native identity. */
+export function captureConversationSourceNativeId(
+	sessionId: string,
+	tabId: string,
+	nativeSessionId: string,
+	provider: string
+): void {
+	useSessionStore.getState().setSessions((sessions) =>
+		sessions.map((session) => {
+			let changed = false;
+			const aiTabs = session.aiTabs.map((tab) => {
+				const origin = tab.origin;
+				if (
+					!origin ||
+					origin.sourceNativeSessionId ||
+					origin.sourceSessionId !== sessionId ||
+					origin.sourceTabId !== tabId ||
+					origin.sourceProvider !== provider
+				)
+					return tab;
+				changed = true;
+				return { ...tab, origin: { ...origin, sourceNativeSessionId: nativeSessionId } };
+			});
+			return changed ? { ...session, aiTabs } : session;
+		})
+	);
 }
 
 /** Settle a pending `ask` pill once its consult ends. No-op if the tab or entry is gone. */

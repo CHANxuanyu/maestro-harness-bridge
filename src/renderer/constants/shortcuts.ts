@@ -83,6 +83,12 @@ export const DEFAULT_SHORTCUTS = {
 		windowScoped: true,
 		shell: 'new',
 	},
+	splitConversation: {
+		id: 'splitConversation',
+		label: 'Open on the Right',
+		keys: ['Alt', 'Meta', '\\'],
+		shell: 'new',
+	},
 	agentSwitcher: {
 		id: 'agentSwitcher',
 		shell: 'classic',

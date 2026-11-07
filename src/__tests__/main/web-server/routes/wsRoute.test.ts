@@ -685,6 +685,7 @@ describe('WsRoute Web Login gate', () => {
 		expect(callbacks.onClientConnect).toHaveBeenCalledTimes(1);
 		// Admitted is not the same as signed in: a CLI caller acts as the desktop.
 		expect((callbacks.onClientConnect as any).mock.calls[0][0].user).toBeUndefined();
+		expect((callbacks.onClientConnect as any).mock.calls[0][0].trustedCli).toBe(true);
 	});
 
 	it('closes a bare loopback upgrade: the tunnel arrives over loopback too', () => {
@@ -730,6 +731,7 @@ describe('WsRoute Web Login gate', () => {
 		expect(client.user).toEqual({ id: 'u1', username: 'ada', displayName: 'Ada' });
 		// Revocation is keyed on the session, so the client must remember it.
 		expect(client.sessionId).toBe('sid-1');
+		expect(client.trustedCli).toBe(false);
 	});
 
 	it('leaves a LAN upgrade alone while the Encore flag is off', () => {

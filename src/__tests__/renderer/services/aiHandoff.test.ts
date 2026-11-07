@@ -1,3 +1,5 @@
+import { tileNewTabInSession } from '../../../renderer/services/tileNewTabAction';
+import { projectSettingsKey } from '../../../shared/projectSettings';
 import { conversationPermissionSnapshot } from '../../../renderer/utils/newConversationPermissions';
 import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
 import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
@@ -60,9 +62,19 @@ beforeEach(() => {
 		getConversationPermissions: vi.fn().mockResolvedValue([]),
 	};
 	vi.clearAllMocks();
+	window.maestro.settings.projectSettings = vi.fn(async (command) => ({
+		success: true,
+		scope: command.scope,
+		settings: useSettingsStore.getState().projectSettings[projectSettingsKey(command.scope)] ?? {},
+	}));
 	useOperationStore.getState().resetAll();
 	clearLiveDraft('source-tab');
-	useSettingsStore.setState({ newShell: false, uiLanguage: 'en', automaticTabNamingEnabled: true });
+	useSettingsStore.setState({
+		newShell: false,
+		projectSettings: {},
+		uiLanguage: 'en',
+		automaticTabNamingEnabled: true,
+	});
 	useComposerInputStore.getState().loadAiDraft('', '', 'off');
 	clearLiveDraft('target-empty');
 	vi.mocked(window.maestro.sessions.setMany).mockResolvedValue(true);
@@ -1001,4 +1013,186 @@ it('refuses a new shell handoff when neither the source nor its permission snaps
 	const result = await openHandoffTarget(request());
 	expect(result).toMatchObject({ success: false, code: 'unavailable' });
 	expect(sessions()[1].aiTabs).toEqual(before);
+});
+
+describe('project conversation configuration isolation', () => {
+	it('creates a separate runner for project environment changes and preserves old account identity', async () => {
+		useSettingsStore.setState({
+			newShell: true,
+			projectSettings: {
+				'[null,"/project"]': {
+					defaultProvider: 'codex',
+					defaultModel: 'project-model',
+					defaultReasoningEffort: 'high',
+					defaultPermissionMode: 'readonly',
+					envVars: { CODEX_HOME: '/synthetic/project-account', PROJECT_VALUE: 'new' },
+				},
+			},
+		});
+		const oldTarget = sessions()[1];
+		useSessionStore.getState().updateSession('target', {
+			customEnvVars: { CODEX_HOME: '/synthetic/old-account', PRESERVED: 'yes' },
+		});
+		const result = await openHandoffTarget(
+			request({
+				newConversation: {},
+				sourcePermission: { permissionMode: 'full', readOnlyMode: false },
+				config: {
+					toolType: 'codex',
+					customEnvVars: { CODEX_HOME: '/synthetic/old-account', PRESERVED: 'yes' },
+				},
+			})
+		);
+		expect(result.success).toBe(true);
+		expect(result.agentId).not.toBe('target');
+		const owner = sessions().find((session) => session.id === result.agentId)!;
+		expect(owner.customEnvVars).toEqual({
+			CODEX_HOME: '/synthetic/project-account',
+			PROJECT_VALUE: 'new',
+			PRESERVED: 'yes',
+		});
+		expect(owner.aiTabs[0]).toMatchObject({
+			customModel: 'project-model',
+			customEffort: 'high',
+			permissionMode: 'readonly',
+		});
+		expect(sessions().find((session) => session.id === 'target')!.aiTabs).toEqual(oldTarget.aiTabs);
+		expect(sessions().find((session) => session.id === 'target')!.customEnvVars?.CODEX_HOME).toBe(
+			'/synthetic/old-account'
+		);
+	});
+});
+
+it('inherits current conversation model, effort and account above project defaults', async () => {
+	useSettingsStore.setState({
+		newShell: true,
+		projectSettings: {
+			'[null,"/project"]': {
+				defaultModel: 'project-model',
+				defaultReasoningEffort: 'high',
+				defaultPermissionMode: 'full',
+				fullAccessAcknowledged: true,
+				envVars: { CODEX_HOME: '/synthetic/new-account', PROJECT_ONLY: 'new' },
+			},
+		},
+	});
+	useSessionStore.getState().updateSession('target', {
+		customEnvVars: { CODEX_HOME: '/synthetic/current-account' },
+		aiTabs: [
+			createMockAITab({
+				id: 'current',
+				customModel: 'current-model',
+				customEffort: 'low',
+				permissionMode: 'readonly',
+			}),
+		],
+	});
+	const result = await openHandoffTarget(
+		request({
+			sourceAgentId: 'target',
+			newConversation: { sourceTabId: 'current' },
+			config: { toolType: 'codex' },
+		})
+	);
+	expect(result.success).toBe(true);
+	const owner = sessions().find((session) => session.id === result.agentId)!;
+	expect(owner.customEnvVars).toEqual({
+		CODEX_HOME: '/synthetic/current-account',
+		PROJECT_ONLY: 'new',
+	});
+	expect(owner.aiTabs.find((tab) => tab.id === result.tabId)).toMatchObject({
+		customModel: 'current-model',
+		customEffort: 'low',
+		permissionMode: 'readonly',
+	});
+});
+
+it('clears a project environment override for future conversations without changing an old runner', async () => {
+	useSettingsStore.setState({
+		newShell: true,
+		projectSettings: { '[null,"/project"]': { envVars: {} } },
+	});
+	useSessionStore.getState().updateSession('target', {
+		customEnvVars: { CODEX_HOME: '/synthetic/project-account', PROJECT_VALUE: 'old' },
+		projectSettingsBaseEnv: { CODEX_HOME: '/synthetic/base-account' },
+	} as never);
+	const result = await openHandoffTarget(
+		request({
+			newConversation: {},
+			sourcePermission: { permissionMode: 'full', readOnlyMode: false },
+			config: {
+				toolType: 'codex',
+				customEnvVars: { CODEX_HOME: '/synthetic/project-account', PROJECT_VALUE: 'old' },
+			},
+		})
+	);
+	expect(result.success).toBe(true);
+	expect(result.agentId).not.toBe('target');
+	expect(sessions().find((session) => session.id === result.agentId)?.customEnvVars).toEqual({
+		CODEX_HOME: '/synthetic/base-account',
+	});
+	expect(sessions().find((session) => session.id === 'target')?.customEnvVars?.PROJECT_VALUE).toBe(
+		'old'
+	);
+});
+
+it('loads project environment through the dedicated service after general settings hydration redacts it', async () => {
+	useSettingsStore.setState({
+		newShell: true,
+		projectSettings: { '[null,"/project"]': { envVars: {} } },
+	});
+	vi.mocked(window.maestro.settings.projectSettings).mockResolvedValueOnce({
+		success: true,
+		scope: { projectPath: '/project' },
+		settings: { envVars: { PROJECT_TOKEN: 'synthetic-private-token' } },
+	});
+	const result = await openHandoffTarget(
+		request({ newConversation: {}, sourcePermission: { permissionMode: 'full' } })
+	);
+	expect(result.success).toBe(true);
+	expect(sessions().find((session) => session.id === result.agentId)?.customEnvVars).toEqual({
+		PROJECT_TOKEN: 'synthetic-private-token',
+	});
+});
+
+it('creates a tiled project conversation with its resolved environment and actual owner', async () => {
+	Object.defineProperty(window, 'innerWidth', { value: 1600, configurable: true });
+	useSettingsStore.setState({
+		newShell: true,
+		newShellSplit: null,
+		projectSettings: {
+			'[null,"/project"]': {
+				defaultProvider: 'codex',
+				envVars: { PROJECT_ONLY: 'synthetic-project-env' },
+			},
+		},
+	});
+	const oldTarget = structuredClone(sessions()[1]);
+	window.maestro.context.conversation = vi.fn(async () =>
+		openHandoffTarget(
+			request({
+				newConversation: {},
+				sourcePermission: { permissionMode: 'readonly' },
+				background: true,
+			})
+		)
+	);
+	expect(await tileNewTabInSession('source', 'ai')).toBe(true);
+	expect(window.maestro.context.conversation).toHaveBeenCalledWith(
+		expect.objectContaining({
+			action: 'new-conversation',
+			sourceAgentId: 'source',
+			targetProvider: 'codex',
+			background: true,
+		})
+	);
+	const split = useSettingsStore.getState().newShellSplit!;
+	expect(split.left).toEqual({ sessionId: 'source', tabId: 'source-tab' });
+	expect(split.right.sessionId).not.toBe('target');
+	const created = sessions().find((session) => session.id === split.right.sessionId)!;
+	expect(created.customEnvVars).toEqual({ PROJECT_ONLY: 'synthetic-project-env' });
+	expect(created.aiTabs.find((tab) => tab.id === split.right.tabId)?.permissionMode).toBe(
+		'readonly'
+	);
+	expect(sessions().find((session) => session.id === 'target')).toEqual(oldTarget);
 });

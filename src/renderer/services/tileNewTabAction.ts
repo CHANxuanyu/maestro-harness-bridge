@@ -17,6 +17,8 @@ import { useUIStore } from '../stores/uiStore';
 import { findLeafByTabRef, type DropZone } from '../utils/panelLayout';
 import { tileNewTab, type TileableTabKind } from '../hooks/tabs/tileNewTab';
 import { resolveProjectConversationPermission } from '../utils/newConversationPermissions';
+import { newProjectConversation } from './newShellConversation';
+import { splitConversation } from './newShellSplit';
 
 /**
  * Create a `kind` tab, tile it into `zone` of the view currently on screen, and
@@ -36,6 +38,22 @@ export async function tileNewTabInSession(
 		target && kind === 'ai' && useSettingsStore.getState().newShell
 			? await resolveProjectConversationPermission(target)
 			: undefined;
+	if (target && kind === 'ai' && useSettingsStore.getState().newShell) {
+		const created = await newProjectConversation(target, undefined, true, permissionSource);
+		if (created) {
+			if (!created.success || !created.agentId || !created.tabId) return false;
+			try {
+				await splitConversation(created.agentId, created.tabId);
+				return true;
+			} catch (error) {
+				notifyCenterFlash({
+					color: 'yellow',
+					message: String(error instanceof Error ? error.message : error),
+				});
+				return false;
+			}
+		}
+	}
 	// Captured inside the updater so focus is only requested when the tile
 	// actually landed.
 	let paneId: string | null = null;

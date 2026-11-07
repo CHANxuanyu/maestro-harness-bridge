@@ -21,7 +21,7 @@
  * - Escape (idle): Opens exit confirmation dialog
  */
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
 	Terminal,
 	Wand2,
@@ -42,7 +42,9 @@ import {
 	formatEnterToSend,
 	formatEnterToSendTooltip,
 } from '../../utils/shortcutFormatter';
-import { useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { addStagedImageIfUnique } from '../InputArea/utils/stagedImages';
+import { updateAiTab, useSessionStore } from '../../stores/sessionStore';
 import { closeTab } from '../../utils/tabHelpers';
 import { displayImageSrc } from '../../utils/sessionImageSrc';
 import { useAutosizeTextarea } from '../../hooks/ui/useAutosizeTextarea';
@@ -151,6 +153,8 @@ export const WizardInputPanel = React.memo(function WizardInputPanel({
 	// State for exit confirmation dialog
 	const [showExitConfirm, setShowExitConfirm] = useState(false);
 
+	const imageInputRef = useRef<HTMLInputElement>(null);
+	const imageTargetRef = useRef<{ sessionId: string; tabId: string } | null>(null);
 	// Auto-resize the textarea to fit its content, keeping the caret visible once
 	// the composer is tall enough to scroll.
 	useAutosizeTextarea({
@@ -350,7 +354,12 @@ export const WizardInputPanel = React.memo(function WizardInputPanel({
 								{/* Image attachment button */}
 								{!isTerminalMode && canAttachImages && (
 									<button
-										onClick={() => document.getElementById('wizard-image-file-input')?.click()}
+										onClick={() => {
+											imageTargetRef.current = useSettingsStore.getState().newShell
+												? { sessionId: session.id, tabId: session.activeTabId }
+												: null;
+											imageInputRef.current?.click();
+										}}
 										className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
 										title="Attach Image"
 									>
@@ -358,25 +367,33 @@ export const WizardInputPanel = React.memo(function WizardInputPanel({
 									</button>
 								)}
 								<input
-									id="wizard-image-file-input"
+									ref={imageInputRef}
 									type="file"
 									accept="image/*"
 									multiple
 									className="hidden"
 									onChange={(e) => {
 										const files = Array.from(e.target.files || []);
+										const target = imageTargetRef.current;
 										files.forEach((file) => {
 											const reader = new FileReader();
 											reader.onload = (event) => {
 												if (event.target?.result) {
 													const imageData = event.target.result as string;
-													setStagedImages((prev) => {
-														if (prev.includes(imageData)) {
-															showFlashNotification?.('Duplicate image ignored');
-															return prev;
-														}
-														return [...prev, imageData];
-													});
+													if (target) {
+														updateAiTab(target.sessionId, target.tabId, (tab) => ({
+															...tab,
+															stagedImages: addStagedImageIfUnique(
+																tab.stagedImages ?? [],
+																imageData,
+																showFlashNotification
+															),
+														}));
+													} else {
+														setStagedImages((prev) =>
+															addStagedImageIfUnique(prev, imageData, showFlashNotification)
+														);
+													}
 												}
 											};
 											reader.readAsDataURL(file);

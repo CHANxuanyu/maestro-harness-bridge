@@ -11,6 +11,7 @@ import type {
 import { WebSocket } from 'ws';
 import type {
 	NewTabCallback,
+	NewAITabWithPromptCallback,
 	AutoRunDocument,
 	AutoRunState,
 	WebSettings,
@@ -196,11 +197,7 @@ export interface MessageHandlerCallbacks {
 		sessionId: string,
 		payload: ReadTerminalTabPayload
 	) => Promise<ReadTerminalTabResult>;
-	newAITabWithPrompt: (
-		sessionId: string,
-		prompt: string,
-		background?: boolean
-	) => Promise<{ success: boolean; tabId?: string; queued?: boolean; error?: string }>;
+	newAITabWithPrompt: NewAITabWithPromptCallback;
 	/** Consult another agent and return its answer (`maestro-cli ask`). */
 	consultAgent: (params: ConsultAgentParams) => Promise<ConsultAgentResult>;
 	/** Mark a delivered CLI dispatch in the calling agent's transcript. Fire-and-forget. */

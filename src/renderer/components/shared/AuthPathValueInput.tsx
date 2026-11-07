@@ -15,6 +15,8 @@ export interface AuthPathValueInputProps {
 	className: string;
 	containerClassName: string;
 	style: CSSProperties;
+	/** Project editors may conceal credential values without changing their bytes. */
+	type?: 'text' | 'password';
 }
 
 export function AuthPathValueInput({
@@ -26,6 +28,7 @@ export function AuthPathValueInput({
 	className,
 	containerClassName,
 	style,
+	type = 'text',
 }: AuthPathValueInputProps) {
 	const t = useT();
 	const knownPaths =
@@ -59,7 +62,7 @@ export function AuthPathValueInput({
 	if (knownPaths.length === 0) {
 		return (
 			<input
-				type="text"
+				type={type}
 				value={value}
 				onChange={(event) => onChange(event.target.value)}
 				onBlur={onBlur}
@@ -109,7 +112,7 @@ export function AuthPathValueInput({
 			</select>
 			{showCustomInput && (
 				<input
-					type="text"
+					type={type}
 					value={value}
 					onChange={(event) => onChange(event.target.value)}
 					onBlur={onBlur}

@@ -1,3 +1,4 @@
+import { publicProjectSettings, type ProjectSettingsResult } from '../../../shared/projectSettings';
 /**
  * IPC Bridge - generic Web↔Main mirror of Electron's window.maestro.*
  *
@@ -192,7 +193,15 @@ export async function handleBridgeInvoke(
 		// handler performs still reads the same account from `getActingUser()`.
 		// `client.user` is undefined for maestro-cli (admitted by its secret) and
 		// for every client when the gate is off, which reads as "the desktop".
-		const result = await runAsActingUser(client.user, () => handler(FAKE_EVENT, ...args));
+		let result = await runAsActingUser(client.user, () => handler(FAKE_EVENT, ...args));
+		if (channel === 'settings:projectSettings' && !client.trustedCli) {
+			const response = result as ProjectSettingsResult;
+			result = {
+				...response,
+				settings: publicProjectSettings(response.settings),
+				environmentRedacted: true,
+			};
+		}
 		send(client, {
 			type: 'bridge.response',
 			requestId,

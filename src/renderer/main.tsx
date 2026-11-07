@@ -14,6 +14,8 @@ import { WizardProvider } from './components/Wizard';
 import { logger } from './utils/logger';
 import './index.css';
 
+performance.mark('maestro:renderer.modulesReady');
+
 // Initialize Sentry for renderer process
 // Uses IPCMode.Classic in main process to avoid "sentry-ipc://" protocol conflicts
 // See: https://github.com/getsentry/sentry-electron/issues/661

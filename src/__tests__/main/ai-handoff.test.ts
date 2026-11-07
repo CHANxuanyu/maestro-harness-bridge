@@ -321,6 +321,66 @@ describe('local AI handoff routing', () => {
 		expect(openTarget).not.toHaveBeenCalled();
 	});
 
+	it('prefers the current configuration when inheriting a conversation', async () => {
+		runners.unshift({ ...runner('claude-code'), id: 'other-account', customPath: '/other/claude' });
+		await service().command({
+			action: 'new-conversation',
+			sourceAgentId: 'claude-code',
+			targetProvider: 'claude-code',
+			sourceTabId: 'current',
+		});
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				runnerId: 'claude-code',
+				config: expect.objectContaining({ customPath: '/bin/claude-code' }),
+			})
+		);
+	});
+
+	it('uses an existing tool configuration for a generic project default', async () => {
+		runners.push({
+			...runner('codex'),
+			id: 'opencode',
+			toolType: 'opencode',
+			customEnvVars: { XDG_CONFIG_HOME: '/synthetic/config' },
+		});
+		const result = await service().command({
+			action: 'new-conversation',
+			sourceAgentId: 'opencode',
+			targetProvider: 'opencode',
+		} as never);
+		expect(result.success).toBe(true);
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				provider: 'opencode',
+				config: expect.objectContaining({
+					toolType: 'opencode',
+					customEnvVars: { XDG_CONFIG_HOME: '/synthetic/config' },
+				}),
+			})
+		);
+	});
+
+	it('creates a new SSH project conversation on the same host and effective directory', async () => {
+		runners[0].sessionSshRemoteConfig = {
+			enabled: true,
+			remoteId: 'host-a',
+			workingDirOverride: '~/project',
+		};
+		const result = await service().command({
+			action: 'new-conversation',
+			sourceAgentId: 'claude-code',
+			targetProvider: 'claude-code',
+		});
+		expect(result.success).toBe(true);
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cwd: '~/project',
+				sessionSshRemoteConfig: runners[0].sessionSshRemoteConfig,
+			})
+		);
+	});
+
 	it('keeps an SSH source on its host and effective worktree directory', async () => {
 		runners[0].sessionSshRemoteConfig = {
 			enabled: true,

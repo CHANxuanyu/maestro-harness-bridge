@@ -774,6 +774,25 @@ describe('web-server/web-server-factory', () => {
 			expect(getCallback()()[0].origin).toEqual(origin);
 		});
 
+		it('exposes a hidden subtask tool marker and error without an unread mark', () => {
+			vi.mocked(mockSessionsStore.get).mockReturnValue([
+				{
+					id: 'worker',
+					toolType: 'claude-code',
+					customEnvVars: { ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic' },
+					aiTabs: [
+						{ id: 'child', hidden: true, hasUnread: true, agentError: { message: 'failed' } },
+					],
+				},
+			]);
+			expect(getCallback()()[0]).toMatchObject({
+				provider: 'deepseek',
+				hidden: true,
+				error: true,
+				hasUnread: false,
+			});
+		});
+
 		it('reports a persisted busy tab as busy without a managed process', () => {
 			vi.mocked(mockSessionsStore.get).mockReturnValue([
 				{

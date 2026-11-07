@@ -1,3 +1,4 @@
+import { PROJECT_CONVERSATION_TIMEOUT_MS } from '../../../shared/projectSettings';
 import type { NewTabResult } from '../types';
 import { randomUUID } from 'crypto';
 import { ipcMain } from 'electron';
@@ -24,7 +25,8 @@ const RENAME_CONFIRMATION_RELEASE_MS = 60_000;
 
 export function registerTabCallbacks(
 	server: WebServer,
-	deps: Pick<WebServerFactoryDependencies, 'getMainWindow' | 'getWindowForSession'>
+	deps: Pick<WebServerFactoryDependencies, 'getMainWindow' | 'getWindowForSession'> &
+		Partial<Pick<WebServerFactoryDependencies, 'settingsStore'>>
 ): void {
 	const { getMainWindow, getWindowForSession } = deps;
 	const resolveSessionWindow = (sessionId: string) =>
@@ -101,14 +103,17 @@ export function registerTabCallbacks(
 					...(sourceTabId ? ([sourceTabId, sourcePermissionMode] as const) : [])
 				);
 
-				// Timeout after 5 seconds - clean up the listener to prevent memory leak
-				const timeoutId = setTimeout(() => {
-					if (resolved) return;
-					resolved = true;
-					ipcMain.removeListener(responseChannel, handleResponse);
-					logger.warn(`newTab callback timed out for session ${sessionId}`, 'WebServer');
-					resolve(null);
-				}, 5000);
+				// Project defaults can require an SSH probe before the renderer confirms creation.
+				const timeoutId = setTimeout(
+					() => {
+						if (resolved) return;
+						resolved = true;
+						ipcMain.removeListener(responseChannel, handleResponse);
+						logger.warn(`newTab callback timed out for session ${sessionId}`, 'WebServer');
+						resolve(null);
+					},
+					deps.settingsStore?.get('newShell', false) ? PROJECT_CONVERSATION_TIMEOUT_MS : 5000
+				);
 			});
 		}
 	);

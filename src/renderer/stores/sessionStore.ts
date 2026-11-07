@@ -478,7 +478,8 @@ export function updateSessionWith(sessionId: string, updater: (session: Session)
 export function updateAiTab(
 	sessionId: string,
 	tabId: string,
-	updater: (tab: AITab) => AITab
+	updater: (tab: AITab) => AITab,
+	options: { includeOrphans?: boolean } = {}
 ): void {
 	useSessionStore.getState().setSessions((prev: Session[]) =>
 		prev.map((s) => {
@@ -486,6 +487,13 @@ export function updateAiTab(
 			return {
 				...s,
 				aiTabs: s.aiTabs.map((t) => (t.id === tabId ? updater(t) : t)),
+				...(options.includeOrphans && s.orphanedThinkingTabs
+					? {
+							orphanedThinkingTabs: s.orphanedThinkingTabs.map((t) =>
+								t.id === tabId ? updater(t) : t
+							),
+						}
+					: {}),
 			};
 		})
 	);

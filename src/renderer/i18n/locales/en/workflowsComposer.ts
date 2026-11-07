@@ -1,4 +1,25 @@
 export const workflowsComposer = {
+	'workflows.nativeCommands.reported': 'Reported by tool',
+	'workflows.nativeCommands.queuedUnavailable':
+		'Could not read native commands. Your command is held in the queue. Try sending it again when the connection is available.',
+	'workflows.nativeCommands.project': 'Project',
+	'workflows.nativeCommands.user': 'User',
+	'workflows.nativeCommands.unavailable':
+		'Could not read native commands. Showing built-in commands only.',
+	'workflows.nativeCommands.remoteUnavailable':
+		'Could not read commands on the SSH host. Showing built-in commands only.',
+	'workflows.nativeCommands.help': 'Show available commands',
+	'workflows.nativeCommands.compact': 'Summarize the conversation to reduce context usage',
+	'workflows.nativeCommands.context': 'Show current context usage',
+	'workflows.nativeCommands.cost': 'Show conversation cost and token usage',
+	'workflows.nativeCommands.init': 'Initialize CLAUDE.md for this project',
+	'workflows.nativeCommands.pr-comments': 'Address pull request review comments',
+	'workflows.nativeCommands.release-notes': 'Generate release notes from changes',
+	'workflows.nativeCommands.todos': 'Find and list TODO comments',
+	'workflows.nativeCommands.review': 'Review code changes',
+	'workflows.nativeCommands.security-review': 'Review code for security issues',
+	'workflows.nativeCommands.plan': 'Create an implementation plan',
+
 	'workflows.composer.title': 'Prompt Composer',
 	'workflows.composer.closeLabel': 'Close prompt composer',
 	'workflows.composer.collapse': 'Collapse',

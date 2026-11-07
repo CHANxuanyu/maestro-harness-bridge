@@ -17,6 +17,8 @@ function aiTabEqual(a: AITab, b: AITab): boolean {
 		a.readOnlyMode === b.readOnlyMode &&
 		a.agentSessionId === b.agentSessionId &&
 		a.hidden === b.hidden &&
+		a.origin === b.origin &&
+		a.consultOrigin === b.consultOrigin &&
 		a.agentError === b.agentError &&
 		a.createdAt === b.createdAt
 	);
@@ -61,7 +63,8 @@ export function sidebarSessionEquality(a: Session[], b: Session[]): boolean {
 			x.activeTabId !== y.activeTabId ||
 			// Provider identity and the account dir decide DeepSeek marks and history rows.
 			sessionProviderId(x) !== sessionProviderId(y) ||
-			x.customEnvVars?.CLAUDE_CONFIG_DIR !== y.customEnvVars?.CLAUDE_CONFIG_DIR
+			x.customEnvVars?.CLAUDE_CONFIG_DIR !== y.customEnvVars?.CLAUDE_CONFIG_DIR ||
+			x.customEnvVars?.CODEX_HOME !== y.customEnvVars?.CODEX_HOME
 		) {
 			return false;
 		}

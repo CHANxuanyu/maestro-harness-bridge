@@ -48,7 +48,7 @@ import { useGitInfo } from '../../hooks/mainPanel/useGitInfo';
 import { useChatFileDropZone } from '../../hooks/ui/useChatFileDropZone';
 import { usePhoneLayout } from '../../hooks/ui/useViewportBreakpoint';
 import { MainPanelHeader } from './MainPanelHeader';
-import { MainPanelContent } from './MainPanelContent';
+import { NewShellSplitContent as MainPanelContent } from './NewShellSplitContent';
 import { AgentErrorBanner } from './AgentErrorBanner';
 import { PianolaDashboard } from '../PianolaDashboard';
 import { PianolaDashboardTab } from '../PianolaDashboard/PianolaTabControls';

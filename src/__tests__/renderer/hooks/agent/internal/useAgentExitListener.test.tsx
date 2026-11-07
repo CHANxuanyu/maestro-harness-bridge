@@ -60,6 +60,7 @@ beforeEach(() => {
 	useSettingsStore.setState(useSettingsStore.getInitialState(), true);
 	useNotificationStore.setState(useNotificationStore.getInitialState(), true);
 	useNotificationStore.getState().setOsNotifications(false);
+	useSettingsStore.setState({ newShell: false });
 	handler = undefined;
 	mockIsWebDesktop = false;
 	useRetryStore.setState({ retries: {}, outages: {} } as any);
@@ -86,6 +87,50 @@ afterEach(async () => {
 });
 
 describe('useAgentExitListener', () => {
+	it.each([false, true])(
+		'keeps other conversations and queues intact after a scoped Stop, own queue %s',
+		async (ownQueue) => {
+			useSettingsStore.setState({ newShell: true });
+			const background = createMockAITab({
+				id: 'right',
+				state: 'busy',
+				inputValue: 'draft',
+				logs: [{ id: 'partial', timestamp: 1, source: 'ai', text: 'partial output' }],
+			});
+			const otherItem = {
+				id: 'other',
+				timestamp: 1,
+				tabId: 'right',
+				type: 'message' as const,
+				text: 'other queued',
+				readOnlyMode: true,
+			};
+			const ownItem = { ...otherItem, id: 'own', tabId: 'left', text: 'own queued' };
+			const session = createMockSession({
+				id: 'sess-1',
+				state: 'busy',
+				busySource: 'ai',
+				aiTabs: [createMockAITab({ id: 'left', state: 'busy' }), background],
+				activeTabId: 'right',
+				executionQueue: ownQueue ? [otherItem, ownItem] : [otherItem],
+			});
+			useSessionStore.setState({ sessions: [session] });
+			const processQueuedItem = vi.fn().mockResolvedValue(undefined);
+			const deps = { ...makeDeps(), processQueuedItemRef: { current: processQueuedItem } };
+			renderHook(() => useAgentExitListener(deps));
+			await act(async () => {
+				await handler!('sess-1-ai-left', 130, undefined, true);
+			});
+			expect(useSessionStore.getState().sessions[0].aiTabs[1]).toEqual(background);
+			expect(useSessionStore.getState().sessions[0].executionQueue).toEqual([otherItem]);
+			await act(async () => {
+				await new Promise((resolve) => setTimeout(resolve, 0));
+			});
+			if (ownQueue) expect(processQueuedItem).toHaveBeenCalledExactlyOnceWith('sess-1', ownItem);
+			else expect(processQueuedItem).not.toHaveBeenCalled();
+		}
+	);
+
 	it('skips terminal-tab format session ids', async () => {
 		renderHook(() => useAgentExitListener(makeDeps()));
 		await handler!('sess-1-terminal-tab-1', 0);

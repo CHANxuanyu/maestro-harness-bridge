@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { ToolbarControls } from '../../../../../renderer/components/InputArea/components/ToolbarControls';
@@ -6,8 +6,11 @@ import { usePhoneLayout } from '../../../../../renderer/hooks/ui/useViewportBrea
 import { createInputAreaSession, inputAreaTheme } from '../_fixtures';
 import { restorePointer, setCoarsePointer } from '../../../../helpers/mockPointer';
 
+import { useSessionStore } from '../../../../../renderer/stores/sessionStore';
+
 const mockUpdateSessionWith = vi.fn();
-vi.mock('../../../../../renderer/stores/sessionStore', () => ({
+vi.mock('../../../../../renderer/stores/sessionStore', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../../../../renderer/stores/sessionStore')>()),
 	updateSessionWith: (...args: unknown[]) => mockUpdateSessionWith(...args),
 }));
 
@@ -61,6 +64,38 @@ describe('ToolbarControls', () => {
 			/>
 		);
 	}
+
+	it('opens the image picker belonging to the clicked pane', () => {
+		useSettingsStore.setState({ newShell: true });
+		const left = renderToolbar();
+		const right = renderToolbar();
+		const leftClick = vi.spyOn(left.container.querySelector('input[type="file"]')!, 'click');
+		const rightClick = vi.spyOn(right.container.querySelector('input[type="file"]')!, 'click');
+		fireEvent.click(right.container.querySelector('[title="Attach Image"]')!);
+		expect(rightClick).toHaveBeenCalledOnce();
+		expect(leftClick).not.toHaveBeenCalled();
+	});
+
+	it('pins image selection and the asynchronous read to the original conversation', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = createInputAreaSession();
+		const first = session.aiTabs[0];
+		first.stagedImages = [];
+		session.aiTabs.push({ ...first, id: 'other', stagedImages: [] });
+		useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+		const globalSetter = vi.fn();
+		const view = renderToolbar({ session, setStagedImages: globalSetter });
+		fireEvent.click(screen.getByTitle('Attach Image'));
+		useSessionStore.getState().updateSession(session.id, { activeTabId: 'other' });
+		fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+			target: { files: [new File(['pixels'], 'test.png', { type: 'image/png' })] },
+		});
+		await waitFor(() =>
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].stagedImages).toHaveLength(1)
+		);
+		expect(useSessionStore.getState().sessions[0].aiTabs[1].stagedImages).toEqual([]);
+		expect(globalSetter).not.toHaveBeenCalled();
+	});
 
 	it('shows inherited standard immediately while target capabilities are loading', () => {
 		useSettingsStore.setState({ newShell: true });
@@ -146,17 +181,15 @@ describe('ToolbarControls', () => {
 		expect(screen.getByText('~/project/src')).toBeInTheDocument();
 	});
 
-	it('opens prompt composer and triggers file input lookup', () => {
+	it('opens prompt composer and its own file input', () => {
 		const onOpenPromptComposer = vi.fn();
-		const click = vi.fn();
-		vi.spyOn(document, 'getElementById').mockReturnValue({ click } as any);
-		renderToolbar({ onOpenPromptComposer });
+		const { container } = renderToolbar({ onOpenPromptComposer });
+		const click = vi.spyOn(container.querySelector('input[type="file"]')!, 'click');
 
 		fireEvent.click(screen.getByTitle(/Open Prompt Composer/));
 		fireEvent.click(screen.getByTitle('Attach Image'));
 
 		expect(onOpenPromptComposer).toHaveBeenCalled();
-		expect(document.getElementById).toHaveBeenCalledWith('image-file-input');
 		expect(click).toHaveBeenCalled();
 	});
 
@@ -338,10 +371,10 @@ describe('ToolbarControls', () => {
 		});
 
 		it('renders exactly one image file input', () => {
-			// The attach button reaches it by element id, so a second copy would
+			// Each toolbar owns exactly one file input.
 			// make the click resolve to whichever mounted first.
 			const { container } = renderPhoneToolbar();
-			expect(container.querySelectorAll('#image-file-input')).toHaveLength(1);
+			expect(container.querySelectorAll('input[type="file"]')).toHaveLength(1);
 		});
 	});
 

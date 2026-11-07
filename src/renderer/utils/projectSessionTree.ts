@@ -1,9 +1,12 @@
-import type { Group, Session } from '../types';
-import type { ProjectHistoryConversation, ProjectHistoryScope } from '../../shared/projectHistory';
+export { buildProjectHistoryScopes } from './nativeConversationMatch';
+import type { ArchivedConversation } from '../../shared/conversationArchive';
+import type { ConversationOrigin, Group, Session } from '../types';
+import { findConversationParent } from '../../shared/conversationChildren';
+import type { ProjectHistoryConversation } from '../../shared/projectHistory';
 import { getBasename } from '../../shared/formatters';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
 import { DEEPSEEK_PRESET, sessionProviderId } from '../../shared/agentPresets';
-import { isSessionIdLabel, visibleAiTabs } from './tabHelpers';
+import { isAiTabHidden, isSessionIdLabel, visibleAiTabs } from './tabHelpers';
 import { conversationDisplayTitle } from './conversationTitle';
 import {
 	matchRecordForTab,
@@ -17,6 +20,8 @@ import {
 export const PROJECT_HISTORY_PAGE_SIZE = 15;
 
 export interface SidebarConversation {
+	/** New shell only: real conversations dispatched from this row. */
+	children?: SidebarConversation[];
 	key: string;
 	/**
 	 * `open`: an AI tab in this window (it may also be in native history).
@@ -60,6 +65,7 @@ export interface SidebarAgentChoice {
 }
 
 export interface SidebarProject {
+	archivedConversations?: ArchivedConversation[];
 	key: string;
 	groupId?: string;
 	name: string;
@@ -79,12 +85,15 @@ export interface SidebarProject {
 export { sessionProjectKey } from './nativeConversationMatch';
 
 interface ProjectSessionTreeOptions {
+	newShell?: boolean;
+	archives?: ArchivedConversation[];
 	sessions: Session[];
 	/** Already in the user's sidebar group order. */
 	groups: Group[];
 	groupsPlusEnabled?: boolean;
 	collapsedProjects?: string[];
 	search?: string;
+	remoteTitleOnly?: boolean;
 	unreadOnly?: boolean;
 	/** Native conversations from `agentSessions.listProjectHistory`. */
 	history?: ProjectHistoryConversation[];
@@ -120,49 +129,11 @@ function historyProviderId(
 	return deepseekAccount ? DEEPSEEK_PRESET.id : record.provider;
 }
 
-/**
- * One scope per project + host + path, so a manual group spanning several
- * repositories asks for every one of them. Ordered, so its JSON is a stable key.
- */
-export function buildProjectHistoryScopes(
-	sessions: Session[],
-	groups: Group[]
-): ProjectHistoryScope[] {
-	const groupById = new Map(groups.map((group) => [group.id, group]));
-	const ownerById = new Map(sessions.map((session) => [session.id, session]));
-	const scopes = new Map<string, ProjectHistoryScope>();
-	for (const session of sessions) {
-		if (session.toolType === 'terminal') continue;
-		const projectPath = sessionPath(session);
-		if (!projectPath) continue;
-		const { key: projectKey } = sessionProjectKey(session, ownerById, groupById);
-		const sshRemoteId = sessionHost(session);
-		const id = `${projectKey}\0${sshRemoteId ?? ''}\0${projectPath}`;
-		let scope = scopes.get(id);
-		if (!scope) {
-			scope = { projectKey, projectPath, ...(sshRemoteId ? { sshRemoteId } : {}), ownerIds: [] };
-			scopes.set(id, scope);
-		}
-		scope.ownerIds.push(session.id);
-	}
-	return [...scopes.values()]
-		.map((scope) => ({ ...scope, ownerIds: [...scope.ownerIds].sort() }))
-		.sort((a, b) =>
-			`${a.projectKey}\0${a.sshRemoteId ?? ''}\0${a.projectPath}`.localeCompare(
-				`${b.projectKey}\0${b.sshRemoteId ?? ''}\0${b.projectPath}`
-			)
-		);
-}
-
 /** A readable title: never a bare id when a name or the first message exists. */
 export function historyTitle(conversation: ProjectHistoryConversation): string {
 	const title = conversation.title?.trim();
-	if (
-		title &&
-		title !== conversation.nativeSessionId &&
-		!isSessionIdLabel(title, conversation.nativeSessionId)
-	)
-		return title;
+	const nativeSessionId = conversation.nativeSessionId;
+	if (title && title !== nativeSessionId && !isSessionIdLabel(title, nativeSessionId)) return title;
 	return conversation.preview?.trim().split('\n')[0] ?? '';
 }
 
@@ -196,11 +167,14 @@ function aliasFor(
  * row per native conversation. Nothing here copies or imports a transcript.
  */
 export function buildProjectSessionTree({
+	newShell = false,
+	archives = [],
 	sessions,
 	groups,
 	groupsPlusEnabled = false,
 	collapsedProjects = [],
 	search = '',
+	remoteTitleOnly = false,
 	unreadOnly = false,
 	history = [],
 	providerFilter = null,
@@ -210,6 +184,7 @@ export function buildProjectSessionTree({
 	const ownerById = new Map(sessions.map((session) => [session.id, session]));
 	const projects = new Map<string, SidebarProject>();
 	const rowsByProject = new Map<string, SidebarConversation[]>();
+	const origins = new Map<string, ConversationOrigin>();
 	const collapsed = new Set(collapsedProjects);
 	const query = search.trim().toLocaleLowerCase();
 	for (const group of groups) {
@@ -233,11 +208,47 @@ export function buildProjectSessionTree({
 	// Main's key (provider + host + account pool + native id) is the identity;
 	// the same native id in two account pools stays two conversations.
 	const historyByKey = new Map<string, ProjectHistoryConversation>();
-	for (const record of history) {
+	for (const record of newShell ? [...history, ...archives] : history) {
+		if (
+			!newShell &&
+			archives.some(
+				(item) =>
+					item.key === record.key ||
+					(record.key.startsWith('local:') &&
+						item.ownerIds.includes(record.ownerId ?? '') &&
+						item.nativeSessionId === record.nativeSessionId)
+			)
+		)
+			continue;
 		const existing = historyByKey.get(record.key);
 		if (!existing || record.modifiedAt > existing.modifiedAt) historyByKey.set(record.key, record);
 	}
 	const records = [...historyByKey.values()];
+	const recordsByNative = new Map<string, ProjectHistoryConversation[]>();
+	for (const record of records) {
+		const id = record.nativeSessionId;
+		const bucket = recordsByNative.get(id);
+		if (bucket) bucket.push(record);
+		else recordsByNative.set(id, [record]);
+	}
+	const matchedRecords = new Map<string, ProjectHistoryConversation | null>();
+	const recordFor = (session: Session, nativeId: string) => {
+		const key = JSON.stringify([session.id, nativeId]);
+		if (!matchedRecords.has(key))
+			matchedRecords.set(
+				key,
+				matchRecordForTab(runnerAccount(session), nativeId, recordsByNative.get(nativeId) ?? [])
+			);
+		return matchedRecords.get(key) ?? null;
+	};
+	const archivedKeys = new Set(archives.map((record) => record.key));
+	const archivedNative = new Set(
+		archives.flatMap((record) =>
+			record.ownerIds.map((id) => JSON.stringify([id, record.nativeSessionId]))
+		)
+	);
+	const archivedRows = new Set<string>();
+
 	// Record keys claimed by an open tab, and identities of open tabs no record names.
 	const claimed = new Set<string>();
 
@@ -271,9 +282,18 @@ export function buildProjectSessionTree({
 			});
 		}
 		const runner = runnerAccount(session);
-		for (const tab of visibleAiTabs(session.aiTabs)) {
+		for (const tab of session.aiTabs) {
+			if (isAiTabHidden(tab) && !(newShell && (tab.origin || tab.consultOrigin))) continue;
+			if (
+				!newShell &&
+				archives.some(
+					(item) =>
+						item.ownerIds.includes(session.id) && item.nativeSessionId === tab.agentSessionId
+				)
+			)
+				continue;
 			const record = tab.agentSessionId
-				? (matchRecordForTab(runner, tab.agentSessionId, records) ?? undefined)
+				? (recordFor(session, tab.agentSessionId) ?? undefined)
 				: undefined;
 			const identity = record
 				? record.key
@@ -283,6 +303,13 @@ export function buildProjectSessionTree({
 			// A second tab on the same native conversation (another runner) adds no row.
 			if (identity && claimed.has(identity)) continue;
 			if (identity) claimed.add(identity);
+			if (newShell) {
+				for (const nativeId of tab.consultOrigin?.nativeSessionIds ?? []) {
+					const consultRecord = recordFor(session, nativeId);
+					claimed.add(consultRecord?.key ?? openTabIdentity(runner, nativeId));
+				}
+			}
+
 			const recordTitle = record ? historyTitle(record) : '';
 			// Never the provider id label. Before the tab is named or its native
 			// record is scanned, the row uses the first thing the user said, like
@@ -293,6 +320,29 @@ export function buildProjectSessionTree({
 			// streamed chunks never touch the first message.
 			const name = tab.name && !isSessionIdLabel(tab.name, tab.agentSessionId) ? tab.name : '';
 			const title = name || recordTitle || conversationDisplayTitle(tab) || '';
+			if (newShell) {
+				const source = tab.consultOrigin
+					? ownerById.get(tab.consultOrigin.sourceSessionId)
+					: undefined;
+				const sourceTab = source?.aiTabs.find((t) => t.id === tab.consultOrigin?.sourceTabId);
+				const origin =
+					tab.origin ??
+					(tab.consultOrigin && source
+						? {
+								kind: 'subtask' as const,
+								...tab.consultOrigin,
+								sourceProvider: sessionProviderId(source),
+								sourceNativeSessionId: sourceTab?.agentSessionId ?? undefined,
+								createdAt: tab.createdAt,
+							}
+						: undefined);
+				if (origin) origins.set(`${session.id}:${tab.id}`, origin);
+			}
+			if (
+				archivedNative.has(JSON.stringify([session.id, tab.agentSessionId])) ||
+				(record && archivedKeys.has(record.key))
+			)
+				archivedRows.add(`${session.id}:${tab.id}`);
 			rowsByProject.get(key)!.push({
 				key: `${session.id}:${tab.id}`,
 				kind: 'open',
@@ -305,7 +355,7 @@ export function buildProjectSessionTree({
 				agentName: session.name,
 				projectPath: path,
 				busy: tab.state === 'busy',
-				unread: !!tab.hasUnread,
+				unread: !isAiTabHidden(tab) && !!tab.hasUnread,
 				error: !!tab.agentError,
 				starred: tab.starred,
 				canDeleteWorktree: !!(session.parentSessionId && session.worktreeBranch),
@@ -321,6 +371,12 @@ export function buildProjectSessionTree({
 		const rows = rowsByProject.get(record.projectKey);
 		// A scope the window no longer has (agent removed mid-load) has nowhere to go.
 		if (!rows) continue;
+		if (
+			archivedKeys.has(record.key) ||
+			(record.key.startsWith('local:') &&
+				archivedNative.has(JSON.stringify([record.ownerId, record.nativeSessionId])))
+		)
+			archivedRows.add(`history:${record.key}`);
 		const owner = record.ownerId ? ownerById.get(record.ownerId) : undefined;
 		const title = historyTitle(record);
 		rows.push({
@@ -344,11 +400,85 @@ export function buildProjectSessionTree({
 		});
 	}
 
+	// Resolve before filtering or paging so a closed source stays above its live
+	// children, including a target configured under a different project.
+	const allRows = [...rowsByProject.values()].flat();
+	const parents = new Map<string, string>();
+	if (newShell) {
+		const tabsByIdentity = new Map<string, SidebarConversation>();
+		const nativeRows = new Map<string, SidebarConversation[]>();
+		const rowsByHistory = new Map<string, SidebarConversation>();
+		for (const candidate of allRows) {
+			if (candidate.history) rowsByHistory.set(candidate.history.key, candidate);
+			if (candidate.kind !== 'open') continue;
+			tabsByIdentity.set(JSON.stringify([candidate.ownerId, candidate.tabId]), candidate);
+			if (candidate.nativeSessionId) {
+				const key = JSON.stringify([
+					candidate.ownerId,
+					candidate.provider,
+					candidate.nativeSessionId,
+				]);
+				const bucket = nativeRows.get(key);
+				if (bucket) bucket.push(candidate);
+				else nativeRows.set(key, [candidate]);
+			}
+		}
+		for (const row of allRows) {
+			const origin = origins.get(row.key);
+			if (!origin) continue;
+			const exact = tabsByIdentity.get(
+				JSON.stringify([origin.sourceSessionId, origin.sourceTabId])
+			);
+			const candidates =
+				exact && exact.key !== row.key
+					? [exact]
+					: [
+							...(nativeRows.get(
+								JSON.stringify([
+									origin.sourceSessionId,
+									origin.sourceProvider,
+									origin.sourceNativeSessionId,
+								])
+							) ?? []),
+						];
+			if (!exact && origin.sourceNativeSessionId) {
+				const source = ownerById.get(origin.sourceSessionId);
+				const record = source ? recordFor(source, origin.sourceNativeSessionId) : null;
+				const historyParent = record ? rowsByHistory.get(record.key) : undefined;
+				if (historyParent?.kind === 'history')
+					candidates.push({ ...historyParent, ownerId: origin.sourceSessionId });
+			}
+			const parent = findConversationParent(
+				origin,
+				candidates.filter((candidate) => candidate.key !== row.key)
+			);
+			if (!parent) continue;
+			let ancestor: string | undefined = parent.key;
+			while (ancestor && ancestor !== row.key) ancestor = parents.get(ancestor);
+			if (ancestor === row.key) continue;
+			parents.set(row.key, parent.key);
+		}
+		const byKey = new Map(allRows.map((row) => [row.key, row]));
+		for (const row of allRows) {
+			const parentKey = parents.get(row.key);
+			if (parentKey) (byKey.get(parentKey)!.children ??= []).push(row);
+		}
+	}
+
 	for (const project of projects.values()) {
-		const rows = (rowsByProject.get(project.key) ?? []).filter((row) => {
+		if (archives.length)
+			project.archivedConversations = archives.filter(
+				(record) => record.projectKey === project.key
+			);
+		const matches = (row: SidebarConversation): boolean => {
 			if (providerFilter && row.provider !== providerFilter) return false;
 			if (unreadOnly && !row.unread && !row.busy && !row.error) return false;
 			if (!query) return true;
+			const owner = row.ownerId ? ownerById.get(row.ownerId) : undefined;
+			if (remoteTitleOnly && (row.history?.sshRemoteId || (owner && sessionHost(owner))))
+				return [row.title, row.nativeTitle ?? '', row.history?.title ?? ''].some((value) =>
+					value.toLocaleLowerCase().includes(query)
+				);
 			return [
 				row.title,
 				row.nativeTitle ?? '',
@@ -360,14 +490,29 @@ export function buildProjectSessionTree({
 				project.name,
 				row.nativeSessionId ?? '',
 			].some((value) => value.toLocaleLowerCase().includes(query));
-		});
-		rows.sort((a, b) => Number(b.starred) - Number(a.starred) || b.modifiedAt - a.modifiedAt);
+		};
+		const filterRows = (input: SidebarConversation[]): SidebarConversation[] =>
+			input
+				.flatMap((row) => {
+					if (archivedRows.has(row.key)) return [];
+					const children = row.children ? filterRows(row.children) : undefined;
+					if (!matches(row) && !children?.length) return [];
+					return [{ ...row, ...(children ? { children } : {}) }];
+				})
+				.sort((a, b) => Number(b.starred) - Number(a.starred) || b.modifiedAt - a.modifiedAt);
+		const rows = filterRows(
+			(rowsByProject.get(project.key) ?? []).filter((row) => !parents.has(row.key))
+		);
 		const limit = rowLimits[project.key] ?? PROJECT_HISTORY_PAGE_SIZE;
 		// Open tabs are never paged away: they are what the user is working in.
-		const visible = rows.filter((row, index) => index < limit || row.kind === 'open');
+		const hasOpen = (row: SidebarConversation): boolean =>
+			row.kind === 'open' || !!row.children?.some(hasOpen);
+		const visible = rows.filter((row, index) => index < limit || hasOpen(row));
+		const count = (input: SidebarConversation[]): number =>
+			input.reduce((sum, row) => sum + 1 + count(row.children ?? []), 0);
 		project.conversations = visible;
-		project.totalCount = rows.length;
-		project.hiddenCount = rows.length - visible.length;
+		project.totalCount = count(rows);
+		project.hiddenCount = project.totalCount - count(visible);
 	}
 
 	const filtering = !!query || unreadOnly || !!providerFilter;
@@ -378,7 +523,7 @@ export function buildProjectSessionTree({
 				groupsPlusEnabled && group?.parentGroupId ? groupById.get(group.parentGroupId) : undefined;
 			if (!filtering && project.depth > 0 && parent?.collapsed) return false;
 			if (filtering) {
-				if (project.totalCount > 0) return true;
+				if (project.totalCount > 0 || project.archivedConversations?.length) return true;
 				return (
 					groupsPlusEnabled &&
 					groups.some(

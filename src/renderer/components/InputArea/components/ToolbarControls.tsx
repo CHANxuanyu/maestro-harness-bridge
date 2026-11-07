@@ -1,6 +1,6 @@
 import { permissionModeLabel, permissionModeTooltip } from '../utils/displayLabels';
 import { useT } from '../../../i18n';
-import React, { memo, useCallback, useState } from 'react';
+import React, { memo, useCallback, useRef, useState } from 'react';
 import {
 	ArrowUp,
 	Brain,
@@ -19,7 +19,7 @@ import { formatEnterToSend, isMacOS } from '../../../utils/shortcutFormatter';
 import { resolveTabPermissionMode } from '../../../../shared/agentMetadata';
 import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { shortcutSuffix } from '../../ui/ShortcutHint';
-import { updateSessionWith } from '../../../stores/sessionStore';
+import { updateAiTab, updateSessionWith } from '../../../stores/sessionStore';
 import { captureException } from '../../../utils/sentry';
 import { isCoarsePointer } from '../../../utils/touch';
 import { useViewportBreakpoint } from '../../../hooks/ui';
@@ -186,26 +186,45 @@ export const ToolbarControls = memo(function ToolbarControls({
 
 	const activeTabId = activeTab?.id;
 
-	// One hidden file input, rendered by BOTH the phone row and the desktop row.
-	// The attach button reaches it by element id, so a second copy would give two
-	// elements the same id and the click would resolve to whichever mounted first.
+	const imageInputRef = useRef<HTMLInputElement>(null);
+	const selectionTargetRef = useRef<{ sessionId: string; tabId: string } | null>(null);
+	const openImagePicker = () => {
+		selectionTargetRef.current =
+			newShell && activeTabId ? { sessionId: session.id, tabId: activeTabId } : null;
+		imageInputRef.current?.click();
+	};
+
 	const imageFileInput = (
 		<input
-			id="image-file-input"
+			ref={imageInputRef}
 			type="file"
 			accept="image/*"
 			multiple
 			className="hidden"
 			onChange={(e) => {
 				const files = Array.from(e.target.files || []);
+				const target =
+					selectionTargetRef.current ??
+					(newShell && activeTabId ? { sessionId: session.id, tabId: activeTabId } : null);
 				files.forEach((file) => {
 					const reader = new FileReader();
 					reader.onload = (event) => {
 						if (event.target?.result) {
 							const imageData = event.target.result as string;
-							setStagedImages((prev) =>
-								addStagedImageIfUnique(prev, imageData, showFlashNotification)
-							);
+							if (target) {
+								updateAiTab(target.sessionId, target.tabId, (tab) => ({
+									...tab,
+									stagedImages: addStagedImageIfUnique(
+										tab.stagedImages ?? [],
+										imageData,
+										showFlashNotification
+									),
+								}));
+							} else {
+								setStagedImages((prev) =>
+									addStagedImageIfUnique(prev, imageData, showFlashNotification)
+								);
+							}
 						}
 					};
 					reader.onerror = (event) => {
@@ -296,7 +315,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 					)}
 					{isAiMode && canAttachImages && (
 						<button
-							onClick={() => document.getElementById('image-file-input')?.click()}
+							onClick={openImagePicker}
 							className="flex h-9 w-9 items-center justify-center rounded opacity-70"
 							title={t('workflows.shell.attachImage')}
 							aria-label={t('workflows.shell.attachImage')}
@@ -426,7 +445,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 				)}
 				{isAiMode && canAttachImages && (
 					<button
-						onClick={() => document.getElementById('image-file-input')?.click()}
+						onClick={openImagePicker}
 						className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
 						title={t('workflows.shell.attachImage')}
 					>

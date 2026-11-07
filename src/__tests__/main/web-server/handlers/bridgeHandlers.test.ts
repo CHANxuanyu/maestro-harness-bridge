@@ -442,3 +442,32 @@ describe('handleBridgeInvoke denied channels', () => {
 		expect(send.mock.calls[0][1]).toMatchObject({ ok: true, result: 'dracula' });
 	});
 });
+
+it('removes project environment values from browser service replies while retaining trusted CLI replies', async () => {
+	const result = {
+		success: true,
+		scope: { projectPath: '/tmp/project' },
+		settings: { envVars: { TOKEN: 'synthetic-private-value' } },
+	};
+	invokeHandlers.set('settings:projectSettings', () => result);
+	for (const trustedCli of [false, true]) {
+		const send = vi.fn();
+		await handleBridgeInvoke(
+			{ ...makeClient(), trustedCli },
+			{
+				type: 'bridge.invoke',
+				requestId: 1,
+				channel: 'settings:projectSettings',
+				args: [{ action: 'show', scope: result.scope }],
+			},
+			send
+		);
+		const reply = send.mock.calls[0][1].result;
+		if (trustedCli) expect(reply).toEqual(result);
+		else {
+			expect(JSON.stringify(reply)).not.toContain('synthetic-private-value');
+			expect(reply.environmentRedacted).toBe(true);
+		}
+	}
+	expect(result.settings.envVars.TOKEN).toBe('synthetic-private-value');
+});

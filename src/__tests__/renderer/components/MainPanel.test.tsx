@@ -791,6 +791,15 @@ describe('MainPanel', () => {
 		expect(screen.getAllByTestId('new-shell-split-pane')).toHaveLength(2);
 	});
 
+	it('passes the pane identity explicitly to Stop', () => {
+		seedSplit(true);
+		const stop = vi.fn();
+		render(<MainPanel {...defaultProps} handleInterrupt={stop} />);
+		const panes = screen.getAllByTestId('new-shell-split-pane');
+		fireEvent.click(within(panes[1]).getByTestId('pane-stop'));
+		expect(stop).toHaveBeenCalledExactlyOnceWith({ sessionId: 'left', tabId: 'right-tab' });
+	});
+
 	it('saves an unfocused pane scroll and clears unread only when it reaches the bottom', () => {
 		seedSplit();
 		useSessionStore.getState().setSessions((sessions) =>

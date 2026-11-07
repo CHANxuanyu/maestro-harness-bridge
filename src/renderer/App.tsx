@@ -986,7 +986,9 @@ function MaestroConsoleInner() {
 	>(null);
 	// Ref for handleInterrupt - bridges the ordering gap between useInputHandlers
 	// (Escape stops the conversation on screen) and useInterruptHandler below
-	const interruptTurnRef = useRef<(() => void) | null>(null);
+	const interruptTurnRef = useRef<((target?: { sessionId: string; tabId: string }) => void) | null>(
+		null
+	);
 	// Ref for handleResumeSession - bridges ordering gap between useModalHandlers and useAgentSessionManagement
 	const handleResumeSessionRef = useRef<
 		((agentSessionId: string, providedMessages?: undefined, sessionName?: string) => void) | null

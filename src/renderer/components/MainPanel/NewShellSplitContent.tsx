@@ -111,6 +111,8 @@ function ConversationPane({
 				activeBrowserTabId={null}
 				focusedPane={focused}
 				composerTargetTabId={target.tabId}
+				handleInterrupt={() => content.handleInterrupt(target)}
+				handleInputKeyDown={(event) => content.handleInputKeyDown(event, target)}
 				inputRef={focused ? content.inputRef : inputRef}
 				logsEndRef={focused ? content.logsEndRef : logsEndRef}
 				terminalOutputRef={focused ? content.terminalOutputRef : terminalOutputRef}

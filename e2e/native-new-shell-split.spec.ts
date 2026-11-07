@@ -259,3 +259,145 @@ test('new shell split: independent conversations, focus, resize, restore and cla
 		fs.rmSync(native.root, { recursive: true, force: true });
 	}
 });
+
+for (const split of [true, false]) {
+	// eslint-disable-next-line no-empty-pattern
+	test(`new shell ${split ? 'split button' : 'single pane Escape'} stops only one conversation of the same tool`, async ({}, info) => {
+		const native = new NativeApp(info, { providerCli: false });
+		const home = path.join(native.root, 'home');
+		fs.mkdirSync(home);
+		const gate = path.join(native.root, 'finish-background');
+		const answer = 'Background answer first paragraph.\n\nBackground answer final paragraph.';
+		const script = path.join(native.root, 'same-tool.json');
+		fs.writeFileSync(
+			script,
+			JSON.stringify({
+				turns: [
+					{ answer: '', waitForStop: true },
+					{
+						answer,
+						tools: [
+							{
+								id: 'background-tool',
+								command: 'synthetic read',
+								output: 'complete tool output',
+								updates: ['background is running'],
+								gates: [gate],
+							},
+						],
+					},
+				],
+			})
+		);
+		const tabs = ['left', 'right'].map((id) =>
+			createMockAITab({
+				id,
+				name: `${id} conversation`,
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+				saveToHistory: false,
+				newShellPanel: { tab: 'files', open: false },
+				logs: [{ id: `${id}-seed`, timestamp: 1, source: 'ai', text: `${id} saved answer` }],
+			})
+		);
+		const session = createMockSession({
+			id: 'same-tool',
+			name: 'Shared project',
+			toolType: 'claude-code',
+			cwd: fs.realpathSync(native.project),
+			fullPath: fs.realpathSync(native.project),
+			projectRoot: fs.realpathSync(native.project),
+			customPath: path.resolve('e2e/fixtures/native/claude'),
+			customEnvVars: { CLAUDE_CONFIG_DIR: native.claude, MAESTRO_NATIVE_SCRIPT: script },
+			aiTabs: tabs,
+			activeTabId: 'left',
+			unifiedTabOrder: tabs.map((tab) => ({ type: 'ai' as const, id: tab.id })),
+		});
+		const settingsFile = path.join(native.data, 'maestro-settings.json');
+		fs.writeFileSync(
+			settingsFile,
+			JSON.stringify({
+				...JSON.parse(fs.readFileSync(settingsFile, 'utf8')),
+				newShell: true,
+				defaultSaveToHistory: false,
+				crashReportingEnabled: false,
+			})
+		);
+		const sessionsFile = path.join(native.data, 'maestro-sessions.json');
+		fs.writeFileSync(sessionsFile, JSON.stringify({ sessions: [session] }));
+		const saved = (): Session =>
+			JSON.parse(fs.readFileSync(sessionsFile, 'utf8')).sessions.find(
+				(item: Session) => item.id === session.id
+			);
+		const pane = (id: string) =>
+			native.page.locator(`[data-testid="new-shell-split-pane"][data-tab-id="${id}"]`);
+		const input = (id: string) =>
+			split ? pane(id).getByPlaceholder(/^(Talking to |Message )/) : native.input();
+		let failed = false;
+		try {
+			await native.start(home);
+			const appWindow = await native.app.browserWindow(native.page);
+			await appWindow.evaluate((win) => win.setContentSize(1800, 960));
+			await native.cli('focus-agent', session.id, '--tab', 'left');
+			if (split) {
+				expect((await native.cli('tab', 'split', 'right')).success).toBe(true);
+				await expect(native.page.getByTestId('new-shell-split-pane')).toHaveCount(2);
+			}
+			await input('left').fill('Run the foreground fixture');
+			await input('left').press('Enter');
+			await expect
+				.poll(
+					() =>
+						fs.existsSync(path.join(native.claude, 'fixture-turn-count')) &&
+						fs.readFileSync(path.join(native.claude, 'fixture-turn-count'), 'utf8')
+				)
+				.toBe('1');
+			await native.cli('focus-agent', session.id, '--tab', 'right');
+			await input('right').fill('Run the background fixture');
+			await input('right').press('Enter');
+			await expect.poll(() => saved().aiTabs.map((tab) => tab.state)).toEqual(['busy', 'busy']);
+			await expect
+				.poll(() => fs.readFileSync(path.join(native.claude, 'fixture-turn-count'), 'utf8'))
+				.toBe('2');
+			await input('right').fill('Keep this background draft');
+			if (split) {
+				await pane('left').getByTestId('stop-turn-button').click();
+			} else {
+				await native.cli('focus-agent', session.id, '--tab', 'left');
+				await input('left').press('Escape');
+			}
+			await expect.poll(() => saved().aiTabs.map((tab) => tab.state)).toEqual(['idle', 'busy']);
+			expect(saved().aiTabs[1].inputValue).toBe('Keep this background draft');
+			const processes = await native.page.evaluate(() =>
+				window.maestro.process.getActiveProcesses()
+			);
+			expect(processes.some((process) => process.sessionId === 'same-tool-ai-right')).toBe(true);
+			fs.writeFileSync(gate, 'continue');
+			await expect.poll(() => saved().aiTabs[1].state).toBe('idle');
+			await expect
+				.poll(() =>
+					saved()
+						.aiTabs[1].logs.filter((log) => log.source === 'ai' || log.source === 'stdout')
+						.map((log) => log.text)
+						.join('\n')
+				)
+				.toContain(answer);
+			expect(saved().aiTabs[0].logs.some((log) => log.text.includes('Background answer'))).toBe(
+				false
+			);
+			expect(saved().aiTabs[1].logs.some((log) => /canceled by user/i.test(log.text))).toBe(false);
+			await native.cli('focus-agent', session.id, '--tab', 'right');
+			const output = split
+				? pane('right').getByLabel('Terminal output', { exact: true })
+				: native.output();
+			await expect(output).toContainText('Background answer first paragraph.');
+			await expect(output).toContainText('Background answer final paragraph.');
+		} catch (error) {
+			failed = true;
+			throw error;
+		} finally {
+			if (native.app) await native.close(failed);
+			fs.rmSync(native.root, { recursive: true, force: true });
+		}
+	});
+}

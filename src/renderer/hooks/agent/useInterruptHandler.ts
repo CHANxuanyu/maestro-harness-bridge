@@ -32,6 +32,8 @@ import { logger } from '../../utils/logger';
 import { isTransientActivityEntry, settleRunningToolEntries } from '../../utils/logEntries';
 import { currentActivityRetention } from '../../utils/activityRetention';
 import { getT } from '../../i18n';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { notifyCenterFlash } from '../../stores/centerFlashStore';
 import { dropMentionHandoffs } from '../../services/crossAgentHandoff';
 
 /**
@@ -58,7 +60,7 @@ export interface UseInterruptHandlerDeps {
 	/** Ref to latest sessions array (avoids stale closure) */
 	sessionsRef: React.RefObject<Session[]>;
 	/** Cancel any pending synopsis processes for a session */
-	cancelPendingSynopsis: (sessionId: string) => Promise<void>;
+	cancelPendingSynopsis: (sessionId: string, tabId?: string) => Promise<void>;
 	/** Process next queued execution item */
 	processQueuedItem: (sessionId: string, item: QueuedItem) => Promise<void>;
 }
@@ -69,7 +71,7 @@ export interface UseInterruptHandlerDeps {
 
 export interface UseInterruptHandlerReturn {
 	/** Interrupt the active session's running process */
-	handleInterrupt: () => Promise<void>;
+	handleInterrupt: (target?: { sessionId: string; tabId: string }) => Promise<void>;
 }
 
 // ============================================================================
@@ -79,13 +81,14 @@ export interface UseInterruptHandlerReturn {
 /**
  * Every process id Stop must signal for this agent.
  *
- * Stop is an AGENT-level action, not a tab-level one: `handleInterrupt` idles
+ * Classic Stop is an AGENT-level action: `handleInterrupt` idles
  * EVERY busy tab, so signalling only the active tab left the other tabs'
  * agent processes running while the store recorded them as idle. Once a tab is
  * recorded idle, `closeTab` no longer parks it in `orphanedThinkingTabs`, so
  * closing it dropped the last reference to a live agent process and left no UI
  * path to stop it (issue #1448).
  *
+ * New shell Stop limits live tabs to the named conversation.
  * Orphans are included for the same reason: a closed-but-still-draining tab is
  * still writing under this agent, and Stop is the only control the user has.
  *
@@ -100,12 +103,19 @@ export interface UseInterruptHandlerReturn {
 async function collectInterruptTargets(
 	session: Session,
 	primaryTargetId: string,
-	includeAiTabs: boolean
+	includeAiTabs: boolean,
+	onlyTabId?: string
 ): Promise<string[]> {
 	const targets = [primaryTargetId];
 	if (!includeAiTabs) return targets;
 
 	for (const tab of getBusyTabs(session, { includeOrphans: true })) {
+		if (
+			onlyTabId &&
+			tab.id !== onlyTabId &&
+			!session.orphanedThinkingTabs?.some((orphan) => orphan.id === tab.id)
+		)
+			continue;
 		const tabTargetId = `${session.id}-ai-${tab.id}`;
 		if (!targets.includes(tabTargetId)) targets.push(tabTargetId);
 	}
@@ -129,6 +139,90 @@ async function collectInterruptTargets(
 	return targets;
 }
 
+/** New shell Stop owns one conversation plus closed tabs that have no other Stop entry. */
+async function interruptConversation(
+	session: Session,
+	tabId: string,
+	deps: UseInterruptHandlerDeps
+): Promise<void> {
+	if (!session.aiTabs.some((tab) => tab.id === tabId)) return;
+	const stoppedTabs = new Set([
+		tabId,
+		...(session.orphanedThinkingTabs ?? [])
+			.filter((tab) => tab.state === 'busy')
+			.map((tab) => tab.id),
+	]);
+	for (const id of stoppedTabs) {
+		dropMentionHandoffs(session.id, id);
+		// Side-effect cancellation is tab-scoped even while main is still spawning a consult.
+		await Promise.allSettled([
+			deps.cancelPendingSynopsis(session.id, id),
+			window.maestro.crossAgent.cancel(session.id, id),
+		]);
+	}
+	const processIds = await collectInterruptTargets(
+		session,
+		`${session.id}-ai-${tabId}`,
+		true,
+		tabId
+	);
+	const results = await Promise.allSettled(
+		processIds.map((id) => window.maestro.process.interrupt(id))
+	);
+	if (results.some((result) => result.status === 'rejected')) {
+		if (!confirm(getT()('workflows.shell.confirmForceStopConversation'))) return;
+		const killed = await Promise.allSettled(
+			processIds.map((id) => window.maestro.process.kill(id))
+		);
+		if (killed.some((result) => result.status === 'rejected')) {
+			notifyCenterFlash({
+				color: 'yellow',
+				message: getT()('workflows.shell.stopConversationFailed'),
+			});
+			return;
+		}
+	}
+	const canceledLog: LogEntry = {
+		id: generateId(),
+		timestamp: Date.now(),
+		source: 'system',
+		text: getT()('workflows.status.canceledByUser'),
+	};
+	updateSessionWith(session.id, (current) => {
+		const settle = (tab: Session['aiTabs'][number]) =>
+			stoppedTabs.has(tab.id)
+				? {
+						...tab,
+						state: 'idle' as const,
+						thinkingStartTime: undefined,
+						awaitingSessionId: false,
+						autoSendOnActivate: false,
+						logs: [...settleStoppedTools(tab.logs).filter(keptAfterStop), canceledLog],
+					}
+				: tab;
+		const aiTabs = current.aiTabs.map(settle);
+		const orphanedThinkingTabs = current.orphanedThinkingTabs?.map(settle);
+		const stillBusy = [...aiTabs, ...(orphanedThinkingTabs ?? [])].some(
+			(tab) => tab.state === 'busy'
+		);
+		return {
+			...current,
+			aiTabs,
+			orphanedThinkingTabs,
+			...(stillBusy
+				? {}
+				: {
+						state: 'idle' as const,
+						busySource: undefined,
+						thinkingStartTime: undefined,
+						pendingAICommandForSynopsis: undefined,
+					}),
+		};
+	});
+	// The exit listener dequeues this conversation after its process releases the key.
+	// Other conversations keep their queue entries and running state throughout Stop.
+}
+
 // ============================================================================
 // Hook implementation
 // ============================================================================
@@ -140,9 +234,20 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 	// ========================================================================
 	// handleInterrupt - interrupt the active process
 	// ========================================================================
-	const handleInterrupt = useCallback(async () => {
-		const activeSession = selectActiveSession(useSessionStore.getState());
+	const handleInterrupt = useCallback(async (target?: { sessionId: string; tabId: string }) => {
+		const newShell = useSettingsStore.getState().newShell;
+		const explicitTarget = newShell && target?.sessionId && target?.tabId ? target : undefined;
+		const activeSession = explicitTarget
+			? useSessionStore
+					.getState()
+					.sessions.find((session) => session.id === explicitTarget.sessionId)
+			: selectActiveSession(useSessionStore.getState());
 		if (!activeSession) return;
+		if (newShell && (explicitTarget || activeSession.inputMode === 'ai')) {
+			const tabId = explicitTarget?.tabId ?? activeSession.activeTabId;
+			if (tabId) await interruptConversation(activeSession, tabId, depsRef.current);
+			return;
+		}
 
 		const { sessionsRef, cancelPendingSynopsis, processQueuedItem } = depsRef.current;
 

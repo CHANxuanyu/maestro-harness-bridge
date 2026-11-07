@@ -20,7 +20,7 @@ import {
 	unsplitConversation,
 } from '../../services/newShellSplit';
 import { notifyCenterFlash } from '../../stores/centerFlashStore';
-import { useSessionStore } from '../../stores/sessionStore';
+import { updateAiTab, useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTabStore } from '../../stores/tabStore';
 import { conversationDisplayTitle } from '../../utils/conversationTitle';
@@ -128,9 +128,15 @@ function ConversationPane({
 				sessionRecoveryError={focused ? content.sessionRecoveryError : null}
 				fileTree={owner.fileTree}
 				onScrollPositionChange={(value) =>
-					useTabStore.getState().setAiTabScrollTop(target.tabId, value)
+					updateAiTab(owner.id, target.tabId, (tab) => ({ ...tab, scrollTop: value }))
 				}
-				onAtBottomChange={(value) => useTabStore.getState().setAiTabAtBottom(target.tabId, value)}
+				onAtBottomChange={(value) =>
+					updateAiTab(owner.id, target.tabId, (tab) => ({
+						...tab,
+						isAtBottom: value,
+						...(value && { hasUnread: false }),
+					}))
+				}
 				hasCapability={hasCapability}
 				activeTabContextUsage={activeTabContextUsage}
 				currentModel={model}

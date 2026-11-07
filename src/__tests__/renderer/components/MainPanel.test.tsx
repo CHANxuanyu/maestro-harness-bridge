@@ -118,13 +118,30 @@ vi.mock('../../../renderer/components/LogViewer', () => ({
 }));
 
 vi.mock('../../../renderer/components/TerminalOutput', () => ({
-	TerminalOutput: React.forwardRef((props: { session: { name: string } }, ref) => {
-		return React.createElement(
-			'div',
-			{ 'data-testid': 'terminal-output', ref },
-			`Terminal Output for ${props.session?.name}`
-		);
-	}),
+	TerminalOutput: React.forwardRef(
+		(
+			props: {
+				session: { name: string };
+				onScrollPositionChange?: (value: number) => void;
+				onAtBottomChange?: (value: boolean) => void;
+			},
+			ref
+		) => {
+			return React.createElement(
+				'div',
+				{
+					'data-testid': 'terminal-output',
+					ref,
+					onWheel: () => {
+						props.onScrollPositionChange?.(123);
+						props.onAtBottomChange?.(false);
+					},
+					onScroll: () => props.onAtBottomChange?.(true),
+				},
+				`Terminal Output for ${props.session?.name}`
+			);
+		}
+	),
 }));
 
 vi.mock('../../../renderer/components/InputArea', () => ({
@@ -772,6 +789,42 @@ describe('MainPanel', () => {
 		expect(targets).toEqual(['right-tab', 'left-tab']);
 		expect(defaultProps.inputRef.current).toBe(within(panes[0]).getByTestId('input-field'));
 		expect(screen.getAllByTestId('new-shell-split-pane')).toHaveLength(2);
+	});
+
+	it('saves an unfocused pane scroll and clears unread only when it reaches the bottom', () => {
+		seedSplit();
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) => ({
+				...session,
+				aiTabs: session.aiTabs.map((tab) => ({
+					...tab,
+					logs: [{ id: 'saved', timestamp: 1, source: 'ai' as const, text: 'Saved answer' }],
+					scrollTop: 9,
+					isAtBottom: true,
+					hasUnread: true,
+				})),
+			}))
+		);
+		render(<MainPanel {...defaultProps} />);
+		const panes = screen.getAllByTestId('new-shell-split-pane');
+		fireEvent.click(within(panes[1]).getByTestId('input-field'));
+		const left = within(panes[0]).getByTestId('terminal-output');
+		fireEvent.wheel(left);
+		expect(useSessionStore.getState().activeSessionId).toBe('right');
+		expect(useSessionStore.getState().sessions[0].aiTabs[0]).toMatchObject({
+			scrollTop: 123,
+			isAtBottom: false,
+			hasUnread: true,
+		});
+		expect(useSessionStore.getState().sessions[1].aiTabs[0]).toMatchObject({
+			scrollTop: 9,
+			isAtBottom: true,
+		});
+		fireEvent.scroll(left);
+		expect(useSessionStore.getState().sessions[0].aiTabs[0]).toMatchObject({
+			isAtBottom: true,
+			hasUnread: false,
+		});
 	});
 
 	it('restores saved proportions, explains a narrow window, and restores the pair when widened', () => {

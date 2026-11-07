@@ -17,6 +17,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 import { logger } from '../../../renderer/utils/logger';
 import { renderHook, act, cleanup } from '@testing-library/react';
 
@@ -281,6 +283,7 @@ describe('useWizardHandlers', () => {
 		} as any);
 		useSettingsStore.setState({
 			newShell: false,
+			projectSettings: {},
 			defaultSaveToHistory: true,
 			defaultShowThinking: 'off',
 			conductorProfile: 'default',
@@ -1491,6 +1494,40 @@ describe('useWizardHandlers', () => {
 	// handleLaunchWizardTab
 	// ========================================================================
 	describe('handleLaunchWizardTab', () => {
+		it('starts the wizard with the model resolved on its newly created tab', async () => {
+			for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
+				setCapabilitiesCache(id, capabilities);
+			useSettingsStore.setState({
+				newShell: true,
+				projectSettings: {
+					'[null,"/projects/test"]': {
+						defaultProvider: 'claude-code',
+						defaultModel: 'project-model',
+					},
+				},
+			});
+			const session = createMockSession({ customModel: 'old-model' });
+			useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+			const deps = createMockDeps();
+			const { result } = renderHook(() => useWizardHandlers(deps));
+			act(() => result.current.handleLaunchWizardTab());
+			await act(async () => {
+				await new Promise((resolve) => setTimeout(resolve, 20));
+			});
+			expect(deps.inlineWizardContext.startWizard).toHaveBeenCalledWith(
+				undefined,
+				expect.any(Object),
+				session.projectRoot,
+				session.toolType,
+				session.name,
+				expect.any(String),
+				session.id,
+				session.autoRunFolderPath,
+				session.sessionSshRemoteConfig,
+				'default',
+				expect.objectContaining({ customModel: 'project-model' })
+			);
+		});
 		it('creates a new tab and starts wizard on it', async () => {
 			const session = createMockSession();
 			useSessionStore.setState({ sessions: [session], activeSessionId: 'session-1' });

@@ -957,7 +957,7 @@ export function useWizardHandlers(deps: UseWizardHandlersDeps): UseWizardHandler
 					customPath: currentSession.customPath,
 					customArgs: currentSession.customArgs,
 					customEnvVars: currentSession.customEnvVars,
-					customModel: currentSession.customModel,
+					customModel: newTab.customModel ?? currentSession.customModel,
 					claudeTokenSource: getClaudeTokenSourceFields(currentSession),
 				}
 			);

@@ -1,3 +1,4 @@
+import { tileNewTabInSession } from '../../../renderer/services/tileNewTabAction';
 import { projectSettingsKey } from '../../../shared/projectSettings';
 import { conversationPermissionSnapshot } from '../../../renderer/utils/newConversationPermissions';
 import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
@@ -1152,4 +1153,46 @@ it('loads project environment through the dedicated service after general settin
 	expect(sessions().find((session) => session.id === result.agentId)?.customEnvVars).toEqual({
 		PROJECT_TOKEN: 'synthetic-private-token',
 	});
+});
+
+it('creates a tiled project conversation with its resolved environment and actual owner', async () => {
+	Object.defineProperty(window, 'innerWidth', { value: 1600, configurable: true });
+	useSettingsStore.setState({
+		newShell: true,
+		newShellSplit: null,
+		projectSettings: {
+			'[null,"/project"]': {
+				defaultProvider: 'codex',
+				envVars: { PROJECT_ONLY: 'synthetic-project-env' },
+			},
+		},
+	});
+	const oldTarget = structuredClone(sessions()[1]);
+	window.maestro.context.conversation = vi.fn(async () =>
+		openHandoffTarget(
+			request({
+				newConversation: {},
+				sourcePermission: { permissionMode: 'readonly' },
+				background: true,
+			})
+		)
+	);
+	expect(await tileNewTabInSession('source', 'ai')).toBe(true);
+	expect(window.maestro.context.conversation).toHaveBeenCalledWith(
+		expect.objectContaining({
+			action: 'new-conversation',
+			sourceAgentId: 'source',
+			targetProvider: 'codex',
+			background: true,
+		})
+	);
+	const split = useSettingsStore.getState().newShellSplit!;
+	expect(split.left).toEqual({ sessionId: 'source', tabId: 'source-tab' });
+	expect(split.right.sessionId).not.toBe('target');
+	const created = sessions().find((session) => session.id === split.right.sessionId)!;
+	expect(created.customEnvVars).toEqual({ PROJECT_ONLY: 'synthetic-project-env' });
+	expect(created.aiTabs.find((tab) => tab.id === split.right.tabId)?.permissionMode).toBe(
+		'readonly'
+	);
+	expect(sessions().find((session) => session.id === 'target')).toEqual(oldTarget);
 });

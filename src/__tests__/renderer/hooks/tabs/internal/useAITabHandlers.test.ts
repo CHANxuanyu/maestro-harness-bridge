@@ -113,14 +113,12 @@ describe('useAITabHandlers', () => {
 			if (inventoryArrived) useSessionStore.getState().addSession(owner);
 			useSettingsStore.setState({ newShell: true });
 			runtimeMocks.isWebDesktop.mockReturnValue(true);
-			window.maestro.web.requestNewTab = vi
-				.fn()
-				.mockResolvedValue({
-					sessionId: 'project-owner',
-					tabId: 'project-tab',
-					permissionMode: 'readonly',
-					readOnlyMode: true,
-				});
+			window.maestro.web.requestNewTab = vi.fn().mockResolvedValue({
+				sessionId: 'project-owner',
+				tabId: 'project-tab',
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
 			const { result } = renderHook(() => useAITabHandlers());
 			await act(async () => {
 				result.current.handleNewTab();

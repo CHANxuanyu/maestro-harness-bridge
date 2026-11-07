@@ -166,7 +166,8 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 	}
 
 	const action = newShell ? JSON.stringify(request.input, null, 2) : describeAction(request);
-	const tab = session?.aiTabs?.find((item) => item.id === request.tabId);
+	const tabId = request.tabId ?? parseSessionId(request.sessionId).tabId;
+	const tab = session?.aiTabs?.find((item) => item.id === tabId);
 
 	return createPortal(
 		<div
@@ -205,7 +206,7 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 					>
 						<p>
 							{uiText('workflows.sessions.approvalConversation', {
-								title: conversationDisplayTitle(tab) ?? request.tabId ?? request.sessionId,
+								title: conversationDisplayTitle(tab) ?? tabId ?? request.sessionId,
 							})}
 						</p>
 						{request.cwd && <p>{request.cwd}</p>}

@@ -12,6 +12,7 @@ import type { BrowserWindow } from 'electron';
 import type { EventEmitter } from 'events';
 import * as fs from 'fs';
 import { logger } from '../utils/logger';
+import { REGEX_AI_TAB_ID } from '../constants';
 import { permissionRelayServer } from './PermissionRelayServer';
 import { registerSpawn, resolvePending } from './registry';
 import { buildRelayArgs, resolveBridgeScriptPath } from './spawn-args';
@@ -145,7 +146,7 @@ export async function preparePermissionRelayArgs(params: {
 	cleanupSessionRelay(params.sessionId);
 	const { token, cleanup } = registerSpawn({
 		sessionId: params.sessionId,
-		tabId: params.tabId,
+		tabId: params.tabId ?? params.sessionId.match(REGEX_AI_TAB_ID)?.[1],
 		cwd: params.cwd,
 	});
 

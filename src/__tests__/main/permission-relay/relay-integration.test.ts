@@ -89,6 +89,28 @@ describe('permission relay Electron integration', () => {
 		expect(registry.lookupBinding(token)).toMatchObject({ cwd });
 	});
 
+	it.each([
+		{ sessionId: 'conversation-ai-tab', explicit: undefined, expected: 'tab' },
+		{ sessionId: 'conversation-ai-tab-fp-1234', explicit: undefined, expected: 'tab' },
+		{ sessionId: 'conversation-ai-tab', explicit: 'explicit-tab', expected: 'explicit-tab' },
+		{ sessionId: 'conversation-ai', explicit: undefined, expected: undefined },
+	])('resolves approval ownership from the spawn identity: %j', async (scenario) => {
+		const args = await integration.preparePermissionRelayArgs({
+			sessionId: scenario.sessionId,
+			tabId: scenario.explicit,
+			cwd: path.join(root, 'project'),
+			userDataDir: root,
+			execPath: process.execPath,
+		});
+		try {
+			const config = JSON.parse(fs.readFileSync(args[args.indexOf('--mcp-config') + 1], 'utf8'));
+			const token = config.mcpServers.maestro_permissions.env.MAESTRO_RELAY_TOKEN;
+			expect(registry.lookupBinding(token)).toMatchObject({ tabId: scenario.expected });
+		} finally {
+			integration.cleanupSessionRelay(scenario.sessionId);
+		}
+	});
+
 	it('lists pending requests without relay credentials and broadcasts resolution', () => {
 		const send = vi.fn();
 		const window = {

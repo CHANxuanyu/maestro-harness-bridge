@@ -8,6 +8,7 @@ import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import type { PermissionRequestUI } from '../../../../renderer/stores/permissionRequestStore';
 import { resetStores } from '../../../helpers/resetStores';
 import { createMockSession } from '../../../helpers/mockSession';
+import { createMockAITab } from '../../../helpers/mockTab';
 import { mockTheme } from '../../../helpers/mockTheme';
 
 const request = {
@@ -56,6 +57,41 @@ function showPrompt(payload: PermissionRequestUI = request) {
 }
 
 describe('Claude approval prompt', () => {
+	it.each(['session-ai-tab', 'session-ai-tab-fp-1234'])(
+		'finds the named background conversation when %s omits tabId',
+		(sessionId) => {
+			useSessionStore.setState({
+				sessions: [
+					createMockSession({
+						id: 'session',
+						activeTabId: 'other-tab',
+						aiTabs: [
+							createMockAITab({ id: 'tab', name: '等待审批的对话' }),
+							createMockAITab({ id: 'other-tab', name: '正在查看的对话' }),
+						],
+					}),
+				],
+			});
+			showPrompt({ ...request, sessionId, tabId: undefined });
+			expect(screen.getByText('对话：等待审批的对话')).toBeInTheDocument();
+			expect(screen.queryByText('对话：正在查看的对话')).not.toBeInTheDocument();
+		}
+	);
+	it('keeps an explicit request tab ahead of the compatibility fallback', () => {
+		useSessionStore.setState({
+			sessions: [
+				createMockSession({
+					id: 'session',
+					aiTabs: [
+						createMockAITab({ id: 'tab', name: '推断的对话' }),
+						createMockAITab({ id: 'explicit-tab', name: '指定的对话' }),
+					],
+				}),
+			],
+		});
+		showPrompt({ ...request, tabId: 'explicit-tab' });
+		expect(screen.getByText('对话：指定的对话')).toBeInTheDocument();
+	});
 	it('shows the actual worktree cwd instead of the owning project record', () => {
 		const cwd = '/temporary-project/.claude/worktrees/approval';
 		showPrompt({ ...request, cwd });

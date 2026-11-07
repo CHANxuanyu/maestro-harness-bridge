@@ -87,8 +87,21 @@ describe('native command refresh in the composer', () => {
 
 	it('leaves the classic shell discovery unchanged', () => {
 		useSettingsStore.setState({ newShell: false });
+		const session = createMockSession({ customEnvVars: { CLAUDE_CONFIG_DIR: '/temporary/a' } });
+		useSessionStore.setState({ sessions: [session] });
 		window.maestro.agents.getNativeCommands = vi.fn();
-		renderHook(() => useNativeCommands(createMockSession(), true));
+		const render = vi.fn();
+		renderHook(() => {
+			render();
+			return useNativeCommands(session, true);
+		});
+		const renders = render.mock.calls.length;
+		act(() => {
+			useSessionStore.getState().updateSession(session.id, {
+				customEnvVars: { CLAUDE_CONFIG_DIR: '/temporary/b' },
+			});
+		});
+		expect(render).toHaveBeenCalledTimes(renders);
 		expect(window.maestro.agents.getNativeCommands).not.toHaveBeenCalled();
 	});
 	it('shows cached commands while refreshing and checks again on reopen', async () => {

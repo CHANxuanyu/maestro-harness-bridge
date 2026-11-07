@@ -94,6 +94,24 @@ beforeEach(() => {
 });
 
 describe('maestro:remoteUpdateSessionConfig', () => {
+	it('updates and persists the account environment while preserving the legacy command report', async () => {
+		vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as never);
+		const session = createMockSession({
+			customEnvVars: { CLAUDE_CONFIG_DIR: '/temporary/account-a' },
+			agentCommands: [{ command: '/plugin:review', description: '' }],
+		});
+		const { setSessions } = setup([session]);
+		const customEnvVars = { CLAUDE_CONFIG_DIR: '/temporary/account-b' };
+		dispatchPatch(session.id, { customEnvVars });
+		await flush();
+		const [updated] = applyUpdate(setSessions, [session]);
+		expect(updated.customEnvVars).toEqual(customEnvVars);
+		expect(updated.agentCommands).toBe(session.agentCommands);
+		expect(setMany).toHaveBeenCalledWith([updated], []);
+		expect(ack).toHaveBeenCalledWith('ch', { success: true });
+		expect(setMany.mock.invocationCallOrder[0]).toBeLessThan(ack.mock.invocationCallOrder[0]);
+	});
+
 	it('tightens every new-shell tab when the next provider cannot keep standard permission', async () => {
 		vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as never);
 		const session = createMockSession({

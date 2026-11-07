@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { create } from 'zustand';
 import { nativeCommandContext } from '../../services/nativeCommands';
+import { useSessionStore } from '../../stores/sessionStore';
 import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import type { Session } from '../../types';
 import { nativeBuiltinCommands, type NativeCommandSnapshot } from '../../../shared/nativeCommands';
@@ -18,7 +19,13 @@ export function useNativeCommands(
 	const enabled = useSettingsStore(selectNewShellEnabled);
 	const shellEnvVars = useSettingsStore((s) => s.shellEnvVars);
 	const supported = enabled && !!session && ['claude-code', 'codex'].includes(session.toolType);
-	const context = session && nativeCommandContext(session);
+	// App's chrome snapshot omits environment edits. Subscribe to the account input directly.
+	const customEnvVars = useSessionStore((s) =>
+		supported
+			? (s.sessions.find((current) => current.id === session.id) ?? session).customEnvVars
+			: session?.customEnvVars
+	);
+	const context = session && nativeCommandContext({ ...session, customEnvVars });
 	const key = JSON.stringify([context, shellEnvVars]);
 	const snapshot = useCommandCache((s) => s.entries.get(key));
 	const builtins = useMemo(

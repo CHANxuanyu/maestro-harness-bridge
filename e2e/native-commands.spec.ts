@@ -147,7 +147,8 @@ test('native commands refresh, preserve drafts and retain scoped plugin reports'
 		await native.input().press('Escape');
 		await native.input().fill('');
 		const otherAccount = path.join(native.root, 'other-account');
-		fs.mkdirSync(otherAccount, { recursive: true });
+		fs.mkdirSync(path.join(otherAccount, 'commands'), { recursive: true });
+		fs.writeFileSync(path.join(otherAccount, 'commands', 'account-b.md'), 'Other account command');
 		await native.cli('update-agent', session.id, '--env', `CLAUDE_CONFIG_DIR=${otherAccount}`);
 		await native.input().fill('/plugin');
 		await expect(
@@ -158,6 +159,31 @@ test('native commands refresh, preserve drafts and retain scoped plugin reports'
 				(c: { command: string }) => c.command === '/plugin:review'
 			)
 		).toBe(false);
+		expect((await native.cli('tab', 'commands', tabId)).commands).toContainEqual({
+			command: '/account-b',
+			description: 'Other account command',
+			source: 'user',
+		});
+		await native.input().fill('/account-b');
+		await expect(
+			native.page.getByRole('button', { name: '/account-b User Other account command' })
+		).toBeVisible();
+		// Keep the menu open while returning to the account that reported the plugin.
+		await native.cli('update-agent', session.id, '--env', `CLAUDE_CONFIG_DIR=${native.claude}`);
+		await expect(
+			native.page.getByRole('button', { name: '/account-b User Other account command' })
+		).toHaveCount(0);
+		await native.input().fill('/plugin');
+		await expect(
+			native.page.getByRole('button', { name: '/plugin:review Reported by tool' })
+		).toBeVisible();
+		expect((await native.cli('tab', 'commands', tabId)).commands).toContainEqual({
+			command: '/plugin:review',
+			description: '',
+			source: 'reported',
+		});
+		expect(fs.readFileSync(path.join(native.claude, 'fixture-turn-count'), 'utf8')).toBe('1');
+		expect(fs.existsSync(path.join(otherAccount, 'fixture-turn-count'))).toBe(false);
 	} catch (error) {
 		failed = true;
 		throw error;

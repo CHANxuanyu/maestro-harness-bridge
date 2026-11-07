@@ -314,3 +314,7 @@ The cache holds at most 64 contexts; scans accept 2048 directory entries, eight
 nested command levels, 256 KiB per file and 2 MiB of command bodies. SSH metadata
 uses the existing remote stat resolution. The new-shell hook keeps cached rows
 while refreshing and ignores late responses after changing conversation context.
+The hook subscribes to the current session's `customEnvVars` directly when native
+discovery is enabled. App's chrome equality deliberately omits that field, so
+the passed session snapshot alone cannot identify an account change. Keep this
+subscription narrow and leave the classic shell's stored command report intact.

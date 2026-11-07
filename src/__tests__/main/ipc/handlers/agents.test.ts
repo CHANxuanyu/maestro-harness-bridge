@@ -6,12 +6,24 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
+import os from 'node:os';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { ipcMain } from 'electron';
 import {
 	registerAgentsHandlers,
 	AgentsHandlerDependencies,
 } from '../../../../main/ipc/handlers/agents';
 import * as agentCapabilities from '../../../../main/agents';
+import {
+	nativeCommandScope,
+	rememberNativeCommands,
+} from '../../../../main/agents/native-commands';
+import type {
+	NativeCommandRequest,
+	NativeCommandSnapshot,
+} from '../../../../shared/nativeCommands';
+import { createMockSession } from '../../../helpers/mockSession';
+import { createMockAITab } from '../../../helpers/mockTab';
 
 // Mock electron's ipcMain
 vi.mock('electron', () => ({
@@ -213,6 +225,48 @@ describe('agents IPC handlers', () => {
 			}
 			expect(handlers.size).toBe(expectedChannels.length);
 		});
+	});
+
+	it('uses the updated stored account for tab commands without moving the old report', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'native-command-account-'));
+		try {
+			const original = createMockSession({
+				cwd: path.join(root, 'project'),
+				customEnvVars: { CLAUDE_CONFIG_DIR: path.join(root, 'account-a') },
+				agentCommands: [{ command: '/plugin:review', description: '' }],
+				aiTabs: [createMockAITab()],
+			});
+			let stored = original;
+			registerAgentsHandlers({
+				...deps,
+				sessionsStore: {
+					get: vi.fn((key, fallback) => (key === 'sessions' ? [stored] : fallback)),
+				} as never,
+			});
+			const read = handlers.get('agents:getNativeCommands') as (
+				event: unknown,
+				request: NativeCommandRequest
+			) => Promise<NativeCommandSnapshot>;
+			const request = { sessionId: original.id, tabId: original.aiTabs[0].id };
+			const reported = { command: '/plugin:review', description: '', source: 'reported' };
+			rememberNativeCommands(nativeCommandScope(original, { homeDir: root, env: {} }).key, [
+				'plugin:review',
+			]);
+			expect((await read({}, request)).commands).toContainEqual(reported);
+			stored = {
+				...original,
+				customEnvVars: { CLAUDE_CONFIG_DIR: path.join(root, 'account-b') },
+			};
+			const result = await read({}, request);
+			expect(result.warning).toBeUndefined();
+			expect(result.commands).not.toContainEqual(reported);
+			expect(result).toEqual(await read({}, stored));
+			expect((await read({}, original)).commands).toContainEqual(reported);
+			stored = original;
+			expect((await read({}, request)).commands).toContainEqual(reported);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 
 	describe('agents:getKnownAuthDirs', () => {

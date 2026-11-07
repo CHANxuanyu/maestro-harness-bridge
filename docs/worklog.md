@@ -963,3 +963,15 @@ Claude 切换失败属于产品的 CLI 路径。失败截图只显示 Codex 新�
 扩展 `e2e/native-tool-output.spec.ts` 的换工具场景：Claude 标准权限切到 Codex 后立即显示只读，合成续聊调用含 `--sandbox read-only` 和任务工具开关，不含绕过权限参数；继续验证旧回答、旧工具全文、CLI 回读、收起释放和全文不落盘。沙箱外需执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell.spec.ts e2e/native-stop-resume.spec.ts e2e/native-codex-plan.spec.ts e2e/native-tool-output.spec.ts --retries=0`。本轮未运行真实模型、真实账户、真实 SSH、浏览器会话、其他平台或发行包验收，未推送或创建 PR。
 
 旧界面没有增加全文按钮或权限继承规则。T6 原有共享变化包括统一工具预览截断标记、增加固定来源及原生调用元数据、刷新时补齐调用身份，仍保持 4000 字符缓存上限。全文读取的 SSH、视图折叠 CLI、旧缓存身份缺失和换工具 CLI 旧文案缺口仍按 parity 文档保留，不宣称已经补齐。
+
+## 2026-11-07：T10 换账户后的原生命令刷新
+
+验证对象为本次修复源码，基线 `937cfdeda`，未制作安装包。现场 Electron 记录在换账户后仍找到 `/plugin:review`，期望为零。单元回归先提交为 `733ff13b6`：菜单打开和关闭两种情况均失败，原有四项通过。回归使用真实 session store 和 App 的 `activeSessionChromeEquality()`，证明 store 环境已更新，但传入命令 hook 的会话快照仍是旧值。
+
+根因是 chrome 比较器有意忽略 `customEnvVars`，命令 hook 却从这份快照构造账户键和 IPC 参数。CLI 的配置处理已更新并保存环境，主进程的上报命令也仍正确保存在启动时冻结的账户键下。旧 `session.agentCommands` 虽然保留报告，新界面原生命令发现并不读取它。本次仅让 `useNativeCommands()` 在新界面支持原生命令发现时直接订阅当前会话的环境，不修改全局比较器、报告保存方式或 CLI 实现。
+
+五个相关 Vitest 文件共 199 项最终通过，使用 `--configLoader runner --no-cache`，该次无跳过、无重试。覆盖账户切换后的菜单缓存、配置保存、CLI 使用的实际 IPC 处理函数、主进程账户与 SSH 隔离，以及 `tab commands` 的桥接调用。补充 IPC 用例首次因种子缺少标签失败，使用既有 `createMockAITab()` 补齐后通过。`npx tsc --noEmit -p tsconfig.json` 通过；产品 hook 与 Electron 场景 ESLint 无错误，三个单元测试文件被仓库既有 ESLint 配置忽略。改动文件 Prettier 与 diff 空白检查通过。
+
+`e2e/native-commands.spec.ts` 保留原断言，增加新账户命令在界面与 CLI 出现、保持菜单打开切回原账户、原插件命令恢复，以及查询不额外启动回合的检查。Playwright `--list` 收集到一条场景，没有启动 Electron。Opus 需在沙箱外运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-commands.spec.ts --retries=0`；脚本会重建 main、renderer、web-desktop 和 CLI。
+
+没有新增界面动作、CLI 动词或用户文案。旧界面保留既有命令报告与发现行为，回归确认账户环境更新不会触发此次新增订阅的重绘或发现调用。没有修改 SSH 路径处理，真实 SSH、真实工具、其他平台、发行包和完整 Electron 链路仍未验证。未运行全量 Vitest，未推送、创建 PR、打标签或发布。

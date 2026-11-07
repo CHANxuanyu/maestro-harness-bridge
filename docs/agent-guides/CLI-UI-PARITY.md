@@ -83,6 +83,15 @@ replaces the report, including with an empty list. This correction adds no UI
 action or CLI verb: `/` and `tab commands` consume the same retained inventory.
 Legacy `process:slash-commands` notifications are unchanged.
 
+Account changes through `update-agent <id> --env CLAUDE_CONFIG_DIR=<directory>`
+refresh the new-shell list even when App retains its chrome session snapshot.
+`useNativeCommands()` subscribes directly to the current session's environment;
+its cache key and IPC request use that value. `tab commands` continues to resolve
+the stored owner through the same discovery handler. Reports remain attached to
+their original account scope, and switching back restores them. The legacy
+`session.agentCommands` report is preserved and does not enter new-shell
+discovery. No action or CLI verb is added; classic-shell behavior is unchanged.
+
 Source badges have a text separator from the command name, including English
 and Chinese accessible names. This presentation fix adds no action or CLI verb;
 `tab commands` still returns the command, description and source separately.

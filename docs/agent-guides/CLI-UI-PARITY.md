@@ -649,6 +649,8 @@ operations in either shell. No new parity gap is introduced by these actions.
 
 ## Open gaps
 
+2026-11-07 性能分支合并保留主线工具全文和任务面板动作。消息行复用仍传递全文来源，来源或原生调用身份更新时清除旧全文；读取继续共用 `agentSessions:toolOutput` 与 `native-history tool-output`，本轮没有新增 UI 动作或 CLI 动词。以下全文收起状态和 SSH 等既有缺口保持原状。
+
 2026-11-06 性能基准没有新增界面动作或 CLI 动词。Codex 列表的目录判断优化位于共享存储适配器，桌面项目列表、`sessions` 和 `native-history list` 沿用同一实现。性能采集继续使用 `profiling start/status/stop`；离线合成基准见 `scripts/perf/README.md`。本轮没有填补下列既有交互缺口。
 
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no

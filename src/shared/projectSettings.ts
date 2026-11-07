@@ -11,6 +11,8 @@ export interface ProjectSettingsScope {
 
 export interface ProjectSettings {
 	defaultProvider?: string;
+	/** Tool that owns the model and effort, even when the default tool is inherited. */
+	modelProvider?: string;
 	defaultModel?: string;
 	defaultReasoningEffort?: string;
 	defaultPermissionMode?: 'full' | 'standard' | 'readonly';
@@ -42,7 +44,8 @@ export type ProjectSettingsErrorCode =
 	| 'invalidPermission'
 	| 'fullAccessRequired'
 	| 'saveFailed'
-	| 'requestFailed';
+	| 'requestFailed'
+	| 'modelProviderRequired';
 
 export interface ProjectSettingsResult {
 	success: boolean;

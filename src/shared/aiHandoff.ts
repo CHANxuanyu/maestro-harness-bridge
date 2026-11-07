@@ -168,7 +168,8 @@ export type HandoffCommand =
 	| {
 			action: 'new-conversation';
 			sourceAgentId: string;
-			targetProvider: string;
+			/** Omitted means the source tool resolved from its effective provider environment. */
+			targetProvider?: string;
 			replaceTabId?: string;
 			sourceTabId?: string;
 			prompt?: string;

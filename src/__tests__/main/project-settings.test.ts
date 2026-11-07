@@ -28,7 +28,11 @@ describe('project settings persistence', () => {
 				await api.command({
 					action: 'set',
 					scope: target,
-					patch: { defaultModel: sshRemoteId ?? 'local', envVars: { API_TOKEN: 'synthetic-only' } },
+					patch: {
+						modelProvider: 'claude-code',
+						defaultModel: sshRemoteId ?? 'local',
+						envVars: { API_TOKEN: 'synthetic-only' },
+					},
 				})
 			).toMatchObject({ success: true });
 		}
@@ -89,6 +93,7 @@ describe('project settings persistence', () => {
 		});
 		expect(result.settings).toEqual({
 			defaultProvider: 'codex',
+			modelProvider: 'codex',
 			defaultReasoningEffort: 'high',
 			envVars: { EMPTY: '', API_TOKEN: 'synthetic-only' },
 		});
@@ -104,7 +109,11 @@ describe('project settings persistence', () => {
 		{ scope: { projectPath: '/tmp/project', sshRemoteId: '' }, patch: {} },
 	])('rejects invalid input without modifying existing settings: %j', async (invalid) => {
 		const api = service();
-		await api.command({ action: 'set', scope, patch: { defaultModel: 'kept' } });
+		await api.command({
+			action: 'set',
+			scope,
+			patch: { modelProvider: 'claude-code', defaultModel: 'kept' },
+		});
 		const before = structuredClone(values);
 		expect(await api.command({ action: 'set', scope, ...invalid })).toMatchObject({
 			success: false,
@@ -141,12 +150,39 @@ describe('project settings persistence', () => {
 			).settings
 		).toEqual({
 			defaultProvider: 'claude-code',
+			modelProvider: 'claude-code',
 			defaultModel: 'custom-model',
 			defaultReasoningEffort: 'medium',
 		});
 		expect(
 			(await api.command({ action: 'set', scope, patch: { defaultProvider: null } })).settings
 		).toEqual({});
+	});
+
+	it('records the owner of a model without changing the inherited default tool', async () => {
+		const api = service();
+		expect(
+			await api.command({
+				action: 'set',
+				scope,
+				patch: {
+					defaultModel: 'opus',
+					defaultReasoningEffort: 'high',
+					modelProvider: 'claude-code',
+				},
+			})
+		).toMatchObject({
+			success: true,
+			settings: { modelProvider: 'claude-code', defaultModel: 'opus' },
+		});
+		expect((await api.command({ action: 'show', scope })).settings.defaultProvider).toBeUndefined();
+	});
+
+	it('requires an explicit model owner when neither a saved nor default tool is available', async () => {
+		expect(
+			await service().command({ action: 'set', scope, patch: { defaultModel: 'opus' } })
+		).toMatchObject({ success: false, errorCode: 'modelProviderRequired' });
+		expect(values).toEqual({});
 	});
 
 	it('returns translatable error codes without loading renderer translations in main', async () => {
@@ -175,6 +211,7 @@ describe('project settings persistence', () => {
 			'fullAccessRequired',
 			'saveFailed',
 			'requestFailed',
+			'modelProviderRequired',
 		] as const) {
 			const key = `workflows.projectSettings.errors.${errorCode}` as const;
 			for (const locale of ['en', 'zh-CN'] as const) {
@@ -195,7 +232,11 @@ describe('project settings persistence', () => {
 			onChanged: changed,
 		});
 		expect(
-			await api.command({ action: 'set', scope, patch: { defaultModel: 'model' } })
+			await api.command({
+				action: 'set',
+				scope,
+				patch: { modelProvider: 'claude-code', defaultModel: 'model' },
+			})
 		).toMatchObject({ success: false, code: 'persistence-failed' });
 		expect(changed).not.toHaveBeenCalled();
 	});

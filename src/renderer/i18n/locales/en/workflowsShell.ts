@@ -4,6 +4,10 @@ export const workflowsShell = {
 		'Use project settings set to change project settings',
 	'workflows.projectSettings.environmentDesktopOnly':
 		'View and edit environment variables in the desktop app.',
+	'workflows.projectSettings.errors.modelProviderRequired':
+		'Specify the tool that owns the model with --model-provider or select a default tool.',
+	'workflows.projectSettings.cli.modelProviderHelp':
+		'Tool owning the model and effort when the default tool is inherited',
 	'workflows.projectSettings.errors.scopeRequired':
 		'A project path and an optional SSH host are required',
 	'workflows.projectSettings.errors.invalidPatch': 'Project settings must be an object',

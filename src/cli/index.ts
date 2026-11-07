@@ -567,6 +567,10 @@ program
 	.option('--ssh-remote <id>', projectSettingsT('workflows.projectSettings.cli.sshHelp'))
 	.option('--provider <id>', projectSettingsT('workflows.projectSettings.cli.providerHelp'))
 	.option('--model <id>', projectSettingsT('workflows.projectSettings.cli.modelHelp'))
+	.option(
+		'--model-provider <id>',
+		projectSettingsT('workflows.projectSettings.cli.modelProviderHelp')
+	)
 	.option('--effort <level>', projectSettingsT('workflows.projectSettings.cli.effortHelp'))
 	.option('--permission <mode>', projectSettingsT('workflows.projectSettings.cli.permissionHelp'))
 	.option(

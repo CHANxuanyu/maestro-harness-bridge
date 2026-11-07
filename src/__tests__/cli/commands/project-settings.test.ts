@@ -185,3 +185,26 @@ describe('project settings CLI', () => {
 		expect(process.exit).toHaveBeenCalledWith(1);
 	});
 });
+
+it('passes the model owner independently of the default conversation tool', async () => {
+	vi.mocked(sendSimpleCommand).mockResolvedValue({
+		ok: true,
+		result: { success: true, settings: {} },
+	});
+	vi.spyOn(console, 'log').mockImplementation(() => {});
+	await projectSettings('set', {
+		path: '/tmp/project',
+		model: 'opus',
+		modelProvider: 'claude-code',
+		json: true,
+	});
+	expect(sendSimpleCommand).toHaveBeenLastCalledWith(
+		expect.objectContaining({
+			args: [
+				expect.objectContaining({ patch: { defaultModel: 'opus', modelProvider: 'claude-code' } }),
+			],
+		}),
+		'bridge.response'
+	);
+	vi.restoreAllMocks();
+});

@@ -48,7 +48,7 @@ export function projectConversationFields(
 	const fields = newConversationPermissionFields(permission, capabilities);
 	if (!fields) return null;
 	const modelDefaults =
-		!project?.defaultProvider || project.defaultProvider === sessionProviderId(session)
+		(project?.modelProvider ?? project?.defaultProvider) === sessionProviderId(session)
 			? project
 			: undefined;
 	return {

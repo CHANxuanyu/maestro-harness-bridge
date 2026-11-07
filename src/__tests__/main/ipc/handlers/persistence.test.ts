@@ -193,12 +193,12 @@ describe('persistence IPC handlers', () => {
 			{
 				action: 'set',
 				scope: { projectPath: '~/project', sshRemoteId: 'fixture' },
-				patch: { defaultModel: 'fixture-model' },
+				patch: { modelProvider: 'codex', defaultModel: 'fixture-model' },
 			}
 		);
 		expect(result).toMatchObject({ success: true, settings: { defaultModel: 'fixture-model' } });
 		expect(mockSettingsStore.set).toHaveBeenCalledExactlyOnceWith('projectSettings', {
-			'["fixture","~/project"]': { defaultModel: 'fixture-model' },
+			'["fixture","~/project"]': { modelProvider: 'codex', defaultModel: 'fixture-model' },
 		});
 		expect(broadcastBridgeEvent).toHaveBeenCalledExactlyOnceWith('settings:externalChange', []);
 		expect(mockSessionsStore.set).not.toHaveBeenCalled();

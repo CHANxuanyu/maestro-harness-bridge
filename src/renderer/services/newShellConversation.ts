@@ -1,6 +1,5 @@
 import { isValidAgentId } from '../../shared/agentIds';
 import { projectSettingsForSession } from '../utils/projectConversationDefaults';
-import { sessionProviderId } from '../../shared/agentPresets';
 import type { Session } from '../types';
 import { useOperationStore } from '../stores/operationStore';
 import { getT } from '../i18n';
@@ -46,7 +45,7 @@ export function useNewConversationTools(sourceAgentId: string | undefined) {
 
 export async function newShellConversation(
 	sourceAgentId: string,
-	targetProvider: string,
+	targetProvider: string | undefined,
 	replaceTabId?: string,
 	options?: Omit<
 		Extract<HandoffCommand, { action: 'new-conversation' }>,
@@ -96,10 +95,12 @@ export async function newProjectConversation(
 		!session.projectSettingsBaseEnv
 	)
 		return null;
-	const provider = sourceTabId
-		? sessionProviderId(session)
-		: project?.defaultProvider || sessionProviderId(session);
-	if (!isHandoffProvider(provider) && (!isValidAgentId(provider) || provider === 'terminal'))
+	const provider = sourceTabId ? undefined : project?.defaultProvider;
+	if (
+		provider !== undefined &&
+		!isHandoffProvider(provider) &&
+		(!isValidAgentId(provider) || provider === 'terminal')
+	)
 		return null;
 	return newShellConversation(session.id, provider, undefined, {
 		sourceTabId,

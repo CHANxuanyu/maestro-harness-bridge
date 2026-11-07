@@ -15,6 +15,7 @@ interface ProjectSettingsOptions {
 	sshRemote?: string;
 	provider?: string;
 	model?: string;
+	modelProvider?: string;
 	effort?: string;
 	permission?: string;
 	env?: readonly string[];
@@ -43,6 +44,7 @@ export async function projectSettings(
 		for (const [field, value] of [
 			['defaultProvider', options.provider],
 			['defaultModel', options.model],
+			['modelProvider', options.modelProvider],
 			['defaultReasoningEffort', options.effort],
 			['defaultPermissionMode', options.permission],
 		] as const) {

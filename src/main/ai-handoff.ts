@@ -2,7 +2,7 @@ import { isValidAgentId, type AgentId } from '../shared/agentIds';
 import { createKeyedWriteQueue } from '../shared/keyedWriteQueue';
 import { effectiveAgentCustomEnvVars } from '../shared/providerProfiles';
 import { getClaudeTokenSourceFields } from '../shared/claudeTokenMode';
-import { isDeepSeekAgent } from '../shared/agentPresets';
+import { agentProviderId } from '../shared/agentPresets';
 import {
 	HANDOFF_PROVIDERS,
 	isHandoffProvider,
@@ -52,14 +52,9 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			deps.getAgentConfig(runner.toolType).customEnvVars
 		),
 	});
-	const providerOf = (runner: Pick<HandoffRunner, 'toolType' | 'customEnvVars'>): string | null => {
-		if (runner.toolType === 'codex') return 'codex';
-		if (runner.toolType !== 'claude-code')
-			return runner.toolType === 'terminal' ? null : runner.toolType;
-		return isDeepSeekAgent(runner.toolType, effectiveEnv(runner) as Record<string, string>)
-			? 'deepseek'
-			: 'claude-code';
-	};
+	const providerOf = (runner: Pick<HandoffRunner, 'toolType' | 'customEnvVars'>): string | null =>
+		runner.toolType === 'terminal' ? null : agentProviderId(runner.toolType, effectiveEnv(runner));
+
 	function sourceFor(id: string) {
 		return deps
 			.getSessions()
@@ -232,7 +227,8 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			if (!deps.getNewShell())
 				return failed('Only an empty conversation in the new shell can change tools');
 			if (
-				(!isHandoffProvider(request.targetProvider) &&
+				(request.targetProvider !== undefined &&
+					!isHandoffProvider(request.targetProvider) &&
 					(!isValidAgentId(request.targetProvider) || request.targetProvider === 'terminal')) ||
 				(request.prompt !== undefined &&
 					(typeof request.prompt !== 'string' || !!request.replaceTabId)) ||
@@ -244,20 +240,16 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 				.getSessions()
 				.find((runner) => runner.id === request.sourceAgentId && providerOf(runner));
 			if (!source) return failed('Source project not found');
-			if (request.replaceTabId && providerOf(source) === request.targetProvider)
+			const targetProvider = request.targetProvider ?? providerOf(source)!;
+			if (request.replaceTabId && providerOf(source) === targetProvider)
 				return failed('Choose a different tool', 'invalid-request');
 			const location = handoffLocation(source);
 			return queue.enqueue(
-				`new:${source.id}:${request.replaceTabId ?? request.targetProvider}`,
+				`new:${source.id}:${request.replaceTabId ?? targetProvider}`,
 				async () => {
 					if (!deps.getNewShell())
 						return failed('Only an empty conversation in the new shell can change tools');
-					const target = await selectTarget(
-						source,
-						request.targetProvider,
-						true,
-						!!request.sourceTabId
-					);
+					const target = await selectTarget(source, targetProvider, true, !!request.sourceTabId);
 					if (!target) return failed('The selected tool is unavailable');
 					return deps.openTarget({
 						newConversation: {
@@ -271,7 +263,7 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 						cwd: location.cwd,
 						projectPath: source.projectRoot,
 						groupId: source.groupId,
-						provider: request.targetProvider,
+						provider: targetProvider,
 						...target,
 						mode: 'handoff',
 						origin: {

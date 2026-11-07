@@ -48,7 +48,9 @@ export function ProjectSettingsModal({
 		(session) => projectSettingsKey(projectSettingsScopeForSession(session)) === scopeKey
 	);
 	const provider =
-		draft.defaultProvider || sessionProviderId(scopedSessions[0] ?? { toolType: 'claude-code' });
+		draft.defaultProvider ||
+		draft.modelProvider ||
+		sessionProviderId(scopedSessions[0] ?? { toolType: 'claude-code' });
 	const owner = scopedSessions.find((session) => sessionProviderId(session) === provider);
 	const { capabilities } = useAgentCapabilities(provider === 'deepseek' ? 'claude-code' : provider);
 	const { models, efforts, loaded } = useAgentModelEffortOptions(
@@ -111,6 +113,8 @@ export function ProjectSettingsModal({
 				scope,
 				patch: {
 					defaultProvider: draft.defaultProvider || null,
+					modelProvider:
+						draft.defaultModel?.trim() || draft.defaultReasoningEffort ? provider : null,
 					defaultModel: draft.defaultModel?.trim() || null,
 					defaultReasoningEffort: draft.defaultReasoningEffort || null,
 					defaultPermissionMode: draft.defaultPermissionMode || null,
@@ -204,6 +208,7 @@ export function ProjectSettingsModal({
 									setDraft((current) => ({
 										...current,
 										defaultProvider: event.target.value || undefined,
+										modelProvider: undefined,
 										defaultModel: undefined,
 										defaultReasoningEffort: undefined,
 									}))

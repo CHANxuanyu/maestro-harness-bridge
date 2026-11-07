@@ -11,6 +11,7 @@ beforeEach(() => {
 		newShell: true,
 		projectSettings: {
 			'[null,"/test/project"]': {
+				modelProvider: 'claude-code',
 				defaultModel: 'project-model',
 				defaultReasoningEffort: 'high',
 				defaultPermissionMode: 'readonly',
@@ -64,4 +65,25 @@ describe('project defaults for subsequent conversations', () => {
 			createTab(remote, { permissionSource: { permissionMode: 'full' } })!.tab.customModel
 		).toBeUndefined();
 	});
+});
+
+it('does not apply inherited-tool project models or effort to a different tool', () => {
+	const codex = createMockSession({ toolType: 'codex' });
+	const created = createTab(codex, { permissionSource: { permissionMode: 'full' } })!;
+	expect(created.tab.customModel).toBeUndefined();
+	expect(created.tab.customEffort).toBeUndefined();
+	expect(created.tab.permissionMode).toBe('readonly');
+});
+
+it('never treats legacy unbound model names as defaults for all tools', () => {
+	useSettingsStore.setState({
+		projectSettings: {
+			'[null,"/test/project"]': { defaultModel: 'opus', defaultReasoningEffort: 'high' },
+		},
+	});
+	const created = createTab(createMockSession({ toolType: 'codex' }), {
+		permissionSource: { permissionMode: 'full' },
+	})!;
+	expect(created.tab.customModel).toBeUndefined();
+	expect(created.tab.customEffort).toBeUndefined();
 });

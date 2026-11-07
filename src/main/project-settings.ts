@@ -66,6 +66,7 @@ export function createProjectSettingsService(deps: {
 					'defaultProvider' in command.patch &&
 					(command.patch.defaultProvider ?? undefined) !== settings.defaultProvider
 				) {
+					delete next.modelProvider;
 					delete next.defaultModel;
 					delete next.defaultReasoningEffort;
 				}
@@ -73,6 +74,7 @@ export function createProjectSettingsService(deps: {
 					if (
 						![
 							'defaultProvider',
+							'modelProvider',
 							'defaultModel',
 							'defaultReasoningEffort',
 							'defaultPermissionMode',
@@ -108,7 +110,7 @@ export function createProjectSettingsService(deps: {
 					)
 						return failure('invalidSetting', { field });
 					if (
-						field === 'defaultProvider' &&
+						(field === 'defaultProvider' || field === 'modelProvider') &&
 						(value === 'terminal' || (!isValidAgentId(value) && value !== DEEPSEEK_PRESET.id))
 					)
 						return failure('unknownProvider');
@@ -118,6 +120,16 @@ export function createProjectSettingsService(deps: {
 					)
 						return failure('invalidPermission');
 					Object.assign(next, { [field]: value });
+				}
+				if (next.defaultModel || next.defaultReasoningEffort) {
+					next.modelProvider ??= next.defaultProvider;
+					if (
+						!next.modelProvider &&
+						(command.patch.defaultModel || command.patch.defaultReasoningEffort)
+					)
+						return failure('modelProviderRequired');
+				} else {
+					delete next.modelProvider;
 				}
 				if (next.defaultPermissionMode === 'full' && !settings.fullAccessAcknowledged) {
 					if (command.acknowledgeFullAccess !== true) return failure('fullAccessRequired');

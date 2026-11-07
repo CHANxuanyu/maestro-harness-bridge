@@ -308,7 +308,6 @@ export const TerminalOutput = memo(
 		// no reasoning at all. One switch, one meaning.
 		const toolsVisible = useSettingsStore((s) => s.showToolCalls);
 		const readingColumn = useSettingsStore(selectConversationNavigation);
-		const newShell = useSettingsStore((s) => s.newShell);
 		const showProviderModePill = useSettingsStore((s) => s.showProviderModePill);
 		// Reasoning summaries read back from the provider transcript follow the
 		// tab's Thinking switch. They are history and stay in the logs (the switch

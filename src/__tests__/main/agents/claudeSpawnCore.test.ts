@@ -52,6 +52,13 @@ describe('isMaestroPBinaryPath', () => {
 		expect(isMaestroPBinaryPath('MAESTRO-P')).toBe(true);
 	});
 
+	it.each(['C:\\Program Files\\maestro-p\\maestro-p.cmd', 'C:/tools/MAESTRO-P.CMD'])(
+		'recognizes the Windows installer entry %s',
+		(binaryPath) => {
+			expect(isMaestroPBinaryPath(binaryPath)).toBe(true);
+		}
+	);
+
 	it('does not match a plain claude binary or empty input', () => {
 		expect(isMaestroPBinaryPath('/usr/local/bin/claude')).toBe(false);
 		expect(isMaestroPBinaryPath('claude')).toBe(false);
@@ -168,6 +175,8 @@ describe('resolveClaudeSpawnModeCore under CLI-shaped deps', () => {
 	it.each([
 		{ command: '/opt/maestro-p', sessionCustomPath: undefined },
 		{ command: 'claude', sessionCustomPath: '/opt/maestro-p.js' },
+		{ command: 'C:\\Program Files\\maestro-p\\maestro-p.cmd', sessionCustomPath: undefined },
+		{ command: 'claude', sessionCustomPath: 'C:/tools/MAESTRO-P.CMD' },
 	])('refuses a direct TUI executable for standard approval: %j', (binary) => {
 		expect(() =>
 			resolveClaudeSpawnModeCore(

@@ -60,7 +60,7 @@ export interface CoreLogger {
  *
  * Canonical implementation shared by every surface. Recognises the bundled
  * `maestro-p.js` script, a packaged `maestro-p` executable, and the Windows
- * `.exe` variant. Used to detect power-user setups where the `Path` field
+ * `.exe` variant or installer `.cmd` entry. Used to detect power-user setups where the `Path` field
  * points directly at maestro-p (bypassing the token-source toggle) so the
  * resolved mode still surfaces as `interactive`, and to avoid pointing
  * `MAESTRO_CLAUDE_BIN` at maestro-p itself (which would make it drive itself
@@ -73,7 +73,12 @@ export function isMaestroPBinaryPath(binaryPath: string | undefined | null): boo
 	// separator, which would otherwise leave the whole `C:\…` string as the
 	// "basename" and miss the match).
 	const base = (binaryPath.split(/[\\/]/).pop() ?? '').toLowerCase();
-	return base === 'maestro-p' || base === 'maestro-p.js' || base === 'maestro-p.exe';
+	return (
+		base === 'maestro-p' ||
+		base === 'maestro-p.js' ||
+		base === 'maestro-p.exe' ||
+		base === 'maestro-p.cmd'
+	);
 }
 
 /**

@@ -374,3 +374,70 @@ it('streams preview chunks separately and emits complete commentary once', async
 	]);
 	f.session.dispose();
 });
+
+it('maps scoped plan notifications into the existing task list event', async () => {
+	const f = fixture();
+	await f.start();
+	try {
+		const plan = [
+			{ step: 'Inspect fixtures', status: 'completed' },
+			{ step: 'Verify plan panel', status: 'inProgress' },
+			{ step: 'Record results', status: 'pending' },
+		];
+		f.notify('turn/plan/updated', { threadId: 'other', turnId: 'turn-1', plan });
+		f.notify('turn/plan/updated', { threadId: 'thread-1', turnId: 'old-turn', plan });
+		f.notify('turn/plan/updated', { threadId: 'thread-1', plan });
+		expect(f.events.filter((event) => event.type === 'response_item')).toEqual([]);
+		f.notify('turn/plan/updated', {
+			threadId: 'thread-1',
+			turnId: 'turn-1',
+			explanation: 'Synthetic plan',
+			plan,
+		});
+		const input = {
+			explanation: 'Synthetic plan',
+			plan: plan.map((step) => ({
+				...step,
+				status: step.status === 'inProgress' ? 'in_progress' : step.status,
+			})),
+		};
+		expect(f.events.filter((event) => event.type === 'response_item')).toEqual([
+			{
+				type: 'response_item',
+				payload: {
+					type: 'function_call',
+					call_id: 'plan-turn-1',
+					name: 'update_plan',
+					arguments: JSON.stringify(input),
+				},
+			},
+			{
+				type: 'response_item',
+				payload: {
+					type: 'function_call_output',
+					call_id: 'plan-turn-1',
+					output: JSON.stringify({ status: 'completed', success: true }),
+					status: 'completed',
+					is_error: false,
+				},
+			},
+		]);
+		const count = f.events.length;
+		f.notify('turn/plan/updated', {
+			threadId: 'thread-1',
+			turnId: 'turn-1',
+			plan: [{ step: 'Broken', status: 'unknown' }],
+		});
+		expect(f.events).toHaveLength(count);
+		f.notify('turn/plan/updated', {
+			threadId: 'thread-1',
+			turnId: 'turn-1',
+			explanation: null,
+			plan: [],
+		});
+		expect(f.events.at(-2).payload.call_id).toBe('plan-turn-1');
+		expect(JSON.parse(f.events.at(-2).payload.arguments)).toEqual({ explanation: null, plan: [] });
+	} finally {
+		f.session.dispose();
+	}
+});

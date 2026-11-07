@@ -471,3 +471,14 @@ it('removes project environment values from browser service replies while retain
 	}
 	expect(result.settings.envVars.TOKEN).toBe('synthetic-private-value');
 });
+
+it.each([false, true])('uses server authenticated CLI identity, trusted=%s', async (trustedCli) => {
+	const handler = vi.fn(() => true);
+	invokeHandlers.set('permission:respond', handler);
+	await handleBridgeInvoke(
+		{ ...makeClient(), trustedCli },
+		{ type: 'bridge.invoke', requestId: 1, channel: 'permission:respond', trustedCli: true } as any,
+		vi.fn()
+	);
+	expect(handler).toHaveBeenCalledWith(expect.objectContaining({ type: 'bridge', trustedCli }));
+});

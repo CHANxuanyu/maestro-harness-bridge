@@ -14,10 +14,10 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-codex-app-server.spec.ts --wor
 
 自动化覆盖顺序：
 
-1. 新建 Codex 对话，通过 CLI 选择标准权限。第一次发送必须为 thread/start，后续三次为同一 threadId 的 thread/resume。
+1. 通过 CLI 将项目默认权限设为标准，新建 Codex 对话，断言仍为标准。第一次发送必须为 thread/start，后续三次为同一 threadId 的 thread/resume。
 2. 文件审批显示 Codex、文件路径和差异。审批前不存在标记文件；界面允许后存在，内容为一行合成数据。
 3. 命令审批通过 `codex-turn permissions` 取得 requestId，再用 `permission-respond <request-id> deny` 拒绝。弹窗消失，没有标记文件。
-4. 运行中输入合成追加文字，点击本轮追加按钮。最终回答含原文，草稿清空；协议记录中只有一次 turn/steer。
+4. 发送带合成计划通知的保持运行回合，右栏任务为三项，完成数 1/3 且一项进行中。输入追加文字并点击本轮追加，夹具等待临时文件放行；等待期间按 Enter，草稿仍在且发送按钮禁用。放行后回答含原文，草稿清空，任务变为 3/3；协议记录中只有一次 turn/steer。
 5. 再发一轮保持运行的合成任务，用 `codex-turn stop <process-id>` 停止。协议记录必须有 turn/interrupt，待审批列表为空。
 6. 总计一条 thread/start、三条 thread/resume、四条 turn/start、一条 turn/steer。断言失败后保留 NativeApp 的失败 trace，先分析，不自动重试。
 
@@ -36,4 +36,4 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-codex-app-server.spec.ts --wor
 
 ## 原型未覆盖
 
-主窗口以外的审批归属、真实浏览器控制、强制并行回合、多客户端并发写同一原生对话、图片、网络授权、MCP 提问和动态工具均未完成验收。`codex-turn stop` 仅停止指定进程；界面 Stop 额外取消队列与咨询的完整对等仍在 CLI Open gaps 中。真实 CLI 版本兼容性、模型是否遵守审批和沙箱、跨平台进程树清理、发行包内转换器加载需要另外验证，本轮不执行真实会话。
+主窗口以外审批的 Electron 展示、浏览器明确拒绝的完整端到端验证、强制并行回合、多客户端并发写同一原生对话、图片、网络授权、MCP 提问和动态工具均未完成验收。`codex-turn stop` 仅停止指定进程；界面 Stop 额外取消队列与咨询的完整对等仍在 CLI Open gaps 中。真实 CLI 版本兼容性、模型是否遵守审批和沙箱、跨平台进程树清理、发行包内转换器加载需要另外验证，本轮不执行真实会话。

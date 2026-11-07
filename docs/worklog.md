@@ -1477,3 +1477,35 @@ Opus 仍须在沙箱外执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native
 能力，仍走自己的 exec 限制。对已有 `turnProvider: codex` 的标准权限对话，恢复后保持
 标准，原型不可用时由现有 spawn 拒绝；旧工具切换形成的未运行标签保留原先收紧规则。
 相关七文件 203 项通过，后续补共享能力矩阵，最终结果记入总验收记录。
+
+## 2026-11-07：U5 原型审查修复，计划通知及总验收
+
+验证对象为本轮源码，起点 `4b08824f1`。没有构建发行包，没有启动真实 Codex 或 Electron。
+任务清单回归先失败三项：两条原型启动断言缺少任务工具配置，计划通知没有产生工具事件。
+修复仅在 app-server 参数中保留 `tools.update_plan.enabled=true`，通知按当前 threadId 和
+turnId 校验后，复用共享转换器生成 update_plan 调用及结果；保留进行中状态和空快照。
+官方配置源码可核对到 `0.166.0-alpha.6`，通知 schema 只取得当前 main，对应版本仍待确认。
+
+最终相关 Vitest 共 22 文件、912 项全部通过，使用 `--configLoader runner --no-cache`，
+无跳过或自动重试。包含两用户审批隔离、可信 CLI 身份不可由消息伪造、Claude 同入口、
+重复及过期审批、追加按钮和 Enter 防重、失败及超时保留、项目及恢复权限、咨询限制、
+合成 stdio 计划事件、解析和旧发送队列相关回归。
+
+`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 三份 noEmit 检查通过。
+Electron 场景的补充类型检查首次使用的临时配置缺少 ES2024 和 renderer 全局声明，
+补齐检查输入后通过，没有修改产品或放宽断言。修改文件 Prettier 及 diff 空白检查通过。
+Playwright 仅收集一条合成场景，未启动 Electron。
+
+新增 Electron 断言：项目标准权限新建后保持标准；夹具等待手动文件放行的追加期间
+按 Enter 不重复发送；任务右栏从 1/3 且一项进行中更新到 3/3。保留原审批允许及拒绝、
+续聊、停止和精确轮次数断言。Opus 在沙箱外运行：
+
+```sh
+MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-codex-app-server.spec.ts --workers=1 --retries=0
+```
+
+旧界面与关闭原型时 Codex 的 exec 参数、环境和 SSH 分支未修改，nativeCommandScopeKey
+保留。共有行为变化是 Claude 审批也收紧到所属用户和窗口，以及普通发送登记迁入共享
+composer store，原匹配规则不变。CLI 仍仅处理主窗口审批，浏览器审批明确拒绝。
+真实提供方协议兼容、模型及沙箱效果、真实 SSH、跨平台进程树、重启历史、发行包和
+Electron 多窗口展示未验证。没有推送、开 PR、打标签或发布。

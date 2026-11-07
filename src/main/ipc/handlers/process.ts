@@ -1,5 +1,7 @@
+import { CODEX_APP_SERVER_MESSAGES } from '../../../shared/codexAppServer';
+import { resolveAppLocale } from '../../../shared/i18n';
 import { listCodexAppServerPermissions } from '../../permission-relay/codex-app-server';
-import { ipcMain, BrowserWindow } from 'electron';
+import { app, ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import type { AgentConfigsData } from '../../stores/types';
 import * as os from 'os';
@@ -173,7 +175,12 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 	);
 
 	ipcMain.handle('process:codex-permissions', (event) =>
-		listCodexAppServerPermissions(permissionCaller(event, getMainWindow))
+		listCodexAppServerPermissions(
+			permissionCaller(event, getMainWindow),
+			CODEX_APP_SERVER_MESSAGES[resolveAppLocale(settingsStore.get('uiLanguage'), app.getLocale())][
+				'workflows.shell.codexAppServerApprovalUnavailable'
+			]
+		)
 	);
 
 	ipcMain.handle(

@@ -1,3 +1,4 @@
+import { CODEX_APP_SERVER_MESSAGES } from '../../shared/codexAppServer';
 import type { BrowserWindow } from 'electron';
 import { randomUUID } from 'crypto';
 import { isWebContentsAvailable } from '../utils/safe-send';
@@ -9,9 +10,12 @@ import type { CodexAppServerApproval } from '../process-manager/CodexAppServerSe
 const visibleRequests = new Map<string, Omit<PermissionRequest, 'token'>>();
 
 export function listCodexAppServerPermissions(
-	caller?: PermissionCaller
+	caller?: PermissionCaller,
+	unavailableMessage: string = CODEX_APP_SERVER_MESSAGES.en[
+		'workflows.shell.codexAppServerApprovalUnavailable'
+	]
 ): Omit<PermissionRequest, 'token'>[] {
-	if (!caller) throw new Error('Codex approvals are unavailable for this caller.');
+	if (!caller) throw new Error(unavailableMessage);
 	return [...visibleRequests.values()].filter((request) => ownsPending(request.requestId, caller));
 }
 

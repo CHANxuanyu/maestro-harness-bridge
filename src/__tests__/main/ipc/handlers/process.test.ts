@@ -565,7 +565,7 @@ describe('process IPC handlers', () => {
 			);
 			const spawn = mockProcessManager.spawn.mock.calls[0][0];
 			if (newShell && codexAppServer) {
-				expect(spawn.args).toEqual(['app-server']);
+				expect(spawn.args).toEqual(['app-server', '-c', 'tools.update_plan.enabled=true']);
 				expect(spawn.codexAppServer).toMatchObject({
 					approvalPolicy: 'on-request',
 					sandbox: 'workspace-write',
@@ -605,7 +605,7 @@ describe('process IPC handlers', () => {
 				);
 				const spawn = mockProcessManager.spawn.mock.calls[0][0];
 				if (enabled) {
-					expect(spawn.args).toEqual(['app-server']);
+					expect(spawn.args).toEqual(['app-server', '-c', 'tools.update_plan.enabled=true']);
 					expect(spawn.tabId).toBe('tab');
 					spawn.codexAppServer.onDispose();
 				} else {

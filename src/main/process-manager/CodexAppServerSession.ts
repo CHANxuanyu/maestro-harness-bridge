@@ -270,6 +270,36 @@ export class CodexAppServerSession {
 				}
 			}
 			for (const event of translateItem(p.item, complete)) this.options.onEvent(event);
+		} else if (message.method === 'turn/plan/updated') {
+			if (
+				eventTurn !== this.turnId ||
+				!Array.isArray(p.plan) ||
+				!p.plan.every(
+					(step) =>
+						step &&
+						typeof step.step === 'string' &&
+						['pending', 'inProgress', 'completed'].includes(step.status)
+				)
+			)
+				return;
+			// A plan notification is a full tool snapshot, separate from plan text items.
+			// Reuse the connector projection so existing parser and task consumers agree.
+			const item = {
+				id: `plan-${this.turnId}`,
+				type: 'dynamicToolCall',
+				tool: 'update_plan',
+				arguments: {
+					explanation: p.explanation ?? null,
+					plan: p.plan.map((step) => ({
+						step: step.step,
+						status: step.status === 'inProgress' ? 'in_progress' : step.status,
+					})),
+				},
+				status: 'completed',
+				success: true,
+			};
+			for (const event of [...translateItem(item, false), ...translateItem(item, true)])
+				this.options.onEvent(event);
 		} else if (message.method === 'item/agentMessage/delta') {
 			if (eventTurn !== this.turnId || !p.itemId || !p.delta || this.completed.has(p.itemId))
 				return;

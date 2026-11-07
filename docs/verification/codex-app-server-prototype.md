@@ -45,9 +45,9 @@
 
 回答增量走现有临时预览通道，完整进度和最终回答由完成项各自提交，避免把每个增量都保存成一条完整进度；工具项转换直接复用 `scripts/codex-shared/shared-exec.cjs` 的 `translateItem()`，继续走现有 Codex 输出解析器。用量只取 `tokenUsage.last`。两个转换器依赖文件已加入发行包文件清单，尚未打包验证。
 
-审批使用现有 pending registry 和 PermissionPrompt。允许仅限本次，命令显示 command、cwd、reason，文件显示工具项里的变更；无法准确呈现的网络、额外权限或 grantRoot 请求拒绝。服务端解决请求、工具完成、停止和断线清理提示，并拒绝迟到答复。当前只向主窗口投递审批，不承诺多窗口和浏览器支持。
+审批使用现有 pending registry 和 PermissionPrompt。允许仅限本次，命令显示 command、cwd、reason，文件显示工具项里的变更；无法准确呈现的网络、额外权限或 grantRoot 请求拒绝。服务端解决请求、工具完成、停止和断线清理提示，并拒绝迟到答复。审批绑定启动时的用户和桌面窗口，只向该窗口投递。列举和响应共用归属校验；关闭窗口、请求结束后不能批准。浏览器审批明确拒绝，可信 CLI 以桌面用户及主窗口身份调用相同校验，暂不能选择其他窗口。Claude 的既有响应入口也校验相同归属。
 
-本轮追加有独立按钮，普通发送仍排队。仅文本追加，确认前不清草稿；确认后只有仍属于原对话且内容未变化的草稿才清空。失败不重试、不自动排队。主进程再检查实际 controller，运行中切开关不会把 exec 变成 app-server。停止先发准确的 turn/interrupt，等待终态，超时清理进程树；强制停止保留进程占位至 close，避免旧写入者未退出就启动下一轮。真实进程树仍需外部验证。
+本轮追加有独立按钮，与普通发送共用在途草稿登记。追加等待确认时，同一草稿不能通过发送按钮或 Enter 再排队，其他新草稿仍按原路径发送。仅文本追加，确认前不清草稿；确认后只有仍属于原对话且内容未变化的草稿才清空。失败不重试、不自动排队。主进程再检查实际 controller，运行中切开关不会把 exec 变成 app-server。停止先发准确的 turn/interrupt，等待终态，超时清理进程树；强制停止保留进程占位至 close，避免旧写入者未退出就启动下一轮。真实进程树仍需外部验证。
 
 单元和组件测试覆盖双开关、本地限制、协议作用域、早到事件、审批唯一响应和失效、追加确认和草稿、取消及退出。合成可执行夹具通过真实 stdio 子进程完成允许与拒绝：审批前无标记文件，允许后只写一次，拒绝后不写。夹具只访问测试临时目录，不运行真实 Codex 或模型。Electron 脚本仅通过测试收集，未执行。
 
@@ -61,3 +61,30 @@
 - Electron 展示、跨窗口审批归属、重启恢复和发行包内转换器打包。
 
 需要 Opus 在沙箱外执行的合成 Electron 场景见 [验收步骤](../../e2e/codex-app-server-prototype.md)。真实会话验收需要另行授权，本轮不执行。
+
+## 审查修复补充：任务清单协议（2026-11-07）
+
+原型启动保留 `app-server -c tools.update_plan.enabled=true`，仅在原型分支添加，
+exec 分支参数不改。`0.166.0-alpha.6` 的官方
+[CLI 参数收集](https://github.com/openai/codex/blob/rust-v0.166.0-alpha.6/codex-rs/cli/src/config_override_args.rs)、
+[app-server 配置加载](https://github.com/openai/codex/blob/rust-v0.166.0-alpha.6/codex-rs/app-server/src/lib.rs)
+确认命令行配置进入服务器配置；同版本的
+[核心配置解析](https://github.com/openai/codex/blob/rust-v0.166.0-alpha.6/codex-rs/core/src/config/mod.rs)
+通过 `tools.update_plan.enabled` 决定是否启用任务工具。这是源码依据，未运行真实二进制验证。
+
+[官方回合事件说明](https://learn.chatgpt.com/docs/app-server#turn-events)将结构化
+`turn/plan/updated` 与普通 `plan` 文本项分开。当前 main 的
+[通知类型](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/schema/typescript/v2/TurnPlanUpdatedNotification.ts)
+及[状态枚举](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/schema/typescript/v2/TurnPlanStepStatus.ts)
+确认通知带 threadId、turnId、explanation 和完整 plan，状态为 pending、inProgress、completed。
+本次获取对应版本标签下的这两个 schema 文件失败，因此该版本完整通知契约仍未确认。
+
+实现校验当前 threadId 和 turnId，拒绝缺失作用域及畸形快照，通过既有 `translateItem()`
+映射为 `update_plan` 工具调用和结果，复用 Codex 解析器及任务面板，保持稳定清单 ID。
+inProgress 转成已有 in_progress，空快照可清空清单。普通 plan 文本不冒充任务事件。
+合成夹具提供计划通知；真实 stdio 单测验证任务输入、三个状态和工具结束事件。
+Electron 场景增加项目标准权限新建、追加确认前 Enter 防重及右栏清单从 1/3 到 3/3。
+
+有效标准权限统一由 shared 的 `effectiveStandardPermissionCapability()` 判断。
+咨询显式禁用原型能力。已由 Codex 运行过的标准对话保留其保存模式，关闭原型后恢复
+也由既有启动检查拒绝；旧工具切换产生、尚未运行的标签仍保留原先收紧权限的规则。

@@ -17,6 +17,7 @@ if (process.argv[2] !== 'app-server') throw new Error('Only synthetic app-server
 const receipt = (value) =>
 	fs.appendFileSync(path.join(root, 'app-server-receipts.jsonl'), JSON.stringify(value) + '\n');
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\n');
+receipt({ argv: process.argv.slice(2) });
 let threadId, turnId, prompt, approval;
 const notify = (method, params) => send({ method, params: { threadId, turnId, ...params } });
 const finish = (text, status = 'completed') => {
@@ -41,6 +42,16 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 		turnId = randomUUID();
 		prompt = p.input.map((item) => item.text || '').join('\n');
 		reply({ turn: { id: turnId, status: 'inProgress' } });
+		if (prompt.includes('U5_PLAN')) {
+			notify('turn/plan/updated', {
+				explanation: 'Synthetic plan',
+				plan: [
+					{ step: 'Inspect synthetic fixture', status: 'completed' },
+					{ step: 'Wait for synthetic steer', status: 'inProgress' },
+					{ step: 'Record synthetic results', status: 'pending' },
+				],
+			});
+		}
 		if (prompt.includes('U5_HOLD')) return;
 		const file = prompt.includes('file approval');
 		approval = { id: 900, file };
@@ -79,8 +90,26 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 	} else if (message.method === 'turn/steer') {
 		if (p.expectedTurnId !== turnId)
 			return send({ id: message.id, error: { code: -32000, message: 'Turn changed' } });
-		reply({ turnId });
-		finish('Synthetic steer accepted: ' + p.input[0].text);
+		const accept = () => {
+			reply({ turnId });
+			if (prompt.includes('U5_PLAN'))
+				notify('turn/plan/updated', {
+					explanation: null,
+					plan: [
+						{ step: 'Inspect synthetic fixture', status: 'completed' },
+						{ step: 'Wait for synthetic steer', status: 'completed' },
+						{ step: 'Record synthetic results', status: 'completed' },
+					],
+				});
+			finish('Synthetic steer accepted: ' + p.input[0].text);
+		};
+		if (prompt.includes('U5_DELAY_STEER')) {
+			const timer = setInterval(() => {
+				if (!fs.existsSync(path.join(root, 'release-steer'))) return;
+				clearInterval(timer);
+				accept();
+			}, 10);
+		} else accept();
 	} else if (message.method === 'turn/interrupt') {
 		reply({});
 		finish('', 'interrupted');

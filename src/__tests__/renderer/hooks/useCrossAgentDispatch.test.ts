@@ -503,21 +503,19 @@ describe('new-shell consult conversations', () => {
 
 	it('keeps Codex consults readonly even with the desktop prototype enabled', () => {
 		useSettingsStore.setState({ codexAppServer: true });
-		useSessionStore
-			.getState()
-			.setSessions((sessions) =>
-				sessions.map((session) =>
-					session.id === 'src'
-						? {
-								...session,
-								aiTabs: session.aiTabs.map((tab) => ({
-									...tab,
-									permissionMode: 'standard' as const,
-								})),
-							}
-						: { ...session, toolType: 'codex' as const }
-				)
-			);
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === 'src'
+					? {
+							...session,
+							aiTabs: session.aiTabs.map((tab) => ({
+								...tab,
+								permissionMode: 'standard' as const,
+							})),
+						}
+					: { ...session, toolType: 'codex' as const }
+			)
+		);
 		const consult = ensureConsultTab({
 			targetSessionId: 'tgt',
 			sourceSessionId: 'src',

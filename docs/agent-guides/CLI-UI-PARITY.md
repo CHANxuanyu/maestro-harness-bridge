@@ -1308,3 +1308,7 @@ Open gaps：CLI 暂不选择其他窗口；浏览器原型审批尚未支持。C
 Codex 标准权限的输入栏、项目设置、新建、继承、恢复及 `tab permission` 共用
 `effectiveStandardPermissionCapability()`。`project settings set --permission standard`
 及 `tab new` 保持相同有效能力判断。咨询显式禁用原型能力，继续自己的 exec 权限限制。
+
+原型计划通知沿用 `update_plan` 工具事件，任务面板及 `tab panel <tab-id> tasks`
+继续读取同一清单。追加防重仅管理界面草稿，不会把两次显式 CLI steer 指令合并。
+此次没有增加 CLI 动词，既有追加、审批、项目默认权限、新建、面板及停止动作均保留。

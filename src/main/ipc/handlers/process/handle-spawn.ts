@@ -1068,7 +1068,7 @@ export async function handleProcessSpawn(
 			...config,
 			nativeCommandScopeKey,
 			command: commandToSpawn,
-			args: codexAppServer ? ['app-server'] : argsToSpawn,
+			args: codexAppServer ? ['app-server', '-c', 'tools.update_plan.enabled=true'] : argsToSpawn,
 			...(codexAppServer ? { tabId: codexAppServerTabId } : {}),
 			codexAppServer,
 			// When using SSH, use user's home directory as local cwd

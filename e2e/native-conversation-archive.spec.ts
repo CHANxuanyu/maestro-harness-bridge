@@ -7,8 +7,7 @@ import { createMockAITab } from '../src/__tests__/helpers/mockTab';
 import { createMockSession } from '../src/__tests__/helpers/mockSession';
 
 // This scenario never reads real credentials or sends a model request.
-if (process.env.MAESTRO_E2E_REAL === '1')
-	throw new Error('Run archive acceptance with synthetic providers only');
+test.skip(process.env.MAESTRO_E2E_REAL === '1', 'Archive acceptance uses synthetic providers only');
 test.setTimeout(120_000);
 
 // eslint-disable-next-line no-empty-pattern

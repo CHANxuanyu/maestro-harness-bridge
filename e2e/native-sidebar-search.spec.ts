@@ -8,6 +8,8 @@ import { createMockSession } from '../src/__tests__/helpers/mockSession';
 import { createMockAITab } from '../src/__tests__/helpers/mockTab';
 import { embedSystemPromptInPrompt } from '../src/shared/embeddedSystemPrompt';
 
+test.skip(process.env.MAESTRO_E2E_REAL === '1', 'Content search uses synthetic history only');
+
 for (const [provider, scenario] of [
 	['claude', 'older-answer'],
 	['codex', 'older-answer'],
@@ -17,8 +19,6 @@ for (const [provider, scenario] of [
 ] as const) {
 	// eslint-disable-next-line no-empty-pattern
 	test(`${provider}: sidebar content search ${scenario} opens the visible body and flashes it`, async ({}, info) => {
-		if (process.env.MAESTRO_E2E_REAL === '1')
-			throw new Error('This scenario requires synthetic history');
 		const native = new NativeApp(info, { providerCli: false });
 		const home = path.join(native.root, 'home');
 		fs.mkdirSync(home);

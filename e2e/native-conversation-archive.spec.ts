@@ -73,6 +73,7 @@ test('archive conversation, restart and unarchive without changing native histor
 		await native.page.getByRole('button', { name: 'Archived 1', exact: true }).click();
 		await native.page.getByRole('button', { name: 'Unarchive', exact: true }).click();
 		await expect(row()).toBeVisible();
+		await reopenedSearch.fill('Archive this conversation');
 		await expect(native.page.locator('[data-content-hit]')).toHaveCount(1);
 		expect(
 			(await native.cli('native-history', 'search', 'Archive this conversation')).result.hits

@@ -231,7 +231,8 @@ it.each([
 		fireEvent.click(fold.querySelector('button')!);
 		expect(fold.querySelector('[data-turn-activity-steps]')).toBeNull();
 	},
-	60_000
+	// Asserts redraw counts, not time. A loaded Windows runner needs more than a minute.
+	180_000
 );
 
 it.each([true, false])(

@@ -102,6 +102,18 @@ const defaultProps = {
 	handleFileClick: vi.fn().mockResolvedValue(undefined),
 };
 
+it('includes the source project and host in new shell file drags', () => {
+	const { container } = render(<FileTreeRow {...defaultProps} newShell sshRemoteId="ssh-a" />);
+	const setData = vi.fn();
+	fireEvent.dragStart(container.firstElementChild!, {
+		dataTransfer: { setData, effectAllowed: '' },
+	});
+	expect(setData).toHaveBeenCalledWith(
+		'application/x-maestro-file-origin',
+		JSON.stringify({ root: '/project', sshRemoteId: 'ssh-a' })
+	);
+});
+
 describe('FileTreeRow', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();

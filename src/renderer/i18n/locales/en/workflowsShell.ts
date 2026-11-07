@@ -1,4 +1,98 @@
 export const workflowsShell = {
+	'workflows.projectSettings.errors.requestFailed': 'Project settings request failed',
+	'workflows.projectSettings.errors.useService':
+		'Use project settings set to change project settings',
+	'workflows.projectSettings.environmentDesktopOnly':
+		'View and edit environment variables in the desktop app.',
+	'workflows.projectSettings.errors.modelProviderRequired':
+		'Specify the tool that owns the model with --model-provider or select a default tool.',
+	'workflows.projectSettings.cli.modelProviderHelp':
+		'Tool owning the model and effort when the default tool is inherited',
+	'workflows.projectSettings.errors.useReadService':
+		'Use project settings show to read project settings; add --show-secrets to reveal environment values.',
+	'workflows.projectSettings.errors.scopeRequired':
+		'A project path and an optional SSH host are required',
+	'workflows.projectSettings.errors.invalidPatch': 'Project settings must be an object',
+	'workflows.projectSettings.errors.unknownSetting': 'Unknown project setting: {field}',
+	'workflows.projectSettings.errors.invalidEnvironment':
+		'Environment values must use valid names and string values',
+	'workflows.projectSettings.errors.invalidSetting': 'Invalid project setting: {field}',
+	'workflows.projectSettings.errors.unknownProvider': 'Unknown conversation tool',
+	'workflows.projectSettings.errors.invalidPermission':
+		'Permission must be full, standard or readonly',
+	'workflows.projectSettings.errors.fullAccessRequired':
+		'Full access lets new conversations read, write and run commands without approval. Acknowledge this once for this project.',
+	'workflows.projectSettings.errors.saveFailed': 'Project settings could not be saved',
+	'workflows.projectSettings.cli.usage':
+		'Use project settings show|set --path <project> [--ssh-remote <id>]',
+	'workflows.projectSettings.cli.conflictingEnv': 'Use either --clear-env or --env',
+	'workflows.projectSettings.cli.envFormat': '--env expects NAME=VALUE',
+	'workflows.projectSettings.cli.setOnly': 'Setting options require project settings set',
+	'workflows.projectSettings.cli.emptyPatch': 'Specify at least one project setting',
+	'workflows.projectSettings.cli.requestFailed': 'Project settings request failed',
+	'workflows.projectSettings.cli.projectHelp':
+		'Manage project defaults for future conversations in the new interface',
+	'workflows.projectSettings.cli.settingsHelp':
+		'Show or set defaults stored by Maestro for one project and host',
+	'workflows.projectSettings.cli.pathHelp':
+		'Project directory; remote paths are kept on the specified host',
+	'workflows.projectSettings.cli.sshHelp': 'SSH host identity; omit for local projects',
+	'workflows.projectSettings.cli.providerHelp': 'Default tool, or inherit to clear',
+	'workflows.projectSettings.cli.modelHelp': 'Default model, or inherit to clear',
+	'workflows.projectSettings.cli.effortHelp': 'Default reasoning effort, or inherit to clear',
+	'workflows.projectSettings.cli.permissionHelp': 'full, standard, readonly, or inherit to clear',
+	'workflows.projectSettings.cli.envHelp':
+		'Replace project environment variables; repeat for every entry',
+	'workflows.projectSettings.cli.clearEnvHelp': 'Remove the project environment override',
+	'workflows.projectSettings.cli.ackHelp':
+		'Acknowledge once that full access permits reading, writing and commands without approval',
+	'workflows.projectSettings.cli.secretsHelp': 'Reveal environment credentials in output',
+	'workflows.projectSettings.cli.jsonHelp': 'Output the settings snapshot as JSON',
+
+	'workflows.projectSettings.newConversation': 'New with project defaults',
+	'workflows.projectSettings.title': 'Project settings',
+	'workflows.projectSettings.description':
+		'Applies only to new conversations in this project on the selected host. Current conversation choices take priority; project permissions may only make them stricter.',
+	'workflows.projectSettings.location': 'Project location',
+	'workflows.projectSettings.local': 'This computer',
+	'workflows.projectSettings.failed':
+		'Could not load or save project settings. Your changes have not been saved.',
+	'workflows.projectSettings.loading': 'Loading project settings…',
+	'workflows.projectSettings.provider': 'Default tool',
+	'workflows.projectSettings.model': 'Default model',
+	'workflows.projectSettings.effort': 'Default effort',
+	'workflows.projectSettings.permission': 'Default permission',
+	'workflows.projectSettings.inherit': 'Inherit existing defaults',
+	'workflows.projectSettings.fullAccess':
+		'I understand that full access lets new conversations read and write files and run commands without approval.',
+	'workflows.projectSettings.environment': 'Environment variables',
+	'workflows.projectSettings.environmentHelp':
+		'These values apply to future conversations. Existing account and tool configuration is retained unless overridden here.',
+	'workflows.split.openRight': 'Open on the right',
+	'workflows.split.openRightTitle': 'Open on the right: {title}',
+	'workflows.split.chooseConversation': 'Choose a conversation to open on the right',
+	'workflows.split.unsplit': 'Exit split view',
+	'workflows.split.closePane': 'Close this pane',
+	'workflows.split.resize': 'Resize split view',
+	'workflows.split.narrow':
+		'This window is too narrow. Widen it to view two conversations side by side.',
+	'workflows.split.disabled': 'Turn on the new interface first',
+	'workflows.split.missing': 'This conversation could not be found',
+	'workflows.split.same': 'The same conversation cannot be opened twice',
+	'workflows.split.invalidRatio': 'The split ratio must be between 0.2 and 0.8',
+	'workflows.shell.splitInvalidRequest': 'Invalid conversation split request',
+	'workflows.archive.archive': 'Archive',
+	'workflows.archive.unarchive': 'Unarchive',
+	'workflows.archive.archived': 'Archived {count}',
+	'workflows.archive.delete': 'Delete conversation',
+	'workflows.archive.deleteConfirm':
+		'Delete “{title}”? This deletes its native history and cannot be undone.',
+	'workflows.archive.running':
+		'This conversation is running or has queued messages. Stop it or wait for it to finish before archiving or deleting.',
+	'workflows.archive.failed':
+		'The conversation could not be changed. Its owner window or account may be unavailable.',
+	'workflows.archive.error': 'Conversation could not be changed',
+	'workflows.archive.keepsHistory': 'Keeps the native history unchanged',
 	'workflows.shell.synopsisFailed': 'Synopsis failed',
 	'workflows.shell.synopsisNoFinalAnswer': 'No final answer is available for this turn',
 	'workflows.shell.signInRequired': 'Sign in again',
@@ -190,6 +284,18 @@ export const workflowsShell = {
 	'workflows.conversations.closeConversation': 'Close conversation',
 	'workflows.conversations.addAccount': 'Add account or configuration',
 	'workflows.conversations.handoff': 'Hand off…',
+	'workflows.conversations.contentSearchPlaceholder': 'Search conversations...',
+	'workflows.conversations.contentSearchLimited': 'Search reached its limit. Narrow your search.',
+	'workflows.conversations.titleResults': 'Conversations',
+	'workflows.conversations.contentResults': 'Conversation content',
+	'workflows.conversations.remoteContentExcluded':
+		'Remote conversations are searched by title only.',
+	'workflows.conversations.searchingContent': 'Searching conversation content...',
+	'workflows.conversations.contentSearchFailed':
+		'Could not search conversation content. Try again.',
+	'workflows.conversations.moreContentResults': 'More results are available. Narrow your search.',
+	'workflows.conversations.noContentMatches': 'No matching conversation content',
+	'workflows.conversations.contentOpenFailed': 'Could not locate this message. Search again.',
 	'workflows.conversations.search': 'Search conversations...',
 	'workflows.conversations.new': 'New conversation',
 	'workflows.conversations.newWith': 'New with {provider}',
@@ -443,6 +549,13 @@ export const workflowsShell = {
 	'workflows.shell.typeToQueueMessage': 'Type to queue message...',
 	'workflows.shell.typeAMessageToMentionAgent': 'Type a message... (@ to mention agent)',
 	'workflows.shell.openPromptComposervalue': 'Open Prompt Composer{p0}',
+	'workflows.shell.crossHostDropUnsupported':
+		'Dragging files between different hosts is not supported.',
+	'workflows.shell.invalidFileDropOrigin':
+		'The source location of this file could not be read. Please drag it again.',
+	'workflows.shell.confirmForceStopConversation':
+		'This conversation could not be stopped gracefully. Force stop it? Unsaved work may be lost.',
+	'workflows.shell.stopConversationFailed': 'Could not stop this conversation. Please try again.',
 	'workflows.shell.attachImage': 'Attach Image',
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify':
 		"Toggle Read-Only mode (agents won't modify files)",

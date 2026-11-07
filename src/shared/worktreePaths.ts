@@ -3,7 +3,11 @@
  * boundaries. This does not resolve relative paths; callers that operate on a
  * local filesystem must resolve them against the same cwd used by Git first.
  */
-export function normalizeWorktreePath(path: string, posix = false): string {
+export function normalizeWorktreePath(
+	path: string,
+	posix = false,
+	caseInsensitiveWindows = false
+): string {
 	// SSH paths preserve literal backslashes. Local UNC paths retain their
 	// semantic double separator; ordinary redundant separators collapse.
 	const hasUncPrefix = !posix && /^[\\/]{2}[^\\/]/.test(path);
@@ -12,7 +16,11 @@ export function normalizeWorktreePath(path: string, posix = false): string {
 		? path
 		: path.replace(/\\/g, '/').replace(/^[a-z]:/, (drive) => drive.toUpperCase());
 	const collapsed = separated.replace(/\/+/g, '/');
-	const normalized = hasUncPrefix ? `/${collapsed}` : collapsed;
+	let normalized = hasUncPrefix ? `/${collapsed}` : collapsed;
+	// Project identities opt into Windows filesystem case semantics. Existing
+	// callers keep their comparison contract, and SSH always remains POSIX.
+	if (!posix && caseInsensitiveWindows && (hasUncPrefix || /^[A-Za-z]:/.test(normalized)))
+		normalized = normalized.toLowerCase();
 	if (normalized === '/' || (!posix && /^[A-Za-z]:\/$/.test(normalized))) return normalized;
 	return normalized.replace(/\/+$/, '');
 }

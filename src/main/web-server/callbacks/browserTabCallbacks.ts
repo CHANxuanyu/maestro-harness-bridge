@@ -1,3 +1,4 @@
+import { PROJECT_CONVERSATION_TIMEOUT_MS } from '../../../shared/projectSettings';
 import { randomUUID } from 'crypto';
 import { ipcMain } from 'electron';
 import type { WebServer } from '../WebServer';
@@ -8,9 +9,10 @@ import type { TerminalTabInfo, ReadTerminalTabResult, NewAITabWithPromptResult }
 
 export function registerBrowserTabCallbacks(
 	server: WebServer,
-	deps: Pick<WebServerFactoryDependencies, 'getMainWindow'>
+	deps: Pick<WebServerFactoryDependencies, 'getMainWindow' | 'getWindowForSession'> &
+		Partial<Pick<WebServerFactoryDependencies, 'settingsStore'>>
 ): void {
-	const { getMainWindow } = deps;
+	const { getMainWindow, getWindowForSession } = deps;
 
 	server.setOpenBrowserTabCallback(
 		async (sessionId: string, url: string, options?: { background?: boolean }) => {
@@ -310,7 +312,7 @@ export function registerBrowserTabCallbacks(
 
 	server.setNewAITabWithPromptCallback(
 		async (sessionId: string, prompt: string, background?: boolean) => {
-			const mainWindow = getMainWindow();
+			const mainWindow = getWindowForSession?.(sessionId) ?? getMainWindow();
 			if (!mainWindow) {
 				logger.warn('mainWindow is null for newAITabWithPrompt', 'WebServer');
 				return { success: false, error: 'Maestro desktop window is not available' };
@@ -331,12 +333,14 @@ export function registerBrowserTabCallbacks(
 					if (typeof result === 'object' && result !== null) {
 						const r = result as {
 							success?: unknown;
+							sessionId?: unknown;
 							tabId?: unknown;
 							queued?: unknown;
 							error?: unknown;
 						};
 						resolve({
 							success: r.success === true,
+							...(typeof r.sessionId === 'string' && r.sessionId ? { sessionId: r.sessionId } : {}),
 							tabId: typeof r.tabId === 'string' ? r.tabId : undefined,
 							...(r.queued === true ? { queued: true } : {}),
 							...(typeof r.error === 'string' && r.error ? { error: r.error } : {}),
@@ -361,16 +365,19 @@ export function registerBrowserTabCallbacks(
 					background
 				);
 
-				const timeoutId = setTimeout(() => {
-					if (resolved) return;
-					resolved = true;
-					ipcMain.removeListener(responseChannel, handleResponse);
-					logger.warn(
-						`newAITabWithPrompt callback timed out for session ${sessionId}`,
-						'WebServer'
-					);
-					resolve({ success: false, error: 'Maestro desktop did not answer in time' });
-				}, 5000);
+				const timeoutId = setTimeout(
+					() => {
+						if (resolved) return;
+						resolved = true;
+						ipcMain.removeListener(responseChannel, handleResponse);
+						logger.warn(
+							`newAITabWithPrompt callback timed out for session ${sessionId}`,
+							'WebServer'
+						);
+						resolve({ success: false, error: 'Maestro desktop did not answer in time' });
+					},
+					deps.settingsStore?.get('newShell', false) ? PROJECT_CONVERSATION_TIMEOUT_MS : 5000
+				);
 			});
 		}
 	);

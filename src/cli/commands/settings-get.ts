@@ -1,3 +1,5 @@
+import { isProjectSettingsKey, publicProjectSettingsMap } from '../../shared/projectSettings';
+import { projectSettingsTranslator } from './project-settings';
 // Get a single setting value
 // Supports dot-notation for nested keys, --json, --verbose
 
@@ -18,7 +20,17 @@ interface SettingsGetOptions {
 
 export function settingsGet(key: string, options: SettingsGetOptions): void {
 	try {
-		const value = readSettingValue(key);
+		if (isProjectSettingsKey(key) && key !== 'projectSettings')
+			throw new Error(
+				projectSettingsTranslator()('workflows.projectSettings.errors.useReadService')
+			);
+		const stored = readSettingValue(key);
+		const value =
+			key === 'projectSettings'
+				? publicProjectSettingsMap(
+						(stored ?? {}) as import('../../shared/projectSettings').ProjectSettingsMap
+					)
+				: stored;
 
 		// Resolve metadata - for dot-notation, use the top-level key
 		const topKey = key.split('.')[0];

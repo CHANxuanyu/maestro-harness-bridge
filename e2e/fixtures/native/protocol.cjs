@@ -35,6 +35,7 @@ function createTurn({
 	prompt,
 	model = models[provider],
 	effort = null,
+	slashCommands = [],
 	persist = true,
 	emit = () => {},
 }) {
@@ -59,7 +60,7 @@ function createTurn({
 	};
 	const rollout = (type, payload) => append({ timestamp: timestamp(), type, payload });
 	if (provider === 'claude') {
-		emit({ type: 'system', subtype: 'init', session_id: id, slash_commands: [] });
+		emit({ type: 'system', subtype: 'init', session_id: id, slash_commands: slashCommands });
 		claudeMessage('user', prompt);
 	} else {
 		if (!fs.existsSync(file))

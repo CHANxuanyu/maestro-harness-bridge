@@ -36,7 +36,7 @@ declare const __CRASH_REPORTING_BUILD__: boolean;
 
 // Splash screen global functions (defined in splash.js)
 interface Window {
-	__hideSplash?: () => void;
+	__hideSplash?: (newShell?: boolean) => void;
 	__updateSplash?: (progress: number, text?: string) => void;
 	__splashProgress?: () => number;
 	__splashInterval?: ReturnType<typeof setInterval>;

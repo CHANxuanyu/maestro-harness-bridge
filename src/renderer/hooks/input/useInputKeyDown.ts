@@ -83,10 +83,10 @@ export interface InputKeyDownDeps {
 	/** Ref to the terminal output container */
 	terminalOutputRef: React.RefObject<HTMLDivElement | null>;
 	/**
-	 * Stop the running turn (the agent-level interrupt the send key's Stop runs).
+	 * Stop the running turn using the same scope as the send key's Stop.
 	 * Escape calls it while the conversation on screen is running.
 	 */
-	interruptTurn?: () => void;
+	interruptTurn?: (target?: { sessionId: string; tabId: string }) => void;
 }
 
 // ============================================================================
@@ -94,7 +94,10 @@ export interface InputKeyDownDeps {
 // ============================================================================
 
 export interface InputKeyDownReturn {
-	handleInputKeyDown: (e: React.KeyboardEvent) => void;
+	handleInputKeyDown: (
+		e: React.KeyboardEvent,
+		target?: { sessionId: string; tabId: string }
+	) => void;
 }
 
 // ============================================================================
@@ -178,7 +181,7 @@ export function useInputKeyDown(deps: InputKeyDownDeps): InputKeyDownReturn {
 	useEventListener(FORCED_PARALLEL_SEND_EVENT, runForcedParallelSend);
 
 	const handleInputKeyDown = useCallback(
-		(e: React.KeyboardEvent) => {
+		(e: React.KeyboardEvent, target?: { sessionId: string; tabId: string }) => {
 			const activeSession = selectActiveSession(useSessionStore.getState());
 			// Snapshot the live composer text once at call time (it lives in the
 			// store now, not in a reactive prop).
@@ -494,6 +497,16 @@ export function useInputKeyDown(deps: InputKeyDownDeps): InputKeyDownReturn {
 				}
 			} else if (e.key === 'Escape') {
 				e.preventDefault();
+				const stopTarget = useSettingsStore.getState().newShell ? target : undefined;
+				const owner = stopTarget
+					? useSessionStore
+							.getState()
+							.sessions.find((session) => session.id === stopTarget.sessionId)
+					: activeSession;
+				const stopSession =
+					stopTarget && owner
+						? { ...owner, inputMode: 'ai' as const, activeTabId: stopTarget.tabId }
+						: owner;
 				// While the conversation on screen runs, Escape is its Stop - the same
 				// control as the send key (`resolveStopPlacement`), reached only after
 				// the popovers and the command-mode ladder above have had the key. The
@@ -502,12 +515,13 @@ export function useInputKeyDown(deps: InputKeyDownDeps): InputKeyDownReturn {
 				// `handleEscapeInMain` from blurring the composer right afterwards.
 				if (
 					interruptTurn &&
-					activeSession?.inputMode === 'ai' &&
-					isOnScreenTurnRunning(activeSession)
+					stopSession?.inputMode === 'ai' &&
+					isOnScreenTurnRunning(stopSession)
 				) {
 					e.stopPropagation();
 					trackShortcutUsage('stopTurn');
-					interruptTurn();
+					if (stopTarget) interruptTurn(stopTarget);
+					else interruptTurn();
 					return;
 				}
 				inputRef.current?.blur();

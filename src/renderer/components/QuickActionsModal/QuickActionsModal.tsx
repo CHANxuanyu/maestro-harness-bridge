@@ -16,7 +16,12 @@ import {
 import { notifyCenterFlash } from '../../stores/centerFlashStore';
 import { flashCopiedToClipboard } from '../../utils/flashCopiedToClipboard';
 import { captureException } from '../../utils/sentry';
-import { getModalActions, selectModalOpen, useModalStore } from '../../stores/modalStore';
+import {
+	getModalActions,
+	selectModalData,
+	selectModalOpen,
+	useModalStore,
+} from '../../stores/modalStore';
 import { toggleAllCadenzas, useCadenzaStore } from '../../stores/cadenzaStore';
 import { buildConcertoCommands } from './commands/concertoCommands';
 import { MODAL_PRIORITIES } from '../../constants/modalPriorities';
@@ -70,6 +75,7 @@ import {
 } from './commands/groupChatCommands';
 import { buildMoveToGroupCommands } from './commands/moveToGroupCommands';
 import { buildNavigationCommands } from './commands/navigationCommands';
+import { buildNewShellSplitCommands } from './commands/newShellSplitCommands';
 import { buildPluginCommandPaletteCommands } from './commands/pluginCommandPaletteCommands';
 import { mergePluginContributions } from '../../utils/pluginContributionMerge';
 import { buildNotificationCommands } from './commands/notificationCommands';
@@ -302,7 +308,9 @@ export const QuickActionsModal = memo(function QuickActionsModal(props: QuickAct
 		allGroupChatParticipantStates,
 	};
 
-	const [search, setSearch] = useState('');
+	const [search, setSearch] = useState(
+		() => selectModalData('quickAction')(useModalStore.getState())?.initialSearch ?? ''
+	);
 	const [mode, setMode] = useState<'main' | 'move-to-group' | 'agents'>(initialMode);
 	const [renamingSession, setRenamingSession] = useState(false);
 	const [renameValue, setRenameValue] = useState('');
@@ -608,6 +616,13 @@ export const QuickActionsModal = memo(function QuickActionsModal(props: QuickAct
 				navBack: shortcuts.navBack,
 				navForward: shortcuts.navForward,
 			},
+		}),
+		...buildNewShellSplitCommands({
+			sessions,
+			activeSession,
+			setQuickActionOpen,
+			setSearch,
+			getSessionWindow,
 		}),
 		...buildNewTabCommands({
 			activeSession,

@@ -103,6 +103,7 @@ const CROSS_AGENT_MAX_DURATION_MS = 30 * 60 * 1000;
  * agent fan out?" without that race.
  */
 interface ActiveConsult {
+	sourceTabId: string;
 	/** The agent the mention was typed in - what Stop is addressed to. */
 	sourceSessionId: string;
 	/** Terminate this consult and emit its terminal chunk. Idempotent. */
@@ -112,7 +113,7 @@ interface ActiveConsult {
 const activeConsults = new Map<string, ActiveConsult>();
 
 /**
- * Stop every consult the given source agent still has in flight.
+ * Stop every consult the given source agent still has in flight, optionally limited to one source tab.
  *
  * Each cancelled consult settles exactly like a timeout does - the process is
  * killed and whatever the target already said is flushed as the terminal chunk -
@@ -122,9 +123,14 @@ const activeConsults = new Map<string, ActiveConsult>();
  *
  * @returns How many consults were cancelled.
  */
-export function cancelCrossAgentRequestsForSource(sourceSessionId: string): number {
+export function cancelCrossAgentRequestsForSource(
+	sourceSessionId: string,
+	sourceTabId?: string
+): number {
 	// Snapshot first: `cancel()` deletes from the map it is iterating.
-	const doomed = [...activeConsults.values()].filter((c) => c.sourceSessionId === sourceSessionId);
+	const doomed = [...activeConsults.values()].filter(
+		(c) => c.sourceSessionId === sourceSessionId && (!sourceTabId || c.sourceTabId === sourceTabId)
+	);
 	for (const consult of doomed) consult.cancel();
 	return doomed.length;
 }
@@ -396,6 +402,7 @@ export async function startCrossAgentRequest(
 	 */
 	let cancelRequested = false;
 	const registration: ActiveConsult = {
+		sourceTabId: request.sourceTabId,
 		sourceSessionId: request.sourceSessionId,
 		cancel: () => {
 			cancelRequested = true;

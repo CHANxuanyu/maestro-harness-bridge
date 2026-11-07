@@ -1,3 +1,12 @@
+import { newProjectConversation } from '../../services/newShellConversation';
+import { requestConversationAction } from '../../services/conversationArchive';
+import { useConversationArchiveStore } from '../../stores/conversationArchiveStore';
+import type { ConversationArchiveTarget } from '../../../shared/conversationArchive';
+import { projectHistoryScopeFor } from '../../../shared/projectHistory';
+
+import { useNativeHistorySearch } from '../../hooks/session/useNativeHistorySearch';
+import { openNativeHistorySearchHit } from '../../services/openNativeHistorySearchHit';
+import type { NativeHistorySearchHit } from '../../../shared/nativeHistorySearch';
 import { useTabStore } from '../../stores/tabStore';
 import { type ReactNode, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Group, Session, Theme } from '../../types';
@@ -6,6 +15,9 @@ import type {
 	ProjectHistoryError,
 } from '../../../shared/projectHistory';
 import { ProjectSessionTree } from './ProjectSessionTree';
+import { ProjectSettingsModal } from '../ProjectSettingsModal';
+import { projectSettingsKey } from '../../../shared/projectSettings';
+import { projectSettingsScopeForSession } from '../../utils/projectConversationDefaults';
 import {
 	buildProjectHistoryScopes,
 	buildProjectSessionTree,
@@ -126,7 +138,13 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	onDeleteWorktree,
 }: ProjectSessionSidebarProps) {
 	const newShell = useSettingsStore(selectNewShellEnabled);
+	const archiveRecords = useConversationArchiveStore((state) => state.records);
 	const [search, setSearch] = useState('');
+	const [settingsProject, setSettingsProject] = useState<SidebarProject | null>(null);
+	const contentSearch = useNativeHistorySearch(search, newShell);
+	const [contentOpening, setContentOpening] = useState(false);
+	const [contentOpenFailed, setContentOpenFailed] = useState(false);
+	const contentOpenTicket = useRef(0);
 	const [providerFilter, setProviderFilter] = useState<string | null>(null);
 	const [rowLimits, setRowLimits] = useState<Record<string, number>>({});
 	const [pendingKeys, setPendingKeys] = useState<Record<string, true>>({});
@@ -155,9 +173,29 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const scopes = useMemo(() => buildProjectHistoryScopes(sessions, groups), [sessions, groups]);
 	const scopeKey = useMemo(() => JSON.stringify(scopes), [scopes]);
 	const history = useProjectHistory(scopes, scopeKey, sessions);
+	useEffect(() => {
+		if (newShell) history.refresh();
+	}, [archiveRecords, newShell, history.refresh]);
+	const archives = useMemo(
+		() =>
+			newShell
+				? archiveRecords
+						.filter((record) => record.archived !== false)
+						.map((record) => ({
+							...record,
+							projectKey: projectHistoryScopeFor(scopes, record)?.projectKey ?? '',
+						}))
+				: [],
+		[archiveRecords, scopes, newShell]
+	);
 
 	const rememberedRef = useRef(new Map<string, ProjectHistoryConversation>());
+	const archiveRevision = useRef(archiveRecords);
 	const mergedHistory = useMemo(() => {
+		if (archiveRevision.current !== archiveRecords) {
+			rememberedRef.current.clear();
+			archiveRevision.current = archiveRecords;
+		}
 		rememberOpenConversations(sessions, groups, rememberedRef.current);
 		const extra: ProjectHistoryConversation[] = [];
 		for (const [key, record] of rememberedRef.current) {
@@ -176,7 +214,26 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 			else extra.push(record);
 		}
 		return extra.length > 0 ? [...history.conversations, ...extra] : history.conversations;
-	}, [sessions, groups, history.conversations]);
+	}, [sessions, groups, history.conversations, archiveRecords]);
+
+	const contentResults = useMemo(
+		() => ({
+			...contentSearch.result,
+			hits: contentSearch.result.hits
+				.filter((hit) => !archives.some((record) => record.key === hit.conversation.key))
+				.map((hit) => {
+					const known = mergedHistory.find(
+						(record) =>
+							!record.sshRemoteId &&
+							record.provider === hit.conversation.provider &&
+							record.nativeSessionId === hit.conversation.nativeSessionId &&
+							record.accountDir === hit.conversation.accountDir
+					);
+					return known ? { ...hit, conversation: known } : hit;
+				}),
+		}),
+		[contentSearch.result, mergedHistory, archives]
+	);
 
 	const providers = useMemo(
 		() => providersInHistory(sessions, mergedHistory),
@@ -190,11 +247,13 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 		() =>
 			buildProjectSessionTree({
 				newShell,
+				archives,
 				sessions,
 				groups,
 				groupsPlusEnabled,
 				collapsedProjects,
 				search,
+				remoteTitleOnly: newShell,
 				unreadOnly,
 				history: mergedHistory,
 				providerFilter: effectiveProviderFilter,
@@ -202,11 +261,13 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 			}),
 		[
 			newShell,
+			archives,
 			sessions,
 			groups,
 			groupsPlusEnabled,
 			collapsedProjects,
 			search,
+			newShell,
 			unreadOnly,
 			mergedHistory,
 			effectiveProviderFilter,
@@ -351,13 +412,15 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 		refreshOpenTab(rowKey, session.id, tab.id, record);
 	}, [activeKey, history.conversations, refreshOpenTab]);
 	const newConversation = useCallback(
-		(ownerId: string) => {
+		async (ownerId: string) => {
 			if (!selectOwner(ownerId)) return;
+			const owner = useSessionStore.getState().sessions.find((session) => session.id === ownerId);
+			if (owner && newShell && (await newProjectConversation(owner))) return;
 			noteDirectSelection(ownerId, null);
 			handleNewAgentSession();
 			leaveSidebar(activeTabIdNow());
 		},
-		[selectOwner, handleNewAgentSession, leaveSidebar]
+		[selectOwner, handleNewAgentSession, leaveSidebar, newShell]
 	);
 	const renameConversation = useCallback(
 		(conversation: SidebarConversation) => {
@@ -406,48 +469,142 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const manageAgents = useCallback(() => {
 		useSettingsStore.getState().setSidebarNavigationMode('agents');
 	}, []);
+	const settingsSessions = useMemo(() => {
+		if (!settingsProject) return [];
+		const owners = new Map(sessions.map((owner) => [owner.id, owner]));
+		const projectGroups = new Map(groups.map((group) => [group.id, group]));
+		return sessions.filter(
+			(session) =>
+				session.toolType !== 'terminal' &&
+				sessionProjectKey(session, owners, projectGroups).key === settingsProject.key
+		);
+	}, [settingsProject, sessions, groups]);
+	const settingsScopes = [
+		...new Map(
+			settingsSessions.map((session) => {
+				const scope = projectSettingsScopeForSession(session);
+				return [projectSettingsKey(scope), scope] as const;
+			})
+		).values(),
+	];
+
+	const archiveTarget = (conversation: SidebarConversation): ConversationArchiveTarget =>
+		conversation.history &&
+		conversation.kind !== 'open' &&
+		!conversation.history.key.startsWith('local:')
+			? {
+					provider: conversation.history.provider,
+					nativeSessionId: conversation.history.nativeSessionId,
+					projectPath: conversation.history.projectPath,
+					projectKey: conversation.history.projectKey,
+					lastActivity: conversation.history.modifiedAt,
+					worktree: conversation.history.worktree,
+					accountDir: conversation.history.accountDir,
+					sshRemoteId: conversation.history.sshRemoteId,
+					title: conversation.title,
+				}
+			: {
+					ownerId: conversation.ownerId ?? undefined,
+					nativeSessionId: conversation.nativeSessionId ?? '',
+					title: conversation.title,
+				};
+
+	const selectContent = useCallback(
+		async (hit: NativeHistorySearchHit) => {
+			if (!onResumeSession) return;
+			const ticket = ++contentOpenTicket.current;
+			setContentOpening(true);
+			setContentOpenFailed(false);
+			const known = mergedHistory.find(
+				(record) =>
+					record.provider === hit.conversation.provider &&
+					record.nativeSessionId === hit.conversation.nativeSessionId &&
+					!record.sshRemoteId &&
+					record.accountDir === hit.conversation.accountDir
+			);
+			const success = await openNativeHistorySearchHit(
+				known ? { ...hit, conversation: known } : hit,
+				onResumeSession
+			);
+			if (ticket !== contentOpenTicket.current) return;
+			setContentOpening(false);
+			setContentOpenFailed(!success);
+			if (success) {
+				useUIStore.getState().setActiveFocus('main');
+				useUIStore.getState().closeLeftSidebarForNavigation();
+			}
+		},
+		[onResumeSession, mergedHistory]
+	);
 
 	return (
-		<ProjectSessionTree
-			headerMenu={headerMenu}
-			theme={theme}
-			projects={projects}
-			activeKey={groupChatActive || browsing ? null : activeKey}
-			search={search}
-			onSearchChange={setSearch}
-			providers={providers}
-			providerFilter={effectiveProviderFilter}
-			onProviderFilterChange={setProviderFilter}
-			historyStatus={history.status}
-			historyRefreshing={history.refreshing}
-			historyFailure={history.failure}
-			historyErrors={historyErrors}
-			onRetryHistory={history.refresh}
-			pendingKeys={pendingKeys}
-			failedKeys={failedKeys}
-			onToggleProject={toggleProject}
-			onSelectConversation={selectConversation}
-			onNewConversation={newConversation}
-			onNewConversationHere={activeOwnerId ? newConversationHere : undefined}
-			onRenameConversation={renameConversation}
-			onCloseConversation={closeConversation}
-			onTogglePin={(conversation) => {
-				if (conversation.ownerId && conversation.tabId)
-					useTabStore.getState().starTab(conversation.tabId, conversation.ownerId);
-			}}
-			onDeleteWorktree={
-				onDeleteWorktree
-					? (conversation) => {
-							const owner = useSessionStore
-								.getState()
-								.sessions.find((s) => s.id === conversation.ownerId);
-							if (owner?.parentSessionId && owner.worktreeBranch) onDeleteWorktree(owner);
-						}
-					: undefined
-			}
-			onShowMore={showMore}
-			onManageAgents={manageAgents}
-			onAddAgent={onAddAgent}
-		/>
+		<>
+			<ProjectSessionTree
+				headerMenu={headerMenu}
+				theme={theme}
+				projects={projects}
+				activeKey={groupChatActive || browsing ? null : activeKey}
+				search={search}
+				contentSearch={contentResults}
+				contentSearching={contentSearch.searching}
+				contentOpening={contentOpening}
+				contentOpenFailed={contentOpenFailed}
+				onSelectContent={selectContent}
+				onSearchChange={setSearch}
+				providers={providers}
+				providerFilter={effectiveProviderFilter}
+				onProviderFilterChange={setProviderFilter}
+				historyStatus={history.status}
+				historyRefreshing={history.refreshing}
+				historyFailure={history.failure}
+				historyErrors={historyErrors}
+				onRetryHistory={history.refresh}
+				pendingKeys={pendingKeys}
+				failedKeys={failedKeys}
+				onToggleProject={toggleProject}
+				onSelectConversation={selectConversation}
+				onNewConversation={newConversation}
+				onNewConversationHere={activeOwnerId ? newConversationHere : undefined}
+				onRenameConversation={renameConversation}
+				onCloseConversation={closeConversation}
+				onArchiveConversation={
+					newShell
+						? (conversation) => requestConversationAction(archiveTarget(conversation), 'archive')
+						: undefined
+				}
+				onDeleteConversation={
+					newShell
+						? (conversation) => requestConversationAction(archiveTarget(conversation), 'delete')
+						: undefined
+				}
+				onTogglePin={(conversation) => {
+					if (conversation.ownerId && conversation.tabId)
+						useTabStore.getState().starTab(conversation.tabId, conversation.ownerId);
+				}}
+				onDeleteWorktree={
+					onDeleteWorktree
+						? (conversation) => {
+								const owner = useSessionStore
+									.getState()
+									.sessions.find((s) => s.id === conversation.ownerId);
+								if (owner?.parentSessionId && owner.worktreeBranch) onDeleteWorktree(owner);
+							}
+						: undefined
+				}
+				onShowMore={showMore}
+				onManageAgents={manageAgents}
+				onProjectSettings={setSettingsProject}
+				onAddAgent={onAddAgent}
+			/>
+			{newShell && settingsProject && settingsScopes.length > 0 && (
+				<ProjectSettingsModal
+					theme={theme}
+					name={settingsProject.name}
+					scopes={settingsScopes}
+					sessions={settingsSessions}
+					onClose={() => setSettingsProject(null)}
+				/>
+			)}
+		</>
 	);
 });

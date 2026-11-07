@@ -233,3 +233,17 @@ describe('project native history discovery', () => {
 		expect(list).not.toHaveBeenCalled();
 	});
 });
+
+it('filters archived identities from scans and can list only archived records', async () => {
+	const deps = dependencies();
+	const initial = await discoverProjectHistory([scope], deps);
+	const key = initial.conversations.find((row) => row.provider === 'codex')!.key;
+	const filtered = await discoverProjectHistory([scope], { ...deps, archivedKeys: new Set([key]) });
+	expect(filtered.conversations.map((row) => row.provider)).toEqual(['claude-code']);
+	const archived = await discoverProjectHistory([scope], {
+		...deps,
+		archivedKeys: new Set([key]),
+		archivedOnly: true,
+	});
+	expect(archived.conversations.map((row) => row.key)).toEqual([key]);
+});

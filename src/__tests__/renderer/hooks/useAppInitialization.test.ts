@@ -328,6 +328,20 @@ describe('useAppInitialization', () => {
 			expect((window as any).__hideSplash).not.toHaveBeenCalled();
 		});
 
+		it('reveals the ready new shell after two frames without the decorative delay', async () => {
+			vi.useFakeTimers();
+			mockSettingsState.newShell = true;
+			mockSettingsState.settingsLoaded = true;
+			mockSessionState.sessionsLoaded = true;
+			mockSessionState.initialFileTreeReady = true;
+			renderHook(() => useAppInitialization());
+			expect(window.__hideSplash).not.toHaveBeenCalled();
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(50);
+			});
+			expect(window.__hideSplash).toHaveBeenCalledWith(true);
+		});
+
 		it('should call __hideSplash after rAF + delay when all three gates pass', async () => {
 			vi.useFakeTimers();
 			mockSettingsState.settingsLoaded = true;

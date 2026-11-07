@@ -25,12 +25,15 @@ export function createCrossAgentApi() {
 			ipcRenderer.invoke('cross-agent:send', request),
 
 		/**
-		 * Stop every consult a source agent still has in flight (the Stop button).
+		 * Stop a source agent's consults, or only the named source tab in the new shell.
 		 * Each one settles with a terminal `canceled` chunk, so the response bubbles
 		 * and the "N agents responding" indicator both close out.
 		 */
-		cancel: (sourceSessionId: string): Promise<{ canceled: number }> =>
-			ipcRenderer.invoke('cross-agent:cancel', { sourceSessionId }),
+		cancel: (sourceSessionId: string, sourceTabId?: string): Promise<{ canceled: number }> =>
+			ipcRenderer.invoke('cross-agent:cancel', {
+				sourceSessionId,
+				...(sourceTabId && { sourceTabId }),
+			}),
 
 		/**
 		 * Subscribe to streamed cross-agent response chunks.

@@ -43,6 +43,23 @@ describe('dispatch command', () => {
 		processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 	});
 
+	it('returns the project-created owner and allows its SSH creation round trip', async () => {
+		vi.mocked(resolveAgentId).mockReturnValue('source-owner');
+		const sendCommand = vi
+			.fn()
+			.mockResolvedValue({ success: true, sessionId: 'project-owner', tabId: 'project-tab' });
+		vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+			action({ sendCommand } as never)
+		);
+		const result = await runDispatch('source-owner', 'Synthetic prompt', { newTab: true });
+		expect(result).toMatchObject({ success: true, agentId: 'project-owner', tabId: 'project-tab' });
+		expect(sendCommand).toHaveBeenCalledWith(
+			expect.objectContaining({ type: 'new_ai_tab_with_prompt' }),
+			'new_ai_tab_with_prompt_result',
+			65_000
+		);
+	});
+
 	describe('default (active tab) flow', () => {
 		it('sends send_command in the background by default (no tabId) and surfaces the desktop-supplied tabId', async () => {
 			vi.mocked(resolveAgentId).mockReturnValue('agent-abc-123');
@@ -122,7 +139,8 @@ describe('dispatch command', () => {
 					// return is how the caller follows it without stealing the view.
 					background: true,
 				},
-				'new_ai_tab_with_prompt_result'
+				'new_ai_tab_with_prompt_result',
+				65_000
 			);
 
 			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
@@ -260,7 +278,8 @@ describe('dispatch command', () => {
 					sessionId: 'agent-abc-123',
 					prompt: 'Open a new conversation',
 				},
-				'new_ai_tab_with_prompt_result'
+				'new_ai_tab_with_prompt_result',
+				65_000
 			);
 		});
 

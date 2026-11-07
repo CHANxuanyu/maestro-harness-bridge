@@ -83,6 +83,26 @@
 - CLI：`tab new --agent <id> --provider <provider> [--replace-empty <tab>]`；`tab panel <tab> <changes|files|back|open|close|edit|preview|save>`，可带 `--filter`、`--line`、`--content`。文件打开和刷新沿用 `open-file`、`refresh-files`，隐藏文件沿用 `settings set showHiddenFiles`。文本保存复用 FilePreview 保存函数。
 - `e2e/native-new-shell.spec.ts` 按 hb.7 演示覆盖打开项目、Claude 改动、Codex 交接、DeepSeek 复核、三段会话切换、正常退出重启、恢复旧界面；检查界面、项目文件、原生转录和保存的会话数据。只使用合成提供方，真实模式跳过。本批按要求只写用例和做类型检查，Electron / Playwright 尚待用户运行，不宣称已完成 hb.7 真人验收。
 
+## 归档与删除对话（2026-11-06，T9）
+
+- 新界面的对话右键和命令面板提供归档。归档仅保存 Maestro 标记，关闭同一工具、账户和主机下的打开标签，原生文件保持不变。运行中或排队中的对话拒绝归档。
+- 项目列表底部显示“已归档 N”，展开后可以取消归档。状态由主进程保存并广播，换窗口和重启后仍保留。扫描、缓存投影和权限继承均识别归档状态；无普通对话时保留归档中的最严格权限。
+- Codex 提供删除并明确确认原生记录不可恢复，沿用现有原生删除实现；Claude 不提供删除。新入口均受 `newShell` 控制。
+- CLI 对应 `tab archive`、`native-history archive|unarchive`、`native-history list --archived`，删除使用 `native-history delete --yes`。边界见 [CLI-UI-PARITY.md](../agent-guides/CLI-UI-PARITY.md#new-shell-conversation-archive-and-native-deletion-2026-11-06)。
+- 审查修复：取消归档保留权限元数据及原活动时间，不重新打开也不会放宽新对话权限；项目子目录和工作树共用扫描归属规则。浏览器读取和订阅归档状态，关闭标签仍由所属桌面窗口处理。
+- 合成 Electron 场景在 `e2e/native-conversation-archive.spec.ts`，覆盖桌面归档往返、取消归档后的权限，以及子目录归档和取消归档后的重启保留。第四轮移除额外浏览器窗口，修改后的场景待沙箱外执行；浏览器归档读取、实时订阅、重新挂载和退订由 `useRemoteIntegration.test.ts` 单元回归覆盖，不宣称浏览器整页验收通过。
+
+## 左栏内容搜索（2026-11-06）
+
+- 只在新界面启用。本机原生历史内容搜索与现有标题结果并列，输入至少两个字符，防抖 250 毫秒；两组依次为“对话”和“对话内容”。内容行显示标题、项目和一行高亮片段，上下键选择，回车打开，Esc 先清空搜索并回到搜索框。
+- 内容搜索共用会话浏览器的解析和片段工具，读取 Claude 与 Codex 本机账户，支持 Codex 压缩归档。不扫描 SSH 内容；新界面里的远程记录只按标题匹配。
+- 主进程解析账户，worker 扫描内容。新输入终止旧任务，旧返回不能覆盖新结果。单文件 8 MiB，总原始字节和展开字节合计 64 MiB，最多枚举 1024 个文件和 8192 个目录项，最多返回 50 条对话。扫描软预算 2500 毫秒，worker 硬上限 4000 毫秒，含账户发现的请求总预算 5000 毫秒。触及预算时提示搜索不完整，不能当成已搜索全部历史。
+- 点击内容结果沿用原生打开与只读补读，把早于默认加载窗口的命中消息补入当前对话，再通过现有跳转机制滚动和短暂高亮。不启动模型，不改原生历史。
+- CLI `maestro-cli native-history search <text> [--project <path>] [--json]` 通过桌面应用调用同一实现。点击结果后的打开、滚动和高亮，以及界面清空搜索的 CLI 对等仍列在 `CLI-UI-PARITY.md` 的 Open gaps。
+- 审查修正：Codex 搜索复用显示正文的解包规则，首条用户消息不会再因内部包装而定位失败。命中已结束回合的过程消息时先展开回合，再高亮正文。旧格式从环境记录补齐项目路径；未加载项目的结果读取账户内原生标题索引，无名称时取清理后的真实用户消息。标题索引也计入搜索字节预算。
+- 第三轮修正：四条 Codex Electron 场景均已搜到内容，但原生读取漏掉 `archived_sessions`，因此打开失败。共享存储发现补齐本机归档目录，保留普通文件优先和账户隔离；四条新增单元回归先失败后通过，Electron 的正文入视口与高亮断言保留，沙箱外运行仍待 Opus。
+- 合成 Electron 场景位于 `e2e/native-sidebar-search.spec.ts`，分别覆盖 Claude 和 Codex 压缩归档中早于默认加载窗口的命中消息、CLI 结果、键盘操作、高亮及原生字节不变。沙箱内只做类型检查和场景收集，实际运行待 Opus。
+
 ## 三家工具能做什么
 
 界面只显示当前工具真正支持的控件，不支持的直接不出现。2026-11-05 已按附录 D 核对各家命令行的帮助和参数（记录在 [hb.7 能力核对](../verification/hb7-capabilities.md)）。标“待实测”的项必须真实调用模型才能确定，会产生费用，先问用户。
@@ -126,8 +146,9 @@ DeepSeek 实际跑的是 Claude Code，只是接口地址指向 DeepSeek，所�
 - 任务沿用 `agentTaskList.ts` 读取当前会话最新的顶层清单，Claude 与 DeepSeek 的 TodoWrite、Codex 的 update_plan 共用显示，Codex exec 的 todo_list 增量归一为同一工具输入。原生历史沿用转录适配器，只读，无清单时显示普通居中文字。
 - 终端快捷键沿用 `⌘/Ctrl+J`，任务使用 `⌘/Ctrl+Shift+7`，均有命令面板和右栏按钮；终端聚焦时关闭、查找、清屏沿用既有动作。CLI 沿用终端读写与新建动词，补 `tab panel terminal|tasks|terminal-select|terminal-close`；旧界面保留原入口。
 - 原生验收用例已补终端执行命令、切换会话后的输出保留与合成 TodoWrite 显示。Electron / Playwright 尚待用户运行，本批不宣称通过真人或发行包验收。
-- 改动按回合分组，能看出哪一轮改了什么。
-- 两条会话分屏。
+- 改动按回合分组已实现源码。面板默认按文件，每条对话记住切换选择；从成功的 Claude 写入工具、Codex apply_patch 和 file_change 记录归类当前仍有改动的文件，最新回合在上，未归类文件在底部“其他改动”。各组均打开当前差异，不保存逐轮差异。CLI 为 `changes --by-turn --tab <id> --json`，界面切换为 `tab panel <id> changes-files|changes-turns`。已补独立于日志裁剪的写入索引与完整原生历史只读索引，长参数和旧格式 Codex 工具结果保留路径归属，按 Git 实际执行目录处理 SSH 主目录写法及本机目录别名。合成两轮及两家长历史的 Electron 场景已补，尚待外部运行。
+- 两条会话分屏已实现，合成 Electron 场景通过，真人长时间使用待验证。已有对话可从左栏右键、`⌥⌘\` / `Ctrl+Alt+\` 和命令面板在右侧打开，初始等宽，分隔线可拖动；每栏沿用对话流、输入框和运行状态，右侧面板跟随焦点。关闭分栏保留对话及进程，正常重启恢复组合和宽度。窗口不足 1180 像素或中间区域不足 720 像素时显示说明，临时退回单栏。CLI 为 `tab split <tab-id> [--ratio <fraction>]` 和 `tab unsplit`。
+- 2026-11-07 分屏审查修复：新界面单栏和分屏的停止按钮、Escape 只停止目标对话及仍运行的孤儿标签，后台其他对话、排队和交接保留。附件读取绑定目标，文件树拖拽携带来源项目和主机，跨主机明确拒绝；未聚焦栏也保存阅读位置。合成 Electron 补同工具双对话同时运行和单栏后台运行场景，尚待沙箱外执行。
 - 项目设置完整替代智能体配置。
 - 子任务挂在父会话下面：@提及和 maestro-cli 派出的活能点开、插话、接着聊；来源标签关掉以后也能按原生 id 挂回去。
 - 2026-11-07 U3 源码已补父子树、运行时展开、首句标题、原生 id 回填和 CLI `tab children` / `tab select`。咨询仍不产生未读，运行中插话使用既有队列。单元回归通过；`e2e/native-subtasks.spec.ts` 合成场景已收集，尚未运行 Electron。界面折叠状态、已关闭父对话的 CLI 地址和跨窗口来源写入限制见 CLI 对等表的 Open gaps。

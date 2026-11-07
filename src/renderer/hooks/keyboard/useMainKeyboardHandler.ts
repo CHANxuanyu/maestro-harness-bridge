@@ -2,6 +2,7 @@ import { openUiSurface } from '../../utils/openUiSurface';
 import { shellRightPanelTab } from '../../../shared/newShellPanel';
 import { shellFeatureVisible } from '../../../shared/newShellFeatures';
 import { chooseProject } from '../../services/openProject';
+import { getT } from '../../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { Session, AITab } from '../../types';
 import {
@@ -658,6 +659,13 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				e.preventDefault();
 				void chooseProject();
 				trackShortcut('openProject');
+			} else if (newShell && ctx.isShortcut(e, 'splitConversation')) {
+				e.preventDefault();
+				useModalStore.getState().openModal('quickAction', {
+					initialMode: 'main',
+					initialSearch: getT()('workflows.split.openRight'),
+				});
+				trackShortcut('splitConversation');
 			} else if (ctx.isShortcut(e, 'toggleSidebar')) {
 				if (useSessionStore.getState().sessions.length > 0 || !ctx.leftSidebarOpen) {
 					ctx.setLeftSidebarOpen((p: boolean) => !p);

@@ -3267,6 +3267,25 @@ describe('settingsStore', () => {
 			expect(useSettingsStore.getState().totalActiveTimeMs).toBe(0);
 		});
 
+		it('restores a split pair and rejects malformed persisted layouts', async () => {
+			const split = {
+				left: { sessionId: 'left', tabId: 'left-tab' },
+				right: { sessionId: 'right', tabId: 'right-tab' },
+				ratio: 0.6,
+			};
+			vi.mocked(window.maestro.settings.getAll).mockResolvedValue({
+				newShell: true,
+				newShellSplit: split,
+			});
+			await loadAllSettings();
+			expect(useSettingsStore.getState().newShellSplit).toEqual(split);
+			vi.mocked(window.maestro.settings.getAll).mockResolvedValue({
+				newShellSplit: { ...split, ratio: 2 },
+			});
+			await loadAllSettings();
+			expect(useSettingsStore.getState().newShellSplit).toBeNull();
+		});
+
 		it('validates documentGraphMaxNodes on load (rejects out-of-range)', async () => {
 			vi.mocked(window.maestro.settings.getAll).mockResolvedValue({
 				documentGraphMaxNodes: 10, // below 50

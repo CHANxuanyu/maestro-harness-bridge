@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import fs from 'node:fs';
@@ -264,6 +265,33 @@ describe('useDebouncedPersistence', () => {
 	// prepareSessionForPersistence (tested indirectly through hook flush)
 	// -----------------------------------------------------------------------
 	describe('prepareSessionForPersistence (via hook flush)', () => {
+		it('retains the turn write index across log trimming, restart and another save', () => {
+			useSettingsStore.setState({ newShell: true });
+			const logs: LogEntry[] = [
+				{ id: 'early', source: 'user', text: 'Early change', timestamp: 1 },
+				{
+					id: 'write',
+					source: 'tool',
+					text: 'Write',
+					timestamp: 2,
+					metadata: { toolState: { status: 'completed', input: { file_path: 'a.ts' } } },
+				},
+				...Array.from({ length: 150 }, (_, i) => makeLog(`later-${i}`)),
+			];
+			seedSessions([makeSession({ aiTabs: [makeTab({ id: 't', logs })], activeTabId: 't' })]);
+			const { result } = renderPersistence(makeInitialLoadRef(true));
+			act(() => result.current.flushNow(useSessionStore.getState().sessions));
+			const saved = vi.mocked(window.maestro.sessions.setAll).mock.calls[0][0] as Session[];
+			expect(saved[0].aiTabs[0].logs).toHaveLength(100);
+			expect(saved[0].aiTabs[0].changeTurnIndex?.turns).toEqual([
+				{ turnId: 'early', title: 'Early change', timestamp: 1, paths: ['a.ts'] },
+			]);
+			seedSessions(saved);
+			act(() => result.current.flushNow(useSessionStore.getState().sessions));
+			const reSaved = vi.mocked(window.maestro.sessions.setAll).mock.calls.at(-1)![0] as Session[];
+			expect(reSaved[0].aiTabs[0].changeTurnIndex).toEqual(saved[0].aiTabs[0].changeTurnIndex);
+			useSettingsStore.setState({ newShell: false });
+		});
 		describe('wizard tab filtering', () => {
 			it('should filter out tabs with active wizard state', () => {
 				const regularTab = makeTab({ id: 'regular' });

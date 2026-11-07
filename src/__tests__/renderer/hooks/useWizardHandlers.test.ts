@@ -17,6 +17,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 import { logger } from '../../../renderer/utils/logger';
 import { renderHook, act, cleanup } from '@testing-library/react';
 
@@ -280,6 +282,8 @@ describe('useWizardHandlers', () => {
 			sessionsLoaded: false,
 		} as any);
 		useSettingsStore.setState({
+			newShell: false,
+			projectSettings: {},
 			defaultSaveToHistory: true,
 			defaultShowThinking: 'off',
 			conductorProfile: 'default',
@@ -302,6 +306,19 @@ describe('useWizardHandlers', () => {
 	// Slash command discovery effect
 	// ========================================================================
 	describe('slash command discovery effect', () => {
+		it('does not probe the host account from the new shell', async () => {
+			useSettingsStore.setState({ newShell: true });
+			const session = createMockSession({
+				customEnvVars: { CLAUDE_CONFIG_DIR: '/temporary/account-b' },
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: 'session-1' });
+			await act(async () => {
+				renderHook(() => useWizardHandlers(createMockDeps()));
+			});
+			expect(window.maestro.claude.getCommands).not.toHaveBeenCalled();
+			expect(window.maestro.agents.discoverSlashCommands).not.toHaveBeenCalled();
+		});
+
 		it('fetches custom commands and agent commands for claude-code sessions', async () => {
 			const session = createMockSession({ agentCommands: undefined });
 			useSessionStore.setState({ sessions: [session], activeSessionId: 'session-1' });
@@ -1477,6 +1494,40 @@ describe('useWizardHandlers', () => {
 	// handleLaunchWizardTab
 	// ========================================================================
 	describe('handleLaunchWizardTab', () => {
+		it('starts the wizard with the model resolved on its newly created tab', async () => {
+			for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
+				setCapabilitiesCache(id, capabilities);
+			useSettingsStore.setState({
+				newShell: true,
+				projectSettings: {
+					'[null,"/projects/test"]': {
+						defaultProvider: 'claude-code',
+						defaultModel: 'project-model',
+					},
+				},
+			});
+			const session = createMockSession({ customModel: 'old-model' });
+			useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+			const deps = createMockDeps();
+			const { result } = renderHook(() => useWizardHandlers(deps));
+			act(() => result.current.handleLaunchWizardTab());
+			await act(async () => {
+				await new Promise((resolve) => setTimeout(resolve, 20));
+			});
+			expect(deps.inlineWizardContext.startWizard).toHaveBeenCalledWith(
+				undefined,
+				expect.any(Object),
+				session.projectRoot,
+				session.toolType,
+				session.name,
+				expect.any(String),
+				session.id,
+				session.autoRunFolderPath,
+				session.sessionSshRemoteConfig,
+				'default',
+				expect.objectContaining({ customModel: 'project-model' })
+			);
+		});
 		it('creates a new tab and starts wizard on it', async () => {
 			const session = createMockSession();
 			useSessionStore.setState({ sessions: [session], activeSessionId: 'session-1' });

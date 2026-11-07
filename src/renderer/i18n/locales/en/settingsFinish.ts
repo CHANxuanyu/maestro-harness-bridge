@@ -4,6 +4,8 @@ export const settingsFinish = {
 	'settings.finish.environment.heading': 'Global Environment Variables',
 	'settings.finish.environment.description':
 		"Variables set here apply to all terminal sessions and AI agents. Per-agent environment variables (configured in each agent's settings) take precedence when both define the same key. Common use cases: API keys, proxy settings, custom tool paths. Use the eye button to switch a variable off: it stays in this list with its value intact, but is no longer passed to anything Maestro runs.",
+	'settings.finish.env.revealValue': 'Reveal {key}',
+	'settings.finish.env.hideValue': 'Hide {key}',
 	'settings.finish.env.label': 'Environment Variables (optional)',
 	'settings.finish.env.description':
 		'Environment variables passed to all terminal sessions and AI agent processes.',

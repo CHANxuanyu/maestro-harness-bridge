@@ -238,6 +238,8 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 			// pending retry freezes the execution queue (see chooseNextQueuedItem),
 			// which asks about both the exiting tab and the next item's target tab.
 			const isRetryPending = (tabId: string): boolean => hasPendingRetry(actualSessionId, tabId);
+			const stoppedTabId =
+				stopped && useSettingsStore.getState().newShell ? tabIdFromSession : undefined;
 			// The same answer, precomputed for the reducer below, which re-derives the
 			// dequeue decision and must stay in step with chooseNextQueuedItem.
 			const retryPending =
@@ -245,7 +247,8 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 				queueIsHeldByRetry(
 					getSessions().find((s) => s.id === actualSessionId),
 					tabIdFromSession,
-					isRetryPending
+					isRetryPending,
+					stoppedTabId
 				);
 
 			// A client that does not own the side effects never dequeues either:
@@ -258,7 +261,8 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 					const queueDecision = chooseNextQueuedItem(
 						currentSession,
 						tabIdFromSession,
-						isRetryPending
+						isRetryPending,
+						stoppedTabId
 					);
 					if (queueDecision.action === 'dequeue' && queueDecision.item) {
 						queuedItemToProcess = {
@@ -435,7 +439,8 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 					// carries the agent session id for continuity and is a valid dispatch
 					// target - until its queued work is gone.
 					const { item: nextItem, remaining: remainingQueue } = takeNextRunnableQueueItem(
-						s.executionQueue
+						s.executionQueue,
+						stoppedTabId
 					);
 					const otherTabsBusy = s.aiTabs?.some((tab) => tab.state === 'busy') ?? false;
 					const runNextOnOrphan =
@@ -517,7 +522,8 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 					// queuedItemToProcess keeps the reducer and the spawn perfectly in sync.
 					const orphansWithoutExited = s.orphanedThinkingTabs.filter((_, i) => i !== orphanIndex);
 					const { item: nextRunnable, remaining: remainingAfterNext } = takeNextRunnableQueueItem(
-						s.executionQueue
+						s.executionQueue,
+						stoppedTabId
 					);
 					const dispatchesNext =
 						!!queuedItemToProcess &&
@@ -623,7 +629,8 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 					// Skip paused items: run the first runnable one, holding the rest
 					// (including any paused items ahead of it) in place.
 					const { item: nextItem, remaining: remainingQueue } = takeNextRunnableQueueItem(
-						s.executionQueue
+						s.executionQueue,
+						stoppedTabId
 					);
 					if (nextItem) {
 						// Guard: non-forceParallel, non-readOnly items must wait

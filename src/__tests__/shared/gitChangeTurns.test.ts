@@ -272,3 +272,53 @@ describe('conversation changes by turn', () => {
 		expect(result.groups).toEqual([expect.objectContaining({ turnId: null })]);
 	});
 });
+
+it.each(['claude-code', 'codex'])(
+	'keeps %s tool output identity beside long write evidence',
+	(provider) => {
+		const source = {
+			provider,
+			projectPath: '/repo',
+			nativeSessionId: 'native',
+			ownerAgentId: 'owner',
+			accountDir: '/synthetic-account',
+		};
+		const input =
+			provider === 'claude-code'
+				? { file_path: 'saved.ts', content: 'x'.repeat(6000) }
+				: `*** Begin Patch\n*** Add File: saved.ts\n+${'x'.repeat(6000)}\n*** End Patch`;
+		const logs = transcriptMessagesToLogEntries(
+			[
+				{ type: 'user', content: 'Write a file', uuid: 'turn', timestamp: '2026-11-06T09:00:00Z' },
+				{
+					type: 'assistant',
+					content: '',
+					uuid: 'write',
+					timestamp: '2026-11-06T09:00:01Z',
+					toolUse: [
+						{
+							id: 'call',
+							name: provider === 'claude-code' ? 'Write' : 'apply_patch',
+							state: { status: 'completed', input, output: 'saved' },
+						},
+					],
+				},
+			],
+			source
+		);
+		expect(logs[1].metadata).toMatchObject({
+			toolCallId: 'call',
+			nativeToolCallId: 'call',
+			toolOutputSource: source,
+			toolState: { status: 'completed', writePaths: ['saved.ts'], output: 'saved' },
+		});
+		expect(collectTurnWrites(logs)).toEqual([
+			{
+				turnId: 'turn',
+				title: 'Write a file',
+				timestamp: Date.parse('2026-11-06T09:00:00Z'),
+				paths: ['saved.ts'],
+			},
+		]);
+	}
+);

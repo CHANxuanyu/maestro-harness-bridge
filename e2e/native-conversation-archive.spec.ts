@@ -40,9 +40,20 @@ test('archive conversation, restart and unarchive without changing native histor
 		await expect(row()).toBeVisible();
 		await row().locator('[data-tree-nav]').click();
 		await native.page.locator(`[data-native-session-id="${kept.id}"] [data-tree-nav]`).click();
+		const search = native.page.getByPlaceholder('Search conversations...', { exact: true });
+		await search.fill('Archive this conversation');
+		await expect(native.page.locator('[data-content-hit]')).toHaveCount(1);
+		expect(
+			(await native.cli('native-history', 'search', 'Archive this conversation')).result.hits
+		).toHaveLength(1);
 		await row().locator('[data-tree-nav]').click({ button: 'right' });
 		await native.page.getByRole('menuitem', { name: /^Archive/ }).click();
 		await expect(row()).toHaveCount(0);
+		await expect(native.page.locator('[data-content-hit]')).toHaveCount(0);
+		expect(
+			(await native.cli('native-history', 'search', 'Archive this conversation')).result.hits
+		).toEqual([]);
+		await search.clear();
 		await expect(
 			native.page.getByRole('button', { name: 'Archived 1', exact: true })
 		).toBeVisible();
@@ -58,6 +69,9 @@ test('archive conversation, restart and unarchive without changing native histor
 		await native.page.getByRole('button', { name: 'Archived 1', exact: true }).click();
 		await native.page.getByRole('button', { name: 'Unarchive', exact: true }).click();
 		await expect(row()).toBeVisible();
+		expect(
+			(await native.cli('native-history', 'search', 'Archive this conversation')).result.hits
+		).toHaveLength(1);
 		await expect(native.page.getByRole('button', { name: 'Archived 1', exact: true })).toHaveCount(
 			0
 		);

@@ -303,6 +303,8 @@ For archived Claude desktop worktrees, `localProjectWorktree()` also accepts a r
 
 `projectHistoryScopeFor()` in `src/shared/projectHistory.ts` is shared by native discovery, archive display and permission inheritance. It matches the host, prefers an exact scope, then the local worktree main repository, then the most specific ancestor at a directory boundary. A saved project key retains adapter-recognized aliases when no path matches. SSH paths are compared as POSIX strings and never resolved locally. `buildProjectHistoryScopes()` lives in `nativeConversationMatch.ts` and is re-exported by `projectSessionTree.ts`.
 
+The strict `createTab()` fallback includes archive metadata alongside hidden, closed, orphaned and snoozed conversations. Project recency still prefers ordinary conversations; missing owner replies require readonly before archive recency is considered.
+
 Archive records retain permission metadata with `archived: false` after unarchive. Legacy records without the flag remain archived. Default lists and scan filters exclude unarchived metadata; renderer hydration explicitly requests it for permission inheritance. `conversationActivity()` in `newConversationPermissions.ts` is also used by the archive lifecycle to preserve the original activity in `modifiedAt`. Do not use `archivedAt` as fresh activity after unarchive: an old full-access conversation must not outrank a newer readonly one just because it was archived later.
 
 ## Native conversation content search (2026-11-06)

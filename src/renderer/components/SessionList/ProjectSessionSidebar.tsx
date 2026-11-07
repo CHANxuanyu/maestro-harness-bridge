@@ -214,18 +214,20 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const contentResults = useMemo(
 		() => ({
 			...contentSearch.result,
-			hits: contentSearch.result.hits.map((hit) => {
-				const known = mergedHistory.find(
-					(record) =>
-						!record.sshRemoteId &&
-						record.provider === hit.conversation.provider &&
-						record.nativeSessionId === hit.conversation.nativeSessionId &&
-						record.accountDir === hit.conversation.accountDir
-				);
-				return known ? { ...hit, conversation: known } : hit;
-			}),
+			hits: contentSearch.result.hits
+				.filter((hit) => !archives.some((record) => record.key === hit.conversation.key))
+				.map((hit) => {
+					const known = mergedHistory.find(
+						(record) =>
+							!record.sshRemoteId &&
+							record.provider === hit.conversation.provider &&
+							record.nativeSessionId === hit.conversation.nativeSessionId &&
+							record.accountDir === hit.conversation.accountDir
+					);
+					return known ? { ...hit, conversation: known } : hit;
+				}),
 		}),
-		[contentSearch.result, mergedHistory]
+		[contentSearch.result, mergedHistory, archives]
 	);
 
 	const providers = useMemo(

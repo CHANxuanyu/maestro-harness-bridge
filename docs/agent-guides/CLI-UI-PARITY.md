@@ -818,6 +818,26 @@ T9 第四轮将子目录归档的 Electron 验收收敛为桌面左栏操作、�
 
 权限继承排除归档项的最近活动；没有普通对话时使用归档中最严格的已知档位。没有 Maestro 权限记录的原生历史保守记为只读。空项目不会在重启时被当作损坏数据补出高权限对话。新界面关闭时不启用归档过滤或新增菜单；归档写操作要求 `newShell`。既有 CLI 删除增加 `--yes` 确认，这是两种界面共用的安全收紧。Claude 不提供原生删除。
 
+## Second batch integration (2026-11-07)
+
+`native-history search` and sidebar content search share the archive filter in
+`agentSessions:searchNativeHistory`. With `newShell` enabled, both exclude Maestro
+archive keys, scoped to provider, host, account pool and native ID. The sidebar
+also removes already displayed hits when archive metadata changes. Unarchive
+allows the next search to find the conversation again. Codex `archived_sessions`
+is native storage and remains searchable unless Maestro has archived that exact
+identity. The scan and result budgets remain unchanged; filtering can return
+fewer than 50 hits. This repair adds no UI action, CLI verb or localized copy.
+
+Project creation still resolves authoritative owner snapshots, excludes archived
+conversations from recency and uses the strictest archive when no ordinary
+conversation remains. Missing owners or changed project/host identity cannot
+authorize wider permissions. A direct `createTab()` without `permissionSource`
+uses the strictest known inventory, including archives, hidden conversations,
+closed tabs, orphaned turns and snoozed group members. The creation call-site
+inventory remains unchanged. The archive tests exercise project recency through
+`resolveProjectConversationPermission()` and assert the strict fallback separately.
+
 ## Open gaps
 
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no

@@ -199,3 +199,31 @@ it('returns a bounded partial result when account discovery exceeds the deadline
 		vi.useRealTimers();
 	}
 });
+
+it('keeps Maestro archives out of new-shell content results without hiding other accounts or native archives', async () => {
+	const key = JSON.stringify(['codex', 'local', root, 'same-native']);
+	const hidden = { key, provider: 'codex', nativeSessionId: 'same-native', accountDir: root };
+	const hits = [
+		hidden,
+		{ ...hidden, key: 'other-account', accountDir: path.join(root, 'other') },
+		{ ...hidden, key: 'native-archive', nativeSessionId: 'native-archive' },
+	].map((conversation) => ({ conversation, matchPreview: 'needle' }));
+	vi.mocked(runNativeHistorySearch).mockResolvedValue({ hits, truncated: true } as never);
+	let archived = true;
+	let newShell = true;
+	vi.mocked(getSettingsStore).mockReturnValue({
+		get: (name: string, fallback: unknown) =>
+			name === 'newShell'
+				? newShell
+				: name === 'archivedConversations'
+					? [{ ...hidden, archived }]
+					: fallback,
+	} as never);
+	const search = () => handlers.get('agentSessions:searchNativeHistory')!({}, { query: 'needle' });
+	expect(await search()).toEqual({ hits: hits.slice(1), truncated: true });
+	archived = false;
+	expect(await search()).toEqual({ hits, truncated: true });
+	archived = true;
+	newShell = false;
+	expect(await search()).toEqual({ hits, truncated: true });
+});

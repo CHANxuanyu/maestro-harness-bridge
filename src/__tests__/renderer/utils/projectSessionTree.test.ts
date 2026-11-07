@@ -674,3 +674,27 @@ it('matches SSH history only by title when the new shell requests it, preserving
 		)
 	).toHaveLength(1);
 });
+
+it.each([false, true])(
+	'searches an open conversation with remoteTitleOnly and SSH=%s',
+	(remote) => {
+		const owner = createMockSession({
+			id: 'search-owner',
+			name: 'Configuration needle',
+			cwd: remote ? '~/project' : '/project',
+			sessionSshRemoteConfig: remote ? { enabled: true, remoteId: 'host' } : undefined,
+			aiTabs: [createMockAITab({ id: 'open', name: 'Conversation title' })],
+		});
+		const options = { sessions: [owner], groups: [], remoteTitleOnly: true };
+		expect(
+			buildProjectSessionTree({ ...options, search: 'Conversation title' }).flatMap(
+				(item) => item.conversations
+			)
+		).toHaveLength(1);
+		expect(
+			buildProjectSessionTree({ ...options, search: 'Configuration needle' }).flatMap(
+				(item) => item.conversations
+			)
+		).toHaveLength(remote ? 0 : 1);
+	}
+);

@@ -592,7 +592,18 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
 					{ query: request.query, projectPath: request.projectPath, accounts },
 					controller.signal
 				);
-				return timedOut ? stopped() : result;
+				if (timedOut) return stopped();
+				if (!getSettingsStore().get('newShell', false)) return result;
+				const archivedKeys = new Set(
+					getSettingsStore()
+						.get('archivedConversations', [])
+						.filter((record) => record.archived !== false)
+						.map((record) => record.key)
+				);
+				return {
+					...result,
+					hits: result.hits.filter((hit) => !archivedKeys.has(hit.conversation.key)),
+				};
 			} finally {
 				clearTimeout(timeout);
 				controller.signal.removeEventListener('abort', onAbort);

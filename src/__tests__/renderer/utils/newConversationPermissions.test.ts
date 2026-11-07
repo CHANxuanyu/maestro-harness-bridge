@@ -85,7 +85,7 @@ it.each(['unavailable', 'empty', 'live'] as const)(
 			snapshot === 'unavailable'
 				? [null]
 				: snapshot === 'empty'
-					? [{ sessionId: owner.id, tabs: [] }]
+					? [{ ...conversationPermissionSnapshot(owner.id)!, tabs: [] }]
 					: [conversationPermissionSnapshot(owner.id)]
 		);
 		try {
@@ -139,7 +139,7 @@ it('inherits archived permissions from a project subdirectory without matching a
 	expect(createTab(remote)!.tab.permissionMode).toBe('full');
 });
 
-it('treats unarchived metadata as ordinary recency while keeping classic creation unchanged', () => {
+it('treats unarchived metadata as ordinary recency while keeping classic creation unchanged', async () => {
 	const owner = createMockSession({
 		id: 'owner',
 		toolType: 'codex',
@@ -171,7 +171,14 @@ it('treats unarchived metadata as ordinary recency while keeping classic creatio
 			},
 		] as ArchivedConversation[],
 	});
-	expect(createTab(owner)!.tab.permissionMode).toBe('full');
+	vi.spyOn(window.maestro.windows, 'getConversationPermissions').mockImplementation(async () => [
+		conversationPermissionSnapshot(owner.id),
+	]);
+	expect(createTab(owner)!.tab).toMatchObject(permissionModeFields('readonly'));
+	expect(
+		createTab(owner, { permissionSource: await resolveProjectConversationPermission(owner) })!.tab
+			.permissionMode
+	).toBe('full');
 	useConversationArchiveStore.setState({
 		records: useConversationArchiveStore
 			.getState()
@@ -181,7 +188,12 @@ it('treats unarchived metadata as ordinary recency while keeping classic creatio
 		...owner,
 		aiTabs: [createMockAITab({ id: 'newer', createdAt: 200, permissionMode: 'full' })],
 	};
-	expect(createTab(current)!.tab.permissionMode).toBe('full');
+	useSessionStore.setState({ sessions: [current] });
+	expect(createTab(current)!.tab).toMatchObject(permissionModeFields('readonly'));
+	expect(
+		createTab(current, { permissionSource: await resolveProjectConversationPermission(current) })!
+			.tab.permissionMode
+	).toBe('full');
 	useSettingsStore.setState({ newShell: false });
 	expect(createTab(owner)!.tab.permissionMode).toBeUndefined();
 });
@@ -751,7 +763,14 @@ describe('archived conversation permissions', () => {
 		const normal = createMockAITab({ id: 'normal', createdAt: 1, permissionMode: 'standard' });
 		const session = createMockSession({ aiTabs: [normal, archivedStrict, archivedFull] });
 		useSessionStore.setState({ sessions: [session] });
-		expect(createTab(session)!.tab.permissionMode).toBe('standard');
+		vi.spyOn(window.maestro.windows, 'getConversationPermissions').mockImplementation(async () => [
+			conversationPermissionSnapshot(session.id),
+		]);
+		expect(createTab(session)!.tab).toMatchObject(permissionModeFields('readonly'));
+		expect(
+			createTab(session, { permissionSource: await resolveProjectConversationPermission(session) })!
+				.tab.permissionMode
+		).toBe('standard');
 		session.aiTabs = [archivedStrict, archivedFull];
 		expect(createTab(session)!.tab.permissionMode).toBe('readonly');
 		vi.spyOn(window.maestro.windows, 'getConversationPermissions').mockImplementation(async () => [

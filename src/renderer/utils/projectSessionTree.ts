@@ -11,6 +11,7 @@ import {
 	matchRecordForTab,
 	openTabIdentity,
 	runnerAccount,
+	sessionHost,
 	sessionProjectKey,
 } from './nativeConversationMatch';
 

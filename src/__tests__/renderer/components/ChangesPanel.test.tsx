@@ -354,6 +354,32 @@ describe('ChangesPanel', () => {
 		expect(screen.getByTestId('changes-review')).toBeDisabled();
 	});
 
+	it('keeps classic diffs open when switching provider context in the same directory', async () => {
+		useSettingsStore.setState({ newShell: false });
+		changes.mockResolvedValue(twoFiles);
+		changeDiff.mockResolvedValue({ diff: patch, binary: false, tooLarge: false });
+		const { rerender } = render(
+			<ChangesPanel theme={mockTheme} session={session({ toolType: 'claude-code' })} />
+		);
+		fireEvent.click(await screen.findByRole('button', { name: /app\.ts/ }));
+		await screen.findByText('new line two');
+		rerender(
+			<ChangesPanel
+				theme={mockTheme}
+				session={session({
+					id: 'codex-owner',
+					toolType: 'codex',
+					projectRoot: '/alias',
+					remoteCwd: '/remote-metadata',
+				})}
+			/>
+		);
+		await act(async () => {});
+		expect(changes).toHaveBeenCalledTimes(1);
+		expect(screen.getByText('new line two')).toBeInTheDocument();
+		expect(nativeTurnWrites).not.toHaveBeenCalled();
+	});
+
 	it('refreshes when the turn ends', async () => {
 		changes.mockResolvedValue(clean);
 		const { rerender } = render(

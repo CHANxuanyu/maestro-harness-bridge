@@ -106,6 +106,13 @@ export const ChangesPanel = memo(function ChangesPanel({
 		newShell && session.sessionSshRemoteConfig?.enabled
 			? session.sessionSshRemoteConfig.workingDirOverride || undefined
 			: undefined;
+	const nativeProvider = nativeGrouping ? session.toolType : undefined;
+	const nativeOwnerId = nativeGrouping ? session.id : undefined;
+	const nativeProject = nativeGrouping
+		? sshRemoteId
+			? session.remoteCwd || remoteCwd || cwd
+			: session.projectRoot || cwd
+		: undefined;
 	const context = JSON.stringify([session.id, session.activeTabId, cwd, sshRemoteId, remoteCwd]);
 	const refreshContext = newShell ? context : JSON.stringify([cwd, sshRemoteId, remoteCwd]);
 	const contextRef = useRef(context);
@@ -128,12 +135,12 @@ export const ChangesPanel = memo(function ChangesPanel({
 		try {
 			const [changes, native] = await Promise.all([
 				gitService.getChanges(cwd, sshRemoteId, remoteCwd),
-				nativeGrouping
+				nativeProvider
 					? window.maestro.agentSessions.turnWrites(
-							session.toolType,
-							sshRemoteId ? session.remoteCwd || remoteCwd || cwd : session.projectRoot || cwd,
+							nativeProvider,
+							nativeProject!,
 							nativeId!,
-							{ ownerAgentId: session.id },
+							{ ownerAgentId: nativeOwnerId! },
 							sshRemoteId
 						)
 					: Promise.resolve([]),
@@ -156,11 +163,10 @@ export const ChangesPanel = memo(function ChangesPanel({
 		sshRemoteId,
 		remoteCwd,
 		refreshContext,
-		nativeGrouping,
+		nativeProvider,
 		nativeId,
-		session.toolType,
-		session.projectRoot,
-		session.remoteCwd,
+		nativeOwnerId,
+		nativeProject,
 	]);
 
 	useEffect(() => {

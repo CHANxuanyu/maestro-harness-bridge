@@ -439,3 +439,33 @@ it('pins and unpins a background conversation without changing focus', () => {
 	).toBe(false);
 	expect(useSessionStore.getState().activeSessionId).toBe(main.id);
 });
+
+it('removes a cached content hit as soon as its conversation is archived', async () => {
+	useSettingsStore.setState({ newShell: true });
+	const conversation = record({ title: 'Body result', key: 'content-native' });
+	const original = window.maestro.agentSessions;
+	window.maestro.agentSessions = {
+		...original,
+		cancelNativeHistorySearch: vi.fn().mockResolvedValue(undefined),
+		searchNativeHistory: vi.fn().mockResolvedValue({
+			hits: [
+				{ conversation, matchPreview: 'needle body', message: { role: 'user', text: 'needle' } },
+			],
+			truncated: false,
+		}),
+	};
+	const { container, unmount } = renderSidebar([]);
+	try {
+		fireEvent.change(screen.getByRole('textbox'), { target: { value: 'needle' } });
+		await waitFor(() => expect(container.querySelectorAll('[data-content-hit]')).toHaveLength(1));
+		act(() => {
+			useConversationArchiveStore.setState({
+				records: [{ ...conversation, ownerIds: [], archivedAt: 1, permissionMode: 'readonly' }],
+			});
+		});
+		expect(container.querySelectorAll('[data-content-hit]')).toHaveLength(0);
+	} finally {
+		unmount();
+		window.maestro.agentSessions = original;
+	}
+});

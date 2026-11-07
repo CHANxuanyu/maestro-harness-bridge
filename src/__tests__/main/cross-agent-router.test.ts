@@ -7,6 +7,14 @@ import {
 	cancelCrossAgentRequestsForSource,
 	type CrossAgentTargetSession,
 } from '../../main/cross-agent/cross-agent-router';
+import * as consultRouter from '../../main/cross-agent/cross-agent-router';
+import { registerSessionCallbacks } from '../../main/web-server/callbacks/sessionCallbacks';
+
+vi.mock('../../shared/cli-activity', () => ({ getSessionIdsBusyWithCli: () => new Set() }));
+vi.mock('../../main/storage/session-image-store', () => ({
+	isImageRef: () => false,
+	resolveToDataUrlSync: vi.fn(),
+}));
 import type {
 	CrossAgentRequest,
 	CrossAgentResponseChunk,
@@ -246,7 +254,9 @@ const HARD_MS = 30 * 60 * 1000;
 
 /** Minimal ProcessManager stand-in: the router only uses on/off/kill. */
 class FakeProcessManager extends EventEmitter {
-	kill = vi.fn();
+	kill = vi.fn((sessionId: string) => {
+		this.emit('exit', sessionId, 0);
+	});
 }
 
 const targetSession = (): CrossAgentTargetSession => ({
@@ -553,6 +563,74 @@ describe('cancelCrossAgentRequestsForSource', () => {
 		cancelCrossAgentRequestsForSource('src');
 		vi.useRealTimers();
 		vi.clearAllMocks();
+	});
+
+	it('waits for process exit before releasing a stopped consult', async () => {
+		const { dispatch, processManager, chunks, emitExit } = harness();
+		await dispatch({ targetTabId: 'child' });
+		processManager.kill.mockImplementation(() => {});
+		expect(cancelCrossAgentRequestsForSource('src', 'tab')).toBe(1);
+		expect(processManager.kill).toHaveBeenCalledWith('cross-agent-r1');
+		expect(chunks).toEqual([]);
+		emitExit(0);
+		expect(chunks).toHaveLength(1);
+		expect(chunks[0].canceled).toBe(true);
+	});
+
+	it('stops only the addressed child and acknowledges only after its process exits', async () => {
+		const left = harness();
+		const right = harness();
+		await left.dispatch({ requestId: 'child-left', targetTabId: 'left' });
+		await right.dispatch({ requestId: 'child-right', targetTabId: 'right' });
+		left.processManager.kill.mockImplementation(() => {});
+		let acknowledged = false;
+		const stop = consultRouter
+			.cancelCrossAgentRequestsForConversation('tgt', 'left')
+			.then((count) => {
+				acknowledged = true;
+				return count;
+			});
+		await Promise.resolve();
+		expect(left.processManager.kill).toHaveBeenCalledWith('cross-agent-child-left');
+		expect(right.processManager.kill).not.toHaveBeenCalled();
+		expect(acknowledged).toBe(false);
+		expect(left.chunks).toEqual([]);
+		left.processManager.emit('exit', 'cross-agent-child-left', 0);
+		expect(await stop).toBe(1);
+		expect(right.chunks).toEqual([]);
+		right.processManager.emit('exit', 'cross-agent-child-right', 0);
+	});
+
+	it('lists live consult state and terminal errors despite idle sanitized persistence', async () => {
+		const { dispatch, emitExit, processManager } = harness();
+		let list: () => Array<{ state: string; error: boolean }>;
+		registerSessionCallbacks(
+			{
+				setGetSessionsCallback: vi.fn(),
+				setGetSessionHistoryCallback: vi.fn(),
+				setGetSessionDetailCallback: vi.fn(),
+				setListDesktopSessionsCallback: (callback: typeof list) => {
+					list = callback;
+				},
+			} as never,
+			{
+				sessionsStore: {
+					get: () => [
+						{
+							id: 'tgt',
+							toolType: 'claude-code',
+							aiTabs: [{ id: 'child', state: 'idle', logs: [] }],
+						},
+					],
+				},
+				groupsStore: { get: () => [] },
+				getProcessManager: () => Object.assign(processManager, { get: () => undefined }),
+			} as never
+		);
+		await dispatch({ targetTabId: 'child' });
+		expect(list!()[0]).toMatchObject({ state: 'busy', error: false });
+		emitExit(1);
+		expect(list!()[0]).toMatchObject({ state: 'idle', error: true });
 	});
 
 	it('cancels only the named source tab while another consult finishes normally', async () => {

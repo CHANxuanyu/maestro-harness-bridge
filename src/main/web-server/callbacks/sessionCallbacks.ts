@@ -6,6 +6,7 @@ import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
 import { sessionProviderId } from '../../../shared/agentPresets';
 import { asThinkingMode } from '../../../shared/types';
 import { getSessionIdsBusyWithCli } from '../../../shared/cli-activity';
+import { getCrossAgentTargetState } from '../../cross-agent/cross-agent-router';
 import { isAiTabProcessActive } from '../../utils/agent-busy';
 import { isImageRef, resolveToDataUrlSync } from '../../storage/session-image-store';
 
@@ -127,7 +128,8 @@ export function registerSessionCallbacks(
 					tab.id,
 					isActiveTab
 				);
-				const processActive = managedProcessActive || (isActiveTab && cliBusy);
+				const consult = getCrossAgentTargetState(s.id, tab.id);
+				const processActive = managedProcessActive || (isActiveTab && cliBusy) || !!consult?.busy;
 				const state =
 					tab.state === 'busy' || processActive
 						? ('busy' as const)
@@ -148,7 +150,11 @@ export function registerSessionCallbacks(
 					consultOrigin: tab.consultOrigin,
 					provider: sessionProviderId(s),
 					hidden: tab.hidden === true,
-					error: !!tab.agentError,
+					error:
+						!processActive &&
+						(!!tab.agentError ||
+							tab.logs?.at(-1)?.source === 'error' ||
+							(!!consult?.error && consult.updatedAt >= (tab.logs?.at(-1)?.timestamp ?? 0))),
 					tabId: tab.id,
 					sessionId: tab.id,
 					agentId: s.id,

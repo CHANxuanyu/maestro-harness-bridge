@@ -275,6 +275,50 @@ describe('useInterruptHandler', () => {
 			}
 		);
 
+		it('keeps sibling orphan consults running when stopping one child', async () => {
+			useSettingsStore.setState({ newShell: true });
+			const origin = {
+				kind: 'subtask' as const,
+				sourceSessionId: 'parent',
+				sourceTabId: 'parent-tab',
+				sourceProvider: 'codex',
+				createdAt: 1,
+			};
+			const tab = createTab({ id: 'child', state: 'busy', origin });
+			const sibling = createTab({ id: 'sibling', state: 'busy', origin });
+			const session = createSession({
+				aiTabs: [tab],
+				activeTabId: tab.id,
+				orphanedThinkingTabs: [sibling],
+				state: 'busy',
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+			const { result } = renderHook(() =>
+				useInterruptHandler(createDeps({ sessionsRef: { current: [session] } }))
+			);
+			await act(async () => {
+				await result.current.handleInterrupt();
+			});
+			expect(mockMaestro.crossAgent.cancel.mock.calls).toEqual([[session.id, tab.id]]);
+			expect(mockMaestro.process.interrupt.mock.calls).toEqual([[session.id + '-ai-child']]);
+			expect(useSessionStore.getState().sessions[0].orphanedThinkingTabs?.[0]).toBe(sibling);
+		});
+
+		it('keeps a child busy if cancellation could not be confirmed', async () => {
+			useSettingsStore.setState({ newShell: true });
+			const tab = createTab({ id: 'child', state: 'busy' });
+			const session = createSession({ aiTabs: [tab], activeTabId: tab.id, state: 'busy' });
+			useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+			mockMaestro.crossAgent.cancel.mockRejectedValueOnce(new Error('bridge down'));
+			const { result } = renderHook(() =>
+				useInterruptHandler(createDeps({ sessionsRef: { current: [session] } }))
+			);
+			await act(async () => {
+				await result.current.handleInterrupt();
+			});
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].state).toBe('busy');
+		});
+
 		it('pins an explicit pane target through asynchronous cancellation and focus changes', async () => {
 			useSettingsStore.setState({ newShell: true });
 			const left = createSession({

@@ -103,6 +103,9 @@ const CROSS_AGENT_MAX_DURATION_MS = 30 * 60 * 1000;
  * agent fan out?" without that race.
  */
 interface ActiveConsult {
+	targetSessionId: string;
+	targetTabId?: string;
+	done: Promise<void>;
 	sourceTabId: string;
 	/** The agent the mention was typed in - what Stop is addressed to. */
 	sourceSessionId: string;
@@ -111,6 +114,28 @@ interface ActiveConsult {
 }
 
 const activeConsults = new Map<string, ActiveConsult>();
+
+/** Runtime evidence survives the persistence sanitizer, but never a restart. */
+const targetStates = new Map<string, { busy: boolean; error: boolean; updatedAt: number }>();
+
+export function getCrossAgentTargetState(sessionId: string, tabId: string) {
+	return targetStates.get(JSON.stringify([sessionId, tabId]));
+}
+
+/** New shell Stop includes incoming work on this exact child and awaits real exit. */
+export async function cancelCrossAgentRequestsForConversation(
+	sessionId: string,
+	tabId: string
+): Promise<number> {
+	const doomed = [...activeConsults.values()].filter(
+		(consult) =>
+			(consult.sourceSessionId === sessionId && consult.sourceTabId === tabId) ||
+			(consult.targetSessionId === sessionId && consult.targetTabId === tabId)
+	);
+	for (const consult of doomed) consult.cancel();
+	await Promise.all(doomed.map((consult) => consult.done));
+	return doomed.length;
+}
 
 /**
  * Stop every consult the given source agent still has in flight, optionally limited to one source tab.
@@ -364,7 +389,29 @@ export async function startCrossAgentRequest(
 	request: CrossAgentRequest,
 	opts: StartCrossAgentRequestOptions
 ): Promise<void> {
-	const { processManager, agentDetector, sshStore, getTargetSession, onChunk } = opts;
+	const { processManager, agentDetector, sshStore, getTargetSession } = opts;
+	let resolveDone!: () => void;
+	const done = new Promise<void>((resolve) => {
+		resolveDone = resolve;
+	});
+	const targetKey = JSON.stringify([request.targetSessionId, request.targetTabId]);
+	if (request.targetTabId)
+		targetStates.set(targetKey, { busy: true, error: false, updatedAt: Date.now() });
+	const onChunk = (chunk: CrossAgentResponseChunk) => {
+		if (chunk.done) {
+			if (request.targetTabId) {
+				targetStates.delete(targetKey);
+				targetStates.set(targetKey, { busy: false, error: !!chunk.error, updatedAt: Date.now() });
+				// Completed evidence is bounded. Running registrations are never evicted.
+				for (const [key, status] of targetStates) {
+					if (targetStates.size <= 2048) break;
+					if (!status.busy) targetStates.delete(key);
+				}
+			}
+			resolveDone();
+		}
+		opts.onChunk(chunk);
+	};
 	const permissionMode = opts.writable ? (request.permissionMode ?? 'full') : 'readonly';
 	const writable = permissionMode !== 'readonly';
 
@@ -403,6 +450,9 @@ export async function startCrossAgentRequest(
 	 */
 	let cancelRequested = false;
 	const registration: ActiveConsult = {
+		targetSessionId: request.targetSessionId,
+		targetTabId: request.targetTabId,
+		done,
 		sourceTabId: request.sourceTabId,
 		sourceSessionId: request.sourceSessionId,
 		cancel: () => {
@@ -490,6 +540,9 @@ export async function startCrossAgentRequest(
 	// emitting 'exit', so by the time onExit fires our buffer is complete.
 	let buffer = '';
 	let settled = false;
+	let spawning = false;
+	let spawned = false;
+	let termination: { message: string; canceled: boolean } | undefined;
 	// The target's own provider session id, captured from its output stream (the
 	// same `session-id` event the desktop/group-chat listeners consume). Forwarded
 	// on the terminal chunk so the renderer stores it on the consult tab and
@@ -529,6 +582,10 @@ export async function startCrossAgentRequest(
 
 	const onExit = (sid: string, code: number): void => {
 		if (sid !== sessionId || settled) return;
+		if (termination) {
+			finishTerminated();
+			return;
+		}
 		settled = true;
 		cleanup();
 		try {
@@ -594,31 +651,30 @@ export async function startCrossAgentRequest(
 	 * failure of the target, while Stop is the user's own decision and must not be
 	 * reported as the target failing to answer.
 	 */
-	const settleTerminated = (message: string, canceled = false): void => {
-		if (settled) return;
+	const finishTerminated = (): void => {
+		if (settled || !termination) return;
 		settled = true;
 		cleanup();
-		try {
-			processManager.kill(sessionId);
-		} catch {
-			// Process may already be gone - nothing to kill.
-		}
 		let partial = '';
 		try {
 			partial = extractTextFromStreamJson(buffer, target.toolType).trim();
 		} catch {
-			// A stream truncated mid-object may not parse; the error still lands.
+			// A truncated stream still produces the terminal reason.
 		}
-		logger.warn(`${LOG_CONTEXT} ${message}`, LOG_CONTEXT, {
-			requestId: request.requestId,
-			targetSessionId: request.targetSessionId,
-			partialChars: partial.length,
-		});
 		onChunk(
-			canceled
+			termination.canceled
 				? baseChunk({ chunk: partial, done: true, canceled: true })
-				: baseChunk({ chunk: partial, done: true, error: message })
+				: baseChunk({ chunk: partial, done: true, error: termination.message })
 		);
+	};
+
+	const settleTerminated = (message: string, canceled = false): void => {
+		if (settled || termination) return;
+		termination = { message, canceled };
+		watch.dog?.disarm();
+		// Keep the exit listener and registry until the spawned process has exited.
+		if (spawned) processManager.kill(sessionId);
+		else if (!spawning) finishTerminated();
 	};
 
 	processManager.on('data', onData);
@@ -653,6 +709,7 @@ export async function startCrossAgentRequest(
 	}
 
 	try {
+		spawning = true;
 		const spawnResult = await spawnGroupChatAgent({
 			sessionId,
 			agentId: target.toolType,
@@ -681,7 +738,12 @@ export async function startCrossAgentRequest(
 		// rather than throwing (see ChildProcessSpawner). Such a process emits no
 		// 'exit' event, so without this check the only listener that ever fires is the
 		// timeout - the user waits the full budget for a process that never existed.
+		spawning = false;
 		if (!spawnResult.success) {
+			if (termination) {
+				finishTerminated();
+				return;
+			}
 			if (!settled) {
 				settled = true;
 				cleanup();
@@ -689,16 +751,9 @@ export async function startCrossAgentRequest(
 			}
 			return;
 		}
-		// Stop can land between `registration.cancel` going live and the spawn
-		// resolving. `settleTerminated` already killed a process id that did not
-		// exist yet, so the one we just created has to be killed here or it survives
-		// the Stop that was meant to end it.
-		if (settled) {
-			try {
-				processManager.kill(sessionId);
-			} catch {
-				// Already gone - nothing to kill.
-			}
+		spawned = true;
+		if (termination) {
+			processManager.kill(sessionId);
 			return;
 		}
 		logger.info(`${LOG_CONTEXT} Dispatched to ${target.name}`, LOG_CONTEXT, {
@@ -707,7 +762,12 @@ export async function startCrossAgentRequest(
 			transcriptEntries: request.transcript.length,
 		});
 	} catch (err) {
-		// Spawn failed - tear down listeners and surface a single error chunk.
+		// Spawn failed before a process was created.
+		spawning = false;
+		if (termination) {
+			finishTerminated();
+			return;
+		}
 		if (!settled) {
 			settled = true;
 			cleanup();

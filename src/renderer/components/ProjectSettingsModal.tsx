@@ -156,6 +156,8 @@ export function ProjectSettingsModal({
 			onClose={saving ? () => {} : onClose}
 			width={560}
 			resizeKey="project-settings"
+			// Six fields and the environment list should fit without scrolling.
+			defaultSize={{ width: 560, height: 700 }}
 			footer={
 				<ModalFooter
 					theme={theme}
@@ -172,23 +174,35 @@ export function ProjectSettingsModal({
 				<p className="text-sm" style={{ color: theme.colors.textDim }}>
 					{t('workflows.projectSettings.description')}
 				</p>
-				<label className="block text-xs" htmlFor={`${id}-scope`}>
-					{t('workflows.projectSettings.location')}
-					<select
-						id={`${id}-scope`}
-						className={fieldClass}
-						style={inputStyle}
-						value={scopeIndex}
-						disabled={saving}
-						onChange={(event) => setScopeIndex(Number(event.target.value))}
+				{scopes.length > 1 ? (
+					<label className="block text-xs" htmlFor={`${id}-scope`}>
+						{t('workflows.projectSettings.location')}
+						<select
+							id={`${id}-scope`}
+							className={fieldClass}
+							style={inputStyle}
+							value={scopeIndex}
+							disabled={saving}
+							onChange={(event) => setScopeIndex(Number(event.target.value))}
+						>
+							{scopes.map((entry, index) => (
+								<option key={projectSettingsKey(entry)} value={index}>
+									{entry.projectPath} ({entry.sshRemoteId || t('workflows.projectSettings.local')})
+								</option>
+							))}
+						</select>
+					</label>
+				) : (
+					<p
+						className="text-xs truncate"
+						style={{ color: theme.colors.textDim }}
+						title={scopes[0]?.projectPath}
+						data-testid="project-settings-location"
 					>
-						{scopes.map((entry, index) => (
-							<option key={projectSettingsKey(entry)} value={index}>
-								{entry.projectPath} ({entry.sshRemoteId || t('workflows.projectSettings.local')})
-							</option>
-						))}
-					</select>
-				</label>
+						{scopes[0]?.projectPath} (
+						{scopes[0]?.sshRemoteId || t('workflows.projectSettings.local')})
+					</p>
+				)}
 				{error && (
 					<p role="alert" className="text-sm" style={{ color: theme.colors.error }}>
 						{error}

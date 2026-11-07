@@ -814,7 +814,11 @@ test('new shell T5: stage commit and revert single files in a real worktree', as
 		const stage = panel.getByRole('button', { name: 'Stage tracked.txt', exact: true });
 		// Keyboard focus reveals the same affordance as pointer hover.
 		await stage.focus();
-		await expect(stage.locator('..')).toHaveCSS('opacity', '1');
+		// :focus-within needs a focused window, which the Linux runner does not have.
+		if (await native.page.evaluate(() => document.hasFocus()))
+			await expect(stage.locator('..')).toHaveCSS('opacity', '1');
+		else
+			await expect(stage.locator('..')).toHaveClass(/group-focus-within\/changed-file:opacity-100/);
 		await stage.press('Enter');
 		await expect(panel.getByText('Staged (1)', { exact: true })).toBeVisible();
 		expect(git(worktree, 'diff', '--cached', '--name-only')).toBe('tracked.txt\n');

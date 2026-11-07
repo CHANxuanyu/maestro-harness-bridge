@@ -68,6 +68,8 @@ test('archive conversation, restart and unarchive without changing native histor
 		const reopenedSearch = native.page.getByPlaceholder('Search conversations...', { exact: true });
 		await reopenedSearch.fill('Archive this conversation');
 		await expect(native.page.locator('[data-content-hit]')).toHaveCount(0);
+		// Search replaces the project list, so the archived row returns with the list.
+		await reopenedSearch.fill('');
 		await native.page.getByRole('button', { name: 'Archived 1', exact: true }).click();
 		await native.page.getByRole('button', { name: 'Unarchive', exact: true }).click();
 		await expect(row()).toBeVisible();

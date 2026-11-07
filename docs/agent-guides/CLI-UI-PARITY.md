@@ -74,6 +74,15 @@ retaining the saved pair. Selecting a third conversation shows it alone; a new
 split from there uses that conversation as its left pane. The saved references and
 ratio load through `readNewShellSplit()`; malformed values are discarded.
 
+The 2026-11-07 review correction binds each pane's Stop and Escape to its session
+and tab. New shell single-pane Stop has the same conversation scope. Classic
+Stop keeps its whole-agent scope. A stopped process exit only dequeues that
+conversation's work. Closed busy orphan tabs remain included in Stop.
+File pickers use component refs, and image reads retain their destination tab.
+File-tree drags retain the source root and SSH host; a different host is rejected.
+Unfocused scroll writes use `updateAiTab(sessionId, tabId, updater)` and reaching
+the bottom still clears unread. No new CLI verb is added; the gaps below apply.
+
 ## New shell conversation content search (2026-11-06)
 
 | UI action                                  | CLI                                                                    | Shared implementation                                                                             |
@@ -962,7 +971,9 @@ This presentation-only phase adds no CLI verb or session protocol. Neither half 
 Ranked by how often an agent is likely to hit them. None of these are blocked by
 a design constraint; they are simply not built yet.
 
-1. **Interrupt a running turn.** Escape stops a busy agent in the UI. There is
+1. **Interrupt a running turn.** In the new shell, Stop and Escape stop the named
+   conversation, including its forced parallel processes and busy orphan tabs.
+   Classic Stop remains agent-wide. There is
    no CLI equivalent and no WS message behind one. This is the largest remaining
    gap: an agent that starts a runaway turn on another agent cannot stop it.
    The 2026-11-06 Stop/synopsis correction preserves this gap; the legacy remote
@@ -1009,7 +1020,18 @@ a design constraint; they are simply not built yet.
     `POST /api/session/:id/interrupt` -> `remote:interrupt`) signals the
     legacy `${sessionId}-ai` process id, which misses per-tab processes
     (`${sessionId}-ai-${tabId}`). Fix the renderer handler to take a tab id,
-    then add `interrupt <agent> [--tab]`.
+    then add `interrupt <agent> [--tab]`. The 2026-11-07 new shell correction fixes
+    the desktop callback and source-tab consult cancellation, but deliberately
+    leaves this legacy remote transport and the missing CLI verb as Open gaps.
+    A normal conversation stop must not be confused with `group-chat stop` or
+    `stop-auto-run`, which control different workflows.
+
+    **Composer attachments and reading position:** there is still no CLI action
+    to open a file picker, stage an image on a draft, insert a dropped file
+    reference, or set the transcript scroll position and bottom/unread state.
+    `image list/save` reads or exports existing images; it does not attach one.
+    The new source-host rejection and per-pane scroll fix do not close these gaps.
+
 11. **Expand a diagram or image to the pan/zoom viewer.** The viewer opens on
     an element already rendered in a transcript or document
     (`openZoomViewer(element)`), and a transcript element has no address the

@@ -4,6 +4,16 @@
 
 滚动回归先确认未聚焦栏仍保留旧位置 9、底部状态 true，预期为 123 和 false。改用 sessionStore 的 updateAiTab 按对话所属 session 写入后，MainPanel 定向测试 163 条通过，保留到底部清未读规则。Electron 未运行。
 
+其余三条审查意见均复现后修复。附件回归确认右栏按钮没有点击自己的 file input，向导输入框也有同样问题；改为组件引用并固定读图目标。文件树回归确认来源图片错误地读成目标项目路径，跨主机也未拒绝；新界面拖拽现携带来源根目录和主机，沿用 joinPath 及 fs.readFile，不对远程路径做本地解析。
+
+停止回归确认同工具后台对话及其强制并行进程被一起中断，其他标签的交接和咨询被一起取消。新界面单栏和分屏均改为目标 sessionId 与 tabId，Escape 也显式传递分栏身份；仍包含忙碌孤儿标签。摘要注册表和咨询注册表保留来源标签维度，摘要在提供方查找期间也可取消。停止后的 exit 出队仅处理目标对话，其他运行中的对话及排队保留。旧界面沿用原停止分支，原有智能体级测试未放宽。
+
+验证源码为 `f2b8be5d5`，不是安装包。最终定向 Vitest 使用 `--configLoader runner --no-cache`，20 文件、953 条通过，无跳过、无自动重试。`tsconfig.main.json` 类型检查通过。`npx tsc --noEmit -p tsconfig.json` 仍以两条已有 TS2451 失败：TerminalOutput.tsx 的 172、311 行重复声明 newShell，已用 `git show fbfcbceb1:src/renderer/components/TerminalOutput/TerminalOutput.tsx` 确认存在于任务基线，按本轮范围要求没有修改。修改文件已跑 Prettier，`git diff --check` 通过。
+
+`e2e/native-new-shell-split.spec.ts` 增加同工具双对话同时运行时停止左栏、单栏 Escape 停止当前而保留后台的合成场景，以临时文件控制后台结束并检查完整输出。Playwright `--list` 识别 3 条场景，但没有运行 Electron。Opus 需先处理上述基线编译错误，构建本克隆，再以 `MAESTRO_E2E_REAL=0 npx playwright test e2e/native-new-shell-split.spec.ts --project=native --workers=1 --retries=0` 执行。真实提供方、SSH 实机、系统选图窗口和发行包未测。
+
+CLI 没有新增动作。普通对话停止、草稿附件和阅读位置的命令行缺口已写入 CLI-UI-PARITY.md 的 Open gaps；`image list/save`、群聊停止和 Auto Run 停止不冒充这些入口。旧界面的共享变化仅为文件输入引用和保持默认语义的可选参数，单实例操作与原停止范围保持不变。未推送、未开 PR、未发布。
+
 ## 2026-11-07：性能分支合并主线
 
 合并提交 `93a36f384` 的父提交为性能分支 `a2ddc7c62` 和主线 `79e3b400e`。三处冲突分别为 CHANGELOG、CLI 对等说明和 TerminalOutput。两份文档的冲突段落保留双方内容；TerminalOutput 保留按显示窗口创建行、逐批复用和新界面已结束活动行 memo，将主线的工具全文来源参数及依赖接入同一个行渲染器。任务、权限和停止恢复的主线改动保留。

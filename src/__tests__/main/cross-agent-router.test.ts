@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
+import { transcriptMessagesToLogEntries } from '../../shared/transcriptEntries';
+import { parseNativeSearchMessages } from '../../shared/sessionSearch';
 import {
 	serializeTranscript,
 	buildCrossAgentPrompt,
@@ -773,4 +775,115 @@ describe('cancelCrossAgentRequestsForSource', () => {
 		expect(chunks).toHaveLength(1);
 		expect(chunks[0].canceled).toBe(true);
 	});
+});
+
+describe('consult envelopes in native history', () => {
+	const question = '@Worker Inspect the queue. Then inspect shutdown.';
+	const display = (content: string, type = 'user') =>
+		transcriptMessagesToLogEntries([
+			{ uuid: 'consult-user', type, content, timestamp: '2026-11-07T00:00:00Z' },
+		]);
+
+	it.each([false, true])('round trips a consult with write access %s', (writable) => {
+		for (const transcript of [[], [entry('user', 'Earlier context')]]) {
+			const content = buildCrossAgentPrompt(
+				request({ userPrompt: question, transcript, sourceCwd: '~/remote/project' }),
+				writable
+			);
+			expect(display(content)[0].text).toBe(question);
+			expect(display(content, 'assistant')[0].text).toBe(content);
+		}
+	});
+
+	it.each([false, true])('round trips a handoff with write access %s', (writable) => {
+		for (const sourceAgentName of [undefined, 'Source']) {
+			const content = buildCrossAgentPrompt(
+				request({
+					userPrompt: question,
+					sourceAgentName,
+					handoffAnswer: 'Internal result',
+					sourceCwd: '/project',
+					transcript: [entry('ai', 'Earlier context')],
+				}),
+				writable
+			);
+			expect(display(content)[0].text).toBe(question);
+		}
+	});
+
+	it('preserves envelope prose and markers quoted by the user', () => {
+		const inner = buildCrossAgentPrompt(request({ userPrompt: 'Quoted question' }));
+		for (const quoted of [
+			'Explain this:\n' + inner,
+			'```\n' + inner + '\n```',
+			'> ' + inner.replace(/\n/g, '\n> '),
+		]) {
+			expect(display(quoted)[0].text).toBe(quoted);
+			expect(display(buildCrossAgentPrompt(request({ userPrompt: quoted })))[0].text).toBe(quoted);
+		}
+	});
+
+	it('preserves incomplete envelopes and drops a complete empty question', () => {
+		const content = buildCrossAgentPrompt(request({ userPrompt: '' }));
+		const prefix = '**Question from the user (relayed via the source agent):**';
+		const incomplete = content.slice(0, content.indexOf('\n\n' + prefix));
+		expect(display(incomplete)[0].text).toBe(incomplete);
+		expect(display(content)).toEqual([]);
+	});
+
+	it.each(['claude-code', 'codex'] as const)(
+		'searches only the user question for %s',
+		(provider) => {
+			const content = buildCrossAgentPrompt(
+				request({ userPrompt: question, transcript: [entry('user', 'Hidden context')] })
+			);
+			const row =
+				provider === 'claude-code'
+					? { type: 'user', message: { content } }
+					: {
+							type: 'response_item',
+							payload: {
+								type: 'message',
+								role: 'user',
+								content: [{ type: 'input_text', text: content }],
+							},
+						};
+			expect(
+				parseNativeSearchMessages(JSON.stringify(row), provider).messages.map((m) => m.textContent)
+			).toEqual([question]);
+		}
+	);
+});
+
+describe('consult native display identity', () => {
+	it.each(['stop', 'failure', 'success'] as const)(
+		'announces identity before %s without granting early resume',
+		async (ending) => {
+			const { dispatch, processManager, chunks, emitData, emitExit } = harness();
+			await dispatch({ targetTabId: 'child' });
+			try {
+				processManager.emit('session-id', 'cross-agent-unrelated', 'wrong-id');
+				expect(chunks).toEqual([]);
+				processManager.emit('session-id', 'cross-agent-r1', 'native-child');
+				expect(chunks).toEqual([
+					expect.objectContaining({
+						targetNativeSessionId: 'native-child',
+						targetTabId: 'child',
+						done: false,
+						chunk: '',
+					}),
+				]);
+				expect(chunks[0].targetAgentSessionId).toBeUndefined();
+				emitData('answer');
+				if (ending === 'stop') cancelCrossAgentRequestsForSource('src');
+				else emitExit(ending === 'failure' ? 1 : 0);
+				expect(chunks.at(-1)).toMatchObject({ done: true, targetNativeSessionId: 'native-child' });
+				expect(chunks.at(-1)?.targetAgentSessionId).toBe(
+					ending === 'success' ? 'native-child' : undefined
+				);
+			} finally {
+				emitExit(1);
+			}
+		}
+	);
 });

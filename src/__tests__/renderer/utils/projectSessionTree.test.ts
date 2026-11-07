@@ -147,6 +147,46 @@ describe('project conversation navigation', () => {
 			};
 		}
 
+		it.each(['busy', 'idle'] as const)(
+			'claims a %s consult record without a resumable binding',
+			(state) => {
+				const tab = createMockAITab({
+					id: 'child',
+					name: 'Inspect the queue.',
+					hidden: true,
+					state,
+					agentSessionId: null,
+					consultOrigin: {
+						sourceSessionId: 'parent',
+						sourceTabId: 'parent-tab',
+						nativeSessionIds: [NATIVE],
+					},
+				});
+				const owner = createMockSession({
+					id: 'owner',
+					toolType: 'codex',
+					groupId: project.id,
+					aiTabs: [tab],
+				});
+				const history = [record({ ownerId: owner.id })];
+				const options = { sessions: [owner], groups: [project], history };
+				const [tree] = buildProjectSessionTree({ ...options, newShell: true });
+				expect(tree.totalCount).toBe(1);
+				expect(tree.conversations.map((row) => row.key)).toEqual(['owner:child']);
+				expect(tab.agentSessionId).toBeNull();
+				expect(buildProjectSessionTree(options)[0].conversations.map((row) => row.kind)).toEqual([
+					'history',
+				]);
+				const previous = {
+					...owner,
+					aiTabs: [
+						{ ...tab, consultOrigin: { sourceSessionId: 'parent', sourceTabId: 'parent-tab' } },
+					],
+				};
+				expect(sidebarSessionEquality([previous], [owner])).toBe(false);
+			}
+		);
+
 		it('keeps an open conversation unpinned while history still has an old star', () => {
 			const session = createMockSession({
 				id: 'owner',

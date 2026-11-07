@@ -401,6 +401,70 @@ describe('new-shell consult conversations', () => {
 	});
 	afterEach(() => resetStore(useSettingsStore));
 
+	it.each([false, true])(
+		'keeps display identity after Stop, with a previous resume binding %s',
+		async (resumed) => {
+			const hook = renderHook(() => useCrossAgentDispatch());
+			const options = {
+				targetSessionId: 'tgt',
+				sourceSessionId: 'src',
+				sourceTabId: 'tab',
+				sourceAgentName: 'Source',
+				question: 'Inspect the queue.',
+			};
+			const { targetTabId } = ensureConsultTab(options)!;
+			if (resumed)
+				useSessionStore
+					.getState()
+					.setSessions((sessions) =>
+						sessions.map((session) => ({
+							...session,
+							aiTabs: session.aiTabs.map((tab) =>
+								tab.id === targetTabId ? { ...tab, agentSessionId: 'native-child' } : tab
+							),
+						}))
+					);
+			const child = () =>
+				useSessionStore
+					.getState()
+					.sessions.find((s) => s.id === 'tgt')!
+					.aiTabs.find((t) => t.id === targetTabId)!;
+			try {
+				act(() =>
+					receiveChunk(
+						chunk({
+							requestId: 'identity-stop-' + resumed,
+							targetTabId,
+							chunk: '',
+							done: false,
+							targetNativeSessionId: 'native-child',
+						})
+					)
+				);
+				expect(child().consultOrigin?.nativeSessionIds).toEqual(['native-child']);
+				expect(child().logs.map((log) => log.text)).toEqual(['Inspect the queue.']);
+				expect(child().agentSessionId).toBe(resumed ? 'native-child' : null);
+				act(() =>
+					receiveChunk(
+						chunk({
+							requestId: 'identity-stop-' + resumed,
+							targetTabId,
+							chunk: '',
+							done: true,
+							canceled: true,
+							targetNativeSessionId: 'native-child',
+						})
+					)
+				);
+				expect(child().agentSessionId).toBeNull();
+				expect(child().consultOrigin?.nativeSessionIds).toEqual(['native-child']);
+				expect(ensureConsultTab(options)?.resumeAgentSessionId).toBeUndefined();
+			} finally {
+				hook.unmount();
+			}
+		}
+	);
+
 	it.each(['readonly', 'standard'] as const)(
 		'bounds new and reused consults by the parent %s permission',
 		(mode) => {

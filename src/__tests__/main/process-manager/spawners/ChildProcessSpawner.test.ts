@@ -181,7 +181,7 @@ describe('ChildProcessSpawner', () => {
 			projectPath: '/project',
 			ownerAgentId: 'owner',
 			nativeSessionId: 'native',
-			accountDir: '/synthetic-account',
+			accountDir: nodePath.resolve('/synthetic-account'),
 			sshRemoteId: undefined,
 		});
 	});

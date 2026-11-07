@@ -83,4 +83,5 @@ it('requires a permission review when a conversation creation call is added or m
 	).toEqual(
 		Object.fromEntries(Object.entries(reviewed).map(([file, calls]) => [file, calls.length]))
 	);
-});
+	// Parses every renderer file; the Windows runner needs well over the default.
+}, 60_000);

@@ -8,11 +8,7 @@ import { createMockAITab } from '../src/__tests__/helpers/mockTab';
 import type { Session } from '../src/renderer/types';
 
 test.setTimeout(180_000);
-test.beforeAll(() => {
-	expect(process.env.MAESTRO_E2E_REAL, 'Split acceptance only uses synthetic providers').not.toBe(
-		'1'
-	);
-});
+test.skip(process.env.MAESTRO_E2E_REAL === '1', 'Split acceptance only uses synthetic providers');
 
 // eslint-disable-next-line no-empty-pattern
 test('new shell split: independent conversations, focus, resize, restore and classic isolation', async ({}, info) => {
@@ -333,6 +329,13 @@ for (const split of [true, false]) {
 			native.page.locator(`[data-testid="new-shell-split-pane"][data-tab-id="${id}"]`);
 		const input = (id: string) =>
 			split ? pane(id).getByPlaceholder(/^(Talking to |Message )/) : native.input();
+		// Persistence writes every tab as idle, so only the live process list can
+		// say which conversation is running.
+		const running = async () =>
+			(await native.page.evaluate(() => window.maestro.process.getActiveProcesses()))
+				.map((process) => process.sessionId.replace(/-fp-.*$/, ''))
+				.filter((id) => /^same-tool-ai-(left|right)$/.test(id))
+				.sort();
 		let failed = false;
 		try {
 			await native.start(home);
@@ -355,7 +358,7 @@ for (const split of [true, false]) {
 			await native.cli('focus-agent', session.id, '--tab', 'right');
 			await input('right').fill('Run the background fixture');
 			await input('right').press('Enter');
-			await expect.poll(() => saved().aiTabs.map((tab) => tab.state)).toEqual(['busy', 'busy']);
+			await expect.poll(running).toEqual(['same-tool-ai-left', 'same-tool-ai-right']);
 			await expect
 				.poll(() => fs.readFileSync(path.join(native.claude, 'fixture-turn-count'), 'utf8'))
 				.toBe('2');
@@ -366,14 +369,10 @@ for (const split of [true, false]) {
 				await native.cli('focus-agent', session.id, '--tab', 'left');
 				await input('left').press('Escape');
 			}
-			await expect.poll(() => saved().aiTabs.map((tab) => tab.state)).toEqual(['idle', 'busy']);
-			expect(saved().aiTabs[1].inputValue).toBe('Keep this background draft');
-			const processes = await native.page.evaluate(() =>
-				window.maestro.process.getActiveProcesses()
-			);
-			expect(processes.some((process) => process.sessionId === 'same-tool-ai-right')).toBe(true);
+			await expect.poll(running).toEqual(['same-tool-ai-right']);
+			await expect.poll(() => saved().aiTabs[1].inputValue).toBe('Keep this background draft');
 			fs.writeFileSync(gate, 'continue');
-			await expect.poll(() => saved().aiTabs[1].state).toBe('idle');
+			await expect.poll(running).toEqual([]);
 			await expect
 				.poll(() =>
 					saved()

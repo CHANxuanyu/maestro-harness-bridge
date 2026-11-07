@@ -1,4 +1,17 @@
 export const workflowsShell = {
+	'workflows.split.openRight': 'Open on the right',
+	'workflows.split.openRightTitle': 'Open on the right: {title}',
+	'workflows.split.chooseConversation': 'Choose a conversation to open on the right',
+	'workflows.split.unsplit': 'Exit split view',
+	'workflows.split.closePane': 'Close this pane',
+	'workflows.split.resize': 'Resize split view',
+	'workflows.split.narrow':
+		'This window is too narrow. Widen it to view two conversations side by side.',
+	'workflows.split.disabled': 'Turn on the new interface first',
+	'workflows.split.missing': 'This conversation could not be found',
+	'workflows.split.same': 'The same conversation cannot be opened twice',
+	'workflows.split.invalidRatio': 'The split ratio must be between 0.2 and 0.8',
+	'workflows.shell.splitInvalidRequest': 'Invalid conversation split request',
 	'workflows.shell.synopsisFailed': 'Synopsis failed',
 	'workflows.shell.synopsisNoFinalAnswer': 'No final answer is available for this turn',
 	'workflows.shell.signInRequired': 'Sign in again',

@@ -503,6 +503,36 @@ export async function tabShow(tabId: string, options: TabMutateOptions): Promise
 	row('Unread', String(entry.hasUnread ?? false));
 }
 
+/** Open an existing conversation beside the current one in the new shell. */
+export async function tabSplit(
+	tabId: string,
+	options: TabMutateOptions & { ratio?: string }
+): Promise<void> {
+	const ratio = options.ratio === undefined ? undefined : Number(options.ratio);
+	if (ratio !== undefined && !Number.isFinite(ratio)) {
+		return failCommand('Ratio must be a number', options.json);
+	}
+	await tabFlag(
+		tabId,
+		{
+			newShellSplitAction: 'split',
+			...(ratio !== undefined ? { newShellSplitRatio: ratio } : {}),
+		},
+		() => 'Opened conversation on the right',
+		options
+	);
+}
+
+/** Return the addressed window to its focused conversation. */
+export async function tabUnsplit(options: TabMutateOptions): Promise<void> {
+	await tabFlag(
+		'active',
+		{ newShellSplitAction: 'unsplit' },
+		() => 'Returned to one conversation',
+		options
+	);
+}
+
 /** Presentation of this conversation, persisted through the existing tab patch route. */
 export async function tabPanel(
 	tabId: string,

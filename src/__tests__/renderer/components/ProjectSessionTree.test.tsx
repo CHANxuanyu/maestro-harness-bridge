@@ -14,6 +14,7 @@ import { mockTheme } from '../../helpers/mockTheme';
 // Pin the English copy so the tests do not depend on the catalog keys landing
 // in the same change.
 const EN: Record<string, string> = {
+	'workflows.split.openRight': 'Open on the right',
 	'workflows.conversations.closeConversation': 'Close conversation',
 	'workflows.conversations.addAccount': 'Add account or configuration',
 	'workflows.conversations.handoff': 'Hand off…',
@@ -173,6 +174,16 @@ it.each([false, true])(
 );
 
 describe('ProjectSessionTree', () => {
+	it.each([false, true])(
+		'offers opening a conversation on the right only in new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			setup();
+			fireEvent.contextMenu(screen.getByRole('button', { name: /^Codex Fix bug/ }));
+			expect(!!screen.queryByRole('menuitem', { name: 'Open on the right' })).toBe(newShell);
+		}
+	);
+
 	it.each([false, true])(
 		'uses available local tools from the shared plus path, new shell %s',
 		async (newShell) => {

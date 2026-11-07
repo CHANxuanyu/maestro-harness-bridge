@@ -14,6 +14,7 @@ import { useFileExplorerStore } from '../../../renderer/stores/fileExplorerStore
 import { useGroupChatStore } from '../../../renderer/stores/groupChatStore';
 import { mockTheme } from '../../helpers/mockTheme';
 import { Z_LAYERS } from '../../../renderer/constants/zLayers';
+import { createMockAITab } from '../../helpers/mockTab';
 
 /**
  * The action rows, in render order. Scoped to `[data-action-label]` rather than
@@ -229,6 +230,7 @@ describe('QuickActionsModal', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		useModalStore.getState().closeModal('quickAction');
 		useSettingsStore.setState({ newShell: false });
 		// Reset uiStore state used by search actions
 		useUIStore.setState({
@@ -260,6 +262,28 @@ describe('QuickActionsModal', () => {
 	});
 
 	describe('Basic rendering', () => {
+		it('opens a targeted split command from the shortcut search', () => {
+			useSettingsStore.setState({ newShell: true });
+			useModalStore.getState().openModal('quickAction', {
+				initialMode: 'main',
+				initialSearch: 'Open on the right',
+			} as never);
+			const props = createDefaultProps();
+			const owner = baseCreateMockSession({
+				id: 'split-owner',
+				activeTabId: 'source',
+				aiTabs: [
+					createMockAITab({ id: 'source', name: 'Current conversation' }),
+					createMockAITab({ id: 'target', name: 'Review changes' }),
+				],
+			});
+			render(<QuickActionsModal {...props} sessions={[owner]} activeSessionId={owner.id} />);
+			expect(screen.getByRole('textbox')).toHaveValue('Open on the right');
+			expect(screen.getByText('Open on the right: Review changes')).toBeInTheDocument();
+			expect(screen.queryByText('Open on the right: Current conversation')).toBeNull();
+			useModalStore.getState().closeModal('quickAction');
+		});
+
 		it('renders with dialog role and aria attributes', () => {
 			const props = createDefaultProps();
 			render(<QuickActionsModal {...props} />);

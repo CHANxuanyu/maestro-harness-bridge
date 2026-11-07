@@ -38,6 +38,27 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## New shell conversation split (2026-11-06)
+
+| UI action                              | CLI                                                   | Shared implementation                                               |
+| -------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------- |
+| Open a conversation on the right       | `tab split <tab-id> [--agent <id>] [--json]`          | `splitConversation()` in `src/renderer/services/newShellSplit.ts`   |
+| Drag the divider                       | `tab split <right-tab-id> --ratio <fraction>`         | The same split service persists the left pane share                 |
+| Return to the focused conversation     | `tab unsplit [--agent <id>] [--json]`                 | `unsplitConversation()` in the same service                         |
+| Select the other pane                  | `focus-agent <agent-id> --tab <tab-id>`               | Existing conversation selection and focused conversation state      |
+| Close one pane while keeping the other | Select the surviving conversation, then `tab unsplit` | The same focus and unsplit actions; neither conversation is deleted |
+
+The row context menu, keyboard bindings and command palette call these services.
+The CLI resolves exact or unique-prefix conversation IDs through the existing
+desktop tab list. `unsplit` addresses the active conversation unless `--agent`
+selects a particular owner. Both commands require the new shell and a running
+desktop application. The renderer validates the split action separately from
+ordinary tab configuration; split fields are never stored on an AI tab and
+cannot be combined with permission or model changes. The acknowledged
+`update_session_config` transport waits for the shared service to save the
+layout before reporting success. Service errors, including a narrow window,
+are returned to the CLI.
+
 ## Stop and read-only resume corrections (2026-11-06)
 
 No UI action or CLI verb is added. `tab permission <tab> readonly` and

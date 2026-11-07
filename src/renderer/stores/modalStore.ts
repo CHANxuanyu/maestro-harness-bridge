@@ -96,6 +96,7 @@ export interface EditAgentModalData {
 /** Quick action modal data */
 export interface QuickActionModalData {
 	initialMode: 'main' | 'move-to-group' | 'agents';
+	initialSearch?: string;
 }
 
 /** Confirmation modal data */

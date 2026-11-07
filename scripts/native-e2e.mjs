@@ -13,7 +13,8 @@ function run(command, args) {
 	if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-for (const target of ['main', 'renderer', 'cli']) run(npm, ['run', `build:${target}`]);
+for (const target of ['main', 'renderer', 'web-desktop', 'cli'])
+	run(npm, ['run', `build:${target}`]);
 const args = [
 	process.execPath,
 	fileURLToPath(new URL('../node_modules/@playwright/test/cli.js', import.meta.url)),

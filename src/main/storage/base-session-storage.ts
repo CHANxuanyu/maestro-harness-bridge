@@ -1,3 +1,4 @@
+import { extractMatchPreview } from '../../shared/sessionSearch';
 /**
  * Base Session Storage
  *
@@ -280,25 +281,7 @@ export abstract class BaseSessionStorage implements AgentSessionStorage {
 	 * short lead, long trail, so the matched keyword stays visible when the
 	 * UI truncates the preview with `text-overflow: ellipsis`.
 	 */
-	static extractMatchPreview(
-		originalText: string,
-		lowerText: string,
-		searchLower: string,
-		queryLength: number,
-		leadChars: number = 20,
-		trailChars: number = 120
-	): string {
-		const idx = lowerText.indexOf(searchLower);
-		if (idx < 0) return '';
-
-		const start = Math.max(0, idx - leadChars);
-		const end = Math.min(originalText.length, idx + queryLength + trailChars);
-		return (
-			(start > 0 ? '...' : '') +
-			originalText.slice(start, end) +
-			(end < originalText.length ? '...' : '')
-		);
-	}
+	static extractMatchPreview = extractMatchPreview;
 
 	/**
 	 * Resolve search mode into a result, applying the mode-specific logic.

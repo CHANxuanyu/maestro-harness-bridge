@@ -611,6 +611,26 @@ describe('remote-fs', () => {
 	});
 
 	describe('statRemote', () => {
+		it('requests target metadata on GNU and BSD stat only when opted in', async () => {
+			const deps = createMockDeps({
+				stdout: '4096\ndirectory\n1703836800\n',
+				stderr: '',
+				exitCode: 0,
+			});
+			const result = await statRemote('~/shared commands', baseConfig, deps, {
+				followSymlinks: true,
+			});
+			expect(result.data).toEqual({ size: 4096, isDirectory: true, mtime: 1703836800000 });
+			const args = vi.mocked(deps.execSsh).mock.calls[0][1];
+			const command = args[args.length - 1];
+			expect(command).toContain('stat -L --printf=');
+			expect(command).toContain('stat -L -f ');
+			expect(command).toContain('"$HOME/shared commands"');
+			await statRemote('/link', baseConfig, deps);
+			const original = vi.mocked(deps.execSsh).mock.calls[1][1];
+			expect(original[original.length - 1]).not.toContain('stat -L');
+		});
+
 		it('parses GNU stat output for regular file', async () => {
 			const deps = createMockDeps({
 				stdout: '1234\nregular file\n1703836800\n',

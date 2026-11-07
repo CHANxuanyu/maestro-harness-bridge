@@ -61,6 +61,8 @@ export interface PendingLogJump {
 	sessionId: string;
 	tabId: string;
 	logId: string;
+	/** Native content search must reveal the message inside a folded turn. */
+	revealTurnActivity?: boolean;
 }
 
 export interface UIStoreState {

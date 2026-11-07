@@ -1,3 +1,10 @@
+import { requestConversationAction } from '../../services/conversationArchive';
+
+import type {
+	NativeHistorySearchHit,
+	NativeHistorySearchResult,
+} from '../../../shared/nativeHistorySearch';
+import { highlightMatches } from '../../utils/highlightMatches';
 import { useNewConversationTools, newShellConversation } from '../../services/newShellConversation';
 import { chooseProject } from '../../services/openProject';
 import { Spinner } from '../ui/Spinner';
@@ -66,11 +73,18 @@ import { useFormatRelativeTime, useT, type TFunction } from '../../i18n';
 export type ProjectHistoryLoadStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
 
 export interface ProjectSessionTreeProps {
+	onArchiveConversation?: (conversation: SidebarConversation) => void;
+	onDeleteConversation?: (conversation: SidebarConversation) => void;
 	headerMenu?: ReactNode;
 	theme: Theme;
 	projects: SidebarProject[];
 	activeKey: string | null;
 	search: string;
+	contentSearch?: NativeHistorySearchResult;
+	contentSearching?: boolean;
+	contentOpening?: boolean;
+	contentOpenFailed?: boolean;
+	onSelectContent?: (hit: NativeHistorySearchHit) => void;
 	onSearchChange: (value: string) => void;
 	/** Providers with at least one conversation; the filter shows only for two or more. */
 	providers?: string[];
@@ -401,16 +415,17 @@ const ConversationRow = memo(function ConversationRow({
 	const title = conversationTitle(conversation, t);
 	const worktree = conversation.history?.worktree;
 	const isOpen = conversation.kind === 'open';
+	const newShell = useSettingsStore(selectNewShellEnabled);
+	const hasMenu = isOpen || (newShell && !!conversation.nativeSessionId);
 	const indent = 4 + depth * DEPTH_INDENT + 16;
 
 	const handleContextMenu = useCallback(
 		(e: ReactMouseEvent<HTMLButtonElement>) => {
-			// Only an open tab has actions (rename, close tab).
-			if (!isOpen) return;
+			if (!hasMenu) return;
 			e.preventDefault();
 			openMenu('row', conversation.key, e.currentTarget, { x: e.clientX, y: e.clientY });
 		},
-		[isOpen, openMenu, conversation.key]
+		[hasMenu, openMenu, conversation.key]
 	);
 
 	return (
@@ -510,7 +525,7 @@ const ConversationRow = memo(function ConversationRow({
 					) : null}
 					<StatusMark theme={theme} conversation={conversation} t={t} />
 				</button>
-				{isOpen && (
+				{hasMenu && (
 					<button
 						type="button"
 						aria-label={`${t('workflows.conversations.more')}: ${title}`}
@@ -643,6 +658,7 @@ const ProjectSection = memo(function ProjectSection({
 	openMenu,
 }: ProjectSectionProps) {
 	const listId = useId();
+	const [archivesExpanded, setArchivesExpanded] = useState(false);
 	// A search reveals matches inside collapsed projects; the stored collapse
 	// state is left alone so clearing the search restores the user's layout.
 	const expanded = searching || !project.collapsed;
@@ -814,6 +830,50 @@ const ProjectSection = memo(function ProjectSection({
 							/>
 						</li>
 					)}
+					{newShell && !!project.archivedConversations?.length && (
+						<li style={{ paddingLeft: rowIndent, color: theme.colors.textDim }}>
+							<button
+								type="button"
+								data-tree-nav=""
+								aria-expanded={archivesExpanded}
+								className="w-full text-left py-1.5 text-xs rounded focus-visible:ring-1"
+								onClick={() => setArchivesExpanded((value) => !value)}
+							>
+								{t('workflows.archive.archived', { count: project.archivedConversations.length })}
+							</button>
+							{archivesExpanded && (
+								<ul>
+									{project.archivedConversations.map((record) => (
+										<li key={record.key} className="flex items-center gap-2 py-1 text-xs">
+											<span className="truncate flex-1" title={record.title}>
+												{record.title}
+											</span>
+											<button
+												type="button"
+												data-tree-nav=""
+												className="shrink-0 rounded focus-visible:ring-1"
+												style={{ color: theme.colors.accent }}
+												onClick={() =>
+													requestConversationAction(
+														{
+															provider: record.provider,
+															nativeSessionId: record.nativeSessionId,
+															projectPath: record.projectPath,
+															accountDir: record.accountDir,
+															sshRemoteId: record.sshRemoteId,
+														},
+														'unarchive'
+													)
+												}
+											>
+												{t('workflows.archive.unarchive')}
+											</button>
+										</li>
+									))}
+								</ul>
+							)}
+						</li>
+					)}
 				</ul>
 			)}
 		</li>
@@ -830,6 +890,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	projects,
 	activeKey,
 	search,
+	contentSearch,
+	contentSearching,
+	contentOpening,
+	contentOpenFailed,
+	onSelectContent,
 	onSearchChange,
 	providers = [],
 	providerFilter = null,
@@ -847,6 +912,8 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	onNewConversationHere,
 	onRenameConversation,
 	onCloseConversation,
+	onArchiveConversation,
+	onDeleteConversation,
 	onDeleteWorktree,
 	onTogglePin,
 	onShowMore,
@@ -864,7 +931,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	const historyLoading = historyStatus === 'idle' || historyStatus === 'loading';
 	const [menu, setMenu] = useState<MenuState | null>(null);
 	const triggerRef = useRef<HTMLElement | null>(null);
-	const treeRef = useRef<HTMLUListElement>(null);
+	const treeRef = useRef<HTMLDivElement>(null);
 	const searching = search.trim().length > 0;
 
 	const openMenu = useCallback<OpenMenu>((kind, key, trigger, point) => {
@@ -882,7 +949,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		if (restoreFocus) triggerRef.current?.focus();
 	}, []);
 
-	const handleTreeKeyDown = useCallback((e: ReactKeyboardEvent<HTMLUListElement>) => {
+	const handleTreeKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
 		if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
 		const target = e.target as HTMLElement;
 		if (!target.hasAttribute(NAV_ATTR)) return;
@@ -898,14 +965,26 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		items[next].focus();
 	}, []);
 
-	const handleSearchKeyDown = useCallback((e: ReactKeyboardEvent<HTMLInputElement>) => {
-		if (e.key !== 'ArrowDown') return;
-		const first = treeRef.current?.querySelector<HTMLElement>(`[${NAV_ATTR}]`);
-		if (first) {
-			e.preventDefault();
-			first.focus();
-		}
-	}, []);
+	const handleSearchKeyDown = useCallback(
+		(e: ReactKeyboardEvent<HTMLInputElement>) => {
+			if (!newShell && e.key !== 'ArrowDown') return;
+			if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(e.key)) return;
+			const items = Array.from(
+				treeRef.current?.querySelectorAll<HTMLElement>(
+					newShell && searching
+						? '[data-conversation-key] [data-tree-nav], [data-content-hit]'
+						: `[${NAV_ATTR}]`
+				) ?? []
+			);
+			const item = e.key === 'ArrowUp' ? items.at(-1) : items[0];
+			if (item) {
+				e.preventDefault();
+				if (e.key === 'Enter') item.click();
+				else item.focus();
+			}
+		},
+		[newShell, searching]
+	);
 
 	const addAgentSection: TreeMenuSection = {
 		key: 'add-agent',
@@ -935,7 +1014,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	if (menu) {
 		if (menu.kind === 'row') {
 			const conversation = projects.flatMap((p) => p.conversations).find((c) => c.key === menu.key);
-			// Only an open tab has actions; native history is never deleted from here.
+			// Open tabs keep their existing tab actions.
 			if (conversation && conversation.kind === 'open') {
 				menuLabel = t('workflows.conversations.more');
 				menuSections = [
@@ -1000,6 +1079,39 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						],
 					},
 				];
+			}
+			if (newShell && conversation?.nativeSessionId) {
+				menuLabel = t('workflows.conversations.more');
+				menuSections ??= [];
+				menuSections.push({
+					key: 'native-history',
+					items: [
+						...(onArchiveConversation
+							? [
+									{
+										key: 'archive',
+										label: t('workflows.archive.archive'),
+										detail: t(
+											conversation.busy
+												? 'workflows.archive.running'
+												: 'workflows.archive.keepsHistory'
+										),
+										onSelect: () => onArchiveConversation(conversation),
+									},
+								]
+							: []),
+						...(conversation.provider === 'codex' && onDeleteConversation
+							? [
+									{
+										key: 'delete-native',
+										label: t('workflows.archive.delete'),
+										color: theme.colors.error,
+										onSelect: () => onDeleteConversation(conversation),
+									},
+								]
+							: []),
+					],
+				});
 			}
 		} else {
 			const project = projects.find((p) => p.key === menu.key);
@@ -1094,7 +1206,19 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	);
 
 	return (
-		<div className="flex flex-col min-w-0 gap-1 select-none">
+		<div
+			ref={treeRef}
+			onKeyDown={handleTreeKeyDown}
+			onKeyDownCapture={(event) => {
+				if (newShell && searching && !menu && event.key === 'Escape') {
+					event.preventDefault();
+					event.stopPropagation();
+					onSearchChange('');
+					treeRef.current?.querySelector('input')?.focus();
+				}
+			}}
+			className="flex flex-col min-w-0 gap-1 select-none"
+		>
 			<div className="px-2 pt-1 pb-2 flex flex-col gap-1.5">
 				{/* The first thing in the list is starting one, the way a chat app opens. */}
 				{newShell ? (
@@ -1109,7 +1233,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					theme={theme}
 					value={search}
 					onChange={onSearchChange}
-					placeholder={t('workflows.conversations.search')}
+					placeholder={t(
+						newShell
+							? 'workflows.conversations.contentSearchPlaceholder'
+							: 'workflows.conversations.search'
+					)}
 					placeholderColor={
 						newShell ? readableTextOn(theme.colors.textDim, [theme.colors.bgActivity]) : undefined
 					}
@@ -1156,6 +1284,11 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 				/>
 			)}
 
+			{newShell && searching && (
+				<h3 className="px-3 pt-2 text-xs" style={{ color: theme.colors.textDim }}>
+					{t('workflows.conversations.titleResults')}
+				</h3>
+			)}
 			{filtering && totalConversations === 0 ? (
 				<p className="px-3 py-2 text-xs italic" style={{ color: theme.colors.textDim }}>
 					{historyLoading
@@ -1178,7 +1311,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					</button>
 				</div>
 			) : (
-				<ul ref={treeRef} className="flex flex-col px-1" onKeyDown={handleTreeKeyDown}>
+				<ul className="flex flex-col px-1">
 					{projects.map((project) => (
 						<ProjectSection
 							key={project.key}
@@ -1203,6 +1336,78 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 						/>
 					))}
 				</ul>
+			)}
+
+			{newShell && search.trim().length >= 2 && (
+				<section
+					aria-label={t('workflows.conversations.contentResults')}
+					className="px-2 pt-2"
+					style={{ color: theme.colors.textMain }}
+				>
+					<h3 className="px-1 text-xs" style={{ color: theme.colors.textDim }}>
+						{t('workflows.conversations.contentResults')}
+					</h3>
+					<p className="px-1 py-1 text-2xs" style={{ color: theme.colors.textDim }}>
+						{t('workflows.conversations.remoteContentExcluded')}
+					</p>
+					{contentSearching && (
+						<p role="status" className="px-1 text-xs">
+							{t('workflows.conversations.searchingContent')}
+						</p>
+					)}
+					{contentSearch?.unavailable && (
+						<p role="status" className="px-1 text-xs">
+							{t('workflows.conversations.contentSearchFailed')}
+						</p>
+					)}
+					{contentOpening && (
+						<p role="status" className="px-1 text-xs">
+							{t('workflows.conversations.opening')}
+						</p>
+					)}
+					{contentOpenFailed && (
+						<p role="alert" className="px-1 text-xs">
+							{t('workflows.conversations.contentOpenFailed')}
+						</p>
+					)}
+					{contentSearch?.hits.map((hit) => (
+						<button
+							key={hit.conversation.key}
+							type="button"
+							data-tree-nav
+							data-content-hit
+							className="w-full text-left rounded px-1 py-2 focus-ring hover:bg-white/5"
+							onClick={() => onSelectContent?.(hit)}
+						>
+							<span className="block truncate text-xs">{hit.conversation.title}</span>
+							<span
+								className="block truncate text-2xs"
+								title={hit.conversation.projectPath}
+								style={{ color: theme.colors.textDim }}
+							>
+								{hit.conversation.projectPath}
+							</span>
+							<span className="block truncate text-xs">
+								{highlightMatches(hit.matchPreview, search.trim(), theme.colors.accent)}
+							</span>
+						</button>
+					))}
+					{contentSearch?.truncated && (
+						<p role="status" className="px-1 text-xs">
+							{t(
+								contentSearch.limited
+									? 'workflows.conversations.contentSearchLimited'
+									: 'workflows.conversations.moreContentResults'
+							)}
+						</p>
+					)}
+					{!contentSearching &&
+						!contentSearch?.unavailable &&
+						!contentSearch?.truncated &&
+						contentSearch?.hits.length === 0 && (
+							<p className="px-1 text-xs">{t('workflows.conversations.noContentMatches')}</p>
+						)}
+				</section>
 			)}
 
 			{menu && menuSections && (

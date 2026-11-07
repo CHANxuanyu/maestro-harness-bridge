@@ -1,4 +1,23 @@
 export const workflowsComposer = {
+	'workflows.nativeCommands.reported': '工具上报',
+	'workflows.nativeCommands.queuedUnavailable':
+		'暂时无法读取原生命令，这条命令已保留在队列中。连接恢复后可重新发送。',
+	'workflows.nativeCommands.project': '项目',
+	'workflows.nativeCommands.user': '用户',
+	'workflows.nativeCommands.unavailable': '无法读取原生命令，暂时只显示内置命令。',
+	'workflows.nativeCommands.remoteUnavailable': '无法读取 SSH 主机上的命令，暂时只显示内置命令。',
+	'workflows.nativeCommands.help': '查看可用命令',
+	'workflows.nativeCommands.compact': '压缩对话，减少上下文占用',
+	'workflows.nativeCommands.context': '查看当前上下文占用',
+	'workflows.nativeCommands.cost': '查看对话费用与用量',
+	'workflows.nativeCommands.init': '为项目创建 CLAUDE.md',
+	'workflows.nativeCommands.pr-comments': '处理拉取请求中的审查意见',
+	'workflows.nativeCommands.release-notes': '根据改动生成发布说明',
+	'workflows.nativeCommands.todos': '查找并列出 TODO 注释',
+	'workflows.nativeCommands.review': '审查代码改动',
+	'workflows.nativeCommands.security-review': '检查代码中的安全问题',
+	'workflows.nativeCommands.plan': '制定实施计划',
+
 	'workflows.composer.title': '提示词编辑器',
 	'workflows.composer.closeLabel': '关闭提示词编辑器',
 	'workflows.composer.collapse': '收起',

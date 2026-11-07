@@ -280,6 +280,7 @@ describe('useWizardHandlers', () => {
 			sessionsLoaded: false,
 		} as any);
 		useSettingsStore.setState({
+			newShell: false,
 			defaultSaveToHistory: true,
 			defaultShowThinking: 'off',
 			conductorProfile: 'default',
@@ -302,6 +303,19 @@ describe('useWizardHandlers', () => {
 	// Slash command discovery effect
 	// ========================================================================
 	describe('slash command discovery effect', () => {
+		it('does not probe the host account from the new shell', async () => {
+			useSettingsStore.setState({ newShell: true });
+			const session = createMockSession({
+				customEnvVars: { CLAUDE_CONFIG_DIR: '/temporary/account-b' },
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: 'session-1' });
+			await act(async () => {
+				renderHook(() => useWizardHandlers(createMockDeps()));
+			});
+			expect(window.maestro.claude.getCommands).not.toHaveBeenCalled();
+			expect(window.maestro.agents.discoverSlashCommands).not.toHaveBeenCalled();
+		});
+
 		it('fetches custom commands and agent commands for claude-code sessions', async () => {
 			const session = createMockSession({ agentCommands: undefined });
 			useSessionStore.setState({ sessions: [session], activeSessionId: 'session-1' });

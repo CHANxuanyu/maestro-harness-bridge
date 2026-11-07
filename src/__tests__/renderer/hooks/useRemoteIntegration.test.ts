@@ -29,6 +29,9 @@ import {
 	noteDesktopAiTabSelection,
 } from '../../../renderer/utils/desktopTabSelectionSync';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { useConversationArchiveStore } from '../../../renderer/stores/conversationArchiveStore';
+import * as runtimeContext from '../../../renderer/utils/runtimeContext';
+import type { ArchivedConversation } from '../../../shared/conversationArchive';
 
 // The planner's verdict is the seam under test: a queued CLI prompt must carry
 // it as the same flags a composer-queued message does.
@@ -486,6 +489,7 @@ describe('useRemoteIntegration', () => {
 	beforeEach(() => {
 		for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
 			setCapabilitiesCache(id, capabilities);
+		useConversationArchiveStore.setState({ records: [] });
 		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 		onRemoteCommandHandler = undefined;
@@ -536,6 +540,7 @@ describe('useRemoteIntegration', () => {
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		clearConcertoDesignerFramesForTests();
 		window.maestro = originalMaestro;
 	});
@@ -572,6 +577,91 @@ describe('useRemoteIntegration', () => {
 			defaultShowThinking: 'off' as const,
 		};
 	};
+
+	it('loads and subscribes to browser archives without handling desktop tab lifecycle', async () => {
+		vi.spyOn(runtimeContext, 'isWebDesktop').mockReturnValue(true);
+		const previousNewShell = useSettingsStore.getState().newShell;
+		const previousSessionsLoaded = useSessionStore.getState().sessionsLoaded;
+		const previousRecords = useConversationArchiveStore.getState().records;
+		useSettingsStore.setState({ newShell: true });
+		useSessionStore.setState({ sessionsLoaded: true });
+		useConversationArchiveStore.setState({ records: [] });
+		const records: ArchivedConversation[] = [
+			{
+				key: 'native',
+				nativeSessionId: 'native',
+				ownerIds: ['owner'],
+				projectKey: 'project',
+				projectPath: '/repo/packages/api',
+				provider: 'codex',
+				title: 'Subdirectory archive',
+				preview: '',
+				createdAt: 1,
+				modifiedAt: 2,
+				messageCount: 2,
+				starred: false,
+				permissionMode: 'readonly',
+				archivedAt: 3,
+			},
+		];
+		const unarchived = records.map((record) => ({ ...record, archived: false }));
+		const archives = vi.fn().mockResolvedValue(records);
+		let changed: ((records: ArchivedConversation[]) => void) | undefined;
+		const stop = vi.fn();
+		const lifecycle = vi.fn();
+		window.maestro.agentSessions = {
+			...window.maestro.agentSessions,
+			archives,
+			onArchivesChanged: vi.fn((callback) => {
+				changed = callback;
+				return stop;
+			}),
+			onConversationLifecycle: lifecycle,
+		};
+		const session = createMockSession({
+			id: 'owner',
+			aiTabs: [createMockTab({ agentSessionId: 'native' })],
+		});
+		const deps = createDeps({ sessions: [session] });
+		let hook = renderHook(() => useRemoteIntegration(deps));
+		try {
+			await act(async () => {});
+			expect(useConversationArchiveStore.getState().records).toEqual(records);
+			expect(archives).toHaveBeenCalledOnce();
+			expect(archives).toHaveBeenCalledWith({ includeUnarchived: true });
+			expect(changed).toBeTypeOf('function');
+			act(() => changed!(unarchived));
+			expect(useConversationArchiveStore.getState().records).toEqual(unarchived);
+			act(() => changed!([]));
+			expect(useConversationArchiveStore.getState().records).toEqual([]);
+			act(() => changed!(records));
+			expect(useConversationArchiveStore.getState().records).toEqual(records);
+
+			// A page reload reads current metadata and installs a fresh subscription.
+			hook.unmount();
+			expect(stop).toHaveBeenCalledOnce();
+			useConversationArchiveStore.setState({ records: [] });
+			archives.mockResolvedValue(unarchived);
+			changed = undefined;
+			hook = renderHook(() => useRemoteIntegration(deps));
+			await act(async () => {});
+			expect(archives).toHaveBeenCalledTimes(2);
+			expect(archives).toHaveBeenLastCalledWith({ includeUnarchived: true });
+			expect(useConversationArchiveStore.getState().records).toEqual(unarchived);
+			expect(changed).toBeTypeOf('function');
+			act(() => changed!(records));
+			expect(useConversationArchiveStore.getState().records).toEqual(records);
+			expect(window.maestro.agentSessions.onArchivesChanged).toHaveBeenCalledTimes(2);
+			expect(lifecycle).not.toHaveBeenCalled();
+			expect(useSessionStore.getState().sessions[0].aiTabs).toEqual(session.aiTabs);
+		} finally {
+			hook.unmount();
+			useSettingsStore.setState({ newShell: previousNewShell });
+			useSessionStore.setState({ sessionsLoaded: previousSessionsLoaded });
+			useConversationArchiveStore.setState({ records: previousRecords });
+		}
+		expect(stop).toHaveBeenCalledTimes(2);
+	});
 
 	describe('active session broadcast', () => {
 		it('broadcasts active session when live mode is enabled', () => {

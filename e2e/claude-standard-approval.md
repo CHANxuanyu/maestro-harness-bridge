@@ -8,7 +8,7 @@
 MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-claude-permission.spec.ts --retries=0
 ```
 
-命令构建主进程、renderer 和 CLI，再运行 9 条场景。全部使用 `NativeApp` 的临时项目、临时应用数据及合成 Claude；真实模式在建立夹具前直接报错。`claude-permission.cjs` 启动应用实际配置的 MCP bridge，通过 initialize、tools/list、tools/call 请求审批，不调用模型。每个场景保留首次失败，不自动重试。
+命令构建主进程、renderer 和 CLI，再运行 11 条场景。全部使用 `NativeApp` 的临时项目、临时应用数据及合成 Claude；真实模式通过文件级 `test.skip()` 跳过，收集场景不建立夹具。`claude-permission.cjs` 启动应用实际配置的 MCP bridge，通过 initialize、tools/list、tools/call 请求审批，不调用模型。每个场景保留首次失败，不自动重试。
 
 覆盖内容：
 
@@ -21,8 +21,16 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-claude-permission.spec.ts --re
 7. 旧界面的 API/print 路径仍显示原来的 Allow 按钮，审批和收尾工作。
 8. 从主项目打开工作树原生历史，保持主项目记录的目录不变，通过输入框发送相对路径 Bash 请求。审批与 CLI 必须显示工作树实际目录、命名后的对话和同一个 tabId；批准后只在工作树出现文件。
 9. 同样的工作树历史先运行一个被夹具暂缓退出的回合，再用 `dispatch --tab <id> --queue` 排队审批请求。确认返回 queued，释放夹具后检查相同目录、对话归属与文件落点。
+10. 保存标准后切换 TUI 包装器，中英文菜单禁用标准项并显示说明，完全访问与计划模式仍可选。CLI 设置标准、普通派发、排队派发和输入框发送都拒绝，保留 token source 与标准设置，无任何合成 CLI 启动记录。
+11. 动态切换重复上一条，不能因当前额度或自动切换状态绕到 print。
 
-原有六条新界面场景先保存 interactive token source，确认实际参数仍为 print 并携带 relay，不包含跳过权限参数。新弹窗切中文，检查完整工具输入、项目路径、命名后的对话和默认焦点；CLI 列表不得包含认证 token。原有七条场景检查 bridge 退出记录、MCP 配置删除和迟到批准失败。新增两条工作树场景验证相对路径工具输入与实际落盘位置，不执行真实 shell 命令。停止场景验证进程中断链路，不冒充点击输入框停止按钮的验收。
+工作树场景先等待 CLI 持久化快照中的原生 ID 精确等于 seed ID，再读取 tab 并重复原断言。等待只读取，不重新点击、不重发、不重试场景。运行状态从 `window.maestro.process.getActiveProcesses()` 检查，不从已保存的 idle 字段推断。排队场景使用夹具的 `dispatchWithEnv()`，因为 dispatch 自带 JSON 输出，不接受通用 `--json`。
+
+## 上一轮失败的根因
+
+外部运行记录为 1 过 8 失败，本轮未重新启动 Electron。前六条用了不合法的 `--token-source interactive`，CLI 实际接受 `api|tui|dynamic`；现在审批场景明确用 api，TUI 拒绝场景用 tui。两条工作树场景在历史正文可见后立刻读取 CLI active tab，而 CLI 从持久化快照列出对话，renderer 默认 2000 毫秒防抖后才保存。旧 trace 在正文断言后约 200 毫秒已进入失败截图，符合读取旧空白 tab 的时序。修复保持精确原生 ID 和主项目 cwd 断言，增加等待保存完成的同步点，没有更改产品历史归属。
+
+前七条审批场景显式选择 api token source，确认实际参数为 print 并携带 relay，不包含跳过权限参数。新弹窗切中文，检查完整工具输入、项目路径、命名后的对话和默认焦点；CLI 列表不得包含认证 token。原有七条场景检查 bridge 退出记录、MCP 配置删除和迟到批准失败。新增两条工作树场景验证相对路径工具输入与实际落盘位置，不执行真实 shell 命令。停止场景验证进程中断链路，不冒充点击输入框停止按钮的验收。
 
 Windows 外部补验：把 Claude 自定义路径指向安装器生成的 `maestro-p.cmd`，开启新界面并选择标准权限，确认发送被拒绝且没有启动 TUI。分别检查配置中直接填写 `.cmd`，以及路径探测最终解析为 `.cmd` 的情况。本轮只用纯函数回归验证 Windows 路径识别与拒绝分支，没有在 Windows 上执行。
 
@@ -30,13 +38,13 @@ Windows 外部补验：把 Claude 自定义路径指向安装器生成的 `maest
 
 `src/maestro-p/open-tool-calls.ts` 中 `withPermissionBypass()` 会在未显式给出 permission mode 时添加 `--dangerously-skip-permissions`。`tui-driver.ts` 会接受 bypass 首次确认，它没有 Maestro 的标准权限审批 relay。不能把 TUI 当作标准审批已实现。
 
-`newShell=true` 时，标准权限固定走本机 print，不改写已保存的 token source 偏好；显式 maestro-p 路径、SSH，以及冲突的自定义权限参数会拒绝启动。权限菜单说明 TUI 和 SSH 暂不支持，启动拒绝有中英文解释。不会通过本地 realpath 解析远程目录，也不为了判断标准审批去探测远程 maestro-p。
+`newShell=true` 时，只有有效模式为本机 api 的 Claude 对话支持标准权限。TUI 包装器和动态切换下标准项禁用，并说明 maestro-p 跳过确认，用户需自行选择 claude -p。已有不兼容标准配置启动拒绝，不改道、不改权限。显式 maestro-p 路径、SSH，以及冲突的自定义权限参数同样拒绝启动。不会通过本地 realpath 解析远程目录，也不为了判断标准审批去探测远程 maestro-p。
 
 旧界面 TUI 的权限策略没有改变，仍存在上述绕过风险。本轮共享路径识别补齐 `.cmd`，旧界面与 CLI 也会把该安装入口识别为 TUI；标准权限拒绝它的约束仍只在新界面生效。完全访问与只读的权限策略保留原逻辑。自定义包装脚本内部行为、原生 Claude 的预先允许规则、hooks 和 settings 内容不在这次参数检查的保证范围内。标准权限只对 Claude 自身决定需要询问的工具请求弹窗，不承诺每个工具都询问。
 
 ## 最少一次真实验证，另行授权后执行
 
-在隔离的临时项目中，用当前待验收构建、新界面、本机 Claude、标准权限和已登录账户，确认没有项目或账户预先允许该工具的规则。记录实际 CLI 版本、源码提交及构建身份。不要将合成测试改成真实账户模式。
+在隔离的临时项目中，用当前待验收构建、新界面、本机 Claude 的 api 模式、标准权限和已登录账户，确认没有项目或账户预先允许该工具的规则。记录实际 CLI 版本、源码提交及构建身份。不要将合成测试改成真实账户模式。
 
 仅发送一次明确的请求，例如：“只使用 Write 工具创建当前临时项目的 approval-smoke.txt，内容为 approval smoke。不要改其他文件。”
 

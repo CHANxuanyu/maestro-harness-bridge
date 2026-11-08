@@ -1364,11 +1364,15 @@ Claude 的既有浏览器审批继续通过 `permission:respond`，CLI 对应
 重复、结束和超时请求均失败。此修复同时恢复旧界面的既有浏览器用法，没有新增动词。
 
 Open gaps：CLI 暂不选择其他窗口；`codex-turn permissions` 只列 Codex 原型请求，
-Claude 请求仍需从已有审批事件取得 requestId；浏览器 Codex 原型审批尚未支持。
+Claude 请求由 `permission list` 查询，并按相同调用方归属过滤；浏览器 Codex 原型审批尚未支持。
+新界面尚无按单条对话修改 token source 的控件，现有 `update-agent --token-source`
+修改所属工具记录，影响其下对话。
 
 Codex 标准权限的输入栏、项目设置、新建、继承、恢复及 `tab permission` 共用
 `effectiveStandardPermissionCapability()`。`project settings set --permission standard`
-及 `tab new` 保持相同有效能力判断。咨询显式禁用原型能力，继续自己的 exec 权限限制。
+保存项目的默认意图，实际 `tab new` 创建时按目标能力收紧，不等同于修改已有对话权限。
+项目设置保存入口尚未按具体对话的 token source 拒绝默认值，属于上述创建规则覆盖的范围。
+咨询显式禁用原型能力，继续自己的 exec 权限限制。
 
 原型计划通知沿用 `update_plan` 工具事件，任务面板及 `tab panel <tab-id> tasks`
 继续读取同一清单。追加防重仅管理界面草稿，不会把两次显式 CLI steer 指令合并。

@@ -9,6 +9,22 @@
 
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import type * as MaestroClientModule from '../../../cli/services/maestro-client';
+import { registerCommandCallbacks } from '../../../main/web-server/callbacks/commandCallbacks';
+import { requestFromRenderer } from '../../../main/web-server/callbacks/remoteRequest';
+import { CallbackRegistry } from '../../../main/web-server/managers/CallbackRegistry';
+import { handleSendCommand } from '../../../main/web-server/handlers/messageHandlers/commands';
+import type { MessageHandlerContext } from '../../../main/web-server/handlers/messageHandlers/types';
+import { CLAUDE_STANDARD_PERMISSION_MESSAGES } from '../../../shared/processErrors';
+
+vi.mock('../../../main/web-server/callbacks/remoteRequest', () => ({
+	requestFromRenderer: vi.fn(),
+}));
+vi.mock('../../../main/utils/safe-send', () => ({
+	isWebContentsAvailable: () => true,
+}));
+vi.mock('../../../main/utils/logger', () => ({
+	logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
 
 vi.mock('../../../cli/services/maestro-client', async (importOriginal) => {
 	const actual = await importOriginal<typeof MaestroClientModule>();
@@ -61,6 +77,85 @@ describe('dispatch command', () => {
 	});
 
 	describe('default (active tab) flow', () => {
+		it.each(['en', 'zh-CN'] as const)(
+			'preserves the renderer refusal through main callbacks, WebSocket handler and CLI (%s)',
+			async (language) => {
+				const refusal =
+					CLAUDE_STANDARD_PERMISSION_MESSAGES[language]['workflows.sessions.standardSpawnRefused'];
+				vi.mocked(resolveAgentId).mockReturnValue('agent-abc-123');
+				// Only the IPC transport is replaced. The receipt conversion, callback
+				// registry, WebSocket handler and CLI result handling are production code.
+				vi.mocked(requestFromRenderer).mockResolvedValue({ accepted: false, reason: refusal });
+				const registry = new CallbackRegistry();
+				registerCommandCallbacks(registry as never, {
+					getMainWindow: () => ({}) as never,
+					sessionsStore: { get: () => [] } as never,
+				});
+				const wireResults: Record<string, unknown>[] = [];
+				const noteAgentDelegation = vi.fn();
+				vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+					action({
+						sendCommand: (message: Record<string, unknown>) =>
+							new Promise((resolve, reject) => {
+								const ctx = {
+									callbacks: {
+										getSessionDetail: () => ({ state: 'idle', inputMode: 'ai' }),
+										executeCommand: registry.executeCommand.bind(registry),
+										noteAgentDelegation,
+									},
+									send: (_client: unknown, result: Record<string, unknown>) => {
+										wireResults.push(result);
+										resolve(result);
+									},
+									sendError: (_client: unknown, error: string) => reject(new Error(error)),
+									reportHandlerError: (_client: unknown, error: Error) => reject(error),
+								} as unknown as MessageHandlerContext;
+								handleSendCommand(ctx, {} as never, {
+									...message,
+									type: 'send_command',
+									requestId: 'dispatch-refusal',
+								});
+							}),
+					} as never)
+				);
+
+				await dispatch('agent-abc', 'Refuse CLI dispatch', { tab: 'tab-standard' });
+
+				expect(JSON.parse(consoleSpy.mock.calls[0][0])).toEqual({
+					success: false,
+					error: refusal,
+					code: 'DISPATCH_REFUSED',
+				});
+				expect(processExitSpy).toHaveBeenCalledExactlyOnceWith(1);
+				expect(wireResults).toEqual([
+					{
+						type: 'command_result',
+						success: false,
+						error: refusal,
+						sessionId: 'agent-abc-123',
+						tabId: 'tab-standard',
+						requestId: 'dispatch-refusal',
+					},
+				]);
+				expect(requestFromRenderer).toHaveBeenCalledExactlyOnceWith(
+					expect.anything(),
+					'remote:executeCommand',
+					expect.objectContaining({
+						args: [
+							'agent-abc-123',
+							'Refuse CLI dispatch',
+							'ai',
+							'tab-standard',
+							false,
+							undefined,
+							true,
+						],
+					})
+				);
+				expect(noteAgentDelegation).not.toHaveBeenCalled();
+			}
+		);
+
 		it('sends send_command in the background by default (no tabId) and surfaces the desktop-supplied tabId', async () => {
 			vi.mocked(resolveAgentId).mockReturnValue('agent-abc-123');
 			const mockSendCommand = vi.fn().mockResolvedValue({

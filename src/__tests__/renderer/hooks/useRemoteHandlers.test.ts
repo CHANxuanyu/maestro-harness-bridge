@@ -527,7 +527,7 @@ describe('useRemoteHandlers', () => {
 				expect(window.maestro.process.sendRemoteCommandReceipt).toHaveBeenCalledExactlyOnceWith(
 					'approval-refused',
 					false,
-					'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch this conversation to claude -p.'
+					'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch to claude -p.'
 				);
 				useSettingsStore.setState({ newShell: false });
 			}

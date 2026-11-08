@@ -110,6 +110,31 @@ describe('ToolbarControls', () => {
 		expect(globalSetter).not.toHaveBeenCalled();
 	});
 
+	it.each([false, true])(
+		'offers claude -p from an unavailable TUI standard only when it can help, ssh %s',
+		(ssh) => {
+			useSettingsStore.setState({ newShell: true });
+			const session = {
+				...createInputAreaSession(),
+				toolType: 'claude-code' as const,
+				enableMaestroP: true,
+				maestroPMode: 'interactive' as const,
+				...(ssh ? { sessionSshRemoteConfig: { enabled: true, remoteId: 'remote' } } : {}),
+			};
+			renderToolbar({ session, hasStandardCapability: false });
+			fireEvent.click(screen.getByTestId('composer-permission'));
+			expect(screen.getByRole('menuitemradio', { name: 'Standard' })).toBeDisabled();
+			if (ssh) {
+				expect(screen.queryByTestId('permission-switch-to-print')).toBeNull();
+				return;
+			}
+			fireEvent.click(screen.getByTestId('permission-switch-to-print'));
+			const updated = mockUpdateSessionWith.mock.calls[0][1](session);
+			expect(updated).toMatchObject({ enableMaestroP: false, maestroPMode: 'dynamic' });
+			expect(updated.aiTabs).toBe(session.aiTabs);
+		}
+	);
+
 	it('shows inherited standard immediately while target capabilities are loading', () => {
 		useSettingsStore.setState({ newShell: true });
 		const session = createInputAreaSession();

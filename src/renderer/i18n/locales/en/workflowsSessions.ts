@@ -361,6 +361,9 @@ export const workflowsSessions = {
 		'Run every turn through claude --print. Signed in with a Claude plan, it draws from your plan limits; with an API key set, it bills that key.',
 	'workflows.sessions.tokenModeInteractiveHelp':
 		'Run every turn through the Claude TUI via maestro-p. Signed in with a Claude plan, it draws from your plan limits.',
+	'workflows.sessions.switchToClaudePrint': 'Switch to claude -p',
+	'workflows.sessions.switchToClaudePrintScope':
+		'Every conversation using this Claude configuration switches.',
 	'workflows.sessions.tokenModeDynamicHelp':
 		'Start on the TUI, switch to claude --print near a plan limit. The switch only helps with an API key set: signed in with a plan alone, both draw from the same limits.',
 	'workflows.sessions.resumedEnvHelp':

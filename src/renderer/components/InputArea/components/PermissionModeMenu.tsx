@@ -15,6 +15,8 @@ interface PermissionModeMenuProps {
 	hasStandardCapability: boolean;
 	standardUnavailableNotice?: MessageKey;
 	onChange: (mode: 'full' | 'standard' | 'readonly') => void;
+	/** Offered only when switching the token source can make Standard work. */
+	onSwitchToPrint?: () => void;
 }
 
 /** Desktop selection uses the same supported modes and field patches as the phone sheet. */
@@ -25,6 +27,7 @@ export function PermissionModeMenu({
 	hasStandardCapability,
 	standardUnavailableNotice = 'workflows.sessions.standardPrintNotice',
 	onChange,
+	onSwitchToPrint,
 }: PermissionModeMenuProps) {
 	const t = useT();
 	const newShell = useSettingsStore(selectNewShellEnabled);
@@ -53,7 +56,7 @@ export function PermissionModeMenu({
 	useEffect(() => {
 		if (open)
 			menuRef.current
-				?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')
+				?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]:not(:disabled)')
 				[selectedIndex]?.focus();
 	}, [open, selectedIndex]);
 	return (
@@ -114,12 +117,38 @@ export function PermissionModeMenu({
 								/>
 							</button>
 							{option === 'standard' && unavailableStandard && (
-								<p
+								<div
 									className="w-64 px-3 pb-2 text-xs whitespace-normal"
 									style={{ color: theme.colors.textDim }}
 								>
-									{t(standardUnavailableNotice)}
-								</p>
+									<p>{t(standardUnavailableNotice)}</p>
+									{onSwitchToPrint && (
+										<>
+											{/* The user picks the billing channel; nothing switches it for them. */}
+											<button
+												type="button"
+												data-testid="permission-switch-to-print"
+												title={t('workflows.sessions.tokenModeApiHelp')}
+												onClick={() => {
+													onSwitchToPrint();
+													setOpen(false);
+													triggerRef.current?.focus();
+												}}
+												className="mt-1.5 rounded px-2 py-0.5 text-xs hover:bg-white/10 focus:bg-white/10 outline-none"
+												style={{
+													color: theme.colors.accent,
+													border: `1px solid ${theme.colors.border}`,
+												}}
+											>
+												{t('workflows.sessions.switchToClaudePrint')}
+											</button>
+											<p className="mt-1">
+												{t('workflows.sessions.switchToClaudePrintScope')}{' '}
+												{t('workflows.sessions.tokenModeApiHelp')}
+											</p>
+										</>
+									)}
+								</div>
 							)}
 						</Fragment>
 					))}

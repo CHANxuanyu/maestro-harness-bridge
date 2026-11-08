@@ -371,7 +371,7 @@ for (const tokenSource of ['tui', 'dynamic'] as const) {
 				menu.getByRole('menuitemradio', { name: 'Standard', exact: true })
 			).toBeDisabled();
 			await expect(menu).toContainText(
-				'Unavailable with TUI Wrapper or Dynamic: maestro-p skips confirmations. To approve each step, switch this conversation to claude -p.'
+				'Unavailable with TUI Wrapper or Dynamic: maestro-p skips confirmations. Approving each step needs claude -p.'
 			);
 			await expect(
 				menu.getByRole('menuitemradio', { name: 'Full Access', exact: true })
@@ -381,7 +381,7 @@ for (const tokenSource of ['tui', 'dynamic'] as const) {
 			).toBeEnabled();
 			await native.page.keyboard.press('Escape');
 			const refusal =
-				'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch this conversation to claude -p.';
+				'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch to claude -p.';
 			await expect(native.cli('tab', 'permission', tab.tabId, 'standard')).rejects.toThrow(refusal);
 			await expect(
 				native.dispatchWithEnv({}, owner, 'Refuse CLI dispatch', '--tab', tab.tabId)
@@ -416,8 +416,21 @@ for (const tokenSource of ['tui', 'dynamic'] as const) {
 			await native.page.getByTestId('composer-permission').click();
 			await expect(menu.getByRole('menuitemradio', { name: '标准', exact: true })).toBeDisabled();
 			await expect(menu).toContainText(
-				'TUI 包装器和动态切换模式下不可用：maestro-p 会跳过确认。要逐次批准，请把这条对话改为 claude -p。'
+				'TUI 包装器和动态切换模式下不可用：maestro-p 会跳过确认。要逐次批准，需要改用 claude -p。'
 			);
+			// The user can switch the token source from here. Nothing switches it for them.
+			await menu.getByTestId('permission-switch-to-print').click();
+			await expect
+				.poll(
+					() =>
+						JSON.parse(
+							fs.readFileSync(path.join(native.data, 'maestro-sessions.json'), 'utf8')
+						).sessions.find((session: { id: string }) => session.id === owner)?.enableMaestroP
+				)
+				.toBe(false);
+			await native.page.getByTestId('composer-permission').click();
+			await expect(menu.getByRole('menuitemradio', { name: '标准', exact: true })).toBeEnabled();
+			await expect(menu.getByTestId('permission-switch-to-print')).toHaveCount(0);
 		} catch (error) {
 			failed = true;
 			throw error;

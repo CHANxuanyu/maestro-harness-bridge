@@ -842,12 +842,12 @@ describe('process IPC handlers', () => {
 			[
 				'interactive',
 				'en',
-				'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch this conversation to claude -p.',
+				'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch to claude -p.',
 			],
 			[
 				'dynamic',
 				'zh-CN',
-				'这条对话使用 TUI 包装器或动态切换，标准权限无法生效。请改用只读或完全访问，或把这条对话改为 claude -p。',
+				'这条对话使用 TUI 包装器或动态切换，标准权限无法生效。请改用只读或完全访问，或改用 claude -p。',
 			],
 		])(
 			'refuses saved standard in %s with a localized %s message before spawn',

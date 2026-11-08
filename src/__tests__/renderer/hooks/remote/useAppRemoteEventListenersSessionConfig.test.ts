@@ -620,7 +620,7 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 			expect(ack).toHaveBeenCalledWith('ch', {
 				success: false,
 				error:
-					'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch this conversation to claude -p.',
+					'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch to claude -p.',
 			});
 		}
 	);

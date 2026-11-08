@@ -26,17 +26,17 @@ export const CLAUDE_STANDARD_PERMISSION_ERRORS = {
 export const CLAUDE_STANDARD_PERMISSION_MESSAGES = {
 	en: {
 		'workflows.sessions.standardSpawnRefused':
-			'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch this conversation to claude -p.',
+			'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch to claude -p.',
 		'workflows.sessions.standardPrintNotice':
-			'Unavailable with TUI Wrapper or Dynamic: maestro-p skips confirmations. To approve each step, switch this conversation to claude -p.',
+			'Unavailable with TUI Wrapper or Dynamic: maestro-p skips confirmations. Approving each step needs claude -p.',
 		'workflows.sessions.standardTransportRefused':
 			'Standard is unavailable over SSH or with custom permission overrides. Choose Read-only or Full Access, or use local claude -p without permission overrides.',
 	},
 	'zh-CN': {
 		'workflows.sessions.standardSpawnRefused':
-			'这条对话使用 TUI 包装器或动态切换，标准权限无法生效。请改用只读或完全访问，或把这条对话改为 claude -p。',
+			'这条对话使用 TUI 包装器或动态切换，标准权限无法生效。请改用只读或完全访问，或改用 claude -p。',
 		'workflows.sessions.standardPrintNotice':
-			'TUI 包装器和动态切换模式下不可用：maestro-p 会跳过确认。要逐次批准，请把这条对话改为 claude -p。',
+			'TUI 包装器和动态切换模式下不可用：maestro-p 会跳过确认。要逐次批准，需要改用 claude -p。',
 		'workflows.sessions.standardTransportRefused':
 			'SSH 或自定义权限参数下无法使用标准权限。请选择只读或完全访问，或使用本机 claude -p 并移除自定义权限参数。',
 	},

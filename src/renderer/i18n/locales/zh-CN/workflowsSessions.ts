@@ -331,6 +331,8 @@ export const workflowsSessions = {
 		'每轮通过 claude --print 运行。使用 Claude 订阅登录时消耗订阅额度；配置 API 密钥时向该密钥计费。',
 	'workflows.sessions.tokenModeInteractiveHelp':
 		'每轮通过 maestro-p 调用 Claude TUI。使用 Claude 订阅登录时消耗订阅额度。',
+	'workflows.sessions.switchToClaudePrint': '改用 claude -p',
+	'workflows.sessions.switchToClaudePrintScope': '同一 Claude 配置下的所有对话都会改用。',
 	'workflows.sessions.tokenModeDynamicHelp':
 		'先使用 TUI，接近订阅限制时切换至 claude --print。只有配置了 API 密钥时切换才有帮助；仅使用订阅登录时，两者消耗同一份额度。',
 	'workflows.sessions.resumedEnvHelp':

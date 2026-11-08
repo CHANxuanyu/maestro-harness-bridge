@@ -33,6 +33,8 @@ import { addStagedImageIfUnique } from '../utils/stagedImages';
 import { formatTerminalCwd } from '../utils/terminalPath';
 import { ComposerOptionsSheet } from './ComposerOptionsSheet';
 import { PermissionModeMenu } from './PermissionModeMenu';
+import { effectiveStandardPermissionCapability } from '../../../../shared/codexAppServer';
+import { toClaudeTokenModeSource } from '../../../../shared/claudeTokenMode';
 import { ModelEffortPills } from './ModelEffortPills';
 import { StopTurnButton } from '../../ui/StopTurnButton';
 
@@ -183,6 +185,17 @@ export const ToolbarControls = memo(function ToolbarControls({
 	// from the tab shortcut map rather than spelling the default combo into the
 	// tooltip: a user who rebinds one should see their own chord, not ours.
 	const tabShortcuts = useSettingsStore((s) => s.tabShortcuts);
+	// Offer the switch only when claude -p alone would make Standard work here.
+	const canSwitchToPrint =
+		newShell &&
+		session.toolType === 'claude-code' &&
+		!hasStandardCapability &&
+		effectiveStandardPermissionCapability(
+			{ supportsStandardPermissionMode: true },
+			{ newShell },
+			!!session.sessionSshRemoteConfig?.enabled,
+			{ ...toClaudeTokenModeSource('api'), customPath: session.customPath }
+		);
 
 	const activeTabId = activeTab?.id;
 
@@ -529,6 +542,15 @@ export const ToolbarControls = memo(function ToolbarControls({
 										: 'workflows.sessions.standardPrintNotice'
 								}
 								onChange={handlePermissionModeChange}
+								onSwitchToPrint={
+									canSwitchToPrint
+										? () =>
+												updateSessionWith(session.id, (s) => ({
+													...s,
+													...toClaudeTokenModeSource('api'),
+												}))
+										: undefined
+								}
 							/>
 						) : (
 							<button

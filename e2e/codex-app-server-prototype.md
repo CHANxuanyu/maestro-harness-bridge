@@ -15,13 +15,36 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-codex-app-server.spec.ts --wor
 自动化覆盖顺序：
 
 1. 通过 CLI 将项目默认权限设为标准，新建 Codex 对话，断言仍为标准。第一次发送必须为 thread/start，后续三次为同一 threadId 的 thread/resume。
-2. 文件审批显示 Codex、文件路径和差异。审批前不存在标记文件；界面允许后存在，内容为一行合成数据。
+2. 文件审批显示 Codex、文件路径和差异。审批前不存在标记文件；精确点击新界面的 `Allow once` 后存在，内容为一行合成数据。
 3. 命令审批通过 `codex-turn permissions` 取得 requestId，再用 `permission-respond <request-id> deny` 拒绝。弹窗消失，没有标记文件。
 4. 发送带合成计划通知的保持运行回合，右栏任务为三项，完成数 1/3 且一项进行中。输入追加文字并点击本轮追加，夹具等待临时文件放行；等待期间按 Enter，草稿仍在且发送按钮禁用。放行后回答含原文，草稿清空，任务变为 3/3；协议记录中只有一次 turn/steer。
-5. 再发一轮保持运行的合成任务，用 `codex-turn stop <process-id>` 停止。协议记录必须有 turn/interrupt，待审批列表为空。
+5. 确认追加回合的停止按钮已经消失，再发一轮保持运行的合成任务。等待第四次 turn/start 到达夹具，用 `codex-turn stop <process-id>` 停止，返回必须为成功。协议记录必须有 turn/interrupt，待审批列表为空，停止按钮消失且目标进程不在活动列表中。
 6. 总计一条 thread/start、三条 thread/resume、四条 turn/start、一条 turn/steer。断言失败后保留 NativeApp 的失败 trace，先分析，不自动重试。
 
 该夹具未生成真实原生转录，因此此脚本验证活动对话接续，不验证应用重启后从原生历史恢复。
+
+## U4 第五轮：区分场景失败与停止失败
+
+合并后的新界面审批按钮叫 `Allow once`，原场景仍精确查找旧界面的 `Allow`。
+单元回归将场景里的实际定位器用于真实审批组件，修复前报找不到 `Allow`，修复后通过。
+另一个单元回归执行场景回调并注入早期失败，确认旧清理路径会把原错覆盖为停止按钮计数失败。
+独立 Playwright 探针也确认：断言抛出后，进入 `finally` 时 `info.status` 仍可能是 `passed`。
+场景现在用完成标记选择失败清理，保留 trace；全部断言完成后仍走正常关闭及其空闲断言。
+
+没有改动 `CodexAppServerSession`、审批注册表或 Claude 清理路径。
+合成 stdio 测试经过真实 `ProcessManager.interrupt()`、原型控制器、审批适配器和进程退出处理，
+保持运行与等待文件审批两种情况下都收到一次中断并以 130 退出，待审批清空且没有批准文件。
+测试仅替换环境构造、Electron socket 路径、PTY 和进程树枚举；真实子进程仍需退出。
+这不能代替外部 Electron 复测，也不能证明此前外部运行已经到达中断步骤。
+
+Opus 请重新构建后一次运行原型和 Claude 的 11 条审批场景，不自动重试：
+
+```sh
+MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-codex-app-server.spec.ts e2e/native-claude-permission.spec.ts --workers=1 --retries=0
+```
+
+若停止断言仍失败，保留本次运行的 trace 和临时夹具 receipts，核对第四次 turn/start 与 turn/interrupt
+是否属于同一回合，并记录 `process:exit` 和 renderer 异常。不要以另一轮运行的回执代替。
 
 ## 仍需人工检查的合成场景
 

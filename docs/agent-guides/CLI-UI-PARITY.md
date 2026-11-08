@@ -1332,6 +1332,13 @@ Unknown protocol requests are not treated as implicit approval.
 Synthetic validation and unresolved protocol/version limits are recorded in
 [the prototype note](../verification/codex-app-server-prototype.md).
 
+2026-11-08 U4 第五轮仅修正原型验收，没有新增界面动作或 CLI 动词。
+新界面审批按钮沿用 `Allow once`，对应既有 `permission-respond <request-id> allow`。
+`codex-turn stop <process-id>` 和界面中断仍共用 `ProcessManager.interrupt()`。
+合成单元覆盖保持运行及等待文件审批时停止，要求退出码 130、进程注销、审批清空且无文件写入。
+Electron 场景直接检查停止按钮消失和目标进程不存在；异常关闭保留原始失败。
+没有修改产品停止或 Claude 审批收尾实现，完整 Stop 的队列与咨询对等缺口仍在 Open gaps。
+
 ## New shell transcript performance (2026-11-06)
 
 Progressive row element reuse changes rendering work only. No new UI action or CLI verb is introduced. Existing conversation selection, transcript search and jumps retain their current paths and existing gaps; this change does not claim to close native resume or refresh gaps.

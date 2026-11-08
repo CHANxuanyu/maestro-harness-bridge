@@ -268,7 +268,7 @@ for (const delivery of ['direct', 'queued'] as const) {
 				.toBe(seed.id);
 			const tab = (await native.cli('tab', 'show', 'active', '--agent', owner)).tab;
 			expect(tab.agentSessionId).toBe(seed.id);
-			expect((await native.cli('show-agent', owner)).cwd).toBe(native.project);
+			expect((await native.cli('show', 'agent', owner)).cwd).toBe(native.project);
 			await native.cli('tab', 'rename', tab.tabId, '工作树审批对话');
 			await native.cli('tab', 'permission', tab.tabId, 'standard');
 			if (delivery === 'queued') {

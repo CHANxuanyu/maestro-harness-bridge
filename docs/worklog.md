@@ -1,5 +1,11 @@
 # 分支工作记录
 
+## 2026-11-07：U5 原型验收和一个主线偶发失败
+
+U5 全量 Electron 117 条里只有分屏综合场景失败。同样的场景在 U6 上重复 6 次失败 3 次，所以它是已合入的 U1 场景自带的偶发失败，不是 U5 引入的。原因是重启后只量了一次左栏像素宽度，而保存的是比例，侧栏和右栏的宽度变化会带动像素。改为等布局稳定后比较左栏占比，重复 8 次全部通过。
+
+U5 第二轮修复让浏览器再也不能批准 Claude 审批，影响旧界面的手机审批。第三轮改为：Codex 原型浏览器一律拒绝；Claude 只在请求和调用方都有用户且不同时拒绝，浏览器不查窗口。
+
 ## 2026-11-07：U6 文案审计验收
 
 Opus 逐条读了新界面的中文文案，改了三处：`关闭标签页` 改为 `关闭对话`，新界面没有标签栏；`按提供方筛选` 改为 `按工具筛选`；`再显示 {count} 个` 改为 `条`。英文同步。
@@ -226,6 +232,18 @@ CLI 没有新增动作。普通对话停止、草稿附件和阅读位置的命�
 测试对象是源码和 Node 临时打包，不是应用安装包。Electron 基准已写入 `e2e/perf-new-shell.spec.ts`，默认跳过的入口已检查，尚未启动 Electron；真实启动、滚动、切换和流式渲染指标待 Opus 在沙箱外运行。旧界面共用存储性能改进，界面、i18n、SSH 和 CLI 协议均未改变。
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
+
+## 2026-11-07：Codex app-server 本地通路原型
+
+从 `ecd16fb64` 续接未提交的 U5 改动，先以 `dbc8cbba4` 保留已验证的默认关闭开关和审批失效清理，再以 `2b79a0ce3` 完成运行通路。要求 `newShell`、`codexAppServer` 同时开启，普通本地对话每轮启动独立 stdio app-server，新建或按原 threadId 接续。复用共享连接器的工具转换、Codex 解析器、现有权限 registry 和 PermissionPrompt。回答增量进入临时预览，完整进度和最终回答各自提交，避免片段变成多条消息。
+
+命令与文件审批只允许一次，停止、工具完成和服务端 resolved 通知使迟到答复失效；不支持的权限请求拒绝。本轮追加带 expectedTurnId，确认前保留草稿，失败不重试、不转排队。停止走 turn/interrupt，超时清理进程树，强制停止保留进程占位到 close。主进程补识别现有发送入口编码在完整进程 ID 内的 tabId；没有改变其他提供方的启动配置。
+
+先运行失败回归再修复。初始通路回归有 10 条断言失败和缺失模块，后续分别确认了权限边界、已完成工具的迟到审批、未知终态、CLI 审批发现、标准权限关闭开关、双语审批文案、强制停止、发送入口缺 tabId 和流式片段误作完整进度。最后检查还发现两条 renderer IPC 类型缺失及中文目录未挂入两个共有消息键，均已补齐，没有放宽断言。最终相关 Vitest 16 文件、624 条通过，无跳过，使用 `--configLoader runner --no-cache`。renderer、main、CLI 三份 TypeScript 检查通过；产品源码 ESLint 无错误；修改文件已格式化，`git diff --check` 通过。
+
+被测对象是 `2b79a0ce3` 的源码和合成 stdio 夹具，不是发行包。夹具在临时目录通过实际子进程证明审批前不写、允许后只写一次、拒绝后不写。CLI 构建成功；Electron 只收集到 1 个场景，未执行。沙箱外步骤见 [Electron 验证清单](../e2e/codex-app-server-prototype.md)，字段依据和未确认版本见 [协议记录](verification/codex-app-server-prototype.md)。未运行真实 CLI 或模型，未读取个人账户目录，未改 node_modules、版本或依赖，未推送、开 PR、打标签或发布。
+
+新增 `codex-turn steer`、`codex-turn stop`、`codex-turn permissions`、`permission-respond`，界面和 CLI 共用进程与审批实现；界面 Stop 取消整个项目队列和咨询的额外动作仍是 Open gaps。主窗口外的审批归属、浏览器、强制并行和原生历史重启恢复未验。新控件及原型通路均在双开关后；唯一共享行为变化是标准权限 Codex 对话无法使用本地原型时拒绝启动，避免关闭开关或改用 SSH 后静默变成跳过审批。普通完全访问和只读 exec 参数及解析维持原路径。
 
 ## 2026-11-07：新界面文案审计收尾
 
@@ -1440,3 +1458,89 @@ Opus 仍须在沙箱外执行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native
 `e2e/native-commands.spec.ts` 保留原断言，增加新账户命令在界面与 CLI 出现、保持菜单打开切回原账户、原插件命令恢复，以及查询不额外启动回合的检查。Playwright `--list` 收集到一条场景，没有启动 Electron。Opus 需在沙箱外运行 `MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-commands.spec.ts --retries=0`；脚本会重建 main、renderer、web-desktop 和 CLI。
 
 没有新增界面动作、CLI 动词或用户文案。旧界面保留既有命令报告与发现行为，回归确认账户环境更新不会触发此次新增订阅的重绘或发现调用。没有修改 SSH 路径处理，真实 SSH、真实工具、其他平台、发行包和完整 Electron 链路仍未验证。未运行全量 Vitest，未推送、创建 PR、打标签或发布。
+
+## 2026-11-07：U5 原型审查修复，审批归属
+
+审批列表及响应先补合成回归，修复前两项失败：另一用户能读取请求，无身份响应返回 true。
+修复把请求绑定到启动用户及原始窗口，列表和响应共用 pending 归属判断；Codex 原型拒绝浏览器，
+可信 CLI 以桌面主窗口身份调用同一校验。第三轮纠正 Claude 的误收紧：浏览器可批准桌面
+主窗口及副窗口请求，仅双方用户都存在且不同时拒绝；桌面调用继续校验原始窗口。
+相关三文件 175 项通过，未运行 Electron 或真实会话。其余审查项继续单独修复。
+
+## 2026-11-07：U5 原型审查修复，追加防重
+
+补充输入栏回归后，四种结果路径均在确认前点击发送时失败，普通发送回调执行一次。
+最初测试误用了 Send message 按钮名称，纠正为运行时的 Queue message 后确认上述行为失败。
+把既有普通发送登记移入 composer store，追加共用相同登记，按钮及 Enter 同时校验。
+登记按对话与草稿内容隔离，失败及超时释放，确认后只清理未改变的草稿，不自动重试。
+相关四文件 302 项通过，随后补超时释放断言；最终结果记入总验收记录。
+普通发送的原有匹配规则保持不变，旧界面没有新增追加入口。Electron 场景待沙箱外执行。
+
+## 2026-11-07：U5 原型审查修复，标准权限
+
+新建、继承、恢复和关闭原型后的已运行 Codex 权限保留共四条回归在修复前失败。
+共享 `effectiveStandardPermissionCapability()` 位于 `src/shared/codexAppServer.ts`，
+新建、交接、恢复、项目设置、输入栏和 CLI 权限校验均使用它。咨询显式不使用 app-server
+能力，仍走自己的 exec 限制。对已有 `turnProvider: codex` 的标准权限对话，恢复后保持
+标准，原型不可用时由现有 spawn 拒绝；旧工具切换形成的未运行标签保留原先收紧规则。
+相关七文件 203 项通过，后续补共享能力矩阵，最终结果记入总验收记录。
+
+## 2026-11-07：U5 原型审查修复，计划通知及总验收
+
+验证对象为本轮源码，起点 `4b08824f1`。没有构建发行包，没有启动真实 Codex 或 Electron。
+任务清单回归先失败三项：两条原型启动断言缺少任务工具配置，计划通知没有产生工具事件。
+修复仅在 app-server 参数中保留 `tools.update_plan.enabled=true`，通知按当前 threadId 和
+turnId 校验后，复用共享转换器生成 update_plan 调用及结果；保留进行中状态和空快照。
+官方配置源码可核对到 `0.166.0-alpha.6`，通知 schema 只取得当前 main，对应版本仍待确认。
+
+最终相关 Vitest 共 22 文件、912 项全部通过，使用 `--configLoader runner --no-cache`，
+无跳过或自动重试。包含两用户审批隔离、可信 CLI 身份不可由消息伪造、Claude 同入口、
+重复及过期审批、追加按钮和 Enter 防重、失败及超时保留、项目及恢复权限、咨询限制、
+合成 stdio 计划事件、解析和旧发送队列相关回归。
+
+`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 三份 noEmit 检查通过。
+Electron 场景的补充类型检查首次使用的临时配置缺少 ES2024 和 renderer 全局声明，
+补齐检查输入后通过，没有修改产品或放宽断言。修改文件 Prettier 及 diff 空白检查通过。
+Playwright 仅收集一条合成场景，未启动 Electron。
+
+新增 Electron 断言：项目标准权限新建后保持标准；夹具等待手动文件放行的追加期间
+按 Enter 不重复发送；任务右栏从 1/3 且一项进行中更新到 3/3。保留原审批允许及拒绝、
+续聊、停止和精确轮次数断言。Opus 在沙箱外运行：
+
+```sh
+MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-codex-app-server.spec.ts --workers=1 --retries=0
+```
+
+旧界面与关闭原型时 Codex 的 exec 参数、环境和 SSH 分支未修改，nativeCommandScopeKey
+保留。共有行为变化是 Claude 审批增加用户归属判断，以及普通发送登记迁入共享
+composer store，原匹配规则不变。第三轮恢复 Claude 浏览器审批，仅双方用户都存在且不同
+时拒绝，浏览器不校验窗口。CLI 仍仅处理主窗口审批，Codex 原型仍明确拒绝浏览器审批。
+真实提供方协议兼容、模型及沙箱效果、真实 SSH、跨平台进程树、重启历史、发行包和
+Electron 多窗口展示未验证。没有推送、开 PR、打标签或发布。
+
+## 2026-11-07：U5 第三轮，恢复 Claude 浏览器审批
+
+验证对象为任务分支源码，基线 `f3d87e44c`，回归提交 `72958b085`。没有构建或运行发行包。
+修复前四个相关 Vitest 文件为 12 项失败、189 项通过：新旧界面下，浏览器批准无用户归属的
+桌面请求、同用户请求、副窗口请求以及未启用网页登录时的请求，均应成功却返回 false。
+用户 B 批准用户 A 的请求、Codex 浏览器审批、桌面及可信 CLI 原有校验均通过。
+
+仅在现有 relay 中区分请求提供方与调用方类型。Codex 注册由服务端标记，仍拒绝全部浏览器
+响应和列表查询，CLI 与桌面继续要求同用户及原始存活窗口。Claude 只在双方用户都存在且
+不同时拒绝，浏览器不做窗口校验；桌面及可信 CLI 保留原始存活窗口校验。身份来自认证后
+的 bridge 元数据和 acting user，不接受请求参数伪造。pending 清理、超时及重复响应逻辑未改。
+
+修复后四个相关文件 201 项通过，命令使用 `--configLoader runner --no-cache`，无跳过、
+无重试。覆盖新旧界面、主副窗口、两用户隔离、认证元数据不可由消息及额外参数覆盖、
+重复响应、进程结束、超时，以及原有 Codex 与 CLI 行为。`tsconfig.json`、
+`tsconfig.main.json`、`tsconfig.cli.json` 三份 noEmit 检查通过；改动文件 Prettier 及
+diff 空白检查通过。没有运行全量 Vitest。
+
+没有新增界面动作、CLI 动词或用户文案。既有 `permission-respond` 与界面共用
+`permission:respond` 和 `ownsPending()`。CLI 对等文档已纠正，并保留其他窗口选择、
+Claude 请求列表和浏览器 Codex 原型审批的 Open gaps。必要的共享行为变化是恢复旧界面的
+Claude 浏览器审批，不能放在 `newShell` 开关后。SSH 路径及启动逻辑未改。
+
+沙箱外验收交接见 [Claude 浏览器审批验收](../e2e/claude-browser-permissions.md)。
+本轮未启动 Electron、操作浏览器、调用模型或读取个人账户。真实网页认证与事件传递、
+Electron 多窗口、真实 Claude、SSH、其他平台及发行包仍未验证。未推送、开 PR、打标签或发布。

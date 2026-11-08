@@ -1,3 +1,4 @@
+import { effectiveStandardPermissionCapability } from '../../shared/codexAppServer';
 import { useAgentCapabilities } from '../hooks/agent/useAgentCapabilities';
 import { projectSettingsScopeForSession } from '../utils/projectConversationDefaults';
 import { permissionModes } from '../utils/tabHelpers/focusFields';
@@ -33,6 +34,8 @@ export function ProjectSettingsModal({
 	onClose,
 }: ProjectSettingsModalProps) {
 	const t = useT();
+	const newShell = useSettingsStore((state) => state.newShell);
+	const codexAppServer = useSettingsStore((state) => state.codexAppServer);
 	const id = useId();
 	const [scopeIndex, setScopeIndex] = useState(0);
 	const scope = scopes[scopeIndex];
@@ -304,7 +307,13 @@ export function ProjectSettingsModal({
 								}
 							>
 								<option value="">{t('workflows.projectSettings.inherit')}</option>
-								{permissionModes(!!capabilities.supportsStandardPermissionMode)
+								{permissionModes(
+									effectiveStandardPermissionCapability(
+										capabilities,
+										{ newShell, codexAppServer },
+										!!scope?.sshRemoteId
+									)
+								)
 									.filter((mode) => mode !== 'readonly' || capabilities.supportsReadOnlyMode)
 									.map((mode) => (
 										<option key={mode} value={mode}>

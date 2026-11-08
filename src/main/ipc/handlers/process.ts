@@ -1,4 +1,7 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { CODEX_APP_SERVER_MESSAGES } from '../../../shared/codexAppServer';
+import { resolveAppLocale } from '../../../shared/i18n';
+import { listCodexAppServerPermissions } from '../../permission-relay/codex-app-server';
+import { app, ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import type { AgentConfigsData } from '../../stores/types';
 import * as os from 'os';
@@ -28,6 +31,7 @@ import type { SpawnProcessConfig } from './process/spawn-types';
 import {
 	initPermissionRelay,
 	resolvePermissionResponse,
+	permissionCaller,
 	type PermissionDecision,
 } from '../../permission-relay';
 import { releaseConcertoHtmlDocument, restoreConcertoHtmlDocument } from '../../concerto-html';
@@ -146,19 +150,18 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 	);
 
 	// Renderer -> main: the user's allow/deny decision for a relayed request.
-	ipcMain.handle(
-		'permission:respond',
-		(_event, requestId: string, decision: PermissionDecision) => {
-			return resolvePermissionResponse(requestId, decision);
-		}
-	);
+	ipcMain.handle('permission:respond', (event, requestId: string, decision: PermissionDecision) => {
+		return resolvePermissionResponse(requestId, decision, permissionCaller(event, getMainWindow));
+	});
 
 	// Spawn a new process for a session
 	// Supports agent-specific argument builders for batch mode, JSON output, resume, read-only mode, YOLO mode
-	ipcMain.handle(
-		'process:spawn',
+	ipcMain.handle('process:spawn', (event, config: SpawnProcessConfig) =>
 		withIpcErrorLogging(handlerOpts('spawn'), (config: SpawnProcessConfig) =>
 			handleProcessSpawn(config, {
+				getPermissionWindow: event.sender
+					? () => BrowserWindow.fromWebContents(event.sender)
+					: getMainWindow,
 				getProcessManager,
 				getAgentDetector,
 				agentConfigsStore,
@@ -168,7 +171,42 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 				sessionsStore: deps.sessionsStore,
 				interactiveReplayController: deps.interactiveReplayController,
 			})
+		)(event, config)
+	);
+
+	ipcMain.handle('process:codex-permissions', (event) =>
+		listCodexAppServerPermissions(
+			permissionCaller(event, getMainWindow),
+			CODEX_APP_SERVER_MESSAGES[resolveAppLocale(settingsStore.get('uiLanguage'), app.getLocale())][
+				'workflows.shell.codexAppServerApprovalUnavailable'
+			]
 		)
+	);
+
+	ipcMain.handle(
+		'process:steer',
+		withIpcErrorLogging(handlerOpts('steer'), async (sessionId: string, text: string) => {
+			try {
+				if (!settingsStore.get('newShell', false) || !settingsStore.get('codexAppServer', false))
+					throw new Error('Codex app-server prototype is disabled');
+				if (typeof sessionId !== 'string' || typeof text !== 'string' || !text.trim())
+					throw new Error('A process ID and nonempty instruction are required');
+				const result = await requireProcessManager(getProcessManager).steer(sessionId, text);
+				return { success: true, ...result };
+			} catch (error) {
+				return { success: false, error: error instanceof Error ? error.message : String(error) };
+			}
+		})
+	);
+
+	ipcMain.handle(
+		'process:codex-stop',
+		withIpcErrorLogging(handlerOpts('codex-stop'), async (sessionId: string) => {
+			const manager = requireProcessManager(getProcessManager);
+			// Stop remains reachable if the user turns the prototype off mid-turn.
+			if (!manager.get(sessionId)?.codexAppServerController) return false;
+			return manager.interrupt(sessionId);
+		})
 	);
 
 	// Write data to a process

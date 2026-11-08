@@ -22,6 +22,7 @@ import { newConversationPermissionFields } from '../../../renderer/utils/tabHelp
 import { buildAgentArgs } from '../../../main/utils/agent-args';
 import { getAgentDefinition } from '../../../main/agents/definitions';
 import {
+	restoreConversationPermissions,
 	conversationPermissionSnapshot,
 	resolveProjectConversationPermission,
 } from '../../../renderer/utils/newConversationPermissions';
@@ -41,7 +42,7 @@ beforeEach(() => {
 		...window.maestro.windows,
 		getConversationPermissions: vi.fn().mockResolvedValue([]),
 	};
-	useSettingsStore.setState({ newShell: true });
+	useSettingsStore.setState({ newShell: true, codexAppServer: false });
 	for (const [id, capabilities] of Object.entries(AGENT_CAPABILITIES))
 		setCapabilitiesCache(id, capabilities);
 	useSessionStore.setState({ sessions: [], groups: [] });
@@ -843,4 +844,47 @@ it('keeps worktree archive restrictions in the parent project', async () => {
 	} finally {
 		useConversationArchiveStore.setState({ records: [] });
 	}
+});
+
+describe('Codex prototype effective standard capability', () => {
+	it('keeps the project standard default for a new local conversation', () => {
+		useSettingsStore.setState({
+			newShell: true,
+			codexAppServer: true,
+			projectSettings: { '[null,"/test/project"]': { defaultPermissionMode: 'standard' } },
+		});
+		const session = createMockSession({ toolType: 'codex', aiTabs: [] });
+		expect(createTab(session)!.tab.permissionMode).toBe('standard');
+	});
+	it('keeps inherited and restored local standard permissions', () => {
+		useSettingsStore.setState({ newShell: true, codexAppServer: true, projectSettings: {} });
+		const tab = createMockAITab({ permissionMode: 'standard' });
+		const session = createMockSession({ toolType: 'codex', aiTabs: [tab] });
+		expect(createTab(session, { permissionSource: tab })!.tab.permissionMode).toBe('standard');
+		expect(restoreConversationPermissions(session, tab)?.permissionMode).toBe('standard');
+	});
+	it('never offers prototype standard over SSH or after opt-out', () => {
+		useSettingsStore.setState({ newShell: true, codexAppServer: true, projectSettings: {} });
+		const tab = createMockAITab({ permissionMode: 'standard', turnProvider: 'codex' });
+		const remote = createMockSession({
+			toolType: 'codex',
+			aiTabs: [tab],
+			sessionSshRemoteConfig: { enabled: true, remoteId: 'fixture' },
+		});
+		expect(createTab(remote, { permissionSource: tab })!.tab.permissionMode).toBe('readonly');
+		expect(restoreConversationPermissions(remote, tab)?.permissionMode).toBe('standard');
+		useSettingsStore.setState({ codexAppServer: false });
+		expect(
+			restoreConversationPermissions({ ...remote, sessionSshRemoteConfig: undefined }, tab)
+				?.permissionMode
+		).toBe('standard');
+		expect(tab.permissionMode).toBe('standard');
+	});
+});
+
+it('restores an existing local Codex standard conversation while the prototype is enabled', () => {
+	useSettingsStore.setState({ newShell: true, codexAppServer: true, projectSettings: {} });
+	const tab = createMockAITab({ permissionMode: 'standard' });
+	const session = createMockSession({ toolType: 'codex', aiTabs: [tab] });
+	expect(restoreConversationPermissions(session, tab)?.permissionMode).toBe('standard');
 });

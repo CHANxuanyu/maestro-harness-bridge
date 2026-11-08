@@ -846,6 +846,17 @@ below remain open.
 
 ## Open gaps
 
+**Codex prototype controls (2026-11-07).** `codex-turn stop` interrupts only the
+addressed local app-server process through `ProcessManager.interrupt()`. The
+composer Stop also cancels the project's queued work and cross-agent consults;
+that wider existing Stop action is still not CLI-covered. Approval prompts use
+the main window only. Secondary-window ownership and web-desktop approval/steer
+controls have not been integrated or verified. There is no CLI draft editor:
+`steer` takes explicit text and leaves the desktop draft alone. The composer
+shows the affordance from opt-in eligibility; if the current turn started with
+exec before the setting changed, the main process refuses steering and the draft
+is retained. No RPC is sent to that exec process.
+
 **Copy audit presentation controls (2026-11-07).** The existing terminal search
 query and next/previous match, file preview tier, image zoom, and media
 playback/volume controls still have no CLI verbs operating their mounted UI
@@ -1227,6 +1238,36 @@ still missing. Grouped, highest value first:
 
 Packaged CLI storage and discovery use the shipped product identity. `settings set` uses the live `settings:set` IPC handler when the desktop is running and waits for its acknowledgement. Offline writes keep the same value validation and product-directory checks.
 
+## Codex app-server prototype (2026-11-07)
+
+Both `newShell` and `codexAppServer` must be true; the latter defaults to false.
+Only local user turns with a conversation tab use this path. SSH and Auto Run
+stay on exec. A saved Codex `standard` turn without the local approval transport
+is refused, including after either setting is disabled, so it cannot inherit
+exec's bypass arguments. Full and read-only exec behavior is unchanged.
+
+| UI action                             | CLI action                                                                  | Shared implementation                                                                    |
+| ------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Enable the prototype                  | `settings set codexAppServer true` after `settings set newShell true`       | Existing settings service and persisted defaults                                         |
+| Choose standard permission            | `tab permission <tab-id> standard --agent <owner-id>`                       | Shared eligibility gate, existing tab permission action, explicit spawn policy           |
+| Create, resume and send a turn        | Existing `tab new` and `dispatch <owner-id> <text> --tab <tab-id>`          | Existing renderer dispatch and `process:spawn`; app-server selected in `handle-spawn.ts` |
+| Add ordinary text to the running turn | `codex-turn steer <process-id> <text>`                                      | `process:steer`, `ProcessManager.steer()`, exact `turn/steer` acknowledgement            |
+| Read pending approvals                | `codex-turn permissions`                                                    | The same pending registry used to render `PermissionPrompt`                              |
+| Allow or deny one approval            | `permission-respond <request-id> <decision>`, decision is `allow` or `deny` | Existing `permission:respond` and permission relay registry                              |
+| Stop the running prototype process    | `codex-turn stop <process-id>`                                              | `ProcessManager.interrupt()` and `turn/interrupt`; wider Stop gap above                  |
+
+All four new commands support `--json` and require a running desktop bridge.
+The process ID is the full `<owner-id>-ai-<tab-id>` string, not a native Codex
+thread ID. Pending-approval listings include both `sessionId` (the process ID)
+and `requestId`. Otherwise obtain the owner and tab from existing `session list --json` command and construct that process ID.
+A successful steer receipt means accepted by the same turn, not completed.
+Failure or timeout keeps the draft, does not queue it, and never retries it.
+The CLI returns nonzero on rejection. A stale permission request is rejected.
+Unknown protocol requests are not treated as implicit approval.
+
+Synthetic validation and unresolved protocol/version limits are recorded in
+[the prototype note](../verification/codex-app-server-prototype.md).
+
 ## New shell transcript performance (2026-11-06)
 
 Progressive row element reuse changes rendering work only. No new UI action or CLI verb is introduced. Existing conversation selection, transcript search and jumps retain their current paths and existing gaps; this change does not claim to close native resume or refresh gaps.
@@ -1252,3 +1293,28 @@ paint and font readiness gates. Classic startup and SSH refresh remain unchanged
 ## U7 流式输入调查（2026-11-07）
 
 本轮只修补合成 renderer 基准的逐键记录与尾帧收尾，并增加输入和流式批次的源码回归，没有新增界面动作或 maestro-cli 动词。UI 与 CLI 发起的回合仍共用原有 process listener 和 session batcher；产品内采集沿用 `profiling start/status/stop`。七轮 stream 命令见 [renderer 性能复测](../perf-renderer.md#u7流式期间按键延迟调查)。Open gaps 中既有的视图交互缺口保持原状，本轮不声称补齐。
+
+### Codex 原型审批归属补充（2026-11-07）
+
+`codex-turn permissions` 和 `permission-respond` 与桌面审批共用请求归属校验。
+Codex 原型的浏览器调用明确拒绝，包括未开启网页登录的浏览器。CLI 必须通过服务端认证的
+`trustedCli` 身份，按桌面用户和主窗口身份查询及响应，因此不能处理其他窗口或
+浏览器用户的请求。桌面只能处理原始所属窗口中的请求；关闭窗口后不能批准。
+
+Claude 的既有浏览器审批继续通过 `permission:respond`，CLI 对应
+`maestro-cli permission-respond <request-id> <allow|deny>`，共用同一响应及 pending 校验。
+仅当请求所属用户和调用方用户都存在且不同时拒绝；桌面发起、无所属用户的请求，
+允许已通过服务端认证的浏览器客户端响应，包括副窗口发起的请求。浏览器不校验窗口，
+桌面和可信 CLI 仍校验原始窗口。用户、客户端类型只取服务端元数据，不取请求参数。
+重复、结束和超时请求均失败。此修复同时恢复旧界面的既有浏览器用法，没有新增动词。
+
+Open gaps：CLI 暂不选择其他窗口；`codex-turn permissions` 只列 Codex 原型请求，
+Claude 请求仍需从已有审批事件取得 requestId；浏览器 Codex 原型审批尚未支持。
+
+Codex 标准权限的输入栏、项目设置、新建、继承、恢复及 `tab permission` 共用
+`effectiveStandardPermissionCapability()`。`project settings set --permission standard`
+及 `tab new` 保持相同有效能力判断。咨询显式禁用原型能力，继续自己的 exec 权限限制。
+
+原型计划通知沿用 `update_plan` 工具事件，任务面板及 `tab panel <tab-id> tasks`
+继续读取同一清单。追加防重仅管理界面草稿，不会把两次显式 CLI steer 指令合并。
+此次没有增加 CLI 动词，既有追加、审批、项目默认权限、新建、面板及停止动作均保留。

@@ -165,6 +165,25 @@ describe('ChildProcessSpawner', () => {
 		});
 	});
 
+	it('keeps app-server stdin open and starts the RPC handshake without putting the prompt in argv', () => {
+		const { processes, spawner } = createTestContext();
+		spawner.spawn(
+			createBaseConfig({
+				toolType: 'codex',
+				command: 'synthetic-codex',
+				args: ['app-server'],
+				prompt: 'Private synthetic prompt',
+				codexAppServer: { approvalPolicy: 'on-request', sandbox: 'workspace-write' },
+			})
+		);
+		expect(mockSpawn.mock.calls[0][1]).toEqual(['app-server']);
+		expect(JSON.parse(mockChildProcess.stdin.write.mock.calls[0][0])).toMatchObject({
+			method: 'initialize',
+		});
+		expect(mockChildProcess.stdin.end).not.toHaveBeenCalled();
+		processes.get('test-session')?.codexAppServerController?.dispose();
+	});
+
 	it('carries the frozen command scope into the process that reports commands', () => {
 		const { processes, spawner } = createTestContext();
 		spawner.spawn(createBaseConfig({ nativeCommandScopeKey: 'isolated-command-scope' }));

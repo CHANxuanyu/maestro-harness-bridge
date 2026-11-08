@@ -74,6 +74,8 @@ export interface AgentCapabilities {
 	 * rather than expose a non-functional option (it would abort/auto-deny).
 	 */
 	supportsStandardPermissionMode?: boolean;
+	/** Local app-server prototype; requires both feature switches. */
+	supportsCodexAppServer?: boolean;
 
 	/** Agent outputs JSON-formatted responses (for parsing) */
 	supportsJsonOutput: boolean;

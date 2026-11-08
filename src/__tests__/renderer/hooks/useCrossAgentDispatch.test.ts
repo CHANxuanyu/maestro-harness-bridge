@@ -501,6 +501,35 @@ describe('new-shell consult conversations', () => {
 		}
 	);
 
+	it('keeps Codex consults readonly even with the desktop prototype enabled', () => {
+		useSettingsStore.setState({ codexAppServer: true });
+		useSessionStore.getState().setSessions((sessions) =>
+			sessions.map((session) =>
+				session.id === 'src'
+					? {
+							...session,
+							aiTabs: session.aiTabs.map((tab) => ({
+								...tab,
+								permissionMode: 'standard' as const,
+							})),
+						}
+					: { ...session, toolType: 'codex' as const }
+			)
+		);
+		const consult = ensureConsultTab({
+			targetSessionId: 'tgt',
+			sourceSessionId: 'src',
+			sourceTabId: 'tab',
+			sourceAgentName: 'Source',
+			question: 'Inspect files.',
+		})!;
+		const target = useSessionStore.getState().sessions.find((session) => session.id === 'tgt')!;
+		expect(target.aiTabs.find((tab) => tab.id === consult.targetTabId)?.permissionMode).toBe(
+			'readonly'
+		);
+		useSettingsStore.setState({ codexAppServer: false });
+	});
+
 	it('keeps an existing readonly child restricted when the parent and project allow full access', () => {
 		const options = {
 			targetSessionId: 'tgt',

@@ -1,3 +1,4 @@
+import { useComposerInputStore } from '../../stores/composerInputStore';
 import { conversationNativeCommands } from '../../services/nativeCommands';
 import { appendReadOnlyPrompt } from '../../../shared/readOnlyPrompt';
 import { useOperationStore } from '../../stores/operationStore';
@@ -84,27 +85,6 @@ function getImageOnlyPrompt(): string {
  * Uses `let` so the binding updates after loadInputProcessingPrompts() populates the cache.
  */
 export let DEFAULT_IMAGE_ONLY_PROMPT: string = getImageOnlyPrompt();
-
-/**
- * Composer submits still waiting on their process-ownership probe, keyed
- * `${sessionId}:${tabId}`, holding what each one took out of the composer. The
- * probe is a bridge round trip (135ms in the field, up to its deadline on a
- * stalled socket), and a second Enter inside that window - key repeat,
- * dictation's Enter plus a manual one, the send button - is the same submit
- * again. It used to read the same draft, resume after the first had marked the
- * tab busy, and queue a duplicate.
- *
- * Taking the draft before the probe already makes the repeat read an empty box.
- * This catches what that cannot: a render that has not landed yet, so the
- * repeat still holds the same `stagedImages` array. It matches on CONTENT, not
- * just on the tab, because a message the user typed after the first was taken
- * is new and must go through (it queues behind the first) - ignoring every
- * Enter for the length of a stalled probe would swallow it.
- *
- * Module scope, not a ref: a ref belongs to one hook instance, and the guard
- * has to hold for the tab.
- */
-const composerSubmitsInFlight = new Map<string, Array<{ text: string; images: string[] }>>();
 
 /**
  * Dependencies for the useInputProcessing hook.
@@ -447,12 +427,9 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 			const revealsSentTurn = isComposerSubmit || options?.revealTurn === true;
 			const inFlightKey = `${activeSession.id}:${targetTabId ?? ''}`;
 			const submitted = { text: effectiveInputValue, images: effectiveImages };
-			const isRepeatOfInFlight = (composerSubmitsInFlight.get(inFlightKey) ?? []).some(
-				(prior) =>
-					(!submitted.text.trim() || submitted.text === prior.text) &&
-					(submitted.images === prior.images ||
-						(submitted.images.length === 0 && prior.images.length === 0))
-			);
+			const isRepeatOfInFlight = useComposerInputStore
+				.getState()
+				.isSubmitting(inFlightKey, submitted);
 			if (currentMode === 'ai' && isComposerSubmit && isRepeatOfInFlight) {
 				logger.info(
 					'[processInput] Ignoring a repeat composer submit while the first is in flight'
@@ -480,19 +457,12 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 			};
 			const takeComposer = () => {
 				if (!isComposerSubmit) return;
-				const inFlight = composerSubmitsInFlight.get(inFlightKey) ?? [];
-				if (!inFlight.includes(submitted))
-					composerSubmitsInFlight.set(inFlightKey, [...inFlight, submitted]);
+				useComposerInputStore.getState().beginSubmission(inFlightKey, submitted);
 				if (!composerTaken) clearComposer();
 				composerTaken = true;
 			};
-			const releaseSubmit = () => {
-				const remaining = (composerSubmitsInFlight.get(inFlightKey) ?? []).filter(
-					(entry) => entry !== submitted
-				);
-				if (remaining.length > 0) composerSubmitsInFlight.set(inFlightKey, remaining);
-				else composerSubmitsInFlight.delete(inFlightKey);
-			};
+			const releaseSubmit = () =>
+				useComposerInputStore.getState().endSubmission(inFlightKey, submitted);
 			const probeForSubmit = async (tabId: string | undefined) => {
 				try {
 					takeComposer();

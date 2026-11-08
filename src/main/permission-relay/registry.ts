@@ -13,7 +13,7 @@
  */
 
 import { randomBytes } from 'crypto';
-import type { PermissionDecision, RelaySpawnBinding } from './types';
+import type { PermissionCaller, PermissionDecision, RelaySpawnBinding } from './types';
 import { RELAY_DECISION_TIMEOUT_MS } from './types';
 
 interface PendingRequest {
@@ -107,4 +107,26 @@ export function resolvePending(requestId: string, decision: PermissionDecision):
 /** Test/inspection helper: current counts. */
 export function relayRegistryStats(): { bindings: number; pending: number } {
 	return { bindings: bindings.size, pending: pending.size };
+}
+
+/** Codex keeps strict ownership; Claude also accepts authenticated browser decisions. */
+export function ownsPending(requestId: string, caller?: PermissionCaller): boolean {
+	const req = pending.get(requestId);
+	const binding = req && bindings.get(req.token);
+	const owner = binding?.owner;
+	if (!caller || !owner) return false;
+	if (binding.provider === 'codex') {
+		if (caller.type === 'browser' || owner.userId !== caller.userId) return false;
+	} else {
+		if (owner.userId && caller.userId && owner.userId !== caller.userId) return false;
+		// Browser calls are forwarded through the main window, regardless of origin.
+		if (caller.type === 'browser') return true;
+	}
+	const win = owner.window;
+	return !!(
+		win &&
+		!win.isDestroyed() &&
+		!win.webContents.isDestroyed() &&
+		win.webContents.id === caller.webContentsId
+	);
 }

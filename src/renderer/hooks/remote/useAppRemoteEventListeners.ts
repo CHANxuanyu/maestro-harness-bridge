@@ -1,3 +1,4 @@
+import { effectiveStandardPermissionCapability } from '../../../shared/codexAppServer';
 import { getT } from '../../i18n';
 import { splitConversation, unsplitConversation } from '../../services/newShellSplit';
 import { getWindowContext } from '../../contexts/WindowContext';
@@ -2064,7 +2065,12 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 				try {
 					const capabilities = await window.maestro.agents.getCapabilities(session.toolType);
 					if (
-						(mode === 'standard' && !capabilities?.supportsStandardPermissionMode) ||
+						(mode === 'standard' &&
+							!effectiveStandardPermissionCapability(
+								capabilities,
+								useSettingsStore.getState(),
+								!!session.sessionSshRemoteConfig?.enabled
+							)) ||
 						(mode === 'readonly' && !capabilities?.supportsReadOnlyMode)
 					) {
 						throw new Error('Permission mode is not supported by this provider');

@@ -169,6 +169,13 @@ test('new shell split: independent conversations, focus, resize, restore and cla
 			await composer('split-claude-tab').focus();
 		});
 		let resizedWidth = 0;
+		let resizedShare = 0;
+		// The saved value is a ratio. Pixel widths also move with the side panels.
+		const leftShare = async () => {
+			const leftBox = (await left().boundingBox())!;
+			const rightBox = (await right().boundingBox())!;
+			return leftBox.width / (leftBox.width + rightBox.width);
+		};
 		await test.step('the divider resizes the two columns and duplicate opens preserve both', async () => {
 			const divider = native.page.getByTestId('new-shell-split-divider');
 			const box = await divider.boundingBox();
@@ -179,6 +186,7 @@ test('new shell split: independent conversations, focus, resize, restore and cla
 			await native.page.mouse.move(box!.x + 100, box!.y + box!.height / 2, { steps: 8 });
 			await native.page.mouse.up();
 			resizedWidth = (await left().boundingBox())!.width;
+			resizedShare = await leftShare();
 			expect(resizedWidth).toBeGreaterThan(before + 50);
 			expect((await native.cli('tab', 'split', 'split-codex-tab')).success).toBe(true);
 			await expect(native.page.getByTestId('new-shell-split-pane')).toHaveCount(2);
@@ -203,7 +211,7 @@ test('new shell split: independent conversations, focus, resize, restore and cla
 			await expect(composer('split-claude-tab')).toHaveValue('Left restored draft');
 			await expect(composer('split-codex-tab')).toHaveValue('Right restored draft');
 			await expect(native.page.getByTestId('tasks-panel')).toContainText('codex pane task');
-			expect(Math.abs((await left().boundingBox())!.width - resizedWidth)).toBeLessThan(4);
+			await expect.poll(leftShare).toBeCloseTo(resizedShare, 2);
 		});
 		await test.step('narrow windows explain single-column mode without discarding the saved pair', async () => {
 			await resize(1000);

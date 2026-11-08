@@ -299,7 +299,8 @@ export function ensureConsultTab(opts: {
 					getCachedCapabilities(session.toolType) ?? {
 						supportsReadOnlyMode: false,
 						supportsStandardPermissionMode: false,
-					}
+					},
+					false
 				)
 			: undefined;
 		if (permissions === null) return session;

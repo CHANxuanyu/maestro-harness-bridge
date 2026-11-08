@@ -64,10 +64,14 @@ export function projectConversationFields(
 				project.defaultPermissionMode
 			)
 		: source;
+	// Turning the prototype off is not the same as running over SSH, which also
+	// rules out Claude's Standard. Consults pass allowAppServer = false.
 	const fields = newConversationPermissionFields(
 		permission,
-		capabilities,
-		!allowAppServer || !!session.sessionSshRemoteConfig?.enabled,
+		allowAppServer || !capabilities
+			? capabilities
+			: { ...capabilities, supportsCodexAppServer: false },
+		!!session.sessionSshRemoteConfig?.enabled,
 		session
 	);
 	if (!fields) return null;

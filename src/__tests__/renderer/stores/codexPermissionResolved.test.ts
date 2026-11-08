@@ -17,8 +17,8 @@ it('dismisses only a resolved request without sending a second decision', () => 
 			input: { command: 'pwd' },
 			createdAt: 1,
 		});
-	store.dismiss('first');
-	store.dismiss('first');
+	store.resolve('first');
+	store.resolve('first');
 	expect(usePermissionRequestStore.getState().queue.map((request) => request.requestId)).toEqual([
 		'second',
 	]);

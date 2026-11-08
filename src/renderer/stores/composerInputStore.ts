@@ -28,12 +28,22 @@
 import { create } from 'zustand';
 import type { ComposerCommandMode } from '../utils/shellCommandInput';
 
+interface ComposerSubmission {
+	text: string;
+	images: string[];
+}
+
 type Updater = string | ((prev: string) => string);
 
 const resolve = (next: Updater, prev: string): string =>
 	typeof next === 'function' ? next(prev) : next;
 
 interface ComposerInputState {
+	/** Shared by ordinary sends and app-server steering, scoped to one conversation. */
+	submissions: Record<string, ComposerSubmission[]>;
+	isSubmitting: (key: string, draft: ComposerSubmission) => boolean;
+	beginSubmission: (key: string, draft: ComposerSubmission) => void;
+	endSubmission: (key: string, draft: ComposerSubmission) => void;
 	/** Live AI prompt draft for the active tab. */
 	aiValue: string;
 	/**
@@ -89,7 +99,29 @@ interface ComposerInputState {
 	adoptAiDraft: (tabId: string) => void;
 }
 
-export const useComposerInputStore = create<ComposerInputState>()((set) => ({
+export const useComposerInputStore = create<ComposerInputState>()((set, get) => ({
+	submissions: {},
+	isSubmitting: (key, draft) =>
+		(get().submissions[key] ?? []).some(
+			(prior) =>
+				(!draft.text.trim() || draft.text === prior.text) &&
+				(draft.images === prior.images || (draft.images.length === 0 && prior.images.length === 0))
+		),
+	beginSubmission: (key, draft) =>
+		set((state) => {
+			const pending = state.submissions[key] ?? [];
+			return pending.includes(draft)
+				? state
+				: { submissions: { ...state.submissions, [key]: [...pending, draft] } };
+		}),
+	endSubmission: (key, draft) =>
+		set((state) => {
+			const submissions = { ...state.submissions };
+			const pending = (submissions[key] ?? []).filter((entry) => entry !== draft);
+			if (pending.length) submissions[key] = pending;
+			else delete submissions[key];
+			return { submissions };
+		}),
 	aiValue: '',
 	aiValueTabId: null,
 	terminalValue: '',

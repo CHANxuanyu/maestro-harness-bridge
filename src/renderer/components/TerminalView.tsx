@@ -8,7 +8,7 @@ import {
 	useState,
 	useMemo,
 } from 'react';
-import { getT } from '../i18n';
+import { getT, useT } from '../i18n';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useWindowContextOptional } from '../contexts/WindowContext';
 import { XTerminal, XTerminalHandle } from './XTerminal';
@@ -112,6 +112,7 @@ export const TerminalView = memo(
 		ref
 	) {
 		const windowContext = useWindowContextOptional();
+		const t = useT();
 		const newShell = useSettingsStore((s) => s.newShell);
 		// Map of tabId → XTerminalHandle ref for each tab instance
 		const terminalRefs = useRef<Map<string, XTerminalHandle>>(new Map());
@@ -210,7 +211,7 @@ export const TerminalView = memo(
 					terminalRefs.current
 						.get(tabId)
 						?.write(
-							`\r\n\x1b[2m[failed to start]${newShell ? '' : ' - restart from the tab menu'}\x1b[0m\r\n`
+							`\r\n\x1b[2m[${newShell ? getT()('workflows.newShellCopy.panels.terminalStartFailed') : 'failed to start'}]${newShell ? '' : ' - restart from the tab menu'}\x1b[0m\r\n`
 						);
 				} else {
 					setTimeout(() => closeTerminalTab(tabId, 'spawn-failure'), 0);
@@ -436,15 +437,29 @@ export const TerminalView = memo(
 					});
 					if (age < 2000 && !wasKilled) {
 						// Exited almost immediately - surface as a startup failure toast.
-						const message = `Shell exited immediately${tab.exitCode != null ? ` (exit code: ${tab.exitCode})` : ''}.`;
+						const message = newShell
+							? tab.exitCode != null
+								? getT()('workflows.newShellCopy.panels.shellExitedImmediatelyCode', {
+										code: tab.exitCode,
+									})
+								: getT()('workflows.newShellCopy.panels.shellExitedImmediately')
+							: `Shell exited immediately${tab.exitCode != null ? ` (exit code: ${tab.exitCode})` : ''}.`;
 						onSpawnFailureRef.current?.(tabId, message);
 						notifySpawnFailure(message);
 					}
 					if (keepTab) {
 						// Keep the tab; show a visible notice instead of a silent dead husk.
-						const reason = wasKilled
-							? `process killed (signal ${signal})`
-							: `process exited${tab.exitCode != null ? ` (code ${tab.exitCode})` : ''}`;
+						const reason = newShell
+							? wasKilled
+								? getT()('workflows.newShellCopy.panels.terminalKilled', { signal })
+								: tab.exitCode != null
+									? getT()('workflows.newShellCopy.panels.terminalExitedCode', {
+											code: tab.exitCode,
+										})
+									: getT()('workflows.newShellCopy.panels.terminalExited')
+							: wasKilled
+								? `process killed (signal ${signal})`
+								: `process exited${tab.exitCode != null ? ` (code ${tab.exitCode})` : ''}`;
 						terminalRefs.current
 							.get(tabId)
 							?.write(
@@ -474,7 +489,7 @@ export const TerminalView = memo(
 					className="flex-1 flex items-center justify-center text-sm"
 					style={{ color: theme.colors.textDim }}
 				>
-					No terminal tabs
+					{newShell ? t('workflows.newShellCopy.panels.noTerminals') : 'No terminal tabs'}
 				</div>
 			);
 		}

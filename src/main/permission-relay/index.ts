@@ -4,6 +4,7 @@ export {
 	preparePermissionRelayArgs,
 	resolvePermissionResponse,
 	listPermissionRequests,
+	permissionCaller,
 	cleanupSessionRelay,
 	PERMISSION_REQUEST_CHANNEL,
 	PERMISSION_RESOLVED_CHANNEL,

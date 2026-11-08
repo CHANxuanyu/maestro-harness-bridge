@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useT } from '../../i18n';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Image } from 'lucide-react';
 import { Spinner } from '../ui/Spinner';
@@ -28,6 +30,8 @@ export const MarkdownImage = React.memo(function MarkdownImage({
 	projectRoot?: string;
 	sshRemoteId?: string;
 }) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const [dataUrl, setDataUrl] = useState<string | null>(null);
 	const [dimensions, setDimensions] = useState<{ width?: number; height?: number }>({});
 	const [error, setError] = useState<string | null>(null);
@@ -151,7 +155,7 @@ export const MarkdownImage = React.memo(function MarkdownImage({
 			>
 				<Spinner size={16} color={theme.colors.textDim} />
 				<span className="text-xs" style={{ color: theme.colors.textDim }}>
-					Loading image...
+					{newShell ? t('workflows.newShellCopy.panels.imageLoading') : 'Loading image...'}
 				</span>
 			</span>
 		);
@@ -168,7 +172,16 @@ export const MarkdownImage = React.memo(function MarkdownImage({
 			>
 				<Image className="w-4 h-4" style={{ color: theme.colors.error }} />
 				<span className="text-xs" style={{ color: theme.colors.error }}>
-					{error}
+					{newShell
+						? error === 'Invalid image data'
+							? t('workflows.newShellCopy.panels.invalidImage')
+							: t('workflows.newShellCopy.panels.imageError', {
+									reason:
+										error === 'Failed to load image: Unknown error'
+											? t('workflows.newShellCopy.panels.unknownError')
+											: error.replace(/^Failed to load image: /, ''),
+								})
+						: error}
 				</span>
 			</span>
 		);
@@ -186,7 +199,7 @@ export const MarkdownImage = React.memo(function MarkdownImage({
 			>
 				<Image className="w-4 h-4" style={{ color: theme.colors.textDim }} />
 				<span className="text-xs" style={{ color: theme.colors.textDim }}>
-					Remote image blocked
+					{newShell ? t('workflows.newShellCopy.panels.imageBlocked') : 'Remote image blocked'}
 				</span>
 			</span>
 		);

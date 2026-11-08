@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { memo } from 'react';
+import { shallow } from 'zustand/shallow';
 import { ChevronRight } from 'lucide-react';
 import type { Theme } from '../../../types';
 import { formatElapsedTickerCompact } from '../../../../shared/duration';
@@ -33,7 +34,7 @@ export function TurnActivityFold({
 	index: number;
 	activity: TurnActivity;
 	open: boolean;
-	onToggle: () => void;
+	onToggle: (key: string) => void;
 	theme: Theme;
 	secondaryTextColor: string;
 	/** The unfolded entries, rendered by the transcript's own row renderer. */
@@ -80,7 +81,7 @@ export function TurnActivityFold({
 			<div className="flex flex-col" style={{ paddingInlineStart: '0.5em' }}>
 				<button
 					type="button"
-					onClick={onToggle}
+					onClick={() => onToggle(`turn:${hostId}`)}
 					aria-expanded={open}
 					title={
 						open
@@ -126,3 +127,22 @@ export function TurnActivityFold({
 		</div>
 	);
 }
+
+// Only the new shell opts in. Closed rows have no rendered children; comparing
+// all entry fields also catches corrections, while merged response objects
+// with unchanged fields can still be reused. Nested data stays immutable.
+export const MemoizedTurnActivityFold = memo(
+	TurnActivityFold,
+	(prev, next) =>
+		prev.hostId === next.hostId &&
+		prev.index === next.index &&
+		prev.open === next.open &&
+		prev.onToggle === next.onToggle &&
+		prev.theme === next.theme &&
+		prev.secondaryTextColor === next.secondaryTextColor &&
+		prev.children === next.children &&
+		prev.activity.durationMs === next.activity.durationMs &&
+		prev.activity.status === next.activity.status &&
+		prev.activity.entries.length === next.activity.entries.length &&
+		prev.activity.entries.every((entry, index) => shallow(entry, next.activity.entries[index]))
+);

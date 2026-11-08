@@ -1,4 +1,5 @@
 import { useT } from '../../../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import React, { memo } from 'react';
 import type { MutableRefObject } from 'react';
 import { File, Folder, Users } from 'lucide-react';
@@ -74,19 +75,28 @@ export const AtMentionPopover = memo(function AtMentionPopover({
 	showCategoryBar = true,
 }: AtMentionPopoverProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const CATEGORY_LABELS: Record<MentionCategory, string> = {
 		all: t('common.all'),
 		files: t('workflows.labels.files'),
 		directories: t('workflows.labels.directories'),
-		agents: t('common.agents'),
+		agents: t(newShell ? 'workflows.newShellCopy.composer.conversations' : 'common.agents'),
 	};
 	const EMPTY_LABELS: Record<MentionCategory, string> = {
 		all: t('workflows.shell.extraNoMatches'),
 		files: t('workflows.shell.extraNoFiles'),
 		directories: t('workflows.shell.extraNoDirectories'),
-		agents: t('workflows.shell.extraNoAgentsAvailable'),
+		agents: t(
+			newShell
+				? 'workflows.newShellCopy.composer.noConversations'
+				: 'workflows.shell.extraNoAgentsAvailable'
+		),
 	};
-	const NO_OTHER_AGENTS_LABEL = t('workflows.shell.extraNoOtherAgentsAvailableOpenAnotherAgentIn');
+	const NO_OTHER_AGENTS_LABEL = t(
+		newShell
+			? 'workflows.newShellCopy.composer.openConversation'
+			: 'workflows.shell.extraNoOtherAgentsAvailableOpenAnotherAgentIn'
+	);
 	// Resolved before the early return (hooks can't sit behind a conditional).
 	// One shared, cached lookup labels every SSH row in the list.
 	const sshRemoteNames = useSshRemoteNames();
@@ -249,8 +259,16 @@ export const AtMentionPopover = memo(function AtMentionPopover({
 										<span className="text-2xs opacity-50 flex-shrink-0">
 											{item.memberSessionIds?.length ?? 0}{' '}
 											{item.memberSessionIds?.length === 1
-												? t('workflows.shell.agent2')
-												: t('workflows.shell.agents2')}
+												? t(
+														newShell
+															? 'workflows.newShellCopy.composer.conversationCountOne'
+															: 'workflows.shell.agent2'
+													)
+												: t(
+														newShell
+															? 'workflows.newShellCopy.composer.conversationsCount'
+															: 'workflows.shell.agents2'
+													)}
 										</span>
 									)}
 									<span
@@ -262,7 +280,13 @@ export const AtMentionPopover = memo(function AtMentionPopover({
 											color: isGroup ? theme.colors.accent : theme.colors.textDim,
 										}}
 									>
-										{isGroup ? t('workflows.shell.group') : t('workflows.shell.agent2')}
+										{isGroup
+											? t('workflows.shell.group')
+											: t(
+													newShell
+														? 'workflows.newShellCopy.composer.conversation'
+														: 'workflows.shell.agent2'
+												)}
 									</span>
 								</button>
 							);

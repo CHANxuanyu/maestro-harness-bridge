@@ -185,6 +185,7 @@ export const workflowsSessions = {
 	'workflows.sessions.claudeQuestion': 'Question from Claude Code',
 	'workflows.sessions.claudeHasQuestion': 'Claude Code has a question',
 	'workflows.sessions.permissionRequired': 'Permission required',
+	'workflows.sessions.codexWantsToUse': 'Codex wants to use',
 	'workflows.sessions.claudeWantsToUse': 'Claude Code wants to use',
 	'workflows.sessions.deny': 'Deny',
 	'workflows.sessions.allow': 'Allow',

@@ -9,6 +9,8 @@ import type { FileClickOptions } from '../../hooks/ui/useAppHandlers';
 export const FILE_TREE_MULTI_MIME = 'application/x-maestro-file-paths';
 /** MIME type for dragging a single file-tree row as a relative path. */
 export const FILE_TREE_SINGLE_MIME = 'application/x-maestro-file-path';
+/** Source root and host for a drag between conversations. */
+export const FILE_TREE_ORIGIN_MIME = 'application/x-maestro-file-origin';
 
 /**
  * Above this many files, "Preview All Files in Folder" asks for confirmation

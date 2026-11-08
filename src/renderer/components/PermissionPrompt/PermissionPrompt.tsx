@@ -38,6 +38,7 @@ interface PermissionPromptProps {
 /** Best-effort one-line summary of the requested tool action. */
 function describeAction(request: PermissionRequestUI): string {
 	const input = request.input || {};
+	if (request.provider === 'codex') return JSON.stringify(input, null, 2);
 	const command = input.command;
 	if (typeof command === 'string' && command.trim().length > 0) {
 		return command;
@@ -214,7 +215,11 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 					</div>
 				)}
 				<p className="text-xs mb-2" style={{ color: theme.colors.textDim }}>
-					{uiText('workflows.sessions.claudeWantsToUse')}{' '}
+					{uiText(
+						request.provider === 'codex'
+							? 'workflows.sessions.codexWantsToUse'
+							: 'workflows.sessions.claudeWantsToUse'
+					)}{' '}
 					<span className="font-semibold" style={{ color: theme.colors.textMain }}>
 						{request.toolName}
 					</span>

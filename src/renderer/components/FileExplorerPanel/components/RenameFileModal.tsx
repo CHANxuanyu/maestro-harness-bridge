@@ -1,3 +1,5 @@
+import { useT } from '../../../i18n';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { useEffect, useRef } from 'react';
 import { Modal, ModalFooter } from '../../ui/Modal';
 import { FormInput } from '../../ui/FormInput';
@@ -24,9 +26,19 @@ export function RenameFileModal({
 	onClose,
 	onRename,
 }: RenameFileModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const isFolder = node.type === 'folder';
-	const title = isFolder ? 'Rename Folder' : 'Rename File';
+	const title = newShell
+		? t(
+				isFolder
+					? 'workflows.newShellCopy.panels.renameFolder'
+					: 'workflows.newShellCopy.panels.renameFile'
+			)
+		: isFolder
+			? 'Rename Folder'
+			: 'Rename File';
 
 	useEffect(() => {
 		requestAnimationFrame(() => {
@@ -54,7 +66,8 @@ export function RenameFileModal({
 					theme={theme}
 					onCancel={onClose}
 					onConfirm={onRename}
-					confirmLabel="Rename"
+					cancelLabel={newShell ? t('common.cancel') : undefined}
+					confirmLabel={newShell ? t('workflows.newShellCopy.panels.rename') : 'Rename'}
 					confirmDisabled={!value.trim() || value.trim() === node.name}
 				/>
 			}
@@ -65,7 +78,17 @@ export function RenameFileModal({
 				value={value}
 				onChange={setValue}
 				onSubmit={onRename}
-				placeholder={isFolder ? 'Enter folder name...' : 'Enter file name...'}
+				placeholder={
+					newShell
+						? t(
+								isFolder
+									? 'workflows.newShellCopy.panels.folderName'
+									: 'workflows.newShellCopy.panels.fileName'
+							)
+						: isFolder
+							? 'Enter folder name...'
+							: 'Enter file name...'
+				}
 				error={error || undefined}
 				submitEnabled={Boolean(value.trim() && value.trim() !== node.name)}
 			/>

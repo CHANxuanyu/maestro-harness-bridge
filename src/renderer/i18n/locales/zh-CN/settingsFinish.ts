@@ -6,6 +6,8 @@ export const settingsFinish = {
 	'settings.finish.environment.heading': '全局环境变量',
 	'settings.finish.environment.description':
 		'这里设置的变量适用于所有终端会话和 AI 智能体。同名变量以各智能体设置中的值为准。常见用途包括 API 密钥、代理设置和自定义工具路径。点击眼睛按钮可停用变量：变量及其值会保留在列表中，但不再传给 Maestro 启动的进程。',
+	'settings.finish.env.revealValue': '显示 {key}',
+	'settings.finish.env.hideValue': '遮盖 {key}',
 	'settings.finish.env.label': '环境变量（可选）',
 	'settings.finish.env.description': '传给所有终端会话和 AI 智能体进程的环境变量。',
 	'settings.finish.env.invalidName': '变量名无效：仅允许字母、数字和下划线，且不能以数字开头。',

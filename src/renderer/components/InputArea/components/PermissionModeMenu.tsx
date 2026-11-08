@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Shield } from 'lucide-react';
 import type { Theme } from '../../../types';
 import { useT } from '../../../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { useClickOutside } from '../../../hooks/ui/useClickOutside';
 import { useListNavigation } from '../../../hooks/keyboard/useListNavigation';
 import { permissionModes } from '../../../utils/tabHelpers';
@@ -24,6 +25,7 @@ export function PermissionModeMenu({
 	onChange,
 }: PermissionModeMenuProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const triggerRef = useRef<HTMLButtonElement>(null);
@@ -57,13 +59,14 @@ export function PermissionModeMenu({
 					setOpen(!open);
 				}}
 				aria-haspopup="menu"
+				data-testid="composer-permission"
 				aria-expanded={open}
-				title={permissionModeTooltip(t, mode, agentId)}
+				title={permissionModeTooltip(t, mode, agentId, newShell)}
 				className="flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs whitespace-nowrap cursor-pointer transition-all opacity-80 hover:opacity-100 hover:bg-white/10"
 				style={{ color: mode === 'readonly' ? theme.colors.warning : theme.colors.textDim }}
 			>
 				<Shield className="w-3.5 h-3.5" />
-				<span>{permissionModeLabel(t, mode, agentId)}</span>
+				<span>{permissionModeLabel(t, mode, agentId, newShell)}</span>
 				<ChevronDown className="w-3 h-3 opacity-70" />
 			</button>
 			{open && (
@@ -103,7 +106,7 @@ export function PermissionModeMenu({
 							className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs whitespace-nowrap hover:bg-white/10 focus:bg-white/10 outline-none transition-colors"
 							style={{ color: option === mode ? theme.colors.accent : theme.colors.textMain }}
 						>
-							<span className="flex-1">{permissionModeLabel(t, option, agentId)}</span>
+							<span className="flex-1">{permissionModeLabel(t, option, agentId, newShell)}</span>
 							<Check aria-hidden className={`w-3.5 h-3.5 ${option === mode ? '' : 'invisible'}`} />
 						</button>
 					))}

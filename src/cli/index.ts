@@ -1,6 +1,16 @@
 #!/usr/bin/env node
+import {
+	codexTurnSteer,
+	codexTurnStop,
+	permissionRespond,
+	codexPermissions,
+} from './commands/codex-turn';
 import { openProjectCommand } from './commands/open-project';
 import { aboutMe } from './commands/about-me';
+import { resolveAppLocale } from '../shared/i18n';
+import { workflowsShell as enShell } from '../renderer/i18n/locales/en/workflowsShell';
+import { workflowsShell as zhShell } from '../renderer/i18n/locales/zh-CN/workflowsShell';
+import { projectSettings, projectSettingsTranslator } from './commands/project-settings';
 // Maestro CLI
 // Command-line interface for Maestro
 
@@ -150,6 +160,7 @@ import {
 	tabNew,
 	tabCompact,
 	tabClose,
+	tabArchive,
 	tabRename,
 	tabStar,
 	tabMove,
@@ -159,10 +170,15 @@ import {
 	tabReadOnly,
 	tabPermission,
 	tabPanel,
+	tabSplit,
+	tabUnsplit,
 	tabModel,
 	tabEffort,
 	tabEnterToSend,
 	tabShow,
+	tabChildren,
+	tabSelect,
+	tabCommands,
 } from './commands/tab';
 import { setBookmark } from './commands/bookmark';
 import { setTheme } from './commands/set-theme';
@@ -325,13 +341,35 @@ program
 	.option('--json', 'Output JSON')
 	.action(openProjectCommand);
 
+const codexTurn = program
+	.command('codex-turn')
+	.description('Control a running local Codex app-server prototype turn');
+codexTurn
+	.command('steer <process-id> <text>')
+	.option('--json', 'Output JSON')
+	.action(codexTurnSteer);
+codexTurn
+	.command('permissions')
+	.description('List pending prototype approvals')
+	.option('--json', 'Output JSON')
+	.action(codexPermissions);
+codexTurn.command('stop <process-id>').option('--json', 'Output JSON').action(codexTurnStop);
+program
+	.command('permission-respond <request-id> <decision>')
+	.description('Answer a pending permission request with allow or deny')
+	.option('--json', 'Output JSON')
+	.action(permissionRespond);
+
 program
 	.command('native-history <action> [session] [conversation-or-tool-call-id]')
 	.description(
-		'List projects, list/read/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an exact native history ID)'
+		'List projects, search <text> [--project <path>], list/read/archive/unarchive/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an exact native history ID)'
 	)
 	.option('--json', 'Output JSON')
 	.option('--copy', 'Copy the returned tool output to the desktop clipboard')
+	.option('--archived', 'List archived native conversations')
+	.option('--yes', 'Confirm irreversible deletion of native history')
+	.option('--project <path>', 'Search native history in this local project')
 	.action(nativeHistory);
 
 list
@@ -549,6 +587,35 @@ program
 	.option('--json', 'Output JSON including per-file states')
 	.action(aboutMe);
 
+const projectSettingsT = projectSettingsTranslator();
+
+program
+	.command('project')
+	.description(projectSettingsT('workflows.projectSettings.cli.projectHelp'))
+	.command('settings <action>')
+	.description(projectSettingsT('workflows.projectSettings.cli.settingsHelp'))
+	.requiredOption('--path <path>', projectSettingsT('workflows.projectSettings.cli.pathHelp'))
+	.option('--ssh-remote <id>', projectSettingsT('workflows.projectSettings.cli.sshHelp'))
+	.option('--provider <id>', projectSettingsT('workflows.projectSettings.cli.providerHelp'))
+	.option('--model <id>', projectSettingsT('workflows.projectSettings.cli.modelHelp'))
+	.option(
+		'--model-provider <id>',
+		projectSettingsT('workflows.projectSettings.cli.modelProviderHelp')
+	)
+	.option('--effort <level>', projectSettingsT('workflows.projectSettings.cli.effortHelp'))
+	.option('--permission <mode>', projectSettingsT('workflows.projectSettings.cli.permissionHelp'))
+	.option(
+		'--env <NAME=VALUE>',
+		projectSettingsT('workflows.projectSettings.cli.envHelp'),
+		(value: string, previous: string[]) => [...previous, value],
+		[]
+	)
+	.option('--clear-env', projectSettingsT('workflows.projectSettings.cli.clearEnvHelp'))
+	.option('--acknowledge-full-access', projectSettingsT('workflows.projectSettings.cli.ackHelp'))
+	.option('--show-secrets', projectSettingsT('workflows.projectSettings.cli.secretsHelp'))
+	.option('--json', projectSettingsT('workflows.projectSettings.cli.jsonHelp'))
+	.action(projectSettings);
+
 program
 	.command('permission <action> [request-id]')
 	.description('List or answer a pending Claude tool approval: list, allow, deny')
@@ -561,6 +628,7 @@ program
 	.option('-a, --agent <id>', 'Agent whose active tab to use')
 	.option('--tab <id>', 'Conversation tab, exact ID, prefix or active')
 	.option('--file <path>', 'Read the diff for one repository-relative file')
+	.option('--by-turn', 'Group current changes by recorded conversation turns')
 	.option('--json', 'Output the shared changes or diff structure as JSON')
 	.option('--message <text>', 'Commit message for the staged files')
 	.option('--yes', 'Explicitly confirm destructive revert')
@@ -1579,6 +1647,12 @@ const tabTargetOptions = (cmd: Command): Command =>
 		.option('-a, --agent <id>', 'Whose active tab, when <tab-id> is "active"')
 		.option('--json', 'Output as JSON (for scripting)');
 
+tabTargetOptions(
+	tab
+		.command('commands <tab-id>')
+		.description('List native commands for this conversation account and project')
+).action((tabId, options) => tabCommands(tabId, options));
+
 tab
 	.command('new')
 	.description('Open a new tab for an agent (optionally seeded with a prompt)')
@@ -1597,9 +1671,18 @@ tab
 	.option('--json', 'Output as JSON (for scripting)')
 	.action((options) => tabNew(options));
 
+tabTargetOptions(tab.command('split <tab-id>'))
+	.description('Open an existing conversation on the right (requires the new shell)')
+	.option('--ratio <fraction>', 'Left pane share of the split width, for example 0.5')
+	.action((tabId, options) => tabSplit(tabId, options));
+
+tabTargetOptions(tab.command('unsplit'))
+	.description('Return the current conversation window to one pane (requires the new shell)')
+	.action((options) => tabUnsplit(options));
+
 tabTargetOptions(tab.command('panel <tab-id> <action>'))
 	.description(
-		'New shell panel: changes, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
+		'New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
 	)
 	.option(
 		'--terminal <id>',
@@ -1620,6 +1703,10 @@ tabTargetOptions(
 	.option('--background', 'Keep the current agent and tab selected (default)')
 	.option('--focus', 'Select the compacted conversation when ready')
 	.action((tabId, options) => tabCompact(tabId, options));
+
+tabTargetOptions(tab.command('archive <tab-id>'))
+	.description('Archive a native conversation and close its tabs')
+	.action((tabId, options) => tabArchive(tabId, options));
 
 tabTargetOptions(tab.command('close <tab-id>'))
 	.description('Close a tab (owning agent is resolved automatically)')
@@ -1668,6 +1755,24 @@ tabTargetOptions(tab.command('save-to-history <tab-id> <bool>'))
 tabTargetOptions(tab.command('show <tab-id>'))
 	.description("Show one tab's settings (model, effort, thinking, access, history)")
 	.action((tabId, options) => tabShow(tabId, options));
+
+tabTargetOptions(tab.command('children <tab-id>'))
+	.description(
+		(resolveAppLocale('system', Intl.DateTimeFormat().resolvedOptions().locale) === 'zh-CN'
+			? zhShell
+			: enShell)['workflows.conversations.childrenCommand'] ??
+			enShell['workflows.conversations.childrenCommand']
+	)
+	.action((tabId, options) => tabChildren(tabId, options));
+
+tabTargetOptions(tab.command('select <tab-id>'))
+	.description(
+		(resolveAppLocale('system', Intl.DateTimeFormat().resolvedOptions().locale) === 'zh-CN'
+			? zhShell
+			: enShell)['workflows.conversations.selectCommand'] ??
+			enShell['workflows.conversations.selectCommand']
+	)
+	.action((tabId, options) => tabSelect(tabId, options));
 
 tabTargetOptions(tab.command('thinking <tab-id> <mode>'))
 	.description('Set the thinking display: off, on, sticky, or cycle')

@@ -18,6 +18,8 @@ interface NotificationSendControlsProps {
 	onStop?: () => void;
 	/** The composer holds something to send; while running it is queued. */
 	hasDraft?: boolean;
+	onSteer?: () => Promise<void>;
+	submitting?: boolean;
 }
 
 export const NotificationSendControls = memo(function NotificationSendControls({
@@ -26,10 +28,14 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 	processInput,
 	onStop,
 	hasDraft = false,
+	onSteer,
+	submitting = false,
 }: NotificationSendControlsProps) {
 	const t = useT();
 	const newShell = useSettingsStore(selectNewShellEnabled);
 	const [notificationPopoverOpen, setNotificationPopoverOpen] = useState(false);
+	const [steering, setSteering] = useState(false);
+	const steeringRef = useRef(false);
 	const notificationBtnRef = useRef<HTMLButtonElement>(null);
 
 	return (
@@ -57,6 +63,28 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 			)}
 			{/* While the turn on screen runs the corner key is Stop; once there is a
 			    draft the corner queues it and Stop steps in beside it. */}
+			{newShell && onSteer && hasDraft && (
+				<button
+					type="button"
+					disabled={steering || submitting}
+					onClick={async () => {
+						if (steeringRef.current || submitting) return;
+						steeringRef.current = true;
+						setSteering(true);
+						try {
+							await onSteer();
+						} finally {
+							steeringRef.current = false;
+							setSteering(false);
+						}
+					}}
+					className="px-2 py-1 text-xs rounded border disabled:opacity-50"
+					style={{ color: theme.colors.textMain, borderColor: theme.colors.border }}
+					aria-label={t('workflows.shell.steerTurn')}
+				>
+					{t(steering ? 'workflows.shell.steerPending' : 'workflows.shell.steerTurn')}
+				</button>
+			)}
 			{onStop && (
 				<StopTurnButton
 					theme={theme}
@@ -68,7 +96,10 @@ export const NotificationSendControls = memo(function NotificationSendControls({
 			{(!onStop || hasDraft) && (
 				<button
 					type="button"
-					onClick={() => processInput()}
+					disabled={submitting}
+					onClick={() => {
+						if (!submitting) processInput();
+					}}
 					className="flex h-8 w-8 items-center justify-center rounded-full shadow-sm transition-all hover:opacity-90 cursor-pointer"
 					style={{
 						backgroundColor: theme.colors.accent,

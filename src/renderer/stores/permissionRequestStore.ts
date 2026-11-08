@@ -28,6 +28,7 @@ export interface ParsedQuestionUI {
 }
 
 export interface PermissionRequestUI {
+	provider?: 'codex';
 	requestId: string;
 	sessionId: string;
 	tabId?: string;

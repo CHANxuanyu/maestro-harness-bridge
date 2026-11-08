@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FileTreeContextMenu } from '../../../../../renderer/components/FileExplorerPanel/components/FileTreeContextMenu';
@@ -92,6 +93,20 @@ const defaultProps = {
 const origMaestro = (window as any).maestro;
 
 describe('FileTreeContextMenu', () => {
+	it('localizes the system file manager and hides unavailable new shell features', () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+		render(
+			<FileTreeContextMenu
+				{...defaultProps}
+				contextMenu={makeContextMenu(mdNode)}
+				autoRunStagedCount={1}
+			/>
+		);
+		expect(screen.getByText('在 Finder 中显示')).toBeVisible();
+		expect(screen.getByText('重命名')).toBeVisible();
+		expect(screen.queryByText(/Auto Run|Document Graph/)).not.toBeInTheDocument();
+	});
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mockUsePhoneLayout.mockReturnValue(false);
@@ -100,6 +115,7 @@ describe('FileTreeContextMenu', () => {
 
 	afterEach(() => {
 		(window as any).maestro = origMaestro;
+		useSettingsStore.setState({ newShell: false, uiLanguage: 'en' });
 	});
 
 	it('shows Preview + Open in Default App + Copy Path + Reveal + Rename + Delete for a file', () => {

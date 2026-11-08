@@ -1,3 +1,5 @@
+import { useT } from '../../../i18n';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import type { Theme } from '../../../types';
 
@@ -26,6 +28,8 @@ export function FileTreeTruncatedBanner({
 	pendingLoad = null,
 	onCollapse,
 }: FileTreeTruncatedBannerProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const busy = isRefreshing || pendingLoad !== null;
 	const capLabel =
 		previousCap !== undefined && Number.isFinite(previousCap)
@@ -50,10 +54,24 @@ export function FileTreeTruncatedBanner({
 				style={{ color: theme.colors.warning }}
 			/>
 			<div className="flex-1 min-w-0">
-				<div className="text-xs font-medium">Unable to load all files into the file panel.</div>
+				<div className="text-xs font-medium">
+					{newShell ? (
+						t('workflows.newShellCopy.panels.partialFiles')
+					) : (
+						<>Unable to load all files into the file panel.</>
+					)}
+				</div>
 				<div className="text-xs-plus opacity-70 mt-0.5">
-					Scan stopped at {capLabel} entries to protect memory. Adjust the cap in Settings → Display
-					→ File Indexing.
+					{newShell ? (
+						t('workflows.newShellCopy.panels.scanLimit', {
+							count: previousCap ?? t('workflows.newShellCopy.panels.configuredLimit'),
+						})
+					) : (
+						<>
+							Scan stopped at {capLabel} entries to protect memory. Adjust the cap in Settings →
+							Display → File Indexing.
+						</>
+					)}
 				</div>
 				<div className="flex gap-2 mt-1.5">
 					<button
@@ -68,7 +86,19 @@ export function FileTreeTruncatedBanner({
 						}}
 					>
 						{pendingLoad === 'more' && <Loader2 className="w-3 h-3 animate-spin" />}
-						{pendingLoad === 'more' ? `Loading ${nextCap}...` : `Load more (${nextCap})`}
+						{newShell
+							? t(
+									pendingLoad === 'more'
+										? 'workflows.newShellCopy.panels.loadingMore'
+										: 'workflows.newShellCopy.panels.loadMore',
+									{
+										count:
+											previousCap === undefined ? t('workflows.newShellCopy.panels.more') : nextCap,
+									}
+								)
+							: pendingLoad === 'more'
+								? `Loading ${nextCap}...`
+								: `Load more (${nextCap})`}
 					</button>
 					<button
 						type="button"
@@ -82,15 +112,29 @@ export function FileTreeTruncatedBanner({
 						}}
 					>
 						{pendingLoad === 'all' && <Loader2 className="w-3 h-3 animate-spin" />}
-						{pendingLoad === 'all' ? 'Loading all...' : 'Load all'}
+						{newShell
+							? t(
+									pendingLoad === 'all'
+										? 'workflows.newShellCopy.panels.loadingAll'
+										: 'workflows.newShellCopy.panels.loadAll'
+								)
+							: pendingLoad === 'all'
+								? 'Loading all...'
+								: 'Load all'}
 					</button>
 				</div>
 			</div>
 			<button
 				type="button"
 				onClick={onCollapse}
-				aria-label="Minimize file scan warning"
-				title="Minimize (click the warning icon next to the path to reopen)"
+				aria-label={
+					newShell ? t('workflows.newShellCopy.panels.collapseScan') : 'Minimize file scan warning'
+				}
+				title={
+					newShell
+						? t('workflows.newShellCopy.panels.collapseScanHelp')
+						: 'Minimize (click the warning icon next to the path to reopen)'
+				}
 				className="flex-shrink-0 p-0.5 rounded opacity-50 hover:opacity-100 transition-opacity"
 				style={{ color: theme.colors.textMain }}
 			>

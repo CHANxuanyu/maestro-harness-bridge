@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { useT } from '../../../i18n';
 import React, {
 	forwardRef,
 	useCallback,
@@ -53,6 +55,8 @@ export const MarkdownPreviewFast = forwardRef<MarkdownPreviewFastHandle, Markdow
 		},
 		ref
 	) {
+		const t = useT();
+		const newShell = useSettingsStore((s) => s.newShell);
 		const virtuosoRef = useRef<VirtuosoHandle>(null);
 		const containerRef = useRef<HTMLDivElement | null>(null);
 		const [blocks, setBlocks] = useState<MarkdownBlock[]>([]);
@@ -289,7 +293,9 @@ export const MarkdownPreviewFast = forwardRef<MarkdownPreviewFastHandle, Markdow
 						data-testid="markdown-fast-skeleton"
 						style={{ padding: '24px', color: theme.colors.textDim, fontSize: '0.8125rem' }}
 					>
-						Parsing large markdown…
+						{newShell
+							? t('workflows.newShellCopy.panels.parsingMarkdown')
+							: 'Parsing large markdown\u2026'}
 					</div>
 				) : (
 					<Virtuoso

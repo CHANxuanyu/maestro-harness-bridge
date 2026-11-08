@@ -55,6 +55,7 @@ describe('useAgentExecution', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 
+		useSettingsStore.setState({ newShell: false });
 		onDataHandler = undefined;
 		onSessionIdHandler = undefined;
 		onUsageHandler = undefined;
@@ -940,6 +941,96 @@ describe('useAgentExecution', () => {
 
 		expect(setFlashNotification).toHaveBeenCalledWith(null);
 		expect(setSuccessFlashNotification).toHaveBeenCalledWith(null);
+	});
+
+	it('cancels a tab synopsis still waiting for provider lookup without spawning it later', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = createMockSession();
+		session.aiTabs[0].agentSessionId = 'native-left';
+		const agent = await window.maestro.agents.get('claude-code');
+		let release!: (value: typeof agent) => void;
+		vi.mocked(window.maestro.agents.get).mockReturnValueOnce(
+			new Promise((resolve) => {
+				release = resolve;
+			})
+		);
+		const { result } = renderHook(() =>
+			useAgentExecution({
+				activeSessionId: session.id,
+				sessionsRef: { current: [session] },
+				setSessions: vi.fn(),
+				processQueuedItemRef: { current: null },
+				setFlashNotification: vi.fn(),
+				setSuccessFlashNotification: vi.fn(),
+			})
+		);
+		const pending = result.current.spawnBackgroundSynopsis(
+			session.id,
+			session.cwd,
+			'native-left',
+			'summary',
+			'claude-code'
+		);
+		await result.current.cancelPendingSynopsis(session.id, session.aiTabs[0].id);
+		release(agent);
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+		expect(mockProcess.spawn).not.toHaveBeenCalled();
+		expect(await pending).toEqual({ success: false });
+	});
+
+	it('cancels only synopsis processes owned by the named tab', async () => {
+		const session = createMockSession();
+		session.aiTabs = ['left', 'right'].map((id) => ({
+			...session.aiTabs[0],
+			id,
+			agentSessionId: `native-${id}`,
+		}));
+		const { result } = renderHook(() =>
+			useAgentExecution({
+				activeSessionId: session.id,
+				sessionsRef: { current: [session] },
+				setSessions: vi.fn(),
+				processQueuedItemRef: { current: null },
+				setFlashNotification: vi.fn(),
+				setSuccessFlashNotification: vi.fn(),
+			})
+		);
+		const exitHandlers: Array<(sid: string) => void> = [];
+		mockProcess.onExit.mockImplementation((handler) => {
+			exitHandlers.push(handler);
+			return vi.fn();
+		});
+		const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+		const left = result.current.spawnBackgroundSynopsis(
+			session.id,
+			session.cwd,
+			'native-left',
+			'summary',
+			'claude-code'
+		);
+		await waitFor(() => expect(mockProcess.spawn).toHaveBeenCalledTimes(1));
+		now.mockReturnValue(2000);
+		const right = result.current.spawnBackgroundSynopsis(
+			session.id,
+			session.cwd,
+			'native-right',
+			'summary',
+			'claude-code'
+		);
+		await waitFor(() => expect(mockProcess.spawn).toHaveBeenCalledTimes(2));
+		await act(async () => {
+			await result.current.cancelPendingSynopsis(session.id, 'left');
+		});
+		expect(mockProcess.kill).toHaveBeenCalledExactlyOnceWith(`${session.id}-synopsis-1000`);
+		exitHandlers.forEach((handler) => {
+			handler(`${session.id}-synopsis-1000`);
+			handler(`${session.id}-synopsis-2000`);
+		});
+		await Promise.all([left, right]);
+		now.mockRestore();
 	});
 
 	it('cancels pending synopsis sessions when cancelPendingSynopsis is called', async () => {

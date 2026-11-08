@@ -111,16 +111,18 @@ describe('permission relay Electron integration', () => {
 		}
 	});
 
-	it('lists pending requests without relay credentials and broadcasts resolution', () => {
+	it('lists pending requests without relay credentials and broadcasts resolution', async () => {
 		const send = vi.fn();
 		const window = {
 			isDestroyed: () => false,
-			webContents: { isDestroyed: () => false, send },
+			webContents: { id: 11, isDestroyed: () => false, send },
 		} as unknown as BrowserWindow;
 		integration.initPermissionRelay(() => window, new EventEmitter());
+		const binding = registry.registerSpawn({ sessionId: 'conversation-ai-tab', owner: { window } });
+		const pending = registry.createPending('request-1', binding.token);
 		const request: PermissionRequest = {
 			requestId: 'request-1',
-			token: 'private-spawn-token',
+			token: binding.token,
 			sessionId: 'conversation-ai-tab',
 			tabId: 'tab',
 			cwd: path.join(root, 'worktree'),
@@ -130,10 +132,61 @@ describe('permission relay Electron integration', () => {
 		};
 		relay.onRequest!(request);
 		const { token: _token, ...visibleRequest } = request;
-		expect(integration.listPermissionRequests()).toEqual([visibleRequest]);
+		expect(integration.listPermissionRequests({ webContentsId: 11 })).toEqual([visibleRequest]);
 		expect(send).toHaveBeenCalledWith('process:permission-request', visibleRequest);
+		registry.resolvePending('request-1', { behavior: 'deny', message: 'done' });
+		await pending;
+		binding.cleanup();
 		relay.onResolved!('request-1');
-		expect(integration.listPermissionRequests()).toEqual([]);
+		expect(integration.listPermissionRequests({ webContentsId: 11 })).toEqual([]);
 		expect(send).toHaveBeenCalledWith('process:permission-resolved', 'request-1');
+	});
+	it('lists only each callers own requests across two users and windows', async () => {
+		const cleanups: Array<() => void> = [];
+		const decisions: Promise<unknown>[] = [];
+		integration.initPermissionRelay(() => null, new EventEmitter());
+		try {
+			for (const [userId, id] of [
+				['alice', 11],
+				['bob', 22],
+			] as const) {
+				const window = {
+					isDestroyed: () => false,
+					webContents: { id, isDestroyed: () => false, send: vi.fn() },
+				} as unknown as BrowserWindow;
+				const { token, cleanup } = registry.registerSpawn({
+					sessionId: userId,
+					owner: { userId, window },
+				});
+				cleanups.push(cleanup);
+				decisions.push(registry.createPending(userId, token));
+				relay.onRequest!({
+					requestId: userId,
+					token,
+					sessionId: userId,
+					toolName: 'Write',
+					input: {},
+					createdAt: 1,
+				});
+			}
+			for (const [userId, webContentsId] of [
+				['alice', 11],
+				['bob', 22],
+			] as const) {
+				expect(
+					integration.listPermissionRequests({ userId, webContentsId }).map((r) => r.requestId)
+				).toEqual([userId]);
+				expect(
+					integration.listPermissionRequests({ type: 'browser', userId }).map((r) => r.requestId)
+				).toEqual([userId]);
+			}
+			expect(integration.listPermissionRequests({ userId: 'alice', webContentsId: 22 })).toEqual(
+				[]
+			);
+			expect(integration.listPermissionRequests()).toEqual([]);
+		} finally {
+			cleanups.forEach((cleanup) => cleanup());
+			await Promise.all(decisions);
+		}
 	});
 });

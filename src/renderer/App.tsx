@@ -1,3 +1,4 @@
+import { useNativeCommands } from './hooks/input/useNativeCommands';
 import { openProjectTarget } from './services/openProject';
 import React, {
 	useState,
@@ -985,7 +986,9 @@ function MaestroConsoleInner() {
 	>(null);
 	// Ref for handleInterrupt - bridges the ordering gap between useInputHandlers
 	// (Escape stops the conversation on screen) and useInterruptHandler below
-	const interruptTurnRef = useRef<(() => void) | null>(null);
+	const interruptTurnRef = useRef<((target?: { sessionId: string; tabId: string }) => void) | null>(
+		null
+	);
 	// Ref for handleResumeSession - bridges ordering gap between useModalHandlers and useAgentSessionManagement
 	const handleResumeSessionRef = useRef<
 		((agentSessionId: string, providedMessages?: undefined, sessionName?: string) => void) | null
@@ -1587,6 +1590,7 @@ function MaestroConsoleInner() {
 
 	// Combine built-in slash commands with custom AI commands, bundled methodology
 	// commands, and agent-specific commands for autocomplete.
+	const nativeCommands = useNativeCommands(activeSession, slashCommandOpen);
 	const allSlashCommands = useMemo(() => {
 		const customCommandsAsSlash = customAICommands.map((cmd) => ({
 			command: cmd.command,
@@ -1614,13 +1618,18 @@ function MaestroConsoleInner() {
 		}));
 		// Only include agent-specific commands if the agent supports slash commands
 		// This allows built-in and custom commands to be shown for all agents (Codex, OpenCode, etc.)
-		const agentCommands = hasActiveSessionCapability('supportsSlashCommands')
-			? (activeSession?.agentCommands || []).map((cmd) => ({
-					command: cmd.command,
-					description: cmd.description,
-					aiOnly: true, // Agent commands are only available in AI mode
-				}))
-			: [];
+		const agentCommands =
+			nativeCommands.supported || hasActiveSessionCapability('supportsSlashCommands')
+				? (nativeCommands.supported
+						? nativeCommands.commands
+						: activeSession?.agentCommands || []
+					).map((cmd) => ({
+						...('source' in cmd ? { source: cmd.source } : {}),
+						command: cmd.command,
+						description: cmd.description,
+						aiOnly: true, // Agent commands are only available in AI mode
+					}))
+				: [];
 		// Filter built-in slash commands by agent type (if specified)
 		const currentAgentType = activeSession?.toolType;
 		const filteredSlashCommands = slashCommands.filter(
@@ -1628,10 +1637,14 @@ function MaestroConsoleInner() {
 		);
 		return [
 			...filteredSlashCommands,
-			...customCommandsAsSlash,
-			...speckitCommandsAsSlash,
-			...openspecCommandsAsSlash,
-			...bmadCommandsAsSlash,
+			...(nativeCommands.supported && nativeCommands.warning
+				? []
+				: [
+						...customCommandsAsSlash,
+						...speckitCommandsAsSlash,
+						...openspecCommandsAsSlash,
+						...bmadCommandsAsSlash,
+					]),
 			...agentCommands,
 		];
 	}, [
@@ -1639,6 +1652,9 @@ function MaestroConsoleInner() {
 		speckitCommands,
 		openspecCommands,
 		bmadCommands,
+		nativeCommands.warning,
+		nativeCommands.supported,
+		nativeCommands.commands,
 		activeSession?.agentCommands,
 		activeSession?.toolType,
 		hasActiveSessionCapability,

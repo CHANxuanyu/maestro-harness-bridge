@@ -279,7 +279,7 @@ describe('new shell terminals', () => {
 			'\x0c'
 		);
 		act(() => ref.current!.openTerminalSearch());
-		expect(screen.getByPlaceholderText('Search...')).toBeVisible();
+		expect(screen.getByPlaceholderText('Search terminal')).toBeVisible();
 		window.maestro.process.isTerminalBusy = vi.fn().mockResolvedValue(false);
 		act(() => ref.current!.closeActiveTerminal());
 		await waitFor(() => expect(screen.queryByTestId('terminal-instance')).toBeNull());

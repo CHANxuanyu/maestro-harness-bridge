@@ -1,3 +1,4 @@
+import { runNativeHistorySearch } from '../../../../main/storage/native-history-search';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,6 +13,9 @@ import {
 import { getSessionsStore, getSettingsStore } from '../../../../main/stores/getters';
 import { requestFromRenderer } from '../../../../main/web-server/callbacks/remoteRequest';
 
+vi.mock('../../../../main/storage/native-history-search', () => ({
+	runNativeHistorySearch: vi.fn().mockResolvedValue({ hits: [], truncated: false }),
+}));
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }));
 vi.mock('../../../../main/agents/provider-account-dirs', () => ({
 	getProviderAccountDirs: vi.fn(),
@@ -118,4 +122,108 @@ it('reveals the existing project owner window after its renderer acknowledges', 
 	expect(win.restore).toHaveBeenCalledOnce();
 	expect(win.show).toHaveBeenCalledOnce();
 	expect(win.focus).toHaveBeenCalledOnce();
+});
+
+it('settles a cancelled search even while account discovery is waiting', async () => {
+	let finish: (dirs: string[]) => void = () => {};
+	vi.mocked(getProviderAccountDirs).mockImplementationOnce(
+		() =>
+			new Promise((resolve) => {
+				finish = resolve;
+			})
+	);
+	let settled = false;
+	const pending = handlers.get('agentSessions:searchNativeHistory')!(
+		{ sender: { id: 17 } },
+		{ query: 'needle', requestId: 'pending' }
+	).then((result: unknown) => {
+		settled = true;
+		return result;
+	});
+	handlers.get('agentSessions:cancelNativeHistorySearch')!({ sender: { id: 17 } }, 'pending');
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	try {
+		expect(settled).toBe(true);
+	} finally {
+		finish([]);
+		await pending;
+	}
+});
+
+it('search passes resolved local accounts to the worker and never resolves SSH accounts locally', async () => {
+	vi.mocked(getSessionsStore).mockReturnValue({
+		get: () => [
+			{ id: 'local', toolType: 'codex' },
+			{
+				id: 'remote',
+				toolType: 'codex',
+				sessionSshRemoteConfig: { enabled: true, remoteId: 'host' },
+			},
+		],
+	} as never);
+	vi.mocked(resolveAgentAccountDir).mockReturnValue(path.join(root, 'selected-account'));
+	await handlers.get('agentSessions:searchNativeHistory')!(
+		{},
+		{ query: 'needle', projectPath: root }
+	);
+	expect(resolveAgentAccountDir).toHaveBeenCalledWith('local');
+	expect(resolveAgentAccountDir).not.toHaveBeenCalledWith('remote');
+	expect(runNativeHistorySearch).toHaveBeenCalledWith(
+		expect.objectContaining({
+			query: 'needle',
+			projectPath: root,
+			accounts: expect.arrayContaining([
+				{ provider: 'codex', accountDir: path.join(root, 'selected-account') },
+			]),
+		}),
+		expect.any(AbortSignal)
+	);
+});
+
+it('returns a bounded partial result when account discovery exceeds the deadline', async () => {
+	vi.useFakeTimers();
+	let finish: (dirs: string[]) => void = () => {};
+	vi.mocked(getProviderAccountDirs).mockImplementationOnce(
+		() =>
+			new Promise((resolve) => {
+				finish = resolve;
+			})
+	);
+	try {
+		const pending = handlers.get('agentSessions:searchNativeHistory')!({}, { query: 'needle' });
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(await pending).toEqual({ hits: [], truncated: true, limited: true });
+		expect(runNativeHistorySearch).not.toHaveBeenCalled();
+	} finally {
+		finish([]);
+		vi.useRealTimers();
+	}
+});
+
+it('keeps Maestro archives out of new-shell content results without hiding other accounts or native archives', async () => {
+	const key = JSON.stringify(['codex', 'local', root, 'same-native']);
+	const hidden = { key, provider: 'codex', nativeSessionId: 'same-native', accountDir: root };
+	const hits = [
+		hidden,
+		{ ...hidden, key: 'other-account', accountDir: path.join(root, 'other') },
+		{ ...hidden, key: 'native-archive', nativeSessionId: 'native-archive' },
+	].map((conversation) => ({ conversation, matchPreview: 'needle' }));
+	vi.mocked(runNativeHistorySearch).mockResolvedValue({ hits, truncated: true } as never);
+	let archived = true;
+	let newShell = true;
+	vi.mocked(getSettingsStore).mockReturnValue({
+		get: (name: string, fallback: unknown) =>
+			name === 'newShell'
+				? newShell
+				: name === 'archivedConversations'
+					? [{ ...hidden, archived }]
+					: fallback,
+	} as never);
+	const search = () => handlers.get('agentSessions:searchNativeHistory')!({}, { query: 'needle' });
+	expect(await search()).toEqual({ hits: hits.slice(1), truncated: true });
+	archived = false;
+	expect(await search()).toEqual({ hits, truncated: true });
+	archived = true;
+	newShell = false;
+	expect(await search()).toEqual({ hits, truncated: true });
 });

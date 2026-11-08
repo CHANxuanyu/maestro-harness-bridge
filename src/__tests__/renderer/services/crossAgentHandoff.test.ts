@@ -167,6 +167,14 @@ describe('arm / drop', () => {
 		expect(tab().pendingMentionHandoff).toEqual({ targets: [KENSHO], message: 'm' });
 	});
 
+	it('drops only the named conversation handoff', () => {
+		seed([], { targets: [KENSHO], message: 'm' });
+		const other = tab('tab-2');
+		dropMentionHandoffs(SOURCE_ID, SOURCE_TAB);
+		expect(tab().pendingMentionHandoff).toBeUndefined();
+		expect(tab('tab-2')).toBe(other);
+	});
+
 	it('Stop drops every armed hand-off on the agent', () => {
 		seed([], { targets: [KENSHO], message: 'm' });
 

@@ -17,6 +17,7 @@ import type { HandoffDraftNote } from '../../../../shared/aiHandoff';
 import { getAgentDisplayName } from '../../../../shared/agentMetadata';
 import { formatCount, formatTokensCompact } from '../../../../shared/formatters';
 import { useT } from '../../../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 
 interface HandoffDraftBarProps {
 	theme: Theme;
@@ -30,6 +31,7 @@ export const HandoffDraftBar = memo(function HandoffDraftBar({
 	onDismiss,
 }: HandoffDraftBarProps) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const details = [
 		note.sourceName &&
 			(note.sourceProvider
@@ -38,9 +40,14 @@ export const HandoffDraftBar = memo(function HandoffDraftBar({
 						provider: getAgentDisplayName(note.sourceProvider),
 					})
 				: t('workflows.sessions.handoff.draftFromName', { name: note.sourceName })),
-		t('workflows.sessions.handoff.draftTokens', {
-			tokens: formatTokensCompact(note.estimatedTokens),
-		}),
+		t(
+			newShell
+				? 'workflows.newShellCopy.composer.draftTokens'
+				: 'workflows.sessions.handoff.draftTokens',
+			{
+				tokens: formatTokensCompact(note.estimatedTokens),
+			}
+		),
 		note.omittedEntries === 1
 			? t('workflows.sessions.handoff.draftOmittedOne')
 			: note.omittedEntries > 1

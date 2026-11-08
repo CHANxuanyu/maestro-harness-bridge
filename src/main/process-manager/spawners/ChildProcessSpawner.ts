@@ -1,3 +1,5 @@
+import { killProcessTreeNow } from '../utils/commandKill';
+import { CodexAppServerSession } from '../CodexAppServerSession';
 import { resolveAgentAccountDir } from '../../../shared/agentAccountDir';
 import { resolveOwningMaestroSessionId } from '../../coworking/coworking-session-id';
 // src/main/process-manager/spawners/ChildProcessSpawner.ts
@@ -105,7 +107,11 @@ export class ChildProcessSpawner {
 		const argsHaveInputStreamJson = args.some(
 			(arg, i) => arg === 'stream-json' && i > 0 && args[i - 1] === '--input-format'
 		);
-		const promptViaStdin = sendPromptViaStdin || sendPromptViaStdinRaw || argsHaveInputStreamJson;
+		const promptViaStdin =
+			!!config.codexAppServer ||
+			sendPromptViaStdin ||
+			sendPromptViaStdinRaw ||
+			argsHaveInputStreamJson;
 
 		// Build final args based on batch mode and images
 		// Track whether the prompt was added to CLI args (used later to decide stdin behavior)
@@ -117,7 +123,17 @@ export class ChildProcessSpawner {
 		// inside bash -c), skip the appending paths below and treat it as already-added.
 		let promptAddedToArgs = !!config.promptAlreadyInArgs;
 
-		if (hasImages && prompt && capabilities.supportsStreamJsonInput) {
+		if (config.codexAppServer) {
+			finalArgs = [...args];
+			for (const image of images || []) {
+				const saved = saveImageToTempFile(image, tempImageFiles.length);
+				if (!saved) {
+					config.codexAppServer.onDispose?.();
+					return { pid: -1, success: false };
+				}
+				tempImageFiles.push(saved);
+			}
+		} else if (hasImages && prompt && capabilities.supportsStreamJsonInput) {
 			// For agents that support stream-json input (like Claude Code)
 			// Always add --input-format stream-json when sending images via stdin.
 			// This flag is required for Claude Code to parse the JSON+base64 message
@@ -463,6 +479,7 @@ export class ChildProcessSpawner {
 				config.sshStdinScript && sshConnectionArgs(finalArgs) ? newRemotePidFilePath() : undefined;
 
 			const managedProcess: ManagedProcess = {
+				nativeCommandScopeKey: config.nativeCommandScopeKey,
 				...(['claude-code', 'codex'].includes(toolType)
 					? {
 							toolOutputSource: {
@@ -539,6 +556,41 @@ export class ChildProcessSpawner {
 			// current again. See process-manager/generation.ts.
 			managedProcess.spawnGeneration = nextSpawnGeneration(sessionId);
 			this.processes.set(sessionId, managedProcess);
+			let codexExitCode: number | undefined;
+			let codexKillTimer: ReturnType<typeof setTimeout> | undefined;
+			if (config.codexAppServer) {
+				managedProcess.codexAppServerController = new CodexAppServerSession({
+					cwd,
+					prompt: effectivePrompt || '',
+					imagePaths: tempImageFiles,
+					settings: config.codexAppServer,
+					send: (line) => {
+						if (
+							!childProcess.stdin ||
+							childProcess.stdin.destroyed ||
+							childProcess.stdin.writableEnded
+						)
+							throw new Error('Codex app-server stdin is closed');
+						childProcess.stdin.write(line);
+					},
+					onTextDelta: (text) => this.emitter.emit('thinking-chunk', sessionId, text),
+					onEvent: (event) =>
+						this.stdoutHandler.handleData(sessionId, JSON.stringify(event) + '\n'),
+					onDone: (code) => {
+						codexExitCode = code;
+						if (code === 130) managedProcess.interrupted = true;
+						childProcess.stdin?.end();
+						if (code !== 0 && childProcess.pid)
+							killProcessTreeNow(childProcess.pid, { sessionId, label: 'Codex app-server' });
+						else childProcess.kill('SIGTERM');
+						codexKillTimer = setTimeout(() => {
+							if (childProcess.exitCode === null && !childProcess.signalCode)
+								childProcess.kill('SIGKILL');
+						}, 2000);
+						codexKillTimer.unref?.();
+					},
+				});
+			}
 
 			const isSuperseded = (): boolean =>
 				isSupersededGeneration(sessionId, managedProcess.spawnGeneration);
@@ -595,7 +647,9 @@ export class ChildProcessSpawner {
 							error: String(err),
 						});
 					}
-					this.stdoutHandler.handleData(sessionId, output);
+					if (managedProcess.codexAppServerController)
+						managedProcess.codexAppServerController.handleData(output);
+					else this.stdoutHandler.handleData(sessionId, output);
 				});
 			} else {
 				logger.warn('[ProcessManager] childProcess.stdout is null', 'ProcessManager', {
@@ -628,6 +682,9 @@ export class ChildProcessSpawner {
 			// emitted near the end of stdout (e.g., tab-naming, batch operations).
 			// The 'close' event guarantees all stdio streams are closed first.
 			childProcess.on('close', (code) => {
+				clearTimeout(codexKillTimer);
+				managedProcess.codexAppServerController?.dispose();
+				if (config.codexAppServer) code = codexExitCode ?? (code || 1);
 				if (isSuperseded()) {
 					logger.warn('[ProcessManager] Ignoring exit from superseded process', 'ProcessManager', {
 						sessionId,
@@ -684,6 +741,7 @@ export class ChildProcessSpawner {
 
 			// Handle errors
 			childProcess.on('error', (error) => {
+				managedProcess.codexAppServerController?.dispose();
 				if (isSuperseded()) {
 					logger.warn('[ProcessManager] Ignoring error from superseded process', 'ProcessManager', {
 						sessionId,
@@ -695,7 +753,9 @@ export class ChildProcessSpawner {
 				this.exitHandler.handleError(sessionId, error);
 			});
 
-			if (config.sshStdinScript) {
+			if (managedProcess.codexAppServerController) {
+				void managedProcess.codexAppServerController.start();
+			} else if (config.sshStdinScript) {
 				// SSH stdin script mode: send the entire script to /bin/bash on remote
 				// This bypasses all shell escaping issues by piping the script via stdin
 				logger.debug('[ProcessManager] Sending SSH stdin script', 'ProcessManager', {

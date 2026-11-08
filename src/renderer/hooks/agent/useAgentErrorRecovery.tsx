@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 /**
  * useAgentErrorRecovery - Hook for generating recovery actions for agent errors
  *
@@ -90,7 +91,8 @@ function getRecoveryActionsForError(
 	error: AgentError,
 	agentId: ToolType,
 	options: UseAgentErrorRecoveryOptions,
-	t: TFunction
+	t: TFunction,
+	newShell: boolean
 ): RecoveryAction[] {
 	const actions: RecoveryAction[] = [];
 
@@ -104,10 +106,16 @@ function getRecoveryActionsForError(
 			if (options.onAuthenticate) {
 				actions.push({
 					id: 'authenticate',
-					label: 'Re-authenticate',
+					label: newShell ? t('workflows.newShellCopy.feedback.recovery.login') : 'Re-authenticate',
 					description: login
-						? `Run "${formatAgentLoginCommand(login)}" here`
-						: 'Log in again to restore access',
+						? newShell
+							? t('workflows.newShellCopy.feedback.recovery.loginCommand', {
+									command: formatAgentLoginCommand(login),
+								})
+							: `Run "${formatAgentLoginCommand(login)}" here`
+						: newShell
+							? t('workflows.newShellCopy.feedback.recovery.loginDescription')
+							: 'Log in again to restore access',
 					primary: true,
 					icon: login ? <Terminal className="w-4 h-4" /> : <KeyRound className="w-4 h-4" />,
 					onClick: options.onAuthenticate,
@@ -116,8 +124,10 @@ function getRecoveryActionsForError(
 			if (options.onNewSession) {
 				actions.push({
 					id: 'new-session',
-					label: 'Start New Session',
-					description: 'Begin a fresh conversation',
+					label: newShell ? t('workflows.newShellCopy.feedback.recovery.new') : 'Start New Session',
+					description: newShell
+						? t('workflows.newShellCopy.feedback.recovery.newDescription')
+						: 'Begin a fresh conversation',
 					icon: <MessageSquarePlus className="w-4 h-4" />,
 					onClick: options.onNewSession,
 				});
@@ -131,8 +141,10 @@ function getRecoveryActionsForError(
 			if (options.onNewSession) {
 				actions.push({
 					id: 'new-session',
-					label: 'Start New Session',
-					description: 'Begin a fresh conversation with full context',
+					label: newShell ? t('workflows.newShellCopy.feedback.recovery.new') : 'Start New Session',
+					description: newShell
+						? t('workflows.newShellCopy.feedback.recovery.emptyContext')
+						: 'Begin a fresh conversation with full context',
 					primary: true,
 					icon: <MessageSquarePlus className="w-4 h-4" />,
 					onClick: options.onNewSession,
@@ -145,8 +157,10 @@ function getRecoveryActionsForError(
 			if (options.onRetry) {
 				actions.push({
 					id: 'retry',
-					label: 'Try Again',
-					description: 'Wait a moment and retry',
+					label: newShell ? t('workflows.newShellCopy.feedback.recovery.retry') : 'Try Again',
+					description: newShell
+						? t('workflows.newShellCopy.feedback.recovery.wait')
+						: 'Wait a moment and retry',
 					primary: true,
 					icon: <RefreshCw className="w-4 h-4" />,
 					onClick: options.onRetry,
@@ -160,8 +174,12 @@ function getRecoveryActionsForError(
 			if (options.onRetry) {
 				actions.push({
 					id: 'retry',
-					label: 'Retry Connection',
-					description: 'Attempt to reconnect',
+					label: newShell
+						? t('workflows.newShellCopy.feedback.recovery.connection')
+						: 'Retry Connection',
+					description: newShell
+						? t('workflows.newShellCopy.feedback.recovery.connectionDescription')
+						: 'Attempt to reconnect',
 					primary: true,
 					icon: <Wifi className="w-4 h-4" />,
 					onClick: options.onRetry,
@@ -174,8 +192,12 @@ function getRecoveryActionsForError(
 			if (options.onRetry) {
 				actions.push({
 					id: 'retry',
-					label: t('workflows.sessions.retryResume'),
-					description: t('workflows.sessions.retryAfterRelease'),
+					label: newShell
+						? t('workflows.newShellCopy.feedback.recovery.retryResume')
+						: t('workflows.sessions.retryResume'),
+					description: newShell
+						? t('workflows.newShellCopy.feedback.recovery.retryAfterRelease')
+						: t('workflows.sessions.retryAfterRelease'),
 					primary: true,
 					icon: <RefreshCw className="w-4 h-4" />,
 					onClick: options.onRetry,
@@ -188,8 +210,10 @@ function getRecoveryActionsForError(
 			if (options.onRestartAgent) {
 				actions.push({
 					id: 'restart-agent',
-					label: 'Restart Agent',
-					description: 'Respawn the agent process',
+					label: newShell ? t('workflows.newShellCopy.feedback.recovery.restart') : 'Restart Agent',
+					description: newShell
+						? t('workflows.newShellCopy.feedback.recovery.restartDescription')
+						: 'Respawn the agent process',
 					primary: true,
 					icon: <RotateCcw className="w-4 h-4" />,
 					onClick: options.onRestartAgent,
@@ -198,8 +222,10 @@ function getRecoveryActionsForError(
 			if (options.onNewSession) {
 				actions.push({
 					id: 'new-session',
-					label: 'Start New Session',
-					description: 'Begin a fresh conversation',
+					label: newShell ? t('workflows.newShellCopy.feedback.recovery.new') : 'Start New Session',
+					description: newShell
+						? t('workflows.newShellCopy.feedback.recovery.newDescription')
+						: 'Begin a fresh conversation',
 					icon: <MessageSquarePlus className="w-4 h-4" />,
 					onClick: options.onNewSession,
 				});
@@ -211,8 +237,10 @@ function getRecoveryActionsForError(
 			if (options.onRetry) {
 				actions.push({
 					id: 'retry',
-					label: 'Try Again',
-					description: 'Retry with different approach',
+					label: newShell ? t('workflows.newShellCopy.feedback.recovery.retry') : 'Try Again',
+					description: newShell
+						? t('workflows.newShellCopy.feedback.recovery.permission')
+						: 'Retry with different approach',
 					primary: true,
 					icon: <RefreshCw className="w-4 h-4" />,
 					onClick: options.onRetry,
@@ -225,8 +253,10 @@ function getRecoveryActionsForError(
 			if (options.onRetry) {
 				actions.push({
 					id: 'retry',
-					label: 'Try Again',
-					description: 'Retry the operation',
+					label: newShell ? t('workflows.newShellCopy.feedback.recovery.retry') : 'Try Again',
+					description: newShell
+						? t('workflows.newShellCopy.feedback.recovery.retryDescription')
+						: 'Retry the operation',
 					primary: true,
 					icon: <RefreshCw className="w-4 h-4" />,
 					onClick: options.onRetry,
@@ -245,11 +275,12 @@ export function useAgentErrorRecovery(
 ): UseAgentErrorRecoveryResult {
 	const { error, agentId, onClearError } = options;
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 
 	// Generate recovery actions for the current error
 	const recoveryActions = useMemo(() => {
 		if (!error) return [];
-		return getRecoveryActionsForError(error, agentId, options, t);
+		return getRecoveryActionsForError(error, agentId, options, t, newShell);
 	}, [
 		error,
 		agentId,
@@ -259,6 +290,7 @@ export function useAgentErrorRecovery(
 		options.onRestartAgent,
 		options.onRetry,
 		t,
+		newShell,
 	]);
 
 	// Handler to execute a recovery action by its ID

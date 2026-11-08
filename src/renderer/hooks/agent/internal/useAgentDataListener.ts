@@ -18,6 +18,7 @@
 
 import { useEffect } from 'react';
 import { updateAiTab, updateSessionWith, useSessionStore } from '../../../stores/sessionStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { REGEX_AI_TAB } from '../../../utils/sessionIdParser';
 import { getActiveTab, getWriteModeTab } from '../../../utils/tabHelpers';
 import { logger } from '../../../utils/logger';
@@ -95,13 +96,20 @@ export function useAgentDataListener(deps: UseAgentDataListenerDeps): void {
 			deps.activeHiddenToolRef.current?.delete(`${actualSessionId}:${targetTabId}`);
 
 			const targetTab = session?.aiTabs?.find((t) => t.id === targetTabId);
+			const batchPlaceholder = useSettingsStore.getState().newShell;
 
 			// Only rewrite the sessions array when the target tab still carries a
 			// hidden-progress placeholder to strip. That holds on the first visible
 			// chunk of a turn; for the thousands of chunks that follow it doesn't, so
 			// we skip the full prev.map() allocation and store notification entirely
 			// instead of mapping every session just to return `prev` unchanged.
-			if (targetTab && removeHiddenProgressLog(targetTab.logs, targetTabId) !== targetTab.logs) {
+			// New shell removes the placeholder with the first batched answer.
+			// Do not scan the entire transcript for every incoming data fragment.
+			if (
+				!batchPlaceholder &&
+				targetTab &&
+				removeHiddenProgressLog(targetTab.logs, targetTabId) !== targetTab.logs
+			) {
 				updateAiTab(actualSessionId, targetTabId, (tab) => ({
 					...tab,
 					logs: removeHiddenProgressLog(tab.logs, targetTabId!),
@@ -109,7 +117,11 @@ export function useAgentDataListener(deps: UseAgentDataListenerDeps): void {
 			}
 
 			deps.batchedUpdater.appendLog(actualSessionId, targetTabId, true, data);
-			deps.batchedUpdater.markDelivered(actualSessionId, targetTabId);
+			if (batchPlaceholder) {
+				deps.batchedUpdater.markDelivered(actualSessionId, targetTabId, targetTab?.logs);
+			} else {
+				deps.batchedUpdater.markDelivered(actualSessionId, targetTabId);
+			}
 			deps.batchedUpdater.updateCycleBytes(actualSessionId, data.length);
 
 			if (session?.agentError) {

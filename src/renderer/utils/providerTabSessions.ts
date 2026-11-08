@@ -72,14 +72,18 @@ export function switchSessionProvider(
 	toProvider: ToolType,
 	permissionCapabilities?: Pick<
 		AgentCapabilities,
-		'supportsReadOnlyMode' | 'supportsStandardPermissionMode'
+		'supportsReadOnlyMode' | 'supportsStandardPermissionMode' | 'supportsCodexAppServer'
 	>
 ): Session | null {
 	if (session.toolType === toProvider) return session;
 	const aiTabs: AITab[] = [];
 	for (const tab of session.aiTabs) {
 		const permissions = permissionCapabilities
-			? newConversationPermissionFields(tab, permissionCapabilities)
+			? newConversationPermissionFields(
+					tab,
+					permissionCapabilities,
+					!!session.sessionSshRemoteConfig?.enabled
+				)
 			: {};
 		// Reject the whole transition before changing any conversation.
 		if (!permissions) return null;

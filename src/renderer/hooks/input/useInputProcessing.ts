@@ -1,3 +1,5 @@
+import { useComposerInputStore } from '../../stores/composerInputStore';
+import { conversationNativeCommands } from '../../services/nativeCommands';
 import { appendReadOnlyPrompt } from '../../../shared/readOnlyPrompt';
 import { useOperationStore } from '../../stores/operationStore';
 import { useCallback, useRef } from 'react';
@@ -46,7 +48,11 @@ import {
 	isClaudeStandardPermissionError,
 } from '../../../shared/processErrors';
 import { hasPendingRetry, noteDirectDispatch } from '../../stores/retryStore';
-import { resolveForceParallel, useSettingsStore } from '../../stores/settingsStore';
+import {
+	resolveForceParallel,
+	selectNewShellEnabled,
+	useSettingsStore,
+} from '../../stores/settingsStore';
 import {
 	useSessionStore,
 	selectActiveSession,
@@ -83,27 +89,6 @@ function getImageOnlyPrompt(): string {
  * Uses `let` so the binding updates after loadInputProcessingPrompts() populates the cache.
  */
 export let DEFAULT_IMAGE_ONLY_PROMPT: string = getImageOnlyPrompt();
-
-/**
- * Composer submits still waiting on their process-ownership probe, keyed
- * `${sessionId}:${tabId}`, holding what each one took out of the composer. The
- * probe is a bridge round trip (135ms in the field, up to its deadline on a
- * stalled socket), and a second Enter inside that window - key repeat,
- * dictation's Enter plus a manual one, the send button - is the same submit
- * again. It used to read the same draft, resume after the first had marked the
- * tab busy, and queue a duplicate.
- *
- * Taking the draft before the probe already makes the repeat read an empty box.
- * This catches what that cannot: a render that has not landed yet, so the
- * repeat still holds the same `stagedImages` array. It matches on CONTENT, not
- * just on the tab, because a message the user typed after the first was taken
- * is new and must go through (it queues behind the first) - ignoring every
- * Enter for the length of a stalled probe would swallow it.
- *
- * Module scope, not a ref: a ref belongs to one hook instance, and the guard
- * has to hold for the tab.
- */
-const composerSubmitsInFlight = new Map<string, Array<{ text: string; images: string[] }>>();
 
 /**
  * Dependencies for the useInputProcessing hook.
@@ -434,6 +419,63 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 				effectiveInputValue = stripShellCommandEscape(effectiveInputValue);
 			}
 
+			const currentMode = activeSession.inputMode;
+
+			// A submit straight from the composer (Enter, the send button), as
+			// opposed to a replay, Force Send, or recovery that hands its own text
+			// in. Only these read the draft, so only these can read it twice.
+			const isComposerSubmit = overrideInputValue === undefined;
+			// Whether the user's own Send is what dispatches this turn, so the
+			// transcript takes its tab to it (see requestTranscriptScrollToBottom
+			// below). Not every path that appends a user row is that.
+			const revealsSentTurn = isComposerSubmit || options?.revealTurn === true;
+			const inFlightKey = `${activeSession.id}:${targetTabId ?? ''}`;
+			const submitted = { text: effectiveInputValue, images: effectiveImages };
+			const isRepeatOfInFlight = useComposerInputStore
+				.getState()
+				.isSubmitting(inFlightKey, submitted);
+			if (currentMode === 'ai' && isComposerSubmit && isRepeatOfInFlight) {
+				logger.info(
+					'[processInput] Ignoring a repeat composer submit while the first is in flight'
+				);
+				return;
+			}
+
+			// The AI path takes the draft out of the composer BEFORE its ownership
+			// probe rather than after, so a second Enter during the probe reads an
+			// empty box instead of the same text. `composerTaken` tells the exits
+			// past the probe the composer is already clear: clearing again there
+			// would wipe whatever the user typed while the probe was out. Nothing
+			// past the probe returns without sending or queuing the message (and
+			// the probe resolves on failure rather than rejecting), so the taken
+			// draft never needs putting back.
+			let composerTaken = false;
+			const clearComposer = () => {
+				setInputValue('');
+				if (!usingOverrideImages) setStagedImages([]);
+				syncAiInputToSession('', syncTarget);
+				if (inputRef.current) inputRef.current.style.height = 'auto';
+			};
+			const clearComposerUnlessTaken = () => {
+				if (!composerTaken) clearComposer();
+			};
+			const takeComposer = () => {
+				if (!isComposerSubmit) return;
+				useComposerInputStore.getState().beginSubmission(inFlightKey, submitted);
+				if (!composerTaken) clearComposer();
+				composerTaken = true;
+			};
+			const releaseSubmit = () =>
+				useComposerInputStore.getState().endSubmission(inFlightKey, submitted);
+			const probeForSubmit = async (tabId: string | undefined) => {
+				try {
+					takeComposer();
+					return await probeSessionAiProcesses(activeSession.id, tabId);
+				} finally {
+					releaseSubmit();
+				}
+			};
+
 			// Handle slash commands
 			// Note: slash commands are queued like regular messages when agent is busy
 			if (effectiveInputValue.trim().startsWith('/')) {
@@ -504,218 +546,161 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 					const commandArgs =
 						firstSpaceIndex === -1 ? '' : commandText.substring(firstSpaceIndex + 1).trim();
 
-					// Check custom AI commands first, then agent-discovered commands with prompts
-					const matchingAgentCommand = activeSession.agentCommands?.find(
-						(cmd) => cmd.command === baseCommand && cmd.prompt
-					);
-					const matchingCustomCommand =
-						customAICommands.find((cmd) => cmd.command === baseCommand) ||
-						(matchingAgentCommand
-							? {
-									command: matchingAgentCommand.command,
-									description: matchingAgentCommand.description,
-									prompt: matchingAgentCommand.prompt!,
+					// The scan owns this submit before crossing IPC. Later edits belong to the next draft.
+					if (selectNewShellEnabled(useSettingsStore.getState())) takeComposer();
+					try {
+						// Check custom AI commands first, then agent-discovered commands with prompts
+						const matchingAgentCommand = (
+							await conversationNativeCommands(activeSession)
+						).commands.find((cmd) => cmd.command === baseCommand && cmd.prompt);
+						const matchingCustomCommand =
+							customAICommands.find((cmd) => cmd.command === baseCommand) ||
+							(matchingAgentCommand
+								? {
+										command: matchingAgentCommand.command,
+										description: matchingAgentCommand.description,
+										prompt: matchingAgentCommand.prompt!,
+									}
+								: undefined);
+						if (matchingCustomCommand) {
+							// Execute the custom AI command by sending its prompt
+							if (!composerTaken) setInputValue('');
+							setSlashCommandOpen(false);
+							if (!composerTaken) syncAiInputToSession('', syncTarget); // We're in AI mode here (isTerminalMode === false)
+							if (inputRef.current) inputRef.current.style.height = 'auto';
+
+							// Substitute template variables and send to the AI agent
+							await (async () => {
+								let gitBranch: string | undefined;
+								if (activeSession.isGitRepo) {
+									try {
+										const status = await gitService.getStatus(activeSession.cwd);
+										gitBranch = status.branch;
+									} catch {
+										// Ignore git errors
+									}
 								}
-							: undefined);
-					if (matchingCustomCommand) {
-						// Execute the custom AI command by sending its prompt
-						setInputValue('');
-						setSlashCommandOpen(false);
-						syncAiInputToSession('', syncTarget); // We're in AI mode here (isTerminalMode === false)
-						if (inputRef.current) inputRef.current.style.height = 'auto';
+								substituteTemplateVariables(matchingCustomCommand.prompt, {
+									session: activeSession,
+									gitBranch,
+									groupId: activeSession.groupId,
+									activeTabId: activeSession.activeTabId,
+									conductorProfile,
+								});
 
-						// Substitute template variables and send to the AI agent
-						(async () => {
-							let gitBranch: string | undefined;
-							if (activeSession.isGitRepo) {
-								try {
-									const status = await gitService.getStatus(activeSession.cwd);
-									gitBranch = status.branch;
-								} catch {
-									// Ignore git errors
-								}
-							}
-							substituteTemplateVariables(matchingCustomCommand.prompt, {
-								session: activeSession,
-								gitBranch,
-								groupId: activeSession.groupId,
-								activeTabId: activeSession.activeTabId,
-								conductorProfile,
-							});
+								// ALWAYS queue slash commands - they execute in order like write messages
+								// This ensures commands are processed sequentially through the queue
+								const activeTab = resolveTargetTab(activeSession);
+								const isReadOnlyMode = activeTab?.readOnlyMode === true;
+								// Check both session busy state AND AutoRun state
+								// AutoRun runs in isolation and doesn't set session to busy, so we check it explicitly
+								const isAutoRunActive = getBatchState(activeSession.id).isRunning;
+								// Forced parallel: explicit user override (Cmd+Shift+Enter / Force Send button).
+								// Mirrors the regular message path - only THIS tab's state matters; cross-tab
+								// busyness and AutoRun are intentionally bypassed.
+								const forceParallel = resolveForceParallel(options?.forceParallel);
+								// Agent Resilience holds the line for this tab - see the message
+								// path below for the full reasoning. A held tab is idle, so
+								// without this the command would spawn straight into the wall.
+								const retryHoldsTab = hasPendingRetry(
+									activeSession.id,
+									activeTab?.id || activeSession.activeTabId
+								);
+								const sessionIsIdle =
+									!retryHoldsTab &&
+									(forceParallel
+										? activeTab?.state !== 'busy'
+										: activeSession.state !== 'busy' && !isAutoRunActive);
 
-							// ALWAYS queue slash commands - they execute in order like write messages
-							// This ensures commands are processed sequentially through the queue
-							const activeTab = resolveTargetTab(activeSession);
-							const isReadOnlyMode = activeTab?.readOnlyMode === true;
-							// Check both session busy state AND AutoRun state
-							// AutoRun runs in isolation and doesn't set session to busy, so we check it explicitly
-							const isAutoRunActive = getBatchState(activeSession.id).isRunning;
-							// Forced parallel: explicit user override (Cmd+Shift+Enter / Force Send button).
-							// Mirrors the regular message path - only THIS tab's state matters; cross-tab
-							// busyness and AutoRun are intentionally bypassed.
-							const forceParallel = resolveForceParallel(options?.forceParallel);
-							// Agent Resilience holds the line for this tab - see the message
-							// path below for the full reasoning. A held tab is idle, so
-							// without this the command would spawn straight into the wall.
-							const retryHoldsTab = hasPendingRetry(
-								activeSession.id,
-								activeTab?.id || activeSession.activeTabId
-							);
-							const sessionIsIdle =
-								!retryHoldsTab &&
-								(forceParallel
-									? activeTab?.state !== 'busy'
-									: activeSession.state !== 'busy' && !isAutoRunActive);
+								const queuedItem: QueuedItem = {
+									id: generateId(),
+									timestamp: Date.now(),
+									tabId: activeTab?.id || activeSession.activeTabId,
+									type: 'command',
+									command: matchingCustomCommand.command,
+									commandArgs, // Arguments passed after the command (for $ARGUMENTS substitution)
+									commandDescription: matchingCustomCommand.description,
+									// Last-known label, used only if the tab is gone by the time
+									// the queue drains - the queue UI resolves the live name first.
+									tabName: activeTab ? getTabDisplayName(activeTab) : undefined,
+									readOnlyMode: isReadOnlyMode,
+									...(forceParallel && { forceParallel: true }),
+									// Freeze the model/effort now: the queue may not drain until
+									// after the user has switched to something else, and this
+									// command must run under - and be labeled with - what was
+									// selected when they sent it.
+									turnSettings: captureQueuedTurnSettings(activeTab, activeSession),
+								};
 
-							const queuedItem: QueuedItem = {
-								id: generateId(),
-								timestamp: Date.now(),
-								tabId: activeTab?.id || activeSession.activeTabId,
-								type: 'command',
-								command: matchingCustomCommand.command,
-								commandArgs, // Arguments passed after the command (for $ARGUMENTS substitution)
-								commandDescription: matchingCustomCommand.description,
-								// Last-known label, used only if the tab is gone by the time
-								// the queue drains - the queue UI resolves the live name first.
-								tabName: activeTab ? getTabDisplayName(activeTab) : undefined,
-								readOnlyMode: isReadOnlyMode,
-								...(forceParallel && { forceParallel: true }),
-								// Freeze the model/effort now: the queue may not drain until
-								// after the user has switched to something else, and this
-								// command must run under - and be labeled with - what was
-								// selected when they sent it.
-								turnSettings: captureQueuedTurnSettings(activeTab, activeSession),
-							};
+								// If session is idle, we need to set up state and process immediately
+								// If session is busy, just add to queue - it will be processed when current item finishes
+								if (sessionIsIdle) {
+									// Set up session and tab state for immediate processing
+									// NOTE: Don't add to executionQueue when processing immediately - it's not actually queued,
+									// and adding it would cause duplicate display (once as sent message, once in queue section)
+									updateSessionWith(resolvedSessionId, (s) => {
+										// Set the target tab to busy
+										const updatedAiTabs = s.aiTabs.map((tab) =>
+											tab.id === queuedItem.tabId
+												? {
+														...tab,
+														state: 'busy' as const,
+														thinkingStartTime: Date.now(),
+														...codifyTurnSettings(tab, s),
+													}
+												: tab
+										);
 
-							// If session is idle, we need to set up state and process immediately
-							// If session is busy, just add to queue - it will be processed when current item finishes
-							if (sessionIsIdle) {
-								// Set up session and tab state for immediate processing
-								// NOTE: Don't add to executionQueue when processing immediately - it's not actually queued,
-								// and adding it would cause duplicate display (once as sent message, once in queue section)
-								updateSessionWith(resolvedSessionId, (s) => {
-									// Set the target tab to busy
-									const updatedAiTabs = s.aiTabs.map((tab) =>
-										tab.id === queuedItem.tabId
-											? {
-													...tab,
-													state: 'busy' as const,
-													thinkingStartTime: Date.now(),
-													...codifyTurnSettings(tab, s),
-												}
-											: tab
-									);
+										return {
+											...s,
+											state: 'busy' as SessionState,
+											busySource: 'ai',
+											thinkingStartTime: Date.now(),
+											currentCycleTokens: 0,
+											currentCycleBytes: 0,
+											aiTabs: updatedAiTabs,
+											// Don't add to queue - we're processing immediately, not queuing
+											aiCommandHistory: Array.from(
+												new Set([...(s.aiCommandHistory || []), commandText])
+											).slice(-50),
+										};
+									});
 
-									return {
+									// Process immediately after state is set up
+									// 50ms delay allows React to flush the setState above, ensuring the session
+									// is marked 'busy' before processQueuedItem runs (prevents duplicate processing)
+									setTimeout(() => {
+										// Rejects on a dispatch failure. This item was never queued (it
+										// is being sent immediately), so agentStore's recovery is what
+										// puts it INTO the queue rather than back - the prompt survives
+										// a failed spawn instead of disappearing from the composer.
+										processQueuedItemRef.current?.(resolvedSessionId, queuedItem).catch((err) => {
+											logger.error(
+												'[useInputProcessing] Immediate command dispatch failed, prompt queued',
+												undefined,
+												err
+											);
+										});
+									}, 50);
+								} else {
+									// Session is busy - just add to queue
+									updateSessionWith(resolvedSessionId, (s) => ({
 										...s,
-										state: 'busy' as SessionState,
-										busySource: 'ai',
-										thinkingStartTime: Date.now(),
-										currentCycleTokens: 0,
-										currentCycleBytes: 0,
-										aiTabs: updatedAiTabs,
-										// Don't add to queue - we're processing immediately, not queuing
+										executionQueue: [...s.executionQueue, queuedItem],
 										aiCommandHistory: Array.from(
 											new Set([...(s.aiCommandHistory || []), commandText])
 										).slice(-50),
-									};
-								});
-
-								// Process immediately after state is set up
-								// 50ms delay allows React to flush the setState above, ensuring the session
-								// is marked 'busy' before processQueuedItem runs (prevents duplicate processing)
-								setTimeout(() => {
-									// Rejects on a dispatch failure. This item was never queued (it
-									// is being sent immediately), so agentStore's recovery is what
-									// puts it INTO the queue rather than back - the prompt survives
-									// a failed spawn instead of disappearing from the composer.
-									processQueuedItemRef.current?.(resolvedSessionId, queuedItem).catch((err) => {
-										logger.error(
-											'[useInputProcessing] Immediate command dispatch failed, prompt queued',
-											undefined,
-											err
-										);
-									});
-								}, 50);
-							} else {
-								// Session is busy - just add to queue
-								updateSessionWith(resolvedSessionId, (s) => ({
-									...s,
-									executionQueue: [...s.executionQueue, queuedItem],
-									aiCommandHistory: Array.from(
-										new Set([...(s.aiCommandHistory || []), commandText])
-									).slice(-50),
-								}));
-							}
-							// Note: Input already cleared synchronously before this async block
-						})();
-						return;
+									}));
+								}
+								// Note: Input already cleared synchronously before this async block
+							})();
+							return;
+						}
+					} finally {
+						releaseSubmit();
 					}
 				}
 			}
-
-			const currentMode = activeSession.inputMode;
-
-			// A submit straight from the composer (Enter, the send button), as
-			// opposed to a replay, Force Send, or recovery that hands its own text
-			// in. Only these read the draft, so only these can read it twice.
-			const isComposerSubmit = overrideInputValue === undefined;
-			// Whether the user's own Send is what dispatches this turn, so the
-			// transcript takes its tab to it (see requestTranscriptScrollToBottom
-			// below). Not every path that appends a user row is that.
-			const revealsSentTurn = isComposerSubmit || options?.revealTurn === true;
-			const inFlightKey = `${activeSession.id}:${targetTabId ?? ''}`;
-			const submitted = { text: effectiveInputValue, images: effectiveImages };
-			const isRepeatOfInFlight = (composerSubmitsInFlight.get(inFlightKey) ?? []).some(
-				(prior) =>
-					(!submitted.text.trim() || submitted.text === prior.text) &&
-					(submitted.images === prior.images ||
-						(submitted.images.length === 0 && prior.images.length === 0))
-			);
-			if (currentMode === 'ai' && isComposerSubmit && isRepeatOfInFlight) {
-				logger.info(
-					'[processInput] Ignoring a repeat composer submit while the first is in flight'
-				);
-				return;
-			}
-
-			// The AI path takes the draft out of the composer BEFORE its ownership
-			// probe rather than after, so a second Enter during the probe reads an
-			// empty box instead of the same text. `composerTaken` tells the exits
-			// past the probe the composer is already clear: clearing again there
-			// would wipe whatever the user typed while the probe was out. Nothing
-			// past the probe returns without sending or queuing the message (and
-			// the probe resolves on failure rather than rejecting), so the taken
-			// draft never needs putting back.
-			let composerTaken = false;
-			const clearComposer = () => {
-				setInputValue('');
-				if (!usingOverrideImages) setStagedImages([]);
-				syncAiInputToSession('', syncTarget);
-				if (inputRef.current) inputRef.current.style.height = 'auto';
-			};
-			const clearComposerUnlessTaken = () => {
-				if (!composerTaken) clearComposer();
-			};
-			// The probe is the only await between Enter and the queue/send decision,
-			// and everything after it is synchronous, so the in-flight window is
-			// exactly the probe.
-			const probeForSubmit = async (tabId: string | undefined) => {
-				if (!isComposerSubmit) return probeSessionAiProcesses(activeSession.id, tabId);
-				const inFlight = composerSubmitsInFlight.get(inFlightKey) ?? [];
-				composerSubmitsInFlight.set(inFlightKey, [...inFlight, submitted]);
-				try {
-					clearComposer();
-					composerTaken = true;
-					return await probeSessionAiProcesses(activeSession.id, tabId);
-				} finally {
-					const remaining = (composerSubmitsInFlight.get(inFlightKey) ?? []).filter(
-						(entry) => entry !== submitted
-					);
-					if (remaining.length > 0) composerSubmitsInFlight.set(inFlightKey, remaining);
-					else composerSubmitsInFlight.delete(inFlightKey);
-				}
-			};
 
 			// Handle wizard mode - route messages to wizard sendMessage instead of normal AI processing
 			// This allows the wizard to have its own conversation without affecting the regular AI queue

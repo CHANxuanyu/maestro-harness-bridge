@@ -57,6 +57,8 @@ import {
 	type CrossAgentMentionPlan,
 } from '../../services/crossAgentMentions';
 import { formatFileMention, stripMentionQuotes } from '../../../shared/mentionPatterns';
+import { getT } from '../../i18n';
+import { joinPath } from '../../../shared/formatters';
 import { IMAGE_EXTENSIONS } from '../../utils/fileExplorerIcons/shared';
 import { screenshotReferenceLabel } from '../../utils/stagedImageOrder';
 import { STAGED_IMAGE_MIME } from '../../components/InputArea/components/stagedImageDrag';
@@ -67,6 +69,7 @@ import {
 import {
 	FILE_TREE_SINGLE_MIME,
 	FILE_TREE_MULTI_MIME,
+	FILE_TREE_ORIGIN_MIME,
 } from '../../components/FileExplorerPanel/types';
 
 function isImagePath(path: string): boolean {
@@ -128,7 +131,9 @@ export interface UseInputHandlersDeps {
 	 * Ref to the agent-level interrupt (`useInterruptHandler`), which App creates
 	 * after this hook; Escape stops the conversation on screen through it.
 	 */
-	interruptTurnRef?: React.MutableRefObject<(() => void) | null>;
+	interruptTurnRef?: React.MutableRefObject<
+		((target?: { sessionId: string; tabId: string }) => void) | null
+	>;
 	/** Flush pending batched session updates */
 	flushBatchedUpdates: () => void;
 	/** Handler for /history command */
@@ -182,7 +187,10 @@ export interface UseInputHandlersReturn {
 	/** Ref to latest processInput for use in memoized callbacks */
 	processInputRef: React.MutableRefObject<(text?: string, options?: ProcessInputOptions) => void>;
 	/** Keyboard event handler for the input textarea */
-	handleInputKeyDown: (e: React.KeyboardEvent) => void;
+	handleInputKeyDown: (
+		e: React.KeyboardEvent,
+		target?: { sessionId: string; tabId: string }
+	) => void;
 	/** Capture the agent/tab that owns the composer when the input gains focus */
 	handleMainPanelInputFocus: () => void;
 	/** Handler for input blur (persists input to session state) */
@@ -368,25 +376,21 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 	// ====================================================================
 
 	const setStagedImages = useCallback(
-		(imagesOrUpdater: string[] | ((prev: string[]) => string[])) => {
-			const activeSession = selectActiveSession(useSessionStore.getState());
-			if (!activeSession) return;
-			updateSessionWith(activeSession.id, (s) => {
-				const tabId = s.activeTabId;
-				if (!tabId) return s;
-				return {
-					...s,
-					aiTabs: s.aiTabs.map((tab) => {
-						if (tab.id !== tabId) return tab;
-						const currentImages = tab.stagedImages || [];
-						const newImages =
-							typeof imagesOrUpdater === 'function'
-								? imagesOrUpdater(currentImages)
-								: imagesOrUpdater;
-						return { ...tab, stagedImages: newImages };
-					}),
-				};
-			});
+		(
+			imagesOrUpdater: React.SetStateAction<string[]>,
+			target?: { sessionId: string; tabId: string }
+		) => {
+			const activeSession = target ? undefined : selectActiveSession(useSessionStore.getState());
+			const sessionId = target?.sessionId ?? activeSession?.id;
+			const tabId = target?.tabId ?? activeSession?.activeTabId;
+			if (!sessionId || !tabId) return;
+			updateAiTab(sessionId, tabId, (tab) => ({
+				...tab,
+				stagedImages:
+					typeof imagesOrUpdater === 'function'
+						? imagesOrUpdater(tab.stagedImages ?? [])
+						: imagesOrUpdater,
+			}));
 		},
 		[]
 	);
@@ -732,7 +736,10 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 	// ====================================================================
 
 	// Read at call time: the interrupt is created after this hook runs.
-	const interruptTurn = useCallback(() => interruptTurnRef?.current?.(), [interruptTurnRef]);
+	const interruptTurn = useCallback(
+		(target?: { sessionId: string; tabId: string }) => interruptTurnRef?.current?.(target),
+		[interruptTurnRef]
+	);
 
 	const { handleInputKeyDown } = useInputKeyDown({
 		getInputValue,
@@ -826,6 +833,12 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 	const handlePaste = useCallback(
 		(e: React.ClipboardEvent) => {
 			const activeSession = selectActiveSession(useSessionStore.getState());
+			const imageTarget =
+				useSettingsStore.getState().newShell && activeSession?.activeTabId
+					? { sessionId: activeSession.id, tabId: activeSession.activeTabId }
+					: undefined;
+			const stageAiImages = (value: React.SetStateAction<string[]>) =>
+				setStagedImages(value, imageTarget);
 			const groupChatId = useGroupChatStore.getState().activeGroupChatId;
 			const isGroupChatActive = !!groupChatId;
 			// Bound now, not when the FileReader resolves: the image belongs to the
@@ -894,7 +907,7 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 										return [...prev, imageData];
 									});
 								} else {
-									setStagedImages((prev) => {
+									stageAiImages((prev) => {
 										if (prev.includes(imageData)) {
 											setSuccessFlashNotification('Duplicate image ignored');
 											setTimeout(() => setSuccessFlashNotification(null), 2000);
@@ -1061,6 +1074,12 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 			setIsDraggingFile(false);
 
 			const activeSession = selectActiveSession(useSessionStore.getState());
+			const imageTarget =
+				useSettingsStore.getState().newShell && activeSession?.activeTabId
+					? { sessionId: activeSession.id, tabId: activeSession.activeTabId }
+					: undefined;
+			const stageAiImages = (value: React.SetStateAction<string[]>) =>
+				setStagedImages(value, imageTarget);
 			const groupChatId = useGroupChatStore.getState().activeGroupChatId;
 			const isGroupChatActive = !!groupChatId;
 			// Bound now, not when the FileReader resolves: the image belongs to the
@@ -1130,21 +1149,50 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 				// (see TreeRow's `${session.fullPath}/${fullPath}`), so resolve image
 				// reads against fullPath first to match the explorer's own absolute-path
 				// construction.
-				const treeRoot = activeSession?.fullPath ?? activeSession?.projectRoot;
+				let treeRoot = activeSession?.fullPath ?? activeSession?.projectRoot;
 				const sshRemoteId =
 					activeSession?.sshRemoteId ??
 					activeSession?.sessionSshRemoteConfig?.remoteId ??
 					undefined;
 
+				const originPayload = useSettingsStore.getState().newShell
+					? e.dataTransfer.getData(FILE_TREE_ORIGIN_MIME)
+					: '';
+				if (originPayload) {
+					try {
+						const origin = JSON.parse(originPayload);
+						if (
+							typeof origin?.root !== 'string' ||
+							!origin.root ||
+							(origin.sshRemoteId !== null && typeof origin.sshRemoteId !== 'string')
+						)
+							throw new Error('Invalid file origin');
+						if ((origin.sshRemoteId ?? undefined) !== sshRemoteId) {
+							notifyCenterFlash({
+								color: 'yellow',
+								message: getT()('workflows.shell.crossHostDropUnsupported'),
+							});
+							return;
+						}
+						treeRoot = origin.root;
+					} catch {
+						notifyCenterFlash({
+							color: 'yellow',
+							message: getT()('workflows.shell.invalidFileDropOrigin'),
+						});
+						return;
+					}
+				}
+
 				const mentionPaths: string[] = [];
 				for (const p of internalPaths) {
 					if (isImagePath(p) && treeRoot) {
-						const absolutePath = `${treeRoot}/${p}`;
+						const absolutePath = joinPath(treeRoot, p);
 						void window.maestro.fs
 							.readFile(absolutePath, sshRemoteId)
 							.then((content) => {
 								if (typeof content !== 'string' || !content.startsWith('data:image/')) return;
-								setStagedImages((prev) => {
+								stageAiImages((prev) => {
 									if (prev.includes(content)) {
 										setSuccessFlashNotification('Duplicate image ignored');
 										setTimeout(() => setSuccessFlashNotification(null), 2000);
@@ -1160,11 +1208,18 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 					} else {
 						// Non-image file, folder, or image we can't resolve a root for:
 						// insert as an @mention rather than dropping it silently.
-						mentionPaths.push(p);
+						mentionPaths.push(
+							originPayload && treeRoot
+								? toMentionPath(
+										joinPath(treeRoot, p),
+										activeSession.fullPath ?? activeSession.projectRoot
+									)
+								: p
+						);
 					}
 				}
 
-				if (mentionPaths.length > 0) appendMentionsToAiInput(mentionPaths);
+				if (mentionPaths.length > 0) appendMentionsToAiInput(mentionPaths, imageTarget?.tabId);
 				inputRef.current?.focus();
 				return;
 			}
@@ -1194,7 +1249,7 @@ export function useInputHandlers(deps: UseInputHandlersDeps): UseInputHandlersRe
 									return [...prev, imageData];
 								});
 							} else {
-								setStagedImages((prev) => {
+								stageAiImages((prev) => {
 									if (prev.includes(imageData)) {
 										setSuccessFlashNotification('Duplicate image ignored');
 										setTimeout(() => setSuccessFlashNotification(null), 2000);

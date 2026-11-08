@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useState } from 'react';
 import type { Session, AITab, Theme } from '../types';
@@ -15,6 +16,7 @@ export function EmptyConversationPicker({
 	tab: AITab;
 	theme: Theme;
 }) {
+	const t = useT();
 	const tools = useNewConversationTools(session.id);
 	const [pending, setPending] = useState(false);
 	const newShell = useSettingsStore((s) => s.newShell);
@@ -27,7 +29,11 @@ export function EmptyConversationPicker({
 			<div className="text-base" style={{ color: theme.colors.textMain }}>
 				{getBasename(session.projectRoot || session.cwd)}
 			</div>
-			<div className="flex items-center gap-4 text-sm" role="group" aria-label="Tools">
+			<div
+				className="flex items-center gap-4 text-sm"
+				role="group"
+				aria-label={t('workflows.newShellCopy.navigation.tools')}
+			>
 				{tools.map((provider) => (
 					<button
 						key={provider}

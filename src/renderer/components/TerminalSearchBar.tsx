@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { useSettingsStore } from '../stores/settingsStore';
 import { memo, useEffect, useRef, useState } from 'react';
 import { ChevronUp, ChevronDown, X } from 'lucide-react';
 import { useLayerStack } from '../contexts/LayerStackContext';
@@ -21,6 +23,8 @@ export const TerminalSearchBar = memo(function TerminalSearchBar({
 	onSearchNext,
 	onSearchPrevious,
 }: TerminalSearchBarProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [query, setQuery] = useState('');
 	const [hasResults, setHasResults] = useState(true);
@@ -117,7 +121,7 @@ export const TerminalSearchBar = memo(function TerminalSearchBar({
 				value={query}
 				onChange={(e) => handleQueryChange(e.target.value)}
 				onKeyDown={handleKeyDown}
-				placeholder="Search..."
+				placeholder={newShell ? t('workflows.newShellCopy.panels.terminalSearch') : 'Search...'}
 				className="bg-transparent outline-none text-sm"
 				style={{
 					width: '200px',
@@ -126,15 +130,17 @@ export const TerminalSearchBar = memo(function TerminalSearchBar({
 			/>
 			{noResults && (
 				<span className="text-xs whitespace-nowrap" style={{ color: theme.colors.error }}>
-					No results
+					{newShell ? t('workflows.newShellCopy.panels.noMatches') : 'No results'}
 				</span>
 			)}
 			<button
 				type="button"
-				aria-label="Previous match"
+				aria-label={newShell ? t('workflows.shell.previousMatch') : 'Previous match'}
 				onClick={handlePrevious}
 				disabled={!query}
-				title="Previous match (Shift+Enter)"
+				title={
+					newShell ? t('workflows.shell.previousMatchShiftEnter') : 'Previous match (Shift+Enter)'
+				}
 				className="p-0.5 rounded opacity-70 hover:opacity-100 disabled:opacity-30"
 				style={{ color: theme.colors.textMain }}
 			>
@@ -142,10 +148,10 @@ export const TerminalSearchBar = memo(function TerminalSearchBar({
 			</button>
 			<button
 				type="button"
-				aria-label="Next match"
+				aria-label={newShell ? t('workflows.shell.nextMatch') : 'Next match'}
 				onClick={handleNext}
 				disabled={!query}
-				title="Next match (Enter)"
+				title={newShell ? t('workflows.shell.nextMatchEnter') : 'Next match (Enter)'}
 				className="p-0.5 rounded opacity-70 hover:opacity-100 disabled:opacity-30"
 				style={{ color: theme.colors.textMain }}
 			>
@@ -153,9 +159,9 @@ export const TerminalSearchBar = memo(function TerminalSearchBar({
 			</button>
 			<button
 				type="button"
-				aria-label="Close search"
+				aria-label={newShell ? t('workflows.newShellCopy.panels.closeSearch') : 'Close search'}
 				onClick={onClose}
-				title="Close (Escape)"
+				title={newShell ? t('workflows.shell.closeEsc') : 'Close (Escape)'}
 				className="p-0.5 rounded opacity-70 hover:opacity-100"
 				style={{ color: theme.colors.textMain }}
 			>

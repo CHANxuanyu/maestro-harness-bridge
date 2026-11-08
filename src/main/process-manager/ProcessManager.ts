@@ -33,7 +33,7 @@ import {
 } from '../coworking/coworking-types';
 import { resolveOwningMaestroSessionId } from '../coworking/coworking-session-id';
 import { getBridgeSocketPath } from '../coworking/coworking-socket-path';
-import { killPty } from './utils/commandKill';
+import { killPty, killProcessTreeNow } from './utils/commandKill';
 import { signalRemoteAgent, type RemoteSignalMode } from '../utils/ssh-remote-signal';
 
 /** Time (ms) to wait for a PTY process to exit after SIGTERM before sending SIGKILL. */
@@ -305,8 +305,15 @@ export class ProcessManager extends EventEmitter {
 	/**
 	 * Write data to a process's stdin
 	 */
+	steer(sessionId: string, text: string): Promise<{ turnId: string }> {
+		const controller = this.processes.get(sessionId)?.codexAppServerController;
+		if (!controller) return Promise.reject(new Error('No active Codex app-server turn'));
+		return controller.steer(text);
+	}
+
 	write(sessionId: string, data: string): boolean {
 		const process = this.processes.get(sessionId);
+		if (process?.codexAppServerController) return false;
 		if (!process) {
 			logger.error('[ProcessManager] write() - No process found for session', 'ProcessManager', {
 				sessionId,
@@ -378,7 +385,10 @@ export class ProcessManager extends EventEmitter {
 		process.interrupted = true;
 
 		try {
-			if (process.sdkController) {
+			if (process.codexAppServerController) {
+				process.codexAppServerController.interrupt();
+				return true;
+			} else if (process.sdkController) {
 				// Server-backed (OpenCode SDK) process: abort the in-flight turn.
 				process.sdkController.interrupt();
 				return true;
@@ -475,6 +485,15 @@ export class ProcessManager extends EventEmitter {
 	): boolean {
 		const proc = this.processes.get(sessionId);
 		if (!proc) return false;
+		if (proc.codexAppServerController) {
+			proc.interrupted = true;
+			proc.codexAppServerController.dispose();
+			if (proc.childProcess?.pid)
+				killProcessTreeNow(proc.childProcess.pid, { sessionId, label: 'Codex app-server' });
+			else proc.childProcess?.kill('SIGKILL');
+			// Close owns removal, so another turn cannot start while this writer is alive.
+			return true;
+		}
 
 		try {
 			if (proc.dataBufferTimeout) {

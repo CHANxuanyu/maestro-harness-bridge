@@ -73,6 +73,190 @@ new shell standard mode rejects them before spawn. This detector correction
 also applies to classic mode and CLI resolution; the classic permission policy
 and TUI bypass behavior are otherwise unchanged.
 
+## 项目设置，U2，2026-11-07
+
+| 界面动作                         | CLI                                                                                                    | 共用实现                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| 项目行右键打开设置，切换项目位置 | `project settings show --path <path> [--ssh-remote <id>]`                                              | `settings:projectSettings`、`createProjectSettingsService()`              |
+| 保存默认工具、模型、强度、权限   | `project settings set --path <path> --provider <id> --model <id> --effort <level> --permission <mode>` | 同一 IPC 服务验证并写 Maestro 设置                                        |
+| 清空某项默认值                   | 对应选项传 `inherit`                                                                                   | 同一服务删除对应覆盖值                                                    |
+| 首次选择完全访问                 | `--permission full --acknowledge-full-access`                                                          | 每个项目与主机单独记录一次说明确认                                        |
+| 编辑或删除项目环境变量           | 重复 `--env NAME=VALUE` 替换项目变量；`--clear-env` 清空覆盖                                           | 同一服务保存；既有环境编辑器用于界面输入                                  |
+| 查看遮盖或明文变量               | `show` 默认遮盖，`--show-secrets` 显示原值                                                             | `isSecretEnvKey()`、`maskEnvValue()`                                      |
+| 按项目默认设置新建对话           | `tab new --agent <id> [--prompt <text>]`、`dispatch <id> <prompt> --new-tab`                           | `newProjectConversation()`、`context:conversation`、`openHandoffTarget()` |
+| 明确选择新对话工具               | `tab new --agent <id> --provider <provider>`                                                           | 同一 `context:conversation` 服务，SSH 传递原主机和执行目录                |
+
+模型和强度所属工具通过 `--model-provider <id>` 单独保存，默认工具选择“沿用”时也必须确定归属；显式 `--provider` 可以提供归属。界面保存当前模型控件对应的工具。旧数据有默认工具时继续兼容；没有任何工具归属的旧模型需重新保存后应用，不推断它适用于所有工具。
+
+通用 `settings set projectSettings` 及其点路径一律拒绝，提示改用 `project settings set`；IPC 的 `settings:set` 同样拒绝。`settings:getAll`、`settings:get` 和 CLI `settings get projectSettings` 只返回无环境值的投影；通用点路径读取不能获取变量原值，应使用 `project settings show`。桌面设置窗口读取专用服务，CLI 通过启动时密钥验证的连接访问同一服务，默认遮盖，`--show-secrets` 显示原值。普通浏览器的专用服务响应也移除环境值，保存其他字段不会清空环境；环境编辑需在桌面或 CLI 完成。
+
+`project settings` 需要运行中的 Maestro。它只保存 Maestro 数据，不读写原生配置。
+设置可以由 CLI 预先保存，只有 `newShell` 开启后的新对话采用。已有对话和原生历史导入不重新套用。
+当前对话的显式模型、强度和环境优先于项目，项目优先于既有工具默认配置；权限使用两者中更严格的值，继续按目标能力校验。
+项目入口选择项目默认工具，从当前对话新建保留当前工具。未指定工具时由主进程依据 `effectiveAgentCustomEnvVars()` 解析实际工具身份，提供方默认环境中的 DeepSeek 与前端入口采用同一结果。明确选工具的入口采用该工具的模型与强度，不复制另一家的模型名。切换项目默认工具时，共享设置服务清除上一工具的模型与强度，除非同次提交明确提供新值。
+环境变化通过独立的内部配置承载，保留旧对话的账户、SSH、停用变量和原生身份；记录原始环境以便清空项目覆盖后恢复。
+CLI `tab new` 返回实际 `sessionId`，`dispatch --new-tab` 返回实际 `agentId`，保留其既有 `sessionId` 等于 `tabId` 的约定。带提示的新建由目标所属窗口持久化后排队，来源窗口不会向自己的会话重复投递。
+
+本轮共用修正：带提示的新建回调按来源所属窗口路由，旧界面也由此修正副窗口投递目标；新界面新建回调允许 60 秒，CLI 留出 65 秒等待；旧界面回调仍为 5 秒。其余新行为均受 `newShell` 控制。
+
+## New shell conversation split (2026-11-06)
+
+| UI action                              | CLI                                                   | Shared implementation                                               |
+| -------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------- |
+| Open a conversation on the right       | `tab split <tab-id> [--agent <id>] [--json]`          | `splitConversation()` in `src/renderer/services/newShellSplit.ts`   |
+| Drag the divider                       | `tab split <right-tab-id> --ratio <fraction>`         | The same split service persists the left pane share                 |
+| Return to the focused conversation     | `tab unsplit [--agent <id>] [--json]`                 | `unsplitConversation()` in the same service                         |
+| Select the other pane                  | `focus-agent <agent-id> --tab <tab-id>`               | Existing conversation selection and focused conversation state      |
+| Close one pane while keeping the other | Select the surviving conversation, then `tab unsplit` | The same focus and unsplit actions; neither conversation is deleted |
+
+The row context menu, keyboard bindings and command palette call these services.
+The CLI resolves exact or unique-prefix conversation IDs through the existing
+desktop tab list. `unsplit` addresses the active conversation unless `--agent`
+selects a particular owner. Both commands require the new shell and a running
+desktop application. The renderer validates the split action separately from
+ordinary tab configuration; split fields are never stored on an AI tab and
+cannot be combined with permission or model changes. The acknowledged
+`update_session_config` transport waits for the shared service to save the
+layout before reporting success. Service errors, including a narrow window,
+are returned to the CLI.
+
+`NewShellSplitContent` reuses `MainPanelContent`, `InputArea` and the pointer
+capture divider exported by `TiledLayout`. `tileNewTab()` creates new tabs inside
+one owner, so it cannot represent these two existing conversations across owners.
+The split keeps references rather than cloning conversations or inheriting new
+permissions. Background pane drafts, scroll positions and models stay keyed to
+that pane; only the focused pane claims App's input and transcript refs.
+
+The default shortcut opens the same palette picker: `Alt+Cmd+\` on macOS,
+`Ctrl+Alt+\` elsewhere. Arrow keys on the divider resize through the same service
+as dragging and `--ratio`. Resizing an existing pair keeps focus. A window below
+1180 pixels or a center below 720 pixels shows one conversation and an explanation,
+retaining the saved pair. Selecting a third conversation shows it alone; a new
+split from there uses that conversation as its left pane. The saved references and
+ratio load through `readNewShellSplit()`; malformed values are discarded.
+
+The 2026-11-07 review correction binds each pane's Stop and Escape to its session
+and tab. New shell single-pane Stop has the same conversation scope. Classic
+Stop keeps its whole-agent scope. A stopped process exit only dequeues that
+conversation's work. Closed busy orphan tabs remain included in Stop.
+File pickers use component refs, and image reads retain their destination tab.
+File-tree drags retain the source root and SSH host; a different host is rejected.
+Unfocused scroll writes use `updateAiTab(sessionId, tabId, updater)` and reaching
+the bottom still clears unread. No new CLI verb is added; the gaps below apply.
+
+## New shell conversation content search (2026-11-06)
+
+| UI action                                  | CLI                                                                    | Shared implementation                                                                             |
+| ------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Search local native conversation content   | `maestro-cli native-history search <text> [--project <path>] [--json]` | `agentSessions:searchNativeHistory`, `runNativeHistorySearch()`, `searchNativeHistoryFiles()`     |
+| Open a content hit and jump to its message | Open gap below                                                         | `openNativeHistorySearchHit()`, canonical native resume and transcript backfill, `pendingLogJump` |
+
+The desktop app must be running. The CLI supports relative local project paths.
+The optional project filter compares physical local directories; SSH paths are
+never passed to local resolution. Both callers receive `hits`, `truncated`, and
+optional `limited`, `cancelled`, or `unavailable` flags. Each hit contains the
+conversation identity, owning account, snippet and message locator.
+
+The new shell starts content search after 250 ms for at least two characters.
+Changing or clearing the query cancels the prior request, including account
+discovery still in progress, and ignores late replies. The worker terminates
+before its cancellation promise resolves. Search supports local Claude and Codex,
+including compressed archives; SSH conversations retain title matching only.
+Existing session-browser search reuses the extracted `sessionSearch.ts` parser
+and snippet helper and keeps its API. Codex search now uses the same desktop
+envelope and prompt decoding as displayed messages, so hidden injected context
+no longer matches. Both UI and CLI find legacy Codex headers with an environment
+`<cwd>` fallback and use account-scoped `session_index.jsonl` titles. Index reads
+consume the existing byte budget; oversized or unreadable indexes report `limited`.
+Without an indexed name, the title comes from the first displayed user request.
+Native content jumps carry `revealTurnActivity`; only `newShell` expands the
+containing turn and flashes the body after it mounts.
+
+The third-round correction adds no action or CLI verb. Local Codex history
+discovery now includes `archived_sessions` as well as `sessions`, so an archived
+content hit can pass the canonical read used by resume and backfill.
+`native-history read <agent> <native-id>` uses that same reader; `list` and explicit
+conversation deletion share its account-scoped discovery. Plain rollouts still
+take precedence over compressed copies. The Electron scenario checks CLI content
+before clicking, retains the body-in-viewport and flash assertions, and polls the
+persisted tab name after opening. These reads do not close the navigation gap.
+
+## Native command discovery, T10
+
+| UI action                                                         | CLI                                                         | Shared implementation                                        |
+| ----------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| Open `/` and inspect native commands for the current conversation | `maestro-cli tab commands <tab-id> [--agent <id>] [--json]` | `agents:getNativeCommands`, `createNativeCommandDiscovery()` |
+
+The composer opts in with `newShell` for Claude Code and Codex. The CLI resolves
+an exact tab, unique prefix or `active`, then asks the same IPC handler to resolve
+its stored owner. Results contain `commands` with `command`, `description`,
+`source` (`project`, `user`, `builtin`, `reported`) and a `prompt` for Codex
+commands and selected Claude project commands.
+An unavailable read returns `warning` (`unavailable` or `remote-unavailable`)
+and the supported native builtins. The JSON warning is data, not a failed transport.
+Queued native command execution preserves read failures and holds the item for
+manual resend through the existing queue controls. CLI can inspect and remove
+held items with `queue list` and `queue remove`; force-send remains an open gap.
+This verb lists the native portion of `/`; Maestro's own workflow commands and
+Settings custom AI commands retain their existing configuration paths.
+
+Discovery uses the canonical account resolver and the execution cwd, including
+SSH overrides. The renderer presents its memory cache immediately and checks on
+reopening. Main caches directory listings and file bodies by metadata, with
+single flight per provider, account, cwd and SSH configuration. Project scope
+wins over user scope; within a scope, skills precede commands or prompts.
+Claude reads commands and skills, and Codex reads its existing skills and prompts
+locations. Codex and Claude project bodies use the same lookup during command
+dispatch and queue draining. This makes the chosen Claude project body explicit,
+since native Claude prefers a personal skill over a same-named project skill.
+SSH discovery follows command directory symlinks through remote `stat -L`; other
+remote stat callers retain their existing behavior.
+
+Native init reports are captured with the account, cwd and SSH configuration
+frozen at spawn. UI and CLI reads merge that scoped report with file discovery,
+which wins on collisions. Reports have the label `reported`, because the init
+event does not identify a file scope. Failed reads show only native builtins,
+including cached reads after the failure. No discovery call starts a provider or
+writes native files.
+
+Spawns with `--no-session-persistence`, including automatic Claude synopses,
+do not publish into that inventory. Their reduced or empty init reports must
+not replace the conversation's plugin commands. A later persistent turn still
+replaces the report, including with an empty list. This correction adds no UI
+action or CLI verb: `/` and `tab commands` consume the same retained inventory.
+Legacy `process:slash-commands` notifications are unchanged.
+
+Account changes through `update-agent <id> --env CLAUDE_CONFIG_DIR=<directory>`
+refresh the new-shell list even when App retains its chrome session snapshot.
+`useNativeCommands()` subscribes directly to the current session's environment;
+its cache key and IPC request use that value. `tab commands` continues to resolve
+the stored owner through the same discovery handler. Reports remain attached to
+their original account scope, and switching back restores them. The legacy
+`session.agentCommands` report is preserved and does not enter new-shell
+discovery. No action or CLI verb is added; classic-shell behavior is unchanged.
+
+Source badges have a text separator from the command name, including English
+and Chinese accessible names. This presentation fix adds no action or CLI verb;
+`tab commands` still returns the command, description and source separately.
+
+The scan-delay fixture uses the Electron module passed to `evaluateHandle` and
+temporarily wraps `agents:getNativeCommands`. Cached reads and other contexts
+continue through the original handler. This test-only correction adds no UI
+action or CLI verb and preserves the draft and single-submission assertions.
+
+Open gaps: plugin commands appear after an existing Claude process reports them;
+there is no offline inventory of Claude plugin manifests or Codex plugin catalogs.
+Project Claude commands expand their selected Markdown body and `$ARGUMENTS`
+through Maestro; native skill frontmatter execution controls, indexed arguments,
+dynamic shell interpolation and relative supporting-file semantics are not
+reimplemented or verified here. CLI queue force-send has no equivalent yet.
+Busy `dispatch --queue` stores a message and does not expand a native command
+body through the composer; use normal dispatch when idle for this path. Codex TUI-only builtins cannot
+be expanded by `codex exec`, so they are not offered as native commands. Other
+providers keep their existing discovery. Real SSH transport, Electron rendering
+and native command execution require external acceptance; the new synthetic
+Electron scenario is `e2e/native-commands.spec.ts`.
+
 ## Stop and read-only resume corrections (2026-11-06)
 
 No UI action or CLI verb is added. `tab permission <tab> readonly` and
@@ -682,6 +866,19 @@ hook failures return their original diagnostics, with no automatic retry.
 The UI controls are gated by `newShell`; the CLI verbs are explicit opt-in
 operations in either shell. No new parity gap is introduced by these actions.
 
+## New shell copy audit (2026-11-07)
+
+This copy-only change adds no UI action or CLI verb. Language selection still
+uses `settings set uiLanguage en|zh-CN`; shell selection still uses
+`settings set newShell true|false`. File operations, conversation creation,
+permission selection, handoff, retry and update preferences keep their existing
+handlers and stored values. New shell labels are separate from classic labels.
+Terminal search, selection menus, file preview and file-operation feedback use
+the same callbacks as before. Update toggles still use `settings set
+checkForUpdatesOnStartup|enableBetaUpdates|crashReportingEnabled <boolean>`.
+Provider diagnostics remain verbatim. Existing presentation and recovery gaps
+below remain open.
+
 ## Open gaps
 
 Claude approval: the modal covers the composer Stop button. Escape denies only
@@ -689,6 +886,213 @@ the current tool. U4 tests the existing interrupt IPC while approval is pending;
 it does not add a direct Stop action or close the existing full Stop parity gap.
 `permission` covers tool allow/deny only; a structured AskUserQuestion answer
 command, cross-window routing and browser prompt delivery are not verified here.
+
+**Codex prototype controls (2026-11-07).** `codex-turn stop` interrupts only the
+addressed local app-server process through `ProcessManager.interrupt()`. The
+composer Stop also cancels the project's queued work and cross-agent consults;
+that wider existing Stop action is still not CLI-covered. Approval prompts use
+the main window only. Secondary-window ownership and web-desktop approval/steer
+controls have not been integrated or verified. There is no CLI draft editor:
+`steer` takes explicit text and leaves the desktop draft alone. The composer
+shows the affordance from opt-in eligibility; if the current turn started with
+exec before the setting changed, the main process refuses steering and the draft
+is retained. No RPC is sent to that exec process.
+
+**Copy audit presentation controls (2026-11-07).** The existing terminal search
+query and next/previous match, file preview tier, image zoom, and media
+playback/volume controls still have no CLI verbs operating their mounted UI
+state. `read-terminal` exposes output, `open-file` opens a file, and `--queue`
+adds media, but none controls those presentation states. Terminal selection
+quoting and link context-menu presentation also lack a shared CLI UI action.
+The copy audit translates these existing controls only; it does not close these
+gaps or add separate implementations. Error recovery remains in the backlog below.
+
+## New shell conversation children (2026-11-07)
+
+| UI action                                               | CLI                                                                 | Shared implementation                                                                                    |
+| ------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Inspect a parent's child conversations and their status | `tab children <tab-id> [--agent <id>] [--json]`                     | `findConversationParent()` in `shared/conversationChildren.ts`; open tab inventory                       |
+| Select a child conversation                             | `tab select <tab-id> [--json]` or `focus-agent <agent> --tab <tab>` | `select_tab` / remote selection and `setActiveTab()`; new shell reveals the hidden tab and clears unread |
+| Ask another conversation to do work                     | `ask <target> <question>` or `dispatch <source> "@Target ..."`      | Existing mention planner and `sendCrossAgentRequest()`                                                   |
+| Delegate into a new child                               | `dispatch <target> <prompt> --new-tab` from a stamped caller        | Existing accepted-dispatch notice and `recordAgentDelegation()`                                          |
+| Add a reply while a child works                         | `dispatch <child-owner> <prompt> --tab <child-tab> --queue`         | Existing execution queue; consult completion releases the child's tab barrier                            |
+| Continue an idle child                                  | `send <prompt> --tab <child-tab>`                                   | Existing composer send and captured native session ID                                                    |
+| Rename, star or close a child                           | `tab rename`, `tab star`, `tab close`                               | Existing tab actions, also used by nested row menus                                                      |
+
+Origins are created only under `newShell`. A source native ID arriving later is
+filled once by `captureConversationSourceNativeId()`, shared by normal provider
+events and consult completions. The tree checks account and SSH identity with
+`matchRecordForTab()` before offering a history parent. No remote path is resolved
+locally. `tab children` returns direct children including hidden consults, product
+provider markers, busy/error state and origin metadata. The tab inventory and
+origin metadata still wait for persistence. Running consults and their terminal
+errors come from the main-process consult registry; persisted error logs retain
+the failure after restart. Normal managed processes take precedence when the
+child is continued.
+
+Background consults still have no tab chip and raise no unread. Selecting one is
+an explicit reveal. A busy consult tab is not reused for another simultaneous
+consult in the new shell. Completion and failure settle existing subtask state
+even if the user switched back to the classic shell meanwhile. These children
+keep the full consult detail instead of spawning a second summary writer.
+
+Plain dispatch into an existing conversation keeps that conversation's current
+origin. A command without caller identity creates no guessed parent. The new CLI
+help strings share the English and Chinese catalogs and follow the process
+locale. The classic CLI inventory now suppresses stale unread on hidden tabs and
+adds optional provider/hidden/error/consult-origin fields; desktop classic
+navigation and ordinary consults retain their previous behavior.
+
+Consult creation and reuse intersect the source permission, the target project's
+default, and the existing child's restriction through the canonical permission
+functions. Execution carries that ceiling; the global write switch can only
+tighten it. A closed running child saves its reply and native identity into the
+retained tab, and remains in the orphan collection while queued work exists.
+
+Archive and unarchive use the existing `tab archive <tab-id>` and
+`native-history archive|unarchive <owner> <native-id>` routes. The shared
+`conversationBranch()` check refuses archive while a descendant is running or
+queued. The tree resolves archived parents before filtering, so completed
+children stay hidden with their parent and return on unarchive. A child can be
+archived independently.
+
+New shell Stop addresses both outgoing consults and the incoming consult on the
+selected child. The main registry waits for process exit before acknowledging
+cancellation. Stopping a child leaves its siblings, including closed siblings,
+running. This uses the desktop interrupt service; the existing CLI Stop gap below
+remains open. No new CLI verb was added in this review correction.
+
+咨询历史展示修复（2026-11-07，U3 第三轮）没有新增界面动作或 CLI 动词。
+`ask`、带 @提及的 `dispatch` 和界面派发继续使用 `sendCrossAgentRequest()` 与同一路由。
+原生 ID 到达时立即通过 `targetNativeSessionId` 通知显示认领，存入
+`consultOrigin.nativeSessionIds`；`targetAgentSessionId` 仍只表示成功后的续聊资格。
+停止或失败也清除旧续聊资格，防止复用被中断的咨询。显示认领仅在 `newShell` 的树中生效。
+
+`tab close` 和原生历史打开沿用原入口；`native-history list`、`native-history search`
+与界面读取同一份清理后的标题和搜索正文。生产信封及 `stripCrossAgentPrompt()`
+位于 `shared/crossAgentPrompt.ts`，兼容旧记录，不改写原生文件。
+没有新增 CLI 对等缺口，下列停止、折叠和历史打开的既有缺口仍保留。
+
+## Open gaps
+
+**Subtask disclosure and archived sources (2026-11-07).** The disclosure button
+keeps local React state. `tab children` reads the same parent relation but does
+not expand or collapse the desktop tree. It resolves an open parent tab; after
+closing the source, reopen its native history row and pass the new tab ID.
+The existing native-history open gap below still applies. A pre-feature consult
+without a captured source native ID can only attach while its original source
+tab is open.
+
+**Cross-window CLI child provenance, U3 review item 6 (2026-11-07).** Confirmed
+and deferred under the review's small-change limit. The accepted-dispatch notice
+routes to the caller window, where `recordAgentDelegation()` patches the target
+tab. A missing target snapshot drops the patch, and persistence excludes targets
+owned by another window. Fixing this needs source identity in the new-tab request,
+target-owner storage and acknowledgment, across the dispatch handler, callback,
+preload and renderer request path. This review does not claim cross-window
+attachment or restart recovery. The source must be transferred before the target
+acknowledges creation; broadcasting the existing caller notice is insufficient.
+
+## New shell changes by turn (2026-11-06)
+
+| UI action                                      | CLI action                                                                                                        | Shared implementation                                                                                  |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Read changes grouped by conversation turn      | `changes --by-turn --tab <id> --json`                                                                             | `updateTurnWriteIndex()` and `groupChangesByTurn()`, with `agentSessions:turnWrites` and `git:changes` |
+| Choose By file or By turn on this conversation | `tab panel <id> changes-files` or `tab panel <id> changes-turns`                                                  | `changeNewShellPanel()`, persisted in `AITab.newShellPanel.changesView`                                |
+| Open a diff, stage, unstage, revert or commit  | Existing `changes --file`, `changes stage`, `changes unstage`, `changes revert --yes`, `changes commit --message` | Existing Git handlers and panel actions                                                                |
+
+The new panel actions require `newShell`. Reading `--by-turn` is read only and
+does not change the view preference. It cannot be combined with `--file` or a
+write action. JSON keeps the Git snapshot and adds `groups`, `hasWriteRecords`
+and `diffScope: "current"`. A group's `turnId: null` means Other changes; its
+title is empty so the renderer can localize it. Each recorded group carries the
+user message's first line, capped at 120 characters, and its timestamp.
+
+The UI memoizes the live index by the log array. New-shell persistence saves
+`AITab.changeTurnIndex` before trimming the displayed logs to 100 entries.
+Both surfaces obtain complete Claude and Codex native indexes from the same
+read-only `agentSessions:turnWrites` handler, scoped to the selected owner,
+account and SSH host. Native indexes take precedence when they contain writes;
+otherwise the retained live index supplies the evidence. No native file is
+created, restored or edited. The main-process cache holds up to 32 identities,
+uses the existing transcript revision probes, and incrementally converts the
+open turns while reusing closed turns from the canonical storage readers.
+Remote Claude has no revision probe and is read only on an explicit refresh.
+
+Both surfaces intersect recorded successful writes with current Git changes.
+Renames use Git's `oldPath`; copies do not inherit the source file's turns.
+Git's 500-file limit remains. `executionCwd` comes from Git on the execution
+host and maps the selected cwd alias, including SSH `~` and `$HOME`, without
+local resolution of remote paths. Explicit write paths survive display input
+truncation. Unrecognized path aliases and parent traversal remain unmatched.
+
+The synthetic T8 scenarios in `e2e/native-new-shell.spec.ts` cover two turns,
+Other changes, shared diffs, staging, CLI parity and restart with 150 later
+logs, plus each provider's early native write before 600 later messages and
+5000-character tool inputs. The Codex fixture uses legacy call/result records.
+They have been authored but not executed in the sandbox.
+
+## New shell conversation archive and native deletion (2026-11-06)
+
+| 界面动作                     | CLI                                                                  | 共用实现                                                             |
+| ---------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 对话右键或命令面板归档       | `tab archive <tab-id>`；`native-history archive <agent> <native-id>` | `agentSessions:archiveConversation` 与 `createConversationArchive()` |
+| 项目底部展开已归档列表       | `native-history list --archived`；限定项目时加 `<agent>`             | 主进程归档元数据与 `listProjectHistory` 的归档过滤                   |
+| 取消归档                     | `native-history unarchive <agent> <native-id>`                       | 同一归档服务，取消标记并保留权限元数据                               |
+| Codex 对话右键或命令面板删除 | `native-history delete <agent> <native-id> --yes`                    | 新界面复用同一服务，再调用原有 `CodexSessionStorage.deleteSession()` |
+
+归档写入 Maestro 设置的 `archivedConversations`，以工具、主机、规范账户历史目录和原生 ID 为身份。主进程检查仍在运行的进程，并向每个所属窗口请求实时检查及标签关闭。忙碌、排队或窗口无法确认时拒绝；关闭采用原标签实现，不调用模型、不写原生历史。项目扫描、缓存条目和打开标签的投影都排除归档项。工作树归档仍显示在所属项目下。
+
+取消归档仅将记录的 `archived` 设为 `false`，保留权限、原活动时间及项目归属；旧记录未带该字段时仍视为已归档。默认归档接口和 `native-history list --archived` 只返回已归档项，渲染层以 `includeUnarchived` 读取完整权限库存。浏览器和桌面均初始读取并订阅同一事件，只有桌面处理标签关闭。`projectHistoryScopeFor()` 统一目录边界、最具体项目、工作树和主机归属，子目录归档也有恢复入口。
+
+T9 第三轮仅修正验收入口，没有新增 CLI 动作。`tab new` 确认渲染层创建完成时，`tab show` 读取的主进程持久化库存可能尚未更新；验收先确认页面中的同一标签，再等待该 ID 可读，仍同时断言 `permissionMode: readonly` 和 `readOnly: true`。`test:e2e` 同时构建 `web-desktop`。
+
+T9 第四轮将子目录归档的 Electron 验收收敛为桌面左栏操作、归档和取消归档后的重启保留，以及 `native-history archive|unarchive` 的桌面同步。浏览器归档读取、保留取消归档权限元数据、实时增删、重新挂载后的读取与订阅和卸载退订，由 `src/__tests__/renderer/hooks/useRemoteIntegration.test.ts` 覆盖。移除验收中的额外 `BrowserWindow`，产品实现和 CLI 动作均不变；修改后的 Electron 场景待外部执行，浏览器整页及跨窗口同步不在本轮验收范围。
+
+权限继承排除归档项的最近活动；没有普通对话时使用归档中最严格的已知档位。没有 Maestro 权限记录的原生历史保守记为只读。空项目不会在重启时被当作损坏数据补出高权限对话。新界面关闭时不启用归档过滤或新增菜单；归档写操作要求 `newShell`。既有 CLI 删除增加 `--yes` 确认，这是两种界面共用的安全收紧。Claude 不提供原生删除。
+
+## Second batch integration (2026-11-07)
+
+`native-history search` and sidebar content search share the archive filter in
+`agentSessions:searchNativeHistory`. With `newShell` enabled, both exclude Maestro
+archive keys, scoped to provider, host, account pool and native ID. The sidebar
+also removes already displayed hits when archive metadata changes, cancels any
+pending search and refreshes the unchanged query after archive or unarchive.
+Search identities use `nativeHistoryPool()`, shared with discovery and archive,
+including account aliases that share a transcript directory. Codex `archived_sessions`
+is native storage and remains searchable unless Maestro has archived that exact
+identity. The scan and result budgets remain unchanged; filtering can return
+fewer than 50 hits. This repair adds no UI action, CLI verb or localized copy.
+
+The shared CLI result identity now matches discovery even with `newShell` off;
+classic-shell result membership and the archive filter's opt-in remain unchanged.
+
+Project creation still resolves authoritative owner snapshots, excludes archived
+conversations from recency and uses the strictest archive when no ordinary
+conversation remains. Missing owners or changed project/host identity cannot
+authorize wider permissions. A direct `createTab()` without `permissionSource`
+uses the strictest known inventory, including archives, hidden conversations,
+closed tabs, orphaned turns and snoozed group members. The creation call-site
+inventory remains unchanged. The archive tests exercise project recency through
+`resolveProjectConversationPermission()` and assert the strict fallback separately.
+
+## Open gaps
+
+**项目设置的展示状态，U2。** 打开、关闭弹窗和切换位置选择框没有 CLI 窗口状态动词；读取、修改、清空、确认和变量显示都有上表对应动作。新界面可达的“在下方新建 AI 对话”在项目有默认值时共用 `newProjectConversation()`，再将返回的实际归属交给 U1 的 `splitConversation()` 在右侧显示。CLI 可按顺序调用 `tab new` 和 `tab split`，没有原子化的新建并分屏命令。普通浏览器暂不编辑项目环境值；手机实际点击仍需验收。
+
+**向导入口，U2 二轮。** `handleLaunchWizardTab()` 仅由旧 Auto Run 工具栏使用，新界面隐藏 Auto Run、向导命令和快捷键，因此未增加项目环境创建逻辑。启动模型已改为优先使用新标签解析出的模型。若未来开放该入口，必须先接入统一项目创建服务，并补齐 CLI 对等及 Electron 验收。
+
+**New shell split limits (2026-11-07).** Split targets must already be open tabs;
+native history entries must first be opened with the existing history action.
+Conversations owned by another window cannot be split into this window. There is
+one saved split pair in settings, so independent saved pairs per window are not
+implemented. Existing external native transcript following still follows only
+the focused conversation; this change does not add a second background reader.
+All new visible split actions have the CLI equivalents listed above.
+
+2026-11-07 性能分支合并保留主线工具全文和任务面板动作。消息行复用仍传递全文来源，来源或原生调用身份更新时清除旧全文；读取继续共用 `agentSessions:toolOutput` 与 `native-history tool-output`，本轮没有新增 UI 动作或 CLI 动词。以下全文收起状态和 SSH 等既有缺口保持原状。
+
+2026-11-06 性能基准没有新增界面动作或 CLI 动词。Codex 列表的目录判断优化位于共享存储适配器，桌面项目列表、`sessions` 和 `native-history list` 沿用同一实现。性能采集继续使用 `profiling start/status/stop`；离线合成基准见 `scripts/perf/README.md`。本轮没有填补下列既有交互缺口。
 
 **Fork and create-in-tile actions (2026-11-06).** Message forking still has no
 `tab fork --at` verb; this remains the Composer backlog below. The palette and
@@ -705,6 +1109,28 @@ persisted desktop inventory. UI history selection, closed-tab restoration and
 identity or returned tab ID before reading or mutating it, then uses that exact ID.
 The permission write and provider switch still require immediate readback after
 their acknowledged save. There is no live-owner inventory read in these CLI verbs.
+
+**Turn grouping freshness (2026-11-06 review fix).** For conversations without
+readable native write records, CLI still reads the persisted independent index.
+A live write can lag until normal persistence completes. Early writes no longer
+disappear permanently after log trimming, and native indexing no longer depends
+on scrolling through history. No new UI action or CLI verb was added.
+
+- T9：自动发现但尚无匹配工具及账户配置的历史，可在界面直接归档或取消归档。CLI 的修改命令使用 `<agent>` 指定账户，需要先有匹配的配置；暂未提供直接按账户目录修改的参数。全局 `native-history list --archived` 仍可读取这些条目。
+- T9：运行状态拒绝覆盖 Maestro 管理的进程、窗口标签和队列。尚未接入其他应用或独立原生 CLI 的活动探测，不声称能识别这些外部进程是否正在写同一历史。
+- T9：跨窗口先全部检查，再逐个关闭。若后一个窗口在关闭时失败，归档标记回退，但已关闭窗口的标签不自动恢复；尚未提供跨窗口事务式回滚。
+
+**Native content search navigation (2026-11-06).** Content retrieval has the CLI
+command above. Opening a returned hit, creating a compatible runner when needed,
+and scrolling or flashing its message still have no acknowledged CLI command.
+They extend the existing native-history open gap below. The implementation is
+`openNativeHistorySearchHit()`; a future CLI entry must route to that service in
+the owning renderer. `native-history read` returns text but does not perform this
+UI action. Cancelling or clearing the sidebar search is also view-local; the
+internal cancellation IPC has no standalone CLI verb.
+The review fix also expands a folded turn before flashing its matched body.
+That expansion belongs to the same unresolved navigation action, with no new
+CLI verb in this round.
 
 **Provider switch wording (2026-11-06).** The existing CLI help, force warning and
 success text still describe the classic reset behavior. With `newShell` enabled,
@@ -737,7 +1163,9 @@ This presentation-only phase adds no CLI verb or session protocol. Neither half 
 Ranked by how often an agent is likely to hit them. None of these are blocked by
 a design constraint; they are simply not built yet.
 
-1. **Interrupt a running turn.** Escape stops a busy agent in the UI. There is
+1. **Interrupt a running turn.** In the new shell, Stop and Escape stop the named
+   conversation, including its forced parallel processes and busy orphan tabs.
+   Classic Stop remains agent-wide. There is
    no CLI equivalent and no WS message behind one. This is the largest remaining
    gap: an agent that starts a runaway turn on another agent cannot stop it.
    The 2026-11-06 Stop/synopsis correction preserves this gap; the legacy remote
@@ -784,7 +1212,18 @@ a design constraint; they are simply not built yet.
     `POST /api/session/:id/interrupt` -> `remote:interrupt`) signals the
     legacy `${sessionId}-ai` process id, which misses per-tab processes
     (`${sessionId}-ai-${tabId}`). Fix the renderer handler to take a tab id,
-    then add `interrupt <agent> [--tab]`.
+    then add `interrupt <agent> [--tab]`. The 2026-11-07 new shell correction fixes
+    the desktop callback and source-tab consult cancellation, but deliberately
+    leaves this legacy remote transport and the missing CLI verb as Open gaps.
+    A normal conversation stop must not be confused with `group-chat stop` or
+    `stop-auto-run`, which control different workflows.
+
+    **Composer attachments and reading position:** there is still no CLI action
+    to open a file picker, stage an image on a draft, insert a dropped file
+    reference, or set the transcript scroll position and bottom/unread state.
+    `image list/save` reads or exports existing images; it does not attach one.
+    The new source-host rejection and per-pane scroll fix do not close these gaps.
+
 11. **Expand a diagram or image to the pan/zoom viewer.** The viewer opens on
     an element already rendered in a transcript or document
     (`openZoomViewer(element)`), and a transcript element has no address the
@@ -839,3 +1278,84 @@ still missing. Grouped, highest value first:
 `maestro-cli native-history list <agent>` returns the project sidebar's native conversation records through `agentSessions:listProjectHistory`. `read <agent> <conversation>` uses the canonical read-only transcript adapter. `delete <agent> <conversation>` removes a whole Codex conversation in the selected local or SSH account. Partial native-message deletion returns a read-only error. These verbs require the desktop app. Pianola's offline learning scan uses the bounded shared Codex rollout decoder.
 
 Packaged CLI storage and discovery use the shipped product identity. `settings set` uses the live `settings:set` IPC handler when the desktop is running and waits for its acknowledgement. Offline writes keep the same value validation and product-directory checks.
+
+## Codex app-server prototype (2026-11-07)
+
+Both `newShell` and `codexAppServer` must be true; the latter defaults to false.
+Only local user turns with a conversation tab use this path. SSH and Auto Run
+stay on exec. A saved Codex `standard` turn without the local approval transport
+is refused, including after either setting is disabled, so it cannot inherit
+exec's bypass arguments. Full and read-only exec behavior is unchanged.
+
+| UI action                             | CLI action                                                                  | Shared implementation                                                                    |
+| ------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Enable the prototype                  | `settings set codexAppServer true` after `settings set newShell true`       | Existing settings service and persisted defaults                                         |
+| Choose standard permission            | `tab permission <tab-id> standard --agent <owner-id>`                       | Shared eligibility gate, existing tab permission action, explicit spawn policy           |
+| Create, resume and send a turn        | Existing `tab new` and `dispatch <owner-id> <text> --tab <tab-id>`          | Existing renderer dispatch and `process:spawn`; app-server selected in `handle-spawn.ts` |
+| Add ordinary text to the running turn | `codex-turn steer <process-id> <text>`                                      | `process:steer`, `ProcessManager.steer()`, exact `turn/steer` acknowledgement            |
+| Read pending approvals                | `codex-turn permissions`                                                    | The same pending registry used to render `PermissionPrompt`                              |
+| Allow or deny one approval            | `permission-respond <request-id> <decision>`, decision is `allow` or `deny` | Existing `permission:respond` and permission relay registry                              |
+| Stop the running prototype process    | `codex-turn stop <process-id>`                                              | `ProcessManager.interrupt()` and `turn/interrupt`; wider Stop gap above                  |
+
+All four new commands support `--json` and require a running desktop bridge.
+The process ID is the full `<owner-id>-ai-<tab-id>` string, not a native Codex
+thread ID. Pending-approval listings include both `sessionId` (the process ID)
+and `requestId`. Otherwise obtain the owner and tab from existing `session list --json` command and construct that process ID.
+A successful steer receipt means accepted by the same turn, not completed.
+Failure or timeout keeps the draft, does not queue it, and never retries it.
+The CLI returns nonzero on rejection. A stale permission request is rejected.
+Unknown protocol requests are not treated as implicit approval.
+
+Synthetic validation and unresolved protocol/version limits are recorded in
+[the prototype note](../verification/codex-app-server-prototype.md).
+
+## New shell transcript performance (2026-11-06)
+
+Progressive row element reuse changes rendering work only. No new UI action or CLI verb is introduced. Existing conversation selection, transcript search and jumps retain their current paths and existing gaps; this change does not claim to close native resume or refresh gaps.
+
+New shell stdout placeholder cleanup now shares the existing 200 ms output batch, including final flush. It adds no user action. CLI and UI initiated turns continue through the same process listener and session batcher.
+
+## Renderer benchmark runner (2026-11-06)
+
+T4 第三轮只修改离线合成基准，不增加界面动作或 maestro-cli 动词。阶段选择使用 `MAESTRO_PERF_STAGES`，运行命令、依赖和结果读回见 [renderer 性能复测](../perf-renderer.md)。产品内性能采集仍走既有 `profiling start/status/stop`，本轮没有填补 Open gaps 中的交互缺口。
+
+## T4 fourth round rendering
+
+Opening and switching conversations use the existing UI and CLI selection paths.
+Lazy row construction changes no action, command, message or IPC contract.
+The progressive window still hydrates the full history and retains search and jump targets.
+No new CLI verb or parity gap is introduced.
+
+Startup now defers local Git metadata refresh only in the new shell. It uses the
+existing gitService and background refresh path, with no new user action or CLI
+verb. The new shell splash also removes decorative waits after the existing data,
+paint and font readiness gates. Classic startup and SSH refresh remain unchanged.
+
+## U7 流式输入调查（2026-11-07）
+
+本轮只修补合成 renderer 基准的逐键记录与尾帧收尾，并增加输入和流式批次的源码回归，没有新增界面动作或 maestro-cli 动词。UI 与 CLI 发起的回合仍共用原有 process listener 和 session batcher；产品内采集沿用 `profiling start/status/stop`。七轮 stream 命令见 [renderer 性能复测](../perf-renderer.md#u7流式期间按键延迟调查)。Open gaps 中既有的视图交互缺口保持原状，本轮不声称补齐。
+
+### Codex 原型审批归属补充（2026-11-07）
+
+`codex-turn permissions` 和 `permission-respond` 与桌面审批共用请求归属校验。
+Codex 原型的浏览器调用明确拒绝，包括未开启网页登录的浏览器。CLI 必须通过服务端认证的
+`trustedCli` 身份，按桌面用户和主窗口身份查询及响应，因此不能处理其他窗口或
+浏览器用户的请求。桌面只能处理原始所属窗口中的请求；关闭窗口后不能批准。
+
+Claude 的既有浏览器审批继续通过 `permission:respond`，CLI 对应
+`maestro-cli permission-respond <request-id> <allow|deny>`，共用同一响应及 pending 校验。
+仅当请求所属用户和调用方用户都存在且不同时拒绝；桌面发起、无所属用户的请求，
+允许已通过服务端认证的浏览器客户端响应，包括副窗口发起的请求。浏览器不校验窗口，
+桌面和可信 CLI 仍校验原始窗口。用户、客户端类型只取服务端元数据，不取请求参数。
+重复、结束和超时请求均失败。此修复同时恢复旧界面的既有浏览器用法，没有新增动词。
+
+Open gaps：CLI 暂不选择其他窗口；`codex-turn permissions` 只列 Codex 原型请求，
+Claude 请求仍需从已有审批事件取得 requestId；浏览器 Codex 原型审批尚未支持。
+
+Codex 标准权限的输入栏、项目设置、新建、继承、恢复及 `tab permission` 共用
+`effectiveStandardPermissionCapability()`。`project settings set --permission standard`
+及 `tab new` 保持相同有效能力判断。咨询显式禁用原型能力，继续自己的 exec 权限限制。
+
+原型计划通知沿用 `update_plan` 工具事件，任务面板及 `tab panel <tab-id> tasks`
+继续读取同一清单。追加防重仅管理界面草稿，不会把两次显式 CLI steer 指令合并。
+此次没有增加 CLI 动词，既有追加、审批、项目默认权限、新建、面板及停止动作均保留。

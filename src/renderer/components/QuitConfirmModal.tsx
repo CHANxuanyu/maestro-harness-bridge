@@ -1,3 +1,4 @@
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 import { useT } from '../i18n';
 /**
  * QuitConfirmModal.tsx
@@ -51,6 +52,7 @@ export function QuitConfirmModal({
 	onCancel,
 }: QuitConfirmModalProps): JSX.Element {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const cancelButtonRef = useRef<HTMLButtonElement>(null);
 	// When checked, the app stays open and quits itself once everything is idle.
 	const [quitWhenIdle, setQuitWhenIdle] = useState(false);
@@ -130,7 +132,13 @@ export function QuitConfirmModal({
 						{busyAgentCount > 0 && (
 							<>
 								{t(
-									busyAgentCount === 1 ? 'workflows.quit.agentsOne' : 'workflows.quit.agentsMany',
+									newShell
+										? busyAgentCount === 1
+											? 'workflows.newShellCopy.feedback.quit.one'
+											: 'workflows.newShellCopy.feedback.quit.many'
+										: busyAgentCount === 1
+											? 'workflows.quit.agentsOne'
+											: 'workflows.quit.agentsMany',
 									{
 										count: busyAgentCount,
 										state: hasAutoRun
@@ -178,7 +186,9 @@ export function QuitConfirmModal({
 							}}
 						>
 							<div className="text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-								{t('workflows.shell.activeAgents')}
+								{newShell
+									? t('workflows.newShellCopy.feedback.quit.active')
+									: t('workflows.shell.activeAgents')}
 							</div>
 							<div className="flex flex-wrap gap-2">
 								{displayNames.map((name, index) => (

@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 /**
  * Real-DOM proof that Escape leaves the caret in the composer.
  *
@@ -83,12 +84,14 @@ function Composer({
 	commandMode,
 	setCommandMode,
 	inputValue,
+	target,
 	interruptTurn = vi.fn(),
 	setInputValue = vi.fn(),
 }: {
 	commandMode: 'off' | 'shell' | 'ai';
 	setCommandMode: (v: 'off' | 'shell' | 'ai') => void;
 	inputValue: string;
+	target?: { sessionId: string; tabId: string };
 	interruptTurn?: () => void;
 	setInputValue?: (v: string) => void;
 }) {
@@ -116,12 +119,17 @@ function Composer({
 	return (
 		<div>
 			<div ref={transcriptRef} tabIndex={-1} data-testid="transcript" />
-			<textarea ref={inputRef} aria-label="composer" onKeyDown={handleInputKeyDown} />
+			<textarea
+				ref={inputRef}
+				aria-label="composer"
+				onKeyDown={(event) => handleInputKeyDown(event, target)}
+			/>
 		</div>
 	);
 }
 
 beforeEach(() => {
+	useSettingsStore.setState({ newShell: false });
 	vi.clearAllMocks();
 	useSessionStore.setState({
 		sessions: [{ id: 's1', inputMode: 'ai', activeTabId: 't1', isGitRepo: false }],
@@ -232,6 +240,27 @@ describe('Escape stops the conversation on screen (real DOM)', () => {
 
 	afterEach(() => {
 		mockInputContext.slashCommandOpen = false;
+	});
+
+	it('passes the pane identity to Stop even when another tab is globally active', () => {
+		runningAgent(false);
+		useSettingsStore.setState({ newShell: true });
+		const target = { sessionId: 's1', tabId: 't2' };
+		const interruptTurn = vi.fn();
+		const view = render(
+			<Composer
+				target={target}
+				commandMode="off"
+				setCommandMode={vi.fn()}
+				inputValue="draft"
+				interruptTurn={interruptTurn}
+			/>
+		);
+		const composer = view.getByLabelText('composer');
+		act(() => composer.focus());
+		fireEvent.keyDown(composer, { key: 'Escape', bubbles: true });
+		expect(interruptTurn).toHaveBeenCalledExactlyOnceWith(target);
+		expect(composer).toHaveFocus();
 	});
 
 	it('stops the running turn and keeps the caret in the composer', () => {

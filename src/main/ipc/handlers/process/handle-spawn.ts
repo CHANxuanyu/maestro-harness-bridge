@@ -1,3 +1,12 @@
+import {
+	codexAppServerEnabled,
+	CODEX_APP_SERVER_MESSAGES,
+} from '../../../../shared/codexAppServer';
+import { resolveAppLocale } from '../../../../shared/i18n';
+import { getAgentCapabilities } from '../../../agents/capabilities';
+import { prepareCodexAppServerPermissions } from '../../../permission-relay/codex-app-server';
+import { nativeCommandScope, rememberNativeCommands } from '../../../agents/native-commands';
+import { getAgentAccountDirLayers } from '../../../agents/provider-account-dirs';
 import { app, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import * as os from 'os';
@@ -77,6 +86,7 @@ export interface SpawnHandlerDependencies {
 	agentConfigsStore: Store<AgentConfigsData>;
 	settingsStore: Store<MaestroSettings>;
 	getMainWindow: () => BrowserWindow | null;
+	getPermissionWindow?: () => BrowserWindow | null;
 	safeSend?: (channel: string, ...args: unknown[]) => void;
 	sessionsStore: Store<{ sessions: unknown[] }>;
 	interactiveReplayController?: InteractiveReplayController<ProcessSpawnConfig>;
@@ -502,6 +512,7 @@ export async function handleProcessSpawn(
 				cwd: config.cwd,
 				userDataDir: app.getPath('userData'),
 				execPath: process.execPath,
+				getPermissionWindow: deps.getPermissionWindow ?? getMainWindow,
 			});
 			finalArgs = [...finalArgs, ...relayArgs];
 		} catch (e) {
@@ -1002,46 +1013,126 @@ export async function handleProcessSpawn(
 		}
 	}
 
-	const result = processManager.spawn({
-		...config,
-		command: commandToSpawn,
-		args: argsToSpawn,
-		// When using SSH, use user's home directory as local cwd
-		// The remote working directory is embedded in the SSH stdin script
-		// This fixes ENOENT errors when session.cwd is a remote-only path
-		cwd: sshRemoteUsed ? os.homedir() : config.cwd,
-		// When using SSH, disable PTY (SSH provides its own terminal handling)
-		requiresPty: sshRemoteUsed ? false : agent?.requiresPty,
-		// For SSH, prompt is included in the stdin script, not passed separately
-		// For local execution, pass prompt (with system prompt embedded for non-append-system-prompt agents)
-		prompt: sshRemoteUsed ? undefined : effectivePrompt,
-		// Host-authoritative (see above): overrides whatever the caller sent.
-		sendPromptViaStdin,
-		sendPromptViaStdinRaw,
-		shell: shellToUse,
-		runInShell: useShell,
-		shellArgs: shellArgsStr, // Shell-specific CLI args (for terminal sessions)
-		shellEnvVars: globalShellEnvVars, // Global shell env vars (for both terminals and agents)
-		contextWindow, // Pass configured context window to process manager
-		ompModelCatalogKey, // Identity for the omp model catalog (local omp only)
-		// When using SSH, env vars are passed in the stdin script, not locally
-		customEnvVars: customEnvVarsToPass,
-		imageArgs: agent?.imageArgs, // Function to build image CLI args (for Codex, OpenCode)
-		imagePromptBuilder: agent?.imagePromptBuilder, // Function to embed image refs into prompts (for Copilot)
-		promptArgs: agent?.promptArgs, // Function to build prompt args (e.g., ['-p', prompt] for OpenCode)
-		noPromptSeparator: agent?.noPromptSeparator, // Some agents don't support '--' before prompt
-		// Stats tracking: use cwd as projectPath if not explicitly provided
-		projectPath: config.cwd,
-		// SSH remote context (for SSH-specific error messages)
-		sshRemoteId: sshRemoteUsed?.id,
-		sshRemoteHost: sshRemoteUsed?.host,
-		// SSH stdin script - the entire command is sent via stdin to /bin/bash on remote
-		sshStdinScript,
-		// Human-readable remote agent invocation (shown in Process Details)
-		sshRemoteCommand,
-		// Extra dirs to prepend to spawn PATH (local non-SSH only)
-		extraPathDirs: localAgentBinDir ? [localAgentBinDir] : undefined,
-	});
+	let codexAppServer: ProcessSpawnConfig['codexAppServer'];
+	// Composer and queued sends encode the tab in the process ID.
+	const codexAppServerTabId =
+		config.tabId || config.sessionId.match(REGEX_AI_SUFFIX)?.[0].slice('-ai-'.length);
+	const useCodexAppServer =
+		!!codexAppServerTabId &&
+		!!config.prompt &&
+		config.querySource !== 'auto' &&
+		codexAppServerEnabled(
+			getAgentCapabilities(config.toolType),
+			{
+				newShell: settingsStore.get('newShell', false),
+				codexAppServer: settingsStore.get('codexAppServer', false),
+			},
+			!!sshRemoteUsed
+		);
+	// A saved prototype approval mode must never fall through to exec's bypass flags.
+	if (config.toolType === 'codex' && config.permissionMode === 'standard' && !useCodexAppServer) {
+		throw new Error(
+			CODEX_APP_SERVER_MESSAGES[resolveAppLocale(settingsStore.get('uiLanguage'), app.getLocale())][
+				'workflows.shell.codexAppServerStandardRequired'
+			]
+		);
+	}
+	if (useCodexAppServer) {
+		// Exec-only custom arguments cannot be silently reinterpreted as server flags.
+		if ((config.sessionCustomArgs ?? agentConfigValues.customArgs)?.trim()) {
+			throw new Error(
+				CODEX_APP_SERVER_MESSAGES[
+					resolveAppLocale(settingsStore.get('uiLanguage'), app.getLocale())
+				]['workflows.shell.codexAppServerCustomArgsUnsupported']
+			);
+		}
+		const fullAccess =
+			config.permissionMode === 'full' || (!hasExplicitPermissionMode && config.yoloMode === true);
+		codexAppServer = {
+			threadId: config.agentSessionId,
+			model: config.sessionCustomModel || agentConfigValues.model || config.modelId || undefined,
+			effort: config.sessionCustomEffort || agentConfigValues.reasoningEffort || undefined,
+			approvalPolicy: isReadOnly || fullAccess ? 'never' : 'on-request',
+			sandbox: isReadOnly ? 'read-only' : fullAccess ? 'danger-full-access' : 'workspace-write',
+			writableRoots: config.sessionAdditionalDirectories
+				?.filter((entry) => entry.write)
+				.map((entry) => entry.path),
+			...prepareCodexAppServerPermissions({
+				sessionId: config.sessionId,
+				tabId: codexAppServerTabId,
+				getMainWindow: deps.getPermissionWindow ?? getMainWindow,
+			}),
+		};
+	}
+
+	// Non-persisting helpers can report a reduced command set. Their init must
+	// not replace the conversation's scoped inventory after a completed turn.
+	const nativeCommandScopeKey =
+		config.toolType === 'claude-code' && !config.args.includes('--no-session-persistence')
+			? nativeCommandScope(
+					{
+						toolType: config.toolType,
+						cwd: config.cwd,
+						customEnvVars: config.sessionCustomEnvVars,
+						sessionSshRemoteConfig: config.sessionSshRemoteConfig,
+					},
+					getAgentAccountDirLayers(config.toolType, {
+						agentLevelEnvVars: claudeEnvLayers.agentCustomEnvVars ?? {},
+						globalShellEnvVars,
+					}),
+					sshRemoteUsed ?? undefined
+				).key
+			: undefined;
+	let result: ReturnType<ProcessManager['spawn']>;
+	try {
+		result = processManager.spawn({
+			...config,
+			nativeCommandScopeKey,
+			command: commandToSpawn,
+			args: codexAppServer ? ['app-server', '-c', 'tools.update_plan.enabled=true'] : argsToSpawn,
+			...(codexAppServer ? { tabId: codexAppServerTabId } : {}),
+			codexAppServer,
+			// When using SSH, use user's home directory as local cwd
+			// The remote working directory is embedded in the SSH stdin script
+			// This fixes ENOENT errors when session.cwd is a remote-only path
+			cwd: sshRemoteUsed ? os.homedir() : config.cwd,
+			// When using SSH, disable PTY (SSH provides its own terminal handling)
+			requiresPty: sshRemoteUsed ? false : agent?.requiresPty,
+			// For SSH, prompt is included in the stdin script, not passed separately
+			// For local execution, pass prompt (with system prompt embedded for non-append-system-prompt agents)
+			prompt: sshRemoteUsed ? undefined : effectivePrompt,
+			// Host-authoritative (see above): overrides whatever the caller sent.
+			sendPromptViaStdin,
+			sendPromptViaStdinRaw,
+			shell: shellToUse,
+			runInShell: useShell,
+			shellArgs: shellArgsStr, // Shell-specific CLI args (for terminal sessions)
+			shellEnvVars: globalShellEnvVars, // Global shell env vars (for both terminals and agents)
+			contextWindow, // Pass configured context window to process manager
+			ompModelCatalogKey, // Identity for the omp model catalog (local omp only)
+			// When using SSH, env vars are passed in the stdin script, not locally
+			customEnvVars: customEnvVarsToPass,
+			imageArgs: agent?.imageArgs, // Function to build image CLI args (for Codex, OpenCode)
+			imagePromptBuilder: agent?.imagePromptBuilder, // Function to embed image refs into prompts (for Copilot)
+			promptArgs: agent?.promptArgs, // Function to build prompt args (e.g., ['-p', prompt] for OpenCode)
+			noPromptSeparator: agent?.noPromptSeparator, // Some agents don't support '--' before prompt
+			// Stats tracking: use cwd as projectPath if not explicitly provided
+			projectPath: config.cwd,
+			// SSH remote context (for SSH-specific error messages)
+			sshRemoteId: sshRemoteUsed?.id,
+			sshRemoteHost: sshRemoteUsed?.host,
+			// SSH stdin script - the entire command is sent via stdin to /bin/bash on remote
+			sshStdinScript,
+			// Human-readable remote agent invocation (shown in Process Details)
+			sshRemoteCommand,
+			// Extra dirs to prepend to spawn PATH (local non-SSH only)
+			extraPathDirs: localAgentBinDir ? [localAgentBinDir] : undefined,
+		});
+	} catch (error) {
+		codexAppServer?.onDispose?.();
+		throw error;
+	}
+	if (!result.success) codexAppServer?.onDispose?.();
 
 	// The prime outran the spawn cap, so the process started without a usable
 	// catalog and its first usage event carries the 200k fallback. Close the loop:
@@ -1090,6 +1181,7 @@ export async function handleProcessSpawn(
 		void probeClaudeSlashCommandsCached(interactiveClaudeBinPath, config.cwd, probeEnv).then(
 			(commands) => {
 				if (commands && commands.length > 0) {
+					rememberNativeCommands(nativeCommandScopeKey, commands);
 					safeSend('process:slash-commands', config.sessionId, commands);
 				}
 			}

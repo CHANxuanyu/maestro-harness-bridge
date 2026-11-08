@@ -1,4 +1,5 @@
 import { useT, type TFunction } from '../../../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 /**
  * MentionRoutingBar - shows, BEFORE send, how a message's `@agent` mentions
  * will run.
@@ -28,7 +29,10 @@ interface MentionRoutingBarProps {
 	agentNames: string[];
 }
 
-function getRoutingCopy(t: TFunction): Record<
+function getRoutingCopy(
+	t: TFunction,
+	newShell: boolean
+): Record<
 	MentionRouting,
 	{
 		label: string;
@@ -43,28 +47,66 @@ function getRoutingCopy(t: TFunction): Record<
 			label: t('workflows.shell.only'),
 			Icon: AtSign,
 			describe: (names, many) =>
-				t(many ? 'workflows.mention.onlyMany' : 'workflows.mention.onlyOne', { names }),
-			hint: t('workflows.mention.onlyHint'),
+				t(
+					many
+						? newShell
+							? 'workflows.newShellCopy.composer.onlyMany'
+							: 'workflows.mention.onlyMany'
+						: newShell
+							? 'workflows.newShellCopy.composer.onlyOne'
+							: 'workflows.mention.onlyOne',
+					{ names }
+				),
+			hint: t(newShell ? 'workflows.newShellCopy.composer.onlyHint' : 'workflows.mention.onlyHint'),
 		},
 		parallel: {
 			label: t('workflows.shell.parallel'),
 			Icon: Split,
 			describe: (names, many) =>
-				t(many ? 'workflows.mention.parallelMany' : 'workflows.mention.parallelOne', { names }),
-			hint: t('workflows.mention.parallelHint'),
+				t(
+					many
+						? newShell
+							? 'workflows.newShellCopy.composer.parallelMany'
+							: 'workflows.mention.parallelMany'
+						: newShell
+							? 'workflows.newShellCopy.composer.parallelOne'
+							: 'workflows.mention.parallelOne',
+					{ names }
+				),
+			hint: t(
+				newShell ? 'workflows.newShellCopy.composer.parallelHint' : 'workflows.mention.parallelHint'
+			),
 		},
 		'consult-first': {
 			label: t('workflows.shell.consultFirst'),
 			Icon: ArrowLeftToLine,
 			describe: (names, many) =>
-				t(many ? 'workflows.mention.firstMany' : 'workflows.mention.firstOne', { names }),
-			hint: t('workflows.mention.firstHint'),
+				t(
+					many
+						? newShell
+							? 'workflows.newShellCopy.composer.firstMany'
+							: 'workflows.mention.firstMany'
+						: newShell
+							? 'workflows.newShellCopy.composer.firstOne'
+							: 'workflows.mention.firstOne',
+					{ names }
+				),
+			hint: t(
+				newShell ? 'workflows.newShellCopy.composer.firstHint' : 'workflows.mention.firstHint'
+			),
 		},
 		handoff: {
-			label: t('workflows.shell.handOff'),
+			label: t(
+				newShell ? 'workflows.newShellCopy.composer.handoffLabel' : 'workflows.shell.handOff'
+			),
 			Icon: ArrowRightFromLine,
-			describe: (names) => t('workflows.mention.handoff', { names }),
-			hint: t('workflows.mention.handoffHint'),
+			describe: (names) =>
+				t(newShell ? 'workflows.newShellCopy.composer.handoff' : 'workflows.mention.handoff', {
+					names,
+				}),
+			hint: t(
+				newShell ? 'workflows.newShellCopy.composer.handoffHint' : 'workflows.mention.handoffHint'
+			),
 		},
 	};
 }
@@ -75,7 +117,8 @@ export const MentionRoutingBar = memo(function MentionRoutingBar({
 	agentNames,
 }: MentionRoutingBarProps) {
 	const t = useT();
-	const copy = getRoutingCopy(t)[routing];
+	const newShell = useSettingsStore(selectNewShellEnabled);
+	const copy = getRoutingCopy(t, newShell)[routing];
 	const { Icon } = copy;
 	return (
 		<div

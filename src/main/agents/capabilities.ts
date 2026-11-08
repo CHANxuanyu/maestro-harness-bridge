@@ -112,6 +112,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
 	// Read-only sandbox support is not evidence of a dedicated planning workflow
 	// or of model-driven maestro-cli access to the local WebSocket bridge.
 	codex: {
+		supportsCodexAppServer: true, // Synthetic protocol coverage only; see codex-app-server-prototype.md.
 		supportsResume: true, // exec resume <id> (v0.30.0+) - Verified
 		supportsReadOnlyMode: true, // --sandbox read-only; exec help checked with Codex CLI 0.166.0-alpha.6 (2026-11-05)
 		supportsJsonOutput: true, // --json flag - Verified

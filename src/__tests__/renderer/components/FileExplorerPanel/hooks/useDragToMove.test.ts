@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useDragToMove } from '../../../../../renderer/components/FileExplorerPanel/hooks/useDragToMove';
 import type { FileNode } from '../../../../../renderer/types/fileTree';
@@ -79,6 +80,27 @@ const SINGLE = 'application/x-maestro-file-path';
 const MULTI = 'application/x-maestro-file-paths';
 
 describe('useDragToMove', () => {
+	afterEach(() => useSettingsStore.setState({ newShell: false, uiLanguage: 'en' }));
+	it('localizes the fallback for a move rejected without an Error', async () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+		mockMaestro.fs.rename.mockRejectedValueOnce('synthetic rejection');
+		const onShowFlash = vi.fn();
+		const { result } = renderHook(() => useDragToMove({ ...defaultArgs, onShowFlash }));
+		await act(() =>
+			result.current.performMoves(
+				[
+					{
+						sourceName: 'a.ts',
+						sourceAbsolutePath: '/project/src/a.ts',
+						destAbsolutePath: '/project/dest/a.ts',
+					},
+				],
+				'dest'
+			)
+		);
+		expect(onShowFlash).toHaveBeenCalledWith('文件操作未完成：未知错误');
+	});
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});

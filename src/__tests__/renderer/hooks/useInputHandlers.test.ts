@@ -256,6 +256,7 @@ beforeEach(() => {
 	} as any);
 
 	useSettingsStore.setState({
+		newShell: false,
 		conductorProfile: 'default',
 		automaticTabNamingEnabled: true,
 	} as any);
@@ -2404,6 +2405,80 @@ describe('useInputHandlers', () => {
 			});
 
 			expect(inputVal()).toBe('');
+		});
+
+		it.each([undefined, 'ssh-a'])(
+			'keeps drag origin and destination when focus changes during image read on host %s',
+			async (host) => {
+				useSettingsStore.setState({ newShell: true });
+				const target = createMockSession({
+					fullPath: '/target',
+					projectRoot: '/target',
+					sshRemoteId: host,
+				});
+				const other = createMockSession({
+					id: 'other',
+					activeTabId: 'other-tab',
+					aiTabs: [{ ...target.aiTabs[0], id: 'other-tab', stagedImages: [] }],
+				});
+				useSessionStore.setState({ sessions: [target, other], activeSessionId: target.id });
+				let resolveRead!: (value: string) => void;
+				vi.mocked(window.maestro.fs.readFile).mockReturnValueOnce(
+					new Promise((resolve) => {
+						resolveRead = resolve;
+					})
+				);
+				const { result } = renderHook(() => useInputHandlers(createMockDeps()));
+				act(() =>
+					result.current.handleDrop({
+						preventDefault: vi.fn(),
+						dataTransfer: {
+							getData: (type: string) => {
+								if (type === 'application/x-maestro-file-paths')
+									return JSON.stringify(['assets/logo.png', 'src/app.ts']);
+								if (type === 'application/x-maestro-file-origin')
+									return JSON.stringify({ root: '/source', sshRemoteId: host ?? null });
+								return '';
+							},
+							files: [],
+						},
+					} as unknown as React.DragEvent)
+				);
+				expect(window.maestro.fs.readFile).toHaveBeenCalledWith('/source/assets/logo.png', host);
+				expect(inputVal()).toBe('@/source/src/app.ts ');
+				act(() => useSessionStore.getState().setActiveSessionId('other'));
+				await act(async () => resolveRead('data:image/png;base64,SOURCE'));
+				expect(useSessionStore.getState().sessions[0].aiTabs[0].stagedImages).toEqual([
+					'data:image/png;base64,SOURCE',
+				]);
+				expect(useSessionStore.getState().sessions[1].aiTabs[0].stagedImages).toEqual([]);
+			}
+		);
+
+		it.each([null, 'ssh-b'])('rejects a file-tree drop from a different host %s', (host) => {
+			useSettingsStore.setState({ newShell: true });
+			useSessionStore.getState().updateSession('session-1', { sshRemoteId: 'ssh-a' });
+			const { result } = renderHook(() => useInputHandlers(createMockDeps()));
+			act(() =>
+				result.current.handleDrop({
+					preventDefault: vi.fn(),
+					dataTransfer: {
+						getData: (type: string) => {
+							if (type === 'application/x-maestro-file-paths')
+								return JSON.stringify(['assets/logo.png', 'src/app.ts']);
+							if (type === 'application/x-maestro-file-origin')
+								return JSON.stringify({ root: '/source', sshRemoteId: host });
+							return '';
+						},
+						files: [],
+					},
+				} as unknown as React.DragEvent)
+			);
+			expect(window.maestro.fs.readFile).not.toHaveBeenCalled();
+			expect(inputVal()).toBe('');
+			expect(mockNotifyCenterFlash).toHaveBeenCalledWith(
+				expect.objectContaining({ message: expect.stringMatching(/different hosts/i) })
+			);
 		});
 
 		it('stages an image when an image path is dragged from the Files panel', async () => {

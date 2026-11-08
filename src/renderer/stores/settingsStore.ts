@@ -1,3 +1,4 @@
+import type { ProjectSettings } from '../../shared/projectSettings';
 /**
  * settingsStore - Zustand store for all persistent application settings
  *
@@ -15,6 +16,7 @@
  */
 
 import { create } from 'zustand';
+import { readNewShellSplit } from '../../shared/newShellSplit';
 import type { BrowserConfirmPolicy } from '../../shared/coworkingBrowser';
 import { isWindowsPlatform } from '../utils/platformUtils';
 import type {
@@ -425,6 +427,9 @@ export interface SettingsStoreState
 	groupChatSortAlphabetical: boolean;
 	starredSessionsCollapsed: boolean;
 	newShell: boolean;
+	codexAppServer: boolean;
+	projectSettings: Record<string, ProjectSettings>;
+	newShellSplit: import('../../shared/newShellSplit').NewShellSplit | null;
 	sidebarNavigationMode: 'conversations' | 'agents';
 	collapsedConversationProjects: string[];
 	tourCompleted: boolean;
@@ -554,6 +559,7 @@ export interface SettingsStoreActions
 	setGroupChatSortAlphabetical: (value: boolean) => void;
 	setStarredSessionsCollapsed: (value: boolean) => void;
 	setNewShell: (value: boolean) => void;
+	setCodexAppServer: (value: boolean) => void;
 	setSidebarNavigationMode: (value: 'conversations' | 'agents') => void;
 	setCollapsedConversationProjects: (value: string[]) => void;
 	setTourCompleted: (value: boolean) => void;
@@ -811,6 +817,9 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		groupChatSortAlphabetical: false,
 		starredSessionsCollapsed: false,
 		newShell: false,
+		codexAppServer: false,
+		projectSettings: {},
+		newShellSplit: null,
 		sidebarNavigationMode: 'conversations',
 		collapsedConversationProjects: [],
 		tourCompleted: false,
@@ -1155,6 +1164,10 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		setNewShell: (value) => {
 			set({ newShell: value });
 			window.maestro.settings.set('newShell', value);
+		},
+		setCodexAppServer: (value) => {
+			set({ codexAppServer: value });
+			window.maestro.settings.set('codexAppServer', value);
 		},
 		setSidebarNavigationMode: (value) => {
 			set({ sidebarNavigationMode: value });
@@ -2312,6 +2325,11 @@ export async function loadAllSettings(): Promise<void> {
 			patch.groupChatSortAlphabetical = allSettings['groupChatSortAlphabetical'] as boolean;
 
 		if (allSettings['newShell'] !== undefined) patch.newShell = allSettings['newShell'] === true;
+		if (allSettings['codexAppServer'] !== undefined)
+			patch.codexAppServer = allSettings['codexAppServer'] === true;
+		if (allSettings['projectSettings'] && typeof allSettings['projectSettings'] === 'object')
+			patch.projectSettings = allSettings['projectSettings'] as Record<string, ProjectSettings>;
+		patch.newShellSplit = readNewShellSplit(allSettings['newShellSplit']);
 		if (allSettings['sidebarNavigationMode'] !== undefined)
 			patch.sidebarNavigationMode =
 				allSettings['sidebarNavigationMode'] === 'agents' ? 'agents' : 'conversations';

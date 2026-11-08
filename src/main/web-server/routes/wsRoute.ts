@@ -162,6 +162,7 @@ export class WsRoute {
 					: null;
 
 			const client: WebClient = {
+				trustedCli: auth.cli,
 				socket,
 				id: clientId,
 				connectedAt: Date.now(),

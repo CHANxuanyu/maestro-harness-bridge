@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import React, { memo, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Theme } from '../types';
@@ -6,7 +7,7 @@ import {
 	type Toast as ToastType,
 	type ToastColor,
 } from '../stores/notificationStore';
-import { useSettingsStore } from '../stores/settingsStore';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 import { openUrl } from '../utils/openUrl';
 import { runToastClick } from '../services/toastClickActions';
 import { formatDurationParts as formatDuration, formatTimestamp } from '../../shared/formatters';
@@ -150,6 +151,8 @@ const ToastItem = memo(function ToastItem({
 	/** Slide in from (and out to) the left edge instead of the right. */
 	fromLeft: boolean;
 }) {
+	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const [isExiting, setIsExiting] = useState(false);
 	const [isEntering, setIsEntering] = useState(true);
 
@@ -262,7 +265,13 @@ const ToastItem = memo(function ToastItem({
 										border: `1px solid ${theme.colors.accent}50`,
 									}}
 									title={
-										toast.agentSessionId ? `Claude Session: ${toast.agentSessionId}` : undefined
+										toast.agentSessionId
+											? newShell
+												? t('workflows.newShellCopy.feedback.toast.id', {
+														id: toast.agentSessionId,
+													})
+												: `Claude Session: ${toast.agentSessionId}`
+											: undefined
 									}
 								>
 									{toast.tabName}
@@ -335,7 +344,15 @@ const ToastItem = memo(function ToastItem({
 									d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
 								/>
 							</svg>
-							<span>Completed in {formatDuration(toast.taskDuration)}</span>
+							<span>
+								{newShell ? (
+									t('workflows.newShellCopy.feedback.toast.completed', {
+										duration: formatDuration(toast.taskDuration),
+									})
+								) : (
+									<>Completed in {formatDuration(toast.taskDuration)}</>
+								)}
+							</span>
 						</div>
 					)}
 				</div>
@@ -355,8 +372,20 @@ const ToastItem = memo(function ToastItem({
 									}
 								: { color: theme.colors.textDim }
 						}
-						title={toast.dismissible ? 'Dismiss' : undefined}
-						aria-label={toast.dismissible ? 'Dismiss notification' : 'Close'}
+						title={
+							toast.dismissible
+								? newShell
+									? t('workflows.newShellCopy.feedback.dismiss')
+									: 'Dismiss'
+								: undefined
+						}
+						aria-label={
+							newShell
+								? t('workflows.newShellCopy.feedback.toast.dismiss')
+								: toast.dismissible
+									? 'Dismiss notification'
+									: 'Close'
+						}
 					>
 						<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path
@@ -372,7 +401,9 @@ const ToastItem = memo(function ToastItem({
 					<CopyIconButton
 						value={() => buildToastClipboardText(toast)}
 						theme={theme}
-						title="Copy notification text"
+						title={
+							newShell ? t('workflows.newShellCopy.feedback.toast.copy') : 'Copy notification text'
+						}
 						iconClassName="w-3.5 h-3.5"
 						testId="toast-copy-button"
 					/>

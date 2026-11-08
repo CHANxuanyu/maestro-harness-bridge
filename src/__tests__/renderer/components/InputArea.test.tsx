@@ -1,3 +1,5 @@
+import { useAgentCapabilities } from '../../../renderer/hooks/agent/useAgentCapabilities';
+import { getAgentCapabilities } from '../../../main/agents/capabilities';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -274,6 +276,20 @@ describe('InputArea', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 		mockUpdateSessionWith.mockClear();
+	});
+
+	it('keeps the unfocused split composer draft separate from the live composer', () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = createMockSession();
+		session.aiTabs[0].inputValue = 'Saved left draft';
+		const props = createDefaultProps({ session, inputValue: 'Live right draft' });
+		useComposerInputStore.setState({ aiValueTabId: 'another-tab' });
+		render(<InputArea {...props} composerTargetTabId={session.activeTabId} />);
+		expect(screen.getByRole('textbox')).toHaveValue('Saved left draft');
+		act(() =>
+			useComposerInputStore.getState().loadAiDraft(session.activeTabId, 'Live left draft', 'off')
+		);
+		expect(screen.getByRole('textbox')).toHaveValue('Live left draft');
 	});
 
 	describe('Basic Rendering', () => {
@@ -1999,7 +2015,7 @@ describe('InputArea', () => {
 			render(<InputArea {...props} />);
 
 			// Get the hidden file input
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 			expect(fileInput).toBeInTheDocument();
 			expect(fileInput).toHaveAttribute('type', 'file');
 			expect(fileInput).toHaveAttribute('accept', 'image/*');
@@ -2012,7 +2028,7 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 			const clickSpy = vi.spyOn(fileInput, 'click');
 
 			fireEvent.click(screen.getByTitle('Attach Image'));
@@ -2028,7 +2044,7 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 
 			// Create a mock file
 			const file = new File(['fake image content'], 'test.png', { type: 'image/png' });
@@ -2052,7 +2068,7 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 
 			// Create multiple mock files
 			const file1 = new File(['image1'], 'test1.png', { type: 'image/png' });
@@ -2077,7 +2093,7 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 			const file = new File(['content'], 'test.png', { type: 'image/png' });
 
 			await act(async () => {
@@ -2097,7 +2113,7 @@ describe('InputArea', () => {
 			});
 			render(<InputArea {...props} />);
 
-			const fileInput = document.getElementById('image-file-input') as HTMLInputElement;
+			const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 
 			// Trigger with empty/null files
 			await act(async () => {
@@ -2839,4 +2855,80 @@ describe('InputArea on a phone', () => {
 		expect(screen.queryByTestId('phone-composer-handle')).not.toBeInTheDocument();
 		expect(screen.getByRole('textbox')).toBeInTheDocument();
 	});
+});
+
+describe('InputArea Codex current-turn instructions', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		useSettingsStore.setState({ newShell: true, codexAppServer: true, uiLanguage: 'en' });
+		window.maestro.process.steer = vi.fn();
+		const capabilities = getAgentCapabilities('codex');
+		vi.mocked(useAgentCapabilities).mockReturnValue({
+			capabilities,
+			loading: false,
+			error: null,
+			refresh: vi.fn(),
+			hasCapability: (key) => !!capabilities[key],
+		});
+	});
+
+	it.each(['accepted', 'rejected', 'timed-out', 'changed-draft', 'changed-tab'])(
+		'clears only an unchanged accepted draft: %s',
+		async (outcome) => {
+			const session = createMockSession({
+				id: 'owner',
+				toolType: 'codex',
+				state: 'busy',
+				busySource: 'ai',
+				aiTabs: [{ id: 'tab-1', logs: [], state: 'busy' }] as never,
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: session.id, groups: [] });
+			const props = createDefaultProps({
+				session,
+				inputValue: 'Please also check types',
+				showFlashNotification: vi.fn(),
+			});
+			useComposerInputStore.setState({ aiValueTabId: 'tab-1' });
+			let settle!: (value: any) => void;
+			vi.mocked(window.maestro.process.steer).mockImplementation(
+				() =>
+					new Promise((resolve) => {
+						settle = resolve;
+					})
+			);
+			render(<InputArea {...props} />);
+			fireEvent.click(screen.getByRole('button', { name: 'Add to this turn' }));
+			expect(window.maestro.process.steer).toHaveBeenCalledExactlyOnceWith(
+				'owner-ai-tab-1',
+				'Please also check types'
+			);
+			expect(props.setInputValue).not.toHaveBeenCalled();
+			fireEvent.click(screen.getByTitle('Queue message'));
+			fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+			expect(props.processInput).not.toHaveBeenCalled();
+			expect(props.handleInputKeyDown).not.toHaveBeenCalled();
+			if (outcome === 'changed-draft')
+				act(() => useComposerInputStore.setState({ aiValue: 'A newer draft' }));
+			if (outcome === 'changed-tab')
+				act(() => useComposerInputStore.setState({ aiValueTabId: 'tab-2' }));
+			await act(async () =>
+				settle(
+					outcome === 'rejected' || outcome === 'timed-out'
+						? { success: false, error: outcome === 'timed-out' ? 'RPC timed out' : 'Turn ended' }
+						: { success: true, turnId: 'turn-1' }
+				)
+			);
+			if (outcome === 'accepted') expect(props.setInputValue).toHaveBeenCalledWith('');
+			else expect(props.setInputValue).not.toHaveBeenCalled();
+			expect(props.processInput).not.toHaveBeenCalled();
+			if (outcome === 'rejected' || outcome === 'timed-out') {
+				expect(screen.getByRole('alert')).toHaveTextContent(
+					'Could not add instructions to this turn'
+				);
+				fireEvent.click(screen.getByTitle('Queue message'));
+				expect(props.processInput).toHaveBeenCalledTimes(1);
+				expect(window.maestro.process.steer).toHaveBeenCalledTimes(1);
+			}
+		}
+	);
 });

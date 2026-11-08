@@ -1873,6 +1873,11 @@ export const LogItem = memo(
 			// id and often its text, but changes what it draws as.
 			prevProps.log.source === nextProps.log.source &&
 			prevProps.handoffOrigin === nextProps.handoffOrigin &&
+			// Native refresh can bind the original call without changing its preview.
+			// A different source must also release any full output from the old target.
+			prevProps.nativeToolOutputTarget === nextProps.nativeToolOutputTarget &&
+			prevProps.log.metadata?.toolOutputSource === nextProps.log.metadata?.toolOutputSource &&
+			prevProps.log.metadata?.nativeToolCallId === nextProps.log.metadata?.nativeToolCallId &&
 			prevProps.log.nativeTranscript?.channel === nextProps.log.nativeTranscript?.channel &&
 			prevProps.log.metadata?.toolState === nextProps.log.metadata?.toolState &&
 			prevProps.log.delivered === nextProps.log.delivered &&

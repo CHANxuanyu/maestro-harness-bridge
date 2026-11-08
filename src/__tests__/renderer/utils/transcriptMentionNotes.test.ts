@@ -1,6 +1,8 @@
+import { buildCrossAgentPrompt } from '../../../shared/crossAgentPrompt';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { appendReadOnlyPrompt } from '../../../shared/readOnlyPrompt';
+import { stripTurnPrompt } from '../../../shared/turnPrompt';
 import {
 	bindDelayedOwnSends,
 	hasLegacyTranscriptEntries,
@@ -94,4 +96,34 @@ describe('read-only turns with mention notes', () => {
 			vi.restoreAllMocks();
 		}
 	});
+});
+
+describe('legacy notes from a Windows checkout', () => {
+	it('decodes a note whose prompt file had CRLF line endings', () => {
+		const note = consultTemplate
+			.replace('{{CONSULTED_AGENTS}}', 'Reviewer')
+			.replace(/\r?\n/g, '\r\n');
+		expect(stripTurnPrompt(`Check this\n\n---\n\n${note}`)).toBe('Check this');
+	});
+});
+
+it('recognizes cached consult envelopes so reopening refreshes old user entries', () => {
+	const content = buildCrossAgentPrompt({
+		requestId: 'cached-consult',
+		sourceSessionId: 'source',
+		sourceTabId: 'source-tab',
+		targetSessionId: 'target',
+		userPrompt: 'Inspect the queue.',
+		transcript: [],
+		strategy: { kind: 'full' },
+		createdAt: 0,
+	});
+	const [entry] = transcriptMessagesToLogEntries([
+		{ uuid: 'native-consult-user', type: 'user', content, timestamp: '2026-11-07T00:00:00Z' },
+	]);
+	expect(hasLegacyTranscriptEntries([{ ...entry, text: content }])).toBe(true);
+	expect(hasLegacyTranscriptEntries([entry])).toBe(false);
+	expect(reconcileTranscriptEntries([entry], [{ ...entry, text: content }]).logs[0].text).toBe(
+		'Inspect the queue.'
+	);
 });

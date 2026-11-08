@@ -1,3 +1,4 @@
+import type { BrowserWindow } from 'electron';
 /**
  * Shared types for the Claude Code permission relay.
  *
@@ -56,6 +57,7 @@ export interface ParsedQuestion {
  * the session/tab) that produced it.
  */
 export interface PermissionRequest {
+	provider?: 'codex';
 	requestId: string;
 	token: string;
 	sessionId: string;
@@ -77,8 +79,15 @@ export interface PermissionRequest {
 	questions?: ParsedQuestion[];
 }
 
+/** Caller identity derived from authenticated bridge metadata or Electron IPC. */
+export type PermissionCaller = {
+	userId?: string;
+} & ({ type: 'browser' } | { type?: 'desktop'; webContentsId: number });
+
 /** Identifies which session/tab a spawn's relay token belongs to. */
 export interface RelaySpawnBinding {
+	provider?: 'codex';
+	owner?: { userId?: string; window: BrowserWindow | null };
 	sessionId: string;
 	tabId?: string;
 	cwd?: string;

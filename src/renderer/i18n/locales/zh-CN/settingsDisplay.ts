@@ -186,6 +186,9 @@ export const settingsDisplay: AreaTranslation<typeof en> = {
 	'settings.display.modal.title': '已保存的弹窗尺寸',
 	'settings.display.modal.description': '清除自定义的对话框尺寸。',
 
+	'settings.display.codexAppServer.title': 'Codex 交互通路原型',
+	'settings.display.codexAppServer.description':
+		'从下一轮开始，本机 Codex 对话使用实验通路，支持工具审批和补充本轮指令。默认关闭，暂不支持 SSH。',
 	'settings.display.newShell.heading': '新界面（预览）',
 	'settings.display.newShell.title': '使用新界面',
 	'settings.display.newShell.description':

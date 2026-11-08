@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { useSettingsStore } from '../stores/settingsStore';
 /**
  * LinkContextMenu - Reusable right-click context menu for URLs.
  *
@@ -25,6 +27,8 @@ interface LinkContextMenuProps {
 }
 
 export function LinkContextMenu({ menu, theme, onDismiss }: LinkContextMenuProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const menuRef = useRef<HTMLDivElement>(null);
 	const onDismissRef = useRef(onDismiss);
 	onDismissRef.current = onDismiss;
@@ -92,7 +96,7 @@ export function LinkContextMenu({ menu, theme, onDismiss }: LinkContextMenuProps
 				style={{ color: theme.colors.textMain }}
 			>
 				<Copy className="w-3.5 h-3.5" />
-				Copy Link
+				{newShell ? t('workflows.newShellCopy.panels.copyLink') : 'Copy Link'}
 			</button>
 			<button
 				onClick={handleOpenMaestro}
@@ -100,7 +104,9 @@ export function LinkContextMenu({ menu, theme, onDismiss }: LinkContextMenuProps
 				style={{ color: theme.colors.textMain }}
 			>
 				<Globe className="w-3.5 h-3.5" />
-				Open in Maestro Browser
+				{newShell
+					? t('workflows.newShellCopy.panels.openMaestroBrowser')
+					: 'Open in Maestro Browser'}
 			</button>
 			<button
 				onClick={handleOpenSystem}
@@ -108,7 +114,7 @@ export function LinkContextMenu({ menu, theme, onDismiss }: LinkContextMenuProps
 				style={{ color: theme.colors.textMain }}
 			>
 				<ExternalLink className="w-3.5 h-3.5" />
-				Open in System Browser
+				{newShell ? t('workflows.newShellCopy.panels.openSystemBrowser') : 'Open in System Browser'}
 			</button>
 		</div>,
 		document.body

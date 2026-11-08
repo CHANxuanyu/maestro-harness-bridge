@@ -1,3 +1,5 @@
+import { useT } from '../../../i18n';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { useRef } from 'react';
 import { AlertTriangle, Trash2 } from 'lucide-react';
 import { Modal, ModalFooter } from '../../ui/Modal';
@@ -22,13 +24,25 @@ export function DeleteFileModal({
 	onClose,
 	onDelete,
 }: DeleteFileModalProps) {
+	const t = useT();
+	const newShell = useSettingsStore((s) => s.newShell);
 	const cancelButtonRef = useRef<HTMLButtonElement>(null);
 	const isFolder = node.type === 'folder';
 
 	return (
 		<Modal
 			theme={theme}
-			title={isFolder ? 'Delete Folder' : 'Delete File'}
+			title={
+				newShell
+					? t(
+							isFolder
+								? 'workflows.newShellCopy.panels.deleteFolder'
+								: 'workflows.newShellCopy.panels.deleteFile'
+						)
+					: isFolder
+						? 'Delete Folder'
+						: 'Delete File'
+			}
 			priority={MODAL_PRIORITIES.CONFIRM}
 			onClose={isDeleting ? () => {} : onClose}
 			headerIcon={<Trash2 className="w-4 h-4" style={{ color: theme.colors.error }} />}
@@ -38,7 +52,18 @@ export function DeleteFileModal({
 					theme={theme}
 					onCancel={isDeleting ? () => {} : onClose}
 					onConfirm={onDelete}
-					confirmLabel={isDeleting ? 'Deleting...' : 'Delete'}
+					cancelLabel={newShell ? t('common.cancel') : undefined}
+					confirmLabel={
+						newShell
+							? t(
+									isDeleting
+										? 'workflows.newShellCopy.panels.deleting'
+										: 'workflows.newShellCopy.panels.delete'
+								)
+							: isDeleting
+								? 'Deleting...'
+								: 'Delete'
+					}
 					confirmDisabled={isDeleting}
 					destructive
 					cancelButtonRef={cancelButtonRef}
@@ -54,19 +79,35 @@ export function DeleteFileModal({
 				</div>
 				<div>
 					<p style={{ color: theme.colors.textMain }}>
-						Are you sure you want to delete the {isFolder ? 'folder' : 'file'} "{node.name}"? This
-						action cannot be undone.
+						{newShell ? (
+							t('workflows.newShellCopy.panels.deleteConfirm', { name: node.name })
+						) : (
+							<>
+								Are you sure you want to delete the {isFolder ? 'folder' : 'file'} "{node.name}"?
+								This action cannot be undone.
+							</>
+						)}
 					</p>
 					{isFolder && itemCount && (
 						<p className="text-sm mt-3" style={{ color: theme.colors.warning }}>
-							This folder contains {itemCount.fileCount} file{itemCount.fileCount !== 1 ? 's' : ''}
-							{itemCount.folderCount > 0 && (
+							{newShell ? (
+								t('workflows.newShellCopy.panels.folderContents', {
+									files: itemCount.fileCount,
+									folders: itemCount.folderCount,
+								})
+							) : (
 								<>
-									{' '}
-									and {itemCount.folderCount} subfolder{itemCount.folderCount !== 1 ? 's' : ''}
+									This folder contains {itemCount.fileCount} file
+									{itemCount.fileCount !== 1 ? 's' : ''}
+									{itemCount.folderCount > 0 && (
+										<>
+											{' '}
+											and {itemCount.folderCount} subfolder{itemCount.folderCount !== 1 ? 's' : ''}
+										</>
+									)}
+									.
 								</>
 							)}
-							.
 						</p>
 					)}
 				</div>

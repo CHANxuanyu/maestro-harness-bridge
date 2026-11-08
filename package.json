@@ -106,6 +106,8 @@
 		},
 		"files": [
 			"dist/**/*",
+			"scripts/codex-shared/shared-exec.cjs",
+			"scripts/codex-shared/rpc.cjs",
 			"package.json"
 		],
 		"asarUnpack": [

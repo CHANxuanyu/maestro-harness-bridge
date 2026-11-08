@@ -14,9 +14,10 @@ import * as fs from 'fs';
 import { logger } from '../utils/logger';
 import { REGEX_AI_TAB_ID } from '../constants';
 import { permissionRelayServer } from './PermissionRelayServer';
-import { registerSpawn, resolvePending } from './registry';
+import { registerSpawn, resolvePending, ownsPending, lookupBinding } from './registry';
 import { buildRelayArgs, resolveBridgeScriptPath } from './spawn-args';
-import type { PermissionDecision, PermissionRequest } from './types';
+import { getActingUser } from '../web-server/auth/acting-user';
+import type { PermissionCaller, PermissionDecision, PermissionRequest } from './types';
 
 const LOG_CONTEXT = '[PermissionRelay]';
 
@@ -29,6 +30,7 @@ const sessionCleanups = new Map<string, () => void>();
 const visibleRequests = new Map<string, Omit<PermissionRequest, 'token'>>();
 
 let initialized = false;
+let permissionWindow: () => BrowserWindow | null = () => null;
 
 /**
  * Wire the relay into Electron. Idempotent. `getMainWindow` supplies the
@@ -43,11 +45,12 @@ export function initPermissionRelay(
 		return;
 	}
 	initialized = true;
+	permissionWindow = getMainWindow;
 
 	permissionRelayServer.setOnRequest((request) => {
 		const { token: _token, ...visibleRequest } = request;
 		visibleRequests.set(request.requestId, visibleRequest);
-		const win = getMainWindow();
+		const win = lookupBinding(request.token)?.owner?.window;
 		if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
 			// No window to prompt: deny so the agent gets a clear answer instead
 			// of hanging until the timeout.
@@ -102,14 +105,18 @@ export function initPermissionRelay(
 /** Resolve a pending request with the user's decision (called from IPC). */
 export function resolvePermissionResponse(
 	requestId: string,
-	decision: PermissionDecision
+	decision: PermissionDecision,
+	caller?: PermissionCaller
 ): boolean {
+	if (!ownsPending(requestId, caller)) return false;
 	return resolvePending(requestId, decision);
 }
 
 /** Read the same pending requests shown by the desktop, without spawn credentials. */
-export function listPermissionRequests(): Omit<PermissionRequest, 'token'>[] {
-	return [...visibleRequests.values()];
+export function listPermissionRequests(
+	caller?: PermissionCaller
+): Omit<PermissionRequest, 'token'>[] {
+	return [...visibleRequests.values()].filter((request) => ownsPending(request.requestId, caller));
 }
 
 /** Clean up a spawn's relay binding (on process exit or re-spawn). */
@@ -134,6 +141,7 @@ export async function preparePermissionRelayArgs(params: {
 	cwd: string;
 	userDataDir: string;
 	execPath: string;
+	getPermissionWindow?: () => BrowserWindow | null;
 }): Promise<string[]> {
 	const bridgeScriptPath = resolveBridgeScriptPath();
 	if (!bridgeScriptPath) {
@@ -148,6 +156,10 @@ export async function preparePermissionRelayArgs(params: {
 		sessionId: params.sessionId,
 		tabId: params.tabId ?? params.sessionId.match(REGEX_AI_TAB_ID)?.[1],
 		cwd: params.cwd,
+		owner: {
+			userId: getActingUser()?.id,
+			window: (params.getPermissionWindow ?? permissionWindow)(),
+		},
 	});
 
 	let relayArgs: ReturnType<typeof buildRelayArgs>;
@@ -181,4 +193,16 @@ export async function preparePermissionRelayArgs(params: {
 	});
 
 	return args;
+}
+
+/** Bridge metadata is set by the authenticated server, never by IPC arguments. */
+export function permissionCaller(
+	event: { type?: string; trustedCli?: boolean; sender?: { id: number } },
+	getMainWindow: () => BrowserWindow | null
+): PermissionCaller | undefined {
+	if (event.type === 'bridge' && !event.trustedCli)
+		return { type: 'browser', userId: getActingUser()?.id };
+	const webContentsId =
+		event.type === 'bridge' ? getMainWindow()?.webContents.id : event.sender?.id;
+	return webContentsId === undefined ? undefined : { userId: getActingUser()?.id, webContentsId };
 }

@@ -251,7 +251,13 @@ export const InputTextarea = memo(function InputTextarea({
 					className="text-sm font-bold select-none pl-3 pt-3"
 					style={{ color: theme.colors.accent, fontFamily: shellFontFamily }}
 					title={
-						isCommandModeDraft ? t('workflows.shell.commandModeRunsInTheShellNotThe') : undefined
+						isCommandModeDraft
+							? t(
+									newShell
+										? 'workflows.newShellCopy.composer.commandModeHint'
+										: 'workflows.shell.commandModeRunsInTheShellNotThe'
+								)
+							: undefined
 					}
 				>
 					$
@@ -335,7 +341,11 @@ export const InputTextarea = memo(function InputTextarea({
 							: isAiCommandDraft
 								? t('workflows.shell.describeWhatYouWantToAccomplishEscFor')
 								: isCommandModeDraft
-									? t('workflows.shell.runShellCommandForAiCommandEscFor')
+									? t(
+											newShell
+												? 'workflows.newShellCopy.composer.commandPlaceholder'
+												: 'workflows.shell.runShellCommandForAiCommandEscFor'
+										)
 									: newShell
 										? t('workflows.shell.messageProvider', {
 												provider: getAgentDisplayName(sessionProviderId(session), 'short'),

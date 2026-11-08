@@ -14,10 +14,14 @@ import { mockTheme } from '../../helpers/mockTheme';
 // Pin the English copy so the tests do not depend on the catalog keys landing
 // in the same change.
 const EN: Record<string, string> = {
+	'workflows.projectSettings.title': 'Project settings',
+	'workflows.projectSettings.newConversation': 'New with project defaults',
+	'workflows.split.openRight': 'Open on the right',
 	'workflows.conversations.closeConversation': 'Close conversation',
 	'workflows.conversations.addAccount': 'Add account or configuration',
 	'workflows.conversations.handoff': 'Hand off…',
 	'workflows.conversations.search': 'Search conversations...',
+	'workflows.conversations.contentSearchPlaceholder': 'Search conversations...',
 	'workflows.conversations.new': 'New conversation',
 	'workflows.conversations.newWith': 'New with {provider}',
 	'workflows.conversations.newConversation': 'New conversation',
@@ -45,12 +49,19 @@ const EN: Record<string, string> = {
 	'workflows.conversations.busy': 'Working',
 	'workflows.conversations.unread': 'Unread',
 	'workflows.conversations.error': 'Needs attention',
+	'workflows.conversations.expandChildren': 'Show subtasks: {title}',
+	'workflows.conversations.collapseChildren': 'Hide subtasks: {title}',
 };
 
 vi.mock('../../../renderer/i18n', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../../../renderer/i18n')>();
 	const t = (key: string, params?: Record<string, unknown>) =>
-		(EN[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? ''));
+		(
+			EN[key] ??
+			(key.startsWith('workflows.newShellCopy.')
+				? actual.getTranslator('en')(key as keyof typeof actual.CATALOGS.en)
+				: key)
+		).replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? ''));
 	return { ...actual, useT: () => t };
 });
 
@@ -173,6 +184,140 @@ it.each([false, true])(
 );
 
 describe('ProjectSessionTree', () => {
+	it('keeps completed subtasks collapsed and opens them through the same row callback', () => {
+		useSettingsStore.setState({ newShell: true });
+		const child = { ...codexFix, title: 'Review the tests' };
+		const parent = conversation({ children: [child] });
+		const { props } = setup({ projects: [project({ conversations: [parent] })] });
+		expect(screen.queryByRole('button', { name: 'Codex Review the tests' })).toBeNull();
+		const disclosure = screen.getByRole('button', { name: 'Show subtasks: Fix bug' });
+		expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+		fireEvent.click(disclosure);
+		const childButton = screen.getByRole('button', { name: 'Codex Review the tests' });
+		expect(childButton).toHaveStyle({ paddingLeft: '32px' });
+		expect(within(childButton).getByRole('img', { name: 'Codex' })).toBeInTheDocument();
+		fireEvent.click(childButton);
+		expect(props.onSelectConversation).toHaveBeenCalledWith(child);
+		fireEvent.click(screen.getByRole('button', { name: 'Hide subtasks: Fix bug' }));
+		expect(screen.queryByRole('button', { name: 'Codex Review the tests' })).toBeNull();
+	});
+
+	it('automatically reveals running subtasks and their state without unread marks', () => {
+		useSettingsStore.setState({ newShell: true });
+		const child = { ...codexFix, title: 'Review the tests', busy: false };
+		const tree = (busy: boolean) => [
+			project({ conversations: [conversation({ children: [{ ...child, busy }] })] }),
+		];
+		const { rerender } = setup({ projects: tree(false) });
+		expect(screen.queryByRole('button', { name: /Codex Review the tests/ })).toBeNull();
+		rerender({ projects: tree(true) });
+		const childButton = screen.getByRole('button', { name: 'Codex Review the tests Working' });
+		expect(within(childButton).getByTitle('Working')).toBeInTheDocument();
+		expect(screen.queryByTitle('Unread')).toBeNull();
+		expect(screen.getByRole('button', { name: 'Hide subtasks: Fix bug' })).toHaveAttribute(
+			'aria-expanded',
+			'true'
+		);
+		rerender({ projects: tree(false) });
+		expect(screen.queryByRole('button', { name: /Codex Review the tests/ })).toBeNull();
+	});
+
+	it('keeps a selected completed descendant visible and resolves its own menu actions', () => {
+		useSettingsStore.setState({ newShell: true });
+		const child = { ...codexFix, title: 'Review the tests' };
+		const { props } = setup({
+			projects: [project({ conversations: [conversation({ children: [child] })] })],
+			activeKey: child.key,
+		});
+		expect(screen.getByRole('button', { name: 'Codex Review the tests' })).toHaveAttribute(
+			'aria-current',
+			'page'
+		);
+		fireEvent.click(screen.getByRole('button', { name: 'Conversation actions: Review the tests' }));
+		fireEvent.click(screen.getByRole('menuitem', { name: 'Rename conversation' }));
+		expect(props.onRenameConversation).toHaveBeenCalledWith(child);
+	});
+
+	it('lets a user collapse running subtasks and expands them again on the next run', () => {
+		useSettingsStore.setState({ newShell: true });
+		const tree = (busy: boolean) => [
+			project({ conversations: [conversation({ children: [{ ...codexFix, busy }] })] }),
+		];
+		const { rerender } = setup({ projects: tree(true) });
+		fireEvent.click(screen.getByRole('button', { name: 'Hide subtasks: Fix bug' }));
+		expect(screen.queryByRole('button', { name: 'Codex Fix bug Working' })).toBeNull();
+		rerender({ projects: tree(false) });
+		rerender({ projects: tree(true) });
+		expect(screen.getByRole('button', { name: 'Codex Fix bug Working' })).toBeInTheDocument();
+	});
+
+	it('reveals nested descendants during search and when a grandchild is working', () => {
+		useSettingsStore.setState({ newShell: true });
+		const grandchild = conversation({ key: 'deep:tab-3', title: 'Check edge cases', busy: true });
+		const parent = conversation({ children: [{ ...codexFix, children: [grandchild] }] });
+		const { rerender } = setup({ projects: [project({ conversations: [parent] })] });
+		expect(
+			screen.getByRole('button', { name: 'Claude Code Check edge cases Working' })
+		).toHaveStyle({
+			paddingLeft: '44px',
+		});
+		rerender({
+			search: 'edge',
+			projects: [
+				project({
+					conversations: [conversation({ children: [{ ...grandchild, busy: false }] })],
+				}),
+			],
+		});
+		expect(
+			screen.getByRole('button', { name: 'Claude Code Check edge cases' })
+		).toBeInTheDocument();
+	});
+
+	it('does not expose children or their disclosure in the old shell', () => {
+		useSettingsStore.setState({ newShell: false });
+		setup({ projects: [project({ conversations: [conversation({ children: [codexFix] })] })] });
+		expect(screen.queryByRole('button', { name: /subtasks:/ })).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Codex Fix bug' })).toBeNull();
+		expect(screen.getByRole('button', { name: 'Claude Code Fix bug' })).toBeInTheDocument();
+	});
+
+	it('offers project default creation through the same project action', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const { props } = setup();
+		fireEvent.click(screen.getByRole('button', { name: 'New conversation: Maestro' }));
+		fireEvent.click(await screen.findByRole('menuitem', { name: 'New with project defaults' }));
+		expect(props.onNewConversation).toHaveBeenCalledWith(CLAUDE_AGENT.id);
+	});
+	it.each([false, true])(
+		'opens project settings from the project context menu only in new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			const onProjectSettings = vi.fn();
+			setup({ onProjectSettings });
+			fireEvent.contextMenu(projectHeader(), { clientX: 40, clientY: 80 });
+			if (newShell) {
+				fireEvent.click(screen.getByRole('menuitem', { name: 'Project settings' }));
+				expect(onProjectSettings).toHaveBeenCalledWith(
+					expect.objectContaining({ key: 'project-maestro' })
+				);
+			} else {
+				expect(
+					screen.queryByRole('menuitem', { name: 'Project settings' })
+				).not.toBeInTheDocument();
+			}
+		}
+	);
+	it.each([false, true])(
+		'offers opening a conversation on the right only in new shell %s',
+		(newShell) => {
+			useSettingsStore.setState({ newShell });
+			setup();
+			fireEvent.contextMenu(screen.getByRole('button', { name: /^Codex Fix bug/ }));
+			expect(!!screen.queryByRole('menuitem', { name: 'Open on the right' })).toBe(newShell);
+		}
+	);
+
 	it.each([false, true])(
 		'uses available local tools from the shared plus path, new shell %s',
 		async (newShell) => {
@@ -186,7 +331,9 @@ describe('ProjectSessionTree', () => {
 			if (newShell) expect(button).toHaveAttribute('aria-haspopup', 'menu');
 			fireEvent.click(button);
 			if (newShell) {
-				fireEvent.click(await screen.findByRole('menuitem', { name: 'New with Codex' }));
+				fireEvent.click(
+					await screen.findByRole('menuitem', { name: 'New conversation with Codex' })
+				);
 				await waitFor(() =>
 					expect(window.maestro.context.conversation).toHaveBeenCalledWith({
 						action: 'new-conversation',
@@ -477,4 +624,94 @@ describe('ProjectSessionTree', () => {
 		fireEvent.click(screen.getAllByRole('button', { name: 'Retry' })[0]);
 		expect(props.onRetryHistory).toHaveBeenCalled();
 	});
+});
+
+it('offers archive and native delete on Codex history only in the new shell', () => {
+	useSettingsStore.setState({ newShell: true });
+	const archive = vi.fn();
+	const remove = vi.fn();
+	setup({
+		projects: [project({ conversations: [historyRow()] })],
+		onArchiveConversation: archive,
+		onDeleteConversation: remove,
+	});
+	fireEvent.contextMenu(screen.getByText('Old investigation').closest('button')!);
+	fireEvent.click(screen.getByText('workflows.archive.archive'));
+	expect(archive).toHaveBeenCalledWith(expect.objectContaining({ nativeSessionId: 'native-1' }));
+	fireEvent.contextMenu(screen.getByText('Old investigation').closest('button')!);
+	expect(screen.getByText('workflows.archive.delete')).toBeTruthy();
+});
+
+it('never offers native deletion for Claude, and hides archive actions in the classic shell', () => {
+	useSettingsStore.setState({ newShell: true });
+	const row = conversation({ nativeSessionId: 'claude-native' });
+	const { rerender } = setup({
+		projects: [project({ conversations: [row] })],
+		onArchiveConversation: vi.fn(),
+		onDeleteConversation: vi.fn(),
+	});
+	fireEvent.contextMenu(screen.getByText('Fix bug').closest('button')!);
+	expect(screen.queryByText('workflows.archive.delete')).toBeNull();
+	expect(screen.getByText('workflows.archive.archive')).toBeTruthy();
+	fireEvent.keyDown(document, { key: 'Escape' });
+	useSettingsStore.setState({ newShell: false });
+	rerender({ projects: [project({ conversations: [row] })] });
+	fireEvent.contextMenu(screen.getByText('Fix bug').closest('button')!);
+	expect(screen.queryByText('workflows.archive.archive')).toBeNull();
+});
+it('expands archived conversations at the bottom of their project and unarchives through the shared operation', async () => {
+	useSettingsStore.setState({ newShell: true });
+	window.maestro.agentSessions.archiveConversation = vi.fn().mockResolvedValue({ success: true });
+	setup({
+		projects: [
+			project({
+				archivedConversations: [
+					{
+						key: 'archive',
+						title: 'Archived item',
+						provider: 'codex',
+						nativeSessionId: 'native',
+						projectPath: '/p',
+						accountDir: '/synthetic-account',
+						ownerIds: [],
+					},
+				] as never,
+			}),
+		],
+	});
+	expect(screen.queryByText('Archived item')).toBeNull();
+	fireEvent.click(screen.getByText('workflows.archive.archived'));
+	expect(screen.getByText('Archived item')).toBeTruthy();
+	fireEvent.click(screen.getByText('workflows.archive.unarchive'));
+	await waitFor(() =>
+		expect(window.maestro.agentSessions.archiveConversation).toHaveBeenCalledWith(
+			expect.objectContaining({ nativeSessionId: 'native', accountDir: '/synthetic-account' }),
+			'unarchive'
+		)
+	);
+});
+
+it('shows a separate content group with highlighted snippet and keyboard opening in the new shell', () => {
+	useSettingsStore.setState({ newShell: true });
+	const hit = {
+		conversation: { key: 'body-hit', title: 'Body result', projectPath: '/project' },
+		matchPreview: 'before needle after',
+		message: { role: 'assistant', text: 'needle' },
+	};
+	const open = vi.fn();
+	setup({
+		search: 'needle',
+		projects: [],
+		contentSearch: { hits: [hit], truncated: true },
+		onSelectContent: open,
+	});
+	expect(screen.getByText('workflows.conversations.contentResults')).toBeTruthy();
+	expect(screen.getByText('workflows.conversations.moreContentResults')).toBeTruthy();
+	const row = screen.getByRole('button', { name: /Body result/ });
+	expect(row.textContent).toContain('/project');
+	expect(row.querySelector('mark')?.textContent).toBe('needle');
+	fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowDown' });
+	expect(document.activeElement).toBe(row);
+	fireEvent.click(row);
+	expect(open).toHaveBeenCalledWith(hit);
 });

@@ -94,6 +94,24 @@ beforeEach(() => {
 });
 
 describe('maestro:remoteUpdateSessionConfig', () => {
+	it('updates and persists the account environment while preserving the legacy command report', async () => {
+		vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as never);
+		const session = createMockSession({
+			customEnvVars: { CLAUDE_CONFIG_DIR: '/temporary/account-a' },
+			agentCommands: [{ command: '/plugin:review', description: '' }],
+		});
+		const { setSessions } = setup([session]);
+		const customEnvVars = { CLAUDE_CONFIG_DIR: '/temporary/account-b' };
+		dispatchPatch(session.id, { customEnvVars });
+		await flush();
+		const [updated] = applyUpdate(setSessions, [session]);
+		expect(updated.customEnvVars).toEqual(customEnvVars);
+		expect(updated.agentCommands).toBe(session.agentCommands);
+		expect(setMany).toHaveBeenCalledWith([updated], []);
+		expect(ack).toHaveBeenCalledWith('ch', { success: true });
+		expect(setMany.mock.invocationCallOrder[0]).toBeLessThan(ack.mock.invocationCallOrder[0]);
+	});
+
 	it('tightens every new-shell tab when the next provider cannot keep standard permission', async () => {
 		vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as never);
 		const session = createMockSession({
@@ -340,6 +358,34 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 		return session;
 	}
 
+	it.each([false, true])(
+		'gates and persists CLI change grouping only on the requested conversation, new shell %s',
+		async (newShell) => {
+			const sessions = [twoTabSession()];
+			vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell } as never);
+			const { setSessions } = setup(sessions);
+			dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'changes-turns' });
+			await flush();
+			if (newShell) {
+				const updated = applyUpdate(setSessions, sessions)[0];
+				expect(updated.aiTabs[0].newShellPanel).toEqual(sessions[0].aiTabs[0].newShellPanel);
+				expect(updated.aiTabs[1].newShellPanel).toEqual({
+					tab: 'changes',
+					open: true,
+					changesView: 'turn',
+				});
+				expect(setMany).toHaveBeenCalled();
+				expect(ack).toHaveBeenCalledWith('ch', expect.objectContaining({ success: true }));
+			} else {
+				expect(setSessions).not.toHaveBeenCalled();
+				expect(setMany).not.toHaveBeenCalled();
+				expect(ack).toHaveBeenCalledWith('ch', {
+					success: false,
+					error: 'This panel requires the new shell',
+				});
+			}
+		}
+	);
 	it.each([false, true])(
 		'sets a file buffer through its conversation without touching classic selection, new shell %s',
 		async (newShell) => {
@@ -689,4 +735,23 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 			error: 'No editable tab fields in patch',
 		});
 	});
+});
+
+it('allows CLI standard permission for the enabled local Codex prototype', async () => {
+	vi.mocked(useSettingsStore.getState).mockReturnValue({
+		newShell: true,
+		codexAppServer: true,
+	} as never);
+	vi.mocked(window.maestro.agents.getCapabilities).mockResolvedValue({
+		supportsCodexAppServer: true,
+	} as never);
+	const session = createMockSession({
+		id: 'session-1',
+		toolType: 'codex',
+		aiTabs: [createMockAITab({ id: 'tab-2' })],
+	});
+	setup([session]);
+	dispatchPatch('session-1', { tabId: 'tab-2', permissionMode: 'standard' });
+	await flush();
+	expect(ack).toHaveBeenCalledWith('ch', { success: true });
 });

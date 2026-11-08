@@ -22,8 +22,18 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { HistoryEntry, LogEntry, Session, ToolType } from '../../types';
 import { updateSessionWith, updateAiTab, useSessionStore } from '../../stores/sessionStore';
 import { useCrossAgentInFlightStore } from '../../stores/crossAgentInFlightStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { createTab } from '../../utils/tabHelpers';
+import { projectConversationFields } from '../../utils/projectConversationDefaults';
+import { remoteConversationPermissionFields } from '../../utils/newConversationPermissions';
+import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
+import { getCachedCapabilities } from './useAgentCapabilities';
+import { conversationDisplayTitle } from '../../utils/conversationTitle';
+import { applyQueuedItemRelease } from '../../utils/executionQueue';
+import { sessionProviderId } from '../../../shared/agentPresets';
+import { captureConversationSourceNativeId } from '../../services/agentDelegation';
 import { generateId } from '../../utils/ids';
+import { getT } from '../../i18n';
 import { logger } from '../../utils/logger';
 import {
 	deriveConsultSubject,
@@ -240,30 +250,89 @@ export function ensureConsultTab(opts: {
 	sourceTabId: string;
 	sourceAgentName: string;
 	question: string;
-}): { targetTabId: string; resumeAgentSessionId?: string } | null {
+}): {
+	targetTabId: string;
+	resumeAgentSessionId?: string;
+	permissionMode?: ReturnType<typeof resolveTabPermissionMode>;
+} | null {
 	const questionEntry: LogEntry = {
 		id: generateId(),
 		timestamp: Date.now(),
 		source: 'user',
 		text: opts.question,
 	};
+	const source = useSessionStore.getState().sessions.find((s) => s.id === opts.sourceSessionId);
+	const sourceTab = [...(source?.aiTabs ?? []), ...(source?.orphanedThinkingTabs ?? [])].find(
+		(tab) => tab.id === opts.sourceTabId
+	);
+	const origin =
+		useSettingsStore.getState().newShell && source && sourceTab
+			? {
+					kind: 'subtask' as const,
+					sourceSessionId: source.id,
+					sourceTabId: sourceTab.id,
+					sourceProvider: sessionProviderId(source),
+					sourceNativeSessionId: sourceTab.agentSessionId ?? undefined,
+					sourceTitle: conversationDisplayTitle(sourceTab) ?? undefined,
+					createdAt: questionEntry.timestamp,
+				}
+			: undefined;
 
 	let resolvedTabId: string | null = null;
 	let resumeAgentSessionId: string | undefined;
+	let permissionMode: ReturnType<typeof resolveTabPermissionMode> | undefined;
 
 	updateSessionWith(opts.targetSessionId, (session) => {
 		const existing = session.aiTabs.find(
 			(t) =>
+				(!origin || t.state !== 'busy') &&
 				t.consultOrigin?.sourceSessionId === opts.sourceSessionId &&
 				t.consultOrigin?.sourceTabId === opts.sourceTabId
 		);
+		const permissions = useSettingsStore.getState().newShell
+			? projectConversationFields(
+					session,
+					remoteConversationPermissionFields(
+						sourceTab,
+						resolveTabPermissionMode(existing ?? sourceTab)
+					),
+					getCachedCapabilities(session.toolType) ?? {
+						supportsReadOnlyMode: false,
+						supportsStandardPermissionMode: false,
+					},
+					false
+				)
+			: undefined;
+		if (permissions === null) return session;
+		permissionMode = permissions?.permissionMode;
 		if (existing) {
 			resolvedTabId = existing.id;
 			resumeAgentSessionId = existing.agentSessionId ?? undefined;
 			return {
 				...session,
 				aiTabs: session.aiTabs.map((t) =>
-					t.id === existing.id ? { ...t, logs: [...t.logs, questionEntry] } : t
+					t.id === existing.id
+						? {
+								...t,
+								...(permissions
+									? {
+											permissionMode: permissions.permissionMode,
+											readOnlyMode: permissions.readOnlyMode,
+										}
+									: {}),
+								...(origin && !t.origin
+									? {
+											origin,
+											name: deriveConsultSubject(
+												t.logs.find((log) => log.source === 'user')?.text ?? opts.question,
+												80,
+												true
+											),
+										}
+									: {}),
+								logs: [...t.logs, questionEntry],
+							}
+						: t
 				),
 			};
 		}
@@ -275,9 +344,12 @@ export function ensureConsultTab(opts: {
 		// activeGroupId in particular would silently pop the target out of a tiled
 		// group it was displaying.
 		const created = createTab(session, {
-			name: buildConsultTabName(opts.sourceAgentName),
+			name: origin
+				? deriveConsultSubject(opts.question, 80, true)
+				: buildConsultTabName(opts.sourceAgentName),
 			logs: [questionEntry],
 			saveToHistory: false,
+			permissionSource: permissions ?? undefined,
 		});
 		if (!created) return session;
 		resolvedTabId = created.tab.id;
@@ -294,6 +366,7 @@ export function ensureConsultTab(opts: {
 				t.id === created.tab.id
 					? {
 							...t,
+							...(origin ? { origin } : {}),
 							// Hidden until the user opens it from the attribution header.
 							hidden: true,
 							consultOrigin: {
@@ -307,7 +380,64 @@ export function ensureConsultTab(opts: {
 	});
 
 	if (!resolvedTabId) return null;
-	return { targetTabId: resolvedTabId, resumeAgentSessionId };
+	return {
+		targetTabId: resolvedTabId,
+		resumeAgentSessionId,
+		...(permissionMode ? { permissionMode } : {}),
+	};
+}
+
+/** Release the same tab barrier used by normal sends so queued replies can run. */
+function settleSubtaskConsult(
+	sessionId: string,
+	tabId: string | undefined,
+	error?: string,
+	recordError = false
+): void {
+	if (!tabId) return;
+	updateSessionWith(sessionId, (session) => {
+		const tab = [...session.aiTabs, ...(session.orphanedThinkingTabs ?? [])].find(
+			(candidate) => candidate.id === tabId
+		);
+		if (tab?.origin?.kind !== 'subtask') return session;
+		const released = applyQueuedItemRelease(session, tabId);
+		const finished = {
+			...tab,
+			state: 'idle' as const,
+			thinkingStartTime: undefined,
+			hasUnread: false,
+			agentError: error
+				? {
+						type: 'unknown' as const,
+						message: error,
+						recoverable: true,
+						agentId: session.toolType,
+						timestamp: Date.now(),
+					}
+				: undefined,
+			logs:
+				recordError && error
+					? [
+							...tab.logs,
+							{ id: generateId(), timestamp: Date.now(), source: 'error' as const, text: error },
+						]
+					: tab.logs,
+		};
+		const queued = released.executionQueue.some((item) => item.tabId === tabId);
+		return {
+			...released,
+			aiTabs: released.aiTabs.map((candidate) => (candidate.id === tabId ? finished : candidate)),
+			orphanedThinkingTabs: released.orphanedThinkingTabs?.flatMap((candidate) =>
+				candidate.id === tabId ? (queued ? [finished] : []) : [candidate]
+			),
+			closedTabHistory: released.closedTabHistory?.map((entry) =>
+				entry.tab.id === tabId ? { ...entry, tab: finished } : entry
+			),
+			unifiedClosedTabHistory: released.unifiedClosedTabHistory?.map((entry) =>
+				entry.type === 'ai' && entry.tab.id === tabId ? { ...entry, tab: finished } : entry
+			),
+		};
+	});
 }
 
 /** Per-request tracking so streamed chunks land on one stable LogEntry. */
@@ -462,7 +592,9 @@ function recordConsultHistory(
 		tracked.sourceAgentName ??
 		state.sessions.find((s) => s.id === chunk.sourceSessionId)?.name ??
 		'another agent';
-	const consultTab = target.aiTabs.find((t) => t.id === tracked.targetTabId);
+	const consultTab = [...target.aiTabs, ...(target.orphanedThinkingTabs ?? [])].find(
+		(t) => t.id === tracked.targetTabId
+	);
 
 	const entryId = generateId();
 	const historySessionId = chunk.targetSessionId;
@@ -488,6 +620,9 @@ function recordConsultHistory(
 			logger.warn('[useCrossAgentDispatch] Failed to record consult history', undefined, err);
 		});
 
+	// An open child can resume immediately. A second writer used only to shorten
+	// its history detail must not race that continuation on the same native id.
+	if (consultTab?.origin?.kind === 'subtask') return;
 	void enrichConsultDetail({
 		spawnBackgroundSynopsis,
 		target,
@@ -586,6 +721,52 @@ export function sendCrossAgentRequest(opts: SendCrossAgentRequestOptions): void 
 		sourceAgentName: opts.sourceAgentName,
 		question: opts.userPrompt,
 	});
+	if (!consult && useSettingsStore.getState().newShell) {
+		const error = getT()('workflows.shell.consultPermissionUnavailable');
+		updateAiTab(
+			opts.sourceSessionId,
+			opts.sourceTabId,
+			(tab) => ({
+				...tab,
+				logs: [
+					...tab.logs,
+					{ id: generateId(), timestamp: Date.now(), source: 'error', text: error },
+				],
+			}),
+			{ includeOrphans: true }
+		);
+		settleConsultHold({
+			sourceSessionId: opts.sourceSessionId,
+			sourceTabId: opts.sourceTabId,
+			targetSessionId: opts.targetSessionId,
+			text: '',
+			error,
+		});
+		opts.onComplete?.({ text: '', error });
+		return;
+	}
+	if (consult) {
+		updateSessionWith(opts.targetSessionId, (session) => {
+			const tab = session.aiTabs.find((candidate) => candidate.id === consult.targetTabId);
+			if (tab?.origin?.kind !== 'subtask') return session;
+			return {
+				...session,
+				state: 'busy',
+				busySource: session.state === 'busy' ? session.busySource : 'ai',
+				aiTabs: session.aiTabs.map((candidate) =>
+					candidate.id === tab.id
+						? {
+								...candidate,
+								state: 'busy',
+								thinkingStartTime: Date.now(),
+								hasUnread: false,
+								agentError: undefined,
+							}
+						: candidate
+				),
+			};
+		});
+	}
 
 	// Fire-and-forget: never await before the caller clears the input.
 	void window.maestro.crossAgent
@@ -596,6 +777,7 @@ export function sendCrossAgentRequest(opts: SendCrossAgentRequestOptions): void 
 			targetSessionId: opts.targetSessionId,
 			targetTabId: consult?.targetTabId,
 			resumeAgentSessionId: consult?.resumeAgentSessionId,
+			...(consult?.permissionMode ? { permissionMode: consult.permissionMode } : {}),
 			userPrompt: opts.userPrompt,
 			transcript,
 			strategy,
@@ -661,6 +843,7 @@ export function sendCrossAgentRequest(opts: SendCrossAgentRequestOptions): void 
 			// settle a caller blocked on the answer - or the source turn's consult
 			// hold, which would otherwise wait on this target forever.
 			const error = err instanceof Error ? err.message : String(err);
+			settleSubtaskConsult(opts.targetSessionId, consult?.targetTabId, error, true);
 			settleConsultHold({
 				sourceSessionId: opts.sourceSessionId,
 				sourceTabId: opts.sourceTabId,
@@ -685,6 +868,27 @@ export function useCrossAgentDispatch(
 	spawnSynopsisRef.current = spawnBackgroundSynopsis;
 
 	const applyChunk = useCallback((chunk: CrossAgentResponseChunk): void => {
+		if (chunk.targetTabId && chunk.targetNativeSessionId) {
+			const nativeId = chunk.targetNativeSessionId;
+			updateAiTab(
+				chunk.targetSessionId,
+				chunk.targetTabId,
+				(tab) => {
+					if (!tab.consultOrigin || tab.consultOrigin.nativeSessionIds?.includes(nativeId))
+						return tab;
+					return {
+						...tab,
+						consultOrigin: {
+							...tab.consultOrigin,
+							nativeSessionIds: [...(tab.consultOrigin.nativeSessionIds ?? []), nativeId],
+						},
+					};
+				},
+				{ includeOrphans: true }
+			);
+			// Identity events do not create an empty answer or alter classic UI state.
+			if (!chunk.done && !chunk.chunk) return;
+		}
 		const map = pendingRequests;
 		let tracked = map.get(chunk.requestId);
 		if (!tracked) {
@@ -710,24 +914,23 @@ export function useCrossAgentDispatch(
 		const sourceTabId = tracked.sourceTabId;
 
 		// 1. The attribution bubble on the SOURCE tab (what the user reads inline).
-		updateSessionWith(tracked.sourceSessionId, (session) => {
-			const tab = session.aiTabs.find((t) => t.id === sourceTabId);
-			if (!tab) return session; // Source tab was closed; nothing to update.
+		updateAiTab(
+			tracked.sourceSessionId,
+			sourceTabId,
+			(tab) => {
+				const existingIndex = tab.logs.findIndex((l) => l.id === entryId);
+				const timestamp = existingIndex >= 0 ? tab.logs[existingIndex].timestamp : Date.now();
+				const entry = buildCrossAgentLogEntry(entryId, timestamp, displayText, chunk);
 
-			const existingIndex = tab.logs.findIndex((l) => l.id === entryId);
-			const timestamp = existingIndex >= 0 ? tab.logs[existingIndex].timestamp : Date.now();
-			const entry = buildCrossAgentLogEntry(entryId, timestamp, displayText, chunk);
+				const nextLogs =
+					existingIndex >= 0
+						? tab.logs.map((l, i) => (i === existingIndex ? entry : l))
+						: [...tab.logs, entry];
 
-			const nextLogs =
-				existingIndex >= 0
-					? tab.logs.map((l, i) => (i === existingIndex ? entry : l))
-					: [...tab.logs, entry];
-
-			return {
-				...session,
-				aiTabs: session.aiTabs.map((t) => (t.id === tab.id ? { ...t, logs: nextLogs } : t)),
-			};
-		});
+				return { ...tab, logs: nextLogs };
+			},
+			{ includeOrphans: true }
+		);
 
 		// 2. The persisted copy on the TARGET's consult tab (what the jump arrow
 		// lands on, and what makes the target "remember it was consulted"). Written
@@ -736,33 +939,51 @@ export function useCrossAgentDispatch(
 		const targetTabId = tracked.targetTabId;
 		if (targetTabId) {
 			const answerId = tracked.targetLogEntryId;
-			updateAiTab(chunk.targetSessionId, targetTabId, (tab) => {
-				const existingIndex = tab.logs.findIndex((l) => l.id === answerId);
-				const timestamp = existingIndex >= 0 ? tab.logs[existingIndex].timestamp : Date.now();
-				const answer: LogEntry = {
-					id: answerId,
-					timestamp,
-					source: chunk.error ? 'error' : 'ai',
-					text: displayText,
-				};
-				const nextLogs =
-					existingIndex >= 0
-						? tab.logs.map((l, i) => (i === existingIndex ? answer : l))
-						: [...tab.logs, answer];
-				// On success, store the target's captured provider session id so the
-				// next mention from this source tab resumes it (continuity).
-				const agentSessionId =
-					chunk.done && chunk.targetAgentSessionId
-						? chunk.targetAgentSessionId
+			updateAiTab(
+				chunk.targetSessionId,
+				targetTabId,
+				(tab) => {
+					const existingIndex = tab.logs.findIndex((l) => l.id === answerId);
+					const timestamp = existingIndex >= 0 ? tab.logs[existingIndex].timestamp : Date.now();
+					const answer: LogEntry = {
+						id: answerId,
+						timestamp,
+						source: chunk.error ? 'error' : 'ai',
+						text: displayText,
+					};
+					const nextLogs =
+						existingIndex >= 0
+							? tab.logs.map((l, i) => (i === existingIndex ? answer : l))
+							: [...tab.logs, answer];
+					// On success, store the target's captured provider session id so the
+					// next mention from this source tab resumes it (continuity).
+					const agentSessionId = chunk.done
+						? chunk.error || chunk.canceled
+							? null
+							: (chunk.targetAgentSessionId ?? tab.agentSessionId)
 						: tab.agentSessionId;
-				return { ...tab, logs: nextLogs, agentSessionId };
-			});
+					return { ...tab, logs: nextLogs, agentSessionId };
+				},
+				{ includeOrphans: true }
+			);
 		}
 
 		if (chunk.done) {
+			const target = useSessionStore
+				.getState()
+				.sessions.find((s) => s.id === chunk.targetSessionId);
+			if (target && targetTabId && chunk.targetAgentSessionId) {
+				captureConversationSourceNativeId(
+					target.id,
+					targetTabId,
+					chunk.targetAgentSessionId,
+					sessionProviderId(target)
+				);
+			}
 			// The target now has a durable record of the consult, attributed to the
 			// caller so its History shows who consulted it (and about what).
 			recordConsultHistory(tracked, chunk, spawnSynopsisRef.current);
+			settleSubtaskConsult(chunk.targetSessionId, targetTabId, chunk.error);
 			map.delete(chunk.requestId);
 			const completion: CrossAgentCompletion = {
 				text: accumulated,

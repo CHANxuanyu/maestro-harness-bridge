@@ -176,6 +176,7 @@ export const workflowsSessions = {
 	'workflows.sessions.claudeQuestion': 'Claude Code 的问题',
 	'workflows.sessions.claudeHasQuestion': 'Claude Code 需要你回答一个问题',
 	'workflows.sessions.permissionRequired': '需要授权',
+	'workflows.sessions.codexWantsToUse': 'Codex 请求使用',
 	'workflows.sessions.claudeWantsToUse': 'Claude Code 请求使用',
 	'workflows.sessions.deny': '拒绝',
 	'workflows.sessions.allow': '允许',

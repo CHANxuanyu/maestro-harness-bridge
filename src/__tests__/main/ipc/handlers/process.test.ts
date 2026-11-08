@@ -1,3 +1,5 @@
+import { prepareCodexAppServerPermissions } from '../../../../main/permission-relay/codex-app-server';
+import { createPending, registerSpawn } from '../../../../main/permission-relay/registry';
 /**
  * Tests for the process IPC handlers
  *
@@ -14,6 +16,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ipcMain } from 'electron';
 import {
@@ -30,6 +34,10 @@ import { nativeSessionResumeCwd } from '../../../../main/storage/local-project-p
 import { preparePermissionRelayArgs } from '../../../../main/permission-relay';
 import { getChildProcesses } from '../../../../main/process-manager/utils/childProcessInfo';
 import { probeClaudeSlashCommandsCached } from '../../../../main/agents/claude-slash-command-probe';
+import { createNativeCommandDiscovery } from '../../../../main/agents/native-commands';
+import { StdoutHandler } from '../../../../main/process-manager/handlers/StdoutHandler';
+import { ClaudeOutputParser } from '../../../../main/parsers/claude-output-parser';
+import type { ManagedProcess } from '../../../../main/process-manager/types';
 import {
 	primeOmpModelCatalog,
 	computeOmpCatalogKey,
@@ -43,7 +51,7 @@ import {
 
 // Mock electron's ipcMain
 vi.mock('electron', () => ({
-	app: { getPath: () => '/temporary-app-data' },
+	app: { getPath: () => '/temporary-app-data', getLocale: () => 'en' },
 	ipcMain: {
 		handle: vi.fn(),
 		on: vi.fn(),
@@ -322,6 +330,7 @@ describe('process IPC handlers', () => {
 	let mockProcessManager: {
 		spawn: ReturnType<typeof vi.fn>;
 		write: ReturnType<typeof vi.fn>;
+		steer: ReturnType<typeof vi.fn>;
 		interrupt: ReturnType<typeof vi.fn>;
 		kill: ReturnType<typeof vi.fn>;
 		resize: ReturnType<typeof vi.fn>;
@@ -359,6 +368,7 @@ describe('process IPC handlers', () => {
 		mockProcessManager = {
 			spawn: vi.fn(),
 			write: vi.fn(),
+			steer: vi.fn(),
 			interrupt: vi.fn(),
 			kill: vi.fn(),
 			resize: vi.fn(),
@@ -396,6 +406,7 @@ describe('process IPC handlers', () => {
 		const mockMainWindow = {
 			isDestroyed: vi.fn().mockReturnValue(false),
 			webContents: {
+				id: 11,
 				send: vi.fn(),
 				isDestroyed: vi.fn().mockReturnValue(false),
 			},
@@ -431,6 +442,9 @@ describe('process IPC handlers', () => {
 				'concerto-html:restore',
 				'process:spawn',
 				'process:write',
+				'process:steer',
+				'process:codex-stop',
+				'process:codex-permissions',
 				'process:broadcast-user-input',
 				'process:interrupt',
 				'process:kill',
@@ -467,6 +481,359 @@ describe('process IPC handlers', () => {
 			await expect(handler!({}, 'bogus', '', null)).rejects.toThrow(
 				'Invalid Concerto HTML restore request'
 			);
+		});
+	});
+
+	it('rejects browser approvals for both users and permits only the owning desktop or trusted CLI', async () => {
+		const win = deps.getMainWindow()!;
+		const bridge = prepareCodexAppServerPermissions({
+			sessionId: 'owner-ai-tab',
+			getMainWindow: () => win,
+		});
+		const decision = bridge.onPermissionRequest({
+			requestId: '1',
+			method: 'item/commandExecution/requestApproval',
+			threadId: 't',
+			turnId: 'turn',
+			itemId: 'item',
+		});
+		const id = (win.webContents.send as any).mock.calls[0][1].requestId;
+		try {
+			for (const user of [
+				undefined,
+				{ id: 'a', username: 'a', displayName: 'A' },
+				{ id: 'b', username: 'b', displayName: 'B' },
+			]) {
+				runAsActingUser(user, () => {
+					expect(() => handlers.get('process:codex-permissions')!({ type: 'bridge' })).toThrow(
+						'unavailable'
+					);
+					expect(
+						handlers.get('permission:respond')!({ type: 'bridge' }, id, { behavior: 'allow' })
+					).toBe(false);
+				});
+			}
+			expect(
+				handlers.get('permission:respond')!({ sender: { id: 22 } }, id, { behavior: 'allow' })
+			).toBe(false);
+			expect(
+				handlers.get('process:codex-permissions')!({ type: 'bridge', trustedCli: true })
+			).toHaveLength(1);
+			expect(
+				handlers.get('permission:respond')!({ type: 'bridge', trustedCli: true }, id, {
+					behavior: 'allow',
+				})
+			).toBe(true);
+			await expect(decision).resolves.toBe('accept');
+		} finally {
+			bridge.onDispose();
+		}
+	});
+
+	it.each([{ sender: { id: 11 } }, { type: 'bridge', trustedCli: true }])(
+		'preserves Claude desktop window and trusted CLI checks for %j',
+		async (event) => {
+			const binding = registerSpawn({
+				sessionId: 'claude',
+				owner: { window: deps.getMainWindow() },
+			});
+			const pending = createPending('claude-request', binding.token);
+			try {
+				expect(
+					handlers.get('permission:respond')!({}, 'claude-request', {
+						behavior: 'allow',
+					})
+				).toBe(false);
+				expect(
+					handlers.get('permission:respond')!({ sender: { id: 22 } }, 'claude-request', {
+						behavior: 'allow',
+					})
+				).toBe(false);
+				expect(
+					handlers.get('permission:respond')!(event, 'claude-request', {
+						behavior: 'allow',
+					})
+				).toBe(true);
+				await expect(pending).resolves.toEqual({ behavior: 'allow' });
+			} finally {
+				binding.cleanup();
+			}
+		}
+	);
+
+	describe.each([false, true])('Claude browser approvals with newShell=%s', (newShell) => {
+		it.each([
+			{
+				name: 'desktop main window without web login',
+				windowId: 11,
+				ownerId: undefined,
+				callerId: undefined,
+				allowed: true,
+			},
+			{
+				name: 'desktop main window with web login',
+				windowId: 11,
+				ownerId: undefined,
+				callerId: 'a',
+				allowed: true,
+			},
+			{
+				name: 'desktop secondary window',
+				windowId: 22,
+				ownerId: undefined,
+				callerId: 'b',
+				allowed: true,
+			},
+			{ name: 'same user main window', windowId: 11, ownerId: 'a', callerId: 'a', allowed: true },
+			{
+				name: 'same user secondary window',
+				windowId: 22,
+				ownerId: 'a',
+				callerId: 'a',
+				allowed: true,
+			},
+			{ name: 'another user', windowId: 11, ownerId: 'a', callerId: 'b', allowed: false },
+			{
+				name: 'user owned request without web login',
+				windowId: 11,
+				ownerId: 'a',
+				callerId: undefined,
+				allowed: true,
+			},
+		])('$name', async ({ windowId, ownerId, callerId, allowed }) => {
+			mockSettingsStore.get.mockImplementation((key, fallback) =>
+				key === 'newShell' ? newShell : fallback
+			);
+			const mainWindow = deps.getMainWindow()!;
+			const binding = registerSpawn({
+				sessionId: 'claude',
+				owner: {
+					userId: ownerId,
+					window: {
+						...mainWindow,
+						webContents: { ...mainWindow.webContents, id: windowId },
+					} as any,
+				},
+			});
+			const pending = createPending('claude-browser-request', binding.token);
+			const user = callerId
+				? { id: callerId, username: callerId, displayName: callerId }
+				: undefined;
+			try {
+				runAsActingUser(user, () => {
+					expect(
+						handlers.get('permission:respond')!(
+							{ type: 'bridge' },
+							'claude-browser-request',
+							{ behavior: 'allow' },
+							{ userId: ownerId, webContentsId: windowId, trustedCli: true }
+						)
+					).toBe(allowed);
+				});
+				if (allowed) {
+					await expect(pending).resolves.toEqual({ behavior: 'allow' });
+					expect(
+						runAsActingUser(user, () =>
+							handlers.get('permission:respond')!({ type: 'bridge' }, 'claude-browser-request', {
+								behavior: 'allow',
+							})
+						)
+					).toBe(false);
+				} else {
+					expect(
+						runAsActingUser({ id: 'a', username: 'a', displayName: 'A' }, () =>
+							handlers.get('permission:respond')!(
+								{ sender: { id: windowId } },
+								'claude-browser-request',
+								{ behavior: 'allow' }
+							)
+						)
+					).toBe(true);
+					await expect(pending).resolves.toEqual({ behavior: 'allow' });
+				}
+			} finally {
+				binding.cleanup();
+			}
+		});
+	});
+
+	it.each(['exit', 'timeout'])('rejects Claude browser approvals after %s', async (reason) => {
+		vi.useFakeTimers();
+		const binding = registerSpawn({ sessionId: 'claude', owner: { window: deps.getMainWindow() } });
+		const pending = createPending('claude-ended-request', binding.token);
+		try {
+			if (reason === 'exit') binding.cleanup();
+			else await vi.advanceTimersByTimeAsync(300_000);
+			await expect(pending).resolves.toMatchObject({ behavior: 'deny' });
+			expect(
+				handlers.get('permission:respond')!({ type: 'bridge' }, 'claude-ended-request', {
+					behavior: 'allow',
+				})
+			).toBe(false);
+		} finally {
+			binding.cleanup();
+			vi.useRealTimers();
+		}
+	});
+
+	describe('Codex app-server opt-in', () => {
+		it.each([
+			[false, false],
+			[true, false],
+			[false, true],
+			[true, true],
+		])('requires both newShell=%s and codexAppServer=%s', async (newShell, codexAppServer) => {
+			mockSettingsStore.get.mockImplementation((key, fallback) =>
+				key === 'newShell' ? newShell : key === 'codexAppServer' ? codexAppServer : fallback
+			);
+			mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+			mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+			await handlers.get('process:spawn')!(
+				{},
+				{
+					sessionId: 'project-ai-tab',
+					tabId: 'tab',
+					toolType: 'codex',
+					cwd: '/fixture/project',
+					command: 'codex',
+					args: [],
+					prompt: 'synthetic prompt',
+				}
+			);
+			const spawn = mockProcessManager.spawn.mock.calls[0][0];
+			if (newShell && codexAppServer) {
+				expect(spawn.args).toEqual(['app-server', '-c', 'tools.update_plan.enabled=true']);
+				expect(spawn.codexAppServer).toMatchObject({
+					approvalPolicy: 'on-request',
+					sandbox: 'workspace-write',
+					onPermissionRequest: expect.any(Function),
+					onDispose: expect.any(Function),
+				});
+				spawn.codexAppServer.onDispose();
+			} else {
+				expect(spawn.codexAppServer).toBeUndefined();
+				expect(spawn.args).toEqual([]);
+			}
+		});
+
+		it.each([
+			['project-ai-tab', 'user', true],
+			['project-ai-tab', 'auto', false],
+			['background-synopsis', 'user', false],
+		])(
+			'selects only ordinary desktop turns without a separate tabId: %s %s',
+			async (sessionId, querySource, enabled) => {
+				mockSettingsStore.get.mockImplementation((key, fallback) =>
+					key === 'newShell' || key === 'codexAppServer' ? true : fallback
+				);
+				mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+				mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+				await handlers.get('process:spawn')!(
+					{},
+					{
+						sessionId,
+						querySource,
+						toolType: 'codex',
+						cwd: '/fixture/project',
+						command: 'codex',
+						args: [],
+						prompt: 'fixture',
+					}
+				);
+				const spawn = mockProcessManager.spawn.mock.calls[0][0];
+				if (enabled) {
+					expect(spawn.args).toEqual(['app-server', '-c', 'tools.update_plan.enabled=true']);
+					expect(spawn.tabId).toBe('tab');
+					spawn.codexAppServer.onDispose();
+				} else {
+					expect(spawn.codexAppServer).toBeUndefined();
+					expect(spawn.args).toEqual([]);
+				}
+			}
+		);
+
+		it('refuses a saved Codex standard turn when its approval transport is off', async () => {
+			mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+			mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+			await expect(
+				handlers.get('process:spawn')!(
+					{},
+					{
+						sessionId: 'project-ai-tab',
+						tabId: 'tab',
+						toolType: 'codex',
+						cwd: '/fixture/project',
+						command: 'codex',
+						args: [],
+						prompt: 'fixture',
+						permissionMode: 'standard',
+					}
+				)
+			).rejects.toThrow('requires the local app-server prototype');
+			expect(mockProcessManager.spawn).not.toHaveBeenCalled();
+		});
+
+		it.each([
+			['en', false, 'Codex standard permission requires the local app-server prototype'],
+			[
+				'zh-CN',
+				false,
+				'Codex 标准权限需要开启本地交互通路原型。请开启新界面和原型开关，或明确改用只读权限。',
+			],
+			[
+				'en',
+				true,
+				'The Codex app-server prototype does not support custom CLI arguments. Remove them before starting this turn.',
+			],
+			['zh-CN', true, 'Codex 交互通路原型暂不支持自定义命令行参数，请清空后再发送。'],
+		])(
+			'localizes prototype spawn refusals in %s (custom arguments: %s)',
+			async (locale, custom, message) => {
+				mockSettingsStore.get.mockImplementation((key, fallback) =>
+					key === 'uiLanguage'
+						? locale
+						: key === 'newShell' || key === 'codexAppServer'
+							? custom
+							: fallback
+				);
+				mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+				await expect(
+					handlers.get('process:spawn')!(
+						{},
+						{
+							sessionId: 'project-ai-tab',
+							tabId: 'tab',
+							toolType: 'codex',
+							cwd: '/fixture/project',
+							command: 'codex',
+							args: [],
+							prompt: 'fixture',
+							permissionMode: 'standard',
+							sessionCustomArgs: custom ? '--fixture-unsupported' : undefined,
+						}
+					)
+				).rejects.toThrow(message);
+				expect(mockProcessManager.spawn).not.toHaveBeenCalled();
+			}
+		);
+
+		it('waits for the steering receipt and returns its turn id', async () => {
+			mockSettingsStore.get.mockImplementation((key, fallback) =>
+				key === 'newShell' || key === 'codexAppServer' ? true : fallback
+			);
+			mockProcessManager.steer.mockResolvedValue({ turnId: 'turn-fixture' });
+			expect(await handlers.get('process:steer')!({}, 'project-ai-tab', 'adjust')).toEqual({
+				success: true,
+				turnId: 'turn-fixture',
+			});
+			expect(mockProcessManager.steer).toHaveBeenCalledExactlyOnceWith('project-ai-tab', 'adjust');
+		});
+
+		it('refuses steering with the prototype disabled', async () => {
+			expect(await handlers.get('process:steer')!({}, 'project-ai-tab', 'adjust')).toMatchObject({
+				success: false,
+			});
+			expect(mockProcessManager.steer).not.toHaveBeenCalled();
 		});
 	});
 
@@ -628,6 +995,91 @@ describe('process IPC handlers', () => {
 			expect(result.pid).toBe(-1);
 			expect(result.success).toBe(false);
 		});
+
+		it('freezes command scope from the provider account and execution directory', async () => {
+			mockAgentDetector.getAgent.mockResolvedValue({ id: 'claude-code', requiresPty: false });
+			mockProcessManager.spawn.mockReturnValue({ pid: 1000, success: true });
+			mockAgentConfigsStore.get.mockReturnValue({
+				'claude-code': { customEnvVars: { CLAUDE_CONFIG_DIR: '/temporary/provider-account' } },
+			});
+			const config = {
+				sessionId: 'command-owner',
+				toolType: 'claude-code',
+				cwd: '/temporary/project',
+				command: 'claude',
+				args: [],
+			};
+			await handlers.get('process:spawn')!({} as any, config);
+			expect(JSON.parse(mockProcessManager.spawn.mock.calls[0][0].nativeCommandScopeKey)).toEqual([
+				'claude-code',
+				'/temporary/project',
+				path.resolve('/temporary/provider-account'),
+				null,
+			]);
+		});
+
+		it.each([{ synopsisCommands: [] }, { synopsisCommands: ['plugin:summary'] }])(
+			'keeps conversation plugin reports after a non-persisting synopsis reports $synopsisCommands',
+			async ({ synopsisCommands }) => {
+				const root = fs.mkdtempSync(path.join(os.tmpdir(), 'command-synopsis-'));
+				try {
+					const { createTurn } = createRequire(import.meta.url)(
+						'../../../../../e2e/fixtures/native/protocol.cjs'
+					);
+					const context = {
+						toolType: 'claude-code',
+						cwd: path.join(root, 'project'),
+						customEnvVars: { CLAUDE_CONFIG_DIR: path.join(root, 'account') },
+					};
+					const read = createNativeCommandDiscovery({ layers: () => ({ homeDir: root, env: {} }) });
+					const processes = new Map<string, ManagedProcess>();
+					const emitter = new EventEmitter();
+					const reports = vi.fn();
+					emitter.on('slash-commands', reports);
+					const stdout = new StdoutHandler({
+						processes,
+						emitter,
+						bufferManager: { emitDataBuffered: vi.fn() } as any,
+					});
+					mockAgentDetector.getAgent.mockResolvedValue({ id: 'claude-code', requiresPty: false });
+					mockProcessManager.spawn.mockReturnValue({ pid: 1000, success: true });
+					for (const [index, commands] of [['plugin:review'], synopsisCommands, []].entries()) {
+						const persist = index !== 1;
+						const sessionId = persist ? 'commands-ai-tab' : 'commands-synopsis-123';
+						await handlers.get('process:spawn')!({} as any, {
+							sessionId,
+							toolType: context.toolType,
+							cwd: context.cwd,
+							command: 'fixture-only',
+							args: persist ? [] : ['--no-session-persistence'],
+							sessionCustomEnvVars: context.customEnvVars,
+						});
+						processes.set(sessionId, {
+							...mockProcessManager.spawn.mock.lastCall![0],
+							isStreamJsonMode: true,
+							outputParser: new ClaudeOutputParser(),
+						} as ManagedProcess);
+						createTurn({
+							provider: 'claude',
+							configDir: context.customEnvVars.CLAUDE_CONFIG_DIR,
+							cwd: context.cwd,
+							prompt: 'Fixture prompt',
+							persist,
+							slashCommands: commands,
+							emit: (event: unknown) => stdout.handleData(sessionId, `${JSON.stringify(event)}\n`),
+						});
+						expect(reports).toHaveBeenLastCalledWith(sessionId, commands);
+						expect(
+							(await read(context, true)).commands.filter((c) => c.source === 'reported')
+						).toEqual(
+							index < 2 ? [{ command: '/plugin:review', description: '', source: 'reported' }] : []
+						);
+					}
+				} finally {
+					fs.rmSync(root, { recursive: true, force: true });
+				}
+			}
+		);
 
 		it('should pass environment variables to spawn', async () => {
 			const mockAgent = {

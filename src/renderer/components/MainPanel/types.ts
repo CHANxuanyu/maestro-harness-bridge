@@ -140,8 +140,11 @@ export interface MainPanelProps {
 	// Functions
 	toggleInputMode: () => void;
 	processInput: () => void;
-	handleInterrupt: () => void;
-	handleInputKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+	handleInterrupt: (target?: { sessionId: string; tabId: string }) => void;
+	handleInputKeyDown: (
+		e: React.KeyboardEvent<HTMLTextAreaElement>,
+		target?: { sessionId: string; tabId: string }
+	) => void;
 	handlePaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 	handleDrop: (e: React.DragEvent<HTMLElement>) => void;
 	getContextColor: (usage: number, theme: Theme) => string;

@@ -1,3 +1,4 @@
+import { projectConversationFields } from '../projectConversationDefaults';
 // Tab helper functions for AI multi-tab support
 // These helpers manage AITab state within Maestro sessions
 
@@ -1005,7 +1006,10 @@ export function settleTabThinkingState(session: Session, tabId: string): Session
  */
 export interface CreateTabOptions {
 	/** Exact source or resolved project permissions. Missing sources use the strictest known mode. */
-	permissionSource?: Pick<AITab, 'permissionMode' | 'readOnlyMode'>;
+	permissionSource?: Pick<
+		AITab,
+		'permissionMode' | 'readOnlyMode' | 'customModel' | 'customEffort'
+	>;
 
 	agentSessionId?: string | null; // Claude Code session UUID (null for new tabs)
 	logs?: LogEntry[]; // Initial conversation history
@@ -1079,7 +1083,8 @@ export function createTab(
 	let permissions = {};
 	if (useSettingsStore.getState().newShell && !agentSessionId) {
 		const source = options.permissionSource ?? fallbackConversationPermissionSource(session);
-		const fields = newConversationPermissionFields(
+		const fields = projectConversationFields(
+			session,
 			source,
 			getCachedCapabilities(session.toolType) ?? {
 				supportsStandardPermissionMode: false,
@@ -1174,6 +1179,8 @@ function resolveUnreadFilterFallbackRef(session: Session, tabId: string): Unifie
  * Options for closing a tab.
  */
 export interface CloseTabOptions {
+	/** Archive and delete leave the project empty until the user creates a conversation. */
+	skipReplacement?: boolean;
 	/** If true, skip adding to closed tab history (e.g., for wizard tabs) */
 	skipHistory?: boolean;
 	/**
@@ -1277,7 +1284,7 @@ export function closeTab(
 	let fallbackRef: UnifiedTabRef | null = null;
 	let createdFreshTab = false;
 	let freshTabId = '';
-	if (visibleUpdatedTabs.length === 0 && otherTabCount === 0) {
+	if (visibleUpdatedTabs.length === 0 && otherTabCount === 0 && !options.skipReplacement) {
 		const freshTab: AITab = {
 			...(useSettingsStore.getState().newShell ? newConversationPermissionFields(tabToClose) : {}),
 			id: generateId(),
@@ -2396,10 +2403,11 @@ export function setActiveTab(session: Session, tabId: string): SetActiveTabResul
 	}
 
 	if (useSettingsStore.getState().newShell) {
+		session = revealAiTab(session, tabId);
 		session = {
 			...session,
 			aiTabs: session.aiTabs.map((tab) =>
-				tab.id === tabId ? { ...tab, lastSelectedAt: Date.now() } : tab
+				tab.id === tabId ? { ...tab, lastSelectedAt: Date.now(), hasUnread: false } : tab
 			),
 		};
 	}

@@ -983,6 +983,44 @@ describe('permission metadata across renderer owners', () => {
 			readOnlyMode: true,
 		});
 	});
+	it.each([
+		['interactive', false],
+		['dynamic', false],
+		['interactive', true],
+		['dynamic', true],
+	] as const)(
+		'tightens handoff to Claude %s with existing target=%s',
+		async (maestroPMode, existing) => {
+			useSettingsStore.setState({ newShell: true });
+			vi.mocked(window.maestro.agents.getCapabilities).mockResolvedValueOnce({
+				supportsStandardPermissionMode: true,
+				supportsReadOnlyMode: true,
+			} as never);
+			if (existing)
+				useSessionStore
+					.getState()
+					.updateSession('target', { toolType: 'claude-code', enableMaestroP: true, maestroPMode });
+			const result = await openHandoffTarget(
+				request({
+					runnerId: existing ? 'target' : undefined,
+					config: {
+						toolType: 'claude-code',
+						...(existing ? {} : { enableMaestroP: true, maestroPMode }),
+					},
+					provider: existing ? 'claude-code' : 'deepseek',
+					sourcePermission: { permissionMode: 'standard', readOnlyMode: false },
+				})
+			);
+			expect(result.success).toBe(true);
+			const target = sessions().find((session) => session.id === result.agentId)!;
+			expect(target).toMatchObject({ enableMaestroP: true, maestroPMode });
+			expect(target.aiTabs.find((tab) => tab.id === result.tabId)).toMatchObject({
+				permissionMode: 'readonly',
+				readOnlyMode: true,
+			});
+		}
+	);
+
 	it('preserves standard in a supported Claude or DeepSeek target', async () => {
 		useSettingsStore.setState({ newShell: true });
 		vi.mocked(window.maestro.agents.getCapabilities).mockResolvedValueOnce({

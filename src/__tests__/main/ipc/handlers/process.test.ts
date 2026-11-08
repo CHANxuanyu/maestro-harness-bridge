@@ -838,6 +838,55 @@ describe('process IPC handlers', () => {
 	});
 
 	describe('process:spawn', () => {
+		it.each([
+			[
+				'interactive',
+				'en',
+				'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch this conversation to claude -p.',
+			],
+			[
+				'dynamic',
+				'zh-CN',
+				'这条对话使用 TUI 包装器或动态切换，标准权限无法生效。请改用只读或完全访问，或把这条对话改为 claude -p。',
+			],
+		])(
+			'refuses saved standard in %s with a localized %s message before spawn',
+			async (maestroPMode, locale, message) => {
+				mockSettingsStore.get.mockImplementation((key, fallback) =>
+					key === 'newShell' ? true : key === 'uiLanguage' ? locale : fallback
+				);
+				mockProcessManager.spawn.mockReturnValue({ pid: 4244, success: true });
+				const saved = { id: 'owner', enableMaestroP: true, maestroPMode };
+				mockSessionsStore.get.mockImplementation((key, fallback) =>
+					key === 'sessions' ? [saved] : fallback
+				);
+				mockAgentDetector.getAgent.mockResolvedValue({
+					id: 'claude-code',
+					interactiveCommand: 'maestro-p',
+					interactiveModeArgs: [],
+				});
+				await expect(
+					handlers.get('process:spawn')!(
+						{},
+						{
+							sessionId: 'owner-ai-tab',
+							toolType: 'claude-code',
+							command: 'claude',
+							cwd: '/temporary-project',
+							args: ['--print'],
+							prompt: 'fixture',
+							permissionMode: 'standard',
+							enableMaestroP: false,
+						}
+					)
+				).rejects.toThrow(message);
+				expect(mockProcessManager.spawn).not.toHaveBeenCalled();
+				expect(preparePermissionRelayArgs).not.toHaveBeenCalled();
+				expect(mockSessionsStore.set).not.toHaveBeenCalled();
+				expect(saved).toEqual({ id: 'owner', enableMaestroP: true, maestroPMode });
+			}
+		);
+
 		it('binds approval to the resolved native worktree cwd', async () => {
 			mockSettingsStore.get.mockImplementation((key, fallback) =>
 				key === 'newShell' ? true : fallback
@@ -897,7 +946,7 @@ describe('process IPC handlers', () => {
 						sessionCustomEnvVars: { CLAUDE_CONFIG_DIR: '/tmp/approval-account' },
 					}
 				)
-			).rejects.toThrow('CLAUDE_STANDARD_CONFLICTING_ARGUMENTS');
+			).rejects.toThrow('Standard is unavailable over SSH or with custom permission overrides.');
 			expect(mockProcessManager.spawn).not.toHaveBeenCalled();
 		});
 

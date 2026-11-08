@@ -1,3 +1,4 @@
+import { CLAUDE_STANDARD_PERMISSION_MESSAGES } from '../../../../shared/processErrors';
 /** Agent setup, native session history, and permission UI. */
 export const workflowsSessions = {
 	'workflows.sessions.handoff.conversationIntro':
@@ -185,10 +186,7 @@ export const workflowsSessions = {
 	'workflows.sessions.approvalScope': '只批准这一次工具调用，请先检查下方完整参数。',
 	'workflows.sessions.approvalSendFailed': '审批决定未能送达，请重试。',
 	'workflows.sessions.permissionMessageHeld': '消息已保留在队列中。',
-	'workflows.sessions.standardSpawnRefused':
-		'标准权限需要本机 Claude 通过 print 请求审批。请关闭 SSH，选择 Claude 可执行文件而非 maestro-p，并移除自定义参数中的权限覆盖。',
-	'workflows.sessions.standardPrintNotice':
-		'标准权限通过 Claude print 请求审批，暂不支持 TUI 审批和 SSH。',
+	...CLAUDE_STANDARD_PERMISSION_MESSAGES['zh-CN'],
 	'workflows.sessions.customAnswer': '其他（输入自定义回答）',
 	'workflows.sessions.submitAnswer': '提交回答',
 	'workflows.sessions.noRecordedSession': '此条目没有关联的会话记录',

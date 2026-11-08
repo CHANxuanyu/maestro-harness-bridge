@@ -1,3 +1,4 @@
+import { CLAUDE_STANDARD_PERMISSION_MESSAGES } from '../../../../shared/processErrors';
 /** Agent setup, native session history, and permission UI. */
 export const workflowsSessions = {
 	'workflows.sessions.handoff.conversationIntro':
@@ -196,10 +197,7 @@ export const workflowsSessions = {
 	'workflows.sessions.approvalSendFailed':
 		'Your decision could not be delivered. Please try again.',
 	'workflows.sessions.permissionMessageHeld': 'Your message is held in the queue.',
-	'workflows.sessions.standardSpawnRefused':
-		'Standard permissions require local Claude print. Disable SSH, select the Claude executable instead of maestro-p, and remove custom permission overrides.',
-	'workflows.sessions.standardPrintNotice':
-		'Standard permissions use Claude print with approval prompts. TUI approval and SSH are not supported yet.',
+	...CLAUDE_STANDARD_PERMISSION_MESSAGES['en'],
 	'workflows.sessions.customAnswer': 'Other (type a custom answer)',
 	'workflows.sessions.submitAnswer': 'Submit answer',
 	'workflows.sessions.noRecordedSession': 'No session recorded for this entry',

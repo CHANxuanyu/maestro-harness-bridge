@@ -183,6 +183,7 @@ beforeEach(() => {
 
 	useSettingsStore.setState({
 		conductorProfile: 'default',
+		newShell: false,
 	} as any);
 
 	useUIStore.setState({
@@ -483,6 +484,36 @@ describe('useRemoteHandlers', () => {
 			);
 		});
 
+		it.each(['interactive', 'dynamic'] as const)(
+			'refuses CLI dispatch to saved standard under %s before accepting delivery',
+			async (maestroPMode) => {
+				useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+				const session = createMockSession({ enableMaestroP: true, maestroPMode });
+				session.aiTabs[0].permissionMode = 'standard';
+				renderHook(() =>
+					useRemoteHandlers(createMockDeps({ sessionsRef: { current: [session] } }))
+				);
+				await act(async () =>
+					getRemoteCommandHandler()(
+						new CustomEvent('maestro:remoteCommand', {
+							detail: {
+								sessionId: session.id,
+								command: 'fixture',
+								inputMode: 'ai',
+								receiptChannel: 'approval-refused',
+							},
+						})
+					)
+				);
+				expect(window.maestro.process.spawn).not.toHaveBeenCalled();
+				expect(window.maestro.process.sendRemoteCommandReceipt).toHaveBeenCalledExactlyOnceWith(
+					'approval-refused',
+					false,
+					'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch this conversation to claude -p.'
+				);
+				useSettingsStore.setState({ newShell: false });
+			}
+		);
 		it('dispatches AI commands via spawn', async () => {
 			const session = createMockSession({ inputMode: 'ai' });
 			const deps = createMockDeps({

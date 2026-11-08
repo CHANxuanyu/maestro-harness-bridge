@@ -2069,11 +2069,22 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 							!effectiveStandardPermissionCapability(
 								capabilities,
 								useSettingsStore.getState(),
-								!!session.sessionSshRemoteConfig?.enabled
+								!!session.sessionSshRemoteConfig?.enabled,
+								session
 							)) ||
 						(mode === 'readonly' && !capabilities?.supportsReadOnlyMode)
 					) {
-						throw new Error('Permission mode is not supported by this provider');
+						throw new Error(
+							mode === 'standard' &&
+								session.toolType === 'claude-code' &&
+								useSettingsStore.getState().newShell
+								? getT()(
+										session.sessionSshRemoteConfig?.enabled
+											? 'workflows.sessions.standardTransportRefused'
+											: 'workflows.sessions.standardSpawnRefused'
+									)
+								: 'Permission mode is not supported by this provider'
+						);
 					}
 					Object.assign(tabPatch, permissionModeFields(mode));
 				} catch (error) {

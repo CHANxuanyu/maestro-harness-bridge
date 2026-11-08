@@ -54,12 +54,26 @@ exit code 1. The renderer waits for acknowledgement and removes requests settled
 by CLI, timeout, process exit or bridge disconnect. A failed delivery remains
 visible for a deliberate retry. No persistent allow rule is written.
 
-New shell standard Claude turns use local print even with a saved interactive
-or dynamic preference. Direct maestro-p, SSH and conflicting permission args
-fail before spawn. Classic permission policy is unchanged. The existing shared
-relay also receives lifetime and failed-delivery fixes in the classic shell.
-Synthetic Electron coverage is in `e2e/native-claude-permission.spec.ts` and
-execution instructions are in `e2e/claude-standard-approval.md`.
+New shell Claude standard is available only with the effective `api` token
+source (`claude -p`) on a local Claude executable. TUI Wrapper and Dynamic show
+a disabled Standard row with an explanation. Existing incompatible standard
+turns are refused before spawn, without changing the chosen source or starting
+maestro-p. New, inherited, restored and handoff conversations tighten unsupported
+standard to readonly through `newConversationPermissionFields()` and
+`effectiveStandardPermissionCapability()`.
+
+`tab permission <tab> standard`, `dispatch`, and `dispatch --queue` use the same
+capability gate and localized refusal. `update-agent <owner> --token-source
+api|tui|dynamic` remains the explicit token source action; `tui` is the CLI name
+for stored `interactive`. The new shell has no per-conversation token source UI
+entry; classic Edit Agent exposes it in the shared AgentConfigPanel. The owner
+setting applies to its conversations, so this task adds no new UI action or verb.
+SSH and conflicting permission arguments still refuse before spawn.
+
+旧界面 TUI 下选标准仍会跳过确认，这是既有问题，这次没改。共享审批列表的
+归属过滤同时修复旧界面和 CLI 的信息泄露，审批响应及生命周期模型保持合并后的规则。
+Synthetic Electron coverage is in `e2e/native-claude-permission.spec.ts`; execution
+instructions are in `e2e/claude-standard-approval.md`.
 
 The U4 review fixes add no action or verb. `permission list` carries the same
 effective spawn `cwd` and `tabId` as the prompt. The relay derives a missing

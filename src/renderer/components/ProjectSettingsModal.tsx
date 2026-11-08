@@ -311,7 +311,8 @@ export function ProjectSettingsModal({
 									effectiveStandardPermissionCapability(
 										capabilities,
 										{ newShell, codexAppServer },
-										!!scope?.sshRemoteId
+										!!scope?.sshRemoteId,
+										owner
 									)
 								)
 									.filter((mode) => mode !== 'readonly' || capabilities.supportsReadOnlyMode)

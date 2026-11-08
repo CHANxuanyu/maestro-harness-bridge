@@ -1,3 +1,4 @@
+import type { ClaudeTokenModeSource } from '../../shared/claudeTokenMode';
 import { effectiveStandardPermissionCapability } from '../../shared/codexAppServer';
 import { projectHistoryScopeFor } from '../../shared/projectHistory';
 import {
@@ -26,13 +27,19 @@ export function newConversationPermissionFields(
 		AgentCapabilities,
 		'supportsReadOnlyMode' | 'supportsStandardPermissionMode' | 'supportsCodexAppServer'
 	>,
-	remote = true
+	remote = true,
+	claudeTokenSource?: ClaudeTokenModeSource & { customPath?: string }
 ): ReturnType<typeof permissionModeFields> | null {
 	let mode = resolveTabPermissionMode(source);
 	if (
 		mode === 'standard' &&
 		capabilities &&
-		!effectiveStandardPermissionCapability(capabilities, useSettingsStore.getState(), remote)
+		!effectiveStandardPermissionCapability(
+			capabilities,
+			useSettingsStore.getState(),
+			remote,
+			claudeTokenSource
+		)
 	)
 		mode = 'readonly';
 	if (mode === 'readonly' && capabilities && !capabilities.supportsReadOnlyMode) return null;
@@ -73,7 +80,8 @@ export function restoreConversationPermissions(
 	const permissions = newConversationPermissionFields(
 		source,
 		capabilities,
-		!!session.sessionSshRemoteConfig?.enabled
+		!!session.sessionSshRemoteConfig?.enabled,
+		session
 	);
 	// Keep a saved prototype choice when its transport is unavailable. Spawn must
 	// report the existing explicit refusal instead of silently changing the mode.

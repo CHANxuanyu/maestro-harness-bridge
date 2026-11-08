@@ -146,29 +146,27 @@ describe('resolveClaudeSpawnModeCore under CLI-shaped deps', () => {
 	const NOW = new Date('2026-07-05T00:00:00.000Z');
 
 	it.each(['interactive', 'dynamic'] as const)(
-		'keeps standard approval on print when the saved source is %s',
+		'refuses standard without changing the saved %s source',
 		(tokenMode) => {
-			const decision = resolveClaudeSpawnModeCore(
-				{
-					agent: CLAUDE_AGENT,
-					tokenMode,
-					sshEnabled: false,
-					command: 'claude',
-					requirePermissionRelay: true,
-					persisted: { mode: 'interactive' },
-					sessionCustomEnvVars: { CLAUDE_CONFIG_DIR: '/tmp/claude-approval-test' },
-					now: NOW,
-				},
-				cliShapedDeps({
-					getUsageSnapshot: () => {
-						throw new Error('Standard approval must not consult usage');
+			expect(() =>
+				resolveClaudeSpawnModeCore(
+					{
+						agent: CLAUDE_AGENT,
+						tokenMode,
+						sshEnabled: false,
+						command: 'claude',
+						requirePermissionRelay: true,
+						persisted: { mode: 'interactive' },
+						sessionCustomEnvVars: { CLAUDE_CONFIG_DIR: '/tmp/claude-approval-test' },
+						now: NOW,
 					},
-				})
-			);
-			expect(decision.mode).toBe('api');
-			expect(decision.maestroPBinPath).toBeNull();
-			expect(decision.directBinary).toBeUndefined();
-			expect(decision.configDirKey).toBe('/tmp/claude-approval-test');
+					cliShapedDeps({
+						getUsageSnapshot: () => {
+							throw new Error('Standard approval must not consult usage');
+						},
+					})
+				)
+			).toThrow('CLAUDE_STANDARD_UNAVAILABLE_WITH_TUI');
 		}
 	);
 

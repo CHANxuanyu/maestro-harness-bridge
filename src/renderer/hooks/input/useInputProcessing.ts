@@ -46,6 +46,7 @@ import { getT } from '../../i18n';
 import {
 	isAgentAlreadyRunningError,
 	isClaudeStandardPermissionError,
+	claudeStandardPermissionMessageKey,
 } from '../../../shared/processErrors';
 import { hasPendingRetry, noteDirectDispatch } from '../../stores/retryStore';
 import {
@@ -1644,7 +1645,7 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 							source: 'system',
 							text:
 								useSettingsStore.getState().newShell && isClaudeStandardPermissionError(error)
-									? getT()('workflows.sessions.standardSpawnRefused')
+									? getT()(claudeStandardPermissionMessageKey(error)!)
 									: `Error: Failed to spawn agent process - ${(error as Error).message}`,
 						};
 						updateSessionWith(resolvedSessionId, (s) => {

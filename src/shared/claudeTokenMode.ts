@@ -162,3 +162,29 @@ export function autoRunMaestroPMaxWaitSeconds(settings: {
 	if (maxDuration > 0) return Math.ceil(maxDuration * 60);
 	return AUTO_RUN_UNWATCHED_MAX_WAIT_SECONDS;
 }
+
+/**
+ * Return true when `binaryPath` looks like a maestro-p binary (by basename).
+ *
+ * Canonical implementation shared by every surface. Recognises the bundled
+ * `maestro-p.js` script, a packaged `maestro-p` executable, and the Windows
+ * `.exe` variant or installer `.cmd` entry. Used to detect power-user setups where the `Path` field
+ * points directly at maestro-p (bypassing the token-source toggle) so the
+ * resolved mode still surfaces as `interactive`, and to avoid pointing
+ * `MAESTRO_CLAUDE_BIN` at maestro-p itself (which would make it drive itself
+ * instead of the claude TUI).
+ */
+export function isMaestroPBinaryPath(binaryPath: string | undefined | null): boolean {
+	if (!binaryPath) return false;
+	// Split on both `/` and `\` so a Windows-style path resolves correctly when
+	// this code runs on POSIX (path.basename on POSIX doesn't treat `\` as a
+	// separator, which would otherwise leave the whole `C:\…` string as the
+	// "basename" and miss the match).
+	const base = (binaryPath.split(/[\\/]/).pop() ?? '').toLowerCase();
+	return (
+		base === 'maestro-p' ||
+		base === 'maestro-p.js' ||
+		base === 'maestro-p.exe' ||
+		base === 'maestro-p.cmd'
+	);
+}

@@ -278,6 +278,22 @@ describe('InputArea', () => {
 		mockUpdateSessionWith.mockClear();
 	});
 
+	it.each(['interactive', 'dynamic'] as const)(
+		'disables standard from the effective Claude %s mode',
+		(maestroPMode) => {
+			useSettingsStore.setState({ newShell: true });
+			const session = createMockSession({
+				toolType: 'claude-code',
+				enableMaestroP: true,
+				maestroPMode,
+			});
+			render(<InputArea {...createDefaultProps({ session })} />);
+			fireEvent.click(screen.getByTestId('composer-permission'));
+			expect(screen.getByRole('menuitemradio', { name: 'Standard' })).toBeDisabled();
+			expect(screen.getByRole('menu')).toHaveTextContent('maestro-p skips confirmations');
+		}
+	);
+
 	it('keeps the unfocused split composer draft separate from the live composer', () => {
 		useSettingsStore.setState({ newShell: true });
 		const session = createMockSession();

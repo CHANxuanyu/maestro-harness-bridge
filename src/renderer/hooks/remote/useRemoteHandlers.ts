@@ -1,3 +1,5 @@
+import { getT } from '../../i18n';
+import { effectiveStandardPermissionCapability } from '../../../shared/codexAppServer';
 /**
  * useRemoteHandlers - extracted from App.tsx (Phase 2K)
  *
@@ -366,6 +368,27 @@ export function useRemoteHandlers(deps: UseRemoteHandlersDeps): UseRemoteHandler
 			}
 			const targetTab = requestedTab ?? getActiveTab(session);
 			const writeTabId = targetTab?.id;
+
+			const permissionSettings = useSettingsStore.getState();
+			if (
+				permissionSettings.newShell &&
+				session.toolType === 'claude-code' &&
+				resolveTabPermissionMode(targetTab) === 'standard' &&
+				!effectiveStandardPermissionCapability(
+					{ supportsStandardPermissionMode: true },
+					permissionSettings,
+					!!session.sessionSshRemoteConfig?.enabled,
+					session
+				)
+			) {
+				const reason = getT()(
+					session.sessionSshRemoteConfig?.enabled
+						? 'workflows.sessions.standardTransportRefused'
+						: 'workflows.sessions.standardSpawnRefused'
+				);
+				reportDelivery(false, reason);
+				return;
+			}
 
 			// Cross-agent @mentions, resolved the way the composer does it
 			// (useInputProcessing): a remote prompt is the same message a user would

@@ -523,6 +523,11 @@ export const ToolbarControls = memo(function ToolbarControls({
 								agentId={session.toolType}
 								mode={currentPermissionMode}
 								hasStandardCapability={hasStandardCapability}
+								standardUnavailableNotice={
+									session.sessionSshRemoteConfig?.enabled
+										? 'workflows.sessions.standardTransportRefused'
+										: 'workflows.sessions.standardPrintNotice'
+								}
 								onChange={handlePermissionModeChange}
 							/>
 						) : (

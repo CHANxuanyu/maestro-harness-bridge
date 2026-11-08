@@ -39,6 +39,7 @@ import { useSettingsStore } from './settingsStore';
 import {
 	isAgentAlreadyRunningError,
 	isClaudeStandardPermissionError,
+	claudeStandardPermissionMessageKey,
 } from '../../shared/processErrors';
 import { createTab, getActiveTab } from '../utils/tabHelpers';
 import { codifyQueuedTurnSettings } from '../utils/providerTabSessions';
@@ -771,7 +772,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
 				source: 'error',
 				text:
 					useSettingsStore.getState().newShell && isClaudeStandardPermissionError(error)
-						? `${getT()('workflows.sessions.standardSpawnRefused')} ${getT()('workflows.sessions.permissionMessageHeld')}`
+						? `${getT()(claudeStandardPermissionMessageKey(error)!)} ${getT()('workflows.sessions.permissionMessageHeld')}`
 						: commandDiscoveryFailed
 							? getT()('workflows.nativeCommands.queuedUnavailable')
 							: `Error: Failed to send queued ${item.type} - ${error.message}. The message is held in the queue.`,

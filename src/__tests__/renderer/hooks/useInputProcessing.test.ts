@@ -1482,7 +1482,7 @@ describe('useInputProcessing', () => {
 			useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
 			const session = createMockSession({ state: 'idle' });
 			vi.mocked(window.maestro.process.spawn).mockRejectedValue(
-				new Error('Error invoking remote method: CLAUDE_STANDARD_REQUIRES_LOCAL_PRINT')
+				new Error('Error invoking remote method: CLAUDE_STANDARD_UNAVAILABLE_WITH_TUI')
 			);
 			const deps = createDeps({
 				activeSession: session,
@@ -1497,9 +1497,11 @@ describe('useInputProcessing', () => {
 			});
 			const [live] = useSessionStore.getState().sessions;
 			expect(live.aiTabs[0].state).toBe('idle');
-			expect(live.aiTabs[0].logs.some((log) => log.text?.includes('标准权限需要本机 Claude'))).toBe(
-				true
-			);
+			expect(
+				live.aiTabs[0].logs.some((log) =>
+					log.text?.includes('这条对话使用 TUI 包装器或动态切换，标准权限无法生效。')
+				)
+			).toBe(true);
 			expect(
 				live.aiTabs[0].logs.some((log) => log.text?.includes('CLAUDE_STANDARD_REQUIRES'))
 			).toBe(false);

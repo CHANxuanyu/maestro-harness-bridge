@@ -1,3 +1,8 @@
+import {
+	getClaudeTokenMode,
+	isMaestroPBinaryPath,
+	type ClaudeTokenModeSource,
+} from './claudeTokenMode';
 import type { AgentCapabilities } from './types';
 
 /** Prototype eligibility only; an already running exec turn never gains RPC controls. */
@@ -20,8 +25,17 @@ export function effectiveStandardPermissionCapability(
 		| Pick<AgentCapabilities, 'supportsStandardPermissionMode' | 'supportsCodexAppServer'>
 		| undefined,
 	settings: { newShell?: boolean; codexAppServer?: boolean },
-	remote = false
+	remote = false,
+	claudeTokenSource?: ClaudeTokenModeSource & { customPath?: string }
 ): boolean {
+	if (
+		settings.newShell &&
+		capabilities?.supportsStandardPermissionMode &&
+		(remote ||
+			getClaudeTokenMode(claudeTokenSource) !== 'api' ||
+			isMaestroPBinaryPath(claudeTokenSource?.customPath))
+	)
+		return false;
 	return (
 		capabilities?.supportsStandardPermissionMode === true ||
 		codexAppServerEnabled(capabilities, settings, remote)

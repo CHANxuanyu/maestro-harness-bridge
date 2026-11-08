@@ -418,7 +418,8 @@ describe('permission choices across tools', () => {
 		expect(
 			newConversationPermissionFields(
 				permissionModeFields('standard'),
-				AGENT_CAPABILITIES['claude-code']
+				AGENT_CAPABILITIES['claude-code'],
+				false
 			)
 		).toEqual(permissionModeFields('standard'));
 		expect(
@@ -888,3 +889,27 @@ it('restores an existing local Codex standard conversation while the prototype i
 	const session = createMockSession({ toolType: 'codex', aiTabs: [tab] });
 	expect(restoreConversationPermissions(session, tab)?.permissionMode).toBe('standard');
 });
+
+it.each(['interactive', 'dynamic'] as const)(
+	'tightens new and restored Claude standard under %s',
+	(maestroPMode) => {
+		const tab = createMockAITab({ permissionMode: 'standard' });
+		const session = createMockSession({
+			toolType: 'claude-code',
+			enableMaestroP: true,
+			maestroPMode,
+			aiTabs: [tab],
+			activeTabId: tab.id,
+		});
+		expect(createTab(session, { permissionSource: tab })?.tab).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+		expect(restoreConversationPermissions(session, tab)).toMatchObject({
+			permissionMode: 'readonly',
+			readOnlyMode: true,
+		});
+		expect(session.enableMaestroP).toBe(true);
+		expect(session.maestroPMode).toBe(maestroPMode);
+	}
+);

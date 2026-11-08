@@ -65,13 +65,17 @@ describe('ToolbarControls', () => {
 		);
 	}
 
-	it('explains the local print approval route in the new shell permission menu', () => {
+	it('shows unavailable standard with a reason and skips it for keyboard selection', () => {
 		useSettingsStore.setState({ newShell: true });
-		renderToolbar();
+		renderToolbar({ hasStandardCapability: false });
 		fireEvent.click(screen.getByTestId('composer-permission'));
-		expect(screen.getByRole('menu')).toHaveTextContent(
-			'TUI approval and SSH are not supported yet'
-		);
+		const standard = screen.getByRole('menuitemradio', { name: 'Standard' });
+		expect(standard).toBeDisabled();
+		expect(screen.getByRole('menu')).toHaveTextContent('maestro-p skips confirmations');
+		fireEvent.click(standard);
+		expect(mockUpdateSessionWith).not.toHaveBeenCalled();
+		fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' });
+		expect(screen.getByRole('menuitemradio', { name: 'Plan mode' })).toHaveFocus();
 	});
 
 	it('opens the image picker belonging to the clicked pane', () => {
@@ -138,7 +142,7 @@ describe('ToolbarControls', () => {
 	);
 
 	it.each([true, false])(
-		'lists only supported permission modes and applies the selected fields, standard supported %s',
+		'lists standard availability and applies the selected fields, standard supported %s',
 		(hasStandardCapability) => {
 			useSettingsStore.setState({ newShell: true });
 			const session = createInputAreaSession();
@@ -146,7 +150,11 @@ describe('ToolbarControls', () => {
 			const trigger = screen.getByTitle(/^Read, write/);
 			fireEvent.click(trigger);
 			expect(mockUpdateSessionWith).not.toHaveBeenCalled();
-			expect(screen.getAllByRole('menuitemradio')).toHaveLength(hasStandardCapability ? 3 : 2);
+			expect(screen.getAllByRole('menuitemradio')).toHaveLength(3);
+			expect(screen.getByRole('menuitemradio', { name: 'Standard' })).toHaveProperty(
+				'disabled',
+				!hasStandardCapability
+			);
 			expect(screen.getByRole('menuitemradio', { name: 'Full Access' })).toHaveAttribute(
 				'aria-checked',
 				'true'

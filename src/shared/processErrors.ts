@@ -16,15 +16,69 @@ export const AGENT_ALREADY_RUNNING_PREFIX = 'Agent process already running for s
 
 /** Stable refusal identifiers translated by the renderer after IPC wrapping. */
 export const CLAUDE_STANDARD_PERMISSION_ERRORS = {
+	tuiMode: 'CLAUDE_STANDARD_UNAVAILABLE_WITH_TUI',
 	remote: 'CLAUDE_STANDARD_REQUIRES_LOCAL_PRINT',
 	tuiBinary: 'CLAUDE_STANDARD_REQUIRES_CLAUDE_BINARY',
 	conflictingArgs: 'CLAUDE_STANDARD_CONFLICTING_ARGUMENTS',
 } as const;
 
-/** Match a standard approval refusal after Electron wraps the error. */
-export function isClaudeStandardPermissionError(error: unknown): boolean {
+/** Shared catalogs keep main, CLI and renderer refusals identical. */
+export const CLAUDE_STANDARD_PERMISSION_MESSAGES = {
+	en: {
+		'workflows.sessions.standardSpawnRefused':
+			'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch this conversation to claude -p.',
+		'workflows.sessions.standardPrintNotice':
+			'Unavailable with TUI Wrapper or Dynamic: maestro-p skips confirmations. To approve each step, switch this conversation to claude -p.',
+		'workflows.sessions.standardTransportRefused':
+			'Standard is unavailable over SSH or with custom permission overrides. Choose Read-only or Full Access, or use local claude -p without permission overrides.',
+	},
+	'zh-CN': {
+		'workflows.sessions.standardSpawnRefused':
+			'这条对话使用 TUI 包装器或动态切换，标准权限无法生效。请改用只读或完全访问，或把这条对话改为 claude -p。',
+		'workflows.sessions.standardPrintNotice':
+			'TUI 包装器和动态切换模式下不可用：maestro-p 会跳过确认。要逐次批准，请把这条对话改为 claude -p。',
+		'workflows.sessions.standardTransportRefused':
+			'SSH 或自定义权限参数下无法使用标准权限。请选择只读或完全访问，或使用本机 claude -p 并移除自定义权限参数。',
+	},
+} as const;
+
+/** Match stable core codes and localized IPC errors without importing renderer code. */
+export function claudeStandardPermissionMessageKey(
+	error: unknown
+):
+	| 'workflows.sessions.standardSpawnRefused'
+	| 'workflows.sessions.standardTransportRefused'
+	| undefined {
 	const message = error instanceof Error ? error.message : String(error ?? '');
-	return Object.values(CLAUDE_STANDARD_PERMISSION_ERRORS).some((code) => message.includes(code));
+	for (const key of [
+		'workflows.sessions.standardSpawnRefused',
+		'workflows.sessions.standardTransportRefused',
+	] as const) {
+		if (
+			Object.values(CLAUDE_STANDARD_PERMISSION_MESSAGES).some((catalog) =>
+				message.includes(catalog[key])
+			)
+		)
+			return key;
+	}
+	if (
+		[CLAUDE_STANDARD_PERMISSION_ERRORS.tuiMode, CLAUDE_STANDARD_PERMISSION_ERRORS.tuiBinary].some(
+			(code) => message.includes(code)
+		)
+	)
+		return 'workflows.sessions.standardSpawnRefused';
+	if (
+		[
+			CLAUDE_STANDARD_PERMISSION_ERRORS.remote,
+			CLAUDE_STANDARD_PERMISSION_ERRORS.conflictingArgs,
+		].some((code) => message.includes(code))
+	)
+		return 'workflows.sessions.standardTransportRefused';
+	return undefined;
+}
+
+export function isClaudeStandardPermissionError(error: unknown): boolean {
+	return claudeStandardPermissionMessageKey(error) !== undefined;
 }
 
 /** The exact message `ProcessManager.spawn` throws for an owned session. */

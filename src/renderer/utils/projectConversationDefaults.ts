@@ -41,7 +41,14 @@ export function projectSettingsForSession(
 export function projectConversationFields(
 	session: Pick<
 		Session,
-		'cwd' | 'projectRoot' | 'sessionSshRemoteConfig' | 'toolType' | 'customEnvVars'
+		| 'cwd'
+		| 'projectRoot'
+		| 'sessionSshRemoteConfig'
+		| 'toolType'
+		| 'customEnvVars'
+		| 'enableMaestroP'
+		| 'maestroPMode'
+		| 'customPath'
 	>,
 	source?: Pick<AITab, 'permissionMode' | 'readOnlyMode' | 'customModel' | 'customEffort'>,
 	capabilities?: Pick<
@@ -60,7 +67,8 @@ export function projectConversationFields(
 	const fields = newConversationPermissionFields(
 		permission,
 		capabilities,
-		!allowAppServer || !!session.sessionSshRemoteConfig?.enabled
+		!allowAppServer || !!session.sessionSshRemoteConfig?.enabled,
+		session
 	);
 	if (!fields) return null;
 	const modelDefaults =

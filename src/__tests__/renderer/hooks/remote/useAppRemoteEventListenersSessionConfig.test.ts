@@ -598,6 +598,33 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 			expect(ack).toHaveBeenCalledWith('ch', { success: true });
 		}
 	);
+	it.each(['interactive', 'dynamic'] as const)(
+		'refuses CLI standard for Claude %s without changing the tab',
+		async (maestroPMode) => {
+			vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as any);
+			window.maestro.agents = {
+				getCapabilities: vi
+					.fn()
+					.mockResolvedValue({ supportsStandardPermissionMode: true, supportsReadOnlyMode: true }),
+			} as any;
+			const session = {
+				...twoTabSession(),
+				toolType: 'claude-code' as const,
+				enableMaestroP: true,
+				maestroPMode,
+			};
+			const { setSessions } = setup([session]);
+			dispatchPatch('session-1', { tabId: 'tab-2', permissionMode: 'standard' });
+			await flush();
+			expect(setSessions).not.toHaveBeenCalled();
+			expect(ack).toHaveBeenCalledWith('ch', {
+				success: false,
+				error:
+					'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch this conversation to claude -p.',
+			});
+		}
+	);
+
 	it('rejects an unsupported permission mode before changing the tab', async () => {
 		window.maestro.agents = {
 			getCapabilities: vi

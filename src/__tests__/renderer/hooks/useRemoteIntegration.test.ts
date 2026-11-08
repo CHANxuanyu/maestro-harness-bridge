@@ -1828,6 +1828,40 @@ describe('useRemoteIntegration', () => {
 	});
 
 	describe('remote enqueue command (dispatch --queue)', () => {
+		it.each(['interactive', 'dynamic'] as const)(
+			'refuses queued standard under %s without storing work',
+			(maestroPMode) => {
+				useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+				const session = createMockSession({
+					id: 'session-1',
+					state: 'busy',
+					enableMaestroP: true,
+					maestroPMode,
+				});
+				session.aiTabs[0].permissionMode = 'standard';
+				useSessionStore.setState({ sessions: [session] });
+				renderHook(() => useRemoteIntegration(createDeps({ sessions: [session] })));
+				act(() =>
+					onRemoteEnqueueCommandHandler?.(
+						'session-1',
+						'fixture',
+						'approval-refused',
+						'ai',
+						session.aiTabs[0].id
+					)
+				);
+				expect(useSessionStore.getState().sessions[0].executionQueue).toEqual([]);
+				expect(
+					window.maestro.process.sendRemoteEnqueueCommandResponse
+				).toHaveBeenCalledExactlyOnceWith('approval-refused', {
+					success: false,
+					error:
+						'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch this conversation to claude -p.',
+				});
+				useSettingsStore.setState({ newShell: false });
+			}
+		);
+
 		it('enqueues a message on a busy session and acks the queue position', () => {
 			const tab = createMockTab({ id: 'tab-1', name: 'PR review' });
 			const session = createMockSession({

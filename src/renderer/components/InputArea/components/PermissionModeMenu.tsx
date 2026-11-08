@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Shield } from 'lucide-react';
 import type { Theme } from '../../../types';
-import { useT } from '../../../i18n';
+import { useT, type MessageKey } from '../../../i18n';
 import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { useClickOutside } from '../../../hooks/ui/useClickOutside';
 import { useListNavigation } from '../../../hooks/keyboard/useListNavigation';
@@ -13,6 +13,7 @@ interface PermissionModeMenuProps {
 	agentId: string;
 	mode: 'full' | 'standard' | 'readonly';
 	hasStandardCapability: boolean;
+	standardUnavailableNotice?: MessageKey;
 	onChange: (mode: 'full' | 'standard' | 'readonly') => void;
 }
 
@@ -22,6 +23,7 @@ export function PermissionModeMenu({
 	agentId,
 	mode,
 	hasStandardCapability,
+	standardUnavailableNotice = 'workflows.sessions.standardPrintNotice',
 	onChange,
 }: PermissionModeMenuProps) {
 	const t = useT();
@@ -30,16 +32,19 @@ export function PermissionModeMenu({
 	const rootRef = useRef<HTMLDivElement>(null);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
-	const modes = permissionModes(hasStandardCapability);
+	const unavailableStandard = newShell && agentId === 'claude-code' && !hasStandardCapability;
+	const modes = permissionModes(hasStandardCapability || unavailableStandard);
+	const selectableModes = permissionModes(hasStandardCapability);
 	useClickOutside(rootRef, () => setOpen(false), open);
 	const select = (index: number) => {
-		onChange(modes[index]);
+		if (!selectableModes[index]) return;
+		onChange(selectableModes[index]);
 		setOpen(false);
 		triggerRef.current?.focus();
 	};
 	const { selectedIndex, setSelectedIndex, handleKeyDown } = useListNavigation({
-		listLength: modes.length,
-		initialIndex: modes.indexOf(mode),
+		listLength: selectableModes.length,
+		initialIndex: Math.max(0, selectableModes.indexOf(mode)),
 		onSelect: select,
 		wrap: true,
 		enablePageNavigation: true,
@@ -47,7 +52,9 @@ export function PermissionModeMenu({
 	});
 	useEffect(() => {
 		if (open)
-			menuRef.current?.querySelectorAll<HTMLButtonElement>('button')[selectedIndex]?.focus();
+			menuRef.current
+				?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')
+				[selectedIndex]?.focus();
 	}, [open, selectedIndex]);
 	return (
 		<div className="relative" ref={rootRef}>
@@ -55,7 +62,7 @@ export function PermissionModeMenu({
 				type="button"
 				ref={triggerRef}
 				onClick={() => {
-					setSelectedIndex(modes.indexOf(mode));
+					setSelectedIndex(Math.max(0, selectableModes.indexOf(mode)));
 					setOpen(!open);
 				}}
 				aria-haspopup="menu"
@@ -86,29 +93,35 @@ export function PermissionModeMenu({
 						else handleKeyDown(event);
 					}}
 				>
-					{agentId === 'claude-code' && hasStandardCapability && (
-						<p
-							className="w-64 px-3 py-2 text-xs whitespace-normal"
-							style={{ color: theme.colors.textDim }}
-						>
-							{t('workflows.sessions.standardPrintNotice')}
-						</p>
-					)}
-					{modes.map((option, index) => (
-						<button
-							key={option}
-							type="button"
-							role="menuitemradio"
-							aria-checked={option === mode}
-							tabIndex={index === selectedIndex ? 0 : -1}
-							onFocus={() => setSelectedIndex(index)}
-							onClick={() => select(index)}
-							className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs whitespace-nowrap hover:bg-white/10 focus:bg-white/10 outline-none transition-colors"
-							style={{ color: option === mode ? theme.colors.accent : theme.colors.textMain }}
-						>
-							<span className="flex-1">{permissionModeLabel(t, option, agentId, newShell)}</span>
-							<Check aria-hidden className={`w-3.5 h-3.5 ${option === mode ? '' : 'invisible'}`} />
-						</button>
+					{modes.map((option) => (
+						<Fragment key={option}>
+							<button
+								type="button"
+								role="menuitemradio"
+								disabled={option === 'standard' && unavailableStandard}
+								aria-disabled={option === 'standard' && unavailableStandard}
+								aria-checked={option === mode}
+								tabIndex={selectableModes.indexOf(option) === selectedIndex ? 0 : -1}
+								onFocus={() => setSelectedIndex(selectableModes.indexOf(option))}
+								onClick={() => select(selectableModes.indexOf(option))}
+								className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs whitespace-nowrap enabled:hover:bg-white/10 focus:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed outline-none transition-colors"
+								style={{ color: option === mode ? theme.colors.accent : theme.colors.textMain }}
+							>
+								<span className="flex-1">{permissionModeLabel(t, option, agentId, newShell)}</span>
+								<Check
+									aria-hidden
+									className={`w-3.5 h-3.5 ${option === mode ? '' : 'invisible'}`}
+								/>
+							</button>
+							{option === 'standard' && unavailableStandard && (
+								<p
+									className="w-64 px-3 pb-2 text-xs whitespace-normal"
+									style={{ color: theme.colors.textDim }}
+								>
+									{t(standardUnavailableNotice)}
+								</p>
+							)}
+						</Fragment>
 					))}
 				</div>
 			)}

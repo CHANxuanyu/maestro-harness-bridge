@@ -25,6 +25,28 @@ is defined, capable, and detected is still invisible in the UI until it has a
 
 ---
 
+## Claude standard approval (2026-11-07)
+
+The local print relay lives in `src/main/permission-relay/`. The registry owns
+single decisions and the five minute timeout. `PermissionRelayServer` settles
+requests on disconnect or shutdown; `integration.ts` clears the renderer and
+CLI request list, removes per-spawn MCP configs on process exit, and omits tokens
+from UI payloads. Do not add a second pending-request registry for CLI clients.
+
+`resolveClaudeSpawnContext()` requires local print for new-shell standard turns.
+The shared core honors `requirePermissionRelay` before inspecting TUI usage or
+remote availability. `isClaudeStandardPermissionError()` in
+`src/shared/processErrors.ts` identifies the resulting refusals for both direct
+and queued renderer sends. Classic permission policy stays unchanged.
+
+The relay spawn binding carries the final native resume `cwd`; approval UI and
+`permission list` read it instead of the persisted project's directory. Missing
+tab IDs are derived centrally in `preparePermissionRelayArgs()` with main's
+`REGEX_AI_TAB_ID`. Renderer compatibility uses `parseSessionId()`. Keep these
+existing parsers rather than adding another process ID parser. The shared
+`isMaestroPBinaryPath()` also recognizes the Windows installer's `.cmd` entry;
+this detection correction applies to classic and CLI callers too.
+
 ## 1. Agent IDs (`src/shared/agentIds.ts`)
 
 The canonical list of all agent IDs:

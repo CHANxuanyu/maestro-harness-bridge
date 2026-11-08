@@ -298,10 +298,13 @@ export type GetSessionDetailCallback = (sessionId: string, tabId?: string) => Se
  */
 export type WriteToSessionCallback = (sessionId: string, data: string) => boolean;
 
+/** Boolean callbacks remain supported; detailed results preserve renderer refusals. */
+export type ExecuteCommandResult = boolean | { success: boolean; error?: string };
+
 /**
  * Callback type for executing a command through the desktop's existing logic.
  * This forwards the command to the renderer which handles spawn, state, and broadcasts.
- * Returns true if command was accepted (session not busy).
+ * Reports whether the command was accepted, with an optional refusal reason.
  * inputMode is optional - if provided, the renderer will use it instead of querying session state.
  * tabId is optional - if provided, the renderer targets that specific tab instead of the active tab.
  * force is optional - if true, bypasses the renderer's own busy-state guard so
@@ -321,7 +324,7 @@ export type ExecuteCommandCallback = (
 	 * every in-app caller keep focusing exactly as they do now.
 	 */
 	background?: boolean
-) => Promise<boolean>;
+) => Promise<ExecuteCommandResult>;
 
 /**
  * Callback type for interrupting a session through the desktop's existing logic.

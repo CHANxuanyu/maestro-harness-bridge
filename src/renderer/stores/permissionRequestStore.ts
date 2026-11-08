@@ -32,6 +32,7 @@ export interface PermissionRequestUI {
 	requestId: string;
 	sessionId: string;
 	tabId?: string;
+	cwd?: string;
 	toolName: string;
 	input: Record<string, unknown>;
 	createdAt: number;
@@ -47,14 +48,16 @@ export type PermissionDecision =
 
 interface PermissionRequestState {
 	queue: PermissionRequestUI[];
+	responding: string[];
+	failed: string[];
 	/** Add a request to the queue (from the IPC listener). */
 	enqueue: (request: PermissionRequestUI) => void;
 	/** Answer a request: send the decision to main, then dequeue it. */
-	respond: (requestId: string, decision: PermissionDecision) => void;
+	respond: (requestId: string, decision: PermissionDecision) => Promise<void>;
+	/** Remove a request settled by main, including timeout or another window. */
+	resolve: (requestId: string) => void;
 	/** Drop all requests for a session (e.g. when its process exits). */
 	clearSession: (sessionId: string) => void;
-	/** Remove an externally resolved request without replying again. */
-	dismiss: (requestId: string) => void;
 }
 
 /**
@@ -68,8 +71,10 @@ function sendDecision(requestId: string, decision: PermissionDecision): void {
 	});
 }
 
-export const usePermissionRequestStore = create<PermissionRequestState>((set) => ({
+export const usePermissionRequestStore = create<PermissionRequestState>((set, get) => ({
 	queue: [],
+	responding: [],
+	failed: [],
 	enqueue: (request) =>
 		set((state) => {
 			// Ignore duplicates (defensive against double-delivery).
@@ -78,13 +83,35 @@ export const usePermissionRequestStore = create<PermissionRequestState>((set) =>
 			}
 			return { queue: [...state.queue, request] };
 		}),
-	respond: (requestId, decision) => {
-		// Fire-and-forget to main; the relay resolves the awaiting bridge call.
-		sendDecision(requestId, decision);
-		set((state) => ({ queue: state.queue.filter((r) => r.requestId !== requestId) }));
+	respond: async (requestId, decision) => {
+		if (get().responding.includes(requestId) || !get().queue.some((r) => r.requestId === requestId))
+			return;
+		set((state) => ({
+			responding: [...state.responding, requestId],
+			failed: state.failed.filter((id) => id !== requestId),
+		}));
+		try {
+			if (!window.maestro?.process?.respondPermission)
+				throw new Error('Permission bridge unavailable');
+			// A false acknowledgement means main already settled the request.
+			await window.maestro.process.respondPermission(requestId, decision);
+			get().resolve(requestId);
+		} catch (error) {
+			console.error('[permissionRequestStore] respondPermission failed', requestId, error);
+			set((state) => ({
+				responding: state.responding.filter((id) => id !== requestId),
+				failed: state.queue.some((r) => r.requestId === requestId)
+					? [...state.failed, requestId]
+					: state.failed,
+			}));
+		}
 	},
-	dismiss: (requestId) =>
-		set((state) => ({ queue: state.queue.filter((request) => request.requestId !== requestId) })),
+	resolve: (requestId) =>
+		set((state) => ({
+			queue: state.queue.filter((r) => r.requestId !== requestId),
+			responding: state.responding.filter((id) => id !== requestId),
+			failed: state.failed.filter((id) => id !== requestId),
+		})),
 	clearSession: (sessionId) =>
 		set((state) => {
 			// Explicitly deny any queued requests for the exiting session so the
@@ -96,7 +123,12 @@ export const usePermissionRequestStore = create<PermissionRequestState>((set) =>
 					sendDecision(r.requestId, { behavior: 'deny', message: 'Agent exited.' });
 				}
 			}
-			return { queue: state.queue.filter((r) => r.sessionId !== sessionId) };
+			const removed = state.queue.filter((r) => r.sessionId === sessionId).map((r) => r.requestId);
+			return {
+				queue: state.queue.filter((r) => r.sessionId !== sessionId),
+				responding: state.responding.filter((id) => !removed.includes(id)),
+				failed: state.failed.filter((id) => !removed.includes(id)),
+			};
 		}),
 }));
 

@@ -186,12 +186,6 @@ export function createProcessCoreApi() {
 		): Promise<{ success: true; turnId: string } | { success: false; error: string }> =>
 			ipcRenderer.invoke('process:steer', sessionId, text),
 
-		onPermissionResolved: (callback: (requestId: string) => void): (() => void) => {
-			const handler = (_: unknown, requestId: string) => callback(requestId);
-			ipcRenderer.on('process:permission-resolved', handler);
-			return () => ipcRenderer.removeListener('process:permission-resolved', handler);
-		},
-
 		broadcastUserInput: (payload: ProcessUserInputBroadcast): Promise<void> =>
 			ipcRenderer.invoke('process:broadcast-user-input', payload),
 
@@ -292,6 +286,7 @@ export function createProcessCoreApi() {
 				requestId: string;
 				sessionId: string;
 				tabId?: string;
+				cwd?: string;
 				toolName: string;
 				input: Record<string, unknown>;
 				createdAt: number;
@@ -306,9 +301,13 @@ export function createProcessCoreApi() {
 			return () => ipcRenderer.removeListener('process:permission-request', handler);
 		},
 
-		/**
-		 * Send the user's allow/deny decision for a relayed permission request.
-		 */
+		onPermissionResolved: (callback: (requestId: string) => void): (() => void) => {
+			const handler = (_: unknown, requestId: string) => callback(requestId);
+			ipcRenderer.on('process:permission-resolved', handler);
+			return () => ipcRenderer.removeListener('process:permission-resolved', handler);
+		},
+
+		/** Send the user's decision through the same handler as maestro-cli. */
 		respondPermission: (
 			requestId: string,
 			decision:

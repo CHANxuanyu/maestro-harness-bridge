@@ -207,10 +207,10 @@ function mapDispatchError(error: unknown, agentId: string): DispatchResponse {
 	// Checked before the substring sniffing below: this reason came from the
 	// desktop verbatim, so it must not be re-classified by whatever words it
 	// happens to contain.
-	if (msg.startsWith('NEW_TAB_REFUSED:')) {
+	if (msg.startsWith('DISPATCH_REFUSED:')) {
 		return {
 			success: false,
-			error: msg.slice('NEW_TAB_REFUSED:'.length),
+			error: msg.slice('DISPATCH_REFUSED:'.length),
 			code: 'DISPATCH_REFUSED',
 		};
 	}
@@ -375,7 +375,7 @@ export async function runDispatch(
 				// it is not (#1602).
 				if (result.success === false) {
 					throw new Error(
-						`NEW_TAB_REFUSED:${result.error || 'Maestro desktop refused the dispatch'}`
+						`DISPATCH_REFUSED:${result.error || 'Maestro desktop refused the dispatch'}`
 					);
 				}
 				// `--new-tab`'s sole purpose is to surface a fresh tab id for
@@ -394,7 +394,12 @@ export async function runDispatch(
 					queued: result.queued === true,
 				};
 			}
-			const result = await client.sendCommand<{ tabId?: string; callbackId?: string }>(
+			const result = await client.sendCommand<{
+				success: boolean;
+				error?: string;
+				tabId?: string;
+				callbackId?: string;
+			}>(
 				{
 					type: 'send_command',
 					sessionId: agentId,
@@ -414,6 +419,11 @@ export async function runDispatch(
 				},
 				'command_result'
 			);
+			if (result.success === false) {
+				throw new Error(
+					`DISPATCH_REFUSED:${result.error || 'Maestro desktop refused the dispatch'}`
+				);
+			}
 			return { agentId, tabId: result.tabId, callbackId: result.callbackId, queued: false };
 		});
 		// `--tab <tabId>` is the authoritative target; the desktop handler

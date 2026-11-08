@@ -62,6 +62,8 @@ export interface PermissionRequest {
 	token: string;
 	sessionId: string;
 	tabId?: string;
+	/** Effective process cwd, supplied by the spawn binding rather than the bridge. */
+	cwd?: string;
 	/** The tool Claude wants to run, e.g. "Bash", "Edit", "Write". */
 	toolName: string;
 	/** The tool input Claude proposed (command, file path + contents, etc.). */
@@ -88,6 +90,7 @@ export interface RelaySpawnBinding {
 	owner?: { userId?: string; window: BrowserWindow | null };
 	sessionId: string;
 	tabId?: string;
+	cwd?: string;
 }
 
 // --- Wire protocol: bridge (client) <-> Maestro (server) over the UDS. ---

@@ -429,6 +429,7 @@ interface MaestroAPI {
 				requestId: string;
 				sessionId: string;
 				tabId?: string;
+				cwd?: string;
 				toolName: string;
 				input: Record<string, unknown>;
 				createdAt: number;
@@ -441,6 +442,7 @@ interface MaestroAPI {
 				}>;
 			}) => void
 		) => () => void;
+		onPermissionResolved: (callback: (requestId: string) => void) => () => void;
 		respondPermission: (
 			requestId: string,
 			decision:

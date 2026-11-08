@@ -65,6 +65,19 @@ describe('ToolbarControls', () => {
 		);
 	}
 
+	it('shows unavailable standard with a reason and skips it for keyboard selection', () => {
+		useSettingsStore.setState({ newShell: true });
+		renderToolbar({ hasStandardCapability: false });
+		fireEvent.click(screen.getByTestId('composer-permission'));
+		const standard = screen.getByRole('menuitemradio', { name: 'Standard' });
+		expect(standard).toBeDisabled();
+		expect(screen.getByRole('menu')).toHaveTextContent('maestro-p skips confirmations');
+		fireEvent.click(standard);
+		expect(mockUpdateSessionWith).not.toHaveBeenCalled();
+		fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' });
+		expect(screen.getByRole('menuitemradio', { name: 'Plan mode' })).toHaveFocus();
+	});
+
 	it('opens the image picker belonging to the clicked pane', () => {
 		useSettingsStore.setState({ newShell: true });
 		const left = renderToolbar();
@@ -96,6 +109,31 @@ describe('ToolbarControls', () => {
 		expect(useSessionStore.getState().sessions[0].aiTabs[1].stagedImages).toEqual([]);
 		expect(globalSetter).not.toHaveBeenCalled();
 	});
+
+	it.each([false, true])(
+		'offers claude -p from an unavailable TUI standard only when it can help, ssh %s',
+		(ssh) => {
+			useSettingsStore.setState({ newShell: true });
+			const session = {
+				...createInputAreaSession(),
+				toolType: 'claude-code' as const,
+				enableMaestroP: true,
+				maestroPMode: 'interactive' as const,
+				...(ssh ? { sessionSshRemoteConfig: { enabled: true, remoteId: 'remote' } } : {}),
+			};
+			renderToolbar({ session, hasStandardCapability: false });
+			fireEvent.click(screen.getByTestId('composer-permission'));
+			expect(screen.getByRole('menuitemradio', { name: 'Standard' })).toBeDisabled();
+			if (ssh) {
+				expect(screen.queryByTestId('permission-switch-to-print')).toBeNull();
+				return;
+			}
+			fireEvent.click(screen.getByTestId('permission-switch-to-print'));
+			const updated = mockUpdateSessionWith.mock.calls[0][1](session);
+			expect(updated).toMatchObject({ enableMaestroP: false, maestroPMode: 'dynamic' });
+			expect(updated.aiTabs).toBe(session.aiTabs);
+		}
+	);
 
 	it('shows inherited standard immediately while target capabilities are loading', () => {
 		useSettingsStore.setState({ newShell: true });
@@ -129,7 +167,7 @@ describe('ToolbarControls', () => {
 	);
 
 	it.each([true, false])(
-		'lists only supported permission modes and applies the selected fields, standard supported %s',
+		'lists standard availability and applies the selected fields, standard supported %s',
 		(hasStandardCapability) => {
 			useSettingsStore.setState({ newShell: true });
 			const session = createInputAreaSession();
@@ -137,7 +175,11 @@ describe('ToolbarControls', () => {
 			const trigger = screen.getByTitle(/^Read, write/);
 			fireEvent.click(trigger);
 			expect(mockUpdateSessionWith).not.toHaveBeenCalled();
-			expect(screen.getAllByRole('menuitemradio')).toHaveLength(hasStandardCapability ? 3 : 2);
+			expect(screen.getAllByRole('menuitemradio')).toHaveLength(3);
+			expect(screen.getByRole('menuitemradio', { name: 'Standard' })).toHaveProperty(
+				'disabled',
+				!hasStandardCapability
+			);
 			expect(screen.getByRole('menuitemradio', { name: 'Full Access' })).toHaveAttribute(
 				'aria-checked',
 				'true'

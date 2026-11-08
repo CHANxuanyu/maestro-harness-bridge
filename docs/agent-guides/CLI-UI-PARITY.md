@@ -38,6 +38,64 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## Claude standard approval, U4 (2026-11-07)
+
+| UI action                                 | CLI                                      | Shared implementation                                                |
+| ----------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
+| Read the pending tool and full input      | `permission list [--json]`               | `permission:list`, `listPermissionRequests()`; excludes relay tokens |
+| Allow the displayed tool once             | `permission allow <request-id> [--json]` | `permission:respond`, `resolvePermissionResponse()`                  |
+| Deny the displayed tool, including Escape | `permission deny <request-id> [--json]`  | Same response handler with a deny decision                           |
+| Set the conversation permission           | Existing `tab permission <tab> standard` | Existing permission field update and desktop spawn path              |
+
+Commands require the running desktop. IDs are exact: a settled request returns
+failure rather than answering a later request. JSON list returns an array;
+allow and deny return `true`, and failures use `{ success: false, error }` with
+exit code 1. The renderer waits for acknowledgement and removes requests settled
+by CLI, timeout, process exit or bridge disconnect. A failed delivery remains
+visible for a deliberate retry. No persistent allow rule is written.
+
+New shell Claude standard is available only with the effective `api` token
+source (`claude -p`) on a local Claude executable. TUI Wrapper and Dynamic show
+a disabled Standard row with an explanation. Existing incompatible standard
+turns are refused before spawn, without changing the chosen source or starting
+maestro-p. New, inherited, restored and handoff conversations tighten unsupported
+standard to readonly through `newConversationPermissionFields()` and
+`effectiveStandardPermissionCapability()`.
+
+`tab permission <tab> standard`, `dispatch`, and `dispatch --queue` use the same
+capability gate and localized refusal. `update-agent <owner> --token-source
+api|tui|dynamic` remains the explicit token source action; `tui` is the CLI name
+for stored `interactive`. The new shell has no per-conversation token source UI
+entry; classic Edit Agent exposes it in the shared AgentConfigPanel. The owner
+setting applies to its conversations, so this task adds no new UI action or verb.
+SSH and conflicting permission arguments still refuse before spawn.
+
+U4 第四轮补齐普通派发的返回链路：`send_command` 经过
+`registerCommandCallbacks()`、`CallbackRegistry` 和 `handleSendCommand()`，
+保留渲染层拒绝回执的原文，再由 CLI `dispatch` 返回失败及非零退出码。
+布尔回调仍受支持；带原因的失败不能被当作真值成功。失败不记录派发关系，
+已预登记的完成通知回调会取消。`dispatch --queue` 原有拒绝链路保持不变，
+空闲和忙碌目标都在派发或入队前校验同一权限能力。
+没有新增界面动作或 CLI 动词，没有新增 Open gaps。
+共享回执修正也让旧界面下已经被拒绝的 CLI 派发如实失败，不改变旧界面的权限策略。
+
+旧界面 TUI 下选标准仍会跳过确认，这是既有问题，这次没改。共享审批列表的
+归属过滤同时修复旧界面和 CLI 的信息泄露，审批响应及生命周期模型保持合并后的规则。
+Synthetic Electron coverage is in `e2e/native-claude-permission.spec.ts`; execution
+instructions are in `e2e/claude-standard-approval.md`.
+
+The U4 review fixes add no action or verb. `permission list` carries the same
+effective spawn `cwd` and `tabId` as the prompt. The relay derives a missing
+tab ID from the compound process ID with `REGEX_AI_TAB_ID`, including forced
+parallel suffixes; an explicit tab ID wins. The new shell prompt also uses
+`parseSessionId()` for older events and never substitutes the saved project
+directory for an absent execution directory. Worktree direct and queued sends
+are covered by two additional synthetic Electron scenarios, pending execution.
+Windows installer `maestro-p.cmd` entries now use the shared TUI detector, so
+new shell standard mode rejects them before spawn. This detector correction
+also applies to classic mode and CLI resolution; the classic permission policy
+and TUI bypass behavior are otherwise unchanged.
+
 ## 项目设置，U2，2026-11-07
 
 | 界面动作                         | CLI                                                                                                    | 共用实现                                                                  |
@@ -846,6 +904,12 @@ below remain open.
 
 ## Open gaps
 
+Claude approval: the modal covers the composer Stop button. Escape denies only
+the current tool. U4 tests the existing interrupt IPC while approval is pending;
+it does not add a direct Stop action or close the existing full Stop parity gap.
+`permission` covers tool allow/deny only; a structured AskUserQuestion answer
+command, cross-window routing and browser prompt delivery are not verified here.
+
 **Codex prototype controls (2026-11-07).** `codex-turn stop` interrupts only the
 addressed local app-server process through `ProcessManager.interrupt()`. The
 composer Stop also cancels the project's queued work and cross-agent consults;
@@ -1268,6 +1332,13 @@ Unknown protocol requests are not treated as implicit approval.
 Synthetic validation and unresolved protocol/version limits are recorded in
 [the prototype note](../verification/codex-app-server-prototype.md).
 
+2026-11-08 U4 第五轮仅修正原型验收，没有新增界面动作或 CLI 动词。
+新界面审批按钮沿用 `Allow once`，对应既有 `permission-respond <request-id> allow`。
+`codex-turn stop <process-id>` 和界面中断仍共用 `ProcessManager.interrupt()`。
+合成单元覆盖保持运行及等待文件审批时停止，要求退出码 130、进程注销、审批清空且无文件写入。
+Electron 场景直接检查停止按钮消失和目标进程不存在；异常关闭保留原始失败。
+没有修改产品停止或 Claude 审批收尾实现，完整 Stop 的队列与咨询对等缺口仍在 Open gaps。
+
 ## New shell transcript performance (2026-11-06)
 
 Progressive row element reuse changes rendering work only. No new UI action or CLI verb is introduced. Existing conversation selection, transcript search and jumps retain their current paths and existing gaps; this change does not claim to close native resume or refresh gaps.
@@ -1309,11 +1380,15 @@ Claude 的既有浏览器审批继续通过 `permission:respond`，CLI 对应
 重复、结束和超时请求均失败。此修复同时恢复旧界面的既有浏览器用法，没有新增动词。
 
 Open gaps：CLI 暂不选择其他窗口；`codex-turn permissions` 只列 Codex 原型请求，
-Claude 请求仍需从已有审批事件取得 requestId；浏览器 Codex 原型审批尚未支持。
+Claude 请求由 `permission list` 查询，并按相同调用方归属过滤；浏览器 Codex 原型审批尚未支持。
+新界面尚无按单条对话修改 token source 的控件，现有 `update-agent --token-source`
+修改所属工具记录，影响其下对话。
 
 Codex 标准权限的输入栏、项目设置、新建、继承、恢复及 `tab permission` 共用
 `effectiveStandardPermissionCapability()`。`project settings set --permission standard`
-及 `tab new` 保持相同有效能力判断。咨询显式禁用原型能力，继续自己的 exec 权限限制。
+保存项目的默认意图，实际 `tab new` 创建时按目标能力收紧，不等同于修改已有对话权限。
+项目设置保存入口尚未按具体对话的 token source 拒绝默认值，属于上述创建规则覆盖的范围。
+咨询显式禁用原型能力，继续自己的 exec 权限限制。
 
 原型计划通知沿用 `update_plan` 工具事件，任务面板及 `tab panel <tab-id> tasks`
 继续读取同一清单。追加防重仅管理界面草稿，不会把两次显式 CLI steer 指令合并。

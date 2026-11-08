@@ -2491,26 +2491,30 @@ describe('WebSocketMessageHandler', () => {
 			expect(callbacks.executeCommand).not.toHaveBeenCalled();
 		});
 
-		it('cancels the armed callback when the dispatch is rejected', async () => {
-			vi.mocked(callbacks.executeCommand!).mockResolvedValue(false);
-			handler.handleMessage(client, {
-				type: 'send_command',
-				sessionId: 'session-1',
-				command: 'go',
-				inputMode: 'ai',
-				tabId: 'tab-7',
-				notifyOnComplete: 'caller-1',
-			});
+		it.each([false, { success: false, error: 'standard permission unavailable' }])(
+			'cancels the armed callback when the dispatch is rejected: %j',
+			async (result) => {
+				vi.mocked(callbacks.executeCommand!).mockResolvedValue(result);
+				handler.handleMessage(client, {
+					type: 'send_command',
+					sessionId: 'session-1',
+					command: 'go',
+					inputMode: 'ai',
+					tabId: 'tab-7',
+					notifyOnComplete: 'caller-1',
+				});
 
-			await vi.waitFor(() => expect(lastSend().type).toBe('command_result'));
-			expect(getDispatchCallbackRegistry()!.hasArmedFor('session-1', 'tab-7')).toBe(false);
-			// A rejected dispatch must not read as success, and must not hand back
-			// a callbackId the caller would then wait on forever. This path was
-			// dead until `executeCommand` started reporting real delivery.
-			const response = lastSend();
-			expect(response.success).toBe(false);
-			expect(response.callbackId).toBeUndefined();
-		});
+				await vi.waitFor(() => expect(lastSend().type).toBe('command_result'));
+				expect(getDispatchCallbackRegistry()!.hasArmedFor('session-1', 'tab-7')).toBe(false);
+				// A rejected dispatch must not read as success, and must not hand back
+				// a callbackId the caller would then wait on forever. This path was
+				// dead until `executeCommand` started reporting real delivery.
+				const response = lastSend();
+				expect(response.success).toBe(false);
+				expect(response.callbackId).toBeUndefined();
+				expect(response.error).toBe(typeof result === 'object' ? result.error : undefined);
+			}
+		);
 
 		it('refuses a second callback on the same tab', async () => {
 			handler.handleMessage(client, {

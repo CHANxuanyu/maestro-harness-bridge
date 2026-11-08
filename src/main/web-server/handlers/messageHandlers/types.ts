@@ -10,6 +10,7 @@ import type {
 
 import { WebSocket } from 'ws';
 import type {
+	ExecuteCommandCallback,
 	NewTabCallback,
 	NewAITabWithPromptCallback,
 	AutoRunDocument,
@@ -129,15 +130,7 @@ export interface MessageHandlerCallbacks {
 	 * does not carry it.
 	 */
 	getAutoRunState?: (sessionId: string) => AutoRunState | undefined;
-	executeCommand: (
-		sessionId: string,
-		command: string,
-		inputMode?: 'ai' | 'terminal',
-		tabId?: string,
-		force?: boolean,
-		images?: string[],
-		background?: boolean
-	) => Promise<boolean>;
+	executeCommand: ExecuteCommandCallback;
 	switchMode: (
 		sessionId: string,
 		mode: 'ai' | 'terminal',

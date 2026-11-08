@@ -52,6 +52,13 @@ describe('isMaestroPBinaryPath', () => {
 		expect(isMaestroPBinaryPath('MAESTRO-P')).toBe(true);
 	});
 
+	it.each(['C:\\Program Files\\maestro-p\\maestro-p.cmd', 'C:/tools/MAESTRO-P.CMD'])(
+		'recognizes the Windows installer entry %s',
+		(binaryPath) => {
+			expect(isMaestroPBinaryPath(binaryPath)).toBe(true);
+		}
+	);
+
 	it('does not match a plain claude binary or empty input', () => {
 		expect(isMaestroPBinaryPath('/usr/local/bin/claude')).toBe(false);
 		expect(isMaestroPBinaryPath('claude')).toBe(false);
@@ -137,6 +144,75 @@ describe('mergeClaudeSpawnEnvLayers', () => {
 
 describe('resolveClaudeSpawnModeCore under CLI-shaped deps', () => {
 	const NOW = new Date('2026-07-05T00:00:00.000Z');
+
+	it.each(['interactive', 'dynamic'] as const)(
+		'refuses standard without changing the saved %s source',
+		(tokenMode) => {
+			expect(() =>
+				resolveClaudeSpawnModeCore(
+					{
+						agent: CLAUDE_AGENT,
+						tokenMode,
+						sshEnabled: false,
+						command: 'claude',
+						requirePermissionRelay: true,
+						persisted: { mode: 'interactive' },
+						sessionCustomEnvVars: { CLAUDE_CONFIG_DIR: '/tmp/claude-approval-test' },
+						now: NOW,
+					},
+					cliShapedDeps({
+						getUsageSnapshot: () => {
+							throw new Error('Standard approval must not consult usage');
+						},
+					})
+				)
+			).toThrow('CLAUDE_STANDARD_UNAVAILABLE_WITH_TUI');
+		}
+	);
+
+	it.each([
+		{ command: '/opt/maestro-p', sessionCustomPath: undefined },
+		{ command: 'claude', sessionCustomPath: '/opt/maestro-p.js' },
+		{ command: 'C:\\Program Files\\maestro-p\\maestro-p.cmd', sessionCustomPath: undefined },
+		{ command: 'claude', sessionCustomPath: 'C:/tools/MAESTRO-P.CMD' },
+	])('refuses a direct TUI executable for standard approval: %j', (binary) => {
+		expect(() =>
+			resolveClaudeSpawnModeCore(
+				{
+					agent: CLAUDE_AGENT,
+					tokenMode: 'api',
+					sshEnabled: false,
+					requirePermissionRelay: true,
+					now: NOW,
+					...binary,
+				},
+				cliShapedDeps()
+			)
+		).toThrow('CLAUDE_STANDARD_REQUIRES_CLAUDE_BINARY');
+	});
+
+	it('refuses remote standard approval before any local account or remote probe lookup', () => {
+		expect(() =>
+			resolveClaudeSpawnModeCore(
+				{
+					agent: CLAUDE_AGENT,
+					tokenMode: 'interactive',
+					sshEnabled: true,
+					command: 'claude',
+					requirePermissionRelay: true,
+					now: NOW,
+				},
+				cliShapedDeps({
+					resolveConfigDirKey: () => {
+						throw new Error('Must not resolve a local account');
+					},
+					getRemoteMaestroPAvailable: () => {
+						throw new Error('Must not probe TUI availability');
+					},
+				})
+			)
+		).toThrow('CLAUDE_STANDARD_REQUIRES_LOCAL_PRINT');
+	});
 
 	it('api token mode resolves to api (claude --print)', () => {
 		const d = resolveClaudeSpawnModeCore(

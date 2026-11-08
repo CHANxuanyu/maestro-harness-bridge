@@ -1,3 +1,4 @@
+import { CLAUDE_STANDARD_PERMISSION_MESSAGES } from '../../../../shared/processErrors';
 /** Agent setup, native session history, and permission UI. */
 export const workflowsSessions = {
 	'workflows.sessions.handoff.conversationIntro':
@@ -180,6 +181,12 @@ export const workflowsSessions = {
 	'workflows.sessions.claudeWantsToUse': 'Claude Code 请求使用',
 	'workflows.sessions.deny': '拒绝',
 	'workflows.sessions.allow': '允许',
+	'workflows.sessions.allowOnce': '允许一次',
+	'workflows.sessions.approvalConversation': '对话：{title}',
+	'workflows.sessions.approvalScope': '只批准这一次工具调用，请先检查下方完整参数。',
+	'workflows.sessions.approvalSendFailed': '审批决定未能送达，请重试。',
+	'workflows.sessions.permissionMessageHeld': '消息已保留在队列中。',
+	...CLAUDE_STANDARD_PERMISSION_MESSAGES['zh-CN'],
 	'workflows.sessions.customAnswer': '其他（输入自定义回答）',
 	'workflows.sessions.submitAnswer': '提交回答',
 	'workflows.sessions.noRecordedSession': '此条目没有关联的会话记录',
@@ -324,6 +331,8 @@ export const workflowsSessions = {
 		'每轮通过 claude --print 运行。使用 Claude 订阅登录时消耗订阅额度；配置 API 密钥时向该密钥计费。',
 	'workflows.sessions.tokenModeInteractiveHelp':
 		'每轮通过 maestro-p 调用 Claude TUI。使用 Claude 订阅登录时消耗订阅额度。',
+	'workflows.sessions.switchToClaudePrint': '改用 claude -p',
+	'workflows.sessions.switchToClaudePrintScope': '同一 Claude 配置下的所有对话都会改用。',
 	'workflows.sessions.tokenModeDynamicHelp':
 		'先使用 TUI，接近订阅限制时切换至 claude --print。只有配置了 API 密钥时切换才有帮助；仅使用订阅登录时，两者消耗同一份额度。',
 	'workflows.sessions.resumedEnvHelp':

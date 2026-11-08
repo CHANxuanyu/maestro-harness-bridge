@@ -25,6 +25,7 @@ test('Codex prototype synthetic approval, steering, resume and stop', async ({},
 			crashReportingEnabled: false,
 		})
 	);
+	let scenarioCompleted = false;
 	try {
 		await native.start(home);
 		const owner = await native.createAgent('codex', {
@@ -53,7 +54,7 @@ test('Codex prototype synthetic approval, steering, resume and stop', async ({},
 		const pending = await native.cli('codex-turn', 'permissions');
 		expect(pending).toHaveLength(1);
 		const processId = pending[0].sessionId;
-		await dialog.getByRole('button', { name: 'Allow', exact: true }).click();
+		await dialog.getByRole('button', { name: 'Allow once', exact: true }).click();
 		await expect(native.output()).toContainText('Synthetic approval accepted');
 		expect(fs.readFileSync(path.join(native.root, 'approved.txt'), 'utf8')).toBe('synthetic\n');
 		fs.unlinkSync(path.join(native.root, 'approved.txt'));
@@ -86,13 +87,34 @@ test('Codex prototype synthetic approval, steering, resume and stop', async ({},
 		);
 		await expect(native.input()).toHaveValue('');
 		await expect(native.page.getByTestId('tasks-progress')).toHaveText('3 / 3 completed');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
 		await native.send('U5_HOLD for stop');
 		await expect(native.page.getByTestId('stop-turn-button')).toBeVisible();
-		await native.cli('codex-turn', 'stop', processId);
+		// The composer becomes busy before the protocol turn is acknowledged.
+		// Reach this turn before requiring a turn/interrupt receipt.
+		await expect
+			.poll(() => {
+				const lines = fs.readFileSync(path.join(native.root, 'app-server-receipts.jsonl'), 'utf8');
+				return lines
+					.trim()
+					.split('\n')
+					.filter((line) => JSON.parse(line).method === 'turn/start').length;
+			})
+			.toBe(4);
+		expect(await native.cli('codex-turn', 'stop', processId)).toEqual({ success: true });
 		await expect.poll(async () => (await native.cli('codex-turn', 'permissions')).length).toBe(0);
 		await expect
 			.poll(() => fs.readFileSync(path.join(native.root, 'app-server-receipts.jsonl'), 'utf8'))
 			.toContain('turn/interrupt');
+		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		expect(
+			await native.page.evaluate(async (id) => {
+				const active = await window.maestro.process.getActiveProcesses({
+					includeChildProcesses: false,
+				});
+				return active.some((process) => process.sessionId === id);
+			}, processId)
+		).toBe(false);
 		const receipts = fs
 			.readFileSync(path.join(native.root, 'app-server-receipts.jsonl'), 'utf8')
 			.trim()
@@ -102,7 +124,10 @@ test('Codex prototype synthetic approval, steering, resume and stop', async ({},
 		expect(receipts.filter((row) => row.method === 'thread/resume')).toHaveLength(3);
 		expect(receipts.filter((row) => row.method === 'turn/start')).toHaveLength(4);
 		expect(receipts.filter((row) => row.method === 'turn/steer')).toHaveLength(1);
+		scenarioCompleted = true;
 	} finally {
-		if (native.app) await native.close(info.status !== info.expectedStatus);
+		// Playwright can still report "passed" here while an assertion is unwinding.
+		// Preserve that failure's trace instead of replacing it with close's idle check.
+		if (native.app) await native.close(!scenarioCompleted || info.status !== info.expectedStatus);
 	}
 });

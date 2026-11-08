@@ -45,7 +45,10 @@ import {
 	useRetryStore,
 } from '../../../renderer/stores/retryStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
-import { agentAlreadyRunningMessage } from '../../../shared/processErrors';
+import {
+	agentAlreadyRunningMessage,
+	CLAUDE_STANDARD_PERMISSION_MESSAGES,
+} from '../../../shared/processErrors';
 import {
 	releaseConnectionHeldQueueItems,
 	takeNextRunnableQueueItem,
@@ -1477,6 +1480,43 @@ describe('useInputProcessing', () => {
 				live.aiTabs[0].logs.some((log) => log.text?.includes('Failed to spawn agent process'))
 			).toBe(false);
 		});
+
+		it.each(['en', 'zh-CN'] as const)(
+			'explains standard permission refusal in %s and releases the unsent turn',
+			async (language) => {
+				useSettingsStore.setState({ newShell: true, uiLanguage: language });
+				const session = createMockSession({ state: 'idle' });
+				vi.mocked(window.maestro.process.spawn).mockRejectedValue(
+					new Error('Error invoking remote method: CLAUDE_STANDARD_UNAVAILABLE_WITH_TUI')
+				);
+				const deps = createDeps({
+					activeSession: session,
+					sessionsRef: { current: [session] },
+					inputValue: 'synthetic approval',
+				});
+				const { result } = renderHook(() => useInputProcessing(deps));
+				await act(async () => {
+					await result.current.processInput();
+					await Promise.resolve();
+					await Promise.resolve();
+				});
+				const [live] = useSessionStore.getState().sessions;
+				expect(live.aiTabs[0].state).toBe('idle');
+				expect(live.executionQueue).toEqual([]);
+				expect(
+					live.aiTabs[0].logs.some(
+						(log) =>
+							log.text ===
+							CLAUDE_STANDARD_PERMISSION_MESSAGES[language][
+								'workflows.sessions.standardSpawnRefused'
+							]
+					)
+				).toBe(true);
+				expect(
+					live.aiTabs[0].logs.some((log) => log.text?.includes('CLAUDE_STANDARD_REQUIRES'))
+				).toBe(false);
+			}
+		);
 
 		it('still reports a genuine spawn failure and frees the tab', async () => {
 			// The other half of the branch: nothing is running, so the tab must be

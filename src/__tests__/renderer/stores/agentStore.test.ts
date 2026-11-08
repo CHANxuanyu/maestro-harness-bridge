@@ -2150,6 +2150,32 @@ describe('agentStore', () => {
 			expect(updated.aiTabs[0].logs[0].aiCommand?.command).toBe('/implement');
 		});
 
+		it('keeps a refused standard permission send queued with a Chinese explanation', async () => {
+			const previous = useSettingsStore.getState();
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+			try {
+				mockSpawn.mockRejectedValueOnce(new Error('CLAUDE_STANDARD_UNAVAILABLE_WITH_TUI'));
+				const session = createMockSession({ id: 'session-1', state: 'busy' });
+				useSessionStore.getState().setSessions([session]);
+				const item = createQueuedItem({ tabId: session.activeTabId, text: 'Synthetic approval' });
+				await expect(
+					useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps)
+				).rejects.toThrow('CLAUDE_STANDARD_UNAVAILABLE_WITH_TUI');
+				const updated = useSessionStore.getState().sessions[0];
+				expect(updated.executionQueue.some((queued) => queued.id === item.id)).toBe(true);
+				expect(
+					updated.aiTabs[0].logs.some((log) =>
+						log.text.includes('这条对话使用 TUI 包装器或动态切换，标准权限无法生效。')
+					)
+				).toBe(true);
+				expect(updated.aiTabs[0].logs.some((log) => log.text.includes('消息已保留在队列'))).toBe(
+					true
+				);
+			} finally {
+				useSettingsStore.setState({ newShell: previous.newShell, uiLanguage: previous.uiLanguage });
+			}
+		});
+
 		it('handles spawn error gracefully', async () => {
 			mockSpawn.mockRejectedValueOnce(new Error('Spawn failed'));
 			const consoleSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});

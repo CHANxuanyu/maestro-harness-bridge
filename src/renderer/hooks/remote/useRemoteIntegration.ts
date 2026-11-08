@@ -1,3 +1,5 @@
+import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
+import { effectiveStandardPermissionCapability } from '../../../shared/codexAppServer';
 import { getT } from '../../i18n';
 import { newProjectConversation } from '../../services/newShellConversation';
 import { projectSettingsForSession } from '../../utils/projectConversationDefaults';
@@ -1272,6 +1274,27 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 					const targetTab = requestedTab ?? getActiveTab(session);
 					if (!targetTab) {
 						reply({ success: false, error: 'Session has no AI tabs', reason: 'no-ai-tabs' });
+						return;
+					}
+
+					const permissionSettings = useSettingsStore.getState();
+					if (
+						permissionSettings.newShell &&
+						session.toolType === 'claude-code' &&
+						resolveTabPermissionMode(targetTab) === 'standard' &&
+						!effectiveStandardPermissionCapability(
+							{ supportsStandardPermissionMode: true },
+							permissionSettings,
+							!!session.sessionSshRemoteConfig?.enabled,
+							session
+						)
+					) {
+						const reason = getT()(
+							session.sessionSshRemoteConfig?.enabled
+								? 'workflows.sessions.standardTransportRefused'
+								: 'workflows.sessions.standardSpawnRefused'
+						);
+						reply({ success: false, error: reason });
 						return;
 					}
 					const resolvedTabId = targetTab.id;

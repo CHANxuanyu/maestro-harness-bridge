@@ -285,7 +285,8 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				? newConversationPermissionFields(
 						sourcePermission,
 						capabilities,
-						!!request.sessionSshRemoteConfig?.enabled
+						!!request.sessionSshRemoteConfig?.enabled,
+						request.config
 					)
 				: {};
 			if (
@@ -396,6 +397,22 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 					// Keep old native conversations attached to their original account.
 					target = undefined;
 				}
+			}
+			// Recheck the actual target: its mode may have changed since preparation.
+			if (newShell) {
+				const targetPermissions = newConversationPermissionFields(
+					tabFields,
+					capabilities,
+					!!request.sessionSshRemoteConfig?.enabled,
+					target ?? request.config
+				);
+				if (!targetPermissions)
+					return {
+						success: false,
+						code: 'unavailable',
+						error: getT()('workflows.shell.permissionUnavailable'),
+					};
+				Object.assign(tabFields, targetPermissions);
 			}
 			const createdAgent = !target;
 			const settings = useSettingsStore.getState();

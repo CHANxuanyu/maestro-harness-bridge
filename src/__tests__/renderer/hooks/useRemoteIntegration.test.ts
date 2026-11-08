@@ -1828,6 +1828,48 @@ describe('useRemoteIntegration', () => {
 	});
 
 	describe('remote enqueue command (dispatch --queue)', () => {
+		it.each([
+			['interactive', 'idle'],
+			['interactive', 'busy'],
+			['dynamic', 'idle'],
+			['dynamic', 'busy'],
+		] as const)(
+			'refuses queued standard under %s while %s without storing or dispatching work',
+			(maestroPMode, state) => {
+				useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+				const session = createMockSession({
+					id: 'session-1',
+					state,
+					enableMaestroP: true,
+					maestroPMode,
+				});
+				session.aiTabs[0].permissionMode = 'standard';
+				useSessionStore.setState({ sessions: [session] });
+				renderHook(() => useRemoteIntegration(createDeps({ sessions: [session] })));
+				const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
+				act(() =>
+					onRemoteEnqueueCommandHandler?.(
+						'session-1',
+						'fixture',
+						'approval-refused',
+						'ai',
+						session.aiTabs[0].id
+					)
+				);
+				expect(useSessionStore.getState().sessions[0].executionQueue).toEqual([]);
+				expect(dispatchEventSpy).not.toHaveBeenCalled();
+				expect(
+					window.maestro.process.sendRemoteEnqueueCommandResponse
+				).toHaveBeenCalledExactlyOnceWith('approval-refused', {
+					success: false,
+					error:
+						'This conversation uses TUI Wrapper or Dynamic, so Standard cannot take effect. Choose Read-only or Full Access, or switch to claude -p.',
+				});
+				dispatchEventSpy.mockRestore();
+				useSettingsStore.setState({ newShell: false });
+			}
+		);
+
 		it('enqueues a message on a busy session and acks the queue position', () => {
 			const tab = createMockTab({ id: 'tab-1', name: 'PR review' });
 			const session = createMockSession({

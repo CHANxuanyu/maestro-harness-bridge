@@ -1174,7 +1174,7 @@ describe('web-server/web-server-factory', () => {
 		// V1 secondary defect: `success` used to mean "an IPC send was issued", so
 		// a dispatch to a tab that does not exist was acknowledged as success.
 		// `success` now means the renderer accepted the command for execution.
-		it('resolves false when the renderer rejects the command (nonexistent target)', async () => {
+		it('preserves the reason when the renderer rejects the command (nonexistent target)', async () => {
 			const createWebServer = createWebServerFactory(deps);
 			const server = createWebServer();
 
@@ -1184,7 +1184,10 @@ describe('web-server/web-server-factory', () => {
 			const resultPromise = callback('session-1', 'test command', 'ai', 'no-such-tab');
 			answerReceipt(false, 'tab-not-found:no-such-tab');
 
-			await expect(resultPromise).resolves.toBe(false);
+			await expect(resultPromise).resolves.toEqual({
+				success: false,
+				error: 'tab-not-found:no-such-tab',
+			});
 			// Only the reason CODE is logged. The detail half is dropped because
 			// this line is persisted at warn level and a reason can carry remote
 			// input or a path-bearing error string (CWE-532, review of PR #1357).
@@ -1198,7 +1201,7 @@ describe('web-server/web-server-factory', () => {
 			);
 		});
 
-		it('resolves false when no receipt arrives within the window', async () => {
+		it('reports a refusal when no receipt arrives within the window', async () => {
 			vi.useFakeTimers();
 			try {
 				const createWebServer = createWebServerFactory(deps);
@@ -1212,7 +1215,7 @@ describe('web-server/web-server-factory', () => {
 				// channel, or a wedged one. Must not hang the CLI, must not lie.
 				await vi.advanceTimersByTimeAsync(3000);
 
-				await expect(resultPromise).resolves.toBe(false);
+				await expect(resultPromise).resolves.toEqual({ success: false, error: 'renderer-timeout' });
 				expect(logger.warn).toHaveBeenCalledWith(
 					expect.stringContaining('No delivery receipt'),
 					'WebServer'
@@ -1222,7 +1225,7 @@ describe('web-server/web-server-factory', () => {
 			}
 		});
 
-		it('resolves false when the renderer answers with a malformed receipt', async () => {
+		it('reports a refusal when the renderer answers with a malformed receipt', async () => {
 			const createWebServer = createWebServerFactory(deps);
 			const server = createWebServer();
 
@@ -1240,7 +1243,7 @@ describe('web-server/web-server-factory', () => {
 				'sure thing'
 			);
 
-			await expect(resultPromise).resolves.toBe(false);
+			await expect(resultPromise).resolves.toEqual({ success: false, error: 'malformed-receipt' });
 		});
 
 		it('does not log raw command text at info level (info shows length only)', async () => {

@@ -157,11 +157,14 @@ export function handleSendCommand(
 				images,
 				background
 			)
-			.then((success) => {
+			.then((result) => {
+				const success = typeof result === 'boolean' ? result : result.success;
+				const error = typeof result === 'boolean' ? undefined : result.error;
 				if (!success) cancelArmedCallback();
 				ctx.send(client, {
 					type: 'command_result',
 					success,
+					...(!success && error ? { error } : {}),
 					sessionId,
 					...(resolvedTabId ? { tabId: resolvedTabId } : {}),
 					...(success && sendCallbackId ? { callbackId: sendCallbackId } : {}),

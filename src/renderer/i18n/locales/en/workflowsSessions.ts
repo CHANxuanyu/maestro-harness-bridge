@@ -1,3 +1,4 @@
+import { CLAUDE_STANDARD_PERMISSION_MESSAGES } from '../../../../shared/processErrors';
 /** Agent setup, native session history, and permission UI. */
 export const workflowsSessions = {
 	'workflows.sessions.handoff.conversationIntro':
@@ -189,6 +190,14 @@ export const workflowsSessions = {
 	'workflows.sessions.claudeWantsToUse': 'Claude Code wants to use',
 	'workflows.sessions.deny': 'Deny',
 	'workflows.sessions.allow': 'Allow',
+	'workflows.sessions.allowOnce': 'Allow once',
+	'workflows.sessions.approvalConversation': 'Conversation: {title}',
+	'workflows.sessions.approvalScope':
+		'Only this tool call will be approved. Review its full input below.',
+	'workflows.sessions.approvalSendFailed':
+		'Your decision could not be delivered. Please try again.',
+	'workflows.sessions.permissionMessageHeld': 'Your message is held in the queue.',
+	...CLAUDE_STANDARD_PERMISSION_MESSAGES['en'],
 	'workflows.sessions.customAnswer': 'Other (type a custom answer)',
 	'workflows.sessions.submitAnswer': 'Submit answer',
 	'workflows.sessions.noRecordedSession': 'No session recorded for this entry',
@@ -352,6 +361,9 @@ export const workflowsSessions = {
 		'Run every turn through claude --print. Signed in with a Claude plan, it draws from your plan limits; with an API key set, it bills that key.',
 	'workflows.sessions.tokenModeInteractiveHelp':
 		'Run every turn through the Claude TUI via maestro-p. Signed in with a Claude plan, it draws from your plan limits.',
+	'workflows.sessions.switchToClaudePrint': 'Switch to claude -p',
+	'workflows.sessions.switchToClaudePrintScope':
+		'Every conversation using this Claude configuration switches.',
 	'workflows.sessions.tokenModeDynamicHelp':
 		'Start on the TUI, switch to claude --print near a plan limit. The switch only helps with an API key set: signed in with a plan alone, both draw from the same limits.',
 	'workflows.sessions.resumedEnvHelp':

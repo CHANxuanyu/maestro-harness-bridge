@@ -1184,3 +1184,9 @@ display and the main-process `createNativeTurnWriteReader()` reuse that converte
 The converter also uses the existing `generateId()` implementation from
 `src/shared/uuid.ts`, re-exported at `src/renderer/utils/ids.ts`; its behavior
 is unchanged and the main process has no renderer runtime dependency.
+
+## Claude 标准权限与运行模式
+
+`effectiveStandardPermissionCapability()` 位于 `src/shared/codexAppServer.ts`，复用 Codex 原型能力门控，并接受目标 Claude 的 token source 和自定义可执行路径。新界面只允许本机 api 模式使用标准权限；不支持时，新对话权限计算收紧为只读，已有标准对话启动拒绝。
+
+`isMaestroPBinaryPath()` 的唯一实现位于 `src/shared/claudeTokenMode.ts`，原 `src/main/agents/claudeSpawnCore.ts` 导出继续兼容。它只比较文件名，不访问文件系统，远程路径也不会经过本地 realpath。中英文拒绝文案和错误识别位于 `src/shared/processErrors.ts`，主进程不引入 renderer。

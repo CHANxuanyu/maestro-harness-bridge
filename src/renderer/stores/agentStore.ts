@@ -1,4 +1,3 @@
-import { getT } from '../i18n';
 import { conversationNativeCommands } from '../services/nativeCommands';
 /**
  * agentStore - Zustand store for agent lifecycle orchestration
@@ -35,7 +34,13 @@ import type {
 import { buildSnapshotKey } from '../../shared/agentCapabilities';
 import { resolveTabPermissionMode } from '../../shared/agentMetadata';
 import { prependNewSessionMessageOnFirstTurn } from '../../shared/newSessionMessage';
-import { isAgentAlreadyRunningError } from '../../shared/processErrors';
+import { getT } from '../i18n';
+import { useSettingsStore } from './settingsStore';
+import {
+	isAgentAlreadyRunningError,
+	isClaudeStandardPermissionError,
+	claudeStandardPermissionMessageKey,
+} from '../../shared/processErrors';
 import { createTab, getActiveTab } from '../utils/tabHelpers';
 import { codifyQueuedTurnSettings } from '../utils/providerTabSessions';
 import { prepareMaestroSystemPrompt } from '../utils/spawnHelpers';
@@ -765,9 +770,12 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
 				id: generateId(),
 				timestamp: Date.now(),
 				source: 'error',
-				text: commandDiscoveryFailed
-					? getT()('workflows.nativeCommands.queuedUnavailable')
-					: `Error: Failed to send queued ${item.type} - ${error.message}. The message is held in the queue.`,
+				text:
+					useSettingsStore.getState().newShell && isClaudeStandardPermissionError(error)
+						? `${getT()(claudeStandardPermissionMessageKey(error)!)} ${getT()('workflows.sessions.permissionMessageHeld')}`
+						: commandDiscoveryFailed
+							? getT()('workflows.nativeCommands.queuedUnavailable')
+							: `Error: Failed to send queued ${item.type} - ${error.message}. The message is held in the queue.`,
 			};
 			useSessionStore.getState().setSessions((prev) =>
 				prev.map((s) => {

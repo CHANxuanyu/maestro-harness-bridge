@@ -132,6 +132,8 @@ export async function resolveClaudeSpawnContext(
 	// dynamic/interactive selection, the direct-maestro-p-Path power-user
 	// case, and stale `claudeInteractive` cleanup.
 	if (isClaudeCode) {
+		const requirePermissionRelay =
+			deps.settingsStore.get('newShell', false) && config.permissionMode === 'standard';
 		const persistedSession = findOwningSessionRecord(
 			deps.sessionsStore.get('sessions', []) as PersistedSessionRecord[],
 			config.sessionId,
@@ -146,7 +148,7 @@ export async function resolveClaudeSpawnContext(
 		// Without this an unconfigured/interactive SSH agent resolves to the
 		// remote TUI on a cold cache and exits 127 when maestro-p is absent.
 		let remoteMaestroPAvailable: boolean | undefined;
-		if (isSshEnabled) {
+		if (isSshEnabled && !requirePermissionRelay) {
 			const sshRemote = getSshRemoteConfig(createSshRemoteStoreAdapter(deps.settingsStore), {
 				sessionSshConfig: config.sessionSshRemoteConfig,
 			}).config;
@@ -172,6 +174,7 @@ export async function resolveClaudeSpawnContext(
 		const decision = resolveClaudeSpawnMode({
 			agent,
 			tokenMode,
+			requirePermissionRelay,
 			sshEnabled: isSshEnabled,
 			// Lets the resolver fall a remote TUI spawn back to API when the
 			// remote has no maestro-p on its PATH (avoids exit 127).

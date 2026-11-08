@@ -1,5 +1,68 @@
 # 分支工作记录
 
+## 2026-11-08：U4 第五轮原型停止验收误报
+
+本轮验证任务分支源码，没有启动 Electron。合并引入的新界面 `Allow once` 与原型 E2E
+精确定位的 `Allow` 不匹配。先提交组件回归，直接用 E2E 的定位器查找真实审批按钮，
+修复前一项失败，错误为找不到 `Allow`。再提交场景回调回归，复现早期错误被
+`NativeApp.close()` 的停止按钮计数断言覆盖。独立无浏览器 Playwright 探针确认
+`finally` 中 `info.status` 仍可能为 `passed`，不能据此认定前面的场景已经通过。
+
+修正仅限验收：点击准确的新界面按钮；显式记录场景完成情况，失败时保留 trace；
+追加回合结束后再发停止回合，等待该回合已进入合成协议；直接断言停止成功、审批清空、
+收到中断、停止按钮消失及目标进程不存在。原有协议次数、文件内容和正常关闭断言保留。
+
+新增合成 stdio 测试串联 `ProcessManager.interrupt()`、`CodexAppServerSession`、
+真实审批注册表及退出处理。保持运行和等待文件审批两项在产品代码未改时已通过，
+均以 130 退出并注销进程、清空请求，不写批准文件。进程树枚举在测试中替换为仅终止合成子进程，
+不把沙箱的 `ps` 限制算作产品失败。没有证据要求改动停止协议或 Claude 生命周期清理。
+
+最终相关 Vitest 为 15 文件、154 项通过，无跳过或自动重试；三份生产 TypeScript
+无输出检查及原型 E2E 的独立严格类型检查通过。仅收集原型一条及 Claude 审批 11 条场景，
+Electron 仍待 Opus 重建并执行，
+不能把本轮单元结果当作 Electron 已通过，也尚未核实外部所述最后一轮中断回执。
+没有产品运行代码、新文案、CLI 动词或旧界面行为变化，因此不增加产品 changelog 条目。
+
+## 2026-11-08：U4 TUI 标准权限验收
+
+用户决定：TUI 包装器和动态切换下，“标准”标为不可用，不替用户改走 claude -p。`e2e/native-claude-permission.spec.ts` 11 条通过：允许、拒绝、CLI 允许和拒绝、停止、超时、旧界面、工作树直接和排队、TUI 和动态切换的拒绝。
+
+新界面没有改 token 模式的入口，提示却让用户“把这条对话改为 claude -p”，而且这个设置是配置级的，不是单条对话。Opus 在禁用的“标准”下面加了“改用 claude -p”按钮，只在点击时切换，写明影响同一 Claude 配置下的所有对话和计费方式。SSH 下切换也没用，所以不显示按钮。
+
+合并后全量查出两处：U5 的测试调用合并时被丢掉的 `dismiss`，正式代码用的是 `resolve`，测试已改；U5 让咨询不走原型时借用了 `remote` 参数，U4 又让 `remote` 下 Claude 不能用“标准”，结果 Claude 咨询子对话全被降成只读。现在不走原型改为关掉 `supportsCodexAppServer`，`remote` 只表示 SSH。
+
+本机未配置的 Claude 默认是 `api`，所以开箱就能用“标准”。
+
+## 2026-11-08：U4 第四轮 CLI 标准权限拒绝回执
+
+验证对象为本任务分支源码，没有构建安装包或运行 Electron。
+先提交回归 `13406ef84`，串联真实 CLI、WebSocket 命令处理、回调注册和回调管理，
+仅模拟 IPC 返回渲染层拒绝。英文、中文两项修复前均收到 `success: true`，
+同文件其余 34 项通过，复现外部 TUI 和 Dynamic 的假成功。
+
+根因有两处：`registerCommandCallbacks()` 把拒绝回执压成布尔值，丢失提示；
+CLI 普通派发没有检查 `command_result.success`。现在回调保留拒绝原因，
+WebSocket 返回明确失败，CLI 用原文提示并非零退出，完成通知回调按失败取消。
+兼容既有布尔回调，成功结果的形状保持原样。队列拒绝路径原本已传递错误，保持实现不变。
+
+核对真实入口为 `send_command`、`remote:executeCommand`、`maestro:remoteCommand`。
+App 的 `sessionsRef.current` 是实时 store getter；token source 的第四参数字段匹配；
+权限拒绝位于派发成功回执和 spawn 宽限计时器之前，因此没有改写渲染层权限判断。
+补充 API 切换 TUI 或 Dynamic 的实时读取、空闲及忙碌队列拒绝、API 标准和普通派发成功、
+旧界面派发兼容、中英文输入框拒绝提示及完成通知清理检查。
+
+最终定向 Vitest 为 12 文件、1109 项通过，使用 `--configLoader runner --no-cache`，
+无跳过或自动重试。三份生产 TypeScript 无输出检查、改动产品源码 ESLint、
+Prettier 和 diff 空白检查通过。Electron 场景及其依赖的独立严格类型检查通过；
+Playwright 仅收集 11 条合成场景，没有启动 Electron。
+保留原有两条拒绝场景的全部断言，新增持久化队列为空的检查。
+Opus 需按 `e2e/claude-standard-approval.md` 重新构建并运行全部 11 条，
+包括输入框拒绝、工作树、API 审批、停止、超时与旧界面。
+
+本轮没有新增界面动作、CLI 动词或翻译，复用既有中英文拒绝文案。
+共享回执修正也让旧界面已被拒绝的 CLI 派发如实失败，这是必要的协议修正；
+旧界面的权限策略、TUI 行为和正常派发保持不变。SSH、真实模型、发行包及跨窗口未实测。
+
 ## 2026-11-07：U5 原型验收和一个主线偶发失败
 
 U5 全量 Electron 117 条里只有分屏综合场景失败。同样的场景在 U6 上重复 6 次失败 3 次，所以它是已合入的 U1 场景自带的偶发失败，不是 U5 引入的。原因是重启后只量了一次左栏像素宽度，而保存的是比例，侧栏和右栏的宽度变化会带动像素。改为等布局稳定后比较左栏占比，重复 8 次全部通过。
@@ -232,6 +295,63 @@ CLI 没有新增动作。普通对话停止、草稿附件和阅读位置的命�
 测试对象是源码和 Node 临时打包，不是应用安装包。Electron 基准已写入 `e2e/perf-new-shell.spec.ts`，默认跳过的入口已检查，尚未启动 Electron；真实启动、滚动、切换和流式渲染指标待 Opus 在沙箱外运行。旧界面共用存储性能改进，界面、i18n、SSH 和 CLI 协议均未改变。
 
 以下日期使用 Europe/Paris。此记录归纳实际交付，不把回退、重复检查和限额等待包装成额外功能。具体代码由 Git 提交保留；本机原始验收日志与截图保留在私有工作目录，公开记录不包含个人对话、账户路径或原生会话标识。
+
+## 2026-11-08：U4 第三轮 Electron 场景修正
+
+验证对象为本克隆源码。读取上一轮外部 Electron 记录确认 1 过 8 失败，本轮没有启动 Electron。
+前六条场景传了 CLI 不接受的 `interactive` token source，现改为显式 api 审批；新增拒绝场景使用合法的 tui 和 dynamic。
+两条工作树场景在正文显示后立即读取尚未完成防抖保存的 CLI 快照，得到旧空白对话的 null 原生 ID。
+现先等待快照中 ID 精确等于 seed ID，再保留原有精确断言，不放宽条件或重复点击。
+排队场景改用不附加 `--json` 的既有 dispatch 夹具。运行状态统一读取活动进程列表。
+
+新增 TUI 与动态切换两条场景，覆盖中英文禁用说明、CLI 设置和两种派发拒绝、输入框发送拒绝、权限与 token source 不变，以及没有活动进程和合成 CLI 启动记录。真实模式使用文件级跳过守卫，普通模式不跳过场景。
+Playwright 在普通和真实模式都完成 11 条场景收集，未执行应用；合成 Claude 夹具的 5 条 Vitest 全部通过。
+场景及依赖的补充严格类型检查通过，临时配置补充 allowJs 以检查既有 CJS 夹具。
+项目三份类型检查已在上一提交通过。相对任务初始源码的 442 个文件通过 Prettier 检查；场景移除既有显式 any 后，定向 ESLint 通过。
+
+沙箱外运行方法和全部断言见 [Claude 标准审批验收](../e2e/claude-standard-approval.md)。Electron 的修复后结果仍待 Opus 验证，本轮不将场景收集视作通过。未运行真实模型、账户或 SSH，没有构建发行包、推送、开 PR、打标签或发布。
+
+## 2026-11-08：U4 保留 TUI 模式并拒绝不兼容标准权限
+
+新界面不再把标准权限回合强制改为 print。复用 U5 的 `effectiveStandardPermissionCapability()` 判断目标 token source、本机或 SSH 和直接 maestro-p 路径。TUI 与动态切换下显示禁用的标准项及中英文说明；已有标准配置启动拒绝，普通 CLI 派发和排队派发在接收前返回相同提示。新建、继承、恢复和交接收紧为只读，交接在目标落实后再次检查其当前模式。本机 api 审批保留。
+
+能力、启动、菜单、新建恢复先有 7 条失败，修复后通过。补充 main 和 CLI 设置的有效回归 8 条失败，交接到新建或既有 TUI 目标 4 条失败，实际 InputArea 两种模式 2 条失败，显式 maestro-p 路径 2 条失败，普通及排队 CLI 派发 4 条失败，均在对应修改前确认。测试夹具的错误调用修正后重新记录了有效失败，不把夹具错误算作产品回归。最终相关 Vitest 18 文件、1051 条通过，三份 TypeScript 检查通过，改动文件 Prettier 通过。未跑全量或真实会话。
+
+没有新增 CLI 动词。token source 仍由 `update-agent --token-source api|tui|dynamic` 明确修改，新界面尚无按单条对话修改的控件。旧界面 TUI 下选标准仍会跳过确认，这是既有问题，这次没改。共享路径识别仅迁到 shared 并兼容原导出，主进程未引入 renderer。Electron 场景待下一步更新并交外部运行。
+
+## 2026-11-08：U4 第三轮合入 U5
+
+合入本地 `u5-head`，保留审批的用户和窗口归属、Claude 浏览器兼容判断及 Codex 浏览器拒绝，同时保留实际执行目录、复合进程 tabId、审批列表、响应中和失败状态。审批列表复用 `permissionCaller()` 与 `ownsPending()` 过滤。
+
+两用户列表回归先失败，Alice 列表实际包含 Alice 和 Bob；修复后仅返回各自请求。相关六个 Vitest 文件共 229 条通过，renderer、main、CLI 三份类型检查通过。socket round-trip 因沙箱拒绝监听报 EPERM，未跳过或重试，留待外部验证。Electron 未运行；本步没有新增界面动作或 CLI 动词。
+
+## 2026-11-07：U4 审批链路审查修复
+
+从 `69db12e43` 核实三项审查意见，全部成立。`18066afa1` 在共享 TUI 路径识别中补齐 Windows 安装器的 `.cmd` 入口；`23eb618ed` 将原生接续解析后的 cwd 绑定到 relay，传给审批弹窗和 CLI；`e87611239` 使用已有进程 ID 规则补齐缺失的 tabId，并在弹窗用 `parseSessionId()` 兼容旧请求。没有新增解析工具、界面动作、CLI 动词或用户文案，沿用现有中英文翻译和 `permission list|allow|deny`。
+
+三项均先补回归并确认失败，再修复。Windows 路径识别和标准权限拒绝共 4 条失败；目录从启动到绑定、请求和弹窗共 5 条失败；普通及并行复合 ID 的后台对话归属共 4 条失败。修复后最终相关 Vitest 8 文件、226 条全部通过，使用 `--configLoader runner --no-cache`，没有跳过或自动重试。renderer 与 main 类型检查通过。Electron 场景的独立严格检查通过，临时配置补入 Node 运行环境需要的 ES2024 库，保留 strict；最初继承 renderer 的 ES2020 库时报的是现有夹具使用 Error cause 和 findLast 的类型错误。
+
+原有 7 条 Electron 场景增加命名对话和请求 cwd 断言，另加工作树原生历史的直接发送与排队发送，共收集 9 条，未启动 Electron。修改文件已运行 Prettier，diff 空白检查通过。ESLint 对本轮产品源码没有报错；合并检查命令仍因 E2E 中起点已有的 `Record<string, any>` 报 1 个 no-explicit-any 错误，未借此扩展清理范围。外部运行命令及 Windows 手工补验见 `e2e/claude-standard-approval.md`。
+
+新弹窗展示与标准权限拒绝仍由 `newShell` 控制。共享影响有两处：旧界面和 CLI 同样正确识别 `.cmd` 为 TUI；旧界面 print 的审批事件和 CLI 列表也携带实际 cwd 与补齐的 tabId。旧界面按钮、权限策略与 TUI bypass 保持原状。共享识别不能继续错误声称该入口是 print，审批元数据也不能按外壳产生不同身份。SSH 没有新增本地路径解析。既有 Stop 对等缺口保留。
+
+被测对象是当前分支源码，不是安装包。没有运行 Electron、真实 Claude、真实 SSH、Windows 或 Linux，没有访问个人账户目录、修改依赖链接、推送、开 PR、打标签或发布。指定外部报告不纳入公开提交。
+
+## 2026-11-07：Claude 标准权限审批链路续作
+
+从 `ecd16fb649a3f0a9f046986dc7c99421a134dace` 的未提交工作继续，保留原来的 relay、弹窗和合成夹具实现。先回放起始版本的相关生产文件确认新回归失败，恢复工作区后验证，并先提交 `38fe20e57`。后续实现提交为 `09d253994`，没有重开任务或改动其他克隆。
+
+新界面的标准权限固定走本机 print，保留已保存的 token source 偏好；显式 maestro-p 路径、SSH 与冲突权限参数拒绝启动。审批显示完整输入及对话项目，允许一次或拒绝；决定送达前防重复提交，失败保留弹窗，超时、断连、停止和 CLI 决定都会清除待审批项。CLI `permission list|allow|deny` 通过既有 IPC 桥共用 registry，不复制审批状态，不返回 spawn token。直接和队列发送的启动拒绝均有中英文提示。
+
+修复前主进程、模式和弹窗 5 文件共 22 条失败；夹具 5 条失败；补充参数覆盖、菜单提示和中文拒绝回归 6 条失败，CLI 因实现缺失不能收集；队列中文拒绝另有 1 条失败。没有放宽原行为断言。CLI 遗留测试的 JSON 错误输出从 stderr 改为共享 `failCommand()` 既有的 stdout 精确对象断言，注册测试保留精确总数并登记新增 channel。
+
+最终相关 Vitest 14 文件、514 条通过，合成夹具 1 文件、5 条通过，均使用 `--configLoader runner --no-cache`。最终完整选定文件运行无跳过、无自动重试。主进程、CLI 类型检查通过。renderer 最终检查发现事件缺少全局声明，补齐 `onPermissionResolved` 后重新检查通过。修改文件 Prettier 和产品源码 ESLint 通过。CLI bundle 已构建，参考文档只纳入本次新增命令。
+
+新增 `e2e/native-claude-permission.spec.ts` 的 7 条场景已收集，单独严格类型检查通过；没有启动 Electron。场景覆盖 UI 与 CLI 允许和拒绝、等待审批时中断、真实 300 秒超时、旧界面 print 对照，并核对写入、迟到决定、子进程退出与临时 MCP 配置。运行说明和最少一次真实验证在 `e2e/claude-standard-approval.md`，真实模型调用未执行。
+
+新样式、print 约束及启动拒绝本地化受 `newShell` 控制。共享 relay 生命周期、发送回执和失败保留修复同时影响旧界面，避免遗留请求和假送达。旧界面 TUI 的 `withPermissionBypass()` 行为未改，不能声称它有标准审批。审批遮罩遮住输入框停止按钮，当前只通过既有 interrupt IPC 验证中断链路，完整 Stop CLI 对等仍在 Open gaps。浏览器、其他窗口、真实 SSH、其他平台、原生预先授权规则和安装包未验证。
+
+被测对象是本克隆源码与合成进程，不是发行包。未运行 Electron、真实模型、推送、PR、打标签或发布。私人日志及任务报告放在指定外部交付目录，未纳入公开提交。
 
 ## 2026-11-07：Codex app-server 本地通路原型
 

@@ -1,3 +1,7 @@
+import {
+	CLAUDE_STANDARD_PERMISSION_MESSAGES,
+	claudeStandardPermissionMessageKey,
+} from '../../../shared/processErrors';
 import { CODEX_APP_SERVER_MESSAGES } from '../../../shared/codexAppServer';
 import { resolveAppLocale } from '../../../shared/i18n';
 import { listCodexAppServerPermissions } from '../../permission-relay/codex-app-server';
@@ -31,6 +35,7 @@ import type { SpawnProcessConfig } from './process/spawn-types';
 import {
 	initPermissionRelay,
 	resolvePermissionResponse,
+	listPermissionRequests,
 	permissionCaller,
 	type PermissionDecision,
 } from '../../permission-relay';
@@ -149,6 +154,10 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 		)
 	);
 
+	ipcMain.handle('permission:list', (event) =>
+		listPermissionRequests(permissionCaller(event, getMainWindow))
+	);
+
 	// Renderer -> main: the user's allow/deny decision for a relayed request.
 	ipcMain.handle('permission:respond', (event, requestId: string, decision: PermissionDecision) => {
 		return resolvePermissionResponse(requestId, decision, permissionCaller(event, getMainWindow));
@@ -170,6 +179,16 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 				safeSend,
 				sessionsStore: deps.sessionsStore,
 				interactiveReplayController: deps.interactiveReplayController,
+			}).catch((error: unknown) => {
+				const key = claudeStandardPermissionMessageKey(error);
+				if (settingsStore.get('newShell', false) && key) {
+					throw new Error(
+						CLAUDE_STANDARD_PERMISSION_MESSAGES[
+							resolveAppLocale(settingsStore.get('uiLanguage'), app.getLocale())
+						][key]
+					);
+				}
+				throw error;
 			})
 		)(event, config)
 	);

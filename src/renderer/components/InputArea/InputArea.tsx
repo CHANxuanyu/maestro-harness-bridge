@@ -816,7 +816,8 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 							hasStandardCapability={effectiveStandardPermissionCapability(
 								capabilities,
 								{ newShell, codexAppServer },
-								!!session.sessionSshRemoteConfig?.enabled
+								!!session.sessionSshRemoteConfig?.enabled,
+								session
 							)}
 							enterToSend={enterToSend}
 							setEnterToSend={setEnterToSend}

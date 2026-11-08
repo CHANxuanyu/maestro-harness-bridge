@@ -1,3 +1,5 @@
+import { effectiveStandardPermissionCapability } from '../../shared/codexAppServer';
+import { toClaudeTokenModeSource } from '../../shared/claudeTokenMode';
 /**
  * Claude Spawn Core (bundle-safe)
  *
@@ -33,6 +35,7 @@ import type { SelectModeInput, SelectModeResult, UsageSnapshot } from './claude-
 import type { ClaudeTokenMode } from '../../shared/claudeTokenMode';
 import { isBlankEnvValue } from '../../shared/agentEnvironment';
 import { effectiveAgentCustomEnvVars } from '../../shared/providerProfiles';
+import { CLAUDE_STANDARD_PERMISSION_ERRORS } from '../../shared/processErrors';
 
 const LOG_CONTEXT = 'ClaudeSpawnCore';
 
@@ -54,26 +57,7 @@ export interface CoreLogger {
 	debug: (message: string, context?: string, meta?: unknown) => void;
 }
 
-/**
- * Return true when `binaryPath` looks like a maestro-p binary (by basename).
- *
- * Canonical implementation shared by every surface. Recognises the bundled
- * `maestro-p.js` script, a packaged `maestro-p` executable, and the Windows
- * `.exe` variant. Used to detect power-user setups where the `Path` field
- * points directly at maestro-p (bypassing the token-source toggle) so the
- * resolved mode still surfaces as `interactive`, and to avoid pointing
- * `MAESTRO_CLAUDE_BIN` at maestro-p itself (which would make it drive itself
- * instead of the claude TUI).
- */
-export function isMaestroPBinaryPath(binaryPath: string | undefined | null): boolean {
-	if (!binaryPath) return false;
-	// Split on both `/` and `\` so a Windows-style path resolves correctly when
-	// this code runs on POSIX (path.basename on POSIX doesn't treat `\` as a
-	// separator, which would otherwise leave the whole `C:\…` string as the
-	// "basename" and miss the match).
-	const base = (binaryPath.split(/[\\/]/).pop() ?? '').toLowerCase();
-	return base === 'maestro-p' || base === 'maestro-p.js' || base === 'maestro-p.exe';
-}
+export { isMaestroPBinaryPath } from '../../shared/claudeTokenMode';
 
 /**
  * Canonical CLAUDE_CONFIG_DIR key: the absolute path of `$CLAUDE_CONFIG_DIR`
@@ -178,6 +162,8 @@ export interface ResolveClaudeSpawnModeCoreInput {
 	agent: ResolverAgent | null;
 	/** Canonical token mode for this spawn (see getClaudeTokenMode). */
 	tokenMode: ClaudeTokenMode;
+	/** Require approval support while preserving the chosen token source. */
+	requirePermissionRelay?: boolean;
 	/**
 	 * SSH-enabled spawn. Interactive (TUI) mode runs maestro-p on the remote
 	 * host; it falls back to API when the remote probe says maestro-p is absent.
@@ -258,6 +244,24 @@ export function resolveClaudeSpawnModeCore(
 	// Non-Claude agents never route through maestro-p.
 	if (!isClaudeCode) {
 		return { mode: 'api', reason: 'auto', maestroPBinPath: null };
+	}
+
+	if (input.requirePermissionRelay) {
+		if (sshEnabled) {
+			throw new Error(CLAUDE_STANDARD_PERMISSION_ERRORS.remote);
+		}
+		if (d.isMaestroPBinaryPath(command) || d.isMaestroPBinaryPath(sessionCustomPath)) {
+			throw new Error(CLAUDE_STANDARD_PERMISSION_ERRORS.tuiBinary);
+		}
+		if (
+			!effectiveStandardPermissionCapability(
+				{ supportsStandardPermissionMode: true },
+				{ newShell: true },
+				sshEnabled,
+				toClaudeTokenModeSource(tokenMode)
+			)
+		)
+			throw new Error(CLAUDE_STANDARD_PERMISSION_ERRORS.tuiMode);
 	}
 
 	const envForKey = mergeClaudeSpawnEnvLayers({

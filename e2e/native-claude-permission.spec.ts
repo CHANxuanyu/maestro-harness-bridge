@@ -411,6 +411,7 @@ for (const tokenSource of ['tui', 'dynamic'] as const) {
 				enableMaestroP: true,
 				maestroPMode: tokenSource === 'tui' ? 'interactive' : 'dynamic',
 			});
+			expect(saved.executionQueue ?? []).toEqual([]);
 			await native.cli('settings', 'set', 'uiLanguage', 'zh-CN');
 			await native.page.getByTestId('composer-permission').click();
 			await expect(menu.getByRole('menuitemradio', { name: '标准', exact: true })).toBeDisabled();

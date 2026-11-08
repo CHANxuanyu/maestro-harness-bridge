@@ -26,6 +26,7 @@ import type {
 	GetSessionDetailCallback,
 	WriteToSessionCallback,
 	ExecuteCommandCallback,
+	ExecuteCommandResult,
 	InterruptSessionCallback,
 	SwitchModeCallback,
 	SelectSessionCallback,
@@ -438,7 +439,7 @@ export class CallbackRegistry {
 		force?: boolean,
 		images?: string[],
 		background?: boolean
-	): Promise<boolean> {
+	): Promise<ExecuteCommandResult> {
 		if (!this.callbacks.executeCommand) return false;
 		return this.callbacks.executeCommand(
 			sessionId,

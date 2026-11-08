@@ -488,10 +488,25 @@ describe('useRemoteHandlers', () => {
 			'refuses CLI dispatch to saved standard under %s before accepting delivery',
 			async (maestroPMode) => {
 				useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
-				const session = createMockSession({ enableMaestroP: true, maestroPMode });
+				const session = createMockSession({ enableMaestroP: false });
 				session.aiTabs[0].permissionMode = 'standard';
+				useSessionStore.setState({ sessions: [session] });
 				renderHook(() =>
-					useRemoteHandlers(createMockDeps({ sessionsRef: { current: [session] } }))
+					useRemoteHandlers(
+						createMockDeps({
+							// App uses a live store getter, including after update-agent.
+							sessionsRef: {
+								get current() {
+									return useSessionStore.getState().sessions;
+								},
+							},
+						})
+					)
+				);
+				act(() =>
+					useSessionStore
+						.getState()
+						.updateSession(session.id, { enableMaestroP: true, maestroPMode })
 				);
 				await act(async () =>
 					getRemoteCommandHandler()(
@@ -500,12 +515,15 @@ describe('useRemoteHandlers', () => {
 								sessionId: session.id,
 								command: 'fixture',
 								inputMode: 'ai',
+								tabId: session.aiTabs[0].id,
 								receiptChannel: 'approval-refused',
 							},
 						})
 					)
 				);
 				expect(window.maestro.process.spawn).not.toHaveBeenCalled();
+				expect(useSessionStore.getState().sessions[0].executionQueue).toEqual([]);
+				expect(useSessionStore.getState().sessions[0].aiTabs[0].logs).toEqual([]);
 				expect(window.maestro.process.sendRemoteCommandReceipt).toHaveBeenCalledExactlyOnceWith(
 					'approval-refused',
 					false,
@@ -514,6 +532,36 @@ describe('useRemoteHandlers', () => {
 				useSettingsStore.setState({ newShell: false });
 			}
 		);
+		it.each([
+			{ newShell: true, permissionMode: 'standard', enableMaestroP: false },
+			{ newShell: true, permissionMode: 'full', enableMaestroP: true },
+			{ newShell: false, permissionMode: 'standard', enableMaestroP: true },
+		] as const)('accepts supported or classic dispatch: %j', async (config) => {
+			useSettingsStore.setState({ newShell: config.newShell });
+			const session = createMockSession({ enableMaestroP: config.enableMaestroP });
+			session.aiTabs[0].permissionMode = config.permissionMode;
+			useSessionStore.setState({ sessions: [session] });
+			renderHook(() => useRemoteHandlers(createMockDeps({ sessionsRef: { current: [session] } })));
+			await act(async () =>
+				getRemoteCommandHandler()(
+					new CustomEvent('maestro:remoteCommand', {
+						detail: {
+							sessionId: session.id,
+							command: 'Allowed CLI dispatch',
+							inputMode: 'ai',
+							tabId: session.aiTabs[0].id,
+							receiptChannel: 'accepted-dispatch',
+						},
+					})
+				)
+			);
+			expect(window.maestro.process.spawn).toHaveBeenCalledTimes(1);
+			expect(window.maestro.process.sendRemoteCommandReceipt).toHaveBeenCalledExactlyOnceWith(
+				'accepted-dispatch',
+				true,
+				undefined
+			);
+		});
 		it('dispatches AI commands via spawn', async () => {
 			const session = createMockSession({ inputMode: 'ai' });
 			const deps = createMockDeps({

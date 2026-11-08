@@ -150,6 +150,9 @@ export function registerCommandCallbacks(
 						: `[Web → Renderer] Renderer rejected command for session ${sessionId}: ${receiptReasonCode(receipt.reason)}`,
 					'WebServer'
 				);
+				// Keep the localized explanation on the reply, while logs above
+				// continue to contain only the fixed reason code.
+				return { success: false, error: receipt.reason };
 			}
 			return receipt.accepted;
 		}

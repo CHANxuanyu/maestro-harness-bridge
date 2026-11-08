@@ -70,6 +70,15 @@ entry; classic Edit Agent exposes it in the shared AgentConfigPanel. The owner
 setting applies to its conversations, so this task adds no new UI action or verb.
 SSH and conflicting permission arguments still refuse before spawn.
 
+U4 第四轮补齐普通派发的返回链路：`send_command` 经过
+`registerCommandCallbacks()`、`CallbackRegistry` 和 `handleSendCommand()`，
+保留渲染层拒绝回执的原文，再由 CLI `dispatch` 返回失败及非零退出码。
+布尔回调仍受支持；带原因的失败不能被当作真值成功。失败不记录派发关系，
+已预登记的完成通知回调会取消。`dispatch --queue` 原有拒绝链路保持不变，
+空闲和忙碌目标都在派发或入队前校验同一权限能力。
+没有新增界面动作或 CLI 动词，没有新增 Open gaps。
+共享回执修正也让旧界面下已经被拒绝的 CLI 派发如实失败，不改变旧界面的权限策略。
+
 旧界面 TUI 下选标准仍会跳过确认，这是既有问题，这次没改。共享审批列表的
 归属过滤同时修复旧界面和 CLI 的信息泄露，审批响应及生命周期模型保持合并后的规则。
 Synthetic Electron coverage is in `e2e/native-claude-permission.spec.ts`; execution

@@ -535,6 +535,40 @@ describe('dispatch command', () => {
 	});
 
 	describe('--queue flow', () => {
+		it.each(['en', 'zh-CN'] as const)(
+			'exits nonzero with the unchanged standard permission refusal (%s)',
+			async (language) => {
+				const refusal =
+					CLAUDE_STANDARD_PERMISSION_MESSAGES[language]['workflows.sessions.standardSpawnRefused'];
+				vi.mocked(resolveAgentId).mockReturnValue('agent-abc-123');
+				const sendCommand = vi.fn().mockResolvedValue({
+					type: 'enqueue_command_result',
+					success: false,
+					error: refusal,
+				});
+				vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+					action({ sendCommand } as never)
+				);
+
+				await dispatch('agent-abc', 'Refuse CLI queue', { tab: 'tab-standard', queue: true });
+
+				expect(JSON.parse(consoleSpy.mock.calls[0][0])).toEqual({
+					success: false,
+					error: refusal,
+					code: 'ENQUEUE_FAILED',
+				});
+				expect(processExitSpy).toHaveBeenCalledExactlyOnceWith(1);
+				expect(sendCommand).toHaveBeenCalledExactlyOnceWith(
+					expect.objectContaining({
+						type: 'enqueue_command',
+						sessionId: 'agent-abc-123',
+						tabId: 'tab-standard',
+					}),
+					'enqueue_command_result'
+				);
+			}
+		);
+
 		it('sends enqueue_command with the target tab and surfaces queue position when busy', async () => {
 			vi.mocked(resolveAgentId).mockReturnValue('agent-abc-123');
 			const mockSendCommand = vi.fn().mockResolvedValue({

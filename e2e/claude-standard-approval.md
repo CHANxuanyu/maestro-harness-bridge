@@ -26,6 +26,17 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-claude-permission.spec.ts --re
 
 工作树场景先等待 CLI 持久化快照中的原生 ID 精确等于 seed ID，再读取 tab 并重复原断言。等待只读取，不重新点击、不重发、不重试场景。运行状态从 `window.maestro.process.getActiveProcesses()` 检查，不从已保存的 idle 字段推断。排队场景使用夹具的 `dispatchWithEnv()`，因为 dispatch 自带 JSON 输出，不接受通用 `--json`。
 
+## U4 第四轮 CLI 回执复测
+
+外部上一轮记录中，TUI 与 Dynamic 场景在普通 CLI 派发处收到假成功。
+本轮修复主进程丢失拒绝原因，以及 CLI 忽略 `command_result.success: false`
+的两处返回处理。权限判断、队列入口和输入框拒绝实现保持不变。
+场景继续要求两种派发及输入框发送返回原句，不放宽断言；补充持久化队列为空的检查。
+
+Opus 请用上面的命令重新构建并运行全部 11 条，包含两条拒绝、工作树普通和排队发送、
+API 审批、停止、超时和旧界面。不要复用修复前的 `dist/cli`。
+沙箱内仅执行单元、类型和场景收集检查，不代表本轮 Electron 已通过。
+
 ## 上一轮失败的根因
 
 外部运行记录为 1 过 8 失败，本轮未重新启动 Electron。前六条用了不合法的 `--token-source interactive`，CLI 实际接受 `api|tui|dynamic`；现在审批场景明确用 api，TUI 拒绝场景用 tui。两条工作树场景在历史正文可见后立刻读取 CLI active tab，而 CLI 从持久化快照列出对话，renderer 默认 2000 毫秒防抖后才保存。旧 trace 在正文断言后约 200 毫秒已进入失败截图，符合读取旧空白 tab 的时序。修复保持精确原生 ID 和主项目 cwd 断言，增加等待保存完成的同步点，没有更改产品历史归属。

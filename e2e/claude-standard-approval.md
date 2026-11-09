@@ -61,7 +61,27 @@ Windows 外部补验：把 Claude 自定义路径指向安装器生成的 `maest
 
 观察真实 Claude 是否通过 permission-prompt-tool 调到应用 bridge。审批前文件必须不存在，弹窗必须显示正确项目、工具与完整输入；只点击一次允许后，文件才出现且内容正确。回合结束后待审批列表为空，MCP 临时配置删除。若没有收到审批，保留实际参数与脱敏诊断，不能把模型直接拒绝或已预先授权当作此验证通过。
 
-这一轮真实调用只能证实当前 CLI 版本的最小批准契约。真实模型被拒绝后是否解释、另提方案或继续推理，真实停止和超时，SSH、Windows、Linux、发行包，以及跨窗口和浏览器的审批展示仍需另外验收。本任务没有执行任何一次真实调用。
+这一轮真实调用只能证实当前 CLI 版本的最小批准契约。真实模型被拒绝后是否解释、另提方案或继续推理，真实停止和超时，SSH、Windows、Linux、发行包，以及跨窗口和浏览器的审批展示仍需另外验收。
+
+### 2026-11-09 真实验证结果：通过
+
+场景是 `e2e/real-claude-approval.spec.ts`，默认跳过，只在 `MAESTRO_E2E_REAL=1` 时运行。被测对象是主线 `f5d3e7aab` 的本地开发构建（#69 合并后），Claude Code `2.1.317`，claude.ai 订阅登录。项目、应用数据、HOME 和 `CLAUDE_CONFIG_DIR` 都是临时目录，登录只以只读的访问令牌传入，没有写 `~/.claude`。
+
+逐条结果：
+
+- 审批前目标文件不存在，项目目录（递归）和发送前一刻的快照完全一致。
+- 弹窗显示 Write、`approval-smoke.txt` 和项目目录。`permission list` 只有这一条，归属当前对话，不含 spawn 令牌。
+- 运行中的真实进程参数含 print 和 `--permission-prompt-tool`，不含 `--dangerously-skip-permissions`，`--mcp-config` 指向的临时文件存在。
+- 点一次“Allow once”后文件才出现，内容是 `approval smoke`，项目里只多了这一个文件。
+- 回合结束，停止按钮消失，待审批列表为空，临时 MCP 配置已删除。
+
+过程记录：
+
+- 第一次运行没有启动 Claude：钥匙串里的 `Claude Code-credentials` 有 `claudeAiOauth` 字段，但 `accessToken` 和 `refreshToken` 都是空字符串，`claude auth status` 在正常环境和测试用的干净环境里都是 `loggedIn: false`。框架读取的字段路径与 `2.1.317` 一致，不是框架或隔离问题。用户用 `claude auth login` 重新登录后通过。
+- 共发出 4 次真实请求。第 1 次在审批前失败，是场景把 Maestro 建对话时创建的 `.maestro` 目录算成了审批前写入，快照改到发送前一刻；第 2 次通过；第 3、4 次分别补了进程参数和临时 MCP 配置的检查，都通过。失败的那次在点允许前结束，没有写入文件。
+- `e2e/fixtures/native/real-runtime.cjs` 固定的 Claude 版本是 `2.1.310`。这次只在运行时临时放行 `2.1.317`，跑完恢复，没有提交，因为其他真实场景没有在 `2.1.317` 上重新验证。
+
+仍未真实验证：拒绝、停止、超时，SSH，Windows，Linux，安装包。
 
 ## 已知交互缺口
 

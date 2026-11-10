@@ -75,6 +75,7 @@ export function createProjectSettingsService(deps: {
 				for (const [field, value] of Object.entries(command.patch)) {
 					if (
 						![
+							'autoHandoffTarget',
 							'defaultProvider',
 							'modelProvider',
 							'defaultModel',

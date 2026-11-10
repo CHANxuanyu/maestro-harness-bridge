@@ -1,3 +1,4 @@
+import { maybeAutoHandoff } from '../../../services/autoHandoff';
 /**
  * useAgentExitListener - registers `window.maestro.process.onExit`
  *
@@ -873,6 +874,16 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 			if (isFromAi && ownsSideEffects && tabIdFromSession && !isRetryPending(tabIdFromSession)) {
 				deps.batchedUpdater.flushNow();
 				releaseMentionHandoff(actualSessionId, tabIdFromSession, { failed: code !== 0 });
+			}
+
+			if (
+				isFromAi &&
+				ownsSideEffects &&
+				tabIdFromSession &&
+				!stopped &&
+				!deps.getBatchStateRef.current?.(actualSessionId)?.isRunning
+			) {
+				await maybeAutoHandoff(actualSessionId, tabIdFromSession);
 			}
 
 			if (queuedItemToProcess && ownsSideEffects) {

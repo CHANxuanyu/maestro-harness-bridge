@@ -1,6 +1,23 @@
 import { CODEX_APP_SERVER_MESSAGES } from '../../../../shared/codexAppServer';
 
 export const workflowsShell = {
+	'workflows.autoHandoff.disabled': 'Automatic handoff requires the new shell.',
+
+	'workflows.autoHandoff.listHelp': 'List tool configuration IDs and accounts in this project',
+	'workflows.autoHandoff.listOnly':
+		'Listing configurations cannot be combined with a target or sending.',
+
+	'workflows.autoHandoff.setting': 'Automatically hand off when quota runs out',
+	'workflows.autoHandoff.off': 'Off',
+	'workflows.autoHandoff.defaultAccount': 'Default account on this host',
+	'workflows.autoHandoff.target': '{tool} (account {account}) · {name}',
+	'workflows.autoHandoff.unavailable': 'Unavailable configuration: {id}',
+	'workflows.autoHandoff.sent': 'Automatically handed off to {tool} (account {account})',
+	'workflows.autoHandoff.failed':
+		'Automatic handoff could not be completed. Check the target configuration and continue manually.',
+	'workflows.projectSettings.cli.autoHandoffHelp':
+		'Target tool configuration ID for automatic handoff, or off',
+
 	...CODEX_APP_SERVER_MESSAGES['en'],
 	'workflows.shell.consultPermissionUnavailable':
 		'This tool cannot preserve the source conversation’s permissions.',

@@ -3,6 +3,20 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.autoHandoff.disabled': '自动交接需要开启新界面。',
+
+	'workflows.autoHandoff.listHelp': '列出本项目的工具配置 ID 和账户',
+	'workflows.autoHandoff.listOnly': '列出配置时不能指定目标或发送。',
+
+	'workflows.autoHandoff.setting': '额度用尽时自动交给',
+	'workflows.autoHandoff.off': '关闭',
+	'workflows.autoHandoff.defaultAccount': '此主机的默认账户',
+	'workflows.autoHandoff.target': '{tool}（账户 {account}）· {name}',
+	'workflows.autoHandoff.unavailable': '配置不可用：{id}',
+	'workflows.autoHandoff.sent': '已自动交给 {tool}（账户 {account}）',
+	'workflows.autoHandoff.failed': '自动交接未完成。请检查目标配置，再手动继续。',
+	'workflows.projectSettings.cli.autoHandoffHelp': '自动交接的工具配置 ID，off 表示关闭',
+
 	...CODEX_APP_SERVER_MESSAGES['zh-CN'],
 	'workflows.shell.consultPermissionUnavailable': '这个工具无法保持来源对话的权限限制。',
 	'workflows.projectSettings.errors.requestFailed': '项目设置请求失败。',

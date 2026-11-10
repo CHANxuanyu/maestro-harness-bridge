@@ -10,6 +10,7 @@ import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 
 const api = vi.fn();
+const targets = vi.fn();
 const scope = { projectPath: '/projects/demo', sshRemoteId: 'server-a' };
 
 function setup() {
@@ -37,6 +38,13 @@ function setup() {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	window.maestro.context.conversation = targets;
+	targets.mockResolvedValue({
+		success: true,
+		targets: [
+			{ provider: 'codex', runnerId: 'config-work', name: 'Work', account: '/tmp/work-account' },
+		],
+	});
 	useSettingsStore.setState({ newShell: false, uiLanguage: 'en' });
 	for (const [id, caps] of Object.entries(AGENT_CAPABILITIES)) setCapabilitiesCache(id, caps);
 	Object.assign(window.maestro.settings, { projectSettings: api });
@@ -319,4 +327,27 @@ it('uses project wording in Chinese and discards tool edits on Cancel', async ()
 	expect(window.maestro.sessions.setMany).not.toHaveBeenCalled();
 	expect(api.mock.calls.every(([command]) => command.action === 'show')).toBe(true);
 	expect(useSessionStore.getState().sessions[0]).toEqual(owner);
+});
+
+it('shows the exact tool account, defaults off and saves the selected configuration', async () => {
+	useSettingsStore.setState({ newShell: true });
+	const onClose = setup();
+	const picker = await screen.findByLabelText('Automatically hand off when quota runs out');
+	expect(picker).toHaveValue('');
+	await screen.findByRole('option', { name: /Codex.*work-account/ });
+	fireEvent.change(picker, { target: { value: 'config-work' } });
+	fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+	await waitFor(() => expect(onClose).toHaveBeenCalled());
+	expect(api).toHaveBeenLastCalledWith(
+		expect.objectContaining({
+			patch: expect.objectContaining({ autoHandoffTarget: 'config-work' }),
+		})
+	);
+});
+
+it('does not expose auto handoff in the classic shell', async () => {
+	setup();
+	await screen.findByDisplayValue('test-secret-value');
+	expect(screen.queryByLabelText('Automatically hand off when quota runs out')).toBeNull();
+	expect(targets).not.toHaveBeenCalled();
 });

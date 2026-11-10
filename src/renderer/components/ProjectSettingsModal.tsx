@@ -8,7 +8,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import type { Session, Theme } from '../types';
 import type { ProjectSettings, ProjectSettingsScope } from '../../shared/projectSettings';
 import { projectSettingsKey } from '../../shared/projectSettings';
-import { HANDOFF_PROVIDERS } from '../../shared/aiHandoff';
+import { HANDOFF_PROVIDERS, type HandoffTargetsResult } from '../../shared/aiHandoff';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
 import { DEEPSEEK_PRESET, sessionProviderId } from '../../shared/agentPresets';
 import { Modal, ModalFooter } from './ui/Modal';
@@ -43,6 +43,9 @@ export function ProjectSettingsModal({
 	const scope = scopes[scopeIndex];
 	const scopeKey = scope ? projectSettingsKey(scope) : '';
 	const [loadedScope, setLoadedScope] = useState('');
+	const [handoffTargets, setHandoffTargets] = useState<
+		NonNullable<HandoffTargetsResult['targets']>
+	>([]);
 	const [draft, setDraft] = useState<ProjectSettings>({});
 	const [toolPatches, setToolPatches] = useState<Record<string, Partial<Session>>>({});
 	const [acknowledged, setAcknowledged] = useState(false);
@@ -112,6 +115,25 @@ export function ProjectSettingsModal({
 		};
 	}, [scopeKey]);
 
+	useEffect(() => {
+		setHandoffTargets([]);
+		const source = scopedSessions[0];
+		if (!newShell || !source) return;
+		let stale = false;
+		void window.maestro.context
+			.conversation({ action: 'targets', sourceAgentId: source.id, configurations: true })
+			.then((result) => {
+				if (!stale && result.success && 'targets' in result)
+					setHandoffTargets(result.targets ?? []);
+			})
+			.catch(() => {
+				if (!stale) setError(t('workflows.projectSettings.failed'));
+			});
+		return () => {
+			stale = true;
+		};
+	}, [scopeKey, newShell, sessions]);
+
 	const save = async () => {
 		if (!ready || saving || !validEnvironment || (needsAcknowledgement && !acknowledged)) return;
 		setSaving(true);
@@ -122,6 +144,7 @@ export function ProjectSettingsModal({
 				action: 'set',
 				scope,
 				patch: {
+					...(newShell ? { autoHandoffTarget: draft.autoHandoffTarget || null } : {}),
 					defaultProvider: draft.defaultProvider || null,
 					modelProvider:
 						draft.defaultModel?.trim() || draft.defaultReasoningEffort ? provider : null,
@@ -253,6 +276,42 @@ export function ProjectSettingsModal({
 				{!ready && !error && <p role="status">{t('workflows.projectSettings.loading')}</p>}
 				{ready && (
 					<fieldset disabled={saving} className="space-y-4">
+						{newShell && (
+							<label className="block text-xs" htmlFor={`${id}-auto-handoff`}>
+								{t('workflows.autoHandoff.setting')}
+								<select
+									id={`${id}-auto-handoff`}
+									className={fieldClass}
+									style={inputStyle}
+									value={draft.autoHandoffTarget ?? ''}
+									onChange={(event) =>
+										setDraft((current) => ({
+											...current,
+											autoHandoffTarget: event.target.value || undefined,
+										}))
+									}
+								>
+									<option value="">{t('workflows.autoHandoff.off')}</option>
+									{draft.autoHandoffTarget &&
+										!handoffTargets.some(
+											(target) => target.runnerId === draft.autoHandoffTarget
+										) && (
+											<option value={draft.autoHandoffTarget}>
+												{t('workflows.autoHandoff.unavailable', { id: draft.autoHandoffTarget })}
+											</option>
+										)}
+									{handoffTargets.map((target) => (
+										<option key={target.runnerId} value={target.runnerId}>
+											{t('workflows.autoHandoff.target', {
+												tool: getAgentDisplayName(target.provider),
+												account: target.account || t('workflows.autoHandoff.defaultAccount'),
+												name: target.name || target.runnerId || '',
+											})}
+										</option>
+									))}
+								</select>
+							</label>
+						)}
 						<label className="block text-xs" htmlFor={`${id}-provider`}>
 							{t('workflows.projectSettings.provider')}
 							<select

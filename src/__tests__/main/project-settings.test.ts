@@ -20,6 +20,36 @@ describe('project settings persistence', () => {
 		createProjectSettingsService({ settingsStore: store as never, onChanged: changed });
 	const scope = { projectPath: '/tmp/project-settings-fixture' };
 
+	it('keeps auto handoff off by default and isolates its target by project and host', async () => {
+		const api = service();
+		expect(
+			(await api.command({ action: 'show', scope })).settings.autoHandoffTarget
+		).toBeUndefined();
+		for (const sshRemoteId of [undefined, 'host-a', 'host-b']) {
+			const location = { ...scope, sshRemoteId };
+			expect(
+				await api.command({
+					action: 'set',
+					scope: location,
+					patch: { autoHandoffTarget: sshRemoteId ?? 'local-target' },
+				})
+			).toMatchObject({ success: true });
+		}
+		for (const sshRemoteId of [undefined, 'host-a', 'host-b']) {
+			expect(
+				(await api.command({ action: 'show', scope: { ...scope, sshRemoteId } })).settings
+					.autoHandoffTarget
+			).toBe(sshRemoteId ?? 'local-target');
+		}
+		expect(
+			(await api.command({ action: 'show', scope: { projectPath: '/tmp/other' } })).settings
+				.autoHandoffTarget
+		).toBeUndefined();
+		expect(
+			await api.command({ action: 'set', scope, patch: { autoHandoffTarget: null } })
+		).toMatchObject({ success: true, settings: {} });
+	});
+
 	it('saves defaults only in Maestro and isolates the same path on distinct hosts', async () => {
 		const api = service();
 		for (const sshRemoteId of [undefined, 'host-a', 'host-b']) {

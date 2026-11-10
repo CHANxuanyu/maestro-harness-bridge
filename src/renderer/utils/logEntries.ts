@@ -41,6 +41,7 @@ export function isSelfContainedCard(entry: LogEntry): boolean {
 		entry.shellCommand ||
 		// Agent Resilience outage card - driven by retryStore
 		entry.retryOutageId ||
+		entry.autoHandoff ||
 		// "Create new session from prior context" prompt
 		entry.recoveryAction ||
 		// Custom AI command chip on a user message

@@ -1,3 +1,4 @@
+import { projectSettingsKey } from '../../../../../shared/projectSettings';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAgentExitListener } from '../../../../../renderer/hooks/agent/internal/useAgentExitListener';
@@ -790,5 +791,73 @@ describe('useAgentExitListener', () => {
 			expect(useNotificationStore.getState().history).toHaveLength(enabled ? 1 : 0);
 			expect(useNotificationStore.getState().toasts).toHaveLength(0);
 		}
+	);
+});
+
+it('hands off one failed user turn once after exit and leaves a source link', async () => {
+	const error = {
+		type: 'rate_limited' as const,
+		message: 'quota',
+		timestamp: 2,
+		agentId: 'claude-code',
+		recoverable: true,
+	};
+	const tab = createMockAITab({
+		id: 'tab-1',
+		state: 'busy',
+		agentError: error,
+		logs: [{ id: 'turn-1', source: 'user', timestamp: 1, text: 'Failed request' }],
+	});
+	const source = createMockSession({
+		id: 'sess-1',
+		cwd: '/tmp/project',
+		projectRoot: '/tmp/project',
+		activeTabId: tab.id,
+		aiTabs: [tab],
+		state: 'error',
+		agentError: error,
+	});
+	const target = createMockSession({
+		id: 'target',
+		toolType: 'codex',
+		cwd: source.cwd,
+		projectRoot: source.projectRoot,
+	});
+	useSessionStore.setState({ sessions: [source, target] });
+	useSettingsStore.setState({
+		newShell: true,
+		projectSettings: {
+			[projectSettingsKey({ projectPath: source.cwd })]: { autoHandoffTarget: target.id },
+		},
+	});
+	const handoff = vi.fn().mockResolvedValue({
+		success: true,
+		state: 'queued',
+		agentId: target.id,
+		tabId: 'recipient',
+		targetAccount: '/tmp/work-account',
+	});
+	window.maestro.context.handoff = handoff;
+	vi.mocked(window.maestro.sessions.setMany).mockResolvedValue(true);
+	renderHook(() => useAgentExitListener(makeDeps()));
+	await act(async () => {
+		await handler!('sess-1-ai-tab-1', 1);
+	});
+	await act(async () => {
+		await handler!('sess-1-ai-tab-1', 1);
+	});
+	expect(handoff).toHaveBeenCalledExactlyOnceWith(
+		expect.objectContaining({
+			targetConfigId: 'target',
+			automaticTurnId: 'turn-1',
+			send: true,
+			background: true,
+		})
+	);
+	expect(useSessionStore.getState().sessions[0].aiTabs[0].logs).toContainEqual(
+		expect.objectContaining({
+			autoHandoff: { sessionId: 'target', tabId: 'recipient' },
+			text: expect.stringContaining('/tmp/work-account'),
+		})
 	);
 });

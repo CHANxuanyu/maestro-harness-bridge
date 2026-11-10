@@ -1,3 +1,4 @@
+import { projectSettingsTranslator } from './project-settings';
 import {
 	resolveTabEntry,
 	sendSimpleCommand,
@@ -10,6 +11,7 @@ import { resolveBackgroundFlag } from '../../shared/focusPlacement';
 interface HandoffOptions {
 	agent?: string;
 	listTargets?: boolean;
+	listConfigurations?: boolean;
 	send?: boolean;
 	review?: boolean;
 	maxTokens?: string;
@@ -24,9 +26,12 @@ export async function handoff(
 	provider: string | undefined,
 	options: HandoffOptions
 ): Promise<void> {
+	const listTargets = options.listTargets || options.listConfigurations;
+	if (options.listConfigurations && (provider !== undefined || options.send || options.review))
+		return failCommand(projectSettingsTranslator()('workflows.autoHandoff.listOnly'), options.json);
 	if (options.listTargets && (provider !== undefined || options.send || options.review))
 		return failCommand('--list-targets cannot be combined with a target or --send', options.json);
-	if (!options.listTargets && !isHandoffProvider(provider))
+	if (!listTargets && !isHandoffProvider(provider))
 		return failCommand(
 			'Choose claude-code, codex or deepseek, or use --list-targets',
 			options.json
@@ -36,10 +41,11 @@ export async function handoff(
 		return failCommand('--max-tokens must be a positive integer', options.json);
 	try {
 		const source = await resolveTabEntry(tab, options.agent);
-		const payload = options.listTargets
+		const payload = listTargets
 			? {
 					type: 'ai_handoff',
 					action: 'targets',
+					...(options.listConfigurations ? { configurations: true } : {}),
 					sourceAgentId: source.agentId,
 				}
 			: {
@@ -66,7 +72,9 @@ export async function handoff(
 		if (!result.success) return failCommand(result.error ?? 'Handoff failed');
 		if ('targets' in result) {
 			for (const target of result.targets ?? [])
-				console.log(`${target.provider}${target.runnerId ? `\t${target.runnerId}` : ''}`);
+				console.log(
+					`${target.provider}${target.runnerId ? `\t${target.runnerId}` : ''}${options.listConfigurations ? `\t${target.account || projectSettingsTranslator()('workflows.autoHandoff.defaultAccount')}` : ''}`
+				);
 		} else if ('draft' in result) {
 			console.log(
 				`Agent: ${result.agentId}\nTab: ${result.tabId}\nTitle: ${result.title ?? ''}\nState: ${result.state}\nEstimated tokens: ${result.draft?.estimatedTokens}\n\n${result.draft?.text}`

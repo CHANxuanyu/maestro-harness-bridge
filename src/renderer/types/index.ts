@@ -224,6 +224,7 @@ export interface FileArtifact {
 }
 
 export interface LogEntry {
+	autoHandoff?: { sessionId: string; tabId: string };
 	id: string;
 	timestamp: number;
 	source: 'stdout' | 'stderr' | 'system' | 'user' | 'ai' | 'error' | 'thinking' | 'tool';
@@ -849,6 +850,8 @@ export interface AITab {
 	archived?: boolean;
 	newShellPanel?: import('../../shared/newShellPanel').NewShellPanelState;
 	origin?: ConversationOrigin;
+	/** Last failed user entry claimed by automatic handoff, persisted before dispatch. */
+	autoHandoffAttemptedTurnId?: string;
 	id: string; // Unique tab ID (generated UUID)
 	agentSessionId: string | null; // Agent session UUID (null for new tabs)
 	name: string | null; // User-defined name (null = show UUID octet)

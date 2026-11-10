@@ -603,6 +603,10 @@ program
 		projectSettingsT('workflows.projectSettings.cli.modelProviderHelp')
 	)
 	.option('--effort <level>', projectSettingsT('workflows.projectSettings.cli.effortHelp'))
+	.option(
+		'--auto-handoff <id|off>',
+		projectSettingsT('workflows.projectSettings.cli.autoHandoffHelp')
+	)
 	.option('--permission <mode>', projectSettingsT('workflows.projectSettings.cli.permissionHelp'))
 	.option(
 		'--env <NAME=VALUE>',
@@ -638,6 +642,7 @@ program
 	.command('handoff <tab> [provider]')
 	.description('Prepare a new conversation with another AI in the same project')
 	.option('--agent <id>', 'Source agent for an active or ambiguous tab')
+	.option('--list-configurations', projectSettingsT('workflows.autoHandoff.listHelp'))
 	.option('--list-targets', 'List available target providers without creating a draft')
 	.option('--review', 'Prepare a review that reports problems without editing files')
 	.option('--send', 'Explicitly send the prepared handoff instead of leaving a draft')

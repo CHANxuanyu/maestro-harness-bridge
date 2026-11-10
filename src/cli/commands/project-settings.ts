@@ -11,6 +11,7 @@ import { failCommand, reportResult, sendSimpleCommand } from '../services/sessio
 import { isInheritValue, resolveCliPath } from '../utils/parse';
 
 interface ProjectSettingsOptions {
+	autoHandoff?: string;
 	path?: string;
 	sshRemote?: string;
 	provider?: string;
@@ -51,6 +52,8 @@ export async function projectSettings(
 			if (value !== undefined)
 				Object.assign(patch, { [field]: isInheritValue(value) ? null : value });
 		}
+		if (options.autoHandoff !== undefined)
+			patch.autoHandoffTarget = options.autoHandoff === 'off' ? null : options.autoHandoff;
 		if (options.clearEnv && options.env?.length)
 			throw new Error(t('workflows.projectSettings.cli.conflictingEnv'));
 		if (options.clearEnv) patch.envVars = null;

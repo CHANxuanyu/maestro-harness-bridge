@@ -10,6 +10,8 @@ export const DEFAULT_HANDOFF_BUDGET = 8000;
 
 export interface ConversationOrigin {
 	kind: 'handoff' | 'review' | 'subtask';
+	/** An automatic recipient can never pass the task on automatically. */
+	automatic?: boolean;
 	sourceSessionId: string;
 	sourceTabId: string;
 	sourceProvider: string;
@@ -68,6 +70,9 @@ export interface HandoffRunner extends HandoffRunnerConfig {
 export type HandoffMode = 'handoff' | 'review';
 
 export interface HandoffRequest {
+	targetConfigId?: string;
+	/** Source user entry identity, checked by the owning renderer. */
+	automaticTurnId?: string;
 	mode?: HandoffMode;
 	sourceAgentId: string;
 	sourceTabId: string;
@@ -80,6 +85,7 @@ export interface HandoffRequest {
 }
 
 export interface HandoffReadRequest {
+	automaticTurnId?: string;
 	/** Read permission metadata only; an empty tab id selects the latest project conversation. */
 	permissionOnly?: boolean;
 	/** Read a draft for a tool change in the source owner. */
@@ -93,6 +99,7 @@ export interface HandoffReadRequest {
 }
 
 export interface HandoffSourceSnapshot {
+	images?: string[];
 	sourcePermission?: { permissionMode: 'full' | 'standard' | 'readonly'; readOnlyMode: boolean };
 	sourceDefaults?: {
 		customModel?: string;
@@ -112,6 +119,9 @@ export interface HandoffSourceSnapshot {
 }
 
 export interface HandoffOpenRequest {
+	/** Prevent implicit selection of another account when copying a worktree config. */
+	targetConfigId?: string;
+	images?: string[];
 	/** Captured in the source owner, including when the target lives in another window. */
 	sourcePermission?: HandoffSourceSnapshot['sourcePermission'];
 	sourceDefaults?: HandoffSourceSnapshot['sourceDefaults'];
@@ -140,6 +150,7 @@ export interface HandoffOpenRequest {
 }
 
 export interface HandoffResult {
+	targetAccount?: string;
 	permissionMode?: 'full' | 'standard' | 'readonly';
 	readOnlyMode?: boolean;
 	mode?: HandoffMode;
@@ -156,7 +167,12 @@ export interface HandoffResult {
 }
 
 export interface HandoffTargetsResult extends Pick<HandoffResult, 'success' | 'error' | 'code'> {
-	targets?: Array<{ provider: HandoffProvider; runnerId?: string }>;
+	targets?: Array<{
+		provider: HandoffProvider;
+		runnerId?: string;
+		name?: string;
+		account?: string;
+	}>;
 }
 
 export type HandoffReadResult =
@@ -164,7 +180,13 @@ export type HandoffReadResult =
 	| Pick<HandoffResult, 'success' | 'error' | 'code'>
 	| null;
 export type HandoffCommand =
-	| { action: 'targets'; sourceAgentId: string; includeCurrent?: boolean; localOnly?: boolean }
+	| {
+			action: 'targets';
+			sourceAgentId: string;
+			includeCurrent?: boolean;
+			localOnly?: boolean;
+			configurations?: boolean;
+	  }
 	| {
 			action: 'new-conversation';
 			sourceAgentId: string;
@@ -209,6 +231,20 @@ export function handoffRequestError(request: HandoffRequest): string | null {
 		(request.background !== undefined && typeof request.background !== 'boolean')
 	)
 		return 'Send and background must be boolean values';
+	if (
+		request.targetConfigId !== undefined &&
+		(typeof request.targetConfigId !== 'string' || !request.targetConfigId.trim())
+	)
+		return 'A target configuration id is required';
+	if (
+		request.automaticTurnId !== undefined &&
+		(typeof request.automaticTurnId !== 'string' ||
+			!request.automaticTurnId ||
+			!request.targetConfigId ||
+			request.mode === 'review' ||
+			request.send !== true)
+	)
+		return 'Invalid automatic handoff';
 	return null;
 }
 

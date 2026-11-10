@@ -95,6 +95,126 @@ describe('local AI handoff routing', () => {
 		});
 	});
 
+	it('selects the exact target configuration, including another account of the same tool', async () => {
+		runners.push(
+			runner('claude-code', {
+				id: 'claude-work',
+				customEnvVars: { CLAUDE_CONFIG_DIR: '/tmp/work-account' },
+			})
+		);
+		expect(
+			await service().prepare({
+				sourceAgentId: 'claude-code',
+				sourceTabId: 't',
+				targetProvider: 'claude-code',
+				targetConfigId: 'claude-work',
+			})
+		).toMatchObject({ success: true });
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				runnerId: 'claude-work',
+				config: expect.objectContaining({
+					customEnvVars: { CLAUDE_CONFIG_DIR: '/tmp/work-account' },
+				}),
+			})
+		);
+	});
+
+	it.each(['missing', 'self', 'host', 'project', 'unavailable'])(
+		'refuses an invalid exact configuration: %s',
+		async (reason) => {
+			const target = runners[1];
+			if (reason === 'host') target.sessionSshRemoteConfig = { enabled: true, remoteId: 'other' };
+			if (reason === 'project') target.projectRoot = target.cwd = '/other';
+			if (reason === 'unavailable') target.customPath = 'missing';
+			const result = await service().prepare({
+				sourceAgentId: 'claude-code',
+				sourceTabId: 't',
+				targetProvider: 'codex',
+				targetConfigId: reason === 'missing' ? 'gone' : reason === 'self' ? 'claude-code' : 'codex',
+			});
+			expect(result.success).toBe(false);
+			expect(openTarget).not.toHaveBeenCalled();
+		}
+	);
+
+	it('keeps the source worktree while copying the selected project configuration', async () => {
+		runners[0].cwd = '/project/worktree';
+		expect(
+			await service().prepare({
+				sourceAgentId: 'claude-code',
+				sourceTabId: 't',
+				targetProvider: 'codex',
+				targetConfigId: 'codex',
+			})
+		).toMatchObject({ success: true });
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cwd: '/project/worktree',
+				runnerId: undefined,
+				targetConfigId: 'codex',
+			})
+		);
+	});
+
+	it('lists individual configurations with their effective account, scoped to the host and project', async () => {
+		runners.push(
+			runner('codex', { id: 'work', customEnvVars: { CODEX_HOME: '/tmp/work-account' } })
+		);
+		runners.push(runner('codex', { id: 'other', cwd: '/other', projectRoot: '/other' }));
+		const result = await service().command({
+			action: 'targets',
+			sourceAgentId: 'claude-code',
+			configurations: true,
+		});
+		expect(result).toMatchObject({
+			success: true,
+			targets: expect.arrayContaining([
+				expect.objectContaining({ runnerId: 'work', account: '/tmp/work-account' }),
+			]),
+		});
+		expect(JSON.stringify(result)).not.toContain('"other"');
+	});
+
+	it('ignores a configuration with an unresolved SSH host when listing project targets', async () => {
+		runners.push(
+			runner('codex', { id: 'broken-remote', sessionSshRemoteConfig: { enabled: true } })
+		);
+		const result = await service().command({
+			action: 'targets',
+			sourceAgentId: 'claude-code',
+			configurations: true,
+		});
+		expect(result.success).toBe(true);
+		expect(JSON.stringify(result)).not.toContain('broken-remote');
+	});
+
+	it('selects an exact SSH configuration without expanding its remote paths locally', async () => {
+		for (const item of runners) {
+			item.cwd = '/local-placeholder';
+			item.sessionSshRemoteConfig = {
+				enabled: true,
+				remoteId: 'remote',
+				workingDirOverride: '~/remote/project',
+			};
+		}
+		runners[1].customEnvVars = { CODEX_HOME: '~/remote/account' };
+		const result = await service().prepare({
+			sourceAgentId: 'claude-code',
+			sourceTabId: 't',
+			targetProvider: 'codex',
+			targetConfigId: 'codex',
+		});
+		expect(result).toMatchObject({ success: true, targetAccount: '~/remote/account' });
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cwd: '~/remote/project',
+				runnerId: 'codex',
+				sessionSshRemoteConfig: expect.objectContaining({ remoteId: 'remote' }),
+			})
+		);
+	});
+
 	it('creates a provider conversation without reading context or sending', async () => {
 		const result = await service().command({
 			action: 'new-conversation',

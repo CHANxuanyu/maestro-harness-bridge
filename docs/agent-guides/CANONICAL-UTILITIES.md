@@ -299,6 +299,8 @@ Git and hook diagnostics stay verbatim.
 
 ## Handoff execution context
 
+`projectSettingsScopeForSession()` now lives in `src/shared/projectSettings.ts` and is re-exported by the renderer defaults module. Project settings and exact handoff configuration selection share this host and project scope. Automatic handoff policy lives in `src/renderer/services/autoHandoff.ts`; it reuses `classifyRetryableError()` for quota exhaustion, claims the source user entry before persistence, and dispatches through the manual handoff service after exit.
+
 `handoffLocation()` in `src/shared/aiHandoff.ts` resolves only the configured execution directory and builds its host-scoped comparison key. The sidebar project root is grouping metadata, not a spawn directory. An SSH override wins over cwd, a missing remote ID fails, and remote paths are never passed through local realpath or path.resolve. Main routing and renderer target insertion share this check so worktrees and identically named directories on different hosts cannot be mixed.
 
 ## Codex rollout archives

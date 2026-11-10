@@ -6,6 +6,8 @@ import { ProjectSettingsModal } from '../../../renderer/components/ProjectSettin
 import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
 import { mockTheme } from '../../helpers/mockTheme';
 import { createMockSession } from '../../helpers';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { useSessionStore } from '../../../renderer/stores/sessionStore';
 
 const api = vi.fn();
 const scope = { projectPath: '/projects/demo', sshRemoteId: 'server-a' };
@@ -35,6 +37,7 @@ function setup() {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	useSettingsStore.setState({ newShell: false });
 	for (const [id, caps] of Object.entries(AGENT_CAPABILITIES)) setCapabilitiesCache(id, caps);
 	Object.assign(window.maestro.settings, { projectSettings: api });
 	api.mockImplementation(async (command) => ({
@@ -134,4 +137,93 @@ it('preserves hidden environment values when saving other settings from a browse
 	fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 	await waitFor(() => expect(close).toHaveBeenCalled());
 	expect(api.mock.calls.at(-1)![0].patch).not.toHaveProperty('envVars');
+});
+
+it('edits every project tool through the shared panel without changing conversations or another host', async () => {
+	useSettingsStore.setState({ newShell: true });
+	const owners = [
+		createMockSession({
+			id: 'claude-a',
+			name: 'Primary Claude',
+			toolType: 'claude-code',
+			projectRoot: '/projects/demo',
+			customPath: '/fixture/claude-old',
+			enableMaestroP: true,
+			maestroPMode: 'interactive',
+			customEnvVars: { CLAUDE_CONFIG_DIR: '/fixture/account-a' },
+		}),
+		createMockSession({
+			id: 'claude-b',
+			name: 'Second Claude',
+			toolType: 'claude-code',
+			projectRoot: '/projects/demo',
+			customPath: '/fixture/claude-other',
+		}),
+		createMockSession({
+			id: 'remote',
+			name: 'Remote Claude',
+			projectRoot: '/projects/demo',
+			sessionSshRemoteConfig: { enabled: true, remoteId: 'remote' },
+		}),
+	];
+	useSessionStore.setState({ sessions: owners });
+	vi.mocked(window.maestro.agents.detect).mockResolvedValue([
+		{
+			id: 'claude-code',
+			name: 'Claude Code',
+			binaryName: 'claude',
+			available: true,
+			path: '/fixture/claude',
+			configOptions: [],
+		},
+	] as never);
+	vi.mocked(window.maestro.sessions.setMany).mockResolvedValue(true);
+	const close = vi.fn();
+	render(
+		<LayerStackProvider>
+			<ProjectSettingsModal
+				theme={mockTheme}
+				name="Demo"
+				scopes={[{ projectPath: '/projects/demo' }]}
+				sessions={owners}
+				onClose={close}
+			/>
+		</LayerStackProvider>
+	);
+	await screen.findByText('Tool configurations');
+	expect(screen.getByText('New conversation defaults')).toBeInTheDocument();
+	fireEvent.click(screen.getByText('Primary Claude', { exact: true }));
+	await screen.findByDisplayValue('/fixture/claude-old');
+	expect(screen.getByText('Second Claude', { exact: true })).toBeInTheDocument();
+	expect(screen.queryByText('Remote Claude', { exact: true })).not.toBeInTheDocument();
+	expect(
+		screen.getAllByText('Changes affect all conversations using this tool configuration.').length
+	).toBeGreaterThan(0);
+	fireEvent.change(screen.getByDisplayValue('/fixture/claude-old'), {
+		target: { value: '/fixture/claude-new' },
+	});
+	fireEvent.change(screen.getByDisplayValue('/fixture/account-a'), {
+		target: { value: '/fixture/account-b' },
+	});
+	fireEvent.click(screen.getByRole('button', { name: 'claude -p', exact: true }));
+	expect(window.maestro.sessions.setMany).not.toHaveBeenCalled();
+	fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+	await waitFor(() => expect(close).toHaveBeenCalled());
+	const saved = useSessionStore.getState().sessions;
+	expect(saved[0]).toMatchObject({
+		customPath: '/fixture/claude-new',
+		customEnvVars: { CLAUDE_CONFIG_DIR: '/fixture/account-b' },
+		enableMaestroP: false,
+		maestroPMode: 'dynamic',
+	});
+	expect(saved[0].aiTabs).toEqual(owners[0].aiTabs);
+	expect(saved.slice(1)).toEqual(owners.slice(1));
+	expect(window.maestro.sessions.setMany).toHaveBeenCalledWith([saved[0]], []);
+});
+
+it('keeps tool configuration hidden in the classic shell', async () => {
+	useSettingsStore.setState({ newShell: false });
+	setup();
+	await screen.findByDisplayValue('test-secret-value');
+	expect(screen.queryByText('Tool configurations')).not.toBeInTheDocument();
 });

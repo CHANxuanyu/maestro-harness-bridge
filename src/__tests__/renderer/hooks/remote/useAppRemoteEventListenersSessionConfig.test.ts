@@ -782,3 +782,14 @@ it('allows CLI standard permission for the enabled local Codex prototype', async
 	await flush();
 	expect(ack).toHaveBeenCalledWith('ch', { success: true });
 });
+
+it('reports a new-shell tool configuration persistence failure instead of claiming success', async () => {
+	vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as never);
+	const session = createMockSession({ customPath: '/fixture/old' });
+	setup([session]);
+	setMany.mockResolvedValueOnce(false);
+	dispatchPatch(session.id, { customPath: '/fixture/new' });
+	await flush();
+	expect(ack).toHaveBeenCalledWith('ch', { success: false, error: expect.any(String) });
+	expect(useSessionStore.getState().sessions[0].customPath).toBe('/fixture/old');
+});

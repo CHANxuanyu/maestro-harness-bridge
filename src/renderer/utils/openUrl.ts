@@ -1,3 +1,4 @@
+import { openLocalWebPanel } from '../services/newShellWeb';
 /**
  * Centralized URL opening utility.
  *
@@ -25,6 +26,7 @@ import { insertAfterActiveInUnifiedTabOrder } from './unifiedTabOrderUtils';
  *                         held - inverts the default browser choice
  */
 export function openUrl(url: string, options?: { ctrlKey?: boolean }): void {
+	if (openLocalWebPanel(url)) return;
 	// mailto: always goes to system browser
 	if (/^mailto:/i.test(url)) {
 		window.maestro.shell.openExternal(url);

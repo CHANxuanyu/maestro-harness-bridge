@@ -129,6 +129,10 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.shell.terminalsStartFailed': '{count} 个终端启动失败',
 	'workflows.shell.terminalsNotStarted': '{count} 个终端没有启动。',
 	'workflows.newShell.terminal': '终端',
+	'workflows.newShell.webNavigationFailed': '无法打开网页',
+	'workflows.newShell.web': '网页',
+	'workflows.newShell.webEmpty': '输入本机开发服务器地址，例如 http://localhost:5173',
+	'workflows.newShell.webInvalidUrl': '请输入 HTTP 或 HTTPS 网址',
 	'workflows.newShell.tasks': '任务',
 	'workflows.newShell.tasksEmpty':
 		'这条对话的工具尚未提供任务清单。回复正文里的清单不会显示在这里。',

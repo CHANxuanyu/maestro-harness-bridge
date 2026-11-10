@@ -1,3 +1,4 @@
+import { NewShellWebPanel } from './NewShellWebPanel';
 import { NewShellTerminalPanel, type NewShellTerminalPanelHandle } from './NewShellTerminalPanel';
 import { TasksPanel } from './TasksPanel';
 import { shellRightPanelTab } from '../../shared/newShellPanel';
@@ -629,11 +630,11 @@ export const RightPanel = memo(
 					style={{ borderColor: theme.colors.border }}
 				>
 					{(newShell
-						? (['changes', 'files', 'terminal', 'tasks'] as const)
+						? (['changes', 'files', 'terminal', 'tasks', 'web'] as const)
 						: (['files', 'history', ...(autoRunDisabled ? [] : ['autorun'])] as const)
 					).map((tab) => {
 						const label =
-							tab === 'terminal' || tab === 'tasks'
+							tab === 'terminal' || tab === 'tasks' || tab === 'web'
 								? t(`workflows.newShell.${tab}`)
 								: tab === 'changes'
 									? t('workflows.changes.tab')
@@ -734,6 +735,14 @@ export const RightPanel = memo(
 							session={session}
 							theme={theme}
 							visible={rightPanelOpen && activeRightTab === 'terminal'}
+						/>
+					)}
+					{newShell && activeRightTab === 'web' && (
+						<NewShellWebPanel
+							key={`${session.id}:${session.activeTabId}`}
+							session={session}
+							theme={theme}
+							visible={rightPanelOpen}
 						/>
 					)}
 					{newShell && activeRightTab === 'tasks' && (

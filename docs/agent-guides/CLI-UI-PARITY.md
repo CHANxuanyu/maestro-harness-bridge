@@ -1393,3 +1393,33 @@ Codex 标准权限的输入栏、项目设置、新建、继承、恢复及 `tab
 原型计划通知沿用 `update_plan` 工具事件，任务面板及 `tab panel <tab-id> tasks`
 继续读取同一清单。追加防重仅管理界面草稿，不会把两次显式 CLI steer 指令合并。
 此次没有增加 CLI 动词，既有追加、审批、项目默认权限、新建、面板及停止动作均保留。
+
+## New shell web preview (2026-11-10)
+
+The fifth right-panel tab uses `BrowserTabView` in compact mode. Navigation,
+reload and system-browser opening use `applyNewShellWebAction()` from both the
+UI and the acknowledged CLI tab patch. URLs live on each conversation's
+`newShellPanel.webUrl`; the existing session persistence restores URL, selection
+and open state. Guest navigation updates that same URL. Reload recreates the
+guest with its current URL and existing browser partition.
+
+| UI action                                     | CLI action                                                                 | Shared implementation                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Select Web                                    | `tab panel web [--agent <id>]`                                             | `changeNewShellPanel()` and conversation state             |
+| Enter an address or click a local output link | `tab panel web --url <url> [--agent <id>]`                                 | `applyNewShellWebAction()` and `BrowserTabView.navigate()` |
+| Address a background conversation             | `tab panel <tab-id> web --url <url> [--agent <id>]`                        | Same acknowledged patch, no conversation focus change      |
+| Refresh                                       | `tab panel web-reload [--agent <id>]`                                      | Same action and guest recreation                           |
+| Open in system browser                        | `tab panel web-external [--agent <id>]`                                    | Same action and `shell.openExternal()`                     |
+| Read the current address and panel state      | `tab panel [<tab-id>] [--agent <id>] --json` or `tab show <tab-id> --json` | Existing tab inventory, `tab.newShellPanel.webUrl`         |
+| Collapse or reopen                            | `tab panel close` or `tab panel open`                                      | Existing conversation panel actions                        |
+
+`tab panel preview` retains file-preview semantics. Web mutations require
+`newShell`; explicit addresses must use HTTP or HTTPS. Local output links route
+to Web only in the new shell. External URLs and classic-shell routing retain
+their existing behavior. No SSH path resolution or port forwarding is added:
+loopback URLs address the machine hosting the desktop browser engine.
+
+Open gaps: mobile/web-desktop keeps the existing browser-engine availability
+placeholder. In-page website controls are outside Maestro CLI panel actions.
+The new panel does not expose browser-history or scroll-position restoration;
+URLs and panel state persist, while guests are recreated on conversation changes.

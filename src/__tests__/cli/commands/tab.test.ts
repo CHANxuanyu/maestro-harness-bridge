@@ -264,6 +264,17 @@ describe('tab commands', () => {
 		});
 		expect(payload()).not.toHaveProperty('send');
 	});
+	it('opens the web panel with a URL through the acknowledged patch', async () => {
+		const payload = mockTab({ success: true });
+		await tabPanel('tab-aaaa', 'web', { url: 'http://localhost:5173/' });
+		expect(payload()).toMatchObject({
+			configPatch: {
+				tabId: 'tab-aaaa',
+				newShellPanelAction: 'web',
+				newShellWebUrl: 'http://localhost:5173/',
+			},
+		});
+	});
 	it.each([
 		'files',
 		'changes',

@@ -1,3 +1,4 @@
+import { applyNewShellWebAction } from '../../services/newShellWeb';
 import { effectiveStandardPermissionCapability } from '../../../shared/codexAppServer';
 import { getT } from '../../i18n';
 import { splitConversation, unsplitConversation } from '../../services/newShellSplit';
@@ -2001,6 +2002,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 				readOnlyMode: 'boolean',
 				permissionMode: 'permission',
 				newShellPanelAction: 'panel',
+				newShellWebUrl: 'string',
 				newShellPanelFilter: 'string',
 				newShellTerminalId: 'string',
 				newShellFileContent: 'string',
@@ -2095,6 +2097,29 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 					return;
 				}
 			}
+
+			if (String(tabPatch.newShellPanelAction).startsWith('web')) {
+				try {
+					await applyNewShellWebAction(
+						sessionId,
+						targetTabId,
+						tabPatch.newShellPanelAction as 'web' | 'web-reload' | 'web-external',
+						tabPatch.newShellWebUrl as string | undefined
+					);
+					const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)!;
+					await window.maestro.sessions.setMany([current], []);
+					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+						success: true,
+					});
+				} catch (error) {
+					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					});
+				}
+				return;
+			}
+			delete tabPatch.newShellWebUrl;
 
 			let panelTerminalOwnerId: string | undefined;
 			if (

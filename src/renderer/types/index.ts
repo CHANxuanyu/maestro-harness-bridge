@@ -72,7 +72,14 @@ import type { MindMapLayoutType } from '../components/DocumentGraph/layoutTypes'
 export type SessionState = 'idle' | 'busy' | 'waiting_input' | 'connecting' | 'error';
 export type FileChangeType = 'modified' | 'added' | 'deleted';
 /** Changes, Terminal and Tasks belong to the new shell; History and Auto Run to classic. */
-export type RightPanelTab = 'changes' | 'files' | 'history' | 'autorun' | 'terminal' | 'tasks';
+export type RightPanelTab =
+	| 'changes'
+	| 'files'
+	| 'history'
+	| 'autorun'
+	| 'terminal'
+	| 'tasks'
+	| 'web';
 /**
  * Tabs in the Usage Dashboard modal. Shared so the in-memory uiStore can
  * remember the last-selected tab across dashboard opens (resets on restart).

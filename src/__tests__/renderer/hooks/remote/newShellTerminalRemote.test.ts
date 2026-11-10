@@ -70,6 +70,30 @@ beforeEach(() => {
 });
 
 describe('new shell terminal CLI bridge', () => {
+	it('persists the web URL only on the addressed conversation before acknowledgement', async () => {
+		act(() =>
+			window.dispatchEvent(
+				new CustomEvent('maestro:remoteUpdateSessionConfig', {
+					detail: {
+						sessionId: 'second',
+						responseChannel: 'ack',
+						configPatch: {
+							tabId: 'second-conversation',
+							newShellPanelAction: 'web',
+							newShellWebUrl: 'http://localhost:5173/',
+						},
+					},
+				})
+			)
+		);
+		await waitFor(() => expect(ack).toHaveBeenCalledWith('ack', { success: true }));
+		expect(saved.mock.calls[0][0][0].aiTabs[0].newShellPanel).toEqual({
+			tab: 'web',
+			open: true,
+			webUrl: 'http://localhost:5173/',
+		});
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].newShellPanel).toBeUndefined();
+	});
 	it.each(['terminal', 'tasks'])(
 		'persists the %s panel on the addressed conversation',
 		async (action) => {

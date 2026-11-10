@@ -145,6 +145,11 @@ export const workflowsShell = {
 	'workflows.shell.terminalsStartFailed': 'Failed to start {count} terminals',
 	'workflows.shell.terminalsNotStarted': '{count} terminals could not be started.',
 	'workflows.newShell.terminal': 'Terminal',
+	'workflows.newShell.webNavigationFailed': 'Could not open this page',
+	'workflows.newShell.web': 'Web',
+	'workflows.newShell.webEmpty':
+		'Enter a local development server address, for example http://localhost:5173',
+	'workflows.newShell.webInvalidUrl': 'Enter an HTTP or HTTPS URL',
 	'workflows.newShell.tasks': 'Tasks',
 	'workflows.newShell.tasksEmpty':
 		'The tools in this conversation have not provided a task list. Checklists in replies are not shown here.',

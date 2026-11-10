@@ -1684,3 +1684,9 @@ Claude 浏览器审批，不能放在 `newShell` 开关后。SSH 路径及启动
 沙箱外验收交接见 [Claude 浏览器审批验收](../e2e/claude-browser-permissions.md)。
 本轮未启动 Electron、操作浏览器、调用模型或读取个人账户。真实网页认证与事件传递、
 Electron 多窗口、真实 Claude、SSH、其他平台及发行包仍未验证。未推送、开 PR、打标签或发布。
+
+## 2026-11-10，D 额度自动交接
+
+本轮源码增加新界面项目级自动交接，默认关闭，目标锁定工具配置和主机。来源退出后保存失败回合标记，复用手动交接上下文、权限与发送队列；目标不自动继续转交。设置、CLI、目标配置选择、退出触发、重试互斥、完整失败消息和来源跳转均先观察回归失败，再实现。只使用合成数据和临时目录，未调用真实模型，未构建发布产物。
+
+已写合成 Electron 场景，验证默认关闭、开启后单次发送、来源说明跳转、只读权限和目标再失败不传递。Electron 尚未运行，待沙箱外验收。相关 10 个文件共 304 条单元测试通过，ES2020 兼容写法调整后相关 2 个文件的 90 条回归再次通过。`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 三份类型检查通过；全部改动文件通过 Prettier，代码及测试通过 `eslint --no-ignore`。Electron 两个场景已收集，并以包含现有 CJS 夹具和 renderer 全局声明的临时配置完成类型检查；未启动 Electron。沙箱外运行：`npm run test:e2e -- e2e/native-auto-handoff.spec.ts`。

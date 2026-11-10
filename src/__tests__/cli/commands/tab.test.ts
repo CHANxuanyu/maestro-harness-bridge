@@ -275,6 +275,17 @@ describe('tab commands', () => {
 			},
 		});
 	});
+	it.each(['web', 'web-reload', 'web-external'])(
+		'defers active %s targeting to the live renderer instead of the persisted selection',
+		async (action) => {
+			const payload = mockTab({ success: true });
+			await tabPanel('active', action, { agent: 'agent-2' });
+			expect(payload()).toMatchObject({
+				sessionId: 'agent-2',
+				configPatch: { tabId: 'active', newShellPanelAction: action },
+			});
+		}
+	);
 	it.each([
 		'files',
 		'changes',

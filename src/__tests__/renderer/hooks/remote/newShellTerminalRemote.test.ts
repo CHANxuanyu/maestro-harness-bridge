@@ -70,6 +70,44 @@ beforeEach(() => {
 });
 
 describe('new shell terminal CLI bridge', () => {
+	it('resolves active web navigation from the addressed live conversation before persistence', async () => {
+		const firstTab = createMockAITab({
+			id: 'web-one',
+			newShellPanel: { tab: 'web', open: true, webUrl: 'http://localhost:5173/one' },
+		});
+		act(() =>
+			useSessionStore.getState().updateSession('second', {
+				activeTabId: 'web-two',
+				aiTabs: [firstTab, createMockAITab({ id: 'web-two' })],
+			})
+		);
+		act(() =>
+			window.dispatchEvent(
+				new CustomEvent('maestro:remoteUpdateSessionConfig', {
+					detail: {
+						sessionId: 'second',
+						responseChannel: 'ack',
+						configPatch: {
+							tabId: 'active',
+							newShellPanelAction: 'web',
+							newShellWebUrl: 'http://localhost:5173/two',
+						},
+					},
+				})
+			)
+		);
+		await waitFor(() => expect(ack).toHaveBeenCalledWith('ack', { success: true }));
+		const current = useSessionStore.getState();
+		expect(current.sessions[1].aiTabs[0]).toEqual(firstTab);
+		expect(current.sessions[1].aiTabs[1].newShellPanel).toEqual({
+			tab: 'web',
+			open: true,
+			webUrl: 'http://localhost:5173/two',
+		});
+		expect(saved).toHaveBeenCalledWith([current.sessions[1]], []);
+		expect(current.activeSessionId).toBe('first');
+		expect(current.sessions[0].aiTabs[0].newShellPanel).toBeUndefined();
+	});
 	it('persists the web URL only on the addressed conversation before acknowledgement', async () => {
 		act(() =>
 			window.dispatchEvent(

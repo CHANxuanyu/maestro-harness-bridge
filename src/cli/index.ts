@@ -171,6 +171,7 @@ import {
 	tabPermission,
 	tabPanel,
 	tabSplit,
+	tabStop,
 	tabUnsplit,
 	tabModel,
 	tabEffort,
@@ -1670,6 +1671,10 @@ tab
 	.option('--focus', 'Switch to the new tab after creating it (default)')
 	.option('--json', 'Output as JSON (for scripting)')
 	.action((options) => tabNew(options));
+
+tabTargetOptions(tab.command('stop <tab-id>'))
+	.description(projectSettingsT('workflows.shell.stopCliDescription'))
+	.action((tabId, options) => tabStop(tabId, options));
 
 tabTargetOptions(tab.command('split <tab-id>'))
 	.description('Open an existing conversation on the right (requires the new shell)')

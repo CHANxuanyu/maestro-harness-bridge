@@ -1,3 +1,4 @@
+import { projectSettingsTranslator } from './project-settings';
 import { PROJECT_CONVERSATION_TIMEOUT_MS } from '../../shared/projectSettings';
 import { invokeNativeHistory } from '../services/agent-sessions';
 
@@ -583,6 +584,16 @@ export async function tabShow(tabId: string, options: TabMutateOptions): Promise
 	row('Enter to send', inherited(entry.enterToSend));
 	row('Starred', String(entry.starred));
 	row('Unread', String(entry.hasUnread ?? false));
+}
+
+/** Stop through the same renderer handler as the composer and approval prompt. */
+export async function tabStop(tabId: string, options: TabMutateOptions): Promise<void> {
+	await tabFlag(
+		tabId,
+		{ stopTurn: true },
+		() => projectSettingsTranslator()('workflows.shell.stopRequested'),
+		options
+	);
 }
 
 /** Open an existing conversation beside the current one in the new shell. */

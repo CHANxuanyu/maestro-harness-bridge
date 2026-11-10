@@ -14,7 +14,8 @@ import { useT } from '../../i18n';
  * Escape denies (fail-safe: the agent gets a clear "no", never a hang).
  */
 
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
+import type { UseInterruptHandlerReturn } from '../../hooks/agent/useInterruptHandler';
 import { createPortal } from 'react-dom';
 import { ShieldQuestion, Check, X, MessagesSquare } from 'lucide-react';
 import type { Theme } from '../../types';
@@ -32,6 +33,7 @@ import { parseSessionId } from '../../utils/sessionIdParser';
 import { conversationDisplayTitle } from '../../utils/conversationTitle';
 
 interface PermissionPromptProps {
+	onStopTurn?: UseInterruptHandlerReturn['handleInterrupt'];
 	theme: Theme;
 }
 
@@ -54,8 +56,11 @@ function describeAction(request: PermissionRequestUI): string {
 	}
 }
 
-function PermissionPromptInner({ theme }: PermissionPromptProps) {
+function PermissionPromptInner({ theme, onStopTurn }: PermissionPromptProps) {
 	const uiText = useT();
+	const [stoppingId, setStoppingId] = useState<string | null>(null);
+	const stoppingRef = useRef<string | null>(null);
+	const [stopError, setStopError] = useState<{ requestId: string; message: string } | null>(null);
 	const newShell = useSettingsStore((s) => s.newShell);
 	const enqueue = usePermissionRequestStore((s) => s.enqueue);
 	const respond = usePermissionRequestStore((s) => s.respond);
@@ -73,6 +78,38 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 			? s.sessions.find((item) => item.id === parseSessionId(request.sessionId).baseSessionId)
 			: undefined
 	);
+
+	const stopping = !!request && stoppingId === request.requestId;
+	const blocked = responding || stopping;
+	const onStop = async () => {
+		if (!request || responding || stoppingRef.current === request.requestId || !onStopTurn) return;
+		const parsed = parseSessionId(request.sessionId);
+		const tabId = request.tabId ?? parsed.tabId;
+		if (!tabId) {
+			setStopError({
+				requestId: request.requestId,
+				message: uiText('workflows.shell.stopTargetMissing'),
+			});
+			return;
+		}
+		stoppingRef.current = request.requestId;
+		setStoppingId(request.requestId);
+		setStopError(null);
+		try {
+			// Do not send deny first: it would release the tool loop before Stop.
+			// Process exit revokes the relay request and emits permissionResolved.
+			const result = await onStopTurn({ sessionId: parsed.baseSessionId, tabId });
+			if (!result.success)
+				throw new Error(result.error ?? uiText('workflows.shell.stopConversationFailed'));
+		} catch (error) {
+			setStopError({
+				requestId: request.requestId,
+				message: error instanceof Error ? error.message : String(error),
+			});
+			stoppingRef.current = null;
+			setStoppingId(null);
+		}
+	};
 
 	// Wire the IPC listeners once.
 	useEffect(() => {
@@ -92,12 +129,12 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 	const isQuestion = !!request && request.kind === 'question' && !!request.questions?.length;
 
 	const onDeny = () => {
-		if (request && !responding) {
+		if (request && !blocked) {
 			respond(request.requestId, { behavior: 'deny', message: 'Denied by user.' });
 		}
 	};
 	const onAllow = () => {
-		if (request && !responding) {
+		if (request && !blocked) {
 			respond(request.requestId, { behavior: 'allow' });
 		}
 	};
@@ -240,13 +277,28 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 						{uiText('workflows.sessions.approvalSendFailed')}
 					</p>
 				)}
+				{stopError?.requestId === request.requestId && (
+					<p role="alert" className="text-xs mb-3" style={{ color: theme.colors.error }}>
+						{stopError.message}
+					</p>
+				)}
 				<div className="flex justify-end gap-2">
+					{newShell && (
+						<button
+							onClick={onStop}
+							disabled={blocked || !onStopTurn}
+							className="mr-auto text-xs px-3 py-1.5 rounded-md cursor-pointer transition-colors"
+							style={{ color: theme.colors.error, border: `1px solid ${theme.colors.border}` }}
+						>
+							{uiText('workflows.shell.stopThisTurn')}
+						</button>
+					)}
 					{/* Deny is the default-focused action: this is a fail-safe prompt, so a
 					    stray Enter/Space must NOT approve a potentially destructive tool
 					    call. Matches the Escape-denies behavior above. */}
 					<button
 						onClick={onDeny}
-						disabled={responding}
+						disabled={blocked}
 						autoFocus
 						className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md cursor-pointer transition-colors"
 						style={{
@@ -260,7 +312,7 @@ function PermissionPromptInner({ theme }: PermissionPromptProps) {
 					</button>
 					<button
 						onClick={onAllow}
-						disabled={responding}
+						disabled={blocked}
 						className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md cursor-pointer transition-colors"
 						style={{
 							backgroundColor: theme.colors.accent,

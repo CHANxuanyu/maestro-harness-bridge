@@ -526,6 +526,11 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.shell.invalidFileDropOrigin': '无法读取文件的来源位置，请重新拖入。',
 	'workflows.shell.confirmForceStopConversation':
 		'未能正常停止这条对话。要强制停止吗？未保存的工作可能丢失。',
+	'workflows.shell.stopRequested': '已请求停止这一轮。',
+	'workflows.shell.stopCliDescription': '新界面停止这条对话，旧界面停止所属配置的全部对话',
+	'workflows.shell.stopThisTurn': '停止这一轮',
+	'workflows.shell.stopNotRunning': '这条对话没有在运行。',
+	'workflows.shell.stopTargetMissing': '找不到这条对话。',
 	'workflows.shell.stopConversationFailed': '未能停止这条对话，请重试。',
 	'workflows.shell.attachImage': '添加图片',
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify': '切换只读模式（智能体不会修改文件）',

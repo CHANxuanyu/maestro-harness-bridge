@@ -1,3 +1,4 @@
+import type { UseInterruptHandlerReturn } from '../agent/useInterruptHandler';
 import { effectiveStandardPermissionCapability } from '../../../shared/codexAppServer';
 import { getT } from '../../i18n';
 import { splitConversation, unsplitConversation } from '../../services/newShellSplit';
@@ -158,6 +159,7 @@ function applyGroupUpdate(
 // ============================================================================
 
 export interface UseAppRemoteEventListenersDeps {
+	handleInterrupt?: UseInterruptHandlerReturn['handleInterrupt'];
 	/** Ref-like getter for current sessions array */
 	sessionsRef: React.MutableRefObject<Session[]>;
 	/** Switch active session (wrapper that also dismisses group chat) */
@@ -1852,6 +1854,29 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 		}
 
 		const patchObj = configPatch as Record<string, unknown>;
+		if ('stopTurn' in patchObj) {
+			try {
+				if (
+					patchObj.stopTurn !== true ||
+					typeof patchObj.tabId !== 'string' ||
+					!session.aiTabs.some((tab) => tab.id === patchObj.tabId) ||
+					Object.keys(patchObj).some((key) => !['tabId', 'stopTurn'].includes(key))
+				) {
+					throw new Error(getT()('workflows.shell.stopTargetMissing'));
+				}
+				if (!deps.handleInterrupt)
+					throw new Error(getT()('workflows.shell.stopConversationFailed'));
+				const result = await deps.handleInterrupt({ sessionId, tabId: patchObj.tabId });
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, result);
+			} catch (error) {
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+			return;
+		}
+
 		if ('newShellSplitAction' in patchObj) {
 			try {
 				const action = patchObj.newShellSplitAction;

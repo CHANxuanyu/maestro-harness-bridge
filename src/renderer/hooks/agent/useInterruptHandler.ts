@@ -69,9 +69,14 @@ export interface UseInterruptHandlerDeps {
 // Return type
 // ============================================================================
 
+export interface InterruptResult {
+	success: boolean;
+	error?: string;
+}
+
 export interface UseInterruptHandlerReturn {
 	/** Interrupt the active session's running process */
-	handleInterrupt: (target?: { sessionId: string; tabId: string }) => Promise<void>;
+	handleInterrupt: (target?: { sessionId: string; tabId: string }) => Promise<InterruptResult>;
 }
 
 // ============================================================================
@@ -140,14 +145,38 @@ async function collectInterruptTargets(
 	return targets;
 }
 
+/** Distinguish absent processes from failed delivery without trusting saved tab state. */
+async function interruptResult(
+	processIds: string[],
+	results: PromiseSettledResult<boolean>[],
+	canceledConsults = 0
+): Promise<InterruptResult> {
+	if (results.some((result) => result.status === 'rejected')) {
+		return { success: false, error: getT()('workflows.shell.stopConversationFailed') };
+	}
+	const unacknowledged = processIds.filter((_, index) => {
+		const result = results[index];
+		return result.status === 'fulfilled' && !result.value;
+	});
+	if (unacknowledged.length) {
+		const live = await window.maestro.process.getActiveProcesses();
+		if (live.some((process) => unacknowledged.includes(process.sessionId))) {
+			return { success: false, error: getT()('workflows.shell.stopConversationFailed') };
+		}
+	}
+	return canceledConsults || results.some((result) => result.status === 'fulfilled' && result.value)
+		? { success: true }
+		: { success: false, error: getT()('workflows.shell.stopNotRunning') };
+}
+
 /** New shell Stop owns one conversation plus closed tabs that have no other Stop entry. */
 async function interruptConversation(
 	session: Session,
 	tabId: string,
 	deps: UseInterruptHandlerDeps
-): Promise<void> {
+): Promise<InterruptResult> {
 	const target = session.aiTabs.find((tab) => tab.id === tabId);
-	if (!target) return;
+	if (!target) return { success: false, error: getT()('workflows.shell.stopTargetMissing') };
 	const includeOrphans = target.origin?.kind !== 'subtask';
 	const stoppedTabs = new Set([
 		tabId,
@@ -155,6 +184,7 @@ async function interruptConversation(
 			.filter((tab) => tab.state === 'busy')
 			.map((tab) => tab.id),
 	]);
+	let canceledConsults = 0;
 	for (const id of stoppedTabs) {
 		dropMentionHandoffs(session.id, id);
 		// Side-effect cancellation is tab-scoped even while main is still spawning a consult.
@@ -167,8 +197,9 @@ async function interruptConversation(
 				color: 'yellow',
 				message: getT()('workflows.shell.stopConversationFailed'),
 			});
-			return;
+			return { success: false, error: getT()('workflows.shell.stopConversationFailed') };
 		}
+		canceledConsults += cancellations[1].value.canceled;
 	}
 	const processIds = await collectInterruptTargets(
 		session,
@@ -177,22 +208,23 @@ async function interruptConversation(
 		tabId,
 		includeOrphans
 	);
-	const results = await Promise.allSettled(
+	let results = await Promise.allSettled(
 		processIds.map((id) => window.maestro.process.interrupt(id))
 	);
 	if (results.some((result) => result.status === 'rejected')) {
-		if (!confirm(getT()('workflows.shell.confirmForceStopConversation'))) return;
-		const killed = await Promise.allSettled(
-			processIds.map((id) => window.maestro.process.kill(id))
-		);
-		if (killed.some((result) => result.status === 'rejected')) {
+		if (!confirm(getT()('workflows.shell.confirmForceStopConversation')))
+			return { success: false, error: getT()('workflows.shell.stopConversationFailed') };
+		results = await Promise.allSettled(processIds.map((id) => window.maestro.process.kill(id)));
+		if (results.some((result) => result.status === 'rejected')) {
 			notifyCenterFlash({
 				color: 'yellow',
 				message: getT()('workflows.shell.stopConversationFailed'),
 			});
-			return;
+			return { success: false, error: getT()('workflows.shell.stopConversationFailed') };
 		}
 	}
+	const outcome = await interruptResult(processIds, results, canceledConsults);
+	if (!outcome.success) return outcome;
 	const canceledLog: LogEntry = {
 		id: generateId(),
 		timestamp: Date.now(),
@@ -232,6 +264,7 @@ async function interruptConversation(
 	});
 	// The exit listener dequeues this conversation after its process releases the key.
 	// Other conversations keep their queue entries and running state throughout Stop.
+	return { success: true };
 }
 
 // ============================================================================
@@ -247,23 +280,37 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 	// ========================================================================
 	const handleInterrupt = useCallback(async (target?: { sessionId: string; tabId: string }) => {
 		const newShell = useSettingsStore.getState().newShell;
-		const explicitTarget = newShell && target?.sessionId && target?.tabId ? target : undefined;
+		const explicitTarget = target;
 		const activeSession = explicitTarget
 			? useSessionStore
 					.getState()
 					.sessions.find((session) => session.id === explicitTarget.sessionId)
 			: selectActiveSession(useSessionStore.getState());
-		if (!activeSession) return;
+		if (
+			!activeSession ||
+			(explicitTarget && !activeSession.aiTabs.some((tab) => tab.id === explicitTarget.tabId))
+		)
+			return { success: false, error: getT()('workflows.shell.stopTargetMissing') };
 		if (newShell && (explicitTarget || activeSession.inputMode === 'ai')) {
 			const tabId = explicitTarget?.tabId ?? activeSession.activeTabId;
-			if (tabId) await interruptConversation(activeSession, tabId, depsRef.current);
-			return;
+			if (!tabId) return { success: false, error: getT()('workflows.shell.stopTargetMissing') };
+			try {
+				return await interruptConversation(activeSession, tabId, depsRef.current);
+			} catch {
+				notifyCenterFlash({
+					color: 'yellow',
+					message: getT()('workflows.shell.stopConversationFailed'),
+				});
+				return { success: false, error: getT()('workflows.shell.stopConversationFailed') };
+			}
 		}
 
 		const { sessionsRef, cancelPendingSynopsis, processQueuedItem } = depsRef.current;
 
-		const currentMode = activeSession.inputMode;
-		const activeTab = getActiveTab(activeSession);
+		const currentMode = explicitTarget ? 'ai' : activeSession.inputMode;
+		const activeTab = explicitTarget
+			? activeSession.aiTabs.find((tab) => tab.id === explicitTarget.tabId)
+			: getActiveTab(activeSession);
 		const targetSessionId =
 			currentMode === 'ai'
 				? `${activeSession.id}-ai-${activeTab?.id || 'default'}`
@@ -287,6 +334,7 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 		// the user has already stopped. Cancelled by SOURCE agent (main holds the
 		// authoritative list) so a Stop pressed before `crossAgent.send` resolved
 		// still lands. Non-critical: a failure here must not block the interrupt.
+		let canceledConsults = 0;
 		if (currentMode === 'ai') {
 			// A hand-off armed for this turn must not fire when it stops: Stop means
 			// stop, and forwarding a half-finished answer would act for the user
@@ -294,7 +342,7 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 			// causes finds nothing armed.
 			dropMentionHandoffs(activeSession.id);
 			try {
-				await window.maestro.crossAgent.cancel(activeSession.id);
+				canceledConsults = (await window.maestro.crossAgent.cancel(activeSession.id)).canceled;
 			} catch (crossAgentErr) {
 				logger.warn(
 					'[useInterruptHandler] Failed to cancel cross-agent consults:',
@@ -312,6 +360,10 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 			currentMode === 'ai'
 		);
 
+		let outcome: InterruptResult = {
+			success: false,
+			error: getT()('workflows.shell.stopConversationFailed'),
+		};
 		try {
 			const results = await Promise.allSettled(
 				targetSessionIds.map((id) => window.maestro.process.interrupt(id))
@@ -321,6 +373,9 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 			if (results[0].status === 'rejected') {
 				throw results[0].reason;
 			}
+
+			outcome = await interruptResult(targetSessionIds, results, canceledConsults);
+			if (explicitTarget && !outcome.success) return outcome;
 
 			// Check if there are queued items to process after interrupt
 			const currentSession = sessionsRef.current?.find((s) => s.id === activeSession.id);
@@ -491,6 +546,8 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 					if (killResults[0].status === 'rejected') {
 						throw killResults[0].reason;
 					}
+
+					outcome = await interruptResult(targetSessionIds, killResults, canceledConsults);
 
 					const killLog: LogEntry = {
 						id: generateId(),
@@ -703,6 +760,7 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 				}
 			}
 		}
+		return outcome;
 	}, []);
 
 	return { handleInterrupt };

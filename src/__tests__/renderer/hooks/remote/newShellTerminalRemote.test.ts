@@ -14,6 +14,14 @@ import { useAppRemoteEventListeners } from '../../../../renderer/hooks/remote/us
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { openPanelTerminal } from '../../../../renderer/services/newShellTerminal';
+import { tabPanel } from '../../../../cli/commands/tab';
+import { withMaestroClient } from '../../../../cli/services/maestro-client';
+
+vi.mock('../../../../cli/services/maestro-client', () => ({ withMaestroClient: vi.fn() }));
+vi.mock('../../../../cli/services/storage', () => ({
+	resolveAgentId: vi.fn((id: string) => id),
+	readActiveAgentId: vi.fn(() => 'first'),
+}));
 
 vi.mock('../../../../renderer/components/XTerminal', () => ({ XTerminal: forwardRef(() => null) }));
 
@@ -81,20 +89,30 @@ describe('new shell terminal CLI bridge', () => {
 				aiTabs: [firstTab, createMockAITab({ id: 'web-two' })],
 			})
 		);
-		act(() =>
-			window.dispatchEvent(
-				new CustomEvent('maestro:remoteUpdateSessionConfig', {
-					detail: {
-						sessionId: 'second',
-						responseChannel: 'ack',
-						configPatch: {
-							tabId: 'active',
-							newShellPanelAction: 'web',
-							newShellWebUrl: 'http://localhost:5173/two',
-						},
-					},
-				})
-			)
+		// The UI has switched, but the main-process inventory has not been saved yet.
+		vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+			action({
+				sendCommand: vi.fn(async (payload: Record<string, unknown>) => {
+					if (payload.type === 'list_desktop_sessions') {
+						return {
+							sessions: [
+								{ agentId: 'second', tabId: 'web-one', active: true },
+								{ agentId: 'second', tabId: 'web-two', active: false },
+							],
+						};
+					}
+					window.dispatchEvent(
+						new CustomEvent('maestro:remoteUpdateSessionConfig', {
+							detail: { ...payload, responseChannel: 'ack' },
+						})
+					);
+					await waitFor(() => expect(ack).toHaveBeenCalledWith('ack', { success: true }));
+					return { success: true };
+				}),
+			} as never)
+		);
+		await act(() =>
+			tabPanel('active', 'web', { agent: 'second', url: 'http://localhost:5173/two', json: true })
 		);
 		await waitFor(() => expect(ack).toHaveBeenCalledWith('ack', { success: true }));
 		const current = useSessionStore.getState();

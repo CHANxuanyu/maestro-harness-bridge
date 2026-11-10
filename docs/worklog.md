@@ -1,5 +1,24 @@
 # 分支工作记录
 
+## 2026-11-10 网页预览切换后的 CLI 目标修复
+
+验证对象为当前任务分支源码，未构建发行包。`native-web-preview` 在切换到第二条
+对话后失败的根因是 CLI 从持久化列表解析 `active`，列表仍可能保留防抖保存前的
+第一条对话。串联 CLI 与真实渲染层处理函数的回归确认：旧实现成功回执指向
+`web-one`，并把它的 `/one` 网址错误改为 `/two`。
+
+网页打开、刷新和外部打开现在把 `active` 交给指定窗口的实时状态解析，再走原有
+网页动作和保存确认。显式标签 ID 保持定向操作，未修改浏览器引擎或防抖保存。
+初始两个测试文件共 4 项失败、79 项通过；修复后相关 5 文件 108 项通过。
+三份 `tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 的 noEmit 检查通过，
+改动代码通过 Prettier 和 `eslint --no-ignore`。没有新增界面文字或 CLI 动词。
+
+Electron 场景保留原断言与超时，补查另一条对话网址未被覆盖、显式指定后台对话
+和切换后显示其网址。已收集 1 条场景，尚未运行 Electron。沙箱外运行
+`MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-web-preview.spec.ts --workers=1 --retries=0`。
+旧界面仍拒绝网页面板动作；其他 CLI 动作与共享引擎不变。SSH、真实模型、
+多窗口、手机网页和发行包未验证。未推送或发布。
+
 ## 2026-11-09：Claude 标准权限真实验证
 
 `e2e/real-claude-approval.spec.ts` 用真实 Claude Code `2.1.317` 跑通：标准权限下 Write 先弹审批，审批前不写任何文件，点一次允许后才写入，回合结束后待审批为空、临时 MCP 配置删除，进程参数没有跳过权限。被测对象是主线 `f5d3e7aab` 的本地开发构建。细节和未覆盖项见 `e2e/claude-standard-approval.md`。

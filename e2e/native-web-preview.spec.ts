@@ -112,6 +112,29 @@ test('web preview navigates, reloads, follows conversations and restores after r
 		await native.cli('tab', 'panel', 'web', '--url', `${base}/two`, '--agent', session.id);
 		await expect.poll(guestText).toContain('Preview /two');
 		await expect.poll(read).toMatchObject({ webUrl: `${base}/two` });
+		expect(
+			(await native.cli('tab', 'show', 'web-one', '--agent', session.id)).tab.newShellPanel
+		).toMatchObject({ webUrl: `${base}/linked` });
+		await select('web-one');
+		await expect.poll(guestText).toContain('Preview /linked');
+		await native.cli(
+			'tab',
+			'panel',
+			'web-two',
+			'web',
+			'--url',
+			`${base}/background`,
+			'--agent',
+			session.id
+		);
+		expect(
+			(await native.cli('tab', 'show', 'web-two', '--agent', session.id)).tab.newShellPanel
+		).toMatchObject({ webUrl: `${base}/background` });
+		await expect.poll(guestText).toContain('Preview /linked');
+		await select('web-two');
+		await expect.poll(guestText).toContain('Preview /background');
+		await native.cli('tab', 'panel', 'web', '--url', `${base}/two`, '--agent', session.id);
+		await expect.poll(guestText).toContain('Preview /two');
 		await select('web-one');
 		await expect.poll(guestText).toContain('Preview /linked');
 		await native.page.getByRole('link', { name: 'local preview', exact: true }).click();

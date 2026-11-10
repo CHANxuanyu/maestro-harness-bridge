@@ -636,7 +636,13 @@ export async function tabPanel(
 		(!Number.isSafeInteger(Number(options.line)) || Number(options.line) < 1)
 	)
 		return failCommand('Line must be a positive integer', options.json);
+	// Web actions resolve the selected conversation in its owning renderer.
+	// The desktop inventory can still contain the selection before the UI switch.
+	const liveWebTarget =
+		tabId.trim().toLowerCase() === 'active' &&
+		['web', 'web-reload', 'web-external'].includes(action);
 	const owner = await resolveTabOwner(tabId, options.agent);
+	if (liveWebTarget) owner.tabId = 'active';
 	await writeTabPatch(
 		owner,
 		{

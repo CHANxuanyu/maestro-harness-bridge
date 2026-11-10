@@ -1403,6 +1403,13 @@ UI and the acknowledged CLI tab patch. URLs live on each conversation's
 and open state. Guest navigation updates that same URL. Reload recreates the
 guest with its current URL and existing browser partition.
 
+Web actions with an omitted tab ID or `active` resolve the conversation in the
+addressed renderer when the command is applied. The persisted inventory can lag
+behind a UI selection by the save debounce, so it only resolves the owning agent;
+its selected tab is not the mutation target. Explicit tab IDs retain background
+targeting. JSON acknowledgement uses `tabId: "active"` for that selector; read an
+explicit tab ID to inspect its saved URL. No new CLI verb is added.
+
 | UI action                                     | CLI action                                                                 | Shared implementation                                      |
 | --------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | Select Web                                    | `tab panel web [--agent <id>]`                                             | `changeNewShellPanel()` and conversation state             |

@@ -1,5 +1,13 @@
 # 分支工作记录
 
+## 2026-11-10：F Codex 真实验证场景准备
+
+本轮只新增默认跳过的真实场景和测试夹具，验证对象是任务分支源码，没有运行 Electron、真实模型或构建发行包。`real-codex-app-server.spec.ts` 覆盖新建、标准权限拒绝与允许、本轮追加和停止；`real-codex-orchestrator.spec.ts` 要求 Codex 自行派发 Claude 子任务并引用随机 README 首行。复用 NativeApp 与临时目录工具，凭据只经环境传入，不读取用户账户文件，不伪造调用方身份。
+
+相关协议与调用方身份单元测试 2 文件 27 项通过，`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 无输出类型检查通过，另对两个场景及导入夹具做独立类型检查。TypeScript 文件 ESLint 与所有改动文件 Prettier 通过。Playwright 仅收集 2 条场景，未执行。没有产品修复，因此没有修复前的真实失败证据，不把默认跳过或收集成功当作验收通过。
+
+没有新增界面动作、CLI 动词、产品文案或旧界面行为变化。仅支持环境 API 凭据；订阅登录、SSH、跨平台和完整后台进程树仍未验证。外部执行命令、请求数量、协议字段差异记录见 [真实验证说明](verification/real-codex.md)。原始附件只留在本地验收输出。
+
 ## 2026-11-09：Claude 标准权限真实验证
 
 `e2e/real-claude-approval.spec.ts` 用真实 Claude Code `2.1.317` 跑通：标准权限下 Write 先弹审批，审批前不写任何文件，点一次允许后才写入，回合结束后待审批为空、临时 MCP 配置删除，进程参数没有跳过权限。被测对象是主线 `f5d3e7aab` 的本地开发构建。细节和未覆盖项见 `e2e/claude-standard-approval.md`。

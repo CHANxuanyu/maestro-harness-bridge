@@ -50,7 +50,8 @@ test('codex: real orchestrator dispatches Claude and quotes its result', async (
 					'--path',
 					native.project,
 					'--permission',
-					'full'
+					'full',
+					'--acknowledge-full-access'
 				)
 			).success
 		).toBe(true);

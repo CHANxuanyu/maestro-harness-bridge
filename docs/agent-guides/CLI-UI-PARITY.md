@@ -149,6 +149,11 @@ Open gaps：不提供 CLI 打开或折叠项目设置窗口的视觉动作；配
 项目默认值与多个工具配置不是一个跨存储事务；后续保存失败时保留窗口，并提示此前改动可能已经保存。
 合成验收：`e2e/native-project-tool-config.spec.ts`，Electron 执行待沙箱外完成。
 
+2026-11-10 第二线回归修正：场景模拟已完成 API 默认模式迁移的安装，编辑前后通过
+`show agent <id> --json` 核对两份配置，另核对工具级默认值未变。
+额度交接场景使用合成错误封装，保留 `rate_limited` 和只交接一次的严格断言。
+本轮仅修改测试，无新增界面动作或 CLI 动词，以上共用实现及 Open gaps 不变。
+
 ## New shell conversation split (2026-11-06)
 
 | UI action                              | CLI                                                   | Shared implementation                                               |

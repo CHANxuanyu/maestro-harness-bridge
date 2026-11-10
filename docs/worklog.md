@@ -1,5 +1,25 @@
 # 分支工作记录
 
+## 2026-11-10：第二线项目配置与额度交接场景修复
+
+验证对象为任务分支源码 `54150b59e`，不是发行安装包。两条失败均来自场景数据。
+项目配置场景缺少 API 默认模式迁移完成标记，启动迁移在保存前将两份 Claude
+配置改成 API。现在模拟已迁移安装，并在编辑前检查两份配置均为 interactive，
+编辑后检查另一份配置和工具级默认值不变；共用保存服务也补充隔离断言。
+额度文本本身被识别为 rate_limited，但夹具将其作为普通 assistant 消息输出，
+随后成功 result 触发 data，渲染层按恢复清除错误。夹具现在使用 Claude 的
+合成额度错误标记及错误 result，主进程暂存通知并在回合结束时只发送一次错误。
+依据为仓库 ClaudeOutputParser 的真实转录格式记录及现有解析回归，没有修改识别规则。
+新增回归直接运行两份场景的种子准备，在 Electron 启动前截停，再分别执行真实迁移
+和隔离夹具加 StdoutHandler。修复前两条均失败，修复后两条通过。
+相关产品单元测试 7 文件 178 项通过，新增回归及 Claude 审批夹具共 7 项通过。
+protocol.test.ts 为 5 项通过、3 项因沙箱 Unix socket listen EPERM 超时；未重试或跳过。
+三份生产 TypeScript 检查、场景独立严格类型检查、改动代码 ESLint、Prettier 均通过。
+Playwright 仅收集 2 文件 3 场景，未启动 Electron；运行命令：
+`MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-project-tool-config.spec.ts e2e/native-auto-handoff.spec.ts`。
+新旧界面和 SSH 产品路径均未修改，无新增界面动作、CLI 动词或文案。
+尚未验证 Electron 完整交接、真实模型、SSH、发行包和受沙箱阻断的 socket 场景。
+
 ## 2026-11-10：项目设置中的工具配置
 
 任务分支源码新增项目工具配置入口，复用 `AgentConfigPanel` 和 SSH 主机选择器。

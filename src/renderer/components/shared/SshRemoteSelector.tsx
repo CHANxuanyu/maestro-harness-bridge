@@ -17,6 +17,8 @@ import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../../shared/type
 import { formatSshTarget } from '../../../shared/formatters';
 
 export interface SshRemoteSelectorProps {
+	/** The project editor changes the host, retaining existing history flags. */
+	projectConfiguration?: boolean;
 	theme: Theme;
 	sshRemotes: SshRemoteConfig[];
 	sshRemoteConfig?: AgentSshRemoteConfig;
@@ -31,6 +33,7 @@ export function SshRemoteSelector({
 	sshRemoteConfig,
 	onSshRemoteConfigChange,
 	compact = false,
+	projectConfiguration = false,
 }: SshRemoteSelectorProps): JSX.Element {
 	const uiText = useT();
 	// Compact mode uses bordered container style (for nested use in config panels)
@@ -45,12 +48,19 @@ export function SshRemoteSelector({
 					{uiText('workflows.sessions.sshExecution')}
 				</label>
 				<SshRemoteDropdown
+					projectConfiguration={projectConfiguration}
 					theme={theme}
 					sshRemotes={sshRemotes}
 					sshRemoteConfig={sshRemoteConfig}
 					onSshRemoteConfigChange={onSshRemoteConfigChange}
 				/>
-				<p className="text-xs opacity-50 mt-2">{uiText('workflows.sessions.sshExecutionHelp')}</p>
+				<p className="text-xs opacity-50 mt-2">
+					{uiText(
+						projectConfiguration
+							? 'workflows.projectSettings.toolSshHelp'
+							: 'workflows.sessions.sshExecutionHelp'
+					)}
+				</p>
 			</div>
 		);
 	}
@@ -65,13 +75,18 @@ export function SshRemoteSelector({
 				{uiText('workflows.sessions.sshExecution')}
 			</label>
 			<SshRemoteDropdown
+				projectConfiguration={projectConfiguration}
 				theme={theme}
 				sshRemotes={sshRemotes}
 				sshRemoteConfig={sshRemoteConfig}
 				onSshRemoteConfigChange={onSshRemoteConfigChange}
 			/>
 			<p className="mt-1 text-xs" style={{ color: theme.colors.textDim }}>
-				{uiText('workflows.sessions.sshExecutionHelpSentence')}
+				{uiText(
+					projectConfiguration
+						? 'workflows.projectSettings.toolSshHelp'
+						: 'workflows.sessions.sshExecutionHelpSentence'
+				)}
 			</p>
 		</div>
 	);
@@ -79,11 +94,13 @@ export function SshRemoteSelector({
 
 /** Internal component for the dropdown and status indicator */
 function SshRemoteDropdown({
+	projectConfiguration,
 	theme,
 	sshRemotes,
 	sshRemoteConfig,
 	onSshRemoteConfigChange,
 }: {
+	projectConfiguration?: boolean;
 	theme: Theme;
 	sshRemotes: SshRemoteConfig[];
 	sshRemoteConfig?: AgentSshRemoteConfig;
@@ -158,7 +175,11 @@ function SshRemoteDropdown({
 					<>
 						<Cloud className="w-3 h-3" style={{ color: theme.colors.success }} />
 						<span style={{ color: theme.colors.textMain }}>
-							{uiText('workflows.sessions.agentRunsOn')}{' '}
+							{uiText(
+								projectConfiguration
+									? 'workflows.projectSettings.toolRunsOn'
+									: 'workflows.sessions.agentRunsOn'
+							)}{' '}
 							<span className="font-medium">{selectedRemote.name}</span>
 							<span style={{ color: theme.colors.textDim }}>
 								{' '}
@@ -170,14 +191,18 @@ function SshRemoteDropdown({
 					<>
 						<Monitor className="w-3 h-3" style={{ color: theme.colors.textDim }} />
 						<span style={{ color: theme.colors.textDim }}>
-							{uiText('workflows.sessions.agentRunsLocally')}
+							{uiText(
+								projectConfiguration
+									? 'workflows.projectSettings.toolRunsLocally'
+									: 'workflows.sessions.agentRunsLocally'
+							)}
 						</span>
 					</>
 				)}
 			</div>
 
 			{/* Sync history toggle - shown when an SSH remote is selected */}
-			{selectedRemote && (
+			{!projectConfiguration && selectedRemote && (
 				<label
 					className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors hover:bg-white/5"
 					style={{ backgroundColor: theme.colors.bgActivity }}
@@ -213,7 +238,7 @@ function SshRemoteDropdown({
 			    a viewer would SSH into the remote, not here. The flag is still
 			    preserved across dropdown changes (see local/remote branches above)
 			    so toggling SSH doesn't silently wipe it. */}
-			{!selectedRemote && (
+			{!projectConfiguration && !selectedRemote && (
 				<label
 					className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors hover:bg-white/5"
 					style={{ backgroundColor: theme.colors.bgActivity }}

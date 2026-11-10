@@ -1,3 +1,5 @@
+import { ProjectToolConfig } from './ProjectToolConfig';
+import { saveSessionToolConfig } from '../services/sessionToolConfig';
 import { effectiveStandardPermissionCapability } from '../../shared/codexAppServer';
 import { useAgentCapabilities } from '../hooks/agent/useAgentCapabilities';
 import { projectSettingsScopeForSession } from '../utils/projectConversationDefaults';
@@ -25,7 +27,7 @@ export interface ProjectSettingsModalProps {
 	onClose: () => void;
 }
 
-/** Edits Maestro defaults. Existing conversations and provider files are untouched. */
+/** Separates future conversation defaults from existing tool launch configuration. */
 export function ProjectSettingsModal({
 	theme,
 	name,
@@ -42,11 +44,13 @@ export function ProjectSettingsModal({
 	const scopeKey = scope ? projectSettingsKey(scope) : '';
 	const [loadedScope, setLoadedScope] = useState('');
 	const [draft, setDraft] = useState<ProjectSettings>({});
+	const [toolPatches, setToolPatches] = useState<Record<string, Partial<Session>>>({});
 	const [acknowledged, setAcknowledged] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [environmentRedacted, setEnvironmentRedacted] = useState(false);
 	const [validEnvironment, setValidEnvironment] = useState(true);
 	const [error, setError] = useState<string>();
+	const [toolSaveError, setToolSaveError] = useState(false);
 	const scopedSessions = sessions.filter(
 		(session) => projectSettingsKey(projectSettingsScopeForSession(session)) === scopeKey
 	);
@@ -81,7 +85,9 @@ export function ProjectSettingsModal({
 		let stale = false;
 		setLoadedScope('');
 		setError(undefined);
+		setToolSaveError(false);
 		setAcknowledged(false);
+		setToolPatches({});
 		void window.maestro.settings
 			.projectSettings({ action: 'show', scope })
 			.then((result) => {
@@ -110,6 +116,7 @@ export function ProjectSettingsModal({
 		if (!ready || saving || !validEnvironment || (needsAcknowledgement && !acknowledged)) return;
 		setSaving(true);
 		setError(undefined);
+		setToolSaveError(false);
 		try {
 			const result = await window.maestro.settings.projectSettings({
 				action: 'set',
@@ -136,6 +143,30 @@ export function ProjectSettingsModal({
 			useSettingsStore.setState((state) => ({
 				projectSettings: { ...state.projectSettings, [scopeKey]: result.settings },
 			}));
+			if (newShell) {
+				for (const [sessionId, { sessionSshRemoteConfig, ...patch }] of Object.entries(
+					toolPatches
+				)) {
+					const fields: Record<string, unknown> = { ...patch };
+					for (const key of ['customPath', 'customArgs', 'maestroPPath']) {
+						if (typeof fields[key] === 'string')
+							fields[key] = (fields[key] as string).trim() || null;
+					}
+					if (patch.customEnvVars)
+						fields.customEnvVars = Object.fromEntries(
+							Object.entries(patch.customEnvVars).filter(([key]) => key.trim())
+						);
+					try {
+						await saveSessionToolConfig(sessionId, fields, sessionSshRemoteConfig);
+					} catch (error) {
+						setToolSaveError(true);
+						setError(
+							error instanceof Error ? error.message : t('workflows.projectSettings.toolSaveFailed')
+						);
+						return;
+					}
+				}
+			}
 			onClose();
 		} catch {
 			setError(t('workflows.projectSettings.failed'));
@@ -174,6 +205,9 @@ export function ProjectSettingsModal({
 			}
 		>
 			<div className="space-y-4" style={{ color: theme.colors.textMain }}>
+				{newShell && (
+					<h3 className="text-sm font-medium">{t('workflows.projectSettings.defaultsHeading')}</h3>
+				)}
 				<p className="text-sm" style={{ color: theme.colors.textDim }}>
 					{t('workflows.projectSettings.description')}
 				</p>
@@ -209,6 +243,11 @@ export function ProjectSettingsModal({
 				{error && (
 					<p role="alert" className="text-sm" style={{ color: theme.colors.error }}>
 						{error}
+					</p>
+				)}
+				{toolSaveError && (
+					<p className="text-xs" style={{ color: theme.colors.error }}>
+						{t('workflows.projectSettings.toolSaveFailed')}
 					</p>
 				)}
 				{!ready && !error && <p role="status">{t('workflows.projectSettings.loading')}</p>}
@@ -346,6 +385,30 @@ export function ProjectSettingsModal({
 								maskSecrets
 								onValidityChange={setValidEnvironment}
 							/>
+						)}
+						{newShell && !environmentRedacted && (
+							<section
+								className="space-y-3 border-t pt-4"
+								style={{ borderColor: theme.colors.border }}
+							>
+								<h3 className="text-sm font-medium">
+									{t('workflows.projectSettings.toolsHeading')}
+								</h3>
+								{scopedSessions.map((session) => (
+									<ProjectToolConfig
+										key={session.id}
+										theme={theme}
+										session={session}
+										patch={toolPatches[session.id] ?? {}}
+										onChange={(update) =>
+											setToolPatches((previous) => ({
+												...previous,
+												[session.id]: update(previous[session.id] ?? {}),
+											}))
+										}
+									/>
+								))}
+							</section>
 						)}
 					</fieldset>
 				)}

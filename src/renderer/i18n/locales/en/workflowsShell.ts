@@ -55,6 +55,33 @@ export const workflowsShell = {
 	'workflows.projectSettings.cli.jsonHelp': 'Output the settings snapshot as JSON',
 
 	'workflows.projectSettings.newConversation': 'New with project defaults',
+	'workflows.projectSettings.defaultsHeading': 'New conversation defaults',
+	'workflows.projectSettings.toolsHeading': 'Tool configurations',
+	'workflows.projectSettings.toolScope':
+		'Changes affect all conversations using this tool configuration.',
+	'workflows.projectSettings.toolAccountHelp':
+		'Set the account directory in Environment variables: CLAUDE_CONFIG_DIR for Claude or DeepSeek, CODEX_HOME for Codex. SSH paths belong to the remote host.',
+	'workflows.projectSettings.toolLoadFailed':
+		'Could not load the tool configuration. Close and reopen project settings to try again.',
+	'workflows.projectSettings.toolMissing': 'This tool configuration no longer exists.',
+	'workflows.projectSettings.toolRunning':
+		'Stop all conversations using this configuration before changing its SSH host.',
+	'workflows.projectSettings.toolNoChanges': 'No editable tool configuration fields were supplied.',
+	'workflows.projectSettings.toolSaveFailed':
+		'Could not save the tool configuration. Earlier changes may already be saved. Review your settings before saving again.',
+	'workflows.projectSettings.toolArgsHelp':
+		'Arguments added to each invocation using this tool configuration.',
+	'workflows.projectSettings.toolEnvHelp':
+		'Environment variables for this tool configuration. They replace the tool defaults and apply to every conversation using this configuration.',
+	'workflows.projectSettings.toolBinaryHelp':
+		'installations. This choice applies to this tool configuration.',
+	'workflows.projectSettings.toolOpenCode': 'OpenCode role (optional)',
+	'workflows.projectSettings.toolOpenCodeHelp':
+		', retaining the selected OpenCode role, model and instructions. Plugin roles are resolved by OpenCode at runtime, even when absent from ',
+	'workflows.projectSettings.toolSshHelp':
+		'Run conversations using this configuration on the selected SSH host.',
+	'workflows.projectSettings.toolRunsOn': 'Conversations run on',
+	'workflows.projectSettings.toolRunsLocally': 'Conversations run on this computer',
 	'workflows.projectSettings.title': 'Project settings',
 	'workflows.projectSettings.description':
 		'Applies only to new conversations in this project on the selected host. Current conversation choices take priority; project permissions may only make them stricter.',

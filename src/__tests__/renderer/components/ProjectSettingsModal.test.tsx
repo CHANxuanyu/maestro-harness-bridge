@@ -1,7 +1,7 @@
 import { setCapabilitiesCache } from '../../../renderer/hooks/agent/useAgentCapabilities';
 import { AGENT_CAPABILITIES } from '../../../main/agents/capabilities';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ProjectSettingsModal } from '../../../renderer/components/ProjectSettingsModal';
 import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
 import { mockTheme } from '../../helpers/mockTheme';
@@ -37,7 +37,7 @@ function setup() {
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	useSettingsStore.setState({ newShell: false });
+	useSettingsStore.setState({ newShell: false, uiLanguage: 'en' });
 	for (const [id, caps] of Object.entries(AGENT_CAPABILITIES)) setCapabilitiesCache(id, caps);
 	Object.assign(window.maestro.settings, { projectSettings: api });
 	api.mockImplementation(async (command) => ({
@@ -178,6 +178,7 @@ it('edits every project tool through the shared panel without changing conversat
 		},
 	] as never);
 	vi.mocked(window.maestro.sessions.setMany).mockResolvedValue(true);
+	vi.mocked(window.maestro.agents.getMaestroPDetectedPath).mockResolvedValue('/fixture/maestro-p');
 	const close = vi.fn();
 	render(
 		<LayerStackProvider>
@@ -194,6 +195,7 @@ it('edits every project tool through the shared panel without changing conversat
 	expect(screen.getByText('New conversation defaults')).toBeInTheDocument();
 	fireEvent.click(screen.getByText('Primary Claude', { exact: true }));
 	await screen.findByDisplayValue('/fixture/claude-old');
+	expect(screen.getByPlaceholderText('/fixture/maestro-p')).toBeInTheDocument();
 	expect(screen.getByText('Second Claude', { exact: true })).toBeInTheDocument();
 	expect(screen.queryByText('Remote Claude', { exact: true })).not.toBeInTheDocument();
 	expect(
@@ -222,8 +224,99 @@ it('edits every project tool through the shared panel without changing conversat
 });
 
 it('keeps tool configuration hidden in the classic shell', async () => {
-	useSettingsStore.setState({ newShell: false });
+	useSettingsStore.setState({ newShell: false, uiLanguage: 'en' });
 	setup();
 	await screen.findByDisplayValue('test-secret-value');
 	expect(screen.queryByText('Tool configurations')).not.toBeInTheDocument();
+});
+
+it('explains why an active conversation prevents changing its SSH host', async () => {
+	useSettingsStore.setState({ newShell: true });
+	const owner = createMockSession({
+		id: 'running-owner',
+		name: 'Running Claude',
+		projectRoot: '/projects/demo',
+		toolType: 'claude-code',
+	});
+	useSessionStore.setState({ sessions: [owner] });
+	vi.mocked(window.maestro.agents.detect).mockResolvedValue([
+		{ id: 'claude-code', name: 'Claude Code', binaryName: 'claude', available: true },
+	] as never);
+	vi.mocked(window.maestro.sshRemote.getConfigs).mockResolvedValue({
+		success: true,
+		configs: [
+			{
+				id: 'remote',
+				name: 'Remote host',
+				host: 'fixture.invalid',
+				username: 'fixture',
+				enabled: true,
+			},
+		],
+	} as never);
+	vi.mocked(window.maestro.process.getActiveProcesses).mockResolvedValue([
+		{ sessionId: 'running-owner-ai-tab', isTerminal: false },
+	] as never);
+	const close = vi.fn();
+	render(
+		<LayerStackProvider>
+			<ProjectSettingsModal
+				theme={mockTheme}
+				name="Demo"
+				scopes={[{ projectPath: '/projects/demo' }]}
+				sessions={[owner]}
+				onClose={close}
+			/>
+		</LayerStackProvider>
+	);
+	fireEvent.click(await screen.findByText('Running Claude', { exact: true }));
+	const row = screen.getByTestId('project-tool-running-owner');
+	await within(row).findByRole('option', { name: /Remote host/ });
+	fireEvent.change(within(row).getByRole('combobox'), { target: { value: 'remote' } });
+	fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+	await screen.findByText(
+		'Stop all conversations using this configuration before changing its SSH host.'
+	);
+	expect(close).not.toHaveBeenCalled();
+	expect(window.maestro.sessions.setMany).not.toHaveBeenCalled();
+	expect(useSessionStore.getState().sessions[0]).toEqual(owner);
+});
+
+it('uses project wording in Chinese and discards tool edits on Cancel', async () => {
+	useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
+	const owner = createMockSession({
+		id: 'cancel-owner',
+		name: 'Claude 配置',
+		projectRoot: '/projects/demo',
+		toolType: 'claude-code',
+		customPath: '/fixture/original',
+	});
+	useSessionStore.setState({ sessions: [owner] });
+	vi.mocked(window.maestro.agents.detect).mockResolvedValue([
+		{ id: 'claude-code', name: 'Claude Code', binaryName: 'claude', available: true },
+	] as never);
+	vi.mocked(window.maestro.sshRemote.getConfigs).mockResolvedValue({ success: true, configs: [] });
+	const close = vi.fn();
+	render(
+		<LayerStackProvider>
+			<ProjectSettingsModal
+				theme={mockTheme}
+				name="Demo"
+				scopes={[{ projectPath: '/projects/demo' }]}
+				sessions={[owner]}
+				onClose={close}
+			/>
+		</LayerStackProvider>
+	);
+	fireEvent.click(await screen.findByText('Claude 配置', { exact: true }));
+	await screen.findByDisplayValue('/fixture/original');
+	expect(screen.getByRole('dialog').textContent).not.toContain('智能体');
+	fireEvent.change(screen.getByDisplayValue('/fixture/original'), {
+		target: { value: '/fixture/discarded' },
+	});
+	fireEvent.click(screen.getByRole('button', { name: '取消', exact: true }));
+	expect(close).toHaveBeenCalled();
+	expect(window.maestro.sessions.setMany).not.toHaveBeenCalled();
+	expect(api.mock.calls.every(([command]) => command.action === 'show')).toBe(true);
+	expect(useSessionStore.getState().sessions[0]).toEqual(owner);
 });

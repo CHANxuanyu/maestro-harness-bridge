@@ -298,6 +298,8 @@ function ModelTextInput({
 }
 
 export interface AgentConfigPanelProps {
+	/** Use project wording for the new shell owner editor. */
+	projectConfiguration?: boolean;
 	theme: Theme;
 	agent: AgentConfig;
 	// Custom path
@@ -404,6 +406,7 @@ export interface AgentConfigPanelProps {
 }
 
 export function AgentConfigPanel({
+	projectConfiguration = false,
 	theme,
 	agent,
 	customPath,
@@ -828,7 +831,11 @@ export function AgentConfigPanel({
 						style={{ color: theme.colors.textDim }}
 						htmlFor="opencode-agent-input"
 					>
-						{uiText('workflows.sessions.opencodeAgent')}
+						{uiText(
+							projectConfiguration
+								? 'workflows.projectSettings.toolOpenCode'
+								: 'workflows.sessions.opencodeAgent'
+						)}
 					</label>
 					<input
 						id="opencode-agent-input"
@@ -844,7 +851,11 @@ export function AgentConfigPanel({
 					<p className="text-xs opacity-50 mt-2">
 						{uiText('workflows.sessions.runsAs')}{' '}
 						<span className="font-mono">opencode run --agent &lt;name&gt;</span>{' '}
-						{uiText('workflows.sessions.opencodeAgentHelp')}{' '}
+						{uiText(
+							projectConfiguration
+								? 'workflows.projectSettings.toolOpenCodeHelp'
+								: 'workflows.sessions.opencodeAgentHelp'
+						)}{' '}
 						<span className="font-mono">opencode agent list</span>{' '}
 						{uiText('workflows.sessions.opencodeAgentHelpEnd')}{' '}
 						<span className="font-mono">--agent plan</span>.
@@ -873,7 +884,11 @@ export function AgentConfigPanel({
 					/>
 				</div>
 				<p className="text-xs opacity-50 mt-2">
-					{uiText('workflows.sessions.customArgumentsHelp')}
+					{uiText(
+						projectConfiguration
+							? 'workflows.projectSettings.toolArgsHelp'
+							: 'workflows.sessions.customArgumentsHelp'
+					)}
 				</p>
 			</div>
 
@@ -1031,7 +1046,11 @@ export function AgentConfigPanel({
 					</button>
 				</div>
 				<p className="text-xs opacity-50 mt-2">
-					{uiText('workflows.sessions.agentEnvironmentHelp')}
+					{uiText(
+						projectConfiguration
+							? 'workflows.projectSettings.toolEnvHelp'
+							: 'workflows.sessions.agentEnvironmentHelp'
+					)}
 				</p>
 			</div>
 

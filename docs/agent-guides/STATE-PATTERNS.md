@@ -15,6 +15,15 @@ uses `switchTabProvider()` to park native identities while preserving logs and
 their tool-output sources. Running turns retain their captured `turnProvider`.
 The classic CLI reset remains a separate compatibility path.
 
+Project tool configuration: `saveSessionToolConfig()` in
+`src/renderer/services/sessionToolConfig.ts` shares the new shell project editor
+and `update-agent` writes. It queues per owner, reads the current store at execution,
+retains conversation fields and waits for `sessions.setMany` before acknowledging.
+`editableSessionConfigPatch()` is the common editable field allowlist, including
+null clearing and context window provenance. SSH edits preserve remote path bytes
+and use `probeSessionAiProcesses()` before switching hosts. Classic save behavior
+is retained.
+
 Maestro uses Zustand stores to replace React Context providers. Each store:
 
 - Uses **selector-based subscriptions** (components only re-render when their slice changes)

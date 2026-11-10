@@ -122,6 +122,33 @@ CLI `tab new` 返回实际 `sessionId`，`dispatch --new-tab` 返回实际 `agen
 
 本轮共用修正：带提示的新建回调按来源所属窗口路由，旧界面也由此修正副窗口投递目标；新界面新建回调允许 60 秒，CLI 留出 65 秒等待；旧界面回调仍为 5 秒。其余新行为均受 `newShell` 控制。
 
+## 项目工具配置（2026-11-10）
+
+仅在 `newShell` 开启的桌面项目设置中显示。先按项目位置筛选配置，再展开具体工具配置。
+“新对话默认值”与“工具配置”分节，后者明确影响此配置下的所有对话，保存不改写标签内容或权限。
+账户目录使用已有环境变量表单和目录建议，Claude 与 DeepSeek 使用 `CLAUDE_CONFIG_DIR`，Codex 使用 `CODEX_HOME`。
+
+| 界面动作               | maestro-cli 对等动作                                          | 共用实现                                    |
+| ---------------------- | ------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------- |
+| 展开并读取一个工具配置 | `show agent <id> --json`                                      | 同一会话配置字段，界面显示配置名称和 ID     |
+| 编辑账户目录、环境变量 | `update-agent <id> --env KEY=VALUE`，清空用 `--clear-env`     | `saveSessionToolConfig()`，环境变量整体替换 |
+| 编辑自定义路径、参数   | `update-agent <id> --custom-path <path> --custom-args <args>` | 同上；空字符串清空覆盖                      |
+| 选择 Claude 调用方式   | `update-agent <id> --token-source api                         | tui                                         | dynamic`                                 | `toClaudeTokenModeSource()` 与同一保存服务；`tui` 保存为 `interactive` |
+| 编辑 TUI 包装器路径    | `update-agent <id> --maestro-p-path <path>`                   | 同一保存服务                                |
+| 选择 SSH 主机或本机    | `update-agent <id> --ssh-remote <id                           | none>`                                      | 同一保存服务；保留远程目录与历史同步字段 |
+| 取消或收起编辑         | 不发送更新；读取仍用 `show agent`                             | 草稿只在明确保存时写入，收起保留草稿        |
+
+新界面的 CLI 与项目设置都通过原有 `sessions.setMany` 保存，仅在成功后更新内存和报告成功。
+同一配置的更新使用 `createKeyedWriteQueue()` 串行化，执行时读取当前 store，避免 React 尚未刷新时覆盖上一项改动。
+SSH 主机改动复用 `probeSessionAiProcesses()` 检查实时进程，探测失败也拒绝保存；路径不调用本机 realpath。
+改用 `api` 与权限菜单的“改用 claude -p”写入相同字段，不改写已有对话权限，也不停止当前回合。
+旧界面仍用原来的编辑与 CLI 保存路径，共用字段白名单的抽取不改变其行为。
+
+Open gaps：不提供 CLI 打开或折叠项目设置窗口的视觉动作；配置读取与保存已有对等动作。
+浏览器仍不开放此编辑节。停用的环境变量保留原值，本节不提供停用开关。
+项目默认值与多个工具配置不是一个跨存储事务；后续保存失败时保留窗口，并提示此前改动可能已经保存。
+合成验收：`e2e/native-project-tool-config.spec.ts`，Electron 执行待沙箱外完成。
+
 ## New shell conversation split (2026-11-06)
 
 | UI action                              | CLI                                                   | Shared implementation                                               |

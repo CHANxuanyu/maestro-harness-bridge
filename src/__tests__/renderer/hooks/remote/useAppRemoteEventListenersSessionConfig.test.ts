@@ -793,3 +793,17 @@ it('reports a new-shell tool configuration persistence failure instead of claimi
 	expect(ack).toHaveBeenCalledWith('ch', { success: false, error: expect.any(String) });
 	expect(useSessionStore.getState().sessions[0].customPath).toBe('/fixture/old');
 });
+
+it('merges queued new-shell CLI edits against the store before React refreshes its ref', async () => {
+	vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as never);
+	const session = createMockSession({ customPath: '/fixture/old', customArgs: '--old' });
+	const { setSessions } = setup([session]);
+	setSessions.mockImplementation(useSessionStore.getState().setSessions);
+	dispatchPatch(session.id, { customPath: '/fixture/new' });
+	dispatchPatch(session.id, { customArgs: '--new' });
+	await waitFor(() => expect(ack).toHaveBeenCalledTimes(2));
+	expect(setMany.mock.calls.at(-1)![0][0]).toMatchObject({
+		customPath: '/fixture/new',
+		customArgs: '--new',
+	});
+});

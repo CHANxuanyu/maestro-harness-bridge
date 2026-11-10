@@ -1,5 +1,19 @@
 # 分支工作记录
 
+## 2026-11-10：项目设置中的工具配置
+
+任务分支源码新增项目工具配置入口，复用 `AgentConfigPanel` 和 SSH 主机选择器。
+修复前两条回归分别失败于缺少入口、CLI 将保存失败报告为成功；后续回归还复现
+SSH 拒绝原因被隐藏、连续 CLI 修改在 React 引用刷新前覆盖前一次保存，以及
+未传入已检测到的 TUI 包装器路径导致错误提示。
+新界面通过共用服务持久化，保留现有对话、其他配置和 SSH 远程路径。
+相关 5 个单元测试文件共 128 项通过，三份 TypeScript 检查通过。新增 Electron 文件
+通过独立类型检查及 Playwright 场景收集，改动代码通过 ESLint，全部改动通过 Prettier。
+旧界面保存路径保持不变。增加中英文文案、CLI 对等表和合成 Electron 场景。
+本轮验证对象为任务分支源码，不是发行安装包。Electron、真实工具调用和 SSH 主机
+未执行；场景运行命令为 `npm run test:e2e -- e2e/native-project-tool-config.spec.ts`。
+项目默认值和多个工具配置的保存不是跨存储事务，失败时明确提示可能已经部分保存。
+
 ## 2026-11-09：Claude 标准权限真实验证
 
 `e2e/real-claude-approval.spec.ts` 用真实 Claude Code `2.1.317` 跑通：标准权限下 Write 先弹审批，审批前不写任何文件，点一次允许后才写入，回合结束后待审批为空、临时 MCP 配置删除，进程参数没有跳过权限。被测对象是主线 `f5d3e7aab` 的本地开发构建。细节和未覆盖项见 `e2e/claude-standard-approval.md`。

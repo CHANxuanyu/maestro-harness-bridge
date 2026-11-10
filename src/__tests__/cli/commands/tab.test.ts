@@ -20,6 +20,7 @@ import {
 	tabCompact,
 	tabPanel,
 	tabSplit,
+	tabStop,
 	tabUnsplit,
 	tabClose,
 	tabRename,
@@ -130,6 +131,30 @@ describe('tab commands', () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
 			throw new Error('__exit__');
+		});
+	});
+
+	it('stops the resolved conversation through the acknowledged renderer action', async () => {
+		const captured = mockTab({ success: true });
+		await tabStop('tab-bb', { agent: 'agent-2', json: true });
+		expect(captured()).toEqual({
+			type: 'update_session_config',
+			sessionId: 'agent-2',
+			configPatch: { tabId: 'tab-bbbb', stopTurn: true },
+		});
+		expect(JSON.parse(consoleSpy.mock.calls[0][0])).toMatchObject({
+			success: true,
+			tabId: 'tab-bbbb',
+		});
+	});
+
+	it('reports an idle or failed stop as failure instead of claiming success', async () => {
+		mockTab({ success: false, error: 'This conversation is not running.' });
+		await expect(tabStop('tab-aaaa', { json: true })).rejects.toThrow('__exit__');
+		expect(processExitSpy).toHaveBeenCalledWith(1);
+		expect(JSON.parse(consoleSpy.mock.calls[0][0])).toMatchObject({
+			success: false,
+			error: 'This conversation is not running.',
 		});
 	});
 

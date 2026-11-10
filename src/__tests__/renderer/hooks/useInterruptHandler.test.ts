@@ -184,6 +184,43 @@ describe('useInterruptHandler', () => {
 	// ========================================================================
 	// AI mode interrupt
 	// ========================================================================
+	it.each([true, false])('returns the actual interrupt acknowledgement %s', async (accepted) => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+		const session = createSession({ aiTabs: [createTab({ state: 'busy' })] });
+		useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+		mockMaestro.process.interrupt.mockResolvedValueOnce(accepted);
+		const { result } = renderHook(() => useInterruptHandler(createDeps()));
+		await act(async () => {
+			expect(await result.current.handleInterrupt()).toEqual(
+				accepted
+					? { success: true }
+					: { success: false, error: 'This conversation is not running.' }
+			);
+		});
+		if (!accepted) expect(useSessionStore.getState().sessions[0].aiTabs[0].logs).toEqual([]);
+	});
+
+	it('targets the requested owner in classic mode while retaining whole owner stop', async () => {
+		const active = createSession({ id: 'active' });
+		const requested = createSession({
+			id: 'requested',
+			aiTabs: [
+				createTab({ id: 'target', state: 'busy' }),
+				createTab({ id: 'sibling', state: 'busy' }),
+			],
+		});
+		useSessionStore.setState({ sessions: [active, requested], activeSessionId: active.id });
+		const { result } = renderHook(() => useInterruptHandler(createDeps()));
+		await act(async () => {
+			await result.current.handleInterrupt({ sessionId: 'requested', tabId: 'target' });
+		});
+		expect(mockMaestro.process.interrupt.mock.calls.map(([id]) => id)).toEqual([
+			'requested-ai-target',
+			'requested-ai-sibling',
+		]);
+		expect(useSessionStore.getState().activeSessionId).toBe('active');
+	});
+
 	describe('new shell conversation stop', () => {
 		it.each([false, true])(
 			'only interrupts the target and busy orphans, force kill %s',

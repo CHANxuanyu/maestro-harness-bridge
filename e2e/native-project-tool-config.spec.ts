@@ -29,6 +29,8 @@ test('project tool config: claude -p, custom path, CLI readback, restart and cla
 			newShell: true,
 			uiLanguage: 'en',
 			defaultSaveToHistory: false,
+			// Seed an already migrated installation with deliberate per-config choices.
+			migration_apiModeDefaultV1: true,
 		})
 	);
 	const owner = createMockSession({
@@ -74,6 +76,13 @@ test('project tool config: claude -p, custom path, CLI readback, restart and cla
 	let failed = true;
 	try {
 		await native.start(home);
+		for (const session of [owner, sibling]) {
+			expect(await native.cli('show', 'agent', session.id)).toMatchObject({
+				tokenSource: 'interactive',
+				enableMaestroP: true,
+				maestroPMode: 'interactive',
+			});
+		}
 		await expect(
 			native.page.getByText('Existing conversation', { exact: true }).first()
 		).toBeVisible();
@@ -102,6 +111,13 @@ test('project tool config: claude -p, custom path, CLI readback, restart and cla
 			customEnvVars: { CLAUDE_CONFIG_DIR: native.claude },
 		});
 		expect((await native.cli('show', 'agent', sibling.id)).tokenSource).toBe('interactive');
+		expect(
+			JSON.parse(fs.readFileSync(path.join(native.data, 'maestro-agent-configs.json'), 'utf8'))
+		).toEqual({
+			configs: {
+				'claude-code': { customPath, customEnvVars: { CLAUDE_CONFIG_DIR: native.claude } },
+			},
+		});
 		expect(
 			saved()
 				.find((session) => session.id === owner.id)

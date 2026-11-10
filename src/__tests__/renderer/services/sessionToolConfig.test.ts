@@ -14,6 +14,8 @@ describe('saveSessionToolConfig', () => {
 	it('updates only allowed fields and retains all current conversation state', async () => {
 		const owner = createMockSession({
 			id: 'owner',
+			enableMaestroP: true,
+			maestroPMode: 'interactive',
 			customPath: '/fixture/old',
 			customArgs: '--old',
 			customEnvVarsDisabled: { PARKED: 'kept' },
@@ -24,7 +26,8 @@ describe('saveSessionToolConfig', () => {
 				createMockAITab({ id: 'b', state: 'busy' }),
 			],
 		});
-		useSessionStore.setState({ sessions: [owner] });
+		const sibling = createMockSession({ ...owner, id: 'sibling' });
+		useSessionStore.setState({ sessions: [owner, sibling] });
 		await saveSessionToolConfig(owner.id, {
 			customPath: null,
 			customArgs: '--new',
@@ -49,6 +52,10 @@ describe('saveSessionToolConfig', () => {
 		expect(updated.contextWindowSource).toBeUndefined();
 		expect(updated.aiTabs).toEqual(owner.aiTabs);
 		expect(window.maestro.sessions.setMany).toHaveBeenCalledWith([updated], []);
+		expect(useSessionStore.getState().sessions[1]).toBe(sibling);
+		expect(sibling.enableMaestroP).toBe(true);
+		expect(sibling.maestroPMode).toBe('interactive');
+		expect(window.maestro.agents.setConfig).not.toHaveBeenCalled();
 	});
 
 	it('preserves remote path bytes and history flags when changing the host', async () => {

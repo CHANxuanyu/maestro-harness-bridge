@@ -23,7 +23,9 @@ for (const enabled of [false, true]) {
 				crashReportingEnabled: false,
 			})
 		);
-		native.scriptTurns([{ answer: 'Claude AI usage limit reached|1999999999' }]);
+		native.scriptTurns([
+			{ answer: 'Claude AI usage limit reached|1999999999', quotaFailure: true },
+		]);
 		fs.writeFileSync(
 			codexScript,
 			JSON.stringify({ scene: { answer: 'Received the failed request once.' } })

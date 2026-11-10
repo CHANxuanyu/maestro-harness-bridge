@@ -38,6 +38,25 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## 完整停止对等，A，2026-11-10
+
+| 界面动作                 | CLI                                                     | 共用实现                                           |
+| ------------------------ | ------------------------------------------------------- | -------------------------------------------------- |
+| 输入框停止、对话 Escape  | `maestro-cli tab stop <tab-id> [--agent <id>] [--json]` | 所属窗口的 `useInterruptHandler.handleInterrupt()` |
+| 新界面审批框“停止这一轮” | 同一 `tab stop`                                         | 同一停止处理函数，进程退出时撤销审批               |
+| 审批框拒绝、Escape       | `permission deny <request-id>`                          | 既有审批响应，不停止整轮                           |
+
+CLI 通过 `update_session_config` 的独立 `stopTurn` 动作等待窗口回执，不写设置，
+不切换焦点。支持完整、唯一前缀和 `active` 标签标识。新界面只停止目标对话、
+其强制并行进程和仍运行的孤儿标签，保留其他对话；子任务沿用既有范围限制。
+旧界面仍按所属配置停止所有运行中的对话。咨询、交接、摘要和队列收尾均沿用输入框路径。
+审批停止不先发送拒绝，避免放行下一步；停止期间禁用审批按钮，失败显示原因。
+
+成功表示底层接受了中断或强制停止，进程退出由既有生命周期负责，不表示已观察到退出。
+没有运行返回 `success: false` 和当前界面语言的原因，CLI 退出码为 1。
+部分信号失败不能报成功。合成场景另查活动进程为空、审批撤销、未写文件及能继续下一轮。
+旧 REST `remote:interrupt` 仍是独立路径，其对等缺口见 Open gaps。
+
 ## Claude standard approval, U4 (2026-11-07)
 
 | UI action                                 | CLI                                      | Shared implementation                                                |
@@ -165,7 +184,7 @@ conversation's work. Closed busy orphan tabs remain included in Stop.
 File pickers use component refs, and image reads retain their destination tab.
 File-tree drags retain the source root and SSH host; a different host is rejected.
 Unfocused scroll writes use `updateAiTab(sessionId, tabId, updater)` and reaching
-the bottom still clears unread. No new CLI verb is added; the gaps below apply.
+the bottom still clears unread. The later A entry adds `tab stop` for Stop and Escape; other gaps below remain.
 
 ## New shell conversation content search (2026-11-06)
 
@@ -913,7 +932,7 @@ command, cross-window routing and browser prompt delivery are not verified here.
 **Codex prototype controls (2026-11-07).** `codex-turn stop` interrupts only the
 addressed local app-server process through `ProcessManager.interrupt()`. The
 composer Stop also cancels the project's queued work and cross-agent consults;
-that wider existing Stop action is still not CLI-covered. Approval prompts use
+that action is now covered by `tab stop`, as recorded in A above. Approval prompts use
 the main window only. Secondary-window ownership and web-desktop approval/steer
 controls have not been integrated or verified. There is no CLI draft editor:
 `steer` takes explicit text and leaves the desktop draft alone. The composer
@@ -982,8 +1001,8 @@ archived independently.
 New shell Stop addresses both outgoing consults and the incoming consult on the
 selected child. The main registry waits for process exit before acknowledging
 cancellation. Stopping a child leaves its siblings, including closed siblings,
-running. This uses the desktop interrupt service; the existing CLI Stop gap below
-remains open. No new CLI verb was added in this review correction.
+running. This uses the desktop interrupt service. The later A entry adds
+`tab stop` through that same service.
 
 咨询历史展示修复（2026-11-07，U3 第三轮）没有新增界面动作或 CLI 动词。
 `ask`、带 @提及的 `dispatch` 和界面派发继续使用 `sendCrossAgentRequest()` 与同一路由。
@@ -1186,13 +1205,8 @@ This presentation-only phase adds no CLI verb or session protocol. Neither half 
 Ranked by how often an agent is likely to hit them. None of these are blocked by
 a design constraint; they are simply not built yet.
 
-1. **Interrupt a running turn.** In the new shell, Stop and Escape stop the named
-   conversation, including its forced parallel processes and busy orphan tabs.
-   Classic Stop remains agent-wide. There is
-   no CLI equivalent and no WS message behind one. This is the largest remaining
-   gap: an agent that starts a runaway turn on another agent cannot stop it.
-   The 2026-11-06 Stop/synopsis correction preserves this gap; the legacy remote
-   interrupt callback is not the desktop interrupt implementation.
+1. **完整停止已补齐。** `tab stop` 共用桌面完整停止处理函数，见上方 A 条目。
+   旧 REST 中断路径仍需迁移，见第 10 项。
 2. **Reopen a closed tab.** New-shell restore now revalidates permissions against
    the current tool through `restoreConversationPermissions()` and the same
    `newConversationPermissionFields()` used by creation. This fix adds no CLI verb.
@@ -1231,15 +1245,10 @@ a design constraint; they are simply not built yet.
    hook, as recorded above. The generic merge/transfer paths remain gaps:
    `merge_context` and `transfer_context` have preload listeners but no
    renderer subscribers. They still need the shared hooks wired and CLI verbs.
-10. **Interrupt, precisely.** Beyond "no CLI verb": the only backend (REST
-    `POST /api/session/:id/interrupt` -> `remote:interrupt`) signals the
-    legacy `${sessionId}-ai` process id, which misses per-tab processes
-    (`${sessionId}-ai-${tabId}`). Fix the renderer handler to take a tab id,
-    then add `interrupt <agent> [--tab]`. The 2026-11-07 new shell correction fixes
-    the desktop callback and source-tab consult cancellation, but deliberately
-    leaves this legacy remote transport and the missing CLI verb as Open gaps.
-    A normal conversation stop must not be confused with `group-chat stop` or
-    `stop-auto-run`, which control different workflows.
+10. **旧 REST 中断路径。** `POST /api/session/:id/interrupt` 经由
+    `remote:interrupt` 仍使用旧进程标识，没有迁移到完整停止处理函数。
+    本轮 `tab stop` 使用带窗口回执的独立动作，已补齐 CLI，不使用该 REST 路径。
+    `group-chat stop` 和 `stop-auto-run` 仍用于各自独立的工作流。
 
     **Composer attachments and reading position:** there is still no CLI action
     to open a file picker, stage an image on a draft, insert a dropped file
@@ -1318,7 +1327,7 @@ exec's bypass arguments. Full and read-only exec behavior is unchanged.
 | Add ordinary text to the running turn | `codex-turn steer <process-id> <text>`                                      | `process:steer`, `ProcessManager.steer()`, exact `turn/steer` acknowledgement            |
 | Read pending approvals                | `codex-turn permissions`                                                    | The same pending registry used to render `PermissionPrompt`                              |
 | Allow or deny one approval            | `permission-respond <request-id> <decision>`, decision is `allow` or `deny` | Existing `permission:respond` and permission relay registry                              |
-| Stop the running prototype process    | `codex-turn stop <process-id>`                                              | `ProcessManager.interrupt()` and `turn/interrupt`; wider Stop gap above                  |
+| Stop the running prototype process    | `codex-turn stop <process-id>`                                              | `ProcessManager.interrupt()` and `turn/interrupt`; complete Stop uses `tab stop`         |
 
 All four new commands support `--json` and require a running desktop bridge.
 The process ID is the full `<owner-id>-ai-<tab-id>` string, not a native Codex
@@ -1337,7 +1346,7 @@ Synthetic validation and unresolved protocol/version limits are recorded in
 `codex-turn stop <process-id>` 和界面中断仍共用 `ProcessManager.interrupt()`。
 合成单元覆盖保持运行及等待文件审批时停止，要求退出码 130、进程注销、审批清空且无文件写入。
 Electron 场景直接检查停止按钮消失和目标进程不存在；异常关闭保留原始失败。
-没有修改产品停止或 Claude 审批收尾实现，完整 Stop 的队列与咨询对等缺口仍在 Open gaps。
+没有修改产品停止或 Claude 审批收尾实现，完整 Stop 的对等由后续 A 条目的 `tab stop` 补齐。
 
 ## New shell transcript performance (2026-11-06)
 

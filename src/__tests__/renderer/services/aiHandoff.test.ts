@@ -1234,3 +1234,47 @@ it('creates a tiled project conversation with its resolved environment and actua
 	);
 	expect(sessions().find((session) => session.id === 'target')).toEqual(oldTarget);
 });
+
+it('reads delegation identity and permission without reading transcript or Git', async () => {
+	useSettingsStore.setState({ newShell: true });
+	const result = await readHandoffSource({
+		sourceAgentId: 'source',
+		sourceTabId: 'source-tab',
+		provider: 'codex',
+		permissionOnly: true,
+		delegation: true,
+	});
+	expect(result).toMatchObject({
+		sourceAgentId: 'source',
+		sourceTabId: 'source-tab',
+		sourceProvider: 'claude-code',
+		sourceNativeSessionId: 'native-original',
+		sourceTitle: 'Original',
+		sourcePermission: expect.any(Object),
+	});
+	expect(gitService.getChanges).not.toHaveBeenCalled();
+});
+
+it('saves CLI subtask provenance through the project conversation route before queueing', async () => {
+	useSettingsStore.setState({ newShell: true });
+	const origin = { ...request().origin, kind: 'subtask' as const, sourceSessionId: 'other-window' };
+	await openHandoffTarget(
+		request({
+			newConversation: { prompt: 'Fix the bug. Then test.', origin },
+			permissionCeiling: { permissionMode: 'readonly', readOnlyMode: true },
+		})
+	);
+	expect(window.maestro.sessions.setMany).toHaveBeenCalledWith(
+		[
+			expect.objectContaining({
+				aiTabs: expect.arrayContaining([
+					expect.objectContaining({ origin, name: 'Fix the bug.', permissionMode: 'readonly' }),
+				]),
+			}),
+		],
+		[]
+	);
+	expect(vi.mocked(window.maestro.sessions.setMany).mock.invocationCallOrder[0]).toBeLessThan(
+		vi.mocked(enqueuePromptForTab).mock.invocationCallOrder[0]
+	);
+});

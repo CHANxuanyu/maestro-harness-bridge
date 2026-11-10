@@ -170,6 +170,7 @@ export const workflowsShell = {
 	'workflows.projects.openHint': 'Choose a folder to start or continue work',
 	'workflows.shell.permissionUnavailable':
 		'This tool cannot preserve the source conversation permissions.',
+	'workflows.shell.delegationSaveFailed': 'Could not save the subtask. No prompt was sent.',
 	'workflows.shell.newConversationFailed': 'Could not open conversation',
 	'workflows.shell.defaultModel': 'Default model',
 	'workflows.shell.defaultEffort': 'Default effort',

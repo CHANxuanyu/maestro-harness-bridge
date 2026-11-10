@@ -1,3 +1,4 @@
+import { readCallerMessageFields } from '../../../../shared/agentDelegation';
 import type { NewTabResult } from '../../types';
 /**
  * Tabs domain WebSocket message handlers.
@@ -734,8 +735,9 @@ export function handleNewAITabWithPrompt(
 		return;
 	}
 
+	const caller = readCallerMessageFields(message);
 	ctx.callbacks
-		.newAITabWithPrompt(sessionId, prompt, background)
+		.newAITabWithPrompt(sessionId, prompt, background, ...(caller ? [caller] : []))
 		.then((result) => {
 			// Arm the callback only once the fresh tab id is known - that id is
 			// the correlation key. `isNewTab` lets the registry adopt a spawn the
@@ -775,6 +777,7 @@ export function handleNewAITabWithPrompt(
 					targetTabId: result.tabId,
 					prompt,
 					newTab: true,
+					...(result.provenanceSaved ? { provenanceSaved: true } : {}),
 				});
 			}
 		})

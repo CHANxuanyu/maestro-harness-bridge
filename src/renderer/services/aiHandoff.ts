@@ -1,3 +1,5 @@
+import { resolveDelegationSourceTab } from './agentDelegation';
+import { deriveConsultSubject } from '../../shared/crossAgentContext';
 import {
 	projectConversationFields,
 	projectSettingsForSession,
@@ -88,12 +90,24 @@ export async function readHandoffSource(
 		.sessions.find((item) => item.id === request.sourceAgentId);
 	let tab = session?.aiTabs.find((item) => item.id === request.sourceTabId);
 	if (!session) return null;
+	if (request.delegation) {
+		if (!useSettingsStore.getState().newShell) return null;
+		tab = resolveDelegationSourceTab(session, request.sourceTabId || undefined);
+		if (!tab) return null;
+	}
 	if (request.permissionOnly) {
 		if (request.sourceTabId && !tab) return null;
 		const source = tab ?? (await resolveProjectConversationPermission(session));
 		return {
 			sourceAgentId: session.id,
 			sourceTabId: tab?.id ?? '',
+			...(request.delegation && tab
+				? {
+						sourceProvider: sessionProviderId(session),
+						sourceTitle: conversationDisplayTitle(tab) ?? undefined,
+						sourceNativeSessionId: tab.agentSessionId ?? undefined,
+					}
+				: {}),
 			sourcePermission: permissionModeFields(resolveTabPermissionMode(source)),
 			sourceDefaults: tab
 				? {
@@ -307,14 +321,16 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 					? DEEPSEEK_PRESET.name
 					: getAgentDisplayName(request.origin.sourceProvider));
 			const title =
-				request.newConversation || !useSettingsStore.getState().newShell
-					? undefined
-					: getT()(
-							request.mode === 'review'
-								? 'workflows.handoff.reviewTitle'
-								: 'workflows.handoff.continuedTitle',
-							{ title: sourceTitle }
-						);
+				newShell && request.newConversation?.origin
+					? deriveConsultSubject(request.newConversation.prompt ?? '', 80, true)
+					: request.newConversation || !useSettingsStore.getState().newShell
+						? undefined
+						: getT()(
+								request.mode === 'review'
+									? 'workflows.handoff.reviewTitle'
+									: 'workflows.handoff.continuedTitle',
+								{ title: sourceTitle }
+							);
 			const projectOwner = {
 				...request.config,
 				cwd: request.cwd,
@@ -358,7 +374,11 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 							commandMode: transferredDraft.commandMode,
 						}
 					: {}),
-				origin: request.newConversation ? undefined : { ...request.origin, sourceTitle },
+				origin: request.newConversation
+					? newShell
+						? request.newConversation.origin
+						: undefined
+					: { ...request.origin, sourceTitle },
 				...(request.mode === 'review' && capabilities?.supportsReadOnlyMode
 					? permissionModeFields('readonly')
 					: {}),

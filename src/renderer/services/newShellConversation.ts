@@ -86,7 +86,8 @@ export async function newProjectConversation(
 	sourceTabId?: string,
 	background = false,
 	sourcePermission?: HandoffSourceSnapshot['sourcePermission'],
-	prompt?: string
+	prompt?: string,
+	origin?: import('../../shared/aiHandoff').ConversationOrigin
 ) {
 	if (!useSettingsStore.getState().newShell) return null;
 	const project = projectSettingsForSession(session);
@@ -106,6 +107,7 @@ export async function newProjectConversation(
 		sourceTabId,
 		background,
 		...(prompt ? { prompt } : {}),
+		...(origin ? { origin } : {}),
 		...(sourcePermission ? { sourcePermission } : {}),
 	}) as Promise<HandoffResult>;
 }

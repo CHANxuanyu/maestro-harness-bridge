@@ -937,7 +937,7 @@ gaps or add separate implementations. Error recovery remains in the backlog belo
 | Inspect a parent's child conversations and their status | `tab children <tab-id> [--agent <id>] [--json]`                     | `findConversationParent()` in `shared/conversationChildren.ts`; open tab inventory                       |
 | Select a child conversation                             | `tab select <tab-id> [--json]` or `focus-agent <agent> --tab <tab>` | `select_tab` / remote selection and `setActiveTab()`; new shell reveals the hidden tab and clears unread |
 | Ask another conversation to do work                     | `ask <target> <question>` or `dispatch <source> "@Target ..."`      | Existing mention planner and `sendCrossAgentRequest()`                                                   |
-| Delegate into a new child                               | `dispatch <target> <prompt> --new-tab` from a stamped caller        | Existing accepted-dispatch notice and `recordAgentDelegation()`                                          |
+| Delegate into a new child                               | `dispatch <target> <prompt> --new-tab` from a stamped caller        | Owner creation and persistence receipt, then `recordAgentDelegation()`                                   |
 | Add a reply while a child works                         | `dispatch <child-owner> <prompt> --tab <child-tab> --queue`         | Existing execution queue; consult completion releases the child's tab barrier                            |
 | Continue an idle child                                  | `send <prompt> --tab <child-tab>`                                   | Existing composer send and captured native session ID                                                    |
 | Rename, star or close a child                           | `tab rename`, `tab star`, `tab close`                               | Existing tab actions, also used by nested row menus                                                      |
@@ -1006,15 +1006,36 @@ The existing native-history open gap below still applies. A pre-feature consult
 without a captured source native ID can only attach while its original source
 tab is open.
 
-**Cross-window CLI child provenance, U3 review item 6 (2026-11-07).** Confirmed
-and deferred under the review's small-change limit. The accepted-dispatch notice
-routes to the caller window, where `recordAgentDelegation()` patches the target
-tab. A missing target snapshot drops the patch, and persistence excludes targets
-owned by another window. Fixing this needs source identity in the new-tab request,
-target-owner storage and acknowledgment, across the dispatch handler, callback,
-preload and renderer request path. This review does not claim cross-window
-attachment or restart recovery. The source must be transferred before the target
-acknowledges creation; broadcasting the existing caller notice is insufficient.
+**Late native identity across windows (2026-11-10).** A source that has not yet
+announced its native ID is saved with its live tab identity. The existing native
+ID backfill only updates the source window's snapshot. Cross-window backfill
+before that ID exists is not covered here; restart attachment requires the native
+ID captured in the creation request. Historical children already missing their
+origin are not reconstructed.
+
+## Cross-window CLI child provenance (2026-11-10)
+
+`dispatch <target> <prompt> --new-tab` keeps the existing caller environment and
+CLI syntax. In `newShell`, main reads identity and permission metadata from the
+source owner through `context:readHandoffSource`. The creation request carries
+`AgentDelegationSource` through the callback registry and preload to the target
+owner. That owner writes the origin, first-sentence title and permission ceiling
+before delivering the prompt and returning `provenanceSaved`. Project default
+tool selection carries the same origin through `newProjectConversation()` and
+`openHandoffTarget()`. Source and project permissions use the canonical intersection.
+
+Only an acknowledged creation generates a caller card. The notice includes target
+metadata so a missing local target snapshot cannot drop the card. The caller no
+longer patches another window's child. Missing source, failed save or missing
+receipt returns failure. The main callback verifies the sender of both receipts.
+The existing parent lookup uses the saved native ID after the source tab closes
+and after restart, with the same account and SSH identity boundaries.
+
+No new UI action or CLI verb was added. The previous cross-window creation gap is
+closed in source; `e2e/native-cross-window-subtasks.spec.ts` covers product window
+creation and movement, dispatch, persistence, source-window closure and restart.
+Electron execution remains pending outside the sandbox. Classic creation does
+not read source identity or require a persistence receipt.
 
 ## New shell changes by turn (2026-11-06)
 

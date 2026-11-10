@@ -151,6 +151,7 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.handoff.reviewMessage': '复核「{title}」',
 	'workflows.projects.openHint': '选择文件夹，开始或继续项目工作',
 	'workflows.shell.permissionUnavailable': '这个工具无法保留来源对话的权限。',
+	'workflows.shell.delegationSaveFailed': '子任务未保存，内容未发送。',
 	'workflows.shell.newConversationFailed': '无法打开会话',
 	'workflows.shell.defaultModel': '默认模型',
 	'workflows.shell.defaultEffort': '默认强度',

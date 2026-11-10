@@ -98,35 +98,37 @@ describe('recordAgentDelegation / settleAgentDelegation', () => {
 		useSessionStore.setState({ sessions: [proxmox(), maestro()] } as never);
 	});
 
-	it.each([false, true])(
-		'records dispatched new tabs as children only in newShell=%s',
-		(newShell) => {
-			useSettingsStore.setState({ newShell });
-			const caller = maestro();
-			caller.aiTabs[0].agentSessionId = 'source-native';
-			caller.aiTabs[0].name = 'Parent conversation';
-			const child = createMockAITab({ id: 'child', state: 'busy' });
-			const target = { ...proxmox(), aiTabs: [child] };
-			useSessionStore.setState({ sessions: [caller, target] });
-			recordAgentDelegation(
-				notice({ newTab: true, targetTabId: child.id, prompt: 'Fix the bug. Then check tests.' })
-			);
-			const result = useSessionStore.getState().sessions[1].aiTabs[0];
-			if (newShell) {
-				expect(result.origin).toMatchObject({
-					kind: 'subtask',
-					sourceSessionId: caller.id,
-					sourceTabId: 'caller-tab',
-					sourceNativeSessionId: 'source-native',
-					sourceProvider: caller.toolType,
-				});
-				expect(result.name).toBe('Fix the bug.');
-			} else {
-				expect(result.origin).toBeUndefined();
-				expect(result.name).toBe(child.name);
-			}
-		}
-	);
+	it.each([false, true])('requires a saved child receipt only in newShell=%s', (newShell) => {
+		useSettingsStore.setState({ newShell });
+		const target = { ...proxmox(), aiTabs: [createMockAITab({ id: 'child' })] };
+		useSessionStore.setState({ sessions: [maestro(), target] });
+		const result = recordAgentDelegation(notice({ newTab: true, targetTabId: 'child' }));
+		if (newShell) expect(result).toBeNull();
+		else expect(result).toMatchObject({ sessionId: 'maestro', tabId: 'caller-tab' });
+		expect(logsOf('maestro', 'caller-tab')).toHaveLength(newShell ? 0 : 1);
+		expect(useSessionStore.getState().sessions[1]).toBe(target);
+	});
+
+	it('records an acknowledged cross-window child without patching its stale snapshot', () => {
+		useSettingsStore.setState({ newShell: true });
+		const target = { ...proxmox(), aiTabs: [createMockAITab({ id: 'child' })] };
+		useSessionStore.setState({ sessions: [maestro(), target] });
+		const accepted = notice({
+			newTab: true,
+			targetTabId: 'child',
+			provenanceSaved: true,
+			target: { id: target.id, name: target.name, toolType: target.toolType },
+		});
+		recordAgentDelegation(accepted);
+		expect(useSessionStore.getState().sessions[1]).toBe(target);
+		useSessionStore.setState({ sessions: [maestro()] });
+		expect(recordAgentDelegation(accepted)).not.toBeNull();
+		expect(logsOf('maestro', 'caller-tab')[0].delegation).toMatchObject({
+			toTabId: 'child',
+			toSessionId: target.id,
+			toAgentName: target.name,
+		});
+	});
 
 	it('keeps existing conversation provenance when dispatch does not create a tab', () => {
 		useSettingsStore.setState({ newShell: true });

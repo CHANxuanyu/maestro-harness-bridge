@@ -361,6 +361,32 @@ describe('local AI handoff routing', () => {
 		);
 	});
 
+	it('keeps CLI child identity and permission when project defaults select the target', async () => {
+		const origin = {
+			kind: 'subtask' as const,
+			sourceSessionId: 'remote-parent',
+			sourceTabId: 'parent-tab',
+			sourceProvider: 'codex',
+			sourceNativeSessionId: 'parent-native',
+			createdAt: 1,
+		};
+		const sourcePermission = { permissionMode: 'readonly' as const, readOnlyMode: true };
+		await service().command({
+			action: 'new-conversation',
+			sourceAgentId: 'claude-code',
+			targetProvider: 'codex',
+			prompt: 'Build',
+			origin,
+			sourcePermission,
+		});
+		expect(openTarget).toHaveBeenCalledWith(
+			expect.objectContaining({
+				newConversation: expect.objectContaining({ origin, prompt: 'Build' }),
+				permissionCeiling: sourcePermission,
+			})
+		);
+	});
+
 	it('creates a new SSH project conversation on the same host and effective directory', async () => {
 		runners[0].sessionSshRemoteConfig = {
 			enabled: true,

@@ -1241,8 +1241,8 @@ export class WebServer {
 				this.callbackRegistry.listTerminalTabs(sessionId),
 			readTerminalTab: async (sessionId: string, payload: ReadTerminalTabPayload) =>
 				this.callbackRegistry.readTerminalTab(sessionId, payload),
-			newAITabWithPrompt: async (sessionId: string, prompt: string, background?: boolean) =>
-				this.callbackRegistry.newAITabWithPrompt(sessionId, prompt, background),
+			newAITabWithPrompt: async (...args: Parameters<NewAITabWithPromptCallback>) =>
+				this.callbackRegistry.newAITabWithPrompt(...args),
 			consultAgent: async (params: ConsultAgentParams): Promise<ConsultAgentResult> =>
 				this.callbackRegistry.consultAgent(params),
 			noteAgentDelegation: (notice: Parameters<NoteAgentDelegationCallback>[0]) =>

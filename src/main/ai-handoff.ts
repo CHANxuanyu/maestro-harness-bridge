@@ -255,6 +255,7 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 					if (!target) return failed('The selected tool is unavailable');
 					return deps.openTarget({
 						newConversation: {
+							...(request.origin ? { origin: request.origin } : {}),
 							replaceTabId: request.replaceTabId,
 							...(request.sourceTabId ? { sourceTabId: request.sourceTabId } : {}),
 							...(request.prompt ? { prompt: request.prompt } : {}),

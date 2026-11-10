@@ -80,6 +80,8 @@ export interface HandoffRequest {
 }
 
 export interface HandoffReadRequest {
+	/** Read live delegation identity with its permission, without transcript content. */
+	delegation?: boolean;
 	/** Read permission metadata only; an empty tab id selects the latest project conversation. */
 	permissionOnly?: boolean;
 	/** Read a draft for a tool change in the source owner. */
@@ -93,6 +95,7 @@ export interface HandoffReadRequest {
 }
 
 export interface HandoffSourceSnapshot {
+	sourceProvider?: string;
 	sourcePermission?: { permissionMode: 'full' | 'standard' | 'readonly'; readOnlyMode: boolean };
 	sourceDefaults?: {
 		customModel?: string;
@@ -117,6 +120,7 @@ export interface HandoffOpenRequest {
 	sourceDefaults?: HandoffSourceSnapshot['sourceDefaults'];
 	permissionCeiling?: HandoffSourceSnapshot['sourcePermission'];
 	newConversation?: {
+		origin?: ConversationOrigin;
 		/** An explicit CLI prompt, delivered by the target owner after persistence. */
 		prompt?: string;
 		sourceTabId?: string;
@@ -167,6 +171,7 @@ export type HandoffCommand =
 	| { action: 'targets'; sourceAgentId: string; includeCurrent?: boolean; localOnly?: boolean }
 	| {
 			action: 'new-conversation';
+			origin?: ConversationOrigin;
 			sourceAgentId: string;
 			/** Omitted means the source tool resolved from its effective provider environment. */
 			targetProvider?: string;

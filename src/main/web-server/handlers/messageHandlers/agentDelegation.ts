@@ -1,3 +1,4 @@
+import { isValidAgentId } from '../../../../shared/agentIds';
 /**
  * Report a delivered CLI dispatch to the calling agent's transcript.
  *
@@ -20,6 +21,7 @@ export interface DeliveredDispatch {
 	prompt: string;
 	newTab?: boolean;
 	queued?: boolean;
+	provenanceSaved?: boolean;
 }
 
 export function noteDispatchDelegation(
@@ -33,7 +35,17 @@ export function noteDispatchDelegation(
 	if (isSelfDispatch(caller, dispatch.targetSessionId, dispatch.targetTabId)) return;
 
 	try {
-		ctx.callbacks.noteAgentDelegation({ kind: 'dispatch', ...caller, ...dispatch });
+		const target = dispatch.provenanceSaved
+			? ctx.callbacks.getSessions?.().find((session) => session.id === dispatch.targetSessionId)
+			: undefined;
+		ctx.callbacks.noteAgentDelegation({
+			kind: 'dispatch',
+			...caller,
+			...dispatch,
+			...(target && isValidAgentId(target.toolType)
+				? { target: { id: target.id, name: target.name, toolType: target.toolType } }
+				: {}),
+		});
 	} catch (error) {
 		// The prompt is already delivered and its result already sent. A pill that
 		// failed to draw must not turn that into a reported failure, but it is

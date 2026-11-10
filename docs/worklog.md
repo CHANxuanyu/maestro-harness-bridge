@@ -1670,3 +1670,26 @@ Claude 浏览器审批，不能放在 `newShell` 开关后。SSH 路径及启动
 沙箱外验收交接见 [Claude 浏览器审批验收](../e2e/claude-browser-permissions.md)。
 本轮未启动 Electron、操作浏览器、调用模型或读取个人账户。真实网页认证与事件传递、
 Electron 多窗口、真实 Claude、SSH、其他平台及发行包仍未验证。未推送、开 PR、打标签或发布。
+
+## 2026-11-10 右栏网页预览
+
+新界面第五页签复用 `BrowserTabView`，每条对话保存网址与面板状态。本机链接经
+`openUrl()` 或纯文本链接入口进入右栏；旧界面与外部链接保留原行为。地址提交、
+CLI 导航、刷新和系统浏览器打开共用 `applyNewShellWebAction()`；CLI 文件预览语义保留。
+实现提交为 `ad8868be516d99265dc888d484486d21939e7210`，本轮验证对象是源码，未构建发行包。
+
+修复前首批 7 项断言失败，覆盖面板选择、CLI 和桥接、本机链接及空状态。
+补充回归先发现地址提交未走共用入口、空白页导航把输入框填为 `about:blank`，再修复。
+最终相关 10 文件 378 项通过，使用 `--configLoader runner --no-cache`，无跳过或重试。
+三份正式 tsconfig 的 noEmit 检查通过；所有改动代码和测试使用 Prettier 与
+`eslint --no-ignore` 通过。没有运行全量 Vitest。
+
+`e2e/native-web-preview.spec.ts` 已收集，未启动 Electron。临时 HTTP 服务覆盖地址输入、
+页内导航、UI 与 CLI 刷新、两条对话的网址、输出链接、终端链接、CLI 读取、关闭与重启恢复。
+系统浏览器打开在场景中替换为记录调用，避免启动其他应用；运行状态读取实时进程列表。
+沙箱外命令：`npm run build`，然后
+`MAESTRO_E2E_REAL=0 npx playwright test e2e/native-web-preview.spec.ts --project=native --workers=1 --retries=0`。
+
+未验证真实 Electron、SSH 转发、手机网页与发行包。页面历史、滚动位置不保存，切换对话会
+重建网页；远程项目的本机网址仍指向桌面所在机器，没有新增 SSH 端口转发。
+未读写个人账户、运行模型、推送或发布。

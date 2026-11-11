@@ -36,6 +36,15 @@ test('codex: real app-server approval, steering and stop', async ({}, info) => {
 		expect(created.success).toBe(true);
 		const tabId = created.tabId as string;
 		const processId = `${owner}-ai-${tabId}`;
+		// A new tab reaches the CLI's store on the debounced save; wait before addressing it.
+		await expect
+			.poll(() =>
+				native
+					.cli('tab', 'show', tabId, '--agent', owner)
+					.then((result) => result.success === true)
+					.catch(() => false)
+			)
+			.toBe(true);
 		expect(
 			(await native.cli('tab', 'permission', tabId, 'standard', '--agent', owner)).success
 		).toBe(true);

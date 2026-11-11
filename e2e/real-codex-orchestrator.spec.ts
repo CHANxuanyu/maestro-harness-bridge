@@ -165,6 +165,11 @@ test('codex: real orchestrator dispatches the selected child and quotes its resu
 		expect(parentAnswer).toContain(`CHILD_RESULT: ${firstLine}`);
 		await expect(native.output()).toContainText(`CHILD_RESULT: ${firstLine}`);
 		await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
+		// Subtasks auto-expand only while one is working or open, so reopen the finished tree.
+		await parentRow
+			.getByRole('button', { name: /^Show subtasks:/ })
+			.first()
+			.click();
 		await expect(childRow).toBeVisible();
 		await expect(childRow.getByTitle('Working')).toHaveCount(0);
 		expect((await native.cli('tab', 'children', parentTab)).children).toHaveLength(1);

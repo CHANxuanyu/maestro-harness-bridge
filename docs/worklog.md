@@ -1,5 +1,19 @@
 # 分支工作记录
 
+## 2026-11-11：hb.7 试用候选准备
+
+本任务分两步，L 文档核对提交 `c6eb27140`，M 准备 `1.0.1-hb.7` 版本和候选说明。文档核对起点 `92dd094f3` 是集成分支身份，不是冻结构建来源。参照 hb.6 的 `8caf512db`，只改文档及 package 版本字段，没有改产品、测试、依赖或 `docs/releases.md`。
+
+L 按审计第 4 节追加后续证据，保留早期未运行与失败记录；补路线图逐项状态、交接顶层待用户确认、共享 renderer 手机基础与专项未验。没有证据的源码身份保留待补，不把记录提交冒充被测提交。真实 Claude 11-09 只覆盖允许，真实 Codex 11-11 仅固定版本的 app-server 和 Codex 子任务工作负载，均非安装包。
+
+M 将原 Unreleased 的 113 条完整归入七个中文分组，保留 hb.6 及更早条目原文，补旧界面停止修复及后续验收事实。新建版本说明和验收清单，同步 README、fork 入口；hb.6 仍是仓库记录的最新公开包。冻结提交、CI、ZIP、哈希、签名和公证均待构建后填写，不编造附件或链接。
+
+本轮验证：`node scripts/hb-release.mjs check` 通过（`1.0.1-hb.7`）；`node --test scripts/hb-release.test.mjs` 19 通过、0 失败、0 跳过。三份 `npx tsc --noEmit -p` 配置为 `tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json`，均通过。条目保留检查通过；改动文件 Prettier 与 diff 空白检查通过。ESLint 调用无错误，但 Markdown/JSON 无适用规则，不宣称代码 lint 覆盖。只有文档和版本变化，无行为修复，因此未新增失败回归、未运行 Vitest 全量，也没有修改或跳过既有测试。
+
+没有新增界面动作或 CLI 动词，已有动作及缺口见 `CLI-UI-PARITY.md`。本次不改变旧界面行为；候选累计共享修复包括停止通知、旧停止按钮、配置最新值、审批收尾、历史读取和保存，目的及边界在 CHANGELOG 和版本说明保留，不能说 hb.7 对旧界面完全无变化。
+
+未运行 Electron、模型、真实 SSH、手机或安装包，也未查询远端 CI。没有读取私人账户或凭据，没有操作其他应用，没有推送、开 PR、打标签、上传或发布，未运行 assets/verify。Opus 的集成合成命令与包内待办见 `docs/verification/v1.0.1-hb.7.md`；真人全天使用和默认切换仍待决定。
+
 ## 2026-11-10：完整停止 CLI 对等与审批入口
 
 `tab stop` 经所属窗口回执调用 `useInterruptHandler`，新界面按对话、旧界面按所属配置停止。

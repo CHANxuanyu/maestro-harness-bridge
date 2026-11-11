@@ -9,7 +9,7 @@ MAESTRO_E2E_REAL=0 npx playwright test e2e/native-subtasks.spec.ts --project=nat
 ```
 
 自动场景使用 `NativeApp` 的临时目录和合成 Claude / Codex 协议夹具。
-若误开真实模型模式，场景会报错，不读取真实凭据、不跳过测试。
+真实模型模式通过文件级 `test.skip(process.env.MAESTRO_E2E_REAL === '1', ...)` 跳过，不建立夹具、不读取真实凭据。早期报错的守卫已由 U3 二轮修复替换。
 
 自动场景检查：
 
@@ -24,8 +24,14 @@ MAESTRO_E2E_REAL=0 npx playwright test e2e/native-subtasks.spec.ts --project=nat
 2. 失败、取消以及进程异常退出后的状态。插话只能在前一轮结束后执行，错误信息应可见。
 3. 同目录不同账户、同名目录不同 SSH 主机、worktree 来源关闭后的归属。远程未做实际连接验证。
 4. 关闭新界面开关，确认原有咨询无 chip、无未读；切换前正在运行的子任务结束后不能卡在忙碌。
-5. 多窗口分别持有父对话和目标对话。目前派发来源通知仍只发给调用方窗口，另一窗口拥有的子对话来源写入尚未保证，应记录为限制，不当作已通过。
+5. 多窗口分别持有父对话和目标对话。早期来源仅通知调用方窗口的缺口已由 PR #72 修复，目标窗口保存后才回执。`native-cross-window-subtasks.spec.ts` 的最新 Electron 结果未验证；原生 ID 晚到的跨窗口补写仍见 CLI Open gaps。
 
 已有历史咨询若从未记录父原生 ID，原父标签关闭后无法补猜身份。
 CLI `tab children` 以仍打开的父标签为入口，父标签关闭后须先从界面重新打开历史行再查询。
 展开和收起是当前界面的本地状态，CLI 只读取子任务，不修改折叠状态。
+
+## 后续结果（2026-11-11）
+
+上文“未启动 Electron”是编写阶段记录。`docs/worklog.md`“U3 子任务 Electron 验收”记录 PR #66 的同窗口合成场景通过，含插话、停止、归档、父标签关闭和重启挂回；该记录未填写被测源码 SHA，不能用当前 HEAD 代填。
+
+PR #77 的开发构建 `eab909e35` 已真实通过 Codex 派 Codex 子任务并引用结果，见 `docs/verification/real-codex.md`。Codex 派 Claude 因访问令牌过期未完成，真实插话、SSH、多窗口和安装包不在该结果范围。子任务只在运行或打开时自动展开，完成后会收起；完成后核对需先展开父对话。交接保持顶层，复核与子任务嵌套，附录 C 的规格差异待用户确认。

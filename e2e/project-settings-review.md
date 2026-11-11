@@ -9,7 +9,7 @@ npm run build
 MAESTRO_E2E_REAL=0 npx playwright test e2e/native-project-settings.spec.ts --workers=1 --retries=0
 ```
 
-`native-project-settings.spec.ts` 使用 `NativeApp` 的临时项目、Maestro 数据和工具账户，明确拒绝真实模式。不会向对话发送提示，不调用真实模型，不读取个人账户。用例失败后保留失败结果和 trace，不自动重试。
+`native-project-settings.spec.ts` 使用 `NativeApp` 的临时项目、Maestro 数据和工具账户，真实模式通过文件级 `test.skip()` 跳过。不会向对话发送提示，不调用真实模型，不读取个人账户。用例失败后保留失败结果和 trace，不自动重试。
 
 场景覆盖：
 
@@ -38,3 +38,9 @@ MAESTRO_E2E_REAL=0 npx playwright test e2e/native-project-settings.spec.ts --wor
 项目有默认值时，可达的分屏新建共用项目创建服务，并通过实际返回的归属调用 U1 分屏服务。CLI 用 `tab new` 后接 `tab split`；原子化动作的缺口登记在 `docs/agent-guides/CLI-UI-PARITY.md`。向导入口在新界面隐藏，未为其增加项目环境逻辑。浏览器设置响应不含项目环境值，浏览器只能编辑其他字段。
 
 真实 SSH、多窗口、手机操作、其他操作系统和发行包均未在本轮执行。CLI 带提示的新建及目标窗口排队只做了 mock 回归，没有真实发送。
+
+## 后续结果（2026-11-11）
+
+保留上文编写阶段未运行事实。`docs/worklog.md`“2026-11-07：U2 项目设置 Electron 验收”记录 PR #65 的 `native-project-settings.spec.ts` 开发构建合成通过，源码 SHA 未记录，待补；真实模式现在文件级跳过。通过范围是项目新对话默认值，不是全部账户与 SSH 配置替代。
+
+PR #76 后的工具配置及旧表单最新值修复见工作记录“J 第二线额度恢复与配置旧快照修复”，场景 `native-project-tool-config.spec.ts` 的最新 Electron 结果未验证。项目默认值与多份工具配置依次写入，不是事务，后项失败可能保留前项，窗口会提示。真实 SSH、多窗口、手机与安装包仍未验证。

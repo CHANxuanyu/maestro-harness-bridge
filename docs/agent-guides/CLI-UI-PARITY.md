@@ -360,7 +360,7 @@ interrupt implementation. This correction adds no separate stop implementation.
 停止按钮、Escape 和经现有中断通路停止的 CLI 回合均不会发送完成通知，
 包括通知中心、弹窗、系统通知及自定义声音。新旧界面一致，错误提示和其他对话
 不受影响。没有新增界面动作或 CLI 动词；`codex-turn stop` 沿用已有入口，
-完整桌面 Stop 的 CLI 对等仍属于 Open gaps，未在本次修复中补齐。
+当时未补完整桌面 Stop 的 CLI 对等。后续 PR #73 已以 `tab stop` 补齐，见本文件完整停止条目；旧 REST 中断仍不等同于完整停止。
 
 The review follow-up keeps these same actions. Consecutive refreshes preserve
 genuine repeated sends; an old cached internal prompt outside the newest 500
@@ -966,18 +966,21 @@ below remain open.
 
 ## Open gaps
 
-Claude approval: the modal covers the composer Stop button. Escape denies only
-the current tool. U4 tests the existing interrupt IPC while approval is pending;
-it does not add a direct Stop action or close the existing full Stop parity gap.
+Claude approval: PR #73 adds Stop this turn inside the new shell approval modal,
+with `tab stop` routed to the same owner and complete interrupt handler. Escape
+still denies only the current tool. The updated synthetic Electron scenarios
+await an execution result; the earlier real allow result does not verify Stop.
 `permission` covers tool allow/deny only; a structured AskUserQuestion answer
 command, cross-window routing and browser prompt delivery are not verified here.
 
 **Codex prototype controls (2026-11-07).** `codex-turn stop` interrupts only the
 addressed local app-server process through `ProcessManager.interrupt()`. The
-composer Stop also cancels the project's queued work and cross-agent consults;
-that action is now covered by `tab stop`, as recorded in A above. Approval prompts use
-the main window only. Secondary-window ownership and web-desktop approval/steer
-controls have not been integrated or verified. There is no CLI draft editor:
+new shell composer Stop cancels work for the target conversation, including its
+queue and scoped consults, while other conversations remain running; classic
+Stop retains its owner configuration scope. `tab stop` shares that complete
+handler. Approval ownership already checks the user and owning window. Actual
+secondary-window Electron presentation is unverified; the CLI cannot select
+another approval window, and Codex approvals are explicitly refused in browsers. There is no CLI draft editor:
 `steer` takes explicit text and leaves the desktop draft alone. The composer
 shows the affordance from opt-in eligibility; if the current turn started with
 exec before the setting changed, the main process refuses steering and the draft
@@ -1542,3 +1545,9 @@ URLs and panel state persist, while guests are recreated on conversation changes
 目标选择锁定配置 ID，不回退到其他账户。跨本机 worktree 复制该配置并保持来源 cwd；SSH 按项目路径和主机比较，不执行本机 realpath。目标环境保持该配置当前的账户，不再用项目默认环境覆盖。权限仍取来源和项目默认的较严者。失败的用户消息完整放入交接指令，历史正文不重复该消息，附件一起入队。读取目标列表不访问凭据或调用模型，账户显示解析后的配置目录或该主机的默认账户。
 
 Open gaps：本轮没有新增界面动作缺口。目标不可用、保存失败或发送队列失败不自动重试；保留原错误，需手动处理。Electron 场景在 `e2e/native-auto-handoff.spec.ts`，待沙箱外执行。
+
+## 2026-11-11 文档核对补充
+
+本次只整理证据，没有新增界面动作或 CLI 动词。PR #72、#73、#74、#76 的对应动作仍使用各自已登记的共享实现。`active` 在刚切换对话后可能读到尚未保存的上一条；PR #74 已让网页打开、刷新和外部打开使用窗口实时状态，其他动词未逐一验证，暂用显式标签 ID。
+
+PR #77 后续真实结果见 `docs/verification/real-codex.md`：仅固定版本 app-server 工作负载及 Codex 派 Codex 子任务通过。早期 Stop 缺口描述保留历史含义，以本文件完整停止条目和首个 Open gaps 的当前说明为准。原生历史打开定位、树折叠及其他展示控制缺口没有因此关闭。

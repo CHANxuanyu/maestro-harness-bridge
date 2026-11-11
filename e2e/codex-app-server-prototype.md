@@ -1,5 +1,7 @@
 # Codex app-server 原型的沙箱外验证
 
+2026-11-11 后续结果：PR #77 的开发构建 `eab909e35` 已通过合成 app-server 及两条真实 Codex 工作负载，见 [真实验证记录](../docs/verification/real-codex.md)。只覆盖 `codex-cli 0.167.0-alpha.3.2`，安装包、其他版本及完整协议未验证；下文原始“未运行”描述保留为当时事实。
+
 本文件是交给 Opus 的待执行清单。本轮仅收集了 `native-codex-app-server.spec.ts`，没有启动 Electron，也没有运行真实 Codex 会话。
 
 ## 合成 Electron 场景
@@ -10,7 +12,7 @@
 MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-codex-app-server.spec.ts --workers=1 --retries=0
 ```
 
-脚本重建 main、renderer、CLI，再运行 native 项目。测试创建独立临时 HOME、Maestro 数据目录和提供方目录，设置 `newShell=true`、`codexAppServer=true`，关闭自动命名及自动摘要。唯一提供方可执行文件是 `e2e/fixtures/native/codex-app-server`，它只读写指定临时夹具目录和 stdio，不调用模型、真实 CLI 或网络。不要改为 `MAESTRO_E2E_REAL=1`，本场景会拒绝真实模式。
+脚本重建 main、renderer、CLI，再运行 native 项目。测试创建独立临时 HOME、Maestro 数据目录和提供方目录，设置 `newShell=true`、`codexAppServer=true`，关闭自动命名及自动摘要。唯一提供方可执行文件是 `e2e/fixtures/native/codex-app-server`，它只读写指定临时夹具目录和 stdio，不调用模型、真实 CLI 或网络。本场景在 `MAESTRO_E2E_REAL=1` 时文件级跳过，不读取真实账户。
 
 自动化覆盖顺序：
 
@@ -60,3 +62,9 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-codex-app-server.spec.ts e2e/n
 ## 原型未覆盖
 
 主窗口以外审批的 Electron 展示、浏览器明确拒绝的完整端到端验证、强制并行回合、多客户端并发写同一原生对话、图片、网络授权、MCP 提问和动态工具均未完成验收。`codex-turn stop` 仅停止指定进程；界面 Stop 额外取消队列与咨询的完整对等仍在 CLI Open gaps 中。真实 CLI 版本兼容性、模型是否遵守审批和沙箱、跨平台进程树清理、发行包内转换器加载需要另外验证，本轮不执行真实会话。
+
+## 停止断言的后续边界（2026-11-11）
+
+PR #75（`b4a0d4e64`）只修正 `src/__tests__/main/process-manager/codex-app-server-stop.test.ts`：检查控制器实际发出的 `turn/interrupt`，避免等待审批时对端先处理拒绝并退出、来不及记录中断的竞态，仍要求进程退出和审批清空。它没有修改本文件对应的 Electron 场景，不能据此宣称最新集成 Electron 通过。
+
+PR #73 的 `tab stop` 已与界面完整停止共用实现，新界面只清理目标对话队列与咨询；`codex-turn stop` 仅中断指定进程。11 月 11 日记录的合成通过和真实结果对应 `eab909e35`，不代表当前合并提交或所有新增停止场景，集成后需重跑。

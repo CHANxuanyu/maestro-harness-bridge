@@ -280,7 +280,12 @@ export function useInterruptHandler(deps: UseInterruptHandlerDeps): UseInterrupt
 	// ========================================================================
 	const handleInterrupt = useCallback(async (target?: { sessionId: string; tabId: string }) => {
 		const newShell = useSettingsStore.getState().newShell;
-		const explicitTarget = target;
+		// Stop buttons are wired as onClick={onInterrupt}, so a click event can arrive here.
+		// Only a real { sessionId, tabId } pair (pane Stop, CLI) pins the target.
+		const explicitTarget =
+			typeof target?.sessionId === 'string' && typeof target?.tabId === 'string'
+				? target
+				: undefined;
 		const activeSession = explicitTarget
 			? useSessionStore
 					.getState()

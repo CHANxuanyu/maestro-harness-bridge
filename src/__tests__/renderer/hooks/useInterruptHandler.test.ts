@@ -453,6 +453,34 @@ describe('useInterruptHandler', () => {
 			expect(mockMaestro.process.interrupt).toHaveBeenCalledWith('sess-ai-ai-tab-ai-1');
 		});
 
+		it('treats a click event passed by a Stop button as no target', async () => {
+			const tab = createTab({ id: 'tab-ai-1', state: 'busy' });
+			const session = createSession({
+				id: 'sess-ai',
+				inputMode: 'ai',
+				state: 'busy',
+				aiTabs: [tab],
+				activeTabId: 'tab-ai-1',
+			});
+			useSessionStore.setState({
+				sessions: [session],
+				activeSessionId: 'sess-ai',
+			});
+
+			const deps = createDeps({ sessionsRef: { current: [session] } });
+			const { result } = renderHook(() => useInterruptHandler(deps));
+			// StopTurnButton is wired as onClick={onInterrupt}, so React hands Stop its event.
+			const clickEvent = { type: 'click', target: {}, currentTarget: {} } as never;
+
+			let outcome: { success: boolean } | undefined;
+			await act(async () => {
+				outcome = await result.current.handleInterrupt(clickEvent);
+			});
+
+			expect(mockMaestro.process.interrupt).toHaveBeenCalledWith('sess-ai-ai-tab-ai-1');
+			expect(outcome?.success).toBe(true);
+		});
+
 		it('cancels pending synopsis before interrupting', async () => {
 			const session = createSession({
 				id: 'sess-syn',

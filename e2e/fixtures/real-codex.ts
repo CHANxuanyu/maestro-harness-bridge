@@ -3,12 +3,14 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { expect, type TestInfo } from '@playwright/test';
 import { NativeApp } from './native-app';
+import { prepareCredentials } from './native/real-runtime.cjs';
 
-/** Explicit API credentials only. Never discover or copy a user's account files. */
+/** API credentials or access-only login snapshots in isolated temporary accounts. */
 export class RealCodexApp extends NativeApp {
 	readonly executable: string;
-	readonly model: string;
+	readonly model: string | undefined;
 	readonly version: string;
+	private loginCredentials: Record<string, string> = {};
 
 	constructor(info: TestInfo, appServer: boolean) {
 		if (process.env.MAESTRO_E2E_REAL !== '1') throw new Error('Real run requires explicit opt-in');
@@ -16,14 +18,20 @@ export class RealCodexApp extends NativeApp {
 			throw new Error('Unset inherited MAESTRO_CALLER_*; only the application may inject identity');
 		const executable = process.env.MAESTRO_E2E_CODEX_PATH;
 		const model = process.env.MAESTRO_E2E_CODEX_MODEL;
-		if (!executable || !path.isAbsolute(executable) || !model || !process.env.CODEX_API_KEY)
-			throw new Error(
-				'Set absolute MAESTRO_E2E_CODEX_PATH, MAESTRO_E2E_CODEX_MODEL and CODEX_API_KEY'
-			);
+		if (!executable || !path.isAbsolute(executable))
+			throw new Error('Set absolute MAESTRO_E2E_CODEX_PATH');
 		super(info, { providerCli: false });
 		this.executable = executable;
 		this.model = model;
 		try {
+			if (!process.env.CODEX_API_KEY) prepareCredentials('codex', this.codex);
+			// Only the orchestrator needs Claude. Preserve the helper's access-token
+			// environment instead of overriding it in the child environment getter.
+			if (!appServer && !process.env.ANTHROPIC_API_KEY)
+				this.loginCredentials = {
+					CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? '',
+					...prepareCredentials('claude', this.claude),
+				};
 			const settings = path.join(this.data, 'maestro-settings.json');
 			fs.writeFileSync(
 				settings,
@@ -42,7 +50,7 @@ export class RealCodexApp extends NativeApp {
 					'cli_auth_credentials_store = "file"',
 					'mcp_oauth_credentials_store = "file"',
 					'web_search = "disabled"',
-					'model_provider = "maestro_real_e2e"',
+					...(process.env.CODEX_API_KEY ? ['model_provider = "maestro_real_e2e"'] : []),
 					'[features]',
 					'apps = false',
 					'plugins = false',
@@ -50,13 +58,17 @@ export class RealCodexApp extends NativeApp {
 					'multi_agent = false',
 					'code_mode = false',
 					'unbounded_connection_retries = false',
-					'[model_providers.maestro_real_e2e]',
-					'name = "OpenAI real acceptance"',
-					'base_url = "https://api.openai.com/v1"',
-					'env_key = "CODEX_API_KEY"',
-					'wire_api = "responses"',
-					'request_max_retries = 0',
-					'stream_max_retries = 0',
+					...(process.env.CODEX_API_KEY
+						? [
+								'[model_providers.maestro_real_e2e]',
+								'name = "OpenAI real acceptance"',
+								'base_url = "https://api.openai.com/v1"',
+								'env_key = "CODEX_API_KEY"',
+								'wire_api = "responses"',
+								'request_max_retries = 0',
+								'stream_max_retries = 0',
+							]
+						: []),
 				].join('\n') + '\n'
 			);
 			this.version = execFileSync(executable, ['--version'], {
@@ -85,6 +97,7 @@ export class RealCodexApp extends NativeApp {
 			OPENAI_API_KEY: '',
 			ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? '',
 			CLAUDE_CODE_OAUTH_TOKEN: '',
+			...this.loginCredentials,
 			CLAUDE_CODE_API_KEY: '',
 			CLAUDE_CODE_USE_BEDROCK: '0',
 			CLAUDE_CODE_USE_VERTEX: '0',
@@ -102,10 +115,33 @@ export class RealCodexApp extends NativeApp {
 			this.project,
 			'--custom-path',
 			this.executable,
-			'--model',
-			this.model,
+			...(this.model ? ['--model', this.model] : []),
 			'--env',
 			`CODEX_HOME=${this.codex}`,
+			'--env',
+			`HOME=${this.syntheticHome}`
+		);
+		expect(result.success).toBe(true);
+		return result.agentId as string;
+	}
+
+	async createClaude() {
+		const executable = process.env.MAESTRO_E2E_CLAUDE_PATH;
+		const model = process.env.MAESTRO_E2E_CLAUDE_MODEL;
+		if (!executable || !path.isAbsolute(executable))
+			throw new Error('Set absolute MAESTRO_E2E_CLAUDE_PATH');
+		const result = await this.cli(
+			'create-agent',
+			'Claude reader',
+			'--type',
+			'claude-code',
+			'--cwd',
+			this.project,
+			'--custom-path',
+			executable,
+			...(model ? ['--model', model] : []),
+			'--env',
+			`CLAUDE_CONFIG_DIR=${this.claude}`,
 			'--env',
 			`HOME=${this.syntheticHome}`
 		);

@@ -112,6 +112,17 @@ describe('read-only native login snapshots', () => {
 		expect(fs.readdirSync(destination)).toEqual([]);
 	});
 
+	it('rejects malformed token containers without leaking their contents', () => {
+		fs.writeFileSync(
+			path.join(source, 'auth.json'),
+			JSON.stringify({ tokens: 'fake-private-value' })
+		);
+		expect(() => prepareCredentials('codex', destination, { CODEX_HOME: source })).toThrow(
+			/^Codex login snapshot is unavailable/
+		);
+		expect(fs.readdirSync(destination)).toEqual([]);
+	});
+
 	it('does not expose malformed auth contents in the error', () => {
 		fs.writeFileSync(path.join(source, 'auth.json'), '{"tokens":fake-private-value}');
 		expect(() => prepareCredentials('codex', destination, { CODEX_HOME: source })).toThrow(

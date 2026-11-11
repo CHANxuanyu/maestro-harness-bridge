@@ -1,5 +1,29 @@
 # 分支工作记录
 
+## 2026-11-11：I 真实 Codex 场景支持订阅登录
+
+验证对象为 `codex/real-specs` 任务分支源码，先提交回归 `23ed18e63`，没有构建发行包。
+`RealCodexApp` 无 API key 时复用 `prepareCredentials()`。Codex 只复制 auth.json 并清空
+刷新令牌，已过期 JWT 明确失败，格式错误不带出凭据。Claude 只传访问令牌给子进程。
+app-server 场景不要求 Claude 登录。两家模型参数可选，API key 模式保留原提供方和环境。
+
+修复前首批 7 条测试全部失败，覆盖刷新令牌原样复制、过期及坏 JSON 不拒绝、API key
+和模型强制要求，以及待抽取的 Claude 创建路径。随后补充坏 tokens 对象回归，先出现
+1 失败、7 通过，确认 TypeError 会包含假凭据，再修正为固定错误。最终 8 条全部通过，
+命令为 `npx vitest run src/__tests__/scripts/real-codex-login.test.ts --configLoader runner --no-cache`。
+只用临时假账户，CLI 版本调用和 Electron 启动均 mock，不读取真实登录或钥匙串。
+
+`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 三份 noEmit 检查通过。
+两个真实场景及导入夹具的补充类型检查通过，代码 ESLint、改动文件 Prettier 和 diff
+空白检查通过。Playwright 仅收集 2 条真实场景，未运行。无新增界面动作、CLI 动词或
+产品文案，CLI 对等表已登记，既有 Open gaps 保留。旧界面和产品代码不变，无需新增
+newShell 分支；共享变化仅为其他真实 Codex 验收夹具同样不再携带刷新令牌。
+
+外部执行命令见 [真实验证说明](verification/real-codex.md)。真实订阅登录、API 请求、
+macOS 钥匙串、默认提供方内部重试、Electron、SSH、其他平台与发行包均未验证。
+登录模式保留默认 OpenAI 提供方，其 HTTP 重试由 CLI 决定；测试本身不重试。
+未推送、开 PR、打标签或发布。
+
 ## 2026-11-10：F Codex 真实验证场景准备
 
 本轮只新增默认跳过的真实场景和测试夹具，验证对象是任务分支源码，没有运行 Electron、真实模型或构建发行包。`real-codex-app-server.spec.ts` 覆盖新建、标准权限拒绝与允许、本轮追加和停止；`real-codex-orchestrator.spec.ts` 要求 Codex 自行派发 Claude 子任务并引用随机 README 首行。复用 NativeApp 与临时目录工具，凭据只经环境传入，不读取用户账户文件，不伪造调用方身份。

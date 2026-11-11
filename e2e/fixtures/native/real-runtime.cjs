@@ -67,7 +67,39 @@ function prepareCredentials(provider, destination, env = process.env) {
 		// Source: src/main/agents/codex-auth.ts. Copy only credentials, never the
 		// account config, hooks, databases or existing native session directory.
 		const source = path.join(env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'auth.json');
-		fs.writeFileSync(path.join(destination, 'auth.json'), fs.readFileSync(source), { mode: 0o600 });
+		let credentials;
+		try {
+			credentials = JSON.parse(fs.readFileSync(source, 'utf8'));
+			if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials))
+				throw new Error('Invalid auth object');
+			if (
+				credentials.tokens != null &&
+				(typeof credentials.tokens !== 'object' || Array.isArray(credentials.tokens))
+			)
+				throw new Error('Invalid tokens object');
+		} catch {
+			// JSON parse errors can include source bytes. Never expose credentials.
+			throw new Error('Codex login snapshot is unavailable. Check CODEX_HOME/auth.json.');
+		}
+		if (credentials.tokens) {
+			// A copied refresh token could rotate the user's live login. The snapshot
+			// can only use its current access token and must fail when that expires.
+			credentials.tokens.refresh_token = '';
+			let expiresAt;
+			try {
+				const payload = credentials.tokens.access_token.split('.')[1];
+				expiresAt = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')).exp;
+			} catch {
+				// Opaque tokens have no local expiry hint; the provider validates them.
+			}
+			if (typeof expiresAt === 'number' && expiresAt <= Date.now() / 1000)
+				throw new Error(
+					'Codex access token has expired. Refresh the login outside acceptance before running again; snapshots cannot refresh.'
+				);
+		}
+		fs.writeFileSync(path.join(destination, 'auth.json'), JSON.stringify(credentials), {
+			mode: 0o600,
+		});
 		return {};
 	}
 	if (env.CLAUDE_CODE_OAUTH_TOKEN || env.ANTHROPIC_API_KEY) return {};

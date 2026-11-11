@@ -7,20 +7,24 @@
 
 由 Opus 在沙箱外运行，每次执行会消耗真实账户额度。使用本地官方 CLI 的绝对路径，不使用共享连接器、TUI 包装器或合成 CLI。
 
-- 必填 `MAESTRO_E2E_CODEX_PATH`、`MAESTRO_E2E_CODEX_MODEL` 和环境凭据 `CODEX_API_KEY`。
-- 主控场景另需 `MAESTRO_E2E_CLAUDE_PATH`、`MAESTRO_E2E_CLAUDE_MODEL` 和 `ANTHROPIC_API_KEY`。
+- 必填官方 CLI 的绝对路径 `MAESTRO_E2E_CODEX_PATH`。主控场景另需 `MAESTRO_E2E_CLAUDE_PATH`，app-server 场景不读取 Claude 登录。
+- `MAESTRO_E2E_CODEX_MODEL`、`MAESTRO_E2E_CLAUDE_MODEL` 可选，未设置或为空时不传模型参数，使用账户默认。可显式设置 `MAESTRO_E2E_CODEX_MODEL=gpt-6-astra`。模型必须在所选账户中可用。
 - 可选 `MAESTRO_E2E_CODEX_EXPECT_VERSION`，填写完整的 `codex-cli <version>`。未提供时记录实际版本，不声称版本准入。
-- 本套只支持环境 API 凭据，不读取现有登录文件或钥匙串，不使用 `inheritCodexHome`、`realCliFor()` 或 `createAgent()` 的账户发现逻辑。需要订阅登录验证时另写隔离方案，不能直接切回真实 HOME。
+- API 模式保持原配置：存在 `CODEX_API_KEY` 时，Codex 使用隔离的 API 提供方，不读取原生登录；存在 `ANTHROPIC_API_KEY` 时，Claude 使用该 key，忽略继承的 OAuth token。两种工具可以分别选择 API 或登录模式。
+- 登录模式：没有 `CODEX_API_KEY` 时，复用 `prepareCredentials('codex', ...)`，只读 `${CODEX_HOME 或 ~/.codex}/auth.json`，将 `tokens.refresh_token` 置为空字符串后写到临时 CODEX_HOME，文件权限为 0600。不复制 config、会话、数据库或 hooks；临时 config.toml 不指定自定义 `model_provider`，使用默认 OpenAI 提供方。
+- 主控场景没有 `ANTHROPIC_API_KEY` 时，复用 `prepareCredentials('claude', ...)`：优先使用环境 `CLAUDE_CODE_OAUTH_TOKEN`，否则只读已登录账户的访问令牌快照。现有来源为指定 CLAUDE_CONFIG_DIR 的 `.credentials.json`，或默认目录文件，或 macOS 默认钥匙串条目。仅访问令牌进入子进程环境，不复制刷新令牌或其他账户文件。
+- 必须在访问令牌有效期内运行。Codex JWT 中已过期的 `exp` 会在创建快照前明确报错；不透明令牌、撤销状态或运行中到期由原生 CLI 返回认证失败。临时快照不能续期，不自动重新登录或重发测试。需要恢复时由 Opus 在验收外先完成登录，再明确启动一次新的验收。
+- 刷新令牌可能在刷新时轮换，复制它会让临时账户影响用户当前登录，因此 Codex 清空该字段，Claude 从不复制该字段。夹具不写真实账户目录或钥匙串；所有原生进程仍使用隔离 HOME，不使用 `inheritCodexHome`。
 - 从没有 `MAESTRO_CALLER_*` 的独立终端启动。夹具发现继承的调用方标识就失败；父子身份必须由应用注入。不要在命令前手工补这些变量。
-- HOME、USERPROFILE、项目、应用数据、Codex 和 Claude 账户目录全部位于 `createNativeTempDir()` 创建的临时根目录。只对这些临时数据写入和清理；凭据经子进程环境传递，不保存进配置或命令参数。
-- 关闭自动命名、历史摘要和崩溃上报。Codex 测试账户禁用 apps、plugins、hooks、多代理和网络重连，API 请求与流重试设为 0。Playwright 重试为 0；场景不重新提交失败提示词。
+- HOME、USERPROFILE、项目、应用数据、Codex 和 Claude 账户目录全部位于 `createNativeTempDir()` 创建的临时根目录。只对这些临时数据写入和清理；Codex 登录凭据只保存在临时 auth.json；API key 和 Claude 访问令牌经子进程环境传递，不保存进应用配置或命令参数。
+- 关闭自动命名、历史摘要和崩溃上报。Codex 测试账户禁用 apps、plugins、hooks、多代理和网络重连，API 模式的请求与流重试设为 0；登录模式使用默认 OpenAI 提供方，其内部 HTTP 重试由 CLI 决定。Playwright 重试为 0；场景不重新提交失败提示词。
 
 先在当前提交构建，准备好上述环境变量后，再逐条运行。不要用整个 `electron` 项目的测试集代替这两个文件。
 
 ```sh
 npm run build
-MAESTRO_E2E_REAL=1 npx playwright test e2e/real-codex-app-server.spec.ts --project=electron --workers=1 --retries=0
-MAESTRO_E2E_REAL=1 npx playwright test e2e/real-codex-orchestrator.spec.ts --project=electron --workers=1 --retries=0
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_CODEX_MODEL=gpt-6-astra npx playwright test e2e/real-codex-app-server.spec.ts --project=electron --workers=1 --retries=0
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_CODEX_MODEL=gpt-6-astra npx playwright test e2e/real-codex-orchestrator.spec.ts --project=electron --workers=1 --retries=0
 ```
 
 只收集场景，不启动应用：
@@ -35,6 +39,8 @@ MAESTRO_E2E_REAL=0 npx playwright test e2e/real-codex-app-server.spec.ts e2e/rea
 | ---------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | app-server | 4 次 Codex 回合提交，分别为问候、拒绝写入、允许写入并追加、停止；另有 1 次 `turn/steer` | 第一轮完成；拒绝后文件不存在且正常结束；允许后内容逐字相同；追加标记出现在本轮回答；停止后退出码 130、进程 PID 消失、停止按钮和审批消失 |
 | 主控       | 1 次 Codex 父回合，父工具调用中仅派发 1 次 Claude 子回合，无完成回调                    | 子任务在左栏嵌套于父对话；主进程报告子进程运行；子回合成功退出；父最终回答引用随机 README 首行                                          |
+
+登录模式消耗所选 ChatGPT 和 claude.ai 订阅账户的可用额度，仍受账户模型权限和限额约束；API 模式消耗对应 API 账户额度。订阅不代表无限使用，也不替代 API 计费。
 
 这些是应用层提交次数，不是固定的计费 HTTP 次数。模型执行工具后还会继续请求，追加也可能触发续推；实际 HTTP 数量由模型和 CLI 决定，不能保证恰好为 4 或 2。轮询 Maestro 本身不调用模型。
 
@@ -66,4 +72,4 @@ app-server 场景同时启用 `newShell` 和 `codexAppServer`，只测本机标�
 
 ## 边界
 
-本套没有新增界面动作或 CLI 动词，既有对应关系见 [CLI 对等表](../agent-guides/CLI-UI-PARITY.md#codex-app-server-prototype-2026-11-07)。不覆盖 SSH、订阅登录、其他平台、浏览器、多窗口、重启恢复、所有协议字段或任意脱离父进程的后台工具。旧界面和产品实现均未修改。一次通过只证明所记录版本、账户模式与这两个工作负载。
+本套没有新增界面动作或 CLI 动词，既有对应关系见 [CLI 对等表](../agent-guides/CLI-UI-PARITY.md#codex-app-server-prototype-2026-11-07)。支持本机订阅登录快照，但尚未真实运行验证。不覆盖 SSH、其他平台、浏览器、多窗口、重启恢复、所有协议字段或任意脱离父进程的后台工具。旧界面和产品实现均未修改。一次通过只证明所记录版本、账户模式与这两个工作负载。

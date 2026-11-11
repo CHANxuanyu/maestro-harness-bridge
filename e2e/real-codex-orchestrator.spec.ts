@@ -17,11 +17,7 @@ test.describe.configure({ retries: 0 });
 // eslint-disable-next-line no-empty-pattern
 test('codex: real orchestrator dispatches Claude and quotes its result', async ({}, info) => {
 	const claude = process.env.MAESTRO_E2E_CLAUDE_PATH;
-	const claudeModel = process.env.MAESTRO_E2E_CLAUDE_MODEL;
-	if (!claude || !path.isAbsolute(claude) || !claudeModel || !process.env.ANTHROPIC_API_KEY)
-		throw new Error(
-			'Set absolute MAESTRO_E2E_CLAUDE_PATH, MAESTRO_E2E_CLAUDE_MODEL and ANTHROPIC_API_KEY'
-		);
+	if (!claude || !path.isAbsolute(claude)) throw new Error('Set absolute MAESTRO_E2E_CLAUDE_PATH');
 	// This independently verifies the existing full-access exec path as a parent.
 	const native = new RealCodexApp(info, false);
 	let completed = false;
@@ -55,24 +51,7 @@ test('codex: real orchestrator dispatches Claude and quotes its result', async (
 				)
 			).success
 		).toBe(true);
-		const worker = await native.cli(
-			'create-agent',
-			'Claude reader',
-			'--type',
-			'claude-code',
-			'--cwd',
-			native.project,
-			'--custom-path',
-			claude,
-			'--model',
-			claudeModel,
-			'--env',
-			`CLAUDE_CONFIG_DIR=${native.claude}`,
-			'--env',
-			`HOME=${native.syntheticHome}`
-		);
-		expect(worker.success).toBe(true);
-		const workerId = worker.agentId as string;
+		const workerId = await native.createClaude();
 		expect((await native.cli('update-agent', workerId, '--token-source', 'api')).success).toBe(
 			true
 		);

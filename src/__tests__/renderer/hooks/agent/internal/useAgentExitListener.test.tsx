@@ -518,6 +518,69 @@ describe('useAgentExitListener', () => {
 		expect(spawn).not.toHaveBeenCalled();
 	});
 
+	describe.each([false, true])('deliberate Stop notifications with newShell=%s', (newShell) => {
+		it.each([
+			{ viewing: true, code: 0 },
+			{ viewing: true, code: 130 },
+			{ viewing: false, code: 0 },
+			{ viewing: false, code: 130 },
+		])(
+			'suppresses every completion channel with viewing=$viewing and code=$code',
+			async ({ viewing, code }) => {
+				useSettingsStore.setState({ newShell });
+				const tab = createMockAITab({
+					id: 'stopped',
+					state: 'busy',
+					thinkingStartTime: Date.now() - 100,
+					logs: [
+						{ id: 'u1', timestamp: 1, source: 'user', text: 'Previous question' },
+						{ id: 'a1', timestamp: 2, source: 'stdout', text: 'Previous answer already finished.' },
+						{ id: 'u2', timestamp: 3, source: 'user', text: 'Current interrupted question' },
+					],
+				});
+				useSessionStore.setState({
+					sessions: [
+						createMockSession({
+							id: 'sess-1',
+							aiTabs: [tab, createMockAITab({ id: 'other', state: 'busy' })],
+							activeTabId: viewing ? 'stopped' : 'other',
+							state: 'busy',
+						}),
+					],
+					activeSessionId: 'sess-1',
+				});
+				const show = vi.fn().mockResolvedValue(undefined);
+				const speak = vi.fn().mockResolvedValue(undefined);
+				window.maestro.notification.show = show;
+				window.maestro.notification.speak = speak;
+				useNotificationStore.getState().setOsNotifications(true);
+				useNotificationStore.getState().setAudioFeedback(true, 'say');
+				renderHook(() => useAgentExitListener(makeDeps()));
+				await act(async () => {
+					await handler!('sess-1-ai-stopped', code, undefined, true);
+					await new Promise((resolve) => setTimeout(resolve, 0));
+				});
+				expect(useNotificationStore.getState().history).toHaveLength(0);
+				expect(useNotificationStore.getState().toasts).toHaveLength(0);
+				expect(show).not.toHaveBeenCalled();
+				expect(speak).not.toHaveBeenCalled();
+				expect(window.maestro.stats.recordQuery).toHaveBeenCalledTimes(1);
+
+				// Stopping one conversation must not silence another conversation's completion.
+				await act(async () => {
+					await handler!('sess-1-ai-other', 0);
+					await new Promise((resolve) => setTimeout(resolve, 0));
+				});
+				expect(useNotificationStore.getState().history).toEqual([
+					expect.objectContaining({ sessionId: 'sess-1', tabId: 'other', type: 'success' }),
+				]);
+				expect(useNotificationStore.getState().toasts).toHaveLength(viewing ? 1 : 0);
+				expect(show).toHaveBeenCalledTimes(viewing ? 1 : 0);
+				expect(speak).toHaveBeenCalledTimes(1);
+			}
+		);
+	});
+
 	it('spawns the exit-path synopsis under the run model override, not the session model', async () => {
 		const { deps, spawn } = setupSynopsisRun({
 			sessionCustomModel: 'session-sonnet',

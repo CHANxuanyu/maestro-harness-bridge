@@ -574,6 +574,8 @@ export async function tabShow(tabId: string, options: TabMutateOptions): Promise
 	row('Provider', entry.toolType);
 	row('Name', entry.name ?? '(unnamed)');
 	row('State', entry.state);
+	row('Panel', entry.newShellPanel?.tab ?? 'changes');
+	row('Web URL', entry.newShellPanel?.webUrl ?? '');
 	row('Session', entry.agentSessionId ?? '(none yet)');
 	row('Model', inherited(entry.model));
 	row('Effort', inherited(entry.effort));
@@ -635,6 +637,7 @@ export async function tabPanel(
 		content?: string;
 		line?: string;
 		terminal?: string;
+		url?: string;
 	}
 ): Promise<void> {
 	if (!NEW_SHELL_PANEL_ACTIONS.includes(action as NewShellPanelAction))
@@ -644,13 +647,20 @@ export async function tabPanel(
 		(!Number.isSafeInteger(Number(options.line)) || Number(options.line) < 1)
 	)
 		return failCommand('Line must be a positive integer', options.json);
+	// Web actions resolve the selected conversation in its owning renderer.
+	// The desktop inventory can still contain the selection before the UI switch.
+	const liveWebTarget =
+		tabId.trim().toLowerCase() === 'active' &&
+		['web', 'web-reload', 'web-external'].includes(action);
 	const owner = await resolveTabOwner(tabId, options.agent);
+	if (liveWebTarget) owner.tabId = 'active';
 	await writeTabPatch(
 		owner,
 		{
 			...(options.content !== undefined ? { newShellFileContent: options.content } : {}),
 			...(options.line !== undefined ? { newShellFileLine: Number(options.line) } : {}),
 			newShellPanelAction: action,
+			...(options.url !== undefined ? { newShellWebUrl: options.url } : {}),
 			...(options.terminal !== undefined ? { newShellTerminalId: options.terminal } : {}),
 			...(options.filter !== undefined ? { newShellPanelFilter: options.filter } : {}),
 		},

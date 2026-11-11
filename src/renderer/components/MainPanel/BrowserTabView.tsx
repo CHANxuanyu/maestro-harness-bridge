@@ -69,6 +69,10 @@ interface BrowserTabViewProps {
 	 * which otherwise strands keystrokes in the webview.
 	 */
 	isActive?: boolean;
+	panelMode?: boolean;
+	onPanelNavigate?: (url: string) => Promise<void>;
+	onPanelReload?: () => void;
+	onPanelExternal?: () => void;
 }
 
 export interface BrowserTabViewHandle {
@@ -228,7 +232,16 @@ function syncWebviewLayout(webview: ElectronWebviewElement | null) {
 
 export const BrowserTabView = React.memo(
 	forwardRef<BrowserTabViewHandle, BrowserTabViewProps>(function BrowserTabView(
-		{ tab, theme, onUpdateTab, isActive = true },
+		{
+			tab,
+			theme,
+			onUpdateTab,
+			isActive = true,
+			panelMode = false,
+			onPanelNavigate,
+			onPanelReload,
+			onPanelExternal,
+		},
 		ref
 	) {
 		const t = useT();
@@ -254,7 +267,9 @@ export const BrowserTabView = React.memo(
 		// Used to distinguish intentional focus (user click) from programmatic
 		// focus-stealing (page autofocus, window.focus(), etc.).
 		const userClickedRef = useRef(false);
-		const [addressValue, setAddressValue] = useState(tab.url);
+		const [addressValue, setAddressValue] = useState(
+			panelMode && tab.url === DEFAULT_BROWSER_TAB_URL ? '' : tab.url
+		);
 		const [addressError, setAddressError] = useState<string | null>(null);
 		const [addressBarHidden, setAddressBarHidden] = useState(false);
 		const [findOpen, setFindOpen] = useState(false);
@@ -473,9 +488,9 @@ export const BrowserTabView = React.memo(
 
 		useEffect(() => {
 			if (!isAddressFocusedRef.current) {
-				setAddressValue(tab.url);
+				setAddressValue(panelMode && tab.url === DEFAULT_BROWSER_TAB_URL ? '' : tab.url);
 			}
-		}, [tab.id, tab.url]);
+		}, [tab.id, tab.url, panelMode]);
 
 		// The component instance is reused across tab switches (see the addressValue
 		// reset above), so reset the two-step clear-session confirm too: arming Clear
@@ -842,11 +857,24 @@ export const BrowserTabView = React.memo(
 		const navigateToAddress = useCallback(
 			(rawValue: string) => {
 				const result = resolveBrowserTabNavigationTarget(rawValue);
-				if (result.kind === 'error') {
-					setAddressError(result.message);
+				if (result.kind === 'error' || (panelMode && !isHttpBrowserTabUrl(result.url))) {
+					setAddressError(
+						panelMode
+							? t('workflows.newShell.webInvalidUrl')
+							: result.kind === 'error'
+								? result.message
+								: ''
+					);
 					return;
 				}
 
+				if (panelMode && onPanelNavigate) {
+					setAddressError(null);
+					void onPanelNavigate(result.url).catch(() =>
+						setAddressError(t('workflows.newShell.webNavigationFailed'))
+					);
+					return;
+				}
 				const nextUrl = result.url;
 				setAddressValue(nextUrl);
 				setAddressError(null);
@@ -864,7 +892,7 @@ export const BrowserTabView = React.memo(
 					webview.src = nextUrl;
 				}
 			},
-			[onUpdateTab, tab.id, tab.title]
+			[onUpdateTab, tab.id, tab.title, panelMode, onPanelNavigate, t]
 		);
 
 		const handleSubmit = useCallback(
@@ -965,8 +993,8 @@ export const BrowserTabView = React.memo(
 				<div
 					className="shrink-0 overflow-hidden"
 					style={{
-						maxHeight: addressBarHidden ? 0 : 200,
-						opacity: addressBarHidden ? 0 : 1,
+						maxHeight: !panelMode && addressBarHidden ? 0 : 200,
+						opacity: !panelMode && addressBarHidden ? 0 : 1,
 						transition: 'max-height 0.2s ease-out, opacity 0.15s ease-out',
 					}}
 				>
@@ -977,32 +1005,40 @@ export const BrowserTabView = React.memo(
 							borderColor: theme.colors.border,
 						}}
 					>
+						{!panelMode && (
+							<>
+								<button
+									type="button"
+									onClick={handleBack}
+									disabled={!tab.canGoBack}
+									className="flex items-center justify-center w-8 h-8 rounded transition-colors disabled:opacity-40"
+									style={{ color: theme.colors.textMain }}
+									title={t('workflows.shell.back')}
+								>
+									<ArrowLeft className="w-4 h-4" />
+								</button>
+								<button
+									type="button"
+									onClick={handleForward}
+									disabled={!tab.canGoForward}
+									className="flex items-center justify-center w-8 h-8 rounded transition-colors disabled:opacity-40"
+									style={{ color: theme.colors.textMain }}
+									title={t('workflows.shell.forward')}
+								>
+									<ArrowRight className="w-4 h-4" />
+								</button>
+							</>
+						)}
 						<button
 							type="button"
-							onClick={handleBack}
-							disabled={!tab.canGoBack}
-							className="flex items-center justify-center w-8 h-8 rounded transition-colors disabled:opacity-40"
-							style={{ color: theme.colors.textMain }}
-							title={t('workflows.shell.back')}
-						>
-							<ArrowLeft className="w-4 h-4" />
-						</button>
-						<button
-							type="button"
-							onClick={handleForward}
-							disabled={!tab.canGoForward}
-							className="flex items-center justify-center w-8 h-8 rounded transition-colors disabled:opacity-40"
-							style={{ color: theme.colors.textMain }}
-							title={t('workflows.shell.forward')}
-						>
-							<ArrowRight className="w-4 h-4" />
-						</button>
-						<button
-							type="button"
-							onClick={handleReload}
+							onClick={panelMode ? (onPanelReload ?? handleReload) : handleReload}
 							className="flex items-center justify-center w-8 h-8 rounded transition-colors"
 							style={{ color: theme.colors.textMain }}
-							title={tab.isLoading ? t('workflows.shell.stop') : t('workflows.shell.reload')}
+							title={
+								!panelMode && tab.isLoading
+									? t('workflows.shell.stop')
+									: t('workflows.shell.reload')
+							}
 						>
 							{tab.isLoading ? <Spinner size={16} /> : <RotateCw className="w-4 h-4" />}
 						</button>
@@ -1037,7 +1073,9 @@ export const BrowserTabView = React.memo(
 										id={`browser-tab-address-${tab.id}`}
 										aria-label={t('workflows.shell.browserUrl')}
 										aria-invalid={addressError ? 'true' : 'false'}
-										value={addressValue}
+										value={
+											panelMode && addressValue === DEFAULT_BROWSER_TAB_URL ? '' : addressValue
+										}
 										onChange={(event) => {
 											setAddressValue(event.target.value);
 											if (addressError) setAddressError(null);
@@ -1059,7 +1097,11 @@ export const BrowserTabView = React.memo(
 										}}
 										className="w-full bg-transparent outline-none text-sm"
 										style={{ color: theme.colors.textMain }}
-										placeholder={t('workflows.shell.enterAUrlOrSearchTerm')}
+										placeholder={
+											panelMode
+												? 'http://localhost:5173'
+												: t('workflows.shell.enterAUrlOrSearchTerm')
+										}
 									/>
 								</div>
 								{addressError ? (
@@ -1071,7 +1113,7 @@ export const BrowserTabView = React.memo(
 						</form>
 						<button
 							type="button"
-							onClick={handleOpenExternal}
+							onClick={panelMode ? (onPanelExternal ?? handleOpenExternal) : handleOpenExternal}
 							disabled={tab.url === DEFAULT_BROWSER_TAB_URL}
 							className="flex items-center justify-center w-8 h-8 rounded transition-colors disabled:opacity-40"
 							style={{ color: theme.colors.textMain }}
@@ -1079,40 +1121,48 @@ export const BrowserTabView = React.memo(
 						>
 							<ExternalLink className="w-4 h-4" />
 						</button>
-						<button
-							type="button"
-							onClick={handleToggleHiddenFromAgent}
-							className="flex items-center justify-center w-8 h-8 rounded transition-colors"
-							style={{
-								color: tab.hiddenFromAgent ? theme.colors.warning : theme.colors.textDim,
-							}}
-							title={
-								tab.hiddenFromAgent
-									? t('workflows.shell.hiddenFromAgentsClickToExposeThisTab')
-									: t('workflows.shell.visibleToAgentsClickToHideThisTab')
-							}
-							aria-pressed={tab.hiddenFromAgent === true}
-						>
-							{tab.hiddenFromAgent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-						</button>
-						<button
-							type="button"
-							onClick={handleClearSessionData}
-							disabled={!tab.partition}
-							className="flex items-center justify-center w-8 h-8 rounded transition-colors disabled:opacity-40"
-							style={{
-								color: clearArmed ? theme.colors.error : theme.colors.textDim,
-							}}
-							title={
-								clearArmed
-									? t('workflows.shell.clickAgainToClearAllBrowsingDataCookies')
-									: t('workflows.shell.clearBrowsingDataForThisAgentSBrowser')
-							}
-							aria-pressed={clearArmed}
-							data-testid="browser-tab-clear-session-data"
-						>
-							<Trash2 className="w-4 h-4" />
-						</button>
+						{!panelMode && (
+							<>
+								<button
+									type="button"
+									onClick={handleToggleHiddenFromAgent}
+									className="flex items-center justify-center w-8 h-8 rounded transition-colors"
+									style={{
+										color: tab.hiddenFromAgent ? theme.colors.warning : theme.colors.textDim,
+									}}
+									title={
+										tab.hiddenFromAgent
+											? t('workflows.shell.hiddenFromAgentsClickToExposeThisTab')
+											: t('workflows.shell.visibleToAgentsClickToHideThisTab')
+									}
+									aria-pressed={tab.hiddenFromAgent === true}
+								>
+									{tab.hiddenFromAgent ? (
+										<EyeOff className="w-4 h-4" />
+									) : (
+										<Eye className="w-4 h-4" />
+									)}
+								</button>
+								<button
+									type="button"
+									onClick={handleClearSessionData}
+									disabled={!tab.partition}
+									className="flex items-center justify-center w-8 h-8 rounded transition-colors disabled:opacity-40"
+									style={{
+										color: clearArmed ? theme.colors.error : theme.colors.textDim,
+									}}
+									title={
+										clearArmed
+											? t('workflows.shell.clickAgainToClearAllBrowsingDataCookies')
+											: t('workflows.shell.clearBrowsingDataForThisAgentSBrowser')
+									}
+									aria-pressed={clearArmed}
+									data-testid="browser-tab-clear-session-data"
+								>
+									<Trash2 className="w-4 h-4" />
+								</button>
+							</>
+						)}
 					</div>
 				</div>
 
@@ -1159,6 +1209,14 @@ export const BrowserTabView = React.memo(
 							partition={tab.partition}
 							src={initialSrcRef.current}
 						/>
+					)}
+					{panelMode && tab.url === DEFAULT_BROWSER_TAB_URL && (
+						<p
+							className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm pointer-events-none"
+							style={{ color: theme.colors.textDim }}
+						>
+							{t('workflows.newShell.webEmpty')}
+						</p>
 					)}
 					{findOpen ? (
 						<div

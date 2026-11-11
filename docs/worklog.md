@@ -11,6 +11,25 @@
 Opus 运行命令见 `e2e/claude-standard-approval.md`。未验证真实模型、SSH、跨窗口和发行包。
 旧界面按钮、Escape、审批展示和停止范围保留；共享停止函数增加结果回执供 CLI 使用。
 
+## 2026-11-10 网页预览切换后的 CLI 目标修复
+
+验证对象为当前任务分支源码，未构建发行包。`native-web-preview` 在切换到第二条
+对话后失败的根因是 CLI 从持久化列表解析 `active`，列表仍可能保留防抖保存前的
+第一条对话。串联 CLI 与真实渲染层处理函数的回归确认：旧实现成功回执指向
+`web-one`，并把它的 `/one` 网址错误改为 `/two`。
+
+网页打开、刷新和外部打开现在把 `active` 交给指定窗口的实时状态解析，再走原有
+网页动作和保存确认。显式标签 ID 保持定向操作，未修改浏览器引擎或防抖保存。
+初始两个测试文件共 4 项失败、79 项通过；修复后相关 5 文件 108 项通过。
+三份 `tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 的 noEmit 检查通过，
+改动代码通过 Prettier 和 `eslint --no-ignore`。没有新增界面文字或 CLI 动词。
+
+Electron 场景保留原断言与超时，补查另一条对话网址未被覆盖、显式指定后台对话
+和切换后显示其网址。已收集 1 条场景，尚未运行 Electron。沙箱外运行
+`MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-web-preview.spec.ts --workers=1 --retries=0`。
+旧界面仍拒绝网页面板动作；其他 CLI 动作与共享引擎不变。SSH、真实模型、
+多窗口、手机网页和发行包未验证。未推送或发布。
+
 ## 2026-11-10：主动停止不发送完成通知
 
 被测对象为任务分支源码，未构建安装包。退出监听器复用已有的 `stopped` 标记，
@@ -1718,3 +1737,26 @@ ESLint 强制包含测试文件后退出 0，保留 4 条原有未使用变量�
 本轮未启动 Electron 或真实模型，未验证 SSH 实机、其他平台和发行包。
 原生 ID 尚未到达时的跨窗口补写、既有缺失来源数据仍列入 Open gaps。
 新行为受 `newShell` 控制；共享回调将超时注册移到 IPC 发送之前，避免同步回执时访问未初始化计时器。
+
+## 2026-11-10 右栏网页预览
+
+新界面第五页签复用 `BrowserTabView`，每条对话保存网址与面板状态。本机链接经
+`openUrl()` 或纯文本链接入口进入右栏；旧界面与外部链接保留原行为。地址提交、
+CLI 导航、刷新和系统浏览器打开共用 `applyNewShellWebAction()`；CLI 文件预览语义保留。
+实现提交为 `ad8868be516d99265dc888d484486d21939e7210`，本轮验证对象是源码，未构建发行包。
+
+修复前首批 7 项断言失败，覆盖面板选择、CLI 和桥接、本机链接及空状态。
+补充回归先发现地址提交未走共用入口、空白页导航把输入框填为 `about:blank`，再修复。
+最终相关 10 文件 378 项通过，使用 `--configLoader runner --no-cache`，无跳过或重试。
+三份正式 tsconfig 的 noEmit 检查通过；所有改动代码和测试使用 Prettier 与
+`eslint --no-ignore` 通过。没有运行全量 Vitest。
+
+`e2e/native-web-preview.spec.ts` 已收集，未启动 Electron。临时 HTTP 服务覆盖地址输入、
+页内导航、UI 与 CLI 刷新、两条对话的网址、输出链接、终端链接、CLI 读取、关闭与重启恢复。
+系统浏览器打开在场景中替换为记录调用，避免启动其他应用；运行状态读取实时进程列表。
+沙箱外命令：`npm run build`，然后
+`MAESTRO_E2E_REAL=0 npx playwright test e2e/native-web-preview.spec.ts --project=native --workers=1 --retries=0`。
+
+未验证真实 Electron、SSH 转发、手机网页与发行包。页面历史、滚动位置不保存，切换对话会
+重建网页；远程项目的本机网址仍指向桌面所在机器，没有新增 SSH 端口转发。
+未读写个人账户、运行模型、推送或发布。

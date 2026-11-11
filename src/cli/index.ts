@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { NEW_SHELL_PANEL_ACTIONS } from '../shared/newShellPanel';
 import {
 	codexTurnSteer,
 	codexTurnStop,
@@ -1685,9 +1686,9 @@ tabTargetOptions(tab.command('unsplit'))
 	.description('Return the current conversation window to one pane (requires the new shell)')
 	.action((options) => tabUnsplit(options));
 
-tabTargetOptions(tab.command('panel <tab-id> <action>'))
+tabTargetOptions(tab.command('panel [tab-id-or-action] [action]'))
 	.description(
-		'New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
+		'New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, web, web-reload, web-external, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
 	)
 	.option(
 		'--terminal <id>',
@@ -1696,7 +1697,13 @@ tabTargetOptions(tab.command('panel <tab-id> <action>'))
 	.option('--filter <query>', 'Filter the conversation file tree; an empty string clears it')
 	.option('--content <text>', 'Set the remembered text file edit buffer before this action')
 	.option('--line <number>', 'Jump to a line in the remembered preview')
-	.action((tabId, action, options) => tabPanel(tabId, action, options));
+	.option('--url <url>', 'HTTP or HTTPS address for the web panel')
+	.action((target, action, options) => {
+		if (action) return tabPanel(target, action, options);
+		if (target && NEW_SHELL_PANEL_ACTIONS.includes(target))
+			return tabPanel('active', target, options);
+		return tabShow(target || 'active', options);
+	});
 
 tabTargetOptions(
 	tab

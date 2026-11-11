@@ -1,3 +1,4 @@
+import { openLocalWebPanel } from '../services/newShellWeb';
 import React from 'react';
 import type { Theme } from '../types';
 
@@ -17,7 +18,7 @@ function ExternalLink({ url, theme }: { url: string; theme: Theme }) {
 			onClick={(e) => {
 				e.preventDefault();
 				e.stopPropagation();
-				void window.maestro.shell.openExternal(url);
+				if (!openLocalWebPanel(url)) void window.maestro.shell.openExternal(url);
 			}}
 			className="underline hover:opacity-80 cursor-pointer"
 			// accentText (not accent) so links stay legible against accent-tinted

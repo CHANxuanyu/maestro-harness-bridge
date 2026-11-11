@@ -159,9 +159,10 @@ test('project tool config: claude -p, custom path, CLI readback, restart and cla
 		await expect(native.page.getByTestId(`project-tool-${owner.id}`)).toHaveCount(0);
 		expect((await native.cli('settings', 'get', 'newShell')).value).toBe(false);
 		await native.cli('settings', 'set', 'sidebarNavigationMode', 'agents');
+		// The window title strip also shows the agent name, so aim at the classic list row.
 		await native.page
+			.locator('[data-tour="session-list"]')
 			.getByText('Primary Claude', { exact: true })
-			.first()
 			.click({ button: 'right' });
 		await native.page.getByRole('button', { name: 'Edit Agent...', exact: true }).click();
 		const classic = native.page.getByRole('dialog', {

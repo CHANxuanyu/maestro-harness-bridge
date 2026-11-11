@@ -118,9 +118,15 @@ for (const enabled of [false, true]) {
 			await expect
 				.poll(() => native.page.evaluate(() => window.maestro.process.getActiveProcesses()))
 				.toEqual([]);
-			const recipient = saved()
-				.flatMap((s) => s.aiTabs)
-				.find((tab) => tab.origin?.automatic)!;
+			// The handed-off message reaches disk on the debounced save, after the screen.
+			const recipientTab = () =>
+				saved()
+					.flatMap((s) => s.aiTabs)
+					.find((tab) => tab.origin?.automatic)!;
+			await expect
+				.poll(() => recipientTab().logs.filter((log) => log.source === 'user').length)
+				.toBe(1);
+			const recipient = recipientTab();
 			expect(recipient).toMatchObject({ permissionMode: 'readonly', readOnlyMode: true });
 			expect(recipient.logs.filter((log) => log.source === 'user')).toHaveLength(1);
 			expect(

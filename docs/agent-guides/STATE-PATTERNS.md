@@ -24,6 +24,12 @@ null clearing and context window provenance. SSH edits preserve remote path byte
 and use `probeSessionAiProcesses()` before switching hosts. Classic save behavior
 is retained.
 
+Project tool rows read their owner through `selectSessionById()` while the editor
+is mounted. Sidebar snapshots deliberately omit launch settings. All Edit Agent
+entry points use `getModalActions().setEditAgentSession()`, which resolves the live
+owner at opening time before taking the form snapshot. Never seed an editable
+configuration directly from the sidebar or shell chrome snapshot.
+
 Maestro uses Zustand stores to replace React Context providers. Each store:
 
 - Uses **selector-based subscriptions** (components only re-render when their slice changes)

@@ -913,10 +913,11 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 
 			if (
 				toastData &&
+				!stopped &&
 				!(tabIdFromSession && isRetryPending(tabIdFromSession)) &&
 				(!queuedItemToProcess || useSettingsStore.getState().notificationHistoryQueuedReplies)
 			) {
-				// Retry attempts have failed, so they must not announce a successful completion.
+				// Stopped turns and pending retries must not announce a successful completion.
 				setTimeout(() => {
 					window.maestro.logger.log('info', 'Agent process completed', 'App', {
 						agentSessionId: toastData!.agentSessionId,

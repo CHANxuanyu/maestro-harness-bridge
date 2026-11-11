@@ -42,6 +42,7 @@ beforeEach(() => {
 		'CODEX_API_KEY',
 		'ANTHROPIC_API_KEY',
 		'CLAUDE_CODE_OAUTH_TOKEN',
+		'MAESTRO_E2E_CHILD_PROVIDER',
 		'MAESTRO_E2E_CODEX_MODEL',
 		'MAESTRO_E2E_CLAUDE_MODEL',
 	])
@@ -112,6 +113,55 @@ describe('read-only native login snapshots', () => {
 		expect(fs.readdirSync(destination)).toEqual([]);
 	});
 
+	it.each([-1, 0])('rejects Claude expiry at now %d before launching anything', (offset) => {
+		vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+		const original = JSON.stringify({
+			claudeAiOauth: {
+				accessToken: 'fake-private-access',
+				refreshToken: 'fake-private-refresh',
+				expiresAt: Date.now() + offset,
+			},
+		});
+		fs.writeFileSync(path.join(source, '.credentials.json'), original);
+		const message =
+			'Claude access token has expired. Refresh the login outside acceptance before running again; snapshots cannot refresh.';
+		expect(() => prepareCredentials('claude', destination, { CLAUDE_CONFIG_DIR: source })).toThrow(
+			message
+		);
+		expect(() => new RealCodexApp(info, false)).toThrow(message);
+		expect(execFileSync).not.toHaveBeenCalled();
+		expect(fs.readdirSync(destination)).toEqual([]);
+		expect(fs.readdirSync(root).sort()).toEqual(['destination', 'source']);
+		expect(fs.readFileSync(path.join(source, '.credentials.json'), 'utf8')).toBe(original);
+	});
+
+	it('accepts a still valid Claude snapshot with millisecond expiry and no refresh token', () => {
+		vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+		const original = JSON.stringify({
+			claudeAiOauth: {
+				accessToken: 'fake-access',
+				refreshToken: 'fake-refresh',
+				expiresAt: Date.now() + 1,
+			},
+		});
+		fs.writeFileSync(path.join(source, '.credentials.json'), original);
+		expect(prepareCredentials('claude', destination, { CLAUDE_CONFIG_DIR: source })).toEqual({
+			CLAUDE_CODE_OAUTH_TOKEN: 'fake-access',
+		});
+		expect(fs.readdirSync(destination)).toEqual([]);
+		expect(fs.readFileSync(path.join(source, '.credentials.json'), 'utf8')).toBe(original);
+	});
+
+	it('does not expose malformed Claude auth contents in the error', () => {
+		fs.writeFileSync(
+			path.join(source, '.credentials.json'),
+			'{"claudeAiOauth":fake-private-value}'
+		);
+		expect(() => prepareCredentials('claude', destination, { CLAUDE_CONFIG_DIR: source })).toThrow(
+			/^Claude login snapshot is unavailable\. Check the selected login source\.$/
+		);
+	});
+
 	it('rejects malformed token containers without leaking their contents', () => {
 		fs.writeFileSync(
 			path.join(source, 'auth.json'),
@@ -166,6 +216,59 @@ describe('real Codex acceptance fixture', () => {
 		expect(cli.mock.calls[0]).not.toContain('--model');
 		expect(fs.readdirSync(app.claude)).toEqual([]);
 		expect(JSON.stringify(cli.mock.calls)).not.toContain('fake-');
+	});
+
+	it('defaults the child target to Claude', async () => {
+		app = new RealCodexApp(info, false);
+		const cli = vi.spyOn(app, 'cli').mockResolvedValue({ success: true, agentId: 'worker' });
+		expect(app.childProvider).toBe('claude');
+		expect(await app.createChild()).toBe('worker');
+		expect(cli.mock.calls[0].slice(0, 4)).toEqual([
+			'create-agent',
+			'Claude reader',
+			'--type',
+			'claude-code',
+		]);
+	});
+
+	it('creates a second Codex target using the access-only snapshot without Claude login', async () => {
+		vi.stubEnv('MAESTRO_E2E_CHILD_PROVIDER', 'codex');
+		fs.rmSync(path.join(source, '.credentials.json'));
+		app = new RealCodexApp(info, false);
+		const cli = vi
+			.spyOn(app, 'cli')
+			.mockResolvedValueOnce({ success: true, agentId: 'worker' })
+			.mockResolvedValueOnce({ success: true, agentId: 'parent' });
+		expect(app.childProvider).toBe('codex');
+		expect(await app.createChild()).toBe('worker');
+		expect(await app.createCodex()).toBe('parent');
+		expect(cli.mock.calls[0].slice(0, 4)).toEqual([
+			'create-agent',
+			'Codex reader',
+			'--type',
+			'codex',
+		]);
+		expect(cli.mock.calls[1].slice(0, 4)).toEqual([
+			'create-agent',
+			'Real Codex',
+			'--type',
+			'codex',
+		]);
+		for (const call of cli.mock.calls) expect(call).toContain(`CODEX_HOME=${app.codex}`);
+		expect(
+			JSON.parse(fs.readFileSync(path.join(app.codex, 'auth.json'), 'utf8')).tokens.refresh_token
+		).toBe('');
+		expect(app.env.CLAUDE_CODE_OAUTH_TOKEN).toBe('');
+		expect(JSON.stringify(cli.mock.calls)).not.toContain('fake-');
+	});
+
+	it('rejects an unsupported child provider before CLI execution or temporary account creation', () => {
+		vi.stubEnv('MAESTRO_E2E_CHILD_PROVIDER', 'unsupported');
+		expect(() => new RealCodexApp(info, false)).toThrow(
+			'Set MAESTRO_E2E_CHILD_PROVIDER to claude or codex'
+		);
+		expect(execFileSync).not.toHaveBeenCalled();
+		expect(fs.readdirSync(root).sort()).toEqual(['destination', 'source']);
 	});
 
 	it('preserves an explicitly supplied Claude OAuth token', () => {

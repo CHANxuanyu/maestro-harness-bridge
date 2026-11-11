@@ -1,4 +1,7 @@
-import { automaticHandoffCandidate } from '../../../services/autoHandoff';
+import {
+	automaticHandoffCandidate,
+	automaticHandoffOwnsFailure,
+} from '../../../services/autoHandoff';
 /**
  * useAgentErrorListener - registers `window.maestro.process.onAgentError`
  *
@@ -227,7 +230,12 @@ export function useAgentErrorListener(deps: UseAgentErrorListenerDeps): void {
 				!batchOwnsError &&
 				!!tabIdFromSession &&
 				!!automaticHandoffCandidate(actualSessionId, tabIdFromSession, agentError);
-			const canAutoRetry = !willAutoHandoff && !isSessionNotFound && !!tabIdFromSession;
+			const handoffOwnsFailure =
+				!isBatchError &&
+				!batchOwnsError &&
+				!!tabIdFromSession &&
+				automaticHandoffOwnsFailure(actualSessionId, tabIdFromSession, agentError);
+			const canAutoRetry = !handoffOwnsFailure && !isSessionNotFound && !!tabIdFromSession;
 			const willAutoRetryInteractive =
 				canAutoRetry &&
 				!batchOwnsError &&
@@ -404,7 +412,7 @@ export function useAgentErrorListener(deps: UseAgentErrorListenerDeps): void {
 				// after the synchronous pause above and never awaited: a reset that
 				// succeeds is picked up by the existing retry/auto-resume machinery
 				// on its next probe, and one that fails must not disturb the pause.
-				if (pausedSession && !willAutoHandoff) {
+				if (pausedSession && !handoffOwnsFailure) {
 					void maybeAutoResetCodexUsage(pausedSession, agentError).catch(() => {
 						// The service reports its own outcome to the user; a throw here
 						// would only mean the attempt never started.

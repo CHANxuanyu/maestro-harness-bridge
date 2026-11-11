@@ -19,6 +19,7 @@ for (const enabled of [false, true]) {
 			JSON.stringify({
 				...JSON.parse(fs.readFileSync(settingsFile, 'utf8')),
 				newShell: true,
+				autoResumeOnLimit: true,
 				defaultSaveToHistory: false,
 				crashReportingEnabled: false,
 			})
@@ -166,6 +167,9 @@ for (const enabled of [false, true]) {
 							.find((tab) => tab.id === recipient.id)?.agentError?.type
 				)
 				.toBe('rate_limited');
+			// Observe beyond the global coordinator's 10 second startup tick.
+			// It must not replay this captured prompt even when auto-resume is enabled.
+			await native.page.waitForTimeout(11_000);
 			await expect
 				.poll(() => native.page.evaluate(() => window.maestro.process.getActiveProcesses()))
 				.toEqual([]);

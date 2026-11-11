@@ -804,3 +804,45 @@ it('gives an enabled auto handoff priority over retrying the failed source', () 
 	expect(useModalStore.getState().modals.has('agentError')).toBe(false);
 	useSettingsStore.setState({ newShell: false, projectSettings: {} });
 });
+
+it('does not schedule quota retries for an automatic recipient with resilience enabled', () => {
+	useSettingsStore.setState({ newShell: true });
+	const tab = createMockAITab({
+		id: 'tab-1',
+		origin: {
+			kind: 'handoff',
+			sourceSessionId: 'source',
+			sourceTabId: 'source-tab',
+			sourceProvider: 'claude-code',
+			createdAt: 1,
+			automatic: true,
+		},
+	});
+	useSessionStore.setState({
+		sessions: [
+			createMockSession({
+				id: 'sess-1',
+				toolType: 'codex',
+				aiTabs: [tab],
+				activeTabId: tab.id,
+				retryOnAvailabilityErrors: true,
+				retryOnTokenExhaustion: true,
+			}),
+		],
+	});
+	seedSnapshot('sess-1', tab.id);
+	const { unmount } = renderHook(() => useAgentErrorListener(makeDeps()));
+	try {
+		handler!('sess-1-ai-tab-1', {
+			...overloadError,
+			agentId: 'codex',
+			message: 'rate limit exceeded',
+		});
+		expect(useRetryStore.getState().retries).toEqual({});
+		expect(useSessionStore.getState().sessions[0].agentErrorPaused).toBe(true);
+	} finally {
+		cancelRetry('sess-1', tab.id);
+		useSettingsStore.setState({ newShell: false });
+		unmount();
+	}
+});

@@ -15,6 +15,14 @@ import { generateId } from '../utils/ids';
 import { getT } from '../i18n';
 import { captureException } from '../utils/sentry';
 
+function isQuotaFailure(failure: AgentError | undefined): boolean {
+	// token_exhaustion is a full context window in the provider taxonomy.
+	return (
+		!!failure &&
+		(failure.type === 'rate_limited' || classifyRetryableError(failure) === 'token-exhaustion')
+	);
+}
+
 /** Also used before retry scheduling, so only one recovery owns a failed turn. */
 export function automaticHandoffCandidate(sessionId: string, tabId: string, error?: AgentError) {
 	if (!useSettingsStore.getState().newShell) return null;
@@ -23,10 +31,7 @@ export function automaticHandoffCandidate(sessionId: string, tabId: string, erro
 	const tab = source?.aiTabs.find((item) => item.id === tabId);
 	const failure = error ?? tab?.agentError;
 	if (!source || !tab || !failure || tab.origin?.automatic) return null;
-	// token_exhaustion is a full context window in the provider taxonomy.
-	// Quota exhaustion has its own canonical retry classification.
-	if (failure.type !== 'rate_limited' && classifyRetryableError(failure) !== 'token-exhaustion')
-		return null;
+	if (!isQuotaFailure(failure)) return null;
 	if (source.sessionSshRemoteConfig?.enabled && !source.sessionSshRemoteConfig.remoteId)
 		return null;
 	const targetId = projectSettingsForSession(source)?.autoHandoffTarget;
@@ -44,6 +49,22 @@ export function automaticHandoffCandidate(sessionId: string, tabId: string, erro
 	const message = [...tab.logs].reverse().find((entry) => entry.source === 'user');
 	if (!message || (!message.text.trim() && !message.images?.length)) return null;
 	return { source, tab, target, provider, message };
+}
+
+/** A handoff owns recovery even after its target or project setting changes. */
+export function automaticHandoffOwnsFailure(
+	sessionId: string,
+	tabId: string,
+	error?: AgentError
+): boolean {
+	if (!useSettingsStore.getState().newShell) return false;
+	const source = useSessionStore.getState().sessions.find((session) => session.id === sessionId);
+	const tab = source?.aiTabs.find((item) => item.id === tabId);
+	if (!tab || !isQuotaFailure(error ?? tab.agentError)) return false;
+	if (tab.origin?.automatic) return true;
+	const message = [...tab.logs].reverse().find((entry) => entry.source === 'user');
+	if (message && tab.autoHandoffAttemptedTurnId === message.id) return true;
+	return !!automaticHandoffCandidate(sessionId, tabId, error);
 }
 
 /** Called only by the desktop owner after process exit. A failed attempt is never replayed. */

@@ -9,6 +9,7 @@ import {
 	listCodexAppServerPermissions,
 } from '../../../main/permission-relay/codex-app-server';
 import { relayRegistryStats } from '../../../main/permission-relay/registry';
+import { CodexAppServerSession } from '../../../main/process-manager/CodexAppServerSession';
 
 const { createNativeTempDir } = require('../../../../e2e/fixtures/native/temp-root.cjs');
 
@@ -30,6 +31,16 @@ it.each(['U5_HOLD for stop', 'file approval for stop'])(
 	'settles %s through the shared interrupt, permission cleanup and process exit',
 	async (prompt) => {
 		const root = createNativeTempDir('maestro-u4-stop-');
+		// What the session wrote to the peer. A pending approval is declined before the
+		// interrupt, the synthetic peer can end the turn on that decline, and the process
+		// may then exit before it reads the interrupt line, so the peer's own receipt log
+		// cannot prove what Stop sent.
+		const sent = vi.spyOn(
+			CodexAppServerSession.prototype as unknown as {
+				send: (message: { method?: string }) => void;
+			},
+			'send'
+		);
 		const manager = new ProcessManager();
 		const send = vi.fn();
 		const window = {
@@ -84,13 +95,11 @@ it.each(['U5_HOLD for stop', 'file approval for stop'])(
 				).toHaveLength(1);
 			}
 			expect(fs.existsSync(path.join(root, 'approved.txt'))).toBe(false);
-			const receipts = fs
-				.readFileSync(path.join(root, 'app-server-receipts.jsonl'), 'utf8')
-				.trim()
-				.split('\n')
-				.map((line) => JSON.parse(line));
-			expect(receipts.filter((message) => message.method === 'turn/interrupt')).toHaveLength(1);
+			expect(
+				sent.mock.calls.filter(([message]) => message.method === 'turn/interrupt')
+			).toHaveLength(1);
 		} finally {
+			sent.mockRestore();
 			managed.codexAppServerController!.dispose();
 			child.kill('SIGKILL');
 			await closed;

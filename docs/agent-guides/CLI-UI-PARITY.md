@@ -1344,7 +1344,7 @@ Electron 场景直接检查停止按钮消失和目标进程不存在；异常�
 本批仅补测试，没有新增界面动作或 CLI 动词。默认跳过的
 `e2e/real-codex-app-server.spec.ts` 复用上表的权限、审批、追加和停止路径；
 `e2e/real-codex-orchestrator.spec.ts` 要求 Codex 自己调用 `dispatch --new-tab`，
-以 `session show` 读取 Claude 结果，再用 `tab children` 与左栏嵌套关系互相核对。
+以 `session show` 读取所选子工具的结果，再用 `tab children` 与左栏嵌套关系互相核对。
 来源标识只由应用注入，测试不伪造 `MAESTRO_CALLER_*`。
 运行方法、请求次数和协议失败记录见 [真实验证说明](../verification/real-codex.md)。
 本批未执行真实模型或 Electron；既有 Open gaps 保留，不宣称补齐全部停止语义、跨窗口或浏览器对等。
@@ -1352,6 +1352,11 @@ Electron 场景直接检查停止按钮消失和目标进程不存在；异常�
 2026-11-11 登录模式仅调整真实验收夹具的凭据和可选模型参数。
 没有新增界面动作或 CLI 动词；创建对话仍走 `create-agent`，未指定模型时省略 `--model`。
 Codex 和 Claude 复用 `prepareCredentials()` 的只读访问凭据快照，既有 Open gaps 不变。
+
+2026-11-11 K 夹具修复不新增界面动作或 CLI 动词。
+`MAESTRO_E2E_CHILD_PROVIDER=codex` 通过同一 `create-agent` 实现创建第二个 Codex 配置，
+继续验证 `dispatch --new-tab`、`session show`、`tab children` 与左栏父子关系。
+默认 Claude 模式保留；快照过期预检和控制器观察器只影响验收夹具，既有 Open gaps 不变。
 
 ## New shell transcript performance (2026-11-06)
 

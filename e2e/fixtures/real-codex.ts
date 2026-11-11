@@ -10,6 +10,7 @@ export class RealCodexApp extends NativeApp {
 	readonly executable: string;
 	readonly model: string | undefined;
 	readonly version: string;
+	readonly childProvider: 'claude' | 'codex';
 	private loginCredentials: Record<string, string> = {};
 
 	constructor(info: TestInfo, appServer: boolean) {
@@ -20,14 +21,20 @@ export class RealCodexApp extends NativeApp {
 		const model = process.env.MAESTRO_E2E_CODEX_MODEL;
 		if (!executable || !path.isAbsolute(executable))
 			throw new Error('Set absolute MAESTRO_E2E_CODEX_PATH');
+		const childProvider = appServer
+			? 'claude'
+			: (process.env.MAESTRO_E2E_CHILD_PROVIDER ?? 'claude');
+		if (childProvider !== 'claude' && childProvider !== 'codex')
+			throw new Error('Set MAESTRO_E2E_CHILD_PROVIDER to claude or codex');
 		super(info, { providerCli: false });
 		this.executable = executable;
 		this.model = model;
+		this.childProvider = childProvider;
 		try {
 			if (!process.env.CODEX_API_KEY) prepareCredentials('codex', this.codex);
-			// Only the orchestrator needs Claude. Preserve the helper's access-token
-			// environment instead of overriding it in the child environment getter.
-			if (!appServer && !process.env.ANTHROPIC_API_KEY)
+			// Only a Claude child needs Claude credentials. Preserve the helper's
+			// access-token environment in the child environment getter.
+			if (!appServer && childProvider === 'claude' && !process.env.ANTHROPIC_API_KEY)
 				this.loginCredentials = {
 					CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? '',
 					...prepareCredentials('claude', this.claude),
@@ -105,10 +112,14 @@ export class RealCodexApp extends NativeApp {
 		};
 	}
 
-	async createCodex() {
+	async createChild() {
+		return this.childProvider === 'codex' ? this.createCodex('Codex reader') : this.createClaude();
+	}
+
+	async createCodex(name = 'Real Codex') {
 		const result = await this.cli(
 			'create-agent',
-			'Real Codex',
+			name,
 			'--type',
 			'codex',
 			'--cwd',
@@ -203,8 +214,10 @@ export async function observeCodexWire(native: NativeApp) {
 	await native.app.evaluate((_electron, modulePath) => {
 		const root = globalThis as WireGlobal;
 		root.__realCodexWire = [];
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const { CodexAppServerSession } = require(modulePath);
+		// Electron evaluate has process but no module-scoped require. Use Node's
+		// loader and cache so this is the same controller the application uses.
+		const load = process.getBuiltinModule('module').createRequire(modulePath);
+		const { CodexAppServerSession } = load(modulePath);
 		const proto = CodexAppServerSession.prototype;
 		const received = new WeakSet<object>();
 		for (const [method, direction] of [

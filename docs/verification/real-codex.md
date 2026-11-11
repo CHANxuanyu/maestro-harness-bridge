@@ -7,13 +7,14 @@
 
 由 Opus 在沙箱外运行，每次执行会消耗真实账户额度。使用本地官方 CLI 的绝对路径，不使用共享连接器、TUI 包装器或合成 CLI。
 
-- 必填官方 CLI 的绝对路径 `MAESTRO_E2E_CODEX_PATH`。主控场景另需 `MAESTRO_E2E_CLAUDE_PATH`，app-server 场景不读取 Claude 登录。
+- 必填官方 CLI 的绝对路径 `MAESTRO_E2E_CODEX_PATH`。主控场景用 `MAESTRO_E2E_CHILD_PROVIDER=claude|codex` 选择子任务工具，默认 `claude`，其他值直接失败。仅 Claude 子任务需要 `MAESTRO_E2E_CLAUDE_PATH`；Codex 子任务和 app-server 场景不读取 Claude 登录。
 - `MAESTRO_E2E_CODEX_MODEL`、`MAESTRO_E2E_CLAUDE_MODEL` 可选，未设置或为空时不传模型参数，使用账户默认。可显式设置 `MAESTRO_E2E_CODEX_MODEL=gpt-6-astra`。模型必须在所选账户中可用。
 - 可选 `MAESTRO_E2E_CODEX_EXPECT_VERSION`，填写完整的 `codex-cli <version>`。未提供时记录实际版本，不声称版本准入。
 - API 模式保持原配置：存在 `CODEX_API_KEY` 时，Codex 使用隔离的 API 提供方，不读取原生登录；存在 `ANTHROPIC_API_KEY` 时，Claude 使用该 key，忽略继承的 OAuth token。两种工具可以分别选择 API 或登录模式。
 - 登录模式：没有 `CODEX_API_KEY` 时，复用 `prepareCredentials('codex', ...)`，只读 `${CODEX_HOME 或 ~/.codex}/auth.json`，将 `tokens.refresh_token` 置为空字符串后写到临时 CODEX_HOME，文件权限为 0600。不复制 config、会话、数据库或 hooks；临时 config.toml 不指定自定义 `model_provider`，使用默认 OpenAI 提供方。
-- 主控场景没有 `ANTHROPIC_API_KEY` 时，复用 `prepareCredentials('claude', ...)`：优先使用环境 `CLAUDE_CODE_OAUTH_TOKEN`，否则只读已登录账户的访问令牌快照。现有来源为指定 CLAUDE_CONFIG_DIR 的 `.credentials.json`，或默认目录文件，或 macOS 默认钥匙串条目。仅访问令牌进入子进程环境，不复制刷新令牌或其他账户文件。
-- 必须在访问令牌有效期内运行。Codex JWT 中已过期的 `exp` 会在创建快照前明确报错；不透明令牌、撤销状态或运行中到期由原生 CLI 返回认证失败。临时快照不能续期，不自动重新登录或重发测试。需要恢复时由 Opus 在验收外先完成登录，再明确启动一次新的验收。
+- 主控场景选择 Claude 子任务且没有 `ANTHROPIC_API_KEY` 时，复用 `prepareCredentials('claude', ...)`：优先使用环境 `CLAUDE_CODE_OAUTH_TOKEN`，否则只读已登录账户的访问令牌快照。现有来源为指定 CLAUDE_CONFIG_DIR 的 `.credentials.json`，或默认目录文件，或 macOS 默认钥匙串条目。仅访问令牌进入子进程环境，不复制刷新令牌或其他账户文件。
+- 必须在访问令牌有效期内运行。Codex JWT 的 `exp` 按秒检查，Claude 快照的 `claudeAiOauth.expiresAt` 按毫秒检查，等于当前时间也视为过期。已知过期时在启动 Electron 和父回合前明确失败，错误不含凭据，不会进入产品登录窗口。Claude 快照缺少到期字段、显式环境令牌、不透明 Codex 令牌、撤销状态或运行中到期仍由原生 CLI 验证，这类失败可能触发产品原有认证恢复界面，本轮不修改该流程。临时快照不能续期，夹具不主动登录或重发测试；需要恢复时由 Opus 在验收外先完成登录，再明确启动一次新的验收。
+- Codex 子任务调用同一 `create-agent` 路径创建第二个配置，与父配置 ID 不同，复用本次临时 CODEX_HOME 中不含刷新令牌的登录快照及同一模型设置，不额外读取或复制账户。API 模式也复用同一隔离配置。
 - 刷新令牌可能在刷新时轮换，复制它会让临时账户影响用户当前登录，因此 Codex 清空该字段，Claude 从不复制该字段。夹具不写真实账户目录或钥匙串；所有原生进程仍使用隔离 HOME，不使用 `inheritCodexHome`。
 - 从没有 `MAESTRO_CALLER_*` 的独立终端启动。夹具发现继承的调用方标识就失败；父子身份必须由应用注入。不要在命令前手工补这些变量。
 - HOME、USERPROFILE、项目、应用数据、Codex 和 Claude 账户目录全部位于 `createNativeTempDir()` 创建的临时根目录。只对这些临时数据写入和清理；Codex 登录凭据只保存在临时 auth.json；API key 和 Claude 访问令牌经子进程环境传递，不保存进应用配置或命令参数。
@@ -24,7 +25,19 @@
 ```sh
 npm run build
 MAESTRO_E2E_REAL=1 MAESTRO_E2E_CODEX_MODEL=gpt-6-astra npx playwright test e2e/real-codex-app-server.spec.ts --project=electron --workers=1 --retries=0
-MAESTRO_E2E_REAL=1 MAESTRO_E2E_CODEX_MODEL=gpt-6-astra npx playwright test e2e/real-codex-orchestrator.spec.ts --project=electron --workers=1 --retries=0
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_CHILD_PROVIDER=claude MAESTRO_E2E_CODEX_MODEL=gpt-6-astra npx playwright test e2e/real-codex-orchestrator.spec.ts --project=electron --workers=1 --retries=0
+```
+
+只使用 Codex 登录验证主控时，改为以下命令，不必准备 Claude 登录或路径。它是一次独立的真实验收，不是失败后的自动重试。
+
+```sh
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_CHILD_PROVIDER=codex MAESTRO_E2E_CODEX_MODEL=gpt-6-astra npx playwright test e2e/real-codex-orchestrator.spec.ts --project=electron --workers=1 --retries=0
+```
+
+先确认观察器能够挂到构建产物，可在沙箱外只跑合成 app-server。这个场景在真实模式下文件级跳过，不读取登录或调用模型。
+
+```sh
+MAESTRO_E2E_REAL=0 npx playwright test e2e/native-codex-app-server.spec.ts --project=native --workers=1 --retries=0
 ```
 
 只收集场景，不启动应用：
@@ -38,9 +51,9 @@ MAESTRO_E2E_REAL=0 npx playwright test e2e/real-codex-app-server.spec.ts e2e/rea
 | 场景       | 主动发出的真实工作                                                                      | 必须看到的结果                                                                                                                          |
 | ---------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | app-server | 4 次 Codex 回合提交，分别为问候、拒绝写入、允许写入并追加、停止；另有 1 次 `turn/steer` | 第一轮完成；拒绝后文件不存在且正常结束；允许后内容逐字相同；追加标记出现在本轮回答；停止后退出码 130、进程 PID 消失、停止按钮和审批消失 |
-| 主控       | 1 次 Codex 父回合，父工具调用中仅派发 1 次 Claude 子回合，无完成回调                    | 子任务在左栏嵌套于父对话；主进程报告子进程运行；子回合成功退出；父最终回答引用随机 README 首行                                          |
+| 主控       | 1 次 Codex 父回合，父工具调用中仅派发 1 次所选工具子回合，无完成回调                    | 子任务在左栏嵌套于父对话；主进程报告子进程运行；子回合成功退出；父最终回答引用随机 README 首行                                          |
 
-登录模式消耗所选 ChatGPT 和 claude.ai 订阅账户的可用额度，仍受账户模型权限和限额约束；API 模式消耗对应 API 账户额度。订阅不代表无限使用，也不替代 API 计费。
+登录模式消耗所选 ChatGPT 订阅额度，Claude 子任务另消耗 claude.ai 订阅额度，仍受账户模型权限和限额约束；API 模式消耗对应 API 账户额度。订阅不代表无限使用，也不替代 API 计费。
 
 这些是应用层提交次数，不是固定的计费 HTTP 次数。模型执行工具后还会继续请求，追加也可能触发续推；实际 HTTP 数量由模型和 CLI 决定，不能保证恰好为 4 或 2。轮询 Maestro 本身不调用模型。
 
@@ -50,11 +63,11 @@ app-server 场景同时启用 `newShell` 和 `codexAppServer`，只测本机标�
 
 允许写入后模型执行 `sleep 20`，观察到真实命令开始才点击“本轮追加”。追加标记只出现在追加消息中；断言最终回答与协议确认的回合 ID，不能只凭草稿清空判成功。停止轮用 `sleep 120` 确保在命令开始后点击停止，并核对原生进程 PID 已退出。
 
-主控场景启用新界面，关闭 app-server 原型，验证 Codex 完全访问的既有 exec 通路。README 首行每次随机生成，父提示词不含答案。父通过当前构建的 `maestro-cli dispatch --new-tab` 派发，并通过 `session show` 读取结果。Claude 子任务先短暂等待，再用 Read 读取首行，便于观察真实运行状态。测试既不代替父对话派发，也不伪造来源环境。
+主控场景启用新界面，关闭 app-server 原型，验证 Codex 完全访问的既有 exec 通路。README 首行每次随机生成，父提示词不含答案。父通过当前构建的 `maestro-cli dispatch --new-tab` 派发，并通过 `session show` 读取结果。两种子任务都先短暂等待，再读取首行，Claude 用 Read，Codex 用 `head -n 1 README.md`。两者同样要求左栏嵌套和运行标记、实际进程 PID、退出码 0、子回答逐字匹配、父回答引用随机首行以及没有残留活动进程；Claude 核对 `--print` 或 `-p`，Codex 核对 `exec` 且没有 `app-server`。测试既不代替父对话派发，也不伪造来源环境。
 
 ## 协议差异与失败记录
 
-`codex-wire.json` 附件记录实际 CLI 版本、模型、控制器接收和发送的消息以及进程事件。观察器包裹现有 `CodexAppServerSession` 的消息边界，仍逐次调用原实现，不制造响应，不修正字段。成功与失败均尝试保存附件；失败保留 NativeApp 截图和 trace。主控场景保存两个工具版本及父子回答、退出和工具事件。
+`codex-wire.json` 附件记录实际 CLI 版本、模型、控制器接收和发送的消息以及进程事件。观察器通过主进程的 `process.getBuiltinModule('module').createRequire()` 加载 dist 中已缓存的同一个控制器，不依赖 evaluate 的全局 `require`。它包裹现有 `CodexAppServerSession` 的消息边界，仍逐次调用原实现，不制造响应，不修正字段。成功与失败均尝试保存附件；失败保留 NativeApp 截图和 trace。主控场景保存父工具版本、子工具种类和版本，以及父子回答、退出和工具事件。
 
 与合成夹具 `e2e/fixtures/native/codex-app-server` 和控制器单元测试核对时，至少填写以下差异：
 
@@ -70,6 +83,11 @@ app-server 场景同时启用 `newShell` 和 `codexAppServer`，只测本机标�
 
 附件可能包含提示词、工具输出和临时路径，只留在本地验收输出，不提交原始捕获或账户材料。测试结束清理临时账户与项目；强制杀掉整个测试运行器时，需要 Opus 检查并清理该次临时根目录。
 
+## 本轮夹具回归
+
+2026-11-11 的外部运行反馈：app-server 在安装观察器时因 `require is not defined` 失败；主控已派出 Claude，但过期访问快照导致子进程认证失败。本轮未重跑这些真实场景。
+本地只用临时假账户和无 `require` 的 VM 执行序列化观察器，修复前 7 失败、9 通过，修复后 16 项通过。覆盖过期边界、预检失败前不执行 CLI、坏 JSON 的固定错误、两种子工具配置和缓存控制器消息转发；Electron 合成场景已接入同一个观察器，仍待沙箱外执行。
+
 ## 边界
 
-本套没有新增界面动作或 CLI 动词，既有对应关系见 [CLI 对等表](../agent-guides/CLI-UI-PARITY.md#codex-app-server-prototype-2026-11-07)。支持本机订阅登录快照，但尚未真实运行验证。不覆盖 SSH、其他平台、浏览器、多窗口、重启恢复、所有协议字段或任意脱离父进程的后台工具。旧界面和产品实现均未修改。一次通过只证明所记录版本、账户模式与这两个工作负载。
+本套没有新增界面动作或 CLI 动词，既有对应关系见 [CLI 对等表](../agent-guides/CLI-UI-PARITY.md#codex-app-server-prototype-2026-11-07)。支持本机订阅登录快照，修复后尚未重跑真实验收。不覆盖 SSH、其他平台、浏览器、多窗口、重启恢复、所有协议字段或任意脱离父进程的后台工具。旧界面和产品实现均未修改。一次通过只证明所记录版本、账户模式与这两个工作负载。

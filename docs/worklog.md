@@ -1,5 +1,29 @@
 # 分支工作记录
 
+## 2026-11-11：K 真实 Codex 验收夹具修复
+
+验证对象为 `codex/real-specs` 任务分支源码，没有构建发行包或启动 Electron。
+先提交回归 `b847e6c31`，两文件 16 项中 7 失败、9 通过，复现无 require 的观察器安装失败、
+Claude 过期快照未拒绝、坏 JSON 错误带出假凭据，以及子工具选择缺失。
+修复后同一命令 16 项全部通过：
+`npx vitest run src/__tests__/scripts/real-codex-login.test.ts src/__tests__/scripts/real-codex-wire.test.ts --configLoader runner --no-cache`。
+测试只用临时假账户，版本命令和 Electron 启动被 mock，没有读取真实凭据或钥匙串。
+
+观察器用 Node 内置模块取得加载器，加载缓存中的同一个控制器，保留原始消息和调用。
+VM 回归验证无全局 require 时的安装、缓存身份、去重、原返回值和错误传播。
+合成 `native-codex-app-server.spec.ts` 已接入同一探针并核对审批双向消息，尚未执行。
+Claude 快照的毫秒 expiresAt 到期时在启动前拒绝；其他共享真实验收夹具也采用此预检。
+主控增加 `MAESTRO_E2E_CHILD_PROVIDER=claude|codex`，默认 Claude，Codex 通过第二个配置
+复用临时访问快照，保持父子嵌套、真实进程退出和随机 README 回答断言。
+
+三份项目 tsc 检查通过，三个 Electron 场景、两个单元文件及其导入夹具的补充类型检查通过。
+改动代码 ESLint 和所有改动文件 Prettier 通过。
+Playwright 仅收集两条真实场景和一条合成场景，不代表 Electron 验收通过。
+没有产品代码、界面动作、CLI 动词或产品文案变化，旧界面不变，既有 Open gaps 保留。
+夹具诊断沿用英文测试错误，不进入产品 i18n；两个真实场景继续显式开启 newShell。
+外部命令和限制见 [真实验证说明](verification/real-codex.md)。
+未验证真实模型、账户有效性、Electron、SSH、其他平台或发行包；未推送或发布。
+
 ## 2026-11-11：I 真实 Codex 场景支持订阅登录
 
 验证对象为 `codex/real-specs` 任务分支源码，先提交回归 `23ed18e63`，没有构建发行包。

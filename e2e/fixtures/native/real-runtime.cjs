@@ -123,10 +123,23 @@ function prepareCredentials(provider, destination, env = process.env) {
 		throw new Error(
 			'Claude login is unavailable. Supply CLAUDE_CODE_OAUTH_TOKEN or an authenticated CLAUDE_CONFIG_DIR.'
 		);
-	const token = JSON.parse(credentials).claudeAiOauth?.accessToken;
+	let oauth;
+	try {
+		oauth = JSON.parse(credentials)?.claudeAiOauth;
+	} catch {
+		// Parse errors can include source bytes. Keep login diagnostics credential-free.
+		throw new Error('Claude login snapshot is unavailable. Check the selected login source.');
+	}
+	const token = oauth?.accessToken;
 	if (!token)
 		throw new Error(
 			'Claude login has no access token. Refresh the login before running acceptance.'
+		);
+	// Claude stores expiresAt in milliseconds. This access-only snapshot cannot
+	// refresh, so reject it before Electron or a parent model turn can start.
+	if (typeof oauth.expiresAt === 'number' && oauth.expiresAt <= Date.now())
+		throw new Error(
+			'Claude access token has expired. Refresh the login outside acceptance before running again; snapshots cannot refresh.'
 		);
 	return { CLAUDE_CODE_OAUTH_TOKEN: token };
 }

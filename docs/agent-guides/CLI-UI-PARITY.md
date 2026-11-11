@@ -300,6 +300,12 @@ not share the desktop handler's multi-tab, queue and synopsis cancellation work.
 Closing that gap requires an acknowledged command routed to the same owner and
 interrupt implementation. This correction adds no separate stop implementation.
 
+2026-11-10：主动停止后的完成通知也复用上述退出事件的 `stopped` 判断。
+停止按钮、Escape 和经现有中断通路停止的 CLI 回合均不会发送完成通知，
+包括通知中心、弹窗、系统通知及自定义声音。新旧界面一致，错误提示和其他对话
+不受影响。没有新增界面动作或 CLI 动词；`codex-turn stop` 沿用已有入口，
+完整桌面 Stop 的 CLI 对等仍属于 Open gaps，未在本次修复中补齐。
+
 The review follow-up keeps these same actions. Consecutive refreshes preserve
 genuine repeated sends; an old cached internal prompt outside the newest 500
 messages makes the same read-only service widen its window. `withMentionTurnNotes()`

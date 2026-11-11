@@ -379,6 +379,7 @@ for (const split of [true, false]) {
 			}
 			await expect.poll(running).toEqual(['same-tool-ai-right']);
 			await expect.poll(() => saved().aiTabs[1].inputValue).toBe('Keep this background draft');
+			await expect(native.page.getByTestId('notification-center-badge')).toHaveCount(0);
 			fs.writeFileSync(gate, 'continue');
 			await expect.poll(running).toEqual([]);
 			await expect

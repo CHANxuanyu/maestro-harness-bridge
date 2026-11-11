@@ -38,6 +38,7 @@ function setup() {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	useSessionStore.setState({ sessions: [] });
 	window.maestro.context.conversation = targets;
 	targets.mockResolvedValue({
 		success: true,
@@ -236,6 +237,70 @@ it('keeps tool configuration hidden in the classic shell', async () => {
 	setup();
 	await screen.findByDisplayValue('test-secret-value');
 	expect(screen.queryByText('Tool configurations')).not.toBeInTheDocument();
+});
+
+it('reads CLI updates from the store even when the project sidebar holds an older owner', async () => {
+	useSettingsStore.setState({ newShell: true });
+	const cached = createMockSession({
+		name: 'Primary Claude',
+		projectRoot: '/projects/demo',
+		toolType: 'claude-code',
+		customPath: '/fixture/old',
+		enableMaestroP: false,
+	});
+	useSessionStore.setState({
+		sessions: [
+			{
+				...cached,
+				customPath: '/fixture/current',
+				enableMaestroP: true,
+				maestroPMode: 'dynamic',
+			},
+		],
+	});
+	vi.mocked(window.maestro.agents.detect).mockResolvedValue([
+		{
+			id: 'claude-code',
+			name: 'Claude Code',
+			binaryName: 'claude',
+			available: true,
+			path: '/fixture/claude',
+			configOptions: [],
+		},
+	] as never);
+	vi.mocked(window.maestro.sessions.setMany).mockResolvedValue(true);
+	const close = vi.fn();
+	render(
+		<LayerStackProvider>
+			<ProjectSettingsModal
+				theme={mockTheme}
+				name="Demo"
+				scopes={[{ projectPath: '/projects/demo' }]}
+				sessions={[cached]}
+				onClose={close}
+			/>
+		</LayerStackProvider>
+	);
+	await screen.findByText('Tool configurations');
+	fireEvent.click(screen.getByText('Primary Claude', { exact: true }));
+	await screen.findByPlaceholderText('/path/to/claude');
+	expect(screen.getByPlaceholderText('/path/to/claude')).toHaveValue('/fixture/current');
+	expect(screen.getByRole('button', { name: 'Dynamic', exact: true })).toHaveClass('ring-2');
+	fireEvent.change(screen.getByPlaceholderText('--flag value --another-flag'), {
+		target: { value: '--new' },
+	});
+	fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+	await waitFor(() => expect(close).toHaveBeenCalled());
+	expect(useSessionStore.getState().sessions[0]).toMatchObject({
+		customPath: '/fixture/current',
+		enableMaestroP: true,
+		maestroPMode: 'dynamic',
+		customArgs: '--new',
+	});
+	expect(window.maestro.sessions.setMany).toHaveBeenCalledWith(
+		[useSessionStore.getState().sessions[0]],
+		[]
+	);
 });
 
 it('explains why an active conversation prevents changing its SSH host', async () => {

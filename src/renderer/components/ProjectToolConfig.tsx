@@ -7,11 +7,12 @@ import { withBlankEnvVarRow } from '../../shared/envVarCatalog';
 import { AgentConfigPanel } from './shared/AgentConfigPanel';
 import { SshRemoteSelector } from './shared/SshRemoteSelector';
 import { useT } from '../i18n';
+import { selectSessionById, useSessionStore } from '../stores/sessionStore';
 
 /** A draft of one existing owner, independent of defaults for future conversations. */
 export function ProjectToolConfig({
 	theme,
-	session,
+	session: sidebarSession,
 	patch,
 	onChange,
 }: {
@@ -21,6 +22,9 @@ export function ProjectToolConfig({
 	onChange: (update: (previous: Partial<Session>) => Partial<Session>) => void;
 }) {
 	const t = useT();
+	// Sidebar snapshots omit launch settings. Keep untouched fields current while
+	// the explicit form patch retains anything the user is editing.
+	const session = useSessionStore(selectSessionById(sidebarSession.id)) ?? sidebarSession;
 	const [expanded, setExpanded] = useState(false);
 	const [agent, setAgent] = useState<AgentConfig>();
 	const [remotes, setRemotes] = useState<SshRemoteConfig[]>([]);

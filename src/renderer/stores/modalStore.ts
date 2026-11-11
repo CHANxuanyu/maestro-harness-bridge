@@ -22,6 +22,7 @@ import type { ConductorBadge } from '../constants/conductorBadges';
 import { UI_SURFACES } from '../../shared/uiSurfaces';
 import { logger } from '../utils/logger';
 import { safeStorageGet, safeStorageSet } from '../utils/safeLocalStorage';
+import { useSessionStore } from './sessionStore';
 
 // ============================================================================
 // Prompt Composer full-screen preference (persisted)
@@ -873,7 +874,14 @@ export function getModalActions() {
 		setEditAgentModalOpen: (open: boolean) =>
 			open ? openModal('editAgent') : closeModal('editAgent'),
 		setEditAgentSession: (session: Session | null) =>
-			session ? openModal('editAgent', { session }) : closeModal('editAgent'),
+			session
+				? openModal('editAgent', {
+						// Sidebar and shell selectors omit spawn config to avoid streaming renders.
+						// Resolve at opening time so a later save cannot restore their stale fields.
+						session:
+							useSessionStore.getState().sessions.find((item) => item.id === session.id) ?? session,
+					})
+				: closeModal('editAgent'),
 
 		// Delete Agent Modal
 		setDeleteAgentModalOpen: (open: boolean) =>

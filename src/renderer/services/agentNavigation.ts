@@ -21,7 +21,7 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useUIStore } from '../stores/uiStore';
 import { useFileExplorerStore } from '../stores/fileExplorerStore';
 import { useGroupChatStore } from '../stores/groupChatStore';
-import { useModalStore } from '../stores/modalStore';
+import { getModalActions } from '../stores/modalStore';
 import { aiTabFocusFields } from '../utils/tabFocusFields';
 import { requestSidebarReveal } from '../utils/sidebarReveal';
 
@@ -107,5 +107,5 @@ export function jumpToAgent(sessionId: string, options: JumpToAgentOptions = {})
 
 /** Open the Edit Agent modal for an agent (the per-agent settings pane). */
 export function openAgentSettings(session: Session): void {
-	useModalStore.getState().openModal('editAgent', { session });
+	getModalActions().setEditAgentSession(session);
 }

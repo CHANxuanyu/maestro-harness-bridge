@@ -14,6 +14,7 @@ import { useAppRemoteEventListeners } from '../../../../renderer/hooks/remote/us
 import { createMockSession } from '../../../helpers/mockSession';
 import type { Session } from '../../../../renderer/types';
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
+import { getModalActions, useModalStore } from '../../../../renderer/stores/modalStore';
 import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { compactToolOutput } from '../../../../shared/toolOutput';
 import { mkdtemp, readFile, rm, stat, writeFile as writeDiskFile } from 'node:fs/promises';
@@ -36,10 +37,10 @@ vi.mock('../../../../renderer/utils/ids', () => ({ generateId: () => 'new-tab-id
 const ack = vi.fn();
 const setMany = vi.fn().mockResolvedValue(undefined);
 
-function setup(sessions: Session[]) {
+function setup(sessions: Session[], liveState = false) {
 	useSessionStore.setState({ sessions });
 	const sessionsRef = { current: sessions };
-	const setSessions = vi.fn();
+	const setSessions = vi.fn(liveState ? useSessionStore.getState().setSessions : undefined);
 
 	renderHook(() =>
 		useAppRemoteEventListeners({
@@ -94,6 +95,44 @@ beforeEach(() => {
 });
 
 describe('maestro:remoteUpdateSessionConfig', () => {
+	it.each([true, false])(
+		'opens Edit Agent from the saved CLI config in newShell=%s',
+		async (newShell) => {
+			vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell } as never);
+			const root = await mkdtemp('/tmp/maestro-config-sync-');
+			const file = join(root, 'sessions.json');
+			const owner = createMockSession({
+				customPath: '/fixture/next-path',
+				enableMaestroP: false,
+				maestroPMode: 'dynamic',
+			});
+			try {
+				await writeDiskFile(file, JSON.stringify([owner]));
+				setMany.mockImplementationOnce(async (sessions: Session[]) => {
+					await writeDiskFile(file, JSON.stringify(sessions));
+					return true;
+				});
+				setup([owner], true);
+				dispatchPatch(owner.id, {
+					customPath: '/fixture/custom-path',
+					enableMaestroP: true,
+					maestroPMode: 'dynamic',
+				});
+				await waitFor(() => expect(ack).toHaveBeenCalledWith('ch', { success: true }));
+				const [disk] = JSON.parse(await readFile(file, 'utf8'));
+				const current = useSessionStore.getState().sessions[0];
+				expect(current).toEqual(disk);
+				expect(current.customPath).toBe('/fixture/custom-path');
+				// Sidebar equality deliberately retains this pre-edit object.
+				getModalActions().setEditAgentSession(owner);
+				expect(useModalStore.getState().getData('editAgent')?.session).toEqual(disk);
+			} finally {
+				useModalStore.getState().closeAll();
+				await rm(root, { recursive: true, force: true });
+			}
+		}
+	);
+
 	it('updates and persists the account environment while preserving the legacy command report', async () => {
 		vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell: true } as never);
 		const session = createMockSession({

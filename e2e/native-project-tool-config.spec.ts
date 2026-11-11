@@ -155,6 +155,17 @@ test('project tool config: claude -p, custom path, CLI readback, restart and cla
 			customPath,
 			tokenSource: 'dynamic',
 		});
+		await native.page.getByRole('button', { name: /^project\s+\d+$/i }).click({ button: 'right' });
+		await native.page.getByRole('menuitem', { name: 'Project settings', exact: true }).click();
+		await row.getByRole('button', { name: /Primary Claude/ }).click();
+		await expect(row.getByPlaceholder('/path/to/claude', { exact: true })).toHaveValue(customPath);
+		await expect(row.getByRole('button', { name: 'Dynamic', exact: true })).toHaveClass(/ring-2/);
+		expect(saved().find((session) => session.id === owner.id)).toMatchObject({
+			customPath,
+			enableMaestroP: true,
+			maestroPMode: 'dynamic',
+		});
+		await modal.getByRole('button', { name: 'Cancel', exact: true }).click();
 		await native.cli('settings', 'set', 'newShell', 'false');
 		await expect(native.page.getByTestId(`project-tool-${owner.id}`)).toHaveCount(0);
 		expect((await native.cli('settings', 'get', 'newShell')).value).toBe(false);
@@ -175,7 +186,22 @@ test('project tool config: claude -p, custom path, CLI readback, restart and cla
 		await expect(classic.getByRole('button', { name: 'Dynamic', exact: true })).toHaveClass(
 			/ring-2/
 		);
-		await classic.getByRole('button', { name: 'Cancel', exact: true }).click();
+		// A changed name proves the post-edit disk write has actually completed.
+		await classic.locator('#edit-agent-name-input').fill('Primary Claude Updated');
+		await classic.getByRole('button', { name: 'Save Changes', exact: true }).click();
+		await expect(classic).toHaveCount(0);
+		await expect
+			.poll(() => saved().find((session) => session.id === owner.id))
+			.toMatchObject({
+				name: 'Primary Claude Updated',
+				customPath,
+				enableMaestroP: true,
+				maestroPMode: 'dynamic',
+			});
+		expect(await native.cli('show', 'agent', owner.id)).toMatchObject({
+			customPath,
+			tokenSource: 'dynamic',
+		});
 		expect((await native.cli('show', 'agent', sibling.id)).tokenSource).toBe('interactive');
 		await native.cli('update-agent', owner.id, '--token-source', 'api');
 		expect((await native.cli('show', 'agent', owner.id)).tokenSource).toBe('api');

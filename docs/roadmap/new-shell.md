@@ -296,7 +296,7 @@ export interface ConversationOrigin {
 
 ## 本轮完成情况（2026-11-11）
 
-本表覆盖上文路线图及补充项。路线图的 hb.7、hb.8、hb.9 是原计划阶段，不等于当前包版本。核对的集成源码为 `92dd094f3`；本次仅整理记录，没有运行 Electron 或模型。“已实现已验证”仅指证据栏限定范围，不表示安装包、全平台或真人验收。没有通过回执的应用链路列“已实现未验证”，即使其单元测试已通过。工程缺口不能仅因需要真人体验就视为完成。
+本表覆盖上文路线图及补充项。路线图的 hb.7、hb.8、hb.9 是原计划阶段，不等于当前包版本。核对的集成源码为 `92dd094f3`；表格整理时没有运行 Electron 或模型，之后的集成回归结果见 E7。“已实现已验证”仅指证据栏限定范围，不表示安装包、全平台或真人验收。没有通过回执的应用链路列“已实现未验证”，即使其单元测试已通过。工程缺口不能仅因需要真人体验就视为完成。
 
 证据索引（均为仓库内既有记录，原始失败和未运行记录保留）：
 
@@ -306,6 +306,7 @@ export interface ConversationOrigin {
 - E4：`e2e/claude-standard-approval.md` 的 11-09 真实允许结果，源码 `f5d3e7aab`、Claude Code `2.1.317`；11 条旧合成场景通过见工作记录“U4 第四轮 CLI 标准权限拒绝回执”。#73 新增停止场景没有新通过记录。
 - E5：`docs/verification/real-codex.md` 的 11-11 结果，源码 `eab909e35`、`codex-cli 0.167.0-alpha.3.2`、`gpt-6-astra`，合成 app-server 与两条真实工作负载通过。不是完整协议准入，也不是安装包。
 - E6：`docs/verification/v1.0.1-hb.6.md`，包来源 `df8da1690a847efb6b0d33b6cb20687953ad244d`；41 条包内合成脚本和 6 条开发构建选定真实模式分开记录。该包早于新界面，不能替 hb.7 验包。
+- E7：2026-11-11 集成分支 `codex/round-close` 提交 `26a7dd66e` 的开发构建，全部 native 合成 Electron 场景 134 条一次通过（单 worker，无重试），见 `docs/verification/v1.0.1-hb.7.md`。仍是合成提供方，不是安装包或真人使用。
 
 | 路线图条目                            | 状态         | 证据与验证边界                                                                                           | 仅需真人体验的部分                   |
 | ------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------ |
@@ -327,19 +328,19 @@ export interface ConversationOrigin {
 | 工具全文与长历史性能                  | 已实现未验证 | `native-tool-output.spec.ts` 有合成记录；`docs/perf-renderer.md` 的流式按键 p95 退化仍待核实             | 长时间输入和阅读感受                 |
 | 常驻终端                              | 已实现已验证 | PR #58；E1，`native-new-shell.spec.ts` 实际终端合成验收；SSH、多窗口未验                                 | 终端工作流与按键                     |
 | Claude、Codex 任务清单                | 已实现已验证 | PR #58、#61；E1、E2，`native-codex-plan.spec.ts`；`docs/verification/codex-plan.md` 真实 exec 全链路未验 | 清单可读性；真实 exec 另验           |
-| 右栏网页预览                          | 已实现未验证 | PR #74；`native-web-preview.spec.ts`，工作记录有修复前失败及单元结果，最新 Electron 未验证               | 常用网站兼容性                       |
+| 右栏网页预览                          | 已实现已验证 | PR #74；E7，`native-web-preview.spec.ts`                                                                 | 常用网站兼容性                       |
 | 改动按回合分组                        | 已实现已验证 | PR #62；E2，`native-new-shell.spec.ts` T8；非逐轮差异快照                                                | 分组对复核的帮助                     |
 | 两条对话分屏与独立停止                | 已实现已验证 | PR #64；E3，`native-new-shell-split.spec.ts` 3 条合成通过                                                | 系统选图、真实拖拽与长期使用         |
 | 新对话的项目默认值                    | 已实现已验证 | PR #65；E3，`native-project-settings.spec.ts`；SSH 只测设置隔离                                          | 默认值是否合用                       |
-| 项目设置完整按工具配置替代            | 已实现未验证 | PR #76；`native-project-tool-config.spec.ts`，最新 Electron、真实 SSH 未验证                             | 账户和主机说明是否清楚               |
+| 项目设置完整按工具配置替代            | 已实现已验证 | PR #76；E7，`native-project-tool-config.spec.ts`；真实 SSH 未验证                                        | 账户和主机说明是否清楚               |
 | 同窗口子任务可见、插话、续聊、挂回    | 已实现已验证 | PR #66；E3，`native-subtasks.spec.ts`；完成后树自动收起                                                  | 介入和收起行为是否合用               |
-| 跨窗口子任务来源保存和重启挂回        | 已实现未验证 | PR #72；`native-cross-window-subtasks.spec.ts` 未运行回执；晚到原生身份补写仍有 Open gaps                | 跨窗口组织体验                       |
-| 额度用尽自动交接、默认关闭、账户告知  | 已实现未验证 | PR #76；`native-auto-handoff.spec.ts` 最新 Electron 未验证；仅额度或限流                                 | 是否愿意启用及提示清晰度             |
+| 跨窗口子任务来源保存和重启挂回        | 已实现已验证 | PR #72；E7，`native-cross-window-subtasks.spec.ts`；晚到原生身份补写仍有 Open gaps                       | 跨窗口组织体验                       |
+| 额度用尽自动交接、默认关闭、账户告知  | 已实现已验证 | PR #76；E7，`native-auto-handoff.spec.ts`（合成额度错误）；仅额度或限流，真实额度耗尽未验证              | 是否愿意启用及提示清晰度             |
 | Codex 当主控                          | 已实现已验证 | PR #77；E5，`real-codex-orchestrator.spec.ts` 派 Codex 真实通过，派 Claude 未完成                        | 派活效率；Claude 真实路径仍需重跑    |
 | Claude 标准审批                       | 已实现已验证 | PR #69、#70；E4；真实只覆盖允许，不含拒绝、停止、超时                                                    | 审批信息可读性                       |
 | Claude TUI、Dynamic 禁用标准权限      | 已实现已验证 | PR #69；工作记录“U4 TUI 标准权限验收”记录用户决定；E4 合成                                               | 无新增待定产品决定                   |
 | Codex app-server 审批、追加、停止原型 | 已实现已验证 | PR #68、#75、#77；E5，`real-codex-app-server.spec.ts`；仅固定版本工作负载                                | 日常可用性；全协议及包内仍需工程验证 |
-| 完整停止 CLI、审批中停止及停止通知    | 已实现未验证 | PR #71、#73；`native-claude-permission.spec.ts`、`native-new-shell-split.spec.ts` 新断言待跑             | 停止反馈是否明确                     |
+| 完整停止 CLI、审批中停止及停止通知    | 已实现已验证 | PR #71、#73；E7，`native-claude-permission.spec.ts`、`native-new-shell-split.spec.ts`                    | 停止反馈是否明确                     |
 | 交接来源嵌套（附录 C 原要求）         | 未实现       | `conversationChildren.ts` 保持顶层，E3 解释原因；规格差异待用户确认                                      | 确认保持顶层还是恢复嵌套             |
 | 新安装、升级默认新界面                | 未实现       | `src/main/stores/defaults.ts` 与 renderer 默认 `newShell: false`                                         | 候选包全天使用后决定                 |
 | 删除确认不用的上游功能与旧界面        | 用户同意推迟 | 上文决定 4、5；先用一个版本确认，默认切换后旧界面再留一个版本                                            | 确认删除清单与时机                   |

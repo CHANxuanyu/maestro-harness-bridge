@@ -1,3 +1,7 @@
+import {
+	automaticHandoffCandidate,
+	automaticHandoffOwnsFailure,
+} from '../../../services/autoHandoff';
 /**
  * useAgentErrorListener - registers `window.maestro.process.onAgentError`
  *
@@ -220,7 +224,18 @@ export function useAgentErrorListener(deps: UseAgentErrorListenerDeps): void {
 			const rawBatchState = deps.getBatchStateRef.current?.(actualSessionId);
 			const batchState = rawBatchState?.mirrored === true ? undefined : rawBatchState;
 			const batchOwnsError = !!(batchState?.isRunning && !batchState.errorPaused);
-			const canAutoRetry = !isSessionNotFound && !!tabIdFromSession;
+			const willAutoHandoff =
+				ownsSideEffects &&
+				!isBatchError &&
+				!batchOwnsError &&
+				!!tabIdFromSession &&
+				!!automaticHandoffCandidate(actualSessionId, tabIdFromSession, agentError);
+			const handoffOwnsFailure =
+				!isBatchError &&
+				!batchOwnsError &&
+				!!tabIdFromSession &&
+				automaticHandoffOwnsFailure(actualSessionId, tabIdFromSession, agentError);
+			const canAutoRetry = !handoffOwnsFailure && !isSessionNotFound && !!tabIdFromSession;
 			const willAutoRetryInteractive =
 				canAutoRetry &&
 				!batchOwnsError &&
@@ -397,7 +412,7 @@ export function useAgentErrorListener(deps: UseAgentErrorListenerDeps): void {
 				// after the synchronous pause above and never awaited: a reset that
 				// succeeds is picked up by the existing retry/auto-resume machinery
 				// on its next probe, and one that fails must not disturb the pause.
-				if (pausedSession) {
+				if (pausedSession && !handoffOwnsFailure) {
 					void maybeAutoResetCodexUsage(pausedSession, agentError).catch(() => {
 						// The service reports its own outcome to the user; a throw here
 						// would only mean the attempt never started.
@@ -519,7 +534,7 @@ export function useAgentErrorListener(deps: UseAgentErrorListenerDeps): void {
 
 			const erroredSession = getSessions().find((s) => s.id === actualSessionId);
 
-			if (!isSessionNotFound && !willAutoRetry) {
+			if (!isSessionNotFound && !willAutoRetry && !willAutoHandoff) {
 				// An expired token is not a per-turn error: it fails every agent on
 				// that provider at once. The outage store groups them, so the tenth
 				// agent to fail joins the prompt already on screen instead of stacking

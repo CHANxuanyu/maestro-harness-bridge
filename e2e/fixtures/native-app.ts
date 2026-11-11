@@ -45,6 +45,7 @@ export interface NativeScene {
 	exitGate?: string;
 	approval?: boolean;
 	authFailure?: boolean;
+	quotaFailure?: boolean;
 }
 
 export class NativeApp {

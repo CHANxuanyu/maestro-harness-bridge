@@ -31,6 +31,19 @@ describe('handoff CLI consent and result', () => {
 	});
 	afterEach(() => vi.restoreAllMocks());
 
+	it('lists configuration ids and accounts through the same target picker service', async () => {
+		await handoff('active', undefined, { listConfigurations: true, json: true });
+		expect(sendSimpleCommand).toHaveBeenCalledWith(
+			expect.objectContaining({
+				action: 'targets',
+				configurations: true,
+				sourceAgentId: 'source-agent',
+			}),
+			'ai_handoff_result',
+			75000
+		);
+	});
+
 	it.each([false, true])('reports the handoff title in json=%s', async (json) => {
 		vi.mocked(sendSimpleCommand).mockResolvedValue({
 			success: true,

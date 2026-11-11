@@ -3,6 +3,20 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.autoHandoff.disabled': '自动交接需要开启新界面。',
+
+	'workflows.autoHandoff.listHelp': '列出本项目的工具配置 ID 和账户',
+	'workflows.autoHandoff.listOnly': '列出配置时不能指定目标或发送。',
+
+	'workflows.autoHandoff.setting': '额度用尽时自动交给',
+	'workflows.autoHandoff.off': '关闭',
+	'workflows.autoHandoff.defaultAccount': '此主机的默认账户',
+	'workflows.autoHandoff.target': '{tool}（账户 {account}）· {name}',
+	'workflows.autoHandoff.unavailable': '配置不可用：{id}',
+	'workflows.autoHandoff.sent': '已自动交给 {tool}（账户 {account}）',
+	'workflows.autoHandoff.failed': '自动交接未完成。请检查目标配置，再手动继续。',
+	'workflows.projectSettings.cli.autoHandoffHelp': '自动交接的工具配置 ID，off 表示关闭',
+
 	...CODEX_APP_SERVER_MESSAGES['zh-CN'],
 	'workflows.shell.consultPermissionUnavailable': '这个工具无法保持来源对话的权限限制。',
 	'workflows.projectSettings.errors.requestFailed': '项目设置请求失败。',
@@ -45,6 +59,27 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.projectSettings.cli.jsonHelp': '以 JSON 输出设置快照',
 
 	'workflows.projectSettings.newConversation': '按项目默认设置新建',
+	'workflows.projectSettings.defaultsHeading': '新对话默认值',
+	'workflows.projectSettings.toolsHeading': '工具配置',
+	'workflows.projectSettings.toolScope': '改动影响这个工具配置下的所有对话。',
+	'workflows.projectSettings.toolAccountHelp':
+		'在环境变量中设置账户目录：Claude 和 DeepSeek 用 CLAUDE_CONFIG_DIR，Codex 用 CODEX_HOME。SSH 路径属于远程主机。',
+	'workflows.projectSettings.toolLoadFailed': '工具配置加载失败。请关闭后重新打开项目设置。',
+	'workflows.projectSettings.toolMissing': '这个工具配置已不存在。',
+	'workflows.projectSettings.toolRunning': '请先停止这个配置下的所有对话，再修改 SSH 主机。',
+	'workflows.projectSettings.toolNoChanges': '没有可保存的工具配置字段。',
+	'workflows.projectSettings.toolSaveFailed':
+		'工具配置保存失败。此前的改动可能已保存，请检查后再保存。',
+	'workflows.projectSettings.toolArgsHelp': '使用这个工具配置时，每次调用都会附加这些参数。',
+	'workflows.projectSettings.toolEnvHelp':
+		'这个工具配置专用的环境变量，替代工具默认环境变量，影响使用此配置的所有对话。',
+	'workflows.projectSettings.toolBinaryHelp': '个可执行文件。选择只应用到这个工具配置。',
+	'workflows.projectSettings.toolOpenCode': 'OpenCode 角色（可选）',
+	'workflows.projectSettings.toolOpenCodeHelp':
+		'，保留对应 OpenCode 角色、模型和指令。插件角色由 OpenCode 在运行时解析，即使',
+	'workflows.projectSettings.toolSshHelp': '使用这个配置的对话将在所选 SSH 主机上运行。',
+	'workflows.projectSettings.toolRunsOn': '对话运行在',
+	'workflows.projectSettings.toolRunsLocally': '对话在本机运行',
 	'workflows.projectSettings.title': '项目设置',
 	'workflows.projectSettings.description':
 		'只影响所选主机上这个项目之后新建的对话。当前对话的选择优先；项目权限只能收紧，不能放宽继承的权限。',

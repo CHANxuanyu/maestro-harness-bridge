@@ -1,5 +1,9 @@
 import type { UseInterruptHandlerReturn } from '../agent/useInterruptHandler';
 import { applyNewShellWebAction } from '../../services/newShellWeb';
+import {
+	editableSessionConfigPatch,
+	saveSessionToolConfig,
+} from '../../services/sessionToolConfig';
 import { effectiveStandardPermissionCapability } from '../../../shared/codexAppServer';
 import { getT } from '../../i18n';
 import { splitConversation, unsplitConversation } from '../../services/newShellSplit';
@@ -1797,6 +1801,23 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			});
 			return;
 		}
+		if (useSettingsStore.getState().newShell) {
+			try {
+				await saveSessionToolConfig(sessionId, {}, sshPatch, {
+					getSession: () => useSessionStore.getState().sessions.find((s) => s.id === sessionId),
+					setSessions,
+				});
+				window.maestro.process.sendRemoteUpdateSessionSshResponse(responseChannel, {
+					success: true,
+				});
+			} catch (error) {
+				window.maestro.process.sendRemoteUpdateSessionSshResponse(responseChannel, {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+			return;
+		}
 		if (session.aiPid && session.aiPid > 0) {
 			window.maestro.process.sendRemoteUpdateSessionSshResponse(responseChannel, {
 				success: false,
@@ -2368,6 +2389,24 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			return;
 		}
 
+		if (useSettingsStore.getState().newShell) {
+			try {
+				await saveSessionToolConfig(sessionId, patchObj, undefined, {
+					getSession: () => useSessionStore.getState().sessions.find((s) => s.id === sessionId),
+					setSessions,
+				});
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: true,
+				});
+			} catch (error) {
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+			return;
+		}
+
 		// Allowlist of editable session config keys. Anything else in the patch is
 		// ignored so the CLI can't write arbitrary Session internals.
 		//
@@ -2377,44 +2416,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 		// they apply immediately and are flushed to disk by the setMany below, so
 		// a CLI read straight after the write sees the new value rather than
 		// waiting on the renderer's 2s debounce.
-		const EDITABLE_KEYS = new Set([
-			'nudgeMessage',
-			'newSessionMessage',
-			'customPath',
-			'customArgs',
-			'customEnvVars',
-			'customModel',
-			'customEffort',
-			'customContextWindow',
-			// Provenance for the key above (finding AD1). Must be allowlisted or
-			// `maestro-cli update-agent --context-window` writes the number without
-			// its provenance, and the value it just set stays outranked by the
-			// provider's report - the deliberate edit would silently not apply.
-			'contextWindowSource',
-			'enableMaestroP',
-			'maestroPMode',
-			'maestroPPath',
-			// UI state
-			'bookmarked',
-		]);
-
-		// Build the field patch. A `null` value clears the field (sets undefined);
-		// any other provided value is written through as-is.
-		const patch = patchObj;
-		const updated: Partial<Session> = {};
-		for (const key of Object.keys(patch)) {
-			if (!EDITABLE_KEYS.has(key)) continue;
-			const value = patch[key];
-			(updated as Record<string, unknown>)[key] = value === null ? undefined : value;
-		}
-
-		// Clearing the window clears its provenance too, even when the caller sent
-		// only `customContextWindow: null`. Otherwise a stale 'user-edited' outlives
-		// the value it described and the next window set without provenance
-		// inherits precedence nobody asked for (finding AD1).
-		if (patch.customContextWindow === null) {
-			updated.contextWindowSource = undefined;
-		}
+		const updated = editableSessionConfigPatch(patchObj);
 
 		if (Object.keys(updated).length === 0) {
 			window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {

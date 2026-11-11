@@ -46,17 +46,27 @@ function createTurn({
 		fs.mkdirSync(path.dirname(file), { recursive: true });
 		fs.appendFileSync(file, `${JSON.stringify(record)}\n`);
 	};
-	const claudeMessage = (role, content) => {
+	const claudeMessage = (role, content, quotaFailure = false) => {
 		const record = {
 			type: role,
 			uuid: randomUUID(),
 			sessionId: id,
 			cwd,
 			timestamp: timestamp(),
-			message: { role, content, ...(role === 'assistant' ? { model } : {}) },
+			message: {
+				role,
+				content,
+				...(role === 'assistant' ? { model: quotaFailure ? '<synthetic>' : model } : {}),
+			},
+			...(quotaFailure ? { error: 'rate_limit', isApiErrorMessage: true } : {}),
 		};
 		append(record);
-		emit({ type: role, session_id: id, message: record.message });
+		emit({
+			type: role,
+			session_id: id,
+			message: record.message,
+			...(quotaFailure ? { error: 'rate_limit', is_api_error_message: true } : {}),
+		});
 	};
 	const rollout = (type, payload) => append({ timestamp: timestamp(), type, payload });
 	if (provider === 'claude') {
@@ -174,14 +184,17 @@ function createTurn({
 				});
 			}
 		},
-		finish(text) {
+		finish(text, { quotaFailure = false } = {}) {
 			if (provider === 'claude') {
-				claudeMessage('assistant', [{ type: 'text', text }]);
+				// Match Claude's synthetic plan-limit envelope documented in
+				// ClaudeOutputParser.detectPlanLimitNotice/isProvisionalErrorNotice.
+				claudeMessage('assistant', [{ type: 'text', text }], quotaFailure);
 				emit({
 					type: 'result',
 					subtype: 'success',
 					session_id: id,
 					result: text,
+					...(quotaFailure ? { is_error: true } : {}),
 					usage: { input_tokens: 10, output_tokens: 5 },
 					total_cost_usd: 0.0001,
 				});

@@ -1201,3 +1201,19 @@ describe('new shell login failure card', () => {
 		}
 	);
 });
+
+it('renders the automatic handoff note as a conversation link in the new shell', () => {
+	useSettingsStore.setState({ newShell: true });
+	renderTranscript([
+		{
+			id: 'automatic-note',
+			timestamp: T0,
+			source: 'system',
+			text: 'Automatically handed off to Codex (account work)',
+			autoHandoff: { sessionId: 'recipient', tabId: 'recipient-tab' },
+		},
+	]);
+	expect(
+		screen.getByRole('button', { name: 'Automatically handed off to Codex (account work)' })
+	).toBeInTheDocument();
+});

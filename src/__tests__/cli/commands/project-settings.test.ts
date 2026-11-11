@@ -35,6 +35,26 @@ describe('project settings CLI', () => {
 	});
 	afterEach(() => vi.restoreAllMocks());
 
+	it.each([
+		['config-b', 'config-b'],
+		['off', null],
+	])('sets auto handoff %s through the shared project service', async (autoHandoff, target) => {
+		await projectSettings('set', {
+			path: scope.projectPath,
+			sshRemote: scope.sshRemoteId,
+			autoHandoff,
+			json: true,
+		});
+		expect(sendSimpleCommand).toHaveBeenCalledExactlyOnceWith(
+			{
+				type: 'bridge.invoke',
+				channel: 'settings:projectSettings',
+				args: [{ action: 'set', scope, patch: { autoHandoffTarget: target } }],
+			},
+			'bridge.response'
+		);
+	});
+
 	it('reads the same handler as the UI without expanding remote home paths and masks secrets', async () => {
 		await projectSettings('show', {
 			path: scope.projectPath,

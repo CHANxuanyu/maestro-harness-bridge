@@ -129,6 +129,15 @@ export async function readHandoffSource(
 		};
 	}
 	if (!tab) return null;
+	if (
+		request.automaticTurnId &&
+		(!useSettingsStore.getState().newShell ||
+			tab.origin?.automatic ||
+			tab.autoHandoffAttemptedTurnId !== request.automaticTurnId ||
+			[...tab.logs].reverse().find((entry) => entry.source === 'user')?.id !==
+				request.automaticTurnId)
+	)
+		return null;
 	if (request.emptyConversation) {
 		if (!useSettingsStore.getState().newShell || !canReplaceConversation(session, tab)) return null;
 		const draft = replacementDraft(tab);
@@ -178,7 +187,17 @@ export async function readHandoffSource(
 		!current.aiTabs.some((item) => item.id === request.sourceTabId)
 	)
 		return null;
-	const source = extractTabContext(tab, session.name, session);
+	const failedMessage = request.automaticTurnId
+		? tab.logs.find((entry) => entry.id === request.automaticTurnId && entry.source === 'user')
+		: undefined;
+	if (request.automaticTurnId && !failedMessage) return null;
+	const source = extractTabContext(
+		failedMessage
+			? { ...tab, logs: tab.logs.filter((entry) => entry.id !== failedMessage.id) }
+			: tab,
+		session.name,
+		session
+	);
 	return {
 		cwd: location.cwd,
 		sessionSshRemoteConfig: session.sessionSshRemoteConfig,
@@ -196,7 +215,20 @@ export async function readHandoffSource(
 		sourcePermission: permissionModeFields(resolveTabPermissionMode(tab)),
 		projectPath: session.projectRoot || session.cwd,
 		groupId: session.groupId,
-		draft: buildHandoffDraft(source, { ...request, changes }),
+		images: failedMessage?.images,
+		draft: buildHandoffDraft(source, {
+			...request,
+			changes,
+			...(failedMessage
+				? {
+						instruction: failedMessage.text,
+						budgetTokens: Math.max(
+							request.budgetTokens ?? 8000,
+							Math.ceil(failedMessage.text.length / 2) + 8000
+						),
+					}
+				: {}),
+		}),
 	};
 }
 
@@ -212,6 +244,15 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 			? `new:${request.sourceAgentId}:${request.newConversation.replaceTabId ?? request.provider}`
 			: `${handoffLocation(request).key}:${request.provider}`,
 		async (): Promise<HandoffResult> => {
+			if (
+				(request.targetConfigId || request.origin.automatic) &&
+				!useSettingsStore.getState().newShell
+			)
+				return {
+					success: false,
+					code: 'unavailable',
+					error: getT()('workflows.autoHandoff.disabled'),
+				};
 			const sourceSession = useSessionStore
 				.getState()
 				.sessions.find((s) => s.id === request.sourceAgentId);
@@ -338,7 +379,7 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				sessionSshRemoteConfig: request.sessionSshRemoteConfig,
 			};
 			let project = projectSettingsForSession(projectOwner);
-			if (project?.envVars) {
+			if (project?.envVars && !request.targetConfigId) {
 				const response = await window.maestro.settings.projectSettings({
 					action: 'show',
 					scope: projectSettingsScopeForSession(projectOwner),
@@ -389,9 +430,11 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				session.toolType === request.config.toolType;
 			let target = request.runnerId
 				? state.sessions.find((session) => session.id === request.runnerId)
-				: state.sessions.find(
-						(session) => matches(session) && sessionProviderId(session) === request.provider
-					);
+				: request.targetConfigId
+					? undefined
+					: state.sessions.find(
+							(session) => matches(session) && sessionProviderId(session) === request.provider
+						);
 			if (request.runnerId && (!target || !matches(target)))
 				return {
 					success: false,
@@ -404,7 +447,9 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				request.config.customEnvVars ??
 				{};
 			const hasProjectEnvironment =
-				newShell && (!!project?.envVars || !!target?.projectSettingsBaseEnv);
+				newShell &&
+				!request.targetConfigId &&
+				(!!project?.envVars || !!target?.projectSettingsBaseEnv);
 			if (hasProjectEnvironment) {
 				const env = { ...baseEnvironment, ...project?.envVars, ...inherited?.customEnvVars };
 				request = { ...request, config: { ...request.config, customEnvVars: env } };
@@ -740,10 +785,18 @@ export async function openHandoffTarget(request: HandoffOpenRequest): Promise<Ha
 				}
 			}
 			if (request.send) {
+				if (request.origin.automatic && !useSettingsStore.getState().newShell)
+					return {
+						...result,
+						success: false,
+						code: 'unavailable',
+						error: getT()('workflows.autoHandoff.disabled'),
+					};
 				const queued = enqueuePromptForTab({
 					sessionId: agentId,
 					tabId,
 					text: request.draft.text,
+					...(request.images?.length ? { images: request.images } : {}),
 				});
 				if (!queued)
 					return {

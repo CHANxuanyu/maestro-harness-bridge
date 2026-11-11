@@ -141,6 +141,43 @@ CLI `tab new` 返回实际 `sessionId`，`dispatch --new-tab` 返回实际 `agen
 
 本轮共用修正：带提示的新建回调按来源所属窗口路由，旧界面也由此修正副窗口投递目标；新界面新建回调允许 60 秒，CLI 留出 65 秒等待；旧界面回调仍为 5 秒。其余新行为均受 `newShell` 控制。
 
+## 项目工具配置（2026-11-10）
+
+仅在 `newShell` 开启的桌面项目设置中显示。先按项目位置筛选配置，再展开具体工具配置。
+“新对话默认值”与“工具配置”分节，后者明确影响此配置下的所有对话，保存不改写标签内容或权限。
+账户目录使用已有环境变量表单和目录建议，Claude 与 DeepSeek 使用 `CLAUDE_CONFIG_DIR`，Codex 使用 `CODEX_HOME`。
+
+| 界面动作               | maestro-cli 对等动作                                          | 共用实现                                                               |
+| ---------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 展开并读取一个工具配置 | `show agent <id> --json`                                      | 同一会话配置字段，界面显示配置名称和 ID                                |
+| 编辑账户目录、环境变量 | `update-agent <id> --env KEY=VALUE`，清空用 `--clear-env`     | `saveSessionToolConfig()`，环境变量整体替换                            |
+| 编辑自定义路径、参数   | `update-agent <id> --custom-path <path> --custom-args <args>` | 同上；空字符串清空覆盖                                                 |
+| 选择 Claude 调用方式   | `update-agent <id> --token-source api\|tui\|dynamic`          | `toClaudeTokenModeSource()` 与同一保存服务；`tui` 保存为 `interactive` |
+| 编辑 TUI 包装器路径    | `update-agent <id> --maestro-p-path <path>`                   | 同一保存服务                                                           |
+| 选择 SSH 主机或本机    | `update-agent <id> --ssh-remote <id\|none>`                   | 同一保存服务；保留远程目录与历史同步字段                               |
+| 取消或收起编辑         | 不发送更新；读取仍用 `show agent`                             | 草稿只在明确保存时写入，收起保留草稿                                   |
+
+新界面的 CLI 与项目设置都通过原有 `sessions.setMany` 保存，仅在成功后更新内存和报告成功。
+同一配置的更新使用 `createKeyedWriteQueue()` 串行化，执行时读取当前 store，避免 React 尚未刷新时覆盖上一项改动。
+SSH 主机改动复用 `probeSessionAiProcesses()` 检查实时进程，探测失败也拒绝保存；路径不调用本机 realpath。
+改用 `api` 与权限菜单的“改用 claude -p”写入相同字段，不改写已有对话权限，也不停止当前回合。
+旧界面仍用原来的编辑与 CLI 保存路径，共用字段白名单的抽取不改变其行为。
+
+2026-11-11 修复：`update-agent` 的确认已包含窗口 store 与磁盘写入。
+项目工具配置行直接订阅当前 owner；各个 Edit Agent 入口在打开时按 ID 读取当前配置，
+不再将左栏缓存的路径与调用方式交给编辑表单。`show agent <id> --json` 可核对同一份数据。
+旧界面同步获得这项防回滚修复，保存动作不变。没有新增 CLI 动词。
+
+Open gaps：不提供 CLI 打开或折叠项目设置窗口的视觉动作；配置读取与保存已有对等动作。
+浏览器仍不开放此编辑节。停用的环境变量保留原值，本节不提供停用开关。
+项目默认值与多个工具配置不是一个跨存储事务；后续保存失败时保留窗口，并提示此前改动可能已经保存。
+合成验收：`e2e/native-project-tool-config.spec.ts`，Electron 执行待沙箱外完成。
+
+2026-11-10 第二线回归修正：场景模拟已完成 API 默认模式迁移的安装，编辑前后通过
+`show agent <id> --json` 核对两份配置，另核对工具级默认值未变。
+额度交接场景使用合成错误封装，保留 `rate_limited` 和只交接一次的严格断言。
+本轮仅修改测试，无新增界面动作或 CLI 动词，以上共用实现及 Open gaps 不变。
+
 ## New shell conversation split (2026-11-06)
 
 | UI action                              | CLI                                                   | Shared implementation                                               |
@@ -1466,3 +1503,23 @@ Open gaps: mobile/web-desktop keeps the existing browser-engine availability
 placeholder. In-page website controls are outside Maestro CLI panel actions.
 The new panel does not expose browser-history or scroll-position restoration;
 URLs and panel state persist, while guests are recreated on conversation changes.
+
+## 额度用尽时自动交接，D
+
+| 界面动作                       | CLI 对等动作                                                                               | 共用实现                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| 项目设置选择目标工具配置或关闭 | `project settings set --path <项目> [--ssh-remote <主机>] --auto-handoff <配置 ID 或 off>` | `createProjectSettingsService()`                |
+| 读取自动交接设置               | `project settings show --path <项目> [--ssh-remote <主机>]`                                | `ProjectSettings.autoHandoffTarget`，缺省为关闭 |
+| 查看配置 ID、工具和账户        | `handoff <来源对话> --list-configurations --json`                                          | `createAiHandoffService().targets()` 的配置模式 |
+| 点击来源说明打开目标对话       | `tab select <目标对话 ID> --agent <目标配置 ID>`                                           | 现有对话导航与深链接                            |
+
+仅新界面执行自动交接。来源进程退出后，所属桌面窗口以最后一条用户消息 ID 认领并保存一次性标记，再走手动交接的读取、权限与队列实现。复用 `rate_limited` 和 `classifyRetryableError()` 的额度分类，登录失效和上下文已满不触发。自动目标的 `origin.automatic` 阻止再次转交，重复错误与重复退出不重发。自动交接接管时不再安排来源工具的重试或额度重置。
+
+2026-11-11 修复：`automaticHandoffOwnsFailure()` 同时约束错误重试和全局额度恢复。
+新界面中，已认领的来源回合与自动交接接收方再次遇到额度错误时均停下，
+不以重发探测额度、不重置额度，也不恢复已认领的失败请求；项目关闭交接后仍保留认领边界。
+`settings set autoResumeOnLimit true` 不覆盖这项约束。旧界面和普通手动交接保留原恢复规则。
+
+目标选择锁定配置 ID，不回退到其他账户。跨本机 worktree 复制该配置并保持来源 cwd；SSH 按项目路径和主机比较，不执行本机 realpath。目标环境保持该配置当前的账户，不再用项目默认环境覆盖。权限仍取来源和项目默认的较严者。失败的用户消息完整放入交接指令，历史正文不重复该消息，附件一起入队。读取目标列表不访问凭据或调用模型，账户显示解析后的配置目录或该主机的默认账户。
+
+Open gaps：本轮没有新增界面动作缺口。目标不可用、保存失败或发送队列失败不自动重试；保留原错误，需手动处理。Electron 场景在 `e2e/native-auto-handoff.spec.ts`，待沙箱外执行。

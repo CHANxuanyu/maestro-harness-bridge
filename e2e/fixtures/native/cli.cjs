@@ -172,7 +172,7 @@ async function run(provider) {
 				);
 		}
 	}
-	if (!stopped) turn.finish(scene.answer);
+	if (!stopped) turn.finish(scene.answer, { quotaFailure: scene.quotaFailure === true });
 	if (provider === 'codex' && !stopped) await delay(1100);
 	// Hold the completed native writer before Maestro starts its exit synopsis.
 	if (scene.exitGate) while (!fs.existsSync(scene.exitGate) && !stopped) await delay(10);

@@ -1,9 +1,8 @@
 import {
 	projectSettingsKeysForScope,
-	type ProjectSettingsScope,
+	projectSettingsScopeForSession,
 } from '../../shared/projectSettings';
 import { sessionProviderId } from '../../shared/agentPresets';
-import { handoffLocation } from '../../shared/aiHandoff';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { AITab, Session } from '../types';
 import {
@@ -12,16 +11,7 @@ import {
 } from './newConversationPermissions';
 import type { AgentCapabilities } from '../../shared/types';
 
-/** The SSH execution directory is remote data and never enters local path resolution. */
-export function projectSettingsScopeForSession(
-	session: Pick<Session, 'cwd' | 'projectRoot' | 'sessionSshRemoteConfig'>
-): ProjectSettingsScope {
-	const ssh = session.sessionSshRemoteConfig;
-	return {
-		projectPath: ssh?.enabled ? handoffLocation(session).cwd : session.projectRoot || session.cwd,
-		...(ssh?.enabled && ssh.remoteId ? { sshRemoteId: ssh.remoteId } : {}),
-	};
-}
+export { projectSettingsScopeForSession } from '../../shared/projectSettings';
 
 export function projectSettingsForSession(
 	session: Pick<Session, 'cwd' | 'projectRoot' | 'sessionSshRemoteConfig'>

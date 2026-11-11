@@ -8,7 +8,7 @@
 MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-claude-permission.spec.ts --retries=0
 ```
 
-命令构建主进程、renderer 和 CLI，再运行 11 条场景。全部使用 `NativeApp` 的临时项目、临时应用数据及合成 Claude；真实模式通过文件级 `test.skip()` 跳过，收集场景不建立夹具。`claude-permission.cjs` 启动应用实际配置的 MCP bridge，通过 initialize、tools/list、tools/call 请求审批，不调用模型。每个场景保留首次失败，不自动重试。
+命令构建主进程、renderer 和 CLI，再运行 12 条场景。全部使用 `NativeApp` 的临时项目、临时应用数据及合成 Claude；真实模式通过文件级 `test.skip()` 跳过，收集场景不建立夹具。`claude-permission.cjs` 启动应用实际配置的 MCP bridge，通过 initialize、tools/list、tools/call 请求审批，不调用模型。每个场景保留首次失败，不自动重试。
 
 覆盖内容：
 
@@ -83,6 +83,17 @@ Windows 外部补验：把 Claude 自定义路径指向安装器生成的 `maest
 
 仍未真实验证：拒绝、停止、超时，SSH，Windows，Linux，安装包。
 
-## 已知交互缺口
+## 2026-11-10 审批停止与 CLI 对等
 
-审批遮罩覆盖输入框的停止按钮；Escape 当前表示拒绝这个工具，不表示停止整个回合。现有 CLI Stop 也没有与桌面完整停止处理函数对等。此轮保持原动作范围，通过 IPC 中断验证收尾，将直接停止入口留在 CLI 对等表的 Open gaps。
+合成 `stop` 场景改为点击审批框“停止这一轮”，新增 `stop CLI` 使用 `tab stop`。
+两条均保留桥接进程退出、配置删除、活动进程为空、审批撤销、迟到批准失败、
+没有文件写入以及下一轮可继续的断言。CLI 场景在退出后再停止一次，必须返回“没有在运行”。
+Escape 仍只拒绝当前工具，单元回归覆盖此区别。此前的停止交互缺口由本轮补齐。
+
+运行本文件顶部命令，或仅运行两条停止场景：
+
+```sh
+MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-claude-permission.spec.ts --grep 'Claude standard approval: stop' --retries=0
+```
+
+本轮没有执行 Electron，也没有复用此前真实批准结果作为停止通过的证据。

@@ -2422,6 +2422,7 @@ function MaestroConsoleInner() {
 
 	// --- REMOTE EVENT LISTENERS (extracted to useAppRemoteEventListeners hook) ---
 	useAppRemoteEventListeners({
+		handleInterrupt,
 		sessionsRef,
 		setActiveSessionId,
 		setSessions,
@@ -3248,6 +3249,7 @@ function MaestroConsoleInner() {
 			    Settings launch button and a plugin summoning its own overlay. */}
 			<PluginModalPanelMount theme={theme} />
 			<AppShell
+				onStopTurn={handleInterrupt}
 				theme={theme}
 				keyboardShellOffset={keyboardShellOffset}
 				isMobileLandscape={isMobileLandscape}

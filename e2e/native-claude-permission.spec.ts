@@ -17,6 +17,7 @@ for (const outcome of [
 	'allow CLI',
 	'deny CLI',
 	'stop',
+	'stop CLI',
 	'timeout',
 	'classic allow',
 ] as const) {
@@ -117,14 +118,18 @@ for (const outcome of [
 			const configPath = invocation.args[invocation.args.indexOf('--mcp-config') + 1];
 			expect(fs.existsSync(configPath)).toBe(true);
 
-			if (outcome.endsWith('CLI')) {
+			if (outcome === 'stop CLI') {
+				expect(await native.cli('tab', 'stop', tab.tabId, '--agent', owner)).toMatchObject({
+					success: true,
+					tabId: tab.tabId,
+					agentId: owner,
+				});
+			} else if (outcome.endsWith('CLI')) {
 				expect(await native.cli('permission', allowed ? 'allow' : 'deny', request.requestId)).toBe(
 					true
 				);
 			} else if (outcome === 'stop') {
-				// The approval overlay covers the composer Stop control. Exercise the
-				// existing interrupt IPC while the bridge is still awaiting a decision.
-				await native.page.evaluate((id) => window.maestro.process.interrupt(id), request.sessionId);
+				await dialog.getByRole('button', { name: '停止这一轮', exact: true }).click();
 			} else if (outcome !== 'timeout') {
 				await dialog
 					.getByRole('button', {
@@ -151,6 +156,11 @@ for (const outcome of [
 				)
 				.toEqual([]);
 			expect(await native.cli('permission', 'list')).toEqual([]);
+			if (outcome === 'stop CLI') {
+				await expect(native.cli('tab', 'stop', tab.tabId, '--agent', owner)).rejects.toThrow(
+					'这条对话没有在运行。'
+				);
+			}
 			await expect(native.cli('permission', 'allow', request.requestId)).rejects.toThrow(
 				'no longer pending'
 			);
@@ -163,7 +173,7 @@ for (const outcome of [
 					updatedInput: request.input,
 				});
 				await expect(native.page.getByText('APPROVAL_ALLOWED_ONCE', { exact: true })).toBeVisible();
-			} else if (outcome !== 'stop') {
+			} else if (outcome !== 'stop' && outcome !== 'stop CLI') {
 				const decision = rows<{ decision: Extract<PermissionDecision, { behavior: 'deny' }> }>(
 					'fixture-permission-events.jsonl'
 				)[0].decision;

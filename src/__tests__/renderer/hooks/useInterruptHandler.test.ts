@@ -45,8 +45,8 @@ import type { Session, AITab } from '../../../renderer/types';
 
 const mockMaestro = {
 	process: {
-		interrupt: vi.fn().mockResolvedValue(undefined),
-		kill: vi.fn().mockResolvedValue(undefined),
+		interrupt: vi.fn().mockResolvedValue(true),
+		kill: vi.fn().mockResolvedValue(true),
 		getActiveProcesses: vi.fn().mockResolvedValue([]),
 	},
 	crossAgent: {
@@ -142,6 +142,7 @@ function createDeps(overrides: Partial<UseInterruptHandlerDeps> = {}): UseInterr
 beforeEach(() => {
 	idCounter = 0;
 	vi.clearAllMocks();
+	mockMaestro.process.getActiveProcesses.mockReset().mockResolvedValue([]);
 	window.confirm = originalConfirm;
 
 	useSessionStore.setState({
@@ -184,6 +185,81 @@ describe('useInterruptHandler', () => {
 	// ========================================================================
 	// AI mode interrupt
 	// ========================================================================
+	it.each([true, false])('returns the actual interrupt acknowledgement %s', async (accepted) => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+		const session = createSession({ aiTabs: [createTab({ state: 'busy' })] });
+		useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+		mockMaestro.process.interrupt.mockResolvedValueOnce(accepted);
+		const { result } = renderHook(() => useInterruptHandler(createDeps()));
+		await act(async () => {
+			expect(await result.current.handleInterrupt()).toEqual(
+				accepted
+					? { success: true }
+					: { success: false, error: 'This conversation is not running.' }
+			);
+		});
+		if (!accepted) expect(useSessionStore.getState().sessions[0].aiTabs[0].logs).toEqual([]);
+	});
+
+	it('targets the requested owner in classic mode while retaining whole owner stop', async () => {
+		const active = createSession({ id: 'active' });
+		const requested = createSession({
+			id: 'requested',
+			aiTabs: [
+				createTab({ id: 'target', state: 'busy' }),
+				createTab({ id: 'sibling', state: 'busy' }),
+			],
+		});
+		useSessionStore.setState({ sessions: [active, requested], activeSessionId: active.id });
+		const { result } = renderHook(() => useInterruptHandler(createDeps()));
+		await act(async () => {
+			await result.current.handleInterrupt({ sessionId: 'requested', tabId: 'target' });
+		});
+		expect(mockMaestro.process.interrupt.mock.calls.map(([id]) => id)).toEqual([
+			'requested-ai-target',
+			'requested-ai-sibling',
+		]);
+		expect(useSessionStore.getState().activeSessionId).toBe('active');
+	});
+
+	it.each([true, false])(
+		'reports a live process refusing interrupt as failure, new shell %s',
+		async (newShell) => {
+			useSettingsStore.setState({ newShell, uiLanguage: 'en' });
+			const session = createSession({ aiTabs: [createTab({ state: 'busy' })] });
+			useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+			mockMaestro.process.interrupt.mockResolvedValueOnce(false);
+			mockMaestro.process.getActiveProcesses
+				.mockResolvedValueOnce([{ sessionId: 'sess-1-ai-tab-1' }])
+				.mockResolvedValueOnce([{ sessionId: 'sess-1-ai-tab-1' }]);
+			const { result } = renderHook(() => useInterruptHandler(createDeps()));
+			await act(async () => {
+				expect(
+					await result.current.handleInterrupt({ sessionId: session.id, tabId: 'tab-1' })
+				).toEqual({ success: false, error: 'Could not stop this conversation. Please try again.' });
+			});
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].state).toBe('busy');
+		}
+	);
+
+	it('does not report a partial stop as success when a forced parallel process remains', async () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+		const session = createSession({ aiTabs: [createTab({ state: 'busy' })] });
+		useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+		mockMaestro.process.getActiveProcesses
+			.mockResolvedValueOnce([{ sessionId: 'sess-1-ai-tab-1-fp-123' }])
+			.mockResolvedValueOnce([{ sessionId: 'sess-1-ai-tab-1-fp-123' }]);
+		mockMaestro.process.interrupt.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+		const { result } = renderHook(() => useInterruptHandler(createDeps()));
+		await act(async () => {
+			expect(await result.current.handleInterrupt()).toEqual({
+				success: false,
+				error: 'Could not stop this conversation. Please try again.',
+			});
+		});
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].state).toBe('busy');
+	});
+
 	describe('new shell conversation stop', () => {
 		it.each([false, true])(
 			'only interrupts the target and busy orphans, force kill %s',
@@ -375,6 +451,34 @@ describe('useInterruptHandler', () => {
 			});
 
 			expect(mockMaestro.process.interrupt).toHaveBeenCalledWith('sess-ai-ai-tab-ai-1');
+		});
+
+		it('treats a click event passed by a Stop button as no target', async () => {
+			const tab = createTab({ id: 'tab-ai-1', state: 'busy' });
+			const session = createSession({
+				id: 'sess-ai',
+				inputMode: 'ai',
+				state: 'busy',
+				aiTabs: [tab],
+				activeTabId: 'tab-ai-1',
+			});
+			useSessionStore.setState({
+				sessions: [session],
+				activeSessionId: 'sess-ai',
+			});
+
+			const deps = createDeps({ sessionsRef: { current: [session] } });
+			const { result } = renderHook(() => useInterruptHandler(deps));
+			// StopTurnButton is wired as onClick={onInterrupt}, so React hands Stop its event.
+			const clickEvent = { type: 'click', target: {}, currentTarget: {} } as never;
+
+			let outcome: { success: boolean } | undefined;
+			await act(async () => {
+				outcome = await result.current.handleInterrupt(clickEvent);
+			});
+
+			expect(mockMaestro.process.interrupt).toHaveBeenCalledWith('sess-ai-ai-tab-ai-1');
+			expect(outcome?.success).toBe(true);
 		});
 
 		it('cancels pending synopsis before interrupting', async () => {

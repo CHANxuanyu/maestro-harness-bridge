@@ -9,6 +9,7 @@ vi.mock('../../../cli/services/maestro-client', () => ({ withMaestroClient: vi.f
 vi.mock('../../../cli/services/storage', () => ({
 	resolveAgentId: vi.fn((id: string) => id),
 	readActiveAgentId: vi.fn(() => null),
+	readSettingValue: vi.fn(() => 'en'),
 }));
 vi.mock('../../../cli/output/formatter', () => ({
 	formatError: vi.fn((msg) => `Error: ${msg}`),
@@ -20,6 +21,7 @@ import {
 	tabCompact,
 	tabPanel,
 	tabSplit,
+	tabStop,
 	tabUnsplit,
 	tabClose,
 	tabRename,
@@ -39,7 +41,7 @@ import {
 	tabCommands,
 } from '../../../cli/commands/tab';
 import { withMaestroClient } from '../../../cli/services/maestro-client';
-import { resolveAgentId, readActiveAgentId } from '../../../cli/services/storage';
+import { resolveAgentId, readActiveAgentId, readSettingValue } from '../../../cli/services/storage';
 import { formatError } from '../../../cli/output/formatter';
 
 // agent-1 owns three tabs in tab-bar order so reordering has something to move
@@ -130,6 +132,37 @@ describe('tab commands', () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
 			throw new Error('__exit__');
+		});
+	});
+
+	it('localizes the stop acknowledgement in Chinese', async () => {
+		vi.mocked(readSettingValue).mockReturnValueOnce('zh-CN');
+		mockTab({ success: true });
+		await tabStop('tab-aaaa', {});
+		expect(consoleSpy).toHaveBeenCalledWith('Success: 已请求停止这一轮。');
+	});
+
+	it('stops the resolved conversation through the acknowledged renderer action', async () => {
+		const captured = mockTab({ success: true });
+		await tabStop('tab-bb', { agent: 'agent-2', json: true });
+		expect(captured()).toEqual({
+			type: 'update_session_config',
+			sessionId: 'agent-2',
+			configPatch: { tabId: 'tab-bbbb', stopTurn: true },
+		});
+		expect(JSON.parse(consoleSpy.mock.calls[0][0])).toMatchObject({
+			success: true,
+			tabId: 'tab-bbbb',
+		});
+	});
+
+	it('reports an idle or failed stop as failure instead of claiming success', async () => {
+		mockTab({ success: false, error: 'This conversation is not running.' });
+		await expect(tabStop('tab-aaaa', { json: true })).rejects.toThrow('__exit__');
+		expect(processExitSpy).toHaveBeenCalledWith(1);
+		expect(JSON.parse(consoleSpy.mock.calls[0][0])).toMatchObject({
+			success: false,
+			error: 'This conversation is not running.',
 		});
 	});
 

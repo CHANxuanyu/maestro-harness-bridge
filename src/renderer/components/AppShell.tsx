@@ -1,3 +1,4 @@
+import type { UseInterruptHandlerReturn } from '../hooks/agent/useInterruptHandler';
 import { shellFeatureVisible } from '../../shared/newShellFeatures';
 import { ProjectStartView } from './ProjectStartView';
 import { chooseProject } from '../services/openProject';
@@ -44,6 +45,7 @@ type RightPanelProps = ComponentProps<typeof RightPanel>;
 type EmptyStateViewProps = ComponentProps<typeof EmptyStateView>;
 
 export interface AppShellProps {
+	onStopTurn?: UseInterruptHandlerReturn['handleInterrupt'];
 	theme: Theme;
 	keyboardShellOffset: number;
 	isMobileLandscape: boolean;
@@ -87,6 +89,7 @@ export interface AppShellProps {
 }
 
 export function AppShell({
+	onStopTurn,
 	theme,
 	keyboardShellOffset,
 	isMobileLandscape,
@@ -357,7 +360,7 @@ export function AppShell({
 			{/* --- CONTEXT TIMELINE (single, app-wide; opened from the header gauge) --- */}
 			<ContextTimelinePanel theme={theme} />
 			{/* --- PERMISSION PROMPT (Claude Code standard mode; portal) --- */}
-			<PermissionPrompt theme={theme} />
+			<PermissionPrompt theme={theme} onStopTurn={onStopTurn} />
 			{/* --- CONCERTO ---
 			    Cadenzas float over the app; the movement stage lives in its own
 			    resizable window (Alt+C / command palette / hamburger menu). Both stay

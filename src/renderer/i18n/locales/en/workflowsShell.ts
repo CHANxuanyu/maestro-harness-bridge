@@ -562,6 +562,12 @@ export const workflowsShell = {
 		'The source location of this file could not be read. Please drag it again.',
 	'workflows.shell.confirmForceStopConversation':
 		'This conversation could not be stopped gracefully. Force stop it? Unsaved work may be lost.',
+	'workflows.shell.stopRequested': 'Stop requested.',
+	'workflows.shell.stopCliDescription':
+		'Stop this conversation in the new shell, or its owning agent in classic mode',
+	'workflows.shell.stopThisTurn': 'Stop this turn',
+	'workflows.shell.stopNotRunning': 'This conversation is not running.',
+	'workflows.shell.stopTargetMissing': 'Conversation not found.',
 	'workflows.shell.stopConversationFailed': 'Could not stop this conversation. Please try again.',
 	'workflows.shell.attachImage': 'Attach Image',
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify':

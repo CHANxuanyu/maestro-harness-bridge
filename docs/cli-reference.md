@@ -1299,6 +1299,15 @@ Open a new tab for an agent (optionally seeded with a prompt)
 | `--focus`                  | Switch to the new tab after creating it (default)                | -       |
 | `--json`                   | Output as JSON (for scripting)                                   | -       |
 
+## `maestro-cli tab stop <tab-id>`
+
+Stop this conversation in the new shell, or its owning agent in classic mode
+
+| Option             | Description                                    | Default |
+| ------------------ | ---------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
+| `--json`           | Output as JSON (for scripting)                 | -       |
+
 ## `maestro-cli tab panel <tab-id> <action>`
 
 New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show

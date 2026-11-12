@@ -64,6 +64,7 @@ export function sidebarSessionEquality(a: Session[], b: Session[]): boolean {
 			x.groupId !== y.groupId ||
 			x.parentSessionId !== y.parentSessionId ||
 			x.worktreesExpanded !== y.worktreesExpanded ||
+			x.conversationTreeExpanded !== y.conversationTreeExpanded ||
 			x.projectRoot !== y.projectRoot ||
 			x.cwd !== y.cwd ||
 			x.sessionSshRemoteConfig !== y.sessionSshRemoteConfig ||

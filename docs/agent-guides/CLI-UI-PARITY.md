@@ -1005,15 +1005,17 @@ gaps or add separate implementations. Error recovery remains in the backlog belo
 
 ## New shell conversation children (2026-11-07)
 
-| UI action                                               | CLI                                                                 | Shared implementation                                                                                    |
-| ------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Inspect a parent's child conversations and their status | `tab children <tab-id> [--agent <id>] [--json]`                     | `findConversationParent()` in `shared/conversationChildren.ts`; open tab inventory                       |
-| Select a child conversation                             | `tab select <tab-id> [--json]` or `focus-agent <agent> --tab <tab>` | `select_tab` / remote selection and `setActiveTab()`; new shell reveals the hidden tab and clears unread |
-| Ask another conversation to do work                     | `ask <target> <question>` or `dispatch <source> "@Target ..."`      | Existing mention planner and `sendCrossAgentRequest()`                                                   |
-| Delegate into a new child                               | `dispatch <target> <prompt> --new-tab` from a stamped caller        | Owner creation and persistence receipt, then `recordAgentDelegation()`                                   |
-| Add a reply while a child works                         | `dispatch <child-owner> <prompt> --tab <child-tab> --queue`         | Existing execution queue; consult completion releases the child's tab barrier                            |
-| Continue an idle child                                  | `send <prompt> --tab <child-tab>`                                   | Existing composer send and captured native session ID                                                    |
-| Rename, star or close a child                           | `tab rename`, `tab star`, `tab close`                               | Existing tab actions, also used by nested row menus                                                      |
+| UI action                                                           | CLI                                                                 | Shared implementation                                                                                                                  |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Inspect a parent's child conversations, status and saved disclosure | `tab children <tab-id> [--agent <id>] [--json]`                     | `findConversationParent()` in `shared/conversationChildren.ts`; open tab inventory                                                     |
+| Expand or collapse child conversations                              | `tab children <tab-id> --expand` / `--collapse`                     | `windows:conversationChildren` routes to `conversationChildren()` in the owner; `Session.conversationTreeExpanded` persists the choice |
+| Inspect a closed source by native identity (read only)              | `tab children --native <native-id> --agent <id> [--json]`           | Owner history lookup through `matchRecordForTab()`, then the same `findConversationParent()` relation                                  |
+| Select a child conversation                                         | `tab select <tab-id> [--json]` or `focus-agent <agent> --tab <tab>` | `select_tab` / remote selection and `setActiveTab()`; new shell reveals the hidden tab and clears unread                               |
+| Ask another conversation to do work                                 | `ask <target> <question>` or `dispatch <source> "@Target ..."`      | Existing mention planner and `sendCrossAgentRequest()`                                                                                 |
+| Delegate into a new child                                           | `dispatch <target> <prompt> --new-tab` from a stamped caller        | Owner creation and persistence receipt, then `recordAgentDelegation()`                                                                 |
+| Add a reply while a child works                                     | `dispatch <child-owner> <prompt> --tab <child-tab> --queue`         | Existing execution queue; consult completion releases the child's tab barrier                                                          |
+| Continue an idle child                                              | `send <prompt> --tab <child-tab>`                                   | Existing composer send and captured native session ID                                                                                  |
+| Rename, star or close a child                                       | `tab rename`, `tab star`, `tab close`                               | Existing tab actions, also used by nested row menus                                                                                    |
 
 Origins are created only under `newShell`. A source native ID arriving later is
 filled once by `captureConversationSourceNativeId()`, shared by normal provider
@@ -1047,10 +1049,11 @@ retained tab, and remains in the orphan collection while queued work exists.
 
 Archive and unarchive use the existing `tab archive <tab-id>` and
 `native-history archive|unarchive <owner> <native-id>` routes. The shared
-`conversationBranch()` check refuses archive while a descendant is running or
-queued. The tree resolves archived parents before filtering, so completed
-children stay hidden with their parent and return on unarchive. A child can be
-archived independently.
+`conversationBranch()` refuses archive while a review/subtask descendant is running or
+queued. Handoffs nest visually but move the work, so they never block archiving
+the source. Unarchived handoffs under a hidden archived branch are promoted to
+their own project and reattach on unarchive. Reviews/subtasks stay hidden with
+an archived parent. A child can be archived independently.
 
 New shell Stop addresses both outgoing consults and the incoming consult on the
 selected child. The main registry waits for process exit before acknowledging
@@ -1067,24 +1070,18 @@ running. This uses the desktop interrupt service. The later A entry adds
 `tab close` 和原生历史打开沿用原入口；`native-history list`、`native-history search`
 与界面读取同一份清理后的标题和搜索正文。生产信封及 `stripCrossAgentPrompt()`
 位于 `shared/crossAgentPrompt.ts`，兼容旧记录，不改写原生文件。
-没有新增 CLI 对等缺口，下列停止、折叠和历史打开的既有缺口仍保留。
+停止与历史打开的其他限制按各自条目记录；Task K 已关闭折叠与原生来源查询缺口。
 
-## Open gaps
-
-**Subtask disclosure and archived sources (2026-11-07).** The disclosure button
-keeps local React state. `tab children` reads the same parent relation but does
-not expand or collapse the desktop tree. It resolves an open parent tab; after
-closing the source, reopen its native history row and pass the new tab ID.
-The existing native-history open gap below still applies. A pre-feature consult
-without a captured source native ID can only attach while its original source
-tab is open.
-
-**Late native identity across windows (2026-11-10).** A source that has not yet
-announced its native ID is saved with its live tab identity. The existing native
-ID backfill only updates the source window's snapshot. Cross-window backfill
-before that ID exists is not covered here; restart attachment requires the native
-ID captured in the creation request. Historical children already missing their
-origin are not reconstructed.
+Expanded/collapsed state is saved in the owning session, keyed by native ID
+(or the live tab ID before the provider announces one). UI and CLI share the
+owning-window request and persistence receipt. JSON includes `expanded`.
+Running or selected children can expand an unset parent; completion never
+collapses it, and an explicit collapsed choice is retained. Native-ID queries
+are read only and validate the same account and SSH identity as the sidebar.
+Late identity uses `captureConversationSourceNativeId()` in every owner window,
+with sender verification and a persistence acknowledgement before the broadcast
+resolves. Existing children without any recoverable origin are not reconstructed.
+Updated synthetic Electron scenarios still require an outside-sandbox run.
 
 ## Cross-window CLI child provenance (2026-11-10)
 

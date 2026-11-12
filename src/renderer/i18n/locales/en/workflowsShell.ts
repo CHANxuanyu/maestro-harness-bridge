@@ -373,6 +373,14 @@ export const workflowsShell = {
 	'workflows.conversations.showMore': 'Show {count} more',
 	'workflows.conversations.expandChildren': 'Show subtasks: {title}',
 	'workflows.conversations.collapseChildren': 'Hide subtasks: {title}',
+	'workflows.conversations.expandChildrenCommand':
+		'Expand the conversation tree and save the choice',
+	'workflows.conversations.collapseChildrenCommand':
+		'Collapse the conversation tree and save the choice',
+	'workflows.conversations.nativeChildrenCommand':
+		'Read children of a native conversation (requires --agent)',
+	'workflows.conversations.disclosureFailed':
+		'Could not save the conversation tree. Please try again.',
 	'workflows.conversations.childrenCommand':
 		'List direct child conversations, including hidden subtasks',
 	'workflows.conversations.selectCommand': 'Select a conversation in the desktop',

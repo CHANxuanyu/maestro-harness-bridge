@@ -1,3 +1,4 @@
+import { conversationExpanded } from '../../../shared/conversationChildren';
 import type { WebServer } from '../WebServer';
 import type { WebServerFactoryDependencies } from '../web-server-factory';
 import type { StoredSession } from '../../stores/types';
@@ -171,6 +172,8 @@ export function registerSessionCallbacks(
 					readOnly: tab.readOnlyMode === true,
 					permissionMode: resolveTabPermissionMode(tab),
 					newShellPanel: tab.newShellPanel,
+					expanded:
+						conversationExpanded(s.conversationTreeExpanded, tab.id, tab.agentSessionId) ?? false,
 					thinking: asThinkingMode(tab.showThinking) ?? 'off',
 					// `null` (not `false`) is the honest answer for the three
 					// inheriting fields: the tab has no override and follows the

@@ -50,6 +50,46 @@ describe('Windows Preload API', () => {
 		expect(mockRemoveListener).toHaveBeenCalledWith('windows:readConversationPermissions', handler);
 	});
 
+	it('acknowledges late native identity only after the receiving owner saves', async () => {
+		const identity = {
+			sessionId: 'owner',
+			tabId: 'source',
+			nativeSessionId: 'native',
+			provider: 'codex',
+		};
+		let finish!: () => void;
+		const saved = new Promise<void>((resolve) => {
+			finish = resolve;
+		});
+		const receive = vi.fn(() => saved);
+		const stop = api.onConversationSourceNativeId(receive);
+		const handler = mockOn.mock.calls.find(
+			([channel]) => channel === 'windows:conversationSourceNativeId'
+		)![1];
+		const pending = handler({}, identity, 'reply');
+		expect(receive).toHaveBeenCalledWith(identity);
+		expect(mockSend).not.toHaveBeenCalled();
+		finish();
+		await pending;
+		expect(mockSend).toHaveBeenCalledWith('reply', { success: true });
+		stop();
+		expect(mockRemoveListener).toHaveBeenCalledWith('windows:conversationSourceNativeId', handler);
+	});
+
+	it('returns a disclosure persistence error to the caller and removes the listener', async () => {
+		const stop = api.onConversationChildren(vi.fn().mockRejectedValue(new Error('write failed')));
+		const handler = mockOn.mock.calls.find(
+			([channel]) => channel === 'windows:conversationChildrenRequest'
+		)![1];
+		await handler({}, { sessionId: 'owner', tabId: 'source', expanded: true }, 'reply');
+		expect(mockSend).toHaveBeenCalledWith('reply', {
+			success: false,
+			error: 'Error: write failed',
+		});
+		stop();
+		expect(mockRemoveListener).toHaveBeenCalledWith('windows:conversationChildrenRequest', handler);
+	});
+
 	it('create forwards sessionIds and bounds', async () => {
 		mockInvoke.mockResolvedValue({
 			id: 'w1',

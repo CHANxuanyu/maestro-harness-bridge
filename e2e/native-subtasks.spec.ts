@@ -275,6 +275,7 @@ test('new shell subtasks: mention, queued reply, CLI dispatch and closed parent'
 
 		await test.step('closed parent stays above its child through native history and restart', async () => {
 			await native.cli('tab', 'select', child.id);
+			expect((await native.cli('tab', 'children', parentTab, '--expand')).expanded).toBe(true);
 			await native.cli('tab', 'close', parentTab);
 			await expect.poll(() => savedTab(parentTab)).toBeUndefined();
 			const historyParent = () =>
@@ -283,7 +284,10 @@ test('new shell subtasks: mention, queued reply, CLI dispatch and closed parent'
 				historyParent().locator(`[data-conversation-key="${workerId}:${child.id}"]`)
 			).toBeVisible();
 			await native.restart(home);
-			await native.cli('tab', 'select', child.id);
+			expect(
+				(await native.cli('tab', 'children', '--native', parentNativeId, '--agent', parentId))
+					.expanded
+			).toBe(true);
 			await expect(
 				historyParent().locator(`[data-conversation-key="${workerId}:${child.id}"]`)
 			).toBeVisible();

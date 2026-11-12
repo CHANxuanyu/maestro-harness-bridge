@@ -284,7 +284,7 @@ export interface ConversationOrigin {
 - 命令行：`maestro-cli handoff <tab> <provider> --review [--send] [--json]`。JSON 结果包含新会话的智能体 id、标签 id 和 `mode`，来源能用现有的标签读取命令读回。
 - hb.7 的左栏只把还开着的复核、交接会话挂在来源下面；关掉以后按原生 id 挂回去，和子任务一起放到 hb.8。
 
-2026-11-11 规格差异，**待用户确认**：以上原要求保留。当前 `src/shared/conversationChildren.ts` 的 `findConversationParent()` 和 `conversationBranch()` 排除 `handoff`，交接后的新对话保持顶层；复核与子任务仍嵌套。原因是嵌套会让归档来源时隐藏正在接力的对话，见 `docs/worklog.md`“U3 子任务 Electron 验收”。未找到用户同意该调整的记录，不能将它记为原规格完全实现。
+2026-11-12 按原规格实现：新界面将交接、复核和子任务挂在来源会话下面，来源标签关闭后按原生 ID、账户和 SSH 身份挂回。来源归档时，未归档的交接会话回到自己项目的顶层，取消归档后重新嵌套；交接中的运行或排队工作不阻止来源归档，复核和子任务仍会阻止。展开选择随会话数据保存，完成不再自动收起，切换会话和重启后仍保留。CLI 可展开、收起和按已关闭来源的原生 ID 查询。跨窗口的晚到原生 ID 通过所属窗口补写来源。单元回归已覆盖，合成 Electron 场景待沙箱外运行。
 
 ### D. 能力核对
 
@@ -333,15 +333,15 @@ export interface ConversationOrigin {
 | 两条对话分屏与独立停止                | 已实现已验证 | PR #64；E3，`native-new-shell-split.spec.ts` 3 条合成通过                                                | 系统选图、真实拖拽与长期使用         |
 | 新对话的项目默认值                    | 已实现已验证 | PR #65；E3，`native-project-settings.spec.ts`；SSH 只测设置隔离                                          | 默认值是否合用                       |
 | 项目设置完整按工具配置替代            | 已实现已验证 | PR #76；E7，`native-project-tool-config.spec.ts`；真实 SSH 未验证                                        | 账户和主机说明是否清楚               |
-| 同窗口子任务可见、插话、续聊、挂回    | 已实现已验证 | PR #66；E3，`native-subtasks.spec.ts`；完成后树自动收起                                                  | 介入和收起行为是否合用               |
-| 跨窗口子任务来源保存和重启挂回        | 已实现已验证 | PR #72；E7，`native-cross-window-subtasks.spec.ts`；晚到原生身份补写仍有 Open gaps                       | 跨窗口组织体验                       |
+| 同窗口子任务可见、插话、续聊、挂回    | 已实现已验证 | PR #66；Task K 保留展开选择，更新后的 Electron 场景待运行                                                | 介入和展开选择是否合用               |
+| 跨窗口子任务来源保存和重启挂回        | 已实现已验证 | PR #72；Task K 补齐晚到原生身份，更新后的跨窗口 Electron 场景待运行                                      | 跨窗口组织体验                       |
 | 额度用尽自动交接、默认关闭、账户告知  | 已实现已验证 | PR #76；E7，`native-auto-handoff.spec.ts`（合成额度错误）；仅额度或限流，真实额度耗尽未验证              | 是否愿意启用及提示清晰度             |
 | Codex 当主控                          | 已实现已验证 | PR #77；E5，`real-codex-orchestrator.spec.ts` 派 Codex 真实通过，派 Claude 未完成                        | 派活效率；Claude 真实路径仍需重跑    |
 | Claude 标准审批                       | 已实现已验证 | PR #69、#70；E4；真实只覆盖允许，不含拒绝、停止、超时                                                    | 审批信息可读性                       |
 | Claude TUI、Dynamic 禁用标准权限      | 已实现已验证 | PR #69；工作记录“U4 TUI 标准权限验收”记录用户决定；E4 合成                                               | 无新增待定产品决定                   |
 | Codex app-server 审批、追加、停止原型 | 已实现已验证 | PR #68、#75、#77；E5，`real-codex-app-server.spec.ts`；仅固定版本工作负载                                | 日常可用性；全协议及包内仍需工程验证 |
 | 完整停止 CLI、审批中停止及停止通知    | 已实现已验证 | PR #71、#73；E7，`native-claude-permission.spec.ts`、`native-new-shell-split.spec.ts`                    | 停止反馈是否明确                     |
-| 交接来源嵌套（附录 C 原要求）         | 未实现       | `conversationChildren.ts` 保持顶层，E3 解释原因；规格差异待用户确认                                      | 确认保持顶层还是恢复嵌套             |
+| 交接来源嵌套（附录 C 原要求）         | 已实现待验证 | Task K 恢复原规格；单元回归覆盖，合成 Electron 待运行                                                    | 检查嵌套与归档后的可见性             |
 | 新安装、升级默认新界面                | 未实现       | `src/main/stores/defaults.ts` 与 renderer 默认 `newShell: false`                                         | 候选包全天使用后决定                 |
 | 删除确认不用的上游功能与旧界面        | 用户同意推迟 | 上文决定 4、5；先用一个版本确认，默认切换后旧界面再留一个版本                                            | 确认删除清单与时机                   |
 | 手机窄屏新界面                        | 已实现未验证 | 共享 renderer 与 `index.css` 窄屏基础；手机专项未完成                                                    | iOS、Android 输入法和后台恢复        |

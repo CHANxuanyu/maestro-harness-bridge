@@ -1905,3 +1905,9 @@ CLI 导航、刷新和系统浏览器打开共用 `applyNewShellWebAction()`；C
 本轮源码增加新界面项目级自动交接，默认关闭，目标锁定工具配置和主机。来源退出后保存失败回合标记，复用手动交接上下文、权限与发送队列；目标不自动继续转交。设置、CLI、目标配置选择、退出触发、重试互斥、完整失败消息和来源跳转均先观察回归失败，再实现。只使用合成数据和临时目录，未调用真实模型，未构建发布产物。
 
 已写合成 Electron 场景，验证默认关闭、开启后单次发送、来源说明跳转、只读权限和目标再失败不传递。Electron 尚未运行，待沙箱外验收。相关 10 个文件共 304 条单元测试通过，ES2020 兼容写法调整后相关 2 个文件的 90 条回归再次通过。`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 三份类型检查通过；全部改动文件通过 Prettier，代码及测试通过 `eslint --no-ignore`。Electron 两个场景已收集，并以包含现有 CJS 夹具和 renderer 全局声明的临时配置完成类型检查；未启动 Electron。沙箱外运行：`npm run test:e2e -- e2e/native-auto-handoff.spec.ts`。
+
+## 2026-11-12，Task K 原规格会话树
+
+基于 `1d9ed9c9f`，新界面恢复交接嵌套，并在来源归档时提升未归档交接；运行或排队交接不阻止来源归档，复核和子任务仍阻止。展开选择随会话保存，CLI 与界面共用所属窗口路由，支持只读查询已关闭的原生来源。晚到原生 ID 经窗口注册表进入子对话所属窗口，仍复用 `captureConversationSourceNativeId()`，保存后回执。
+
+三轮先失败回归共复现 8 项失败。最终 14 个相关单元文件共 591 项通过；正式 TypeScript、lint、ESLint 和改动文件 Prettier 通过。三份合成 Electron 文件收集到 17 场景并完成类型检查，未启动 Electron。没有更改原生夹具、个人账户、凭据或安装；未构建发行包、推送或发布。完整命令、失败原因、文件分工与 Opus 沙箱外运行要求见 [Task K 验证记录](verification/task-k-conversation-tree.md)。

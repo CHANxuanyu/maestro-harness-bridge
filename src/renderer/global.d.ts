@@ -4999,6 +4999,10 @@ interface MaestroAPI {
 	// Multi-window API - enumerate/create/focus/close windows and inspect or
 	// move the agents (sessions) each window owns. `sessionIds` are agent IDs.
 	windows: {
+		conversationChildren: import('../main/preload/windows').WindowsApi['conversationChildren'];
+		onConversationChildren: import('../main/preload/windows').WindowsApi['onConversationChildren'];
+		captureConversationSourceNativeId: import('../main/preload/windows').WindowsApi['captureConversationSourceNativeId'];
+		onConversationSourceNativeId: import('../main/preload/windows').WindowsApi['onConversationSourceNativeId'];
 		getConversationPermissions: (
 			sessionIds: string[]
 		) => Promise<Array<ConversationPermissionSnapshot | null>>;

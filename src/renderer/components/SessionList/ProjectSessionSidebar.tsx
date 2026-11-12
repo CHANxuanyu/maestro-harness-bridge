@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { newProjectConversation } from '../../services/newShellConversation';
 import { requestConversationAction } from '../../services/conversationArchive';
 import { useConversationArchiveStore } from '../../stores/conversationArchiveStore';
@@ -137,6 +138,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	onResumeSession,
 	onDeleteWorktree,
 }: ProjectSessionSidebarProps) {
+	const t = useT();
 	const newShell = useSettingsStore(selectNewShellEnabled);
 	const archiveRecords = useConversationArchiveStore((state) => state.records);
 	const [search, setSearch] = useState('');
@@ -242,6 +244,28 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	// A filter for a provider that no longer has rows would hide everything.
 	const effectiveProviderFilter =
 		!newShell && providerFilter && providers.includes(providerFilter) ? providerFilter : null;
+
+	const setChildrenExpanded = useCallback(
+		(conversation: SidebarConversation, expanded: boolean) => {
+			if (!newShell || !conversation.ownerId) return;
+			void window.maestro.windows
+				.conversationChildren({
+					sessionId: conversation.ownerId,
+					...(conversation.tabId
+						? { tabId: conversation.tabId }
+						: { nativeSessionId: conversation.nativeSessionId! }),
+					expanded,
+				})
+				.catch(() => {
+					useModalStore.getState().openModal('confirm', {
+						title: t('workflows.archive.error'),
+						message: t('workflows.conversations.disclosureFailed'),
+						onConfirm: () => {},
+					});
+				});
+		},
+		[newShell, t]
+	);
 
 	const projects = useMemo(
 		() =>
@@ -562,6 +586,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 				pendingKeys={pendingKeys}
 				failedKeys={failedKeys}
 				onToggleProject={toggleProject}
+				onSetChildrenExpanded={setChildrenExpanded}
 				onSelectConversation={selectConversation}
 				onNewConversation={newConversation}
 				onNewConversationHere={activeOwnerId ? newConversationHere : undefined}

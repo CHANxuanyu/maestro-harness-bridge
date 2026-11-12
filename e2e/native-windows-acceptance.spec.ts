@@ -628,10 +628,11 @@ for (const update of [false, true]) {
 			// never a dist import or __setAutoUpdaterForTesting. Replace only the
 			// external installer side effect; updates:install still runs its real
 			// onBeforeQuitAndInstall hook and the real before-quit coordinator.
-			await native.app.evaluate(async ({ app }) => {
-				// The main bundle is an ES module, so require is not in scope here.
-				const { createRequire } = await import('node:module');
-				const { join } = await import('node:path');
+			await native.app.evaluate(({ app }) => {
+				// The main bundle is an ES module and evaluate has no import callback,
+				// so reach Node's built-ins through process.getBuiltinModule.
+				const { createRequire } = process.getBuiltinModule('node:module');
+				const { join } = process.getBuiltinModule('node:path');
 				const appRequire = createRequire(join(app.getAppPath(), 'package.json'));
 				const { autoUpdater } = appRequire('electron-updater');
 				autoUpdater.autoInstallOnAppQuit = false;

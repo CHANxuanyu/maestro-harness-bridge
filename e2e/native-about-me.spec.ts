@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect } from './fixtures/native-app';
+import { test, expect, NativeApp } from './fixtures/native-app';
+import { test as base } from '@playwright/test';
 import {
 	nativeAboutMePointer,
 	type AboutMeCommand,
@@ -146,93 +147,211 @@ test('claude about-me: IPC and CLI preserve native files until explicit consent'
 	expect(fs.lstatSync(codexFile).isSymbolicLink()).toBe(true);
 });
 
-// The Settings page drives the same service: the full Markdown survives the
-// editor, only files the user ticks are written, an edit made after the tick is
-// not overwritten, and clearing removes the section. Files only; this does not
-// claim a model loaded anything.
-test('claude about-me settings: the page keeps long text and writes only approved files', async ({
-	native,
-}) => {
-	test.skip(native.real, 'The page adds no CLI behaviour; claude about-me: covers the transport');
-	const home = path.join(native.root, 'synthetic-home');
-	for (const dir of ['.claude', '.codex']) fs.mkdirSync(path.join(home, dir), { recursive: true });
-	await native.close();
-	await native.start(home);
-	const { page } = native;
-	const claudeFile = path.join(native.claude, 'CLAUDE.md');
-	const codexFile = path.join(native.codex, 'AGENTS.md');
-	const codexTarget = path.join(native.root, 'user-instructions.md');
-	const prefix = Buffer.from('﻿User-owned instructions\r\nNo trailing newline');
-	fs.writeFileSync(claudeFile, prefix);
-	fs.writeFileSync(codexTarget, prefix);
-	fs.symlinkSync(codexTarget, codexFile);
-	const block = (content: string) =>
-		`<!-- maestro:about-me:start -->\n${content}\n<!-- maestro:about-me:end -->`;
-	const long = `${'Synthetic preference line.\n'.repeat(220)}End of the long profile.`;
-	expect(long.length).toBeGreaterThan(5000);
-	const profileFile = path.join(native.root, 'profile.md');
-	fs.writeFileSync(profileFile, long);
-	expect((await native.cli('about-me', 'set', '--file', profileFile)).content).toBe(long);
-
-	await page.keyboard.press('ControlOrMeta+,');
-	const settings = page.locator('[role="dialog"][aria-label="Settings"]');
-	const editor = settings.getByRole('textbox', { name: 'About Me' });
-	await expect(editor).toHaveValue(long);
-	const edited = `${long}\nEdited in Settings.`;
-	await editor.fill(edited);
-	await expect(settings.getByTestId('about-me-save-state')).toHaveText('Saved');
-	expect((await native.cli('about-me', 'show')).content).toBe(edited);
-
-	const row = (file: string) => settings.getByTestId(`about-me-file-${file}`);
-	await expect(row(claudeFile)).toContainText('Needs your OK');
-	await expect(row(codexFile)).toContainText(`Real file: ${fs.realpathSync(codexTarget)}`);
-	const write = settings.getByTestId('about-me-write');
-	await expect(write).toBeDisabled();
-	await row(claudeFile)
-		.getByRole('checkbox', { name: 'Add an About Me section to this file' })
-		.check();
-	await expect(write).toHaveText('Write to 1 file');
-	await write.click();
-	const outcome = settings.getByTestId('about-me-outcome');
-	await expect(outcome).toContainText(/^Wrote 1 of \d+ files\./);
-	await expect(row(claudeFile)).toContainText('Up to date');
-	expect(fs.readFileSync(claudeFile)).toEqual(Buffer.concat([prefix, Buffer.from(block(edited))]));
-	expect(fs.readFileSync(codexTarget)).toEqual(prefix);
-	expect(fs.lstatSync(codexFile).isSymbolicLink()).toBe(true);
-	for (const dir of ['.claude', '.codex']) expect(fs.readdirSync(path.join(home, dir))).toEqual([]);
-
-	// An outside edit needs a new OK, and an edit made after the OK is kept.
-	const external = Buffer.concat([prefix, Buffer.from(block('Edited outside Maestro.'))]);
-	fs.writeFileSync(claudeFile, external);
-	await settings.getByRole('button', { name: 'Check again' }).click();
-	await expect(row(claudeFile)).toContainText('Edited outside Maestro');
-	const replace = row(claudeFile).getByRole('checkbox', {
-		name: 'Replace the section that was edited outside Maestro',
-	});
-	await replace.check();
-	const later = Buffer.concat([prefix, Buffer.from(block('Edited again after the OK.'))]);
-	fs.writeFileSync(claudeFile, later);
-	await write.click();
-	await expect(outcome).toContainText(/^Wrote 0 of \d+ files\./);
-	expect(fs.readFileSync(claudeFile)).toEqual(later);
-	await expect(replace).not.toBeChecked();
-	await replace.check();
-	await write.click();
-	await expect(outcome).toContainText(/^Wrote 1 of \d+ files\./);
-	expect(fs.readFileSync(claudeFile)).toEqual(Buffer.concat([prefix, Buffer.from(block(edited))]));
-
-	// Clearing saves an empty profile; Remove takes the section out again.
-	await editor.fill('');
-	await expect(settings.getByTestId('about-me-save-state')).toHaveText('Saved');
-	await expect(row(claudeFile)).toContainText('Needs update');
-	await expect(write).toHaveText('Remove from 1 file');
-	await write.click();
-	await expect(outcome).toContainText(
-		'Removed the section from 1 file. Restart any claude or codex that is already running'
-	);
-	expect(fs.readFileSync(claudeFile)).toEqual(prefix);
-	expect(fs.readFileSync(codexTarget)).toEqual(prefix);
+// Seed the classic shell before the first launch, and skip before constructing
+// NativeApp so real-mode collection never reads an account for these UI checks.
+const syntheticTest = base.extend<{ native: NativeApp }>({
+	// eslint-disable-next-line no-empty-pattern
+	native: async ({}, use, info) => {
+		base.skip(
+			process.env.MAESTRO_E2E_REAL === '1',
+			'About Me UI acceptance uses synthetic accounts only'
+		);
+		const native = new NativeApp(info, { providerCli: false });
+		const settingsFile = path.join(native.data, 'maestro-settings.json');
+		fs.writeFileSync(
+			settingsFile,
+			JSON.stringify({
+				...JSON.parse(fs.readFileSync(settingsFile, 'utf8')),
+				newShell: false,
+			})
+		);
+		try {
+			await native.start();
+			await use(native);
+		} finally {
+			try {
+				if (native.app) await native.close(info.status !== info.expectedStatus);
+			} finally {
+				fs.rmSync(native.root, { recursive: true, force: true });
+			}
+		}
+	},
 });
+
+syntheticTest(
+	'claude about-me settings F5: saving long text survives reopening with tokens and leaves native files unchanged',
+	async ({ native }) => {
+		syntheticTest.setTimeout(180_000);
+		const { page } = native;
+		await expect(page.locator('html')).toHaveAttribute('data-new-shell', 'false');
+		const nativeFiles = [
+			path.join(native.claude, 'CLAUDE.md'),
+			path.join(native.codex, 'AGENTS.md'),
+		];
+		const prefix = Buffer.from('User-owned native instructions.\r\n');
+		for (const file of nativeFiles) fs.writeFileSync(file, prefix);
+		const long = `${'Synthetic preference line.\n'.repeat(220)}End of the long profile.`;
+		expect(long.length).toBeGreaterThan(5000);
+		await page.keyboard.press('ControlOrMeta+,');
+		const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+		const editor = settings.getByRole('textbox', { name: 'About Me' });
+		await editor.fill(long);
+		await expect(settings.getByTestId('about-me-save-state')).toHaveText('Saved');
+		const settingsFile = path.join(native.data, 'maestro-settings.json');
+		expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).conductorProfile).toBe(long);
+		expect((await native.cli('about-me', 'show')).content).toBe(long);
+		const tokens = settings.getByTestId('about-me-tokens');
+		await tokens.scrollIntoViewIfNeeded();
+		await expect(tokens).toBeVisible();
+		await expect(tokens).toBeInViewport();
+		await expect(tokens).toHaveText('~1.5K tokens');
+		for (const file of nativeFiles) expect(fs.readFileSync(file)).toEqual(prefix);
+		await page.keyboard.press('Escape');
+		await expect(settings).toHaveCount(0);
+		await page.keyboard.press('ControlOrMeta+,');
+		await expect(editor).toHaveValue(long);
+		await tokens.scrollIntoViewIfNeeded();
+		await expect(tokens).toBeVisible();
+		await expect(tokens).toBeInViewport();
+		await expect(tokens).toHaveText('~1.5K tokens');
+		for (const file of nativeFiles) expect(fs.readFileSync(file)).toEqual(prefix);
+		for (const dir of ['.claude', '.codex'])
+			expect(fs.existsSync(path.join(native.syntheticHome, dir))).toBe(false);
+	}
+);
+
+// Files only: this checks consent and status, never claims a model loaded it.
+syntheticTest(
+	'claude about-me settings F7: external edits revoke consent, missing folders stay absent and Codex override is explicit',
+	async ({ native }) => {
+		syntheticTest.setTimeout(180_000);
+		const home = native.syntheticHome;
+		const { page } = native;
+		await expect(page.locator('html')).toHaveAttribute('data-new-shell', 'false');
+		const claudeFile = path.join(native.claude, 'CLAUDE.md');
+		const codexFile = path.join(native.codex, 'AGENTS.md');
+		const codexTarget = path.join(native.root, 'user-instructions.md');
+		const prefix = Buffer.from('﻿User-owned instructions\r\nNo trailing newline');
+		fs.writeFileSync(claudeFile, prefix);
+		fs.writeFileSync(codexTarget, prefix);
+		fs.symlinkSync(codexTarget, codexFile);
+		const block = (content: string) =>
+			`<!-- maestro:about-me:start -->\n${content}\n<!-- maestro:about-me:end -->`;
+		const long = `${'Synthetic preference line.\n'.repeat(220)}End of the long profile.`;
+		expect(long.length).toBeGreaterThan(5000);
+		const profileFile = path.join(native.root, 'profile.md');
+		fs.writeFileSync(profileFile, long);
+		expect((await native.cli('about-me', 'set', '--file', profileFile)).content).toBe(long);
+
+		await page.keyboard.press('ControlOrMeta+,');
+		const settings = page.locator('[role="dialog"][aria-label="Settings"]');
+		const editor = settings.getByRole('textbox', { name: 'About Me' });
+		await expect(editor).toHaveValue(long);
+		const edited = `${long}\nEdited in Settings.`;
+		await editor.fill(edited);
+		await expect(settings.getByTestId('about-me-save-state')).toHaveText('Saved');
+		expect((await native.cli('about-me', 'show')).content).toBe(edited);
+
+		const row = (file: string) => settings.getByTestId(`about-me-file-${file}`);
+		for (const [dir, name] of [
+			['.claude', 'CLAUDE.md'],
+			['.codex', 'AGENTS.md'],
+		]) {
+			const missing = row(path.join(home, dir, name));
+			await missing.scrollIntoViewIfNeeded();
+			await expect(missing).toBeVisible();
+			await expect(missing).toContainText('Folder missing');
+			await expect(missing).toContainText('Maestro does not create account folders.');
+			await expect(missing.getByRole('checkbox')).toHaveCount(0);
+			expect(fs.existsSync(path.join(home, dir))).toBe(false);
+		}
+		await expect(row(claudeFile)).toContainText('Needs your OK');
+		await expect(row(codexFile)).toContainText(`Real file: ${fs.realpathSync(codexTarget)}`);
+		const write = settings.getByTestId('about-me-write');
+		await expect(write).toBeDisabled();
+		await row(claudeFile)
+			.getByRole('checkbox', { name: 'Add an About Me section to this file' })
+			.check();
+		await expect(write).toHaveText('Write to 1 file');
+		await write.click();
+		const outcome = settings.getByTestId('about-me-outcome');
+		await expect(outcome).toContainText(/^Wrote 1 of \d+ files\./);
+		await expect(row(claudeFile)).toContainText('Up to date');
+		expect(fs.readFileSync(claudeFile)).toEqual(
+			Buffer.concat([prefix, Buffer.from(block(edited))])
+		);
+		expect(fs.readFileSync(codexTarget)).toEqual(prefix);
+		expect(fs.lstatSync(codexFile).isSymbolicLink()).toBe(true);
+		for (const dir of ['.claude', '.codex'])
+			expect(fs.existsSync(path.join(home, dir))).toBe(false);
+
+		// An outside edit needs a new OK, and an edit made after the OK is kept.
+		const external = Buffer.concat([prefix, Buffer.from(block('Edited outside Maestro.'))]);
+		fs.writeFileSync(claudeFile, external);
+		await settings.getByRole('button', { name: 'Check again' }).click();
+		await expect(row(claudeFile)).toContainText('Edited outside Maestro');
+		const replace = row(claudeFile).getByRole('checkbox', {
+			name: 'Replace the section that was edited outside Maestro',
+		});
+		await expect(replace).not.toBeChecked();
+		await expect(write).toBeDisabled();
+		expect(fs.readFileSync(claudeFile)).toEqual(external);
+		await replace.check();
+		const later = Buffer.concat([prefix, Buffer.from(block('Edited again after the OK.'))]);
+		fs.writeFileSync(claudeFile, later);
+		await write.click();
+		await expect(outcome).toContainText(/^Wrote 0 of \d+ files\./);
+		expect(fs.readFileSync(claudeFile)).toEqual(later);
+		await expect(replace).not.toBeChecked();
+		await expect(write).toBeDisabled();
+		await replace.check();
+		await write.click();
+		await expect(outcome).toContainText(/^Wrote 1 of \d+ files\./);
+		expect(fs.readFileSync(claudeFile)).toEqual(
+			Buffer.concat([prefix, Buffer.from(block(edited))])
+		);
+
+		// A synced AGENTS.md may still be unused by Codex. The row must state the
+		// override and name the file Codex actually reads, not claim it is up to date.
+		await row(codexFile)
+			.getByRole('checkbox', { name: 'Add an About Me section to this file' })
+			.check();
+		await write.click();
+		await expect(row(codexFile)).toContainText('Up to date');
+		expect(fs.readFileSync(codexTarget)).toEqual(
+			Buffer.concat([prefix, Buffer.from(block(edited))])
+		);
+		const override = path.join(native.codex, 'AGENTS.override.md');
+		const overrideBytes = Buffer.from('Synthetic override owned by the user.\n');
+		fs.writeFileSync(override, overrideBytes);
+		await settings.getByRole('button', { name: 'Check again' }).click();
+		await row(codexFile).scrollIntoViewIfNeeded();
+		await expect(row(codexFile)).toBeVisible();
+		await expect(row(codexFile)).toContainText('Overridden');
+		await expect(row(codexFile)).not.toContainText('Up to date');
+		await expect(row(codexFile)).toContainText(
+			`Codex reads ${override} instead, because it is not empty. This file is not used until you empty that one.`
+		);
+		expect(fs.readFileSync(override)).toEqual(overrideBytes);
+		for (const dir of ['.claude', '.codex'])
+			expect(fs.existsSync(path.join(home, dir))).toBe(false);
+
+		// Clearing saves an empty profile; Remove takes the section out again.
+		await editor.fill('');
+		await expect(settings.getByTestId('about-me-save-state')).toHaveText('Saved');
+		await expect(row(claudeFile)).toContainText('Needs update');
+		await expect(write).toHaveText('Remove from 2 files');
+		await write.click();
+		await expect(outcome).toContainText(
+			'Removed the section from 2 files. Restart any claude or codex that is already running'
+		);
+		expect(fs.readFileSync(claudeFile)).toEqual(prefix);
+		expect(fs.readFileSync(codexTarget)).toEqual(prefix);
+		expect(fs.readFileSync(override)).toEqual(overrideBytes);
+		for (const dir of ['.claude', '.codex'])
+			expect(fs.existsSync(path.join(home, dir))).toBe(false);
+	}
+);
 
 // Codex has no system-prompt flag, so Maestro's system prompt is embedded in
 // the first user message of the native transcript, where the Codex app shows

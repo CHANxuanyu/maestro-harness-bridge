@@ -887,7 +887,7 @@ then reads the old result through both the card and `native-history tool-output`
 创建期间窗口消失或布局保存失败仍会报告失败，已创建的对话不会被破坏性撤回。
 本批没有补齐经典界面的文件、终端或浏览器新建平铺命令，也没有改动子任务树折叠操作。
 
-合成单元验证及沙箱外 Electron 场景见 [Task L 验证记录](../verification/new-shell-cli-parity.md)。
+单元测试与合成 Electron 场景 `e2e/native-new-shell-cli-parity.spec.ts` 覆盖全部八项；结果见 `docs/worklog.md` 2026-11-12 条目。
 
 Notification center history uses the live desktop `notificationStore` over a request-response bridge. Main owns durable append/read/clear mutations in `maestro-notification-history.json`; renderer snapshots are synchronized across windows, and CLI results await committed writes. `notify inbox list --unread` filters the snapshot, `read <id>` / `read-all` update read state, `clear` clears history, `dismiss [id]` dismisses one entry or clears visible toasts, and `activate <id>` / `link <id>` run the same entry and inline-link actions as the UI. Every result includes the resulting unread count and history. `detail <id>` / `collapse` expand and collapse the same in-inbox details view. The five opt-in inbox preferences are registered settings and can be changed with `settings set <key> <value>`. `open notification-center` and `notify inbox open` open the app-level popover even when the Main Panel header is absent.
 

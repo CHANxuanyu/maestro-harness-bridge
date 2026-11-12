@@ -1,187 +1,20 @@
 # 分支工作记录
 
-## 2026-11-12：Task L 新界面 CLI 对等
+## 2026-11-12：按原规格补齐剩余开发与技术验收
 
-基于 `1d9ed9c9f`，补齐审计 A20、B2、B5 指定的八项：搜索命中打开定位、左栏搜索、
-任务快照、项目设置开关、新建并分屏、队列强制发送、原生历史刷新和切换后立即读取
-当前对话。动作经所属窗口确认，调用界面已有服务；经典界面保留原有行为。帮助文字
-同时维护 en 和 zh-CN，中文强制发送拒绝原因与排队卡片共用提示函数。
+用户要求以原始规格（`docs/roadmap/new-shell.md` 在 `5f5ce0ae8` 的文本）、用户明确决定和后续明确调整为准，逐项核对并做完剩余工作。核对结果和决定记录见 [原计划逐项核对](verification/original-plan-audit.md)。2026-11-11 的完成表不再作为依据；Fable 的下一轮计划草稿按用户要求搁置，不在仓库内。基线为主线 `1d9ed9c9f`。
 
-首轮八项回归先失败；另补不存在 UUID、指定工具新建分屏、窄窗口创建前拒绝、消息
-跳转状态先被消费和中文拒绝原因的先失败回归。最终相关 26 个文件、1,074 项通过，
-没有跳过、放宽断言或增加重试。被测对象是任务源码，不是安装包。完整命令和限制见
-[Task L 验证记录](verification/new-shell-cli-parity.md)。Electron 合成场景已收集 1 条，
-TypeScript、lint、ESLint 和改动文件 Prettier 检查通过。
-本沙箱不能启动 Electron，留给 Opus 执行；真实模式明确跳过。未修改 e2e fixtures，
-未验证真实提供商、真实多窗口界面或发行包，未读取真实账户、未推送或发布。
+本轮补齐的开发：
 
-## 2026-11-12：Task P 真实模型验收脚本
+- **手机网页的新界面窄屏形态（原规格 hb.9）。** 新界面里终端、文件、网页属于右侧面板，切换这些页签不再被窄屏规则当成“离开面板”而关闭；手机上输入框默认展开（单独记住选择，不改旧界面默认）；顶栏“交给…”在手机上只显示图标；浏览器里“打开项目”改为输入路径并列出最近项目，不再把文件夹对话框弹到电脑上，打开后浏览器自己切到该项目；浏览器里未命名对话的左栏标题在对话记录到达后更新；手机输入框设置面板不再出现新界面隐藏的“历史”“思考”开关。
+- **交接会话挂在来源下面（附录 C）。** 之前交接会话放在顶层，没有用户同意记录，现按原规格嵌套；来源归档时未归档的交接回到项目顶层，取消归档后重新挂回，交接中的工作不阻止归档来源。展开选择随会话保存，完成后不再自动收起。CLI 增加 `tab children --expand/--collapse` 与 `--native` 只读查询；跨窗口晚到的来源原生 ID 补写到子对话所属窗口。`tab children --native` 会忽略刚被归档关闭、但延迟存盘还没删除的来源标签。
+- **新界面 CLI 对等。** 内容搜索命中打开与定位、左栏搜索、任务面板快照、项目设置窗口开关、新建并分屏、排队强制发送、原生历史刷新，以及切换后立即读取当前对话。
+- **缺陷。** 新旧界面切换时保留终端内容、进程和草稿；终端在隐藏或零尺寸时不再被压成几列；隐藏终端容器不再挡住可见终端；从旧界面终端标签切回新界面时输入框不再消失、也不停在终端命令模式；项目设置保存改为先全部校验再统一写入，失败回滚；SSH 对话的网页面板打开本机地址时给出一行说明；额度错误卡片与顶栏共用同一个交接入口；改动面板已展开的差异不再被后台刷新收起（SSH 下点开即被收起，由新的 SSH 场景发现）。
+- **hb.9 删除准备。** `docs/roadmap/new-shell-deletion-plan.md` 与逐文件清单、只读安装包基线脚本 `scripts/hb-baseline.mjs`。没有删除任何功能。默认开启新界面的切换在单独分支上，等用户体验后决定是否合并（用户 2026-11-10 的决定）。
 
-基线 `1d9ed9c9f552bae240f64ae8ff74c4d24d2d59f3`，分支 `codex/real-acceptance-specs`。被测对象是本次源码中的 fixture 和测试收集，不是运行中的 Electron、真实模型或安装包。新增 `real-relay`、`real-claude-orchestrator`、`real-auto-handoff`、`real-tasks-panel`、`real-deepseek`，把 `real-codex-orchestrator` 拆为分别命名的 Codex/Claude 子任务用例。运行方法、明确开关、版本和账户来源、回合预算及证据判定见 `e2e/real-acceptance.md`。
+新增验收场景：`native-new-shell-phone`（浏览器以手机尺寸打开网页端，覆盖上述手机行为；撤掉面板修复后该场景按预期在“切换右侧面板页签”一步失败）、`native-new-shell-ssh`（本机回环地址上的临时 sshd，用临时密钥，不改系统设置；覆盖改动面板与差异、暂存、远程文件编辑保存、远程终端、交接后仍在同一主机和目录、网页本机地址说明，并检查没有在本机执行）、`native-new-shell-cli-parity`、`native-new-shell-toggle`、`native-new-shell-error-handoff`，以及 `real-*` 真实模型场景（需显式开关，默认跳过）和运行手册 `e2e/real-acceptance.md`。
 
-共用 `RealAcceptanceApp` 和 `realOrchestrator`；复用 `NativeApp`、`prepareCredentials()`、`observeRealProcesses()`、`createNativeTempDir()`、`readCodexRolloutSync()`。Codex 隔离配置从既有 `RealCodexApp` 提取成同一函数。只读快照在模型和版本探测前预检，转发器限制调用次数并记录应用注入的 caller。DeepSeek 只从明确的环境变量取用户提供的 key，走临时应用预设；透明 HTTP 转发只留下能力参数和状态码。普通 CI 和 real-smoke 即使继承 opt-in 也不运行这些真实场景。
-
-失败优先记录：新增 opt-in/预检的 3 条回归先因函数不存在失败；调用预算回归先因第二次调用仍成功而失败；DeepSeek 请求观察回归先因模块不存在失败。补实现后，DeepSeek socket 版本被沙箱以 `listen EPERM` 拒绝，因此改用内存 Node 流执行同一个 HTTP 处理器，保留原始字节、单次转发、状态码和不泄露 key 的断言，没有跳过测试。最终相关四文件 24 项通过。产品 A17 来源嵌套仍使用原要求的严格断言，本任务不修产品，也不把编写场景记为真实通过。
-
-检查命令与结果：
-
-```sh
-npm run lint
-npm run lint:eslint
-npx tsc -p tsconfig.json --noEmit
-npx tsc -p e2e/tsconfig.real-acceptance.json --noEmit
-npx eslint e2e/fixtures/native/real-runtime.cjs e2e/fixtures/native/deepseek-relay.cjs
-npm run test:e2e:fixtures -- --run e2e/fixtures/native/real-acceptance.test.ts e2e/fixtures/native/real-runtime.test.ts e2e/fixtures/native/real-isolation.test.ts e2e/fixtures/native/deepseek-relay.test.ts
-npm run test:e2e:fixtures
-```
-
-前五条通过，相关 Vitest 24 项通过。全量 fixture 为 85 项通过、3 项失败（23 文件中 22 通过）；失败全部在既有 `protocol.test.ts`，原因是沙箱拒绝监听临时 Unix socket（`listen EPERM`），同时报告 3 个未处理的监听错误。未跳过、重试或改弱这些测试；随后版本探测复用整理的相关四文件仍为 24 项通过。Vite 的 CommonJS 配置兼容提醒保留，不算测试失败。
-
-```sh
-MAESTRO_E2E_REAL=0 npx playwright test --project=electron 'e2e/real-(relay|claude-orchestrator|codex-orchestrator|auto-handoff|tasks-panel|deepseek).spec.ts' --reporter=list
-MAESTRO_E2E_REAL=1 MAESTRO_E2E_SMOKE=1 MAESTRO_E2E_RELAY=1 MAESTRO_E2E_CLAUDE_ORCHESTRATOR=1 MAESTRO_E2E_CODEX_ORCHESTRATOR=1 MAESTRO_E2E_CLAUDE_CHILD=1 MAESTRO_E2E_AUTO_HANDOFF=1 MAESTRO_E2E_TASKS_PANEL=1 MAESTRO_E2E_DEEPSEEK=1 MAESTRO_E2E_DEEPSEEK_KEY=synthetic-skip-check npx playwright test --project=electron 'e2e/real-(relay|claude-orchestrator|codex-orchestrator|auto-handoff|tasks-panel|deepseek).spec.ts' --reporter=list
-```
-
-两种模式各 7 项 skipped，未启动 Electron；第二条仅使用合成占位 key。默认 `npm run test:e2e` 和 `npm run test:e2e:real-smoke` 的 native 项目不收集 `real-*`，本次未执行它们的 Electron 全套。
-
-```sh
-npx prettier --check CLAUDE.md docs/agent-guides/CANONICAL-UTILITIES.md docs/agent-guides/CLI-UI-PARITY.md docs/agent-guides/TEST-PATTERNS.md docs/worklog.md e2e/fixtures/native/real-cli e2e/fixtures/native/real-isolation.test.ts e2e/fixtures/native/real-runtime.cjs e2e/fixtures/native/real-acceptance.test.ts e2e/fixtures/native/deepseek-relay.cjs e2e/fixtures/native/deepseek-relay.test.ts e2e/fixtures/real-codex.ts e2e/fixtures/real-acceptance.ts e2e/fixtures/real-orchestrator.ts e2e/real-relay.spec.ts e2e/real-claude-orchestrator.spec.ts e2e/real-codex-orchestrator.spec.ts e2e/real-auto-handoff.spec.ts e2e/real-tasks-panel.spec.ts e2e/real-deepseek.spec.ts e2e/real-acceptance.md e2e/tsconfig.real-acceptance.json
-git diff --check
-```
-
-格式、空白和改动文件禁用长横线检查通过。没有新增产品行为、界面动作或 CLI 动词，故不改 CHANGELOG，不关闭 CLI Open gaps；同步了夹具索引和验收说明。
-
-待 Opus：在沙箱外按手册运行六个文件共七个真实用例，并重跑完整 fixture 套件。接力缺 DeepSeek key 时只能证明 Claude 复核，DeepSeek 单项必须有用户提供的 key。当前基线的交接嵌套缺口应使接力场景失败，等待对应产品任务合入后再验；图片或 effort 被拒绝要保留诊断结果，不能据此宣布支持。没有读取真实账户、keychain 或凭据，没有调用模型或启动 Electron，没有推送、发布或构建发行包。
-## 2026-11-12：终端布局与额度错误恢复回归
-
-验证对象为 `7cd317503` 之后的本分支源码修改，未构建安装包。该提交的外部合成 Electron 回执为 5 项中 2 项通过、3 项失败；已确认项目工具配置通过。失败上下文显示：终端首次打开即被缩成约 5 列，网页预览的终端链接点击被宿主容器遮挡，额度场景点击顶栏时被已有错误弹窗阻挡。原始截图与运行记录仅保留在本机，没有加入公开提交。
-
-`TerminalView.tsx` 的两个宿主延续列向 flex 布局，恢复内容高度；隐藏或暂存宿主明确设置不可见、不可点击并降低层级，分屏宿主仍允许点击穿透到其他区域。`XTerminal.tsx` 用同一检查保护所有 fit、尺寸读取和 PTY resize，跳过未连接、零尺寸、隐藏及退化网格，尺寸恢复由 ResizeObserver 触发，单纯恢复可见时沿用显式 refresh。共享保护必须覆盖开关两侧，才能保留同一个终端；旧界面的操作入口和交接行为未改。
-
-新增 7 项单元回归在修复前全部失败，分别覆盖零宽、零高、隐藏时不 fit 或 resize、三种退化网格，以及宿主 flex 与点击隔离。修复后相关 10 文件 393 项通过，0 失败、0 跳过。原有 PTY 重启用例补充非零模拟高度，继续严格断言同一实例与重复尺寸去重。测试日志保留原有 React act 和样式警告。
-
-额度错误弹窗已经通过 `useAgentErrorRecovery()` 和 `requestAiHandoff()` 提供交接，无需新增产品入口或文案。`native-new-shell-error-handoff.spec.ts` 改为先点弹窗入口并确认关闭错误弹窗，再依次打开顶栏与错误卡片，严格比较三个入口的全部目标值和名称，保留同目录 Codex 接续验证。`native-new-shell-toggle.spec.ts` 在首次打开及每次双向切换后检查终端实际宽高大于 100 像素并正常点击，保留缓冲区、PTY 身份、运行回合和草稿断言。网页预览原有链接点击场景保持原断言。
-
-本轮单元测试命令：
-
-```sh
-npx vitest run \
-  src/__tests__/renderer/components/XTerminal.test.ts \
-  src/__tests__/renderer/components/XTerminal.autocopy.test.tsx \
-  src/__tests__/renderer/components/TerminalView.test.tsx \
-  src/__tests__/renderer/components/NewShellPanels.test.tsx \
-  src/__tests__/renderer/components/AppShell.test.tsx \
-  src/__tests__/renderer/components/AgentErrorModal.test.tsx \
-  src/__tests__/renderer/components/TerminalOutput.test.tsx \
-  src/__tests__/renderer/hooks/useAgentErrorRecovery.test.ts \
-  src/__tests__/renderer/services/aiHandoffEntry.test.ts \
-  src/__tests__/renderer/hooks/remote/newShellTerminalRemote.test.ts \
-  --configLoader runner --reporter=dot
-```
-
-以下生产检查退出 0：`npx tsc -p tsconfig.json --noEmit`、`npm run lint`、`npm run lint:eslint`。改动测试与场景另用 `npx eslint --no-ignore` 检查，0 错误，保留 TerminalView 测试原有的 2 条无用 disable 警告。`npm run docs:verify` 通过。没有修改 e2e 夹具，未运行 `npm run test:e2e:fixtures`。
-
-Playwright 仅收集以下 4 文件的 5 项场景，退出 0，没有启动 Electron：
-
-```sh
-npx playwright test \
-  e2e/native-new-shell-toggle.spec.ts \
-  e2e/native-new-shell-error-handoff.spec.ts \
-  e2e/native-web-preview.spec.ts \
-  e2e/native-project-tool-config.spec.ts \
-  --project=native --list
-```
-
-场景另以临时 TypeScript 配置检查通过：继承仓库 strict 配置，包含以上 4 个文件、renderer 全局声明和 src/types，使用 ES2023、allowJs 推断现有 CJS 夹具，checkJs=false。改动文件格式及空白检查命令如下，均退出 0：
-
-```sh
-git diff --cached --name-only --diff-filter=ACMR -z | xargs -0 npx prettier --check
-git diff --cached --check
-```
-
-修复后的 Electron 场景尚未执行，不能将单元测试或场景收集当作应用通过。需要先重新构建，再运行以下合成场景：
-
-```sh
-npm run build
-MAESTRO_E2E_REAL=0 npm run test:e2e -- \
-  e2e/native-new-shell-toggle.spec.ts \
-  e2e/native-new-shell-error-handoff.spec.ts \
-  e2e/native-web-preview.spec.ts \
-  e2e/native-project-tool-config.spec.ts \
-  --project=native --workers=1 --retries=0
-```
-
-未运行真实提供方、SSH 或安装包；未访问真实账户、钥匙串或凭据，未推送。没有新增 UI 动作或翻译文本，现有 CLI 对等路径见 `CLI-UI-PARITY.md`。
-
-## 2026-11-12：终端保留、SSH 网页说明与项目设置事务
-
-源码提交 `7cd317503` 基于 `1d9ed9c9f`，修复外壳切换丢失终端缓冲区、SSH 本机网页缺少说明和项目设置分步保存。终端继续使用同一 xterm 实例；项目默认值与多个工具修改共用 `createProjectSettingsService()`，CLI 新增 `project settings set --tool-config` 组合提交。额度错误入口原来就与顶栏共用，补新界面回归与同目录 Codex 交接场景，没有重复实现。
-
-当时的先失败记录：从新旧两种起点切换有 2 项失败；SSH 的 localhost、127.0.0.1 和 IPv6 提示有 3 项失败；项目事务首批 4 项和 CLI 组合参数 1 项失败，随后提交后通知失败 1 项、保存中切换外壳与非法枚举 3 项、CLI 畸形 JSON 中英文错误 2 项均先失败后修复。首次终端回归另外暴露 4 项 store 串扰，通过逐例重置隔离，没有放宽断言。额度入口原实现已正确，仅扩展测试。
-
-该提交记录的 14 个 Vitest 文件共 751 项通过，覆盖 TerminalView、ProjectSettingsModal、TerminalOutput、NewShellWebPanel、AppShell、DisplayTab、sessionToolConfig、aiHandoffEntry、useSettings、project-settings 的 main 与 CLI 路径、persistence IPC、settings preload 和 bridgeHandlers；使用 `--configLoader runner --reporter=dot`。默认配置加载曾因共享 node_modules 的 `.vite-temp` 写权限失败，改用 runner loader，不改依赖或权限。`npx tsc -p tsconfig.json --noEmit`、`npm run lint`、`npm run lint:eslint`、暂存文件 Prettier 及空白检查均通过。Electron 当时只收集 4 文件 5 项并做补充类型检查，没有启动；后续实际失败记录见上一节。
-
-项目事务只在新界面接受，进入事务时固定开关状态。先校验全部工具归属和字段，在同一会话写入队列中保存工具并落盘，再保存默认值；失败恢复全部已尝试写入的部分，成功才发配置补丁。补丁保留运行回合、日志和草稿。旧界面与单项 `update-agent` 保留原保存入口，共用字段白名单。它是进程内补偿事务：持续磁盘故障导致回滚失败时返回 `rollbackFailed`，并尝试恢复另一份存储；不保证两份文件之间崩溃时的原子恢复。
-
-SSH 网页说明只在新界面、SSH 已启用且地址为本机回环或绑定地址时显示，复用 `isLocalWebUrl()`，没有创建隧道。隐藏终端保留原尺寸，关闭标签或移出窗口时释放；没有新增输出存储。合成场景在真实模式下于构造夹具前 `test.skip`，没有添加重试。该提交未构建安装包、访问真实账户、推送或发布。
-## 2026-11-12：Task S 新界面 SSH 验收场景，待沙箱外运行
-
-基线 `1d9ed9c9f`，工作分支 `codex/ssh-acceptance`。新增
-`e2e/native-new-shell-ssh.spec.ts` 和 `e2e/fixtures/native/local-sshd.ts`，
-覆盖任务指定的 A9、A10、A13、B1、B3。仓库中没有
-`docs/verification/original-plan-audit.md`，本次以任务列出的条目及
-`docs/roadmap/new-shell.md` 为范围。没有修改产品代码、新增界面动作或 CLI
-动词，因此不改 CHANGELOG，也不关闭尚未实测的 SSH 验收缺口。
-
-场景开启 `newShell`，在临时目录生成两套密钥、独立 sshd 配置和本机、远端
-账户目录，以当前非 root 用户监听 loopback 随机端口。SSH 配置沿用
-`create-ssh-remote` 写入的 store 格式，项目设置走既有 `--ssh-remote` CLI
-路径。远端 PATH、脚本与账户路径来自 `remoteEnv`；源 Claude 使用 binaryName，
-交接到 Codex 时允许已有配置继承 fixture 的 customPath。两者都必须经过 SSH，
-调用记录的实际 cwd、`SSH_CONNECTION`、进程快照和远端转录共同验证执行位置。
-客户端入口加 `-F /dev/null`，避免 HOME 隔离不足导致读取用户 SSH 配置；记录
-Git 读写与文件读写参数，防止同一物理文件系统掩盖本地回退。没有读取或复制真实
-账户、凭据或 keychain，也不操作系统 sshd 或 Remote Login。
-
-先失败记录：`new-shell-files.test.ts` 的 Claude/Codex 两条持久化用例因缺少
-provider、cwd、processCwd、SSH_CONNECTION 记录而失败；`app-start.test.ts`
-新增用例因启动环境没有 PATH 而失败。`local-sshd.test.ts` 最初因 fixture
-模块不存在失败，随后新增客户端记录用例因 recorder 不存在失败。
-`native-synthetic-skip.test.ts` 的新行因场景文件不存在失败。实现后相关
-fixture 18 条和模式收集 4 条均通过。新增 sshd 生命周期用例使用模拟 socket
-和子进程，覆盖临时配置、工具缺失、就绪、提前退出、超时、强制结束和幂等清理；
-没有把这些单元测试当作真实 SSH 通过。
-
-最终验证命令及结果：
-
-| 命令                                                                                                                                                                                                                                                                                                                                                                                                                          | 结果                                                                           |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `npx tsc -p tsconfig.json --noEmit`                                                                                                                                                                                                                                                                                                                                                                                           | 通过                                                                           |
-| `npm run lint`                                                                                                                                                                                                                                                                                                                                                                                                                | renderer/shared、main、CLI 三份类型检查通过                                    |
-| `npm run lint:eslint`                                                                                                                                                                                                                                                                                                                                                                                                         | 通过                                                                           |
-| `npx vitest run --config e2e/fixtures/native/vitest.config.ts e2e/fixtures/native/local-sshd.test.ts e2e/fixtures/native/new-shell-files.test.ts e2e/fixtures/native/app-start.test.ts`                                                                                                                                                                                                                                       | 3 文件、18 条通过                                                              |
-| `npx vitest run --configLoader runner src/__tests__/scripts/native-synthetic-skip.test.ts`                                                                                                                                                                                                                                                                                                                                    | 4 条通过；real 模式在创建 NativeApp 前跳过                                     |
-| `npm run test:e2e:fixtures`                                                                                                                                                                                                                                                                                                                                                                                                   | 21 文件通过、1 文件失败；86 条通过、3 条失败，另有 3 个未捕获的 `listen EPERM` |
-| `npx playwright test --project=native e2e/native-new-shell-ssh.spec.ts --list`                                                                                                                                                                                                                                                                                                                                                | 收集 1 个场景，未启动 Electron                                                 |
-| `npx tsc --ignoreConfig --noEmit --target ES2024 --module ESNext --moduleResolution bundler --jsx react-jsx --esModuleInterop --skipLibCheck --strict --noImplicitAny false e2e/native-new-shell-ssh.spec.ts e2e/fixtures/native/local-sshd.test.ts src/renderer/global.d.ts src/types/*.d.ts`                                                                                                                                | 场景与 fixture 的独立类型检查通过；现有 CJS 导入不检查 noImplicitAny           |
-| `npx eslint e2e/fixtures/native-app.ts e2e/fixtures/native/app-start.test.ts e2e/fixtures/native/cli.cjs e2e/fixtures/native/new-shell-files.test.ts e2e/fixtures/native/local-sshd.ts e2e/fixtures/native/local-sshd.test.ts e2e/native-new-shell-ssh.spec.ts`                                                                                                                                                               | 通过                                                                           |
-| `npx prettier --check CLAUDE.md docs/agent-guides/CANONICAL-UTILITIES.md docs/ssh-remote-execution.md docs/worklog.md e2e/fixtures/native-app.ts e2e/fixtures/native/app-start.test.ts e2e/fixtures/native/cli.cjs e2e/fixtures/native/new-shell-files.test.ts e2e/fixtures/native/local-sshd.ts e2e/fixtures/native/local-sshd.test.ts e2e/native-new-shell-ssh.spec.ts src/__tests__/scripts/native-synthetic-skip.test.ts` | 通过                                                                           |
-| `git diff --check`                                                                                                                                                                                                                                                                                                                                                                                                            | 通过                                                                           |
-
-完整 fixture 套件的三个失败都在既有 `protocol.test.ts`，原因是沙箱禁止监听
-Unix socket，随后用例超时。没有修改、跳过这些用例或增加重试。加入 SSH 客户端
-记录后重新运行完整套件，仍为相同三个失败。默认 Vitest 配置加载最初因 symlink
-依赖目录的 `.vite-temp` 写权限报 EPERM，改用 `--configLoader runner` 后正常运行。
-独立类型检查首次缺少 TS 6 的 `--ignoreConfig`，补上后又发现检查命令缺少 renderer
-全局声明和 ES2023 以上标准库；最终使用上表命令通过，没有放宽产品 tsconfig。
-
-Opus 仍须在沙箱外、以非 root 用户在 macOS 和 Linux 执行：
-`MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell-ssh.spec.ts`，
-以及 `npm run test:e2e:fixtures`。前者会重新构建本分支。
-本次没有启动 Electron 或真实 sshd，没有构建发行包，也没有真实 SSH 验收结果。
-本分支尚无 `web-preview-local-notice`，场景保留具名 TODO；实现该 test id 的分支
-会断言提示可见。本次没有发现并修复可确认的产品 bug，没有提交原始日志或本机
-账户路径。
+验证（开发构建，合成提供方，macOS，单 worker、无重试）：合入 SSH 前的整合提交 `27d466914` 上全部原生 Electron 场景 140 项通过；SSH 场景在其分支上通过。升级与回退用两个安装包在独立数据目录实测：hb.6 建的智能体和设置在 hb.7 中保留，hb.7 写入的新界面开关与项目设置经过 hb.6 往返后仍在，没有出现损坏文件。真实模型、安装包和真人使用的结果另行记录，不由本条的合成结果代替。
 
 ## 2026-11-12：hb.7 合入主线、CI 收口与试用包
 
@@ -2088,9 +1921,3 @@ CLI 导航、刷新和系统浏览器打开共用 `applyNewShellWebAction()`；C
 本轮源码增加新界面项目级自动交接，默认关闭，目标锁定工具配置和主机。来源退出后保存失败回合标记，复用手动交接上下文、权限与发送队列；目标不自动继续转交。设置、CLI、目标配置选择、退出触发、重试互斥、完整失败消息和来源跳转均先观察回归失败，再实现。只使用合成数据和临时目录，未调用真实模型，未构建发布产物。
 
 已写合成 Electron 场景，验证默认关闭、开启后单次发送、来源说明跳转、只读权限和目标再失败不传递。Electron 尚未运行，待沙箱外验收。相关 10 个文件共 304 条单元测试通过，ES2020 兼容写法调整后相关 2 个文件的 90 条回归再次通过。`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 三份类型检查通过；全部改动文件通过 Prettier，代码及测试通过 `eslint --no-ignore`。Electron 两个场景已收集，并以包含现有 CJS 夹具和 renderer 全局声明的临时配置完成类型检查；未启动 Electron。沙箱外运行：`npm run test:e2e -- e2e/native-auto-handoff.spec.ts`。
-
-## 2026-11-12，Task K 原规格会话树
-
-基于 `1d9ed9c9f`，新界面恢复交接嵌套，并在来源归档时提升未归档交接；运行或排队交接不阻止来源归档，复核和子任务仍阻止。展开选择随会话保存，CLI 与界面共用所属窗口路由，支持只读查询已关闭的原生来源。晚到原生 ID 经窗口注册表进入子对话所属窗口，仍复用 `captureConversationSourceNativeId()`，保存后回执。
-
-三轮先失败回归共复现 8 项失败。最终 14 个相关单元文件共 591 项通过；正式 TypeScript、lint、ESLint 和改动文件 Prettier 通过。三份合成 Electron 文件收集到 17 场景并完成类型检查，未启动 Electron。没有更改原生夹具、个人账户、凭据或安装；未构建发行包、推送或发布。完整命令、失败原因、文件分工与 Opus 沙箱外运行要求见 [Task K 验证记录](verification/task-k-conversation-tree.md)。

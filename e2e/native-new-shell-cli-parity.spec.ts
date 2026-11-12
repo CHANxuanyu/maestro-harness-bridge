@@ -91,6 +91,12 @@ test('new shell CLI parity: search, tasks, settings, split, queue, refresh and i
 		id: 'parity-second',
 		name: 'Parity second',
 		saveToHistory: false,
+		// The inline queued card lives in the transcript; an empty conversation
+		// shows the tool picker and only the queue indicator instead.
+		logs: [
+			{ id: 'parity-second-user', timestamp: 1, source: 'user', text: 'Earlier parity request' },
+			{ id: 'parity-second-ai', timestamp: 2, source: 'stdout', text: 'Earlier parity answer' },
+		],
 	});
 	const owner = createMockSession({
 		id: 'parity-owner',

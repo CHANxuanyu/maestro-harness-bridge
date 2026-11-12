@@ -227,7 +227,19 @@ export async function tabChildren(
 						},
 					])
 				: undefined;
-		const tabs = await listDesktopTabs();
+		const saved = await listDesktopTabs();
+		// The owner window answered from live state. When it resolved the parent
+		// through history, it has no open tab for that native ID, so an inventory
+		// tab with that ID is one it just closed (an archive) that the debounced
+		// save has not dropped yet. Matching it would take the parent's place.
+		const tabs =
+			state && state.parent.tabId === null
+				? saved.filter(
+						(tab) =>
+							tab.agentId !== state.parent.ownerId ||
+							tab.agentSessionId !== state.parent.nativeSessionId
+					)
+				: saved;
 		const candidates = tabs.map((tab) => ({
 			key: `${tab.agentId}:${tab.tabId}`,
 			ownerId: tab.agentId,

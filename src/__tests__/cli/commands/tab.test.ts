@@ -706,3 +706,47 @@ it('reads a closed native parent through its owner without requiring an open tab
 	});
 	log.mockRestore();
 });
+
+it('ignores a just-archived source tab still listed by the saved inventory', async () => {
+	const send = vi.fn(async (message: any) =>
+		message.type === 'bridge.invoke'
+			? {
+					ok: true,
+					result: {
+						parent: {
+							key: 'history:n',
+							ownerId: 'source',
+							tabId: null,
+							provider: 'codex',
+							nativeSessionId: 'native',
+						},
+						expanded: true,
+					},
+				}
+			: {
+					sessions: [
+						// The owner already closed it; the debounced save has not caught up.
+						entry('closed', 'source', { agentSessionId: 'native', toolType: 'codex' }),
+						entry('child', 'worker', {
+							origin: {
+								kind: 'handoff',
+								sourceSessionId: 'source',
+								sourceTabId: 'closed',
+								sourceNativeSessionId: 'native',
+								sourceProvider: 'codex',
+								createdAt: 1,
+							},
+						}),
+					],
+				}
+	);
+	vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+		action({ sendCommand: send } as never)
+	);
+	const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+	await tabChildren(undefined, { agent: 'source', native: 'native', json: true });
+	expect(JSON.parse(log.mock.calls.at(-1)![0])).toMatchObject({
+		children: [expect.objectContaining({ tabId: 'child' })],
+	});
+	log.mockRestore();
+});

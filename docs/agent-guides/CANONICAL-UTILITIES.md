@@ -342,6 +342,10 @@ For archived Claude desktop worktrees, `localProjectWorktree()` also accepts a r
 
 `TerminalViewProvider` in `src/renderer/components/TerminalView.tsx` owns stable DOM hosts above the two shell layouts. Each layout attaches its terminal slot to the same mounted `TerminalViewContent` and `XTerminal`; the existing xterm buffer, PTY listeners, buffer reader and inactive-to-active repaint remain the only terminal output mechanism. Detached hosts are invisible and inert, retain their previous size, and release when tabs close, the owner disappears, or window ownership changes. Do not add a second output store or replay plain-text snapshots into a replacement xterm: that loses ANSI state and alternate screens.
 
+Both portal wrappers must continue the column flex layout: a block wrapper collapses the content's `flex-1` height, leaving an empty pane and a tiny terminal grid. Hidden hosts and slots use `visibility: hidden` and `pointer-events: none`; parked hosts also clear their visible state explicitly. Tiled hosts stay click-through outside their terminal pane rectangles.
+
+`canFitTerminal()` in `src/renderer/components/XTerminal.tsx` guards every fit, measured-size read and PTY size publication. It requires an attached, visible, nonzero container and a finite proposed grid above FitAddon's 2-column / 1-row minimum. Do not call `fit()` unconditionally from an imperative refresh or resize: reparenting can temporarily remove the container's size. `ResizeObserver` handles size recovery; `TerminalView` requests a refresh when visibility returns without a dimension change. These guards apply in both layouts because one retained xterm crosses the new-shell switch.
+
 `isLocalWebUrl()` in `src/renderer/services/newShellWeb.ts` shares HTTP(S) loopback recognition between automatic local preview links and the SSH inline notice. The notice is gated by `selectNewShellEnabled` and the conversation's enabled SSH configuration; it never changes navigation or opens a tunnel.
 
 ## Conversation archive identity and lifecycle

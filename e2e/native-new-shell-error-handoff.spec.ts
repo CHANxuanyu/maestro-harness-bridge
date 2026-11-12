@@ -75,8 +75,26 @@ test('quota error and header share handoff targets and continue the failed conve
 		await expect(
 			card.getByRole('button', { name: 'Continue with another AI', exact: true })
 		).toBeVisible();
-		await native.page.getByTestId('header-handoff').click();
+		const quotaDialog = native.page.getByRole('dialog', {
+			name: 'Usage limit reached',
+			exact: true,
+		});
+		await expect(quotaDialog).toBeVisible();
+		await quotaDialog.getByRole('button', { name: /^Continue with another AI/ }).click();
+		await expect(quotaDialog).toHaveCount(0);
 		const dialog = native.page.getByTestId('ai-handoff-modal');
+		await expect(dialog).toContainText('Failed request');
+		await expect(dialog.getByRole('radio', { name: /^Codex/ })).toBeVisible();
+		const quotaTargets = await dialog.getByRole('radio').evaluateAll((radios) =>
+			radios.map((radio) => ({
+				value: (radio as HTMLInputElement).value,
+				label: radio.closest('label')?.textContent,
+			}))
+		);
+		await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await expect(dialog).toHaveCount(0);
+		await native.page.getByTestId('header-handoff').click();
+		await expect(dialog).toContainText('Failed request');
 		await expect(dialog.getByRole('radio', { name: /^Codex/ })).toBeVisible();
 		const headerTargets = await dialog.getByRole('radio').evaluateAll((radios) =>
 			radios.map((radio) => ({
@@ -84,7 +102,9 @@ test('quota error and header share handoff targets and continue the failed conve
 				label: radio.closest('label')?.textContent,
 			}))
 		);
+		expect(headerTargets).toEqual(quotaTargets);
 		await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await expect(dialog).toHaveCount(0);
 		await card.getByRole('button', { name: 'Continue with another AI', exact: true }).click();
 		await expect(dialog).toContainText('Failed request');
 		await expect(dialog.getByRole('radio', { name: /^Codex/ })).toBeVisible();

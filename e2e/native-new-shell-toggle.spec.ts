@@ -65,6 +65,14 @@ test('terminal buffer, shell PID, running AI turn and draft survive both shell t
 		const xterm = native.page.getByTestId('terminal-panel').locator('.xterm:visible');
 		await expect(xterm).toBeVisible();
 		await xterm.evaluate((element) => element.setAttribute('data-toggle-buffer', 'original'));
+		const terminalScreen = native.page.locator('[data-toggle-buffer="original"] .xterm-screen');
+		await expect
+			.poll(async () => (await terminalScreen.boundingBox())?.width ?? 0)
+			.toBeGreaterThan(100);
+		await expect
+			.poll(async () => (await terminalScreen.boundingBox())?.height ?? 0)
+			.toBeGreaterThan(100);
+		await terminalScreen.click();
 		for (const enabled of [false, true, false, true]) {
 			await native.cli('settings', 'set', 'newShell', String(enabled));
 			await expect(native.page.locator('html')).toHaveAttribute('data-new-shell', String(enabled));
@@ -86,6 +94,13 @@ test('terminal buffer, shell PID, running AI turn and draft survive both shell t
 				await native.page.getByText('Toggle continuity', { exact: true }).click();
 				await expect(native.page.locator('[data-toggle-buffer="original"]')).toBeVisible();
 			}
+			await expect
+				.poll(async () => (await terminalScreen.boundingBox())?.width ?? 0)
+				.toBeGreaterThan(100);
+			await expect
+				.poll(async () => (await terminalScreen.boundingBox())?.height ?? 0)
+				.toBeGreaterThan(100);
+			await terminalScreen.click();
 		}
 		await native.cli(
 			'send-terminal',

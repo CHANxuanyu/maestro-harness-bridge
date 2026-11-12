@@ -4,20 +4,27 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { XTerminal } from '../../../renderer/components/XTerminal';
 import type { Theme } from '../../../shared/theme-types';
 
-const { mockSafeClipboardWrite, mockTerminalInstances, mockFit, mockResize, mockOnData } =
-	vi.hoisted(() => ({
-		mockSafeClipboardWrite: vi.fn(),
-		mockTerminalInstances: [] as Array<{
-			selection: string;
-			selectionListeners: Array<() => void>;
-			triggerSelectionChange(): void;
-			focus: ReturnType<typeof vi.fn>;
-			oscHandlers: Map<number, (data: string) => boolean>;
-		}>,
-		mockFit: vi.fn(),
-		mockResize: vi.fn(),
-		mockOnData: vi.fn(),
-	}));
+const {
+	mockSafeClipboardWrite,
+	mockTerminalInstances,
+	mockFit,
+	mockProposeDimensions,
+	mockResize,
+	mockOnData,
+} = vi.hoisted(() => ({
+	mockSafeClipboardWrite: vi.fn(),
+	mockTerminalInstances: [] as Array<{
+		selection: string;
+		selectionListeners: Array<() => void>;
+		triggerSelectionChange(): void;
+		focus: ReturnType<typeof vi.fn>;
+		oscHandlers: Map<number, (data: string) => boolean>;
+	}>,
+	mockFit: vi.fn(),
+	mockProposeDimensions: vi.fn(() => ({ cols: 80, rows: 24 })),
+	mockResize: vi.fn(),
+	mockOnData: vi.fn(),
+}));
 
 vi.mock('../../../renderer/utils/clipboard', () => ({
 	safeClipboardWrite: (...args: unknown[]) => mockSafeClipboardWrite(...args),
@@ -26,6 +33,7 @@ vi.mock('../../../renderer/utils/clipboard', () => ({
 vi.mock('@xterm/addon-fit', () => ({
 	FitAddon: class {
 		fit = mockFit;
+		proposeDimensions = mockProposeDimensions;
 	},
 }));
 
@@ -462,6 +470,15 @@ describe('XTerminal sticky-Ctrl (touch key bar)', () => {
 });
 
 describe('XTerminal restarted PTY size', () => {
+	beforeEach(() => {
+		vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(400);
+	});
+
+	afterEach(() => {
+		cleanup();
+		vi.restoreAllMocks();
+	});
+
 	it('resends an unchanged grid when the PTY PID changes without replacing the xterm', async () => {
 		mockTerminalInstances.length = 0;
 		window.maestro.process.onData = vi.fn().mockReturnValue(() => {});
@@ -487,4 +504,128 @@ describe('XTerminal restarted PTY size', () => {
 		await act(async () => view.rerender(<XTerminal {...props} ptyPid={42} ref={ref} />));
 		expect(window.maestro.process.resize).toHaveBeenCalledTimes(1);
 	});
+});
+
+describe('XTerminal layout visibility', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
+		vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(400);
+		mockTerminalInstances.length = 0;
+		mockFit.mockReset();
+		mockProposeDimensions.mockReturnValue({ cols: 80, rows: 24 });
+		window.maestro.process.onData = vi.fn().mockReturnValue(() => {});
+		window.maestro.process.resize = vi.fn().mockResolvedValue(true);
+	});
+
+	it.each([
+		{ cols: 2, rows: 24 },
+		{ cols: 80, rows: 1 },
+		{ cols: NaN, rows: 24 },
+	])('does not fit or publish a degenerate proposed grid %j', async (size) => {
+		mockProposeDimensions.mockReturnValue(size);
+		const ref = React.createRef<import('../../../renderer/components/XTerminal').XTerminalHandle>();
+		render(<XTerminal sessionId="owner-terminal-tab" theme={theme} fontFamily="Menlo" ref={ref} />);
+		await act(async () => {
+			ref.current!.refresh();
+			ref.current!.resize();
+			ref.current!.syncSize();
+			await vi.advanceTimersByTimeAsync(100);
+		});
+		expect(mockFit).not.toHaveBeenCalled();
+		expect(window.maestro.process.resize).not.toHaveBeenCalled();
+		expect(ref.current!.getSize()).toBeNull();
+	});
+
+	afterEach(() => {
+		cleanup();
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.useRealTimers();
+	});
+
+	it.each(['width', 'height', 'visibility'] as const)(
+		'keeps the grid and PTY size while %s is hidden, then fits when visible',
+		async (hidden) => {
+			let visible = true;
+			vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(() =>
+				!visible && hidden === 'width' ? 0 : 800
+			);
+			vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() =>
+				!visible && hidden === 'height' ? 0 : 400
+			);
+			const resizeObservers: ResizeObserverCallback[] = [];
+			vi.stubGlobal(
+				'ResizeObserver',
+				class {
+					constructor(callback: ResizeObserverCallback) {
+						resizeObservers.push(callback);
+					}
+					observe() {}
+					disconnect() {}
+				}
+			);
+			const ref =
+				React.createRef<import('../../../renderer/components/XTerminal').XTerminalHandle>();
+			const props = { sessionId: 'owner-terminal-tab', theme, fontFamily: 'Menlo' };
+			const view = render(
+				<div style={{ visibility: 'visible' }}>
+					<XTerminal {...props} ref={ref} />
+				</div>
+			);
+			const term = mockTerminalInstances[0] as unknown as {
+				cols: number;
+				rows: number;
+				refresh: ReturnType<typeof vi.fn>;
+			};
+			mockFit.mockImplementation(() => {
+				term.cols = visible ? 100 : 2;
+				term.rows = visible ? 25 : 1;
+			});
+			mockFit.mockClear();
+			term.refresh.mockClear();
+			vi.mocked(window.maestro.process.resize).mockClear();
+			visible = false;
+			view.rerender(
+				<div style={{ visibility: hidden === 'visibility' ? 'hidden' : 'visible' }}>
+					<XTerminal {...props} ref={ref} />
+				</div>
+			);
+			await act(async () => {
+				ref.current!.resize();
+				ref.current!.refresh();
+				ref.current!.syncSize();
+				for (const callback of resizeObservers) callback([], {} as ResizeObserver);
+				await vi.advanceTimersByTimeAsync(100);
+			});
+			expect(mockFit).not.toHaveBeenCalled();
+			expect(term.refresh).not.toHaveBeenCalled();
+			expect(window.maestro.process.resize).not.toHaveBeenCalled();
+			expect(ref.current!.getSize()).toBeNull();
+			expect(term.cols).toBe(80);
+			expect(term.rows).toBe(24);
+
+			visible = true;
+			view.rerender(
+				<div style={{ visibility: 'visible' }}>
+					<XTerminal {...props} ref={ref} />
+				</div>
+			);
+			await act(async () => {
+				// Visibility-only changes use TerminalView's explicit refresh; a
+				// recovered size is observed even if the isVisible prop never changed.
+				if (hidden === 'visibility') ref.current!.refresh();
+				else for (const callback of resizeObservers) callback([], {} as ResizeObserver);
+				await vi.advanceTimersByTimeAsync(100);
+			});
+			expect(mockFit).toHaveBeenCalledOnce();
+			expect(term.refresh).toHaveBeenCalledWith(0, 24);
+			expect(window.maestro.process.resize).toHaveBeenCalledExactlyOnceWith(
+				'owner-terminal-tab',
+				100,
+				25
+			);
+			expect(mockTerminalInstances).toHaveLength(1);
+		}
+	);
 });

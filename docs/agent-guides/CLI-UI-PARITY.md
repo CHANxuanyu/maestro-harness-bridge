@@ -178,15 +178,16 @@ Open gaps：不提供 CLI 打开或折叠项目设置窗口的视觉动作；配
 额度交接场景使用合成错误封装，保留 `rate_limited` 和只交接一次的严格断言。
 本轮仅修改测试，无新增界面动作或 CLI 动词，以上共用实现及 Open gaps 不变。
 
-## 新界面缺陷修复对等（2026-11-12，Task M）
+## 新界面终端与错误恢复对等（2026-11-12）
 
-| 界面动作                           | maestro-cli 对等动作                                                                                                   | 共用实现                                                                                            |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 切换新旧界面并保留终端、回合与草稿 | `settings set newShell true` 或 `false`；`read-terminal --agent <id> --tab <terminal-id>`、`tab show <id> --json` 读回 | 同一设置更新；`TerminalViewProvider` 保留原 xterm 缓冲区与监听，不另存终端输出                      |
-| 从额度或登录错误卡片交给另一家     | `handoff <tab-id> codex --agent <owner-id> --json`；`--send` 发送                                                      | 卡片与顶栏均用 `requestAiHandoff()`、相同目标解析及 `context:conversation` 交接实现                 |
-| SSH 对话打开本机网页地址           | `tab panel <tab-id> web --url http://localhost:3000 --agent <id>`                                                      | `newShellWeb` 与 `NewShellWebPanel`；`isLocalWebUrl()` 判断地址，说明随当前地址显示，无单独提示开关 |
+| 界面动作                             | maestro-cli 对等动作                                                                                                   | 共用实现                                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 切换新旧界面并保留终端、回合与草稿   | `settings set newShell true` 或 `false`；`read-terminal --agent <id> --tab <terminal-id>`、`tab show <id> --json` 读回 | 同一设置更新；`TerminalViewProvider` 保留原 xterm 缓冲区与监听，不另存终端输出                      |
+| 从额度或登录错误弹窗、卡片交给另一家 | `handoff <tab-id> codex --agent <owner-id> --json`；`--list-targets` 列出目标，`--send` 发送                           | 弹窗关闭后与卡片、顶栏均用 `requestAiHandoff()`、相同目标解析及 `context:conversation` 交接实现     |
+| 点击终端里的本机网页链接             | `tab panel <tab-id> web --url http://localhost:3000 --agent <id>`；`tab panel <tab-id> --agent <id>` 读回              | 终端链接经 `openUrl()` 进入 `newShellWeb`，复用 `applyNewShellWebAction()`                          |
+| SSH 对话打开本机网页地址             | `tab panel <tab-id> web --url http://localhost:3000 --agent <id>`                                                      | `newShellWeb` 与 `NewShellWebPanel`；`isLocalWebUrl()` 判断地址，说明随当前地址显示，无单独提示开关 |
 
-错误卡片入口覆盖 `errorOffersHandoff()` 的 `rate_limited` 与 `auth_expired`，其他错误不增加入口。网页说明仅在新界面、SSH 配置启用且当前地址为回环或本机绑定地址时显示；不创建隧道。场景见 `native-new-shell-toggle.spec.ts`、`native-new-shell-error-handoff.spec.ts`、`native-web-preview.spec.ts`，Electron 待沙箱外执行。
+错误入口覆盖 `errorOffersHandoff()` 的 `rate_limited` 与 `auth_expired`，其他错误不增加入口。额度场景先操作阻挡背景的错误弹窗，再严格比较交接弹窗、顶栏与卡片的目标值和名称。网页说明仅在新界面、SSH 配置启用且当前地址为回环或本机绑定地址时显示；不创建隧道。终端复用原有设置、输入与读回命令，修复宿主尺寸和点击层级没有新增动作或 Open gaps。场景见 `native-new-shell-toggle.spec.ts`、`native-new-shell-error-handoff.spec.ts`、`native-web-preview.spec.ts`；`7cd317503` 的三项失败记录及修复后待验范围见 `docs/worklog.md`。
 
 ## New shell conversation split (2026-11-06)
 

@@ -234,6 +234,37 @@ it('parks the existing terminal between layout slots and disposes it when its ta
 	expect(screen.queryByTestId('xterm-mock')).toBeNull();
 });
 
+it('fills the terminal slot and keeps hidden hosts from intercepting the visible terminal', () => {
+	const first = makeSession([makeTab()]);
+	const second = { ...makeSession([makeTab()]), id: 'session-2' };
+	useSessionStore.setState({ sessions: [first, second] });
+	useSettingsStore.setState({ newShell: true });
+	const view = (shown: string) => (
+		<TerminalViews.TerminalViewProvider>
+			{[first, second].map((session) => (
+				<div key={session.id} data-testid={session.id}>
+					<TerminalView {...defaultProps} session={session} isVisible={shown === session.id} />
+				</div>
+			))}
+		</TerminalViews.TerminalViewProvider>
+	);
+	const { rerender } = render(view(first.id));
+	for (const shown of [first.id, second.id]) {
+		rerender(view(shown));
+		for (const session of [first, second]) {
+			const slot = screen.getByTestId(session.id).firstElementChild!;
+			const host = slot.firstElementChild!;
+			// Both wrappers must continue the column flex layout to the content.
+			expect(slot).toHaveClass('flex', 'flex-col', 'h-full', 'min-h-0');
+			expect(host).toHaveClass('flex', 'flex-col', 'h-full', 'min-h-0');
+			expect(host).toHaveStyle({
+				visibility: shown === session.id ? 'visible' : 'hidden',
+				pointerEvents: shown === session.id ? 'auto' : 'none',
+			});
+		}
+	}
+});
+
 it('keeps startup decoration out of xterm without clearing real output', async () => {
 	const tab = makeTab({ pid: 0, state: 'idle' });
 	const session = makeSession([tab]);

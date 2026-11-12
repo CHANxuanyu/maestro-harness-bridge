@@ -136,7 +136,9 @@ export function TerminalViewProvider({ children }: { children: ReactNode }) {
 			let host = hosts.current.get(id);
 			if (!host) {
 				const element = document.createElement('div');
-				element.className = 'relative h-full w-full min-h-0';
+				// Continue the flex column through both portal wrappers, so the
+				// content's flex-1 owns the slot height instead of collapsing to zero.
+				element.className = 'relative flex flex-col h-full w-full min-h-0';
 				host = { element, target, props, ref };
 				hosts.current.set(id, host);
 			}
@@ -145,6 +147,10 @@ export function TerminalViewProvider({ children }: { children: ReactNode }) {
 			host.target = target;
 			host.element.style.width = '';
 			host.element.style.height = '';
+			host.element.style.visibility = props.isVisible === false ? 'hidden' : 'visible';
+			host.element.style.pointerEvents =
+				props.isVisible === false || props.paneRects ? 'none' : 'auto';
+			host.element.style.zIndex = props.isVisible === false ? '-1' : '';
 			target.appendChild(host.element);
 			repaint((value) => value + 1);
 			return () => {
@@ -152,6 +158,9 @@ export function TerminalViewProvider({ children }: { children: ReactNode }) {
 				const { width, height } = host.element.getBoundingClientRect();
 				host.element.style.width = `${width}px`;
 				host.element.style.height = `${height}px`;
+				host.element.style.visibility = 'hidden';
+				host.element.style.pointerEvents = 'none';
+				host.element.style.zIndex = '-1';
 				host.target = null;
 				host.ref = null;
 				parking.current?.appendChild(host.element);
@@ -215,7 +224,13 @@ export const TerminalView = memo(
 			if (mount && target.current) return mount(props, ref, target.current);
 		}, [mount, props, ref]);
 		return mount ? (
-			<div ref={target} className="relative h-full w-full min-h-0" />
+			<div
+				ref={target}
+				className="relative flex flex-col h-full w-full min-h-0"
+				style={
+					props.isVisible === false ? { visibility: 'hidden', pointerEvents: 'none' } : undefined
+				}
+			/>
 		) : (
 			<TerminalViewContent {...props} ref={ref} />
 		);

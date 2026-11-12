@@ -1,12 +1,77 @@
 # 分支工作记录
 
-## 2026-11-12：Task M 新界面缺陷 A1、A14、B3、B6
+## 2026-11-12：终端布局与额度错误恢复回归
 
-本次从 `1d9ed9c9f` 的源码修复外壳切换丢失终端缓冲区、SSH 本机网页缺少说明和项目设置分步保存。终端继续使用同一 xterm 实例；项目默认值与多个工具修改共用主进程事务，CLI 新增 `project settings set --tool-config` 组合提交。额度错误入口原来就与顶栏共用，补新界面回归与同目录 Codex 交接场景，没有重复实现。
+验证对象为 `7cd317503` 之后的本分支源码修改，未构建安装包。该提交的外部合成 Electron 回执为 5 项中 2 项通过、3 项失败；已确认项目工具配置通过。失败上下文显示：终端首次打开即被缩成约 5 列，网页预览的终端链接点击被宿主容器遮挡，额度场景点击顶栏时被已有错误弹窗阻挡。原始截图与运行记录仅保留在本机，没有加入公开提交。
 
-A1 两种切换起点、B3 三种本机地址、B6 各写入阶段及后续边界均先失败后修复。最终 14 个 Vitest 文件 751 项通过；生产 TypeScript、lint、ESLint、改动文件 Prettier 与空白检查通过。Electron 4 文件共收集 5 项，另做类型检查，未启动 Electron。没有改夹具，未运行 fixture 测试。完整命令、失败记录、文件范围与 Opus 运行命令见 [Task M 验证记录](verification/task-m-new-shell-defects.md)。
+`TerminalView.tsx` 的两个宿主延续列向 flex 布局，恢复内容高度；隐藏或暂存宿主明确设置不可见、不可点击并降低层级，分屏宿主仍允许点击穿透到其他区域。`XTerminal.tsx` 用同一检查保护所有 fit、尺寸读取和 PTY resize，跳过未连接、零尺寸、隐藏及退化网格，尺寸恢复由 ResizeObserver 触发，单纯恢复可见时沿用显式 refresh。共享保护必须覆盖开关两侧，才能保留同一个终端；旧界面的操作入口和交接行为未改。
 
-验证对象为本分支源码，未构建安装包，未读取真实账户或凭据，未推送。仍需 Opus 沙箱外跑 Electron。项目保存采用进程内回滚，持续磁盘故障导致回滚失败时明确报错，不宣称跨文件崩溃原子性。旧界面保存行为保留；共享终端宿主必须从首次 classic 挂载就存在，才能保持 classic 到 new 的同一缓冲区。移走的工具字段白名单已由共享模块承接，没有遗留重复实现。
+新增 7 项单元回归在修复前全部失败，分别覆盖零宽、零高、隐藏时不 fit 或 resize、三种退化网格，以及宿主 flex 与点击隔离。修复后相关 10 文件 393 项通过，0 失败、0 跳过。原有 PTY 重启用例补充非零模拟高度，继续严格断言同一实例与重复尺寸去重。测试日志保留原有 React act 和样式警告。
+
+额度错误弹窗已经通过 `useAgentErrorRecovery()` 和 `requestAiHandoff()` 提供交接，无需新增产品入口或文案。`native-new-shell-error-handoff.spec.ts` 改为先点弹窗入口并确认关闭错误弹窗，再依次打开顶栏与错误卡片，严格比较三个入口的全部目标值和名称，保留同目录 Codex 接续验证。`native-new-shell-toggle.spec.ts` 在首次打开及每次双向切换后检查终端实际宽高大于 100 像素并正常点击，保留缓冲区、PTY 身份、运行回合和草稿断言。网页预览原有链接点击场景保持原断言。
+
+本轮单元测试命令：
+
+```sh
+npx vitest run \
+  src/__tests__/renderer/components/XTerminal.test.ts \
+  src/__tests__/renderer/components/XTerminal.autocopy.test.tsx \
+  src/__tests__/renderer/components/TerminalView.test.tsx \
+  src/__tests__/renderer/components/NewShellPanels.test.tsx \
+  src/__tests__/renderer/components/AppShell.test.tsx \
+  src/__tests__/renderer/components/AgentErrorModal.test.tsx \
+  src/__tests__/renderer/components/TerminalOutput.test.tsx \
+  src/__tests__/renderer/hooks/useAgentErrorRecovery.test.ts \
+  src/__tests__/renderer/services/aiHandoffEntry.test.ts \
+  src/__tests__/renderer/hooks/remote/newShellTerminalRemote.test.ts \
+  --configLoader runner --reporter=dot
+```
+
+以下生产检查退出 0：`npx tsc -p tsconfig.json --noEmit`、`npm run lint`、`npm run lint:eslint`。改动测试与场景另用 `npx eslint --no-ignore` 检查，0 错误，保留 TerminalView 测试原有的 2 条无用 disable 警告。`npm run docs:verify` 通过。没有修改 e2e 夹具，未运行 `npm run test:e2e:fixtures`。
+
+Playwright 仅收集以下 4 文件的 5 项场景，退出 0，没有启动 Electron：
+
+```sh
+npx playwright test \
+  e2e/native-new-shell-toggle.spec.ts \
+  e2e/native-new-shell-error-handoff.spec.ts \
+  e2e/native-web-preview.spec.ts \
+  e2e/native-project-tool-config.spec.ts \
+  --project=native --list
+```
+
+场景另以临时 TypeScript 配置检查通过：继承仓库 strict 配置，包含以上 4 个文件、renderer 全局声明和 src/types，使用 ES2023、allowJs 推断现有 CJS 夹具，checkJs=false。改动文件格式及空白检查命令如下，均退出 0：
+
+```sh
+git diff --cached --name-only --diff-filter=ACMR -z | xargs -0 npx prettier --check
+git diff --cached --check
+```
+
+修复后的 Electron 场景尚未执行，不能将单元测试或场景收集当作应用通过。需要先重新构建，再运行以下合成场景：
+
+```sh
+npm run build
+MAESTRO_E2E_REAL=0 npm run test:e2e -- \
+  e2e/native-new-shell-toggle.spec.ts \
+  e2e/native-new-shell-error-handoff.spec.ts \
+  e2e/native-web-preview.spec.ts \
+  e2e/native-project-tool-config.spec.ts \
+  --project=native --workers=1 --retries=0
+```
+
+未运行真实提供方、SSH 或安装包；未访问真实账户、钥匙串或凭据，未推送。没有新增 UI 动作或翻译文本，现有 CLI 对等路径见 `CLI-UI-PARITY.md`。
+
+## 2026-11-12：终端保留、SSH 网页说明与项目设置事务
+
+源码提交 `7cd317503` 基于 `1d9ed9c9f`，修复外壳切换丢失终端缓冲区、SSH 本机网页缺少说明和项目设置分步保存。终端继续使用同一 xterm 实例；项目默认值与多个工具修改共用 `createProjectSettingsService()`，CLI 新增 `project settings set --tool-config` 组合提交。额度错误入口原来就与顶栏共用，补新界面回归与同目录 Codex 交接场景，没有重复实现。
+
+当时的先失败记录：从新旧两种起点切换有 2 项失败；SSH 的 localhost、127.0.0.1 和 IPv6 提示有 3 项失败；项目事务首批 4 项和 CLI 组合参数 1 项失败，随后提交后通知失败 1 项、保存中切换外壳与非法枚举 3 项、CLI 畸形 JSON 中英文错误 2 项均先失败后修复。首次终端回归另外暴露 4 项 store 串扰，通过逐例重置隔离，没有放宽断言。额度入口原实现已正确，仅扩展测试。
+
+该提交记录的 14 个 Vitest 文件共 751 项通过，覆盖 TerminalView、ProjectSettingsModal、TerminalOutput、NewShellWebPanel、AppShell、DisplayTab、sessionToolConfig、aiHandoffEntry、useSettings、project-settings 的 main 与 CLI 路径、persistence IPC、settings preload 和 bridgeHandlers；使用 `--configLoader runner --reporter=dot`。默认配置加载曾因共享 node_modules 的 `.vite-temp` 写权限失败，改用 runner loader，不改依赖或权限。`npx tsc -p tsconfig.json --noEmit`、`npm run lint`、`npm run lint:eslint`、暂存文件 Prettier 及空白检查均通过。Electron 当时只收集 4 文件 5 项并做补充类型检查，没有启动；后续实际失败记录见上一节。
+
+项目事务只在新界面接受，进入事务时固定开关状态。先校验全部工具归属和字段，在同一会话写入队列中保存工具并落盘，再保存默认值；失败恢复全部已尝试写入的部分，成功才发配置补丁。补丁保留运行回合、日志和草稿。旧界面与单项 `update-agent` 保留原保存入口，共用字段白名单。它是进程内补偿事务：持续磁盘故障导致回滚失败时返回 `rollbackFailed`，并尝试恢复另一份存储；不保证两份文件之间崩溃时的原子恢复。
+
+SSH 网页说明只在新界面、SSH 已启用且地址为本机回环或绑定地址时显示，复用 `isLocalWebUrl()`，没有创建隧道。隐藏终端保留原尺寸，关闭标签或移出窗口时释放；没有新增输出存储。合成场景在真实模式下于构造夹具前 `test.skip`，没有添加重试。该提交未构建安装包、访问真实账户、推送或发布。
 
 ## 2026-11-12：hb.7 合入主线、CI 收口与试用包
 

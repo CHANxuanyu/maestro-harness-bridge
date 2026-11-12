@@ -5,7 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import {
 	parseBaselineArgs,
-	parseReadyTiming,
 	summarizeStartup,
 	bundleBytes,
 	baselineEnvironment,
@@ -30,20 +29,6 @@ test('parses app or zip paths with bounded positive run counts', () => {
 		['x.app', '--timeout-ms', '-1'],
 	]) {
 		assert.throws(() => parseBaselineArgs(args));
-	}
-});
-
-test('uses the renderer ready timestamp, not the later polling receipt', () => {
-	assert.equal(parseReadyTiming({ timeOrigin: 1200, ready: 123.5 }, 1000), 323.5);
-	for (const value of [
-		null,
-		{},
-		{ timeOrigin: 1200, ready: -1 },
-		{ timeOrigin: 0, ready: 1 },
-		{ timeOrigin: 1200, ready: '2' },
-		{ timeOrigin: Infinity, ready: 1 },
-	]) {
-		assert.throws(() => parseReadyTiming(value, 1000));
 	}
 });
 

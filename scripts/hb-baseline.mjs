@@ -3,8 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { distribution } from './perf/summary.mjs';
 
@@ -25,19 +24,6 @@ export function parseBaselineArgs(args) {
 		options[key] = value;
 	}
 	return options;
-}
-
-export function parseReadyTiming(timing, launchEpochMs) {
-	if (
-		!timing ||
-		!Number.isFinite(timing.timeOrigin) ||
-		!Number.isFinite(timing.ready) ||
-		timing.ready < 0 ||
-		timing.timeOrigin < launchEpochMs
-	) {
-		throw new Error('Missing or invalid maestro:renderer.ready timestamp');
-	}
-	return timing.timeOrigin + timing.ready - launchEpochMs;
 }
 
 export function summarizeStartup(samples) {
@@ -84,7 +70,6 @@ export function baselineEnvironment(root) {
 }
 
 async function coldStart(bundle, root, timeoutMs) {
-	const { _electron: electron } = await import('playwright');
 	const env = baselineEnvironment(root);
 	for (const directory of Object.values(env).filter((value) => value.startsWith(root))) {
 		fs.mkdirSync(directory.endsWith('auth.json') ? path.dirname(directory) : directory, {
@@ -114,66 +99,40 @@ async function coldStart(bundle, root, timeoutMs) {
 	if (!executable || path.basename(executable) !== executable)
 		throw new Error('Invalid bundle executable');
 	const binary = path.join(bundle, 'Contents', 'MacOS', executable);
-	const require = createRequire(import.meta.url);
-	const playwrightRoot = path.dirname(
-		fs.realpathSync(require.resolve('playwright-core/package.json'))
-	);
-	// macOS HOME alone does not isolate Keychain or absolute native account paths.
-	// Refuse access at the OS boundary, including native keyring daemon calls.
-	const quote = (value) => JSON.stringify(value);
-	const profile = path.join(root, 'baseline.sb');
-	fs.writeFileSync(
-		profile,
-		`(version 1)
-(allow default)
-(deny file-read* file-write* (subpath ${quote(os.homedir())}))
-(allow file-read* (subpath ${quote(bundle)}) (subpath ${quote(playwrightRoot)}))
-(allow file-read* file-write* (subpath ${quote(root)}))
-(deny file-write* (subpath ${quote(bundle)}))
-(deny file-read* file-write* (subpath "/Library/Keychains") (subpath "/System/Library/Keychains"))
-(deny process-exec (literal "/usr/bin/security"))
-(deny mach-lookup (global-name "com.apple.securityd") (global-name "com.apple.securityd.xpc") (global-name "com.apple.secd"))
-(deny network-outbound (remote ip "*:*") )
-(allow network-outbound (remote ip "localhost:*"))
-`
-	);
-	// Playwright supplies Electron's inspector/loader arguments to this wrapper.
-	// argv is forwarded without interpolation by the shell.
-	const wrapper = path.join(root, 'launch');
-	fs.writeFileSync(
-		wrapper,
-		'#!/bin/sh\nexec /usr/bin/sandbox-exec -f "$HB_BASELINE_PROFILE" "$HB_BASELINE_BINARY" "$@"\n',
-		{ mode: 0o700 }
-	);
-	let app;
+	// No OS sandbox: Chromium's own sandbox cannot start inside sandbox-exec,
+	// and the GPU process then aborts, which would time a broken app. Isolation
+	// comes from the environment above: temporary HOME, data folder and account
+	// folders, and a PATH without any provider CLI.
+	// A release build disables Electron's inspector arguments, so readiness is
+	// observed from outside: the packaged CLI's `status` answers only once the
+	// running app serves the CLI bridge from this data folder.
+	const cli = path.join(bundle, 'Contents', 'Resources', 'maestro-cli.js');
+	const launchedAt = Date.now();
+	const child = spawn(binary, ['--use-mock-keychain'], {
+		env,
+		stdio: 'ignore',
+	});
 	try {
-		const launchedAt = Date.now();
-		app = await electron.launch({
-			executablePath: wrapper,
-			args: ['--use-mock-keychain'],
-			env: { ...env, HB_BASELINE_PROFILE: profile, HB_BASELINE_BINARY: binary },
-			timeout: timeoutMs,
-		});
-		const window = await app.firstWindow({ timeout: timeoutMs });
-		await window.waitForFunction(
-			() => performance.getEntriesByName('maestro:renderer.ready').length > 0,
-			null,
-			{ timeout: timeoutMs }
-		);
-		const timing = await window.evaluate(() => ({
-			timeOrigin: performance.timeOrigin,
-			ready: performance.getEntriesByName('maestro:renderer.ready')[0].startTime,
-		}));
-		return parseReadyTiming(timing, launchedAt);
+		while (Date.now() - launchedAt < timeoutMs) {
+			if (child.exitCode !== null) throw new Error(`App exited early with ${child.exitCode}`);
+			const ready = spawnSync(process.execPath, [cli, 'status'], {
+				env,
+				stdio: 'ignore',
+				timeout: 10_000,
+			});
+			if (ready.status === 0) return Date.now() - launchedAt;
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		throw new Error(`App did not answer the CLI within ${timeoutMs} ms`);
 	} finally {
-		if (app) {
-			// Even an initialization timeout must leave no package process running.
-			const kill = setTimeout(() => app.process().kill('SIGKILL'), 10_000);
-			try {
-				await app.close();
-			} finally {
-				clearTimeout(kill);
-			}
+		// Even an initialization timeout must leave no package process running.
+		if (child.exitCode === null) {
+			child.kill('SIGTERM');
+			const killed = await Promise.race([
+				new Promise((resolve) => child.once('exit', () => resolve(true))),
+				new Promise((resolve) => setTimeout(() => resolve(false), 10_000)),
+			]);
+			if (!killed) child.kill('SIGKILL');
 		}
 	}
 }
@@ -222,7 +181,7 @@ export async function baseline(options) {
 			...sizes,
 			startup: { unit: 'ms', samples, ...summarizeStartup(samples) },
 			method:
-				'Fresh process and profile; launch to first window maestro:renderer.ready; OS page cache retained; macOS sandbox denies real home, Keychain and external network; Playwright instrumentation included',
+				'Fresh process and profile; launch until the packaged CLI status answers from the isolated data folder (CLI bridge serving); polled every 100 ms; OS page cache retained; temporary HOME, data and account folders, PATH without provider CLIs; no OS sandbox (Chromium cannot start inside sandbox-exec)',
 		};
 	} finally {
 		fs.rmSync(root, { recursive: true, force: true });

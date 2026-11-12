@@ -1366,7 +1366,10 @@ export const TerminalOutput = memo(
 						// so the CSS variable reaches the whole subtree - including the
 						// markdown, tool cards, and code fences nested several
 						// components deep - without touching any of them. The family
-						// still arrives as a prop because individual rows override it.
+						// rides the same variable: markdown answers set no font of their
+						// own, so without it a chosen AI Chat font never reached them.
+						// Rows that render shell text still override it with the prop.
+						fontFamily: 'var(--maestro-font-chat, inherit)',
 						fontSize: 'var(--maestro-size-chat, inherit)',
 					}}
 					onScroll={handleTranscriptScroll}

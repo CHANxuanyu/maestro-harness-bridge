@@ -626,13 +626,9 @@ export class CallbackRegistry {
 		return this.callbacks.readTerminalTab(sessionId, payload);
 	}
 
-	async newAITabWithPrompt(
-		sessionId: string,
-		prompt: string,
-		background?: boolean
-	): Promise<{ success: boolean; tabId?: string }> {
+	async newAITabWithPrompt(...args: Parameters<NewAITabWithPromptCallback>) {
 		if (!this.callbacks.newAITabWithPrompt) return { success: false };
-		return this.callbacks.newAITabWithPrompt(sessionId, prompt, background);
+		return this.callbacks.newAITabWithPrompt(...args);
 	}
 
 	async consultAgent(params: ConsultAgentParams): Promise<ConsultAgentResult> {

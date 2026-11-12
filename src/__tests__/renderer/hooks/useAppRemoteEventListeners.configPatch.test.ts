@@ -79,6 +79,37 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
+describe('remote conversation stop', () => {
+	it.each([{ success: true }, { success: false, error: 'Not running' }])(
+		'returns the shared stop result %j without persisting a patch',
+		async (result) => {
+			const session = makeSession({ aiTabs: [{ id: 'tab' }] as Session['aiTabs'] });
+			const deps = { ...makeDeps(session), handleInterrupt: vi.fn().mockResolvedValue(result) };
+			renderHook(() => useAppRemoteEventListeners(deps));
+			await act(async () => {
+				window.dispatchEvent(
+					new CustomEvent('maestro:remoteUpdateSessionConfig', {
+						detail: {
+							sessionId: session.id,
+							configPatch: { tabId: 'tab', stopTurn: true },
+							responseChannel: RESPONSE_CHANNEL,
+						},
+					})
+				);
+			});
+			expect(deps.handleInterrupt).toHaveBeenCalledExactlyOnceWith({
+				sessionId: session.id,
+				tabId: 'tab',
+			});
+			expect(window.maestro.process.sendRemoteUpdateSessionConfigResponse).toHaveBeenCalledWith(
+				RESPONSE_CHANNEL,
+				result
+			);
+			expect(deps.setSessions).not.toHaveBeenCalled();
+		}
+	);
+});
+
 describe('remoteUpdateSessionConfig - context window provenance (finding AD1)', () => {
 	it('writes contextWindowSource through the editable-key allowlist', async () => {
 		// Without the allowlist entry the CLI writes the number but not its

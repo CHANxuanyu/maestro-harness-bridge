@@ -18,16 +18,24 @@ function dirs() {
 afterEach(() => {
 	for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true });
 });
-it('Codex copies only auth bytes and leaves the account and existing sessions unchanged', () => {
+it('Codex copies only auth, without its refresh token, and leaves the account unchanged', () => {
 	const { source, destination } = dirs();
-	const auth = '{"OPENAI_API_KEY":"synthetic-acceptance-token"}\n';
+	const auth =
+		JSON.stringify({
+			OPENAI_API_KEY: 'synthetic-acceptance-token',
+			tokens: { access_token: 'synthetic-access', refresh_token: 'private-refresh' },
+		}) + '\n';
 	fs.writeFileSync(path.join(source, 'auth.json'), auth);
 	fs.mkdirSync(path.join(source, 'sessions'));
 	fs.writeFileSync(path.join(source, 'sessions', 'existing.jsonl'), 'private sentinel');
 	fs.writeFileSync(path.join(source, 'config.toml'), 'unrelated setting');
 	prepareCredentials('codex', destination, { CODEX_HOME: source });
 	expect(fs.readdirSync(destination)).toEqual(['auth.json']);
-	expect(fs.readFileSync(path.join(destination, 'auth.json'), 'utf8')).toBe(auth);
+	// The snapshot keeps every field except the refresh token, which could rotate the live login.
+	expect(JSON.parse(fs.readFileSync(path.join(destination, 'auth.json'), 'utf8'))).toEqual({
+		OPENAI_API_KEY: 'synthetic-acceptance-token',
+		tokens: { access_token: 'synthetic-access', refresh_token: '' },
+	});
 	expect(fs.statSync(path.join(destination, 'auth.json')).mode & 0o777).toBe(0o600);
 	expect(fs.readFileSync(path.join(source, 'auth.json'), 'utf8')).toBe(auth);
 	expect(fs.readFileSync(path.join(source, 'sessions', 'existing.jsonl'), 'utf8')).toBe(

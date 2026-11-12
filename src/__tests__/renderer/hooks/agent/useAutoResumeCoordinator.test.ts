@@ -88,7 +88,12 @@ beforeEach(() => {
 	useBatchStore.setState({ batchRunStates: {}, customPrompts: {} });
 	useNotificationStore.getState().clearToasts();
 	useClaudeUsageStore.getState().__resetForTests();
-	useSettingsStore.setState({ autoResumeOnLimit: true, autoResumeCheckIntervalHours: 2 });
+	useSettingsStore.setState({
+		autoResumeOnLimit: true,
+		autoResumeCheckIntervalHours: 2,
+		newShell: false,
+		projectSettings: {},
+	});
 
 	(window as unknown as { maestro: unknown }).maestro = {
 		agents: {
@@ -199,6 +204,81 @@ describe('probeAvailability', () => {
 // ---------------------------------------------------------------------------
 
 describe('runAutoResumeTick', () => {
+	it.each([
+		{
+			label: 'automatic recipient',
+			newShell: true,
+			automatic: true,
+			attempted: false,
+			blocked: true,
+		},
+		{ label: 'claimed source', newShell: true, automatic: false, attempted: true, blocked: true },
+		{ label: 'manual handoff', newShell: true, automatic: false, attempted: false, blocked: false },
+		{
+			label: 'classic recipient',
+			newShell: false,
+			automatic: true,
+			attempted: false,
+			blocked: false,
+		},
+	])(
+		'keeps the kickoff recovery contract for $label',
+		async ({ newShell, automatic, attempted, blocked }) => {
+			vi.useFakeTimers();
+			useSettingsStore.setState({ newShell });
+			const error = makeLimitError({ agentId: 'codex' });
+			const tab = createMockAITab({
+				id: 'tab-1',
+				agentError: error,
+				origin: {
+					kind: 'handoff',
+					sourceSessionId: 'source',
+					sourceTabId: 'source-tab',
+					sourceProvider: 'claude-code',
+					createdAt: 1,
+					automatic,
+				},
+				autoHandoffAttemptedTurnId: attempted ? 'turn-1' : undefined,
+				logs: [
+					{ id: 'turn-1', timestamp: 1, source: 'user', text: 'Quota request' },
+					{
+						id: 'failure',
+						timestamp: 2,
+						source: 'error',
+						text: error.message,
+						recoveryAction: { lastUserPrompt: 'Quota request', tabId: 'tab-1' },
+					},
+				],
+			});
+			setSessions([
+				makeLimitPausedSession({
+					toolType: 'codex',
+					agentError: error,
+					aiTabs: [tab],
+					retryOnAvailabilityErrors: false,
+					retryOnTokenExhaustion: false,
+				}),
+			]);
+			const resumeAutoRun = vi.fn();
+			const { unmount } = renderHook(() =>
+				useAutoResumeCoordinator({ resumeAutoRunAfterError: resumeAutoRun })
+			);
+			try {
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(10_000);
+				});
+				const after = useSessionStore.getState().sessions[0];
+				expect(after.executionQueue).toHaveLength(blocked ? 0 : 1);
+				expect(after.state).toBe(blocked ? 'error' : 'idle');
+				expect(after.aiTabs[0].logs[1].recoveryAction !== undefined).toBe(blocked);
+				expect(useNotificationStore.getState().toasts).toHaveLength(blocked ? 0 : 1);
+				expect(resumeAutoRun).not.toHaveBeenCalled();
+			} finally {
+				unmount();
+			}
+		}
+	);
+
 	it('(b) resumes an eligible Claude session when probe=true and fires a toast', async () => {
 		claudeSnapshotMap = { '/home/.claude': makeSnapshot(20, 30) };
 		setSessions([makeLimitPausedSession()]);

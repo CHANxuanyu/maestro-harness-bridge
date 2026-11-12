@@ -41,6 +41,7 @@ import { notifyToast } from '../../stores/notificationStore';
 import { LIMIT_THRESHOLD } from '../../components/UsageDashboard/quota/quotaFormatting';
 import { generateId } from '../../utils/ids';
 import { logger } from '../../utils/logger';
+import { automaticHandoffOwnsFailure } from '../../services/autoHandoff';
 
 const LOG_CONTEXT = '[AutoResume]';
 
@@ -111,6 +112,12 @@ export function isLimitPausedSession(session: Session): boolean {
  * backoff.
  */
 export function isEligibleToProbe(session: Session, now: number): boolean {
+	const tabId =
+		session.agentErrorTabId ??
+		session.aiTabs.find(
+			(tab) => tab.agentError && tab.agentError.timestamp === session.agentError?.timestamp
+		)?.id;
+	if (tabId && automaticHandoffOwnsFailure(session.id, tabId, session.agentError)) return false;
 	const resetAt = session.agentError?.limitResetAt;
 	if (typeof resetAt === 'number' && resetAt > now) return false;
 	return true;
@@ -466,8 +473,19 @@ export async function runAutoResumeTick(
 				// Ownership can change while the async probe is pending. A mirror is
 				// read-only, so re-check before mutating its pause state or queue.
 				if (useBatchStore.getState().batchRunStates[session.id]?.mirrored === true) return;
-				resume(session, resumeAutoRunAfterError);
-				fireResumedToast(session);
+				// Handoff can claim the failed turn while the usage probe is pending.
+				const current = useSettingsStore.getState().newShell
+					? useSessionStore.getState().sessions.find((s) => s.id === session.id)
+					: session;
+				if (
+					!current ||
+					!isLimitPausedSession(current) ||
+					current.agentError?.timestamp !== session.agentError?.timestamp ||
+					!isEligibleToProbe(current, now)
+				)
+					return;
+				resume(current, resumeAutoRunAfterError);
+				fireResumedToast(current);
 			} catch (err) {
 				logger.warn('Auto-resume probe/resume failed', LOG_CONTEXT, {
 					sessionId: session.id,

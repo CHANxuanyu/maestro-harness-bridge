@@ -189,6 +189,13 @@ describe('revealAgentInSidebar', () => {
 });
 
 describe('openAgentSettings', () => {
+	it('opens the current configuration when a cached card carries an older session', () => {
+		const cached = seed({ customPath: '/fixture/old' });
+		useSessionStore.getState().updateSession(cached.id, { customPath: '/fixture/new' });
+		openAgentSettings(cached);
+		expect(useModalStore.getState().getData('editAgent')?.session.customPath).toBe('/fixture/new');
+	});
+
 	it('opens the Edit Agent modal carrying the agent', () => {
 		const session = seed();
 		const openModal = vi.spyOn(useModalStore.getState(), 'openModal');

@@ -138,7 +138,13 @@ describe('useRemoteIntegration', () => {
 		  ) => void)
 		| undefined;
 	let onRemoteNewAITabWithPromptHandler:
-		| ((sessionId: string, prompt: string, responseChannel: string, background?: boolean) => void)
+		| ((
+				sessionId: string,
+				prompt: string,
+				responseChannel: string,
+				background?: boolean,
+				source?: import('../../../shared/agentDelegation').AgentDelegationSource
+		  ) => void | Promise<void>)
 		| undefined;
 	let onRemoteEnqueueCommandHandler:
 		| ((
@@ -1689,6 +1695,95 @@ describe('useRemoteIntegration', () => {
 	});
 
 	describe('remote new AI tab with prompt', () => {
+		it.each(['saved', 'refused', 'throws', 'closed'] as const)(
+			'persists cross-window provenance before receipt and delivery, outcome=%s',
+			async (outcome) => {
+				const saved = outcome === 'saved';
+				useSettingsStore.setState({ newShell: true });
+				const session = createMockSession({
+					id: 'target',
+					aiTabs: [createMockTab({ permissionMode: 'full' })],
+				});
+				const source = {
+					origin: {
+						kind: 'subtask' as const,
+						sourceSessionId: 'absent-parent',
+						sourceTabId: 'parent-tab',
+						sourceNativeSessionId: 'parent-native',
+						sourceProvider: 'codex',
+						sourceTitle: 'Parent',
+						createdAt: 123,
+					},
+					permission: { permissionMode: 'readonly' as const, readOnlyMode: true },
+				};
+				let finish!: (saved: boolean) => void;
+				let fail!: (error: Error) => void;
+				const persist = vi.spyOn(window.maestro.sessions, 'setMany').mockImplementation(
+					() =>
+						new Promise<boolean>((resolve, reject) => {
+							finish = resolve;
+							fail = reject;
+						})
+				);
+				const dispatch = vi.spyOn(window, 'dispatchEvent');
+				renderHook(() => useRemoteIntegration(createDeps({ sessions: [session] })));
+				let pending: void | Promise<void>;
+				await act(async () => {
+					pending = onRemoteNewAITabWithPromptHandler?.(
+						'target',
+						'Fix the bug. Then check tests.',
+						'ack',
+						true,
+						source
+					);
+				});
+				expect(persist).toHaveBeenCalledWith(
+					[
+						expect.objectContaining({
+							id: 'target',
+							aiTabs: expect.arrayContaining([
+								expect.objectContaining({
+									origin: source.origin,
+									name: 'Fix the bug.',
+									permissionMode: 'readonly',
+									readOnlyMode: true,
+								}),
+							]),
+						}),
+					],
+					[]
+				);
+				expect(mockProcess.sendRemoteNewAITabWithPromptResponse).not.toHaveBeenCalled();
+				expect(dispatch).not.toHaveBeenCalledWith(
+					expect.objectContaining({ type: 'maestro:remoteCommand' })
+				);
+				await act(async () => {
+					if (outcome === 'closed')
+						useSessionStore.getState().updateSession('target', { aiTabs: session.aiTabs });
+					if (outcome === 'throws') fail(new Error('disk unavailable'));
+					else finish(saved || outcome === 'closed');
+					await pending;
+				});
+				expect(mockProcess.sendRemoteNewAITabWithPromptResponse).toHaveBeenCalledWith(
+					'ack',
+					expect.objectContaining({
+						success: saved,
+						...(saved ? { provenanceSaved: true } : { error: expect.any(String) }),
+					})
+				);
+				if (saved)
+					expect(dispatch).toHaveBeenCalledWith(
+						expect.objectContaining({ type: 'maestro:remoteCommand' })
+					);
+				else
+					expect(dispatch).not.toHaveBeenCalledWith(
+						expect.objectContaining({ type: 'maestro:remoteCommand' })
+					);
+				persist.mockRestore();
+				dispatch.mockRestore();
+			}
+		);
+
 		it('creates tab, dispatches remoteCommand, and acks true with the new tab id on idle session', () => {
 			const session = createMockSession({ id: 'session-1', state: 'idle' });
 			const originalTabCount = session.aiTabs.length;

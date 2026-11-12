@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { NativeApp } from './fixtures/native-app';
+import { observeCodexWire, readCodexWire } from './fixtures/real-codex';
 
 test.setTimeout(120_000);
 test.skip(
@@ -28,6 +29,7 @@ test('Codex prototype synthetic approval, steering, resume and stop', async ({},
 	let scenarioCompleted = false;
 	try {
 		await native.start(home);
+		await observeCodexWire(native);
 		const owner = await native.createAgent('codex', {
 			executable: path.resolve('e2e/fixtures/native/codex-app-server'),
 			env: { MAESTRO_APP_SERVER_FIXTURE_ROOT: native.root },
@@ -57,6 +59,24 @@ test('Codex prototype synthetic approval, steering, resume and stop', async ({},
 		await dialog.getByRole('button', { name: 'Allow once', exact: true }).click();
 		await expect(native.output()).toContainText('Synthetic approval accepted');
 		expect(fs.readFileSync(path.join(native.root, 'approved.txt'), 'utf8')).toBe('synthetic\n');
+		const wire = await readCodexWire(native);
+		const approvals = wire.filter(
+			(row) =>
+				row.direction === 'receive' && row.message.method === 'item/fileChange/requestApproval'
+		);
+		expect(approvals).toHaveLength(1);
+		expect(approvals[0].message.id).toBeDefined();
+		expect(
+			wire.filter((row) => row.direction === 'send' && row.message.id === approvals[0].message.id)
+		).toEqual([
+			{
+				direction: 'send',
+				message: { id: approvals[0].message.id, result: { decision: 'accept' } },
+			},
+		]);
+		expect(
+			wire.filter((row) => row.direction === 'send' && row.message.method === 'thread/start')
+		).toHaveLength(1);
 		fs.unlinkSync(path.join(native.root, 'approved.txt'));
 
 		await native.send('command approval deny');

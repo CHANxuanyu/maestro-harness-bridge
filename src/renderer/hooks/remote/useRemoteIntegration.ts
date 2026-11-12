@@ -1,3 +1,5 @@
+import type { AgentDelegationSource } from '../../../shared/agentDelegation';
+import { deriveConsultSubject } from '../../../shared/crossAgentContext';
 import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
 import { effectiveStandardPermissionCapability } from '../../../shared/codexAppServer';
 import { getT } from '../../i18n';
@@ -851,12 +853,20 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 		// success when a tab was actually created - and reports the REASON when it
 		// was not, rather than leaving the CLI to infer one from a missing tab id.
 		const unsubscribeNewTabWithPrompt = window.maestro.process.onRemoteNewAITabWithPrompt(
-			async (sessionId: string, prompt: string, responseChannel: string, background?: boolean) => {
+			async (
+				sessionId: string,
+				prompt: string,
+				responseChannel: string,
+				background?: boolean,
+				delegationSource?: AgentDelegationSource
+			) => {
+				const source = useSettingsStore.getState().newShell ? delegationSource : undefined;
 				const requestedSessionId = sessionId;
 				const ack = (result: {
 					success: boolean;
 					tabId?: string;
 					queued?: boolean;
+					provenanceSaved?: boolean;
 					error?: string;
 				}) =>
 					window.maestro.process.sendRemoteNewAITabWithPromptResponse(responseChannel, {
@@ -882,7 +892,14 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 				// dispatch at a working agent into a dropped prompt (#1602). The
 				// prompt is queued below instead.
 				const projectCreated = projectSettingsForSession(targetSession)
-					? await newProjectConversation(targetSession, undefined, background, undefined, prompt)
+					? await newProjectConversation(
+							targetSession,
+							undefined,
+							background,
+							source?.permission,
+							prompt,
+							source?.origin
+						)
 					: null;
 				if (
 					projectCreated &&
@@ -900,12 +917,16 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 						success: true,
 						tabId: projectCreated.tabId,
 						queued: projectCreated.state === 'queued',
+						...(source ? { provenanceSaved: true } : {}),
 					});
 					return;
 				}
-				const permissionSource = useSettingsStore.getState().newShell
+				const projectPermission = useSettingsStore.getState().newShell
 					? await resolveProjectConversationPermission(targetSession)
 					: undefined;
+				const permissionSource = source
+					? remoteConversationPermissionFields(projectPermission, source.permission.permissionMode)
+					: projectPermission;
 				let createdTabId: string | undefined;
 				flushSync(() => {
 					updateSessionWith(sessionId, (s) => {
@@ -920,6 +941,10 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 						});
 						if (!result) return s;
 						createdTabId = result.tab.id;
+						if (source) {
+							result.tab.origin = source.origin;
+							result.tab.name = deriveConsultSubject(prompt, 80, true);
+						}
 						return result.session;
 					});
 					if (createdTabId && !background) {
@@ -937,6 +962,30 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 					);
 					ack({ success: false, error: 'Could not create a new AI tab' });
 					return;
+				}
+				if (source) {
+					try {
+						const target = useSessionStore
+							.getState()
+							.sessions.find((item) => item.id === sessionId);
+						if (!target || (await window.maestro.sessions.setMany([target], [])) !== true)
+							throw new Error('delegation-not-saved');
+						if (
+							!useSessionStore
+								.getState()
+								.sessions.find((item) => item.id === sessionId)
+								?.aiTabs.some((tab) => tab.id === createdTabId)
+						)
+							throw new Error('delegation-tab-closed');
+					} catch (error) {
+						captureException(error, { tags: { context: 'delegationPersistence' } });
+						ack({
+							success: false,
+							tabId: createdTabId,
+							error: getT()('workflows.shell.delegationSaveFailed'),
+						});
+						return;
+					}
 				}
 				// Re-read the agent rather than trusting the snapshot taken before
 				// the tab was created: the store write above is the only thing that
@@ -965,7 +1014,12 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 						});
 						return;
 					}
-					ack({ success: true, tabId: createdTabId, queued: true });
+					ack({
+						success: true,
+						tabId: createdTabId,
+						queued: true,
+						...(source ? { provenanceSaved: true } : {}),
+					});
 					return;
 				}
 				// Pass the new tab id explicitly so the renderer writes into the tab
@@ -977,7 +1031,7 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 						detail: { sessionId, command: prompt, inputMode: 'ai', tabId: createdTabId },
 					})
 				);
-				ack({ success: true, tabId: createdTabId });
+				ack({ success: true, tabId: createdTabId, ...(source ? { provenanceSaved: true } : {}) });
 			}
 		);
 

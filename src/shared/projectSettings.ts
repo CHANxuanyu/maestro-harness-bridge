@@ -1,3 +1,5 @@
+import { handoffLocation } from './aiHandoff';
+import type { AgentSshRemoteConfig } from './types';
 import { normalizeWorktreePath } from './worktreePaths';
 
 /** Allows an SSH tool probe and the owning window to persist a new conversation. */
@@ -10,6 +12,8 @@ export interface ProjectSettingsScope {
 }
 
 export interface ProjectSettings {
+	/** Absent means off. Refers to an existing tool configuration in this project. */
+	autoHandoffTarget?: string;
 	defaultProvider?: string;
 	/** Tool that owns the model and effort, even when the default tool is inherited. */
 	modelProvider?: string;
@@ -109,4 +113,17 @@ export function projectSettingsKeysForScope(
 		...(Object.prototype.hasOwnProperty.call(settings, canonical) ? [canonical] : []),
 		...aliases,
 	];
+}
+
+/** The SSH execution directory is remote data, never a local filesystem path. */
+export function projectSettingsScopeForSession(session: {
+	cwd: string;
+	projectRoot?: string;
+	sessionSshRemoteConfig?: AgentSshRemoteConfig;
+}): ProjectSettingsScope {
+	const ssh = session.sessionSshRemoteConfig;
+	return {
+		projectPath: ssh?.enabled ? handoffLocation(session).cwd : session.projectRoot || session.cwd,
+		...(ssh?.enabled && ssh.remoteId ? { sshRemoteId: ssh.remoteId } : {}),
+	};
 }

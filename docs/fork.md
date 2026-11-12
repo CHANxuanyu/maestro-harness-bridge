@@ -4,7 +4,7 @@
 
 - [产品 changelog](../CHANGELOG.md)
 - [分支、版本与发布管理](release-policy.md)
-- [本版验证与限制](verification/v1.0.1-hb.6.md)
+- [hb.7 候选验证与限制](verification/v1.0.1-hb.7.md)
 - [开发过程记录](worklog.md)
 - [信息流改造记录](roadmap/conversation-feed.md)
 - [新界面规格](roadmap/new-shell.md)
@@ -21,6 +21,10 @@
 
 ## 下载与试用
 
+当前源码为 `1.0.1-hb.7` 试用候选，尚未构建或发布，没有 hb.7 下载附件或标签。见[候选说明](release-notes/v1.0.1-hb.7.md)与[候选验证](verification/v1.0.1-hb.7.md)。设置 → 显示 → 新界面可打开，默认仍关闭；命令行为 `maestro-cli settings set newShell true`，关闭用 `false`。默认切换等待候选包真人全天体验后的决定。
+
+以下下载、签名和安装事实仅属于已公开的 hb.6，不是 hb.7 的构建结果。
+
 最新公开版为 [v1.0.1-hb.6](https://github.com/CHANxuanyu/maestro-harness-bridge/releases/tag/v1.0.1-hb.6)，2026-11-06 发布，为不可变预发布，不标记 Latest。hb.5 从未打标签或发布，编号作废；hb.6 是 hb.4 之后的第一个公开包，包含累计接续改进、DeepSeek 预设、换个 AI 继续、关于我同步及界面改版。[公开版本说明](release-notes/v1.0.1-hb.6.md)与[本版验收记录](verification/v1.0.1-hb.6.md)记录实际构建提交、CI、包身份及未验项。
 
 macOS Apple Silicon 是本版验证目标。下载 Release 的 mac-arm64 ZIP，校验随附 SHA-256 清单，再解压应用。应用采用临时签名，未做 Apple Developer ID 公证；系统可能要求通过“系统设置 → 隐私与安全性”确认打开。
@@ -30,6 +34,8 @@ macOS Apple Silicon 是本版验证目标。下载 Release 的 mac-arm64 ZIP，�
 本预览包不注册 `maestro://` 协议、不提供自动安装更新元数据，也不带上游崩溃上报凭据。手动从本分支 Releases 更新。上游帮助、赞助与部分反馈入口仍保留；本分支问题请报到[本仓库 Issues](https://github.com/CHANxuanyu/maestro-harness-bridge/issues)。
 
 ## 从源码构建
+
+下面固定检出已发布的 hb.6。hb.7 须在候选审查完成后，从对应主线 CI 全绿的实际提交冻结构建；冻结身份待填写，不存在可直接检出的 hb.7 标签。候选的包内验证清单见上方链接。
 
 ```sh
 git clone https://github.com/CHANxuanyu/maestro-harness-bridge.git

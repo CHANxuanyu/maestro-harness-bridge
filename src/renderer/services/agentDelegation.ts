@@ -15,9 +15,6 @@
 
 import { updateAiTab, useSessionStore } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { sessionProviderId } from '../../shared/agentPresets';
-import { deriveConsultSubject } from '../../shared/crossAgentContext';
-import { conversationDisplayTitle } from '../utils/conversationTitle';
 import { getActiveTab } from '../utils/tabHelpers';
 import { generateId } from '../utils/ids';
 import { truncateText } from '../../shared/formatters';
@@ -104,33 +101,26 @@ export function recordAgentDelegation(
 	notice: AgentDelegationNotice,
 	options: { pending?: boolean } = {}
 ): DelegationEntryRef | null {
+	if (
+		useSettingsStore.getState().newShell &&
+		notice.kind === 'dispatch' &&
+		notice.newTab &&
+		!notice.provenanceSaved
+	)
+		return null;
 	const { sessions } = useSessionStore.getState();
 	const caller = sessions.find((s) => s.id === notice.fromSessionId);
-	const target = sessions.find((s) => s.id === notice.targetSessionId);
+	const target =
+		sessions.find((s) => s.id === notice.targetSessionId) ??
+		(notice.provenanceSaved && notice.target?.id === notice.targetSessionId
+			? notice.target
+			: undefined);
 	if (!caller || !target) return null;
 	const tab = resolveDelegationSourceTab(caller, notice.fromTabId);
 	if (!tab) return null;
 
 	const entry = buildDelegationLogEntry(notice, target, options.pending ? 'pending' : undefined);
-	if (useSettingsStore.getState().newShell && notice.newTab && notice.targetTabId) {
-		updateAiTab(target.id, notice.targetTabId, (child) =>
-			child.origin
-				? child
-				: {
-						...child,
-						name: deriveConsultSubject(notice.prompt, 80, true),
-						origin: {
-							kind: 'subtask',
-							sourceSessionId: caller.id,
-							sourceTabId: tab.id,
-							sourceProvider: sessionProviderId(caller),
-							sourceNativeSessionId: tab.agentSessionId ?? undefined,
-							sourceTitle: conversationDisplayTitle(tab) ?? undefined,
-							createdAt: entry.timestamp,
-						},
-					}
-		);
-	}
+
 	updateAiTab(caller.id, tab.id, (t) => ({ ...t, logs: [...t.logs, entry] }));
 	return { sessionId: caller.id, tabId: tab.id, entryId: entry.id };
 }

@@ -1,3 +1,5 @@
+import type { ConversationOrigin, HandoffSourceSnapshot } from './aiHandoff';
+
 /**
  * Agent-to-agent delegation: who handed what to whom, so the chat can say so.
  *
@@ -112,9 +114,18 @@ export function readCallerMessageFields(
 /** `dispatch` hands over work; `ask` puts a question and waits for the answer. */
 export type AgentDelegationKind = 'dispatch' | 'ask';
 
+/** Captured in the source owner and saved by the child owner before acknowledgment. */
+export interface AgentDelegationSource {
+	origin: ConversationOrigin;
+	permission: NonNullable<HandoffSourceSnapshot['sourcePermission']>;
+}
+
 /** One hand-off, as delivered to the renderer that owns the caller's transcript. */
 export interface AgentDelegationNotice {
 	kind: AgentDelegationKind;
+	/** Verified target metadata for a caller window without a target snapshot. */
+	target?: { id: string; name: string; toolType: import('./agentIds').AgentId };
+	provenanceSaved?: boolean;
 	/** The delegating agent. */
 	fromSessionId: string;
 	/** The delegating agent's AI tab, when the spawn stamped it. */
@@ -147,3 +158,15 @@ export function isSelfDispatch(
 	if (!targetTabId) return true;
 	return caller.fromTabId === targetTabId;
 }
+
+/** Transport errors shared without loading renderer modules in main. */
+export const DELEGATION_ERRORS = {
+	en: {
+		sourceUnavailable: 'Could not read the source conversation. Keep its window open.',
+		receiptMissing: 'The target window did not confirm saving the subtask origin.',
+	},
+	'zh-CN': {
+		sourceUnavailable: '无法读取来源对话，请保持来源窗口打开。',
+		receiptMissing: '目标窗口未确认子任务来源已保存。',
+	},
+};

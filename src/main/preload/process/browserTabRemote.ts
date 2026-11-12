@@ -1,3 +1,4 @@
+import type { AgentDelegationSource } from '../../../shared/agentDelegation';
 import type { NewAITabWithPromptResult } from '../../web-server/types';
 import { ipcRenderer } from 'electron';
 
@@ -242,7 +243,8 @@ export function createBrowserTabRemoteApi() {
 				sessionId: string,
 				prompt: string,
 				responseChannel: string,
-				background?: boolean
+				background?: boolean,
+				source?: AgentDelegationSource
 			) => void
 		): (() => void) => {
 			const handler = (
@@ -250,10 +252,11 @@ export function createBrowserTabRemoteApi() {
 				sessionId: string,
 				prompt: string,
 				responseChannel: string,
-				background?: boolean
+				background?: boolean,
+				source?: AgentDelegationSource
 			) => {
 				try {
-					callback(sessionId, prompt, responseChannel, background);
+					callback(sessionId, prompt, responseChannel, background, ...(source ? [source] : []));
 				} catch (error) {
 					ipcRenderer.send(responseChannel, false);
 					throw error;

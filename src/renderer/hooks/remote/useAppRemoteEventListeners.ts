@@ -1,3 +1,9 @@
+import type { UseInterruptHandlerReturn } from '../agent/useInterruptHandler';
+import { applyNewShellWebAction } from '../../services/newShellWeb';
+import {
+	editableSessionConfigPatch,
+	saveSessionToolConfig,
+} from '../../services/sessionToolConfig';
 import { effectiveStandardPermissionCapability } from '../../../shared/codexAppServer';
 import { getT } from '../../i18n';
 import { splitConversation, unsplitConversation } from '../../services/newShellSplit';
@@ -158,6 +164,7 @@ function applyGroupUpdate(
 // ============================================================================
 
 export interface UseAppRemoteEventListenersDeps {
+	handleInterrupt?: UseInterruptHandlerReturn['handleInterrupt'];
 	/** Ref-like getter for current sessions array */
 	sessionsRef: React.MutableRefObject<Session[]>;
 	/** Switch active session (wrapper that also dismisses group chat) */
@@ -1794,6 +1801,23 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			});
 			return;
 		}
+		if (useSettingsStore.getState().newShell) {
+			try {
+				await saveSessionToolConfig(sessionId, {}, sshPatch, {
+					getSession: () => useSessionStore.getState().sessions.find((s) => s.id === sessionId),
+					setSessions,
+				});
+				window.maestro.process.sendRemoteUpdateSessionSshResponse(responseChannel, {
+					success: true,
+				});
+			} catch (error) {
+				window.maestro.process.sendRemoteUpdateSessionSshResponse(responseChannel, {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+			return;
+		}
 		if (session.aiPid && session.aiPid > 0) {
 			window.maestro.process.sendRemoteUpdateSessionSshResponse(responseChannel, {
 				success: false,
@@ -1852,6 +1876,29 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 		}
 
 		const patchObj = configPatch as Record<string, unknown>;
+		if ('stopTurn' in patchObj) {
+			try {
+				if (
+					patchObj.stopTurn !== true ||
+					typeof patchObj.tabId !== 'string' ||
+					!session.aiTabs.some((tab) => tab.id === patchObj.tabId) ||
+					Object.keys(patchObj).some((key) => !['tabId', 'stopTurn'].includes(key))
+				) {
+					throw new Error(getT()('workflows.shell.stopTargetMissing'));
+				}
+				if (!deps.handleInterrupt)
+					throw new Error(getT()('workflows.shell.stopConversationFailed'));
+				const result = await deps.handleInterrupt({ sessionId, tabId: patchObj.tabId });
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, result);
+			} catch (error) {
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+			return;
+		}
+
 		if ('newShellSplitAction' in patchObj) {
 			try {
 				const action = patchObj.newShellSplitAction;
@@ -1984,7 +2031,14 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 		// allowlist, a response channel the caller can await, and a setMany flush
 		// so the value is on disk before the ack. Prefer extending this for new
 		// persistent state over adding another fire-and-forget renderer channel.
-		const targetTabId = typeof patchObj.tabId === 'string' ? patchObj.tabId : undefined;
+		const targetTabId =
+			patchObj.tabId === 'active' &&
+			useSettingsStore.getState().newShell &&
+			['web', 'web-reload', 'web-external'].includes(String(patchObj.newShellPanelAction))
+				? useSessionStore.getState().sessions.find((s) => s.id === sessionId)?.activeTabId
+				: typeof patchObj.tabId === 'string'
+					? patchObj.tabId
+					: undefined;
 		if (targetTabId !== undefined) {
 			// Everything the composer chips toggle, keyed by the value it accepts.
 			// The type is enforced here rather than trusted from the wire: these
@@ -2001,6 +2055,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 				readOnlyMode: 'boolean',
 				permissionMode: 'permission',
 				newShellPanelAction: 'panel',
+				newShellWebUrl: 'string',
 				newShellPanelFilter: 'string',
 				newShellTerminalId: 'string',
 				newShellFileContent: 'string',
@@ -2095,6 +2150,29 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 					return;
 				}
 			}
+
+			if (String(tabPatch.newShellPanelAction).startsWith('web')) {
+				try {
+					await applyNewShellWebAction(
+						sessionId,
+						targetTabId,
+						tabPatch.newShellPanelAction as 'web' | 'web-reload' | 'web-external',
+						tabPatch.newShellWebUrl as string | undefined
+					);
+					const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)!;
+					await window.maestro.sessions.setMany([current], []);
+					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+						success: true,
+					});
+				} catch (error) {
+					window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					});
+				}
+				return;
+			}
+			delete tabPatch.newShellWebUrl;
 
 			let panelTerminalOwnerId: string | undefined;
 			if (
@@ -2311,6 +2389,24 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 			return;
 		}
 
+		if (useSettingsStore.getState().newShell) {
+			try {
+				await saveSessionToolConfig(sessionId, patchObj, undefined, {
+					getSession: () => useSessionStore.getState().sessions.find((s) => s.id === sessionId),
+					setSessions,
+				});
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: true,
+				});
+			} catch (error) {
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+			return;
+		}
+
 		// Allowlist of editable session config keys. Anything else in the patch is
 		// ignored so the CLI can't write arbitrary Session internals.
 		//
@@ -2320,44 +2416,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 		// they apply immediately and are flushed to disk by the setMany below, so
 		// a CLI read straight after the write sees the new value rather than
 		// waiting on the renderer's 2s debounce.
-		const EDITABLE_KEYS = new Set([
-			'nudgeMessage',
-			'newSessionMessage',
-			'customPath',
-			'customArgs',
-			'customEnvVars',
-			'customModel',
-			'customEffort',
-			'customContextWindow',
-			// Provenance for the key above (finding AD1). Must be allowlisted or
-			// `maestro-cli update-agent --context-window` writes the number without
-			// its provenance, and the value it just set stays outranked by the
-			// provider's report - the deliberate edit would silently not apply.
-			'contextWindowSource',
-			'enableMaestroP',
-			'maestroPMode',
-			'maestroPPath',
-			// UI state
-			'bookmarked',
-		]);
-
-		// Build the field patch. A `null` value clears the field (sets undefined);
-		// any other provided value is written through as-is.
-		const patch = patchObj;
-		const updated: Partial<Session> = {};
-		for (const key of Object.keys(patch)) {
-			if (!EDITABLE_KEYS.has(key)) continue;
-			const value = patch[key];
-			(updated as Record<string, unknown>)[key] = value === null ? undefined : value;
-		}
-
-		// Clearing the window clears its provenance too, even when the caller sent
-		// only `customContextWindow: null`. Otherwise a stale 'user-edited' outlives
-		// the value it described and the next window set without provenance
-		// inherits precedence nobody asked for (finding AD1).
-		if (patch.customContextWindow === null) {
-			updated.contextWindowSource = undefined;
-		}
+		const updated = editableSessionConfigPatch(patchObj);
 
 		if (Object.keys(updated).length === 0) {
 			window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {

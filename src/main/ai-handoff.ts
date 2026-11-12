@@ -1,3 +1,6 @@
+import { homedir } from 'node:os';
+import { resolveAgentAccountDir } from '../shared/agentAccountDir';
+import { projectSettingsKey, projectSettingsScopeForSession } from '../shared/projectSettings';
 import { isValidAgentId, type AgentId } from '../shared/agentIds';
 import { createKeyedWriteQueue } from '../shared/keyedWriteQueue';
 import { effectiveAgentCustomEnvVars } from '../shared/providerProfiles';
@@ -140,14 +143,70 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			config = await deps.preparePreset(config);
 		return { config, runnerId: undefined };
 	}
+	const scopeKey = (runner: HandoffRunner) =>
+		projectSettingsKey(projectSettingsScopeForSession(runner));
+	const accountFor = (runner: HandoffRunner) =>
+		resolveAgentAccountDir(
+			{ ...runner, sshRemote: !!runner.sessionSshRemoteConfig?.enabled },
+			{
+				agentLevelEnvVars: deps.getAgentConfig(runner.toolType).customEnvVars,
+				globalShellEnvVars: deps.getGlobalEnv(),
+				env: deps.env,
+				homeDir: homedir(),
+			}
+		);
+	async function exactTarget(source: HandoffRunner, id: string, provider: string) {
+		const runner = deps.getSessions().find((entry) => entry.id === id);
+		if (
+			!runner ||
+			runner.id === source.id ||
+			(runner.sessionSshRemoteConfig?.enabled && !runner.sessionSshRemoteConfig.remoteId) ||
+			providerOf(runner) !== provider ||
+			scopeKey(runner) !== scopeKey(source)
+		)
+			return null;
+		const config = configFor(runner);
+		if (provider === 'deepseek') {
+			const env = effectiveEnv(runner);
+			if (
+				!(env.ANTHROPIC_AUTH_TOKEN?.trim() || env.ANTHROPIC_API_KEY?.trim()) ||
+				!env.CLAUDE_CONFIG_DIR?.trim()
+			)
+				return null;
+		}
+		if (!(await deps.isAvailable(config, source))) return null;
+		return {
+			config,
+			runnerId: handoffLocation(runner).key === handoffLocation(source).key ? runner.id : undefined,
+			targetConfigId: id,
+			account: accountFor(runner),
+		};
+	}
 	async function targets(
 		sourceAgentId: string,
 		includeCurrent = false,
-		localOnly = false
+		localOnly = false,
+		configurations = false
 	): Promise<HandoffTargetsResult> {
 		const source = sourceFor(sourceAgentId);
 		if (!source) return failed('A Claude Code, Codex or DeepSeek source agent is required');
 		const targets: NonNullable<HandoffTargetsResult['targets']> = [];
+		if (configurations) {
+			if (!deps.getNewShell()) return failed('Tool configurations require the new shell');
+			for (const runner of deps.getSessions()) {
+				if (runner.sessionSshRemoteConfig?.enabled && !runner.sessionSshRemoteConfig.remoteId)
+					continue;
+				const provider = providerOf(runner);
+				if (!isHandoffProvider(provider) || scopeKey(runner) !== scopeKey(source)) continue;
+				targets.push({
+					provider,
+					runnerId: runner.id,
+					name: runner.name,
+					account: accountFor(runner),
+				});
+			}
+			return { success: true, targets };
+		}
 		for (const provider of HANDOFF_PROVIDERS) {
 			if (!includeCurrent && provider === providerOf(source)) continue;
 			if (localOnly && source.sessionSshRemoteConfig?.enabled) continue;
@@ -159,6 +218,8 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 	async function prepare(request: HandoffRequest): Promise<HandoffResult> {
 		const invalid = handoffRequestError(request);
 		if (invalid) return failed(invalid, 'invalid-request');
+		if ((request.targetConfigId || request.automaticTurnId) && !deps.getNewShell())
+			return failed('Configured handoff requires the new shell');
 		const source = sourceFor(request.sourceAgentId);
 		if (!source) return failed('A Claude Code, Codex or DeepSeek source agent is required');
 		if (source.sessionSshRemoteConfig?.enabled && !source.sessionSshRemoteConfig.remoteId)
@@ -170,13 +231,14 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 			if (!current || handoffLocation(current).key !== location.key)
 				return failed('The source agent changed while preparing the handoff');
 			const provider = providerOf(current) as HandoffProvider;
-			if (provider === request.targetProvider)
+			if (provider === request.targetProvider && !request.targetConfigId)
 				return failed('Choose a different target provider', 'invalid-request');
 			const snapshot = await deps.readSource({
 				sourceAgentId: request.sourceAgentId,
 				sourceTabId: request.sourceTabId,
 				provider,
 				mode,
+				automaticTurnId: request.automaticTurnId,
 				budgetTokens: request.budgetTokens,
 				instruction: request.instruction,
 			});
@@ -191,7 +253,9 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 				providerOf(current) !== provider
 			)
 				return failed('The source agent changed while reading the conversation');
-			const target = await selectTarget(current, request.targetProvider, true);
+			const target = request.targetConfigId
+				? await exactTarget(current, request.targetConfigId, request.targetProvider)
+				: await selectTarget(current, request.targetProvider, true);
 			if (!target)
 				return failed(
 					'The target provider cannot run in the source directory on the same host. Check its global settings and account; an SSH DeepSeek target needs an existing preset runner on that host.'
@@ -204,6 +268,7 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 				mode,
 				origin: {
 					kind: mode,
+					...(request.automaticTurnId ? { automatic: true } : {}),
 					sourceSessionId: current.id,
 					sourceTabId: request.sourceTabId,
 					sourceProvider: provider,
@@ -215,16 +280,28 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 				...target,
 				projectPath: snapshot.projectPath,
 				groupId: snapshot.groupId ?? current.groupId,
+				images: snapshot.images,
 				draft: snapshot.draft,
 				send: request.send === true,
 				background: request.background === true,
 			});
-			return { ...result, mode };
+			return {
+				...result,
+				mode,
+				...('account' in target && typeof target.account === 'string'
+					? { targetAccount: target.account }
+					: {}),
+			};
 		});
 	}
 	async function command(request: HandoffCommand): Promise<HandoffCommandResult> {
 		if (request.action === 'targets')
-			return targets(request.sourceAgentId, request.includeCurrent, request.localOnly);
+			return targets(
+				request.sourceAgentId,
+				request.includeCurrent,
+				request.localOnly,
+				request.configurations
+			);
 		if (request.action === 'new-conversation') {
 			if (!deps.getNewShell())
 				return failed('Only an empty conversation in the new shell can change tools');
@@ -255,6 +332,7 @@ export function createAiHandoffService(deps: HandoffDependencies) {
 					if (!target) return failed('The selected tool is unavailable');
 					return deps.openTarget({
 						newConversation: {
+							...(request.origin ? { origin: request.origin } : {}),
 							replaceTabId: request.replaceTabId,
 							...(request.sourceTabId ? { sourceTabId: request.sourceTabId } : {}),
 							...(request.prompt ? { prompt: request.prompt } : {}),

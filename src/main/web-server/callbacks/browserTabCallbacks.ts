@@ -1,3 +1,8 @@
+import { DELEGATION_ERRORS } from '../../../shared/agentDelegation';
+import { resolveAppLocale } from '../../../shared/i18n';
+import type { AgentDelegationSource, CallerMessageFields } from '../../../shared/agentDelegation';
+import type { HandoffReadResult } from '../../../shared/aiHandoff';
+import { requestFromRenderer } from './remoteRequest';
 import { PROJECT_CONVERSATION_TIMEOUT_MS } from '../../../shared/projectSettings';
 import { randomUUID } from 'crypto';
 import { ipcMain } from 'electron';
@@ -311,8 +316,70 @@ export function registerBrowserTabCallbacks(
 	});
 
 	server.setNewAITabWithPromptCallback(
-		async (sessionId: string, prompt: string, background?: boolean) => {
-			const mainWindow = getWindowForSession?.(sessionId) ?? getMainWindow();
+		async (
+			sessionId: string,
+			prompt: string,
+			background?: boolean,
+			caller?: CallerMessageFields
+		) => {
+			const errors =
+				DELEGATION_ERRORS[
+					resolveAppLocale(
+						deps.settingsStore?.get('uiLanguage', 'system'),
+						Intl.DateTimeFormat().resolvedOptions().locale
+					)
+				];
+			let source: AgentDelegationSource | undefined;
+			if (caller && deps.settingsStore?.get('newShell', false)) {
+				const sourceWindow = getWindowForSession
+					? getWindowForSession(caller.fromSessionId)
+					: getMainWindow();
+				if (!isWebContentsAvailable(sourceWindow))
+					return { success: false, error: errors.sourceUnavailable };
+				const snapshot = await requestFromRenderer<HandoffReadResult>(
+					sourceWindow,
+					'context:readHandoffSource',
+					{
+						fallback: null,
+						verifySender: true,
+						args: [
+							{
+								sourceAgentId: caller.fromSessionId,
+								sourceTabId: caller.fromTabId ?? '',
+								provider: 'claude-code',
+								permissionOnly: true,
+								delegation: true,
+							},
+						],
+					}
+				);
+				if (
+					!snapshot ||
+					'success' in snapshot ||
+					snapshot.sourceAgentId !== caller.fromSessionId ||
+					!snapshot.sourceTabId ||
+					(caller.fromTabId && snapshot.sourceTabId !== caller.fromTabId) ||
+					!snapshot.sourceProvider ||
+					!snapshot.sourcePermission
+				)
+					return { success: false, error: errors.sourceUnavailable };
+				source = {
+					origin: {
+						kind: 'subtask',
+						sourceSessionId: snapshot.sourceAgentId,
+						sourceTabId: snapshot.sourceTabId,
+						sourceProvider: snapshot.sourceProvider,
+						sourceNativeSessionId: snapshot.sourceNativeSessionId,
+						sourceTitle: snapshot.sourceTitle,
+						createdAt: Date.now(),
+					},
+					permission: snapshot.sourcePermission,
+				};
+			}
+			const mainWindow =
+				source && getWindowForSession
+					? getWindowForSession(sessionId)
+					: (getWindowForSession?.(sessionId) ?? getMainWindow());
 			if (!mainWindow) {
 				logger.warn('mainWindow is null for newAITabWithPrompt', 'WebServer');
 				return { success: false, error: 'Maestro desktop window is not available' };
@@ -322,10 +389,12 @@ export function registerBrowserTabCallbacks(
 				const responseChannel = `remote:newAITabWithPrompt:response:${randomUUID()}`;
 				let resolved = false;
 
-				const handleResponse = (_event: Electron.IpcMainEvent, result: unknown) => {
+				const handleResponse = (event: Electron.IpcMainEvent, result: unknown) => {
+					if (source && event.sender !== mainWindow.webContents) return;
 					if (resolved) return;
 					resolved = true;
 					clearTimeout(timeoutId);
+					ipcMain.removeListener(responseChannel, handleResponse);
 					// Renderer was updated to ack with
 					// `{ success, tabId?, queued?, error? }`. Older renderers that
 					// still send a bare boolean stay supported via the
@@ -333,38 +402,36 @@ export function registerBrowserTabCallbacks(
 					if (typeof result === 'object' && result !== null) {
 						const r = result as {
 							success?: unknown;
+							provenanceSaved?: unknown;
 							sessionId?: unknown;
 							tabId?: unknown;
 							queued?: unknown;
 							error?: unknown;
 						};
 						resolve({
-							success: r.success === true,
+							success: r.success === true && (!source || r.provenanceSaved === true),
+							...(source && r.provenanceSaved === true ? { provenanceSaved: true } : {}),
+							...(source && r.success === true && r.provenanceSaved !== true
+								? { error: errors.receiptMissing }
+								: {}),
 							...(typeof r.sessionId === 'string' && r.sessionId ? { sessionId: r.sessionId } : {}),
 							tabId: typeof r.tabId === 'string' ? r.tabId : undefined,
 							...(r.queued === true ? { queued: true } : {}),
 							...(typeof r.error === 'string' && r.error ? { error: r.error } : {}),
 						});
 					} else {
-						resolve({ success: result === true });
+						resolve({ success: !source && result === true });
 					}
 				};
 
-				ipcMain.once(responseChannel, handleResponse);
+				if (source) ipcMain.on(responseChannel, handleResponse);
+				else ipcMain.once(responseChannel, handleResponse);
 				if (!isWebContentsAvailable(mainWindow)) {
 					logger.warn('webContents is not available for newAITabWithPrompt', 'WebServer');
 					ipcMain.removeListener(responseChannel, handleResponse);
 					resolve({ success: false, error: 'Maestro desktop window is not available' });
 					return;
 				}
-				mainWindow.webContents.send(
-					'remote:newAITabWithPrompt',
-					sessionId,
-					prompt,
-					responseChannel,
-					background
-				);
-
 				const timeoutId = setTimeout(
 					() => {
 						if (resolved) return;
@@ -377,6 +444,14 @@ export function registerBrowserTabCallbacks(
 						resolve({ success: false, error: 'Maestro desktop did not answer in time' });
 					},
 					deps.settingsStore?.get('newShell', false) ? PROJECT_CONVERSATION_TIMEOUT_MS : 5000
+				);
+				mainWindow.webContents.send(
+					'remote:newAITabWithPrompt',
+					sessionId,
+					prompt,
+					responseChannel,
+					background,
+					...(source ? [source] : [])
 				);
 			});
 		}

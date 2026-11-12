@@ -3,6 +3,20 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.autoHandoff.disabled': '自动交接需要开启新界面。',
+
+	'workflows.autoHandoff.listHelp': '列出本项目的工具配置 ID 和账户',
+	'workflows.autoHandoff.listOnly': '列出配置时不能指定目标或发送。',
+
+	'workflows.autoHandoff.setting': '额度用尽时自动交给',
+	'workflows.autoHandoff.off': '关闭',
+	'workflows.autoHandoff.defaultAccount': '此主机的默认账户',
+	'workflows.autoHandoff.target': '{tool}（账户 {account}）· {name}',
+	'workflows.autoHandoff.unavailable': '配置不可用：{id}',
+	'workflows.autoHandoff.sent': '已自动交给 {tool}（账户 {account}）',
+	'workflows.autoHandoff.failed': '自动交接未完成。请检查目标配置，再手动继续。',
+	'workflows.projectSettings.cli.autoHandoffHelp': '自动交接的工具配置 ID，off 表示关闭',
+
 	...CODEX_APP_SERVER_MESSAGES['zh-CN'],
 	'workflows.shell.consultPermissionUnavailable': '这个工具无法保持来源对话的权限限制。',
 	'workflows.projectSettings.errors.requestFailed': '项目设置请求失败。',
@@ -45,6 +59,27 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.projectSettings.cli.jsonHelp': '以 JSON 输出设置快照',
 
 	'workflows.projectSettings.newConversation': '按项目默认设置新建',
+	'workflows.projectSettings.defaultsHeading': '新对话默认值',
+	'workflows.projectSettings.toolsHeading': '工具配置',
+	'workflows.projectSettings.toolScope': '改动影响这个工具配置下的所有对话。',
+	'workflows.projectSettings.toolAccountHelp':
+		'在环境变量中设置账户目录：Claude 和 DeepSeek 用 CLAUDE_CONFIG_DIR，Codex 用 CODEX_HOME。SSH 路径属于远程主机。',
+	'workflows.projectSettings.toolLoadFailed': '工具配置加载失败。请关闭后重新打开项目设置。',
+	'workflows.projectSettings.toolMissing': '这个工具配置已不存在。',
+	'workflows.projectSettings.toolRunning': '请先停止这个配置下的所有对话，再修改 SSH 主机。',
+	'workflows.projectSettings.toolNoChanges': '没有可保存的工具配置字段。',
+	'workflows.projectSettings.toolSaveFailed':
+		'工具配置保存失败。此前的改动可能已保存，请检查后再保存。',
+	'workflows.projectSettings.toolArgsHelp': '使用这个工具配置时，每次调用都会附加这些参数。',
+	'workflows.projectSettings.toolEnvHelp':
+		'这个工具配置专用的环境变量，替代工具默认环境变量，影响使用此配置的所有对话。',
+	'workflows.projectSettings.toolBinaryHelp': '个可执行文件。选择只应用到这个工具配置。',
+	'workflows.projectSettings.toolOpenCode': 'OpenCode 角色（可选）',
+	'workflows.projectSettings.toolOpenCodeHelp':
+		'，保留对应 OpenCode 角色、模型和指令。插件角色由 OpenCode 在运行时解析，即使',
+	'workflows.projectSettings.toolSshHelp': '使用这个配置的对话将在所选 SSH 主机上运行。',
+	'workflows.projectSettings.toolRunsOn': '对话运行在',
+	'workflows.projectSettings.toolRunsLocally': '对话在本机运行',
 	'workflows.projectSettings.title': '项目设置',
 	'workflows.projectSettings.description':
 		'只影响所选主机上这个项目之后新建的对话。当前对话的选择优先；项目权限只能收紧，不能放宽继承的权限。',
@@ -129,6 +164,10 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.shell.terminalsStartFailed': '{count} 个终端启动失败',
 	'workflows.shell.terminalsNotStarted': '{count} 个终端没有启动。',
 	'workflows.newShell.terminal': '终端',
+	'workflows.newShell.webNavigationFailed': '无法打开网页',
+	'workflows.newShell.web': '网页',
+	'workflows.newShell.webEmpty': '输入本机开发服务器地址，例如 http://localhost:5173',
+	'workflows.newShell.webInvalidUrl': '请输入 HTTP 或 HTTPS 网址',
 	'workflows.newShell.tasks': '任务',
 	'workflows.newShell.tasksEmpty':
 		'这条对话的工具尚未提供任务清单。回复正文里的清单不会显示在这里。',
@@ -151,6 +190,7 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.handoff.reviewMessage': '复核「{title}」',
 	'workflows.projects.openHint': '选择文件夹，开始或继续项目工作',
 	'workflows.shell.permissionUnavailable': '这个工具无法保留来源对话的权限。',
+	'workflows.shell.delegationSaveFailed': '子任务未保存，内容未发送。',
 	'workflows.shell.newConversationFailed': '无法打开会话',
 	'workflows.shell.defaultModel': '默认模型',
 	'workflows.shell.defaultEffort': '默认强度',
@@ -526,6 +566,11 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.shell.invalidFileDropOrigin': '无法读取文件的来源位置，请重新拖入。',
 	'workflows.shell.confirmForceStopConversation':
 		'未能正常停止这条对话。要强制停止吗？未保存的工作可能丢失。',
+	'workflows.shell.stopRequested': '已请求停止这一轮。',
+	'workflows.shell.stopCliDescription': '新界面停止这条对话，旧界面停止所属配置的全部对话',
+	'workflows.shell.stopThisTurn': '停止这一轮',
+	'workflows.shell.stopNotRunning': '这条对话没有在运行。',
+	'workflows.shell.stopTargetMissing': '找不到这条对话。',
 	'workflows.shell.stopConversationFailed': '未能停止这条对话，请重试。',
 	'workflows.shell.attachImage': '添加图片',
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify': '切换只读模式（智能体不会修改文件）',

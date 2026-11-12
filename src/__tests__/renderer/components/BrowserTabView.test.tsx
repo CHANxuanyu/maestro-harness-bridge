@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, afterEach } from 'vitest';
 import {
 	BrowserTabView,
@@ -94,5 +94,34 @@ describe('BrowserTabView <webview> src (reload-loop regression)', () => {
 		expect(resolved).toBe('https://example.com/');
 		// The contract with teeth: navigate DID drive the guest src imperatively.
 		expect(webview.src).toBe('https://example.com/');
+	});
+});
+
+describe('web panel browser presentation', () => {
+	it('offers a compact address row and an empty development URL hint', () => {
+		render(
+			<BrowserTabView
+				tab={createBrowserTab({ url: 'about:blank' })}
+				theme={mockTheme}
+				onUpdateTab={noop}
+				panelMode
+			/>
+		);
+		expect(
+			screen.getByText(
+				'Enter a local development server address, for example http://localhost:5173'
+			)
+		).toBeInTheDocument();
+		expect(screen.getByRole('textbox', { name: 'Browser URL' })).toHaveValue('');
+		expect(screen.queryByTitle('Back')).not.toBeInTheDocument();
+		expect(screen.getByTitle('Reload')).toBeInTheDocument();
+		Object.assign(screen.getByTestId('browser-tab-host').querySelector('webview')!, {
+			executeJavaScript: () => Promise.resolve(),
+		});
+		fireEvent(
+			screen.getByTestId('browser-tab-host').querySelector('webview')!,
+			Object.assign(new Event('did-navigate'), { url: 'about:blank' })
+		);
+		expect(screen.getByRole('textbox', { name: 'Browser URL' })).toHaveValue('');
 	});
 });

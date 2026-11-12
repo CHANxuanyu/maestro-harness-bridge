@@ -1,3 +1,5 @@
+import { buildSessionDeepLink } from '../../../../shared/deep-link-urls';
+import { openMaestroLink } from '../../../utils/openMaestroLink';
 import { isLimitError } from '../../../../shared/types';
 import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import React, { useRef, useCallback, useId, useState, memo } from 'react';
@@ -856,6 +858,30 @@ export const LogItem = memo(
 
 		// Agent Resilience: an outage marker renders as a live status card in a
 		// clean row (no error-tinted bubble chrome), left gutter kept for alignment.
+		if (newShell && log.autoHandoff) {
+			return (
+				<div
+					ref={logItemRef}
+					className="px-3 sm:px-6 py-2 text-sm"
+					data-log-index={index}
+					data-log-id={log.id}
+				>
+					<button
+						type="button"
+						className="text-left hover:underline rounded focus-visible:ring-2"
+						style={{ color: theme.colors.accent }}
+						onClick={() =>
+							openMaestroLink(
+								buildSessionDeepLink(log.autoHandoff!.sessionId, log.autoHandoff!.tabId)
+							)
+						}
+					>
+						{log.text}
+					</button>
+				</div>
+			);
+		}
+
 		if (log.retryOutageId) {
 			return (
 				<div

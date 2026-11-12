@@ -24,3 +24,7 @@ The account environment for each row was established by Python `subprocess.run(a
 No capability boolean changed. The two read-only fields now carry the inspected CLI versions beside them in `src/main/agents/capabilities.ts`. DeepSeek remains a Claude Code preset; no new provider identity, capability field or unverified model support was invented. The existing capability tests passed 25/25 before this documentation-only audit; there is no new behavior for a failing test to demonstrate.
 
 Opus should ask the user before real calls for DeepSeek image input, DeepSeek reasoning effort and Codex dispatch through Maestro. If a dedicated Codex planning workflow or DeepSeek plan behavior must be certified beyond the documented permission flags, include that in the same authorized acceptance run. No paid call was made here.
+
+## 2026-11-11 后续真实范围
+
+保留上文帮助核对和早期未实测结论。PR #77 的开发构建 `eab909e35` 已真实通过 Codex app-server 与 Codex 主控派 Codex 子任务，版本和工作负载见 [真实记录](real-codex.md)。派 Claude 子任务因访问令牌过期未完成。DeepSeek 图片、强度与真实网关、三家真实接力、任务清单 exec 的完整应用链路仍未验证，不由这两条结果推断。

@@ -518,6 +518,7 @@ export type NoteAgentDelegationCallback = (notice: AgentDelegationNotice) => voi
  * one from a missing tab id.
  */
 export type NewAITabWithPromptResult = {
+	provenanceSaved?: boolean;
 	sessionId?: string;
 	success: boolean;
 	tabId?: string;
@@ -527,7 +528,8 @@ export type NewAITabWithPromptResult = {
 export type NewAITabWithPromptCallback = (
 	sessionId: string,
 	prompt: string,
-	background?: boolean
+	background?: boolean,
+	caller?: import('../../shared/agentDelegation').CallerMessageFields
 ) => Promise<NewAITabWithPromptResult>;
 /**
  * Result of enqueuing (or immediately dispatching) a CLI prompt into the

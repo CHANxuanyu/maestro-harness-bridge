@@ -72,7 +72,14 @@ import type { MindMapLayoutType } from '../components/DocumentGraph/layoutTypes'
 export type SessionState = 'idle' | 'busy' | 'waiting_input' | 'connecting' | 'error';
 export type FileChangeType = 'modified' | 'added' | 'deleted';
 /** Changes, Terminal and Tasks belong to the new shell; History and Auto Run to classic. */
-export type RightPanelTab = 'changes' | 'files' | 'history' | 'autorun' | 'terminal' | 'tasks';
+export type RightPanelTab =
+	| 'changes'
+	| 'files'
+	| 'history'
+	| 'autorun'
+	| 'terminal'
+	| 'tasks'
+	| 'web';
 /**
  * Tabs in the Usage Dashboard modal. Shared so the in-memory uiStore can
  * remember the last-selected tab across dashboard opens (resets on restart).
@@ -224,6 +231,7 @@ export interface FileArtifact {
 }
 
 export interface LogEntry {
+	autoHandoff?: { sessionId: string; tabId: string };
 	id: string;
 	timestamp: number;
 	source: 'stdout' | 'stderr' | 'system' | 'user' | 'ai' | 'error' | 'thinking' | 'tool';
@@ -849,6 +857,8 @@ export interface AITab {
 	archived?: boolean;
 	newShellPanel?: import('../../shared/newShellPanel').NewShellPanelState;
 	origin?: ConversationOrigin;
+	/** Last failed user entry claimed by automatic handoff, persisted before dispatch. */
+	autoHandoffAttemptedTurnId?: string;
 	id: string; // Unique tab ID (generated UUID)
 	agentSessionId: string | null; // Agent session UUID (null for new tabs)
 	name: string | null; // User-defined name (null = show UUID octet)

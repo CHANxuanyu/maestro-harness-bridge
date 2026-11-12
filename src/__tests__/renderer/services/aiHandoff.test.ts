@@ -1234,3 +1234,139 @@ it('creates a tiled project conversation with its resolved environment and actua
 	);
 	expect(sessions().find((session) => session.id === 'target')).toEqual(oldTarget);
 });
+
+it('reads delegation identity and permission without reading transcript or Git', async () => {
+	useSettingsStore.setState({ newShell: true });
+	const result = await readHandoffSource({
+		sourceAgentId: 'source',
+		sourceTabId: 'source-tab',
+		provider: 'codex',
+		permissionOnly: true,
+		delegation: true,
+	});
+	expect(result).toMatchObject({
+		sourceAgentId: 'source',
+		sourceTabId: 'source-tab',
+		sourceProvider: 'claude-code',
+		sourceNativeSessionId: 'native-original',
+		sourceTitle: 'Original',
+		sourcePermission: expect.any(Object),
+	});
+	expect(gitService.getChanges).not.toHaveBeenCalled();
+});
+
+it('saves CLI subtask provenance through the project conversation route before queueing', async () => {
+	useSettingsStore.setState({ newShell: true });
+	const origin = { ...request().origin, kind: 'subtask' as const, sourceSessionId: 'other-window' };
+	await openHandoffTarget(
+		request({
+			newConversation: { prompt: 'Fix the bug. Then test.', origin },
+			permissionCeiling: { permissionMode: 'readonly', readOnlyMode: true },
+		})
+	);
+	expect(window.maestro.sessions.setMany).toHaveBeenCalledWith(
+		[
+			expect.objectContaining({
+				aiTabs: expect.arrayContaining([
+					expect.objectContaining({ origin, name: 'Fix the bug.', permissionMode: 'readonly' }),
+				]),
+			}),
+		],
+		[]
+	);
+	expect(vi.mocked(window.maestro.sessions.setMany).mock.invocationCallOrder[0]).toBeLessThan(
+		vi.mocked(enqueuePromptForTab).mock.invocationCallOrder[0]
+	);
+});
+
+it('pins the selected account against project environment overrides and preserves readonly', async () => {
+	useSettingsStore.setState({
+		newShell: true,
+		projectSettings: {
+			[projectSettingsKey({ projectPath: '/project' })]: {
+				defaultPermissionMode: 'full',
+				fullAccessAcknowledged: true,
+				envVars: { CODEX_HOME: '/tmp/wrong-account' },
+			},
+		},
+	});
+	useSessionStore
+		.getState()
+		.updateSession('target', { customEnvVars: { CODEX_HOME: '/tmp/chosen-account' } });
+	const result = await openHandoffTarget(
+		request({
+			targetConfigId: 'target',
+			sourcePermission: { permissionMode: 'readonly', readOnlyMode: true },
+			config: { toolType: 'codex', customEnvVars: { CODEX_HOME: '/tmp/chosen-account' } },
+			send: true,
+			origin: { ...request().origin, automatic: true },
+		})
+	);
+	expect(result).toMatchObject({
+		success: true,
+		agentId: 'target',
+		permissionMode: 'readonly',
+		readOnlyMode: true,
+	});
+	expect(sessions().find((s) => s.id === result.agentId)?.customEnvVars?.CODEX_HOME).toBe(
+		'/tmp/chosen-account'
+	);
+	expect(
+		sessions()
+			.find((s) => s.id === result.agentId)
+			?.aiTabs.find((t) => t.id === result.tabId)?.origin?.automatic
+	).toBe(true);
+	expect(enqueuePromptForTab).toHaveBeenCalledTimes(1);
+});
+
+it('keeps the full failed user request once even when later output exceeds the context budget', async () => {
+	useSettingsStore.setState({ newShell: true });
+	useSessionStore.getState().updateSession('source', {
+		aiTabs: [
+			createMockAITab({
+				id: 'source-tab',
+				autoHandoffAttemptedTurnId: 'failed-turn',
+				logs: [
+					{
+						id: 'failed-turn',
+						timestamp: 1,
+						source: 'user',
+						text: 'Exact failed request',
+						images: ['synthetic-image'],
+					},
+					{ id: 'output', timestamp: 2, source: 'stdout', text: 'x'.repeat(40000) },
+				],
+			}),
+		],
+	});
+	const snapshot = await readHandoffSource({
+		sourceAgentId: 'source',
+		sourceTabId: 'source-tab',
+		provider: 'claude-code',
+		automaticTurnId: 'failed-turn',
+	});
+	expect(snapshot?.draft.text.split('Exact failed request')).toHaveLength(2);
+	expect(snapshot?.images).toEqual(['synthetic-image']);
+	expect(
+		await readHandoffSource({
+			sourceAgentId: 'source',
+			sourceTabId: 'source-tab',
+			provider: 'claude-code',
+			automaticTurnId: 'older-turn',
+		})
+	).toBeNull();
+});
+
+it('does not create or send a pending automatic handoff after the new shell is disabled', async () => {
+	const before = JSON.stringify(sessions());
+	const result = await openHandoffTarget(
+		request({
+			targetConfigId: 'target',
+			send: true,
+			origin: { ...request().origin, automatic: true },
+		})
+	);
+	expect(result.success).toBe(false);
+	expect(enqueuePromptForTab).not.toHaveBeenCalled();
+	expect(JSON.stringify(sessions())).toBe(before);
+});

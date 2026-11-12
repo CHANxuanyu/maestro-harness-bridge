@@ -1,5 +1,158 @@
 # 分支工作记录
 
+## 2026-11-11：hb.7 试用候选准备
+
+本任务分两步，L 文档核对提交 `c6eb27140`，M 准备 `1.0.1-hb.7` 版本和候选说明。文档核对起点 `92dd094f3` 是集成分支身份，不是冻结构建来源。参照 hb.6 的 `8caf512db`，只改文档及 package 版本字段，没有改产品、测试、依赖或 `docs/releases.md`。
+
+L 按审计第 4 节追加后续证据，保留早期未运行与失败记录；补路线图逐项状态、交接顶层待用户确认、共享 renderer 手机基础与专项未验。没有证据的源码身份保留待补，不把记录提交冒充被测提交。真实 Claude 11-09 只覆盖允许，真实 Codex 11-11 仅固定版本的 app-server 和 Codex 子任务工作负载，均非安装包。
+
+M 将原 Unreleased 的 113 条完整归入七个中文分组，保留 hb.6 及更早条目原文，补旧界面停止修复及后续验收事实。新建版本说明和验收清单，同步 README、fork 入口；hb.6 仍是仓库记录的最新公开包。冻结提交、CI、ZIP、哈希、签名和公证均待构建后填写，不编造附件或链接。
+
+本轮验证：`node scripts/hb-release.mjs check` 通过（`1.0.1-hb.7`）；`node --test scripts/hb-release.test.mjs` 19 通过、0 失败、0 跳过。三份 `npx tsc --noEmit -p` 配置为 `tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json`，均通过。条目保留检查通过；改动文件 Prettier 与 diff 空白检查通过。ESLint 调用无错误，但 Markdown/JSON 无适用规则，不宣称代码 lint 覆盖。只有文档和版本变化，无行为修复，因此未新增失败回归、未运行 Vitest 全量，也没有修改或跳过既有测试。
+
+没有新增界面动作或 CLI 动词，已有动作及缺口见 `CLI-UI-PARITY.md`。本次不改变旧界面行为；候选累计共享修复包括停止通知、旧停止按钮、配置最新值、审批收尾、历史读取和保存，目的及边界在 CHANGELOG 和版本说明保留，不能说 hb.7 对旧界面完全无变化。
+
+未运行 Electron、模型、真实 SSH、手机或安装包，也未查询远端 CI。没有读取私人账户或凭据，没有操作其他应用，没有推送、开 PR、打标签、上传或发布，未运行 assets/verify。Opus 的集成合成命令与包内待办见 `docs/verification/v1.0.1-hb.7.md`；真人全天使用和默认切换仍待决定。
+
+## 2026-11-10：完整停止 CLI 对等与审批入口
+
+`tab stop` 经所属窗口回执调用 `useInterruptHandler`，新界面按对话、旧界面按所属配置停止。
+新界面审批框增加“停止这一轮”，不先发送拒绝，退出清理撤销请求；Escape 仍拒绝工具。
+首轮新增回归修复前 9 项失败；底层 false 与强制并行部分失败另有回归。
+最终相关 7 文件 167 项通过，无跳过、无自动重试。三份生产 TypeScript 及 lint 类型检查通过。
+被测对象为当前任务源码与本地 CLI 构建，不是发行包。
+`native-claude-permission.spec.ts` 收集 12 条，包含按钮停止及新增 CLI 停止，未运行 Electron。
+Opus 运行命令见 `e2e/claude-standard-approval.md`。未验证真实模型、SSH、跨窗口和发行包。
+旧界面按钮、Escape、审批展示和停止范围保留；共享停止函数增加结果回执供 CLI 使用。
+
+## 2026-11-10 网页预览切换后的 CLI 目标修复
+
+验证对象为当前任务分支源码，未构建发行包。`native-web-preview` 在切换到第二条
+对话后失败的根因是 CLI 从持久化列表解析 `active`，列表仍可能保留防抖保存前的
+第一条对话。串联 CLI 与真实渲染层处理函数的回归确认：旧实现成功回执指向
+`web-one`，并把它的 `/one` 网址错误改为 `/two`。
+
+网页打开、刷新和外部打开现在把 `active` 交给指定窗口的实时状态解析，再走原有
+网页动作和保存确认。显式标签 ID 保持定向操作，未修改浏览器引擎或防抖保存。
+初始两个测试文件共 4 项失败、79 项通过；修复后相关 5 文件 108 项通过。
+三份 `tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 的 noEmit 检查通过，
+改动代码通过 Prettier 和 `eslint --no-ignore`。没有新增界面文字或 CLI 动词。
+
+Electron 场景保留原断言与超时，补查另一条对话网址未被覆盖、显式指定后台对话
+和切换后显示其网址。已收集 1 条场景，尚未运行 Electron。沙箱外运行
+`MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-web-preview.spec.ts --workers=1 --retries=0`。
+旧界面仍拒绝网页面板动作；其他 CLI 动作与共享引擎不变。SSH、真实模型、
+多窗口、手机网页和发行包未验证。未推送或发布。
+
+## 2026-11-11：J 第二线额度恢复与配置旧快照修复
+
+验证对象为任务分支源码，产品提交 `7fdcaf571`、`2e8a32643`，不是发行安装包。
+第三次 Codex 启动来自全局额度恢复的首次定时检查：非 Claude 工具用重发探测额度，
+未识别自动交接边界。已有场景轨迹包含对应恢复通知，第二条提示只发送一次。
+新界面的错误重试、额度重置与全局恢复共用交接归属判断，来源认领和接收方均不重发。
+CLI 保存已更新所属窗口 store 与磁盘，旧编辑值来自左栏性能缓存保留的会话对象。
+项目工具行改读当前 store，Edit Agent 各入口在打开时读取当前配置，避免保存旧值。
+三组修复前回归分别出现 5、1、1 项失败；修复后相关 11 文件 468 项通过，
+场景种子检查 1 文件 2 项通过，未跳过、放宽断言或自动重试。
+三份生产 TypeScript 检查及改动代码 ESLint 通过，改动文件均通过 Prettier。
+Electron 未运行。两份合成场景保留真实模式文件级跳过与实时进程检查，补充首次
+额度恢复定时器后的发送计数，以及 CLI 修改后新旧表单读回、旧表单保存后的磁盘核对。
+沙箱外命令：`MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-project-tool-config.spec.ts e2e/native-auto-handoff.spec.ts`。
+旧界面仅同步获得打开编辑器时读取最新配置的防回滚修复；额度恢复规则不变。
+无新增 CLI 动词和用户文案，已有动作的对等表已更新。未验证真实模型、SSH 和发行包。
+
+## 2026-11-10：第二线项目配置与额度交接场景修复
+
+验证对象为任务分支源码 `54150b59e`，不是发行安装包。两条失败均来自场景数据。
+项目配置场景缺少 API 默认模式迁移完成标记，启动迁移在保存前将两份 Claude
+配置改成 API。现在模拟已迁移安装，并在编辑前检查两份配置均为 interactive，
+编辑后检查另一份配置和工具级默认值不变；共用保存服务也补充隔离断言。
+额度文本本身被识别为 rate_limited，但夹具将其作为普通 assistant 消息输出，
+随后成功 result 触发 data，渲染层按恢复清除错误。夹具现在使用 Claude 的
+合成额度错误标记及错误 result，主进程暂存通知并在回合结束时只发送一次错误。
+依据为仓库 ClaudeOutputParser 的真实转录格式记录及现有解析回归，没有修改识别规则。
+新增回归直接运行两份场景的种子准备，在 Electron 启动前截停，再分别执行真实迁移
+和隔离夹具加 StdoutHandler。修复前两条均失败，修复后两条通过。
+相关产品单元测试 7 文件 178 项通过，新增回归及 Claude 审批夹具共 7 项通过。
+protocol.test.ts 为 5 项通过、3 项因沙箱 Unix socket listen EPERM 超时；未重试或跳过。
+三份生产 TypeScript 检查、场景独立严格类型检查、改动代码 ESLint、Prettier 均通过。
+Playwright 仅收集 2 文件 3 场景，未启动 Electron；运行命令：
+`MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-project-tool-config.spec.ts e2e/native-auto-handoff.spec.ts`。
+新旧界面和 SSH 产品路径均未修改，无新增界面动作、CLI 动词或文案。
+尚未验证 Electron 完整交接、真实模型、SSH、发行包和受沙箱阻断的 socket 场景。
+
+## 2026-11-10：项目设置中的工具配置
+
+任务分支源码新增项目工具配置入口，复用 `AgentConfigPanel` 和 SSH 主机选择器。
+修复前两条回归分别失败于缺少入口、CLI 将保存失败报告为成功；后续回归还复现
+SSH 拒绝原因被隐藏、连续 CLI 修改在 React 引用刷新前覆盖前一次保存，以及
+未传入已检测到的 TUI 包装器路径导致错误提示。
+新界面通过共用服务持久化，保留现有对话、其他配置和 SSH 远程路径。
+相关 5 个单元测试文件共 128 项通过，三份 TypeScript 检查通过。新增 Electron 文件
+通过独立类型检查及 Playwright 场景收集，改动代码通过 ESLint，全部改动通过 Prettier。
+旧界面保存路径保持不变。增加中英文文案、CLI 对等表和合成 Electron 场景。
+本轮验证对象为任务分支源码，不是发行安装包。Electron、真实工具调用和 SSH 主机
+未执行；场景运行命令为 `npm run test:e2e -- e2e/native-project-tool-config.spec.ts`。
+项目默认值和多个工具配置的保存不是跨存储事务，失败时明确提示可能已经部分保存。
+
+## 2026-11-11：K 真实 Codex 验收夹具修复
+
+验证对象为 `codex/real-specs` 任务分支源码，没有构建发行包或启动 Electron。
+先提交回归 `b847e6c31`，两文件 16 项中 7 失败、9 通过，复现无 require 的观察器安装失败、
+Claude 过期快照未拒绝、坏 JSON 错误带出假凭据，以及子工具选择缺失。
+修复后同一命令 16 项全部通过：
+`npx vitest run src/__tests__/scripts/real-codex-login.test.ts src/__tests__/scripts/real-codex-wire.test.ts --configLoader runner --no-cache`。
+测试只用临时假账户，版本命令和 Electron 启动被 mock，没有读取真实凭据或钥匙串。
+
+观察器用 Node 内置模块取得加载器，加载缓存中的同一个控制器，保留原始消息和调用。
+VM 回归验证无全局 require 时的安装、缓存身份、去重、原返回值和错误传播。
+合成 `native-codex-app-server.spec.ts` 已接入同一探针并核对审批双向消息，尚未执行。
+Claude 快照的毫秒 expiresAt 到期时在启动前拒绝；其他共享真实验收夹具也采用此预检。
+主控增加 `MAESTRO_E2E_CHILD_PROVIDER=claude|codex`，默认 Claude，Codex 通过第二个配置
+复用临时访问快照，保持父子嵌套、真实进程退出和随机 README 回答断言。
+
+三份项目 tsc 检查通过，三个 Electron 场景、两个单元文件及其导入夹具的补充类型检查通过。
+改动代码 ESLint 和所有改动文件 Prettier 通过。
+Playwright 仅收集两条真实场景和一条合成场景，不代表 Electron 验收通过。
+没有产品代码、界面动作、CLI 动词或产品文案变化，旧界面不变，既有 Open gaps 保留。
+夹具诊断沿用英文测试错误，不进入产品 i18n；两个真实场景继续显式开启 newShell。
+外部命令和限制见 [真实验证说明](verification/real-codex.md)。
+未验证真实模型、账户有效性、Electron、SSH、其他平台或发行包；未推送或发布。
+
+## 2026-11-11：I 真实 Codex 场景支持订阅登录
+
+验证对象为 `codex/real-specs` 任务分支源码，先提交回归 `23ed18e63`，没有构建发行包。
+`RealCodexApp` 无 API key 时复用 `prepareCredentials()`。Codex 只复制 auth.json 并清空
+刷新令牌，已过期 JWT 明确失败，格式错误不带出凭据。Claude 只传访问令牌给子进程。
+app-server 场景不要求 Claude 登录。两家模型参数可选，API key 模式保留原提供方和环境。
+
+修复前首批 7 条测试全部失败，覆盖刷新令牌原样复制、过期及坏 JSON 不拒绝、API key
+和模型强制要求，以及待抽取的 Claude 创建路径。随后补充坏 tokens 对象回归，先出现
+1 失败、7 通过，确认 TypeError 会包含假凭据，再修正为固定错误。最终 8 条全部通过，
+命令为 `npx vitest run src/__tests__/scripts/real-codex-login.test.ts --configLoader runner --no-cache`。
+只用临时假账户，CLI 版本调用和 Electron 启动均 mock，不读取真实登录或钥匙串。
+
+`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 三份 noEmit 检查通过。
+两个真实场景及导入夹具的补充类型检查通过，代码 ESLint、改动文件 Prettier 和 diff
+空白检查通过。Playwright 仅收集 2 条真实场景，未运行。无新增界面动作、CLI 动词或
+产品文案，CLI 对等表已登记，既有 Open gaps 保留。旧界面和产品代码不变，无需新增
+newShell 分支；共享变化仅为其他真实 Codex 验收夹具同样不再携带刷新令牌。
+
+外部执行命令见 [真实验证说明](verification/real-codex.md)。真实订阅登录、API 请求、
+macOS 钥匙串、默认提供方内部重试、Electron、SSH、其他平台与发行包均未验证。
+登录模式保留默认 OpenAI 提供方，其 HTTP 重试由 CLI 决定；测试本身不重试。
+未推送、开 PR、打标签或发布。
+
+## 2026-11-10：F Codex 真实验证场景准备
+
+本轮只新增默认跳过的真实场景和测试夹具，验证对象是任务分支源码，没有运行 Electron、真实模型或构建发行包。`real-codex-app-server.spec.ts` 覆盖新建、标准权限拒绝与允许、本轮追加和停止；`real-codex-orchestrator.spec.ts` 要求 Codex 自行派发 Claude 子任务并引用随机 README 首行。复用 NativeApp 与临时目录工具，凭据只经环境传入，不读取用户账户文件，不伪造调用方身份。
+
+相关协议与调用方身份单元测试 2 文件 27 项通过，`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 无输出类型检查通过，另对两个场景及导入夹具做独立类型检查。TypeScript 文件 ESLint 与所有改动文件 Prettier 通过。Playwright 仅收集 2 条场景，未执行。没有产品修复，因此没有修复前的真实失败证据，不把默认跳过或收集成功当作验收通过。
+
+没有新增界面动作、CLI 动词、产品文案或旧界面行为变化。仅支持环境 API 凭据；订阅登录、SSH、跨平台和完整后台进程树仍未验证。外部执行命令、请求数量、协议字段差异记录见 [真实验证说明](verification/real-codex.md)。原始附件只留在本地验收输出。
+
+2026-11-11 后续：订阅登录快照及夹具修复已进入 PR #77。开发构建 `eab909e35` 的 app-server 与 Codex 派 Codex 真实通过；派 Claude 因访问令牌过期未完成，详见 `docs/verification/real-codex.md`。原准备阶段未运行事实保留。
+
 ## 2026-11-10：主动停止不发送完成通知
 
 被测对象为任务分支源码，未构建安装包。退出监听器复用已有的 `stopped` 标记，
@@ -15,6 +168,8 @@
 `notification-center-badge` 不存在的断言。只收集这 2 项场景，未运行 Electron；
 沙箱外执行、真实系统通知、SSH 和发行包验收仍待完成。完整桌面 Stop 的 CLI
 对等缺口继续登记在 `CLI-UI-PARITY.md` 的 Open gaps，本次没有扩大范围。
+
+2026-11-11 文档追记：上述未完成项保留为当时事实。PR #71 已修停止完成通知，PR #73 已补 `tab stop` 与审批框停止；PR #72 已实现跨窗口来源随创建保存及回执。新增或修改场景尚无本轮集成 Electron 通过回执，不能沿用旧场景的通过数。交接保持顶层与原规格的差异仍待用户确认，见 `docs/roadmap/new-shell.md` 附录 C。
 
 ## 2026-11-09：Claude 标准权限真实验证
 
@@ -111,6 +266,8 @@ Electron 查出单元测试看不到的问题。只配了 `customPath` 的工具
 
 跨窗口 CLI 派发的父子关系仍未保证，已写入 Open gaps。
 
+2026-11-11 文档追记：上述未完成项保留为当时事实。PR #71 已修停止完成通知，PR #73 已补 `tab stop` 与审批框停止；PR #72 已实现跨窗口来源随创建保存及回执。新增或修改场景尚无本轮集成 Electron 通过回执，不能沿用旧场景的通过数。交接保持顶层与原规格的差异仍待用户确认，见 `docs/roadmap/new-shell.md` 附录 C。
+
 ## 2026-11-07：U3 第三轮咨询信封与重复历史行
 
 验证对象为本克隆源码，回归提交 `b90308f9e`，产品修复提交 `33f044617`，没有构建安装包。
@@ -195,6 +352,8 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-subtasks.spec.ts --workers=1 -
 目视后补了一项：两栏可能属于不同工具，栏头只有小圆点，看不出工具，焦点也弱。现在栏头有工具图标，焦点栏标题更重并有强调线。
 
 已知未修：用户停止后，铃铛里仍有一条回合完成通知，内容是上一轮的回答。这是既有行为，不是分屏引入的，单独处理。系统文件选择窗口、真实拖拽和未聚焦栏滚轮只有单元回归，没有在 Electron 里操作过。
+
+2026-11-11 文档追记：上述未完成项保留为当时事实。PR #71 已修停止完成通知，PR #73 已补 `tab stop` 与审批框停止；PR #72 已实现跨窗口来源随创建保存及回执。新增或修改场景尚无本轮集成 Electron 通过回执，不能沿用旧场景的通过数。交接保持顶层与原规格的差异仍待用户确认，见 `docs/roadmap/new-shell.md` 附录 C。
 
 ## 2026-11-07：U1 分屏审查修复
 
@@ -386,6 +545,8 @@ Playwright 在普通和真实模式都完成 11 条场景收集，未执行应�
 被测对象是 `2b79a0ce3` 的源码和合成 stdio 夹具，不是发行包。夹具在临时目录通过实际子进程证明审批前不写、允许后只写一次、拒绝后不写。CLI 构建成功；Electron 只收集到 1 个场景，未执行。沙箱外步骤见 [Electron 验证清单](../e2e/codex-app-server-prototype.md)，字段依据和未确认版本见 [协议记录](verification/codex-app-server-prototype.md)。未运行真实 CLI 或模型，未读取个人账户目录，未改 node_modules、版本或依赖，未推送、开 PR、打标签或发布。
 
 新增 `codex-turn steer`、`codex-turn stop`、`codex-turn permissions`、`permission-respond`，界面和 CLI 共用进程与审批实现；界面 Stop 取消整个项目队列和咨询的额外动作仍是 Open gaps。主窗口外的审批归属、浏览器、强制并行和原生历史重启恢复未验。新控件及原型通路均在双开关后；唯一共享行为变化是标准权限 Codex 对话无法使用本地原型时拒绝启动，避免关闭开关或改用 SSH 后静默变成跳过审批。普通完全访问和只读 exec 参数及解析维持原路径。
+
+2026-11-11 文档追记：当前新界面 Stop 按目标对话隔离，保留其他对话队列；PR #73 的 `tab stop` 共用完整停止处理，`codex-turn stop` 仅中断指定 app-server 进程。归属已校验用户及窗口，CLI 不能选择其他审批窗口，浏览器拒绝 Codex 审批。PR #77 的两条真实结果见 `docs/verification/real-codex.md`，不将早期未运行记录改写为通过。
 
 ## 2026-11-07：新界面文案审计收尾
 
@@ -1686,3 +1847,53 @@ Claude 浏览器审批，不能放在 `newShell` 开关后。SSH 路径及启动
 沙箱外验收交接见 [Claude 浏览器审批验收](../e2e/claude-browser-permissions.md)。
 本轮未启动 Electron、操作浏览器、调用模型或读取个人账户。真实网页认证与事件传递、
 Electron 多窗口、真实 Claude、SSH、其他平台及发行包仍未验证。未推送、开 PR、打标签或发布。
+
+## 2026-11-10：跨窗口 CLI 子任务来源保存
+
+验证对象为任务分支源码 `0a6e0cda2`，没有构建或运行安装包。
+来源身份和权限从父对话所属窗口读取，随新建请求交给目标所属窗口。
+目标先保存来源、首句标题和权限上限，再投递和回执；调用方只记录已确认的委派卡片。
+项目默认工具分支沿用同一来源和权限交集，不改 SSH 路径规则。
+
+修复前分轮观察到：请求与保存回归 4 项失败，来源读取及项目分支 2 项失败，
+调用方误改目标快照 1 项失败，缺少回执及保存中关闭目标 2 项失败。
+最终 9 个相关单元测试文件共 646 项通过，没有跳过或重试；
+三份 TypeScript noEmit 检查通过，改动文件 Prettier 通过，
+ESLint 强制包含测试文件后退出 0，保留 4 条原有未使用变量警告。
+
+新增 `e2e/native-cross-window-subtasks.spec.ts`，通过 Playwright 收集 1 个合成场景。
+它使用 `windows.create` 和 `moveSession`，覆盖跨窗口派发、保存后回执、
+来源窗口关闭、父标签关闭后的历史挂回和重启保留。运行状态读取进程接口。
+沙箱外运行：`npm run test:e2e -- e2e/native-cross-window-subtasks.spec.ts`。
+本轮未启动 Electron 或真实模型，未验证 SSH 实机、其他平台和发行包。
+原生 ID 尚未到达时的跨窗口补写、既有缺失来源数据仍列入 Open gaps。
+新行为受 `newShell` 控制；共享回调将超时注册移到 IPC 发送之前，避免同步回执时访问未初始化计时器。
+
+## 2026-11-10 右栏网页预览
+
+新界面第五页签复用 `BrowserTabView`，每条对话保存网址与面板状态。本机链接经
+`openUrl()` 或纯文本链接入口进入右栏；旧界面与外部链接保留原行为。地址提交、
+CLI 导航、刷新和系统浏览器打开共用 `applyNewShellWebAction()`；CLI 文件预览语义保留。
+实现提交为 `ad8868be516d99265dc888d484486d21939e7210`，本轮验证对象是源码，未构建发行包。
+
+修复前首批 7 项断言失败，覆盖面板选择、CLI 和桥接、本机链接及空状态。
+补充回归先发现地址提交未走共用入口、空白页导航把输入框填为 `about:blank`，再修复。
+最终相关 10 文件 378 项通过，使用 `--configLoader runner --no-cache`，无跳过或重试。
+三份正式 tsconfig 的 noEmit 检查通过；所有改动代码和测试使用 Prettier 与
+`eslint --no-ignore` 通过。没有运行全量 Vitest。
+
+`e2e/native-web-preview.spec.ts` 已收集，未启动 Electron。临时 HTTP 服务覆盖地址输入、
+页内导航、UI 与 CLI 刷新、两条对话的网址、输出链接、终端链接、CLI 读取、关闭与重启恢复。
+系统浏览器打开在场景中替换为记录调用，避免启动其他应用；运行状态读取实时进程列表。
+沙箱外命令：`npm run build`，然后
+`MAESTRO_E2E_REAL=0 npx playwright test e2e/native-web-preview.spec.ts --project=native --workers=1 --retries=0`。
+
+未验证真实 Electron、SSH 转发、手机网页与发行包。页面历史、滚动位置不保存，切换对话会
+重建网页；远程项目的本机网址仍指向桌面所在机器，没有新增 SSH 端口转发。
+未读写个人账户、运行模型、推送或发布。
+
+## 2026-11-10，D 额度自动交接
+
+本轮源码增加新界面项目级自动交接，默认关闭，目标锁定工具配置和主机。来源退出后保存失败回合标记，复用手动交接上下文、权限与发送队列；目标不自动继续转交。设置、CLI、目标配置选择、退出触发、重试互斥、完整失败消息和来源跳转均先观察回归失败，再实现。只使用合成数据和临时目录，未调用真实模型，未构建发布产物。
+
+已写合成 Electron 场景，验证默认关闭、开启后单次发送、来源说明跳转、只读权限和目标再失败不传递。Electron 尚未运行，待沙箱外验收。相关 10 个文件共 304 条单元测试通过，ES2020 兼容写法调整后相关 2 个文件的 90 条回归再次通过。`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 三份类型检查通过；全部改动文件通过 Prettier，代码及测试通过 `eslint --no-ignore`。Electron 两个场景已收集，并以包含现有 CJS 夹具和 renderer 全局声明的临时配置完成类型检查；未启动 Electron。沙箱外运行：`npm run test:e2e -- e2e/native-auto-handoff.spec.ts`。

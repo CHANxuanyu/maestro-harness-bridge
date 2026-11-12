@@ -1,3 +1,4 @@
+import { projectSettingsKey } from '../../../../../shared/projectSettings';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useAgentErrorListener } from '../../../../../renderer/hooks/agent/internal/useAgentErrorListener';
@@ -766,4 +767,82 @@ describe('useAgentErrorListener', () => {
 			expect(updated.aiTabs[0].agentError?.message).toContain('Unsupported value');
 		});
 	});
+});
+
+it('gives an enabled auto handoff priority over retrying the failed source', () => {
+	useModalStore.setState({ modals: new Map() });
+	const tab = createMockAITab({
+		id: 'tab-1',
+		logs: [{ id: 'turn-1', timestamp: 1, source: 'user', text: 'Failed request' }],
+	});
+	const source = createMockSession({
+		id: 'sess-1',
+		cwd: '/tmp/project',
+		projectRoot: '/tmp/project',
+		activeTabId: tab.id,
+		aiTabs: [tab],
+		retryOnAvailabilityErrors: true,
+	});
+	const target = createMockSession({
+		id: 'target',
+		toolType: 'codex',
+		cwd: source.cwd,
+		projectRoot: source.projectRoot,
+	});
+	useSessionStore.setState({ sessions: [source, target] });
+	useSettingsStore.setState({
+		newShell: true,
+		projectSettings: {
+			[projectSettingsKey({ projectPath: source.cwd })]: { autoHandoffTarget: target.id },
+		},
+	});
+	seedSnapshot(source.id, tab.id);
+	renderHook(() => useAgentErrorListener(makeDeps()));
+	handler!('sess-1-ai-tab-1', overloadError);
+	expect(useRetryStore.getState().retries).toEqual({});
+	expect(useSessionStore.getState().sessions[0].agentErrorPaused).toBe(true);
+	expect(useModalStore.getState().modals.has('agentError')).toBe(false);
+	useSettingsStore.setState({ newShell: false, projectSettings: {} });
+});
+
+it('does not schedule quota retries for an automatic recipient with resilience enabled', () => {
+	useSettingsStore.setState({ newShell: true });
+	const tab = createMockAITab({
+		id: 'tab-1',
+		origin: {
+			kind: 'handoff',
+			sourceSessionId: 'source',
+			sourceTabId: 'source-tab',
+			sourceProvider: 'claude-code',
+			createdAt: 1,
+			automatic: true,
+		},
+	});
+	useSessionStore.setState({
+		sessions: [
+			createMockSession({
+				id: 'sess-1',
+				toolType: 'codex',
+				aiTabs: [tab],
+				activeTabId: tab.id,
+				retryOnAvailabilityErrors: true,
+				retryOnTokenExhaustion: true,
+			}),
+		],
+	});
+	seedSnapshot('sess-1', tab.id);
+	const { unmount } = renderHook(() => useAgentErrorListener(makeDeps()));
+	try {
+		handler!('sess-1-ai-tab-1', {
+			...overloadError,
+			agentId: 'codex',
+			message: 'rate limit exceeded',
+		});
+		expect(useRetryStore.getState().retries).toEqual({});
+		expect(useSessionStore.getState().sessions[0].agentErrorPaused).toBe(true);
+	} finally {
+		cancelRetry('sess-1', tab.id);
+		useSettingsStore.setState({ newShell: false });
+		unmount();
+	}
 });

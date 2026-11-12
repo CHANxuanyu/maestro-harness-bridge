@@ -38,6 +38,25 @@ text with `nativeAboutMePointer()`; every uncertain result retains the body.
 Desktop spawns ask the same read through `conductorProfileForAgent()`; the
 wizard prompts still inject the body.
 
+## 完整停止对等，A，2026-11-10
+
+| 界面动作                 | CLI                                                     | 共用实现                                           |
+| ------------------------ | ------------------------------------------------------- | -------------------------------------------------- |
+| 输入框停止、对话 Escape  | `maestro-cli tab stop <tab-id> [--agent <id>] [--json]` | 所属窗口的 `useInterruptHandler.handleInterrupt()` |
+| 新界面审批框“停止这一轮” | 同一 `tab stop`                                         | 同一停止处理函数，进程退出时撤销审批               |
+| 审批框拒绝、Escape       | `permission deny <request-id>`                          | 既有审批响应，不停止整轮                           |
+
+CLI 通过 `update_session_config` 的独立 `stopTurn` 动作等待窗口回执，不写设置，
+不切换焦点。支持完整、唯一前缀和 `active` 标签标识。新界面只停止目标对话、
+其强制并行进程和仍运行的孤儿标签，保留其他对话；子任务沿用既有范围限制。
+旧界面仍按所属配置停止所有运行中的对话。咨询、交接、摘要和队列收尾均沿用输入框路径。
+审批停止不先发送拒绝，避免放行下一步；停止期间禁用审批按钮，失败显示原因。
+
+成功表示底层接受了中断或强制停止，进程退出由既有生命周期负责，不表示已观察到退出。
+没有运行返回 `success: false` 和当前界面语言的原因，CLI 退出码为 1。
+部分信号失败不能报成功。合成场景另查活动进程为空、审批撤销、未写文件及能继续下一轮。
+旧 REST `remote:interrupt` 仍是独立路径，其对等缺口见 Open gaps。
+
 ## Claude standard approval, U4 (2026-11-07)
 
 | UI action                                 | CLI                                      | Shared implementation                                                |
@@ -122,6 +141,43 @@ CLI `tab new` 返回实际 `sessionId`，`dispatch --new-tab` 返回实际 `agen
 
 本轮共用修正：带提示的新建回调按来源所属窗口路由，旧界面也由此修正副窗口投递目标；新界面新建回调允许 60 秒，CLI 留出 65 秒等待；旧界面回调仍为 5 秒。其余新行为均受 `newShell` 控制。
 
+## 项目工具配置（2026-11-10）
+
+仅在 `newShell` 开启的桌面项目设置中显示。先按项目位置筛选配置，再展开具体工具配置。
+“新对话默认值”与“工具配置”分节，后者明确影响此配置下的所有对话，保存不改写标签内容或权限。
+账户目录使用已有环境变量表单和目录建议，Claude 与 DeepSeek 使用 `CLAUDE_CONFIG_DIR`，Codex 使用 `CODEX_HOME`。
+
+| 界面动作               | maestro-cli 对等动作                                          | 共用实现                                                               |
+| ---------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 展开并读取一个工具配置 | `show agent <id> --json`                                      | 同一会话配置字段，界面显示配置名称和 ID                                |
+| 编辑账户目录、环境变量 | `update-agent <id> --env KEY=VALUE`，清空用 `--clear-env`     | `saveSessionToolConfig()`，环境变量整体替换                            |
+| 编辑自定义路径、参数   | `update-agent <id> --custom-path <path> --custom-args <args>` | 同上；空字符串清空覆盖                                                 |
+| 选择 Claude 调用方式   | `update-agent <id> --token-source api\|tui\|dynamic`          | `toClaudeTokenModeSource()` 与同一保存服务；`tui` 保存为 `interactive` |
+| 编辑 TUI 包装器路径    | `update-agent <id> --maestro-p-path <path>`                   | 同一保存服务                                                           |
+| 选择 SSH 主机或本机    | `update-agent <id> --ssh-remote <id\|none>`                   | 同一保存服务；保留远程目录与历史同步字段                               |
+| 取消或收起编辑         | 不发送更新；读取仍用 `show agent`                             | 草稿只在明确保存时写入，收起保留草稿                                   |
+
+新界面的 CLI 与项目设置都通过原有 `sessions.setMany` 保存，仅在成功后更新内存和报告成功。
+同一配置的更新使用 `createKeyedWriteQueue()` 串行化，执行时读取当前 store，避免 React 尚未刷新时覆盖上一项改动。
+SSH 主机改动复用 `probeSessionAiProcesses()` 检查实时进程，探测失败也拒绝保存；路径不调用本机 realpath。
+改用 `api` 与权限菜单的“改用 claude -p”写入相同字段，不改写已有对话权限，也不停止当前回合。
+旧界面仍用原来的编辑与 CLI 保存路径，共用字段白名单的抽取不改变其行为。
+
+2026-11-11 修复：`update-agent` 的确认已包含窗口 store 与磁盘写入。
+项目工具配置行直接订阅当前 owner；各个 Edit Agent 入口在打开时按 ID 读取当前配置，
+不再将左栏缓存的路径与调用方式交给编辑表单。`show agent <id> --json` 可核对同一份数据。
+旧界面同步获得这项防回滚修复，保存动作不变。没有新增 CLI 动词。
+
+Open gaps：不提供 CLI 打开或折叠项目设置窗口的视觉动作；配置读取与保存已有对等动作。
+浏览器仍不开放此编辑节。停用的环境变量保留原值，本节不提供停用开关。
+项目默认值与多个工具配置不是一个跨存储事务；后续保存失败时保留窗口，并提示此前改动可能已经保存。
+合成验收：`e2e/native-project-tool-config.spec.ts`，Electron 执行待沙箱外完成。
+
+2026-11-10 第二线回归修正：场景模拟已完成 API 默认模式迁移的安装，编辑前后通过
+`show agent <id> --json` 核对两份配置，另核对工具级默认值未变。
+额度交接场景使用合成错误封装，保留 `rate_limited` 和只交接一次的严格断言。
+本轮仅修改测试，无新增界面动作或 CLI 动词，以上共用实现及 Open gaps 不变。
+
 ## New shell conversation split (2026-11-06)
 
 | UI action                              | CLI                                                   | Shared implementation                                               |
@@ -165,7 +221,7 @@ conversation's work. Closed busy orphan tabs remain included in Stop.
 File pickers use component refs, and image reads retain their destination tab.
 File-tree drags retain the source root and SSH host; a different host is rejected.
 Unfocused scroll writes use `updateAiTab(sessionId, tabId, updater)` and reaching
-the bottom still clears unread. No new CLI verb is added; the gaps below apply.
+the bottom still clears unread. The later A entry adds `tab stop` for Stop and Escape; other gaps below remain.
 
 ## New shell conversation content search (2026-11-06)
 
@@ -304,7 +360,7 @@ interrupt implementation. This correction adds no separate stop implementation.
 停止按钮、Escape 和经现有中断通路停止的 CLI 回合均不会发送完成通知，
 包括通知中心、弹窗、系统通知及自定义声音。新旧界面一致，错误提示和其他对话
 不受影响。没有新增界面动作或 CLI 动词；`codex-turn stop` 沿用已有入口，
-完整桌面 Stop 的 CLI 对等仍属于 Open gaps，未在本次修复中补齐。
+当时未补完整桌面 Stop 的 CLI 对等。后续 PR #73 已以 `tab stop` 补齐，见本文件完整停止条目；旧 REST 中断仍不等同于完整停止。
 
 The review follow-up keeps these same actions. Consecutive refreshes preserve
 genuine repeated sends; an old cached internal prompt outside the newest 500
@@ -910,18 +966,21 @@ below remain open.
 
 ## Open gaps
 
-Claude approval: the modal covers the composer Stop button. Escape denies only
-the current tool. U4 tests the existing interrupt IPC while approval is pending;
-it does not add a direct Stop action or close the existing full Stop parity gap.
+Claude approval: PR #73 adds Stop this turn inside the new shell approval modal,
+with `tab stop` routed to the same owner and complete interrupt handler. Escape
+still denies only the current tool. The updated synthetic Electron scenarios
+await an execution result; the earlier real allow result does not verify Stop.
 `permission` covers tool allow/deny only; a structured AskUserQuestion answer
 command, cross-window routing and browser prompt delivery are not verified here.
 
 **Codex prototype controls (2026-11-07).** `codex-turn stop` interrupts only the
 addressed local app-server process through `ProcessManager.interrupt()`. The
-composer Stop also cancels the project's queued work and cross-agent consults;
-that wider existing Stop action is still not CLI-covered. Approval prompts use
-the main window only. Secondary-window ownership and web-desktop approval/steer
-controls have not been integrated or verified. There is no CLI draft editor:
+new shell composer Stop cancels work for the target conversation, including its
+queue and scoped consults, while other conversations remain running; classic
+Stop retains its owner configuration scope. `tab stop` shares that complete
+handler. Approval ownership already checks the user and owning window. Actual
+secondary-window Electron presentation is unverified; the CLI cannot select
+another approval window, and Codex approvals are explicitly refused in browsers. There is no CLI draft editor:
 `steer` takes explicit text and leaves the desktop draft alone. The composer
 shows the affordance from opt-in eligibility; if the current turn started with
 exec before the setting changed, the main process refuses steering and the draft
@@ -943,7 +1002,7 @@ gaps or add separate implementations. Error recovery remains in the backlog belo
 | Inspect a parent's child conversations and their status | `tab children <tab-id> [--agent <id>] [--json]`                     | `findConversationParent()` in `shared/conversationChildren.ts`; open tab inventory                       |
 | Select a child conversation                             | `tab select <tab-id> [--json]` or `focus-agent <agent> --tab <tab>` | `select_tab` / remote selection and `setActiveTab()`; new shell reveals the hidden tab and clears unread |
 | Ask another conversation to do work                     | `ask <target> <question>` or `dispatch <source> "@Target ..."`      | Existing mention planner and `sendCrossAgentRequest()`                                                   |
-| Delegate into a new child                               | `dispatch <target> <prompt> --new-tab` from a stamped caller        | Existing accepted-dispatch notice and `recordAgentDelegation()`                                          |
+| Delegate into a new child                               | `dispatch <target> <prompt> --new-tab` from a stamped caller        | Owner creation and persistence receipt, then `recordAgentDelegation()`                                   |
 | Add a reply while a child works                         | `dispatch <child-owner> <prompt> --tab <child-tab> --queue`         | Existing execution queue; consult completion releases the child's tab barrier                            |
 | Continue an idle child                                  | `send <prompt> --tab <child-tab>`                                   | Existing composer send and captured native session ID                                                    |
 | Rename, star or close a child                           | `tab rename`, `tab star`, `tab close`                               | Existing tab actions, also used by nested row menus                                                      |
@@ -988,8 +1047,8 @@ archived independently.
 New shell Stop addresses both outgoing consults and the incoming consult on the
 selected child. The main registry waits for process exit before acknowledging
 cancellation. Stopping a child leaves its siblings, including closed siblings,
-running. This uses the desktop interrupt service; the existing CLI Stop gap below
-remains open. No new CLI verb was added in this review correction.
+running. This uses the desktop interrupt service. The later A entry adds
+`tab stop` through that same service.
 
 咨询历史展示修复（2026-11-07，U3 第三轮）没有新增界面动作或 CLI 动词。
 `ask`、带 @提及的 `dispatch` 和界面派发继续使用 `sendCrossAgentRequest()` 与同一路由。
@@ -1012,15 +1071,36 @@ The existing native-history open gap below still applies. A pre-feature consult
 without a captured source native ID can only attach while its original source
 tab is open.
 
-**Cross-window CLI child provenance, U3 review item 6 (2026-11-07).** Confirmed
-and deferred under the review's small-change limit. The accepted-dispatch notice
-routes to the caller window, where `recordAgentDelegation()` patches the target
-tab. A missing target snapshot drops the patch, and persistence excludes targets
-owned by another window. Fixing this needs source identity in the new-tab request,
-target-owner storage and acknowledgment, across the dispatch handler, callback,
-preload and renderer request path. This review does not claim cross-window
-attachment or restart recovery. The source must be transferred before the target
-acknowledges creation; broadcasting the existing caller notice is insufficient.
+**Late native identity across windows (2026-11-10).** A source that has not yet
+announced its native ID is saved with its live tab identity. The existing native
+ID backfill only updates the source window's snapshot. Cross-window backfill
+before that ID exists is not covered here; restart attachment requires the native
+ID captured in the creation request. Historical children already missing their
+origin are not reconstructed.
+
+## Cross-window CLI child provenance (2026-11-10)
+
+`dispatch <target> <prompt> --new-tab` keeps the existing caller environment and
+CLI syntax. In `newShell`, main reads identity and permission metadata from the
+source owner through `context:readHandoffSource`. The creation request carries
+`AgentDelegationSource` through the callback registry and preload to the target
+owner. That owner writes the origin, first-sentence title and permission ceiling
+before delivering the prompt and returning `provenanceSaved`. Project default
+tool selection carries the same origin through `newProjectConversation()` and
+`openHandoffTarget()`. Source and project permissions use the canonical intersection.
+
+Only an acknowledged creation generates a caller card. The notice includes target
+metadata so a missing local target snapshot cannot drop the card. The caller no
+longer patches another window's child. Missing source, failed save or missing
+receipt returns failure. The main callback verifies the sender of both receipts.
+The existing parent lookup uses the saved native ID after the source tab closes
+and after restart, with the same account and SSH identity boundaries.
+
+No new UI action or CLI verb was added. The previous cross-window creation gap is
+closed in source; `e2e/native-cross-window-subtasks.spec.ts` covers product window
+creation and movement, dispatch, persistence, source-window closure and restart.
+Electron execution remains pending outside the sandbox. Classic creation does
+not read source identity or require a persistence receipt.
 
 ## New shell changes by turn (2026-11-06)
 
@@ -1192,13 +1272,8 @@ This presentation-only phase adds no CLI verb or session protocol. Neither half 
 Ranked by how often an agent is likely to hit them. None of these are blocked by
 a design constraint; they are simply not built yet.
 
-1. **Interrupt a running turn.** In the new shell, Stop and Escape stop the named
-   conversation, including its forced parallel processes and busy orphan tabs.
-   Classic Stop remains agent-wide. There is
-   no CLI equivalent and no WS message behind one. This is the largest remaining
-   gap: an agent that starts a runaway turn on another agent cannot stop it.
-   The 2026-11-06 Stop/synopsis correction preserves this gap; the legacy remote
-   interrupt callback is not the desktop interrupt implementation.
+1. **完整停止已补齐。** `tab stop` 共用桌面完整停止处理函数，见上方 A 条目。
+   旧 REST 中断路径仍需迁移，见第 10 项。
 2. **Reopen a closed tab.** New-shell restore now revalidates permissions against
    the current tool through `restoreConversationPermissions()` and the same
    `newConversationPermissionFields()` used by creation. This fix adds no CLI verb.
@@ -1237,15 +1312,10 @@ a design constraint; they are simply not built yet.
    hook, as recorded above. The generic merge/transfer paths remain gaps:
    `merge_context` and `transfer_context` have preload listeners but no
    renderer subscribers. They still need the shared hooks wired and CLI verbs.
-10. **Interrupt, precisely.** Beyond "no CLI verb": the only backend (REST
-    `POST /api/session/:id/interrupt` -> `remote:interrupt`) signals the
-    legacy `${sessionId}-ai` process id, which misses per-tab processes
-    (`${sessionId}-ai-${tabId}`). Fix the renderer handler to take a tab id,
-    then add `interrupt <agent> [--tab]`. The 2026-11-07 new shell correction fixes
-    the desktop callback and source-tab consult cancellation, but deliberately
-    leaves this legacy remote transport and the missing CLI verb as Open gaps.
-    A normal conversation stop must not be confused with `group-chat stop` or
-    `stop-auto-run`, which control different workflows.
+10. **旧 REST 中断路径。** `POST /api/session/:id/interrupt` 经由
+    `remote:interrupt` 仍使用旧进程标识，没有迁移到完整停止处理函数。
+    本轮 `tab stop` 使用带窗口回执的独立动作，已补齐 CLI，不使用该 REST 路径。
+    `group-chat stop` 和 `stop-auto-run` 仍用于各自独立的工作流。
 
     **Composer attachments and reading position:** there is still no CLI action
     to open a file picker, stage an image on a draft, insert a dropped file
@@ -1324,7 +1394,7 @@ exec's bypass arguments. Full and read-only exec behavior is unchanged.
 | Add ordinary text to the running turn | `codex-turn steer <process-id> <text>`                                      | `process:steer`, `ProcessManager.steer()`, exact `turn/steer` acknowledgement            |
 | Read pending approvals                | `codex-turn permissions`                                                    | The same pending registry used to render `PermissionPrompt`                              |
 | Allow or deny one approval            | `permission-respond <request-id> <decision>`, decision is `allow` or `deny` | Existing `permission:respond` and permission relay registry                              |
-| Stop the running prototype process    | `codex-turn stop <process-id>`                                              | `ProcessManager.interrupt()` and `turn/interrupt`; wider Stop gap above                  |
+| Stop the running prototype process    | `codex-turn stop <process-id>`                                              | `ProcessManager.interrupt()` and `turn/interrupt`; complete Stop uses `tab stop`         |
 
 All four new commands support `--json` and require a running desktop bridge.
 The process ID is the full `<owner-id>-ai-<tab-id>` string, not a native Codex
@@ -1343,7 +1413,26 @@ Synthetic validation and unresolved protocol/version limits are recorded in
 `codex-turn stop <process-id>` 和界面中断仍共用 `ProcessManager.interrupt()`。
 合成单元覆盖保持运行及等待文件审批时停止，要求退出码 130、进程注销、审批清空且无文件写入。
 Electron 场景直接检查停止按钮消失和目标进程不存在；异常关闭保留原始失败。
-没有修改产品停止或 Claude 审批收尾实现，完整 Stop 的队列与咨询对等缺口仍在 Open gaps。
+没有修改产品停止或 Claude 审批收尾实现，完整 Stop 的对等由后续 A 条目的 `tab stop` 补齐。
+
+### 真实 Codex 验证场景（2026-11-10）
+
+本批仅补测试，没有新增界面动作或 CLI 动词。默认跳过的
+`e2e/real-codex-app-server.spec.ts` 复用上表的权限、审批、追加和停止路径；
+`e2e/real-codex-orchestrator.spec.ts` 要求 Codex 自己调用 `dispatch --new-tab`，
+以 `session show` 读取所选子工具的结果，再用 `tab children` 与左栏嵌套关系互相核对。
+来源标识只由应用注入，测试不伪造 `MAESTRO_CALLER_*`。
+运行方法、请求次数和协议失败记录见 [真实验证说明](../verification/real-codex.md)。
+本批未执行真实模型或 Electron；既有 Open gaps 保留，不宣称补齐全部停止语义、跨窗口或浏览器对等。
+
+2026-11-11 登录模式仅调整真实验收夹具的凭据和可选模型参数。
+没有新增界面动作或 CLI 动词；创建对话仍走 `create-agent`，未指定模型时省略 `--model`。
+Codex 和 Claude 复用 `prepareCredentials()` 的只读访问凭据快照，既有 Open gaps 不变。
+
+2026-11-11 K 夹具修复不新增界面动作或 CLI 动词。
+`MAESTRO_E2E_CHILD_PROVIDER=codex` 通过同一 `create-agent` 实现创建第二个 Codex 配置，
+继续验证 `dispatch --new-tab`、`session show`、`tab children` 与左栏父子关系。
+默认 Claude 模式保留；快照过期预检和控制器观察器只影响验收夹具，既有 Open gaps 不变。
 
 ## New shell transcript performance (2026-11-06)
 
@@ -1399,3 +1488,66 @@ Codex 标准权限的输入栏、项目设置、新建、继承、恢复及 `tab
 原型计划通知沿用 `update_plan` 工具事件，任务面板及 `tab panel <tab-id> tasks`
 继续读取同一清单。追加防重仅管理界面草稿，不会把两次显式 CLI steer 指令合并。
 此次没有增加 CLI 动词，既有追加、审批、项目默认权限、新建、面板及停止动作均保留。
+
+## New shell web preview (2026-11-10)
+
+The fifth right-panel tab uses `BrowserTabView` in compact mode. Navigation,
+reload and system-browser opening use `applyNewShellWebAction()` from both the
+UI and the acknowledged CLI tab patch. URLs live on each conversation's
+`newShellPanel.webUrl`; the existing session persistence restores URL, selection
+and open state. Guest navigation updates that same URL. Reload recreates the
+guest with its current URL and existing browser partition.
+
+Web actions with an omitted tab ID or `active` resolve the conversation in the
+addressed renderer when the command is applied. The persisted inventory can lag
+behind a UI selection by the save debounce, so it only resolves the owning agent;
+its selected tab is not the mutation target. Explicit tab IDs retain background
+targeting. JSON acknowledgement uses `tabId: "active"` for that selector; read an
+explicit tab ID to inspect its saved URL. No new CLI verb is added.
+
+| UI action                                     | CLI action                                                                 | Shared implementation                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Select Web                                    | `tab panel web [--agent <id>]`                                             | `changeNewShellPanel()` and conversation state             |
+| Enter an address or click a local output link | `tab panel web --url <url> [--agent <id>]`                                 | `applyNewShellWebAction()` and `BrowserTabView.navigate()` |
+| Address a background conversation             | `tab panel <tab-id> web --url <url> [--agent <id>]`                        | Same acknowledged patch, no conversation focus change      |
+| Refresh                                       | `tab panel web-reload [--agent <id>]`                                      | Same action and guest recreation                           |
+| Open in system browser                        | `tab panel web-external [--agent <id>]`                                    | Same action and `shell.openExternal()`                     |
+| Read the current address and panel state      | `tab panel [<tab-id>] [--agent <id>] --json` or `tab show <tab-id> --json` | Existing tab inventory, `tab.newShellPanel.webUrl`         |
+| Collapse or reopen                            | `tab panel close` or `tab panel open`                                      | Existing conversation panel actions                        |
+
+`tab panel preview` retains file-preview semantics. Web mutations require
+`newShell`; explicit addresses must use HTTP or HTTPS. Local output links route
+to Web only in the new shell. External URLs and classic-shell routing retain
+their existing behavior. No SSH path resolution or port forwarding is added:
+loopback URLs address the machine hosting the desktop browser engine.
+
+Open gaps: mobile/web-desktop keeps the existing browser-engine availability
+placeholder. In-page website controls are outside Maestro CLI panel actions.
+The new panel does not expose browser-history or scroll-position restoration;
+URLs and panel state persist, while guests are recreated on conversation changes.
+
+## 额度用尽时自动交接，D
+
+| 界面动作                       | CLI 对等动作                                                                               | 共用实现                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| 项目设置选择目标工具配置或关闭 | `project settings set --path <项目> [--ssh-remote <主机>] --auto-handoff <配置 ID 或 off>` | `createProjectSettingsService()`                |
+| 读取自动交接设置               | `project settings show --path <项目> [--ssh-remote <主机>]`                                | `ProjectSettings.autoHandoffTarget`，缺省为关闭 |
+| 查看配置 ID、工具和账户        | `handoff <来源对话> --list-configurations --json`                                          | `createAiHandoffService().targets()` 的配置模式 |
+| 点击来源说明打开目标对话       | `tab select <目标对话 ID> --agent <目标配置 ID>`                                           | 现有对话导航与深链接                            |
+
+仅新界面执行自动交接。来源进程退出后，所属桌面窗口以最后一条用户消息 ID 认领并保存一次性标记，再走手动交接的读取、权限与队列实现。复用 `rate_limited` 和 `classifyRetryableError()` 的额度分类，登录失效和上下文已满不触发。自动目标的 `origin.automatic` 阻止再次转交，重复错误与重复退出不重发。自动交接接管时不再安排来源工具的重试或额度重置。
+
+2026-11-11 修复：`automaticHandoffOwnsFailure()` 同时约束错误重试和全局额度恢复。
+新界面中，已认领的来源回合与自动交接接收方再次遇到额度错误时均停下，
+不以重发探测额度、不重置额度，也不恢复已认领的失败请求；项目关闭交接后仍保留认领边界。
+`settings set autoResumeOnLimit true` 不覆盖这项约束。旧界面和普通手动交接保留原恢复规则。
+
+目标选择锁定配置 ID，不回退到其他账户。跨本机 worktree 复制该配置并保持来源 cwd；SSH 按项目路径和主机比较，不执行本机 realpath。目标环境保持该配置当前的账户，不再用项目默认环境覆盖。权限仍取来源和项目默认的较严者。失败的用户消息完整放入交接指令，历史正文不重复该消息，附件一起入队。读取目标列表不访问凭据或调用模型，账户显示解析后的配置目录或该主机的默认账户。
+
+Open gaps：本轮没有新增界面动作缺口。目标不可用、保存失败或发送队列失败不自动重试；保留原错误，需手动处理。Electron 场景在 `e2e/native-auto-handoff.spec.ts`，待沙箱外执行。
+
+## 2026-11-11 文档核对补充
+
+本次只整理证据，没有新增界面动作或 CLI 动词。PR #72、#73、#74、#76 的对应动作仍使用各自已登记的共享实现。`active` 在刚切换对话后可能读到尚未保存的上一条；PR #74 已让网页打开、刷新和外部打开使用窗口实时状态，其他动词未逐一验证，暂用显式标签 ID。
+
+PR #77 后续真实结果见 `docs/verification/real-codex.md`：仅固定版本 app-server 工作负载及 Codex 派 Codex 子任务通过。早期 Stop 缺口描述保留历史含义，以本文件完整停止条目和首个 Open gaps 的当前说明为准。原生历史打开定位、树折叠及其他展示控制缺口没有因此关闭。

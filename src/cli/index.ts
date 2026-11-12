@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { NEW_SHELL_PANEL_ACTIONS } from '../shared/newShellPanel';
 import {
 	codexTurnSteer,
 	codexTurnStop,
@@ -171,6 +172,7 @@ import {
 	tabPermission,
 	tabPanel,
 	tabSplit,
+	tabStop,
 	tabUnsplit,
 	tabModel,
 	tabEffort,
@@ -603,6 +605,10 @@ program
 		projectSettingsT('workflows.projectSettings.cli.modelProviderHelp')
 	)
 	.option('--effort <level>', projectSettingsT('workflows.projectSettings.cli.effortHelp'))
+	.option(
+		'--auto-handoff <id|off>',
+		projectSettingsT('workflows.projectSettings.cli.autoHandoffHelp')
+	)
 	.option('--permission <mode>', projectSettingsT('workflows.projectSettings.cli.permissionHelp'))
 	.option(
 		'--env <NAME=VALUE>',
@@ -638,6 +644,7 @@ program
 	.command('handoff <tab> [provider]')
 	.description('Prepare a new conversation with another AI in the same project')
 	.option('--agent <id>', 'Source agent for an active or ambiguous tab')
+	.option('--list-configurations', projectSettingsT('workflows.autoHandoff.listHelp'))
 	.option('--list-targets', 'List available target providers without creating a draft')
 	.option('--review', 'Prepare a review that reports problems without editing files')
 	.option('--send', 'Explicitly send the prepared handoff instead of leaving a draft')
@@ -1671,6 +1678,10 @@ tab
 	.option('--json', 'Output as JSON (for scripting)')
 	.action((options) => tabNew(options));
 
+tabTargetOptions(tab.command('stop <tab-id>'))
+	.description(projectSettingsT('workflows.shell.stopCliDescription'))
+	.action((tabId, options) => tabStop(tabId, options));
+
 tabTargetOptions(tab.command('split <tab-id>'))
 	.description('Open an existing conversation on the right (requires the new shell)')
 	.option('--ratio <fraction>', 'Left pane share of the split width, for example 0.5')
@@ -1680,9 +1691,9 @@ tabTargetOptions(tab.command('unsplit'))
 	.description('Return the current conversation window to one pane (requires the new shell)')
 	.action((options) => tabUnsplit(options));
 
-tabTargetOptions(tab.command('panel <tab-id> <action>'))
+tabTargetOptions(tab.command('panel [tab-id-or-action] [action]'))
 	.description(
-		'New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
+		'New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, web, web-reload, web-external, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
 	)
 	.option(
 		'--terminal <id>',
@@ -1691,7 +1702,13 @@ tabTargetOptions(tab.command('panel <tab-id> <action>'))
 	.option('--filter <query>', 'Filter the conversation file tree; an empty string clears it')
 	.option('--content <text>', 'Set the remembered text file edit buffer before this action')
 	.option('--line <number>', 'Jump to a line in the remembered preview')
-	.action((tabId, action, options) => tabPanel(tabId, action, options));
+	.option('--url <url>', 'HTTP or HTTPS address for the web panel')
+	.action((target, action, options) => {
+		if (action) return tabPanel(target, action, options);
+		if (target && NEW_SHELL_PANEL_ACTIONS.includes(target))
+			return tabPanel('active', target, options);
+		return tabShow(target || 'active', options);
+	});
 
 tabTargetOptions(
 	tab

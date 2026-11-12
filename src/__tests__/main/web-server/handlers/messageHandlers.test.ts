@@ -2296,6 +2296,31 @@ describe('WebSocketMessageHandler', () => {
 	});
 
 	describe('New AI Tab With Prompt (Web → Desktop)', () => {
+		it('carries caller identity and waits for owner acknowledgment before the card', async () => {
+			let finish!: (value: unknown) => void;
+			(callbacks.newAITabWithPrompt as any).mockImplementation(
+				() =>
+					new Promise((resolve) => {
+						finish = resolve;
+					})
+			);
+			handler.handleMessage(client, {
+				type: 'new_ai_tab_with_prompt',
+				sessionId: 'session-1',
+				prompt: 'Build',
+				fromSessionId: 'parent',
+				fromTabId: 'parent-tab',
+			});
+			expect(callbacks.newAITabWithPrompt).toHaveBeenCalledWith('session-1', 'Build', false, {
+				fromSessionId: 'parent',
+				fromTabId: 'parent-tab',
+			});
+			expect(callbacks.noteAgentDelegation).not.toHaveBeenCalled();
+			finish({ success: false, error: 'save failed' });
+			await Promise.resolve();
+			expect(callbacks.noteAgentDelegation).not.toHaveBeenCalled();
+		});
+
 		it('marks a CLI dispatch into a fresh tab with the new tab id', async () => {
 			handler.handleMessage(client, {
 				type: 'new_ai_tab_with_prompt',

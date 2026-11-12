@@ -14,6 +14,14 @@ import { useAppRemoteEventListeners } from '../../../../renderer/hooks/remote/us
 import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { openPanelTerminal } from '../../../../renderer/services/newShellTerminal';
+import { tabPanel } from '../../../../cli/commands/tab';
+import { withMaestroClient } from '../../../../cli/services/maestro-client';
+
+vi.mock('../../../../cli/services/maestro-client', () => ({ withMaestroClient: vi.fn() }));
+vi.mock('../../../../cli/services/storage', () => ({
+	resolveAgentId: vi.fn((id: string) => id),
+	readActiveAgentId: vi.fn(() => 'first'),
+}));
 
 vi.mock('../../../../renderer/components/XTerminal', () => ({ XTerminal: forwardRef(() => null) }));
 
@@ -70,6 +78,78 @@ beforeEach(() => {
 });
 
 describe('new shell terminal CLI bridge', () => {
+	it('resolves active web navigation from the addressed live conversation before persistence', async () => {
+		const firstTab = createMockAITab({
+			id: 'web-one',
+			newShellPanel: { tab: 'web', open: true, webUrl: 'http://localhost:5173/one' },
+		});
+		act(() =>
+			useSessionStore.getState().updateSession('second', {
+				activeTabId: 'web-two',
+				aiTabs: [firstTab, createMockAITab({ id: 'web-two' })],
+			})
+		);
+		// The UI has switched, but the main-process inventory has not been saved yet.
+		vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+			action({
+				sendCommand: vi.fn(async (payload: Record<string, unknown>) => {
+					if (payload.type === 'list_desktop_sessions') {
+						return {
+							sessions: [
+								{ agentId: 'second', tabId: 'web-one', active: true },
+								{ agentId: 'second', tabId: 'web-two', active: false },
+							],
+						};
+					}
+					window.dispatchEvent(
+						new CustomEvent('maestro:remoteUpdateSessionConfig', {
+							detail: { ...payload, responseChannel: 'ack' },
+						})
+					);
+					await waitFor(() => expect(ack).toHaveBeenCalledWith('ack', { success: true }));
+					return { success: true };
+				}),
+			} as never)
+		);
+		await act(() =>
+			tabPanel('active', 'web', { agent: 'second', url: 'http://localhost:5173/two', json: true })
+		);
+		await waitFor(() => expect(ack).toHaveBeenCalledWith('ack', { success: true }));
+		const current = useSessionStore.getState();
+		expect(current.sessions[1].aiTabs[0]).toEqual(firstTab);
+		expect(current.sessions[1].aiTabs[1].newShellPanel).toEqual({
+			tab: 'web',
+			open: true,
+			webUrl: 'http://localhost:5173/two',
+		});
+		expect(saved).toHaveBeenCalledWith([current.sessions[1]], []);
+		expect(current.activeSessionId).toBe('first');
+		expect(current.sessions[0].aiTabs[0].newShellPanel).toBeUndefined();
+	});
+	it('persists the web URL only on the addressed conversation before acknowledgement', async () => {
+		act(() =>
+			window.dispatchEvent(
+				new CustomEvent('maestro:remoteUpdateSessionConfig', {
+					detail: {
+						sessionId: 'second',
+						responseChannel: 'ack',
+						configPatch: {
+							tabId: 'second-conversation',
+							newShellPanelAction: 'web',
+							newShellWebUrl: 'http://localhost:5173/',
+						},
+					},
+				})
+			)
+		);
+		await waitFor(() => expect(ack).toHaveBeenCalledWith('ack', { success: true }));
+		expect(saved.mock.calls[0][0][0].aiTabs[0].newShellPanel).toEqual({
+			tab: 'web',
+			open: true,
+			webUrl: 'http://localhost:5173/',
+		});
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].newShellPanel).toBeUndefined();
+	});
 	it.each(['terminal', 'tasks'])(
 		'persists the %s panel on the addressed conversation',
 		async (action) => {

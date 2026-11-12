@@ -44,6 +44,33 @@ describe('Process BrowserTabRemote Preload API', () => {
 		api = createBrowserTabRemoteApi();
 	});
 
+	it('forwards subtask source and the saved acknowledgment across preload', () => {
+		const source = {
+			origin: {
+				kind: 'subtask' as const,
+				sourceSessionId: 'parent',
+				sourceTabId: 'parent-tab',
+				sourceProvider: 'codex',
+				createdAt: 1,
+			},
+			permission: { permissionMode: 'readonly' as const, readOnlyMode: true },
+		};
+		const callback = vi.fn();
+		api.onRemoteNewAITabWithPrompt(callback);
+		registeredHandler('remote:newAITabWithPrompt')(null, 'target', 'Build', 'ack', true, source);
+		expect(callback).toHaveBeenCalledWith('target', 'Build', 'ack', true, source);
+		api.sendRemoteNewAITabWithPromptResponse('ack', {
+			success: true,
+			tabId: 'child',
+			provenanceSaved: true,
+		});
+		expect(mockSend).toHaveBeenCalledWith('ack', {
+			success: true,
+			tabId: 'child',
+			provenanceSaved: true,
+		});
+	});
+
 	describe('onRemoteOpenTerminalTab - background must survive the bridge', () => {
 		const config = { name: 'Dev server' };
 

@@ -21,9 +21,11 @@ const request = {
 };
 let resolved: ((id: string) => void) | undefined;
 const respondPermission = vi.fn();
+const stopTurn = vi.fn();
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	stopTurn.mockResolvedValue({ success: true });
 	resolved = undefined;
 	useSettingsStore.setState({ newShell: true, uiLanguage: 'zh-CN' });
 	resetStores(usePermissionRequestStore, useSessionStore);
@@ -51,12 +53,53 @@ function showPrompt(payload: PermissionRequestUI = request) {
 	usePermissionRequestStore.getState().enqueue(payload);
 	return render(
 		<LayerStackProvider>
-			<PermissionPrompt theme={mockTheme} />
+			<PermissionPrompt theme={mockTheme} onStopTurn={stopTurn} />
 		</LayerStackProvider>
 	);
 }
 
 describe('Claude approval prompt', () => {
+	it('stops the approval conversation without answering deny and blocks duplicate clicks', async () => {
+		let finish!: (value: { success: boolean }) => void;
+		stopTurn.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve;
+				})
+		);
+		showPrompt();
+		const stop = screen.getByRole('button', { name: '停止这一轮' });
+		fireEvent.click(stop);
+		fireEvent.click(stop);
+		expect(stopTurn).toHaveBeenCalledExactlyOnceWith({ sessionId: 'session', tabId: 'tab' });
+		expect(respondPermission).not.toHaveBeenCalled();
+		expect(screen.getByRole('button', { name: '允许一次' })).toBeDisabled();
+		await act(async () => {
+			finish({ success: true });
+		});
+		act(() => resolved?.(request.requestId));
+		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+	});
+	it('keeps Escape as deny without stopping the turn', async () => {
+		showPrompt();
+		await act(async () => {
+			fireEvent.keyDown(document, { key: 'Escape' });
+		});
+		expect(stopTurn).not.toHaveBeenCalled();
+		expect(respondPermission).toHaveBeenCalledExactlyOnceWith('approval-a', {
+			behavior: 'deny',
+			message: 'Denied by user.',
+		});
+	});
+	it('shows a failed stop and keeps the request available', async () => {
+		stopTurn.mockResolvedValue({ success: false, error: '停止失败' });
+		showPrompt();
+		await act(async () => {
+			fireEvent.click(screen.getByRole('button', { name: '停止这一轮' }));
+		});
+		expect(screen.getByRole('alert')).toHaveTextContent('停止失败');
+		expect(screen.getByRole('button', { name: '拒绝' })).toBeEnabled();
+	});
 	it.each(['session-ai-tab', 'session-ai-tab-fp-1234'])(
 		'finds the named background conversation when %s omits tabId',
 		(sessionId) => {
@@ -146,6 +189,7 @@ describe('Claude approval prompt', () => {
 		useSettingsStore.setState({ newShell: false, uiLanguage: 'en' });
 		showPrompt();
 		expect(screen.getByRole('button', { name: 'Allow' })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Stop this turn' })).not.toBeInTheDocument();
 		expect(screen.getByRole('dialog')).not.toHaveTextContent('待审批内容');
 	});
 	it('sends exactly one allow for the displayed request', async () => {

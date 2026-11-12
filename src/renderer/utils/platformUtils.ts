@@ -13,7 +13,8 @@
  */
 
 function getPlatform(): string {
-	return (window as any).maestro?.platform ?? '';
+	// Renderer stores can be imported by node-environment tests, where window does not exist.
+	return (globalThis as { window?: any }).window?.maestro?.platform ?? '';
 }
 
 export function isWindowsPlatform(): boolean {

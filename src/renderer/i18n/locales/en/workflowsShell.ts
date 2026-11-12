@@ -1,6 +1,23 @@
 import { CODEX_APP_SERVER_MESSAGES } from '../../../../shared/codexAppServer';
 
 export const workflowsShell = {
+	'workflows.autoHandoff.disabled': 'Automatic handoff requires the new shell.',
+
+	'workflows.autoHandoff.listHelp': 'List tool configuration IDs and accounts in this project',
+	'workflows.autoHandoff.listOnly':
+		'Listing configurations cannot be combined with a target or sending.',
+
+	'workflows.autoHandoff.setting': 'Automatically hand off when quota runs out',
+	'workflows.autoHandoff.off': 'Off',
+	'workflows.autoHandoff.defaultAccount': 'Default account on this host',
+	'workflows.autoHandoff.target': '{tool} (account {account}) · {name}',
+	'workflows.autoHandoff.unavailable': 'Unavailable configuration: {id}',
+	'workflows.autoHandoff.sent': 'Automatically handed off to {tool} (account {account})',
+	'workflows.autoHandoff.failed':
+		'Automatic handoff could not be completed. Check the target configuration and continue manually.',
+	'workflows.projectSettings.cli.autoHandoffHelp':
+		'Target tool configuration ID for automatic handoff, or off',
+
 	...CODEX_APP_SERVER_MESSAGES['en'],
 	'workflows.shell.consultPermissionUnavailable':
 		'This tool cannot preserve the source conversation’s permissions.',
@@ -55,6 +72,33 @@ export const workflowsShell = {
 	'workflows.projectSettings.cli.jsonHelp': 'Output the settings snapshot as JSON',
 
 	'workflows.projectSettings.newConversation': 'New with project defaults',
+	'workflows.projectSettings.defaultsHeading': 'New conversation defaults',
+	'workflows.projectSettings.toolsHeading': 'Tool configurations',
+	'workflows.projectSettings.toolScope':
+		'Changes affect all conversations using this tool configuration.',
+	'workflows.projectSettings.toolAccountHelp':
+		'Set the account directory in Environment variables: CLAUDE_CONFIG_DIR for Claude or DeepSeek, CODEX_HOME for Codex. SSH paths belong to the remote host.',
+	'workflows.projectSettings.toolLoadFailed':
+		'Could not load the tool configuration. Close and reopen project settings to try again.',
+	'workflows.projectSettings.toolMissing': 'This tool configuration no longer exists.',
+	'workflows.projectSettings.toolRunning':
+		'Stop all conversations using this configuration before changing its SSH host.',
+	'workflows.projectSettings.toolNoChanges': 'No editable tool configuration fields were supplied.',
+	'workflows.projectSettings.toolSaveFailed':
+		'Could not save the tool configuration. Earlier changes may already be saved. Review your settings before saving again.',
+	'workflows.projectSettings.toolArgsHelp':
+		'Arguments added to each invocation using this tool configuration.',
+	'workflows.projectSettings.toolEnvHelp':
+		'Environment variables for this tool configuration. They replace the tool defaults and apply to every conversation using this configuration.',
+	'workflows.projectSettings.toolBinaryHelp':
+		'installations. This choice applies to this tool configuration.',
+	'workflows.projectSettings.toolOpenCode': 'OpenCode role (optional)',
+	'workflows.projectSettings.toolOpenCodeHelp':
+		', retaining the selected OpenCode role, model and instructions. Plugin roles are resolved by OpenCode at runtime, even when absent from ',
+	'workflows.projectSettings.toolSshHelp':
+		'Run conversations using this configuration on the selected SSH host.',
+	'workflows.projectSettings.toolRunsOn': 'Conversations run on',
+	'workflows.projectSettings.toolRunsLocally': 'Conversations run on this computer',
 	'workflows.projectSettings.title': 'Project settings',
 	'workflows.projectSettings.description':
 		'Applies only to new conversations in this project on the selected host. Current conversation choices take priority; project permissions may only make them stricter.',
@@ -145,6 +189,11 @@ export const workflowsShell = {
 	'workflows.shell.terminalsStartFailed': 'Failed to start {count} terminals',
 	'workflows.shell.terminalsNotStarted': '{count} terminals could not be started.',
 	'workflows.newShell.terminal': 'Terminal',
+	'workflows.newShell.webNavigationFailed': 'Could not open this page',
+	'workflows.newShell.web': 'Web',
+	'workflows.newShell.webEmpty':
+		'Enter a local development server address, for example http://localhost:5173',
+	'workflows.newShell.webInvalidUrl': 'Enter an HTTP or HTTPS URL',
 	'workflows.newShell.tasks': 'Tasks',
 	'workflows.newShell.tasksEmpty':
 		'The tools in this conversation have not provided a task list. Checklists in replies are not shown here.',
@@ -170,6 +219,7 @@ export const workflowsShell = {
 	'workflows.projects.openHint': 'Choose a folder to start or continue work',
 	'workflows.shell.permissionUnavailable':
 		'This tool cannot preserve the source conversation permissions.',
+	'workflows.shell.delegationSaveFailed': 'Could not save the subtask. No prompt was sent.',
 	'workflows.shell.newConversationFailed': 'Could not open conversation',
 	'workflows.shell.defaultModel': 'Default model',
 	'workflows.shell.defaultEffort': 'Default effort',
@@ -561,6 +611,12 @@ export const workflowsShell = {
 		'The source location of this file could not be read. Please drag it again.',
 	'workflows.shell.confirmForceStopConversation':
 		'This conversation could not be stopped gracefully. Force stop it? Unsaved work may be lost.',
+	'workflows.shell.stopRequested': 'Stop requested.',
+	'workflows.shell.stopCliDescription':
+		'Stop this conversation in the new shell, or its owning agent in classic mode',
+	'workflows.shell.stopThisTurn': 'Stop this turn',
+	'workflows.shell.stopNotRunning': 'This conversation is not running.',
+	'workflows.shell.stopTargetMissing': 'Conversation not found.',
 	'workflows.shell.stopConversationFailed': 'Could not stop this conversation. Please try again.',
 	'workflows.shell.attachImage': 'Attach Image',
 	'workflows.shell.toggleReadOnlyModeAgentsWonTModify':

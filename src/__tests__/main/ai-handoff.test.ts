@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAiHandoffService } from '../../main/ai-handoff';
 import type { StoredSession } from '../../main/stores/types';
@@ -170,7 +171,8 @@ describe('local AI handoff routing', () => {
 		expect(result).toMatchObject({
 			success: true,
 			targets: expect.arrayContaining([
-				expect.objectContaining({ runnerId: 'work', account: '/tmp/work-account' }),
+				// resolveAgentAccountDir() returns a host-absolute path, so Windows reports D:\tmp\...
+				expect.objectContaining({ runnerId: 'work', account: path.resolve('/tmp/work-account') }),
 			]),
 		});
 		expect(JSON.stringify(result)).not.toContain('"other"');

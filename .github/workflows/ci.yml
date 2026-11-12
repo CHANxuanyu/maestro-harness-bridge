@@ -67,9 +67,11 @@ jobs:
   native-e2e:
     name: Native resume E2E (Linux)
     runs-on: ubuntu-latest
-    # Two full Electron passes (synthetic, then real-smoke) take 9 to 12 minutes
-    # each on a hosted runner; 25 minutes cancelled a run with no failures.
-    timeout-minutes: 45
+    # Two full Electron passes (synthetic, then real-smoke). With 134 scenarios
+    # (2026-11-11) the synthetic pass took 33 minutes on a hosted runner and the
+    # job was cancelled at 45 minutes with no failures, 99 scenarios into the
+    # real-smoke pass. Earlier limits of 25 and 45 minutes were outgrown the same way.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

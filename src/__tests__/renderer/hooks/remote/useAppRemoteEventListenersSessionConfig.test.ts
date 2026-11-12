@@ -19,6 +19,7 @@ import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { compactToolOutput } from '../../../../shared/toolOutput';
 import { mkdtemp, readFile, rm, stat, writeFile as writeDiskFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 vi.mock('../../../../renderer/stores/settingsStore', () => ({
 	useSettingsStore: Object.assign(vi.fn(), { getState: vi.fn(() => ({})) }),
@@ -99,7 +100,8 @@ describe('maestro:remoteUpdateSessionConfig', () => {
 		'opens Edit Agent from the saved CLI config in newShell=%s',
 		async (newShell) => {
 			vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell } as never);
-			const root = await mkdtemp('/tmp/maestro-config-sync-');
+			// /tmp does not exist on Windows; use the platform temp directory.
+			const root = await mkdtemp(join(tmpdir(), 'maestro-config-sync-'));
 			const file = join(root, 'sessions.json');
 			const owner = createMockSession({
 				customPath: '/fixture/next-path',

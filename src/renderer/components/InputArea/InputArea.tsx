@@ -64,6 +64,8 @@ import {
 
 /** localStorage key for the phone composer fold (see PhoneComposerHandle). */
 export const PHONE_COMPOSER_COLLAPSED_KEY = 'phone.composer.collapsed';
+/** The same fold in the new shell, where the composer starts open. */
+export const PHONE_NEW_SHELL_COMPOSER_COLLAPSED_KEY = 'phone.newShell.composer.collapsed';
 
 export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 	const t = useT();
@@ -437,7 +439,12 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 	// often than it is in use. The handle keeps a busy dot, since Stop lives in
 	// the folded composer row, and a pencil for an unsent draft.
 	const phone = usePhoneLayout();
-	const composerFold = usePersistedToggle(PHONE_COMPOSER_COLLAPSED_KEY, true);
+	const classicComposerFold = usePersistedToggle(PHONE_COMPOSER_COLLAPSED_KEY, true);
+	// The new shell is a conversation app: the message box is where the user
+	// works, so on a phone it starts open, like any chat app. It keeps its own
+	// remembered choice, so folding it here never changes the classic default.
+	const newShellComposerFold = usePersistedToggle(PHONE_NEW_SHELL_COMPOSER_COLLAPSED_KEY, false);
+	const composerFold = newShell ? newShellComposerFold : classicComposerFold;
 	const phoneHandleBusy = thinkingItems.length > 0 || !!autoRunState?.isRunning;
 	const hasDraft = inputValue.trim().length > 0 || stagedImages.length > 0;
 

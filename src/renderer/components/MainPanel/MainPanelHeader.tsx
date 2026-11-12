@@ -387,7 +387,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 			data-traffic-light-clearance={
 				newShell && showSidebarOpener && !nativeTitleBar && isMacOSPlatform() ? 'true' : undefined
 			}
-			className={`chrome-sheen header-container ${newShell ? 'h-12' : 'h-16'} border-b flex items-center justify-between px-6 shrink-0 relative z-20 ${isCurrentSessionAutoMode ? 'header-auto-mode' : ''}`}
+			className={`chrome-sheen header-container ${newShell ? 'h-12' : 'h-16'} border-b flex items-center justify-between ${newShell && isPhone ? 'px-2 gap-1' : 'px-6'} shrink-0 relative z-20 ${isCurrentSessionAutoMode ? 'header-auto-mode' : ''}`}
 			style={{
 				borderColor: theme.colors.border,
 				backgroundColor: theme.colors.bgSidebar,
@@ -396,7 +396,9 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 			}}
 			data-tour="header-controls"
 		>
-			<div className="flex items-center gap-4 min-w-0 overflow-hidden">
+			<div
+				className={`flex items-center ${newShell && isPhone ? 'gap-2' : 'gap-4'} min-w-0 overflow-hidden`}
+			>
 				{/* Inline hamburger - appears when the left sidebar is fully hidden,
 				    or (on web-desktop phones) when it is collapsed, since the 64px
 				    collapsed strip is hidden there. Renders INSIDE the header row
@@ -1140,13 +1142,16 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 				{newShell && canHandOff && activeTab && (
 					<button
 						onClick={() => requestAiHandoff(activeSession.id, activeTab.id)}
-						className="flex items-center gap-1.5 px-2 py-1 rounded text-xs hover:bg-white/5"
+						className={`flex items-center gap-1.5 rounded text-xs hover:bg-white/5 ${isPhone ? 'p-2' : 'px-2 py-1'}`}
 						style={{ color: theme.colors.textDim }}
 						title={t('workflows.sessions.handoff.conversationSubtext')}
+						// On a phone the label would take the title's room; the icon keeps
+						// the same name for touch and screen readers.
+						aria-label={isPhone ? t('workflows.sessions.handoff.headerButton') : undefined}
 						data-testid="header-handoff"
 					>
 						<ArrowRightLeft className="w-3.5 h-3.5" />
-						{t('workflows.sessions.handoff.headerButton')}
+						{!isPhone && t('workflows.sessions.handoff.headerButton')}
 					</button>
 				)}
 

@@ -77,6 +77,9 @@ export const MODAL_PRIORITIES = {
 	/** Rename tab modal */
 	RENAME_TAB: 875,
 
+	/** Browser and phone "Open project" path prompt (no native folder dialog there) */
+	OPEN_PROJECT_PATH: 876,
+
 	/**
 	 * Snooze tab modal (pick a wake time).
 	 * Sits above SNOOZED_TABS because it opens on top of that list when

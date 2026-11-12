@@ -141,6 +141,22 @@ describe('sidebarSessionEquality', () => {
 		expect(sidebarSessionEquality(a, b)).toBe(true);
 	});
 
+	it('returns false when an unnamed tab receives its first user message (browser transcript load)', () => {
+		const a = [createMockSession({ id: 'a', aiTabs: [tab({ id: 't1', logs: [] })] })];
+		const b = [
+			createMockSession({
+				id: 'a',
+				aiTabs: [
+					tab({
+						id: 't1',
+						logs: [{ id: 'log-1', timestamp: 0, source: 'user', text: 'Make shipping free' }],
+					}),
+				],
+			}),
+		];
+		expect(sidebarSessionEquality(a, b)).toBe(false);
+	});
+
 	it('returns false when AI tab count changes', () => {
 		const a = [createMockSession({ id: 'a', aiTabs: [tab({ id: 't1' })] })];
 		const b = [createMockSession({ id: 'a', aiTabs: [tab({ id: 't1' }), tab({ id: 't2' })] })];

@@ -20,8 +20,20 @@ function aiTabEqual(a: AITab, b: AITab): boolean {
 		a.origin === b.origin &&
 		a.consultOrigin === b.consultOrigin &&
 		a.agentError === b.agentError &&
-		a.createdAt === b.createdAt
+		a.createdAt === b.createdAt &&
+		titleSource(a) === titleSource(b)
 	);
+}
+
+/**
+ * Whether an unnamed row can be titled from its first user message. A browser
+ * client receives transcripts only when a conversation is opened, so the row
+ * must rebuild once when that message arrives, or it keeps "New conversation"
+ * while the header already shows the real title. It flips once and streaming
+ * output never flips it back; the user message is normally the first entry.
+ */
+function titleSource(tab: AITab): boolean {
+	return !!tab.name || !!tab.logs?.some((entry) => entry.source === 'user');
 }
 
 /**

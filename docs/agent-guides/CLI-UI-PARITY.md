@@ -483,6 +483,14 @@ agent switcher in the classic shell, without overwriting saved shortcuts.
 This opens a project, not a particular archived conversation; the native resume
 and refresh gaps below remain separate.
 
+Browser and phone clients (2026-11-12): a browser cannot see a native folder
+dialog, so `chooseProject()` opens a path prompt there (`OpenProjectPathModal`,
+state in `openProjectPathStore`) with the same recent projects list. Submitting
+calls the same `openProject()` and `agentSessions:openProject`; the browser then
+selects the returned session once the session sync delivers it, because the
+desktop window that performed the open keeps its own selection. The CLI verb is
+unchanged: `open-project <path>` already takes the path the prompt asks for.
+
 ## New shell terminal and tasks panels (hb.8)
 
 | UI action                                   | CLI                                                                                                                   | Shared implementation                                                                                               |

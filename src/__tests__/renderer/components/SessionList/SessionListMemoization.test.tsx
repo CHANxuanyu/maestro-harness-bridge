@@ -152,6 +152,8 @@ const createProps = (sortedSessions: Session[]) =>
 
 describe('SessionList memoization (#1186)', () => {
 	beforeEach(() => {
+		// Classic agent rows and now-playing placement are tested here.
+		useSettingsStore.setState({ newShell: false });
 		capturedProps.clear();
 		treeProps.length = 0;
 		useUIStore.setState({
@@ -243,7 +245,13 @@ describe('SessionList memoization (#1186)', () => {
 		expect(lastPropsFor('a1').onDrop).toBe(beforeDrop);
 	});
 
-	describe('conversation tree (default Left Bar)', () => {
+	describe.each([false, true])('conversation tree (default Left Bar, new shell %s)', (newShell) => {
+		beforeEach(() => {
+			// The new shell passes the tree its header menu; both shells must keep
+			// the tree's props identical when nothing it shows has changed.
+			useSettingsStore.setState({ newShell });
+		});
+
 		const lastTreeProps = (): Record<string, unknown> => {
 			if (treeProps.length === 0) throw new Error('ProjectSessionSidebar never rendered');
 			return treeProps[treeProps.length - 1];

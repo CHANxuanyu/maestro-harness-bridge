@@ -1359,6 +1359,43 @@ function SessionListInner(props: SessionListProps) {
 		return <div key={`${options.keyPrefix}-${session.id}`}>{content}</div>;
 	};
 
+	// Memoized: the conversation tree is memo'd, and a fresh element here on every
+	// render (a moved keyboard cursor, an unrelated store change) re-rendered the
+	// whole tree for nothing.
+	const conversationHeaderMenu = useMemo(
+		() =>
+			newShell ? (
+				<div ref={menuRef} className="relative z-30" data-tour="hamburger-menu">
+					<GhostIconButton
+						onClick={() => setMenuOpen(!menuOpen)}
+						padding="p-2"
+						title={t('workflows.emptyState.menu')}
+						color={theme.colors.textDim}
+					>
+						<Menu className="w-4 h-4" />
+					</GhostIconButton>
+					{menuOpen && (
+						<HamburgerDropdown
+							theme={theme}
+							isPhone={isXs}
+							anchorRef={menuRef}
+							onClose={() => setMenuOpen(false)}
+							dataTour="hamburger-menu-contents"
+						>
+							<HamburgerMenuContent
+								theme={theme}
+								onNewAgentSession={onNewAgentSession}
+								openWizard={openWizard}
+								startTour={startTour}
+								setMenuOpen={setMenuOpen}
+							/>
+						</HamburgerDropdown>
+					)}
+				</div>
+			) : undefined,
+		[newShell, menuOpen, theme, t, isXs, onNewAgentSession, openWizard, startTour]
+	);
+
 	// Precomputed jump number map (1-9, 0=10th) for sessions based on position in visibleSessions
 	const jumpNumberMap = useMemo(() => {
 		if (!showSessionJumpNumbers) return new Map<string, string>();
@@ -1701,37 +1738,7 @@ function SessionListInner(props: SessionListProps) {
 						>
 							<ProjectSessionSidebar
 								onDeleteWorktree={onDeleteWorktree}
-								headerMenu={
-									newShell ? (
-										<div ref={menuRef} className="relative z-30" data-tour="hamburger-menu">
-											<GhostIconButton
-												onClick={() => setMenuOpen(!menuOpen)}
-												padding="p-2"
-												title={t('workflows.emptyState.menu')}
-												color={theme.colors.textDim}
-											>
-												<Menu className="w-4 h-4" />
-											</GhostIconButton>
-											{menuOpen && (
-												<HamburgerDropdown
-													theme={theme}
-													isPhone={isXs}
-													anchorRef={menuRef}
-													onClose={() => setMenuOpen(false)}
-													dataTour="hamburger-menu-contents"
-												>
-													<HamburgerMenuContent
-														theme={theme}
-														onNewAgentSession={onNewAgentSession}
-														openWizard={openWizard}
-														startTour={startTour}
-														setMenuOpen={setMenuOpen}
-													/>
-												</HamburgerDropdown>
-											)}
-										</div>
-									) : undefined
-								}
+								headerMenu={conversationHeaderMenu}
 								theme={theme}
 								sessions={conversationSessions}
 								groups={displayGroups}

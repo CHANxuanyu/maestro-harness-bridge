@@ -107,6 +107,21 @@ describe.each(['agents', 'conversations'] as const)(
 			expect(parent!.className).toContain('overflow-y-auto');
 		});
 
+		it('gives the whole transcript the AI Chat font, not only its size', () => {
+			const logsEndRef = createRef<HTMLDivElement>();
+			render(
+				<LayerStackProvider>
+					<TerminalOutput {...makeProps(logsEndRef, sessionWithLogs())} />
+				</LayerStackProvider>
+			);
+
+			// Markdown answers render no font of their own, so a chat font chosen in
+			// Settings reaches them only through the scroll container they sit in.
+			const scroller = logsEndRef.current!.parentElement!;
+			expect(scroller.style.fontFamily).toBe('var(--maestro-font-chat, inherit)');
+			expect(scroller.style.fontSize).toBe('var(--maestro-size-chat, inherit)');
+		});
+
 		it('keeps every rendered log a direct child of the content wrapper, in order, with its index', () => {
 			const logsEndRef = createRef<HTMLDivElement>();
 			render(

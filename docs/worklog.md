@@ -1962,4 +1962,4 @@ CLI 导航、刷新和系统浏览器打开共用 `applyNewShellWebAction()`；C
 
 在 `codex/default-new-shell` 准备默认切换，没有推送或合并。查明 conf 会落盘默认值，新增一次迁移及 UI/在线和离线 CLI 共用的显式选择记录。旧界面继续保留，未删除产品功能或用户数据。删除计划附生产 import 双向边、存储与接口清单，明确群聊启动/解析、插件 MCP、安全边界和经典容器内的新界面组件必须先拆出保留。
 
-源码相关 12 文件 810 项单元测试、基线脚本 5 项 Node 测试通过；类型、ESLint、改动文件格式通过。先观察默认/选择写入回归失败、基线模块缺失、classic fixture 缺少选择标记，再实现。夹具全套 80 项通过，3 项因沙箱拒绝临时 Unix socket 的 listen 而失败，未放宽断言或跳过。16 个 Electron 场景仅收集，未运行；hb.7 实际包体积/启动基线待 Opus 沙箱外执行。验证对象仅为源码，没有新包、真实模型或账户验收。[完整命令与边界](verification/default-new-shell.md)，[待用户决定的 PR 正文](verification/default-new-shell-pr.md)，[删除计划](roadmap/new-shell-deletion-plan.md)。
+源码相关 12 文件 810 项单元测试、基线脚本 5 项 Node 测试通过；类型、ESLint、改动文件格式通过。先观察默认/选择写入回归失败、基线模块缺失、classic fixture 缺少选择标记，再实现。夹具全套 80 项通过，3 项因沙箱拒绝临时 Unix socket 的 listen 而失败，未放宽断言或跳过。16 个 Electron 场景仅收集，未运行；hb.7 实际包体积/启动基线待 Opus 沙箱外执行。验证对象仅为源码，没有新包、真实模型或账户验收。功能删除范围见[删除计划](roadmap/new-shell-deletion-plan.md)。

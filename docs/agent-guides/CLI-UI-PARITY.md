@@ -1572,3 +1572,9 @@ Open gaps：本轮没有新增界面动作缺口。目标不可用、保存失�
 本次只整理证据，没有新增界面动作或 CLI 动词。PR #72、#73、#74、#76 的对应动作仍使用各自已登记的共享实现。当时 `active` 可能读到尚未保存的上一条；Task L 已为新界面库存增加所属窗口刷新回执和实时选择读回。其他未审计动词不据此宣称完成。
 
 PR #77 后续真实结果见 `docs/verification/real-codex.md`：仅固定版本 app-server 工作负载及 Codex 派 Codex 子任务通过。早期 Stop 缺口描述保留历史含义，以本文件完整停止条目和首个 Open gaps 的当前说明为准。树折叠及其他展示控制缺口没有因此关闭；原生历史命中打开定位后由 Task L 覆盖。
+
+PR #77 后续真实结果见 `docs/verification/real-codex.md`：仅固定版本 app-server 工作负载及 Codex 派 Codex 子任务通过。早期 Stop 缺口描述保留历史含义，以本文件完整停止条目和首个 Open gaps 的当前说明为准。原生历史打开定位、树折叠及其他展示控制缺口没有因此关闭。
+
+## 2026-11-12 Task P 真实验收脚本
+
+本批只增加测试，不新增或修改产品界面动作。`e2e/real-acceptance.md` 列出接力、只读复核、双向 dispatch、自动交接、任务面板和 DeepSeek 能力探测的运行方式。测试沿用本表已有的 `handoff`、`tab select`、`tab children`、`tab panel`、`tab effort`、`project settings` 和 `dispatch` 共用实现。尚未运行真实模型或 Electron，任务面板 CLI 清单读回及来源嵌套等 Open gaps 不因增加测试而关闭。

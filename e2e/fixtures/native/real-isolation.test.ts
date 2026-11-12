@@ -2,10 +2,53 @@ import { createNativeTempDir } from './temp-root.cjs';
 import { it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import NativeReporter from '../../native-reporter';
 import { realExternalTurn } from '../native-real';
+
+it('the acceptance relay records argv without credentials and refuses a second budgeted turn', () => {
+	const root = createNativeTempDir('maestro-real-budget-');
+	try {
+		const control = path.join(root, 'control.json');
+		const record = path.join(root, 'requests.jsonl');
+		const executable = path.join(root, 'cli');
+		fs.writeFileSync(executable, `#!${process.execPath}\nconsole.log('REAL_ONCE');\n`, {
+			mode: 0o700,
+		});
+		fs.writeFileSync(control, JSON.stringify({ record, maxInvocations: 1 }));
+		const run = () =>
+			spawnSync(
+				process.execPath,
+				[path.resolve('e2e/fixtures/native/real-cli'), '--print', '--effort', 'low'],
+				{
+					cwd: root,
+					encoding: 'utf8',
+					env: {
+						...process.env,
+						ANTHROPIC_AUTH_TOKEN: 'never-record-key',
+						MAESTRO_E2E_CLI: executable,
+						MAESTRO_E2E_CONTROL: control,
+						MAESTRO_E2E_PROCESS: path.join(root, 'pid'),
+					},
+				}
+			);
+		expect(run().stdout).toBe('REAL_ONCE\n');
+		const second = run();
+		expect(second.status).toBe(1);
+		expect(second.stderr).toContain('Acceptance turn budget exceeded');
+		const text = fs.readFileSync(record, 'utf8');
+		expect(text).not.toContain('never-record-key');
+		expect(
+			text
+				.trim()
+				.split('\n')
+				.map((line) => JSON.parse(line))
+		).toEqual([{ args: ['--print', '--effort', 'low'], cwd: root }]);
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
 
 it('the shared summary excludes conversation text, paths, diagnostics and native IDs', () => {
 	const root = createNativeTempDir('maestro-real-report-');

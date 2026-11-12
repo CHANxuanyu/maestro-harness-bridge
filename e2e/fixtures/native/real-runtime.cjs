@@ -14,17 +14,21 @@ const versions = {
 	copilot: "GitHub Copilot CLI 1.0.63.\nRun 'copilot update' to check for updates.",
 };
 
-function installedCli(provider, env = process.env, sharedAcceptance = false) {
+function installedCli(provider, env = process.env, sharedAcceptance = false, expectedVersion) {
 	const configured = env[`MAESTRO_E2E_${provider.toUpperCase()}_PATH`];
 	const executable = configured || execFileSync('which', [provider], { encoding: 'utf8' }).trim();
-	const version = execFileSync(executable, ['--version'], { encoding: 'utf8', env }).trim();
+	const version = execFileSync(executable, ['--version'], {
+		encoding: 'utf8',
+		env,
+		timeout: 10_000,
+	}).trim();
 	const reviewedShared =
 		sharedAcceptance &&
 		provider === 'codex' &&
 		require('../../../scripts/codex-shared/versions.json').some(
 			(entry) => entry.version === version && ['candidate', 'admitted'].includes(entry.state)
 		);
-	if (version !== versions[provider] && !reviewedShared)
+	if (version !== (expectedVersion ?? versions[provider]) && !reviewedShared)
 		throw new Error(`Unsupported ${provider} version: ${version}`);
 	return { executable: path.resolve(executable), version };
 }
@@ -144,4 +148,105 @@ function prepareCredentials(provider, destination, env = process.env) {
 	return { CLAUDE_CODE_OAUTH_TOKEN: token };
 }
 
-module.exports = { installedCli, prepareCredentials };
+function acceptanceEnabled(scenario, env = process.env) {
+	return (
+		env.MAESTRO_E2E_REAL === '1' &&
+		env[`MAESTRO_E2E_${scenario}`] === '1' &&
+		env.MAESTRO_E2E_SMOKE !== '1' &&
+		!env.CI
+	);
+}
+
+// All login prechecks precede any executable probe or model turn. Explicit
+// sources prevent an acceptance typo from falling back to the user's keychain.
+function prepareAcceptanceProviders(providers, homes, env = process.env) {
+	/** @type {Record<string, string>} */
+	const credentials = {};
+	for (const provider of providers) {
+		if (provider === 'deepseek') {
+			if (!env.MAESTRO_E2E_DEEPSEEK_KEY) throw new Error('Set MAESTRO_E2E_DEEPSEEK_KEY');
+			continue;
+		}
+		const source = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+		// On macOS the default Claude login lives in the keychain, not in a
+		// credentials file. Reading it is an explicit choice, never a fallback.
+		const keychain =
+			provider === 'claude' &&
+			env.MAESTRO_E2E_CLAUDE_LOGIN === 'keychain' &&
+			process.platform === 'darwin';
+		if (keychain && env[source])
+			throw new Error('Choose CLAUDE_CONFIG_DIR or MAESTRO_E2E_CLAUDE_LOGIN=keychain, not both');
+		if (!keychain && (!env[source] || !path.isAbsolute(env[source])))
+			throw new Error(`Set ${source} to the selected login snapshot directory`);
+		const loginEnv = {
+			...env,
+			ANTHROPIC_API_KEY: '',
+			CLAUDE_CODE_OAUTH_TOKEN: '',
+			CODEX_API_KEY: '',
+		};
+		if (keychain) delete loginEnv.CLAUDE_CONFIG_DIR;
+		Object.assign(credentials, prepareCredentials(provider, homes[provider], loginEnv));
+	}
+	/** @type {Record<string, {executable: string, version: string, model?: string}>} */
+	const tools = {};
+	for (const provider of providers) {
+		const harness = provider === 'deepseek' ? 'claude' : provider;
+		const prefix = `MAESTRO_E2E_${harness.toUpperCase()}`;
+		const executable = env[`${prefix}_PATH`];
+		if (!executable || !path.isAbsolute(executable)) throw new Error(`Set absolute ${prefix}_PATH`);
+		const model = provider === 'deepseek' ? undefined : env[`${prefix}_MODEL`];
+		if (provider !== 'deepseek' && !model) throw new Error(`Set ${prefix}_MODEL explicitly`);
+		const cli = installedCli(
+			harness,
+			{
+				PATH: env.PATH ?? process.env.PATH,
+				HOME: homes.home,
+				USERPROFILE: homes.home,
+				CLAUDE_CONFIG_DIR: homes.claude,
+				CODEX_HOME: homes.codex,
+				[`${prefix}_PATH`]: executable,
+			},
+			false,
+			env[`${prefix}_EXPECT_VERSION`]
+		);
+		tools[provider] = { ...cli, model };
+	}
+	return { credentials, tools };
+}
+
+function codexAcceptanceConfig(apiKey = false) {
+	return (
+		[
+			'cli_auth_credentials_store = "file"',
+			'mcp_oauth_credentials_store = "file"',
+			'web_search = "disabled"',
+			...(apiKey ? ['model_provider = "maestro_real_e2e"'] : []),
+			'[features]',
+			'apps = false',
+			'plugins = false',
+			'hooks = false',
+			'multi_agent = false',
+			'code_mode = false',
+			'unbounded_connection_retries = false',
+			...(apiKey
+				? [
+						'[model_providers.maestro_real_e2e]',
+						'name = "OpenAI real acceptance"',
+						'base_url = "https://api.openai.com/v1"',
+						'env_key = "CODEX_API_KEY"',
+						'wire_api = "responses"',
+						'request_max_retries = 0',
+						'stream_max_retries = 0',
+					]
+				: []),
+		].join('\n') + '\n'
+	);
+}
+
+module.exports = {
+	installedCli,
+	prepareCredentials,
+	acceptanceEnabled,
+	prepareAcceptanceProviders,
+	codexAcceptanceConfig,
+};

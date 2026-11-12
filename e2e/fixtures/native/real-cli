@@ -13,7 +13,40 @@ const control =
 	!inspection && fs.existsSync(process.env.MAESTRO_E2E_CONTROL)
 		? JSON.parse(fs.readFileSync(process.env.MAESTRO_E2E_CONTROL, 'utf8'))
 		: {};
-const child = spawn(process.env.MAESTRO_E2E_CLI, args, { stdio: 'inherit' });
+if (!inspection && control.record) {
+	const count = fs.existsSync(control.record)
+		? fs.readFileSync(control.record, 'utf8').trim().split('\n').filter(Boolean).length
+		: 0;
+	if (count >= control.maxInvocations) {
+		console.error('Acceptance turn budget exceeded');
+		process.exit(1);
+	}
+	fs.appendFileSync(
+		control.record,
+		JSON.stringify({
+			args,
+			cwd: process.cwd(),
+			...(control.recordCaller
+				? {
+						caller: {
+							agentId: process.env.MAESTRO_CALLER_AGENT_ID,
+							tabId: process.env.MAESTRO_CALLER_TAB_ID,
+						},
+					}
+				: {}),
+		}) + '\n'
+	);
+}
+// A loopback relay observes only the DeepSeek request shape. The app retains
+// its real preset endpoint and key; no environment is written to evidence.
+const env = { ...process.env };
+if (control.deepseekProxy) {
+	const url = new URL(control.deepseekProxy);
+	if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1')
+		throw new Error('DeepSeek observation requires a loopback HTTP relay');
+	env.ANTHROPIC_BASE_URL = url.href.replace(/\/$/, '');
+}
+const child = spawn(process.env.MAESTRO_E2E_CLI, args, { stdio: 'inherit', env });
 if (!inspection) fs.writeFileSync(process.env.MAESTRO_E2E_PROCESS, String(child.pid));
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
 child.on('error', (error) => {

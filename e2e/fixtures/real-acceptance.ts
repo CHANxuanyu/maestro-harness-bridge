@@ -195,6 +195,25 @@ export class RealAcceptanceApp extends NativeApp {
 				(await this.cli('update-agent', result.agentId, '--token-source', 'api')).success
 			).toBe(true);
 		// Fixture setup only, before any turns: disable resilience on the actual runner.
+		// The renderer flushes its own copy of the sessions on reload, so wait until
+		// its debounced save of the new runner has landed and stopped changing;
+		// otherwise that flush overwrites the fields written below.
+		const sessionsFile = path.join(this.data, 'maestro-sessions.json');
+		const savedState = () =>
+			fs.existsSync(sessionsFile) ? fs.readFileSync(sessionsFile, 'utf8') : '';
+		await expect.poll(savedState, { timeout: 15_000 }).toContain(result.agentId);
+		let previous = '';
+		await expect
+			.poll(
+				() => {
+					const current = savedState();
+					const stable = current === previous;
+					previous = current;
+					return stable;
+				},
+				{ timeout: 20_000, intervals: [3_000] }
+			)
+			.toBe(true);
 		await this.page.evaluate(async (id) => {
 			const runner = (await window.maestro.sessions.getAll()).find(
 				(session: { id: string }) => session.id === id

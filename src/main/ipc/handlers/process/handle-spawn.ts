@@ -371,10 +371,14 @@ export async function handleProcessSpawn(
 	// Same injection point as Pianola's id, for the same reason: it has to reach
 	// both the local and the SSH env-merge paths. A terminal is a shell the user
 	// drives, not an agent turn, so it is never stamped.
+	// Composer and queued sends encode the tab in the process ID
+	// (`{agentId}-ai-{tabId}`) without always setting `tabId`.
+	const spawnTabId =
+		config.tabId || config.sessionId.match(REGEX_AI_SUFFIX)?.[0].slice('-ai-'.length);
 	if (config.toolType !== 'terminal') {
 		effectiveCustomEnvVars = {
 			...(effectiveCustomEnvVars || {}),
-			...buildCallerIdentityEnv(baseSessionId, config.tabId),
+			...buildCallerIdentityEnv(baseSessionId, spawnTabId),
 		};
 
 		// Who asked for this turn, when the spawn came from a logged-in browser.
@@ -388,7 +392,7 @@ export async function handleProcessSpawn(
 		// one typed at the keyboard. A terminal is a shell the user drives, not
 		// an agent turn, so it is neither noted nor stamped.
 		const actingUser = getActingUser();
-		noteTurnActor(baseSessionId, config.tabId, actingUser);
+		noteTurnActor(baseSessionId, spawnTabId, actingUser);
 		if (actingUser) {
 			// Same injection point as the caller identity above, for the same
 			// reason: it has to reach both the local and the SSH env-merge paths.
@@ -1014,9 +1018,7 @@ export async function handleProcessSpawn(
 	}
 
 	let codexAppServer: ProcessSpawnConfig['codexAppServer'];
-	// Composer and queued sends encode the tab in the process ID.
-	const codexAppServerTabId =
-		config.tabId || config.sessionId.match(REGEX_AI_SUFFIX)?.[0].slice('-ai-'.length);
+	const codexAppServerTabId = spawnTabId;
 	const useCodexAppServer =
 		!!codexAppServerTabId &&
 		!!config.prompt &&

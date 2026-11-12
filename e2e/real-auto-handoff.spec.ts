@@ -102,11 +102,21 @@ test('real auto handoff: synthetic Claude quota failure reaches Codex exactly on
 		expect(await native.answer(recipient)).toContain('AUTO_REAL_RESULT_7429');
 		await expect(native.output()).toContainText('AUTO_REAL_RESULT_7429');
 		const transcript = await native.transcript(recipient);
-		const nativeRequests = transcript.rows.filter(
-			(row) => row.type === 'event_msg' && row.payload?.type === 'user_message'
-		);
+		// Current Codex records the user turn as a response_item message with role
+		// user, the same rows the app's Codex reader treats as user messages.
+		const userText = (row: (typeof transcript.rows)[number]) =>
+			row.type === 'response_item' &&
+			row.payload?.type === 'message' &&
+			row.payload?.role === 'user'
+				? ((row.payload.content ?? []) as { type?: string; text?: string }[])
+						.map((part) => part.text ?? '')
+						.join('')
+				: null;
+		const nativeRequests = transcript.rows
+			.map(userText)
+			.filter((text): text is string => text !== null && text.includes(request));
 		expect(nativeRequests).toHaveLength(1);
-		expect(nativeRequests[0].payload.message.split(request)).toHaveLength(2);
+		expect(nativeRequests[0].split(request)).toHaveLength(2);
 		await expect
 			.poll(
 				() =>

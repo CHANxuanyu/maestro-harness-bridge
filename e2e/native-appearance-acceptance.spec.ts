@@ -137,9 +137,10 @@ test('U1 fresh classic: Clay, proportional UI, collapsed files and fixed-pitch c
 	await input.focus();
 	await input.dispatchEvent('compositionstart', { data: '' });
 	await input.dispatchEvent('compositionupdate', { data: 'WiWi' });
+	// A synthetic composition carries no text, so the view stays zero width; its
+	// computed font is still the terminal's live font option.
 	const composition = xterm.locator('.composition-view.active');
-	await expect(composition).toBeVisible();
-	await expect(composition).toHaveText('WiWi');
+	await expect(composition).toHaveCount(1);
 	const terminalFont = await fontMetrics(composition);
 	expect(terminalFont.family).toMatch(/monospace/i);
 	expect(terminalFont.wide).toBeGreaterThan(0);

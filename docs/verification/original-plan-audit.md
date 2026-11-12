@@ -117,7 +117,7 @@
 
 ## 包级验收里原标“人工核对”的项目
 
-hb.7 包级验收清单有 14 项此前标为人工或部分人工（C4、C6、F3、F5、F7、U1 至 U8、N1）。它们属于技术验收，现都写成可重复运行的 Electron 场景（`native-classic-composer-acceptance`、`native-appearance-acceptance`、`native-windows-acceptance`、`native-about-me` 中的 F5 与 F7），开发构建上全部通过，并逐项做了临时破坏产品代码的反证（各场景都在自己的断言上失败，改动未提交）。F3 的“标签菜单”入口在旧界面里是智能体布局的标签栏悬停菜单；旧界面默认的对话布局没有标签栏，其行菜单按既有约定不提供交接。U8 按 hb.6 记录的约定核对：保存总时限 5 秒，之后照常退出。
+hb.7 包级验收清单有 14 项此前标为人工或部分人工（C4、C6、F3、F5、F7、U1 至 U8、N1）。它们属于技术验收，现都写成可重复运行的 Electron 场景（`native-classic-composer-acceptance`、`native-appearance-acceptance`、`native-windows-acceptance`、`native-about-me` 中的 F5 与 F7），开发构建上全部通过，并逐项做了临时破坏产品代码的反证（各场景都在自己的断言上失败，改动未提交）。F3 的“标签菜单”入口在旧界面里是智能体布局的标签栏悬停菜单；旧界面默认的对话布局没有标签栏，其行菜单按既有约定不提供交接。U8 按 hb.6 记录的约定核对：保存总时限 5 秒，之后照常退出。更新安装的退出只在 macOS 核对：只有 macOS 在宽限期后强制退出；Windows 和 Linux 按设计把退出交给安装程序、不强制退出，无响应的窗口会让退出等到它恢复（本包只发 macOS，这两个平台未验证）。
 
 仍需用户的只剩：几天日常使用（C8）、真实遇到额度或登录错误时的入口（F4）、用真实旧会话只读核对（C9、C10，可选）、DeepSeek 真实网关三项（F1、F2、F8，等密钥）。
 

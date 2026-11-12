@@ -595,6 +595,14 @@ for (const update of [false, true]) {
 	test(`U8 classic: ${update ? 'update' : 'normal'} quit bounds an unresponsive secondary and records unsaved state`, async ({
 		native,
 	}, info) => {
+		// Only macOS hard-exits after the update-install grace window (ShipIt
+		// waits for the PID to die). Windows and Linux hand the quit to their
+		// installer without a forced exit by design, so an unresponsive window
+		// holds that quit until it recovers; the trial package is macOS only.
+		test.skip(
+			update && process.platform !== 'darwin',
+			'The update-install exit budget is a macOS contract'
+		);
 		const owners = await twoWindows(native);
 		const [main, second] = owners;
 		for (const owner of owners) {
@@ -694,8 +702,7 @@ for (const update of [false, true]) {
 			expect(log()).toContain('Installing update - quitting and restarting app');
 			expect(log()).toContain('Q3 updater handoff {"silent":false,"forceRunAfter":true}');
 			expect(log()).not.toContain('Requesting quit confirmation from renderer');
-			if (process.platform === 'darwin')
-				expect(log()).toContain('Hard-exiting after update-install grace window');
+			expect(log()).toContain('Hard-exiting after update-install grace window');
 		} else expect(log()).toContain('Quit confirmed by renderer');
 		const savedMain = savedSessions(native).find((s) => s.id === main.id)!.aiTabs[0];
 		expect(savedMain.inputValue).toBe(main.draft);

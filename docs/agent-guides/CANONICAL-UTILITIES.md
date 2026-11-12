@@ -261,6 +261,29 @@ The tracker at [DEDUP-TRACKER.md](DEDUP-TRACKER.md) lists all known duplication 
 
 Every asynchronous transport operation must use `StageScope.step()`. Its abort check prevents a late response from initiating more work or publishing success. A timeout must terminate the Electron child owned by that sample, record dependent phases as blocked and proceed to independent samples. Never silently count a blocked phase as passed, retry it automatically, or start isolated streaming before full row ID validation succeeds. This runner is not the product's idle process watchdog. Commands, sample caps and trace limitations are in [perf-renderer.md](../perf-renderer.md).
 
+## Opt-in real acceptance
+
+`RealAcceptanceApp` in `e2e/fixtures/real-acceptance.ts` extends `NativeApp` for the
+Task P real-model scenarios. `acceptanceEnabled()` and `prepareAcceptanceProviders()`
+in `e2e/fixtures/native/real-runtime.cjs` require local double opt-in, reject CI and
+smoke mode, precheck every selected login before any binary probe, and pin tools and
+models. Credential access stays in `prepareCredentials()`, with explicit sources
+and no refresh token copied. `codexAcceptanceConfig()` is also used by
+`RealCodexApp`; do not create a competing isolated Codex config.
+
+`realOrchestrator()` in `e2e/fixtures/real-orchestrator.ts` shares both real parent
+directions. The existing `native/real-cli` relay optionally limits paid invocations
+and records argv, cwd and application-stamped caller IDs, never the environment.
+`createDeepSeekRelay()` in `e2e/fixtures/native/deepseek-relay.cjs` streams the real
+upstream response and records only allowlisted request capability fields and HTTP
+status. The secret stays in headers, never evidence. Test this boundary with
+in-memory streams; fixture tests must not need account files or listening sockets.
+
+Use `transcript()` for temp-contained native evidence and `finish()` in `finally`
+for attachments and cleanup. Runbook and per-spec budgets: [real-acceptance.md](../../e2e/real-acceptance.md).
+A skipped scenario is not passed acceptance; a collected capability rejection is
+not support. Do not hide missing product behavior by weakening scenario assertions.
+
 ## Native test temporary directories
 
 `nativeTempRoot()` and `createNativeTempDir(prefix)` in `e2e/fixtures/native/temp-root.cjs` select `MAESTRO_E2E_TEMP_ROOT`, then the short macOS temporary root or the system temporary root. They resolve the root physically before creating directories. Use them for native fixture and Electron acceptance directories; OMP uses the same root for its containment guard. A symlinked temporary path must not produce a different Claude project key from the child process cwd.

@@ -36,6 +36,15 @@ npm run test          # Unit tests (excludes integration/e2e/performance)
 npm run test:watch    # Watch mode
 ```
 
+### Task P real acceptance
+
+Use `RealAcceptanceApp` and the opt-in/precheck helpers in `real-runtime.cjs` for
+paid new-shell acceptance. See [the runbook](../../e2e/real-acceptance.md) for
+explicit switches, pinned versions, snapshot sources, budgets and evidence.
+The specs skip before constructing fixtures. Ordinary fixture tests use temporary
+synthetic credentials only. `e2e/tsconfig.real-acceptance.json` checks these specs
+and their shared fixture graph, which production TypeScript configs do not include.
+
 ### maestro-p Live Suite
 
 The maestro-p unit tests (`src/__tests__/maestro-p/`) mock the PTY. The behavior that breaks in the field (envelopes, exit codes, slash commands, trust dialogs, `--continue`, process cleanup) only shows against a real `claude` TUI, so `scripts/maestro-p-suite.mjs` runs the binary end to end. Each case runs a real turn on the account it runs as. Run it after any change to `src/maestro-p/`, and add a case when you fix a bug only a live run can see.

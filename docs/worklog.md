@@ -1,5 +1,43 @@
 # 分支工作记录
 
+## 2026-11-12：Task P 真实模型验收脚本
+
+基线 `1d9ed9c9f552bae240f64ae8ff74c4d24d2d59f3`，分支 `codex/real-acceptance-specs`。被测对象是本次源码中的 fixture 和测试收集，不是运行中的 Electron、真实模型或安装包。新增 `real-relay`、`real-claude-orchestrator`、`real-auto-handoff`、`real-tasks-panel`、`real-deepseek`，把 `real-codex-orchestrator` 拆为分别命名的 Codex/Claude 子任务用例。运行方法、明确开关、版本和账户来源、回合预算及证据判定见 `e2e/real-acceptance.md`。
+
+共用 `RealAcceptanceApp` 和 `realOrchestrator`；复用 `NativeApp`、`prepareCredentials()`、`observeRealProcesses()`、`createNativeTempDir()`、`readCodexRolloutSync()`。Codex 隔离配置从既有 `RealCodexApp` 提取成同一函数。只读快照在模型和版本探测前预检，转发器限制调用次数并记录应用注入的 caller。DeepSeek 只从明确的环境变量取用户提供的 key，走临时应用预设；透明 HTTP 转发只留下能力参数和状态码。普通 CI 和 real-smoke 即使继承 opt-in 也不运行这些真实场景。
+
+失败优先记录：新增 opt-in/预检的 3 条回归先因函数不存在失败；调用预算回归先因第二次调用仍成功而失败；DeepSeek 请求观察回归先因模块不存在失败。补实现后，DeepSeek socket 版本被沙箱以 `listen EPERM` 拒绝，因此改用内存 Node 流执行同一个 HTTP 处理器，保留原始字节、单次转发、状态码和不泄露 key 的断言，没有跳过测试。最终相关四文件 24 项通过。产品 A17 来源嵌套仍使用原要求的严格断言，本任务不修产品，也不把编写场景记为真实通过。
+
+检查命令与结果：
+
+```sh
+npm run lint
+npm run lint:eslint
+npx tsc -p tsconfig.json --noEmit
+npx tsc -p e2e/tsconfig.real-acceptance.json --noEmit
+npx eslint e2e/fixtures/native/real-runtime.cjs e2e/fixtures/native/deepseek-relay.cjs
+npm run test:e2e:fixtures -- --run e2e/fixtures/native/real-acceptance.test.ts e2e/fixtures/native/real-runtime.test.ts e2e/fixtures/native/real-isolation.test.ts e2e/fixtures/native/deepseek-relay.test.ts
+npm run test:e2e:fixtures
+```
+
+前五条通过，相关 Vitest 24 项通过。全量 fixture 为 85 项通过、3 项失败（23 文件中 22 通过）；失败全部在既有 `protocol.test.ts`，原因是沙箱拒绝监听临时 Unix socket（`listen EPERM`），同时报告 3 个未处理的监听错误。未跳过、重试或改弱这些测试；随后版本探测复用整理的相关四文件仍为 24 项通过。Vite 的 CommonJS 配置兼容提醒保留，不算测试失败。
+
+```sh
+MAESTRO_E2E_REAL=0 npx playwright test --project=electron 'e2e/real-(relay|claude-orchestrator|codex-orchestrator|auto-handoff|tasks-panel|deepseek).spec.ts' --reporter=list
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_SMOKE=1 MAESTRO_E2E_RELAY=1 MAESTRO_E2E_CLAUDE_ORCHESTRATOR=1 MAESTRO_E2E_CODEX_ORCHESTRATOR=1 MAESTRO_E2E_CLAUDE_CHILD=1 MAESTRO_E2E_AUTO_HANDOFF=1 MAESTRO_E2E_TASKS_PANEL=1 MAESTRO_E2E_DEEPSEEK=1 MAESTRO_E2E_DEEPSEEK_KEY=synthetic-skip-check npx playwright test --project=electron 'e2e/real-(relay|claude-orchestrator|codex-orchestrator|auto-handoff|tasks-panel|deepseek).spec.ts' --reporter=list
+```
+
+两种模式各 7 项 skipped，未启动 Electron；第二条仅使用合成占位 key。默认 `npm run test:e2e` 和 `npm run test:e2e:real-smoke` 的 native 项目不收集 `real-*`，本次未执行它们的 Electron 全套。
+
+```sh
+npx prettier --check CLAUDE.md docs/agent-guides/CANONICAL-UTILITIES.md docs/agent-guides/CLI-UI-PARITY.md docs/agent-guides/TEST-PATTERNS.md docs/worklog.md e2e/fixtures/native/real-cli e2e/fixtures/native/real-isolation.test.ts e2e/fixtures/native/real-runtime.cjs e2e/fixtures/native/real-acceptance.test.ts e2e/fixtures/native/deepseek-relay.cjs e2e/fixtures/native/deepseek-relay.test.ts e2e/fixtures/real-codex.ts e2e/fixtures/real-acceptance.ts e2e/fixtures/real-orchestrator.ts e2e/real-relay.spec.ts e2e/real-claude-orchestrator.spec.ts e2e/real-codex-orchestrator.spec.ts e2e/real-auto-handoff.spec.ts e2e/real-tasks-panel.spec.ts e2e/real-deepseek.spec.ts e2e/real-acceptance.md e2e/tsconfig.real-acceptance.json
+git diff --check
+```
+
+格式、空白和改动文件禁用长横线检查通过。没有新增产品行为、界面动作或 CLI 动词，故不改 CHANGELOG，不关闭 CLI Open gaps；同步了夹具索引和验收说明。
+
+待 Opus：在沙箱外按手册运行六个文件共七个真实用例，并重跑完整 fixture 套件。接力缺 DeepSeek key 时只能证明 Claude 复核，DeepSeek 单项必须有用户提供的 key。当前基线的交接嵌套缺口应使接力场景失败，等待对应产品任务合入后再验；图片或 effort 被拒绝要保留诊断结果，不能据此宣布支持。没有读取真实账户、keychain 或凭据，没有调用模型或启动 Electron，没有推送、发布或构建发行包。
+
 ## 2026-11-12：hb.7 合入主线、CI 收口与试用包
 
 #78 第一次 CI 被 GitHub 故障卡住，关闭重开后的第二次运行在 Windows 上有 3 个失败、Linux Electron 超时取消。逐条看原始日志确认：`ai-handoff.test.ts` 期望 POSIX 路径，而 `resolveAgentAccountDir()` 按设计返回主机绝对路径（Windows 为 `D:\tmp\...`）；`useAppRemoteEventListenersSessionConfig.test.ts` 用 `mkdtemp('/tmp/...')`，Windows 没有 `/tmp`；Linux Electron 任务没有失败，合成一遍 134 条通过后 real-smoke 第二遍跑到 99 条时撞上 45 分钟上限。两处测试改用平台路径，任务上限改为 75 分钟并写明实测。
@@ -1279,10 +1317,10 @@ PR #29 合并后的 Windows CI 在既有 4 万条无时间转录用例超时；�
 
 | 阶段                           | 实际结果                                                                                         | 主要代码与证据                                                                                                                                                                         |
 | ------------------------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-10-15—16 中文化           | 日常桌面流程、全部设置分类、自有菜单与说明支持中英切换；草稿与语言偏好持久化                     | `src/renderer/i18n/`、`src/shared/i18n.ts`、`src/main/app-menu-translations.ts`；见 [语言范围](internationalization.md)                                                                |
-| 2026-10-16—17 原生历史进入项目 | 项目下直接列出会话、提供方标识、原生标题搜索、点击直接接续、已开页签刷新；账户/主机边界与去重    | `src/main/storage/project-history.ts`、`src/renderer/components/SessionList/ProjectSessionTree.tsx`、`src/renderer/services/openNativeConversation.ts`、`refreshNativeConversation.ts` |
-| 2026-10-19—20 对话可靠性       | 历史/实时进度与工具一致、工具状态隔离、主动停止不丢 ID、历史阅读定位、本地发送跟随与手动上滚暂停 | Codex parser/storage、process-manager、`TerminalOutput`、`useTerminalOutputScroll`、`useInputProcessing` 与对应回归                                                                    |
-| 2026-10-21 原始会话最终验收    | 在真实释放占用后，原始同 ID 完成多轮、工具、停止恢复和重启后继续；用户确认成功                   | [验收摘要](verification/v1.0.1-hb.1.md)；本地 `original-handoff-live-20261021` 01–27 证据序列                                                                                          |
+| 2026-10-15-16 中文化           | 日常桌面流程、全部设置分类、自有菜单与说明支持中英切换；草稿与语言偏好持久化                     | `src/renderer/i18n/`、`src/shared/i18n.ts`、`src/main/app-menu-translations.ts`；见 [语言范围](internationalization.md)                                                                |
+| 2026-10-16-17 原生历史进入项目 | 项目下直接列出会话、提供方标识、原生标题搜索、点击直接接续、已开页签刷新；账户/主机边界与去重    | `src/main/storage/project-history.ts`、`src/renderer/components/SessionList/ProjectSessionTree.tsx`、`src/renderer/services/openNativeConversation.ts`、`refreshNativeConversation.ts` |
+| 2026-10-19-20 对话可靠性       | 历史/实时进度与工具一致、工具状态隔离、主动停止不丢 ID、历史阅读定位、本地发送跟随与手动上滚暂停 | Codex parser/storage、process-manager、`TerminalOutput`、`useTerminalOutputScroll`、`useInputProcessing` 与对应回归                                                                    |
+| 2026-10-21 原始会话最终验收    | 在真实释放占用后，原始同 ID 完成多轮、工具、停止恢复和重启后继续；用户确认成功                   | [验收摘要](verification/v1.0.1-hb.1.md)；本地 `original-handoff-live-20261021` 01-27 证据序列                                                                                          |
 | 2026-10-21 首次分支发布        | 汇总既有改动，建立产品 changelog、分支说明、发布构建方法及下一阶段议题                           | `CHANGELOG.md`、本文件、Release tag 与资产校验清单                                                                                                                                     |
 
 ## 可追溯性的做法

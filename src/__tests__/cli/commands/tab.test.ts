@@ -195,9 +195,64 @@ describe('tab commands', () => {
 			success: true,
 			tabId: 'reopened',
 			agentId: 'source',
+			expanded: false,
 			children: [child],
 		});
 	});
+
+	it.each([true, false])(
+		'saves disclosure %s through the owning window and reads the receipt',
+		async (expanded) => {
+			const payload = mockTab({
+				ok: true,
+				result: {
+					parent: {
+						key: 'agent-1:tab-aaaa',
+						ownerId: 'agent-1',
+						tabId: 'tab-aaaa',
+						provider: 'claude-code',
+						nativeSessionId: null,
+					},
+					expanded,
+				},
+			});
+			await tabChildren('tab-aaaa', { json: true, expand: expanded, collapse: !expanded });
+			expect(payload()).toEqual({
+				type: 'bridge.invoke',
+				channel: 'windows:conversationChildren',
+				args: [{ sessionId: 'agent-1', tabId: 'tab-aaaa', expanded }],
+			});
+			expect(JSON.parse(consoleSpy.mock.calls[0][0]).expanded).toBe(expanded);
+		}
+	);
+
+	it.each([
+		{ native: 'n', expand: true, agent: 'source' },
+		{ native: 'n' },
+		{ expand: true, collapse: true },
+	])('rejects conflicting or mutating native lookup options %j', async (options) => {
+		await expect(tabChildren(undefined, { ...options, json: true })).rejects.toThrow('__exit__');
+		expect(withMaestroClient).not.toHaveBeenCalled();
+	});
+
+	it.each([false, true])(
+		'only includes handoffs in new shell CLI inventory: %s',
+		async (newShell) => {
+			vi.mocked(readSettingValue).mockReturnValue(newShell);
+			const source = entry('source-tab', 'source', { expanded: true });
+			const child = entry('handoff', 'worker', {
+				origin: { kind: 'handoff', sourceSessionId: 'source', sourceTabId: 'source-tab' },
+			});
+			vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+				action({ sendCommand: vi.fn().mockResolvedValue({ sessions: [source, child] }) } as never)
+			);
+			await tabChildren('source-tab', { json: true });
+			expect(JSON.parse(consoleSpy.mock.calls[0][0])).toMatchObject({
+				expanded: newShell,
+				children: newShell ? [child] : [],
+			});
+		}
+	);
 
 	it('selects a child through the existing tab navigation transport', async () => {
 		const payload = mockTab({ success: true });
@@ -598,4 +653,56 @@ describe('tab commands', () => {
 			sourceTabId: 'source-tab',
 		});
 	});
+});
+
+it('reads a closed native parent through its owner without requiring an open tab', async () => {
+	const send = vi.fn(async (message: any) =>
+		message.type === 'bridge.invoke'
+			? {
+					ok: true,
+					result: {
+						parent: {
+							key: 'history:n',
+							ownerId: 'source',
+							tabId: null,
+							provider: 'codex',
+							nativeSessionId: 'native',
+						},
+						expanded: true,
+					},
+				}
+			: {
+					sessions: [
+						entry('child', 'worker', {
+							origin: {
+								kind: 'handoff',
+								sourceSessionId: 'source',
+								sourceTabId: 'closed',
+								sourceNativeSessionId: 'native',
+								sourceProvider: 'codex',
+								createdAt: 1,
+							},
+						}),
+					],
+				}
+	);
+	vi.mocked(withMaestroClient).mockImplementation(async (action) =>
+		action({ sendCommand: send } as never)
+	);
+	const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+	await tabChildren(undefined, { agent: 'source', native: 'native', json: true });
+	expect(send).toHaveBeenCalledWith(
+		expect.objectContaining({
+			type: 'bridge.invoke',
+			channel: 'windows:conversationChildren',
+			args: [{ sessionId: 'source', nativeSessionId: 'native' }],
+		}),
+		expect.anything(),
+		undefined
+	);
+	expect(JSON.parse(log.mock.calls.at(-1)![0])).toMatchObject({
+		expanded: true,
+		children: [expect.objectContaining({ tabId: 'child' })],
+	});
+	log.mockRestore();
 });

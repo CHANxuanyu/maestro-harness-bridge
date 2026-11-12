@@ -206,6 +206,69 @@ describe('Windows IPC Handlers', () => {
 		expect(await pending).toEqual([null]);
 	});
 
+	it('routes disclosure to the owning window and rejects a reply from another window', async () => {
+		const owner = makeFakeWindow();
+		const other = makeFakeWindow();
+		registry.create({ windowId: 'owner', browserWindow: owner, isMain: true, sessionIds: ['a'] });
+		registry.create({ windowId: 'other', browserWindow: other, sessionIds: ['b'] });
+		const handler = handlers.get('windows:conversationChildren');
+		expect(handler).toBeTypeOf('function');
+		const pending = handler!({}, { sessionId: 'b', tabId: 't', expanded: true });
+		const request = sendOf(other).mock.calls[0];
+		expect(request.slice(0, 2)).toEqual([
+			'windows:conversationChildrenRequest',
+			{ sessionId: 'b', tabId: 't', expanded: true },
+		]);
+		const listener = vi
+			.mocked(ipcMain.on)
+			.mock.calls.find(([channel]) => channel === request[2])![1];
+		listener({ sender: owner.webContents } as never, {
+			success: true,
+			result: { expanded: false },
+		});
+		expect(ipcMain.removeListener).not.toHaveBeenCalledWith(request[2], listener);
+		listener({ sender: other.webContents } as never, { success: true, result: { expanded: true } });
+		expect(await pending).toEqual({ expanded: true });
+	});
+
+	it('forwards late identity only from the source owner and waits for child window persistence', async () => {
+		const source = makeFakeWindow();
+		const child = makeFakeWindow();
+		registry.create({
+			windowId: 'source',
+			browserWindow: source,
+			isMain: true,
+			sessionIds: ['parent'],
+		});
+		registry.create({ windowId: 'child', browserWindow: child, sessionIds: ['worker'] });
+		const identity = {
+			sessionId: 'parent',
+			tabId: 'tab',
+			nativeSessionId: 'native',
+			provider: 'codex',
+		};
+		const handler = handlers.get('windows:captureConversationSourceNativeId')!;
+		vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(child);
+		await expect(handler({ sender: child.webContents }, identity)).rejects.toThrow('owning window');
+		expect(sendOf(source)).not.toHaveBeenCalled();
+		vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(source);
+		let saved = false;
+		const pending = handler({ sender: source.webContents }, identity).then(() => {
+			saved = true;
+		});
+		const request = sendOf(child).mock.calls[0];
+		expect(request.slice(0, 2)).toEqual(['windows:conversationSourceNativeId', identity]);
+		expect(saved).toBe(false);
+		const listener = vi
+			.mocked(ipcMain.on)
+			.mock.calls.find(([channel]) => channel === request[2])![1];
+		listener({ sender: source.webContents } as never, { success: true });
+		expect(ipcMain.removeListener).not.toHaveBeenCalledWith(request[2], listener);
+		listener({ sender: child.webContents } as never, { success: true });
+		await pending;
+		expect(saved).toBe(true);
+	});
+
 	describe('handler registration', () => {
 		it('registers every windows:* handler', () => {
 			for (const channel of [

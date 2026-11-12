@@ -1,3 +1,6 @@
+import { conversationDisclosureKey, conversationExpanded } from '../../shared/conversationChildren';
+import { getWindowContext } from '../contexts/WindowContext';
+import { captureException } from '../utils/sentry';
 /**
  * agentDelegation - mark an agent's own hand-offs in its transcript.
  *
@@ -130,12 +133,16 @@ export function captureConversationSourceNativeId(
 	sessionId: string,
 	tabId: string,
 	nativeSessionId: string,
-	provider: string
-): void {
+	provider: string,
+	broadcast = true
+): string[] {
+	const changedIds: string[] = [];
+	const newShell = useSettingsStore.getState().newShell;
 	useSessionStore.getState().setSessions((sessions) =>
 		sessions.map((session) => {
+			if (newShell && getWindowContext()?.ownsSession(session.id) === false) return session;
 			let changed = false;
-			const aiTabs = session.aiTabs.map((tab) => {
+			const capture = (tab: AITab) => {
 				const origin = tab.origin;
 				if (
 					!origin ||
@@ -147,10 +154,37 @@ export function captureConversationSourceNativeId(
 					return tab;
 				changed = true;
 				return { ...tab, origin: { ...origin, sourceNativeSessionId: nativeSessionId } };
-			});
-			return changed ? { ...session, aiTabs } : session;
+			};
+			const aiTabs = session.aiTabs.map(capture);
+			const orphanedThinkingTabs = newShell
+				? session.orphanedThinkingTabs?.map(capture)
+				: session.orphanedThinkingTabs;
+			let conversationTreeExpanded = session.conversationTreeExpanded;
+			const expanded = conversationExpanded(conversationTreeExpanded, tabId, null);
+			if (
+				newShell &&
+				session.id === sessionId &&
+				expanded !== undefined &&
+				conversationTreeExpanded?.[conversationDisclosureKey(null, nativeSessionId)] === undefined
+			) {
+				conversationTreeExpanded = {
+					...conversationTreeExpanded,
+					[conversationDisclosureKey(null, nativeSessionId)]: expanded,
+				};
+				changed = true;
+			}
+			if (!changed) return session;
+			changedIds.push(session.id);
+			return { ...session, aiTabs, orphanedThinkingTabs, conversationTreeExpanded };
 		})
 	);
+	if (newShell && broadcast)
+		void window.maestro.windows
+			?.captureConversationSourceNativeId?.({ sessionId, tabId, nativeSessionId, provider })
+			.catch((error) =>
+				captureException(error, { tags: { context: 'conversationSourceNativeId' } })
+			);
+	return changedIds;
 }
 
 /** Settle a pending `ask` pill once its consult ends. No-op if the tab or entry is gone. */

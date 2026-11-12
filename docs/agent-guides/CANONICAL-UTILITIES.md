@@ -432,3 +432,10 @@ subscription narrow and leave the classic shell's stored command report intact.
 Codex 原型的标准权限能力统一取 `effectiveStandardPermissionCapability()`
 （`src/shared/codexAppServer.ts`）。只有新界面、原型开关和本地执行同时满足才增加
 Codex 的标准能力；咨询调用 `projectConversationFields(..., false)` 保持自己的限制。
+
+## Conversation tree disclosure and late native identity (Task K)
+
+- `conversationDisclosureKey()` and `conversationExpanded()` in `src/shared/conversationChildren.ts` read the owning session's `conversationTreeExpanded` map. Native ID keys survive source tab closure; tab ID keys cover the first turn before native identity exists.
+- `conversationChildren()` in `src/renderer/services/conversationChildren.ts` is the owner-side UI/CLI read and write operation. `windows:conversationChildren` routes through the registry, verifies the responder and waits for persistence. Native history resolution uses `matchRecordForTab()`; never infer an account from the native ID alone.
+- `captureConversationSourceNativeId()` in `src/renderer/services/agentDelegation.ts` is the only backfill. The source window forwards the identity through the registry, and child windows run the same function without rebroadcasting, then save only owned changes. It also migrates disclosure from the tab key to the first native key without overwriting an explicit choice.
+- `findConversationParent()` includes handoffs. `conversationBranch()` excludes handoff edges for archive refusal only. Do not reuse archive membership as display membership: an unarchived handoff must remain visible when its source is archived.

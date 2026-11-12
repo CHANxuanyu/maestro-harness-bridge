@@ -1,5 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import * as windowContext from '../../../renderer/contexts/WindowContext';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+	captureConversationSourceNativeId,
 	buildDelegationLogEntry,
 	recordAgentDelegation,
 	resolveDelegationSourceTab,
@@ -175,4 +177,80 @@ describe('recordAgentDelegation / settleAgentDelegation', () => {
 
 		expect(logsOf('maestro', 'caller-tab')).toHaveLength(0);
 	});
+});
+
+it('backfills orphan children and forwards late identity to their owning windows', () => {
+	useSettingsStore.setState({ newShell: true });
+	const origin = {
+		kind: 'handoff' as const,
+		sourceSessionId: 'source',
+		sourceTabId: 'first',
+		sourceProvider: 'codex',
+		createdAt: 1,
+	};
+	useSessionStore.setState({
+		sessions: [
+			createMockSession({
+				id: 'worker',
+				aiTabs: [],
+				orphanedThinkingTabs: [createMockAITab({ id: 'child', origin })],
+			}),
+		],
+	});
+	const broadcast = vi.fn().mockResolvedValue(undefined);
+	window.maestro.windows = {
+		...window.maestro.windows,
+		captureConversationSourceNativeId: broadcast,
+	} as never;
+	captureConversationSourceNativeId('source', 'first', 'native', 'codex');
+	expect(
+		useSessionStore.getState().sessions[0].orphanedThinkingTabs?.[0].origin?.sourceNativeSessionId
+	).toBe('native');
+	expect(broadcast).toHaveBeenCalledWith({
+		sessionId: 'source',
+		tabId: 'first',
+		nativeSessionId: 'native',
+		provider: 'codex',
+	});
+});
+
+it('only patches owned children and reuses the same backfill without echo or overwrites', () => {
+	useSettingsStore.setState({ newShell: true });
+	const origin = {
+		kind: 'subtask' as const,
+		sourceSessionId: 'source',
+		sourceTabId: 'first',
+		sourceProvider: 'codex',
+		createdAt: 1,
+	};
+	const child = createMockSession({
+		id: 'worker',
+		aiTabs: [
+			createMockAITab({ id: 'child', origin }),
+			createMockAITab({ id: 'known', origin: { ...origin, sourceNativeSessionId: 'original' } }),
+		],
+	});
+	useSessionStore.setState({ sessions: [child] });
+	const context = vi
+		.spyOn(windowContext, 'getWindowContext')
+		.mockReturnValue({ ownsSession: (id: string) => id === 'source' } as never);
+	const broadcast = vi.fn().mockResolvedValue(undefined);
+	window.maestro.windows = {
+		...window.maestro.windows,
+		captureConversationSourceNativeId: broadcast,
+	} as never;
+	captureConversationSourceNativeId('source', 'first', 'native', 'codex');
+	expect(useSessionStore.getState().sessions[0]).toBe(child);
+	context.mockReturnValue({ ownsSession: (id: string) => id === 'worker' } as never);
+	expect(captureConversationSourceNativeId('source', 'first', 'native', 'codex', false)).toEqual([
+		'worker',
+	]);
+	expect(
+		useSessionStore.getState().sessions[0].aiTabs.map((tab) => tab.origin?.sourceNativeSessionId)
+	).toEqual(['native', 'original']);
+	expect(captureConversationSourceNativeId('source', 'first', 'changed', 'codex', false)).toEqual(
+		[]
+	);
+	expect(broadcast).toHaveBeenCalledTimes(1);
+	context.mockRestore();
 });

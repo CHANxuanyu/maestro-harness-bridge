@@ -138,3 +138,12 @@ it('resolves a parked native conversation from the saved tool source', async () 
 	expect(read).toHaveBeenCalledWith(expect.anything(), source, 'old-call');
 	expect(discover).not.toHaveBeenCalled();
 });
+
+it('reports persisted disclosure in the desktop inventory used by tab children', () => {
+	state.sessions[0].conversationTreeExpanded = { '["native","native-id"]': true };
+	expect(state.callbacks.get('setListDesktopSessionsCallback')!()).toEqual([
+		expect.objectContaining({ tabId: 'tab', expanded: true }),
+	]);
+	state.sessions[0].conversationTreeExpanded['["native","native-id"]'] = false;
+	expect(state.callbacks.get('setListDesktopSessionsCallback')!()[0].expanded).toBe(false);
+});

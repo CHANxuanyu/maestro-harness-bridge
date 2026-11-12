@@ -14,6 +14,7 @@
  * global setting (enter-to-send) - it is NOT the same as `false`.
  */
 export interface DesktopTabEntry {
+	expanded?: boolean;
 	toolOutputSources?: import('./nativeToolOutput').NativeToolOutputTarget[];
 	newShellPanel?: import('./newShellPanel').NewShellPanelState;
 	origin?: import('./aiHandoff').ConversationOrigin;

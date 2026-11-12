@@ -1379,6 +1379,7 @@ export interface SnoozedGroupPayload {
 export type SnoozedGroupEntry = SnoozedGroupPayload & SnoozedTabEntryBase;
 
 export interface Session {
+	conversationTreeExpanded?: Record<string, boolean>;
 	/** Archive or delete deliberately left this project without an open conversation. */
 	conversationArchiveEmpty?: boolean;
 	id: string;

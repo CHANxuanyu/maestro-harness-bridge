@@ -1773,13 +1773,23 @@ tabTargetOptions(tab.command('show <tab-id>'))
 	.description("Show one tab's settings (model, effort, thinking, access, history)")
 	.action((tabId, options) => tabShow(tabId, options));
 
-tabTargetOptions(tab.command('children <tab-id>'))
+const shellChildrenCopy = (
+	key: 'expandChildrenCommand' | 'collapseChildrenCommand' | 'nativeChildrenCommand'
+) =>
+	(resolveAppLocale('system', Intl.DateTimeFormat().resolvedOptions().locale) === 'zh-CN'
+		? zhShell
+		: enShell)[`workflows.conversations.${key}`];
+
+tabTargetOptions(tab.command('children [tab-id]'))
 	.description(
 		(resolveAppLocale('system', Intl.DateTimeFormat().resolvedOptions().locale) === 'zh-CN'
 			? zhShell
 			: enShell)['workflows.conversations.childrenCommand'] ??
 			enShell['workflows.conversations.childrenCommand']
 	)
+	.option('--expand', shellChildrenCopy('expandChildrenCommand'))
+	.option('--collapse', shellChildrenCopy('collapseChildrenCommand'))
+	.option('--native <native-id>', shellChildrenCopy('nativeChildrenCommand'))
 	.action((tabId, options) => tabChildren(tabId, options));
 
 tabTargetOptions(tab.command('select <tab-id>'))

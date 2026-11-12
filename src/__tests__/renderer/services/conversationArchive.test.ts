@@ -160,3 +160,45 @@ it.each(['open', 'orphan', 'grandchild'] as const)(
 		expect(useSessionStore.getState().sessions[0].aiTabs).toEqual([parent]);
 	}
 );
+
+it.each(['handoff', 'review', 'subtask'] as const)(
+	'archive checks running and queued %s children without closing moved work',
+	(kind) => {
+		for (const queued of [false, true]) {
+			const parent = createMockAITab({ id: 'source', agentSessionId: 'native' });
+			const child = createMockAITab({
+				id: 'child',
+				state: queued ? 'idle' : 'busy',
+				origin: {
+					kind,
+					sourceSessionId: 'owner',
+					sourceTabId: 'source',
+					sourceNativeSessionId: 'native',
+					sourceProvider: 'claude-code',
+					createdAt: 1,
+				},
+			});
+			useSessionStore.setState({
+				sessions: [
+					createMockSession({ id: 'owner', aiTabs: [parent] }),
+					createMockSession({
+						id: 'worker',
+						aiTabs: [child],
+						executionQueue: queued ? ([{ tabId: 'child' }] as never) : [],
+					}),
+				],
+			});
+			const result = conversationLifecycle({
+				ownerIds: ['owner'],
+				nativeSessionId: 'native',
+				action: 'archive',
+				phase: 'close',
+			});
+			expect(result.error).toBe(kind === 'handoff' ? undefined : 'conversation-running');
+			expect(useSessionStore.getState().sessions[0].aiTabs).toEqual(
+				kind === 'handoff' ? [] : [parent]
+			);
+			expect(useSessionStore.getState().sessions[1].aiTabs).toEqual([child]);
+		}
+	}
+);

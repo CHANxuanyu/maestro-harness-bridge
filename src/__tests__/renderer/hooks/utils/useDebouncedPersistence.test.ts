@@ -265,6 +265,24 @@ describe('useDebouncedPersistence', () => {
 	// prepareSessionForPersistence (tested indirectly through hook flush)
 	// -----------------------------------------------------------------------
 	describe('prepareSessionForPersistence (via hook flush)', () => {
+		it('retains both expanded and collapsed conversation choices after closing tabs and saving again', () => {
+			const choices = {
+				'["native","first"]': true,
+				'["native","second"]': false,
+				'["tab","waiting"]': true,
+			};
+			seedSessions([makeSession({ conversationTreeExpanded: choices, aiTabs: [] })]);
+			const { result } = renderPersistence(makeInitialLoadRef(true));
+			act(() => result.current.flushNow(useSessionStore.getState().sessions));
+			const saved = JSON.parse(
+				JSON.stringify(vi.mocked(window.maestro.sessions.setAll).mock.calls[0][0])
+			) as Session[];
+			expect(saved[0].conversationTreeExpanded).toEqual(choices);
+			seedSessions(saved);
+			act(() => result.current.flushNow(useSessionStore.getState().sessions));
+			const resaved = vi.mocked(window.maestro.sessions.setAll).mock.calls.at(-1)![0] as Session[];
+			expect(resaved[0].conversationTreeExpanded).toEqual(choices);
+		});
 		it('retains the turn write index across log trimming, restart and another save', () => {
 			useSettingsStore.setState({ newShell: true });
 			const logs: LogEntry[] = [

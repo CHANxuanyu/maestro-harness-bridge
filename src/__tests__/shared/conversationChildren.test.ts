@@ -19,12 +19,12 @@ const parent = {
 };
 
 describe('conversation parent identity', () => {
-	it('keeps a hand-off as a peer of the conversation it continued', () => {
+	it('nests handoffs with reviews and subtasks under their source', () => {
 		const candidates = [
 			{ key: 'a:t', ownerId: 'a', tabId: 't', provider: 'claude-code', nativeSessionId: 'n' },
 		];
 		const origin = { sourceSessionId: 'a', sourceTabId: 't', sourceProvider: 'claude-code' };
-		expect(findConversationParent({ ...origin, kind: 'handoff' }, candidates)).toBeNull();
+		expect(findConversationParent({ ...origin, kind: 'handoff' }, candidates)?.key).toBe('a:t');
 		expect(findConversationParent({ ...origin, kind: 'review' }, candidates)?.key).toBe('a:t');
 		expect(findConversationParent({ ...origin, kind: 'subtask' }, candidates)?.key).toBe('a:t');
 	});
@@ -58,9 +58,12 @@ describe('conversation parent identity', () => {
 		expect(findConversationParent(origin, [parent, exact])).toBe(exact);
 	});
 
-	it('reattaches to the source native conversation after its tab closes', () => {
-		expect(findConversationParent(origin, [parent])).toBe(parent);
-	});
+	it.each(['handoff', 'review', 'subtask'] as const)(
+		'reattaches %s after its source tab closes',
+		(kind) => {
+			expect(findConversationParent({ ...origin, kind }, [parent])).toBe(parent);
+		}
+	);
 
 	it('attaches to a history row whose owner was resolved by native account matching', () => {
 		const history = { ...parent, key: 'history:source', tabId: null };

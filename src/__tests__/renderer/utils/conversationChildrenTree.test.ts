@@ -82,22 +82,25 @@ describe('new shell conversation children', () => {
 		});
 	});
 
-	it('keeps native identities on another account or SSH host separate', () => {
-		const tree = buildProjectSessionTree({
-			sessions: [
-				{ ...parent, aiTabs: [], customEnvVars: { CLAUDE_CONFIG_DIR: '/account' } },
-				child,
-			],
-			groups: [],
-			newShell: true,
-			history: [
-				{ ...history, accountDir: '/other' },
-				{ ...history, key: 'remote', sshRemoteId: 'remote' },
-			],
-		});
-		expect(tree[0].conversations.every((row) => !row.children?.length)).toBe(true);
-		expect(tree[1].conversations[0].tabId).toBe('child-tab');
-	});
+	it.each(['review', 'handoff', 'subtask'] as const)(
+		'keeps %s native identities on another account or SSH host separate',
+		(kind) => {
+			const tree = buildProjectSessionTree({
+				sessions: [
+					{ ...parent, aiTabs: [], customEnvVars: { CLAUDE_CONFIG_DIR: '/account' } },
+					{ ...child, aiTabs: [{ ...child.aiTabs[0], origin: { ...origin, kind } }] },
+				],
+				groups: [],
+				newShell: true,
+				history: [
+					{ ...history, accountDir: '/other' },
+					{ ...history, key: 'remote', sshRemoteId: 'remote' },
+				],
+			});
+			expect(tree[0].conversations.every((row) => !row.children?.length)).toBe(true);
+			expect(tree[1].conversations[0].tabId).toBe('child-tab');
+		}
+	);
 
 	it('retains ancestors when a child matches search', () => {
 		const tree = buildProjectSessionTree({
@@ -152,32 +155,61 @@ describe('new shell conversation children', () => {
 		expect(restored[0].conversations[0].children?.[0].tabId).toBe('child-tab');
 	});
 
-	it('allows a child to be archived without hiding its parent', () => {
-		const nativeChild = {
-			...child,
-			aiTabs: [{ ...child.aiTabs[0], agentSessionId: 'child-native' }],
-		};
-		const archive = {
-			...history,
-			key: 'child-archive',
-			provider: 'codex' as const,
-			projectKey: 'path:local:/child',
-			projectPath: '/child',
-			nativeSessionId: 'child-native',
-			archivedAt: 10,
-			permissionMode: 'readonly' as const,
-			ownerIds: [child.id],
-		};
-		const tree = buildProjectSessionTree({
-			sessions: [parent, nativeChild],
-			groups: [],
-			newShell: true,
-			archives: [archive],
-		});
-		expect(tree[0].conversations[0].tabId).toBe('parent-tab');
-		expect(tree[0].conversations[0].children ?? []).toEqual([]);
-		expect(tree[1].conversations).toEqual([]);
-	});
+	it.each([false, true])(
+		'nests handoffs, promotes them on archive, and reattaches (closed: %s)',
+		(closed) => {
+			const source = { ...parent, aiTabs: closed ? [] : parent.aiTabs };
+			const moved = {
+				...child,
+				aiTabs: [{ ...child.aiTabs[0], origin: { ...origin, kind: 'handoff' as const } }],
+			};
+			const options = { sessions: [source, moved], groups: [], newShell: true, history: [history] };
+			const visible = buildProjectSessionTree(options);
+			expect(visible[0].conversations[0].children?.[0].tabId).toBe('child-tab');
+			const archived = buildProjectSessionTree({
+				...options,
+				archives: [
+					{ ...history, archivedAt: 10, ownerIds: [parent.id], permissionMode: 'readonly' },
+				],
+			});
+			expect(archived[0].conversations).toEqual([]);
+			expect(archived[1].conversations[0].tabId).toBe('child-tab');
+			const restarted = buildProjectSessionTree(JSON.parse(JSON.stringify(options)));
+			expect(restarted[0].conversations[0].children?.[0].tabId).toBe('child-tab');
+		}
+	);
+
+	it.each(['review', 'handoff', 'subtask'] as const)(
+		'allows a %s child to be archived independently',
+		(kind) => {
+			const nativeChild = {
+				...child,
+				aiTabs: [
+					{ ...child.aiTabs[0], agentSessionId: 'child-native', origin: { ...origin, kind } },
+				],
+			};
+			const archive = {
+				...history,
+				key: 'child-archive',
+				provider: 'codex' as const,
+				projectKey: 'path:local:/child',
+				projectPath: '/child',
+				nativeSessionId: 'child-native',
+				archivedAt: 10,
+				permissionMode: 'readonly' as const,
+				ownerIds: [child.id],
+			};
+			const tree = buildProjectSessionTree({
+				sessions: [parent, nativeChild],
+				groups: [],
+				newShell: true,
+				archives: [archive],
+			});
+			expect(tree[0].conversations[0].tabId).toBe('parent-tab');
+			expect(tree[0].conversations[0].children ?? []).toEqual([]);
+			expect(tree[1].conversations).toEqual([]);
+		}
+	);
 
 	it('indexes 5000 history identities once instead of scanning them for each of 1000 children', () => {
 		const reads = (count: number) => {

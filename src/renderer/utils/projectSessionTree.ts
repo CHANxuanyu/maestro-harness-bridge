@@ -1,7 +1,7 @@
 export { buildProjectHistoryScopes } from './nativeConversationMatch';
 import type { ArchivedConversation } from '../../shared/conversationArchive';
 import type { ConversationOrigin, Group, Session } from '../types';
-import { findConversationParent } from '../../shared/conversationChildren';
+import { conversationExpanded, findConversationParent } from '../../shared/conversationChildren';
 import type { ProjectHistoryConversation } from '../../shared/projectHistory';
 import { getBasename } from '../../shared/formatters';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
@@ -20,6 +20,7 @@ import {
 export const PROJECT_HISTORY_PAGE_SIZE = 15;
 
 export interface SidebarConversation {
+	expanded?: boolean;
 	/** New shell only: real conversations dispatched from this row. */
 	children?: SidebarConversation[];
 	key: string;
@@ -346,6 +347,11 @@ export function buildProjectSessionTree({
 			rowsByProject.get(key)!.push({
 				key: `${session.id}:${tab.id}`,
 				kind: 'open',
+				expanded: conversationExpanded(
+					session.conversationTreeExpanded,
+					tab.id,
+					tab.agentSessionId
+				),
 				ownerId: session.id,
 				tabId: tab.id,
 				provider,
@@ -382,6 +388,7 @@ export function buildProjectSessionTree({
 		rows.push({
 			key: `history:${record.key}`,
 			kind: 'history',
+			expanded: conversationExpanded(owner?.conversationTreeExpanded, null, record.nativeSessionId),
 			ownerId: owner ? owner.id : null,
 			tabId: null,
 			provider: historyProviderId(record, owner, sessions),
@@ -445,8 +452,19 @@ export function buildProjectSessionTree({
 				const source = ownerById.get(origin.sourceSessionId);
 				const record = source ? recordFor(source, origin.sourceNativeSessionId) : null;
 				const historyParent = record ? rowsByHistory.get(record.key) : undefined;
-				if (historyParent?.kind === 'history')
+				if (historyParent?.kind === 'history') {
+					// The matching account can have no backend owner hint. Keep the
+					// proven source owner on the actual row for disclosure persistence.
+					if (!historyParent.ownerId) {
+						historyParent.ownerId = origin.sourceSessionId;
+						historyParent.expanded = conversationExpanded(
+							source?.conversationTreeExpanded,
+							null,
+							origin.sourceNativeSessionId
+						);
+					}
 					candidates.push({ ...historyParent, ownerId: origin.sourceSessionId });
+				}
 			}
 			const parent = findConversationParent(
 				origin,
@@ -457,6 +475,14 @@ export function buildProjectSessionTree({
 			while (ancestor && ancestor !== row.key) ancestor = parents.get(ancestor);
 			if (ancestor === row.key) continue;
 			parents.set(row.key, parent.key);
+		}
+		// A handoff moves the work. Detach it from an archived branch before
+		// filtering, leaving it in its own project's rows. Reviews/subtasks stay hidden.
+		for (const row of allRows) {
+			if (origins.get(row.key)?.kind !== 'handoff') continue;
+			let ancestor = parents.get(row.key);
+			while (ancestor && !archivedRows.has(ancestor)) ancestor = parents.get(ancestor);
+			if (ancestor) parents.delete(row.key);
 		}
 		const byKey = new Map(allRows.map((row) => [row.key, row]));
 		for (const row of allRows) {

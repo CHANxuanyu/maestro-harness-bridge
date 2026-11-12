@@ -75,9 +75,9 @@ test('U1 fresh classic: Clay, proportional UI, collapsed files and fixed-pitch c
 	native,
 }) => {
 	const { page } = native;
-	await native.app.evaluate(({ nativeTheme }) => {
-		nativeTheme.themeSource = 'dark';
-	});
+	// Playwright emulates a light color scheme unless told otherwise, which
+	// overrides the OS appearance; drive the media feature the product reads.
+	await page.emulateMedia({ colorScheme: 'dark' });
 	await expect(page.locator('html')).toHaveAttribute('data-new-shell', 'false');
 	await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
 	await expect(page.locator('.maestro-app-shell')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
@@ -205,9 +205,9 @@ test.describe('U5 classic system appearance', () => {
 			expectedMode: 'dark' | 'light',
 			background: string
 		) => {
-			await native.app.evaluate(({ nativeTheme }, value) => {
-				nativeTheme.themeSource = value;
-			}, mode);
+			// Playwright's emulated scheme overrides nativeTheme, so set the media
+			// feature the renderer reads (usePrefersDarkColorScheme) directly.
+			await page.emulateMedia({ colorScheme: mode });
 			await expect
 				.poll(() => page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches))
 				.toBe(mode === 'dark');

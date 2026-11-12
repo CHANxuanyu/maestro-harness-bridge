@@ -124,6 +124,64 @@ MAESTRO_E2E_REAL=0 npm run test:e2e -- \
 项目事务只在新界面接受，进入事务时固定开关状态。先校验全部工具归属和字段，在同一会话写入队列中保存工具并落盘，再保存默认值；失败恢复全部已尝试写入的部分，成功才发配置补丁。补丁保留运行回合、日志和草稿。旧界面与单项 `update-agent` 保留原保存入口，共用字段白名单。它是进程内补偿事务：持续磁盘故障导致回滚失败时返回 `rollbackFailed`，并尝试恢复另一份存储；不保证两份文件之间崩溃时的原子恢复。
 
 SSH 网页说明只在新界面、SSH 已启用且地址为本机回环或绑定地址时显示，复用 `isLocalWebUrl()`，没有创建隧道。隐藏终端保留原尺寸，关闭标签或移出窗口时释放；没有新增输出存储。合成场景在真实模式下于构造夹具前 `test.skip`，没有添加重试。该提交未构建安装包、访问真实账户、推送或发布。
+## 2026-11-12：Task S 新界面 SSH 验收场景，待沙箱外运行
+
+基线 `1d9ed9c9f`，工作分支 `codex/ssh-acceptance`。新增
+`e2e/native-new-shell-ssh.spec.ts` 和 `e2e/fixtures/native/local-sshd.ts`，
+覆盖任务指定的 A9、A10、A13、B1、B3。仓库中没有
+`docs/verification/original-plan-audit.md`，本次以任务列出的条目及
+`docs/roadmap/new-shell.md` 为范围。没有修改产品代码、新增界面动作或 CLI
+动词，因此不改 CHANGELOG，也不关闭尚未实测的 SSH 验收缺口。
+
+场景开启 `newShell`，在临时目录生成两套密钥、独立 sshd 配置和本机、远端
+账户目录，以当前非 root 用户监听 loopback 随机端口。SSH 配置沿用
+`create-ssh-remote` 写入的 store 格式，项目设置走既有 `--ssh-remote` CLI
+路径。远端 PATH、脚本与账户路径来自 `remoteEnv`；源 Claude 使用 binaryName，
+交接到 Codex 时允许已有配置继承 fixture 的 customPath。两者都必须经过 SSH，
+调用记录的实际 cwd、`SSH_CONNECTION`、进程快照和远端转录共同验证执行位置。
+客户端入口加 `-F /dev/null`，避免 HOME 隔离不足导致读取用户 SSH 配置；记录
+Git 读写与文件读写参数，防止同一物理文件系统掩盖本地回退。没有读取或复制真实
+账户、凭据或 keychain，也不操作系统 sshd 或 Remote Login。
+
+先失败记录：`new-shell-files.test.ts` 的 Claude/Codex 两条持久化用例因缺少
+provider、cwd、processCwd、SSH_CONNECTION 记录而失败；`app-start.test.ts`
+新增用例因启动环境没有 PATH 而失败。`local-sshd.test.ts` 最初因 fixture
+模块不存在失败，随后新增客户端记录用例因 recorder 不存在失败。
+`native-synthetic-skip.test.ts` 的新行因场景文件不存在失败。实现后相关
+fixture 18 条和模式收集 4 条均通过。新增 sshd 生命周期用例使用模拟 socket
+和子进程，覆盖临时配置、工具缺失、就绪、提前退出、超时、强制结束和幂等清理；
+没有把这些单元测试当作真实 SSH 通过。
+
+最终验证命令及结果：
+
+| 命令                                                                                                                                                                                                                                                                                                                                                                                                                          | 结果                                                                           |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `npx tsc -p tsconfig.json --noEmit`                                                                                                                                                                                                                                                                                                                                                                                           | 通过                                                                           |
+| `npm run lint`                                                                                                                                                                                                                                                                                                                                                                                                                | renderer/shared、main、CLI 三份类型检查通过                                    |
+| `npm run lint:eslint`                                                                                                                                                                                                                                                                                                                                                                                                         | 通过                                                                           |
+| `npx vitest run --config e2e/fixtures/native/vitest.config.ts e2e/fixtures/native/local-sshd.test.ts e2e/fixtures/native/new-shell-files.test.ts e2e/fixtures/native/app-start.test.ts`                                                                                                                                                                                                                                       | 3 文件、18 条通过                                                              |
+| `npx vitest run --configLoader runner src/__tests__/scripts/native-synthetic-skip.test.ts`                                                                                                                                                                                                                                                                                                                                    | 4 条通过；real 模式在创建 NativeApp 前跳过                                     |
+| `npm run test:e2e:fixtures`                                                                                                                                                                                                                                                                                                                                                                                                   | 21 文件通过、1 文件失败；86 条通过、3 条失败，另有 3 个未捕获的 `listen EPERM` |
+| `npx playwright test --project=native e2e/native-new-shell-ssh.spec.ts --list`                                                                                                                                                                                                                                                                                                                                                | 收集 1 个场景，未启动 Electron                                                 |
+| `npx tsc --ignoreConfig --noEmit --target ES2024 --module ESNext --moduleResolution bundler --jsx react-jsx --esModuleInterop --skipLibCheck --strict --noImplicitAny false e2e/native-new-shell-ssh.spec.ts e2e/fixtures/native/local-sshd.test.ts src/renderer/global.d.ts src/types/*.d.ts`                                                                                                                                | 场景与 fixture 的独立类型检查通过；现有 CJS 导入不检查 noImplicitAny           |
+| `npx eslint e2e/fixtures/native-app.ts e2e/fixtures/native/app-start.test.ts e2e/fixtures/native/cli.cjs e2e/fixtures/native/new-shell-files.test.ts e2e/fixtures/native/local-sshd.ts e2e/fixtures/native/local-sshd.test.ts e2e/native-new-shell-ssh.spec.ts`                                                                                                                                                               | 通过                                                                           |
+| `npx prettier --check CLAUDE.md docs/agent-guides/CANONICAL-UTILITIES.md docs/ssh-remote-execution.md docs/worklog.md e2e/fixtures/native-app.ts e2e/fixtures/native/app-start.test.ts e2e/fixtures/native/cli.cjs e2e/fixtures/native/new-shell-files.test.ts e2e/fixtures/native/local-sshd.ts e2e/fixtures/native/local-sshd.test.ts e2e/native-new-shell-ssh.spec.ts src/__tests__/scripts/native-synthetic-skip.test.ts` | 通过                                                                           |
+| `git diff --check`                                                                                                                                                                                                                                                                                                                                                                                                            | 通过                                                                           |
+
+完整 fixture 套件的三个失败都在既有 `protocol.test.ts`，原因是沙箱禁止监听
+Unix socket，随后用例超时。没有修改、跳过这些用例或增加重试。加入 SSH 客户端
+记录后重新运行完整套件，仍为相同三个失败。默认 Vitest 配置加载最初因 symlink
+依赖目录的 `.vite-temp` 写权限报 EPERM，改用 `--configLoader runner` 后正常运行。
+独立类型检查首次缺少 TS 6 的 `--ignoreConfig`，补上后又发现检查命令缺少 renderer
+全局声明和 ES2023 以上标准库；最终使用上表命令通过，没有放宽产品 tsconfig。
+
+Opus 仍须在沙箱外、以非 root 用户在 macOS 和 Linux 执行：
+`MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell-ssh.spec.ts`，
+以及 `npm run test:e2e:fixtures`。前者会重新构建本分支。
+本次没有启动 Electron 或真实 sshd，没有构建发行包，也没有真实 SSH 验收结果。
+本分支尚无 `web-preview-local-notice`，场景保留具名 TODO；实现该 test id 的分支
+会断言提示可见。本次没有发现并修复可确认的产品 bug，没有提交原始日志或本机
+账户路径。
 
 ## 2026-11-12：hb.7 合入主线、CI 收口与试用包
 

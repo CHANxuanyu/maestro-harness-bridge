@@ -77,6 +77,21 @@ it('keeps title parsing and cached provider preparation for existing tests', asy
 	expect(mocks.launch.mock.calls[0][2].SYNTHETIC_CREDENTIAL).toBe('fixture-token');
 });
 
+it('passes a test-only client PATH to Electron without changing the runner environment', async () => {
+	vi.stubEnv('MAESTRO_E2E_REAL', '0');
+	native = new NativeApp({ title: 'loopback SSH' } as TestInfo, { providerCli: false });
+	const before = process.env.PATH;
+	await native.start(undefined, { PATH: '/synthetic/ssh-client:/usr/bin:/bin' });
+	expect(mocks.launch.mock.calls[0][2]).toMatchObject({
+		PATH: '/synthetic/ssh-client:/usr/bin:/bin',
+		HOME: native.syntheticHome,
+		CLAUDE_CONFIG_DIR: native.claude,
+		CODEX_HOME: native.codex,
+	});
+	expect(process.env.PATH).toBe(before);
+	expect(mocks.prepareCredentials).not.toHaveBeenCalled();
+});
+
 it.each([undefined, '/synthetic/existing-codex-home'])(
 	'login diagnostics inherit CODEX_HOME (%s) without preparing an account',
 	async (codexHome) => {

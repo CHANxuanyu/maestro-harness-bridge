@@ -179,7 +179,7 @@ export class NativeApp {
 		this.info.annotations.push({ type: 'native-cli-version', description: cli.version });
 		return result;
 	}
-	async start(homeDir?: string) {
+	async start(homeDir?: string, launchEnv: Record<string, string> = {}) {
 		if (this.real && this.options.providerCli !== false && !this.realCli) {
 			this.provider = this.info.title.split(' ')[0].replace(':', '') as Provider;
 			this.realCli = this.realCliFor(this.provider);
@@ -192,6 +192,7 @@ export class NativeApp {
 		this.app = await launchElectronApp(path.resolve('dist/main/index.js'), this.data, {
 			...this.env,
 			...(home ? { HOME: home } : {}),
+			...launchEnv,
 		});
 		this.boot++;
 		await this.app.context().tracing.start({ screenshots: true, snapshots: true });

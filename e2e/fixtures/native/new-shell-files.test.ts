@@ -39,12 +39,24 @@ for (const provider of ['claude', 'codex']) {
 							CLAUDE_CONFIG_DIR: root,
 							CODEX_HOME: root,
 							MAESTRO_NATIVE_SCRIPT: script,
+							SSH_CONNECTION: '127.0.0.1 41000 127.0.0.1 42000',
 						},
 					}
 				);
 				const file = path.join(root, 'src/cart.ts');
 				expect(fs.existsSync(file)).toBe(persist);
-				if (persist) expect(fs.readFileSync(file, 'utf8')).toBe(scene.writes['src/cart.ts']);
+				if (persist) {
+					expect(fs.readFileSync(file, 'utf8')).toBe(scene.writes['src/cart.ts']);
+					const invocation = JSON.parse(
+						fs.readFileSync(path.join(root, 'fixture-invocations.jsonl'), 'utf8').trim()
+					);
+					expect(invocation).toMatchObject({
+						provider,
+						cwd: root,
+						processCwd: root,
+						sshConnection: '127.0.0.1 41000 127.0.0.1 42000',
+					});
+				}
 			}
 		);
 		it('rejects a write outside the project', async () => {

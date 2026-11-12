@@ -183,12 +183,27 @@ const providers = [
 	{ id: 'codex', cli: 'codex', label: 'Codex', name: 'Native codex' },
 	{ id: 'deepseek', cli: 'claude', label: 'DeepSeek', name: 'Native deepseek' },
 ] as const;
-for (const entry of ['tab menu', 'command palette'] as const) {
+// The classic shell's default layout lists conversations in the Left Bar, and
+// each row's right-click menu is the per-conversation menu there. The agents
+// layout keeps the tab strip with its hover menu; that entry point does not
+// depend on the provider, so two directions cover it.
+for (const entry of ['conversation menu', 'agents tab menu', 'command palette'] as const) {
 	for (const from of providers) {
 		for (const to of providers.filter((provider) => provider.id !== from.id)) {
+			if (entry === 'agents tab menu' && (from.id === 'deepseek' || to.id === 'deepseek')) continue;
 			test(`F3 classic: ${entry} ${from.id} to ${to.id} explains and edits an unsent draft`, async ({
 				native,
 			}) => {
+				if (entry === 'agents tab menu') {
+					const settingsFile = path.join(native.data, 'maestro-settings.json');
+					fs.writeFileSync(
+						settingsFile,
+						JSON.stringify({
+							...JSON.parse(fs.readFileSync(settingsFile, 'utf8')),
+							sidebarNavigationMode: 'agents',
+						})
+					);
+				}
 				await native.start();
 				const browserWindow = await native.app.browserWindow(native.page);
 				await browserWindow.evaluate((window) => window.setContentSize(1800, 1000));
@@ -242,7 +257,13 @@ for (const entry of ['tab menu', 'command palette'] as const) {
 					)
 				).toEqual([]);
 
-				if (entry === 'tab menu') {
+				if (entry === 'conversation menu') {
+					await native.page
+						.locator(`[data-conversation-key$=":${sourceTab.id}"] button[data-tree-nav]`)
+						.first()
+						.click({ button: 'right' });
+					await native.page.getByRole('menuitem', { name: 'Hand off…', exact: true }).click();
+				} else if (entry === 'agents tab menu') {
 					await native.page.locator(`[role="tab"][data-tab-id="${sourceTab.id}"]`).hover();
 					await native.page
 						.getByRole('button', { name: 'Continue with another AI…', exact: true })
@@ -418,7 +439,11 @@ async function twoWindows(native: NativeApp) {
 		output: windows[index].getByLabel('Terminal output', { exact: true }),
 	}));
 	const assignments = await native.page.evaluate(() => window.maestro.windows.list());
-	expect(assignments.find((window) => window.id === mainId)!.sessionIds).toContain(owners[0].id);
+	// The main window owns every agent no other window has claimed; the registry
+	// lists only explicit claims, so "owned by main" means "claimed nowhere else".
+	expect(
+		assignments.some((window) => window.id !== mainId && window.sessionIds.includes(owners[0].id))
+	).toBe(false);
 	expect(assignments.find((window) => window.id === mainId)!.sessionIds).not.toContain(
 		owners[1].id
 	);

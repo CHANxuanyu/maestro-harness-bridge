@@ -324,6 +324,26 @@ describe('ChangesPanel', () => {
 		expect(screen.queryByText('new line two')).not.toBeInTheDocument();
 	});
 
+	it('keeps an open diff open across a later refresh and reloads it', async () => {
+		changes.mockResolvedValue(twoFiles);
+		changeDiff.mockResolvedValue({ diff: patch, binary: false, tooLarge: false });
+		render(<ChangesPanel theme={mockTheme} session={session()} />);
+
+		const row = await screen.findByRole('button', { name: /app\.ts/ });
+		fireEvent.click(row);
+		expect(await screen.findByText('new line two')).toBeInTheDocument();
+
+		// A slower refresh (an SSH round trip) lands after the user opened the diff.
+		fireEvent.click(screen.getByRole('button', { name: 'Refresh changes' }));
+		await waitFor(() => expect(changes).toHaveBeenCalledTimes(2));
+		await waitFor(() => expect(changeDiff).toHaveBeenCalledTimes(2));
+		expect(await screen.findByText('new line two')).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: /app\.ts/ })).toHaveAttribute(
+			'aria-expanded',
+			'true'
+		);
+	});
+
 	it('says why a file has no diff instead of showing an empty box', async () => {
 		changes.mockResolvedValue(twoFiles);
 		changeDiff.mockResolvedValue({ diff: '', binary: false, tooLarge: true });

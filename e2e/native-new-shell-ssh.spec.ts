@@ -293,18 +293,14 @@ test('new shell SSH: changes, files, terminal, handoff and localhost preview', a
 						command.includes(path.join(remoteProject, 'cart.ts')) && /\bcat\b/.test(command)
 				)
 			).toBe(true);
+			// A transcript link jumps to its line in the preview; Edit opens the editor.
 			await native.output().getByText('cart.ts', { exact: true }).click();
+			await expect(files).toContainText('export const threshold = 80;');
+			await files.getByTitle('Edit', { exact: true }).click();
 			const editor = files.locator('.cm-content[contenteditable="true"]');
-			await expect(editor).toBeFocused();
-			await expect
-				.poll(() =>
-					editor.evaluate(() => {
-						const anchor = window.getSelection()?.anchorNode;
-						const element = anchor instanceof Element ? anchor : anchor?.parentElement;
-						return element?.closest('.cm-line')?.textContent;
-					})
-				)
-				.toBe('export const threshold = 80;');
+			await expect(editor).toBeVisible();
+			await editor.click();
+			await expect(editor.locator('.cm-line').nth(1)).toHaveText('export const threshold = 80;');
 			await editor.fill(edited);
 			const beforeSave = sshd.clientInvocations().length;
 			await files.getByTitle('Save', { exact: true }).click();
@@ -331,16 +327,14 @@ test('new shell SSH: changes, files, terminal, handoff and localhost preview', a
 			await input.focus();
 			await input.pressSequentially('pwd; echo "$SSH_CONNECTION"');
 			await input.press('Enter');
-			const read = async () =>
-				(await native.cli('read-terminal', '--agent', source.id)).lines as string[];
-			await expect.poll(read).toContain(remoteProject);
+			// The right panel terminal is narrow, so long output wraps across screen
+			// rows. Read the screen as one string without the row breaks.
+			const screen = async () =>
+				((await native.cli('read-terminal', '--agent', source.id)).lines as string[]).join('');
+			await expect.poll(screen).toContain(remoteProject);
 			await expect
-				.poll(async () =>
-					(await read()).some((line) =>
-						new RegExp(`^127\\.0\\.0\\.1 \\d+ 127\\.0\\.0\\.1 ${remote.port}$`).test(line.trim())
-					)
-				)
-				.toBe(true);
+				.poll(screen)
+				.toMatch(new RegExp(`127\\.0\\.0\\.1 \\d+ 127\\.0\\.0\\.1 ${remote.port}`));
 			expect(
 				sshd
 					.clientInvocations()

@@ -83,7 +83,11 @@ export class PermissionRelayServer {
 		if (preferred.length <= 100) {
 			return preferred;
 		}
-		return path.join(os.tmpdir(), `maestro-relay-${process.pid}.sock`);
+		// The bridge connects from the agent's cwd, so a relative TMPDIR must not leak
+		// into the path; and an absolute one can itself be too long for a socket.
+		const name = `maestro-relay-${process.pid}.sock`;
+		const fallback = path.resolve(os.tmpdir(), name);
+		return fallback.length <= 100 ? fallback : path.join('/tmp', name);
 	}
 
 	private async start(userDataDir: string): Promise<string> {

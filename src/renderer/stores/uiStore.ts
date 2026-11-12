@@ -66,6 +66,9 @@ export interface PendingLogJump {
 }
 
 export interface UIStoreState {
+	newShellSidebarSearch: string;
+	newShellSettingsProjectKey: string | null;
+	newShellSettingsScopeKey: string | null;
 	// Sidebar - tri-state via two booleans: !hidden && open = full panel,
 	// !hidden && !open = collapsed status-dot strip, hidden = no panel at all.
 	leftSidebarOpen: boolean;
@@ -227,6 +230,8 @@ export interface UIStoreState {
 }
 
 export interface UIStoreActions {
+	setNewShellSidebarSearch: (query: string) => void;
+	setNewShellSettingsProjectKey: (key: string | null, scopeKey?: string) => void;
 	// Sidebar
 	setLeftSidebarOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
 	toggleLeftSidebar: () => void;
@@ -463,6 +468,9 @@ export const useUIStore = create<UIStore>()((set, get) => ({
 	sidebarExtraSelection: null,
 	outputSearchByKey: {},
 	pendingLogJump: null,
+	newShellSidebarSearch: '',
+	newShellSettingsProjectKey: null,
+	newShellSettingsScopeKey: null,
 	sessionFilterOpen: false,
 	sessionFilter: '',
 	showArchivedGroupChats: false,
@@ -597,6 +605,9 @@ export const useUIStore = create<UIStore>()((set, get) => ({
 	clearPendingLogJump: (logId) =>
 		set((s) => (s.pendingLogJump?.logId === logId ? { pendingLogJump: null } : s)),
 
+	setNewShellSidebarSearch: (query) => set({ newShellSidebarSearch: query }),
+	setNewShellSettingsProjectKey: (key, scopeKey) =>
+		set({ newShellSettingsProjectKey: key, newShellSettingsScopeKey: scopeKey ?? null }),
 	setSessionFilterOpen: (v) => set((s) => ({ sessionFilterOpen: resolve(v, s.sessionFilterOpen) })),
 	setSessionFilter: (v) => set((s) => ({ sessionFilter: resolve(v, s.sessionFilter) })),
 	setShowArchivedGroupChats: (v) =>

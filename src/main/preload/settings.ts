@@ -27,6 +27,14 @@ export function createSettingsApi() {
 	return {
 		projectSettings: (command: ProjectSettingsCommand): Promise<ProjectSettingsResult> =>
 			ipcRenderer.invoke('settings:projectSettings', command),
+		onProjectToolsChanged: (
+			handler: (patches: Record<string, Record<string, unknown>>) => void
+		) => {
+			const listener = (_: unknown, patches: Record<string, Record<string, unknown>>) =>
+				handler(patches);
+			ipcRenderer.on('settings:projectToolsChanged', listener);
+			return () => ipcRenderer.removeListener('settings:projectToolsChanged', listener);
+		},
 		aboutMe: (command: AboutMeCommand): Promise<AboutMeResult> =>
 			ipcRenderer.invoke('settings:aboutMe', command),
 		get: (key: string) => ipcRenderer.invoke('settings:get', key),

@@ -96,9 +96,6 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 	const edited = 'export const shipping = 0;\nexport const threshold = 80;\n';
 	const select = async (id: string) => {
 		const row = native.page.locator(`[data-conversation-key$=":${id}"]`);
-		const folded = native.page.getByRole('button', { name: /^Show subtasks: / });
-		// A finished review folds under the conversation it reviewed.
-		while (!(await row.count()) && (await folded.count())) await folded.first().click();
 		await row.locator(':scope > div > button[data-tree-nav]').last().click();
 	};
 	try {
@@ -187,7 +184,9 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 			await expect.poll(() => saved().some((s) => s.toolType === 'codex')).toBe(true);
 			const codex = saved().find((s) => s.toolType === 'codex')!;
 			codexTab = codex.activeTabId;
-			await expect(native.page.locator(`[data-conversation-key$=":${codexTab}"]`)).toBeVisible();
+			const sourceRow = native.page.locator(`[data-conversation-key="${claudeId}:${claudeTab}"]`);
+			await expect(sourceRow.locator(`[data-conversation-key$=":${codexTab}"]`)).toBeVisible();
+			expect((await native.cli('tab', 'children', claudeTab, '--expand')).expanded).toBe(true);
 			expect(savedTab(codexTab)!.inputValue).toContain('Claude implemented shipping.');
 			expect(savedTab(codexTab)!.logs).toEqual([]);
 			expect(calls(native.codex)).toBe(0);
@@ -198,6 +197,9 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 			await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
 			codexFile = await native.oneTranscript('codex');
 			expect(fs.readFileSync(codexFile, 'utf8')).toContain('Codex checked the implementation.');
+			await select(claudeTab);
+			await expect(sourceRow.locator(`[data-conversation-key$=":${codexTab}"]`)).toBeVisible();
+			expect((await native.cli('tab', 'children', claudeTab)).expanded).toBe(true);
 			expect(fs.readFileSync(claudeFile)).toEqual(claudeBytes);
 			expect(savedTab(claudeTab)!.logs).toEqual(claudeLogs);
 		});
@@ -368,7 +370,14 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 			await expect.poll(() => savedTab(codexTab)?.inputValue).toBe('Codex follow-up draft');
 			await expect.poll(() => savedTab(claudeTab)?.inputValue).toBe('Claude draft after review');
 			const before = [claudeFile, codexFile, reviewFile].map((file) => fs.readFileSync(file));
+			await select(claudeTab);
 			await native.restart(home);
+			await expect(
+				native.page.locator(
+					`[data-conversation-key="${claudeId}:${claudeTab}"] [data-conversation-key$=":${codexTab}"]`
+				)
+			).toBeVisible();
+			expect((await native.cli('tab', 'children', claudeTab)).expanded).toBe(true);
 			for (const [tabId, answer] of answers) {
 				await select(tabId);
 				await expect(native.output()).toContainText(answer);
@@ -385,6 +394,44 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 				expect(fs.readFileSync(file)).toEqual(before[i])
 			);
 			expect([calls(native.claude), calls(native.codex), calls(deepseekHome)]).toEqual([1, 1, 1]);
+		});
+		await test.step('6b archive promotes the handoff and unarchive nests it again', async () => {
+			const sourceNativeId = savedTab(claudeTab)!.agentSessionId!;
+			expect((await native.cli('tab', 'children', claudeTab, '--collapse')).expanded).toBe(false);
+			await expect(native.page.locator(`[data-conversation-key$=":${codexTab}"]`)).toHaveCount(0);
+			expect((await native.cli('tab', 'children', claudeTab, '--expand')).expanded).toBe(true);
+			await native.cli('tab', 'archive', claudeTab);
+			const handoffRow = native.page.locator(`[data-conversation-key$=":${codexTab}"]`);
+			await expect(handoffRow).toBeVisible();
+			await expect(handoffRow.locator('xpath=ancestor::li[@data-conversation-key]')).toHaveCount(0);
+			const closed = await native.cli(
+				'tab',
+				'children',
+				'--native',
+				sourceNativeId,
+				'--agent',
+				claudeId
+			);
+			expect(closed.expanded).toBe(true);
+			expect(closed.children.map((tab: { tabId: string }) => tab.tabId)).toContain(codexTab);
+			await native.cli('native-history', 'unarchive', claudeId, sourceNativeId);
+			const sourceRow = native.page.locator(`[data-native-session-id="${sourceNativeId}"]`);
+			await expect(sourceRow.locator(`[data-conversation-key$=":${codexTab}"]`)).toBeVisible();
+			await sourceRow.locator(':scope > div > button[data-tree-nav]').last().click();
+			// Reopening binds the native ID to a tab that can be replaced while the
+			// open settles. Take the tab the sidebar row ends on, once it is saved.
+			const reopenedTab = async () =>
+				(await sourceRow.getAttribute('data-conversation-key'))?.split(':').at(-1) ?? '';
+			await expect
+				.poll(async () => {
+					const shown = await reopenedTab();
+					return saved()
+						.find((owner) => owner.id === claudeId)
+						?.aiTabs.some((tab) => tab.id === shown && tab.agentSessionId === sourceNativeId);
+				})
+				.toBe(true);
+			claudeTab = await reopenedTab();
+			answers[0][0] = claudeTab;
 		});
 		await test.step('7 classic shell brings back the old right panel and every conversation', async () => {
 			// The settings UI updates both Zustand and disk; raw settings IPC only persists.

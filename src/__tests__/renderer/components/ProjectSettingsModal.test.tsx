@@ -229,7 +229,18 @@ it('edits every project tool through the shared panel without changing conversat
 	});
 	expect(saved[0].aiTabs).toEqual(owners[0].aiTabs);
 	expect(saved.slice(1)).toEqual(owners.slice(1));
-	expect(window.maestro.sessions.setMany).toHaveBeenCalledWith([saved[0]], []);
+	expect(window.maestro.sessions.setMany).not.toHaveBeenCalled();
+	expect(api).toHaveBeenLastCalledWith(
+		expect.objectContaining({
+			toolPatches: {
+				'claude-a': expect.objectContaining({
+					customPath: '/fixture/claude-new',
+					customEnvVars: { CLAUDE_CONFIG_DIR: '/fixture/account-b' },
+					enableMaestroP: false,
+				}),
+			},
+		})
+	);
 });
 
 it('keeps tool configuration hidden in the classic shell', async () => {
@@ -297,9 +308,13 @@ it('reads CLI updates from the store even when the project sidebar holds an olde
 		maestroPMode: 'dynamic',
 		customArgs: '--new',
 	});
-	expect(window.maestro.sessions.setMany).toHaveBeenCalledWith(
-		[useSessionStore.getState().sessions[0]],
-		[]
+	expect(window.maestro.sessions.setMany).not.toHaveBeenCalled();
+	expect(api).toHaveBeenLastCalledWith(
+		expect.objectContaining({
+			toolPatches: {
+				'session-1': { customArgs: '--new' },
+			},
+		})
 	);
 });
 
@@ -353,6 +368,7 @@ it('explains why an active conversation prevents changing its SSH host', async (
 	expect(close).not.toHaveBeenCalled();
 	expect(window.maestro.sessions.setMany).not.toHaveBeenCalled();
 	expect(useSessionStore.getState().sessions[0]).toEqual(owner);
+	expect(api.mock.calls.every(([command]) => command.action === 'show')).toBe(true);
 });
 
 it('uses project wording in Chinese and discards tool edits on Cancel', async () => {
@@ -415,4 +431,45 @@ it('does not expose auto handoff in the classic shell', async () => {
 	await screen.findByDisplayValue('test-secret-value');
 	expect(screen.queryByLabelText('Automatically hand off when quota runs out')).toBeNull();
 	expect(targets).not.toHaveBeenCalled();
+});
+
+it('keeps all renderer state and the form draft unchanged when the combined save fails', async () => {
+	useSettingsStore.setState({ newShell: true, projectSettings: {} });
+	const owner = createMockSession({
+		id: 'atomic-owner',
+		name: 'Atomic Claude',
+		projectRoot: '/projects/demo',
+		customArgs: '--before',
+	});
+	useSessionStore.setState({ sessions: [owner] });
+	const close = vi.fn();
+	render(
+		<LayerStackProvider>
+			<ProjectSettingsModal
+				theme={mockTheme}
+				name="Demo"
+				scopes={[{ projectPath: '/projects/demo' }]}
+				sessions={[owner]}
+				onClose={close}
+			/>
+		</LayerStackProvider>
+	);
+	await screen.findByText('Tool configurations');
+	fireEvent.click(screen.getByText('Atomic Claude', { exact: true }));
+	fireEvent.change(await screen.findByDisplayValue('--before'), { target: { value: '--after' } });
+	fireEvent.change(screen.getByLabelText('Default model'), { target: { value: 'after-model' } });
+	api.mockResolvedValueOnce({
+		success: false,
+		scope: { projectPath: '/projects/demo' },
+		settings: {},
+		errorCode: 'saveFailed',
+	});
+	fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+	await screen.findByRole('alert');
+	expect(close).not.toHaveBeenCalled();
+	expect(useSessionStore.getState().sessions).toEqual([owner]);
+	expect(useSettingsStore.getState().projectSettings).toEqual({});
+	expect(screen.getByDisplayValue('--after')).toBeInTheDocument();
+	expect(screen.getByDisplayValue('after-model')).toBeInTheDocument();
+	expect(window.maestro.sessions.setMany).not.toHaveBeenCalled();
 });

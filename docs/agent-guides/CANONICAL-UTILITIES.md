@@ -261,9 +261,48 @@ The tracker at [DEDUP-TRACKER.md](DEDUP-TRACKER.md) lists all known duplication 
 
 Every asynchronous transport operation must use `StageScope.step()`. Its abort check prevents a late response from initiating more work or publishing success. A timeout must terminate the Electron child owned by that sample, record dependent phases as blocked and proceed to independent samples. Never silently count a blocked phase as passed, retry it automatically, or start isolated streaming before full row ID validation succeeds. This runner is not the product's idle process watchdog. Commands, sample caps and trace limitations are in [perf-renderer.md](../perf-renderer.md).
 
+## Opt-in real acceptance
+
+`RealAcceptanceApp` in `e2e/fixtures/real-acceptance.ts` extends `NativeApp` for the
+Task P real-model scenarios. `acceptanceEnabled()` and `prepareAcceptanceProviders()`
+in `e2e/fixtures/native/real-runtime.cjs` require local double opt-in, reject CI and
+smoke mode, precheck every selected login before any binary probe, and pin tools and
+models. Credential access stays in `prepareCredentials()`, with explicit sources
+and no refresh token copied. `codexAcceptanceConfig()` is also used by
+`RealCodexApp`; do not create a competing isolated Codex config.
+
+`realOrchestrator()` in `e2e/fixtures/real-orchestrator.ts` shares both real parent
+directions. The existing `native/real-cli` relay optionally limits paid invocations
+and records argv, cwd and application-stamped caller IDs, never the environment.
+`createDeepSeekRelay()` in `e2e/fixtures/native/deepseek-relay.cjs` streams the real
+upstream response and records only allowlisted request capability fields and HTTP
+status. The secret stays in headers, never evidence. Test this boundary with
+in-memory streams; fixture tests must not need account files or listening sockets.
+
+Use `transcript()` for temp-contained native evidence and `finish()` in `finally`
+for attachments and cleanup. Runbook and per-spec budgets: [real-acceptance.md](../../e2e/real-acceptance.md).
+A skipped scenario is not passed acceptance; a collected capability rejection is
+not support. Do not hide missing product behavior by weakening scenario assertions.
+
 ## Native test temporary directories
 
 `nativeTempRoot()` and `createNativeTempDir(prefix)` in `e2e/fixtures/native/temp-root.cjs` select `MAESTRO_E2E_TEMP_ROOT`, then the short macOS temporary root or the system temporary root. They resolve the root physically before creating directories. Use them for native fixture and Electron acceptance directories; OMP uses the same root for its containment guard. A symlinked temporary path must not produce a different Claude project key from the child process cwd.
+
+`LocalSshd` and `localSshdUnavailableReason()` in `e2e/fixtures/native/local-sshd.ts`
+provide the synthetic new-shell SSH acceptance server. Pass a directory under
+the native temp root. Both keys, authorized keys, known hosts, sshd configuration
+and remote HOME stay there. The client wrapper adds `-F /dev/null`, since HOME
+alone does not isolate OpenSSH's config lookup; put its directory ahead of all
+system SSH binaries in the Electron launch PATH. Connection options still come
+from the app's `SshRemoteConfig`, not from a separate test SSH implementation.
+`clientInvocations()` reads the fixture's argument log; use it to distinguish
+SSH filesystem operations from local fallbacks against the same physical repo.
+The recorder does not read stdin, which carries the agent's remote spawn script.
+Readiness is bounded, startup errors include the daemon log, and `stop()` is
+idempotent with process-group termination and kill escalation. Always call it
+from `finally`, including when Electron startup fails. Missing OpenSSH tools
+return a skip reason; authentication, configuration and timeout failures must
+fail acceptance. Do not turn on system Remote Login or use real provider accounts.
 
 ## Conversation changes
 
@@ -333,6 +372,20 @@ For archived Claude desktop worktrees, `localProjectWorktree()` also accepts a r
 `projectSettingsKey()` 位于 `src/shared/projectSettings.ts`，以规范化项目路径和 SSH 主机标识隔离配置，不对远程路径做本机解析。
 `projectSettingsScopeForSession()`、`projectSettingsForSession()` 和 `projectConversationFields()` 位于 `src/renderer/utils/projectConversationDefaults.ts`，统一定位项目、检查新界面开关、冻结新对话模型与强度，并复用既有权限收紧函数。
 `newProjectConversation()` 位于 `src/renderer/services/newShellConversation.ts`，桌面默认新建和 CLI 回调共用。环境不同的对话通过 `openHandoffTarget()` 创建独立配置，`Session.projectSettingsBaseEnv` 保留应用项目变量之前的环境。清空项目变量时回到这一层，不能把上一次项目覆盖当成工具默认值。已有对话不读新的项目设置，原生导入仍走既有路径。
+
+`createProjectSettingsService()` 位于 `src/main/project-settings.ts`，是项目默认值与多个工具修改的唯一事务入口。新界面与 CLI `project settings set --tool-config` 在写入前校验全部字段和项目归属；主进程的会话写入队列串行处理工具保存、落盘、默认值保存以及失败回滚。成功后才发布配置补丁，禁止在 renderer 循环调用单项保存来实现项目保存。
+
+`editableSessionConfigPatch()` 位于 `src/shared/projectSettings.ts`，由 `sessionToolConfig.ts` 重导出，保留 `update-agent` 的字段白名单和 `null` 清空语义。`prepareSessionToolConfig()` 在 `src/renderer/services/sessionToolConfig.ts` 验证实时 SSH 进程，不写数据；`applyProjectToolPatches()` 只合并已提交配置字段，不替换运行回合、日志、草稿或标签。单项 `saveSessionToolConfig()` 继续使用同一验证入口。
+
+## Terminal buffer continuity across shell layouts
+
+`TerminalViewProvider` in `src/renderer/components/TerminalView.tsx` owns stable DOM hosts above the two shell layouts. Each layout attaches its terminal slot to the same mounted `TerminalViewContent` and `XTerminal`; the existing xterm buffer, PTY listeners, buffer reader and inactive-to-active repaint remain the only terminal output mechanism. Detached hosts are invisible and inert, retain their previous size, and release when tabs close, the owner disappears, or window ownership changes. Do not add a second output store or replay plain-text snapshots into a replacement xterm: that loses ANSI state and alternate screens.
+
+Both portal wrappers must continue the column flex layout: a block wrapper collapses the content's `flex-1` height, leaving an empty pane and a tiny terminal grid. Hidden hosts and slots use `visibility: hidden` and `pointer-events: none`; parked hosts also clear their visible state explicitly. Tiled hosts stay click-through outside their terminal pane rectangles.
+
+`canFitTerminal()` in `src/renderer/components/XTerminal.tsx` guards every fit, measured-size read and PTY size publication. It requires an attached, visible, nonzero container and a finite proposed grid above FitAddon's 2-column / 1-row minimum. Do not call `fit()` unconditionally from an imperative refresh or resize: reparenting can temporarily remove the container's size. `ResizeObserver` handles size recovery; `TerminalView` requests a refresh when visibility returns without a dimension change. These guards apply in both layouts because one retained xterm crosses the new-shell switch.
+
+`isLocalWebUrl()` in `src/renderer/services/newShellWeb.ts` shares HTTP(S) loopback recognition between automatic local preview links and the SSH inline notice. The notice is gated by `selectNewShellEnabled` and the conversation's enabled SSH configuration; it never changes navigation or opens a tunnel.
 
 ## Conversation archive identity and lifecycle
 
@@ -432,3 +485,10 @@ subscription narrow and leave the classic shell's stored command report intact.
 Codex 原型的标准权限能力统一取 `effectiveStandardPermissionCapability()`
 （`src/shared/codexAppServer.ts`）。只有新界面、原型开关和本地执行同时满足才增加
 Codex 的标准能力；咨询调用 `projectConversationFields(..., false)` 保持自己的限制。
+
+## Conversation tree disclosure and late native identity (Task K)
+
+- `conversationDisclosureKey()` and `conversationExpanded()` in `src/shared/conversationChildren.ts` read the owning session's `conversationTreeExpanded` map. Native ID keys survive source tab closure; tab ID keys cover the first turn before native identity exists.
+- `conversationChildren()` in `src/renderer/services/conversationChildren.ts` is the owner-side UI/CLI read and write operation. `windows:conversationChildren` routes through the registry, verifies the responder and waits for persistence. Native history resolution uses `matchRecordForTab()`; never infer an account from the native ID alone.
+- `captureConversationSourceNativeId()` in `src/renderer/services/agentDelegation.ts` is the only backfill. The source window forwards the identity through the registry, and child windows run the same function without rebroadcasting, then save only owned changes. It also migrates disclosure from the tab key to the first native key without overwriting an explicit choice.
+- `findConversationParent()` includes handoffs. `conversationBranch()` excludes handoff edges for archive refusal only. Do not reuse archive membership as display membership: an unarchived handoff must remain visible when its source is archived.

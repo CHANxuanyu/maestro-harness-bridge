@@ -128,7 +128,57 @@ test('project tool config: claude -p, custom path, CLI readback, restart and cla
 				(await window.maestro.process.getActiveProcesses()).filter((process) => !process.isTerminal)
 			)
 		).toEqual([]);
+		// A rejected multi-tool transaction leaves defaults and both owners untouched.
+		const beforeDefaults = await native.cli(
+			'project',
+			'settings',
+			'show',
+			'--path',
+			native.project
+		);
+		await expect(
+			native.cli(
+				'project',
+				'settings',
+				'set',
+				'--path',
+				native.project,
+				'--provider',
+				'codex',
+				'--tool-config',
+				JSON.stringify({
+					[owner.id]: { customArgs: '--should-not-save' },
+					missing: { customArgs: '--missing' },
+				})
+			)
+		).rejects.toThrow();
+		expect(await native.cli('project', 'settings', 'show', '--path', native.project)).toEqual(
+			beforeDefaults
+		);
+		expect((await native.cli('show', 'agent', owner.id)).customArgs).not.toBe('--should-not-save');
+		await native.cli(
+			'project',
+			'settings',
+			'set',
+			'--path',
+			native.project,
+			'--provider',
+			'codex',
+			'--tool-config',
+			JSON.stringify({
+				[owner.id]: { customArgs: '--transaction-a' },
+				[sibling.id]: { customArgs: '--transaction-b' },
+			})
+		);
+		expect(
+			(await native.cli('project', 'settings', 'show', '--path', native.project)).settings
+				.defaultProvider
+		).toBe('codex');
+		expect((await native.cli('show', 'agent', owner.id)).customArgs).toBe('--transaction-a');
+		expect((await native.cli('show', 'agent', sibling.id)).customArgs).toBe('--transaction-b');
 		await native.restart(home);
+		expect((await native.cli('show', 'agent', owner.id)).customArgs).toBe('--transaction-a');
+		expect((await native.cli('show', 'agent', sibling.id)).customArgs).toBe('--transaction-b');
 		modal = native.page.getByRole('dialog', { name: 'Project settings', exact: true });
 		row = modal.getByTestId(`project-tool-${owner.id}`);
 		expect(await native.cli('show', 'agent', owner.id)).toMatchObject({

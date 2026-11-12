@@ -416,14 +416,19 @@ export const ToolbarControls = memo(function ToolbarControls({
 						theme={theme}
 						agentId={session.toolType}
 						tabSaveToHistory={tabSaveToHistory}
-						onToggleTabSaveToHistory={onToggleTabSaveToHistory}
+						// The new shell has no History panel and folds thinking into the
+						// turn, so its desktop toolbar shows neither toggle; the phone sheet
+						// offers the same set.
+						onToggleTabSaveToHistory={newShell ? undefined : onToggleTabSaveToHistory}
 						hasReadOnlyCapability={hasReadOnlyCapability}
 						hasStandardCapability={hasStandardCapability}
 						permissionMode={currentPermissionMode}
 						onPermissionModeChange={handlePermissionModeChange}
 						supportsThinking={supportsThinking}
 						tabShowThinking={tabShowThinking}
-						onThinkingModeChange={onToggleTabShowThinking ? handleThinkingModeChange : undefined}
+						onThinkingModeChange={
+							!newShell && onToggleTabShowThinking ? handleThinkingModeChange : undefined
+						}
 						currentModel={currentModel}
 						availableModels={availableModels}
 						onModelChange={onModelChange}

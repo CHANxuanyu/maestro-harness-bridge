@@ -56,7 +56,7 @@ export function registerQuitSave(save: () => Promise<void>): () => void {
  * Run the registered save. Rejects when it fails or does not settle within
  * QUIT_SAVE_TIMEOUT_MS, so a caller can tell a save from a give-up.
  */
-async function runRegisteredSave(): Promise<void> {
+export async function flushPendingSessionSave(): Promise<void> {
 	const save = saveBeforeQuit;
 	if (!save) return Promise.resolve();
 	prepareQuitSave?.();
@@ -80,7 +80,7 @@ export async function confirmQuitAfterSave(): Promise<void> {
 	// With nothing to save, confirm in the same tick, as before.
 	if (saveBeforeQuit) {
 		try {
-			await runRegisteredSave();
+			await flushPendingSessionSave();
 		} catch (err) {
 			if (err instanceof QuitSaveTimeoutError)
 				logger.warn('[Persistence] save before quit timed out; quitting anyway');
@@ -97,5 +97,5 @@ export async function confirmQuitAfterSave(): Promise<void> {
  * reports a rejection as `false`), never as saved. Returns the unsubscribe.
  */
 export function answerQuitSaveRequests(): () => void {
-	return window.maestro.app.onQuitSaveRequest(runRegisteredSave);
+	return window.maestro.app.onQuitSaveRequest(flushPendingSessionSave);
 }

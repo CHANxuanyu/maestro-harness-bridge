@@ -2,7 +2,7 @@ import type { NativeHistorySearchHit } from '../../shared/nativeHistorySearch';
 import { openNativeConversation, type ResumeNativeSession } from './openNativeConversation';
 import { nativeRecordFitsTab, refreshNativeConversation } from './refreshNativeConversation';
 import { useSessionStore, updateAiTab } from '../stores/sessionStore';
-import { useUIStore } from '../stores/uiStore';
+import { useUIStore, type PendingLogJump } from '../stores/uiStore';
 import {
 	sameLiveMessage,
 	selectOlderEntries,
@@ -14,7 +14,8 @@ import {
 /** Open and backfill through the normal native reader, then use the existing scroll and flash. */
 export async function openNativeHistorySearchHit(
 	hit: NativeHistorySearchHit,
-	resume: ResumeNativeSession
+	resume: ResumeNativeSession,
+	onLocated?: (target: PendingLogJump) => void
 ): Promise<boolean> {
 	const record = hit.conversation;
 	if (record.sshRemoteId) return false;
@@ -59,6 +60,7 @@ export async function openNativeHistorySearchHit(
 			) ??
 			loaded.find(
 				(entry) =>
+					!!hit.message.text.trim() &&
 					(entry.source === 'user') === (hit.message.role === 'user') &&
 					(!hit.message.timestamp || entry.timestamp === Date.parse(hit.message.timestamp)) &&
 					entry.text.replace(/\s+/g, ' ').includes(hit.message.text.replace(/\s+/g, ' '))
@@ -81,12 +83,14 @@ export async function openNativeHistorySearchHit(
 			return older.length ? { ...tab, logs } : tab;
 		});
 		if (!logId || !current()) return false;
-		useUIStore.getState().setPendingLogJump({
+		const target: PendingLogJump = {
 			sessionId: ownerId,
 			tabId,
 			logId,
 			revealTurnActivity: true,
-		});
+		};
+		onLocated?.(target);
+		useUIStore.getState().setPendingLogJump(target);
 		return true;
 	} catch {
 		return false;

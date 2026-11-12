@@ -1,3 +1,8 @@
+import type {
+	ConversationChildrenRequest,
+	ConversationChildrenResult,
+	ConversationSourceIdentity,
+} from '../../../shared/conversationChildren';
 /**
  * Multi-Window IPC Handlers
  *
@@ -212,6 +217,72 @@ export function wireEmptySecondaryWindowAutoClose(registry: WindowRegistry): () 
  */
 export function registerWindowsHandlers(deps: WindowsHandlerDependencies): void {
 	const { getWindowRegistry, getWindowManager } = deps;
+
+	ipcMain.handle(
+		'windows:conversationChildren',
+		async (_event, request: ConversationChildrenRequest) => {
+			const registry = getWindowRegistry();
+			const ownerId =
+				registry?.getWindowForSession(request.sessionId) ?? registry?.getPrimary()?.id;
+			const owner = ownerId ? registry?.get(ownerId)?.browserWindow : undefined;
+			if (!owner || !isWebContentsAvailable(owner))
+				throw new Error('Conversation owner is unavailable');
+			const reply = await requestFromRenderer<{
+				success: boolean;
+				result?: ConversationChildrenResult;
+				error?: string;
+			}>(owner, 'windows:conversationChildrenRequest', {
+				args: [request],
+				timeoutMs: 15000,
+				fallback: { success: false, error: 'Conversation owner did not respond' },
+				verifySender: true,
+			});
+			if (
+				(registry?.getWindowForSession(request.sessionId) ?? registry?.getPrimary()?.id) !== ownerId
+			)
+				throw new Error('Conversation owner changed');
+			if (!reply.success || !reply.result)
+				throw new Error(reply.error || 'Conversation lookup failed');
+			return reply.result;
+		}
+	);
+
+	ipcMain.handle(
+		'windows:captureConversationSourceNativeId',
+		async (event, identity: ConversationSourceIdentity) => {
+			const registry = getWindowRegistry();
+			if (!registry) return;
+			const source = resolveCallingWindow(event, registry);
+			const ownerId = registry.getWindowForSession(identity.sessionId) ?? registry.getPrimary()?.id;
+			if (!source || source.id !== ownerId)
+				throw new Error('Native identity must come from its owning window');
+			if (
+				![identity.sessionId, identity.tabId, identity.nativeSessionId, identity.provider].every(
+					(value) => typeof value === 'string' && value.length > 0
+				)
+			)
+				throw new Error('Invalid native identity');
+			await Promise.all(
+				registry
+					.getAppWindows()
+					.filter((entry) => entry.id !== source.id)
+					.map(async (entry) => {
+						const result = await requestFromRenderer<{ success: boolean }>(
+							entry.browserWindow,
+							'windows:conversationSourceNativeId',
+							{
+								args: [identity],
+								timeoutMs: 5000,
+								fallback: { success: false },
+								verifySender: true,
+							}
+						);
+						if (!result.success)
+							throw new Error('Could not save native identity in a child window');
+					})
+			);
+		}
+	);
 
 	ipcMain.handle('windows:getConversationPermissions', async (_event, sessionIds: string[]) => {
 		const registry = getWindowRegistry();

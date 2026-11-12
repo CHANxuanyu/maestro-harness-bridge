@@ -6,11 +6,13 @@ import type { Session, Theme, AITab, FilePreviewTab } from '../../../../renderer
 
 import { mockTheme } from '../../../helpers/mockTheme';
 // Mock stores
+const settingsOverrides = vi.hoisted(() => ({ newShell: false }));
 vi.mock('../../../../renderer/stores/settingsStore', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../../../../renderer/stores/settingsStore')>()),
 	useSettingsStore: Object.assign(
 		vi.fn((selector) =>
 			selector({
+				...settingsOverrides,
 				fontFamily: 'monospace',
 				defaultShell: '/bin/zsh',
 				fontSize: 14,
@@ -233,6 +235,29 @@ describe('MainPanelContent', () => {
 		props.activeSession = makeSession({ inputMode: 'terminal' });
 		render(<MainPanelContent {...props} />);
 		expect(screen.queryByTestId('input-area')).not.toBeInTheDocument();
+	});
+
+	it('keeps the composer in the new shell when the classic shell left terminal mode or a file tab', () => {
+		settingsOverrides.newShell = true;
+		try {
+			const props = makeDefaultProps();
+			const tab = {
+				id: 'tab-1',
+				state: 'busy',
+				logs: [{ id: 'u1', timestamp: 1, source: 'user', text: 'Keep working' }],
+			} as unknown as AITab;
+			props.activeSession = makeSession({
+				inputMode: 'terminal',
+				activeFileTabId: 'stale-file',
+				aiTabs: [tab],
+			});
+			props.activeTab = tab;
+			props.activeFileTabId = 'stale-file';
+			render(<MainPanelContent {...props} />);
+			expect(screen.getByTestId('input-area')).toBeInTheDocument();
+		} finally {
+			settingsOverrides.newShell = false;
+		}
 	});
 
 	it('hides InputArea in mobile landscape', () => {

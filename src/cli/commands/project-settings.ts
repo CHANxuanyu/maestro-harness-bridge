@@ -12,6 +12,7 @@ import { isInheritValue, resolveCliPath } from '../utils/parse';
 
 interface ProjectSettingsOptions {
 	autoHandoff?: string;
+	toolConfig?: string;
 	path?: string;
 	sshRemote?: string;
 	provider?: string;
@@ -42,6 +43,16 @@ export async function projectSettings(
 		if (!['show', 'set'].includes(action) || !options.path?.trim())
 			throw new Error(t('workflows.projectSettings.cli.usage'));
 		const patch: ProjectSettingsPatch = {};
+		let toolPatches: Record<string, Record<string, unknown>> | undefined;
+		if (options.toolConfig !== undefined) {
+			try {
+				const parsed = JSON.parse(options.toolConfig);
+				if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+				toolPatches = parsed;
+			} catch {
+				throw new Error(t('workflows.projectSettings.cli.invalidToolConfig'));
+			}
+		}
 		for (const [field, value] of [
 			['defaultProvider', options.provider],
 			['defaultModel', options.model],
@@ -66,9 +77,12 @@ export async function projectSettings(
 				})
 			);
 		}
-		if (action === 'show' && (Object.keys(patch).length || options.acknowledgeFullAccess))
+		if (
+			action === 'show' &&
+			(Object.keys(patch).length || toolPatches !== undefined || options.acknowledgeFullAccess)
+		)
 			throw new Error(t('workflows.projectSettings.cli.setOnly'));
-		if (action === 'set' && !Object.keys(patch).length)
+		if (action === 'set' && !Object.keys(patch).length && !Object.keys(toolPatches ?? {}).length)
 			throw new Error(t('workflows.projectSettings.cli.emptyPatch'));
 		const scope = {
 			projectPath: options.sshRemote ? options.path : resolveCliPath(options.path),
@@ -81,6 +95,7 @@ export async function projectSettings(
 						action: 'set',
 						scope,
 						patch,
+						...(toolPatches !== undefined ? { toolPatches } : {}),
 						...(options.acknowledgeFullAccess ? { acknowledgeFullAccess: true } : {}),
 					};
 		const reply = await sendSimpleCommand<{

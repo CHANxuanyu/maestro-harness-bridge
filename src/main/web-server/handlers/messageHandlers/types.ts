@@ -345,7 +345,7 @@ export interface MessageHandlerCallbacks {
 	updateSessionConfig: (
 		sessionId: string,
 		configPatch: Record<string, unknown>
-	) => Promise<{ success: boolean; error?: string }>;
+	) => Promise<{ success: boolean; error?: string; data?: Record<string, unknown> }>;
 	getGitStatus: (sessionId: string) => Promise<GitStatusResult>;
 	getGitDiff: (sessionId: string, filePath?: string) => Promise<GitDiffResult>;
 	getGitBranchesForSession: (sessionId: string) => Promise<GitBranchesResult>;
@@ -427,7 +427,7 @@ export interface MessageHandlerCallbacks {
 	/** External-pickup primitive used by `maestro-cli session list`. Surfaces every
 	 *  open AI tab across all desktop agents so consumers (Maestro-Discord, Cue)
 	 *  can address tabs by id without owning a persistent channel. */
-	listDesktopSessions: () => DesktopSessionEntry[];
+	listDesktopSessions: () => DesktopSessionEntry[] | Promise<DesktopSessionEntry[]>;
 	/** Read-only conversation history fetch used by `maestro-cli session show
 	 *  <tabId>`. Filters (`sinceMs`, `tail`) live alongside the read so we don't
 	 *  ship the full transcript over the wire on every poll. */

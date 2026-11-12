@@ -1,3 +1,5 @@
+import { requestFromRenderer } from './remoteRequest';
+import { PROJECT_CONVERSATION_TIMEOUT_MS } from '../../../shared/projectSettings';
 import { randomUUID } from 'crypto';
 import { ipcMain } from 'electron';
 import type { WebServer } from '../WebServer';
@@ -7,7 +9,10 @@ import { isWebContentsAvailable } from '../../utils/safe-send';
 
 export function registerSessionCrudCallbacks(
 	server: WebServer,
-	deps: Pick<WebServerFactoryDependencies, 'getMainWindow' | 'getWindowForSession'>
+	deps: Pick<
+		WebServerFactoryDependencies,
+		'getMainWindow' | 'getWindowForSession' | 'getAppWindows'
+	>
 ): void {
 	const { getMainWindow, getWindowForSession } = deps;
 
@@ -279,6 +284,54 @@ export function registerSessionCrudCallbacks(
 	// disk. Applied even while the agent runs (these are spawn-time settings).
 	server.setUpdateSessionConfigCallback(
 		async (sessionId: string, configPatch: Record<string, unknown>) => {
+			if ('newShellCommand' in configPatch) {
+				let target =
+					sessionId === 'active'
+						? getMainWindow()
+						: (getWindowForSession?.(sessionId) ?? getMainWindow());
+				const command = configPatch.newShellCommand as Record<string, unknown> | null;
+				if (sessionId === 'active' && command?.action === 'force-send') {
+					const matches: Array<{ window: NonNullable<typeof target>; sessionId: string }> = [];
+					for (const win of deps.getAppWindows?.() ?? (target ? [target] : [])) {
+						if (!isWebContentsAvailable(win))
+							return { success: false, error: 'Desktop window unavailable' };
+						const found = await requestFromRenderer<{
+							success: boolean;
+							error?: string;
+							data?: { sessionIds?: string[] };
+						}>(win, 'remote:updateSessionConfig', {
+							args: [
+								'active',
+								{ newShellCommand: { action: 'locate-queue', itemId: command.itemId } },
+							],
+							verifySender: true,
+							fallback: { success: false, error: 'Desktop did not confirm the queue owner' },
+						});
+						if (!found.success) return { success: false, error: found.error };
+						for (const id of found.data?.sessionIds ?? [])
+							matches.push({ window: win, sessionId: id });
+					}
+					if (matches.length !== 1)
+						return { success: false, error: 'Queued item not found or ambiguous' };
+					target = matches[0].window;
+					sessionId = matches[0].sessionId;
+				}
+				if (!isWebContentsAvailable(target))
+					return { success: false, error: 'Desktop window unavailable' };
+				return requestFromRenderer<{
+					success: boolean;
+					error?: string;
+					data?: Record<string, unknown>;
+				}>(target, 'remote:updateSessionConfig', {
+					args: [sessionId, configPatch],
+					verifySender: true,
+					timeoutMs: PROJECT_CONVERSATION_TIMEOUT_MS,
+					fallback: {
+						success: false,
+						error: 'Desktop did not confirm the command; it may still be applying',
+					},
+				});
+			}
 			const mainWindow = getWindowForSession?.(sessionId) ?? getMainWindow();
 			if (!mainWindow) {
 				logger.warn('mainWindow is null for updateSessionConfig', 'WebServer');

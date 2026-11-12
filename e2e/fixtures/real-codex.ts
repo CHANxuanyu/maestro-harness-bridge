@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { expect, type TestInfo } from '@playwright/test';
 import { NativeApp } from './native-app';
-import { prepareCredentials } from './native/real-runtime.cjs';
+import { prepareCredentials, codexAcceptanceConfig } from './native/real-runtime.cjs';
 
 /** API credentials or access-only login snapshots in isolated temporary accounts. */
 export class RealCodexApp extends NativeApp {
@@ -53,30 +53,7 @@ export class RealCodexApp extends NativeApp {
 			);
 			fs.writeFileSync(
 				path.join(this.codex, 'config.toml'),
-				[
-					'cli_auth_credentials_store = "file"',
-					'mcp_oauth_credentials_store = "file"',
-					'web_search = "disabled"',
-					...(process.env.CODEX_API_KEY ? ['model_provider = "maestro_real_e2e"'] : []),
-					'[features]',
-					'apps = false',
-					'plugins = false',
-					'hooks = false',
-					'multi_agent = false',
-					'code_mode = false',
-					'unbounded_connection_retries = false',
-					...(process.env.CODEX_API_KEY
-						? [
-								'[model_providers.maestro_real_e2e]',
-								'name = "OpenAI real acceptance"',
-								'base_url = "https://api.openai.com/v1"',
-								'env_key = "CODEX_API_KEY"',
-								'wire_api = "responses"',
-								'request_max_retries = 0',
-								'stream_max_retries = 0',
-							]
-						: []),
-				].join('\n') + '\n'
+				codexAcceptanceConfig(!!process.env.CODEX_API_KEY)
 			);
 			this.version = execFileSync(executable, ['--version'], {
 				cwd: this.project,

@@ -1,3 +1,5 @@
+import { conversationChildren } from '../../services/conversationChildren';
+import { captureConversationSourceNativeId } from '../../services/agentDelegation';
 import type { AgentDelegationSource } from '../../../shared/agentDelegation';
 import { deriveConsultSubject } from '../../../shared/crossAgentContext';
 import { resolveTabPermissionMode } from '../../../shared/agentMetadata';
@@ -362,6 +364,34 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 		};
 	}, []);
 
+	useEffect(() => {
+		if (isWebDesktop()) return;
+		const stopChildren = window.maestro.windows?.onConversationChildren?.(conversationChildren);
+		const stopIdentity = window.maestro.windows?.onConversationSourceNativeId?.(
+			async (identity) => {
+				if (!useSettingsStore.getState().newShell) return;
+				const changed = captureConversationSourceNativeId(
+					identity.sessionId,
+					identity.tabId,
+					identity.nativeSessionId,
+					identity.provider,
+					false
+				);
+				if (
+					changed.length &&
+					(await window.maestro.sessions.setMany(
+						useSessionStore.getState().sessions.filter((session) => changed.includes(session.id)),
+						[]
+					)) === false
+				)
+					throw new Error('Could not save child origins');
+			}
+		);
+		return () => {
+			stopChildren?.();
+			stopIdentity?.();
+		};
+	}, []);
 	useEffect(() => {
 		if (isWebDesktop()) return;
 		return window.maestro.windows?.onReadConversationPermissions?.(conversationPermissionSnapshot);

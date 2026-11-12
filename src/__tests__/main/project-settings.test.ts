@@ -1,3 +1,4 @@
+import { createMockSession } from '../helpers/mockSession';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProjectSettingsService } from '../../main/project-settings';
 import { projectSettingsKey } from '../../shared/projectSettings';
@@ -14,11 +15,288 @@ describe('project settings persistence', () => {
 	};
 	beforeEach(() => {
 		values = {};
-		changed.mockClear();
+		changed.mockReset();
 	});
 	const service = () =>
 		createProjectSettingsService({ settingsStore: store as never, onChanged: changed });
 	const scope = { projectPath: '/tmp/project-settings-fixture' };
+
+	it.each(['sessions', 'flush', 'settings'])(
+		'rolls back every store when %s fails after mutation',
+		async (step) => {
+			values = {
+				newShell: true,
+				projectSettings: { [projectSettingsKey(scope)]: { defaultProvider: 'claude-code' } },
+			};
+			let sessions = [
+				createMockSession({
+					id: 'owner',
+					cwd: scope.projectPath,
+					projectRoot: scope.projectPath,
+					customPath: '/fixture/old',
+				}),
+			];
+			const beforeSettings = structuredClone(values);
+			const beforeSessions = structuredClone(sessions);
+			let failed = false;
+			const fail = (at: string) => {
+				if (at === step && !failed) {
+					failed = true;
+					throw new Error('injected write failure');
+				}
+			};
+			const api = createProjectSettingsService({
+				settingsStore: {
+					...store,
+					set: (key: string, value: unknown) => {
+						store.set(key, value);
+						fail('settings');
+					},
+				} as never,
+				sessionsStore: {
+					get: () => sessions,
+					set: (_key: string, value: typeof sessions) => {
+						sessions = structuredClone(value);
+						fail('sessions');
+					},
+				},
+				flushSessionWrites: async () => {
+					fail('flush');
+				},
+				onChanged: changed,
+			});
+			expect(
+				await api.command({
+					action: 'set',
+					scope,
+					patch: { defaultProvider: 'codex' },
+					toolPatches: { owner: { customPath: '/fixture/new' } },
+				})
+			).toMatchObject({ success: false, code: 'persistence-failed' });
+			expect(failed).toBe(true);
+			expect(values).toEqual(beforeSettings);
+			expect(sessions).toEqual(beforeSessions);
+			expect(changed).not.toHaveBeenCalled();
+		}
+	);
+
+	it('still rolls back if the shell setting changes while the disk write is pending', async () => {
+		values.newShell = true;
+		const owner = createMockSession({
+			id: 'owner',
+			cwd: scope.projectPath,
+			projectRoot: scope.projectPath,
+		});
+		let sessions = [owner];
+		const flush = vi
+			.fn()
+			.mockImplementationOnce(async () => {
+				values.newShell = false;
+				throw new Error('pending write failed');
+			})
+			.mockResolvedValue(undefined);
+		const api = createProjectSettingsService({
+			settingsStore: store as never,
+			sessionsStore: {
+				get: () => sessions,
+				set: (_key, updated) => {
+					sessions = updated as typeof sessions;
+				},
+			},
+			flushSessionWrites: flush,
+			onChanged: changed,
+		});
+		expect(
+			await api.command({
+				action: 'set',
+				scope,
+				patch: { defaultProvider: 'codex' },
+				toolPatches: { owner: { customArgs: '--new' } },
+			})
+		).toMatchObject({ success: false, errorCode: 'saveFailed' });
+		expect(sessions).toEqual([owner]);
+		expect(values).toEqual({ newShell: false });
+		expect(changed).not.toHaveBeenCalled();
+	});
+
+	it('does not report a save failure after a committed transaction when a listener fails', async () => {
+		values.newShell = true;
+		changed.mockImplementation(() => {
+			throw new Error('listener disconnected');
+		});
+		expect(
+			await service().command({ action: 'set', scope, patch: { defaultProvider: 'codex' } })
+		).toMatchObject({ success: true });
+		expect((await service().command({ action: 'show', scope })).settings.defaultProvider).toBe(
+			'codex'
+		);
+	});
+
+	it('restores an absent defaults key when its first write fails after mutation', async () => {
+		values.newShell = true;
+		const api = createProjectSettingsService({
+			settingsStore: {
+				...store,
+				set: (key: string, value: unknown) => {
+					store.set(key, value);
+					throw new Error('write failed');
+				},
+				delete: (key: string) => {
+					delete values[key];
+				},
+			} as never,
+			onChanged: changed,
+		});
+		expect(
+			await api.command({ action: 'set', scope, patch: { defaultProvider: 'codex' } })
+		).toMatchObject({ success: false, errorCode: 'saveFailed' });
+		expect(values).toEqual({ newShell: true });
+		expect(changed).not.toHaveBeenCalled();
+	});
+
+	it('validates every tool before saving project defaults or any tool', async () => {
+		values.newShell = true;
+		const set = vi.fn();
+		const api = createProjectSettingsService({
+			settingsStore: { ...store, set } as never,
+			sessionsStore: {
+				get: () => [
+					createMockSession({
+						id: 'owner',
+						cwd: scope.projectPath,
+						projectRoot: scope.projectPath,
+					}),
+				],
+				set,
+			},
+			flushSessionWrites: async () => {},
+		});
+		expect(
+			await api.command({
+				action: 'set',
+				scope,
+				patch: { defaultProvider: 'codex' },
+				toolPatches: {
+					owner: { customPath: '/fixture/new' },
+					missing: { customArgs: '--changed' },
+				},
+			})
+		).toMatchObject({ success: false });
+		expect(set).not.toHaveBeenCalled();
+	});
+
+	it('commits all tool patches once and preserves live conversations and untouched tools', async () => {
+		values.newShell = true;
+		const owner = createMockSession({
+			id: 'owner',
+			cwd: scope.projectPath,
+			projectRoot: scope.projectPath,
+		});
+		const sibling = createMockSession({ ...owner, id: 'sibling', customPath: '/fixture/old' });
+		const untouched = createMockSession({ ...owner, id: 'untouched' });
+		let sessions = [owner, sibling, untouched];
+		const write = vi.fn((_key, updated) => {
+			sessions = updated;
+		});
+		const flush = vi.fn().mockResolvedValue(undefined);
+		const api = createProjectSettingsService({
+			settingsStore: store as never,
+			sessionsStore: { get: () => sessions, set: write },
+			flushSessionWrites: flush,
+			onChanged: changed,
+		});
+		expect(
+			await api.command({
+				action: 'set',
+				scope,
+				patch: { defaultProvider: 'codex' },
+				toolPatches: { owner: { customArgs: '--new' }, sibling: { customPath: null } },
+			})
+		).toMatchObject({ success: true });
+		expect(write).toHaveBeenCalledTimes(1);
+		expect(flush).toHaveBeenCalledTimes(1);
+		expect(sessions[0]).toEqual({ ...owner, customArgs: '--new' });
+		expect(sessions[1]).toEqual({ ...sibling, customPath: undefined });
+		expect(sessions[2]).toBe(untouched);
+		expect(changed).toHaveBeenCalledExactlyOnceWith({
+			owner: { customArgs: '--new' },
+			sibling: { customPath: undefined },
+		});
+	});
+
+	it.each([
+		{ newShell: false, patch: { customArgs: '--new' }, errorCode: 'newShellRequired' },
+		{ newShell: true, patch: { aiTabs: [] }, errorCode: 'invalidPatch' },
+		{ newShell: true, patch: { maestroPMode: 'unsupported' }, errorCode: 'invalidSetting' },
+		{ newShell: true, patch: { contextWindowSource: 'unsupported' }, errorCode: 'invalidSetting' },
+		{
+			newShell: true,
+			patch: { customEnvVars: { 'BAD-KEY': 'bad' } },
+			errorCode: 'invalidEnvironment',
+		},
+		{
+			newShell: true,
+			patch: { sessionSshRemoteConfig: { enabled: true, remoteId: 'host' } },
+			errorCode: 'toolRunning',
+		},
+	])('rejects invalid tool changes before writing: %j', async ({ newShell, patch, errorCode }) => {
+		values.newShell = newShell;
+		const owner = createMockSession({
+			id: 'owner',
+			cwd: scope.projectPath,
+			projectRoot: scope.projectPath,
+		});
+		const write = vi.fn();
+		const api = createProjectSettingsService({
+			settingsStore: { ...store, set: write } as never,
+			sessionsStore: { get: () => [owner], set: write },
+			flushSessionWrites: async () => {},
+			isSessionRunning: () => true,
+		});
+		expect(
+			await api.command({
+				action: 'set',
+				scope,
+				patch: { defaultProvider: 'codex' },
+				toolPatches: { owner: patch },
+			})
+		).toMatchObject({ success: false, errorCode });
+		expect(write).not.toHaveBeenCalled();
+	});
+
+	it('reports a failed rollback explicitly and still restores the other store', async () => {
+		values.newShell = true;
+		const owner = createMockSession({
+			id: 'owner',
+			cwd: scope.projectPath,
+			projectRoot: scope.projectPath,
+		});
+		let sessions = [owner];
+		const api = createProjectSettingsService({
+			settingsStore: {
+				...store,
+				set: () => {
+					throw new Error('disk unavailable');
+				},
+			} as never,
+			sessionsStore: {
+				get: () => sessions,
+				set: (_key, value) => {
+					sessions = value as typeof sessions;
+				},
+			},
+			flushSessionWrites: async () => {},
+		});
+		expect(
+			await api.command({
+				action: 'set',
+				scope,
+				patch: {},
+				toolPatches: { owner: { customArgs: '--new' } },
+			})
+		).toMatchObject({ success: false, errorCode: 'rollbackFailed' });
+		expect(sessions).toEqual([owner]);
+	});
 
 	it('keeps auto handoff off by default and isolates its target by project and host', async () => {
 		const api = service();
@@ -295,6 +573,10 @@ describe('project settings persistence', () => {
 			'saveFailed',
 			'requestFailed',
 			'modelProviderRequired',
+			'toolMissing',
+			'toolRunning',
+			'newShellRequired',
+			'rollbackFailed',
 		] as const) {
 			const key = `workflows.projectSettings.errors.${errorCode}` as const;
 			for (const locale of ['en', 'zh-CN'] as const) {

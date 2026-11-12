@@ -104,6 +104,7 @@ export interface ProjectSessionTreeProps {
 	/** Rows whose last open (history row) or catch-up refresh (open tab) failed. */
 	failedKeys?: Record<string, true>;
 	onToggleProject: (project: SidebarProject) => void;
+	onSetChildrenExpanded?: (conversation: SidebarConversation, expanded: boolean) => void;
 	/** Open rows focus their tab; history rows resume in the original harness. */
 	onSelectConversation: (conversation: SidebarConversation) => void;
 	onNewConversation: (ownerId: string) => void;
@@ -421,6 +422,7 @@ interface ConversationRowProps {
 	t: TFunction;
 	formatRelative: (value: number) => string;
 	onSelect: (conversation: SidebarConversation) => void;
+	onSetChildrenExpanded?: (conversation: SidebarConversation, expanded: boolean) => void;
 	openMenu: OpenMenu;
 }
 
@@ -450,11 +452,10 @@ const ConversationRow = memo(function ConversationRow({
 	t,
 	formatRelative,
 	onSelect,
+	onSetChildrenExpanded,
 	openMenu,
 }: ConversationRowProps) {
 	const childrenId = useId();
-	const [childrenExpanded, setChildrenExpanded] = useState(false);
-	const [autoExpansionDismissed, setAutoExpansionDismissed] = useState(false);
 	const children = newShell ? conversation.children : undefined;
 	const active = conversation.key === activeKey;
 	const menuOpen = openMenuState?.kind === 'row' && openMenuState.key === conversation.key;
@@ -464,8 +465,11 @@ const ConversationRow = memo(function ConversationRow({
 	const forceExpanded =
 		!!children &&
 		(searching || !!findConversation(children, (child) => child.busy || child.key === activeKey));
-	useEffect(() => setAutoExpansionDismissed(false), [forceExpanded]);
-	const expanded = childrenExpanded || (forceExpanded && !autoExpansionDismissed);
+	const expanded = conversation.expanded ?? forceExpanded;
+	useEffect(() => {
+		if (newShell && !searching && forceExpanded && conversation.expanded === undefined)
+			onSetChildrenExpanded?.(conversation, true);
+	}, [newShell, searching, forceExpanded, conversation, onSetChildrenExpanded]);
 	const title = conversationTitle(conversation, t, newShell);
 	const worktree = conversation.history?.worktree;
 	const isOpen = conversation.kind === 'open';
@@ -500,10 +504,7 @@ const ConversationRow = memo(function ConversationRow({
 						)}
 						aria-expanded={expanded}
 						aria-controls={childrenId}
-						onClick={() => {
-							setChildrenExpanded(!expanded);
-							setAutoExpansionDismissed(expanded);
-						}}
+						onClick={() => onSetChildrenExpanded?.(conversation, !expanded)}
 						className="absolute rounded p-0.5 outline-none focus-visible:ring-1 hover:bg-white/10"
 						style={{ left: indent - 18, color: theme.colors.textDim }}
 					>
@@ -706,6 +707,7 @@ const ConversationRow = memo(function ConversationRow({
 							t={t}
 							formatRelative={formatRelative}
 							onSelect={onSelect}
+							onSetChildrenExpanded={onSetChildrenExpanded}
 							openMenu={openMenu}
 						/>
 					))}
@@ -776,6 +778,7 @@ interface ProjectSectionProps {
 	t: TFunction;
 	formatRelative: (value: number) => string;
 	onToggleProject: (project: SidebarProject) => void;
+	onSetChildrenExpanded?: (conversation: SidebarConversation, expanded: boolean) => void;
 	onSelectConversation: (conversation: SidebarConversation) => void;
 	onNewConversation: (ownerId: string) => void;
 	onShowMore?: (project: SidebarProject) => void;
@@ -797,6 +800,7 @@ const ProjectSection = memo(function ProjectSection({
 	t,
 	formatRelative,
 	onToggleProject,
+	onSetChildrenExpanded,
 	onSelectConversation,
 	onNewConversation,
 	onShowMore,
@@ -949,6 +953,7 @@ const ProjectSection = memo(function ProjectSection({
 							t={t}
 							formatRelative={formatRelative}
 							onSelect={onSelectConversation}
+							onSetChildrenExpanded={onSetChildrenExpanded}
 							openMenu={openMenu}
 						/>
 					))}
@@ -1091,6 +1096,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 	pendingKeys = NO_KEYS,
 	failedKeys = NO_KEYS,
 	onToggleProject,
+	onSetChildrenExpanded,
 	onSelectConversation,
 	onNewConversation,
 	onNewConversationHere,
@@ -1633,6 +1639,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 							t={t}
 							formatRelative={formatRelative}
 							onToggleProject={onToggleProject}
+							onSetChildrenExpanded={onSetChildrenExpanded}
 							onSelectConversation={onSelectConversation}
 							onNewConversation={onNewConversation}
 							onShowMore={onShowMore}

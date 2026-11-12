@@ -269,6 +269,12 @@ export function registerAllHandlers(deps: HandlerDependencies): void {
 		sessionsStore: deps.sessionsStore,
 	});
 	registerPersistenceHandlers({
+		isSessionRunning: (id) =>
+			deps
+				.getProcessManager()
+				?.getAll()
+				.some((process) => !process.isTerminal && process.sessionId.startsWith(`${id}-ai-`)) ??
+			true,
 		aboutMe: deps.aboutMe,
 		settingsStore: deps.settingsStore,
 		sessionsStore: deps.sessionsStore,

@@ -847,6 +847,11 @@ const mockMaestro = {
 		getBounds: vi.fn().mockResolvedValue(null),
 		findWindowAtPoint: vi.fn().mockResolvedValue(null),
 		highlightDropZone: vi.fn().mockResolvedValue(undefined),
+		// The conversation tree persists its disclosure through the owner window.
+		conversationChildren: vi.fn().mockResolvedValue({ parent: null, expanded: false }),
+		onConversationChildren: vi.fn(() => () => {}),
+		captureConversationSourceNativeId: vi.fn().mockResolvedValue(undefined),
+		onConversationSourceNativeId: vi.fn(() => () => {}),
 		// Returns an unsubscribe fn (default no-op) so WindowProvider's effect can
 		// clean up. Window tests capture the registered callback to fire broadcasts.
 		onSessionMoved: vi.fn(() => () => {}),

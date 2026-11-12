@@ -1,4 +1,48 @@
 export default {
+	'workflows.cliParity.invalidRequest': 'Invalid new shell command',
+	'workflows.cliParity.wrongWindow': 'Conversation belongs to another window',
+	'workflows.cliParity.missingField': 'Missing {field}',
+	'workflows.cliParity.ownerMissing': 'Agent not found',
+	'workflows.cliParity.conversationMissing': 'Conversation not found',
+	'workflows.cliParity.invalidHit': 'Invalid native search hit',
+	'workflows.cliParity.historyUnavailable': 'Native history is unavailable',
+	'workflows.cliParity.unknownProvider': 'Unknown conversation provider',
+	'workflows.cliParity.itemMissing': 'Queued item not found',
+	'workflows.cliParity.queueUnavailable': 'Queue dispatch is unavailable',
+	'workflows.cliParity.queueFailed': 'Queue dispatch failed',
+	'workflows.cliParity.unknownCommand': 'Unknown new shell command',
+	'workflows.cliParity.refreshSkipped': 'Native refresh skipped: {reason}',
+	'workflows.cliParity.commandFailed': 'New shell command failed',
+	'workflows.cliParity.searchUsage': 'Supply search text or --clear',
+	'workflows.cliParity.projectMissing': 'Project not found',
+	'workflows.cliParity.projectWindowMissing': 'Project not found in this window',
+	'workflows.cliParity.openedSettings': 'Opened project settings',
+	'workflows.cliParity.closedSettings': 'Closed project settings',
+	'workflows.cliParity.ratioRequiresSplit': '--ratio requires --split',
+	'workflows.cliParity.splitIncompatible':
+		'--split cannot be combined with --background or --replace-empty',
+	'workflows.cliParity.openHitUsage':
+		'open-hit requires a native ID and --message <UUID or message JSON>',
+	'workflows.cliParity.nativeAmbiguous': 'Native conversation not found or ambiguous',
+	'workflows.cliParity.surfaceOptions': '--path and --close require project-settings',
+	'workflows.cliParity.nativeHelp':
+		'List, search, read or archive native history; open-hit <agent> <native-id> --message <locator> opens a matching message',
+
+	'workflows.cliParity.ownerHelp': 'Agent whose window receives the command',
+	'workflows.cliParity.jsonHelp': 'Output JSON',
+	'workflows.cliParity.clearHelp': 'Clear the sidebar search',
+
+	'workflows.cliParity.sidebarHelp': 'Set the new shell sidebar search, or clear it with --clear',
+	'workflows.cliParity.tasksHelp': 'Read the live Tasks panel list and empty state',
+	'workflows.cliParity.refreshHelp': 'Refresh this conversation from its native history',
+	'workflows.cliParity.splitHelp': 'Create a conversation directly in the right split pane',
+	'workflows.cliParity.ratioHelp': 'Left pane width fraction, between 0.2 and 0.8',
+	'workflows.cliParity.forceHelp': 'Force-send a queued item using the same checks as its card',
+	'workflows.cliParity.messageHelp': 'open-hit message UUID or the message JSON returned by search',
+	'workflows.cliParity.pathHelp': 'Open settings for this project path',
+	'workflows.cliParity.closeHelp': 'Close the project settings window',
+	'workflows.cliParity.hitMissing': 'The matching message could not be opened',
+
 	'workflows.newShellCopy.navigation.openFailed': 'Could not open this conversation',
 	'workflows.newShellCopy.navigation.refreshFailed':
 		'Could not load newer messages. Showing saved content.',

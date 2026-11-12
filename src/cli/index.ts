@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { registerNewShellCli } from './commands/new-shell';
 import { NEW_SHELL_PANEL_ACTIONS } from '../shared/newShellPanel';
 import {
 	codexTurnSteer,
@@ -616,6 +617,7 @@ program
 		(value: string, previous: string[]) => [...previous, value],
 		[]
 	)
+	.option('--tool-config <json>', projectSettingsT('workflows.projectSettings.cli.toolConfigHelp'))
 	.option('--clear-env', projectSettingsT('workflows.projectSettings.cli.clearEnvHelp'))
 	.option('--acknowledge-full-access', projectSettingsT('workflows.projectSettings.cli.ackHelp'))
 	.option('--show-secrets', projectSettingsT('workflows.projectSettings.cli.secretsHelp'))
@@ -1773,13 +1775,23 @@ tabTargetOptions(tab.command('show <tab-id>'))
 	.description("Show one tab's settings (model, effort, thinking, access, history)")
 	.action((tabId, options) => tabShow(tabId, options));
 
-tabTargetOptions(tab.command('children <tab-id>'))
+const shellChildrenCopy = (
+	key: 'expandChildrenCommand' | 'collapseChildrenCommand' | 'nativeChildrenCommand'
+) =>
+	(resolveAppLocale('system', Intl.DateTimeFormat().resolvedOptions().locale) === 'zh-CN'
+		? zhShell
+		: enShell)[`workflows.conversations.${key}`];
+
+tabTargetOptions(tab.command('children [tab-id]'))
 	.description(
 		(resolveAppLocale('system', Intl.DateTimeFormat().resolvedOptions().locale) === 'zh-CN'
 			? zhShell
 			: enShell)['workflows.conversations.childrenCommand'] ??
 			enShell['workflows.conversations.childrenCommand']
 	)
+	.option('--expand', shellChildrenCopy('expandChildrenCommand'))
+	.option('--collapse', shellChildrenCopy('collapseChildrenCommand'))
+	.option('--native <native-id>', shellChildrenCopy('nativeChildrenCommand'))
 	.action((tabId, options) => tabChildren(tabId, options));
 
 tabTargetOptions(tab.command('select <tab-id>'))
@@ -2816,4 +2828,5 @@ mcp
 // only strips argv[0] and treats the script path as the first user command.
 // Force node-style argv parsing so the shim that spawns us via Electron-as-Node
 // (see MaestroCliManager.writeUnixShim / writeWindowsShim) works correctly.
+registerNewShellCli(program);
 program.parse(process.argv, { from: 'node' });

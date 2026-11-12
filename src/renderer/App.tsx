@@ -702,12 +702,22 @@ function MaestroConsoleInner() {
 	// `uiStore.closeRightPanelForNavigation()` - see its twin for the left
 	// drawer. What is left here covers everything else that activates a tab from
 	// inside the drawer (a conversation resumed from History, a queued item).
-	const activeTabKey = [
-		activeSession?.activeTabId,
-		activeSession?.activeFileTabId,
-		activeSession?.activeTerminalTabId,
-		activeSession?.activeBrowserTabId,
-	].join('|');
+	// In the new shell, files, terminals and web pages are shown INSIDE the right
+	// panel, so activating one of them is a request to look at the panel, not
+	// past it. Only a conversation change moves the view off the panel there;
+	// counting the panel's own tabs closed it the moment its first terminal
+	// started, or a file opened from the tree.
+	const newShellLayout = useSettingsStore((s) => s.newShell);
+	const activeTabKey = (
+		newShellLayout
+			? [activeSession?.activeTabId]
+			: [
+					activeSession?.activeTabId,
+					activeSession?.activeFileTabId,
+					activeSession?.activeTerminalTabId,
+					activeSession?.activeBrowserTabId,
+				]
+	).join('|');
 	const prevActiveTabKeyRef = useRef(activeTabKey);
 	useEffect(() => {
 		const changed = prevActiveTabKeyRef.current !== activeTabKey;
@@ -2420,23 +2430,6 @@ function MaestroConsoleInner() {
 		handleOpenFileTab,
 	});
 
-	// --- REMOTE EVENT LISTENERS (extracted to useAppRemoteEventListeners hook) ---
-	useAppRemoteEventListeners({
-		handleInterrupt,
-		sessionsRef,
-		setActiveSessionId,
-		setSessions,
-		setGroups,
-		handleOpenFileTab,
-		refreshFileTree,
-		handleAutoRunRefresh,
-		startBatchRun,
-		stopBatchRun,
-		resumeAfterError: resumeAutoRunAfterError,
-		skipCurrentDocument: skipCurrentAutoRunDocument,
-		abortBatchOnError: abortAutoRunBatchOnError,
-	});
-
 	/*
 	 * --- CODEX FOLLOWUP CHIPS ---
 	 *
@@ -2622,6 +2615,25 @@ function MaestroConsoleInner() {
 		handleEditQueueItem,
 		handleForceSendQueueItem,
 	} = useQueueHandlers({ processQueuedItem });
+
+	// --- REMOTE EVENT LISTENERS (extracted to useAppRemoteEventListeners hook) ---
+	useAppRemoteEventListeners({
+		handleResumeSession,
+		handleForceSendQueueItem,
+		handleInterrupt,
+		sessionsRef,
+		setActiveSessionId,
+		setSessions,
+		setGroups,
+		handleOpenFileTab,
+		refreshFileTree,
+		handleAutoRunRefresh,
+		startBatchRun,
+		stopBatchRun,
+		resumeAfterError: resumeAutoRunAfterError,
+		skipCurrentDocument: skipCurrentAutoRunDocument,
+		abortBatchOnError: abortAutoRunBatchOnError,
+	});
 
 	// Force Send from the inline chat list: the item always belongs to the active
 	// agent, so this is the queue browser's handler with the session pinned.

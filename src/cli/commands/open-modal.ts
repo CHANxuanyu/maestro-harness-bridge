@@ -1,3 +1,5 @@
+import { projectSettingsTranslator } from './project-settings';
+import { projectSettingsSurface } from './new-shell';
 /**
  * `maestro-cli open <surface> [--tab <tab>]` - open one of Maestro's modals
  * or dashboards in the running desktop app, optionally on a specific tab.
@@ -23,6 +25,9 @@ import {
 } from '../../shared/uiSurfaces';
 
 interface OpenModalOptions {
+	path?: string;
+	close?: boolean;
+	agent?: string;
 	tab?: string;
 	list?: boolean;
 	json?: boolean;
@@ -95,6 +100,10 @@ export async function openModal(
 		const valid = UI_SURFACES.map((entry) => entry.id).join(', ');
 		fail(`Unknown surface "${surfaceName}". Valid surfaces: ${valid}`, options);
 	}
+
+	if (surface.id === 'project-settings') return projectSettingsSurface(options);
+	if (options.path || options.close)
+		fail(projectSettingsTranslator()('workflows.cliParity.surfaceOptions'), options);
 
 	let tabId: string | undefined;
 	if (options.tab !== undefined) {

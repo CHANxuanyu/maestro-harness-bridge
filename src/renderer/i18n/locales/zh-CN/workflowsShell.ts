@@ -3,6 +3,13 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.projectSettings.errors.toolMissing': '此工具配置已不属于这个项目。',
+	'workflows.projectSettings.errors.toolRunning': '请先停止使用此配置的所有对话，再更改 SSH 主机。',
+	'workflows.projectSettings.errors.newShellRequired': '请打开新界面后再保存工具配置。',
+	'workflows.projectSettings.errors.rollbackFailed': '保存失败，原设置未能完全恢复。',
+	'workflows.projectSettings.cli.toolConfigHelp':
+		'JSON 对象，以工具配置 ID 为键、修改字段为值，与项目默认值一起保存',
+	'workflows.newShell.webLocalNotice': '此地址打开的是这台电脑，不是远程主机。',
 	'workflows.autoHandoff.disabled': '自动交接需要开启新界面。',
 
 	'workflows.autoHandoff.listHelp': '列出本项目的工具配置 ID 和账户',
@@ -28,6 +35,7 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.projectSettings.errors.useReadService':
 		'请使用 project settings show 读取项目设置；加 --show-secrets 可显示环境变量原值。',
 	'workflows.projectSettings.errors.scopeRequired': '需要项目路径；SSH 项目还需提供主机标识。',
+	'workflows.projectSettings.cli.invalidToolConfig': '工具配置必须是以配置 ID 为键的 JSON 对象。',
 	'workflows.projectSettings.errors.invalidPatch': '项目设置必须是一个对象。',
 	'workflows.projectSettings.errors.unknownSetting': '未知项目设置：{field}',
 	'workflows.projectSettings.errors.invalidEnvironment': '环境变量必须使用有效名称和文本值。',
@@ -68,8 +76,7 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.projectSettings.toolMissing': '这个工具配置已不存在。',
 	'workflows.projectSettings.toolRunning': '请先停止这个配置下的所有对话，再修改 SSH 主机。',
 	'workflows.projectSettings.toolNoChanges': '没有可保存的工具配置字段。',
-	'workflows.projectSettings.toolSaveFailed':
-		'工具配置保存失败。此前的改动可能已保存，请检查后再保存。',
+	'workflows.projectSettings.toolSaveFailed': '工具配置保存失败。',
 	'workflows.projectSettings.toolArgsHelp': '使用这个工具配置时，每次调用都会附加这些参数。',
 	'workflows.projectSettings.toolEnvHelp':
 		'这个工具配置专用的环境变量，替代工具默认环境变量，影响使用此配置的所有对话。',
@@ -334,6 +341,10 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.conversations.showMore': '再显示 {count} 个',
 	'workflows.conversations.expandChildren': '展开子任务：{title}',
 	'workflows.conversations.collapseChildren': '收起子任务：{title}',
+	'workflows.conversations.expandChildrenCommand': '展开子对话并保存选择',
+	'workflows.conversations.collapseChildrenCommand': '收起子对话并保存选择',
+	'workflows.conversations.nativeChildrenCommand': '按原生会话 ID 只读查询子对话（须指定 --agent）',
+	'workflows.conversations.disclosureFailed': '未能保存子对话的展开状态，请重试。',
 	'workflows.conversations.childrenCommand': '列出直接发起的子对话，包括隐藏的子任务',
 	'workflows.conversations.selectCommand': '在桌面中选中一条对话',
 	'workflows.conversations.loadingHistory': '正在加载历史会话...',
@@ -1760,6 +1771,10 @@ export const workflowsShell: AreaTranslation<typeof en> = {
 	'workflows.projects.installed': '{tool} 已安装',
 	'workflows.projects.notInstalled': '{tool} 未安装',
 	'workflows.projects.install': '请先安装 Claude Code 或 Codex，再打开项目。',
+	'workflows.projects.pathTitle': '打开项目',
+	'workflows.projects.pathHint': '输入运行 Maestro 的那台电脑上的文件夹路径。',
+	'workflows.projects.pathPlaceholder': '/path/to/project',
+	'workflows.projects.pathOpen': '打开',
 	'workflows.effort.low': '低',
 	'workflows.effort.medium': '中',
 	'workflows.effort.high': '高',

@@ -140,3 +140,5 @@ MAESTRO_E2E_PERF=1 MAESTRO_PERF_ROUNDS=1 MAESTRO_PERF_STAGES=stream MAESTRO_PERF
 ```
 
 Electron 七轮和独立 trace 尚未执行。没有足够证据修改 200 ms 刷新周期、放弃历史行复用或声称按键延迟已恢复。
+
+2026-11-12 七轮结果（schema 4，只选 stream，before 为 `maestro-t4-perf-base` 的构建，after 为原计划收尾整合分支的开发构建，Apple M4）：流式期间按键事件等待 p95，before 七轮为 103.9、91.2、95.1、98.1、94.8、81.9、78.0 ms，中位数 94.8 ms；after 为 125.2、86.9、75.8、80.7、91.3、84.4 ms，中位数 85.7 ms。after 第 7 轮在启动阶段因 `electronApplication.evaluate` 遇到页面重载而失败，依赖阶段记为 blocked，未重试，不计入汇总。每份按键与尾帧计数相等。此前三轮的退化信号在七轮对比中没有重现，after 不比 before 慢；没有据此修改 200 ms 刷新周期。完整回填 before 约 30.7 s，after 约 17.9 s。独立 trace 未执行，因为没有稳定退化需要定位。

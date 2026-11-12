@@ -230,3 +230,72 @@ test('web preview navigates, reloads, follows conversations and restores after r
 		}
 	}
 });
+
+// eslint-disable-next-line no-empty-pattern
+test('SSH conversation loopback preview explains that it opens on this computer', async ({}, info) => {
+	const native = new NativeApp(info, { providerCli: false });
+	const settingsFile = path.join(native.data, 'maestro-settings.json');
+	fs.writeFileSync(
+		settingsFile,
+		JSON.stringify({
+			...JSON.parse(fs.readFileSync(settingsFile, 'utf8')),
+			newShell: true,
+			rightPanelOpen: true,
+		})
+	);
+	const session = createMockSession({
+		id: 'fake-ssh-web',
+		name: 'SSH preview',
+		cwd: native.project,
+		projectRoot: native.project,
+		fullPath: native.project,
+		state: 'idle',
+		aiPid: 0,
+		sessionSshRemoteConfig: {
+			enabled: true,
+			remoteId: 'fake-ssh-only',
+			workingDirOverride: '/synthetic/remote',
+		},
+		activeTabId: 'ssh-web',
+		aiTabs: [
+			createMockAITab({
+				id: 'ssh-web',
+				name: 'SSH web',
+				newShellPanel: { tab: 'web', open: true },
+			}),
+		],
+	});
+	fs.writeFileSync(
+		path.join(native.data, 'maestro-sessions.json'),
+		JSON.stringify({ sessions: [session], activeSessionId: session.id })
+	);
+	let failed = true;
+	try {
+		await native.start();
+		await native.cli('tab', 'select', 'ssh-web', '--agent', session.id);
+		const notice = native.page.getByTestId('web-preview-local-notice');
+		for (const host of ['localhost', '127.0.0.1']) {
+			await native.cli('tab', 'panel', 'web', '--url', `http://${host}:1`, '--agent', session.id);
+			await expect(notice).toHaveText('This address opens on this computer, not the remote host.');
+		}
+		await native.cli('settings', 'set', 'uiLanguage', 'zh-CN');
+		await expect(notice).toHaveText('此地址打开的是这台电脑，不是远程主机。');
+		await native.cli(
+			'tab',
+			'panel',
+			'web',
+			'--url',
+			'http://remote.invalid:1',
+			'--agent',
+			session.id
+		);
+		await expect(notice).toHaveCount(0);
+		expect(await native.page.evaluate(() => window.maestro.process.getActiveProcesses())).toEqual(
+			[]
+		);
+		failed = false;
+	} finally {
+		if (native.app) await native.close(failed);
+		fs.rmSync(native.root, { recursive: true, force: true });
+	}
+});

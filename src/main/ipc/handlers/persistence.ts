@@ -189,6 +189,7 @@ export interface PersistenceHandlerDependencies {
 	emitPluginEvent?: (event: PluginEvent) => void;
 	/** Resolve only after the deferred sessions document reaches disk. */
 	flushSessionWrites: () => Promise<void>;
+	isSessionRunning?: (id: string) => boolean;
 }
 
 /**
@@ -363,13 +364,23 @@ export function registerPersistenceHandlers(
 	// Settings management
 	const projectSettings = createProjectSettingsService({
 		settingsStore,
-		onChanged: () => {
+		sessionsStore,
+		flushSessionWrites,
+		isSessionRunning: deps.isSessionRunning,
+		onChanged: (toolPatches) => {
+			if (toolPatches) {
+				for (const win of BrowserWindow.getAllWindows()) {
+					if (isWebContentsAvailable(win))
+						win.webContents.send('settings:projectToolsChanged', toolPatches);
+				}
+			}
 			notifyPeerWindows(undefined);
 			broadcastBridgeEvent('settings:externalChange', []);
 		},
 	});
-	ipcMain.handle('settings:projectSettings', (_, command: unknown) =>
-		projectSettings.command(command)
+	ipcMain.handle(
+		'settings:projectSettings',
+		queueWrite(async (_, command: unknown) => projectSettings.command(command))
 	);
 	if (deps.aboutMe) {
 		ipcMain.handle('settings:aboutMe', (event, command: unknown) =>

@@ -7,6 +7,8 @@ import { jumpToAgent } from './agentNavigation';
 import { sessionProjectKey } from '../utils/projectSessionTree';
 import { notifyToast } from '../stores/notificationStore';
 import { getT } from '../i18n';
+import { isWebDesktop } from '../utils/runtimeContext';
+import { useOpenProjectPathStore } from '../stores/openProjectPathStore';
 import type { OpenProjectTarget, OpenProjectResult } from '../../shared/projects';
 import type { UseSessionCrudReturn } from '../hooks/session/useSessionCrud';
 
@@ -16,6 +18,9 @@ export async function openProject(path: string): Promise<OpenProjectResult> {
 		return { success: false, code: 'unavailable', error: 'Open Project requires the new shell' };
 	try {
 		const result = await window.maestro.agentSessions.openProject(path);
+		// In a browser the desktop window creates and selects the project, but
+		// this client keeps its own selection: follow it here once it arrives.
+		if (result.success && isWebDesktop()) await selectWhenArrived(result.sessionId);
 		if (!result.success)
 			notifyToast({
 				type: 'warning',
@@ -30,8 +35,33 @@ export async function openProject(path: string): Promise<OpenProjectResult> {
 	}
 }
 
+/** Select a project conversation once the session sync has delivered it. */
+async function selectWhenArrived(sessionId: string, timeoutMs = 5000): Promise<void> {
+	const arrived = () => useSessionStore.getState().sessions.some((s) => s.id === sessionId);
+	if (!arrived())
+		await new Promise<void>((resolve) => {
+			const timer = setTimeout(() => {
+				unsubscribe();
+				resolve();
+			}, timeoutMs);
+			const unsubscribe = useSessionStore.subscribe(() => {
+				if (!arrived()) return;
+				clearTimeout(timer);
+				unsubscribe();
+				resolve();
+			});
+		});
+	if (arrived()) jumpToAgent(sessionId);
+}
+
 export async function chooseProject(): Promise<void> {
 	if (!selectNewShellEnabled(useSettingsStore.getState())) return;
+	// A browser or phone cannot see a native folder dialog: it would open on the
+	// computer running Maestro. Ask for the path there instead.
+	if (isWebDesktop()) {
+		useOpenProjectPathStore.getState().setOpen(true);
+		return;
+	}
 	const path = await window.maestro.dialog.selectFolder();
 	if (path) await openProject(path);
 }

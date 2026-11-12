@@ -154,9 +154,32 @@ function setup(overrides: Record<string, unknown> = {}) {
 		onAddAgent: vi.fn(),
 		...overrides,
 	};
-	const utils = render(<ProjectSessionTree {...(props as any)} />);
+	function ControlledTree({ value }: { value: typeof props }) {
+		const [choices, setChoices] = React.useState<Record<string, boolean>>({});
+		const apply = (row: SidebarConversation): SidebarConversation =>
+			!row.children && choices[row.key] === undefined
+				? row
+				: {
+						...row,
+						expanded: choices[row.key] ?? row.expanded,
+						children: row.children?.map(apply),
+					};
+		return (
+			<ProjectSessionTree
+				{...(value as any)}
+				projects={(value.projects as SidebarProject[]).map((p) => ({
+					...p,
+					conversations: p.conversations.map(apply),
+				}))}
+				onSetChildrenExpanded={(row, expanded) =>
+					setChoices((previous) => ({ ...previous, [row.key]: expanded }))
+				}
+			/>
+		);
+	}
+	const utils = render(<ControlledTree value={props} />);
 	const rerender = (next: Record<string, unknown>) =>
-		utils.rerender(<ProjectSessionTree {...({ ...props, ...next } as any)} />);
+		utils.rerender(<ControlledTree value={{ ...props, ...next } as any} />);
 	return { props, rerender };
 }
 
@@ -219,7 +242,7 @@ describe('ProjectSessionTree', () => {
 			'true'
 		);
 		rerender({ projects: tree(false) });
-		expect(screen.queryByRole('button', { name: /Codex Review the tests/ })).toBeNull();
+		expect(screen.getByRole('button', { name: /Codex Review the tests/ })).toBeInTheDocument();
 	});
 
 	it('keeps a selected completed descendant visible and resolves its own menu actions', () => {
@@ -238,7 +261,7 @@ describe('ProjectSessionTree', () => {
 		expect(props.onRenameConversation).toHaveBeenCalledWith(child);
 	});
 
-	it('lets a user collapse running subtasks and expands them again on the next run', () => {
+	it('keeps the explicit collapsed choice when another run starts', () => {
 		useSettingsStore.setState({ newShell: true });
 		const tree = (busy: boolean) => [
 			project({ conversations: [conversation({ children: [{ ...codexFix, busy }] })] }),
@@ -248,7 +271,7 @@ describe('ProjectSessionTree', () => {
 		expect(screen.queryByRole('button', { name: 'Codex Fix bug Working' })).toBeNull();
 		rerender({ projects: tree(false) });
 		rerender({ projects: tree(true) });
-		expect(screen.getByRole('button', { name: 'Codex Fix bug Working' })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Codex Fix bug Working' })).toBeNull();
 	});
 
 	it('reveals nested descendants during search and when a grandchild is working', () => {

@@ -125,6 +125,32 @@ export const ChangesPanel = memo(function ChangesPanel({
 	const [load, setLoad] = useState<Load>({ kind: 'loading' });
 	const [refreshing, setRefreshing] = useState(false);
 	const [open, setOpen] = useState<Record<string, FileDiffState>>({});
+	const openRef = useRef(open);
+	openRef.current = open;
+
+	// One diff read, shared by a click and by a refresh that keeps a diff open.
+	const loadDiff = useCallback(
+		async (path: string) => {
+			setOpen((previous) => ({ ...previous, [path]: { kind: 'loading' } }));
+			try {
+				const diff = await gitService.getChangeDiff(cwd, path, sshRemoteId, remoteCwd);
+				if (contextRef.current !== context) return;
+				setOpen((previous) =>
+					previous[path] ? { ...previous, [path]: { kind: 'ready', diff } } : previous
+				);
+			} catch (error) {
+				if (contextRef.current !== context) return;
+				setOpen((previous) =>
+					previous[path]
+						? { ...previous, [path]: { kind: 'error', message: messageOf(error) } }
+						: previous
+				);
+			}
+		},
+		[cwd, sshRemoteId, remoteCwd, context]
+	);
+	const loadDiffRef = useRef(loadDiff);
+	loadDiffRef.current = loadDiff;
 	// Only the newest request may write state: a slow answer for the previous
 	// conversation must not overwrite the one on screen.
 	const requestRef = useRef(0);
@@ -151,7 +177,15 @@ export const ChangesPanel = memo(function ChangesPanel({
 			setLoad((previous) =>
 				changes.timedOut && previous.kind === 'ready' ? previous : { kind: 'ready', changes }
 			);
-			setOpen({});
+			// A refresh can land after the user opened a diff (over SSH it often
+			// does). Keep the diffs of files that are still changed, and read them
+			// again since their content may have moved; a timeout keeps everything.
+			if (!changes.timedOut) {
+				const stillChanged = new Set(changes.files.map((file) => file.path));
+				const reopen = Object.keys(openRef.current).filter((path) => stillChanged.has(path));
+				setOpen({});
+				for (const path of reopen) void loadDiffRef.current(path);
+			}
 		} catch (error) {
 			if (request !== requestRef.current) return;
 			setLoad({ kind: 'error', message: messageOf(error) });
@@ -200,23 +234,9 @@ export const ChangesPanel = memo(function ChangesPanel({
 				setOpen(({ [file.path]: _closed, ...rest }) => rest);
 				return;
 			}
-			setOpen((previous) => ({ ...previous, [file.path]: { kind: 'loading' } }));
-			try {
-				const diff = await gitService.getChangeDiff(cwd, file.path, sshRemoteId, remoteCwd);
-				if (contextRef.current !== context) return;
-				setOpen((previous) =>
-					previous[file.path] ? { ...previous, [file.path]: { kind: 'ready', diff } } : previous
-				);
-			} catch (error) {
-				if (contextRef.current !== context) return;
-				setOpen((previous) =>
-					previous[file.path]
-						? { ...previous, [file.path]: { kind: 'error', message: messageOf(error) } }
-						: previous
-				);
-			}
+			await loadDiff(file.path);
 		},
-		[cwd, open, sshRemoteId, remoteCwd, context]
+		[open, loadDiff]
 	);
 
 	const runAction = async (request: GitChangeRequest) => {

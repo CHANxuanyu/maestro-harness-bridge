@@ -1,6 +1,8 @@
+import { TerminalViewProvider } from './TerminalView';
 import type { UseInterruptHandlerReturn } from '../hooks/agent/useInterruptHandler';
 import { shellFeatureVisible } from '../../shared/newShellFeatures';
 import { ProjectStartView } from './ProjectStartView';
+import { OpenProjectPathHost } from './OpenProjectPathModal';
 import { chooseProject } from '../services/openProject';
 import { newShellSidebarInset } from '../utils/appTitleStrip';
 import { useT } from '../i18n';
@@ -88,7 +90,7 @@ export interface AppShellProps {
 	onToastSessionClick: (sessionId: string, tabId?: string) => void;
 }
 
-export function AppShell({
+function AppShellContent({
 	onStopTurn,
 	theme,
 	keyboardShellOffset,
@@ -350,6 +352,8 @@ export function AppShell({
 			    Full-screen pan/zoom for any diagram or image. Opened by expand
 			    buttons and the image right-click menu via openZoomViewer(). */}
 			<ZoomViewerHost theme={theme} />
+			{/* --- OPEN PROJECT PATH (browser and phone; no native folder dialog there) --- */}
+			<OpenProjectPathHost theme={theme} />
 			{/* --- MEDIA PLAYBACK (single, app-wide, never unmounted) ---
 			    Owns the one <audio>/<video> element so playback survives switching
 			    tabs and agents. Media never gets a tab: it renders only as the
@@ -372,5 +376,13 @@ export function AppShell({
 				</>
 			)}
 		</div>
+	);
+}
+
+export function AppShell(props: AppShellProps) {
+	return (
+		<TerminalViewProvider>
+			<AppShellContent {...props} />
+		</TerminalViewProvider>
 	);
 }

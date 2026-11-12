@@ -1,5 +1,21 @@
 # 分支工作记录
 
+## 2026-11-12：按原规格补齐剩余开发与技术验收
+
+用户要求以原始规格（`docs/roadmap/new-shell.md` 在 `5f5ce0ae8` 的文本）、用户明确决定和后续明确调整为准，逐项核对并做完剩余工作。核对结果和决定记录见 [原计划逐项核对](verification/original-plan-audit.md)。2026-11-11 的完成表不再作为依据；Fable 的下一轮计划草稿按用户要求搁置，不在仓库内。基线为主线 `1d9ed9c9f`。
+
+本轮补齐的开发：
+
+- **手机网页的新界面窄屏形态（原规格 hb.9）。** 新界面里终端、文件、网页属于右侧面板，切换这些页签不再被窄屏规则当成“离开面板”而关闭；手机上输入框默认展开（单独记住选择，不改旧界面默认）；顶栏“交给…”在手机上只显示图标；浏览器里“打开项目”改为输入路径并列出最近项目，不再把文件夹对话框弹到电脑上，打开后浏览器自己切到该项目；浏览器里未命名对话的左栏标题在对话记录到达后更新；手机输入框设置面板不再出现新界面隐藏的“历史”“思考”开关。
+- **交接会话挂在来源下面（附录 C）。** 之前交接会话放在顶层，没有用户同意记录，现按原规格嵌套；来源归档时未归档的交接回到项目顶层，取消归档后重新挂回，交接中的工作不阻止归档来源。展开选择随会话保存，完成后不再自动收起。CLI 增加 `tab children --expand/--collapse` 与 `--native` 只读查询；跨窗口晚到的来源原生 ID 补写到子对话所属窗口。`tab children --native` 会忽略刚被归档关闭、但延迟存盘还没删除的来源标签。
+- **新界面 CLI 对等。** 内容搜索命中打开与定位、左栏搜索、任务面板快照、项目设置窗口开关、新建并分屏、排队强制发送、原生历史刷新，以及切换后立即读取当前对话。
+- **缺陷。** 派出子任务时漏带调用方标签（真实验收中发现）；新旧界面切换时保留终端内容、进程和草稿；终端在隐藏或零尺寸时不再被压成几列；隐藏终端容器不再挡住可见终端；从旧界面终端标签切回新界面时输入框不再消失、也不停在终端命令模式；项目设置保存改为先全部校验再统一写入，失败回滚；SSH 对话的网页面板打开本机地址时给出一行说明；额度错误卡片与顶栏共用同一个交接入口；改动面板已展开的差异不再被后台刷新收起（SSH 下点开即被收起，由新的 SSH 场景发现）。
+- **hb.9 删除准备。** `docs/roadmap/new-shell-deletion-plan.md` 与逐文件清单、只读安装包基线脚本 `scripts/hb-baseline.mjs`。没有删除任何功能。默认开启新界面的切换在单独分支上，等用户体验后决定是否合并（用户 2026-11-10 的决定）。
+
+新增验收场景：`native-new-shell-phone`（浏览器以手机尺寸打开网页端，覆盖上述手机行为；撤掉面板修复后该场景按预期在“切换右侧面板页签”一步失败）、`native-new-shell-ssh`（本机回环地址上的临时 sshd，用临时密钥，不改系统设置；覆盖改动面板与差异、暂存、远程文件编辑保存、远程终端、交接后仍在同一主机和目录、网页本机地址说明，并检查没有在本机执行）、`native-new-shell-cli-parity`、`native-new-shell-toggle`、`native-new-shell-error-handoff`，以及 `real-*` 真实模型场景（需显式开关，默认跳过）和运行手册 `e2e/real-acceptance.md`。
+
+验证（开发构建，macOS，单 worker、无重试）：最终整合提交上全部原生 Electron 场景 141 项通过（合成提供方）；`npm run validate:push`（Vitest 2213 文件、49902 项）、`docs:verify`、`test:e2e:fixtures`（96 项）通过。真实模型（2026-11-12，开发构建）：合成 Claude 额度错误触发自动交接、由真实 Codex 接手一轮通过；真实 Codex 派 Codex 子任务并引用结果通过（期间发现并修复：没有显式标签参数的启动漏带调用方标签）。需要 Claude 的真实场景因访问令牌快照过期、DeepSeek 场景因没有密钥而未运行。输入延迟七轮对比没有重现此前的退化信号（`docs/perf-renderer.md`）。升级与回退用两个安装包在独立数据目录实测：hb.6 建的智能体和设置在 hb.7 中保留，hb.7 写入的新界面开关与项目设置经过 hb.6 往返后仍在，没有出现损坏文件。安装包和真人使用的结果另行记录，不由本条代替。
+
 ## 2026-11-12：hb.7 合入主线、CI 收口与试用包
 
 #78 第一次 CI 被 GitHub 故障卡住，关闭重开后的第二次运行在 Windows 上有 3 个失败、Linux Electron 超时取消。逐条看原始日志确认：`ai-handoff.test.ts` 期望 POSIX 路径，而 `resolveAgentAccountDir()` 按设计返回主机绝对路径（Windows 为 `D:\tmp\...`）；`useAppRemoteEventListenersSessionConfig.test.ts` 用 `mkdtemp('/tmp/...')`，Windows 没有 `/tmp`；Linux Electron 任务没有失败，合成一遍 134 条通过后 real-smoke 第二遍跑到 99 条时撞上 45 分钟上限。两处测试改用平台路径，任务上限改为 75 分钟并写明实测。
@@ -1279,10 +1295,10 @@ PR #29 合并后的 Windows CI 在既有 4 万条无时间转录用例超时；�
 
 | 阶段                           | 实际结果                                                                                         | 主要代码与证据                                                                                                                                                                         |
 | ------------------------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-10-15—16 中文化           | 日常桌面流程、全部设置分类、自有菜单与说明支持中英切换；草稿与语言偏好持久化                     | `src/renderer/i18n/`、`src/shared/i18n.ts`、`src/main/app-menu-translations.ts`；见 [语言范围](internationalization.md)                                                                |
-| 2026-10-16—17 原生历史进入项目 | 项目下直接列出会话、提供方标识、原生标题搜索、点击直接接续、已开页签刷新；账户/主机边界与去重    | `src/main/storage/project-history.ts`、`src/renderer/components/SessionList/ProjectSessionTree.tsx`、`src/renderer/services/openNativeConversation.ts`、`refreshNativeConversation.ts` |
-| 2026-10-19—20 对话可靠性       | 历史/实时进度与工具一致、工具状态隔离、主动停止不丢 ID、历史阅读定位、本地发送跟随与手动上滚暂停 | Codex parser/storage、process-manager、`TerminalOutput`、`useTerminalOutputScroll`、`useInputProcessing` 与对应回归                                                                    |
-| 2026-10-21 原始会话最终验收    | 在真实释放占用后，原始同 ID 完成多轮、工具、停止恢复和重启后继续；用户确认成功                   | [验收摘要](verification/v1.0.1-hb.1.md)；本地 `original-handoff-live-20261021` 01–27 证据序列                                                                                          |
+| 2026-10-15-16 中文化           | 日常桌面流程、全部设置分类、自有菜单与说明支持中英切换；草稿与语言偏好持久化                     | `src/renderer/i18n/`、`src/shared/i18n.ts`、`src/main/app-menu-translations.ts`；见 [语言范围](internationalization.md)                                                                |
+| 2026-10-16-17 原生历史进入项目 | 项目下直接列出会话、提供方标识、原生标题搜索、点击直接接续、已开页签刷新；账户/主机边界与去重    | `src/main/storage/project-history.ts`、`src/renderer/components/SessionList/ProjectSessionTree.tsx`、`src/renderer/services/openNativeConversation.ts`、`refreshNativeConversation.ts` |
+| 2026-10-19-20 对话可靠性       | 历史/实时进度与工具一致、工具状态隔离、主动停止不丢 ID、历史阅读定位、本地发送跟随与手动上滚暂停 | Codex parser/storage、process-manager、`TerminalOutput`、`useTerminalOutputScroll`、`useInputProcessing` 与对应回归                                                                    |
+| 2026-10-21 原始会话最终验收    | 在真实释放占用后，原始同 ID 完成多轮、工具、停止恢复和重启后继续；用户确认成功                   | [验收摘要](verification/v1.0.1-hb.1.md)；本地 `original-handoff-live-20261021` 01-27 证据序列                                                                                          |
 | 2026-10-21 首次分支发布        | 汇总既有改动，建立产品 changelog、分支说明、发布构建方法及下一阶段议题                           | `CHANGELOG.md`、本文件、Release tag 与资产校验清单                                                                                                                                     |
 
 ## 可追溯性的做法

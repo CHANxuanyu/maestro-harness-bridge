@@ -278,6 +278,9 @@ interface MaestroAPI {
 		get: (key: string) => Promise<unknown>;
 		set: (key: string, value: unknown) => Promise<boolean>;
 		getAll: () => Promise<Record<string, unknown>>;
+		onProjectToolsChanged: (
+			handler: (patches: Record<string, Record<string, unknown>>) => void
+		) => () => void;
 		onExternalChange: (handler: () => void) => () => void;
 	};
 	sessions: {
@@ -1040,7 +1043,7 @@ interface MaestroAPI {
 		) => () => void;
 		sendRemoteUpdateSessionConfigResponse: (
 			responseChannel: string,
-			result: { success: boolean; error?: string }
+			result: { success: boolean; error?: string; data?: Record<string, unknown> }
 		) => void;
 		onRemoteCreateGroup: (
 			callback: (
@@ -4999,6 +5002,10 @@ interface MaestroAPI {
 	// Multi-window API - enumerate/create/focus/close windows and inspect or
 	// move the agents (sessions) each window owns. `sessionIds` are agent IDs.
 	windows: {
+		conversationChildren: import('../main/preload/windows').WindowsApi['conversationChildren'];
+		onConversationChildren: import('../main/preload/windows').WindowsApi['onConversationChildren'];
+		captureConversationSourceNativeId: import('../main/preload/windows').WindowsApi['captureConversationSourceNativeId'];
+		onConversationSourceNativeId: import('../main/preload/windows').WindowsApi['onConversationSourceNativeId'];
 		getConversationPermissions: (
 			sessionIds: string[]
 		) => Promise<Array<ConversationPermissionSnapshot | null>>;

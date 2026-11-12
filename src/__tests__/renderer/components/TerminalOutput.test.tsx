@@ -431,57 +431,63 @@ describe('TerminalOutput', () => {
 			expect(markdown.textContent).toBe(errorText);
 		});
 
-		it('offers to continue with another AI beside a limit or login error, and only those', () => {
-			const tabWith = (logs: LogEntry[]) => ({
-				id: 'tab-1',
-				agentSessionId: 'claude-123',
-				logs,
-				isUnread: false,
-				showThinking: 'on' as const,
-			});
-			const errorLog = (type: 'rate_limited' | 'auth_expired' | 'network_error') =>
-				createLogEntry({
-					id: `err-${type}`,
-					source: 'error',
-					text: 'Usage limit reached.',
-					agentError: {
-						type,
-						message: 'Usage limit reached.',
-						recoverable: true,
-						agentId: 'claude-code',
-						timestamp: 1,
-					},
+		it.each([false, true])(
+			'offers the shared handoff beside limit and login errors (new shell %s)',
+			(newShell) => {
+				useSettingsStore.setState({ newShell });
+				const tabWith = (logs: LogEntry[]) => ({
+					id: 'tab-1',
+					agentSessionId: 'claude-123',
+					logs,
+					isUnread: false,
+					showThinking: 'on' as const,
 				});
-			const question = createLogEntry({ id: 'q', source: 'user', text: 'Keep going' });
-			const show = (type: 'rate_limited' | 'auth_expired' | 'network_error') => {
-				const tab = tabWith([question, errorLog(type)]);
-				const session = createDefaultSession({
-					tabs: [tab],
-					aiTabs: [tab],
-					activeTabId: 'tab-1',
-				} as Partial<Session>);
-				useSessionStore.setState({ sessions: [session] });
-				return render(<TerminalOutput {...createDefaultProps({ session })} />);
-			};
-			useModalStore.getState().closeModal('aiHandoff');
+				const errorLog = (type: 'rate_limited' | 'auth_expired' | 'network_error') =>
+					createLogEntry({
+						id: `err-${type}`,
+						source: 'error',
+						text: 'Usage limit reached.',
+						agentError: {
+							type,
+							message: 'Usage limit reached.',
+							recoverable: true,
+							agentId: 'claude-code',
+							timestamp: 1,
+						},
+					});
+				const question = createLogEntry({ id: 'q', source: 'user', text: 'Keep going' });
+				const show = (type: 'rate_limited' | 'auth_expired' | 'network_error') => {
+					const tab = tabWith([question, errorLog(type)]);
+					const session = createDefaultSession({
+						tabs: [tab],
+						aiTabs: [tab],
+						activeTabId: 'tab-1',
+					} as Partial<Session>);
+					useSessionStore.setState({ sessions: [session] });
+					return render(<TerminalOutput {...createDefaultProps({ session })} />);
+				};
+				useModalStore.getState().closeModal('aiHandoff');
 
-			const limited = show('rate_limited');
-			// The original error stays; the handoff sits beside it.
-			expect(screen.getByText('Error')).toBeInTheDocument();
-			fireEvent.click(screen.getByRole('button', { name: 'Continue with another AI' }));
-			expect(useModalStore.getState().modals.get('aiHandoff')).toMatchObject({
-				open: true,
-				data: { sessionId: 'session-1', tabId: 'tab-1' },
-			});
-			limited.unmount();
+				const limited = show('rate_limited');
+				// The original error stays; the handoff sits beside it.
+				expect(screen.getByText(newShell ? 'Quota exhausted' : 'Error')).toBeInTheDocument();
+				fireEvent.click(screen.getByRole('button', { name: 'Continue with another AI' }));
+				expect(useModalStore.getState().modals.get('aiHandoff')).toMatchObject({
+					open: true,
+					data: { sessionId: 'session-1', tabId: 'tab-1' },
+				});
+				limited.unmount();
 
-			const login = show('auth_expired');
-			expect(screen.getByRole('button', { name: 'Continue with another AI' })).toBeInTheDocument();
-			login.unmount();
+				const login = show('auth_expired');
+				expect(
+					screen.getByRole('button', { name: 'Continue with another AI' })
+				).toBeInTheDocument();
+				login.unmount();
 
-			show('network_error');
-			expect(screen.queryByRole('button', { name: 'Continue with another AI' })).toBeNull();
-		});
+				show('network_error');
+				expect(screen.queryByRole('button', { name: 'Continue with another AI' })).toBeNull();
+			}
+		);
 
 		it('collapses consecutive AI responses in AI mode', () => {
 			const logs: LogEntry[] = [

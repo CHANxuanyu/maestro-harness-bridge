@@ -1,3 +1,8 @@
+import type {
+	ConversationChildrenRequest,
+	ConversationChildrenResult,
+	ConversationSourceIdentity,
+} from '../../shared/conversationChildren';
 /**
  * Preload API for the multi-window system.
  *
@@ -26,6 +31,47 @@ export type { WindowBounds };
  */
 export function createWindowsApi() {
 	return {
+		conversationChildren: (
+			request: ConversationChildrenRequest
+		): Promise<ConversationChildrenResult> =>
+			ipcRenderer.invoke('windows:conversationChildren', request),
+		onConversationChildren: (
+			callback: (request: ConversationChildrenRequest) => Promise<ConversationChildrenResult>
+		): (() => void) => {
+			const handler = async (
+				_event: unknown,
+				request: ConversationChildrenRequest,
+				channel: string
+			) => {
+				try {
+					ipcRenderer.send(channel, { success: true, result: await callback(request) });
+				} catch (error) {
+					ipcRenderer.send(channel, { success: false, error: String(error) });
+				}
+			};
+			ipcRenderer.on('windows:conversationChildrenRequest', handler);
+			return () => ipcRenderer.removeListener('windows:conversationChildrenRequest', handler);
+		},
+		captureConversationSourceNativeId: (identity: ConversationSourceIdentity): Promise<void> =>
+			ipcRenderer.invoke('windows:captureConversationSourceNativeId', identity),
+		onConversationSourceNativeId: (
+			callback: (identity: ConversationSourceIdentity) => Promise<void>
+		): (() => void) => {
+			const handler = async (
+				_event: unknown,
+				identity: ConversationSourceIdentity,
+				channel: string
+			) => {
+				try {
+					await callback(identity);
+					ipcRenderer.send(channel, { success: true });
+				} catch (error) {
+					ipcRenderer.send(channel, { success: false, error: String(error) });
+				}
+			};
+			ipcRenderer.on('windows:conversationSourceNativeId', handler);
+			return () => ipcRenderer.removeListener('windows:conversationSourceNativeId', handler);
+		},
 		getConversationPermissions: (
 			sessionIds: string[]
 		): Promise<Array<ConversationPermissionSnapshot | null>> =>

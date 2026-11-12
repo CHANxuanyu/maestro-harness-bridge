@@ -1,6 +1,17 @@
 import { CODEX_APP_SERVER_MESSAGES } from '../../../../shared/codexAppServer';
 
 export const workflowsShell = {
+	'workflows.projectSettings.errors.toolMissing':
+		'This tool configuration no longer belongs to the project.',
+	'workflows.projectSettings.errors.toolRunning':
+		'Stop all conversations using this configuration before changing its SSH host.',
+	'workflows.projectSettings.errors.newShellRequired':
+		'Tool configuration transactions require the new shell.',
+	'workflows.projectSettings.errors.rollbackFailed':
+		'Saving failed and the previous settings could not be fully restored.',
+	'workflows.projectSettings.cli.toolConfigHelp':
+		'JSON object mapping tool configuration IDs to edited fields; saved together with project defaults',
+	'workflows.newShell.webLocalNotice': 'This address opens on this computer, not the remote host.',
 	'workflows.autoHandoff.disabled': 'Automatic handoff requires the new shell.',
 
 	'workflows.autoHandoff.listHelp': 'List tool configuration IDs and accounts in this project',
@@ -34,6 +45,8 @@ export const workflowsShell = {
 		'Use project settings show to read project settings; add --show-secrets to reveal environment values.',
 	'workflows.projectSettings.errors.scopeRequired':
 		'A project path and an optional SSH host are required',
+	'workflows.projectSettings.cli.invalidToolConfig':
+		'Tool configuration must be a JSON object keyed by configuration ID.',
 	'workflows.projectSettings.errors.invalidPatch': 'Project settings must be an object',
 	'workflows.projectSettings.errors.unknownSetting': 'Unknown project setting: {field}',
 	'workflows.projectSettings.errors.invalidEnvironment':
@@ -84,8 +97,7 @@ export const workflowsShell = {
 	'workflows.projectSettings.toolRunning':
 		'Stop all conversations using this configuration before changing its SSH host.',
 	'workflows.projectSettings.toolNoChanges': 'No editable tool configuration fields were supplied.',
-	'workflows.projectSettings.toolSaveFailed':
-		'Could not save the tool configuration. Earlier changes may already be saved. Review your settings before saving again.',
+	'workflows.projectSettings.toolSaveFailed': 'Could not save the tool configuration.',
 	'workflows.projectSettings.toolArgsHelp':
 		'Arguments added to each invocation using this tool configuration.',
 	'workflows.projectSettings.toolEnvHelp':
@@ -373,6 +385,14 @@ export const workflowsShell = {
 	'workflows.conversations.showMore': 'Show {count} more',
 	'workflows.conversations.expandChildren': 'Show subtasks: {title}',
 	'workflows.conversations.collapseChildren': 'Hide subtasks: {title}',
+	'workflows.conversations.expandChildrenCommand':
+		'Expand the conversation tree and save the choice',
+	'workflows.conversations.collapseChildrenCommand':
+		'Collapse the conversation tree and save the choice',
+	'workflows.conversations.nativeChildrenCommand':
+		'Read children of a native conversation (requires --agent)',
+	'workflows.conversations.disclosureFailed':
+		'Could not save the conversation tree. Please try again.',
 	'workflows.conversations.childrenCommand':
 		'List direct child conversations, including hidden subtasks',
 	'workflows.conversations.selectCommand': 'Select a conversation in the desktop',
@@ -1886,6 +1906,10 @@ export const workflowsShell = {
 	'workflows.projects.installed': '{tool} installed',
 	'workflows.projects.notInstalled': '{tool} not installed',
 	'workflows.projects.install': 'Install Claude Code or Codex, then open a project.',
+	'workflows.projects.pathTitle': 'Open project',
+	'workflows.projects.pathHint': 'Enter the folder path on the computer running Maestro.',
+	'workflows.projects.pathPlaceholder': '/path/to/project',
+	'workflows.projects.pathOpen': 'Open',
 	'workflows.effort.low': 'Low',
 	'workflows.effort.medium': 'Medium',
 	'workflows.effort.high': 'High',

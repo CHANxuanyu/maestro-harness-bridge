@@ -1,3 +1,5 @@
+import { readSettingValue } from '../services/storage';
+import { newShellCommand } from './new-shell';
 import { projectSettingsTranslator } from './project-settings';
 import { PROJECT_CONVERSATION_TIMEOUT_MS } from '../../shared/projectSettings';
 import { invokeNativeHistory } from '../services/agent-sessions';
@@ -5,7 +7,10 @@ import { invokeNativeHistory } from '../services/agent-sessions';
 import type { NativeCommandSnapshot } from '../../shared/nativeCommands';
 import { NEW_SHELL_PANEL_ACTIONS, type NewShellPanelAction } from '../../shared/newShellPanel';
 import { isHandoffProvider } from '../../shared/aiHandoff';
-import { findConversationParent } from '../../shared/conversationChildren';
+import {
+	findConversationParent,
+	type ConversationChildrenResult,
+} from '../../shared/conversationChildren';
 // Tab commands - manage an agent's AI tabs in the running desktop app: open a
 // new tab (optionally seeded with a prompt), close, rename, star/unstar, and
 // move. These mirror the tab bar and AI tab overlay menu via the new_tab,
@@ -38,6 +43,8 @@ import type { DesktopTabEntry } from '../../shared/desktopTabs';
 import { resolveBackgroundFlag } from '../../shared/focusPlacement';
 
 interface TabNewOptions {
+	split?: boolean;
+	ratio?: string;
 	provider?: string;
 	replaceEmpty?: string;
 	agent: string;
@@ -63,6 +70,29 @@ export async function tabNew(options: TabNewOptions): Promise<void> {
 	const background = resolveBackgroundFlag(options, 'tab-new');
 
 	try {
+		if (options.ratio !== undefined && !options.split)
+			throw new Error(projectSettingsTranslator()('workflows.cliParity.ratioRequiresSplit'));
+		if (options.split) {
+			if (background || options.replaceEmpty)
+				throw new Error(projectSettingsTranslator()('workflows.cliParity.splitIncompatible'));
+			const ratio = options.ratio === undefined ? undefined : Number(options.ratio);
+			if (ratio !== undefined && (!Number.isFinite(ratio) || ratio < 0.2 || ratio > 0.8))
+				throw new Error(projectSettingsTranslator()('workflows.split.invalidRatio'));
+			if (options.provider && !isHandoffProvider(options.provider))
+				throw new Error(projectSettingsTranslator()('workflows.cliParity.unknownProvider'));
+			const result = await newShellCommand(
+				sessionId,
+				{
+					action: 'new-split',
+					...(options.provider ? { provider: options.provider } : {}),
+					...(ratio !== undefined ? { ratio } : {}),
+					...(prompt ? { prompt } : {}),
+				},
+				options.json
+			);
+			console.log(JSON.stringify(result, null, options.json ? undefined : 2));
+			return;
+		}
 		if (options.provider) {
 			if (!isHandoffProvider(options.provider) || prompt)
 				return failCommand('Choose claude-code, codex or deepseek without --prompt', options.json);
@@ -202,20 +232,55 @@ export async function tabSelect(tabId: string, options: TabMutateOptions): Promi
 }
 
 /** Direct children use the same source identity rule as the project tree. */
-export async function tabChildren(tabId: string, options: TabMutateOptions): Promise<void> {
+export async function tabChildren(
+	tabId: string | undefined,
+	options: TabMutateOptions & { native?: string; expand?: boolean; collapse?: boolean }
+): Promise<void> {
 	try {
-		const source = await resolveTabEntry(tabId, options.agent);
-		const tabs = await listDesktopTabs();
+		if (options.expand && options.collapse) throw new Error('Choose --expand or --collapse');
+		if (options.native && (tabId || !options.agent || options.expand || options.collapse))
+			throw new Error('--native requires --agent and is read only; omit the tab ID');
+		if (!tabId && !options.native) throw new Error('A tab ID or --native is required');
+		const source = tabId ? await resolveTabEntry(tabId, options.agent) : undefined;
+		const agentId = source?.agentId ?? resolveAgentOrFail(options.agent!, options.json);
+		const state =
+			options.native || options.expand || options.collapse
+				? await invokeNativeHistory<ConversationChildrenResult>('windows:conversationChildren', [
+						{
+							sessionId: agentId,
+							...(options.native ? { nativeSessionId: options.native } : { tabId: source!.tabId }),
+							...(options.expand || options.collapse ? { expanded: !!options.expand } : {}),
+						},
+					])
+				: undefined;
+		const saved = await listDesktopTabs();
+		// The owner window answered from live state. When it resolved the parent
+		// through history, it has no open tab for that native ID, so an inventory
+		// tab with that ID is one it just closed (an archive) that the debounced
+		// save has not dropped yet. Matching it would take the parent's place.
+		const tabs =
+			state && state.parent.tabId === null
+				? saved.filter(
+						(tab) =>
+							tab.agentId !== state.parent.ownerId ||
+							tab.agentSessionId !== state.parent.nativeSessionId
+					)
+				: saved;
 		const candidates = tabs.map((tab) => ({
 			key: `${tab.agentId}:${tab.tabId}`,
 			ownerId: tab.agentId,
-			tabId: tab.tabId,
+			tabId: tab.tabId as string | null,
 			provider: tab.provider ?? tab.toolType,
 			nativeSessionId: tab.agentSessionId,
 		}));
-		const key = `${source.agentId}:${source.tabId}`;
+		if (state && !candidates.some((candidate) => candidate.key === state.parent.key))
+			candidates.push(state.parent as (typeof candidates)[number]);
+		const key = state?.parent.key ?? `${source!.agentId}:${source!.tabId}`;
+		const newShell = readSettingValue('newShell') === true;
+		const expanded = state?.expanded ?? (newShell ? (source?.expanded ?? false) : false);
 		const children = tabs.filter(
 			(tab) =>
+				(state || newShell || tab.origin?.kind !== 'handoff') &&
 				findConversationParent(
 					tab.origin ?? tab.consultOrigin,
 					candidates.filter((candidate) => candidate.key !== `${tab.agentId}:${tab.tabId}`)
@@ -223,9 +288,16 @@ export async function tabChildren(tabId: string, options: TabMutateOptions): Pro
 		);
 		if (options.json) {
 			console.log(
-				JSON.stringify({ success: true, tabId: source.tabId, agentId: source.agentId, children })
+				JSON.stringify({
+					success: true,
+					tabId: source?.tabId ?? state?.parent.tabId ?? null,
+					agentId,
+					expanded,
+					children,
+				})
 			);
 		} else {
+			if (state || newShell) console.log(`expanded\t${expanded}`);
 			for (const child of children) {
 				console.log(
 					[

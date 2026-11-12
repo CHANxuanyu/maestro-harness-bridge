@@ -46,22 +46,27 @@ async function saveSplit(split: NewShellSplit | null): Promise<void> {
 	useSettingsStore.setState({ newShellSplit: split });
 }
 
+/** Validate before creating a conversation so an unavailable split leaves no extra tab. */
+export function assertNewShellSplitAvailable(ratio?: number): void {
+	requireNewShell();
+	if (ratio !== undefined && (!Number.isFinite(ratio) || ratio < 0.2 || ratio > 0.8))
+		throw new Error(getT()('workflows.split.invalidRatio'));
+	const content = document.querySelector('[data-testid="new-shell-split-layout"]');
+	const width = content?.getBoundingClientRect().width;
+	if (
+		window.innerWidth < NEW_SHELL_SPLIT_MIN_WIDTH ||
+		(width !== undefined && width > 0 && width < NEW_SHELL_SPLIT_MIN_CONTENT_WIDTH)
+	)
+		throw new Error(getT()('workflows.split.narrow'));
+}
+
 export async function splitConversation(
 	sessionId: string,
 	tabId: string,
 	ratio?: number
 ): Promise<void> {
 	return writes.enqueue('split', async () => {
-		requireNewShell();
-		if (ratio !== undefined && (!Number.isFinite(ratio) || ratio < 0.2 || ratio > 0.8))
-			throw new Error(getT()('workflows.split.invalidRatio'));
-		const content = document.querySelector('[data-testid="new-shell-split-layout"]');
-		const width = content?.getBoundingClientRect().width;
-		if (
-			window.innerWidth < NEW_SHELL_SPLIT_MIN_WIDTH ||
-			(width !== undefined && width > 0 && width < NEW_SHELL_SPLIT_MIN_CONTENT_WIDTH)
-		)
-			throw new Error(getT()('workflows.split.narrow'));
+		assertNewShellSplitAvailable(ratio);
 		const right = { sessionId, tabId };
 		if (!splitConversationExists(right)) throw new Error(getT()('workflows.split.missing'));
 		const saved = useSettingsStore.getState().newShellSplit;

@@ -14,6 +14,7 @@
  * global setting (enter-to-send) - it is NOT the same as `false`.
  */
 export interface DesktopTabEntry {
+	expanded?: boolean;
 	toolOutputSources?: import('./nativeToolOutput').NativeToolOutputTarget[];
 	newShellPanel?: import('./newShellPanel').NewShellPanelState;
 	origin?: import('./aiHandoff').ConversationOrigin;
@@ -37,6 +38,8 @@ export interface DesktopTabEntry {
 	starred: boolean;
 	/** True for the tab its agent currently has selected (the `active` keyword). */
 	active: boolean;
+	/** The focused conversation in the primary owner window, from its live acknowledgement. */
+	current?: boolean;
 	/** Unread marker in the tab bar. */
 	hasUnread: boolean;
 	/** Synopsize this tab's completions into History after each completion. */

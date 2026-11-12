@@ -84,9 +84,15 @@ test('terminal buffer, shell PID, running AI turn and draft survive both shell t
 				shell.pid
 			);
 			expect(processes.find((process) => process.sessionId === ai.sessionId)?.pid).toBe(ai.pid);
-			expect(
-				(await native.cli('tab', 'show', owner.activeTabId, '--agent', owner.id)).tab.inputValue
-			).toBe('Unsent draft across both layouts');
+			// The draft is saved with the conversation on the debounced save.
+			await expect
+				.poll(
+					() =>
+						saved()
+							.find((session) => session.id === owner.id)
+							?.aiTabs.find((tab) => tab.id === owner.activeTabId)?.inputValue
+				)
+				.toBe('Unsent draft across both layouts');
 			if (enabled) {
 				await expect(native.page.locator('[data-toggle-buffer="original"]')).toBeVisible();
 				await expect(native.input()).toHaveValue('Unsent draft across both layouts');

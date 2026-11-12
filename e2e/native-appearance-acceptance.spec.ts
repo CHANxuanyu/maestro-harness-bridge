@@ -85,7 +85,9 @@ test('U1 fresh classic: Clay, proportional UI, collapsed files and fixed-pitch c
 	const agent = await native.createAgent('claude');
 	const right = page.locator('[data-panel="right"]');
 	await expect(right).toHaveAttribute('data-open', 'false');
-	await expect(right).toHaveCSS('width', '0px');
+	// Collapsed is `w-0 border-l opacity-0`: with border-box sizing only the 1px
+	// left border remains, and it is fully transparent.
+	expect((await right.boundingBox())!.width).toBeLessThanOrEqual(1);
 	await expect(right).toHaveCSS('opacity', '0');
 	await expect(page.getByTitle(/^Show right panel/)).toBeVisible();
 	const ui = await fontMetrics(page.locator('.maestro-app-shell'));

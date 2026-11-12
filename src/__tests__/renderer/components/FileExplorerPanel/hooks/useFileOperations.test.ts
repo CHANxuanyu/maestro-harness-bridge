@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useFileOperations } from '../../../../../renderer/components/FileExplorerPanel/hooks/useFileOperations';
@@ -50,6 +51,8 @@ const mockMaestro = {
 
 describe('useFileOperations', () => {
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 	});
 

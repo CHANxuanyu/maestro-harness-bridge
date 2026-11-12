@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { HandoffDraftBar } from '../../../renderer/components/InputArea/components/HandoffDraftBar';
 import { handoffDraftNoteFor } from '../../../renderer/services/aiHandoffEntry';
@@ -16,7 +17,18 @@ const note: HandoffDraftNote = {
 	omittedCharacters: 0,
 };
 
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
+
 describe('HandoffDraftBar', () => {
+	it('uses plain token-count copy in the new shell', () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+		render(<HandoffDraftBar theme={mockTheme} note={note} onDismiss={vi.fn()} />);
+		// workflows.newShellCopy.composer.draftTokens
+		expect(screen.getByTestId('handoff-draft-bar')).toHaveTextContent('About 2.3K tokens');
+	});
 	it('says where the draft came from, how big it is and what was left out', () => {
 		render(<HandoffDraftBar theme={mockTheme} note={note} onDismiss={vi.fn()} />);
 		const bar = screen.getByTestId('handoff-draft-bar');

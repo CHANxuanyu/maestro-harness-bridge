@@ -1589,6 +1589,7 @@ PR #77 后续真实结果见 `docs/verification/real-codex.md`：仅固定版本
 ## 2026-11-12 Task P 真实验收脚本
 
 本批只增加测试，不新增或修改产品界面动作。`e2e/real-acceptance.md` 列出接力、只读复核、双向 dispatch、自动交接、任务面板和 DeepSeek 能力探测的运行方式。测试沿用本表已有的 `handoff`、`tab select`、`tab children`、`tab panel`、`tab effort`、`project settings` 和 `dispatch` 共用实现。尚未运行真实模型或 Electron，任务面板 CLI 清单读回及来源嵌套等 Open gaps 不因增加测试而关闭。
+
 ## 默认新界面与显式选择
 
 | 界面操作                                     | CLI                                                         | 共用实现与读回                                                                                                                                   |

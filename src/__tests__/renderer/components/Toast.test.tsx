@@ -45,6 +45,11 @@ function setStoreToasts(toasts: Toast[]) {
 	useNotificationStore.setState({ toasts });
 }
 
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
+
 describe('Toast', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();

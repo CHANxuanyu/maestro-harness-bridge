@@ -11,6 +11,7 @@
  * rather than on the whole catalog being present.
  */
 
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useRef, useState } from 'react';
 import { render, screen, fireEvent, waitFor, createEvent } from '@testing-library/react';
@@ -62,6 +63,8 @@ describe('ModelEffortModal', () => {
 	let setTabEffort: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 		(window.maestro.agents.getModels as ReturnType<typeof vi.fn>).mockResolvedValue(MODELS);
 		(window.maestro.agents.getConfigOptions as ReturnType<typeof vi.fn>).mockImplementation(
@@ -73,6 +76,14 @@ describe('ModelEffortModal', () => {
 		setTabEffort = vi.fn();
 		useTabStore.setState({ setTabModel, setTabEffort } as never);
 		seedStore();
+	});
+
+	it('shows the English effort label and saves its provider value in the new shell', async () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+		renderModal();
+		// workflows.effort.high
+		fireEvent.doubleClick(await screen.findByText('High'));
+		expect(setTabEffort).toHaveBeenCalledWith('tab-1', 'high');
 	});
 
 	it('opens on the value the tab is currently running', async () => {

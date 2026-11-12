@@ -10,6 +10,7 @@
  * - Accessibility
  */
 
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -51,6 +52,8 @@ const renderWithLayerStack = (ui: React.ReactElement) => {
 
 describe('QuitConfirmModal', () => {
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 	});
 
@@ -59,6 +62,21 @@ describe('QuitConfirmModal', () => {
 	});
 
 	describe('rendering', () => {
+		it('names running conversations in the new shell', () => {
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+			renderWithLayerStack(
+				<QuitConfirmModal
+					theme={testTheme}
+					busyAgentCount={2}
+					busyAgentNames={['Project A', 'Project B']}
+					onConfirmQuit={vi.fn()}
+					onCancel={vi.fn()}
+				/>
+			);
+			// workflows.newShellCopy.feedback.quit.many / active
+			expect(screen.getByText(/2 conversations are running\./)).toBeInTheDocument();
+			expect(screen.getByText('Running conversations')).toBeInTheDocument();
+		});
 		it('renders with busy agent count and names', () => {
 			renderWithLayerStack(
 				<QuitConfirmModal

@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -40,7 +41,17 @@ const defaultProps = {
 
 describe('DeleteFileModal', () => {
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
+	});
+
+	it('uses plain deletion copy in the new shell', () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+		render(<DeleteFileModal {...defaultProps} />);
+		// workflows.newShellCopy.panels.deleteFile / deleteConfirm
+		expect(screen.getByTestId('modal-title')).toHaveTextContent('Delete file');
+		expect(screen.getByText('Delete “index.ts”? This cannot be undone.')).toBeInTheDocument();
 	});
 
 	it('shows "Delete File" title for a file node', () => {

@@ -8,6 +8,7 @@
  * - Terminal sessions are excluded from busy agent count
  */
 
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, renderHook, screen } from '@testing-library/react';
@@ -100,6 +101,8 @@ const renderWithLayerStack = (ui: React.ReactElement) => {
 
 describe('AppConfirmModals', () => {
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 	});
 

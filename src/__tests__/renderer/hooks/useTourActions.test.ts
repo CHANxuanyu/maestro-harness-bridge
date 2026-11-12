@@ -12,6 +12,7 @@
  *   - cleanup on unmount: listener is removed
  */
 
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, cleanup } from '@testing-library/react';
 import { useTourActions } from '../../../renderer/hooks/ui/useTourActions';
@@ -24,6 +25,8 @@ import { useTabStore } from '../../../renderer/stores/tabStore';
 // ============================================================================
 
 beforeEach(() => {
+	// Classic tour actions select Right Bar tabs instead of conversation panels.
+	useSettingsStore.setState({ newShell: false });
 	useUIStore.setState({
 		activeRightTab: 'files',
 		rightPanelOpen: true,

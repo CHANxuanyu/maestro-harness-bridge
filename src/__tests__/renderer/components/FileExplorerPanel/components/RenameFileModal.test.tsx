@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -56,7 +57,17 @@ const defaultProps = {
 
 describe('RenameFileModal', () => {
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
+	});
+
+	it('uses plain rename copy in the new shell', () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+		render(<RenameFileModal {...defaultProps} />);
+		// workflows.newShellCopy.panels.renameFile / fileName
+		expect(screen.getByTestId('modal-title')).toHaveTextContent('Rename file');
+		expect(screen.getByPlaceholderText('Enter file name')).toHaveValue('App.tsx');
 	});
 
 	it('shows "Rename File" title for a file node', () => {

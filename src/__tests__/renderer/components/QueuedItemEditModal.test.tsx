@@ -5,7 +5,8 @@
  * Cmd/Ctrl+Enter saves and closes from anywhere in the modal body, including
  * the textarea where plain Enter must stay a newline.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueuedItemEditModal } from '../../../renderer/components/QueuedItemEditModal';
 import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
@@ -33,6 +34,11 @@ function setup(overrides: Partial<QueuedItem> = {}) {
 	);
 	return { onSave, onClose, textarea: screen.getByPlaceholderText('Message to send…') };
 }
+
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
 
 describe('QueuedItemEditModal keyboard', () => {
 	it('saves and closes on Cmd+Enter from the textarea', () => {

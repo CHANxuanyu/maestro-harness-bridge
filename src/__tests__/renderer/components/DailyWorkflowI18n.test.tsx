@@ -17,6 +17,8 @@ vi.mock('../../../renderer/services/tileNewTabAction', () => ({
 
 describe('daily workflow language switching', () => {
 	beforeEach(() => {
+		// Classic composer and routing copy is the language-switching contract here.
+		useSettingsStore.setState({ newShell: false });
 		useSettingsStore.setState({ uiLanguage: 'en' });
 		vi.clearAllMocks();
 	});

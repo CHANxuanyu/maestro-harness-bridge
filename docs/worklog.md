@@ -35,6 +35,15 @@ hb.7 包级验收清单里 14 项原标为人工或部分人工（C4、C6、F3�
 场景发现两处产品缺陷并已修复：设置里的对话字体没有用于助手回答（只应用了字号，`TerminalOutput` 的滚动容器现在同时读取字体变量）；新界面下移动左栏键盘光标让整棵对话列表重新渲染（传给列表的菜单元素现按依赖缓存）。
 
 场景编写中纠正的假设，均对照产品既有约定，没有放宽验收：Playwright 默认模拟浅色配色，外观要用它的配色模拟驱动；主窗口拥有所有未被其他窗口认领的智能体，注册表只列显式认领；收起的右栏是 `w-0` 加 1px 透明边框；旧界面的标签菜单在智能体布局的标签栏上；退出保存按 hb.6 约定是总时限 5 秒，不是整个退出 5 秒。外派稿里一处只改旧界面退出时序的产品改动与约定不符，已撤回；F5、F7 改写时丢掉的原 About Me 场景断言已原样恢复。
+## 2026-11-12：Task N3 默认新界面单元测试整理
+
+验证对象为 `codex/default-new-shell` 的 `bc067a960` 加本次测试与文档修改，不是安装包。按断言逐项区分旧界面文案、旧标签/右栏/快捷键约定与新界面行为；旧约定在测试本地显式设置 `newShell: false`，保留全部原断言。保留交办时已有的 `useAgentListeners` 新界面占位进度回归与 CLI 对等文档格式修复。新增 10 条新界面英文文案测试，覆盖文件删除、重命名、扫描进度、图片保存、接力草稿、预览模式、退出提示、刷新反馈、SSH 拖出说明和思考强度标签；逐个查询既有测试后补入，临时切回旧界面时 10 条均失败。`TEST-PATTERNS.md` 补充测试必须声明界面的约定。本次没有产品行为或 UI 动作变化，因此没有新增 CLI 动词或产品 changelog 条目。
+
+两处不能用旧界面开关掩盖的 fixture 缺陷已补齐：远程配置测试只填了 `sessionsRef`，新保存路径从实时 store 读不到所属配置，现将同一 fixture 放入 store，并在新旧界面各运行原来的三条来源规则断言；补齐前仅新界面的三条失败，补齐后全部通过。`tileNewTab` 的强制类型转换 fixture 缺少 `cwd`，项目设置路径规范化报 `undefined.replace`；现复用 `createMockSession()` 的完整字段，显式运行新界面，原 13 条断言全部通过。
+
+**尚未解决的新界面问题：** `SessionListMemoization.test.tsx` 中“没有智能体变化时树的 props 保持引用”仍在新界面失败，唯一变化项为 `headerMenu`。`SessionList.tsx` 传入该 prop 的 JSX 每次渲染都会新建，移动 `selectedSidebarIndex` 也会使 `ProjectSessionSidebar` 的 memo 失效。这不是文案或预期产品差异；该子组显式设置 `newShell: true`，没有改断言、跳过或用旧界面设置遮住失败。需 Opus 审查并修复此处后再判定默认切换可合入。
+
+失败基线为指定 47 文件中的 46 文件失败，170 项失败、1427 项通过；最终同一批文件 46 文件通过、1 文件失败，1609 项通过、1 项失败、0 跳过。原有断言通过 TypeScript AST 逐句比对，47 文件均无删除或改值。`npx tsc -p tsconfig.json --noEmit`、`npm run lint`、`npm run lint:eslint`、`npx prettier --check .` 及改动文件 Prettier 均通过。直接运行 `npx vitest run` 在加载配置时因只读依赖链接下的 `.vite-temp` 写入返回 `EPERM`；使用 `--configLoader native --no-cache` 后能够运行测试，未更改 Vitest 配置或依赖。全量实际命令为 `npx vitest run --configLoader native --no-cache --reporter=default --reporter=json --outputFile.json=/tmp/n3-full.json`，退出码 1：2215 文件中 2209 通过、5 失败、1 跳过；50029 项中 49933 通过、6 失败、90 跳过，耗时 653.94 秒。唯一 renderer 失败就是上述 `headerMenu` 引用变化。其余为未改动的后端测试：`cue-cli-hot-reload` 三条真实文件监听断言失败；`cue-webhook-server` 的真实端口始终为 0；`execFile` 的孙进程结束检查失败；`permission-relay/relay-core` 有一个 suite 在绑定 Unix socket 时直接报 `listen EPERM`。另行最小探测确认本沙箱绑定 `127.0.0.1` 返回 `EPERM`，`ps` 被拒，而进程树清理依赖 `ps -eo pid=,ppid=`。`npx vitest run src/__tests__/main/cue/cue-cli-hot-reload.test.ts --configLoader native --no-cache` 单独运行仍为 5 通过、3 失败；再以 `CHOKIDAR_USEPOLLING=1` 运行同一命令也是 5 通过、3 失败，因此不能将这三条直接归因于原生事件监听限制，留待沙箱外核实。这些后端文件和测试配置均未改动，没有增加 skip、放宽断言或重试。未运行 Electron、真实模型、SSH 服务或安装包；未修改 e2e fixture，因此不要求额外的 Electron 场景或 fixture 套件。没有读取私人账户目录或凭据，没有推送。Opus 需先处理新界面 memo 回归，并在沙箱外重跑上述四个后端文件及完整 `npx vitest run`；本记录不宣称全绿。
 
 ## 2026-11-12：按原规格补齐剩余开发与技术验收
 

@@ -193,7 +193,7 @@ test.describe('U5 classic system appearance', () => {
 		const { page } = native;
 		await page.keyboard.press('ControlOrMeta+,');
 		const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
-		await settings.getByRole('button', { name: 'Theme', exact: true }).click();
+		await settings.getByRole('button', { name: 'Themes', exact: true }).click();
 		await settings.locator('[data-theme-id="clay-light"]').click();
 		const follow = settings.getByRole('switch', { name: 'Follow system light and dark mode' });
 		await expect(follow).not.toBeChecked();

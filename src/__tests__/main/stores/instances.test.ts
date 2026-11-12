@@ -27,14 +27,23 @@ vi.mock('electron-store', async () => {
 			constructor(options: Record<string, unknown>) {
 				this.options = options;
 				this.path = path.resolve(String(options.cwd ?? '/mock/user/data'), `${options.name}.json`);
-				mockStoreContents.set(this.path, '{}');
+				mockStoreContents.set(
+					this.path,
+					JSON.stringify({
+						...(options.defaults as object),
+						...JSON.parse(mockStoreContents.get(this.path) ?? '{}'),
+					})
+				);
 				mockStoreConstructorCalls.push(options);
 			}
-			get() {
-				return undefined;
+			get(key: string) {
+				return JSON.parse(mockStoreContents.get(this.path) ?? '{}')[key];
 			}
-			set(key: string, value: unknown) {
-				this._write({ [key]: value });
+			set(key: string | Record<string, unknown>, value?: unknown) {
+				this._write({
+					...JSON.parse(mockStoreContents.get(this.path) ?? '{}'),
+					...(typeof key === 'string' ? { [key]: value } : key),
+				});
 			}
 			_write(value: unknown) {
 				mockStoreContents.set(this.path, this._serialize(value));
@@ -81,6 +90,18 @@ describe('stores/instances', () => {
 	});
 
 	describe('initializeStores', () => {
+		it.each([
+			[{}, true, 'auto'],
+			[{ newShell: false }, true, 'auto'],
+			[{ newShell: false, newShellChoice: 'classic' }, false, 'classic'],
+			[{ newShell: true, newShellChoice: 'new' }, true, 'new'],
+		])('migrates before returning the settings store: %j', (stored, enabled, choice) => {
+			mockStoreContents.set('/mock/user/data/maestro-settings.json', JSON.stringify(stored));
+			initializeStores({ productionDataPath: '/mock/production/path' });
+			expect(getStoreInstances().settingsStore!.get('newShell')).toBe(enabled);
+			expect(getStoreInstances().settingsStore!.get('newShellChoice')).toBe(choice);
+		});
+
 		it('should initialize all stores', () => {
 			const result = initializeStores({ productionDataPath: '/mock/production/path' });
 

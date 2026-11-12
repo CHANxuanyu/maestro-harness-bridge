@@ -89,6 +89,7 @@ function getBadgeLevelForTime(cumulativeTimeMs: number): number {
  */
 function resetStore() {
 	useSettingsStore.setState({
+		newShell: true,
 		settingsLoaded: false,
 		conductorProfile: '',
 		globalShowHotkey: [],
@@ -190,19 +191,22 @@ describe('settingsStore', () => {
 		['notificationCenterKeyboardNavigation', 'setNotificationCenterKeyboardNavigation'],
 		['notificationHistoryQueuedReplies', 'setNotificationHistoryQueuedReplies'],
 		['notificationHistoryAutoRunTasks', 'setNotificationHistoryAutoRunTasks'],
-	] as const)('keeps %s opt-in and persists and restores it', async (key, setter) => {
-		expect(SETTINGS_METADATA[key].default).toBe(false);
-		expect(useSettingsStore.getInitialState()[key]).toBe(false);
-		useSettingsStore.getState()[setter](true);
-		expect(window.maestro.settings.set).toHaveBeenCalledWith(key, true);
-		useSettingsStore.setState({ [key]: false });
-		vi.mocked(window.maestro.settings.getAll).mockResolvedValue({ [key]: true });
-		await loadAllSettings();
-		expect(useSettingsStore.getState()[key]).toBe(true);
-		vi.mocked(window.maestro.settings.getAll).mockResolvedValue({ [key]: false });
-		await loadAllSettings();
-		expect(useSettingsStore.getState()[key]).toBe(false);
-	});
+	] as const)(
+		'uses the expected default for %s and persists and restores it',
+		async (key, setter) => {
+			expect(SETTINGS_METADATA[key].default).toBe(key === 'newShell');
+			expect(useSettingsStore.getInitialState()[key]).toBe(key === 'newShell');
+			useSettingsStore.getState()[setter](true);
+			expect(window.maestro.settings.set).toHaveBeenCalledWith(key, true);
+			useSettingsStore.setState({ [key]: false });
+			vi.mocked(window.maestro.settings.getAll).mockResolvedValue({ [key]: true });
+			await loadAllSettings();
+			expect(useSettingsStore.getState()[key]).toBe(true);
+			vi.mocked(window.maestro.settings.getAll).mockResolvedValue({ [key]: false });
+			await loadAllSettings();
+			expect(useSettingsStore.getState()[key]).toBe(false);
+		}
+	);
 
 	beforeEach(() => {
 		resetStore();
@@ -237,6 +241,7 @@ describe('settingsStore', () => {
 			const state = useSettingsStore.getState();
 
 			expect(state.settingsLoaded).toBe(false);
+			expect(state.newShell).toBe(true);
 			expect(state.conductorProfile).toBe('');
 			expect(state.defaultShell).toBe('zsh');
 			expect(state.customShellPath).toBe('');

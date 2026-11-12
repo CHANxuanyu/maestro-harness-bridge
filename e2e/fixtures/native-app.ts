@@ -102,6 +102,9 @@ export class NativeApp {
 			path.join(this.data, 'maestro-settings.json'),
 			JSON.stringify({
 				uiLanguage: 'en',
+				// Existing provider scenarios exercise the classic shell explicitly.
+				newShell: false,
+				newShellChoice: 'classic',
 				typographyPromptSeen: true,
 				themePromptSeen: true,
 				updatesPromptSeen: true,
@@ -201,7 +204,7 @@ export class NativeApp {
 		await expect(
 			this.page
 				.getByText('Create your first agent', { exact: true })
-				.or(this.page.getByRole('button', { name: 'Open project folder', exact: true }))
+				.or(this.page.getByTestId('project-start'))
 				.or(this.input())
 		).toBeVisible();
 	}

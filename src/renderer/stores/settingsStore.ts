@@ -685,7 +685,7 @@ export interface SettingsStoreActions
 
 export type SettingsStore = SettingsStoreState & SettingsStoreActions;
 
-/** Shared renderer selector for the opt-in shell. */
+/** Shared renderer selector for the new shell. */
 export const selectNewShellEnabled = (state: SettingsStoreState) => state.newShell === true;
 
 /** Shared renderer selector for every Groups+ surface. */
@@ -816,7 +816,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get, api) => {
 		groupChatsExpanded: true,
 		groupChatSortAlphabetical: false,
 		starredSessionsCollapsed: false,
-		newShell: false,
+		newShell: true,
 		codexAppServer: false,
 		projectSettings: {},
 		newShellSplit: null,

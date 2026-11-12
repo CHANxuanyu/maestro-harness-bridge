@@ -1957,3 +1957,9 @@ CLI 导航、刷新和系统浏览器打开共用 `applyNewShellWebAction()`；C
 本轮源码增加新界面项目级自动交接，默认关闭，目标锁定工具配置和主机。来源退出后保存失败回合标记，复用手动交接上下文、权限与发送队列；目标不自动继续转交。设置、CLI、目标配置选择、退出触发、重试互斥、完整失败消息和来源跳转均先观察回归失败，再实现。只使用合成数据和临时目录，未调用真实模型，未构建发布产物。
 
 已写合成 Electron 场景，验证默认关闭、开启后单次发送、来源说明跳转、只读权限和目标再失败不传递。Electron 尚未运行，待沙箱外验收。相关 10 个文件共 304 条单元测试通过，ES2020 兼容写法调整后相关 2 个文件的 90 条回归再次通过。`tsconfig.json`、`tsconfig.main.json`、`tsconfig.cli.json` 三份类型检查通过；全部改动文件通过 Prettier，代码及测试通过 `eslint --no-ignore`。Electron 两个场景已收集，并以包含现有 CJS 夹具和 renderer 全局声明的临时配置完成类型检查；未启动 Electron。沙箱外运行：`npm run test:e2e -- e2e/native-auto-handoff.spec.ts`。
+
+## 2026-11-12，Task N：hb.9 准备分支
+
+在 `codex/default-new-shell` 准备默认切换，没有推送或合并。查明 conf 会落盘默认值，新增一次迁移及 UI/在线和离线 CLI 共用的显式选择记录。旧界面继续保留，未删除产品功能或用户数据。删除计划附生产 import 双向边、存储与接口清单，明确群聊启动/解析、插件 MCP、安全边界和经典容器内的新界面组件必须先拆出保留。
+
+源码相关 12 文件 810 项单元测试、基线脚本 5 项 Node 测试通过；类型、ESLint、改动文件格式通过。先观察默认/选择写入回归失败、基线模块缺失、classic fixture 缺少选择标记，再实现。夹具全套 80 项通过，3 项因沙箱拒绝临时 Unix socket 的 listen 而失败，未放宽断言或跳过。16 个 Electron 场景仅收集，未运行；hb.7 实际包体积/启动基线待 Opus 沙箱外执行。验证对象仅为源码，没有新包、真实模型或账户验收。[完整命令与边界](verification/default-new-shell.md)，[待用户决定的 PR 正文](verification/default-new-shell-pr.md)，[删除计划](roadmap/new-shell-deletion-plan.md)。

@@ -501,6 +501,8 @@ test('new shell first run asks only the updates question', async ({}, info) => {
 	const home = path.join(native.root, 'home');
 	fs.mkdirSync(home, { recursive: true });
 	const settings = seedNewShell(native, {
+		newShell: undefined,
+		newShellChoice: undefined,
 		typographyPromptSeen: false,
 		themePromptSeen: false,
 		updatesPromptSeen: false,
@@ -591,7 +593,7 @@ test('old shell wizard names a rejected login instead of an exit code', async ({
 	const native = new NativeApp(info, { providerCli: false });
 	const home = path.join(native.root, 'home');
 	fs.mkdirSync(home, { recursive: true });
-	seedNewShell(native, { newShell: false });
+	seedNewShell(native, { newShell: false, newShellChoice: 'classic' });
 	native.scriptTurns([{ authFailure: true, answer: '' }]);
 	let failed = false;
 	try {

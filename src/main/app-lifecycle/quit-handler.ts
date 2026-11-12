@@ -90,6 +90,8 @@ function hardExit(): void {
 
 /** Dependencies for quit handler */
 export interface QuitHandlerDependencies {
+	/** Keep the new shell's existing save and teardown timing unchanged. */
+	getNewShellEnabled?: () => boolean;
 	/** Function to get the main window */
 	getMainWindow: () => BrowserWindow | null;
 	/** Function to get the process manager */
@@ -196,6 +198,8 @@ export function createQuitHandler(deps: QuitHandlerDependencies): QuitHandler {
 		cleanupStarted: false,
 		rendererSave: 'idle',
 	};
+	let classicQuit = false;
+	let rendererSaveStartedAt = 0;
 
 	return {
 		setup: () => {
@@ -279,6 +283,8 @@ export function createQuitHandler(deps: QuitHandlerDependencies): QuitHandler {
 					return;
 				}
 				if (state.rendererSave === 'idle') {
+					classicQuit = deps.getNewShellEnabled?.() !== true;
+					rendererSaveStartedAt = performance.now();
 					state.rendererSave = 'pending';
 					let dispatching = true;
 					flushRendererPersistence(() => {
@@ -324,6 +330,13 @@ export function createQuitHandler(deps: QuitHandlerDependencies): QuitHandler {
 				if (!state.installingUpdate || forceExitOnInstall) {
 					event.preventDefault();
 					const graceMs = state.installingUpdate ? UPDATE_EXIT_GRACE_MS : FORCE_EXIT_GRACE_MS;
+					// Classic acceptance bounds the entire confirmed quit, including exit.
+					// The updater helper has already been armed when saving starts, so its
+					// settle time can overlap that wait. Do not add another grace window
+					// after a slow/unresponsive renderer consumes the save budget.
+					const remainingGraceMs = classicQuit
+						? Math.max(0, graceMs - (performance.now() - rendererSaveStartedAt))
+						: graceMs;
 					setTimeout(() => {
 						logger.info(
 							forceExitOnInstall
@@ -332,7 +345,7 @@ export function createQuitHandler(deps: QuitHandlerDependencies): QuitHandler {
 							'Shutdown'
 						);
 						hardExit();
-					}, graceMs);
+					}, remainingGraceMs);
 				}
 			});
 		},
@@ -385,10 +398,19 @@ export function createQuitHandler(deps: QuitHandlerDependencies): QuitHandler {
 			if (id !== requestId || typeof saved !== 'boolean') return;
 			settle(event.sender, saved);
 		};
-		const timeout = setTimeout(() => {
-			logger.warn(`Quit save timed out with ${pending.size} renderer(s) pending`, 'Shutdown');
-			finish();
-		}, QUIT_SAVE_TIMEOUT_MS);
+		// Reserve the normal teardown allowance inside classic's five seconds.
+		// Synchronous cleanup and process exit still need time after this timer.
+		const timeout = setTimeout(
+			() => {
+				logger.warn(`Quit save timed out with ${pending.size} renderer(s) pending`, 'Shutdown');
+				if (classicQuit) {
+					for (const contents of pending)
+						logger.warn(`Quit save did not complete for renderer ${contents.id}`, 'Shutdown');
+				}
+				finish();
+			},
+			classicQuit ? QUIT_SAVE_TIMEOUT_MS - FORCE_EXIT_GRACE_MS : QUIT_SAVE_TIMEOUT_MS
+		);
 		ipcMain.on('app:quitSaveComplete', onComplete);
 
 		// Register every target before sending so fast replies cannot end the

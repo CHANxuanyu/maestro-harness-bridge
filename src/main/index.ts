@@ -3225,6 +3225,7 @@ app.on('window-all-closed', () => {
 
 // Create and setup quit handler with dependency injection (Phase 4 refactoring)
 quitHandler = createQuitHandler({
+	getNewShellEnabled: () => store.get('newShell', false),
 	getMainWindow: () => mainWindow,
 	getProcessManager: () => processManager,
 	getWebServer: () => webServer,

@@ -100,11 +100,12 @@ export function resolveAgentOrFail(agentId: string, json?: boolean): string {
  */
 export async function listDesktopTabs(): Promise<DesktopTabEntry[]> {
 	const res = await withMaestroClient((client) =>
-		client.sendCommand<{ sessions?: DesktopTabEntry[] }>(
+		client.sendCommand<{ success?: boolean; error?: string; sessions?: DesktopTabEntry[] }>(
 			{ type: 'list_desktop_sessions' },
 			'desktop_sessions_list'
 		)
 	);
+	if (res.success === false) throw new Error(res.error || 'Live inventory unavailable');
 	return res.sessions ?? [];
 }
 
@@ -126,6 +127,10 @@ export async function resolveTabEntry(tabId: string, agentHint?: string): Promis
 	const list = await listDesktopTabs();
 
 	if (tabId.trim().toLowerCase() === ACTIVE_TAB_KEYWORD) {
+		const current = !agentHint && list.find((tab) => tab.current);
+		if (current) return current;
+		if (!agentHint && list.some((tab) => tab.current !== undefined))
+			throw new Error('No active AI conversation');
 		const agentId = agentHint ? resolveAgentId(agentHint) : readActiveAgentId();
 		if (!agentId) {
 			throw new Error(

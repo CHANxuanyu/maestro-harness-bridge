@@ -181,18 +181,18 @@ Answer a pending permission request with allow or deny
 | -------- | ----------- | ------- |
 | `--json` | Output JSON | -       |
 
-## `maestro-cli native-history <action> [agent] [conversation]`
-
 ## `maestro-cli native-history <action> [session] [conversation-or-tool-call-id]`
 
-List projects, list/read/archive/unarchive/delete native history, or tool-output <session> <tool-call-id> (tab ID, active, or an exact native history ID)
+List, search, read or archive native history; open-hit &lt;agent> &lt;native-id> --message &lt;locator> opens a matching message
 
-| Option       | Description                                            | Default |
-| ------------ | ------------------------------------------------------ | ------- |
-| `--json`     | Output JSON                                            | -       |
-| `--copy`     | Copy the returned tool output to the desktop clipboard | -       |
-| `--archived` | List archived native conversations                     | -       |
-| `--yes`      | Confirm irreversible deletion of native history        | -       |
+| Option                | Description                                                  | Default |
+| --------------------- | ------------------------------------------------------------ | ------- |
+| `--json`              | Output JSON                                                  | -       |
+| `--copy`              | Copy the returned tool output to the desktop clipboard       | -       |
+| `--archived`          | List archived native conversations                           | -       |
+| `--yes`               | Confirm irreversible deletion of native history              | -       |
+| `--project <path>`    | Search native history in this local project                  | -       |
+| `--message <locator>` | open-hit message UUID or the message JSON returned by search | -       |
 
 ## `maestro-cli show`
 
@@ -323,14 +323,6 @@ Show, stage, apply or inspect the shared native instruction profile
 | `--confirm <path>` | Approve this exact resolved file from status (repeatable) | `[]`    |
 | `--json`           | Output JSON including per-file states                     | -       |
 
-## `maestro-cli permission <action> [request-id]`
-
-List or answer a pending Claude tool approval: list, allow, deny
-
-| Option   | Description | Default |
-| -------- | ----------- | ------- |
-| `--json` | Output JSON | -       |
-
 ## `maestro-cli project`
 
 Manage project defaults for future conversations in the new interface
@@ -345,13 +337,23 @@ Show or set defaults stored by Maestro for one project and host
 | `--ssh-remote <id>`         | SSH host identity; omit for local projects                                               | -       |
 | `--provider <id>`           | Default tool, or inherit to clear                                                        | -       |
 | `--model <id>`              | Default model, or inherit to clear                                                       | -       |
+| `--model-provider <id>`     | Tool owning the model and effort when the default tool is inherited                      | -       |
 | `--effort <level>`          | Default reasoning effort, or inherit to clear                                            | -       |
+| `--auto-handoff <id\|off>`  | Target tool configuration ID for automatic handoff, or off                               | -       |
 | `--permission <mode>`       | full, standard, readonly, or inherit to clear                                            | -       |
 | `--env <NAME=VALUE>`        | Replace project environment variables; repeat for every entry                            | `[]`    |
 | `--clear-env`               | Remove the project environment override                                                  | -       |
 | `--acknowledge-full-access` | Acknowledge once that full access permits reading, writing and commands without approval | -       |
 | `--show-secrets`            | Reveal environment credentials in output                                                 | -       |
 | `--json`                    | Output the settings snapshot as JSON                                                     | -       |
+
+## `maestro-cli permission <action> [request-id]`
+
+List or answer a pending Claude tool approval: list, allow, deny
+
+| Option   | Description | Default |
+| -------- | ----------- | ------- |
+| `--json` | Output JSON | -       |
 
 ## `maestro-cli changes [action] [paths]`
 
@@ -371,17 +373,18 @@ Read, stage, unstage, revert or commit changes in a conversation working directo
 
 Prepare a new conversation with another AI in the same project
 
-| Option                 | Description                                                     | Default |
-| ---------------------- | --------------------------------------------------------------- | ------- |
-| `--agent <id>`         | Source agent for an active or ambiguous tab                     | -       |
-| `--list-targets`       | List available target providers without creating a draft        | -       |
-| `--review`             | Prepare a review that reports problems without editing files    | -       |
-| `--send`               | Explicitly send the prepared handoff instead of leaving a draft | -       |
-| `--instruction <text>` | Append an instruction to the handoff                            | -       |
-| `--max-tokens <count>` | Estimated token budget for the handoff                          | -       |
-| `--background`         | Prepare the target tab without changing selection (default)     | -       |
-| `--focus`              | Focus the prepared target tab                                   | -       |
-| `--json`               | Output JSON                                                     | -       |
+| Option                  | Description                                                     | Default |
+| ----------------------- | --------------------------------------------------------------- | ------- |
+| `--agent <id>`          | Source agent for an active or ambiguous tab                     | -       |
+| `--list-configurations` | List tool configuration IDs and accounts in this project        | -       |
+| `--list-targets`        | List available target providers without creating a draft        | -       |
+| `--review`              | Prepare a review that reports problems without editing files    | -       |
+| `--send`                | Explicitly send the prepared handoff instead of leaving a draft | -       |
+| `--instruction <text>`  | Append an instruction to the handoff                            | -       |
+| `--max-tokens <count>`  | Estimated token budget for the handoff                          | -       |
+| `--background`          | Prepare the target tab without changing selection (default)     | -       |
+| `--focus`               | Focus the prepared target tab                                   | -       |
+| `--json`                | Output JSON                                                     | -       |
 
 ## `maestro-cli ask <agent-id> <question>`
 
@@ -413,6 +416,15 @@ Remove a queued item by its id (from dispatch --queue output or queue list)
 | Option             | Description                                      | Default |
 | ------------------ | ------------------------------------------------ | ------- |
 | `-a, --agent <id>` | Agent whose queue the item belongs to (required) | -       |
+
+## `maestro-cli queue force-send <item-id>`
+
+Force-send a queued item using the same checks as its card
+
+| Option             | Description                             | Default |
+| ------------------ | --------------------------------------- | ------- |
+| `-a, --agent <id>` | Agent whose window receives the command | -       |
+| `--json`           | Output JSON                             | -       |
 
 ## `maestro-cli window`
 
@@ -630,11 +642,14 @@ Open a URL as a browser tab in the Maestro desktop app
 
 Open a Maestro modal or dashboard (use --list to see every surface)
 
-| Option            | Description                                             | Default |
-| ----------------- | ------------------------------------------------------- | ------- |
-| `-t, --tab <tab>` | Deep-link to a tab within the surface                   | -       |
-| `--list`          | List every openable surface, its tabs, and its shortcut | -       |
-| `--json`          | Output as JSON (for scripting)                          | -       |
+| Option             | Description                                             | Default |
+| ------------------ | ------------------------------------------------------- | ------- |
+| `-t, --tab <tab>`  | Deep-link to a tab within the surface                   | -       |
+| `--list`           | List every openable surface, its tabs, and its shortcut | -       |
+| `--json`           | Output as JSON (for scripting)                          | -       |
+| `--path <project>` | Open settings for this project path                     | -       |
+| `--close`          | Close the project settings window                       | -       |
+| `-a, --agent <id>` | Agent whose window receives the command                 | -       |
 
 ## `maestro-cli image`
 
@@ -1298,6 +1313,8 @@ Open a new tab for an agent (optionally seeded with a prompt)
 | `--background`             | Create the tab without moving the view (agent and tab stay put)  | -       |
 | `--focus`                  | Switch to the new tab after creating it (default)                | -       |
 | `--json`                   | Output as JSON (for scripting)                                   | -       |
+| `--split`                  | Create a conversation directly in the right split pane           | -       |
+| `--ratio <fraction>`       | Left pane width fraction, between 0.2 and 0.8                    | -       |
 
 ## `maestro-cli tab stop <tab-id>`
 
@@ -1308,9 +1325,28 @@ Stop this conversation in the new shell, or its owning agent in classic mode
 | `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
 | `--json`           | Output as JSON (for scripting)                 | -       |
 
-## `maestro-cli tab panel <tab-id> <action>`
+## `maestro-cli tab split <tab-id>`
 
-New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show
+Open an existing conversation on the right (requires the new shell)
+
+| Option               | Description                                         | Default |
+| -------------------- | --------------------------------------------------- | ------- |
+| `-a, --agent <id>`   | Whose active tab, when &lt;tab-id> is "active"      | -       |
+| `--json`             | Output as JSON (for scripting)                      | -       |
+| `--ratio <fraction>` | Left pane share of the split width, for example 0.5 | -       |
+
+## `maestro-cli tab unsplit`
+
+Return the current conversation window to one pane (requires the new shell)
+
+| Option             | Description                                    | Default |
+| ------------------ | ---------------------------------------------- | ------- |
+| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
+| `--json`           | Output as JSON (for scripting)                 | -       |
+
+## `maestro-cli tab panel [tab-id-or-action] [action]`
+
+New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, web, web-reload, web-external, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show
 
 | Option             | Description                                                                                                                                                               | Default |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -1320,6 +1356,7 @@ New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, 
 | `--filter <query>` | Filter the conversation file tree; an empty string clears it                                                                                                              | -       |
 | `--content <text>` | Set the remembered text file edit buffer before this action                                                                                                               | -       |
 | `--line <number>`  | Jump to a line in the remembered preview                                                                                                                                  | -       |
+| `--url <url>`      | HTTP or HTTPS address for the web panel                                                                                                                                   | -       |
 
 ## `maestro-cli tab compact <tab-id>`
 
@@ -1493,6 +1530,24 @@ Move a tab to a position in its agent's tab bar (0-based, or "first"/"last")
 | ------------------ | ---------------------------------------------- | ------- |
 | `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
 | `--json`           | Output as JSON (for scripting)                 | -       |
+
+## `maestro-cli tab tasks <tab-id>`
+
+Read the live Tasks panel list and empty state
+
+| Option             | Description                             | Default |
+| ------------------ | --------------------------------------- | ------- |
+| `-a, --agent <id>` | Agent whose window receives the command | -       |
+| `--json`           | Output JSON                             | -       |
+
+## `maestro-cli tab refresh <tab-id>`
+
+Refresh this conversation from its native history
+
+| Option             | Description                             | Default |
+| ------------------ | --------------------------------------- | ------- |
+| `-a, --agent <id>` | Agent whose window receives the command | -       |
+| `--json`           | Output JSON                             | -       |
 
 ## `maestro-cli create-ssh-remote <name>`
 
@@ -2460,3 +2515,15 @@ Run an MCP stdio server exposing registered plugin tools (spawned by an agent vi
 | Option       | Description                                   | Default |
 | ------------ | --------------------------------------------- | ------- |
 | `--tab <id>` | Originating desktop tab id (diagnostics only) | -       |
+
+## `maestro-cli ui`
+
+## `maestro-cli ui sidebar-search [text]`
+
+Set the new shell sidebar search, or clear it with --clear
+
+| Option             | Description                             | Default |
+| ------------------ | --------------------------------------- | ------- |
+| `--clear`          | Clear the sidebar search                | -       |
+| `-a, --agent <id>` | Agent whose window receives the command | -       |
+| `--json`           | Output JSON                             | -       |

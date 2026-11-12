@@ -1,3 +1,8 @@
+import { getT } from '../i18n';
+import { projectSettingsScopeForSession } from './projectConversationDefaults';
+import { projectSettingsKey } from '../../shared/projectSettings';
+import { sessionProjectKey } from './nativeConversationMatch';
+import { getWindowContext } from '../contexts/WindowContext';
 /**
  * Open one of the app's registered UI surfaces by id (see
  * `shared/uiSurfaces.ts`). This is the renderer end of `maestro-cli open`,
@@ -31,7 +36,11 @@ export interface OpenUiSurfaceResult {
  * has turned off: silently opening nothing would look like the CLI lied, and
  * silently enabling the feature would change a setting the user never touched.
  */
-export function openUiSurface(surfaceId: string, tabId?: string): OpenUiSurfaceResult {
+export function openUiSurface(
+	surfaceId: string,
+	tabId?: string,
+	options?: { path?: string; close?: boolean; sessionId?: string; projectKey?: string }
+): OpenUiSurfaceResult {
 	const surface = resolveUiSurface(surfaceId);
 	if (!surface) return { ok: false, error: `Unknown surface "${surfaceId}"` };
 
@@ -50,6 +59,33 @@ export function openUiSurface(surfaceId: string, tabId?: string): OpenUiSurfaceR
 	const actions = getModalActions();
 
 	switch (surface.id) {
+		case 'project-settings': {
+			if (!useSettingsStore.getState().newShell)
+				return { ok: false, error: getT()('workflows.split.disabled') };
+			if (options?.close) {
+				useUIStore.getState().setNewShellSettingsProjectKey(null);
+				return { ok: true };
+			}
+			const state = useSessionStore.getState();
+			const owners = new Map(state.sessions.map((s) => [s.id, s]));
+			const groups = new Map(state.groups.map((g) => [g.id, g]));
+			const candidates = state.sessions.filter(
+				(s) => s.toolType !== 'terminal' && getWindowContext()?.ownsSession(s.id) !== false
+			);
+			const session = options?.projectKey
+				? candidates.find((s) => sessionProjectKey(s, owners, groups).key === options.projectKey)
+				: options?.path
+					? candidates.find((s) => (s.projectRoot || s.cwd) === options.path)
+					: candidates.find((s) => s.id === (options?.sessionId || state.activeSessionId));
+			if (!session) return { ok: false, error: getT()('workflows.cliParity.projectWindowMissing') };
+			useUIStore
+				.getState()
+				.setNewShellSettingsProjectKey(
+					sessionProjectKey(session, owners, groups).key,
+					projectSettingsKey(projectSettingsScopeForSession(session))
+				);
+			return { ok: true };
+		}
 		case 'worktree-cleanup': {
 			const session = selectActiveSession(useSessionStore.getState());
 			if (!session?.parentSessionId || !session.worktreeBranch)

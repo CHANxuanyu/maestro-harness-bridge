@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { registerNewShellCli } from './commands/new-shell';
 import { NEW_SHELL_PANEL_ACTIONS } from '../shared/newShellPanel';
 import {
 	codexTurnSteer,
@@ -2826,4 +2827,5 @@ mcp
 // only strips argv[0] and treats the script path as the first user command.
 // Force node-style argv parsing so the shim that spawns us via Electron-as-Node
 // (see MaestroCliManager.writeUnixShim / writeWindowsShim) works correctly.
+registerNewShellCli(program);
 program.parse(process.argv, { from: 'node' });

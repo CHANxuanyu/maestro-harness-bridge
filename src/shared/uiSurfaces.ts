@@ -63,6 +63,13 @@ export const CUE_MODAL_TABS: UiSurfaceTab[] = [
 
 export const UI_SURFACES: UiSurface[] = [
 	{
+		id: 'project-settings',
+		label: 'Project Settings',
+		modal: 'projectSettings',
+		description: 'Open or close project settings in the new shell.',
+		click: 'Project menu > Settings',
+	},
+	{
 		id: 'worktree-cleanup',
 		label: 'Remove Worktree',
 		modal: 'deleteWorktree',

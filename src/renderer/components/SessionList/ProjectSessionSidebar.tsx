@@ -1,4 +1,5 @@
 import { useT } from '../../i18n';
+import { openUiSurface } from '../../utils/openUiSurface';
 import { newProjectConversation } from '../../services/newShellConversation';
 import { requestConversationAction } from '../../services/conversationArchive';
 import { useConversationArchiveStore } from '../../stores/conversationArchiveStore';
@@ -141,8 +142,12 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const t = useT();
 	const newShell = useSettingsStore(selectNewShellEnabled);
 	const archiveRecords = useConversationArchiveStore((state) => state.records);
-	const [search, setSearch] = useState('');
-	const [settingsProject, setSettingsProject] = useState<SidebarProject | null>(null);
+	const [classicSearch, setClassicSearch] = useState('');
+	const shellSearch = useUIStore((state) => state.newShellSidebarSearch);
+	const search = newShell ? shellSearch : classicSearch;
+	const setSearch = newShell ? useUIStore.getState().setNewShellSidebarSearch : setClassicSearch;
+	const settingsProjectKey = useUIStore((state) => state.newShellSettingsProjectKey);
+	const settingsScopeKey = useUIStore((state) => state.newShellSettingsScopeKey);
 	const contentSearch = useNativeHistorySearch(search, newShell);
 	const [contentOpening, setContentOpening] = useState(false);
 	const [contentOpenFailed, setContentOpenFailed] = useState(false);
@@ -493,16 +498,17 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const manageAgents = useCallback(() => {
 		useSettingsStore.getState().setSidebarNavigationMode('agents');
 	}, []);
+	const settingsProject = projects.find((project) => project.key === settingsProjectKey);
 	const settingsSessions = useMemo(() => {
-		if (!settingsProject) return [];
+		if (!settingsProjectKey) return [];
 		const owners = new Map(sessions.map((owner) => [owner.id, owner]));
 		const projectGroups = new Map(groups.map((group) => [group.id, group]));
 		return sessions.filter(
 			(session) =>
 				session.toolType !== 'terminal' &&
-				sessionProjectKey(session, owners, projectGroups).key === settingsProject.key
+				sessionProjectKey(session, owners, projectGroups).key === settingsProjectKey
 		);
-	}, [settingsProject, sessions, groups]);
+	}, [settingsProjectKey, sessions, groups]);
 	const settingsScopes = [
 		...new Map(
 			settingsSessions.map((session) => {
@@ -510,7 +516,11 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 				return [projectSettingsKey(scope), scope] as const;
 			})
 		).values(),
-	];
+	].sort(
+		(a, b) =>
+			Number(projectSettingsKey(b) === settingsScopeKey) -
+			Number(projectSettingsKey(a) === settingsScopeKey)
+	);
 
 	const archiveTarget = (conversation: SidebarConversation): ConversationArchiveTarget =>
 		conversation.history &&
@@ -618,16 +628,19 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 				}
 				onShowMore={showMore}
 				onManageAgents={manageAgents}
-				onProjectSettings={setSettingsProject}
+				onProjectSettings={(project) =>
+					openUiSurface('project-settings', undefined, { projectKey: project.key })
+				}
 				onAddAgent={onAddAgent}
 			/>
-			{newShell && settingsProject && settingsScopes.length > 0 && (
+			{newShell && settingsProjectKey && settingsScopes.length > 0 && (
 				<ProjectSettingsModal
+					key={`${settingsProjectKey}:${settingsScopeKey}`}
 					theme={theme}
-					name={settingsProject.name}
+					name={settingsProject?.name ?? settingsSessions[0]?.name ?? ''}
 					scopes={settingsScopes}
 					sessions={settingsSessions}
-					onClose={() => setSettingsProject(null)}
+					onClose={() => openUiSurface('project-settings', undefined, { close: true })}
 				/>
 			)}
 		</>

@@ -1,4 +1,5 @@
 import { readSettingValue } from '../services/storage';
+import { newShellCommand } from './new-shell';
 import { projectSettingsTranslator } from './project-settings';
 import { PROJECT_CONVERSATION_TIMEOUT_MS } from '../../shared/projectSettings';
 import { invokeNativeHistory } from '../services/agent-sessions';
@@ -42,6 +43,8 @@ import type { DesktopTabEntry } from '../../shared/desktopTabs';
 import { resolveBackgroundFlag } from '../../shared/focusPlacement';
 
 interface TabNewOptions {
+	split?: boolean;
+	ratio?: string;
 	provider?: string;
 	replaceEmpty?: string;
 	agent: string;
@@ -67,6 +70,29 @@ export async function tabNew(options: TabNewOptions): Promise<void> {
 	const background = resolveBackgroundFlag(options, 'tab-new');
 
 	try {
+		if (options.ratio !== undefined && !options.split)
+			throw new Error(projectSettingsTranslator()('workflows.cliParity.ratioRequiresSplit'));
+		if (options.split) {
+			if (background || options.replaceEmpty)
+				throw new Error(projectSettingsTranslator()('workflows.cliParity.splitIncompatible'));
+			const ratio = options.ratio === undefined ? undefined : Number(options.ratio);
+			if (ratio !== undefined && (!Number.isFinite(ratio) || ratio < 0.2 || ratio > 0.8))
+				throw new Error(projectSettingsTranslator()('workflows.split.invalidRatio'));
+			if (options.provider && !isHandoffProvider(options.provider))
+				throw new Error(projectSettingsTranslator()('workflows.cliParity.unknownProvider'));
+			const result = await newShellCommand(
+				sessionId,
+				{
+					action: 'new-split',
+					...(options.provider ? { provider: options.provider } : {}),
+					...(ratio !== undefined ? { ratio } : {}),
+					...(prompt ? { prompt } : {}),
+				},
+				options.json
+			);
+			console.log(JSON.stringify(result, null, options.json ? undefined : 2));
+			return;
+		}
 		if (options.provider) {
 			if (!isHandoffProvider(options.provider) || prompt)
 				return failCommand('Choose claude-code, codex or deepseek without --prompt', options.json);

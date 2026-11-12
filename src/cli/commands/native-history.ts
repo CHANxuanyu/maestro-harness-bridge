@@ -1,3 +1,6 @@
+import { projectSettingsTranslator } from './project-settings';
+import { newShellCommand } from './new-shell';
+import type { NativeHistorySearchHit } from '../../shared/nativeHistorySearch';
 import path from 'node:path';
 import { invokeNativeHistory } from '../services/agent-sessions';
 import { getSessionById, readSessions, resolveAgentId } from '../services/storage';
@@ -10,7 +13,14 @@ export async function nativeHistory(
 	action: string,
 	agentArg: string | undefined,
 	nativeId: string | undefined,
-	options: { json?: boolean; copy?: boolean; archived?: boolean; yes?: boolean; project?: string }
+	options: {
+		message?: string;
+		json?: boolean;
+		copy?: boolean;
+		archived?: boolean;
+		yes?: boolean;
+		project?: string;
+	}
 ): Promise<void> {
 	try {
 		if (action === 'search') {
@@ -142,6 +152,42 @@ export async function nativeHistory(
 				[scope],
 				...(options.archived ? [{ archived: true }] : []),
 			]);
+		} else if (action === 'open-hit') {
+			if (!nativeId || !options.message)
+				throw new Error(projectSettingsTranslator()('workflows.cliParity.openHitUsage'));
+			const history = await invokeNativeHistory<ProjectHistoryResult>(
+				'agentSessions:listProjectHistory',
+				[
+					[
+						{
+							projectKey: agentId,
+							projectPath,
+							ownerIds: readSessions().map((s) => s.id),
+							sshRemoteId,
+						},
+					],
+				]
+			);
+			const records = history.conversations.filter(
+				(record) => record.nativeSessionId === nativeId && record.provider === agent.toolType
+			);
+			const owned = records.filter((record) => record.ownerId === agentId);
+			const candidates = owned.length ? owned : records;
+			if (candidates.length !== 1)
+				throw new Error(projectSettingsTranslator()('workflows.cliParity.nativeAmbiguous'));
+			const message: NativeHistorySearchHit['message'] = options.message.startsWith('{')
+				? JSON.parse(options.message)
+				: { uuid: options.message, role: 'assistant', text: '' };
+			const opened = await newShellCommand(
+				candidates[0].ownerId ?? agentId,
+				{
+					action: 'open-hit',
+					hit: { conversation: candidates[0], message, matchPreview: message.text },
+				},
+				options.json
+			);
+			console.log(JSON.stringify(opened, null, options.json ? undefined : 2));
+			return;
 		} else if (action === 'archive' || action === 'unarchive') {
 			if (!nativeId) throw new Error('A native conversation ID is required');
 			result = await invokeNativeHistory('agentSessions:archiveConversation', [
@@ -167,7 +213,7 @@ export async function nativeHistory(
 			]);
 		} else
 			throw new Error(
-				'Action must be projects, search, list, read, tool-output, archive, unarchive or delete'
+				'Action must be projects, search, list, read, open-hit, tool-output, archive, unarchive or delete'
 			);
 		console.log(JSON.stringify({ success: true, result }, null, options.json ? undefined : 2));
 	} catch (error) {

@@ -13,6 +13,7 @@
  */
 
 import type { LogEntry, QueuedItem, QueuedItemEditPatch, Session, SessionState } from '../types';
+import type { TFunction } from '../i18n';
 import { generateId } from './ids';
 import {
 	getBusyTabs,
@@ -547,18 +548,33 @@ export function shouldOfferForceSend(
  * blocked button whose tooltip does not explain the block is just a dead
  * control, which is the failure this whole path is fixing.
  */
-export function getForceSendTitle(eligibility: ForceSendEligibility): string {
+export function getForceSendTitle(eligibility: ForceSendEligibility, t?: TFunction): string {
 	const otherBusyCount = eligibility.otherBusyTabs.length;
 	switch (eligibility.blockedReason) {
 		case 'target-tab-busy':
-			return 'This tab is already working - the message runs when the current turn finishes';
+			return t
+				? t('workflows.queue.busy')
+				: 'This tab is already working - the message runs when the current turn finishes';
 		case 'needs-forced-parallel':
-			return 'Another tab in this agent is working. Forced Parallel Execution is off - click to turn it on in Settings.';
+			return t
+				? t('workflows.queue.parallelOff')
+				: 'Another tab in this agent is working. Forced Parallel Execution is off - click to turn it on in Settings.';
 		case 'no-target-tab':
-			return 'This message has no tab left to run on';
+			return t ? t('workflows.queue.noTab') : 'This message has no tab left to run on';
 		case 'awaiting-consult':
-			return 'Waiting for the consulted agent to reply - this runs as soon as it does';
+			return t
+				? t('workflows.queue.consult')
+				: 'Waiting for the consulted agent to reply - this runs as soon as it does';
 		default:
+			if (t)
+				return eligibility.requiresParallel
+					? t(
+							otherBusyCount === 1
+								? 'workflows.queue.sendParallelOne'
+								: 'workflows.queue.sendParallelMany',
+							{ count: otherBusyCount }
+						)
+					: t('workflows.queue.sendAhead');
 			return eligibility.requiresParallel
 				? `Send now, running in parallel with ${otherBusyCount} other working tab${otherBusyCount === 1 ? '' : 's'}`
 				: 'Send this message now, ahead of the rest of the queue';

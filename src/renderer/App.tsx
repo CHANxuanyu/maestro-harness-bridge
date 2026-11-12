@@ -2430,23 +2430,6 @@ function MaestroConsoleInner() {
 		handleOpenFileTab,
 	});
 
-	// --- REMOTE EVENT LISTENERS (extracted to useAppRemoteEventListeners hook) ---
-	useAppRemoteEventListeners({
-		handleInterrupt,
-		sessionsRef,
-		setActiveSessionId,
-		setSessions,
-		setGroups,
-		handleOpenFileTab,
-		refreshFileTree,
-		handleAutoRunRefresh,
-		startBatchRun,
-		stopBatchRun,
-		resumeAfterError: resumeAutoRunAfterError,
-		skipCurrentDocument: skipCurrentAutoRunDocument,
-		abortBatchOnError: abortAutoRunBatchOnError,
-	});
-
 	/*
 	 * --- CODEX FOLLOWUP CHIPS ---
 	 *
@@ -2632,6 +2615,25 @@ function MaestroConsoleInner() {
 		handleEditQueueItem,
 		handleForceSendQueueItem,
 	} = useQueueHandlers({ processQueuedItem });
+
+	// --- REMOTE EVENT LISTENERS (extracted to useAppRemoteEventListeners hook) ---
+	useAppRemoteEventListeners({
+		handleResumeSession,
+		handleForceSendQueueItem,
+		handleInterrupt,
+		sessionsRef,
+		setActiveSessionId,
+		setSessions,
+		setGroups,
+		handleOpenFileTab,
+		refreshFileTree,
+		handleAutoRunRefresh,
+		startBatchRun,
+		stopBatchRun,
+		resumeAfterError: resumeAutoRunAfterError,
+		skipCurrentDocument: skipCurrentAutoRunDocument,
+		abortBatchOnError: abortAutoRunBatchOnError,
+	});
 
 	// Force Send from the inline chat list: the item always belongs to the active
 	// agent, so this is the queue browser's handler with the session pinned.

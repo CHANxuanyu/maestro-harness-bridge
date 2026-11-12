@@ -87,7 +87,8 @@ export async function newProjectConversation(
 	background = false,
 	sourcePermission?: HandoffSourceSnapshot['sourcePermission'],
 	prompt?: string,
-	origin?: import('../../shared/aiHandoff').ConversationOrigin
+	origin?: import('../../shared/aiHandoff').ConversationOrigin,
+	providerOverride?: HandoffProvider
 ) {
 	if (!useSettingsStore.getState().newShell) return null;
 	const project = projectSettingsForSession(session);
@@ -96,7 +97,7 @@ export async function newProjectConversation(
 		!session.projectSettingsBaseEnv
 	)
 		return null;
-	const provider = sourceTabId ? undefined : project?.defaultProvider;
+	const provider = providerOverride ?? (sourceTabId ? undefined : project?.defaultProvider);
 	if (
 		provider !== undefined &&
 		!isHandoffProvider(provider) &&

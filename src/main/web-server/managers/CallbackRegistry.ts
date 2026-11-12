@@ -915,7 +915,7 @@ export class CallbackRegistry {
 	async updateSessionConfig(
 		sessionId: string,
 		configPatch: Record<string, unknown>
-	): Promise<{ success: boolean; error?: string }> {
+	): Promise<{ success: boolean; error?: string; data?: Record<string, unknown> }> {
 		if (!this.callbacks.updateSessionConfig) {
 			return { success: false, error: 'Session config updates not configured' };
 		}
@@ -1154,7 +1154,7 @@ export class CallbackRegistry {
 		return this.callbacks.importMarketplacePlaybook(sessionId, playbookId, targetFolderName);
 	}
 
-	listDesktopSessions(): DesktopSessionEntry[] {
+	listDesktopSessions(): DesktopSessionEntry[] | Promise<DesktopSessionEntry[]> {
 		return this.callbacks.listDesktopSessions?.() ?? [];
 	}
 

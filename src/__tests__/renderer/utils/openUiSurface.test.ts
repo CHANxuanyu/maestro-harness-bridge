@@ -1,3 +1,6 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { useUIStore } from '../../../renderer/stores/uiStore';
+import { projectSettingsKey } from '../../../shared/projectSettings';
 /**
  * @file openUiSurface.test.ts
  * @description `maestro-cli open feedback` must behave like the Feedback
@@ -47,4 +50,25 @@ it('opens worktree cleanup confirmation only for a worktree owner', () => {
 	useSessionStore.setState({ sessions: [{ ...session, parentSessionId: undefined }] });
 	expect(openUiSurface('worktree-cleanup').ok).toBe(false);
 	expect(selectModalOpen('deleteWorktree')(useModalStore.getState())).toBe(false);
+});
+
+it('opens the requested path inside a grouped project and closes through the registry', () => {
+	useSettingsStore.setState({ newShell: true });
+	useSessionStore.setState({
+		sessions: [
+			createMockSession({ id: 'one', groupId: 'group', cwd: '/one', projectRoot: '/one' }),
+			createMockSession({ id: 'two', groupId: 'group', cwd: '/two', projectRoot: '/two' }),
+		],
+		groups: [{ id: 'group', name: 'Group', emoji: '' }],
+		activeSessionId: 'one',
+	});
+	expect(openUiSurface('project-settings', undefined, { path: '/two' })).toEqual({ ok: true });
+	expect(useUIStore.getState().newShellSettingsProjectKey).toBe('group:group');
+	expect(useUIStore.getState().newShellSettingsScopeKey).toBe(
+		projectSettingsKey({ projectPath: '/two' })
+	);
+	expect(openUiSurface('project-settings', undefined, { close: true })).toEqual({ ok: true });
+	expect(useUIStore.getState().newShellSettingsProjectKey).toBeNull();
+	useSettingsStore.setState({ newShell: false });
+	expect(openUiSurface('project-settings', undefined, { path: '/two' }).ok).toBe(false);
 });

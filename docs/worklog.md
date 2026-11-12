@@ -1,5 +1,20 @@
 # 分支工作记录
 
+## 2026-11-12：Task L 新界面 CLI 对等
+
+基于 `1d9ed9c9f`，补齐审计 A20、B2、B5 指定的八项：搜索命中打开定位、左栏搜索、
+任务快照、项目设置开关、新建并分屏、队列强制发送、原生历史刷新和切换后立即读取
+当前对话。动作经所属窗口确认，调用界面已有服务；经典界面保留原有行为。帮助文字
+同时维护 en 和 zh-CN，中文强制发送拒绝原因与排队卡片共用提示函数。
+
+首轮八项回归先失败；另补不存在 UUID、指定工具新建分屏、窄窗口创建前拒绝、消息
+跳转状态先被消费和中文拒绝原因的先失败回归。最终相关 26 个文件、1,074 项通过，
+没有跳过、放宽断言或增加重试。被测对象是任务源码，不是安装包。完整命令和限制见
+[Task L 验证记录](verification/new-shell-cli-parity.md)。Electron 合成场景已收集 1 条，
+TypeScript、lint、ESLint 和改动文件 Prettier 检查通过。
+本沙箱不能启动 Electron，留给 Opus 执行；真实模式明确跳过。未修改 e2e fixtures，
+未验证真实提供商、真实多窗口界面或发行包，未读取真实账户、未推送或发布。
+
 ## 2026-11-12：hb.7 合入主线、CI 收口与试用包
 
 #78 第一次 CI 被 GitHub 故障卡住，关闭重开后的第二次运行在 Windows 上有 3 个失败、Linux Electron 超时取消。逐条看原始日志确认：`ai-handoff.test.ts` 期望 POSIX 路径，而 `resolveAgentAccountDir()` 按设计返回主机绝对路径（Windows 为 `D:\tmp\...`）；`useAppRemoteEventListenersSessionConfig.test.ts` 用 `mkdtemp('/tmp/...')`，Windows 没有 `/tmp`；Linux Electron 任务没有失败，合成一遍 134 条通过后 real-smoke 第二遍跑到 99 条时撞上 45 分钟上限。两处测试改用平台路径，任务上限改为 75 分钟并写明实测。
@@ -1279,10 +1294,10 @@ PR #29 合并后的 Windows CI 在既有 4 万条无时间转录用例超时；�
 
 | 阶段                           | 实际结果                                                                                         | 主要代码与证据                                                                                                                                                                         |
 | ------------------------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-10-15—16 中文化           | 日常桌面流程、全部设置分类、自有菜单与说明支持中英切换；草稿与语言偏好持久化                     | `src/renderer/i18n/`、`src/shared/i18n.ts`、`src/main/app-menu-translations.ts`；见 [语言范围](internationalization.md)                                                                |
-| 2026-10-16—17 原生历史进入项目 | 项目下直接列出会话、提供方标识、原生标题搜索、点击直接接续、已开页签刷新；账户/主机边界与去重    | `src/main/storage/project-history.ts`、`src/renderer/components/SessionList/ProjectSessionTree.tsx`、`src/renderer/services/openNativeConversation.ts`、`refreshNativeConversation.ts` |
-| 2026-10-19—20 对话可靠性       | 历史/实时进度与工具一致、工具状态隔离、主动停止不丢 ID、历史阅读定位、本地发送跟随与手动上滚暂停 | Codex parser/storage、process-manager、`TerminalOutput`、`useTerminalOutputScroll`、`useInputProcessing` 与对应回归                                                                    |
-| 2026-10-21 原始会话最终验收    | 在真实释放占用后，原始同 ID 完成多轮、工具、停止恢复和重启后继续；用户确认成功                   | [验收摘要](verification/v1.0.1-hb.1.md)；本地 `original-handoff-live-20261021` 01–27 证据序列                                                                                          |
+| 2026-10-15-16 中文化           | 日常桌面流程、全部设置分类、自有菜单与说明支持中英切换；草稿与语言偏好持久化                     | `src/renderer/i18n/`、`src/shared/i18n.ts`、`src/main/app-menu-translations.ts`；见 [语言范围](internationalization.md)                                                                |
+| 2026-10-16-17 原生历史进入项目 | 项目下直接列出会话、提供方标识、原生标题搜索、点击直接接续、已开页签刷新；账户/主机边界与去重    | `src/main/storage/project-history.ts`、`src/renderer/components/SessionList/ProjectSessionTree.tsx`、`src/renderer/services/openNativeConversation.ts`、`refreshNativeConversation.ts` |
+| 2026-10-19-20 对话可靠性       | 历史/实时进度与工具一致、工具状态隔离、主动停止不丢 ID、历史阅读定位、本地发送跟随与手动上滚暂停 | Codex parser/storage、process-manager、`TerminalOutput`、`useTerminalOutputScroll`、`useInputProcessing` 与对应回归                                                                    |
+| 2026-10-21 原始会话最终验收    | 在真实释放占用后，原始同 ID 完成多轮、工具、停止恢复和重启后继续；用户确认成功                   | [验收摘要](verification/v1.0.1-hb.1.md)；本地 `original-handoff-live-20261021` 01-27 证据序列                                                                                          |
 | 2026-10-21 首次分支发布        | 汇总既有改动，建立产品 changelog、分支说明、发布构建方法及下一阶段议题                           | `CHANGELOG.md`、本文件、Release tag 与资产校验清单                                                                                                                                     |
 
 ## 可追溯性的做法

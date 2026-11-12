@@ -16,15 +16,19 @@ import { invokeNativeHistory } from '../../../cli/services/agent-sessions';
 
 vi.mock('../../../cli/services/maestro-client', () => ({ withMaestroClient: vi.fn() }));
 vi.mock('../../../cli/services/agent-sessions', () => ({ invokeNativeHistory: vi.fn() }));
+// The CLI resolves a typed path, which is `D:\\project` on Windows.
+const project = vi.hoisted(() =>
+	process.platform === 'win32' ? `${process.cwd().slice(0, 2)}\\project` : '/project'
+);
 vi.mock('../../../cli/services/storage', () => ({
 	resolveAgentId: (id: string) => id,
 	readActiveAgentId: () => 'previous-owner',
 	readSettingValue: () => 'en',
-	readSessions: () => [{ id: 'owner', cwd: '/project', projectRoot: '/project' }],
+	readSessions: () => [{ id: 'owner', cwd: project, projectRoot: project }],
 	getSessionById: () => ({
 		id: 'owner',
-		cwd: '/project',
-		projectRoot: '/project',
+		cwd: project,
+		projectRoot: project,
 		toolType: 'codex',
 	}),
 }));
@@ -97,10 +101,10 @@ it.each([
 	expect(send).not.toHaveBeenCalled();
 });
 it('routes project settings open and close through the registered surface', async () => {
-	await openModal('project-settings', { path: '/project', json: true });
+	await openModal('project-settings', { path: project, json: true });
 	expect(send.mock.calls.at(-1)![0]).toMatchObject({
 		sessionId: 'owner',
-		configPatch: { newShellCommand: { action: 'project-settings', path: '/project' } },
+		configPatch: { newShellCommand: { action: 'project-settings', path: project } },
 	});
 	await projectSettingsSurface({ close: true, json: true });
 	expect(send.mock.calls.at(-1)![0]).toMatchObject({
@@ -167,7 +171,7 @@ it.each([
 	[['ui', 'sidebar-search', '--clear', '--json'], 'sidebar-search'],
 	[['tab', 'tasks', 'current-tab', '--json'], 'tasks'],
 	[['tab', 'refresh', 'current-tab', '--json'], 'refresh'],
-	[['open', 'project-settings', '--path', '/project', '--json'], 'project-settings'],
+	[['open', 'project-settings', '--path', project, '--json'], 'project-settings'],
 	[['open', 'project-settings', '--close', '--json'], 'project-settings'],
 	[['tab', 'new', '--agent', 'owner', '--split', '--ratio', '0.6', '--json'], 'new-split'],
 	[['queue', 'force-send', 'item', '--json'], 'force-send'],

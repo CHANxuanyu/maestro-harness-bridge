@@ -183,14 +183,12 @@ const providers = [
 	{ id: 'codex', cli: 'codex', label: 'Codex', name: 'Native codex' },
 	{ id: 'deepseek', cli: 'claude', label: 'DeepSeek', name: 'Native deepseek' },
 ] as const;
-// The classic shell's default layout lists conversations in the Left Bar, and
-// each row's right-click menu is the per-conversation menu there. The agents
-// layout keeps the tab strip with its hover menu; that entry point does not
-// depend on the provider, so two directions cover it.
-for (const entry of ['conversation menu', 'agents tab menu', 'command palette'] as const) {
+// The classic tab menu lives on the tab strip, which the agents layout draws.
+// The default conversation layout has no tab strip, and its row menu keeps the
+// classic actions without hand off (asserted in ProjectSessionTree.test.tsx).
+for (const entry of ['agents tab menu', 'command palette'] as const) {
 	for (const from of providers) {
 		for (const to of providers.filter((provider) => provider.id !== from.id)) {
-			if (entry === 'agents tab menu' && (from.id === 'deepseek' || to.id === 'deepseek')) continue;
 			test(`F3 classic: ${entry} ${from.id} to ${to.id} explains and edits an unsent draft`, async ({
 				native,
 			}) => {
@@ -257,13 +255,7 @@ for (const entry of ['conversation menu', 'agents tab menu', 'command palette'] 
 					)
 				).toEqual([]);
 
-				if (entry === 'conversation menu') {
-					await native.page
-						.locator(`[data-conversation-key$=":${sourceTab.id}"] button[data-tree-nav]`)
-						.first()
-						.click({ button: 'right' });
-					await native.page.getByRole('menuitem', { name: 'Hand off…', exact: true }).click();
-				} else if (entry === 'agents tab menu') {
+				if (entry === 'agents tab menu') {
 					await native.page.locator(`[role="tab"][data-tab-id="${sourceTab.id}"]`).hover();
 					await native.page
 						.getByRole('button', { name: 'Continue with another AI…', exact: true })
@@ -464,14 +456,24 @@ async function restoredWindows(native: NativeApp, owners: Awaited<ReturnType<typ
 	// Preserve the window-state file: acceptance includes the real two-window restore.
 	await native.start();
 	await expect.poll(() => native.app.windows().length).toBe(2);
+	const entries: { page: Page; id: string | undefined; sessionIds: string[] }[] = [];
+	for (const page of native.app.windows()) {
+		await page.waitForLoadState('domcontentloaded');
+		const state = await page.evaluate(() => window.maestro.windows.getState());
+		entries.push({ page, id: state?.id, sessionIds: state?.sessionIds ?? [] });
+	}
+	const registered = await native.page.evaluate(() => window.maestro.windows.list());
+	const mainId = registered.find((window) => window.isMain)?.id;
 	const pages: Page[] = [];
 	for (const owner of owners) {
-		let found: Page | undefined;
-		for (const page of native.app.windows()) {
-			await page.waitForLoadState('domcontentloaded');
-			const state = await page.evaluate(() => window.maestro.windows.getState());
-			if (state?.sessionIds.includes(owner.id)) found = page;
-		}
+		// The main window owns every agent that no other window claims.
+		const claimed = entries.find((entry) => entry.sessionIds.includes(owner.id));
+		const claimedElsewhere = registered.some(
+			(window) => window.id !== mainId && window.sessionIds.includes(owner.id)
+		);
+		const found =
+			claimed?.page ??
+			(claimedElsewhere ? undefined : entries.find((entry) => entry.id === mainId)?.page);
 		expect(found, `Restored window owning ${owner.name}`).toBeDefined();
 		pages.push(found!);
 	}
@@ -626,11 +628,11 @@ for (const update of [false, true]) {
 			// never a dist import or __setAutoUpdaterForTesting. Replace only the
 			// external installer side effect; updates:install still runs its real
 			// onBeforeQuitAndInstall hook and the real before-quit coordinator.
-			await native.app.evaluate(({ app }) => {
-				const { createRequire } = require('node:module');
-				const appRequire = createRequire(
-					require('node:path').join(app.getAppPath(), 'package.json')
-				);
+			await native.app.evaluate(async ({ app }) => {
+				// The main bundle is an ES module, so require is not in scope here.
+				const { createRequire } = await import('node:module');
+				const { join } = await import('node:path');
+				const appRequire = createRequire(join(app.getAppPath(), 'package.json'));
 				const { autoUpdater } = appRequire('electron-updater');
 				autoUpdater.autoInstallOnAppQuit = false;
 				autoUpdater.quitAndInstall = (silent: boolean, forceRunAfter: boolean) => {

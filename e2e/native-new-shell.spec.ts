@@ -418,16 +418,19 @@ test('new shell hb.7: Claude changes, Codex handoff, DeepSeek review and restart
 			const sourceRow = native.page.locator(`[data-native-session-id="${sourceNativeId}"]`);
 			await expect(sourceRow.locator(`[data-conversation-key$=":${codexTab}"]`)).toBeVisible();
 			await sourceRow.locator(':scope > div > button[data-tree-nav]').last().click();
+			// Reopening binds the native ID to a tab that can be replaced while the
+			// open settles. Take the tab the sidebar row ends on, once it is saved.
+			const reopenedTab = async () =>
+				(await sourceRow.getAttribute('data-conversation-key'))?.split(':').at(-1) ?? '';
 			await expect
-				.poll(() =>
-					saved()
+				.poll(async () => {
+					const shown = await reopenedTab();
+					return saved()
 						.find((owner) => owner.id === claudeId)
-						?.aiTabs.some((tab) => tab.agentSessionId === sourceNativeId)
-				)
+						?.aiTabs.some((tab) => tab.id === shown && tab.agentSessionId === sourceNativeId);
+				})
 				.toBe(true);
-			claudeTab = saved()
-				.find((owner) => owner.id === claudeId)!
-				.aiTabs.find((tab) => tab.agentSessionId === sourceNativeId)!.id;
+			claudeTab = await reopenedTab();
 			answers[0][0] = claudeTab;
 		});
 		await test.step('7 classic shell brings back the old right panel and every conversation', async () => {

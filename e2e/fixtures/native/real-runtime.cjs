@@ -168,17 +168,24 @@ function prepareAcceptanceProviders(providers, homes, env = process.env) {
 			continue;
 		}
 		const source = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
-		if (!env[source] || !path.isAbsolute(env[source]))
+		// On macOS the default Claude login lives in the keychain, not in a
+		// credentials file. Reading it is an explicit choice, never a fallback.
+		const keychain =
+			provider === 'claude' &&
+			env.MAESTRO_E2E_CLAUDE_LOGIN === 'keychain' &&
+			process.platform === 'darwin';
+		if (keychain && env[source])
+			throw new Error('Choose CLAUDE_CONFIG_DIR or MAESTRO_E2E_CLAUDE_LOGIN=keychain, not both');
+		if (!keychain && (!env[source] || !path.isAbsolute(env[source])))
 			throw new Error(`Set ${source} to the selected login snapshot directory`);
-		Object.assign(
-			credentials,
-			prepareCredentials(provider, homes[provider], {
-				...env,
-				ANTHROPIC_API_KEY: '',
-				CLAUDE_CODE_OAUTH_TOKEN: '',
-				CODEX_API_KEY: '',
-			})
-		);
+		const loginEnv = {
+			...env,
+			ANTHROPIC_API_KEY: '',
+			CLAUDE_CODE_OAUTH_TOKEN: '',
+			CODEX_API_KEY: '',
+		};
+		if (keychain) delete loginEnv.CLAUDE_CONFIG_DIR;
+		Object.assign(credentials, prepareCredentials(provider, homes[provider], loginEnv));
 	}
 	/** @type {Record<string, {executable: string, version: string, model?: string}>} */
 	const tools = {};

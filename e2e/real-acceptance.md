@@ -24,6 +24,7 @@ npm run build:cli
 | `MAESTRO_E2E_CLAUDE_MODEL`、`MAESTRO_E2E_CODEX_MODEL`                   | 明确指定本次验收模型；不使用账户默认模型                                                                                            |
 | `MAESTRO_E2E_CLAUDE_EXPECT_VERSION`、`MAESTRO_E2E_CODEX_EXPECT_VERSION` | 完整 `--version` 输出的精确匹配。缺省使用 `real-runtime.cjs` 的固定版本。不同版本须先人工核对，再设置期望值；这不等于共享连接器准入 |
 | `CLAUDE_CONFIG_DIR`                                                     | 显式选择的 Claude 登录来源目录，须含有效的 `.credentials.json`。不回退读取 keychain                                                 |
+| `MAESTRO_E2E_CLAUDE_LOGIN=keychain`                                     | 仅 macOS：显式选择默认 Claude 登录（钥匙串）的只读访问令牌快照，与 `CLAUDE_CONFIG_DIR` 二选一                                       |
 | `CODEX_HOME`                                                            | 显式选择的 Codex 登录来源目录，须含有效的 `auth.json`                                                                               |
 | `MAESTRO_E2E_DEEPSEEK_KEY`                                              | 仅用户提供后由 Opus 注入环境。只传给临时应用的预设创建命令，不读或复制其他配置中的密钥                                              |
 | `MAESTRO_E2E_TEMP_ROOT`                                                 | 可选，独立临时根目录；默认复用 `createNativeTempDir()`                                                                              |

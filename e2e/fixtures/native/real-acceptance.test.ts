@@ -95,3 +95,19 @@ it('DeepSeek pins the harness without opening a Claude login or returning its su
 		})
 	).toThrow('Unsupported claude version');
 });
+
+it('reads the keychain only when it is chosen explicitly, and never together with a directory', () => {
+	expect(() =>
+		prepareAcceptanceProviders(
+			['claude'],
+			{},
+			{
+				MAESTRO_E2E_CLAUDE_LOGIN: 'keychain',
+				CLAUDE_CONFIG_DIR: '/tmp/claude-login',
+			}
+		)
+	).toThrow('not both');
+	expect(() =>
+		prepareAcceptanceProviders(['claude'], {}, { MAESTRO_E2E_CLAUDE_LOGIN: 'other' })
+	).toThrow('Set CLAUDE_CONFIG_DIR');
+});

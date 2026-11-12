@@ -10,8 +10,18 @@ import { useUIStore } from '../../../renderer/stores/uiStore';
 import { useGroupChatStore } from '../../../renderer/stores/groupChatStore';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
+import { useOpenProjectPathStore } from '../../../renderer/stores/openProjectPathStore';
+import { isWebDesktop } from '../../../renderer/utils/runtimeContext';
+
+// Flip between the desktop app and the browser (phone) client.
+vi.mock('../../../renderer/utils/runtimeContext', () => ({
+	isWebDesktop: vi.fn(() => false),
+	isElectronDesktop: vi.fn(() => true),
+}));
 
 beforeEach(() => {
+	vi.mocked(isWebDesktop).mockReturnValue(false);
+	useOpenProjectPathStore.setState({ open: false });
 	useSettingsStore.setState({
 		newShell: true,
 		collapsedConversationProjects: ['path:local:/fixture'],
@@ -85,4 +95,28 @@ it('does nothing in the classic shell and surfaces a no-tools result without sen
 		.fn()
 		.mockResolvedValue({ success: false, code: 'no-tools', error: 'Install a tool' });
 	expect(await openProject('/fixture')).toMatchObject({ success: false, code: 'no-tools' });
+});
+
+it('asks for a path in the browser instead of opening a folder dialog on the desktop', async () => {
+	vi.mocked(isWebDesktop).mockReturnValue(true);
+	await chooseProject();
+	expect(window.maestro.dialog.selectFolder).not.toHaveBeenCalled();
+	expect(window.maestro.agentSessions.openProject).not.toHaveBeenCalled();
+	expect(useOpenProjectPathStore.getState().open).toBe(true);
+});
+
+it('selects the opened project in the browser once the session sync delivers it', async () => {
+	vi.mocked(isWebDesktop).mockReturnValue(true);
+	useUIStore.setState({ leftSidebarOpen: true, leftSidebarHidden: false });
+	const tab = createMockAITab({ id: 'tab' });
+	const pending = openProject('/fixture');
+	// The desktop window created the project; the sync reaches this client later.
+	await Promise.resolve();
+	useSessionStore.setState({
+		sessions: [
+			createMockSession({ id: 'owner', cwd: '/fixture', aiTabs: [tab], activeTabId: tab.id }),
+		],
+	});
+	await expect(pending).resolves.toEqual({ success: true, sessionId: 'owner' });
+	expect(useSessionStore.getState().activeSessionId).toBe('owner');
 });

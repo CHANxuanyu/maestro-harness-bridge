@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { ToolbarControls } from '../../../../../renderer/components/InputArea/components/ToolbarControls';
@@ -382,6 +382,25 @@ describe('ToolbarControls', () => {
 			fireEvent.click(screen.getByTestId('composer-options-button'));
 			expect(screen.getByTestId('composer-options-sheet')).toBeInTheDocument();
 			expect(screen.getByTestId('composer-options-model')).toBeInTheDocument();
+		});
+
+		it('offers the desktop new shell set in the sheet: no History or Thinking rows', () => {
+			const toggles = {
+				onToggleTabSaveToHistory: vi.fn(),
+				supportsThinking: true,
+				onToggleTabShowThinking: vi.fn(),
+			};
+			renderPhoneToolbar(toggles);
+			fireEvent.click(screen.getByTestId('composer-options-button'));
+			expect(screen.getByTestId('composer-options-history')).toBeInTheDocument();
+			cleanup();
+
+			useSettingsStore.setState({ newShell: true });
+			renderPhoneToolbar(toggles);
+			fireEvent.click(screen.getByTestId('composer-options-button'));
+			expect(screen.getByTestId('composer-options-access')).toBeInTheDocument();
+			expect(screen.queryByTestId('composer-options-history')).not.toBeInTheDocument();
+			expect(screen.queryByTestId('composer-options-thinking')).not.toBeInTheDocument();
 		});
 
 		it('writes a permission mode picked in the sheet, not the next one in the cycle', () => {

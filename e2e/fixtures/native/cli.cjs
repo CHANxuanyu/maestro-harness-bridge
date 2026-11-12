@@ -57,7 +57,7 @@ async function run(provider) {
 	if (persist) {
 		fs.appendFileSync(
 			path.join(configDir, 'fixture-invocations.jsonl'),
-			`${JSON.stringify({ args })}\n`
+			`${JSON.stringify({ args, provider, cwd, processCwd: process.cwd(), sshConnection: process.env.SSH_CONNECTION ?? null })}\n`
 		);
 		fs.writeFileSync(stateFile, String(count + 1));
 		// Cleanup checks the actual child PID, outside the native transcript.

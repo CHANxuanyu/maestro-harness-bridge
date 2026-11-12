@@ -265,6 +265,22 @@ Every asynchronous transport operation must use `StageScope.step()`. Its abort c
 
 `nativeTempRoot()` and `createNativeTempDir(prefix)` in `e2e/fixtures/native/temp-root.cjs` select `MAESTRO_E2E_TEMP_ROOT`, then the short macOS temporary root or the system temporary root. They resolve the root physically before creating directories. Use them for native fixture and Electron acceptance directories; OMP uses the same root for its containment guard. A symlinked temporary path must not produce a different Claude project key from the child process cwd.
 
+`LocalSshd` and `localSshdUnavailableReason()` in `e2e/fixtures/native/local-sshd.ts`
+provide the synthetic new-shell SSH acceptance server. Pass a directory under
+the native temp root. Both keys, authorized keys, known hosts, sshd configuration
+and remote HOME stay there. The client wrapper adds `-F /dev/null`, since HOME
+alone does not isolate OpenSSH's config lookup; put its directory ahead of all
+system SSH binaries in the Electron launch PATH. Connection options still come
+from the app's `SshRemoteConfig`, not from a separate test SSH implementation.
+`clientInvocations()` reads the fixture's argument log; use it to distinguish
+SSH filesystem operations from local fallbacks against the same physical repo.
+The recorder does not read stdin, which carries the agent's remote spawn script.
+Readiness is bounded, startup errors include the daemon log, and `stop()` is
+idempotent with process-group termination and kill escalation. Always call it
+from `finally`, including when Electron startup fails. Missing OpenSSH tools
+return a skip reason; authentication, configuration and timeout failures must
+fail acceptance. Do not turn on system Remote Login or use real provider accounts.
+
 ## Conversation changes
 
 ### Conversation children

@@ -493,6 +493,43 @@ Shared history files respect the **Maximum Log Buffer** setting (Settings → Di
 - The `.maestro/history/` directory is created automatically on first write
 - Consider adding `.maestro/history/` to your `.gitignore` - history is operational data, not source code
 
+## New shell verification
+
+`e2e/native-new-shell-ssh.spec.ts` covers a synthetic Claude turn, Changes counts
+and per-file diff, stage/unstage, file-link line navigation and save, a terminal's
+remote `pwd` and `SSH_CONNECTION`, and the header handoff to Codex on the same
+host and cwd. It checks both provider invocation records and active SSH process
+commands, the remote Codex transcript, the sshd log and an untouched local
+project. The isolated SSH client records arguments so a local filesystem
+fallback cannot satisfy the Git read/write and Files read/save steps just
+because both machines share a filesystem. The Web step opens a localhost URL and asserts
+`web-preview-local-notice` only on a branch implementing that test id.
+
+Run outside the sandbox as a non-root macOS or Linux user with
+`/usr/sbin/sshd`, `/usr/bin/ssh-keygen` and `/usr/bin/ssh` installed:
+
+```bash
+MAESTRO_E2E_REAL=0 npm run test:e2e -- e2e/native-new-shell-ssh.spec.ts
+npm run test:e2e:fixtures
+```
+
+The first command builds the checkout and runs Electron (with Xvfb on a headless
+Linux runner). `local-sshd.ts` starts a separate unprivileged daemon on
+`127.0.0.1` and an OS-assigned port, using temporary host/client keys, authorized
+keys and known hosts. It never enables system Remote Login, changes system sshd
+configuration or uses the user's SSH configuration or agent. The app receives
+the same `sshRemotes` store shape as `create-ssh-remote`; provider PATH, script
+and account directories are supplied through `remoteEnv`. All local and remote
+provider homes are temporary. Missing tools and unsupported platforms produce
+an explained skip. Real-provider mode skips before NativeApp is constructed.
+Other startup or authentication failures fail the test and attach the synthetic
+sshd and client logs; teardown stops the app and daemon and removes the temporary files.
+
+This scenario was added on 2026-11-12 but has not been executed against Electron
+or a listening sshd in the sandbox. Fixture unit tests mock sockets and daemon
+processes. A passing unit suite or Playwright collection is not SSH acceptance;
+the commands above still need to run outside the sandbox on macOS and Linux.
+
 ## Troubleshooting
 
 ### Authentication Errors

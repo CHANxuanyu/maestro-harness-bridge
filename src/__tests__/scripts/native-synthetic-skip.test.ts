@@ -19,6 +19,7 @@ it.each([
 	['native-sidebar-search', 5],
 	['native-conversation-archive', 3],
 	['native-commands', 1],
+	['native-new-shell-ssh', 1],
 ] as const)(
 	'%s skips synthetic scenarios in real mode and collects them in synthetic mode',
 	async (file, count) => {

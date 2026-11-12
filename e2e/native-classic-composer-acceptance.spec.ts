@@ -18,8 +18,15 @@ const test = base.extend<{ native: NativeApp }>({
 			await use(native);
 		} finally {
 			try {
-				if (native.app && native.app.process().exitCode === null)
-					await native.close(info.status !== info.expectedStatus);
+				// A scenario may already have closed the app (C4 quits twice), and a
+				// closed ElectronApplication throws from process().
+				let open = false;
+				try {
+					open = !!native.app && native.app.process().exitCode === null;
+				} catch {
+					open = false;
+				}
+				if (open) await native.close(info.status !== info.expectedStatus);
 			} finally {
 				fs.rmSync(native.root, { recursive: true, force: true });
 			}
@@ -270,20 +277,22 @@ for (const provider of ['claude', 'codex'] as const) {
 					await expect.poll(state.running).toEqual([processId, otherProcessId].sort());
 
 					// A typed bang on an empty composer enters the real command ladder.
+					// Command mode changes the placeholder, so hold the textarea itself.
+					const composer = native.page.getByTestId('composer-card').locator('textarea').first();
 					await native.input().fill('');
-					await native.input().press('!');
+					await composer.press('!');
 					await expect(native.page.getByTestId('command-mode-bar')).toBeVisible();
-					await native.input().press('!');
+					await composer.press('!');
 					await expect(native.page.getByTestId('ai-command-mode-bar')).toBeVisible();
-					await native.input().press('Escape');
+					await composer.press('Escape');
 					await expect(native.page.getByTestId('ai-command-mode-bar')).toHaveCount(0);
 					await expect(native.page.getByTestId('command-mode-bar')).toBeVisible();
-					await expect(native.input()).toBeFocused();
+					await expect(composer).toBeFocused();
 					await expect.poll(() => state.tab(tabId)?.commandMode).toBe('shell');
 					await expect.poll(state.running).toEqual([processId, otherProcessId].sort());
-					await native.input().press('Escape');
+					await composer.press('Escape');
 					await expect(native.page.getByTestId('command-mode-bar')).toHaveCount(0);
-					await expect(native.input()).toBeFocused();
+					await expect(composer).toBeFocused();
 					await expect.poll(() => state.tab(tabId)?.commandMode).toBe('off');
 					await expect.poll(state.running).toEqual([processId, otherProcessId].sort());
 				}

@@ -730,12 +730,25 @@ export const MainPanelContent = React.memo(function MainPanelContent(props: Main
 	// input), and when a group's focused pane is a non-AI tab. In single view it also
 	// hides while a browser or file tab owns the panel (those have no AI input); a
 	// group ignores those stale single-view ids.
+	// In the new shell, terminals, files and web pages live in the right panel and
+	// the centre always shows the conversation. A terminal mode or a file/browser
+	// selection left over from the classic shell must not take its composer away.
 	const shouldShowInputArea =
 		!isMobileLandscape &&
 		!activeTab?.wizardState?.isGeneratingDocs &&
 		!groupFocusedIsNonAi &&
-		activeSession.inputMode !== 'terminal' &&
-		(!!activeGroup || (!activeBrowserTabId && !activeFileTabId));
+		(newShell ||
+			(activeSession.inputMode !== 'terminal' &&
+				(!!activeGroup || (!activeBrowserTabId && !activeFileTabId))));
+
+	// The composer would otherwise come back in shell-command mode after a switch
+	// from a classic terminal tab. Terminal input belongs to the right panel here.
+	React.useEffect(() => {
+		if (newShell && activeSession.inputMode === 'terminal')
+			updateSessionWith(activeSession.id, (s) =>
+				s.inputMode === 'terminal' ? { ...s, inputMode: 'ai' } : s
+			);
+	}, [newShell, activeSession.id, activeSession.inputMode]);
 
 	// The same chat handlers the single-view TerminalOutput below gets, bundled for
 	// the tiled AI panes so a tiled AI tab is a FULL chat, not a read-only mirror:

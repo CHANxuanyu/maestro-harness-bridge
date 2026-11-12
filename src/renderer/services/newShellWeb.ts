@@ -35,19 +35,21 @@ export async function applyNewShellWebAction(
 	}));
 }
 
+/** Loopback URLs always refer to the computer hosting the webview. */
+export function isLocalWebUrl(url: string): boolean {
+	if (!isHttpBrowserTabUrl(url)) return false;
+	const host = new URL(url).hostname;
+	return (
+		host === 'localhost' ||
+		host === '[::1]' ||
+		host === '0.0.0.0' ||
+		/^127\.\d+\.\d+\.\d+$/.test(host)
+	);
+}
+
 /** Local URLs in output follow the active conversation; external links retain their routing. */
 export function openLocalWebPanel(url: string): boolean {
-	if (!useSettingsStore.getState().newShell || !isHttpBrowserTabUrl(url)) return false;
-	const host = new URL(url).hostname;
-	if (
-		!(
-			host === 'localhost' ||
-			host === '[::1]' ||
-			host === '0.0.0.0' ||
-			/^127\.\d+\.\d+\.\d+$/.test(host)
-		)
-	)
-		return false;
+	if (!useSettingsStore.getState().newShell || !isLocalWebUrl(url)) return false;
 	const state = useSessionStore.getState();
 	const session = state.sessions.find((s) => s.id === state.activeSessionId);
 	if (!session?.aiTabs.some((tab) => tab.id === session.activeTabId)) return false;

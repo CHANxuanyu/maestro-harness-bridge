@@ -874,7 +874,7 @@ describe('DisplayTab', () => {
 	});
 
 	describe('New shell', () => {
-		it('shows the terminal-content warning in Chinese', async () => {
+		it('describes terminal and draft continuity in Chinese', async () => {
 			useSettingsStore.setState({ uiLanguage: 'zh-CN' });
 			try {
 				render(<DisplayTab theme={mockTheme} />);
@@ -882,7 +882,7 @@ describe('DisplayTab', () => {
 					await vi.advanceTimersByTimeAsync(50);
 				});
 				expect(document.querySelector('[data-setting-id="display-new-shell"]')).toHaveTextContent(
-					'切换时，已打开终端里的内容会清空，运行中的进程不受影响。'
+					'切换时保留终端内容、运行中的进程和草稿。'
 				);
 			} finally {
 				act(() => useSettingsStore.setState({ uiLanguage: 'en' }));
@@ -898,7 +898,7 @@ describe('DisplayTab', () => {
 
 			const section = document.querySelector('[data-setting-id="display-new-shell"]')!;
 			expect(section).toHaveTextContent(
-				'Switching clears the contents of open terminals; running processes are unaffected.'
+				'Terminal output, running processes and drafts are preserved.'
 			);
 			const toggle = within(section as HTMLElement).getByRole('switch', {
 				name: 'Use the new shell',

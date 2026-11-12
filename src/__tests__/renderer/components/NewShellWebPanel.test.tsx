@@ -42,6 +42,24 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('conversation web engine', () => {
+	it.each([
+		['http://localhost:5173', true, true, true],
+		['http://127.0.0.1:8080/path', true, true, true],
+		['http://[::1]:8080', true, true, true],
+		['https://example.com/localhost', true, true, false],
+		['http://localhost.example.com', true, true, false],
+		['http://localhost:5173', false, true, false],
+		['http://localhost:5173', true, false, false],
+	])('explains local preview for %s (SSH %s, new shell %s)', (url, ssh, newShell, shown) => {
+		useSettingsStore.setState({ newShell });
+		const session = useSessionStore.getState().sessions[0];
+		session.sessionSshRemoteConfig = { enabled: ssh, remoteId: 'fake-remote' };
+		session.aiTabs[0].newShellPanel!.webUrl = url;
+		render(<Panel />);
+		expect(
+			screen.queryByText('This address opens on this computer, not the remote host.') !== null
+		).toBe(shown);
+	});
 	it('navigates the mounted engine from the CLI, reloads from either entry and opens externally', async () => {
 		const { container } = render(<Panel />);
 		const original = container.querySelector('webview')!;

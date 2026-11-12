@@ -147,18 +147,19 @@ CLI `tab new` 返回实际 `sessionId`，`dispatch --new-tab` 返回实际 `agen
 “新对话默认值”与“工具配置”分节，后者明确影响此配置下的所有对话，保存不改写标签内容或权限。
 账户目录使用已有环境变量表单和目录建议，Claude 与 DeepSeek 使用 `CLAUDE_CONFIG_DIR`，Codex 使用 `CODEX_HOME`。
 
-| 界面动作               | maestro-cli 对等动作                                          | 共用实现                                                               |
-| ---------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| 展开并读取一个工具配置 | `show agent <id> --json`                                      | 同一会话配置字段，界面显示配置名称和 ID                                |
-| 编辑账户目录、环境变量 | `update-agent <id> --env KEY=VALUE`，清空用 `--clear-env`     | `saveSessionToolConfig()`，环境变量整体替换                            |
-| 编辑自定义路径、参数   | `update-agent <id> --custom-path <path> --custom-args <args>` | 同上；空字符串清空覆盖                                                 |
-| 选择 Claude 调用方式   | `update-agent <id> --token-source api\|tui\|dynamic`          | `toClaudeTokenModeSource()` 与同一保存服务；`tui` 保存为 `interactive` |
-| 编辑 TUI 包装器路径    | `update-agent <id> --maestro-p-path <path>`                   | 同一保存服务                                                           |
-| 选择 SSH 主机或本机    | `update-agent <id> --ssh-remote <id\|none>`                   | 同一保存服务；保留远程目录与历史同步字段                               |
-| 取消或收起编辑         | 不发送更新；读取仍用 `show agent`                             | 草稿只在明确保存时写入，收起保留草稿                                   |
+| 界面动作                     | maestro-cli 对等动作                                                                                         | 共用实现                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| 展开并读取一个工具配置       | `show agent <id> --json`                                                                                     | 同一会话配置字段，界面显示配置名称和 ID                                                        |
+| 编辑账户目录、环境变量       | `update-agent <id> --env KEY=VALUE`，清空用 `--clear-env`                                                    | `saveSessionToolConfig()`，环境变量整体替换                                                    |
+| 编辑自定义路径、参数         | `update-agent <id> --custom-path <path> --custom-args <args>`                                                | 同上；空字符串清空覆盖                                                                         |
+| 选择 Claude 调用方式         | `update-agent <id> --token-source api\|tui\|dynamic`                                                         | `toClaudeTokenModeSource()` 与同一保存服务；`tui` 保存为 `interactive`                         |
+| 编辑 TUI 包装器路径          | `update-agent <id> --maestro-p-path <path>`                                                                  | 同一保存服务                                                                                   |
+| 选择 SSH 主机或本机          | `update-agent <id> --ssh-remote <id\|none>`                                                                  | 同一保存服务；保留远程目录与历史同步字段                                                       |
+| 一次保存默认值与多个工具配置 | `project settings set --path <path> --provider <id> --tool-config '{"owner-id":{"customArgs":"--verbose"}}'` | `settings:projectSettings`、`createProjectSettingsService()`；字段传 `null` 清空覆盖，失败回滚 |
+| 取消或收起编辑               | 不发送更新；读取仍用 `show agent`                                                                            | 草稿只在明确保存时写入，收起保留草稿                                                           |
 
-新界面的 CLI 与项目设置都通过原有 `sessions.setMany` 保存，仅在成功后更新内存和报告成功。
-同一配置的更新使用 `createKeyedWriteQueue()` 串行化，执行时读取当前 store，避免 React 尚未刷新时覆盖上一项改动。
+新界面项目设置和 `project settings set --tool-config` 共用主进程 `createProjectSettingsService()`，先校验所有默认值和工具修改，再在会话写入队列中保存。全部工具一次写入，等待落盘后写默认值，任一步失败恢复已经尝试写入的存储；完整提交后才通知窗口。
+单项 `update-agent` 保留 `saveSessionToolConfig()` 与 `sessions.setMany` 路径，同一配置通过 `createKeyedWriteQueue()` 串行化。两条路径共用 `editableSessionConfigPatch()` 白名单，读取时保留最新对话与草稿。
 SSH 主机改动复用 `probeSessionAiProcesses()` 检查实时进程，探测失败也拒绝保存；路径不调用本机 realpath。
 改用 `api` 与权限菜单的“改用 claude -p”写入相同字段，不改写已有对话权限，也不停止当前回合。
 旧界面仍用原来的编辑与 CLI 保存路径，共用字段白名单的抽取不改变其行为。
@@ -170,13 +171,23 @@ SSH 主机改动复用 `probeSessionAiProcesses()` 检查实时进程，探测�
 
 Open gaps：不提供 CLI 打开或折叠项目设置窗口的视觉动作；配置读取与保存已有对等动作。
 浏览器仍不开放此编辑节。停用的环境变量保留原值，本节不提供停用开关。
-项目默认值与多个工具配置不是一个跨存储事务；后续保存失败时保留窗口，并提示此前改动可能已经保存。
 合成验收：`e2e/native-project-tool-config.spec.ts`，Electron 执行待沙箱外完成。
 
 2026-11-10 第二线回归修正：场景模拟已完成 API 默认模式迁移的安装，编辑前后通过
 `show agent <id> --json` 核对两份配置，另核对工具级默认值未变。
 额度交接场景使用合成错误封装，保留 `rate_limited` 和只交接一次的严格断言。
 本轮仅修改测试，无新增界面动作或 CLI 动词，以上共用实现及 Open gaps 不变。
+
+## 新界面终端与错误恢复对等（2026-11-12）
+
+| 界面动作                             | maestro-cli 对等动作                                                                                                   | 共用实现                                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 切换新旧界面并保留终端、回合与草稿   | `settings set newShell true` 或 `false`；`read-terminal --agent <id> --tab <terminal-id>`、`tab show <id> --json` 读回 | 同一设置更新；`TerminalViewProvider` 保留原 xterm 缓冲区与监听，不另存终端输出                      |
+| 从额度或登录错误弹窗、卡片交给另一家 | `handoff <tab-id> codex --agent <owner-id> --json`；`--list-targets` 列出目标，`--send` 发送                           | 弹窗关闭后与卡片、顶栏均用 `requestAiHandoff()`、相同目标解析及 `context:conversation` 交接实现     |
+| 点击终端里的本机网页链接             | `tab panel <tab-id> web --url http://localhost:3000 --agent <id>`；`tab panel <tab-id> --agent <id>` 读回              | 终端链接经 `openUrl()` 进入 `newShellWeb`，复用 `applyNewShellWebAction()`                          |
+| SSH 对话打开本机网页地址             | `tab panel <tab-id> web --url http://localhost:3000 --agent <id>`                                                      | `newShellWeb` 与 `NewShellWebPanel`；`isLocalWebUrl()` 判断地址，说明随当前地址显示，无单独提示开关 |
+
+错误入口覆盖 `errorOffersHandoff()` 的 `rate_limited` 与 `auth_expired`，其他错误不增加入口。额度场景先操作阻挡背景的错误弹窗，再严格比较交接弹窗、顶栏与卡片的目标值和名称。网页说明仅在新界面、SSH 配置启用且当前地址为回环或本机绑定地址时显示；不创建隧道。终端复用原有设置、输入与读回命令，修复宿主尺寸和点击层级没有新增动作或 Open gaps。场景见 `native-new-shell-toggle.spec.ts`、`native-new-shell-error-handoff.spec.ts`、`native-web-preview.spec.ts`；`7cd317503` 的三项失败记录及修复后待验范围见 `docs/worklog.md`。
 
 ## New shell conversation split (2026-11-06)
 

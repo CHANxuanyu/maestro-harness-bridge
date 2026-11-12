@@ -1,5 +1,5 @@
 import { ProjectToolConfig } from './ProjectToolConfig';
-import { saveSessionToolConfig } from '../services/sessionToolConfig';
+import { prepareSessionToolConfig, applyProjectToolPatches } from '../services/sessionToolConfig';
 import { effectiveStandardPermissionCapability } from '../../shared/codexAppServer';
 import { useAgentCapabilities } from '../hooks/agent/useAgentCapabilities';
 import { projectSettingsScopeForSession } from '../utils/projectConversationDefaults';
@@ -140,8 +140,38 @@ export function ProjectSettingsModal({
 		setError(undefined);
 		setToolSaveError(false);
 		try {
+			const preparedTools: Record<string, Record<string, unknown>> = {};
+			if (newShell) {
+				for (const [sessionId, { sessionSshRemoteConfig, ...patch }] of Object.entries(
+					toolPatches
+				)) {
+					const fields: Record<string, unknown> = { ...patch };
+					for (const key of ['customPath', 'customArgs', 'maestroPPath']) {
+						if (typeof fields[key] === 'string')
+							fields[key] = (fields[key] as string).trim() || null;
+					}
+					if (patch.customEnvVars)
+						fields.customEnvVars = Object.fromEntries(
+							Object.entries(patch.customEnvVars).filter(([key]) => key.trim())
+						);
+					try {
+						preparedTools[sessionId] = await prepareSessionToolConfig(
+							sessionId,
+							fields,
+							sessionSshRemoteConfig
+						);
+					} catch (error) {
+						setToolSaveError(true);
+						setError(
+							error instanceof Error ? error.message : t('workflows.projectSettings.toolSaveFailed')
+						);
+						return;
+					}
+				}
+			}
 			const result = await window.maestro.settings.projectSettings({
 				action: 'set',
+				...(newShell ? { toolPatches: preparedTools } : {}),
 				scope,
 				patch: {
 					...(newShell ? { autoHandoffTarget: draft.autoHandoffTarget || null } : {}),
@@ -166,30 +196,7 @@ export function ProjectSettingsModal({
 			useSettingsStore.setState((state) => ({
 				projectSettings: { ...state.projectSettings, [scopeKey]: result.settings },
 			}));
-			if (newShell) {
-				for (const [sessionId, { sessionSshRemoteConfig, ...patch }] of Object.entries(
-					toolPatches
-				)) {
-					const fields: Record<string, unknown> = { ...patch };
-					for (const key of ['customPath', 'customArgs', 'maestroPPath']) {
-						if (typeof fields[key] === 'string')
-							fields[key] = (fields[key] as string).trim() || null;
-					}
-					if (patch.customEnvVars)
-						fields.customEnvVars = Object.fromEntries(
-							Object.entries(patch.customEnvVars).filter(([key]) => key.trim())
-						);
-					try {
-						await saveSessionToolConfig(sessionId, fields, sessionSshRemoteConfig);
-					} catch (error) {
-						setToolSaveError(true);
-						setError(
-							error instanceof Error ? error.message : t('workflows.projectSettings.toolSaveFailed')
-						);
-						return;
-					}
-				}
-			}
+			if (newShell) applyProjectToolPatches(preparedTools);
 			onClose();
 		} catch {
 			setError(t('workflows.projectSettings.failed'));

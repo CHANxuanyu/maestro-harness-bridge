@@ -1,3 +1,4 @@
+import { TerminalViewProvider } from './TerminalView';
 import type { UseInterruptHandlerReturn } from '../hooks/agent/useInterruptHandler';
 import { shellFeatureVisible } from '../../shared/newShellFeatures';
 import { ProjectStartView } from './ProjectStartView';
@@ -89,7 +90,7 @@ export interface AppShellProps {
 	onToastSessionClick: (sessionId: string, tabId?: string) => void;
 }
 
-export function AppShell({
+function AppShellContent({
 	onStopTurn,
 	theme,
 	keyboardShellOffset,
@@ -375,5 +376,13 @@ export function AppShell({
 				</>
 			)}
 		</div>
+	);
+}
+
+export function AppShell(props: AppShellProps) {
+	return (
+		<TerminalViewProvider>
+			<AppShellContent {...props} />
+		</TerminalViewProvider>
 	);
 }

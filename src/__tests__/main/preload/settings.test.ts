@@ -12,10 +12,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock electron ipcRenderer
 const mockInvoke = vi.fn();
+const mockOn = vi.fn();
+const mockRemoveListener = vi.fn();
 
 vi.mock('electron', () => ({
 	ipcRenderer: {
 		invoke: (...args: unknown[]) => mockInvoke(...args),
+		on: (...args: unknown[]) => mockOn(...args),
+		removeListener: (...args: unknown[]) => mockRemoveListener(...args),
 	},
 }));
 
@@ -36,6 +40,18 @@ describe('Settings Preload API', () => {
 
 		beforeEach(() => {
 			api = createSettingsApi();
+		});
+
+		it('forwards committed project tool patches and releases the desktop listener', () => {
+			const received = vi.fn();
+			const cleanup = api.onProjectToolsChanged(received);
+			const [channel, listener] = mockOn.mock.calls[0];
+			expect(channel).toBe('settings:projectToolsChanged');
+			const patches = { owner: { customArgs: '--saved', customPath: undefined } };
+			listener({}, patches);
+			expect(received).toHaveBeenCalledExactlyOnceWith(patches);
+			cleanup();
+			expect(mockRemoveListener).toHaveBeenCalledExactlyOnceWith(channel, listener);
 		});
 
 		it('routes project defaults and the full access acknowledgement through the shared handler', async () => {

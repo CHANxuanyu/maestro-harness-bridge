@@ -253,6 +253,24 @@ export interface XTerminalProps {
 	};
 }
 
+// FitAddon clamps an unmeasurable pane to 2 columns / 1 row. Never let that
+// temporary layout overwrite the retained grid or reach the running PTY.
+function canFitTerminal(container: HTMLDivElement | null, fitAddon: FitAddon | null): boolean {
+	if (!container?.isConnected || container.offsetWidth <= 0 || container.offsetHeight <= 0) {
+		return false;
+	}
+	const visibility = getComputedStyle(container).visibility;
+	if (visibility === 'hidden' || visibility === 'collapse') return false;
+	const size = fitAddon?.proposeDimensions();
+	return (
+		!!size &&
+		Number.isFinite(size.cols) &&
+		Number.isFinite(size.rows) &&
+		size.cols > 2 &&
+		size.rows > 1
+	);
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -385,20 +403,17 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
 				return lines.join('\n');
 			},
 			resize() {
-				fitAddonRef.current?.fit();
+				if (canFitTerminal(containerRef.current, fitAddonRef.current)) {
+					fitAddonRef.current?.fit();
+				}
 			},
 			refresh() {
 				const fitAddon = fitAddonRef.current;
 				const term = terminalRef.current;
 				const container = containerRef.current;
-				if (!fitAddon || !term) return;
+				if (!fitAddon || !term || !canFitTerminal(container, fitAddon)) return;
 				// Apply deferred WebGL load now that the container is visible
-				if (
-					pendingWebglLoadRef.current &&
-					container &&
-					container.offsetWidth > 0 &&
-					container.offsetHeight > 0
-				) {
+				if (pendingWebglLoadRef.current) {
 					pendingWebglLoadRef.current();
 					pendingWebglLoadRef.current = null;
 				}
@@ -415,10 +430,10 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
 				// A hidden container has never been fit, so xterm still reports its
 				// constructor default. Report nothing rather than a measurement that
 				// isn't one.
-				if (!term || !container || container.offsetWidth === 0 || container.offsetHeight === 0) {
+				if (!term || !canFitTerminal(container, fitAddonRef.current)) {
 					return null;
 				}
-				if (term.cols <= 0 || term.rows <= 0) return null;
+				if (term.cols <= 2 || term.rows <= 1) return null;
 				return { cols: term.cols, rows: term.rows };
 			},
 			syncSize() {
@@ -433,7 +448,13 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
 	// retried on the next call, so this is the one place the winsize is published.
 	const pushPtySize = useCallback(() => {
 		const term = terminalRef.current;
-		if (!term || term.cols <= 0 || term.rows <= 0) return;
+		if (
+			!term ||
+			term.cols <= 2 ||
+			term.rows <= 1 ||
+			!canFitTerminal(containerRef.current, fitAddonRef.current)
+		)
+			return;
 		const { cols, rows } = term;
 		const last = lastSentSizeRef.current;
 		if (last && last.cols === cols && last.rows === rows) return;
@@ -471,7 +492,7 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
 			// Skip when the container is hidden (display:none → offsetWidth/Height = 0).
 			// Calling fit() or refresh() on a zero-size WebGL canvas clears the GPU
 			// framebuffer, wiping the terminal content when the user navigates away.
-			if (container.offsetWidth === 0 || container.offsetHeight === 0) return;
+			if (!canFitTerminal(container, fitAddon)) return;
 
 			// Apply deferred WebGL load if the container just became visible
 			if (pendingWebglLoadRef.current) {
@@ -515,7 +536,7 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
 				webglAddonRef.current = null;
 				requestAnimationFrame(() => {
 					const c = containerRef.current;
-					if (!c || c.offsetWidth === 0 || c.offsetHeight === 0) return;
+					if (!canFitTerminal(c, fitAddonRef.current)) return;
 					if (webglCtorRef.current && webglContextLossCountRef.current < 2) {
 						webglContextLossCountRef.current += 1;
 						attachWebglRenderer(webglCtorRef.current, term);
@@ -712,7 +733,7 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
 		// ancestor (e.g. session has terminal tabs but inputMode !== 'terminal'), calling fit()
 		// here would resize the terminal to the 2×2 minimum. The isVisible effect in TerminalView
 		// will call refresh() → fit() once the container becomes visible.
-		if (containerRef.current.offsetWidth > 0 && containerRef.current.offsetHeight > 0) {
+		if (canFitTerminal(containerRef.current, fitAddon)) {
 			fitAddon.fit();
 		}
 
@@ -912,7 +933,7 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
 			// Calling fit() on a zero-size container resizes the terminal to the minimum (2×2),
 			// corrupting content written while at that reduced size.
 			const container = containerRef.current;
-			if (container && container.offsetWidth > 0 && container.offsetHeight > 0) {
+			if (canFitTerminal(container, fitAddonRef.current)) {
 				fitAddonRef.current?.fit();
 			}
 		}

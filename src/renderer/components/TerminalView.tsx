@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import {
 	memo,
 	forwardRef,
@@ -7,6 +8,11 @@ import {
 	useCallback,
 	useState,
 	useMemo,
+	useLayoutEffect,
+	createContext,
+	useContext,
+	type ReactNode,
+	type ForwardedRef,
 } from 'react';
 import { getT, useT } from '../i18n';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -91,7 +97,147 @@ interface TerminalViewProps {
 // Component
 // ============================================================================
 
+interface HostedTerminalView {
+	element: HTMLDivElement;
+	target: HTMLDivElement | null;
+	props: TerminalViewProps;
+	ref: ForwardedRef<TerminalViewHandle>;
+}
+
+const TerminalViewContext = createContext<
+	| ((
+			props: TerminalViewProps,
+			ref: ForwardedRef<TerminalViewHandle>,
+			target: HTMLDivElement
+	  ) => () => void)
+	| null
+>(null);
+
+/**
+ * Keep the existing xterm buffers and PTY listeners mounted while shell layouts
+ * exchange their terminal slots. This registry holds DOM hosts, never output.
+ */
+export function TerminalViewProvider({ children }: { children: ReactNode }) {
+	const hosts = useRef(new Map<string, HostedTerminalView>());
+	const parking = useRef<HTMLDivElement>(null);
+	const [, repaint] = useState(0);
+	const windowContext = useWindowContextOptional();
+	const membership = useSessionStore((state) =>
+		state.sessions
+			.map(
+				(session) =>
+					`${session.id}:${session.terminalTabs?.map((tab) => `${tab.id}:${tab.pid}:${tab.state}`).join(',') ?? ''}`
+			)
+			.join('|')
+	);
+	const mount = useCallback(
+		(props: TerminalViewProps, ref: ForwardedRef<TerminalViewHandle>, target: HTMLDivElement) => {
+			const id = props.session.id;
+			let host = hosts.current.get(id);
+			if (!host) {
+				const element = document.createElement('div');
+				// Continue the flex column through both portal wrappers, so the
+				// content's flex-1 owns the slot height instead of collapsing to zero.
+				element.className = 'relative flex flex-col h-full w-full min-h-0';
+				host = { element, target, props, ref };
+				hosts.current.set(id, host);
+			}
+			host.props = props;
+			host.ref = ref;
+			host.target = target;
+			host.element.style.width = '';
+			host.element.style.height = '';
+			host.element.style.visibility = props.isVisible === false ? 'hidden' : 'visible';
+			host.element.style.pointerEvents =
+				props.isVisible === false || props.paneRects ? 'none' : 'auto';
+			host.element.style.zIndex = props.isVisible === false ? '-1' : '';
+			target.appendChild(host.element);
+			repaint((value) => value + 1);
+			return () => {
+				if (host.target !== target) return;
+				const { width, height } = host.element.getBoundingClientRect();
+				host.element.style.width = `${width}px`;
+				host.element.style.height = `${height}px`;
+				host.element.style.visibility = 'hidden';
+				host.element.style.pointerEvents = 'none';
+				host.element.style.zIndex = '-1';
+				host.target = null;
+				host.ref = null;
+				parking.current?.appendChild(host.element);
+				repaint((value) => value + 1);
+			};
+		},
+		[]
+	);
+	useEffect(() => {
+		const sessions = useSessionStore.getState().sessions;
+		let removed = false;
+		for (const [id, host] of hosts.current) {
+			if (
+				!sessions.some((session) => session.id === id && session.terminalTabs?.length) ||
+				windowContext?.ownsSession(id, true) === false
+			) {
+				host.element.remove();
+				hosts.current.delete(id);
+				removed = true;
+			}
+		}
+		if (removed) repaint((value) => value + 1);
+	}, [membership, windowContext?.ownsSession]);
+	return (
+		<TerminalViewContext.Provider value={mount}>
+			{children}
+			<div
+				ref={parking}
+				aria-hidden="true"
+				{...{ inert: '' }}
+				className="fixed pointer-events-none"
+				style={{ visibility: 'hidden' }}
+			/>
+			{Array.from(hosts.current, ([id, host]) => {
+				const session = host.target
+					? host.props.session
+					: useSessionStore.getState().sessions.find((entry) => entry.id === id);
+				return (
+					session &&
+					createPortal(
+						<TerminalViewContent
+							{...host.props}
+							session={session}
+							ref={host.ref}
+							isVisible={!!host.target && host.props.isVisible !== false}
+						/>,
+						host.element,
+						id
+					)
+				);
+			})}
+		</TerminalViewContext.Provider>
+	);
+}
+
 export const TerminalView = memo(
+	forwardRef<TerminalViewHandle, TerminalViewProps>(function TerminalView(props, ref) {
+		const mount = useContext(TerminalViewContext);
+		const target = useRef<HTMLDivElement>(null);
+		useLayoutEffect(() => {
+			if (mount && target.current) return mount(props, ref, target.current);
+		}, [mount, props, ref]);
+		return mount ? (
+			<div
+				ref={target}
+				className="relative flex flex-col h-full w-full min-h-0"
+				style={
+					props.isVisible === false ? { visibility: 'hidden', pointerEvents: 'none' } : undefined
+				}
+			/>
+		) : (
+			<TerminalViewContent {...props} ref={ref} />
+		);
+	})
+);
+
+const TerminalViewContent = memo(
 	forwardRef<TerminalViewHandle, TerminalViewProps>(function TerminalView(
 		{
 			session,

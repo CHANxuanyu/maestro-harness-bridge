@@ -677,6 +677,7 @@ const aiHandoff = createDesktopAiHandoff({
 
 // Create web server factory with dependency injection (Phase 2 refactoring)
 const createWebServer = createWebServerFactory({
+	getAppWindows: () => windowRegistry.getAppWindows().map((entry) => entry.browserWindow),
 	aboutMe,
 	aiHandoff,
 	settingsStore: store,

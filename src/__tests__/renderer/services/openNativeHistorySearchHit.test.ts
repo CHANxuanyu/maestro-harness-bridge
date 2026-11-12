@@ -184,3 +184,13 @@ it('does not guess between repeated live messages', async () => {
 	expect(await openNativeHistorySearchHit(hit, vi.fn())).toBe(false);
 	expect(useUIStore.getState().pendingLogJump).toBeNull();
 });
+
+it('refuses a missing UUID locator instead of jumping to the first message', async () => {
+	expect(
+		await openNativeHistorySearchHit(
+			{ ...hit, message: { uuid: 'missing', role: 'assistant', text: '' } },
+			vi.fn()
+		)
+	).toBe(false);
+	expect(useUIStore.getState().pendingLogJump).toBeNull();
+});

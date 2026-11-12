@@ -1,3 +1,4 @@
+import { runNewShellCommand, type NewShellCommandDeps } from '../../services/newShellCommands';
 import type { UseInterruptHandlerReturn } from '../agent/useInterruptHandler';
 import { applyNewShellWebAction } from '../../services/newShellWeb';
 import {
@@ -163,7 +164,7 @@ function applyGroupUpdate(
 // Dependencies interface
 // ============================================================================
 
-export interface UseAppRemoteEventListenersDeps {
+export interface UseAppRemoteEventListenersDeps extends NewShellCommandDeps {
 	handleInterrupt?: UseInterruptHandlerReturn['handleInterrupt'];
 	/** Ref-like getter for current sessions array */
 	sessionsRef: React.MutableRefObject<Session[]>;
@@ -1866,6 +1867,23 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 	// read sees it rather than the 2s-debounced stale value.
 	useEventListener('maestro:remoteUpdateSessionConfig', async (e: Event) => {
 		const { sessionId, configPatch, responseChannel } = (e as CustomEvent).detail;
+		if (configPatch && 'newShellCommand' in configPatch) {
+			try {
+				if (Object.keys(configPatch).length !== 1)
+					throw new Error('Mixed new shell command and config patch');
+				const data = await runNewShellCommand(sessionId, configPatch.newShellCommand, deps);
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: true,
+					data,
+				});
+			} catch (error) {
+				window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+			return;
+		}
 		const session = sessionsRef.current.find((s) => s.id === sessionId);
 		if (!session) {
 			window.maestro.process.sendRemoteUpdateSessionConfigResponse(responseChannel, {

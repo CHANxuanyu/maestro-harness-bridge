@@ -210,7 +210,7 @@ export function createSessionCrudRemoteApi() {
 		 */
 		sendRemoteUpdateSessionConfigResponse: (
 			responseChannel: string,
-			result: { success: boolean; error?: string }
+			result: { success: boolean; error?: string; data?: Record<string, unknown> }
 		): void => {
 			ipcRenderer.send(responseChannel, result);
 		},

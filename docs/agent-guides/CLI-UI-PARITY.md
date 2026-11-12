@@ -843,6 +843,33 @@ then reads the old result through both the card and `native-history tool-output`
 
 ## Covered
 
+### 新界面 CLI 对等，Task L，2026-11-12
+
+| 界面动作                                       | CLI                                                                                                   | 共用实现                                                                                                                                             |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 打开内容命中、补载历史、展开所在回合并闪烁消息 | `native-history open-hit <agent> <native-id> --message <UUID 或 message JSON> [--json]`               | 所属窗口的 `openNativeHistorySearchHit()`，回执包含 `agentId`、`tabId`、`logId`                                                                      |
+| 输入或清空左栏搜索                             | `ui sidebar-search <text>` / `ui sidebar-search --clear`，可加 `--agent`、`--json`                    | `uiStore.newShellSidebarSearch` 和原有 `useNativeHistorySearch()` 防抖、取消流程                                                                     |
+| 读取任务面板清单及空状态                       | `tab tasks <tab-id> [--agent <id>] [--json]`                                                          | 所属窗口的 `latestAgentTaskList()`，返回 `list`、`empty`、`emptyText`                                                                                |
+| 打开、关闭项目设置                             | `open project-settings [--path <project>] [--agent <id>]` / `open project-settings --close`           | `UI_SURFACES`、`openUiSurface()` 和左栏共用窗口状态；分组内按指定项目位置打开                                                                        |
+| 新建对话并直接分屏                             | `tab new --agent <id> --split [--ratio <0.2-0.8>] [--provider <provider>] [--prompt <text>] [--json]` | 一个所属窗口回执内组合 `newProjectConversation()`、原有无项目默认值创建路径和 `splitConversation()`                                                  |
+| 排队卡片强制发送                               | `queue force-send <item-id> [--agent <id>] [--json]`                                                  | 先查实时窗口归属，再用 `shouldOfferForceSend()`、`getForceSendEligibility()`、`getForceSendTitle()` 和 `useQueueHandlers.handleForceSendQueueItem()` |
+| 刷新原生历史                                   | `tab refresh <tab-id> [--agent <id>] [--json]`                                                        | 所属窗口的 `refreshNativeConversation()`，忙碌、排队或身份变化时报告原因                                                                             |
+| 切换后立即读取当前对话                         | `session list --json` / `tab show active --json`                                                      | 各所属窗口确认 `flushPendingSessionSave()` 后读取库存；`current` 取主窗口实时选择，`active` 仍表示各工具选中的标签                                   |
+
+所有新动作都要求 `newShell`。命令使用既有 `update_session_config` 的独立
+`newShellCommand` 动作，不把动作字段写进配置；回执校验发送窗口。旧界面保留原有
+库存读取和操作行为。未知字段、失效目标和服务拒绝均返回非零，不自动重试。
+
+`--message` 可直接传 `native-history search` 命中的 `message` 对象 JSON；没有原生
+消息 UUID 的 Codex 记录使用完整文本、角色和时间定位。不存在的纯 UUID 不会退化为
+第一条消息。内容搜索仍仅限本机，SSH 限制未改变。任务快照读取实时日志，不触发模型。
+
+`--split` 不与 `--background` 或 `--replace-empty` 合用。窗口宽度和比例在创建前检查；
+创建期间窗口消失或布局保存失败仍会报告失败，已创建的对话不会被破坏性撤回。
+本批没有补齐经典界面的文件、终端或浏览器新建平铺命令，也没有改动子任务树折叠操作。
+
+合成单元验证及沙箱外 Electron 场景见 [Task L 验证记录](../verification/new-shell-cli-parity.md)。
+
 Notification center history uses the live desktop `notificationStore` over a request-response bridge. Main owns durable append/read/clear mutations in `maestro-notification-history.json`; renderer snapshots are synchronized across windows, and CLI results await committed writes. `notify inbox list --unread` filters the snapshot, `read <id>` / `read-all` update read state, `clear` clears history, `dismiss [id]` dismisses one entry or clears visible toasts, and `activate <id>` / `link <id>` run the same entry and inline-link actions as the UI. Every result includes the resulting unread count and history. `detail <id>` / `collapse` expand and collapse the same in-inbox details view. The five opt-in inbox preferences are registered settings and can be changed with `settings set <key> <value>`. `open notification-center` and `notify inbox open` open the app-level popover even when the Main Panel header is absent.
 
 | Point-and-click action                                                      | CLI                                                                                                              |
@@ -1187,7 +1214,7 @@ inventory remains unchanged. The archive tests exercise project recency through
 
 ## Open gaps
 
-**项目设置的展示状态，U2。** 打开、关闭弹窗和切换位置选择框没有 CLI 窗口状态动词；读取、修改、清空、确认和变量显示都有上表对应动作。新界面可达的“在下方新建 AI 对话”在项目有默认值时共用 `newProjectConversation()`，再将返回的实际归属交给 U1 的 `splitConversation()` 在右侧显示。CLI 可按顺序调用 `tab new` 和 `tab split`，没有原子化的新建并分屏命令。普通浏览器暂不编辑项目环境值；手机实际点击仍需验收。
+**项目设置剩余限制。** 普通浏览器暂不编辑项目环境值，手机实际点击仍需验收。项目设置窗口开关和指定位置、原子命令形式的新建分屏已由上表 Task L 覆盖。
 
 **向导入口，U2 二轮。** `handleLaunchWizardTab()` 仅由旧 Auto Run 工具栏使用，新界面隐藏 Auto Run、向导命令和快捷键，因此未增加项目环境创建逻辑。启动模型已改为优先使用新标签解析出的模型。若未来开放该入口，必须先接入统一项目创建服务，并补齐 CLI 对等及 Electron 验收。
 
@@ -1203,21 +1230,14 @@ All new visible split actions have the CLI equivalents listed above.
 
 2026-11-06 性能基准没有新增界面动作或 CLI 动词。Codex 列表的目录判断优化位于共享存储适配器，桌面项目列表、`sessions` 和 `native-history list` 沿用同一实现。性能采集继续使用 `profiling start/status/stop`；离线合成基准见 `scripts/perf/README.md`。本轮没有填补下列既有交互缺口。
 
-**Fork and create-in-tile actions (2026-11-06).** Message forking still has no
-`tab fork --at` verb; this remains the Composer backlog below. The palette and
-shortcut for creating a conversation directly in a tile share
-`tileNewTabInSession()`, but there is no CLI action calling that service.
-`tab new` covers the same project permission resolution, not the tiling action.
-This permission repair does not add either command. Scheduled wake refusal has
-no new diagnostic UI; the retained snooze can be woken manually after selecting
-a tool that can preserve the restriction.
+**Fork and classic create-in-tile actions.** Message forking still has no
+`tab fork --at` verb. The new shell AI create-and-split command is covered above.
+Classic file, terminal and browser create-in-tile actions still lack CLI verbs.
+Scheduled wake refusals retain the existing manual recovery path.
 
-**CLI inventory timing (2026-11-06).** `session list` and `tab show` read the
-persisted desktop inventory. UI history selection, closed-tab restoration and
-`tab new` can precede its debounced save. Acceptance waits for the expected native
-identity or returned tab ID before reading or mutating it, then uses that exact ID.
-The permission write and provider switch still require immediate readback after
-their acknowledged save. There is no live-owner inventory read in these CLI verbs.
+**Classic inventory timing.** The classic shell retains its persisted inventory
+and save debounce. New shell `session list` and `tab show` now wait for the owner
+flush and return live selection as documented in Task L.
 
 **Turn grouping freshness (2026-11-06 review fix).** For conversations without
 readable native write records, CLI still reads the persisted independent index.
@@ -1229,17 +1249,10 @@ on scrolling through history. No new UI action or CLI verb was added.
 - T9：运行状态拒绝覆盖 Maestro 管理的进程、窗口标签和队列。尚未接入其他应用或独立原生 CLI 的活动探测，不声称能识别这些外部进程是否正在写同一历史。
 - T9：跨窗口先全部检查，再逐个关闭。若后一个窗口在关闭时失败，归档标记回退，但已关闭窗口的标签不自动恢复；尚未提供跨窗口事务式回滚。
 
-**Native content search navigation (2026-11-06).** Content retrieval has the CLI
-command above. Opening a returned hit, creating a compatible runner when needed,
-and scrolling or flashing its message still have no acknowledged CLI command.
-They extend the existing native-history open gap below. The implementation is
-`openNativeHistorySearchHit()`; a future CLI entry must route to that service in
-the owning renderer. `native-history read` returns text but does not perform this
-UI action. Cancelling or clearing the sidebar search is also view-local; the
-internal cancellation IPC has no standalone CLI verb.
-The review fix also expands a folded turn before flashing its matched body.
-That expansion belongs to the same unresolved navigation action, with no new
-CLI verb in this round.
+**Native content search limits.** Content opening, message navigation and sidebar
+query changes are covered by Task L. Content retrieval remains local only, and
+existing scan limits can leave coverage incomplete. SSH content navigation is not
+added by these commands.
 
 **Provider switch wording (2026-11-06).** The existing CLI help, force warning and
 success text still describe the classic reset behavior. With `newShell` enabled,
@@ -1258,9 +1271,12 @@ wrappers or native call times more than five seconds from the live start event.
 Legacy filename lookup inspects at most 64 KiB of metadata;
 nonstandard records with later identity metadata may not be found.
 
-**Project native history (2026-10-16).** The desktop bridge exposes `agentSessions:listProjectHistory`, but CLI `sessions <agent-id>` is still provider scoped. One-click native-history open with automatic runner creation uses the canonical renderer resume flow and has no dedicated CLI verb yet. Adding a WS renderer action is outside this local sidebar acceptance change; this is an explicit parity gap, not a covered action. The same gap covers the external-transcript catch-up: selecting an open native conversation in the project tree (or returning to the window while it is on screen and a history scan reports newer native activity) re-reads the transcript and appends what was written outside Maestro (`refreshNativeConversation()` in `src/renderer/services/refreshNativeConversation.ts`, read-only, same tab/account/host/native id). No CLI verb triggers or reports that refresh yet; the read half is reachable through `sessions`/`agentSessions:read`, but nothing lets an agent fold newer native messages into an open tab. Since 2026-10-23 the desktop also runs the same refresh automatically for the visible local Codex tab when its transcript revision changes (`useNativeTranscriptFollow()` in `src/renderer/hooks/session/useNativeTranscriptFollow.ts`, over `agentSessions.getTranscriptRevision`). That is background upkeep, not a user action, so it adds no row and changes no CLI verb.
+**Project native history.** Task L covers opening a content locator with compatible
+runner creation and explicitly refreshing an open native conversation. Automatic
+Codex transcript following remains background upkeep through
+`useNativeTranscriptFollow()` and the same `refreshNativeConversation()` service.
 
-**Conversation tool detail folds (2026-10-19).** The conversation layout groups tool calls into expandable runs and each call can reveal its stored input/result. These view-local fold states have no CLI address or verb yet. Native transcript reads expose the underlying tool data, but do not expand the desktop card. This is an explicit presentation parity gap in the local conversation UX repair, alongside the native-history refresh gap above; no claim is made that the new fold controls are CLI-covered.
+**Conversation tool detail folds (2026-10-19).** The conversation layout groups tool calls into expandable runs and each call can reveal its stored input/result. These view-local fold states have no CLI address or verb yet. Native transcript reads expose the underlying tool data, but do not expand the desktop card. This is an explicit presentation parity gap in the local conversation UX repair, no claim is made that the new fold controls are CLI-covered.
 
 **Conversation feed message info (2026-10-21).** In the conversation layout each message has an info toggle that opens an inline panel (time, turn duration, model, effort, Claude capture mode, delivered / read-only / forced-parallel state, cross-agent source). Opening that panel is view-local presentation state with no CLI address or verb, like the tool detail folds above. Reading the data is a separate question with two halves:
 
@@ -1348,7 +1364,7 @@ a design constraint; they are simply not built yet.
 A full sweep of the palette, shortcuts, context menus, and modals found these
 still missing. Grouped, highest value first:
 
-- **Execution queue:** list, remove, edit, reorder, hold, force-send (`queue ...`).
+- **Execution queue:** edit, reorder and hold still lack CLI verbs; list, remove and new shell force-send are covered.
 - **Composer:** send images with a prompt (`dispatch --image`); fork a tab from a
   message (`tab fork --at`); resume a stored provider session into a tab
   (`tab new --resume`), read a stored transcript (`session read`).
@@ -1548,6 +1564,6 @@ Open gaps：本轮没有新增界面动作缺口。目标不可用、保存失�
 
 ## 2026-11-11 文档核对补充
 
-本次只整理证据，没有新增界面动作或 CLI 动词。PR #72、#73、#74、#76 的对应动作仍使用各自已登记的共享实现。`active` 在刚切换对话后可能读到尚未保存的上一条；PR #74 已让网页打开、刷新和外部打开使用窗口实时状态，其他动词未逐一验证，暂用显式标签 ID。
+本次只整理证据，没有新增界面动作或 CLI 动词。PR #72、#73、#74、#76 的对应动作仍使用各自已登记的共享实现。当时 `active` 可能读到尚未保存的上一条；Task L 已为新界面库存增加所属窗口刷新回执和实时选择读回。其他未审计动词不据此宣称完成。
 
-PR #77 后续真实结果见 `docs/verification/real-codex.md`：仅固定版本 app-server 工作负载及 Codex 派 Codex 子任务通过。早期 Stop 缺口描述保留历史含义，以本文件完整停止条目和首个 Open gaps 的当前说明为准。原生历史打开定位、树折叠及其他展示控制缺口没有因此关闭。
+PR #77 后续真实结果见 `docs/verification/real-codex.md`：仅固定版本 app-server 工作负载及 Codex 派 Codex 子任务通过。早期 Stop 缺口描述保留历史含义，以本文件完整停止条目和首个 Open gaps 的当前说明为准。树折叠及其他展示控制缺口没有因此关闭；原生历史命中打开定位后由 Task L 覆盖。

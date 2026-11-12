@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../../stores/settingsStore';
+import { getT } from '../../i18n';
 /**
  * useQueueHandlers - extracted from App.tsx
  *
@@ -17,6 +19,9 @@ import {
 	applyQueuedItemDispatch,
 	applyQueuedItemEdit,
 	getQueueBusyContext,
+	getForceSendEligibility,
+	getForceSendTitle,
+	shouldOfferForceSend,
 } from '../../utils/executionQueue';
 import { useSessionStore } from '../../stores/sessionStore';
 import { planCrossAgentMentions } from '../../services/crossAgentMentions';
@@ -47,7 +52,10 @@ export interface UseQueueHandlersReturn {
 	/** Edit a queued message's prompt text and attached images within a session */
 	handleEditQueueItem: (sessionId: string, itemId: string, patch: QueuedItemEditPatch) => void;
 	/** Dispatch one queued item immediately, out of queue order */
-	handleForceSendQueueItem: (sessionId: string, itemId: string) => void;
+	handleForceSendQueueItem: (
+		sessionId: string,
+		itemId: string
+	) => Promise<{ success: boolean; error?: string }>;
 }
 
 // ============================================================================
@@ -158,14 +166,27 @@ export function useQueueHandlers({
 	// the Execution Queue browser (any agent, any tab) and by the inline chat
 	// list's Force Send button, so both surfaces share one dispatch path.
 	const handleForceSendQueueItem = useCallback(
-		(sessionId: string, itemId: string) => {
+		async (sessionId: string, itemId: string) => {
 			const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
 			const item = session?.executionQueue?.find((i) => i.id === itemId);
-			if (!session || !item) return;
+			if (!session || !item) return { success: false, error: 'Queued item not found' };
+			if (useSettingsStore.getState().newShell) {
+				const eligibility = getForceSendEligibility(session, item, {
+					forcedParallelEnabled: useSettingsStore.getState().forcedParallelExecution,
+				});
+				if (!shouldOfferForceSend(eligibility) || !eligibility.canForce)
+					return { success: false, error: getForceSendTitle(eligibility, getT()) };
+			}
 
 			// A tab runs one turn at a time - never spawn over an in-flight one.
 			const { targetTabBusy, otherBusyTabs } = getQueueBusyContext(session, item);
-			if (targetTabBusy) return;
+			if (targetTabBusy)
+				return {
+					success: false,
+					error: getForceSendTitle(
+						getForceSendEligibility(session, item, { forcedParallelEnabled: false })
+					),
+				};
 
 			// Stamp forceParallel when another tab is mid-turn: it badges the chat log
 			// entry and tells the on-exit dequeue guard this turn was a deliberate
@@ -181,9 +202,13 @@ export function useQueueHandlers({
 			// owned by `agentStore.processQueuedItem`'s catch, which is the only place
 			// that knows WHY the dispatch failed. This rejection still needs an owner
 			// so it does not surface as an unhandled promise crash report.
-			processQueuedItem(sessionId, dispatchItem).catch((err) => {
-				logger.error('[ForceSend] Dispatch failed, item returned to queue', undefined, err);
-			});
+			return processQueuedItem(sessionId, dispatchItem).then(
+				() => ({ success: true }),
+				(err: unknown) => {
+					logger.error('[ForceSend] Dispatch failed, item returned to queue', undefined, err);
+					return { success: false, error: err instanceof Error ? err.message : String(err) };
+				}
+			);
 		},
 		[processQueuedItem]
 	);

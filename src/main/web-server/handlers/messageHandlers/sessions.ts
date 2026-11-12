@@ -424,6 +424,7 @@ export function handleUpdateSessionConfig(
 		.then((result) => {
 			ctx.send(client, {
 				type: 'update_session_config_result',
+				...(result.data ? { data: result.data } : {}),
 				success: result.success,
 				error: result.error,
 				sessionId,
@@ -437,7 +438,7 @@ export function handleUpdateSessionConfig(
 
 /**
  * Handle list_desktop_sessions message - enumerate every open AI tab across
- * desktop agents. Stateless read backed by the persisted session store; no
+ * desktop agents. New shell callbacks flush the owner state before reading; no
  * subscription side-effects so external pollers (Maestro-Discord, Cue) can
  * call this every few seconds without leaking state into the desktop.
  */
@@ -446,13 +447,29 @@ export function handleListDesktopSessions(
 	client: WebClient,
 	message: WebClientMessage
 ): void {
-	const sessions = ctx.callbacks.listDesktopSessions ? ctx.callbacks.listDesktopSessions() : [];
-	ctx.send(client, {
-		type: 'desktop_sessions_list',
-		success: true,
-		sessions,
-		requestId: message.requestId,
-	});
+	const reply = (sessions: import('../../../../shared/desktopTabs').DesktopTabEntry[]) => {
+		ctx.send(client, {
+			type: 'desktop_sessions_list',
+			success: true,
+			sessions,
+			requestId: message.requestId,
+		});
+	};
+	const failed = (error: unknown) => {
+		ctx.send(client, {
+			type: 'desktop_sessions_list',
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+			requestId: message.requestId,
+		});
+	};
+	try {
+		const result = ctx.callbacks.listDesktopSessions?.() ?? [];
+		if (result instanceof Promise) void result.then(reply, failed);
+		else reply(result);
+	} catch (error) {
+		failed(error);
+	}
 }
 
 /**

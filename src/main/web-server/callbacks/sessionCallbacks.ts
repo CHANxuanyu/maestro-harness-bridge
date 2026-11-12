@@ -1,3 +1,5 @@
+import { requestFromRenderer } from './remoteRequest';
+import { isWebContentsAvailable } from '../../utils/safe-send';
 import type { WebServer } from '../WebServer';
 import type { WebServerFactoryDependencies } from '../web-server-factory';
 import type { StoredSession } from '../../stores/types';
@@ -12,7 +14,13 @@ import { isImageRef, resolveToDataUrlSync } from '../../storage/session-image-st
 
 export function registerSessionCallbacks(
 	server: WebServer,
-	deps: Pick<WebServerFactoryDependencies, 'sessionsStore' | 'groupsStore' | 'getProcessManager'>
+	deps: Pick<WebServerFactoryDependencies, 'sessionsStore' | 'groupsStore' | 'getProcessManager'> &
+		Partial<
+			Pick<
+				WebServerFactoryDependencies,
+				'settingsStore' | 'getMainWindow' | 'getWindowForSession' | 'getAppWindows'
+			>
+		>
 ): void {
 	const { sessionsStore, groupsStore, getProcessManager } = deps;
 
@@ -110,6 +118,41 @@ export function registerSessionCallbacks(
 	// session store (same source the renderer pushes to via `sessions:save`),
 	// then reconciles it with live managed-process and CLI-activity evidence.
 	server.setListDesktopSessionsCallback(() => {
+		if (!deps.settingsStore?.get('newShell', false)) return inventory();
+		return liveInventory();
+	});
+
+	async function liveInventory() {
+		let activeSessionId: string | undefined;
+		if (deps.settingsStore?.get('newShell', false)) {
+			const main = deps.getMainWindow?.();
+			const windows = new Set([
+				main,
+				...(deps.getAppWindows?.() ?? []),
+				...sessionsStore
+					.get<StoredSession[]>('sessions', [])
+					.map((s) => deps.getWindowForSession?.(s.id) ?? main),
+			]);
+			for (const win of windows) {
+				if (!isWebContentsAvailable(win ?? null)) throw new Error('Desktop window unavailable');
+				const result = await requestFromRenderer<{
+					success: boolean;
+					error?: string;
+					data?: { activeSessionId?: string };
+				}>(win!, 'remote:updateSessionConfig', {
+					args: ['active', { newShellCommand: { action: 'flush-inventory' } }],
+					verifySender: true,
+					fallback: { success: false, error: 'Desktop did not confirm its live inventory' },
+					timeoutMs: 5000,
+				});
+				if (!result.success) throw new Error(result.error || 'Live inventory unavailable');
+				if (win === main) activeSessionId = result.data?.activeSessionId;
+			}
+		}
+		return inventory(activeSessionId ?? '');
+	}
+
+	function inventory(activeSessionId?: string) {
 		const sessions = sessionsStore.get<StoredSession[]>('sessions', []);
 		const processManager = getProcessManager();
 		// Resolved once: this used to be a per-agent call that re-read and
@@ -166,6 +209,9 @@ export function registerSessionCallbacks(
 					createdAt: typeof tab.createdAt === 'number' ? tab.createdAt : 0,
 					starred: tab.starred === true,
 					active: isActiveTab,
+					...(activeSessionId !== undefined
+						? { current: isActiveTab && s.id === activeSessionId }
+						: {}),
 					hasUnread: tab.hidden !== true && tab.hasUnread === true,
 					saveToHistory: tab.saveToHistory === true,
 					readOnly: tab.readOnlyMode === true,
@@ -182,7 +228,7 @@ export function registerSessionCallbacks(
 			}
 		}
 		return entries;
-	});
+	}
 
 	// `maestro-cli session show <tabId>` - return the tab's conversation
 	// history with optional `--since` (poll cursor) and `--tail` (cap)

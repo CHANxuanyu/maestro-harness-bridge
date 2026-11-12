@@ -977,7 +977,9 @@ export interface GetSessionHistoryOptions {
 }
 
 /** Callback to enumerate all open AI tabs across all desktop agents. */
-export type ListDesktopSessionsCallback = () => DesktopSessionEntry[];
+export type ListDesktopSessionsCallback = () =>
+	| DesktopSessionEntry[]
+	| Promise<DesktopSessionEntry[]>;
 
 /** Callback to fetch a tab's full conversation history by tabId. */
 export type GetSessionHistoryCallback = (
@@ -1262,7 +1264,7 @@ export type UpdateSessionSshCallback = (
 export type UpdateSessionConfigCallback = (
 	sessionId: string,
 	configPatch: Record<string, unknown>
-) => Promise<{ success: boolean; error?: string }>;
+) => Promise<{ success: boolean; error?: string; data?: Record<string, unknown> }>;
 export type GetAutoRunDocsCallback = (sessionId: string) => Promise<AutoRunDocument[]>;
 export type GetAutoRunDocContentCallback = (sessionId: string, filename: string) => Promise<string>;
 export type SaveAutoRunDocCallback = (

@@ -105,10 +105,12 @@ function parseSinceToMs(since: string): number | null {
 export async function sessionList(options: SessionListOptions): Promise<void> {
 	try {
 		const sessions = await withMaestroClient(async (client) => {
-			const result = await client.sendCommand<{ sessions?: DesktopSessionEntry[] }>(
-				{ type: 'list_desktop_sessions' },
-				'desktop_sessions_list'
-			);
+			const result = await client.sendCommand<{
+				success?: boolean;
+				error?: string;
+				sessions?: DesktopSessionEntry[];
+			}>({ type: 'list_desktop_sessions' }, 'desktop_sessions_list');
+			if (result.success === false) throw new Error(result.error || 'Live inventory unavailable');
 			return result.sessions ?? [];
 		});
 

@@ -1,4 +1,4 @@
-import { useT, type TFunction } from '../i18n';
+import { useT } from '../i18n';
 import React, { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
 import {
 	X,
@@ -301,7 +301,7 @@ export const QueuedItemsList = memo(
 						const showForceSendButton = shouldOfferForceSend(forceSendContext);
 						const canForceSend = !!forceSendContext?.canForce;
 						const forceSendTitle = forceSendContext
-							? localizedForceSendTitle(t, forceSendContext)
+							? getForceSendTitle(forceSendContext, t)
 							: undefined;
 
 						return (
@@ -477,29 +477,6 @@ QueuedItemsList.displayName = 'QueuedItemsList';
 // Uses the shared queue-drag primitives so the handle, press-to-grab feel, and
 // grabbed visual effect match the Execution Queue modal exactly.
 // ============================================================================
-
-function localizedForceSendTitle(t: TFunction, eligibility: ForceSendEligibility): string {
-	switch (eligibility.blockedReason) {
-		case 'target-tab-busy':
-			return t('workflows.queue.busy');
-		case 'needs-forced-parallel':
-			return t('workflows.queue.parallelOff');
-		case 'no-target-tab':
-			return t('workflows.queue.noTab');
-		case 'awaiting-consult':
-			return t('workflows.queue.consult');
-		default:
-			if (!eligibility.canForce && eligibility.blockedReason) return getForceSendTitle(eligibility);
-			return eligibility.requiresParallel
-				? t(
-						eligibility.otherBusyTabs.length === 1
-							? 'workflows.queue.sendParallelOne'
-							: 'workflows.queue.sendParallelMany',
-						{ count: eligibility.otherBusyTabs.length }
-					)
-				: t('workflows.queue.sendAhead');
-	}
-}
 
 interface QueuedItemRowProps {
 	item: QueuedItem;

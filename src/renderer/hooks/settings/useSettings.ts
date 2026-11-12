@@ -1,3 +1,4 @@
+import { applyProjectToolPatches } from '../../services/sessionToolConfig';
 /**
  * useSettings - Thin adapter over settingsStore
  *
@@ -627,6 +628,8 @@ export function useSettings(): UseSettingsReturn {
 		});
 		return cleanup;
 	}, []);
+
+	useEffect(() => window.maestro.settings.onProjectToolsChanged?.(applyProjectToolPatches), []);
 
 	// Publish the resolved typography as CSS custom properties on the document
 	// root, and set the root font-size so rem-based Tailwind spacing scales.

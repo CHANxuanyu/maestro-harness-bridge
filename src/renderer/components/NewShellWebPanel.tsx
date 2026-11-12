@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 import { useCallback, useState } from 'react';
 import { BrowserTabView, type BrowserTabViewHandle } from './MainPanel/BrowserTabView';
 import type { BrowserTab, Session, Theme } from '../types';
@@ -8,7 +10,7 @@ import {
 } from '../utils/browserTabPersistence';
 import { updateAiTab } from '../stores/sessionStore';
 import { patchNewShellPanel } from '../../shared/newShellPanel';
-import { applyNewShellWebAction, newShellWebViews } from '../services/newShellWeb';
+import { applyNewShellWebAction, isLocalWebUrl, newShellWebViews } from '../services/newShellWeb';
 
 /** The existing browser engine, with durable metadata owned by one conversation. */
 export function NewShellWebPanel({
@@ -20,6 +22,8 @@ export function NewShellWebPanel({
 	theme: Theme;
 	visible: boolean;
 }) {
+	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const conversation = session.aiTabs.find((tab) => tab.id === session.activeTabId)!;
 	const panel = conversation.newShellPanel;
 	const key = JSON.stringify([session.id, conversation.id]);
@@ -56,6 +60,16 @@ export function NewShellWebPanel({
 	};
 	return (
 		<div className="h-full flex flex-col" data-testid="new-shell-web-panel">
+			{newShell && session.sessionSshRemoteConfig?.enabled && isLocalWebUrl(tab.url) && (
+				<p
+					data-testid="web-preview-local-notice"
+					className="shrink-0 truncate px-3 py-1 text-xs"
+					style={{ color: theme.colors.textDim }}
+					title={t('workflows.newShell.webLocalNotice')}
+				>
+					{t('workflows.newShell.webLocalNotice')}
+				</p>
+			)}
 			<BrowserTabView
 				key={panel?.webReload ?? 0}
 				ref={register}

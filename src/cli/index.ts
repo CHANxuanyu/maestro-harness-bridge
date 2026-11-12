@@ -616,6 +616,7 @@ program
 		(value: string, previous: string[]) => [...previous, value],
 		[]
 	)
+	.option('--tool-config <json>', projectSettingsT('workflows.projectSettings.cli.toolConfigHelp'))
 	.option('--clear-env', projectSettingsT('workflows.projectSettings.cli.clearEnvHelp'))
 	.option('--acknowledge-full-access', projectSettingsT('workflows.projectSettings.cli.ackHelp'))
 	.option('--show-secrets', projectSettingsT('workflows.projectSettings.cli.secretsHelp'))

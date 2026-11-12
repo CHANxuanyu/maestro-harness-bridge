@@ -278,6 +278,9 @@ interface MaestroAPI {
 		get: (key: string) => Promise<unknown>;
 		set: (key: string, value: unknown) => Promise<boolean>;
 		getAll: () => Promise<Record<string, unknown>>;
+		onProjectToolsChanged: (
+			handler: (patches: Record<string, Record<string, unknown>>) => void
+		) => () => void;
 		onExternalChange: (handler: () => void) => () => void;
 	};
 	sessions: {

@@ -1,5 +1,13 @@
 # 分支工作记录
 
+## 2026-11-12：Task M 新界面缺陷 A1、A14、B3、B6
+
+本次从 `1d9ed9c9f` 的源码修复外壳切换丢失终端缓冲区、SSH 本机网页缺少说明和项目设置分步保存。终端继续使用同一 xterm 实例；项目默认值与多个工具修改共用主进程事务，CLI 新增 `project settings set --tool-config` 组合提交。额度错误入口原来就与顶栏共用，补新界面回归与同目录 Codex 交接场景，没有重复实现。
+
+A1 两种切换起点、B3 三种本机地址、B6 各写入阶段及后续边界均先失败后修复。最终 14 个 Vitest 文件 751 项通过；生产 TypeScript、lint、ESLint、改动文件 Prettier 与空白检查通过。Electron 4 文件共收集 5 项，另做类型检查，未启动 Electron。没有改夹具，未运行 fixture 测试。完整命令、失败记录、文件范围与 Opus 运行命令见 [Task M 验证记录](verification/task-m-new-shell-defects.md)。
+
+验证对象为本分支源码，未构建安装包，未读取真实账户或凭据，未推送。仍需 Opus 沙箱外跑 Electron。项目保存采用进程内回滚，持续磁盘故障导致回滚失败时明确报错，不宣称跨文件崩溃原子性。旧界面保存行为保留；共享终端宿主必须从首次 classic 挂载就存在，才能保持 classic 到 new 的同一缓冲区。移走的工具字段白名单已由共享模块承接，没有遗留重复实现。
+
 ## 2026-11-12：hb.7 合入主线、CI 收口与试用包
 
 #78 第一次 CI 被 GitHub 故障卡住，关闭重开后的第二次运行在 Windows 上有 3 个失败、Linux Electron 超时取消。逐条看原始日志确认：`ai-handoff.test.ts` 期望 POSIX 路径，而 `resolveAgentAccountDir()` 按设计返回主机绝对路径（Windows 为 `D:\tmp\...`）；`useAppRemoteEventListenersSessionConfig.test.ts` 用 `mkdtemp('/tmp/...')`，Windows 没有 `/tmp`；Linux Electron 任务没有失败，合成一遍 134 条通过后 real-smoke 第二遍跑到 99 条时撞上 45 分钟上限。两处测试改用平台路径，任务上限改为 75 分钟并写明实测。
@@ -1279,10 +1287,10 @@ PR #29 合并后的 Windows CI 在既有 4 万条无时间转录用例超时；�
 
 | 阶段                           | 实际结果                                                                                         | 主要代码与证据                                                                                                                                                                         |
 | ------------------------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-10-15—16 中文化           | 日常桌面流程、全部设置分类、自有菜单与说明支持中英切换；草稿与语言偏好持久化                     | `src/renderer/i18n/`、`src/shared/i18n.ts`、`src/main/app-menu-translations.ts`；见 [语言范围](internationalization.md)                                                                |
-| 2026-10-16—17 原生历史进入项目 | 项目下直接列出会话、提供方标识、原生标题搜索、点击直接接续、已开页签刷新；账户/主机边界与去重    | `src/main/storage/project-history.ts`、`src/renderer/components/SessionList/ProjectSessionTree.tsx`、`src/renderer/services/openNativeConversation.ts`、`refreshNativeConversation.ts` |
-| 2026-10-19—20 对话可靠性       | 历史/实时进度与工具一致、工具状态隔离、主动停止不丢 ID、历史阅读定位、本地发送跟随与手动上滚暂停 | Codex parser/storage、process-manager、`TerminalOutput`、`useTerminalOutputScroll`、`useInputProcessing` 与对应回归                                                                    |
-| 2026-10-21 原始会话最终验收    | 在真实释放占用后，原始同 ID 完成多轮、工具、停止恢复和重启后继续；用户确认成功                   | [验收摘要](verification/v1.0.1-hb.1.md)；本地 `original-handoff-live-20261021` 01–27 证据序列                                                                                          |
+| 2026-10-15-16 中文化           | 日常桌面流程、全部设置分类、自有菜单与说明支持中英切换；草稿与语言偏好持久化                     | `src/renderer/i18n/`、`src/shared/i18n.ts`、`src/main/app-menu-translations.ts`；见 [语言范围](internationalization.md)                                                                |
+| 2026-10-16-17 原生历史进入项目 | 项目下直接列出会话、提供方标识、原生标题搜索、点击直接接续、已开页签刷新；账户/主机边界与去重    | `src/main/storage/project-history.ts`、`src/renderer/components/SessionList/ProjectSessionTree.tsx`、`src/renderer/services/openNativeConversation.ts`、`refreshNativeConversation.ts` |
+| 2026-10-19-20 对话可靠性       | 历史/实时进度与工具一致、工具状态隔离、主动停止不丢 ID、历史阅读定位、本地发送跟随与手动上滚暂停 | Codex parser/storage、process-manager、`TerminalOutput`、`useTerminalOutputScroll`、`useInputProcessing` 与对应回归                                                                    |
+| 2026-10-21 原始会话最终验收    | 在真实释放占用后，原始同 ID 完成多轮、工具、停止恢复和重启后继续；用户确认成功                   | [验收摘要](verification/v1.0.1-hb.1.md)；本地 `original-handoff-live-20261021` 01-27 证据序列                                                                                          |
 | 2026-10-21 首次分支发布        | 汇总既有改动，建立产品 changelog、分支说明、发布构建方法及下一阶段议题                           | `CHANGELOG.md`、本文件、Release tag 与资产校验清单                                                                                                                                     |
 
 ## 可追溯性的做法

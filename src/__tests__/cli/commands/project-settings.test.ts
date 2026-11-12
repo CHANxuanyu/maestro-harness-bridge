@@ -36,6 +36,41 @@ describe('project settings CLI', () => {
 	afterEach(() => vi.restoreAllMocks());
 
 	it.each([
+		['en', 'Tool configuration must be a JSON object keyed by configuration ID.'],
+		['zh-CN', '工具配置必须是以配置 ID 为键的 JSON 对象。'],
+	])('reports malformed tool JSON in %s before sending any write', async (locale, message) => {
+		vi.mocked(readSettingValue).mockReturnValue(locale);
+		await projectSettings('set', { path: scope.projectPath, toolConfig: '{', json: true });
+		expect(sendSimpleCommand).not.toHaveBeenCalled();
+		expect(JSON.parse(vi.mocked(console.log).mock.calls[0][0])).toMatchObject({
+			success: false,
+			error: message,
+		});
+	});
+
+	it('saves project defaults and multiple tool edits in one shared transaction', async () => {
+		const toolPatches = {
+			'config-a': { customPath: '/fixture/new' },
+			'config-b': { customArgs: null },
+		};
+		await projectSettings('set', {
+			path: scope.projectPath,
+			sshRemote: scope.sshRemoteId,
+			provider: 'codex',
+			toolConfig: JSON.stringify(toolPatches),
+			json: true,
+		});
+		expect(sendSimpleCommand).toHaveBeenCalledExactlyOnceWith(
+			{
+				type: 'bridge.invoke',
+				channel: 'settings:projectSettings',
+				args: [{ action: 'set', scope, patch: { defaultProvider: 'codex' }, toolPatches }],
+			},
+			'bridge.response'
+		);
+	});
+
+	it.each([
 		['config-b', 'config-b'],
 		['off', null],
 	])('sets auto handoff %s through the shared project service', async (autoHandoff, target) => {

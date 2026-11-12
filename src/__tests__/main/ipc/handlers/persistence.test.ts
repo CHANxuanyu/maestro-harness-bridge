@@ -204,6 +204,57 @@ describe('persistence IPC handlers', () => {
 		expect(mockSessionsStore.set).not.toHaveBeenCalled();
 	});
 
+	it('serializes the project transaction with session writes and broadcasts only after commit', async () => {
+		let release!: () => void;
+		const durable = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		mockFlushSessionWrites.mockImplementationOnce(() => durable);
+		const owner = {
+			id: 'project-tool',
+			name: 'Tool',
+			toolType: 'claude-code',
+			cwd: '/fixture/project',
+			projectRoot: '/fixture/project',
+			aiTabs: [{ id: 'live', inputValue: 'draft' }],
+		};
+		let sessions = [owner];
+		const settings: Record<string, unknown> = { newShell: true };
+		mockSettingsStore.get.mockImplementation((key, fallback) => settings[key] ?? fallback);
+		mockSettingsStore.set.mockImplementation((key, value) => {
+			settings[key] = value;
+		});
+		mockSessionsStore.get.mockImplementation((key, fallback) =>
+			key === 'sessions' ? sessions : fallback
+		);
+		mockSessionsStore.set.mockImplementation((key, value) => {
+			if (key === 'sessions') sessions = value;
+		});
+		const pending = handlers.get('settings:projectSettings')!(
+			{},
+			{
+				action: 'set',
+				scope: { projectPath: '/fixture/project' },
+				patch: { defaultProvider: 'codex' },
+				toolPatches: { 'project-tool': { customArgs: '--committed' } },
+			}
+		);
+		await vi.waitFor(() => expect(mockFlushSessionWrites).toHaveBeenCalledTimes(1));
+		expect(mockSettingsStore.set).not.toHaveBeenCalled();
+		expect(broadcastBridgeEvent).not.toHaveBeenCalled();
+		let readFinished = false;
+		const read = handlers.get('sessions:getAll')!().then((result: unknown) => {
+			readFinished = true;
+			return result;
+		});
+		await Promise.resolve();
+		expect(readFinished).toBe(false);
+		release();
+		expect(await pending).toMatchObject({ success: true });
+		expect(await read).toEqual([{ ...owner, customArgs: '--committed' }]);
+		expect(broadcastBridgeEvent).toHaveBeenCalledExactlyOnceWith('settings:externalChange', []);
+	});
+
 	it('removes project environment values from general settings reads and logs', async () => {
 		const projectSettings = {
 			'[null,"/tmp/private-project"]': {

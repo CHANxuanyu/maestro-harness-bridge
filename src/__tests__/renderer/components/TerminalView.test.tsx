@@ -13,6 +13,8 @@ import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { render, act, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TerminalView } from '../../../renderer/components/TerminalView';
+import * as TerminalViews from '../../../renderer/components/TerminalView';
+import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import type { Session, TerminalTab } from '../../../renderer/types';
 import type { Theme } from '../../../renderer/types';
 
@@ -171,6 +173,7 @@ const defaultProps = {
 const maestro = () => (window as any).maestro;
 
 beforeEach(() => {
+	useSessionStore.setState({ sessions: [] });
 	vi.clearAllMocks();
 	useSettingsStore.setState({ newShell: false, uiLanguage: 'en' });
 	xtermPropsBySessionId.clear();
@@ -182,6 +185,54 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+it.each([false, true])(
+	'retains the same xterm across both shell layouts starting newShell=%s',
+	(initial) => {
+		const session = makeSession([makeTab()]);
+		useSessionStore.setState({ sessions: [session] });
+		const Provider = TerminalViews.TerminalViewProvider;
+		const view = (newShell: boolean) => (
+			<Provider>
+				<div key={newShell ? 'new-shell-panel' : 'classic-panel'}>
+					<TerminalView {...defaultProps} session={session} isVisible />
+				</div>
+			</Provider>
+		);
+		useSettingsStore.setState({ newShell: initial });
+		const { rerender } = render(view(initial));
+		const xterm = screen.getByTestId('xterm-mock');
+		xterm.textContent = 'Existing scrollback';
+		for (const newShell of [!initial, initial]) {
+			act(() => useSettingsStore.setState({ newShell }));
+			rerender(view(newShell));
+			expect(screen.getByTestId('xterm-mock')).toBe(xterm);
+			expect(xterm).toHaveTextContent('Existing scrollback');
+		}
+		expect(maestro().process.spawnTerminalTab).not.toHaveBeenCalled();
+		expect(maestro().process.kill).not.toHaveBeenCalled();
+	}
+);
+
+it('parks the existing terminal between layout slots and disposes it when its tabs close', () => {
+	const session = makeSession([makeTab()]);
+	useSessionStore.setState({ sessions: [session] });
+	const view = (visible: boolean) => (
+		<TerminalViews.TerminalViewProvider>
+			{visible && <TerminalView {...defaultProps} session={session} isVisible />}
+		</TerminalViews.TerminalViewProvider>
+	);
+	const { rerender } = render(view(true));
+	const xterm = screen.getByTestId('xterm-mock');
+	rerender(view(false));
+	expect(screen.getByTestId('xterm-mock')).toBe(xterm);
+	expect(xterm).not.toBeVisible();
+	rerender(view(true));
+	expect(screen.getByTestId('xterm-mock')).toBe(xterm);
+	rerender(view(false));
+	act(() => useSessionStore.setState({ sessions: [{ ...session, terminalTabs: [] }] }));
+	expect(screen.queryByTestId('xterm-mock')).toBeNull();
+});
 
 it('keeps startup decoration out of xterm without clearing real output', async () => {
 	const tab = makeTab({ pid: 0, state: 'idle' });
@@ -950,7 +1001,7 @@ describe('TerminalView - touch key bar (coarse pointer)', () => {
 	});
 });
 
-describe('TerminalView — PTY window size', () => {
+describe('TerminalView - PTY window size', () => {
 	// The PTY is born 80x24 unless the spawn says otherwise. Anything that asks the
 	// kernel for the window size - nano, vim, less, top - then paints into that box
 	// however large the pane is, while ordinary command output still fills it,

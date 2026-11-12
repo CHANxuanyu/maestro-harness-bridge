@@ -224,6 +224,12 @@ export function setupIpcHandlers(deps: IpcBootstrapDependencies): void {
 
 	// Persistence operations - extracted to src/main/ipc/handlers/persistence.ts
 	const persistenceHandlers = registerPersistenceHandlers({
+		isSessionRunning: (id) =>
+			deps
+				.getProcessManager()
+				?.getAll()
+				.some((process) => !process.isTerminal && process.sessionId.startsWith(`${id}-ai-`)) ??
+			true,
 		aboutMe: deps.aboutMe,
 		settingsStore: deps.settingsStore,
 		sessionsStore: deps.sessionsStore,

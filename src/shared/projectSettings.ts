@@ -35,6 +35,7 @@ export type ProjectSettingsCommand =
 			action: 'set';
 			scope: ProjectSettingsScope;
 			patch: ProjectSettingsPatch;
+			toolPatches?: Record<string, Record<string, unknown>>;
 			acknowledgeFullAccess?: boolean;
 	  };
 
@@ -49,7 +50,11 @@ export type ProjectSettingsErrorCode =
 	| 'fullAccessRequired'
 	| 'saveFailed'
 	| 'requestFailed'
-	| 'modelProviderRequired';
+	| 'modelProviderRequired'
+	| 'toolMissing'
+	| 'toolRunning'
+	| 'newShellRequired'
+	| 'rollbackFailed';
 
 export interface ProjectSettingsResult {
 	success: boolean;
@@ -126,4 +131,38 @@ export function projectSettingsScopeForSession(session: {
 		projectPath: ssh?.enabled ? handoffLocation(session).cwd : session.projectRoot || session.cwd,
 		...(ssh?.enabled && ssh.remoteId ? { sshRemoteId: ssh.remoteId } : {}),
 	};
+}
+
+const EDITABLE_KEYS = new Set([
+	'nudgeMessage',
+	'newSessionMessage',
+	'customPath',
+	'customArgs',
+	'customEnvVars',
+	'customModel',
+	'customEffort',
+	'customContextWindow',
+	// Provenance for the key above (finding AD1). Must be allowlisted or
+	// `maestro-cli update-agent --context-window` writes the number without
+	// its provenance, and the value it just set stays outranked by the
+	// provider's report - the deliberate edit would silently not apply.
+	'contextWindowSource',
+	'enableMaestroP',
+	'maestroPMode',
+	'maestroPPath',
+	// UI state
+	'bookmarked',
+]);
+
+/** The existing update-agent allowlist, shared with project tool configuration. */
+export function editableSessionConfigPatch(
+	patch: Record<string, unknown>
+): Record<string, unknown> {
+	const updated: Record<string, unknown> = {};
+	for (const key of Object.keys(patch)) {
+		if (!EDITABLE_KEYS.has(key)) continue;
+		updated[key] = patch[key] === null ? undefined : patch[key];
+	}
+	if (patch.customContextWindow === null) updated.contextWindowSource = undefined;
+	return updated;
 }

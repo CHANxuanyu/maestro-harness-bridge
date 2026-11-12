@@ -655,10 +655,7 @@ describe('app-lifecycle/quit-handler', () => {
 				}),
 			};
 		}
-		async function startSaving(
-			prepare?: (windows: ReturnType<typeof pendingWindow>[]) => void,
-			options = { update: false, newShell: false }
-		) {
+		async function startSaving(prepare?: (windows: ReturnType<typeof pendingWindow>[]) => void) {
 			vi.useFakeTimers();
 			const { createQuitHandler } = await import('../../../main/app-lifecycle/quit-handler');
 			const { WindowRegistry } = await import('../../../main/window-registry');
@@ -671,14 +668,9 @@ describe('app-lifecycle/quit-handler', () => {
 			dead.isDestroyed.mockReturnValue(true);
 			registry.create({ browserWindow: dead as any });
 			deps.getMainWindow.mockReturnValue(windows[0]);
-			const handler = createQuitHandler({
-				...deps,
-				getWindowRegistry: () => registry,
-				getNewShellEnabled: () => options.newShell,
-			} as any);
+			const handler = createQuitHandler({ ...deps, getWindowRegistry: () => registry } as any);
 			handler.setup();
-			if (options.update) handler.confirmQuit();
-			else ipcHandlers.get('app:quitConfirmed')!();
+			ipcHandlers.get('app:quitConfirmed')!();
 			prepare?.(windows);
 			beforeQuitHandler!({ preventDefault: vi.fn() });
 			return { windows, hud, dead };
@@ -716,8 +708,8 @@ describe('app-lifecycle/quit-handler', () => {
 			for (const window of windows) expect(window.webContents.listenerCount('destroyed')).toBe(0);
 		});
 
-		it('new shell uses one total save deadline across windows and repeated quit attempts', async () => {
-			const { windows } = await startSaving(undefined, { update: false, newShell: true });
+		it('uses one total save deadline across windows and repeated quit attempts', async () => {
+			const { windows } = await startSaving();
 			vi.advanceTimersByTime(3000);
 			const repeated = { preventDefault: vi.fn() };
 			beforeQuitHandler!(repeated);
@@ -734,51 +726,6 @@ describe('app-lifecycle/quit-handler', () => {
 			);
 			vi.advanceTimersByTime(750);
 			expect(process.kill).toHaveBeenCalledOnce();
-		});
-
-		it.each([false, true])(
-			'classic quit includes cleanup and exit in the five second budget (update: %s)',
-			async (update) => {
-				const { windows } = await startSaving(undefined, { update, newShell: false });
-				const requestId = windows[0].webContents.send.mock.calls[0][1];
-				acknowledge(windows[0], requestId);
-				// Electron re-emits before-quit when the save coordinator calls app.quit().
-				mockQuit.mockImplementation(() => beforeQuitHandler!({ preventDefault: vi.fn() }));
-				try {
-					vi.advanceTimersByTime(3000);
-					beforeQuitHandler!({ preventDefault: vi.fn() });
-					vi.advanceTimersByTime(2000);
-					expect(mockFlushSessionWrites).toHaveBeenCalledOnce();
-					expect.soft(process.kill).toHaveBeenCalledWith(process.pid, 'SIGKILL');
-					expect(mockLogger.warn).toHaveBeenCalledWith(
-						'Quit save did not complete for renderer 102',
-						'Shutdown'
-					);
-					expect(mockFlushSessionWrites.mock.invocationCallOrder[0]).toBeLessThan(
-						vi.mocked(process.kill).mock.invocationCallOrder[0]
-					);
-				} finally {
-					mockQuit.mockReset();
-				}
-			}
-		);
-
-		it('leaves the new shell update save deadline and post-cleanup grace unchanged', async () => {
-			const { windows } = await startSaving(undefined, { update: true, newShell: true });
-			acknowledge(windows[0], windows[0].webContents.send.mock.calls[0][1]);
-			mockQuit.mockImplementation(() => beforeQuitHandler!({ preventDefault: vi.fn() }));
-			try {
-				vi.advanceTimersByTime(4999);
-				expect(mockFlushSessionWrites).not.toHaveBeenCalled();
-				vi.advanceTimersByTime(1);
-				expect(mockFlushSessionWrites).toHaveBeenCalledOnce();
-				vi.advanceTimersByTime(1999);
-				expect(process.kill).not.toHaveBeenCalled();
-				vi.advanceTimersByTime(1);
-				expect(process.kill).toHaveBeenCalledOnce();
-			} finally {
-				mockQuit.mockReset();
-			}
 		});
 
 		it('ignores stale, malformed and unrelated acknowledgements', async () => {

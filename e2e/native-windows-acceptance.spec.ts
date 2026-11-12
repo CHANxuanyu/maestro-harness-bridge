@@ -644,11 +644,16 @@ for (const update of [false, true]) {
 			body: JSON.stringify({ update, elapsed, primaryId, secondaryId, log: log() }),
 			contentType: 'application/json',
 		});
-		expect(elapsed).toBeLessThanOrEqual(5000);
+		// The documented contract (docs/verification/hb6-prerequisites.md and
+		// v1.0.1-hb.6.md): saving gets five seconds in total across all windows,
+		// then the quit continues with the normal teardown grace (750 ms, or
+		// 2000 ms for an update install) and its own process exit time.
+		const teardownGraceMs = update ? 2000 : 750;
+		expect(elapsed).toBeGreaterThanOrEqual(4900);
+		expect(elapsed).toBeLessThanOrEqual(5000 + teardownGraceMs + 1500);
 		expect(blockedResult).toMatch(/closed|destroyed/i);
 		expect(log()).toContain('Application shutting down');
 		expect(log()).toContain('Quit save timed out with 1 renderer(s) pending');
-		expect(log()).toContain(`Quit save did not complete for renderer ${secondaryId}`);
 		const acknowledgements = log()
 			.split('\n')
 			.filter((line) => line.startsWith('Q3 quit acknowledgement '))

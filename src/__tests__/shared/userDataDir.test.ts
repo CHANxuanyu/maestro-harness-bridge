@@ -21,6 +21,32 @@ describe('resolveUserDataDir', () => {
 		);
 	});
 
+	it('follows MAESTRO_DEMO_DIR like the app, so a CLI never drives the installed app instead', () => {
+		// The app makes MAESTRO_DEMO_DIR its whole data folder (demo mode). A CLI
+		// started with the same variable must land there too; falling through to
+		// the platform default reached the user's installed app and its settings.
+		const demo = path.join(os.tmpdir(), 'maestro-demo-copy');
+		expect(
+			resolveUserDataDir({
+				env: { MAESTRO_DEMO_DIR: demo },
+				platform: 'darwin',
+				homedir: home,
+				isPackaged: true,
+			})
+		).toBe(demo);
+	});
+
+	it('lets MAESTRO_USER_DATA win over MAESTRO_DEMO_DIR, as the app publishes it', () => {
+		const configured = path.join(os.tmpdir(), 'maestro-somewhere');
+		const demo = path.join(os.tmpdir(), 'maestro-demo-copy');
+		expect(
+			resolveUserDataDir({
+				env: { MAESTRO_USER_DATA: configured, MAESTRO_DEMO_DIR: demo },
+				homedir: home,
+			})
+		).toBe(configured);
+	});
+
 	it('uses the capitalized name for a packaged install', () => {
 		expect(
 			resolveUserDataDir({ env: {}, platform: 'darwin', homedir: home, isPackaged: true })

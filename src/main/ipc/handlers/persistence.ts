@@ -627,7 +627,7 @@ export function registerPersistenceHandlers(
 			// Drop any agent this write would resurrect: another client closed it
 			// moments ago and this flush was already in flight with a stale copy.
 			const updates = dropResurrections(relocatedUpdates, new Set(previousMap.keys())).map(
-				(session) => pendingPatches.apply(session)
+				(session) => pendingPatches.apply(session, previousMap.get(session.id))
 			);
 			const removeSet = new Set(removeIds);
 			const updateMap = new Map(updates.map((s) => [s.id, s]));
@@ -783,7 +783,7 @@ export function registerPersistenceHandlers(
 			// Same resurrection guard as setMany: a client that loaded before another
 			// closed an agent still carries it, and this path would write it back.
 			const sessions = dropResurrections(relocatedSessions, new Set(previousSessionMap.keys())).map(
-				(session) => pendingPatches.apply(session)
+				(session) => pendingPatches.apply(session, previousSessionMap.get(session.id))
 			);
 			const incomingIds = new Set(sessions.map((s) => s.id));
 			// setAll is a client's opening snapshot, so an omitted id means the client

@@ -251,7 +251,8 @@ describe('persistence IPC handlers', () => {
 		expect(readFinished).toBe(false);
 		release();
 		expect(await pending).toMatchObject({ success: true });
-		expect(await read).toEqual([{ ...owner, customArgs: '--committed' }]);
+		// Main stamps the agent's config revision with the patch it commits.
+		expect(await read).toEqual([{ ...owner, customArgs: '--committed', configRevision: 1 }]);
 		expect(broadcastBridgeEvent).toHaveBeenCalledExactlyOnceWith('settings:externalChange', []);
 	});
 
@@ -298,12 +299,19 @@ describe('persistence IPC handlers', () => {
 		await handlers.get('sessions:setAll')!({}, [{ ...owner, name: 'Renamed in window' }]);
 		expect(stored().customArgs).toBe('--committed');
 
-		// The window caught up; afterwards a newer value of its own wins.
-		await handlers.get('sessions:setMany')!({}, [{ ...owner, customArgs: '--committed' }], []);
+		expect(stored().configRevision).toBe(1);
+
+		// The window applied the announced patch (which carries the revision) but never
+		// wrote it back. Its next copy is a deliberate return to the old value: it wins.
+		await handlers.get('sessions:setMany')!(
+			{},
+			[{ ...owner, configRevision: 1, customArgs: '--before' }],
+			[]
+		);
+		expect(stored().customArgs).toBe('--before');
+		// No longer guarded once the window showed the revision.
 		await handlers.get('sessions:setMany')!({}, [{ ...owner, customArgs: '--newer' }], []);
 		expect(stored().customArgs).toBe('--newer');
-		await handlers.get('sessions:setMany')!({}, [{ ...owner, customArgs: '--before' }], []);
-		expect(stored().customArgs).toBe('--before');
 	});
 
 	it('removes project environment values from general settings reads and logs', async () => {

@@ -1617,6 +1617,8 @@ export interface Session {
 	// These override the global agent-level settings for this specific session
 	customPath?: string; // Custom path to agent binary (overrides agent-level)
 	customArgs?: string; // Custom CLI arguments (overrides agent-level)
+	/** Bumped by main when it writes this agent's tool configuration (see pending-session-patches). */
+	configRevision?: number;
 	customEnvVars?: Record<string, string>; // Custom environment variables (overrides agent-level)
 	/** Original environment before project defaults, retained for future reset operations. */
 	projectSettingsBaseEnv?: Record<string, string>;

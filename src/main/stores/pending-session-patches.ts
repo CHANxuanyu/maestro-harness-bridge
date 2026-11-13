@@ -5,88 +5,73 @@
  * is written to the sessions store by main, and only then announced to the
  * windows. A flush the owning window already had in flight still carries the
  * values from before the change, and because `sessions:setMany` / `setAll`
- * replace whole agents, that flush would put the old values back on disk. The
- * window applies the announcement a moment later and writes again, so the disk
- * recovers, but a read in between (the CLI's `show agent`) reports the old value.
+ * replace whole agents, that flush would put the old values back on disk. A read
+ * in between (the CLI's `show agent`) then reports the old configuration.
  *
- * So main remembers what it wrote until the window's copy shows it has caught up.
- * For each patched field of an incoming agent:
- * - the patched value: the window has it; stop guarding that field;
- * - a value from before the patch: a stale copy; keep the patched value;
- * - anything else: a newer edit made in the window after it caught up; it wins.
+ * Comparing values cannot tell a stale copy from a deliberate change back to the
+ * old value, so every such write bumps the agent's `configRevision`. The patch the
+ * window receives carries the new revision, so once the window has applied it,
+ * every later copy it writes carries that revision too. An incoming copy with an
+ * older revision is stale: the fields main patched are taken from disk instead.
+ * A copy with the current revision is the window's own and wins, including a
+ * deliberate return to an earlier value.
  */
 
-type FieldValues = Record<string, unknown>;
+export const CONFIG_REVISION_KEY = 'configRevision';
 
 interface PendingEntry {
-	/** The values main wrote, by field. */
-	fields: FieldValues;
-	/** Serialized values a stale window copy may still hold, by field. */
-	stale: Record<string, Set<string>>;
-}
-
-/** Stable serialization so object-valued fields (env vars) compare by content. */
-function serialize(value: unknown): string {
-	if (value === undefined || value === null) return 'null';
-	if (Array.isArray(value)) return `[${value.map(serialize).join(',')}]`;
-	if (typeof value === 'object') {
-		const entries = Object.entries(value as Record<string, unknown>)
-			.filter(([, item]) => item !== undefined)
-			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-		return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${serialize(item)}`).join(',')}}`;
-	}
-	return JSON.stringify(value);
+	revision: number;
+	/** Field names main patched since a window last showed this revision. */
+	fields: Set<string>;
 }
 
 export interface PendingSessionPatches {
-	/** Record a patch BEFORE it is written, with the agent's values before it. */
-	note(sessionId: string, fields: FieldValues, previous: FieldValues): void;
+	/** The revision to stamp on a new main-process patch of this agent. */
+	nextRevision(stored: Record<string, unknown> | undefined): number;
+	/** Record a patch BEFORE it is written: its revision and the fields it sets. */
+	note(sessionId: string, revision: number, fields: Iterable<string>): void;
 	/** Forget a patch that was rolled back. */
 	forget(sessionIds: Iterable<string>): void;
-	/** Restore guarded fields on a stale incoming copy of an agent. */
-	apply<T extends { id: string }>(session: T): T;
+	/** Take main's patched fields from `stored` when `incoming` is an older copy. */
+	apply<T extends { id: string }>(incoming: T, stored: Record<string, unknown> | undefined): T;
+}
+
+function revisionOf(session: Record<string, unknown> | undefined): number {
+	const value = session?.[CONFIG_REVISION_KEY];
+	return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 export function createPendingSessionPatches(limit = 500): PendingSessionPatches {
 	const pending = new Map<string, PendingEntry>();
 	return {
-		note(sessionId, fields, previous) {
-			const entry = pending.get(sessionId) ?? { fields: {}, stale: {} };
-			for (const [key, value] of Object.entries(fields)) {
-				// A window may still hold the value from before this patch, or the value
-				// of an earlier patch it has not caught up with either.
-				const stale = entry.stale[key] ?? new Set<string>();
-				stale.add(serialize(key in entry.fields ? entry.fields[key] : previous[key]));
-				stale.add(serialize(previous[key]));
-				stale.delete(serialize(value));
-				entry.stale[key] = stale;
-				entry.fields[key] = value;
-			}
+		nextRevision(stored) {
+			return revisionOf(stored) + 1;
+		},
+		note(sessionId, revision, fields) {
+			const entry = pending.get(sessionId) ?? { revision, fields: new Set<string>() };
+			entry.revision = revision;
+			for (const field of fields) entry.fields.add(field);
 			pending.delete(sessionId);
 			pending.set(sessionId, entry);
-			// Bounded: an agent its window never writes again keeps an entry, and a
-			// process runs for days. The oldest guard is the least likely to matter.
+			// Bounded: an agent no window writes again keeps an entry, and a process
+			// runs for days. The oldest guard is the least likely to matter.
 			while (pending.size > limit) pending.delete(pending.keys().next().value as string);
 		},
 		forget(sessionIds) {
 			for (const id of sessionIds) pending.delete(id);
 		},
-		apply(session) {
-			const entry = pending.get(session.id);
-			if (!entry) return session;
-			let result = session;
-			for (const key of Object.keys(entry.fields)) {
-				const incoming = serialize((session as Record<string, unknown>)[key]);
-				if (entry.stale[key]?.has(incoming)) {
-					result = { ...result, [key]: entry.fields[key] };
-					continue;
-				}
-				// Caught up, or a newer edit: either way the window is now the authority.
-				delete entry.fields[key];
-				delete entry.stale[key];
+		apply(incoming, stored) {
+			const entry = pending.get(incoming.id);
+			if (!entry) return incoming;
+			if (revisionOf(incoming as Record<string, unknown>) >= entry.revision) {
+				// The window has applied the patch; from here on its copy is the authority.
+				pending.delete(incoming.id);
+				return incoming;
 			}
-			if (Object.keys(entry.fields).length === 0) pending.delete(session.id);
-			return result;
+			if (!stored) return incoming;
+			const restored: Record<string, unknown> = { [CONFIG_REVISION_KEY]: entry.revision };
+			for (const field of entry.fields) restored[field] = stored[field];
+			return { ...incoming, ...restored };
 		},
 	};
 }

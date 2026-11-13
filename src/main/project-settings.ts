@@ -1,4 +1,4 @@
-import type { PendingSessionPatches } from './stores/pending-session-patches';
+import { CONFIG_REVISION_KEY, type PendingSessionPatches } from './stores/pending-session-patches';
 import { isValidAgentId } from '../shared/agentIds';
 import { DEEPSEEK_PRESET } from '../shared/agentPresets';
 import {
@@ -27,7 +27,7 @@ export function createProjectSettingsService(deps: {
 	isSessionRunning?: (id: string) => boolean;
 	onChanged?: (toolPatches?: Record<string, Record<string, unknown>>) => void;
 	/** Guards a committed tool patch against a stale flush from the owning window. */
-	pendingPatches?: Pick<PendingSessionPatches, 'note' | 'forget'>;
+	pendingPatches?: Pick<PendingSessionPatches, 'nextRevision' | 'note' | 'forget'>;
 }) {
 	return {
 		async command(input: unknown): Promise<ProjectSettingsResult> {
@@ -246,17 +246,17 @@ export function createProjectSettingsService(deps: {
 					// Persist all edited tools together, then the defaults. No observer is
 					// notified until both stores acknowledge the complete transaction.
 					if (hasTools) {
-						// Guard before writing: a window flush can land between this write
-						// and the announcement, and it must not restore the old values.
+						// Stamp a new config revision and guard it before writing: a window
+						// flush can land between this write and the announcement, and an
+						// older copy must not restore the old values.
 						for (const [id, fields] of Object.entries(toolPatches)) {
 							const before = previousSessions.find((session) => session.id === id) as
 								| Record<string, unknown>
 								| undefined;
-							deps.pendingPatches?.note(
-								id,
-								fields,
-								Object.fromEntries(Object.keys(fields).map((field) => [field, before?.[field]]))
-							);
+							const revision = deps.pendingPatches?.nextRevision(before);
+							if (revision === undefined) continue;
+							deps.pendingPatches!.note(id, revision, Object.keys(fields));
+							toolPatches[id] = { ...fields, [CONFIG_REVISION_KEY]: revision };
 						}
 						sessionsAttempted = true;
 						deps.sessionsStore!.set(

@@ -25,6 +25,7 @@
  * matches what `focusBrowserAddressBar` on the MainPanel handle already does.
  */
 
+import { isEditingTextFocused } from './editableTarget';
 import type { UnifiedTabRef } from '../types';
 
 /**
@@ -126,9 +127,19 @@ export function focusPaneInputWhenReady(
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let elapsed = 0;
 	let cancelled = false;
+	// The pane can take a while to exist (an opening history conversation loads
+	// asynchronously). If the user has moved into another text field by then, the
+	// request is stale: a late focus would carry their typing into the wrong field.
+	const startFocus = typeof document === 'undefined' ? null : document.activeElement;
 
 	const attempt = () => {
 		if (cancelled) return;
+		if (
+			typeof document !== 'undefined' &&
+			document.activeElement !== startFocus &&
+			isEditingTextFocused()
+		)
+			return;
 		if (focusPaneInput(tab, targets)) return;
 		elapsed += intervalMs;
 		if (elapsed >= timeoutMs) return;

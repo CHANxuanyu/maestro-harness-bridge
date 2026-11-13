@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+	type CommandFiles,
 	createNativeCommandDiscovery,
 	nativeCommandScope,
 	rememberNativeCommands,
@@ -200,21 +201,30 @@ describe('account scoped native commands', () => {
 		expect(authored(await discovery()(request('codex')))).toEqual([]);
 	});
 
-	it('checks metadata without rereading unchanged command bodies', async () => {
-		await file('account-a/commands/reused.md');
-		const read = discovery();
-		await read(request());
-		const readSpy = vi.spyOn(fs, 'readFile');
-		const listSpy = vi.spyOn(fs, 'readdir');
-		try {
-			expect(authored(await read(request())).map((c) => c.command)).toEqual(['/reused']);
-			expect(readSpy).not.toHaveBeenCalled();
-			expect(listSpy).not.toHaveBeenCalled();
-		} finally {
-			readSpy.mockRestore();
-			listSpy.mockRestore();
+	it.each(['darwin', 'win32'] as const)(
+		'checks metadata without rereading unchanged command bodies on %s',
+		async (platform) => {
+			await file('account-a/commands/reused.md');
+			const read = createNativeCommandDiscovery({
+				layers: () => ({ homeDir: root, env: {} }),
+				platform,
+			});
+			await read(request());
+			const readSpy = vi.spyOn(fs, 'readFile');
+			const listSpy = vi.spyOn(fs, 'readdir');
+			try {
+				expect(authored(await read(request())).map((c) => c.command)).toEqual(['/reused']);
+				expect(readSpy).not.toHaveBeenCalled();
+				// A Windows folder's revision cannot be trusted, so it is listed again
+				// (cheap); everywhere else an unchanged folder is not listed at all.
+				if (platform === 'win32') expect(listSpy).toHaveBeenCalledTimes(1);
+				else expect(listSpy).not.toHaveBeenCalled();
+			} finally {
+				readSpy.mockRestore();
+				listSpy.mockRestore();
+			}
 		}
-	});
+	);
 	it('reads SSH paths remotely, honors the SSH cwd and drops stale commands on failure', async () => {
 		const remote = {
 			id: 'ssh-a',
@@ -311,6 +321,46 @@ describe('account scoped native commands', () => {
 		await fs.unlink(first);
 		expect(authored(await read(request())).map((c) => c.command)).toEqual(['/new']);
 	});
+	it.each([
+		['win32', ['/first', '/new']],
+		['darwin', ['/first']],
+	] as const)(
+		'on %s, a local command folder whose stat did not move lists %j',
+		async (platform, expected) => {
+			// NTFS does not reliably move a folder's modified time when a file is
+			// created and reports its size as 0. Simulate that folder stat exactly.
+			const dir = path.join(root, 'account-a', 'commands');
+			const frozen = new Map<string, { mtime: number; size: number; directory: boolean }>();
+			const localFiles: CommandFiles = {
+				async stat(target) {
+					try {
+						const info = await fs.stat(target);
+						const value = { mtime: info.mtimeMs, size: info.size, directory: info.isDirectory() };
+						if (!info.isDirectory()) return value;
+						if (!frozen.has(target)) frozen.set(target, value);
+						return frozen.get(target);
+					} catch {
+						return undefined;
+					}
+				},
+				async list(target) {
+					const entries = await fs.readdir(target, { withFileTypes: true });
+					return entries.map((entry) => ({ name: entry.name, directory: entry.isDirectory() }));
+				},
+				read: (target) => fs.readFile(target, 'utf8'),
+			};
+			const read = createNativeCommandDiscovery({
+				layers: () => ({ homeDir: root, env: {} }),
+				platform,
+				localFiles,
+			});
+			await file('account-a/commands/first.md', 'First');
+			await read(request());
+			expect(frozen.has(dir)).toBe(true);
+			await file('account-a/commands/new.md', 'New');
+			expect(authored(await read(request())).map((c) => c.command)).toEqual(expected);
+		}
+	);
 	it.each(['claude-code', 'codex'])(
 		'lets project commands override user commands for %s',
 		async (tool) => {

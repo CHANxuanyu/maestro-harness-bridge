@@ -50,7 +50,7 @@ interface CommandEntry {
 	name: string;
 	directory: boolean;
 }
-interface CommandFiles {
+export interface CommandFiles {
 	stat(file: string): Promise<CommandStat | undefined>;
 	list(dir: string): Promise<CommandEntry[]>;
 	read(file: string): Promise<string>;
@@ -58,6 +58,10 @@ interface CommandFiles {
 interface Dependencies {
 	layers(toolType: string): AgentAccountDirLayers;
 	remote?(id: string): SshRemoteConfig | undefined;
+	/** Defaults to `process.platform`; decides whether a local folder's revision can be trusted. */
+	platform?: NodeJS.Platform;
+	/** Local file access; tests substitute it to simulate another filesystem. */
+	localFiles?: CommandFiles;
 }
 interface CacheEntry {
 	result: NativeCommandSnapshot;
@@ -164,7 +168,11 @@ export function createNativeCommandDiscovery(deps: Dependencies) {
 					account = result.stdout.trim();
 				}
 				if (!account) throw new Error('Account unavailable');
-				const io = remote ? remoteFiles(remote) : localFiles;
+				const io = remote ? remoteFiles(remote) : (deps.localFiles ?? localFiles);
+				// NTFS does not reliably move a folder's modified time when a file is
+				// created and reports its size as 0, so a local Windows folder is always
+				// listed again. File contents stay cached by their own revision.
+				const trustFolderRevision = !!remote || (deps.platform ?? process.platform) !== 'win32';
 				const paths = remote ? path.posix : path;
 				const next: CacheEntry = {
 					result: fallback,
@@ -182,7 +190,10 @@ export function createNativeCommandDiscovery(deps: Dependencies) {
 					if (!stat.directory) throw new Error('Command directory is not a directory');
 					const revision = `${stat.mtime}:${stat.size}`;
 					const saved = previous?.directories.get(dir);
-					const entries = saved?.revision === revision ? saved.entries : await io.list(dir);
+					const entries =
+						trustFolderRevision && saved?.revision === revision
+							? saved.entries
+							: await io.list(dir);
 					entriesSeen += entries.length;
 					if (entriesSeen > 2048) throw new Error('Command directory limit reached');
 					next.directories.set(dir, { revision, entries });

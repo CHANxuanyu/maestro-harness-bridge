@@ -147,6 +147,22 @@ describe('focusPaneInputWhenReady', () => {
 		expect(document.activeElement).toBe(pane.querySelector('.cm-content'));
 	});
 
+	it('yields when the user moves into another text field before the pane is ready', () => {
+		// Opening a history conversation loads asynchronously; meanwhile the user
+		// clicks the sidebar search and types. The late focus must not steal it.
+		const focusAiInput = vi.fn(() => false);
+		focusPaneInputWhenReady(ref('ai', 'opening'), { focusAiInput }, { intervalMs: 50 });
+		vi.advanceTimersByTime(50);
+		const search = document.createElement('input');
+		document.body.appendChild(search);
+		search.focus();
+		focusAiInput.mockImplementation(() => true);
+		vi.advanceTimersByTime(500);
+		expect(focusAiInput).toHaveBeenCalledTimes(1);
+		expect(document.activeElement).toBe(search);
+		search.remove();
+	});
+
 	it('stops retrying once focus lands', () => {
 		const focusTerminal = vi.fn(() => true);
 		focusPaneInputWhenReady(ref('terminal', 't'), { focusTerminal }, { intervalMs: 50 });

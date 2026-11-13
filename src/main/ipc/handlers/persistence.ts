@@ -1,6 +1,7 @@
 import { isProjectSettingsKey, publicProjectSettingsMap } from '../../../shared/projectSettings';
 import type { AboutMeService } from '../../about-me';
 import { createProjectSettingsService } from '../../project-settings';
+import { createPendingSessionPatches } from '../../stores/pending-session-patches';
 /**
  * Persistence IPC Handlers
  *
@@ -362,11 +363,14 @@ export function registerPersistenceHandlers(
 	};
 
 	// Settings management
+	// One guard shared by the tool patch writer and both session write paths.
+	const pendingPatches = createPendingSessionPatches();
 	const projectSettings = createProjectSettingsService({
 		settingsStore,
 		sessionsStore,
 		flushSessionWrites,
 		isSessionRunning: deps.isSessionRunning,
+		pendingPatches,
 		onChanged: (toolPatches) => {
 			if (toolPatches) {
 				for (const win of BrowserWindow.getAllWindows()) {
@@ -622,7 +626,9 @@ export function registerPersistenceHandlers(
 			const previousMap = new Map(previousSessions.map((s) => [s.id, s]));
 			// Drop any agent this write would resurrect: another client closed it
 			// moments ago and this flush was already in flight with a stale copy.
-			const updates = dropResurrections(relocatedUpdates, new Set(previousMap.keys()));
+			const updates = dropResurrections(relocatedUpdates, new Set(previousMap.keys())).map(
+				(session) => pendingPatches.apply(session)
+			);
 			const removeSet = new Set(removeIds);
 			const updateMap = new Map(updates.map((s) => [s.id, s]));
 
@@ -776,7 +782,9 @@ export function registerPersistenceHandlers(
 			const previousSessionMap = new Map(previousSessions.map((s) => [s.id, s]));
 			// Same resurrection guard as setMany: a client that loaded before another
 			// closed an agent still carries it, and this path would write it back.
-			const sessions = dropResurrections(relocatedSessions, new Set(previousSessionMap.keys()));
+			const sessions = dropResurrections(relocatedSessions, new Set(previousSessionMap.keys())).map(
+				(session) => pendingPatches.apply(session)
+			);
 			const incomingIds = new Set(sessions.map((s) => s.id));
 			// setAll is a client's opening snapshot, so an omitted id means the client
 			// never saw that agent. Only setMany's explicit removeIds may delete one.

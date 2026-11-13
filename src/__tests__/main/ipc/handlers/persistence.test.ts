@@ -255,6 +255,57 @@ describe('persistence IPC handlers', () => {
 		expect(broadcastBridgeEvent).toHaveBeenCalledExactlyOnceWith('settings:externalChange', []);
 	});
 
+	it('keeps a committed tool patch over a stale window flush until the window catches up', async () => {
+		const owner = {
+			id: 'project-tool',
+			name: 'Tool',
+			toolType: 'claude-code',
+			cwd: '/fixture/project',
+			projectRoot: '/fixture/project',
+			customArgs: '--before',
+			aiTabs: [{ id: 'live', inputValue: 'draft' }],
+		};
+		let sessions: Record<string, unknown>[] = [owner];
+		const settings: Record<string, unknown> = { newShell: true };
+		mockSettingsStore.get.mockImplementation((key, fallback) => settings[key] ?? fallback);
+		mockSettingsStore.set.mockImplementation((key, value) => {
+			settings[key] = value;
+		});
+		mockSessionsStore.get.mockImplementation((key, fallback) =>
+			key === 'sessions' ? sessions : fallback
+		);
+		mockSessionsStore.set.mockImplementation((key, value) => {
+			if (key === 'sessions') sessions = value;
+		});
+		const stored = () => sessions.find((session) => session.id === owner.id)!;
+		expect(
+			await handlers.get('settings:projectSettings')!(
+				{},
+				{
+					action: 'set',
+					scope: { projectPath: '/fixture/project' },
+					patch: {},
+					toolPatches: { 'project-tool': { customArgs: '--committed' } },
+				}
+			)
+		).toMatchObject({ success: true });
+		expect(stored().customArgs).toBe('--committed');
+
+		// The owning window flushed before it applied the patch: same agent, old value,
+		// plus an unrelated edit of its own that must still land.
+		await handlers.get('sessions:setMany')!({}, [{ ...owner, name: 'Renamed in window' }], []);
+		expect(stored()).toMatchObject({ customArgs: '--committed', name: 'Renamed in window' });
+		await handlers.get('sessions:setAll')!({}, [{ ...owner, name: 'Renamed in window' }]);
+		expect(stored().customArgs).toBe('--committed');
+
+		// The window caught up; afterwards a newer value of its own wins.
+		await handlers.get('sessions:setMany')!({}, [{ ...owner, customArgs: '--committed' }], []);
+		await handlers.get('sessions:setMany')!({}, [{ ...owner, customArgs: '--newer' }], []);
+		expect(stored().customArgs).toBe('--newer');
+		await handlers.get('sessions:setMany')!({}, [{ ...owner, customArgs: '--before' }], []);
+		expect(stored().customArgs).toBe('--before');
+	});
+
 	it('removes project environment values from general settings reads and logs', async () => {
 		const projectSettings = {
 			'[null,"/tmp/private-project"]': {

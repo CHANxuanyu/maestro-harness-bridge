@@ -96,7 +96,11 @@ describe('stores/instances', () => {
 			[{ newShell: false, newShellChoice: 'classic' }, false, 'classic'],
 			[{ newShell: true, newShellChoice: 'new' }, true, 'new'],
 		])('migrates before returning the settings store: %j', (stored, enabled, choice) => {
-			mockStoreContents.set('/mock/user/data/maestro-settings.json', JSON.stringify(stored));
+			// Keyed the way the store builds it, so Windows separators match too.
+			mockStoreContents.set(
+				path.resolve('/mock/user/data', 'maestro-settings.json'),
+				JSON.stringify(stored)
+			);
 			initializeStores({ productionDataPath: '/mock/production/path' });
 			expect(getStoreInstances().settingsStore!.get('newShell')).toBe(enabled);
 			expect(getStoreInstances().settingsStore!.get('newShellChoice')).toBe(choice);

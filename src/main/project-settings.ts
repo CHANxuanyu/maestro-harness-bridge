@@ -1,3 +1,4 @@
+import type { PendingSessionPatches } from './stores/pending-session-patches';
 import { isValidAgentId } from '../shared/agentIds';
 import { DEEPSEEK_PRESET } from '../shared/agentPresets';
 import {
@@ -25,6 +26,8 @@ export function createProjectSettingsService(deps: {
 	flushSessionWrites?: () => Promise<void>;
 	isSessionRunning?: (id: string) => boolean;
 	onChanged?: (toolPatches?: Record<string, Record<string, unknown>>) => void;
+	/** Guards a committed tool patch against a stale flush from the owning window. */
+	pendingPatches?: Pick<PendingSessionPatches, 'note' | 'forget'>;
 }) {
 	return {
 		async command(input: unknown): Promise<ProjectSettingsResult> {
@@ -243,6 +246,18 @@ export function createProjectSettingsService(deps: {
 					// Persist all edited tools together, then the defaults. No observer is
 					// notified until both stores acknowledge the complete transaction.
 					if (hasTools) {
+						// Guard before writing: a window flush can land between this write
+						// and the announcement, and it must not restore the old values.
+						for (const [id, fields] of Object.entries(toolPatches)) {
+							const before = previousSessions.find((session) => session.id === id) as
+								| Record<string, unknown>
+								| undefined;
+							deps.pendingPatches?.note(
+								id,
+								fields,
+								Object.fromEntries(Object.keys(fields).map((field) => [field, before?.[field]]))
+							);
+						}
 						sessionsAttempted = true;
 						deps.sessionsStore!.set(
 							'sessions',
@@ -279,6 +294,10 @@ export function createProjectSettingsService(deps: {
 							rollbackFailed = true;
 						}
 					}
+					// Nothing of the patch stays on disk when the write never happened or
+					// was rolled back, so stop guarding it.
+					if (hasTools && (!sessionsAttempted || newShell))
+						deps.pendingPatches?.forget(Object.keys(toolPatches));
 					return failure(rollbackFailed ? 'rollbackFailed' : 'saveFailed');
 				}
 				try {

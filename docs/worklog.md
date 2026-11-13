@@ -4,6 +4,10 @@
 
 从 #80 的主线合并提交 `8673a5d98` 在干净检出上构建试用包，主线 CI（43266864146）七项通过。十项本地门禁一次通过；包内脚本验收 61 个测试通过，清单新增手机网页、SSH、界面切换、额度交接入口和 CLI 对等五项。验收脚本给测试夹具打补丁的锚点随源码改变，第一次在开跑前停止，更新锚点后重跑通过。升级与回退、并排启动和基线测量用本包复测通过，身份与数字见[候选验收](verification/v1.0.1-hb.7.md#2026-11-12-原计划收尾后的试用包)。基线脚本改为不依赖调试端口和系统沙箱：发布包关闭了调试参数，Chromium 也无法在 `sandbox-exec` 里启动自己的沙箱。
 
+## 2026-11-13：CLI 跟随试用副本的数据目录
+
+在新试用包上做并排启动检查时发现：应用用 `MAESTRO_DEMO_DIR` 作为整个数据目录，但 CLI 的 `resolveUserDataDir()` 只认 `MAESTRO_USER_DATA`，于是从终端运行的 `maestro-cli` 落到已安装应用的数据目录和正在运行的已装应用上。检查脚本的 `settings set fontSize 15` 因此改了用户已装应用的字号；已用已装应用自带的 CLI 改回原值 14，设置文件内容与检查前的备份逐项一致。修复：解析器在 `MAESTRO_USER_DATA` 之后、平台默认目录之前认 `MAESTRO_DEMO_DIR`，同样做产品身份校验。先写的单元测试修复前失败。
+
 ## 2026-11-12：包级验收的人工项改为脚本
 
 hb.7 包级验收清单里 14 项原标为人工或部分人工（C4、C6、F3、F5、F7、U1 至 U8、N1），这些是技术验收，不交给用户。现写成 39 个 Electron 场景，分在 `native-classic-composer-acceptance`、`native-appearance-acceptance`、`native-windows-acceptance` 和 `native-about-me`（F5、F7）里，全部用临时数据和合成提供方，并显式固定旧界面。

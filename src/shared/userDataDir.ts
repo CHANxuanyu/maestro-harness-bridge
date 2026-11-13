@@ -10,12 +10,14 @@
  *      startup (`src/main/index.ts`), so anything the app spawns inherits it and
  *      lands in the right place by construction. A CLI the user starts from
  *      their own terminal does NOT inherit it and falls through to step 2.
- *   2. Otherwise the platform default plus the app name, and the app name is
+ *   2. `MAESTRO_DEMO_DIR`, the app's demo mode folder, so a CLI started beside a
+ *      side-by-side trial copy reaches that copy and not the installed app.
+ *   3. Otherwise the platform default plus the app name, and the app name is
  *      NOT constant: Electron uses `package.json` `name` ("maestro") when
  *      running unpackaged and the bundle's `productName` ("Maestro") once
  *      packaged. Both spellings exist in the wild, which is why the fallbacks
  *      scattered around this repo disagree with each other.
- *   3. Development adds one more hop: the app redirects to a sibling
+ *   4. Development adds one more hop: the app redirects to a sibling
  *      `maestro-dev` directory unless `USE_PROD_DATA` is set.
  *
  * Everything is injectable so the branches can be tested without pretending to
@@ -245,6 +247,14 @@ export function resolveUserDataDir(options: UserDataDirOptions = {}): string {
 	const identity = resolveAppProduct(options);
 	if (env.MAESTRO_USER_DATA) {
 		const dir = path.resolve(env.MAESTRO_USER_DATA);
+		return identity.verified ? assertUserDataDirProduct(dir, identity.product) : dir;
+	}
+	// Demo mode: the app makes MAESTRO_DEMO_DIR its whole data folder
+	// (`DEMO_DATA_PATH` in src/main/constants.ts). A CLI started with the same
+	// variable has to reach that folder; the platform default is the user's
+	// installed app, which is what a side-by-side trial copy must never touch.
+	if (env.MAESTRO_DEMO_DIR) {
+		const dir = path.resolve(env.MAESTRO_DEMO_DIR);
 		return identity.verified ? assertUserDataDirProduct(dir, identity.product) : dir;
 	}
 

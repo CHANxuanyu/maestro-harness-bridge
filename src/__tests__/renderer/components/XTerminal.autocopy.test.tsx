@@ -544,6 +544,34 @@ describe('XTerminal layout visibility', () => {
 		vi.useRealTimers();
 	});
 
+	it('tells the shell only the settled size when refresh lands mid-animation', async () => {
+		// The right panel animates open: refresh() fires while it is still narrow.
+		let width = 200;
+		vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(() => width);
+		const ref = React.createRef<import('../../../renderer/components/XTerminal').XTerminalHandle>();
+		render(<XTerminal sessionId="owner-terminal-tab" theme={theme} fontFamily="Menlo" ref={ref} />);
+		const term = mockTerminalInstances[0] as unknown as { cols: number; rows: number };
+		mockFit.mockImplementation(() => {
+			term.cols = Math.floor(width / 8);
+			term.rows = 25;
+		});
+		vi.mocked(window.maestro.process.resize).mockClear();
+		await act(async () => {
+			ref.current!.refresh();
+			await vi.advanceTimersByTimeAsync(50);
+			width = 800;
+			await vi.advanceTimersByTimeAsync(250);
+		});
+		// A narrow intermediate size makes zsh redraw its prompt at that width and
+		// interrupts a waiting read; only the final grid may reach the PTY.
+		expect(window.maestro.process.resize).toHaveBeenCalledExactlyOnceWith(
+			'owner-terminal-tab',
+			100,
+			25
+		);
+		expect(term.cols).toBe(100);
+	});
+
 	it.each(['width', 'height', 'visibility'] as const)(
 		'keeps the grid and PTY size while %s is hidden, then fits when visible',
 		async (hidden) => {

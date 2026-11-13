@@ -3508,6 +3508,18 @@ describe('CueEngine', () => {
 	});
 
 	describe('triggerSubscription fires sibling branch group', () => {
+		// The subscriptions below are scheduled for 07:00. On the real clock a run
+		// during that minute fired them from the scheduler first, and the manual
+		// trigger under test was dropped as a duplicate (CI at 07:00 UTC). Pin the
+		// clock well away from the schedule.
+		beforeEach(() => {
+			vi.useFakeTimers();
+			const noon = new Date();
+			noon.setHours(12, 0, 0, 0);
+			vi.setSystemTime(noon);
+		});
+		afterEach(() => vi.useRealTimers());
+
 		// Regression guard for the per-branch fan-out shape (two parallel
 		// subs sharing one trigger). A natural scheduled tick fires every
 		// armed sub; manual trigger must match that so the editor Play

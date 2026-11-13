@@ -421,8 +421,10 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
 				term.refresh(0, term.rows - 1);
 				// fit() only changes xterm's own grid. Without this push the shell keeps
 				// whatever size it had while the pane was hidden, and the next TUI the
-				// user starts paints at that stale size.
-				pushPtySizeRef.current();
+				// user starts paints at that stale size. Push once the layout settles:
+				// refresh() runs as a pane starts to open, and an intermediate narrow
+				// grid makes zsh redraw its prompt at that width and interrupts a read.
+				pushPtySizeWhenSettledRef.current();
 			},
 			getSize() {
 				const term = terminalRef.current;
@@ -472,6 +474,43 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
 	// callback through a ref rather than capturing a stale closure.
 	const pushPtySizeRef = useRef(pushPtySize);
 	pushPtySizeRef.current = pushPtySize;
+
+	// Publish the grid only after the container has kept one size for a beat. The
+	// visible grid may follow an animating pane frame by frame; the shell gets one
+	// SIGWINCH for the size it will actually have.
+	const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const pushPtySizeWhenSettled = useCallback(() => {
+		const measure = () => {
+			const container = containerRef.current;
+			return container ? `${container.offsetWidth}x${container.offsetHeight}` : '';
+		};
+		const fitted = measure();
+		let previous = fitted;
+		if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+		const check = () => {
+			const now = measure();
+			if (now !== previous) {
+				previous = now;
+				settleTimerRef.current = setTimeout(check, 100);
+				return;
+			}
+			settleTimerRef.current = null;
+			if (now !== fitted && canFitTerminal(containerRef.current, fitAddonRef.current)) {
+				fitAddonRef.current?.fit();
+				terminalRef.current?.refresh(0, (terminalRef.current?.rows ?? 1) - 1);
+			}
+			pushPtySizeRef.current();
+		};
+		settleTimerRef.current = setTimeout(check, 100);
+	}, []);
+	const pushPtySizeWhenSettledRef = useRef(pushPtySizeWhenSettled);
+	pushPtySizeWhenSettledRef.current = pushPtySizeWhenSettled;
+	useEffect(
+		() => () => {
+			if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+		},
+		[]
+	);
 
 	// A different PTY knows nothing about what the previous one was told.
 	useEffect(() => {

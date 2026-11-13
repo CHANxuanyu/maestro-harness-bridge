@@ -201,21 +201,30 @@ describe('account scoped native commands', () => {
 		expect(authored(await discovery()(request('codex')))).toEqual([]);
 	});
 
-	it('checks metadata without rereading unchanged command bodies', async () => {
-		await file('account-a/commands/reused.md');
-		const read = discovery();
-		await read(request());
-		const readSpy = vi.spyOn(fs, 'readFile');
-		const listSpy = vi.spyOn(fs, 'readdir');
-		try {
-			expect(authored(await read(request())).map((c) => c.command)).toEqual(['/reused']);
-			expect(readSpy).not.toHaveBeenCalled();
-			expect(listSpy).not.toHaveBeenCalled();
-		} finally {
-			readSpy.mockRestore();
-			listSpy.mockRestore();
+	it.each(['darwin', 'win32'] as const)(
+		'checks metadata without rereading unchanged command bodies on %s',
+		async (platform) => {
+			await file('account-a/commands/reused.md');
+			const read = createNativeCommandDiscovery({
+				layers: () => ({ homeDir: root, env: {} }),
+				platform,
+			});
+			await read(request());
+			const readSpy = vi.spyOn(fs, 'readFile');
+			const listSpy = vi.spyOn(fs, 'readdir');
+			try {
+				expect(authored(await read(request())).map((c) => c.command)).toEqual(['/reused']);
+				expect(readSpy).not.toHaveBeenCalled();
+				// A Windows folder's revision cannot be trusted, so it is listed again
+				// (cheap); everywhere else an unchanged folder is not listed at all.
+				if (platform === 'win32') expect(listSpy).toHaveBeenCalledTimes(1);
+				else expect(listSpy).not.toHaveBeenCalled();
+			} finally {
+				readSpy.mockRestore();
+				listSpy.mockRestore();
+			}
 		}
-	});
+	);
 	it('reads SSH paths remotely, honors the SSH cwd and drops stale commands on failure', async () => {
 		const remote = {
 			id: 'ssh-a',

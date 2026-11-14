@@ -116,6 +116,11 @@ function createMockContext(overrides: Record<string, unknown> = {}) {
 	};
 }
 
+beforeEach(() => {
+	// Classic shortcuts target agent tabs, group chats and the Right Bar.
+	useSettingsStore.setState({ newShell: false });
+});
+
 describe('useMainKeyboardHandler', () => {
 	// Track event listeners for cleanup
 	let addedListeners: { type: string; handler: EventListener }[] = [];

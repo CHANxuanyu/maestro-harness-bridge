@@ -52,6 +52,11 @@ function renderPlayer(overrides: PlayerOverrides = {}) {
 const CHROME = mediaFloatChromeHeight(null);
 const frame = () => screen.getByTestId('floating-media-player') as HTMLElement;
 
+beforeEach(() => {
+	// Classic shell reserves the tab strip above the floating player.
+	useSettingsStore.setState({ newShell: false });
+});
+
 describe('FloatingMediaPlayer', () => {
 	beforeEach(() => {
 		useMediaPlaybackStore.setState({

@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { renderHook, act, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTerminalTabHandlers } from '../../../../../renderer/hooks/tabs/internal/useTerminalTabHandlers';
@@ -12,6 +13,8 @@ import {
 
 describe('useTerminalTabHandlers', () => {
 	beforeEach(() => {
+		// Classic terminals select a tab rather than a conversation panel.
+		useSettingsStore.setState({ newShell: false });
 		resetTabHandlerStores();
 	});
 

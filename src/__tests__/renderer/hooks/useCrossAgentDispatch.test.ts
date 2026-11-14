@@ -167,6 +167,8 @@ describe('buildConsultTabName', () => {
 describe('ensureConsultTab', () => {
 	beforeEach(() => {
 		resetStore(useSettingsStore);
+		// Classic consult tabs do not require the new conversation permission preflight.
+		useSettingsStore.setState({ newShell: false });
 		useSessionStore.setState({ sessions: [] } as never);
 	});
 

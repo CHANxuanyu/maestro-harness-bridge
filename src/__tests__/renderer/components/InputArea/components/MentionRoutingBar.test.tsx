@@ -1,7 +1,13 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MentionRoutingBar } from '../../../../../renderer/components/InputArea/components/MentionRoutingBar';
 import { inputAreaTheme } from '../_fixtures';
+
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
 
 describe('MentionRoutingBar', () => {
 	it('says a hand-off runs AFTER this agent answers', () => {

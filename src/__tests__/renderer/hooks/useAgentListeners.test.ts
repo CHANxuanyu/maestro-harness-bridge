@@ -208,7 +208,9 @@ beforeEach(() => {
 	useModalStore.getState().closeAll();
 	// The agent layout's scratch-state contract for tool logs is the baseline
 	// here; the conversation layout keeps them (see liveProgressAndTools.test).
-	useSettingsStore.setState({ sidebarNavigationMode: 'agents' });
+	// The classic shell is pinned: the new shell hands the hidden progress
+	// placeholder to the batched answer (tested below) and keeps tool logs.
+	useSettingsStore.setState({ sidebarNavigationMode: 'agents', newShell: false });
 
 	// Mock window.maestro
 	(window as any).maestro = {
@@ -1344,6 +1346,39 @@ describe('useAgentListeners', () => {
 
 			const updated = useSessionStore.getState().sessions.find((s) => s.id === 'sess-1');
 			expect(updated?.aiTabs[0]?.logs).toEqual([]);
+		});
+
+		it('hands hidden progress to the batched answer in the new shell', () => {
+			useSettingsStore.setState({ newShell: true });
+			const deps = createMockDeps();
+			const logs = [
+				{
+					id: 'hidden-progress:tab-1',
+					timestamp: 1700000000000,
+					source: 'system' as const,
+					text: 'Thinking through the next step...',
+				},
+			];
+			const session = createMockSession({
+				id: 'sess-1',
+				state: 'busy',
+				aiTabs: [createMockTab({ id: 'tab-1', showThinking: 'off', logs })],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.setState({
+				sessions: [session],
+				activeSessionId: 'sess-1',
+			});
+
+			renderHook(() => useAgentListeners(deps));
+
+			onDataHandler?.('sess-1-ai-tab-1', 'Visible response');
+
+			// The listener does not rewrite the store per fragment; the batch that
+			// carries the answer removes the placeholder it was handed.
+			const updated = useSessionStore.getState().sessions.find((s) => s.id === 'sess-1');
+			expect(updated?.aiTabs[0]?.logs).toBe(logs);
+			expect(deps.batchedUpdater.markDelivered).toHaveBeenCalledWith('sess-1', 'tab-1', logs);
 		});
 	});
 

@@ -7,6 +7,7 @@
  * the seeded default name, and the format-changed warning.
  */
 
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -70,6 +71,8 @@ describe('ImageSaveModal', () => {
 		);
 
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		theme = createTestTheme();
 		onOverwrite = vi.fn();
 		onSaveAs = vi.fn();
@@ -81,6 +84,14 @@ describe('ImageSaveModal', () => {
 	});
 
 	describe('choose phase', () => {
+		it('uses plain image save copy in the new shell', () => {
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+			renderModal();
+			// workflows.newShellCopy.panels.saveImage / saveAs / saveAlongside
+			expect(screen.getByRole('heading', { name: 'Save edited image' })).toBeInTheDocument();
+			fireEvent.click(screen.getByText('Save as new file'));
+			expect(screen.getByText('Save in the same folder as the original.')).toBeInTheDocument();
+		});
 		it('shows both destination options and the original file name', () => {
 			renderModal();
 			expect(screen.getByText('Overwrite the existing file')).toBeInTheDocument();

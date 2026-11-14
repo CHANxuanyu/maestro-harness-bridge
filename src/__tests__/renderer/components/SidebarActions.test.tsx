@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { SidebarActions } from '../../../renderer/components/SessionList/SidebarActions';
 import { useFeedbackDraftStore } from '../../../renderer/stores/feedbackDraftStore';
@@ -28,6 +29,11 @@ const theme: Theme = {
 const shortcuts = {
 	toggleSidebar: { keys: ['Meta', 'b'] },
 } as Record<string, Shortcut>;
+
+beforeEach(() => {
+	// Classic sidebar owns the new-agent and feedback actions.
+	useSettingsStore.setState({ newShell: false });
+});
 
 describe('SidebarActions', () => {
 	afterEach(() => {

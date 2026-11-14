@@ -22,6 +22,8 @@
 import { useEffect, useRef } from 'react';
 import type { WindowPanelState } from '../../../shared/window-types';
 import { useUIStore } from '../../stores/uiStore';
+import { selectActiveSession, useSessionStore } from '../../stores/sessionStore';
+import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import { useDebouncedCallback } from '../utils/useThrottle';
 
 /**
@@ -40,7 +42,6 @@ export function useWindowState(): void {
 	const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen);
 	const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
 	const setLeftSidebarOpen = useUIStore((s) => s.setLeftSidebarOpen);
-	const setRightPanelOpen = useUIStore((s) => s.setRightPanelOpen);
 
 	// True once the window's persisted state has been read and applied. We must
 	// not persist before this (it would clobber the saved value with the store's
@@ -61,22 +62,45 @@ export function useWindowState(): void {
 	useEffect(() => {
 		let cancelled = false;
 		void (async () => {
-			const state = await window.maestro?.windows?.getState?.();
+			const settings = useSettingsStore.getState();
+			const [state, savedNewShell] = await Promise.all([
+				window.maestro?.windows?.getState?.(),
+				settings.settingsLoaded
+					? selectNewShellEnabled(settings)
+					: window.maestro?.settings?.get('newShell'),
+			]);
 			if (cancelled) return;
 			if (state) {
+				// Settings and sessions hydrate independently. Use the saved shell if
+				// settings are still pending, then read the current conversation.
+				const currentSettings = useSettingsStore.getState();
+				const newShell = currentSettings.settingsLoaded
+					? selectNewShellEnabled(currentSettings)
+					: savedNewShell === true;
+				const session = selectActiveSession(useSessionStore.getState());
+				const conversationOpen = newShell
+					? session?.aiTabs.find((tab) => tab.id === session.activeTabId)?.newShellPanel?.open
+					: undefined;
+				const open = conversationOpen ?? !state.rightPanelCollapsed;
 				lastPersistedRef.current = {
 					leftPanelCollapsed: state.leftPanelCollapsed,
 					rightPanelCollapsed: state.rightPanelCollapsed,
 				};
 				setLeftSidebarOpen(!state.leftPanelCollapsed);
-				setRightPanelOpen(!state.rightPanelCollapsed);
+				// Hydration is a read, not a toggle: the setter would overwrite the
+				// conversation's saved choice with the window's fallback value.
+				useUIStore.setState((current) => ({
+					rightPanelOpen: open,
+					rightPanelManuallyOpened:
+						current.rightPanelManuallyOpened || conversationOpen !== undefined || open,
+				}));
 			}
 			hydratedRef.current = true;
 		})();
 		return () => {
 			cancelled = true;
 		};
-	}, [setLeftSidebarOpen, setRightPanelOpen]);
+	}, [setLeftSidebarOpen]);
 
 	// Persist (debounced) whenever the panel state changes after hydration. The
 	// equality check skips the no-op write that hydration's own state update would

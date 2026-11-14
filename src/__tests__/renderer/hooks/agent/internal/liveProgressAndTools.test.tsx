@@ -105,6 +105,8 @@ function appendFinalAnswer(text: string, at = Date.now()) {
 }
 
 beforeEach(() => {
+	// Classic layouts differ in whether tool calls are retained at exit.
+	useSettingsStore.setState({ newShell: false });
 	vi.clearAllMocks();
 	thinking = undefined;
 	tool = undefined;

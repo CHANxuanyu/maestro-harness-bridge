@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAutoRefresh } from '../../../../../renderer/components/FileExplorerPanel/hooks/useAutoRefresh';
@@ -21,11 +22,31 @@ const defaultArgs = {
 
 describe('useAutoRefresh', () => {
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		vi.useFakeTimers();
 		vi.clearAllMocks();
 	});
 	afterEach(() => {
 		vi.useRealTimers();
+	});
+
+	it('uses plain refresh feedback in the new shell', async () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+		const onShowFlash = vi.fn();
+		const { result } = renderHook(() =>
+			useAutoRefresh({
+				...defaultArgs,
+				refreshFileTree: vi.fn().mockResolvedValue({ totalChanges: 3 }),
+				onShowFlash,
+			})
+		);
+		await act(async () => {
+			await result.current.handleRefresh();
+			vi.advanceTimersByTime(500);
+		});
+		// workflows.newShellCopy.panels.detectedChanges
+		expect(onShowFlash).toHaveBeenCalledWith('Changes detected: 3');
 	});
 
 	it('initialises with isRefreshing = false and overlayOpen = false', () => {

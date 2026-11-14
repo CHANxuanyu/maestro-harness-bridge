@@ -501,6 +501,8 @@ test('new shell first run asks only the updates question', async ({}, info) => {
 	const home = path.join(native.root, 'home');
 	fs.mkdirSync(home, { recursive: true });
 	const settings = seedNewShell(native, {
+		newShell: undefined,
+		newShellChoice: undefined,
 		typographyPromptSeen: false,
 		themePromptSeen: false,
 		updatesPromptSeen: false,
@@ -591,7 +593,7 @@ test('old shell wizard names a rejected login instead of an exit code', async ({
 	const native = new NativeApp(info, { providerCli: false });
 	const home = path.join(native.root, 'home');
 	fs.mkdirSync(home, { recursive: true });
-	seedNewShell(native, { newShell: false });
+	seedNewShell(native, { newShell: false, newShellChoice: 'classic' });
 	native.scriptTurns([{ authFailure: true, answer: '' }]);
 	let failed = false;
 	try {
@@ -862,6 +864,7 @@ test('new shell T5: stage commit and revert single files in a real worktree', as
 		await native.start(isolatedHome);
 		await native.page.locator(`[data-conversation-key$=":${tabId}"] [data-tree-nav]`).click();
 		const panel = native.page.getByTestId('changes-panel');
+		await expect(native.page.locator('[data-panel="right"]')).toHaveAttribute('data-open', 'true');
 		await expect(panel).toBeVisible();
 		await expect(panel.getByRole('button', { name: 'Commit', exact: true })).toBeDisabled();
 		const stage = panel.getByRole('button', { name: 'Stage tracked.txt', exact: true });
@@ -1319,6 +1322,8 @@ test('new shell T8: group two synthetic write turns and preserve the conversatio
 		await native.start(isolatedHome);
 		await select(tabId);
 		const panel = native.page.getByTestId('changes-panel');
+		await expect(native.page.locator('[data-panel="right"]')).toHaveAttribute('data-open', 'true');
+		await expect(panel).toBeVisible();
 		await expect(panel.getByRole('radio', { name: 'By file', exact: true })).toHaveAttribute(
 			'aria-checked',
 			'true'

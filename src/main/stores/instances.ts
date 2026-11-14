@@ -14,6 +14,7 @@ import path from 'path';
 import { app } from 'electron';
 import Store from 'electron-store';
 import { createStoreDeserializer } from './corrupt-store-recovery';
+import { migrateNewShellChoice } from '../../shared/newShellChoice';
 
 import type {
 	BootstrapSettings,
@@ -130,6 +131,12 @@ export function initializeStores(options: StoreInitOptions): {
 		}),
 		'maestro-settings.json'
 	);
+	// Run before any settings consumer. A choice made through UI or CLI survives
+	// every later startup; only pre-switch, unmarked settings receive the default.
+	const shellMigration = migrateNewShellChoice({
+		newShellChoice: _settingsStore.get('newShellChoice'),
+	});
+	if (shellMigration) _settingsStore.set(shellMigration);
 
 	// The sessions store is read and written far more than any other, and is the
 	// only one that grows with agent count into the multi-megabyte range. Served

@@ -10,6 +10,7 @@
  * Regression test for: Group chat @mention tab completion
  */
 
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { GroupChatInput } from '../../../renderer/components/GroupChatInput';
@@ -87,6 +88,8 @@ function typeInTextarea(textarea: HTMLTextAreaElement, value: string) {
 
 describe('GroupChatInput', () => {
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		resetStores(useSessionStore, useImageAnnotatorStore);
 	});
 

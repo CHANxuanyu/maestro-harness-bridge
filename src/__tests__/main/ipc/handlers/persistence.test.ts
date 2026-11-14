@@ -609,6 +609,14 @@ describe('persistence IPC handlers', () => {
 	});
 
 	describe('settings:set', () => {
+		it.each([true, false])('persists shell choice and value together: %s', async (value) => {
+			expect(await handlers.get('settings:set')!({}, 'newShell', value)).toBe(true);
+			expect(mockSettingsStore.set).toHaveBeenCalledExactlyOnceWith({
+				newShell: value,
+				newShellChoice: value ? 'new' : 'classic',
+			});
+		});
+
 		it.each(['system', 'en', 'zh-CN'])(
 			'persists %s and applies the native menu language',
 			async (value) => {

@@ -9,6 +9,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, cleanup } from '@testing-library/react';
 import { useAppRemoteEventListeners } from '../../../renderer/hooks/remote/useAppRemoteEventListeners';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import type { Session } from '../../../renderer/types';
 
 const RESPONSE_CHANNEL = 'remote:updateSessionConfig:response:test';
@@ -49,6 +51,8 @@ async function applyPatch(
 	session: Session,
 	configPatch: Record<string, unknown>
 ): Promise<Partial<Session>> {
+	// The new shell validates and saves against the live owner, not only sessionsRef.
+	useSessionStore.setState({ sessions: [session] });
 	const deps = makeDeps(session);
 	renderHook(() => useAppRemoteEventListeners(deps));
 
@@ -110,40 +114,46 @@ describe('remote conversation stop', () => {
 	);
 });
 
-describe('remoteUpdateSessionConfig - context window provenance (finding AD1)', () => {
-	it('writes contextWindowSource through the editable-key allowlist', async () => {
-		// Without the allowlist entry the CLI writes the number but not its
-		// provenance, so the deliberate edit stays outranked by the provider's
-		// report and silently does not apply.
-		const updated = await applyPatch(makeSession(), {
-			customContextWindow: 120000,
-			contextWindowSource: 'user-edited',
+describe.each([false, true])(
+	'remoteUpdateSessionConfig - context window provenance (finding AD1), newShell: %s',
+	(newShell) => {
+		beforeEach(() => {
+			useSettingsStore.setState({ newShell });
+		});
+		it('writes contextWindowSource through the editable-key allowlist', async () => {
+			// Without the allowlist entry the CLI writes the number but not its
+			// provenance, so the deliberate edit stays outranked by the provider's
+			// report and silently does not apply.
+			const updated = await applyPatch(makeSession(), {
+				customContextWindow: 120000,
+				contextWindowSource: 'user-edited',
+			});
+
+			expect(updated.customContextWindow).toBe(120000);
+			expect(updated.contextWindowSource).toBe('user-edited');
 		});
 
-		expect(updated.customContextWindow).toBe(120000);
-		expect(updated.contextWindowSource).toBe('user-edited');
-	});
+		it('clears provenance when a patch clears the window, even alone', async () => {
+			// Review of PR #1362. A patch carrying only `customContextWindow: null`
+			// left a stale 'user-edited' behind, so the next window set without
+			// provenance inherited precedence nobody asked for.
+			const updated = await applyPatch(
+				makeSession({ customContextWindow: 120000, contextWindowSource: 'user-edited' }),
+				{ customContextWindow: null }
+			);
 
-	it('clears provenance when a patch clears the window, even alone', async () => {
-		// Review of PR #1362. A patch carrying only `customContextWindow: null`
-		// left a stale 'user-edited' behind, so the next window set without
-		// provenance inherited precedence nobody asked for.
-		const updated = await applyPatch(
-			makeSession({ customContextWindow: 120000, contextWindowSource: 'user-edited' }),
-			{ customContextWindow: null }
-		);
+			expect(updated.customContextWindow).toBeUndefined();
+			expect(updated.contextWindowSource).toBeUndefined();
+		});
 
-		expect(updated.customContextWindow).toBeUndefined();
-		expect(updated.contextWindowSource).toBeUndefined();
-	});
+		it('leaves provenance alone when the patch does not touch the window', async () => {
+			const updated = await applyPatch(
+				makeSession({ customContextWindow: 120000, contextWindowSource: 'user-edited' }),
+				{ customModel: 'opus' }
+			);
 
-	it('leaves provenance alone when the patch does not touch the window', async () => {
-		const updated = await applyPatch(
-			makeSession({ customContextWindow: 120000, contextWindowSource: 'user-edited' }),
-			{ customModel: 'opus' }
-		);
-
-		expect(updated.customModel).toBe('opus');
-		expect(updated.contextWindowSource).toBe('user-edited');
-	});
-});
+			expect(updated.customModel).toBe('opus');
+			expect(updated.contextWindowSource).toBe('user-edited');
+		});
+	}
+);

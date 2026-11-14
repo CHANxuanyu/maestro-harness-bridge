@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useAgentDataListener } from '../../../../../renderer/hooks/agent/internal/useAgentDataListener';
@@ -35,6 +36,8 @@ function makeRef(): {
 }
 
 beforeEach(() => {
+	// Classic delivery does not hand existing logs to the batched placeholder cleanup.
+	useSettingsStore.setState({ newShell: false });
 	vi.clearAllMocks();
 	handler = undefined;
 	useSessionStore.setState({

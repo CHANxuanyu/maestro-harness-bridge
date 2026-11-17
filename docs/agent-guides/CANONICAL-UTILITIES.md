@@ -356,6 +356,19 @@ cannot be candidates, but their failed requests must not be replayed either.
 
 ## Codex rollout archives
 
+`extractCodexPlan()` in `src/shared/codexSessionText.ts` decodes a native tool
+payload into its plan snapshot. Codex 0.166+ records `exec` custom calls containing
+`text(await tools.update_plan({...}))`; older versions record direct `update_plan`
+function arguments. Storage, live response-item parsing and the real acceptance
+oracle share this helper. It accepts complete calls with JSON-literal arguments,
+preserves all three statuses and explicit empty arrays, and returns null for
+partial, malformed, computed or unrelated scripts. Never execute native source or
+extract a plan from a quoted example. The normalized input reaches both
+`latestAgentTaskList()` (Tasks panel and CLI) and `extractAgentTaskList()` (inline
+cards) through the existing transcript converter; there is no separate plan store.
+Exec `todo_list` events only carry completed booleans, so their false values remain
+pending; native records retain `in_progress` when present.
+
 `codexRolloutSessionId()`, `isCodexRollout()`, `preferPlainCodexRollouts()`, `readCodexRollout()` and `readCodexRolloutSync()` in `src/shared/codexRollout.ts` are the filename, source selection and bounded read entry points for Codex native history. Both `.jsonl` and `.jsonl.zst` use a 100 MB source and expanded-byte limit. Zstd decoding uses Node's built-in implementation entirely in memory. SSH storage transfers binary bytes as base64 for local decoding. A plain rollout wins when both forms carry the same UUID. Never write expanded archives to disk or use compressed byte offsets as transcript offsets.
 
 ## Native history worktrees

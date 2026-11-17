@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import planEvents from './codex-plan-events.json';
+import restartScene from './codex-plan-restart.json';
 import path from 'node:path';
-import { createTurn } from './protocol.cjs';
+import { createTurn, transcriptPath } from './protocol.cjs';
+import { extractCodexPlan } from '../../../src/shared/codexSessionText';
 import { createNativeTempDir } from './temp-root.cjs';
 import { nativeIdentity, nativeToolIds } from '../native-real';
 
@@ -13,22 +15,61 @@ afterEach(() => {
 	for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
+it('writes the code-mode plan only to the rollout while stdout carries todo_list', async () => {
+	const root = createNativeTempDir('maestro-codex-plan-restart-');
+	roots.push(root);
+	const script = path.join(root, 'scenario.json');
+	fs.writeFileSync(script, JSON.stringify({ turns: [restartScene] }));
+	const { stdout } = await promisify(execFile)(
+		process.execPath,
+		[path.resolve('e2e/fixtures/native/codex'), 'exec', '--json', '--', 'Synthetic tile plan'],
+		{ cwd: root, env: { ...process.env, CODEX_HOME: root, MAESTRO_NATIVE_SCRIPT: script } }
+	);
+	expect(
+		stdout
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line))
+	).toEqual(restartScene.codexExecEvents);
+	const file = transcriptPath('codex', root, root, restartScene.codexExecEvents[0].thread_id);
+	const rows = fs
+		.readFileSync(file, 'utf8')
+		.trim()
+		.split('\n')
+		.map((line) => JSON.parse(line));
+	const plans = rows.flatMap((row) => {
+		const plan = row.type === 'response_item' ? extractCodexPlan(row.payload) : null;
+		return plan ? [plan] : [];
+	});
+	expect(plans).toEqual([
+		{
+			plan: [
+				{ step: 'Inspect the sample tiles', status: 'completed' },
+				{ step: 'Verify the sample tiles', status: 'pending' },
+			],
+		},
+	]);
+	expect(
+		rows.some((row) => row.payload?.name === 'update_plan' || row.item?.type === 'todo_list')
+	).toBe(false);
+});
+
 it('Codex exec publishes command output only at completion', () => {
 	const root = createNativeTempDir('maestro-codex-contract-');
 	roots.push(root);
-	const events: any[] = [];
+	const events: Record<string, unknown>[] = [];
 	const turn = createTurn({
 		provider: 'codex',
 		configDir: root,
 		cwd: root,
 		prompt: 'Output',
-		emit: (event: unknown) => events.push(event),
+		emit: (event: unknown) => events.push(event as Record<string, unknown>),
 	});
 	const tool = { id: 'command', command: 'printf result', output: 'result' };
 	turn.startTool(tool);
 	turn.updateTool(tool, 'res');
 	expect(events.filter((event) => event.type === 'item.updated')).toEqual([]);
-	expect(events.at(-1).item.aggregated_output).toBe('');
+	expect(events.at(-1)).toMatchObject({ item: { aggregated_output: '' } });
 	turn.finishTool(tool);
 	expect(events.at(-1)).toMatchObject({
 		type: 'item.completed',

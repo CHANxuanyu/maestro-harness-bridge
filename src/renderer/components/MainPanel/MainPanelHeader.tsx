@@ -465,7 +465,7 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 											: 'workflows.conversations.newConversation'
 									)}
 							</span>
-							{activeTab?.state === 'busy' && (
+							{!newShell && activeTab?.state === 'busy' && (
 								<span
 									role="status"
 									aria-label={t(

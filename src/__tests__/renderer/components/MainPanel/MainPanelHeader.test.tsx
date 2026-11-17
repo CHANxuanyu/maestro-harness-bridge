@@ -289,6 +289,24 @@ describe('MainPanelHeader', () => {
 		mockOpenModal.mockRestore();
 	});
 
+	it.each([false, true])(
+		'keeps header running status only in the classic shell: newShell=%s',
+		(newShell) => {
+			settingsMocks.overrides = { newShell, sidebarNavigationMode: 'conversations' };
+			const tab = makeTab({ state: 'busy', name: 'Busy conversation' });
+			const { container } = render(
+				<MainPanelHeader
+					{...defaultProps}
+					activeSession={makeSession({ activeTabId: tab.id, aiTabs: [tab] })}
+					activeTab={tab}
+				/>
+			);
+			expect(
+				container.querySelectorAll('[data-testid="header-conversation-title"] [role="status"]')
+			).toHaveLength(newShell ? 0 : 1);
+		}
+	);
+
 	it('marks a DeepSeek preset conversation as DeepSeek, not Claude Code', () => {
 		settingsMocks.overrides = { sidebarNavigationMode: 'conversations' };
 		render(

@@ -1,3 +1,4 @@
+import { usePermissionRequestStore } from '../../stores/permissionRequestStore';
 import { requestConversationAction } from '../../services/conversationArchive';
 
 import type {
@@ -363,6 +364,13 @@ const StatusMark = memo(function StatusMark({
 	t: TFunction;
 }) {
 	const newShell = useSettingsStore(selectNewShellEnabled);
+	const awaitingApproval = usePermissionRequestStore(
+		(state) =>
+			newShell &&
+			state.queue.some(
+				(request) => request.sessionId === `${conversation.ownerId}-ai-${conversation.tabId}`
+			)
+	);
 	const labels: string[] = [];
 	if (conversation.error)
 		labels.push(
@@ -376,12 +384,21 @@ const StatusMark = memo(function StatusMark({
 		labels.push(
 			t(newShell ? 'workflows.newShellCopy.navigation.unread' : 'workflows.conversations.unread')
 		);
+	if (awaitingApproval) labels.push(t('workflows.sessions.permissionRequired'));
 	if (labels.length === 0) return null;
 
 	// One visible mark, by severity: an error outranks work in progress, which
 	// outranks unread. Screen readers get every state that applies.
 	let mark: ReactNode;
-	if (conversation.error) {
+	if (awaitingApproval) {
+		mark = (
+			<span
+				data-testid="conversation-approval-dot"
+				className="block w-2 h-2 rounded-full"
+				style={{ backgroundColor: theme.colors.accent }}
+			/>
+		);
+	} else if (conversation.error) {
 		mark = <AlertCircle className="w-3 h-3" style={{ color: theme.colors.error }} />;
 	} else if (conversation.busy) {
 		mark = newShell ? (

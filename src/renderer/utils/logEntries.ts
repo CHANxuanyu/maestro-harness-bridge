@@ -26,7 +26,17 @@
  */
 
 import { isClaudeLimitNotice } from '../../shared/agentErrorPatterns';
+import { truncateCommand } from '../../shared/formatters';
+import { stripAnsiCodes } from '../../shared/stringUtils';
 import type { LogEntry } from '../types';
+
+/** The provider's failure reason, without dumping a raw JSON envelope into the summary. */
+export function turnFailureReason(entry: Pick<LogEntry, 'text' | 'agentError'>): string {
+	const raw = entry.agentError?.raw;
+	const detail = (raw?.errorLine || raw?.stderr)?.trim();
+	const reason = detail && !/^[{[]/.test(detail) ? detail : entry.text;
+	return truncateCommand(stripAnsiCodes(reason).replace(/\s+/g, ' '), 240);
+}
 
 /**
  * True when the entry is a self-contained card rather than an open stream.
@@ -146,4 +156,17 @@ export function settleRunningToolEntries(
 		};
 	});
 	return changed ? next : logs;
+}
+
+/** Preserve provider exit codes; never guess a code from a generic failed status. */
+export function toolExitCode(entry: LogEntry): number | undefined {
+	const state = entry.metadata?.toolState;
+	if (typeof state?.exitCode === 'number') return state.exitCode;
+	const output = state?.output;
+	if (typeof output !== 'string') return undefined;
+	const match =
+		/(?:^|\n)(?:Error: )?(?:Exit code:?|Process exited with code|Command exited with code)\s*(-?\d+)\b/i.exec(
+			output
+		);
+	return match ? Number(match[1]) : undefined;
 }

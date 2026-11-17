@@ -498,9 +498,7 @@ describe('conversation feed: tools', () => {
 			window.maestro.agentSessions.toolOutput = read;
 			try {
 				const { container, rerenderWith } = renderTranscript(logs, { session });
-				if (finished) {
-					fireEvent.click(within(row(container, 't1')).getByRole('button', { name: /Worked for/ }));
-				}
+				fireEvent.click(screen.getByTestId('activity-collapsed'));
 				fireEvent.click(screen.getByRole('button', { name: 'Show details for read_file' }));
 				expect(read).not.toHaveBeenCalled();
 				await act(async () => {
@@ -1090,9 +1088,13 @@ describe('new shell login failure card', () => {
 			reportAuthFailure({ sessionId: session.id, tabId: 'tab-1', message: errorLog.text });
 			const outage = useAuthOutageStore.getState().outages.codex;
 			renderTranscript(logs, { session });
+			const card = within(document.querySelector(`[data-log-id="${errorLog.id}"]`)! as HTMLElement);
 			expect(
-				screen.getByText(uiLanguage === 'en' ? 'Sign in again' : '需要重新登录')
+				card.getByText(uiLanguage === 'en' ? 'Sign in again' : '需要重新登录')
 			).toBeInTheDocument();
+			expect(screen.getByTestId('activity-collapsed')).toHaveTextContent(
+				uiLanguage === 'en' ? 'Sign in required' : '需要重新登录'
+			);
 			expect(
 				screen.getByText(
 					uiLanguage === 'en'
@@ -1193,7 +1195,9 @@ describe('new shell login failure card', () => {
 			useSessionStore.setState({ sessions: [session] });
 			renderTranscript(logs, { session });
 			expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
-			expect(screen.getByText(log.text)).toBeInTheDocument();
+			const card = within(document.querySelector(`[data-log-id="${log.id}"]`)! as HTMLElement);
+			expect(card.getByText(log.text)).toBeInTheDocument();
+			if (newShell) expect(screen.getByTestId('activity-collapsed')).toHaveTextContent(log.text);
 			expect(screen.getByText(newShell ? 'Quota exhausted' : 'Error')).toBeInTheDocument();
 			expect(screen.getByRole('button', { name: 'Continue with another AI' })).toHaveStyle({
 				backgroundColor: newShell ? mockTheme.colors.accent : mockTheme.colors.accent + '15',
@@ -1216,4 +1220,32 @@ it('renders the automatic handoff note as a conversation link in the new shell',
 	expect(
 		screen.getByRole('button', { name: 'Automatically handed off to Codex (account work)' })
 	).toBeInTheDocument();
+});
+
+describe('new shell running activity integration', () => {
+	it.each([false, true])('folds running tools only with newShell=%s', (newShell) => {
+		useSettingsStore.setState({ newShell, showToolCalls: true });
+		const logs: LogEntry[] = [
+			user('u', 0, 'Work'),
+			{
+				id: 't',
+				timestamp: at(1),
+				source: 'tool',
+				text: 'Bash',
+				metadata: { toolState: { status: 'running', input: { command: 'npm test' } } },
+			},
+		];
+		const session = sessionWith(logs);
+		session.aiTabs[0].state = 'busy';
+		const { container } = renderTranscript(logs, { session });
+		expect(screen.queryAllByTestId('turn-activity-bar')).toHaveLength(newShell ? 1 : 0);
+		expect(screen.queryAllByTestId('turn-running-status')).toHaveLength(newShell ? 0 : 1);
+		expect(container.querySelectorAll('[data-tool-activity]')).toHaveLength(newShell ? 0 : 1);
+		if (newShell) {
+			expect(container.querySelectorAll('.animate-pulse, .animate-spin')).toHaveLength(1);
+			fireEvent.click(screen.getByTestId('activity-toggle'));
+			expect(container.querySelectorAll('[data-tool-activity]')).toHaveLength(1);
+			expect(container.querySelectorAll('.animate-pulse, .animate-spin')).toHaveLength(1);
+		}
+	});
 });

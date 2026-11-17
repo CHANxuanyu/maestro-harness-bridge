@@ -3,6 +3,26 @@ import type { workflowsShell as en } from '../en/workflowsShell';
 import type { AreaTranslation } from '../types';
 
 export const workflowsShell: AreaTranslation<typeof en> = {
+	'workflows.activity.working': '正在处理你的请求',
+	'workflows.activity.reading': '正在读 {count} 个文件',
+	'workflows.activity.editing': '正在修改 {count} 个文件',
+	'workflows.activity.runningCommand': '正在运行命令',
+	'workflows.activity.justStarted': '刚开始',
+	'workflows.activity.reads': '读取 {count}',
+	'workflows.activity.edits': '修改 {count}',
+	'workflows.activity.commands': '命令 {count}',
+	'workflows.activity.tasks': '{completed}/{total} 项任务',
+	'workflows.activity.stepOne': '1 步',
+	'workflows.activity.steps': '{count} 步',
+	'workflows.activity.turnFailed': '回合以错误结束',
+	'workflows.activity.failedWithReason': '失败：{reason}',
+	'workflows.activity.exitCode': '退出码 {code}',
+	'workflows.activity.files': '改动 {count} 个文件',
+	'workflows.activity.countsUnavailable': '无法确定增删行数',
+	'workflows.activity.turnFilterHelp': '将 changes-turns 筛选到此回合；空字符串清除筛选',
+	'workflows.newShell.tasksAbsent': '这条对话没有任务清单。',
+	'workflows.newShell.tasksClaude5':
+		'Claude 5 系模型不提供任务清单工具。你可以通过活动条和过程说明了解进展。',
 	'workflows.projectSettings.errors.toolMissing': '此工具配置已不属于这个项目。',
 	'workflows.projectSettings.errors.toolRunning': '请先停止使用此配置的所有对话，再更改 SSH 主机。',
 	'workflows.projectSettings.errors.newShellRequired': '请打开新界面后再保存工具配置。',

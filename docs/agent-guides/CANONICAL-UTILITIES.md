@@ -506,3 +506,45 @@ Codex 的标准能力；咨询调用 `projectConversationFields(..., false)` 保
 - `conversationChildren()` in `src/renderer/services/conversationChildren.ts` is the owner-side UI/CLI read and write operation. `windows:conversationChildren` routes through the registry, verifies the responder and waits for persistence. Native history resolution uses `matchRecordForTab()`; never infer an account from the native ID alone.
 - `captureConversationSourceNativeId()` in `src/renderer/services/agentDelegation.ts` is the only backfill. The source window forwards the identity through the registry, and child windows run the same function without rebroadcasting, then save only owned changes. It also migrates disclosure from the tab key to the first native key without overwriting an explicit choice.
 - `findConversationParent()` includes handoffs. `conversationBranch()` excludes handoff edges for archive refusal only. Do not reuse archive membership as display membership: an unarchived handoff must remain visible when its source is archived.
+
+## Running-turn activity and delivery
+
+`foldTurnActivity()`, `summarizeTurnActivity()` and `turnActivityOutcome()` in
+`src/renderer/components/TerminalOutput/utils/foldTurnActivity.ts` own the new
+shell's running and completed activity projection. Keep classic callers opted
+out. Count only top-level tool calls, use `latestAgentTaskList()` for reported
+plans, and use `isProgressNoteEntry()` for public narration. A failed step does
+not determine the turn outcome. `toolExitCode()` in `renderer/utils/logEntries.ts`
+reads explicit provider codes without inventing one for generic failures.
+`turnFailureReason()` in the same file prefers the provider's plain diagnostic
+over a generic error-category message, while keeping raw JSON out of the summary.
+It strips ANSI, collapses whitespace and uses `truncateCommand()` to bound the
+reason to 240 characters. Apply it to persisted completion reasons too. Auto-retry
+stores a system marker instead of an error log, but retains the full `tab.agentError`;
+the exit listener must consider that error only when its process ID and timestamp
+belong to the current turn. A transcript error log is not the only failure source.
+Terminal errors retain a summary even without activity entries; an available
+failing step is located only within that turn, never borrowed from earlier work.
+With no steps, the localized summary reads `Failed: <reason>`; the duration and
+step-count wording is reserved for turns with steps. The reason stays on one line.
+Auth errors retain the localized sign-in explanation rather than exposing raw
+provider rejection text beside the existing sign-in card.
+
+`beginGitTurn()`, `recordGitTurnTool()` and `finishGitTurn()` extend
+`src/main/git-changes.ts`. Capture bounded dirty patches before spawn, retain
+only write paths and statuses while running, and consume the boundary before
+forwarding process exit. `collectTurnWrites()` remains the write-evidence rule;
+`summarizeTurnDelivery()` in `src/shared/gitChangeTurns.ts` preserves unknown
+counts. Never substitute the current HEAD diff for this boundary comparison.
+Snapshots stay in main memory; only totals and paths enter `LogEntry.turnCompletion`
+on the user message. Native reconciliation preserves that renderer field.
+Historical turns without a retained boundary show unavailable line counts.
+HEAD changes, binary files, oversized content and ambiguous renames also retain
+unknown counts. Simultaneous external edits to the same attributed file cannot
+be separated by workspace boundaries.
+
+`TurnDeliveryBar` opens the existing Changes panel with `changesTurnId`;
+`tab panel <id> changes-turns --turn <turn-id>` is the CLI equivalent. That panel
+continues to show current file diffs, clearly separate from the frozen turn
+counts on the delivery bar. The optional check-result slot stays absent until
+F3 supplies evidence for the same turn.

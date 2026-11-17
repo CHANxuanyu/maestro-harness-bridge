@@ -1701,6 +1701,7 @@ tabTargetOptions(tab.command('panel [tab-id-or-action] [action]'))
 		'--terminal <id>',
 		'Terminal to select, close or restart; defaults to the conversation selection. Terminals still running on a previous host can only be closed from their owner conversation'
 	)
+	.option('--turn <id>', projectSettingsT('workflows.activity.turnFilterHelp'))
 	.option('--filter <query>', 'Filter the conversation file tree; an empty string clears it')
 	.option('--content <text>', 'Set the remembered text file edit buffer before this action')
 	.option('--line <number>', 'Jump to a line in the remembered preview')

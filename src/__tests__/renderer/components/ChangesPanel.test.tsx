@@ -859,3 +859,23 @@ it('localizes application refusals in Chinese while leaving Git errors raw', asy
 		useSettingsStore.setState({ uiLanguage: 'en' });
 	}
 });
+
+it('filters the turn projection without counting unrelated workspace files', async () => {
+	useSettingsStore.setState({ newShell: true });
+	changes.mockResolvedValue(twoFiles);
+	const current = session();
+	current.aiTabs[0].logs.push({
+		id: 'w',
+		source: 'tool',
+		text: 'Edit',
+		timestamp: 2,
+		metadata: { toolState: { status: 'completed', input: { file_path: 'src/app.ts' } } },
+	});
+	current.aiTabs[0].newShellPanel = { tab: 'changes', changesView: 'turn', changesTurnId: 'u' };
+	render(<ChangesPanel session={current} theme={mockTheme} />);
+	await waitFor(() =>
+		expect(screen.getByTestId('changes-list')).toHaveAttribute('data-turn-filter', 'u')
+	);
+	expect(screen.getByTestId('changes-list')).toHaveTextContent('app.ts');
+	expect(screen.getByTestId('changes-list')).not.toHaveTextContent('.claude/worktrees');
+});

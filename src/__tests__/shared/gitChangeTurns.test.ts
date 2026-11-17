@@ -1,3 +1,4 @@
+import { summarizeTurnDelivery } from '../../shared/gitChangeTurns';
 import { describe, expect, it } from 'vitest';
 import {
 	collectTurnWrites,
@@ -322,3 +323,19 @@ it.each(['claude-code', 'codex'])(
 		]);
 	}
 );
+
+it('summarizes only supplied turn deltas, deduplicates paths and preserves unknown counts', () => {
+	const files = [
+		{ path: 'a', additions: 2, deletions: 1 },
+		{ path: 'b', additions: 3, deletions: 0 },
+	];
+	expect(summarizeTurnDelivery([...files, files[0]])).toEqual({
+		files: 2,
+		paths: ['a', 'b'],
+		additions: 5,
+		deletions: 1,
+	});
+	expect(
+		summarizeTurnDelivery([{ path: 'binary', additions: null, deletions: null }])
+	).toMatchObject({ files: 1, additions: null, deletions: null });
+});

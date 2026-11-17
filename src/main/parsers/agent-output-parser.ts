@@ -171,6 +171,8 @@ export interface ParsedEvent {
 
 	/** A complete public progress message, separate from reasoning and the final answer. */
 	isCommentary?: boolean;
+	/** Claude public text confirmed as narration by a following tool call. */
+	publicNarration?: string[];
 
 	/**
 	 * Tool use blocks extracted from the message (for agents with mixed content)

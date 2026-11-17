@@ -2075,6 +2075,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 				newShellPanelAction: 'panel',
 				newShellWebUrl: 'string',
 				newShellPanelFilter: 'string',
+				newShellChangesTurnId: 'string',
 				newShellTerminalId: 'string',
 				newShellFileContent: 'string',
 				newShellFileLine: 'line',
@@ -2343,6 +2344,7 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 					const {
 						newShellPanelAction,
 						newShellPanelFilter,
+						newShellChangesTurnId,
 						newShellTerminalId: _terminalId,
 						newShellFileContent: _content,
 						newShellFileLine: _line,
@@ -2360,12 +2362,14 @@ export function useAppRemoteEventListeners(deps: UseAppRemoteEventListenersDeps)
 						...fields,
 						...(newShellPanelAction || newShellPanelFilter !== undefined
 							? {
-									newShellPanel: patchNewShellPanel(
-										panel,
-										newShellPanelFilter !== undefined
+									newShellPanel: patchNewShellPanel(panel, {
+										...(newShellPanelFilter !== undefined
 											? { filter: newShellPanelFilter as string }
-											: {}
-									),
+											: {}),
+										...(newShellChangesTurnId !== undefined
+											? { changesTurnId: (newShellChangesTurnId as string) || undefined }
+											: {}),
+									}),
 								}
 							: {}),
 					};

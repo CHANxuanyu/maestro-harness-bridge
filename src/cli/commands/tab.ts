@@ -705,6 +705,7 @@ export async function tabPanel(
 	tabId: string,
 	action: string,
 	options: TabMutateOptions & {
+		turn?: string;
 		filter?: string;
 		content?: string;
 		line?: string;
@@ -732,6 +733,7 @@ export async function tabPanel(
 			...(options.content !== undefined ? { newShellFileContent: options.content } : {}),
 			...(options.line !== undefined ? { newShellFileLine: Number(options.line) } : {}),
 			newShellPanelAction: action,
+			...(options.turn !== undefined ? { newShellChangesTurnId: options.turn } : {}),
 			...(options.url !== undefined ? { newShellWebUrl: options.url } : {}),
 			...(options.terminal !== undefined ? { newShellTerminalId: options.terminal } : {}),
 			...(options.filter !== undefined ? { newShellPanelFilter: options.filter } : {}),

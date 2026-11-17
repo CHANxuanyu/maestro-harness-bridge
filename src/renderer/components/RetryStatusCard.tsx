@@ -1,3 +1,4 @@
+import { formatSteppedElapsed } from '../../shared/duration';
 import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
  * RetryStatusCard - the collapsed Agent Resilience "outage" bubble in the chat
@@ -305,7 +306,11 @@ export function RetryStatusCard({
 				/>
 				<StatBlock
 					label={newShell ? t('workflows.newShellCopy.feedback.retry.elapsed') : 'Failing for'}
-					value={formatDurationHuman(elapsedMs)}
+					value={
+						newShell
+							? formatSteppedElapsed(elapsedMs, t('workflows.newShellCopy.feedback.justStarted'))
+							: formatDurationHuman(elapsedMs)
+					}
 					color={theme.colors.textMain}
 				/>
 				<StatBlock

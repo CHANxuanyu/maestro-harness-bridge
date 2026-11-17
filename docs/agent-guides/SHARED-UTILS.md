@@ -318,6 +318,8 @@ works. `duration.ts` is canonical and is where new duration work belongs.
 | `formatElapsedTickerCompact(ms)`     | `(number) => string`          | Same ladder without the padded lead: `"3s"`, `"20m 4s"`, `"1h 2m 5s"`. For a counter inside a chip or sentence, where a bare seconds count reads fine below a minute but `1203s` does not past it. |
 | `formatTurnDuration(ms)`             | `(number) => string`          | Transcript turn time, day-capped and second-free: `"<1m"`, `"25m"`, `"5d 6h 25m"`.                                                                                                                 |
 
+`steppedElapsedTime(ms)` returns the displayed elapsed milliseconds and delay to the next new-shell running-counter boundary. `formatSteppedElapsed(ms, justStarted)` formats the same boundaries with the caller's translated initial label: ten-second steps below one minute, then whole minutes. The shared `ElapsedTimeDisplay` schedules these boundaries.
+
 `DURATION_MS` gives each unit's size in ms - use it instead of redeclaring
 `const DAY = 86400000`. `DURATION_LADDER_FULL` / `_DAYS` / `_HOURS` are the prebuilt
 ladders.

@@ -2,6 +2,9 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { ProjectSessionTree } from '../../../renderer/components/SessionList/ProjectSessionTree';
+import { buildProjectSessionTree } from '../../../renderer/utils/projectSessionTree';
+import { createMockSession } from '../../helpers/mockSession';
+import { createMockAITab } from '../../helpers/mockTab';
 import type {
 	SidebarConversation,
 	SidebarProject,
@@ -13,6 +16,10 @@ import { mockTheme } from '../../helpers/mockTheme';
 
 // Pin the English copy so the tests do not depend on the catalog keys landing
 // in the same change.
+vi.mock('../../../renderer/utils/measureTextWidth', () => ({
+	measureTextWidth: (text: string) => Array.from(text).length * 12,
+}));
+
 const EN: Record<string, string> = {
 	'workflows.projectSettings.title': 'Project settings',
 	'workflows.projectSettings.newConversation': 'New with project defaults',
@@ -737,4 +744,42 @@ it('shows a separate content group with highlighted snippet and keyboard opening
 	expect(document.activeElement).toBe(row);
 	fireEvent.click(row);
 	expect(open).toHaveBeenCalledWith(hit);
+});
+
+it('gives eight worktree titles distinct visible text in a 264px bar', () => {
+	useSettingsStore.setState({ newShell: true });
+	const names = Array.from(
+		{ length: 8 },
+		(_, index) => '# 修复 `草稿` ' + '同一工作树里的公共上下文'.repeat(4) + ' **情况' + index + '**'
+	);
+	const session = createMockSession({
+		id: 'worktree-owner',
+		cwd: '/project/worktree',
+		projectRoot: '/project',
+		worktreeBranch: 'feature/long-worktree-branch',
+		aiTabs: names.map((name, index) =>
+			createMockAITab({ id: 'tab-' + index, name, createdAt: index + 1 })
+		),
+	});
+	const projects = buildProjectSessionTree({ newShell: true, sessions: [session], groups: [] });
+	const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(264 - 144);
+	try {
+		setup({ projects });
+		const titles = Array.from(document.querySelectorAll<HTMLElement>('[data-conversation-title]'));
+		expect(titles).toHaveLength(8);
+		expect(new Set(titles.map((element) => element.textContent)).size).toBe(8);
+		for (const element of titles) {
+			expect(element.textContent).not.toMatch(/[#`*]/);
+			expect(element.title).toBe(element.dataset.conversationTitle);
+		}
+		const markers = Array.from(document.querySelectorAll<HTMLElement>('[data-worktree]'));
+		expect(markers).toHaveLength(8);
+		for (const marker of markers) {
+			expect(marker.textContent).toBe('');
+			expect(marker.querySelectorAll('svg')).toHaveLength(1);
+			expect(marker.title).toContain('feature/long-worktree-branch');
+		}
+	} finally {
+		width.mockRestore();
+	}
 });

@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import path from 'path';
+import { createHash } from 'crypto';
 import { normalizeWorktreePath, isPathAtOrUnderRoot } from '../../shared/worktreePaths';
 import type { CheckHost } from '../../shared/checkRun';
 import { execFileNoThrow } from '../utils/execFile';
@@ -21,6 +22,7 @@ export interface TeamWorkspaceState {
 	pm: string;
 	branch: string;
 	qaRevision: string;
+	baseRevision?: string;
 	devGitFile: string;
 	qaGitFile: string;
 }
@@ -31,6 +33,8 @@ export interface TeamWorkspaces {
 	enforceQaBoundary(): Promise<string[]>;
 	commitDevWork(message: string): Promise<string>;
 	pushDevWork(remote?: string): Promise<boolean>;
+	/** Content identity against the initial revision, including untracked files. */
+	diffHash(): Promise<string>;
 }
 
 const writes = createKeyedWriteQueue();
@@ -184,11 +188,59 @@ export function createTeamWorkspaces(options: TeamWorkspaceOptions): TeamWorkspa
 					pm: dev,
 					branch,
 					qaRevision: revision,
+					baseRevision: revision,
 					devGitFile: await fs.readFile(path.join(dev, '.git'), 'utf8'),
 					qaGitFile: await fs.readFile(path.join(qa, '.git'), 'utf8'),
 				};
 				await atomicWriteJson(manifest, state);
 				return structuredClone(state);
+			}),
+		diffHash: () =>
+			writes.enqueue(root, async () => {
+				const dev = await assertOwned('dev');
+				const hash = createHash('sha256');
+				const changed = (
+					await git(dev, [
+						'diff',
+						'--name-only',
+						'-z',
+						'--no-renames',
+						'--no-ext-diff',
+						'--no-textconv',
+						state!.baseRevision ?? state!.qaRevision,
+						'--',
+					])
+				).split('\0');
+				const untracked = (
+					await git(dev, ['ls-files', '--others', '--exclude-standard', '-z'])
+				).split('\0');
+				const names = [...new Set([...changed, ...untracked].filter(Boolean))].sort();
+				// Hash the same representation before and after a new file is staged or committed.
+				// A patch for tracked files plus raw untracked bytes would change without an edit.
+				for (const name of names) {
+					const file = safePath(dev, name);
+					const stat = await fs.lstat(file).catch((error: NodeJS.ErrnoException) => {
+						if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
+						return undefined;
+					});
+					const content = createHash('sha256');
+					if (!stat) content.update('deleted');
+					else if (stat.isSymbolicLink()) content.update(await fs.readlink(file));
+					else if (stat.isDirectory())
+						content.update(await git(file, ['rev-parse', '--verify', 'HEAD']));
+					else {
+						const handle = await fs.open(file);
+						try {
+							for await (const chunk of handle.createReadStream()) content.update(chunk);
+						} finally {
+							await handle.close();
+						}
+					}
+					hash.update(
+						JSON.stringify([name, stat ? stat.mode & 0o170111 : 0, content.digest('hex')])
+					);
+				}
+				return hash.digest('hex');
 			}),
 		enforceQaBoundary: () => writes.enqueue(root, boundary),
 		advanceQa: (revision) =>

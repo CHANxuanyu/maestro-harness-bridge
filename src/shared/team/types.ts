@@ -24,6 +24,10 @@ export interface SeatModel {
 }
 
 export interface SeatConfig extends SeatModel {
+	/** Optional seat-specific execution settings, including the native account directory. */
+	customPath?: string;
+	customArgs?: string;
+	customEnv?: Record<string, string>;
 	/** Optional substitute taking over when this seat's model is unavailable (PRD 6.8.1, 6.8.2). */
 	substitute?: SeatModel;
 }
@@ -62,6 +66,9 @@ export interface TeamConfig {
 	authorizations: TeamAuthorizations;
 	sshRemoteId?: string;
 }
+
+/** The title is derived from the idea by the main process. */
+export type CreateTeamInput = Omit<TeamConfig, 'id' | 'createdAt' | 'title'>;
 
 export type TeamPhase =
 	| 'clarify'
@@ -181,6 +188,16 @@ export type LedgerEvent = EventBase &
 				dispatchId: string;
 				turn: TurnKind;
 				promptDigest: string;
+				/** Replay the original ledger slice, including isolated challenge inputs. */
+				sourceSeq?: number;
+				expectedTurn?: M1TurnKind | 'topic';
+				repairOf?: string;
+				retryOf?: string;
+				mode?: 'diagnose' | 'gather' | 'wake';
+				problemId?: string;
+				fingerprint?: string;
+				failures?: string[];
+				note?: string;
 		  }
 		| {
 				kind: 'turn_finished';
@@ -192,10 +209,20 @@ export type LedgerEvent = EventBase &
 				outputTokens?: number;
 				costUsd?: number;
 				reportError?: string;
+				/** Bounded visible reply, excluding all top-level team-report fences. */
+				message?: string;
+				/** Durable ingestion receipt; domain events can be recovered after a crash. */
+				report?: TeamReport;
+				repairTail?: string;
+				canceled?: boolean;
+				failureKind?: MemberFaultKind;
 		  }
 		| { kind: 'report_accepted'; seat: SeatRole; dispatchId: string; report: TeamReport }
 		| { kind: 'report_repaired'; seat: SeatRole; dispatchId: string }
 		| { kind: 'report_rejected'; seat: SeatRole; dispatchId: string; reason: string }
+		| { kind: 'workspace_submitted'; dispatchId: string; revision: string; diffHash: string }
+		| { kind: 'qa_boundary_checked'; dispatchId: string }
+		| { kind: 'qa_boundary_restored'; dispatchId: string; paths: string[] }
 		| { kind: 'brief_published'; brief: Brief }
 		| {
 				kind: 'challenge_submitted';
@@ -239,6 +266,8 @@ export type LedgerEvent = EventBase &
 				evidenceId: string;
 				timedOut?: boolean;
 				notRun?: string;
+				/** Stable batch identity, for restart reconciliation. */
+				batchId?: string;
 		  }
 		| {
 				kind: 'issue_opened';

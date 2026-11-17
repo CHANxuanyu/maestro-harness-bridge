@@ -38,6 +38,7 @@ import { createTempfileApi, createHistoryApi, createCliApi } from './files';
 import { createSpeckitApi, createOpenspecApi, createBmadApi } from './commands';
 import { createAutorunApi, createPlaybooksApi, createMarketplaceApi } from './autorun';
 import { createDebugApi, createDocumentGraphApi } from './debug';
+import { createTeamApi } from './team';
 import { createGroupChatApi } from './groupChat';
 import { createCrossAgentApi } from './crossAgent';
 import { createStatsApi } from './stats';
@@ -207,6 +208,7 @@ contextBridge.exposeInMainWorld('maestro', {
 	documentGraph: createDocumentGraphApi(),
 
 	// Group Chat API
+	team: createTeamApi(),
 	groupChat: createGroupChatApi(),
 
 	// Cross-Agent Dispatch API (@mentions)

@@ -5,6 +5,38 @@ clicking in Maestro, an agent MUST be able to do through `maestro-cli`, through
 the same code path. A UI action ships with its CLI verb. This file records where
 that holds today, where it does not yet, and why.
 
+## Team M1 main-process contract (2026-11-17)
+
+These are the actions exposed for the separately implemented team renderer.
+Every command accepts `--json`. Select a team with `--team <id>` (exact or
+unambiguous prefix); omission is accepted only when exactly one team exists.
+Handlers use `createTeamScheduler()` and require no Electron sender.
+
+| Preload action                         | CLI                                                                                                                                                                                                                           | Shared IPC                                                            |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `team.create(input)`                   | `team start --idea <text> --pm tool:model:effort --dev tool:model:effort --qa tool:model:effort [--sub-pm ...] [--sub-dev ...] [--sub-qa ...] [--deadline <ISO>] [--turns <n>] [--allow checks,push,pr,temp] [--path <root>]` | `team:create`                                                         |
+| `team.list()`                          | `team list`                                                                                                                                                                                                                   | `team:list`                                                           |
+| `team.get(id)`                         | `team get`; `team show brief\|baseline\|decisions\|issues\|evidence\|cost`                                                                                                                                                    | `team:get`, shared `reduceLedger()` projections                       |
+| `team.status(id)`                      | `team status`                                                                                                                                                                                                                 | `team:status`, shared `teamStatus()`                                  |
+| `team.answer(id, card, option, note?)` | `team answer <card> <option> [--note <text>]`                                                                                                                                                                                 | `team:answer`                                                         |
+| Confirm the baseline card              | `team baseline confirm`                                                                                                                                                                                                       | `team:status` then the same `team:answer`                             |
+| `team.say(id, text, to?)`              | `team say [--to pm\|dev\|qa] <text>`                                                                                                                                                                                          | `team:say`; M1 delivers to PM on its next turn                        |
+| `team.pause(id)`                       | `team pause`                                                                                                                                                                                                                  | `team:pause`                                                          |
+| `team.resume(id)`                      | `team resume`                                                                                                                                                                                                                 | `team:resume`                                                         |
+| `team.stop(id)`                        | `team stop`                                                                                                                                                                                                                   | `team:stop`                                                           |
+| `team.accept(id)`                      | `team accept`                                                                                                                                                                                                                 | `team:accept`                                                         |
+| `team.requestChanges(id, note)`        | `team request-changes --note <text>`                                                                                                                                                                                          | `team:requestChanges`                                                 |
+| `team.export(id)`                      | `team export`                                                                                                                                                                                                                 | `team:export`, JSON text of config and ledger                         |
+| `team.seatTranscript(id, seat)`        | `team seat-transcript <seat>`                                                                                                                                                                                                 | `team:seatTranscript`                                                 |
+| `team.onChanged(listener)`             | Re-read `team get` or `team status`                                                                                                                                                                                           | `team:changed` carries `{ teamId, event }` after every durable append |
+
+The CLI uses the existing authenticated `bridge.invoke` transport. It does not
+write the team directory. The exact preload signatures and subscription replay
+recipe are documented in `src/renderer/global.d.ts`. M1 supports local Git
+workspaces; SSH, discussion rounds, review rejection loops and substitute/model
+handover scheduling remain later milestones. `--sub-*`, `pr`, and `temp` retain
+their configuration values for those milestones. No team renderer is added here.
+
 Audited 2026-08-19 against the three surfaces that define "clickable": the
 keyboard shortcut registry (`src/renderer/constants/shortcuts.ts`), the Quick
 Actions command builders (`src/renderer/components/QuickActionsModal/commands/`),

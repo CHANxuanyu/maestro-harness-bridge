@@ -162,4 +162,27 @@ describe('team workspaces', () => {
 		await expect(workspaces.enforceQaBoundary()).rejects.toThrow('Git identity changed');
 		expect(await fs.readFile(path.join(project, 'src/code.txt'), 'utf8')).toBe('original\n');
 	});
+
+	it('fingerprints actual content across staging and commits, including untracked files', async () => {
+		const initial = await workspaces.diffHash();
+		await fs.writeFile(path.join(state.dev, 'src/code.txt'), 'changed');
+		const changed = await workspaces.diffHash();
+		expect(changed).not.toBe(initial);
+		await git(state.dev, 'add', '.');
+		expect(await workspaces.diffHash()).toBe(changed);
+		await workspaces.commitDevWork('Submitted');
+		expect(await workspaces.diffHash()).toBe(changed);
+		await fs.writeFile(path.join(state.dev, 'new.txt'), 'new observation');
+		const added = await workspaces.diffHash();
+		expect(added).not.toBe(changed);
+		await git(state.dev, 'add', '.');
+		expect(await workspaces.diffHash()).toBe(added);
+		await workspaces.commitDevWork('Add evidence');
+		expect(await workspaces.diffHash()).toBe(added);
+		await fs.rm(path.join(state.dev, 'src/code.txt'));
+		const deleted = await workspaces.diffHash();
+		expect(deleted).not.toBe(added);
+		await workspaces.commitDevWork('Remove code');
+		expect(await workspaces.diffHash()).toBe(deleted);
+	});
 });

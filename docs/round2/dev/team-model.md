@@ -33,7 +33,11 @@ interface SeatModel {
 } // effort uses the vendor's own level id
 interface SeatConfig extends SeatModel {
 	substitute?: SeatModel;
+	customPath?: string;
+	customArgs?: string;
+	customEnv?: Record<string, string>; // seat-specific account environment
 }
+type CreateTeamInput = Omit<TeamConfig, 'id' | 'createdAt' | 'title'>;
 interface TeamAuthorizations {
 	checks: boolean;
 	push: boolean;
@@ -117,4 +121,30 @@ Every card the owner must answer carries a `boundary` from `progressRules.Bounda
 
 ## 7. IPC and CLI
 
-`team:create`, `team:list`, `team:get` (config + state), `team:status`, `team:answer(cardId, option, note?)`, `team:say(to?, text)`, `team:baseline:*`, `team:pause|resume|stop`, `team:accept|requestChanges`, `team:export`, and a broadcast `team:state` on every append. The CLI verbs in PRD 6.12 map one to one onto these handlers.
+The fixed preload API is documented with JSDoc in `src/renderer/global.d.ts`.
+`team:create(CreateTeamInput)` returns a `TeamConfig`, deriving its title from
+the idea. `team:get(teamId)` returns `{ config, events } | null`; consumers use
+`reduceLedger()` for state. `team:status(teamId)` returns `TeamStatusView | null`.
+The other methods are `list()`, `answer(teamId, cardId, optionId, note?)`,
+`say(teamId, text, to?)`, `pause(teamId)`, `resume(teamId)`, `stop(teamId)`,
+`accept(teamId)`, `requestChanges(teamId, note)`, `export(teamId)` (JSON text),
+and `seatTranscript(teamId, seat)` (provider, optional native ID, cwd, or null).
+Baseline confirmation calls `answer`; it has no separate IPC action.
+
+`team:changed` broadcasts `{ teamId, event }` after every durable append.
+Subscribe with `onChanged` before `get`, buffer notifications during the read,
+and deduplicate by event ID/sequence. Its return value unsubscribes that listener.
+All handlers work without `event.sender`, including through the authenticated
+CLI bridge. The [CLI parity table](../../agent-guides/CLI-UI-PARITY.md) lists the
+matching commands. M1 queues owner messages for the PM's next turn.
+
+`turn_finished.message` holds up to 12,000 code units of visible reply with
+top-level report fences removed. The validated report is a durable receipt;
+stable domain event IDs allow restart during ingestion. `sourceSeq` freezes
+each dispatch's prompt input, and `repairOf` preserves the original context.
+`workspace_submitted` stores the revision and content fingerprint. QA receipts
+are ingested only after `qa_boundary_checked`, with restored paths recorded in
+`qa_boundary_restored`. Application work runs outside the per-team event queue.
+
+M1 limitations and verification commands are recorded in
+[team runtime verification](team-runtime-verification.md).

@@ -3,6 +3,7 @@ import {
 	extractTeamReport,
 	reportRepairPrompt,
 	validateTeamReport,
+	teamReplyMessage,
 } from '../../../shared/team/report';
 import { reduceLedger } from '../../../shared/team/ledger';
 import { REPORT_PERMISSIONS, type TeamReport } from '../../../shared/team/types';
@@ -10,6 +11,15 @@ import { baseline, goodReports, issue, ledger, proven } from './fixtures';
 
 const state = reduceLedger(ledger(...proven));
 const block = (report: unknown) => `\`\`\`team-report\n${JSON.stringify(report)}\n\`\`\``;
+
+it('keeps bounded visible prose while hiding valid, malformed and tilde report fences', () => {
+	expect(
+		teamReplyMessage(`Before\n${block(goodReports.brief)}\nAfter\n~~~team-report\n{bad}\n~~~`)
+	).toBe('Before\nAfter');
+	expect(teamReplyMessage('  A long visible response  ', 6)).toBe('A long');
+	expect(teamReplyMessage('Visible\n```team-report\n{unfinished')).toBe('Visible');
+	expect(teamReplyMessage('> ```team-report\n> example\n> ```')).toContain('example');
+});
 
 describe('extractTeamReport', () => {
 	it('takes the last report and never falls back to an earlier valid one', () => {

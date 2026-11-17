@@ -27,6 +27,21 @@ problems without a confirmed criterion become suggestions. Without state, no
 review criterion is assumed confirmed. The dispatcher must permit only one
 repair, passing the original turn kind; repair does not redo work.
 
+`teamReplyMessage()` in that same module uses the canonical Markdown parser to
+remove report fences and bound visible replies. `reportEvents()` in
+`src/main/team/report-events.ts` maps validated reports to stable receipt-relative
+domain events. Do not duplicate this projection in a renderer or CLI.
+`createTeamScheduler()` in `src/main/team/scheduler.ts` owns scheduling and owner
+actions over the ledger; long provider, Git, and check operations run outside
+its `createKeyedWriteQueue()`. `createTeamRuntime()` in
+`src/main/team/runtime.ts` connects production services and broadcasts durable
+appends. Its `reconcileTeamTurn()` reads the bound account's native storage with
+`readOnly: true` and matches the dispatch marker before accepting a result.
+`TeamWorkspaces.diffHash()` fingerprints the content against the initial
+revision, including untracked files, so staging or committing alone cannot
+manufacture a new fix. The scheduler combines it with failing signatures for
+`decideNext()`; new check row IDs alone do not count as progress.
+
 Domain events project requirements, work, issues, reviews, and decisions.
 `report_accepted` preserves the report and contributes QA verdicts, but does not
 also invent domain events. This avoids double-counting the subsequent recorded

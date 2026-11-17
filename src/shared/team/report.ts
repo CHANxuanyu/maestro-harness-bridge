@@ -10,6 +10,21 @@ import {
 import { teamReportSchema, type ReportSchema } from './schemas';
 
 const markdown = new MarkdownIt({ html: false, linkify: false });
+
+/** Preserve prose verbatim while hiding report fences, including malformed JSON. */
+export function teamReplyMessage(text: string, limit = 12_000): string {
+	const lines = text.replace(/\r\n?/g, '\n').split('\n');
+	for (const token of markdown.parse(text, {}).reverse()) {
+		if (
+			token.type === 'fence' &&
+			token.info.trim() === 'team-report' &&
+			token.level === 0 &&
+			token.map
+		)
+			lines.splice(token.map[0], token.map[1] - token.map[0]);
+	}
+	return lines.join('\n').trim().slice(0, limit);
+}
 export type TeamReportResult<T = TeamReport> =
 	| { ok: true; report: T }
 	| { ok: false; reason: string };

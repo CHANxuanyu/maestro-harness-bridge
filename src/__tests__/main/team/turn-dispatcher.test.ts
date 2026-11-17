@@ -58,8 +58,10 @@ describe('team turn dispatcher', () => {
 	});
 
 	it('uses the full event-free spawn preparation and collects only its own normalized usage and final text', async () => {
+		const onNativeSessionId = vi.fn();
 		const turn = createTurnDispatcher(deps).dispatch({
 			...request,
+			onNativeSessionId,
 			model: 'model',
 			effort: 'high',
 			nativeSessionId: 'native-old',
@@ -88,6 +90,7 @@ describe('team turn dispatcher', () => {
 		pm.emit('usage', 'other', { inputTokens: 999 });
 		pm.emit('data', config.sessionId, 'final answer');
 		pm.emit('session-id', config.sessionId, 'native-new');
+		expect(onNativeSessionId).toHaveBeenCalledWith('native-new');
 		pm.emit('usage', config.sessionId, { inputTokens: 10, outputTokens: 3, totalCostUsd: 0.1 });
 		pm.emit('usage', config.sessionId, { inputTokens: 5, outputTokens: 2, totalCostUsd: 0.2 });
 		pm.emit('exit', config.sessionId, 0);

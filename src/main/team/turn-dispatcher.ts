@@ -34,6 +34,8 @@ export interface SeatTurnRequest extends SeatModel {
 	customArgs?: string;
 	customEnv?: Record<string, string>;
 	signal?: AbortSignal;
+	/** Persist native identity as soon as it exists, including before a forced quit. */
+	onNativeSessionId?: (id: string) => void;
 }
 
 export interface SeatTurnResult {
@@ -170,7 +172,10 @@ export function createTurnDispatcher(deps: SpawnHandlerDependencies) {
 				if (id === processId) recordTurnUsage(id, usage);
 			};
 			const onSession = (id: string, nativeId: string) => {
-				if (id === processId) nativeSessionId = nativeId;
+				if (id === processId) {
+					nativeSessionId = nativeId;
+					input.onNativeSessionId?.(nativeId);
+				}
 			};
 			const onError = (id: string, error: AgentError) => {
 				if (id === processId) agentError = error;

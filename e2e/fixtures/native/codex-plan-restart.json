@@ -1,0 +1,59 @@
+{
+	"answer": "Synthetic plan ready for restart.",
+	"codexRolloutItems": [
+		{
+			"type": "custom_tool_call",
+			"name": "exec",
+			"call_id": "synthetic-plan-restart-call",
+			"arguments": null,
+			"input": "text(await tools.update_plan({\"plan\":[{\"step\":\"Inspect the sample tiles\",\"status\":\"completed\"},{\"step\":\"Verify the sample tiles\",\"status\":\"pending\"}]}));\n"
+		},
+		{
+			"type": "custom_tool_call_output",
+			"call_id": "synthetic-plan-restart-call",
+			"output": "Plan updated"
+		}
+	],
+	"codexExecEvents": [
+		{
+			"type": "thread.started",
+			"thread_id": "00000000-0000-4000-8000-000000000020"
+		},
+		{
+			"type": "turn.started"
+		},
+		{
+			"type": "item.updated",
+			"item": {
+				"id": "synthetic-todo-restart",
+				"type": "todo_list",
+				"items": [
+					{
+						"text": "Inspect the sample tiles",
+						"completed": true
+					},
+					{
+						"text": "Verify the sample tiles",
+						"completed": false
+					}
+				]
+			}
+		},
+		{
+			"type": "item.completed",
+			"item": {
+				"id": "synthetic-answer-restart",
+				"type": "agent_message",
+				"text": "Synthetic plan ready for restart."
+			}
+		},
+		{
+			"type": "turn.completed",
+			"usage": {
+				"input_tokens": 12,
+				"cached_input_tokens": 0,
+				"output_tokens": 6
+			}
+		}
+	]
+}

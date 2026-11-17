@@ -16,3 +16,8 @@ docs/releases.md
 # undone by the next `npm run fonts:fetch`, breaking the format gate on a
 # routine font refresh.
 src/renderer/generated-fonts.css
+
+# Round 2 planning prototype and its recorded check evidence stay byte-identical
+# with the hashes recorded in docs/round2/03-verification.md.
+docs/round2/prototype/
+docs/round2/evidence/prototype/

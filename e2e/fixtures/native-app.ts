@@ -35,6 +35,7 @@ export interface NativeTool {
 }
 export interface NativeScene {
 	codexExecEvents?: Record<string, unknown>[];
+	codexRolloutItems?: Record<string, unknown>[];
 	writes?: Record<string, string>;
 	answer: string;
 	effort?: string;

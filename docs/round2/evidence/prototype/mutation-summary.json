@@ -1,0 +1,60 @@
+{
+ "main": {
+  "checks": 147,
+  "passed": true
+ },
+ "mutations": {
+  "m1-category-count": {
+   "checks": 51,
+   "failed": 8,
+   "fails": [
+    "[升级条件：判断函数] 报告的问题已修：定位找到原因、换做法出现新问题后，仍有授权内下一步就继续 :: {\"bugVerdicts\":\"evidence,changed,none\",\"bugNext\":\"escalate\",\"sameCat\":\"evidence,evidence,evidence,evidence\",\"sameCatNext\":\"continue\",\"dup\":\"first,dup,none\",\"dupTwin\":1,",
+    "[升级条件：判断函数] 判断函数不读类别 :: {\"bugVerdicts\":\"evidence,changed,none\",\"bugNext\":\"escalate\",\"sameCat\":\"evidence,evidence,evidence,evidence\",\"sameCatNext\":\"continue\",\"dup\":\"first,dup,none\",\"dupTwin\":1,\"dupNext\":\"diagnose\",\"noRedi",
+    "[单聊：有进展就继续，不出现要你接手的卡片] 定位、换做法、小实验都已用过，仍有授权内下一步：继续，不升级 :: {\"id\":\"f2e\",\"kind\":\"escalate\",\"why\":\"\",\"status\":\"新问题已定位原因\",\"used\":26,\"total\":120,\"list\":[{\"id\":\"1\",\"cat\":\"直接修\",\"fp\":\"import-top\",\"v\":\"first\",\"ka\":0},{\"id\":\"2\",\"cat",
+    "[单聊：有进展就继续，不出现要你接手的卡片] “换更强的模型”只作为建议出现，没有产生卡片",
+    "[单聊：真正触及边界才升级] 升级时授权内没有有依据的下一步，剩下的路都要越过边界 :: {\"kind\":\"escalate\",\"boundary\":\"model\",\"open\":0,\"opts\":\"opus\",\"stepBoundary\":\"model\",\"need\":\"ESC\"}",
+    "[单聊：真正触及边界才升级] 卡片标明的边界与判断一致",
+    "[单聊：真正触及边界才升级] 选项对应边界：登录、放宽标准，外加停下；没有“继续”，也没有“换模型” :: [\"opus:model\",\"stop:\"]",
+    "[单聊：真正触及边界才升级] 脚本在这一组中断：locator.click: Timeout 8000ms exceeded."
+   ]
+  },
+  "m2-no-dup": {
+   "checks": 147,
+   "failed": 2,
+   "fails": [
+    "[升级条件：判断函数] 相同改动换了说法：判为重复，指向原来那次 :: {\"bugVerdicts\":\"evidence,changed,none\",\"bugNext\":\"continue\",\"sameCat\":\"evidence,evidence,evidence,evidence\",\"sameCatNext\":\"continue\",\"dup\":\"first,none,none\",\"dupTwin\":1,\"dupNext\":\"diag",
+    "[单聊：有进展就继续，不出现要你接手的卡片] 三次尝试：第 3 次和第 1 次是同一个改动，判为重复 :: {\"id\":\"f2\",\"kind\":\"diagnose\",\"why\":\"streak\",\"status\":\"未定位\",\"used\":6,\"total\":120,\"list\":[{\"id\":\"1\",\"cat\":\"直接修\",\"fp\":\"import-top\",\"v\":\"first\",\"ka\":0},{\"id\":\"2\",\"cat\":\"直"
+   ]
+  },
+  "m3-unfinished-means-stuck": {
+   "checks": 51,
+   "failed": 9,
+   "fails": [
+    "[升级条件：判断函数] 诊断后不会把没有新证据的旧改动再派发一次 :: {\"bugVerdicts\":\"evidence,changed,none\",\"bugNext\":\"continue\",\"sameCat\":\"evidence,evidence,evidence,evidence\",\"sameCatNext\":\"continue\",\"dup\":\"first,dup,none\",\"dupTwin\":1,\"dupNext\":\"diagn",
+    "[升级条件：判断函数] PM 连续两次打回先复盘，复盘后有进展继续 :: {\"bugVerdicts\":\"evidence,changed,none\",\"bugNext\":\"continue\",\"sameCat\":\"evidence,evidence,evidence,evidence\",\"sameCatNext\":\"continue\",\"dup\":\"first,dup,none\",\"dupTwin\":1,\"dupNext\":\"diag",
+    "[单聊：有进展就继续，不出现要你接手的卡片] 有进展、预算尚余、有授权内下一步：继续，没有卡片 :: {\"id\":\"f2d\",\"kind\":\"escalate\",\"why\":\"\",\"status\":\"部分解决：TS2304 已消失，新问题 TS2300 单独记\",\"used\":14,\"total\":120,\"list\":[{\"id\":\"1\",\"cat\":\"直接修\",\"fp\":\"import-top\",\"v\":\"first\",\"ka\":0",
+    "[单聊：有进展就继续，不出现要你接手的卡片] 定位、换做法、小实验都已用过，仍有授权内下一步：继续，不升级 :: {\"id\":\"f2e\",\"kind\":\"escalate\",\"why\":\"\",\"status\":\"新问题已定位原因\",\"used\":26,\"total\":120,\"list\":[{\"id\":\"1\",\"cat\":\"直接修\",\"fp\":\"import-top\",\"v\":\"first\",\"ka\":0},{\"id\":\"2\",\"cat",
+    "[单聊：有进展就继续，不出现要你接手的卡片] “换更强的模型”只作为建议出现，没有产生卡片",
+    "[单聊：真正触及边界才升级] 升级时授权内没有有依据的下一步，剩下的路都要越过边界 :: {\"kind\":\"escalate\",\"boundary\":\"model\",\"open\":0,\"opts\":\"opus\",\"stepBoundary\":\"model\",\"need\":\"ESC\"}",
+    "[单聊：真正触及边界才升级] 卡片标明的边界与判断一致",
+    "[单聊：真正触及边界才升级] 选项对应边界：登录、放宽标准，外加停下；没有“继续”，也没有“换模型” :: [\"opus:model\",\"stop:\"]",
+    "[单聊：真正触及边界才升级] 脚本在这一组中断：locator.click: Timeout 8000ms exceeded."
+   ]
+  },
+  "m4-model-advice-escalates": {
+   "checks": 51,
+   "failed": 8,
+   "fails": [
+    "[升级条件：判断函数] “更强的模型可能更好”只是建议：有授权内下一步时继续，只剩这条建议时先补证据，都不升级 :: {\"bugVerdicts\":\"evidence,changed,none\",\"bugNext\":\"continue\",\"sameCat\":\"evidence,evidence,evidence,evidence\",\"sameCatNext\":\"continue\",\"dup\":\"first,dup,none\",\"dupT",
+    "[升级条件：判断函数] 只剩越过边界的路才升级，并准确列出边界和选项 :: {\"bugVerdicts\":\"evidence,changed,none\",\"bugNext\":\"continue\",\"sameCat\":\"evidence,evidence,evidence,evidence\",\"sameCatNext\":\"continue\",\"dup\":\"first,dup,none\",\"dupTwin\":1,\"dupNext\":\"dia",
+    "[单聊：有进展就继续，不出现要你接手的卡片] 定位、换做法、小实验都已用过，仍有授权内下一步：继续，不升级 :: {\"id\":\"f2e\",\"kind\":\"escalate\",\"why\":\"\",\"status\":\"新问题已定位原因\",\"used\":26,\"total\":120,\"list\":[{\"id\":\"1\",\"cat\":\"直接修\",\"fp\":\"import-top\",\"v\":\"first\",\"ka\":0},{\"id\":\"2\",\"cat",
+    "[单聊：有进展就继续，不出现要你接手的卡片] “换更强的模型”只作为建议出现，没有产生卡片",
+    "[单聊：真正触及边界才升级] 升级时授权内没有有依据的下一步，剩下的路都要越过边界 :: {\"kind\":\"escalate\",\"boundary\":\"model\",\"open\":0,\"opts\":\"\",\"stepBoundary\":\"model\",\"need\":\"ESC\"}",
+    "[单聊：真正触及边界才升级] 卡片标明的边界与判断一致",
+    "[单聊：真正触及边界才升级] 选项对应边界：登录、放宽标准，外加停下；没有“继续”，也没有“换模型” :: [\"undefined:model\",\"stop:\"]",
+    "[单聊：真正触及边界才升级] 脚本在这一组中断：locator.click: Timeout 8000ms exceeded."
+   ]
+  }
+ },
+ "note": "同一个检查脚本跑在四个故意改坏判断规则的原型副本上。failed 是失败的检查数（含脚本因流程断开而中断的那一条）。"
+}

@@ -6,6 +6,7 @@
 		"checkJs": false
 	},
 	"include": [
+		"native-codex-plan-restart.spec.ts",
 		"real-relay.spec.ts",
 		"real-claude-orchestrator.spec.ts",
 		"real-codex-orchestrator.spec.ts",

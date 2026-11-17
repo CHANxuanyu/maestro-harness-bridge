@@ -30,6 +30,7 @@ import type {
 } from '../../shared/codexResetCredits';
 import type { KnownAuthDirs } from '../../shared/authPaths';
 import type { KnownEnvVarKeys } from '../../shared/envVarCatalog';
+import type { ModelCatalogRequest, ProviderModelCatalog } from '../../shared/modelCatalog';
 
 // Re-export for consumers that import from preload. `AgentStatus` is
 // re-exported only (no local usage in this file); TypeScript's
@@ -59,6 +60,8 @@ export interface AgentRefreshResult {
  */
 export function createAgentsApi() {
 	return {
+		getModelCatalog: (request: ModelCatalogRequest): Promise<ProviderModelCatalog> =>
+			ipcRenderer.invoke('agents:getModelCatalog', request),
 		getNativeCommands: (
 			request: NativeCommandRequest,
 			cachedOnly?: boolean

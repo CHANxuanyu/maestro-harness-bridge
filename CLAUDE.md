@@ -59,6 +59,8 @@ This guide has been split into focused sub-documents for progressive disclosure:
 
 ### Commonly-reimplemented functions (do NOT add new copies)
 
+- **Provider model catalogs and picker state:** `createModelCatalogService()` in `src/main/agents/model-catalog.ts`, selection helpers in `src/shared/modelCatalog.ts`, and `cachedModelCatalogQuota()` in `src/main/agents/model-catalog-quota.ts`. Use `agents:getModelCatalog` for account-scoped per-model efforts, native defaults and cached quota; see [model-catalog-api.md](docs/round2/dev/model-catalog-api.md).
+
 - **Handoff execution context:** `handoffLocation()` in `src/shared/aiHandoff.ts` compares the effective cwd and SSH host without resolving remote paths locally.
 - **New conversation permissions:** `newConversationPermissionFields()` and `recentProjectConversation()` in `src/renderer/utils/newConversationPermissions.ts`, keeps new shell creation and handoff from widening source permissions. See [CANONICAL-UTILITIES.md](docs/agent-guides/CANONICAL-UTILITIES.md).
 - **Native history project membership:** `projectHistoryScopeFor()` in `src/shared/projectHistory.ts` shares host, subdirectory and worktree membership across discovery, archive display and permission inheritance.

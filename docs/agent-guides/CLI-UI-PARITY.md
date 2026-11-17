@@ -862,6 +862,18 @@ then reads the old result through both the card and `native-history tool-output`
 
 ## Covered
 
+### Typed model catalog, B1-1, 2026-11-17
+
+| UI read                                                                 | CLI                                                                                             | Shared implementation                                   |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Provider models, model-specific effort, native default and cached quota | `models <codex\|claude-code> [--agent <id>\|--account-dir <path>] [--ssh-remote <id>] [--json]` | `agents:getModelCatalog`, `createModelCatalogService()` |
+
+Requires the running desktop. Reads only cached quota; it never samples.
+Typed SSH catalogs explicitly return `unsupported-remote`; existing remote
+`getModels` remains unchanged. JSON retains hidden entries for resolving saved
+selections, while text output and the picker helper exclude them. Frontend
+integration and keyboard/focus acceptance belong to B1-2 through B1-4.
+
 ### 新界面 CLI 对等，Task L，2026-11-12
 
 | 界面动作                                       | CLI                                                                                                   | 共用实现                                                                                                                                             |

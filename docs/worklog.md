@@ -1,5 +1,17 @@
 # 分支工作记录
 
+## 2026-11-17：B1-1 按模型读取厂商目录
+
+本次只交付模型选择器的数据层：共享类型和纯选择规则、按有效账号读取的目录缓存、`agents:getModelCatalog`、preload 类型及 `models <provider>` CLI。Claude 读取 `cc` 目录的模型顺序、分组、描述和各自档位；Codex 按 priority 排序。文件及原生配置的修改时间改变时重新读取，不等 TTL。额度复用现有保留采样和过期规则，缺失不返回零，也不触发采样。前端接入、D9 键盘与焦点验收由 B1-2 至 B1-4 完成，见 [API 交接](round2/dev/model-catalog-api.md)。
+
+本机只读核对了两家真实目录形状，公开夹具全部合成。Claude 的客户端目录版本号未被当成 CLI 版本；默认模型标明来自配置、环境、目录状态或 Codex 目录顺序。原有 Codex 无静态模型 ID，目录缺失返回空模型表及内置档位回退标记，不新增猜测 ID。SSH 新接口明确返回 `unsupported-remote`，不读取本机目录或额度；旧远程发现接口不变。清理了移动 Claude 别名常量后留下的说明和 Codex 输出解析器的重复配置解析，未移除其他发现路径。
+
+验证对象为本 worktree 未提交源码和本次构建的 CLI bundle，不是发行包。定向 Vitest 10 文件、475 项通过；`tsconfig.main.json`、`tsconfig.lint.json`、`tsconfig.cli.json` 三套 `--noEmit` 通过。CLI bundle 构建与 `models --help` 通过。默认 Vitest 配置加载会写入外部链接的依赖目录，改用 `--configLoader native` 后通过；CLI 文档生成使用 worktree 内隔离数据目录，未更改已安装应用的数据。
+
+变更 TypeScript 文件的 ESLint 使用 `--no-ignore`，包含仓库默认忽略的测试文件，0 错误、0 警告；全部 30 个变更文件的 Prettier 检查通过，`git diff --check` 通过，新增内容无禁用破折号。原有 `.survey-A0.md` 保持未改动。
+
+未验：真实模型推理、打包应用 GUI、SSH typed catalog、Windows/Linux CI、项目局部原生默认配置和自定义 CLI 参数/二进制；没有提交、发布或切换默认 UI。
+
 ## 2026-11-17：第二轮开工基线
 
 老板确认 PRD v5.1、原型 P7.1 和 04-roadmap，批准第二轮正式开发。规划材料进入主线，作为执行依据：`docs/round2/`（PRD、路线图、交接、各轮评审回应、原型及其 147 项检查记录）。逐项进度和验收证据记在 `docs/round2/progress.md`，"已合并"和"已验收"分开写。

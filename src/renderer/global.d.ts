@@ -1852,6 +1852,7 @@ interface MaestroAPI {
 	};
 	agents: {
 		getNativeCommands: import('../main/preload/agents').AgentsApi['getNativeCommands'];
+		getModelCatalog: import('../main/preload/agents').AgentsApi['getModelCatalog'];
 		getPresets: import('../main/preload/agents').AgentsApi['getPresets'];
 		prepareDeepSeekPreset: import('../main/preload/agents').AgentsApi['prepareDeepSeekPreset'];
 		detect: (sshRemoteId?: string) => Promise<AgentConfig[]>;

@@ -68,6 +68,8 @@ import {
 import type { CodexResetCreditConsumeResult } from '../../../shared/codexResetCredits';
 import type { KnownAuthDirs } from '../../../shared/authPaths';
 import { rememberableEnvVarKeys, type KnownEnvVarKeys } from '../../../shared/envVarCatalog';
+import { createModelCatalogService } from '../../agents/model-catalog';
+import type { ModelCatalogRequest } from '../../../shared/modelCatalog';
 
 const LOG_CONTEXT = '[AgentDetector]';
 const CONFIG_LOG_CONTEXT = '[AgentConfig]';
@@ -1032,6 +1034,20 @@ async function discoverOpenCodeSlashCommandsRemote(
 
 export function registerAgentsHandlers(deps: AgentsHandlerDependencies): void {
 	const { getAgentDetector, agentConfigsStore, settingsStore, sessionsStore } = deps;
+	const readModelCatalog = createModelCatalogService({
+		layers: (provider) =>
+			getAgentAccountDirLayers(provider, {
+				agentLevelEnvVars: agentConfigsStore.get('configs', {})[provider]?.customEnvVars ?? {},
+				globalShellEnvVars: settingsStore?.get('shellEnvVars', {}) ?? {},
+			}),
+		session: (id) => sessionsStore?.get('sessions', []).find((session) => session.id === id),
+	});
+	ipcMain.handle(
+		'agents:getModelCatalog',
+		withIpcErrorLogging(handlerOpts('getModelCatalog'), (request: ModelCatalogRequest) =>
+			readModelCatalog(request)
+		)
+	);
 	const readNativeCommands = createNativeCommandDiscovery({
 		layers: (toolType) =>
 			getAgentAccountDirLayers(toolType, {

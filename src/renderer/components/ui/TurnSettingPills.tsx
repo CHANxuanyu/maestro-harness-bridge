@@ -1,3 +1,4 @@
+import { NATIVE_MODEL_DEFAULT } from '../../../shared/modelCatalog';
 import { useT } from '../../i18n';
 import { selectNewShellEnabled, useSettingsStore } from '../../stores/settingsStore';
 import { modelDisplayLabel, effortDisplayLabel } from '../../utils/workflowLabels';
@@ -41,6 +42,9 @@ export const TurnSettingPills = memo(function TurnSettingPills({
 }: TurnSettingPillsProps) {
 	const t = useT();
 	const newShell = useSettingsStore(selectNewShellEnabled);
+	// A native default is not evidence of which model or level actually ran.
+	if (model === NATIVE_MODEL_DEFAULT) model = undefined;
+	if (effort === NATIVE_MODEL_DEFAULT) effort = undefined;
 	if (!model && !effort) return null;
 
 	return (

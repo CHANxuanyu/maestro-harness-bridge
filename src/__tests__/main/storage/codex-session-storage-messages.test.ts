@@ -4,7 +4,7 @@
  */
 import path from 'path';
 import { embedSystemPromptInPrompt } from '../../../shared/embeddedSystemPrompt';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock Electron app
 vi.mock('electron', () => ({
@@ -58,6 +58,9 @@ import fs from 'fs/promises';
 import { CodexSessionStorage } from '../../../main/storage/codex-session-storage';
 import { readDirRemote, readFileRemote, statRemote } from '../../../main/utils/remote-fs';
 import type { SshRemoteConfig } from '../../../shared/types';
+import { CodexOutputParser } from '../../../main/parsers/codex-output-parser';
+import { transcriptMessagesToLogEntries } from '../../../renderer/utils/transcriptMessages';
+import { extractAgentTaskList, latestAgentTaskList } from '../../../renderer/utils/agentTaskList';
 
 /**
  * Create a realistic Codex v0.111.0 session JSONL content
@@ -158,6 +161,113 @@ function createSessionContent(): string {
 }
 
 describe('CodexSessionStorage - readSessionMessages', () => {
+	it.each(['function_call', 'custom_tool_call'])(
+		'restores %s plans from synthetic native history with the live todo_list statuses',
+		async (type) => {
+			const plan = [
+				{ step: 'Inspect the sample', status: 'completed' },
+				{ step: 'Verify the sample', status: 'pending' },
+			];
+			const payload = {
+				type,
+				call_id: 'synthetic-plan-call',
+				name: type === 'function_call' ? 'update_plan' : 'exec',
+				arguments: type === 'function_call' ? JSON.stringify({ plan }) : null,
+				input:
+					type === 'custom_tool_call'
+						? `text(await tools.update_plan(${JSON.stringify({ plan })}));\n`
+						: undefined,
+			};
+			vi.spyOn(storage as any, 'findSessionFile').mockResolvedValue(path.resolve('plan.jsonl'));
+			vi.mocked(fs.readFile).mockResolvedValue(
+				[
+					{
+						type: 'session_meta',
+						payload: { id: 'synthetic-plan-session', cwd: path.resolve('project') },
+					},
+					{ type: 'response_item', payload },
+					{
+						type: 'response_item',
+						payload: {
+							type: type === 'function_call' ? 'function_call_output' : 'custom_tool_call_output',
+							call_id: payload.call_id,
+							output: 'Plan updated',
+						},
+					},
+				]
+					.map((row) => JSON.stringify({ timestamp: '2026-11-10T10:00:00Z', ...row }))
+					.join('\n')
+			);
+			const { messages } = await storage.readSessionMessages(
+				path.resolve('project'),
+				'synthetic-plan-session',
+				{ readOnly: true }
+			);
+			const logs = transcriptMessagesToLogEntries(messages);
+			// These are the same derived selectors the Tasks panel and inline card read.
+			const restored = latestAgentTaskList(logs);
+			const runtime = new CodexOutputParser().parseJsonObject({
+				type: 'item.updated',
+				item: {
+					id: 'synthetic-todo',
+					type: 'todo_list',
+					items: plan.map((task) => ({ text: task.step, completed: task.status === 'completed' })),
+				},
+			});
+			expect(restored?.tasks).toEqual([
+				{ content: 'Inspect the sample', status: 'completed' },
+				{ content: 'Verify the sample', status: 'pending' },
+			]);
+			expect(restored).toEqual(extractAgentTaskList(runtime?.toolState?.input));
+			const liveCall = new CodexOutputParser().parseJsonObject({ type: 'response_item', payload });
+			expect(extractAgentTaskList(liveCall?.toolState?.input)).toEqual(restored);
+			expect(extractAgentTaskList(logs[0].metadata?.toolState?.input)).toEqual(restored);
+			expect(logs[0].metadata?.toolCallId).toBe(payload.call_id);
+			expect(fs.writeFile).not.toHaveBeenCalled();
+		}
+	);
+
+	it.each(['update_plan', 'functions.update_plan', 'exec'])(
+		'keeps all three native plan statuses and the last snapshot from %s',
+		async (name) => {
+			const plan = [
+				{ step: 'Read sample', status: 'completed' },
+				{ step: 'Check sample', status: 'in_progress' },
+				{ step: 'Report sample', status: 'pending' },
+			];
+			vi.spyOn(storage as any, 'findSessionFile').mockResolvedValue(path.resolve('plan.jsonl'));
+			vi.mocked(fs.readFile).mockResolvedValue(
+				[{ plan: [{ step: 'Old task', status: 'pending' }] }, { plan }]
+					.map((input, index) =>
+						JSON.stringify({
+							type: 'response_item',
+							timestamp: '2026-11-10T10:00:00Z',
+							payload: {
+								type: name === 'exec' ? 'custom_tool_call' : 'function_call',
+								name,
+								call_id: `synthetic-plan-${index}`,
+								...(name === 'exec'
+									? {
+											input: `text(await tools.update_plan(${JSON.stringify(input)}));`,
+											arguments: null,
+										}
+									: { arguments: JSON.stringify(input) }),
+							},
+						})
+					)
+					.join('\n')
+			);
+			const { messages } = await storage.readSessionMessages(
+				path.resolve('project'),
+				'synthetic-plan-session',
+				{ readOnly: true }
+			);
+			expect(latestAgentTaskList(transcriptMessagesToLogEntries(messages))?.tasks).toEqual(
+				plan.map(({ step, status }) => ({ content: step, status }))
+			);
+		}
+	);
+
 	it('does not certify a legacy tool call with no result as a successful write', async () => {
 		const storage = new CodexSessionStorage();
 		vi.spyOn(storage as any, 'findSessionFile').mockResolvedValue('/fixture.jsonl');
@@ -245,9 +355,11 @@ describe('CodexSessionStorage - readSessionMessages', () => {
 	);
 
 	beforeEach(() => {
+		vi.stubEnv('CODEX_HOME', path.resolve('synthetic-codex-account'));
 		storage = new CodexSessionStorage();
 		vi.clearAllMocks();
 	});
+	afterEach(() => vi.unstubAllEnvs());
 
 	it.each([
 		[undefined, '~/.codex/sessions'],

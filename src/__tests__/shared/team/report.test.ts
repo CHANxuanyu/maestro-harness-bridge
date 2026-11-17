@@ -61,7 +61,7 @@ describe('extractTeamReport', () => {
 });
 
 describe('validateTeamReport', () => {
-	it.each(Object.keys(goodReports) as TeamReport['type'][])(
+	it.each(Object.keys(goodReports) as Array<keyof typeof goodReports>)(
 		'accepts a good %s report for every permitted seat',
 		(kind) => {
 			for (const seat of REPORT_PERMISSIONS[kind]) {
@@ -115,7 +115,7 @@ describe('validateTeamReport', () => {
 		expect(validateTeamReport(report, kind, seat, state).ok).toBe(false);
 	});
 	it('rejects every missing required array', () => {
-		for (const kind of Object.keys(goodReports) as TeamReport['type'][]) {
+		for (const kind of Object.keys(goodReports) as Array<keyof typeof goodReports>) {
 			for (const key of Object.keys(goodReports[kind])) {
 				if (
 					!Array.isArray((goodReports[kind] as unknown as Record<string, unknown>)[key]) ||
@@ -228,7 +228,17 @@ describe('validateTeamReport', () => {
 			],
 			suggestions: [],
 		};
-		for (const context of [undefined, reduceLedger(ledger(...baseline.slice(0, 2)))])
+		for (const context of [
+			undefined,
+			reduceLedger(
+				ledger(...baseline.slice(0, 2), {
+					kind: 'output_captured',
+					outputId: 'draft',
+					files: ['result.html'],
+					previews: ['result.png'],
+				})
+			),
+		])
 			expect(validateTeamReport(review, 'review', 'pm', context)).toMatchObject({
 				ok: true,
 				report: { verdict: 'pass', problems: [], suggestions: [expect.any(String)] },
@@ -290,8 +300,8 @@ describe('validateTeamReport', () => {
 		).toBe(false);
 		expect(validateTeamReport(goodReports.demo, 'demo', 'pm', state).ok).toBe(true);
 	});
-	it('returns an explicit unsupported error for M2 turn schemas and repair transport', () => {
-		for (const kind of ['position', 'proposal', 'response', 'report_repair'] as const)
+	it('requires the original schema for repair transport', () => {
+		for (const kind of ['report_repair'] as const)
 			expect(validateTeamReport({}, kind, 'pm')).toMatchObject({
 				ok: false,
 				reason: expect.stringContaining('No report schema'),

@@ -152,6 +152,7 @@ export const team = {
 	'workflows.team.fixed-claimed': 'Fixed (self-reported)',
 	'workflows.team.verified-pass': 'Verified',
 	'workflows.team.verified-fail': 'Verification failed',
+	'workflows.team.superseded': 'Superseded by a later change',
 	'workflows.team.expected': 'Expected',
 	'workflows.team.actual': 'Actual',
 	'workflows.team.violates': 'Violates {id}',

@@ -4,6 +4,7 @@
  * docs/round2/dev/team-model.md; the PRD wins on any conflict.
  */
 
+import type { CheckBoundary } from '../checkRun';
 import type { AgentId } from '../agentIds';
 import type {
 	AttemptInput,
@@ -114,10 +115,84 @@ export interface Criterion {
 	experience?: boolean;
 	/** Set when the owner wrote or edited this criterion. */
 	byOwner?: boolean;
+	/** Enumerate every place named by this criterion, including separate viewers. */
+	locations?: OutputLocation[];
+}
+
+export interface OutputLocation {
+	label: string;
+	target: string;
+	kind: 'file' | 'preview' | 'screenshot';
+}
+
+export type DecisionLayer = 'fact' | 'implementation' | 'testing' | 'product' | 'commitment';
+
+export interface TeamTopic {
+	topic: string;
+	why: string;
+	participants: SeatRole[];
+	owner?: SeatRole;
+	layer?: DecisionLayer;
+	reversible?: boolean;
+	/** Stable question identity; reopens names the earlier discussion when wording changes. */
+	question?: string;
+	kind?: 'discussion' | 'standard';
+	criterionId?: string;
+	reopens?: string;
+	evidence?: string[];
+}
+
+export interface DiscussionAction {
+	seat: SeatRole;
+	action: string;
+	waitFor?: string;
+}
+
+export interface DiscussionExperiment {
+	command: string;
+	boundary?: CheckBoundary;
+	basis: string;
+	expected: string;
+}
+
+export interface StandardChangeRequest {
+	criterionId: string;
+	change: 'add' | 'tighten' | 'relax' | 'modify' | 'remove';
+	criterion?: Criterion;
+	reason: string;
+	/** PM must justify intent; dev independently estimates cost in turns. */
+	withinMeaning?: string;
+	extraTurns?: number;
+	preservesDeadline?: boolean;
+	/** Owner-origin messages confer authority only for this exact pending message. */
+	ownerMessageId?: string;
+}
+
+export interface OutputCapture {
+	files: string[];
+	previews: string[];
+	locations?: Array<{
+		criterion: string;
+		location: OutputLocation;
+		file?: string;
+		preview?: string;
+		error?: string;
+	}>;
+	beforeOutputId?: string;
+}
+
+export interface BaselineDiff {
+	fromVersion: number | null;
+	toVersion: number;
+	scope?: { before: string; after: string };
+	notDoing?: { before: string[]; after: string[] };
+	criteria: Array<{ id: string; before?: Criterion; after?: Criterion }>;
+	checks?: { before: CheckCommand[]; after: CheckCommand[] };
 }
 
 export interface CheckCommand {
 	command: string;
+	boundary?: CheckBoundary;
 	covers: string[];
 }
 
@@ -156,15 +231,29 @@ export interface OwnerCard {
 	/** Where it is stuck and why the remaining paths need the owner. */
 	body: string;
 	/** Structured checkpoint data stays separate from owner-facing prose. */
-	payload?: {
-		type: 'baseline';
-		brief: Brief;
-		question?: string | null;
-		trials: TeamEvent<'check_run'>[];
-	};
+	payload?:
+		| {
+				type: 'baseline';
+				brief: Brief;
+				question?: string | null;
+				trials: TeamEvent<'check_run'>[];
+				diff?: BaselineDiff;
+		  }
+		| {
+				type: 'progress-report';
+				missing: { id: string; text: string; status: string; reason: string }[];
+				changes: TeamEvent<'standard_change'>[];
+				contested: TeamEvent<'discussion_closed'>[];
+				suggestions: string[];
+				evidenceChanges: TeamEvent<'check_run'>[];
+		  };
 	options: CardOption[];
 	/** Budget used when raised, for escalations. */
 	budgetNote?: string;
+	discussionId?: string;
+	standardChange?: StandardChangeRequest;
+	/** Reference only, never a scheduling threshold. */
+	referenceVotes?: string;
 }
 
 interface EventBase {
@@ -203,9 +292,11 @@ export type LedgerEvent = EventBase &
 				dispatchId: string;
 				turn: TurnKind;
 				promptDigest: string;
+				/** Exact assignment survives prompt-template changes between app versions. */
+				prompt?: string;
 				/** Replay the original ledger slice, including isolated challenge inputs. */
 				sourceSeq?: number;
-				expectedTurn?: M1TurnKind | 'topic';
+				expectedTurn?: ReportTurnKind;
 				repairOf?: string;
 				retryOf?: string;
 				mode?: 'diagnose' | 'gather' | 'wake';
@@ -213,6 +304,9 @@ export type LedgerEvent = EventBase &
 				fingerprint?: string;
 				failures?: string[];
 				note?: string;
+				discussionId?: string;
+				round?: number;
+				messageIds?: string[];
 		  }
 		| {
 				kind: 'turn_finished';
@@ -244,11 +338,12 @@ export type LedgerEvent = EventBase &
 				seat: SeatRole;
 				objections: Objection[];
 				plans?: VerificationPlan[];
+				briefVersion?: number;
 		  }
 		| { kind: 'brief_response'; decisions: ObjectionDecision[] }
 		| { kind: 'baseline_proposed'; briefVersion: number }
 		| { kind: 'baseline_confirmed'; briefVersion: number }
-		| { kind: 'baseline_edited'; criterionId: string; before: string; after: string }
+		| { kind: 'baseline_edited'; criterionId: string; before: string; after: string; brief?: Brief }
 		| { kind: 'baseline_returned'; note: string }
 		| {
 				kind: 'standard_change';
@@ -260,6 +355,7 @@ export type LedgerEvent = EventBase &
 				approvedBy: 'owner' | 'pm';
 				/** Complete definition for an addition or a change to the proof method. */
 				criterion?: Criterion;
+				ownerMessageId?: string;
 		  }
 		| {
 				kind: 'work_item';
@@ -267,6 +363,8 @@ export type LedgerEvent = EventBase &
 				title: string;
 				owner: SeatRole;
 				state: 'claimed' | 'done' | 'checked';
+				criterionId?: string;
+				discussionId?: string;
 		  }
 		| {
 				kind: 'check_run';
@@ -283,6 +381,9 @@ export type LedgerEvent = EventBase &
 				notRun?: string;
 				/** Stable batch identity, for restart reconciliation. */
 				batchId?: string;
+				testsRun?: number;
+				testsSkipped?: number;
+				dilution?: string[];
 		  }
 		| {
 				kind: 'issue_opened';
@@ -293,9 +394,13 @@ export type LedgerEvent = EventBase &
 				steps: string[];
 				expected?: string;
 				actual?: string;
+				reviewId?: string;
+				location?: string;
+				impact?: string;
 		  }
 		| { kind: 'issue_fixed'; issueId: string; summary?: string }
 		| { kind: 'issue_verified'; issueId: string; pass: boolean; evidence?: string }
+		| { kind: 'standard_issue_resolved'; issueId: string; reason: string }
 		| {
 				kind: 'criterion_evidence';
 				criterionId: string;
@@ -318,6 +423,13 @@ export type LedgerEvent = EventBase &
 				owner: SeatRole;
 				participants: SeatRole[];
 				trigger: string;
+				layer?: DecisionLayer;
+				reversible?: boolean;
+				question?: string;
+				evidence?: string[];
+				reopens?: string;
+				change?: StandardChangeRequest;
+				problemId?: string;
 		  }
 		| {
 				kind: 'position';
@@ -326,12 +438,20 @@ export type LedgerEvent = EventBase &
 				claim: string;
 				basis: string;
 				wouldChangeMind: string;
+				evidence?: string[];
+				extraTurns?: number;
+				preservesDeadline?: boolean;
 		  }
 		| {
 				kind: 'proposal';
 				discussionId: string;
 				proposal: string;
 				decider: LedgerActor;
+				round?: number;
+				actions?: DiscussionAction[];
+				compromise?: string;
+				experiment?: DiscussionExperiment;
+				options?: CardOption[];
 		  }
 		| {
 				kind: 'response';
@@ -340,6 +460,8 @@ export type LedgerEvent = EventBase &
 				result: 'agree' | 'reserve' | 'insist';
 				reason: string;
 				evidence?: string;
+				baselineViolation?: string;
+				round?: number;
 		  }
 		| {
 				kind: 'discussion_closed';
@@ -348,9 +470,11 @@ export type LedgerEvent = EventBase &
 				decider: LedgerActor;
 				dissent?: string;
 				contested?: boolean;
-				actions: Array<{ seat: SeatRole; action: string }>;
+				actions: DiscussionAction[];
 		  }
-		| { kind: 'output_captured'; outputId: string; files: string[]; previews: string[] }
+		| ({ kind: 'output_captured'; outputId: string } & OutputCapture)
+		| { kind: 'topic_rejected'; topic: TeamTopic; reason: string }
+		| { kind: 'suggestion'; text: string; criterionId?: string }
 		| {
 				kind: 'review';
 				verdict: 'pass' | 'reject';
@@ -362,10 +486,22 @@ export type LedgerEvent = EventBase &
 				reason: 'no-progress' | 'rejections';
 				summary: string;
 				progressEvidence: string;
+				basis?: string;
+				approach?: string;
+				difference?: string;
+				discussionId?: string;
 				/** A targeted diagnosis; omitted for a team-wide retro. */
 				problemId?: string;
 		  }
-		| { kind: 'demo' }
+		| {
+				kind: 'demo';
+				criterionIds?: string[];
+				changes?: string[];
+				contested?: string[];
+				suggestions?: string[];
+				withEvidence?: number;
+				total?: number;
+		  }
 		| { kind: 'accepted'; withGaps?: string[] }
 		| { kind: 'changes_requested'; note: string }
 		| {
@@ -383,8 +519,11 @@ export type LedgerEvent = EventBase &
 		| { kind: 'member_recovered'; seat: SeatRole; how: string }
 		| { kind: 'decision_card'; card: OwnerCard }
 		| { kind: 'card_answered'; cardId: string; optionId: string; note?: string }
+		| { kind: 'card_superseded'; cardId: string; reason: string }
 		| { kind: 'owner_message'; messageId: string; to?: SeatRole; text: string; scope?: boolean }
-		| { kind: 'message_delivered'; messageId: string; seat: SeatRole }
+		| { kind: 'message_delivered'; messageId: string; seat: SeatRole; dispatchId?: string }
+		| { kind: 'message_handled'; messageId: string; seat: SeatRole; summary: string }
+		| { kind: 'message_forwarded'; messageId: string; from: SeatRole; summary: string }
 	);
 
 export type LedgerEventKind = LedgerEvent['kind'];
@@ -404,6 +543,8 @@ export type TurnKind =
 	| 'review'
 	| 'demo'
 	| 'topic'
+	| 'message'
+	| 'retro'
 	| 'report_repair';
 
 export interface Objection {
@@ -434,7 +575,11 @@ export interface ReviewProblem {
 }
 
 /** The parsed body of a `team-report` block, discriminated by `type`. */
-export type TeamReport =
+export type TeamReport = {
+	/** Any seat can raise a topic or propose a standard change in its own turn. */
+	topic?: TeamTopic | string;
+	standardChanges?: StandardChangeRequest[];
+} & (
 	| {
 			type: 'brief';
 			scope: string;
@@ -459,7 +604,7 @@ export type TeamReport =
 			done: string[];
 			summary: string;
 			claimsComplete: boolean;
-			waiting?: { reason: string; waitFor: string } | null;
+			waiting?: { reason: string; waitFor: string; needs?: SeatRole[] } | null;
 	  }
 	| { type: 'qa_prep'; tests: string[]; samples: string[] }
 	| {
@@ -493,7 +638,57 @@ export type TeamReport =
 	  }
 	| { type: 'review'; verdict: 'pass' | 'reject'; problems: ReviewProblem[]; suggestions: string[] }
 	| { type: 'demo'; summary: string; evidence: string[]; decisions: string[]; changes: string[] }
-	| { type: 'topic'; topic: string; why: string; participants: SeatRole[] };
+	| ({ type: 'topic' } & TeamTopic)
+	| {
+			type: 'position';
+			discussionId: string;
+			claim: string;
+			basis: string;
+			wouldChangeMind: string;
+			evidence?: string[];
+			extraTurns?: number;
+			preservesDeadline?: boolean;
+	  }
+	| {
+			type: 'proposal';
+			discussionId: string;
+			proposal: string;
+			decider: LedgerActor;
+			actions: DiscussionAction[];
+			compromise?: string;
+			experiment?: DiscussionExperiment;
+			options?: CardOption[];
+	  }
+	| {
+			type: 'response';
+			discussionId: string;
+			result: 'agree' | 'reserve' | 'insist';
+			reason: string;
+			evidence?: string;
+			baselineViolation?: string;
+	  }
+	| {
+			type: 'retro';
+			discussionId: string;
+			causes: string;
+			approach: string;
+			basis: string;
+			difference: string;
+			progressEvidence: string;
+	  }
+	| {
+			type: 'message';
+			summary: string;
+			messages: Array<{
+				messageId: string;
+				scope: boolean;
+				criterion?: Criterion;
+				change?: StandardChangeRequest['change'];
+				criterionId?: string;
+			}>;
+			resolvedStandards?: Array<{ issueId: string; reason: string }>;
+	  }
+);
 
 /** Which seats may submit which report types (PRD R1, R2). */
 export const REPORT_PERMISSIONS: Record<TeamReport['type'], readonly SeatRole[]> = {
@@ -508,12 +703,18 @@ export const REPORT_PERMISSIONS: Record<TeamReport['type'], readonly SeatRole[]>
 	review: ['pm'],
 	demo: ['pm'],
 	topic: ['pm', 'dev', 'qa'],
+	position: ['pm', 'dev', 'qa'],
+	proposal: ['pm', 'dev', 'qa'],
+	response: ['pm', 'dev', 'qa'],
+	retro: ['pm'],
+	message: ['pm', 'dev', 'qa'],
 };
 
 export type TeamEvent<K extends LedgerEventKind> = Extract<LedgerEvent, { kind: K }>;
+export type ReportTurnKind = TeamReport['type'];
 export type M1TurnKind = Exclude<
 	TurnKind,
-	'position' | 'proposal' | 'response' | 'topic' | 'report_repair'
+	'position' | 'proposal' | 'response' | 'topic' | 'report_repair' | 'message' | 'retro'
 >;
 export type CriterionEvidenceStatus = 'unproven' | 'pending' | 'pass' | 'fail';
 
@@ -540,8 +741,16 @@ export interface CriterionState extends Criterion {
 export interface TeamIssue {
 	id: string;
 	opened: TeamEvent<'issue_opened'>;
-	state: 'opened' | 'fixed-claimed' | 'verified-pass' | 'verified-fail';
-	history: Array<TeamEvent<'issue_opened' | 'issue_fixed' | 'issue_verified'>>;
+	state: 'opened' | 'fixed-claimed' | 'verified-pass' | 'verified-fail' | 'superseded';
+	history: Array<
+		TeamEvent<
+			| 'issue_opened'
+			| 'issue_fixed'
+			| 'issue_verified'
+			| 'standard_issue_resolved'
+			| 'standard_change'
+		>
+	>;
 }
 
 export interface TeamDiscussion {
@@ -643,8 +852,26 @@ export interface TeamState {
 		repaired?: boolean;
 	}>;
 	pendingMessages: TeamEvent<'owner_message'>[];
+	messages: Array<{
+		message: TeamEvent<'owner_message'>;
+		delivered?: TeamEvent<'message_delivered'>;
+		handled?: TeamEvent<'message_handled'>;
+		forwarded?: TeamEvent<'message_forwarded'>;
+	}>;
+	suggestions: string[];
+	demos: TeamEvent<'demo'>[];
 	usage: TeamUsage;
 	statistics: TeamStatistics;
+}
+
+export interface TeamTurnLog {
+	dispatchId: string;
+	seat: SeatRole;
+	turn?: TurnKind;
+	prompt?: string;
+	reply?: string;
+	report?: TeamReport;
+	error?: string;
 }
 
 export interface TeamStatusView {

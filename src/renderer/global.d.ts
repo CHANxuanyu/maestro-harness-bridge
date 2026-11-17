@@ -246,7 +246,13 @@ interface MaestroAPI {
 		status(teamId: string): Promise<TeamStatusView | null>;
 		/** Answer an exact open card/option. Return/change options require a nonempty note. */
 		answer(teamId: string, cardId: string, optionId: string, note?: string): Promise<void>;
-		/** M1 queues every owner message for the PM's next turn; a requested recipient is preserved in text. */
+		baselineEdit: ReturnType<typeof import('../main/preload/team').createTeamApi>['baselineEdit'];
+		baselineDiff: ReturnType<typeof import('../main/preload/team').createTeamApi>['baselineDiff'];
+		baselineReturn: ReturnType<
+			typeof import('../main/preload/team').createTeamApi
+		>['baselineReturn'];
+		log: ReturnType<typeof import('../main/preload/team').createTeamApi>['log'];
+		/** Targets one seat, queued after its current turn. PM records owner requirements. */
 		say(teamId: string, text: string, to?: SeatRole): Promise<void>;
 		/** Stops new scheduling; current turns finish and their results are retained. */
 		pause(teamId: string): Promise<void>;

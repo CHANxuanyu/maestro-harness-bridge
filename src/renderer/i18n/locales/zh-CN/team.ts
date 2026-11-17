@@ -149,6 +149,7 @@ export const team: AreaTranslation<typeof en> = {
 	'workflows.team.fixed-claimed': '已修复（自述）',
 	'workflows.team.verified-pass': '已复验',
 	'workflows.team.verified-fail': '复验未通过',
+	'workflows.team.superseded': '已被后续变更取代',
 	'workflows.team.expected': '期待',
 	'workflows.team.actual': '实际',
 	'workflows.team.violates': '违反 {id}',

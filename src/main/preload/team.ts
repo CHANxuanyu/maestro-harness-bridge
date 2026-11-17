@@ -1,6 +1,9 @@
 import { ipcRenderer } from 'electron';
 import type {
 	CreateTeamInput,
+	BaselineDiff,
+	Brief,
+	TeamTurnLog,
 	LedgerEvent,
 	SeatRole,
 	TeamConfig,
@@ -19,6 +22,18 @@ export function createTeamApi() {
 			ipcRenderer.invoke('team:status', teamId),
 		answer: (teamId: string, cardId: string, optionId: string, note?: string): Promise<void> =>
 			ipcRenderer.invoke('team:answer', teamId, cardId, optionId, note),
+		baselineEdit: (
+			teamId: string,
+			criterionId: string,
+			text: string
+		): Promise<{ brief: Brief; diff: BaselineDiff }> =>
+			ipcRenderer.invoke('team:baselineEdit', teamId, criterionId, text),
+		baselineDiff: (teamId: string): Promise<BaselineDiff> =>
+			ipcRenderer.invoke('team:baselineDiff', teamId),
+		baselineReturn: (teamId: string, note: string): Promise<void> =>
+			ipcRenderer.invoke('team:baselineReturn', teamId, note),
+		log: (teamId: string, seat?: SeatRole): Promise<TeamTurnLog[]> =>
+			ipcRenderer.invoke('team:log', teamId, seat),
 		say: (teamId: string, text: string, to?: SeatRole): Promise<void> =>
 			ipcRenderer.invoke('team:say', teamId, text, to),
 		pause: (teamId: string): Promise<void> => ipcRenderer.invoke('team:pause', teamId),

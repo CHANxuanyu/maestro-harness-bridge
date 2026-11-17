@@ -113,7 +113,25 @@ A missing or malformed block is repaired once by asking the seat to resubmit onl
 | review    | PM `review` on captured output                                                                                                          | PM passes and every criterion has evidence        |
 | demo      | PM `demo`, owner acceptance card                                                                                                        | owner accepts or requests changes                 |
 
-Always one of: a seat working, a registered wait, an owner card. Otherwise the scheduler wakes the PM (R3-1).
+Always one of: a seat working, a registered wait, an owner card, or an explicit
+member fault awaiting recovery. Otherwise the scheduler wakes the PM (R3-1).
+A member fault must not generate repeated PM wake turns.
+
+Execution permissions are per turn through `teamTurnPermission()` in
+`src/shared/team/policy.ts`: dev `work` and `fix` write in the dev worktree;
+QA `qa_prep` and `reverify` write only `qa/` in the QA worktree. Every other
+turn is read-only, including challenge, position, proposal, response, review,
+verification, message and report repair. PM is always read-only. Read-only
+provider enforcement and conflicting custom-argument checks apply to all seats.
+
+An immediate dispatch error is a `turn-failed` member fault. The scheduler
+permits one same-turn recovery retry and then holds the fault in status. This
+latch is derived from ledger receipts, including duplicate roots left by older
+schedulers; new dispatch IDs and restart cannot reset it. A different turn kind
+requires a changed basis, or an owner answer/member recovery can restart the
+failed assignment. Failed attempts remain recorded, but fallback polling does
+not consume more turns. `model-unavailable` obeys this same bound; model takeover
+is reserved for M3.
 
 ## 6. Owner cards and boundaries
 
@@ -148,3 +166,48 @@ are ingested only after `qa_boundary_checked`, with restored paths recorded in
 
 M1 limitations and verification commands are recorded in
 [team runtime verification](team-runtime-verification.md).
+
+## M2 backend contract (2026-11-17)
+
+The renderer consumes the existing append stream plus these main-process actions:
+`baselineEdit(id, criterionId, text)`, `baselineDiff(id)`,
+`baselineReturn(id, note)`, and `log(id, seat?)`. `say(id, text, to?)` defaults
+to PM. A direct seat conversation uses the same call with `to`; messages have
+separate delivered, forwarded and handled receipts. New dispatches persist their
+exact prompt text; legacy dispatches without it reconstruct their frozen ledger
+slice using the current prompt builder. See the
+[CLI parity table](../../agent-guides/CLI-UI-PARITY.md#team-m1-and-m2-main-process-contract-2026-11-17).
+
+Any report may attach `topic` or `standardChanges`. Discussion reports are
+`position`, `proposal`, `response`; PM's `retro` records causes, approach, basis,
+difference and expected progress evidence. `message` receipts can identify an
+owner addition, edit or removal with `change`, `criterionId` and the complete
+replacement `criterion` when applicable. Owner wording remains in the ledger.
+`topic.kind: 'standard'` routes unjudgeable criteria to PM; standard resolution
+is separate from a QA-verified implementation fix. Owner-approved replacement
+or removal supersedes old issues, preserving their history.
+
+`Criterion.locations` enumerates every required viewer or output file:
+`{ label, target, kind: 'file' | 'preview' | 'screenshot' }`. The app captures
+local HTML, SVG and Markdown with the compositor, copies files, and can capture
+an already open app web viewer by exact URL. Missing targets block review as
+standard issues. A resolved viewer issue triggers a fresh capture. Capture
+receipts carry `beforeOutputId` and per-location errors; the initial revision
+is captured before implementation. Native apps outside Electron require a
+separate capture integration and are not silently treated as reviewed.
+
+`CheckCommand.boundary` and discussion experiments may declare
+`outside-workspace` or `external-write`. These use one-invocation owner cards,
+without expanding the team's workspace-check authorization. Explicit shell
+paths and common external-write verbs are also detected. Arbitrary script
+internals are not sandboxed by this metadata and command inspection.
+
+`TeamState.reviewProgress` and `reviewDecision` come from the shared progress
+rules. Every PM problem opens a criterion-linked issue and work item. Dropping
+a comment cannot close it. Two consecutive rejections cause a PM-led retro;
+progress after a retro continues fixing. `demos` contains app-generated criterion
+coverage, all changes and contested decisions. A second demo covers the new
+owner request only, while the completion gate still checks every criterion.
+
+The actual validation and limitations are recorded in
+[team-m2-verification.md](team-m2-verification.md).

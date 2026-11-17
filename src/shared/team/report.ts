@@ -1,4 +1,11 @@
 import MarkdownIt from 'markdown-it';
+import {
+	discussionDecider,
+	isOpenTeamIssue,
+	missingOutputLocations,
+	teamEvidence,
+	teamReadyForDemo,
+} from './policy';
 import { parseJsonWithBom } from '../jsonUtils';
 import {
 	REPORT_PERMISSIONS,
@@ -61,6 +68,12 @@ function shapeError(value: unknown, schema: ReportSchema, path = 'report'): stri
 			: `${path} does not match an allowed shape.`;
 	}
 	if (schema.type === 'null') return value === null ? undefined : `${path} must be null.`;
+	if (schema.type === 'number')
+		return typeof value === 'number' &&
+			Number.isFinite(value) &&
+			value >= (schema.minimum ?? -Infinity)
+			? undefined
+			: `${path} must be a finite nonnegative number.`;
 	if (schema.type === 'boolean')
 		return typeof value === 'boolean' ? undefined : `${path} must be a boolean.`;
 	if (schema.type === 'string') {
@@ -105,6 +118,8 @@ export function validateTeamReport(
 	seat: SeatRole,
 	state?: TeamState
 ): TeamReportResult {
+	// A seat may raise a topic instead of its scheduled work report. The scheduler resumes that work afterwards.
+	if (raw && typeof raw === 'object' && 'type' in raw && raw.type === 'topic') expected = 'topic';
 	const schema = teamReportSchema(expected, seat);
 	if (!schema)
 		return {
@@ -121,6 +136,122 @@ export function validateTeamReport(
 	const report = raw as TeamReport;
 	const fail = (reason: string): TeamReportResult => ({ ok: false, reason });
 	const confirmed = state?.criteria.filter((c) => c.confirmed) ?? [];
+	if (report.standardChanges) {
+		for (const change of report.standardChanges) {
+			if (
+				change.change !== 'remove' &&
+				(!change.criterion || change.criterion.id !== change.criterionId)
+			)
+				return fail('Standard changes require a complete matching criterion definition.');
+			if (
+				change.ownerMessageId &&
+				!state?.pendingMessages.some((m) => m.messageId === change.ownerMessageId)
+			)
+				return fail('Owner authority must reference an actual pending owner message.');
+		}
+	}
+	if (
+		report.type === 'position' ||
+		report.type === 'proposal' ||
+		report.type === 'response' ||
+		report.type === 'retro'
+	) {
+		const discussion = state?.discussions.find((d) => d.id === report.discussionId);
+		if (!discussion?.opened || !discussion.opened.participants.includes(seat))
+			return fail('Only a participant may report on an existing discussion.');
+		if (discussion.decision && report.type !== 'retro')
+			return fail('This discussion already has a conclusion.');
+		if (report.type === 'position') {
+			if (discussion.proposals.length || discussion.positions.some((p) => p.seat === seat))
+				return fail('The sealed position has already been submitted.');
+			if (report.evidence?.some((e) => !teamEvidence(state!).includes(e)))
+				return fail('Positions must cite recorded evidence.');
+			if (report.extraTurns !== undefined && seat !== 'dev')
+				return fail('Only dev estimates implementation cost.');
+		}
+		if (report.type === 'proposal') {
+			if (
+				seat !== discussion.opened.owner ||
+				discussion.positions.length !== discussion.opened.participants.length
+			)
+				return fail('The topic owner proposes after every sealed position is recorded.');
+			if (report.decider !== discussionDecider(discussion))
+				return fail(`This layer is decided by ${discussionDecider(discussion)}.`);
+			if (
+				new Set(report.actions.map((a) => a.seat)).size !== report.actions.length ||
+				discussion.opened.participants.some((p) => !report.actions.some((a) => a.seat === p))
+			)
+				return fail('A conclusion needs exactly one action or wait for each participant.');
+		}
+		if (report.type === 'response') {
+			const proposal = discussion.proposals.at(-1);
+			if (!proposal) return fail('Responses require a proposal.');
+			if (report.evidence && !teamEvidence(state!).includes(report.evidence))
+				return fail('Responses must cite recorded evidence.');
+			if (report.result === 'insist') {
+				const used = [
+					...(discussion.opened.evidence ?? []),
+					...discussion.positions.flatMap((p) => p.evidence ?? []),
+					...discussion.responses
+						.filter((r) => r.seq < proposal.seq)
+						.flatMap((r) => (r.evidence ? [r.evidence] : [])),
+				];
+				const fresh =
+					report.evidence &&
+					teamEvidence(state!).includes(report.evidence) &&
+					!used.includes(report.evidence);
+				if (!fresh && !confirmed.some((c) => c.id === report.baselineViolation))
+					return fail(
+						'Insisting requires new recorded evidence or a confirmed baseline violation.'
+					);
+			}
+		}
+		if (report.type === 'retro') {
+			if (seat !== 'pm' || !discussion.decision)
+				return fail('PM records the retro after the team discussion concludes.');
+			if (
+				state!.retros.some(
+					(r) =>
+						r.basis === report.basis &&
+						(discussion.opened!.trigger === 'no-progress' || r.approach === report.approach)
+				)
+			)
+				return fail('Diagnosis requires a new basis, not a repeated approach and basis.');
+		}
+	}
+	if (report.type === 'message') {
+		const messages =
+			state?.pendingMessages.filter(
+				(m) =>
+					(m.to ?? 'pm') === seat ||
+					(seat === 'pm' &&
+						state.messages.find((item) => item.message.messageId === m.messageId)?.forwarded)
+			) ?? [];
+		if (
+			report.messages.length !== messages.length ||
+			new Set(report.messages.map((m) => m.messageId)).size !== messages.length ||
+			report.messages.some((m) => !messages.some((known) => known.messageId === m.messageId))
+		)
+			return fail('A message turn must handle exactly the messages delivered to this seat.');
+		for (const receipt of report.messages) {
+			if (
+				receipt.change &&
+				receipt.change !== 'add' &&
+				(!receipt.scope || !state?.criteria.some((c) => c.id === receipt.criterionId))
+			)
+				return fail('An owner scope edit must name an existing criterion.');
+			if (receipt.change && !['add', 'remove'].includes(receipt.change) && !receipt.criterion)
+				return fail('An owner scope edit requires the complete replacement criterion.');
+		}
+		if (report.resolvedStandards?.length && seat !== 'pm')
+			return fail('Standard issues belong to PM.');
+		if (
+			report.resolvedStandards?.some(
+				(r) => !state?.issues.some((i) => i.id === r.issueId && i.opened.issueKind === 'standard')
+			)
+		)
+			return fail('Unknown standard issue.');
+	}
 	if (report.type === 'brief' || report.type === 'respond') {
 		const brief = report.type === 'brief' ? report : report.brief!;
 		const ids = brief.criteria.map((c) => c.id);
@@ -176,10 +307,7 @@ export function validateTeamReport(
 		const ids = [...report.fixed, ...report.notFixed.map((i) => i.id)];
 		if (new Set(ids).size !== ids.length)
 			return fail('An issue must occur once, in fixed or notFixed.');
-		if (
-			state &&
-			ids.some((id) => !state.issues.some((i) => i.id === id && i.state !== 'verified-pass'))
-		)
+		if (state && ids.some((id) => !state.issues.some((i) => i.id === id && isOpenTeamIssue(i))))
 			return fail('Fix reports must name open issues.');
 		if (
 			state &&
@@ -216,6 +344,8 @@ export function validateTeamReport(
 			return fail('QA may reverify only an issue with a developer fix claim.');
 	}
 	if (report.type === 'review') {
+		if (state && missingOutputLocations(state, state.outputs.at(-1)).length)
+			return fail('Review requires captured real output at every named location.');
 		const problems = report.problems.filter((p) => confirmed.some((c) => c.id === p.criterion));
 		const suggestions = [
 			...report.suggestions,
@@ -233,16 +363,9 @@ export function validateTeamReport(
 			report: { ...report, problems, suggestions, verdict: problems.length ? 'reject' : 'pass' },
 		};
 	}
-	if (
-		report.type === 'demo' &&
-		state &&
-		(!confirmed.length ||
-			confirmed.some((c) => c.status !== 'pass') ||
-			state.reviews.at(-1)?.verdict !== 'pass' ||
-			state.issues.some((i) => i.state !== 'verified-pass'))
-	)
+	if (report.type === 'demo' && state && !teamReadyForDemo(state))
 		return fail(
-			'A completion demo requires evidence for every confirmed criterion, no open issues, and a passing PM review.'
+			'A completion demo requires evidence for every confirmed criterion, captured output, no open issues, and a passing PM review.'
 		);
 	return { ok: true, report };
 }

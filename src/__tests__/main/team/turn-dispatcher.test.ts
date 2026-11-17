@@ -5,6 +5,9 @@ import type { SpawnHandlerDependencies } from '../../../main/ipc/handlers/proces
 import type { ProcessManager } from '../../../main/process-manager';
 import { AGENT_LIVENESS_EVENTS } from '../../../main/utils/agent-liveness';
 import { getTurnUsageLedgerSize } from '../../../shared/turnUsageLedger';
+import { TEAM_TURN_PROMPTS } from '../../../shared/team/prompts';
+import { teamTurnPermission } from '../../../shared/team/policy';
+import { SEAT_ROLES, type TurnKind } from '../../../shared/team/types';
 
 vi.mock('../../../main/ipc/handlers/process/handle-spawn', () => ({ handleProcessSpawn: vi.fn() }));
 vi.mock('../../../main/power-manager', () => ({ powerManager: { removeBlockReason: vi.fn() } }));
@@ -42,6 +45,7 @@ describe('team turn dispatcher', () => {
 		request = {
 			teamId: 'team1',
 			seat: 'dev',
+			turn: 'work',
 			dispatchId: 'turn1',
 			tool: 'codex',
 			permissionMode: 'full',
@@ -56,6 +60,56 @@ describe('team turn dispatcher', () => {
 		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
+
+	it.each(
+		SEAT_ROLES.flatMap((seat) =>
+			([...Object.keys(TEAM_TURN_PROMPTS), 'report_repair'] as TurnKind[]).map((turn) => ({
+				seat,
+				turn,
+			}))
+		)
+	)('enforces permissions for $seat $turn through native spawn', async ({ seat, turn }) => {
+		const permissionMode = teamTurnPermission(seat, turn);
+		const writing =
+			(seat === 'dev' && ['work', 'fix'].includes(turn)) ||
+			(seat === 'qa' && ['qa_prep', 'reverify'].includes(turn));
+		expect(permissionMode).toBe(writing ? 'full' : 'readonly');
+		const dispatcher = createTurnDispatcher(deps);
+		await expect(
+			dispatcher.dispatch({
+				...request,
+				seat,
+				turn,
+				permissionMode: writing ? 'readonly' : 'full',
+			})
+		).rejects.toThrow('turn policy');
+		const pending = dispatcher.dispatch({ ...request, seat, turn, permissionMode });
+		await started();
+		expect(handleProcessSpawn).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd: request.cwd, permissionMode }),
+			expect.anything()
+		);
+		pm.emit('exit', `team-team1-${seat}-turn1`, 0);
+		expect((await pending).failure).toBeUndefined();
+	});
+
+	it.each(SEAT_ROLES)(
+		'refuses providers that cannot enforce a read-only %s discussion',
+		async (seat) => {
+			deps.getAgentDetector = () =>
+				({
+					getAgent: async () => ({ id: 'codex', readOnlyCliEnforced: false }),
+				}) as never;
+			const result = await createTurnDispatcher(deps).dispatch({
+				...request,
+				seat,
+				turn: 'position',
+				permissionMode: 'readonly',
+			});
+			expect(result.failure).toMatchObject({ kind: 'turn-failed' });
+			expect(handleProcessSpawn).not.toHaveBeenCalled();
+		}
+	);
 
 	it('uses the full event-free spawn preparation and collects only its own normalized usage and final text', async () => {
 		const onNativeSessionId = vi.fn();
@@ -156,7 +210,7 @@ describe('team turn dispatcher', () => {
 	it('refuses Ultra and inconsistent seat permissions before any spawn', async () => {
 		const dispatcher = createTurnDispatcher(deps);
 		await expect(dispatcher.dispatch({ ...request, effort: 'ULTRA' })).rejects.toThrow('Ultra');
-		await expect(dispatcher.dispatch({ ...request, seat: 'pm' })).rejects.toThrow('read-only');
+		await expect(dispatcher.dispatch({ ...request, seat: 'pm' })).rejects.toThrow('turn policy');
 		expect(handleProcessSpawn).not.toHaveBeenCalled();
 	});
 

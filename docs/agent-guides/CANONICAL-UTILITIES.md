@@ -77,7 +77,8 @@ experience evidence must reference an app-captured output. The runtime owns
 validation and execution; this reducer does not execute work or append events.
 Baseline command canaries use `check_run.purpose: 'trial'` and never prove the
 delivered product. Review progress uses fresh QA evidence about previous review
-problems, never a change in the number or wording of PM comments.
+problems. Multiple problems on one criterion stay separate; omitting a comment
+does not close an unresolved issue. All review rounds still use `judgeAttempts()`.
 
 `extractTeamReport()`, `validateTeamReport()`, and `reportRepairPrompt()` in
 `src/shared/team/report.ts` share `REPORT_SCHEMAS` and `teamReportSchema()` from
@@ -88,6 +89,33 @@ Unknown fields are rejected, QA challenge plans are mandatory, and review
 problems without a confirmed criterion become suggestions. Without state, no
 review criterion is assumed confirmed. The dispatcher must permit only one
 repair, passing the original turn kind; repair does not redo work.
+
+`baselineDiff()`, `discussionDecider()`, `topicRejection()`, `pmMayChange()`,
+`referenceVotes()`, `missingOutputLocations()`, `teamReadyForDemo()` and
+`isOpenTeamIssue()` in `src/shared/team/policy.ts` own the M2 policy. Do not add
+renderer versions of these gates. A superseded issue preserves the failed
+history; it is not a verified fix. Topic positions use fresh native contexts
+and are omitted from other seats' prompts until response time. The main-owned
+conclusion creates the work items and registered waits.
+
+`teamTurnPermission()` in that same policy module is the execution permission
+allowlist shared by prompts, scheduler requests and the native turn dispatcher.
+Only dev `work`/`fix` and QA `qa_prep`/`reverify` can write; QA's existing boundary
+restoration still confines those writes to `qa/`. Every other turn, including
+challenge, discussion, verification and report repair, is read-only. PM is
+always read-only. Do not infer permission from the seat alone.
+
+`captureTeamOutput()` in `src/main/team/output-capture.ts` preserves immutable
+files and every declared location receipt. It uses `captureWebContentsPage()`
+in `src/main/utils/capture-page.ts`, the same compositor path as the window
+capture IPC, after two animation frames with bounded loading and capture.
+Missing viewers produce explicit receipts and standard issues for PM.
+`checkTestCounts()` and `checkCommandBoundary()` in `src/shared/checkRun.ts`
+share observed runner counts and explicit check boundaries. Unknown counts
+remain unknown. Boundary declarations and recognized shell actions require a
+per-invocation card; this is not an operating-system sandbox for script contents.
+`getModelFamily()` now lives in `src/shared/modelFamily.ts`; the renderer path
+re-exports it. Reference votes group same-vendor models through that utility.
 
 `teamReplyMessage()` in that same module uses the canonical Markdown parser to
 remove report fences and bound visible replies. `reportEvents()` in
@@ -103,6 +131,14 @@ appends. Its `reconcileTeamTurn()` reads the bound account's native storage with
 revision, including untracked files, so staging or committing alone cannot
 manufacture a new fix. The scheduler combines it with failing signatures for
 `decideNext()`; new check row IDs alone do not count as progress.
+
+Member execution failures use a separate durable recovery latch, not the
+product-progress loop. One same-turn retry is allowed; a fresh UUID, fallback
+wake, incidental ledger append or restart cannot grant another. Existing
+duplicate roots count as attempts too. A later member recovery or owner answer
+can restart the assignment; a different kind also needs a changed assignment
+basis. A held member fault appears in app/CLI status instead of waking PM in a
+loop. Model takeover remains a separate M3 responsibility.
 
 Domain events project requirements, work, issues, reviews, and decisions.
 `report_accepted` preserves the report and contributes QA verdicts, but does not
@@ -483,6 +519,19 @@ cannot be candidates, but their failed requests must not be replayed either.
 `handoffLocation()` in `src/shared/aiHandoff.ts` resolves only the configured execution directory and builds its host-scoped comparison key. The sidebar project root is grouping metadata, not a spawn directory. An SSH override wins over cwd, a missing remote ID fails, and remote paths are never passed through local realpath or path.resolve. Main routing and renderer target insertion share this check so worktrees and identically named directories on different hosts cannot be mixed.
 
 ## Codex rollout archives
+
+`extractCodexPlan()` in `src/shared/codexSessionText.ts` decodes a native tool
+payload into its plan snapshot. Codex 0.166+ records `exec` custom calls containing
+`text(await tools.update_plan({...}))`; older versions record direct `update_plan`
+function arguments. Storage, live response-item parsing and the real acceptance
+oracle share this helper. It accepts complete calls with JSON-literal arguments,
+preserves all three statuses and explicit empty arrays, and returns null for
+partial, malformed, computed or unrelated scripts. Never execute native source or
+extract a plan from a quoted example. The normalized input reaches both
+`latestAgentTaskList()` (Tasks panel and CLI) and `extractAgentTaskList()` (inline
+cards) through the existing transcript converter; there is no separate plan store.
+Exec `todo_list` events only carry completed booleans, so their false values remain
+pending; native records retain `in_progress` when present.
 
 `codexRolloutSessionId()`, `isCodexRollout()`, `preferPlainCodexRollouts()`, `readCodexRollout()` and `readCodexRolloutSync()` in `src/shared/codexRollout.ts` are the filename, source selection and bounded read entry points for Codex native history. Both `.jsonl` and `.jsonl.zst` use a 100 MB source and expanded-byte limit. Zstd decoding uses Node's built-in implementation entirely in memory. SSH storage transfers binary bytes as base64 for local decoding. A plain rollout wins when both forms carry the same UUID. Never write expanded archives to disk or use compressed byte offsets as transcript offsets.
 

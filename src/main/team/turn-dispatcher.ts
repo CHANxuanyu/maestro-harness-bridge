@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
-import type { SeatModel, SeatRole, MemberFaultKind } from '../../shared/team/types';
+import type { SeatModel, SeatRole, MemberFaultKind, TurnKind } from '../../shared/team/types';
+import { teamTurnPermission } from '../../shared/team/policy';
 import type { AgentError, AgentSshRemoteConfig, UsageStats } from '../../shared/types';
 import { DURATION_MS } from '../../shared/duration';
 import { recordTurnUsage, drainTurnUsage, type TurnUsage } from '../../shared/turnUsageLedger';
@@ -24,6 +25,7 @@ import {
 export interface SeatTurnRequest extends SeatModel {
 	teamId: string;
 	seat: SeatRole;
+	turn: TurnKind;
 	dispatchId?: string;
 	permissionMode: 'readonly' | 'full';
 	cwd: string;
@@ -66,8 +68,10 @@ export function createTurnDispatcher(deps: SpawnHandlerDependencies) {
 			if (input.tool === 'codex' && configuredEffort?.trim().toLowerCase() === 'ultra')
 				throw new Error('Codex Ultra is not allowed for team seats');
 			if (input.tool === 'terminal') throw new Error('A team seat requires a provider');
-			if (input.permissionMode !== (input.seat === 'pm' ? 'readonly' : 'full'))
-				throw new Error('PM must be read-only; dev and QA require write permissions');
+			if (input.permissionMode !== teamTurnPermission(input.seat, input.turn))
+				throw new Error(
+					`Permission mode conflicts with the ${input.seat} ${input.turn} turn policy`
+				);
 			const pm = deps.getProcessManager();
 			if (!pm) throw new Error('Process manager unavailable');
 			const dispatchId = input.dispatchId ?? randomUUID();
@@ -235,9 +239,9 @@ export function createTurnDispatcher(deps: SpawnHandlerDependencies) {
 				if (settled) return;
 				const agent = await deps.getAgentDetector()?.getAgent(input.tool);
 				if (!agent) throw new Error(`Unknown provider: ${input.tool}`);
-				if (input.seat === 'pm') {
+				if (input.permissionMode === 'readonly') {
 					if (agent.readOnlyCliEnforced === false)
-						throw new Error('This provider cannot enforce the PM read-only policy');
+						throw new Error('This provider cannot enforce the turn read-only policy');
 					const overrides = {
 						agentConfigValues: deps.agentConfigsStore.get('configs', {})[input.tool] ?? {},
 						sessionCustomArgs: input.customArgs,
@@ -256,7 +260,7 @@ export function createTurnDispatcher(deps: SpawnHandlerDependencies) {
 						configured.length !== pinned.length ||
 						configured.some((arg) => writeFlags.has(arg.split('=')[0]))
 					)
-						throw new Error('Provider configuration conflicts with the PM read-only policy');
+						throw new Error('Provider configuration conflicts with the turn read-only policy');
 				}
 				const { handleProcessSpawn } = await import('../ipc/handlers/process/handle-spawn');
 				if (settled) return;

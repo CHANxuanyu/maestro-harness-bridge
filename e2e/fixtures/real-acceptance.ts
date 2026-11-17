@@ -115,7 +115,6 @@ export class RealAcceptanceApp extends NativeApp {
 			ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
 			MAESTRO_E2E_DEEPSEEK_KEY: '',
 			CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-			CLAUDE_CODE_ENABLE_TASKS: 'false',
 			...this.acceptanceCredentials,
 		};
 	}

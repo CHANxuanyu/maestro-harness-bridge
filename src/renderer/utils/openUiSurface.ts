@@ -1,3 +1,4 @@
+import { useTeamStore } from '../stores/teamStore';
 import { resolveModelEffortTabId } from './panelLayout';
 import { useGroupChatStore } from '../stores/groupChatStore';
 import { getT } from '../i18n';
@@ -61,7 +62,14 @@ export function openUiSurface(
 	const actions = getModalActions();
 
 	switch (surface.id) {
+		case 'create-team':
+			if (!useSettingsStore.getState().newShell)
+				return { ok: false, error: getT()('workflows.split.disabled') };
+			useTeamStore.getState().setSetupOpen(!options?.close);
+			return { ok: true };
 		case 'model-picker': {
+			if (useTeamStore.getState().activeTeamId)
+				return { ok: false, error: getT()('workflows.modelPicker.noConversation') };
 			const session = selectActiveSession(useSessionStore.getState());
 			const target = resolveModelEffortTabId(
 				session,

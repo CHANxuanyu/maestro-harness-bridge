@@ -1,3 +1,4 @@
+import { useTeamStore } from '../../stores/teamStore';
 import { useT } from '../../i18n';
 import { openUiSurface } from '../../utils/openUiSurface';
 import { newProjectConversation } from '../../services/newShellConversation';
@@ -158,6 +159,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const [failedKeys, setFailedKeys] = useState<Record<string, true>>({});
 	const pendingRef = useRef(new Set<string>());
 	const collapsedProjects = useSettingsStore((s) => s.collapsedConversationProjects);
+	const teamActive = useTeamStore((s) => !!s.activeTeamId);
 	const groupChatActive = useGroupChatStore((s) => s.activeGroupChatId !== null);
 	const browsing = useModalStore(selectModalOpen('agentSessions'));
 	const activeKey = useSessionStore((s) => {
@@ -311,6 +313,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	}, [history.errors]);
 
 	const selectOwner = useCallback((ownerId: string) => {
+		useTeamStore.getState().selectTeam(null);
 		if (!useSessionStore.getState().sessions.some((session) => session.id === ownerId))
 			return false;
 		useGroupChatStore.getState().setActiveGroupChatId(null);
@@ -336,6 +339,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 
 	const openHistory = useCallback(
 		(conversation: SidebarConversation) => {
+			useTeamStore.getState().selectTeam(null);
 			const record = conversation.history;
 			if (!record || !onResumeSession) return;
 			const key = conversation.key;
@@ -546,6 +550,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const selectContent = useCallback(
 		async (hit: NativeHistorySearchHit) => {
 			if (!onResumeSession) return;
+			useTeamStore.getState().selectTeam(null);
 			const ticket = ++contentOpenTicket.current;
 			setContentOpening(true);
 			setContentOpenFailed(false);
@@ -577,7 +582,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 				headerMenu={headerMenu}
 				theme={theme}
 				projects={projects}
-				activeKey={groupChatActive || browsing ? null : activeKey}
+				activeKey={groupChatActive || teamActive || browsing ? null : activeKey}
 				search={search}
 				contentSearch={contentResults}
 				contentSearching={contentSearch.searching}

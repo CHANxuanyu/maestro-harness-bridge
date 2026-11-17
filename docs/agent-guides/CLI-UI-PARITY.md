@@ -1,5 +1,14 @@
 # CLI / UI Parity Audit
 
+Team UI A1c (2026-11-17): `maestro-cli open create-team` uses the same registered
+new-shell setup surface as the sidebar, menu, palette and rebindable shortcut.
+The renderer routes create, answer, say, pause/resume/stop, accept,
+requestChanges and export through `teamClient()`. The service and `team` CLI
+verbs are the parallel backend work, not implemented by this UI task. Runtime
+command parity, export output and native seat identity must be verified when
+that bridge lands. Baseline edit/diff/return remain hidden feature gates; quota
+return-to-original has no verb in the supplied contract and is not offered.
+
 New-shell catalog picker: `maestro-cli open model-picker` reaches the same
 registered popover as the composer and shortcut. `models <provider> --agent
 <id> --json` reads the same catalog, defaults and quota. Existing `tab model`

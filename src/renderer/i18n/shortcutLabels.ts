@@ -21,6 +21,7 @@ export const SHORTCUT_LABEL_OVERLAYS: Readonly<
 };
 
 const NEW_SHELL_SHORTCUT_KEYS: Readonly<Record<string, MessageKey>> = {
+	createTeam: 'workflows.team.new',
 	splitConversation: 'workflows.split.openRight',
 	toggleMode: 'workflows.newShell.newTerminalTab',
 	goToFiles: 'workflows.newShell.goToFilesTab',

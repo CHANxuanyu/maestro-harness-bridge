@@ -1,3 +1,5 @@
+import { useTeamStore } from '../stores/teamStore';
+import { TeamSetupHost } from './Team/TeamView';
 import { TerminalViewProvider } from './TerminalView';
 import type { UseInterruptHandlerReturn } from '../hooks/agent/useInterruptHandler';
 import { shellFeatureVisible } from '../../shared/newShellFeatures';
@@ -64,6 +66,7 @@ export interface AppShellProps {
 	logViewerOpen: boolean;
 	logViewer: ReactNode | null;
 	groupChatView: ReactNode | null;
+	teamView?: ReactNode;
 
 	hasSessions: boolean;
 	sessionsLoaded: boolean;
@@ -106,6 +109,7 @@ function AppShellContent({
 	logViewerOpen,
 	logViewer,
 	groupChatView,
+	teamView,
 	hasSessions,
 	sessionsLoaded,
 	emptyStateProps,
@@ -126,6 +130,8 @@ function AppShellContent({
 	// activeSession into the shell (busy/log flushes stay off this paint path when
 	// App's chrome equality ignores state).
 	const newShell = useSettingsStore(selectNewShellEnabled);
+	const activeTeamId = useTeamStore((s) => s.activeTeamId);
+	const teamActive = newShell && !!activeTeamId;
 	const t = useT();
 	useEffect(() => {
 		document.documentElement.dataset.newShell = String(newShell);
@@ -230,11 +236,11 @@ function AppShellContent({
 			{modals}
 			{standaloneModals}
 
-			{!hasSessions && (!sessionsLoaded || !sessionsReadOk) && !isMobileLandscape ? (
+			{!teamActive && !hasSessions && (!sessionsLoaded || !sessionsReadOk) && !isMobileLandscape ? (
 				<AgentsLoadingView theme={theme} readFailed={sessionsLoaded && !sessionsReadOk} />
 			) : null}
 
-			{!hasSessions && sessionsLoaded && sessionsReadOk && !isMobileLandscape ? (
+			{!teamActive && !hasSessions && sessionsLoaded && sessionsReadOk && !isMobileLandscape ? (
 				newShell ? (
 					<>
 						<aside
@@ -301,7 +307,7 @@ function AppShellContent({
 			*/}
 			{isNarrowViewport &&
 				hasSessions &&
-				(leftSidebarOpen || (rightPanelOpen && !activeGroupChatId)) && (
+				(leftSidebarOpen || (rightPanelOpen && !activeGroupChatId && !teamActive)) && (
 					<div
 						className="maestro-mobile-backdrop"
 						onClick={onCloseDrawers}
@@ -312,9 +318,13 @@ function AppShellContent({
 
 			{logViewer}
 
-			{shellFeatureVisible('groupChat', newShell) && groupChatView}
+			{!teamActive && shellFeatureVisible('groupChat', newShell) && groupChatView}
+
+			{teamActive && !logViewerOpen && teamView}
+			{newShell && <TeamSetupHost theme={theme} />}
 
 			{hasSessions &&
+				!teamActive &&
 				(!shellFeatureVisible('groupChat', newShell) || !activeGroupChatId) &&
 				!logViewerOpen && <MainPanel ref={mainPanelRef} {...mainPanelProps} />}
 
@@ -326,6 +336,7 @@ function AppShellContent({
 
 			{!isMobileLandscape &&
 				hasSessions &&
+				!teamActive &&
 				(!shellFeatureVisible('groupChat', newShell) || !activeGroupChatId) &&
 				!logViewerOpen && (
 					<ErrorBoundary>

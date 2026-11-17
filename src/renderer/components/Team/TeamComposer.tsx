@@ -1,0 +1,123 @@
+import { useRef, useState } from 'react';
+import { SEAT_ROLES, type SeatRole, type TeamState } from '../../../shared/team/types';
+import { useT } from '../../i18n';
+import { useTeamStore } from '../../stores/teamStore';
+import { useFocusAfterRender } from '../../hooks/utils/useFocusAfterRender';
+import { SeatTag } from './TeamPrimitives';
+
+export function TeamComposer({ state }: { state: TeamState }) {
+	const t = useT();
+	const id = state.config!.id;
+	const [draft, setDraft] = useState('');
+	const to =
+		SEAT_ROLES.find((seat) =>
+			new RegExp(`^@(?:${seat}|${t(`workflows.team.${seat}`)})\\s`, 'i').test(draft)
+		) ?? 'pm';
+	const [index, setIndex] = useState(0);
+	const [focus, setFocus] = useState(false);
+	const ref = useRef<HTMLTextAreaElement>(null);
+	const busy = useTeamStore((s) => s.pending[`${id}:say`]);
+	const mention = draft.match(/^@(\S*)$/);
+	const options = mention
+		? SEAT_ROLES.filter(
+				(seat) =>
+					seat.startsWith(mention[1].toLowerCase()) ||
+					t(`workflows.team.${seat}`).toLowerCase().startsWith(mention[1].toLowerCase())
+			)
+		: [];
+	const pick = (seat: SeatRole) => {
+		setDraft(`@${t(`workflows.team.${seat}`)} `);
+		setFocus(true);
+	};
+	useFocusAfterRender(ref, focus);
+	const send = async () => {
+		if (!draft.trim() || busy) return;
+		const submitted = draft;
+		if (await useTeamStore.getState().say(id, draft.trim(), to)) {
+			setDraft((current) => (current === submitted ? '' : current));
+			setFocus(true);
+		}
+	};
+	return (
+		<div
+			className="shrink-0 px-5 pt-2.5 pb-4 border-t"
+			style={{ borderColor: 'var(--team-border)', background: 'var(--team-side)' }}
+		>
+			<div
+				className="max-w-[720px] mx-auto rounded-xl border p-3"
+				style={{ borderColor: 'var(--team-border)', background: 'var(--team-bg)' }}
+			>
+				<div className="flex flex-wrap gap-2 items-center pb-1.5">
+					<span className="team-dim">{t('workflows.team.sendTo')}</span>
+					<SeatTag seat={to} model={state.seats[to].model ?? state.config!.seats[to]} />
+					<span className="team-dim">{t('workflows.team.mentionHint')}</span>
+				</div>
+				{options.length > 0 && (
+					<div
+						role="listbox"
+						aria-label={t('workflows.team.chooseSeat')}
+						className="flex gap-2 py-2"
+					>
+						{options.map((seat, i) => (
+							<button
+								type="button"
+								role="option"
+								aria-selected={i === index % options.length}
+								className="team-button"
+								key={seat}
+								onClick={() => pick(seat)}
+							>
+								<SeatTag seat={seat} />
+							</button>
+						))}
+					</div>
+				)}
+				<textarea
+					ref={ref}
+					rows={2}
+					className="w-full resize-none !border-0 !p-0"
+					aria-label={t('workflows.team.message')}
+					disabled={!!state.terminal || state.stopped}
+					placeholder={t('workflows.team.messagePlaceholder')}
+					value={draft}
+					onBlur={() => setFocus(false)}
+					onChange={(e) => {
+						setDraft(e.target.value);
+						setIndex(0);
+						setFocus(false);
+					}}
+					onKeyDown={(e) => {
+						if (e.nativeEvent.isComposing) return;
+						if (options.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+							e.preventDefault();
+							setIndex(
+								(value) =>
+									(value + (e.key === 'ArrowDown' ? 1 : options.length - 1)) % options.length
+							);
+						}
+						if (e.key === 'Enter' && !e.shiftKey) {
+							e.preventDefault();
+							if (options.length) pick(options[index % options.length]);
+							else void send();
+						}
+					}}
+				/>
+				<div className="flex gap-2 items-center justify-between">
+					<span className="team-dim" role="status">
+						{t(busy ? 'workflows.team.sending' : 'workflows.team.deliveryHint')}
+					</span>
+					<button
+						type="button"
+						className="team-button"
+						data-primary="true"
+						aria-label={t('workflows.team.send')}
+						disabled={!draft.trim() || busy || !!state.terminal || state.stopped}
+						onClick={() => void send()}
+					>
+						↑
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}

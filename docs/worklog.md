@@ -1,5 +1,61 @@
 # 分支工作记录
 
+## 2026-11-17：A1c 团队群聊界面
+
+验证对象是基于 `5a8a8914d6bcb14989e79ea86d865feb524eabe8` 的本 worktree
+未提交源码，不是发行包。移植 P7.1 的团队场景：左栏建队入口与三岗位树、
+主视图标题和预算、七阶段、现状四格、历史阶段折叠、台账卡片、发言区，
+以及产出、进展、决定、证据、成员、改动六个侧栏页签。演示先展示产出，
+验收后仍可见；旧阶段收起，未答的老板卡片始终在折叠外。
+
+默认路径合成台账覆盖需求与标准、独立质询、基线确认、完整讨论、应用检查、
+问题状态链、额度和替补、打回及通过的产品评审、演示、消息投递、跟进和终态。
+需求、检查、讨论与证据沿用原型的展开层级；成员标签保留事件发生时的模型。
+老板卡片共用一种组件，附 `data-boundary`，推荐项在前，有代价与边界，
+不接受单独的“继续”选项。答复成功不乐观删除卡片，以后端事件为准。
+
+建队对话框复用 `ModelEffortPicker policy="team-seat"`，包括可选替补；
+四项授权默认勾选，40 回合，保留固定的始终询问清单和厂商来源说明。
+未打开选择器时也为已解析的 Codex 模型固定允许的强度，避免原生 Ultra
+默认值漏过团队策略。Esc、可见关闭、Tab 陷阱和选择器焦点返回使用既有组件。
+SSH 使用有效远程路径，缺主机时禁止误建成本机团队。成员对话经
+`seatTranscript` 和 `agentSessions.read({ readOnly: true })` 读取，复用
+`SessionMessagesView`，Esc 返回团队并把焦点还给成员行。改动复用既有
+`ChangesPanel` 的只读工作区模式。离开团队回到普通对话时恢复原有面板。
+
+台账镜像先订阅再读快照，按事件身份合并竞态，按团队保存还原结果，断开后
+丢弃迟到读取。唯一适配层为 `services/teamClient.ts`；没有内置运行时演示数据。
+服务缺席时显示未就绪。快捷键、菜单、命令面板和 `open create-team` 共用入口，
+团队显示时隐藏对话的删除、模型与 Git 快捷操作不会落到后台对话上。
+
+定向 Vitest 12 文件、364 项通过，包含团队新增测试及受影响的 shell、左栏、
+模型选择器、改动、键盘、表面注册和翻译测试。执行命令：
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team src/__tests__/renderer/components/ChangesPanel.test.tsx src/__tests__/renderer/components/ModelEffortPicker.test.tsx src/__tests__/renderer/components/AppShell.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/utils/openUiSurface.test.ts src/__tests__/renderer/constants/shortcuts.test.ts src/__tests__/shared/uiSurfaces.test.ts src/__tests__/renderer/i18n/messages.test.tsx src/__tests__/renderer/hooks/useMainKeyboardHandler.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg -v '^\.survey-A0\.md$')
+npm run docs:verify
+git diff --check
+```
+
+Vitest 默认配置加载器试图写入外部链接的依赖目录而被拒绝，故使用 runner
+加载器且禁用缓存。TypeScript、ESLint（含测试）、Prettier、文档路径和 diff
+检查通过；新增文件与变更文件没有禁用的两种破折号。
+
+待接入：真实 `window.maestro.team` 服务及事件，创建和列表暂按返回
+`TeamConfig` / `TeamConfig[]` 声明；导出只调用约定方法，保存与返回值语义
+待后端确认。基线编辑、差异、退回的控件与回调留在关闭的 feature gates 后。
+额度卡片展示替补事实和成员入口，原型“等原模型恢复”的主动切回没有对应
+后端方法，暂不提供。其余分支复用卡片但不宣称 M2/M3 验收完成；`team` CLI
+对等由并行后端任务补齐。
+
+未验证：真实团队派发、账号隔离下的成员历史、真实产出采集与导出保存、SSH
+团队、重启持久化、打包应用中的视觉和键盘走查、Windows/Linux。系统 Chrome
+启动被当前沙箱拒绝，没有用 jsdom 当作截图验收。按任务要求没有编写或运行
+Electron 场景。没有提交或发布；原有 `.survey-A0.md` 未改动。
+
 ## 2026-11-17：B1-2/3/4 新界面模型选择器
 
 验证对象为基于 `4e87704b29b5fde6592b4b71b5cd2b8de361763a` 的本 worktree

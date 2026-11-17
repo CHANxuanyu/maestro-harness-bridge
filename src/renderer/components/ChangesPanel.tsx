@@ -76,44 +76,54 @@ function splitPath(path: string): { dir: string; name: string } {
 		: { dir: trimmed.slice(0, at + 1), name: path.slice(at + 1) };
 }
 
-interface ChangesPanelProps {
+type ChangesPanelProps = {
 	theme: Theme;
-	session: Session;
 	onFileClick?: (path: string) => void;
-}
+} & (
+	| { session: Session; readOnlyScope?: never }
+	| {
+			session?: never;
+			/** Inspect a team workspace without conversation actions or Git mutations. */
+			readOnlyScope: { cwd: string; sshRemoteId?: string; revision?: number };
+	  }
+);
 
 export const ChangesPanel = memo(function ChangesPanel({
 	theme,
 	session,
+	readOnlyScope,
 	onFileClick,
 }: ChangesPanelProps) {
 	const t = useT();
 	const locale = useAppLocale();
-	const newShell = useSettingsStore((s) => s.newShell);
-	const activeTab = session.aiTabs.find((tab) => tab.id === session.activeTabId);
+	const newShellEnabled = useSettingsStore((s) => s.newShell);
+	const newShell = newShellEnabled && !!session;
+	const activeTab = session?.aiTabs.find((tab) => tab.id === session.activeTabId);
 	const byTurn = newShell && activeTab?.newShellPanel?.changesView === 'turn';
 	const nativeId = newShell ? activeTab?.agentSessionId : undefined;
 	const nativeGrouping = !!(
 		byTurn &&
 		nativeId &&
-		['claude-code', 'codex'].includes(session.toolType)
+		['claude-code', 'codex'].includes(session?.toolType ?? '')
 	);
 	const [nativeWrites, setNativeWrites] = useState<TurnWrites[]>([]);
 	const colorBlindMode = useSettingsStore((s) => s.colorBlindMode);
-	const cwd = newShell ? session.cwd : resolveGitCwd(session);
-	const sshRemoteId = resolveGitSshRemoteId(session);
+	const cwd =
+		readOnlyScope?.cwd ?? (session ? (newShell ? session.cwd : resolveGitCwd(session)) : '');
+	const sshRemoteId =
+		readOnlyScope?.sshRemoteId ?? (session ? resolveGitSshRemoteId(session) : undefined);
 	const remoteCwd =
-		newShell && session.sessionSshRemoteConfig?.enabled
-			? session.sessionSshRemoteConfig.workingDirOverride || undefined
+		newShell && session?.sessionSshRemoteConfig?.enabled
+			? session?.sessionSshRemoteConfig.workingDirOverride || undefined
 			: undefined;
-	const nativeProvider = nativeGrouping ? session.toolType : undefined;
-	const nativeOwnerId = nativeGrouping ? session.id : undefined;
+	const nativeProvider = nativeGrouping ? session?.toolType : undefined;
+	const nativeOwnerId = nativeGrouping ? session?.id : undefined;
 	const nativeProject = nativeGrouping
 		? sshRemoteId
-			? session.remoteCwd || remoteCwd || cwd
-			: session.projectRoot || cwd
+			? session?.remoteCwd || remoteCwd || cwd
+			: session?.projectRoot || cwd
 		: undefined;
-	const context = JSON.stringify([session.id, session.activeTabId, cwd, sshRemoteId, remoteCwd]);
+	const context = JSON.stringify([session?.id, session?.activeTabId, cwd, sshRemoteId, remoteCwd]);
 	const refreshContext = newShell ? context : JSON.stringify([cwd, sshRemoteId, remoteCwd]);
 	const contextRef = useRef(context);
 	contextRef.current = context;
@@ -221,7 +231,13 @@ export const ChangesPanel = memo(function ChangesPanel({
 	}, [refresh]);
 
 	// A turn ending is when files change; refresh on the busy -> idle edge.
-	const busy = session.state === 'busy';
+	const busy = session?.state === 'busy';
+	const scopeRevision = readOnlyScope?.revision;
+	const previousScopeRevision = useRef(scopeRevision);
+	useEffect(() => {
+		if (previousScopeRevision.current !== scopeRevision) void refresh();
+		previousScopeRevision.current = scopeRevision;
+	}, [scopeRevision, refresh]);
 	const wasBusyRef = useRef(busy);
 	useEffect(() => {
 		if (wasBusyRef.current && !busy) void refresh();
@@ -240,8 +256,15 @@ export const ChangesPanel = memo(function ChangesPanel({
 	);
 
 	const runAction = async (request: GitChangeRequest) => {
-		if (!mountedRef.current || actionRef.current || contextRef.current !== context) return;
-		if (session.sessionSshRemoteConfig?.enabled && !sshRemoteId) {
+		if (
+			!session ||
+			readOnlyScope ||
+			!mountedRef.current ||
+			actionRef.current ||
+			contextRef.current !== context
+		)
+			return;
+		if (session?.sessionSshRemoteConfig?.enabled && !sshRemoteId) {
 			setActionError(t('workflows.changes.missingRemote'));
 			return;
 		}
@@ -317,7 +340,7 @@ export const ChangesPanel = memo(function ChangesPanel({
 		0;
 	const canCommit = stagedCount > 0 && !pending && !refreshing && !!message.trim();
 	const hasChanges = !!changes && changes.totals.files > 0;
-	const canReview = hasChanges && !!activeTab && canHandOffTab(session, activeTab);
+	const canReview = hasChanges && !!session && !!activeTab && canHandOffTab(session, activeTab);
 	const diffStyles = useMemo(
 		() => generateDiffViewStyles(theme, colorBlindMode),
 		[theme, colorBlindMode]
@@ -605,6 +628,7 @@ export const ChangesPanel = memo(function ChangesPanel({
 							{ value: 'turn', label: t('workflows.changes.byTurn') },
 						]}
 						onChange={(view) =>
+							session &&
 							updateAiTab(session.id, session.activeTabId, (tab) => ({
 								...tab,
 								newShellPanel: changeNewShellPanel(
@@ -658,19 +682,23 @@ export const ChangesPanel = memo(function ChangesPanel({
 				</p>
 			)}
 			<div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">{body}</div>
-			<div className="pt-3">
-				<button
-					type="button"
-					disabled={!canReview}
-					onClick={() => activeTab && requestAiHandoff(session.id, activeTab.id, 'review')}
-					className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-white/5"
-					style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-					data-testid="changes-review"
-				>
-					<ShieldCheck className="w-3.5 h-3.5" />
-					{t('workflows.changes.review')}
-				</button>
-			</div>
+			{session && (
+				<div className="pt-3">
+					<button
+						type="button"
+						disabled={!canReview}
+						onClick={() =>
+							session && activeTab && requestAiHandoff(session.id, activeTab.id, 'review')
+						}
+						className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-white/5"
+						style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+						data-testid="changes-review"
+					>
+						<ShieldCheck className="w-3.5 h-3.5" />
+						{t('workflows.changes.review')}
+					</button>
+				</div>
+			)}
 			{newShell && (
 				<>
 					{actionError && (

@@ -1,5 +1,29 @@
 # Canonical Utilities - Full Rationale
 
+**New-shell team renderer**
+
+`teamClient()` in `src/renderer/services/teamClient.ts` is the sole typed access
+to the pending `window.maestro.team` contract. Absence disables creation and
+does not substitute a demonstration ledger. `useTeamStore` in
+`src/renderer/stores/teamStore.ts` subscribes before `list` / `get`, merges
+snapshot and incremental events by identity, and calls the shared `reduceLedger`.
+Each team retains its reduced reference until its ledger changes; commands wait
+for recorded events instead of fabricating acceptance, delivery or evidence.
+Connection lifetime is reference counted, late reads are discarded after
+disconnect, and one clock supplies deadline status to `useTeamStatus`.
+
+`deriveTeamFeed()` in `src/renderer/components/Team/deriveTeamFeed.ts` groups
+events into chronological phase folds only. `OwnerCard` is shared across
+boundaries, takes unresolved cards from `state.openCards`, puts recommended
+choices first, and never offers a bare continue. Baseline edit/diff/return stay
+behind `teamFeatures` until the backend supports them. `TeamPrimitives.tsx`
+owns theme mapping, seat tags, folds and criteria presentation for these surfaces.
+`TeamMemberView` uses `seatTranscript` plus `agentSessions.read` with
+`readOnly: true` and the existing `SessionMessagesView`; never add a team-specific
+transcript parser. `TeamOutput` shows ledger artifacts through existing image
+and Markdown components. Team changes use `ChangesPanel.readOnlyScope`, sharing
+the Git reads and diff view while omitting write and review controls.
+
 **Team chat shared layer**
 
 `reduceLedger()` in `src/shared/team/ledger.ts` is the pure replay used by main,

@@ -6,6 +6,7 @@ import { FONT_ZOOM_MAX, FONT_ZOOM_MIN } from '../../../shared/typography';
 import { useModalStore } from '../../../renderer/stores/modalStore';
 import { useUIStore } from '../../../renderer/stores/uiStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { useTeamStore } from '../../../renderer/stores/teamStore';
 import { groupChatOutputSearchKey } from '../../../renderer/utils/outputSearch';
 import { useGroupChatStore } from '../../../renderer/stores/groupChatStore';
 import {
@@ -5081,4 +5082,33 @@ describe('new shell terminal focus routing', () => {
 		expect(closeConversation).not.toHaveBeenCalled();
 		expect(clearMain).not.toHaveBeenCalled();
 	});
+});
+
+describe('new shell team shortcuts', () => {
+	afterEach(() => {
+		useTeamStore.setState({ activeTeamId: null, setupOpen: false });
+		useSettingsStore.setState({ newShell: false });
+		publishGitShortcutActions(null);
+	});
+	it.each(['killInstance', 'gitPush', 'createTeam'])(
+		'keeps %s scoped to the visible team instead of the hidden conversation',
+		(action) => {
+			useSettingsStore.setState({ newShell: true });
+			const remove = vi.fn();
+			const push = vi.fn();
+			publishGitShortcutActions({ isGitRepo: true, push } as never);
+			const { result } = renderHook(() => useMainKeyboardHandler());
+			result.current.keyboardHandlerRef.current = createMockContext({
+				activeSession: { id: 'owner', inputMode: 'ai', aiTabs: [] },
+				activeSessionId: 'owner',
+				deleteSession: remove,
+				isShortcut: (_event: KeyboardEvent, id: string) => id === action,
+			});
+			useTeamStore.setState({ activeTeamId: 'team' });
+			act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F8' })));
+			expect(remove).not.toHaveBeenCalled();
+			expect(push).not.toHaveBeenCalled();
+			expect(useTeamStore.getState().setupOpen).toBe(action === 'createTeam');
+		}
+	);
 });

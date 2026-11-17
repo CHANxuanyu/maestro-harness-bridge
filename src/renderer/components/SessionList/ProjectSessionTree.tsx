@@ -1,3 +1,5 @@
+import { openUiSurface } from '../../utils/openUiSurface';
+import { TeamSidebar } from '../Team/TeamSidebar';
 import { requestConversationAction } from '../../services/conversationArchive';
 
 import type {
@@ -938,6 +940,11 @@ const ProjectSection = memo(function ProjectSection({
 			</div>
 			{expanded && (
 				<ul id={listId} className="flex flex-col">
+					{newShell && (
+						<li>
+							<TeamSidebar theme={theme} projectKey={project.key} />
+						</li>
+					)}
 					{project.conversations.map((conversation) => (
 						<ConversationRow
 							key={conversation.key}
@@ -1506,6 +1513,13 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 				{newShell ? (
 					<div className="flex items-center justify-between">
 						{newConversationButton}
+						<button
+							type="button"
+							className="rounded-md px-2 py-1.5 text-sm"
+							onClick={() => openUiSurface('create-team')}
+						>
+							{t('workflows.team.new')}
+						</button>
 						{headerMenu}
 					</div>
 				) : (

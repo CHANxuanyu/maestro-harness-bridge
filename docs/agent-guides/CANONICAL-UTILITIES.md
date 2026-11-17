@@ -1,5 +1,54 @@
 # Canonical Utilities - Full Rationale
 
+**Team chat shared layer**
+
+`reduceLedger()` in `src/shared/team/ledger.ts` is the pure replay used by main,
+renderer, and CLI. It sorts by sequence, ignores unknown kinds and dangling
+references, and deduplicates event and dispatch identities. Owner-confirmed
+criteria stay independent of later draft briefs. Explicit edits invalidate
+evidence for the old wording without deleting its history. A failed app check
+is superseded only by a rerun of that same command in that workspace, never by
+a member's completion claim or by acceptance with gaps. A narrow issue retest
+closes that issue but does not prove the whole criterion; append a fresh
+`criterion_evidence` event or a QA `verify` verdict for that conclusion. PM
+experience evidence must reference an app-captured output. The runtime owns
+validation and execution; this reducer does not execute work or append events.
+Baseline command canaries use `check_run.purpose: 'trial'` and never prove the
+delivered product. Review progress uses fresh QA evidence about previous review
+problems, never a change in the number or wording of PM comments.
+
+`extractTeamReport()`, `validateTeamReport()`, and `reportRepairPrompt()` in
+`src/shared/team/report.ts` share `REPORT_SCHEMAS` and `teamReportSchema()` from
+`src/shared/team/schemas.ts` with `buildTeamTurnPrompt()` and `TEAM_TURN_PROMPTS`
+in `src/shared/team/prompts.ts`. The existing Markdown parser finds real report
+fences; do not extract JSON from arbitrary prose or from a quoted example.
+Unknown fields are rejected, QA challenge plans are mandatory, and review
+problems without a confirmed criterion become suggestions. Without state, no
+review criterion is assumed confirmed. The dispatcher must permit only one
+repair, passing the original turn kind; repair does not redo work.
+
+Domain events project requirements, work, issues, reviews, and decisions.
+`report_accepted` preserves the report and contributes QA verdicts, but does not
+also invent domain events. This avoids double-counting the subsequent recorded
+actions. App-generated verdict events may carry `actor: 'app'`; member-authored
+ones must have the appropriate actor. To count one owner decision that has both
+a `card_answered` and a semantic event, propagate `cardId` to that semantic
+event. Recovery statistics count explicit `member_recovered` events; bindings
+describe where and under which model a seat runs. Additions in `standard_change`
+carry a complete `criterion`, including its proof method. All attempts and the
+review loop use `judgeAttempts()` and `decideNext()` in `src/shared/progressRules.ts`.
+Pass `initialFailures` for the first attempt when known; without it replay uses
+the first attempt's failures conservatively. A targeted retro carries `problemId`;
+an untargeted retro resets all current problem streaks.
+
+`teamStatus()` and `formatTeamStatus()` in `src/shared/team/status.ts` produce
+status directly from replay, including when PM is unavailable. Passing evidence
+counts only confirmed criteria. The explicit `now` controls deadline display;
+replay itself never reads the clock. Time formatting uses `src/shared/duration.ts`,
+and token/cost formatting uses `src/shared/formatters.ts`. Prompts omit transcripts
+and private workspace bindings, isolate challenges, bound recent attempt details,
+and include all standard changes and contested decisions in the demo slice.
+
 - **On-demand native tool results:** `readToolOutputFile()` in `src/main/storage/native-tool-output.ts` runs `readNativeToolOutput()` in a disposable worker. Use `agentSessions:toolOutput` from UI and CLI so owner account selection, the 100 MiB native read cap, 2 MiB UTF-8 tail and read-only behavior stay shared. `codexToolOutputText()` in `src/shared/codexToolOutput.ts` is the native text decoder; the storage wrapper still applies `compactToolOutput()`. Claude uses `flattenToolResultContent(content, false)` only inside the bounded worker. Full text never enters session state. Do not add a second transcript parser or full-output persistence path.
 
 The complete, reasoned entry for every commonly-reimplemented function in the codebase. The always-loaded index in [CLAUDE.md](../../CLAUDE.md#commonly-reimplemented-functions-do-not-add-new-copies) lists each entry as one line (name, canonical symbols, path); this file carries the why - the failure each canonical implementation replaced, the invariants it protects, and the traps that made the duplicates subtly wrong. Read the matching entry here BEFORE extending or working around one of these utilities.

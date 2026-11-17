@@ -59,6 +59,7 @@ This guide has been split into focused sub-documents for progressive disclosure:
 
 ### Commonly-reimplemented functions (do NOT add new copies)
 
+- **Team chat facts and reports:** `reduceLedger()` in `src/shared/team/ledger.ts`, `extractTeamReport()` / `validateTeamReport()` / `reportRepairPrompt()` in `src/shared/team/report.ts`, `teamStatus()` / `formatTeamStatus()` in `src/shared/team/status.ts`, and `buildTeamTurnPrompt()` / `TEAM_TURN_PROMPTS` in `src/shared/team/prompts.ts`. Schemas live in `src/shared/team/schemas.ts`; all loops use `src/shared/progressRules.ts`. See the canonical guide before adding another evidence counter, report parser, or team prompt.
 - **Handoff execution context:** `handoffLocation()` in `src/shared/aiHandoff.ts` compares the effective cwd and SSH host without resolving remote paths locally.
 - **New conversation permissions:** `newConversationPermissionFields()` and `recentProjectConversation()` in `src/renderer/utils/newConversationPermissions.ts`, keeps new shell creation and handoff from widening source permissions. See [CANONICAL-UTILITIES.md](docs/agent-guides/CANONICAL-UTILITIES.md).
 - **Native history project membership:** `projectHistoryScopeFor()` in `src/shared/projectHistory.ts` shares host, subdirectory and worktree membership across discovery, archive display and permission inheritance.

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
+import path from 'node:path';
 import type { TestInfo } from '@playwright/test';
 
 const mocks = vi.hoisted(() => ({
@@ -7,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 	prepareCredentials: vi.fn(),
 	launch: vi.fn(),
 	visible: vi.fn(),
+	projectStart: vi.fn(),
 }));
 vi.mock('@playwright/test', async (original) => ({
 	...(await original<typeof import('@playwright/test')>()),
@@ -20,14 +22,25 @@ vi.mock('../electron-app', () => ({ launchElectronApp: mocks.launch }));
 import { NativeApp } from '../native-app';
 
 let native: NativeApp;
+
+it('pins existing provider scenarios to an explicit classic choice', () => {
+	native = new NativeApp({ title: 'synthetic existing scenario' } as TestInfo, {
+		providerCli: false,
+	});
+	expect(
+		JSON.parse(fs.readFileSync(path.join(native.data, 'maestro-settings.json'), 'utf8'))
+	).toMatchObject({ newShell: false, newShellChoice: 'classic' });
+});
 beforeEach(() => {
 	vi.resetAllMocks();
 	vi.stubEnv('MAESTRO_E2E_REAL', '1');
 	const locator = { or: () => locator };
+	mocks.projectStart.mockReturnValue(locator);
 	const page = {
 		waitForLoadState: vi.fn(),
 		getByText: () => locator,
 		getByRole: () => locator,
+		getByTestId: mocks.projectStart,
 		getByPlaceholder: vi.fn(),
 	};
 	mocks.launch.mockResolvedValue({
@@ -57,6 +70,7 @@ it.each(['desktop identity startup', 'codex g: provider-free startup'])(
 		expect(mocks.prepareCredentials).not.toHaveBeenCalled();
 		expect(native.realCli).toBeUndefined();
 		expect(mocks.visible).toHaveBeenCalledTimes(2);
+		expect(mocks.projectStart).toHaveBeenCalledWith('project-start');
 	}
 );
 

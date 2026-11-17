@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useOsFileDragOut } from '../../../../../renderer/components/FileExplorerPanel/hooks/useOsFileDragOut';
@@ -36,8 +37,22 @@ function makeDragEvent(altKey: boolean): React.DragEvent {
 
 describe('useOsFileDragOut', () => {
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 		vi.mocked(isWebDesktop).mockReturnValue(false);
+	});
+
+	it('explains unsupported SSH folder dragging in the new shell', () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+		const onShowFlash = vi.fn();
+		const { result } = renderHook(() =>
+			useOsFileDragOut({ session, sshRemoteId: 'remote-1', onShowFlash })
+		);
+		act(() => result.current.handleOsDragStart(makeDragEvent(true), ['src']));
+		// workflows.newShellCopy.panels.sshDragFolders
+		expect(onShowFlash).toHaveBeenCalledWith('Folders cannot be dragged out over SSH');
+		expect(startDragOut).not.toHaveBeenCalled();
 	});
 
 	it('web-desktop: never takes over the gesture, even for an Alt-drag', () => {

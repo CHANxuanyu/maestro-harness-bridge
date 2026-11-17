@@ -8,7 +8,9 @@
  * activeGroupId, which would tear down the group being built.
  */
 
-import { describe, it, expect } from 'vitest';
+import { createMockSession } from '../../../../__tests__/helpers/mockSession';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { beforeEach, describe, it, expect } from 'vitest';
 import type { AITab, Session, TabGroup, UnifiedTabRef } from '../../../types';
 import { collectLeafTabRefs, createGroupFromTabRefs, tabRefKey } from '../../../utils/panelLayout';
 import { canTileNewTab, tileNewTab } from '../tileNewTab';
@@ -20,6 +22,7 @@ const aiTab = (id: string): AITab =>
 
 function baseSession(extra?: Partial<Session>): Session {
 	return {
+		...createMockSession(),
 		id: 'sess-1',
 		aiTabs: [aiTab('ai-1')],
 		activeTabId: 'ai-1',
@@ -47,6 +50,11 @@ function onlyGroup(session: Session): TabGroup {
 	expect(session.tabGroups).toHaveLength(1);
 	return session.tabGroups[0];
 }
+
+beforeEach(() => {
+	// New-shell creation reads project defaults, so the owner must include a project cwd.
+	useSettingsStore.setState({ newShell: true });
+});
 
 describe('canTileNewTab', () => {
 	it('is false with no session and true when a tab is on screen', () => {

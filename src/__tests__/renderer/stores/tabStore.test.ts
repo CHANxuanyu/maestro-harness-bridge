@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTabStore } from '../../../renderer/stores/tabStore';
@@ -1112,6 +1113,8 @@ function setupSessionWithTerminalTabs(terminalTabs: TerminalTab[]): string {
 
 describe('closeTerminalTab', () => {
 	beforeEach(() => {
+		// Classic terminals use tab selection and synchronous restart state.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 		useSessionStore.setState({ sessions: [], activeSessionId: null });
 	});
@@ -1154,6 +1157,8 @@ describe('closeTerminalTab', () => {
 
 describe('restartTerminalTab', () => {
 	beforeEach(() => {
+		// Classic terminals use tab selection and synchronous restart state.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 		useSessionStore.setState({ sessions: [], activeSessionId: null });
 	});

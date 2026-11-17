@@ -1,6 +1,7 @@
 import { createMockAITab, createMockFileTab } from '../../helpers/mockTab';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, renderHook, screen, fireEvent, act } from '@testing-library/react';
+import { useWindowState } from '../../../renderer/hooks/ui/useWindowState';
 import { RightPanel, RightPanelHandle } from '../../../renderer/components/RightPanel';
 import {
 	RIGHT_PANEL_PILL_FONT_SIZE,
@@ -465,6 +466,48 @@ describe('RightPanel', () => {
 			act(() => useSettingsStore.setState({ newShell: false }));
 			expect(screen.getByTestId('history-panel')).toBeVisible();
 		});
+
+		it.each([
+			{ initialNewShell: false, open: true },
+			{ initialNewShell: true, open: true },
+			{ initialNewShell: false, open: false },
+			{ initialNewShell: true, open: false },
+		])(
+			'keeps conversation open=$open across window hydration with initial newShell=$initialNewShell',
+			async ({ initialNewShell, open }) => {
+				useSettingsStore.setState({ newShell: initialNewShell, settingsLoaded: true });
+				const panel = { tab: 'changes' as const, open, changesView: 'turn' as const };
+				useSessionStore.setState({
+					sessions: [
+						{
+							...mockSession,
+							activeTabId: 'restored',
+							aiTabs: [createMockAITab({ id: 'restored', newShellPanel: panel })],
+						},
+					],
+				});
+				let restoreWindow!: (state: WindowState) => void;
+				vi.mocked(window.maestro.windows.getState).mockReturnValueOnce(
+					new Promise((resolve) => {
+						restoreWindow = resolve;
+					})
+				);
+				render(<RightPanel {...createDefaultProps()} />);
+				renderHook(() => useWindowState());
+				await act(async () => {
+					restoreWindow(makeWindowState({ id: 'w1', rightPanelCollapsed: open }));
+				});
+				// Before the default switch, enabling the shell after hydration restored
+				// this choice. Starting in the new shell must restore the same choice.
+				act(() => useSettingsStore.setState({ newShell: true }));
+				expect(useSessionStore.getState().sessions[0].aiTabs[0].newShellPanel).toEqual(panel);
+				expect(document.querySelector('[data-panel="right"]')).toHaveAttribute(
+					'data-open',
+					String(open)
+				);
+				expect(useUIStore.getState().rightPanelOpen).toBe(open);
+			}
+		);
 		it('shows Changes, Files, Terminal and Tasks, defaulting to Changes', () => {
 			useSettingsStore.setState({ newShell: true });
 			useUIStore.setState({ activeRightTab: 'history' });

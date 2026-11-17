@@ -81,7 +81,11 @@ function streamAnswer() {
 }
 
 describe('useBatchedSessionUpdates stream clear point', () => {
-	beforeEach(() => seed(turnSoFar()));
+	beforeEach(() => {
+		// Classic layouts differ in whether streamed answers clear tool calls.
+		useSettingsStore.setState({ newShell: false });
+		seed(turnSoFar());
+	});
 
 	it('keeps tool results and progress in the conversation layout; the answer is its own entry', () => {
 		useSettingsStore.setState({ sidebarNavigationMode: 'conversations' });

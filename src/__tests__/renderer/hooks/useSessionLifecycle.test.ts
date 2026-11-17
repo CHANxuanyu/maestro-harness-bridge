@@ -96,6 +96,8 @@ function createDeps(overrides: Partial<SessionLifecycleDeps> = {}): SessionLifec
 beforeEach(() => {
 	vi.clearAllMocks();
 	resetStore(useSettingsStore);
+	// Classic provider changes do not run the new conversation permission preflight.
+	useSettingsStore.setState({ newShell: false });
 	vi.useFakeTimers();
 
 	// Reset stores

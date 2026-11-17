@@ -55,6 +55,8 @@ export interface MaestroSettings {
 	projectSettings?: ProjectSettingsMap;
 	uiLanguage: UiLanguagePreference;
 	newShell: boolean;
+	/** Absent in pre-switch versions; never provide a store default for this marker. */
+	newShellChoice?: 'auto' | 'new' | 'classic';
 	codexAppServer: boolean;
 	sidebarNavigationMode: 'conversations' | 'agents';
 	collapsedConversationProjects: string[];

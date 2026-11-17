@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAgentErrorRecovery } from '../../../renderer/hooks';
 import type { AgentError } from '../../../shared/types';
@@ -10,6 +11,11 @@ const baseError: AgentError = {
 	agentId: 'claude-code',
 	timestamp: 1700000000000,
 };
+
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
 
 describe('useAgentErrorRecovery', () => {
 	it('offers only a manual resume for an occupied session, never a blank replacement', () => {

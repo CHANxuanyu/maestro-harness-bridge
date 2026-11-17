@@ -1,5 +1,6 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FileTreeLoadingProgress } from '../../../../../renderer/components/FileExplorerPanel/components/FileTreeLoadingProgress';
 
@@ -11,7 +12,26 @@ const theme = {
 	colors: { textMain: '#fff', textDim: '#888', accent: '#7C3AED' },
 } as any;
 
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
+
 describe('FileTreeLoadingProgress', () => {
+	it('uses plain scan progress copy in the new shell', () => {
+		useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+		render(
+			<FileTreeLoadingProgress
+				theme={theme}
+				isRemote
+				progress={{ directoriesScanned: 12, filesFound: 45, currentDirectory: '/src/foo' }}
+			/>
+		);
+		// workflows.newShellCopy.panels.loadingRemote / scanProgress / scanning
+		expect(screen.getByText('Loading remote files…')).toBeInTheDocument();
+		expect(screen.getByText('Files: 45. Folders: 12.')).toBeInTheDocument();
+		expect(screen.getByText('Scanning: foo/')).toBeInTheDocument();
+	});
 	it('shows local loading text when not remote', () => {
 		render(<FileTreeLoadingProgress theme={theme} isRemote={false} />);
 		expect(screen.getByText('Loading files...')).toBeTruthy();

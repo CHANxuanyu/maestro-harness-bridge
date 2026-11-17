@@ -527,6 +527,8 @@ vi.mock('react-syntax-highlighter/dist/esm/styles/prism', () => ({
 
 ## Rendering Patterns
 
+Renderer tests name the shell they test. The default is the new shell, so a test of classic copy or behaviour pins `useSettingsStore.setState({ newShell: false })` in its setup, with a one-line comment explaining the classic contract. New-shell cases explicitly set `newShell: true`; keep coverage for their English copy and do not use a classic pin to hide a failure that should also work in the new shell.
+
 ### Rendering with LayerStackProvider
 
 All components that use the modal system require `LayerStackProvider`:

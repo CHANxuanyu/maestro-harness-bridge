@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AtMentionPopover } from '../../../../../renderer/components/InputArea/overlays/AtMentionPopover';
@@ -47,6 +48,8 @@ describe('AtMentionPopover', () => {
 	};
 
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		// The SSH name lookup reads through the shared 30s ipcCache entry, so a
 		// prior test's configs would otherwise leak into the next one.
 		ipcCache.invalidate('ssh-configs');

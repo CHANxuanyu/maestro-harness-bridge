@@ -81,6 +81,10 @@ export const test = base.extend<ElectronTestFixtures>({
 	// eslint-disable-next-line no-empty-pattern
 	testDataDir: async ({}, use) => {
 		const dir = createTestDataDir();
+		fs.writeFileSync(
+			path.join(dir, 'maestro-settings.json'),
+			JSON.stringify({ newShell: false, newShellChoice: 'classic' })
+		);
 		await use(dir);
 		// Cleanup after test
 		try {

@@ -1,3 +1,4 @@
+import { newShellChoicePatch } from '../../../shared/newShellChoice';
 import { isProjectSettingsKey, publicProjectSettingsMap } from '../../../shared/projectSettings';
 import type { AboutMeService } from '../../about-me';
 import { createProjectSettingsService } from '../../project-settings';
@@ -421,7 +422,8 @@ export function registerPersistenceHandlers(
 					)
 				: value;
 		try {
-			settingsStore.set(key, toPersist);
+			if (key === 'newShell') settingsStore.set(newShellChoicePatch(toPersist));
+			else settingsStore.set(key, toPersist);
 		} catch (err) {
 			// ENOSPC / ENFILE errors are transient disk issues - log and return false
 			// so the renderer doesn't see an unhandled rejection.

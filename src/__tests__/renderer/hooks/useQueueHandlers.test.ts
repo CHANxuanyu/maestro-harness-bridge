@@ -9,6 +9,7 @@
  *   - Return type completeness
  */
 
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, cleanup } from '@testing-library/react';
 import type { Session, QueuedItem } from '../../../renderer/types';
@@ -100,6 +101,8 @@ function createSession(overrides: Partial<Session> = {}): Session {
 const processQueuedItem = vi.fn((_sessionId: string, _item: QueuedItem) => Promise.resolve());
 
 beforeEach(() => {
+	// Classic force-send predates the new shell eligibility checks.
+	useSettingsStore.setState({ newShell: false });
 	vi.clearAllMocks();
 	processQueuedItem.mockResolvedValue();
 

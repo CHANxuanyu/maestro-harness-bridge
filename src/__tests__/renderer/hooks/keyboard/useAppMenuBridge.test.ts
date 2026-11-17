@@ -70,6 +70,11 @@ const MENU_SHORTCUT_IDS = [
 
 const ALL_SHORTCUTS = { ...FIXED_SHORTCUTS, ...TAB_SHORTCUTS, ...DEFAULT_SHORTCUTS };
 
+beforeEach(() => {
+	// Classic menu commands replay shortcuts, including features hidden in the new shell.
+	useSettingsStore.setState({ newShell: false });
+});
+
 describe('menu shortcut ids', () => {
 	it('all resolve to a real binding', () => {
 		const unresolved = MENU_SHORTCUT_IDS.filter((id) => !ALL_SHORTCUTS[id]);

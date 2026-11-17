@@ -1,5 +1,6 @@
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MarkdownRenderer } from '../../../renderer/components/MarkdownRenderer';
 
@@ -88,6 +89,11 @@ function renderMd(content: string, props?: Partial<typeof defaultProps>) {
 // ============================================================================
 // Tests
 // ============================================================================
+
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
 
 describe('MarkdownRenderer', () => {
 	// ========================================================================

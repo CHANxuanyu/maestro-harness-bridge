@@ -85,6 +85,8 @@ describe.each(['agents', 'conversations'] as const)(
 	'TerminalOutput (%s layout) scroll-container / row contract',
 	(navigationMode) => {
 		beforeEach(() => {
+			// Classic transcript rows expose tool calls directly instead of folding activity.
+			useSettingsStore.setState({ newShell: false });
 			useSettingsStore.setState({ sidebarNavigationMode: navigationMode, showToolCalls: false });
 		});
 

@@ -15,8 +15,8 @@ describe('newShell generic settings commands', () => {
 		for (const directory of directories) rmSync(directory, { recursive: true, force: true });
 	});
 
-	it('registers an opt-in default', () => {
-		expect(SETTINGS_DEFAULTS.newShell).toBe(false);
+	it('defaults new installations to the new shell', () => {
+		expect(SETTINGS_DEFAULTS.newShell).toBe(true);
 	});
 
 	it('sets and reads a boolean through the existing generic commands', () => {
@@ -30,13 +30,17 @@ describe('newShell generic settings commands', () => {
 			throw new Error('CLI exit');
 		});
 		settingsGet('newShell', { json: true });
-		expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string)).toMatchObject({ defaultValue: false });
+		expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string)).toMatchObject({ defaultValue: true });
 		settingsSet('newShell', 'true', { json: true });
 		expect(readSettingValue('newShell')).toBe(true);
+		expect(readSettingValue('newShellChoice')).toBe('new');
 		settingsGet('newShell', { json: true });
 		expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string)).toMatchObject({
 			key: 'newShell',
 			value: true,
 		});
+		settingsSet('newShell', 'false', { json: true });
+		expect(readSettingValue('newShell')).toBe(false);
+		expect(readSettingValue('newShellChoice')).toBe('classic');
 	});
 });

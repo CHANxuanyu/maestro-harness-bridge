@@ -3,8 +3,9 @@
  * user highlights text in XTerminal and chooses Copy-to-Clipboard or Send-to-Agent.
  */
 
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { TerminalSelectionContextMenu } from '../../../renderer/components/TerminalSelectionContextMenu';
 import type { Theme } from '../../../renderer/types';
 import { spyOnListeners, expectAllListenersRemoved } from '../../helpers/listenerLeakAssertions';
@@ -29,6 +30,11 @@ const baseTheme: Theme = {
 } as unknown as Theme;
 
 const menu = { x: 100, y: 120, selection: 'hello world' };
+
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
 
 describe('TerminalSelectionContextMenu', () => {
 	it('renders both actions when both handlers are provided', () => {

@@ -122,6 +122,8 @@ function createMockBrowserTab(overrides: Record<string, unknown> = {}) {
 
 describe('tabHelpers', () => {
 	beforeEach(() => {
+		// Classic tab selection preserves identity without updating conversation recency.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 	});
 

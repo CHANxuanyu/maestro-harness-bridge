@@ -39,6 +39,11 @@ function setup(overrides: Record<string, unknown> = {}) {
 	return { ...props, ...utils };
 }
 
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
+
 describe('QueuedItemsList pause/hold', () => {
 	it('renders a Hold button and fires onTogglePauseQueuedItem for a runnable item', () => {
 		const props = setup();

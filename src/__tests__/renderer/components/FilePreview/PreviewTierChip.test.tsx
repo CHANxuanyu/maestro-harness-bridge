@@ -1,7 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
+import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PreviewTierChip } from '../../../../renderer/components/FilePreview/PreviewTierChip';
 import { mockTheme } from '../../../helpers/mockTheme';
+
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
 
 describe('PreviewTierChip', () => {
 	function renderChip(
@@ -26,6 +32,16 @@ describe('PreviewTierChip', () => {
 	}
 
 	describe('rendering', () => {
+		it('uses plain preview mode copy in the new shell', () => {
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+			renderChip({ autoTier: 'fast', override: 'rich' });
+			expect(screen.getByTestId('preview-tier-chip-button')).toHaveTextContent('Full preview');
+			fireEvent.click(screen.getByTestId('preview-tier-chip-button'));
+			// workflows.newShellCopy.panels.currentPreview / tier.rich
+			expect(screen.getByTestId('preview-tier-chip-status')).toHaveTextContent(
+				'Current preview: Full preview'
+			);
+		});
 		it('renders the auto tier label when no override is set', () => {
 			renderChip({ autoTier: 'fast' });
 			const btn = screen.getByTestId('preview-tier-chip-button');

@@ -7,6 +7,7 @@
  * stats + controls), recovered, stopped, and the no-record fallback.
  */
 
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { RetryStatusCard } from '../../../renderer/components/RetryStatusCard';
@@ -36,6 +37,8 @@ function setOutage(partial: Partial<OutageRecord> = {}) {
 }
 
 beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
 	vi.useFakeTimers();
 	vi.setSystemTime(NOW);
 	useRetryStore.setState({ retries: {}, outages: {} });

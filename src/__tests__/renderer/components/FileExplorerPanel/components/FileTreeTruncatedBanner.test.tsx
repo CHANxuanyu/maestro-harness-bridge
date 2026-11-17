@@ -1,11 +1,17 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FileTreeTruncatedBanner } from '../../../../../renderer/components/FileExplorerPanel/components/FileTreeTruncatedBanner';
 
 const theme = {
 	colors: { warning: '#F59E0B', textMain: '#fff', textDim: '#888', border: '#333', bgMain: '#111' },
 } as any;
+
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
 
 describe('FileTreeTruncatedBanner', () => {
 	it('displays the cap label when previousCap is provided', () => {

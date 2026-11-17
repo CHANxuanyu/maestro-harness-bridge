@@ -88,6 +88,11 @@ function openSheet() {
 	fireEvent.click(screen.getByTestId('file-preview-actions-button'));
 }
 
+beforeEach(() => {
+	// Classic shell copy is asserted below; keep its wording explicit.
+	useSettingsStore.setState({ newShell: false });
+});
+
 describe('FilePreviewHeader on a phone', () => {
 	beforeEach(() => {
 		mockedUsePhoneLayout.mockReturnValue(true);

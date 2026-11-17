@@ -13,6 +13,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useWindowState } from '../../../renderer/hooks/ui/useWindowState';
 import { useUIStore } from '../../../renderer/stores/uiStore';
+import { useSettingsStore } from '../../../renderer/stores/settingsStore';
+import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { createMockSession } from '../../helpers/mockSession';
+import { createMockAITab } from '../../helpers/mockTab';
 import type { WindowState } from '../../../shared/window-types';
 
 const windows = () => window.maestro.windows;
@@ -38,10 +42,52 @@ function makeState(partial: Partial<WindowState>): WindowState {
 describe('useWindowState', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		useSettingsStore.setState({ newShell: false, settingsLoaded: true });
+		useSessionStore.setState({ sessions: [], activeSessionId: '' });
 		// Reset the global panel state to the store defaults (both open).
 		useUIStore.setState({ leftSidebarOpen: true, rightPanelOpen: true });
 		vi.mocked(windows().getState).mockResolvedValue(null);
 		vi.mocked(windows().setPanelState).mockResolvedValue(undefined);
+	});
+
+	it.each([false, true])(
+		'restores saved shell=%s before settings hydration without rewriting conversation preferences',
+		async (newShell) => {
+			useSettingsStore.setState({ newShell: true, settingsLoaded: false });
+			vi.mocked(window.maestro.settings.get).mockResolvedValueOnce(newShell);
+			const panel = { tab: 'changes' as const, open: true };
+			const session = createMockSession({
+				id: 'restored',
+				activeTabId: 'conversation',
+				aiTabs: [createMockAITab({ id: 'conversation', newShellPanel: panel })],
+			});
+			useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+			vi.mocked(windows().getState).mockResolvedValue(
+				makeState({ leftPanelCollapsed: true, rightPanelCollapsed: true })
+			);
+			renderHook(() => useWindowState());
+			await waitFor(() => expect(useUIStore.getState().leftSidebarOpen).toBe(false));
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].newShellPanel).toEqual(panel);
+			expect(useUIStore.getState().rightPanelOpen).toBe(newShell);
+			expect(window.maestro.settings.get).toHaveBeenCalledWith('newShell');
+		}
+	);
+
+	it('uses the window fallback without creating a conversation preference', async () => {
+		useSettingsStore.setState({ newShell: true });
+		const session = createMockSession({
+			id: 'restored',
+			activeTabId: 'conversation',
+			aiTabs: [createMockAITab({ id: 'conversation' })],
+		});
+		useSessionStore.setState({ sessions: [session], activeSessionId: session.id });
+		vi.mocked(windows().getState).mockResolvedValue(
+			makeState({ leftPanelCollapsed: true, rightPanelCollapsed: false })
+		);
+		renderHook(() => useWindowState());
+		await waitFor(() => expect(useUIStore.getState().leftSidebarOpen).toBe(false));
+		expect(useUIStore.getState().rightPanelOpen).toBe(true);
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].newShellPanel).toBeUndefined();
 	});
 
 	it('hydrates the UI store from the persisted per-window state on mount', async () => {

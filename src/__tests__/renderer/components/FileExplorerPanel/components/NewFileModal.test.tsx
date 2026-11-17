@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -54,6 +55,8 @@ const defaultProps = {
 
 describe('NewFileModal', () => {
 	beforeEach(() => {
+		// Classic shell copy is asserted below; keep its wording explicit.
+		useSettingsStore.setState({ newShell: false });
 		vi.clearAllMocks();
 	});
 

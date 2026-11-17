@@ -258,6 +258,10 @@ export type ExecStreamName = 'stdout' | 'stderr';
 export interface ExecStreamingOptions {
 	cwd?: string;
 	env?: NodeJS.ProcessEnv;
+	/** Optional bounded tail per pipe. Zero disables capture; callbacks still receive all chunks. */
+	maxCaptureChars?: number;
+	/** Optional stdin payload, used by the canonical SSH spawn wrapper. */
+	input?: string;
 	/** Called for every chunk as it arrives, decoded as utf8. */
 	onChunk: (chunk: string, stream: ExecStreamName) => void;
 }
@@ -289,25 +293,38 @@ export function execFileStreaming(
 		cwd,
 		env,
 		shell: useShell,
-		stdio: ['ignore', 'pipe', 'pipe'],
+		stdio: [options.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
 	});
 
 	let stdout = '';
 	let stderr = '';
 	let cancelled = false;
+	const capture = (previous: string, chunk: string): string => {
+		if (options.maxCaptureChars === undefined) return previous + chunk;
+		if (options.maxCaptureChars <= 0) return '';
+		return (previous + chunk).slice(-options.maxCaptureChars);
+	};
 
 	const collect = (stream: ExecStreamName) => (data: Buffer | string) => {
 		const chunk = data.toString();
 		if (stream === 'stdout') {
-			stdout += chunk;
+			stdout = capture(stdout, chunk);
 		} else {
-			stderr += chunk;
+			stderr = capture(stderr, chunk);
 		}
 		onChunk(chunk, stream);
 	};
 
 	child.stdout?.on('data', collect('stdout'));
 	child.stderr?.on('data', collect('stderr'));
+	if (options.input !== undefined) {
+		// A fast failure may close stdin before the payload is written. The
+		// process error/close handlers below remain the authoritative outcome.
+		child.stdin?.on('error', (error: NodeJS.ErrnoException) => {
+			if (error.code !== 'EPIPE' && error.code !== 'ERR_STREAM_DESTROYED') throw error;
+		});
+		child.stdin?.end(options.input);
+	}
 
 	const result = new Promise<ExecResult>((resolve) => {
 		// Spawn failures emit both 'error' and 'close'. Prefer the errno from

@@ -1,3 +1,10 @@
+import type {
+	CreateTeamInput,
+	TeamConfig,
+	LedgerEvent,
+	TeamStatusView,
+	SeatRole,
+} from '../shared/team/types';
 import type { ConversationPermissionSnapshot } from '../shared/window-types';
 import type { NewTabResult, NewAITabWithPromptResult } from '../main/web-server/types';
 /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -227,6 +234,44 @@ import type { WindowCommandRequest, WindowCommandResult } from '../shared/window
 import type { WebUserPublic } from '../shared/webLogin';
 
 interface MaestroAPI {
+	/** Main-owned teams. Mutations reject on invalid/stale input; no Electron sender is required. */
+	team: {
+		/** Creates and starts a team. Input omits id, createdAt and title; title comes from idea. */
+		create(input: CreateTeamInput): Promise<TeamConfig>;
+		/** Includes active, paused and terminal team configurations. */
+		list(): Promise<TeamConfig[]>;
+		/** Durable replay source. Null means unknown team. Events are ordered by seq. */
+		get(teamId: string): Promise<{ config: TeamConfig; events: LedgerEvent[] } | null>;
+		/** App-generated evidence, waits, cards, seat health and budget. */
+		status(teamId: string): Promise<TeamStatusView | null>;
+		/** Answer an exact open card/option. Return/change options require a nonempty note. */
+		answer(teamId: string, cardId: string, optionId: string, note?: string): Promise<void>;
+		/** M1 queues every owner message for the PM's next turn; a requested recipient is preserved in text. */
+		say(teamId: string, text: string, to?: SeatRole): Promise<void>;
+		/** Stops new scheduling; current turns finish and their results are retained. */
+		pause(teamId: string): Promise<void>;
+		/** Resumes automatically from durable ledger state. */
+		resume(teamId: string): Promise<void>;
+		/** Cancels active work, retaining branch and ledger. */
+		stop(teamId: string): Promise<void>;
+		/** Answers the current acceptance card; refuses incomplete results. */
+		accept(teamId: string): Promise<void>;
+		/** Returns the current demonstration to implementation with the owner's exact note. */
+		requestChanges(teamId: string, note: string): Promise<void>;
+		/** JSON text containing the same config and events as get(). No save dialog. */
+		export(teamId: string): Promise<string>;
+		/** Native-history locator for existing agentSessions reads. Null before a seat is bound. */
+		seatTranscript(
+			teamId: string,
+			seat: SeatRole
+		): Promise<{
+			provider: import('../shared/agentIds').AgentId;
+			nativeSessionId?: string;
+			cwd: string;
+		} | null>;
+		/** Emitted after every durable append. Subscribe before get(), then deduplicate by event.id/seq. */
+		onChanged(listener: (payload: { teamId: string; event: LedgerEvent }) => void): () => void;
+	};
 	// Context merging API (for session context transfer and grooming)
 	context: {
 		conversation: import('../main/preload/context').ContextApi['conversation'];

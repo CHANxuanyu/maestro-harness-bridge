@@ -17,6 +17,7 @@ import { projectSettings, projectSettingsTranslator } from './commands/project-s
 // Command-line interface for Maestro
 
 import { Command } from 'commander';
+import { registerTeamCommands } from './commands/team';
 import { asThinkingMode, type ThinkingMode } from '../shared/types';
 import { parseCliBool, isInheritValue } from './utils/parse';
 import { listGroups } from './commands/list-groups';
@@ -232,6 +233,7 @@ const cliVersion: string =
 logger.routeConsoleToStderr();
 
 const program = new Command();
+registerTeamCommands(program);
 
 program.name('maestro-cli').description('Command-line interface for Maestro').version(cliVersion);
 

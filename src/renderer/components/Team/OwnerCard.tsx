@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import type { OwnerCard as OwnerCardData, TeamState } from '../../../shared/team/types';
-import { teamFeatures } from '../../services/teamClient';
+import { presentTeamOwnerCard, teamFeatures } from '../../services/teamClient';
 import { useTeamStore } from '../../stores/teamStore';
-import { useT } from '../../i18n';
+import { useT, useFormatList } from '../../i18n';
 import { Criteria, TeamFold } from './TeamPrimitives';
 
 export function OwnerCard({
-	card,
+	card: source,
 	teamId,
 	state,
 	emphasis = true,
@@ -19,9 +19,14 @@ export function OwnerCard({
 	answered?: string;
 }) {
 	const t = useT();
+	const formatList = useFormatList();
+	const card = presentTeamOwnerCard(source, state, t);
 	const busy = useTeamStore((s) => s.pending[`${teamId}:${card.id}`]);
 	const [note, setNote] = useState('');
 	const baseline = card.boundary === 'baseline';
+	const trials = state.checks.filter(
+		(check) => check.purpose === 'trial' && check.batchId === `trial:${card.briefVersion}`
+	);
 	const bare = /^(continue|继续)[.!。！]?$/i;
 	const options = [...card.options].sort(
 		(a, b) => Number(!!b.recommended) - Number(!!a.recommended)
@@ -39,17 +44,31 @@ export function OwnerCard({
 			aria-label={card.title}
 		>
 			<h3>{card.title}</h3>
-			<p className="whitespace-pre-wrap">{card.body}</p>
-			<p className="team-dim">
-				{t('workflows.team.boundary', { boundary: t(`workflows.team.boundary.${card.boundary}`) })}
-			</p>
+			{card.body && <p className="whitespace-pre-wrap">{card.body}</p>}
+			{card.question && <p>{card.question}</p>}
+			{!baseline && card.boundary !== 'acceptance' && (
+				<p className="team-dim text-xs">
+					{t('workflows.team.boundary', {
+						boundary: t(`workflows.team.boundary.${card.boundary}`),
+					})}
+				</p>
+			)}
 			{card.budgetNote && <p className="team-dim">{card.budgetNote}</p>}
 			{baseline && (
 				<>
 					<Criteria state={state} />
 					<p>
-						<b>{t('workflows.team.notDoing')}</b>: {state.brief?.notDoing.join('；')}
+						<b>{t('workflows.team.notDoing')}</b>: {formatList(state.brief?.notDoing ?? [])}
 					</p>
+					{trials.length > 0 && (
+						<p className="team-dim">
+							{t(
+								trials.every((check) => !check.notRun && !check.timedOut)
+									? 'workflows.team.baselineDryRun'
+									: 'workflows.team.baselineDryRunFailed'
+							)}
+						</p>
+					)}
 				</>
 			)}
 			{answered ? (
@@ -66,21 +85,19 @@ export function OwnerCard({
 							className="team-button text-left"
 							data-primary={emphasis && index === 0}
 							key={option.id}
+							data-boundary={option.boundary ?? card.boundary}
 							disabled={busy}
 							onClick={() => void useTeamStore.getState().answer(teamId, card.id, option.id)}
 						>
 							<span>
 								{option.label}
-								{option.recommended ? ` (${t('workflows.team.recommended')})` : ''}
+								{option.recommended && !baseline && card.boundary !== 'acceptance'
+									? ` (${t('workflows.team.recommended')})`
+									: ''}
 							</span>
 							{option.cost && (
 								<span className="block">{t('workflows.team.cost', { cost: option.cost })}</span>
 							)}
-							<span className="block">
-								{t('workflows.team.boundary', {
-									boundary: t(`workflows.team.boundary.${option.boundary ?? card.boundary}`),
-								})}
-							</span>
 						</button>
 					))}
 					{visible.length !== options.length && options.some((o) => bare.test(o.label.trim())) && (

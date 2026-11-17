@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import {
 	effortsForModel,
+	modelEffortLevelName as levelName,
 	rememberEffortPerModel,
 	rememberedEffortForModel,
 	teamSeatEfforts,
@@ -47,13 +48,6 @@ export interface ModelEffortPickerProps {
 	onChange: (selection: ModelPickerSelection) => void;
 	running?: boolean;
 	shortcutKeys?: string[];
-}
-
-/** Vendor vocabulary is intentionally untranslated; explanations are localized. */
-function levelName(provider: ProviderModelCatalog['provider'], effort?: ModelEffort): string {
-	if (!effort) return '';
-	if (effort.id === 'xhigh') return provider === 'claude-code' ? 'Extra' : 'Extra High';
-	return effort.displayName || effort.id.charAt(0).toUpperCase() + effort.id.slice(1);
 }
 
 export const ModelEffortPicker = memo(function ModelEffortPicker(props: ModelEffortPickerProps) {

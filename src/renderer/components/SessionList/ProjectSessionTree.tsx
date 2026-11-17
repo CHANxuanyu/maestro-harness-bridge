@@ -38,6 +38,7 @@ import {
 	type KeyboardEvent as ReactKeyboardEvent,
 	type MouseEvent as ReactMouseEvent,
 	type ReactNode,
+	type CSSProperties,
 	type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -816,7 +817,7 @@ const ProjectSection = memo(function ProjectSection({
 	// state is left alone so clearing the search restores the user's layout.
 	const expanded = searching || !project.collapsed;
 	// Conversations, not configurations: every matching row, paged or not.
-	const count = project.totalCount;
+	const count = project.totalCount + (project.teams?.length ?? 0);
 	const rowIndent = 4 + project.depth * DEPTH_INDENT + 16;
 	const newMenuOpen = openMenuState?.kind === 'new' && openMenuState.key === project.key;
 	const projectMenuOpen = openMenuState?.kind === 'project' && openMenuState.key === project.key;
@@ -853,7 +854,7 @@ const ProjectSection = memo(function ProjectSection({
 	const showLoading = expanded && count === 0 && !searching && historyLoading;
 
 	return (
-		<li>
+		<li data-project-key={project.key}>
 			<div
 				className="group flex items-center gap-0.5 pr-1"
 				style={{ paddingLeft: 4 + project.depth * DEPTH_INDENT }}
@@ -940,9 +941,9 @@ const ProjectSection = memo(function ProjectSection({
 			</div>
 			{expanded && (
 				<ul id={listId} className="flex flex-col">
-					{newShell && (
+					{newShell && !!project.teams?.length && (
 						<li>
-							<TeamSidebar theme={theme} projectKey={project.key} />
+							<TeamSidebar theme={theme} teams={project.teams} />
 						</li>
 					)}
 					{project.conversations.map((conversation) => (
@@ -1448,7 +1449,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		if (menu && !menuSections) setMenu(null);
 	}, [menu, menuSections]);
 
-	const totalConversations = projects.reduce((sum, p) => sum + p.totalCount, 0);
+	const totalRows = projects.reduce((sum, p) => sum + p.totalCount + (p.teams?.length ?? 0), 0);
 	const filtering = searching || !!providerFilter;
 	const providerOptions =
 		providers.length > 1
@@ -1472,8 +1473,12 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		<button
 			type="button"
 			onClick={onNewConversationHere}
-			className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-white/10"
-			style={{ color: theme.colors.textMain }}
+			className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${newShell ? 'w-full min-w-0 font-medium whitespace-nowrap pr-10 sidebar-create-action' : 'hover:bg-white/10'}`}
+			style={{
+				color: newShell
+					? readableTextOn(theme.colors.textMain, [theme.colors.bgSidebar])
+					: theme.colors.textMain,
+			}}
 			title={
 				t(
 					newShell
@@ -1508,19 +1513,29 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 			}}
 			className="flex flex-col min-w-0 gap-1 select-none"
 		>
-			<div className="px-2 pt-1 pb-2 flex flex-col gap-1.5">
+			<div
+				className={
+					newShell ? 'px-3 pt-3.5 pb-2 flex flex-col gap-2' : 'px-2 pt-1 pb-2 flex flex-col gap-1.5'
+				}
+			>
 				{/* The first thing in the list is starting one, the way a chat app opens. */}
 				{newShell ? (
-					<div className="flex items-center justify-between">
+					<div
+						className="relative flex flex-col gap-2"
+						data-testid="sidebar-create-actions"
+						style={{ '--sidebar-create-hover': theme.colors.bgActivity } as CSSProperties}
+					>
 						{newConversationButton}
 						<button
 							type="button"
-							className="rounded-md px-2 py-1.5 text-sm"
+							className="sidebar-create-action flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium whitespace-nowrap"
+							style={{ color: readableTextOn(theme.colors.textMain, [theme.colors.bgSidebar]) }}
 							onClick={() => openUiSurface('create-team')}
 						>
+							<Plus aria-hidden className="w-4 h-4 shrink-0" />
 							{t('workflows.team.new')}
 						</button>
-						{headerMenu}
+						<div className="absolute right-0 top-0 shrink-0">{headerMenu}</div>
 					</div>
 				) : (
 					newConversationButton
@@ -1559,7 +1574,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 				)}
 			</div>
 
-			{historyStatus === 'loading' && totalConversations > 0 && (
+			{historyStatus === 'loading' && totalRows > 0 && (
 				<p
 					role="status"
 					className="px-3 text-2xs flex items-center gap-1"
@@ -1601,7 +1616,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					{t('workflows.conversations.titleResults')}
 				</h3>
 			)}
-			{filtering && totalConversations === 0 ? (
+			{filtering && totalRows === 0 ? (
 				<p className="px-3 py-2 text-xs italic" style={{ color: theme.colors.textDim }}>
 					{historyLoading
 						? t(

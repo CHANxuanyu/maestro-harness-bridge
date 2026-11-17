@@ -3,16 +3,18 @@ import type { LedgerEvent, SeatRole, TeamReport, TeamState } from '../../../shar
 import { SEAT_ROLES } from '../../../shared/team/types';
 import { teamStatus } from '../../../shared/team/status';
 import { formatDurationCompact } from '../../../shared/duration';
-import { useT } from '../../i18n';
+import { useT, useFormatList } from '../../i18n';
 import type { Theme } from '../../types';
 import { useTeamStore } from '../../stores/teamStore';
 import { Criteria, SeatTag, TeamFold } from './TeamPrimitives';
 import { deriveTeamFeed } from './deriveTeamFeed';
 import { OwnerCard } from './OwnerCard';
 import { TeamOutput } from './TeamOutput';
+import { TeamSummary } from './TeamSummary';
 
 function ReportMessage({ report }: { report: TeamReport }) {
 	const t = useT();
+	const formatList = useFormatList();
 	switch (report.type) {
 		case 'brief':
 			return <p>{report.scope}</p>;
@@ -26,7 +28,7 @@ function ReportMessage({ report }: { report: TeamReport }) {
 				</>
 			);
 		case 'fix':
-			return <p>{report.summary || report.fixed.join('、')}</p>;
+			return <p>{report.summary || formatList(report.fixed)}</p>;
 		case 'qa_prep':
 			return (
 				<>
@@ -111,13 +113,15 @@ export function DemoCard({
 	onChanges: () => void;
 }) {
 	const t = useT();
+	const formatList = useFormatList();
 	const [editing, setEditing] = useState(false);
 	const [note, setNote] = useState('');
 	const status = teamStatus(state, Date.now());
 	const id = state.config!.id;
 	const busy = useTeamStore((s) => s.pending[`${id}:command`]);
 	const ready =
-		state.openCards.length === 0 &&
+		state.openCards.some((card) => card.boundary === 'acceptance') &&
+		state.openCards.every((card) => card.boundary === 'acceptance') &&
 		status.criteria.total > 0 &&
 		status.criteria.withEvidence === status.criteria.total &&
 		state.reviews.at(-1)?.verdict === 'pass';
@@ -127,7 +131,7 @@ export function DemoCard({
 			className="team-card"
 			data-card="demo"
 			data-boundary="acceptance"
-			data-emphasis={active && !state.openCards.length}
+			data-emphasis={active && state.openCards.every((card) => card.boundary === 'acceptance')}
 		>
 			<h3>
 				{t('workflows.team.demo')} <SeatTag seat="pm" model={state.seats.pm.model} />
@@ -174,7 +178,7 @@ export function DemoCard({
 				)}
 			</TeamFold>
 			<p className="team-dim">
-				{t('workflows.team.notDoing')}: {state.baseline.brief?.notDoing.join('；')}
+				{t('workflows.team.notDoing')}: {formatList(state.baseline.brief?.notDoing ?? [])}
 			</p>
 			{editing && (
 				<label>
@@ -211,7 +215,7 @@ export function DemoCard({
 					</>
 				)}
 				<button className="team-button" onClick={onChanges}>
-					{t('workflows.team.panel.changes')}
+					{t('workflows.team.viewChanges')}
 				</button>
 			</div>
 		</section>
@@ -232,6 +236,7 @@ function FeedEvent({
 	onChanges: () => void;
 }) {
 	const t = useT();
+	const formatList = useFormatList();
 	const teamId = state.config!.id;
 	const tag = (seat: SeatRole) => {
 		const binding = [...events]
@@ -306,7 +311,7 @@ function FeedEvent({
 						))}
 					</TeamFold>
 					<p className="team-dim">
-						{t('workflows.team.notDoing')}: {event.brief.notDoing.join('；')}
+						{t('workflows.team.notDoing')}: {formatList(event.brief.notDoing)}
 					</p>
 				</section>
 			);
@@ -441,7 +446,7 @@ function FeedEvent({
 					kind="check"
 					title={
 						<>
-							<b>{t('workflows.team.check')}</b> · {event.covers.join(', ')} ·{' '}
+							<b>{t('workflows.team.check')}</b> · {formatList(event.covers)} ·{' '}
 							{t(
 								event.exitCode === 0 && !event.timedOut && !event.notRun
 									? 'workflows.team.pass'
@@ -468,7 +473,7 @@ function FeedEvent({
 		case 'issue_opened': {
 			const issue = state.issues.find((i) => i.id === event.issueId);
 			return (
-				<section className="team-card" data-card="issue">
+				<section className="team-card" data-card="issue" data-state={issue?.state}>
 					<h3>
 						{t('workflows.team.issue', { id: event.issueId })} · {event.title}
 					</h3>
@@ -545,9 +550,6 @@ function FeedEvent({
 						</>
 					) : (
 						<>
-							<p>
-								{event.model.model} · {event.model.effort}
-							</p>
 							<p>{t('workflows.team.takeoverContext')}</p>
 						</>
 					)}
@@ -666,31 +668,6 @@ function FeedEvent({
 					{tag(event.seat)} · {event.how}
 				</p>
 			);
-		case 'terminal':
-			return (
-				<section className="team-card" data-card="summary">
-					<h3>{t('workflows.team.summary')}</h3>
-					<p>
-						{t(
-							event.terminal === 'all'
-								? 'workflows.team.accepted'
-								: event.terminal === 'stopped'
-									? 'workflows.team.stopped'
-									: 'workflows.team.gaps',
-							{ count: event.residual.length }
-						)}
-					</p>
-					{event.residual.map((item) => (
-						<p key={item}>{item}</p>
-					))}
-					<p>
-						{t('workflows.team.turns', {
-							used: state.usage.turns,
-							total: state.config!.turnBudget,
-						})}
-					</p>
-				</section>
-			);
 		case 'changes_requested':
 			return (
 				<p>
@@ -720,18 +697,23 @@ export function TeamFeed({
 }) {
 	const t = useT();
 	const groups = useMemo(() => deriveTeamFeed(events), [events]);
+	const demoPending =
+		!state.terminal &&
+		(state.phase === 'demo' || state.phase === 'accept') &&
+		events.some((event) => event.kind === 'demo');
 	return (
 		<div className="max-w-[760px] w-full mx-auto px-5 py-5 flex flex-col gap-3.5">
 			{groups.map((group, index) => {
 				const body = group.events.map((event) => (
-					<FeedEvent
-						key={event.id}
-						event={event}
-						state={state}
-						events={events}
-						theme={theme}
-						onChanges={onChanges}
-					/>
+					<div key={event.id} className="contents" data-team-event={event.id}>
+						<FeedEvent
+							event={event}
+							state={state}
+							events={events}
+							theme={theme}
+							onChanges={onChanges}
+						/>
+					</div>
 				));
 				return index < groups.length - 1 && group.phase !== 'demo' && group.phase !== 'accept' ? (
 					<TeamFold key={group.id} kind="phase" title={t(`workflows.team.phase.${group.phase}`)}>
@@ -743,15 +725,19 @@ export function TeamFeed({
 					</div>
 				);
 			})}
-			{state.openCards.map((card, i) => (
-				<OwnerCard
-					key={card.id}
-					card={card}
-					teamId={state.config!.id}
-					state={state}
-					emphasis={i === 0}
-				/>
-			))}
+			{!state.terminal &&
+				state.openCards
+					.filter((card) => !(demoPending && card.boundary === 'acceptance'))
+					.map((card, i) => (
+						<OwnerCard
+							key={card.id}
+							card={card}
+							teamId={state.config!.id}
+							state={state}
+							emphasis={i === 0}
+						/>
+					))}
+			<TeamSummary state={state} />
 		</div>
 	);
 }

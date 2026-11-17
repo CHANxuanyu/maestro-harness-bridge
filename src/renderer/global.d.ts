@@ -264,11 +264,7 @@ interface MaestroAPI {
 		seatTranscript(
 			teamId: string,
 			seat: SeatRole
-		): Promise<{
-			provider: import('../shared/agentIds').AgentId;
-			nativeSessionId?: string;
-			cwd: string;
-		} | null>;
+		): Promise<import('../shared/team/types').TeamSeatTranscript | null>;
 		/** Emitted after every durable append. Subscribe before get(), then deduplicate by event.id/seq. */
 		onChanged(listener: (payload: { teamId: string; event: LedgerEvent }) => void): () => void;
 	};

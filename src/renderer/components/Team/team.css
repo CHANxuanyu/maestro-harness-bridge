@@ -124,3 +124,12 @@
 		grid-template-columns: 1fr 1fr;
 	}
 }
+
+.sidebar-create-action:hover {
+	background: var(--sidebar-create-hover);
+}
+
+.team-panel-resize:hover,
+.team-panel-resize:focus-visible {
+	background: var(--team-accent);
+}

@@ -131,7 +131,6 @@ export function CreateTeamModal({
 		if (deadline === 'tomorrow') due.setDate(due.getDate() + 1);
 		due.setHours(deadline === 'tomorrow' ? 10 : 18, 0, 0, 0);
 		const ok = await useTeamStore.getState().create({
-			title: idea.trim().split('\n')[0].slice(0, 60),
 			idea: idea.trim(),
 			projectRoot,
 			seats,

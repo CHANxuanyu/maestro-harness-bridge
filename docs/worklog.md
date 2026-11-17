@@ -1,5 +1,108 @@
 # 分支工作记录
 
+## 2026-11-18：A1c 第三轮布局与终态输入
+
+验证对象为 `75f2537c7` 之上的未提交源码。查看用户提供的三张 fix2 截图后，将左栏入口改为全宽上下排列、终态标签改为带完整提示的小圆点，团队侧栏改为默认 520 px 的可调宽面板和带溢出渐隐的下划线页签；产出列表直接展开，列表连接使用界面语言，终态禁用发言并只留一个导出入口，暂停仍可排队。定向 Vitest 9 文件 144 项、三份 TypeScript noEmit、变更文件 ESLint 和 Prettier 均通过，文档检查 734 路径无缺失，diff 与禁用破折号检查通过。本轮没有运行 Electron；中英文默认及最窄左栏、侧栏收窄后的实际布局仍待用户截图验收。没有提交或加入截图。
+第四轮查看 fix3 截图后，侧栏默认改回普通右栏的 384 px、页签水平内边距收为 8 px，标题先截断并保持操作同排，阶段分隔符移出标签且需要你徽标固定在滚动区外，产出预览链接单行左对齐；定向 Vitest 9 文件 147 项、三份 TypeScript noEmit、变更文件 ESLint 和 Prettier 通过，未运行 Electron，1400 × 900 中英文实际布局待用户复核。
+
+## 2026-11-17：A1c 第二轮截图修正与终态总结
+
+验证对象仍是基于 `5ac69fdd2c2fcb2440aa0b6e81c16f897798da45` 的本 worktree
+未提交源码，不是发行包。已查看用户提供的 baseline 和 demo 两张本地截图，
+对照 P7.1 原型修正；没有把截图加入公共文档或重新生成 Electron 截图。
+
+真实调度器仅记录 `accepted` 或 `stopped` 就能进入终态，原 feed 却只在收到
+`terminal` 时渲染总结。现在从 `state.terminal` 渲染唯一的“这次协作”卡片，
+始终放在阶段折叠外，覆盖全部达标、带缺口验收和停止。总结读取共享 reducer
+的决定、主动消息、讨论、评审打回、复盘、恢复、替补、唤醒和回合统计，以及
+实际标准变更、残余问题和建议；没有按原型路径填固定数字。主动消息按消息
+身份、唤醒按派发身份计数，重放和送达回执不重复计数。
+
+基线后端卡片分离可读 `body` 与结构化 `payload`，保留 PM 的人类问题用于 CLI。
+唯一客户端适配器兼容旧 JSON body；界面展示标准、范围与原型的检查试跑说明。
+预算报告也不再在正文拼 JSON。基线和验收不显示边界文字，升级卡只显示一次，
+保留 `data-boundary`。成员标签通过现有目录 hook 按岗位账号读取厂商模型与档位
+名字，历史事件仍取当时模型，未知条目才回退到 ID。选择器共用同一档位名字函数。
+
+主视图和右栏去掉 Esc 控件及主视图的模态注册，成员返回与建队弹窗保留 Esc。
+应用 job 跟进的内部结算行不再进入 feed，真实成员跟进仍保留。演示先展示产出，
+文件名相对工作区显示，实际读取保持原路径；第三个按钮改为“看改动”。无普通
+对话时顶栏仍并列提供“新对话”和“新建团队”，前者复用已有打开项目流程。
+中文测试实际设置 `uiLanguage: 'zh-CN'`，覆盖基线、边界、总结、目录名字与导航。
+
+保留用户对问题修复状态竞态的调整：等待修复声明或核验结束，再查台账确认开发
+声明在 QA 核验之前。场景增加可读基线、目录名、相对文件名和总结统计断言，
+终态截图前滚到总结卡。可选截图变量与共享三岗位夹具继续复用。
+
+验证命令与结果：
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/components/ModelEffortPicker.test.tsx src/__tests__/renderer/components/AppShell.test.tsx src/__tests__/renderer/i18n/messages.test.tsx src/__tests__/shared/team/ledger.test.ts src/__tests__/main/team/scheduler.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg '\.(ts|tsx|md|json)$')
+npx playwright test e2e/native-team.spec.ts e2e/native-team-ui.spec.ts --project=native --list
+npm run docs:verify
+git diff --check
+```
+
+定向 Vitest 9 文件、158 项通过，无跳过；三份 TypeScript 检查通过。
+ESLint（含变更测试）、Prettier、diff 检查和禁用破折号扫描通过。
+文档路径检查 734 个、0 缺失。Playwright 仅发现 2 文件的 2 场景，没有运行。
+
+没有运行 Electron、真实模型或发行包，没有提交。用户给出的截图证明的是修复前
+界面；本轮视觉效果、完整 UI 接受路径及新终态截图仍待沙箱外运行。其他终态
+只在 reducer 和 renderer 测试中验证，未跑完整 Electron 分支。没有新增后端桩，
+基线编辑、差异和退回仍保持原有关闭的 feature gates。
+
+## 2026-11-17：A1c 后端接入后的左栏可达性与 UI 场景
+
+验证对象是基于 `5ac69fdd2c2fcb2440aa0b6e81c16f897798da45` 的本 worktree
+未提交源码，不是发行包。真实团队后端已合入。修复两处可达性门槛：没有普通
+对话时仍挂载项目左栏；团队所属路径不在树中时用同一个项目行补出项目，按
+主机和路径归属复用已有项目。搜索、提供方和未读过滤不移除团队项目，终态
+团队保留；停止后的未答卡片和迟到退出不再遮住终态标签。
+
+演示卡接管真实后端的 acceptance 边界，开放“验收”按钮而不重复另一张老板
+卡片。`teamClient` 从真实 preload 契约取类型，并处理 `get` 的空结果。
+成员原生历史读取增加岗位实际账号目录，由 main 使用既有账号解析器返回，
+renderer 仍走只读 `agentSessions.read` 和既有 transcript 组件。
+
+新增 `e2e/native-team-ui.spec.ts`，与后端场景共用
+`e2e/fixtures/native-team.ts` 中的三岗位脚本、独立账号、台账读取和释放门。
+场景从没有对话的窗口经 IPC 建队，随后点击真实左栏、基线确认、发送和演示
+验收按钮。断言标题/预算、七阶段、现状四格、需求/质询/基线/检查/问题链/
+评审/演示顺序、先产出后总结、PM 排队与送达、原生成员历史、Esc 焦点返回及
+验收后仍可选的团队行。`MAESTRO_E2E_SHOTS` 可保存 baseline、demo、terminal
+三张截图；默认不额外保存这些阶段图。
+
+验证命令与结果：
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team src/__tests__/renderer/components/AppShell.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/utils/projectSessionTree.test.ts src/__tests__/main/team/scheduler.test.ts src/__tests__/main/team/ipc.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg -v '^\.survey-A0\.md$')
+npx playwright test e2e/native-team.spec.ts e2e/native-team-ui.spec.ts --project=native --list
+npm run docs:verify
+git diff --check
+```
+
+定向 Vitest 8 文件、133 项通过；renderer、main 和场景三个 TypeScript 检查
+通过；ESLint（含变更测试）与 Prettier 通过。Playwright 发现 2 文件中的
+2 个场景，没有执行测试。文档检查 734 个路径、0 缺失，diff 检查及变更文件
+禁用破折号扫描通过。
+
+本轮按要求没有运行 Electron，也没有生成阶段截图。TypeScript 和 Playwright
+收集只验证场景可编译/发现，不能代替 UI 验收。待用户在沙箱外以本次源码构建
+后运行新场景，检查实际截图、原生历史账号隔离和焦点。旧后端场景提取助手后
+也未重跑 Electron。SSH、其他终态分支的完整运行及 Windows/Linux 未验证。
+基线编辑、差异、退回仍在原有关闭的 feature gates 后；本次没有新增后端桩。
+
 ## 2026-11-17：A1c 团队群聊界面
 
 验证对象是基于 `5a8a8914d6bcb14989e79ea86d865feb524eabe8` 的本 worktree

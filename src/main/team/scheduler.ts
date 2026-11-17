@@ -23,6 +23,7 @@ import {
 	type TeamConfig,
 	type TeamEvent,
 	type TeamState,
+	type TeamSeatTranscript,
 } from '../../shared/team/types';
 import type { FollowUpFire } from '../../shared/followUp';
 import type { createCheckRunner } from '../check-runner';
@@ -52,6 +53,7 @@ export interface TeamSchedulerDependencies {
 		config: TeamConfig,
 		seat: SeatRole
 	): Pick<SeatTurnRequest, 'customEnv' | 'customPath' | 'customArgs'>;
+	seatAccountDir?(config: TeamConfig, seat: SeatRole): string | undefined;
 	now?: () => number;
 	onError(error: unknown): void;
 }
@@ -721,7 +723,11 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				id: 'budget',
 				boundary: 'budget',
 				title: 'Incomplete progress report',
-				body: `This is a progress report, not a completion demo. ${JSON.stringify(teamStatus(state, now()).criteria.missing)}`,
+				body: `This is a progress report, not a completion demo.\n${teamStatus(state, now())
+					.criteria.missing.map(
+						(criterion) => `${criterion.id}: ${criterion.text} (${criterion.reason})`
+					)
+					.join('\n')}`,
 				options: [
 					{ id: 'stop', label: 'Stop and preserve work', cost: 'Keep the branch and ledger.' },
 					{
@@ -870,11 +876,21 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				id: `baseline:${last('respond')!.dispatchId}`,
 				boundary: 'baseline',
 				title: 'Confirm the baseline',
-				body: JSON.stringify({
+				body: [
+					'Review this scope and its criteria before implementation starts.',
+					state.brief.checks.length
+						? 'The checks were dry-run in the task workspace under your authorization; they can start, and failures before implementation are expected.'
+						: '',
+					response.type === 'respond' ? response.askOwner : '',
+				]
+					.filter(Boolean)
+					.join(' '),
+				payload: {
+					type: 'baseline',
 					brief: state.brief,
 					question: response.type === 'respond' ? response.askOwner : undefined,
 					trials: state.checks.filter((c) => c.batchId === batchId),
-				}),
+				},
 				options: [
 					{ id: 'confirm', label: 'Confirm this scope and criteria', recommended: true },
 					{ id: 'return', label: 'Return with specific changes' },
@@ -1299,7 +1315,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			const data = await load(id);
 			return JSON.stringify(data, null, '\t');
 		},
-		async seatTranscript(id: string, seat: SeatRole) {
+		async seatTranscript(id: string, seat: SeatRole): Promise<TeamSeatTranscript | null> {
 			if (!SEAT_ROLES.includes(seat)) throw new Error('Invalid seat');
 			const data = await this.get(id);
 			if (!data) return null;
@@ -1309,6 +1325,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						provider: binding.model.tool,
 						nativeSessionId: binding.nativeSessionId,
 						cwd: binding.workspace,
+						configDir: deps.seatAccountDir?.(data.config, seat),
 					}
 				: null;
 		},

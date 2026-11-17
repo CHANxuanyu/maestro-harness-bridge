@@ -3,7 +3,9 @@ import type { TeamState } from '../../../shared/team/types';
 import { getFileExtension } from '../../../shared/fileCategories';
 import { isImageFile } from '../../../shared/gitUtils';
 import { shouldOpenExternally } from '../../utils/fileExplorer';
-import { isAbsolutePath, joinPath } from '../../../shared/formatters';
+import { getBasename, isAbsolutePath, joinPath } from '../../../shared/formatters';
+import { toRelativePath } from '../../utils/fileLinks/matcher';
+import { normalizeWorktreePath } from '../../../shared/worktreePaths';
 import type { Theme } from '../../types';
 import { useT } from '../../i18n';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -14,10 +16,12 @@ import { TeamFold } from './TeamPrimitives';
 
 function OutputFile({
 	path,
+	label,
 	theme,
 	sshRemoteId,
 }: {
 	path: string;
+	label: string;
 	theme: Theme;
 	sshRemoteId?: string;
 }) {
@@ -68,7 +72,7 @@ function OutputFile({
 					else setOpen(!open);
 				}}
 			>
-				{t('workflows.team.openFile', { path })}
+				{t('workflows.team.openFile', { path: label })}
 			</button>
 			{open && (
 				<div
@@ -80,7 +84,7 @@ function OutputFile({
 					) : content === null ? (
 						<p>{t('workflows.team.loading')}</p>
 					) : isImageFile(path) ? (
-						<img src={content} alt={path} />
+						<img src={content} alt={label} />
 					) : ['md', 'mdx', 'markdown'].includes(extension) ? (
 						<div className="team-output-document">
 							<style>{proseStyles}</style>
@@ -103,7 +107,15 @@ function OutputFile({
 	);
 }
 
-export function TeamOutput({ state, theme }: { state: TeamState; theme: Theme }) {
+export function TeamOutput({
+	state,
+	theme,
+	disclosure = true,
+}: {
+	state: TeamState;
+	theme: Theme;
+	disclosure?: boolean;
+}) {
 	const t = useT();
 	const [version, setVersion] = useState<'now' | 'before'>('now');
 	const latest = state.outputs.at(-1);
@@ -117,8 +129,24 @@ export function TeamOutput({ state, theme }: { state: TeamState; theme: Theme })
 	const output = version === 'before' && before ? before : latest;
 	if (!output) return <p className="team-dim">{t('workflows.team.noOutput')}</p>;
 	const cwd = state.seats.dev.binding?.workspace ?? state.config!.projectRoot;
+	const files = output.files.map((file) => (
+		<OutputFile
+			key={`${output.id}:${file}`}
+			path={isAbsolutePath(file) ? file : joinPath(cwd, file)}
+			label={
+				isAbsolutePath(file)
+					? (toRelativePath(
+							normalizeWorktreePath(file, !!state.config?.sshRemoteId),
+							normalizeWorktreePath(cwd, !!state.config?.sshRemoteId)
+						) ?? getBasename(file))
+					: file
+			}
+			theme={theme}
+			sshRemoteId={state.config?.sshRemoteId}
+		/>
+	));
 	return (
-		<div className="space-y-3">
+		<div className="space-y-3" data-testid="team-output">
 			{before && before !== latest && (
 				<SegmentedControl
 					theme={theme}
@@ -141,16 +169,11 @@ export function TeamOutput({ state, theme }: { state: TeamState; theme: Theme })
 					sshRemoteId={state.config?.sshRemoteId}
 				/>
 			))}
-			<TeamFold title={t('workflows.team.output')}>
-				{output.files.map((file) => (
-					<OutputFile
-						key={`${output.id}:${file}`}
-						path={isAbsolutePath(file) ? file : joinPath(cwd, file)}
-						theme={theme}
-						sshRemoteId={state.config?.sshRemoteId}
-					/>
-				))}
-			</TeamFold>
+			{disclosure ? (
+				<TeamFold title={t('workflows.team.output')}>{files}</TeamFold>
+			) : (
+				<div className="space-y-3">{files}</div>
+			)}
 			<p className="team-dim">{t('workflows.team.outputSource')}</p>
 		</div>
 	);

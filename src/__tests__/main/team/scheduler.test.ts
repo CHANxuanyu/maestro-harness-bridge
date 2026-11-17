@@ -183,6 +183,13 @@ describe('M1 team scheduler', () => {
 		await scheduler.create(config);
 		await drain();
 	};
+	it('returns the host-resolved account alongside the native seat locator', async () => {
+		deps.seatAccountDir = vi.fn(() => '/synthetic/account');
+		await begin();
+		const locator = await scheduler.seatTranscript(teamConfig.id, 'pm');
+		expect(locator).toMatchObject({ provider: 'claude-code', configDir: '/synthetic/account' });
+		expect(deps.seatAccountDir).toHaveBeenCalledWith(teamConfig, 'pm');
+	});
 	const toBaseline = async () => {
 		await begin();
 		await finish(latest('pm', 'brief'), goodReports.brief);
@@ -200,6 +207,17 @@ describe('M1 team scheduler', () => {
 		await scheduler.answer(teamConfig.id, state().openCards[0].id, 'confirm');
 		await drain();
 	};
+	it('keeps the baseline readable while preserving its structured brief and trial evidence', async () => {
+		await toBaseline();
+		const card = state().openCards[0];
+		expect(card.body).toContain('dry-run in the task workspace');
+		expect(card.body).not.toMatch(/"brief"|"trials"|"cwd"|"evidenceId"/);
+		expect(card.payload).toMatchObject({
+			type: 'baseline',
+			brief: state().brief,
+			trials: state().checks,
+		});
+	});
 	it('repairs only once when both the reply and its repair are malformed', async () => {
 		await begin();
 		await finish(latest('pm', 'brief'), 'Missing block');

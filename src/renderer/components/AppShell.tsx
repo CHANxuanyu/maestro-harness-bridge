@@ -132,6 +132,8 @@ function AppShellContent({
 	const newShell = useSettingsStore(selectNewShellEnabled);
 	const activeTeamId = useTeamStore((s) => s.activeTeamId);
 	const teamActive = newShell && !!activeTeamId;
+	const hasTeams = useTeamStore((s) => Object.keys(s.teams).length > 0) && newShell;
+	const hasSidebarProjects = hasSessions || hasTeams;
 	const t = useT();
 	useEffect(() => {
 		document.documentElement.dataset.newShell = String(newShell);
@@ -236,11 +238,18 @@ function AppShellContent({
 			{modals}
 			{standaloneModals}
 
-			{!teamActive && !hasSessions && (!sessionsLoaded || !sessionsReadOk) && !isMobileLandscape ? (
+			{!teamActive &&
+			!hasSidebarProjects &&
+			(!sessionsLoaded || !sessionsReadOk) &&
+			!isMobileLandscape ? (
 				<AgentsLoadingView theme={theme} readFailed={sessionsLoaded && !sessionsReadOk} />
 			) : null}
 
-			{!teamActive && !hasSessions && sessionsLoaded && sessionsReadOk && !isMobileLandscape ? (
+			{!teamActive &&
+			!hasSidebarProjects &&
+			sessionsLoaded &&
+			sessionsReadOk &&
+			!isMobileLandscape ? (
 				newShell ? (
 					<>
 						<aside
@@ -278,7 +287,7 @@ function AppShellContent({
 			    bubble through it. useSwipeGestures only preventDefaults once a
 			    gesture locks HORIZONTAL, so vertical scrolling inside the drawer is
 			    untouched, and neither drawer scrolls sideways. */}
-			{!isMobileLandscape && hasSessions && (
+			{!isMobileLandscape && hasSidebarProjects && (
 				<ErrorBoundary>
 					<div
 						className="contents"
@@ -288,6 +297,9 @@ function AppShellContent({
 						<SessionList {...sessionListProps} />
 					</div>
 				</ErrorBoundary>
+			)}
+			{!hasSessions && hasTeams && !teamActive && !logViewerOpen && !isMobileLandscape && (
+				<ProjectStartView theme={theme} />
 			)}
 
 			<PluginPanelSlot
@@ -306,7 +318,7 @@ function AppShellContent({
 			  drawer in a group chat, so opening THAT still earns a backdrop.
 			*/}
 			{isNarrowViewport &&
-				hasSessions &&
+				hasSidebarProjects &&
 				(leftSidebarOpen || (rightPanelOpen && !activeGroupChatId && !teamActive)) && (
 					<div
 						className="maestro-mobile-backdrop"

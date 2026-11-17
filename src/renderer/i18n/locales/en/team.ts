@@ -199,6 +199,8 @@ export const team = {
 	'workflows.team.pause': 'Pause team',
 	'workflows.team.resume': 'Resume team',
 	'workflows.team.stop': 'Stop team',
+	'workflows.team.resizePanel': 'Resize team panel',
+	'workflows.team.finishedMessages': 'This team has finished. Messages are no longer delivered.',
 	'workflows.team.export': 'Export ledger',
 	'workflows.team.exported': 'Exported',
 	'workflows.team.followUp': 'Follow-up',
@@ -208,4 +210,31 @@ export const team = {
 	'workflows.team.empty': 'No records yet.',
 	'workflows.team.changesUnavailable': 'Member workspace is not ready yet.',
 	'workflows.team.projectMissing': 'Open a project first.',
+	'workflows.team.viewChanges': 'View changes',
+	'workflows.team.progressReport':
+		'This is a progress report, not a completion demo. These criteria still lack passing evidence:',
+	'workflows.team.acceptResult': 'Accept the demonstrated result',
+	'workflows.team.acceptanceBody':
+		'All confirmed criteria have evidence and product review passed. Accept the result or request specific changes.',
+	'workflows.team.baselineDryRun':
+		'The PM proposed these checks. The app dry-ran them in the task workspace under your authorization: they can start; failures now are expected because implementation has not started.',
+	'workflows.team.baselineDryRunFailed':
+		'Some checks could not start or timed out in the task workspace. Review the check results before confirming.',
+	'workflows.team.summarySource': 'Statistics from the path this team actually took',
+	'workflows.team.summaryResult': 'Result',
+	'workflows.team.summaryOwner': 'Your actions',
+	'workflows.team.summaryOwnerCounts': 'Decisions: {decisions}; messages: {messages}',
+	'workflows.team.summaryTeam': 'Resolved by the team',
+	'workflows.team.summaryTeamCounts': 'Discussions: {discussions}; decisions: {decisions}',
+	'workflows.team.summaryReviewCounts':
+		'Product review: {rejections} rejections, {retros} retrospectives; latest result: {result}',
+	'workflows.team.summaryNoReview': 'Product review has not started',
+	'workflows.team.summaryRecovery': 'Automatic recovery',
+	'workflows.team.summaryRecoveryCounts':
+		'Recoveries: {recoveries}; substitute takeovers: {substitutions}',
+	'workflows.team.summaryNoRecovery': 'Not needed',
+	'workflows.team.summaryWakes': 'App wake-ups',
+	'workflows.team.summaryWakeCount': 'Wake-ups: {count}',
+	'workflows.team.summaryUsage': 'Usage',
+	'workflows.team.summaryNone': 'None',
 } as const;

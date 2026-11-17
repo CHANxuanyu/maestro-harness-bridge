@@ -3,9 +3,9 @@ import { readableTextOn, blendColors } from '../../../shared/colorContrast';
 import type { SeatModel, SeatRole, TeamState } from '../../../shared/team/types';
 import type { Theme } from '../../types';
 import { useT } from '../../i18n';
-import { modelDisplayLabel, effortDisplayLabel } from '../../utils/workflowLabels';
 import { getAgentDisplayName } from '../../../shared/agentMetadata';
-import { NATIVE_MODEL_DEFAULT } from '../../../shared/modelCatalog';
+import { NATIVE_MODEL_DEFAULT, modelEffortLevelName } from '../../../shared/modelCatalog';
+import { useTeamModelCatalog } from './TeamModelCatalogs';
 import './team.css';
 
 export function teamStyle(theme: Theme): CSSProperties {
@@ -29,16 +29,26 @@ export function teamStyle(theme: Theme): CSSProperties {
 
 export function SeatTag({ seat, model }: { seat: SeatRole; model?: SeatModel }) {
 	const t = useT();
+	const catalog = useTeamModelCatalog(seat, model?.tool);
+	const modelId =
+		model?.model && model.model !== NATIVE_MODEL_DEFAULT
+			? model.model
+			: catalog?.followDefault.modelId;
+	const resolved = catalog?.models.find((entry) => entry.id === modelId);
+	const effort = model?.effort ?? resolved?.defaultEffort;
+	const level = resolved?.efforts.find((entry) => entry.id === effort);
 	return (
 		<span className="inline-flex items-center gap-1.5 text-sm font-semibold">
 			<i className="team-seat-mark" data-seat={seat} aria-hidden />
 			{t(`workflows.team.${seat}`)}
 			{model && (
 				<span className="team-dim font-normal">
-					{model.model && model.model !== NATIVE_MODEL_DEFAULT
-						? modelDisplayLabel(model.model)
-						: `${getAgentDisplayName(model.tool)} · ${t('workflows.team.nativeDefault')}`}
-					{model.effort ? ` · ${effortDisplayLabel(t, model.effort)}` : ''}
+					{resolved?.displayName ||
+						modelId ||
+						`${getAgentDisplayName(model.tool)} · ${t('workflows.team.nativeDefault')}`}
+					{effort
+						? ` · ${level && catalog ? modelEffortLevelName(catalog.provider, level) : effort}`
+						: ''}
 				</span>
 			)}
 		</span>

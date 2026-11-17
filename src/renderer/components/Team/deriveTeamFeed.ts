@@ -12,6 +12,12 @@ export function deriveTeamFeed(events: readonly LedgerEvent[]): TeamFeedGroup[] 
 	let phase: TeamPhase = 'clarify';
 	let group: TeamFeedGroup | undefined;
 	for (const event of events) {
+		// Scheduler bookkeeping is not a member follow-up or owner-facing conversation.
+		if (
+			(event.kind === 'follow_up_registered' || event.kind === 'follow_up_fired') &&
+			(event.followUpId.startsWith('job:') || event.followUpId.startsWith('job-retry:'))
+		)
+			continue;
 		if (event.kind === 'phase_changed') {
 			phase = event.to;
 			group = undefined;

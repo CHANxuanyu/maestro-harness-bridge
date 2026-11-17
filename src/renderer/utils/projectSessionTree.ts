@@ -2,7 +2,11 @@ export { buildProjectHistoryScopes } from './nativeConversationMatch';
 import type { ArchivedConversation } from '../../shared/conversationArchive';
 import type { ConversationOrigin, Group, Session } from '../types';
 import { conversationExpanded, findConversationParent } from '../../shared/conversationChildren';
-import type { ProjectHistoryConversation } from '../../shared/projectHistory';
+import {
+	projectHistoryScopeFor,
+	type ProjectHistoryConversation,
+} from '../../shared/projectHistory';
+import type { TeamConfig } from '../../shared/team/types';
 import { getBasename } from '../../shared/formatters';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
 import { DEEPSEEK_PRESET, sessionProviderId } from '../../shared/agentPresets';
@@ -14,6 +18,8 @@ import {
 	runnerAccount,
 	sessionHost,
 	sessionProjectKey,
+	projectPathKey,
+	buildProjectHistoryScopes,
 } from './nativeConversationMatch';
 
 /** Rows a project shows before "Show more", and how many each press adds. */
@@ -66,6 +72,7 @@ export interface SidebarAgentChoice {
 }
 
 export interface SidebarProject {
+	teams?: TeamConfig[];
 	archivedConversations?: ArchivedConversation[];
 	key: string;
 	groupId?: string;
@@ -86,6 +93,7 @@ export interface SidebarProject {
 export { sessionProjectKey } from './nativeConversationMatch';
 
 interface ProjectSessionTreeOptions {
+	teams?: TeamConfig[];
 	newShell?: boolean;
 	archives?: ArchivedConversation[];
 	sessions: Session[];
@@ -168,6 +176,7 @@ function aliasFor(
  * row per native conversation. Nothing here copies or imports a transcript.
  */
 export function buildProjectSessionTree({
+	teams = [],
 	newShell = false,
 	archives = [],
 	sessions,
@@ -407,6 +416,40 @@ export function buildProjectSessionTree({
 		});
 	}
 
+	// A team owns a project even when no conversation has ever been opened here.
+	// Share host/path membership with native history, without creating a fake runner.
+	if (newShell && teams.length) {
+		const scopes = buildProjectHistoryScopes(sessions, groups);
+		for (const team of teams) {
+			const scope = projectHistoryScopeFor(scopes, {
+				projectPath: team.projectRoot,
+				sshRemoteId: team.sshRemoteId,
+			});
+			const key = scope?.projectKey ?? projectPathKey(team.projectRoot, team.sshRemoteId);
+			let project = projects.get(key);
+			if (!project) {
+				project = {
+					key,
+					name: getBasename(team.projectRoot) || team.projectRoot,
+					depth: 0,
+					collapsed: collapsed.has(key),
+					conversations: [],
+					totalCount: 0,
+					hiddenCount: 0,
+					agents: [],
+				};
+				projects.set(key, project);
+				scopes.push({
+					projectKey: key,
+					projectPath: team.projectRoot,
+					sshRemoteId: team.sshRemoteId,
+					ownerIds: [],
+				});
+			}
+			(project.teams ??= []).push(team);
+		}
+	}
+
 	// Resolve before filtering or paging so a closed source stays above its live
 	// children, including a target configured under a different project.
 	const allRows = [...rowsByProject.values()].flat();
@@ -544,6 +587,8 @@ export function buildProjectSessionTree({
 	const filtering = !!query || unreadOnly || !!providerFilter;
 	return [...projects.values()]
 		.filter((project) => {
+			// Conversation filters and collapsed parent groups must not strand teams.
+			if (project.teams?.length) return true;
 			const group = project.groupId ? groupById.get(project.groupId) : undefined;
 			const parent =
 				groupsPlusEnabled && group?.parentGroupId ? groupById.get(group.parentGroupId) : undefined;

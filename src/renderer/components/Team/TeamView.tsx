@@ -1,21 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { PanelRight, Users } from 'lucide-react';
 import { TEAM_PHASES } from '../../../shared/team/types';
-import { useT, useAppLocale } from '../../i18n';
+import { useT, useAppLocale, useFormatList } from '../../i18n';
 import type { Theme } from '../../types';
 import { useTeamState, useTeamStatus, useTeamStore } from '../../stores/teamStore';
 import { HeaderActionButton } from '../ui/HeaderActionButton';
 import { MiniBadge } from '../ui/MiniBadge';
-import { EscCloseButton } from '../ui/EscCloseButton';
-import { useModalLayer } from '../../hooks/ui/useModalLayer';
 import { useScrollPosition } from '../../hooks/ui/useScrollPosition';
-import { MODAL_PRIORITIES } from '../../constants/modalPriorities';
 import { TeamFeed } from './TeamFeed';
 import { TeamPanel, type TeamPanelTab } from './TeamPanel';
 import { TeamComposer } from './TeamComposer';
 import { TeamMemberView } from './TeamMemberView';
 import { CreateTeamModal } from './CreateTeamModal';
+import { presentTeamOwnerCard } from '../../services/teamClient';
 import { teamStyle } from './TeamPrimitives';
+import { TeamModelCatalogProvider } from './TeamModelCatalogs';
 
 export function TeamSetupHost({ theme }: { theme: Theme }) {
 	const open = useTeamStore((s) => s.setupOpen);
@@ -53,21 +52,7 @@ export function TeamView({ theme }: { theme: Theme }) {
 	}, [teamId, seat, scrollToBottom]);
 	const t = useT();
 	const locale = useAppLocale();
-	useModalLayer(
-		MODAL_PRIORITIES.GROUP_CHAT_INFO - 1,
-		t('workflows.team.title'),
-		() => {
-			if (panel) setPanel(false);
-			else useTeamStore.getState().selectTeam(null);
-		},
-		{
-			enabled: !seat,
-			capturesFocus: false,
-			focusTrap: 'none',
-			blocksAppShortcuts: false,
-			blocksLowerLayers: false,
-		}
-	);
+	const formatList = useFormatList();
 	if (!teamId || !state || !status || !events)
 		return <div role="status">{t('workflows.team.loading')}</div>;
 	const selectPanel = (value: TeamPanelTab) => {
@@ -92,146 +77,171 @@ export function TeamView({ theme }: { theme: Theme }) {
 		state.terminal === 'all'
 			? t('workflows.team.noProblems')
 			: state.residual.length
-				? state.residual.map((id) => state.criteria.find((c) => c.id === id)?.text ?? id).join('；')
-				: state.issues
-						.filter((i) => i.state !== 'verified-pass')
-						.map((i) => i.opened.title)
-						.join('；') ||
-					status.openWorkItems.map((i) => i.title).join('；') ||
+				? formatList(
+						state.residual.map((id) => state.criteria.find((c) => c.id === id)?.text ?? id)
+					)
+				: formatList(
+						state.issues.filter((i) => i.state !== 'verified-pass').map((i) => i.opened.title)
+					) ||
+					formatList(status.openWorkItems.map((i) => i.title)) ||
 					state.brief?.scope ||
 					t('workflows.team.noProblems');
 	const next = state.terminal
 		? t('workflows.team.noNext')
-		: state.openCards[0]?.title ||
+		: (state.openCards[0] ? presentTeamOwnerCard(state.openCards[0], state, t).title : '') ||
 			state.followUps[0]?.waitFor ||
 			status.openWorkItems[0]?.title ||
 			t('workflows.team.scheduler');
 	return (
-		<div
-			className="team-surface flex flex-1 min-w-0 min-h-0 relative"
-			style={teamStyle(theme)}
-			data-testid="team-view"
-		>
-			{seat ? (
-				<TeamMemberView
-					key={`${teamId}:${seat}`}
-					teamId={teamId}
-					seat={seat}
-					state={state}
-					theme={theme}
-				/>
-			) : (
-				<main className="flex flex-col flex-1 min-w-0 min-h-0">
-					<header className="team-head">
-						<Users size={18} />
-						<h2 className="font-semibold">{state.config!.title}</h2>
-						<span className="team-dim">
-							{status.budget.deadline
-								? t('workflows.team.deadlineAt', {
-										time: new Date(status.budget.deadline).toLocaleString(locale),
-									})
-								: t('workflows.team.noDeadline')}{' '}
-							·{' '}
-							{t('workflows.team.turns', {
-								used: status.budget.turnsUsed,
-								total: status.budget.turnsTotal,
-							})}
-						</span>
-						<div className="flex-1" />
-						<HeaderActionButton
-							theme={theme}
-							variant="ghost"
-							onClick={() => selectPanel('members')}
-						>
-							{t('workflows.team.membersRules')}
-						</HeaderActionButton>
-						<button
-							type="button"
-							aria-label={t('workflows.team.panel')}
-							aria-expanded={panel}
-							onClick={() => setPanel(!panel)}
-						>
-							<PanelRight size={16} />
-						</button>
-						<EscCloseButton
-							theme={theme}
-							onClose={() => useTeamStore.getState().selectTeam(null)}
-						/>
-					</header>
-					<div
-						className="flex items-center gap-3 px-4 py-2 border-b overflow-x-auto shrink-0"
-						style={{ borderColor: 'var(--team-border)' }}
-					>
-						{TEAM_PHASES.map((phase, i) => (
-							<span
-								key={phase}
-								className="whitespace-nowrap rounded-full px-2 py-0.5"
-								aria-current={phase === state.phase ? 'step' : undefined}
-								style={{
-									fontWeight: phase === state.phase ? 600 : 400,
-									background: phase === state.phase ? 'var(--team-soft)' : undefined,
-									color: phase === state.phase ? 'var(--team-text)' : 'var(--team-dim)',
-								}}
+		<TeamModelCatalogProvider config={state.config!}>
+			<div
+				className="team-surface flex flex-1 min-w-0 min-h-0 relative"
+				style={teamStyle(theme)}
+				data-testid="team-view"
+			>
+				{seat ? (
+					<TeamMemberView
+						key={`${teamId}:${seat}`}
+						teamId={teamId}
+						seat={seat}
+						state={state}
+						theme={theme}
+					/>
+				) : (
+					<main className="flex flex-col flex-1 min-w-0 min-h-0">
+						<header className="team-head" style={{ flexWrap: 'nowrap' }} data-testid="team-header">
+							<Users size={18} className="shrink-0" />
+							<div className="flex items-center gap-2 flex-1 min-w-0">
+								<h2 className="font-semibold flex-1 min-w-0 truncate" title={state.config!.title}>
+									{state.config!.title}
+								</h2>
+								<span className="team-dim min-w-0 truncate">
+									{status.budget.deadline
+										? t('workflows.team.deadlineAt', {
+												time: new Date(status.budget.deadline).toLocaleString(locale),
+											})
+										: t('workflows.team.noDeadline')}{' '}
+									·{' '}
+									{t('workflows.team.turns', {
+										used: status.budget.turnsUsed,
+										total: status.budget.turnsTotal,
+									})}
+								</span>
+							</div>
+							<div
+								className="flex items-center gap-2 shrink-0 whitespace-nowrap"
+								data-testid="team-header-actions"
 							>
-								{i ? '› ' : ''}
-								{t(`workflows.team.phase.${phase}`)}
-							</span>
-						))}
-						{state.openCards.length > 0 && (
-							<MiniBadge
-								theme={theme}
-								label={t('workflows.team.needsYou', { count: state.openCards.length })}
-								style={{ color: 'var(--team-on-accent)', background: 'var(--team-accent)' }}
-							/>
-						)}
-					</div>
-					<div className="team-status">
-						<div aria-live="polite">
-							<span className="team-dim block">{t('workflows.team.now')}</span>
-							{current}
-						</div>
-						<div>
-							<span className="team-dim block">{t('workflows.team.solving')}</span>
-							{solving}
-						</div>
-						<div>
-							<span className="team-dim block">{t('workflows.team.next')}</span>
-							{next}
-						</div>
-						<div>
-							<span className="team-dim block">{t('workflows.team.output')}</span>
-							{state.outputs.length ? (
-								<button className="underline" onClick={() => selectPanel('output')}>
-									{t('workflows.team.preview')} ›
+								<HeaderActionButton
+									theme={theme}
+									variant="ghost"
+									onClick={() => selectPanel('members')}
+								>
+									{t('workflows.team.membersRules')}
+								</HeaderActionButton>
+								<button
+									type="button"
+									aria-label={t('workflows.team.panel')}
+									aria-expanded={panel}
+									onClick={() => setPanel(!panel)}
+								>
+									<PanelRight size={16} />
 								</button>
-							) : (
-								t('workflows.team.noneYet')
+							</div>
+						</header>
+						<div
+							data-testid="team-phase-strip"
+							className="flex items-center gap-2 px-4 py-2 border-b min-w-0 shrink-0"
+							style={{ borderColor: 'var(--team-border)' }}
+						>
+							<div
+								className="flex items-center gap-1 min-w-0 overflow-x-auto overflow-y-hidden"
+								data-testid="team-phase-scroll"
+							>
+								{TEAM_PHASES.map((phase, i) => (
+									<Fragment key={phase}>
+										{i > 0 && (
+											<span
+												aria-hidden="true"
+												className="shrink-0"
+												style={{ color: 'var(--team-border)' }}
+											>
+												›
+											</span>
+										)}
+										<span
+											className="shrink-0 whitespace-nowrap rounded-full px-1 py-0.5 text-xs"
+											aria-current={phase === state.phase ? 'step' : undefined}
+											style={{
+												fontWeight: phase === state.phase ? 600 : 400,
+												background: phase === state.phase ? 'var(--team-soft)' : undefined,
+												color: phase === state.phase ? 'var(--team-text)' : 'var(--team-dim)',
+											}}
+										>
+											{t(`workflows.team.phase.${phase}`)}
+										</span>
+									</Fragment>
+								))}
+							</div>
+							{!state.terminal && state.openCards.length > 0 && (
+								<MiniBadge
+									theme={theme}
+									className="whitespace-nowrap"
+									testId="team-needs-you"
+									label={t('workflows.team.needsYou', { count: state.openCards.length })}
+									style={{ color: 'var(--team-on-accent)', background: 'var(--team-accent)' }}
+								/>
 							)}
 						</div>
-					</div>
-					{error && (
-						<p role="alert" className="px-5 py-2">
-							{t('workflows.team.error', { error })}
-							<button
-								className="team-button ml-2"
-								onClick={() => void useTeamStore.getState().refresh()}
-							>
-								{t('workflows.team.retry')}
-							</button>
-						</p>
-					)}
-					<div ref={feedRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-auto">
-						<TeamFeed
-							state={state}
-							events={events}
-							theme={theme}
-							onChanges={() => selectPanel('changes')}
-						/>
-					</div>
-					<TeamComposer key={teamId} state={state} />
-					<div className="flex gap-2 px-5 pb-2" style={{ background: 'var(--team-side)' }}>
+						<div className="team-status" data-testid="team-status">
+							<div aria-live="polite" data-status-cell="now">
+								<span className="team-dim block">{t('workflows.team.now')}</span>
+								{current}
+							</div>
+							<div data-status-cell="solving">
+								<span className="team-dim block">{t('workflows.team.solving')}</span>
+								{solving}
+							</div>
+							<div data-status-cell="next">
+								<span className="team-dim block">{t('workflows.team.next')}</span>
+								{next}
+							</div>
+							<div data-status-cell="output">
+								<span className="team-dim block">{t('workflows.team.output')}</span>
+								{state.outputs.length ? (
+									<button
+										className="underline block max-w-full truncate text-left"
+										onClick={() => selectPanel('output')}
+									>
+										{t('workflows.team.preview')} ›
+									</button>
+								) : (
+									t('workflows.team.noneYet')
+								)}
+							</div>
+						</div>
+						{error && (
+							<p role="alert" className="px-5 py-2">
+								{t('workflows.team.error', { error })}
+								<button
+									className="team-button ml-2"
+									onClick={() => void useTeamStore.getState().refresh()}
+								>
+									{t('workflows.team.retry')}
+								</button>
+							</p>
+						)}
+						<div ref={feedRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-auto">
+							<TeamFeed
+								state={state}
+								events={events}
+								theme={theme}
+								onChanges={() => selectPanel('changes')}
+							/>
+						</div>
+						<TeamComposer key={teamId} state={state} />
 						{!state.terminal && (
-							<>
+							<div className="flex gap-2 px-5 pb-2" style={{ background: 'var(--team-side)' }}>
 								<button
 									className="team-button"
 									onClick={() =>
@@ -246,26 +256,18 @@ export function TeamView({ theme }: { theme: Theme }) {
 								>
 									{t('workflows.team.stop')}
 								</button>
-							</>
+								<button
+									className="team-button"
+									onClick={() => void useTeamStore.getState().command(teamId, 'export')}
+								>
+									{t('workflows.team.export')}
+								</button>
+							</div>
 						)}
-						<button
-							className="team-button"
-							onClick={() => void useTeamStore.getState().command(teamId, 'export')}
-						>
-							{t('workflows.team.export')}
-						</button>
-					</div>
-				</main>
-			)}
-			{panel && !seat && (
-				<TeamPanel
-					state={state}
-					theme={theme}
-					tab={tab}
-					onTab={setTab}
-					onClose={() => setPanel(false)}
-				/>
-			)}
-		</div>
+					</main>
+				)}
+				{panel && !seat && <TeamPanel state={state} theme={theme} tab={tab} onTab={setTab} />}
+			</div>
+		</TeamModelCatalogProvider>
 	);
 }

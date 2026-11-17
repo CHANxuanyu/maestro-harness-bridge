@@ -5,8 +5,8 @@ import type {
 	SeatRole,
 	TeamConfig,
 	TeamStatusView,
+	TeamSeatTranscript,
 } from '../../shared/team/types';
-import type { AgentId } from '../../shared/agentIds';
 
 export function createTeamApi() {
 	return {
@@ -28,10 +28,7 @@ export function createTeamApi() {
 		requestChanges: (teamId: string, note: string): Promise<void> =>
 			ipcRenderer.invoke('team:requestChanges', teamId, note),
 		export: (teamId: string): Promise<string> => ipcRenderer.invoke('team:export', teamId),
-		seatTranscript: (
-			teamId: string,
-			seat: SeatRole
-		): Promise<{ provider: AgentId; nativeSessionId?: string; cwd: string } | null> =>
+		seatTranscript: (teamId: string, seat: SeatRole): Promise<TeamSeatTranscript | null> =>
 			ipcRenderer.invoke('team:seatTranscript', teamId, seat),
 		onChanged: (
 			listener: (payload: { teamId: string; event: LedgerEvent }) => void

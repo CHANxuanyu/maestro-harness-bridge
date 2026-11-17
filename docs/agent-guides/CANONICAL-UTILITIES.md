@@ -3,7 +3,8 @@
 **New-shell team renderer**
 
 `teamClient()` in `src/renderer/services/teamClient.ts` is the sole typed access
-to the pending `window.maestro.team` contract. Absence disables creation and
+to the real `window.maestro.team` preload contract, deriving wire types rather
+than redeclaring them. Absence disables creation and
 does not substitute a demonstration ledger. `useTeamStore` in
 `src/renderer/stores/teamStore.ts` subscribes before `list` / `get`, merges
 snapshot and incremental events by identity, and calls the shared `reduceLedger`.
@@ -12,17 +13,54 @@ for recorded events instead of fabricating acceptance, delivery or evidence.
 Connection lifetime is reference counted, late reads are discarded after
 disconnect, and one clock supplies deadline status to `useTeamStatus`.
 
+`buildProjectSessionTree()` in `src/renderer/utils/projectSessionTree.ts` assigns
+teams with the existing `projectHistoryScopeFor()` host/path membership. A team
+without an existing project contributes a normal project row using
+`projectPathKey()` in `src/renderer/utils/nativeConversationMatch.ts`, shared
+with conversation runners. Do not invent a runner or a separate team sidebar:
+the shell must mount its project sidebar even with zero conversations, and
+conversation filters must retain these projects. Terminal teams stay listed.
+The top-level new-conversation action remains present without a runner and
+opens the selected local team's project through the existing `openProject()`.
+
 `deriveTeamFeed()` in `src/renderer/components/Team/deriveTeamFeed.ts` groups
 events into chronological phase folds only. `OwnerCard` is shared across
 boundaries, takes unresolved cards from `state.openCards`, puts recommended
 choices first, and never offers a bare continue. Baseline edit/diff/return stay
-behind `teamFeatures` until the backend supports them. `TeamPrimitives.tsx`
+behind `teamFeatures` until the backend supports them. `presentTeamOwnerCard()`
+in the client adapter separates legacy JSON checkpoint bodies from human text;
+new baseline cards carry readable `body` and structured `payload` separately.
+Fixed baseline/acceptance checkpoints have no visible boundary label;
+escalations show it once, while retaining `data-boundary` attributes.
+Application `job:` / `job-retry:` follow-ups are bookkeeping, not feed messages.
+`TeamSummary` renders once from `state.terminal`, outside phase folds: the
+scheduler can end with `accepted` or `stopped` without a separate `terminal`
+event. It uses canonical replay statistics rather than counting rendered cards.
+`TeamModelCatalogProvider` shares account-scoped catalogs across seat tags on
+each surface using `useConversationModelCatalog()`. Historical tags keep their
+event model and use catalog display names, including hidden catalog entries;
+missing entries fall back to IDs. `modelEffortLevelName()` in
+`src/shared/modelCatalog.ts` shares vendor level vocabulary with the picker.
+`TeamPrimitives.tsx`
 owns theme mapping, seat tags, folds and criteria presentation for these surfaces.
 `TeamMemberView` uses `seatTranscript` plus `agentSessions.read` with
-`readOnly: true` and the existing `SessionMessagesView`; never add a team-specific
+`readOnly: true`, the locator's resolved `configDir`, and the existing
+`SessionMessagesView`; never add a team-specific
 transcript parser. `TeamOutput` shows ledger artifacts through existing image
-and Markdown components. Team changes use `ChangesPanel.readOnlyScope`, sharing
+and Markdown components, using workspace-relative labels while retaining the
+original paths for reads. The team surface is not a modal; only setup and member
+views register Escape behavior. Team changes use `ChangesPanel.readOnlyScope`, sharing
 the Git reads and diff view while omitting write and review controls.
+The live demo renders the backend's acceptance boundary itself; its open
+acceptance card enables the demo action rather than blocking it or adding a
+second generic acceptance card. Other unresolved boundaries still block accept.
+
+`prepareNativeTeam()` in `e2e/fixtures/native-team.ts` owns the synthetic three-seat
+scripts, isolated accounts, ledger reads and release gates shared by
+`e2e/native-team.spec.ts` and `e2e/native-team-ui.spec.ts`. The former tests CLI
+decisions and recovery; the latter creates externally with no open project,
+then uses real UI controls for both owner decisions and the composer. See
+[test commands and screenshot capture](TEST-PATTERNS.md#synthetic-team-acceptance).
 
 **Team chat shared layer**
 
@@ -72,7 +110,9 @@ also invent domain events. This avoids double-counting the subsequent recorded
 actions. App-generated verdict events may carry `actor: 'app'`; member-authored
 ones must have the appropriate actor. To count one owner decision that has both
 a `card_answered` and a semantic event, propagate `cardId` to that semantic
-event. Recovery statistics count explicit `member_recovered` events; bindings
+event. Owner messages count logical message IDs regardless of delivery; wake-ups
+count distinct dispatched wake turns, and substitutions count takeover events.
+Recovery statistics count explicit `member_recovered` events; bindings
 describe where and under which model a seat runs. Additions in `standard_change`
 carry a complete `criterion`, including its proof method. All attempts and the
 review loop use `judgeAttempts()` and `decideNext()` in `src/shared/progressRules.ts`.

@@ -65,7 +65,12 @@ export function TeamMemberView({
 					transcript.provider,
 					transcript.cwd,
 					transcript.nativeSessionId,
-					{ offset: 0, limit, readOnly: true },
+					{
+						offset: 0,
+						limit,
+						readOnly: true,
+						...(transcript.configDir ? { configDir: transcript.configDir } : {}),
+					},
 					state.config?.sshRemoteId
 				);
 				if (stale) return;
@@ -82,7 +87,7 @@ export function TeamMemberView({
 		};
 	}, [teamId, seat, binding, revision, limit, state.config?.sshRemoteId]);
 	return (
-		<div className="flex flex-col flex-1 min-w-0 min-h-0">
+		<div className="flex flex-col flex-1 min-w-0 min-h-0" data-testid="team-member-view">
 			<header className="team-head">
 				<button className="team-button" onClick={back}>
 					← {state.config?.title}

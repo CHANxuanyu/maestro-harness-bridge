@@ -32,6 +32,14 @@ export interface SeatConfig extends SeatModel {
 	substitute?: SeatModel;
 }
 
+/** Native read locator, including the account used by the dispatched seat. */
+export interface TeamSeatTranscript {
+	provider: AgentId;
+	nativeSessionId?: string;
+	cwd: string;
+	configDir?: string;
+}
+
 /** One-time authorization chosen at team creation (PRD 6.3). All four default to true. */
 export interface TeamAuthorizations {
 	/** Run check commands in the task workspaces. */
@@ -147,6 +155,13 @@ export interface OwnerCard {
 	title: string;
 	/** Where it is stuck and why the remaining paths need the owner. */
 	body: string;
+	/** Structured checkpoint data stays separate from owner-facing prose. */
+	payload?: {
+		type: 'baseline';
+		brief: Brief;
+		question?: string | null;
+		trials: TeamEvent<'check_run'>[];
+	};
 	options: CardOption[];
 	/** Budget used when raised, for escalations. */
 	budgetNote?: string;
@@ -569,6 +584,9 @@ export interface TeamProblem {
 
 export interface TeamStatistics {
 	ownerDecisions: number;
+	ownerMessages: number;
+	wakes: number;
+	substitutions: number;
 	discussions: number;
 	rejections: number;
 	retros: number;

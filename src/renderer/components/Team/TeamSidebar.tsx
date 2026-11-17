@@ -1,14 +1,12 @@
-import { useSessionStore } from '../../stores/sessionStore';
-import { buildProjectHistoryScopes } from '../../utils/nativeConversationMatch';
-import { projectHistoryScopeFor } from '../../../shared/projectHistory';
 import { useEffect, useRef } from 'react';
 import { Loader2, Users } from 'lucide-react';
 import { SEAT_ROLES, type SeatRole, type TeamConfig } from '../../../shared/team/types';
-import { useTeamState, useTeamStatus, useTeams, useTeamStore } from '../../stores/teamStore';
+import { useTeamState, useTeamStatus, useTeamStore } from '../../stores/teamStore';
 import { useFocusAfterRender } from '../../hooks/utils/useFocusAfterRender';
 import { useT } from '../../i18n';
 import type { Theme } from '../../types';
 import { SeatTag, teamStyle } from './TeamPrimitives';
+import { TeamModelCatalogProvider } from './TeamModelCatalogs';
 
 function SeatRow({ config, seat }: { config: TeamConfig; seat: SeatRole }) {
 	const t = useT();
@@ -16,7 +14,7 @@ function SeatRow({ config, seat }: { config: TeamConfig; seat: SeatRole }) {
 	const active = useTeamStore((s) => s.activeTeamId === config.id && s.activeSeat === seat);
 	const returning = useTeamStore((s) => s.activeTeamId === config.id && s.returnSeat === seat);
 	const state = useTeamState(config.id)!;
-	const working = state.seats[seat].activeDispatchIds.length > 0;
+	const working = !state.terminal && state.seats[seat].activeDispatchIds.length > 0;
 	useFocusAfterRender(ref, returning);
 	useEffect(() => {
 		if (returning) useTeamStore.getState().clearReturnSeat();
@@ -24,6 +22,7 @@ function SeatRow({ config, seat }: { config: TeamConfig; seat: SeatRole }) {
 	return (
 		<button
 			ref={ref}
+			data-team-seat={seat}
 			type="button"
 			className="w-full flex items-center gap-2 rounded px-2 py-1.5 pl-8 text-left"
 			style={{ background: active ? 'var(--team-activity)' : undefined }}
@@ -44,42 +43,60 @@ function TeamRow({ config }: { config: TeamConfig }) {
 	const t = useT();
 	const status = useTeamStatus(config.id)!;
 	const active = useTeamStore((s) => s.activeTeamId === config.id && !s.activeSeat);
-	const working = status.seats.some((s) => s.status === 'working');
+	const working = !status.terminal && status.seats.some((s) => s.status === 'working');
+	const terminalLabel = status.terminal
+		? t(
+				status.terminal === 'all'
+					? 'workflows.team.accepted'
+					: status.terminal === 'gaps'
+						? 'workflows.team.gaps'
+						: 'workflows.team.stopped',
+				{ count: status.residual.length }
+			)
+		: undefined;
 	return (
 		<div>
 			<button
+				data-team-id={config.id}
 				type="button"
-				className="w-full flex items-center gap-2 rounded px-2 py-2 text-left"
+				className="w-full min-w-0 flex items-center gap-2 rounded px-2 py-2 text-left"
+				title={terminalLabel ? `${config.title}\n${terminalLabel}` : config.title}
+				aria-label={config.title}
 				style={{ background: active ? 'var(--team-activity)' : undefined }}
 				aria-current={active ? 'page' : undefined}
 				onClick={() => useTeamStore.getState().selectTeam(config.id)}
 			>
-				<Users size={15} />
-				<span className="truncate flex-1">{config.title}</span>
-				{status.openCards.length > 0 ? (
+				<Users size={15} className="shrink-0" aria-hidden />
+				<span className="truncate flex-1 min-w-0" data-team-title title={config.title}>
+					{config.title}
+				</span>
+				{!status.terminal && status.openCards.length > 0 ? (
 					<span
-						className="w-2 h-2 rounded-full"
+						className="w-2 h-2 shrink-0 rounded-full"
 						style={{ background: 'var(--team-accent)' }}
 						aria-label={t('workflows.team.needsYou', { count: status.openCards.length })}
 					/>
 				) : working ? (
 					<Loader2 size={12} className="animate-spin" aria-label={t('workflows.team.working')} />
-				) : (
-					<span className="team-dim">
-						{status.terminal
-							? t(
-									status.terminal === 'all'
-										? 'workflows.team.accepted'
-										: status.terminal === 'gaps'
-											? 'workflows.team.gaps'
-											: 'workflows.team.stopped',
-									{ count: status.residual.length }
-								)
-							: status.paused
-								? t('workflows.team.paused')
-								: ''}
-					</span>
-				)}
+				) : terminalLabel ? (
+					<span
+						role="img"
+						aria-label={terminalLabel}
+						title={terminalLabel}
+						data-team-status={status.terminal}
+						className="w-2 h-2 shrink-0 rounded-full"
+						style={{
+							background:
+								status.terminal === 'all'
+									? 'var(--team-success)'
+									: status.terminal === 'gaps'
+										? 'var(--team-warning)'
+										: 'var(--team-dim)',
+						}}
+					/>
+				) : status.paused ? (
+					<span className="team-dim">{t('workflows.team.paused')}</span>
+				) : null}
 			</button>
 			{SEAT_ROLES.map((seat) => (
 				<SeatRow key={seat} config={config} seat={seat} />
@@ -87,27 +104,17 @@ function TeamRow({ config }: { config: TeamConfig }) {
 		</div>
 	);
 }
-export function TeamSidebar({ theme, projectKey }: { theme: Theme; projectKey: string }) {
-	const teams = useTeams();
-	const sessions = useSessionStore((s) => s.sessions);
-	const groups = useSessionStore((s) => s.groups);
-	const scopes = buildProjectHistoryScopes(sessions, groups);
+export function TeamSidebar({ theme, teams }: { theme: Theme; teams: readonly TeamConfig[] }) {
 	return (
 		<div
 			className="team-surface"
 			style={{ ...teamStyle(theme), background: theme.colors.bgSidebar }}
 		>
-			{teams
-				.filter(
-					(config) =>
-						projectHistoryScopeFor(scopes, {
-							projectPath: config.projectRoot,
-							sshRemoteId: config.sshRemoteId,
-						})?.projectKey === projectKey
-				)
-				.map((config) => (
-					<TeamRow key={config.id} config={config} />
-				))}
+			{teams.map((config) => (
+				<TeamModelCatalogProvider key={config.id} config={config}>
+					<TeamRow config={config} />
+				</TeamModelCatalogProvider>
+			))}
 		</div>
 	);
 }

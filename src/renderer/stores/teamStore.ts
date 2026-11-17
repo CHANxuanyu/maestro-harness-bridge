@@ -128,7 +128,7 @@ export const useTeamStore = create<TeamStore>((set, get) => {
 					void teamClient()
 						?.get(teamId)
 						.then((snapshot) => {
-							if (epoch === generation) get().mirror(snapshot);
+							if (epoch === generation && snapshot) get().mirror(snapshot);
 						})
 						.catch((error: unknown) => {
 							if (epoch === generation) {
@@ -150,7 +150,7 @@ export const useTeamStore = create<TeamStore>((set, get) => {
 				await Promise.all(
 					configs.map(async (config) => {
 						const snapshot = await client.get(config.id);
-						if (epoch === generation) get().mirror(snapshot);
+						if (epoch === generation && snapshot) get().mirror(snapshot);
 					})
 				);
 			} catch (error) {
@@ -187,7 +187,8 @@ export const useTeamStore = create<TeamStore>((set, get) => {
 				get().mirror({ config, events: [] });
 				get().selectTeam(config.id);
 				set({ setupOpen: false });
-				get().mirror(await client.get(config.id));
+				const snapshot = await client.get(config.id);
+				if (snapshot) get().mirror(snapshot);
 			}),
 		answer: (id, cardId, optionId, note) =>
 			perform(`${id}:${cardId}`, (client) => client.answer(id, cardId, optionId, note)),

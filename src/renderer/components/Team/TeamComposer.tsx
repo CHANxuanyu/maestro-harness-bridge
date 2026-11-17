@@ -8,6 +8,7 @@ import { SeatTag } from './TeamPrimitives';
 export function TeamComposer({ state }: { state: TeamState }) {
 	const t = useT();
 	const id = state.config!.id;
+	const finished = !!state.terminal || state.stopped;
 	const [draft, setDraft] = useState('');
 	const to =
 		SEAT_ROLES.find((seat) =>
@@ -17,6 +18,7 @@ export function TeamComposer({ state }: { state: TeamState }) {
 	const [focus, setFocus] = useState(false);
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const busy = useTeamStore((s) => s.pending[`${id}:say`]);
+	const exporting = useTeamStore((s) => s.pending[`${id}:command`]);
 	const mention = draft.match(/^@(\S*)$/);
 	const options = mention
 		? SEAT_ROLES.filter(
@@ -31,15 +33,43 @@ export function TeamComposer({ state }: { state: TeamState }) {
 	};
 	useFocusAfterRender(ref, focus);
 	const send = async () => {
-		if (!draft.trim() || busy) return;
+		if (finished || !draft.trim() || busy) return;
 		const submitted = draft;
 		if (await useTeamStore.getState().say(id, draft.trim(), to)) {
 			setDraft((current) => (current === submitted ? '' : current));
 			setFocus(true);
 		}
 	};
+	if (finished)
+		return (
+			<div
+				data-testid="team-composer"
+				className="shrink-0 px-5 py-3 border-t"
+				style={{ borderColor: 'var(--team-border)', background: 'var(--team-side)' }}
+			>
+				<div className="max-w-[720px] mx-auto flex items-center gap-3">
+					<textarea
+						aria-label={t('workflows.team.message')}
+						disabled
+						rows={2}
+						value=""
+						placeholder={t('workflows.team.finishedMessages')}
+						className="flex-1 min-w-0 resize-none !border-0 !p-0 !bg-transparent"
+					/>
+					<button
+						type="button"
+						className="team-button shrink-0"
+						disabled={exporting}
+						onClick={() => void useTeamStore.getState().command(id, 'export')}
+					>
+						{t('workflows.team.export')}
+					</button>
+				</div>
+			</div>
+		);
 	return (
 		<div
+			data-testid="team-composer"
 			className="shrink-0 px-5 pt-2.5 pb-4 border-t"
 			style={{ borderColor: 'var(--team-border)', background: 'var(--team-side)' }}
 		>

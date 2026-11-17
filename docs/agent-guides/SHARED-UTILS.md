@@ -258,6 +258,11 @@ because that cost is paid on the main thread on every store write (~40ms on the
 
 ## Formatting (`src/shared/formatters.ts` - Both)
 
+Renderer prose lists use `useFormatList()` in `src/renderer/i18n/format.ts`
+(re-exported by the i18n barrel). It memoizes `Intl.ListFormat` for the current
+UI locale. Use it for scope, issue and status lists instead of hard-coded
+commas or CJK separators; it leaves every supplied item unchanged.
+
 | Function                               | Signature                              | Purpose                                                                           |
 | -------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------- |
 | `formatSize(bytes)`                    | `(number) => string`                   | File size: `"1.5 MB"`, `"256 KB"`. Auto-scales B/KB/MB/GB/TB.                     |

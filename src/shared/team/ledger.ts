@@ -136,6 +136,9 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		usage: emptyUsage(),
 		statistics: {
 			ownerDecisions: 0,
+			ownerMessages: 0,
+			wakes: 0,
+			substitutions: 0,
 			discussions: 0,
 			rejections: 0,
 			retros: 0,
@@ -148,6 +151,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 	const fired = new Set<string>();
 	const delivered = new Set<string>();
 	const ownerDecisions = new Set<string>();
+	const ownerMessages = new Set<string>();
 	const attempts = new Map<
 		string,
 		{
@@ -269,6 +273,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				break;
 			}
 			case 'substitute_took_over':
+				state.statistics.substitutions++;
 				state.seats[event.seat].takeover = event.temporary ? 'temporary' : 'substitute';
 				state.seats[event.seat].model = event.model;
 				break;
@@ -611,6 +616,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				}
 				break;
 			case 'owner_message':
+				if (event.actor === 'owner') ownerMessages.add(event.messageId);
 				if (!delivered.has(event.messageId)) state.pendingMessages.push(event);
 				break;
 			case 'message_delivered':
@@ -663,6 +669,8 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 	state.statistics = {
 		...state.statistics,
 		ownerDecisions: ownerDecisions.size,
+		ownerMessages: ownerMessages.size,
+		wakes: state.turns.filter((turn) => turn.dispatched?.mode === 'wake').length,
 		discussions: state.discussions.filter((d) => d.opened).length,
 		rejections: state.rejectionCount,
 		retros: state.retros.length,

@@ -1,7 +1,8 @@
-import { useTeamStore } from '../../stores/teamStore';
+import { useTeams, useTeamStore } from '../../stores/teamStore';
 import { useT } from '../../i18n';
 import { openUiSurface } from '../../utils/openUiSurface';
 import { newProjectConversation } from '../../services/newShellConversation';
+import { openProject, chooseProject } from '../../services/openProject';
 import { requestConversationAction } from '../../services/conversationArchive';
 import { useConversationArchiveStore } from '../../stores/conversationArchiveStore';
 import type { ConversationArchiveTarget } from '../../../shared/conversationArchive';
@@ -160,6 +161,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const pendingRef = useRef(new Set<string>());
 	const collapsedProjects = useSettingsStore((s) => s.collapsedConversationProjects);
 	const teamActive = useTeamStore((s) => !!s.activeTeamId);
+	const teams = useTeams();
 	const groupChatActive = useGroupChatStore((s) => s.activeGroupChatId !== null);
 	const browsing = useModalStore(selectModalOpen('agentSessions'));
 	const activeKey = useSessionStore((s) => {
@@ -277,6 +279,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	const projects = useMemo(
 		() =>
 			buildProjectSessionTree({
+				teams,
 				newShell,
 				archives,
 				sessions,
@@ -291,6 +294,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 				rowLimits,
 			}),
 		[
+			teams,
 			newShell,
 			archives,
 			sessions,
@@ -498,7 +502,13 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 	}, []);
 	const newConversationHere = useCallback(() => {
 		if (activeOwnerId) newConversation(activeOwnerId);
-	}, [activeOwnerId, newConversation]);
+		else {
+			const teamId = useTeamStore.getState().activeTeamId;
+			const team = teams.find((team) => team.id === teamId) ?? teams[0];
+			if (team && !team.sshRemoteId) void openProject(team.projectRoot);
+			else void chooseProject();
+		}
+	}, [activeOwnerId, newConversation, teams]);
 	const manageAgents = useCallback(() => {
 		useSettingsStore.getState().setSidebarNavigationMode('agents');
 	}, []);
@@ -604,7 +614,7 @@ export const ProjectSessionSidebar = memo(function ProjectSessionSidebar({
 				onSetChildrenExpanded={setChildrenExpanded}
 				onSelectConversation={selectConversation}
 				onNewConversation={newConversation}
-				onNewConversationHere={activeOwnerId ? newConversationHere : undefined}
+				onNewConversationHere={newShell || activeOwnerId ? newConversationHere : undefined}
 				onRenameConversation={renameConversation}
 				onCloseConversation={closeConversation}
 				onArchiveConversation={

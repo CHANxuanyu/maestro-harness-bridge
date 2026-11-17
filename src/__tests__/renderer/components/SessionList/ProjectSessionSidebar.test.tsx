@@ -19,6 +19,15 @@ import { createMockAITab } from '../../../helpers/mockTab';
 import { mockTheme } from '../../../helpers/mockTheme';
 import { setActiveTab } from '../../../../renderer/utils/tabHelpers';
 import { useConversationArchiveStore } from '../../../../renderer/stores/conversationArchiveStore';
+import { useTeamStore } from '../../../../renderer/stores/teamStore';
+import { resetStore } from '../../../helpers';
+import { teamConfig, defaultPath } from '../Team/defaultPath';
+import { openProject } from '../../../../renderer/services/openProject';
+
+vi.mock('../../../../renderer/services/openProject', () => ({
+	openProject: vi.fn().mockResolvedValue({ success: true }),
+	chooseProject: vi.fn().mockResolvedValue(undefined),
+}));
 
 const EN: Record<string, string> = {
 	'workflows.conversations.refreshFailed': "Couldn't load newer messages; showing the saved copy",
@@ -149,6 +158,8 @@ function rowButton(container: HTMLElement): HTMLElement {
 }
 
 beforeEach(() => {
+	resetStore(useTeamStore);
+	useUIStore.setState({ newShellSidebarSearch: '' });
 	useSettingsStore.setState({ newShell: false });
 	useConversationArchiveStore.setState({ records: [] });
 	refreshNativeConversation.mockReset();
@@ -157,6 +168,36 @@ beforeEach(() => {
 	setHistory([record()]);
 	const sessions = [owner()];
 	useSessionStore.setState({ sessions, activeSessionId: 'maestro-owner' } as never);
+});
+
+it('reveals externally created teams without an open project and retains terminal teams while filtering', () => {
+	useSettingsStore.setState({ newShell: true });
+	useSessionStore.setState({ sessions: [], activeSessionId: null });
+	setHistory([]);
+	const { container } = renderSidebar([]);
+	act(() => useTeamStore.getState().receive(teamConfig.id, defaultPath[0]));
+	const row = container.querySelector(`[data-team-id="${teamConfig.id}"]`)!;
+	expect(row).toBeVisible();
+	expect(row.closest('[data-project-key]')).toHaveAttribute(
+		'data-project-key',
+		`path:local:${teamConfig.projectRoot}`
+	);
+	expect(container.querySelectorAll('[data-team-seat]')).toHaveLength(3);
+	const newConversation = screen.getByTestId('sidebar-new-conversation');
+	const newTeam = screen.getByRole('button', { name: 'workflows.team.new' });
+	expect(newConversation).toBeVisible();
+	expect(newTeam).toBeVisible();
+	expect(newConversation.parentElement).toBe(newTeam.parentElement);
+	fireEvent.click(newConversation);
+	expect(openProject).toHaveBeenCalledWith(teamConfig.projectRoot);
+	fireEvent.click(row);
+	expect(useTeamStore.getState().activeTeamId).toBe(teamConfig.id);
+	act(() => useUIStore.setState({ newShellSidebarSearch: 'no conversation matches' }));
+	expect(row).toBeVisible();
+	act(() => useTeamStore.getState().mirror({ config: teamConfig, events: defaultPath }));
+	expect(row).toBeVisible();
+	expect(row).toHaveAttribute('title', `${teamConfig.title}\nworkflows.team.accepted`);
+	expect(row).not.toHaveTextContent('workflows.team.accepted');
 });
 
 it('reveals a running hidden subtask when its new shell row is selected', () => {

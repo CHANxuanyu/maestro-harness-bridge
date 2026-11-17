@@ -11,6 +11,7 @@ import { createMockSession } from '../../helpers/mockSession';
 import { mockTheme } from '../../helpers/mockTheme';
 import { THEMES } from '../../../shared/themes';
 import { contrastRatio } from '../../../shared/colorContrast';
+import { teamConfig, defaultPath } from './Team/defaultPath';
 
 vi.mock('../../../renderer/components/Toast', () => ({ ToastContainer: () => null }));
 vi.mock('../../../renderer/components/CenterFlash', () => ({ CenterFlash: () => null }));
@@ -35,7 +36,9 @@ vi.mock('../../../renderer/components/EmptyStateView', () => ({
 vi.mock('../../../renderer/components/ProjectStartView', () => ({
 	ProjectStartView: () => <div data-testid="new-start" />,
 }));
-vi.mock('../../../renderer/components/SessionList', () => ({ SessionList: () => null }));
+vi.mock('../../../renderer/components/SessionList', () => ({
+	SessionList: () => <div data-testid="project-sidebar" />,
+}));
 vi.mock('../../../renderer/components/MainPanel', async () => {
 	const { forwardRef } = await import('react');
 	return { MainPanel: forwardRef(() => <div data-testid="main-panel" />) };
@@ -131,6 +134,15 @@ describe('AppShell title strip', () => {
 			rerender(<AppShell {...props} sessionsLoaded teamView={<div data-testid="team-slot" />} />);
 			expect(screen.getByTestId('team-slot')).toBeVisible();
 			expect(screen.queryByTestId('new-start')).toBeNull();
+			useTeamStore.getState().selectTeam(null);
+			useTeamStore.getState().mirror({ config: teamConfig, events: defaultPath });
+			rerender(<AppShell {...props} sessionsLoaded teamView={<div data-testid="team-slot" />} />);
+			expect(screen.getByTestId('project-sidebar')).toBeVisible();
+			expect(screen.getByTestId('new-start')).toBeVisible();
+			useTeamStore.getState().selectTeam(teamConfig.id);
+			rerender(<AppShell {...props} sessionsLoaded teamView={<div data-testid="team-slot" />} />);
+			expect(screen.getByTestId('project-sidebar')).toBeVisible();
+			expect(screen.getByTestId('team-slot')).toBeVisible();
 		}
 	});
 });

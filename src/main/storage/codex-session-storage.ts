@@ -35,6 +35,7 @@ import {
 import path from 'path';
 import { hasEmbeddedSystemPrompt } from '../../shared/embeddedSystemPrompt';
 import {
+	extractCodexPlan,
 	extractTextFromContent,
 	isSystemContextMessage,
 	unwrapCodexUserReply,
@@ -576,24 +577,28 @@ function parseCodexTranscript(
 				(payload?.type === 'function_call' || payload?.type === 'custom_tool_call')
 			) {
 				const input = payload.arguments ?? payload.input ?? {};
-				let parsedInput: unknown = input;
-				if (typeof input === 'string') {
+				const plan = extractCodexPlan(payload);
+				// A code-mode `exec` call that only wraps update_plan is labelled
+				// update_plan, the name the live todo_list path already uses.
+				const toolName = plan ? 'update_plan' : payload.name || 'unknown';
+				let parsedInput: unknown = plan ?? input;
+				if (typeof parsedInput === 'string') {
 					try {
-						parsedInput = JSON.parse(input);
+						parsedInput = JSON.parse(parsedInput);
 					} catch {
 						/* Custom tool input is plain text. */
 					}
 				}
 				const toolInfo: CodexToolUseEntry = {
 					id: payload.call_id,
-					tool: payload.name || 'unknown',
+					tool: toolName,
 					args: input,
 					state: { status: 'running', input: parsedInput },
 				};
 				appendMessage({
 					type: 'assistant',
 					role: 'assistant',
-					content: `Tool: ${payload.name || 'unknown'}`,
+					content: `Tool: ${toolName}`,
 					timestamp: entry.timestamp || '',
 					uuid: payload.call_id || `codex-msg-${messageIndex}`,
 					toolUse: [toolInfo],

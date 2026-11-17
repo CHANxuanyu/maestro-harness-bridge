@@ -225,7 +225,6 @@ function codexAcceptanceConfig(apiKey = false) {
 			'plugins = false',
 			'hooks = false',
 			'multi_agent = false',
-			'code_mode = false',
 			'unbounded_connection_retries = false',
 			...(apiKey
 				? [

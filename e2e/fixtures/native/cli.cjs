@@ -78,14 +78,21 @@ async function run(provider) {
 		return;
 	}
 	if (provider === 'codex' && scene.codexExecEvents) {
-		// Replay the observed exec ordering verbatim. Only seed the minimal
-		// synthetic history needed for a following resume, without extra stdout.
+		// Exec stdout and native rollout are different projections of a turn.
+		// Optional synthetic response items exercise history without extra stdout.
 		const replayId = scene.codexExecEvents[0].thread_id;
 		if (id && id !== replayId) throw new Error('Replay thread does not match resume');
 		const turn = createTurn({ provider, configDir, cwd, id: replayId, prompt, persist });
+		if (persist)
+			for (const payload of scene.codexRolloutItems || [])
+				fs.appendFileSync(
+					turn.file,
+					`${JSON.stringify({ timestamp: new Date().toISOString(), type: 'response_item', payload })}\n`
+				);
 		for (const event of scene.codexExecEvents) {
 			process.stdout.write(`${JSON.stringify(event)}\n`);
 		}
+		if (scene.exitGate) while (!fs.existsSync(scene.exitGate)) await delay(10);
 		turn.finish(scene.answer);
 		return;
 	}

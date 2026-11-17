@@ -11,6 +11,61 @@ export interface CodexMessageContent {
 	output?: string;
 }
 
+/** A native plan snapshot, including an empty array that clears an earlier plan. */
+export interface CodexPlanInput {
+	plan: Array<{ step: string; status: 'pending' | 'in_progress' | 'completed' }>;
+	explanation?: string;
+}
+
+/**
+ * Read direct update_plan calls and the JSON-literal code-mode envelope used by
+ * Codex 0.166+. Only complete, unconditional calls are accepted. Quoted examples,
+ * partial scripts and computed arguments stay ordinary tool input. Never eval
+ * native scripts or search arbitrary source text for a plan-shaped substring.
+ */
+export function extractCodexPlan(payload: unknown): CodexPlanInput | null {
+	if (!payload || typeof payload !== 'object') return null;
+	const call = payload as Record<string, unknown>;
+	if (typeof call.name !== 'string') return null;
+	let input: unknown;
+	if (call.type === 'function_call' && /^(?:functions\.)?update_plan$/.test(call.name)) {
+		input = call.arguments;
+	} else if (call.type === 'custom_tool_call' && /^(?:functions\.)?exec$/.test(call.name)) {
+		if (typeof call.input !== 'string') return null;
+		const script = call.input.trim();
+		const match =
+			/^text\s*\(\s*await\s+tools\s*\.\s*update_plan\s*\(([\s\S]*)\)\s*\)\s*;?$/.exec(script) ??
+			/^await\s+tools\s*\.\s*update_plan\s*\(([\s\S]*)\)\s*;?$/.exec(script);
+		if (!match) return null;
+		input = match[1];
+	} else return null;
+	if (typeof input === 'string') {
+		try {
+			input = JSON.parse(input);
+		} catch {
+			return null;
+		}
+	}
+	if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+	const record = input as Record<string, unknown>;
+	if (
+		!Array.isArray(record.plan) ||
+		!record.plan.every(
+			(task) =>
+				task &&
+				typeof task === 'object' &&
+				typeof task.step === 'string' &&
+				task.step.trim() &&
+				['pending', 'in_progress', 'completed'].includes(task.status)
+		)
+	)
+		return null;
+	return {
+		plan: record.plan.map(({ step, status }) => ({ step, status })),
+		...(typeof record.explanation === 'string' ? { explanation: record.explanation } : {}),
+	};
+}
+
 /**
  * Extract text from Codex message content array
  */

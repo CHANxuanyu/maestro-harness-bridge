@@ -1,15 +1,44 @@
 import { projectSettingsKey } from '../../../../../shared/projectSettings';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, render, screen } from '@testing-library/react';
+import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
+import { StdoutHandler } from '../../../../../main/process-manager/handlers/StdoutHandler';
+import { StderrHandler } from '../../../../../main/process-manager/handlers/StderrHandler';
+import { ExitHandler } from '../../../../../main/process-manager/handlers/ExitHandler';
+import { setupDataListener } from '../../../../../main/process-listeners/data-listener';
+import { setupErrorListener } from '../../../../../main/process-listeners/error-listener';
+import { DataBufferManager } from '../../../../../main/process-manager/handlers/DataBufferManager';
+import type { ManagedProcess } from '../../../../../main/process-manager/types';
+import { ClaudeOutputParser } from '../../../../../main/parsers/claude-output-parser';
+import { CodexOutputParser } from '../../../../../main/parsers/codex-output-parser';
+import { useAgentToolExecutionListener } from '../../../../../renderer/hooks/agent/internal/useAgentToolExecutionListener';
+import { useAgentErrorListener } from '../../../../../renderer/hooks/agent/internal/useAgentErrorListener';
+import { useAgentDataListener } from '../../../../../renderer/hooks/agent/internal/useAgentDataListener';
+import { useBatchedSessionUpdates } from '../../../../../renderer/hooks/session/useBatchedSessionUpdates';
+import { foldTurnActivity } from '../../../../../renderer/components/TerminalOutput/utils/foldTurnActivity';
+import { TurnActivityFold } from '../../../../../renderer/components/TerminalOutput/components/TurnActivityFold';
+import { mockTheme } from '../../../../helpers/mockTheme';
+import { readableTextOn } from '../../../../../shared/colorContrast';
 import { useAgentExitListener } from '../../../../../renderer/hooks/agent/internal/useAgentExitListener';
 import { useSessionStore } from '../../../../../renderer/stores/sessionStore';
-import { useRetryStore } from '../../../../../renderer/stores/retryStore';
+import {
+	useRetryStore,
+	noteDispatch,
+	cancelRetry,
+} from '../../../../../renderer/stores/retryStore';
 import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { useNotificationStore } from '../../../../../renderer/stores/notificationStore';
 import { DEFAULT_BATCH_STATE } from '../../../../../renderer/hooks/batch/batchReducer';
 import type { BatchRunState } from '../../../../../renderer/types';
 import { createMockSession } from '../../../../helpers/mockSession';
 import { createMockAITab } from '../../../../helpers/mockTab';
+
+vi.mock('../../../../../main/ipc/handlers/groupChat', () => ({ groupChatEmitters: {} }));
+vi.mock('../../../../../main/utils/sentry', () => ({ captureMessage: vi.fn() }));
+vi.mock('../../../../../main/agents/capability-snapshot', () => ({
+	capabilitySnapshots: { markAuthRequired: vi.fn() },
+}));
 
 let mockIsWebDesktop = false;
 vi.mock('../../../../../renderer/utils/runtimeContext', () => ({
@@ -22,6 +51,10 @@ let handler:
 const mockUnsubscribe = vi.fn();
 
 const mockProcess = {
+	onData: vi.fn().mockReturnValue(mockUnsubscribe),
+	onToolExecution: vi.fn().mockReturnValue(mockUnsubscribe),
+	onAgentError: vi.fn().mockReturnValue(mockUnsubscribe),
+	onAuthExpired: vi.fn().mockReturnValue(mockUnsubscribe),
 	onExit: vi.fn((h: any) => {
 		handler = h;
 		return mockUnsubscribe;
@@ -75,12 +108,16 @@ beforeEach(() => {
 	(window as any).maestro = {
 		...((window as any).maestro || {}),
 		process: mockProcess,
-		stats: { recordQuery: vi.fn().mockResolvedValue(undefined) },
+		stats: {
+			recordQuery: vi.fn().mockResolvedValue(undefined),
+			recordResilience: vi.fn().mockResolvedValue(undefined),
+		},
 		logger: { log: vi.fn() },
 	};
 });
 
 afterEach(async () => {
+	cancelRetry('sess-1', 'tab-1');
 	// Exit side effects are intentionally deferred; settle them before resetting stores.
 	await act(async () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
@@ -88,6 +125,303 @@ afterEach(async () => {
 });
 
 describe('useAgentExitListener', () => {
+	it.each([
+		{ provider: 'claude', reuseCall: true, retry: false },
+		{ provider: 'codex', reuseCall: true, retry: false },
+		{ provider: 'claude', reuseCall: false, retry: false },
+		{ provider: 'codex', reuseCall: false, retry: false },
+		{ provider: 'claude', reuseCall: true, retry: true },
+		{ provider: 'codex', reuseCall: true, retry: true },
+		{ provider: 'claude', reuseCall: false, retry: true },
+		{ provider: 'codex', reuseCall: false, retry: true },
+	])(
+		'shows the fixture terminal error for $provider, reused call=$reuseCall, retry=$retry',
+		async ({ provider, reuseCall, retry }) => {
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+			const toolType = provider === 'claude' ? 'claude-code' : 'codex';
+			const reason = 'Activity fixture connection failed';
+			const tab = createMockAITab({
+				id: 'tab-1',
+				state: 'busy',
+				logs: [
+					{ id: 'previous-user', timestamp: 1, source: 'user', text: 'Previous turn' },
+					{
+						id: 'tool-activity-4',
+						timestamp: 2,
+						source: 'tool',
+						text: 'Bash',
+						metadata: { toolState: { status: 'failed' } },
+					},
+					{ id: 'previous-answer', timestamp: 3, source: 'stdout', text: 'ACTIVITY_DONE' },
+					{
+						id: 'error-user',
+						timestamp: 4,
+						source: 'user',
+						text: 'End this synthetic turn with an error',
+					},
+				],
+			});
+			useSessionStore.setState({
+				sessions: [
+					createMockSession({
+						id: 'sess-1',
+						toolType,
+						state: 'busy',
+						activeTabId: tab.id,
+						aiTabs: [tab],
+					}),
+				],
+			});
+			// The native composer snapshots the dispatched prompt, enabling retry.
+			// Without this the error listener takes its modal fallback instead.
+			if (retry) {
+				noteDispatch(
+					'sess-1',
+					{
+						id: 'error-user',
+						tabId: tab.id,
+						type: 'message',
+						text: tab.logs.at(-1)!.text,
+						timestamp: 4,
+					},
+					{ conductorProfile: '', customAICommands: [], speckitCommands: [], openspecCommands: [] }
+				);
+			}
+			const deps = makeDeps();
+			renderHook(() => {
+				const liveDeps = { ...deps, batchedUpdater: useBatchedSessionUpdates() };
+				useAgentDataListener(liveDeps);
+				useAgentToolExecutionListener();
+				useAgentErrorListener({ ...liveDeps, pauseBatchOnErrorRef: { current: null } });
+				useAgentExitListener(liveDeps);
+			});
+			const processId = 'sess-1-ai-tab-1';
+			const emitter = new EventEmitter();
+			const safeSend = vi.fn((channel: string, ...args: unknown[]) => {
+				if (channel === 'process:data') mockProcess.onData.mock.calls[0][0](...args);
+				if (channel === 'agent:error') mockProcess.onAgentError.mock.calls[0][0](...args);
+				return true;
+			});
+			const { flushPendingData } = setupDataListener(
+				emitter as never,
+				{
+					safeSend,
+					getWebServer: () => null,
+					outputBuffer: {},
+					outputParser: {},
+					debugLog: vi.fn(),
+					patterns: {},
+				} as unknown as Parameters<typeof setupDataListener>[1]
+			);
+			setupErrorListener(
+				emitter as never,
+				{ safeSend, logger: { info: vi.fn(), warn: vi.fn() } } as Parameters<
+					typeof setupErrorListener
+				>[1],
+				flushPendingData
+			);
+			emitter.on('tool-execution', mockProcess.onToolExecution.mock.calls[0][0]);
+			const proc = {
+				sessionId: processId,
+				toolType,
+				cwd: '.',
+				pid: 1,
+				startTime: Date.now(),
+				isStreamJsonMode: true,
+				isBatchMode: true,
+				isTerminal: false,
+				jsonBuffer: '',
+				stdoutBuffer: '',
+				streamedText: '',
+				resultEmitted: false,
+				errorEmitted: false,
+				outputParser: provider === 'claude' ? new ClaudeOutputParser() : new CodexOutputParser(),
+			} as ManagedProcess;
+			const processes = new Map([[processId, proc]]);
+			const bufferManager = new DataBufferManager(processes, emitter);
+			const stdout = new StdoutHandler({ processes, emitter, bufferManager });
+			const stderr = new StderrHandler({ processes, emitter });
+			const exit = new ExitHandler({ processes, emitter, bufferManager, stdoutHandler: stdout });
+			let rendererExit: Promise<void> | undefined;
+			emitter.on('exit', (...args: Parameters<NonNullable<typeof handler>>) => {
+				rendererExit = handler!(...args);
+			});
+			const { createTurn } = createRequire(import.meta.url)(
+				'../../../../../../e2e/fixtures/native/protocol.cjs'
+			);
+			await act(async () => {
+				const turn = createTurn({
+					provider,
+					configDir: '.',
+					cwd: '.',
+					persist: false,
+					prompt: tab.logs.at(-1)!.text,
+					emit: (event: Record<string, unknown>) =>
+						stdout.handleData(processId, `${JSON.stringify(event)}\n`),
+				});
+				// native-activity-bar uses the first turn's activity-4 again in its
+				// error scene. Also cover a provider assigning a fresh native call id.
+				const tool = {
+					id: reuseCall ? 'activity-4' : 'error-tool',
+					command: 'printf step-4',
+					output: 'Exit code: 1\nExpected regression failure',
+				};
+				turn.startTool(tool);
+				turn.finishTool(tool, 'failed');
+				turn.fail(reason);
+				// cli.cjs writes the same reason to stderr and exits 1, without Stop.
+				stderr.handleData(processId, `${reason}\n`);
+				await exit.handleExit(processId, 1);
+				await rendererExit;
+				const forwardedError = safeSend.mock.calls.find(
+					([channel]) => channel === 'agent:error'
+				)?.[2];
+				expect(forwardedError).toMatchObject({
+					type: 'network_error',
+					sessionId: processId,
+					raw:
+						provider === 'codex' ? { errorLine: reason } : { stderr: `${reason}\n`, exitCode: 1 },
+				});
+			});
+			const finished = useSessionStore.getState().sessions[0].aiTabs[0];
+			expect(finished.state).toBe('idle');
+			expect
+				.soft(finished.logs.find((log) => log.id === 'error-user')?.turnCompletion)
+				.toMatchObject({ status: 'error', reason });
+			expect(finished.logs.filter((log) => log.source === 'tool')).toHaveLength(reuseCall ? 1 : 2);
+			const folded = foldTurnActivity(finished.logs, { newShell: true, keepLastTurnOpen: false });
+			const [hostId, activity] = [...folded.activityByHostId].at(-1)!;
+			expect(activity).toMatchObject({ turnId: 'error-user', status: 'error', reason });
+			expect(activity.failingStepId).toBe(reuseCall ? undefined : 'tool-error-tool');
+			// Preserve the actionable error or retry card even if no tool belongs to
+			// this turn. Never borrow the previous turn's failed step for its summary.
+			const errorCard = finished.logs.find((log) =>
+				retry ? !!log.retryOutageId : log.source === 'error'
+			);
+			expect(!!useRetryStore.getState().retries['sess-1:tab-1']).toBe(retry);
+			expect(errorCard).toBeDefined();
+			expect(folded.logs).toContain(errorCard);
+			const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+			render(
+				<TurnActivityFold
+					hostId={hostId}
+					index={0}
+					activity={activity}
+					open
+					newShell
+					onToggle={vi.fn()}
+					theme={mockTheme}
+					secondaryTextColor={mockTheme.colors.textDim}
+				>
+					{activity.entries.map((entry) => (
+						<div key={entry.id} data-log-id={entry.id}>
+							{entry.text}
+						</div>
+					))}
+				</TurnActivityFold>
+			);
+			expect(
+				screen.getByTestId('activity-collapsed').querySelector('[data-tool-status="error"]')
+			).toHaveTextContent(reason);
+			const expectedSummary = reuseCall ? `Failed: ${reason}` : `· 1 step · ${reason}`;
+			if (!reuseCall)
+				expect(screen.getByTestId('activity-collapsed').textContent).toMatch(/^Worked for /);
+			expect(screen.getByTestId('activity-collapsed')).toHaveTextContent(expectedSummary);
+			expect(screen.getByText(reuseCall ? `Failed: ${reason}` : reason)).toHaveStyle({
+				color: readableTextOn(mockTheme.colors.error, [mockTheme.colors.bgMain]),
+			});
+			if (!reuseCall) {
+				expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+				expect((scroll.mock.instances.at(-1) as HTMLElement).dataset.logId).toBe('tool-error-tool');
+			}
+			scroll.mockRestore();
+		}
+	);
+
+	it.each([
+		{
+			name: 'earlier turn',
+			errorTime: 1,
+			errorSession: 'sess-1-ai-tab-1',
+			code: 1,
+			newShell: true,
+			stopped: false,
+			status: 'error',
+			reason: 'exit code 1',
+		},
+		{
+			name: 'another process',
+			errorTime: 20,
+			errorSession: 'sess-1-ai-tab-2',
+			code: 1,
+			newShell: true,
+			stopped: false,
+			status: 'error',
+			reason: 'exit code 1',
+		},
+		{
+			name: 'provider failure with exit 0',
+			errorTime: 20,
+			errorSession: 'sess-1-ai-tab-1',
+			code: 0,
+			newShell: true,
+			stopped: false,
+			status: 'error',
+			reason: 'Provider disconnected',
+		},
+		{
+			name: 'explicit stop',
+			errorTime: 20,
+			errorSession: 'sess-1-ai-tab-1',
+			code: 1,
+			newShell: true,
+			stopped: true,
+			status: 'canceled',
+			reason: undefined,
+		},
+		{
+			name: 'classic shell',
+			errorTime: 20,
+			errorSession: 'sess-1-ai-tab-1',
+			code: 1,
+			newShell: false,
+			stopped: false,
+			status: undefined,
+			reason: undefined,
+		},
+	])(
+		'scopes the retained provider error: $name',
+		async ({ errorTime, errorSession, code, newShell, stopped, status, reason }) => {
+			useSettingsStore.setState({ newShell, uiLanguage: 'en' });
+			const tab = createMockAITab({
+				id: 'tab-1',
+				state: 'busy',
+				logs: [{ id: 'user', timestamp: 10, source: 'user', text: 'Try this turn' }],
+				agentError: {
+					type: 'network_error',
+					message: 'Connection failed',
+					timestamp: errorTime,
+					sessionId: errorSession,
+					agentId: 'codex',
+					recoverable: true,
+					raw: { errorLine: 'Provider disconnected' },
+				},
+			});
+			useSessionStore.setState({
+				sessions: [
+					createMockSession({ id: 'sess-1', activeTabId: tab.id, aiTabs: [tab], state: 'busy' }),
+				],
+			});
+			renderHook(() => useAgentExitListener(makeDeps()));
+			await act(async () => {
+				await handler!('sess-1-ai-tab-1', code, undefined, stopped);
+			});
+			const completion = useSessionStore.getState().sessions[0].aiTabs[0].logs[0].turnCompletion;
+			if (newShell) expect(completion).toMatchObject({ status, reason });
+			else expect(completion).toBeUndefined();
+		}
+	);
+
 	it.each([false, true])(
 		'keeps other conversations and queues intact after a scoped Stop, own queue %s',
 		async (ownQueue) => {

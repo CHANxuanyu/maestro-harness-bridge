@@ -4,7 +4,17 @@ import { latestAgentTaskList } from '../utils/agentTaskList';
 import type { LogEntry, Theme } from '../types';
 import { useT } from '../i18n';
 
-export function TasksPanel({ logs, theme }: { logs: LogEntry[]; theme: Theme }) {
+export function TasksPanel({
+	logs,
+	theme,
+	provider,
+	model,
+}: {
+	logs: LogEntry[];
+	theme: Theme;
+	provider?: string;
+	model?: string;
+}) {
 	const t = useT();
 	const list = useMemo(() => latestAgentTaskList(logs), [logs]);
 	if (!list?.tasks.length)
@@ -14,7 +24,16 @@ export function TasksPanel({ logs, theme }: { logs: LogEntry[]; theme: Theme }) 
 				className="h-full flex items-center justify-center px-4 text-center text-sm"
 				style={{ color: theme.colors.textDim }}
 			>
-				{t('workflows.newShell.tasksEmpty')}
+				<div>
+					<p>{t('workflows.newShell.tasksAbsent')}</p>
+					<p className="mt-2">
+						{t(
+							provider === 'claude-code' && /(?:sonnet|opus|haiku)[- ]5/.test(model ?? '')
+								? 'workflows.newShell.tasksClaude5'
+								: 'workflows.newShell.tasksEmpty'
+						)}
+					</p>
+				</div>
 			</div>
 		);
 	return (

@@ -1,6 +1,27 @@
 import { CODEX_APP_SERVER_MESSAGES } from '../../../../shared/codexAppServer';
 
 export const workflowsShell = {
+	'workflows.activity.working': 'Working on your request',
+	'workflows.activity.reading': 'Reading {count} files',
+	'workflows.activity.editing': 'Editing {count} files',
+	'workflows.activity.runningCommand': 'Running a command',
+	'workflows.activity.justStarted': 'Just started',
+	'workflows.activity.reads': 'Reads {count}',
+	'workflows.activity.edits': 'Edits {count}',
+	'workflows.activity.commands': 'Commands {count}',
+	'workflows.activity.tasks': '{completed}/{total} tasks',
+	'workflows.activity.stepOne': '1 step',
+	'workflows.activity.steps': '{count} steps',
+	'workflows.activity.turnFailed': 'Turn ended in error',
+	'workflows.activity.failedWithReason': 'Failed: {reason}',
+	'workflows.activity.exitCode': 'exit code {code}',
+	'workflows.activity.files': 'Changed {count} files',
+	'workflows.activity.countsUnavailable': 'Line counts unavailable',
+	'workflows.activity.turnFilterHelp':
+		'Filter changes-turns to this turn; an empty string clears it',
+	'workflows.newShell.tasksAbsent': 'This conversation has no task list.',
+	'workflows.newShell.tasksClaude5':
+		'Claude 5-series models do not provide a task-list tool. Progress is shown through activity and process notes.',
 	'workflows.projectSettings.errors.toolMissing':
 		'This tool configuration no longer belongs to the project.',
 	'workflows.projectSettings.errors.toolRunning':

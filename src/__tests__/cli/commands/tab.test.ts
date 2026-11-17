@@ -363,6 +363,17 @@ describe('tab commands', () => {
 			},
 		});
 	});
+	it('opens Changes filtered to one delivery turn through the acknowledged patch', async () => {
+		const payload = mockTab({ success: true });
+		await tabPanel('tab-aaaa', 'changes-turns', { turn: 'user-turn' });
+		expect(payload()).toMatchObject({
+			configPatch: {
+				tabId: 'tab-aaaa',
+				newShellPanelAction: 'changes-turns',
+				newShellChangesTurnId: 'user-turn',
+			},
+		});
+	});
 	it.each(['web', 'web-reload', 'web-external'])(
 		'defers active %s targeting to the live renderer instead of the persisted selection',
 		async (action) => {

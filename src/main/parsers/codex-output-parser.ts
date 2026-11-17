@@ -1,4 +1,5 @@
 import { compactToolOutput } from '../../shared/toolOutput';
+import { extractCodexPlan } from '../../shared/codexSessionText';
 /**
  * Codex CLI Output Parser
  *
@@ -775,7 +776,10 @@ export class CodexOutputParser implements AgentOutputParser {
 
 		// function_call: tool invocation starting
 		if (payload.type === 'function_call' || payload.type === 'custom_tool_call') {
-			const toolName = payload.name || 'unknown';
+			const plan = extractCodexPlan(payload);
+			// A code-mode `exec` call that only wraps update_plan carries the
+			// update_plan name, matching the todo_list path and restored history.
+			const toolName = plan ? 'update_plan' : payload.name || 'unknown';
 			const callId = payload.call_id;
 			if (callId) {
 				this.toolNamesByCallId.set(callId, toolName);
@@ -788,10 +792,10 @@ export class CodexOutputParser implements AgentOutputParser {
 				this.lastToolName = toolName;
 			}
 			const input = payload.arguments ?? payload.input ?? {};
-			let parsedArgs: unknown = input;
-			if (typeof input === 'string') {
+			let parsedArgs: unknown = plan ?? input;
+			if (typeof parsedArgs === 'string') {
 				try {
-					parsedArgs = JSON.parse(input);
+					parsedArgs = JSON.parse(parsedArgs);
 				} catch {
 					// Custom tool input can be plain text, including patches.
 				}

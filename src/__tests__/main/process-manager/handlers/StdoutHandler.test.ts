@@ -3601,3 +3601,34 @@ describe('StdoutHandler - single JSON parse per line', () => {
 		});
 	});
 });
+
+describe('new shell Claude narration routing', () => {
+	it.each([true, false])(
+		'keeps public narration separate with new shell = %s',
+		(newShellActivity) => {
+			const { handler, sessionId, emitter } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'claude-code',
+				outputParser: new ClaudeOutputParser(),
+				newShellActivity,
+			});
+			const chunks = vi.fn();
+			emitter.on('thinking-chunk', chunks);
+			sendJsonLine(handler, sessionId, {
+				type: 'assistant',
+				message: { content: [{ type: 'text', text: 'Checking files' }] },
+			});
+			sendJsonLine(handler, sessionId, {
+				type: 'assistant',
+				message: {
+					content: [{ type: 'tool_use', id: 'read', name: 'Read', input: { file_path: 'a.ts' } }],
+				},
+			});
+			expect(chunks.mock.calls).toEqual(
+				newShellActivity
+					? [[sessionId, 'Checking files', 'commentary']]
+					: [[sessionId, 'Checking files']]
+			);
+		}
+	);
+});

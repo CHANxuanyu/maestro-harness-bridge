@@ -141,7 +141,12 @@ export function updateTurnWriteIndex(
 }
 
 /** Lexical matching only. Never resolve a remote path on the local filesystem. */
-function repositoryPath(raw: string, root: string, cwd: string, posix: boolean): string | null {
+export function repositoryPath(
+	raw: string,
+	root: string,
+	cwd: string,
+	posix: boolean
+): string | null {
 	const path = normalizeWorktreePath(raw, posix);
 	// Unexpanded home variables, parent traversal and ambiguous drive-relative paths
 	// cannot establish a correspondence without more execution context.
@@ -198,4 +203,29 @@ export function groupChangesByTurn(
 	const other = changes.files.filter((file) => !attributed.has(file.path));
 	if (other.length) groups.push({ turnId: null, title: '', timestamp: null, files: other });
 	return { ...changes, groups, hasWriteRecords: turns.length > 0, diffScope: 'current' };
+}
+
+/** Exact boundary delta for paths with successful write-tool evidence. */
+export interface TurnDelivery {
+	files: number;
+	additions: number | null;
+	deletions: number | null;
+	paths: string[];
+}
+
+/** Null line counts remain unknown instead of becoming a misleading zero. */
+export function summarizeTurnDelivery(
+	files: readonly { path: string; additions: number | null; deletions: number | null }[]
+): TurnDelivery {
+	const unique = [...new Map(files.map((file) => [file.path, file])).values()];
+	return {
+		files: unique.length,
+		paths: unique.map((file) => file.path),
+		additions: unique.some((file) => file.additions === null)
+			? null
+			: unique.reduce((sum, file) => sum + file.additions!, 0),
+		deletions: unique.some((file) => file.deletions === null)
+			? null
+			: unique.reduce((sum, file) => sum + file.deletions!, 0),
+	};
 }

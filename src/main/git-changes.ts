@@ -1,3 +1,12 @@
+import { applyPatch, diffLines } from 'diff';
+import {
+	collectTurnWrites,
+	toolInputWritePaths,
+	repositoryPath,
+	summarizeTurnDelivery,
+	type ChangeTurnEntry,
+	type TurnDelivery,
+} from '../shared/gitChangeTurns';
 import path from 'path';
 import fs from 'fs/promises';
 import type {
@@ -542,4 +551,152 @@ export async function applyGitChange(
 				: {}),
 		};
 	}
+}
+
+/** Boundary patches are private, bounded, and discarded as soon as the turn ends. */
+interface GitTurnBoundary {
+	cwd: string;
+	remote?: SshRemoteConfig;
+	remoteCwd?: string;
+	head: string;
+	changes: GitChanges;
+	patches: Map<string, GitFileChangeDiff>;
+	tools: Map<string, ChangeTurnEntry>;
+}
+const gitTurnBoundaries = new Map<string, GitTurnBoundary>();
+
+/** Capture pre-existing edits before spawning, without changing the index or worktree. */
+export async function beginGitTurn(
+	sessionId: string,
+	cwd: string,
+	remote?: SshRemoteConfig,
+	remoteCwd?: string
+): Promise<void> {
+	gitTurnBoundaries.delete(sessionId);
+	const changes = await getGitChanges(cwd, remote, remoteCwd);
+	if (changes.notARepo || changes.timedOut || changes.truncated) return;
+	const head = await execGitReadOnly(['rev-parse', '--verify', 'HEAD'], cwd, remote, remoteCwd);
+	if (isGitTimeout(head)) return;
+	const patches = new Map<string, GitFileChangeDiff>();
+	let bytes = 0;
+	await mapWithConcurrency(changes.files, 4, async (file) => {
+		if (bytes > 16 * MAX_BYTES) return;
+		const patch = await getGitChangeDiff(cwd, file.path, remote, remoteCwd);
+		bytes += Buffer.byteLength(patch.diff);
+		patches.set(file.path, patch);
+	});
+	if (bytes > 16 * MAX_BYTES) return;
+	gitTurnBoundaries.set(sessionId, {
+		cwd,
+		remote,
+		remoteCwd,
+		head: head.exitCode === 0 ? head.stdout.trim() : '',
+		changes,
+		patches,
+		tools: new Map(),
+	});
+}
+
+/** Reuse the write-index contract, correlating completion with the original input. */
+export function recordGitTurnTool(
+	sessionId: string,
+	event: { toolName: string; toolCallId?: string; timestamp: number; state?: unknown }
+): void {
+	const boundary = gitTurnBoundaries.get(sessionId);
+	if (!boundary || !event.toolCallId || !event.state || typeof event.state !== 'object') return;
+	const previous = boundary.tools.get(event.toolCallId);
+	const state = event.state as { status?: string; input?: unknown; writePaths?: string[] };
+	const paths = state.writePaths ?? toolInputWritePaths(event.toolName, state.input);
+	boundary.tools.set(event.toolCallId, {
+		id: event.toolCallId,
+		source: 'tool',
+		text: event.toolName,
+		timestamp: event.timestamp,
+		metadata: {
+			toolState: {
+				status: state.status,
+				writePaths: paths.length ? paths : previous?.metadata?.toolState?.writePaths,
+			},
+		},
+	});
+}
+
+/** Consume once at process exit, before the renderer is allowed to dispatch its next turn. */
+export function finishGitTurn(
+	sessionId: string,
+	discard = false
+): Promise<TurnDelivery | undefined> | undefined {
+	const boundary = gitTurnBoundaries.get(sessionId);
+	gitTurnBoundaries.delete(sessionId);
+	if (!boundary || discard) return undefined;
+	return measureGitTurn(boundary);
+}
+
+async function measureGitTurn(boundary: GitTurnBoundary): Promise<TurnDelivery> {
+	const { cwd, remote, remoteCwd, head, changes, patches, tools } = boundary;
+	const writes = collectTurnWrites([
+		{ id: 'boundary', source: 'user', text: '', timestamp: 0 },
+		...tools.values(),
+	]);
+	const paths = [
+		...new Set(
+			(writes[0]?.paths ?? []).flatMap((raw) => {
+				const relative = repositoryPath(
+					raw,
+					slash(changes.root),
+					changes.executionCwd ?? remoteCwd ?? cwd,
+					!!remote
+				);
+				return relative === null ? [] : [relative];
+			})
+		),
+	];
+	const currentHead = await execGitReadOnly(
+		['rev-parse', '--verify', 'HEAD'],
+		cwd,
+		remote,
+		remoteCwd
+	);
+	const sameHead =
+		!isGitTimeout(currentHead) &&
+		(currentHead.exitCode === 0 ? currentHead.stdout.trim() : '') === head;
+	const files = await mapWithConcurrency(paths, 4, async (file) => {
+		const unknown = { path: file, additions: null, deletions: null };
+		if (!sameHead) return unknown;
+		const before = patches.get(file);
+		if (before?.binary || before?.tooLarge || before?.timedOut) return unknown;
+		const oldPath = changes.files.find((item) => item.path === file)?.oldPath;
+		if (oldPath && oldPath !== file) return unknown;
+		let base = '';
+		if (head) {
+			const size = await execGitReadOnly(
+				['cat-file', '-s', `${head}:${file}`],
+				cwd,
+				remote,
+				remoteCwd
+			);
+			if (isGitTimeout(size) || Number(size.stdout) > MAX_BYTES) return unknown;
+			if (size.exitCode === 0) {
+				const blob = await execGitReadOnly(['show', `${head}:${file}`], cwd, remote, remoteCwd);
+				if (blob.exitCode !== 0 || blob.stdout.includes('\0')) return unknown;
+				base = blob.stdout;
+			}
+		}
+		const after = await getGitChangeDiff(cwd, file, remote, remoteCwd);
+		if (after.binary || after.tooLarge || after.timedOut) return unknown;
+		const startText = before?.diff ? applyPatch(base, before.diff) : base;
+		const endText = after.diff ? applyPatch(base, after.diff) : base;
+		if (startText === false || endText === false) return unknown;
+		if (startText === endText) return null;
+		const delta = diffLines(startText, endText, { timeout: 50 });
+		if (!delta) return unknown;
+		return {
+			path: file,
+			additions: delta.reduce((sum, part) => sum + (part.added ? part.count : 0), 0),
+			deletions: delta.reduce((sum, part) => sum + (part.removed ? part.count : 0), 0),
+		};
+	});
+	return summarizeTurnDelivery(
+		files.filter((file): file is NonNullable<typeof file> => file !== null)
+	);
 }

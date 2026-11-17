@@ -275,6 +275,7 @@ export interface LogEntry {
 			input?: unknown;
 			/** Explicit write targets retained before display arguments are capped. */
 			writePaths?: string[];
+			exitCode?: number;
 			output?: unknown;
 		};
 		/**
@@ -339,6 +340,13 @@ export interface LogEntry {
 	// with other output, and is not taken as the turn's reply. The stored form of
 	// the same thing is `nativeTranscript.channel === 'commentary'`.
 	purpose?: 'commentary';
+	/** New shell turn boundary, stored on its user message. */
+	turnCompletion?: {
+		status: 'completed' | 'error' | 'canceled' | 'unknown';
+		timestamp: number;
+		reason?: string;
+		delivery?: import('../../shared/gitChangeTurns').TurnDelivery;
+	};
 	// How this turn was captured. 'structured' (default) is the normal JSON-stream
 	// pipeline from `claude --print`; 'text-stream' marks entries captured during
 	// maestro-p interactive-mode turns. The renderer uses the same tool-card /

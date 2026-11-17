@@ -1,3 +1,4 @@
+import { finishGitTurn } from '../git-changes';
 /**
  * Process exit listener.
  * Handles process exit events, including group chat moderator/participant exits.
@@ -579,7 +580,16 @@ export function setupExitListener(
 			});
 		}
 
-		if (interrupted) safeSend('process:exit', sessionId, code, signal, true);
+		const delivery = finishGitTurn(sessionId);
+		if (delivery) {
+			void delivery.then(
+				(summary) => safeSend('process:exit', sessionId, code, signal, !!interrupted, summary),
+				(error) => {
+					logger.warn('Turn delivery unavailable', 'ProcessListener', error);
+					safeSend('process:exit', sessionId, code, signal, !!interrupted);
+				}
+			);
+		} else if (interrupted) safeSend('process:exit', sessionId, code, signal, true);
 		else safeSend('process:exit', sessionId, code, signal);
 
 		// Broadcast exit to web clients

@@ -463,9 +463,9 @@ interface MaestroAPI {
 			}) => void
 		) => () => void;
 		/** `signal` is set only when the process was killed by a signal, never on a clean exit. */
-		onExit: (
-			callback: (sessionId: string, code: number, signal?: number, interrupted?: boolean) => void
-		) => () => void;
+		onExit: ReturnType<
+			typeof import('../main/preload/process/core').createProcessCoreApi
+		>['onExit'];
 		steer: ReturnType<typeof import('../main/preload/process/core').createProcessCoreApi>['steer'];
 		onPermissionResolved: ReturnType<
 			typeof import('../main/preload/process/core').createProcessCoreApi

@@ -1596,3 +1596,27 @@ describe('ClaudeOutputParser', () => {
 		});
 	});
 });
+
+describe('public process narration', () => {
+	it('confirms text on a following tool call, excludes reasoning and does not repeat the final answer', () => {
+		const parser = new ClaudeOutputParser();
+		const parse = (content: unknown[]) =>
+			parser.parseJsonLine(JSON.stringify({ type: 'assistant', message: { content } }));
+		expect(parse([{ type: 'text', text: 'First note' }])?.publicNarration).toBeUndefined();
+		expect(
+			parse([{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'a' } }])
+				?.publicNarration
+		).toEqual(['First note']);
+		expect(
+			parse([
+				{ type: 'thinking', thinking: 'Hidden reasoning' },
+				{ type: 'text', text: 'Second note' },
+				{ type: 'tool_use', id: 't2', name: 'Bash', input: { command: 'true' } },
+			])?.publicNarration
+		).toEqual(['Second note']);
+		expect(parse([{ type: 'text', text: 'Final answer' }])?.publicNarration).toBeUndefined();
+		expect(
+			parser.parseJsonLine(JSON.stringify({ type: 'result', result: 'Final answer' }))?.text
+		).toBe('Final answer');
+	});
+});

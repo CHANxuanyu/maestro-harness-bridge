@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maestro 第二轮交互原型</title>
+<meta name="prototype-version" content="P7.1">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+	/* Maestro Clay Light, taken from src/shared/themes.ts */
+	--bg: #faf9f5;
+	--bg-side: #f3f1ea;
+	--bg-raised: #eceae1;
+	--line: #e0ddd2;
+	--text: #1f1e1d;
+	--dim: #6f6d66;
+	--accent: #c2603e;
+	--accent-soft: rgba(194, 96, 62, 0.12);
+	--accent-text: #a3502f;
+	--on-accent: #ffffff;
+	--ok: #3f7a2e;
+	--warn: #8a6100;
+	--err: #b8392b;
+	--seat-pm: #a3502f;
+	--seat-dev: #2f5f96;
+	--seat-qa: #6b4a9c;
+	--shadow: 0 8px 28px rgba(31, 30, 29, 0.14);
+	--font: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+	--mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	/* layout: a slim prototype bar over the three-column shell (conversations, current conversation, side panel) */
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--bg: #262624; --bg-side: #1f1e1d; --bg-raised: #30302e; --line: #3d3c38;
+		--text: #f5f4ef; --dim: #a6a39a; --accent: #d97757; --accent-soft: rgba(217, 119, 87, 0.18);
+		--accent-text: #e8916f; --on-accent: #1f1e1d; --ok: #8fbf77; --warn: #e0b15c; --err: #e5675b;
+		--seat-pm: #e8916f; --seat-dev: #8db4e2; --seat-qa: #bda3e6;
+		--shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+		color-scheme: dark;
+	}
+}
+:root[data-theme="dark"] {
+	--bg: #262624; --bg-side: #1f1e1d; --bg-raised: #30302e; --line: #3d3c38;
+	--text: #f5f4ef; --dim: #a6a39a; --accent: #d97757; --accent-soft: rgba(217, 119, 87, 0.18);
+	--accent-text: #e8916f; --on-accent: #1f1e1d; --ok: #8fbf77; --warn: #e0b15c; --err: #e5675b;
+	--seat-pm: #e8916f; --seat-dev: #8db4e2; --seat-qa: #bda3e6;
+	--shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+	color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg-side); color: var(--text); font: 14px/1.55 var(--font); display: flex; flex-direction: column; overflow: hidden; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+button:focus-visible, [tabindex]:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.mono { font-family: var(--mono); font-size: 0.92em; }
+.dim { color: var(--dim); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* prototype bar */
+.pbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 16px; background: var(--bg-raised); border-bottom: 1px solid var(--line); }
+.pbar .brand { font-weight: 600; font-size: 13px; margin-right: 4px; white-space: nowrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+.seg button { padding: 5px 11px; font-size: 13px; color: var(--dim); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.pbtn { padding: 5px 11px; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); white-space: nowrap; }
+.pbtn:hover { border-color: var(--dim); }
+.pbtn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.pbtn[disabled] { opacity: 0.45; cursor: default; }
+.pcheck { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); white-space: nowrap; }
+.pbar .grow { flex: 1 1 0; }
+.pcount { font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.narr { flex: none; padding: 7px 16px; font-size: 13px; background: var(--bg-side); border-bottom: 1px solid var(--line); color: var(--dim); min-height: 34px; }
+.narr b { color: var(--text); font-weight: 600; }
+
+/* shell */
+.app { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 264px minmax(0, 1fr) 372px; background: var(--bg); }
+.app.nopanel { grid-template-columns: 264px minmax(0, 1fr); }
+.side { background: var(--bg-side); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.side-top { padding: 14px 12px 8px; display: flex; flex-direction: column; gap: 8px; }
+.newconv { display: flex; align-items: center; gap: 8px; font-weight: 500; padding: 6px 8px; border-radius: 8px; }
+.newconv:hover { background: var(--bg-raised); }
+.search { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 10px; color: var(--dim); font-size: 13px; }
+.side-list { flex: 1 1 0; overflow-y: auto; padding: 4px 8px 12px; }
+.proj { display: flex; align-items: center; gap: 6px; padding: 8px 6px 4px; font-weight: 600; font-size: 13px; }
+.proj .n { font-weight: 400; color: var(--dim); }
+.row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 8px; font-size: 13px; min-height: 32px; }
+.row:hover { background: var(--bg-raised); }
+.row.active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.row .ttl { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .br { flex: 0 1 auto; max-width: 96px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--dim); }
+.row .time { flex: none; color: var(--dim); font-size: 12px; }
+.row.child { padding-left: 26px; }
+.tmark { flex: none; width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; font-size: 10px; font-weight: 600; color: var(--on-accent); background: var(--accent); }
+.tmark.cx { background: var(--seat-dev); }
+.tmark.gl { background: var(--seat-qa); }
+.tmark.team { background: var(--text); color: var(--bg); }
+.wt { flex: none; color: var(--dim); font-size: 12px; }
+.spin { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--accent); border-right-color: transparent; animation: spin 0.9s linear infinite; }
+.needdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.side-foot { flex: none; border-top: 1px solid var(--line); padding: 8px 12px; display: flex; justify-content: space-between; color: var(--dim); font-size: 12px; }
+
+.center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.head { flex: none; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--bg-side); }
+.head .ttl { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.head .meta { color: var(--dim); font-size: 13px; white-space: nowrap; flex: none; }
+.head .grow { flex: 1 1 0; }
+.head .hbtn { color: var(--dim); font-size: 13px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; flex: none; }
+.head .hbtn:hover { background: var(--bg-raised); color: var(--text); }
+.hdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.scroll { flex: 1 1 0; overflow-y: auto; padding: 22px 0 18px; }
+.col { max-width: 760px; margin: 0 auto; padding: 0 20px; display: flex; flex-direction: column; gap: 14px; }
+.bubble { align-self: flex-end; max-width: 82%; background: var(--bg-raised); border-radius: 14px; padding: 10px 14px; }
+.answer p { margin: 0 0 8px; }
+.answer ul { margin: 0; padding-left: 20px; }
+.answer li { margin: 2px 0; }
+
+/* current presentation replica */
+.oldrow { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 14px; }
+.oldrow .ic { flex: none; width: 16px; color: var(--dim); text-align: center; }
+.oldrow .vb { flex: none; color: var(--dim); }
+.oldrow .arg { font-family: var(--mono); font-size: 13.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge-run { flex: none; color: var(--warn); font-weight: 500; }
+.badge-run::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); margin-right: 5px; }
+.badge-fail { flex: none; color: var(--err); font-weight: 500; }
+.oldthink { display: flex; align-items: center; gap: 8px; color: var(--dim); padding-top: 4px; font-variant-numeric: tabular-nums; }
+.oldthink::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); animation: blink 1s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: 0.35; } }
+.oldworked { color: var(--dim); }
+.oldworked .f { color: var(--err); }
+
+/* proposed activity line */
+.act { display: block; width: 100%; border-radius: 10px; padding: 8px 10px; margin: 0 -10px; }
+.act:hover { background: var(--bg-side); }
+.act-l1 { display: flex; align-items: baseline; gap: 10px; }
+.pulse { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); align-self: center; animation: blink 1.6s ease-in-out infinite; }
+.act-intent { flex: 1 1 0; min-width: 0; }
+.act-time { flex: none; color: var(--dim); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.act-l2 { display: flex; gap: 8px; color: var(--dim); font-size: 12.5px; padding-left: 18px; margin-top: 2px; white-space: nowrap; overflow: hidden; }
+.act-l2 .cur { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 12px; }
+.steps { margin: 2px 0 0 8px; padding: 4px 0 4px 12px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+.step { display: flex; gap: 8px; font-size: 12.5px; color: var(--dim); align-items: baseline; }
+.step .arg { font-family: var(--mono); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); opacity: 0.8; }
+.step .note { flex: none; }
+.step.say { color: var(--text); font-size: 13px; }
+.worked { color: var(--dim); font-size: 13px; padding: 2px 0; border-radius: 6px; }
+.worked:hover { color: var(--text); }
+.deliver { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 2px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; background: var(--bg); white-space: nowrap; }
+.chip.ok { color: var(--ok); border-color: currentColor; }
+.chip.warn { color: var(--warn); border-color: currentColor; }
+button.chip:hover { background: var(--bg-raised); }
+.needyou { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.needyou h4 { margin: 0; font-size: 13px; color: var(--accent-text); font-weight: 600; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 12px; font-size: 13px; min-height: 32px; }
+.btn:hover { border-color: var(--dim); }
+.btn.pri { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.btn[disabled] { opacity: 0.5; cursor: default; }
+.btn.chosen { border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+
+/* composer */
+.composer-wrap { flex: none; padding: 10px 20px 16px; border-top: 1px solid var(--line); background: var(--bg-side); }
+.composer { max-width: 760px; margin: 0 auto; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); padding: 10px 12px 8px; position: relative; }
+.composer textarea { width: 100%; border: 0; background: transparent; resize: none; font: inherit; color: inherit; height: 44px; }
+.composer textarea:focus { outline: none; }
+.crow { display: flex; align-items: center; gap: 6px; }
+.crow .grow { flex: 1 1 0; }
+.cpill { color: var(--dim); font-size: 13px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
+.cpill:hover { background: var(--bg-raised); color: var(--text); }
+.cpill .tag { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+.send { flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-weight: 600; }
+.send.stop { background: var(--text); color: var(--bg); }
+.to { font-size: 12.5px; color: var(--dim); padding-bottom: 6px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* model + effort picker */
+.pop { position: absolute; right: 8px; bottom: calc(100% + 8px); width: min(640px, calc(100vw - 32px)); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); z-index: 30; overflow: hidden; }
+.pop-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--dim); }
+.pop-head input { flex: 1 1 0; border: 0; background: transparent; font: inherit; color: var(--text); min-width: 0; }
+.pop-head input:focus { outline: none; }
+.quota { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.qbar { width: 46px; height: 5px; border-radius: 3px; background: var(--bg-raised); overflow: hidden; }
+.qbar i { display: block; height: 100%; background: var(--ok); }
+.pop-body { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); max-height: min(420px, 56vh); }
+.mlist { overflow-y: auto; padding: 6px; border-right: 1px solid var(--line); }
+.msec { font-size: 11.5px; color: var(--dim); padding: 8px 8px 2px; }
+.mrow { display: block; width: 100%; padding: 7px 8px; border-radius: 8px; }
+.mrow[aria-selected="true"] { background: var(--bg-raised); }
+.mrow .n { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.mrow .d { color: var(--dim); font-size: 12.5px; }
+.mrow .ck { margin-left: auto; color: var(--accent-text); font-size: 12px; font-weight: 600; }
+.mini { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--dim); font-weight: 400; white-space: nowrap; }
+.elist { overflow-y: auto; padding: 6px; }
+.elist h5 { margin: 0; padding: 8px 8px 2px; font-size: 11.5px; color: var(--dim); font-weight: 400; }
+.erow { display: block; width: 100%; padding: 6px 8px; border-radius: 8px; }
+.erow[aria-selected="true"] { background: var(--bg-raised); }
+.erow .n { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.erow .d { color: var(--dim); font-size: 12.5px; }
+.enote { margin: 6px 8px; padding: 6px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-text); font-size: 12.5px; }
+.pop-foot { display: flex; align-items: center; gap: 12px; padding: 7px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--dim); }
+.pop-foot kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
+.pop-foot .grow { flex: 1 1 0; }
+.oldmenu { position: absolute; right: 120px; bottom: calc(100% + 8px); width: 210px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); z-index: 30; font-family: var(--mono); font-size: 12px; }
+.oldmenu .hint { padding: 6px 12px; color: var(--dim); border-bottom: 1px solid var(--line); }
+.oldmenu .it { padding: 6px 12px; }
+.oldmenu .it.sel { color: var(--accent-text); background: var(--bg-raised); }
+.oldmenu .typed { padding: 6px 12px; color: var(--dim); border-top: 1px solid var(--line); }
+.oldmenu .lst { max-height: 168px; overflow-y: auto; }
+
+/* side panel */
+.panel { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); }
+.tabs { flex: none; height: 48px; display: flex; align-items: stretch; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); background: var(--bg-side); overflow-x: auto; }
+.tab { padding: 0 10px; color: var(--dim); font-weight: 500; font-size: 13px; border-bottom: 2px solid transparent; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.tab .cnt { font-size: 11px; color: var(--dim); margin-left: 4px; }
+.pbody { flex: 1 1 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.pbody h3 { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--dim); }
+.todo { display: flex; gap: 8px; align-items: baseline; }
+.todo .box { flex: none; width: 14px; }
+.todo.done { color: var(--dim); }
+.todo.cur { font-weight: 600; }
+.item { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
+.item .top { display: flex; gap: 8px; align-items: baseline; }
+.item .top .t { flex: 1 1 0; min-width: 0; font-weight: 500; }
+.st { flex: none; font-size: 11.5px; border-radius: 4px; padding: 0 6px; border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
+.st.ok { color: var(--ok); border-color: currentColor; }
+.st.warn { color: var(--warn); border-color: currentColor; }
+.st.err { color: var(--err); border-color: currentColor; }
+.st.acc { color: var(--accent-text); border-color: currentColor; }
+.src { font-size: 11.5px; color: var(--dim); }
+
+/* team feed */
+.strip { flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); font-size: 13px; overflow-x: auto; }
+.phases { display: flex; align-items: center; gap: 4px; flex: none; }
+.ph { padding: 2px 8px; border-radius: 999px; color: var(--dim); white-space: nowrap; font-size: 12.5px; }
+.ph.done { color: var(--text); }
+.ph.cur { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.ph-sep { color: var(--line); }
+.strip .now { color: var(--dim); white-space: nowrap; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.strip .need { flex: none; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 2px 10px; font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+.seat { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
+.seat i { width: 8px; height: 8px; border-radius: 2px; background: var(--seat-pm); display: inline-block; }
+.seat.dev i { background: var(--seat-dev); border-radius: 50%; }
+.seat.qa i { background: var(--seat-qa); transform: rotate(45deg); }
+.seat .mdl { font-weight: 400; color: var(--dim); font-size: 12px; }
+.msg { display: flex; flex-direction: column; gap: 3px; }
+.msg .body { padding-left: 14px; }
+.sys { color: var(--dim); font-size: 12.5px; padding-left: 14px; }
+.card { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.card > h4 { margin: 0; font-size: 12px; font-weight: 600; color: var(--dim); display: flex; gap: 8px; align-items: baseline; }
+.card > h4 .k { color: var(--text); }
+.card.need { border-color: var(--accent); background: var(--accent-soft); }
+.card.need > h4 { color: var(--accent-text); }
+.card.block { border-color: var(--warn); }
+.card ul { margin: 0; padding-left: 18px; }
+.card li { margin: 2px 0; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; font-size: 13px; }
+.kv dt { color: var(--dim); }
+.kv dd { margin: 0; }
+.thread { border: 1px dashed var(--line); border-radius: 12px; }
+.thread > button { display: flex; gap: 8px; width: 100%; padding: 9px 14px; align-items: baseline; }
+.thread > button .t { flex: 1 1 0; min-width: 0; }
+.thread > button .o { color: var(--dim); font-size: 12.5px; flex: none; }
+.thread .in { padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 12px; border-top: 1px dashed var(--line); }
+.crit { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 10px; font-size: 13px; align-items: baseline; }
+.crit .id { color: var(--dim); font-family: var(--mono); font-size: 12px; }
+.chain { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; }
+.chain .lk { border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; color: var(--dim); }
+.chain .lk.on { color: var(--ok); border-color: currentColor; }
+.chain .lk.bad { color: var(--err); border-color: currentColor; }
+.chain .ar { color: var(--dim); }
+.banner { border: 1px solid var(--line); background: var(--bg-raised); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+.fadein { animation: fadein 0.25s ease-out; }
+@keyframes fadein { from { opacity: 0.4; transform: translateY(4px); } }
+
+pre.out { margin: 0; padding: 8px 10px; background: var(--bg-raised); border-radius: 8px; font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-x: auto; }
+.cmds { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px; background: var(--bg-raised); border-radius: 8px; }
+.pbar .brand .dim { font-weight: 400; font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 2px; }
+/* setup dialog */
+.veil { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); display: grid; place-items: center; z-index: 50; padding: 16px; }
+.dlg { width: min(680px, 100%); max-height: 100%; overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.dlg h2 { margin: 0; font-size: 16px; }
+.dlg label { font-size: 12.5px; color: var(--dim); display: block; margin-bottom: 4px; }
+.dlg textarea, .dlg select, .dlg input[type="number"] { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; padding: 6px 8px; }
+.seats { display: grid; grid-template-columns: 0.8fr 1fr 1.2fr 0.9fr; gap: 6px 8px; align-items: center; }
+.seats .hd { font-size: 12px; color: var(--dim); }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.hintline { font-size: 12.5px; color: var(--dim); }
+.hintline.warn { color: var(--warn); }
+
+@media (max-width: 1080px) { .app { grid-template-columns: 232px minmax(0, 1fr); } .panel { display: none; } }
+@media (max-width: 720px) { .app, .app.nopanel { grid-template-columns: minmax(0, 1fr); } .side { display: none; } .pop-body { grid-template-columns: minmax(0, 1fr); } .mlist { border-right: 0; border-bottom: 1px solid var(--line); max-height: 200px; } .seats { grid-template-columns: 1fr 1fr; } .seats .hd { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+
+/* team chat (P6) */
+.fold { display: flex; gap: 10px; width: 100%; padding: 9px 14px; align-items: baseline; text-align: left; }
+.fold .t { flex: 1 1 0; min-width: 38%; }
+.fold .o { color: var(--dim); font-size: 12.5px; flex: 0 1 auto; text-align: right; }
+.phfold { border: 1px solid var(--line); border-radius: 12px; background: var(--bg-side); }
+.phfold .in2 { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--line); }
+.sit { flex: none; display: grid; grid-template-columns: 1.3fr 1.3fr 1.3fr 0.9fr; gap: 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.sit > div { padding: 8px 16px; border-right: 1px solid var(--line); min-width: 0; }
+.sit > div:last-child { border-right: 0; }
+.sit .k { display: block; font-size: 11.5px; color: var(--dim); }
+.lnk { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; padding: 0 2px; font-size: inherit; }
+.dlv { align-self: flex-end; font-size: 12px; color: var(--dim); margin-top: -8px; }
+.eff { font-size: 12.5px; border-left: 3px solid var(--accent); padding: 2px 10px; color: var(--dim); }
+.chips2 { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; color: var(--dim); padding: 0 4px 6px; }
+.chips2 button { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; background: var(--bg); }
+.chips2 button:hover { background: var(--bg-raised); }
+.men { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); box-shadow: var(--shadow); width: 220px; margin: 0 0 6px; overflow: hidden; }
+.men button { text-align: left; padding: 6px 10px; }
+.men button[aria-selected="true"] { background: var(--bg-raised); }
+.dispatch { border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+.dispatch .k { display: block; font-size: 11.5px; color: var(--dim); }
+.inl { width: calc(100% - 64px); border: 1px solid var(--accent); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; padding: 2px 6px; margin-right: 6px; }
+.diff { border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.diff .id { font-weight: 600; margin-right: 6px; }
+.diff del { color: var(--dim); }
+.diff ins { text-decoration: none; background: var(--bg-raised); border-radius: 4px; padding: 0 3px; }
+.backbox { display: flex; gap: 8px; align-items: flex-end; }
+.backbox textarea { flex: 1 1 auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; padding: 6px 8px; resize: vertical; }
+.card.rev { border-color: var(--accent); }
+.probs { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.probs li b { display: block; }
+.probs li span { display: block; }
+.pts { margin: 0; padding-left: 18px; }
+.seg2 { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; align-self: flex-start; }
+.seg2 button { padding: 3px 12px; font-size: 12.5px; }
+.seg2 button[aria-pressed="true"] { background: var(--bg-raised); font-weight: 600; }
+.mdp { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--bg); font-size: 12.5px; line-height: 1.5; color: var(--text); }
+.mdp p { margin: 4px 0; }
+.mdp-h1 { font-size: 16px; font-weight: 700; border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 6px; }
+.mdp-h3 { font-weight: 700; margin-top: 10px; }
+.mdp .raw { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; word-break: break-all; color: var(--dim); }
+.mdp-fold { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; margin: 4px 0; color: var(--dim); }
+.mdp-img { border: 1px dashed var(--line); border-radius: 6px; padding: 14px; text-align: center; color: var(--dim); margin: 6px 0; }
+.seatrow { display: grid; grid-template-columns: 64px 1.5fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
+.seatrow .cpill { justify-content: flex-start; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.auth { display: flex; flex-direction: column; gap: 4px; }
+.dlg { position: relative; }
+.dlg > * { flex-shrink: 0; }
+.sp { background: var(--bg); border: 1px solid var(--accent); border-radius: 12px; overflow: hidden; margin: 0 0 8px; }
+.sp .pop-body { display: grid; grid-template-columns: 1.15fr 1fr; height: 232px; }
+.sp .mlist, .sp .elist { overflow-y: auto; min-height: 0; }
+.composer textarea[disabled] { opacity: 0.6; }
+
+/* P7.1 */
+.ledger .why { color: var(--dim); font-size: 11.5px; margin-top: 2px; line-height: 1.45; }
+.ledger td:nth-child(2) { min-width: 46%; }
+.ledger td:first-child { white-space: nowrap; }
+.ledger td:last-child .dim { font-size: 11.5px; margin-top: 2px; }
+.lstate { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; margin-top: 6px; color: var(--dim); }
+.lstate b { color: var(--text); font-weight: 600; }
+.nextbox { margin-top: 6px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); font-size: 12.5px; }
+.nextbox b { margin-right: 2px; }
+.nextbox.ok { border-color: var(--ok); }
+.nextbox.need { border-color: var(--accent); }
+.bound .opts { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.bound .opt { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+/* added in P7 */
+.att { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.att th, .att td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.att th { color: var(--dim); font-weight: 500; }
+.polls { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }
+.rec { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.rec li { display: grid; grid-template-columns: 22px 9em 1fr; gap: 6px; align-items: baseline; }
+.card.appgen { background: var(--bg-side); }
+.gaps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.gaps .id { font-weight: 600; }
+.prog { border-left: 3px solid var(--ok, #3a8f5c); padding: 2px 10px; font-size: 13px; }
+.sug { font-size: 12.5px; color: var(--dim); border-top: 1px dashed var(--line); padding-top: 6px; }
+.probs li .src { display: block; }
+.mdp-cap { font-size: 11px; color: var(--dim); margin-bottom: 4px; }
+.kv.lim select { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; padding: 1px 4px; }
+</style>
+</head>
+<body>
+<div class="pbar" id="pbar"></div>
+<div class="narr" id="narr" aria-live="polite"></div>
+<div class="app" id="app">
+	<aside class="side" id="side" aria-label="对话列表"></aside>
+	<main class="center" id="center"></main>
+	<aside class="panel" id="panel" aria-label="侧面板"></aside>
+</div>
+<div id="overlay"></div>
+<script>
+'use strict';
+const PROTO_VERSION = 'P7.1';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* ---------- vendor catalogs: names, descriptions and levels as the vendors publish them ----------
+   Read on 2026-11-14 from ~/.codex/models_cache.json (CLI 0.167.0) and
+   ~/.claude/cache/model-catalog/*-cc.json (CLI 2.1.317). Quota figures are sample data. */
+const CODEX_LEVELS = {
+	low: ['Low', 'Fast responses with lighter reasoning', '回应快，推理较浅'],
+	medium: ['Medium', 'Balances speed and reasoning depth for everyday tasks', '速度与推理深度平衡，适合日常任务'],
+	high: ['High', 'Greater reasoning depth for complex problems', '推理更深，适合复杂问题'],
+	xhigh: ['Extra High', 'Extra high reasoning depth for complex problems', '更高的推理深度，适合复杂问题'],
+	max: ['Max', 'Maximum reasoning depth for the hardest problems', '最大推理深度，留给最难的问题'],
+	ultra: ['Ultra', 'Maximum reasoning with automatic task delegation', '最大推理，并且会自动派发子任务，用量明显更高'],
+};
+const CLAUDE_LEVELS = {
+	low: ['Low', '', '更快，回答较简'],
+	medium: ['Medium', '', '多数任务的平衡点'],
+	high: ['High', '', '更周全，更慢'],
+	xhigh: ['Extra', '', '更深入，明显更慢'],
+	max: ['Max', 'May use excessive tokens resulting in long response times and may hit token limits.', '可能消耗大量 token、响应很慢并触及上限，只留给最难的任务'],
+};
+const ALL6 = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+const NO_ULTRA = ['low', 'medium', 'high', 'xhigh', 'max'];
+const CATALOG = {
+	codex: {
+		label: 'Codex', term: 'Reasoning', mark: 'Cx', levels: CODEX_LEVELS, defaultModel: 'gpt-6.1-sol',
+		source: '来自 Codex 自己的模型目录', quota: 62, quotaText: 'Codex 本周余量 62%',
+		models: [
+			{ id: 'gpt-6.1-sol', name: 'GPT-6.1-Sol', desc: 'Latest workhorse model for coding and everyday work.', zh: '日常编码与工作的主力模型', def: 'low', efforts: ALL6, fast: '2x speed, increased usage' },
+			{ id: 'gpt-6-astra', name: 'GPT-6-Astra', desc: 'Frontier intelligence for the most demanding work.', zh: '最强一档，留给最难的工作', def: 'medium', efforts: ALL6, fast: '2x speed, increased usage' },
+			{ id: 'gpt-6.1-terra', name: 'GPT-6.1 Terra', desc: 'GPT-6.1 Terra Codex model.', zh: 'GPT-6.1 Terra', def: 'low', efforts: ALL6 },
+			{ id: 'gpt-6-sol', name: 'GPT-6-Sol', desc: 'Previous generation workhorse model.', zh: '上一代主力模型', def: 'medium', efforts: ALL6 },
+			{ id: 'gpt-6-luna', name: 'GPT-6-Luna', desc: 'Fast and affordable model for easier tasks.', zh: '又快又省，适合简单任务', def: 'medium', efforts: NO_ULTRA, fast: '1.5x speed' },
+			{ id: 'gpt-5.6-sol', name: 'GPT-5.6-Sol', desc: 'Older generation workhorse model.', zh: '较早一代的主力模型', def: 'low', efforts: ALL6 },
+			{ id: 'gpt-5.6-terra', name: 'GPT-5.6-Terra', desc: 'Older balanced model for straightforward work.', zh: '较早的均衡模型', def: 'medium', efforts: ALL6 },
+			{ id: 'gpt-5.6-luna', name: 'GPT-5.6-Luna', desc: 'Older fast and efficient model.', zh: '较早的快速模型', def: 'medium', efforts: NO_ULTRA },
+		],
+	},
+	claude: {
+		label: 'Claude Code', term: 'Effort', mark: 'A', levels: CLAUDE_LEVELS, defaultModel: 'claude-sonnet-5-5',
+		source: '来自 Claude Code 自己的模型目录', quota: 38, quotaText: 'Claude 本周余量 38%',
+		levelNote: 'Higher effort means more thorough responses, but takes longer and uses your limits faster.',
+		models: [
+			{ id: 'claude-opus-5-5', name: 'Opus 5.5', desc: 'For complex work and everyday tasks', zh: '复杂工作和日常任务', def: 'medium', efforts: NO_ULTRA, fast: 'Fast mode' },
+			{ id: 'claude-sonnet-5-5', name: 'Sonnet 5.5', desc: 'Most efficient for simpler tasks', zh: '简单任务最省', def: 'medium', efforts: NO_ULTRA },
+			{ id: 'claude-fable-5-2', name: 'Fable 5.2', desc: 'For your toughest challenges', zh: '最难的问题', def: 'medium', efforts: NO_ULTRA, fast: 'Fast mode', notice: 'Fable 消耗额度比 Opus 快得多' },
+			{ id: 'claude-haiku-5-5', name: 'Haiku 5.5', desc: 'Fastest for quick answers', zh: '最快，适合快问快答', def: 'medium', efforts: NO_ULTRA },
+			{ id: 'claude-fable-5-1', name: 'Fable 5.1', desc: '', zh: '', def: 'high', efforts: NO_ULTRA, more: true },
+			{ id: 'claude-opus-5', name: 'Opus 5', desc: '', zh: '', def: 'high', efforts: NO_ULTRA, more: true, fast: 'Fast mode' },
+			{ id: 'claude-sonnet-5', name: 'Sonnet 5', desc: '', zh: '', def: 'high', efforts: NO_ULTRA, more: true },
+			{ id: 'claude-opus-4-7', name: 'Opus 4.7', desc: '', zh: '', def: 'xhigh', efforts: NO_ULTRA, more: true },
+			{ id: 'claude-opus-4-6', name: 'Opus 4.6', desc: '', zh: '', def: 'high', efforts: ['low', 'medium', 'high', 'max'], more: true, fast: 'Fast mode' },
+			{ id: 'claude-haiku-4-5', name: 'Haiku 4.5', desc: '', zh: '这个模型没有强度选项', def: null, efforts: [], more: true },
+		],
+	},
+};
+
+/* ---------- state ---------- */
+const S = {
+	scene: 'daily',
+	mode: 'new', // 'old' = current presentation, 'new' = proposal
+	tool: 'codex',
+	approval: false,
+	run: { status: 'idle', events: [], startedAt: 0, timers: [], expanded: false, approvalOpen: false, approved: false },
+	sel: { codex: { model: null, effort: {} , fast: false }, claude: { model: null, effort: {}, fast: false } },
+	pop: { open: false, col: 'model', mi: 0, ei: 0, q: '', more: false, notice: '' },
+	team: { i: 0, auto: null, choice: {}, choiceAt: {}, sim: {}, simAt: {}, tab: 'board', openThreads: {}, setup: false },
+	follow: { i: 0, choice: {}, choiceAt: {}, sim: {}, simAt: {}, restartAt: null, tab: 'checks', limit: 2 },
+	theme: null,
+};
+
+/* ---------- daily: one scripted turn ---------- */
+const RUN = [
+	{ t: 500, k: 'say', text: '先定位草稿写回和窗口关闭保存的先后关系，再补一条能失败的回归。' },
+	{ t: 900, k: 'plan', done: 0, cur: '定位关闭窗口的保存路径' },
+	{ t: 1400, k: 'tool', cat: 'search', old: 'Searched', arg: 'confirmQuitAfterSave|answerQuitSaveRequests', dur: 700 },
+	{ t: 2300, k: 'tool', cat: 'read', old: 'Read', arg: 'src/quitSave.ts', dur: 500 },
+	{ t: 3000, k: 'tool', cat: 'read', old: 'Read', arg: 'src/composer.ts', dur: 500 },
+	{ t: 3800, k: 'say', text: '原因确认：草稿只在空闲定时器里写回，关闭窗口保存的是旧内容。' },
+	{ t: 4100, k: 'plan', done: 1, cur: '写一条修复前失败的回归' },
+	{ t: 4500, k: 'tool', cat: 'write', old: 'Wrote', arg: 'src/quitSave.test.ts', dur: 500 },
+	{ t: 5200, k: 'tool', cat: 'run', old: 'Ran', arg: 'npx vitest run src/quitSave.test.ts', dur: 2200, fail: true },
+	{ t: 7700, k: 'say', text: '回归按预期在修复前失败。现在让关闭路径先同步写回草稿。' },
+	{ t: 8000, k: 'plan', done: 2, cur: '修复草稿写回时序' },
+	{ t: 8300, k: 'tool', cat: 'write', old: 'Edited', arg: 'src/quitSave.ts', dur: 500 },
+	{ t: 9000, k: 'plan', done: 3, cur: '跑相关测试和 lint' },
+	{ t: 9200, k: 'tool', cat: 'run', old: 'Ran', arg: 'npx vitest run src/quitSave.test.ts src/composer.test.ts', dur: 2200 },
+	{ t: 11600, k: 'tool', cat: 'run', old: 'Ran', arg: 'npm run lint', dur: 1500 },
+	{ t: 13300, k: 'plan', done: 4, cur: '' },
+	{ t: 13800, k: 'done' },
+];
+const PLAN = ['定位关闭窗口的保存路径', '写一条修复前失败的回归', '修复草稿写回时序', '跑相关测试和 lint'];
+const CAT = { search: '搜索', read: '读取', write: '写入', run: '命令' };
+const USER_MSG = '关闭窗口时会丢最后的草稿。先写能失败的回归，确认修复前失败，再修。完成后说明根因、修法和验证结果。';
+
+function stopRun() { S.run.timers.forEach(clearTimeout); S.run.timers = []; if (S.run.tick) clearInterval(S.run.tick); S.run.tick = null; }
+function resetRun() { stopRun(); S.run = { status: 'idle', events: [], startedAt: 0, timers: [], expanded: false, approvalOpen: false, approved: false }; }
+function playRun() {
+	resetRun();
+	S.run.status = 'running'; S.run.startedAt = Date.now();
+	const push = (ev) => { S.run.events.push(ev); renderDaily(); };
+	const later = (ms, fn) => S.run.timers.push(setTimeout(fn, ms));
+	let shift = 0;
+	RUN.forEach((e, i) => {
+		if (S.approval && e.k === 'tool' && e.arg === 'npm run lint') {
+			// a step that needs the user: the only thing allowed to break through
+			later(e.t + shift, () => { S.run.approvalOpen = true; renderAll(); });
+			shift = 1e9; // the rest waits for the click
+			S.run.pending = RUN.slice(i);
+			return;
+		}
+		if (shift >= 1e9) return;
+		schedule(e, e.t, later, push);
+	});
+	S.run.tick = setInterval(() => { if (S.run.status === 'running') renderDaily(true); }, 1000);
+	renderAll();
+}
+function schedule(e, at, later, push) {
+	if (e.k === 'tool') {
+		const ev = { ...e, state: 'running' };
+		later(at, () => push(ev));
+		later(at + e.dur, () => { ev.state = e.fail ? 'failed' : 'ok'; renderDaily(); });
+	} else if (e.k === 'done') {
+		later(at, () => { S.run.status = 'done'; S.run.elapsed = Math.round((Date.now() - S.run.startedAt) / 1000); stopRun(); renderAll(); });
+	} else later(at, () => push({ ...e }));
+}
+function approve(ok) {
+	S.run.approvalOpen = false; S.run.approved = ok;
+	const rest = S.run.pending || []; S.run.pending = null;
+	const later = (ms, fn) => S.run.timers.push(setTimeout(fn, ms));
+	const push = (ev) => { S.run.events.push(ev); renderDaily(); };
+	const base = rest[0].t;
+	rest.forEach((e) => { if (!ok && e.k === 'tool') return; schedule(e, e.t - base + 300, later, push); });
+	renderAll();
+}
+
+/* ---------- shared progress rules: PRD 3.1.3 to 3.1.5 ----------
+   One judgement serves a single conversation, a team problem and PM review. It reads only what the app can observe:
+   the concrete change or experiment (fp), what still fails afterwards (fails) and the evidence an attempt produced.
+   An attempt's category and wording are kept for people to read; they never decide whether work continues. */
+const VERDICT = { first: '第一次', solved: '已解决', fewer: '有进展：失败变少', changed: '有进展：失败变了，旧的没回来', evidence: '有进展：新证据', none: '无进展：结果没变，也没有新证据', regress: '无进展：回到了之前的报错', dup: '重复：不算新办法' };
+const PROGRESS = ['solved', 'fewer', 'changed', 'evidence'];
+const BOUNDARY = { budget: '整体预算或截止时间', commitment: '改变承诺', permission: '新权限', model: '新模型', login: '本人登录', baseline: '确认基线', acceptance: '演示验收' };
+const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+function judgeAttempts(start, list) {
+	let prev = start.slice(); const seen = new Set(start); const known = new Set(); let streak = 0; let rejects = 0; const out = [];
+	for (const a of list) {
+		if (a.diag) { streak = 0; rejects = 0; out.push({ ...a, verdict: 'diag', knownAfter: known.size, streak }); continue; }
+		const fails = a.fails; const fresh = (a.evidence || []).filter((e) => !known.has(e));
+		// the same concrete change, nothing learned since, the same result: a repeat, whatever it is called this time
+		const twin = out.find((o) => !o.diag && o.fp === a.fp && o.knownAfter === known.size && sameSet(o.fails, fails));
+		let v;
+		if (twin && !fresh.length) v = 'dup';
+		else if (!fails.length) v = 'solved';
+		else if (fails.some((f) => seen.has(f) && !prev.includes(f))) v = 'regress';
+		else if (fails.length < prev.length) v = 'fewer';
+		else if (!sameSet(fails, prev)) v = 'changed';
+		else if (fresh.length) v = 'evidence';
+		else v = out.some((o) => !o.diag) ? 'none' : 'first';
+		fresh.forEach((e) => known.add(e)); fails.forEach((f) => seen.add(f));
+		streak = PROGRESS.includes(v) ? 0 : streak + 1;
+		rejects = a.reject ? rejects + 1 : 0;
+		out.push({ ...a, verdict: v, twin: twin ? twin.n : null, knownAfter: known.size, streak });
+		prev = fails.slice();
+	}
+	return { list: out, fails: prev, streak, rejects, known: known.size };
+}
+// What happens next. Candidates are the next steps someone could take, each with its basis; a boundary marks one that needs the boss.
+// Nothing here counts how often a category was used.
+function decideNext(st, ctx = {}) {
+	const cands = ctx.candidates || []; const advice = cands.filter((x) => x.advice);
+	if (!st.fails.length) return { kind: 'done', advice: [] };
+	if (ctx.budget && ctx.budget.used >= ctx.budget.total) return { kind: 'report', boundary: ['budget'], advice: [] };
+	if (st.streak >= 3) return { kind: 'diagnose', why: 'streak', advice };
+	if (st.rejects >= 2) return { kind: 'diagnose', why: 'rejects', advice };
+	const tried = (x) => st.list.some((o) => !o.diag && o.fp === x.fp && o.knownAfter === st.known);
+	const open = cands.filter((x) => !x.boundary && x.basis && !tried(x));
+	if (open.length) return { kind: 'continue', next: open[0], advice };
+	const blocked = cands.filter((x) => x.boundary && !x.advice);
+	if (blocked.length) return { kind: 'escalate', boundary: [...new Set(blocked.map((x) => x.boundary))], options: blocked, advice };
+	return { kind: 'gather', advice };
+}
+function progressState(start, list, ctx = {}) {
+	const st = judgeAttempts(start, list); const last = [...st.list].reverse().find((a) => a.status);
+	return { ...st, decision: decideNext(st, ctx), budget: ctx.budget || null, status: last ? last.status : '未定位' };
+}
+
+/* the single conversation's fix loop: the same TS2304 failure as before, now with every attempt's basis on record */
+const FX_START = ['TS2304 syncDraftNow'];
+const FX_2300 = 'TS2300 flushDraft 重复声明';
+const FX_DIAG = '诊断：三次都假定“漏了导入”，结果一模一样，第 3 次还和第 1 次是同一个改动，说明这个假设错了。下一步不再改导入，先找证据：syncDraftNow 现在还存在吗。预期：找到它的定义或改名记录。';
+const FX_ATT = [
+	{ id: '1', n: 1, cat: '直接修', plan: '在 quitSave.ts 顶部补导入', basis: '报错说找不到 syncDraftNow，推测漏了导入', diff: '第一次', expect: 'TS2304 消失', fp: 'import-top', fails: FX_START, result: 'TS2304 syncDraftNow', min: 2 },
+	{ id: '2', n: 2, cat: '直接修', plan: '改成从 ./store 导入', basis: '同一个推测：导入路径写错了', diff: '导入路径不同', expect: 'TS2304 消失', fp: 'import-store', fails: FX_START, result: 'TS2304 syncDraftNow', min: 4 },
+	{ id: '3', n: 3, cat: '换做法', plan: '助手的说明：“换一种写法，重新整理导入”', basis: '没有写新的依据', diff: '应用比对实际改动：和第 1 次是同一行', expect: 'TS2304 消失', fp: 'import-top', fails: FX_START, result: 'TS2304 syncDraftNow', min: 6 },
+	{ id: 'D', n: 'D', diag: true, min: 8 },
+	{ id: '4', n: 4, cat: '定位', plan: '查 syncDraftNow 的定义和提交记录', basis: '三次补导入结果一样，怀疑这个名字已经不存在', diff: '不再改导入，先找证据', expect: '找到它的定义或改名记录', fp: 'locate-name', fails: FX_START, evidence: ['renamed'], result: '三天前 draft.ts 把它改名为 flushDraft', status: '已定位原因', min: 11 },
+	{ id: '5', n: 5, cat: '换做法', plan: '调用处改用 flushDraft', basis: '第 4 次找到的改名记录', diff: '改调用处，不再补导入', expect: 'TS2304 消失', fp: 'call-flush', fails: [FX_2300], result: 'TS2304 消失；新报错 TS2300：flushDraft 重复声明', status: '部分解决：TS2304 已消失，新问题 TS2300 单独记', min: 14 },
+	{ id: '6', n: 6, cat: '定位', plan: '查重复声明从哪来', basis: '新报错指向依赖包 @acme/draft-utils 的类型', diff: '同样是定位，查的是新报错和另一个假设', expect: '找到第二个声明是谁引入的', fp: 'locate-dup', fails: [FX_2300], evidence: ['global-decl'], result: '@acme/draft-utils 2.1 用 declare global 声明了 flushDraft', status: '新问题已定位原因', min: 20 },
+	{ id: '7', n: 7, cat: '小实验', plan: '在 tsconfig 的副本里排除这个类型包', basis: '第 6 次的证据', diff: '先在副本里验证，不动项目配置', expect: 'TS2300 消失', fp: 'exp-exclude', fails: [FX_2300], evidence: ['exclude-breaks'], result: 'TS2300 消失，但 draft-utils 失去类型（TS7016）：不能整包排除', min: 26 },
+];
+const FX_OK = [
+	{ id: '8', n: 8, cat: '小实验', plan: '只用本地声明覆盖冲突的那一条', basis: '第 7 次说明冲突只在这一条全局声明', diff: '同样是小实验，只覆盖一条，不排除整个包', expect: 'TS2300 和 TS7016 都不出现', fp: 'exp-override', fails: [], result: '两条报错都没有出现', status: '已解决', min: 31 },
+];
+const FX_BLOCK = [
+	{ id: '8b', n: 8, cat: '小实验', plan: '只用本地声明覆盖冲突的那一条', basis: '第 7 次说明冲突只在这一条全局声明', diff: '同样是小实验，只覆盖一条，不排除整个包', expect: 'TS2300 和 TS7016 都不出现', fp: 'exp-override', fails: [FX_2300], evidence: ['override-fails', 'upstream-23'], result: '盖不住 declare global（TS2451）；查到 2.3 的更新说明：已删除这条全局声明', min: 31 },
+	{ id: '9b', n: 9, cat: '换做法', plan: '升级 @acme/draft-utils 到 2.3', basis: '第 8 次查到 2.3 删除了冲突的声明', diff: '改依赖版本，不再在本地覆盖', expect: '安装成功后 TS2300 消失', fp: 'upgrade-23', fails: [FX_2300], evidence: ['registry-401'], result: 'npm install 失败：公司私有源返回 401，登录凭据过期', status: '修法已知：升级到 2.3；卡在安装', min: 36 },
+];
+const FX_OPUS = { plan: '请 Opus 5.5 看这个问题', boundary: 'model', advice: true };
+// the next steps the assistant could take at each point, each with its basis; the rules above choose among them
+const FX_NEXT = {
+	3: [{ plan: '再补一次导入', fp: 'import-top', basis: '没有新依据' }],
+	5: [{ plan: '查重复声明从哪来', fp: 'locate-dup', basis: '新报错指向依赖包 @acme/draft-utils 的类型' }],
+	7: [{ plan: '只用本地声明覆盖冲突的那一条', fp: 'exp-override', basis: '第 7 次说明冲突只在这一条全局声明' }, { ...FX_OPUS, why: '更强的模型也许更快，但授权内还有有依据的下一步，这只是建议。' }],
+	'9b': [{ plan: '不登录再装一次 2.3', fp: 'upgrade-23', basis: '同第 9 次' },
+		{ key: 'login', plan: '我来登录私有源，助手接着装 2.3', fp: 'upgrade-23-login', boundary: 'login', basis: '2.3 已删除冲突的声明（第 8 次）', cost: '你登录一次，约 1 分钟；之后助手装好 2.3、去掉本地覆盖、重跑检查', rec: true },
+		{ key: 'skip', plan: '批准打开 skipLibCheck', fp: 'skiplib', boundary: 'commitment', basis: '能让 TS2300 不再报', cost: '类型检查不再检查依赖包里的声明文件，等于放宽 lint 这条检查，会记为标准变更' },
+		{ ...FX_OPUS, why: '原因已经查清，卡住的是登录，不是模型的能力。' }],
+};
+function fixState(F, upto, block) {
+	const all = [...FX_ATT, ...(block ? FX_BLOCK : FX_OK)];
+	const list = all.slice(0, all.findIndex((a) => a.id === upto) + 1);
+	return progressState(FX_START, list, { candidates: FX_NEXT[upto] || [], budget: { used: list[list.length - 1].min, total: F.limit * 60 } });
+}
+
+/* the team's problem #1 and the PM review loop, judged by the same rules */
+const TFX_START = ['样本 1', '样本 2', '样本 3', '样本 4'];
+const TFX_ATT = [
+	{ id: '1', n: 1, who: 'dev', cat: '直接修', plan: '链接前补 ./', basis: '复现里图片路径是绝对路径', diff: '第一次', expect: '4 条样本里的图片能显示', fp: 'prefix-dot', fails: TFX_START, result: '4 条样本仍是破图' },
+	{ id: '2', n: 2, who: 'dev', cat: '直接修', plan: '改用 path.relative 计算', basis: '同一个推测：相对路径算错了', diff: '换了计算方式', expect: '同上', fp: 'path-relative', fails: TFX_START, result: '4 条样本仍是破图' },
+	{ id: '3', n: 3, who: 'dev', cat: '直接修', plan: '处理 Windows 分隔符', basis: '推测是分隔符', diff: '只改分隔符', expect: '同上', fp: 'win-sep', fails: TFX_START, result: '4 条样本仍是破图' },
+	{ id: 'R', n: 'R', diag: true },
+	{ id: '4', n: 4, who: 'qa', cat: '定位', plan: '把失败的 4 条样本按引用写法归类', basis: '三次修补都只针对一种写法', diff: '不改代码，先找证据', expect: '找出失败样本的共同点', fp: 'classify', fails: TFX_START, evidence: ['3-forms'], result: '共有 3 种引用写法：相对路径、绝对路径、HTML img 标签', status: '已定位原因' },
+	{ id: '5', n: 5, who: 'dev', cat: '小实验', plan: '只对第一种写法统一重写引用', basis: '第 4 次的归类', diff: '不再逐处补判断；先只试一种写法', expect: '这种写法的 2 条样本通过', fp: 'rewrite-one', fails: ['样本 3', '样本 4'], result: '样本 1、2 通过；3、4 仍失败', status: '部分解决：2/4 通过' },
+	{ id: '6', n: 6, who: 'dev', cat: '小实验', plan: '同一规则扩到另外两种写法', basis: '第 5 次证明统一重写有效', diff: '同样是小实验，覆盖另外两种写法', expect: '4 条样本全部通过', fp: 'rewrite-all', fails: [], result: '4 条样本全部通过；QA 复验通过', status: '已解决' },
+];
+const TFX_NEXT = { 3: [{ plan: '再补一种路径写法', fp: 'win-sep', basis: '没有新依据' }] };
+function issueFx(upto, budget) { const list = TFX_ATT.slice(0, TFX_ATT.findIndex((a) => a.id === upto) + 1); return progressState(TFX_START, list, { candidates: TFX_NEXT[upto] || [], budget }); }
+const RFX_START = ['E1 分不清谁说的', 'E1 工具输出淹没正文', 'E1 开头没有交代'];
+const RFX = {
+	r1: { id: 'r1', n: 1, cat: '评审', plan: '第一版导出', basis: '功能标准都有证据，没有未关闭的问题', diff: '第一次评审', expect: '体验标准 E1 满足', fp: 'v1', reject: true, fails: RFX_START, result: '打回：3 处违反 E1', status: '3 处违反 E1' },
+	r2: { id: 'r2', n: 2, cat: '换做法', plan: '三处都改，工具输出用 details 折叠', basis: '第 1 次评审的三处问题', diff: '按问题逐条改', expect: '三处都不再出现', fp: 'v2-details', reject: true, fails: ['E1 VS Code 里工具输出仍展开'], result: '打回：还剩 1 处（VS Code 里折叠不生效）', status: '还剩 1 处' },
+	r2p: { id: 'r2p', n: 2, cat: '换做法', plan: '三处都改，工具输出用 details 折叠', basis: '第 1 次评审的三处问题', diff: '按问题逐条改', expect: '三处都不再出现', fp: 'v2-details', fails: [], result: '通过', status: '全部达标' },
+	R: { id: 'R', n: 'R', diag: true },
+	r3: { id: 'r3', n: 3, cat: '换做法', plan: '工具输出改成一行摘要加附录；E1 细化成三条子项', basis: '复盘：details 在 VS Code 里默认展开；核对只覆盖了 GitHub', diff: '不再依赖 details；两个查看器都核对', expect: '三条子项在两个查看器里逐条通过', fp: 'v3-appendix', reject: true, fails: ['E1b 超长输出的附录链接跳不过去'], result: '打回：三条子项通过两条，剩 1 处', status: '三条子项通过两条' },
+	r4: { id: 'r4', n: 4, cat: '换做法', plan: '附录跳转改成 VS Code 也认的锚点', basis: '第 3 次评审指出的那一处', diff: '只改跳转写法', expect: 'E1b 通过', fp: 'v4-anchor', fails: [], result: '通过', status: '全部达标' },
+};
+const RFX_NEXT = { r1: [{ plan: '按三处问题修改', fp: 'v2-details', basis: '第 1 次评审的三处问题' }], R: [{ plan: '工具输出改成一行摘要加附录', fp: 'v3-appendix', basis: '复盘找到的两个原因' }], r3: [{ plan: '修附录跳转', fp: 'v4-anchor', basis: 'QA 定位到 VS Code 不认这种锚点写法' }] };
+function reviewFx(ids, budget) { return progressState(RFX_START, ids.map((k) => RFX[k]), { candidates: RFX_NEXT[ids[ids.length - 1]] || [], budget }); }
+
+/* ---------- follow-ups and checks in one ordinary conversation ---------- */
+const CHECKS = [['npx vitest run src/quitSave.test.ts src/composer.test.ts', '相关测试'], ['npm run lint', '类型检查']];
+const CHECKS2 = [['npx vitest run src/quitSave.test.ts src/composer.test.ts src/draft.test.ts', '相关测试（多了一个文件）'], ['npm run lint', '类型检查']];
+const FLIMIT = { 1: '15:20', 2: '16:20', 4: '18:20' };
+const FSIM_AT = { stuck: ['f1', 'f2'], boundary: ['f2e'], outside: ['f2'] };
+const FSIM_LABEL = { stuck: '修复三次无进展', boundary: '剩下的路需要你登录', outside: '超出授权的检查' };
+const FNEED_BOUNDARY = { CHK: 'permission', FIX: 'permission', OUT: 'permission', EXP: 'budget' };
+function fsimOk(k, st, F) {
+	if (!FSIM_AT[k].includes(st.id) || F.sim[k]) return false;
+	if (k === 'stuck' && st.id === 'f2' && (F.choice.FIX !== 'auto' || F.choice.CHK !== 'ok')) return false;
+	if (k === 'stuck' && st.id === 'f1' && F.choice.FIX) return false;
+	if (k === 'outside' && (F.sim.stuck || F.choice.FIX !== 'auto')) return false;
+	return true;
+}
+function buildFollow(F) {
+	const c = F.choice; const hasChecks = c.CHK !== 'skip'; const auto = c.FIX !== 'manual'; const steps = [];
+	const stuck = !!F.sim.stuck; const block = !!F.sim.boundary; const lim = F.limit; const until = FLIMIT[lim];
+	const add = (s) => steps.push(s);
+	add({ id: 'f0', need: 'CHK', checks: 'proposed', narr: '<b>验收清单，授权一次。</b>检查命令由应用直接运行，所以第一次要你授权。授权按项目记住：只要命令只在项目目录里运行、不联网写入，之后助手改了命令也不再问你；超出这个范围的才单独问。',
+		feed: [{ t: 'bubble', text: USER_MSG }, { t: 'worked', text: '用时 14 秒 · 8 步' }, { t: 'answer' },
+			{ t: 'ask', key: 'CHK', title: '允许应用在这个项目里运行检查命令', body: '助手建议回合结束后运行这两条命令。授权按项目记住：命令只在项目目录里运行、不联网写入时，以后助手改了命令也不再问你。要访问项目之外、联网写入或推送的命令，会单独问。', cmds: true, opts: [['ok', '允许（这个项目记住）'], ['skip', '这条对话不用清单']] }] });
+	if (hasChecks) {
+		add({ id: 'f1', need: 'FIX', checks: 'failed', narr: '<b>检查没全过，就不显示绿色的完成。</b>助手在回答里写了“lint 通过”，但应用自己跑出来是失败。界面以应用的结果为准。',
+			feed: [{ t: 'sys', text: '应用运行了验收清单：1/2 通过。' }, { t: 'checkout', title: 'npm run lint', out: 'src/quitSave.ts(3,3): error TS2304: Cannot find name \'syncDraftNow\'.\n\nFound 1 error in src/quitSave.ts:3' },
+				{ t: 'ask', key: 'FIX', title: '检查失败', body: '要不要把失败结果发回给助手，让它接着修？选了“发回去”，以后这条对话不再问。自动修复和之后的跟进共用一个总时限，默认 2 小时，登记跟进时可以调整。每次尝试的依据和结果都会记下来：有进展就接着修，只有下一步必须越过授权边界才来问你。', opts: [['auto', '发回去继续修'], ['manual', '我自己看']] }] });
+		if (auto && !stuck) add({ id: 'f2', checks: 'passed', narr: '<b>失败结果自动回到对话里。</b>应用把检查的输出发给助手，助手修完，应用再跑一遍。之后助手给检查命令多加了一个测试文件：命令仍只在项目目录里运行，属于你已经给的授权，所以没有再问你。',
+			feed: [{ t: 'sys', text: '已把 npm run lint 的输出发回给助手（第 1 次）。' }, { t: 'worked', text: '用时 9 秒 · 2 步' }, { t: 'say', text: '漏了导入。已在 src/quitSave.ts 顶部加上 syncDraftNow 的导入，并补了一个 src/draft.test.ts。' }, { t: 'sys', text: '检查命令改了：相关测试多了 src/draft.test.ts。命令仍只在项目目录里运行，在你已经给的授权之内，没有再问你。' }, { t: 'sys', text: '应用重新运行了验收清单：2/2 通过。' }] });
+		if (auto && stuck) {
+			const fx3 = fixState(F, '3'); const fx5 = fixState(F, '5'); const fx7 = fixState(F, '7');
+			add({ id: 'f2', checks: 'failed', fx: fx3, narr: '<b>三次没有进展，先诊断，不是来问你。</b>进展只看应用观察到的证据：失败变少、报错变了而且旧的没回来、或者拿到了能缩小原因的新证据。第 3 次助手说“换了一种写法”，应用比对实际改动，和第 1 次是同一行，所以记为重复：换个说法不算新办法。',
+				feed: [{ t: 'sys', text: '已把 npm run lint 的输出发回给助手。' }, { t: 'ledger', title: '问题：TS2304 找不到 syncDraftNow', fx: fx3, show: ['1', '2', '3'], unit: 'min' }] });
+			add({ id: 'f2d', checks: 'failed', fx: fx5, narr: '<b>找到原因、报错变了，就是有进展。</b>诊断之后，第 4 次定位到原因，第 5 次让旧报错消失，同时冒出一个新问题。检查还没全过，但这不等于没有进展：应用更新问题状态，新问题单独记，助手接着推进，不需要你。',
+				feed: [{ t: 'worked', text: '用时 2 分钟 · 4 步' }, { t: 'say', text: FX_DIAG }, { t: 'ledger', title: '诊断之后', fx: fx5, show: ['4', '5'], unit: 'min' }] });
+			add({ id: 'f2e', checks: 'failed', fx: fx7, narr: '<b>同一类办法可以再用，只要依据和方案不同。</b>第 6 次又是定位，查的是新报错和另一个假设；第 7 次是小实验，结论“不能整包排除”也是新证据。各类办法都用过了，但授权内还有有依据的下一步，预算也还有，所以继续。“换更强的模型”只列为建议，不是停下来的理由。',
+				feed: [{ t: 'worked', text: '用时 3 分钟 · 6 步' }, { t: 'ledger', title: '新问题：TS2300 flushDraft 重复声明', fx: fx7, show: ['6', '7'], unit: 'min' }] });
+			if (!block) {
+				const fx8 = fixState(F, '8');
+				add({ id: 'f2f', checks: 'passed', fx: fx8, narr: '<b>问题解决了，全程没有找你。</b>八次尝试里有两次定位、两次小实验，每次都写了依据、区别和预期；有进展就接着做，重复的那一次被认出来，没有再派发。',
+					feed: [{ t: 'worked', text: '用时 2 分钟 · 3 步' }, { t: 'ledger', title: '新问题：TS2300 flushDraft 重复声明', fx: fx8, show: ['8'], unit: 'min', doneText: '两个问题都解决了，应用重新运行验收清单确认。' }, { t: 'sys', text: '应用重新运行了验收清单：2/2 通过。' }] });
+			} else {
+				const fx9 = fixState(F, '9b', true);
+				add({ id: 'f2x', need: 'ESC', boundary: fx9.decision.boundary.join(' '), checks: 'failed', fx: fx9, narr: '<b>真正碰到边界，才来问你。</b>修法已经查清：升级到 2.3。可安装要登录公司的私有源，这一步只有你能做；另一条能让检查通过的路要放宽类型检查，属于改变承诺。卡片写明卡在哪、授权内每条路的结论、每个选项的代价和推荐。不推荐换模型，因为卡住的不是能力。',
+					feed: [{ t: 'worked', text: '用时 5 分钟 · 7 步' }, { t: 'ledger', title: '新问题：TS2300 flushDraft 重复声明', fx: fx9, show: ['8b', '9b'], unit: 'min' },
+						{ t: 'bound', key: 'ESC', fx: fx9, title: '需要你决定：下一步要越过授权边界', block: '修法已经查清：升级 @acme/draft-utils 到 2.3，它删除了冲突的全局声明。安装要登录公司的私有 npm 源，返回 401：登录凭据过期了。只有你能登录。', paths: ['整包排除这个类型包：draft-utils 会失去类型（第 7 次）', '本地覆盖这一条声明：盖不住 declare global（第 8 次）', '不登录再装一次：只会重复第 9 次', '打开 skipLibCheck 能让检查通过，但它放宽了类型检查，属于改变承诺'] }] });
+				const out = c.ESC;
+				add({ id: 'f2y', checks: out === 'stop' ? 'failed' : 'passed', narr: out === 'login' ? '<b>你登录之后，助手从卡住的地方接着做。</b>授权没有因此扩大：这次只是补上了一个只有你能做的登录。' : out === 'skip' ? '<b>放宽标准要你批，批了也记下来。</b>交付条照常显示通过，但标准变更里写着“类型检查不再检查依赖包的声明文件”。' : '<b>停了就是停了，记录都在。</b>交付条停在 1/2。你登录之后可以在右侧“检查”里发回给助手，它从第 9 次接着做。',
+					feed: out === 'login' ? [{ t: 'sys', text: '你在终端里登录了公司的私有 npm 源（模拟）。应用确认凭据有效，助手继续。' }, { t: 'worked', text: '用时 1 分钟 · 3 步' }, { t: 'say', text: '已安装 @acme/draft-utils 2.3，去掉了第 8 次加的本地声明。' }, { t: 'sys', text: '应用重新运行了验收清单：2/2 通过。' }] : out === 'skip' ? [{ t: 'sys', text: '按你的批准打开了 skipLibCheck。已记为标准变更：lint 不再检查依赖包里的声明文件。' }, { t: 'sys', text: '应用重新运行了验收清单：2/2 通过（标准已变更）。' }] : [{ t: 'sys', text: '助手停在这里，没有再尝试。尝试记录、问题状态和剩下的两条路都保留着。' }] });
+			}
+		}
+		if (!auto) add({ id: 'f2', checks: 'failed', narr: '<b>你选了自己看。</b>应用不再自动发回。交付条停在“1/2 通过”，直到下一次检查通过为止。', feed: [{ t: 'sys', text: '没有自动发回。你可以随时在右侧“检查”里点“重新运行”或“发回给助手”。' }] });
+		if (F.sim.outside) {
+			add({ id: 'f2o', need: 'OUT', checks: 'passed', narr: '<b>同一授权范围内不再问，超出的才问，而且问得具体。</b>刚才助手在项目里改检查命令没有问你；这条不一样，它要下载浏览器到项目之外并联网。卡片说清楚超出了哪一点，你只对这一条做决定。',
+				feed: [{ t: 'say', text: '我想再加一条端到端检查，确认关窗口时草稿真的写盘了。' }, { t: 'ask', key: 'OUT', title: '需要你决定：这条检查超出了授权范围', body: '命令：npx playwright install chromium && npx playwright test e2e/quit.spec.ts。它会把浏览器下载到项目之外（~/Library/Caches/ms-playwright）并联网，超出了“只在项目目录里运行、不联网写入”。', opts: [['once', '只允许这一次'], ['no', '不加这条检查']] }] });
+		}
+	} else add({ id: 'f2', checks: 'none', narr: '<b>没有清单时，界面只说“助手称完成”。</b>它不会替助手背书。你随时可以在右侧“检查”里补上清单。', feed: [{ t: 'sys', text: '这条对话没有验收清单。交付条只显示改动，不显示检查结果。' }] });
+	const prevChecks = steps[steps.length - 1].checks;
+	const outLine = F.sim.outside ? (c.OUT === 'once' ? [{ t: 'sys', text: '那条端到端检查按你的授权运行了一次：通过。授权只用这一次，没有扩大。' }] : c.OUT === 'no' ? [{ t: 'sys', text: '没有加那条端到端检查。' }] : []) : [];
+	add({ id: 'f3', need: 'CI', follow: 'waiting', checks: prevChecks, narr: '<b>跟进：三种限度分开。</b>单次等待 20 分钟，到点先回来看一眼，不会停；总时限是这条对话自己推进的上限，自动修复和跟进共用，登记时就显示，可以调整；到期时它最后看一次、写下现状，再停下来告诉你。',
+		feed: [...outLine, { t: 'bubble', text: '推上去。CI 过了再告诉我结果，没过就接着修。' }, { t: 'worked', text: '用时 6 秒 · 2 步' }, { t: 'say', text: '已推送到 fix/quit-draft，CI 运行 #482 已开始。我登记了一条跟进，CI 结束时回来处理。' },
+			{ t: 'ask', key: 'CI', follow: true, limit: true, title: '已登记跟进', body: 'CI 运行 #482 结束时回到这条对话。重启应用后仍然有效。', opts: [['pass', '模拟：CI 通过'], ['fail', '模拟：CI 失败'], ['timeout', '模拟：20 分钟到了，CI 还在排队'], ['expire', '模拟：总时限到了'], ['cancel', '取消这条跟进']] }] });
+	const ci = c.CI; const ck = steps[steps.length - 1].checks;
+	if (ci === 'pass') add({ id: 'f4', follow: 'done', checks: ck, narr: '<b>应用把对话叫回来了。</b>你没有发任何消息。助手收到的是事件和结果，不是一句“好了吗”。', feed: [{ t: 'sys', text: 'CI 运行 #482 结束：通过。应用已唤醒这条对话。' }, { t: 'worked', text: '用时 3 秒 · 1 步' }, { t: 'say', text: 'CI 全部通过（7 项）。分支 fix/quit-draft 可以合并了，我没有合并。' }] });
+	if (ci === 'fail') {
+		add({ id: 'f4', follow: 'waiting', checks: ck, narr: '<b>失败也会回来。</b>应用把失败的那一项和日志结尾交给助手。助手修完再推，又登记了一条新的跟进。这一次的失败和之前不同，算新问题，不累计到“无进展”里。', feed: [{ t: 'sys', text: 'CI 运行 #482 结束：1 项失败（Windows 上的路径测试）。应用已唤醒这条对话，并附上失败日志的结尾。' }, { t: 'worked', text: '用时 21 秒 · 4 步' }, { t: 'say', text: '失败的是 Windows 的路径分隔符。已改用 joinPath，重新推送，CI 运行 #483 已开始。我又登记了一条跟进。' }, { t: 'followline', text: `CI 运行 #483 结束时回来。单次等 20 分钟；总时限不变，最迟到 ${until}。` }] });
+		add({ id: 'f5', follow: 'done', checks: ck, narr: '<b>两次等待，你都没有参与。</b>', feed: [{ t: 'sys', text: 'CI 运行 #483 结束：通过。应用已唤醒这条对话。' }, { t: 'worked', text: '用时 3 秒 · 1 步' }, { t: 'say', text: 'CI 全部通过（7 项）。分支 fix/quit-draft 可以合并了，我没有合并。' }] });
+	}
+	if (ci === 'timeout') {
+		add({ id: 'f4', follow: 'waiting', checks: ck, narr: '<b>单次等待超时，不等于停下来问你。</b>应用把对话叫回来并附上状态。CI 只是在排队，所以助手接着跟：改成每 10 分钟看一次，同时先在本地把同一组检查跑掉。', feed: [{ t: 'sys', text: '20 分钟到了，CI 运行 #482 还没结束。应用已唤醒这条对话，并附上状态：排队中，前面还有 3 个任务。' }, { t: 'worked', text: '用时 41 秒 · 3 步' }, { t: 'say', text: `CI 是在排队，不是失败，原因是 runner 不够。我接着跟：改成每 10 分钟看一次，最迟到 ${until}，也就是这条对话的总时限。等的同时我先在本地把 CI 那 7 项跑了一遍，全部通过。` }, { t: 'sys', text: `已登记跟进：CI 运行 #482，每 10 分钟查看一次，最迟到 ${until}。` }] });
+		add({ id: 'f4b', follow: 'waiting', checks: ck, narr: '<b>查询结果没变，不等于失败。</b>CI 仍在正常排队，属于等待，不算修复失败，也不触发诊断。只有外部状态本身说明出了问题（被取消、报错、找不到 runner），或者到了总时限，才会改变处理方式。', feed: [{ t: 'poll', rows: [['14:52', '排队中，前面 3 个'], ['15:02', '排队中，前面 3 个'], ['15:12', '排队中，前面 3 个']], note: '查询 3 次结果都没变：CI 仍在正常排队。这是等待，不是失败，不累计“无进展”，也不打扰你。' }] });
+		add({ id: 'f5', follow: 'done', checks: ck, narr: '<b>它自己跟到了结束。</b>从超时到 CI 跑完，你没有收到任何“要不要继续等”的询问。', feed: [{ t: 'sys', text: '15:26 CI 运行 #482 结束：通过。应用已唤醒这条对话。' }, { t: 'worked', text: '用时 3 秒 · 1 步' }, { t: 'say', text: 'CI 全部通过（7 项），和本地跑的结果一致。分支 fix/quit-draft 可以合并了，我没有合并。' }] });
+	}
+	if (ci === 'expire') {
+		add({ id: 'f4', need: 'EXP', follow: 'expired', checks: ck, narr: '<b>总时限是一道硬边界，到了就停，并说清现状。</b>它不会悄悄继续，也不会只说一句“要继续吗”。卡片写明做到了哪、在等什么、为什么还没完、推荐怎么办。', feed: [{ t: 'sys', text: `${until}，总时限到了（${lim} 小时）。CI 运行 #482 仍在排队。应用最后看了一次，写下现状，停止自动跟进。` }, { t: 'ask', key: 'EXP', title: '跟进到期：现状和建议', body: `已推送到 fix/quit-draft；本地跑过 CI 的 7 项，全部通过；CI 运行 #482 已排队 ${lim} 小时，前面还剩 1 个任务。原因是 runner 不够，不是代码问题。推荐延长 1 小时：队列在缓慢前进。`, opts: [['more', '延长 1 小时'], ['stop', '不再跟进']] }] });
+		add({ id: 'f5', follow: c.EXP === 'more' ? 'done' : 'none', checks: ck, narr: c.EXP === 'more' ? '<b>延长只延长时间，规则不变。</b>' : '<b>停了就是停了。</b>左栏不再显示“等 CI”，右侧“跟进”里可以重新登记。', feed: c.EXP === 'more' ? [{ t: 'sys', text: '跟进延长 1 小时。25 分钟后 CI 运行 #482 结束：通过。应用已唤醒这条对话。' }, { t: 'say', text: 'CI 全部通过（7 项）。分支 fix/quit-draft 可以合并了，我没有合并。' }] : [{ t: 'sys', text: '已停止跟进。CI 的结果需要你自己看。' }] });
+	}
+	if (ci === 'cancel') add({ id: 'f4', follow: 'none', checks: ck, narr: '<b>跟进可以取消。</b>取消之后这条对话不会自己回来。右侧“跟进”里看得到所有挂起的等待。', feed: [{ t: 'sys', text: '你取消了跟进。这条对话不会自己回来，CI 的结果需要你自己看。' }] });
+	return steps;
+}
+function followSteps() { return buildFollow(S.follow); }
+
+/* ---------- rendering: prototype bar ---------- */
+function renderBar() {
+	const sc = S.scene;
+	const seg = (v, label) => `<button aria-pressed="${sc === v}" data-act="scene" data-v="${v}">${label}</button>`;
+	let h = `<span class="brand">Maestro 第二轮原型 <span class="dim">${PROTO_VERSION}</span></span><span class="seg" role="group" aria-label="场景">${seg('daily', '日常对话')}${seg('follow', '跟进与验收')}${seg('team', '团队群聊')}</span>`;
+	let n = '';
+	if (sc === 'daily') {
+		h += `<span class="seg" role="group" aria-label="呈现方式"><button aria-pressed="${S.mode === 'old'}" data-act="mode" data-v="old">现在的呈现</button><button aria-pressed="${S.mode === 'new'}" data-act="mode" data-v="new">第二轮方案</button></span>
+			<span class="seg" role="group" aria-label="这条对话用的工具"><button aria-pressed="${S.tool === 'codex'}" data-act="tool" data-v="codex">Codex</button><button aria-pressed="${S.tool === 'claude'}" data-act="tool" data-v="claude">Claude</button></span>
+			<button class="pbtn primary" data-act="play">${S.run.status === 'running' ? '重新播放' : '播放一个回合'}</button>
+			<label class="pcheck"><input type="checkbox" id="chk-appr" ${S.approval ? 'checked' : ''}> 中途需要我批准一次</label>`;
+		n = S.mode === 'old' ? '<b>现在的呈现</b>（按试用包实拍复刻）：每次工具调用占一行，运行徽标加逐秒计时，过程说明不显示，预期内的失败也标红。点“播放一个回合”对比。'
+			: '<b>第二轮方案</b>：运行中只有一个高度不变的活动条，第一行是它在做什么，第二行是聚合的工具计数。明细点开才有。只有需要你的事才用强调色。右下角的模型按钮可以用键盘操作。';
+	} else if (sc === 'follow') {
+		const F = S.follow; const steps = followSteps(); const st = steps[F.i]; const wait = st.need && !F.choice[st.need];
+		h += `<button class="pbtn" data-act="fprev" ${F.i === 0 ? 'disabled' : ''}>上一步</button><button class="pbtn primary" data-act="fnext" ${F.i >= steps.length - 1 || wait ? 'disabled' : ''}>下一步</button><span class="pcount">${F.i + 1} / ${steps.length}</span>
+			${Object.keys(FSIM_AT).map((k) => `<button class="pbtn" data-act="fsim" data-v="${k}" ${fsimOk(k, st, F) ? '' : 'disabled'}>模拟：${FSIM_LABEL[k]}</button>`).join('')}<button class="pbtn" data-act="frestart" ${st.follow !== 'waiting' || F.restartAt != null ? 'disabled' : ''}>模拟：应用重启</button><button class="pbtn" data-act="freset">重置</button>`;
+		n = st.narr + (wait ? ' <b>请在卡片上点一个选项继续。</b>' : '');
+	} else { const b = teamBar(); h += b.h; n = b.n; }
+	h += `<span class="grow"></span><button class="pbtn" data-act="theme">${isDark() ? '浅色' : '深色'}</button>`;
+	$('#pbar').innerHTML = h; $('#narr').innerHTML = n;
+}
+const isDark = () => S.theme ? S.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+
+/* ---------- rendering: sidebar ---------- */
+function renderSide() {
+	const head = `<div class="side-top"><button class="newconv">✎ 新对话</button><button class="newconv" data-act="t2-new" id="new-team">＋ 新建团队</button><div class="search">搜索对话…</div></div>`;
+	let list = ''; let foot = '方案';
+	const r = (mark, mc, ttl, time, cls = '', extra = '', wt = true) => `<button class="row ${cls}"><span class="tmark ${mc}">${mark}</span><span class="ttl">${ttl}</span>${wt ? '<span class="wt" title="在 worktree 里">⑂</span>' : ''}${extra}<span class="time">${time}</span></button>`;
+	const others = r('Cx', 'cx', '终端面板窄宽度折行', '1 小时前') + r('Cx', 'cx', '搜索框焦点被抢', '1 小时前') + r('Cx', 'cx', 'CLI 读取旧配置值', '1 小时前') + r('A', '', '撤掉手机面板的修复', '1 小时前') + r('A', '', '第二轮规划', '1 小时前', '', '', false) + r('Cx', 'cx', '核对原计划逐项状态', '11月6日');
+	if (S.scene === 'daily') {
+		const running = S.run.status === 'running'; const need = S.run.approvalOpen;
+		if (S.mode === 'old') {
+			foot = '按实拍复刻';
+			const o = (ttl, br, time, cls = '', extra = '') => `<button class="row ${cls}"><span class="tmark cx">Cx</span><span class="ttl" style="flex:0 0 22px">${ttl}</span><span class="wt">⑂</span><span class="br">${br}</span>${extra}<span class="time">${time}</span></button>`;
+			list = `<div class="proj">⌄ maestro-harness-bridge-ha… <span class="n">30</span></div>` + o('# …', 'maestro-harnes…', running ? '' : '刚刚', 'active', running ? '<span class="spin"></span>' : '') + o('# …', 'maestro-harnes…', '1h ago') + o('# …', 'maestro-harnes…', '1h ago') + o('# …', 'maestro-harnes…', '1h ago') + o('# …', 'maestro-harnes…', '1h ago')
+				+ `<button class="row"><span class="tmark">A</span><span class="ttl" style="flex:0 0 30px">撤…</span><span class="wt">⑂</span><span class="br">sahara-desert-c…</span><span class="time">1h ago</span></button>` + o('# 核对…', 'maestro-harnes…', 'Nov 6') + o('# 修复…', 'maestro-harnes…', 'Nov 6');
+		} else list = `<div class="proj">⌄ maestro-harness-bridge <span class="n">30</span></div>` + r('Cx', 'cx', '关闭窗口时丢最后的草稿', running || need ? '' : '刚刚', 'active', need ? '<span class="needdot" title="需要你"></span>' : running ? '<span class="spin"></span>' : '') + others;
+	} else if (S.scene === 'follow') {
+		const st = followSteps()[S.follow.i]; const wait = st.need && !S.follow.choice[st.need];
+		const extra = st.follow === 'waiting' && !(wait && st.need !== 'CI') ? '<span class="st" title="有一条挂起的跟进">◷ 等 CI</span>' : wait && st.need !== 'CI' ? '<span class="needdot" title="需要你"></span>' : '';
+		list = `<div class="proj">⌄ maestro-harness-bridge <span class="n">30</span></div>` + r('Cx', 'cx', '关闭窗口时丢最后的草稿', extra ? '' : '刚刚', 'active', extra) + others;
+	} else { foot = '示例数据'; list = teamSide(r); }
+	$('#side').innerHTML = head + `<div class="side-list">${list}</div><div class="side-foot"><span>⚙ 设置</span><span>${foot}</span></div>`;
+}
+
+/* ---------- rendering: daily ---------- */
+function resolved(tool = S.tool) {
+	const c = CATALOG[tool]; const sel = S.sel[tool];
+	const id = sel.model || c.defaultModel; const m = c.models.find((x) => x.id === id);
+	const eff = sel.effort[id] || m.def; return { c, m, modelIsDefault: !sel.model, eff, effIsDefault: !sel.effort[id] };
+}
+function pillText() {
+	const r = resolved(); const lvl = r.eff ? r.c.levels[r.eff][0] : '';
+	return `${esc(r.m.name)}${lvl ? ' · ' + lvl : ''}${S.sel[S.tool].fast && r.m.fast ? ' · Fast' : ''}${r.modelIsDefault && r.effIsDefault ? '<span class="tag">默认</span>' : ''}`;
+}
+function renderDaily(tickOnly) {
+	const run = S.run; const old = S.mode === 'old';
+	const tools = run.events.filter((e) => e.k === 'tool');
+	const says = run.events.filter((e) => e.k === 'say');
+	const plan = S.tool === 'codex' ? run.events.filter((e) => e.k === 'plan').pop() : null;
+	const secs = run.status === 'running' ? Math.floor((Date.now() - run.startedAt) / 1000) : run.elapsed || 0;
+	const running = run.status === 'running';
+	const title = old ? '# 关闭窗口时丢最后的草稿（`codex/new-shell-polish`） 工作目录是 worktree，分支 `codex/new-shell-polish`，HEAD…' : '关闭窗口时丢最后的草稿';
+	const head = `<div class="head"><span class="tmark ${S.tool === 'codex' ? 'cx' : ''}">${S.tool === 'codex' ? 'Cx' : 'A'}</span><span class="ttl">${esc(title)}</span>${old && running ? '<span class="hdot" title="运行中"></span>' : ''}<span class="meta">⑂ ${old ? 'codex/wizard-a…' : 'codex/new-shell-polish'}</span><span class="grow"></span><button class="hbtn">⇄ 交给…</button><button class="hbtn" data-act="panel" aria-label="开关侧面板">▯▮</button></div>`;
+	let body = `<div class="bubble">${esc(USER_MSG)}</div>`;
+	const ICON = { search: '⌕', read: '▤', write: '✎', run: '›_' };
+	if (run.status === 'idle') {
+		body += `<div class="dim">点上方“播放一个回合”，看同一个回合（14 秒、8 次工具调用）在两种呈现下的差别。</div>`;
+	} else if (old) {
+		const rows = [];
+		run.events.forEach((e) => {
+			if (S.tool === 'codex' && e.k === 'plan' && (e.done === 0 || e.done === 1 || e.done === 4)) rows.push(`<div class="oldrow"><span class="ic">☷</span><span class="vb">Updated plan</span><span class="arg">${esc(e.cur || PLAN[0])} (${e.done}/4)</span></div>`);
+			if (e.k === 'tool') rows.push(`<div class="oldrow"><span class="ic">${ICON[e.cat]}</span><span class="vb">${e.old}</span><span class="arg">${esc(e.arg)}</span>${e.state === 'running' ? '<span class="badge-run">Running</span>' : e.state === 'failed' ? '<span class="badge-fail">! Failed</span>' : ''}</div>`);
+		});
+		if (running) body += `<div>${rows.join('')}<div class="oldthink">Thinking... · ${secs}s</div></div>`;
+		else body += `<div class="oldworked">Worked for ${secs}s · <span class="f">1 failed step</span> ›</div>` + answerHtml();
+	} else {
+		const counts = {}; tools.forEach((t) => { counts[t.cat] = (counts[t.cat] || 0) + 1; });
+		const countText = Object.keys(CAT).filter((k) => counts[k]).map((k) => `${CAT[k]} ${counts[k]}`).join(' · ');
+		const cur = tools.filter((t) => t.state === 'running').pop();
+		const stepList = () => `<div class="steps">${run.events.map((e) => e.k === 'say' ? `<div class="step say">${esc(e.text)}</div>` : e.k === 'tool' ? `<div class="step"><span>${CAT[e.cat]}</span><span class="arg">${esc(e.arg)}</span>${e.state === 'failed' ? '<span class="note">退出码 1，属于预期（先写会失败的回归）</span>' : e.state === 'running' ? '<span class="note">进行中</span>' : ''}</div>` : '').join('')}</div>`;
+		if (running) {
+			const intent = run.approvalOpen ? '停在这里，等你批准一条命令' : says.length ? says[says.length - 1].text : '开始处理';
+			const coarse = secs < 10 ? '刚开始' : secs < 60 ? `${Math.floor(secs / 10) * 10} 秒` : `${Math.floor(secs / 60)} 分钟`;
+			body += `<div><button class="act" data-act="expand" aria-expanded="${run.expanded}">
+					<div class="act-l1">${run.approvalOpen ? '' : '<span class="pulse"></span>'}<span class="act-intent">${esc(intent)}</span><span class="act-time">${coarse}</span></div>
+					<div class="act-l2"><span>${plan ? `第 ${Math.min(plan.done + 1, 4)}/4 步` : ''}${plan && plan.cur ? '：' + esc(plan.cur) : ''}</span>${countText ? `<span>· ${countText}</span>` : ''}${cur ? `<span>·</span><span class="cur">${esc(cur.arg)}</span>` : ''}</div>
+				</button>${run.expanded ? stepList() : ''}</div>`;
+			if (run.approvalOpen) body += `<div class="needyou fadein"><h4>需要你批准</h4><div>要运行 <span class="mono">npm run lint</span>。这条对话的权限是“标准”，命令需要你确认。</div><div class="btnrow"><button class="btn pri" data-act="approve" data-v="1">允许这一次</button><button class="btn" data-act="approve" data-v="0">拒绝</button></div></div>`;
+		} else {
+			body += `<div><button class="worked" data-act="expand" aria-expanded="${run.expanded}">用时 ${secs} 秒 · ${tools.length} 步 ${run.expanded ? '⌄' : '›'}</button>${run.expanded ? stepList() : ''}</div>` + answerHtml()
+				+ `<div class="deliver"><button class="chip" data-act="ptab" data-v="changes">改动 2 个文件 <span class="dim">+9 −1</span></button><span class="chip ok">检查 15/15 通过</span><span class="chip warn">未做：Electron 场景</span></div>`;
+		}
+	}
+	const r = resolved();
+	const composer = `<div class="composer-wrap"><div class="composer">
+			<textarea id="msg" placeholder="给 ${r.c.label} 发消息" aria-label="消息"></textarea>
+			<div class="crow"><button class="cpill" aria-label="添加图片">▧</button><button class="cpill">⛨ 完全访问 ⌄</button><span class="grow"></span>
+			${old ? `<button class="cpill" data-act="oldmenu">Default model ⌄</button><button class="cpill">Default effort ⌄</button>` : `<button class="cpill" id="pill" data-act="pop" aria-haspopup="dialog" aria-expanded="${S.pop.open}">${pillText()} ⌄</button>`}
+			<button class="send ${running ? 'stop' : ''}" aria-label="${running ? '停止' : '发送'}">${running ? '■' : '↑'}</button></div>
+			${S.pop.open && !old ? popHtml() : ''}${S.oldMenu && old ? oldMenuHtml() : ''}
+		</div></div>`;
+	if (tickOnly && (S.pop.open || document.activeElement?.id === 'msg')) {
+		// do not rebuild the composer under the user's hands; refresh only the transcript
+		$('#daily-scroll').innerHTML = `<div class="col">${body}</div>`;
+		return;
+	}
+	$('#center').innerHTML = head + `<div class="scroll" id="daily-scroll"><div class="col">${body}</div></div>` + composer;
+	if (S.pop.open && !old) { const f = $('#pop-filter'); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } scrollSel(); }
+}
+function answerHtml() {
+	if (S.run.approved === false && S.approval && S.run.status === 'done') return `<div class="answer"><p>修复已留在工作树，未提交、未推送。你拒绝了 lint，所以类型检查没有跑。</p><ul><li><b>根因</b>：草稿只在空闲定时器里写回，关闭窗口时保存的是旧内容。</li><li><b>验证</b>：新增回归修前失败、修后通过；相关测试 15/15。lint 未运行。</li></ul></div>`;
+	return `<div class="answer"><p>修复已留在工作树，未提交、未推送。</p><ul><li><b>根因</b>：草稿只在空闲定时器里写回，关闭窗口时保存的是旧内容。</li><li><b>修法</b>：关闭路径先同步写回草稿，再复用现有保存请求。</li><li><b>验证</b>：新增回归修前失败、修后通过；相关测试 15/15，lint 通过。未运行 Electron 场景。</li></ul></div>`;
+}
+function oldMenuHtml() {
+	return `<div class="oldmenu"><div class="hint">Try: ⌥ ⌘ .</div><div class="lst"><div class="it sel">(default)</div>${CATALOG.codex.models.map((m) => `<div class="it">${m.id}</div>`).join('')}</div><div class="typed">Or type a model ID</div></div>`;
+}
+
+/* ---------- model + effort picker ---------- */
+function visibleModels() {
+	const c = CATALOG[S.tool]; const q = S.pop.q.trim().toLowerCase();
+	let ms = c.models.filter((m) => !q || (m.name + ' ' + m.id + ' ' + m.desc + ' ' + m.zh).toLowerCase().includes(q));
+	if (!q && !S.pop.more) ms = ms.filter((m) => !m.more);
+	return ms;
+}
+function popRows() {
+	// row 0 is "follow the tool's default"; it stays unless a filter is typed
+	const rows = []; if (!S.pop.q.trim()) rows.push({ dflt: true }); visibleModels().forEach((m) => rows.push({ m })); return rows;
+}
+function popHtml() {
+	const c = CATALOG[S.tool]; const sel = S.sel[S.tool]; const rows = popRows();
+	const dm = c.models.find((m) => m.id === c.defaultModel);
+	const hi = rows[S.pop.mi] || rows[0]; const hm = hi && (hi.dflt ? dm : hi.m);
+	const hasMore = c.models.some((m) => m.more);
+	const mrow = (r, i) => {
+		const on = i === S.pop.mi && S.pop.col === 'model';
+		if (r.dflt) return `<button class="mrow" role="option" aria-selected="${i === S.pop.mi}" data-act="pick-model" data-i="${i}"><span class="n">跟随 ${c.label} 的默认<span class="mini">当前是 ${esc(dm.name)}</span>${!sel.model ? '<span class="ck">已选</span>' : ''}</span><span class="d">${c.label} 换默认模型时，这里跟着变</span></button>`;
+		const m = r.m;
+		return `<button class="mrow" role="option" aria-selected="${i === S.pop.mi}" data-act="pick-model" data-i="${i}"><span class="n">${esc(m.name)}${m.fast ? '<span class="mini">可开 Fast</span>' : ''}${sel.model === m.id ? '<span class="ck">已选</span>' : ''}</span><span class="d">${esc(m.zh || m.desc || '')}${m.notice ? '。' + esc(m.notice) : ''}</span></button>`;
+	};
+	let list = rows.map(mrow).join('');
+	if (hasMore && !S.pop.q.trim()) list += `<button class="mrow" data-act="more"><span class="n dim">${S.pop.more ? '收起较早的模型' : '更多模型…'}</span></button>`;
+	if (!rows.length) list = `<div class="msec">没有匹配的模型。按 Enter 把“${esc(S.pop.q)}”当作模型 ID 使用。</div>`;
+	// effort column belongs to the highlighted model
+	let ecol = '';
+	if (hm) {
+		const cur = sel.effort[hm.id] || hm.def;
+		if (!hm.efforts.length) ecol = `<h5>${c.term}</h5><div class="msec">${esc(hm.name)} 没有强度选项。</div>`;
+		else ecol = `<h5>${c.term} · ${esc(hm.name)}</h5>` + hm.efforts.map((e, i) => {
+			const L = c.levels[e];
+			return `<button class="erow" role="option" aria-selected="${S.pop.col === 'effort' ? i === S.pop.ei : e === cur}" data-act="pick-effort" data-e="${e}"><span class="n">${L[0]}${e === hm.def ? `<span class="mini">${S.tool === 'claude' ? 'Recommended' : '这个模型的默认'}</span>` : ''}${e === cur ? '<span class="ck">已选</span>' : ''}</span><span class="d">${esc(L[2])}</span></button>`;
+		}).join('') + (hm.fast ? `<h5>速度</h5><button class="erow" data-act="fast"><span class="n">${S.tool === 'claude' ? 'Fast mode' : 'Fast'}<span class="mini">${sel.fast ? '已开' : '关'}</span></span><span class="d">${S.tool === 'claude' ? '更快出结果，用量更高' : esc(hm.fast === '1.5x speed' ? '1.5 倍速度' : '2 倍速度，用量增加')}</span></button>` : '');
+		// say so before the switch when the highlighted model lacks the level in use now
+		const now = resolved();
+		if (hm.id !== now.m.id && now.eff && hm.efforts.length && !hm.efforts.includes(now.eff)) ecol = `<div class="enote">${esc(hm.name)} 没有 ${c.levels[now.eff][0]}。切过去会用它自己的 ${c.levels[cur][0]}。</div>` + ecol;
+	}
+	return `<div class="pop" role="dialog" aria-label="模型与强度" id="pop">
+		<div class="pop-head"><span>⌕</span><input id="pop-filter" value="${esc(S.pop.q)}" placeholder="筛选 ${c.label} 的模型，或输入模型 ID" aria-label="筛选模型" autocomplete="off"><span class="quota" title="示例数据"><span class="qbar"><i style="width:${c.quota}%"></i></span>${c.quotaText}</span></div>
+		<div class="pop-body"><div class="mlist" role="listbox" aria-label="模型">${list}</div><div class="elist" role="listbox" aria-label="${c.term}">${ecol}</div></div>
+		<div class="pop-foot"><span><kbd>↑</kbd> <kbd>↓</kbd> 选择</span><span><kbd>→</kbd> 到强度</span><span><kbd>Enter</kbd> 确定</span><span><kbd>Esc</kbd> 关闭</span><span class="grow"></span><span>${c.source}</span></div>
+	</div>`;
+}
+function scrollSel() { const el = $('#pop [aria-selected="true"]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); }
+function openPop() {
+	const sel = S.sel[S.tool]; const rows = (S.pop.q = '', S.pop.more = false, popRows());
+	let mi = 0; if (sel.model) { const m = CATALOG[S.tool].models.find((x) => x.id === sel.model); if (m && m.more) S.pop.more = true; mi = Math.max(0, popRows().findIndex((r) => r.m && r.m.id === sel.model)); }
+	S.pop = { ...S.pop, open: true, col: 'model', mi, ei: 0, notice: '' }; renderDaily();
+}
+function closePop(refocus = true) { S.pop.open = false; renderDaily(); if (refocus) { const p = $('#pill'); if (p) p.focus(); } }
+function chooseModel(i) {
+	const rows = popRows(); const r = rows[i]; if (!r) return;
+	// The level belongs to the model: each model remembers its own, the way the
+	// vendors' own apps do. Nothing is carried from the previous model.
+	S.sel[S.tool].model = r.dflt ? null : r.m.id;
+	S.pop.notice = '';
+	S.pop.mi = i;
+}
+function chooseEffort(e) { const rows = popRows(); const c = CATALOG[S.tool]; const hi = rows[S.pop.mi]; const m = hi.dflt ? c.models.find((x) => x.id === c.defaultModel) : hi.m; const sel = S.sel[S.tool]; if (e === m.def) delete sel.effort[m.id]; else sel.effort[m.id] = e; S.pop.notice = ''; }
+function popKey(ev) {
+	const rows = popRows(); const c = CATALOG[S.tool];
+	const hi = rows[S.pop.mi]; const hm = hi && (hi.dflt ? c.models.find((x) => x.id === c.defaultModel) : hi.m);
+	const k = ev.key;
+	if (k === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closePop(); return; }
+	if (k === 'ArrowDown' || k === 'ArrowUp') {
+		ev.preventDefault(); const d = k === 'ArrowDown' ? 1 : -1;
+		if (S.pop.col === 'model') { S.pop.mi = Math.max(0, Math.min(rows.length - 1, S.pop.mi + d)); S.pop.notice = ''; }
+		else if (hm) S.pop.ei = Math.max(0, Math.min(hm.efforts.length - 1, S.pop.ei + d));
+		renderDaily(); return;
+	}
+	if ((k === 'ArrowRight' || k === 'Tab') && S.pop.col === 'model' && hm && hm.efforts.length && (k === 'Tab' || ev.target.selectionStart === ev.target.value.length)) {
+		ev.preventDefault(); chooseModel(S.pop.mi); S.pop.col = 'effort'; const sel = S.sel[S.tool]; S.pop.ei = Math.max(0, hm.efforts.indexOf(sel.effort[hm.id] || hm.def)); renderDaily(); return;
+	}
+	if ((k === 'ArrowLeft' || (k === 'Tab' && ev.shiftKey)) && S.pop.col === 'effort') { ev.preventDefault(); S.pop.col = 'model'; renderDaily(); return; }
+	if (k === 'Enter') {
+		ev.preventDefault();
+		if (!rows.length && S.pop.q.trim()) { S.pop.notice = ''; closePop(); return; }
+		if (S.pop.col === 'model') chooseModel(S.pop.mi); else if (hm) chooseEffort(hm.efforts[S.pop.ei]);
+		closePop(); return;
+	}
+}
+
+/* ---------- rendering: follow-ups and checks ---------- */
+function renderFollow() {
+	const F = S.follow; const steps = followSteps(); const st = steps[F.i];
+	const head = `<div class="head"><span class="tmark cx">Cx</span><span class="ttl">关闭窗口时丢最后的草稿</span><span class="meta">⑂ fix/quit-draft</span><span class="grow"></span><button class="hbtn">⇄ 交给…</button><button class="hbtn" data-act="panel" aria-label="开关侧面板">▯▮</button></div>`;
+	const chips = (state) => { const base = `<button class="chip" data-act="ftab" data-v="changes">改动 2 个文件 <span class="dim">+9 −1</span></button>`; return `<div class="deliver">${base}${state === 'proposed' ? '<span class="chip">助手称完成 · 还没有验收清单</span>' : state === 'none' ? '<span class="chip">助手称完成 · 没有验收清单</span>' : state === 'failed' ? '<button class="chip warn" data-act="ftab" data-v="checks">检查 1/2 通过 · 应用运行</button>' : '<button class="chip ok" data-act="ftab" data-v="checks">检查 2/2 通过 · 应用运行</button>'}</div>`; };
+	const item = (it, si) => {
+		const fresh = si === F.i ? ' fadein' : '';
+		if (it.t === 'bubble') return `<div class="bubble${fresh}">${esc(it.text)}</div>`;
+		if (it.t === 'worked') return `<div class="worked">${esc(it.text)} ›</div>`;
+		if (it.t === 'answer') return answerHtml();
+		if (it.t === 'say') return `<div class="answer${fresh}"><p>${esc(it.text)}</p></div>`;
+		if (it.t === 'sys') return `<div class="sys${fresh}">${esc(it.text)}</div>`;
+		if (it.t === 'followline') return `<div class="card${fresh}"><h4><span class="k">已登记跟进</span></h4><div>${esc(it.text.replace('已登记跟进：', ''))}</div><div class="src">由应用保证，重启后仍然有效</div></div>`;
+		if (it.t === 'attempts') return attemptsHtml(it, fresh);
+		if (it.t === 'ledger') return ledgerHtml(it, fresh);
+		if (it.t === 'bound') return boundHtml(it, F.choice[it.key], fresh, 'fchoose');
+		if (it.t === 'poll') return pollHtml(it, fresh);
+		if (it.t === 'checkout') return `<div class="card${fresh}"><h4><span class="k">未通过</span><span class="mono">${esc(it.title)}</span>　由应用运行</h4><pre class="out">${esc(it.out)}</pre></div>`;
+		if (it.t === 'ask') {
+			const ch = F.choice[it.key]; const cls = it.follow || ch ? '' : ' need';
+			return `<div class="card${cls}${fresh}" data-boundary="${FNEED_BOUNDARY[it.key] || ''}"><h4>${it.follow || ch ? '' : '需要你　'}<span class="k">${esc(it.title)}</span></h4><div>${esc(it.body)}</div>${it.cmds ? `<div class="cmds">${CHECKS.map((c) => `<div><span class="mono">${esc(c[0])}</span> <span class="dim">${c[1]}</span></div>`).join('')}</div>` : ''}${it.limit ? `<dl class="kv lim"><dt>单次等待</dt><dd>20 分钟。到点先回来看一眼，不会停</dd><dt>总时限</dt><dd><select id="f-limit" aria-label="总时限" ${ch ? 'disabled' : ''}>${[1, 2, 4].map((h) => `<option value="${h}" ${F.limit === h ? 'selected' : ''}>${h} 小时</option>`).join('')}</select>　最迟到 ${FLIMIT[F.limit]}</dd><dt>到期时</dt><dd>最后看一次，写下现状，停止跟进并告诉你</dd></dl>` : ''}${it.follow ? '<div class="src">下面的按钮用来模拟接下来发生的事。真实使用时你什么都不用做。</div>' : ''}<div class="btnrow">${it.opts.map((o, i) => `<button class="btn ${ch === o[0] ? 'chosen' : i === 0 && !ch && !it.follow ? 'pri' : ''}" data-act="fchoose" data-k="${it.key}" data-v="${o[0]}" ${ch ? 'disabled' : ''}>${esc(o[1])}</button>`).join('')}</div></div>`;
+		}
+		return '';
+	};
+	let body = '';
+	for (let i = 0; i <= F.i; i++) {
+		body += steps[i].feed.map((it) => item(it, i)).join('');
+		if (i === 0) body += chips(steps[F.i].checks);
+		if (F.restartAt === i) body += `<div class="banner">应用重启过。这条对话有 1 条跟进在等（CI 运行 #482），已从磁盘恢复，到点照常触发。</div>`;
+	}
+	const composer = `<div class="composer-wrap"><div class="composer"><textarea placeholder="给 Codex 发消息" aria-label="消息"></textarea><div class="crow"><button class="cpill" aria-label="添加图片">▧</button><button class="cpill">⛨ 完全访问 ⌄</button><span class="grow"></span><span class="cpill">GPT-6.1-Sol · Low<span class="tag">默认</span></span><button class="send" aria-label="发送">↑</button></div></div></div>`;
+	$('#center').innerHTML = head + `<div class="scroll" id="follow-scroll"><div class="col">${body}</div></div>` + composer;
+	const sc = $('#follow-scroll'); sc.scrollTop = sc.scrollHeight;
+}
+
+/* ---------- rendering: side panel ---------- */
+function renderPanel() {
+	if (S.hidePanel) { $('#app').classList.add('nopanel'); $('#panel').style.display = 'none'; return; }
+	$('#app').classList.remove('nopanel'); $('#panel').style.display = '';
+	const tabsHtml = (tabs, cur, act) => `<div class="tabs" role="tablist">${tabs.map((t) => `<button class="tab" role="tab" aria-selected="${cur === t[0]}" data-act="${act}" data-v="${t[0]}">${t[1]}${t[2] ? `<span class="cnt">${t[2]}</span>` : ''}</button>`).join('')}</div>`;
+	if (S.scene === 'daily') {
+		const tab = S.ptab || 'tasks';
+		const plan = S.run.events.filter((e) => e.k === 'plan').pop(); const done = plan ? plan.done : 0; const started = S.run.status !== 'idle';
+		let body = '';
+		if (tab === 'tasks' && S.tool !== 'codex') body = '<div class="dim">这条对话没有任务清单。Claude Code 不给 Claude 5 系模型提供任务清单工具，所以这一页没有内容，不是出了问题。进度看对话里的活动条。</div>';
+		else if (tab === 'tasks') body = started ? PLAN.map((p, i) => `<div class="todo ${i < done ? 'done' : i === done && S.run.status === 'running' ? 'cur' : ''}"><span class="box">${i < done ? '✓' : i === done && S.run.status === 'running' ? '◉' : '○'}</span><span>${p}</span></div>`).join('') : '<div class="dim">这条对话还没有任务清单。</div>';
+		else if (tab === 'changes') body = S.run.status === 'done' ? `<div class="item"><div class="top"><span class="t mono">src/quitSave.ts</span><span class="st">+2 −1</span></div></div><div class="item"><div class="top"><span class="t mono">src/quitSave.test.ts</span><span class="st">+7 −0</span></div></div><button class="btn">让另一家复核这些改动</button>` : '<div class="dim">相对上次提交没有改动。</div>';
+		else body = '<div class="dim">原型里没有做这个面板。</div>';
+		$('#panel').innerHTML = tabsHtml([['changes', '改动', S.run.status === 'done' ? '2' : ''], ['files', '文件', ''], ['term', '终端', ''], ['tasks', '任务', started && S.tool === 'codex' ? `${done}/4` : ''], ['web', '预览', '']], tab, 'ptab') + `<div class="pbody">${body}</div>`;
+		return;
+	}
+	if (S.scene === 'follow') {
+		const F = S.follow; const st = followSteps()[F.i]; const cs = st.checks; const tab = F.tab;
+		let body = '';
+		if (tab === 'checks') {
+			const v2 = followSteps().slice(0, F.i + 1).some((x) => x.id === 'f2' && x.checks === 'passed'); const CK = v2 ? CHECKS2 : CHECKS;
+			const row = (i, ok) => `<div class="item"><div class="top"><span class="t mono">${esc(CK[i][0])}</span><span class="st ${ok === true ? 'ok' : ok === false ? 'err' : ''}">${ok === true ? '通过' : ok === false ? '未通过' : cs === 'proposed' ? '待授权' : '未运行'}</span></div><div class="src">${CK[i][1]} · ${cs === 'proposed' ? '助手建议' : '在项目授权内，由应用运行'}</div></div>`;
+			body = cs === 'none' ? '<div class="dim">这条对话没有验收清单。</div><button class="btn">添加检查命令</button>' : `<h3>验收清单</h3>${row(0, cs === 'proposed' ? null : true)}${row(1, cs === 'proposed' ? null : cs === 'passed')}` + (cs === 'proposed' ? '' : `<div class="btnrow"><button class="btn">重新运行</button>${cs === 'failed' ? '<button class="btn">发回给助手</button>' : ''}</div>`) + `<div class="src">${cs === 'proposed' ? '项目里第一次有检查命令时问一次。' : '这个项目已允许运行检查命令：只在项目目录里运行、不联网写入。'}助手改了命令，只要还在这个范围内就不再问；要访问项目之外、联网写入或推送的命令单独问。输出由应用采集，不来自助手的文字。</div>`;
+		} else if (tab === 'follows') body = st.follow === 'waiting' ? `<div class="item"><div class="top"><span class="t">CI 运行 ${F.choice.CI === 'fail' ? '#483' : '#482'} 结束时回来</span><span class="st">等待中</span></div><div class="src">单次等待 20 分钟 · 总时限 ${F.limit} 小时，最迟到 ${FLIMIT[F.limit]} · 由助手登记 · 重启后仍然有效</div></div><div class="btnrow"><button class="btn">现在就回来</button><button class="btn">延长</button><button class="btn">取消</button></div>` : st.follow === 'expired' ? `<div class="item"><div class="top"><span class="t">CI 运行 #482</span><span class="st warn">跟进已到期</span></div><div class="src">${F.limit} 小时的总时限到了，已停止自动跟进</div></div>` : '<div class="dim">没有挂起的跟进。</div>';
+		else body = `<div class="item"><div class="top"><span class="t mono">src/quitSave.ts</span><span class="st">+2 −1</span></div></div><div class="item"><div class="top"><span class="t mono">src/quitSave.test.ts</span><span class="st">+7 −0</span></div></div>`;
+		$('#panel').innerHTML = tabsHtml([['checks', '检查', cs === 'passed' ? '2/2' : cs === 'failed' ? '1/2' : ''], ['follows', '跟进', st.follow === 'waiting' ? '1' : ''], ['changes', '改动', '2']], tab, 'ftab') + `<div class="pbody">${body}</div>`;
+		return;
+	}
+	teamPanel(tabsHtml);
+}
+
+/* ---------- team chat: one end-to-end case that follows what you configure, choose and type ---------- */
+const ROLE = { pm: 'PM', dev: '开发', qa: 'QA' };
+const DEFAULT_IDEA = '给对话加一个“导出为 Markdown”，能发给同事看。';
+const PHASES = ['明确', '质询', '实施', '验证', '评审', '演示', '验收'];
+const D2_LABEL = { folder: '文件夹：md 加 images/', single: '单文件，图片内嵌', none: '本轮不导出图片' };
+const A3_TEXT = { folder: '图片随导出可见（在 images/ 目录里）', single: '图片内嵌在单个文件里可见', none: '导出的文件里没有图片占位和破损链接' };
+const ISSUE = {
+	folder: { title: '导出后图片是破图', steps: ['导出一条带 2 张图的对话到 ~/Desktop/x', '在 GitHub 预览里打开 x/对话.md', '图片位置显示破图：链接写成了绝对路径'] },
+	single: { title: '带 40 张图的对话导出成 61 MB 的单文件，GitHub 打不开', steps: ['导出样本对话（40 张截图）', '得到 61 MB 的 md 文件', 'GitHub 预览报“文件过大”'] },
+	none: { title: '导出的文件里残留图片占位行', steps: ['导出一条带 2 张图的对话', '打开导出的 md', '原来放图的位置留着两行“![]()”'] },
+};
+const defaultCfg = () => ({ idea: DEFAULT_IDEA, seats: { pm: { tool: 'claude', model: 'claude-opus-5-5', effort: 'high', sub: null }, dev: { tool: 'codex', model: 'gpt-6.1-sol', effort: 'medium', sub: { tool: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' } }, qa: { tool: 'claude', model: 'claude-sonnet-5-5', effort: 'medium', sub: null } }, demoAt: '今天 18:00', turns: 40, auth: { checks: true, push: true, pr: true, temp: true } });
+const freshTeam = (keep) => ({ cfg: keep && keep.cfg ? keep.cfg : defaultCfg(), i: 0, auto: null, choice: {}, choiceAt: {}, sim: {}, simAt: {}, input: {}, msgs: [], draft: '', view: 'team', tab: 'out', open: {}, setup: false, sp: null, men: -1 });
+S.team = freshTeam();
+const mdlOf = (sel) => CATALOG[sel.tool].models.find((x) => x.id === sel.model) || CATALOG[sel.tool].models[0];
+const lvlText = (sel) => { const c = CATALOG[sel.tool]; const mm = mdlOf(sel); return mm.efforts.length && sel.effort ? `${c.term}: ${c.levels[sel.effort][0]}` : '这个模型没有强度选项'; };
+const selText = (sel) => `${CATALOG[sel.tool].label} · ${mdlOf(sel).name}`;
+const seatSel = (k, L) => (k === 'dev' && L && L.devSub && S.team.cfg.seats.dev.sub ? S.team.cfg.seats.dev.sub : k === 'pm' && L && L.pmAlt ? L.pmAlt : S.team.cfg.seats[k]);
+const seatTag = (k, L) => `<span class="seat ${k}"><i></i>${ROLE[k]}<span class="mdl">${esc(mdlOf(seatSel(k, L)).name)}</span></span>`;
+const teamTitle = () => { const t = S.team.cfg.idea.trim(); if (t === DEFAULT_IDEA) return '导出为 Markdown'; const s = t.replace(/[“”"。，,.！!？?\s]+/g, ' ').trim(); return (s.slice(0, 14) || '新团队任务') + (s.length > 14 ? '…' : ''); };
+const setItem = (L, id, state) => { const x = L.items.find((it) => it[0] === id); if (x) x[3] = state; };
+const needOpen = (st) => !!st.need && !S.team.choice[st.need];
+
+const TNEED_BOUNDARY = { D2: 'commitment', BASE: 'baseline', BASE2: 'baseline', PUSH: 'permission', WEAK: 'commitment', ACC: 'acceptance', ACC2: 'acceptance', DL: 'budget', PR: 'permission' };
+function buildSteps(T) {
+	const c = T.choice; const cfg = T.cfg; const custom = cfg.idea.trim() !== DEFAULT_IDEA; const hasSub = !!cfg.seats.dev.sub; const useSub = hasSub && c.Q !== 'wait';
+	const d2 = c.D2 || 'folder'; const iss = ISSUE[d2]; const dl = cfg.demoAt === '不设' ? '' : cfg.demoAt;
+	const pushOk = cfg.auth.push || c.PUSH === 'yes';
+	const steps = []; const add = (s) => steps.push({ work: {}, tasks: {}, feed: [], turns: 1, ...s });
+	const m = (by, text) => ({ t: 'msg', by, text }); const sys = (text) => ({ t: 'sys', text });
+	const spent = () => ({ used: steps.reduce((a, x) => a + (typeof x.turns === 'number' ? x.turns : 0), 0), total: cfg.turns });
+	add({ id: 's0', phase: 0, now: '团队已建好，PM 在写需求', solving: '把想法写成能验收的需求', next: 'PM 交出需求第一版', work: { pm: 'run' }, tasks: { pm: '把老板的想法写成需求：范围、不做什么、验收标准，每条写明怎么证明' },
+		narr: '<b>你只做了一件事：提出想法，选好谁来做。</b>左栏多了一个团队和三位成员，每位成员都是一条真实的对话，可以点进去看。之后由应用负责叫醒该动的人。',
+		feed: [{ t: 'boss', text: cfg.idea }, { t: 'made' }, ...(custom ? [sys('原型说明：你改了想法。真实产品里 PM 会照你的原话写需求；这个原型后面的内容仍然用“导出为 Markdown”来演示流程。')] : [])] });
+	add({ id: 's1', phase: 0, now: '需求第一版已写好', solving: '需求里有没有不合理、验不了的地方', next: '开发和 QA 各自独立提意见', work: { dev: 'run', qa: 'run' }, tasks: { dev: '读需求第一版，写出你认为不合理或做不到的地方。你看不到 QA 的意见', qa: '读需求第一版，逐条写怎么验；写不出怎么验的就是意见。你看不到开发的意见' },
+		narr: '<b>PM 把一句话写成了能判定的标准。</b>其中 E1 是体验标准：它不靠测试，靠 PM 对着真实产出评审，但它和其他标准一样是承诺，没满足就不能算完成。标准默认折成一行，点开才展开。',
+		apply(L) { L.brief = 1; L.crit = { A1: { text: '导出的文件在 VS Code 和 GitHub 里正常渲染', proof: '应用生成渲染预览并截图，QA 核对' }, A2: { text: '1000 条消息的对话，导出不超过 3 秒', proof: '应用运行基准脚本' }, A3: { text: '图片随导出可见', proof: 'QA 核对' }, A4: { text: '命令行有同等命令 maestro-cli export', proof: '应用运行命令' }, A5: { text: '不改动原生历史文件', proof: '应用比对哈希' }, E1: { text: '同事不问你也能读懂：分得清谁说的，工具输出不挡正文', proof: 'PM 对着真实产出评审' } }; },
+		feed: [m('pm', '我把想法写成了需求第一版。范围：把一条对话导出成一份 Markdown，同事不装 Maestro 也能读。不做：导出为 PDF 或 HTML；把多条对话合并导出。'), { t: 'brief', v: 1 }] });
+	add({ id: 's2', phase: 1, now: '两份独立意见已交，PM 在回应', solving: '两条意见怎么处理', next: 'PM 回应意见，谈不拢的开一次短讨论', work: { pm: 'run' }, tasks: { pm: '逐条回应开发和 QA 的意见：采纳、驳回并说明，或者发起讨论' },
+		narr: '<b>先各自独立写，再互相看。</b>两份意见是同时写的，谁也看不到对方的，避免后写的跟着先写的走。交上来之后才汇总，之后的讨论里大家能看到彼此的论据。',
+		feed: [{ t: 'challenge' }] });
+	add({ id: 's3', phase: 1, now: '团队开了一次短讨论，自己定了', solving: '图片用什么形态导出', next: '还有一处会改变交付形态，要请你定', work: { pm: 'run' }, tasks: { pm: '主持讨论：工具输出怎么截断', dev: '给出主张和依据；看过 QA 的证据后回应 PM 的建议', qa: '给出主张和证据；回应 PM 的建议' },
+		narr: '<b>这次分歧团队自己解决了，没有找你。</b>它在已定的范围和预算之内，做了还能改回来，所以归团队定。开发看到 QA 的证据后改了方案，QA 留了一句保留意见，结论直接变成了两个人的下一步。点开讨论能看到原话。',
+		apply(L) { L.meet++; L.brief = 2; L.dec.push(['D1', '工具输出保留头尾各 1 KB，中间标注省略了多少', '团队自己定（实现方式，开发决定）', 'QA 留了一条保留意见']); L.crit.A2.text = '1000 条消息的对话，工具输出按 D1 截断后，导出不超过 3 秒'; L.crit.A6 = { text: 'SSH 远程会话：本轮不支持，界面明确提示', proof: 'QA 核对' }; },
+		feed: [{ t: 'meet', id: 'M1', topic: '工具输出怎么截断', who: ['pm', 'dev', 'qa'], by: '开发（实现方式归开发定）', cls: 'team', result: '保留头尾各 1 KB，中间标注省略了多少字',
+			pos: [['dev', '每条工具输出只留前 2 KB。', '这是让 A2 达标最简单的办法，实测 2.1 秒；不截断要 7.8 秒。'], ['qa', '不能只留前 2 KB。', '样本的 12 条长输出里，有 3 条的报错在 2 KB 之后。同事最需要看的恰好是报错。']],
+			prop: '两边的理由都成立，而且不冲突：保留开头和结尾各 1 KB，中间写明省略了多少。报错多数在结尾。这是实现方式，在范围和预算之内，团队自己定，由开发拍板。',
+			resp: [['dev', '同意', '我用 QA 的 12 条样本试了：头尾各 1 KB 时 3 条报错都在，导出 2.3 秒，仍然达标。我改方案。'], ['qa', '同意，留一条保留意见', '报错出现在正中间的情况仍然会丢。我加一条样本测试盯住它，真遇到再提。']],
+			dissent: 'QA：报错在正中间时仍会被省略，已用一条测试盯住', actions: [['dev', '按头尾各 1 KB 实现截断'], ['qa', '加一条“报错在中间”的样本测试'], ['pm', '把 A2 的条件改成“按 D1 截断后”，另加 A6（SSH 本轮不支持）']] }] });
+	add({ id: 's4', phase: 1, now: '有一处分歧需要你定', solving: '图片用什么形态导出', next: '你选定后，PM 出需求定稿', need: 'D2', work: {}, turns: 0,
+		narr: '<b>这一处找你，是因为它会改变交付的形态。</b>团队讨论了，也给出了各自的立场和参考票数，但“交付出来是一个文件还是一个文件夹”不是团队能替你定的。三个选项后面的内容不一样。',
+		feed: [{ t: 'ask', key: 'D2', title: '需要你决定', q: '图片用什么形态导出', why: '这会改变交付出来的东西长什么样，属于要你定的那一类。团队讨论过一轮，立场如下。', pos: [['pm', '倾向文件夹：能发给同事，图也在。'], ['dev', '倾向文件夹：实现最稳。单文件内嵌在图多时会很大。'], ['qa', '倾向单文件：发给同事最省事，一个附件就行。']], note: '参考：2 位倾向文件夹，1 位倾向单文件。PM 和 QA 用的是同一家的模型，它们的一致不算两份独立意见。', opts: [['folder', '文件夹（PM 推荐）'], ['single', '单文件，图片内嵌'], ['none', '本轮先不导出图片']] }] });
+	add({ id: 's5', phase: 1, now: '等你确认验收基线', solving: '这份需求是不是你要的', next: '确认后开工', need: 'BASE', work: {}, turns: 0,
+		narr: '<b>基线不是只能点“确认”。</b>你可以直接改某一条标准，可以看它和第一版差在哪，也可以写一句意见把它退回给团队重新讨论。确认之后，放宽或删除标准要你批；团队自己加严，只能在范围和预算之内。',
+		apply(L) { L.dec.push(['D2', '图片：' + D2_LABEL[d2], '你']); L.crit.A3.text = A3_TEXT[d2]; for (const [id, txt] of Object.entries(T.input.baseEdit || {})) if (L.crit[id]) { L.crit[id].text = txt; L.crit[id].you = true; } if (c.BASE === 'ok') L.baseline = true; },
+		feed: [m('pm', `已按你的决定更新：图片用“${D2_LABEL[d2]}”。这是需求第二版，请确认它作为验收基线。`), { t: 'baseline', key: 'BASE', v: 2 }] });
+	if (c.BASE === 'back') {
+		const note = (T.input.baseNote || '').trim() || '（没有写意见）';
+		add({ id: 's5r', phase: 1, now: '你退回了基线，团队在重新讨论', solving: '怎么把你的意见落到标准里', next: 'PM 交出第三版', work: { pm: 'run' }, tasks: { pm: '老板退回了基线，意见见上。组织一次讨论，把意见落成标准', dev: '评估老板的意见对实现和时间的影响', qa: '说明老板的意见怎么验' },
+			narr: '<b>退回的意见原样进了讨论。</b>PM 没有把它当成“已阅”，而是和开发、QA 一起把它落成了一条能验的标准，并说明了代价。',
+			apply(L) { L.meet++; L.brief = 3; L.crit.A7 = { text: note, proof: 'QA 核对', you: true }; L.dec.push(['D3', '按老板的退回意见增加 A7', 'PM（范围内的产品取舍）']); },
+			feed: [{ t: 'boss', text: note }, sys('已送达 PM。基线没有确认，团队不会开工。'), { t: 'meet', id: 'M2', topic: '老板退回基线：怎么落实这条意见', who: ['pm', 'dev', 'qa'], by: 'PM（范围内的产品取舍）', cls: 'team', result: '原话写成 A7，由 QA 核对',
+				pos: [['dev', '能做。', '估计多 2 个回合，不影响截止时间。'], ['qa', '能验。', '我按这句话写一条核对步骤；说法含糊的地方我会在验证计划里列出来请 PM 定。']], prop: '把老板的原话写成 A7，不替老板改写意思。代价是多约 2 个回合，在预算之内。', resp: [['dev', '同意', ''], ['qa', '同意', '']], dissent: '没有', actions: [['pm', '出需求第三版'], ['qa', '为 A7 写核对步骤']] }] });
+		add({ id: 's5b', phase: 1, now: '等你确认第三版', solving: '这份需求是不是你要的', next: '确认后开工', need: 'BASE2', work: {}, turns: 0,
+			narr: '<b>第三版多了你要的那一条。</b>点“看和上一版的差异”能看到只多了 A7。',
+			apply(L) { if (c.BASE2 === 'ok') L.baseline = true; },
+			feed: [m('pm', '这是需求第三版：在第二版的基础上加了 A7，就是你的原话。请确认。'), { t: 'baseline', key: 'BASE2', v: 3 }] });
+	}
+	const startLine = sys(`基线已确认，团队开工。${dl ? '截止 ' + dl + '。' : '没有设截止时间，预算是 ' + cfg.turns + ' 个回合。'}授权范围内的事不会再问你：运行检查${cfg.auth.push ? '、在任务分支上提交和推送' : ''}${cfg.auth.pr ? '、开草稿 PR' : ''}${cfg.auth.temp ? '、成员出故障时用团队已选用的模型临时接任' : ''}。`);
+	if (!cfg.auth.push) add({ id: 's6a', phase: 2, now: '开发要推送，需要你授权一次', solving: '要不要让团队推送到任务分支', next: '你定之后继续', need: 'PUSH', work: {}, turns: 1,
+		narr: '<b>没授权的动作，只问一次，而且问得具体。</b>建队时你没有勾选推送，所以开发第一次要推送时停下来问你：推到哪、会不会碰 main、不推的话怎么办。同意后这个团队里同类推送不再问。',
+		feed: [startLine, m('dev', '核心和命令行写完了。要跑 CI 得先推到任务分支 team/export-md。'), { t: 'ask', key: 'PUSH', title: '需要你授权一次', q: '推送到任务分支 team/export-md', why: '建队时你没有勾选“在任务分支上提交和推送”。推送只写这个团队自己的分支，不碰 main，不开 PR。同意后这个团队里同类推送不再问。', pos: [], note: '不推送也能做：开发只在工作区里跑 CI 的同一组检查，没有远端 CI。', opts: [['yes', '允许推送到任务分支'], ['no', '不推送，只在本地检查']] }] });
+	add({ id: 's6', phase: 2, now: '开发在实现，QA 在准备验证', solving: '把导出做出来', next: pushOk ? '开发推送后等 CI' : '开发在本地跑检查', work: { dev: 'run', qa: 'run' }, turns: 2, tasks: { dev: '按基线实现导出。先做核心，再做命令行。在自己的工作区里做', qa: '按验证计划准备样本和测试。你只能写 qa/ 目录，看不到开发没做完的改动' },
+		narr: '<b>两个人同时在做，互不干扰。</b>开发在自己的工作区写代码，QA 在自己的工作区按标准准备测试，不是照着开发的代码写。你可以点左栏的成员进去看，也可以在下面直接说话，试试输入框上方的三句示例。',
+		apply(L) { L.items = [['W1', '导出核心', 'dev', 'claimed'], ['W2', '命令行 maestro-cli export', 'dev', 'claimed'], ['W3', '验证样本与测试', 'qa', 'done'], ['W4', '“报错在中间”的样本测试', 'qa', 'done']]; if (pushOk) L.follows = [['CI 运行 #482', '单次等 20 分钟']]; L.wake++; },
+		feed: [...(cfg.auth.push ? [startLine] : []), m('dev', pushOk ? `核心和命令行都写完了，已推到分支 team/export-md${cfg.auth.push ? '（在授权范围内）' : '（按你刚才的授权）'}。CI 在跑，我登记了一条跟进：运行 #482 结束时叫我，单次等 20 分钟。` : '核心和命令行都写完了。按你的决定没有推送，我在工作区里跑 CI 的同一组检查。'), m('qa', '样本和测试备好了：1000 条消息的样本、12 条长输出、带图的对话，共 9 条测试在 qa/ 里。')] });
+	if (pushOk) add({ id: 's7', phase: 2, now: 'CI 等待超时，团队在继续跟进', solving: 'CI 排队太久', next: 'CI 结束后应用运行检查', work: { dev: 'run' }, tasks: { dev: '你登记的跟进超时了：CI 运行 #482 等了 20 分钟还在排队。运行状态附后。决定怎么接着跟' },
+		narr: '<b>单次等待超时，不等于停下来问你；查询结果没变，也不等于失败。</b>CI 只是在排队，开发在授权范围内接着跟：改成每 10 分钟看一次，同时先在工作区里把同一组检查跑掉。三次查看结果都没变，仍然是正常等待，不累计“无进展”。',
+		apply(L) { L.wake += 4; L.follows = []; },
+		feed: [sys('20 分钟到了，CI 运行 #482 还没结束。应用已唤醒开发，并附上状态：排队中，前面还有 3 个任务。'), m('dev', 'CI 是在排队，不是失败。我不干等：先在工作区里把 CI 那一组检查跑一遍；CI 这边改成每 10 分钟看一次，最迟跟到任务截止。'), sys('已登记跟进：CI 运行 #482，每 10 分钟查看一次。'), { t: 'poll', rows: [['14:52', '排队中，前面 3 个'], ['15:02', '排队中，前面 3 个'], ['15:12', '排队中，前面 3 个']], note: '三次查看结果都没变：CI 仍在正常排队。这是等待，不是失败，不累计“无进展”，也不打扰你。' }, sys('15:26 CI 结束：通过。应用已唤醒开发，没有打扰你。')] });
+	else add({ id: 's7', phase: 2, now: '开发在本地跑完了检查', solving: '把导出做出来', next: '应用运行检查', work: { dev: 'run' }, tasks: { dev: '没有远端 CI。在工作区里跑 CI 的同一组检查' }, apply(L) { L.wake++; }, narr: '<b>不推送也能往下走。</b>你选了不推送，团队就改在工作区里跑同样的检查，没有远端 CI 可等。', feed: [sys('开发在工作区里跑完了 CI 的 7 项：全部通过。没有远端 CI 可等。')] });
+	add({ id: 's8', phase: 3, now: '检查先没过，开发改了做法，现在过了', solving: '导出速度不达标', next: 'QA 验证需要人看的标准', work: { qa: 'run' }, turns: 2, tasks: { dev: '应用运行的检查里 A2 未通过（3.8 秒）。基准脚本的输出附后。修', qa: '检查已通过。核对需要人看的标准：A1 的渲染截图、A3、A6，并做探索测试' },
+		narr: '<b>“开发说做完了”和“检查过了”是两回事。</b>检查由应用自己运行。第一次 A2 没过，应用把输出发回给开发；开发第二次必须说清这次哪里不同。这里没有找你，因为还在授权范围内，而且有进展：失败的检查从 1 条变成 0 条。',
+		apply(L) { L.ev = { A1: 'wait', A2: 'ok', A4: 'ok', A5: 'ok' }; setItem(L, 'W1', 'checked'); setItem(L, 'W2', 'checked'); L.out = 'v1'; L.wake++; },
+		feed: [{ t: 'checks', rows: [['A2', 'err', '3.8 秒，超过 3 秒'], ['A4', 'ok', '退出码 0'], ['A5', 'ok', '哈希一致']], sum: '应用运行了检查：2 条通过，1 条未通过（A2：3.8 秒）' }, m('dev', '这次和上次不同的地方：上次是把整份内容拼好再一次写盘，这次改成边生成边写。'), ...(pushOk ? [sys('开发第二次推送到 team/export-md：同一授权范围，没有问你。')] : []), { t: 'checks', rows: [['A2', 'ok', '2.3 秒'], ['A4', 'ok', '退出码 0'], ['A5', 'ok', '哈希一致'], ['A1', 'wait', '渲染预览已生成，等 QA 核对截图']], sum: '应用重新运行了检查：3 条通过；A1 的渲染预览已生成，等 QA 核对' }] });
+	if (T.sim.weaken) add({ id: 's8w', phase: 3, now: 'PM 想放宽一条标准，需要你批', solving: 'A2 要不要从 3 秒放宽到 5 秒', next: '你定之后继续', need: 'WEAK', work: {}, turns: 0,
+		narr: '<b>放宽标准只能申请。</b>加严和补充，团队在范围和预算内可以自己定；放宽、删除、缩小已承诺的范围，必须你批。应用把改动前后、失败证据和另外两人的意见摆出来。你不批，旧标准继续有效。',
+		apply(L) { if (c.WEAK === 'yes') { L.crit.A2.text = L.crit.A2.text.replace('3 秒', '5 秒'); L.changes.push(['A2', '放宽：3 秒改为 5 秒', '你批准']); } },
+		feed: [{ t: 'ask', key: 'WEAK', title: 'PM 申请放宽标准', q: 'A2：从“不超过 3 秒”改成“不超过 5 秒”', why: 'PM 的理由：样本里有 12 条超长工具输出，3 秒是当初估的，5 秒对用户没有可感知的差别。提出申请时这条标准的检查正在失败（3.8 秒）。', pos: [['dev', '还能再优化：截断现在做了两遍。'], ['qa', '不同意现在放宽。先让开发优化，确实做不到再谈。']], note: '在检查失败期间提出的放宽申请，会在演示里单独标出。', opts: [['no', '不批准，继续优化'], ['yes', '批准放宽到 5 秒']] }] });
+	add({ id: 's9', phase: 3, now: 'QA 发现了一个问题', solving: iss.title, next: '开发修，应用重跑复现，QA 复验', work: { dev: useSub ? 'block' : 'run' }, tasks: { dev: `QA 报了问题 #1：${iss.title}。复现步骤和截图附后。修` },
+		narr: '<b>QA 是照着标准和真实产出查的，不是照着开发的说法。</b>问题单带着能重现的步骤和截图；界面类的问题不要求一定是一条命令。问题对应哪条标准也写明了：它违反的是已经确认的 A3，所以不管严重程度定成什么，都不能由谁自己决定“以后再说”。',
+		apply(L) { L.issues = [[1, iss.title, 0, 'A3']]; L.ev.A1 = 'ok'; L.ev.A6 = 'ok'; L.ev.A3 = 'err'; },
+		feed: [m('qa', 'A1 的渲染截图我核对过了，VS Code 和 GitHub 里都正常；A6 的提示也在。A3 有问题，开了问题单。'), { t: 'issue', id: 1, title: iss.title, steps: iss.steps, state: 0 }] });
+	add({ id: 's10', phase: 3, now: useSub ? '开发的额度用尽，替补已接手' : '开发的额度用尽，按设置等恢复', solving: iss.title, next: useSub ? '替补修问题 #1' : '额度恢复后开发继续', work: useSub ? { dev: 'run' } : { dev: 'block', qa: 'run' }, turns: 0,
+		narr: useSub ? '<b>额度用尽没有让团队停下，也没有来问你。</b>建队时你给开发选了替补，所以应用直接让替补接手，交给它的是台账和工作区现状，不是上一位的聊天记录。你随时可以改成等原来的模型恢复。' : '<b>没有替补时，团队按设置等恢复，其他人照常工作。</b>这是一次正常等待，不是失败，不需要你点任何东西。恢复后应用自动叫醒开发。',
+		apply(L) { L.devSub = useSub; L.subs = useSub ? 1 : 0; if (!useSub) L.follows = [['Codex 额度恢复', '周四 09:00']]; },
+		feed: [{ t: 'quota', sub: useSub, has: hasSub }] });
+	const stuck = !!T.sim.stuck;
+	add({ id: 's11', fx: stuck ? issueFx('3', spent()) : undefined, phase: 3, now: stuck ? '问题 #1 三次无进展' : '问题 #1 已修复并复验', solving: stuck ? '同一个问题反复修不好' : '产品效果够不够好', next: stuck ? '团队诊断并换打法' : 'PM 做产品评审', work: { pm: 'run' }, turns: stuck ? 6 : 2, tasks: { dev: '修问题 #1', qa: `${ROLE.dev}说问题 #1 修好了。应用重跑了你的复现步骤，结果附后。复验` },
+		narr: stuck ? '<b>三次无进展，触发的是诊断，不是找你。</b>进展看证据：失败的检查变少、失败的报错变了且旧的没回来、或者拿到了能缩小原因的新证据。三次复现都是同一个结果，改了代码也不算进展。应用叫停“照同一个思路再改”，让 PM 组织团队换打法。' : '<b>修的人不能自己宣布修好。</b>开发说修好后，应用先自己重跑一遍 QA 的复现步骤，再叫 QA 复验。只有 QA 能把问题关掉。',
+		apply(L) { L.wake += 2; if (!useSub) L.follows = []; if (!stuck) { L.issues[0][2] = 2; L.ev.A3 = 'ok'; } else L.issues[0][2] = 1; },
+		feed: stuck ? [m('dev', '修好了：链接改成相对路径。'), sys('应用重跑了复现步骤：仍然失败。'), { t: 'ledger', title: '问题 #1 的尝试记录', fx: issueFx('3', spent()), show: ['1', '2', '3'], unit: 'turns', team: true }, { t: 'issue', id: 1, title: iss.title, state: 1, tries: 3 }] : [...(useSub ? [] : [sys('周四 09:00，Codex 额度恢复。应用已唤醒开发。')]), m('dev', d2 === 'single' ? '修好了：图片改成超过 1 MB 就缩到 1600 像素宽再内嵌，同一份样本现在是 4.2 MB。' : d2 === 'none' ? '修好了：导出时把图片占位行整行去掉。' : '修好了：链接改成相对于 md 文件的路径。'), sys('应用重跑了 QA 的复现步骤：通过。已叫 QA 复验。'), m('qa', '复验通过，另外补了一条测试防止再犯。问题 #1 关闭。'), { t: 'issue', id: 1, title: iss.title, state: 2 }] });
+	const altModel = hasSub ? mdlOf(cfg.seats.dev.sub).name : null;
+	if (stuck) add({ id: 's11s', fx: issueFx('6', spent()), phase: 3, now: '团队换了方案，问题解决了', solving: '产品效果够不够好', next: 'PM 做产品评审', work: { pm: 'run' }, turns: 4, tasks: { pm: '问题 #1 三次无进展。组织团队诊断并换打法，写明下一轮的进展证据', dev: '说明三次分别做了什么', qa: '提供定位到的证据' },
+		narr: `<b>团队自己换了方案，没有找你。</b>复盘之后，QA 先定位，再连做两次小实验：同一类办法可以再用，只要依据和方案不同。第 5 次只解决了一半，也算有进展，所以接着做${hasSub ? '；新写法交给已授权的替补，避免沿着同一个思路再错' : ''}。只有下一步必须越过边界（预算、承诺、新权限、新模型、你的登录）才会来找你。`,
+		apply(L) { L.meet++; L.issues[0][2] = 2; L.ev.A3 = 'ok'; L.dec.push(['D4', '问题 #1 换做法：导出时统一重写图片引用', '团队自己定（实现方式，开发决定）']); },
+		feed: [{ t: 'meet', id: 'M3', topic: '问题 #1 三次无进展：为什么，换什么打法', who: ['pm', 'dev', 'qa'], by: '开发（实现方式归开发定）', cls: 'team', result: `先用小实验验证统一重写，再扩到三种写法${hasSub ? `；${altModel} 来写` : ''}`, pos: [['dev', '三次都是在同一处补判断。', '每次修掉一种路径写法，又漏另一种。'], ['qa', '问题不在某一种写法。', '我把失败的 4 条样本归了类：共有 3 种引用写法，逐处补会一直漏。']], prop: `前三次都在同一个假设上补判断，结果一模一样。换成有新依据的方案：按 QA 的归类，先在一种写法上做小实验验证“统一重写”，有效再扩到另外两种。${hasSub ? `新写法由已授权的替补 ${altModel} 来写，避免沿着同一个思路再错一次。` : '没有设替补，换方案就够了。'}每一步写明依据和预期。下一轮的进展证据：至少有一种写法的样本从失败变成通过。这在授权范围内，不用找老板。`, resp: [['dev', '同意', '统一重写更稳。'], ['qa', '同意', '我用 4 条样本盯着。']], dissent: '没有', actions: [['dev', hasSub ? `由 ${altModel} 按新做法重写` : '按新做法重写'], ['qa', '用 4 条归类样本复验']] }, { t: 'ledger', title: '问题 #1 的尝试记录（复盘之后）', fx: issueFx('6', spent()), show: ['4', '5', '6'], unit: 'turns', team: true, doneText: '应用重跑了 4 条样本：全部通过，和预期的进展证据一致。QA 复验通过，问题 #1 关闭。' }, { t: 'issue', id: 1, title: iss.title, state: 2 }] });
+	const r2 = !!T.sim.reject2;
+	add({ id: 's12', fx: reviewFx(['r1'], spent()), phase: 4, now: 'PM 看了真实产出，打回了', solving: '导出的文件读起来不像一段对话', next: '开发改，QA 复验，PM 再评审', work: { dev: 'run' }, turns: 3, tasks: { pm: '检查全部通过，QA 没有未关闭的问题。现在做产品评审：打开真实产出，对照想法和体验标准判断够不够好', dev: 'PM 的产品评审打回了三处，都对应 E1。改', qa: '为 PM 提的三处写核对步骤' },
+		narr: '<b>检查全过、QA 没发现错，不等于产品达标。</b>PM 打开了真实导出的文件来看，认为它“能渲染，但同事读不懂”，于是打回。每一条都写了位置、对应哪条已确认的标准、对读的人有什么影响、应该是什么样。不对应任何已确认标准的想法，单独列为后续建议，不打回，也不悄悄加进本轮。',
+		apply(L) { L.meet++; L.review = 'rejected'; L.rejects++; L.ev.E1 = 'err'; L.items.push(['W5', '消息前加发言人和时间', 'dev', 'claimed'], ['W6', '工具输出折叠成可展开的块', 'dev', 'claimed'], ['W7', '文件开头加标题、来源和日期', 'dev', 'claimed']); L.dec.push(['D5', '产品评审打回：按三处问题修改后再评审', 'PM（范围内的产品判断）']); L.suggest.push('导出时可以选择不含工具输出'); },
+		feed: [sys('应用运行的检查全部通过，QA 的核对全部通过，没有未关闭的问题。应用已请 PM 做产品评审，并附上真实产出。'), { t: 'review', verdict: 'reject', n: 1, intro: '检查都过了，QA 也没发现功能错误。但我打开真实导出的文件看了：它能渲染，同事却读不懂。下面三处都违反已确认的体验标准 E1，不改就不能演示。', problems: [['分不清谁说的', '全文每条消息', 'E1', '读的人不知道哪句是提问、哪句是回答', '每条消息前有发言人和时间'], ['工具输出把正文淹没了', '第 2 条消息的两段工具输出', 'E1', '一条工具输出占满两屏，结论被挤到很后面', '工具输出折成一行，点开才展开'], ['文件开头没有任何交代', '文件开头', 'E1', '同事拿到文件不知道这是哪条对话、什么时候的', '开头有标题、来源和日期']], suggest: ['导出时可以选择不含工具输出'] }, { t: 'meet', id: 'M4', topic: 'PM 打回的三处怎么改', who: ['pm', 'dev', 'qa'], by: 'PM（范围内的产品判断）', cls: 'team', result: '三处都改；折叠用 GitHub 支持的 details 写法；QA 加一条渲染核对', pos: [['dev', '第一处和第三处很快。第二处要选写法。', 'GitHub 和 VS Code 都支持 details 折叠；纯 Markdown 没有折叠。'], ['qa', '改完要重新核对渲染。', '折叠块在 GitHub 上要截图确认，A1 的证据要重做。']], prop: '三处都在 E1 的范围内，都改。折叠用 details。估计 3 个回合，不影响截止时间。', resp: [['dev', '同意', ''], ['qa', '同意', '']], dissent: '没有', actions: [['dev', '改三处'], ['qa', '重做 A1 的渲染核对，新增 E1 的核对步骤'], ['pm', '改完后再评审一次']] }] });
+	const passApply = (L) => { L.review = 'passed'; L.out = 'v2'; L.wake += 2; for (const id of Object.keys(L.crit)) if (L.ev[id] !== 'ok') L.ev[id] = 'ok'; for (const x of L.items) if (x[3] === 'claimed') x[3] = 'checked'; };
+	if (!r2) add({ id: 's13', fx: reviewFx(['r1', 'r2p'], spent()), phase: 4, now: '改完了，PM 再评审通过', solving: '没有待解决的问题', next: 'PM 向你演示', work: { pm: 'run' }, turns: 3, tasks: { dev: '按讨论结论改三处', qa: '开发说三处改完了。应用重新生成了渲染预览。复验 A1 和 E1', pm: '开发改完、QA 复验通过。再做一次产品评审' },
+		narr: '<b>打回之后走的是同一条闭环。</b>开发改，应用重新运行检查并重新生成预览，QA 复验，PM 再看一次真实产出。所有已确认的标准都有了证据，PM 才放行，才轮到向你演示。',
+		apply(L) { passApply(L); L.suggest.push('工具输出可以按类型分组折叠'); },
+		feed: [m('dev', '三处改完了。'), sys('应用重新运行了检查：全部通过。渲染预览已重新生成。'), m('qa', 'A1 重新核对过：折叠块在 GitHub 和 VS Code 里都正常。E1 的三条核对步骤都过。'), { t: 'review', verdict: 'pass', n: 2, suggest: ['工具输出可以按类型分组折叠'] }] });
+	else {
+		add({ id: 's13n', fx: reviewFx(['r1', 'r2'], spent()), phase: 4, now: 'PM 第 2 次评审仍不达标', solving: '工具输出在 VS Code 里仍挡住正文', next: '连续两次打回，团队内部复盘', work: { pm: 'run' }, turns: 3, tasks: { dev: '按讨论结论改三处', qa: '复验 A1 和 E1 的三条核对步骤', pm: '再做一次产品评审：对照 E1，看 GitHub 和 VS Code 两处的真实产出' },
+			narr: '<b>第二次评审仍不通过。</b>上次的改法只在 GitHub 里有效。PM 照样写清位置、对应的标准、影响和期待。连续两次打回，下一步不是再照着意见改一遍，也不是交给你，而是团队内部复盘。',
+			apply(L) { L.rejects++; L.review = 'rejected'; L.ev.E1 = 'err'; L.out = 'v2x'; L.wake += 2; },
+			feed: [m('dev', '三处改完了。'), sys('应用重新运行了检查：全部通过。渲染预览已重新生成（GitHub、VS Code 各一份）。'), m('qa', 'E1 的三条核对步骤我在 GitHub 预览里核对过，通过。'), { t: 'review', verdict: 'reject', n: 2, intro: '发言人和文件开头都改好了。但同事大多用 VS Code 打开，那里工具输出仍然全部展开。这一处仍违反 E1，不改不能演示。', problems: [['工具输出在 VS Code 里仍然全部展开', 'VS Code 预览，第 2 条消息', 'E1', '同事打开后看到的仍是两屏工具输出，结论被挤到后面', '在 GitHub 和 VS Code 两处，工具输出默认都只占一行']] }] });
+		add({ id: 's13r', fx: reviewFx(['r1', 'r2', 'R'], spent()), phase: 4, now: '连续两次打回，团队在复盘', solving: '为什么两轮没有收敛', next: '按复盘的打法改，再评审', work: { pm: 'run', dev: 'run', qa: 'run' }, turns: 3, tasks: { pm: '连续两次打回。主持复盘：查清没有收敛的原因，选新打法，写明下一轮怎样算有进展', dev: '说明两轮各改了什么、在哪里验的', qa: '说明你的核对覆盖了什么、漏了什么' },
+			narr: '<b>连续两次打回，触发的是团队内部复盘。</b>它不是放行的理由，也不是交给你的理由。第二次评审其实有进展（3 处只剩 1 处），复盘照样要做：三个人先查清为什么没收敛，再从授权范围内选有新依据的方案，类别可以和之前相同。复盘必须写明下一轮出现什么变化才算有进展。',
+			apply(L) { L.retro++; L.meet++; L.crit.E1 = { text: '同事不问你也能读懂。细化为三条：E1a 每条消息有发言人和时间；E1b 在 GitHub 和 VS Code 里工具输出默认都只占一行；E1c 开头有标题、来源和日期', proof: 'QA 用 6 份样本在两个查看器里核对，PM 评审' }; L.changes.push(['E1', '细化：拆成三条可核对的子项，含义不变', 'PM 自己定（在原意之内，成本在预算内，不影响截止）']); L.dec.push(['D6', '两次打回后换打法：摘要加附录，两个查看器都核对', '团队复盘决定']); L.items.push(['W11', '工具输出改成一行摘要，原文放进附录', 'dev', 'claimed']); },
+			feed: [{ t: 'meet', id: 'M5', topic: '连续两次打回：为什么没收敛，下一轮怎么证明有进展', who: ['pm', 'dev', 'qa'], by: '团队复盘（PM 主持）', cls: 'team', result: '换做法：工具输出改成一行摘要加附录；E1 细化成三条子项；两个查看器都核对', pos: [['dev', '我只在 GitHub 里验了折叠。', 'details 在 VS Code 预览里默认展开，我没看过那里。'], ['qa', '我的核对也只覆盖了 GitHub。', 'E1 没写在哪里看算数，我按最常见的那个验了。']], prop: '根因有两个：E1 的“不挡正文”没说在哪里看；我们的核对只覆盖一个查看器。换打法：一，工具输出不再依赖 details，改成正文里一行摘要，原文放到文件末尾的附录并加跳转链接；二，把 E1 细化成三条可核对的子项，含义不变，记入标准变更；三，QA 用 6 份样本在 GitHub 和 VS Code 两处核对。下一轮的进展证据：三条子项在两个查看器里逐条通过。', resp: [['dev', '同意', '附录加跳转两处都支持。'], ['qa', '同意', '我加 VS Code 预览的截图核对。']], dissent: '没有', actions: [['dev', '改成摘要加附录'], ['qa', '两个查看器各核对 6 份样本'], ['pm', '细化 E1，记入标准变更']] }] });
+		add({ id: 's13c', fx: reviewFx(['r1', 'r2', 'R', 'r3'], spent()), phase: 4, now: '第 3 次评审：有进展，还差一处', solving: '超长输出的附录链接在 VS Code 里跳不过去', next: '继续修，QA 复验，PM 再评审', work: { dev: 'run' }, turns: 3, tasks: { dev: '按复盘的打法改', qa: '两个查看器各核对 6 份样本', pm: '对照细化后的 E1 再评审' },
+			narr: '<b>第三次评审仍不通过，但有可验证的进展。</b>复盘定下的三条子项，两条已经在两个查看器里通过。还有已确认的标准没满足、预算还有、授权内还有有依据的下一步，所以团队接着修。不会自动进入演示，也不会来问你“要不要继续改”。',
+			apply(L) { L.rejects++; L.review = 'rejected'; L.ev.E1 = 'err'; L.progress = '2/3'; L.out = 'v2'; L.wake += 2; },
+			feed: [m('dev', '按复盘的打法改完了：工具输出变成一行摘要，原文在附录。'), sys('应用重新生成了 GitHub 和 VS Code 两份渲染预览，检查全部通过。'), m('qa', '6 份样本、两个查看器：E1a、E1c 全部通过；E1b 有 1 份没过：超过 200 行的输出，附录链接在 VS Code 里跳不过去。'), { t: 'review', verdict: 'reject', n: 3, progress: '和上一轮比：三条子项里两条已经满足，有进展。按规则继续修，不交给你。', intro: '摘要加附录的方向对了。还剩一处违反 E1b。', problems: [['超长输出的附录链接在 VS Code 里跳不过去', 'VS Code 预览，样本 4 第 3 条消息', 'E1b', '同事点了没反应，只能手动往下翻找原文', '两个查看器里点摘要都能跳到附录对应位置']] }, { t: 'ledger', title: 'PM 评审记录', fx: reviewFx(['r1', 'r2', 'R', 'r3'], spent()), show: ['r1', 'r2', 'r3'], unit: 'turns', team: true, noun: '次评审' }] });
+		add({ id: 's13d', fx: reviewFx(['r1', 'r2', 'R', 'r3', 'r4'], spent()), phase: 4, now: '第 4 次评审通过', solving: '没有待解决的问题', next: 'PM 向你演示', work: { pm: 'run' }, turns: 2, tasks: { dev: '修附录跳转', qa: '两个查看器各核对 6 份样本', pm: '再评审' },
+			narr: '<b>收敛了。</b>从第一次打回到通过，团队自己完成了复盘和换打法，你一次都没被叫到。所有已确认的标准都有了证据，PM 才放行。',
+			apply(L) { passApply(L); L.progress = '3/3'; L.suggest.push('附录可以按工具类型分组'); },
+			feed: [m('dev', '跳转改成 VS Code 也认的锚点写法。'), sys('应用重新生成了两份渲染预览，检查全部通过。'), m('qa', '6 份样本、两个查看器：E1a、E1b、E1c 全部通过。'), { t: 'review', verdict: 'pass', n: 4, suggest: ['附录可以按工具类型分组'] }] });
+	}
+	add({ id: 's14', phase: 5, now: 'PM 在向你演示', solving: '没有待解决的问题', next: '你验收，或者说出要改的地方', need: 'ACC', work: {}, turns: 1, tasks: { pm: '向老板演示：先给看得见的结果，再给证据' },
+		narr: '<b>演示先给你看结果，再给证据。</b>只有所有已确认的标准都有证据、PM 评审通过，才会出现这张演示卡片。最上面是导出文件的真实样子，可以切换改进前后。“要求修改”可以直接写你的意见。',
+		apply(L) { if (c.ACC === 'accept') { L.accepted = true; L.endKind = 'all'; } },
+		feed: [{ t: 'demo', key: 'ACC', v: 1 }] });
+	if (c.ACC === 'change') {
+		const ask = (T.input.change || '').trim() || '（没有写意见）';
+		add({ id: 's15', phase: 2, now: '团队在做你要求的修改', solving: ask, next: '改完后再走一遍检查、复验和评审', work: { dev: 'run' }, turns: 5, tasks: { pm: '老板要求修改，原话见上。说清你的理解，拆成工作项', dev: '做老板要求的修改', qa: '为老板要求的修改写核对步骤并复验' },
+			narr: '<b>你写的那句话成了团队接下来的工作。</b>PM 先复述理解，把它记成一条新标准和一个工作项，然后开发改、应用检查、QA 复验、PM 再评审，和前面是同一条闭环。',
+			apply(L) { L.crit.A8 = { text: ask, proof: 'QA 核对', you: true }; L.ev.A8 = 'ok'; L.changes.push(['A8', '新增：' + ask, '你在演示时要求']); L.items.push(['W8', ask, 'dev', 'checked']); L.wake += 3; },
+			feed: [{ t: 'boss', text: ask }, sys('已送达 PM。'), m('pm', `我的理解是你要改：“${ask}”。我把它原话记成标准 A8，拆成一个工作项交给开发，QA 负责核对。别的标准不动。`), m('dev', '改完了。'), sys('应用重新运行了检查：全部通过。'), m('qa', 'A8 核对通过。'), { t: 'review', verdict: 'pass', n: (r2 ? 4 : 2) + 1 }] });
+		add({ id: 's16', phase: 5, now: 'PM 在做第二次演示', solving: '没有待解决的问题', next: '你验收', need: 'ACC2', work: {}, turns: 1,
+			narr: '<b>第二次演示只讲多出来的那一件事。</b>',
+			apply(L) { if (c.ACC2 === 'accept') { L.accepted = true; L.endKind = 'all'; } },
+			feed: [{ t: 'demo', key: 'ACC2', v: 2 }] });
+	}
+	const prFeed = cfg.auth.pr ? [sys('已按授权开了草稿 PR #512，没有合并。合并由你决定。')] : [{ t: 'ask', key: 'PR', title: '需要你授权一次', q: '开草稿 PR', why: '建队时你没有勾选“开草稿 PR”。草稿 PR 只是把分支 team/export-md 提交给评审，不会合并。', pos: [], note: '不开也没关系：分支和 qa/ 里的验收测试都保留在本地。', opts: [['yes', '开草稿 PR'], ['no', '先不开']] }, ...(c.PR === 'yes' ? [sys('已按你刚才的授权开了草稿 PR #512，没有合并。')] : c.PR === 'no' ? [sys('没有开 PR。分支保留。')] : [])];
+	const end = { id: 'end', phase: 6, now: '已验收：全部达标', solving: '没有待解决的问题', next: cfg.auth.pr || c.PR === 'yes' ? '草稿 PR 已开，合并由你决定' : '分支保留，等你合并或开 PR', need: cfg.auth.pr ? undefined : 'PR', work: {}, tasks: {}, turns: 0, narr: '<b>全部达标后验收。</b>所有已确认的标准都有证据，PM 评审通过，你点了验收。下面的统计按刚才实际走过的路径算。', feed: [sys('已验收：全部达标。分支 team/export-md 保留，qa/ 里的验收测试一并保留。'), ...prFeed, { t: 'summary' }] };
+	steps.push(end);
+	for (const x of steps) if (x.need && TNEED_BOUNDARY[x.need]) x.boundary = TNEED_BOUNDARY[x.need];
+	// simulated events that insert a step right after the step they were triggered on, in the order they were triggered
+	const inserts = ['pmSession', 'pmModel', 'deadline'].filter((k) => T.sim[k]).sort((a, b) => T.simAt[a] - T.simAt[b]);
+	for (const k of inserts) {
+		const at = T.simAt[k]; if (at >= steps.length - 1) continue;
+		if (k === 'deadline') {
+			const byTime = cfg.demoAt !== '不设';
+			const rep = { id: 'sdl', boundary: 'budget', fx: progressState(['还有标准没有证据'], [], { budget: { used: cfg.turns, total: cfg.turns } }), phase: steps[at].phase, now: byTime ? '到截止时间了，还没完成' : '回合预算用完了，还没完成', solving: (L) => { const u = Object.keys(L.crit).filter((id) => L.ev[id] !== 'ok'); return u.length ? `还有 ${u.length} 条标准没有证据：${u.join('、')}` : '没有'; }, next: '你决定：追加、接受遗留项，或者停止', need: 'DL', work: {}, tasks: { pm: byTime ? '到截止时间了。写未完成报告：做到了什么、哪些标准没有证据、试过什么、推荐怎么办' : '回合预算用完了。应用生成未完成报告，不再派发新回合' }, turns: byTime ? 1 : 0,
+				narr: '<b>截止时间和整体预算是硬边界。</b>到了就停下来写未完成报告，不是完成演示：它列出做到了什么、哪些已确认的标准还没有证据、团队试过什么、推荐怎么办。追加时间或预算、接受遗留项、还是停止，由你定。',
+				apply(L) { L.byTime = byTime; if (!byTime) L.turns = Math.max(L.turns, cfg.turns + (L.budgetAdd || 0)); },
+				feed: [sys(byTime ? `${cfg.demoAt} 到了。还有已确认的标准没有证据，团队停下来写未完成报告。` : `${cfg.turns} 个回合的预算用完了。还有已确认的标准没有证据，团队停下来写未完成报告。`), { t: 'report' }] };
+			steps.splice(at + 1, 0, rep);
+			if (c.DL === 'gap') steps.splice(at + 2, steps.length, { id: 'endGap', phase: 6, now: (L) => `已验收，接受了 ${L.residual.length} 项遗留`, solving: (L) => `遗留：${L.residual.join('、')}（你已接受，未达标）`, next: '遗留项已记入后续清单，由你安排', work: {}, tasks: {}, turns: 0, narr: '<b>按现状验收，但不把遗留项说成通过。</b>没有证据的标准仍标着没达标，你接受的具体范围、证据缺口和后续由谁处理都记在台账里。统计按实际走过的路径算。', apply(L) { L.accepted = true; L.endKind = 'gap'; L.residual = Object.keys(L.crit).filter((id) => L.ev[id] !== 'ok'); }, feed: [{ t: 'residual' }, sys(cfg.auth.pr ? '已按授权开了草稿 PR #512，PR 描述里列出了你接受的遗留项，没有合并。' : '分支 team/export-md 保留，没有开 PR。遗留项等你安排。'), { t: 'summary' }] });
+			else if (c.DL === 'stop') steps.splice(at + 2, steps.length, { id: 'endStop', phase: steps[at].phase, now: '已停止：未完成', solving: (L) => { const u = Object.keys(L.crit).filter((id) => L.ev[id] !== 'ok'); return `未完成：${u.join('、')}`; }, next: '分支和台账保留，可以随时接着做', work: {}, tasks: {}, turns: 0, narr: '<b>停止也如实记录。</b>没有完成的标准仍是没有完成，分支和台账都保留，之后可以接着做。', apply(L) { L.endKind = 'stop'; L.residual = Object.keys(L.crit).filter((id) => L.ev[id] !== 'ok'); }, feed: [sys('已停止。分支 team/export-md 和台账保留，没有开 PR。'), { t: 'residual' }, { t: 'summary' }] });
+			else if (c.DL === 'more') steps.splice(at + 2, 0, { id: 'sdl2', phase: steps[at].phase, now: byTime ? '你追加了 2 小时，团队继续' : '你追加了 10 个回合，团队继续', solving: '接着处理没有证据的标准', next: '继续原来的下一步', work: { pm: 'run' }, turns: 0, narr: '<b>追加只改边界，不改规则。</b>团队从中断的地方接着做，没有证据的标准仍然要拿到证据才算完成。', apply(L) { L.extended = (L.extended || 0) + 1; if (byTime) L.timeAdd = (L.timeAdd || 0) + 2; else L.budgetAdd = (L.budgetAdd || 0) + 10; }, feed: [sys(byTime ? '你追加了 2 小时。新的截止时间写进台账，团队接着做。' : '你追加了 10 个回合。新的预算写进台账，团队接着做。')] });
+		} else {
+			const cause = k === 'pmSession' ? 'session' : 'model';
+			const pmSub = cfg.seats.pm.sub; const temp = cfg.auth.temp;
+			const tempSel = cfg.seats.qa.tool !== cfg.seats.dev.tool ? cfg.seats.qa : cfg.seats.dev; const tempName = mdlOf(tempSel).name;
+			const pmCands = [];
+			if (cause === 'session') pmCands.push({ plan: '从台账新开一条同模型对话', fp: 'restore', basis: '会话文件损坏，模型本身可用' });
+			if (cause === 'model' && pmSub) pmCands.push({ plan: `替补 ${mdlOf(pmSub).name} 接任`, fp: 'sub', basis: '建队时授权的替补' });
+			if (cause === 'model') pmCands.push(temp ? { plan: `${tempName} 临时接任`, fp: 'temp', basis: '建队时授权了临时接任' } : { key: 'temp', plan: `允许 ${tempName} 临时担任 PM`, fp: 'temp', boundary: 'permission', basis: '团队已经在用这个模型', cost: '不增加新的付费模型；新开一条对话，不和其他成员共用', rec: true });
+			if (cause === 'model') pmCands.push(dl ? { key: 'wait', plan: `等 ${mdlOf(cfg.seats.pm).name} 恢复，截止顺延到周四 12:00`, fp: 'wait', boundary: 'budget', basis: '周四 09:00 恢复', cost: `晚于截止时间 ${cfg.demoAt}，等于追加时间` } : { plan: `等 ${mdlOf(cfg.seats.pm).name} 恢复（周四 09:00），其间做不需要 PM 的事`, fp: 'wait', basis: '没有设截止时间，等待不越过任何边界' });
+			const pmFx = progressState(['PM 暂时不可用'], [], { candidates: pmCands });
+			const needPMX = pmFx.decision.kind === 'escalate';
+			const waitOk = cause === 'model' && !pmSub && !temp && !needPMX;
+			const rows = [['核对已有结果', 'PM 上一回合“安排问题 #1 的修复”已经完成并记入台账，不会重做', 'ok'], ['补交报告', '不适用：这一回合没有正常结束', 'skip']];
+			if (cause === 'session') rows.push(['重试同一回合', '失败：原生会话无法续接（会话文件损坏）', 'err'], ['从台账恢复会话', `新开一条 ${mdlOf(cfg.seats.pm).name} 对话，交给它台账切片和最近的决定：成功`, 'ok']);
+			else {
+				rows.push(['重试同一回合', `失败：${mdlOf(cfg.seats.pm).name} 的用量上限到了，周四 09:00 恢复`, 'err'], ['从台账恢复会话', '不适用：模型本身暂时不可用', 'skip']);
+				if (pmSub) rows.push(['已授权替补', `${mdlOf(pmSub).name} 接任 PM，拿到台账切片：成功`, 'ok']);
+				else { rows.push(['已授权替补', '建队时没有给 PM 设替补', 'skip']); rows.push(['用团队已选用的模型临时接任', temp ? `按建队时的授权，新开一条 ${tempName} 对话临时担任 PM（不和其他成员共用对话）：成功` : '建队时没有授权这一项', temp ? 'ok' : 'skip']); if (!temp) rows.push(['等原来的模型恢复', dl ? `周四 09:00 恢复，晚于截止时间 ${cfg.demoAt}：等待要越过截止这条边界` : '周四 09:00 恢复。没有设截止时间，这是一次正常等待：需要 PM 判断的事排到那时，其他人继续', dl ? 'err' : 'ok']); }
+			}
+			const alt = cause === 'session' ? null : pmSub ? pmSub : temp ? tempSel : c.PMX === 'temp' ? tempSel : null;
+			const st = { id: k === 'pmSession' ? 'spf1' : 'spf2', fx: pmFx, boundary: needPMX ? pmFx.decision.boundary.join(' ') : undefined, phase: steps[at].phase, now: cause === 'session' ? 'PM 的会话坏了，应用已恢复' : needPMX && !c.PMX ? 'PM 暂时不可用，需要你定一件事' : waitOk || (needPMX && c.PMX === 'wait') ? 'PM 暂时不可用，团队在等它恢复' : 'PM 暂时不可用，已有人接任', solving: 'PM 出了故障', next: needPMX && !c.PMX ? '你定之后继续' : '接着原来的下一步', need: needPMX ? 'PMX' : undefined, work: { pm: 'block' }, tasks: {}, turns: 1,
+				narr: waitOk ? '<b>等恢复也是一条授权内的路。</b>建队时没给 PM 设替补，也没授权临时接任；但这个团队没有设截止时间，等 PM 的模型周四恢复不越过任何边界。所以应用不来问你：需要 PM 判断的事排到那时，开发和 QA 照常工作，现状由应用自己从台账生成。' : cause === 'session' ? '<b>PM 出故障时，先分清是哪一种。</b>正常工作没结束、回合失败、漏报、报告格式错、会话损坏，处理各不相同。这次是会话损坏：应用核对了已完成的动作，不重做；重试失败后从台账新开一条同模型的对话。没有替补也有办法，没有找你。PM 恢复之前，现状由应用自己从台账生成。' : needPMX ? '<b>剩下的每条路都要越过一条边界，才来问你。</b>建队时没给 PM 设替补，也没有授权临时接任；PM 的模型周四才恢复，晚于截止时间，等它也要越过截止这条边界。卡片写明是哪两条边界、选项各意味着什么。PM 不在的这段时间，现状由应用自己生成，不依赖 PM。' : `<b>没有找你，PM 的位置有人接上了。</b>${pmSub ? '建队时给 PM 设了替补，' : '建队时没有给 PM 设替补，但授权了“用团队已选用的模型临时接任”，'}应用按授权接上，交给它的是台账，不是上一位的聊天记录。原来的模型恢复后自动换回。`,
+				apply(L) { L.pmFault = (L.pmFault || 0) + 1; if (waitOk) L.pmBack = [`${mdlOf(cfg.seats.pm).name} 恢复，PM 继续`, '周四 09:00']; if (needPMX && c.PMX === 'wait') L.dlMoved = '周四 12:00'; if (alt) { L.pmAlt = alt; L.pmAltWhy = pmSub ? '替补' : '临时接任'; L.pmBack = [`${mdlOf(cfg.seats.pm).name} 恢复后换回 PM`, '周四 09:00']; } if (needPMX && c.PMX === 'wait') L.pmBack = [`${mdlOf(cfg.seats.pm).name} 恢复，PM 继续`, '周四 09:00']; },
+				feed: [sys(cause === 'session' ? 'PM 这一回合没有正常结束：原生会话无法续接。' : `PM 这一回合没有正常结束：${mdlOf(cfg.seats.pm).name} 的用量上限到了。`), { t: 'status' }, { t: 'recover', rows }, ...(needPMX ? [{ t: 'ask', key: 'PMX', boundary: pmFx.decision.boundary.join(' '), title: '需要你决定：PM 暂时不可用', q: '剩下的路都要越过边界：新权限，或者截止时间', why: `授权内已经试过：核对已有结果、重试同一回合；从台账恢复会话不适用（模型本身不可用）。建队时没有给 PM 设替补，也没有授权临时接任，所以临时接任需要一项新权限。等原来的模型恢复要到周四 09:00，晚于截止时间 ${cfg.demoAt}，等于追加时间。推荐第一项：${tempName} 团队已经在用，不会增加新的付费模型；新开一条对话，不和其他成员共用。`, pos: [], note: '等恢复的话，QA 和开发手上的工作照常；需要 PM 判断的事（产品评审、分诊）会排到周四。', opts: [['temp', `允许 ${tempName} 临时担任 PM`], ['wait', `等 ${mdlOf(cfg.seats.pm).name} 恢复，截止顺延到周四 12:00`]] }] : []), ...(alt && (!needPMX || c.PMX === 'temp') ? [sys(`${mdlOf(alt).name} 已接任 PM，拿到台账切片，接着原来的下一步。`)] : []), ...(cause === 'session' ? [sys('PM 已恢复，接着原来的下一步。')] : []), ...(waitOk ? [sys(`没有设截止时间：等 ${mdlOf(cfg.seats.pm).name} 周四 09:00 恢复。需要 PM 判断的事排到那时，开发和 QA 继续。`)] : []), ...(needPMX && c.PMX === 'wait' ? [sys('截止顺延到周四 12:00。PM 恢复前，开发和 QA 继续；需要 PM 判断的事排到那时。')] : [])] };
+			steps.splice(at + 1, 0, st);
+		}
+	}
+	return steps;
+}
+function teamSteps() { return buildSteps(S.team); }
+function applyMsg(L, mm) {
+	if (mm.kind === 'scope') { if (L.crit.A4) { delete L.crit.A4; delete L.ev.A4; L.items = L.items.filter((x) => x[0] !== 'W2'); L.changes.push(['A4', '去掉：本轮不做命令行导出', '你要求']); } }
+	else if (mm.kind === 'add') { L.crit.A9 = { text: mm.body, proof: 'QA 核对', you: true }; L.changes.push(['A9', '新增：' + mm.body, '你对开发说的']); L.items.push(['W9', mm.body, 'dev', 'claimed']); }
+	else if (mm.kind === 'qa') L.items.push(['W10', '加测：' + mm.body, 'qa', 'claimed']);
+	else L.notes.push(mm.body);
+}
+function ledgerAt(n) {
+	const T = S.team; const steps = teamSteps();
+	const L = { crit: {}, ev: {}, changes: [], dec: [], items: [], issues: [], follows: [], notes: [], suggest: [], residual: [], brief: 0, baseline: false, devSub: false, subs: 0, accepted: false, endKind: null, out: null, review: null, rejects: 0, retro: 0, meet: 0, wake: 0, turns: 0, pmAlt: null, pmFault: 0 };
+	for (let i = 0; i <= n && i < steps.length; i++) { if (steps[i].apply) steps[i].apply(L); L.turns += steps[i].turns; for (const mm of T.msgs) if (mm.at === i) { applyMsg(L, mm); L.turns += 1; } }
+	return L;
+}
+const SIM_AT = { silent: ['s6', 's8', 's9', 's12'], restart: ['s6', 's7', 's8', 's9', 's10', 's11', 's12', 's13'], weaken: ['s8'], stuck: ['s11'], reject2: ['s12'], pmSession: ['s8', 's9', 's11', 's11s', 's12', 's13n', 's13r', 's13c'], pmModel: ['s8', 's9', 's11', 's11s', 's12', 's13n', 's13r', 's13c'], deadline: ['s6', 's7', 's8', 's9', 's10', 's11', 's11s', 's12', 's13', 's13n', 's13r', 's13c', 's13d'] };
+const SIM_LABEL = { silent: '成员漏报', restart: '应用重启', weaken: 'PM 想放宽标准', stuck: '同一处三次无进展', reject2: 'PM 再次打回', pmSession: 'PM 会话损坏', pmModel: 'PM 模型不可用', deadline: '截止或预算用完' };
+const canTalk = (st) => !['s0', 's14', 's16', 'sdl', 'end', 'endGap', 'endStop'].includes(st.id);
+const sv = (v, L) => (typeof v === 'function' ? v(L) : v);
+function classify(text) {
+	const mm = text.match(/^@\s*(PM|pm|开发|QA|qa)\s*/); const to = mm ? ({ pm: 'pm', '开发': 'dev', qa: 'qa' })[mm[1].toLowerCase()] : 'pm'; const body = text.replace(/^@\s*\S+\s*/, '').trim() || text.trim();
+	const kind = to === 'qa' ? 'qa' : to === 'dev' ? 'add' : /(不做|去掉|砍掉|先不)/.test(body) && /(命令行|CLI|cli)/.test(body) ? 'scope' : 'note';
+	return { to, body, kind };
+}
+
+/* ---------- shared renderers for attempts, polls and app-generated reports ---------- */
+function attemptsHtml(it, fresh = '') { return `<div class="card${fresh}"><h4><span class="k">${esc(it.title)}</span>由应用记录，按检查结果判断有没有进展</h4><table class="att"><thead><tr><th>尝试</th><th>做了什么</th><th>结果</th><th>进展</th></tr></thead><tbody>${it.rows.map((r) => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td class="mono">${esc(r[2])}</td><td>${/^无进展/.test(r[3]) ? `<span class="st err">${esc(r[3])}</span>` : /有进展/.test(r[3]) ? `<span class="st ok">${esc(r[3])}</span>` : esc(r[3])}</td></tr>`).join('')}</tbody></table><div class="src">${esc(it.note)}</div></div>`; }
+function ledgerHtml(it, fresh = '') {
+	const fx = it.fx; const d = fx.decision; const rows = fx.list.filter((a) => !a.diag && it.show.includes(a.id));
+	const tag = (a) => { const cls = PROGRESS.includes(a.verdict) ? 'ok' : a.verdict === 'first' ? '' : 'err'; return `<span class="st ${cls}">${esc(VERDICT[a.verdict])}</span>${a.verdict === 'dup' ? `<div class="dim">和第 ${a.twin} 次是同一个改动，之间没有新证据</div>` : ''}`; };
+	const noun = it.noun || '次';
+	const budget = fx.budget && it.unit === 'min' ? `<span>已用 ${fx.budget.used} 分钟，总时限 ${fx.budget.total / 60} 小时</span>` : fx.budget ? `<span>已用 ${fx.budget.used}/${fx.budget.total} 回合</span>` : '';
+	return `<div class="card ledger${fresh}" data-decision="${d.kind}"><h4><span class="k">${esc(it.title)}</span>由应用记录：依据、区别、预期，以及应用跑出来的结果</h4><table class="att"><thead><tr><th>尝试</th><th>做了什么，依据什么</th><th>结果</th><th>判定</th></tr></thead><tbody>${rows.map((a) => `<tr data-id="${a.id}" data-verdict="${a.verdict}" data-cat="${esc(a.cat)}"><td>第 ${a.n} ${noun}<div class="dim">${esc(a.cat)}${a.who ? ' · ' + ROLE[a.who] : ''}</div></td><td>${esc(a.plan)}<div class="why">依据：${esc(a.basis)}<br>区别：${esc(a.diff)}<br>预期：${esc(a.expect)}</div></td><td>${esc(a.result)}</td><td>${tag(a)}</td></tr>`).join('')}</tbody></table><div class="lstate"><span>问题状态：<b>${esc(fx.status)}</b></span>${budget}</div>${nextBoxHtml(d, it, fx)}</div>`;
+}
+function nextBoxHtml(d, it, fx) {
+	const adv = (d.advice || []).map((x) => `<div class="src">建议，不影响继续：${esc(x.plan)}。${esc(x.why || '')}</div>`).join('');
+	const dupN = fx.list.filter((a) => a.verdict === 'dup').length;
+	if (d.kind === 'continue') return `<div class="nextbox" data-decision="continue"><b>下一步</b>　${esc(d.next.plan)}。依据：${esc(d.next.basis)}。在授权内，预算还有，接着做，不需要你。</div>${adv}`;
+	if (d.kind === 'diagnose') return `<div class="nextbox" data-decision="diagnose"><b>${it.team ? '先复盘' : '先诊断'}</b>　${d.why === 'rejects' ? '连续两次打回。团队内部复盘：查清没有收敛的原因，选有新依据的方案，写明下一轮怎样算有进展。' : `连续 3 次没有进展${dupN ? `，其中 ${dupN} 次是重复` : ''}。应用停止重复，${it.team ? '请 PM 主持复盘' : '请助手先诊断'}：为什么没用、下一步依据什么、预期看到什么。`}不需要你。</div>`;
+	if (d.kind === 'done') return `<div class="nextbox ok" data-decision="done"><b>已解决</b>　${esc(it.doneText || '应用重新运行检查确认。')}</div>`;
+	if (d.kind === 'gather') return `<div class="nextbox" data-decision="gather"><b>先补证据</b>　授权内暂时没有有依据的下一步，先复现、定位或做小实验。不需要你。</div>${adv}`;
+	if (d.kind === 'escalate') return `<div class="nextbox need" data-decision="escalate" data-boundary="${d.boundary.join(' ')}"><b>下一步要越过边界</b>　${d.boundary.map((b) => BOUNDARY[b]).join('、')}。授权内有依据的路都已经走到头，见下面的卡片。</div>`;
+	if (d.kind === 'report') return `<div class="nextbox need" data-decision="report" data-boundary="budget"><b>预算到了</b>　停下来写未完成报告。</div>`;
+	return '';
+}
+function boundHtml(it, ch, fresh, act) {
+	const d = it.fx.decision; const b = d.boundary;
+	const opts = [...d.options.map((o) => [o.key, o.plan, o.cost, o.rec, o.boundary]), ['stop', '先停在这里', '助手不再尝试；尝试记录保留，你随时可以发回', false, '']];
+	const why = (d.advice[0] || {}).why;
+	const used = it.fx.budget ? `已用 ${it.fx.budget.used} 分钟，总时限 ${it.fx.budget.total / 60} 小时。你决定之前助手不再尝试，总时限暂停计时。` : '';
+	return `<div class="card bound${ch ? '' : ' need'}${fresh}" data-boundary="${b.join(' ')}"><h4>${ch ? '' : '需要你　'}<span class="k">${esc(it.title)}</span></h4><dl class="kv"><dt>卡在哪</dt><dd>${esc(it.block)}</dd><dt>各条路的结论</dt><dd>${it.paths.map(esc).join('<br>')}</dd>${why ? `<dt>不推荐换模型</dt><dd>${esc(why)}</dd>` : ''}<dt>预算</dt><dd>${used}</dd></dl><div class="opts">${opts.map(([v, label, cost, rec, bd]) => `<div class="opt"><button class="btn ${ch === v ? 'chosen' : rec && !ch ? 'pri' : ''}" data-act="${act}" data-k="${it.key}" data-v="${v}" data-boundary="${bd}" ${ch ? 'disabled' : ''}>${esc(label)}${rec ? '（推荐）' : ''}</button><span class="src">${bd ? BOUNDARY[bd] + '：' : ''}${esc(cost)}</span></div>`).join('')}</div></div>`;
+}
+function pollHtml(it, fresh = '') { return `<div class="card${fresh}"><h4><span class="k">正常等待</span>查看记录</h4><div class="polls">${it.rows.map((r) => `<span><b>${esc(r[0])}</b> ${esc(r[1])}</span>`).join('')}</div><div class="src">${esc(it.note)}</div></div>`; }
+const GAP_WHY = (L, id) => {
+	const v = L.ev[id];
+	if (id === 'E1') return L.review === 'rejected' ? `PM 评审未通过（打回 ${L.rejects} 次${L.progress ? '，细化后的三条子项已满足 ' + L.progress : ''}）` : 'PM 还没有对真实产出做评审';
+	if (id === 'A3' && v === 'err') return '问题 #1 还没修好';
+	if (v === 'err') return '检查或复验未通过';
+	if (v === 'wait') return '等 QA 核对';
+	return '还没有证据';
+};
+function statusHtml(L, fresh = '') {
+	const all = Object.keys(L.crit); const ok = all.filter((id) => L.ev[id] === 'ok'); const gap = all.filter((id) => L.ev[id] !== 'ok');
+	const waits = [...L.follows, ...(L.pmBack ? [L.pmBack] : [])];
+	return `<div class="card appgen${fresh}"><h4><span class="k">现状</span>由应用根据台账生成，不依赖 PM</h4><dl class="kv"><dt>证据</dt><dd>${all.length} 条标准里 ${ok.length} 条有证据${gap.length ? `；没有证据：${gap.map((id) => `${id}（${GAP_WHY(L, id)}）`).join('；')}` : ''}</dd><dt>未完成的工作项</dt><dd>${L.items.filter((x) => x[3] === 'claimed').map((x) => x[0] + ' ' + esc(x[1])).join('；') || '没有'}</dd><dt>在等的事</dt><dd>${waits.map((w) => esc(w[0]) + '（' + esc(w[1]) + '）').join('；') || '没有'}</dd><dt>预算</dt><dd>已用 ${L.turns} / ${S.team.cfg.turns + (L.budgetAdd || 0)} 个回合${S.team.cfg.demoAt === '不设' ? '' : ' · 截止 ' + esc(S.team.cfg.demoAt)}</dd></dl></div>`;
+}
+function recoverHtml(it, fresh = '') { const ic = { ok: ['✓', 'ok'], err: ['✕', 'err'], skip: ['·', ''] }; return `<div class="card${fresh}"><h4><span class="k">自动恢复</span>按顺序做，每一步都看得到结果</h4><ol class="rec">${it.rows.map((r) => `<li><span class="st ${ic[r[2]][1]}">${ic[r[2]][0]}</span><b>${esc(r[0])}</b><span>${esc(r[1])}</span></li>`).join('')}</ol></div>`; }
+function reportHtml(it, si, L, fresh = '') {
+	const T = S.team; const ch = T.choice.DL; const all = Object.keys(L.crit); const gap = all.filter((id) => L.ev[id] !== 'ok'); const d2 = T.choice.D2 || 'folder'; const byTime = T.cfg.demoAt !== '不设';
+	const tried = [`${L.meet} 次团队讨论`, L.retro ? `${L.retro} 次复盘` : '', L.rejects ? `产品评审打回 ${L.rejects} 次` : '', L.subs ? '替补接手 1 次' : '', L.pmFault ? `PM 故障恢复 ${L.pmFault} 次` : ''].filter(Boolean).join('；');
+	return `<div class="card${ch ? '' : ' need'}${fresh}" data-boundary="budget"><h4>未完成报告　<span class="st warn">这是进度报告，不是完成演示</span></h4><div class="src">由应用根据台账生成；推荐由 PM 给出。</div><div><b>已经做到的</b>：${all.length - gap.length} / ${all.length} 条标准有证据。${L.out ? '下面是现在的产出。' : '还没有可以看的产出。'}</div>${L.out ? previewHtml(L.out, d2) : ''}<div><b>还没有证据的标准</b></div><ul class="gaps">${gap.map((id) => `<li><span class="id">${id}</span> ${esc(L.crit[id].text)}<span class="src">　${esc(GAP_WHY(L, id))}</span></li>`).join('')}</ul><div><b>团队已经试过</b>：${esc(tried)}。</div><div><b>推荐</b>：${byTime ? '追加 2 小时' : '追加 10 个回合'}。还差 ${gap.length} 条，最近一轮有进展，预计 2 到 4 个回合能完成。</div><div class="btnrow"><button class="btn ${ch === 'more' ? 'chosen' : !ch ? 'pri' : ''}" data-act="t2-choose" data-k="DL" data-v="more" ${ch ? 'disabled' : ''}>${byTime ? '追加 2 小时' : '追加 10 个回合'}</button><button class="btn ${ch === 'gap' ? 'chosen' : ''}" data-act="t2-choose" data-k="DL" data-v="gap" ${ch ? 'disabled' : ''}>接受这 ${gap.length} 项遗留并验收</button><button class="btn ${ch === 'stop' ? 'chosen' : ''}" data-act="t2-choose" data-k="DL" data-v="stop" ${ch ? 'disabled' : ''}>停止，保留分支和台账</button></div></div>`;
+}
+function residualHtml(L, fresh = '') {
+	const stop = L.endKind === 'stop';
+	return `<div class="card${fresh}"><h4><span class="k">${stop ? '没有完成的标准' : '你接受的遗留项'}</span>${stop ? '已停止' : '按现状验收'}，这些仍标为未达标</h4><ul class="gaps">${L.residual.map((id, i) => `<li><span class="id">${id}</span> ${esc(L.crit[id].text)}<span class="src">　证据缺口：${esc(GAP_WHY(L, id))}${stop ? '' : `　后续：已记入后续清单 L${i + 1}，负责人待你安排`}</span></li>`).join('')}</ul><div class="src">${stop ? '分支和台账保留，接着做时从这里开始。' : `你接受的范围就是上面 ${L.residual.length} 项，别的标准都有证据。验收不会把这些改成通过。`}</div></div>`;
+}
+function summaryHtml(L, fresh = '') {
+	const T = S.team; const keys = Object.keys(T.choice).filter((k) => k !== 'Q');
+	const name = { D2: '图片形态', BASE: T.choice.BASE === 'back' ? '退回基线' : '确认基线', BASE2: '确认第三版', WEAK: '是否放宽标准', PUSH: '是否允许推送', ACC: T.choice.ACC === 'change' ? '要求修改' : '验收', ACC2: '第二次验收', DL: T.choice.DL === 'more' ? '追加边界' : T.choice.DL === 'gap' ? '接受遗留项' : '停止', PMX: 'PM 的临时接任', PR: '是否开草稿 PR' };
+	const result = L.endKind === 'all' ? '全部达标，已验收' : L.endKind === 'gap' ? `接受 ${L.residual.length} 项遗留后验收：${L.residual.join('、')} 仍未达标` : L.endKind === 'stop' ? `已停止，未完成：${L.residual.join('、')}` : '进行中';
+	const review = L.review == null ? '还没到产品评审' : `产品评审打回 ${L.rejects} 次${L.retro ? '，复盘 ' + L.retro + ' 次' : ''}，${L.review === 'passed' ? '最后通过' : '还没通过'}`;
+	return `<div class="card${fresh}"><h4><span class="k">这次协作</span>按刚才实际走过的路径统计</h4><dl class="kv"><dt>结果</dt><dd>${esc(result)}</dd><dt>你的操作</dt><dd>${keys.length} 次决定${keys.length ? '（' + keys.map((x) => name[x]).join('、') + '）' : ''}，${T.msgs.length} 次主动说话，0 次催促</dd><dt>团队自己解决的</dt><dd>${L.meet} 次短讨论，${L.dec.filter((d) => d[2] !== '你').length} 个决定；${review}</dd><dt>自动恢复</dt><dd>${[L.subs ? '开发的替补接手 1 次' : '', L.pmFault ? `PM 故障 ${L.pmFault} 次${L.pmAlt ? '，' + L.pmAltWhy : '，已恢复'}` : ''].filter(Boolean).join('；') || '没有用到'}</dd><dt>应用唤醒</dt><dd>${L.wake} 次</dd><dt>用量</dt><dd>${L.turns} / ${T.cfg.turns + (L.budgetAdd || 0)} 个回合${L.extended ? '（追加过 ' + L.extended + ' 次）' : ''}</dd><dt>基线后的标准变更</dt><dd>${L.changes.length ? L.changes.map((x) => `${x[0]} ${x[1]}（${x[2]}）`).join('；') : '没有'}</dd>${L.suggest.length ? `<dt>后续建议</dt><dd>${L.suggest.map(esc).join('；')}（不对应已确认标准，没有加进本轮）</dd>` : ''}</dl></div>`;
+}
+function reviewHtml(it, L, fresh = '') {
+	const sug = it.suggest && it.suggest.length ? `<div class="sug"><b>后续建议</b>（不对应任何已确认标准，不打回，也不加进本轮）：${it.suggest.map(esc).join('；')}</div>` : '';
+	if (it.verdict === 'pass') return `<div class="card${fresh}"><h4><span class="k">产品评审 第 ${it.n} 次</span>${seatTag('pm', L)}　<span class="st ok">通过，可以演示</span></h4><div>我重新打开了真实产出${it.n >= 4 ? '，在 GitHub 和 VS Code 两处都看了' : ''}：所有已确认的标准都有了证据，包括体验标准 E1。达到了“同事不问也能读懂”。</div>${sug}<div class="btnrow"><button class="btn" data-act="t2-tab" data-v="out">看 PM 看到的产出</button></div></div>`;
+	return `<div class="card rev${fresh}"><h4><span class="k">产品评审 第 ${it.n} 次</span>${seatTag('pm', L)}　<span class="st err">打回，暂不演示</span></h4>${it.progress ? `<div class="prog">${esc(it.progress)}</div>` : ''}<div>${esc(it.intro)}</div><ol class="probs">${it.problems.map((p) => `<li><b>${esc(p[0])}</b><span class="src">位置：${esc(p[1])}　对应：${esc(p[2])}</span><span>影响：${esc(p[3])}</span><span>应该是：${esc(p[4])}</span></li>`).join('')}</ol>${sug}<div class="btnrow"><button class="btn pri" data-act="t2-tab" data-v="out">看 PM 看到的产出</button></div></div>`;
+}
+
+/* ---------- rendering: team chat ---------- */
+function critRows(L, mode) {
+	return Object.keys(L.crit).map((id) => {
+		const cr = L.crit[id]; const v = L.ev[id]; const txt = esc(cr.text) + (cr.you ? ' <span class="st acc">你改的</span>' : '');
+		if (mode === 'plan') return `<span class="id">${id}</span><span>${txt}</span><span class="src">${esc(cr.proof)}</span>`;
+		const stat = v === 'ok' ? '<span class="st ok">有证据</span>' : v === 'err' ? '<span class="st err">未通过</span>' : v === 'wait' ? '<span class="st">待核对</span>' : '<span class="st">待证明</span>';
+		return `<span class="id">${id}</span><span>${txt}</span>${stat}`;
+	}).join('');
+}
+function previewHtml(ver, d2) {
+	const img = d2 === 'none' ? '' : '<div class="mdp-img">图：退出前的保存时序截图</div>';
+	if (ver === 'v1') return `<div class="mdp" data-ver="v1"><div class="mdp-h1">Conversation</div><p>关闭窗口时会丢最后的草稿，帮我修一下</p><p>我先看保存路径。</p><p class="raw">{"tool":"Read","input":{"file_path":"src/quitSave.ts"},"output":"import { app } from 'electron';\\nimport { flush } from './store';\\nexport function onQuit() { flush(); app.exit(0); }\\n// …"}</p><p class="raw">{"tool":"Bash","input":{"command":"npm test -- quitSave"},"output":"FAIL src/quitSave.test.ts\\n × waits for flush before exit (12 ms)\\n…"}</p><p>根因是退出时没有等写盘完成。已经改成先等 flush 再退出，测试通过。</p>${img}<p class="dim">1731650000123</p></div>`;
+	if (ver === 'v2x') return `<div class="mdp" data-ver="v2x"><div class="mdp-cap">VS Code 预览</div><div class="mdp-h1">关闭窗口时丢最后的草稿</div><p class="dim">导出自 Maestro · Codex（GPT-6.1-Sol）· 2026-11-15 14:02 · 共 3 条消息、2 次工具调用</p><div class="mdp-h3">你 · 14:02</div><p>关闭窗口时会丢最后的草稿，帮我修一下</p><div class="mdp-h3">Codex · 14:02</div><p>我先看保存路径。</p><div class="mdp-fold">▾ 读取 src/quitSave.ts（42 行）</div><p class="raw">import { app } from 'electron';<br>import { flush } from './store';<br>export function onQuit() { flush(); app.exit(0); }<br>…（共 42 行，全部展开）</p><div class="mdp-fold">▾ 运行 npm test -- quitSave（失败，退出码 1）</div><p class="raw">FAIL src/quitSave.test.ts<br> × waits for flush before exit (12 ms)<br>…（输出 2 KB，全部展开）</p><div class="mdp-h3">Codex · 14:05</div><p>根因是退出时没有等写盘完成。</p></div>`;
+	return `<div class="mdp" data-ver="v2"><div class="mdp-h1">关闭窗口时丢最后的草稿</div><p class="dim">导出自 Maestro · Codex（GPT-6.1-Sol）· 2026-11-15 14:02 · 共 3 条消息、2 次工具调用</p><div class="mdp-h3">你 · 14:02</div><p>关闭窗口时会丢最后的草稿，帮我修一下</p><div class="mdp-h3">Codex · 14:02</div><p>我先看保存路径。</p><div class="mdp-fold">▸ 读取 src/quitSave.ts（42 行）</div><div class="mdp-fold">▸ 运行 npm test -- quitSave（失败，退出码 1）</div><div class="mdp-h3">Codex · 14:05</div><p>根因是退出时没有等写盘完成。已经改成先等 flush 再退出，测试通过。</p>${img}</div>`;
+}
+function meetHtml(it, L, fresh) {
+	const T = S.team; const open = !!T.open[it.id];
+	const head = `<button class="fold" data-act="t2-open" data-v="${it.id}" aria-expanded="${open}"><span class="t"><b>讨论</b>　${esc(it.topic)}</span><span class="o">${esc(it.result)}　<span class="st ${it.cls === 'team' ? 'ok' : 'warn'}">${it.cls === 'team' ? '团队自己定' : '交老板定'}</span>${it.dissent && it.dissent !== '没有' ? ' <span class="st">有保留意见</span>' : ''}　${open ? '⌄' : '›'}</span></button>`;
+	if (!open) return `<div class="thread${fresh}">${head}</div>`;
+	const line = (k, a, b) => `<div class="msg">${seatTag(k, L)}<div class="body"><b>${esc(a)}</b>${b ? ' ' + esc(b) : ''}</div></div>`;
+	return `<div class="thread${fresh}">${head}<div class="in"><div class="src">第一步：各自独立写主张</div>${it.pos.map((p) => line(p[0], p[1], p[2])).join('')}<div class="src">第二步：主持人给出处理建议，并说明这件事归谁定</div>${line('pm', '建议', it.prop)}<div class="src">第三步：回应。只有拿得出新证据才坚持</div>${it.resp.map((p) => line(p[0], p[1], p[2])).join('')}<dl class="kv"><dt>结论</dt><dd>${esc(it.result)}</dd><dt>决定人</dt><dd>${esc(it.by)}</dd><dt>保留意见</dt><dd>${esc(it.dissent)}</dd><dt>接下来</dt><dd>${it.actions.map((a) => `${ROLE[a[0]]}：${esc(a[1])}`).join('；')}</dd></dl></div></div>`;
+}
+function feedItem(it, si, L) {
+	const T = S.team; const fresh = si === T.i && T.freshStep ? ' fadein' : '';
+	if (it.t === 'boss') return `<div class="bubble${fresh}">${esc(it.text)}</div>`;
+	if (it.t === 'sys') return `<div class="sys${fresh}">${esc(it.text)}</div>`;
+	if (it.t === 'msg') return `<div class="msg${fresh}">${seatTag(it.by, L)}<div class="body">${esc(it.text)}</div></div>`;
+	if (it.t === 'made') { const cfg = T.cfg; const row = (k) => `<div class="msg">${seatTag(k)}<div class="body">${esc(selText(cfg.seats[k]))} · ${esc(lvlText(cfg.seats[k]))}　<span class="dim">${cfg.seats[k].sub ? '替补：' + esc(mdlOf(cfg.seats[k].sub).name) : '没有替补'}</span></div></div>`; return `<div class="card${fresh}"><h4><span class="k">团队</span>${esc(teamTitle())}</h4>${row('pm')}${row('dev')}${row('qa')}<div class="src">${cfg.demoAt === '不设' ? '没有设截止时间' : '截止 ' + esc(cfg.demoAt)} · 预算 ${cfg.turns} 个回合，到了还没完成就写未完成报告 · 已授权：${[cfg.auth.checks ? '运行检查' : '', cfg.auth.push ? '在任务分支上提交和推送' : '', cfg.auth.pr ? '开草稿 PR' : '', cfg.auth.temp ? '成员出故障时用团队已选用的模型临时接任' : ''].filter(Boolean).join('、') || '无'}。合并、发布、对外消息、新的付费模型始终要你确认。</div></div>`; }
+	if (it.t === 'brief') { const open = !!T.open['brief' + it.v]; return `<div class="card${fresh}"><h4><span class="k">需求第 ${it.v} 版</span>${Object.keys(L.crit).length} 条标准，其中 1 条是体验标准</h4>${open ? `<div class="crit">${critRows(L, 'plan')}</div>` : ''}<div class="btnrow"><button class="btn" data-act="t2-open" data-v="brief${it.v}">${open ? '收起标准' : '展开标准'}</button></div></div>`; }
+	if (it.t === 'challenge') { const open = !!T.open.ch; return `<div class="thread${fresh}"><button class="fold" data-act="t2-open" data-v="ch" aria-expanded="${open}"><span class="t"><b>质询</b>　两份独立意见</span><span class="o">${si < T.i ? 'PM 采纳 2 条，1 条进了讨论' : '待 PM 回应'}　${open ? '⌄' : '›'}</span></button>${open ? `<div class="in"><div class="msg">${seatTag('dev', L)}<div class="body"><span class="st err">不合理</span> “导出不超过 3 秒”没有写工具输出怎么处理。单条输出可以到几十 MB，不处理的话谁也做不到。</div></div><div class="msg">${seatTag('qa', L)}<div class="body"><span class="st warn">验不了</span> A2 没写数据规模里工具输出有多长，我没法判定通过还是不通过。另外 SSH 远程会话的对话算不算在内，没有写。</div></div><div class="msg">${seatTag('qa', L)}<div class="body"><span class="st">验证计划</span> A1 看应用生成的渲染截图；A3 用带图的样本；E1 不归我判，但我会把读起来别扭的地方写给 PM。</div></div></div>` : ''}</div>`; }
+	if (it.t === 'meet') return meetHtml(it, L, fresh);
+	if (it.t === 'ask') { const ch = T.choice[it.key]; return `<div class="card${ch ? '' : ' need'}${fresh}" data-boundary="${it.boundary || TNEED_BOUNDARY[it.key] || ''}"><h4>${esc(it.title)}　<span class="k">${esc(it.q)}</span></h4><div>${esc(it.why)}</div>${it.pos.map((p) => `<div class="msg" style="margin-top:4px">${seatTag(p[0], L)}<div class="body">${esc(p[1])}</div></div>`).join('')}${it.note ? `<div class="src">${esc(it.note)}</div>` : ''}<div class="btnrow">${it.opts.map((o, i) => `<button class="btn ${ch === o[0] ? 'chosen' : i === 0 && !ch ? 'pri' : ''}" data-act="t2-choose" data-k="${it.key}" data-v="${o[0]}" ${ch ? 'disabled' : ''}>${esc(o[1])}</button>`).join('')}</div></div>`; }
+	if (it.t === 'baseline') {
+		const ch = T.choice[it.key]; const edits = T.input.baseEdit || {}; const editing = T.open.baseEditId; const diff = !!T.open['diff' + it.v];
+		const rows = Object.keys(L.crit).map((id) => { const cr = L.crit[id]; if (!ch && editing === id) return `<span class="id">${id}</span><span><input class="inl" id="base-edit" value="${esc(cr.text)}" aria-label="修改 ${id}"><button class="btn" data-act="t2-saveedit" data-v="${id}">保存</button></span><span class="src">${esc(cr.proof)}</span>`; return `<span class="id">${id}</span><span>${esc(cr.text)}${cr.you ? ' <span class="st acc">你改的</span>' : ''}${!ch && it.key === 'BASE' ? ` <button class="lnk" data-act="t2-edit" data-v="${id}" aria-label="修改 ${id}">改</button>` : ''}</span><span class="src">${esc(cr.proof)}</span>`; }).join('');
+		const diffHtml = it.v === 2 ? `<div class="diff"><div><span class="id">A2</span><del>1000 条消息的对话，导出不超过 3 秒</del> <ins>1000 条消息的对话，工具输出按 D1 截断后，导出不超过 3 秒</ins> <span class="src">来自讨论 M1</span></div><div><span class="id">A3</span><del>图片随导出可见</del> <ins>${esc(L.crit.A3.text)}</ins> <span class="src">来自你的决定 D2</span></div><div><span class="id">A6</span><ins>${esc(L.crit.A6.text)}</ins> <span class="src">QA 的意见</span></div>${Object.keys(edits).map((id) => `<div><span class="id">${id}</span><ins>${esc(edits[id])}</ins> <span class="src">你改的</span></div>`).join('')}</div>` : `<div class="diff"><div><span class="id">A7</span><ins>${esc(L.crit.A7 ? L.crit.A7.text : '')}</ins> <span class="src">你的退回意见</span></div></div>`;
+		const back = T.open.baseBack && !ch ? `<div class="backbox"><textarea id="base-note" rows="2" aria-label="退回意见" placeholder="写一句你不满意的地方，团队会带着它重新讨论">${esc(T.input.baseNote || '')}</textarea><button class="btn pri" data-act="t2-sendback">退回给团队</button></div>` : '';
+		return `<div class="card${ch ? '' : ' need'}${fresh}" data-boundary="baseline"><h4>${ch ? '' : '需要你确认　'}<span class="k">需求第 ${it.v} 版作为验收基线</span></h4><div class="crit">${rows}</div><div><b>本轮不做</b>（确认基线也就是同意这些不做）：导出为 PDF 或 HTML；把多条对话合并导出；超过 5000 条消息的对话。</div>${diff ? diffHtml : ''}<div class="src">检查命令由 PM 提出，应用已按你建队时给的授权在任务工作区里试跑过：都能启动，现在未通过是预期的（功能还没做）。</div>${back}<div class="btnrow"><button class="btn ${ch === 'ok' ? 'chosen' : !ch ? 'pri' : ''}" data-act="t2-choose" data-k="${it.key}" data-v="ok" ${ch ? 'disabled' : ''}>确认基线</button><button class="btn" data-act="t2-open" data-v="diff${it.v}">${diff ? '收起差异' : '看和上一版的差异'}</button>${it.key === 'BASE' ? `<button class="btn ${ch === 'back' ? 'chosen' : ''}" data-act="t2-open" data-v="baseBack" ${ch ? 'disabled' : ''}>退回讨论…</button>` : ''}</div></div>`;
+	}
+	if (it.t === 'checks') { const key = 'ck' + si + it.rows.length; const open = !!T.open[key]; const bad = it.rows.some((r) => r[1] === 'err'); return `<div class="thread${fresh}"><button class="fold" data-act="t2-open" data-v="${key}" aria-expanded="${open}"><span class="t"><b>检查</b>　${esc(it.sum)}</span><span class="o"><span class="st ${bad ? 'err' : 'ok'}">${bad ? '有未通过' : '通过'}</span>　由应用运行　${open ? '⌄' : '›'}</span></button>${open ? `<div class="in"><div class="crit">${it.rows.filter((r) => L.crit[r[0]]).map((r) => `<span class="id">${r[0]}</span><span>${esc(L.crit[r[0]].text)}</span><span class="st ${r[1] === 'ok' ? 'ok' : r[1] === 'err' ? 'err' : ''}">${esc(r[2])}</span>`).join('')}</div></div>` : ''}</div>`; }
+	if (it.t === 'issue') { const chain = ['已发现', '已修复（自述）', '已复验']; return `<div class="card${fresh}"><h4><span class="k">问题 #${it.id}</span>${esc(it.title)}${it.tries ? `　<span class="st err">复验未通过 ${it.tries} 次</span>` : ''}</h4>${it.steps ? `<ol style="margin:0;padding-left:20px">${it.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol><div class="src">${seatTag('qa', L)} 提出。证据：复现步骤加一张截图。违反的是已确认的 A3，所以必须修好并复验，或者由你决定带着它验收。</div>` : ''}<div class="chain">${chain.map((x, i) => `<span class="lk ${i <= it.state ? 'on' : ''}">${x}</span>${i < 2 ? '<span class="ar">→</span>' : ''}`).join('')}</div></div>`; }
+	if (it.t === 'quota') { const cfg = T.cfg; const ch = T.choice.Q; if (it.has) return `<div class="card${fresh}"><h4><span class="k">${it.sub ? '替补已接手' : '按你的选择等恢复'}</span>开发（${esc(mdlOf(cfg.seats.dev).name)}）的额度用尽，周四 09:00 恢复</h4><div>${it.sub ? `按建队时的设置，替补 ${esc(selText(cfg.seats.dev.sub))} 已经接手问题 #1。交给它的是需求、决定、问题单和工作区里已有的改动。` : '开发的工作项挂起到周四 09:00，QA 和 PM 继续。恢复后应用自动叫醒开发。'}</div><div class="btnrow">${it.sub ? `<button class="btn" data-act="t2-choose" data-k="Q" data-v="wait">改成等原来的模型恢复</button>` : `<button class="btn chosen" disabled>已改成等恢复</button>`}<button class="btn" data-act="t2-view" data-v="dev">看开发的对话</button></div></div>`; return `<div class="card${fresh}"><h4><span class="k">按设置等恢复</span>开发（${esc(mdlOf(cfg.seats.dev).name)}）的额度用尽，周四 09:00 恢复</h4><div>建队时没有给开发选替补。开发的工作项挂起，QA 和 PM 继续。恢复后应用自动叫醒开发，不需要你做什么。</div></div>`; }
+	if (it.t === 'review') return reviewHtml(it, L, fresh);
+	if (it.t === 'attempts') return attemptsHtml(it, fresh);
+	if (it.t === 'ledger') return ledgerHtml(it, fresh);
+	if (it.t === 'poll') return pollHtml(it, fresh);
+	if (it.t === 'status') return statusHtml(L, fresh);
+	if (it.t === 'recover') return recoverHtml(it, fresh);
+	if (it.t === 'report') return reportHtml(it, si, L, fresh);
+	if (it.t === 'residual') return residualHtml(L, fresh);
+	if (it.t === 'demo') {
+		const ch = T.choice[it.key]; const all = Object.keys(L.crit); const pass = all.filter((id) => L.ev[id] === 'ok').length; const d2 = T.choice.D2 || 'folder';
+		const more = (k, label, body) => `<div class="thread"><button class="fold" data-act="t2-open" data-v="${k}" aria-expanded="${!!T.open[k]}"><span class="t">${label}</span><span class="o">${T.open[k] ? '⌄' : '›'}</span></button>${T.open[k] ? `<div class="in">${body}</div>` : ''}</div>`;
+		const extras = more('dm-crit' + it.v, `<b>${all.length} 条标准里 ${pass} 条有证据</b>${pass < all.length ? `，${all.length - pass} 条没有` : ''}`, `<div class="crit">${critRows(L, 'result')}</div><div class="src">通过数由应用按证据统计，PM 改不了。</div>`)
+			+ more('dm-dec' + it.v, `<b>团队自己定了 ${L.dec.filter((d) => d[2].startsWith('团队') || d[2].startsWith('PM')).length} 件事</b>，你定了 ${L.dec.filter((d) => d[2] === '你').length} 件`, L.dec.map((d) => `<div class="item"><div class="top"><span class="t">${d[0]}　${esc(d[1])}</span></div><div class="src">${esc(d[2])}${d[3] ? ' · ' + esc(d[3]) : ''}</div></div>`).join(''))
+			+ more('dm-chg' + it.v, `<b>基线之后的标准变更：${L.changes.length ? L.changes.length + ' 处' : '没有'}</b>`, L.changes.length ? L.changes.map((x) => `<div class="item"><div class="top"><span class="t">${x[0]}　${esc(x[1])}</span></div><div class="src">${esc(x[2])}</div></div>`).join('') : '<div class="dim">没有。</div>');
+		const before = !!T.open.before; const you = L.crit.A8;
+		const lead = it.v === 2 ? `<div>这一版只多了一件事，就是你要的：<b>${esc(you ? you.text : '')}</b>。已经做了，QA 核对通过。其余和上一版相同。</div>` : `<div>“导出为 Markdown”做完了。先看结果：这是一条真实对话导出后在 GitHub 里的样子。</div><div class="seg2" role="group" aria-label="改进前后"><button aria-pressed="${!before}" data-act="t2-before" data-v="0">现在</button><button aria-pressed="${before}" data-act="t2-before" data-v="1">PM 打回之前</button></div>${previewHtml(before ? 'v1' : 'v2', d2)}<ul class="pts"><li>每条消息前有发言人和时间，分得清提问和回答</li><li>工具输出折成一行，正文不再被淹没</li><li>开头有标题、来源和日期</li></ul>`;
+		const notDone = ['导出为 PDF 或 HTML', '把多条对话合并导出', '超过 5000 条消息的对话', ...(L.crit.A4 ? [] : ['命令行导出（按你的要求去掉了）'])].join('；');
+		const change = T.open.chg && !ch ? `<div class="backbox"><textarea id="chg-note" rows="2" aria-label="修改意见" placeholder="写出你要改的地方，团队会照着做，然后再演示一次">${esc(T.input.change || '')}</textarea><button class="btn pri" data-act="t2-sendchange">发给团队</button></div>` : '';
+		const btns = it.v === 1 ? `<button class="btn ${ch === 'accept' ? 'chosen' : !ch ? 'pri' : ''}" data-act="t2-choose" data-k="${it.key}" data-v="accept" ${ch ? 'disabled' : ''}>验收</button><button class="btn ${ch === 'change' ? 'chosen' : ''}" data-act="t2-open" data-v="chg" ${ch ? 'disabled' : ''}>要求修改…</button>` : `<button class="btn ${ch ? 'chosen' : 'pri'}" data-act="t2-choose" data-k="${it.key}" data-v="accept" ${ch ? 'disabled' : ''}>验收</button>`;
+		return `<div class="card${ch ? '' : ' need'}${fresh}"><h4>演示${it.v === 2 ? '（第二次）' : ''}　${seatTag('pm', L)}</h4>${lead}<div class="src">本轮不做的（基线里就写明了）：${esc(notDone)}。所有已确认的标准都有证据，PM 评审已通过。</div>${extras}${change}<div class="btnrow">${btns}<button class="btn" data-act="t2-tab" data-v="changes">看代码改动</button></div></div>`;
+	}
+	if (it.t === 'summary') return summaryHtml(L, fresh);
+	return '';
+}
+function msgHtml(mm, st, L) {
+	const who = ROLE[mm.to]; const busy = st.work[mm.to] === 'run';
+	let h = `<div class="bubble">${esc(mm.text)}</div><div class="dlv">${busy ? `${who}${/[A-Z]$/.test(who) ? ' ' : ''}正在一个回合里，这条排在它后面` : `已送达 ${who}`}　→　已处理</div>`;
+	if (mm.kind === 'scope') h += `<div class="msg">${seatTag('pm', L)}<div class="body">收到。这是你的要求，直接生效：去掉 A4，取消命令行这个工作项。已经告诉开发停下它，QA 不再验这一条。</div></div><div class="eff">影响：标准少 1 条（A4）· 开发少 1 个工作项 · QA 少 1 条验证 · 已记入标准变更</div>`;
+	else if (mm.kind === 'add') h += `<div class="msg">${seatTag('dev', L)}<div class="body">收到，我来做。这会多出一条要求，我已经报给 PM 记账，不会自己悄悄改范围。</div></div><div class="msg">${seatTag('pm', L)}<div class="body">已记成标准 A9，来源是你对开发说的话。QA 会多验这一条。</div></div><div class="eff">影响：标准多 1 条（A9）· 开发多 1 个工作项 · QA 多 1 条验证 · 团队里都能看到这条消息</div>`;
+	else if (mm.kind === 'qa') h += `<div class="msg">${seatTag('qa', L)}<div class="body">收到，我加一组测试。这不改变标准，只是多验一些。发现问题我照常开问题单。</div></div><div class="eff">影响：QA 多 1 个工作项 · 标准不变</div>`;
+	else h += `<div class="msg">${seatTag('pm', L)}<div class="body">记下了：“${esc(mm.body)}”。我的理解是补充说明，不改变标准和工作项，我已经转给相关的人。如果你是想改范围，直接说“不做某某”或“加上某某”。</div></div><div class="eff">影响：记入台账的备注 · 标准和工作项不变</div>`;
+	return h;
+}
+function simFeed(name, L) {
+	if (name === 'silent') return `<div class="sys">开发这一回合结束了，但没有交报告。应用先按自己看到的事实记账：工作区里有 2 个文件变了，没有新的提交。然后请开发补交报告，只补报告，不重做。</div><div class="sys">补报成功，台账已更新。没有找你。</div>`;
+	if (name === 'restart') return `<div class="banner">应用在 14:32 重启过。台账、已登记的跟进和三位成员的对话都已恢复，团队接着做。重启时正在进行的那一步：应用先看那位成员的工作区里有没有做完的结果，有就收下，没有才重新交给它，并提醒它可能已经做了一部分。</div>`;
+	return '';
+}
+function composerHtml(st, L) {
+	const T = S.team; const view = T.view; const off = !canTalk(st);
+	const to = view === 'team' ? 'pm' : view;
+	const chips = view === 'team' && !off ? `<div class="chips2">试试：<button data-act="t2-chip" data-v="先不做命令行导出，这一轮只做界面">先不做命令行导出</button><button data-act="t2-chip" data-v="@开发 导出的文件名带上对话标题">@开发 文件名带上对话标题</button><button data-act="t2-chip" data-v="@QA 多测一下超长对话">@QA 多测一下超长对话</button></div>` : '';
+	return `<div class="composer-wrap">${chips}<div class="composer"><div class="to">发给 ${seatTag(to, L)}　<span class="dim">${to === 'pm' && st.work.pm === 'block' ? 'PM 正在恢复，消息会排队，恢复后送达' : view === 'team' ? '输入 @ 可以直接对某位成员说' : '这里说的话团队里也能看到'}</span></div><div id="mention"></div><textarea id="t2-input" ${off ? 'disabled' : ''} placeholder="${off ? (st.id === 's0' ? 'PM 交出需求后就可以说话了' : '这一步请用卡片上的按钮') : '随时说话：补充、纠正方向，或者回答问题。回车发送'}" aria-label="消息">${esc(T.draft)}</textarea><div class="crow"><span class="grow"></span><button class="send" data-act="t2-send" aria-label="发送" ${off ? 'disabled' : ''}>↑</button></div></div></div>`;
+}
+function renderTeam() {
+	const T = S.team; const steps = teamSteps(); T.i = Math.min(T.i, steps.length - 1); const st = steps[T.i]; const L = ledgerAt(T.i);
+	if (T.view !== 'team') return renderSeatView(T.view, steps, st, L);
+	const head = `<div class="head"><span class="tmark team">组</span><span class="ttl">${esc(teamTitle())}</span><span class="meta">团队 · ${T.cfg.demoAt === '不设' ? '没有截止时间' : L.dlMoved ? '截止顺延到 ' + esc(L.dlMoved) : '截止 ' + esc(T.cfg.demoAt) + (L.timeAdd ? `（追加 ${L.timeAdd} 小时）` : '')} · 已用 ${L.turns}/${T.cfg.turns + (L.budgetAdd || 0)} 回合</span><span class="grow"></span><button class="hbtn" data-act="t2-setup">成员与规则</button><button class="hbtn" data-act="panel" aria-label="开关侧面板">▯▮</button></div>`;
+	const need = needOpen(st);
+	const strip = `<div class="strip"><div class="phases">${PHASES.map((p, i) => `<span class="ph ${i < st.phase ? 'done' : i === st.phase ? 'cur' : ''}">${p}</span>${i < PHASES.length - 1 ? '<span class="ph-sep">›</span>' : ''}`).join('')}</div>${need ? '<span class="need">需要你 1</span>' : ''}</div>
+		<div class="sit"><div aria-live="polite"><span class="k">现在</span>${esc(sv(st.now, L))}</div><div><span class="k">在解决</span>${esc(sv(st.solving, L) || '没有待解决的问题')}</div><div><span class="k">下一步</span>${esc(sv(st.next, L))}</div><div><span class="k">产出</span>${L.out ? `<button class="lnk" data-act="t2-tab" data-v="out">${L.review === 'passed' ? '导出预览（评审已通过）' : '导出预览'} ›</button>` : '还没有'}</div></div>`;
+	let feed = ''; let groupPhase = -1; let groupHtml = ''; let groupInfo = null;
+	const flush = () => { if (groupPhase < 0) return; const key = 'ph' + groupPhase; const open = !!T.open[key]; feed += `<div class="phfold"><button class="fold" data-act="t2-open" data-v="${key}" aria-expanded="${open}"><span class="t"><b>${PHASES[groupPhase]}</b>　${groupInfo}</span><span class="o">${open ? '收起 ⌄' : '展开 ›'}</span></button>${open ? `<div class="in2">${groupHtml}</div>` : ''}</div>`; groupPhase = -1; groupHtml = ''; };
+	const pushOk = T.cfg.auth.push || T.choice.PUSH === 'yes';
+	const info = { 0: '想法写成了需求第一版', 1: '两份独立意见，一次团队自己定的讨论，基线已确认', 2: pushOk ? '实现完成，CI 超时后团队自己跟到了结束' : '实现完成，本地检查通过', 3: '检查通过，问题 #1 已修复并复验', 4: `产品评审打回 ${L.rejects} 次${L.retro ? '，复盘 ' + L.retro + ' 次' : ''}，${L.review === 'passed' ? '改后通过' : '还没通过'}`, 5: '已演示' };
+	for (let i = 0; i <= T.i; i++) {
+		const Li = ledgerAt(i); let h = steps[i].feed.map((it) => feedItem(it, i, Li)).join('');
+		for (const mm of T.msgs) if (mm.at === i) h += msgHtml(mm, steps[i], Li);
+		for (const name of ['silent', 'restart']) if (T.sim[name] && T.simAt[name] === i) h += simFeed(name, Li);
+		if (steps[i].phase < st.phase && steps[i].phase <= 4) { if (groupPhase !== steps[i].phase) { flush(); groupPhase = steps[i].phase; groupInfo = info[groupPhase]; } groupHtml += h; } else { flush(); feed += h; }
+	}
+	flush();
+	$('#center').innerHTML = head + strip + `<div class="scroll" id="team-scroll"><div class="col">${feed}</div></div>` + composerHtml(st, L);
+	const sc = $('#team-scroll'); if (T.keepScroll != null) { sc.scrollTop = T.keepScroll; T.keepScroll = null; } else sc.scrollTop = sc.scrollHeight;
+	if (T.refocus) { const el = $(T.refocus); if (el) { el.focus(); if (el.setSelectionRange && el.value != null) el.setSelectionRange(el.value.length, el.value.length); } T.refocus = null; }
+}
+function renderSeatView(k, steps, st, L) {
+	const T = S.team; const sel = seatSel(k, L); const ws = k === 'dev' ? '工作区 team/export-md，只有开发能写' : k === 'qa' ? '工作区 team/export-md-qa，只能写 qa/' : '只读，不写代码';
+	const head = `<div class="head"><button class="hbtn" data-act="t2-view" data-v="team" id="back-team">← ${esc(teamTitle())}</button><span class="ttl">${ROLE[k]}</span><span class="meta">${esc(selText(sel))} · ${esc(lvlText(sel))} · ${ws}</span><span class="grow"></span><button class="hbtn" data-act="panel" aria-label="开关侧面板">▯▮</button></div>`;
+	let body = `<div class="sys">这是 ${ROLE[k]} 自己的对话，和一条普通对话一样。应用把每一步该它做的事发到这里；它在这里说的要点会出现在团队里。按 Esc 回到团队。</div>`; let n = 0;
+	for (let i = 0; i <= T.i; i++) {
+		const Li = ledgerAt(i); const s = steps[i];
+		if (s.tasks[k]) { n++; body += `<div class="dispatch"><span class="k">应用交给它</span>${esc(s.tasks[k])}</div>`; }
+		const said = s.feed.filter((it) => it.t === 'msg' && it.by === k); const inMeet = s.feed.filter((it) => it.t === 'meet' && it.who.includes(k));
+		if (said.length || inMeet.length) body += `<div class="worked" style="cursor:default">用时 ${12 + i * 3} 秒 · ${2 + (i % 4)} 步</div>`;
+		for (const it of said) body += `<div class="answer"><p>${esc(it.text)}</p></div>`;
+		for (const it of inMeet) { const p = it.pos.find((x) => x[0] === k); const r = it.resp.find((x) => x[0] === k); if (p) body += `<div class="answer"><p><b>讨论“${esc(it.topic)}”里我的主张：</b>${esc(p[1])} ${esc(p[2])}</p></div>`; if (k === 'pm') body += `<div class="answer"><p><b>我的处理建议：</b>${esc(it.prop)}</p></div>`; if (r) body += `<div class="answer"><p><b>我的回应：</b>${esc(r[1])}。${esc(r[2])}</p></div>`; }
+		if (k === 'pm') for (const it of s.feed.filter((x) => x.t === 'review')) body += `<div class="answer"><p><b>产品评审第 ${it.n} 次：</b>${it.verdict === 'pass' ? '通过，可以演示。' : '打回。' + it.problems.map((p) => p[0]).join('；') + '。'}</p></div>`;
+		for (const mm of T.msgs) if (mm.at === i && (mm.to === k || (k === 'pm' && mm.kind === 'add'))) body += `<div class="bubble">${esc(mm.text)}</div><div class="answer"><p>${mm.to === k ? '收到，已处理。' : '开发转来老板的一条新要求，已记成标准 A9。'}</p></div>`;
+	}
+	if (!n) body += '<div class="dim">它还没有被叫到。</div>';
+	$('#center').innerHTML = head + `<div class="scroll" id="team-scroll"><div class="col">${body}</div></div>` + composerHtml(st, L);
+	const sc = $('#team-scroll'); sc.scrollTop = sc.scrollHeight;
+	if (T.refocus) { const el = $(T.refocus); if (el) el.focus(); T.refocus = null; }
+}
+function teamBar() {
+	const T = S.team; const steps = teamSteps(); const st = steps[T.i]; const wait = needOpen(st);
+	const simBtn = (k) => `<button class="pbtn" data-act="t2-sim" data-v="${k}" ${!SIM_AT[k].includes(st.id) || T.sim[k] ? 'disabled' : ''}>模拟：${SIM_LABEL[k]}</button>`;
+	return { h: `<button class="pbtn" data-act="t2-setup">新建团队…</button><button class="pbtn" data-act="t2-prev" ${T.i === 0 ? 'disabled' : ''}>上一步</button><button class="pbtn primary" data-act="t2-next" ${T.i >= steps.length - 1 || wait ? 'disabled' : ''}>下一步</button><button class="pbtn" data-act="t2-auto">${T.auto ? '停止播放' : '自动播放'}</button><span class="pcount">${T.i + 1} / ${steps.length}</span>${Object.keys(SIM_AT).map(simBtn).join('')}<button class="pbtn" data-act="t2-reset">重置</button>`,
+		n: (T.view === 'team' ? st.narr : `<b>成员对话。</b>这是 ${ROLE[T.view]} 的对话。点左上角的“← ${esc(teamTitle())}”或按 Esc 回到团队。`) + (wait ? ' <b>请在卡片上操作后继续。</b>' : '') };
+}
+function teamSide(r) {
+	const T = S.team; const steps = teamSteps(); const st = steps[T.i]; const L = ledgerAt(T.i);
+	const stt = (k) => { const w = st.work[k]; return w === 'run' ? '<span class="spin"></span>' : w === 'block' ? `<span class="st warn">${k === 'pm' ? '故障恢复中' : '额度用尽'}</span>` : ''; };
+	const seatRow = (k) => { const sel = seatSel(k, L); const c = CATALOG[sel.tool]; return `<button class="row child ${T.view === k ? 'active' : ''}" data-act="t2-view" data-v="${k}"><span class="tmark ${sel.tool === 'codex' ? 'cx' : ''}">${c.mark}</span><span class="ttl">${ROLE[k]} <span class="dim">${esc(mdlOf(sel).name)}${k === 'dev' && L.devSub ? '（替补）' : ''}${k === 'pm' && L.pmAlt ? '（' + L.pmAltWhy + '）' : ''}</span></span>${stt(k)}</button>`; };
+	return `<div class="proj">⌄ maestro-harness-bridge <span class="n">31</span></div><button class="row ${T.view === 'team' ? 'active' : ''}" data-act="t2-view" data-v="team"><span class="tmark team">组</span><span class="ttl">${esc(teamTitle())}</span>${needOpen(st) ? '<span class="needdot" title="需要你"></span>' : ''}<span class="time">${L.endKind === 'all' ? '已验收' : L.endKind === 'gap' ? '已验收·有遗留' : L.endKind === 'stop' ? '已停止' : ''}</span></button>` + seatRow('pm') + seatRow('dev') + seatRow('qa') + r('Cx', 'cx', '关闭窗口时丢最后的草稿', '1 小时前') + r('A', '', '第二轮规划', '1 小时前', '', '', false);
+}
+function teamPanel(tabsHtml) {
+	const T = S.team; const steps = teamSteps(); const st = steps[T.i]; const L = ledgerAt(T.i); const tab = T.tab; const d2 = T.choice.D2 || 'folder'; let body = '';
+	const stName = { claimed: ['成员称完成', 'warn'], checked: ['检查通过', 'ok'], done: ['完成', 'ok'] };
+	if (tab === 'out') body = !L.out ? '<div class="dim">还没有可以看的产出。开发做出第一版后，这里会显示真实的导出结果。</div>' : `<h3>导出的文件在 ${L.out === 'v2x' ? 'VS Code' : 'GitHub'} 里的样子</h3>${L.out === 'v2' ? `<div class="seg2" role="group" aria-label="改进前后"><button aria-pressed="${!T.open.before}" data-act="t2-before" data-v="0">现在</button><button aria-pressed="${!!T.open.before}" data-act="t2-before" data-v="1">PM 打回之前</button></div>` : ''}${previewHtml(L.out === 'v2' && !T.open.before ? 'v2' : L.out === 'v2x' ? 'v2x' : 'v1', d2)}<div class="src">这是应用生成的渲染预览，PM 的产品评审和 QA 的核对看的都是它。${L.review === 'rejected' ? 'PM 认为它还不够好，已经打回。' : ''}</div>`;
+	else if (tab === 'board') body = `<h3>工作项</h3>${L.items.length ? L.items.map((x) => `<div class="item"><div class="top"><span class="t">${x[0]}　${esc(x[1])}</span><span class="st ${stName[x[3]][1]}">${stName[x[3]][0]}</span></div>${seatTag(x[2], L)}</div>`).join('') : '<div class="dim">基线确认后才会有工作项。</div>'}<h3>问题</h3>${L.issues.length ? L.issues.map((x) => `<div class="item"><div class="top"><span class="t">#${x[0]}　${esc(x[1])}</span><span class="st ${x[2] === 2 ? 'ok' : x[2] === 1 ? 'warn' : 'err'}">${['已发现', '已修复（自述）', '已复验'][x[2]]}</span></div><div class="src">违反 ${x[3]}</div></div>`).join('') : '<div class="dim">还没有。</div>'}<h3>在等的事</h3>${[...L.follows, ...(L.pmBack ? [L.pmBack] : [])].length ? [...L.follows, ...(L.pmBack ? [L.pmBack] : [])].map((f) => `<div class="item"><div class="top"><span class="t">${esc(f[0])}</span><span class="st">${esc(f[1])}</span></div></div>`).join('') : '<div class="dim">没有在等的事。</div>'}${L.residual.length ? `<h3>${L.endKind === 'stop' ? '没有完成的标准' : '遗留项（你已接受）'}</h3>${L.residual.map((id, i) => `<div class="item"><div class="top"><span class="t">${L.endKind === 'stop' ? '' : 'L' + (i + 1) + '　'}${id}　${esc(L.crit[id].text)}</span><span class="st err">未达标</span></div><div class="src">${esc(GAP_WHY(L, id))}${L.endKind === 'stop' ? '' : ' · 负责人待你安排'}</div></div>`).join('')}` : ''}${L.suggest.length ? `<h3>后续建议</h3>${L.suggest.map((x) => `<div class="item"><div class="top"><span class="t">${esc(x)}</span></div><div class="src">不对应已确认标准，没有加进本轮</div></div>`).join('')}` : ''}`;
+	else if (tab === 'dec') body = L.dec.length ? L.dec.map((d) => `<div class="item"><div class="top"><span class="t">${d[0]}　${esc(d[1])}</span></div><div class="src">${esc(d[2])}${d[3] ? ' · ' + esc(d[3]) : ''}</div></div>`).join('') + (L.changes.length ? `<h3>基线之后的标准变更</h3>${L.changes.map((x) => `<div class="item"><div class="top"><span class="t">${x[0]}　${esc(x[1])}</span></div><div class="src">${esc(x[2])}</div></div>`).join('')}` : '') : '<div class="dim">还没有决定。</div>';
+	else if (tab === 'ev') body = Object.keys(L.crit).length ? `<div class="crit">${critRows(L, 'result')}</div><h3>证据是谁给的</h3><div class="src">A2、A4、A5 由应用运行命令得出。A1 由应用生成渲染预览和截图，QA 核对。A3、A6 由 QA 核对，带截图。E1 由 PM 对着真实产出评审。没有哪一条只凭成员自己说的。${L.residual.length ? '标着“未通过”或“待证明”的条目，验收之后仍然保持原样。' : ''}</div>` : '<div class="dim">还没有标准。</div>';
+	else if (tab === 'seats') { const cfg = T.cfg; const row = (k, ws) => { const sel = seatSel(k, L); return `<div class="item"><div class="top"><span class="t">${ROLE[k]}</span><button class="lnk" data-act="t2-view" data-v="${k}">打开对话</button></div><div class="src">${esc(selText(sel))} · ${esc(lvlText(sel))}${k === 'dev' && L.devSub ? ' · 替补接手中' : cfg.seats[k].sub ? ' · 替补：' + esc(mdlOf(cfg.seats[k].sub).name) : ''}</div><div class="src">${ws}</div></div>`; };
+		const same = CATALOG[seatSel('dev', L).tool].label === CATALOG[cfg.seats.qa.tool].label;
+		body = row('pm', '只读，不写代码' + (L.pmAlt ? `；现在由 ${mdlOf(L.pmAlt).name} ${L.pmAltWhy}` : '')) + row('dev', '自己的工作区 team/export-md') + row('qa', '自己的工作区 team/export-md-qa，只能写 qa/') + `<h3>QA 的结论有多可靠</h3><div class="item"><div class="src">独立的对话：是。QA 看不到开发的思考过程。</div><div class="src">独立的工作区：是。QA 的测试开发改不了。</div><div class="src">检查由应用执行：是。不取成员自己的说法。</div><div class="src">模型来源：${same ? '开发和 QA 现在来自同一家，可能有相同的盲区。' : '开发和 QA 来自不同的厂商，盲区不容易重合。'}</div><div class="src">这四项各管各的。来源不同不保证结论一定对，来源相同也不代表没有验证过。</div></div><h3>授权与预算</h3><div class="item"><div class="src">已用 ${L.turns} / ${cfg.turns} 个回合 · ${cfg.demoAt === '不设' ? '没有截止时间' : '截止 ' + esc(cfg.demoAt)}</div><div class="src">不用再问你的：${[cfg.auth.checks ? '运行检查' : '', cfg.auth.push ? '在任务分支上提交和推送' : '', cfg.auth.pr ? '开草稿 PR' : '', cfg.auth.temp ? '成员出故障时用团队已选用的模型临时接任' : ''].filter(Boolean).join('、') || '无'}</div><div class="src">始终要你确认的：合并、发布、对外消息、放宽或删除标准、追加时间或预算、新的付费模型</div></div>`; }
+	else body = T.i >= 6 ? `<div class="item"><div class="top"><span class="t mono">src/renderer/services/exportMarkdown.ts</span><span class="st">+186 −0</span></div></div>${L.crit.A4 ? '<div class="item"><div class="top"><span class="t mono">src/cli/commands/export.ts</span><span class="st">+74 −0</span></div></div>' : ''}<div class="item"><div class="top"><span class="t mono">qa/export.test.ts</span><span class="st">QA 的测试</span></div></div><div class="src">分支 team/export-md。这里沿用日常对话的改动面板。</div>` : '<div class="dim">还没有改动。</div>';
+	$('#panel').innerHTML = tabsHtml([['out', '产出', ''], ['board', '进展', L.issues.filter((x) => x[2] < 2).length || ''], ['dec', '决定', L.dec.length || ''], ['ev', '证据', ''], ['seats', '成员', ''], ['changes', '改动', '']], tab, 't2-tab') + `<div class="pbody">${body}</div>`;
+}
+
+/* ---------- team setup dialog, with the same model and level picker as the daily composer ---------- */
+function spRows() { const rows = []; for (const tool of ['codex', 'claude']) for (const mm of CATALOG[tool].models.filter((x) => !x.more)) rows.push({ tool, m: mm }); return rows; }
+function spHtml() {
+	const T = S.team; const sp = T.sp; if (!sp) return ''; const rows = spRows(); const hi = sp.mi >= 0 ? rows[sp.mi] : null; const c = hi ? CATALOG[hi.tool] : null; let last = '';
+	const list = (sp.slot === 'sub' ? `<button class="mrow" role="option" aria-selected="${sp.mi === -1}" data-act="t2-sp-none"><span class="n">不设替补</span><span class="d">${sp.seat === 'pm' ? '故障时先恢复会话；仍不行再按授权临时接任或问你' : '额度用尽时等它恢复，其他成员继续'}</span></button>` : '') + rows.map((r, i) => { const hd = r.tool !== last ? `<div class="msec">${CATALOG[r.tool].label}</div>` : ''; last = r.tool; return `${hd}<button class="mrow" role="option" aria-selected="${i === sp.mi}" data-act="t2-sp-model" data-i="${i}"><span class="n">${esc(r.m.name)}</span><span class="d">${esc(r.m.zh || r.m.desc)}</span></button>`; }).join('');
+	const eff = hi ? hi.m.efforts.filter((e) => e !== 'ultra') : []; const cur = hi && sp.effort && eff.includes(sp.effort) ? sp.effort : hi ? hi.m.def : null;
+	const elist = !hi ? '<div class="enote">不设替补，就没有档位可选。</div>' : eff.length ? `<h5>${c.term}</h5>` + eff.map((e, i) => `<button class="erow" role="option" aria-selected="${sp.col === 'effort' ? i === sp.ei : e === cur}" data-act="t2-sp-effort" data-e="${e}"><span class="n">${c.levels[e][0]}${e === hi.m.def ? '<span class="mini">默认</span>' : ''}</span><span class="d">${esc(c.levels[e][2])}</span></button>`).join('') + (hi.tool === 'codex' ? '<div class="enote">团队成员不提供 Ultra：它会自己再派子任务，团队里会套团队。</div>' : '') : '<div class="enote">这个模型没有强度选项。</div>';
+	return `<div class="sp" id="sp" role="dialog" aria-label="给${ROLE[sp.seat]}选${sp.slot === 'sub' ? '替补' : '模型'}"><div class="pop-head"><b>${ROLE[sp.seat]}${sp.slot === 'sub' ? '的替补' : ''}</b><span class="dim">　各家用各家的说法</span></div><div class="pop-body"><div class="mlist" role="listbox">${list}</div><div class="elist" role="listbox">${elist}</div></div><div class="pop-foot"><kbd>↑↓</kbd> 选模型　<kbd>→</kbd> 选档位　<kbd>Enter</kbd> 确定　<kbd>Esc</kbd> 关闭</div></div>`;
+}
+function setupHtml() {
+	const T = S.team; const d = T.draftCfg; const seat = (k) => { const s = d.seats[k]; return `<div class="seatrow"><span class="seat ${k}"><i></i>${ROLE[k]}</span><button class="cpill" data-act="t2-sp" data-seat="${k}" data-slot="main" id="sp-${k}-main">${esc(selText(s))} · ${esc(lvlText(s))} ⌄</button><button class="cpill" data-act="t2-sp" data-seat="${k}" data-slot="sub" id="sp-${k}-sub">替补：${s.sub ? esc(mdlOf(s.sub).name) : '不设'} ⌄</button></div>${T.sp && T.sp.seat === k ? spHtml() : ''}`; };
+	const same = d.seats.dev.tool === d.seats.qa.tool;
+	return `<div class="veil" data-act="t2-closesetup"><div class="dlg" role="dialog" aria-modal="true" aria-label="新建团队" data-stop="1"><h2>新建团队</h2>
+		<label for="idea">你的想法</label><textarea id="idea" rows="2">${esc(d.idea)}</textarea>
+		<label>成员：每个岗位各选模型和档位，可以再选一个替补</label>${seat('pm')}${seat('dev')}${seat('qa')}
+		<div class="hintline ${same ? 'warn' : ''}" id="seat-hint">${same ? '开发和 QA 现在来自同一家，可能有相同的盲区。隔离的对话、隔离的工作区和应用执行的检查不受影响。想多一层保险可以换一家做 QA。' : '开发和 QA 来自不同的厂商，盲区不容易重合。这不等于结论一定对：可靠性还靠隔离的工作区和应用自己执行的检查。'}</div>
+		<label>截止与预算（到了还没完成，团队停下来写未完成报告）</label><div class="rules"><span>截止时间</span><select id="cfg-demo"><option ${d.demoAt === '今天 18:00' ? 'selected' : ''}>今天 18:00</option><option ${d.demoAt === '明天 10:00' ? 'selected' : ''}>明天 10:00</option><option ${d.demoAt === '不设' ? 'selected' : ''}>不设</option></select><span>回合预算</span><input type="number" id="cfg-turns" min="10" max="200" value="${d.turns}"></div>
+		<label>一次授权，范围内不再问你</label><div class="auth"><label class="pcheck"><input type="checkbox" id="au-checks" ${d.auth.checks ? 'checked' : ''}> 在任务工作区里运行检查命令</label><label class="pcheck"><input type="checkbox" id="au-push" ${d.auth.push ? 'checked' : ''}> 在任务分支上提交和推送</label><label class="pcheck"><input type="checkbox" id="au-pr" ${d.auth.pr ? 'checked' : ''}> 开草稿 PR</label><label class="pcheck"><input type="checkbox" id="au-temp" ${d.auth.temp ? 'checked' : ''}> 成员出故障时，用团队已选用的模型新开一条对话临时接任</label></div>
+		<div class="hintline">合并、发布、对外消息、放宽或删除标准、追加时间或预算、新的付费模型，始终要你确认。别的事团队自己推进、自己解决分歧；全部达标后向你演示，到了截止还没完成就给你未完成报告。</div>
+		<div class="btnrow" style="justify-content:flex-end"><button class="btn" data-act="t2-closesetup2">取消</button><button class="btn pri" data-act="t2-start">建队并开始</button></div></div></div>`;
+}
+function readSetup() { const d = S.team.draftCfg; const g = (id) => $(id); if (g('#idea')) d.idea = g('#idea').value; if (g('#cfg-demo')) d.demoAt = g('#cfg-demo').value; if (g('#cfg-turns')) d.turns = Math.max(10, +g('#cfg-turns').value || 40); if (g('#au-checks')) d.auth = { checks: g('#au-checks').checked, push: g('#au-push').checked, pr: g('#au-pr').checked, temp: g('#au-temp').checked }; }
+function spCommit() {
+	const T = S.team; const sp = T.sp; const d = T.draftCfg; const rows = spRows(); const back = `#sp-${sp.seat}-${sp.slot}`;
+	if (sp.mi === -1) d.seats[sp.seat].sub = null;
+	else { const hi = rows[sp.mi]; const eff = hi.m.efforts.filter((e) => e !== 'ultra'); const e = eff.length ? (sp.col === 'effort' ? eff[sp.ei] : sp.effort && eff.includes(sp.effort) ? sp.effort : hi.m.def) : null; const pick = { tool: hi.tool, model: hi.m.id, effort: e }; if (sp.slot === 'sub') d.seats[sp.seat].sub = pick; else d.seats[sp.seat] = { ...pick, sub: d.seats[sp.seat].sub }; }
+	T.sp = null; renderOverlay(); const b = $(back); if (b) b.focus();
+}
+function renderOverlay() { $('#overlay').innerHTML = S.team.setup ? setupHtml() : ''; }
+function closeSetup() { const T = S.team; T.setup = false; T.sp = null; renderAll(); const o = T.opener && $(T.opener); if (o) o.focus(); }
+
+/* ---------- wiring ---------- */
+function renderAll() {
+	renderBar(); renderSide();
+	if (S.scene === 'daily') renderDaily(); else if (S.scene === 'follow') renderFollow(); else renderTeam();
+	renderPanel(); renderOverlay();
+	if (S.theme) document.documentElement.dataset.theme = S.theme; else delete document.documentElement.dataset.theme;
+}
+function stopAuto() { if (S.team.auto) { clearInterval(S.team.auto); S.team.auto = null; } }
+function teamGo(n) { const T = S.team; const len = teamSteps().length; const was = T.i; T.i = Math.max(0, Math.min(len - 1, n)); T.freshStep = T.i !== was; renderAll(); T.freshStep = false; }
+function teamBack() {
+	const T = S.team; if (T.i === 0) return; T.i--;
+	for (const k of Object.keys(T.choiceAt)) if (T.choiceAt[k] >= T.i) { delete T.choice[k]; delete T.choiceAt[k]; if (k === 'BASE') { T.open.baseBack = false; } if (k === 'ACC') T.open.chg = false; }
+	for (const k of Object.keys(T.simAt)) if (T.simAt[k] >= T.i) { delete T.sim[k]; delete T.simAt[k]; }
+	T.msgs = T.msgs.filter((mm) => mm.at < T.i);
+	T.i = Math.min(T.i, teamSteps().length - 1); renderAll();
+}
+function choose(k, v) { const T = S.team; T.choice[k] = v; T.choiceAt[k] = T.i; renderAll(); if (k === 'Q') return; setTimeout(() => { if (S.scene === 'team' && T.i < teamSteps().length - 1 && T.choiceAt[k] === T.i) teamGo(T.i + 1); }, 650); }
+function sendMsg() {
+	const T = S.team; const st = teamSteps()[T.i]; const el = $('#t2-input'); const raw = (el ? el.value : T.draft).trim(); if (!raw || !canTalk(st)) return;
+	const text = T.view !== 'team' && !raw.startsWith('@') ? `@${ROLE[T.view]} ${raw}` : raw;
+	T.msgs.push({ at: T.i, text, ...classify(text) }); T.draft = ''; T.men = -1; T.refocus = '#t2-input'; renderAll();
+}
+function mentionUpdate() {
+	const T = S.team; const el = $('#t2-input'); const box = $('#mention'); if (!el || !box) return; const mm = el.value.match(/^@(\S*)$/);
+	if (!mm || T.view !== 'team') { T.men = -1; box.innerHTML = ''; return; }
+	const list = ['pm', 'dev', 'qa'].filter((k) => ROLE[k].toLowerCase().startsWith(mm[1].toLowerCase())); T.menList = list; if (T.men < 0 || T.men >= list.length) T.men = 0;
+	box.innerHTML = list.length ? `<div class="men" role="listbox" aria-label="选一位成员">${list.map((k, i) => `<button role="option" aria-selected="${i === T.men}" data-act="t2-men" data-v="${k}">${seatTag(k, ledgerAt(T.i))}</button>`).join('')}</div>` : '';
+}
+function pickMention(k) { const T = S.team; const el = $('#t2-input'); el.value = `@${ROLE[k]} `; T.draft = el.value; T.men = -1; $('#mention').innerHTML = ''; el.focus(); }
+const freshFollow = () => ({ i: 0, choice: {}, choiceAt: {}, sim: {}, simAt: {}, restartAt: null, tab: 'checks', limit: 2 });
+document.addEventListener('click', (ev) => {
+	const el = ev.target.closest('[data-act]');
+	if (S.pop.open && !ev.target.closest('#pop') && !(el && el.dataset.act === 'pop')) { S.pop.open = false; renderDaily(); }
+	if (S.oldMenu && !(el && el.dataset.act === 'oldmenu')) { S.oldMenu = false; renderDaily(); }
+	if (!el) return;
+	const a = el.dataset.act; const v = el.dataset.v; const T = S.team; const F = S.follow;
+	if (a === 'scene') { S.scene = v; S.pop.open = false; stopAuto(); if (location.hash !== '#' + v) location.hash = v; renderAll(); }
+	else if (a === 'mode') { S.mode = v; S.pop.open = false; S.oldMenu = false; renderAll(); }
+	else if (a === 'tool') { S.tool = v; S.pop.open = false; renderAll(); }
+	else if (a === 'play') playRun();
+	else if (a === 'theme') { S.theme = isDark() ? 'light' : 'dark'; renderAll(); }
+	else if (a === 'expand') { S.run.expanded = !S.run.expanded; renderDaily(); }
+	else if (a === 'approve') approve(v === '1');
+	else if (a === 'panel') { S.hidePanel = !S.hidePanel; renderPanel(); }
+	else if (a === 'ptab') { S.ptab = v; S.hidePanel = false; renderPanel(); }
+	else if (a === 'ftab') { F.tab = v; S.hidePanel = false; renderPanel(); }
+	else if (a === 'pop') { if (S.pop.open) closePop(); else openPop(); }
+	else if (a === 'oldmenu') { S.oldMenu = !S.oldMenu; renderDaily(); }
+	else if (a === 'pick-model') { chooseModel(+el.dataset.i); S.pop.col = 'model'; renderDaily(); }
+	else if (a === 'pick-effort') { chooseEffort(el.dataset.e); closePop(); }
+	else if (a === 'more') { S.pop.more = !S.pop.more; renderDaily(); }
+	else if (a === 'fast') { S.sel[S.tool].fast = !S.sel[S.tool].fast; renderDaily(); }
+	// team chat
+	else if (a === 't2-prev') { stopAuto(); teamBack(); }
+	else if (a === 't2-next') teamGo(T.i + 1);
+	else if (a === 't2-auto') { if (T.auto) stopAuto(); else T.auto = setInterval(() => { const steps = teamSteps(); if (needOpen(steps[T.i]) || T.i >= steps.length - 1) { stopAuto(); renderBar(); return; } teamGo(T.i + 1); }, 2600); renderBar(); }
+	else if (a === 't2-reset') { stopAuto(); S.team = freshTeam(T); renderAll(); }
+	else if (a === 't2-choose') choose(el.dataset.k, v);
+	else if (a === 't2-sim') { T.sim[v] = true; T.simAt[v] = T.i; renderAll(); if (v !== 'silent' && v !== 'restart') setTimeout(() => { if (S.scene === 'team' && T.simAt[v] === T.i) teamGo(T.i + 1); }, 500); }
+	else if (a === 't2-open') { T.open[v] = !T.open[v]; const sc = $('#team-scroll'); T.keepScroll = sc ? sc.scrollTop : null; if (v === 'baseBack') T.refocus = '#base-note'; if (v === 'chg') T.refocus = '#chg-note'; renderTeam(); }
+	else if (a === 't2-before') { T.open.before = v === '1'; const sc = $('#team-scroll'); T.keepScroll = sc ? sc.scrollTop : null; renderTeam(); renderPanel(); }
+	else if (a === 't2-tab') { T.tab = v; S.hidePanel = false; renderPanel(); }
+	else if (a === 't2-view') { T.view = v; T.draft = ''; T.refocus = v === 'team' ? null : '#back-team'; renderAll(); }
+	else if (a === 't2-edit') { T.open.baseEditId = v; const sc = $('#team-scroll'); T.keepScroll = sc ? sc.scrollTop : null; T.refocus = '#base-edit'; renderTeam(); }
+	else if (a === 't2-saveedit') { const inp = $('#base-edit'); if (inp && inp.value.trim()) { T.input.baseEdit = { ...(T.input.baseEdit || {}), [v]: inp.value.trim() }; } T.open.baseEditId = null; const sc = $('#team-scroll'); T.keepScroll = sc ? sc.scrollTop : null; renderAll(); }
+	else if (a === 't2-sendback') { const n = $('#base-note'); T.input.baseNote = n ? n.value.trim() : ''; if (!T.input.baseNote) { n.focus(); return; } choose('BASE', 'back'); }
+	else if (a === 't2-sendchange') { const n = $('#chg-note'); T.input.change = n ? n.value.trim() : ''; if (!T.input.change) { n.focus(); return; } choose('ACC', 'change'); }
+	else if (a === 't2-chip') { const inp = $('#t2-input'); if (inp) { inp.value = v; T.draft = v; inp.focus(); } }
+	else if (a === 't2-send') sendMsg();
+	else if (a === 't2-men') pickMention(v);
+	else if (a === 't2-setup' || a === 't2-new') { stopAuto(); S.scene = 'team'; T.opener = a === 't2-new' ? '#new-team' : (el.classList.contains('hbtn') ? '.head [data-act="t2-setup"]' : '#pbar [data-act="t2-setup"]'); T.draftCfg = JSON.parse(JSON.stringify(T.cfg)); T.setup = true; T.sp = null; renderAll(); const i = $('#idea'); if (i) i.focus(); }
+	else if (a === 't2-closesetup') { if (!ev.target.closest('[data-stop]')) closeSetup(); }
+	else if (a === 't2-closesetup2') closeSetup();
+	else if (a === 't2-start') { readSetup(); const cfg = T.draftCfg; S.team = freshTeam(); S.team.cfg = cfg; S.scene = 'team'; renderAll(); }
+	else if (a === 't2-sp') { readSetup(); const seat = el.dataset.seat; const slot = el.dataset.slot; const cur = slot === 'sub' ? T.draftCfg.seats[seat].sub : T.draftCfg.seats[seat]; const rows = spRows(); const mi = cur ? Math.max(0, rows.findIndex((r) => r.tool === cur.tool && r.m.id === cur.model)) : -1; T.sp = T.sp && T.sp.seat === seat && T.sp.slot === slot ? null : { seat, slot, mi, col: 'model', ei: 0, effort: cur ? cur.effort : null }; renderOverlay(); const s = $('#sp [aria-selected="true"]'); if (s) s.focus(); }
+	else if (a === 't2-sp-none') { T.sp.mi = -1; spCommit(); }
+	else if (a === 't2-sp-model') { T.sp.mi = +el.dataset.i; T.sp.col = 'model'; T.sp.effort = null; renderOverlay(); const s = $('#sp .mrow[aria-selected="true"]'); if (s) s.focus(); }
+	else if (a === 't2-sp-effort') { T.sp.effort = el.dataset.e; T.sp.col = 'model'; spCommit(); }
+	// follow-ups and checks
+	else if (a === 'fnext') { F.i = Math.min(followSteps().length - 1, F.i + 1); renderAll(); }
+	else if (a === 'fsim') { F.sim[v] = true; F.simAt[v] = F.i; renderAll(); if (v === 'outside' || v === 'boundary') setTimeout(() => { if (S.scene === 'follow' && F.simAt[v] === F.i && F.i < followSteps().length - 1) { F.i++; renderAll(); } }, 500); }
+	else if (a === 'fprev') { if (F.i > 0) { F.i--; for (const k of Object.keys(F.choiceAt)) if (F.choiceAt[k] >= F.i) { delete F.choice[k]; delete F.choiceAt[k]; } for (const k of Object.keys(F.simAt)) if (F.simAt[k] >= F.i) { delete F.sim[k]; delete F.simAt[k]; } if (F.restartAt != null && F.restartAt >= F.i) F.restartAt = null; F.i = Math.min(F.i, followSteps().length - 1); renderAll(); } }
+	else if (a === 'fchoose') { const k = el.dataset.k; F.choice[k] = v; F.choiceAt[k] = F.i; renderAll(); setTimeout(() => { if (S.scene === 'follow' && F.i < followSteps().length - 1 && F.choiceAt[k] === F.i) { F.i++; renderAll(); } }, 650); }
+	else if (a === 'frestart') { F.restartAt = F.i; renderAll(); }
+	else if (a === 'freset') { S.follow = freshFollow(); renderAll(); }
+});
+document.addEventListener('change', (ev) => { if (ev.target.id === 'chk-appr') S.approval = ev.target.checked; if (ev.target.id === 'f-limit') { S.follow.limit = +ev.target.value; renderAll(); const el = $('#f-limit'); if (el) el.focus(); } });
+document.addEventListener('input', (ev) => {
+	if (ev.target.id === 'pop-filter') { S.pop.q = ev.target.value; S.pop.mi = 0; S.pop.col = 'model'; S.pop.notice = ''; renderDaily(); }
+	if (ev.target.id === 't2-input') { S.team.draft = ev.target.value; mentionUpdate(); }
+});
+document.addEventListener('keydown', (ev) => {
+	const T = S.team;
+	if (S.pop.open && S.scene === 'daily') { popKey(ev); return; }
+	if (T.setup && T.sp) {
+		const sp = T.sp; const rows = spRows(); const min = sp.slot === 'sub' ? -1 : 0; const eff = sp.mi >= 0 ? rows[sp.mi].m.efforts.filter((e) => e !== 'ultra') : [];
+		if (ev.key === 'Escape') { ev.preventDefault(); const back = `#sp-${sp.seat}-${sp.slot}`; T.sp = null; renderOverlay(); const b = $(back); if (b) b.focus(); return; }
+		if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); const dlt = ev.key === 'ArrowDown' ? 1 : -1; if (sp.col === 'model') { sp.mi = Math.max(min, Math.min(rows.length - 1, sp.mi + dlt)); sp.effort = null; } else sp.ei = Math.max(0, Math.min(eff.length - 1, sp.ei + dlt)); renderOverlay(); const s = $(sp.col === 'model' ? '#sp .mrow[aria-selected="true"]' : '#sp .erow[aria-selected="true"]'); if (s) s.focus(); return; }
+		if ((ev.key === 'ArrowRight' || ev.key === 'Tab') && sp.col === 'model' && eff.length) { ev.preventDefault(); sp.col = 'effort'; sp.ei = Math.max(0, eff.indexOf(sp.effort || rows[sp.mi].m.def)); renderOverlay(); const s = $('#sp .erow[aria-selected="true"]'); if (s) s.focus(); return; }
+		if (ev.key === 'ArrowLeft' && sp.col === 'effort') { ev.preventDefault(); sp.col = 'model'; renderOverlay(); const s = $('#sp .mrow[aria-selected="true"]'); if (s) s.focus(); return; }
+		if (ev.key === 'Enter') { ev.preventDefault(); spCommit(); return; }
+		return;
+	}
+	if (T.setup && ev.key === 'Escape') { closeSetup(); return; }
+	if (T.setup && ev.key === 'Tab') { const list = [...document.querySelectorAll('.dlg textarea, .dlg select, .dlg input, .dlg button')].filter((x) => !x.disabled); const i = list.indexOf(document.activeElement); if (ev.shiftKey && i <= 0) { ev.preventDefault(); list[list.length - 1].focus(); } else if (!ev.shiftKey && i === list.length - 1) { ev.preventDefault(); list[0].focus(); } return; }
+	// the same chord the product already uses for its model switcher
+	if (S.scene === 'daily' && S.mode === 'new' && ev.altKey && ev.metaKey && (ev.key === '.' || ev.code === 'Period')) { ev.preventDefault(); openPop(); return; }
+	const ae = document.activeElement; const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(ae && ae.tagName);
+	if (S.scene === 'team' && ae && ae.id === 't2-input') {
+		if (T.men >= 0 && T.menList && T.menList.length) { if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); T.men = (T.men + (ev.key === 'ArrowDown' ? 1 : -1) + T.menList.length) % T.menList.length; mentionUpdate(); return; } if (ev.key === 'Enter' || ev.key === 'Tab') { ev.preventDefault(); pickMention(T.menList[T.men]); return; } if (ev.key === 'Escape') { ev.preventDefault(); T.men = -1; $('#mention').innerHTML = ''; return; } }
+		if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); sendMsg(); return; }
+		if (ev.key === 'Escape') { ae.blur(); return; }
+	}
+	if (S.scene === 'team' && ae && ae.id === 'base-edit' && ev.key === 'Enter') { ev.preventDefault(); const b = $('[data-act="t2-saveedit"]'); if (b) b.click(); return; }
+	if (typing || T.setup) return;
+	if (S.scene === 'team') { if (ev.key === 'Escape' && T.view !== 'team') { const k = T.view; T.view = 'team'; renderAll(); const r = $(`#side [data-act="t2-view"][data-v="${k}"]`); if (r) r.focus(); return; } if (ev.key === 'ArrowRight' && !needOpen(teamSteps()[T.i])) teamGo(T.i + 1); if (ev.key === 'ArrowLeft') { stopAuto(); teamBack(); } }
+	if (S.scene === 'follow') { const F = S.follow; const st = followSteps()[F.i]; if (ev.key === 'ArrowRight' && !(st.need && !F.choice[st.need])) $('[data-act="fnext"]').click(); if (ev.key === 'ArrowLeft') $('[data-act="fprev"]').click(); }
+});
+function fromHash() { const h = location.hash.replace('#', ''); if (['team', 'daily', 'follow'].includes(h)) S.scene = h; }
+addEventListener('hashchange', () => { fromHash(); renderAll(); });
+fromHash();
+// open in a realistic working state: a finished turn in the proposed presentation
+S.run.status = 'done'; S.run.elapsed = 14; S.run.events = RUN.filter((e) => e.k !== 'done').map((e) => (e.k === 'tool' ? { ...e, state: e.fail ? 'failed' : 'ok' } : { ...e }));
+renderAll();
+</script>
+</body>
+</html>

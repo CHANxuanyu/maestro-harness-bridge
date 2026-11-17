@@ -131,51 +131,59 @@ const readCold = () =>
 	});
 
 describe('Codex append-only refresh cursor', () => {
-	it('reads update_plan calls into the same latest task list after append and reopen', async () => {
-		// Source-derived contract, not a captured model run. See codex-plan.md.
-		const first = {
-			plan: [
-				{ step: 'First', status: 'in_progress' },
-				{ step: 'Second', status: 'pending' },
-			],
-		};
-		const call = row('response_item', {
-			type: 'function_call',
-			name: 'update_plan',
-			call_id: 'plan-first',
-			arguments: JSON.stringify(first),
-		});
-		const file = await transcript('a', call);
-		const initial = latestAgentTaskList(
-			transcriptMessagesToLogEntries((await readIncrementally()).messages)
-		);
-		expect(initial?.tasks.map((task) => task.status)).toEqual(['in_progress', 'pending']);
-		const done = { plan: first.plan.map((step) => ({ ...step, status: 'completed' })) };
-		const appended =
-			row('response_item', {
-				type: 'function_call_output',
-				call_id: 'plan-first',
-				output: 'Plan updated',
-			}) +
-			row('response_item', {
-				type: 'function_call',
-				name: 'update_plan',
-				call_id: 'plan-done',
-				arguments: JSON.stringify(done),
-			}) +
-			row('response_item', {
-				type: 'function_call_output',
-				call_id: 'plan-done',
-				output: 'Plan updated',
-			});
-		await fs.appendFile(file, appended);
-		const refreshed = await readIncrementally();
-		expect(refreshed).toEqual(await readCold());
-		const list = latestAgentTaskList(transcriptMessagesToLogEntries(refreshed.messages));
-		expect(list?.completed).toBe(2);
-		expect(list?.tasks).toHaveLength(2);
-		expect(await fs.readFile(file, 'utf8')).toBe(call + appended);
-	});
+	it.each(['function_call', 'custom_tool_call'])(
+		'reads %s plans after append and cold reopen, ignoring partial scripts and honoring clears',
+		async (type) => {
+			const first = {
+				plan: [
+					{ step: 'First', status: 'in_progress' },
+					{ step: 'Second', status: 'pending' },
+				],
+			};
+			const snapshots = [
+				first,
+				{ plan: first.plan.map((step) => ({ ...step, status: 'completed' })) },
+				{ plan: [] },
+			];
+			const file = await transcript('a', '');
+			for (const [index, input] of snapshots.entries()) {
+				await fs.appendFile(
+					file,
+					row('response_item', {
+						type,
+						name: type === 'function_call' ? 'update_plan' : 'exec',
+						call_id: `plan-${index}`,
+						...(type === 'function_call'
+							? { arguments: JSON.stringify(input) }
+							: {
+									arguments: null,
+									input: `text(await tools.update_plan(${JSON.stringify(input)}));`,
+								}),
+					})
+				);
+				// A truncated code-mode input is not a new plan and cannot clear one.
+				await fs.appendFile(
+					file,
+					row('response_item', {
+						type: 'custom_tool_call',
+						name: 'exec',
+						call_id: `partial-${index}`,
+						input: 'text(await tools.update_plan({"plan":[',
+					})
+				);
+				const before = await fs.readFile(file, 'utf8');
+				const refreshed = await readIncrementally();
+				expect(refreshed).toEqual(await readCold());
+				const list = latestAgentTaskList(transcriptMessagesToLogEntries(refreshed.messages));
+				if (input.plan.length) {
+					expect(list?.tasks).toEqual(
+						input.plan.map(({ step, status }) => ({ content: step, status }))
+					);
+				} else expect(list).toBeNull();
+				expect(await fs.readFile(file, 'utf8')).toBe(before);
+			}
+		}
+	);
 
 	it('retains native model and effort per turn across cold and incremental reads', async () => {
 		const file = await transcript('a', message('before context'));

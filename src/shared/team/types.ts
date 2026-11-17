@@ -5,7 +5,13 @@
  */
 
 import type { AgentId } from '../agentIds';
-import type { AttemptInput, Boundary } from '../progressRules';
+import type {
+	AttemptInput,
+	Boundary,
+	Candidate,
+	NextDecision,
+	ProgressState,
+} from '../progressRules';
 
 export type SeatRole = 'pm' | 'dev' | 'qa';
 export const SEAT_ROLES: readonly SeatRole[] = ['pm', 'dev', 'qa'];
@@ -145,6 +151,8 @@ interface EventBase {
 	id: string;
 	at: number;
 	actor: LedgerActor;
+	/** Link an owner action to its card answer so statistics count the decision once. */
+	cardId?: string;
 }
 
 /**
@@ -186,6 +194,7 @@ export type LedgerEvent = EventBase &
 				reportError?: string;
 		  }
 		| { kind: 'report_accepted'; seat: SeatRole; dispatchId: string; report: TeamReport }
+		| { kind: 'report_repaired'; seat: SeatRole; dispatchId: string }
 		| { kind: 'report_rejected'; seat: SeatRole; dispatchId: string; reason: string }
 		| { kind: 'brief_published'; brief: Brief }
 		| {
@@ -207,6 +216,8 @@ export type LedgerEvent = EventBase &
 				after?: string;
 				reason: string;
 				approvedBy: 'owner' | 'pm';
+				/** Complete definition for an addition or a change to the proof method. */
+				criterion?: Criterion;
 		  }
 		| {
 				kind: 'work_item';
@@ -217,6 +228,8 @@ export type LedgerEvent = EventBase &
 		  }
 		| {
 				kind: 'check_run';
+				/** A baseline canary proves the command runs, not that the product meets a criterion. */
+				purpose?: 'trial' | 'verification';
 				command: string;
 				cwd: string;
 				exitCode: number | null;
@@ -246,7 +259,14 @@ export type LedgerEvent = EventBase &
 				source: 'app' | 'qa' | 'pm';
 				evidence: string;
 		  }
-		| { kind: 'attempt'; problemId: string; attempt: AttemptInput }
+		| {
+				kind: 'attempt';
+				problemId: string;
+				attempt: AttemptInput;
+				/** Measured failures before the first attempt; defaults to that attempt's failures. */
+				initialFailures?: string[];
+				candidates?: Candidate[];
+		  }
 		| {
 				kind: 'discussion_opened';
 				discussionId: string;
@@ -254,6 +274,28 @@ export type LedgerEvent = EventBase &
 				owner: SeatRole;
 				participants: SeatRole[];
 				trigger: string;
+		  }
+		| {
+				kind: 'position';
+				discussionId: string;
+				seat: SeatRole;
+				claim: string;
+				basis: string;
+				wouldChangeMind: string;
+		  }
+		| {
+				kind: 'proposal';
+				discussionId: string;
+				proposal: string;
+				decider: LedgerActor;
+		  }
+		| {
+				kind: 'response';
+				discussionId: string;
+				seat: SeatRole;
+				result: 'agree' | 'reserve' | 'insist';
+				reason: string;
+				evidence?: string;
 		  }
 		| {
 				kind: 'discussion_closed';
@@ -276,6 +318,8 @@ export type LedgerEvent = EventBase &
 				reason: 'no-progress' | 'rejections';
 				summary: string;
 				progressEvidence: string;
+				/** A targeted diagnosis; omitted for a team-wide retro. */
+				problemId?: string;
 		  }
 		| { kind: 'demo' }
 		| { kind: 'accepted'; withGaps?: string[] }
@@ -290,6 +334,7 @@ export type LedgerEvent = EventBase &
 		  }
 		| { kind: 'follow_up_fired'; followUpId: string; result: string; late?: boolean }
 		| { kind: 'quota_exhausted'; seat: SeatRole; resetsAt?: number }
+		| { kind: 'substitute_took_over'; seat: SeatRole; model: SeatModel; temporary?: boolean }
 		| { kind: 'member_fault'; seat: SeatRole; fault: MemberFaultKind; detail?: string }
 		| { kind: 'member_recovered'; seat: SeatRole; how: string }
 		| { kind: 'decision_card'; card: OwnerCard }
@@ -420,3 +465,173 @@ export const REPORT_PERMISSIONS: Record<TeamReport['type'], readonly SeatRole[]>
 	demo: ['pm'],
 	topic: ['pm', 'dev', 'qa'],
 };
+
+export type TeamEvent<K extends LedgerEventKind> = Extract<LedgerEvent, { kind: K }>;
+export type M1TurnKind = Exclude<
+	TurnKind,
+	'position' | 'proposal' | 'response' | 'topic' | 'report_repair'
+>;
+export type CriterionEvidenceStatus = 'unproven' | 'pending' | 'pass' | 'fail';
+
+export interface CriterionEvidence {
+	eventId: string;
+	seq: number;
+	source: ProofKind;
+	/** Stable check identity or verdict source; a new result supersedes only its own lane. */
+	key: string;
+	status: Exclude<CriterionEvidenceStatus, 'unproven'>;
+	evidence: string;
+	reason: string;
+}
+
+export interface CriterionState extends Criterion {
+	confirmed: boolean;
+	status: CriterionEvidenceStatus;
+	reason: string;
+	evidence: CriterionEvidence[];
+	/** Evidence before a definition change is retained, but no longer proves the new wording. */
+	definitionSeq: number;
+}
+
+export interface TeamIssue {
+	id: string;
+	opened: TeamEvent<'issue_opened'>;
+	state: 'opened' | 'fixed-claimed' | 'verified-pass' | 'verified-fail';
+	history: Array<TeamEvent<'issue_opened' | 'issue_fixed' | 'issue_verified'>>;
+}
+
+export interface TeamDiscussion {
+	id: string;
+	opened?: TeamEvent<'discussion_opened'>;
+	positions: TeamEvent<'position'>[];
+	proposals: TeamEvent<'proposal'>[];
+	responses: TeamEvent<'response'>[];
+	decision?: TeamEvent<'discussion_closed'>;
+}
+
+export interface TeamUsage {
+	turns: number;
+	inputTokens: number;
+	outputTokens: number;
+	costUsd: number;
+	/** Sum of measured member time, not wall-clock team effort. */
+	durationMs: number;
+	turnsWithTokens: number;
+	turnsWithCost: number;
+}
+
+export interface TeamSeatState {
+	binding?: TeamEvent<'seat_bound'>;
+	model?: SeatModel;
+	lastFault?: TeamEvent<'member_fault'>;
+	faultActive: boolean;
+	quota?: TeamEvent<'quota_exhausted'>;
+	takeover: 'substitute' | 'temporary' | null;
+	activeDispatchIds: string[];
+	usage: TeamUsage;
+}
+
+export interface TeamProblem {
+	initialFailures: string[];
+	progress: ProgressState;
+	candidates: Candidate[];
+	decision: NextDecision;
+}
+
+export interface TeamStatistics {
+	ownerDecisions: number;
+	discussions: number;
+	rejections: number;
+	retros: number;
+	recoveries: number;
+	turns: number;
+}
+
+/** Replay output only. Runtime commands validate and append events, never mutate this snapshot. */
+export interface TeamState {
+	config: TeamConfig | null;
+	phase: TeamPhase;
+	paused: boolean;
+	stopped: boolean;
+	terminal: TeamTerminal | null;
+	residual: string[];
+	brief: Brief | null;
+	briefs: Brief[];
+	baseline: {
+		proposedVersion: number | null;
+		confirmedVersion: number | null;
+		/** Effective confirmed baseline, including explicitly approved edits. */
+		brief: Brief | null;
+		edits: TeamEvent<'baseline_edited'>[];
+		returns: TeamEvent<'baseline_returned'>[];
+	};
+	criteria: CriterionState[];
+	challenges: TeamEvent<'challenge_submitted'>[];
+	briefResponses: TeamEvent<'brief_response'>[];
+	workItems: TeamEvent<'work_item'>[];
+	checks: TeamEvent<'check_run'>[];
+	issues: TeamIssue[];
+	discussions: TeamDiscussion[];
+	decisions: TeamEvent<'discussion_closed'>[];
+	standardChanges: TeamEvent<'standard_change'>[];
+	followUps: TeamEvent<'follow_up_registered'>[];
+	openCards: OwnerCard[];
+	cardAnswers: TeamEvent<'card_answered'>[];
+	seats: Record<SeatRole, TeamSeatState>;
+	problems: Record<string, TeamProblem>;
+	reviews: TeamEvent<'review'>[];
+	rejectionCount: number;
+	rejectionsInRow: number;
+	reviewProgress: ProgressState;
+	reviewDecision: NextDecision;
+	retros: TeamEvent<'retro'>[];
+	outputs: TeamEvent<'output_captured'>[];
+	turns: Array<{
+		dispatchId: string;
+		seat: SeatRole;
+		dispatched?: TeamEvent<'turn_dispatched'>;
+		finished?: TeamEvent<'turn_finished'>;
+		report?: TeamReport;
+		reportError?: string;
+		repaired?: boolean;
+	}>;
+	pendingMessages: TeamEvent<'owner_message'>[];
+	usage: TeamUsage;
+	statistics: TeamStatistics;
+}
+
+export interface TeamStatusView {
+	generatedBy: 'app';
+	title: string;
+	phase: TeamPhase;
+	paused: boolean;
+	stopped: boolean;
+	terminal: TeamTerminal | null;
+	residual: string[];
+	criteria: {
+		total: number;
+		/** Confirmed criteria with passing evidence, never member completion claims. */
+		withEvidence: number;
+		missing: Array<{ id: string; text: string; status: CriterionEvidenceStatus; reason: string }>;
+	};
+	openWorkItems: TeamState['workItems'];
+	waitingFor: string[];
+	openCards: OwnerCard[];
+	budget: {
+		turnsUsed: number;
+		turnsTotal: number;
+		deadline?: number;
+		remainingMs?: number;
+		exhausted: boolean;
+	};
+	seats: Array<{
+		seat: SeatRole;
+		status: 'unbound' | 'ready' | 'working' | 'waiting' | 'fault';
+		model?: SeatModel;
+		lastFault?: MemberFaultKind;
+		detail?: string;
+		takeover: TeamSeatState['takeover'];
+		usage: TeamUsage;
+	}>;
+	usage: TeamUsage;
+}

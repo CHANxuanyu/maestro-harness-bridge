@@ -1,0 +1,116 @@
+import { describe, expect, it } from 'vitest';
+import {
+	buildTeamTurnPrompt,
+	TEAM_TURN_PROMPTS,
+	TEAM_WORKSPACE_RULES,
+	teamReportSchema,
+} from '../../../shared/team/prompts';
+import { reduceLedger } from '../../../shared/team/ledger';
+import { REPORT_PERMISSIONS, type M1TurnKind } from '../../../shared/team/types';
+import { baseline, ledger, proven } from './fixtures';
+
+describe('team turn prompts', () => {
+	it.each(Object.keys(TEAM_TURN_PROMPTS) as M1TurnKind[])(
+		'includes the shared schema, workspace rule and actionable slice for %s',
+		(kind) => {
+			const state = reduceLedger(ledger(...proven));
+			for (const seat of REPORT_PERMISSIONS[kind]) {
+				const prompt = buildTeamTurnPrompt(kind, seat, state);
+				expect(prompt).toContain(`You are the team's ${seat.toUpperCase()}`);
+				expect(prompt).toContain(TEAM_WORKSPACE_RULES[seat]);
+				expect(prompt).toContain(JSON.stringify(teamReportSchema(kind, seat), null, '\t'));
+				expect(prompt).toContain('3 consecutive attempts without progress');
+				expect(prompt).toContain('2 consecutive review rejections');
+				expect(prompt).toContain('team-report');
+				expect(prompt).toContain('Parse durations');
+				expect(TEAM_TURN_PROMPTS[kind](state, seat)).toBe(prompt);
+			}
+		}
+	);
+	it('isolates challenges from other seats and QA preparation from unfinished development', () => {
+		const state = reduceLedger(
+			ledger(
+				...baseline,
+				{
+					kind: 'challenge_submitted',
+					seat: 'qa',
+					objections: [{ about: 'A1', kind: 'risk', problem: 'QA_PRIVATE_CHALLENGE' }],
+				},
+				{
+					kind: 'challenge_submitted',
+					seat: 'dev',
+					objections: [{ about: 'A1', kind: 'risk', problem: 'DEV_PRIVATE_CHALLENGE' }],
+				},
+				{
+					kind: 'work_item',
+					itemId: 'dev-work',
+					title: 'DEV_UNFINISHED_WORK',
+					owner: 'dev',
+					state: 'claimed',
+				},
+				{
+					kind: 'seat_bound',
+					seat: 'dev',
+					workspace: '/private/dev-worktree',
+					model: { tool: 'codex' },
+				},
+				{
+					kind: 'report_accepted',
+					seat: 'dev',
+					dispatchId: 'work',
+					report: {
+						type: 'work',
+						done: ['RAW_CHAT_SENTINEL'],
+						summary: 'Private implementation',
+						claimsComplete: false,
+					},
+				}
+			)
+		);
+		expect(buildTeamTurnPrompt('challenge', 'dev', state)).not.toContain('QA_PRIVATE_CHALLENGE');
+		expect(buildTeamTurnPrompt('challenge', 'qa', state)).not.toContain('DEV_PRIVATE_CHALLENGE');
+		const prep = buildTeamTurnPrompt('qa_prep', 'qa', state);
+		for (const secret of ['DEV_UNFINISHED_WORK', '/private/dev-worktree', 'RAW_CHAT_SENTINEL'])
+			expect(prep).not.toContain(secret);
+		expect(buildTeamTurnPrompt('respond', 'pm', state)).toContain('QA_PRIVATE_CHALLENGE');
+	});
+	it('includes captured output for review and all changes and contested decisions for demo', () => {
+		const state = reduceLedger(
+			ledger(
+				...proven,
+				{
+					kind: 'standard_change',
+					actor: 'pm',
+					criterionId: 'A1',
+					change: 'tighten',
+					before: 'Hours',
+					after: 'Whole hours',
+					reason: 'Scope clarification',
+					approvedBy: 'pm',
+				},
+				{
+					kind: 'discussion_closed',
+					discussionId: 'd1',
+					decision: 'Text output',
+					decider: 'pm',
+					contested: true,
+					dissent: 'QA wanted a table',
+					actions: [],
+				}
+			)
+		);
+		expect(buildTeamTurnPrompt('review', 'pm', state)).toContain('preview.png');
+		const demo = buildTeamTurnPrompt('demo', 'pm', state);
+		for (const value of [
+			'Scope clarification',
+			'QA wanted a table',
+			'"contested": true',
+			'before/after',
+			'incomplete progress report',
+		])
+			expect(demo).toContain(value);
+	});
+	it('refuses a turn assigned to the wrong seat', () => {
+		expect(() => buildTeamTurnPrompt('verify', 'dev', reduceLedger([]))).toThrow('may not');
+	});
+});

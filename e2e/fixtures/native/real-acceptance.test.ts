@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
 import { createNativeTempDir } from './temp-root.cjs';
 import { acceptanceEnabled, prepareAcceptanceProviders } from './real-runtime.cjs';
@@ -17,6 +19,51 @@ it('requires both explicit opt-ins and refuses smoke or CI even with inherited s
 	expect(acceptanceEnabled('RELAY', opted)).toBe(true);
 	expect(acceptanceEnabled('RELAY', { ...opted, MAESTRO_E2E_SMOKE: '1' })).toBe(false);
 	expect(acceptanceEnabled('RELAY', { ...opted, CI: '1' })).toBe(false);
+});
+
+it('caps concurrent team launches across providers while leaving version probes free', async () => {
+	const root = createNativeTempDir('maestro-team-budget-');
+	roots.push(root);
+	const budgetDirectory = path.join(root, 'budget');
+	fs.mkdirSync(budgetDirectory);
+	const relay = path.resolve('e2e/fixtures/native/real-cli');
+	const controls = ['claude', 'codex'].map((provider) => {
+		const control = path.join(root, `${provider}.json`);
+		fs.writeFileSync(
+			control,
+			JSON.stringify({
+				record: path.join(root, `${provider}.jsonl`),
+				maxInvocations: 3,
+				budgetDirectory,
+			})
+		);
+		return control;
+	});
+	const invoke = (control: string, args: string[]) =>
+		promisify(execFile)(process.execPath, [relay, ...args], {
+			env: {
+				...process.env,
+				MAESTRO_E2E_CLI: process.execPath,
+				MAESTRO_E2E_CONTROL: control,
+				MAESTRO_E2E_PROCESS: `${control}.pid`,
+			},
+			timeout: 10_000,
+		});
+	await invoke(controls[0], ['--version']);
+	expect(fs.readdirSync(budgetDirectory)).toEqual([]);
+	const results = await Promise.allSettled(
+		Array.from({ length: 12 }, (_, index) =>
+			invoke(controls[index % 2], ['-e', "process.stdout.write('paid-launch')"])
+		)
+	);
+	expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(3);
+	for (const result of results) {
+		if (result.status === 'fulfilled') expect(result.value.stdout).toBe('paid-launch');
+		else expect(result.reason.stderr).toContain('Acceptance shared turn budget exceeded');
+	}
+	expect(fs.readdirSync(budgetDirectory)).toHaveLength(3);
+	await invoke(controls[1], ['--version']);
+	expect(fs.readdirSync(budgetDirectory)).toHaveLength(3);
 });
 
 it('prechecks the Claude child snapshot before starting even the parent version probe', () => {

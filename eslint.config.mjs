@@ -19,6 +19,7 @@ export default tseslint.config(
 			'*.config.mjs',
 			'*.config.ts',
 			'scripts/**',
+			'docs/round2/evidence/**', // Recorded prototype check scripts, run in a browser page, kept byte-identical
 			'src/__tests__/**',
 			'src/web/utils/serviceWorker.ts', // Service worker has special globals
 			'src/web/public/**', // Service worker and static assets

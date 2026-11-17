@@ -1,5 +1,26 @@
 # 分支工作记录
 
+## 2026-11-17：R2.0 Codex 计划从原生记录恢复，任务面板验收改认当前 CLI
+
+Codex 0.166 起把计划调用记成代码模式的 `exec` 脚本（`text(await tools.update_plan({...}))`）。实时 `todo_list` 事件让运行中的任务页是对的，但从原生记录重建历史时这条调用只是一段字符串，重启或从历史重新打开后清单消失。`extractCodexPlan()`（`src/shared/codexSessionText.ts`）现在是实时 response item、原生历史和真实验收共用的解码入口：认旧的直接调用和完整 JSON 字面量脚本，拒绝残缺、计算表达式和非调用脚本，不执行任何代码；恢复出的调用统一叫 `update_plan`，和实时路径一致。`todo_list` 本身只有完成布尔值，不补造 in_progress。
+
+真实验收的任务面板场景：Codex 一半的对照改用同一解码器，去掉已弃用的 `code_mode=false`；Claude 一半按 5 系模型没有任务清单工具的事实，断言整个回合没有任务条目和计数、显示现有说明文字，去掉场景自己设的 `CLAUDE_CODE_ENABLE_TASKS=false` 和 TodoWrite 分支。按 PRD 第 9 节不加 TaskCreate 解析。
+
+验证（源码 `f1aa864ff` 加本次改动）：
+
+- 单元测试：六个相关文件 310 通过；修复前新增的两条恢复用例失败。
+- 合成 Electron 场景 `native-codex-plan-restart` 通过：实时显示计划，关掉会话重启，再从原生历史打开，清单不变。反证：只去掉存储侧的解码，同一场景失败。`native-codex-plan` 回归通过。
+- 真实模型 `real-tasks-panel` 通过（Claude Code 2.1.317，Codex 0.169.0-alpha.11.1；Claude Sonnet 5.5、Codex GPT-6.2-Sol；1.1 分钟）。第一次运行在启动前被预检拦下：钥匙串里的 Claude 访问令牌过期，用一次最小的 `claude -p` 让 CLI 自己刷新后重跑，没有碰登录流程。
+- 类型检查（lint、main、real-acceptance）、ESLint、Prettier 通过。
+
+## 2026-11-17：第二轮开工基线
+
+老板确认 PRD v5.1、原型 P7.1 和 04-roadmap，批准第二轮正式开发。规划材料进入主线，作为执行依据：`docs/round2/`（PRD、路线图、交接、各轮评审回应、原型及其 147 项检查记录）。逐项进度和验收证据记在 `docs/round2/progress.md`，"已合并"和"已验收"分开写。
+
+规划期间的真实应用截图、真实模型实验的逐回合记录、试用包验收日志和研究笔记含本机路径和账户环境信息，没有进入公开提交，保存在维护者本机的私有证据目录；文中以"私有证据"标注。原型和它的检查记录要与 `03-verification.md` 里记录的哈希一致，加进了 `.prettierignore`。
+
+本次提交只有文档，不改变应用行为。
+
 ## 2026-11-14：最终试用包
 
 从 #89 的主线合并提交 `304a02161` 在干净检出上构建试用包，主线 CI（43433194336）七项通过。十项门禁、打包、包体与连接器核验、包内 CLI、隐私扫描一次通过。包内脚本验收 97 个测试全部通过，0 个不稳定。升级与回退（hb.6 与本包轮流打开）保留全部数据。并排启动 1.62 秒就绪，只带 `MAESTRO_DEMO_DIR` 的 CLI 操作的是试用副本，用户已装应用的设置文件哈希和修改时间不变。冷启动中位数 1,191 ms。包身份见 `docs/verification/v1.0.1-hb.7.md`。

@@ -13,6 +13,8 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 	);
 	for (const seat of SEAT_ROLES) {
 		const health = state.seats[seat];
+		if (health.faultActive && !health.takeover)
+			waitingFor.push(`${seat}: recovery from ${health.lastFault?.fault ?? 'member fault'}`);
 		if (health.quota && !health.takeover)
 			waitingFor.push(
 				`${seat}: quota recovery${health.quota.resetsAt === undefined ? '' : ` at ${new Date(health.quota.resetsAt).toISOString()}`}`

@@ -6,6 +6,7 @@ import {
 	type TeamConfig,
 	type TeamEvent,
 	type TeamReport,
+	type M1TurnKind,
 } from '../../../shared/team/types';
 
 export const config: TeamConfig = {
@@ -93,7 +94,7 @@ export const proven: EventInput[] = [
 	},
 	{ kind: 'review', actor: 'pm', verdict: 'pass', problems: [], suggestions: [] },
 ];
-export const goodReports: Record<TeamReport['type'], TeamReport> = {
+export const goodReports: Record<M1TurnKind | 'topic', TeamReport> = {
 	brief: {
 		type: 'brief',
 		scope: brief.scope,

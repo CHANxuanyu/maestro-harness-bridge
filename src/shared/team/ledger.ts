@@ -1,3 +1,4 @@
+import { isOpenTeamIssue, missingOutputLocations } from './policy';
 import { decideNext, judgeAttempts, type AttemptInput } from '../progressRules';
 import {
 	SEAT_ROLES,
@@ -41,7 +42,9 @@ function criterionState(
 		previous &&
 		previous.text === criterion.text &&
 		previous.proof === criterion.proof &&
-		previous.how === criterion.how;
+		previous.how === criterion.how &&
+		previous.experience === criterion.experience &&
+		JSON.stringify(previous.locations) === JSON.stringify(criterion.locations);
 	return {
 		...criterion,
 		confirmed,
@@ -133,6 +136,9 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		outputs: [],
 		turns: [],
 		pendingMessages: [],
+		messages: [],
+		suggestions: [],
+		demos: [],
 		usage: emptyUsage(),
 		statistics: {
 			ownerDecisions: 0,
@@ -146,7 +152,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 	const seen = new Set<string>();
 	const answered = new Set<string>();
 	const fired = new Set<string>();
-	const delivered = new Set<string>();
+	const handled = new Set<string>();
 	const ownerDecisions = new Set<string>();
 	const attempts = new Map<
 		string,
@@ -198,7 +204,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 			state.criteria.length > 0 &&
 			state.criteria.every((c) => c.confirmed && c.status === 'pass') &&
 			state.reviews.at(-1)?.verdict === 'pass' &&
-			state.issues.every((i) => i.state === 'verified-pass')
+			!state.issues.some(isOpenTeamIssue)
 		);
 	};
 
@@ -340,11 +346,20 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				}
 				break;
 			}
-			case 'brief_published':
-				state.briefs.push(copyBrief(event.brief));
-				state.brief = copyBrief(event.brief);
-				if (!state.baseline.brief) syncCriteria(event.brief, false, event.seq);
+			case 'brief_published': {
+				const brief = copyBrief(event.brief);
+				if (!state.baseline.brief) {
+					for (const change of state.standardChanges.filter(
+						(c) => c.approvedBy === 'owner' && c.criterion && c.change === 'add'
+					))
+						if (!brief.criteria.some((c) => c.id === change.criterionId))
+							brief.criteria.push({ ...change.criterion! });
+				}
+				state.briefs.push(copyBrief(brief));
+				state.brief = brief;
+				if (!state.baseline.brief) syncCriteria(brief, false, event.seq);
 				break;
+			}
 			case 'challenge_submitted':
 				state.challenges.push(event);
 				break;
@@ -369,6 +384,13 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				if (event.actor !== 'owner') break;
 				state.baseline.edits.push(event);
 				ownerDecision(event);
+				if (event.brief && !state.baseline.brief) {
+					state.briefs.push(copyBrief(event.brief));
+					state.brief = copyBrief(event.brief);
+					state.baseline.proposedVersion = event.brief.version;
+					syncCriteria(event.brief, false, event.seq);
+					break;
+				}
 				const brief = state.baseline.brief ?? state.brief;
 				const criterion = brief?.criteria.find((c) => c.id === event.criterionId);
 				if (brief && criterion) {
@@ -391,17 +413,23 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				break;
 			case 'standard_change': {
 				state.standardChanges.push(event);
-				const brief = state.baseline.brief;
+				const brief = state.baseline.brief ?? (state.brief ? copyBrief(state.brief) : null);
 				if (
 					!brief ||
 					(event.approvedBy !== 'owner' && event.change !== 'add' && event.change !== 'tighten')
 				)
 					break;
 				if (event.actor !== 'app' && event.actor !== event.approvedBy) break;
-				if (event.approvedBy === 'owner') ownerDecision(event);
+				if (event.approvedBy === 'owner' && !event.ownerMessageId) ownerDecision(event);
 				const index = brief.criteria.findIndex((c) => c.id === event.criterionId);
 				if (event.change === 'remove') {
 					if (index >= 0) brief.criteria.splice(index, 1);
+					brief.checks = brief.checks
+						.map((check) => ({
+							...check,
+							covers: check.covers.filter((id) => id !== event.criterionId),
+						}))
+						.filter((check) => check.covers.length);
 				} else if (index >= 0 && event.after) {
 					const old = brief.criteria[index];
 					// PM tightening may not silently change the proof method.
@@ -413,7 +441,21 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 					};
 				} else if (index < 0 && event.change === 'add' && event.criterion?.id === event.criterionId)
 					brief.criteria.push({ ...event.criterion });
-				syncCriteria(brief, true, event.seq);
+				if (!state.baseline.brief) {
+					brief.version++;
+					state.briefs.push(copyBrief(brief));
+					state.brief = brief;
+				}
+				if (event.approvedBy === 'owner' && ['remove', 'relax', 'modify'].includes(event.change)) {
+					for (const issue of state.issues.filter(
+						(i) => i.opened.criterionId === event.criterionId && isOpenTeamIssue(i)
+					)) {
+						issue.state = 'superseded';
+						issue.history.push(event);
+					}
+				}
+				syncCriteria(brief, state.baseline.confirmedVersion !== null, event.seq);
+				if (state.baseline.confirmedVersion !== null) state.phase = 'implement';
 				break;
 			}
 			case 'work_item': {
@@ -475,7 +517,9 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 			}
 			case 'issue_opened':
 				if (
-					(event.actor === 'qa' || event.actor === 'app') &&
+					(event.actor === 'qa' ||
+						event.actor === 'app' ||
+						(event.actor === 'pm' && !!event.reviewId)) &&
 					!state.issues.some((i) => i.id === event.issueId)
 				) {
 					state.issues.push({
@@ -502,7 +546,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 					issue &&
 					issue.opened.issueKind === 'defect' &&
 					(event.actor === 'dev' || event.actor === 'app') &&
-					issue.state !== 'verified-pass'
+					isOpenTeamIssue(issue)
 				) {
 					issue.state = 'fixed-claimed';
 					issue.history.push(event);
@@ -512,6 +556,26 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 			case 'issue_verified':
 				verifyIssue(event);
 				break;
+			case 'standard_issue_resolved': {
+				const issue = state.issues.find(
+					(i) => i.id === event.issueId && i.opened.issueKind === 'standard'
+				);
+				if (issue && (event.actor === 'pm' || event.actor === 'app')) {
+					issue.state = 'verified-pass';
+					issue.history.push(event);
+					if (issue.opened.criterionId)
+						addEvidence(issue.opened.criterionId, {
+							eventId: event.id,
+							seq: event.seq,
+							key: `issue:${issue.id}`,
+							source: 'pm',
+							status: 'pass',
+							evidence: event.id,
+							reason: event.reason,
+						});
+				}
+				break;
+			}
 			case 'attempt': {
 				let problem = attempts.get(event.problemId);
 				if (!problem) {
@@ -562,10 +626,34 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 					)
 					.map((proof) => proof.evidence);
 				state.reviews.push(event);
-				// Wording, number, or category of PM comments cannot manufacture progress.
-				// A review stays unresolved until it passes with evidence; QA confirmation
-				// of earlier problems contributes the shared rule's evidence verdict.
-				const failures = event.verdict === 'pass' && allProven() ? [] : ['review'];
+				state.suggestions.push(...event.suggestions);
+				// Outstanding criterion failures remain until independent QA resolves their issues.
+				// Rephrasing a PM comment cannot erase a previously recorded problem.
+				const reviewIssues = state.issues.filter((i) => i.opened.reviewId);
+				const failures =
+					event.verdict === 'pass' && allProven()
+						? []
+						: [
+								...new Set([
+									...reviewIssues
+										.filter((i) => isOpenTeamIssue(i))
+										.map((i) =>
+											JSON.stringify([i.opened.criterionId, i.opened.location, i.opened.expected])
+										),
+									...event.problems.map((p) =>
+										reviewIssues.some((i) => i.opened.criterionId === p.criterion)
+											? JSON.stringify([p.criterion, p.location, p.expected])
+											: p.criterion
+									),
+									...reviewInitial.filter(
+										(id) =>
+											!reviewIssues.length &&
+											!evidence.length &&
+											!event.problems.some((p) => p.criterion === id)
+									),
+								]),
+							];
+				if (!failures.length && event.verdict !== 'pass') failures.push('review');
 				if (!reviewAttempts.length) reviewInitial = [...failures];
 				reviewAttempts.push({
 					id: event.id,
@@ -585,6 +673,13 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				if (!event.problemId || event.reason === 'rejections')
 					reviewAttempts.push({ id: event.id, fingerprint: '', failures: [], diagnosis: true });
 				break;
+			case 'suggestion':
+				state.suggestions.push(event.text);
+				break;
+			case 'demo':
+				if (allProven() && !missingOutputLocations(state, state.outputs.at(-1)).length)
+					state.demos.push(event);
+				break;
 			case 'output_captured':
 				if (event.actor === 'app') state.outputs.push(event);
 				break;
@@ -602,6 +697,10 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				if (!answered.has(event.card.id) && !state.openCards.some((c) => c.id === event.card.id))
 					state.openCards.push(event.card);
 				break;
+			case 'card_superseded':
+				answered.add(event.cardId);
+				state.openCards = state.openCards.filter((c) => c.id !== event.cardId);
+				break;
 			case 'card_answered':
 				if (event.actor === 'owner' && !answered.has(event.cardId)) {
 					answered.add(event.cardId);
@@ -611,14 +710,30 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				}
 				break;
 			case 'owner_message':
-				if (!delivered.has(event.messageId)) state.pendingMessages.push(event);
+				if (!state.messages.some((m) => m.message.messageId === event.messageId)) {
+					state.messages.push({ message: event });
+					if (!handled.has(event.messageId)) state.pendingMessages.push(event);
+				}
 				break;
-			case 'message_delivered':
-				delivered.add(event.messageId);
+			case 'message_delivered': {
+				const message = state.messages.find((m) => m.message.messageId === event.messageId);
+				if (message) message.delivered = event;
+				break;
+			}
+			case 'message_forwarded': {
+				const message = state.messages.find((m) => m.message.messageId === event.messageId);
+				if (message) message.forwarded = event;
+				break;
+			}
+			case 'message_handled': {
+				handled.add(event.messageId);
+				const message = state.messages.find((m) => m.message.messageId === event.messageId);
+				if (message) message.handled = event;
 				state.pendingMessages = state.pendingMessages.filter(
 					(m) => m.messageId !== event.messageId
 				);
 				break;
+			}
 		}
 	}
 

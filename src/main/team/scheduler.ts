@@ -1,7 +1,18 @@
+import { checkCommandBoundary, type CheckBoundary } from '../../shared/checkRun';
 import { createHash, randomUUID } from 'crypto';
 import { DURATION_MS } from '../../shared/duration';
 import { isValidAgentId } from '../../shared/agentIds';
 import { decideNext, judgeAttempts } from '../../shared/progressRules';
+import {
+	isOpenTeamIssue,
+	baselineDiff,
+	discussionDecider,
+	referenceVotes,
+	pmMayChange,
+	missingOutputLocations,
+	teamReadyForDemo,
+	teamTurnPermission,
+} from '../../shared/team/policy';
 import { reduceLedger } from '../../shared/team/ledger';
 import { buildTeamTurnPrompt } from '../../shared/team/prompts';
 import {
@@ -10,13 +21,17 @@ import {
 	reportRepairPrompt,
 	teamReplyMessage,
 } from '../../shared/team/report';
-import { teamReportSchema } from '../../shared/team/schemas';
 import { teamStatus } from '../../shared/team/status';
 import {
 	SEAT_ROLES,
 	type CreateTeamInput,
 	type LedgerEvent,
 	type M1TurnKind,
+	type ReportTurnKind,
+	type TeamDiscussion,
+	type StandardChangeRequest,
+	type OutputCapture,
+	type DiscussionAction,
 	type OwnerCard,
 	type SeatRole,
 	type TeamAuthorizations,
@@ -46,7 +61,12 @@ export interface TeamSchedulerDependencies {
 	workspaces(config: TeamConfig, pushAuthorized: boolean): TeamWorkspaces;
 	/** Read-only native transcript reconciliation, matched to the exact dispatch marker. */
 	reconcile(request: SeatTurnRequest): Promise<SeatTurnResult | null>;
-	captureOutput(cwd: string, revision: string): Promise<{ files: string[]; previews: string[] }>;
+	captureOutput(
+		cwd: string,
+		revision: string,
+		criteria?: TeamState['criteria'],
+		beforeOutputId?: string
+	): Promise<OutputCapture>;
 	/** Host-resolved launch configuration; never supplied by a seat report. */
 	seatOptions?(
 		config: TeamConfig,
@@ -56,7 +76,7 @@ export interface TeamSchedulerDependencies {
 	onError(error: unknown): void;
 }
 
-/** Main-owned M1 state machine. Long-running work never holds the event/action queue. */
+/** Main-owned team state machine. Long-running work never holds the event/action queue. */
 export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 	const now = deps.now ?? Date.now;
 	const queue = createKeyedWriteQueue();
@@ -74,6 +94,11 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		return prior ?? deps.store.append(id, { ...input, id: eventId, at: input.at ?? now() });
 	};
 	const stateFor = async (id: string) => reduceLedger((await load(id)).events);
+	const recoveryAt = (events: LedgerEvent[], seat: SeatRole) =>
+		events.findLast(
+			(event) =>
+				event.kind === 'card_answered' || (event.kind === 'member_recovered' && event.seat === seat)
+		)?.seq ?? 0;
 	const authorized = (state: TeamState, action: keyof TeamAuthorizations) =>
 		state.config!.authorizations[action] ||
 		state.cardAnswers.some(
@@ -118,6 +143,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 	const snapshot = (events: LedgerEvent[], dispatch: Dispatch) =>
 		reduceLedger(events.filter((e) => e.seq <= (dispatch.sourceSeq ?? dispatch.seq - 1)));
 	const promptFor = (dispatch: Dispatch, events: LedgerEvent[]) => {
+		if (dispatch.prompt !== undefined) return dispatch.prompt;
 		const state = snapshot(events, dispatch);
 		const expected = dispatch.expectedTurn ?? dispatch.turn;
 		let prompt: string;
@@ -130,20 +156,13 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				original?.reportError ?? 'Invalid report',
 				original?.repairTail ?? original?.message ?? ''
 			);
-		} else if (expected === 'topic') {
-			prompt = [
-				'You are the PM. Diagnose why the team has no actionable work. Inspect the ledger and real output, identify the next concrete step. Do not change files or standards. End with one team-report block using this schema:',
-				JSON.stringify(teamReportSchema('topic')),
-				JSON.stringify(teamStatus(state, now())),
-				JSON.stringify({
-					messages: state.pendingMessages,
-					recentTurns: state.turns
-						.slice(-3)
-						.map((t) => ({ seat: t.seat, message: t.finished?.message, error: t.reportError })),
-					issues: state.issues,
-				}),
-			].join('\n\n');
-		} else prompt = buildTeamTurnPrompt(expected as M1TurnKind, dispatch.seat, state);
+		} else
+			prompt = buildTeamTurnPrompt(
+				expected as ReportTurnKind,
+				dispatch.seat,
+				state,
+				dispatch.discussionId
+			);
 		if (dispatch.mode === 'diagnose' || dispatch.mode === 'gather')
 			prompt += `\n\n${dispatch.mode === 'diagnose' ? 'Diagnosis required: explain why the previous attempts failed, the new basis, difference and expected observation.' : 'Gather new evidence. Do not repeat the previously tried change.'}\nAttempt record: ${JSON.stringify(state.problems[dispatch.problemId ?? 'checks'] ?? null)}`;
 		return `${prompt}\n\n${dispatch.note ?? ''}\n[team-dispatch:${dispatch.dispatchId}]`;
@@ -162,9 +181,14 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			teamId: config.id,
 			dispatchId: dispatch.dispatchId,
 			seat: dispatch.seat,
+			turn: dispatch.turn,
 			cwd: binding.workspace,
-			nativeSessionId: binding.nativeSessionId,
-			permissionMode: dispatch.seat === 'pm' ? 'readonly' : 'full',
+			nativeSessionId: ['position', 'proposal', 'response', 'retro'].includes(
+				dispatch.expectedTurn ?? dispatch.turn
+			)
+				? undefined
+				: binding.nativeSessionId,
+			permissionMode: teamTurnPermission(dispatch.seat, dispatch.turn),
 			prompt: promptFor(dispatch, events),
 		};
 	};
@@ -218,21 +242,12 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				how: 'A valid turn report was ingested.',
 				id: `${dispatch.dispatchId}:recovered`,
 			});
-		if (dispatch.seat === 'pm')
-			for (const message of snapshot(data.events, original).pendingMessages)
-				await append(id, {
-					kind: 'message_delivered',
-					actor: 'app',
-					messageId: message.messageId,
-					seat: 'pm',
-					id: `${original.dispatchId}:message:${message.messageId}`,
-				});
 	};
 	const finish = async (id: string, dispatch: Dispatch, result: SeatTurnResult) => {
 		const data = await load(id);
 		if (data.events.some((e) => e.kind === 'turn_finished' && e.dispatchId === dispatch.dispatchId))
 			return;
-		if (result.nativeSessionId) {
+		if (result.nativeSessionId && !dispatch.discussionId) {
 			const binding = reduceLedger(data.events).seats[dispatch.seat].binding!;
 			await append(id, {
 				kind: 'seat_bound',
@@ -254,7 +269,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					)!
 				: dispatch
 		);
-		const parsed = extracted.ok
+		let parsed = extracted.ok
 			? validateTeamReport(
 					extracted.report,
 					dispatch.expectedTurn ?? dispatch.turn,
@@ -262,7 +277,15 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					validationState
 				)
 			: extracted;
-		const good = parsed.ok && result.exitCode === 0 && !result.canceled;
+		if (
+			parsed.ok &&
+			'discussionId' in parsed.report &&
+			parsed.report.discussionId !== dispatch.discussionId
+		) {
+			parsed = { ok: false, reason: 'The report must address the dispatched discussion.' };
+		}
+		const failureKind = result.failure?.kind ?? (result.exitCode !== 0 ? 'turn-failed' : undefined);
+		const good = parsed.ok && !failureKind && !result.canceled;
 		const finished = (await append(id, {
 			kind: 'turn_finished',
 			actor: dispatch.seat,
@@ -280,10 +303,11 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				: (result.failure?.detail ?? (parsed.ok ? 'Turn did not complete' : parsed.reason)),
 			repairTail: good ? undefined : result.text.slice(-3500),
 			canceled: result.canceled,
-			failureKind: result.failure?.kind,
+			failureKind,
 			id: `${dispatch.dispatchId}:finished`,
 		})) as TeamEvent<'turn_finished'>;
-		if (good && dispatch.seat !== 'qa') await ingest(id, dispatch, finished);
+		if (good && (dispatch.seat !== 'qa' || teamTurnPermission('qa', dispatch.turn) === 'readonly'))
+			await ingest(id, dispatch, finished);
 		else if (!good) {
 			await append(id, {
 				kind: 'report_rejected',
@@ -297,7 +321,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				kind: 'member_fault',
 				actor: 'app',
 				seat: dispatch.seat,
-				fault: result.failure?.kind ?? (extracted.ok ? 'bad-report' : 'missing-report'),
+				fault: failureKind ?? (extracted.ok ? 'bad-report' : 'missing-report'),
 				detail: finished.reportError,
 				id: `${dispatch.dispatchId}:fault`,
 			});
@@ -329,6 +353,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					...request,
 					signal: controller.signal,
 					onNativeSessionId: (nativeId) => {
+						if (dispatch.discussionId) return;
 						void bindNative(data.config.id, dispatch.seat, nativeId).catch(deps.onError);
 					},
 				});
@@ -366,11 +391,20 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		id: string,
 		state: TeamState,
 		seat: SeatRole,
-		turn: M1TurnKind | 'topic',
+		turn: ReportTurnKind,
 		options: Partial<
 			Pick<
 				Dispatch,
-				'repairOf' | 'retryOf' | 'mode' | 'problemId' | 'fingerprint' | 'failures' | 'note'
+				| 'repairOf'
+				| 'retryOf'
+				| 'mode'
+				| 'problemId'
+				| 'fingerprint'
+				| 'failures'
+				| 'note'
+				| 'discussionId'
+				| 'round'
+				| 'messageIds'
 			>
 		> = {}
 	) => {
@@ -381,7 +415,83 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			state.seats[seat].activeDispatchIds.length
 		)
 			return;
-		const data = await load(id);
+		// A new dispatch ID is not a new assignment. Derive the latch from durable
+		// receipts so fallback wakes, unrelated events and restarts cannot reset it.
+		let data = await load(id);
+		const resetAt = recoveryAt(data.events, seat);
+		const failures = state.turns.filter(
+			(attempt) =>
+				attempt.seat === seat &&
+				attempt.dispatched &&
+				attempt.finished &&
+				attempt.finished.seq > resetAt &&
+				!attempt.finished.canceled &&
+				!attempt.finished.report &&
+				!attempt.report &&
+				!attempt.repaired
+		);
+		const recoveryOf = options.retryOf ?? options.repairOf;
+		if (recoveryOf) {
+			const original = state.turns.find((attempt) => attempt.dispatchId === recoveryOf);
+			if (
+				!original?.finished ||
+				original.seat !== seat ||
+				original.report ||
+				(options.retryOf && original.dispatched?.retryOf) ||
+				original.dispatched?.repairOf ||
+				state.turns.some(
+					(attempt) =>
+						attempt.dispatched?.retryOf === recoveryOf ||
+						attempt.dispatched?.repairOf === recoveryOf
+				)
+			)
+				return;
+			if (options.retryOf) {
+				const sameKind = failures.filter(
+					(attempt) => (attempt.dispatched!.expectedTurn ?? attempt.dispatched!.turn) === turn
+				);
+				// Old ledgers may already contain duplicate roots without retryOf.
+				// Those attempts have spent the retry too; never retry each UUID anew.
+				if (sameKind.length !== 1 || sameKind[0].dispatchId !== recoveryOf) return;
+				if (original.finished.failureKind === 'session-broken') {
+					const binding = state.seats[seat].binding!;
+					await append(id, {
+						kind: 'seat_bound',
+						actor: 'app',
+						seat,
+						model: binding.model,
+						workspace: binding.workspace,
+						reason: 'restored',
+						id: `${recoveryOf}:fresh-session`,
+					});
+					data = await load(id);
+				}
+			}
+		} else if (failures.length) {
+			if (
+				failures.some(
+					(attempt) => (attempt.dispatched!.expectedTurn ?? attempt.dispatched!.turn) === turn
+				)
+			)
+				return;
+			const failed = failures.at(-1)!.dispatched!;
+			// A different kind may respond to new input, but an automatic PM wake
+			// or a different prompt digest alone is not evidence of a changed basis.
+			const changedBasis =
+				(options.discussionId && options.discussionId !== failed.discussionId) ||
+				(options.problemId && options.problemId !== failed.problemId) ||
+				options.messageIds?.some((messageId) => !failed.messageIds?.includes(messageId)) ||
+				data.events.some(
+					(event) =>
+						event.seq > (failed.sourceSeq ?? failed.seq) &&
+						(event.kind === 'standard_change' ||
+							event.kind === 'workspace_submitted' ||
+							event.kind === 'output_captured' ||
+							event.kind === 'check_run' ||
+							event.kind === 'issue_opened')
+				);
+			if (!changedBasis) return;
+		}
 		const dispatchId = randomUUID();
 		const input: Dispatch = {
 			kind: 'turn_dispatched',
@@ -397,9 +507,20 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			promptDigest: '',
 			...options,
 		};
-		input.promptDigest = createHash('sha256').update(promptFor(input, data.events)).digest('hex');
+		input.prompt = promptFor(input, data.events);
+		input.promptDigest = createHash('sha256').update(input.prompt).digest('hex');
 		const saved = (await append(id, input)) as Dispatch;
+		for (const messageId of options.messageIds ?? [])
+			await append(id, {
+				kind: 'message_delivered',
+				actor: 'app',
+				messageId,
+				seat,
+				dispatchId,
+				id: `${dispatchId}:delivery:${messageId}`,
+			});
 		launch({ ...data, events: [...data.events, saved] }, saved);
+		return true;
 	};
 	const startJob = async (
 		id: string,
@@ -464,6 +585,36 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			})
 			.catch(deps.onError);
 	};
+	const checkApproval = async (
+		id: string,
+		command: string,
+		key: string,
+		declared?: CheckBoundary
+	) => {
+		const boundary = checkCommandBoundary(command, declared);
+		if (!boundary) return 'allow' as const;
+		return queue.enqueue(id, async () => {
+			const state = await stateFor(id);
+			const cardId = `permission:check:${key}`;
+			const answer = state.cardAnswers.find((a) => a.cardId === cardId);
+			if (answer) return answer.optionId === 'once' ? ('allow' as const) : ('omit' as const);
+			await card(id, {
+				id: cardId,
+				boundary: 'permission',
+				title: 'Approve this check once',
+				body: JSON.stringify({
+					command,
+					boundary,
+					scope: 'Only this invocation; the team workspace grant is unchanged.',
+				}),
+				options: [
+					{ id: 'once', label: 'Allow only this invocation' },
+					{ id: 'omit', label: 'Do not add this check', recommended: true },
+				],
+			});
+			return 'waiting' as const;
+		});
+	};
 	const checksFor = async (
 		id: string,
 		state: TeamState,
@@ -477,7 +628,47 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			if (signal.aborted || !running) return;
 			const eventId = `${batchId}:check:${index}`;
 			if ((await load(id)).events.some((e) => e.id === eventId)) continue;
+			const approval = await checkApproval(id, check.command, eventId, check.boundary);
+			if (approval === 'waiting') return;
+			if (approval === 'omit') {
+				await queue.enqueue(id, () =>
+					append(id, {
+						kind: 'check_run',
+						actor: 'app',
+						id: eventId,
+						batchId,
+						purpose: trial ? 'trial' : 'verification',
+						command: check.command,
+						cwd,
+						covers: check.covers,
+						exitCode: null,
+						outputTail: '',
+						durationMs: 0,
+						evidenceId: eventId,
+						notRun: 'Owner declined this boundary-crossing check',
+					})
+				);
+				continue;
+			}
 			const result = await deps.checks.run({ command: check.command, cwd, signal });
+			const previous = (await stateFor(id)).checks.findLast((c) =>
+				c.covers.some((criterion) => check.covers.includes(criterion))
+			);
+			const dilution: string[] = [];
+			if (previous && previous.command !== check.command) dilution.push('Check command changed');
+			if (
+				previous?.testsRun !== undefined &&
+				result.testsRun !== undefined &&
+				result.testsRun < previous.testsRun
+			)
+				dilution.push('Fewer tests ran');
+			if (
+				previous?.testsSkipped !== undefined &&
+				result.testsSkipped !== undefined &&
+				result.testsSkipped > previous.testsSkipped
+			)
+				dilution.push('More tests were skipped');
+			if (result.testsRun === undefined) dilution.push('Test count unavailable from this command');
 			if (!running) return;
 			await queue.enqueue(id, () =>
 				append(id, {
@@ -493,6 +684,9 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					outputTail: result.outputTail,
 					durationMs: result.endedAt - result.startedAt,
 					evidenceId: result.id,
+					testsRun: result.testsRun,
+					testsSkipped: result.testsSkipped,
+					dilution,
 					timedOut: result.outcome === 'timeout',
 					notRun:
 						result.outcome === 'not-run' || result.outcome === 'canceled'
@@ -510,7 +704,13 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			.every((e) => e.exitCode === 0 && !e.timedOut && !e.notRun);
 	const failures = (state: TeamState) => {
 		const latest = new Map(
-			state.checks.filter((c) => c.purpose !== 'trial').map((c) => [c.command, c])
+			state.checks
+				.filter(
+					(c) =>
+						c.purpose !== 'trial' &&
+						state.baseline.brief?.checks.some((check) => check.command === c.command)
+				)
+				.map((c) => [c.command, c])
 		);
 		return [
 			...[...latest.values()]
@@ -519,7 +719,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					JSON.stringify([c.command, c.exitCode, c.timedOut, c.notRun, c.outputTail.trim()])
 				),
 			...state.issues
-				.filter((i) => i.state !== 'verified-pass')
+				.filter((i) => isOpenTeamIssue(i))
 				.map((i) => `issue:${i.id}:${i.opened.actual ?? i.opened.title}`),
 		].sort();
 	};
@@ -569,13 +769,15 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			if (!running || controller.signal.aborted) return;
 			const output = await deps.captureOutput(
 				state.seats.dev.binding!.workspace,
-				submitted.revision
+				submitted.revision,
+				state.criteria,
+				state.outputs.at(-1)?.outputId
 			);
 			await queue.enqueue(id, () =>
 				append(id, {
 					kind: 'output_captured',
 					actor: 'app',
-					outputId: submitted!.revision,
+					outputId: `${turn.dispatchId}:${submitted!.revision}`,
 					...output,
 					id: `${batchId}:output`,
 				})
@@ -612,8 +814,8 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 	};
 	const fixNext = async (id: string, state: TeamState, kind: 'fix' | 'work') => {
 		const problemId =
-			state.issues.find((i) => i.state !== 'verified-pass' && i.opened.issueKind === 'defect')
-				?.id ?? 'checks';
+			state.issues.find((i) => isOpenTeamIssue(i) && i.opened.issueKind === 'defect')?.id ??
+			'checks';
 		await startJob(id, `plan:${randomUUID()}`, async () => {
 			const workspaces = ws(state);
 			await workspaces.initialize();
@@ -633,16 +835,21 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					],
 				});
 				if (decision.kind === 'report' || decision.kind === 'done') return;
+				if (decision.kind === 'diagnose') {
+					await openDiscussion(
+						id,
+						`diagnosis:${problemId}:${progress.attempts.at(-1)?.id}`,
+						'Diagnose repeated failures and choose a new basis',
+						'no-progress',
+						problemId
+					);
+					return;
+				}
 				await dispatch(id, current, 'dev', kind, {
 					problemId,
 					fingerprint: decision.kind === 'continue' ? fingerprint : undefined,
 					failures: failing,
-					mode:
-						decision.kind === 'diagnose'
-							? 'diagnose'
-							: decision.kind === 'gather'
-								? 'gather'
-								: undefined,
+					mode: decision.kind === 'gather' ? 'gather' : undefined,
 				});
 			});
 		});
@@ -656,6 +863,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			if (!dispatched) continue;
 			if (
 				event.seat === 'qa' &&
+				teamTurnPermission('qa', dispatched.turn) === 'full' &&
 				!data.events.some((e) => e.id === `${event.dispatchId}:boundary-checked`)
 			) {
 				await startJob(id, `boundary:${event.dispatchId}`, async () => {
@@ -687,6 +895,332 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				await ingest(id, dispatched, event);
 		}
 	};
+	const openDiscussion = async (
+		id: string,
+		discussionId: string,
+		topic: string,
+		trigger: string,
+		problemId?: string
+	) =>
+		append(id, {
+			kind: 'discussion_opened',
+			actor: 'app',
+			id: `${discussionId}:opened`,
+			discussionId,
+			topic,
+			owner: 'pm',
+			participants: ['pm', 'dev', 'qa'],
+			trigger,
+			layer: 'product',
+			reversible: true,
+			question: discussionId,
+			problemId,
+		});
+	const applyStandardChange = async (
+		id: string,
+		change: StandardChangeRequest,
+		approvedBy: 'pm' | 'owner',
+		key: string,
+		cardId?: string
+	) => {
+		const current = await stateFor(id);
+		await append(id, {
+			kind: 'standard_change',
+			actor: approvedBy,
+			approvedBy,
+			cardId,
+			criterionId: change.criterionId,
+			change: change.change,
+			before: current.criteria.find((c) => c.id === change.criterionId)?.text,
+			after: change.criterion?.text,
+			criterion: change.criterion,
+			reason: change.reason,
+			id: `${key}:change`,
+		});
+		if (change.change !== 'remove')
+			await append(id, {
+				kind: 'work_item',
+				actor: 'app',
+				itemId: `${key}:work`,
+				title: change.criterion!.text,
+				owner: 'dev',
+				state: 'claimed',
+				criterionId: change.criterionId,
+				id: `${key}:work`,
+			});
+	};
+	const concludeDiscussion = async (
+		id: string,
+		discussion: TeamDiscussion,
+		decider: 'app' | 'owner' | SeatRole,
+		contested: boolean,
+		decision?: string,
+		cardId?: string
+	) => {
+		const proposal = discussion.proposals.at(-1)!;
+		const round = proposal.round ?? discussion.proposals.length;
+		const responses = discussion.responses.filter((r) => (r.round ?? 1) === round);
+		const actions: DiscussionAction[] =
+			discussion.decision?.actions ??
+			proposal.actions ??
+			discussion.opened!.participants.map((seat) => ({
+				seat,
+				action: 'Apply the recorded decision',
+			}));
+		const key = `${discussion.id}:conclusion`;
+		await append(id, {
+			kind: 'discussion_closed',
+			actor: 'app',
+			discussionId: discussion.id,
+			decision: decision ?? proposal.proposal,
+			decider,
+			contested,
+			cardId,
+			dissent: responses
+				.filter((r) => r.result !== 'agree')
+				.map((r) => `${r.seat}: ${r.reason}`)
+				.join('\n'),
+			actions,
+			id: key,
+		});
+		for (const [index, action] of actions.entries()) {
+			const itemId = `${key}:action:${index}`;
+			if (action.waitFor) {
+				const untilMs = now() + FOLLOW_UP_WAIT_MS;
+				if (!(await load(id)).events.some((e) => e.id === itemId)) {
+					await deps.followUps.register({
+						id: itemId,
+						target: { kind: 'team', teamId: id, seat: action.seat },
+						reason: action.action,
+						condition: { kind: 'time', at: untilMs },
+						deadline: untilMs,
+					});
+					await append(id, {
+						kind: 'follow_up_registered',
+						actor: 'app',
+						followUpId: itemId,
+						seat: action.seat,
+						reason: action.action,
+						waitFor: action.waitFor,
+						untilMs,
+						id: itemId,
+					});
+				}
+			} else
+				await append(id, {
+					kind: 'work_item',
+					actor: 'app',
+					itemId,
+					title: action.action,
+					owner: action.seat,
+					state: 'claimed',
+					discussionId: discussion.id,
+					id: itemId,
+				});
+		}
+		const current = await stateFor(id);
+		if (current.baseline.confirmedVersion && !discussion.decision)
+			await transition(
+				id,
+				current,
+				current.issues.some((i) => i.opened.issueKind === 'defect' && isOpenTeamIssue(i))
+					? 'verify'
+					: 'implement'
+			);
+	};
+	/** Returns true while the topic owns scheduling. Other seats receive no private transcript. */
+	const discuss = async (id: string, state: TeamState): Promise<boolean> => {
+		const discussion = state.discussions.find((d) => d.opened && !d.decision);
+		if (!discussion) return false;
+		const opened = discussion.opened!;
+		for (const seat of opened.participants) {
+			if (discussion.positions.some((p) => p.seat === seat)) continue;
+			await dispatch(id, await stateFor(id), seat, 'position', { discussionId: discussion.id });
+		}
+		if (discussion.positions.length !== opened.participants.length) return true;
+		const proposal = discussion.proposals.at(-1);
+		if (!proposal) {
+			await dispatch(id, state, opened.owner, 'proposal', {
+				discussionId: discussion.id,
+				round: 1,
+			});
+			return true;
+		}
+		const round = proposal.round ?? discussion.proposals.length;
+		const responses = discussion.responses.filter((r) => (r.round ?? 1) === round);
+		for (const seat of opened.participants) {
+			if (responses.some((r) => r.seat === seat)) continue;
+			await dispatch(id, await stateFor(id), seat, 'response', {
+				discussionId: discussion.id,
+				round,
+			});
+		}
+		if (responses.length !== opened.participants.length) return true;
+		const decider = discussionDecider(discussion);
+		const objections = responses.filter(
+			(r) => r.seat !== decider && r.result !== 'agree' && r.evidence
+		);
+		const observedExperiment = state.checks.some(
+			(c) =>
+				c.batchId?.startsWith(`discussion:${discussion.id}:`) &&
+				!c.notRun &&
+				c.exitCode !== null &&
+				!c.timedOut &&
+				c.seq < proposal.seq
+		);
+		const needsExperiment =
+			new Set(objections.map((r) => r.seat)).size >= 2 &&
+			!proposal.compromise &&
+			!observedExperiment;
+		const experiment = proposal.experiment;
+		if (experiment) {
+			const batchId = `discussion:${discussion.id}:${createHash('sha256').update(experiment.command).digest('hex')}`;
+			if (!state.checks.some((c) => c.batchId === batchId)) {
+				if (await permission(id, state, 'checks', `Run a small experiment: ${experiment.command}`))
+					await startJob(id, batchId, async (controller) => {
+						const cwd = state.seats.dev.binding!.workspace;
+						const approval = await checkApproval(
+							id,
+							experiment.command,
+							batchId,
+							experiment.boundary
+						);
+						if (approval === 'waiting') return;
+						if (approval === 'omit') {
+							await queue.enqueue(id, () =>
+								append(id, {
+									kind: 'check_run',
+									actor: 'app',
+									command: experiment.command,
+									cwd,
+									covers: [],
+									batchId,
+									exitCode: null,
+									outputTail: '',
+									durationMs: 0,
+									evidenceId: batchId,
+									notRun: 'Owner declined this experiment',
+									id: `${batchId}:result`,
+								})
+							);
+							return;
+						}
+						const result = await deps.checks.run({
+							command: experiment.command,
+							cwd,
+							timeoutMs: Math.max(
+								1,
+								Math.min(TEAM_FALLBACK_MS, (state.config!.deadline ?? Infinity) - now())
+							),
+							signal: controller.signal,
+						});
+						await queue.enqueue(id, () =>
+							append(id, {
+								kind: 'check_run',
+								actor: 'app',
+								command: experiment.command,
+								cwd,
+								covers: [],
+								batchId,
+								exitCode: result.exitCode,
+								outputTail: result.outputTail,
+								durationMs: result.endedAt - result.startedAt,
+								evidenceId: result.id,
+								timedOut: result.outcome === 'timeout',
+								notRun:
+									result.outcome === 'not-run' || result.outcome === 'canceled'
+										? (result.error ?? result.outcome)
+										: undefined,
+								id: `${batchId}:result`,
+							})
+						);
+					});
+				return true;
+			}
+			const result = state.checks.find((c) => c.batchId === batchId)!;
+			if (result.seq > proposal.seq && !result.notRun) {
+				await dispatch(id, state, opened.owner, 'proposal', {
+					discussionId: discussion.id,
+					round: round + 1,
+					note: `Experiment result: ${JSON.stringify(result)}. Decide from this observation; do not repeat the experiment.`,
+				});
+				return true;
+			}
+		}
+		if (needsExperiment) {
+			await dispatch(id, state, opened.owner, 'proposal', {
+				discussionId: discussion.id,
+				round: round + 1,
+				note: 'Two non-owners object with evidence. Supply a small experiment or a compromise before deciding.',
+			});
+			return true;
+		}
+		const insist = responses.some((r) => r.result === 'insist');
+		const newEvidence = responses.some(
+			(r) =>
+				r.evidence &&
+				!discussion.responses.some(
+					(old) => old.seq < proposal.seq && old.evidence === r.evidence
+				) &&
+				!discussion.positions.some((p) => p.evidence?.includes(r.evidence!)) &&
+				!opened.evidence?.includes(r.evidence)
+		);
+		if (insist && (round < 2 || newEvidence)) {
+			await dispatch(id, state, opened.owner, 'proposal', {
+				discussionId: discussion.id,
+				round: round + 1,
+				note: newEvidence
+					? 'New evidence permits another round.'
+					: 'Second discussion round. Preserve objections and seek a resolution.',
+			});
+			return true;
+		}
+		const change = opened.change;
+		const pmChange = change && pmMayChange(change, state, discussion);
+		if (decider === 'owner' || (change && !pmChange)) {
+			const criterion = state.criteria.find((c) => c.id === change?.criterionId);
+			await card(id, {
+				id: `discussion:${discussion.id}`,
+				boundary: 'commitment',
+				title: opened.topic,
+				discussionId: discussion.id,
+				standardChange: change,
+				referenceVotes: referenceVotes(discussion, state),
+				body: JSON.stringify({
+					before: criterion,
+					after: change?.criterion,
+					currentCheckResult: criterion?.reason,
+					failingNow: criterion?.status === 'fail',
+					positions: discussion.positions,
+					proposal: proposal.proposal,
+					responses,
+					boundary: 'The next step is irreversible or changes a commitment.',
+				}),
+				budgetNote: `${state.usage.turns}/${state.config!.turnBudget} turns used`,
+				options: change
+					? [
+							{ id: 'approve', label: 'Approve this standard change', cost: change.reason },
+							{ id: 'keep', label: 'Keep the existing standard', recommended: true },
+						]
+					: (proposal.options ?? [
+							{ id: 'approve', label: 'Approve the proposed commitment', cost: proposal.proposal },
+							{ id: 'keep', label: 'Keep the current commitment', recommended: true },
+						]),
+			});
+			return true;
+		}
+		if (pmChange) await applyStandardChange(id, change, 'pm', discussion.id);
+		await concludeDiscussion(
+			id,
+			discussion,
+			decider,
+			insist,
+			decider === 'app'
+				? `Facts remain determined by recorded evidence. ${JSON.stringify(state.checks.map((c) => ({ command: c.command, exitCode: c.exitCode })))}`
+				: undefined
+		);
+		return true;
+	};
 	const evaluate = async (id: string) => {
 		if (!running) return;
 		let data = await load(id);
@@ -701,18 +1235,65 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		await recoverReceipts(id, data);
 		data = await load(id);
 		const state = reduceLedger(data.events);
+		for (const discussion of state.discussions.filter((d) => d.decision && d.proposals.length)) {
+			if (
+				discussion.decision!.actions.some(
+					(_, index) =>
+						!data.events.some((e) => e.id === `${discussion.id}:conclusion:action:${index}`)
+				)
+			)
+				await concludeDiscussion(
+					id,
+					discussion,
+					discussion.decision!.decider,
+					!!discussion.decision!.contested,
+					discussion.decision!.decision,
+					discussion.decision!.cardId
+				);
+		}
+		for (const target of state.openCards.filter((c) => c.boundary === 'baseline')) {
+			const raisedAt =
+				data.events.find((e) => e.kind === 'decision_card' && e.card.id === target.id)?.seq ?? 0;
+			if ((state.standardChanges.at(-1)?.seq ?? 0) > raisedAt) {
+				await append(id, {
+					kind: 'card_superseded',
+					actor: 'app',
+					cardId: target.id,
+					reason: 'Owner changed the draft baseline.',
+				});
+				return;
+			}
+		}
+		for (const target of state.openCards.filter((c) => c.boundary === 'acceptance')) {
+			if (
+				!teamReadyForDemo(state) &&
+				state.standardChanges.at(-1) &&
+				state.standardChanges.at(-1)!.seq > (state.demos.at(-1)?.seq ?? 0)
+			) {
+				await append(id, {
+					kind: 'card_superseded',
+					actor: 'app',
+					cardId: target.id,
+					reason: 'Owner scope changed after this demo.',
+				});
+				return;
+			}
+		}
 		if (state.paused || state.terminal || jobs.has(id)) return;
 		for (const turn of state.turns)
 			if (turn.dispatched && !turn.finished && !live.has(turn.dispatchId))
 				launch(data, turn.dispatched, true);
 		const wakePm = () =>
-			active ? Promise.resolve() : dispatch(id, state, 'pm', 'topic', { mode: 'wake' });
+			active || SEAT_ROLES.some((seat) => state.seats[seat].faultActive)
+				? Promise.resolve()
+				: dispatch(id, state, 'pm', 'topic', { mode: 'wake' });
 		const active = SEAT_ROLES.reduce(
 			(count, seat) => count + state.seats[seat].activeDispatchIds.length,
 			0
 		);
 		if (active >= 2) return;
-		if (state.openCards.length) return;
+		// Owner messages remain usable while a card waits; they never auto-answer the card.
+		if (state.openCards.length && !state.pendingMessages.length) return;
 		if (
 			state.usage.turns >= data.config.turnBudget ||
 			(data.config.deadline !== undefined && now() >= data.config.deadline)
@@ -721,7 +1302,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				id: 'budget',
 				boundary: 'budget',
 				title: 'Incomplete progress report',
-				body: `This is a progress report, not a completion demo. ${JSON.stringify(teamStatus(state, now()).criteria.missing)}`,
+				body: `This is a progress report, not a completion demo. ${JSON.stringify({ missing: teamStatus(state, now()).criteria.missing, changes: state.standardChanges, contested: state.decisions.filter((d) => d.contested), suggestions: state.suggestions, evidenceChanges: state.checks.filter((c) => c.dilution?.length) })}`,
 				options: [
 					{ id: 'stop', label: 'Stop and preserve work', cost: 'Keep the branch and ledger.' },
 					{
@@ -740,6 +1321,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				!t.report &&
 				!t.dispatched?.repairOf &&
 				t.finished.exitCode === 0 &&
+				!t.finished.failureKind &&
 				!t.finished.canceled &&
 				!state.turns.some((r) => r.dispatched?.repairOf === t.dispatchId)
 		);
@@ -749,48 +1331,124 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				state,
 				broken.seat,
 				(broken.dispatched.expectedTurn ?? broken.dispatched.turn) as M1TurnKind,
-				{ repairOf: broken.dispatchId }
+				{
+					repairOf: broken.dispatchId,
+					discussionId: broken.dispatched.discussionId,
+					round: broken.dispatched.round,
+					messageIds: broken.dispatched.messageIds,
+				}
 			);
 			return;
 		}
-		const failed = state.turns.find(
+		const failedTurns = state.turns.filter(
 			(turn) =>
 				turn.finished &&
-				turn.finished.exitCode !== 0 &&
+				(turn.finished.exitCode !== 0 || turn.finished.failureKind) &&
+				!turn.report &&
+				!turn.repaired &&
 				!turn.finished.canceled &&
 				!turn.dispatched?.retryOf &&
 				!turn.dispatched?.repairOf &&
-				!state.turns.some((retry) => retry.dispatched?.retryOf === turn.dispatchId)
+				!state.turns.some(
+					(retry) =>
+						retry.dispatched?.retryOf === turn.dispatchId ||
+						retry.dispatched?.repairOf === turn.dispatchId
+				)
 		);
-		if (failed?.dispatched && !state.seats[failed.seat].activeDispatchIds.length) {
-			if (failed.finished?.failureKind === 'session-broken') {
-				const binding = state.seats[failed.seat].binding!;
-				await append(id, {
-					kind: 'seat_bound',
-					actor: 'app',
-					seat: failed.seat,
-					model: binding.model,
-					workspace: binding.workspace,
-					reason: 'restored',
-				});
-			}
-			return dispatch(
-				id,
-				await stateFor(id),
-				failed.seat,
-				(failed.dispatched.expectedTurn ?? failed.dispatched.turn) as M1TurnKind,
-				{
-					retryOf: failed.dispatchId,
-					note: 'The previous attempt may have done part of the work. Inspect existing results first; preserve completed actions. This is the single same-turn retry.',
-				}
-			);
+		for (const failed of failedTurns) {
+			if (!failed.dispatched || state.seats[failed.seat].activeDispatchIds.length) continue;
+			if (
+				await dispatch(
+					id,
+					await stateFor(id),
+					failed.seat,
+					(failed.dispatched.expectedTurn ?? failed.dispatched.turn) as M1TurnKind,
+					{
+						retryOf: failed.dispatchId,
+						mode: failed.dispatched.mode,
+						problemId: failed.dispatched.problemId,
+						fingerprint: failed.dispatched.fingerprint,
+						failures: failed.dispatched.failures,
+						discussionId: failed.dispatched.discussionId,
+						round: failed.dispatched.round,
+						messageIds: failed.dispatched.messageIds,
+						note: 'The previous attempt may have done part of the work. Inspect existing results first; preserve completed actions. This is the single same-turn retry.',
+					}
+				)
+			)
+				return;
 		}
-		const epoch = data.events.filter((e) => e.kind === 'changes_requested').at(-1)?.seq ?? 0;
+		// Explicit recovery or an owner answer can restart an exhausted assignment.
+		// Do not revive older failures after a later successful turn (including repair).
+		for (const seat of SEAT_ROLES) {
+			const lastTurn = state.turns.findLast((turn) => turn.seat === seat);
+			if (
+				lastTurn?.dispatched &&
+				lastTurn.finished &&
+				!lastTurn.report &&
+				!lastTurn.finished.report &&
+				!lastTurn.finished.canceled &&
+				lastTurn.finished.seq < recoveryAt(data.events, seat)
+			) {
+				const previous = lastTurn.dispatched;
+				if (
+					await dispatch(
+						id,
+						state,
+						seat,
+						(previous.expectedTurn ?? previous.turn) as ReportTurnKind,
+						{
+							mode: previous.mode,
+							problemId: previous.problemId,
+							fingerprint: previous.fingerprint,
+							failures: previous.failures,
+							discussionId: previous.discussionId,
+							round: previous.round,
+							messageIds: previous.messageIds,
+							note: 'The owner answered or the seat recovered. Inspect existing results before resuming the failed assignment.',
+						}
+					)
+				)
+					return;
+			}
+		}
+		const epoch =
+			data.events
+				.filter(
+					(e) =>
+						e.kind === 'changes_requested' ||
+						e.kind === 'standard_change' ||
+						(e.kind === 'phase_changed' && e.to === 'implement')
+				)
+				.at(-1)?.seq ?? 0;
+		const rejectedAt = state.reviews.findLast((r) => r.verdict === 'reject')?.seq ?? 0;
 		const turns = state.turns.filter(
 			(t) => !t.dispatched?.repairOf && (t.dispatched?.seq ?? 0) > epoch
 		);
+		const published = data.events.filter((e) => e.kind === 'brief_published').at(-1);
+		const previousBrief =
+			published && state.briefs.find((b) => b.version === published.brief.version - 1);
+		const revisionDiff =
+			published && previousBrief ? baselineDiff(previousBrief, published.brief) : undefined;
+		const challengeEpoch =
+			revisionDiff &&
+			(revisionDiff.criteria.length ||
+				revisionDiff.scope ||
+				revisionDiff.notDoing ||
+				revisionDiff.checks)
+				? published!.seq
+				: 0;
 		const last = (kind: M1TurnKind, seat?: SeatRole) =>
-			turns.filter((t) => t.dispatched?.turn === kind && (!seat || t.seat === seat)).at(-1);
+			turns
+				.filter(
+					(t) =>
+						t.dispatched?.turn === kind &&
+						(kind !== 'challenge' || t.dispatched.seq > challengeEpoch) &&
+						(!seat || t.seat === seat) &&
+						(!['fix', 'reverify'].includes(kind) || t.dispatched.seq > rejectedAt) &&
+						t.report?.type !== 'topic'
+				)
+				.at(-1);
 		const accepted = (kind: M1TurnKind, seat?: SeatRole) => last(kind, seat)?.report;
 		if (!state.seats.pm.binding || !state.seats.dev.binding || !state.seats.qa.binding) {
 			await startJob(id, `initialize:${id}`, async () => {
@@ -808,6 +1466,82 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						})
 					);
 			});
+			return;
+		}
+		// A targeted message wakes only its recipient, after its current turn, before phase work.
+		if (state.pendingMessages.length) {
+			const message = state.pendingMessages[0];
+			const forwarded = state.messages.find(
+				(m) => m.message.messageId === message.messageId
+			)?.forwarded;
+			const seat = forwarded ? 'pm' : (message.to ?? 'pm');
+			const messageIds = state.pendingMessages
+				.filter(
+					(m) =>
+						(state.messages.find((item) => item.message.messageId === m.messageId)?.forwarded
+							? 'pm'
+							: (m.to ?? 'pm')) === seat
+				)
+				.map((m) => m.messageId);
+			await dispatch(id, state, seat, 'message', { messageIds });
+			return;
+		}
+		if (state.openCards.length) return;
+		if (await discuss(id, state)) return;
+		const retrospective = state.discussions.find(
+			(d) =>
+				d.decision &&
+				['rejections', 'no-progress'].includes(d.opened?.trigger ?? '') &&
+				!state.retros.some((r) => r.discussionId === d.id)
+		);
+		if (retrospective) {
+			await dispatch(id, state, 'pm', 'retro', { discussionId: retrospective.id });
+			return;
+		}
+		const actions = state.workItems.filter((item) => item.discussionId && item.state === 'claimed');
+		if (actions.length) {
+			for (const seat of SEAT_ROLES) {
+				const assigned = actions.filter((item) => item.owner === seat);
+				if (!assigned.length) continue;
+				const turn =
+					!state.baseline.confirmedVersion ||
+					seat === 'pm' ||
+					assigned.some(
+						(item) =>
+							state.discussions.find((d) => d.id === item.discussionId)?.opened?.trigger ===
+							'standard-issue'
+					)
+						? 'message'
+						: seat === 'qa'
+							? 'qa_prep'
+							: state.issues.some((i) => i.opened.issueKind === 'defect' && isOpenTeamIssue(i))
+								? 'fix'
+								: 'work';
+				await dispatch(id, await stateFor(id), seat, turn, {
+					note: `Carry out the decided next steps: ${JSON.stringify(assigned)}. Before baseline confirmation, report preparation only; do not implement.`,
+				});
+			}
+			return;
+		}
+		const rejected = state.reviews.at(-1);
+		if (
+			rejected?.verdict === 'reject' &&
+			!data.events.some((e) => e.id === `${rejected.id}:discussion:opened`)
+		) {
+			await openDiscussion(
+				id,
+				`${rejected.id}:discussion`,
+				'Resolve the product review problems',
+				state.reviewDecision.kind === 'diagnose' ? state.reviewDecision.reason : 'review'
+			);
+			return;
+		}
+		if (
+			rejected?.verdict === 'reject' &&
+			state.phase === 'review' &&
+			rejected.seq > (state.outputs.at(-1)?.seq ?? 0)
+		) {
+			await transition(id, state, 'verify');
 			return;
 		}
 		if (
@@ -834,7 +1568,15 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				return;
 			}
 			const returned = state.baseline.returns.at(-1)?.seq ?? 0;
-			if (!last('respond') || last('respond')!.dispatched!.seq < returned)
+			if (
+				!last('respond') ||
+				last('respond')!.dispatched!.seq <
+					Math.max(
+						returned,
+						last('challenge', 'dev')!.dispatched!.seq,
+						last('challenge', 'qa')!.dispatched!.seq
+					)
+			)
 				return dispatch(id, state, 'pm', 'respond');
 			const response = accepted('respond');
 			if (!response) return wakePm();
@@ -853,7 +1595,13 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					checksFor(id, state, batchId, true, controller.signal)
 				);
 			}
-			if (state.checks.some((c) => c.batchId === batchId && (c.notRun || c.timedOut))) {
+			if (
+				state.checks.some(
+					(c) =>
+						c.batchId === batchId &&
+						(c.notRun || c.timedOut || c.exitCode === 126 || c.exitCode === 127)
+				)
+			) {
 				if (!active)
 					return dispatch(id, state, 'pm', 'respond', {
 						note: 'The baseline check command could not run. Repair the check definition without claiming product success.',
@@ -867,13 +1615,14 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				id: `${batchId}:proposed`,
 			});
 			await card(id, {
-				id: `baseline:${last('respond')!.dispatchId}`,
+				id: `baseline:${last('respond')!.dispatchId}:v${state.brief.version}`,
 				boundary: 'baseline',
 				title: 'Confirm the baseline',
 				body: JSON.stringify({
 					brief: state.brief,
 					question: response.type === 'respond' ? response.askOwner : undefined,
 					trials: state.checks.filter((c) => c.batchId === batchId),
+					diff: baselineDiff(state.briefs.at(-2) ?? null, state.brief),
 				}),
 				options: [
 					{ id: 'confirm', label: 'Confirm this scope and criteria', recommended: true },
@@ -885,12 +1634,25 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			await transition(id, state, 'implement');
 			return;
 		} else if (state.phase === 'implement') {
-			if (epoch && state.pendingMessages.length) {
-				if (!state.seats.pm.activeDispatchIds.length)
-					await dispatch(id, state, 'pm', 'topic', {
-						note: 'Restate the owner requested changes and the corresponding work item before implementation.',
-					});
-				return;
+			if (!state.outputs.length) {
+				return startJob(id, 'capture-before', async () => {
+					const workspace = await ws(state).initialize();
+					const revision = workspace.baseRevision ?? workspace.qaRevision;
+					const output = await deps.captureOutput(
+						state.seats.dev.binding!.workspace,
+						revision,
+						state.criteria
+					);
+					await queue.enqueue(id, () =>
+						append(id, {
+							kind: 'output_captured',
+							actor: 'app',
+							outputId: `before:${revision}`,
+							...output,
+							id: `${id}:before-output`,
+						})
+					);
+				});
 			}
 			if (!last('work')) await dispatch(id, state, 'dev', 'work');
 			if (!last('qa_prep')) await dispatch(id, await stateFor(id), 'qa', 'qa_prep');
@@ -957,16 +1719,55 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			}
 			if (reverify?.report && fix) await recordAttempt(id, state, fix);
 			if (
-				state.issues.some((i) => i.state !== 'verified-pass' && i.opened.issueKind === 'defect') ||
+				state.issues.some((i) => isOpenTeamIssue(i) && i.opened.issueKind === 'defect') ||
 				!batchPass(state, `submit:${fix?.dispatchId ?? last('work')?.dispatchId}`)
 			)
 				return fixNext(id, await stateFor(id), 'fix');
-			if (state.issues.some((i) => i.state !== 'verified-pass'))
-				return dispatch(id, state, 'pm', 'topic', {
+			if (state.issues.some((i) => isOpenTeamIssue(i)))
+				return dispatch(id, state, 'pm', 'message', {
 					mode: 'wake',
-					note: 'Triage standard issues without changing the confirmed baseline.',
+					note: 'Resolve standard issues or propose standardChanges. Do not assign an unjudgeable criterion to dev.',
 				});
 			if (state.criteria.filter((c) => c.proof !== 'pm').every((c) => c.status === 'pass')) {
+				const missing = missingOutputLocations(state, state.outputs.at(-1));
+				if (missing.length) {
+					const resolved = data.events
+						.filter(
+							(e) =>
+								e.kind === 'standard_issue_resolved' && e.seq > (state.outputs.at(-1)?.seq ?? 0)
+						)
+						.at(-1);
+					const submitted = data.events.filter((e) => e.kind === 'workspace_submitted').at(-1);
+					if (resolved && submitted)
+						return startJob(id, `recapture:${resolved.id}`, async () => {
+							const output = await deps.captureOutput(
+								state.seats.dev.binding!.workspace,
+								submitted.revision,
+								state.criteria,
+								state.outputs.at(-1)?.outputId
+							);
+							await queue.enqueue(id, () =>
+								append(id, {
+									kind: 'output_captured',
+									actor: 'app',
+									outputId: `recapture:${resolved.id}`,
+									...output,
+									id: `recapture:${resolved.id}`,
+								})
+							);
+						});
+					for (const [index, location] of missing.entries())
+						await append(id, {
+							kind: 'issue_opened',
+							actor: 'app',
+							issueId: `output:${state.outputs.at(-1)?.outputId}:${index}`,
+							title: `Output cannot be judged: ${location}`,
+							issueKind: 'standard',
+							steps: [location],
+							id: `output:${state.outputs.at(-1)?.outputId}:${index}`,
+						});
+					return;
+				}
 				await transition(id, state, 'review');
 				return;
 			}
@@ -974,24 +1775,35 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				note: 'Issue retests are narrower than criterion verification. Supply the remaining criterion evidence.',
 			});
 		} else if (state.phase === 'review') {
-			if (!last('review')) return dispatch(id, state, 'pm', 'review');
-			if (
-				accepted('review') &&
-				state.reviews.at(-1)?.verdict === 'pass' &&
-				state.criteria.every((c) => c.status === 'pass')
-			) {
+			if (!last('review') || last('review')!.dispatched!.seq < (state.outputs.at(-1)?.seq ?? 0))
+				return dispatch(id, state, 'pm', 'review');
+			if (accepted('review') && teamReadyForDemo(state)) {
 				await transition(id, state, 'demo');
 				return;
 			}
 		} else if (state.phase === 'demo' || state.phase === 'accept') {
-			if (!last('demo')) return dispatch(id, state, 'pm', 'demo');
+			if (!teamReadyForDemo(state)) {
+				await transition(id, state, 'verify');
+				return;
+			}
+			if (!last('demo') || last('demo')!.dispatched!.seq < (state.reviews.at(-1)?.seq ?? 0))
+				return dispatch(id, state, 'pm', 'demo');
 			if (accepted('demo')) {
 				await transition(id, state, 'accept');
 				await card(id, {
 					id: `acceptance:${last('demo')!.dispatchId}`,
 					boundary: 'acceptance',
 					title: 'Accept the demonstrated result',
-					body: 'All confirmed criteria have evidence and PM review passed. Accept this result or request specific changes.',
+					body: JSON.stringify({
+						output: state.outputs.at(-1),
+						before: state.outputs.at(-2),
+						demo: state.demos.at(-1),
+						evidence: teamStatus(state, now()).criteria,
+						changes: state.standardChanges,
+						contested: state.decisions.filter((d) => d.contested),
+						suggestions: state.suggestions,
+						evidenceChanges: state.checks.filter((c) => c.dilution?.length),
+					}),
 					options: [
 						{ id: 'accept', label: 'Accept the result', recommended: true },
 						{ id: 'changes', label: 'Request specific changes' },
@@ -1030,6 +1842,10 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 	};
 	async function applyAnswer(id: string, target: OwnerCard, optionId: string, note?: string) {
 		const data = await load(id);
+		if (target.boundary === 'baseline' && optionId === 'return')
+			await openDiscussion(id, `${target.id}:returned`, note!, 'baseline-return');
+		if (target.boundary === 'acceptance' && optionId === 'changes')
+			await openDiscussion(id, `${target.id}:requested`, note!, 'requested-changes');
 		if (data.events.some((event) => event.id === `${target.id}:action`)) return;
 		const state = reduceLedger(data.events);
 		const cardId = target.id;
@@ -1072,6 +1888,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					change: 'add',
 					after: note!,
 					reason: 'Owner requested changes',
+					ownerMessageId: `${cardId}:changes`,
 					approvedBy: 'owner',
 					criterion: {
 						id: `owner:${cardId}`,
@@ -1100,14 +1917,42 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					id: `${cardId}:action`,
 				});
 			}
+		} else if (target.discussionId) {
+			const discussion = state.discussions.find((d) => d.id === target.discussionId)!;
+			if (target.standardChange && optionId !== 'keep')
+				await applyStandardChange(id, target.standardChange, 'owner', cardId, cardId);
+			if (optionId === 'keep')
+				discussion.proposals[discussion.proposals.length - 1] = {
+					...discussion.proposals.at(-1)!,
+					actions: discussion.opened!.participants.map((seat) => ({
+						seat,
+						action: 'Find an implementation that preserves the existing confirmed criterion.',
+					})),
+				};
+			await concludeDiscussion(
+				id,
+				discussion,
+				'owner',
+				false,
+				optionId === 'keep'
+					? 'Owner kept the existing commitment. Seek an in-scope solution.'
+					: target.options.find((o) => o.id === optionId)?.label,
+				cardId
+			);
+			await append(id, {
+				kind: 'message_handled',
+				actor: 'app',
+				messageId: cardId,
+				seat: 'pm',
+				summary: 'Owner decision applied',
+				id: `${cardId}:action`,
+			});
 		} else if (target.boundary === 'budget' && optionId === 'gaps') {
 			const gaps = state.criteria
 				.filter((criterion) => criterion.status !== 'pass')
 				.map((criterion) => `${criterion.id}: ${criterion.reason}`)
 				.concat(
-					state.issues
-						.filter((issue) => issue.state !== 'verified-pass')
-						.map((issue) => issue.opened.title)
+					state.issues.filter((issue) => isOpenTeamIssue(issue)).map((issue) => issue.opened.title)
 				);
 			await append(id, {
 				kind: 'accepted',
@@ -1133,11 +1978,18 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			if (
 				target.boundary === 'acceptance' &&
 				optionId === 'accept' &&
-				(state.criteria.some((c) => c.status !== 'pass') ||
-					state.issues.some((i) => i.state !== 'verified-pass') ||
-					state.reviews.at(-1)?.verdict !== 'pass')
+				(!teamReadyForDemo(state) || !state.demos.length)
 			)
 				throw new Error('The team is not ready for acceptance');
+			if (target.boundary === 'baseline' && optionId === 'confirm') {
+				const trials = state.checks.filter((c) => c.batchId === `trial:${state.brief?.version}`);
+				if (
+					!state.brief ||
+					trials.length !== state.brief.checks.length ||
+					trials.some((c) => c.notRun || c.timedOut || c.exitCode === 126 || c.exitCode === 127)
+				)
+					throw new Error('The current baseline commands must run before confirmation');
+			}
 			// The durable answer is the intent. Startup completes any missing semantic events.
 			await append(id, {
 				kind: 'card_answered',
@@ -1266,6 +2118,92 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			const data = await this.get(id);
 			return data ? teamStatus(reduceLedger(data.events), now()) : null;
 		},
+		async baselineDiff(id: string) {
+			const { events } = await load(id);
+			const state = reduceLedger(events);
+			const current = state.baseline.brief ?? state.brief;
+			if (!current) throw new Error('No baseline draft');
+			const lastChange = events.findLast(
+				(e) => e.kind === 'standard_change' || e.kind === 'baseline_edited'
+			);
+			const before =
+				state.baseline.brief && lastChange
+					? reduceLedger(events.filter((e) => e.seq < lastChange.seq)).baseline.brief
+					: (state.briefs.at(-2) ?? null);
+			return baselineDiff(before, current);
+		},
+		baselineEdit: (id: string, criterionId: string, text: string) =>
+			queue.enqueue(id, async () => {
+				const state = await stateFor(id);
+				if (state.terminal || !text?.trim())
+					throw new Error('An active team and nonempty criterion text are required');
+				const current = state.baseline.brief ?? state.brief;
+				const criterion = current?.criteria.find((c) => c.id === criterionId);
+				if (!current || !criterion) throw new Error('Unknown criterion');
+				if (state.baseline.brief) {
+					await applyStandardChange(
+						id,
+						{
+							criterionId,
+							change: 'modify',
+							criterion: { ...criterion, text, byOwner: true },
+							reason: 'Owner edited the criterion',
+						},
+						'owner',
+						randomUUID()
+					);
+				} else {
+					const brief = {
+						...current,
+						version: current.version + 1,
+						criteria: current.criteria.map((c) =>
+							c.id === criterionId ? { ...c, text, byOwner: true } : c
+						),
+					};
+					await append(id, {
+						kind: 'baseline_edited',
+						actor: 'owner',
+						criterionId,
+						before: criterion.text,
+						after: text,
+						brief,
+					});
+				}
+				for (const target of state.openCards.filter(
+					(c) => c.boundary === 'baseline' || c.boundary === 'acceptance'
+				))
+					await append(id, {
+						kind: 'card_superseded',
+						actor: 'app',
+						cardId: target.id,
+						reason: 'Owner changed the criterion; recheck the current version.',
+					});
+				const updated = await stateFor(id);
+				return {
+					brief: updated.baseline.brief ?? updated.brief,
+					diff: baselineDiff(current, (updated.baseline.brief ?? updated.brief)!),
+				};
+			}),
+		async baselineReturn(id: string, note: string) {
+			const target = (await stateFor(id)).openCards.find((c) => c.boundary === 'baseline');
+			if (!target) throw new Error('No baseline confirmation card');
+			await answer(id, target.id, 'return', note);
+		},
+		async log(id: string, seat?: SeatRole) {
+			if (seat && !SEAT_ROLES.includes(seat)) throw new Error('Invalid seat');
+			const data = await load(id);
+			return reduceLedger(data.events)
+				.turns.filter((t) => !seat || t.seat === seat)
+				.map((t) => ({
+					dispatchId: t.dispatchId,
+					seat: t.seat,
+					turn: t.dispatched?.turn,
+					prompt: t.dispatched ? promptFor(t.dispatched, data.events) : undefined,
+					reply: t.finished?.message,
+					report: t.report,
+					error: t.reportError,
+				}));
+		},
 		answer,
 		say: (id: string, text: string, to?: SeatRole) =>
 			queue.enqueue(id, async () => {
@@ -1276,8 +2214,8 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					kind: 'owner_message',
 					actor: 'owner',
 					messageId: randomUUID(),
-					text: to && to !== 'pm' ? `To ${to}: ${text}` : text,
-					to: 'pm',
+					text,
+					to: to ?? 'pm',
 				});
 			}),
 		pause: (id: string) => control(id, 'paused'),

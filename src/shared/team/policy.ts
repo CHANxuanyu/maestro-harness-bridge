@@ -1,0 +1,221 @@
+import { getModelFamily } from '../modelFamily';
+import type {
+	BaselineDiff,
+	Brief,
+	LedgerActor,
+	OutputCapture,
+	SeatRole,
+	StandardChangeRequest,
+	TeamDiscussion,
+	TeamIssue,
+	TeamState,
+	TeamTopic,
+	TurnKind,
+} from './types';
+
+/** Permissions belong to the assignment, not the seat's usual role. Repairs never redo work. */
+export function teamTurnPermission(seat: SeatRole, turn: TurnKind): 'readonly' | 'full' {
+	return (seat === 'dev' && (turn === 'work' || turn === 'fix')) ||
+		(seat === 'qa' && (turn === 'qa_prep' || turn === 'reverify'))
+		? 'full'
+		: 'readonly';
+}
+
+/** Only changed fields are shown. Previous versions remain immutable in the ledger. */
+export function baselineDiff(before: Brief | null, after: Brief): BaselineDiff {
+	const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+	return {
+		fromVersion: before?.version ?? null,
+		toVersion: after.version,
+		...(!same(before?.scope, after.scope)
+			? { scope: { before: before?.scope ?? '', after: after.scope } }
+			: {}),
+		...(!same(before?.notDoing, after.notDoing)
+			? { notDoing: { before: before?.notDoing ?? [], after: after.notDoing } }
+			: {}),
+		criteria: [
+			...new Set([
+				...(before?.criteria ?? []).map((c) => c.id),
+				...after.criteria.map((c) => c.id),
+			]),
+		]
+			.map((id) => ({
+				id,
+				before: before?.criteria.find((c) => c.id === id),
+				after: after.criteria.find((c) => c.id === id),
+			}))
+			.filter((c) => !same(c.before, c.after)),
+		...(!same(before?.checks, after.checks)
+			? { checks: { before: before?.checks ?? [], after: after.checks } }
+			: {}),
+	};
+}
+
+/** References come from durable observations, never a vote or a completion claim. */
+export function teamEvidence(state: TeamState): string[] {
+	return [
+		...new Set([
+			...state.checks.flatMap((c) => (c.notRun ? [] : [c.id, c.evidenceId])),
+			...state.outputs.flatMap((o) => [o.outputId, ...o.files, ...o.previews]),
+			...state.criteria.flatMap((c) => c.evidence.flatMap((e) => [e.eventId, e.evidence])),
+		]),
+	];
+}
+
+export function discussionDecider(discussion: TeamDiscussion): LedgerActor {
+	const opened = discussion.opened!;
+	if (opened.reversible === false || opened.layer === 'commitment') return 'owner';
+	if (opened.layer === 'fact') return 'app';
+	if (opened.layer === 'implementation') return 'dev';
+	if (opened.layer === 'testing') return 'qa';
+	return 'pm';
+}
+
+export function topicRejection(topic: TeamTopic, state: TeamState): string | undefined {
+	const question = (topic.question ?? topic.topic).trim().toLowerCase();
+	const previous = state.discussions.filter(
+		(d) =>
+			d.decision &&
+			(d.id === topic.reopens ||
+				(d.opened?.question ?? d.opened?.topic)?.trim().toLowerCase() === question)
+	);
+	const known = teamEvidence(state);
+	if (topic.evidence?.some((e) => !known.includes(e)))
+		return 'Topic evidence must reference a recorded observation.';
+	if (!previous.length) return;
+	const used = previous.flatMap((d) => [
+		...(d.opened?.evidence ?? []),
+		...d.positions.flatMap((p) => p.evidence ?? []),
+		...d.responses.flatMap((r) => (r.evidence ? [r.evidence] : [])),
+	]);
+	const decidedAt = Math.max(...previous.map((d) => d.decision!.seq));
+	const fresh = [
+		...state.checks.filter((c) => c.seq > decidedAt).flatMap((c) => [c.id, c.evidenceId]),
+		...state.outputs
+			.filter((o) => o.seq > decidedAt)
+			.flatMap((o) => [o.outputId, ...o.files, ...o.previews]),
+		...state.criteria.flatMap((c) =>
+			c.evidence.filter((e) => e.seq > decidedAt).flatMap((e) => [e.eventId, e.evidence])
+		),
+	];
+	if (!topic.evidence?.some((e) => !used.includes(e) && fresh.includes(e)))
+		return 'A decided question cannot reopen without new recorded evidence.';
+}
+
+/** Same-vendor agreement is one reference, with unknown vendors grouped conservatively. */
+export function referenceVotes(discussion: TeamDiscussion, state: TeamState): string {
+	const round = discussion.proposals.at(-1)?.round ?? discussion.proposals.length;
+	const responses = discussion.responses.filter((r) => (r.round ?? 1) === round);
+	const groups = new Map<string, Set<string>>();
+	for (const response of responses) {
+		const model = state.seats[response.seat].model ?? state.config?.seats[response.seat];
+		const family = getModelFamily(
+			model?.model ?? (model?.tool === 'claude-code' ? 'claude' : (model?.tool ?? ''))
+		);
+		const families = groups.get(response.result) ?? new Set<string>();
+		families.add(family);
+		groups.set(response.result, families);
+	}
+	return (
+		[...groups]
+			.map(
+				([result, families]) =>
+					`${responses.filter((r) => r.result === result).length} ${result} (${families.size} vendor group${families.size === 1 ? '' : 's'})`
+			)
+			.join('; ') + '. Reference only; same-vendor agreement is not independent.'
+	);
+}
+
+/** R1-3 requires a dev estimate, not PM asserting that the cost is small. */
+export function pmMayChange(
+	change: StandardChangeRequest,
+	state: TeamState,
+	discussion?: TeamDiscussion
+): boolean {
+	const old = state.criteria.find((c) => c.id === change.criterionId);
+	if (
+		!['add', 'tighten'].includes(change.change) ||
+		!change.withinMeaning?.trim() ||
+		!change.criterion
+	)
+		return false;
+	if (change.change === 'add' ? !!old : !old) return false;
+	if (old && !change.criterion.text.startsWith(old.text)) return false;
+	if (discussion?.responses.some((r) => r.baselineViolation)) return false;
+	if (
+		old &&
+		(old.proof !== change.criterion.proof ||
+			old.how !== change.criterion.how ||
+			JSON.stringify(old.locations) !== JSON.stringify(change.criterion.locations))
+	)
+		return false;
+	// Changing existing numerical examples is a commitment change, even if labelled tightening.
+	if (
+		old &&
+		JSON.stringify(old.text.match(/\d+(?:\.\d+)?/g)) !==
+			JSON.stringify(change.criterion.text.match(/\d+(?:\.\d+)?/g))
+	)
+		return false;
+	const estimate = discussion?.positions.find((p) => p.seat === 'dev');
+	return (
+		estimate?.extraTurns !== undefined &&
+		estimate.preservesDeadline === true &&
+		estimate.extraTurns <= (state.config?.turnBudget ?? 0) - state.usage.turns
+	);
+}
+
+/** An empty capture, or a missing named viewer, cannot support a review. */
+export function missingOutputLocations(state: TeamState, output?: OutputCapture): string[] {
+	if (!output || (!output.files.length && !output.previews.length))
+		return ['No real output captured'];
+	const visualMissing = state.criteria
+		.filter(
+			(c) => (c.experience || c.proof === 'pm') && !c.locations?.length && !output.previews.length
+		)
+		.map((c) => `${c.id}: no rendered preview or screenshot`);
+	return [
+		...visualMissing,
+		...state.criteria.flatMap((criterion) =>
+			(criterion.locations ?? [])
+				.filter(
+					(location) =>
+						!output.locations?.some(
+							(item) =>
+								item.criterion === criterion.id &&
+								JSON.stringify(item.location) === JSON.stringify(location) &&
+								!item.error &&
+								(location.kind === 'file' ? !!item.file : !!item.preview)
+						)
+				)
+				.map((location) => `${criterion.id}: ${location.label} (${location.target})`)
+		),
+	];
+}
+
+export function teamReadyForDemo(state: TeamState): boolean {
+	return (
+		state.baseline.confirmedVersion !== null &&
+		state.criteria.length > 0 &&
+		state.criteria.every((c) => c.confirmed && c.status === 'pass') &&
+		!state.issues.some(isOpenTeamIssue) &&
+		state.reviews.at(-1)?.verdict === 'pass' &&
+		!missingOutputLocations(state, state.outputs.at(-1)).length &&
+		!state.discussions.some((d) => d.opened && !d.decision) &&
+		!state.pendingMessages.length
+	);
+}
+
+export function topicParticipants(topic: TeamTopic): SeatRole[] {
+	const owner =
+		topic.layer === 'implementation'
+			? 'dev'
+			: topic.layer === 'testing'
+				? 'qa'
+				: (topic.owner ?? 'pm');
+	return [...new Set([owner, ...topic.participants])];
+}
+
+/** Superseded commitments stay visible in history, never relabelled as verified. */
+export function isOpenTeamIssue(issue: TeamIssue): boolean {
+	return issue.state !== 'verified-pass' && issue.state !== 'superseded';
+}

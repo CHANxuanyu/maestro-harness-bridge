@@ -20,6 +20,12 @@ export function registerTeamHandlers(team: TeamScheduler): void {
 	handle('answer', (id: string, card: string, option: string, note?: string) =>
 		team.answer(id, card, option, note)
 	);
+	handle('baselineEdit', (id: string, criterion: string, text: string) =>
+		team.baselineEdit(id, criterion, text)
+	);
+	handle('baselineDiff', (id: string) => team.baselineDiff(id));
+	handle('baselineReturn', (id: string, note: string) => team.baselineReturn(id, note));
+	handle('log', (id: string, seat?: SeatRole) => team.log(id, seat));
 	handle('say', (id: string, text: string, to?: SeatRole) => team.say(id, text, to));
 	handle('pause', (id: string) => team.pause(id));
 	handle('resume', (id: string) => team.resume(id));

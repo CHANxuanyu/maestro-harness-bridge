@@ -33,6 +33,8 @@ interface TeamOptions {
 	path?: string;
 	to?: string;
 	note?: string;
+	text?: string;
+	seat?: string;
 }
 
 /** Parse provider-native model/effort names; reject unknown providers and Codex Ultra. */
@@ -127,6 +129,12 @@ export async function teamCommand(
 						decisions: state.decisions,
 						answers: state.cardAnswers,
 					},
+					meetings: state.discussions,
+					changes: state.standardChanges,
+					suggestions: state.suggestions,
+					output: state.outputs,
+					residual: state.residual,
+					messages: state.messages,
 					issues: state.issues,
 					evidence: { criteria: state.criteria, checks: state.checks },
 					cost: {
@@ -135,14 +143,24 @@ export async function teamCommand(
 					},
 				};
 				if (!Object.prototype.hasOwnProperty.call(sections, args[0]))
-					throw new Error('show expects brief|baseline|decisions|issues|evidence|cost');
+					throw new Error(`show expects ${Object.keys(sections).join('|')}`);
 				result = sections[args[0]];
 			} else if (action === 'baseline') {
-				if (args[0] !== 'confirm') throw new Error('M1 supports baseline confirm');
-				const status = await invoke<TeamStatusView | null>('status', id);
-				const card = status?.openCards.find((card) => card.boundary === 'baseline');
-				if (!card) throw new Error('No baseline confirmation card');
-				await invoke('answer', id, card.id, 'confirm');
+				if (args[0] === 'diff') result = await invoke('baselineDiff', id);
+				else if (args[0] === 'edit') {
+					const text = options.text ?? args.slice(2).join(' ');
+					if (!args[1] || !text.trim())
+						throw new Error('baseline edit requires a criterion and --text or replacement text');
+					result = await invoke('baselineEdit', id, args[1], text);
+				} else if (args[0] === 'return') {
+					if (!options.note?.trim()) throw new Error('baseline return requires --note');
+					result = await invoke('baselineReturn', id, options.note);
+				} else if (args[0] === 'confirm') {
+					const status = await invoke<TeamStatusView | null>('status', id);
+					const card = status?.openCards.find((card) => card.boundary === 'baseline');
+					if (!card) throw new Error('No baseline confirmation card');
+					await invoke('answer', id, card.id, 'confirm');
+				} else throw new Error('baseline expects confirm|edit|diff|return');
 			} else if (action === 'answer')
 				result = await invoke('answer', id, args[0], args[1], options.note);
 			else if (action === 'say') {
@@ -151,6 +169,7 @@ export async function teamCommand(
 				result = await invoke('say', id, args.join(' '), options.to);
 			} else if (action === 'request-changes')
 				result = await invoke('requestChanges', id, options.note);
+			else if (action === 'log') result = await invoke('log', id, options.seat);
 			else if (action === 'seat-transcript') result = await invoke('seatTranscript', id, args[0]);
 			else result = await invoke(action, id);
 		}
@@ -192,10 +211,19 @@ export function registerTeamCommands(program: Command): void {
 	command('answer <card> <option>', 'Answer an owner card')
 		.option('--note <text>', 'Decision note')
 		.action((card, option, options) => teamCommand('answer', [card, option], options));
-	command('baseline <action>', 'Confirm the proposed baseline').action((action, options) =>
-		teamCommand('baseline', [action], options)
-	);
-	command('say <text...>', 'Queue an owner message for PM')
+	command(
+		'baseline <action> [criterion] [replacement...]',
+		'Confirm, edit, diff or return the baseline'
+	)
+		.option('--text <text>', 'Replacement criterion text')
+		.option('--note <text>', 'Reason for returning the baseline')
+		.action((action, criterion, replacement, options) =>
+			teamCommand('baseline', [action, ...(criterion ? [criterion] : []), ...replacement], options)
+		);
+	command('log', 'Read the exact assigned prompts and seat replies')
+		.option('--seat <seat>', 'pm, dev or qa')
+		.action((options) => teamCommand('log', [], options));
+	command('say <text...>', 'Deliver an owner message to PM or a named seat')
 		.option('--to <seat>', 'Requested recipient')
 		.action((text, options) => teamCommand('say', text, options));
 	command('request-changes', 'Return the demonstration for changes')

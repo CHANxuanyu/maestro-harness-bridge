@@ -1,5 +1,6 @@
 import path from 'path';
 import { app } from 'electron';
+import { captureTeamOutput } from './output-capture';
 import { createTeamScheduler } from './scheduler';
 import { createTeamStore } from './team-store';
 import { createTeamWorkspaces } from './workspaces';
@@ -101,18 +102,7 @@ export function createTeamRuntime(
 			await execGitReadOnly(['status', '--porcelain'], request.cwd);
 			return reconcileTeamTurn(request);
 		},
-		captureOutput: async (cwd, revision) => {
-			const result = await execGitReadOnly(['ls-tree', '-r', '--name-only', '-z', revision], cwd);
-			if (result.exitCode !== 0) throw new Error(result.stderr);
-			return {
-				files: result.stdout
-					.split('\0')
-					.filter(Boolean)
-					.slice(0, 200)
-					.map((file) => path.join(cwd, file)),
-				previews: [],
-			};
-		},
+		captureOutput: captureTeamOutput,
 	});
 	const unsubscribe = store.subscribe((teamId, event) =>
 		deps.safeSend('team:changed', { teamId, event })

@@ -1,5 +1,17 @@
 # 分支工作记录
 
+## 2026-11-17：M2 回合权限与立即失败重派修复，未提交
+
+读取负责人提供的失败账本后，将执行权限统一到 `teamTurnPermission()`：开发 work/fix、QA prep/reverify 可写，其余回合只读，PM 始终只读。成员立即失败只允许一次同回合重试，之后显示故障并等待恢复；新派发 ID、轮询、重启和旧账本中重复的根回合不会重置次数。状态与 CLI 共用此结果，模型接管仍留给 M3。
+
+复用 Electron 的同一组合成报告，在调度器测试中走通 discussion、contested、commitment、relaxation 和 review 全流程，另覆盖权限错误、model-unavailable、旧重复记录回放和恢复条件。17 个测试文件共 439 条通过，Electron 场景类型检查通过。完整命令和后续检查结果见 [M2 后端验证](round2/dev/team-m2-verification.md)。本次没有启动 Electron，由负责人在沙盒外运行；没有提交或发布。
+
+## 2026-11-17：M2 团队讨论与质量门禁后端，未提交
+
+以 `24c01ad8996dc7957307b9d73e6be927a34790ac` 为基线，在独立工作区增加四步讨论、四层决定、证据门禁、标准变更、评审打回和复盘、老板消息回执，以及基线编辑/差异/退回和成员记录的 CLI 对等。复用 `reduceLedger()`、报告 schema、`judgeAttempts()` 和合成原生提供方；渲染器由独立任务接入，没有改产品页面。
+
+验证对象是未提交源码及开发构建，不是安装包。17 个测试文件共 374 条通过；生产及 Electron 场景类型检查、主进程/preload/CLI/桌面与网页构建、ESLint、格式和文档引用检查通过。精确命令、最终结果、解释选择和未验边界见 [M2 后端验证](round2/dev/team-m2-verification.md)。Electron 在场景开始前启动失败，不能把类型检查或单元测试计为原生验收。T8 中检查授权之外的推送/草稿 PR/合并/新模型执行链路，以及外部原生查看器，未在本任务中完成验收。没有提交、打标签或发布。
+
 ## 2026-11-17：R2.0 Codex 计划从原生记录恢复，任务面板验收改认当前 CLI
 
 Codex 0.166 起把计划调用记成代码模式的 `exec` 脚本（`text(await tools.update_plan({...}))`）。实时 `todo_list` 事件让运行中的任务页是对的，但从原生记录重建历史时这条调用只是一段字符串，重启或从历史重新打开后清单消失。`extractCodexPlan()`（`src/shared/codexSessionText.ts`）现在是实时 response item、原生历史和真实验收共用的解码入口：认旧的直接调用和完整 JSON 字面量脚本，拒绝残缺、计算表达式和非调用脚本，不执行任何代码；恢复出的调用统一叫 `update_plan`，和实时路径一致。`todo_list` 本身只有完成布尔值，不补造 in_progress。

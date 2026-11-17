@@ -8,6 +8,171 @@ icon: book
 
 > Generated from the CLI command tree by `maestro-cli reference`. Do not edit by hand - run `npm run gen:cli-reference` to refresh.
 
+## `maestro-cli team`
+
+Create and operate a main-process team
+
+## `maestro-cli team start`
+
+Create and start a team
+
+| Option              | Description                                                | Default |
+| ------------------- | ---------------------------------------------------------- | ------- |
+| `--team <id>`       | Team id or unique prefix                                   | -       |
+| `--json`            | Machine-readable result                                    | -       |
+| `--idea <text>`     | What the team should deliver                               | -       |
+| `--pm <seat>`       | tool:model:effort                                          | -       |
+| `--dev <seat>`      | tool:model:effort                                          | -       |
+| `--qa <seat>`       | tool:model:effort                                          | -       |
+| `--sub-pm <seat>`   | PM substitute                                              | -       |
+| `--sub-dev <seat>`  | Dev substitute                                             | -       |
+| `--sub-qa <seat>`   | QA substitute                                              | -       |
+| `--deadline <iso>`  | Absolute deadline, ISO date/time                           | -       |
+| `--turns <count>`   | Turn budget                                                | `"40"`  |
+| `--allow <classes>` | Authorized classes: checks,push,pr,temp; omitted means all | -       |
+| `--path <path>`     | Project root; defaults to current directory                | -       |
+
+## `maestro-cli team list`
+
+list team
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team get`
+
+get team
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team status`
+
+status team
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team pause`
+
+pause team
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team resume`
+
+resume team
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team stop`
+
+stop team
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team accept`
+
+accept team
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team export`
+
+export team
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team show <section>`
+
+Read a ledger projection
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team answer <card> <option>`
+
+Answer an owner card
+
+| Option          | Description              | Default |
+| --------------- | ------------------------ | ------- |
+| `--team <id>`   | Team id or unique prefix | -       |
+| `--json`        | Machine-readable result  | -       |
+| `--note <text>` | Decision note            | -       |
+
+## `maestro-cli team baseline <action> [criterion] [replacement]`
+
+Confirm, edit, diff or return the baseline
+
+| Option          | Description                       | Default |
+| --------------- | --------------------------------- | ------- |
+| `--team <id>`   | Team id or unique prefix          | -       |
+| `--json`        | Machine-readable result           | -       |
+| `--text <text>` | Replacement criterion text        | -       |
+| `--note <text>` | Reason for returning the baseline | -       |
+
+## `maestro-cli team log`
+
+Read the exact assigned prompts and seat replies
+
+| Option          | Description              | Default |
+| --------------- | ------------------------ | ------- |
+| `--team <id>`   | Team id or unique prefix | -       |
+| `--json`        | Machine-readable result  | -       |
+| `--seat <seat>` | pm, dev or qa            | -       |
+
+## `maestro-cli team say <text>`
+
+Deliver an owner message to PM or a named seat
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+| `--to <seat>` | Requested recipient      | -       |
+
+## `maestro-cli team request-changes`
+
+Return the demonstration for changes
+
+| Option          | Description                | Default |
+| --------------- | -------------------------- | ------- |
+| `--team <id>`   | Team id or unique prefix   | -       |
+| `--json`        | Machine-readable result    | -       |
+| `--note <text>` | Specific requested changes | -       |
+
+## `maestro-cli team seat-transcript <seat>`
+
+Read the seat native-history locator
+
+| Option        | Description              | Default |
+| ------------- | ------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix | -       |
+| `--json`      | Machine-readable result  | -       |
+
 ## `maestro-cli agent-run`
 
 Record and inspect agent runs

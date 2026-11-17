@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import { teamCommand, parseTeamSeat, registerTeamCommands } from '../../../cli/commands/team';
 import { sendSimpleCommand } from '../../../cli/services/session-command';
-import { config } from '../../shared/team/fixtures';
+import { config, ledger, baseline } from '../../shared/team/fixtures';
 
 vi.mock('../../../cli/services/session-command', () => ({
 	sendSimpleCommand: vi.fn(),
@@ -102,6 +102,60 @@ describe('team CLI parity', () => {
 			'bridge.response'
 		);
 	});
+	it.each([
+		[
+			['baseline', 'edit', 'A1', 'Parses', 'whole hours'],
+			'team:baselineEdit',
+			['A1', 'Parses whole hours'],
+		],
+		[
+			['baseline', 'edit', 'A1', '--text', 'Two complete words'],
+			'team:baselineEdit',
+			['A1', 'Two complete words'],
+		],
+		[['baseline', 'diff'], 'team:baselineDiff', []],
+		[
+			['baseline', 'return', '--note', 'Clarify the expected output'],
+			'team:baselineReturn',
+			['Clarify the expected output'],
+		],
+		[
+			['request-changes', '--note', 'Add the empty state'],
+			'team:requestChanges',
+			['Add the empty state'],
+		],
+		[['log', '--seat', 'qa'], 'team:log', ['qa']],
+	] as const)('parses M2 command %j into the same main action', async (args, channel, tail) => {
+		const program = new Command();
+		registerTeamCommands(program);
+		await program.parseAsync(['node', 'cli', 'team', ...args, '--json']);
+		expect(sendSimpleCommand).toHaveBeenLastCalledWith(
+			{
+				type: 'bridge.invoke',
+				channel,
+				args: [config.id, ...tail],
+			},
+			'bridge.response'
+		);
+	});
+	it.each(['decisions', 'meetings', 'changes', 'suggestions'])(
+		'reads %s from the canonical ledger projection',
+		async (section) => {
+			vi.mocked(sendSimpleCommand).mockImplementation(async (payload) => ({
+				ok: true,
+				result:
+					payload.channel === 'team:list' ? [config] : { config, events: ledger(...baseline) },
+			}));
+			await teamCommand('show', [section], { json: true });
+			expect(sendSimpleCommand).toHaveBeenLastCalledWith(
+				{ type: 'bridge.invoke', channel: 'team:get', args: [config.id] },
+				'bridge.response'
+			);
+			expect(console.log).toHaveBeenCalledWith(
+				section === 'decisions' ? '{"objections":[],"decisions":[],"answers":[]}' : '[]'
+			);
+		}
+	);
 	it('refuses unknown or ambiguous team ids and invalid seat settings', async () => {
 		expect(() => parseTeamSeat('terminal')).toThrow();
 		expect(() => parseTeamSeat('codex:model:Ultra')).toThrow('Ultra');

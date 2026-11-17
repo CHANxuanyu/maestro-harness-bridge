@@ -63,6 +63,15 @@ export const CUE_MODAL_TABS: UiSurfaceTab[] = [
 
 export const UI_SURFACES: UiSurface[] = [
 	{
+		id: 'model-picker',
+		label: 'Model and Effort',
+		modal: 'modelEffort',
+		description: 'Choose the active conversation model and effort.',
+		shortcutId: 'openModelEffort',
+		commandPalette: 'Change Tabs Model and Effort',
+		click: 'Composer model pill',
+	},
+	{
 		id: 'project-settings',
 		label: 'Project Settings',
 		modal: 'projectSettings',

@@ -893,6 +893,8 @@ export interface AITab {
 	enterToSend?: boolean; // Per-tab send-key override; undefined inherits `enterToSendAI` setting. Toggling the chip or palette action stores an override here so new tabs continue using the global default.
 	customModel?: string; // Per-tab model override; falls back to session.customModel, then agent default
 	customEffort?: string; // Per-tab effort/reasoning override; falls back to session.customEffort, then agent default
+	/** Per-conversation choices, partitioned by provider and account context. */
+	modelEfforts?: Record<string, import('../../shared/modelCatalog').RememberedModelEfforts>;
 	awaitingSessionId?: boolean; // True when this tab sent a message and is awaiting its session ID
 	thinkingStartTime?: number; // Timestamp when tab started thinking (for elapsed time display)
 	scrollTop?: number; // Saved scroll position for this tab's output view

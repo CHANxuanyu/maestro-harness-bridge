@@ -1,5 +1,53 @@
 # 分支工作记录
 
+## 2026-11-17：B1-2/3/4 新界面模型选择器
+
+验证对象为基于 `4e87704b29b5fde6592b4b71b5cd2b8de361763a` 的本 worktree
+未提交源码，不是发行包。新界面采用一个模型/强度按钮和锚定弹出层：厂商
+顺序与分组、模型说明、原生默认解析、模型自己的档位、按账号和对话记忆、
+缺目录回退及可选额度余量。Claude/Codex 的档位保持厂商名字，解释有中英文。
+`team-seat` 策略移除 Codex Ultra 并重新校验恢复值。旧界面选择器保留。
+
+复用现有可重绑快捷键、命令面板、layer stack、焦点和定位 hooks；CLI
+`open model-picker` 打开同一表面。筛选框上下选模型，右或 Tab 进入档位，
+左或 Shift+Tab 返回，Enter 确认。组件测试的完整切换路径为五次按键。
+Esc 只关闭这一层并恢复打开它的控件，运行中只改下一回合的覆盖值。
+明确的原生默认值与清除 Maestro 覆盖分开处理，exec 与 app-server 都不把
+内部标记发给厂商；队列和回合展示也不把标记显示为模型名字。
+
+定向 Vitest 15 文件、560 项通过，覆盖新组件及旧选择器、工具栏、默认覆盖、
+CLI、IPC、转录批处理、会话比较、表面入口与基准运行器。最后补充了额度/目录
+更新后的定位重测依赖，再单独运行新组件 17 项，通过。以下为执行命令：
+
+```sh
+npx vitest run src/__tests__/renderer/components/{ModelEffortPicker,ModelEffortModal,InputArea/components/{ModelEffortPills,ToolbarControls},ui/TurnSettingPills}.test.tsx src/__tests__/renderer/{hooks/agent/useAgentModelEffortOptions,hooks/session/useBatchedSessionUpdates,stores/sessionEquality,utils/openUiSurface}.test.ts src/__tests__/main/{agents/model-catalog,utils/agent-args,ipc/handlers/process}.test.ts src/__tests__/cli/commands/tab.test.ts src/__tests__/scripts/{perf-renderer,perf-renderer-runner}.test.ts --configLoader runner --no-cache
+npx vitest run src/__tests__/renderer/components/ModelEffortPicker.test.tsx --configLoader runner --no-cache
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.model-picker.json --noEmit
+npx tsc -p scripts/perf/tsconfig.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg -v '^\.survey-A0\.md$')
+git diff --check
+npx playwright test e2e/native-model-picker.spec.ts --project=native --list
+npx playwright test e2e/perf-renderer.spec.ts --project=electron --list
+```
+
+TypeScript、ESLint、Prettier 与 diff 检查通过。Playwright 分别发现 1 项原生
+验收和 1 项 renderer 基准，没有启动 Electron。`.survey-A0.md` 原样保留。
+
+修改前的旧选择器与新选择器都未取得真实毫秒值：沙箱不能启动 Electron。
+新增显式 `picker` 基准阶段复用 `RendererRun.stage()`，在独立的 1000 消息
+对话测打开主键到可见且焦点就绪的第一帧；记录落盘后检查新选择器的 100 ms
+门槛。冻结两份完整构建并在同一台机器测量的命令见
+[性能说明](perf-renderer.md#阶段筛选)。没有用 jsdom 时间代替真实测量。
+
+未验证：Electron D7/D8/D9 的实际执行、原型视觉走查、100 ms 门槛、流式按键
+延迟回归、真实厂商推理及 Windows/Linux CI。团队对话框在别处开发，本次
+只交付并测试可复用的 team-seat 组件策略。沿用数据层已有的 SSH typed
+catalog 和项目局部原生默认解析限制。没有提交、发布或改变默认界面设置。
+
 ## 2026-11-17：B1-1 按模型读取厂商目录
 
 本次只交付模型选择器的数据层：共享类型和纯选择规则、按有效账号读取的目录缓存、`agents:getModelCatalog`、preload 类型及 `models <provider>` CLI。Claude 读取 `cc` 目录的模型顺序、分组、描述和各自档位；Codex 按 priority 排序。文件及原生配置的修改时间改变时重新读取，不等 TTL。额度复用现有保留采样和过期规则，缺失不返回零，也不触发采样。前端接入、D9 键盘与焦点验收由 B1-2 至 B1-4 完成，见 [API 交接](round2/dev/model-catalog-api.md)。

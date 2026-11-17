@@ -1,3 +1,4 @@
+import { NATIVE_MODEL_DEFAULT } from '../../../../shared/modelCatalog';
 import { selectNewShellEnabled, useSettingsStore } from '../../../stores/settingsStore';
 import { modelDisplayLabel, effortDisplayLabel } from '../../../utils/workflowLabels';
 import { useT } from '../../../i18n';
@@ -45,8 +46,8 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 	isVisible,
 	theme,
 	shortcutKeys,
-	currentModel,
-	currentEffort,
+	currentModel: rawModel,
+	currentEffort: rawEffort,
 	availableModels,
 	availableEfforts,
 	onModelChange,
@@ -61,6 +62,8 @@ export const ModelEffortPills = memo(function ModelEffortPills({
 	const t = useT();
 	const newShell = useSettingsStore(selectNewShellEnabled);
 	const [typedModel, setTypedModel] = useState('');
+	const currentModel = rawModel === NATIVE_MODEL_DEFAULT ? '' : rawModel;
+	const currentEffort = rawEffort === NATIVE_MODEL_DEFAULT ? '' : rawEffort;
 
 	if (!isVisible) {
 		return null;

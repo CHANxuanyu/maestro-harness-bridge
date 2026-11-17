@@ -60,6 +60,7 @@ This guide has been split into focused sub-documents for progressive disclosure:
 ### Commonly-reimplemented functions (do NOT add new copies)
 
 - **Provider model catalogs and picker state:** `createModelCatalogService()` in `src/main/agents/model-catalog.ts`, selection helpers in `src/shared/modelCatalog.ts`, and `cachedModelCatalogQuota()` in `src/main/agents/model-catalog-quota.ts`. Use `agents:getModelCatalog` for account-scoped per-model efforts, native defaults and cached quota; see [model-catalog-api.md](docs/round2/dev/model-catalog-api.md).
+- **New-shell model picker:** `ModelEffortPicker` in `src/renderer/components/ModelEffortPicker.tsx` shares conversation/team-seat policy; `useConversationModelCatalog()` keeps its mounted catalog warm, and `tabStore.setTabModelEffort()` persists one atomic selection with account-scoped memory. See the canonical guide before adding another picker or native-default representation.
 
 - **Handoff execution context:** `handoffLocation()` in `src/shared/aiHandoff.ts` compares the effective cwd and SSH host without resolving remote paths locally.
 - **New conversation permissions:** `newConversationPermissionFields()` and `recentProjectConversation()` in `src/renderer/utils/newConversationPermissions.ts`, keeps new shell creation and handoff from widening source permissions. See [CANONICAL-UTILITIES.md](docs/agent-guides/CANONICAL-UTILITIES.md).

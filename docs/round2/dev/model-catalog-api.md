@@ -1,8 +1,23 @@
 # B1-1 model catalog contract
 
-Status: data/API layer only. B1-2 through B1-4 own picker rendering and D9
-keyboard/focus acceptance. Existing `getModels` and `getConfigOptions` consumers
-keep their current behavior.
+Status: B1-1 data/API plus B1-2 through B1-4 new-shell picker integration.
+Existing classic-shell `getModels` and `getConfigOptions` consumers keep their
+current behavior. Electron acceptance and timing still require an external run.
+
+`ModelEffortPicker` (`src/renderer/components/ModelEffortPicker.tsx`) accepts
+`catalog`, `policy: 'conversation' | 'team-seat'`, `model` (empty means native
+default), optional `effort`, `remembered`, controlled `open`/`onOpenChange`,
+and `onChange(ModelPickerSelection)`. The composer adapter persists through
+`tabStore.setTabModelEffort()`. `accountKey` is an opaque hash of the effective
+provider/account root, supplied by main even for a local fallback. Use it to
+partition memory without exposing account paths. Remote and preset catalogs
+may omit it. The mounted adapter warms once and rechecks on each open; file
+changes and quota updates still use the existing main cache.
+
+An explicit native default is stored as `NATIVE_MODEL_DEFAULT`, distinct from
+an undefined tab override (inherit Maestro owner/provider defaults). Both
+spawn transports understand it. Never send the marker to a vendor or display
+it as a model name. Unknown custom model IDs remain possible through the filter.
 
 ```typescript
 const catalog = await window.maestro.agents.getModelCatalog({

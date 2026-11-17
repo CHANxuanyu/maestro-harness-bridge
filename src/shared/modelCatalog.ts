@@ -1,5 +1,15 @@
 import type { QuotaSummary } from './usageQuota';
 
+/** Explicit native inheritance, distinct from an absent Maestro override. */
+export const NATIVE_MODEL_DEFAULT = '__maestro_native_default__';
+
+export interface ModelPickerSelection {
+	/** Empty selects the native default, not the owner/provider override. */
+	model: string;
+	effort?: string;
+	remembered: RememberedModelEfforts;
+}
+
 export type ModelCatalogProvider = 'claude-code' | 'codex';
 
 /** IDs stay open-ended so new vendor levels require no Maestro release. */
@@ -27,6 +37,8 @@ export interface FollowDefault {
 }
 
 export interface ProviderModelCatalog {
+	/** Opaque effective account identity for per-conversation effort memory. */
+	accountKey?: string;
 	provider: ModelCatalogProvider;
 	effortLabel: 'Effort' | 'Reasoning';
 	/** Includes hidden entries for resolving existing selections. Use visibleCatalogModels for pickers. */

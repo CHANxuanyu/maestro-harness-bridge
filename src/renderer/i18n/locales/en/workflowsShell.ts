@@ -1,6 +1,48 @@
 import { CODEX_APP_SERVER_MESSAGES } from '../../../../shared/codexAppServer';
 
 export const workflowsShell = {
+	'workflows.modelPicker.noEffort':
+		'{model} has no effort control. Switching removes the effort override.',
+	'workflows.modelPicker.noConversation': 'Select a conversation first.',
+	'workflows.modelPicker.title': 'Model and effort',
+	'workflows.modelPicker.default': 'Default',
+	'workflows.modelPicker.unresolved': 'Default unresolved',
+	'workflows.modelPicker.filter': 'Filter models or enter a model ID',
+	'workflows.modelPicker.models': 'Models',
+	'workflows.modelPicker.followDefault': 'Follow default',
+	'workflows.modelPicker.followDescription': 'Follows changes to the tool’s native default.',
+	'workflows.modelPicker.selected': 'Selected',
+	'workflows.modelPicker.more': 'More models',
+	'workflows.modelPicker.less': 'Hide older models',
+	'workflows.modelPicker.custom': 'No matches. Enter uses "{model}" as a model ID.',
+	'workflows.modelPicker.fallback':
+		'Could not read this provider’s model catalog. Showing the built-in list.',
+	'workflows.modelPicker.nextTurn':
+		'Changes apply to the next turn. The running turn stays unchanged.',
+	'workflows.modelPicker.unsupported':
+		'This model does not support the current level. Switching to {model} uses its remembered level or default: {effort}.',
+	'workflows.modelPicker.remaining': '{window}: {percent}% remaining',
+	'workflows.modelPicker.session': 'Session',
+	'workflows.modelPicker.week': 'Weekly',
+	'workflows.modelPicker.window': 'Quota window',
+	'workflows.modelPicker.resets': 'resets {time}',
+	'workflows.modelPicker.stale': 'Last available sample',
+	'workflows.modelPicker.keys': '{up} {down} select · {right} / {tab} effort · {enter} apply',
+	'workflows.modelPicker.apply': 'Apply',
+	'workflows.modelPicker.claude.low': 'Faster, shorter answers',
+	'workflows.modelPicker.claude.medium': 'Balanced for most tasks',
+	'workflows.modelPicker.claude.high': 'More thorough, slower',
+	'workflows.modelPicker.claude.xhigh': 'Deeper work, noticeably slower',
+	'workflows.modelPicker.claude.max':
+		'May use many tokens, respond slowly and reach limits; reserve for the hardest tasks',
+	'workflows.modelPicker.claude.ultra': 'Use the vendor’s guidance for this level',
+	'workflows.modelPicker.codex.low': 'Faster responses with less reasoning',
+	'workflows.modelPicker.codex.medium': 'Balances speed and reasoning',
+	'workflows.modelPicker.codex.high': 'Deeper reasoning for complex problems',
+	'workflows.modelPicker.codex.xhigh': 'More reasoning depth for complex problems',
+	'workflows.modelPicker.codex.max': 'Maximum reasoning for the hardest problems',
+	'workflows.modelPicker.codex.ultra':
+		'Vendor description: automatic task delegation, substantially higher usage',
 	'workflows.projectSettings.errors.toolMissing':
 		'This tool configuration no longer belongs to the project.',
 	'workflows.projectSettings.errors.toolRunning':

@@ -1,5 +1,14 @@
 # CLI / UI Parity Audit
 
+New-shell catalog picker: `maestro-cli open model-picker` reaches the same
+registered popover as the composer and shortcut. `models <provider> --agent
+<id> --json` reads the same catalog, defaults and quota. Existing `tab model`
+and `tab effort` remain literal override setters; `native-default` explicitly
+selects the native CLI default, while `inherit` still clears the tab override
+to inherit Maestro settings. `tab show` reads the stored choice. Automatic
+per-model recall belongs to the picker transaction; legacy CLI literal setters
+do not implicitly replace the other override.
+
 Rule (constitutional, see CLAUDE.md): anything a person can do by pointing and
 clicking in Maestro, an agent MUST be able to do through `maestro-cli`, through
 the same code path. A UI action ships with its CLI verb. This file records where

@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { createHash } from 'crypto';
 import {
 	resolveFollowDefault,
 	type CatalogModel,
@@ -389,6 +390,10 @@ export function createModelCatalogService(deps: ModelCatalogDependencies) {
 					source: 'environment',
 				},
 			};
-		return { ...catalog, quota: (deps.quota ?? cachedModelCatalogQuota)(provider, accountDir) };
+		return {
+			...catalog,
+			accountKey: createHash('sha256').update(`${provider}:${accountDir}`).digest('hex'),
+			quota: (deps.quota ?? cachedModelCatalogQuota)(provider, accountDir),
+		};
 	};
 }

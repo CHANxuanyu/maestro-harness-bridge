@@ -201,6 +201,7 @@ function aiTabChromeEqual(a: AITab, b: AITab): boolean {
 		a.autoSendOnActivate === b.autoSendOnActivate &&
 		a.customModel === b.customModel &&
 		a.customEffort === b.customEffort &&
+		a.modelEfforts === b.modelEfforts &&
 		!!a.pendingMergedContext === !!b.pendingMergedContext &&
 		a.agentError?.timestamp === b.agentError?.timestamp &&
 		a.agentError?.message === b.agentError?.message

@@ -16,9 +16,27 @@ import {
 	getCodexSkillDirs,
 	getCodexPromptDirs,
 	parseCodexMarkdownDoc,
+	parseCodexConfig,
 } from '../../../main/agents/codex-config';
 
 describe('codex-config', () => {
+	describe('native default settings', () => {
+		it('reads root scalars and the selected profile, ignoring unrelated tables', () => {
+			expect(
+				parseCodexConfig(
+					'model = "root"\nprofile = "work"\nmodel_context_window = 123\n[ profiles . work ]\nmodel = \'profile-model\' # comment\n[mcp_servers.fixture]\nmodel = "wrong"'
+				)
+			).toEqual({ model: 'profile-model', contextWindow: 123 });
+			expect(parseCodexConfig('[mcp_servers.fixture]\nmodel = "wrong"').model).toBeUndefined();
+			expect(parseCodexConfig('[[servers]]\nmodel = "wrong"').model).toBeUndefined();
+		});
+		it('does not mistake multiline instruction text for native settings', () => {
+			expect(
+				parseCodexConfig('instructions = """\nmodel = "wrong"\n"""\nmodel = "right"').model
+			).toBe('right');
+			expect(() => parseCodexConfig('model = """bad\nvalue"""')).toThrow('Unsupported multiline');
+		});
+	});
 	describe('getCodexHome', () => {
 		it('defaults to ~/.codex', () => {
 			expect(getCodexHome({})).toBe(path.join(os.homedir(), '.codex'));

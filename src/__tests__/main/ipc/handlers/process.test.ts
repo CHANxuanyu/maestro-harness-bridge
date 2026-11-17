@@ -1,3 +1,4 @@
+import { NATIVE_MODEL_DEFAULT } from '../../../../shared/modelCatalog';
 import { prepareCodexAppServerPermissions } from '../../../../main/permission-relay/codex-app-server';
 import { createPending, registerSpawn } from '../../../../main/permission-relay/registry';
 /**
@@ -88,7 +89,7 @@ vi.mock('../../../../main/agents/path-prober', () => ({
 // Mock the agent-args utilities
 vi.mock('../../../../main/utils/agent-args', () => ({
 	buildAgentArgs: vi.fn((agent, opts) => opts.baseArgs || []),
-	applyAgentConfigOverrides: vi.fn((agent, args, opts) => ({
+	applyAgentConfigOverrides: vi.fn((agent, args, _opts) => ({
 		args,
 		modelSource: 'none' as const,
 		customArgsSource: 'none' as const,
@@ -326,7 +327,7 @@ vi.mock('../../../../main/prompt-manager', () => ({
 }));
 
 describe('process IPC handlers', () => {
-	let handlers: Map<string, Function>;
+	let handlers: Map<string, (...args: any[]) => any>;
 	let mockProcessManager: {
 		spawn: ReturnType<typeof vi.fn>;
 		write: ReturnType<typeof vi.fn>;
@@ -677,6 +678,32 @@ describe('process IPC handlers', () => {
 	});
 
 	describe('Codex app-server opt-in', () => {
+		it('keeps explicit native defaults out of app-server turn overrides', async () => {
+			mockSettingsStore.get.mockImplementation((key, fallback) =>
+				key === 'newShell' || key === 'codexAppServer' ? true : fallback
+			);
+			mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+			mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+			await handlers.get('process:spawn')!(
+				{},
+				{
+					sessionId: 'project-ai-tab',
+					tabId: 'tab',
+					toolType: 'codex',
+					cwd: '/fixture/project',
+					command: 'codex',
+					args: [],
+					prompt: 'synthetic prompt',
+					sessionCustomModel: NATIVE_MODEL_DEFAULT,
+					sessionCustomEffort: NATIVE_MODEL_DEFAULT,
+				}
+			);
+			const spawn = mockProcessManager.spawn.mock.calls[0][0];
+			expect(spawn.codexAppServer.model).toBeUndefined();
+			expect(spawn.codexAppServer.effort).toBeUndefined();
+			spawn.codexAppServer.onDispose();
+		});
+
 		it.each([
 			[false, false],
 			[true, false],

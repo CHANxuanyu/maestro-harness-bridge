@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ModelEffortPills } from '../../../../../renderer/components/InputArea/components/ModelEffortPills';
 import { inputAreaTheme } from '../_fixtures';
 import { formatShortcutKeys } from '../../../../../renderer/utils/shortcutFormatter';
+import { NATIVE_MODEL_DEFAULT } from '../../../../../shared/modelCatalog';
 
 // Formatted through the real formatter rather than spelled out: the chord
 // renders as '⌘X' on macOS and 'Ctrl+X' elsewhere, and hardcoding either makes
@@ -33,6 +34,14 @@ describe('ModelEffortPills', () => {
 			/>
 		);
 	}
+
+	it('keeps native-default markers out of the queued-item controls', () => {
+		const { container } = renderPills({
+			currentModel: NATIVE_MODEL_DEFAULT,
+			currentEffort: NATIVE_MODEL_DEFAULT,
+		});
+		expect(container.textContent).not.toContain(NATIVE_MODEL_DEFAULT);
+	});
 
 	it.each([false, true])('distinguishes inherited model and effort, new shell %s', (newShell) => {
 		useSettingsStore.setState({ newShell });

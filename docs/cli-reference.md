@@ -141,6 +141,17 @@ List open terminal tabs in the desktop app (all agents unless --agent is given)
 | `-a, --agent <id>` | List this agent’s terminals; new shell also includes its directory pool and terminals still running on its previous host | -       |
 | `--json`           | Output as JSON (for scripting)                                                                                           | -       |
 
+## `maestro-cli models <provider>`
+
+Read the provider model catalog and cached quota (requires desktop)
+
+| Option                 | Description                                             | Default |
+| ---------------------- | ------------------------------------------------------- | ------- |
+| `--agent <id>`         | Use a stored agent account and host                     | -       |
+| `--account-dir <path>` | Use an explicit provider account directory              | -       |
+| `--ssh-remote <id>`    | Use a remote host (typed catalog currently unsupported) | -       |
+| `--json`               | Output the full typed catalog as JSON                   | -       |
+
 ## `maestro-cli open-project <path>`
 
 Open a local project in the new shell, reusing its agent or creating one silently

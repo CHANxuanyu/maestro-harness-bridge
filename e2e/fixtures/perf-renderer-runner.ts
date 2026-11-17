@@ -5,6 +5,7 @@ import { summarize } from '../../scripts/perf/summary.mjs';
 
 export const stageBudgets = {
 	startup: 90_000,
+	picker: 30_000,
 	history: 30_000,
 	native: 60_000,
 	switch: 45_000,
@@ -25,9 +26,11 @@ const selectable = [
 	'ids',
 	'scroll',
 	'stream',
+	'picker',
 ] as const;
 const dependencies: Partial<Record<StageName, StageName[]>> = {
 	history: ['startup'],
+	picker: ['startup'],
 	native: ['history'],
 	switch: ['startup'],
 	backfill: ['switch'],
@@ -46,7 +49,7 @@ export function rendererOptions(env: NodeJS.ProcessEnv) {
 		throw Error('MAESTRO_PERF_ROUNDS must be an integer from 1 to 20');
 	const requested =
 		env.MAESTRO_PERF_STAGES === undefined
-			? [...(startupTrace ? ['startup' as const] : selectable)]
+			? [...(startupTrace ? ['startup' as const] : selectable.filter((name) => name !== 'picker'))]
 			: (env.MAESTRO_PERF_STAGES.split(',').map((name) => name.trim()) as StageName[]);
 	if (
 		!requested.length ||

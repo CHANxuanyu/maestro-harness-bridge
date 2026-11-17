@@ -20,6 +20,33 @@ export interface QuotaWindowLike {
 	resetsAt?: string;
 }
 
+/** Display-only projection of a cached sample. Missing windows stay missing. */
+export interface QuotaSummary {
+	sampledAt: string;
+	stale: boolean;
+	windows: Array<{ id: string; label?: string; remainingPercent: number; resetsAt?: string }>;
+}
+
+export function summarizeQuotaWindows(
+	sampledAt: string,
+	stale: boolean,
+	windows: Array<{ id: string; label?: string; window?: QuotaWindowLike }>
+): QuotaSummary | undefined {
+	const available = windows.flatMap(({ id, label, window }) =>
+		window && Number.isFinite(window.percent) && window.percent >= 0
+			? [
+					{
+						id,
+						label,
+						remainingPercent: Math.max(0, 100 - window.percent),
+						resetsAt: window.resetsAt,
+					},
+				]
+			: []
+	);
+	return available.length ? { sampledAt, stale, windows: available } : undefined;
+}
+
 export interface ClaudeQuotaSnapshotLike {
 	authState?: 'authenticated' | 'unauthenticated';
 	session?: QuotaWindowLike;

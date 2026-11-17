@@ -9,12 +9,20 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { TurnSettingPills } from '../../../../renderer/components/ui/TurnSettingPills';
 import { mockTheme } from '../../../helpers/mockTheme';
+import { NATIVE_MODEL_DEFAULT } from '../../../../shared/modelCatalog';
 
 function renderPills(props: Partial<React.ComponentProps<typeof TurnSettingPills>> = {}) {
 	return render(<TurnSettingPills theme={mockTheme} {...props} />);
 }
 
 describe('TurnSettingPills', () => {
+	it('does not present a native-default marker as recorded provider metadata', () => {
+		const { container } = renderPills({
+			model: NATIVE_MODEL_DEFAULT,
+			effort: NATIVE_MODEL_DEFAULT,
+		});
+		expect(container.firstElementChild).toBeNull();
+	});
 	afterEach(() => useSettingsStore.setState({ newShell: false, uiLanguage: 'system' }));
 	it.each([false, true])(
 		'preserves raw tool values while translating Chinese labels in newShell=%s',

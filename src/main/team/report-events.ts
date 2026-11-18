@@ -3,6 +3,7 @@ import {
 	isOpenTeamIssue,
 	topicParticipants,
 	topicRejection,
+	teamEvidence,
 } from '../../shared/team/policy';
 import type {
 	StandardChangeRequest,
@@ -320,14 +321,56 @@ export function reportEvents(
 			topic(report);
 			break;
 		case 'position':
-			add({ ...report, kind: 'position', actor, seat: actor });
+			add({
+				...report,
+				kind: 'position',
+				actor,
+				seat: actor,
+				evidence: report.evidence?.filter((e) => teamEvidence(state).includes(e)),
+				unverifiedBasis: report.evidence?.filter((e) => !teamEvidence(state).includes(e)),
+			});
 			break;
 		case 'proposal':
 			add({ ...report, kind: 'proposal', actor, round: dispatch.round ?? 1 });
 			break;
-		case 'response':
-			add({ ...report, kind: 'response', actor, seat: actor, round: dispatch.round ?? 1 });
+		case 'response': {
+			const evidence =
+				report.evidence && teamEvidence(state).includes(report.evidence)
+					? report.evidence
+					: undefined;
+			const baselineViolation = state.criteria.some(
+				(c) => c.confirmed && c.id === report.baselineViolation
+			)
+				? report.baselineViolation
+				: undefined;
+			const discussion = state.discussions.find((d) => d.id === report.discussionId);
+			const unsupported =
+				report.result === 'insist' &&
+				!baselineViolation &&
+				!(evidence && teamEvidence(state, discussion).includes(evidence));
+			add({
+				...report,
+				kind: 'response',
+				actor,
+				seat: actor,
+				round: dispatch.round ?? 1,
+				evidence,
+				baselineViolation,
+				unverifiedBasis: [
+					...(report.evidence && !evidence ? [report.evidence] : []),
+					...(report.baselineViolation && !baselineViolation ? [report.baselineViolation] : []),
+				],
+				...(unsupported
+					? ({
+							result: 'reserve',
+							requestedResult: 'insist',
+							evidenceConclusion:
+								'No new recorded evidence or confirmed baseline violation; retained as a reservation for the lawful decider.',
+						} as const)
+					: {}),
+			});
 			break;
+		}
 		case 'retro':
 			add({
 				kind: 'retro',

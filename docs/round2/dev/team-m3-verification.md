@@ -1,10 +1,107 @@
 # M3 backend verification, 2026-11-18
 
-Artifact: `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus the uncommitted M3
-worktree changes. Verification targets source and development builds, not an
+Latest artifact: `d0e1698c5` plus the uncommitted real-model follow-up changes.
+Earlier M3 records below used `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus
+the then-uncommitted M3 work. Verification targets source and development builds, not an
 installed release. No commit, tag, release, paid model invocation or real GitHub
 publication was performed. Existing private survey material is not part of this
 change.
+
+## Second follow-up after the real-model run
+
+The owner's synthetic native run passed 25/25 before this change. The subsequent
+real-model ledger was read in place: 151 events, 21 dispatches, 20 charged turns,
+nine rejected reports, six challenges, four briefs and zero checks. The quota
+suspension and fresh-conversation takeover worked. Raw capture and account paths
+were not copied into the repository. This section supersedes the original quota
+budget exemption; it does not change solved-before-budget progress, 10-minute
+wait rechecks or the existing 60-second M2 scripted-test timeouts.
+
+1. **Hard budget:** recovery did not omit the ordinary scheduling check; that
+   check used the wrong counter. One quota refusal reduced `budgetTurns`, so the
+   app admitted dispatch 21 at 20 actual turns. All decisions, prompts and status
+   now use `usage.turns`; `budgetTurns` is a compatibility alias. Each dispatch
+   reserves one slot and duplicate finishes cannot charge it again. All invocation
+   paths share `dispatchAllowed()`, including repairs, takeover, recovery and
+   wrap-up. At exhaustion restart may inspect and reconcile a receipt but cannot
+   start another process. Regressions cover the 20-turn sequence with pending
+   recovery, absent/present wrap-up, quota in the final slot, parallel final slots,
+   restart and pause/extension. The unfinished report is app-generated for free.
+2. **Discussion basis and evidence:** validation treated any prose in `evidence`
+   as a malformed position, and the prompts omitted the allowed ids. Every seat
+   repeated the same error during repair. Positions without evidence are valid;
+   unknown position and response references remain in `unverifiedBasis` on the
+   ledger, separate from verified ids. The shared evidence catalog supplies check,
+   capture and criterion descriptions plus exact ids. Response prompts identify
+   unused ids and confirmed baseline ids; repair prompts quote the original
+   snapshot's allowed ids. An unsupported insistence becomes a recorded reservation
+   with its original requested result and reason. The lawful decider concludes a
+   reversible question as contested; no member fault or extra evidence round is
+   manufactured. Tests retain supported insistence and reject reused evidence as
+   a basis for insisting, while accepting and preserving the reservation.
+3. **Challenge loop:** every PM-published brief reset the challenge epoch, so
+   even small revisions repeated the full dev/QA round indefinitely. The owner's
+   product decision is now in `team-model.md` and shared by scheduler, prompt and
+   QA validation: one full round, at most one round on the first revision's changed
+   criteria with a diff, then discussion or the baseline card. The card retains
+   challenges, answers and the boundary question. Only owner edits/returns reset
+   the cycle. Tests cover another PM revision, restart, partial QA plans, removal
+   only, and a fresh full round after owner edit/return. Old unit flow setups now
+   complete that fresh round before asserting the same baseline result; no native
+   baseline assertion was weakened.
+4. **Respond shape:** the schema allowed `criterion` to be omitted for removal,
+   but the prose never explained its conditional requirement for every other
+   change. The respond prompt now distinguishes draft edits from confirmed
+   standard changes, spells out matching ids and the complete replacement
+   criterion, and includes an example checked by the real validator. The existing
+   rejection for an incomplete non-removal change remains intact.
+
+The restart workspace test now has available budget and an owner-card scheduling
+hold, preserving its real Git inspection and exact-resume assertions. Separate
+tests assert no invocation when that reservation already exhausts the budget.
+The native quota cost assertion now requires the compatibility counter to equal
+actual turns, as required by this follow-up, rather than expecting an exemption.
+QA plans may be empty only when this round has no remaining criteria to plan for
+(or all required criteria have explicit unverifiable objections).
+
+Final commands and results for this follow-up:
+
+```sh
+npm test -- --configLoader runner src/__tests__/shared/team src/__tests__/main/team src/__tests__/cli/commands/team.test.ts src/__tests__/cli/services/session-command.test.ts src/__tests__/shared/progressRules.test.ts src/__tests__/shared/retryClassification.test.ts src/__tests__/main/follow-ups.test.ts src/__tests__/main/check-runner.test.ts
+npm run lint
+node node_modules/typescript/bin/tsc -p e2e/tsconfig.team.json --pretty false
+node node_modules/eslint/bin/eslint.js src/main/team/{scheduler,report-events}.ts src/shared/team/{policy,types,ledger,report,prompts,schemas,status}.ts
+node node_modules/eslint/bin/eslint.js -c eslint.dashes.config.mjs src/__tests__/main/team/scheduler.test.ts src/__tests__/shared/team/{ledger,policy,prompts}.test.ts
+node node_modules/eslint/bin/eslint.js -c eslint.dashes.config.mjs --stdin --stdin-filename src/__tests__/native-team-m3.spec.ts < e2e/native-team-m3.spec.ts
+git diff --name-only -z --diff-filter=ACM | xargs -0 node node_modules/prettier/bin/prettier.cjs --check
+npm run docs:verify
+npm run lint:doc-refs
+git diff --check
+```
+
+All commands exited 0. The final team run passed **438 tests in 19 files**,
+including 86 scheduler cases and 22 shared policy cases. All three production
+TypeScript projects and the three Electron scenario files type-check. ESLint
+reports no errors or warnings for changed production sources and the test passes;
+the native file is fed through the repository's test lint configuration on stdin
+because its file globs otherwise omit `e2e/`. Prettier passes all 19 changed files.
+Documentation verification checks 722 paths with none missing and references
+across 39 docs. `git diff --check` passes, and an added-line scan finds zero
+forbidden dash characters. The pre-existing untracked survey file is untouched.
+
+Not rerun here: the three Electron scenarios after this patch and paid-model
+acceptance. The previous external 25/25 result is not a pass for this artifact.
+Run outside the restricted host, preserving current artifacts if needed:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts
+node scripts/native-e2e.mjs e2e/real-team.spec.ts --grep 'team small task'
+```
+
+The real-team spec exists in the owner's real-team integration worktree; run the
+second command there after applying this patch, with that worktree's documented
+opt-in real-acceptance environment. No paid run or external publication was
+performed for this follow-up. No commit was made.
 
 ## Follow-up after the external native run
 
@@ -124,7 +221,7 @@ src/shared/team/types.ts
 | T16        | Overall deadline or reserved turn budget prevents new dispatch. An app-generated unfinished progress report costs no model turn. Extension restores pending permission/baseline decisions; accept-with-gaps preserves unmet items as unassigned follow-ups; stop preserves branch and ledger.                                                                                                                               |
 | T17        | Preserve existing exact-dispatch native reconciliation. Inspect workspace revision, status and recent commits before resuming interrupted work. Pause prevents new dispatch while app status stays readable; resume continues from durable receipts.                                                                                                                                                                        |
 | T21        | Cover all eight member states. Working is not a fault; failed turns get one bounded retry with partial-work warning; missing/bad reports get one report-only repair; PM can organize a still-missing report; broken sessions use a new same-model conversation; quota/login use availability recovery; idle reports get one nudge then diagnosis. Held failures register app-only inspection waits.                         |
-| T22        | `all`, `gaps` and `stopped` retain actual path statistics, seat usage and terminal wall time. Quota/login refusals remain in the cost history but do not consume the dispatch budget or a no-progress attempt.                                                                                                                                                                                                              |
+| T22        | `all`, `gaps` and `stopped` retain actual path statistics, seat usage and terminal wall time. Quota/login refusals count once in actual turns and the hard dispatch budget, but never count as a no-progress attempt.                                                                                                                                                                                                       |
 | T23        | `decideNext()` is shared by fix planning, team problems and review. Solved problems stay done; otherwise budget wins first. Categories never force escalation, in-authority work wins over boundary alternatives, rewording cannot defeat repeat detection, and boundary cards name the blocked paths, costs, recommendation and used budget.                                                                               |
 
 The exact priority-0 sequence is a PM review dispatch followed by
@@ -231,7 +328,7 @@ node node_modules/@playwright/test/cli.js test --project=native e2e/native-team-
   seats. An SSH clock without an explicit timezone is not guessed locally.
 - An unavailable model never resets its latch merely because a new UUID, topic
   kind or prompt wording appears. Dispatched work reserves a turn slot; quota
-  and login refusals release that slot while retaining actual usage history.
+  and login refusals consume that slot once without entering no-progress.
 - Publication is performed only for a concrete requested action under its
   grant. The grant alone does not automatically publish every work revision.
   Git pushes are non-forced; a project with ambiguous remotes fails visibly.
@@ -240,8 +337,8 @@ node node_modules/@playwright/test/cli.js test --project=native e2e/native-team-
 - Missing usage values remain unknown (coverage counts are exposed), not an
   invented cost. Cost history includes failed provider invocations.
 - SSH team workspaces remain explicitly unsupported as in M2. Renderer feature
-  wiring, installed-package acceptance, real five-hour quota recovery and live
-  GitHub authentication/publication have not been verified by these tests.
+  wiring, installed-package acceptance, real-model completion after these fixes
+  and live GitHub authentication/publication have not been verified by these tests.
 
 On an Electron-capable host, run the native regression and new scenarios:
 

@@ -794,11 +794,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		if (turn.dispatched || turn.finished) {
 			for (const usage of [state.usage, seat.usage]) {
 				usage.turns++;
-				if (
-					turn.finished?.failureKind !== 'model-unavailable' &&
-					turn.finished?.failureKind !== 'login-expired'
-				)
-					usage.budgetTurns++;
+				usage.budgetTurns++;
 				const finished = turn.finished;
 				if (!finished) continue;
 				for (const key of ['inputTokens', 'outputTokens', 'costUsd', 'durationMs'] as const) {
@@ -812,7 +808,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		}
 	}
 	const budget = state.config
-		? { used: state.usage.budgetTurns, total: state.config.turnBudget }
+		? { used: state.usage.turns, total: state.config.turnBudget }
 		: undefined;
 	for (const [id, problem] of attempts) {
 		const progress = judgeAttempts(problem.initial, problem.inputs);

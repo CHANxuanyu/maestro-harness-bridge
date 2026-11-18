@@ -139,7 +139,7 @@ const challengeProperties = {
 	objections: array(
 		object({ about: text, problem: text, kind: choice('unreasonable', 'unverifiable', 'risk') })
 	),
-	plans: array(object({ criterion: text, how: text, data: text }), 1),
+	plans: array(object({ criterion: text, how: text, data: text })),
 };
 
 /** Unknown properties are refused so a work report cannot smuggle in a verification verdict. */

@@ -15,6 +15,7 @@ import {
 	teamModelUnavailable,
 	teamRecoveryDecision,
 	sameTeamModel,
+	teamChallengeRound,
 } from '../../shared/team/policy';
 import { reduceLedger } from '../../shared/team/ledger';
 import { buildTeamTurnPrompt } from '../../shared/team/prompts';
@@ -127,7 +128,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			actor: 'app',
 			id: `card:${value.id}`,
 			card: {
-				budgetNote: `${state.usage.budgetTurns}/${state.config!.turnBudget} turns; deadline ${state.config!.deadline ? new Date(state.config!.deadline).toISOString() : 'not set'}`,
+				budgetNote: `${state.usage.turns}/${state.config!.turnBudget} turns; deadline ${state.config!.deadline ? new Date(state.config!.deadline).toISOString() : 'not set'}`,
 				...value,
 			},
 		});
@@ -487,6 +488,21 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		if (state.phase !== to)
 			await append(id, { kind: 'phase_changed', actor: 'app', from: state.phase, to });
 	};
+	// All model calls share this boundary, including repair, recovery, takeover and
+	// wrap-up. An initial launch uses its already reserved slot; restart may only
+	// reconcile receipts at the limit, never invoke another process.
+	const dispatchAllowed = (state: TeamState, reservedDispatchId?: string) => {
+		const reserved =
+			reservedDispatchId &&
+			state.turns.some((t) => t.dispatchId === reservedDispatchId && t.dispatched && !t.finished);
+		return (
+			!state.paused &&
+			!state.terminal &&
+			!!state.config &&
+			(state.config.deadline === undefined || now() < state.config.deadline) &&
+			state.usage.turns - (reserved ? 1 : 0) < state.config.turnBudget
+		);
+	};
 	const snapshot = (events: LedgerEvent[], dispatch: Dispatch) =>
 		reduceLedger(events.filter((e) => e.seq <= (dispatch.sourceSeq ?? dispatch.seq - 1)));
 	const promptFor = (dispatch: Dispatch, events: LedgerEvent[]) => {
@@ -501,7 +517,14 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			prompt = reportRepairPrompt(
 				expected,
 				original?.reportError ?? 'Invalid report',
-				original?.repairTail ?? original?.message ?? ''
+				original?.repairTail ?? original?.message ?? '',
+				snapshot(
+					events,
+					events.find(
+						(e): e is Dispatch => e.kind === 'turn_dispatched' && e.dispatchId === dispatch.repairOf
+					)!
+				),
+				dispatch.discussionId
 			);
 		} else
 			prompt = buildTeamTurnPrompt(
@@ -854,10 +877,30 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 							kind: 'member_recovered',
 							actor: 'app',
 							seat: dispatch.seat,
-							how: 'Restart: checked native history and workspace; resuming incomplete dispatch.',
+							how: 'Restart: checked native history and workspace for the incomplete dispatch.',
 							id: `${dispatch.dispatchId}:restart`,
 						})
 					);
+				}
+				const current = await stateFor(data.config.id);
+				if (!dispatchAllowed(current, recover ? undefined : dispatch.dispatchId)) {
+					// A pause leaves the reservation available for resume after owner input.
+					if (current.paused && !current.terminal) return;
+					await queue.enqueue(data.config.id, () =>
+						append(data.config.id, {
+							kind: 'turn_finished',
+							actor: 'app',
+							seat: dispatch.seat,
+							dispatchId: dispatch.dispatchId,
+							canceled: true,
+							exitCode: null,
+							durationMs: 0,
+							message:
+								'Dispatch stopped at the budget or terminal boundary after receipt reconciliation.',
+							id: `${dispatch.dispatchId}:finished`,
+						})
+					);
+					return;
 				}
 				result = await deps.dispatcher.dispatch({
 					...request,
@@ -921,10 +964,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		> = {}
 	) => {
 		if (
-			state.paused ||
-			state.terminal ||
-			(state.config!.deadline !== undefined && now() >= state.config!.deadline) ||
-			state.usage.budgetTurns >= state.config!.turnBudget ||
+			!dispatchAllowed(state) ||
 			SEAT_ROLES.reduce((count, role) => count + state.seats[role].activeDispatchIds.length, 0) >=
 				2 ||
 			state.seats[seat].activeDispatchIds.length
@@ -1374,7 +1414,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					.digest('hex');
 				const progress = current.problems[problemId]?.progress ?? judgeAttempts(failing, []);
 				const decision = decideNext(progress, {
-					budget: { used: current.usage.budgetTurns, total: current.config!.turnBudget },
+					budget: { used: current.usage.turns, total: current.config!.turnBudget },
 					candidates: current.problems[problemId]?.candidates.length
 						? current.problems[problemId].candidates
 						: [{ plan: 'Address observed failures', basis: failing.join('\n'), fingerprint }],
@@ -1776,7 +1816,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					responses,
 					boundary: 'The next step is irreversible or changes a commitment.',
 				}),
-				budgetNote: `${state.usage.budgetTurns}/${state.config!.turnBudget} turns used`,
+				budgetNote: `${state.usage.turns}/${state.config!.turnBudget} turns used`,
 				options: change
 					? [
 							{ id: 'approve', label: 'Approve this standard change', cost: change.reason },
@@ -1794,7 +1834,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			id,
 			discussion,
 			decider,
-			insist,
+			insist || responses.some((r) => r.requestedResult === 'insist'),
 			decider === 'app'
 				? `Facts remain determined by recorded evidence. ${JSON.stringify(state.checks.map((c) => ({ command: c.command, exitCode: c.exitCode })))}`
 				: undefined
@@ -2288,20 +2328,19 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			!current.terminal &&
 			current.config &&
 			((current.config.deadline !== undefined && now() >= current.config.deadline) ||
-				current.usage.budgetTurns >= current.config.turnBudget)
+				current.usage.turns >= current.config.turnBudget)
 		) {
 			if (current.config.deadline !== undefined && now() >= current.config.deadline) {
 				for (const item of live.values()) if (item.teamId === id) item.controller.abort();
 				jobs.get(id)?.abort();
 			} else {
-				// A dispatched turn already reserves one budget slot. Reconcile that same
-				// dispatch after restart; never reserve or launch an additional turn here.
+				// Read completed receipts at the limit. launch's shared guard prevents
+				// a missing receipt from turning reconciliation into another invocation.
 				if (!current.paused)
 					for (const turn of current.turns)
 						if (turn.dispatched && !turn.finished && !live.has(turn.dispatchId))
 							launch(data, turn.dispatched, true);
-				if (jobs.has(id) || SEAT_ROLES.some((seat) => current.seats[seat].activeDispatchIds.length))
-					return;
+				if (jobs.has(id) || [...live.values()].some((item) => item.teamId === id)) return;
 			}
 			await budgetReport(id, current);
 			return;
@@ -2384,7 +2423,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		if (await runActions(id, data)) return;
 		if (await handleWaits(id, data)) return;
 		if (
-			(state.usage.budgetTurns >= Math.ceil(data.config.turnBudget * 0.8) ||
+			(state.usage.turns >= Math.ceil(data.config.turnBudget * 0.8) ||
 				(data.config.deadline !== undefined &&
 					now() >= data.config.createdAt + (data.config.deadline - data.config.createdAt) * 0.8)) &&
 			!state.wrapUp &&
@@ -2585,25 +2624,13 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		const turns = state.turns.filter(
 			(t) => !t.dispatched?.repairOf && (t.dispatched?.seq ?? 0) > epoch
 		);
-		const published = data.events.filter((e) => e.kind === 'brief_published').at(-1);
-		const previousBrief =
-			published && state.briefs.find((b) => b.version === published.brief.version - 1);
-		const revisionDiff =
-			published && previousBrief ? baselineDiff(previousBrief, published.brief) : undefined;
-		const challengeEpoch =
-			revisionDiff &&
-			(revisionDiff.criteria.length ||
-				revisionDiff.scope ||
-				revisionDiff.notDoing ||
-				revisionDiff.checks)
-				? published!.seq
-				: 0;
+		const challengeRound = teamChallengeRound(state);
 		const last = (kind: M1TurnKind, seat?: SeatRole) =>
-			turns
+			(kind === 'challenge' ? state.turns.filter((t) => !t.dispatched?.repairOf) : turns)
 				.filter(
 					(t) =>
 						t.dispatched?.turn === kind &&
-						(kind !== 'challenge' || t.dispatched.seq > challengeEpoch) &&
+						(kind !== 'challenge' || t.dispatched.seq > challengeRound.epoch) &&
 						(!seat || t.seat === seat) &&
 						(!['fix', 'reverify'].includes(kind) || t.dispatched.seq > rejectedAt) &&
 						t.report?.type !== 'topic'
@@ -2740,6 +2767,12 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			if (!last('brief')) return dispatch(id, state, 'pm', 'brief');
 		} else if (!state.baseline.confirmedVersion) {
 			await transition(id, state, 'challenge');
+			const returned = state.baseline.returns.at(-1)?.seq ?? 0;
+			if (returned > (state.briefResponses.at(-1)?.seq ?? 0)) {
+				if ((last('respond')?.dispatched?.seq ?? 0) < returned)
+					return dispatch(id, state, 'pm', 'respond');
+				return;
+			}
 			for (const seat of ['dev', 'qa'] as const)
 				if (!last('challenge', seat)) {
 					await dispatch(id, await stateFor(id), seat, 'challenge');
@@ -2748,7 +2781,6 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				if (!active && last('challenge', 'dev') && last('challenge', 'qa')) return wakePm();
 				return;
 			}
-			const returned = state.baseline.returns.at(-1)?.seq ?? 0;
 			if (
 				!last('respond') ||
 				last('respond')!.dispatched!.seq <
@@ -2802,6 +2834,9 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				body: JSON.stringify({
 					brief: state.brief,
 					question: response.type === 'respond' ? response.askOwner : undefined,
+					challenges: state.challenges.filter((c) => c.seq > challengeRound.ownerEpoch),
+					responses: state.briefResponses.filter((r) => r.seq > challengeRound.ownerEpoch),
+					discussions: state.decisions,
 					trials: state.checks.filter((c) => c.batchId === batchId),
 					diff: baselineDiff(state.briefs.at(-2) ?? null, state.brief),
 				}),

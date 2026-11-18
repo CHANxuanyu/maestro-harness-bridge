@@ -381,41 +381,51 @@ describe('reduceLedger', () => {
 		expect(state.standardChanges).toHaveLength(2);
 	});
 
-	it('charges a dispatch once despite duplicate finishes and keeps zero cost distinct from unknown', () => {
-		const finish: EventInput = {
-			kind: 'turn_finished',
-			dispatchId: 't',
-			seat: 'dev',
-			exitCode: 0,
-			durationMs: 10,
-			inputTokens: 20,
-			outputTokens: 5,
-			costUsd: 0,
-		};
-		const state = reduceLedger(
-			ledger(
-				...baseline,
-				{ kind: 'turn_dispatched', dispatchId: 't', seat: 'dev', turn: 'work', promptDigest: 'x' },
-				finish,
-				finish,
-				{ kind: 'report_rejected', dispatchId: 't', seat: 'dev', reason: 'Missing done' },
-				{ kind: 'report_repaired', dispatchId: 't', seat: 'dev' },
-				{ kind: 'report_accepted', dispatchId: 't', seat: 'dev', report: goodReports.work }
-			)
-		);
-		expect(state.usage).toEqual({
-			turns: 1,
-			budgetTurns: 1,
-			inputTokens: 20,
-			outputTokens: 5,
-			costUsd: 0,
-			durationMs: 10,
-			turnsWithTokens: 1,
-			turnsWithCost: 1,
-		});
-		expect(state.turns[0].repaired).toBe(true);
-		expect(state.turns[0].reportError).toBeUndefined();
-	});
+	it.each([undefined, 'model-unavailable', 'login-expired'] as const)(
+		'charges %s once despite duplicate finishes and keeps zero cost distinct from unknown',
+		(failureKind) => {
+			const finish: EventInput = {
+				kind: 'turn_finished',
+				dispatchId: 't',
+				seat: 'dev',
+				exitCode: 0,
+				durationMs: 10,
+				inputTokens: 20,
+				outputTokens: 5,
+				costUsd: 0,
+				failureKind,
+			};
+			const state = reduceLedger(
+				ledger(
+					...baseline,
+					{
+						kind: 'turn_dispatched',
+						dispatchId: 't',
+						seat: 'dev',
+						turn: 'work',
+						promptDigest: 'x',
+					},
+					finish,
+					finish,
+					{ kind: 'report_rejected', dispatchId: 't', seat: 'dev', reason: 'Missing done' },
+					{ kind: 'report_repaired', dispatchId: 't', seat: 'dev' },
+					{ kind: 'report_accepted', dispatchId: 't', seat: 'dev', report: goodReports.work }
+				)
+			);
+			expect(state.usage).toEqual({
+				turns: 1,
+				budgetTurns: 1,
+				inputTokens: 20,
+				outputTokens: 5,
+				costUsd: 0,
+				durationMs: 10,
+				turnsWithTokens: 1,
+				turnsWithCost: 1,
+			});
+			expect(state.turns[0].repaired).toBe(true);
+			expect(state.turns[0].reportError).toBeUndefined();
+		}
+	);
 
 	it('tracks baseline edits and returns without allowing drafts or unauthorized relaxation to replace it', () => {
 		const entries: EventInput[] = [

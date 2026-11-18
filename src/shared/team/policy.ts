@@ -162,15 +162,80 @@ export function baselineDiff(before: Brief | null, after: Brief): BaselineDiff {
 	};
 }
 
-/** References come from durable observations, never a vote or a completion claim. */
-export function teamEvidence(state: TeamState): string[] {
-	return [
-		...new Set([
-			...state.checks.flatMap((c) => (c.notRun ? [] : [c.id, c.evidenceId])),
-			...state.outputs.flatMap((o) => [o.outputId, ...o.files, ...o.previews]),
-			...state.criteria.flatMap((c) => c.evidence.flatMap((e) => [e.eventId, e.evidence])),
-		]),
+/** References and descriptions share one source for validation and model prompts. */
+export function teamEvidenceCatalog(state: TeamState): Array<{ id: string; description: string }> {
+	const entries = [
+		...state.checks.flatMap((c) =>
+			c.notRun
+				? []
+				: [c.id, c.evidenceId].map((id) => ({
+						id,
+						description: `Check ${c.command}: exit ${c.exitCode}${c.timedOut ? ', timed out' : ''}`,
+					}))
+		),
+		...state.outputs.flatMap((o) =>
+			[o.outputId, ...o.files, ...o.previews].map((id) => ({
+				id,
+				description: `Captured output ${o.outputId}: ${[...o.files, ...o.previews].join(', ')}`,
+			}))
+		),
+		...state.criteria.flatMap((c) =>
+			c.evidence.flatMap((e) =>
+				[e.eventId, e.evidence].map((id) => ({
+					id,
+					description: `Criterion ${c.id}: ${e.evidence}`,
+				}))
+			)
+		),
 	];
+	const catalog = new Map<string, { id: string; description: string }>();
+	for (const entry of entries)
+		if (!catalog.has(entry.id))
+			catalog.set(entry.id, { ...entry, description: entry.description.replace(/\s+/g, ' ') });
+	return [...catalog.values()];
+}
+
+/** With a discussion, return only evidence not already used before this proposal. */
+export function teamEvidence(state: TeamState, discussion?: TeamDiscussion): string[] {
+	const used = discussion
+		? [
+				...(discussion.opened?.evidence ?? []),
+				...discussion.positions.flatMap((p) => p.evidence ?? []),
+				...discussion.responses
+					.filter((r) => r.seq < (discussion.proposals.at(-1)?.seq ?? Infinity))
+					.flatMap((r) => (r.evidence ? [r.evidence] : [])),
+			]
+		: [];
+	return teamEvidenceCatalog(state)
+		.map((e) => e.id)
+		.filter((id) => !used.includes(id));
+}
+
+/** One full challenge, then at most one round on the first PM revision's changed criteria. */
+export function teamChallengeRound(state: TeamState) {
+	const ownerEpoch = Math.max(
+		state.baseline.edits.at(-1)?.seq ?? 0,
+		state.baseline.returns.at(-1)?.seq ?? 0,
+		state.standardChanges.filter((c) => c.approvedBy === 'owner').at(-1)?.seq ?? 0
+	);
+	const firstChallenge = state.challenges.find((c) => c.seq > ownerEpoch);
+	const original = state.briefs.find((b) => b.version === firstChallenge?.briefVersion);
+	const revision =
+		original &&
+		state.briefs.find(
+			(b) => b.version > original.version && baselineDiff(original, b).criteria.length > 0
+		);
+	const response = firstChallenge && state.briefResponses.find((r) => r.seq > firstChallenge.seq);
+	const diff = original && revision ? baselineDiff(original, revision) : undefined;
+	const changed = diff?.criteria.map((c) => c.id) ?? [];
+	const second = !!response && changed.length > 0;
+	return {
+		ownerEpoch,
+		epoch: second ? response.seq : ownerEpoch,
+		round: second ? 2 : 1,
+		criteria: second ? changed : (state.brief?.criteria.map((c) => c.id) ?? []),
+		diff: second ? diff : undefined,
+	};
 }
 
 export function discussionDecider(discussion: TeamDiscussion): LedgerActor {
@@ -271,7 +336,7 @@ export function pmMayChange(
 	return (
 		estimate?.extraTurns !== undefined &&
 		estimate.preservesDeadline === true &&
-		estimate.extraTurns <= (state.config?.turnBudget ?? 0) - state.usage.budgetTurns
+		estimate.extraTurns <= (state.config?.turnBudget ?? 0) - state.usage.turns
 	);
 }
 

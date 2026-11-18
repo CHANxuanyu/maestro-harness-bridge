@@ -6,12 +6,21 @@ import {
 	pmMayChange,
 	referenceVotes,
 	topicRejection,
+	teamEvidence,
+	teamEvidenceCatalog,
+	teamChallengeRound,
 } from '../../../shared/team/policy';
+import { reportEvents } from '../../../main/team/report-events';
 import { validateTeamReport } from '../../../shared/team/report';
 import { buildTeamTurnPrompt } from '../../../shared/team/prompts';
 import { reduceLedger } from '../../../shared/team/ledger';
 import { checkCommandBoundary, checkTestCounts } from '../../../shared/checkRun';
-import type { TeamDiscussion, StandardChangeRequest } from '../../../shared/team/types';
+import type {
+	TeamDiscussion,
+	StandardChangeRequest,
+	TeamEvent,
+	TeamReport,
+} from '../../../shared/team/types';
 import { baseline, brief, check, ledger, proven, goodReports } from './fixtures';
 
 const opened = {
@@ -67,7 +76,7 @@ describe('M2 team policy', () => {
 		discussion.opened!.reversible = false;
 		expect(discussionDecider(discussion)).toBe('owner');
 	});
-	it('requires new evidence or a baseline violation for insistence', () => {
+	it('records unsupported insistence as a reservation; only new evidence or a baseline violation sustains insistence', () => {
 		const state = discussionState();
 		state.discussions[0].proposals.push({
 			kind: 'proposal',
@@ -85,14 +94,103 @@ describe('M2 team policy', () => {
 			discussionId: 'd1',
 			result: 'insist',
 			reason: 'I prefer it',
-		};
-		expect(validateTeamReport(report, 'response', 'qa', state).ok).toBe(false);
+		} as const;
+		const dispatch = ledger({
+			kind: 'turn_dispatched',
+			dispatchId: 'r',
+			seat: 'qa',
+			turn: 'response',
+			promptDigest: '',
+		})[0] as TeamEvent<'turn_dispatched'>;
+		const known = teamEvidence(state)[0];
+		for (const candidate of [
+			report,
+			{ ...report, evidence: 'invented' },
+			{ ...report, baselineViolation: 'A1' },
+			{ ...report, evidence: known },
+		]) {
+			expect(validateTeamReport(candidate, 'response', 'qa', state).ok).toBe(true);
+			const event = reportEvents(dispatch, candidate, state).find((e) => e.kind === 'response');
+			expect(event).toMatchObject({
+				result:
+					'baselineViolation' in candidate ||
+					('evidence' in candidate && candidate.evidence === known)
+						? 'insist'
+						: 'reserve',
+			});
+		}
+		state.discussions[0].positions[0].evidence = [known];
 		expect(
-			validateTeamReport({ ...report, evidence: 'invented' }, 'response', 'qa', state).ok
-		).toBe(false);
+			reportEvents(dispatch, { ...report, evidence: known }, state).find(
+				(e) => e.kind === 'response'
+			)
+		).toMatchObject({ result: 'reserve', requestedResult: 'insist' });
+	});
+	it.each([undefined, [], ['invented prose basis']])(
+		'accepts a position with evidence %j without promoting unknown references',
+		(evidence) => {
+			const state = reduceLedger(
+				ledger(...proven, { ...opened, participants: [...opened.participants] })
+			);
+			const report: TeamReport = {
+				type: 'position',
+				discussionId: 'd1',
+				claim: 'Use a short display',
+				basis: 'A small task needs little chrome',
+				wouldChangeMind: 'A readability check',
+				...(evidence ? { evidence } : {}),
+			};
+			expect(validateTeamReport(report, 'position', 'dev', state).ok).toBe(true);
+			const dispatch = ledger({
+				kind: 'turn_dispatched',
+				dispatchId: 'p',
+				seat: 'dev',
+				turn: 'position',
+				promptDigest: '',
+			})[0] as TeamEvent<'turn_dispatched'>;
+			const event = reportEvents(dispatch, report, state).find((e) => e.kind === 'position');
+			expect(event).toMatchObject({
+				evidence: evidence ? [] : undefined,
+				unverifiedBasis: evidence,
+			});
+			expect(teamEvidence(state)).not.toContain('invented prose basis');
+		}
+	);
+	it('lists the exact citable ids with observation descriptions and only unused ids for insistence', () => {
+		const state = discussionState();
+		const catalog = teamEvidenceCatalog(state);
+		expect(catalog.map((e) => e.id)).toEqual(teamEvidence(state));
+		expect(catalog.some((e) => e.description.startsWith('Check npm test'))).toBe(true);
+		expect(catalog.some((e) => e.description.startsWith('Captured output'))).toBe(true);
+		expect(catalog.some((e) => e.description.startsWith('Criterion'))).toBe(true);
+		state.discussions[0].positions[0].evidence = [catalog[0].id];
+		expect(teamEvidence(state, state.discussions[0])).not.toContain(catalog[0].id);
+		const prompt = buildTeamTurnPrompt('response', 'qa', state, 'd1');
+		for (const entry of catalog) expect(prompt).toContain(JSON.stringify(entry.id));
+		expect(prompt).toContain('newEvidenceIds');
+	});
+	it('a no-op brief does not spend the revision round; removal-only challenges need no unchanged plans', () => {
+		const state = reduceLedger(
+			ledger(
+				...baseline.slice(0, 2),
+				{ kind: 'challenge_submitted', seat: 'dev', briefVersion: 1, objections: [] },
+				{ kind: 'challenge_submitted', seat: 'qa', briefVersion: 1, objections: [] },
+				{ kind: 'brief_response', decisions: [] },
+				{ kind: 'brief_published', brief: { ...brief, version: 2 } },
+				{ kind: 'brief_response', decisions: [] },
+				{
+					kind: 'brief_published',
+					brief: { ...brief, version: 3, criteria: brief.criteria.filter((c) => c.id !== 'A2') },
+				}
+			)
+		);
+		expect(teamChallengeRound(state)).toMatchObject({ round: 2, criteria: ['A2'] });
 		expect(
-			validateTeamReport({ ...report, baselineViolation: 'A1' }, 'response', 'qa', state).ok
+			validateTeamReport({ type: 'challenge', objections: [], plans: [] }, 'challenge', 'qa', state)
+				.ok
 		).toBe(true);
+		expect(buildTeamTurnPrompt('challenge', 'qa', state)).toContain('Rejects bad input');
+		expect(buildTeamTurnPrompt('challenge', 'qa', state)).not.toContain('Results are readable');
 	});
 	it('refuses a decided question without a fresh observation, including a renamed reopening', () => {
 		const entries = ledger(

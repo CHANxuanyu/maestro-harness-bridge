@@ -6,8 +6,10 @@ import {
 	teamReportSchema,
 } from '../../../shared/team/prompts';
 import { reduceLedger } from '../../../shared/team/ledger';
+import { validateTeamReport, reportRepairPrompt } from '../../../shared/team/report';
+import { teamEvidence } from '../../../shared/team/policy';
 import { REPORT_PERMISSIONS, type M1TurnKind } from '../../../shared/team/types';
-import { baseline, ledger, proven } from './fixtures';
+import { baseline, ledger, proven, goodReports } from './fixtures';
 
 describe('team turn prompts', () => {
 	it.each(Object.keys(TEAM_TURN_PROMPTS) as M1TurnKind[])(
@@ -112,5 +114,34 @@ describe('team turn prompts', () => {
 	});
 	it('refuses a turn assigned to the wrong seat', () => {
 		expect(() => buildTeamTurnPrompt('verify', 'dev', reduceLedger([]))).toThrow('may not');
+	});
+	it('explains an evidence-free position and quotes exact repair ids', () => {
+		const empty = reduceLedger(ledger(...baseline));
+		expect(buildTeamTurnPrompt('position', 'pm', empty)).toContain(
+			'There is no recorded evidence yet'
+		);
+		const state = reduceLedger(ledger(...proven));
+		const repair = reportRepairPrompt(
+			'response',
+			'Responses require a proposal.',
+			'Previous reply',
+			state
+		);
+		expect(repair).toContain('Responses require a proposal.');
+		expect(repair).toContain(
+			`Allowed recorded evidence ids: ${JSON.stringify(teamEvidence(state))}`
+		);
+	});
+	it('respond includes a complete standard-change example accepted by validation', () => {
+		const state = reduceLedger(ledger(...proven));
+		const prompt = buildTeamTurnPrompt('respond', 'pm', state);
+		const example = prompt.match(/Example: ("standardChanges":\[.*?\])\. For remove/)!;
+		expect(example).not.toBeNull();
+		const changes = JSON.parse(`{${example[1]}}`);
+		expect(
+			validateTeamReport({ ...goodReports.respond, ...changes }, 'respond', 'pm', state).ok
+		).toBe(true);
+		expect(prompt).toContain('id equal to criterionId');
+		expect(prompt).toContain('Before confirmation, put draft edits in brief');
 	});
 });

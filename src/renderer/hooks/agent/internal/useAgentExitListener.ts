@@ -1,3 +1,5 @@
+import { isConversationOnScreen } from '../../../utils/sessionAttention';
+import { useGroupChatStore } from '../../../stores/groupChatStore';
 import { maybeAutoHandoff } from '../../../services/autoHandoff';
 /**
  * useAgentExitListener - registers `window.maestro.process.onExit`
@@ -945,6 +947,15 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 					const historyOnly = !!queuedItemToProcess || isViewingCompletedTab;
 					notifyToast({
 						historyOnly,
+						historyRead:
+							useSettingsStore.getState().newShell &&
+							isConversationOnScreen({
+								session: getSessions().find((s) => s.id === actualSessionId),
+								tabId: toastData!.tabId,
+								activeSessionId: getActiveSessionId(),
+								windowFocused: document.hasFocus(),
+								groupChatOpen: !!useGroupChatStore.getState().activeGroupChatId,
+							}),
 						type: 'success',
 						title: toastData!.title,
 						message: toastData!.summary,

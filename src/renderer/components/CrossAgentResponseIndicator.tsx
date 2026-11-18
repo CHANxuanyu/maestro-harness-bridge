@@ -1,3 +1,5 @@
+import { ElapsedTimeDisplay } from './ui/ElapsedTimeDisplay';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 import { useT } from '../i18n';
 /**
  * CrossAgentResponseIndicator.tsx
@@ -57,6 +59,7 @@ export function CrossAgentResponseIndicator({
 	onInterrupt,
 }: CrossAgentResponseIndicatorProps): JSX.Element | null {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	const requests = useCrossAgentInFlightStore((s) => s.requests);
 	const inFlight = useMemo(
 		() => selectInFlightForTab(requests, sourceSessionId, sourceTabId),
@@ -70,10 +73,10 @@ export function CrossAgentResponseIndicator({
 
 	// Tick once a second while the dropdown is open so elapsed times stay live.
 	useEffect(() => {
-		if (!expanded || !hasRequests) return;
+		if (newShell || !expanded || !hasRequests) return;
 		const id = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(id);
-	}, [expanded, hasRequests]);
+	}, [expanded, hasRequests, newShell]);
 
 	// Collapse automatically once every response has landed.
 	useEffect(() => {
@@ -155,12 +158,14 @@ export function CrossAgentResponseIndicator({
 									color: theme.colors.textMain,
 								}}
 								title={
-									canJump
-										? t('workflows.shellStatus.jumpToValueValue', {
-												p0: req.targetAgentName,
-												p1: elapsed,
-											})
-										: `${req.targetAgentName} · ${elapsed}`
+									newShell
+										? req.targetAgentName
+										: canJump
+											? t('workflows.shellStatus.jumpToValueValue', {
+													p0: req.targetAgentName,
+													p1: elapsed,
+												})
+											: `${req.targetAgentName} · ${elapsed}`
 								}
 							>
 								<span className="shrink-0 leading-none">
@@ -170,7 +175,11 @@ export function CrossAgentResponseIndicator({
 									{truncateText(req.targetAgentName, 24)}
 								</span>
 								<span className="shrink-0 tabular-nums" style={{ color: theme.colors.textDim }}>
-									{elapsed}
+									{newShell ? (
+										<ElapsedTimeDisplay startTime={req.startedAt} className="tabular-nums" />
+									) : (
+										elapsed
+									)}
 								</span>
 							</button>
 						);

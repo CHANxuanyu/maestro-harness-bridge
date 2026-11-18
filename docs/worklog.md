@@ -167,6 +167,15 @@ Vitest 默认配置加载器试图写入外部链接的依赖目录而被拒绝�
 启动被当前沙箱拒绝，没有用 jsdom 当作截图验收。按任务要求没有编写或运行
 Electron 场景。没有提交或发布；原有 `.survey-A0.md` 未改动。
 
+## 2026-11-18：B3 左栏中间省略保留完整标题
+
+PR #93 的 Linux 原生 E2E 有三项失败（Claude 审批的 worktree 两项、子任务的已关闭父对话），本机复现。原因是 B3 的中间省略直接改写了标题文本，按完整标题查找的场景和读屏都只能拿到截断后的文字。现在可见标题仍做中间省略，截断时对辅助技术隐藏，旁边保留一份 `sr-only` 的完整标题；`data-conversation-title` 和 `title` 不变，264 像素下可见标题两两不同的断言不变。单测补充截断时完整标题可读的断言。
+
+```sh
+node scripts/native-e2e.mjs e2e/native-claude-permission.spec.ts e2e/native-subtasks.spec.ts e2e/native-sidebar-titles.spec.ts --grep "worktree|subtasks|sidebar"
+# 4 passed
+```
+
 ## 2026-11-17：B1-2/3/4 新界面模型选择器
 
 验证对象为基于 `4e87704b29b5fde6592b4b71b5cd2b8de361763a` 的本 worktree

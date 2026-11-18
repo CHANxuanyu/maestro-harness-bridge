@@ -24,6 +24,7 @@ import {
 	validateTeamReport,
 	reportRepairPrompt,
 	teamReplyMessage,
+	type TeamReportResult,
 } from '../../shared/team/report';
 import { teamStatus } from '../../shared/team/status';
 import {
@@ -505,6 +506,44 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 	};
 	const snapshot = (events: LedgerEvent[], dispatch: Dispatch) =>
 		reduceLedger(events.filter((e) => e.seq <= (dispatch.sourceSeq ?? dispatch.seq - 1)));
+	const validateReport = async (
+		raw: unknown,
+		dispatch: Dispatch,
+		events: LedgerEvent[]
+	): Promise<TeamReportResult> => {
+		const original = dispatch.repairOf
+			? events.find(
+					(e): e is Dispatch => e.kind === 'turn_dispatched' && e.dispatchId === dispatch.repairOf
+				)!
+			: dispatch;
+		const state = snapshot(events, original);
+		const paths = new Map<string, string>();
+		if (
+			raw &&
+			typeof raw === 'object' &&
+			'type' in raw &&
+			raw.type === 'qa_prep' &&
+			dispatch.seat === 'qa' &&
+			'tests' in raw &&
+			Array.isArray(raw.tests) &&
+			raw.tests.every((value) => typeof value === 'string')
+		) {
+			try {
+				const workspace = ws(state);
+				await workspace.initialize();
+				for (const value of raw.tests) paths.set(value, await workspace.resolveQaTestPath(value));
+			} catch (error) {
+				return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+			}
+		}
+		return validateTeamReport(
+			raw,
+			dispatch.expectedTurn ?? dispatch.turn,
+			dispatch.seat,
+			state,
+			paths
+		);
+	};
 	const promptFor = (dispatch: Dispatch, events: LedgerEvent[]) => {
 		if (dispatch.prompt !== undefined) return dispatch.prompt;
 		const state = snapshot(events, dispatch);
@@ -524,7 +563,8 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						(e): e is Dispatch => e.kind === 'turn_dispatched' && e.dispatchId === dispatch.repairOf
 					)!
 				),
-				dispatch.discussionId
+				dispatch.discussionId,
+				dispatch.seat
 			);
 		} else
 			prompt = buildTeamTurnPrompt(
@@ -595,15 +635,14 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					'```team-report\n' + (finished.report.recoveredJson ?? '') + '\n```'
 				);
 				const recovered = extracted.ok
-					? validateTeamReport(
-							extracted.report,
-							failed.dispatch.expectedTurn ?? failed.dispatch.turn,
-							failed.dispatch.seat,
-							snapshot(data.events, failed.dispatch)
-						)
+					? await validateReport(extracted.report, failed.dispatch, data.events)
 					: extracted;
 				if (recovered.ok) {
-					await ingest(id, failed.dispatch, { ...failed.finished, report: recovered.report });
+					await ingest(id, failed.dispatch, {
+						...failed.finished,
+						report: recovered.report,
+						normalizations: recovered.normalizations,
+					});
 					await append(id, {
 						kind: 'report_repaired',
 						actor: 'pm',
@@ -626,6 +665,15 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				)!
 			: dispatch;
 		const before = reduceLedger(data.events);
+		if (finished.normalizations?.length)
+			await append(id, {
+				kind: 'report_normalized',
+				actor: 'app',
+				seat: original.seat,
+				dispatchId: original.dispatchId,
+				changes: finished.normalizations,
+				id: `${dispatch.dispatchId}:normalized`,
+			});
 		for (const event of reportEvents(original, finished.report, snapshot(data.events, original)))
 			await append(id, event);
 		await append(id, {
@@ -735,21 +783,8 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			});
 		}
 		const extracted = extractTeamReport(result.text);
-		const validationState = snapshot(
-			data.events,
-			dispatch.repairOf
-				? data.events.find(
-						(e): e is Dispatch => e.kind === 'turn_dispatched' && e.dispatchId === dispatch.repairOf
-					)!
-				: dispatch
-		);
 		let parsed = extracted.ok
-			? validateTeamReport(
-					extracted.report,
-					dispatch.expectedTurn ?? dispatch.turn,
-					dispatch.seat,
-					validationState
-				)
+			? await validateReport(extracted.report, dispatch, data.events)
 			: extracted;
 		if (
 			parsed.ok &&
@@ -772,6 +807,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			costUsd: result.usage?.costUsd,
 			message: teamReplyMessage(result.text),
 			report: good && parsed.ok ? parsed.report : undefined,
+			normalizations: good && parsed.ok ? parsed.normalizations : undefined,
 			reportError: good
 				? undefined
 				: (result.failure?.detail ?? (parsed.ok ? 'Turn did not complete' : parsed.reason)),
@@ -1964,12 +2000,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					const extracted =
 						found && !found.failure && found.exitCode === 0 ? extractTeamReport(found.text) : null;
 					const recovered = extracted?.ok
-						? validateTeamReport(
-								extracted.report,
-								original.dispatched!.expectedTurn ?? original.dispatched!.turn,
-								original.seat,
-								snapshot(data.events, original.dispatched!)
-							)
+						? await validateReport(extracted.report, original.dispatched!, data.events)
 						: null;
 					await queue.enqueue(id, async () => {
 						await append(id, {
@@ -1985,6 +2016,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 								await ingest(id, original.dispatched!, {
 									...original.finished!,
 									report: recovered.report,
+									normalizations: recovered.normalizations,
 								});
 								await append(id, {
 									kind: 'member_recovered',
@@ -3475,6 +3507,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					prompt: t.dispatched ? promptFor(t.dispatched, data.events) : undefined,
 					reply: t.finished?.message,
 					report: t.report,
+					normalizations: t.normalizations,
 					error: t.reportError,
 				}));
 		},

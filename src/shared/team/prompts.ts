@@ -4,6 +4,7 @@ import {
 	teamEvidenceCatalog,
 	teamEvidence,
 	teamChallengeRound,
+	discussionDecider,
 } from './policy';
 import { NO_PROGRESS_LIMIT, REJECTION_RETRO_LIMIT } from '../progressRules';
 import { teamReportSchema } from './schemas';
@@ -26,7 +27,7 @@ const tasks: Record<ReportTurnKind, string> = {
 	position:
 		'Turn: position. Write your sealed claim, prose basis, and what evidence would change your mind. Evidence is optional: omit it or use [] when none is recorded. Cite only ids from citableEvidence; other references remain unverified basis text and never count as evidence. Do not read other positions, the ledger file, or team CLI during this sealed step. Dev estimates extraTurns and preservesDeadline for a proposed standard change.',
 	proposal:
-		'Turn: proposal. As topic owner, propose a resolution and name the lawful decider. Positions remain sealed until responses. Give every participant an action or a concrete wait. Two evidenced objections require an experiment or compromise before a decision. An experiment is a small workspace check command with a basis and expected observation. Commitment changes and irreversible choices require owner options.',
+		'Turn: proposal. As topic owner, propose a resolution. The app supplies discussion.decider from the decision layer; do not set decider yourself. Positions remain sealed until responses. Give every participant an action or a concrete wait. Two evidenced objections require an experiment or compromise before a decision. An experiment is a small workspace check command with a basis and expected observation. Commitment changes and irreversible choices require owner options and wait for the owner card.',
 	response:
 		'Turn: response. Read only this topic arguments and proposal. Agree, reserve with a recorded reservation, or insist with an id from newEvidenceIds or a confirmedBaselineIds baselineViolation. Evidence is optional for agree or reserve. Unknown references remain unverified basis text. Unsupported insistence is recorded as a reservation for the lawful decider, not a new round. Do not use votes to override evidence.',
 	retro:
@@ -40,10 +41,10 @@ const tasks: Record<ReportTurnKind, string> = {
 	challenge:
 		'Turn: challenge. Work independently; other seats cannot see this response yet. Do not implement. In round 1 challenge the full brief. In round 2 challenge only challengeRound.criteria, using its before/after diff; do not reopen unchanged criteria. Dev: identify unreasonable requirements and risks. QA: provide a plan with how and sample data for each required criterion still present; if a criterion cannot be verified, name it in an unverifiable objection.',
 	respond:
-		'Turn: respond. Answer each objection with accept, reject, or discuss and a reason. Return the complete revised brief. A PM revision allows at most one further challenge, only on changed criteria; remaining disagreements go to discuss or to askOwner on the baseline card, never a third challenge round. Request owner input only for a concrete boundary; put that request in askOwner, not prose. Before confirmation, put draft edits in brief, without duplicating them in standardChanges. If proposing a confirmed standard change, standardChanges is an array of {criterionId, change, reason, criterion}; change is add, tighten, relax, modify, or remove. Except for remove, criterion must be the COMPLETE replacement {id, text, proof, how, experience?, locations?}, with id equal to criterionId and proof app, qa, or pm. Preserve every required location. Example: "standardChanges":[{"criterionId":"A1","change":"tighten","reason":"Cover zero explicitly","criterion":{"id":"A1","text":"Accept zero and positive durations","proof":"app","how":"Run the duration checks including zero"}}]. For remove omit criterion. Optional authority fields are withinMeaning (string), extraTurns (number), preservesDeadline (boolean), ownerMessageId (an actual pending message id).',
+		'Turn: respond. Answer each objection with accept, reject, or discuss and a reason. Return the complete revised brief. A PM revision allows at most one further challenge, only on changed criteria; remaining disagreements go to discuss or to askOwner on the baseline card, never a third challenge round. Request owner input only for a concrete boundary; put that request in askOwner, not prose. Before confirmation, put draft edits in brief, without duplicating them in standardChanges. If proposing a confirmed standard change, standardChanges is an array of {criterionId, change, reason, criterion}; change is add, tighten, relax, modify, or remove. Except for remove, criterion must be the COMPLETE replacement {id, text, proof, how, experience?, locations?}, with id equal to criterionId and proof app, qa, or pm. Preserve every required location. Example: "standardChanges":[{"criterionId":"A1","change":"tighten","reason":"Cover zero explicitly","criterion":{"id":"A1","text":"Accept zero and positive durations","proof":"app","how":"Run the duration checks including zero"}}]. For remove omit criterion. Optional authority fields are withinMeaning (string) and ownerMessageId (an actual pending message id). Implementation cost and deadline estimates come from dev positions.',
 	work: 'Turn: work. Implement the confirmed scope and assigned work in your worktree. done and claimsComplete are claims only; the app runs checks. waiting must identify a real app-observable follow-up, not an invented wait. If blocked on another member, include waiting.needs with those seats.',
 	qa_prep:
-		'Turn: qa_prep. Prepare independent tests and samples from the confirmed criteria. Report test paths relative to qa/. Unfinished developer changes are not input to this turn.',
+		'Turn: qa_prep. Prepare independent tests and samples from the confirmed criteria. In tests, use workspace-relative paths starting with qa/, for example qa/boundary.test.cjs. The app can normalize ./qa/ paths or absolute paths inside your qa/ directory. A bare filename is accepted only when the app finds it unambiguously inside qa/. Unfinished developer changes are not input to this turn.',
 	verify:
 		'Turn: verify. Verify confirmed criteria against the delivered output, including exploratory cases. Every verdict, even no problems found, needs concrete evidence. Defects need a criterion and reproducible steps. Contradictory or untestable standards are standard issues for PM.',
 	fix: 'Turn: fix. Address the assigned defects. fixed is a claim, not closure. Put impossible or disputed fixes in notFixed with reasons for PM triage; those do not go to QA. From the second attempt, provide basis, difference, and expectation. Do not repeat a change without new evidence.',
@@ -100,6 +101,7 @@ function ledgerSlice(
 			confirmedBaselineIds: state.criteria.filter((c) => c.confirmed).map((c) => c.id),
 			discussion: discussion && {
 				id: discussion.id,
+				decider: discussion.opened ? discussionDecider(discussion) : undefined,
 				topic: discussion.opened,
 				positions: revealed
 					? discussion.positions

@@ -46,11 +46,27 @@ does not close an unresolved issue. All review rounds still use `judgeAttempts()
 `src/shared/team/schemas.ts` with `buildTeamTurnPrompt()` and `TEAM_TURN_PROMPTS`
 in `src/shared/team/prompts.ts`. The existing Markdown parser finds real report
 fences; do not extract JSON from arbitrary prose or from a quoted example.
-Unknown fields are rejected, QA challenge plans cover the current round's
+Known fields owned by another seat are dropped with `report_normalized` notes;
+other unknown fields are rejected. `teamReportSchema()` projects the same schema
+for prompts and repairs, omitting fields the seat cannot set and the app-owned
+proposal decider. Validation uses the full schema after normalization. Scheduler
+receipts persist normalized reports and notes together; stable event ids replay
+the note once after interrupted ingestion. Never add a second parser or normalize
+only in a UI/CLI entry point. QA challenge plans cover the current round's
 required criteria (or explicit unverifiable objections), and review
 problems without a confirmed criterion become suggestions. Without state, no
 review criterion is assumed confirmed. The dispatcher must permit only one
 repair, passing the original turn kind; repair does not redo work.
+
+`teamWorkspaceRelativePath()` in `src/shared/team/policy.ts` shares lexical
+workspace spelling over `normalizeWorktreePath()` / `isPathAtOrUnderRoot()`.
+It rejects traversal and supports owned absolute paths and harmless dot segments;
+it does not prove that a file exists or follows an allowed symlink.
+`createTeamWorkspaces().resolveQaTestPath()` performs that physical QA boundary
+check and resolves a bare name only for an unambiguous existing `qa/` file.
+Output locations normalize against the capture workspace, never by stripping
+another workspace's prefix. Existing `captureTeamOutput()` remains the proof
+gate. Do not normalize a path into an evidence claim or bypass role permissions.
 
 `baselineDiff()`, `discussionDecider()`, `topicRejection()`, `pmMayChange()`,
 `referenceVotes()`, `missingOutputLocations()`, `teamReadyForDemo()` and

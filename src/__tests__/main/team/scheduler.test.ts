@@ -10,10 +10,17 @@ import {
 	type TeamSchedulerDependencies,
 } from '../../../main/team/scheduler';
 import type { SeatTurnRequest, SeatTurnResult } from '../../../main/team/turn-dispatcher';
-import type { LedgerEvent, TeamConfig, TeamReport } from '../../../shared/team/types';
+import type {
+	LedgerEvent,
+	TeamConfig,
+	TeamReport,
+	SeatRole,
+	ReportTurnKind,
+} from '../../../shared/team/types';
 import { reduceLedger } from '../../../shared/team/ledger';
 import { teamStatus } from '../../../shared/team/status';
 import { teamTurnPermission } from '../../../shared/team/policy';
+import normalizationFixtures from '../../shared/team/real-normalization-fixtures.json';
 import {
 	config,
 	check,
@@ -149,6 +156,9 @@ describe('team scheduler', () => {
 				recentCommits: 'fixture commit',
 			})),
 			diffHash: vi.fn(async () => hash),
+			resolveQaTestPath: vi.fn(async (value: string) =>
+				value === 'clamp.boundary.test.cjs' ? `qa/${value}` : value
+			),
 		};
 		deps = {
 			store,
@@ -2445,6 +2455,99 @@ describe('team scheduler', () => {
 		expect(requests.some((r) => r.turn === 'report_repair')).toBe(false);
 	});
 
+	it.each(normalizationFixtures)(
+		'real $seat $turn is accepted with a durable normalization note, no repair',
+		async (fixture) => {
+			const seat = fixture.seat as SeatRole;
+			const turn = fixture.turn as ReportTurnKind;
+			events = ledger(
+				...baseline,
+				...bindings,
+				{
+					kind: 'decision_card',
+					card: {
+						id: 'hold-normalization',
+						boundary: 'permission',
+						title: 'Hold unrelated work',
+						body: 'Fixture scheduling hold',
+						options: [{ id: 'allow', label: 'Allow' }],
+					},
+				},
+				{
+					kind: 'discussion_opened',
+					discussionId: 'location-discussion',
+					topic: 'C3 location',
+					owner: 'pm',
+					participants: ['pm', 'dev', 'qa'],
+					trigger: 'standard-change',
+					layer: 'commitment',
+				},
+				...(turn === 'proposal'
+					? (['pm', 'dev', 'qa'] as const).map(
+							(role): EventInput => ({
+								kind: 'position',
+								discussionId: 'location-discussion',
+								seat: role,
+								claim: 'Preserve the proof',
+								basis: 'Recorded results',
+								wouldChangeMind: 'A changed proof',
+							})
+						)
+					: []),
+				{
+					kind: 'turn_dispatched',
+					seat,
+					turn,
+					dispatchId: 'real-report',
+					promptDigest: '',
+					...(turn === 'qa_prep' ? {} : { discussionId: 'location-discussion' }),
+				}
+			);
+			await scheduler.start();
+			await drain();
+			await finish(requests[0], fixture.report as TeamReport);
+			const accepted = state().turns.find((t) => t.dispatchId === 'real-report')!;
+			expect(accepted.report?.type).toBe(turn);
+			expect(accepted.normalizations?.length).toBeGreaterThan(0);
+			expect(events.filter((e) => e.kind === 'report_normalized')).toHaveLength(1);
+			expect(events.filter((e) => e.kind === 'report_rejected')).toEqual([]);
+			expect(requests).toHaveLength(1);
+			expect((await scheduler.log(teamConfig.id, seat))[0].normalizations).toEqual(
+				accepted.normalizations
+			);
+			// Crash after the durable finish, before ingestion: replay the same note once.
+			scheduler.dispose();
+			events = events.filter((e) => e.seq <= accepted.finished!.seq);
+			scheduler = createTeamScheduler(deps);
+			await scheduler.start();
+			await drain();
+			await scheduler.wake(teamConfig.id);
+			await drain();
+			expect(events.filter((e) => e.kind === 'report_normalized')).toHaveLength(1);
+			expect(state().turns.find((t) => t.dispatchId === 'real-report')?.normalizations).toEqual(
+				accepted.normalizations
+			);
+			expect(requests).toHaveLength(1);
+			if (turn === 'proposal') {
+				expect(state().discussions[0].proposals[0].decider).toBe('owner');
+				await emit({
+					kind: 'card_superseded',
+					cardId: 'hold-normalization',
+					reason: 'Exercise owner routing',
+				});
+				for (const role of ['pm', 'dev', 'qa'] as const)
+					await finish(latest(role, 'response'), {
+						type: 'response',
+						discussionId: 'location-discussion',
+						result: 'agree',
+						reason: 'Preserve the proof',
+					});
+				expect(state().openCards.map((c) => c.boundary)).toEqual(['commitment']);
+				expect(state().discussions[0].decision).toBeUndefined();
+				expect(state().standardChanges).toEqual([]);
+			}
+		}
+	);
 	it('M3 budget boundary preserves a pending permission through extension and restart', async () => {
 		await begin();
 		const created = events.find((e) => e.kind === 'team_created')!;

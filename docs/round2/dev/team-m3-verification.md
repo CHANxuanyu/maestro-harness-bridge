@@ -1,11 +1,127 @@
 # M3 backend verification, 2026-11-18
 
-Latest artifact: `d0e1698c5` plus the uncommitted real-model follow-up changes.
+Latest artifact: `ee282fec1` plus the uncommitted third real-model follow-up changes.
 Earlier M3 records below used `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus
 the then-uncommitted M3 work. Verification targets source and development builds, not an
 installed release. No commit, tag, release, paid model invocation or real GitHub
 publication was performed. Existing private survey material is not part of this
 change.
+
+## Third follow-up: normalize form, preserve facts
+
+The owner's real-model run confirmed the previous fixes: exactly 20 dispatches,
+at most two challenge rounds, baseline confirmation at turn 7, then development,
+QA preparation, verification and an issue. The owner stopped at the progress
+report; that run did not reach acceptance. Four rejected reports and their repairs
+consumed eight turns. The four original report objects now form a regression
+fixture, with only the discussion id and a temporary baseline-directory spelling
+replaced. No full ledger, private transcript or account path is included.
+
+1. **Seat-owned fields:** PM and QA positions both included `extraTurns: 0` and
+   `preservesDeadline: true`. The shared prompt schema advertised these fields
+   to every seat; the semantic validator then rejected the entire non-dev
+   position. Validation now drops both fields, including nested standard-change
+   estimates, and retains the claim, basis and evidence references. Non-PM
+   `resolvedStandards` is similarly dropped without closing anything. Prompt and
+   repair schemas omit fields owned by another seat. Dev estimates and PM
+   standard-resolution facts retain their existing validation.
+2. **Proposal decider:** the PM supplied `decider: "pm"` on a commitment-layer
+   topic. The validator compared this hint with a value the app already knew
+   and rejected the proposal. The app now supplies `discussionDecider()` for an
+   omitted or conflicting hint and records the correction. Prompts expose the
+   lawful decider in context but omit it from the report schema. A scheduler
+   regression completes all participant responses and checks that an owner
+   commitment card appears, with no automatic conclusion or standard change.
+3. **QA paths:** the captured report used the bare `clamp.boundary.test.cjs`,
+   not an absolute or `./qa/` spelling. The old string-prefix validator rejected
+   all three forms. The shared policy normalizes dot segments and owned absolute
+   paths. Main checks the actual QA worktree, including real paths and symlink
+   ancestors. A bare name is inferred only when an existing `qa/` file is
+   unambiguous; unknown or root-conflicting names are rejected. Tests cover real
+   Git workspaces, absolute aliases, Windows spellings, traversal, other
+   directories, escaping symlinks, missing descendants and dangling symlinks.
+   Output-location spelling uses the capture workspace; CI cwd spelling uses
+   the reporting seat. References outside those workspaces are not relocated or
+   promoted to evidence, and output capture still enforces its physical boundary.
+4. **Validator audit and recording:** known unowned fields, app-derived decider
+   and safe path spelling are normalized. Existing review demotion of problems
+   without confirmed criteria, and its derived verdict, now also records notes.
+   Report-role permissions, required factual shape, unknown fields, confirmed
+   criterion identities, actual message ids, complete standard replacements,
+   discussion membership/order, participant actions, QA plan coverage,
+   verification evidence, issue lifecycle, new-basis diagnosis and demo proof
+   remain strict. Unknown discussion references remain unverified basis text,
+   never recorded evidence; unsupported insistence remains a reservation.
+   No guard invents a missing fact or grants authority. Empty review rejection
+   still requires a concrete problem. The full policy is in `team-model.md`.
+
+Each of the four actual reports is tested at both shared-validation and scheduler
+levels. The scheduler accepts it without a repair, records one app-owned
+`report_normalized` event, exposes the changes through `team log`, and replays
+the same note once after a simulated interruption immediately after the durable
+turn receipt. Notes do not add evidence, progress or turns. Fact-guard regressions
+reject QA closure without a developer fix, dev verification of its own fix and
+escaping QA paths; existing evidence tests check recorded ids separately from
+unverified text. No native scenario assertion was loosened or changed.
+
+Commands for this artifact:
+
+```sh
+npm test -- --configLoader runner src/__tests__/shared/team src/__tests__/main/team src/__tests__/cli/commands/team.test.ts src/__tests__/cli/services/session-command.test.ts src/__tests__/shared/progressRules.test.ts src/__tests__/shared/retryClassification.test.ts src/__tests__/main/follow-ups.test.ts src/__tests__/main/check-runner.test.ts
+npm run lint
+node node_modules/typescript/bin/tsc -p e2e/tsconfig.team.json --pretty false
+node node_modules/eslint/bin/eslint.js src/main/team/{scheduler,workspaces}.ts src/shared/team/{policy,types,ledger,report,prompts,schemas}.ts
+node node_modules/eslint/bin/eslint.js -c eslint.dashes.config.mjs src/__tests__/main/team/{scheduler,workspaces}.test.ts src/__tests__/shared/team/{report,prompts}.test.ts
+git diff --name-only -z --diff-filter=ACM | xargs -0 node node_modules/prettier/bin/prettier.cjs --check
+node node_modules/prettier/bin/prettier.cjs --check src/__tests__/shared/team/real-normalization-fixtures.json
+npm run docs:verify
+npm run lint:doc-refs
+git diff --check
+```
+
+All listed commands exited 0. The team run passes **456 tests in 19 files**.
+The three production TypeScript projects and all three Electron scenario files
+type-check. ESLint has no errors or warnings. Prettier passes the 19 changed
+tracked files and the new JSON fixture. Documentation verification checks 724
+asserted paths with none missing, and references across 39 docs resolve.
+`git diff --check` passes; an added-line and new-fixture scan finds zero forbidden
+dash characters. The first focused run had one new test expecting `open` rather
+than the actual `opened` state; that assertion was corrected before the final
+456-test run. Existing assertions were not weakened.
+
+Native/build attempts, with earlier artifacts preserved in their original paths:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts --output e2e-results/m3-normalization --max-failures=1
+npm run build:main
+npm run build:cli
+npm run build:renderer -- --configLoader runner
+npm run build:web-desktop -- --configLoader runner
+node --input-type=module -e 'globalThis.__dirname = process.cwd(); const { build } = await import("vite"); await build({ configLoader: "runner" }); await build({ configFile: "vite.config.web-desktop.mts", configLoader: "runner" });'
+node node_modules/@playwright/test/cli.js test --project=native e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts --output e2e-results/m3-normalization --max-failures=1 --reporter=line
+```
+
+The wrapper exited 1 during renderer config loading: the default Vite loader
+tried to write `.vite-temp` through the shared `node_modules` symlink outside the
+sandbox. Main/preload and CLI builds exited 0. The two plain runner-loader commands
+exited 1 because the existing configs use `__dirname`; the programmatic runner
+command supplies the same project directory as the bundled loader and builds
+both renderer and web-desktop successfully (exit 0, existing chunk-size and
+mixed dynamic/static import warnings). No build configuration was changed.
+
+The direct Playwright command then exited 1: **Electron failed to launch** for
+the first M2 scenario, before scenario assertions; 24 scenarios did not run.
+Its error context is in `e2e-results/m3-normalization/`. This is not a native
+regression result or a claim that the current artifact passed 25/25. Real-model
+acceptance was not rerun. Outside the restricted host, verify with:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts
+node scripts/native-e2e.mjs e2e/real-team.spec.ts --grep 'team small task'
+```
+
+The real command requires the documented opt-in account setup and is listed for
+owner-run verification only; this change made no paid model call.
 
 ## Second follow-up after the real-model run
 

@@ -1,5 +1,6 @@
 import { resolveAgentAccountKey, resolveAgentBillingCredential } from '../providerProfiles';
 import { getModelFamily } from '../modelFamily';
+import { isPathAtOrUnderRoot, normalizeWorktreePath } from '../worktreePaths';
 import { decideNext, judgeAttempts, type Candidate } from '../progressRules';
 import type {
 	BaselineDiff,
@@ -160,6 +161,38 @@ export function baselineDiff(before: Brief | null, after: Brief): BaselineDiff {
 			? { checks: { before: before?.checks ?? [], after: after.checks } }
 			: {}),
 	};
+}
+
+/** Lexical spelling only. Main checks real paths before accepting QA file claims. */
+export function teamWorkspaceRelativePath(
+	value: string,
+	workspace?: string,
+	directory = ''
+): string | undefined {
+	const windows = !!workspace && (/^[a-z]:[\\/]/i.test(workspace) || workspace.startsWith('\\\\'));
+	if (value.includes('\0') || (!windows && value.includes('\\'))) return;
+	const separated = normalizeWorktreePath(value, !windows);
+	if (separated.split('/').includes('..')) return;
+	const normalized = separated
+		.split('/')
+		.filter((part) => part !== '.')
+		.join('/');
+	let relative = normalized;
+	if (/^(\/|[a-z]:)/i.test(normalized)) {
+		if (!workspace) return;
+		const root = normalizeWorktreePath(workspace, !windows);
+		if (
+			!isPathAtOrUnderRoot(
+				windows ? normalized.toLowerCase() : normalized,
+				windows ? root.toLowerCase() : root
+			)
+		)
+			return;
+		relative = normalized.slice(root.length).replace(/^\//, '');
+	}
+	if (relative.includes(':') || relative.startsWith('/')) return;
+	if (directory && !relative.startsWith(`${directory}/`)) return;
+	return relative;
 }
 
 /** References and descriptions share one source for validation and model prompts. */

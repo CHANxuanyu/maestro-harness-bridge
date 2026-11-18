@@ -100,6 +100,44 @@ Each seat's turn ends with a fenced block whose info string is `team-report` and
 
 A missing or malformed block is repaired once by asking the seat to resubmit only the block (R3-4); a block that a role may not submit (for example QA closing an issue it did not verify, dev verifying its own fix) is rejected and recorded. Evidence counts are computed by the app from `check_run` and QA verdicts, never taken from a seat's text (R1-7).
 
+Owner product decision, 2026-11-18: be strict about facts and lenient about form.
+When the app can determine the correct value, or a field belongs to another seat,
+normalize it and keep the rest of the report instead of spending a repair turn.
+This does not invent evidence, permission, verification, files, or a decision.
+
+- Only dev supplies `extraTurns` and `preservesDeadline`, including inside
+  `standardChanges`. Other seats' values are dropped. Only PM supplies
+  `resolvedStandards`; dropping another seat's field never closes an issue.
+  Prompt and repair schemas omit fields the receiving seat does not own.
+- A proposal's `decider` is app-owned, derived by `discussionDecider()`. An
+  omitted or conflicting model hint is replaced and recorded. The model schema
+  omits this field; the discussion slice states the lawful decider. An owner-layer
+  proposal still waits for the owner card after participant responses.
+- QA test paths are workspace-relative `qa/...`. Harmless `./` segments and
+  absolute paths physically inside the QA workspace's `qa/` normalize to that
+  spelling. A bare filename is accepted only when that file exists in `qa/` and
+  no same-named workspace-root entry makes it ambiguous. Traversal, other
+  directories, directory targets and symlink escapes are rejected. Normalizing
+  a file claim does not make it test evidence. Output locations use the same
+  lexical normalization against the dev capture workspace and retain external
+  references; capture still checks the real path. A relative CI observation cwd
+  resolves against the reporting seat's workspace.
+- Every accepted correction produces one app-owned `report_normalized` event
+  with the dispatch id and `{ field, before?, after?, reason }` changes. The
+  normalized report and notes also live in `turn_finished`, so interrupted
+  ingestion replays the same notes once without a new model turn. `team log`
+  and the preload API expose the same notes. Notes are neither evidence nor
+  progress and do not add a turn.
+
+Validation still rejects reports from the wrong role, invented or duplicate
+criterion/issue/message identities, incomplete standard definitions, missing
+verification evidence, premature issue closure, invalid discussion ordering,
+repeated diagnosis without a new basis and a completion demo without proof.
+Unknown position/response references remain unverified basis text. Existing
+review normalization (unconfirmed problems become suggestions, verdict follows
+confirmed problems) now records its corrections; an empty rejection still
+requires a concrete problem rather than guessing the missing fact.
+
 ## 5. Phases and the M1 direct path
 
 `clarify -> challenge -> (owner baseline) -> implement -> verify -> review -> demo -> accept`. M1 implements the direct path with the simplest rules; M2 adds discussions, review loops and baseline edits; M3 adds limits, faults and terminal reports.

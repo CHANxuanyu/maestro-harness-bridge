@@ -326,9 +326,40 @@ export const REPORT_SCHEMAS: Record<TeamReport['type'], ReportSchema> = {
 const qaChallengeSchema = report('challenge', challengeProperties);
 
 /** Repair is transport, not a report type: callers must pass the original expected kind. */
-export function teamReportSchema(expected: TurnKind, seat?: SeatRole): ReportSchema | undefined {
-	if (expected === 'challenge' && seat === 'qa') return qaChallengeSchema;
-	return Object.prototype.hasOwnProperty.call(REPORT_SCHEMAS, expected)
-		? REPORT_SCHEMAS[expected as TeamReport['type']]
-		: undefined;
+export function teamReportSchema(
+	expected: TurnKind,
+	seat?: SeatRole,
+	includeAppFields = false
+): ReportSchema | undefined {
+	const schema =
+		expected === 'challenge' && seat === 'qa'
+			? qaChallengeSchema
+			: Object.prototype.hasOwnProperty.call(REPORT_SCHEMAS, expected)
+				? REPORT_SCHEMAS[expected as TeamReport['type']]
+				: undefined;
+	if (!schema || includeAppFields) return schema;
+	// Prompt schemas omit fields owned by another seat or by the application.
+	const project = (value: ReportSchema): ReportSchema => {
+		if ('anyOf' in value) return { anyOf: value.anyOf.map(project) };
+		if (value.type === 'array') return { ...value, items: project(value.items) };
+		if (value.type !== 'object') return value;
+		const properties = Object.fromEntries(
+			Object.entries(value.properties)
+				.filter(
+					([key]) =>
+						key !== 'decider' &&
+						(!seat || seat === 'dev' || !['extraTurns', 'preservesDeadline'].includes(key)) &&
+						(!seat || seat === 'pm' || key !== 'resolvedStandards')
+				)
+				.map(([key, child]) => [key, project(child)])
+		);
+		return {
+			...value,
+			properties,
+			required: value.required.filter((key) =>
+				Object.prototype.hasOwnProperty.call(properties, key)
+			),
+		};
+	};
+	return project(schema);
 }

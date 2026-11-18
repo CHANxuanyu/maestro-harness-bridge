@@ -6,7 +6,15 @@ import {
 	teamReplyMessage,
 } from '../../../shared/team/report';
 import { reduceLedger } from '../../../shared/team/ledger';
-import { REPORT_PERMISSIONS, type TeamReport } from '../../../shared/team/types';
+import {
+	REPORT_PERMISSIONS,
+	type TeamReport,
+	type SeatRole,
+	type TurnKind,
+} from '../../../shared/team/types';
+import normalizationFixtures from './real-normalization-fixtures.json';
+import { teamEvidence } from '../../../shared/team/policy';
+import { reportEvents } from '../../../main/team/report-events';
 import { baseline, goodReports, issue, ledger, proven } from './fixtures';
 
 const state = reduceLedger(ledger(...proven));
@@ -248,7 +256,6 @@ describe('validateTeamReport', () => {
 		'src/test.ts',
 		'../qa/test.ts',
 		'qa/../src/test.ts',
-		'qa/./test.ts',
 		'/qa/test.ts',
 		'qa\\test.ts',
 		'qa/',
@@ -256,6 +263,236 @@ describe('validateTeamReport', () => {
 		expect(validateTeamReport({ ...goodReports.qa_prep, tests: [path] }, 'qa_prep', 'qa').ok).toBe(
 			false
 		);
+	});
+	it.each(normalizationFixtures)(
+		'normalizes the real $seat $turn report without changing its factual claims',
+		(fixture) => {
+			const context = reduceLedger(
+				ledger(...baseline, {
+					kind: 'discussion_opened',
+					discussionId: 'location-discussion',
+					topic: 'C3 location correction',
+					owner: 'pm',
+					participants: ['pm', 'dev', 'qa'],
+					trigger: 'standard-change',
+					layer: 'commitment',
+				})
+			);
+			if (fixture.turn === 'proposal')
+				context.discussions[0].positions = (['pm', 'dev', 'qa'] as const).map((seat, index) => ({
+					kind: 'position',
+					actor: seat,
+					seat,
+					id: `position-${index}`,
+					seq: 10 + index,
+					at: 1,
+					discussionId: 'location-discussion',
+					claim: 'Keep the proof',
+					basis: 'Recorded results',
+					wouldChangeMind: 'Changed proof',
+				}));
+			const before = JSON.stringify(fixture.report);
+			const result = validateTeamReport(
+				fixture.report,
+				fixture.turn as TurnKind,
+				fixture.seat as SeatRole,
+				context,
+				new Map([['clamp.boundary.test.cjs', 'qa/clamp.boundary.test.cjs']])
+			);
+			expect(result.ok).toBe(true);
+			if (!result.ok) throw new Error(result.reason);
+			expect(result.normalizations?.length).toBeGreaterThan(0);
+			if (result.report.type === 'qa_prep') {
+				expect(result.report.tests).toEqual(['qa/clamp.boundary.test.cjs']);
+				expect(result.normalizations).toContainEqual(
+					expect.objectContaining({
+						field: 'tests[0]',
+						before: 'clamp.boundary.test.cjs',
+						after: 'qa/clamp.boundary.test.cjs',
+					})
+				);
+			}
+			if (result.report.type === 'position') {
+				expect(result.report).not.toHaveProperty('extraTurns');
+				expect(result.report).not.toHaveProperty('preservesDeadline');
+				expect(result.normalizations?.map((n) => n.field)).toEqual([
+					'extraTurns',
+					'preservesDeadline',
+				]);
+				expect(result.report.basis).toBe(fixture.report.basis);
+				const projected = reportEvents(
+					{
+						kind: 'turn_dispatched',
+						actor: 'app',
+						id: 'd',
+						seq: 20,
+						at: 1,
+						dispatchId: 'd',
+						seat: fixture.seat as SeatRole,
+						turn: 'position',
+						promptDigest: '',
+					},
+					result.report,
+					context
+				);
+				expect(projected.find((e) => e.kind === 'position')?.evidence ?? []).toEqual([]);
+				expect(teamEvidence(context)).toEqual([]);
+			}
+			if (result.report.type === 'proposal') {
+				expect(result.report.decider).toBe('owner');
+				expect(result.normalizations).toEqual([
+					{ field: 'decider', before: 'pm', after: 'owner', reason: expect.any(String) },
+				]);
+				const withoutHint = { ...fixture.report } as Record<string, unknown>;
+				delete withoutHint.decider;
+				expect(validateTeamReport(withoutHint, 'proposal', 'pm', context)).toMatchObject({
+					ok: true,
+					report: { decider: 'owner' },
+					normalizations: [{ field: 'decider', after: 'owner' }],
+				});
+			}
+			expect(JSON.stringify(fixture.report)).toBe(before);
+		}
+	);
+	it.each(['./qa/test.ts', 'qa/./test.ts', '/workspace/qa/qa/test.ts'])(
+		'normalizes safe QA path %s',
+		(value) => {
+			const context = reduceLedger(
+				ledger(...baseline, {
+					kind: 'seat_bound',
+					seat: 'qa',
+					workspace: '/workspace/qa',
+					model: { tool: 'claude-code' },
+				})
+			);
+			expect(
+				validateTeamReport({ ...goodReports.qa_prep, tests: [value] }, 'qa_prep', 'qa', context)
+			).toMatchObject({
+				ok: true,
+				report: { tests: ['qa/test.ts'] },
+				normalizations: [{ field: 'tests[0]', before: value, after: 'qa/test.ts' }],
+			});
+		}
+	);
+	it('normalizes native Windows paths with the same qa boundary', () => {
+		const context = reduceLedger(
+			ledger(...baseline, {
+				kind: 'seat_bound',
+				seat: 'qa',
+				workspace: 'C:\\Team\\qa',
+				model: { tool: 'claude-code' },
+			})
+		);
+		expect(
+			validateTeamReport(
+				{ ...goodReports.qa_prep, tests: ['C:\\Team\\qa\\qa\\test.ts', '.\\qa\\test.ts'] },
+				'qa_prep',
+				'qa',
+				context
+			)
+		).toMatchObject({ ok: true, report: { tests: ['qa/test.ts', 'qa/test.ts'] } });
+		expect(
+			validateTeamReport(
+				{ ...goodReports.qa_prep, tests: ['C:\\Team\\qa-other\\qa\\test.ts'] },
+				'qa_prep',
+				'qa',
+				context
+			).ok
+		).toBe(false);
+	});
+	it('ignores another seat standard-resolution field without closing an issue', () => {
+		const context = reduceLedger(ledger(...baseline, { ...issue, issueKind: 'standard' }));
+		const result = validateTeamReport(
+			{
+				type: 'message',
+				summary: 'No messages',
+				messages: [],
+				resolvedStandards: [{ issueId: 'i1', reason: 'I consider this fixed' }],
+			},
+			'message',
+			'qa',
+			context
+		);
+		expect(result).toMatchObject({
+			ok: true,
+			report: { messages: [] },
+			normalizations: [{ field: 'resolvedStandards' }],
+		});
+		if (result.ok) expect(result.report).not.toHaveProperty('resolvedStandards');
+		expect(context.issues[0].state).toBe('opened');
+	});
+	it('normalizes other workspace path fields without relocating external references', () => {
+		const context = reduceLedger(
+			ledger(...baseline, {
+				kind: 'seat_bound',
+				seat: 'dev',
+				workspace: '/workspace/dev',
+				model: { tool: 'codex' },
+			})
+		);
+		const targets = [
+			'./result.html',
+			'/workspace/dev/result.html',
+			'/workspace/qa/qa/test.ts',
+			'https://example.test/result',
+		];
+		const brief = {
+			...goodReports.brief,
+			criteria: goodReports.brief.criteria.map((criterion) => ({
+				...criterion,
+				locations: targets.map((target) => ({ target, label: 'Result', kind: 'file' })),
+			})),
+		};
+		const result = validateTeamReport(brief, 'brief', 'pm', context);
+		expect(result.ok).toBe(true);
+		if (!result.ok || result.report.type !== 'brief') throw new Error('Expected normalized brief');
+		expect(result.report.criteria[0].locations?.map((l) => l.target)).toEqual([
+			'result.html',
+			'result.html',
+			...targets.slice(2),
+		]);
+		expect(result.normalizations).toHaveLength(2 * brief.criteria.length);
+		expect(brief.criteria[0].locations.map((l) => l.target)).toEqual(targets);
+		expect(
+			validateTeamReport(
+				{
+					...goodReports.work,
+					waiting: {
+						reason: 'CI is running',
+						waitFor: 'CI completion',
+						condition: { kind: 'ci', runId: '123', cwd: './' },
+					},
+				},
+				'work',
+				'dev',
+				context
+			)
+		).toMatchObject({
+			ok: true,
+			report: { waiting: { condition: { cwd: '/workspace/dev' } } },
+			normalizations: [{ field: 'waiting.condition.cwd', before: './', after: '/workspace/dev' }],
+		});
+	});
+	it('fact guards still reject QA closure before a developer fix and dev self-verification', () => {
+		const context = reduceLedger(
+			ledger(
+				...baseline,
+				{ ...issue, actor: 'qa' },
+				{ kind: 'issue_fixed', actor: 'qa', issueId: 'i1' }
+			)
+		);
+		expect(validateTeamReport(goodReports.reverify, 'reverify', 'qa', context)).toMatchObject({
+			ok: false,
+			reason: expect.stringContaining('developer fix claim'),
+		});
+		expect(validateTeamReport(goodReports.reverify, 'reverify', 'dev', context)).toMatchObject({
+			ok: false,
+			reason: 'dev may not submit reverify.',
+		});
+		expect(validateTeamReport(goodReports.verify, 'verify', 'dev', context)).toMatchObject({
+			ok: false,
+			reason: 'dev may not submit verify.',
+		});
 	});
 	it('requires attempt rationale from the second fix and refuses premature QA closure', () => {
 		const opened = reduceLedger(ledger(...baseline, issue));

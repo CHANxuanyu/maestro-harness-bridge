@@ -86,15 +86,6 @@ stop team
 | `--team <id>` | Team id or unique prefix | -       |
 | `--json`      | Machine-readable result  | -       |
 
-## `maestro-cli team accept`
-
-accept team
-
-| Option        | Description              | Default |
-| ------------- | ------------------------ | ------- |
-| `--team <id>` | Team id or unique prefix | -       |
-| `--json`      | Machine-readable result  | -       |
-
 ## `maestro-cli team export`
 
 export team
@@ -103,6 +94,47 @@ export team
 | ------------- | ------------------------ | ------- |
 | `--team <id>` | Team id or unique prefix | -       |
 | `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team accept`
+
+Accept a demonstration or the listed leftovers
+
+| Option        | Description                                            | Default |
+| ------------- | ------------------------------------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix                               | -       |
+| `--json`      | Machine-readable result                                | -       |
+| `--with-gaps` | Accept unmet items from the incomplete progress report | -       |
+
+## `maestro-cli team extend`
+
+Add explicit time or turns to the overall budget
+
+| Option            | Description              | Default |
+| ----------------- | ------------------------ | ------- |
+| `--team <id>`     | Team id or unique prefix | -       |
+| `--json`          | Machine-readable result  | -       |
+| `--hours <hours>` | Additional hours         | -       |
+| `--turns <turns>` | Additional turns         | -       |
+
+## `maestro-cli team seat <action> <seat> [model]`
+
+Set a seat model or substitute, or wait for recovery
+
+| Option        | Description                                         | Default |
+| ------------- | --------------------------------------------------- | ------- |
+| `--team <id>` | Team id or unique prefix                            | -       |
+| `--json`      | Machine-readable result                             | -       |
+| `--wait`      | Suspend this seat until its original model recovers | -       |
+
+## `maestro-cli team action <action>`
+
+Request push, draftPr, or an owner-only external action
+
+| Option          | Description                          | Default |
+| --------------- | ------------------------------------ | ------- |
+| `--team <id>`   | Team id or unique prefix             | -       |
+| `--json`        | Machine-readable result              | -       |
+| `--note <text>` | Concrete action and publication body | -       |
 
 ## `maestro-cli team show <section>`
 
@@ -135,6 +167,16 @@ Confirm, edit, diff or return the baseline
 | `--note <text>`  | Reason for returning the baseline | -       |
 | `--proof <kind>` | Proof source: app, qa or pm       | -       |
 | `--how <text>`   | How the criterion will be proven  | -       |
+
+## `maestro-cli team residual <action> <item>`
+
+Assign the owner of an accepted residual item
+
+| Option           | Description                                  | Default |
+| ---------------- | -------------------------------------------- | ------- |
+| `--team <id>`    | Team id or unique prefix                     | -       |
+| `--json`         | Machine-readable result                      | -       |
+| `--owner <name>` | Follow-up owner; empty clears the assignment | -       |
 
 ## `maestro-cli team log`
 

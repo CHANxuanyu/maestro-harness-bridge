@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createTeamWorkspaces } from '../../../main/team/workspaces';
 import {
 	createTeamScheduler,
 	TEAM_FALLBACK_MS,
+	TEAM_FAILURE_COOLDOWN_MS,
 	type TeamSchedulerDependencies,
 } from '../../../main/team/scheduler';
 import type { SeatTurnRequest, SeatTurnResult } from '../../../main/team/turn-dispatcher';
@@ -40,7 +43,7 @@ describe('team scheduler', () => {
 	let hash: string;
 	let followListener: Parameters<TeamSchedulerDependencies['followUps']['onFire']>[0];
 	const drain = async () => {
-		for (let index = 0; index < 400; index++) await Promise.resolve();
+		for (let index = 0; index < 2000; index++) await Promise.resolve();
 	};
 	const state = () => reduceLedger(events);
 	const latest = (seat: string, kind: string) =>
@@ -94,6 +97,7 @@ describe('team scheduler', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 		vi.setSystemTime(10_000);
+		config.turnBudget = 200;
 		events = [];
 		teamConfig = structuredClone(config);
 		requests = [];
@@ -107,9 +111,13 @@ describe('team scheduler', () => {
 				return value;
 			}),
 			listTeams: vi.fn(async () => (events.length ? [teamConfig] : [])),
-			loadTeam: vi.fn(async () => ({ config: teamConfig, events: structuredClone(events) })),
+			loadTeam: async () => ({ config: teamConfig, events: structuredClone(events) }),
 			append: vi.fn(async (id, input) => {
 				const event = { ...structuredClone(input), seq: events.length + 1 } as LedgerEvent;
+				if (events.length > 2000)
+					throw new Error(
+						`Unbounded test ledger: ${JSON.stringify(events.slice(-12).map((e) => [e.kind, e.id]))}`
+					);
 				events.push(event);
 				if (notify) for (const listener of listeners) listener(id, event);
 				return event;
@@ -135,6 +143,12 @@ describe('team scheduler', () => {
 			enforceQaBoundary: vi.fn(async (): Promise<string[]> => []),
 			commitDevWork: vi.fn(async () => 'b'.repeat(40)),
 			pushDevWork: vi.fn(async () => true),
+			createDraftPr: vi.fn(async () => 'https://github.example/test/pull/1'),
+			inspect: vi.fn(async () => ({
+				revision: 'a'.repeat(40),
+				status: '',
+				recentCommits: 'fixture commit',
+			})),
 			diffHash: vi.fn(async () => hash),
 		};
 		deps = {
@@ -200,7 +214,32 @@ describe('team scheduler', () => {
 		await begin();
 		const locator = await scheduler.seatTranscript(teamConfig.id, 'pm');
 		expect(locator).toMatchObject({ provider: 'claude-code', configDir: '/synthetic/account' });
-		expect(deps.seatAccountDir).toHaveBeenCalledWith(teamConfig, 'pm');
+		expect(deps.seatAccountDir).toHaveBeenCalledWith(
+			teamConfig,
+			'pm',
+			state().seats.pm.binding?.model
+		);
+	});
+	it('reads a takeover transcript from the launch source account and effective model', async () => {
+		deps.seatAccountDir = vi.fn(() => '/synthetic/substitute-account');
+		await begin();
+		await scheduler.pause(teamConfig.id);
+		await emit({
+			kind: 'seat_bound',
+			seat: 'pm',
+			workspace: '/project/dev',
+			model: { tool: 'codex', model: 'substitute' },
+			configSource: 'dev',
+			reason: 'temporary',
+		});
+		expect(await scheduler.seatTranscript(teamConfig.id, 'pm')).toMatchObject({
+			provider: 'codex',
+			configDir: '/synthetic/substitute-account',
+		});
+		expect(deps.seatAccountDir).toHaveBeenLastCalledWith(teamConfig, 'dev', {
+			tool: 'codex',
+			model: 'substitute',
+		});
 	});
 	const toBaseline = async () => {
 		await begin();
@@ -425,6 +464,10 @@ describe('team scheduler', () => {
 								.turns.slice(-3)
 								.map((t) => ({ seat: t.seat, turn: t.dispatched?.turn, error: t.reportError })),
 							cards: state().openCards.map((c) => c.id),
+							errors: vi
+								.mocked(deps.onError)
+								.mock.calls.slice(-2)
+								.map((e) => String(e[0])),
 						})
 					).toBeDefined();
 					if (!request) break;
@@ -553,11 +596,12 @@ describe('team scheduler', () => {
 			events.filter((event) => event.kind === 'turn_dispatched' && event.repairOf)
 		).toHaveLength(1);
 		expect(requests.at(-1)!.seat).toBe('pm');
-		expect(requests).toHaveLength(2);
-		expect(teamStatus(state(), Date.now()).seats[0].status).toBe('fault');
+		expect(requests).toHaveLength(3);
+		expect(requests[2].turn).toBe('recovery');
+		expect(requests[2].permissionMode).toBe('readonly');
 	});
 
-	it.each(['turn-failed', 'model-unavailable'] as const)(
+	it.each(['turn-failed'] as const)(
 		'latches immediate %s discussion failures after one retry across fallback wakes and restart',
 		async (kind) => {
 			await toBaseline();
@@ -639,6 +683,8 @@ describe('team scheduler', () => {
 					durationMs: 0,
 				});
 				await drain();
+				await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS);
+				await drain();
 			}
 			expect(requests).toHaveLength(2);
 			expect(state().seats.pm.lastFault?.fault).toBe('turn-failed');
@@ -705,6 +751,12 @@ describe('team scheduler', () => {
 					{ kind: 'member_fault', seat: 'dev', fault: kind },
 				])
 			);
+			for (const event of events)
+				if (event.kind === 'team_created')
+					event.config = {
+						...event.config,
+						authorizations: { ...event.config.authorizations, temporaryTakeover: false },
+					};
 			await scheduler.start();
 			await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS * 10);
 			await drain();
@@ -902,7 +954,82 @@ describe('team scheduler', () => {
 				events.filter((e) => e.kind === 'turn_dispatched' && e.turn === 'report_repair')
 			).toHaveLength(1);
 			expect(state().briefs).toHaveLength(1);
+			expect(requests.filter((r) => r.turn === 'recovery')).toEqual([]);
 			expect(deps.onError).not.toHaveBeenCalled();
+		}
+	);
+
+	it('M1 repaired reports and a baseline note do not delay the subsequent issue fix chain', async () => {
+		await begin();
+		await finish(latest('pm', 'brief'), 'The brief was written without its report block');
+		await finish(requests.at(-1)!, goodReports.brief);
+		expect(requests.filter((r) => r.turn === 'recovery')).toEqual([]);
+		await finish(latest('qa', 'challenge'), goodReports.challenge);
+		await finish(latest('dev', 'challenge'), '```team-report\n{broken}\n```');
+		await finish(requests.at(-1)!, { type: 'challenge', objections: [] });
+		await finish(latest('pm', 'respond'), goodReports.respond);
+		expect(state().openCards.map((c) => c.boundary)).toEqual(['baseline']);
+		expect(requests.filter((r) => r.turn === 'recovery')).toEqual([]);
+		const startedAt = Date.now();
+		await scheduler.say(teamConfig.id, 'Please preserve the independent bad-input check.', 'pm');
+		await drain();
+		await confirm();
+		await finish(latest('pm', 'message'), {
+			type: 'message',
+			summary: 'Keep the independent check',
+			messages: state().pendingMessages.map((message) => ({
+				messageId: message.messageId,
+				scope: false,
+			})),
+		});
+		await finish(latest('dev', 'work'), goodReports.work);
+		await finish(latest('qa', 'qa_prep'), goodReports.qa_prep);
+		await finish(latest('qa', 'verify'), {
+			...goodReports.verify,
+			issues: [
+				{
+					title: 'Bad-input sample fails',
+					criterion: 'A2',
+					kind: 'defect',
+					steps: ['Inspect the bad-input sample'],
+				},
+			],
+		} as TeamReport);
+		expect(state().issues[0].state).toBe('opened');
+		const fix = latest('dev', 'fix');
+		expect(fix).toBeDefined();
+		expect(Date.now() - startedAt).toBeLessThan(TEAM_FAILURE_COOLDOWN_MS);
+		await finish(fix, { ...goodReports.fix, fixed: [state().issues[0].id] } as TeamReport);
+		expect(state().issues[0].state).toBe('fixed-claimed');
+		await finish(latest('qa', 'reverify'), {
+			type: 'reverify',
+			results: [{ issue: state().issues[0].id, pass: true, evidence: 'qa/retest.txt' }],
+			newIssues: [],
+		});
+		expect(state().issues[0].state).toBe('verified-pass');
+		expect(
+			events
+				.filter((event) => event.kind === 'issue_fixed' || event.kind === 'issue_verified')
+				.map((event) => event.actor)
+		).toEqual(['dev', 'qa']);
+		expect(deps.onError).not.toHaveBeenCalled();
+	});
+
+	it.each(['Missing report text', '```team-report\n{broken}\n```'])(
+		'M3 successful review repair resumes demo after %s',
+		async (bad) => {
+			await toReview();
+			const original = latest('pm', 'review');
+			await finish(original, bad);
+			const repair = requests.at(-1)!;
+			const rejected = state().turns.find((t) => t.dispatchId === original.dispatchId)!;
+			expect(repair.prompt).toContain(rejected.finished!.reportError);
+			expect(repair.prompt).toContain('Do not redo work');
+			await finish(repair, goodReports.review);
+			expect(requests.filter((r) => r.turn === 'recovery')).toEqual([]);
+			expect(latest('pm', 'demo')).toBeDefined();
+			await finish(latest('pm', 'demo'), goodReports.demo);
+			expect(state().openCards.map((c) => c.boundary)).toEqual(['acceptance']);
 		}
 	);
 
@@ -983,6 +1110,105 @@ describe('team scheduler', () => {
 		}
 	);
 
+	it.each([true, false])(
+		'M3 restart inspects the real interrupted workspace before reconciliation (native result: %s)',
+		async (present) => {
+			scheduler.dispose();
+			vi.useRealTimers();
+			const root = createNativeTempDir('team-restart-workspace-');
+			const project = path.join(root, 'project');
+			fs.mkdirSync(project);
+			try {
+				for (const args of [
+					['init'],
+					['config', 'user.name', 'Team fixture'],
+					['config', 'user.email', 'fixture@example.invalid'],
+					['config', 'commit.gpgsign', 'false'],
+					['config', 'core.hooksPath', path.join(root, 'no-hooks')],
+				])
+					execFileSync('git', args, { cwd: project, stdio: 'pipe' });
+				fs.writeFileSync(path.join(project, 'result.txt'), 'initial');
+				execFileSync('git', ['add', '.'], { cwd: project });
+				execFileSync('git', ['commit', '-m', 'Initial'], { cwd: project });
+				const options = {
+					root: path.join(root, 'owned'),
+					projectRoot: project,
+					slug: config.id,
+					pushAuthorized: true,
+				};
+				const original = await createTeamWorkspaces(options).initialize();
+				fs.writeFileSync(path.join(original.dev, 'result.txt'), 'Completed external effect');
+				teamConfig = { ...teamConfig, projectRoot: project, turnBudget: 1 };
+				events = ledger(
+					{ kind: 'team_created', config: teamConfig },
+					...(['pm', 'dev', 'qa'] as const).map((seat) => ({
+						kind: 'seat_bound' as const,
+						seat,
+						workspace: original[seat],
+						model: config.seats[seat],
+					})),
+					{
+						kind: 'turn_dispatched',
+						seat: 'dev',
+						dispatchId: 'interrupted',
+						turn: 'work',
+						promptDigest: '',
+					}
+				);
+				events.push({
+					id: 'interrupted:inspection',
+					seq: events.length + 1,
+					at: Date.now() - 1,
+					actor: 'app',
+					kind: 'workspace_inspected',
+					dispatchId: 'interrupted',
+					reason: 'recovery',
+					revision: 'prior-retry',
+					status: '',
+					recentCommits: '',
+				});
+				deps.workspaces = () => createTeamWorkspaces(options);
+				const text = `\`\`\`team-report\n${JSON.stringify(goodReports.work)}\n\`\`\``;
+				vi.mocked(deps.reconcile).mockImplementation(async (request) => {
+					expect(events).toEqual(
+						expect.arrayContaining([
+							expect.objectContaining({
+								kind: 'workspace_inspected',
+								dispatchId: 'interrupted',
+								reason: 'restart',
+								status: expect.stringContaining('result.txt'),
+							}),
+						])
+					);
+					expect(fs.readFileSync(path.join(request.cwd, 'result.txt'), 'utf8')).toBe(
+						'Completed external effect'
+					);
+					return present ? result(request, text) : null;
+				});
+				vi.mocked(deps.dispatcher.dispatch).mockImplementation(async (request) => {
+					expect(request.dispatchId).toBe('interrupted');
+					expect(request.prompt).toContain('Workspace inspection');
+					return result(request, text);
+				});
+				scheduler = createTeamScheduler(deps);
+				await scheduler.start();
+				await vi.waitFor(() => expect(state().turns[0].report?.type).toBe('work'));
+				expect(deps.dispatcher.dispatch).toHaveBeenCalledTimes(present ? 0 : 1);
+				expect(events.filter((e) => e.kind === 'turn_dispatched')).toHaveLength(1);
+				expect(
+					events.filter((e) => e.kind === 'workspace_inspected' && e.reason === 'restart')
+				).toHaveLength(1);
+				expect(fs.readFileSync(path.join(original.dev, 'result.txt'), 'utf8')).toBe(
+					'Completed external effect'
+				);
+				expect(deps.onError).not.toHaveBeenCalled();
+			} finally {
+				scheduler.dispose();
+				fs.rmSync(root, { recursive: true, force: true });
+			}
+		}
+	);
+
 	it('replays a finished receipt after a crash during domain ingestion without a duplicate brief', async () => {
 		await begin();
 		await finish(latest('pm', 'brief'), goodReports.brief);
@@ -996,7 +1222,7 @@ describe('team scheduler', () => {
 		expect(state().turns[0].report?.type).toBe('brief');
 	});
 
-	it.each(['continue', 'diagnose', 'gather'] as const)(
+	it.each(['continue', 'diagnose', 'gather', 'escalate'] as const)(
 		'uses progressRules to %s, using diff and failure identity',
 		async (expected) => {
 			const failed = 'issue:i1:Accepted';
@@ -1023,6 +1249,18 @@ describe('team scheduler', () => {
 				inputs.push({
 					kind: 'attempt',
 					problemId: 'i1',
+					...(expected === 'escalate'
+						? {
+								candidates: [
+									{
+										plan: 'Change the promised output',
+										boundary: 'commitment' as const,
+										cost: 'A smaller deliverable',
+										recommended: true,
+									},
+								],
+							}
+						: {}),
 					initialFailures: expected === 'continue' ? [failed, 'old'] : [failed],
 					attempt: {
 						id: `attempt-${i}`,
@@ -1041,7 +1279,22 @@ describe('team scheduler', () => {
 				expect(state().discussions[0].opened?.trigger).toBe('no-progress');
 				expect(dispatched.turn).toBe('position');
 			}
-			expect(state().openCards).toEqual([]);
+			if (expected === 'escalate') {
+				expect(requests).toEqual([]);
+				expect(state().openCards).toHaveLength(1);
+				expect(state().openCards[0]).toMatchObject({
+					boundary: 'commitment',
+					boundaries: ['commitment'],
+				});
+				expect(state().openCards[0].budgetNote).toContain('/');
+				expect(state().openCards[0].options).toHaveLength(2);
+				expect(state().openCards[0].payload).toMatchObject({
+					type: 'escalation',
+					cause: 'problem',
+					paths: expect.arrayContaining([expect.objectContaining({ id: 'attempt-0' })]),
+				});
+				expect(state().openCards[0].body).not.toMatch(/^\s*[\[{]/);
+			} else expect(state().openCards).toEqual([]);
 			expect(deps.onError).not.toHaveBeenCalled();
 		}
 	);
@@ -1738,5 +1991,590 @@ describe('team scheduler', () => {
 		} finally {
 			config.turnBudget = 40;
 		}
+	});
+	it.each(['wait', 'substitute', 'temporary', 'deadline'] as const)(
+		'M3 priority 0: review -> resets 11:10pm -> %s, never a topic retry loop',
+		async (mode) => {
+			await toReview();
+			const original = latest('pm', 'review');
+			const created = events.find((e) => e.kind === 'team_created')!;
+			if (created.kind !== 'team_created') throw new Error('fixture');
+			created.config.authorizations.temporaryTakeover = mode === 'temporary';
+			if (mode === 'substitute') created.config.seats.pm.substitute = { tool: 'codex' };
+			if (mode === 'deadline') created.config.deadline = Date.now() + 60_000;
+			const reset = Date.now() + 2 * 60 * 60_000;
+			const used = state().usage.budgetTurns;
+			completions.get(original.dispatchId!)!({
+				...result(original, ''),
+				exitCode: 1,
+				durationMs: 20,
+				failure: {
+					kind: 'model-unavailable',
+					detail: "You've hit your 5-hour limit; resets 11:10pm",
+					resetsAt: reset,
+				},
+			});
+			await drain();
+			for (let i = 0; i < 10; i++) {
+				await scheduler.wake(teamConfig.id);
+				await drain();
+			}
+			expect(
+				requests.filter(
+					(r) =>
+						r.seat === 'pm' &&
+						r.tool === 'claude-code' &&
+						r.turn !== 'brief' &&
+						r.turn !== 'respond'
+				)
+			).toHaveLength(1);
+			expect(requests.some((r) => r.turn === 'topic')).toBe(false);
+			expect(state().problems).toEqual({});
+			expect(state().unavailable[0]).toMatchObject({
+				resetsAt: reset,
+				detail: expect.stringContaining('resets 11:10pm'),
+			});
+			expect(state().openCards.some((c) => c.id === 'budget')).toBe(false);
+			if (mode === 'wait' || mode === 'deadline') {
+				expect(state().usage.budgetTurns).toBe(used - 1);
+				expect(state().followUps.some((f) => f.unavailabilityId)).toBe(true);
+				if (mode === 'deadline')
+					expect(state().openCards[0]).toMatchObject({
+						boundaries: ['permission', 'budget'],
+						options: expect.arrayContaining([
+							expect.objectContaining({ id: 'takeover' }),
+							expect.objectContaining({ id: 'extend' }),
+						]),
+					});
+				else {
+					expect(state().openCards).toEqual([]);
+					const receipt = await scheduler.say(teamConfig.id, 'Keep this queued for PM');
+					expect(receipt).toMatchObject({
+						status: 'queued',
+						to: 'pm',
+						messageId: expect.any(String),
+					});
+					await drain();
+					expect(state().pendingMessages).toHaveLength(1);
+					await scheduler.pause(teamConfig.id);
+					scheduler.dispose();
+					scheduler = createTeamScheduler(deps);
+					await scheduler.start();
+					await drain();
+					expect(state().pendingMessages).toHaveLength(1);
+					vi.setSystemTime(reset);
+					await scheduler.resume(teamConfig.id);
+					await scheduler.wake(teamConfig.id);
+					await drain();
+					expect(requests.filter((r) => r.seat === 'pm' && r.turn === 'review')).toHaveLength(2);
+				}
+			} else {
+				const takeover = requests.at(-1)!;
+				expect(takeover).toMatchObject({
+					seat: 'pm',
+					tool: 'codex',
+					turn: 'review',
+					nativeSessionId: undefined,
+				});
+				expect(takeover.prompt).toContain('Workspace inspection');
+				expect(takeover.prompt).toContain(config.idea);
+				expect(takeover.prompt).toContain('decisions');
+				expect(state().openCards).toEqual([]);
+				expect(state().usage.budgetTurns).toBe(used);
+			}
+			if (mode !== 'deadline') {
+				if (mode !== 'wait') await scheduler.say(teamConfig.id, 'Queued question for PM');
+				for (
+					let step = 0;
+					step < 6 && !state().openCards.some((c) => c.boundary === 'acceptance');
+					step++
+				) {
+					await drain();
+					const request = requests.find(
+						(r) =>
+							r.seat === 'pm' && !state().turns.find((t) => t.dispatchId === r.dispatchId)?.finished
+					)!;
+					expect(request).toBeDefined();
+					if (request.turn === 'message')
+						await finish(request, {
+							type: 'message',
+							summary: 'Handled queued question',
+							messages: state().pendingMessages.map((m) => ({
+								messageId: m.messageId,
+								scope: false,
+							})),
+						});
+					else if (request.turn === 'review') await finish(request, goodReports.review);
+					else if (request.turn === 'demo') await finish(request, goodReports.demo);
+					else throw new Error(`Unexpected recovery turn: ${request.turn}`);
+				}
+				expect(state().pendingMessages).toEqual([]);
+				expect(state().messages.every((m) => !!m.handled)).toBe(true);
+				expect(state().openCards.map((c) => c.boundary)).toEqual(['acceptance']);
+			}
+		}
+	);
+
+	it('M3 uses the final reserved turn once and reports a deadline even with an unfinished dispatch', async () => {
+		config.turnBudget = 1;
+		await begin();
+		expect(requests).toHaveLength(1);
+		expect(state().openCards).toEqual([]);
+		await finish(requests[0], goodReports.brief);
+		expect(requests).toHaveLength(1);
+		expect(state().openCards[0].boundary).toBe('budget');
+		await scheduler.extend(teamConfig.id, { turns: 1 });
+		await drain();
+		const created = events.find((e) => e.kind === 'team_created')!;
+		if (created.kind === 'team_created') created.config.deadline = Date.now();
+		// The effective extension carries the deadline as well.
+		const extended = events.find((e) => e.kind === 'budget_extended')!;
+		if (extended.kind === 'budget_extended') extended.deadline = Date.now();
+		await scheduler.resume(teamConfig.id);
+		await drain();
+		expect(state().openCards.some((c) => c.boundary === 'budget')).toBe(true);
+		expect(state().usage.budgetTurns).toBeLessThanOrEqual(2);
+	});
+
+	it('M3 failed report repair goes once to PM for organization, without repeating the original work', async () => {
+		await begin();
+		const original = requests[0];
+		await finish(original, 'The scope and criteria were observed but the block was omitted');
+		await finish(requests.at(-1)!, 'Still missing a report block');
+		await vi.advanceTimersByTimeAsync(TEAM_FAILURE_COOLDOWN_MS);
+		await drain();
+		const review = requests.at(-1)!;
+		expect(review.turn).toBe('recovery');
+		expect(review.nativeSessionId).toBeUndefined();
+		expect(review.permissionMode).toBe('readonly');
+		expect(review.prompt).toContain('Still missing a report');
+		await finish(review, {
+			type: 'recovery',
+			summary: 'Organized the reported facts',
+			recoveredJson: JSON.stringify(goodReports.brief),
+		});
+		expect(state().brief).toBeDefined();
+		expect(state().turns.find((t) => t.dispatchId === original.dispatchId)?.report?.type).toBe(
+			'brief'
+		);
+		expect(requests.filter((r) => r.turn === 'brief')).toHaveLength(1);
+	});
+
+	it('M3 samples quota before dispatch and keeps non-PM work runnable with a queued PM message', async () => {
+		await toBaseline();
+		await confirm();
+		await finish(latest('dev', 'work'), {
+			...goodReports.work,
+			claimsComplete: false,
+			waiting: {
+				reason: 'CI running',
+				waitFor: 'CI run',
+				condition: { kind: 'ci', runId: '123', cwd: '/project/dev' },
+			},
+		} as TeamReport);
+		await finish(latest('qa', 'qa_prep'), goodReports.qa_prep);
+		const created = events.find((e) => e.kind === 'team_created')!;
+		if (created.kind === 'team_created') created.config.authorizations.temporaryTakeover = false;
+		deps.quota = (_config, source) =>
+			source === 'pm'
+				? { sampledAt: Date.now(), exhausted: true, resetsAt: Date.now() + 60_000 }
+				: undefined;
+		await scheduler.say(teamConfig.id, 'Queue this for PM');
+		await drain();
+		expect(requests.some((r) => r.seat === 'pm' && r.turn === 'message')).toBe(false);
+		expect(state().pendingMessages).toHaveLength(1);
+		expect(state().unavailable).toHaveLength(1);
+		expect(state().followUps.some((f) => f.seat === 'dev')).toBe(true);
+		expect(state().openCards).toEqual([]);
+	});
+
+	it('M3 immediate failure waits N seconds, inspects results, retries once, then holds across restart', async () => {
+		await begin();
+		const original = requests[0];
+		completions.get(original.dispatchId!)!({ ...result(original, ''), exitCode: 1, durationMs: 0 });
+		await drain();
+		for (let i = 0; i < 5; i++) {
+			await scheduler.wake(teamConfig.id);
+			await drain();
+		}
+		expect(requests).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS);
+		await drain();
+		expect(requests).toHaveLength(2);
+		expect(requests[1].prompt).toContain('may have done part');
+		expect(requests[1].prompt).toContain('Workspace inspection');
+		completions.get(requests[1].dispatchId!)!({
+			...result(requests[1], ''),
+			exitCode: 1,
+			durationMs: 0,
+		});
+		await drain();
+		scheduler.dispose();
+		scheduler = createTeamScheduler(deps);
+		await scheduler.start();
+		await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS * 5);
+		await drain();
+		expect(requests).toHaveLength(2);
+		for (let poll = 0; poll < 2; poll++) {
+			const wait = state().followUps.find((f) => f.faultId)!;
+			expect(wait).toBeDefined();
+			vi.setSystemTime(wait.untilMs!);
+			followListener({
+				kind: 'wait-timeout',
+				at: Date.now(),
+				late: false,
+				externalStatus: { state: 'waiting', observedAt: Date.now() },
+				followUp: {
+					id: wait.followUpId,
+					target: { kind: 'team', teamId: teamConfig.id, seat: 'pm' },
+				} as never,
+			});
+			await drain();
+			expect(requests).toHaveLength(2);
+			expect(state().usage.budgetTurns).toBe(2);
+			expect(state().followUps.some((f) => !!f.faultId)).toBe(true);
+		}
+	});
+
+	it('M3 session damage restores the same model in a fresh conversation', async () => {
+		await begin();
+		const original = requests[0];
+		completions.get(original.dispatchId!)!({
+			...result(original, ''),
+			exitCode: 1,
+			failure: { kind: 'session-broken', detail: 'Native session not found' },
+		});
+		await drain();
+		await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS);
+		await drain();
+		expect(requests[1]).toMatchObject({ tool: original.tool, nativeSessionId: undefined });
+		expect(deps.reconcile).toHaveBeenCalled();
+		expect(events.some((e) => e.kind === 'workspace_inspected')).toBe(true);
+	});
+
+	it('M3 still-working is not a fault, login identifies the account while authorized takeover works', async () => {
+		deps.seatAccountDir = vi.fn(() => '/synthetic/pm-account');
+		await begin();
+		const original = requests[0];
+		await emit({ kind: 'member_fault', seat: 'pm', fault: 'still-working' });
+		await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS * 3);
+		await drain();
+		expect(requests).toHaveLength(1);
+		expect(state().seats.pm.faultActive).toBe(false);
+		completions.get(original.dispatchId!)!({
+			...result(original, ''),
+			exitCode: 1,
+			failure: { kind: 'login-expired', detail: 'claude-code PM account login expired' },
+		});
+		await drain();
+		expect(state().openCards.find((c) => c.boundary === 'login')?.payload).toMatchObject({
+			type: 'escalation',
+			cause: 'login',
+			provider: 'claude-code',
+			accountSeat: 'pm',
+			accountDir: '/synthetic/pm-account',
+		});
+		expect(state().openCards.find((c) => c.boundary === 'login')?.body).toContain('Claude Code');
+		expect(state().openCards.find((c) => c.boundary === 'login')?.body).toContain(
+			'/synthetic/pm-account'
+		);
+		expect(requests.at(-1)).toMatchObject({ tool: 'codex', nativeSessionId: undefined });
+	});
+
+	it('M3 idle report gets one nudge, then a diagnosis without an owner card', async () => {
+		await toBaseline();
+		await confirm();
+		await finish(latest('qa', 'qa_prep'), goodReports.qa_prep);
+		await finish(latest('dev', 'work'), {
+			type: 'work',
+			done: [],
+			summary: 'Nothing changed',
+			claimsComplete: false,
+		});
+		const nudge = requests.at(-1)!;
+		expect(nudge).toMatchObject({ seat: 'dev', turn: 'message', permissionMode: 'readonly' });
+		expect(nudge.prompt).toContain('First idle turn');
+		await finish(nudge, { type: 'message', summary: 'Still nothing', messages: [] });
+		expect(state().discussions.some((d) => d.opened?.trigger === 'no-progress')).toBe(true);
+		expect(state().openCards).toEqual([]);
+	});
+
+	it('M3 wait timeout and three unchanged polls remain normal waits, rechecked every 10 minutes', async () => {
+		await toBaseline();
+		await confirm();
+		await finish(latest('dev', 'work'), {
+			type: 'work',
+			done: [],
+			summary: 'CI running',
+			claimsComplete: false,
+			waiting: {
+				reason: 'CI running',
+				waitFor: 'CI run',
+				condition: { kind: 'ci', runId: '123', cwd: '/project/dev' },
+			},
+		});
+		await finish(latest('qa', 'qa_prep'), goodReports.qa_prep);
+		expect(deps.followUps.register).toHaveBeenCalledWith(
+			expect.objectContaining({ condition: { kind: 'ci', runId: '123', cwd: '/project/dev' } })
+		);
+		for (let i = 0; i < 4; i++) {
+			const wait = state().followUps.find((f) => f.seat === 'dev')!;
+			expect(wait.untilMs! - Date.now()).toBe((i ? 10 : 20) * 60_000);
+			vi.setSystemTime(wait.untilMs!);
+			followListener({
+				kind: 'wait-timeout',
+				at: Date.now(),
+				late: false,
+				externalStatus: { state: 'running', observedAt: Date.now() },
+				followUp: {
+					id: wait.followUpId,
+					target: { kind: 'team', teamId: teamConfig.id, seat: 'dev' },
+				} as never,
+			});
+			await drain();
+			const wake = requests.at(-1)!;
+			expect(wake.turn).toBe('wait');
+			expect(wake.prompt).toContain('running');
+			await finish(wake, {
+				type: 'wait',
+				status: 'waiting',
+				summary: 'CI is still normally running',
+			});
+		}
+		expect(state().problems).toEqual({});
+		expect(state().openCards).toEqual([]);
+		expect(state().seats.dev.faultActive).toBe(false);
+	});
+
+	it('M3 wait receipts use one timestamp even when persistence advances the clock', async () => {
+		let clock = Date.now();
+		scheduler.dispose();
+		deps.now = () => clock++;
+		scheduler = createTeamScheduler(deps);
+		await toBaseline();
+		await confirm();
+		await finish(latest('qa', 'qa_prep'), goodReports.qa_prep);
+		await finish(latest('dev', 'work'), {
+			type: 'work',
+			done: [],
+			summary: 'CI running',
+			claimsComplete: false,
+			waiting: { reason: 'Normal wait', waitFor: 'CI' },
+		});
+		let wait = state().followUps.find((w) => w.seat === 'dev')!;
+		expect(wait.untilMs! - wait.at).toBe(20 * 60_000);
+		clock = wait.untilMs!;
+		followListener({
+			kind: 'wait-timeout',
+			at: clock,
+			late: false,
+			externalStatus: { state: 'running', observedAt: clock },
+			followUp: {
+				id: wait.followUpId,
+				target: { kind: 'team', teamId: teamConfig.id, seat: 'dev' },
+			} as never,
+		});
+		await drain();
+		await finish(requests.at(-1)!, {
+			type: 'wait',
+			status: 'waiting',
+			summary: 'Still normally running',
+		});
+		wait = state().followUps.find((w) => w.seat === 'dev')!;
+		expect(wait.untilMs! - wait.at).toBe(10 * 60_000);
+	});
+
+	it.each(['deadline', 'turns'] as const)(
+		'M3 %s budget produces a free unfinished report, extends and persists',
+		async (limit) => {
+			events = ledger(...baseline, ...bindings, { kind: 'paused' });
+			const created = events[0];
+			if (created.kind !== 'team_created') throw new Error('fixture');
+			created.config = {
+				...config,
+				deadline: limit === 'deadline' ? Date.now() : undefined,
+				turnBudget: limit === 'turns' ? 1 : 40,
+			};
+			if (limit === 'turns')
+				events = [
+					...events,
+					...ledger(
+						{
+							kind: 'turn_dispatched',
+							dispatchId: 'spent',
+							seat: 'pm',
+							turn: 'brief',
+							promptDigest: '',
+						},
+						{ kind: 'turn_finished', dispatchId: 'spent', seat: 'pm', exitCode: 0, durationMs: 1 }
+					).map((e, i) => ({ ...e, id: `spent-${i}`, seq: events.length + i + 1 })),
+				];
+			await scheduler.start();
+			await drain();
+			const target = state().openCards.find((c) => c.boundary === 'budget')!;
+			expect(target.body).toContain('not a completion demo');
+			expect(target.options.map((o) => o.id)).toEqual(['extend', 'gaps', 'stop']);
+			expect(requests).toEqual([]);
+			await scheduler.extend(config.id, { hours: 1, turns: 10 });
+			await drain();
+			expect(state().openCards).toEqual([]);
+			expect(state().config!.turnBudget).toBe(limit === 'turns' ? 11 : 50);
+			scheduler.dispose();
+			scheduler = createTeamScheduler(deps);
+			await scheduler.start();
+			await drain();
+			expect(state().openCards).toEqual([]);
+			expect(requests).toEqual([]);
+		}
+	);
+
+	it('assigns and clears residual owners durably without changing unmet evidence', async () => {
+		events = ledger(
+			...baseline,
+			{ kind: 'residual_item', itemId: 'gap', text: 'Missing proof', owner: null },
+			{ kind: 'accepted', actor: 'owner', withGaps: ['Missing proof'] }
+		);
+		await scheduler.assignResidual(config.id, 'gap', 'Alex');
+		expect(state().residualItems).toHaveLength(1);
+		expect(state().residualItems[0].owner).toBe('Alex');
+		expect(state().criteria.every((criterion) => criterion.status !== 'pass')).toBe(true);
+		await scheduler.assignResidual(config.id, 'gap', null);
+		expect(state().residualItems[0].owner).toBeNull();
+		await expect(scheduler.assignResidual(config.id, 'unknown', 'Alex')).rejects.toThrow(
+			'existing residual'
+		);
+	});
+
+	it('declines a publication class without running it or stopping independent work', async () => {
+		await begin();
+		const created = events.find((event) => event.kind === 'team_created')!;
+		if (created.kind !== 'team_created') throw new Error('fixture');
+		created.config.authorizations.push = false;
+		await scheduler.action(teamConfig.id, 'push', 'Push reviewed work');
+		await drain();
+		const permission = state().openCards.find((card) => card.id === 'permission:push')!;
+		expect(permission.payload).toMatchObject({
+			type: 'permission',
+			action: 'push',
+			touchesMain: false,
+		});
+		expect(permission.options.map((option) => option.id)).toEqual(['allow', 'decline']);
+		await scheduler.answer(teamConfig.id, permission.id, 'decline');
+		await drain();
+		expect(deps.workspaces(teamConfig, true).pushDevWork).not.toHaveBeenCalled();
+		expect(state().terminal).toBeNull();
+		expect(
+			events.some((event) => event.kind === 'action_receipt' && event.outcome === 'failed')
+		).toBe(true);
+	});
+
+	it('M3 budget boundary preserves a pending permission through extension and restart', async () => {
+		await begin();
+		const created = events.find((e) => e.kind === 'team_created')!;
+		if (created.kind !== 'team_created') throw new Error('fixture');
+		created.config.authorizations.push = false;
+		await scheduler.action(teamConfig.id, 'push', 'Push the task branch');
+		await drain();
+		expect(state().openCards.map((c) => c.id)).toContain('permission:push');
+		created.config.deadline = Date.now();
+		scheduler.dispose();
+		scheduler = createTeamScheduler(deps);
+		await scheduler.start();
+		await drain();
+		expect(state().openCards.map((c) => c.id)).toEqual(['budget']);
+		await scheduler.extend(teamConfig.id, { hours: 1 });
+		await drain();
+		expect(state().openCards.map((c) => c.id)).toContain('permission:push');
+		await scheduler.answer(teamConfig.id, 'permission:push', 'allow');
+		await drain();
+		expect(deps.workspaces(teamConfig, true).pushDevWork).toHaveBeenCalledOnce();
+		expect(
+			events.filter((e) => e.kind === 'decision_card' && e.card.id === 'permission:push')
+		).toHaveLength(1);
+	});
+
+	it.each(['gaps', 'stopped'] as const)(
+		'M3 %s preserves unmet criteria and actual statistics',
+		async (terminal) => {
+			events = ledger(...baseline, ...bindings);
+			const created = events[0];
+			if (created.kind === 'team_created') created.config = { ...config, deadline: Date.now() };
+			await scheduler.start();
+			await drain();
+			if (terminal === 'gaps') await scheduler.accept(config.id, true);
+			else await scheduler.stop(config.id);
+			await drain();
+			expect(state().terminal).toBe(terminal);
+			expect(state().criteria.some((c) => c.status !== 'pass')).toBe(true);
+			expect(state().statistics.ownerDecisions).toBe(2); // Baseline confirmation and terminal choice.
+			if (terminal === 'gaps') {
+				expect(state().residualItems).toHaveLength(3);
+				expect(state().residualItems.every((r) => r.owner === null)).toBe(true);
+			}
+		}
+	);
+
+	it('M3 80 percent requests one informational PM wrap-up plan', async () => {
+		await toReview();
+		const created = events.find((e) => e.kind === 'team_created')!;
+		if (created.kind === 'team_created') {
+			created.config.deadline = Date.now() + 100_000;
+			created.config.createdAt = Date.now() - 500_000;
+		}
+		await finish(latest('pm', 'review'), goodReports.review);
+		expect(requests.at(-1)?.turn).toBe('wrap_up');
+		await finish(requests.at(-1)!, {
+			type: 'wrap_up',
+			summary: 'Finish proof and prepare the result',
+			priorities: ['A1', 'A2', 'E1'],
+		});
+		expect(state().wrapUp?.generatedBy).toBe('pm');
+		expect(state().openCards.some((c) => c.boundary === 'budget')).toBe(false);
+	});
+
+	it('M3 push and draft PR execute once per request with remembered class grants; external actions always ask', async () => {
+		await begin();
+		const created = events.find((e) => e.kind === 'team_created')!;
+		if (created.kind === 'team_created')
+			created.config.authorizations = { ...config.authorizations, push: false, draftPr: false };
+		const workspace = deps.workspaces(teamConfig, true);
+		await scheduler.action(teamConfig.id, 'push', 'Push the task branch');
+		await drain();
+		expect(workspace.pushDevWork).not.toHaveBeenCalled();
+		await scheduler.answer(teamConfig.id, 'permission:push', 'allow');
+		await drain();
+		expect(workspace.pushDevWork).toHaveBeenCalledTimes(1);
+		await scheduler.action(teamConfig.id, 'push', 'Push the next revision');
+		await drain();
+		expect(workspace.pushDevWork).toHaveBeenCalledTimes(2);
+		await scheduler.action(teamConfig.id, 'draftPr', 'Review this concrete result');
+		await drain();
+		await scheduler.answer(teamConfig.id, 'permission:draftPr', 'allow');
+		await drain();
+		expect(workspace.createDraftPr).toHaveBeenCalledOnce();
+		expect(
+			events.filter((e) => e.kind === 'action_receipt' && e.outcome === 'succeeded')
+		).toHaveLength(3);
+		await scheduler.action(teamConfig.id, 'merge', 'Merge the task');
+		await drain();
+		expect(state().openCards[0].boundary).toBe('permission');
+		expect(workspace.pushDevWork).toHaveBeenCalledTimes(3);
+	});
+
+	it('M3 failed draft PR records a loud failure without retrying or silently succeeding', async () => {
+		await begin();
+		const workspace = deps.workspaces(teamConfig, true);
+		vi.mocked(workspace.createDraftPr).mockRejectedValue(
+			new Error('GitHub CLI missing: gh ENOENT')
+		);
+		await scheduler.action(teamConfig.id, 'draftPr', 'Review task');
+		await drain();
+		await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS * 3);
+		await drain();
+		expect(workspace.createDraftPr).toHaveBeenCalledOnce();
+		expect(events.find((e) => e.kind === 'action_receipt' && e.outcome === 'failed')).toMatchObject(
+			{ detail: expect.stringContaining('ENOENT') }
+		);
+		expect(deps.onError).toHaveBeenCalled();
 	});
 });

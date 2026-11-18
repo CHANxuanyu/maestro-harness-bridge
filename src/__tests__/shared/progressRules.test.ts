@@ -269,3 +269,20 @@ describe('decideNext', () => {
 		expect(src).not.toMatch(/\.category\b/);
 	});
 });
+
+describe('M3 boundary precedence', () => {
+	it('keeps a solved problem done when the budget is spent, and reports the budget otherwise', () => {
+		expect(decideNext(judgeAttempts([], []), { budget: { used: 4, total: 4 } }).kind).toBe('done');
+		expect(decideNext(judgeAttempts(['E'], []), { budget: { used: 4, total: 4 } })).toEqual({
+			kind: 'report',
+			boundaries: ['budget'],
+		});
+	});
+	it('never dispatches advice as an in-authority step, even with a basis', () => {
+		expect(
+			decideNext(judgeAttempts(['E'], []), {
+				candidates: [{ plan: 'A stronger model might help', basis: 'Opinion', advice: true }],
+			}).kind
+		).toBe('gather');
+	});
+});

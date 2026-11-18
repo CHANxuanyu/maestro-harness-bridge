@@ -24,7 +24,7 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 		waitingFor.push(`${message.to ?? 'pm'}: delivery of owner message ${message.messageId}`);
 	if (!state.terminal) {
 		if (state.paused) waitingFor.push('Owner to resume the team.');
-		else if (state.usage.turns >= turnsTotal || remainingMs === 0)
+		else if (state.usage.budgetTurns >= turnsTotal || remainingMs === 0)
 			waitingFor.push(
 				'Budget exhausted: owner decision on an incomplete progress report, not a completion demo.'
 			);
@@ -37,6 +37,7 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 	}
 	return {
 		generatedBy: 'app',
+		wrapUp: state.wrapUp,
 		title: state.config?.title ?? 'Team',
 		phase: state.phase,
 		paused: state.paused,
@@ -54,11 +55,11 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 		waitingFor,
 		openCards: [...state.openCards],
 		budget: {
-			turnsUsed: state.usage.turns,
+			turnsUsed: state.usage.budgetTurns,
 			turnsTotal,
 			deadline,
 			remainingMs,
-			exhausted: state.usage.turns >= turnsTotal || remainingMs === 0,
+			exhausted: state.usage.budgetTurns >= turnsTotal || remainingMs === 0,
 		},
 		seats: SEAT_ROLES.map((seat) => {
 			const health = state.seats[seat];
@@ -66,7 +67,9 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 				seat,
 				status:
 					health.faultActive && !health.takeover
-						? 'fault'
+						? health.lastFault?.fault === 'model-unavailable'
+							? 'waiting'
+							: 'fault'
 						: health.activeDispatchIds.length
 							? 'working'
 							: (health.quota && !health.takeover) || state.followUps.some((f) => f.seat === seat)
@@ -104,6 +107,12 @@ export function formatTeamStatus(view: TeamStatusView): string {
 		`Criteria with passing evidence: ${view.criteria.withEvidence}/${view.criteria.total}`,
 		...view.criteria.missing.map((c) => `  ${line(c.id)} [${c.status}]: ${line(c.reason)}`),
 		...(view.criteria.total === 0 ? ['  No confirmed baseline.'] : []),
+		...(view.wrapUp
+			? [
+					`Wrap-up plan (informational): ${line(view.wrapUp.summary)}`,
+					...view.wrapUp.priorities.map((p) => `  ${line(p)}`),
+				]
+			: []),
 		'Open work items:',
 		...(view.openWorkItems.length
 			? view.openWorkItems.map(

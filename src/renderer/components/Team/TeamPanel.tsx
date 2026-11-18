@@ -11,6 +11,8 @@ import { usePersistedPanelWidth } from '../../hooks/ui/usePersistedPanelWidth';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { ChangesPanel } from '../ChangesPanel';
 import { TeamOutput } from './TeamOutput';
+import { TeamSeatHealth, TeamSeatIdentity } from './TeamHealth';
+import { TeamAttempts, TeamCost, TeamWait, TeamResiduals } from './TeamProgress';
 import { Criteria, SeatTag, teamPathLabel } from './TeamPrimitives';
 
 export type TeamPanelTab = 'output' | 'progress' | 'decisions' | 'evidence' | 'members' | 'changes';
@@ -126,6 +128,7 @@ export function TeamPanel({
 								<SeatTag seat={item.owner} />
 							</div>
 						))}
+						<TeamAttempts state={state} />
 						<h3>{t('workflows.team.issues')}</h3>
 						{state.issues.map((issue) => (
 							<div className="team-item" key={issue.id}>
@@ -135,19 +138,9 @@ export function TeamPanel({
 						))}
 						<h3>{t('workflows.team.waitingFor')}</h3>
 						{state.followUps.map((wait) => (
-							<div key={wait.id} className="team-item">
-								{wait.waitFor}
-								<p className="team-dim">{wait.reason}</p>
-							</div>
+							<TeamWait key={wait.id} wait={wait} state={state} />
 						))}
-						{state.residual.length > 0 && (
-							<>
-								<h3>{t('workflows.team.residual')}</h3>
-								{state.residual.map((item) => (
-									<p key={item}>{item}</p>
-								))}
-							</>
-						)}
+						<TeamResiduals state={state} />
 						{state.reviews.some((r) => r.suggestions.length) && (
 							<>
 								<h3>{t('workflows.team.suggestions')}</h3>
@@ -172,7 +165,7 @@ export function TeamPanel({
 						{SEAT_ROLES.map((seat) => (
 							<div className="team-item space-y-2" key={seat}>
 								<div className="flex flex-wrap gap-2 justify-between">
-									<SeatTag seat={seat} model={state.seats[seat].model ?? config.seats[seat]} />
+									<TeamSeatIdentity state={state} seat={seat} />
 									<button
 										className="team-button"
 										onClick={() => useTeamStore.getState().selectTeam(config.id, seat)}
@@ -180,11 +173,17 @@ export function TeamPanel({
 										{t('workflows.team.openConversation')}
 									</button>
 								</div>
+								<TeamSeatHealth state={state} seat={seat} detail />
 								<p className="team-dim">{t(`workflows.team.${seat}Workspace`)}</p>
-								<p className="team-dim break-all">
-									{state.seats[seat].binding &&
-										teamPathLabel(state.seats[seat].binding!.workspace, state)}
-								</p>
+								{state.seats[seat].binding && (
+									<p
+										className="team-dim"
+										data-workspace={seat}
+										title={teamPathLabel(state.seats[seat].binding!.workspace, state)}
+									>
+										{t(seat === 'qa' ? 'workflows.team.qaWorktree' : 'workflows.team.devWorktree')}
+									</p>
+								)}
 								<p className="team-dim">
 									{t('workflows.team.substitute')}:{' '}
 									{config.seats[seat].substitute ? (
@@ -216,6 +215,22 @@ export function TeamPanel({
 									: 'workflows.team.differentVendors'
 							)}
 						</p>
+						<TeamCost state={state} />
+						<h3>{t('workflows.team.grants')}</h3>
+						{state.cardAnswers
+							.filter(
+								(answer) => answer.cardId.startsWith('permission:') && answer.optionId === 'allow'
+							)
+							.map((answer) => {
+								const action = answer.cardId.slice(
+									'permission:'.length
+								) as keyof typeof config.authorizations;
+								return action in config.authorizations ? (
+									<p data-grant={action} key={answer.id}>
+										{t(`workflows.team.auth.${action}`)}
+									</p>
+								) : null;
+							})}
 						<h3>{t('workflows.team.auth')}</h3>
 						{(Object.keys(config.authorizations) as Array<keyof typeof config.authorizations>).map(
 							(key) => (
@@ -230,7 +245,10 @@ export function TeamPanel({
 							)
 						)}
 						<p className="team-dim">
-							{t('workflows.team.turns', { used: state.usage.turns, total: config.turnBudget })}
+							{t('workflows.team.turns', {
+								used: state.usage.budgetTurns,
+								total: config.turnBudget,
+							})}
 						</p>
 						<p className="team-dim">{t('workflows.team.alwaysAsk')}</p>
 					</>

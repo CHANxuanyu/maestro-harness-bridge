@@ -5,7 +5,8 @@ import { useTeamState, useTeamStatus, useTeamStore } from '../../stores/teamStor
 import { useFocusAfterRender } from '../../hooks/utils/useFocusAfterRender';
 import { useT } from '../../i18n';
 import type { Theme } from '../../types';
-import { SeatTag, teamStyle } from './TeamPrimitives';
+import { TeamSeatHealth, TeamSeatIdentity } from './TeamHealth';
+import { teamStyle } from './TeamPrimitives';
 import { TeamModelCatalogProvider } from './TeamModelCatalogs';
 
 function SeatRow({ config, seat }: { config: TeamConfig; seat: SeatRole }) {
@@ -14,7 +15,7 @@ function SeatRow({ config, seat }: { config: TeamConfig; seat: SeatRole }) {
 	const active = useTeamStore((s) => s.activeTeamId === config.id && s.activeSeat === seat);
 	const returning = useTeamStore((s) => s.activeTeamId === config.id && s.returnSeat === seat);
 	const state = useTeamState(config.id)!;
-	const working = !state.terminal && state.seats[seat].activeDispatchIds.length > 0;
+
 	useFocusAfterRender(ref, returning);
 	useEffect(() => {
 		if (returning) useTeamStore.getState().clearReturnSeat();
@@ -31,11 +32,9 @@ function SeatRow({ config, seat }: { config: TeamConfig; seat: SeatRole }) {
 			onClick={() => useTeamStore.getState().selectTeam(config.id, seat)}
 		>
 			<span className="truncate flex-1">
-				<SeatTag seat={seat} model={state.seats[seat].model ?? config.seats[seat]} />
+				<TeamSeatIdentity state={state} seat={seat} compact />
 			</span>
-			{working && (
-				<Loader2 size={12} className="animate-spin" aria-label={t('workflows.team.working')} />
-			)}
+			<TeamSeatHealth state={state} seat={seat} />
 		</button>
 	);
 }

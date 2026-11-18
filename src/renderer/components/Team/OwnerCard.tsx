@@ -1,8 +1,10 @@
 import type { OwnerCard as OwnerCardData, TeamState } from '../../../shared/team/types';
-import { presentTeamOwnerCard } from '../../services/teamClient';
+import { presentTeamOwnerCard, presentTeamText } from '../../services/teamClient';
 import { useTeamStore } from '../../stores/teamStore';
 import { useT, useFormatList } from '../../i18n';
 import { SeatTag } from './TeamPrimitives';
+import type { Theme } from '../../types';
+import { TeamEscalation } from './TeamEscalation';
 import { TeamBaseline } from './TeamBaseline';
 
 export function OwnerCard({
@@ -11,12 +13,14 @@ export function OwnerCard({
 	state,
 	emphasis = true,
 	answered,
+	theme,
 }: {
 	card: OwnerCardData;
 	teamId: string;
 	state: TeamState;
 	emphasis?: boolean;
 	answered?: string;
+	theme?: Theme;
 }) {
 	const t = useT();
 	const formatList = useFormatList();
@@ -52,10 +56,15 @@ export function OwnerCard({
 			{!baseline && card.boundary !== 'acceptance' && (
 				<p className="team-dim text-xs">
 					{t('workflows.team.boundary', {
-						boundary: t(`workflows.team.boundary.${card.boundary}`),
+						boundary: formatList(
+							(card.boundaries ?? [card.boundary]).map((boundary) =>
+								t(`workflows.team.boundary.${boundary}`)
+							)
+						),
 					})}
 				</p>
 			)}
+			<TeamEscalation card={source} state={state} theme={theme} />
 			{card.budgetNote && <p className="team-dim">{card.budgetNote}</p>}
 			{baseline && (
 				<>
@@ -97,7 +106,8 @@ export function OwnerCard({
 								</div>
 							</div>
 							<p>
-								{t('workflows.team.standardReason')}: {source.standardChange.reason}
+								{t('workflows.team.standardReason')}:{' '}
+								{presentTeamText(source.standardChange.reason, state, t)}
 							</p>
 							{discussion.failingNow && (
 								<p data-failing-now>{t('workflows.team.failureUnchanged')}</p>

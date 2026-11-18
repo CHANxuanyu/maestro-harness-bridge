@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { PanelRight, Users } from 'lucide-react';
+import { formatDurationCompact } from '../../../shared/duration';
 import { TEAM_PHASES } from '../../../shared/team/types';
 import { useT, useAppLocale, useFormatList } from '../../i18n';
 import type { Theme } from '../../types';
@@ -13,7 +14,7 @@ import { TeamPanel, type TeamPanelTab } from './TeamPanel';
 import { TeamComposer } from './TeamComposer';
 import { TeamMemberView } from './TeamMemberView';
 import { CreateTeamModal } from './CreateTeamModal';
-import { presentTeamOwnerCard } from '../../services/teamClient';
+import { presentTeamOwnerCard, presentTeamText, presentTeamWait } from '../../services/teamClient';
 import { teamStyle } from './TeamPrimitives';
 import { TeamModelCatalogProvider } from './TeamModelCatalogs';
 
@@ -79,6 +80,7 @@ export function TeamView({ theme }: { theme: Theme }) {
 		setTab(value);
 		setPanel(true);
 	};
+	const budgetBlocked = !state.terminal && status.budget.exhausted;
 	const current = state.terminal
 		? t(
 				state.terminal === 'all'
@@ -88,18 +90,22 @@ export function TeamView({ theme }: { theme: Theme }) {
 						: 'workflows.team.stopped',
 				{ count: state.residual.length }
 			)
-		: state.paused
-			? t('workflows.team.paused')
-			: state.openCards.length
-				? t('workflows.team.waitingOwner')
-				: t(`workflows.team.phase.${state.phase}`);
+		: budgetBlocked
+			? t('workflows.team.budgetBlocked')
+			: state.paused
+				? t('workflows.team.paused')
+				: state.openCards.length
+					? t('workflows.team.waitingOwner')
+					: t(`workflows.team.phase.${state.phase}`);
 	const issues = state.issues.filter((issue) => issue.state !== 'verified-pass');
 	const solvingItems =
 		state.terminal === 'all'
 			? []
 			: state.residual.length
 				? state.residual.map(
-						(id) => state.criteria.find((criterion) => criterion.id === id)?.text ?? id
+						(id) =>
+							state.criteria.find((criterion) => criterion.id === id)?.text ??
+							presentTeamText(id, state, t)
 					)
 				: issues.length
 					? issues.map((issue) => issue.opened.title)
@@ -112,7 +118,7 @@ export function TeamView({ theme }: { theme: Theme }) {
 	const next = state.terminal
 		? t('workflows.team.noNext')
 		: (state.openCards[0] ? presentTeamOwnerCard(state.openCards[0], state, t).title : '') ||
-			state.followUps[0]?.waitFor ||
+			state.followUps.map((wait) => presentTeamWait(wait, state, t, locale)?.title).find(Boolean) ||
 			status.openWorkItems[0]?.title ||
 			t('workflows.team.scheduler');
 	return (
@@ -132,16 +138,32 @@ export function TeamView({ theme }: { theme: Theme }) {
 					/>
 				) : (
 					<main className="flex flex-col flex-1 min-w-0 min-h-0">
-						<header className="team-head" style={{ flexWrap: 'nowrap' }} data-testid="team-header">
+						<header
+							className="team-head"
+							style={{ flexWrap: 'nowrap' }}
+							data-testid="team-header"
+							data-control-state={
+								state.terminal ?? (budgetBlocked ? 'budget' : state.paused ? 'paused' : 'active')
+							}
+						>
 							<Users size={18} className="shrink-0" />
 							<div className="flex items-center gap-2 flex-1 min-w-0">
 								<h2 className="font-semibold flex-1 min-w-0 truncate" title={state.config!.title}>
 									{state.config!.title}
+									{(budgetBlocked || state.paused) &&
+										` · ${t(budgetBlocked ? 'workflows.team.budgetBlocked' : 'workflows.team.paused')}`}
 								</h2>
-								<span className="team-dim min-w-0 truncate">
+								<span
+									className="team-dim min-w-0 truncate"
+									title={
+										status.budget.deadline
+											? new Date(status.budget.deadline).toLocaleString(locale)
+											: undefined
+									}
+								>
 									{status.budget.deadline
-										? t('workflows.team.deadlineAt', {
-												time: new Date(status.budget.deadline).toLocaleString(locale),
+										? t('workflows.team.deadlineRemaining', {
+												time: formatDurationCompact(status.budget.remainingMs ?? 0),
 											})
 										: t('workflows.team.noDeadline')}{' '}
 									·{' '}
@@ -287,14 +309,18 @@ export function TeamView({ theme }: { theme: Theme }) {
 						<TeamComposer key={teamId} state={state} />
 						{!state.terminal && (
 							<div className="flex gap-2 px-5 pb-2" style={{ background: 'var(--team-side)' }}>
-								<button
-									className="team-button"
-									onClick={() =>
-										void useTeamStore.getState().command(teamId, state.paused ? 'resume' : 'pause')
-									}
-								>
-									{t(state.paused ? 'workflows.team.resume' : 'workflows.team.pause')}
-								</button>
+								{!budgetBlocked && (
+									<button
+										className="team-button"
+										onClick={() =>
+											void useTeamStore
+												.getState()
+												.command(teamId, state.paused ? 'resume' : 'pause')
+										}
+									>
+										{t(state.paused ? 'workflows.team.resume' : 'workflows.team.pause')}
+									</button>
+								)}
 								<button
 									className="team-button"
 									onClick={() => void useTeamStore.getState().command(teamId, 'stop')}

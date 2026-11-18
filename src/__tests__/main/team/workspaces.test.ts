@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -8,6 +8,11 @@ import {
 	type TeamWorkspaceState,
 } from '../../../main/team/workspaces';
 import { execFileNoThrow } from '../../../main/utils/execFile';
+import * as execTools from '../../../main/utils/execFile';
+vi.mock('../../../main/utils/cliDetection', () => ({
+	resolveGhPath: async () => 'synthetic-gh',
+	getExpandedEnv: () => ({ ...process.env }),
+}));
 
 describe('team workspaces', () => {
 	let root: string;
@@ -46,6 +51,7 @@ describe('team workspaces', () => {
 		state = await workspaces.initialize();
 	});
 	afterEach(async () => {
+		vi.restoreAllMocks();
 		await fs.rm(root, { recursive: true, force: true });
 	});
 
@@ -162,6 +168,85 @@ describe('team workspaces', () => {
 		await expect(workspaces.enforceQaBoundary()).rejects.toThrow('Git identity changed');
 		expect(await fs.readFile(path.join(project, 'src/code.txt'), 'utf8')).toBe('original\n');
 	});
+
+	it('pushes the task branch to the selected project remote, preserving its base branch', async () => {
+		const remote = path.join(root, 'remote.git');
+		await git(root, 'init', '--bare', remote);
+		await git(project, 'remote', 'add', 'fork', remote);
+		await git(project, 'remote', 'add', 'upstream', path.join(root, 'unused.git'));
+		const base = await git(project, 'branch', '--show-current');
+		await git(project, 'config', `branch.${base}.pushRemote`, 'fork');
+		await fs.writeFile(path.join(state.dev, 'src/code.txt'), 'Published task');
+		const revision = await workspaces.commitDevWork('Authorized task result');
+		expect(await workspaces.pushDevWork()).toBe(true);
+		expect(await git(remote, 'rev-parse', 'refs/heads/team/task')).toBe(revision);
+		expect(await git(project, 'rev-parse', 'HEAD')).toBe(state.baseRevision);
+		expect(await workspaces.inspect()).toMatchObject({ revision, status: '' });
+	});
+
+	it.each(['create', 'existing', 'missing', 'login'] as const)(
+		'draft PR %s uses gh against the project remote with a body on stdin',
+		async (mode) => {
+			await git(project, 'remote', 'add', 'fork', 'https://github.example/synthetic/project.git');
+			const realExec = execTools.execFileNoThrow;
+			const calls: Array<{ args: string[]; input?: string }> = [];
+			vi.spyOn(execTools, 'execFileNoThrow').mockImplementation(
+				async (file, args, cwd, options) => {
+					if (file !== 'synthetic-gh') return realExec(file, args, cwd, options);
+					calls.push({ args: [...args], input: options?.input });
+					const failed = mode === 'missing' || (mode === 'login' && args[0] === 'auth');
+					return {
+						exitCode: failed ? 1 : 0,
+						stderr: failed
+							? mode === 'missing'
+								? 'spawn gh ENOENT'
+								: 'not logged in to github.example'
+							: '',
+						stdout:
+							args[0] === 'pr' && args[1] === 'list'
+								? JSON.stringify(
+										mode === 'existing'
+											? [{ url: 'https://github.example/synthetic/project/pull/1', isDraft: true }]
+											: []
+									)
+								: 'https://github.example/synthetic/project/pull/1',
+					};
+				}
+			);
+			if (mode === 'missing' || mode === 'login') {
+				await expect(workspaces.createDraftPr('Task result', 'Line one\nLine two')).rejects.toThrow(
+					mode === 'missing' ? 'ENOENT' : 'logged in'
+				);
+				expect(calls.some((c) => c.args[1] === 'create')).toBe(false);
+			} else {
+				expect(await workspaces.createDraftPr('Task result', 'Line one\nLine two')).toContain(
+					'/pull/1'
+				);
+				const create = calls.find((c) => c.args[1] === 'create');
+				if (mode === 'existing') expect(create).toBeUndefined();
+				else
+					expect(create).toEqual({
+						args: [
+							'pr',
+							'create',
+							'--draft',
+							'--repo',
+							'https://github.example/synthetic/project.git',
+							'--head',
+							'team/task',
+							'--base',
+							await git(project, 'branch', '--show-current'),
+							'--title',
+							'Task result',
+							'--body-file',
+							'-',
+						],
+						input: 'Line one\nLine two',
+					});
+			}
+			expect(calls.some((c) => c.args.includes('merge'))).toBe(false);
+		}
+	);
 
 	it('fingerprints actual content across staging and commits, including untracked files', async () => {
 		const initial = await workspaces.diffHash();

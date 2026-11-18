@@ -459,6 +459,7 @@ describe('reduceLedger', () => {
 		);
 		expect(state.usage).toEqual({
 			turns: 1,
+			budgetTurns: 1,
 			inputTokens: 20,
 			outputTokens: 5,
 			costUsd: 0,

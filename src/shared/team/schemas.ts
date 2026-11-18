@@ -103,9 +103,15 @@ const report = (
 			type: { type: 'string', const: type },
 			topic: object(topicProperties, topicOptional),
 			standardChanges: array(change),
+			requestedActions: array(
+				object({
+					action: choice('push', 'draftPr', 'merge', 'publish', 'externalMessage'),
+					detail: text,
+				})
+			),
 			...properties,
 		},
-		[...optional, ...(type === 'topic' ? [] : ['topic']), 'standardChanges']
+		[...optional, ...(type === 'topic' ? [] : ['topic']), 'standardChanges', 'requestedActions']
 	);
 
 const briefProperties = {
@@ -138,6 +144,9 @@ const challengeProperties = {
 
 /** Unknown properties are refused so a work report cannot smuggle in a verification verdict. */
 export const REPORT_SCHEMAS: Record<TeamReport['type'], ReportSchema> = {
+	recovery: report('recovery', { summary: text, recoveredJson: text }, ['recoveredJson']),
+	wrap_up: report('wrap_up', { summary: text, priorities: strings(1) }),
+	wait: report('wait', { summary: text, status: choice('waiting', 'ready', 'problem') }),
 	brief: report('brief', briefProperties),
 	challenge: report('challenge', challengeProperties, ['plans']),
 	respond: report(
@@ -158,9 +167,25 @@ export const REPORT_SCHEMAS: Record<TeamReport['type'], ReportSchema> = {
 			summary: text,
 			claimsComplete: boolean,
 			waiting: nullable(
-				object({ reason: text, waitFor: text, needs: array(choice('pm', 'dev', 'qa'), 1) }, [
-					'needs',
-				])
+				object(
+					{
+						reason: text,
+						waitFor: text,
+						needs: array(choice('pm', 'dev', 'qa'), 1),
+						condition: {
+							anyOf: [
+								object({ kind: choice('time'), at: number }),
+								object({ kind: choice('command'), processId: text }),
+								object({
+									kind: choice('ci'),
+									runId: { type: 'string', pattern: '^\\d+$' },
+									cwd: text,
+								}),
+							],
+						},
+					},
+					['needs', 'condition']
+				)
 			),
 		},
 		['waiting']

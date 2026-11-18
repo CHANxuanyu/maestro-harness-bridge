@@ -14,8 +14,8 @@ test('team UI: a project without conversations remains reachable through accepta
 	test.setTimeout(240_000);
 	const native = new NativeApp(info, { providerCli: false });
 	const fixture = prepareNativeTeam(native, { gateRepairs: true });
-	let team: TeamConfig;
-	const state = () => fixture.state(team.id);
+	let team: TeamConfig | undefined;
+	const state = () => fixture.state(team!.id);
 	let open = false;
 	let failed = false;
 	const screenshot = async (stage: 'baseline' | 'demo' | 'terminal') => {
@@ -51,12 +51,12 @@ test('team UI: a project without conversations remains reachable through accepta
 		const header = page.getByTestId('team-header');
 		const assertChrome = async () => {
 			const snapshot = state();
-			await expect(header).toContainText(team.title);
+			await expect(header).toContainText(team!.title);
 			await expect(header).toContainText(en['workflows.team.noDeadline']);
 			await expect
 				.poll(async () =>
 					(await header.innerText()).includes(
-						`${state().usage.turns}/${team.turnBudget} turns used`
+						`${state().usage.turns}/${team!.turnBudget} turns used`
 					)
 				)
 				.toBe(true);
@@ -149,7 +149,7 @@ test('team UI: a project without conversations remains reachable through accepta
 		await expect.poll(() => state().messages[0]?.handled?.seat).toBe('pm');
 		await expect.poll(() => state().phase).toBe('implement');
 		await expect
-			.poll(() => fixture.events(team.id).some((event) => event.kind === 'qa_boundary_restored'))
+			.poll(() => fixture.events(team!.id).some((event) => event.kind === 'qa_boundary_restored'))
 			.toBe(true);
 		await expect
 			.poll(() =>
@@ -292,6 +292,11 @@ test('team UI: a project without conversations remains reachable through accepta
 		await expect(main.locator('[data-card="summary"]')).toBeVisible();
 	} catch (error) {
 		failed = true;
+		if (team)
+			fs.writeFileSync(
+				info.outputPath('ledger.json'),
+				JSON.stringify(fixture.events(team.id), null, 2)
+			);
 		throw error;
 	} finally {
 		if (open) await native.close(failed);

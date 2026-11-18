@@ -1,3 +1,4 @@
+import { presentTeamText } from '../../services/teamClient';
 import type { TeamDiscussion as Discussion, TeamState } from '../../../shared/team/types';
 import { discussionDecider } from '../../../shared/team/policy';
 import { useT } from '../../i18n';
@@ -162,7 +163,8 @@ export function TeamDiscussion({
 									model={state.seats[response.seat].model ?? state.config?.seats[response.seat]}
 								/>
 								<p>
-									{t(`workflows.team.${response.result}`)}: {response.reason}
+									{t(`workflows.team.${response.result}`)}:{' '}
+									{presentTeamText(response.reason, state, t)}
 								</p>
 								{response.evidence && (
 									<p className="team-dim">{teamEvidenceLabel(response.evidence, state)}</p>
@@ -194,7 +196,8 @@ export function TeamDiscussion({
 										<p>{action.action}</p>
 										{action.waitFor && (
 											<p className="team-dim">
-												{t('workflows.team.waitingFor')}: {action.waitFor}
+												{t('workflows.team.waitingFor')}:{' '}
+												{presentTeamText(action.waitFor, state, t)}
 											</p>
 										)}
 									</div>

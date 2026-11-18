@@ -1,5 +1,11 @@
 # 分支工作记录
 
+## 2026-11-18 M3 team renderer and merge resolution
+
+Resolved the in-progress M3 merge without staging or committing, retaining M2 baseline returns, message handling and human card bodies, plus M3 quota, takeover, waits and budget behavior. The merge gate passed 427 team tests and all four TypeScript projects before renderer work; takeover transcript lookup now follows the effective provider and launch source account. Added ledger-derived seat health, account login, app status, escalation/report detail, attempt history, residual ownership and cost surfaces in English and Chinese, with shared CLI/IPC assignment and reusable M3 native fixtures. Final verification passed 454 team tests, 70 adjacent renderer tests, the native fixture test, all four TypeScript projects, ESLint, Prettier and 740 documentation paths. Restart inspection retains a separate receipt from an earlier retry; both real-workspace regression cases fail before the fix and pass after it. Exact commands are recorded in `docs/round2/dev/team-m3-verification.md`; Electron, screenshots and real account recovery were not run here. The separate backend follow-up is not reimplemented.
+
+M3 UI 外部复检：用户运行六份原生场景，38 项通过、2 项失败。本轮读取失败截图、trace 和保留的 M1 台账，修复成功补报被 30 秒失败冷却误拦的问题，登录卡正文标明厂商与实际账号目录，结构化字段保留 provider ID。恢复与等待改用中英文说明，成员工作区加标签，侧栏接任标签保持单行，预算用完时不再显示手动暂停或恢复按钮。两个调度回归先失败后通过，完整团队测试 466 项、相邻组件和 i18n 70 项及四份 TypeScript 检查通过；ESLint、Prettier、文档检查结果和命令见 M3 验证记录。本轮未运行 Electron，未生成或加入截图，未暂存或提交合并。
+
 ## 2026-11-18：M2 团队界面
 
 验证对象为合并 `eb53faa0a` 之上的未提交源码。修复 M1 合成 PM 脚本把消息处理误当评审的问题，保留真实调度的已处理回执；接入四步讨论、分层决定、基线编辑与差异及退回、标准变更、评审复盘、产出前后对比、增量演示和成员轮次记录，补齐中英文及 CLI 参数。新增共享脚本的 M2 UI 场景与中文评审路径；定向 Vitest 16 文件 341 项、最后界面复检 3 文件 58 项通过，renderer、main、CLI 及场景四份 TypeScript noEmit、ESLint、Prettier 均通过，文档检查 739 路径无缺失，原生场景只发现 15 项，未运行 Electron 或生成原生截图。检查命令和未验边界见 [M2 界面验证](round2/dev/team-m2-ui-verification.md)。
@@ -235,6 +241,18 @@ catalog 和项目局部原生默认解析限制。没有提交、发布或改变
 变更 TypeScript 文件的 ESLint 使用 `--no-ignore`，包含仓库默认忽略的测试文件，0 错误、0 警告；全部 30 个变更文件的 Prettier 检查通过，`git diff --check` 通过，新增内容无禁用破折号。原有 `.survey-A0.md` 保持未改动。
 
 未验：真实模型推理、打包应用 GUI、SSH typed catalog、Windows/Linux CI、项目局部原生默认配置和自定义 CLI 参数/二进制；没有提交、发布或切换默认 UI。
+
+## 2026-11-18：M3 原生场景失败后的修复，未提交
+
+根据外部原生运行留下的账本，修复成功补报后仍派发 PM recovery 的错误分支（同时影响 M1 基线及 M3 缺失/错误报告），以及 CLI 默认收件人在 JSON 中变为 null 导致消息被拒的问题。消息入口返回已排队回执，JSON 失败保留 stdout 错误对象并补充 stderr。正常等待的登记时间与截止时间取自同一时钟读数。T17 原先在 dev 已完成后才关闭应用，现将合成提供方闸门放在完成事件之前并强制中断；实际 Git 工作区检查另有调度器集成覆盖。保留负责人恢复的 done 优先、10 分钟复查和 M2 流程测试 60 秒超时。
+
+新增回归先失败后通过，验证命令、根因及尚待外部重跑的原生验收见 [M3 后端验证](round2/dev/team-m3-verification.md)。原始日志、账户路径和捕获未加入公开文档。没有提交或发布。
+
+## 2026-11-18：M3 团队恢复、边界与预算后端，未提交
+
+修复 PM 额度耗尽后反复派发 topic 的实际故障路径；加入额度预检、按授权的新会话接任与重置恢复、正常等待、有限故障恢复、预算报告及终态、按席成本和真实任务分支推送/草稿 PR 执行。补齐 CLI 与 preload 对等入口。恢复复用账本、进展规则、原生历史、跟进和账户解析；没有增加第二套进展判定。
+
+验证对象是本工作区未提交源码及开发构建，没有安装、提交或发布。单元与类型检查、构建、Electron 启动受限的准确结果及命令见 [M3 后端验证](round2/dev/team-m3-verification.md)。合成 Electron 场景已新增并类型检查，但启动失败不计为原生验收。没有运行付费模型或向真实 GitHub 仓库推送。
 
 ## 2026-11-17：M2 回合权限与立即失败重派修复，未提交
 

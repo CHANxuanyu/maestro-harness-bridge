@@ -63,9 +63,23 @@ export function criterionLabel(state: TeamState, id: string): string {
 	);
 }
 
-export function SeatTag({ seat, model }: { seat: SeatRole; model?: SeatModel }) {
+export function SeatTag({
+	seat,
+	model,
+	source,
+	hideRole = false,
+	roleLabel,
+	hideModel = false,
+}: {
+	seat: SeatRole;
+	model?: SeatModel;
+	source?: SeatRole;
+	hideRole?: boolean;
+	roleLabel?: string;
+	hideModel?: boolean;
+}) {
 	const t = useT();
-	const catalog = useTeamModelCatalog(seat, model?.tool);
+	const catalog = useTeamModelCatalog(source ?? seat, model?.tool);
 	const modelId =
 		model?.model && model.model !== NATIVE_MODEL_DEFAULT
 			? model.model
@@ -73,20 +87,19 @@ export function SeatTag({ seat, model }: { seat: SeatRole; model?: SeatModel }) 
 	const resolved = catalog?.models.find((entry) => entry.id === modelId);
 	const effort = model?.effort ?? resolved?.defaultEffort;
 	const level = resolved?.efforts.find((entry) => entry.id === effort);
+	const name =
+		resolved?.displayName ||
+		modelId ||
+		(model ? `${getAgentDisplayName(model.tool)} · ${t('workflows.team.nativeDefault')}` : '');
+	const modelLabel = `${name}${effort ? ` · ${level && catalog ? modelEffortLevelName(catalog.provider, level) : effort}` : ''}`;
 	return (
-		<span className="inline-flex items-center gap-1.5 text-sm font-semibold">
+		<span
+			className="inline-flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap"
+			title={model ? `${t(`workflows.team.${seat}`)} · ${modelLabel}` : undefined}
+		>
 			<i className="team-seat-mark" data-seat={seat} aria-hidden />
-			{t(`workflows.team.${seat}`)}
-			{model && (
-				<span className="team-dim font-normal">
-					{resolved?.displayName ||
-						modelId ||
-						`${getAgentDisplayName(model.tool)} · ${t('workflows.team.nativeDefault')}`}
-					{effort
-						? ` · ${level && catalog ? modelEffortLevelName(catalog.provider, level) : effort}`
-						: ''}
-				</span>
-			)}
+			{!hideRole && (roleLabel ?? t(`workflows.team.${seat}`))}
+			{model && !hideModel && <span className="team-dim font-normal">{modelLabel}</span>}
 		</span>
 	);
 }

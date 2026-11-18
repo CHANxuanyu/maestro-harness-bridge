@@ -1,4 +1,6 @@
 import type { TeamState } from '../../../shared/team/types';
+import { TeamCost, TeamResiduals } from './TeamProgress';
+import { presentTeamText } from '../../services/teamClient';
 import { useT } from '../../i18n';
 
 /** One terminal summary, including accepted/stopped paths with no terminal event. */
@@ -31,7 +33,8 @@ export function TeamSummary({ state }: { state: TeamState }) {
 					)}
 					{residual.map((item) => (
 						<p key={item}>
-							{state.criteria.find((criterion) => criterion.id === item)?.text ?? item}
+							{state.criteria.find((criterion) => criterion.id === item)?.text ??
+								presentTeamText(item, state, t)}
 						</p>
 					))}
 				</dd>
@@ -78,7 +81,7 @@ export function TeamSummary({ state }: { state: TeamState }) {
 					{state.standardChanges.length
 						? state.standardChanges.map((change) => (
 								<p key={change.id}>
-									{change.criterionId}: {change.before} → {change.after}
+									{change.before} → {change.after}
 								</p>
 							))
 						: t('workflows.team.summaryNone')}
@@ -94,6 +97,8 @@ export function TeamSummary({ state }: { state: TeamState }) {
 					</>
 				)}
 			</dl>
+			<TeamResiduals state={state} />
+			<TeamCost state={state} />
 		</section>
 	);
 }

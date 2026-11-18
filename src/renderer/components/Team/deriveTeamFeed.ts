@@ -20,7 +20,9 @@ export function deriveTeamFeed(events: readonly LedgerEvent[]): TeamFeedGroup[] 
 			continue;
 		if (
 			event.kind === 'report_accepted' &&
-			['position', 'proposal', 'response', 'retro', 'message'].includes(event.report.type)
+			['position', 'proposal', 'response', 'retro', 'message', 'wrap_up'].includes(
+				event.report.type
+			)
 		)
 			continue;
 		if (event.kind === 'phase_changed') {
@@ -49,6 +51,8 @@ export function deriveTeamFeed(events: readonly LedgerEvent[]): TeamFeedGroup[] 
 			case 'owner_message':
 			case 'follow_up_registered':
 			case 'follow_up_fired':
+			case 'wrap_up':
+			case 'workspace_inspected':
 			case 'member_fault':
 			case 'member_recovered':
 			case 'terminal':

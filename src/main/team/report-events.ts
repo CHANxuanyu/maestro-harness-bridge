@@ -134,6 +134,19 @@ export function reportEvents(
 		}
 	};
 	switch (report.type) {
+		case 'recovery':
+			break;
+		case 'wrap_up':
+			add({
+				kind: 'wrap_up',
+				actor,
+				generatedBy: 'pm',
+				summary: report.summary,
+				priorities: report.priorities,
+			});
+			break;
+		case 'wait':
+			break;
 		case 'brief':
 			brief(report);
 			break;
@@ -404,7 +417,16 @@ export function reportEvents(
 	}
 	if (
 		report.type !== 'topic' &&
-		!['position', 'proposal', 'response', 'retro', 'challenge'].includes(report.type)
+		![
+			'position',
+			'proposal',
+			'response',
+			'retro',
+			'challenge',
+			'wrap_up',
+			'wait',
+			'recovery',
+		].includes(report.type)
 	)
 		for (const item of state.workItems.filter(
 			(item) => item.discussionId && item.owner === actor && item.state === 'claimed'
@@ -413,5 +435,7 @@ export function reportEvents(
 	if (typeof report.topic === 'object') topic(report.topic);
 	for (const change of report.standardChanges ?? []) standardChange(change);
 
+	for (const action of report.requestedActions ?? [])
+		add({ kind: 'action_requested', actor, ...action });
 	return events.map((event, index) => ({ ...event, id: `${dispatch.dispatchId}:domain:${index}` }));
 }

@@ -1,6 +1,6 @@
 import type { LedgerEvent, TeamState } from '../../../shared/team/types';
 import { useT } from '../../i18n';
-import { presentTeamOwnerCard } from '../../services/teamClient';
+import { presentTeamOwnerCard, presentTeamText } from '../../services/teamClient';
 
 export function TeamDecisions({
 	state,
@@ -156,7 +156,8 @@ export function TeamDecisions({
 									{change.before && <del>{change.before}</del>} {change.after}
 								</p>
 								<p className="team-dim">
-									{change.reason} · {t(`workflows.team.${change.approvedBy}`)}
+									{presentTeamText(change.reason, state, t)} ·{' '}
+									{t(`workflows.team.${change.approvedBy}`)}
 								</p>
 							</div>
 						))}

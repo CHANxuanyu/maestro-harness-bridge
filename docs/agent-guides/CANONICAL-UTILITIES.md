@@ -30,6 +30,12 @@ choices first, and never offers a bare continue. Baseline edit/diff/return call
 the real backend handlers and preserve historical versions. `presentTeamOwnerCard()`
 in the client adapter separates legacy JSON checkpoint bodies from human text;
 new baseline cards carry readable `body` and structured `payload` separately.
+`presentTeamRecovery()` and `presentTeamWait()` in the same adapter map app
+recovery instructions and wait metadata into localized owner-facing copy. The
+feed, status strip and Progress tab share this projection; member-authored
+rationale stays content, while known application prose and workspace prefixes
+pass through `presentTeamText()`. Do not print recovery `how` or quota sampling
+reasons directly, and do not infer status by parsing member prose.
 Fixed baseline/acceptance checkpoints have no visible boundary label;
 escalations show it once, while retaining `data-boundary` attributes.
 Application `job:` / `job-retry:` follow-ups are bookkeeping, not feed messages.
@@ -65,6 +71,26 @@ then uses real UI controls for both owner decisions and the composer. See
 [test commands and screenshot capture](TEST-PATTERNS.md#synthetic-team-acceptance).
 
 **Team chat shared layer**
+
+M3 recovery uses `sameTeamModel()`, `teamModelUnavailable()` and
+`teamRecoveryDecision()` in `src/shared/team/policy.ts`, over `decideNext()`.
+`teamQuotaSample()` in `src/main/team/quota.ts` reads existing account-specific
+quota snapshots through canonical account/environment resolution; it never calls
+a model to probe availability. Effort, turn kind and unrelated environment keys
+do not bypass an unavailable account/model. `tokenExhaustionResetAt()` accepts an
+explicit fallback timezone for a local provider's bare reset clock; remote clocks
+without a zone remain unknown. Do not add a scheduler-local reset parser.
+
+`TeamUsage.turns` counts actual dispatches, including failures and outstanding
+reservations. `budgetTurns` excludes quota/login failures; do not add active seats
+a second time. `createTeamScheduler()` owns 20-minute waits, 10-minute unchanged
+rechecks, the 30-second failure cooldown, one retry/report repair, PM report
+organization, and app-only native-result inspection after exhausted recovery.
+Persisted dispatch bindings and `workspace_inspected` receipts preserve the
+original model/account and interrupted effects. Publication uses
+`createTeamWorkspaces().pushDevWork()` / `.createDraftPr()`, with a selected project
+remote, stdin PR body, draft lookup on replay and durable action receipts. Never
+add a separate CLI executor or use the repository's release tooling here.
 
 `reduceLedger()` in `src/shared/team/ledger.ts` is the pure replay used by main,
 renderer, and CLI. It sorts by sequence, ignores unknown kinds and dangling

@@ -12,9 +12,13 @@ import { reduceLedger } from '../../../shared/team/ledger';
 import { teamStatus } from '../../../shared/team/status';
 import { formatDurationCompact } from '../../../shared/duration';
 import { useFocusAfterRender } from '../../hooks/utils/useFocusAfterRender';
-import { useT, useFormatList } from '../../i18n';
+import { useT, useFormatList, useAppLocale } from '../../i18n';
 import type { Theme } from '../../types';
-import { presentTeamFollowUp } from '../../services/teamClient';
+import {
+	presentTeamFollowUp,
+	presentTeamRecovery,
+	presentTeamText,
+} from '../../services/teamClient';
 import { useTeamStore } from '../../stores/teamStore';
 import {
 	Criteria,
@@ -29,12 +33,17 @@ import { OwnerCard } from './OwnerCard';
 import { TeamOutput } from './TeamOutput';
 import { TeamDiscussion, discussionPositionsOpen } from './TeamDiscussion';
 import { TeamReview, TeamRetro } from './TeamReview';
+import { TeamAppStatus, TeamWait, TeamWrapUp } from './TeamProgress';
+import { TeamFault } from './TeamHealth';
 import { TeamSummary } from './TeamSummary';
 
 export function ReportMessage({ report, state }: { report: TeamReport; state: TeamState }) {
 	const t = useT();
 	const formatList = useFormatList();
 	switch (report.type) {
+		case 'wrap_up':
+		case 'wait':
+		case 'recovery':
 		case 'message':
 			return <p>{report.summary}</p>;
 		case 'position': {
@@ -53,7 +62,7 @@ export function ReportMessage({ report, state }: { report: TeamReport; state: Te
 		case 'response':
 			return (
 				<p>
-					{t(`workflows.team.${report.result}`)}: {report.reason}
+					{t(`workflows.team.${report.result}`)}: {presentTeamText(report.reason, state, t)}
 				</p>
 			);
 		case 'retro':
@@ -132,7 +141,7 @@ export function ReportMessage({ report, state }: { report: TeamReport; state: Te
 				<>
 					{report.decisions.map((d, i) => (
 						<p key={i}>
-							{criterionLabel(state, d.about) || d.about}: {d.reason}
+							{criterionLabel(state, d.about) || d.about}: {presentTeamText(d.reason, state, t)}
 						</p>
 					))}
 				</>
@@ -248,7 +257,7 @@ export function DemoCard({
 				{changes.length ? (
 					changes.map((c) => (
 						<p key={c.id}>
-							{c.before} → {c.after} · {c.reason}
+							{c.before} → {c.after} · {presentTeamText(c.reason, state, t)}
 						</p>
 					))
 				) : (
@@ -332,6 +341,7 @@ export function FeedEvent({
 }) {
 	const t = useT();
 	const formatList = useFormatList();
+	const locale = useAppLocale();
 	const teamId = state.config!.id;
 	const tag = (seat: SeatRole) => {
 		const binding = [...events]
@@ -373,7 +383,8 @@ export function FeedEvent({
 		case 'standard_issue_resolved':
 			return (
 				<p>
-					{state.issues.find((issue) => issue.id === event.issueId)?.opened.title}: {event.reason}
+					{state.issues.find((issue) => issue.id === event.issueId)?.opened.title}:{' '}
+					{presentTeamText(event.reason, state, t)}
 				</p>
 			);
 		case 'criterion_evidence':
@@ -404,7 +415,7 @@ export function FeedEvent({
 		case 'response':
 			return (
 				<p>
-					{t(`workflows.team.${event.result}`)}: {event.reason}
+					{t(`workflows.team.${event.result}`)}: {presentTeamText(event.reason, state, t)}
 				</p>
 			);
 		case 'team_created':
@@ -458,7 +469,7 @@ export function FeedEvent({
 								<span className="team-dim">{index + 1} </span>
 								{c.text}
 								<p className="team-dim">
-									{t(`workflows.team.proof.${c.proof}`)} · {c.how}
+									{t(`workflows.team.proof.${c.proof}`)} · {presentTeamText(c.how, state, t)}
 								</p>
 							</div>
 						))}
@@ -485,8 +496,8 @@ export function FeedEvent({
 					))}
 					{event.plans?.map((p, i) => (
 						<p key={i}>
-							{t('workflows.team.verificationPlan')} · {criterionLabel(state, p.criterion)}: {p.how}{' '}
-							{p.data}
+							{t('workflows.team.verificationPlan')} · {criterionLabel(state, p.criterion)}:{' '}
+							{presentTeamText(p.how, state, t)} {p.data}
 						</p>
 					))}
 				</TeamFold>
@@ -496,7 +507,7 @@ export function FeedEvent({
 				<TeamFold kind="brief-response" title={t('workflows.team.briefResponse')}>
 					{event.decisions.map((d, i) => (
 						<p key={i}>
-							{criterionLabel(state, d.about) || d.about}: {d.reason}
+							{criterionLabel(state, d.about) || d.about}: {presentTeamText(d.reason, state, t)}
 						</p>
 					))}
 				</TeamFold>
@@ -524,6 +535,7 @@ export function FeedEvent({
 					state={state}
 					teamId={teamId}
 					answered={answer.optionId}
+					theme={theme}
 					emphasis={false}
 				/>
 			) : null;
@@ -640,7 +652,7 @@ export function FeedEvent({
 							{event.resetsAt && (
 								<p>
 									{t('workflows.team.resetsAt', {
-										time: new Date(event.resetsAt).toLocaleString(),
+										time: new Date(event.resetsAt).toLocaleString(locale),
 									})}
 								</p>
 							)}
@@ -648,6 +660,10 @@ export function FeedEvent({
 					) : (
 						<>
 							<p>{t('workflows.team.takeoverContext')}</p>
+							<p>
+								{t('workflows.team.switchBack')}{' '}
+								<SeatTag seat={event.seat} model={state.config!.seats[event.seat]} hideRole />
+							</p>
 						</>
 					)}
 					<button
@@ -670,7 +686,7 @@ export function FeedEvent({
 						{event.before && <del>{event.before}</del>} {event.after}
 					</p>
 					<p className="team-dim">
-						{event.reason} · {t(`workflows.team.${event.approvedBy}`)}
+						{presentTeamText(event.reason, state, t)} · {t(`workflows.team.${event.approvedBy}`)}
 					</p>
 				</section>
 			);
@@ -721,13 +737,11 @@ export function FeedEvent({
 					kind="follow-up"
 					title={
 						<>
-							{t('workflows.team.followUp')} · {event.waitFor}
+							{t('workflows.team.followUp')} · <SeatTag seat={event.seat} />
 						</>
 					}
 				>
-					<p>{event.reason}</p>
-					{tag(event.seat)}
-					{event.untilMs && <p className="team-dim">{new Date(event.untilMs).toLocaleString()}</p>}
+					<TeamWait wait={event} state={state} />
 					{events
 						.filter((e) => e.kind === 'follow_up_fired' && e.followUpId === event.followUpId)
 						.map(
@@ -738,20 +752,35 @@ export function FeedEvent({
 			);
 		case 'follow_up_fired':
 			return <p className="team-dim">{presentTeamFollowUp(event.result, t)}</p>;
+		case 'wrap_up':
+			return <TeamWrapUp state={{ ...state, wrapUp: event }} />;
+		case 'workspace_inspected': {
+			const dispatch = state.turns.find((turn) => turn.dispatchId === event.dispatchId);
+			if (event.reason !== 'restart') return null;
+			return (
+				<section className="team-card" data-card="restart" data-dispatch={event.dispatchId}>
+					<h3>{t('workflows.team.restartNote')}</h3>
+					{dispatch && <SeatTag seat={dispatch.seat} />}
+					<p className="team-dim">{t('workflows.team.restartResume')}</p>
+				</section>
+			);
+		}
 		case 'member_fault':
 			return (
 				<section className="team-card" data-card="recovery">
 					{tag(event.seat)}
 					<h3>{t('workflows.team.recovery')}</h3>
-					<p>{event.detail}</p>
+					<TeamFault fault={event} state={state} />
 				</section>
 			);
-		case 'member_recovered':
-			return (
+		case 'member_recovered': {
+			const recovery = presentTeamRecovery(event.how, t);
+			return recovery ? (
 				<p className="team-dim">
-					{tag(event.seat)} · {event.how}
+					{tag(event.seat)} · {recovery}
 				</p>
-			);
+			) : null;
+		}
 		case 'changes_requested':
 			return (
 				<p>
@@ -810,6 +839,10 @@ export function TeamFeed({
 				);
 			})}
 			{!state.terminal &&
+				(state.seats.pm.faultActive || !!state.seats.pm.quota || !!state.seats.pm.takeover) && (
+					<TeamAppStatus state={state} />
+				)}
+			{!state.terminal &&
 				state.openCards
 					.filter((card) => !(demoPending && card.boundary === 'acceptance'))
 					.map((card, i) => (
@@ -818,6 +851,7 @@ export function TeamFeed({
 							card={card}
 							teamId={state.config!.id}
 							state={state}
+							theme={theme}
 							emphasis={i === 0}
 						/>
 					))}

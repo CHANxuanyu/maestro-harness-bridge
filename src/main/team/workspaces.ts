@@ -2,6 +2,8 @@ import * as fs from 'fs/promises';
 import path from 'path';
 import { createHash } from 'crypto';
 import { normalizeWorktreePath, isPathAtOrUnderRoot } from '../../shared/worktreePaths';
+import { DURATION_MS } from '../../shared/duration';
+import { resolveGhPath, getExpandedEnv } from '../utils/cliDetection';
 import type { CheckHost } from '../../shared/checkRun';
 import { execFileNoThrow } from '../utils/execFile';
 import { atomicWriteJson, createKeyedWriteQueue } from '../utils/atomic-json-store';
@@ -33,6 +35,10 @@ export interface TeamWorkspaces {
 	enforceQaBoundary(): Promise<string[]>;
 	commitDevWork(message: string): Promise<string>;
 	pushDevWork(remote?: string): Promise<boolean>;
+	createDraftPr(title: string, body: string): Promise<string>;
+	inspect(
+		seat?: 'dev' | 'qa'
+	): Promise<{ revision: string; status: string; recentCommits: string }>;
 	/** Content identity against the initial revision, including untracked files. */
 	diffHash(): Promise<string>;
 }
@@ -62,6 +68,30 @@ export function createTeamWorkspaces(options: TeamWorkspaceOptions): TeamWorkspa
 		if (result.exitCode !== 0)
 			throw new Error(`git ${args[0]}: ${result.stderr || result.exitCode}`);
 		return result.stdout;
+	};
+	const destination = async () => {
+		const current = (await git(options.projectRoot, ['branch', '--show-current'])).trim();
+		const config = async (key: string) =>
+			(
+				await execFileNoThrow('git', ['config', '--get', key], options.projectRoot, {
+					env: Object.fromEntries(
+						Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'))
+					),
+				})
+			).stdout.trim();
+		const remotes = (await git(options.projectRoot, ['remote'])).trim().split('\n').filter(Boolean);
+		const remote =
+			(await config(`branch.${current}.pushRemote`)) ||
+			(await config('remote.pushDefault')) ||
+			(await config(`branch.${current}.remote`)) ||
+			(remotes.length === 1 ? remotes[0] : '');
+		if (!remote || remote === '.' || !remotes.includes(remote))
+			throw new Error(
+				'Configure an unambiguous project push remote before publishing the task branch'
+			);
+		const url = (await git(options.projectRoot, ['remote', 'get-url', '--push', remote])).trim();
+		const base = (await config(`branch.${current}.merge`)).replace(/^refs\/heads\//, '') || current;
+		return { remote, url, base };
 	};
 	const assertOwned = async (seat: 'dev' | 'qa') => {
 		if (!state) throw new Error('Initialize team workspaces first');
@@ -294,10 +324,79 @@ export function createTeamWorkspaces(options: TeamWorkspaceOptions): TeamWorkspa
 					await git(dev, ['commit', '-m', message]);
 				return (await git(dev, ['rev-parse', 'HEAD'])).trim();
 			}),
-		pushDevWork: (remote = 'origin') =>
+		inspect: (seat = 'dev') =>
+			writes.enqueue(root, async () => {
+				const dev = await assertOwned(seat);
+				return {
+					revision: (await git(dev, ['rev-parse', 'HEAD'])).trim(),
+					status: await git(dev, ['status', '--porcelain']),
+					recentCommits: await git(dev, ['log', '-5', '--format=%H %s']),
+				};
+			}),
+		createDraftPr: (title, body) =>
+			writes.enqueue(root, async () => {
+				if (!options.pushAuthorized)
+					throw new Error('Draft PR publication requires task branch authorization');
+				const dev = await assertOwned('dev');
+				const { url, base } = await destination();
+				const gh = await resolveGhPath();
+				const env = getExpandedEnv();
+				const run = async (args: string[], input?: string) => {
+					const result = await execFileNoThrow(gh, args, dev, {
+						env,
+						input,
+						timeout: 60 * DURATION_MS.second,
+					});
+					if (result.exitCode !== 0)
+						throw new Error(`GitHub CLI: ${result.stderr || result.exitCode}`);
+					return result.stdout.trim();
+				};
+				await run(['--version']);
+				await run(['auth', 'status']);
+				// Query before creating: a restart after an external success must not create another PR.
+				const existing = JSON.parse(
+					await run([
+						'pr',
+						'list',
+						'--repo',
+						url,
+						'--head',
+						state!.branch,
+						'--state',
+						'open',
+						'--json',
+						'url,isDraft',
+					])
+				);
+				if (existing.length) {
+					if (!existing[0].isDraft)
+						throw new Error('The task branch already has a non-draft PR; owner review required');
+					return existing[0].url as string;
+				}
+				return run(
+					[
+						'pr',
+						'create',
+						'--draft',
+						'--repo',
+						url,
+						'--head',
+						state!.branch,
+						'--base',
+						base,
+						'--title',
+						title,
+						'--body-file',
+						'-',
+					],
+					body
+				);
+			}),
+		pushDevWork: (remote) =>
 			writes.enqueue(root, async () => {
 				if (!options.pushAuthorized) return false;
 				const dev = await assertOwned('dev');
+				remote ??= (await destination()).remote;
 				if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(remote))
 					throw new Error('Invalid Git remote name');
 				await git(dev, ['push', remote, `refs/heads/${state!.branch}:refs/heads/${state!.branch}`]);

@@ -13,8 +13,9 @@ function nativeTeamScene(script, prompt, configDir, count, persist) {
 	const message = persist && script.teamMessages && /Turn: message\./.test(prompt);
 	return {
 		consumeTurn: !message,
-		scene:
-			script.teamM2 || message
+		scene: script.teamM3
+			? require('./team-m3.cjs').teamM3Scene(script.teamM3, prompt, configDir)
+			: script.teamM2 || message
 				? require('./team-m2.cjs').teamM2Scene(
 						script.teamM2 || script.teamMessages,
 						prompt,
@@ -197,6 +198,15 @@ async function run(provider) {
 				);
 		}
 	}
+	if (!stopped && scene.exitError) {
+		process.stderr.write(`${scene.exitError}\n`);
+		process.exitCode = 1;
+		return;
+	}
+	// Hold after workspace effects but before the logical completion event. A process
+	// exit gate alone cannot hold a turn that ProcessManager already considers finished.
+	if (scene.completionGate)
+		while (!fs.existsSync(scene.completionGate) && !stopped) await delay(10);
 	if (!stopped) turn.finish(scene.answer, { quotaFailure: scene.quotaFailure === true });
 	if (provider === 'codex' && !stopped) await delay(1100);
 	// Hold the completed native writer before Maestro starts its exit synopsis.

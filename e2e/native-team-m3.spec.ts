@@ -66,7 +66,7 @@ for (const scenario of ['quota-wait', 'quota-substitute', 'quota-temporary'] as 
 						t.finished?.failureKind === 'model-unavailable'
 				);
 			expect(premature).toEqual([]);
-			expect(f.state().usage.turns - f.state().usage.budgetTurns).toBe(1);
+			expect(f.state().usage.budgetTurns).toBe(f.state().usage.turns);
 			await f.cli('accept');
 			expect(f.state().terminal).toBe('all');
 			const cost = await f.cli('show', 'cost');

@@ -1,5 +1,88 @@
 # M3 backend verification, 2026-11-18
 
+## M3 fix2/fix3 merge integration, 2026-11-18
+
+Artifact: `838f3d31a` plus the in-progress merge of `f65c6933b` and this
+integration. The owner reported 40/40 native scenarios passing on `838f3d31a`;
+that is not a native run of this merge. No staging, commit or Electron execution
+was performed here. Fix4 QA location resolution and efficiency work are excluded.
+
+The initial full team run reproduced exactly five failures (496 passed).
+The hard dispatch budget and two-round challenge policy already held in the
+merged scheduler. The integration restores the typed card contract and corrects
+these stale test assumptions without relaxing scheduling or message assertions:
+
+- Baseline objections are structured `payload.challenges`, not serialized body
+  text. The cap/restart test now checks the exact objection and second-round
+  scope in that payload; it still checks the human boundary question and four
+  challenge dispatches across restart.
+- Both 20-turn tests now check `payload.generatedBy: app` and the human report
+  distinction instead of parsing `body` as JSON. Their exact dispatch/usage limit
+  and no-recovery assertions remain intact, with and without a recorded wrap-up.
+- The T7 PM acknowledgment fixture had restored the pre-edit `how` field while
+  acknowledging the new text. That is a real criterion change under fix2 and
+  correctly required another challenge. The fixture now acknowledges both owner
+  fields, and adds a final assertion that the new proof method survives. The
+  two-canary, immutable-history and confirmation assertions remain intact.
+- The edit/return test previously returned immediately after editing. Fix2 now
+  starts a fresh full challenge and supersedes the old confirmation card. The
+  test completes that new round before returning, matching the UI scenario's
+  existing wait for the next card. It still verifies the exact return note in
+  the PM prompt, the next published version, preserved owner text, footer
+  revision, minimal diff and delivered/handled message order with the gate closed.
+
+The baseline payload now types its challenge/response/decision history and stores
+the shared `teamChallengeRound()` scope at card creation. The renderer labels
+the full or changed-criteria round and folds the captured objections, QA plans,
+PM answers and decisions. A later cycle cannot replace that card's captured
+history. The discussion payload's boundary sentence renders once through the
+existing presentation adapter, with localized app wording. New English/Chinese
+tests cover the frozen round and scope; standard-change tests additionally check
+the single localized boundary explanation. No raw JSON is rendered.
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/main/team/scheduler.test.ts -t 'PM revisions cap|T7 owner baseline|revises the baseline after|real-run budget 20'
+# Before: 5 failed. After: 5 passed, 93 unselected, 1.28 s.
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team/M2.test.tsx
+# 26 passed, 1 file, 6.85 s.
+npx vitest run --configLoader runner --no-cache src/__tests__/shared/team src/__tests__/main/team src/__tests__/renderer/components/Team src/__tests__/cli/commands/team.test.ts src/__tests__/shared/progressRules.test.ts
+# 503 passed, 19 files, 35.37 s.
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/i18n/messages.test.tsx
+# 9 passed, 1 file, 1.38 s.
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+# All four exit 0 with no diagnostics.
+```
+
+ESLint/Prettier use the executable changed-file selection below, relative to
+HEAD and including incoming merge files. All three ESLint scopes pass, and
+`npx prettier --check` passes all 31 changed/added files. `npm run docs:verify`
+checks 742 asserted paths with 0 missing. `git diff --check` passes; scans find
+0 conflict markers and 0 added forbidden dash characters.
+
+Files edited for this integration, beyond the incoming merge:
+
+- `src/shared/team/types.ts`: Type baseline history/scope and discussion boundary text with compatibility for older cards.
+- `src/main/team/scheduler.ts`: Freeze the shared challenge scope in the baseline payload.
+- `src/renderer/components/Team/TeamBaseline.tsx`: Render the round summary and captured challenge/response fold.
+- `src/renderer/components/Team/OwnerCard.tsx`: Mount baseline history and the single boundary explanation.
+- `src/renderer/services/teamClient.ts`: Localize the structured commitment boundary without duplicate prose.
+- `src/renderer/i18n/locales/en/team.ts`: Add English challenge scope and objection outcomes.
+- `src/renderer/i18n/locales/zh-CN/team.ts`: Add matching Chinese strings.
+- `src/__tests__/main/team/scheduler.test.ts`: Align old flow fixtures with full owner-edit challenges and human card payloads, preserving behavior assertions.
+- `src/__tests__/renderer/components/Team/M2.test.tsx`: Verify frozen challenge scope/history and localized boundary rendering.
+- `CHANGELOG.md`: Record card presentation and remove the obsolete duplicate quota-budget exemption.
+- `docs/worklog.md`: Record this merge integration and its validation.
+- `docs/round2/dev/team-m3-verification.md`: Record the reproduced failures, precise adjustments and checks.
+
+Native execution and visual layout remain unverified for this merge. External command:
+
+```sh
+MAESTRO_E2E_SHOTS=/tmp/maestro-m3-integration-shots node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-ui.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m2-ui.spec.ts e2e/native-team-m3.spec.ts e2e/native-team-m3-ui.spec.ts
+```
+
 ## M3 UI external review follow-up, 2026-11-18
 
 The owner ran all six native team specs externally: 38 passed, 2 failed. This
@@ -298,9 +381,225 @@ M3 backend work, not a second implementation of it.
 
 Artifact: `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus the uncommitted M3
 worktree changes. Verification targets source and development builds, not an
+
+Latest artifact: `ee282fec1` plus the uncommitted third real-model follow-up changes.
+Earlier M3 records below used `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus
+the then-uncommitted M3 work. Verification targets source and development builds, not an
 installed release. No commit, tag, release, paid model invocation or real GitHub
 publication was performed. Existing private survey material is not part of this
 change.
+
+## Third follow-up: normalize form, preserve facts
+
+The owner's real-model run confirmed the previous fixes: exactly 20 dispatches,
+at most two challenge rounds, baseline confirmation at turn 7, then development,
+QA preparation, verification and an issue. The owner stopped at the progress
+report; that run did not reach acceptance. Four rejected reports and their repairs
+consumed eight turns. The four original report objects now form a regression
+fixture, with only the discussion id and a temporary baseline-directory spelling
+replaced. No full ledger, private transcript or account path is included.
+
+1. **Seat-owned fields:** PM and QA positions both included `extraTurns: 0` and
+   `preservesDeadline: true`. The shared prompt schema advertised these fields
+   to every seat; the semantic validator then rejected the entire non-dev
+   position. Validation now drops both fields, including nested standard-change
+   estimates, and retains the claim, basis and evidence references. Non-PM
+   `resolvedStandards` is similarly dropped without closing anything. Prompt and
+   repair schemas omit fields owned by another seat. Dev estimates and PM
+   standard-resolution facts retain their existing validation.
+2. **Proposal decider:** the PM supplied `decider: "pm"` on a commitment-layer
+   topic. The validator compared this hint with a value the app already knew
+   and rejected the proposal. The app now supplies `discussionDecider()` for an
+   omitted or conflicting hint and records the correction. Prompts expose the
+   lawful decider in context but omit it from the report schema. A scheduler
+   regression completes all participant responses and checks that an owner
+   commitment card appears, with no automatic conclusion or standard change.
+3. **QA paths:** the captured report used the bare `clamp.boundary.test.cjs`,
+   not an absolute or `./qa/` spelling. The old string-prefix validator rejected
+   all three forms. The shared policy normalizes dot segments and owned absolute
+   paths. Main checks the actual QA worktree, including real paths and symlink
+   ancestors. A bare name is inferred only when an existing `qa/` file is
+   unambiguous; unknown or root-conflicting names are rejected. Tests cover real
+   Git workspaces, absolute aliases, Windows spellings, traversal, other
+   directories, escaping symlinks, missing descendants and dangling symlinks.
+   Output-location spelling uses the capture workspace; CI cwd spelling uses
+   the reporting seat. References outside those workspaces are not relocated or
+   promoted to evidence, and output capture still enforces its physical boundary.
+4. **Validator audit and recording:** known unowned fields, app-derived decider
+   and safe path spelling are normalized. Existing review demotion of problems
+   without confirmed criteria, and its derived verdict, now also records notes.
+   Report-role permissions, required factual shape, unknown fields, confirmed
+   criterion identities, actual message ids, complete standard replacements,
+   discussion membership/order, participant actions, QA plan coverage,
+   verification evidence, issue lifecycle, new-basis diagnosis and demo proof
+   remain strict. Unknown discussion references remain unverified basis text,
+   never recorded evidence; unsupported insistence remains a reservation.
+   No guard invents a missing fact or grants authority. Empty review rejection
+   still requires a concrete problem. The full policy is in `team-model.md`.
+
+Each of the four actual reports is tested at both shared-validation and scheduler
+levels. The scheduler accepts it without a repair, records one app-owned
+`report_normalized` event, exposes the changes through `team log`, and replays
+the same note once after a simulated interruption immediately after the durable
+turn receipt. Notes do not add evidence, progress or turns. Fact-guard regressions
+reject QA closure without a developer fix, dev verification of its own fix and
+escaping QA paths; existing evidence tests check recorded ids separately from
+unverified text. No native scenario assertion was loosened or changed.
+
+Commands for this artifact:
+
+```sh
+npm test -- --configLoader runner src/__tests__/shared/team src/__tests__/main/team src/__tests__/cli/commands/team.test.ts src/__tests__/cli/services/session-command.test.ts src/__tests__/shared/progressRules.test.ts src/__tests__/shared/retryClassification.test.ts src/__tests__/main/follow-ups.test.ts src/__tests__/main/check-runner.test.ts
+npm run lint
+node node_modules/typescript/bin/tsc -p e2e/tsconfig.team.json --pretty false
+node node_modules/eslint/bin/eslint.js src/main/team/{scheduler,workspaces}.ts src/shared/team/{policy,types,ledger,report,prompts,schemas}.ts
+node node_modules/eslint/bin/eslint.js -c eslint.dashes.config.mjs src/__tests__/main/team/{scheduler,workspaces}.test.ts src/__tests__/shared/team/{report,prompts}.test.ts
+git diff --name-only -z --diff-filter=ACM | xargs -0 node node_modules/prettier/bin/prettier.cjs --check
+node node_modules/prettier/bin/prettier.cjs --check src/__tests__/shared/team/real-normalization-fixtures.json
+npm run docs:verify
+npm run lint:doc-refs
+git diff --check
+```
+
+All listed commands exited 0. The team run passes **456 tests in 19 files**.
+The three production TypeScript projects and all three Electron scenario files
+type-check. ESLint has no errors or warnings. Prettier passes the 19 changed
+tracked files and the new JSON fixture. Documentation verification checks 724
+asserted paths with none missing, and references across 39 docs resolve.
+`git diff --check` passes; an added-line and new-fixture scan finds zero forbidden
+dash characters. The first focused run had one new test expecting `open` rather
+than the actual `opened` state; that assertion was corrected before the final
+456-test run. Existing assertions were not weakened.
+
+Native/build attempts, with earlier artifacts preserved in their original paths:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts --output e2e-results/m3-normalization --max-failures=1
+npm run build:main
+npm run build:cli
+npm run build:renderer -- --configLoader runner
+npm run build:web-desktop -- --configLoader runner
+node --input-type=module -e 'globalThis.__dirname = process.cwd(); const { build } = await import("vite"); await build({ configLoader: "runner" }); await build({ configFile: "vite.config.web-desktop.mts", configLoader: "runner" });'
+node node_modules/@playwright/test/cli.js test --project=native e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts --output e2e-results/m3-normalization --max-failures=1 --reporter=line
+```
+
+The wrapper exited 1 during renderer config loading: the default Vite loader
+tried to write `.vite-temp` through the shared `node_modules` symlink outside the
+sandbox. Main/preload and CLI builds exited 0. The two plain runner-loader commands
+exited 1 because the existing configs use `__dirname`; the programmatic runner
+command supplies the same project directory as the bundled loader and builds
+both renderer and web-desktop successfully (exit 0, existing chunk-size and
+mixed dynamic/static import warnings). No build configuration was changed.
+
+The direct Playwright command then exited 1: **Electron failed to launch** for
+the first M2 scenario, before scenario assertions; 24 scenarios did not run.
+Its error context is in `e2e-results/m3-normalization/`. This is not a native
+regression result or a claim that the current artifact passed 25/25. Real-model
+acceptance was not rerun. Outside the restricted host, verify with:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts
+node scripts/native-e2e.mjs e2e/real-team.spec.ts --grep 'team small task'
+```
+
+The real command requires the documented opt-in account setup and is listed for
+owner-run verification only; this change made no paid model call.
+
+## Second follow-up after the real-model run
+
+The owner's synthetic native run passed 25/25 before this change. The subsequent
+real-model ledger was read in place: 151 events, 21 dispatches, 20 charged turns,
+nine rejected reports, six challenges, four briefs and zero checks. The quota
+suspension and fresh-conversation takeover worked. Raw capture and account paths
+were not copied into the repository. This section supersedes the original quota
+budget exemption; it does not change solved-before-budget progress, 10-minute
+wait rechecks or the existing 60-second M2 scripted-test timeouts.
+
+1. **Hard budget:** recovery did not omit the ordinary scheduling check; that
+   check used the wrong counter. One quota refusal reduced `budgetTurns`, so the
+   app admitted dispatch 21 at 20 actual turns. All decisions, prompts and status
+   now use `usage.turns`; `budgetTurns` is a compatibility alias. Each dispatch
+   reserves one slot and duplicate finishes cannot charge it again. All invocation
+   paths share `dispatchAllowed()`, including repairs, takeover, recovery and
+   wrap-up. At exhaustion restart may inspect and reconcile a receipt but cannot
+   start another process. Regressions cover the 20-turn sequence with pending
+   recovery, absent/present wrap-up, quota in the final slot, parallel final slots,
+   restart and pause/extension. The unfinished report is app-generated for free.
+2. **Discussion basis and evidence:** validation treated any prose in `evidence`
+   as a malformed position, and the prompts omitted the allowed ids. Every seat
+   repeated the same error during repair. Positions without evidence are valid;
+   unknown position and response references remain in `unverifiedBasis` on the
+   ledger, separate from verified ids. The shared evidence catalog supplies check,
+   capture and criterion descriptions plus exact ids. Response prompts identify
+   unused ids and confirmed baseline ids; repair prompts quote the original
+   snapshot's allowed ids. An unsupported insistence becomes a recorded reservation
+   with its original requested result and reason. The lawful decider concludes a
+   reversible question as contested; no member fault or extra evidence round is
+   manufactured. Tests retain supported insistence and reject reused evidence as
+   a basis for insisting, while accepting and preserving the reservation.
+3. **Challenge loop:** every PM-published brief reset the challenge epoch, so
+   even small revisions repeated the full dev/QA round indefinitely. The owner's
+   product decision is now in `team-model.md` and shared by scheduler, prompt and
+   QA validation: one full round, at most one round on the first revision's changed
+   criteria with a diff, then discussion or the baseline card. The card retains
+   challenges, answers and the boundary question. Only owner edits/returns reset
+   the cycle. Tests cover another PM revision, restart, partial QA plans, removal
+   only, and a fresh full round after owner edit/return. Old unit flow setups now
+   complete that fresh round before asserting the same baseline result; no native
+   baseline assertion was weakened.
+4. **Respond shape:** the schema allowed `criterion` to be omitted for removal,
+   but the prose never explained its conditional requirement for every other
+   change. The respond prompt now distinguishes draft edits from confirmed
+   standard changes, spells out matching ids and the complete replacement
+   criterion, and includes an example checked by the real validator. The existing
+   rejection for an incomplete non-removal change remains intact.
+
+The restart workspace test now has available budget and an owner-card scheduling
+hold, preserving its real Git inspection and exact-resume assertions. Separate
+tests assert no invocation when that reservation already exhausts the budget.
+The native quota cost assertion now requires the compatibility counter to equal
+actual turns, as required by this follow-up, rather than expecting an exemption.
+QA plans may be empty only when this round has no remaining criteria to plan for
+(or all required criteria have explicit unverifiable objections).
+
+Final commands and results for this follow-up:
+
+```sh
+npm test -- --configLoader runner src/__tests__/shared/team src/__tests__/main/team src/__tests__/cli/commands/team.test.ts src/__tests__/cli/services/session-command.test.ts src/__tests__/shared/progressRules.test.ts src/__tests__/shared/retryClassification.test.ts src/__tests__/main/follow-ups.test.ts src/__tests__/main/check-runner.test.ts
+npm run lint
+node node_modules/typescript/bin/tsc -p e2e/tsconfig.team.json --pretty false
+node node_modules/eslint/bin/eslint.js src/main/team/{scheduler,report-events}.ts src/shared/team/{policy,types,ledger,report,prompts,schemas,status}.ts
+node node_modules/eslint/bin/eslint.js -c eslint.dashes.config.mjs src/__tests__/main/team/scheduler.test.ts src/__tests__/shared/team/{ledger,policy,prompts}.test.ts
+node node_modules/eslint/bin/eslint.js -c eslint.dashes.config.mjs --stdin --stdin-filename src/__tests__/native-team-m3.spec.ts < e2e/native-team-m3.spec.ts
+git diff --name-only -z --diff-filter=ACM | xargs -0 node node_modules/prettier/bin/prettier.cjs --check
+npm run docs:verify
+npm run lint:doc-refs
+git diff --check
+```
+
+All commands exited 0. The final team run passed **438 tests in 19 files**,
+including 86 scheduler cases and 22 shared policy cases. All three production
+TypeScript projects and the three Electron scenario files type-check. ESLint
+reports no errors or warnings for changed production sources and the test passes;
+the native file is fed through the repository's test lint configuration on stdin
+because its file globs otherwise omit `e2e/`. Prettier passes all 19 changed files.
+Documentation verification checks 722 paths with none missing and references
+across 39 docs. `git diff --check` passes, and an added-line scan finds zero
+forbidden dash characters. The pre-existing untracked survey file is untouched.
+
+Not rerun here: the three Electron scenarios after this patch and paid-model
+acceptance. The previous external 25/25 result is not a pass for this artifact.
+Run outside the restricted host, preserving current artifacts if needed:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts
+node scripts/native-e2e.mjs e2e/real-team.spec.ts --grep 'team small task'
+```
+
+The real-team spec exists in the owner's real-team integration worktree; run the
+second command there after applying this patch, with that worktree's documented
+opt-in real-acceptance environment. No paid run or external publication was
+performed for this follow-up. No commit was made.
 
 ## Follow-up after the external native run
 
@@ -420,7 +719,7 @@ src/shared/team/types.ts
 | T16        | Overall deadline or reserved turn budget prevents new dispatch. An app-generated unfinished progress report costs no model turn. Extension restores pending permission/baseline decisions; accept-with-gaps preserves unmet items as unassigned follow-ups; stop preserves branch and ledger.                                                                                                                               |
 | T17        | Preserve existing exact-dispatch native reconciliation. Inspect workspace revision, status and recent commits before resuming interrupted work. Pause prevents new dispatch while app status stays readable; resume continues from durable receipts.                                                                                                                                                                        |
 | T21        | Cover all eight member states. Working is not a fault; failed turns get one bounded retry with partial-work warning; missing/bad reports get one report-only repair; PM can organize a still-missing report; broken sessions use a new same-model conversation; quota/login use availability recovery; idle reports get one nudge then diagnosis. Held failures register app-only inspection waits.                         |
-| T22        | `all`, `gaps` and `stopped` retain actual path statistics, seat usage and terminal wall time. Quota/login refusals remain in the cost history but do not consume the dispatch budget or a no-progress attempt.                                                                                                                                                                                                              |
+| T22        | `all`, `gaps` and `stopped` retain actual path statistics, seat usage and terminal wall time. Quota/login refusals count once in actual turns and the hard dispatch budget, but never count as a no-progress attempt.                                                                                                                                                                                                       |
 | T23        | `decideNext()` is shared by fix planning, team problems and review. Solved problems stay done; otherwise budget wins first. Categories never force escalation, in-authority work wins over boundary alternatives, rewording cannot defeat repeat detection, and boundary cards name the blocked paths, costs, recommendation and used budget.                                                                               |
 
 The exact priority-0 sequence is a PM review dispatch followed by
@@ -527,7 +826,7 @@ node node_modules/@playwright/test/cli.js test --project=native e2e/native-team-
   seats. An SSH clock without an explicit timezone is not guessed locally.
 - An unavailable model never resets its latch merely because a new UUID, topic
   kind or prompt wording appears. Dispatched work reserves a turn slot; quota
-  and login refusals release that slot while retaining actual usage history.
+  and login refusals consume that slot once without entering no-progress.
 - Publication is performed only for a concrete requested action under its
   grant. The grant alone does not automatically publish every work revision.
   Git pushes are non-forced; a project with ambiguous remotes fails visibly.
@@ -536,8 +835,8 @@ node node_modules/@playwright/test/cli.js test --project=native e2e/native-team-
 - Missing usage values remain unknown (coverage counts are exposed), not an
   invented cost. Cost history includes failed provider invocations.
 - SSH team workspaces remain explicitly unsupported as in M2. Renderer feature
-  wiring, installed-package acceptance, real five-hour quota recovery and live
-  GitHub authentication/publication have not been verified by these tests.
+  wiring, installed-package acceptance, real-model completion after these fixes
+  and live GitHub authentication/publication have not been verified by these tests.
 
 On an Electron-capable host, run the native regression and new scenarios:
 

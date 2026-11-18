@@ -352,6 +352,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 			case 'turn_finished':
 			case 'report_accepted':
 			case 'report_rejected':
+			case 'report_normalized':
 			case 'report_repaired': {
 				let turn = state.turns.find((t) => t.dispatchId === event.dispatchId);
 				if (!turn) {
@@ -366,6 +367,8 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				}
 				if (event.kind === 'report_rejected') turn.reportError = event.reason;
 				if (event.kind === 'report_repaired') turn.repaired = true;
+				if (event.kind === 'report_normalized' && event.actor === 'app')
+					turn.normalizations = [...(turn.normalizations ?? []), ...event.changes];
 				if (
 					event.kind !== 'report_accepted' ||
 					turn.report ||
@@ -801,11 +804,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		if (turn.dispatched || turn.finished) {
 			for (const usage of [state.usage, seat.usage]) {
 				usage.turns++;
-				if (
-					turn.finished?.failureKind !== 'model-unavailable' &&
-					turn.finished?.failureKind !== 'login-expired'
-				)
-					usage.budgetTurns++;
+				usage.budgetTurns++;
 				const finished = turn.finished;
 				if (!finished) continue;
 				for (const key of ['inputTokens', 'outputTokens', 'costUsd', 'durationMs'] as const) {
@@ -819,7 +818,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		}
 	}
 	const budget = state.config
-		? { used: state.usage.budgetTurns, total: state.config.turnBudget }
+		? { used: state.usage.turns, total: state.config.turnBudget }
 		: undefined;
 	for (const [id, problem] of attempts) {
 		const progress = judgeAttempts(problem.initial, problem.inputs);

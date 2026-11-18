@@ -45,7 +45,7 @@ export function presentTeamOwnerCard(card: OwnerCard, state: TeamState, t: TFunc
 			: (state.baseline.proposedVersion ?? state.brief?.version);
 	const baseline = card.boundary === 'baseline';
 	const acceptance = card.boundary === 'acceptance';
-	const discussion = card.payload?.type === 'discussion';
+	const discussion = card.payload?.type === 'discussion' ? card.payload : undefined;
 	const permission = card.payload?.type === 'check-permission';
 	const m3 =
 		data.type === 'escalation' || data.type === 'permission' || data.type === 'progress-report';
@@ -90,6 +90,11 @@ export function presentTeamOwnerCard(card: OwnerCard, state: TeamState, t: TFunc
 	};
 	return {
 		...card,
+		boundaryReason: discussion?.boundary
+			? discussion.boundary === 'The next step is irreversible or changes a commitment.'
+				? t('workflows.team.commitmentBody')
+				: presentTeamText(discussion.boundary, state, t)
+			: undefined,
 		budgetNote:
 			!baseline && !acceptance
 				? t('workflows.team.budgetUsed', {
@@ -123,7 +128,7 @@ export function presentTeamOwnerCard(card: OwnerCard, state: TeamState, t: TFunc
 				: acceptance
 					? t('workflows.team.acceptanceBody')
 					: discussion
-						? card.standardChange
+						? card.standardChange || discussion.boundary
 							? ''
 							: t('workflows.team.commitmentBody')
 						: permission

@@ -1,11 +1,96 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { BaselineDiff, Brief, Criterion, TeamState } from '../../../shared/team/types';
+import type {
+	BaselineDiff,
+	Brief,
+	Criterion,
+	OwnerCard,
+	TeamState,
+} from '../../../shared/team/types';
 import { baselineDiff } from '../../../shared/team/policy';
-import { teamClient } from '../../services/teamClient';
+import { teamClient, presentTeamText } from '../../services/teamClient';
 import { useTeamStore } from '../../stores/teamStore';
 import { useT, useFormatList } from '../../i18n';
 import { useFocusAfterRender } from '../../hooks/utils/useFocusAfterRender';
-import { teamPathLabel, criterionLabel } from './TeamPrimitives';
+import { teamPathLabel, criterionLabel, SeatTag, TeamFold } from './TeamPrimitives';
+
+/** The card retains its own cycle even after a later owner edit starts another one. */
+export function TeamBaselineChallenges({
+	payload,
+	state,
+}: {
+	payload: Extract<NonNullable<OwnerCard['payload']>, { type: 'baseline' }>;
+	state: TeamState;
+}) {
+	const t = useT();
+	const list = useFormatList();
+	const challenges = payload.challenges ?? [];
+	const versions = [...new Set(challenges.map((challenge) => challenge.briefVersion))];
+	const round = payload.challengeRound;
+	if (!round && !challenges.length) return null;
+	return (
+		<div className="space-y-2" data-card="baseline-challenges">
+			{round && (
+				<p className="team-dim" data-challenge-round={round.round}>
+					{round.round === 2
+						? t('workflows.team.challengeSecond', {
+								criteria: list(
+									round.criteria.map((id) => {
+										const change = round.diff?.criteria.find((entry) => entry.id === id);
+										return change?.after?.text ?? change?.before?.text ?? criterionLabel(state, id);
+									})
+								),
+							})
+						: t('workflows.team.challengeFull')}
+				</p>
+			)}
+			{challenges.length > 0 && (
+				<TeamFold kind="baseline-challenge-history" title={t('workflows.team.challenge')}>
+					{versions.map((version, index) => (
+						<div key={version ?? index} className="space-y-2" data-challenge-version={version}>
+							<h4>{t('workflows.team.round', { round: index + 1 })}</h4>
+							{challenges
+								.filter((entry) => entry.briefVersion === version)
+								.map((entry) => (
+									<div key={entry.id}>
+										<SeatTag seat={entry.seat} />
+										{entry.objections.map((objection, i) => (
+											<p key={i}>{presentTeamText(objection.problem, state, t)}</p>
+										))}
+										{entry.plans?.map((plan, i) => (
+											<p key={i} className="team-dim">
+												{t('workflows.team.verificationPlan')}:{' '}
+												{criterionLabel(state, plan.criterion)} ·{' '}
+												{presentTeamText(plan.how, state, t)} {presentTeamText(plan.data, state, t)}
+											</p>
+										))}
+									</div>
+								))}
+						</div>
+					))}
+					{payload.responses
+						?.filter((response) => response.decisions.length)
+						.map((response) => (
+							<div key={response.id} className="space-y-1">
+								<h4>{t('workflows.team.briefResponse')}</h4>
+								{response.decisions.map((decision, index) => (
+									<p key={index}>
+										{t(`workflows.team.objection.${decision.result}`)}:{' '}
+										{presentTeamText(decision.reason, state, t)}
+									</p>
+								))}
+							</div>
+						))}
+					{payload.discussions?.map((decision) => (
+						<p key={decision.id}>
+							{t('workflows.team.decider', { seat: t(`workflows.team.${decision.decider}`) })}:{' '}
+							{presentTeamText(decision.decision, state, t)}
+						</p>
+					))}
+				</TeamFold>
+			)}
+		</div>
+	);
+}
 
 export function BaselineDiffView({ diff, state }: { diff: BaselineDiff; state: TeamState }) {
 	const t = useT();

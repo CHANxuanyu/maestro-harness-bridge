@@ -1,5 +1,9 @@
 # 分支工作记录
 
+## 2026-11-18：M3 fix2/fix3 集成
+
+在 `838f3d31a` 合并 `f65c6933b` 的未完成合并上补齐基线质询历史、轮次和讨论边界 payload 类型，并在中英文卡片中显示。复现的 5 项失败来自旧的正文 JSON 断言和编辑后流程：保留硬预算、最多两轮质询、完整编辑质询和消息门控规则，调整 PM 确认样例保留老板改过的证明方法，退回测试先完成编辑触发的完整质询，原有版本、差异、脚注和消息顺序断言保留。完整团队测试 503 项、i18n 9 项、4 份 TypeScript 检查、ESLint 和 Prettier 通过，文档检查 742 条路径无缺失，命令见 M3 验证记录。用户此前的 40/40 原生通过属于 `838f3d31a`；本轮未运行 Electron，未暂存或提交，未实现后续 fix4。
+
 ## 2026-11-18 M3 team renderer and merge resolution
 
 Resolved the in-progress M3 merge without staging or committing, retaining M2 baseline returns, message handling and human card bodies, plus M3 quota, takeover, waits and budget behavior. The merge gate passed 427 team tests and all four TypeScript projects before renderer work; takeover transcript lookup now follows the effective provider and launch source account. Added ledger-derived seat health, account login, app status, escalation/report detail, attempt history, residual ownership and cost surfaces in English and Chinese, with shared CLI/IPC assignment and reusable M3 native fixtures. Final verification passed 454 team tests, 70 adjacent renderer tests, the native fixture test, all four TypeScript projects, ESLint, Prettier and 740 documentation paths. Restart inspection retains a separate receipt from an earlier retry; both real-workspace regression cases fail before the fix and pass after it. Exact commands are recorded in `docs/round2/dev/team-m3-verification.md`; Electron, screenshots and real account recovery were not run here. The separate backend follow-up is not reimplemented.
@@ -241,6 +245,18 @@ catalog 和项目局部原生默认解析限制。没有提交、发布或改变
 变更 TypeScript 文件的 ESLint 使用 `--no-ignore`，包含仓库默认忽略的测试文件，0 错误、0 警告；全部 30 个变更文件的 Prettier 检查通过，`git diff --check` 通过，新增内容无禁用破折号。原有 `.survey-A0.md` 保持未改动。
 
 未验：真实模型推理、打包应用 GUI、SSH typed catalog、Windows/Linux CI、项目局部原生默认配置和自定义 CLI 参数/二进制；没有提交、发布或切换默认 UI。
+
+## 2026-11-18：M3 真实模型报告的格式归一化，未提交
+
+以 `ee282fec1` 为基线，读取负责人第三次运行的四份拒收报告。此前预算严格停在 20、质询最多两轮、基线在第 7 回合确认均已被真实运行验证；本次处理消耗补报回合的格式差异。非所属席位的估计字段丢弃，proposal 决策者由应用推导，QA 路径在实际工作区内归一化；原始报告用了裸文件名，因此只有应用找到 `qa/` 内唯一实际文件才补全路径。每次修正有可重放且不重复的账本说明，不能变成证据或关闭问题。产品原则、验证器审计及具体边界已写入团队模型和验证文档。
+
+验证对象为该提交后未提交源码。456 条测试、三项生产类型检查、Electron 场景类型检查、ESLint 和格式检查通过；原生运行在 Electron 启动时报错，不能计为场景通过。测试夹具仅保留四份合成任务报告，替换讨论 ID 和临时基线目录；没有复制整份运行捕获、账户路径或私人材料。准确命令、结果及原生复验边界见 [M3 后端验证](round2/dev/team-m3-verification.md)。没有调用付费模型、提交或发布。
+
+## 2026-11-18：M3 真实模型运行后的预算、依据和质询修复，未提交
+
+读取负责人提供的 151 条事件账本，确认第 21 次派发发生时旧预算计数只记了 20 次，因为豁免了一次额度失败。总预算现按实际派发计数，所有模型调用共用边界守卫，额度失败仍不计无进展次数。未知讨论引用保留为未核实依据，没有新证据的坚持变为保留意见；提示列出可引用 ID。按负责人产品决定，将质询限制为一次完整轮次加最多一次改动标准轮次，老板编辑或退回才重置；补全 respond 的标准变更形状及示例。
+
+验证对象为 `d0e1698c5` 后本工作区未提交源码；没有调用付费模型、提交或发布。原生 25/25 是负责人在本次修改前的外部结果，本次回归、准确命令与尚待外部复验项见 [M3 后端验证](round2/dev/team-m3-verification.md)。原始真实运行捕获未复制进公开文档。
 
 ## 2026-11-18：M3 原生场景失败后的修复，未提交
 

@@ -220,6 +220,89 @@ describe('M2 discussions and decisions', () => {
 
 describe('M2 baseline and standard changes', () => {
 	it.each(['en', 'zh-CN'] as const)(
+		'keeps the baseline challenge scope, objections and PM answers frozen in %s',
+		(language) => {
+			useSettingsStore.setState({ uiLanguage: language });
+			const strings = language === 'en' ? en : zh;
+			const revised = {
+				...brief,
+				version: brief.version + 1,
+				criteria: brief.criteria.map((criterion) =>
+					criterion.id === 'A1' ? { ...criterion, text: 'Parses whole hours' } : criterion
+				),
+			};
+			const events = ledger(
+				...baseline,
+				{
+					kind: 'challenge_submitted',
+					seat: 'dev',
+					briefVersion: brief.version,
+					objections: [{ about: 'A1', kind: 'risk', problem: 'Which hour samples?' }],
+				},
+				{ kind: 'brief_published', brief: revised },
+				{
+					kind: 'challenge_submitted',
+					seat: 'qa',
+					briefVersion: revised.version,
+					objections: [{ about: 'A1', kind: 'risk', problem: 'What about fractional hours?' }],
+					plans: [{ criterion: 'A1', how: 'Inspect whole hours', data: '1h' }],
+				},
+				{
+					kind: 'brief_response',
+					decisions: [
+						{ about: 'A1', result: 'reject', reason: 'Fractional hours remain out of scope' },
+					],
+				}
+			);
+			const snapshot = reduceLedger(events);
+			const card: Card = {
+				id: 'challenge-baseline',
+				boundary: 'baseline',
+				title: 'Baseline',
+				body: 'Human body',
+				options: [{ id: 'confirm', label: 'Confirm' }],
+				payload: {
+					type: 'baseline',
+					brief: revised,
+					trials: [],
+					challenges: snapshot.challenges,
+					responses: snapshot.briefResponses,
+					question: 'Confirm the integer-only boundary',
+					challengeRound: { round: 2, criteria: ['A1'], diff: baselineDiff(brief, revised) },
+				},
+			};
+			const state = reduceLedger([
+				...events,
+				{
+					...snapshot.challenges[0],
+					id: 'later-challenge',
+					seq: events.length + 1,
+					briefVersion: revised.version + 1,
+					objections: [{ about: 'A1', kind: 'risk', problem: 'Later cycle objection' }],
+				},
+			]);
+			const { container } = render(
+				<OwnerCard card={card} state={state} teamId={config.id} answered="superseded" />
+			);
+			const scope = container.querySelector('[data-challenge-round="2"]')!;
+			expect(scope).toHaveTextContent(
+				strings['workflows.team.challengeSecond'].replace('{criteria}', 'Parses whole hours')
+			);
+			expect(scope).not.toHaveTextContent(brief.criteria[1].text);
+			expect(container.querySelectorAll('[data-challenge-version]')).toHaveLength(2);
+			const history = container.querySelector('[data-card="baseline-challenge-history"]')!;
+			fireEvent.click(history.querySelector('summary')!);
+			expect(history).toHaveAttribute('open');
+			expect(history).toHaveTextContent('What about fractional hours?');
+			expect(history).toHaveTextContent('Fractional hours remain out of scope');
+			expect(history).toHaveTextContent(strings['workflows.team.objection.reject']);
+			expect(history).not.toHaveTextContent('Later cycle objection');
+			expect(container).toHaveTextContent('Confirm the integer-only boundary');
+			expect(container).not.toHaveTextContent('briefVersion');
+			expect(container.querySelector('[data-boundary-reason]')).not.toBeInTheDocument();
+		}
+	);
+	it.each(['en', 'zh-CN'] as const)(
 		'edits all three fields, returns a note and reads the backend diff using keyboard in %s',
 		async (language) => {
 			useSettingsStore.setState({ uiLanguage: language });
@@ -320,6 +403,7 @@ describe('M2 baseline and standard changes', () => {
 					positions: [],
 					responses: [],
 					proposal: 'Relax this criterion',
+					boundary: 'The next step is irreversible or changes a commitment.',
 				},
 				options: [
 					{ id: 'approve', label: 'Approve' },
@@ -336,6 +420,12 @@ describe('M2 baseline and standard changes', () => {
 			expect(container.querySelector('[data-failing-now]')).toBeInTheDocument();
 			expect(container.querySelector('[data-reference-votes]')).toBeInTheDocument();
 			expect(container).not.toHaveTextContent('failingNow');
+			expect(container.querySelector('[data-boundary-reason]')).toHaveTextContent(
+				strings['workflows.team.commitmentBody']
+			);
+			expect(container.textContent?.split(strings['workflows.team.commitmentBody'])).toHaveLength(
+				2
+			);
 			expect(container.querySelectorAll('button[data-boundary="commitment"]')).toHaveLength(2);
 			const approve = container.querySelector('[data-option="approve"]')!;
 			const keep = container.querySelector('[data-option="keep"]')!;

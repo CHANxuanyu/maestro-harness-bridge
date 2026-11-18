@@ -100,6 +100,44 @@ Each seat's turn ends with a fenced block whose info string is `team-report` and
 
 A missing or malformed block is repaired once by asking the seat to resubmit only the block (R3-4); a block that a role may not submit (for example QA closing an issue it did not verify, dev verifying its own fix) is rejected and recorded. Evidence counts are computed by the app from `check_run` and QA verdicts, never taken from a seat's text (R1-7).
 
+Owner product decision, 2026-11-18: be strict about facts and lenient about form.
+When the app can determine the correct value, or a field belongs to another seat,
+normalize it and keep the rest of the report instead of spending a repair turn.
+This does not invent evidence, permission, verification, files, or a decision.
+
+- Only dev supplies `extraTurns` and `preservesDeadline`, including inside
+  `standardChanges`. Other seats' values are dropped. Only PM supplies
+  `resolvedStandards`; dropping another seat's field never closes an issue.
+  Prompt and repair schemas omit fields the receiving seat does not own.
+- A proposal's `decider` is app-owned, derived by `discussionDecider()`. An
+  omitted or conflicting model hint is replaced and recorded. The model schema
+  omits this field; the discussion slice states the lawful decider. An owner-layer
+  proposal still waits for the owner card after participant responses.
+- QA test paths are workspace-relative `qa/...`. Harmless `./` segments and
+  absolute paths physically inside the QA workspace's `qa/` normalize to that
+  spelling. A bare filename is accepted only when that file exists in `qa/` and
+  no same-named workspace-root entry makes it ambiguous. Traversal, other
+  directories, directory targets and symlink escapes are rejected. Normalizing
+  a file claim does not make it test evidence. Output locations use the same
+  lexical normalization against the dev capture workspace and retain external
+  references; capture still checks the real path. A relative CI observation cwd
+  resolves against the reporting seat's workspace.
+- Every accepted correction produces one app-owned `report_normalized` event
+  with the dispatch id and `{ field, before?, after?, reason }` changes. The
+  normalized report and notes also live in `turn_finished`, so interrupted
+  ingestion replays the same notes once without a new model turn. `team log`
+  and the preload API expose the same notes. Notes are neither evidence nor
+  progress and do not add a turn.
+
+Validation still rejects reports from the wrong role, invented or duplicate
+criterion/issue/message identities, incomplete standard definitions, missing
+verification evidence, premature issue closure, invalid discussion ordering,
+repeated diagnosis without a new basis and a completion demo without proof.
+Unknown position/response references remain unverified basis text. Existing
+review normalization (unconfirmed problems become suggestions, verdict follows
+confirmed problems) now records its corrections; an empty rejection still
+requires a concrete problem rather than guessing the missing fact.
+
 ## 5. Phases and the M1 direct path
 
 `clarify -> challenge -> (owner baseline) -> implement -> verify -> review -> demo -> accept`. M1 implements the direct path with the simplest rules; M2 adds discussions, review loops and baseline edits; M3 adds limits, faults and terminal reports.
@@ -228,8 +266,10 @@ from the currently bound substitute and switch-back occurs after reset or a newe
 healthy quota sample. PM messages remain queued while its model is suspended.
 
 `quota_exhausted` stores model/source, reset and login classification.
-`model_recovered` clears that specific observation. Quota/login refusals remain in
-the cost bill but not `usage.budgetTurns`. Ordinary immediate failures wait 30
+`model_recovered` clears that specific observation. Every dispatched turn,
+including a quota/login refusal, reserves one slot in `usage.turns` exactly once.
+`usage.budgetTurns` remains a compatibility alias of that total. Quota/login
+refusals do not enter the product no-progress streak. Ordinary immediate failures wait 30
 seconds before the one same-turn retry. Repeated failures never become topic
 retries. After a failed report repair, PM can organize existing replies in a
 read-only `recovery` turn; reconstructed reports still pass the original schema
@@ -278,3 +318,42 @@ projection as `team show cost`; member duration and team wall time are separate.
 seat's prose. Residual reassignment appends `residual_item` through the shared
 service/IPC/CLI and replaces only that item's owner in the reducer. All three
 terminal summaries and paused message queuing remain ledger-derived.
+
+## Real-model follow-up decisions, 2026-11-18
+
+The hard limit uses actual dispatches, including pending reservations. Recovery,
+report repair, takeover and the 80% wrap-up all use the same dispatch guard.
+An initial invocation uses its already reserved slot; restart at an exhausted
+budget may inspect the workspace and reconcile a completed native receipt, but
+cannot invoke a process again. The app generates the unfinished report without
+a turn. A paused reservation can resume after the owner extends the budget and
+resumes the team. Solved progress still precedes the budget in `decideNext()`.
+
+The owner decided that challenge is bounded per owner-authored brief cycle:
+dev and QA first challenge the full brief once. A PM revision permits at most
+one additional round, only for changed criteria, with the before/after diff.
+QA must plan for those criteria still present, or mark them unverifiable; a
+removal-only revision may have an empty plan. Further disagreements enter a
+short discussion or remain visible with the PM answers and boundary question
+on the baseline confirmation card. There is never a third challenge round in
+that cycle. An owner edit or return starts a fresh full round; on return PM
+first supplies the new draft. `teamChallengeRound()` derives the cycle from
+durable owner changes, challenge receipts and brief versions, so restart cannot
+reset the cap. This decision refines PRD 6.4 without changing the discussion
+rules in 6.5.
+
+Positions need a claim, prose basis and what would change the author's mind;
+recorded evidence is optional. `teamEvidenceCatalog()` supplies the exact ids
+and observation descriptions to position and response prompts. Unknown
+references survive in `position.unverifiedBasis` or `response.unverifiedBasis`,
+separate from evidence. The original report receipt also remains intact.
+Step-3 insistence needs a new recorded id or a confirmed baseline violation.
+Without either, the app records `result: reserve`, `requestedResult: insist`
+and an `evidenceConclusion`, then lets the lawful decider conclude the reversible
+question as contested. It does not classify this disagreement as a member fault
+or invent another evidence-bearing round. Repair prompts quote the exact ids
+from the original dispatch snapshot.
+
+The respond prompt distinguishes draft edits in `brief` from confirmed
+`standardChanges`, and supplies the complete replacement criterion shape and
+a validated example. These shared rules apply equally through CLI and UI.

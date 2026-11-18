@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import path from 'path';
 import { createHash } from 'crypto';
 import { normalizeWorktreePath, isPathAtOrUnderRoot } from '../../shared/worktreePaths';
+import { teamWorkspaceRelativePath } from '../../shared/team/policy';
 import { DURATION_MS } from '../../shared/duration';
 import { resolveGhPath, getExpandedEnv } from '../utils/cliDetection';
 import type { CheckHost } from '../../shared/checkRun';
@@ -41,6 +42,8 @@ export interface TeamWorkspaces {
 	): Promise<{ revision: string; status: string; recentCommits: string }>;
 	/** Content identity against the initial revision, including untracked files. */
 	diffHash(): Promise<string>;
+	/** Canonical QA path; bare names require an unambiguous existing qa/ file. */
+	resolveQaTestPath(value: string): Promise<string>;
 }
 
 const writes = createKeyedWriteQueue();
@@ -272,6 +275,63 @@ export function createTeamWorkspaces(options: TeamWorkspaceOptions): TeamWorkspa
 				}
 				return hash.digest('hex');
 			}),
+		async resolveQaTestPath(value) {
+			const qa = await assertOwned('qa');
+			let relative = teamWorkspaceRelativePath(value, qa, 'qa');
+			if (!relative && path.isAbsolute(value) && !value.split(/[\\/]/).includes('..')) {
+				const real = await fs.realpath(value).catch(() => undefined);
+				if (real) relative = teamWorkspaceRelativePath(real, qa, 'qa');
+			}
+			if (!relative && /^[^/\\:\0]+$/.test(value) && !['.', '..'].includes(value)) {
+				const direct = await fs
+					.lstat(path.join(qa, value))
+					.catch((error: NodeJS.ErrnoException) => {
+						if (error.code !== 'ENOENT') throw error;
+						return undefined;
+					});
+				const candidate = path.join(qa, 'qa', value);
+				if (
+					!direct &&
+					(await fs.stat(candidate).then(
+						(stat) => stat.isFile(),
+						() => false
+					))
+				)
+					relative = `qa/${value}`;
+			}
+			if (!relative)
+				throw new Error(`QA test path must resolve inside qa/ without traversal: ${value}`);
+			const target = path.join(qa, relative);
+			let ancestor = target;
+			const suffix: string[] = [];
+			let resolved: string;
+			while (true) {
+				try {
+					resolved = path.join(await fs.realpath(ancestor), ...suffix);
+					break;
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || ancestor === qa) throw error;
+					const unresolved = await fs.lstat(ancestor).catch((statError: NodeJS.ErrnoException) => {
+						if (statError.code !== 'ENOENT') throw statError;
+						return undefined;
+					});
+					if (unresolved?.isSymbolicLink())
+						throw new Error(`QA test path has an unresolved symlink: ${value}`);
+					suffix.unshift(path.basename(ancestor));
+					ancestor = path.dirname(ancestor);
+				}
+			}
+			if (
+				!isPathAtOrUnderRoot(
+					normalizeWorktreePath(resolved),
+					normalizeWorktreePath(path.join(qa, 'qa'))
+				)
+			)
+				throw new Error(`QA test path escapes qa/ through a symlink: ${value}`);
+			if (!suffix.length && !(await fs.stat(target)).isFile())
+				throw new Error(`QA test path must name a file: ${value}`);
+			return relative;
+		},
 		enforceQaBoundary: () => writes.enqueue(root, boundary),
 		advanceQa: (revision) =>
 			writes.enqueue(root, async () => {

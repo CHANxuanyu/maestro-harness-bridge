@@ -253,6 +253,11 @@ export interface OwnerCard {
 				question?: string | null;
 				trials: TeamEvent<'check_run'>[];
 				diff?: BaselineDiff;
+				/** Frozen history for this owner-authored challenge cycle. */
+				challenges?: TeamEvent<'challenge_submitted'>[];
+				responses?: TeamEvent<'brief_response'>[];
+				discussions?: TeamEvent<'discussion_closed'>[];
+				challengeRound?: { round: number; criteria: string[]; diff?: BaselineDiff };
 		  }
 		| {
 				type: 'discussion';
@@ -263,6 +268,8 @@ export interface OwnerCard {
 				positions: TeamEvent<'position'>[];
 				proposal: string;
 				responses: TeamEvent<'response'>[];
+				/** Human explanation of the commitment that needs an owner decision. */
+				boundary?: string;
 		  }
 		| {
 				type: 'escalation';
@@ -433,6 +440,7 @@ export type LedgerEvent = EventBase &
 				message?: string;
 				/** Durable ingestion receipt; domain events can be recovered after a crash. */
 				report?: TeamReport;
+				normalizations?: ReportNormalization[];
 				repairTail?: string;
 				canceled?: boolean;
 				failureKind?: MemberFaultKind;
@@ -441,6 +449,12 @@ export type LedgerEvent = EventBase &
 		| { kind: 'report_accepted'; seat: SeatRole; dispatchId: string; report: TeamReport }
 		| { kind: 'report_repaired'; seat: SeatRole; dispatchId: string }
 		| { kind: 'report_rejected'; seat: SeatRole; dispatchId: string; reason: string }
+		| {
+				kind: 'report_normalized';
+				seat: SeatRole;
+				dispatchId: string;
+				changes: ReportNormalization[];
+		  }
 		| { kind: 'workspace_submitted'; dispatchId: string; revision: string; diffHash: string }
 		| { kind: 'qa_boundary_checked'; dispatchId: string }
 		| { kind: 'qa_boundary_restored'; dispatchId: string; paths: string[] }
@@ -551,6 +565,8 @@ export type LedgerEvent = EventBase &
 				basis: string;
 				wouldChangeMind: string;
 				evidence?: string[];
+				/** Submitted references not backed by an observation; never evidence. */
+				unverifiedBasis?: string[];
 				extraTurns?: number;
 				preservesDeadline?: boolean;
 		  }
@@ -574,6 +590,10 @@ export type LedgerEvent = EventBase &
 				evidence?: string;
 				baselineViolation?: string;
 				round?: number;
+				unverifiedBasis?: string[];
+				/** Unsupported insistence is retained as a reservation, not a fault. */
+				requestedResult?: 'insist';
+				evidenceConclusion?: string;
 		  }
 		| {
 				kind: 'discussion_closed';
@@ -901,9 +921,16 @@ export interface TeamDiscussion {
 	decision?: TeamEvent<'discussion_closed'>;
 }
 
+export interface ReportNormalization {
+	field: string;
+	before?: unknown;
+	after?: unknown;
+	reason: string;
+}
+
 export interface TeamUsage {
 	turns: number;
-	/** Dispatches charged to the limit; quota refusals are recorded but not charged. */
+	/** Compatibility alias of turns. Every dispatch reserves one slot, including quota failures. */
 	budgetTurns: number;
 	inputTokens: number;
 	outputTokens: number;
@@ -995,6 +1022,7 @@ export interface TeamState {
 		report?: TeamReport;
 		reportError?: string;
 		repaired?: boolean;
+		normalizations?: ReportNormalization[];
 	}>;
 	pendingMessages: TeamEvent<'owner_message'>[];
 	messages: Array<{
@@ -1016,6 +1044,7 @@ export interface TeamTurnLog {
 	prompt?: string;
 	reply?: string;
 	report?: TeamReport;
+	normalizations?: ReportNormalization[];
 	error?: string;
 }
 

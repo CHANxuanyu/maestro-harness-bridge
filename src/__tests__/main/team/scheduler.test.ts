@@ -10,10 +10,17 @@ import {
 	type TeamSchedulerDependencies,
 } from '../../../main/team/scheduler';
 import type { SeatTurnRequest, SeatTurnResult } from '../../../main/team/turn-dispatcher';
-import type { LedgerEvent, TeamConfig, TeamReport } from '../../../shared/team/types';
+import type {
+	LedgerEvent,
+	TeamConfig,
+	TeamReport,
+	SeatRole,
+	ReportTurnKind,
+} from '../../../shared/team/types';
 import { reduceLedger } from '../../../shared/team/ledger';
 import { teamStatus } from '../../../shared/team/status';
 import { teamTurnPermission } from '../../../shared/team/policy';
+import normalizationFixtures from '../../shared/team/real-normalization-fixtures.json';
 import {
 	config,
 	check,
@@ -150,6 +157,9 @@ describe('team scheduler', () => {
 				recentCommits: 'fixture commit',
 			})),
 			diffHash: vi.fn(async () => hash),
+			resolveQaTestPath: vi.fn(async (value: string) =>
+				value === 'clamp.boundary.test.cjs' ? `qa/${value}` : value
+			),
 		};
 		deps = {
 			store,
@@ -792,6 +802,12 @@ describe('team scheduler', () => {
 			...goodReports.respond,
 			askOwner: 'Does this scope meet the request?',
 		} as TeamReport);
+		await finish(latest('dev', 'challenge'), { type: 'challenge', objections: [] });
+		await finish(latest('qa', 'challenge'), goodReports.challenge);
+		await finish(latest('pm', 'respond'), {
+			...goodReports.respond,
+			askOwner: 'Does this scope meet the request?',
+		} as TeamReport);
 		expect(state().openCards).toHaveLength(1);
 		expect(state().openCards[0].id).not.toBe(cardId);
 		expect(state().openCards[0].body).toContain('Does this scope meet the request?');
@@ -1138,9 +1154,20 @@ describe('team scheduler', () => {
 				};
 				const original = await createTeamWorkspaces(options).initialize();
 				fs.writeFileSync(path.join(original.dev, 'result.txt'), 'Completed external effect');
-				teamConfig = { ...teamConfig, projectRoot: project, turnBudget: 1 };
+				teamConfig = { ...teamConfig, projectRoot: project, turnBudget: 2 };
 				events = ledger(
 					{ kind: 'team_created', config: teamConfig },
+					// Keep independent scheduling on hold while testing the interrupted turn.
+					{
+						kind: 'decision_card',
+						card: {
+							id: 'hold',
+							boundary: 'permission',
+							title: 'Hold new assignments',
+							body: 'Await owner decision',
+							options: [{ id: 'allow', label: 'Authorize' }],
+						},
+					},
 					...(['pm', 'dev', 'qa'] as const).map((seat) => ({
 						kind: 'seat_bound' as const,
 						seat,
@@ -1502,7 +1529,69 @@ describe('team scheduler', () => {
 				.every((w) => w.title.includes('preserves'))
 		).toBe(true);
 	});
-	it('T7 owner baseline edit keeps version history, reruns canaries and returns a minimal diff', async () => {
+	it('PM revisions cap challenges at two rounds, show only changed criteria, and survive restart', async () => {
+		await begin();
+		await finish(latest('pm', 'brief'), goodReports.brief);
+		await finish(latest('dev', 'challenge'), { type: 'challenge', objections: [] });
+		await finish(latest('qa', 'challenge'), goodReports.challenge);
+		const source = (goodReports.respond as Extract<TeamReport, { type: 'respond' }>).brief!;
+		const revised = {
+			...source,
+			criteria: source.criteria.map((c) =>
+				c.id === 'A1' ? { ...c, text: 'Parses whole hours' } : c
+			),
+		};
+		await finish(latest('pm', 'respond'), { type: 'respond', decisions: [], brief: revised });
+		for (const seat of ['dev', 'qa'] as const) {
+			const prompt = latest(seat, 'challenge').prompt;
+			expect(prompt).toContain('"round": 2');
+			expect(prompt).toContain('Parses hours');
+			expect(prompt).toContain('Parses whole hours');
+			expect(prompt).not.toContain('Results are readable');
+			expect(prompt).not.toContain('Rejects bad input');
+		}
+		await finish(latest('dev', 'challenge'), {
+			type: 'challenge',
+			objections: [{ about: 'A1', kind: 'risk', problem: 'What about fractional hours?' }],
+		});
+		await finish(latest('qa', 'challenge'), {
+			type: 'challenge',
+			objections: [],
+			plans: [{ criterion: 'A1', how: 'Check integers', data: '1h' }],
+		});
+		await finish(latest('pm', 'respond'), {
+			type: 'respond',
+			decisions: [
+				{ about: 'A1', result: 'reject', reason: 'Fractional input is outside this draft scope' },
+			],
+			brief: {
+				...revised,
+				criteria: revised.criteria.map((c) =>
+					c.id === 'A1' ? { ...c, text: 'Accept integer hours only' } : c
+				),
+			},
+			askOwner: 'Confirm the integer-only boundary or add fractional input to scope.',
+		});
+		expect(requests.filter((r) => r.turn === 'challenge')).toHaveLength(4);
+		expect(state().openCards.map((c) => c.boundary)).toEqual(['baseline']);
+		expect(state().openCards[0].payload).toMatchObject({
+			type: 'baseline',
+			challengeRound: { round: 2, criteria: ['A1'] },
+			challenges: expect.arrayContaining([
+				expect.objectContaining({
+					objections: [expect.objectContaining({ problem: 'What about fractional hours?' })],
+				}),
+			]),
+		});
+		expect(state().openCards[0].body).toContain('integer-only boundary');
+		scheduler.dispose();
+		scheduler = createTeamScheduler(deps);
+		await scheduler.start();
+		await drain();
+		expect(requests.filter((r) => r.turn === 'challenge')).toHaveLength(4);
+		expect(events.some((e) => e.kind === 'report_rejected')).toBe(false);
+	});
+	it('T7 owner baseline edit starts a fresh full challenge, keeps history and reruns canaries', async () => {
 		await toBaseline();
 		const originalVersion = state().brief!.version;
 		await scheduler.baselineEdit(teamConfig.id, 'A1', 'Parses whole hours', {
@@ -1518,9 +1607,23 @@ describe('team scheduler', () => {
 		expect(state().briefs.find((b) => b.version === originalVersion)!.criteria[0].how).not.toBe(
 			'Run complete-hour samples'
 		);
+		expect(latest('qa', 'challenge').prompt).toContain('"round": 1');
+		expect(latest('qa', 'challenge').prompt).toContain('Results are readable');
+		await finish(latest('dev', 'challenge'), { type: 'challenge', objections: [] });
+		await finish(latest('qa', 'challenge'), goodReports.challenge);
+		const source = (goodReports.respond as Extract<TeamReport, { type: 'respond' }>).brief!;
+		const edited = {
+			...source,
+			criteria: source.criteria.map((c) =>
+				// Acknowledge both owner fields; reverting how would require a second round.
+				c.id === 'A1' ? { ...c, text: 'Parses whole hours', how: 'Run complete-hour samples' } : c
+			),
+		};
+		await finish(latest('pm', 'respond'), { type: 'respond', decisions: [], brief: edited });
 		expect(state().checks.filter((c) => c.purpose === 'trial')).toHaveLength(2);
 		await confirm();
 		expect(state().criteria[0].text).toBe('Parses whole hours');
+		expect(state().criteria[0].how).toBe('Run complete-hour samples');
 	});
 	it('validates owner proof fields and applies the proof source without changing the old version', async () => {
 		await toBaseline();
@@ -1553,6 +1656,8 @@ describe('team scheduler', () => {
 			),
 		};
 		await finish(latest('pm', 'respond'), { type: 'respond', decisions: [], brief: amended });
+		expect(latest('qa', 'challenge').prompt).toContain('"round": 1');
+		expect(latest('qa', 'challenge').prompt).toContain('Rejects bad input');
 		await finish(latest('dev', 'challenge'), goodReports.challenge);
 		await finish(latest('qa', 'challenge'), goodReports.challenge);
 		await finish(latest('pm', 'respond'), { type: 'respond', decisions: [], brief: amended });
@@ -1597,6 +1702,15 @@ describe('team scheduler', () => {
 			const editedVersion = state().brief!.version;
 			expect(editedVersion).toBe(original.version + 1);
 			expect(state().brief!.criteria.map((criterion) => criterion.id)).toEqual(['A1', 'E1']);
+			// An owner edit now starts a full challenge before the next confirmation card.
+			expect(state().openCards).toEqual([]);
+			expect(latest('qa', 'challenge').prompt).toContain('"round": 1');
+			expect(latest('qa', 'challenge').prompt).toContain('Readable output in both viewers');
+			await completeScriptedTurn('dev', 'challenge');
+			await completeScriptedTurn('qa', 'challenge');
+			await completeScriptedTurn('pm', 'respond');
+			expect(state().brief!.version).toBe(editedVersion);
+			expect(state().openCards[0].boundary).toBe('baseline');
 			await scheduler.baselineReturn(teamConfig.id, 'Include the footer');
 			await drain();
 			expect(state().baseline.returns).toHaveLength(1);
@@ -2036,7 +2150,7 @@ describe('team scheduler', () => {
 			});
 			expect(state().openCards.some((c) => c.id === 'budget')).toBe(false);
 			if (mode === 'wait' || mode === 'deadline') {
-				expect(state().usage.budgetTurns).toBe(used - 1);
+				expect(state().usage.turns).toBe(used);
 				expect(state().followUps.some((f) => f.unavailabilityId)).toBe(true);
 				if (mode === 'deadline')
 					expect(state().openCards[0]).toMatchObject({
@@ -2080,7 +2194,7 @@ describe('team scheduler', () => {
 				expect(takeover.prompt).toContain(config.idea);
 				expect(takeover.prompt).toContain('decisions');
 				expect(state().openCards).toEqual([]);
-				expect(state().usage.budgetTurns).toBe(used);
+				expect(state().usage.turns).toBe(used + 1);
 			}
 			if (mode !== 'deadline') {
 				if (mode !== 'wait') await scheduler.say(teamConfig.id, 'Queued question for PM');
@@ -2427,6 +2541,230 @@ describe('team scheduler', () => {
 			expect(requests).toEqual([]);
 		}
 	);
+	it.each([false, true])(
+		'real-run budget 20 stops pending recovery with wrap-up recorded=%s',
+		async (wrapped) => {
+			const sequence = [
+				'brief',
+				'challenge',
+				'challenge',
+				'respond',
+				'challenge',
+				'challenge',
+				'respond',
+				'challenge',
+				'challenge',
+				'respond',
+				'report_repair',
+				'position',
+				'position',
+				'position',
+				'report_repair',
+				'position',
+				'report_repair',
+				'report_repair',
+				'recovery',
+				'wrap_up',
+			] as const;
+			const rows: EventInput[] = sequence.flatMap((turn, index): EventInput[] => [
+				{
+					kind: 'turn_dispatched',
+					dispatchId: `real-${index}`,
+					seat: 'pm',
+					turn,
+					promptDigest: '',
+					...(turn === 'report_repair'
+						? { repairOf: `real-${index - 1}`, expectedTurn: 'position' as const }
+						: {}),
+				},
+				{
+					kind: 'turn_finished',
+					dispatchId: `real-${index}`,
+					seat: 'pm',
+					exitCode: index === 11 ? 1 : 0,
+					durationMs: index === 11 ? 49 : 100,
+					reportError: 'Missing report',
+					...(index === 11
+						? {
+								failureKind: 'model-unavailable' as const,
+								reportError: "You've hit your 5-hour limit · resets 4:10am (Europe/Paris)",
+							}
+						: {}),
+				},
+			]);
+			events = ledger(
+				...baseline,
+				...bindings,
+				...rows,
+				...(wrapped
+					? [
+							{
+								kind: 'wrap_up',
+								generatedBy: 'pm',
+								summary: 'Preserve remaining work',
+								priorities: ['Report gaps'],
+							} as const,
+						]
+					: [])
+			);
+			const created = events[0];
+			if (created.kind !== 'team_created') throw new Error('fixture');
+			created.config.turnBudget = 20;
+			await scheduler.start();
+			await drain();
+			for (let index = 0; index < 3; index++) await scheduler.wake(config.id);
+			expect(requests).toEqual([]);
+			expect(state().usage.turns).toBe(20);
+			expect(state().usage.budgetTurns).toBe(20);
+			expect(state().openCards.map((c) => c.boundary)).toEqual(['budget']);
+			expect(state().openCards[0].payload).toMatchObject({
+				type: 'progress-report',
+				generatedBy: 'app',
+			});
+			expect(state().openCards[0].body).toContain('not a completion demo');
+		}
+	);
+	it('restart at the last reserved slot reconciles effects without invoking another process', async () => {
+		events = ledger(...baseline, ...bindings, {
+			kind: 'turn_dispatched',
+			dispatchId: 'last-reservation',
+			seat: 'pm',
+			turn: 'recovery',
+			promptDigest: '',
+		});
+		const created = events[0];
+		if (created.kind !== 'team_created') throw new Error('fixture');
+		created.config.turnBudget = 1;
+		await scheduler.start();
+		await drain();
+		expect(deps.reconcile).toHaveBeenCalledOnce();
+		expect(deps.workspaces(teamConfig).inspect).toHaveBeenCalledOnce();
+		expect(requests).toEqual([]);
+		expect(state().turns[0].finished?.canceled).toBe(true);
+		expect(state().usage.turns).toBe(1);
+		expect(state().openCards.map((c) => c.boundary)).toEqual(['budget']);
+	});
+	it('a paused last reservation gets a free budget report and resumes only after extension', async () => {
+		events = ledger(
+			...baseline,
+			...bindings,
+			{ kind: 'paused', actor: 'owner' },
+			{
+				kind: 'turn_dispatched',
+				dispatchId: 'paused-last',
+				seat: 'pm',
+				turn: 'brief',
+				promptDigest: '',
+			}
+		);
+		const created = events[0];
+		if (created.kind !== 'team_created') throw new Error('fixture');
+		created.config.turnBudget = 1;
+		await scheduler.start();
+		await drain();
+		expect(requests).toEqual([]);
+		expect(state().openCards.map((c) => c.boundary)).toEqual(['budget']);
+		await scheduler.extend(config.id, { turns: 10 });
+		await drain();
+		expect(requests).toEqual([]);
+		await scheduler.resume(config.id);
+		await drain();
+		expect(requests.some((r) => r.dispatchId === 'paused-last')).toBe(true);
+	});
+	it('two parallel challenges reserve the final two slots without dispatching respond or wrap-up', async () => {
+		config.turnBudget = 3;
+		await begin();
+		await finish(latest('pm', 'brief'), goodReports.brief);
+		expect(requests).toHaveLength(3);
+		await finish(latest('dev', 'challenge'), { type: 'challenge', objections: [] });
+		await finish(latest('qa', 'challenge'), goodReports.challenge);
+		expect(requests).toHaveLength(3);
+		expect(state().usage.turns).toBe(3);
+		expect(state().openCards.map((c) => c.boundary)).toEqual(['budget']);
+	});
+	it('the last allowed invocation counts an immediate quota failure once and cannot take over or wrap up', async () => {
+		config.turnBudget = 1;
+		await begin();
+		expect(requests).toHaveLength(1);
+		completions.get(requests[0].dispatchId!)!({
+			...result(requests[0], ''),
+			exitCode: 1,
+			durationMs: 49,
+			failure: {
+				kind: 'model-unavailable',
+				detail: "You've hit your 5-hour limit · resets 4:10am (Europe/Paris)",
+				resetsAt: Date.now() + 60_000,
+			},
+		});
+		await drain();
+		await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS * 3);
+		expect(requests).toHaveLength(1);
+		expect(state().usage.turns).toBe(1);
+		expect(state().problems).toEqual({});
+		expect(state().openCards.map((c) => c.boundary)).toEqual(['budget']);
+		expect(state().wrapUp).toBeUndefined();
+	});
+	it('real-run positions preserve unknown basis without repairs; unsupported insistence concludes with a reservation', async () => {
+		events = ledger(...baseline, ...bindings, {
+			kind: 'discussion_opened',
+			discussionId: 'basis',
+			topic: 'Choose formatting',
+			owner: 'pm',
+			participants: ['pm', 'dev', 'qa'],
+			trigger: 'challenge',
+			layer: 'product',
+			reversible: true,
+		});
+		await scheduler.start();
+		await drain();
+		for (const seat of ['pm', 'dev', 'qa'] as const) {
+			await finish(latest(seat, 'position'), {
+				type: 'position',
+				discussionId: 'basis',
+				claim: 'Use a concise display',
+				basis: 'Readable for a small task',
+				wouldChangeMind: 'A captured output that is unreadable',
+				...(seat === 'pm' ? {} : { evidence: ['The brief describes a small task'] }),
+			});
+		}
+		expect(state().discussions[0].positions).toHaveLength(3);
+		expect(state().discussions[0].positions.find((p) => p.seat === 'dev')).toMatchObject({
+			evidence: [],
+			unverifiedBasis: ['The brief describes a small task'],
+		});
+		await finish(latest('pm', 'proposal'), {
+			type: 'proposal',
+			discussionId: 'basis',
+			proposal: 'Use concise formatting',
+			decider: 'pm',
+			actions: ['pm', 'dev', 'qa'].map((seat) => ({
+				seat: seat as 'pm' | 'dev' | 'qa',
+				action: 'Use the chosen format',
+			})),
+		});
+		for (const seat of ['pm', 'dev', 'qa'] as const)
+			await finish(latest(seat, 'response'), {
+				type: 'response',
+				discussionId: 'basis',
+				result: seat === 'qa' ? 'insist' : 'agree',
+				reason: 'Prefer a table',
+				evidence: 'My preference is easier to read',
+			});
+		const discussion = state().discussions[0];
+		expect(discussion.responses.find((r) => r.seat === 'qa')).toMatchObject({
+			result: 'reserve',
+			requestedResult: 'insist',
+			evidence: undefined,
+			unverifiedBasis: ['My preference is easier to read'],
+		});
+		expect(discussion.decision).toMatchObject({ decider: 'pm', contested: true });
+		expect(discussion.decision?.dissent).toContain('Prefer a table');
+		expect(discussion.proposals).toHaveLength(1);
+		expect(events.filter((e) => e.kind === 'report_rejected' || e.kind === 'member_fault')).toEqual(
+			[]
+		);
+		expect(requests.some((r) => r.turn === 'report_repair')).toBe(false);
+	});
 
 	it('assigns and clears residual owners durably without changing unmet evidence', async () => {
 		events = ledger(
@@ -2468,6 +2806,99 @@ describe('team scheduler', () => {
 		).toBe(true);
 	});
 
+	it.each(normalizationFixtures)(
+		'real $seat $turn is accepted with a durable normalization note, no repair',
+		async (fixture) => {
+			const seat = fixture.seat as SeatRole;
+			const turn = fixture.turn as ReportTurnKind;
+			events = ledger(
+				...baseline,
+				...bindings,
+				{
+					kind: 'decision_card',
+					card: {
+						id: 'hold-normalization',
+						boundary: 'permission',
+						title: 'Hold unrelated work',
+						body: 'Fixture scheduling hold',
+						options: [{ id: 'allow', label: 'Allow' }],
+					},
+				},
+				{
+					kind: 'discussion_opened',
+					discussionId: 'location-discussion',
+					topic: 'C3 location',
+					owner: 'pm',
+					participants: ['pm', 'dev', 'qa'],
+					trigger: 'standard-change',
+					layer: 'commitment',
+				},
+				...(turn === 'proposal'
+					? (['pm', 'dev', 'qa'] as const).map(
+							(role): EventInput => ({
+								kind: 'position',
+								discussionId: 'location-discussion',
+								seat: role,
+								claim: 'Preserve the proof',
+								basis: 'Recorded results',
+								wouldChangeMind: 'A changed proof',
+							})
+						)
+					: []),
+				{
+					kind: 'turn_dispatched',
+					seat,
+					turn,
+					dispatchId: 'real-report',
+					promptDigest: '',
+					...(turn === 'qa_prep' ? {} : { discussionId: 'location-discussion' }),
+				}
+			);
+			await scheduler.start();
+			await drain();
+			await finish(requests[0], fixture.report as TeamReport);
+			const accepted = state().turns.find((t) => t.dispatchId === 'real-report')!;
+			expect(accepted.report?.type).toBe(turn);
+			expect(accepted.normalizations?.length).toBeGreaterThan(0);
+			expect(events.filter((e) => e.kind === 'report_normalized')).toHaveLength(1);
+			expect(events.filter((e) => e.kind === 'report_rejected')).toEqual([]);
+			expect(requests).toHaveLength(1);
+			expect((await scheduler.log(teamConfig.id, seat))[0].normalizations).toEqual(
+				accepted.normalizations
+			);
+			// Crash after the durable finish, before ingestion: replay the same note once.
+			scheduler.dispose();
+			events = events.filter((e) => e.seq <= accepted.finished!.seq);
+			scheduler = createTeamScheduler(deps);
+			await scheduler.start();
+			await drain();
+			await scheduler.wake(teamConfig.id);
+			await drain();
+			expect(events.filter((e) => e.kind === 'report_normalized')).toHaveLength(1);
+			expect(state().turns.find((t) => t.dispatchId === 'real-report')?.normalizations).toEqual(
+				accepted.normalizations
+			);
+			expect(requests).toHaveLength(1);
+			if (turn === 'proposal') {
+				expect(state().discussions[0].proposals[0].decider).toBe('owner');
+				await emit({
+					kind: 'card_superseded',
+					cardId: 'hold-normalization',
+					reason: 'Exercise owner routing',
+				});
+				for (const role of ['pm', 'dev', 'qa'] as const)
+					await finish(latest(role, 'response'), {
+						type: 'response',
+						discussionId: 'location-discussion',
+						result: 'agree',
+						reason: 'Preserve the proof',
+					});
+				expect(state().openCards.map((c) => c.boundary)).toEqual(['commitment']);
+				expect(state().discussions[0].decision).toBeUndefined();
+				expect(state().standardChanges).toEqual([]);
+			}
+		}
+	);
 	it('M3 budget boundary preserves a pending permission through extension and restart', async () => {
 		await begin();
 		const created = events.find((e) => e.kind === 'team_created')!;

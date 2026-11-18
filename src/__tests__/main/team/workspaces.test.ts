@@ -25,6 +25,44 @@ describe('team workspaces', () => {
 		if (result.exitCode !== 0) throw new Error(result.stderr);
 		return result.stdout.trim();
 	};
+	it('normalizes the real bare QA filename, ./qa and absolute spellings without changing the file', async () => {
+		const file = path.join(state.qa, 'qa', 'clamp.boundary.test.cjs');
+		await fs.mkdir(path.dirname(file), { recursive: true });
+		await fs.writeFile(file, 'synthetic independent checks');
+		for (const value of ['clamp.boundary.test.cjs', './qa/clamp.boundary.test.cjs', file])
+			expect(await workspaces.resolveQaTestPath(value)).toBe('qa/clamp.boundary.test.cjs');
+		expect(await fs.readFile(file, 'utf8')).toBe('synthetic independent checks');
+		await fs.writeFile(path.join(state.qa, 'clamp.boundary.test.cjs'), 'ambiguous name');
+		await expect(workspaces.resolveQaTestPath('clamp.boundary.test.cjs')).rejects.toThrow(
+			'inside qa/'
+		);
+		await expect(workspaces.resolveQaTestPath('unknown.test.cjs')).rejects.toThrow('inside qa/');
+	});
+	it('rejects escaping paths and symlink ancestors, including a missing descendant', async () => {
+		await fs.mkdir(path.join(state.qa, 'qa'), { recursive: true });
+		await fs.symlink(path.join(project, 'src'), path.join(state.qa, 'qa', 'outside'), 'junction');
+		await fs.symlink(path.join(root, 'missing'), path.join(state.qa, 'qa', 'dangling'), 'junction');
+		await expect(workspaces.resolveQaTestPath('qa/dangling/missing.test.ts')).rejects.toThrow(
+			'unresolved symlink'
+		);
+		for (const value of [
+			'qa/outside/code.txt',
+			'qa/outside/not-created.txt',
+			'../qa/qa/test.ts',
+			'qa/../src/code.txt',
+			'src/code.txt',
+			path.join(project, 'src/code.txt'),
+		])
+			await expect(workspaces.resolveQaTestPath(value)).rejects.toThrow();
+		expect(await fs.readFile(path.join(project, 'src/code.txt'), 'utf8')).toBe('original\n');
+	});
+	it('resolves an absolute alias only when it points inside the owned qa directory', async () => {
+		await fs.mkdir(path.join(state.qa, 'qa'), { recursive: true });
+		await fs.writeFile(path.join(state.qa, 'qa', 'test.cjs'), 'checks');
+		const alias = path.join(root, 'qa-alias');
+		await fs.symlink(path.join(state.qa, 'qa'), alias, 'junction');
+		expect(await workspaces.resolveQaTestPath(path.join(alias, 'test.cjs'))).toBe('qa/test.cjs');
+	});
 	beforeEach(async () => {
 		root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'team-workspaces-')));
 		project = path.join(root, 'project');

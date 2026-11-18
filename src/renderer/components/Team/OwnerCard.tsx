@@ -5,7 +5,7 @@ import { useT, useFormatList } from '../../i18n';
 import { SeatTag } from './TeamPrimitives';
 import type { Theme } from '../../types';
 import { TeamEscalation } from './TeamEscalation';
-import { TeamBaseline } from './TeamBaseline';
+import { TeamBaseline, TeamBaselineChallenges } from './TeamBaseline';
 
 export function OwnerCard({
 	card: source,
@@ -53,6 +53,7 @@ export function OwnerCard({
 			<h3>{card.title}</h3>
 			{card.body && <p className="whitespace-pre-wrap">{card.body}</p>}
 			{card.question && <p>{card.question}</p>}
+			{card.boundaryReason && <p data-boundary-reason>{card.boundaryReason}</p>}
 			{!baseline && card.boundary !== 'acceptance' && (
 				<p className="team-dim text-xs">
 					{t('workflows.team.boundary', {
@@ -68,6 +69,9 @@ export function OwnerCard({
 			{card.budgetNote && <p className="team-dim">{card.budgetNote}</p>}
 			{baseline && (
 				<>
+					{source.payload?.type === 'baseline' && (
+						<TeamBaselineChallenges payload={source.payload} state={state} />
+					)}
 					<TeamBaseline
 						frozenDiff={source.payload?.type === 'baseline' ? source.payload.diff : undefined}
 						brief={brief!}

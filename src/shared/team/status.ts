@@ -24,7 +24,7 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 		waitingFor.push(`${message.to ?? 'pm'}: delivery of owner message ${message.messageId}`);
 	if (!state.terminal) {
 		if (state.paused) waitingFor.push('Owner to resume the team.');
-		else if (state.usage.budgetTurns >= turnsTotal || remainingMs === 0)
+		else if (state.usage.turns >= turnsTotal || remainingMs === 0)
 			waitingFor.push(
 				'Budget exhausted: owner decision on an incomplete progress report, not a completion demo.'
 			);
@@ -55,11 +55,11 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 		waitingFor,
 		openCards: [...state.openCards],
 		budget: {
-			turnsUsed: state.usage.budgetTurns,
+			turnsUsed: state.usage.turns,
 			turnsTotal,
 			deadline,
 			remainingMs,
-			exhausted: state.usage.budgetTurns >= turnsTotal || remainingMs === 0,
+			exhausted: state.usage.turns >= turnsTotal || remainingMs === 0,
 		},
 		seats: SEAT_ROLES.map((seat) => {
 			const health = state.seats[seat];

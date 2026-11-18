@@ -41,6 +41,8 @@ import { displayImageSrc } from '../../../utils/sessionImageSrc';
 import { RetryStatusCard } from '../../RetryStatusCard';
 import { SnoozeReturnCard } from '../../SnoozeReturnCard';
 import { AgentDelegationCard } from '../../AgentDelegationCard';
+import { ConversationAutomationTurn } from '../../ConversationAutomationTurn';
+import { readConversationAutomationPrompt } from '../../../../shared/conversationAutomationPrompt';
 import { ShellCommandCard } from '../../ShellCommandCard';
 import { getTokenSourcePill } from '../../../../shared/claudeTokenModeLabel';
 import { TurnSettingPills } from '../../ui/TurnSettingPills';
@@ -470,6 +472,23 @@ export const LogItem = memo(
 							onSetDeleteConfirmLogId={onSetDeleteConfirmLogId}
 						/>
 					</div>
+				</div>
+			);
+		}
+
+		const automationTurn =
+			log.automationTurn ??
+			(log.source === 'user' ? readConversationAutomationPrompt(log.text) : undefined);
+		if (automationTurn) {
+			return (
+				<div
+					ref={logItemRef}
+					className="px-3 sm:px-6 py-2"
+					data-log-index={index}
+					data-log-id={log.id}
+					style={{ color: secondary }}
+				>
+					<ConversationAutomationTurn marker={automationTurn} />
 				</div>
 			);
 		}

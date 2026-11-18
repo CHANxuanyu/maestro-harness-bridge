@@ -40,6 +40,19 @@ function setup(overrides: Record<string, unknown> = {}) {
 }
 
 describe('QueuedItemsList pause/hold', () => {
+	it('keeps waiting automation prompts in an app marker without raw edit or copy actions', () => {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		const text =
+			'[delivery:follow:private]\n[follow-up:private] Inspect CI\nEvent: ready; condition: ci.\nApplication observation: {"state":"completed","observedAt":7,"conclusion":"failure"}';
+		const { container } = setup({ executionQueue: [item({ text })], onEditQueuedItem: vi.fn() });
+		expect(screen.getByTestId('automation-turn-marker')).toHaveTextContent('Follow-up: Inspect CI');
+		fireEvent.click(screen.getByRole('button', { name: 'Observation' }));
+		expect(screen.getByText('CI conclusion: Failed')).toBeInTheDocument();
+		expect(container.textContent).not.toMatch(/delivery:|private|observedAt/);
+		expect(screen.getByTestId('automation-turn-marker').textContent).not.toMatch(/[{}]/);
+		expect(screen.queryByTitle(/Edit message and images/i)).toBeNull();
+		expect(screen.queryByTitle(/Copy to clipboard/i)).toBeNull();
+	});
 	it('renders a Hold button and fires onTogglePauseQueuedItem for a runnable item', () => {
 		const props = setup();
 		fireEvent.click(screen.getByTitle(/Hold this message/i));

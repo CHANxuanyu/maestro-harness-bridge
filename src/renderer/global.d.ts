@@ -235,6 +235,9 @@ import type { WebUserPublic } from '../shared/webLogin';
 
 interface MaestroAPI {
 	/** Main-owned teams. Mutations reject on invalid/stale input; no Electron sender is required. */
+	conversationAutomation: ReturnType<
+		typeof import('../main/preload/conversationAutomation').createConversationAutomationApi
+	>;
 	team: {
 		/** Creates and starts a team. Input omits id, createdAt and title; title comes from idea. */
 		create(input: CreateTeamInput): Promise<TeamConfig>;

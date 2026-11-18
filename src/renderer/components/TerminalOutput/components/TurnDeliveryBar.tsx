@@ -4,6 +4,7 @@ import type { AgentTaskList } from '../../../utils/agentTaskList';
 import { useT } from '../../../i18n';
 import { updateAiTab } from '../../../stores/sessionStore';
 import { patchNewShellPanel } from '../../../../shared/newShellPanel';
+import { ConversationCheckDelivery } from '../../ConversationCheckDelivery';
 
 export const TurnDeliveryBar = memo(function TurnDeliveryBar({
 	turnId,
@@ -20,12 +21,11 @@ export const TurnDeliveryBar = memo(function TurnDeliveryBar({
 	sessionId: string;
 	tabId: string;
 	textColor: string;
-	/** F3 supplies evidence for this turn here; no placeholder before it exists. */
+	/** Optional caller override; otherwise F3 reads main-owned evidence for this turn. */
 	checkResult?: ReactNode;
 }) {
 	const t = useT();
 	const hasFiles = delivery && delivery.files > 0;
-	if (!hasFiles && !plan && !checkResult) return null;
 	return (
 		<div
 			className="px-3 sm:px-6 pb-3 text-xs"
@@ -62,7 +62,14 @@ export const TurnDeliveryBar = memo(function TurnDeliveryBar({
 						{t('workflows.activity.tasks', { completed: plan.completed, total: plan.tasks.length })}
 					</span>
 				)}
-				{checkResult}
+				{checkResult ?? (
+					<ConversationCheckDelivery
+						sessionId={sessionId}
+						tabId={tabId}
+						turnId={turnId}
+						checkRunId={delivery?.checkRunId}
+					/>
+				)}
 			</div>
 		</div>
 	);

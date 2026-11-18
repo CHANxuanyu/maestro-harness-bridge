@@ -28,7 +28,7 @@ describe('conversation panel state', () => {
 			);
 		}
 	);
-	it.each(['terminal', 'tasks', 'web'] as const)(
+	it.each(['checks', 'follow-ups', 'terminal', 'tasks', 'web'] as const)(
 		'remembers %s without changing the classic shell',
 		(tab) => {
 			const panel = changeNewShellPanel(undefined, tab);

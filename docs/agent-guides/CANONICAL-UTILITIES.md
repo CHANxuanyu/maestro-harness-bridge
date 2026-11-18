@@ -1,5 +1,29 @@
 # Canonical Utilities - Full Rationale
 
+**Conversation checks and durable follow-ups**
+
+`createConversationAutomation()` in `src/main/conversation-automation.ts` is the
+shared UI/CLI owner of project grants, check evidence, fix attempts and the total
+budget. It uses `createCheckRunner()`, `createFollowUpStore()`, `judgeAttempts()`
+and `decideNext()` rather than introducing another runner, timer or progress rule.
+`checkCommandBoundary()` in `src/main/check-authorization.ts` reviews commands at
+registration and immediately before execution, including package scripts and
+hooks. Opaque commands need one-use consent; this review is not a process sandbox.
+
+`createConversationTurns()` in `src/main/conversation-turns.ts` persists intent
+before sending to the exact WindowRegistry owner. Delivery uses the same
+ownership rule as WindowContext: explicit assignment wins; an
+unassigned session belongs to the primary window. An unavailable explicit owner
+is never replaced by another window. Readiness and acknowledgement use that rule.
+`useConversationAutomation()` persists an exact-target queue item before acknowledging it. Both the enqueue
+and drain paths must honor `QueuedItem.exactTarget`; the general queue's active
+tab fallback is not valid for follow-ups. Stable delivery IDs prevent replayed
+fire records from creating extra turns. A queued target that disappears is
+undeliverable; a turn already delivered is not retroactively failed on deletion.
+`onGitTurnFinished()` in `src/main/git-changes.ts` supplies the actual execution
+cwd, file-change boundary and check-run identity for either shell. Do not infer
+completion from assistant text or build a second renderer timer for checks.
+
 **Team chat shared layer**
 
 `reduceLedger()` in `src/shared/team/ledger.ts` is the pure replay used by main,
@@ -92,7 +116,8 @@ Grep-verified 2026-09-04 (`npm run docs:verify` checks that every path below sti
 - **Format numbers:** `formatNumber()` (compact: `1.2M`) and `formatCount()` (exact, grouped: `1,204,993`) in `src/shared/formatters.ts`. Pick by whether the digits ARE the information - a badge wants the magnitude, a filtered row count wants the number.
 - **Format tokens:** `formatTokens()`, `formatTokensCompact()`, `estimateTokenCount()` in `src/shared/formatters.ts`
 - **Format elapsed time:** `formatElapsedTimeColon()` in `src/shared/formatters.ts`
-- **Humanized durations:** everything in `src/shared/duration.ts` (re-exported from `formatters.ts`). `humanizeDuration(ms, opts)` is the one engine; `formatDurationHuman` / `Compact` / `Verbose` / `Parts` / `Decimal` / `Long` / `Words`, plus `formatActiveTime`, `formatElapsedTime`, and `formatTurnDuration` (transcript turn time: day-capped, second-free, `<1m` below a minute), are presets over it. **Never hand-roll another `Math.floor(ms / 86400000)` ladder** - a dozen near-identical copies had already drifted apart on where the ladder stops, whether a zero segment is padded (`"2h 0m"` vs `"2h"`), and whether a countdown rounds up. Those are options (`units`, `maxUnits`, `style`, `keepZeroUnits`, `adjacentUnits`, `round`, `fallback`), so pick a preset or call the engine. Unit sizes are in `DURATION_MS` - don't redeclare `const DAY = 86400000`. See [SHARED-UTILS.md → Durations](docs/agent-guides/SHARED-UTILS.md#durations-srcshareddurationts---both).
+- **App-authored conversation turns:** `readConversationAutomationPrompt()` / `isConversationAutomationPrompt()` in `src/shared/conversationAutomationPrompt.ts` recognize the delivery envelope for both queued turns and provider history. `ConversationAutomationTurn` renders the localized marker, and `FollowUpObservation` labels observed facts. Keep the original prompt for the agent and reconciliation; never render it as an owner message or use it for naming. `isSelfContainedCard()` protects the marker from coalescing and activity folding.
+- **Humanized durations:** everything in `src/shared/duration.ts` (re-exported from `formatters.ts`). `humanizeDuration(ms, opts)` is the one engine; `formatDurationHuman` / `Compact` / `Verbose` / `Parts` / `Decimal` / `Long` / `Words`, plus `formatDurationForLocale` (localized limits and budgets), `formatActiveTime`, `formatElapsedTime`, and `formatTurnDuration` (transcript turn time: day-capped, second-free, `<1m` below a minute), are presets over it. **Never hand-roll another `Math.floor(ms / 86400000)` ladder** - a dozen near-identical copies had already drifted apart on where the ladder stops, whether a zero segment is padded (`"2h 0m"` vs `"2h"`), and whether a countdown rounds up. Those are options (`units`, `maxUnits`, `style`, `keepZeroUnits`, `adjacentUnits`, `round`, `fallback`), so pick a preset or call the engine. Unit sizes are in `DURATION_MS` - don't redeclare `const DAY = 86400000`. See [SHARED-UTILS.md → Durations](docs/agent-guides/SHARED-UTILS.md#durations-srcshareddurationts---both).
 - **Format profiling spans (ms):** `formatDuration()` in `src/shared/performance-metrics.ts` (NOT formatters.ts - common mistake). Two-decimal `"123.45ms"` / `"1.23s"` for perf traces only; it caps at seconds, so a multi-day span comes out as a giant seconds float. For anything user-facing use `src/shared/duration.ts`.
 - **Format relative time:** `formatRelativeTime()` in `src/shared/formatters.ts`
 - **Format cost:** `formatCost()` in `src/shared/formatters.ts`

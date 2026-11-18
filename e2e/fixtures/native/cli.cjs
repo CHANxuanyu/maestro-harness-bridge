@@ -7,6 +7,7 @@ const path = require('node:path');
 const { createTurn, transcriptPath } = require('./protocol.cjs');
 const { permissionServer, requestPermission } = require('./claude-permission.cjs');
 const { setTimeout: delay } = require('node:timers/promises');
+const { execFileSync } = require('node:child_process');
 
 async function run(provider) {
 	const args = process.argv.slice(2);
@@ -57,7 +58,7 @@ async function run(provider) {
 	if (persist) {
 		fs.appendFileSync(
 			path.join(configDir, 'fixture-invocations.jsonl'),
-			`${JSON.stringify({ args, provider, cwd, processCwd: process.cwd(), sshConnection: process.env.SSH_CONNECTION ?? null })}\n`
+			`${JSON.stringify({ args, provider, cwd, prompt, startedAt: Date.now(), processCwd: process.cwd(), sshConnection: process.env.SSH_CONNECTION ?? null })}\n`
 		);
 		fs.writeFileSync(stateFile, String(count + 1));
 		// Cleanup checks the actual child PID, outside the native transcript.
@@ -114,6 +115,14 @@ async function run(provider) {
 		emit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
 	});
 	const tools = scene.tools || [];
+	for (const command of scene.maestroCliCommands || []) {
+		const output = execFileSync(
+			process.execPath,
+			[path.resolve(__dirname, '../../../dist/cli/maestro-cli.js'), ...command, '--json'],
+			{ env: process.env, encoding: 'utf8', timeout: 15_000 }
+		);
+		fs.appendFileSync(path.join(configDir, 'fixture-maestro-cli.jsonl'), `${output.trim()}\n`);
+	}
 	let stopped = false;
 	const approvalAbort = new AbortController();
 	process.once('SIGINT', () => {

@@ -1,3 +1,4 @@
+import { useConversationAutomation } from './hooks/agent/useConversationAutomation';
 import { useNativeCommands } from './hooks/input/useNativeCommands';
 import { openProjectTarget } from './services/openProject';
 import React, {
@@ -557,6 +558,7 @@ function MaestroConsoleInner() {
 	// covers startup until this flips true; on Web Desktop (no splash) we use it
 	// to show a loading spinner instead of flashing the empty "create your first
 	// agent" state while sessions stream in over the WebSocket bridge.
+	useConversationAutomation();
 	const sessionsLoaded = useSessionStore((s) => s.sessionsLoaded);
 	// PERF: Chrome equality ignores logs/tokens/contextUsage. Streaming must not
 	// re-render MaestroConsoleInner. MainPanel self-sources the full Session for

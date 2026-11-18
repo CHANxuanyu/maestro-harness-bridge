@@ -1,3 +1,8 @@
+import {
+	isConversationAutomationPrompt,
+	readConversationAutomationPrompt,
+} from '../../shared/conversationAutomationPrompt';
+import { ConversationAutomationTurn } from './ConversationAutomationTurn';
 import { useT } from '../i18n';
 import React, { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
 import {
@@ -331,7 +336,9 @@ export const QueuedItemsList = memo(
 									onCopy={() => handleCopy(item)}
 									renderMarkdown={!chatRawTextMode}
 									onEdit={
-										onEditQueuedItem && item.type !== 'command'
+										onEditQueuedItem &&
+										item.type !== 'command' &&
+										!isConversationAutomationPrompt(item.text ?? '')
 											? () => setEditItemId(item.id)
 											: undefined
 									}
@@ -455,7 +462,7 @@ export const QueuedItemsList = memo(
 					onEditQueuedItem &&
 					(() => {
 						const editItem = filteredQueue.find((item) => item.id === editItemId);
-						if (!editItem) return null;
+						if (!editItem || isConversationAutomationPrompt(editItem.text ?? '')) return null;
 						return (
 							<QueuedItemEditModal
 								item={editItem}
@@ -554,7 +561,8 @@ function QueuedItemRow({
 	const isWaitingForConnection = !!item.waitingForConnection;
 	const isAwaitingConsult = !!item.awaitingConsult;
 	const isHeldForRetry = useIsHeldRetryItem(item.id);
-	const displayText = isCommand ? (item.command ?? '') : (item.text ?? '');
+	const automation = !isCommand ? readConversationAutomationPrompt(item.text ?? '') : undefined;
+	const displayText = automation ? '' : isCommand ? (item.command ?? '') : (item.text ?? '');
 	const hiddenChars = Math.max(0, displayText.length - QUEUE_PREVIEW_CHARS);
 	// Only collapse when collapsing actually buys back screen: a message that is a
 	// line or two over the preview costs more in toggle chrome than it saves, so it
@@ -648,7 +656,9 @@ function QueuedItemRow({
 						</span>
 					)}
 					{!isCommand &&
-						(showMarkdown ? (
+						(automation ? (
+							<ConversationAutomationTurn marker={automation} />
+						) : showMarkdown ? (
 							<MarkdownRenderer
 								content={visibleText}
 								theme={theme}
@@ -807,14 +817,16 @@ function QueuedItemRow({
 						)}
 
 						{/* Copy button */}
-						<button
-							onClick={onCopy}
-							className="p-1 rounded hover:bg-black/20 transition-colors"
-							style={{ color: isCopied ? theme.colors.success : theme.colors.textDim }}
-							title={t('workflows.shellStatus.copyToClipboard')}
-						>
-							{isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-						</button>
+						{!automation && (
+							<button
+								onClick={onCopy}
+								className="p-1 rounded hover:bg-black/20 transition-colors"
+								style={{ color: isCopied ? theme.colors.success : theme.colors.textDim }}
+								title={t('workflows.shellStatus.copyToClipboard')}
+							>
+								{isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+							</button>
+						)}
 
 						{/* Hold/Resume button */}
 						{onTogglePause && (

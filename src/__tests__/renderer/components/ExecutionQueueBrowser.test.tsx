@@ -96,6 +96,32 @@ describe('ExecutionQueueBrowser', () => {
 	afterEach(() => {
 		vi.clearAllMocks();
 	});
+	it('shows an app marker for queued automation without leaking its envelope into edit or copy', () => {
+		useSettingsStore.setState({ uiLanguage: 'en' });
+		const text =
+			'[delivery:expiry:private]\n[follow-up:budget:["session","tab"]:7:uuid] Shared budget\nEvent: expired; condition: time.\nApplication observation: {"state":"waiting","observedAt":7}';
+		const session = createSession({ executionQueue: [createQueuedItem({ text })] });
+		const { container } = render(
+			<ExecutionQueueBrowser
+				isOpen
+				onClose={mockOnClose}
+				sessions={[session]}
+				activeSessionId={session.id}
+				theme={theme}
+				onRemoveItem={mockOnRemoveItem}
+				onSwitchSession={mockOnSwitchSession}
+				onEditItem={vi.fn()}
+			/>
+		);
+		expect(screen.getByTestId('automation-turn-marker')).toHaveTextContent(
+			'Total time limit reached'
+		);
+		fireEvent.click(screen.getByRole('button', { name: 'Observation' }));
+		expect(screen.getByText('Waiting')).toBeInTheDocument();
+		expect(container.textContent).not.toMatch(/delivery:|private|observedAt|[{}]/);
+		expect(screen.queryByTitle('Edit message and images')).toBeNull();
+		expect(screen.queryByTitle('Copy to clipboard')).toBeNull();
+	});
 
 	describe('closed state', () => {
 		it('should return null when isOpen is false', () => {

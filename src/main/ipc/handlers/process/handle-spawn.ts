@@ -1,4 +1,4 @@
-import { beginGitTurn, finishGitTurn } from '../../../git-changes';
+import { beginGitTurn, finishGitTurn, needsAutomationGitBoundary } from '../../../git-changes';
 import {
 	codexAppServerEnabled,
 	CODEX_APP_SERVER_MESSAGES,
@@ -1086,7 +1086,10 @@ export async function handleProcessSpawn(
 					sshRemoteUsed ?? undefined
 				).key
 			: undefined;
-	if (settingsStore.get('newShell', false) && config.sessionId.includes('-ai-')) {
+	if (
+		(settingsStore.get('newShell', false) || needsAutomationGitBoundary(config.sessionId)) &&
+		config.sessionId.includes('-ai-')
+	) {
 		try {
 			await beginGitTurn(
 				config.sessionId,

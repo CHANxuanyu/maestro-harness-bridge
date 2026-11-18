@@ -763,6 +763,7 @@ export class ProcessManager extends EventEmitter {
 		shellEnvVars?: Record<string, string>,
 		sshRemoteConfig?: SshRemoteConfig | null
 	): Promise<CommandResult> {
+		this.emit('command-start', sessionId);
 		if (sshRemoteConfig) {
 			return this.sshCommandRunner.run(sessionId, command, cwd, sshRemoteConfig, shellEnvVars);
 		}

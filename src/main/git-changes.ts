@@ -1,4 +1,5 @@
 import { applyPatch, diffLines } from 'diff';
+import { randomUUID } from 'crypto';
 import {
 	collectTurnWrites,
 	toolInputWritePaths,
@@ -564,6 +565,26 @@ interface GitTurnBoundary {
 	tools: Map<string, ChangeTurnEntry>;
 }
 const gitTurnBoundaries = new Map<string, GitTurnBoundary>();
+type GitTurnFinishedListener = (
+	processId: string,
+	delivery: TurnDelivery,
+	scope: { cwd: string; changed: boolean }
+) => void;
+const gitTurnFinishedListeners = new Map<GitTurnFinishedListener, (processId: string) => boolean>();
+
+export function onGitTurnFinished(
+	listener: GitTurnFinishedListener,
+	accepts: (processId: string) => boolean = () => true
+): () => void {
+	gitTurnFinishedListeners.set(listener, accepts);
+	return () => {
+		gitTurnFinishedListeners.delete(listener);
+	};
+}
+
+export function needsAutomationGitBoundary(processId: string): boolean {
+	return [...gitTurnFinishedListeners.values()].some((accepts) => accepts(processId));
+}
 
 /** Capture pre-existing edits before spawning, without changing the index or worktree. */
 export async function beginGitTurn(
@@ -629,7 +650,41 @@ export function finishGitTurn(
 	const boundary = gitTurnBoundaries.get(sessionId);
 	gitTurnBoundaries.delete(sessionId);
 	if (!boundary || discard) return undefined;
-	return measureGitTurn(boundary);
+	return measureGitTurn(boundary).then(async (delivery) => {
+		const listeners = [...gitTurnFinishedListeners]
+			.filter(([, accepts]) => accepts(sessionId))
+			.map(([listener]) => listener);
+		if (!listeners.length) return delivery;
+		delivery.checkRunId = randomUUID();
+		let changed = delivery.files > 0;
+		if (!changed) {
+			const current = await getGitChanges(boundary.cwd, boundary.remote, boundary.remoteCwd);
+			if (!current.notARepo && !current.truncated && !current.timedOut) {
+				const paths = new Set([
+					...boundary.patches.keys(),
+					...current.files.map((file) => file.path),
+				]);
+				for (const file of paths) {
+					const after = await getGitChangeDiff(
+						boundary.cwd,
+						file,
+						boundary.remote,
+						boundary.remoteCwd
+					);
+					if (
+						!after.timedOut &&
+						!after.tooLarge &&
+						(boundary.patches.get(file)?.diff ?? '') !== after.diff
+					) {
+						changed = true;
+						break;
+					}
+				}
+			}
+		}
+		for (const listener of listeners) listener(sessionId, delivery, { cwd: boundary.cwd, changed });
+		return delivery;
+	});
 }
 
 async function measureGitTurn(boundary: GitTurnBoundary): Promise<TurnDelivery> {

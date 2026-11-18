@@ -18,6 +18,7 @@ import {
 	beginGitTurn,
 	recordGitTurnTool,
 	finishGitTurn,
+	onGitTurnFinished,
 	getGitChanges,
 	getGitChangeDiff,
 	parseGitChanges,
@@ -93,6 +94,21 @@ describe('combined changes on a real repository', { timeout: 60_000 }, () => {
 			deletions: 1,
 		});
 		expect(finishGitTurn('delivery')).toBeUndefined();
+	});
+
+	it('notifies checks of shell-written changes with a main-owned evidence identity', async () => {
+		const observed = vi.fn();
+		const unsubscribe = onGitTurnFinished(observed, (id) => id === 'checks');
+		try {
+			await beginGitTurn('checks', cwd);
+			writeFileSync(path.join(cwd, 'shell-change.txt'), 'a shell wrote this\n');
+			const delivery = await finishGitTurn('checks');
+			expect(delivery?.files).toBe(0);
+			expect(delivery?.checkRunId).toBeTruthy();
+			expect(observed).toHaveBeenCalledWith('checks', delivery, { cwd, changed: true });
+		} finally {
+			unsubscribe();
+		}
 	});
 
 	it('does not replace unknown boundary counts with the workspace diff after HEAD moves', async () => {

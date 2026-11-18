@@ -10,6 +10,7 @@
 
 import {
 	humanizeDuration,
+	formatDurationForLocale,
 	formatDurationHuman,
 	formatDurationCompact,
 	formatDurationVerbose,
@@ -35,6 +36,21 @@ const WEEK = 7 * DAY;
 const YEAR = 365 * DAY;
 
 describe('shared/duration', () => {
+	it.each([
+		[6000, 'en', '6 s'],
+		[6000, 'zh-CN', '6 秒'],
+		[2 * HOUR, 'en', '2 hours'],
+		[2 * HOUR, 'zh-CN', '2 小时'],
+		[20 * MINUTE, 'en', '20 minutes'],
+		[20 * MINUTE, 'zh-CN', '20 分钟'],
+		[HOUR + 6 * SECOND, 'en', '1 hour 6 seconds'],
+		[HOUR + 6 * SECOND, 'zh-CN', '1 小时 6 秒'],
+		[0, 'en', '0 s'],
+		[0, 'zh-CN', '0 秒'],
+	] as const)('formats owner-facing duration %s in %s', (ms, locale, expected) => {
+		expect(formatDurationForLocale(ms, locale)).toBe(expected);
+	});
+
 	// ==========================================================================
 	// humanizeDuration - the engine
 	// ==========================================================================

@@ -34,6 +34,8 @@ export interface NativeTool {
 	gates?: string[];
 }
 export interface NativeScene {
+	/** Synthetic provider executes the real app CLI with its injected caller identity. */
+	maestroCliCommands?: string[][];
 	sequentialTools?: boolean;
 	narrations?: { beforeTool: number; text: string }[];
 	activityGates?: string[];
@@ -219,6 +221,20 @@ export class NativeApp {
 		// must not open a busy-agent confirmation that the test cannot answer.
 		if (!failed) await expect(this.page.getByTestId('stop-turn-button')).toHaveCount(0);
 		if (failed) {
+			// Main logging is memory-only by default on macOS. Preserve the delivery
+			// stages before confirmQuit closes the app, without changing test outcomes.
+			const automationLog = await this.page
+				.evaluate(async () => ({
+					followUps: await window.maestro.logger.getLogs({ context: 'FollowUps' }),
+					automation: await window.maestro.logger.getLogs({ context: 'ConversationAutomation' }),
+				}))
+				.catch((error: unknown) => ({ captureError: String(error) }));
+			const logFile = this.info.outputPath(`conversation-automation-${this.boot}.json`);
+			fs.writeFileSync(logFile, JSON.stringify(automationLog, null, '\t'));
+			await this.info.attach('conversation-automation', {
+				path: logFile,
+				contentType: 'application/json',
+			});
 			await this.page.screenshot({ path: this.info.outputPath(`failure-${this.boot}.png`) });
 			await this.app
 				.context()

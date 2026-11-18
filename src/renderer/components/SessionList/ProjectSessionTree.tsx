@@ -1,3 +1,4 @@
+import { ConversationWaitingBadge } from '../ConversationCheckDelivery';
 import { usePermissionRequestStore } from '../../stores/permissionRequestStore';
 import { requestConversationAction } from '../../services/conversationArchive';
 
@@ -600,6 +601,9 @@ const ConversationRow = memo(function ConversationRow({
 					>
 						{title}
 					</span>
+					{newShell && conversation.ownerId && conversation.tabId && (
+						<ConversationWaitingBadge sessionId={conversation.ownerId} tabId={conversation.tabId} />
+					)}
 					{worktree && (
 						// Where the conversation ran, kept quieter than its title: the
 						// folder name is short, the branch and full path wait in the hover.

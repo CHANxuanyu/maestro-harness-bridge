@@ -4,6 +4,10 @@ import { stripEmbeddedSystemPrompt } from './embeddedSystemPrompt';
 import { compactToolOutput } from './toolOutput';
 import { toolInputWritePaths } from './gitChangeTurns';
 import { generateId } from './uuid';
+import {
+	readConversationAutomationPrompt,
+	type ConversationAutomationMarker,
+} from './conversationAutomationPrompt';
 import type { NativeToolOutputTarget } from './nativeToolOutput';
 
 /** The native converter's portable output, before any renderer-only fields are added. */
@@ -12,6 +16,7 @@ export interface TranscriptEntry {
 	timestamp: number;
 	source: 'user' | 'stdout' | 'thinking' | 'tool';
 	text: string;
+	automationTurn?: ConversationAutomationMarker;
 	images?: string[];
 	nativeTranscript: { messageId: string; channel?: string };
 	turnModel?: string;
@@ -293,6 +298,7 @@ export function transcriptMessagesToLogEntries(
 				timestamp,
 				source: 'user',
 				text,
+				automationTurn: readConversationAutomationPrompt(text),
 				...(images && { images }),
 				nativeTranscript,
 			});

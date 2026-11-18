@@ -1245,6 +1245,20 @@ describe('agentStore', () => {
 			mockGetAgent.mockResolvedValue(mockAgent);
 			useSettingsStore.setState({ newShell: false });
 		});
+		it('does not spawn an exact-target follow-up on a closed orphan or the active tab', async () => {
+			const session = createMockSession({ id: 'session-1', toolType: 'claude-code' });
+			session.orphanedThinkingTabs = [{ ...session.aiTabs[0], id: 'closed-tab' }];
+			useSessionStore.getState().setSessions([session]);
+			const result = await useAgentStore
+				.getState()
+				.processQueuedItem(
+					'session-1',
+					createQueuedItem({ tabId: 'closed-tab', exactTarget: true }),
+					defaultDeps
+				);
+			expect(result).toBe(false);
+			expect(mockSpawn).not.toHaveBeenCalled();
+		});
 
 		it('spawns agent with queued message text', async () => {
 			const session = createMockSession({

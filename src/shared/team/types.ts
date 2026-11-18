@@ -476,6 +476,8 @@ export type LedgerEvent = EventBase &
 				basis: string;
 				wouldChangeMind: string;
 				evidence?: string[];
+				/** Submitted references not backed by an observation; never evidence. */
+				unverifiedBasis?: string[];
 				extraTurns?: number;
 				preservesDeadline?: boolean;
 		  }
@@ -499,6 +501,10 @@ export type LedgerEvent = EventBase &
 				evidence?: string;
 				baselineViolation?: string;
 				round?: number;
+				unverifiedBasis?: string[];
+				/** Unsupported insistence is retained as a reservation, not a fault. */
+				requestedResult?: 'insist';
+				evidenceConclusion?: string;
 		  }
 		| {
 				kind: 'discussion_closed';
@@ -828,7 +834,7 @@ export interface TeamDiscussion {
 
 export interface TeamUsage {
 	turns: number;
-	/** Dispatches charged to the limit; quota refusals are recorded but not charged. */
+	/** Compatibility alias of turns. Every dispatch reserves one slot, including quota failures. */
 	budgetTurns: number;
 	inputTokens: number;
 	outputTokens: number;

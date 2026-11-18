@@ -12,8 +12,11 @@ explicit fallback timezone for a local provider's bare reset clock; remote clock
 without a zone remain unknown. Do not add a scheduler-local reset parser.
 
 `TeamUsage.turns` counts actual dispatches, including failures and outstanding
-reservations. `budgetTurns` excludes quota/login failures; do not add active seats
-a second time. `createTeamScheduler()` owns 20-minute waits, 10-minute unchanged
+reservations; `budgetTurns` is its compatibility alias. Quota/login refusals count
+once toward the hard limit but never toward no-progress; do not add active seats
+a second time. Every invocation uses the scheduler's `dispatchAllowed()` guard.
+At the limit restart can reconcile receipts but cannot invoke another process.
+`createTeamScheduler()` owns 20-minute waits, 10-minute unchanged
 rechecks, the 30-second failure cooldown, one retry/report repair, PM report
 organization, and app-only native-result inspection after exhausted recovery.
 Persisted dispatch bindings and `workspace_inspected` receipts preserve the
@@ -43,7 +46,8 @@ does not close an unresolved issue. All review rounds still use `judgeAttempts()
 `src/shared/team/schemas.ts` with `buildTeamTurnPrompt()` and `TEAM_TURN_PROMPTS`
 in `src/shared/team/prompts.ts`. The existing Markdown parser finds real report
 fences; do not extract JSON from arbitrary prose or from a quoted example.
-Unknown fields are rejected, QA challenge plans are mandatory, and review
+Unknown fields are rejected, QA challenge plans cover the current round's
+required criteria (or explicit unverifiable objections), and review
 problems without a confirmed criterion become suggestions. Without state, no
 review criterion is assumed confirmed. The dispatcher must permit only one
 repair, passing the original turn kind; repair does not redo work.
@@ -55,6 +59,16 @@ renderer versions of these gates. A superseded issue preserves the failed
 history; it is not a verified fix. Topic positions use fresh native contexts
 and are omitted from other seats' prompts until response time. The main-owned
 conclusion creates the work items and registered waits.
+
+`teamChallengeRound()` in that policy module derives one full challenge plus at
+most one round on the first PM revision's changed criteria. Only owner edits or
+returns start another full cycle. Share it between scheduling, prompts and QA
+plan validation. `teamEvidenceCatalog()` supplies ids and one-line descriptions;
+`teamEvidence(state, discussion?)` optionally limits them to new discussion
+evidence. Unknown position/response references are retained as `unverifiedBasis`
+by `reportEvents()`, never as observations. Unsupported insistence becomes a
+recorded reservation for the lawful decider, not a failed member report. Repair
+prompts use the original dispatch snapshot's exact allowed ids.
 
 `teamTurnPermission()` in that same policy module is the execution permission
 allowlist shared by prompts, scheduler requests and the native turn dispatcher.

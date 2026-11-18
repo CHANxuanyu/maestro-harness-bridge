@@ -224,8 +224,10 @@ from the currently bound substitute and switch-back occurs after reset or a newe
 healthy quota sample. PM messages remain queued while its model is suspended.
 
 `quota_exhausted` stores model/source, reset and login classification.
-`model_recovered` clears that specific observation. Quota/login refusals remain in
-the cost bill but not `usage.budgetTurns`. Ordinary immediate failures wait 30
+`model_recovered` clears that specific observation. Every dispatched turn,
+including a quota/login refusal, reserves one slot in `usage.turns` exactly once.
+`usage.budgetTurns` remains a compatibility alias of that total. Quota/login
+refusals do not enter the product no-progress streak. Ordinary immediate failures wait 30
 seconds before the one same-turn retry. Repeated failures never become topic
 retries. After a failed report repair, PM can organize existing replies in a
 read-only `recovery` turn; reconstructed reports still pass the original schema
@@ -258,3 +260,42 @@ delivery and handling remain separate ledger events. Omitted CLI recipients are
 explicitly PM, including across JSON transport.
 The renderer remains a separate implementation task. See
 [verification](team-m3-verification.md) for tested artifacts and open acceptance.
+
+## Real-model follow-up decisions, 2026-11-18
+
+The hard limit uses actual dispatches, including pending reservations. Recovery,
+report repair, takeover and the 80% wrap-up all use the same dispatch guard.
+An initial invocation uses its already reserved slot; restart at an exhausted
+budget may inspect the workspace and reconcile a completed native receipt, but
+cannot invoke a process again. The app generates the unfinished report without
+a turn. A paused reservation can resume after the owner extends the budget and
+resumes the team. Solved progress still precedes the budget in `decideNext()`.
+
+The owner decided that challenge is bounded per owner-authored brief cycle:
+dev and QA first challenge the full brief once. A PM revision permits at most
+one additional round, only for changed criteria, with the before/after diff.
+QA must plan for those criteria still present, or mark them unverifiable; a
+removal-only revision may have an empty plan. Further disagreements enter a
+short discussion or remain visible with the PM answers and boundary question
+on the baseline confirmation card. There is never a third challenge round in
+that cycle. An owner edit or return starts a fresh full round; on return PM
+first supplies the new draft. `teamChallengeRound()` derives the cycle from
+durable owner changes, challenge receipts and brief versions, so restart cannot
+reset the cap. This decision refines PRD 6.4 without changing the discussion
+rules in 6.5.
+
+Positions need a claim, prose basis and what would change the author's mind;
+recorded evidence is optional. `teamEvidenceCatalog()` supplies the exact ids
+and observation descriptions to position and response prompts. Unknown
+references survive in `position.unverifiedBasis` or `response.unverifiedBasis`,
+separate from evidence. The original report receipt also remains intact.
+Step-3 insistence needs a new recorded id or a confirmed baseline violation.
+Without either, the app records `result: reserve`, `requestedResult: insist`
+and an `evidenceConclusion`, then lets the lawful decider conclude the reversible
+question as contested. It does not classify this disagreement as a member fault
+or invent another evidence-bearing round. Repair prompts quote the exact ids
+from the original dispatch snapshot.
+
+The respond prompt distinguishes draft edits in `brief` from confirmed
+`standardChanges`, and supplies the complete replacement criterion shape and
+a validated example. These shared rules apply equally through CLI and UI.

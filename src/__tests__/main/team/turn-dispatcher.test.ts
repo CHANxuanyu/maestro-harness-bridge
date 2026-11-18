@@ -111,6 +111,29 @@ describe('team turn dispatcher', () => {
 		}
 	);
 
+	it('classifies the real PM five-hour refusal and resolves its local reset clock', async () => {
+		const turn = createTurnDispatcher(deps).dispatch({
+			...request,
+			tool: 'claude-code',
+			seat: 'pm',
+			turn: 'review',
+			permissionMode: 'readonly',
+		});
+		await started();
+		pm.emit('agent-error', 'team-team1-pm-turn1', {
+			type: 'rate_limited',
+			message: "You've hit your limit. resets 11:10pm",
+			recoverable: true,
+		});
+		pm.emit('exit', 'team-team1-pm-turn1', 1);
+		const outcome = await turn;
+		expect(outcome.failure).toMatchObject({
+			kind: 'model-unavailable',
+			detail: expect.stringContaining('resets 11:10pm'),
+		});
+		expect(outcome.failure?.resetsAt).toBeGreaterThan(Date.now());
+	});
+
 	it('uses the full event-free spawn preparation and collects only its own normalized usage and final text', async () => {
 		const onNativeSessionId = vi.fn();
 		const turn = createTurnDispatcher(deps).dispatch({

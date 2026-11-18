@@ -211,3 +211,50 @@ owner request only, while the completion gate still checks every criterion.
 
 The actual validation and limitations are recorded in
 [team-m2-verification.md](team-m2-verification.md).
+
+## M3 backend contract, 2026-11-18
+
+Effective configuration is the original config plus owner-authored
+`budget_extended` and `seat_configured` events from `reduceLedger()`. The config
+file is not rewritten behind ledger replay. `seat_bound.configSource` selects the
+existing team launch configuration for a substitute. Each `turn_dispatched`
+freezes its binding; a takeover or broken-session recovery starts a fresh native
+conversation in the same seat workspace. Original availability is tracked apart
+from the currently bound substitute and switch-back occurs after reset or a newer
+healthy quota sample. PM messages remain queued while its model is suspended.
+
+`quota_exhausted` stores model/source, reset and login classification.
+`model_recovered` clears that specific observation. Quota/login refusals remain in
+the cost bill but not `usage.budgetTurns`. Ordinary immediate failures wait 30
+seconds before the one same-turn retry. Repeated failures never become topic
+retries. After a failed report repair, PM can organize existing replies in a
+read-only `recovery` turn; reconstructed reports still pass the original schema
+and attribution checks. Unsupported facts enter diagnosis instead of passing a
+criterion. Exhausted recovery registers app-only native-result inspection, which
+cannot consume another model turn while its conditions remain unchanged.
+
+Normal follow-ups wake the seat after 20 minutes with observed status. Unchanged
+reports use 10-minute rechecks and do not create failed attempts. A report can name
+an observable command/CI condition; unobservable claims fall back to an explicitly
+labelled timer. `wrap_up` is informational at 80% of time or turns and appears on
+`teamStatus().wrapUp`. At the overall boundary the app creates the incomplete
+progress report without a model call. `all`, `gaps`, `stopped` retain actual-path
+statistics. Accepting gaps emits `residual_item` with `owner: null` and preserves
+failed/unproven criteria.
+
+`requestedActions` on a member report or `team.action()` records publication
+intent. Class grants are remembered by `permission:<action>`; push includes local
+commit on the task branch, and draft PR also requires push authority. Started,
+succeeded and failed receipts record partial external effects. Restart inspects
+Git and checks for an existing draft before creating one. Merge, publish and
+external messages are owner actions only. New model selection creates a model
+boundary card unless already authorized by the team configuration.
+
+Added preload methods: `extend`, `seatSet`, `seatSub`, `action`, and the optional
+`accept(id, withGaps)` argument. All PRD 6.12 CLI verbs use those same handlers;
+`team show cost` returns per-seat usage, total wall time and actual-path statistics.
+`team.say()` returns a durable `{ status: 'queued', messageId, to }` receipt;
+delivery and handling remain separate ledger events. Omitted CLI recipients are
+explicitly PM, including across JSON transport.
+The renderer remains a separate implementation task. See
+[verification](team-m3-verification.md) for tested artifacts and open acceptance.

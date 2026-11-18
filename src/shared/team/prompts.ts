@@ -12,6 +12,11 @@ export const TEAM_WORKSPACE_RULES: Record<SeatRole, string> = {
 };
 
 const tasks: Record<ReportTurnKind, string> = {
+	recovery:
+		'Turn: recovery. The member failed to supply a report after its one repair. Organize the supplied last replies and observed workspace facts. You may provide recoveredJson as a JSON string of the original report only when every claim is supported by those replies; do not invent QA evidence or repeat any external action. Otherwise summarize what is missing for internal diagnosis. If this member has missed reports twice, propose its authorized substitute.',
+	wrap_up:
+		'Turn: wrap_up. The budget is at 80%. Give a concise wrap-up plan, prioritizing confirmed criteria. This is informational; do not relax standards or request more time without an owner decision.',
+	wait: 'Turn: wait. Read the attached external status. If the event is still normally running report waiting; unchanged polls are not failures. Report ready only when it ended, or problem when the observable external status indicates an error. Do not redo work.',
 	position:
 		'Turn: position. Write your sealed claim, basis, recorded evidence references, and what evidence would change your mind. Do not read other positions, the ledger file, or team CLI during this sealed step. Dev estimates extraTurns and preservesDeadline for a proposed standard change.',
 	proposal:
@@ -61,7 +66,7 @@ function ledgerSlice(
 		baselineVersion: state.baseline.confirmedVersion,
 		authorizations: state.config?.authorizations,
 		budget: {
-			turnsUsed: state.usage.turns,
+			turnsUsed: state.usage.budgetTurns,
 			turnsTotal: state.config?.turnBudget,
 			deadline: state.config?.deadline,
 		},
@@ -235,6 +240,7 @@ export function buildTeamTurnPrompt(
 			? 'This turn is read-only. Do not write files, including tests, even if your seat has writing assignments in other turns.'
 			: 'This turn may write only within the workspace boundary above.',
 		tasks[kind],
+		'Request publication through requestedActions:[{action:push|draftPr|merge|publish|externalMessage,detail}]. The app executes authorized task-branch commits/pushes and draft PRs, records receipts, and always asks at other boundaries. Never perform these external actions yourself.',
 		'Any seat may attach topic:{topic,why,participants,owner,layer,evidence} or standardChanges to its report. For an unjudgeable or contradictory standard use topic.kind:standard and criterionId; it goes to PM. Never silently edit a confirmed standard. A new requirement from an owner message is reported to PM.',
 		`Rules: evidence overrides opinions. Never silently relax, remove, or change how to prove a confirmed criterion. PM may add or tighten only within confirmed intent, remaining budget, and deadline; otherwise ask the owner. Never mark pass from a member's completion claim.`,
 		`Progress uses observed results, not wording or attempt categories. ${NO_PROGRESS_LIMIT} consecutive attempts without progress require diagnosis; ${REJECTION_RETRO_LIMIT} consecutive review rejections require a team retro. Waiting is not failure. Gather evidence when no next step has a basis. Stay within authorization; escalate only for a concrete commitment, permission, model, login, or budget boundary. Never use Codex Ultra.`,
@@ -250,6 +256,9 @@ export const TEAM_TURN_PROMPTS: Record<
 	ReportTurnKind,
 	(state: TeamState, seat?: SeatRole) => string
 > = {
+	recovery: (state) => buildTeamTurnPrompt('recovery', 'pm', state),
+	wrap_up: (state) => buildTeamTurnPrompt('wrap_up', 'pm', state),
+	wait: (state, seat = 'dev') => buildTeamTurnPrompt('wait', seat, state),
 	position: (state, seat = 'pm') =>
 		buildTeamTurnPrompt('position', seat, state, state.discussions.find((d) => !d.decision)?.id),
 	proposal: (state, seat = 'pm') =>

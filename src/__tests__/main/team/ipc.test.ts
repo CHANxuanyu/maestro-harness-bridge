@@ -32,6 +32,10 @@ describe('team IPC/preload contract', () => {
 			'resume',
 			'stop',
 			'accept',
+			'extend',
+			'seatSet',
+			'seatSub',
+			'action',
 			'requestChanges',
 			'export',
 			'seatTranscript',
@@ -47,6 +51,19 @@ describe('team IPC/preload contract', () => {
 			await registration[1](undefined as never, 'team', 'card', 'option', 'note');
 			expect(service[name]).toHaveBeenCalledOnce();
 		}
+	});
+	it('normalizes a missing JSON recipient before invoking the owner-message service', async () => {
+		vi.mocked(ipcMain.handle).mockClear();
+		const say = vi.fn(async () => ({ status: 'queued', messageId: 'message', to: 'pm' }));
+		registerTeamHandlers({ say } as unknown as TeamScheduler);
+		const [, handle] = vi.mocked(ipcMain.handle).mock.calls.find(([name]) => name === 'team:say')!;
+		const args = JSON.parse(JSON.stringify(['team', 'Queued question for PM', undefined]));
+		expect(await handle(undefined as never, ...args)).toEqual({
+			status: 'queued',
+			messageId: 'message',
+			to: 'pm',
+		});
+		expect(say).toHaveBeenCalledWith('team', 'Queued question for PM', 'pm');
 	});
 	it('invokes fixed argument order and unsubscribes exactly its own changed listener', async () => {
 		const api = createTeamApi();

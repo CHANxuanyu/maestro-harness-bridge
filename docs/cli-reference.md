@@ -86,15 +86,6 @@ stop team
 | `--team <id>` | Team id or unique prefix | -       |
 | `--json`      | Machine-readable result  | -       |
 
-## `maestro-cli team accept`
-
-accept team
-
-| Option        | Description              | Default |
-| ------------- | ------------------------ | ------- |
-| `--team <id>` | Team id or unique prefix | -       |
-| `--json`      | Machine-readable result  | -       |
-
 ## `maestro-cli team export`
 
 export team
@@ -103,6 +94,47 @@ export team
 | ------------- | ------------------------ | ------- |
 | `--team <id>` | Team id or unique prefix | -       |
 | `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team accept`
+
+Accept a demonstration or the listed leftovers
+
+| Option        | Description                                            | Default |
+| ------------- | ------------------------------------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix                               | -       |
+| `--json`      | Machine-readable result                                | -       |
+| `--with-gaps` | Accept unmet items from the incomplete progress report | -       |
+
+## `maestro-cli team extend`
+
+Add explicit time or turns to the overall budget
+
+| Option            | Description              | Default |
+| ----------------- | ------------------------ | ------- |
+| `--team <id>`     | Team id or unique prefix | -       |
+| `--json`          | Machine-readable result  | -       |
+| `--hours <hours>` | Additional hours         | -       |
+| `--turns <turns>` | Additional turns         | -       |
+
+## `maestro-cli team seat <action> <seat> [model]`
+
+Set a seat model or substitute, or wait for recovery
+
+| Option        | Description                                         | Default |
+| ------------- | --------------------------------------------------- | ------- |
+| `--team <id>` | Team id or unique prefix                            | -       |
+| `--json`      | Machine-readable result                             | -       |
+| `--wait`      | Suspend this seat until its original model recovers | -       |
+
+## `maestro-cli team action <action>`
+
+Request push, draftPr, or an owner-only external action
+
+| Option          | Description                          | Default |
+| --------------- | ------------------------------------ | ------- |
+| `--team <id>`   | Team id or unique prefix             | -       |
+| `--json`        | Machine-readable result              | -       |
+| `--note <text>` | Concrete action and publication body | -       |
 
 ## `maestro-cli team show <section>`
 
@@ -496,21 +528,22 @@ Manage project defaults for future conversations in the new interface
 
 Show or set defaults stored by Maestro for one project and host
 
-| Option                      | Description                                                                              | Default |
-| --------------------------- | ---------------------------------------------------------------------------------------- | ------- |
-| `--path <path>`             | Project directory; remote paths are kept on the specified host                           | -       |
-| `--ssh-remote <id>`         | SSH host identity; omit for local projects                                               | -       |
-| `--provider <id>`           | Default tool, or inherit to clear                                                        | -       |
-| `--model <id>`              | Default model, or inherit to clear                                                       | -       |
-| `--model-provider <id>`     | Tool owning the model and effort when the default tool is inherited                      | -       |
-| `--effort <level>`          | Default reasoning effort, or inherit to clear                                            | -       |
-| `--auto-handoff <id\|off>`  | Target tool configuration ID for automatic handoff, or off                               | -       |
-| `--permission <mode>`       | full, standard, readonly, or inherit to clear                                            | -       |
-| `--env <NAME=VALUE>`        | Replace project environment variables; repeat for every entry                            | `[]`    |
-| `--clear-env`               | Remove the project environment override                                                  | -       |
-| `--acknowledge-full-access` | Acknowledge once that full access permits reading, writing and commands without approval | -       |
-| `--show-secrets`            | Reveal environment credentials in output                                                 | -       |
-| `--json`                    | Output the settings snapshot as JSON                                                     | -       |
+| Option                      | Description                                                                                       | Default |
+| --------------------------- | ------------------------------------------------------------------------------------------------- | ------- |
+| `--path <path>`             | Project directory; remote paths are kept on the specified host                                    | -       |
+| `--ssh-remote <id>`         | SSH host identity; omit for local projects                                                        | -       |
+| `--provider <id>`           | Default tool, or inherit to clear                                                                 | -       |
+| `--model <id>`              | Default model, or inherit to clear                                                                | -       |
+| `--model-provider <id>`     | Tool owning the model and effort when the default tool is inherited                               | -       |
+| `--effort <level>`          | Default reasoning effort, or inherit to clear                                                     | -       |
+| `--auto-handoff <id\|off>`  | Target tool configuration ID for automatic handoff, or off                                        | -       |
+| `--permission <mode>`       | full, standard, readonly, or inherit to clear                                                     | -       |
+| `--env <NAME=VALUE>`        | Replace project environment variables; repeat for every entry                                     | `[]`    |
+| `--tool-config <json>`      | JSON object mapping tool configuration IDs to edited fields; saved together with project defaults | -       |
+| `--clear-env`               | Remove the project environment override                                                           | -       |
+| `--acknowledge-full-access` | Acknowledge once that full access permits reading, writing and commands without approval          | -       |
+| `--show-secrets`            | Reveal environment credentials in output                                                          | -       |
+| `--json`                    | Output the settings snapshot as JSON                                                              | -       |
 
 ## `maestro-cli permission <action> [request-id]`
 
@@ -1615,14 +1648,17 @@ Show one tab's settings (model, effort, thinking, access, history)
 | `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
 | `--json`           | Output as JSON (for scripting)                 | -       |
 
-## `maestro-cli tab children <tab-id>`
+## `maestro-cli tab children [tab-id]`
 
 List direct child conversations, including hidden subtasks
 
-| Option             | Description                                    | Default |
-| ------------------ | ---------------------------------------------- | ------- |
-| `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active" | -       |
-| `--json`           | Output as JSON (for scripting)                 | -       |
+| Option                 | Description                                               | Default |
+| ---------------------- | --------------------------------------------------------- | ------- |
+| `-a, --agent <id>`     | Whose active tab, when &lt;tab-id> is "active"            | -       |
+| `--json`               | Output as JSON (for scripting)                            | -       |
+| `--expand`             | Expand the conversation tree and save the choice          | -       |
+| `--collapse`           | Collapse the conversation tree and save the choice        | -       |
+| `--native <native-id>` | Read children of a native conversation (requires --agent) | -       |
 
 ## `maestro-cli tab select <tab-id>`
 

@@ -12,6 +12,9 @@ import {
 	missingOutputLocations,
 	teamReadyForDemo,
 	teamTurnPermission,
+	teamModelUnavailable,
+	teamRecoveryDecision,
+	sameTeamModel,
 } from '../../shared/team/policy';
 import { reduceLedger } from '../../shared/team/ledger';
 import { buildTeamTurnPrompt } from '../../shared/team/prompts';
@@ -34,10 +37,12 @@ import {
 	type DiscussionAction,
 	type OwnerCard,
 	type SeatRole,
+	type SeatModel,
 	type TeamAuthorizations,
 	type TeamConfig,
 	type TeamEvent,
 	type TeamState,
+	type QueuedTeamMessage,
 } from '../../shared/team/types';
 import type { FollowUpFire } from '../../shared/followUp';
 import type { createCheckRunner } from '../check-runner';
@@ -47,8 +52,13 @@ import { createKeyedWriteQueue } from '../utils/atomic-json-store';
 import type { createTeamStore } from './team-store';
 import type { SeatTurnRequest, SeatTurnResult } from './turn-dispatcher';
 import type { TeamWorkspaces } from './workspaces';
+import { tokenExhaustionResetAt } from '../../shared/retryClassification';
+import type { TeamQuotaSample } from './quota';
 import { reportEvents, type TeamEventInput } from './report-events';
 
+export const TEAM_FAILURE_COOLDOWN_MS = 30 * DURATION_MS.second;
+/** PRD 6.8.1: after a normal 20 minute wait, keep following and look again every 10 minutes. */
+export const TEAM_WAIT_RECHECK_MS = 10 * DURATION_MS.minute;
 export const TEAM_FALLBACK_MS = 30 * DURATION_MS.second;
 type Dispatch = TeamEvent<'turn_dispatched'>;
 type RecordData = { config: TeamConfig; events: LedgerEvent[] };
@@ -70,8 +80,10 @@ export interface TeamSchedulerDependencies {
 	/** Host-resolved launch configuration; never supplied by a seat report. */
 	seatOptions?(
 		config: TeamConfig,
-		seat: SeatRole
+		seat: SeatRole,
+		model?: SeatModel
 	): Pick<SeatTurnRequest, 'customEnv' | 'customPath' | 'customArgs'>;
+	quota?(config: TeamConfig, source: SeatRole, model: SeatModel): TeamQuotaSample | undefined;
 	now?: () => number;
 	onError(error: unknown): void;
 }
@@ -87,7 +99,10 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 	let timer: ReturnType<typeof setInterval> | undefined;
 	let unsubscribe: (() => void) | undefined;
 	let unsubscribeFollow: (() => void) | undefined;
-	const load = (id: string) => deps.store.loadTeam(id);
+	const load = async (id: string) => {
+		const data = await deps.store.loadTeam(id);
+		return { ...data, config: reduceLedger(data.events).config ?? data.config };
+	};
 	const append = async (id: string, input: TeamEventInput) => {
 		const eventId = input.id ?? randomUUID();
 		const prior = (await load(id)).events.find((event) => event.id === eventId);
@@ -105,8 +120,18 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			(answer) => answer.cardId === `permission:${action}` && answer.optionId === 'allow'
 		);
 	const ws = (state: TeamState) => deps.workspaces(state.config!, authorized(state, 'push'));
-	const card = (id: string, value: OwnerCard) =>
-		append(id, { kind: 'decision_card', actor: 'app', id: `card:${value.id}`, card: value });
+	const card = async (id: string, value: OwnerCard) => {
+		const state = await stateFor(id);
+		return append(id, {
+			kind: 'decision_card',
+			actor: 'app',
+			id: `card:${value.id}`,
+			card: {
+				budgetNote: `${state.usage.budgetTurns}/${state.config!.turnBudget} turns; deadline ${state.config!.deadline ? new Date(state.config!.deadline).toISOString() : 'not set'}`,
+				...value,
+			},
+		});
+	};
 	const permission = async (
 		id: string,
 		state: TeamState,
@@ -119,7 +144,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				id: `permission:${action}`,
 				boundary: 'permission',
 				title: `Authorize ${action} for this team`,
-				body: `${detail} This action is outside the team's current ${action} authorization. Dependent work waits for this decision.`,
+				body: `${detail} This action is outside the team's current ${action} authorization. Keeping the work locally preserves the result but does not complete this action. Recommend authorizing this action class if the target and cost are intended. Dependent work waits for this decision.`,
 				options: [
 					{
 						id: 'allow',
@@ -135,6 +160,328 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				],
 			});
 		return false;
+	};
+	const registerWait = async (
+		id: string,
+		wait: Omit<TeamEvent<'follow_up_registered'>, 'seq' | 'id' | 'actor' | 'kind'>
+	) => {
+		if (!(await deps.followUps.list()).some((f) => f.id === wait.followUpId)) {
+			const registration = {
+				id: wait.followUpId,
+				target: { kind: 'team' as const, teamId: id, seat: wait.seat },
+				reason: wait.reason,
+				condition: wait.condition ?? { kind: 'time' as const, at: wait.untilMs! },
+				deadline: Number.MAX_SAFE_INTEGER,
+				waitLimitMs: Math.max(1, wait.untilMs! - wait.at),
+			};
+			try {
+				await deps.followUps.register(registration);
+			} catch (error) {
+				if (!wait.condition) throw error;
+				// An unobservable claimed process is not a registered external wait.
+				// Keep a bounded timer to ask for actual status, with the limitation explicit.
+				wait = {
+					...wait,
+					condition: undefined,
+					reason: `${wait.reason}. Cannot observe external status: ${String(error)}`,
+				};
+				await deps.followUps.register({
+					...registration,
+					reason: wait.reason,
+					condition: { kind: 'time', at: wait.untilMs! },
+				});
+			}
+		}
+		await append(id, {
+			kind: 'follow_up_registered',
+			actor: 'app',
+			...wait,
+			id: `${wait.followUpId}:registered`,
+		});
+	};
+	const noteUnavailable = async (
+		id: string,
+		state: TeamState,
+		seat: SeatRole,
+		detail: string,
+		resetsAt?: number,
+		login = false,
+		key?: string
+	) => {
+		const health = state.seats[seat];
+		const model = health.model ?? state.config!.seats[seat];
+		const configSource = health.binding?.configSource ?? seat;
+		if (teamModelUnavailable(state, model, configSource)) return;
+		await append(id, {
+			kind: 'quota_exhausted',
+			actor: 'app',
+			seat,
+			model,
+			configSource,
+			detail,
+			resetsAt,
+			login,
+			id: key ?? `unavailable:${seat}:${randomUUID()}`,
+		});
+	};
+	const seatAvailable = async (id: string, state: TeamState, seat: SeatRole) => {
+		const health = state.seats[seat];
+		if (state.openCards.some((c) => c.seat === seat && c.boundary !== 'login')) return false;
+		const model = health.model ?? state.config!.seats[seat];
+		const source = health.binding?.configSource ?? seat;
+		if (teamModelUnavailable(state, model, source)) return false;
+		const sample = deps.quota?.(state.config!, source, model);
+		if (sample?.exhausted) {
+			await noteUnavailable(
+				id,
+				state,
+				seat,
+				sample.detail ?? 'Quota sample unavailable',
+				sample.resetsAt,
+				sample.login
+			);
+			return false;
+		}
+		return true;
+	};
+	const recoverAvailability = async (id: string, data: RecordData) => {
+		let state = reduceLedger(data.events);
+		// Reconstruct availability from the durable finish even after a crash before the fault append.
+		for (const turn of state.turns) {
+			if (
+				!turn.finished ||
+				!['model-unavailable', 'login-expired'].includes(turn.finished.failureKind ?? '')
+			)
+				continue;
+			if (data.events.some((e) => e.id === `${turn.dispatchId}:unavailable`)) continue;
+			const model = turn.dispatched?.binding?.model ?? state.config!.seats[turn.seat];
+			await append(id, {
+				kind: 'quota_exhausted',
+				actor: 'app',
+				seat: turn.seat,
+				model,
+				configSource: turn.dispatched?.binding?.configSource ?? turn.seat,
+				detail: turn.finished.reportError,
+				resetsAt: turn.finished.resetsAt,
+				login: turn.finished.failureKind === 'login-expired',
+				id: `${turn.dispatchId}:unavailable`,
+			});
+		}
+		data = await load(id);
+		state = reduceLedger(data.events);
+		for (const entry of state.unavailable) {
+			const source = entry.configSource ?? entry.seat;
+			const model = entry.model ?? state.config!.seats[entry.seat];
+			const sample = deps.quota?.(state.config!, source, model);
+			const restored =
+				(!entry.login && entry.resetsAt !== undefined && now() >= entry.resetsAt) ||
+				(sample && sample.sampledAt > entry.at && !sample.exhausted);
+			if (restored) {
+				await append(id, {
+					kind: 'model_recovered',
+					actor: 'app',
+					unavailabilityId: entry.id,
+					id: `${entry.id}:available`,
+				});
+				for (const wait of state.followUps.filter((f) => f.unavailabilityId === entry.id)) {
+					await deps.followUps.cancel(wait.followUpId);
+					await append(id, {
+						kind: 'follow_up_fired',
+						actor: 'app',
+						followUpId: wait.followUpId,
+						result: 'Model reset or fresh quota sample confirms recovery',
+						id: `${wait.followUpId}:fired`,
+					});
+				}
+				for (const target of state.openCards.filter(
+					(c) => c.id === `availability:${entry.id}` || c.id === `login:${entry.id}`
+				))
+					await append(id, {
+						kind: 'card_superseded',
+						actor: 'app',
+						cardId: target.id,
+						reason: 'The original model recovered',
+					});
+			} else if (!state.followUps.some((f) => f.unavailabilityId === entry.id)) {
+				const poll = data.events.filter(
+					(e) => e.kind === 'follow_up_registered' && e.unavailabilityId === entry.id
+				).length;
+				const at = now();
+				await registerWait(id, {
+					at,
+					followUpId: `quota:${entry.id}:${poll}`,
+					seat: entry.seat,
+					reason: entry.detail ?? 'Waiting for model recovery',
+					waitFor:
+						'Quota reset or a new account status sample; unchanged observations are normal waiting',
+					untilMs: Math.min(
+						entry.resetsAt ?? Infinity,
+						at + (poll ? TEAM_WAIT_RECHECK_MS : FOLLOW_UP_WAIT_MS)
+					),
+					poll,
+					unavailabilityId: entry.id,
+				});
+			}
+			if (entry.login && !restored)
+				await card(id, {
+					id: `login:${entry.id}`,
+					seat: entry.seat,
+					boundary: 'login',
+					title: `Restore ${model.tool} login for ${entry.seat}`,
+					body: JSON.stringify({
+						stuck: entry.detail,
+						accountSeat: source,
+						provider: model.tool,
+						paths: [
+							'The expired credential cannot authenticate. Retrying the same login cannot repair it.',
+							'Authorized substitutes are evaluated separately; other seats continue.',
+						],
+						recommendation:
+							'Sign in to the account configured for this seat, then confirm that login is restored.',
+					}),
+					options: [
+						{
+							id: 'login',
+							label: `I restored the ${model.tool} login for ${source}`,
+							cost: 'Owner completes provider login.',
+							recommended: true,
+						},
+						{
+							id: 'stop',
+							label: 'Stop and preserve work',
+							cost: 'Unfinished criteria remain unmet.',
+						},
+					],
+				});
+		}
+		state = await stateFor(id);
+		for (const seat of SEAT_ROLES) {
+			const health = state.seats[seat];
+			if (!health.binding || health.activeDispatchIds.length) continue;
+			const original = state.config!.seats[seat];
+			const source = health.binding.configSource ?? seat;
+			if (health.takeover && !teamModelUnavailable(state, original, seat)) {
+				await append(id, {
+					kind: 'seat_bound',
+					actor: 'app',
+					seat,
+					model: original,
+					workspace: health.binding.workspace,
+					configSource: seat,
+					reason: 'restored',
+				});
+				await append(id, {
+					kind: 'member_recovered',
+					actor: 'app',
+					seat,
+					how: 'Original model recovered; switched back in a separate conversation',
+				});
+				return;
+			}
+			if (!teamModelUnavailable(state, health.model!, source)) {
+				if (
+					health.faultActive &&
+					['model-unavailable', 'login-expired'].includes(health.lastFault?.fault ?? '')
+				)
+					await append(id, {
+						kind: 'member_recovered',
+						actor: 'app',
+						seat,
+						how: 'The reset condition changed; resume the suspended assignment',
+					});
+				continue;
+			}
+			const waitOnly = data.events.findLast(
+				(e): e is TeamEvent<'seat_configured'> => e.kind === 'seat_configured' && e.seat === seat
+			)?.wait;
+			const recovery = teamRecoveryDecision(
+				state,
+				seat,
+				!waitOnly && authorized(state, 'temporaryTakeover')
+			);
+			if (
+				recovery.decision.kind === 'continue' &&
+				recovery.decision.next.key?.startsWith('takeover:') &&
+				!waitOnly
+			) {
+				const choice = recovery.choices[Number(recovery.decision.next.key.split(':')[1])];
+				const sample = deps.quota?.(state.config!, choice.source, choice.model);
+				if (sample?.exhausted) {
+					await append(id, {
+						kind: 'quota_exhausted',
+						actor: 'app',
+						seat,
+						model: choice.model,
+						configSource: choice.source,
+						resetsAt: sample.resetsAt,
+						detail: sample.detail,
+						login: sample.login,
+					});
+					return;
+				}
+				await append(id, {
+					kind: 'seat_bound',
+					actor: 'app',
+					seat,
+					model: choice.model,
+					configSource: choice.source,
+					workspace: health.binding.workspace,
+					reason: choice.temporary ? 'temporary' : 'substitute',
+				});
+				await append(id, {
+					kind: 'substitute_took_over',
+					actor: 'app',
+					seat,
+					model: choice.model,
+					temporary: choice.temporary,
+				});
+				await append(id, {
+					kind: 'member_recovered',
+					actor: 'app',
+					seat,
+					how: 'Authorized takeover in a NEW conversation; use the ledger slice and inspect the existing workspace',
+				});
+				return;
+			}
+			if (recovery.decision.kind === 'escalate') {
+				const entry = state.unavailable.findLast((e) => e.seat === seat)!;
+				if (entry.login) continue;
+				const extensionHours = Math.max(
+					1,
+					((entry.resetsAt ?? now()) + DURATION_MS.hour - (state.config!.deadline ?? now())) /
+						DURATION_MS.hour
+				);
+				await card(id, {
+					id: `availability:${entry.id}`,
+					seat,
+					boundary: recovery.decision.boundaries[0],
+					boundaries: recovery.decision.boundaries,
+					title: `${seat} recovery would cross the deadline`,
+					body: JSON.stringify({
+						stuck: entry.detail,
+						paths: [
+							'The original model is unavailable; another call would repeat the refusal.',
+							'No available authorized substitute remains.',
+							authorized(state, 'temporaryTakeover')
+								? 'Existing team models are also unavailable; waiting for reset needs more time.'
+								: 'Temporary takeover needs permission; waiting for reset needs more time.',
+						],
+						recommendation:
+							recovery.decision.options.find((option) => option.recommended)?.plan ??
+							recovery.decision.options[0].plan,
+						waiting: 'Independent work continues; the deadline is unchanged.',
+					}),
+					extension: { hours: extensionHours },
+					options: recovery.decision.options.map((c) => ({
+						id: c.key!,
+						label: c.plan,
+						boundary: c.boundary,
+						cost: c.cost,
+						recommended: c.recommended,
+					})),
+				});
+			}
+		}
 	};
 	const transition = async (id: string, state: TeamState, to: TeamState['phase']) => {
 		if (state.phase !== to)
@@ -173,17 +520,17 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		dispatch: Dispatch
 	): SeatTurnRequest => {
 		const state = reduceLedger(events);
-		const binding = state.seats[dispatch.seat].binding;
+		const binding = dispatch.binding ?? state.seats[dispatch.seat].binding;
 		if (!binding) throw new Error(`Unbound team seat: ${dispatch.seat}`);
 		return {
 			...binding.model,
-			...deps.seatOptions?.(config, dispatch.seat),
+			...deps.seatOptions?.(config, binding.configSource ?? dispatch.seat, binding.model),
 			teamId: config.id,
 			dispatchId: dispatch.dispatchId,
 			seat: dispatch.seat,
 			turn: dispatch.turn,
 			cwd: binding.workspace,
-			nativeSessionId: ['position', 'proposal', 'response', 'retro'].includes(
+			nativeSessionId: ['position', 'proposal', 'response', 'retro', 'recovery'].includes(
 				dispatch.expectedTurn ?? dispatch.turn
 			)
 				? undefined
@@ -204,18 +551,58 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					workspace: binding.workspace,
 					model: binding.model,
 					nativeSessionId,
-					reason: 'restored',
+					reason: binding.reason,
+					configSource: binding.configSource,
 				});
 		});
 	const ingest = async (id: string, dispatch: Dispatch, finished: TeamEvent<'turn_finished'>) => {
 		if (!finished.report) return;
 		const data = await load(id);
 		if (data.events.some((e) => e.id === `${dispatch.dispatchId}:accepted`)) return;
+		if (dispatch.recoveryFor && finished.report.type === 'recovery') {
+			const failedTurn = reduceLedger(data.events).turns.find(
+				(t) => t.dispatchId === dispatch.recoveryFor
+			);
+			const failed =
+				failedTurn?.dispatched && failedTurn.finished
+					? { dispatch: failedTurn.dispatched, finished: failedTurn.finished }
+					: undefined;
+			if (failed) {
+				const extracted = extractTeamReport(
+					'```team-report\n' + (finished.report.recoveredJson ?? '') + '\n```'
+				);
+				const recovered = extracted.ok
+					? validateTeamReport(
+							extracted.report,
+							failed.dispatch.expectedTurn ?? failed.dispatch.turn,
+							failed.dispatch.seat,
+							snapshot(data.events, failed.dispatch)
+						)
+					: extracted;
+				if (recovered.ok) {
+					await ingest(id, failed.dispatch, { ...failed.finished, report: recovered.report });
+					await append(id, {
+						kind: 'report_repaired',
+						actor: 'pm',
+						seat: failed.dispatch.seat,
+						dispatchId: failed.dispatch.dispatchId,
+						id: `${dispatch.dispatchId}:organized`,
+					});
+				} else
+					await openDiscussion(
+						id,
+						`missing:${failed.dispatch.dispatchId}`,
+						`${finished.report.summary} Missing report facts still need evidence; do not repeat completed actions.`,
+						'no-progress'
+					);
+			}
+		}
 		const original = dispatch.repairOf
 			? data.events.find(
 					(e): e is Dispatch => e.kind === 'turn_dispatched' && e.dispatchId === dispatch.repairOf
 				)!
 			: dispatch;
+		const before = reduceLedger(data.events);
 		for (const event of reportEvents(original, finished.report, snapshot(data.events, original)))
 			await append(id, event);
 		await append(id, {
@@ -226,6 +613,69 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			report: finished.report,
 			id: `${dispatch.dispatchId}:accepted`,
 		});
+		const after = await stateFor(id);
+		const facts = (state: TeamState) =>
+			JSON.stringify({
+				brief: state.brief,
+				criteria: state.criteria.map((c) => [c.id, c.text, c.status, c.reason]),
+				work: state.workItems.map((w) => [w.itemId, w.state]),
+				issues: state.issues.map((i) => [i.id, i.state]),
+				discussions: state.discussions.map((d) => [
+					d.id,
+					d.positions.length,
+					d.proposals.length,
+					d.responses.length,
+					d.decision?.decision,
+				]),
+				messages: state.messages.map((m) => [
+					m.message.messageId,
+					m.handled?.summary,
+					m.forwarded?.summary,
+				]),
+				challenges: state.challenges.length,
+				responses: state.briefResponses.length,
+				reviews: state.reviews.length,
+				demos: state.demos.length,
+				retros: state.retros.length,
+			});
+		const normalWait =
+			finished.report.type === 'wait' ||
+			(finished.report.type === 'work' && !!finished.report.waiting);
+		const outputClaim =
+			(finished.report.type === 'qa_prep' && finished.report.tests.length > 0) ||
+			(finished.report.type === 'work' && finished.report.claimsComplete) ||
+			(finished.report.type === 'verify' &&
+				(finished.report.criteria.length > 0 || !before.criteria.some((c) => c.proof === 'qa')));
+		const changed =
+			normalWait ||
+			outputClaim ||
+			finished.report.type === 'wrap_up' ||
+			finished.report.type === 'recovery' ||
+			!!finished.report.requestedActions?.length ||
+			facts(before) !== facts(after);
+		const previous = data.events.findLast(
+			(e): e is TeamEvent<'turn_progress'> => e.kind === 'turn_progress' && e.seat === dispatch.seat
+		);
+		const idleCount = changed ? 0 : (previous?.idleCount ?? 0) + 1;
+		await append(id, {
+			kind: 'turn_progress',
+			actor: 'app',
+			dispatchId: original.dispatchId,
+			seat: dispatch.seat,
+			changed,
+			idleCount,
+			id: `${dispatch.dispatchId}:progress`,
+		});
+		if (!changed)
+			await append(id, {
+				kind: 'member_fault',
+				actor: 'app',
+				seat: dispatch.seat,
+				fault: 'idle-turn',
+				detail:
+					'Valid report produced no new ledger facts. Name missing evidence or complete an assigned item.',
+				id: `${dispatch.dispatchId}:idle`,
+			});
 		if (dispatch.repairOf)
 			await append(id, {
 				kind: 'report_repaired',
@@ -234,7 +684,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				dispatchId: original.dispatchId,
 				id: `${dispatch.dispatchId}:repaired`,
 			});
-		if (reduceLedger(data.events).seats[dispatch.seat].faultActive)
+		if (changed && reduceLedger(data.events).seats[dispatch.seat].faultActive)
 			await append(id, {
 				kind: 'member_recovered',
 				actor: 'app',
@@ -256,7 +706,8 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				workspace: binding.workspace,
 				model: binding.model,
 				nativeSessionId: result.nativeSessionId,
-				reason: 'restored',
+				reason: binding.reason,
+				configSource: binding.configSource,
 				id: `${dispatch.dispatchId}:binding`,
 			});
 		}
@@ -304,6 +755,19 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			repairTail: good ? undefined : result.text.slice(-3500),
 			canceled: result.canceled,
 			failureKind,
+			resetsAt:
+				result.failure?.resetsAt ??
+				(failureKind === 'model-unavailable'
+					? tokenExhaustionResetAt(
+							{
+								type: 'rate_limited',
+								recoverable: true,
+								message: result.failure?.detail ?? result.text,
+							},
+							now(),
+							Intl.DateTimeFormat().resolvedOptions().timeZone
+						)
+					: undefined),
 			id: `${dispatch.dispatchId}:finished`,
 		})) as TeamEvent<'turn_finished'>;
 		if (good && (dispatch.seat !== 'qa' || teamTurnPermission('qa', dispatch.turn) === 'readonly'))
@@ -321,7 +785,11 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				kind: 'member_fault',
 				actor: 'app',
 				seat: dispatch.seat,
-				fault: failureKind ?? (extracted.ok ? 'bad-report' : 'missing-report'),
+				fault:
+					failureKind ??
+					(!extracted.ok && extracted.reason.startsWith('Missing ')
+						? 'missing-report'
+						: 'bad-report'),
 				detail: finished.reportError,
 				id: `${dispatch.dispatchId}:fault`,
 			});
@@ -333,7 +801,49 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		live.set(dispatch.dispatchId, { teamId: data.config.id, controller });
 		const request = requestFor(data.config, data.events, dispatch);
 		void (async () => {
-			let result = recover ? await deps.reconcile(request) : null;
+			const previous = dispatch.retryOf
+				? data.events.find(
+						(e): e is Dispatch => e.kind === 'turn_dispatched' && e.dispatchId === dispatch.retryOf
+					)
+				: undefined;
+			if (
+				recover ||
+				dispatch.recoveryFor ||
+				previous ||
+				dispatch.repairOf ||
+				data.events.some(
+					(e) =>
+						e.kind === 'substitute_took_over' &&
+						e.seat === dispatch.seat &&
+						e.seq > (dispatch.sourceSeq ?? 0) - 5
+				)
+			) {
+				const workspace = ws(reduceLedger(data.events));
+				await workspace.initialize();
+				const failedSeat = dispatch.recoveryFor
+					? data.events.find(
+							(e): e is Dispatch =>
+								e.kind === 'turn_dispatched' && e.dispatchId === dispatch.recoveryFor
+						)?.seat
+					: dispatch.seat;
+				const inspection = await workspace.inspect(failedSeat === 'qa' ? 'qa' : 'dev');
+				await queue.enqueue(data.config.id, () =>
+					append(data.config.id, {
+						kind: 'workspace_inspected',
+						actor: 'app',
+						dispatchId: dispatch.dispatchId,
+						...inspection,
+						id: `${dispatch.dispatchId}:inspection`,
+					})
+				);
+				request.prompt += `\nWorkspace inspection (preserve completed external effects): ${JSON.stringify(inspection)}`;
+			}
+			let result =
+				recover || previous
+					? await deps.reconcile(
+							previous ? requestFor(data.config, data.events, previous) : request
+						)
+					: null;
 			if (!running || controller.signal.aborted) return;
 			if (!result) {
 				if (recover) {
@@ -395,6 +905,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		options: Partial<
 			Pick<
 				Dispatch,
+				| 'recoveryFor'
 				| 'repairOf'
 				| 'retryOf'
 				| 'mode'
@@ -405,14 +916,37 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				| 'discussionId'
 				| 'round'
 				| 'messageIds'
+				| 'followUpId'
 			>
 		> = {}
 	) => {
 		if (
-			state.usage.turns >= state.config!.turnBudget ||
+			state.paused ||
+			state.terminal ||
+			(state.config!.deadline !== undefined && now() >= state.config!.deadline) ||
+			state.usage.budgetTurns >= state.config!.turnBudget ||
 			SEAT_ROLES.reduce((count, role) => count + state.seats[role].activeDispatchIds.length, 0) >=
 				2 ||
 			state.seats[seat].activeDispatchIds.length
+		)
+			return;
+		if (!(await seatAvailable(id, state, seat))) return;
+		if (
+			state.followUps.some(
+				(f) =>
+					f.seat === seat && !f.followUpId.startsWith('job:') && !f.unavailabilityId && !f.faultId
+			)
+		)
+			return;
+		const recentFailure = state.turns.findLast(
+			(t) => t.seat === seat && t.finished && !t.report && !t.finished.canceled
+		);
+		if (
+			!options.repairOf &&
+			recentFailure?.finished &&
+			now() - recentFailure.finished.at < TEAM_FAILURE_COOLDOWN_MS &&
+			!((state.seats[seat].binding?.seq ?? 0) > recentFailure.finished.seq) &&
+			recoveryAt((await load(id)).events, seat) < recentFailure.finished.seq
 		)
 			return;
 		// A new dispatch ID is not a new assignment. Derive the latch from durable
@@ -505,6 +1039,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			at: now(),
 			seq: 0,
 			promptDigest: '',
+			binding: reduceLedger(data.events).seats[seat].binding,
 			...options,
 		};
 		input.prompt = promptFor(input, data.events);
@@ -816,6 +1351,16 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		const problemId =
 			state.issues.find((i) => isOpenTeamIssue(i) && i.opened.issueKind === 'defect')?.id ??
 			'checks';
+		if (
+			state.followUps.some(
+				(wait) => wait.seat === 'dev' && !wait.faultId && !wait.followUpId.startsWith('job:')
+			)
+		)
+			return;
+		const lastDevFailure = state.turns.findLast((t) => t.seat === 'dev' && t.finished && !t.report);
+		if (lastDevFailure?.finished && now() - lastDevFailure.finished.at < TEAM_FAILURE_COOLDOWN_MS)
+			return;
+		if (!(await seatAvailable(id, state, 'dev'))) return;
 		await startJob(id, `plan:${randomUUID()}`, async () => {
 			const workspaces = ws(state);
 			await workspaces.initialize();
@@ -829,10 +1374,10 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					.digest('hex');
 				const progress = current.problems[problemId]?.progress ?? judgeAttempts(failing, []);
 				const decision = decideNext(progress, {
-					budget: { used: current.usage.turns, total: current.config!.turnBudget },
-					candidates: [
-						{ plan: 'Address observed failures', basis: failing.join('\n'), fingerprint },
-					],
+					budget: { used: current.usage.budgetTurns, total: current.config!.turnBudget },
+					candidates: current.problems[problemId]?.candidates.length
+						? current.problems[problemId].candidates
+						: [{ plan: 'Address observed failures', basis: failing.join('\n'), fingerprint }],
 				});
 				if (decision.kind === 'report' || decision.kind === 'done') return;
 				if (decision.kind === 'diagnose') {
@@ -845,7 +1390,42 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					);
 					return;
 				}
-				await dispatch(id, current, 'dev', kind, {
+				if (decision.kind === 'escalate') {
+					await card(id, {
+						id: `problem:${problemId}:${progress.attempts.at(-1)?.id ?? 'first'}`,
+						seat: 'dev',
+						boundary: decision.boundaries[0],
+						boundaries: decision.boundaries,
+						title: `A boundary blocks ${problemId}`,
+						body: JSON.stringify({
+							stuck: failing,
+							paths: progress.attempts,
+							recommendation:
+								decision.options.find((o) => o.recommended)?.plan ?? decision.options[0].plan,
+							waiting: 'This problem waits; independent work continues.',
+						}),
+						options: [
+							...decision.options.slice(0, 3).map((c, index) => ({
+								id: c.key ?? `path:${index}`,
+								label: c.plan,
+								cost: c.cost ?? 'Owner supplies the named authority or resource.',
+								boundary: c.boundary,
+								recommended: c.recommended ?? index === 0,
+							})),
+							...(decision.options.length === 1
+								? [
+										{
+											id: 'stop',
+											label: 'Stop and preserve work',
+											cost: 'Keep the branch and ledger; unfinished work stays unfinished.',
+										},
+									]
+								: []),
+						],
+					});
+					return;
+				}
+				await dispatch(id, current, 'dev', decision.kind === 'gather' ? 'message' : kind, {
 					problemId,
 					fingerprint: decision.kind === 'continue' ? fingerprint : undefined,
 					failures: failing,
@@ -1196,7 +1776,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					responses,
 					boundary: 'The next step is irreversible or changes a commitment.',
 				}),
-				budgetNote: `${state.usage.turns}/${state.config!.turnBudget} turns used`,
+				budgetNote: `${state.usage.budgetTurns}/${state.config!.turnBudget} turns used`,
 				options: change
 					? [
 							{ id: 'approve', label: 'Approve this standard change', cost: change.reason },
@@ -1221,6 +1801,472 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		);
 		return true;
 	};
+	const budgetReport = async (id: string, state: TeamState) => {
+		const previous = (await load(id)).events.filter((e) => e.kind === 'budget_extended').length;
+		const cardId = previous ? `budget:${previous}` : 'budget';
+		await card(id, {
+			id: cardId,
+			boundary: 'budget',
+			title: 'Incomplete progress report',
+			body: JSON.stringify({
+				label: 'This is a progress report, not a completion demo.',
+				generatedBy: 'app',
+				output: state.outputs.at(-1),
+				missing: teamStatus(state, now()).criteria.missing,
+				work: state.workItems.filter((w) => w.state !== 'checked'),
+				issues: state.issues.filter(isOpenTeamIssue),
+				tried: Object.fromEntries(
+					Object.entries(state.problems).map(([key, p]) => [key, p.progress.attempts])
+				),
+				faults: SEAT_ROLES.map((seat) => ({ seat, fault: state.seats[seat].lastFault })),
+				changes: state.standardChanges,
+				contested: state.decisions.filter((d) => d.contested),
+				suggestions: state.suggestions,
+				evidenceChanges: state.checks.filter((c) => c.dilution?.length),
+				recommendation:
+					state.wrapUp?.summary ??
+					'Extend by 1 hour and 10 turns to address the listed gaps; this is an allowance, not a completion estimate.',
+			}),
+			extension: { hours: 1, turns: 10 },
+			options: [
+				{
+					id: 'extend',
+					label: 'Add 1 hour and 10 turns',
+					cost: 'Owner increases the overall budget; unmet criteria still need proof.',
+					recommended: true,
+				},
+				{
+					id: 'gaps',
+					label: 'Accept the listed leftovers',
+					cost: 'Unmet items stay unmet and enter the follow-up list with an owner to assign.',
+				},
+				{
+					id: 'stop',
+					label: 'Stop and preserve work',
+					cost: 'Keep the task branch and ledger; unfinished work stays unfinished.',
+				},
+			],
+		});
+	};
+	const extendBudget = async (
+		id: string,
+		extension: { hours?: number; turns?: number },
+		cardId?: string
+	) => {
+		const state = await stateFor(id);
+		if (
+			state.terminal ||
+			((!extension.hours || extension.hours <= 0) && (!extension.turns || extension.turns <= 0)) ||
+			(extension.hours !== undefined &&
+				(!Number.isFinite(extension.hours) || extension.hours <= 0)) ||
+			(extension.turns !== undefined &&
+				(!Number.isSafeInteger(extension.turns) || extension.turns <= 0))
+		)
+			throw new Error('Supply positive hours or integer turns for an active team');
+		await append(id, {
+			kind: 'budget_extended',
+			actor: 'owner',
+			...extension,
+			cardId,
+			turnBudget: state.config!.turnBudget + (extension.turns ?? 0),
+			deadline: extension.hours
+				? Math.max(now(), state.config!.deadline ?? now()) + extension.hours * DURATION_MS.hour
+				: state.config!.deadline,
+			...(cardId ? { id: `${cardId}:action` } : {}),
+		});
+		for (const target of state.openCards.filter(
+			(c) => c.boundary === 'budget' || c.boundaries?.includes('budget')
+		))
+			await append(id, {
+				kind: 'card_superseded',
+				actor: 'app',
+				cardId: target.id,
+				reason: 'Owner extended the budget',
+			});
+	};
+	const handleWaits = async (id: string, data: RecordData) => {
+		const state = reduceLedger(data.events);
+		for (const fired of data.events.filter(
+			(e): e is TeamEvent<'follow_up_fired'> => e.kind === 'follow_up_fired'
+		)) {
+			const wait = data.events.find(
+				(e): e is TeamEvent<'follow_up_registered'> =>
+					e.kind === 'follow_up_registered' && e.followUpId === fired.followUpId
+			);
+			if (
+				!wait ||
+				wait.unavailabilityId ||
+				/^(job:|job-retry:)/.test(wait.followUpId) ||
+				data.events.some((e) => e.kind === 'wait_handled' && e.followUpId === wait.followUpId)
+			)
+				continue;
+			if (wait.faultId) {
+				const failed = state.turns.find((t) => t.dispatchId === wait.faultId);
+				if (!failed?.dispatched || !state.seats[wait.seat].faultActive) {
+					await append(id, {
+						kind: 'wait_handled',
+						actor: 'app',
+						followUpId: wait.followUpId,
+						id: `${wait.followUpId}:handled`,
+					});
+					continue;
+				}
+				const originalId =
+					failed.dispatched.repairOf ?? failed.dispatched.retryOf ?? failed.dispatchId;
+				const original = state.turns.find((t) => t.dispatchId === originalId)!;
+				await startJob(id, `inspect:${wait.followUpId}`, async () => {
+					const workspaces = ws(state);
+					await workspaces.initialize();
+					const inspection = await workspaces.inspect(wait.seat === 'qa' ? 'qa' : 'dev');
+					const found = await deps.reconcile(
+						requestFor(data.config, data.events, original.dispatched!)
+					);
+					const extracted =
+						found && !found.failure && found.exitCode === 0 ? extractTeamReport(found.text) : null;
+					const recovered = extracted?.ok
+						? validateTeamReport(
+								extracted.report,
+								original.dispatched!.expectedTurn ?? original.dispatched!.turn,
+								original.seat,
+								snapshot(data.events, original.dispatched!)
+							)
+						: null;
+					await queue.enqueue(id, async () => {
+						await append(id, {
+							kind: 'workspace_inspected',
+							actor: 'app',
+							dispatchId: originalId,
+							...inspection,
+							id: `${wait.followUpId}:inspection`,
+						});
+						const latest = await stateFor(id);
+						if (latest.seats[wait.seat].faultActive && !latest.terminal) {
+							if (recovered?.ok) {
+								await ingest(id, original.dispatched!, {
+									...original.finished!,
+									report: recovered.report,
+								});
+								await append(id, {
+									kind: 'member_recovered',
+									actor: 'app',
+									seat: wait.seat,
+									how: 'New native results recovered without redispatching the failed model',
+									id: `${wait.followUpId}:recovered`,
+								});
+							} else {
+								const at = now();
+								await registerWait(id, {
+									at,
+									seat: wait.seat,
+									faultId: wait.faultId,
+									reason: wait.reason,
+									waitFor: wait.waitFor,
+									followUpId: `${wait.followUpId}:next`,
+									untilMs: at + TEAM_WAIT_RECHECK_MS,
+									poll: (wait.poll ?? 0) + 1,
+								});
+							}
+						}
+						await append(id, {
+							kind: 'wait_handled',
+							actor: 'app',
+							followUpId: wait.followUpId,
+							id: `${wait.followUpId}:handled`,
+						});
+					});
+				});
+				return true;
+			}
+			const turn = state.turns.findLast((t) => t.dispatched?.followUpId === wait.followUpId);
+			if (!turn) {
+				if (
+					await dispatch(id, state, wait.seat, 'wait', {
+						followUpId: wait.followUpId,
+						note: `External status for ${wait.waitFor}: ${fired.result}. This is a normal wait if unchanged, not a failed attempt.`,
+					})
+				)
+					return true;
+				continue;
+			}
+			if (turn.report?.type !== 'wait') continue;
+			let externallyCompleted = false;
+			try {
+				externallyCompleted =
+					wait.condition?.kind !== 'time' &&
+					!!wait.condition &&
+					JSON.parse(fired.result).state === 'completed';
+			} catch {
+				/* Older receipts may contain plain text. */
+			}
+			if (turn.report.status === 'waiting' && !externallyCompleted) {
+				const at = now();
+				await registerWait(id, {
+					at,
+					followUpId: `${wait.followUpId}:next`,
+					seat: wait.seat,
+					reason: turn.report.summary,
+					waitFor: wait.waitFor,
+					condition: wait.condition?.kind === 'time' ? undefined : wait.condition,
+					untilMs: at + TEAM_WAIT_RECHECK_MS,
+					poll: (wait.poll ?? 0) + 1,
+				});
+			}
+			if (turn.report.status === 'problem')
+				await openDiscussion(
+					id,
+					`wait:${wait.followUpId}:problem`,
+					turn.report.summary,
+					'no-progress',
+					`wait:${wait.followUpId}`
+				);
+			await append(id, {
+				kind: 'wait_handled',
+				actor: 'app',
+				followUpId: wait.followUpId,
+				id: `${wait.followUpId}:handled`,
+			});
+			return true;
+		}
+		return false;
+	};
+	const runActions = async (id: string, data: RecordData) => {
+		const state = reduceLedger(data.events);
+		for (const request of data.events.filter(
+			(e): e is TeamEvent<'action_requested'> => e.kind === 'action_requested'
+		)) {
+			if (
+				data.events.some(
+					(e) => e.kind === 'action_receipt' && e.key === request.id && e.outcome !== 'started'
+				)
+			)
+				continue;
+			if (request.action !== 'push' && request.action !== 'draftPr') {
+				await card(id, {
+					id: `external:${request.id}`,
+					boundary: 'permission',
+					title: `Owner decision required: ${request.action}`,
+					body: JSON.stringify({
+						stuck: request.detail,
+						paths: ['The team grant covers task-branch pushes and draft PRs only.'],
+						recommendation:
+							'Keep the task branch; the owner performs this external action separately.',
+					}),
+					options: [
+						{
+							id: 'decline',
+							label: 'Keep work on the task branch',
+							cost: 'No external action is performed.',
+							recommended: true,
+						},
+						{
+							id: 'stop',
+							label: 'Stop and preserve work',
+							cost: 'Unfinished criteria remain unmet.',
+						},
+					],
+				});
+				continue;
+			}
+			const action = request.action;
+			if (
+				!(await permission(
+					id,
+					state,
+					action,
+					`${request.detail} Target: task branch team/${id} on the project's configured push remote.`
+				))
+			)
+				return true;
+			if (
+				action === 'draftPr' &&
+				!(await permission(
+					id,
+					state,
+					'push',
+					`Push task branch team/${id} before creating its draft PR.`
+				))
+			)
+				return true;
+			await startJob(id, `action:${request.id}`, async (controller) => {
+				const workspaces = ws(await stateFor(id));
+				try {
+					await workspaces.initialize();
+					const inspection = await workspaces.inspect();
+					await queue.enqueue(id, () =>
+						append(id, {
+							kind: 'action_receipt',
+							actor: 'app',
+							action,
+							key: request.id,
+							outcome: 'started',
+							detail: JSON.stringify(inspection),
+							id: `${request.id}:started`,
+						})
+					);
+					if (controller.signal.aborted) throw new Error('Publication stopped before commit');
+					await workspaces.commitDevWork(`Team ${id}: ${action}`);
+					if (controller.signal.aborted) throw new Error('Publication stopped before push');
+					if (!(await workspaces.pushDevWork()))
+						throw new Error('Task branch push was not authorized');
+					if (controller.signal.aborted)
+						throw new Error('Publication stopped after push; inspect the recorded task branch');
+					const detail =
+						action === 'draftPr'
+							? await workspaces.createDraftPr(state.config!.title, request.detail)
+							: `Pushed team/${id} to the configured project remote`;
+					await queue.enqueue(id, () =>
+						append(id, {
+							kind: 'action_receipt',
+							actor: 'app',
+							action,
+							key: request.id,
+							outcome: 'succeeded',
+							detail,
+							id: `${request.id}:result`,
+						})
+					);
+				} catch (error) {
+					deps.onError(error);
+					await queue.enqueue(id, async () => {
+						await append(id, {
+							kind: 'action_receipt',
+							actor: 'app',
+							action,
+							key: request.id,
+							outcome: 'failed',
+							detail: String(error),
+							id: `${request.id}:result`,
+						});
+						if (/auth|log(?:ged)?[ -]?in|credential/i.test(String(error)))
+							await card(id, {
+								id: `action-login:${request.id}`,
+								boundary: 'login',
+								title: 'Restore GitHub CLI login for the project remote',
+								body: JSON.stringify({
+									stuck: String(error),
+									paths: [
+										'The authorized publication failed. Repeating it without restoring GitHub credentials cannot succeed.',
+									],
+									recommendation:
+										'Run gh auth login for the project remote host, then request publication again.',
+								}),
+								options: [
+									{
+										id: 'decline',
+										label: 'Keep work locally while I restore GitHub login',
+										cost: 'No automatic publication retry.',
+										recommended: true,
+									},
+									{
+										id: 'stop',
+										label: 'Stop and preserve work',
+										cost: 'Branch and ledger are kept.',
+									},
+								],
+							});
+					});
+				}
+			});
+			return true;
+		}
+		return false;
+	};
+	const setSeat = async (
+		id: string,
+		seat: SeatRole,
+		model?: SeatModel,
+		substitute = false,
+		wait = false,
+		cardId?: string
+	) => {
+		const state = await stateFor(id);
+		if (state.terminal || !SEAT_ROLES.includes(seat))
+			throw new Error('An active team and valid seat are required');
+		if (state.seats[seat].activeDispatchIds.length)
+			throw new Error('Wait for the active seat turn or pause it before changing models');
+		if (
+			!wait &&
+			(!model ||
+				!isValidAgentId(model.tool) ||
+				model.tool === 'terminal' ||
+				(model.tool === 'codex' && model.effort?.trim().toLowerCase() === 'ultra'))
+		)
+			throw new Error('Invalid team model');
+		const known =
+			model &&
+			SEAT_ROLES.some(
+				(role) =>
+					sameTeamModel(state.config!.seats[role], model) ||
+					(state.config!.seats[role].substitute &&
+						sameTeamModel(state.config!.seats[role].substitute!, model))
+			);
+		if (model && !known && !cardId) {
+			const key = createHash('sha256')
+				.update(JSON.stringify([seat, model, substitute]))
+				.digest('hex');
+			await card(id, {
+				id: `model:${key}`,
+				seat,
+				boundary: 'model',
+				title: `Authorize ${model.tool} ${model.model ?? 'default'} for ${seat}`,
+				body: JSON.stringify({
+					stuck: 'This model is not in the team authorization.',
+					paths: ['Existing team models remain available under the current grant.'],
+					recommendation: 'Approve only if the new model and its usage cost are intended.',
+				}),
+				seatChange: { seat, model, substitute },
+				options: [
+					{
+						id: 'model',
+						label: 'Authorize this named model',
+						cost: 'Uses this provider account and may incur additional model charges.',
+						recommended: true,
+					},
+					{ id: 'decline', label: 'Keep the current model', cost: 'No new model is used.' },
+				],
+			});
+			return;
+		}
+		await append(id, {
+			kind: 'seat_configured',
+			actor: 'owner',
+			seat,
+			...(wait
+				? { wait: true, substitute: null }
+				: substitute
+					? { substitute: model, wait: false }
+					: { model, wait: false }),
+			cardId,
+			...(cardId ? { id: `${cardId}:action` } : {}),
+		});
+		if (!substitute && !wait && model) {
+			await append(id, {
+				kind: 'seat_bound',
+				actor: 'app',
+				seat,
+				workspace: state.seats[seat].binding!.workspace,
+				model,
+				reason: 'restored',
+				configSource: seat,
+			});
+			await append(id, {
+				kind: 'member_recovered',
+				actor: 'app',
+				seat,
+				how: 'Owner selected a model; resume from the ledger in a new conversation',
+			});
+		}
+		if (wait && state.seats[seat].takeover)
+			await append(id, {
+				kind: 'seat_bound',
+				actor: 'app',
+				seat,
+				workspace: state.seats[seat].binding!.workspace,
+				model: state.config!.seats[seat],
+				reason: 'restored',
+				configSource: seat,
+			});
+	};
 	const evaluate = async (id: string) => {
 		if (!running) return;
 		let data = await load(id);
@@ -1232,7 +2278,48 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				)?.card;
 				if (target) await applyAnswer(id, target, event.optionId, event.note);
 			}
+		data = await load(id);
+		if (reduceLedger(data.events).terminal) return;
+		// Reconcile already completed effects even when no dispatch budget remains.
 		await recoverReceipts(id, data);
+		data = await load(id);
+		const current = reduceLedger(data.events);
+		if (
+			!current.terminal &&
+			current.config &&
+			((current.config.deadline !== undefined && now() >= current.config.deadline) ||
+				current.usage.budgetTurns >= current.config.turnBudget)
+		) {
+			if (current.config.deadline !== undefined && now() >= current.config.deadline) {
+				for (const item of live.values()) if (item.teamId === id) item.controller.abort();
+				jobs.get(id)?.abort();
+			} else {
+				// A dispatched turn already reserves one budget slot. Reconcile that same
+				// dispatch after restart; never reserve or launch an additional turn here.
+				if (!current.paused)
+					for (const turn of current.turns)
+						if (turn.dispatched && !turn.finished && !live.has(turn.dispatchId))
+							launch(data, turn.dispatched, true);
+				if (jobs.has(id) || SEAT_ROLES.some((seat) => current.seats[seat].activeDispatchIds.length))
+					return;
+			}
+			await budgetReport(id, current);
+			return;
+		}
+		await recoverAvailability(id, data);
+		data = await load(id);
+		const recoveredState = reduceLedger(data.events);
+		for (const wait of recoveredState.followUps) {
+			if (!wait.faultId || recoveredState.seats[wait.seat].faultActive) continue;
+			await deps.followUps.cancel(wait.followUpId);
+			await append(id, {
+				kind: 'follow_up_fired',
+				actor: 'app',
+				id: `${wait.followUpId}:recovered`,
+				followUpId: wait.followUpId,
+				result: 'Seat recovery changed the condition; cancel the fault inspection wait',
+			});
+		}
 		data = await load(id);
 		const state = reduceLedger(data.events);
 		for (const discussion of state.discussions.filter((d) => d.decision && d.proposals.length)) {
@@ -1293,26 +2380,17 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		);
 		if (active >= 2) return;
 		// Owner messages remain usable while a card waits; they never auto-answer the card.
-		if (state.openCards.length && !state.pendingMessages.length) return;
+		if (state.openCards.some((c) => !c.seat) && !state.pendingMessages.length) return;
+		if (await runActions(id, data)) return;
+		if (await handleWaits(id, data)) return;
 		if (
-			state.usage.turns >= data.config.turnBudget ||
-			(data.config.deadline !== undefined && now() >= data.config.deadline)
+			(state.usage.budgetTurns >= Math.ceil(data.config.turnBudget * 0.8) ||
+				(data.config.deadline !== undefined &&
+					now() >= data.config.createdAt + (data.config.deadline - data.config.createdAt) * 0.8)) &&
+			!state.wrapUp &&
+			!state.turns.some((t) => t.dispatched?.turn === 'wrap_up')
 		) {
-			await card(id, {
-				id: 'budget',
-				boundary: 'budget',
-				title: 'Incomplete progress report',
-				body: `This is a progress report, not a completion demo. ${JSON.stringify({ missing: teamStatus(state, now()).criteria.missing, changes: state.standardChanges, contested: state.decisions.filter((d) => d.contested), suggestions: state.suggestions, evidenceChanges: state.checks.filter((c) => c.dilution?.length) })}`,
-				options: [
-					{ id: 'stop', label: 'Stop and preserve work', cost: 'Keep the branch and ledger.' },
-					{
-						id: 'gaps',
-						label: 'Accept the listed gaps',
-						cost: 'Missing evidence remains unproven.',
-					},
-				],
-			});
-			return;
+			if (await dispatch(id, state, 'pm', 'wrap_up')) return;
 		}
 		// One repair for each original turn, never a repair of a repair.
 		const broken = state.turns.find(
@@ -1336,9 +2414,62 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					discussionId: broken.dispatched.discussionId,
 					round: broken.dispatched.round,
 					messageIds: broken.dispatched.messageIds,
+					followUpId: broken.dispatched.followUpId,
 				}
 			);
 			return;
+		}
+		for (const failed of state.turns.filter(
+			(t) =>
+				t.finished &&
+				!t.finished.report &&
+				!t.report &&
+				!t.finished.canceled &&
+				(t.dispatched?.retryOf || t.dispatched?.repairOf) &&
+				state.seats[t.seat].faultActive
+		)) {
+			if (
+				!data.events.some(
+					(e) => e.kind === 'follow_up_registered' && e.faultId === failed.dispatchId
+				)
+			) {
+				const at = now();
+				await registerWait(id, {
+					at,
+					followUpId: `fault:${failed.dispatchId}`,
+					faultId: failed.dispatchId,
+					seat: failed.seat,
+					reason:
+						'The bounded retry or report repair failed. Do not redispatch unchanged conditions.',
+					waitFor:
+						'New native results or an explicit recovery condition; app inspects without a model call',
+					untilMs: at + FOLLOW_UP_WAIT_MS,
+				});
+			}
+		}
+		const unreported = state.turns.find(
+			(t) =>
+				t.dispatched?.repairOf &&
+				state.turns.find((r) => r.dispatchId === t.dispatched!.repairOf)?.dispatched?.turn !==
+					'recovery' &&
+				t.finished &&
+				!t.finished.report &&
+				!t.finished.canceled &&
+				!t.report &&
+				!t.finished.failureKind &&
+				!state.turns.find((r) => r.dispatchId === t.dispatched!.repairOf)?.report &&
+				!state.turns.some((r) => r.dispatched?.recoveryFor === t.dispatched!.repairOf)
+		);
+		if (unreported?.dispatched?.repairOf) {
+			const original = state.turns.find((t) => t.dispatchId === unreported.dispatched!.repairOf)!;
+			if (
+				await dispatch(id, state, 'pm', 'recovery', {
+					recoveryFor: original.dispatchId,
+					problemId: `report:${original.dispatchId}`,
+					note: `Organize the missing ${original.dispatched!.expectedTurn ?? original.dispatched!.turn} report from ${original.seat}. Original reply: ${original.finished?.repairTail ?? original.finished?.message}. Repair reply: ${unreported.finished?.repairTail ?? unreported.finished?.message}. Do not redo work. Original workspace: ${original.dispatched!.binding?.workspace ?? state.seats[original.seat].binding?.workspace}.`,
+				})
+			)
+				return;
 		}
 		const failedTurns = state.turns.filter(
 			(turn) =>
@@ -1347,6 +2478,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				!turn.report &&
 				!turn.repaired &&
 				!turn.finished.canceled &&
+				!['model-unavailable', 'login-expired'].includes(turn.finished.failureKind ?? '') &&
 				!turn.dispatched?.retryOf &&
 				!turn.dispatched?.repairOf &&
 				!state.turns.some(
@@ -1372,6 +2504,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						discussionId: failed.dispatched.discussionId,
 						round: failed.dispatched.round,
 						messageIds: failed.dispatched.messageIds,
+						followUpId: failed.dispatched.followUpId,
 						note: 'The previous attempt may have done part of the work. Inspect existing results first; preserve completed actions. This is the single same-turn retry.',
 					}
 				)
@@ -1405,9 +2538,36 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 							discussionId: previous.discussionId,
 							round: previous.round,
 							messageIds: previous.messageIds,
+							followUpId: previous.followUpId,
 							note: 'The owner answered or the seat recovered. Inspect existing results before resuming the failed assignment.',
 						}
 					)
+				)
+					return;
+			}
+		}
+		for (const seat of SEAT_ROLES) {
+			const progress = data.events.findLast(
+				(e): e is TeamEvent<'turn_progress'> => e.kind === 'turn_progress' && e.seat === seat
+			);
+			if (!progress || progress.changed || state.seats[seat].activeDispatchIds.length) continue;
+			const key = `idle:${seat}:${progress.id}`;
+			if (progress.idleCount >= 2) {
+				if (!state.discussions.some((d) => d.id === key))
+					await openDiscussion(
+						id,
+						key,
+						`${seat} produced two valid reports without changing any ledger facts. Diagnose the missing evidence and choose a new basis.`,
+						'no-progress',
+						`idle:${seat}`
+					);
+			} else if (!state.turns.some((t) => t.dispatched?.problemId === key)) {
+				if (
+					await dispatch(id, state, seat, 'message', {
+						problemId: key,
+						mode: 'gather',
+						note: 'First idle turn: your valid report changed no facts. State precisely what evidence or completed work item is missing. Gather that evidence without repeating the previous change.',
+					})
 				)
 					return;
 			}
@@ -1470,23 +2630,55 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		}
 		// A targeted message wakes only its recipient, after its current turn, before phase work.
 		if (state.pendingMessages.length) {
-			const message = state.pendingMessages[0];
-			const forwarded = state.messages.find(
-				(m) => m.message.messageId === message.messageId
-			)?.forwarded;
-			const seat = forwarded ? 'pm' : (message.to ?? 'pm');
-			const messageIds = state.pendingMessages
-				.filter(
-					(m) =>
-						(state.messages.find((item) => item.message.messageId === m.messageId)?.forwarded
-							? 'pm'
-							: (m.to ?? 'pm')) === seat
-				)
-				.map((m) => m.messageId);
-			await dispatch(id, state, seat, 'message', { messageIds });
-			return;
+			const message = state.pendingMessages.find((m) => {
+				const recipient = state.messages.find((item) => item.message.messageId === m.messageId)
+					?.forwarded
+					? 'pm'
+					: (m.to ?? 'pm');
+				const health = state.seats[recipient];
+				return (
+					!health.activeDispatchIds.length &&
+					!teamModelUnavailable(
+						state,
+						health.model ?? state.config!.seats[recipient],
+						health.binding?.configSource ?? recipient
+					)
+				);
+			});
+			if (message) {
+				const forwarded = state.messages.find(
+					(m) => m.message.messageId === message.messageId
+				)?.forwarded;
+				const seat = forwarded ? 'pm' : (message.to ?? 'pm');
+				const messageIds = state.pendingMessages
+					.filter(
+						(m) =>
+							(state.messages.find((item) => item.message.messageId === m.messageId)?.forwarded
+								? 'pm'
+								: (m.to ?? 'pm')) === seat
+					)
+					.map((m) => m.messageId);
+				if (await dispatch(id, state, seat, 'message', { messageIds })) return;
+			}
+			// Pending messages to a healthy PM precede dependent phase work.
+			// An unavailable recipient keeps its queue while independent seats continue.
+			if (
+				state.pendingMessages.some((m) => {
+					const seat = state.messages.find((item) => item.message.messageId === m.messageId)
+						?.forwarded
+						? 'pm'
+						: (m.to ?? 'pm');
+					const health = state.seats[seat];
+					return !teamModelUnavailable(
+						state,
+						health.model ?? state.config!.seats[seat],
+						health.binding?.configSource ?? seat
+					);
+				})
+			)
+				return;
 		}
-		if (state.openCards.length) return;
+		if (state.openCards.some((c) => !c.seat)) return;
 		if (await discuss(id, state)) return;
 		const retrospective = state.discussions.find(
 			(d) =>
@@ -1544,17 +2736,6 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			await transition(id, state, 'verify');
 			return;
 		}
-		if (
-			state.followUps.some(
-				(f) =>
-					!f.followUpId.startsWith('initialize:') &&
-					!f.followUpId.startsWith('submit:') &&
-					!f.followUpId.startsWith('trial:') &&
-					!f.followUpId.startsWith('plan:') &&
-					!f.followUpId.startsWith('job:')
-			)
-		)
-			return;
 		if (!state.brief) {
 			if (!last('brief')) return dispatch(id, state, 'pm', 'brief');
 		} else if (!state.baseline.confirmedVersion) {
@@ -1667,22 +2848,16 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 							(e) => e.kind === 'follow_up_registered' && e.followUpId === followUpId
 						)
 					) {
-						// The report cannot name an arbitrary process. A bounded time recheck is observable.
-						await deps.followUps.register({
-							id: followUpId,
-							target: { kind: 'team', teamId: id, seat: 'dev' },
-							reason: work.report.waiting.reason,
-							condition: { kind: 'time', at: now() + FOLLOW_UP_WAIT_MS },
-							deadline: data.config.deadline ?? Number.MAX_SAFE_INTEGER,
-						});
-						await append(id, {
-							kind: 'follow_up_registered',
-							actor: 'app',
+						const at = now();
+						await registerWait(id, {
+							at,
 							followUpId,
 							seat: 'dev',
 							reason: work.report.waiting.reason,
-							waitFor: 'Timed recheck of the reported wait',
-							untilMs: now() + FOLLOW_UP_WAIT_MS,
+							waitFor: work.report.waiting.waitFor,
+							condition: work.report.waiting.condition,
+							untilMs: at + FOLLOW_UP_WAIT_MS,
+							poll: 0,
 						});
 						return;
 					}
@@ -1851,7 +3026,57 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		const cardId = target.id;
 		if (optionId === 'stop')
 			await append(id, { kind: 'stopped', actor: 'owner', cardId, id: `${cardId}:action` });
-		else if (target.boundary === 'baseline') {
+		else if (optionId === 'model' && target.seatChange) {
+			await setSeat(
+				id,
+				target.seatChange.seat,
+				target.seatChange.model,
+				target.seatChange.substitute,
+				false,
+				cardId
+			);
+		} else if (optionId === 'decline') {
+			await append(id, {
+				kind: 'message_handled',
+				actor: 'app',
+				messageId: cardId,
+				seat: target.seat ?? 'pm',
+				summary: 'Owner kept current authority',
+				id: `${cardId}:action`,
+			});
+		} else if (optionId === 'extend' && target.extension) {
+			await extendBudget(id, target.extension, cardId);
+		} else if (optionId === 'takeover' && target.seat) {
+			await append(id, {
+				kind: 'card_answered',
+				actor: 'owner',
+				cardId: 'permission:temporaryTakeover',
+				optionId: 'allow',
+				id: `${cardId}:grant`,
+			});
+			await append(id, {
+				kind: 'member_recovered',
+				actor: 'app',
+				seat: target.seat,
+				how: 'Owner authorized temporary takeover; availability remains checked',
+				id: `${cardId}:action`,
+			});
+		} else if (optionId === 'login' && target.seat) {
+			for (const entry of state.unavailable.filter((q) => q.seat === target.seat && q.login))
+				await append(id, {
+					kind: 'model_recovered',
+					actor: 'app',
+					unavailabilityId: entry.id,
+					id: `${entry.id}:available`,
+				});
+			await append(id, {
+				kind: 'member_recovered',
+				actor: 'app',
+				seat: target.seat,
+				how: 'Owner confirmed the named login was restored',
+				id: `${cardId}:action`,
+			});
+		} else if (target.boundary === 'baseline') {
 			if (optionId === 'confirm')
 				await append(id, {
 					kind: 'baseline_confirmed',
@@ -1954,6 +3179,17 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				.concat(
 					state.issues.filter((issue) => isOpenTeamIssue(issue)).map((issue) => issue.opened.title)
 				);
+			if (!gaps.length) gaps.push('The team stopped before completing its review and demo.');
+			for (const [index, text] of gaps.entries())
+				await append(id, {
+					kind: 'residual_item',
+					actor: 'owner',
+					cardId,
+					itemId: `${cardId}:residual:${index}`,
+					text,
+					owner: null,
+					id: `${cardId}:residual:${index}`,
+				});
 			await append(id, {
 				kind: 'accepted',
 				actor: 'owner',
@@ -2105,7 +3341,10 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			void wake(config.id).catch(deps.onError);
 			return config;
 		},
-		list: () => deps.store.listTeams(),
+		list: async () =>
+			Promise.all(
+				(await deps.store.listTeams()).map(async (config) => (await load(config.id)).config)
+			),
 		async get(id: string): Promise<RecordData | null> {
 			try {
 				return await load(id);
@@ -2205,27 +3444,48 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				}));
 		},
 		answer,
-		say: (id: string, text: string, to?: SeatRole) =>
+		say: (id: string, text: string, to?: SeatRole): Promise<QueuedTeamMessage> =>
 			queue.enqueue(id, async () => {
 				if (!text?.trim() || (to !== undefined && !SEAT_ROLES.includes(to)))
 					throw new Error('Invalid owner message');
 				if ((await stateFor(id)).terminal) throw new Error('Team has ended');
+				const messageId = randomUUID();
 				await append(id, {
 					kind: 'owner_message',
 					actor: 'owner',
-					messageId: randomUUID(),
+					messageId,
 					text,
 					to: to ?? 'pm',
 				});
+				return { status: 'queued', messageId, to: to ?? 'pm' };
 			}),
 		pause: (id: string) => control(id, 'paused'),
 		resume: (id: string) => control(id, 'resumed'),
 		stop: (id: string) => control(id, 'stopped'),
-		async accept(id: string) {
+		seatSet: (id: string, seat: SeatRole, model: SeatModel) =>
+			queue.enqueue(id, () => setSeat(id, seat, model)),
+		seatSub: (id: string, seat: SeatRole, model?: SeatModel, wait = false) =>
+			queue.enqueue(id, () => setSeat(id, seat, model, true, wait)),
+		action: (id: string, action: import('../../shared/team/types').TeamAction, detail: string) =>
+			queue.enqueue(id, async () => {
+				if (
+					(await stateFor(id)).terminal ||
+					!['push', 'draftPr', 'merge', 'publish', 'externalMessage'].includes(action) ||
+					!detail?.trim()
+				)
+					throw new Error('An active team, supported action and concrete detail are required');
+				return append(id, { kind: 'action_requested', actor: 'owner', action, detail });
+			}),
+		extend: (id: string, extension: { hours?: number; turns?: number }) =>
+			queue.enqueue(id, () => extendBudget(id, extension)),
+		async accept(id: string, withGaps = false) {
 			const state = await stateFor(id);
-			const target = state.openCards.find((c) => c.boundary === 'acceptance');
-			if (!target) throw new Error('No acceptance card');
-			await answer(id, target.id, 'accept');
+			const target = state.openCards.find((c) =>
+				withGaps ? c.boundary === 'budget' : c.boundary === 'acceptance'
+			);
+			if (!target)
+				throw new Error(withGaps ? 'No incomplete progress report' : 'No acceptance card');
+			await answer(id, target.id, withGaps ? 'gaps' : 'accept');
 		},
 		async requestChanges(id: string, note: string) {
 			const state = await stateFor(id);

@@ -101,7 +101,13 @@ export function createTurnDispatcher(deps: SpawnHandlerDependencies) {
 					classifyRetryableError(error) === 'token-exhaustion'
 				)
 					kind = 'model-unavailable';
-				const resetsAt = error.limitResetAt ?? tokenExhaustionResetAt(error, Date.now());
+				const resetsAt =
+					error.limitResetAt ??
+					tokenExhaustionResetAt(
+						error,
+						Date.now(),
+						input.sshRemote?.enabled ? undefined : Intl.DateTimeFormat().resolvedOptions().timeZone
+					);
 				if (resetsAt && classifyRetryableError(error) === 'availability')
 					kind = 'model-unavailable';
 				return { kind, detail: error.message, ...(resetsAt ? { resetsAt } : {}) };

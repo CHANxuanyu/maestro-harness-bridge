@@ -35,6 +35,9 @@ interface TeamOptions {
 	note?: string;
 	text?: string;
 	seat?: string;
+	hours?: string;
+	withGaps?: boolean;
+	wait?: boolean;
 }
 
 /** Parse provider-native model/effort names; reject unknown providers and Codex Ultra. */
@@ -133,12 +136,14 @@ export async function teamCommand(
 					changes: state.standardChanges,
 					suggestions: state.suggestions,
 					output: state.outputs,
-					residual: state.residual,
+					residual: { items: state.residual, followUps: state.residualItems },
 					messages: state.messages,
 					issues: state.issues,
 					evidence: { criteria: state.criteria, checks: state.checks },
 					cost: {
 						usage: state.usage,
+						wallTimeMs: Math.max(0, (state.endedAt ?? Date.now()) - data.config.createdAt),
+						statistics: state.statistics,
 						seats: Object.fromEntries(SEAT_ROLES.map((seat) => [seat, state.seats[seat].usage])),
 					},
 				};
@@ -161,12 +166,32 @@ export async function teamCommand(
 					if (!card) throw new Error('No baseline confirmation card');
 					await invoke('answer', id, card.id, 'confirm');
 				} else throw new Error('baseline expects confirm|edit|diff|return');
-			} else if (action === 'answer')
+			} else if (action === 'extend')
+				result = await invoke('extend', id, {
+					...(options.hours ? { hours: Number(options.hours) } : {}),
+					...(options.turns ? { turns: Number(options.turns) } : {}),
+				});
+			else if (action === 'accept')
+				result = await invoke('accept', id, ...(options.withGaps ? [true] : []));
+			else if (action === 'seat') {
+				if (!['set', 'sub'].includes(args[0]) || !SEAT_ROLES.includes(args[1] as SeatRole))
+					throw new Error('seat expects set|sub and pm|dev|qa');
+				if (options.wait && args[0] !== 'sub') throw new Error('--wait requires seat sub');
+				if (!options.wait && !args[2]) throw new Error('Supply tool:model:effort or --wait');
+				result = await invoke(
+					args[0] === 'set' ? 'seatSet' : 'seatSub',
+					id,
+					args[1],
+					options.wait ? undefined : parseTeamSeat(args[2]),
+					options.wait
+				);
+			} else if (action === 'action') result = await invoke('action', id, args[0], options.note);
+			else if (action === 'answer')
 				result = await invoke('answer', id, args[0], args[1], options.note);
 			else if (action === 'say') {
 				if (options.to && !SEAT_ROLES.includes(options.to as SeatRole))
 					throw new Error('--to expects pm, dev or qa');
-				result = await invoke('say', id, args.join(' '), options.to);
+				result = await invoke('say', id, args.join(' '), options.to ?? 'pm');
 			} else if (action === 'request-changes')
 				result = await invoke('requestChanges', id, options.note);
 			else if (action === 'log') result = await invoke('log', id, options.seat);
@@ -203,8 +228,21 @@ export function registerTeamCommands(program: Command): void {
 		.option('--allow <classes>', 'Authorized classes: checks,push,pr,temp; omitted means all')
 		.option('--path <path>', 'Project root; defaults to current directory')
 		.action((options) => teamCommand('start', [], options));
-	for (const action of ['list', 'get', 'status', 'pause', 'resume', 'stop', 'accept', 'export'])
+	for (const action of ['list', 'get', 'status', 'pause', 'resume', 'stop', 'export'])
 		command(action, `${action} team`).action((options) => teamCommand(action, [], options));
+	command('accept', 'Accept a demonstration or the listed leftovers')
+		.option('--with-gaps', 'Accept unmet items from the incomplete progress report')
+		.action((options) => teamCommand('accept', [], options));
+	command('extend', 'Add explicit time or turns to the overall budget')
+		.option('--hours <hours>', 'Additional hours')
+		.option('--turns <turns>', 'Additional turns')
+		.action((options) => teamCommand('extend', [], options));
+	command('seat <action> <seat> [model]', 'Set a seat model or substitute, or wait for recovery')
+		.option('--wait', 'Suspend this seat until its original model recovers')
+		.action((action, seat, model, options) => teamCommand('seat', [action, seat, model], options));
+	command('action <action>', 'Request push, draftPr, or an owner-only external action')
+		.requiredOption('--note <text>', 'Concrete action and publication body')
+		.action((action, options) => teamCommand('action', [action], options));
 	command('show <section>', 'Read a ledger projection').action((section, options) =>
 		teamCommand('show', [section], options)
 	);

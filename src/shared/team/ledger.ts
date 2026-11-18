@@ -14,6 +14,7 @@ import {
 function emptyUsage(): TeamUsage {
 	return {
 		turns: 0,
+		budgetTurns: 0,
 		inputTokens: 0,
 		outputTokens: 0,
 		costUsd: 0,
@@ -100,6 +101,8 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		stopped: false,
 		terminal: null,
 		residual: [],
+		residualItems: [],
+		unavailable: [],
 		brief: null,
 		briefs: [],
 		baseline: {
@@ -220,6 +223,50 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 					for (const seat of SEAT_ROLES) state.seats[seat].model ??= event.config.seats[seat];
 				}
 				break;
+			case 'budget_extended':
+				if (state.config && event.actor === 'owner') {
+					state.config = {
+						...state.config,
+						deadline: event.deadline,
+						turnBudget: event.turnBudget,
+					};
+					ownerDecision(event);
+				}
+				break;
+			case 'seat_configured':
+				if (state.config && event.actor === 'owner') {
+					const current = state.config.seats[event.seat];
+					state.config = {
+						...state.config,
+						seats: {
+							...state.config.seats,
+							[event.seat]: {
+								...current,
+								...(event.model && event.model.tool !== current.tool
+									? { customPath: undefined, customArgs: undefined, customEnv: undefined }
+									: {}),
+								...event.model,
+								...(event.substitute !== undefined
+									? { substitute: event.substitute ?? undefined }
+									: {}),
+							},
+						},
+					};
+					ownerDecision(event);
+				}
+				break;
+			case 'model_recovered':
+				state.unavailable = state.unavailable.filter((q) => q.id !== event.unavailabilityId);
+				for (const seat of SEAT_ROLES)
+					if (state.seats[seat].quota?.id === event.unavailabilityId)
+						delete state.seats[seat].quota;
+				break;
+			case 'wrap_up':
+				state.wrapUp = event;
+				break;
+			case 'residual_item':
+				state.residualItems.push(event);
+				break;
 			case 'phase_changed':
 				if (!state.terminal) state.phase = event.to;
 				break;
@@ -234,6 +281,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 					state.stopped = true;
 					state.paused = false;
 					state.terminal = 'stopped';
+					state.endedAt = event.at;
 				}
 				if (event.actor === 'owner') ownerDecision(event);
 				break;
@@ -242,6 +290,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				if (event.terminal === 'all' && !allProven()) break;
 				if (state.terminal && state.terminal !== event.terminal) break;
 				state.terminal = event.terminal;
+				state.endedAt ??= event.at;
 				state.stopped = event.terminal === 'stopped';
 				state.paused = false;
 				state.residual = [...event.residual];
@@ -251,6 +300,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				ownerDecision(event);
 				if (event.withGaps?.length || allProven()) {
 					state.terminal = event.withGaps?.length ? 'gaps' : 'all';
+					state.endedAt = event.at;
 					state.residual = [...(event.withGaps ?? [])];
 					state.phase = 'accept';
 					state.paused = false;
@@ -284,6 +334,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				break;
 			case 'quota_exhausted':
 				state.seats[event.seat].quota = event;
+				state.unavailable.push(event);
 				break;
 			case 'member_recovered':
 				state.seats[event.seat].faultActive = false;
@@ -743,6 +794,11 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		if (turn.dispatched || turn.finished) {
 			for (const usage of [state.usage, seat.usage]) {
 				usage.turns++;
+				if (
+					turn.finished?.failureKind !== 'model-unavailable' &&
+					turn.finished?.failureKind !== 'login-expired'
+				)
+					usage.budgetTurns++;
 				const finished = turn.finished;
 				if (!finished) continue;
 				for (const key of ['inputTokens', 'outputTokens', 'costUsd', 'durationMs'] as const) {
@@ -756,7 +812,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		}
 	}
 	const budget = state.config
-		? { used: state.usage.turns, total: state.config.turnBudget }
+		? { used: state.usage.budgetTurns, total: state.config.turnBudget }
 		: undefined;
 	for (const [id, problem] of attempts) {
 		const progress = judgeAttempts(problem.initial, problem.inputs);
@@ -783,5 +839,11 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		retros: state.retros.length,
 		turns: state.usage.turns,
 	};
+	// Budget is the current decision boundary. Keep earlier cards in the ledger
+	// so extending the budget restores pending authorization and baseline choices.
+	const budgetCard = state.openCards.find(
+		(card) => card.boundary === 'budget' && /^budget(?::\d+)?$/.test(card.id)
+	);
+	if (budgetCard) state.openCards = [budgetCard];
 	return state;
 }

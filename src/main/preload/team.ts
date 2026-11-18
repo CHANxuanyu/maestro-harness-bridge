@@ -6,8 +6,11 @@ import type {
 	TeamTurnLog,
 	LedgerEvent,
 	SeatRole,
+	SeatModel,
+	TeamAction,
 	TeamConfig,
 	TeamStatusView,
+	QueuedTeamMessage,
 } from '../../shared/team/types';
 import type { AgentId } from '../../shared/agentIds';
 
@@ -34,12 +37,21 @@ export function createTeamApi() {
 			ipcRenderer.invoke('team:baselineReturn', teamId, note),
 		log: (teamId: string, seat?: SeatRole): Promise<TeamTurnLog[]> =>
 			ipcRenderer.invoke('team:log', teamId, seat),
-		say: (teamId: string, text: string, to?: SeatRole): Promise<void> =>
+		say: (teamId: string, text: string, to?: SeatRole): Promise<QueuedTeamMessage> =>
 			ipcRenderer.invoke('team:say', teamId, text, to),
 		pause: (teamId: string): Promise<void> => ipcRenderer.invoke('team:pause', teamId),
 		resume: (teamId: string): Promise<void> => ipcRenderer.invoke('team:resume', teamId),
 		stop: (teamId: string): Promise<void> => ipcRenderer.invoke('team:stop', teamId),
-		accept: (teamId: string): Promise<void> => ipcRenderer.invoke('team:accept', teamId),
+		accept: (teamId: string, withGaps?: boolean): Promise<void> =>
+			ipcRenderer.invoke('team:accept', teamId, withGaps),
+		extend: (teamId: string, extension: { hours?: number; turns?: number }): Promise<void> =>
+			ipcRenderer.invoke('team:extend', teamId, extension),
+		seatSet: (teamId: string, seat: SeatRole, model: SeatModel): Promise<void> =>
+			ipcRenderer.invoke('team:seatSet', teamId, seat, model),
+		seatSub: (teamId: string, seat: SeatRole, model?: SeatModel, wait?: boolean): Promise<void> =>
+			ipcRenderer.invoke('team:seatSub', teamId, seat, model, wait),
+		action: (teamId: string, action: TeamAction, detail: string): Promise<LedgerEvent> =>
+			ipcRenderer.invoke('team:action', teamId, action, detail),
 		requestChanges: (teamId: string, note: string): Promise<void> =>
 			ipcRenderer.invoke('team:requestChanges', teamId, note),
 		export: (teamId: string): Promise<string> => ipcRenderer.invoke('team:export', teamId),

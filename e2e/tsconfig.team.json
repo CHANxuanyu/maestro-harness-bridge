@@ -8,6 +8,7 @@
 	"include": [
 		"native-team.spec.ts",
 		"native-team-m2.spec.ts",
+		"native-team-m3.spec.ts",
 		"../src/renderer/global.d.ts",
 		"../src/types"
 	]

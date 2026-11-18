@@ -247,3 +247,73 @@ describe('M2 team policy', () => {
 		expect(checkTestCounts('All fine')).toEqual({});
 	});
 });
+
+describe('M3 recovery authority', () => {
+	it('identifies the quota account independently of unrelated environment variables', async () => {
+		const { teamModelUnavailable } = await import('../../../shared/team/policy');
+		const state = reduceLedger(
+			ledger(...baseline, {
+				kind: 'quota_exhausted',
+				seat: 'pm',
+				model: { tool: 'claude-code', model: 'same' },
+				configSource: 'pm',
+			})
+		);
+		state.config!.seats.pm = {
+			tool: 'claude-code',
+			model: 'same',
+			customEnv: { CLAUDE_CONFIG_DIR: '/synthetic/account', NOTE: 'first' },
+		};
+		state.config!.seats.qa = {
+			tool: 'claude-code',
+			model: 'same',
+			customEnv: { NOTE: 'different', CLAUDE_CONFIG_DIR: '/synthetic/account' },
+		};
+		expect(teamModelUnavailable(state, state.config!.seats.qa, 'qa')).toBe(true);
+		state.config!.seats.qa.customEnv!.CLAUDE_CONFIG_DIR = '/synthetic/independent';
+		expect(teamModelUnavailable(state, state.config!.seats.qa, 'qa')).toBe(false);
+	});
+	it('prefers an authorized substitute, then an existing model from a different vendor than dev', async () => {
+		const { teamRecoveryDecision } = await import('../../../shared/team/policy');
+		const state = reduceLedger(
+			ledger(...baseline, {
+				kind: 'quota_exhausted',
+				seat: 'pm',
+				model: { tool: 'claude-code', model: 'pm' },
+				configSource: 'pm',
+				resetsAt: 100_000,
+			})
+		);
+		state.config!.seats.pm = {
+			tool: 'claude-code',
+			model: 'pm',
+			customEnv: { CLAUDE_CONFIG_DIR: '/synthetic/pm' },
+		};
+		state.config!.seats.qa = {
+			tool: 'claude-code',
+			model: 'qa',
+			customEnv: { CLAUDE_CONFIG_DIR: '/synthetic/qa' },
+		};
+		state.config!.seats.dev = { tool: 'codex', model: 'gpt-test' };
+		expect(teamRecoveryDecision(state, 'pm', true).choices[0]).toMatchObject({
+			source: 'qa',
+			temporary: true,
+		});
+		state.config!.seats.pm.substitute = { tool: 'codex', model: 'gpt-test' };
+		expect(teamRecoveryDecision(state, 'pm', true).choices[0]).toMatchObject({
+			source: 'dev',
+			temporary: false,
+		});
+		state.config!.seats.pm.substitute = undefined;
+		state.config!.deadline = 90_000;
+		expect(teamRecoveryDecision(state, 'pm', false).decision).toMatchObject({
+			kind: 'escalate',
+			boundaries: ['permission', 'budget'],
+		});
+		state.config!.deadline = 110_000;
+		expect(teamRecoveryDecision(state, 'pm', false).decision).toMatchObject({
+			kind: 'continue',
+			next: { key: 'wait' },
+		});
+	});
+});

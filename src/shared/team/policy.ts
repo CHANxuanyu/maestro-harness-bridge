@@ -1,10 +1,13 @@
+import { resolveAgentAccountKey, resolveAgentBillingCredential } from '../providerProfiles';
 import { getModelFamily } from '../modelFamily';
+import { decideNext, judgeAttempts, type Candidate } from '../progressRules';
 import type {
 	BaselineDiff,
 	Brief,
 	LedgerActor,
 	OutputCapture,
 	SeatRole,
+	SeatModel,
 	StandardChangeRequest,
 	TeamDiscussion,
 	TeamIssue,
@@ -12,6 +15,114 @@ import type {
 	TeamTopic,
 	TurnKind,
 } from './types';
+
+/** Effort changes do not make an exhausted model available. */
+export function sameTeamModel(a: SeatModel, b: SeatModel): boolean {
+	return a.tool === b.tool && a.model === b.model;
+}
+
+/** Quota belongs to the launch account, not to a turn kind or a native conversation. */
+export function teamModelUnavailable(
+	state: TeamState,
+	model: SeatModel,
+	source: SeatRole
+): boolean {
+	return state.unavailable.some((entry) => {
+		const original = state.config!.seats[entry.configSource ?? entry.seat];
+		const target = state.config!.seats[source];
+		return (
+			sameTeamModel(entry.model ?? original, model) &&
+			resolveAgentAccountKey(model.tool, original.customEnv, undefined) ===
+				resolveAgentAccountKey(model.tool, target.customEnv, undefined) &&
+			resolveAgentBillingCredential(model.tool, original.customEnv ?? {})?.id ===
+				resolveAgentBillingCredential(model.tool, target.customEnv ?? {})?.id
+		);
+	});
+}
+
+/** Ordered, authorized recovery choices. All escalation uses the common decision rules. */
+export function teamRecoveryDecision(state: TeamState, seat: SeatRole, temporary: boolean) {
+	const config = state.config!;
+	const health = state.seats[seat];
+	const unavailable = state.unavailable.filter((q) => q.seat === seat).at(-1);
+	const choices: Array<{ model: SeatModel; source: SeatRole; temporary: boolean }> = [];
+	const substitute = config.seats[seat].substitute;
+	if (substitute)
+		choices.push({
+			model: substitute,
+			source:
+				(['pm', 'qa', 'dev'] as SeatRole[]).find(
+					(role) => role !== seat && sameTeamModel(config.seats[role], substitute)
+				) ?? seat,
+			temporary: false,
+		});
+	if (temporary) {
+		const family = (model: SeatModel) =>
+			getModelFamily(model.model ?? (model.tool === 'claude-code' ? 'claude' : model.tool));
+		const devFamily = family(state.seats.dev.model ?? config.seats.dev);
+		for (const source of (['pm', 'qa', 'dev'] as SeatRole[]).sort(
+			(a, b) =>
+				Number(family(config.seats[a]) === devFamily) -
+				Number(family(config.seats[b]) === devFamily)
+		)) {
+			if (source !== seat) choices.push({ model: config.seats[source], source, temporary: true });
+		}
+	}
+	const available = choices.filter((c) => !teamModelUnavailable(state, c.model, c.source));
+	const candidates: Candidate[] = available.map((c, i) => ({
+		key: `takeover:${i}`,
+		plan: `Use ${c.model.tool}${c.model.model ? ` ${c.model.model}` : ''} in a new conversation`,
+		basis: c.temporary
+			? 'Team model and temporary takeover authorization'
+			: 'Explicitly selected substitute',
+	}));
+	if (
+		!unavailable?.login &&
+		(config.deadline === undefined ||
+			unavailable?.resetsAt === undefined ||
+			unavailable.resetsAt < config.deadline)
+	)
+		candidates.push({
+			key: 'wait',
+			plan: 'Wait for the original model to recover',
+			basis: 'Waiting remains within the deadline',
+		});
+	if (unavailable?.login)
+		candidates.push({
+			key: 'login',
+			plan: `Restore the ${health.model?.tool ?? config.seats[seat].tool} login for ${seat}`,
+			boundary: 'login',
+			cost: 'Owner signs in to this seat account; independent work continues.',
+			recommended: true,
+		});
+	else {
+		if (!temporary)
+			candidates.push({
+				key: 'takeover',
+				plan: 'Authorize temporary takeover by a model already in this team',
+				boundary: 'permission',
+				cost: 'Use an independent new conversation and existing team model quota.',
+				recommended: true,
+			});
+		candidates.push({
+			key: 'extend',
+			plan: 'Extend the deadline to wait for the original model',
+			boundary: 'budget',
+			cost: `Delivery moves past ${unavailable?.resetsAt ? new Date(unavailable.resetsAt).toISOString() : 'the current deadline'}.`,
+		});
+	}
+	if (candidates.filter((c) => c.boundary).length < 2)
+		candidates.push({
+			key: 'stop',
+			plan: 'Stop and preserve the task branch',
+			boundary: 'budget',
+			cost: 'The unfinished work remains in the ledger; no new model is used.',
+		});
+	return {
+		decision: decideNext(judgeAttempts(['model unavailable'], []), { candidates }),
+		choices: available,
+	};
+}
 
 /** Permissions belong to the assignment, not the seat's usual role. Repairs never redo work. */
 export function teamTurnPermission(seat: SeatRole, turn: TurnKind): 'readonly' | 'full' {
@@ -160,7 +271,7 @@ export function pmMayChange(
 	return (
 		estimate?.extraTurns !== undefined &&
 		estimate.preservesDeadline === true &&
-		estimate.extraTurns <= (state.config?.turnBudget ?? 0) - state.usage.turns
+		estimate.extraTurns <= (state.config?.turnBudget ?? 0) - state.usage.budgetTurns
 	);
 }
 

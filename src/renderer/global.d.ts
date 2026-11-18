@@ -4,6 +4,7 @@ import type {
 	LedgerEvent,
 	TeamStatusView,
 	SeatRole,
+	QueuedTeamMessage,
 } from '../shared/team/types';
 import type { ConversationPermissionSnapshot } from '../shared/window-types';
 import type { NewTabResult, NewAITabWithPromptResult } from '../main/web-server/types';
@@ -253,7 +254,7 @@ interface MaestroAPI {
 		>['baselineReturn'];
 		log: ReturnType<typeof import('../main/preload/team').createTeamApi>['log'];
 		/** Targets one seat, queued after its current turn. PM records owner requirements. */
-		say(teamId: string, text: string, to?: SeatRole): Promise<void>;
+		say(teamId: string, text: string, to?: SeatRole): Promise<QueuedTeamMessage>;
 		/** Stops new scheduling; current turns finish and their results are retained. */
 		pause(teamId: string): Promise<void>;
 		/** Resumes automatically from durable ledger state. */
@@ -261,7 +262,11 @@ interface MaestroAPI {
 		/** Cancels active work, retaining branch and ledger. */
 		stop(teamId: string): Promise<void>;
 		/** Answers the current acceptance card; refuses incomplete results. */
-		accept(teamId: string): Promise<void>;
+		accept(teamId: string, withGaps?: boolean): Promise<void>;
+		extend: ReturnType<typeof import('../main/preload/team').createTeamApi>['extend'];
+		seatSet: ReturnType<typeof import('../main/preload/team').createTeamApi>['seatSet'];
+		seatSub: ReturnType<typeof import('../main/preload/team').createTeamApi>['seatSub'];
+		action: ReturnType<typeof import('../main/preload/team').createTeamApi>['action'];
 		/** Returns the current demonstration to implementation with the owner's exact note. */
 		requestChanges(teamId: string, note: string): Promise<void>;
 		/** JSON text containing the same config and events as get(). No save dialog. */

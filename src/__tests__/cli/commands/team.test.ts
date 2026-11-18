@@ -102,6 +102,29 @@ describe('team CLI parity', () => {
 			'bridge.response'
 		);
 	});
+	it('queues an omitted-recipient message through JSON transport and prints its receipt', async () => {
+		vi.mocked(sendSimpleCommand).mockImplementation(async (input) => {
+			const payload = JSON.parse(JSON.stringify(input));
+			if (payload.channel === 'team:list') return { ok: true, result: [config] };
+			expect(payload.args).toEqual([config.id, 'Queued question for PM', 'pm']);
+			return { ok: true, result: { status: 'queued', messageId: 'owner-1', to: 'pm' } };
+		});
+		const program = new Command();
+		registerTeamCommands(program);
+		await program.parseAsync([
+			'node',
+			'cli',
+			'team',
+			'say',
+			'Queued question for PM',
+			'--team',
+			config.id,
+			'--json',
+		]);
+		expect(console.log).toHaveBeenLastCalledWith(
+			JSON.stringify({ status: 'queued', messageId: 'owner-1', to: 'pm' })
+		);
+	});
 	it.each([
 		[
 			['baseline', 'edit', 'A1', 'Parses', 'whole hours'],
@@ -125,6 +148,19 @@ describe('team CLI parity', () => {
 			['Add the empty state'],
 		],
 		[['log', '--seat', 'qa'], 'team:log', ['qa']],
+		[['extend', '--hours', '2', '--turns', '10'], 'team:extend', [{ hours: 2, turns: 10 }]],
+		[['accept', '--with-gaps'], 'team:accept', [true]],
+		[
+			['seat', 'set', 'pm', 'codex:gpt:high'],
+			'team:seatSet',
+			['pm', { tool: 'codex', model: 'gpt', effort: 'high' }, undefined],
+		],
+		[['seat', 'sub', 'pm', '--wait'], 'team:seatSub', ['pm', undefined, true]],
+		[
+			['action', 'draftPr', '--note', 'Concrete review body'],
+			'team:action',
+			['draftPr', 'Concrete review body'],
+		],
 	] as const)('parses M2 command %j into the same main action', async (args, channel, tail) => {
 		const program = new Command();
 		registerTeamCommands(program);

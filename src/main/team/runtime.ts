@@ -1,6 +1,7 @@
 import path from 'path';
 import { app } from 'electron';
 import { captureTeamOutput } from './output-capture';
+import { teamQuotaSample } from './quota';
 import { createTeamScheduler } from './scheduler';
 import { createTeamStore } from './team-store';
 import { createTeamWorkspaces } from './workspaces';
@@ -92,11 +93,20 @@ export function createTeamRuntime(
 				slug: config.id,
 				pushAuthorized,
 			}),
-		seatOptions: (config, seat) => ({
-			customPath: config.seats[seat].customPath,
-			customArgs: config.seats[seat].customArgs,
-			customEnv: config.seats[seat].customEnv,
-		}),
+		quota: (config, source, model) =>
+			teamQuotaSample(
+				{ ...(config.seats[source].tool === model.tool ? config.seats[source] : {}), ...model },
+				deps.agentConfigsStore.get('configs', {})[model.tool]?.customEnvVars,
+				Date.now()
+			),
+		seatOptions: (config, seat, model) =>
+			model && model.tool !== config.seats[seat].tool
+				? {}
+				: {
+						customPath: config.seats[seat].customPath,
+						customArgs: config.seats[seat].customArgs,
+						customEnv: config.seats[seat].customEnv,
+					},
 		reconcile: async (request) => {
 			// Inspect the workspace as well as native history before deciding to repeat a turn.
 			await execGitReadOnly(['status', '--porcelain'], request.cwd);

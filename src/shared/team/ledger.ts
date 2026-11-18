@@ -137,6 +137,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		reviewDecision: { kind: 'done' },
 		retros: [],
 		outputs: [],
+		outputObservations: [],
 		turns: [],
 		pendingMessages: [],
 		messages: [],
@@ -736,6 +737,10 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				break;
 			case 'output_captured':
 				if (event.actor === 'app') state.outputs.push(event);
+				break;
+			case 'output_observation':
+				if (event.actor === 'app' && state.outputs.some((o) => o.outputId === event.outputId))
+					state.outputObservations.push(event);
 				break;
 			case 'follow_up_registered':
 				if (!fired.has(event.followUpId)) {

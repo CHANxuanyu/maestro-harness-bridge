@@ -7,6 +7,7 @@ import { captureWebContentsPage } from '../../../main/utils/capture-page';
 import { execGitReadOnly } from '../../../main/utils/remote-git';
 import { BrowserWindow } from 'electron';
 import type { Criterion } from '../../../shared/team/types';
+import qaCriterion from '../../shared/team/real-output-criterion.json';
 
 vi.mock('../../../main/utils/remote-git', () => ({ execGitReadOnly: vi.fn() }));
 vi.mock('../../../main/utils/capture-page', () => ({ captureWebContentsPage: vi.fn() }));
@@ -55,6 +56,46 @@ beforeEach(async () => {
 afterEach(() => fs.rm(root, { recursive: true, force: true }));
 
 describe('M2 real output receipts', () => {
+	it('captures the real C2 QA test from QA and its README from dev, preserving both sources', async () => {
+		const qa = path.join(root, 'qa');
+		await fs.mkdir(path.join(qa, 'qa'), { recursive: true });
+		await fs.writeFile(path.join(qa, 'qa/clamp.qa.test.cjs'), '17 independent passing cases');
+		await fs.writeFile(path.join(cwd, 'README.md'), 'finite inputs, min <= max');
+		await expect(fs.stat(path.join(cwd, 'qa/clamp.qa.test.cjs'))).rejects.toThrow();
+		const output = await captureTeamOutput(
+			cwd,
+			revision,
+			[qaCriterion as Criterion],
+			undefined,
+			qa
+		);
+		expect(output.locations?.map((item) => item.error)).toEqual([undefined, undefined]);
+		expect(output.locations?.map((item) => item.workspace)).toEqual(['dev', 'qa']);
+		expect(output.locations?.[1].source).toBe(path.join(qa, 'qa/clamp.qa.test.cjs'));
+		expect(await Promise.all(output.files.map((file) => fs.readFile(file, 'utf8')))).toEqual([
+			'finite inputs, min <= max',
+			'17 independent passing cases',
+		]);
+		await fs.mkdir(path.join(cwd, 'qa'));
+		await fs.writeFile(path.join(cwd, 'qa/clamp.qa.test.cjs'), 'wrong workspace');
+		await fs.writeFile(path.join(qa, 'qa/clamp.qa.test.cjs'), '18 independent passing cases');
+		const next = await captureTeamOutput(cwd, revision, [qaCriterion as Criterion], 'prior', qa);
+		expect(await fs.readFile(next.files[1], 'utf8')).toBe('18 independent passing cases');
+		expect(await fs.readFile(output.files[1], 'utf8')).toBe('17 independent passing cases');
+	});
+	it('never falls back to dev for qa targets and rejects QA symlinks that leave qa/', async () => {
+		const qa = path.join(root, 'qa');
+		await fs.mkdir(path.join(qa, 'qa'), { recursive: true });
+		await fs.mkdir(path.join(cwd, 'qa'));
+		await fs.writeFile(path.join(cwd, 'qa/clamp.qa.test.cjs'), 'dev decoy');
+		let output = await captureTeamOutput(cwd, revision, [qaCriterion as Criterion]);
+		expect(output.locations?.[1]).toMatchObject({ workspace: 'qa', error: expect.any(String) });
+		await fs.writeFile(path.join(qa, 'outside.cjs'), 'outside qa/');
+		await fs.symlink(path.join(qa, 'outside.cjs'), path.join(qa, 'qa/clamp.qa.test.cjs'));
+		output = await captureTeamOutput(cwd, revision, [qaCriterion as Criterion], undefined, qa);
+		expect(output.locations?.[1].error).toContain('outside');
+		expect(output.files).toEqual([]);
+	});
 	it('captures every named place, preserves before/after files and uses the compositor utility', async () => {
 		const before = await captureTeamOutput(cwd, revision, criteria);
 		expect(before.previews).toHaveLength(2);

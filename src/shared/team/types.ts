@@ -173,9 +173,12 @@ export interface StandardChangeRequest {
 export interface OutputCapture {
 	files: string[];
 	previews: string[];
+	error?: string;
 	locations?: Array<{
 		criterion: string;
 		location: OutputLocation;
+		workspace?: 'dev' | 'qa';
+		source?: string;
 		file?: string;
 		preview?: string;
 		error?: string;
@@ -523,6 +526,7 @@ export type LedgerEvent = EventBase &
 				actions: DiscussionAction[];
 		  }
 		| ({ kind: 'output_captured'; outputId: string } & OutputCapture)
+		| { kind: 'output_observation'; outputId: string; missing: string[]; retryAt: number }
 		| { kind: 'topic_rejected'; topic: TeamTopic; reason: string }
 		| { kind: 'suggestion'; text: string; criterionId?: string }
 		| {
@@ -929,6 +933,7 @@ export interface TeamState {
 	reviewDecision: NextDecision;
 	retros: TeamEvent<'retro'>[];
 	outputs: TeamEvent<'output_captured'>[];
+	outputObservations: TeamEvent<'output_observation'>[];
 	turns: Array<{
 		dispatchId: string;
 		seat: SeatRole;
@@ -964,6 +969,7 @@ export interface TeamTurnLog {
 }
 
 export interface TeamStatusView {
+	appObservations: TeamEvent<'output_observation'>[];
 	wrapUp?: TeamEvent<'wrap_up'>;
 	generatedBy: 'app';
 	title: string;

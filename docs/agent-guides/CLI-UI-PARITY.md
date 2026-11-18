@@ -17,6 +17,11 @@ The `team log --json` rows and preload `team.log()` expose the same optional
 `normalizations` array; `team get`, export and event broadcasts also include the
 app-owned `report_normalized` ledger events. No CLI-specific validator exists.
 
+`team status --json` and preload `team.status()` also share `appObservations` for
+output capture faults. Plain status includes them in waiting reasons; `team get`
+and export retain the `output_observation` events and workspace-tagged captures.
+The app-generated budget card includes the same observations without a PM turn.
+
 | Preload action                             | CLI                                                                                                                                                                                                                           | Shared IPC                                                                             |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `team.create(input)`                       | `team start --idea <text> --pm tool:model:effort --dev tool:model:effort --qa tool:model:effort [--sub-pm ...] [--sub-dev ...] [--sub-qa ...] [--deadline <ISO>] [--turns <n>] [--allow checks,push,pr,temp] [--path <root>]` | `team:create`                                                                          |

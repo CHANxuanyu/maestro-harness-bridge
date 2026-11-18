@@ -36,13 +36,17 @@ import { flashCopiedToClipboard } from '../../utils/flashCopiedToClipboard';
 import { selectConversationNavigation, useSettingsStore } from '../../stores/settingsStore';
 import { useMessageGistStore } from '../../stores/messageGistStore';
 import { getClaudeTokenMode } from '../../../shared/claudeTokenMode';
-import { collapseAiResponseLogs } from './utils/collapseAiResponseLogs';
+import { collapseAiResponseLogs, createAiResponseCollapse } from './utils/collapseAiResponseLogs';
 import { computeTurnDurations } from './utils/turnDurations';
 import { computeTurnSettingChanges, isFeedReplyRow } from './utils/turnSettingChanges';
 import { readableTextOn } from '../../../shared/colorContrast';
 import { groupSubagentToolLogs } from './utils/groupSubagentToolLogs';
 import { foldNativeToolRuns } from './utils/foldNativeToolRuns';
-import { foldTurnActivity, type TurnActivity } from './utils/foldTurnActivity';
+import {
+	createTurnActivityFolder,
+	foldTurnActivity,
+	type TurnActivity,
+} from './utils/foldTurnActivity';
 import { feedProseStyles } from './utils/feedProseStyles';
 import { MemoizedTurnActivityFold, TurnActivityFold } from './components/TurnActivityFold';
 import { usePermissionRequestStore } from '../../stores/permissionRequestStore';
@@ -299,7 +303,15 @@ export const TerminalOutput = memo(
 		// concern: tool events are always recorded (useAgentToolExecutionListener),
 		// so hiding here keeps toggling from mutating log storage (the flicker bug)
 		// and preserves running->completed correlation.
-		const collapsedAll = useMemo(() => collapseAiResponseLogs(activeLogs), [activeLogs]);
+		const transcriptProjection = useMemo(
+			() => ({ collapse: createAiResponseCollapse(), fold: createTurnActivityFolder() }),
+			[session.id, activeTab?.id]
+		);
+		const collapsedAll = useMemo(
+			() =>
+				newShell ? transcriptProjection.collapse(activeLogs) : collapseAiResponseLogs(activeLogs),
+			[activeLogs, newShell, transcriptProjection]
+		);
 		// Per-turn elapsed time for the badge under each reply's clock. Derived from
 		// the RAW logs (not the collapsed ones) because the tool and thinking entries
 		// that mark when the agent stopped working can be filtered out below.
@@ -355,13 +367,16 @@ export const TerminalOutput = memo(
 		const turnFold = useMemo(
 			() =>
 				readingColumn && (!debouncedSearchQuery || newShell)
-					? foldTurnActivity(groupedLogs, { keepLastTurnOpen: turnLive, newShell })
+					? (newShell ? transcriptProjection.fold : foldTurnActivity)(groupedLogs, {
+							keepLastTurnOpen: turnLive,
+							newShell,
+						})
 					: {
 							logs: groupedLogs,
 							activityByHostId: new Map<string, TurnActivity>(),
 							deliveryByHostId: new Map(),
 						},
-			[groupedLogs, readingColumn, debouncedSearchQuery, turnLive, newShell]
+			[groupedLogs, readingColumn, debouncedSearchQuery, turnLive, newShell, transcriptProjection]
 		);
 		const filteredLogs = turnFold.logs;
 		const turnActivityByHostId = turnFold.activityByHostId;

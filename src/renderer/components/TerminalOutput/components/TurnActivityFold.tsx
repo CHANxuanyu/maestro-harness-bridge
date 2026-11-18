@@ -225,6 +225,7 @@ export const MemoizedTurnActivityFold = memo(TurnActivityFold, (prev, next) => {
 		return false;
 	const onlyRunningBar = prev.newShell && prev.activity.running && !prev.open;
 	if (!onlyRunningBar && prev.activity.durationMs !== next.activity.durationMs) return false;
+	if (prev.activity.entries === next.activity.entries) return true;
 	const previousEntries = onlyRunningBar
 		? prev.activity.entries.filter((entry) => entry.source === 'tool' || isProgressNoteEntry(entry))
 		: prev.activity.entries;

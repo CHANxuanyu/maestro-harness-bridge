@@ -5,6 +5,14 @@ import { isProgressNoteEntry } from '../../../utils/transcriptMessages';
 export const isHiddenProgressEntry = (log: LogEntry): boolean =>
 	log.source === 'system' && log.id.startsWith('hidden-progress:');
 
+type ResponseGroupCache = WeakMap<LogEntry, { entries: LogEntry[]; combined: LogEntry }>;
+
+/** Per-conversation cache; immutable entry identities also detect history corrections. */
+export function createAiResponseCollapse(): typeof collapseAiResponseLogs {
+	const cache: ResponseGroupCache = new WeakMap();
+	return (logs) => collapseAiResponseLogs(logs, cache);
+}
+
 /**
  * Collapse a tab's logs into render groups for the AI transcript.
  *
@@ -26,13 +34,31 @@ export const isHiddenProgressEntry = (log: LogEntry): boolean =>
  *
  * Pure + exported so the grouping is unit-testable independent of the component.
  */
-export function collapseAiResponseLogs(logs: LogEntry[]): LogEntry[] {
+export function collapseAiResponseLogs(logs: LogEntry[], cache?: ResponseGroupCache): LogEntry[] {
 	const result: LogEntry[] = [];
 	let currentResponseGroup: LogEntry[] = [];
 
 	// Flush the accumulated LOCAL response group into one combined entry.
 	const flushResponseGroup = () => {
 		if (currentResponseGroup.length > 0) {
+			const first = currentResponseGroup[0];
+			// A single entry needs no projection. Recreating it would invalidate
+			// the finished-turn cache on every chunk of an unrelated live turn.
+			if (currentResponseGroup.length === 1) {
+				result.push(first);
+				currentResponseGroup = [];
+				return;
+			}
+			const cached = cache?.get(first);
+			if (
+				cached &&
+				cached.entries.length === currentResponseGroup.length &&
+				currentResponseGroup.every((entry, index) => entry === cached.entries[index])
+			) {
+				result.push(cached.combined);
+				currentResponseGroup = [];
+				return;
+			}
 			// Live chunks of one stream join seamlessly. A message read back from the
 			// provider transcript is already complete, so it starts a new paragraph:
 			// gluing two stored messages end to end runs the last sentence of one
@@ -59,7 +85,7 @@ export function collapseAiResponseLogs(logs: LogEntry[]): LogEntry[] {
 			const turnSettingsSource = currentResponseGroup.find(
 				(l) => l.turnModel || l.turnEffort
 			)?.turnSettingsSource;
-			result.push({
+			const combined: LogEntry = {
 				...currentResponseGroup[0],
 				text: combinedText,
 				// Keep the first entry's timestamp and id.
@@ -67,7 +93,9 @@ export function collapseAiResponseLogs(logs: LogEntry[]): LogEntry[] {
 				...(turnModel ? { turnModel } : {}),
 				...(turnEffort ? { turnEffort } : {}),
 				...(turnSettingsSource ? { turnSettingsSource } : {}),
-			});
+			};
+			cache?.set(first, { entries: currentResponseGroup, combined });
+			result.push(combined);
 			currentResponseGroup = [];
 		}
 	};

@@ -1,4 +1,4 @@
-import { useTeamStore } from '../stores/teamStore';
+import { subscribeTeamNavigation, useTeamStore } from '../stores/teamStore';
 import { TeamSetupHost } from './Team/TeamView';
 import { TerminalViewProvider } from './TerminalView';
 import type { UseInterruptHandlerReturn } from '../hooks/agent/useInterruptHandler';
@@ -403,6 +403,8 @@ function AppShellContent({
 }
 
 export function AppShell(props: AppShellProps) {
+	// Leaving a conversation, file, browser or terminal tab for anything else closes the team slot.
+	useEffect(() => subscribeTeamNavigation(), []);
 	return (
 		<TerminalViewProvider>
 			<AppShellContent {...props} />

@@ -209,22 +209,30 @@ export const useTeamStore = create<TeamStore>((set, get) => {
 });
 
 // Navigation from keyboard, search, history or another sidebar must leave the team slot.
-useSessionStore.subscribe((state, previous) => {
-	const current = state.sessions.find((s) => s.id === state.activeSessionId);
-	const prior = previous.sessions.find((s) => s.id === previous.activeSessionId);
-	if (
-		state.activeSessionId !== previous.activeSessionId ||
-		current?.activeTabId !== prior?.activeTabId ||
-		current?.activeFileTabId !== prior?.activeFileTabId ||
-		current?.activeBrowserTabId !== prior?.activeBrowserTabId ||
-		current?.activeTerminalTabId !== prior?.activeTerminalTabId
-	)
-		useTeamStore.getState().selectTeam(null);
-});
-useGroupChatStore.subscribe((state, previous) => {
-	if (state.activeGroupChatId && state.activeGroupChatId !== previous.activeGroupChatId)
-		useTeamStore.getState().selectTeam(null);
-});
+// Subscribed when the shell mounts, never at module load: importing the store must stay
+// side-effect free for tests and for surfaces that never show a team.
+export function subscribeTeamNavigation(): () => void {
+	const offSessions = useSessionStore.subscribe((state, previous) => {
+		const current = state.sessions.find((s) => s.id === state.activeSessionId);
+		const prior = previous.sessions.find((s) => s.id === previous.activeSessionId);
+		if (
+			state.activeSessionId !== previous.activeSessionId ||
+			current?.activeTabId !== prior?.activeTabId ||
+			current?.activeFileTabId !== prior?.activeFileTabId ||
+			current?.activeBrowserTabId !== prior?.activeBrowserTabId ||
+			current?.activeTerminalTabId !== prior?.activeTerminalTabId
+		)
+			useTeamStore.getState().selectTeam(null);
+	});
+	const offGroupChats = useGroupChatStore.subscribe((state, previous) => {
+		if (state.activeGroupChatId && state.activeGroupChatId !== previous.activeGroupChatId)
+			useTeamStore.getState().selectTeam(null);
+	});
+	return () => {
+		offSessions();
+		offGroupChats();
+	};
+}
 
 export function useTeams(): TeamConfig[] {
 	return useTeamStore(useShallow((s) => Object.values(s.teams).map((team) => team.config)));

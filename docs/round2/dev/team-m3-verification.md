@@ -383,11 +383,111 @@ Artifact: `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus the uncommitted M3
 worktree changes. Verification targets source and development builds, not an
 
 Latest artifact: `ee282fec1` plus the uncommitted third real-model follow-up changes.
+
+Latest artifact: `f65c6933b` plus the uncommitted fourth real-model follow-up changes.
 Earlier M3 records below used `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus
 the then-uncommitted M3 work. Verification targets source and development builds, not an
 installed release. No commit, tag, release, paid model invocation or real GitHub
 publication was performed. Existing private survey material is not part of this
 change.
+
+## Fourth follow-up: QA output locations and app capture faults
+
+Read the owner's 143-event, 19-turn real-run ledger in place. It had no rejected
+reports or repairs and one decider normalization. The new fixture retains only
+the synthetic C2 criterion from the confirmed brief, including both README and
+`qa/clamp.qa.test.cjs` locations; no raw capture or account paths were copied.
+
+1. **Wrong workspace:** `captureTeamOutput()` accepted only dev's cwd and resolved
+   every file against it, even QA-owned `qa/...` files. Every scheduler capture
+   now supplies the QA binding. Shared `teamOutputLocation()` routes `qa/...` and
+   absolute paths inside QA's `qa/` to QA, other relative paths to dev, independent
+   of the criterion's proof or author. Captures identify the workspace and resolved
+   source. Normalization uses the same rule and keeps explicit workspace identity.
+   Physical boundaries still reject traversal and escaping symlinks; a missing QA
+   binding cannot fall back to a dev file. Tests use the actual C2 shape with its
+   test file present only in QA and README only in dev. Both new capture tests
+   failed against the old implementation before the fix. File copies now include
+   workspace and content hash so QA changes at an unchanged dev revision preserve
+   both versions instead of reusing stale bytes.
+2. **Wrong fault classification:** the verify gate converted `missingOutputLocations()`
+   into app-authored standard issues. The next scheduler pass therefore woke PM
+   to change a confirmed criterion. That conversion is removed. A missing capture
+   records one app-owned `output_observation` per capture, visible through status,
+   CLI and the app-generated progress report. Review remains blocked until real
+   output is available; criterion evidence stays intact. App-only recapture occurs
+   after QA writes, a new verification of a missing location, changed standards,
+   resume/extension, or the 10-minute recheck interval. Unchanged wakes and restart
+   neither duplicate the observation nor spend model turns. Successful newer
+   output clears the active observation while retaining history. Genuine
+   member-reported standard issues still use the existing PM path. The old unit
+   expectation that a missing viewer creates a standard issue was replaced because
+   it contradicts this explicit product correction, not to bypass a proof check.
+3. **Efficiency audit:** the second challenge round was justified. The first PM
+   revision changed both C1 and C2: C1 added untracked-file and byte-identity checks;
+   C2 added an explicit validation-out-of-scope requirement, the dev-module source
+   and concrete QA cases/checklist. The diff rule therefore correctly requested
+   the one permitted additional round. No challenge rule changed. The later PM
+   `message` had no owner message to process; its recorded note asked PM to resolve
+   the app-created standard issue. Removing that issue removes this wasted turn
+   and its seven discussion turns. The observed run also spent one wrap-up turn
+   after that detour reached 80%. The direct scheduler regression proceeds from
+   QA verify to PM review with C1/C2 passing, unchanged locations and no issue,
+   discussion, owner card or redundant capture. Actual real-model acceptance is
+   still unverified; the synthetic result does not predict the next model's review.
+
+Final validation commands for this artifact:
+
+```sh
+npm test -- --configLoader runner src/__tests__/shared/team src/__tests__/main/team src/__tests__/cli/commands/team.test.ts src/__tests__/cli/services/session-command.test.ts src/__tests__/shared/progressRules.test.ts src/__tests__/shared/retryClassification.test.ts src/__tests__/main/follow-ups.test.ts src/__tests__/main/check-runner.test.ts
+npm run lint
+node node_modules/typescript/bin/tsc -p e2e/tsconfig.team.json --pretty false
+node node_modules/eslint/bin/eslint.js src/main/team/{scheduler,output-capture}.ts src/shared/team/{policy,report,types,ledger,status}.ts
+node node_modules/eslint/bin/eslint.js -c eslint.dashes.config.mjs src/__tests__/main/team/{scheduler,output-capture}.test.ts src/__tests__/shared/team/{policy,status}.test.ts
+git diff --name-only -z --diff-filter=ACM | xargs -0 node node_modules/prettier/bin/prettier.cjs --check
+node node_modules/prettier/bin/prettier.cjs --check src/__tests__/shared/team/real-output-criterion.json
+npm run docs:verify
+npm run lint:doc-refs
+git diff --check
+```
+
+All listed commands exited 0. **463 tests in 19 files passed**, including the
+existing scripted M2 flows and the new actual-C2 capture, fault/restart/retry and
+deadline-report cases. All three production TypeScript projects and all three
+Electron scenarios type-check. ESLint has no errors or warnings. Prettier passes
+all 18 changed tracked files plus the new JSON fixture. Documentation checks
+report 724 asserted paths with none missing and valid references across 39 docs.
+`git diff --check` and the added-line/new-fixture forbidden-dash scan pass.
+The focused run initially exposed two wrong field names in the new scheduler
+test setup (`version`/`phase` instead of `briefVersion`/`to`); these were corrected
+before the final run. Native scenario files and assertions were not changed.
+
+Builds and native attempt:
+
+```sh
+npm run build:main
+npm run build:cli
+node --input-type=module -e 'globalThis.__dirname = process.cwd(); const { build } = await import("vite"); await build({ configLoader: "runner" }); await build({ configFile: "vite.config.web-desktop.mts", configLoader: "runner" });'
+node node_modules/@playwright/test/cli.js test --project=native e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts --output e2e-results/m3-output-routing --max-failures=1 --reporter=line
+```
+
+Main/preload, CLI, renderer and web-desktop builds exited 0. The Vite runner
+command uses the already documented sandbox workaround for the shared
+`node_modules` config cache and supplies the configs' expected `__dirname`;
+build configs were not changed. Existing chunk-size and mixed import warnings
+remain. Playwright exited 1 because Electron failed to launch before the first
+scenario's assertions: **1 launch failure, 24 unrun**. The new error context is
+under `e2e-results/m3-output-routing/`; earlier artifacts are preserved. This is
+not a native pass or an observed scenario regression. Real models were not run.
+Outside the restricted host, the outstanding verification commands are:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts
+node scripts/native-e2e.mjs e2e/real-team.spec.ts --grep 'team small task'
+```
+
+The real-model command requires the documented owner-run opt-in account setup.
+No commit or external publication was performed.
 
 ## Third follow-up: normalize form, preserve facts
 

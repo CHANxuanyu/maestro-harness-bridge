@@ -80,7 +80,8 @@ export interface TeamSchedulerDependencies {
 		cwd: string,
 		revision: string,
 		criteria?: TeamState['criteria'],
-		beforeOutputId?: string
+		beforeOutputId?: string,
+		qaCwd?: string
 	): Promise<OutputCapture>;
 	/** Host-resolved launch configuration; never supplied by a seat report. */
 	seatOptions?(
@@ -1347,6 +1348,24 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				.map((i) => `issue:${i.id}:${i.opened.actual ?? i.opened.title}`),
 		].sort();
 	};
+	const captureOutput = async (state: TeamState, revision: string): Promise<OutputCapture> => {
+		try {
+			return await deps.captureOutput(
+				state.seats.dev.binding!.workspace,
+				revision,
+				state.criteria,
+				state.outputs.at(-1)?.outputId,
+				state.seats.qa.binding?.workspace
+			);
+		} catch (error) {
+			deps.onError(error);
+			return {
+				files: [],
+				previews: [],
+				error: error instanceof Error ? error.message : String(error),
+			};
+		}
+	};
 	const submit = async (id: string, state: TeamState, turn: TeamState['turns'][number]) => {
 		const batchId = `submit:${turn.dispatchId}`;
 		if (
@@ -1391,12 +1410,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			}
 			await workspaces.advanceQa(submitted.revision);
 			if (!running || controller.signal.aborted) return;
-			const output = await deps.captureOutput(
-				state.seats.dev.binding!.workspace,
-				submitted.revision,
-				state.criteria,
-				state.outputs.at(-1)?.outputId
-			);
+			const output = await captureOutput(state, submitted.revision);
 			await queue.enqueue(id, () =>
 				append(id, {
 					kind: 'output_captured',
@@ -1930,6 +1944,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				generatedBy: 'app',
 				output: state.outputs.at(-1),
 				missing: teamStatus(state, now()).criteria.missing,
+				appObservations: teamStatus(state, now()).appObservations,
 				work: state.workItems.filter((w) => w.state !== 'checked'),
 				issues: state.issues.filter(isOpenTeamIssue),
 				tried: Object.fromEntries(
@@ -2967,11 +2982,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				return startJob(id, 'capture-before', async () => {
 					const workspace = await ws(state).initialize();
 					const revision = workspace.baseRevision ?? workspace.qaRevision;
-					const output = await deps.captureOutput(
-						state.seats.dev.binding!.workspace,
-						revision,
-						state.criteria
-					);
+					const output = await captureOutput(state, revision);
 					await queue.enqueue(id, () =>
 						append(id, {
 							kind: 'output_captured',
@@ -3052,42 +3063,49 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					note: 'Resolve standard issues or propose standardChanges. Do not assign an unjudgeable criterion to dev.',
 				});
 			if (state.criteria.filter((c) => c.proof !== 'pm').every((c) => c.status === 'pass')) {
-				const missing = missingOutputLocations(state, state.outputs.at(-1));
+				const output = state.outputs.at(-1);
+				const missing = missingOutputLocations(state, output);
+				const observation = state.outputObservations.find((o) => o.outputId === output?.outputId);
+				const submitted = data.events.filter((e) => e.kind === 'workspace_submitted').at(-1);
+				const changed = data.events.some(
+					(e) =>
+						e.seq > (output?.seq ?? 0) &&
+						((missing.length > 0 &&
+							['resumed', 'budget_extended', 'standard_issue_resolved', 'standard_change'].includes(
+								e.kind
+							)) ||
+							(e.kind === 'report_accepted' &&
+								e.seat === 'qa' &&
+								(['reverify', 'qa_prep'].includes(e.report.type) ||
+									(missing.length > 0 && e.report.type === 'verify'))))
+				);
+				// Refresh after QA writes; a read-only successful verify needs no new copy.
+				// A capture fault retries in the app,
+				// on a changed condition or at the normal recheck interval, never via PM.
+				if (submitted && (changed || (observation && now() >= observation.retryAt))) {
+					const key = `recapture:${output?.seq ?? 0}:${data.events.at(-1)?.seq ?? 0}`;
+					return startJob(id, key, async () => {
+						const capture = await captureOutput(state, submitted.revision);
+						await queue.enqueue(id, () =>
+							append(id, {
+								kind: 'output_captured',
+								actor: 'app',
+								outputId: key,
+								...capture,
+								id: key,
+							})
+						);
+					});
+				}
 				if (missing.length) {
-					const resolved = data.events
-						.filter(
-							(e) =>
-								e.kind === 'standard_issue_resolved' && e.seq > (state.outputs.at(-1)?.seq ?? 0)
-						)
-						.at(-1);
-					const submitted = data.events.filter((e) => e.kind === 'workspace_submitted').at(-1);
-					if (resolved && submitted)
-						return startJob(id, `recapture:${resolved.id}`, async () => {
-							const output = await deps.captureOutput(
-								state.seats.dev.binding!.workspace,
-								submitted.revision,
-								state.criteria,
-								state.outputs.at(-1)?.outputId
-							);
-							await queue.enqueue(id, () =>
-								append(id, {
-									kind: 'output_captured',
-									actor: 'app',
-									outputId: `recapture:${resolved.id}`,
-									...output,
-									id: `recapture:${resolved.id}`,
-								})
-							);
-						});
-					for (const [index, location] of missing.entries())
+					if (output && !observation)
 						await append(id, {
-							kind: 'issue_opened',
+							kind: 'output_observation',
 							actor: 'app',
-							issueId: `output:${state.outputs.at(-1)?.outputId}:${index}`,
-							title: `Output cannot be judged: ${location}`,
-							issueKind: 'standard',
-							steps: [location],
-							id: `output:${state.outputs.at(-1)?.outputId}:${index}`,
+							outputId: output.outputId,
+							missing,
+							retryAt: now() + TEAM_WAIT_RECHECK_MS,
+							id: `output-observation:${output.id}`,
 						});
 					return;
 				}

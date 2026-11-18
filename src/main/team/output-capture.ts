@@ -6,6 +6,7 @@ import MarkdownIt from 'markdown-it';
 import { createHash } from 'crypto';
 import { DURATION_MS } from '../../shared/duration';
 import { isPathAtOrUnderRoot, normalizeWorktreePath } from '../../shared/worktreePaths';
+import { teamOutputLocation, teamWorkspaceRelativePath } from '../../shared/team/policy';
 import type { Criterion, OutputCapture, OutputLocation } from '../../shared/team/types';
 import { execGitReadOnly } from '../utils/remote-git';
 import { captureWebContentsPage } from '../utils/capture-page';
@@ -15,7 +16,8 @@ export async function captureTeamOutput(
 	cwd: string,
 	revision: string,
 	criteria: Criterion[] = [],
-	beforeOutputId?: string
+	beforeOutputId?: string,
+	qaCwd?: string
 ): Promise<OutputCapture> {
 	if (!/^[a-f0-9]{40,64}$/.test(revision))
 		throw new Error('Output capture requires a submitted revision');
@@ -46,25 +48,34 @@ export async function captureTeamOutput(
 			let contents: Electron.WebContents | undefined;
 			let previewUrl: string | undefined;
 			if (/^https?:\/\//i.test(target.location.target)) {
+				receipt.source = target.location.target;
 				contents = webContents
 					.getAllWebContents()
 					.find((item) => !item.isDestroyed() && item.getURL() === target.location.target);
 				if (!contents) throw new Error('Open this named viewer in the app before capturing it');
 			} else {
-				const source = await fs.realpath(path.resolve(cwd, target.location.target));
-				if (
-					!isPathAtOrUnderRoot(
-						normalizeWorktreePath(source),
-						normalizeWorktreePath(await fs.realpath(cwd))
-					)
-				)
+				const selected = teamOutputLocation(target.location.target, { dev: cwd, qa: qaCwd });
+				receipt.workspace = selected.workspace;
+				const workspace = selected.workspace === 'qa' ? qaCwd : cwd;
+				if (!workspace) throw new Error('QA output requires the bound QA workspace');
+				if (teamWorkspaceRelativePath(selected.target, workspace) === undefined)
+					throw new Error('Output path is outside its assigned workspace or contains traversal');
+				const source = await fs.realpath(path.resolve(workspace, selected.target));
+				receipt.source = source;
+				const realWorkspace = await fs.realpath(workspace);
+				const boundary =
+					selected.workspace === 'qa' ? path.join(realWorkspace, 'qa') : realWorkspace;
+				if (!isPathAtOrUnderRoot(normalizeWorktreePath(source), normalizeWorktreePath(boundary)))
 					throw new Error('Output path is outside the task workspace');
 				if (!(await fs.stat(source)).isFile()) throw new Error('Output target must be a file');
-				const relative = path.relative(cwd, source);
-				const destination = path.join(root, 'files', relative);
+				const relative = path.relative(realWorkspace, source);
+				const bytes = await fs.readFile(source);
+				// QA may revise its tests without changing the submitted dev revision.
+				const digest = createHash('sha256').update(bytes).digest('hex');
+				const destination = path.join(root, 'files', selected.workspace, digest, relative);
 				await fs.mkdir(path.dirname(destination), { recursive: true });
 				try {
-					await fs.copyFile(source, destination, fs.constants.COPYFILE_EXCL);
+					await fs.writeFile(destination, bytes, { flag: 'wx' });
 				} catch (error) {
 					if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
 				}

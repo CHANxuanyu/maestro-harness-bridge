@@ -42,6 +42,18 @@ export function TeamEscalation({
 						<p className="team-dim">{presentTeamText(criterion.reason, state, t)}</p>
 					</div>
 				))}
+				{!!data.appObservations?.length && (
+					<div data-app-observations>
+						<h4>{t('workflows.team.appObservations')}</h4>
+						{data.appObservations.map((observation) => (
+							<p key={observation.id} className="team-dim">
+								{t('workflows.team.appObservationMissing', {
+									paths: formatList(observation.missing),
+								})}
+							</p>
+						))}
+					</div>
+				)}
 				{data.work?.map((item) => (
 					<p key={item.itemId}>
 						{item.title} · <SeatTag seat={item.owner} />

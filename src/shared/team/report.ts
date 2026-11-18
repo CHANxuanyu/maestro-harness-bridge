@@ -7,6 +7,7 @@ import {
 	teamChallengeRound,
 	teamReadyForDemo,
 	teamWorkspaceRelativePath,
+	teamOutputLocation,
 } from './policy';
 import { parseJsonWithBom } from '../jsonUtils';
 import { joinPath } from '../formatters';
@@ -338,17 +339,16 @@ export function validateTeamReport(
 		}
 		report.tests = tests;
 	}
-	// Output targets are relative to dev's capture workspace, regardless of who
-	// proposes them. Never relocate another workspace's absolute target or a URL.
+	// Path ownership follows the target, not the criterion's proof or author.
 	const locations = (criterion: Criterion, field: string): Criterion => ({
 		...criterion,
 		...(criterion.locations
 			? {
 					locations: criterion.locations.map((location, index) => {
-						const normalized = teamWorkspaceRelativePath(
-							location.target,
-							state?.seats.dev.binding?.workspace
-						);
+						const normalized = teamOutputLocation(location.target, {
+							dev: state?.seats.dev.binding?.workspace,
+							qa: state?.seats.qa.binding?.workspace,
+						}).target;
 						if (!normalized || normalized === location.target) return location;
 						note(
 							`${field}.locations[${index}].target`,

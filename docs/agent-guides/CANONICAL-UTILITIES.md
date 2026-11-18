@@ -134,8 +134,11 @@ It rejects traversal and supports owned absolute paths and harmless dot segments
 it does not prove that a file exists or follows an allowed symlink.
 `createTeamWorkspaces().resolveQaTestPath()` performs that physical QA boundary
 check and resolves a bare name only for an unambiguous existing `qa/` file.
-Output locations normalize against the capture workspace, never by stripping
-another workspace's prefix. Existing `captureTeamOutput()` remains the proof
+`teamOutputLocation()` in that shared policy selects QA for `qa/...` and owned
+absolute QA test paths, dev for other file targets. Normalization and capture
+share this routing, independent of the criterion's proof or author. Explicit
+absolute paths retain their workspace identity after normalization.
+Existing `captureTeamOutput()` remains the proof
 gate. Do not normalize a path into an evidence claim or bypass role permissions.
 
 `baselineDiff()`, `discussionDecider()`, `topicRejection()`, `pmMayChange()`,
@@ -167,7 +170,15 @@ always read-only. Do not infer permission from the seat alone.
 files and every declared location receipt. It uses `captureWebContentsPage()`
 in `src/main/utils/capture-page.ts`, the same compositor path as the window
 capture IPC, after two animation frames with bounded loading and capture.
-Missing viewers produce explicit receipts and standard issues for PM.
+Receipts name the source workspace and resolved path. Captured bytes are stored
+under workspace and content hash, so a QA edit at the same dev revision never
+reuses an older file. Missing viewers and files produce app-owned
+`output_observation` events at the review gate, never standard issues for PM.
+The scheduler refreshes after QA writes or after a new verification when a
+location is missing; a successful read-only verification needs no redundant
+capture. Unresolved observations retry on a changed condition or after 10 minutes
+without a model turn. Status
+and budget reports expose the observation while the review proof gate stays shut.
 `checkTestCounts()` and `checkCommandBoundary()` in `src/shared/checkRun.ts`
 share observed runner counts and explicit check boundaries. Unknown counts
 remain unknown. Boundary declarations and recognized shell actions require a

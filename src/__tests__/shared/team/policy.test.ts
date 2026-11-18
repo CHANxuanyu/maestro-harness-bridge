@@ -9,6 +9,7 @@ import {
 	teamEvidence,
 	teamEvidenceCatalog,
 	teamChallengeRound,
+	teamOutputLocation,
 } from '../../../shared/team/policy';
 import { reportEvents } from '../../../main/team/report-events';
 import { validateTeamReport } from '../../../shared/team/report';
@@ -414,4 +415,27 @@ describe('M3 recovery authority', () => {
 			next: { key: 'wait' },
 		});
 	});
+});
+
+it('selects output workspace by target and keeps normalization stable across a second pass', () => {
+	const roots = { dev: '/team/dev', qa: '/team/qa' };
+	for (const [target, workspace, normalized] of [
+		['qa/clamp.qa.test.cjs', 'qa', 'qa/clamp.qa.test.cjs'],
+		['./qa/clamp.qa.test.cjs', 'qa', 'qa/clamp.qa.test.cjs'],
+		['/team/qa/qa/clamp.qa.test.cjs', 'qa', 'qa/clamp.qa.test.cjs'],
+		['README.md', 'dev', 'README.md'],
+		['/team/dev/README.md', 'dev', 'README.md'],
+		['/team/dev/qa/explicit.cjs', 'dev', '/team/dev/qa/explicit.cjs'],
+		['https://example.test/view', 'dev', 'https://example.test/view'],
+	]) {
+		const selected = teamOutputLocation(target, roots);
+		expect(selected).toEqual({ workspace, target: normalized });
+		expect(teamOutputLocation(selected.target, roots)).toEqual(selected);
+	}
+	expect(
+		teamOutputLocation('C:\\team\\qa\\qa\\test.cjs', {
+			dev: 'C:\\team\\dev',
+			qa: 'C:\\team\\qa',
+		})
+	).toEqual({ workspace: 'qa', target: 'qa/test.cjs' });
 });

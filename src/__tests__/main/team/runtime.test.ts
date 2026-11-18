@@ -30,6 +30,7 @@ describe('team production runtime', () => {
 		cwd: '/work/dev',
 		prompt: 'work',
 		permissionMode: 'full',
+		turn: 'work',
 		customEnv: { CODEX_HOME: '/accounts/dev' },
 		nativeSessionId: 'native',
 	};

@@ -405,6 +405,7 @@ describe('reduceLedger', () => {
 		);
 		expect(state.usage).toEqual({
 			turns: 1,
+			budgetTurns: 1,
 			inputTokens: 20,
 			outputTokens: 5,
 			costUsd: 0,
@@ -694,6 +695,71 @@ describe('reduceLedger', () => {
 		expect(improved.reviewDecision).toMatchObject({ kind: 'diagnose', reason: 'rejections' });
 	});
 
+	it('counts separate review problems on one criterion and recognizes independently verified partial progress', () => {
+		const problem = (location: string) => ({
+			title: 'Unreadable',
+			location,
+			criterion: 'E1',
+			impact: 'Cannot read',
+			expected: 'Readable text',
+		});
+		const first: EventInput[] = [
+			...baseline,
+			...['Header', 'Footer'].map((location) => ({
+				kind: 'issue_opened' as const,
+				actor: 'pm' as const,
+				issueId: location,
+				reviewId: 'r1',
+				title: 'Unreadable',
+				issueKind: 'defect' as const,
+				criterionId: 'E1',
+				location,
+				expected: 'Readable text',
+			})),
+			{
+				kind: 'review',
+				actor: 'pm',
+				verdict: 'reject',
+				problems: [problem('Header'), problem('Footer')],
+				suggestions: [],
+			},
+		];
+		const before = reduceLedger(ledger(...first));
+		expect(before.reviewProgress.failures).toHaveLength(2);
+		const dropped = reduceLedger(
+			ledger(...first, {
+				kind: 'review',
+				actor: 'pm',
+				verdict: 'reject',
+				problems: [problem('Footer')],
+				suggestions: [],
+			})
+		);
+		expect(dropped.reviewProgress.failures).toHaveLength(2);
+		expect(dropped.reviewProgress.attempts.at(-1)?.verdict).toBe('dup');
+		const after = reduceLedger(
+			ledger(
+				...first,
+				{ kind: 'issue_fixed', actor: 'dev', issueId: 'Header' },
+				{
+					kind: 'issue_verified',
+					actor: 'qa',
+					issueId: 'Header',
+					pass: true,
+					evidence: 'qa/header-readable',
+				},
+				{
+					kind: 'review',
+					actor: 'pm',
+					verdict: 'reject',
+					problems: [problem('Footer')],
+					suggestions: [],
+				}
+			)
+		);
+		expect(after.reviewProgress.failures).toHaveLength(1);
+		expect(after.reviewProgress.attempts.at(-1)?.verdict).toBe('fewer');
+	});
 	it.each<TeamTerminal>(['all', 'gaps', 'stopped'])(
 		'derives statistics from the actual %s path without turning gaps into passes',
 		(terminal) => {

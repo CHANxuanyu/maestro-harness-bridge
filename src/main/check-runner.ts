@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import { checkTestCounts } from '../shared/checkRun';
+import { stripAnsiCodes } from '../shared/stringUtils';
 import { DURATION_MS } from '../shared/duration';
 import type { CheckHost, CheckOutcome, CheckRun } from '../shared/checkRun';
 import { compactToolOutput, MAX_PERSISTED_TOOL_OUTPUT_CHARS } from '../shared/toolOutput';
@@ -60,6 +62,7 @@ export function createCheckRunner(deps: CheckRunnerDependencies = {}) {
 				outputTail: compactToolOutput(tail).output as string,
 				truncated,
 				error,
+				...checkTestCounts(stripAnsiCodes(tail)),
 			});
 			const stop = (reason: 'timeout' | 'canceled') => {
 				stopped ??= reason;

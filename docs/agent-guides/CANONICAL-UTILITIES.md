@@ -2,6 +2,26 @@
 
 **Team chat shared layer**
 
+M3 recovery uses `sameTeamModel()`, `teamModelUnavailable()` and
+`teamRecoveryDecision()` in `src/shared/team/policy.ts`, over `decideNext()`.
+`teamQuotaSample()` in `src/main/team/quota.ts` reads existing account-specific
+quota snapshots through canonical account/environment resolution; it never calls
+a model to probe availability. Effort, turn kind and unrelated environment keys
+do not bypass an unavailable account/model. `tokenExhaustionResetAt()` accepts an
+explicit fallback timezone for a local provider's bare reset clock; remote clocks
+without a zone remain unknown. Do not add a scheduler-local reset parser.
+
+`TeamUsage.turns` counts actual dispatches, including failures and outstanding
+reservations. `budgetTurns` excludes quota/login failures; do not add active seats
+a second time. `createTeamScheduler()` owns 20-minute waits, 10-minute unchanged
+rechecks, the 30-second failure cooldown, one retry/report repair, PM report
+organization, and app-only native-result inspection after exhausted recovery.
+Persisted dispatch bindings and `workspace_inspected` receipts preserve the
+original model/account and interrupted effects. Publication uses
+`createTeamWorkspaces().pushDevWork()` / `.createDraftPr()`, with a selected project
+remote, stdin PR body, draft lookup on replay and durable action receipts. Never
+add a separate CLI executor or use the repository's release tooling here.
+
 `reduceLedger()` in `src/shared/team/ledger.ts` is the pure replay used by main,
 renderer, and CLI. It sorts by sequence, ignores unknown kinds and dangling
 references, and deduplicates event and dispatch identities. Owner-confirmed
@@ -15,7 +35,8 @@ experience evidence must reference an app-captured output. The runtime owns
 validation and execution; this reducer does not execute work or append events.
 Baseline command canaries use `check_run.purpose: 'trial'` and never prove the
 delivered product. Review progress uses fresh QA evidence about previous review
-problems, never a change in the number or wording of PM comments.
+problems. Multiple problems on one criterion stay separate; omitting a comment
+does not close an unresolved issue. All review rounds still use `judgeAttempts()`.
 
 `extractTeamReport()`, `validateTeamReport()`, and `reportRepairPrompt()` in
 `src/shared/team/report.ts` share `REPORT_SCHEMAS` and `teamReportSchema()` from
@@ -26,6 +47,33 @@ Unknown fields are rejected, QA challenge plans are mandatory, and review
 problems without a confirmed criterion become suggestions. Without state, no
 review criterion is assumed confirmed. The dispatcher must permit only one
 repair, passing the original turn kind; repair does not redo work.
+
+`baselineDiff()`, `discussionDecider()`, `topicRejection()`, `pmMayChange()`,
+`referenceVotes()`, `missingOutputLocations()`, `teamReadyForDemo()` and
+`isOpenTeamIssue()` in `src/shared/team/policy.ts` own the M2 policy. Do not add
+renderer versions of these gates. A superseded issue preserves the failed
+history; it is not a verified fix. Topic positions use fresh native contexts
+and are omitted from other seats' prompts until response time. The main-owned
+conclusion creates the work items and registered waits.
+
+`teamTurnPermission()` in that same policy module is the execution permission
+allowlist shared by prompts, scheduler requests and the native turn dispatcher.
+Only dev `work`/`fix` and QA `qa_prep`/`reverify` can write; QA's existing boundary
+restoration still confines those writes to `qa/`. Every other turn, including
+challenge, discussion, verification and report repair, is read-only. PM is
+always read-only. Do not infer permission from the seat alone.
+
+`captureTeamOutput()` in `src/main/team/output-capture.ts` preserves immutable
+files and every declared location receipt. It uses `captureWebContentsPage()`
+in `src/main/utils/capture-page.ts`, the same compositor path as the window
+capture IPC, after two animation frames with bounded loading and capture.
+Missing viewers produce explicit receipts and standard issues for PM.
+`checkTestCounts()` and `checkCommandBoundary()` in `src/shared/checkRun.ts`
+share observed runner counts and explicit check boundaries. Unknown counts
+remain unknown. Boundary declarations and recognized shell actions require a
+per-invocation card; this is not an operating-system sandbox for script contents.
+`getModelFamily()` now lives in `src/shared/modelFamily.ts`; the renderer path
+re-exports it. Reference votes group same-vendor models through that utility.
 
 `teamReplyMessage()` in that same module uses the canonical Markdown parser to
 remove report fences and bound visible replies. `reportEvents()` in
@@ -41,6 +89,14 @@ appends. Its `reconcileTeamTurn()` reads the bound account's native storage with
 revision, including untracked files, so staging or committing alone cannot
 manufacture a new fix. The scheduler combines it with failing signatures for
 `decideNext()`; new check row IDs alone do not count as progress.
+
+Member execution failures use a separate durable recovery latch, not the
+product-progress loop. One same-turn retry is allowed; a fresh UUID, fallback
+wake, incidental ledger append or restart cannot grant another. Existing
+duplicate roots count as attempts too. A later member recovery or owner answer
+can restart the assignment; a different kind also needs a changed assignment
+basis. A held member fault appears in app/CLI status instead of waking PM in a
+loop. Model takeover remains a separate M3 responsibility.
 
 Domain events project requirements, work, issues, reviews, and decisions.
 `report_accepted` preserves the report and contributes QA verdicts, but does not

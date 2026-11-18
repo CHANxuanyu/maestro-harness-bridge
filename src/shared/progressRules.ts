@@ -237,6 +237,8 @@ export function isAlreadyTried(state: ProgressState, candidate: Candidate): bool
  * What happens next (PRD 3.1.4, 3.1.5). Order matters: done, then the overall
  * budget, then forced diagnosis, then any in-authority step with a basis, and
  * only then a boundary. With nothing left that has a basis, gather evidence.
+ * A solved problem is done even when the budget is spent: the budget stops
+ * further dispatch, it does not turn met criteria into an unfinished report.
  */
 export function decideNext(state: ProgressState, ctx: DecideContext = {}): NextDecision {
 	const candidates = ctx.candidates ?? [];
@@ -247,7 +249,9 @@ export function decideNext(state: ProgressState, ctx: DecideContext = {}): NextD
 	if (state.streak >= NO_PROGRESS_LIMIT) return { kind: 'diagnose', reason: 'no-progress', advice };
 	if (state.rejectionsInRow >= REJECTION_RETRO_LIMIT)
 		return { kind: 'diagnose', reason: 'rejections', advice };
-	const open = candidates.filter((c) => !c.boundary && !!c.basis && !isAlreadyTried(state, c));
+	const open = candidates.filter(
+		(c) => !c.advice && !c.boundary && !!c.basis && !isAlreadyTried(state, c)
+	);
 	if (open.length > 0) return { kind: 'continue', next: open[0], advice };
 	const blocked = candidates.filter((c) => c.boundary && !c.advice);
 	if (blocked.length > 0) {

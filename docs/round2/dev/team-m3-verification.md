@@ -1,11 +1,108 @@
 # M3 backend verification, 2026-11-18
 
-Latest artifact: `2f3f78cfb` plus the uncommitted fifth follow-up and its native CLI/audit corrections.
+Latest artifact: `86b915d4b` plus the uncommitted sixth follow-up.
 Earlier M3 records below used `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus
 the then-uncommitted M3 work. Verification targets source and development builds, not an
 installed release. No commit, tag, release, paid model invocation or real GitHub
 publication was performed. Existing private survey material is not part of this
 change.
+
+## Sixth follow-up: challenge stall and held assignments
+
+Evidence was read in place: 197 events, 26 dispatches, two topic rejections and
+two discussions, only one closed. No raw capture or private account path was
+copied into source. The first PM position did resume on authorized takeover. The
+later discussion stalled because the first discussion's conclusion registered
+`Dev and QA responses` as a timer wait, blocking every subsequent PM assignment.
+The original model's recovery at 37.27 minutes did not clear that unrelated wait.
+
+1. **Held assignments:** recovery previously inspected only the latest seat
+   turn, so a later wait/message receipt could hide an unavailable assignment.
+   Resumption now scans held availability failures, preserves assignment context
+   and records `resumedFrom`; pending discussion steps still derive from missing
+   positions/proposals/responses. Both takeover and original-model recovery
+   inspect the workspace and use the current binding, with the existing hard
+   budget/concurrency/cooldown guards. Cached quota/login samples older than a
+   recovery cannot suspend the seat again. Tests cover substitute, temporary
+   takeover, reset, login, stale samples, all three discussion steps and a held
+   brief hidden by a later wait.
+2. **Wait ownership:** discussion conclusions bypassed the central registration
+   path and accepted any prose as an external timer. They now share
+   `teamWaitRejection()` and `registerWait()` with work reports. Internal waits
+   are refused/canceled and recorded as app observations, including legacy waits
+   found before firing or after restart. The normal scheduler then dispatches
+   missing steps. Real external command/CI/time conditions are retained; proposal
+   actions accept the same condition schema as work reports; relative CI paths
+   use the assigned seat workspace and produce normalization notes. The existing
+   experiment test's vague `New measured output` wait was not an external event;
+   it now explicitly uses external CI measurement. No native assertion changed.
+3. **Stalls:** every wait report previously reset idle progress, and no watchdog
+   distinguished new facts from poll bookkeeping. The ten-minute watchdog uses
+   substantive facts and the existing 30-second fallback. It excludes active
+   work, pause/terminal, owner cards and genuine external waits, reevaluates normal
+   scheduling, then issues at most one PM diagnostic per stuck fact. The app
+   observation is available in status and the budget progress report. Repeated
+   PM waiting is idle, with one nudge then diagnosis; dev/QA unchanged external
+   polls still do not count as product failures. Two older failure-latch tests
+   retain exactly two failed attempts and now additionally assert one diagnostic
+   after ten minutes, instead of permanent silence.
+4. **Topic evidence:** the topic policy still rejected unknown references even
+   though position/response ingestion already separated prose from evidence.
+   Topics now retain those strings in `discussion_opened.unverifiedBasis` and
+   only recorded ids enter `evidence`. All topic-capable prompts list citable ids.
+   New-evidence requirements for reopening/insistence, evidence-based acceptance,
+   QA attribution and permission guards remain strict. Verify/reverify evidence
+   is a newly attributed observation, not a reference lookup; demo eligibility
+   remains app-derived. Tests cover prose-only/mixed topic bases and rejection
+   of reopening with unrecorded references.
+
+Before implementation, seven targeted regression cases failed: four recovery
+modes, internal-wait registration, the watchdog and topic evidence. The final
+verification commands and exact results are below.
+
+```sh
+npm test -- --configLoader runner src/__tests__/shared/team src/__tests__/main/team src/__tests__/cli/commands/team.test.ts src/__tests__/cli/services/session-command.test.ts src/__tests__/shared/progressRules.test.ts src/__tests__/shared/retryClassification.test.ts src/__tests__/main/follow-ups.test.ts src/__tests__/main/check-runner.test.ts
+npm run lint
+node node_modules/typescript/bin/tsc -p e2e/tsconfig.team.json --pretty false
+node node_modules/eslint/bin/eslint.js src/main/team/scheduler.ts src/main/team/report-events.ts src/shared/team/ledger.ts src/shared/team/policy.ts src/shared/team/prompts.ts src/shared/team/schemas.ts src/shared/team/status.ts src/shared/team/types.ts src/shared/team/report.ts
+node node_modules/eslint/bin/eslint.js -c eslint.dashes.config.mjs src/__tests__/main/team/scheduler.test.ts src/__tests__/shared/team/policy.test.ts src/__tests__/shared/team/report.test.ts
+git diff --name-only -z --diff-filter=ACM | xargs -0 node node_modules/prettier/bin/prettier.cjs --check
+npm run docs:verify
+npm run lint:doc-refs
+git diff --check
+npm run build:main
+npm run build:cli
+```
+
+All commands in the verification block exited 0: **513 tests passed in 20
+files** (31.25 s), all three production TypeScript projects and all three native
+scenarios type-check, ESLint reports no errors/warnings, and Prettier passes all
+changed files. Documentation checks resolve 724 asserted paths and references
+across 39 docs. Main/preload and CLI builds pass; the existing payload-size
+guards still pass. `git diff --check` and the added-line forbidden-dash scan pass.
+
+Native acceptance remains unverified in this sandbox. The standard wrapper
+below exited 1 during the renderer build because Vite attempted to write its
+temporary config through shared `node_modules` outside the worktree. The runner
+loader alternative also exited 1 (`__dirname is not defined` in the existing
+Vite config). Neither build issue is a team scenario failure.
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts --max-failures=1 --output e2e-results/m3-fix6-native --reporter=line
+npm run build:renderer -- --configLoader runner
+node node_modules/@playwright/test/cli.js test --project=native e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts --max-failures=1 --output e2e-results/m3-fix6-native --reporter=line
+```
+
+The direct Playwright attempt used the main/preload development build and the
+existing renderer bundle. It also exited 1 before assertions: Electron failed
+to launch (SIGABRT; cleanup EPERM), **1 launch failure and 24 unrun**. Native
+artifacts are in `e2e-results/m3-fix6-native/`; validation logs are retained under
+`e2e-results/m3-fix6-validation/`. No real model invocation or commit was made.
+To verify all 25 scenarios on an unrestricted host:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts
+```
 
 ## Fix5 native follow-up: prompt reads and ledger audits
 

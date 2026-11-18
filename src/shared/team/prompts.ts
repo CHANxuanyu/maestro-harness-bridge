@@ -23,11 +23,11 @@ const tasks: Record<ReportTurnKind, string> = {
 		'Turn: recovery. The member failed to supply a report after its one repair. Organize the supplied last replies and observed workspace facts. You may provide recoveredJson as a JSON string of the original report only when every claim is supported by those replies; do not invent QA evidence or repeat any external action. Otherwise summarize what is missing for internal diagnosis. If this member has missed reports twice, propose its authorized substitute.',
 	wrap_up:
 		'Turn: wrap_up. The budget is at 80%. Give a concise wrap-up plan, prioritizing confirmed criteria. This is informational; do not relax standards or request more time without an owner decision.',
-	wait: 'Turn: wait. Read the attached external status. If the event is still normally running report waiting; unchanged polls are not failures. Report ready only when it ended, or problem when the observable external status indicates an error. Do not redo work.',
+	wait: 'Turn: wait. Read the attached external status. If the event is still normally running report waiting; unchanged external polls are not product failures. A PM report that merely repeats the same wait is an idle turn and gets one nudge, then diagnosis. Report ready only when it ended, or problem when the observable external status indicates an error. Do not redo work.',
 	position:
 		'Turn: position. Write your sealed claim, prose basis, and what evidence would change your mind. Evidence is optional: omit it or use [] when none is recorded. Cite only ids from citableEvidence; other references remain unverified basis text and never count as evidence. Do not read other positions, the ledger file, or team CLI during this sealed step. Dev estimates extraTurns and preservesDeadline for a proposed standard change.',
 	proposal:
-		'Turn: proposal. As topic owner, propose a resolution. The app supplies discussion.decider from the decision layer; do not set decider yourself. Positions remain sealed until responses. Give every participant an action or a concrete wait. Two evidenced objections require an experiment or compromise before a decision. An experiment is a small workspace check command with a basis and expected observation. Commitment changes and irreversible choices require owner options and wait for the owner card.',
+		'Turn: proposal. As topic owner, propose a resolution. The app supplies discussion.decider from the decision layer; do not set decider yourself. Positions remain sealed until responses. Give every participant an action or an external wait (CI, command, quota reset or deadline). Never wait for discussion responses, seat turns or checks the app dispatches; the app schedules those steps. Two evidenced objections require an experiment or compromise before a decision. An experiment is a small workspace check command with a basis and expected observation. Commitment changes and irreversible choices require owner options and wait for the owner card.',
 	response:
 		'Turn: response. Read only this topic arguments and proposal. Agree, reserve with a recorded reservation, or insist with an id from newEvidenceIds or a confirmedBaselineIds baselineViolation. Evidence is optional for agree or reserve. Unknown references remain unverified basis text. Unsupported insistence is recorded as a reservation for the lawful decider, not a new round. Do not use votes to override evidence.',
 	retro:
@@ -35,14 +35,14 @@ const tasks: Record<ReportTurnKind, string> = {
 	message:
 		'Turn: message. Address exactly the delivered message ids. Acknowledge notes with scope:false. For owner requirements set scope:true. If you are not PM, relay the requirement to PM; PM records additions in the exact owner wording as a criterion and work item without seeking permission. For changes or removal name change and criterionId; provide the complete replacement criterion unless removing it. Preserve the owner message as the reason. Report resolvedStandards only when the contradiction or missing judgement has actually been resolved. Do not implement or verify in this turn.',
 	topic:
-		'Turn: topic. Identify the concrete problem and affected participants, owner, decision layer, and recorded evidence. A decided question needs new evidence. Do not repeat old discussion wording as new evidence.',
+		'Turn: topic. Identify the concrete problem and affected participants, owner, decision layer, and prose basis. Evidence is optional. Only citableEvidence ids count as recorded evidence; unknown references remain unverified basis text. A decided question needs new evidence. Do not repeat old discussion wording as new evidence.',
 	brief:
 		'Turn: brief. Turn the idea into scope, explicit exclusions, and observable criteria. Give every criterion a proof method and how to prove it. Enumerate every required output location in locations, with label, target (workspace file or an already open app viewer URL), and kind file, preview or screenshot. Propose check commands; the app must dry-run them before owner confirmation. Set boundary:outside-workspace or external-write for any check or experiment crossing that boundary, including indirect effects inside scripts; workspace checks authorization does not cover these.',
 	challenge:
 		'Turn: challenge. Work independently; other seats cannot see this response yet. Do not implement. In round 1 challenge the full brief. In round 2 challenge only challengeRound.criteria, using its before/after diff; do not reopen unchanged criteria. Dev: identify unreasonable requirements and risks. QA: provide a plan with how and sample data for each required criterion still present; if a criterion cannot be verified, name it in an unverifiable objection.',
 	respond:
 		'Turn: respond. Answer each objection with accept, reject, or discuss and a reason. Return the complete revised brief. A PM revision allows at most one further challenge, only on changed criteria; remaining disagreements go to discuss or to askOwner on the baseline card, never a third challenge round. Request owner input only for a concrete boundary; put that request in askOwner, not prose. Before confirmation, put draft edits in brief, without duplicating them in standardChanges. If proposing a confirmed standard change, standardChanges is an array of {criterionId, change, reason, criterion}; change is add, tighten, relax, modify, or remove. Except for remove, criterion must be the COMPLETE replacement {id, text, proof, how, experience?, locations?}, with id equal to criterionId and proof app, qa, or pm. Preserve every required location. Example: "standardChanges":[{"criterionId":"A1","change":"tighten","reason":"Cover zero explicitly","criterion":{"id":"A1","text":"Accept zero and positive durations","proof":"app","how":"Run the duration checks including zero"}}]. For remove omit criterion. Optional authority fields are withinMeaning (string) and ownerMessageId (an actual pending message id). Implementation cost and deadline estimates come from dev positions.',
-	work: 'Turn: work. Implement the confirmed scope and assigned work in your worktree. done and claimsComplete are claims only; the app runs checks. waiting must identify a real app-observable follow-up, not an invented wait. If blocked on another member, include waiting.needs with those seats.',
+	work: 'Turn: work. Implement the confirmed scope and assigned work in your worktree. done and claimsComplete are claims only; the app runs checks. waiting must identify a real app-observable follow-up, not an invented wait. If blocked on another member, include waiting.needs with those seats; this requests app scheduling, not an external follow-up.',
 	qa_prep:
 		'Turn: qa_prep. Prepare independent tests and samples from the confirmed criteria. In tests, use workspace-relative paths starting with qa/, for example qa/boundary.test.cjs. The app can normalize ./qa/ paths or absolute paths inside your qa/ directory. A bare filename is accepted only when the app finds it unambiguously inside qa/. Unfinished developer changes are not input to this turn.',
 	verify:
@@ -93,6 +93,10 @@ function ledgerSlice(
 			deadline: state.config?.deadline,
 		},
 		workspace: state.seats[seat].binding?.workspace,
+		citableEvidence: teamEvidenceCatalog(state),
+		evidenceStatus: teamEvidence(state).length
+			? 'Only the listed ids count as recorded evidence. Other references remain unverified basis text.'
+			: 'There is no recorded evidence yet. A prose basis is valid; omit evidence or use [].',
 		messages: (kind === 'message' ? state.pendingMessages : [])
 			.filter(
 				(m) =>
@@ -113,10 +117,6 @@ function ledgerSlice(
 			...common,
 			brief: scopedBrief(criterionId ? [criterionId] : []),
 			messages: [],
-			citableEvidence: teamEvidenceCatalog(state),
-			evidenceStatus: teamEvidence(state).length
-				? 'Only the listed ids count as recorded evidence.'
-				: 'There is no recorded evidence yet. A prose basis is valid; omit evidence or use [].',
 			newEvidenceIds: kind === 'response' ? teamEvidence(state, discussion) : undefined,
 			confirmedBaselineIds: state.criteria.filter((c) => c.confirmed).map((c) => c.id),
 			discussion: discussion && {

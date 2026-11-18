@@ -21,6 +21,7 @@ import {
 	type Criterion,
 } from './types';
 import { teamReportSchema, type ReportSchema } from './schemas';
+import type { FollowUpCondition } from '../followUp';
 
 const markdown = new MarkdownIt({ html: false, linkify: false });
 
@@ -378,23 +379,42 @@ export function validateTeamReport(
 		report.messages = report.messages.map((m, i) =>
 			m.criterion ? { ...m, criterion: locations(m.criterion, `messages[${i}].criterion`) } : m
 		);
-	if (report.type === 'work' && report.waiting?.condition?.kind === 'ci') {
-		const condition = report.waiting.condition;
-		const workspace = state?.seats[seat].binding?.workspace;
+	const ciCondition = (
+		condition: FollowUpCondition | undefined,
+		target: SeatRole,
+		field: string
+	) => {
+		if (condition?.kind !== 'ci') return condition;
+		const workspace = state?.seats[target].binding?.workspace;
 		const relative = teamWorkspaceRelativePath(condition.cwd, workspace);
 		if (workspace && relative !== undefined) {
 			const cwd = relative ? joinPath(workspace, relative) : workspace;
 			if (cwd !== condition.cwd) {
 				note(
-					'waiting.condition.cwd',
+					`${field}.condition.cwd`,
 					condition.cwd,
 					cwd,
 					'Resolve the CI observation directory against this seat workspace.'
 				);
-				report.waiting = { ...report.waiting, condition: { ...condition, cwd } };
+				return { ...condition, cwd };
 			}
 		}
-	}
+		return condition;
+	};
+	if (report.type === 'work' && report.waiting?.condition)
+		report.waiting = {
+			...report.waiting,
+			condition: ciCondition(report.waiting.condition, seat, 'waiting'),
+		};
+	if (report.type === 'proposal')
+		report.actions = report.actions.map((action, index) =>
+			action.condition
+				? {
+						...action,
+						condition: ciCondition(action.condition, action.seat, `actions[${index}]`),
+					}
+				: action
+		);
 	if (report.type === 'verify') {
 		if (new Set(report.criteria.map((c) => c.id)).size !== report.criteria.length)
 			return fail('Verification must not repeat a criterion.');

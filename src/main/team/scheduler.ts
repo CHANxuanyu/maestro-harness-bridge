@@ -16,6 +16,7 @@ import {
 	teamRecoveryDecision,
 	sameTeamModel,
 	teamChallengeRound,
+	teamWaitRejection,
 } from '../../shared/team/policy';
 import { reduceLedger, teamEventForTransport } from '../../shared/team/ledger';
 import { buildTeamTurnPrompt } from '../../shared/team/prompts';
@@ -61,6 +62,7 @@ import { reportEvents, type TeamEventInput } from './report-events';
 export const TEAM_FAILURE_COOLDOWN_MS = 30 * DURATION_MS.second;
 /** PRD 6.8.1: after a normal 20 minute wait, keep following and look again every 10 minutes. */
 export const TEAM_WAIT_RECHECK_MS = 10 * DURATION_MS.minute;
+export const TEAM_STALL_MS = 10 * DURATION_MS.minute;
 export const TEAM_FALLBACK_MS = 30 * DURATION_MS.second;
 type Dispatch = TeamEvent<'turn_dispatched'>;
 type RecordData = { config: TeamConfig; events: LedgerEvent[] };
@@ -115,7 +117,17 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 	const recoveryAt = (events: LedgerEvent[], seat: SeatRole) =>
 		events.findLast(
 			(event) =>
-				event.kind === 'card_answered' || (event.kind === 'member_recovered' && event.seat === seat)
+				event.kind === 'card_answered' ||
+				(event.kind === 'member_recovered' && event.seat === seat) ||
+				(event.kind === 'seat_bound' &&
+					event.seat === seat &&
+					!event.nativeSessionId &&
+					['restored', 'temporary', 'substitute'].includes(event.reason ?? '')) ||
+				(event.kind === 'model_recovered' &&
+					events.some(
+						(e) =>
+							e.kind === 'quota_exhausted' && e.id === event.unavailabilityId && e.seat === seat
+					))
 		)?.seq ?? 0;
 	const authorized = (state: TeamState, action: keyof TeamAuthorizations) =>
 		state.config!.authorizations[action] ||
@@ -168,6 +180,12 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		id: string,
 		wait: Omit<TeamEvent<'follow_up_registered'>, 'seq' | 'id' | 'actor' | 'kind'>
 	) => {
+		const rejection =
+			!wait.unavailabilityId && !wait.faultId && teamWaitRejection(wait, await stateFor(id));
+		if (rejection) {
+			await cancelAppWait(id, wait.followUpId, wait.waitFor, rejection);
+			return false;
+		}
 		if (!(await deps.followUps.list()).some((f) => f.id === wait.followUpId)) {
 			const registration = {
 				id: wait.followUpId,
@@ -200,6 +218,25 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			actor: 'app',
 			...wait,
 			id: `${wait.followUpId}:registered`,
+		});
+		return true;
+	};
+	const cancelAppWait = async (id: string, followUpId: string, target: string, reason: string) => {
+		await deps.followUps.cancel(followUpId);
+		await append(id, {
+			kind: 'wait_canceled',
+			actor: 'app',
+			followUpId,
+			reason,
+			id: `${followUpId}:canceled`,
+		});
+		await append(id, {
+			kind: 'app_observation',
+			actor: 'app',
+			category: 'app-owned-wait',
+			key: followUpId,
+			detail: `Refused wait for ${target}: ${reason}`,
+			id: `${followUpId}:observation`,
 		});
 	};
 	const noteUnavailable = async (
@@ -235,6 +272,18 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		if (teamModelUnavailable(state, model, source)) return false;
 		const sample = deps.quota?.(state.config!, source, model);
 		if (sample?.exhausted) {
+			const events = (await load(id)).events;
+			const recovered = events.some((event) => {
+				if (event.kind !== 'model_recovered' || event.at < sample.sampledAt) return false;
+				const entry = events.find(
+					(e): e is TeamEvent<'quota_exhausted'> =>
+						e.kind === 'quota_exhausted' && e.id === event.unavailabilityId
+				);
+				return entry && teamModelUnavailable({ ...state, unavailable: [entry] }, model, source);
+			});
+			// A cached exhausted sample cannot undo a later reset or confirmed login.
+			if (recovered || (!sample.login && sample.resetsAt !== undefined && now() >= sample.resetsAt))
+				return true;
 			await noteUnavailable(
 				id,
 				state,
@@ -732,9 +781,20 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				demos: state.demos.length,
 				retros: state.retros.length,
 			});
+		const wait = data.events.find(
+			(e): e is TeamEvent<'follow_up_registered'> =>
+				e.kind === 'follow_up_registered' && e.followUpId === dispatch.followUpId
+		);
+		// A PM poll that merely repeats waiting is idle, not a failed product
+		// attempt. Dev/QA monitoring an actual external operation remains normal.
 		const normalWait =
-			finished.report.type === 'wait' ||
-			(finished.report.type === 'work' && !!finished.report.waiting);
+			(finished.report.type === 'wait' &&
+				!!wait &&
+				!teamWaitRejection(wait, before) &&
+				(dispatch.seat !== 'pm' || finished.report.status !== 'waiting')) ||
+			(finished.report.type === 'work' &&
+				!!finished.report.waiting &&
+				!teamWaitRejection(finished.report.waiting, before));
 		const outputClaim =
 			(finished.report.type === 'qa_prep' && finished.report.tests.length > 0) ||
 			(finished.report.type === 'work' && finished.report.claimsComplete) ||
@@ -890,6 +950,10 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				: undefined;
 			if (
 				recover ||
+				dispatch.resumedFrom ||
+				(dispatch.binding?.reason &&
+					dispatch.binding.reason !== 'initial' &&
+					!dispatch.binding.nativeSessionId) ||
 				dispatch.recoveryFor ||
 				previous ||
 				dispatch.repairOf ||
@@ -1012,6 +1076,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				| 'recoveryFor'
 				| 'repairOf'
 				| 'retryOf'
+				| 'resumedFrom'
 				| 'mode'
 				| 'problemId'
 				| 'fingerprint'
@@ -1033,6 +1098,9 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			return;
 		if (!(await seatAvailable(id, state, seat))) return;
 		if (
+			!options.discussionId &&
+			!options.problemId &&
+			turn !== 'message' &&
 			state.followUps.some(
 				(f) =>
 					f.seat === seat && !f.followUpId.startsWith('job:') && !f.unavailabilityId && !f.faultId
@@ -1074,11 +1142,12 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				original.report ||
 				(options.retryOf && original.dispatched?.retryOf) ||
 				original.dispatched?.repairOf ||
-				state.turns.some(
-					(attempt) =>
-						attempt.dispatched?.retryOf === recoveryOf ||
-						attempt.dispatched?.repairOf === recoveryOf
-				)
+				(!options.resumedFrom &&
+					state.turns.some(
+						(attempt) =>
+							attempt.dispatched?.retryOf === recoveryOf ||
+							attempt.dispatched?.repairOf === recoveryOf
+					))
 			)
 				return;
 			if (options.retryOf) {
@@ -1103,7 +1172,16 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				}
 			}
 		} else if (failures.length) {
+			const stallDiagnosis =
+				turn === 'message' &&
+				options.mode === 'diagnose' &&
+				data.events.some(
+					(e) =>
+						e.kind === 'app_observation' && e.category === 'stall' && e.key === options.problemId
+				) &&
+				!state.turns.some((t) => t.dispatched?.problemId === options.problemId);
 			if (
+				!stallDiagnosis &&
 				failures.some(
 					(attempt) => (attempt.dispatched!.expectedTurn ?? attempt.dispatched!.turn) === turn
 				)
@@ -1125,7 +1203,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 							event.kind === 'check_run' ||
 							event.kind === 'issue_opened')
 				);
-			if (!changedBasis) return;
+			if (!changedBasis && !stallDiagnosis) return;
 		}
 		const dispatchId = randomUUID();
 		const input: Dispatch = {
@@ -1681,24 +1759,21 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		for (const [index, action] of actions.entries()) {
 			const itemId = `${key}:action:${index}`;
 			if (action.waitFor) {
-				const untilMs = now() + FOLLOW_UP_WAIT_MS;
-				if (!(await load(id)).events.some((e) => e.id === itemId)) {
-					await deps.followUps.register({
-						id: itemId,
-						target: { kind: 'team', teamId: id, seat: action.seat },
-						reason: action.action,
-						condition: { kind: 'time', at: untilMs },
-						deadline: untilMs,
-					});
-					await append(id, {
-						kind: 'follow_up_registered',
-						actor: 'app',
+				const at = now();
+				if (
+					!(await load(id)).events.some(
+						(e) =>
+							e.id === `${itemId}:registered` || e.id === `${itemId}:canceled` || e.id === itemId
+					)
+				) {
+					await registerWait(id, {
+						at,
 						followUpId: itemId,
 						seat: action.seat,
 						reason: action.action,
 						waitFor: action.waitFor,
-						untilMs,
-						id: itemId,
+						condition: action.condition,
+						untilMs: at + FOLLOW_UP_WAIT_MS,
 					});
 				}
 			} else
@@ -2013,7 +2088,8 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				!wait ||
 				wait.unavailabilityId ||
 				/^(job:|job-retry:)/.test(wait.followUpId) ||
-				data.events.some((e) => e.kind === 'wait_handled' && e.followUpId === wait.followUpId)
+				data.events.some((e) => e.kind === 'wait_handled' && e.followUpId === wait.followUpId) ||
+				data.events.some((e) => e.kind === 'wait_canceled' && e.followUpId === wait.followUpId)
 			)
 				continue;
 			if (wait.faultId) {
@@ -2379,7 +2455,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				configSource: seat,
 			});
 	};
-	const evaluate = async (id: string) => {
+	const advance = async (id: string) => {
 		if (!running) return;
 		let data = await load(id);
 		for (const event of data.events)
@@ -2420,6 +2496,25 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		await recoverAvailability(id, data);
 		data = await load(id);
 		const recoveredState = reduceLedger(data.events);
+		// Also reconcile legacy/fired waits: they may otherwise launch another
+		// wait turn after restart, even though the condition is our own next step.
+		for (const wait of data.events.filter(
+			(e): e is TeamEvent<'follow_up_registered'> => e.kind === 'follow_up_registered'
+		)) {
+			if (
+				wait.unavailabilityId ||
+				wait.faultId ||
+				/^(job:|job-retry:)/.test(wait.followUpId) ||
+				data.events.some(
+					(e) =>
+						(e.kind === 'wait_handled' || e.kind === 'wait_canceled') &&
+						e.followUpId === wait.followUpId
+				)
+			)
+				continue;
+			const rejection = teamWaitRejection(wait, recoveredState);
+			if (rejection) await cancelAppWait(id, wait.followUpId, wait.waitFor, rejection);
+		}
 		for (const wait of recoveredState.followUps) {
 			if (!wait.faultId || recoveredState.seats[wait.seat].faultActive) continue;
 			await deps.followUps.cancel(wait.followUpId);
@@ -2437,7 +2532,13 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			if (
 				discussion.decision!.actions.some(
 					(_, index) =>
-						!data.events.some((e) => e.id === `${discussion.id}:conclusion:action:${index}`)
+						!data.events.some((e) =>
+							[
+								`${discussion.id}:conclusion:action:${index}`,
+								`${discussion.id}:conclusion:action:${index}:registered`,
+								`${discussion.id}:conclusion:action:${index}:canceled`,
+							].includes(e.id)
+						)
 				)
 			)
 				await concludeDiscussion(
@@ -2622,10 +2723,48 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			)
 				return;
 		}
-		// Explicit recovery or an owner answer can restart an exhausted assignment.
-		// Do not revive older failures after a later successful turn (including repair).
+		// Availability recovery resumes every held assignment, even if a later
+		// wait/message turn ran. A durable link prevents replay after restart.
 		for (const seat of SEAT_ROLES) {
-			const lastTurn = state.turns.findLast((turn) => turn.seat === seat);
+			const latest = state.turns.findLast((turn) => turn.seat === seat);
+			const lastTurn = state.turns.find((turn) => {
+				const previous = turn.dispatched;
+				if (
+					!previous ||
+					turn.seat !== seat ||
+					!turn.finished ||
+					turn.report ||
+					turn.finished.report ||
+					turn.finished.canceled ||
+					turn.finished.seq >= recoveryAt(data.events, seat)
+				)
+					return false;
+				if (
+					turn !== latest &&
+					!['model-unavailable', 'login-expired'].includes(turn.finished.failureKind ?? '')
+				)
+					return false;
+				if (
+					previous.discussionId &&
+					state.discussions.find((d) => d.id === previous.discussionId)?.decision
+				)
+					return false;
+				return !state.turns.some(
+					(next) =>
+						next.dispatched &&
+						next.dispatched.seq > previous.seq &&
+						next.seat === seat &&
+						(next.dispatched.resumedFrom === turn.dispatchId ||
+							(next.report &&
+								next.report.type !== 'topic' &&
+								(next.dispatched.expectedTurn ?? next.dispatched.turn) ===
+									(previous.expectedTurn ?? previous.turn) &&
+								next.dispatched.discussionId === previous.discussionId &&
+								next.dispatched.round === previous.round &&
+								next.dispatched.problemId === previous.problemId &&
+								next.dispatched.followUpId === previous.followUpId))
+				);
+			});
 			if (
 				lastTurn?.dispatched &&
 				lastTurn.finished &&
@@ -2642,6 +2781,9 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						seat,
 						(previous.expectedTurn ?? previous.turn) as ReportTurnKind,
 						{
+							resumedFrom: previous.dispatchId,
+							repairOf: previous.repairOf,
+							recoveryFor: previous.recoveryFor,
 							mode: previous.mode,
 							problemId: previous.problemId,
 							fingerprint: previous.fingerprint,
@@ -2650,7 +2792,12 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 							round: previous.round,
 							messageIds: previous.messageIds,
 							followUpId: previous.followUpId,
-							note: 'The owner answered or the seat recovered. Inspect existing results before resuming the failed assignment.',
+							note: [
+								previous.note,
+								'The owner answered or the seat recovered. Inspect existing results before resuming the failed assignment.',
+							]
+								.filter(Boolean)
+								.join('\n'),
 						}
 					)
 				)
@@ -2948,7 +3095,9 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					const followUpId = `${work.dispatchId}:follow-up`;
 					if (
 						!data.events.some(
-							(e) => e.kind === 'follow_up_registered' && e.followUpId === followUpId
+							(e) =>
+								(e.kind === 'follow_up_registered' || e.kind === 'wait_canceled') &&
+								e.followUpId === followUpId
 						)
 					) {
 						const at = now();
@@ -2958,6 +3107,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 							seat: 'dev',
 							reason: work.report.waiting.reason,
 							waitFor: work.report.waiting.waitFor,
+							needs: work.report.waiting.needs,
 							condition: work.report.waiting.condition,
 							untilMs: at + FOLLOW_UP_WAIT_MS,
 							poll: 0,
@@ -3098,6 +3248,95 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			}
 		}
 		if (!active && !state.followUps.length) await wakePm();
+	};
+	const evaluate = async (id: string) => {
+		await advance(id);
+		let data = await load(id);
+		let state = reduceLedger(data.events);
+		const canStall = (value: TeamState) =>
+			running &&
+			!value.paused &&
+			!value.terminal &&
+			!value.openCards.length &&
+			!jobs.has(id) &&
+			!SEAT_ROLES.some((seat) => value.seats[seat].activeDispatchIds.length) &&
+			!value.followUps.some((wait) => {
+				if (wait.faultId || /^(job:|job-retry:)/.test(wait.followUpId)) return false;
+				if (wait.unavailabilityId) {
+					const health = value.seats[wait.seat];
+					return teamModelUnavailable(
+						value,
+						health.model ?? value.config!.seats[wait.seat],
+						health.binding?.configSource ?? wait.seat
+					);
+				}
+				return !teamWaitRejection(wait, value);
+			});
+		if (!canStall(state)) return;
+		// Bookkeeping and repeated wait reports are not progress facts. In
+		// particular, a new poll id cannot reset the ten-minute observation clock.
+		const factKinds: LedgerEvent['kind'][] = [
+			'team_created',
+			'resumed',
+			'phase_changed',
+			'brief_published',
+			'baseline_confirmed',
+			'baseline_edited',
+			'baseline_returned',
+			'standard_change',
+			'work_item',
+			'check_run',
+			'issue_opened',
+			'issue_fixed',
+			'issue_verified',
+			'criterion_evidence',
+			'discussion_opened',
+			'position',
+			'proposal',
+			'response',
+			'discussion_closed',
+			'output_captured',
+			'review',
+			'retro',
+			'demo',
+			'owner_message',
+			'message_handled',
+			'model_recovered',
+			'seat_bound',
+		];
+		const fact = data.events.findLast((e) => factKinds.includes(e.kind));
+		if (!fact || now() - fact.at < TEAM_STALL_MS) return;
+		const key = `stall:${fact.id}`;
+		if (state.appObservations.some((o) => o.key === key)) return;
+		const discussion = state.discussions.find((d) => d.opened && !d.decision);
+		const detail = discussion
+			? `Discussion ${discussion.id} (${discussion.opened!.topic}): positions ${discussion.positions.length}/${discussion.opened!.participants.length}, proposals ${discussion.proposals.length}, responses ${discussion.responses.length}.`
+			: `Phase ${state.phase}; unfinished work: ${
+					state.workItems
+						.filter((w) => w.state !== 'checked')
+						.map((w) => w.title)
+						.join('; ') || 'no runnable assignment found'
+				}.`;
+		await append(id, {
+			kind: 'app_observation',
+			actor: 'app',
+			category: 'stall',
+			key,
+			detail: `No new fact for ten minutes. ${detail}`,
+			id: key,
+		});
+		// Retry the normal ledger-derived decision first. This never grants an
+		// extra retry or crosses permissions, quota or the dispatch budget guard.
+		await advance(id);
+		data = await load(id);
+		state = reduceLedger(data.events);
+		if (!canStall(state) || data.events.some((e) => e.seq > fact.seq && factKinds.includes(e.kind)))
+			return;
+		await dispatch(id, state, 'pm', 'message', {
+			mode: 'diagnose',
+			problemId: key,
+			note: `App stall diagnostic: ${detail} The scheduler rechecked its next step and could not dispatch it. Diagnose the stuck point from recorded facts and identify the next in-authority action. Do not register a wait for a discussion, seat turn or app check.`,
+		});
 	};
 	function wake(id: string): Promise<void> {
 		const pending = queued.get(id);

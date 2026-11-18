@@ -66,7 +66,8 @@ export function reportEvents(
 			layer: value.layer ?? 'product',
 			reversible: value.reversible ?? true,
 			question: value.question ?? value.topic,
-			evidence: value.evidence ?? [],
+			evidence: value.evidence?.filter((e) => teamEvidence(state).includes(e)) ?? [],
+			unverifiedBasis: value.evidence?.filter((e) => !teamEvidence(state).includes(e)) ?? [],
 			reopens: value.reopens,
 			change,
 		});

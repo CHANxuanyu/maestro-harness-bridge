@@ -516,7 +516,17 @@ Codex 的标准能力；咨询调用 `projectConversationFields(..., false)` 保
 `foldTurnActivity()`, `summarizeTurnActivity()` and `turnActivityOutcome()` in
 `src/renderer/components/TerminalOutput/utils/foldTurnActivity.ts` own the new
 shell's running and completed activity projection. Keep classic callers opted
-out. Count only top-level tool calls, use `latestAgentTaskList()` for reported
+out. `createTurnActivityFolder()` in the same module caches each turn by its
+user entry, boundary length, entry identities and presentation state. A streamed
+chunk rebuilds only the changed turn; historical edits and late completion or
+delivery updates invalidate their own turn. Pair it with
+`createAiResponseCollapse()` in `TerminalOutput/utils/collapseAiResponseLogs.ts`
+so unchanged merged replies retain their identity before folding. Both caches
+belong to the mounted conversation and use weak keys; never cache by ids or
+first/last entries alone. Finished activity arrays, plans and delivery objects
+stay stable for the row memos. The flat list still checks entry identities to
+detect corrections; this is not an append-only transcript assumption.
+Count only top-level tool calls, use `latestAgentTaskList()` for reported
 plans, and use `isProgressNoteEntry()` for public narration. A failed step does
 not determine the turn outcome. `toolExitCode()` in `renderer/utils/logEntries.ts`
 reads explicit provider codes without inventing one for generic failures.

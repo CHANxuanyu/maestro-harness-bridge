@@ -1,5 +1,78 @@
 # 分支工作记录
 
+## 2026-11-18: B2-perf streaming turn projection (PRD 4.4)
+
+Tested artifact: `bd575139d` plus this worktree's uncommitted changes on
+`codex/round2-b2-stream-perf`. No build, release, commit or native scenario changes.
+
+The reported same-machine, interleaved six-round comparison was frozen
+`79bd2ecac` versus B1/B2 mainline: stream key-delay p95 median 83.4 -> 88.3 ms,
+next-frame p95 86.3 -> 91.4 ms, renderer script 872 -> 973 ms, long tasks 0 -> 0.
+The recorded PRD 4.4 reference remains 85.7 ms (2026-11-12, Apple M4,
+`docs/perf-renderer.md`). Those are the user's Electron measurements, not this
+sandbox's results.
+
+Root cause: every new logs array rebuilt all finished turn folds, including
+outcome checks, historical write attribution, delivery summaries and plan lookup.
+`collapseAiResponseLogs()` also recreated unchanged response objects, defeating
+an entry-identity cache. Existing activity redraw tests missed these derivations
+because they happen before React's memo comparator.
+
+- The new jsdom regression fully backfills 2,000 finished turns (7,000 raw entries,
+  including both single-entry and merged replies), then streams 15 answer chunks.
+  Before the fix it fails with 30,000 `collectTurnWrites()` calls over 90,000 input
+  entries and 30,000 `latestAgentTaskList()` calls over 60,000 input entries.
+  Per chunk: 2,000 delivery scans / 6,000 entries and 2,000 plan scans / 4,000 entries.
+  After the fix all four counters are zero. These are deterministic call/input
+  counts, not wall-clock latency claims.
+- `createAiResponseCollapse()` preserves unchanged response identities;
+  `createTurnActivityFolder()` reuses finished projections keyed by the user entry,
+  boundary length, entry identities and presentation state. Both caches belong to
+  the mounted conversation and use weak keys. Historical corrections invalidate
+  their own turn. Stable activity arrays, delivery objects and plans keep the row
+  memos cheap; the comparator has an entry-array identity fast path. The running
+  answer also retains the activity array when tools and notes have not changed.
+- The existing 300-event, 100 Hz batching test now also requires zero repeated
+  delivery/plan scans in the new shell. It still passes its 15 store updates,
+  independent composer typing and zero activity-bar redraw assertions. The
+  elapsed counter remains in its existing child component.
+- Added cache equivalence and invalidation coverage for middle-entry corrections,
+  late completion/delivery, backfill, truncation, inserted/deleted boundaries,
+  reordered turns, empty history, presentation toggles and running/finished state.
+  Classic rendering continues through the uncached fold.
+
+Validation:
+
+```sh
+# Before: 1 failed, 6 skipped; after: 1 passed, 6 skipped.
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx -t 'does not refold'
+# 2 files, 25 passed (31.92 s).
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx src/__tests__/renderer/components/TerminalOutput/foldTurnActivity.test.ts
+# 48 files, 959 passed, 1 skipped (37.03 s).
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput src/__tests__/renderer/components/TerminalOutput.test.tsx src/__tests__/renderer/hooks/agent src/__tests__/renderer/utils/agentTaskList.test.ts src/__tests__/renderer/utils/logEntries.test.ts src/__tests__/renderer/utils/transcriptNativeConversion.test.ts src/__tests__/shared/gitChangeTurns.test.ts
+# 2 files, 20 passed (3.62 s), including synthetic provider delivery fixtures.
+npx vitest run --configLoader runner src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts
+# Each exits 0.
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+# Both exit 0, no warnings or errors.
+npx eslint --no-ignore src/renderer/components/TerminalOutput/TerminalOutput.tsx src/renderer/components/TerminalOutput/components/TurnActivityFold.tsx src/renderer/components/TerminalOutput/utils/collapseAiResponseLogs.ts src/renderer/components/TerminalOutput/utils/foldTurnActivity.ts src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx src/__tests__/renderer/components/TerminalOutput/foldTurnActivity.test.ts
+npx eslint -c eslint.dashes.config.mjs src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx src/__tests__/renderer/components/TerminalOutput/foldTurnActivity.test.ts
+# All nine changed files pass formatting; diff check exits 0.
+npx prettier --check src/renderer/components/TerminalOutput/TerminalOutput.tsx src/renderer/components/TerminalOutput/components/TurnActivityFold.tsx src/renderer/components/TerminalOutput/utils/collapseAiResponseLogs.ts src/renderer/components/TerminalOutput/utils/foldTurnActivity.ts src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx src/__tests__/renderer/components/TerminalOutput/foldTurnActivity.test.ts docs/agent-guides/CANONICAL-UTILITIES.md docs/worklog.md CHANGELOG.md
+git diff --check
+```
+
+Remaining acceptance: rerun the same Electron `stream` stage, frozen-before and
+updated-after builds interleaved on the same Mac outside the sandbox. This change
+removes measured repeated derivation work; it does not establish a new p95 result
+or claim the 85.7 ms gate has passed. Native Electron scenarios were not rerun here.
+The flat projection still traverses references to detect arbitrary historical
+corrections; it does not make the entire streaming render constant-time.
+
+Electron 对比（本机 Apple M4，`e2e/perf-renderer.spec.ts` 的 stream 阶段，改动前为冻结构建 `79bd2ecac`，同轮交替）：修复前 6 轮，渲染脚本时间中位数改动后 973 毫秒、改动前 872 毫秒（多 101 毫秒）；修复后合并 12 轮，改动后 861.5、改动前 837.5（多 24 毫秒，约 3%）。按键等待 p95 在机器负载约 3 时单样本 29 到 170 毫秒，噪声大于差异；修复后同轮合并中位数改动后 96.6、改动前 129.7，不劣于改动前。与 2026-11-12 的 85.7 毫秒记录做绝对比较需要空闲机器复测，尚未完成。原生场景 `native-activity-bar`、`native-stop-resume`、`native-subtasks`、`native-new-shell-ssh`、`native-sidebar-titles`、`native-model-picker` 共 11 项通过。
+
 ## 2026-11-18：B2 第五次回归跟进：晚到的回合交付
 
 验证对象为 `229aee9a4` 加本 worktree 未提交修改，不是发行包。用户在沙箱外重跑八套原生场景得到 35 passed、2 failed；此前已有场景全部通过，剩余两项均为 B2 的文件交付条。

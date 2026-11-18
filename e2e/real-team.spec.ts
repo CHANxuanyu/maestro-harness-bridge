@@ -86,6 +86,20 @@ test('help is successful, documents both commands, and matches the captured outp
 };
 
 /** Only test policy lives here; ledger projection, report validation and scheduling stay in product. */
+/**
+ * Seat vendors are configurable so long runs can keep most turns off the owner's
+ * Claude 5-hour pool. Both vendors must still hold at least one seat (PRD V-1).
+ */
+function seatModel(
+	tools: Record<string, { model?: string }>,
+	role: 'PM' | 'DEV' | 'QA',
+	fallback: 'claude-code' | 'codex'
+) {
+	const tool =
+		(process.env[`MAESTRO_E2E_TEAM_${role}`] as 'claude-code' | 'codex' | undefined) ?? fallback;
+	return `${tool}:${tool === 'codex' ? tools.codex?.model : tools.claude?.model}`;
+}
+
 async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 	const medium = size === 'medium';
 	const turnBudget = medium ? 40 : 20;
@@ -336,11 +350,11 @@ async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 			'--idea',
 			idea,
 			'--pm',
-			`claude-code:${native.tools.claude.model}`,
+			seatModel(native.tools, 'PM', 'claude-code'),
 			'--dev',
-			`codex:${native.tools.codex.model}`,
+			seatModel(native.tools, 'DEV', 'codex'),
 			'--qa',
-			`claude-code:${native.tools.claude.model}`,
+			seatModel(native.tools, 'QA', 'claude-code'),
 			'--turns',
 			String(turnBudget),
 			'--allow',

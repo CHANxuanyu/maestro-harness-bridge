@@ -1095,6 +1095,9 @@ describe('new shell login failure card', () => {
 			expect(screen.getByTestId('activity-collapsed')).toHaveTextContent(
 				uiLanguage === 'en' ? 'Sign in required' : '需要重新登录'
 			);
+			expect(screen.getByTestId('activity-collapsed')).toHaveAccessibleDescription(
+				uiLanguage === 'en' ? /Sign in required/ : /需要重新登录/
+			);
 			expect(
 				screen.getByText(
 					uiLanguage === 'en'
@@ -1103,6 +1106,9 @@ describe('new shell login failure card', () => {
 				)
 			).toBeInTheDocument();
 			expect(screen.queryByText(errorLog.text)).not.toBeInTheDocument();
+			expect(
+				screen.getAllByRole('button', { name: uiLanguage === 'en' ? /Sign in/ : /重新登录/ })
+			).toHaveLength(1);
 			const signIn = screen.getByRole('button', {
 				name: uiLanguage === 'en' ? 'Sign in' : '重新登录',
 			});

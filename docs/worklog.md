@@ -1,5 +1,45 @@
 # 分支工作记录
 
+## 2026-11-18：B2 第五次回归跟进：晚到的回合交付
+
+验证对象为 `229aee9a4` 加本 worktree 未提交修改，不是发行包。用户在沙箱外重跑八套原生场景得到 35 passed、2 failed；此前已有场景全部通过，剩余两项均为 B2 的文件交付条。
+
+- 实际 Claude/Codex CLI 夹具经 stdout handler 复现：首个输出早于 Git 基线返回，旧 guard 丢弃基线，因此没有产生交付事件，不是 renderer token 匹配失效。修复前两项均失败。
+- 初始化输出不再取消基线；缓存在途的 Write/add-only 调用，并用现有只读 Git helper 确认所有目标仍不存在后才接纳基线。已有文件、编辑、命令或已完成工具与采样重叠时继续舍弃不确定结果，保持按回合统计的含义。SSH 探测仍走远程通道，超时及非阻塞退出策略不变。
+- Codex 原先忽略 file_change 开始事件；现经同一 parser/工具通道只向新 shell 提供开始状态，以便识别采样中的写入。classic 仍只接收原有完成事件，新增双路径测试验证。
+- 两种 provider 的补测覆盖完成和排队结束后晚到的交付，只附到原回合；未知 token、下一回合及其他 tab 不受影响。实际 persistence hook 保存后重新加载日志，交付条仍显示 `Changed 2 files · +3 -0`。
+
+最终回归：89 files passed，2112 tests passed、1 skipped（44.61 秒）。新增真实 CLI 顺序复现 2/2 通过；晚到、队列隔离、持久化恢复用例两种 provider 均通过；Codex 开始事件补测先得到 1 failed、1 passed，修复后 classic/newShell 均通过。四套 TypeScript 均退出 0。ESLint 0 errors、2 warnings，均为 HEAD 已有的 StdoutHandler 测试局部变量未使用；测试 dash lint、变更文件 Prettier 和 diff 检查通过。原生 Electron 场景和截图不能在沙箱验证，仍需外部执行 `node scripts/native-e2e.mjs e2e/native-activity-bar.spec.ts`。没有提交。
+
+本次验证命令：
+
+```sh
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput src/__tests__/renderer/hooks/agent src/__tests__/renderer/hooks/utils/useDebouncedPersistence.test.ts src/__tests__/renderer/utils/agentTaskList.test.ts src/__tests__/shared/gitChangeTurns.test.ts src/__tests__/main/git src/main/process-listeners/__tests__ src/__tests__/main/preload/process/core.test.ts src/__tests__/main/ipc/handlers/process.test.ts src/__tests__/main/process-manager src/__tests__/main/parsers/codex-output-parser.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.activity-bar.json --noEmit
+npx eslint --no-ignore src/main/git-changes.ts src/main/process-listeners/forwarding-listeners.ts src/main/parsers/agent-output-parser.ts src/main/parsers/codex-output-parser.ts src/main/process-manager/handlers/StdoutHandler.ts src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx
+npx eslint -c eslint.dashes.config.mjs src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx
+npx prettier --check src/main/git-changes.ts src/main/process-listeners/forwarding-listeners.ts src/main/parsers/agent-output-parser.ts src/main/parsers/codex-output-parser.ts src/main/process-manager/handlers/StdoutHandler.ts src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx docs/agent-guides/CANONICAL-UTILITIES.md docs/worklog.md
+git diff --check
+```
+
+## 2026-11-18：B2 第四次回归跟进（PR #94）
+
+验证对象为 `229aee9a4` 加本 worktree 未提交修改，不是发行包。读取该 head 的 CI job
+`134476406942`，日志实际列出 7 failed、1 skipped、174 passed；用户提到的其余两项未在该次日志中出现。
+
+- SSH 和 worktree 排队场景的夹具先发回答，再等测试释放退出门。B2 把最新回答也折进活动条，测试看不到回答而不能放行。现在回答立即显示，工具和过程说明仍折叠。
+- Git 交付统计不再阻塞 spawn 或 process:exit。基线和结果各用现有 20 秒只读 Git 总时限；输出开始时尚未就绪的基线丢弃，下一轮开始时丢弃上一轮未完成的测量。SSH 全程走远程 helper。退出立即结算、排队继续，晚到结果通过 token 写回原回合；失败时不显示文件交付项。
+- 登录摘要按钮的可访问名称原来包含“重新登录”，与真正的登录卡按钮重复匹配。摘要现在用已有的展开/收起活动名称，说明保留，登录卡仍是唯一登录操作。
+- Stop 原生用例只按 PRD D1 把运行工具行改成活动条状态断言；重启、历史保留和继续对话断言不变。CLI Tasks 快照与面板复用同一标题和说明，严格逐字比较两行。
+- 项目工具配置的 CI 失败发生在 update-agent 后立即 show agent，读到旧路径和 token 模式，不是回合卡住。显式保存与先前 autosave 竞争；更新内存后复用持久化 flush，旧写入结束并落盘最新配置才回复 CLI。真实 persistence hook 测试覆盖此顺序。
+- 修正此前误把最终回答藏起来的两条单测；未读始终精确为 3，阅读锚点不动，输入与 100 Hz 批次独立。回答流触发活动条重绘次数从 1 收紧为 0。
+
+修复前新增的回答可见性和配置持久化用例：2 failed、18 passed。TerminalOutput 整目录 12 文件、471 passed、1 skipped；capture/agent hooks/CLI parity/persistence 等定向回归 49 文件、982 passed；登录可访问名称与摘要补测 2 文件、82 passed。lint、main、CLI、E2E 四套 TypeScript 检查通过；变更文件 Prettier、diff 和禁用字符检查通过。ESLint 0 errors、6 warnings，均为 HEAD 已有的测试局部变量未使用。完整组件、hooks 加定向主进程回归：1024 files passed、1 skipped，22776 tests passed、86 skipped（408.21 秒）；控制台出现的 mock/错误边界异常均为被测试处理的输出，没有失败。
+原生六套场景发现 33 项；沙箱 Electron 首次启动失败，32 项未运行。默认 Vite 配置加载另被外部链接依赖目录写入权限拦住，改用 runner 并提供配置所需的根目录后 renderer/web-desktop 构建通过；main/preload 和 CLI 构建也通过。没有原生截图或 Linux 重跑结果，仍需沙箱外重跑六套场景及 activity-bar 场景。没有提交。
+
 ## 2026-11-17：B2 活动条、交付条和任务页如实显示（第二轮 B2-1 到 B2-7）
 
 新界面运行中的回合显示固定两行活动条（计数、当前过程说明、展开明细），结束后折叠成一行摘要；只有以错误结束的回合标红。回合末尾的交付条按回合边界和写入记录统计文件增删，可打开按该回合筛选的改动面板；没有计划来源时任务页说明原因，不显示 0/0。

@@ -346,6 +346,8 @@ export interface LogEntry {
 		timestamp: number;
 		reason?: string;
 		delivery?: import('../../shared/gitChangeTurns').TurnDelivery;
+		/** Correlates late delivery with this completed turn, never the active turn. */
+		deliveryToken?: string;
 	};
 	// How this turn was captured. 'structured' (default) is the normal JSON-stream
 	// pipeline from `claude --print`; 'text-stream' marks entries captured during

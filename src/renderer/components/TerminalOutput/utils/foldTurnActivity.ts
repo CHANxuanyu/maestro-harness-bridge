@@ -111,23 +111,22 @@ export function foldTurnActivity(
 			const running = isLast && keepLastTurnOpen;
 			const status = running ? 'running' : turnActivityOutcome(turn, user);
 			const entries = turn.filter(
-				(log, index) =>
-					isTurnActivityEntry(log) || (isReplyEntry(log) && (running || index !== finalReply))
+				(log, index) => isTurnActivityEntry(log) || (isReplyEntry(log) && index !== finalReply)
 			);
 			const footer =
 				!running && user
 					? {
 							turnId: user.nativeTranscript?.messageId ?? user.id,
-							delivery:
-								user.turnCompletion?.delivery ??
-								(() => {
-									const writes = collectTurnWrites([user, ...turn])[0];
-									return writes
-										? summarizeTurnDelivery(
-												writes.paths.map((path) => ({ path, additions: null, deletions: null }))
-											)
-										: undefined;
-								})(),
+							delivery: user.turnCompletion
+								? user.turnCompletion.delivery
+								: (() => {
+										const writes = collectTurnWrites([user, ...turn])[0];
+										return writes
+											? summarizeTurnDelivery(
+													writes.paths.map((path) => ({ path, additions: null, deletions: null }))
+												)
+											: undefined;
+									})(),
 							plan: latestAgentTaskList(turn),
 						}
 					: undefined;

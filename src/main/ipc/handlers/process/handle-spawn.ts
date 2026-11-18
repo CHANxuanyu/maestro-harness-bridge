@@ -1095,12 +1095,12 @@ export async function handleProcessSpawn(
 			: undefined;
 	if (settingsStore.get('newShell', false) && config.sessionId.includes('-ai-')) {
 		try {
-			await beginGitTurn(
+			void beginGitTurn(
 				config.sessionId,
 				config.cwd,
 				sshRemoteUsed ?? undefined,
 				sshRemoteUsed ? config.cwd : undefined
-			);
+			).catch((error) => logger.warn('Turn change boundary unavailable', 'Process', error));
 		} catch (error) {
 			logger.warn('Turn change boundary unavailable', 'Process', error);
 		}

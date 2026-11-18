@@ -1,3 +1,4 @@
+import type { TurnDelivery } from '../../../../shared/gitChangeTurns';
 import { getT } from '../../../i18n';
 import { maybeAutoHandoff } from '../../../services/autoHandoff';
 /**
@@ -135,7 +136,14 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 		};
 
 		const subscribeExit = window.maestro.process.onExit;
-		const unsubscribe = subscribeExit(async (sessionId, code, _, stopped, delivery) => {
+		const handleExit = async (
+			sessionId: string,
+			code: number,
+			_?: number,
+			stopped?: boolean,
+			delivery?: TurnDelivery,
+			deliveryToken?: string
+		) => {
 			// Window scoping: only the window that owns the agent runs exit side
 			// effects (synopsis spawn, git refresh, history entry, queue dequeue).
 			// Events are broadcast to every window, so a non-owning window must bail
@@ -260,6 +268,7 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 																	: getT()('workflows.activity.exitCode', { code })
 																: undefined,
 														delivery,
+														...(deliveryToken ? { deliveryToken } : {}),
 													},
 												}
 											: entry
@@ -1049,10 +1058,38 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 			if (synopsisData && ownsSideEffects) {
 				dispatchSynopsis(synopsisData, synopsisDidWork);
 			}
+		};
+		const exitingTurns = new Map<string, Promise<void>>();
+		const unsubscribe = subscribeExit((...args) => {
+			const work = handleExit(...args);
+			const token = args[5];
+			if (token) {
+				exitingTurns.set(token, work);
+				void work.finally(() => exitingTurns.delete(token)).catch(() => {});
+			}
+			return work;
 		});
+		const unsubscribeDelivery = window.maestro.process.onTurnDelivery?.(
+			async (sessionId, token, delivery) => {
+				if (!useSettingsStore.getState().newShell || !ownedGate.current?.(sessionId)) return;
+				// Git can finish while handleExit awaits the active-process probe.
+				await exitingTurns.get(token);
+				const match = sessionId.match(REGEX_AI_TAB);
+				if (!match) return;
+				updateAiTab(match[1], match[2], (tab) => ({
+					...tab,
+					logs: tab.logs.map((entry) =>
+						entry.turnCompletion?.deliveryToken === token
+							? { ...entry, turnCompletion: { ...entry.turnCompletion, delivery } }
+							: entry
+					),
+				}));
+			}
+		);
 
 		return () => {
 			unsubscribe();
+			unsubscribeDelivery?.();
 			// Flush any pending debounced synopses so finished work still reaches
 			// History when the listener tears down (navigation, reload, quit).
 			const timers = debounceTimersRef.current;

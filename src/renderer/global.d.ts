@@ -421,6 +421,9 @@ interface MaestroAPI {
 		onExit: ReturnType<
 			typeof import('../main/preload/process/core').createProcessCoreApi
 		>['onExit'];
+		onTurnDelivery: ReturnType<
+			typeof import('../main/preload/process/core').createProcessCoreApi
+		>['onTurnDelivery'];
 		steer: ReturnType<typeof import('../main/preload/process/core').createProcessCoreApi>['steer'];
 		onPermissionResolved: ReturnType<
 			typeof import('../main/preload/process/core').createProcessCoreApi

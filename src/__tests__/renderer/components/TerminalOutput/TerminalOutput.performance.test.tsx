@@ -449,14 +449,17 @@ it.each([true, false])(
 		expect(vi.mocked(formatElapsedTickerCompact)).toHaveBeenCalledTimes(
 			newShell ? 0 : historyTurns * 15
 		);
-		// The first entry takes over the placeholder host once. Answer-only batches
-		// do not change the closed bar, so the remaining batches must not redraw it.
-		expect(activityBarRenders).toHaveBeenCalledTimes(newShell ? 1 : 0);
+		// Answer batches render outside the activity bar. They must never redraw it,
+		// including the first chunk while the process is still running.
+		expect(activityBarRenders).toHaveBeenCalledTimes(0);
+		const answer = view.container.querySelector(
+			`[data-log-id="${finalLogs[history.length + 1].id}"]`
+		);
+		expect(answer).toHaveTextContent(Array.from({ length: 300 }, (_, i) => `chunk-${i}`).join(' '));
 		if (newShell) {
 			fireEvent.click(view.getByTestId('activity-toggle'));
-			expect(view.container.querySelector('[data-turn-activity-steps]')).toHaveTextContent(
-				Array.from({ length: 300 }, (_, i) => `chunk-${i}`).join(' ')
-			);
+			expect(answer?.closest('[data-turn-activity-steps]')).toBeNull();
+			expect(view.getByTestId('activity-toggle')).toHaveAttribute('data-activity-state', 'running');
 		}
 	}
 );

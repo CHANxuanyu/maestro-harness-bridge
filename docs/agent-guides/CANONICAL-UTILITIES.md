@@ -532,12 +532,27 @@ failing step is located only within that turn, never borrowed from earlier work.
 With no steps, the localized summary reads `Failed: <reason>`; the duration and
 step-count wording is reserved for turns with steps. The reason stays on one line.
 Auth errors retain the localized sign-in explanation rather than exposing raw
-provider rejection text beside the existing sign-in card.
+provider rejection text beside the existing sign-in card. The fold button's
+accessible name describes expanding activity; it must not impersonate that card's
+sign-in action. Keep the latest answer visible while the process is still busy:
+provider output and process exit are separate events, including gated fixtures.
 
 `beginGitTurn()`, `recordGitTurnTool()` and `finishGitTurn()` extend
-`src/main/git-changes.ts`. Capture bounded dirty patches before spawn, retain
-only write paths and statuses while running, and consume the boundary before
-forwarding process exit. `collectTurnWrites()` remains the write-evidence rule;
+`src/main/git-changes.ts`. Start dirty-patch capture before spawn without awaiting
+it. Startup stdout does not invalidate capture. Buffer early `Write` and Codex
+add-only `file_change` starts; accept their baseline only if a bounded read-only
+probe still finds every target absent. Codex start/update normalization marks
+this extra evidence `newShellActivityOnly`; classic dispatch ignores it.
+Existing targets, edits, commands, tool
+completion and exit seal an unresolved baseline rather than count uncertain
+pre-existing content. Retain only write paths and statuses while running. Consume the boundary at exit,
+but forward exit immediately: optional measurement must never hold Stop or queue
+drain. Each capture has the canonical read-only Git timeout as a total budget.
+All SSH reads use `execGitReadOnly()` with the remote cwd. A new turn invalidates
+unfinished measurement so its writes cannot enter the preceding turn's totals.
+`process:turn-delivery` carries late totals with the token from `process:exit`;
+the renderer matches that token to the completed user entry, never the latest one.
+Failed or late capture leaves live delivery absent. `collectTurnWrites()` remains the write-evidence rule;
 `summarizeTurnDelivery()` in `src/shared/gitChangeTurns.ts` preserves unknown
 counts. Never substitute the current HEAD diff for this boundary comparison.
 Snapshots stay in main memory; only totals and paths enter `LogEntry.turnCompletion`
@@ -552,3 +567,7 @@ be separated by workspace boundaries.
 continues to show current file diffs, clearly separate from the frozen turn
 counts on the delivery bar. The optional check-result slot stays absent until
 F3 supplies evidence for the same turn.
+
+`agentTaskListEmptyState()` in `renderer/utils/agentTaskList.ts` shares the
+localized title and provider/model explanation between TasksPanel and the CLI.
+The CLI's `emptyText` joins those same two lines with a newline.

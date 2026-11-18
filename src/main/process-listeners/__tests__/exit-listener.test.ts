@@ -4,6 +4,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { finishGitTurn } from '../../git-changes';
+vi.mock('../../git-changes', () => ({ finishGitTurn: vi.fn() }));
 import { setupExitListener } from '../exit-listener';
 import type { ProcessManager } from '../../process-manager';
 import type { ProcessListenerDependencies } from '../types';
@@ -35,6 +37,7 @@ describe('Exit Listener', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(finishGitTurn).mockReset();
 		eventHandlers = new Map();
 
 		mockProcessManager = {
@@ -118,6 +121,67 @@ describe('Exit Listener', () => {
 			setupListener();
 			expect(mockProcessManager.on).toHaveBeenCalledWith('exit', expect.any(Function));
 		});
+	});
+
+	it.each(['hanging', 'throwing', 'rejecting'] as const)(
+		'forwards completion immediately with %s delivery capture',
+		async (mode) => {
+			vi.mocked(finishGitTurn).mockImplementation(() => {
+				if (mode === 'throwing') throw new Error('capture failed');
+				if (mode === 'rejecting') return Promise.reject(new Error('capture failed'));
+				return new Promise(() => {});
+			});
+			setupListener();
+			eventHandlers.get('exit')?.('sess-ai-tab', 0, undefined);
+			expect(vi.mocked(mockDeps.safeSend).mock.calls[0].slice(0, 4)).toEqual([
+				'process:exit',
+				'sess-ai-tab',
+				0,
+				undefined,
+			]);
+			await Promise.resolve();
+			expect(mockDeps.safeSend).toHaveBeenCalledTimes(1);
+			if (mode !== 'hanging') expect(mockDeps.logger.warn).toHaveBeenCalled();
+		}
+	);
+
+	it('delivers Git counts later without emitting a second exit or holding Stop', async () => {
+		let resolve!: (value: {
+			files: number;
+			additions: number;
+			deletions: number;
+			paths: string[];
+		}) => void;
+		vi.mocked(finishGitTurn).mockReturnValueOnce(
+			new Promise((done) => {
+				resolve = done;
+			})
+		);
+		setupListener();
+		eventHandlers.get('exit')?.('sess-ai-tab', 0);
+		const token = vi.mocked(mockDeps.safeSend).mock.calls[0][6];
+		expect(token).toEqual(expect.any(String));
+		const delivery = { files: 2, additions: 3, deletions: 1, paths: ['a', 'b'] };
+		resolve(delivery);
+		await Promise.resolve();
+		expect(mockDeps.safeSend).toHaveBeenLastCalledWith(
+			'process:turn-delivery',
+			'sess-ai-tab',
+			token,
+			delivery
+		);
+		expect(
+			vi.mocked(mockDeps.safeSend).mock.calls.filter(([channel]) => channel === 'process:exit')
+		).toHaveLength(1);
+		eventHandlers.get('exit')?.('other-ai-tab', 0, undefined, true);
+		expect(finishGitTurn).toHaveBeenLastCalledWith('other-ai-tab', true);
+		expect(mockDeps.safeSend).toHaveBeenLastCalledWith(
+			'process:exit',
+			'other-ai-tab',
+			0,
+			undefined,
+			true
+		);
 	});
 
 	describe('Regular Process Exit', () => {

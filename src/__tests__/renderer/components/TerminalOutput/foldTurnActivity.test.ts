@@ -98,6 +98,22 @@ describe('foldTurnActivity', () => {
 });
 
 describe('new shell running turn', () => {
+	it('omits unavailable live delivery instead of falling back to unknown historical counts', () => {
+		const write = entry('write', 1, 'tool', {
+			text: 'Write',
+			metadata: { toolState: { status: 'completed', writePaths: ['a.ts'] } },
+		});
+		const prompt = user('u', 0);
+		const historical = foldTurnActivity([prompt, write, reply('answer', 2)], { newShell: true });
+		expect(historical.deliveryByHostId.get('answer')?.delivery).toMatchObject({
+			files: 1,
+			additions: null,
+			deletions: null,
+		});
+		const completed = { ...prompt, turnCompletion: { status: 'completed' as const, timestamp: 2 } };
+		const live = foldTurnActivity([completed, write, reply('answer', 2)], { newShell: true });
+		expect(live.deliveryByHostId.get('answer')?.delivery).toBeUndefined();
+	});
 	it.each(['completion only', 'error card', 'history slice'])(
 		'keeps an error summary without activity: %s',
 		(shape) => {
@@ -116,6 +132,24 @@ describe('new shell running turn', () => {
 			const classic = foldTurnActivity(logs, { keepLastTurnOpen: false });
 			expect(classic.logs).toBe(logs);
 			expect(classic.activityByHostId.size).toBe(0);
+		}
+	);
+
+	it.each([false, true])(
+		'keeps the delivered answer visible before process exit, newShell=%s',
+		(newShell) => {
+			const answer = reply('answer', 3);
+			const result = foldTurnActivity([user('u', 0), tool('tool', 1), answer], {
+				newShell,
+				keepLastTurnOpen: true,
+			});
+			expect(result.logs).toContain(answer);
+			if (newShell) {
+				expect(result.activityByHostId.get('tool')).toMatchObject({
+					running: true,
+					entries: [tool('tool', 1)],
+				});
+			} else expect(result.activityByHostId.size).toBe(0);
 		}
 	);
 

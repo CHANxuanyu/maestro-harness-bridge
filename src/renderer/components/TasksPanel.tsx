@@ -1,6 +1,6 @@
 import { Check, CircleDot, Circle } from 'lucide-react';
 import { useMemo } from 'react';
-import { latestAgentTaskList } from '../utils/agentTaskList';
+import { latestAgentTaskList, agentTaskListEmptyState } from '../utils/agentTaskList';
 import type { LogEntry, Theme } from '../types';
 import { useT } from '../i18n';
 
@@ -17,7 +17,8 @@ export function TasksPanel({
 }) {
 	const t = useT();
 	const list = useMemo(() => latestAgentTaskList(logs), [logs]);
-	if (!list?.tasks.length)
+	if (!list?.tasks.length) {
+		const empty = agentTaskListEmptyState(t, provider, model);
 		return (
 			<div
 				data-testid="tasks-empty"
@@ -25,17 +26,13 @@ export function TasksPanel({
 				style={{ color: theme.colors.textDim }}
 			>
 				<div>
-					<p>{t('workflows.newShell.tasksAbsent')}</p>
-					<p className="mt-2">
-						{t(
-							provider === 'claude-code' && /(?:sonnet|opus|haiku)[- ]5/.test(model ?? '')
-								? 'workflows.newShell.tasksClaude5'
-								: 'workflows.newShell.tasksEmpty'
-						)}
-					</p>
+					<p>{empty.title}</p>
+					{'\n'}
+					<p className="mt-2">{empty.explanation}</p>
 				</div>
 			</div>
 		);
+	}
 	return (
 		<div className="py-3 text-sm" data-testid="tasks-panel">
 			<p

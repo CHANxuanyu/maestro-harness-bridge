@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { finishGitTurn } from '../git-changes';
 /**
  * Process exit listener.
@@ -580,17 +581,26 @@ export function setupExitListener(
 			});
 		}
 
-		const delivery = finishGitTurn(sessionId);
-		if (delivery) {
-			void delivery.then(
-				(summary) => safeSend('process:exit', sessionId, code, signal, !!interrupted, summary),
-				(error) => {
-					logger.warn('Turn delivery unavailable', 'ProcessListener', error);
-					safeSend('process:exit', sessionId, code, signal, !!interrupted);
-				}
-			);
-		} else if (interrupted) safeSend('process:exit', sessionId, code, signal, true);
+		let delivery: ReturnType<typeof finishGitTurn>;
+		try {
+			delivery = finishGitTurn(sessionId, !!interrupted);
+		} catch (error) {
+			logger.warn('Turn delivery unavailable', 'ProcessListener', { error: String(error) });
+		}
+		const deliveryToken = delivery ? randomUUID() : undefined;
+		// Completion, Stop and queue drain never wait on optional Git reads.
+		if (deliveryToken)
+			safeSend('process:exit', sessionId, code, signal, !!interrupted, undefined, deliveryToken);
+		else if (interrupted) safeSend('process:exit', sessionId, code, signal, true);
 		else safeSend('process:exit', sessionId, code, signal);
+		if (delivery)
+			void delivery.then(
+				(summary) => {
+					if (summary) safeSend('process:turn-delivery', sessionId, deliveryToken, summary);
+				},
+				(error) =>
+					logger.warn('Turn delivery unavailable', 'ProcessListener', { error: String(error) })
+			);
 
 		// Broadcast exit to web clients
 		const webServer = getWebServer();

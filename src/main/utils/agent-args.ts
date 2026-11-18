@@ -1,3 +1,4 @@
+import { NATIVE_MODEL_DEFAULT } from '../../shared/modelCatalog';
 import type { AgentConfig, AgentDefinition } from '../agents';
 import type { AdditionalDirectory } from '../../shared/types';
 import { logger } from './logger';
@@ -341,7 +342,12 @@ export function applyAgentConfigOverrides(
 
 			let value: any;
 			if (option.key === 'model') {
-				if (overrides.sessionCustomModel !== undefined && overrides.sessionCustomModel !== '') {
+				if (overrides.sessionCustomModel === NATIVE_MODEL_DEFAULT) {
+					continue;
+				} else if (
+					overrides.sessionCustomModel !== undefined &&
+					overrides.sessionCustomModel !== ''
+				) {
 					value = overrides.sessionCustomModel;
 					modelSource = 'session';
 				} else if (agentConfigValues[option.key] !== undefined) {
@@ -359,6 +365,7 @@ export function applyAgentConfigOverrides(
 				// Empty means "cleared" and falls through to the agent-level config, the
 				// same rule `model` uses above - and the same order the effort pill shows
 				// (tab > agent override > agent config).
+				if (overrides.sessionCustomEffort === NATIVE_MODEL_DEFAULT) continue;
 				value = overrides.sessionCustomEffort;
 			} else {
 				value =

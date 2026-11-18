@@ -22,6 +22,17 @@ vi.mock('../../../../../renderer/hooks/ui/useViewportBreakpoint', async (importO
 }));
 const mockedUsePhoneLayout = vi.mocked(usePhoneLayout);
 
+// Catalog behavior is covered by ModelEffortPicker.test; toolbar tests inspect layout only.
+vi.mock(
+	'../../../../../renderer/hooks/agent/useAgentModelEffortOptions',
+	async (importOriginal) => ({
+		...(await importOriginal<
+			typeof import('../../../../../renderer/hooks/agent/useAgentModelEffortOptions')
+		>()),
+		useConversationModelCatalog: () => undefined,
+	})
+);
+
 describe('ToolbarControls', () => {
 	beforeEach(() => useSettingsStore.setState({ newShell: false }));
 	afterEach(() => {
@@ -206,10 +217,7 @@ describe('ToolbarControls', () => {
 		const context = screen.queryByText(`Context ${contextUsage}%`);
 		expect(!!context).toBe(visible);
 		if (context)
-			expect(
-				screen.getByTitle(/^Change model/).closest('[data-tour="model-selector"]')
-					?.previousElementSibling
-			).toBe(context);
+			expect(screen.getByTestId('model-effort-picker').previousElementSibling).toBe(context);
 	});
 
 	it('renders terminal cwd in terminal mode', () => {

@@ -21,6 +21,66 @@ import * as os from 'os';
 import * as path from 'path';
 
 /**
+ * The scalar settings used by catalog/default and output-context readers.
+ * Scope matches to their table so an MCP server's `model` cannot become the
+ * CLI default. Supports literal/basic strings and the selected native profile.
+ * This is not a general TOML parser; multiline model IDs are refused.
+ */
+export function parseCodexConfig(content: string): { model?: string; contextWindow?: number } {
+	const tables = new Map<string, Record<string, string>>();
+	let table = '';
+	tables.set(table, {});
+	let multiline: string | undefined;
+	for (const line of content.replace(/^\uFEFF/, '').split(/\r?\n/)) {
+		if (multiline) {
+			if (line.includes(multiline)) multiline = undefined;
+			continue;
+		}
+		const triple = line.match(/^[^#]*?=\s*("""|''')/);
+		if (triple) {
+			if (line.indexOf(triple[1], line.indexOf(triple[1]) + 3) < 0) multiline = triple[1];
+			if (/^\s*(model|profile)\s*=/.test(line))
+				throw new Error('Unsupported multiline model setting');
+			continue;
+		}
+		const header = /^\s*\[([^\]]+)\]\s*(?:#.*)?$/.exec(line);
+		if (header) {
+			table = header[1]
+				.trim()
+				.replace(/["']/g, '')
+				.replace(/\s*\.\s*/g, '.');
+			if (!tables.has(table)) tables.set(table, {});
+			continue;
+		}
+		if (/^\s*\[/.test(line)) {
+			table = '<unsupported-table>';
+			tables.set(table, {});
+			continue;
+		}
+		const match =
+			/^\s*(?:"(model|profile|model_context_window)"|'(model|profile|model_context_window)'|(model|profile|model_context_window))\s*=\s*("(?:[^"\\]|\\.)*"|'[^']*'|\d+)\s*(?:#.*)?$/.exec(
+				line
+			);
+		if (!match) continue;
+		const raw = match[4];
+		const value = raw.startsWith('"')
+			? JSON.parse(raw)
+			: raw.startsWith("'")
+				? raw.slice(1, -1)
+				: raw;
+		tables.get(table)![match[1] ?? match[2] ?? match[3]] = value;
+	}
+	const root = tables.get('')!;
+	const selected = { ...root, ...(root.profile ? tables.get(`profiles.${root.profile}`) : {}) };
+	return {
+		model: selected.model || undefined,
+		contextWindow: selected.model_context_window
+			? Number(selected.model_context_window)
+			: undefined,
+	};
+}
+
+/**
  * Resolve Codex's config home.
  *
  * Codex honours `CODEX_HOME` for every on-disk lookup (it is how `codex exec`

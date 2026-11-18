@@ -70,9 +70,12 @@ agent offers or what a tab is currently running.
 | `useAgentModelEffortOptions` | `(agentId?: string) => { models, efforts, defaultModel, defaultEffort, loaded }` | Fetches all four with a stale guard. Probes BOTH `effort` and `reasoningEffort` config keys, since agents split between them. `loaded` is false until every lookup settles - an empty list means "still loading" and "not offered" alike. |
 | `resolveModelEffort`         | `(tab, session, { defaultModel, defaultEffort }) => { model, effort }`           | Applies tab override > session override > agent default > empty. Do NOT re-derive this ladder inline - it drifts.                                                                                                                         |
 
-Effort options are agent-scoped, not model-scoped: the underlying CLIs expose a
-single list per agent, and a model with no reasoning budget just ignores the
-flag. Don't invent per-model effort lists without a data source for them.
+The legacy hook exposes provider-wide effort options. New Claude/Codex pickers
+must use the account-scoped `agents.getModelCatalog()` contract and helpers in
+`src/shared/modelCatalog.ts`: the vendor files declare each model's supported
+levels, and unsupported values can be rejected. See
+[model-catalog-api.md](../round2/dev/model-catalog-api.md). The old hook remains for
+existing consumers until the new picker is integrated.
 
 ---
 

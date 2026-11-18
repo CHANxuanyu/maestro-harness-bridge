@@ -170,6 +170,9 @@ export type AgentDefinition = Omit<AgentConfig, 'available' | 'path' | 'capabili
 /** Values Codex accepts for `model_reasoning_summary`. */
 const CODEX_REASONING_SUMMARIES = ['auto', 'concise', 'detailed', 'none'];
 
+/** Existing Claude discovery floor, shared with the typed catalog fallback. */
+export const CLAUDE_MODEL_ALIASES = ['fable', 'sonnet', 'opus', 'haiku', 'opus[1m]', 'sonnet[1m]'];
+
 // ============ Agent Definitions ============
 
 /**

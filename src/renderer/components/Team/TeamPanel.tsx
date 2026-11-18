@@ -4,13 +4,14 @@ import { SEAT_ROLES } from '../../../shared/team/types';
 import type { Theme } from '../../types';
 import { useT } from '../../i18n';
 import { useTeamStore } from '../../stores/teamStore';
-import { presentTeamOwnerCard } from '../../services/teamClient';
+import { TeamDecisions } from './TeamDecisions';
+import { TeamReviewRecord } from './TeamReview';
 import { useResizablePanel } from '../../hooks/ui/useResizablePanel';
 import { usePersistedPanelWidth } from '../../hooks/ui/usePersistedPanelWidth';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { ChangesPanel } from '../ChangesPanel';
 import { TeamOutput } from './TeamOutput';
-import { Criteria, SeatTag } from './TeamPrimitives';
+import { Criteria, SeatTag, teamPathLabel } from './TeamPrimitives';
 
 export type TeamPanelTab = 'output' | 'progress' | 'decisions' | 'evidence' | 'members' | 'changes';
 const TABS: TeamPanelTab[] = ['output', 'progress', 'decisions', 'evidence', 'members', 'changes'];
@@ -23,11 +24,13 @@ export function TeamPanel({
 	theme,
 	tab,
 	onTab,
+	onDiscussion = () => {},
 }: {
 	state: TeamState;
 	theme: Theme;
 	tab: TeamPanelTab;
 	onTab: (tab: TeamPanelTab) => void;
+	onDiscussion?: (id: string) => void;
 }) {
 	const t = useT();
 	const panelId = useId();
@@ -98,7 +101,8 @@ export function TeamPanel({
 						value === 'progress'
 							? state.issues.filter((issue) => issue.state !== 'verified-pass').length
 							: value === 'decisions'
-								? state.decisions.length + state.cardAnswers.length
+								? state.decisions.filter((entry) => entry.decider !== 'owner').length +
+									state.statistics.ownerDecisions
 								: undefined,
 				}))}
 				ariaLabel={t('workflows.team.panel')}
@@ -113,12 +117,11 @@ export function TeamPanel({
 				{tab === 'output' && <TeamOutput state={state} theme={theme} disclosure={false} />}
 				{tab === 'progress' && (
 					<>
+						{state.reviews.length > 0 && <TeamReviewRecord state={state} />}
 						<h3>{t('workflows.team.workItems')}</h3>
 						{state.workItems.map((item) => (
 							<div className="team-item" key={item.itemId}>
-								<p>
-									{item.itemId} · {item.title}
-								</p>
+								<p>{item.title}</p>
 								<p className="team-dim">{t(`workflows.team.${item.state}`)}</p>
 								<SeatTag seat={item.owner} />
 							</div>
@@ -156,49 +159,7 @@ export function TeamPanel({
 					</>
 				)}
 				{tab === 'decisions' && (
-					<>
-						{state.decisions.map((decision) => (
-							<div className="team-item" key={decision.id}>
-								<p>{decision.decision}</p>
-								<p className="team-dim">
-									{t(`workflows.team.${decision.decider}`)} · {decision.dissent}
-								</p>
-							</div>
-						))}
-						{state.cardAnswers.map((answer) => {
-							const card = events?.find(
-								(event) => event.kind === 'decision_card' && event.card.id === answer.cardId
-							);
-							const option =
-								card?.kind === 'decision_card'
-									? presentTeamOwnerCard(card.card, state, t).options.find(
-											(option) => option.id === answer.optionId
-										)?.label
-									: undefined;
-							return (
-								<div className="team-item" key={answer.id}>
-									{t('workflows.team.owner')} · {option ?? answer.optionId}
-									<p>{answer.note}</p>
-								</div>
-							);
-						})}
-						{state.standardChanges.length > 0 && (
-							<>
-								<h3>{t('workflows.team.standardChanges')}</h3>
-								{state.standardChanges.map((change) => (
-									<div key={change.id} className="team-item">
-										{change.criterionId}: {change.before} → {change.after}
-										<p className="team-dim">
-											{change.reason} · {t(`workflows.team.${change.approvedBy}`)}
-										</p>
-									</div>
-								))}
-							</>
-						)}
-						{!state.decisions.length && !state.cardAnswers.length && (
-							<p className="team-dim">{t('workflows.team.noDecisions')}</p>
-						)}
-					</>
+					<TeamDecisions state={state} events={events ?? []} onDiscussion={onDiscussion} />
 				)}
 				{tab === 'evidence' && (
 					<>
@@ -220,7 +181,10 @@ export function TeamPanel({
 									</button>
 								</div>
 								<p className="team-dim">{t(`workflows.team.${seat}Workspace`)}</p>
-								<p className="team-dim break-all">{state.seats[seat].binding?.workspace}</p>
+								<p className="team-dim break-all">
+									{state.seats[seat].binding &&
+										teamPathLabel(state.seats[seat].binding!.workspace, state)}
+								</p>
 								<p className="team-dim">
 									{t('workflows.team.substitute')}:{' '}
 									{config.seats[seat].substitute ? (

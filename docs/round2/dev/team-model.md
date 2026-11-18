@@ -211,3 +211,7 @@ owner request only, while the completion gate still checks every criterion.
 
 The actual validation and limitations are recorded in
 [team-m2-verification.md](team-m2-verification.md).
+
+### M2 renderer contract
+
+Owner cards keep human `body` text separate from typed `payload` data: baseline, discussion (including standard-change comparisons), check-permission, acceptance and progress-report. JSON payloads are never displayed as prose. `team.baselineEdit(teamId, criterionId, text, { proof?, how? })` extends the existing edit handler without changing the three-argument call; CLI equivalents are `team baseline edit <criterion> --text <text> --proof app|qa|pm --how <text>`. Only ledger events update the renderer mirror.

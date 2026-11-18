@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { withIpcErrorLogging } from '../../utils/ipcHandler';
 import type { TeamScheduler } from '../../team/scheduler';
-import type { CreateTeamInput, SeatRole } from '../../../shared/team/types';
+import type { CreateTeamInput, SeatRole, Criterion } from '../../../shared/team/types';
 
 /** The bridge passes no Electron sender; every handler only uses its arguments. */
 export function registerTeamHandlers(team: TeamScheduler): void {
@@ -20,8 +20,14 @@ export function registerTeamHandlers(team: TeamScheduler): void {
 	handle('answer', (id: string, card: string, option: string, note?: string) =>
 		team.answer(id, card, option, note)
 	);
-	handle('baselineEdit', (id: string, criterion: string, text: string) =>
-		team.baselineEdit(id, criterion, text)
+	handle(
+		'baselineEdit',
+		(
+			id: string,
+			criterion: string,
+			text: string,
+			fields?: Partial<Pick<Criterion, 'proof' | 'how'>>
+		) => team.baselineEdit(id, criterion, text, fields)
 	);
 	handle('baselineDiff', (id: string) => team.baselineDiff(id));
 	handle('baselineReturn', (id: string, note: string) => team.baselineReturn(id, note));

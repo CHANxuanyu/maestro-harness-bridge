@@ -113,6 +113,11 @@ describe('team CLI parity', () => {
 			'team:baselineEdit',
 			['A1', 'Two complete words'],
 		],
+		[
+			['baseline', 'edit', 'A1', '--text', 'New text', '--proof', 'qa', '--how', 'Inspect samples'],
+			'team:baselineEdit',
+			['A1', 'New text', { proof: 'qa', how: 'Inspect samples' }],
+		],
 		[['baseline', 'diff'], 'team:baselineDiff', []],
 		[
 			['baseline', 'return', '--note', 'Clarify the expected output'],

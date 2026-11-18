@@ -25,6 +25,7 @@ import { teamStatus } from '../../shared/team/status';
 import {
 	SEAT_ROLES,
 	type CreateTeamInput,
+	type Criterion,
 	type LedgerEvent,
 	type M1TurnKind,
 	type ReportTurnKind,
@@ -604,11 +605,8 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				id: cardId,
 				boundary: 'permission',
 				title: 'Approve this check once',
-				body: JSON.stringify({
-					command,
-					boundary,
-					scope: 'Only this invocation; the team workspace grant is unchanged.',
-				}),
+				body: `Run ${command} once. Only this invocation is authorized; the team workspace grant is unchanged.`,
+				payload: { type: 'check-permission', command, boundary },
 				options: [
 					{ id: 'once', label: 'Allow only this invocation' },
 					{ id: 'omit', label: 'Do not add this check', recommended: true },
@@ -1188,7 +1186,11 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				discussionId: discussion.id,
 				standardChange: change,
 				referenceVotes: referenceVotes(discussion, state),
-				body: JSON.stringify({
+				body: change
+					? `${change.reason} The existing standard and check result remain unchanged until you decide.`
+					: `${proposal.proposal} This step is irreversible or changes a commitment and needs your decision.`,
+				payload: {
+					type: 'discussion',
 					before: criterion,
 					after: change?.criterion,
 					currentCheckResult: criterion?.reason,
@@ -1196,13 +1198,27 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					positions: discussion.positions,
 					proposal: proposal.proposal,
 					responses,
-					boundary: 'The next step is irreversible or changes a commitment.',
-				}),
+				},
 				budgetNote: `${state.usage.turns}/${state.config!.turnBudget} turns used`,
 				options: change
 					? [
-							{ id: 'approve', label: 'Approve this standard change', cost: change.reason },
-							{ id: 'keep', label: 'Keep the existing standard', recommended: true },
+							{
+								id: 'approve',
+								label: 'Approve this standard change',
+								cost:
+									change.change === 'remove'
+										? 'This criterion will no longer block acceptance. Its wording and check results remain in the change history.'
+										: 'The proposed wording replaces the existing acceptance standard. Fresh evidence must verify the new standard; the old wording and check results remain in the change history.',
+							},
+							{
+								id: 'keep',
+								label: 'Keep the existing standard',
+								recommended: true,
+								cost:
+									criterion?.status === 'fail'
+										? 'The existing standard stays in force. The check keeps failing and blocks acceptance until fixed and verified.'
+										: 'The existing standard stays in force and must be met for acceptance.',
+							},
 						]
 					: (proposal.options ?? [
 							{ id: 'approve', label: 'Approve the proposed commitment', cost: proposal.proposal },
@@ -1218,7 +1234,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			decider,
 			insist,
 			decider === 'app'
-				? `Facts remain determined by recorded evidence. ${JSON.stringify(state.checks.map((c) => ({ command: c.command, exitCode: c.exitCode })))}`
+				? `Facts remain determined by recorded evidence. ${state.checks.map((c) => `${c.command}: exit ${c.exitCode ?? 'unavailable'}`).join('; ')}`
 				: undefined
 		);
 		return true;
@@ -1818,7 +1834,9 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					id: `acceptance:${last('demo')!.dispatchId}`,
 					boundary: 'acceptance',
 					title: 'Accept the demonstrated result',
-					body: JSON.stringify({
+					body: 'All confirmed criteria have evidence and product review passed. Accept the result or request specific changes.',
+					payload: {
+						type: 'acceptance',
 						output: state.outputs.at(-1),
 						before: state.outputs.at(-2),
 						demo: state.demos.at(-1),
@@ -1827,7 +1845,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						contested: state.decisions.filter((d) => d.contested),
 						suggestions: state.suggestions,
 						evidenceChanges: state.checks.filter((c) => c.dilution?.length),
-					}),
+					},
 					options: [
 						{ id: 'accept', label: 'Accept the result', recommended: true },
 						{ id: 'changes', label: 'Request specific changes' },
@@ -2156,21 +2174,38 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					: (state.briefs.at(-2) ?? null);
 			return baselineDiff(before, current);
 		},
-		baselineEdit: (id: string, criterionId: string, text: string) =>
+		baselineEdit: (
+			id: string,
+			criterionId: string,
+			text: string,
+			fields: Partial<Pick<Criterion, 'proof' | 'how'>> = {}
+		) =>
 			queue.enqueue(id, async () => {
 				const state = await stateFor(id);
 				if (state.terminal || !text?.trim())
 					throw new Error('An active team and nonempty criterion text are required');
+				if (
+					(fields.proof !== undefined && !['app', 'qa', 'pm'].includes(fields.proof)) ||
+					(fields.how !== undefined && typeof fields.how !== 'string')
+				)
+					throw new Error('Invalid criterion proof fields');
 				const current = state.baseline.brief ?? state.brief;
 				const criterion = current?.criteria.find((c) => c.id === criterionId);
 				if (!current || !criterion) throw new Error('Unknown criterion');
+				const edited = {
+					...criterion,
+					text,
+					proof: fields.proof ?? criterion.proof,
+					how: fields.how ?? criterion.how,
+					byOwner: true,
+				};
 				if (state.baseline.brief) {
 					await applyStandardChange(
 						id,
 						{
 							criterionId,
 							change: 'modify',
-							criterion: { ...criterion, text, byOwner: true },
+							criterion: edited,
 							reason: 'Owner edited the criterion',
 						},
 						'owner',
@@ -2180,9 +2215,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					const brief = {
 						...current,
 						version: current.version + 1,
-						criteria: current.criteria.map((c) =>
-							c.id === criterionId ? { ...c, text, byOwner: true } : c
-						),
+						criteria: current.criteria.map((c) => (c.id === criterionId ? edited : c)),
 					};
 					await append(id, {
 						kind: 'baseline_edited',

@@ -26,8 +26,8 @@ opens the selected local team's project through the existing `openProject()`.
 `deriveTeamFeed()` in `src/renderer/components/Team/deriveTeamFeed.ts` groups
 events into chronological phase folds only. `OwnerCard` is shared across
 boundaries, takes unresolved cards from `state.openCards`, puts recommended
-choices first, and never offers a bare continue. Baseline edit/diff/return stay
-behind `teamFeatures` until the backend supports them. `presentTeamOwnerCard()`
+choices first, and never offers a bare continue. Baseline edit/diff/return call
+the real backend handlers and preserve historical versions. `presentTeamOwnerCard()`
 in the client adapter separates legacy JSON checkpoint bodies from human text;
 new baseline cards carry readable `body` and structured `payload` separately.
 Fixed baseline/acceptance checkpoints have no visible boundary label;
@@ -54,6 +54,8 @@ the Git reads and diff view while omitting write and review controls.
 The live demo renders the backend's acceptance boundary itself; its open
 acceptance card enables the demo action rather than blocking it or adding a
 second generic acceptance card. Other unresolved boundaries still block accept.
+
+`TeamDiscussion`, `TeamBaseline`, `TeamReview` and `TeamDecisions` in `src/renderer/components/Team/` project M2 records without another reducer. `teamPathLabel()` and `teamEvidenceLabel()` in `TeamPrimitives.tsx` resolve workspace-relative captions and evidence references. The M2 backend and UI scenarios share `prepareNativeTeamM2()` in `e2e/fixtures/native-team-m2.ts`; `nativeTeamScene()` keeps message-handling turns separate from the M1 scripted turn sequence.
 
 `prepareNativeTeam()` in `e2e/fixtures/native-team.ts` owns the synthetic three-seat
 scripts, isolated accounts, ledger reads and release gates shared by

@@ -6,6 +6,7 @@ import type { Theme } from '../../types';
 import { useTeamState, useTeamStatus, useTeamStore } from '../../stores/teamStore';
 import { HeaderActionButton } from '../ui/HeaderActionButton';
 import { MiniBadge } from '../ui/MiniBadge';
+import { useFocusAfterRender } from '../../hooks/utils/useFocusAfterRender';
 import { useScrollPosition } from '../../hooks/ui/useScrollPosition';
 import { TeamFeed } from './TeamFeed';
 import { TeamPanel, type TeamPanelTab } from './TeamPanel';
@@ -43,6 +44,25 @@ export function TeamView({ theme }: { theme: Theme }) {
 	const [tab, setTab] = useState<TeamPanelTab>('output');
 	const [panel, setPanel] = useState(true);
 	const feedRef = useRef<HTMLDivElement>(null);
+	const discussionRef = useRef<HTMLElement | null>(null);
+	const [discussionId, setDiscussionId] = useState<string | null>(null);
+	useFocusAfterRender(discussionRef, !!discussionId);
+	useEffect(() => {
+		if (discussionId) setDiscussionId(null);
+	}, [discussionId]);
+	const openDiscussion = (id: string) => {
+		const target = document.getElementById(`team-discussion-${id}`);
+		if (!target) return;
+		for (let parent: HTMLElement | null = target; parent; parent = parent.parentElement) {
+			if (parent instanceof HTMLDetailsElement) parent.open = true;
+		}
+		const detail = target.querySelector('details');
+		if (detail) detail.open = true;
+		target.tabIndex = -1;
+		target.scrollIntoView({ block: 'nearest' });
+		discussionRef.current = target;
+		setDiscussionId(id);
+	};
 	const { isAtBottom, handleScroll, scrollToBottom } = useScrollPosition({ containerRef: feedRef });
 	useEffect(() => {
 		if (isAtBottom) scrollToBottom('auto');
@@ -73,19 +93,22 @@ export function TeamView({ theme }: { theme: Theme }) {
 			: state.openCards.length
 				? t('workflows.team.waitingOwner')
 				: t(`workflows.team.phase.${state.phase}`);
-	const solving =
+	const issues = state.issues.filter((issue) => issue.state !== 'verified-pass');
+	const solvingItems =
 		state.terminal === 'all'
-			? t('workflows.team.noProblems')
+			? []
 			: state.residual.length
-				? formatList(
-						state.residual.map((id) => state.criteria.find((c) => c.id === id)?.text ?? id)
+				? state.residual.map(
+						(id) => state.criteria.find((criterion) => criterion.id === id)?.text ?? id
 					)
-				: formatList(
-						state.issues.filter((i) => i.state !== 'verified-pass').map((i) => i.opened.title)
-					) ||
-					formatList(status.openWorkItems.map((i) => i.title)) ||
-					state.brief?.scope ||
-					t('workflows.team.noProblems');
+				: issues.length
+					? issues.map((issue) => issue.opened.title)
+					: status.openWorkItems.map((item) => item.title);
+	const solving =
+		formatList(solvingItems) ||
+		(state.terminal === 'all' ? '' : state.brief?.scope) ||
+		t('workflows.team.noProblems');
+	const solvingPreview = solvingItems.length > 2 ? formatList(solvingItems.slice(0, 2)) : solving;
 	const next = state.terminal
 		? t('workflows.team.noNext')
 		: (state.openCards[0] ? presentTeamOwnerCard(state.openCards[0], state, t).title : '') ||
@@ -195,28 +218,50 @@ export function TeamView({ theme }: { theme: Theme }) {
 						</div>
 						<div className="team-status" data-testid="team-status">
 							<div aria-live="polite" data-status-cell="now">
-								<span className="team-dim block">{t('workflows.team.now')}</span>
-								{current}
+								<span className="team-dim block truncate">{t('workflows.team.now')}</span>
+								<span className="block truncate" data-status-value title={current}>
+									{current}
+								</span>
 							</div>
 							<div data-status-cell="solving">
-								<span className="team-dim block">{t('workflows.team.solving')}</span>
-								{solving}
+								<span className="team-dim block truncate">{t('workflows.team.solving')}</span>
+								<div className="flex gap-1 min-w-0" data-status-value title={solving}>
+									<span className="truncate">{solvingPreview}</span>
+									{solvingItems.length > 2 && (
+										<span
+											className="shrink-0 whitespace-nowrap"
+											data-status-more={solvingItems.length - 2}
+										>
+											{t('workflows.team.moreItems', { count: solvingItems.length - 2 })}
+										</span>
+									)}
+								</div>
 							</div>
 							<div data-status-cell="next">
-								<span className="team-dim block">{t('workflows.team.next')}</span>
-								{next}
+								<span className="team-dim block truncate">{t('workflows.team.next')}</span>
+								<span className="block truncate" data-status-value title={next}>
+									{next}
+								</span>
 							</div>
 							<div data-status-cell="output">
-								<span className="team-dim block">{t('workflows.team.output')}</span>
+								<span className="team-dim block truncate">{t('workflows.team.output')}</span>
 								{state.outputs.length ? (
 									<button
 										className="underline block max-w-full truncate text-left"
+										data-status-value
+										title={t('workflows.team.preview')}
 										onClick={() => selectPanel('output')}
 									>
 										{t('workflows.team.preview')} ›
 									</button>
 								) : (
-									t('workflows.team.noneYet')
+									<span
+										className="block truncate"
+										data-status-value
+										title={t('workflows.team.noneYet')}
+									>
+										{t('workflows.team.noneYet')}
+									</span>
 								)}
 							</div>
 						</div>
@@ -266,7 +311,15 @@ export function TeamView({ theme }: { theme: Theme }) {
 						)}
 					</main>
 				)}
-				{panel && !seat && <TeamPanel state={state} theme={theme} tab={tab} onTab={setTab} />}
+				{panel && !seat && (
+					<TeamPanel
+						state={state}
+						theme={theme}
+						tab={tab}
+						onTab={setTab}
+						onDiscussion={openDiscussion}
+					/>
+				)}
 			</div>
 		</TeamModelCatalogProvider>
 	);

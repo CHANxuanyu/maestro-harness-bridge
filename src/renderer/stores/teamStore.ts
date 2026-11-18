@@ -41,6 +41,8 @@ interface TeamStore {
 	say(teamId: string, text: string, to?: SeatRole): Promise<boolean>;
 	command(teamId: string, command: TeamCommand): Promise<boolean>;
 	requestChanges(teamId: string, note: string): Promise<boolean>;
+	baselineEdit(...args: Parameters<TeamClient['baselineEdit']>): Promise<boolean>;
+	baselineReturn(teamId: string, note: string): Promise<boolean>;
 }
 
 let subscribers = 0;
@@ -196,6 +198,10 @@ export const useTeamStore = create<TeamStore>((set, get) => {
 		command: (id, command) => perform(`${id}:command`, (client) => client[command](id)),
 		requestChanges: (id, note) =>
 			perform(`${id}:command`, (client) => client.requestChanges(id, note)),
+		baselineEdit: (...args) =>
+			perform(`${args[0]}:baseline`, (client) => client.baselineEdit(...args)),
+		baselineReturn: (id, note) =>
+			perform(`${id}:baseline`, (client) => client.baselineReturn(id, note)),
 	};
 });
 

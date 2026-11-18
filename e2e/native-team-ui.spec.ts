@@ -1,23 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect, type Locator } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { revealTeamCard as revealCard } from './fixtures/team-ui';
 import { NativeApp } from './fixtures/native-app';
 import { prepareNativeTeam } from './fixtures/native-team';
 import { TEAM_PHASES, type TeamConfig } from '../src/shared/team/types';
 import { team as en } from '../src/renderer/i18n/locales/en/team';
 
 test.skip(process.env.MAESTRO_E2E_REAL === '1', 'Team UI acceptance uses synthetic providers only');
-
-/** Open history through its real disclosure controls, including nested phase folds. */
-async function revealCard(card: Locator) {
-	await expect(card).toHaveCount(1);
-	const closedAncestors = card.locator('xpath=ancestor::details[not(@open)]');
-	while (await closedAncestors.count()) {
-		await closedAncestors.first().locator(':scope > summary').click();
-	}
-	await card.scrollIntoViewIfNeeded();
-	await expect(card).toBeVisible();
-}
 
 // eslint-disable-next-line no-empty-pattern
 test('team UI: a project without conversations remains reachable through acceptance', async ({}, info) => {
@@ -145,7 +135,7 @@ test('team UI: a project without conversations remains reachable through accepta
 		await main.getByRole('button', { name: en['workflows.team.send'], exact: true }).click();
 		await expect.poll(() => state().pendingMessages.map((message) => message.text)).toContain(note);
 		const message = main.locator('[data-card="owner-message"]').filter({ hasText: note });
-		await expect(message).toContainText('Queued for PM');
+		await expect(message).toContainText(/Queued for PM|Delivered to PM/);
 		await baseline.scrollIntoViewIfNeeded();
 		await screenshot('baseline');
 		await baseline
@@ -155,6 +145,8 @@ test('team UI: a project without conversations remains reachable through accepta
 			})
 			.click();
 		await expect.poll(() => state().baseline.confirmedVersion).toBe(proposedVersion);
+		fixture.releaseMessage();
+		await expect.poll(() => state().messages[0]?.handled?.seat).toBe('pm');
 		await expect.poll(() => state().phase).toBe('implement');
 		await expect
 			.poll(() => fixture.events(team.id).some((event) => event.kind === 'qa_boundary_restored'))
@@ -212,7 +204,14 @@ test('team UI: a project without conversations remains reachable through accepta
 		await revealCard(review);
 		await expect(review).toContainText(en['workflows.team.pass']);
 		await revealCard(message);
-		await expect(message).toContainText('Delivered to PM');
+		await expect(message).toHaveAttribute('data-delivery', 'handled');
+		await expect(message).toContainText(
+			en['workflows.team.handled'].replace('{seat}', en['workflows.team.pm'])
+		);
+		const receipt = state().messages.find((entry) => entry.message.text === note)!;
+		expect(receipt.delivered?.kind).toBe('message_delivered');
+		expect(receipt.handled?.kind).toBe('message_handled');
+		expect(receipt.handled!.seq).toBeGreaterThan(receipt.delivered!.seq);
 		expect(state().pendingMessages).toHaveLength(0);
 		expect(fixture.events(team.id)).toContainEqual(
 			expect.objectContaining({ kind: 'owner_message', to: 'pm', text: note })

@@ -48,6 +48,7 @@ export function prepareNativeTeam(native: NativeApp, options: { gateRepairs?: bo
 	const heldVerify = path.join(native.root, 'release-verification');
 	const heldFix = path.join(native.root, 'release-fix');
 	const heldRetest = path.join(native.root, 'release-retest');
+	const heldMessage = path.join(native.root, 'release-message');
 	const brief = {
 		scope: 'Deliver a text result',
 		notDoing: ['UI and network'],
@@ -183,7 +184,13 @@ export function prepareNativeTeam(native: NativeApp, options: { gateRepairs?: bo
 	];
 	const saveScripts = () => {
 		for (const [seat, turns] of Object.entries({ pm, dev, qa }))
-			fs.writeFileSync(scripts[seat as SeatRole], JSON.stringify({ turns }));
+			fs.writeFileSync(
+				scripts[seat as SeatRole],
+				JSON.stringify({
+					turns,
+					teamMessages: { seat, ...(options.gateRepairs ? { messageGate: heldMessage } : {}) },
+				})
+			);
 	};
 	if (options.gateRepairs) {
 		dev[3].tools = [
@@ -291,5 +298,6 @@ export function prepareNativeTeam(native: NativeApp, options: { gateRepairs?: bo
 		releaseImplementation: () => fs.writeFileSync(heldImplement, 'ready'),
 		releaseFix: () => fs.writeFileSync(heldFix, 'ready'),
 		releaseRetest: () => fs.writeFileSync(heldRetest, 'ready'),
+		releaseMessage: () => fs.writeFileSync(heldMessage, 'ready'),
 	};
 }

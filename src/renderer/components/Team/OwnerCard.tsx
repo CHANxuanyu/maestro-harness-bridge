@@ -1,9 +1,9 @@
-import { useState } from 'react';
 import type { OwnerCard as OwnerCardData, TeamState } from '../../../shared/team/types';
-import { presentTeamOwnerCard, teamFeatures } from '../../services/teamClient';
+import { presentTeamOwnerCard } from '../../services/teamClient';
 import { useTeamStore } from '../../stores/teamStore';
 import { useT, useFormatList } from '../../i18n';
-import { Criteria, TeamFold } from './TeamPrimitives';
+import { SeatTag } from './TeamPrimitives';
+import { TeamBaseline } from './TeamBaseline';
 
 export function OwnerCard({
 	card: source,
@@ -21,8 +21,11 @@ export function OwnerCard({
 	const t = useT();
 	const formatList = useFormatList();
 	const card = presentTeamOwnerCard(source, state, t);
-	const busy = useTeamStore((s) => s.pending[`${teamId}:${card.id}`]);
-	const [note, setNote] = useState('');
+	const busy = useTeamStore(
+		(s) => s.pending[`${teamId}:${card.id}`] || s.pending[`${teamId}:baseline`]
+	);
+	const brief = source.payload?.type === 'baseline' ? source.payload.brief : state.brief;
+	const discussion = source.payload?.type === 'discussion' ? source.payload : undefined;
 	const baseline = card.boundary === 'baseline';
 	const trials = state.checks.filter(
 		(check) => check.purpose === 'trial' && check.batchId === `trial:${card.briefVersion}`
@@ -56,9 +59,14 @@ export function OwnerCard({
 			{card.budgetNote && <p className="team-dim">{card.budgetNote}</p>}
 			{baseline && (
 				<>
-					<Criteria state={state} />
+					<TeamBaseline
+						frozenDiff={source.payload?.type === 'baseline' ? source.payload.diff : undefined}
+						brief={brief!}
+						state={state}
+						editable={!answered && state.openCards.some((open) => open.id === card.id)}
+					/>
 					<p>
-						<b>{t('workflows.team.notDoing')}</b>: {formatList(state.brief?.notDoing ?? [])}
+						<b>{t('workflows.team.notDoing')}</b>: {formatList(brief?.notDoing ?? [])}
 					</p>
 					{trials.length > 0 && (
 						<p className="team-dim">
@@ -71,10 +79,59 @@ export function OwnerCard({
 					)}
 				</>
 			)}
+			{discussion && (
+				<div
+					data-card={source.standardChange ? 'standard-change' : 'commitment'}
+					className="space-y-3"
+				>
+					{source.standardChange && (
+						<>
+							<div className="grid grid-cols-2 gap-3">
+								<div data-standard="before">
+									<h4>{t('workflows.team.previousText')}</h4>
+									<p>{discussion.before?.text}</p>
+								</div>
+								<div data-standard="after">
+									<h4>{t('workflows.team.proposedText')}</h4>
+									<p>{discussion.after?.text}</p>
+								</div>
+							</div>
+							<p>
+								{t('workflows.team.standardReason')}: {source.standardChange.reason}
+							</p>
+							{discussion.failingNow && (
+								<p data-failing-now>{t('workflows.team.failureUnchanged')}</p>
+							)}
+						</>
+					)}
+					{discussion.positions.map((position) => (
+						<div key={position.id}>
+							<SeatTag seat={position.seat} model={state.seats[position.seat].model} />
+							<p>{position.claim}</p>
+							<p className="team-dim">{position.basis}</p>
+						</div>
+					))}
+					<p>{discussion.proposal}</p>
+					{source.referenceVotes && (
+						<div data-reference-votes className="team-dim text-xs">
+							<p>{t('workflows.team.referenceOnly')}</p>
+							{discussion.responses.map((response) => (
+								<p key={response.id}>
+									{t('workflows.team.voteCount', {
+										seat: t(`workflows.team.${response.seat}`),
+										result: t(`workflows.team.${response.result}`),
+									})}
+								</p>
+							))}
+						</div>
+					)}
+				</div>
+			)}
 			{answered ? (
 				<p>
 					{t('workflows.team.answered', {
-						option: card.options.find((o) => o.id === answered)?.label ?? answered,
+						option:
+							card.options.find((o) => o.id === answered)?.label ?? t('workflows.team.superseded'),
 					})}
 				</p>
 			) : (
@@ -85,6 +142,7 @@ export function OwnerCard({
 							className="team-button text-left"
 							data-primary={emphasis && index === 0}
 							key={option.id}
+							data-option={option.id}
 							data-boundary={option.boundary ?? card.boundary}
 							disabled={busy}
 							onClick={() => void useTeamStore.getState().answer(teamId, card.id, option.id)}
@@ -104,43 +162,6 @@ export function OwnerCard({
 						<p role="status">{t('workflows.team.noBareContinue')}</p>
 					)}
 				</div>
-			)}
-			{baseline && !answered && (
-				<>
-					{teamFeatures.baselineDiff && (
-						<TeamFold title={t('workflows.team.diff')}>
-							<pre className="whitespace-pre-wrap">
-								{state.briefs
-									.map((brief) => brief.criteria.map((c) => `${c.id}: ${c.text}`).join('\n'))
-									.join('\n\n')}
-							</pre>
-						</TeamFold>
-					)}
-					{(teamFeatures.baselineReturn || teamFeatures.baselineEdit) && (
-						<>
-							<label>
-								{t('workflows.team.returnNote')}
-								<textarea value={note} onChange={(e) => setNote(e.target.value)} />
-							</label>
-							{options
-								.filter(
-									(o) =>
-										(teamFeatures.baselineReturn && /return|back/i.test(o.id)) ||
-										(teamFeatures.baselineEdit && /edit/i.test(o.id))
-								)
-								.map((o) => (
-									<button
-										key={o.id}
-										className="team-button"
-										disabled={!note.trim() || busy}
-										onClick={() => void useTeamStore.getState().answer(teamId, card.id, o.id, note)}
-									>
-										{o.label}
-									</button>
-								))}
-						</>
-					)}
-				</>
 			)}
 		</section>
 	);

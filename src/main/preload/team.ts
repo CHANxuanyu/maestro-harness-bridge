@@ -3,6 +3,7 @@ import type {
 	CreateTeamInput,
 	BaselineDiff,
 	Brief,
+	Criterion,
 	TeamTurnLog,
 	LedgerEvent,
 	SeatRole,
@@ -25,9 +26,10 @@ export function createTeamApi() {
 		baselineEdit: (
 			teamId: string,
 			criterionId: string,
-			text: string
+			text: string,
+			fields?: Partial<Pick<Criterion, 'proof' | 'how'>>
 		): Promise<{ brief: Brief; diff: BaselineDiff }> =>
-			ipcRenderer.invoke('team:baselineEdit', teamId, criterionId, text),
+			ipcRenderer.invoke('team:baselineEdit', teamId, criterionId, text, fields),
 		baselineDiff: (teamId: string): Promise<BaselineDiff> =>
 			ipcRenderer.invoke('team:baselineDiff', teamId),
 		baselineReturn: (teamId: string, note: string): Promise<void> =>

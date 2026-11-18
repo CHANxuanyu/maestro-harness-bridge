@@ -171,6 +171,12 @@ const entries: EventInput[] = [
 	},
 	{ kind: 'message_delivered', messageId: 'message', seat: 'qa' },
 	{
+		kind: 'message_handled',
+		messageId: 'message',
+		seat: 'qa',
+		summary: 'Added the long conversation sample',
+	},
+	{
 		kind: 'follow_up_registered',
 		followUpId: 'CI',
 		seat: 'dev',
@@ -248,7 +254,13 @@ const entries: EventInput[] = [
 		],
 		suggestions: ['选择不含工具输出'],
 	},
-	{ kind: 'output_captured', outputId: 'v2', files: ['conversation.md'], previews: [] },
+	{
+		kind: 'output_captured',
+		outputId: 'v2',
+		files: ['conversation.md'],
+		previews: ['data:image/png;base64,iVBORw0KGgo='],
+		beforeOutputId: 'v1',
+	},
 	{
 		kind: 'criterion_evidence',
 		actor: 'pm',

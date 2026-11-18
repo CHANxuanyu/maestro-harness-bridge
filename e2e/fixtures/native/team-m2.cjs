@@ -102,6 +102,7 @@ function teamM2Scene(options, prompt, configDir) {
 			};
 			break;
 		case 'proposal':
+			if (options.proposalGate && counts.proposal === 1) scene.exitGate = options.proposalGate;
 			report = {
 				type: kind,
 				discussionId: discussion.id,
@@ -148,6 +149,8 @@ function teamM2Scene(options, prompt, configDir) {
 			};
 			break;
 		case 'message': {
+			// Discussion preparation also uses message turns, with no owner messages to hold.
+			if (options.messageGate && data.messages.length) scene.exitGate = options.messageGate;
 			report = {
 				type: kind,
 				summary: 'Owner message handled and any new requirement sent to PM',
@@ -221,6 +224,7 @@ function teamM2Scene(options, prompt, configDir) {
 			};
 			break;
 		case 'review':
+			if (options.reviewGate && counts.review === 3) scene.exitGate = options.reviewGate;
 			report = {
 				type: kind,
 				verdict: options.scenario === 'review' && counts.review <= 3 ? 'reject' : 'pass',

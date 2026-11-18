@@ -9,6 +9,12 @@ export function TeamComposer({ state }: { state: TeamState }) {
 	const t = useT();
 	const id = state.config!.id;
 	const finished = !!state.terminal || state.stopped;
+	const lastMessage = state.messages.at(-1);
+	const delivery = lastMessage?.handled
+		? 'handled'
+		: lastMessage?.delivered
+			? 'delivered'
+			: 'queued';
 	const [draft, setDraft] = useState('');
 	const to =
 		SEAT_ROLES.find((seat) =>
@@ -133,8 +139,18 @@ export function TeamComposer({ state }: { state: TeamState }) {
 					}}
 				/>
 				<div className="flex gap-2 items-center justify-between">
-					<span className="team-dim" role="status">
-						{t(busy ? 'workflows.team.sending' : 'workflows.team.deliveryHint')}
+					<span
+						className="team-dim"
+						role="status"
+						data-delivery={lastMessage ? delivery : undefined}
+					>
+						{busy
+							? t('workflows.team.sending')
+							: lastMessage
+								? t(`workflows.team.${delivery}`, {
+										seat: t(`workflows.team.${lastMessage.message.to ?? 'pm'}`),
+									})
+								: t('workflows.team.deliveryHint')}
 					</span>
 					<button
 						type="button"

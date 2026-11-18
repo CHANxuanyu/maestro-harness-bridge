@@ -3,16 +3,14 @@ import type { TeamState } from '../../../shared/team/types';
 import { getFileExtension } from '../../../shared/fileCategories';
 import { isImageFile } from '../../../shared/gitUtils';
 import { shouldOpenExternally } from '../../utils/fileExplorer';
-import { getBasename, isAbsolutePath, joinPath } from '../../../shared/formatters';
-import { toRelativePath } from '../../utils/fileLinks/matcher';
-import { normalizeWorktreePath } from '../../../shared/worktreePaths';
+import { isAbsolutePath, joinPath } from '../../../shared/formatters';
 import type { Theme } from '../../types';
 import { useT } from '../../i18n';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { MarkdownImage } from '../FilePreview/MarkdownImage';
 import { Markdown, type MarkdownProps } from '../Markdown/Markdown';
 import { generateProseStyles } from '../../utils/markdownConfig';
-import { TeamFold } from './TeamPrimitives';
+import { TeamFold, teamPathLabel } from './TeamPrimitives';
 
 function OutputFile({
 	path,
@@ -119,13 +117,7 @@ export function TeamOutput({
 	const t = useT();
 	const [version, setVersion] = useState<'now' | 'before'>('now');
 	const latest = state.outputs.at(-1);
-	const rejectedAt = [...state.reviews]
-		.reverse()
-		.find((review) => review.verdict === 'reject')?.seq;
-	const before =
-		rejectedAt === undefined
-			? undefined
-			: [...state.outputs].reverse().find((output) => output.seq < rejectedAt);
+	const before = state.outputs.find((output) => output.outputId === latest?.beforeOutputId);
 	const output = version === 'before' && before ? before : latest;
 	if (!output) return <p className="team-dim">{t('workflows.team.noOutput')}</p>;
 	const cwd = state.seats.dev.binding?.workspace ?? state.config!.projectRoot;
@@ -133,14 +125,10 @@ export function TeamOutput({
 		<OutputFile
 			key={`${output.id}:${file}`}
 			path={isAbsolutePath(file) ? file : joinPath(cwd, file)}
-			label={
-				isAbsolutePath(file)
-					? (toRelativePath(
-							normalizeWorktreePath(file, !!state.config?.sshRemoteId),
-							normalizeWorktreePath(cwd, !!state.config?.sshRemoteId)
-						) ?? getBasename(file))
-					: file
-			}
+			label={teamPathLabel(
+				output.locations?.find((location) => location.file === file)?.location.target ?? file,
+				state
+			)}
 			theme={theme}
 			sshRemoteId={state.config?.sshRemoteId}
 		/>

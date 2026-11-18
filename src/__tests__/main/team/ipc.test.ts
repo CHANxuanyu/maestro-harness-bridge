@@ -58,6 +58,14 @@ describe('team IPC/preload contract', () => {
 			'option',
 			'note'
 		);
+		await api.baselineEdit('team', 'A1', 'New text', { proof: 'qa', how: 'Inspect both views' });
+		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith(
+			'team:baselineEdit',
+			'team',
+			'A1',
+			'New text',
+			{ proof: 'qa', how: 'Inspect both views' }
+		);
 		await api.say('team', 'message', 'dev');
 		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith('team:say', 'team', 'message', 'dev');
 		const listener = vi.fn();

@@ -1,21 +1,70 @@
-import { useMemo, useState } from 'react';
-import type { LedgerEvent, SeatRole, TeamReport, TeamState } from '../../../shared/team/types';
+import { useMemo, useRef, useState } from 'react';
+import type {
+	LedgerEvent,
+	SeatRole,
+	TeamReport,
+	TeamState,
+	TeamEvent,
+} from '../../../shared/team/types';
 import { SEAT_ROLES } from '../../../shared/team/types';
+import { teamReadyForDemo } from '../../../shared/team/policy';
+import { reduceLedger } from '../../../shared/team/ledger';
 import { teamStatus } from '../../../shared/team/status';
 import { formatDurationCompact } from '../../../shared/duration';
+import { useFocusAfterRender } from '../../hooks/utils/useFocusAfterRender';
 import { useT, useFormatList } from '../../i18n';
 import type { Theme } from '../../types';
+import { presentTeamFollowUp } from '../../services/teamClient';
 import { useTeamStore } from '../../stores/teamStore';
-import { Criteria, SeatTag, TeamFold } from './TeamPrimitives';
+import {
+	Criteria,
+	SeatTag,
+	TeamFold,
+	criterionLabel,
+	teamPathLabel,
+	teamEvidenceLabel,
+} from './TeamPrimitives';
 import { deriveTeamFeed } from './deriveTeamFeed';
 import { OwnerCard } from './OwnerCard';
 import { TeamOutput } from './TeamOutput';
+import { TeamDiscussion, discussionPositionsOpen } from './TeamDiscussion';
+import { TeamReview, TeamRetro } from './TeamReview';
 import { TeamSummary } from './TeamSummary';
 
-function ReportMessage({ report }: { report: TeamReport }) {
+export function ReportMessage({ report, state }: { report: TeamReport; state: TeamState }) {
 	const t = useT();
 	const formatList = useFormatList();
 	switch (report.type) {
+		case 'message':
+			return <p>{report.summary}</p>;
+		case 'position': {
+			const discussion = state.discussions.find((entry) => entry.id === report.discussionId);
+			return discussion && discussionPositionsOpen(discussion, state) ? (
+				<>
+					<p>{report.claim}</p>
+					<p>{report.basis}</p>
+				</>
+			) : (
+				<p>{t('workflows.team.sealed')}</p>
+			);
+		}
+		case 'proposal':
+			return <p>{report.proposal}</p>;
+		case 'response':
+			return (
+				<p>
+					{t(`workflows.team.${report.result}`)}: {report.reason}
+				</p>
+			);
+		case 'retro':
+			return (
+				<>
+					<p>{report.causes}</p>
+					<p>{report.approach}</p>
+					<p>{report.basis}</p>
+					<p>{report.difference}</p>
+				</>
+			);
 		case 'brief':
 			return <p>{report.scope}</p>;
 		case 'work':
@@ -28,7 +77,16 @@ function ReportMessage({ report }: { report: TeamReport }) {
 				</>
 			);
 		case 'fix':
-			return <p>{report.summary || formatList(report.fixed)}</p>;
+			return (
+				<p>
+					{report.summary ||
+						formatList(
+							report.fixed.map(
+								(id) => state.issues.find((issue) => issue.id === id)?.opened.title ?? ''
+							)
+						)}
+				</p>
+			);
 		case 'qa_prep':
 			return (
 				<>
@@ -42,7 +100,9 @@ function ReportMessage({ report }: { report: TeamReport }) {
 				<>
 					{report.criteria.map((c) => (
 						<p key={c.id}>
-							{c.id} · {t(c.pass ? 'workflows.team.pass' : 'workflows.team.fail')}: {c.evidence}
+							{criterionLabel(state, c.id)} ·{' '}
+							{t(c.pass ? 'workflows.team.pass' : 'workflows.team.fail')}:{' '}
+							{teamEvidenceLabel(c.evidence, state)}
 						</p>
 					))}
 				</>
@@ -52,9 +112,9 @@ function ReportMessage({ report }: { report: TeamReport }) {
 				<>
 					{report.results.map((r) => (
 						<p key={r.issue}>
-							{r.issue} ·{' '}
+							{state.issues.find((issue) => issue.id === r.issue)?.opened.title} ·{' '}
 							{t(r.pass ? 'workflows.team.verified-pass' : 'workflows.team.verified-fail')}:{' '}
-							{r.evidence}
+							{teamEvidenceLabel(r.evidence, state)}
 						</p>
 					))}
 				</>
@@ -72,7 +132,7 @@ function ReportMessage({ report }: { report: TeamReport }) {
 				<>
 					{report.decisions.map((d, i) => (
 						<p key={i}>
-							{d.about}: {d.reason}
+							{criterionLabel(state, d.about) || d.about}: {d.reason}
 						</p>
 					))}
 				</>
@@ -82,7 +142,7 @@ function ReportMessage({ report }: { report: TeamReport }) {
 				<>
 					{report.objections.map((o, i) => (
 						<p key={i}>
-							{o.about}: {o.problem}
+							{criterionLabel(state, o.about) || o.about}: {o.problem}
 						</p>
 					))}
 				</>
@@ -106,16 +166,22 @@ export function DemoCard({
 	theme,
 	active,
 	onChanges,
+	demo = state.demos.at(-1),
+	canAccept,
 }: {
+	demo?: TeamEvent<'demo'>;
+	canAccept?: boolean;
 	state: TeamState;
 	theme: Theme;
 	active: boolean;
-	onChanges: () => void;
+	onChanges?: () => void;
 }) {
 	const t = useT();
 	const formatList = useFormatList();
 	const [editing, setEditing] = useState(false);
 	const [note, setNote] = useState('');
+	const noteRef = useRef<HTMLTextAreaElement>(null);
+	useFocusAfterRender(noteRef, editing);
 	const status = teamStatus(state, Date.now());
 	const id = state.config!.id;
 	const busy = useTeamStore((s) => s.pending[`${id}:command`]);
@@ -126,6 +192,14 @@ export function DemoCard({
 		status.criteria.withEvidence === status.criteria.total &&
 		state.reviews.at(-1)?.verdict === 'pass';
 	const report = [...state.turns].reverse().find((turn) => turn.report?.type === 'demo')?.report;
+	const previousDemo = state.demos.filter((entry) => demo && entry.seq < demo.seq).at(-1);
+	const decisions = state.decisions.filter((entry) => entry.seq > (previousDemo?.seq ?? 0));
+	const changes = state.standardChanges.filter((entry) => entry.seq > (previousDemo?.seq ?? 0));
+	const evidenceReady =
+		status.criteria.total > 0 &&
+		status.criteria.withEvidence === status.criteria.total &&
+		state.reviews.at(-1)?.verdict === 'pass';
+	if (!evidenceReady) return null;
 	return (
 		<section
 			className="team-card"
@@ -137,7 +211,8 @@ export function DemoCard({
 				{t('workflows.team.demo')} <SeatTag seat="pm" model={state.seats.pm.model} />
 			</h3>
 			<TeamOutput state={state} theme={theme} />
-			{report?.type === 'demo' && (
+			{previousDemo && <p data-demo-delta>{t('workflows.team.demoDelta')}</p>}
+			{!previousDemo && report?.type === 'demo' && (
 				<>
 					<p>{report.summary}</p>
 					<ul>
@@ -153,37 +228,47 @@ export function DemoCard({
 					passed: status.criteria.withEvidence,
 				})}
 			>
-				<Criteria state={state} />
+				<Criteria state={state} ids={previousDemo ? demo?.criterionIds : undefined} />
 				<p className="team-dim">{t('workflows.team.evidenceSource')}</p>
 			</TeamFold>
 			<TeamFold
 				title={t('workflows.team.decisionCount', {
-					team: state.decisions.filter((d) => d.decider !== 'owner').length,
-					owner: state.statistics.ownerDecisions,
+					team: decisions.filter((d) => d.decider !== 'owner').length,
+					owner: previousDemo
+						? decisions.filter((d) => d.decider === 'owner').length +
+							state.cardAnswers.filter((answer) => answer.seq > previousDemo.seq).length
+						: state.statistics.ownerDecisions,
 				})}
 			>
-				{state.decisions.map((d) => (
+				{decisions.map((d) => (
 					<p key={d.id}>{d.decision}</p>
 				))}
 			</TeamFold>
 			<TeamFold title={t('workflows.team.standardChanges')}>
-				{state.standardChanges.length ? (
-					state.standardChanges.map((c) => (
+				{changes.length ? (
+					changes.map((c) => (
 						<p key={c.id}>
-							{c.criterionId}: {c.before} → {c.after} · {c.reason}
+							{c.before} → {c.after} · {c.reason}
 						</p>
 					))
 				) : (
 					<p>{t('workflows.team.empty')}</p>
 				)}
 			</TeamFold>
-			<p className="team-dim">
-				{t('workflows.team.notDoing')}: {formatList(state.baseline.brief?.notDoing ?? [])}
-			</p>
+			{!previousDemo && (
+				<p className="team-dim">
+					{t('workflows.team.notDoing')}: {formatList(state.baseline.brief?.notDoing ?? [])}
+				</p>
+			)}
 			{editing && (
 				<label>
 					{t('workflows.team.changeNote')}
-					<textarea className="w-full" value={note} onChange={(e) => setNote(e.target.value)} />
+					<textarea
+						ref={noteRef}
+						className="w-full"
+						value={note}
+						onChange={(e) => setNote(e.target.value)}
+					/>
 					<button
 						className="team-button"
 						disabled={!note.trim() || busy}
@@ -204,31 +289,41 @@ export function DemoCard({
 						<button
 							className="team-button"
 							data-primary="true"
-							disabled={!ready || busy}
+							data-action="accept"
+							disabled={!(canAccept ?? ready) || busy}
 							onClick={() => void useTeamStore.getState().command(id, 'accept')}
 						>
 							{t('workflows.team.accept')}
 						</button>
-						<button className="team-button" disabled={busy} onClick={() => setEditing(!editing)}>
+						<button
+							className="team-button"
+							data-action="request-changes"
+							disabled={busy}
+							onClick={() => setEditing(!editing)}
+						>
 							{t('workflows.team.requestChanges')}
 						</button>
 					</>
 				)}
-				<button className="team-button" onClick={onChanges}>
-					{t('workflows.team.viewChanges')}
-				</button>
+				{onChanges && (
+					<button className="team-button" onClick={onChanges}>
+						{t('workflows.team.viewChanges')}
+					</button>
+				)}
 			</div>
 		</section>
 	);
 }
 
-function FeedEvent({
+export function FeedEvent({
 	event,
 	state,
 	events,
 	theme,
 	onChanges,
+	readOnly = false,
 }: {
+	readOnly?: boolean;
 	event: LedgerEvent;
 	state: TeamState;
 	events: readonly LedgerEvent[];
@@ -254,6 +349,64 @@ function FeedEvent({
 		return <SeatTag seat={seat} model={model} />;
 	};
 	switch (event.kind) {
+		case 'work_item':
+			return (
+				<p>
+					{event.title} · {t(`workflows.team.${event.state}`)}
+				</p>
+			);
+		case 'issue_fixed':
+			return (
+				<p>
+					{state.issues.find((issue) => issue.id === event.issueId)?.opened.title} ·{' '}
+					{t('workflows.team.fixed-claimed')}: {event.summary}
+				</p>
+			);
+		case 'issue_verified':
+			return (
+				<p>
+					{state.issues.find((issue) => issue.id === event.issueId)?.opened.title} ·{' '}
+					{t(event.pass ? 'workflows.team.verified-pass' : 'workflows.team.verified-fail')}:{' '}
+					{event.evidence && teamEvidenceLabel(event.evidence, state)}
+				</p>
+			);
+		case 'standard_issue_resolved':
+			return (
+				<p>
+					{state.issues.find((issue) => issue.id === event.issueId)?.opened.title}: {event.reason}
+				</p>
+			);
+		case 'criterion_evidence':
+			return (
+				<p>
+					{criterionLabel(state, event.criterionId)} · {t(`workflows.team.proof.${event.source}`)} ·{' '}
+					{t(event.pass ? 'workflows.team.pass' : 'workflows.team.fail')}:{' '}
+					{teamEvidenceLabel(event.evidence, state)}
+				</p>
+			);
+		case 'position': {
+			const discussion = state.discussions.find((entry) => entry.id === event.discussionId);
+			return discussion && discussionPositionsOpen(discussion, state) ? (
+				<p>
+					{event.claim} · {event.basis}
+				</p>
+			) : (
+				<p>{t('workflows.team.sealed')}</p>
+			);
+		}
+		case 'proposal':
+			return (
+				<p>
+					{event.proposal} ·{' '}
+					{t('workflows.team.decider', { seat: t(`workflows.team.${event.decider}`) })}
+				</p>
+			);
+		case 'response':
+			return (
+				<p>
+					{t(`workflows.team.${event.result}`)}: {event.reason}
+				</p>
+			);
 		case 'team_created':
 			return (
 				<>
@@ -290,7 +443,7 @@ function FeedEvent({
 				<div data-card="message" className="flex flex-col gap-1">
 					{tag(event.seat)}
 					<div className="whitespace-pre-wrap">
-						<ReportMessage report={event.report} />
+						<ReportMessage report={event.report} state={state} />
 					</div>
 				</div>
 			);
@@ -300,9 +453,9 @@ function FeedEvent({
 					<h3>{t('workflows.team.brief', { version: event.brief.version })}</h3>
 					<p>{event.brief.scope}</p>
 					<TeamFold title={t('workflows.team.criteria', { count: event.brief.criteria.length })}>
-						{event.brief.criteria.map((c) => (
+						{event.brief.criteria.map((c, index) => (
 							<div key={c.id}>
-								<span className="team-dim">{c.id} </span>
+								<span className="team-dim">{index + 1} </span>
 								{c.text}
 								<p className="team-dim">
 									{t(`workflows.team.proof.${c.proof}`)} · {c.how}
@@ -327,12 +480,13 @@ function FeedEvent({
 				>
 					{event.objections.map((o, i) => (
 						<p key={i}>
-							{o.about}: {o.problem}
+							{criterionLabel(state, o.about) || o.about}: {o.problem}
 						</p>
 					))}
 					{event.plans?.map((p, i) => (
 						<p key={i}>
-							{t('workflows.team.verificationPlan')} · {p.criterion}: {p.how} {p.data}
+							{t('workflows.team.verificationPlan')} · {criterionLabel(state, p.criterion)}: {p.how}{' '}
+							{p.data}
 						</p>
 					))}
 				</TeamFold>
@@ -342,7 +496,7 @@ function FeedEvent({
 				<TeamFold kind="brief-response" title={t('workflows.team.briefResponse')}>
 					{event.decisions.map((d, i) => (
 						<p key={i}>
-							{d.about}: {d.reason}
+							{criterionLabel(state, d.about) || d.about}: {d.reason}
 						</p>
 					))}
 				</TeamFold>
@@ -375,70 +529,8 @@ function FeedEvent({
 			) : null;
 		}
 		case 'discussion_opened': {
-			const discussion = state.discussions.find((d) => d.id === event.discussionId);
-			return (
-				<TeamFold
-					kind="discussion"
-					title={
-						<>
-							<b>
-								{t('workflows.team.discussion')} · {event.topic}
-							</b>
-							{discussion?.decision && (
-								<span className="team-dim"> · {discussion.decision.decision}</span>
-							)}
-						</>
-					}
-				>
-					<p className="team-dim">{event.trigger}</p>
-					<h4>{t('workflows.team.positions')}</h4>
-					{discussion?.positions.map((p) => (
-						<div key={p.id}>
-							{tag(p.seat)}
-							<p>{p.claim}</p>
-							<p className="team-dim">
-								{t('workflows.team.basis')}: {p.basis}
-							</p>
-							<p className="team-dim">
-								{t('workflows.team.changeMind')}: {p.wouldChangeMind}
-							</p>
-						</div>
-					))}
-					<h4>{t('workflows.team.proposal')}</h4>
-					{discussion?.proposals.map((p) => (
-						<p key={p.id}>{p.proposal}</p>
-					))}
-					<h4>{t('workflows.team.responses')}</h4>
-					{discussion?.responses.map((r) => (
-						<div key={r.id}>
-							{tag(r.seat)}
-							<p>{r.reason}</p>
-							<p>{r.evidence}</p>
-						</div>
-					))}
-					{discussion?.decision && (
-						<>
-							<h4>{t('workflows.team.decision')}</h4>
-							<p>
-								{discussion.decision.decision} ·{' '}
-								{t(`workflows.team.${discussion.decision.decider}`)}
-							</p>
-							{discussion.decision.dissent && (
-								<p>
-									{t('workflows.team.dissent')}: {discussion.decision.dissent}
-								</p>
-							)}
-							<h4>{t('workflows.team.actions')}</h4>
-							{discussion.decision.actions.map((a, i) => (
-								<div key={i}>
-									{tag(a.seat)}
-									<p>{a.action}</p>
-								</div>
-							))}
-						</>
-					)}
-				</TeamFold>
-			);
+			const discussion = state.discussions.find((entry) => entry.id === event.discussionId);
+			return discussion ? <TeamDiscussion discussion={discussion} state={state} /> : null;
 		}
 		case 'check_run':
 			return (
@@ -446,7 +538,8 @@ function FeedEvent({
 					kind="check"
 					title={
 						<>
-							<b>{t('workflows.team.check')}</b> · {formatList(event.covers)} ·{' '}
+							<b>{t('workflows.team.check')}</b> ·{' '}
+							{formatList(event.covers.map((id) => criterionLabel(state, id)))} ·{' '}
 							{t(
 								event.exitCode === 0 && !event.timedOut && !event.notRun
 									? 'workflows.team.pass'
@@ -457,7 +550,7 @@ function FeedEvent({
 					}
 				>
 					<code>{event.command}</code>
-					<p className="team-dim">{event.cwd}</p>
+					<p className="team-dim">{teamPathLabel(event.cwd, state)}</p>
 					{event.purpose === 'trial' && <p>{t('workflows.team.trial')}</p>}
 					<p>
 						{t('workflows.team.checkResult', {
@@ -475,7 +568,10 @@ function FeedEvent({
 			return (
 				<section className="team-card" data-card="issue" data-state={issue?.state}>
 					<h3>
-						{t('workflows.team.issue', { id: event.issueId })} · {event.title}
+						{t('workflows.team.issue', {
+							id: state.issues.findIndex((issue) => issue.id === event.issueId) + 1,
+						})}{' '}
+						· {event.title}
 					</h3>
 					<ol className="list-decimal pl-5">
 						{event.steps.map((step, i) => (
@@ -485,7 +581,8 @@ function FeedEvent({
 					<p>{event.expected && `${t('workflows.team.expected')}: ${event.expected}`}</p>
 					<p>{event.actual && `${t('workflows.team.actual')}: ${event.actual}`}</p>
 					<p className="team-dim">
-						{event.criterionId && t('workflows.team.violates', { id: event.criterionId })}
+						{event.criterionId &&
+							t('workflows.team.violates', { id: criterionLabel(state, event.criterionId) })}
 					</p>
 					<div className="flex flex-wrap gap-1 text-xs">
 						{(['opened', 'fixed-claimed', 'verified-pass'] as const).map((step, i) => (
@@ -517,7 +614,7 @@ function FeedEvent({
 						.filter((e) => e.kind === 'issue_verified')
 						.map((e) => (
 							<p className="team-dim" key={e.id}>
-								{e.evidence}
+								{e.evidence && teamEvidenceLabel(e.evidence, state)}
 							</p>
 						))}
 				</section>
@@ -562,52 +659,35 @@ function FeedEvent({
 				</section>
 			);
 		case 'review':
-			return (
-				<section className="team-card" data-card="review">
-					<h3>
-						{t('workflows.team.review')} ·{' '}
-						{t(event.verdict === 'pass' ? 'workflows.team.pass' : 'workflows.team.reject')}
-					</h3>
-					{event.problems.map((p, i) => (
-						<div key={i} className="team-item">
-							<b>{p.title}</b>
-							<p className="team-dim">
-								{t('workflows.team.location')}: {p.location} · {p.criterion}
-							</p>
-							<p>
-								{t('workflows.team.impact')}: {p.impact}
-							</p>
-							<p>
-								{t('workflows.team.expected')}: {p.expected}
-							</p>
-						</div>
-					))}
-					{event.suggestions.length > 0 && (
-						<TeamFold title={t('workflows.team.suggestions')}>
-							{event.suggestions.map((s) => (
-								<p key={s}>{s}</p>
-							))}
-						</TeamFold>
-					)}
-				</section>
-			);
+			return <TeamReview review={event} state={state} />;
 		case 'retro':
+			return <TeamRetro retro={event} />;
+		case 'standard_change':
 			return (
-				<section className="team-card" data-card="retro">
-					<h3>{t('workflows.team.retro')}</h3>
-					<p>{event.summary}</p>
+				<section className="team-card" data-card="standard-change-record">
+					<h3>{t(`workflows.team.change.${event.change}`)}</h3>
 					<p>
-						{t('workflows.team.progressEvidence')}: {event.progressEvidence}
+						{event.before && <del>{event.before}</del>} {event.after}
+					</p>
+					<p className="team-dim">
+						{event.reason} · {t(`workflows.team.${event.approvedBy}`)}
 					</p>
 				</section>
 			);
 		case 'demo':
 			return (
 				<DemoCard
-					state={state}
+					demo={event}
+					canAccept={
+						teamReadyForDemo(state) &&
+						state.openCards.length > 0 &&
+						state.openCards.every((card) => card.boundary === 'acceptance')
+					}
+					state={reduceLedger(events.filter((entry) => entry.seq <= event.seq))}
 					theme={theme}
-					onChanges={onChanges}
+					onChanges={readOnly ? undefined : onChanges}
 					active={
+						!readOnly &&
 						!state.terminal &&
 						(state.phase === 'demo' || state.phase === 'accept') &&
 						[...events].reverse().find((e) => e.kind === 'demo')?.id === event.id
@@ -615,11 +695,10 @@ function FeedEvent({
 				/>
 			);
 		case 'owner_message': {
-			const delivered = events.some(
-				(e) => e.kind === 'message_delivered' && e.messageId === event.messageId
-			);
+			const message = state.messages.find((entry) => entry.message.messageId === event.messageId);
+			const delivery = message?.handled ? 'handled' : message?.delivered ? 'delivered' : 'queued';
 			return (
-				<div data-card="owner-message" className="self-end max-w-[85%]">
+				<div data-card="owner-message" data-delivery={delivery} className="self-end max-w-[85%]">
 					<p
 						className="rounded-xl p-3 whitespace-pre-wrap"
 						style={{ background: 'var(--team-activity)' }}
@@ -627,10 +706,12 @@ function FeedEvent({
 						{event.text}
 					</p>
 					<p className="team-dim">
-						{t(delivered ? 'workflows.team.delivered' : 'workflows.team.queued', {
+						{t(`workflows.team.${delivery}`, {
 							seat: t(`workflows.team.${event.to ?? 'pm'}`),
 						})}
 					</p>
+					{message?.handled && <p className="team-dim">{message.handled.summary}</p>}
+					{message?.forwarded && <p className="team-dim">{t('workflows.team.forwarded')}</p>}
 				</div>
 			);
 		}
@@ -649,11 +730,14 @@ function FeedEvent({
 					{event.untilMs && <p className="team-dim">{new Date(event.untilMs).toLocaleString()}</p>}
 					{events
 						.filter((e) => e.kind === 'follow_up_fired' && e.followUpId === event.followUpId)
-						.map((e) => e.kind === 'follow_up_fired' && <p key={e.id}>{e.result}</p>)}
+						.map(
+							(e) =>
+								e.kind === 'follow_up_fired' && <p key={e.id}>{presentTeamFollowUp(e.result, t)}</p>
+						)}
 				</TeamFold>
 			);
 		case 'follow_up_fired':
-			return <p className="team-dim">{event.result}</p>;
+			return <p className="team-dim">{presentTeamFollowUp(event.result, t)}</p>;
 		case 'member_fault':
 			return (
 				<section className="team-card" data-card="recovery">

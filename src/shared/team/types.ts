@@ -240,6 +240,28 @@ export interface OwnerCard {
 				diff?: BaselineDiff;
 		  }
 		| {
+				type: 'discussion';
+				before?: Criterion;
+				after?: Criterion;
+				currentCheckResult?: string;
+				failingNow: boolean;
+				positions: TeamEvent<'position'>[];
+				proposal: string;
+				responses: TeamEvent<'response'>[];
+		  }
+		| { type: 'check-permission'; command: string; boundary: CheckBoundary }
+		| {
+				type: 'acceptance';
+				output?: TeamEvent<'output_captured'>;
+				before?: TeamEvent<'output_captured'>;
+				demo?: TeamEvent<'demo'>;
+				evidence: TeamStatusView['criteria'];
+				changes: TeamEvent<'standard_change'>[];
+				contested: TeamEvent<'discussion_closed'>[];
+				suggestions: string[];
+				evidenceChanges: TeamEvent<'check_run'>[];
+		  }
+		| {
 				type: 'progress-report';
 				missing: { id: string; text: string; status: string; reason: string }[];
 				changes: TeamEvent<'standard_change'>[];

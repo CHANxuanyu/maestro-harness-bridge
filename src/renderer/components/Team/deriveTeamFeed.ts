@@ -18,6 +18,11 @@ export function deriveTeamFeed(events: readonly LedgerEvent[]): TeamFeedGroup[] 
 			(event.followUpId.startsWith('job:') || event.followUpId.startsWith('job-retry:'))
 		)
 			continue;
+		if (
+			event.kind === 'report_accepted' &&
+			['position', 'proposal', 'response', 'retro', 'message'].includes(event.report.type)
+		)
+			continue;
 		if (event.kind === 'phase_changed') {
 			phase = event.to;
 			group = undefined;
@@ -32,6 +37,7 @@ export function deriveTeamFeed(events: readonly LedgerEvent[]): TeamFeedGroup[] 
 			case 'baseline_proposed':
 			case 'baseline_confirmed':
 			case 'discussion_opened':
+			case 'standard_change':
 			case 'check_run':
 			case 'issue_opened':
 			case 'quota_exhausted':

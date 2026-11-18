@@ -24,12 +24,12 @@ export function presentTeamOwnerCard(card: OwnerCard, state: TeamState, t: TFunc
 			t('workflows.team.progressReport'),
 			...state.criteria
 				.filter((criterion) => criterion.confirmed && criterion.status !== 'pass')
-				.map((criterion) => `${criterion.id}: ${criterion.text}`),
+				.map((criterion) => criterion.text),
 		].join('\n');
 	}
-	if (!payload && /^[\s]*[\[{]/.test(body)) {
+	if (/^[\s]*[\[{]/.test(body)) {
 		try {
-			payload = JSON.parse(body);
+			payload ??= JSON.parse(body);
 		} catch {
 			// A truncated legacy payload is not useful owner-facing copy either.
 		}
@@ -44,6 +44,8 @@ export function presentTeamOwnerCard(card: OwnerCard, state: TeamState, t: TFunc
 			: (state.baseline.proposedVersion ?? state.brief?.version);
 	const baseline = card.boundary === 'baseline';
 	const acceptance = card.boundary === 'acceptance';
+	const discussion = card.payload?.type === 'discussion';
+	const permission = card.payload?.type === 'check-permission';
 	return {
 		...card,
 		title: baseline
@@ -52,12 +54,41 @@ export function presentTeamOwnerCard(card: OwnerCard, state: TeamState, t: TFunc
 				: t('workflows.team.confirmBaseline')
 			: acceptance
 				? t('workflows.team.acceptResult')
-				: card.title,
-		body: baseline && payload ? '' : acceptance ? t('workflows.team.acceptanceBody') : body,
+				: discussion
+					? t(
+							card.standardChange ? 'workflows.team.standardRequest' : 'workflows.team.ownerDecides'
+						)
+					: permission
+						? t('workflows.team.checkPermission')
+						: card.title,
+		body:
+			baseline && payload
+				? ''
+				: acceptance
+					? t('workflows.team.acceptanceBody')
+					: discussion
+						? card.standardChange
+							? ''
+							: t('workflows.team.commitmentBody')
+						: permission
+							? `${t('workflows.team.checkPermissionBody')} ${card.payload?.type === 'check-permission' ? `${card.payload.command}. ${t(`workflows.team.checkScope.${card.payload.boundary}`)}` : ''}`
+							: body,
 		question: baseline && typeof data.question === 'string' ? data.question : undefined,
 		briefVersion: version,
 		options: card.options.map((option) => ({
 			...option,
+			cost:
+				card.standardChange && (option.id === 'approve' || option.id === 'keep')
+					? t(
+							option.id === 'approve'
+								? card.standardChange.change === 'remove'
+									? 'workflows.team.approveRemovalCost'
+									: 'workflows.team.approveStandardCost'
+								: data.failingNow === true
+									? 'workflows.team.keepFailingStandardCost'
+									: 'workflows.team.keepStandardCost'
+						)
+					: option.cost,
 			label:
 				baseline && option.id === 'confirm'
 					? t('workflows.team.confirmBaseline')
@@ -67,10 +98,52 @@ export function presentTeamOwnerCard(card: OwnerCard, state: TeamState, t: TFunc
 							? t('workflows.team.accept')
 							: acceptance && option.id === 'changes'
 								? t('workflows.team.requestChanges')
-								: option.label,
+								: discussion && option.id === 'approve'
+									? t(
+											card.standardChange
+												? 'workflows.team.approveStandard'
+												: 'workflows.team.approveCommitment'
+										)
+									: discussion && option.id === 'keep'
+										? t(
+												card.standardChange
+													? 'workflows.team.keepStandard'
+													: 'workflows.team.keepCommitment'
+											)
+										: permission && option.id === 'once'
+											? t('workflows.team.allowCheck')
+											: permission && option.id === 'omit'
+												? t('workflows.team.omitCheck')
+												: option.label,
 		})),
 	};
 }
 
-/** No speculative IPC calls: these controls become available with the extended contract. */
-export const teamFeatures = { baselineEdit: false, baselineDiff: false, baselineReturn: false };
+/** Legacy follow-up receipts contain serialized external observations, not prose. */
+export function presentTeamFollowUp(result: string, t: TFunction): string {
+	if (!/^\s*[[{]/.test(result)) return result;
+	try {
+		const observation: unknown = JSON.parse(result);
+		if (observation && typeof observation === 'object' && !Array.isArray(observation)) {
+			const data = observation as Record<string, unknown>;
+			return (
+				[
+					data.state === 'waiting' ||
+					data.state === 'running' ||
+					data.state === 'completed' ||
+					data.state === 'unavailable'
+						? t(`workflows.team.external.${data.state}`)
+						: '',
+					...['status', 'conclusion', 'error', 'outputTail'].map((key) =>
+						typeof data[key] === 'string' ? data[key] : ''
+					),
+				]
+					.filter(Boolean)
+					.join(': ') || t('workflows.team.followUpUpdated')
+			);
+		}
+	} catch {
+		// Malformed transport data is not an owner-facing message.
+	}
+	return t('workflows.team.followUpUpdated');
+}

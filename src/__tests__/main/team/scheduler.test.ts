@@ -24,6 +24,7 @@ import {
 import type { NewLedgerEvent } from '../../../main/team/team-store';
 const { createNativeTempDir } = require('../../../../e2e/fixtures/native/temp-root.cjs');
 const { teamM2Brief, teamM2Scene } = require('../../../../e2e/fixtures/native/team-m2.cjs');
+const { nativeTeamScene } = require('../../../../e2e/fixtures/native/cli.cjs');
 
 vi.mock('../../../main/utils/sentry', () => ({ captureException: vi.fn() }));
 
@@ -218,6 +219,41 @@ describe('team scheduler', () => {
 		await scheduler.answer(teamConfig.id, state().openCards[0].id, 'confirm');
 		await drain();
 	};
+	it('handles the M1 UI note queued while baseline is open before advancing after confirmation', async () => {
+		const account = createNativeTempDir('team-baseline-message-');
+		try {
+			await toBaseline();
+			const proposed = state().baseline.proposedVersion;
+			await scheduler.say(teamConfig.id, 'Please preserve the independent bad-input check.', 'pm');
+			await drain();
+			const request = latest('pm', 'message');
+			expect(state().messages[0].delivered?.seat).toBe('pm');
+			expect(state().messages[0].handled).toBeUndefined();
+			await confirm();
+			expect(state().baseline.confirmedVersion).toBe(proposed);
+			expect(state().phase).toBe('challenge');
+			const selection = nativeTeamScene(
+				{
+					teamMessages: { seat: 'pm' },
+					turns: [{ answer: JSON.stringify(goodReports.review) }],
+				},
+				request.prompt,
+				account,
+				0,
+				true
+			);
+			expect(selection.consumeTurn).toBe(false);
+			await finish(request, selection.scene.answer);
+			expect(state().pendingMessages).toHaveLength(0);
+			expect(state().messages[0].handled?.seat).toBe('pm');
+			expect(state().statistics.ownerMessages).toBe(1);
+			expect(state().phase).toBe('implement');
+			expect(latest('dev', 'work')).toBeDefined();
+			expect(state().seats.pm.faultActive).toBe(false);
+		} finally {
+			fs.rmSync(account, { recursive: true, force: true });
+		}
+	});
 	it('keeps the baseline readable while preserving its structured brief and trial evidence', async () => {
 		await toBaseline();
 		const card = state().openCards[0];
@@ -443,14 +479,20 @@ describe('team scheduler', () => {
 				if (scenario === 'commitment' || scenario === 'relaxation') {
 					await pump(() => state().openCards.some((c) => c.boundary === 'commitment'));
 					const card = state().openCards.find((c) => c.boundary === 'commitment')!;
-					expect(card.body).toContain('sealed position');
+					expect(card.payload).toMatchObject({
+						type: 'discussion',
+						positions: expect.arrayContaining([
+							expect.objectContaining({ claim: expect.stringContaining('sealed position') }),
+						]),
+					});
+					expect(card.body).not.toMatch(/^\s*[\[{]/);
 					expect(card.referenceVotes).toContain('Reference only');
 					if (scenario === 'relaxation') {
 						expect(state().criteria[0]).toMatchObject({
 							text: teamM2Brief.criteria[0].text,
 							status: 'fail',
 						});
-						expect(card.body).toContain('"failingNow":true');
+						expect(card.payload).toMatchObject({ type: 'discussion', failingNow: true });
 					}
 					return;
 				}
@@ -497,7 +539,9 @@ describe('team scheduler', () => {
 			} finally {
 				fs.rmSync(root, { recursive: true, force: true });
 			}
-		}
+		},
+		// Full scripted flows through real scheduling and validation; slow on loaded or Windows hosts.
+		60_000
 	);
 	it('repairs only once when both the reply and its repair are malformed', async () => {
 		await begin();
@@ -1163,7 +1207,10 @@ describe('team scheduler', () => {
 			boundary: 'commitment',
 			referenceVotes: expect.stringContaining('2 vendor groups'),
 		});
-		expect(state().openCards[0].body).toContain('qa position');
+		expect(state().openCards[0].payload).toMatchObject({
+			type: 'discussion',
+			positions: expect.arrayContaining([expect.objectContaining({ claim: 'qa position' })]),
+		});
 		expect(state().decisions).toEqual([]);
 	});
 	it('T6 preserves a failing criterion while a relaxation application awaits the owner', async () => {
@@ -1191,8 +1238,8 @@ describe('team scheduler', () => {
 			status: 'fail',
 		});
 		const target = state().openCards[0];
-		expect(target.body).toContain('"failingNow":true');
-		expect(target.body).toContain('Hours optional');
+		expect(target.payload).toMatchObject({ type: 'discussion', failingNow: true });
+		expect(target.payload).toMatchObject({ type: 'discussion', after: { text: 'Hours optional' } });
 		await scheduler.answer(teamConfig.id, target.id, 'keep');
 		await drain();
 		expect(state().criteria[0].text).toBe('Parses hours');
@@ -1205,15 +1252,39 @@ describe('team scheduler', () => {
 	it('T7 owner baseline edit keeps version history, reruns canaries and returns a minimal diff', async () => {
 		await toBaseline();
 		const originalVersion = state().brief!.version;
-		await scheduler.baselineEdit(teamConfig.id, 'A1', 'Parses whole hours');
+		await scheduler.baselineEdit(teamConfig.id, 'A1', 'Parses whole hours', {
+			proof: 'app',
+			how: 'Run complete-hour samples',
+		});
 		await drain();
 		expect(state().briefs.find((b) => b.version === originalVersion)!.criteria[0].text).toBe(
 			'Parses hours'
 		);
 		expect((await scheduler.baselineDiff(teamConfig.id)).criteria.map((c) => c.id)).toEqual(['A1']);
+		expect(state().brief!.criteria[0].how).toBe('Run complete-hour samples');
+		expect(state().briefs.find((b) => b.version === originalVersion)!.criteria[0].how).not.toBe(
+			'Run complete-hour samples'
+		);
 		expect(state().checks.filter((c) => c.purpose === 'trial')).toHaveLength(2);
 		await confirm();
 		expect(state().criteria[0].text).toBe('Parses whole hours');
+	});
+	it('validates owner proof fields and applies the proof source without changing the old version', async () => {
+		await toBaseline();
+		const version = state().brief!.version;
+		await expect(
+			scheduler.baselineEdit(teamConfig.id, 'A1', 'Parses hours', { proof: 'invalid' as never })
+		).rejects.toThrow('Invalid criterion proof fields');
+		expect(state().brief!.version).toBe(version);
+		await scheduler.baselineEdit(teamConfig.id, 'A1', 'Parses hours', {
+			proof: 'qa',
+			how: 'Inspect hour samples',
+		});
+		await drain();
+		expect(state().brief!.criteria[0]).toMatchObject({ proof: 'qa', how: 'Inspect hour samples' });
+		expect(state().briefs.find((brief) => brief.version === version)!.criteria[0].proof).toBe(
+			'app'
+		);
 	});
 	it('re-challenges an amended brief after a return and preserves its minimal diff after PM acknowledges it', async () => {
 		await toBaseline();
@@ -1235,6 +1306,107 @@ describe('team scheduler', () => {
 		expect((await scheduler.baselineDiff(teamConfig.id)).criteria.map((c) => c.id)).toEqual(['E1']);
 		expect(state().openCards[0].boundary).toBe('baseline');
 		expect(state().challenges).toHaveLength(4);
+	});
+	it('revises the baseline after an owner edit and return while the UI message gate remains closed', async () => {
+		const root = createNativeTempDir('team-edited-baseline-return-');
+		const messageGate = path.join(root, 'owner-message.gate');
+		const script = (request: SeatTurnRequest) =>
+			teamM2Scene(
+				{ seat: request.seat, scenario: 'review', brief: teamM2Brief, messageGate },
+				request.prompt,
+				path.join(root, request.seat)
+			) as { answer: string; exitGate?: string };
+		const completeScriptedTurn = async (seat: string, kind: string) => {
+			const request = latest(seat, kind);
+			expect(request).toBeDefined();
+			const scene = script(request);
+			// An exit gate here would occupy a scheduler slot until after baseline confirmation.
+			expect(
+				scene.exitGate,
+				`${seat} ${kind} must finish before the owner-message gate opens`
+			).toBeUndefined();
+			await finish(request, scene.answer);
+		};
+		try {
+			for (const seat of ['pm', 'dev', 'qa']) fs.mkdirSync(path.join(root, seat));
+			await begin();
+			await completeScriptedTurn('pm', 'brief');
+			await completeScriptedTurn('dev', 'challenge');
+			await completeScriptedTurn('qa', 'challenge');
+			await completeScriptedTurn('pm', 'respond');
+			const original = state().brief!;
+			const ownerText = 'Output contains implemented heading in the document';
+			await scheduler.baselineEdit(teamConfig.id, 'A1', ownerText, {
+				proof: 'app',
+				how: 'node check.cjs',
+			});
+			await drain();
+			const editedVersion = state().brief!.version;
+			expect(editedVersion).toBe(original.version + 1);
+			expect(state().brief!.criteria.map((criterion) => criterion.id)).toEqual(['A1', 'E1']);
+			await scheduler.baselineReturn(teamConfig.id, 'Include the footer');
+			await drain();
+			expect(state().baseline.returns).toHaveLength(1);
+			const returned = state().baseline.returns[0];
+			expect(returned.note).toBe('Include the footer');
+			for (const seat of ['pm', 'dev', 'qa']) await completeScriptedTurn(seat, 'position');
+			await completeScriptedTurn('pm', 'proposal');
+			for (const seat of ['pm', 'dev', 'qa']) await completeScriptedTurn(seat, 'response');
+			expect(
+				state().discussions.find((discussion) => discussion.opened?.trigger === 'baseline-return')
+					?.decision
+			).toBeDefined();
+			for (const seat of ['pm', 'dev', 'qa']) await completeScriptedTurn(seat, 'message');
+			const respond = latest('pm', 'respond');
+			expect(
+				state().turns.find((turn) => turn.dispatchId === respond.dispatchId)!.dispatched!.seq
+			).toBeGreaterThan(returned.seq);
+			// Match the actual structured return-note field, not a note mentioned elsewhere in prose.
+			expect(respond.prompt).toContain(
+				JSON.stringify({ baselineReturns: [returned] }, null, '\t').slice(2, -2)
+			);
+			await completeScriptedTurn('pm', 'respond');
+			const published = events.findLast((event) => event.kind === 'brief_published')!;
+			expect(published).toMatchObject({ actor: 'pm', brief: { version: editedVersion + 1 } });
+			expect(state().brief).toEqual(published.brief);
+			expect(state().brief!.criteria[0]).toMatchObject({
+				id: 'A1',
+				text: ownerText,
+				byOwner: true,
+			});
+			expect(state().brief!.criteria[1]).toMatchObject({
+				id: 'E1',
+				text: 'Readable output in both viewers; footer included',
+			});
+			expect(
+				state().briefs.find((brief) => brief.version === editedVersion)!.criteria[1].text
+			).toBe('Readable output in both viewers');
+			await completeScriptedTurn('dev', 'challenge');
+			await completeScriptedTurn('qa', 'challenge');
+			await completeScriptedTurn('pm', 'respond');
+			expect(state().baseline.proposedVersion).toBe(editedVersion + 1);
+			expect(
+				(await scheduler.baselineDiff(teamConfig.id)).criteria.map((criterion) => criterion.id)
+			).toEqual(['E1']);
+			expect(state().openCards[0].payload).toMatchObject({
+				type: 'baseline',
+				brief: state().brief,
+			});
+			expect(events.filter((event) => event.kind === 'report_rejected')).toEqual([]);
+			expect(fs.existsSync(messageGate)).toBe(false);
+			await scheduler.say(teamConfig.id, 'Please explain the sample', 'dev');
+			await drain();
+			const message = latest('dev', 'message');
+			const scene = script(message);
+			expect(scene.exitGate).toBe(messageGate);
+			expect(state().messages[0].delivered?.seat).toBe('dev');
+			expect(state().messages[0].handled).toBeUndefined();
+			fs.writeFileSync(messageGate, 'release');
+			await finish(message, scene.answer);
+			expect(state().messages[0].handled!.seq).toBeGreaterThan(state().messages[0].delivered!.seq);
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
 	});
 	it('T7 refuses baseline confirmation until the edited version has runnable commands', async () => {
 		await toBaseline();
@@ -1262,7 +1434,7 @@ describe('team scheduler', () => {
 		} as TeamReport);
 		const target = state().openCards[0];
 		expect(target).toMatchObject({ boundary: 'permission', title: 'Approve this check once' });
-		expect(target.body).toContain('external-write');
+		expect(target.payload).toMatchObject({ type: 'check-permission', boundary: 'external-write' });
 		expect(deps.checks.run).not.toHaveBeenCalled();
 		await scheduler.answer(teamConfig.id, target.id, 'once');
 		await drain();

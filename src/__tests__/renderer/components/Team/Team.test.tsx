@@ -30,7 +30,6 @@ const bridge = vi.hoisted(() => ({ client: undefined as TeamClient | undefined }
 vi.mock('../../../../renderer/services/teamClient', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../../../../renderer/services/teamClient')>()),
 	teamClient: () => bridge.client,
-	teamFeatures: { baselineEdit: false, baselineDiff: false, baselineReturn: false },
 }));
 
 const catalog: ProviderModelCatalog = {
@@ -212,12 +211,19 @@ describe('owner decisions', () => {
 			screen.getByText('An option lacks a concrete action. Wait for the team to update it.')
 		).toBeVisible();
 	});
-	it('shows baseline confirmation while extended actions are gated', () => {
-		mount(
-			<OwnerCard teamId={teamConfig.id} state={reduceLedger(defaultPath)} card={baselineCard} />
+	it('shows confirmation, editing, diff and return on the live baseline', () => {
+		const state = reduceLedger(
+			defaultPath.slice(
+				0,
+				defaultPath.findIndex((event) => event.kind === 'card_answered' && event.cardId === 'BASE')
+			)
 		);
-		expect(screen.getAllByRole('button')).toHaveLength(1);
-		expect(screen.getByRole('button')).toHaveTextContent('Confirm baseline');
+		mount(<OwnerCard teamId={teamConfig.id} state={state} card={baselineCard} />);
+		expect(screen.getAllByRole('button')).toHaveLength(state.brief!.criteria.length + 3);
+		expect(screen.getByRole('button', { name: 'Confirm baseline', exact: true })).toHaveAttribute(
+			'data-option',
+			'confirm'
+		);
 		expect(screen.getByRole('region')).toHaveAttribute('data-boundary', 'baseline');
 	});
 });
@@ -370,7 +376,7 @@ describe('member navigation and composer', () => {
 			messages: [
 				{
 					type: 'assistant',
-					content: 'Native member reply',
+					content: 'Native member reply\n\n```team-report\n{"internalReceipt":"hidden"}\n```',
 					uuid: 'm1',
 					timestamp: new Date().toISOString(),
 				},
@@ -388,6 +394,7 @@ describe('member navigation and composer', () => {
 		row.focus();
 		fireEvent.click(row);
 		await screen.findByText('Native member reply');
+		expect(screen.queryByText(/internalReceipt/)).not.toBeInTheDocument();
 		expect(window.maestro.agentSessions.read).toHaveBeenCalledWith(
 			'codex',
 			'/project/dev',
@@ -756,6 +763,58 @@ describe('third screenshot review', () => {
 	});
 
 	it.each(['en', 'zh-CN'] as const)(
+		'bounds status values and exposes the full work list in %s',
+		(locale) => {
+			useSettingsStore.setState({ uiLanguage: locale });
+			const items = [
+				'qa/views.txt',
+				'result.html',
+				'other.html',
+				'Apply decision as dev',
+				'Apply decision as pm',
+				'Apply decision as qa',
+			];
+			const events = ledger(
+				{ kind: 'team_created', config: teamConfig },
+				...items.map((title, index) => ({
+					kind: 'work_item' as const,
+					itemId: `item-${index}`,
+					title,
+					owner: 'dev' as const,
+					state: 'claimed' as const,
+				}))
+			);
+			useTeamStore.getState().mirror({ config: teamConfig, events });
+			useTeamStore.getState().selectTeam(teamConfig.id);
+			const { container } = mount(<TeamView theme={mockTheme} />);
+			const solving = container.querySelector('[data-status-cell="solving"]')!;
+			expect(solving).toHaveTextContent(
+				new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(
+					items.slice(0, 2)
+				)
+			);
+			expect(solving).not.toHaveTextContent(items[2]);
+			expect(solving.querySelector('[data-status-more]')).toHaveAttribute('data-status-more', '4');
+			expect(solving.querySelector('[data-status-more]')).toHaveClass(
+				'shrink-0',
+				'whitespace-nowrap'
+			);
+			expect(solving.querySelector('[data-status-value]')).toHaveAttribute(
+				'title',
+				new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(items)
+			);
+			const values = container.querySelectorAll('[data-status-value]');
+			expect(values).toHaveLength(4);
+			for (const value of values) {
+				expect(value).toHaveAttribute('title');
+				expect(
+					value.classList.contains('truncate') || value.querySelector('.truncate')
+				).toBeTruthy();
+			}
+		}
+	);
+
+	it.each(['en', 'zh-CN'] as const)(
 		'formats lists with %s in status, baseline and brief cards',
 		(locale) => {
 			useSettingsStore.setState({ uiLanguage: locale });
@@ -809,7 +868,10 @@ describe('third screenshot review', () => {
 			expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
 			expect(tabs[0]).toHaveAttribute('aria-controls', within(panel).getByRole('tabpanel').id);
 			expect(tabs[2].querySelector('[data-tab-count]')).toHaveTextContent(
-				String(state.decisions.length + state.cardAnswers.length)
+				String(
+					state.decisions.filter((entry) => entry.decider !== 'owner').length +
+						state.statistics.ownerDecisions
+				)
 			);
 			const panelOutput = within(panel).getByTestId('team-output');
 			expect(panelOutput.querySelector('details')).toBeNull();

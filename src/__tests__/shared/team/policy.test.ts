@@ -10,6 +10,7 @@ import {
 	teamEvidenceCatalog,
 	teamChallengeRound,
 	teamOutputLocation,
+	teamWaitRejection,
 } from '../../../shared/team/policy';
 import { reportEvents } from '../../../main/team/report-events';
 import { validateTeamReport } from '../../../shared/team/report';
@@ -438,4 +439,89 @@ it('selects output workspace by target and keeps normalization stable across a s
 			qa: 'C:\\team\\qa',
 		})
 	).toEqual({ workspace: 'qa', target: 'qa/test.cjs' });
+});
+
+it.each([{ recorded: [] }, { recorded: ['check-1'] }])(
+	'accepts real topic prose references with recorded ids %j as unverified basis, never as evidence',
+	({ recorded }) => {
+		const state = reduceLedger(ledger(...baseline, check));
+		const topic = {
+			type: 'topic' as const,
+			topic: 'Expected behavior for decimal edge cases and help placement',
+			why: 'C4 requires decisive QA assertions for unspecified inputs.',
+			participants: ['pm', 'dev', 'qa'] as Array<'pm' | 'dev' | 'qa'>,
+			owner: 'pm' as const,
+			layer: 'product' as const,
+			kind: 'standard' as const,
+			criterionId: 'A2',
+			evidence: [...recorded, 'The baseline contract has no cases for add 1e2 3.'],
+		};
+		expect(topicRejection(topic, state)).toBeUndefined();
+		const events = reportEvents(
+			{
+				kind: 'turn_dispatched',
+				seat: 'dev',
+				dispatchId: 'topic-prose',
+			} as TeamEvent<'turn_dispatched'>,
+			topic,
+			state
+		);
+		expect(events.find((e) => e.kind === 'discussion_opened')).toMatchObject({
+			evidence: recorded,
+			unverifiedBasis: [topic.evidence.at(-1)],
+		});
+		expect(buildTeamTurnPrompt('topic', 'dev', state)).toContain('citableEvidence');
+		expect(buildTeamTurnPrompt('challenge', 'dev', state)).toContain('check-1');
+		const reopened = reduceLedger(
+			ledger(
+				...baseline,
+				check,
+				{ ...opened, participants: [...opened.participants], question: topic.topic },
+				{
+					kind: 'discussion_closed',
+					discussionId: 'd1',
+					decision: 'Keep',
+					decider: 'pm',
+					actions: [],
+				}
+			)
+		);
+		expect(
+			topicRejection(
+				{ ...topic, reopens: 'd1', evidence: ['New wording is not a recorded observation'] },
+				reopened
+			)
+		).toContain('new recorded evidence');
+	}
+);
+
+it.each([
+	'Dev and QA responses',
+	'Responses from dev and QA',
+	'discussion d1 proposal',
+	'PM turn',
+	'app check C1',
+	'A1',
+	'QA verification',
+	'等待开发回复',
+	'npm test',
+])('refuses app-owned wait %s even when a timer is supplied', (waitFor) => {
+	const state = reduceLedger(ledger(...baseline));
+	expect(teamWaitRejection({ waitFor, condition: { kind: 'time', at: 123 } }, state)).toContain(
+		'app-owned'
+	);
+});
+it('distinguishes genuine external conditions and unobservable prose from app-owned needs', () => {
+	for (const wait of [
+		{ waitFor: 'CI run', condition: { kind: 'ci' as const, runId: '123', cwd: '/project/dev' } },
+		{
+			waitFor: 'Command completion',
+			condition: { kind: 'command' as const, processId: 'external-process' },
+		},
+		{ waitFor: 'Quota reset', condition: { kind: 'time' as const, at: 123 } },
+		{ waitFor: 'Deadline', condition: { kind: 'time' as const, at: 456 } },
+	])
+		expect(teamWaitRejection(wait)).toBeUndefined();
+	expect(teamWaitRejection({ waitFor: 'New measured output' })).toContain('No external condition');
+	expect(teamWaitRejection({ waitFor: 'CI', needs: ['qa'] })).toContain('app-owned');
 });

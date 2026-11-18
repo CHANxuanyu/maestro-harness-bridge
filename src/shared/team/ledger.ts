@@ -123,6 +123,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 		residual: [],
 		residualItems: [],
 		unavailable: [],
+		appObservations: [],
 		brief: null,
 		briefs: [],
 		baseline: {
@@ -762,6 +763,9 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				if (event.actor === 'app' && state.outputs.some((o) => o.outputId === event.outputId))
 					state.outputObservations.push(event);
 				break;
+			case 'app_observation':
+				if (event.actor === 'app') state.appObservations.push(event);
+				break;
 			case 'follow_up_registered':
 				if (!fired.has(event.followUpId)) {
 					state.followUps = state.followUps.filter((f) => f.followUpId !== event.followUpId);
@@ -769,6 +773,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				}
 				break;
 			case 'follow_up_fired':
+			case 'wait_canceled':
 				fired.add(event.followUpId);
 				state.followUps = state.followUps.filter((f) => f.followUpId !== event.followUpId);
 				break;

@@ -84,10 +84,21 @@ most one round on the first PM revision's changed criteria. Only owner edits or
 returns start another full cycle. Share it between scheduling, prompts and QA
 plan validation. `teamEvidenceCatalog()` supplies ids and one-line descriptions;
 `teamEvidence(state, discussion?)` optionally limits them to new discussion
-evidence. Unknown position/response references are retained as `unverifiedBasis`
+evidence. Unknown topic/position/response references are retained as `unverifiedBasis`
 by `reportEvents()`, never as observations. Unsupported insistence becomes a
 recorded reservation for the lawful decider, not a failed member report. Repair
 prompts use the original dispatch snapshot's exact allowed ids.
+
+`teamWaitRejection()` in `src/shared/team/policy.ts` is the shared wait-ownership
+check. Discussion/seat steps and app checks cannot become external timer waits;
+explicit member `needs` remains app work. Command/CI/time conditions share one
+schema for work and conclusion actions. The scheduler uses this gate at
+registration and when reconciling legacy/fired waits, recording cancellation and
+an app observation without a repair turn. Unknown prose cannot establish an
+external wait. Its ten-minute stall observation uses substantive facts, not poll
+bookkeeping, and does not retry a failed assignment or spend past the budget.
+Held availability failures use `resumedFrom` so later wait turns cannot hide them;
+resumed work inspects the workspace and preserves its assignment context.
 
 `teamTurnPermission()` in that same policy module is the execution permission
 allowlist shared by prompts, scheduler requests and the native turn dispatcher.

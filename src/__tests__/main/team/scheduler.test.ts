@@ -577,7 +577,8 @@ describe('team scheduler', () => {
 			await scheduler.start();
 			await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS * 10);
 			await drain();
-			expect(requests.slice(before)).toHaveLength(5); // PM position plus two attempts per failed seat.
+			expect(requests.slice(before).filter((r) => r.turn === 'position')).toHaveLength(5);
+			expect(requests.slice(before).filter((r) => r.turn === 'message')).toHaveLength(1); // One ten-minute stall diagnostic, never another failed assignment.
 			for (const seat of ['dev', 'qa'] as const) {
 				const attempts = state().turns.filter(
 					(turn) => turn.seat === seat && turn.dispatched?.turn === 'position'
@@ -602,6 +603,13 @@ describe('team scheduler', () => {
 			const positions = requests.slice(before).filter((r) => r.turn === 'position');
 			expect(positions.filter((r) => r.seat === 'qa')).toHaveLength(3);
 			expect(positions.filter((r) => r.seat === 'dev')).toHaveLength(2);
+			await finish(latest('qa', 'position'), {
+				type: 'position',
+				discussionId,
+				claim: 'Footer',
+				basis: 'Recovered inspection',
+				wouldChangeMind: 'New output',
+			});
 			// A targeted owner message is a different assignment with new input.
 			await scheduler.say(teamConfig.id, 'Explain the failure', 'dev');
 			await drain();
@@ -1356,7 +1364,7 @@ describe('team scheduler', () => {
 			rounds: 3,
 			insist: true,
 			experiment: 'measure-layout',
-			waitForQa: 'New measured output',
+			waitForQa: 'External CI measurement',
 		});
 		expect(state().checks.filter((c) => c.command === 'measure-layout')).toHaveLength(1);
 		expect(state().discussions.find((d) => d.id === id)!.decision).toMatchObject({
@@ -1364,7 +1372,7 @@ describe('team scheduler', () => {
 			contested: true,
 		});
 		expect(
-			state().followUps.some((f) => f.seat === 'qa' && f.waitFor === 'New measured output')
+			state().followUps.some((f) => f.seat === 'qa' && f.waitFor === 'External CI measurement')
 		).toBe(true);
 		expect(deps.followUps.register).toHaveBeenCalled();
 		expect(state().openCards).toEqual([]);
@@ -2235,8 +2243,9 @@ describe('team scheduler', () => {
 				} as never,
 			});
 			await drain();
-			expect(requests).toHaveLength(2);
-			expect(state().usage.budgetTurns).toBe(2);
+			expect(requests.filter((r) => r.turn === 'brief')).toHaveLength(2);
+			expect(requests.filter((r) => r.turn === 'message')).toHaveLength(1);
+			expect(state().usage.budgetTurns).toBe(3);
 			expect(state().followUps.some((f) => !!f.faultId)).toBe(true);
 		}
 	});
@@ -2844,4 +2853,418 @@ describe('team scheduler', () => {
 		);
 		expect(deps.onError).toHaveBeenCalled();
 	});
+	it.each(['substitute', 'temporary', 'reset', 'login'] as const)(
+		'real medium stall: cancels the old app wait and resumes the held PM position via %s',
+		async (mode) => {
+			const reset = Date.now() + 60_000;
+			const model = { tool: 'claude-code' as const };
+			events = ledger(
+				...baseline,
+				...bindings,
+				{ kind: 'phase_changed', to: 'challenge' },
+				{
+					kind: 'quota_exhausted',
+					seat: 'pm',
+					model,
+					configSource: 'pm',
+					resetsAt: reset,
+					login: mode === 'login',
+				},
+				{
+					kind: 'follow_up_registered',
+					followUpId: 'old-discussion:action:0',
+					seat: 'pm',
+					reason: 'Review both responses before deciding the proposed rule.',
+					waitFor: 'Dev and QA responses',
+					untilMs: Date.now() + 20 * 60_000,
+				},
+				{
+					kind: 'discussion_opened',
+					discussionId: 'exports',
+					topic: 'App proof for exports and permitted imports',
+					owner: 'pm',
+					participants: ['pm', 'dev', 'qa'],
+					trigger: 'standard-issue',
+					layer: 'product',
+				}
+			);
+			const created = events[0];
+			if (created.kind !== 'team_created') throw new Error('fixture');
+			created.config = structuredClone(created.config);
+			delete created.config.seats.pm.substitute;
+			created.config.seats.qa = { tool: 'codex' };
+			const qaBinding = events.find((e) => e.kind === 'seat_bound' && e.seat === 'qa');
+			if (qaBinding?.kind === 'seat_bound') qaBinding.model = { tool: 'codex' };
+			created.config.authorizations.temporaryTakeover = mode === 'temporary';
+			if (mode === 'substitute') created.config.seats.pm.substitute = { tool: 'codex' };
+			const sampledAt = Date.now();
+			deps.quota = (_config, source, selected) =>
+				source === 'pm' && selected.tool === 'claude-code'
+					? { exhausted: true, sampledAt, resetsAt: reset, login: mode === 'login' }
+					: undefined;
+			await scheduler.start();
+			await drain();
+			for (const seat of ['dev', 'qa'] as const)
+				await finish(latest(seat, 'position'), {
+					type: 'position',
+					discussionId: 'exports',
+					claim: 'Check exports and imports',
+					basis: 'Same revision',
+					wouldChangeMind: 'Recorded checks',
+				});
+			if (mode === 'reset' || mode === 'login') {
+				expect(latest('pm', 'position')).toBeUndefined();
+				if (mode === 'reset') vi.setSystemTime(reset);
+				else
+					await scheduler.answer(
+						config.id,
+						state().openCards.find((c) => c.boundary === 'login')!.id,
+						'login'
+					);
+				await scheduler.wake(config.id);
+				await drain();
+			}
+			expect(state().followUps.some((w) => w.followUpId === 'old-discussion:action:0')).toBe(false);
+			expect(deps.followUps.cancel).toHaveBeenCalledWith('old-discussion:action:0');
+			const pm = latest('pm', 'position');
+			expect(pm).toMatchObject({
+				tool: mode === 'reset' || mode === 'login' ? 'claude-code' : 'codex',
+				nativeSessionId: undefined,
+			});
+			await finish(pm, {
+				type: 'position',
+				discussionId: 'exports',
+				claim: 'Use app proof',
+				basis: 'Confirmed scope',
+				wouldChangeMind: 'A failing check',
+			});
+			expect(state().discussions[0].positions).toHaveLength(3);
+			expect(latest('pm', 'proposal')).toBeDefined();
+			expect(requests.some((r) => r.turn === 'wait')).toBe(false);
+			expect(deps.onError).not.toHaveBeenCalled();
+		}
+	);
+
+	it('refuses app-owned discussion follow-ups at registration and records the reason', async () => {
+		events = ledger(...baseline, ...bindings, {
+			kind: 'discussion_opened',
+			discussionId: 'internal-wait',
+			topic: 'App proof',
+			owner: 'pm',
+			participants: ['pm', 'dev', 'qa'],
+			trigger: 'member',
+			layer: 'product',
+		});
+		await scheduler.start();
+		await drain();
+		await completeDiscussion({ waitForQa: 'Dev and QA responses' });
+		expect(deps.followUps.register).not.toHaveBeenCalledWith(
+			expect.objectContaining({ reason: 'qa implements the conclusion' })
+		);
+		expect(state().followUps.some((w) => w.waitFor === 'Dev and QA responses')).toBe(false);
+		expect(
+			events.some((e) => e.kind === 'app_observation' && e.category === 'app-owned-wait')
+		).toBe(true);
+	});
+
+	it.each(['proposal', 'message'] as const)(
+		'records one ten-minute stall diagnostic after a failed %s leaves a stuck discussion',
+		async (failedTurn) => {
+			events = ledger(
+				...baseline,
+				...bindings,
+				{
+					kind: 'discussion_opened',
+					discussionId: 'stuck',
+					topic: 'Pending proposal',
+					owner: 'pm',
+					participants: ['pm'],
+					trigger: 'member',
+				},
+				{
+					kind: 'position',
+					seat: 'pm',
+					discussionId: 'stuck',
+					claim: 'Claim',
+					basis: 'Basis',
+					wouldChangeMind: 'Evidence',
+				},
+				{
+					kind: 'turn_dispatched',
+					seat: 'pm',
+					dispatchId: 'failed-proposal',
+					turn: failedTurn,
+					discussionId: 'stuck',
+					promptDigest: 'old',
+				},
+				{
+					kind: 'turn_finished',
+					seat: 'pm',
+					dispatchId: 'failed-proposal',
+					exitCode: 1,
+					durationMs: 10,
+					failureKind: 'turn-failed',
+				},
+				{
+					kind: 'turn_dispatched',
+					seat: 'pm',
+					dispatchId: 'failed-retry',
+					retryOf: 'failed-proposal',
+					turn: failedTurn,
+					discussionId: 'stuck',
+					promptDigest: 'old',
+				},
+				{
+					kind: 'turn_finished',
+					seat: 'pm',
+					dispatchId: 'failed-retry',
+					exitCode: 1,
+					durationMs: 10,
+					failureKind: 'turn-failed',
+				},
+				{ kind: 'member_fault', seat: 'pm', fault: 'turn-failed', detail: 'Both attempts failed' }
+			);
+			await scheduler.start();
+			await drain();
+			expect(requests).toHaveLength(0);
+			vi.setSystemTime(11 * 60_000);
+			await scheduler.wake(config.id);
+			await drain();
+			const observations = events.filter(
+				(e) => e.kind === 'app_observation' && e.category === 'stall'
+			);
+			expect(observations).toHaveLength(1);
+			expect(
+				state().turns.find((t) => t.dispatchId === latest('pm', 'message').dispatchId)?.dispatched
+			).toMatchObject({ mode: 'diagnose' });
+			expect(latest('pm', 'message').prompt).toContain('Pending proposal');
+			for (let i = 0; i < 3; i++) {
+				await scheduler.wake(config.id);
+				await drain();
+			}
+			expect(
+				events.filter((e) => e.kind === 'app_observation' && e.category === 'stall')
+			).toHaveLength(1);
+			expect(teamStatus(state(), Date.now()).appObservations).toEqual(
+				expect.arrayContaining(observations)
+			);
+		}
+	);
+	it.each(['brief', 'position', 'proposal', 'response'] as const)(
+		'resumes a quota-held %s even when a later wait receipt hides the failure',
+		async (turn) => {
+			const reset = Date.now() + 60_000;
+			const heldConfig = structuredClone(config);
+			heldConfig.authorizations.temporaryTakeover = false;
+			delete heldConfig.seats.pm.substitute;
+			const discussionId = turn === 'brief' ? undefined : 'held';
+			const prepared: EventInput[] =
+				turn === 'brief'
+					? []
+					: [
+							{
+								kind: 'discussion_opened',
+								discussionId: 'held',
+								topic: 'Held assignment',
+								owner: 'pm',
+								participants: ['pm', 'dev', 'qa'],
+								trigger: 'member',
+							},
+							...(['pm', 'dev', 'qa'] as const)
+								.filter((seat) => turn !== 'position' || seat !== 'pm')
+								.map((seat) => ({
+									kind: 'position' as const,
+									discussionId: 'held',
+									seat,
+									claim: 'Claim',
+									basis: 'Basis',
+									wouldChangeMind: 'Evidence',
+								})),
+							...(turn === 'response'
+								? [
+										{
+											kind: 'proposal' as const,
+											discussionId: 'held',
+											proposal: 'Test the claim',
+											decider: 'pm' as const,
+											round: 1,
+										},
+									]
+								: []),
+						];
+			events = ledger(
+				{ kind: 'team_created', config: heldConfig },
+				...bindings,
+				...prepared,
+				{
+					kind: 'turn_dispatched',
+					dispatchId: 'held-turn',
+					seat: 'pm',
+					turn,
+					expectedTurn: turn,
+					promptDigest: 'legacy',
+					discussionId,
+					round: turn === 'response' || turn === 'proposal' ? 1 : undefined,
+					problemId: 'held-problem',
+				},
+				{
+					kind: 'turn_finished',
+					dispatchId: 'held-turn',
+					seat: 'pm',
+					exitCode: 1,
+					durationMs: 877,
+					failureKind: 'model-unavailable',
+					resetsAt: reset,
+					reportError: "You've hit your 5-hour limit; resets 9:10am (Europe/Paris)",
+				},
+				{ kind: 'member_fault', seat: 'pm', fault: 'model-unavailable' },
+				{
+					kind: 'quota_exhausted',
+					seat: 'pm',
+					model: config.seats.pm,
+					configSource: 'pm',
+					resetsAt: reset,
+				},
+				{
+					kind: 'turn_dispatched',
+					dispatchId: 'later-wait',
+					seat: 'pm',
+					turn: 'wait',
+					promptDigest: 'legacy',
+				},
+				{
+					kind: 'turn_finished',
+					dispatchId: 'later-wait',
+					seat: 'pm',
+					exitCode: 0,
+					durationMs: 10,
+					report: {
+						type: 'wait',
+						status: 'waiting',
+						summary: 'Dev and QA responses are still pending',
+					},
+				},
+				{
+					kind: 'report_accepted',
+					dispatchId: 'later-wait',
+					seat: 'pm',
+					report: {
+						type: 'wait',
+						status: 'waiting',
+						summary: 'Dev and QA responses are still pending',
+					},
+				}
+			);
+			const receipt = events.find((e) => e.kind === 'report_accepted')!;
+			receipt.id = 'later-wait:accepted';
+			const unavailable = events.find((e) => e.kind === 'quota_exhausted')!;
+			unavailable.id = 'held-turn:unavailable';
+			await scheduler.start();
+			await drain();
+			expect(requests.filter((r) => r.seat === 'pm')).toHaveLength(0);
+			vi.setSystemTime(reset);
+			await scheduler.wake(config.id);
+			await drain();
+			const resumed = state().turns.find((t) => t.dispatched?.resumedFrom === 'held-turn')!;
+			expect(resumed?.dispatched).toMatchObject({ turn, discussionId, problemId: 'held-problem' });
+			expect(requests.find((r) => r.dispatchId === resumed.dispatchId)).toMatchObject({
+				tool: 'claude-code',
+				nativeSessionId: undefined,
+			});
+			expect(requests.find((r) => r.dispatchId === resumed.dispatchId)?.prompt).toContain(
+				'Workspace inspection'
+			);
+			for (let i = 0; i < 3; i++) {
+				await scheduler.wake(config.id);
+				await drain();
+			}
+			expect(state().turns.filter((t) => t.dispatched?.resumedFrom === 'held-turn')).toHaveLength(
+				1
+			);
+			expect(deps.onError).not.toHaveBeenCalled();
+		}
+	);
+
+	it('a PM wait that only repeats waiting gets one idle nudge, then diagnosis', async () => {
+		events = ledger(
+			...baseline,
+			...bindings,
+			{
+				kind: 'follow_up_registered',
+				followUpId: 'pm-ci',
+				seat: 'pm',
+				reason: 'External CI',
+				waitFor: 'CI run',
+				condition: { kind: 'ci', runId: '123', cwd: '/project/dev' },
+				untilMs: Date.now(),
+			},
+			{ kind: 'follow_up_fired', followUpId: 'pm-ci', result: JSON.stringify({ state: 'running' }) }
+		);
+		await scheduler.start();
+		await drain();
+		await finish(latest('pm', 'wait'), {
+			type: 'wait',
+			status: 'waiting',
+			summary: 'External event still running. Unchanged poll, not a failure.',
+		});
+		const nudge = latest('pm', 'message');
+		expect(nudge.prompt).toContain('First idle turn');
+		expect(events.findLast((e) => e.kind === 'turn_progress' && e.seat === 'pm')).toMatchObject({
+			changed: false,
+			idleCount: 1,
+		});
+		await finish(nudge, { type: 'message', messages: [], summary: 'Still waiting' });
+		expect(state().discussions.filter((d) => d.opened?.trigger === 'no-progress')).toHaveLength(1);
+		expect(requests.filter((r) => r.turn === 'message')).toHaveLength(1);
+		expect(state().problems).toEqual({});
+		expect(state().openCards).toEqual([]);
+	});
+
+	it.each(['paused', 'terminal', 'owner', 'external', 'working'] as const)(
+		'does not diagnose a stall while %s explains the inactivity',
+		async (mode) => {
+			events = ledger(
+				...baseline,
+				...bindings,
+				...(mode === 'paused' ? [{ kind: 'paused' as const }] : []),
+				...(mode === 'terminal' ? [{ kind: 'stopped' as const }] : []),
+				...(mode === 'owner'
+					? [
+							{
+								kind: 'decision_card' as const,
+								card: {
+									id: 'owner',
+									boundary: 'permission' as const,
+									title: 'Permission',
+									body: 'Need owner action',
+									options: [{ id: 'allow', label: 'Allow' }],
+								},
+							},
+						]
+					: []),
+				...(mode === 'external'
+					? [
+							{
+								kind: 'follow_up_registered' as const,
+								seat: 'pm' as const,
+								followUpId: 'external',
+								reason: 'CI',
+								waitFor: 'CI run',
+								condition: { kind: 'ci' as const, runId: '123', cwd: '/project/dev' },
+								untilMs: 20 * 60_000,
+							},
+						]
+					: [])
+			);
+			await scheduler.start();
+			await drain();
+			vi.setSystemTime(11 * 60_000);
+			await scheduler.wake(config.id);
+			await drain();
+			expect(events.filter((e) => e.kind === 'app_observation' && e.category === 'stall')).toEqual(
+				[]
+			);
+			expect(deps.onError).not.toHaveBeenCalled();
+		}
+	);
 });

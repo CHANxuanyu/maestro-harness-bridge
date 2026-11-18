@@ -11,6 +11,13 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 	const waitingFor = state.followUps.map(
 		(wait) => `${wait.seat}: ${wait.waitFor} (${wait.reason})`
 	);
+	const appObservations = state.outputObservations.filter(
+		(observation) => observation.outputId === state.outputs.at(-1)?.outputId
+	);
+	for (const observation of appObservations)
+		waitingFor.push(
+			`App output capture: ${observation.missing.join('; ')}. App will recheck at ${new Date(observation.retryAt).toISOString()}; confirmed criteria are unchanged.`
+		);
 	for (const seat of SEAT_ROLES) {
 		const health = state.seats[seat];
 		if (health.faultActive && !health.takeover)
@@ -37,6 +44,7 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 	}
 	return {
 		generatedBy: 'app',
+		appObservations,
 		wrapUp: state.wrapUp,
 		title: state.config?.title ?? 'Team',
 		phase: state.phase,

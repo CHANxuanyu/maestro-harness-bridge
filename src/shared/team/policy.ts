@@ -195,6 +195,18 @@ export function teamWorkspaceRelativePath(
 	return relative;
 }
 
+/** QA artifacts belong to QA even when the criterion also names developer files. */
+export function teamOutputLocation(
+	target: string,
+	workspaces: { dev?: string; qa?: string }
+): { workspace: 'dev' | 'qa'; target: string } {
+	const qa = teamWorkspaceRelativePath(target, workspaces.qa, 'qa');
+	if (qa) return { workspace: 'qa', target: qa };
+	const dev = teamWorkspaceRelativePath(target, workspaces.dev);
+	// An explicit dev/qa/... absolute path must not become a relative QA claim.
+	return { workspace: 'dev', target: dev && !dev.startsWith('qa/') ? dev : target };
+}
+
 /** References and descriptions share one source for validation and model prompts. */
 export function teamEvidenceCatalog(state: TeamState): Array<{ id: string; description: string }> {
 	const entries = [
@@ -375,6 +387,7 @@ export function pmMayChange(
 
 /** An empty capture, or a missing named viewer, cannot support a review. */
 export function missingOutputLocations(state: TeamState, output?: OutputCapture): string[] {
+	if (output?.error) return [`App output capture failed: ${output.error}`];
 	if (!output || (!output.files.length && !output.previews.length))
 		return ['No real output captured'];
 	const visualMissing = state.criteria

@@ -118,9 +118,11 @@ This does not invent evidence, permission, verification, files, or a decision.
   spelling. A bare filename is accepted only when that file exists in `qa/` and
   no same-named workspace-root entry makes it ambiguous. Traversal, other
   directories, directory targets and symlink escapes are rejected. Normalizing
-  a file claim does not make it test evidence. Output locations use the same
-  lexical normalization against the dev capture workspace and retain external
-  references; capture still checks the real path. A relative CI observation cwd
+  a file claim does not make it test evidence. Output locations use
+  `teamOutputLocation()`: relative `qa/...` and absolute paths inside QA's `qa/`
+  belong to the QA workspace; other targets belong to dev. A QA-proof criterion
+  can name files in both workspaces. External references retain their identity;
+  capture still checks the real path. A relative CI observation cwd
   resolves against the reporting seat's workspace.
 - Every accepted correction produces one app-owned `report_normalized` event
   with the dispatch id and `{ field, before?, after?, reason }` changes. The
@@ -228,10 +230,18 @@ or removal supersedes old issues, preserving their history.
 `Criterion.locations` enumerates every required viewer or output file:
 `{ label, target, kind: 'file' | 'preview' | 'screenshot' }`. The app captures
 local HTML, SVG and Markdown with the compositor, copies files, and can capture
-an already open app web viewer by exact URL. Missing targets block review as
-standard issues. A resolved viewer issue triggers a fresh capture. Capture
-receipts carry `beforeOutputId` and per-location errors; the initial revision
-is captured before implementation. Native apps outside Electron require a
+an already open app web viewer by exact URL. `qa/...` resolves in QA's worktree,
+other relative targets in dev's; file receipts name the workspace and resolved
+source. QA content changes get a new immutable copy even at the same dev revision.
+Missing targets block review as app-owned `output_observation` events, never
+standard issues or requests to change the baseline. Status and the app-generated
+progress report expose these observations. QA writes require a fresh capture.
+For a missing capture, a new QA verification, changed standard, resume or budget
+extension permits another attempt; otherwise the app
+rechecks after 10 minutes without spending a model turn. A successful newer capture
+clears the active observation while preserving its history. Capture receipts carry
+`beforeOutputId` and per-location errors; the initial revision is captured before
+implementation. Native apps outside Electron require a
 separate capture integration and are not silently treated as reviewed.
 
 `CheckCommand.boundary` and discussion experiments may declare

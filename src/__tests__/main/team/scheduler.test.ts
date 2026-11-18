@@ -7,6 +7,7 @@ import {
 	createTeamScheduler,
 	TEAM_FALLBACK_MS,
 	TEAM_FAILURE_COOLDOWN_MS,
+	TEAM_WAIT_RECHECK_MS,
 	type TeamSchedulerDependencies,
 } from '../../../main/team/scheduler';
 import type { SeatTurnRequest, SeatTurnResult } from '../../../main/team/turn-dispatcher';
@@ -16,16 +17,19 @@ import type {
 	TeamReport,
 	SeatRole,
 	ReportTurnKind,
+	Criterion,
 } from '../../../shared/team/types';
 import { reduceLedger } from '../../../shared/team/ledger';
 import { teamStatus } from '../../../shared/team/status';
 import { teamTurnPermission } from '../../../shared/team/policy';
 import normalizationFixtures from '../../shared/team/real-normalization-fixtures.json';
+import qaCriterion from '../../shared/team/real-output-criterion.json';
 import {
 	config,
 	check,
 	goodReports,
 	baseline,
+	brief as sampleBrief,
 	proven,
 	ledger,
 	issue,
@@ -1596,29 +1600,120 @@ describe('team scheduler', () => {
 		expect(state().baseline.brief!.checks).toEqual([]);
 		expect(state().openCards.some((c) => c.boundary === 'commitment')).toBe(false);
 	});
-	it('recaptures real output after PM resolves a missing-viewer issue before allowing review', async () => {
+	it.each(['missing', 'exception'])(
+		'holds an app capture %s without a PM message and retries without a turn',
+		async (failure) => {
+			if (failure === 'exception')
+				vi.mocked(deps.captureOutput).mockRejectedValue(new Error('Capture workspace unavailable'));
+			else vi.mocked(deps.captureOutput).mockResolvedValue({ files: ['result.txt'], previews: [] });
+			await toReview();
+			const observation = state().outputObservations.at(-1)!;
+			expect(observation).toMatchObject({ actor: 'app', kind: 'output_observation' });
+			expect(state().issues).toEqual([]);
+			expect(state().openCards).toEqual([]);
+			expect(state().standardChanges).toEqual([]);
+			expect(requests.some((r) => ['message', 'position', 'review'].includes(r.turn))).toBe(false);
+			expect(teamStatus(state(), Date.now()).waitingFor.join(' ')).toContain('App output capture');
+			expect(observation.retryAt - observation.at).toBe(TEAM_WAIT_RECHECK_MS);
+			const count = requests.length;
+			const captures = vi.mocked(deps.captureOutput).mock.calls.length;
+			scheduler.dispose();
+			scheduler = createTeamScheduler(deps);
+			await scheduler.start();
+			for (let i = 0; i < 3; i++) {
+				await scheduler.wake(teamConfig.id);
+				await drain();
+			}
+			expect(state().outputObservations).toHaveLength(1);
+			expect(requests).toHaveLength(count);
+			expect(deps.captureOutput).toHaveBeenCalledTimes(captures);
+			vi.mocked(deps.captureOutput).mockResolvedValue({
+				files: ['result.txt'],
+				previews: ['real-preview.png'],
+			});
+			vi.setSystemTime(observation.retryAt);
+			await scheduler.wake(teamConfig.id);
+			await drain();
+			expect(state().outputs.at(-1)?.outputId).toContain('recapture:');
+			expect(latest('pm', 'review')).toBeDefined();
+			expect(requests).toHaveLength(count + 1);
+			expect(teamStatus(state(), Date.now()).appObservations).toEqual([]);
+			expect(state().criteria.map((c) => c.id)).toEqual(['A1', 'A2', 'E1']);
+		}
+	);
+	it('includes an app capture observation in the deadline report without a model turn', async () => {
 		vi.mocked(deps.captureOutput).mockResolvedValue({ files: ['result.txt'], previews: [] });
-		await toBaseline();
-		await confirm();
-		await finish(latest('dev', 'work'), goodReports.work);
-		await finish(latest('qa', 'qa_prep'), goodReports.qa_prep);
-		await finish(latest('qa', 'verify'), goodReports.verify);
-		const unresolved = state().issues.find((i) => i.opened.issueKind === 'standard')!;
-		expect(unresolved.opened.title).toContain('Output cannot be judged');
-		expect(requests.some((r) => r.prompt.includes('Turn: review.'))).toBe(false);
-		vi.mocked(deps.captureOutput).mockResolvedValue({
-			files: ['result.txt'],
-			previews: ['real-preview.png'],
+		await toReview();
+		const count = requests.length;
+		const observations = teamStatus(state(), Date.now()).appObservations;
+		expect(observations).toHaveLength(1);
+		const created = events.find((e) => e.kind === 'team_created')!;
+		created.config.deadline = Date.now();
+		await scheduler.wake(teamConfig.id);
+		await drain();
+		expect(state().openCards.map((c) => c.boundary)).toEqual(['budget']);
+		expect(JSON.parse(state().openCards[0].body)).toMatchObject({
+			appObservations: observations,
+			issues: [],
 		});
-		await finish(latest('pm', 'message'), {
-			type: 'message',
-			summary: 'Opened the named viewer',
-			messages: [],
-			resolvedStandards: [{ issueId: unresolved.id, reason: 'Viewer is ready' }],
+		expect(requests).toHaveLength(count);
+	});
+	it('routes the real C2 locations through both workspaces and proceeds directly from QA verify to PM review', async () => {
+		const brief = {
+			...sampleBrief,
+			version: 1,
+			criteria: [
+				{ id: 'C1', text: 'Contract check passes', proof: 'app' as const, how: 'Run the check' },
+				qaCriterion as Criterion,
+			],
+			checks: [{ command: 'node --test --test-reporter=tap clamp.test.cjs', covers: ['C1'] }],
+		};
+		events = ledger(
+			{ kind: 'team_created', config: { ...config, turnBudget: 20 } },
+			{ kind: 'brief_published', brief },
+			{ kind: 'baseline_confirmed', actor: 'owner', briefVersion: 1 },
+			...bindings,
+			{ kind: 'phase_changed', to: 'implement' }
+		);
+		vi.mocked(deps.captureOutput).mockImplementation(
+			async (dev, _revision, criteria, _before, qa) => {
+				expect(dev).toBe('/project/dev');
+				expect(qa).toBe('/project/qa');
+				return {
+					files: ['/capture/dev/README.md', '/capture/qa/qa/clamp.qa.test.cjs'],
+					previews: [],
+					locations: criteria!.flatMap((c) =>
+						(c.locations ?? []).map((location) => ({
+							criterion: c.id,
+							location,
+							file: `/capture/${location.target}`,
+						}))
+					),
+				};
+			}
+		);
+		await scheduler.start();
+		await drain();
+		await finish(latest('dev', 'work'), { ...goodReports.work, done: ['C1'] });
+		await finish(latest('qa', 'qa_prep'), {
+			type: 'qa_prep',
+			tests: ['qa/clamp.qa.test.cjs'],
+			samples: ['Independent boundary cases'],
 		});
-		expect(state().outputs.at(-1)?.outputId).toContain('recapture:');
-		expect(latest('pm', 'review')).toBeDefined();
-		expect(deps.onError).not.toHaveBeenCalled();
+		const capturedBeforeVerification = vi.mocked(deps.captureOutput).mock.calls.length;
+		await finish(latest('qa', 'verify'), {
+			type: 'verify',
+			criteria: [{ id: 'C2', pass: true, evidence: '17 of 17 passing; README checked' }],
+			issues: [],
+		});
+		expect(requests.map((r) => r.turn)).toEqual(['work', 'qa_prep', 'verify', 'review']);
+		expect(deps.captureOutput).toHaveBeenCalledTimes(capturedBeforeVerification);
+		expect(state().criteria.every((c) => c.status === 'pass')).toBe(true);
+		expect(state().criteria.find((c) => c.id === 'C2')?.locations).toEqual(qaCriterion.locations);
+		expect(state().issues).toEqual([]);
+		expect(state().outputObservations).toEqual([]);
+		expect(state().standardChanges).toEqual([]);
+		expect(state().openCards).toEqual([]);
 	});
 	it('routes an unjudgeable standard raised by dev to a PM discussion and preparation, never a dev fix', async () => {
 		await toBaseline();

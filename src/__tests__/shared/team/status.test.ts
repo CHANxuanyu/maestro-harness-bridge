@@ -5,6 +5,46 @@ import { DURATION_MS } from '../../../shared/duration';
 import { baseline, check, config, ledger, proven } from './fixtures';
 
 describe('team status', () => {
+	it('shows app capture observations without changing proven criteria or creating a member fault', () => {
+		const events = ledger(
+			...proven,
+			{ kind: 'output_captured', outputId: 'missing-viewer', files: ['result.txt'], previews: [] },
+			{
+				kind: 'output_observation',
+				actor: 'qa',
+				outputId: 'missing-viewer',
+				missing: ['Forged'],
+				retryAt: 10000,
+			},
+			{
+				kind: 'output_observation',
+				outputId: 'missing-viewer',
+				missing: ['E1: viewer unavailable'],
+				retryAt: 10000,
+			}
+		);
+		const state = reduceLedger(events);
+		const view = teamStatus(state, 1000);
+		expect(view.appObservations).toHaveLength(1);
+		expect(formatTeamStatus(view)).toContain('App output capture: E1: viewer unavailable');
+		expect(view.criteria.withEvidence).toBe(3);
+		expect(view.openCards).toEqual([]);
+		expect(state.issues).toEqual([]);
+		expect(view.seats.every((s) => s.status !== 'fault')).toBe(true);
+		expect(
+			teamStatus(
+				reduceLedger(
+					ledger(...events, {
+						kind: 'output_captured',
+						outputId: 'ready',
+						files: ['result.txt'],
+						previews: ['result.png'],
+					})
+				),
+				1001
+			).appObservations
+		).toEqual([]);
+	});
 	it('reports facts, missing reasons, work, waits, cards, budget and seat health without PM', () => {
 		const state = reduceLedger(
 			ledger(

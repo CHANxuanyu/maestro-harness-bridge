@@ -1,3 +1,4 @@
+import { NATIVE_MODEL_DEFAULT } from '../../../shared/modelCatalog';
 /**
  * useBatchedSessionUpdates.ts
  *
@@ -318,8 +319,12 @@ export function useBatchedSessionUpdates(
 								// a model change made while this turn streams applies to the NEXT
 								// message, not to the one already running.
 								const turnSettings = {
-									...(tab.turnModel ? { turnModel: tab.turnModel } : {}),
-									...(tab.turnEffort ? { turnEffort: tab.turnEffort } : {}),
+									...(tab.turnModel && tab.turnModel !== NATIVE_MODEL_DEFAULT
+										? { turnModel: tab.turnModel }
+										: {}),
+									...(tab.turnEffort && tab.turnEffort !== NATIVE_MODEL_DEFAULT
+										? { turnEffort: tab.turnEffort }
+										: {}),
 								};
 
 								let updatedLogs: LogEntry[];

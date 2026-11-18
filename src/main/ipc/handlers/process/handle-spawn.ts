@@ -1,4 +1,5 @@
 import { beginGitTurn, finishGitTurn } from '../../../git-changes';
+import { NATIVE_MODEL_DEFAULT } from '../../../../shared/modelCatalog';
 import {
 	codexAppServerEnabled,
 	CODEX_APP_SERVER_MESSAGES,
@@ -1053,8 +1054,14 @@ export async function handleProcessSpawn(
 			config.permissionMode === 'full' || (!hasExplicitPermissionMode && config.yoloMode === true);
 		codexAppServer = {
 			threadId: config.agentSessionId,
-			model: config.sessionCustomModel || agentConfigValues.model || config.modelId || undefined,
-			effort: config.sessionCustomEffort || agentConfigValues.reasoningEffort || undefined,
+			model:
+				config.sessionCustomModel === NATIVE_MODEL_DEFAULT
+					? undefined
+					: config.sessionCustomModel || agentConfigValues.model || config.modelId || undefined,
+			effort:
+				config.sessionCustomEffort === NATIVE_MODEL_DEFAULT
+					? undefined
+					: config.sessionCustomEffort || agentConfigValues.reasoningEffort || undefined,
 			approvalPolicy: isReadOnly || fullAccess ? 'never' : 'on-request',
 			sandbox: isReadOnly ? 'read-only' : fullAccess ? 'danger-full-access' : 'workspace-write',
 			writableRoots: config.sessionAdditionalDirectories

@@ -1,3 +1,4 @@
+import { NATIVE_MODEL_DEFAULT } from '../../shared/modelCatalog';
 import { readSettingValue } from '../services/storage';
 import { newShellCommand } from './new-shell';
 import { projectSettingsTranslator } from './project-settings';
@@ -567,7 +568,7 @@ export async function tabModel(
 ): Promise<void> {
 	await tabFlag(
 		tabId,
-		{ customModel: model },
+		{ customModel: model === 'native-default' ? NATIVE_MODEL_DEFAULT : model },
 		(owner) =>
 			model === null
 				? `Tab ${owner.tabId} now inherits the agent's model`
@@ -584,7 +585,7 @@ export async function tabEffort(
 ): Promise<void> {
 	await tabFlag(
 		tabId,
-		{ customEffort: effort },
+		{ customEffort: effort === 'native-default' ? NATIVE_MODEL_DEFAULT : effort },
 		(owner) =>
 			effort === null
 				? `Tab ${owner.tabId} now inherits the agent's effort`

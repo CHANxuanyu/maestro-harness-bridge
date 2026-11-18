@@ -1,3 +1,4 @@
+import { NATIVE_MODEL_DEFAULT } from '../../../shared/modelCatalog';
 /**
  * useAgentModelEffortOptions
  *
@@ -135,8 +136,43 @@ export function resolveModelEffort(
 	session: { customModel?: string; customEffort?: string } | null | undefined,
 	defaults: { defaultModel: string; defaultEffort: string }
 ): { model: string; effort: string } {
+	const model = tab?.customModel || session?.customModel || defaults.defaultModel;
+	const effort = tab?.customEffort || session?.customEffort || defaults.defaultEffort;
 	return {
-		model: tab?.customModel || session?.customModel || defaults.defaultModel,
-		effort: tab?.customEffort || session?.customEffort || defaults.defaultEffort,
+		model: model === NATIVE_MODEL_DEFAULT ? '' : model,
+		effort: effort === NATIVE_MODEL_DEFAULT ? '' : effort,
 	};
+}
+
+/** Warm on mount, then recheck file fingerprints and cached quota on each open. */
+export function useConversationModelCatalog(
+	request: import('../../../shared/modelCatalog').ModelCatalogRequest,
+	open: boolean
+): import('../../../shared/modelCatalog').ProviderModelCatalog | undefined {
+	const key = JSON.stringify(request);
+	const [result, setResult] = useState<{
+		key: string;
+		catalog?: import('../../../shared/modelCatalog').ProviderModelCatalog;
+	}>();
+	useEffect(() => {
+		let stale = false;
+		// Closing must not issue another request. The mounted result stays warm.
+		if (!open && result?.key === key) return;
+		(
+			window.maestro.agents.getModelCatalog?.(JSON.parse(key)) ??
+			Promise.reject(new Error('Model catalog unavailable'))
+		).then(
+			(catalog) => {
+				if (!stale) setResult({ key, catalog });
+			},
+			() => {
+				if (!stale) setResult({ key });
+			}
+		);
+		return () => {
+			stale = true;
+		};
+		// Result is deliberately not a dependency: it is the response, not a request.
+	}, [key, open]);
+	return result?.key === key ? result.catalog : undefined;
 }

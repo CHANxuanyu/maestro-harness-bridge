@@ -1,5 +1,14 @@
 # CLI / UI Parity Audit
 
+New-shell catalog picker: `maestro-cli open model-picker` reaches the same
+registered popover as the composer and shortcut. `models <provider> --agent
+<id> --json` reads the same catalog, defaults and quota. Existing `tab model`
+and `tab effort` remain literal override setters; `native-default` explicitly
+selects the native CLI default, while `inherit` still clears the tab override
+to inherit Maestro settings. `tab show` reads the stored choice. Automatic
+per-model recall belongs to the picker transaction; legacy CLI literal setters
+do not implicitly replace the other override.
+
 Rule (constitutional, see CLAUDE.md): anything a person can do by pointing and
 clicking in Maestro, an agent MUST be able to do through `maestro-cli`, through
 the same code path. A UI action ships with its CLI verb. This file records where
@@ -861,6 +870,18 @@ scenario verifies the old Claude answer remains after the Codex continuation,
 then reads the old result through both the card and `native-history tool-output`.
 
 ## Covered
+
+### Typed model catalog, B1-1, 2026-11-17
+
+| UI read                                                                 | CLI                                                                                             | Shared implementation                                   |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Provider models, model-specific effort, native default and cached quota | `models <codex\|claude-code> [--agent <id>\|--account-dir <path>] [--ssh-remote <id>] [--json]` | `agents:getModelCatalog`, `createModelCatalogService()` |
+
+Requires the running desktop. Reads only cached quota; it never samples.
+Typed SSH catalogs explicitly return `unsupported-remote`; existing remote
+`getModels` remains unchanged. JSON retains hidden entries for resolving saved
+selections, while text output and the picker helper exclude them. Frontend
+integration and keyboard/focus acceptance belong to B1-2 through B1-4.
 
 ### 新界面 CLI 对等，Task L，2026-11-12
 

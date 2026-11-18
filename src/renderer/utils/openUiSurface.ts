@@ -1,3 +1,5 @@
+import { resolveModelEffortTabId } from './panelLayout';
+import { useGroupChatStore } from '../stores/groupChatStore';
 import { getT } from '../i18n';
 import { projectSettingsScopeForSession } from './projectConversationDefaults';
 import { projectSettingsKey } from '../../shared/projectSettings';
@@ -59,6 +61,17 @@ export function openUiSurface(
 	const actions = getModalActions();
 
 	switch (surface.id) {
+		case 'model-picker': {
+			const session = selectActiveSession(useSessionStore.getState());
+			const target = resolveModelEffortTabId(
+				session,
+				useGroupChatStore.getState().activeGroupChatId
+			);
+			if (!target) return { ok: false, error: getT()('workflows.modelPicker.noConversation') };
+			if (options?.close) useModalStore.getState().closeModal('modelEffort');
+			else useModalStore.getState().openModal('modelEffort', { tabId: target });
+			return { ok: true };
+		}
 		case 'project-settings': {
 			if (!useSettingsStore.getState().newShell)
 				return { ok: false, error: getT()('workflows.split.disabled') };

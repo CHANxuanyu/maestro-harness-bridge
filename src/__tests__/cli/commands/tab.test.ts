@@ -619,6 +619,22 @@ describe('tab commands', () => {
 		expect(getEnter().configPatch).toEqual({ tabId: 'tab-cccc', enterToSend: false });
 	});
 
+	it('native-default remains distinct from inheriting Maestro overrides', async () => {
+		const { NATIVE_MODEL_DEFAULT } = await import('../../../shared/modelCatalog');
+		const getModel = mockTab({ success: true });
+		await tabModel('tab-cccc', 'native-default', {});
+		expect(getModel().configPatch).toEqual({
+			tabId: 'tab-cccc',
+			customModel: NATIVE_MODEL_DEFAULT,
+		});
+		const getEffort = mockTab({ success: true });
+		await tabEffort('tab-cccc', 'native-default', {});
+		expect(getEffort().configPatch).toEqual({
+			tabId: 'tab-cccc',
+			customEffort: NATIVE_MODEL_DEFAULT,
+		});
+	});
+
 	it('clearing an override sends null so the renderer drops the field', async () => {
 		const getModel = mockTab({ success: true });
 		await tabModel('tab-bbbb', null, {});

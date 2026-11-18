@@ -595,6 +595,7 @@ const ConversationRow = memo(function ConversationRow({
 						ref={titleRef}
 						data-conversation-title={newShell ? title : undefined}
 						className="truncate flex-1 min-w-0"
+						aria-hidden={visibleTitle !== title || undefined}
 						title={
 							newShell
 								? title
@@ -605,6 +606,9 @@ const ConversationRow = memo(function ConversationRow({
 					>
 						{visibleTitle}
 					</span>
+					{/* A middle-shortened title is for the eye only; assistive tech and
+					    text search still get the whole title. */}
+					{visibleTitle !== title && <span className="sr-only">{title}</span>}
 					{worktree && (
 						// Where the conversation ran, kept quieter than its title: the
 						// new shell keeps only the marker; branch and path wait in the hover.

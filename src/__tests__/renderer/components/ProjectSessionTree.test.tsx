@@ -771,7 +771,14 @@ it('gives eight worktree titles distinct visible text in a 264px bar', () => {
 		for (const element of titles) {
 			expect(element.textContent).not.toMatch(/[#`*]/);
 			expect(element.title).toBe(element.dataset.conversationTitle);
+			// The shortened text is for the eye; the whole title stays readable and searchable.
+			if (element.textContent !== element.dataset.conversationTitle) {
+				expect(element.getAttribute('aria-hidden')).toBe('true');
+				const full = element.parentElement!.querySelector('.sr-only');
+				expect(full?.textContent).toBe(element.dataset.conversationTitle);
+			}
 		}
+		expect(titles.some((element) => element.getAttribute('aria-hidden') === 'true')).toBe(true);
 		const markers = Array.from(document.querySelectorAll<HTMLElement>('[data-worktree]'));
 		expect(markers).toHaveLength(8);
 		for (const marker of markers) {

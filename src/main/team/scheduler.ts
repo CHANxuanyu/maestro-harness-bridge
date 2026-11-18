@@ -2,7 +2,7 @@ import { checkCommandBoundary, type CheckBoundary } from '../../shared/checkRun'
 import { createHash, randomUUID } from 'crypto';
 import { DURATION_MS } from '../../shared/duration';
 import { isValidAgentId } from '../../shared/agentIds';
-import { decideNext, judgeAttempts } from '../../shared/progressRules';
+import { decideNext, judgeAttempts, NO_PROGRESS_LIMIT } from '../../shared/progressRules';
 import {
 	isOpenTeamIssue,
 	baselineDiff,
@@ -17,7 +17,7 @@ import {
 	sameTeamModel,
 	teamChallengeRound,
 } from '../../shared/team/policy';
-import { reduceLedger } from '../../shared/team/ledger';
+import { reduceLedger, teamEventForTransport } from '../../shared/team/ledger';
 import { buildTeamTurnPrompt } from '../../shared/team/prompts';
 import {
 	extractTeamReport,
@@ -574,9 +574,30 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				state,
 				dispatch.discussionId
 			);
-		if (dispatch.mode === 'diagnose' || dispatch.mode === 'gather')
-			prompt += `\n\n${dispatch.mode === 'diagnose' ? 'Diagnosis required: explain why the previous attempts failed, the new basis, difference and expected observation.' : 'Gather new evidence. Do not repeat the previously tried change.'}\nAttempt record: ${JSON.stringify(state.problems[dispatch.problemId ?? 'checks'] ?? null)}`;
+		if (dispatch.mode === 'diagnose' || dispatch.mode === 'gather') {
+			const problem = state.problems[dispatch.problemId ?? 'checks'];
+			prompt += `\n\n${dispatch.mode === 'diagnose' ? 'Diagnosis required: explain why the previous attempts failed, the new basis, difference and expected observation.' : 'Gather new evidence. Do not repeat the previously tried change.'}\nAttempt record: ${JSON.stringify(problem ? { ...problem, progress: { ...problem.progress, attempts: problem.progress.attempts.slice(-NO_PROGRESS_LIMIT) } } : null)}`;
+		}
 		return `${prompt}\n\n${dispatch.note ?? ''}\n[team-dispatch:${dispatch.dispatchId}]`;
+	};
+	const recordedPrompt = async (id: string, dispatch: Dispatch, events: LedgerEvent[]) => {
+		// Inline prompts predate sidecars. The oldest ledgers can only reconstruct a snapshot.
+		if (!dispatch.promptRef) return promptFor(dispatch, events);
+		if (dispatch.promptRef !== `prompts/${dispatch.dispatchId}.txt`)
+			throw new Error(`Invalid prompt reference for dispatch ${dispatch.dispatchId}`);
+		const prompt = await deps.store
+			.readPrompt(id, dispatch.dispatchId)
+			.catch((error: NodeJS.ErrnoException) => {
+				if (error.code === 'ENOENT')
+					throw new Error(
+						`Missing prompt sidecar ${dispatch.promptRef} for dispatch ${dispatch.dispatchId}`,
+						{ cause: error }
+					);
+				throw error;
+			});
+		if (createHash('sha256').update(prompt).digest('hex') !== dispatch.promptDigest)
+			throw new Error(`Prompt digest mismatch for dispatch ${dispatch.dispatchId}`);
+		return prompt;
 	};
 	const requestFor = (
 		config: TeamConfig,
@@ -600,7 +621,8 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				? undefined
 				: binding.nativeSessionId,
 			permissionMode: teamTurnPermission(dispatch.seat, dispatch.turn),
-			prompt: promptFor(dispatch, events),
+			// Native receipt matching uses identity and the dispatch marker, never audit text.
+			prompt: '',
 		};
 	};
 	const bindNative = (id: string, seat: SeatRole, nativeSessionId: string) =>
@@ -939,6 +961,8 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					);
 					return;
 				}
+				request.prompt =
+					(await recordedPrompt(data.config.id, dispatch, data.events)) + request.prompt;
 				result = await deps.dispatcher.dispatch({
 					...request,
 					signal: controller.signal,
@@ -1119,8 +1143,9 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			binding: reduceLedger(data.events).seats[seat].binding,
 			...options,
 		};
-		input.prompt = promptFor(input, data.events);
-		input.promptDigest = createHash('sha256').update(input.prompt).digest('hex');
+		const prompt = promptFor(input, data.events);
+		input.promptDigest = createHash('sha256').update(prompt).digest('hex');
+		input.promptRef = await deps.store.writePrompt(id, dispatchId, prompt);
 		const saved = (await append(id, input)) as Dispatch;
 		for (const messageId of options.messageIds ?? [])
 			await append(id, {
@@ -3430,17 +3455,34 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			Promise.all(
 				(await deps.store.listTeams()).map(async (config) => (await load(config.id)).config)
 			),
-		async get(id: string): Promise<RecordData | null> {
+		async get(id: string, full = false): Promise<RecordData | null> {
+			let data: RecordData;
 			try {
-				return await load(id);
+				data = await load(id);
 			} catch (error) {
 				if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
 				throw error;
 			}
+			return {
+				...data,
+				events: await Promise.all(
+					data.events.map(async (event) =>
+						!full
+							? teamEventForTransport(event)
+							: event.kind === 'turn_dispatched'
+								? { ...event, prompt: await recordedPrompt(id, event, data.events) }
+								: event
+					)
+				),
+			};
 		},
 		async status(id: string) {
 			const data = await this.get(id);
 			return data ? teamStatus(reduceLedger(data.events), now()) : null;
+		},
+		/** Exact append-log audit, without loading or hydrating separate prompt files. */
+		async events(id: string): Promise<LedgerEvent[]> {
+			return (await load(id)).events;
 		},
 		async baselineDiff(id: string) {
 			const { events } = await load(id);
@@ -3516,18 +3558,28 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		async log(id: string, seat?: SeatRole) {
 			if (seat && !SEAT_ROLES.includes(seat)) throw new Error('Invalid seat');
 			const data = await load(id);
-			return reduceLedger(data.events)
-				.turns.filter((t) => !seat || t.seat === seat)
-				.map((t) => ({
-					dispatchId: t.dispatchId,
-					seat: t.seat,
-					turn: t.dispatched?.turn,
-					prompt: t.dispatched ? promptFor(t.dispatched, data.events) : undefined,
-					reply: t.finished?.message,
-					report: t.report,
-					normalizations: t.normalizations,
-					error: t.reportError,
-				}));
+			return Promise.all(
+				reduceLedger(data.events)
+					.turns.filter((t) => !seat || t.seat === seat)
+					.map(async (t) => ({
+						dispatchId: t.dispatchId,
+						seat: t.seat,
+						turn: t.dispatched?.turn,
+						prompt: t.dispatched ? await recordedPrompt(id, t.dispatched, data.events) : undefined,
+						reply: t.finished?.message,
+						report: t.report,
+						normalizations: t.normalizations,
+						error: t.reportError,
+					}))
+			);
+		},
+		async prompt(id: string, dispatchId: string) {
+			const { events } = await load(id);
+			const dispatch = events.find(
+				(e): e is Dispatch => e.kind === 'turn_dispatched' && e.dispatchId === dispatchId
+			);
+			if (!dispatch) throw new Error(`Unknown dispatch ${dispatchId}`);
+			return recordedPrompt(id, dispatch, events);
 		},
 		answer,
 		say: (id: string, text: string, to?: SeatRole): Promise<QueuedTeamMessage> =>
@@ -3581,7 +3633,14 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		},
 		async export(id: string) {
 			const data = await load(id);
-			return JSON.stringify(data, null, '\t');
+			const prompts = Object.fromEntries(
+				await Promise.all(
+					data.events
+						.filter((e): e is Dispatch => e.kind === 'turn_dispatched')
+						.map(async (e) => [e.dispatchId, await recordedPrompt(id, e, data.events)])
+				)
+			);
+			return JSON.stringify({ ...data, prompts }, null, '\t');
 		},
 		async seatTranscript(id: string, seat: SeatRole) {
 			if (!SEAT_ROLES.includes(seat)) throw new Error('Invalid seat');

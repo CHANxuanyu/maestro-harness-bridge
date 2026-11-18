@@ -236,7 +236,10 @@ for (const fault of [
 			if (fault === 'missing-report' || fault === 'bad-report') {
 				const repair = f.state().turns.filter((t) => t.dispatched?.repairOf);
 				expect(repair).toHaveLength(1);
-				expect(repair[0].dispatched!.prompt).toContain('Do not redo work');
+				// NativeApp.cli already parses stdout; show prompt returns a JSON string.
+				const prompt: string = await f.cli('show', 'prompt', repair[0].dispatchId);
+				expect(typeof prompt).toBe('string');
+				expect(prompt).toContain('Do not redo work');
 			}
 			if (fault === 'turn-failed' || fault === 'session-broken') {
 				const retry = f.state().turns.find((t) => t.dispatched?.retryOf)!;

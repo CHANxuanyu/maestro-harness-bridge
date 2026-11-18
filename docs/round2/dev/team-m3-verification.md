@@ -1,11 +1,259 @@
 # M3 backend verification, 2026-11-18
 
-Latest artifact: `f65c6933b` plus the uncommitted fourth real-model follow-up changes.
+Latest artifact: `2f3f78cfb` plus the uncommitted fifth follow-up and its native CLI/audit corrections.
 Earlier M3 records below used `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus
 the then-uncommitted M3 work. Verification targets source and development builds, not an
 installed release. No commit, tag, release, paid model invocation or real GitHub
 publication was performed. Existing private survey material is not part of this
 change.
+
+## Fix5 native follow-up: prompt reads and ledger audits
+
+The owner's outside-sandbox run passed 22/25 before these corrections. Both T21
+failures are in the scenario adapter: `NativeApp.cli()` already parses stdout
+and returns the JSON value, so `prompt.stdout` reads an absent property of the
+returned string. The subsequent `JSON.parse(undefined)` fails at the assertion;
+this is not evidence that the binary printed `undefined`. Prompt output keeps
+its existing shape: a JSON string with `--json`, plain text otherwise. The
+scenario now asserts the decoded string directly and declares it as `string`
+so this misuse is caught by scenario type-checking. New Commander-level tests
+verify both output modes and exercise the real error formatter and non-zero
+exit path. Missing sidecars now name the dispatch and relative sidecar path;
+a malformed successful bridge response with no prompt text is rejected.
+
+The M1 failure actually called `team get` and compared `shown.events` with the
+raw append log. Its five removed diff lines are two `repairTail` values, including
+the malformed report fence; `reportError` is present on both sides. The default
+projection already preserves report errors, rejection reasons, normalization
+notes and member-fault details. New tests assert those facts after JSON transport.
+The chosen contract is **`team show events` is the complete ledger audit by
+default**, through shared `team.events(id)` / `team:events`. It returns stored
+rows exactly, including raw repair text and legacy inline prompts, without
+loading sidecars. `team get` stays compact; `get --full` remains the enriched
+view that also hydrates prompt text. M1 retains full ledger equality against
+`show events` and separately checks compact event identities and diagnostics.
+The audit also remains readable when a prompt sidecar is missing.
+
+Three new guard/audit tests failed before implementation; the four positive
+prompt-format/error-format cases already passed, confirming the response-shape
+finding. Final commands and results for this follow-up:
+
+```sh
+npm test -- --configLoader runner src/__tests__/shared/team src/__tests__/main/team src/__tests__/cli/commands/team.test.ts src/__tests__/cli/services/session-command.test.ts src/__tests__/shared/progressRules.test.ts src/__tests__/shared/retryClassification.test.ts src/__tests__/main/follow-ups.test.ts src/__tests__/main/check-runner.test.ts
+npm run lint
+node node_modules/typescript/bin/tsc -p e2e/tsconfig.team.json --pretty false
+node node_modules/eslint/bin/eslint.js src/cli/commands/team.ts src/main/team/scheduler.ts src/main/ipc/handlers/team.ts src/main/preload/team.ts src/renderer/global.d.ts e2e/native-team.spec.ts e2e/native-team-m3.spec.ts
+node node_modules/eslint/bin/eslint.js -c eslint.dashes.config.mjs src/__tests__/cli/commands/team.test.ts src/__tests__/main/team/scheduler.test.ts src/__tests__/main/team/ipc.test.ts src/__tests__/shared/team/payloads.test.ts
+git diff --name-only -z --diff-filter=ACM | xargs -0 node node_modules/prettier/bin/prettier.cjs --check
+node node_modules/prettier/bin/prettier.cjs --check src/__tests__/shared/team/payloads.test.ts
+npm run docs:verify
+npm run lint:doc-refs
+git diff --check
+npm run build:main
+npm run build:cli
+```
+
+All commands exited 0: **483 tests passed in 20 files** (17.10 s); all three
+production TypeScript projects and all three native scenarios type-check;
+ESLint has no errors or warnings; Prettier passes the working changes including
+the size fixture. Documentation checks find 724 asserted paths and valid
+references across 39 docs. Main/preload and CLI builds pass. The prior fix5
+40-turn size guard still passes. No raw captures or private account paths were
+added to source. No commit or paid invocation was made.
+
+```sh
+node node_modules/@playwright/test/cli.js test --project=native e2e/native-team.spec.ts e2e/native-team-m3.spec.ts --grep 'team M1|M3 T21 member state (missing-report|bad-report)' --output e2e-results/m3-fix5-cli-audit --max-failures=1 --reporter=line
+```
+
+The targeted native attempt exited 1 at Electron startup (`Process failed to
+launch!`, SIGABRT with a cleanup EPERM), before scenario assertions: **1 launch
+failure, 2 unrun**. Artifacts are in `e2e-results/m3-fix5-cli-audit/`; unit, type
+and build logs are in `e2e-results/m3-fix5-followup-validation/`. Native passage
+remains unverified here. Re-run on the unrestricted host:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts
+```
+
+## Fifth follow-up: medium-task prompt and transport size
+
+Artifact: `2f3f78cfb` plus this uncommitted follow-up. The supplied medium capture
+was read in place; no raw transcript or account paths were copied into source.
+The available final capture has 169 events and 18 dispatches (including cleanup),
+997,409 bytes as compact UTF-8 JSON. This differs from the owner's earlier
+151-event count. Dispatch events account for 716,412 bytes. Counts below use
+bytes, not JS string length, and do not claim measured provider token savings.
+
+1. **Prompt persistence:** the ledger stored each full assignment as a string in
+   `turn_dispatched`. It now stores only the digest/reference plus dispatch
+   metadata. The store atomically writes and fsyncs an immutable sidecar before
+   the event; failed persistence cannot reserve a turn. `team show prompt <id>`,
+   `team get --full`, the explicit member log and export load audit text through
+   the same main functions as preload. Audit reads check sidecar digests. Inline
+   legacy prompts remain exact and old ledgers are not rewritten. Native receipt
+   matching needs the frozen binding and dispatch marker, so an absent audit
+   sidecar does not block reconciliation. A missing or corrupt sidecar does fail
+   a real redispatch or audit request explicitly, rather than substitute a newly
+   generated assignment. Store and scheduler regressions cover ordering,
+   immutability, legacy reads, export, failures and receipt-only recovery.
+2. **Transport:** `get()` returned the raw append log. The runtime already sent
+   one `team:changed` delta per append, not full `team:state` snapshots, but the
+   dispatch delta carried its prompt. `teamEventForTransport()` now serves both
+   default reads and deltas, omits prompts/repair tails and uses the existing
+   4,000-character tool-output cap for reply, assignment-note and check tails.
+   Config, fact events, evidence ids, criteria, reports and decisions remain
+   intact. The limit applies to heavy fields, not the total number of facts;
+   explicit full/log/export reads can still be large. CLI `show prompt` fetches
+   just one assignment. IPC/CLI and reducer-equivalence tests cover this contract.
+3. **Turn context:** the real discussion prompts repeated a 26 KB evidence
+   catalog, a 7.4 KB brief, a 1.6 KB original idea, and growing discussion data.
+   Every captured-file catalog entry previously repeated the entire file list.
+   Descriptions now identify one observation and cap at 240 characters without
+   removing any id. Original ideas stop repeating after brief creation. Current
+   criteria retain needed proof instructions and locations; targeted turns retain
+   other commitments as an index. Challenge diffs repeat changed fields only,
+   respond sees the current round, QA keeps the latest plan per criterion,
+   passing checks omit verbose output, and recent discussion/attempt history is
+   bounded. Wait/recovery/wrap-up have their own context instead of inheriting
+   demo history. Schema JSON is compact and still exactly the current seat's
+   schema. All citable ids, step-three new evidence and repair allowlists remain.
+
+The native M3 repair assertion now retrieves the same exact text through
+`team show prompt` because new durable events intentionally have no `prompt`
+field. Other assertion adjustments are compact JSON spelling and a takeover
+check for the complete current baseline instead of the superseded original
+idea. No evidence, fault, budget, permission or completion assertion was removed.
+
+### Measurements
+
+The reproducible fixture has 40 dispatches across all 19 report turn kinds,
+eight long proof definitions, two written challenges, eight check tails and
+36 captured QA files. Before measurements were taken with the unchanged builders
+before implementation; after measurements use the same fixture. The original
+prompt bytes move to sidecars; their audit availability is preserved.
+
+| Payload                                              | Before bytes | After bytes |
+| ---------------------------------------------------- | -----------: | ----------: |
+| Synthetic durable ledger, compact JSON               |    1,562,540 |      61,802 |
+| Synthetic default get, same config envelope          |    1,562,890 |      62,152 |
+| Synthetic inline ledger if only prompts were trimmed |    1,562,540 |     652,164 |
+| Real capture events through default transport        |      997,409 |     295,137 |
+| Real 18 snapshot prompt builds, total                |      614,135 |     359,275 |
+
+The default synthetic get is 96.0% smaller. The real prompt builds are 41.5%
+smaller. Old disk ledgers stay unchanged; the real transport row measures their
+read projection. The 350-byte config/envelope is identical for both synthetic
+get values. The default non-JSON CLI formatting is also bounded: 71,100 bytes
+for the same after fixture, including indentation (excluding the final newline). Prompt tables exclude the scheduler's dispatch marker and extra
+recovery/inspection notes, and compare builders from identical fact snapshots.
+Provider input also includes native history and tool output; 597,385 observed
+input tokens cannot be converted into a measured savings claim from these bytes.
+
+| Synthetic turn kind | Before bytes | After bytes |
+| ------------------- | -----------: | ----------: |
+| `recovery`          |       17,797 |      12,722 |
+| `wrap_up`           |       17,606 |      12,506 |
+| `wait`              |       17,617 |       4,964 |
+| `brief`             |       14,649 |      11,591 |
+| `challenge`         |       13,736 |      11,009 |
+| `respond`           |       21,797 |      17,747 |
+| `work`              |       40,070 |      12,039 |
+| `qa_prep`           |       17,497 |      15,004 |
+| `verify`            |       43,952 |      15,670 |
+| `fix`               |       38,788 |      11,569 |
+| `reverify`          |       43,668 |      15,460 |
+| `review`            |       18,339 |      14,792 |
+| `demo`              |       18,065 |      14,654 |
+| `topic`             |       11,842 |       9,811 |
+| `position`          |       73,491 |      16,488 |
+| `proposal`          |       74,926 |      17,391 |
+| `response`          |       73,419 |      18,051 |
+| `retro`             |       73,647 |      16,606 |
+| `message`           |       15,023 |      11,674 |
+
+For the supplied real snapshots, preserving the required detailed context:
+
+| Real turn          | Before builder bytes | After builder bytes |
+| ------------------ | -------------------: | ------------------: |
+| 1. pm `brief`      |               10,824 |               8,100 |
+| 2. dev `challenge` |               14,972 |              10,343 |
+| 3. qa `challenge`  |               14,890 |              10,308 |
+| 4. pm `respond`    |               25,353 |              19,160 |
+| 5. dev `challenge` |               29,461 |              21,439 |
+| 6. qa `challenge`  |               29,379 |              21,404 |
+| 7. pm `respond`    |               34,281 |              22,543 |
+| 8. dev `work`      |               18,902 |              13,492 |
+| 9. qa `qa_prep`    |               22,527 |              15,346 |
+| 10. dev `work`     |               26,329 |              15,893 |
+| 11. pm `position`  |               47,937 |              21,289 |
+| 12. dev `position` |               48,200 |              21,473 |
+| 13. qa `position`  |               47,711 |              21,348 |
+| 14. pm `proposal`  |               51,017 |              24,004 |
+| 15. pm `response`  |               55,343 |              31,454 |
+| 16. dev `response` |               55,495 |              31,556 |
+| 17. qa `response`  |               56,314 |              32,336 |
+| 18. qa `qa_prep`   |               25,200 |              17,787 |
+
+Aggregate measurement artifacts are under `e2e-results/m3-payload-before.json`
+and `e2e-results/m3-payload-after.json` (ignored, no raw prompt text). The permanent
+`payloads.test.ts` fixture asserts the default payload stays below the CLI's
+1 MB threshold, compact event payloads stay under 100 KB, and fixture prompts
+stay below 25 KB. The real table is descriptive, not subject to that fixture
+limit; mandatory task detail is not truncated to hit a byte target.
+
+### Commands and results
+
+```sh
+npm test -- --configLoader runner src/__tests__/shared/team src/__tests__/main/team src/__tests__/cli/commands/team.test.ts src/__tests__/cli/services/session-command.test.ts src/__tests__/shared/progressRules.test.ts src/__tests__/shared/retryClassification.test.ts src/__tests__/main/follow-ups.test.ts src/__tests__/main/check-runner.test.ts
+npm run lint
+node node_modules/typescript/bin/tsc -p e2e/tsconfig.team.json --pretty false
+node node_modules/eslint/bin/eslint.js src/cli/commands/team.ts src/main/ipc/handlers/team.ts src/main/preload/team.ts src/main/team/runtime.ts src/main/team/scheduler.ts src/main/team/team-store.ts src/renderer/global.d.ts src/shared/team/ledger.ts src/shared/team/policy.ts src/shared/team/prompts.ts src/shared/team/types.ts e2e/native-team-m3.spec.ts
+node node_modules/eslint/bin/eslint.js -c eslint.dashes.config.mjs src/__tests__/cli/commands/team.test.ts src/__tests__/main/team/ipc.test.ts src/__tests__/main/team/runtime.test.ts src/__tests__/main/team/scheduler.test.ts src/__tests__/main/team/team-store.test.ts src/__tests__/shared/team/prompts.test.ts src/__tests__/shared/team/payloads.test.ts
+git diff --name-only -z --diff-filter=ACM | xargs -0 node node_modules/prettier/bin/prettier.cjs --check
+node node_modules/prettier/bin/prettier.cjs --check src/__tests__/shared/team/payloads.test.ts
+npm run docs:verify
+npm run lint:doc-refs
+git diff --check
+TEAM_MEASURE_OUT=e2e-results/m3-payload-recheck.json npm test -- --configLoader runner src/__tests__/shared/team/payloads.test.ts
+```
+
+Team tests: **475 passed in 20 files**, exit 0, 18.09 s. `npm run lint` checks
+renderer, main and CLI TypeScript projects; all three pass. Electron scenarios
+type-check. ESLint exits 0 without warnings; Prettier passes all 25 changed
+tracked files plus the new fixture. Documentation checks find all 724 asserted
+paths and valid references across 39 docs. `git diff --check` and the added-line/
+new-file forbidden-dash scan pass. The separate size fixture passes both tests. To include the optional real snapshot table, set `TEAM_MEASURE_REAL`
+to the local capture path while running the measurement test; the test writes
+only aggregate sizes and does not invoke a model. The full-suite measurement run
+used that variable and `TEAM_MEASURE_OUT` in addition to the command above.
+
+Initial checks caught an optional criterion-id narrowing error and an incorrectly
+configured budget in the new missing-sidecar test fixture; both were corrected.
+The first lint attempt applied the test-only config to an Electron file, which
+reported it ignored; the final command uses the normal config for that file.
+
+```sh
+npm run build:main
+npm run build:cli
+node --input-type=module -e 'globalThis.__dirname = process.cwd(); const { build } = await import("vite"); await build({ configLoader: "runner" }); await build({ configFile: "vite.config.web-desktop.mts", configLoader: "runner" });'
+node node_modules/@playwright/test/cli.js test --project=native e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts --output e2e-results/m3-prompt-sidecars --max-failures=1 --reporter=line
+```
+
+Main/preload, CLI and both UI builds exit 0; existing Vite import/chunk warnings
+remain. The runner-config command avoids writing Vite cache into the shared
+`node_modules` directory; build configs are unchanged. Playwright exits 1 with
+`Process failed to launch!` before the first scenario assertion: **1 launch
+failure, 24 unrun**. Artifacts are under `e2e-results/m3-prompt-sidecars/`.
+This does not establish native passage or a product regression. No paid run,
+commit or publication was performed. Outstanding commands on an unrestricted
+host. The second command belongs in the owner's real-team checkout after
+integrating these changes, with its documented real-account opt-in;
+`e2e/real-team.spec.ts` is not present in this backend worktree:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m3.spec.ts
+node scripts/native-e2e.mjs e2e/real-team.spec.ts --grep 'team medium task'
+```
 
 ## Fourth follow-up: QA output locations and app capture faults
 

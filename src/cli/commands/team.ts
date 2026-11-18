@@ -19,6 +19,7 @@ import { resolveCliPath } from '../utils/parse';
 
 interface TeamOptions {
 	json?: boolean;
+	full?: boolean;
 	team?: string;
 	idea?: string;
 	pm?: string;
@@ -120,7 +121,13 @@ export async function teamCommand(
 		} else if (action === 'list') result = await invoke('list');
 		else {
 			const id = await teamId(options);
-			if (action === 'show') {
+			if (action === 'show' && args[0] === 'prompt') {
+				if (!args[1]) throw new Error('show prompt requires a dispatch id');
+				result = await invoke('prompt', id, args[1]);
+				if (typeof result !== 'string')
+					throw new Error(`Prompt text unavailable for dispatch ${args[1]}`);
+			} else if (action === 'show' && args[0] === 'events') result = await invoke('events', id);
+			else if (action === 'show') {
 				const data = await invoke<{ config: TeamConfig; events: LedgerEvent[] } | null>('get', id);
 				if (!data) throw new Error('Team not found');
 				const state = reduceLedger(data.events);
@@ -148,7 +155,9 @@ export async function teamCommand(
 					},
 				};
 				if (!Object.prototype.hasOwnProperty.call(sections, args[0]))
-					throw new Error(`show expects ${Object.keys(sections).join('|')}`);
+					throw new Error(
+						`show expects ${Object.keys(sections).join('|')}|events|prompt <dispatchId>`
+					);
 				result = sections[args[0]];
 			} else if (action === 'baseline') {
 				if (args[0] === 'diff') result = await invoke('baselineDiff', id);
@@ -196,6 +205,7 @@ export async function teamCommand(
 				result = await invoke('requestChanges', id, options.note);
 			else if (action === 'log') result = await invoke('log', id, options.seat);
 			else if (action === 'seat-transcript') result = await invoke('seatTranscript', id, args[0]);
+			else if (action === 'get' && options.full) result = await invoke('get', id, true);
 			else result = await invoke(action, id);
 		}
 		if (options.json) console.log(JSON.stringify(result ?? { success: true }));
@@ -228,8 +238,11 @@ export function registerTeamCommands(program: Command): void {
 		.option('--allow <classes>', 'Authorized classes: checks,push,pr,temp; omitted means all')
 		.option('--path <path>', 'Project root; defaults to current directory')
 		.action((options) => teamCommand('start', [], options));
-	for (const action of ['list', 'get', 'status', 'pause', 'resume', 'stop', 'export'])
+	for (const action of ['list', 'status', 'pause', 'resume', 'stop', 'export'])
 		command(action, `${action} team`).action((options) => teamCommand(action, [], options));
+	command('get', 'Read team config and ledger facts without heavy audit text')
+		.option('--full', 'Include exact prompts and full stored output tails')
+		.action((options) => teamCommand('get', [], options));
 	command('accept', 'Accept a demonstration or the listed leftovers')
 		.option('--with-gaps', 'Accept unmet items from the incomplete progress report')
 		.action((options) => teamCommand('accept', [], options));
@@ -243,9 +256,10 @@ export function registerTeamCommands(program: Command): void {
 	command('action <action>', 'Request push, draftPr, or an owner-only external action')
 		.requiredOption('--note <text>', 'Concrete action and publication body')
 		.action((action, options) => teamCommand('action', [action], options));
-	command('show <section>', 'Read a ledger projection').action((section, options) =>
-		teamCommand('show', [section], options)
-	);
+	command(
+		'show <section> [dispatchId]',
+		'Read a projection, complete events audit, or one exact dispatch prompt'
+	).action((section, dispatchId, options) => teamCommand('show', [section, dispatchId], options));
 	command('answer <card> <option>', 'Answer an owner card')
 		.option('--note <text>', 'Decision note')
 		.action((card, option, options) => teamCommand('answer', [card, option], options));

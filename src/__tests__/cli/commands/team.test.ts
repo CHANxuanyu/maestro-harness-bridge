@@ -1,27 +1,125 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import { teamCommand, parseTeamSeat, registerTeamCommands } from '../../../cli/commands/team';
-import { sendSimpleCommand } from '../../../cli/services/session-command';
+import { failCommand, sendSimpleCommand } from '../../../cli/services/session-command';
 import { config, ledger, baseline } from '../../shared/team/fixtures';
 
 vi.mock('../../../cli/services/session-command', () => ({
 	sendSimpleCommand: vi.fn(),
-	failCommand: (message: string) => {
-		throw new Error(message);
-	},
+	failCommand: vi.fn(),
 }));
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	vi.mocked(failCommand).mockImplementation((message) => {
+		throw new Error(message);
+	});
 	vi.spyOn(console, 'log').mockImplementation(() => {});
 	vi.mocked(sendSimpleCommand).mockImplementation(async (payload) => ({
 		ok: true,
-		result: payload.channel === 'team:list' ? [config] : undefined,
+		result:
+			payload.channel === 'team:list'
+				? [config]
+				: payload.channel === 'team:prompt'
+					? 'Recorded prompt'
+					: undefined,
 	}));
 });
 afterEach(() => vi.restoreAllMocks());
 
 describe('team CLI parity', () => {
+	it.each([false, true])(
+		'prints the exact prompt as text or a JSON string (json: %s)',
+		async (json) => {
+			const prompt = 'Your report was invalid.\nDo not redo work. Quote "the exact error".';
+			vi.mocked(sendSimpleCommand).mockImplementation(async (payload) => ({
+				ok: true,
+				result: payload.channel === 'team:list' ? [config] : prompt,
+			}));
+			const program = new Command();
+			registerTeamCommands(program);
+			await program.parseAsync([
+				'node',
+				'cli',
+				'team',
+				'show',
+				'prompt',
+				'dispatch-1',
+				...(json ? ['--json'] : []),
+			]);
+			expect(console.log).toHaveBeenLastCalledWith(json ? JSON.stringify(prompt) : prompt);
+			if (json) expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])).toBe(prompt);
+		}
+	);
+	it.each([false, true])(
+		'reports a missing sidecar on stderr and exits non-zero (json: %s)',
+		async (json) => {
+			const actual = await vi.importActual<typeof import('../../../cli/services/session-command')>(
+				'../../../cli/services/session-command'
+			);
+			vi.mocked(failCommand).mockImplementation(actual.failCommand);
+			vi.spyOn(console, 'error').mockImplementation(() => {});
+			vi.spyOn(process, 'exit').mockImplementation(() => {
+				throw new Error('cli exit');
+			});
+			const error = 'Missing prompt sidecar prompts/dispatch-1.txt for dispatch dispatch-1';
+			vi.mocked(sendSimpleCommand).mockImplementation(async (payload) =>
+				payload.channel === 'team:list' ? { ok: true, result: [config] } : { ok: false, error }
+			);
+			const program = new Command();
+			registerTeamCommands(program);
+			await expect(
+				program.parseAsync([
+					'node',
+					'cli',
+					'team',
+					'show',
+					'prompt',
+					'dispatch-1',
+					...(json ? ['--json'] : []),
+				])
+			).rejects.toThrow('cli exit');
+			expect(process.exit).toHaveBeenCalledWith(1);
+			expect(console.error).toHaveBeenLastCalledWith(expect.stringContaining(error));
+			if (json)
+				expect(console.log).toHaveBeenLastCalledWith(JSON.stringify({ success: false, error }));
+			else expect(console.log).not.toHaveBeenCalled();
+		}
+	);
+	it('rejects a successful bridge reply with no prompt text instead of reporting empty success', async () => {
+		vi.mocked(sendSimpleCommand).mockImplementation(async (payload) => ({
+			ok: true,
+			result: payload.channel === 'team:list' ? [config] : undefined,
+		}));
+		await expect(teamCommand('show', ['prompt', 'dispatch-1'], { json: true })).rejects.toThrow(
+			'Prompt text unavailable for dispatch dispatch-1'
+		);
+		expect(console.log).not.toHaveBeenCalled();
+	});
+	it('reads show events as the complete ledger audit without hydrating prompt sidecars', async () => {
+		const events = ledger(...baseline, {
+			kind: 'turn_finished',
+			seat: 'pm',
+			dispatchId: 'd',
+			durationMs: 1,
+			exitCode: 0,
+			message: 'Reply',
+			reportError: 'Invalid team-report JSON: broken',
+			repairTail: '```team-report\n{broken}\n```',
+		});
+		vi.mocked(sendSimpleCommand).mockImplementation(async (payload) => ({
+			ok: true,
+			result: payload.channel === 'team:list' ? [config] : events,
+		}));
+		const program = new Command();
+		registerTeamCommands(program);
+		await program.parseAsync(['node', 'cli', 'team', 'show', 'events', '--json']);
+		expect(sendSimpleCommand).toHaveBeenLastCalledWith(
+			{ type: 'bridge.invoke', channel: 'team:events', args: [config.id] },
+			'bridge.response'
+		);
+		expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])).toEqual(events);
+	});
 	it('creates with provider-native settings, substitutions, explicit authorizations and budget', async () => {
 		await teamCommand('start', [], {
 			idea: 'A team idea',
@@ -126,6 +224,8 @@ describe('team CLI parity', () => {
 		);
 	});
 	it.each([
+		[['get', '--full'], 'team:get', [true]],
+		[['show', 'prompt', 'dispatch-1'], 'team:prompt', ['dispatch-1']],
 		[
 			['baseline', 'edit', 'A1', 'Parses', 'whole hours'],
 			'team:baselineEdit',

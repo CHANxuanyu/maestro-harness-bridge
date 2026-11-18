@@ -56,6 +56,38 @@ describe('team store', () => {
 		).toBe(true);
 	});
 
+	it('persists an immutable prompt sidecar before the dispatch delta, across restart', async () => {
+		const store = createTeamStore(root);
+		await store.createTeam(config);
+		const prompt = 'Exact assignment\n' + 'proof instructions '.repeat(4000);
+		const ref = await store.writePrompt('one', 'dispatch-1', prompt);
+		expect(ref).toBe('prompts/dispatch-1.txt');
+		const listener = vi.fn();
+		store.subscribe(listener);
+		await store.append('one', {
+			id: 'dispatch-1',
+			dispatchId: 'dispatch-1',
+			at: 1,
+			actor: 'app',
+			kind: 'turn_dispatched',
+			turn: 'work',
+			seat: 'dev',
+			promptDigest: 'digest',
+			promptRef: ref,
+		});
+		expect(listener.mock.calls[0][1].prompt).toBeUndefined();
+		expect(await createTeamStore(root).readPrompt('one', 'dispatch-1')).toBe(prompt);
+		expect(await fs.readFile(path.join(root, 'teams/one/ledger.jsonl'), 'utf8')).not.toContain(
+			'proof instructions'
+		);
+		await expect(store.writePrompt('one', 'dispatch-1', 'Changed assignment')).rejects.toThrow(
+			'already recorded'
+		);
+		expect(await store.readPrompt('one', 'dispatch-1')).toBe(prompt);
+		expect(() => store.readPrompt('one', '../escape')).toThrow('Invalid dispatch id');
+		expect(() => store.writePrompt('one', '/escape', prompt)).toThrow('Invalid dispatch id');
+	});
+
 	it('fsyncs before emitting or resolving, and does not emit a failed append', async () => {
 		const store = createTeamStore(root);
 		await store.createTeam(config);

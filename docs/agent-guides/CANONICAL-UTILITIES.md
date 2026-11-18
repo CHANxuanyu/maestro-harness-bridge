@@ -116,6 +116,21 @@ per-invocation card; this is not an operating-system sandbox for script contents
 `getModelFamily()` now lives in `src/shared/modelFamily.ts`; the renderer path
 re-exports it. Reference votes group same-vendor models through that utility.
 
+`teamEventForTransport()` in `src/shared/team/ledger.ts` is the shared default
+read/delta projection. It omits inline prompts and repair tails, and uses
+`compactToolOutput()` for reply, assignment-note and check-output previews.
+Never truncate criteria, reports, evidence ids or decisions to fit transport.
+Report errors, rejection reasons, normalization notes and fault details also
+remain intact. `createTeamScheduler().events(id)` / `team show events` is the exact append-log audit,
+including raw repair text and legacy inline prompts, without loading sidecars.
+`createTeamStore().writePrompt()` / `readPrompt()` own immutable per-dispatch
+sidecars under `teams/<id>/prompts/`. Write and fsync the sidecar before the
+reference-bearing dispatch event; retain `promptDigest`. The scheduler checks
+the digest for explicit audit reads and dispatch. `get(id, true)`, `prompt(id,
+dispatchId)`, `log()` and `export()` opt into audit text; ordinary `get()` and
+`team:changed` do not. Restart receipt matching uses the frozen seat identity and
+dispatch marker, not prompt loading. Preserve old inline prompts on read.
+
 `teamReplyMessage()` in that same module uses the canonical Markdown parser to
 remove report fences and bound visible replies. `reportEvents()` in
 `src/main/team/report-events.ts` maps validated reports to stable receipt-relative

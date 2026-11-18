@@ -3,7 +3,11 @@ import * as fs from 'fs/promises';
 import path from 'path';
 import type { LedgerEvent, TeamConfig } from '../../shared/team/types';
 import { assertSerializedJsonIsSafe } from '../../shared/jsonUtils';
-import { atomicWriteJson, createKeyedWriteQueue } from '../utils/atomic-json-store';
+import {
+	atomicWriteFile,
+	atomicWriteJson,
+	createKeyedWriteQueue,
+} from '../utils/atomic-json-store';
 import { corruptStorePath } from '../stores/corrupt-store-recovery';
 import { logger } from '../utils/logger';
 
@@ -32,6 +36,10 @@ export function createTeamStore(
 	const root = path.resolve(userData, 'teams');
 	const listeners = new Set<(teamId: string, event: LedgerEvent) => void>();
 	const reported = new Set<string>();
+	const promptFile = (id: string, dispatchId: string) => {
+		if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(dispatchId)) throw new Error('Invalid dispatch id');
+		return path.join(folder(id), 'prompts', `${dispatchId}.txt`);
+	};
 	const folder = (id: string) => {
 		if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(id)) throw new Error('Invalid team id');
 		return path.join(root, id);
@@ -151,6 +159,33 @@ export function createTeamStore(
 				config: await readConfig(id),
 				events: (await readLedger(id)).events,
 			}));
+		},
+		/** Persist the exact assignment before its dispatch event can be appended. */
+		writePrompt(id: string, dispatchId: string, prompt: string): Promise<string> {
+			const file = promptFile(id, dispatchId);
+			return writes.enqueue(folder(id), async () => {
+				await readConfig(id);
+				await fs.mkdir(path.dirname(file), { recursive: true });
+				const existing = await fs.readFile(file, 'utf8').catch((error: NodeJS.ErrnoException) => {
+					if (error.code !== 'ENOENT') throw error;
+					return undefined;
+				});
+				if (existing !== undefined && existing !== prompt)
+					throw new Error(`Prompt already recorded for dispatch ${dispatchId}`);
+				if (existing === undefined) await atomicWriteFile(file, prompt);
+				// Windows FlushFileBuffers also requires a writable handle.
+				const handle = await fs.open(file, 'r+');
+				try {
+					await handle.sync();
+				} finally {
+					await handle.close();
+				}
+				return `prompts/${dispatchId}.txt`;
+			});
+		},
+		readPrompt(id: string, dispatchId: string): Promise<string> {
+			const file = promptFile(id, dispatchId);
+			return writes.enqueue(folder(id), () => fs.readFile(file, 'utf8'));
 		},
 		append(id: string, input: NewLedgerEvent): Promise<LedgerEvent> {
 			const snapshot = structuredClone(input);

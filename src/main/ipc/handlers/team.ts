@@ -15,7 +15,9 @@ export function registerTeamHandlers(team: TeamScheduler): void {
 		);
 	handle('create', (input: CreateTeamInput) => team.create(input));
 	handle('list', () => team.list());
-	handle('get', (id: string) => team.get(id));
+	handle('get', (id: string, full?: boolean) => team.get(id, full === true));
+	handle('prompt', (id: string, dispatchId: string) => team.prompt(id, dispatchId));
+	handle('events', (id: string) => team.events(id));
 	handle('status', (id: string) => team.status(id));
 	handle('answer', (id: string, card: string, option: string, note?: string) =>
 		team.answer(id, card, option, note)

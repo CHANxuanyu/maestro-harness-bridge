@@ -327,7 +327,9 @@ export type LedgerEvent = EventBase &
 				dispatchId: string;
 				turn: TurnKind;
 				promptDigest: string;
-				/** Exact assignment survives prompt-template changes between app versions. */
+				/** Team-relative audit sidecar; never needed to replay facts or reconcile a receipt. */
+				promptRef?: string;
+				/** Legacy inline assignment, still readable across app versions. */
 				prompt?: string;
 				/** Replay the original ledger slice, including isolated challenge inputs. */
 				sourceSeq?: number;

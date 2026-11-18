@@ -12,7 +12,7 @@ Status: engineering contract for round 2, derived from [PRD](../PRD.md) section 
 | `src/shared/team/report.ts`                                 | shared   | `team-report` block extraction, schema validation per turn kind, permission check by seat role                                                                                                                 |
 | `src/shared/team/status.ts`                                 | shared   | `teamStatus(state, now) -> TeamStatusView`, the app-generated status (PRD 6.8.2, `team status`)                                                                                                                |
 | `src/shared/team/prompts.ts`                                | shared   | Turn prompt builders: the ledger slice and the schema each seat receives                                                                                                                                       |
-| `src/main/team/team-store.ts`                               | main     | Persistence: one folder per team under userData `teams/<teamId>/` with `config.json` and `ledger.jsonl` (append-only, fsync on append, corrupt-line tolerant)                                                  |
+| `src/main/team/team-store.ts`                               | main     | Persistence: one folder per team under userData `teams/<teamId>/` with `config.json`, `ledger.jsonl` and prompt audit sidecars (append-only, fsync on append, corrupt-line tolerant)                           |
 | `src/main/team/turn-dispatcher.ts`                          | main     | Runs one provider turn for a seat in its workspace and native session, without a renderer. Built on the group chat spawn path (`spawnGroupChatAgent`, SSH wrapping, customPath, idle watchdog, output parsers) |
 | `src/main/team/scheduler.ts`                                | main     | Deterministic next-step logic. Event-driven (turn end, check end, follow-up fired, owner answer) handled within 5 s; a 30 s timer self-check as a fallback                                                     |
 | `src/main/team/workspaces.ts`                               | main     | Per-seat git worktrees: dev writes its worktree; QA has its own worktree and may write only `qa/`; PM read-only. Restores QA writes outside `qa/`                                                              |
@@ -69,7 +69,7 @@ Event kinds (M1 needs the first group; later groups land with M2 and M3 but the 
 | Group              | Kinds                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Lifecycle          | `team_created`, `seat_bound` (native session id, workspace path), `phase_changed`, `paused`, `resumed`, `stopped`, `terminal` (`all` / `gaps` / `stopped`, PRD 3.1.6)                                                                                                                                                                                                                                    |
-| Turns              | `turn_dispatched` (seat, kind, dispatch id, prompt digest), `turn_finished` (exit, usage, duration, report or report error), `report_repaired`, `report_rejected` (permission or schema)                                                                                                                                                                                                                 |
+| Turns              | `turn_dispatched` (seat, kind, dispatch id, prompt digest and sidecar reference), `turn_finished` (exit, usage, duration, report or report error), `report_repaired`, `report_rejected` (permission or schema)                                                                                                                                                                                           |
 | Requirements       | `brief_published` (version, scope, not-doing, criteria with proof type `app`/`qa`/`pm`), `challenge_submitted` (dev objections, QA plans), `brief_response` (PM decisions per objection), `baseline_proposed`, `baseline_confirmed` (owner), `baseline_edited` (owner, criterion, before, after), `baseline_returned` (owner note), `standard_change` (kind add/tighten/relax/modify/remove, approvedBy) |
 | Work               | `work_item` (id, title, owner seat, state claimed/done/checked), `check_run` (command, exit, output tail, evidence id), `issue_opened` (QA, violated criterion, repro steps, kind defect/standard), `issue_fixed` (dev claim), `issue_verified` (QA, pass/fail), `attempt` (an `AttemptInput` from progressRules, bound to a problem id)                                                                 |
 | Discussion         | `discussion_opened`, `position` (sealed until step 3), `proposal`, `response`, `discussion_closed` (decision, decider, dissent, contested flag, follow-up actions)                                                                                                                                                                                                                                       |
@@ -213,9 +213,10 @@ The renderer consumes the existing append stream plus these main-process actions
 `baselineEdit(id, criterionId, text)`, `baselineDiff(id)`,
 `baselineReturn(id, note)`, and `log(id, seat?)`. `say(id, text, to?)` defaults
 to PM. A direct seat conversation uses the same call with `to`; messages have
-separate delivered, forwarded and handled receipts. New dispatches persist their
-exact prompt text; legacy dispatches without it reconstruct their frozen ledger
-slice using the current prompt builder. See the
+separate delivered, forwarded and handled receipts. New dispatches persist their exact assignment in a prompt sidecar before the
+digest/reference event. Legacy inline assignments remain readable; the oldest
+dispatches without either representation reconstruct their frozen ledger slice
+using the current prompt builder. See the
 [CLI parity table](../../agent-guides/CLI-UI-PARITY.md#team-m1-and-m2-main-process-contract-2026-11-17).
 
 Any report may attach `topic` or `standardChanges`. Discussion reports are
@@ -347,3 +348,61 @@ from the original dispatch snapshot.
 The respond prompt distinguishes draft edits in `brief` from confirmed
 `standardChanges`, and supplies the complete replacement criterion shape and
 a validated example. These shared rules apply equally through CLI and UI.
+
+## Prompt storage and context size, 2026-11-18
+
+A prompt is audit material, not a team fact. New `turn_dispatched` rows contain
+`promptDigest` and `promptRef: prompts/<dispatchId>.txt`, not inline `prompt`.
+The store serializes prompt writes with team writes, atomically writes and fsyncs
+the text before appending the dispatch, and refuses a different assignment for
+an existing dispatch id. Failed sidecar writes do not reserve or spend a turn.
+Unused sidecars left by an interrupted append are harmless. Existing ledgers are
+not rewritten; inline prompts remain readable. Digest failures or missing new
+sidecars fail explicit audit reads loudly rather than inventing an assignment.
+
+Receipt reconciliation uses the dispatch id, bound account/workspace and native
+marker without reading a prompt. A receipt can therefore complete an interrupted
+turn even if its audit sidecar is unavailable. A real redispatch needs the saved
+assignment and still goes through the shared budget guard. Runtime inspection
+and restart additions keep their existing workspace/recovery events and native
+transcript; the sidecar preserves the original assigned text.
+
+`get(id)` / `team get` returns config plus all ordered fact events, excluding
+inline prompts and repair tails and capping reply, assignment-note and check
+output previews through `compactToolOutput()`. Criteria, evidence ids, reports,
+permissions and decisions are not abbreviated. This bounds heavy fields, not the
+number of facts in an arbitrarily long team. `get(id, true)` / `team get --full`
+hydrates exact prompts and returns full stored tails. `prompt(id, dispatchId)` /
+`team show prompt <dispatchId>` reads one assignment. The JSON result of `show prompt` is a string; plain mode prints that text.
+`events(id)` / `team show events` is an explicit complete append-log audit,
+including raw repair text and legacy inline prompts without loading sidecars.
+`get()` remains compact and preserves report errors, rejection reasons,
+normalization notes and fault details. The existing explicit
+`log()` / `team log` audit view retains exact prompts and replies. `team export`
+includes unabridged config/events and a `prompts` object keyed by dispatch id.
+All CLI verbs support `--json` and call the same main handlers as preload.
+The runtime already sent append deltas, not `team:state` snapshots; those deltas
+now use the same lightweight projection. No append broadcasts a full ledger.
+
+Prompt builders emit compact JSON and only the current turn/seat schema. The
+original idea is used for brief creation; later turns use the current brief or
+confirmed baseline. A targeted fix, reverify or criterion discussion gets the
+complete affected criteria and a text/proof index of other commitments. Work,
+QA preparation, verification and review retain their necessary proof methods
+and locations. Second-round challenge diffs repeat only changed fields, and PM
+respond receives current-round challenges plus the last response. QA plans keep
+the latest plan per current criterion, including unchanged criteria. Passing
+checks retain command, exit, coverage and evidence ids without verbose success
+output; failure diagnostics remain. Discussions retain the three latest proposals and their responses; progress
+contexts retain the three latest attempts, while the app's policy and
+repeat detection still use the full ledger. Demo retains all standard changes
+and contested decisions. Wait turns get external wait state and scope, without
+unrelated output manifests. Pending owner messages appear in their delivery
+turn, not unrelated assignments.
+
+Citable evidence is never silently capped away: every recorded id remains, with
+a single-line description of at most 240 characters. A captured file describes
+itself, rather than repeating the whole capture manifest for every id. Response
+turns also receive the exact new-evidence ids and confirmed baseline ids;
+validation and repair still enforce the recorded facts. Size measurements and
+native verification limits are in [M3 verification](team-m3-verification.md).

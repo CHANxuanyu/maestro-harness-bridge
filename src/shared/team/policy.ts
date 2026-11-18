@@ -15,8 +15,55 @@ import type {
 	TeamIssue,
 	TeamState,
 	TeamTopic,
+	TeamEvent,
 	TurnKind,
 } from './types';
+
+/** Members may await external effects, never the scheduler's own next step. */
+export function teamWaitRejection(
+	wait: {
+		waitFor: string;
+		condition?: TeamEvent<'follow_up_registered'>['condition'];
+		needs?: SeatRole[];
+	},
+	state?: TeamState
+): string | undefined {
+	const target = wait.waitFor;
+	const appCheck = [
+		...(state?.baseline.brief?.checks ?? state?.brief?.checks ?? []),
+		...(state?.checks ?? []),
+	].some((check) => target.trim() === check.command);
+	const appDiscussion = state?.discussions.some(
+		(d) => target.includes(d.id) || (d.opened && target.includes(d.opened.topic))
+	);
+	const appAssignment =
+		state?.turns.some((t) => target.includes(t.dispatchId)) ||
+		state?.workItems.some((w) => target.includes(w.itemId)) ||
+		state?.criteria.some((c) => c.proof === 'app' && target.trim() === c.id);
+	if (
+		appCheck ||
+		appDiscussion ||
+		appAssignment ||
+		wait.needs?.length ||
+		/\b(discussion|position|proposal|response|challenge|seat|turn|app[- ](?:owned|run|check)|baseline|verification|review)\b|讨论|立场|提案|回复|席位|回合|质询|应用.*检查/i.test(
+			target
+		) ||
+		(/\b(pm|dev|qa|developer|member)\b|开发|成员/i.test(target) &&
+			!/\b(ci|command|process|build)\b/i.test(target))
+	)
+		return 'This condition is an app-owned step. The scheduler must dispatch or reconcile it, not poll it as an external event.';
+	if (wait.condition) return;
+	// Legacy reports can name an external event without its provider identifier.
+	// Keep their bounded status check, but never invent a normal external wait
+	// from arbitrary prose about a pending assignment.
+	if (
+		/\b(ci|command|process|build|quota|reset|deadline|time|timer)\b|命令|配额|重置|截止|定时|构建/i.test(
+			target
+		)
+	)
+		return;
+	return 'No external condition is identified. Name a command, CI run, quota reset or time boundary; app-owned work stays runnable.';
+}
 
 /** Effort changes do not make an exhausted model available. */
 export function sameTeamModel(a: SeatModel, b: SeatModel): boolean {
@@ -307,9 +354,6 @@ export function topicRejection(topic: TeamTopic, state: TeamState): string | und
 			(d.id === topic.reopens ||
 				(d.opened?.question ?? d.opened?.topic)?.trim().toLowerCase() === question)
 	);
-	const known = teamEvidence(state);
-	if (topic.evidence?.some((e) => !known.includes(e)))
-		return 'Topic evidence must reference a recorded observation.';
 	if (!previous.length) return;
 	const used = previous.flatMap((d) => [
 		...(d.opened?.evidence ?? []),

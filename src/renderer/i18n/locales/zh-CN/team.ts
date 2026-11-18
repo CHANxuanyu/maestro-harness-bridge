@@ -297,6 +297,8 @@ export const team: AreaTranslation<typeof en> = {
 	'workflows.team.appObservations': '应用发现的问题',
 	'workflows.team.appObservationMissing':
 		'应用在团队工作区里没找到 {paths}。这是应用这边的问题，不算团队的问题单。',
+	'workflows.team.appObservationStall': '团队十分钟没有进展。应用重新判断了下一步，并请 PM 诊断。',
+	'workflows.team.appObservationWait': '有成员想等一件应该由应用自己做的事，应用直接把它做了。',
 	'workflows.team.superseded': '已被后续变更取代',
 	'workflows.team.expected': '期待',
 	'workflows.team.actual': '实际',

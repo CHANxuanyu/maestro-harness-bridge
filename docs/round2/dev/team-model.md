@@ -426,3 +426,51 @@ itself, rather than repeating the whole capture manifest for every id. Response
 turns also receive the exact new-evidence ids and confirmed baseline ids;
 validation and repair still enforce the recorded facts. Size measurements and
 native verification limits are in [M3 verification](team-m3-verification.md).
+
+## Sixth follow-up: held work, wait ownership and stalls, 2026-11-18
+
+A suspension belongs to a model/account, not to the seat's latest turn. Pending
+positions, proposals and responses are derived from the open discussion, and
+failed assignments survive later wait/message receipts. A resumed assignment
+records `resumedFrom`, retains its discussion, round, problem and message context,
+and inspects the workspace before executing. The authorized substitute or
+existing-team temporary model uses a new conversation. Reset or login recovery
+returns to the original model; an older cached exhausted sample cannot undo that
+recovery. All calls still use the shared cooldown, concurrency and hard budget
+guards. Successful or superseded assignments are not revived.
+
+`teamWaitRejection()` owns the external-wait boundary for work reports,
+discussion conclusions and legacy registered waits. A discussion step, member
+turn or app check is app work, even when a report attaches a timer. Work reports
+can identify member dependencies through `needs`; discussion actions can now
+supply the same command/CI/time `condition` as work reports. The app refuses or
+cancels internal waits with durable `wait_canceled` and `app_observation` receipts,
+then evaluates its ordinary next step. It does not charge a repair turn for this
+form error. Legacy prose that clearly names CI, a command, build, quota reset or
+time boundary retains a bounded status check; unidentified prose is refused.
+Application job receipts and exhausted-recovery inspections stay app-managed,
+not member-declared external waits. Canceled waits cannot be resurrected by a
+late fire receipt or restart.
+
+The watchdog observes ten minutes without a substantive ledger fact, excluding
+poll registrations, wait reports and dispatch bookkeeping. It runs on the
+existing event/30-second scheduler paths. Paused or terminal teams, open owner
+cards, active member/app work and genuine external waits are excluded. A quota
+monitor for an inactive original model does not exempt a healthy takeover from
+stall detection. One durable app observation per stuck fact precedes another
+normal scheduler evaluation; if no step becomes runnable, one PM diagnosis names
+the phase/discussion and missing step. Observations appear in app/CLI status and
+budget progress reports, never as criterion evidence or a new standard issue.
+A PM wait report that only repeats waiting is idle: one nudge, then diagnosis.
+Dev/QA unchanged polls of a genuine external operation remain normal waits and
+do not enter the product-failure streak. This distinguishes member idleness
+(6.8.2) from unchanged external results (T11).
+
+Topics use the position/response evidence rule: recorded ids remain evidence;
+unknown references remain `discussion_opened.unverifiedBasis`. Topic prompts and
+all turns that allow an attached topic list the citable catalog. Reopening a
+concluded question and step-three insistence still require new recorded evidence
+(or the existing confirmed-baseline violation rule for insistence). QA verify and
+reverify reports describe newly observed results, so their evidence text remains
+a new attributed observation rather than an id lookup. Demo claims still cannot
+establish proof; the app derives demo eligibility from recorded facts.

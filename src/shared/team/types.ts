@@ -156,6 +156,7 @@ export interface DiscussionAction {
 	seat: SeatRole;
 	action: string;
 	waitFor?: string;
+	condition?: FollowUpCondition;
 }
 
 export interface DiscussionExperiment {
@@ -317,7 +318,7 @@ export interface OwnerCard {
 				recommendation?: string;
 				missing: { id: string; text: string; status: string; reason: string }[];
 				/** Locations the app itself could not resolve: an app fault, not a team problem. */
-				appObservations?: TeamEvent<'output_observation'>[];
+				appObservations?: (TeamEvent<'output_observation'> | TeamEvent<'app_observation'>)[];
 				changes: TeamEvent<'standard_change'>[];
 				contested: TeamEvent<'discussion_closed'>[];
 				suggestions: string[];
@@ -401,6 +402,14 @@ export type LedgerEvent = EventBase &
 				idleCount: number;
 		  }
 		| { kind: 'wait_handled'; followUpId: string }
+		| { kind: 'wait_canceled'; followUpId: string; reason: string }
+		| {
+				kind: 'app_observation';
+				category: 'app-owned-wait' | 'stall';
+				detail: string;
+				/** Durable stuck-point identity, independent of polling receipts. */
+				key: string;
+		  }
 		| { kind: 'paused' }
 		| { kind: 'resumed' }
 		| { kind: 'stopped' }
@@ -421,6 +430,8 @@ export type LedgerEvent = EventBase &
 				recoveryFor?: string;
 				repairOf?: string;
 				retryOf?: string;
+				/** Same held assignment resumed after a changed availability condition. */
+				resumedFrom?: string;
 				mode?: 'diagnose' | 'gather' | 'wake';
 				problemId?: string;
 				fingerprint?: string;
@@ -560,6 +571,7 @@ export type LedgerEvent = EventBase &
 				reversible?: boolean;
 				question?: string;
 				evidence?: string[];
+				unverifiedBasis?: string[];
 				reopens?: string;
 				change?: StandardChangeRequest;
 				problemId?: string;
@@ -650,6 +662,7 @@ export type LedgerEvent = EventBase &
 				seat: SeatRole;
 				reason: string;
 				waitFor: string;
+				needs?: SeatRole[];
 				untilMs?: number;
 				poll?: number;
 				unavailabilityId?: string;
@@ -1023,6 +1036,7 @@ export interface TeamState {
 	retros: TeamEvent<'retro'>[];
 	outputs: TeamEvent<'output_captured'>[];
 	outputObservations: TeamEvent<'output_observation'>[];
+	appObservations: TeamEvent<'app_observation'>[];
 	turns: Array<{
 		dispatchId: string;
 		seat: SeatRole;
@@ -1058,7 +1072,7 @@ export interface TeamTurnLog {
 }
 
 export interface TeamStatusView {
-	appObservations: TeamEvent<'output_observation'>[];
+	appObservations: Array<TeamEvent<'output_observation'> | TeamEvent<'app_observation'>>;
 	wrapUp?: TeamEvent<'wrap_up'>;
 	generatedBy: 'app';
 	title: string;

@@ -47,9 +47,15 @@ export function TeamEscalation({
 						<h4>{t('workflows.team.appObservations')}</h4>
 						{data.appObservations.map((observation) => (
 							<p key={observation.id} className="team-dim">
-								{t('workflows.team.appObservationMissing', {
-									paths: formatList(observation.missing),
-								})}
+								{observation.kind === 'output_observation'
+									? t('workflows.team.appObservationMissing', {
+											paths: formatList(observation.missing),
+										})
+									: t(
+											observation.category === 'stall'
+												? 'workflows.team.appObservationStall'
+												: 'workflows.team.appObservationWait'
+										)}
 							</p>
 						))}
 					</div>

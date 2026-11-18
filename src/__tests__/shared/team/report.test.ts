@@ -561,3 +561,61 @@ describe('reportRepairPrompt', () => {
 		expect(prompt).not.toContain('START'.repeat(1000));
 	});
 });
+
+it('normalizes a proposal CI wait against its assigned seat workspace', () => {
+	const context = reduceLedger(
+		ledger(
+			...baseline,
+			{
+				kind: 'seat_bound',
+				seat: 'qa',
+				workspace: '/workspace/qa',
+				model: { tool: 'claude-code' },
+			},
+			{
+				kind: 'discussion_opened',
+				discussionId: 'ci',
+				topic: 'External CI proof',
+				owner: 'pm',
+				participants: ['pm', 'qa'],
+				trigger: 'member',
+				layer: 'product',
+			},
+			...(['pm', 'qa'] as const).map((seat) => ({
+				kind: 'position' as const,
+				discussionId: 'ci',
+				seat,
+				claim: 'Wait for CI',
+				basis: 'Running external job',
+				wouldChangeMind: 'Completion',
+			}))
+		)
+	);
+	const result = validateTeamReport(
+		{
+			type: 'proposal',
+			discussionId: 'ci',
+			proposal: 'Keep tracking the external run',
+			decider: 'pm',
+			actions: [
+				{ seat: 'pm', action: 'Document the decision' },
+				{
+					seat: 'qa',
+					action: 'Read the external CI result',
+					waitFor: 'CI run',
+					condition: { kind: 'ci', runId: '123', cwd: './' },
+				},
+			],
+		},
+		'proposal',
+		'pm',
+		context
+	);
+	expect(result).toMatchObject({
+		ok: true,
+		normalizations: [{ field: 'actions[1].condition.cwd', before: './', after: '/workspace/qa' }],
+	});
+	if (!result.ok || result.report.type !== 'proposal') throw new Error('Expected a valid proposal');
+	expect(result.report.actions[1].condition).toMatchObject({ cwd: '/workspace/qa' });
+	expect(validateTeamReport(result.report, 'proposal', 'pm', context)).toMatchObject({ ok: true });
+});

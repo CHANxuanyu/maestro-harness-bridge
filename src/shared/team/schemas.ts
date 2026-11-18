@@ -41,6 +41,17 @@ const object = (
 	additionalProperties: false,
 });
 const nullable = (schema: ReportSchema): ReportSchema => ({ anyOf: [schema, { type: 'null' }] });
+const followUpCondition: ReportSchema = {
+	anyOf: [
+		object({ kind: choice('time'), at: number }),
+		object({ kind: choice('command'), processId: text }),
+		object({
+			kind: choice('ci'),
+			runId: { type: 'string', pattern: '^\\d+$' },
+			cwd: text,
+		}),
+	],
+};
 const location = object({
 	label: text,
 	target: text,
@@ -172,17 +183,7 @@ export const REPORT_SCHEMAS: Record<TeamReport['type'], ReportSchema> = {
 						reason: text,
 						waitFor: text,
 						needs: array(choice('pm', 'dev', 'qa'), 1),
-						condition: {
-							anyOf: [
-								object({ kind: choice('time'), at: number }),
-								object({ kind: choice('command'), processId: text }),
-								object({
-									kind: choice('ci'),
-									runId: { type: 'string', pattern: '^\\d+$' },
-									cwd: text,
-								}),
-							],
-						},
+						condition: followUpCondition,
 					},
 					['needs', 'condition']
 				)
@@ -259,7 +260,15 @@ export const REPORT_SCHEMAS: Record<TeamReport['type'], ReportSchema> = {
 			proposal: text,
 			decider: choice('app', 'owner', 'pm', 'dev', 'qa'),
 			actions: array(
-				object({ seat: choice('pm', 'dev', 'qa'), action: text, waitFor: text }, ['waitFor']),
+				object(
+					{
+						seat: choice('pm', 'dev', 'qa'),
+						action: text,
+						waitFor: text,
+						condition: followUpCondition,
+					},
+					['waitFor', 'condition']
+				),
 				1
 			),
 			compromise: text,

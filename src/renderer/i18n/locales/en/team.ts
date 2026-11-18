@@ -333,6 +333,10 @@ export const team = {
 	'workflows.team.appObservations': 'Found by the app',
 	'workflows.team.appObservationMissing':
 		'The app could not find {paths} in the team workspaces. This is an app-side problem, not a team issue.',
+	'workflows.team.appObservationStall':
+		'The team made no progress for ten minutes. The app re-checked the next step and asked the PM for a diagnosis.',
+	'workflows.team.appObservationWait':
+		'A seat tried to wait on a step the app runs itself. The app ran the step instead.',
 	'workflows.team.superseded': 'Superseded by a later change',
 	'workflows.team.expected': 'Expected',
 	'workflows.team.actual': 'Actual',

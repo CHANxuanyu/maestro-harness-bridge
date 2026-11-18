@@ -269,6 +269,24 @@ describe('Process Core Preload API', () => {
 		});
 	});
 
+	it('forwards the exit token and the later delivery separately', () => {
+		const exit = vi.fn();
+		const delivery = vi.fn();
+		const removeExit = api.onExit(exit);
+		const removeDelivery = api.onTurnDelivery(delivery);
+		const exitHandler = mockOn.mock.calls.find(([channel]) => channel === 'process:exit')![1];
+		const deliveryHandler = mockOn.mock.calls.find(
+			([channel]) => channel === 'process:turn-delivery'
+		)![1];
+		exitHandler({}, 'sess-ai-tab', 0, undefined, false, undefined, 'token');
+		expect(exit).toHaveBeenCalledWith('sess-ai-tab', 0, undefined, false, undefined, 'token');
+		const counts = { files: 1, additions: 2, deletions: 0, paths: ['a'] };
+		deliveryHandler({}, 'sess-ai-tab', 'token', counts);
+		expect(delivery).toHaveBeenCalledWith('sess-ai-tab', 'token', counts);
+		removeExit();
+		removeDelivery();
+	});
+
 	describe('onExit', () => {
 		it('forwards deliberate interruption to the renderer callback', () => {
 			const callback = vi.fn();

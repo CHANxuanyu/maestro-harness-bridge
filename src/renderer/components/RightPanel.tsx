@@ -747,6 +747,11 @@ export const RightPanel = memo(
 					)}
 					{newShell && activeRightTab === 'tasks' && (
 						<TasksPanel
+							provider={session.toolType}
+							model={
+								session.aiTabs.find((tab) => tab.id === session.activeTabId)?.turnModel ||
+								session.customModel
+							}
 							logs={session.aiTabs.find((tab) => tab.id === session.activeTabId)?.logs || []}
 							theme={theme}
 						/>

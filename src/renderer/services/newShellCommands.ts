@@ -6,7 +6,7 @@ import { getT } from '../i18n';
 import { useSessionStore, selectActiveSession } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUIStore, type PendingLogJump } from '../stores/uiStore';
-import { latestAgentTaskList } from '../utils/agentTaskList';
+import { latestAgentTaskList, agentTaskListEmptyState } from '../utils/agentTaskList';
 import { openUiSurface } from '../utils/openUiSurface';
 import {
 	getForceSendEligibility,
@@ -111,11 +111,16 @@ export async function runNewShellCommand(
 			if (!tab) throw new Error(getT()('workflows.cliParity.conversationMissing'));
 			if (request.action === 'tasks') {
 				const list = latestAgentTaskList(tab.logs);
+				const empty = agentTaskListEmptyState(
+					getT(),
+					session.toolType,
+					tab.turnModel || session.customModel
+				);
 				return {
 					tabId,
 					list,
 					empty: !list?.tasks.length,
-					emptyText: list?.tasks.length ? '' : getT()('workflows.newShell.tasksEmpty'),
+					emptyText: list?.tasks.length ? '' : `${empty.title}\n${empty.explanation}`,
 				};
 			}
 			const result = await refreshNativeConversation({ sessionId: session.id, tabId });

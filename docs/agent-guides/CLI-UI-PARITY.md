@@ -1272,6 +1272,7 @@ not read source identity or require a persistence receipt.
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Read changes grouped by conversation turn      | `changes --by-turn --tab <id> --json`                                                                             | `updateTurnWriteIndex()` and `groupChangesByTurn()`, with `agentSessions:turnWrites` and `git:changes` |
 | Choose By file or By turn on this conversation | `tab panel <id> changes-files` or `tab panel <id> changes-turns`                                                  | `changeNewShellPanel()`, persisted in `AITab.newShellPanel.changesView`                                |
+| Open a turn delivery's Changes filter          | `tab panel <id> changes-turns --turn <turn-id>`; read with `tab show`                                             | `patchNewShellPanel()`, persisted in `AITab.newShellPanel.changesTurnId`                               |
 | Open a diff, stage, unstage, revert or commit  | Existing `changes --file`, `changes stage`, `changes unstage`, `changes revert --yes`, `changes commit --message` | Existing Git handlers and panel actions                                                                |
 
 The new panel actions require `newShell`. Reading `--by-turn` is read only and

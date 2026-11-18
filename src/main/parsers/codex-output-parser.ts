@@ -863,7 +863,8 @@ export class CodexOutputParser implements AgentOutputParser {
 	 * Transform a command start or an update containing output accumulated so far.
 	 */
 	private transformItemStarted(item: CodexItem, msg: CodexRawMessage): ParsedEvent {
-		if (item.type === 'todo_list') return this.transformItemCompleted(item, msg);
+		if (item.type === 'todo_list' || item.type === 'file_change')
+			return this.transformItemCompleted(item, msg);
 		if (item.type === 'command_execution') {
 			return {
 				type: 'tool_use',
@@ -902,13 +903,18 @@ export class CodexOutputParser implements AgentOutputParser {
 					type: 'tool_use',
 					toolName: 'file_change',
 					toolCallId: item.id,
+					...(msg.type !== 'item.completed'
+						? { newShellActivityOnly: true, isPartial: msg.type === 'item.updated' }
+						: {}),
 					toolState: {
 						status:
-							item.status === 'completed'
-								? 'completed'
-								: item.status === 'failed'
-									? 'failed'
-									: 'unknown',
+							msg.type !== 'item.completed'
+								? 'running'
+								: item.status === 'completed'
+									? 'completed'
+									: item.status === 'failed'
+										? 'failed'
+										: 'unknown',
 						input: { changes: item.changes },
 					},
 					raw: msg,

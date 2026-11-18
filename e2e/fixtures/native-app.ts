@@ -39,6 +39,11 @@ export interface NativeTool {
 	gates?: string[];
 }
 export interface NativeScene {
+	sequentialTools?: boolean;
+	narrations?: { beforeTool: number; text: string }[];
+	activityGates?: string[];
+	plan?: { step: string; status: string }[];
+	terminalError?: string;
 	codexExecEvents?: Record<string, unknown>[];
 	codexRolloutItems?: Record<string, unknown>[];
 	writes?: Record<string, string>;

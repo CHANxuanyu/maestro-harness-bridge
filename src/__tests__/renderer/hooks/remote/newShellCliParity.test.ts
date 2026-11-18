@@ -1,4 +1,5 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { createElement } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { createMockSession } from '../../../helpers/mockSession';
 import { createMockAITab } from '../../../helpers/mockTab';
@@ -8,6 +9,8 @@ import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 import { useSettingsStore } from '../../../../renderer/stores/settingsStore';
 import { useUIStore } from '../../../../renderer/stores/uiStore';
 import { getT } from '../../../../renderer/i18n';
+import { TasksPanel } from '../../../../renderer/components/TasksPanel';
+import { mockTheme } from '../../../helpers/mockTheme';
 
 const mocks = vi.hoisted(() => ({
 	refresh: vi.fn(),
@@ -141,6 +144,34 @@ it('returns the live normalized tasks and empty state', async () => {
 		},
 	});
 });
+it.each([
+	{ language: 'en' as const, model: 'claude-sonnet-5' },
+	{ language: 'zh-CN' as const, model: 'claude-sonnet-5' },
+	{ language: 'en' as const, model: 'claude-sonnet-4' },
+	{ language: 'zh-CN' as const, model: 'claude-sonnet-4' },
+])(
+	'matches both Tasks empty-state lines exactly in $language for $model',
+	async ({ language, model }) => {
+		act(() => {
+			useSettingsStore.setState({ uiLanguage: language });
+			useSessionStore.getState().setSessions((sessions) =>
+				sessions.map((session) => ({
+					...session,
+					toolType: 'claude-code',
+					customModel: model,
+					aiTabs: session.aiTabs.map((tab) => ({ ...tab, logs: [] })),
+				}))
+			);
+		});
+		render(
+			createElement(TasksPanel, { logs: [], theme: mockTheme, provider: 'claude-code', model })
+		);
+		const snapshot = await command({ action: 'tasks', tabId: 'second' });
+		expect(snapshot.success).toBe(true);
+		expect(snapshot.data.emptyText).toBe(screen.getByTestId('tasks-empty').textContent);
+		expect(snapshot.data.emptyText.split('\n')).toHaveLength(2);
+	}
+);
 it('sets and clears the sidebar query through shared state', async () => {
 	expect(await command({ action: 'sidebar-search', text: 'needle' })).toMatchObject({
 		success: true,
@@ -240,7 +271,7 @@ it('returns the same empty-state text when the provider cleared its list', async
 			list: null,
 			empty: true,
 			emptyText:
-				'The tools in this conversation have not provided a task list. Checklists in replies are not shown here.',
+				'This conversation has no task list.\nThe tools in this conversation have not provided a task list. Checklists in replies are not shown here.',
 		},
 	});
 });

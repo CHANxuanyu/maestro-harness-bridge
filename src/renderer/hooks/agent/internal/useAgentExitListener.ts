@@ -1,3 +1,5 @@
+import type { TurnDelivery } from '../../../../shared/gitChangeTurns';
+import { getT } from '../../../i18n';
 import { isConversationOnScreen } from '../../../utils/sessionAttention';
 import { useGroupChatStore } from '../../../stores/groupChatStore';
 import { maybeAutoHandoff } from '../../../services/autoHandoff';
@@ -39,6 +41,7 @@ import { logger } from '../../../utils/logger';
 import { cleanupExitedTabLogs } from './helpers/exitTabCleanup';
 import { currentActivityRetention } from '../../../utils/activityRetention';
 import { isProgressNoteEntry } from '../../../utils/transcriptMessages';
+import { turnFailureReason } from '../../../utils/logEntries';
 import { chooseNextQueuedItem, queueIsHeldByRetry } from './helpers/exitDequeue';
 import { takeNextRunnableQueueItem } from '../../../utils/executionQueue';
 import { refreshGitRefsAfterTerminalExit } from './helpers/exitGitRefresh';
@@ -134,7 +137,15 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 			timers.set(key, { timer, data, anyWork: true });
 		};
 
-		const unsubscribe = window.maestro.process.onExit(async (sessionId, code, _, stopped) => {
+		const subscribeExit = window.maestro.process.onExit;
+		const handleExit = async (
+			sessionId: string,
+			code: number,
+			_?: number,
+			stopped?: boolean,
+			delivery?: TurnDelivery,
+			deliveryToken?: string
+		) => {
 			// Window scoping: only the window that owns the agent runs exit side
 			// effects (synopsis spawn, git refresh, history entry, queue dequeue).
 			// Events are broadcast to every window, so a non-owning window must bail
@@ -203,6 +214,73 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 			// the reply before last. (Issue #1022 added the flush further down,
 			// ahead of the spawn, which is after the card is already in place.)
 			deps.batchedUpdater.flushNow();
+			if (isFromAi && tabIdFromSession && useSettingsStore.getState().newShell) {
+				useSessionStore.getState().setSessions((sessions) =>
+					sessions.map((owner) => {
+						if (owner.id !== actualSessionId) return owner;
+						return {
+							...owner,
+							aiTabs: owner.aiTabs.map((tab) => {
+								if (tab.id !== tabIdFromSession) return tab;
+								const userIndex = tab.logs.map((entry) => entry.source).lastIndexOf('user');
+								if (userIndex < 0) return tab;
+								const error = tab.logs
+									.slice(userIndex + 1)
+									.reverse()
+									.find(
+										(entry) =>
+											entry.source === 'error' ||
+											((entry.source === 'stdout' || entry.source === 'ai') &&
+												!isProgressNoteEntry(entry))
+									);
+								// Auto-retry renders a system marker, not an error log. The
+								// tab still owns the full provider error. Only use one from
+								// this process and turn, never a previous failure on the tab.
+								const currentError =
+									tab.agentError?.sessionId === sessionId &&
+									tab.agentError.timestamp >= tab.logs[userIndex].timestamp
+										? tab.agentError
+										: undefined;
+								const terminalError =
+									error?.source === 'error'
+										? error
+										: currentError && { text: currentError.message, agentError: currentError };
+								const status: NonNullable<
+									import('../../../types').LogEntry['turnCompletion']
+								>['status'] = stopped
+									? 'canceled'
+									: code !== 0 || terminalError
+										? 'error'
+										: error
+											? 'completed'
+											: 'unknown';
+								return {
+									...tab,
+									logs: tab.logs.map((entry, index) =>
+										index === userIndex
+											? {
+													...entry,
+													turnCompletion: {
+														status,
+														timestamp: Date.now(),
+														reason:
+															status === 'error'
+																? terminalError
+																	? turnFailureReason(terminalError)
+																	: getT()('workflows.activity.exitCode', { code })
+																: undefined,
+														delivery,
+														...(deliveryToken ? { deliveryToken } : {}),
+													},
+												}
+											: entry
+									),
+								};
+							}),
+						};
+					})
+				);
+			}
 
 			if (isFromAi && tabIdFromSession) {
 				deps.activeHiddenToolRef.current?.delete(`${actualSessionId}:${tabIdFromSession}`);
@@ -991,10 +1069,38 @@ export function useAgentExitListener(deps: UseAgentExitListenerDeps): void {
 			if (synopsisData && ownsSideEffects) {
 				dispatchSynopsis(synopsisData, synopsisDidWork);
 			}
+		};
+		const exitingTurns = new Map<string, Promise<void>>();
+		const unsubscribe = subscribeExit((...args) => {
+			const work = handleExit(...args);
+			const token = args[5];
+			if (token) {
+				exitingTurns.set(token, work);
+				void work.finally(() => exitingTurns.delete(token)).catch(() => {});
+			}
+			return work;
 		});
+		const unsubscribeDelivery = window.maestro.process.onTurnDelivery?.(
+			async (sessionId, token, delivery) => {
+				if (!useSettingsStore.getState().newShell || !ownedGate.current?.(sessionId)) return;
+				// Git can finish while handleExit awaits the active-process probe.
+				await exitingTurns.get(token);
+				const match = sessionId.match(REGEX_AI_TAB);
+				if (!match) return;
+				updateAiTab(match[1], match[2], (tab) => ({
+					...tab,
+					logs: tab.logs.map((entry) =>
+						entry.turnCompletion?.deliveryToken === token
+							? { ...entry, turnCompletion: { ...entry.turnCompletion, delivery } }
+							: entry
+					),
+				}));
+			}
+		);
 
 		return () => {
 			unsubscribe();
+			unsubscribeDelivery?.();
 			// Flush any pending debounced synopses so finished work still reaches
 			// History when the listener tears down (navigation, reload, quit).
 			const timers = debounceTimersRef.current;

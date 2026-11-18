@@ -5,8 +5,11 @@ import { ElapsedTimeDisplay } from '../../ui/ElapsedTimeDisplay';
 import { formatElapsedTickerCompact } from '../../../../shared/duration';
 import { formatTokensCompact } from '../../../utils/formatters';
 
+import type { summarizeTurnActivity } from '../utils/foldTurnActivity';
+
 interface TurnRunningStatusProps {
 	theme: Theme;
+	summary?: ReturnType<typeof summarizeTurnActivity>;
 	/** When the running turn started (the tab's, falling back to the agent's). */
 	startTime?: number;
 	/** Tokens produced so far in this turn; shown once there are any. */
@@ -31,8 +34,82 @@ export const TurnRunningStatus = memo(function TurnRunningStatus({
 	startTime,
 	tokens,
 	textColor,
+	summary,
 }: TurnRunningStatusProps) {
 	const t = useT();
+	if (summary) {
+		const { counts, note, current, plan } = summary;
+		const action =
+			current?.kind === 'read' || current?.kind === 'search' || current?.kind === 'list'
+				? t('workflows.activity.reading', { count: counts.reads })
+				: current?.kind === 'write' || current?.kind === 'edit'
+					? t('workflows.activity.editing', { count: counts.edits })
+					: current?.kind === 'run'
+						? t('workflows.activity.runningCommand')
+						: t('workflows.activity.working');
+		return (
+			<span
+				className="flex flex-col justify-center gap-1 w-full min-w-0 text-sm"
+				style={{ height: 64, color: textColor }}
+				data-testid="turn-activity-bar"
+			>
+				<span className="flex items-center gap-2 min-w-0">
+					<span
+						className="w-1.5 h-1.5 rounded-full shrink-0 animate-pulse"
+						style={{ backgroundColor: textColor }}
+						aria-hidden
+					/>
+					<span
+						className="truncate min-w-0 text-left flex-1"
+						data-testid="activity-note"
+						title={note || action}
+					>
+						{note || action}
+					</span>
+					{startTime && (
+						<ElapsedTimeDisplay
+							startTime={startTime}
+							className="shrink-0 tabular-nums text-xs"
+							format={(ms) =>
+								ms < 10000
+									? t('workflows.activity.justStarted')
+									: formatElapsedTickerCompact(
+											Math.floor(ms / (ms < 60000 ? 10000 : 60000)) * (ms < 60000 ? 10000 : 60000)
+										)
+							}
+						/>
+					)}
+				</span>
+				<span
+					className="flex items-center gap-2 min-w-0 text-xs whitespace-nowrap overflow-hidden"
+					data-testid="activity-counts"
+				>
+					{plan && (
+						<span data-testid="activity-plan">
+							{t('workflows.activity.tasks', {
+								completed: plan.completed,
+								total: plan.tasks.length,
+							})}
+						</span>
+					)}
+					{counts.reads > 0 && (
+						<span>{t('workflows.activity.reads', { count: counts.reads })}</span>
+					)}
+					{counts.edits > 0 && (
+						<span>{t('workflows.activity.edits', { count: counts.edits })}</span>
+					)}
+					{counts.commands > 0 && (
+						<span>{t('workflows.activity.commands', { count: counts.commands })}</span>
+					)}
+					{current?.target && (
+						<span className="truncate font-mono" title={current.target}>
+							{current.target}
+						</span>
+					)}
+				</span>
+			</span>
+		);
+	}
 	return (
 		// Indented like the turn activity row above an answer, so it starts where
 		// the answer text does.

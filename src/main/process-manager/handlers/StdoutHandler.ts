@@ -626,6 +626,7 @@ export class StdoutHandler {
 		event: ParsedEvent,
 		outputParser: NonNullable<ManagedProcess['outputParser']>
 	): void {
+		if (event.newShellActivityOnly && !managedProcess.newShellActivity) return;
 		// Stop abandons held notices; a later result must not raise them again.
 		const settleHeldErrorAfterResult =
 			!!managedProcess.provisionalError &&
@@ -720,6 +721,13 @@ export class StdoutHandler {
 			this.emitter.emit('slash-commands', sessionId, slashCommands);
 		}
 
+		if (managedProcess.newShellActivity && event.publicNarration) {
+			managedProcess.streamedText = '';
+			for (const note of event.publicNarration) {
+				this.emitter.emit('thinking-chunk', sessionId, note, 'commentary');
+			}
+		}
+
 		// Handle streaming text events (OpenCode, Codex reasoning, Grok thought/text)
 		if (event.type === 'text' && event.isPartial && event.text) {
 			// Thinking panel routing:
@@ -742,13 +750,20 @@ export class StdoutHandler {
 			} else if (toolType !== 'copilot-cli') {
 				const requiresReasoningTag =
 					toolType === 'grok' || toolType === 'codex' || toolType === 'opencode';
-				if (!requiresReasoningTag || event.isReasoning) {
+				if (
+					(!requiresReasoningTag || event.isReasoning) &&
+					!(managedProcess.newShellActivity && toolType === 'claude-code' && !event.isReasoning)
+				) {
 					this.emitter.emit('thinking-chunk', sessionId, event.text);
 				}
 			}
 			// Reasoning content is internal thinking - don't include it in the
 			// final response text. Only message content should be in streamedText.
-			if (!event.isReasoning && !event.isCommentary) {
+			if (
+				!event.isReasoning &&
+				!event.isCommentary &&
+				!(managedProcess.newShellActivity && event.publicNarration)
+			) {
 				managedProcess.streamedText = (managedProcess.streamedText || '') + event.text;
 			}
 		}

@@ -15,6 +15,9 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
+	beginGitTurn,
+	recordGitTurnTool,
+	finishGitTurn,
 	getGitChanges,
 	getGitChangeDiff,
 	parseGitChanges,
@@ -50,6 +53,66 @@ describe('combined changes on a real repository', { timeout: 60_000 }, () => {
 		vi.restoreAllMocks();
 		rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	});
+	it('measures only this turn, excluding dirty baseline lines and unrelated workspace files', async () => {
+		writeFileSync(path.join(cwd, 'a.ts'), 'one\ntwo\n');
+		git('add', '.');
+		git('commit', '-m', 'fixture');
+		writeFileSync(path.join(cwd, 'a.ts'), 'baseline edit\ntwo\n');
+		writeFileSync(path.join(cwd, 'unrelated.txt'), 'not this turn\n');
+		await beginGitTurn('delivery', cwd);
+		recordGitTurnTool('delivery', {
+			toolName: 'Edit',
+			toolCallId: 'a',
+			timestamp: 1,
+			state: { status: 'running', input: { file_path: path.join(cwd, 'a.ts') } },
+		});
+		recordGitTurnTool('delivery', {
+			toolName: 'Edit',
+			toolCallId: 'a',
+			timestamp: 2,
+			state: { status: 'completed' },
+		});
+		recordGitTurnTool('delivery', {
+			toolName: 'Write',
+			toolCallId: 'b',
+			timestamp: 3,
+			state: { status: 'completed', input: { file_path: 'b.ts' } },
+		});
+		recordGitTurnTool('delivery', {
+			toolName: 'Write',
+			toolCallId: 'failed',
+			timestamp: 3,
+			state: { status: 'failed', input: { file_path: 'unrelated.txt' } },
+		});
+		writeFileSync(path.join(cwd, 'a.ts'), 'baseline edit\nnew two\nextra\n');
+		writeFileSync(path.join(cwd, 'b.ts'), 'new file\n');
+		expect(await finishGitTurn('delivery')).toEqual({
+			files: 2,
+			paths: ['a.ts', 'b.ts'],
+			additions: 3,
+			deletions: 1,
+		});
+		expect(finishGitTurn('delivery')).toBeUndefined();
+	});
+
+	it('does not replace unknown boundary counts with the workspace diff after HEAD moves', async () => {
+		await beginGitTurn('head-moved', cwd);
+		writeFileSync(path.join(cwd, 'new.txt'), 'one\n');
+		recordGitTurnTool('head-moved', {
+			toolName: 'Write',
+			toolCallId: 'write',
+			timestamp: 1,
+			state: { status: 'completed', input: { file_path: 'new.txt' } },
+		});
+		git('add', '.');
+		git('commit', '-m', 'fixture');
+		expect(await finishGitTurn('head-moved')).toMatchObject({
+			files: 1,
+			additions: null,
+			deletions: null,
+		});
+	});
+
 	it('reports the actual subdirectory from Git for local and remote command forms', async () => {
 		mkdirSync(path.join(cwd, 'sub'));
 		writeFileSync(path.join(cwd, 'sub', 'a.ts'), 'ok');

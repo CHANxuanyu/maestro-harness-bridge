@@ -1,6 +1,7 @@
 import { useSettingsStore, selectNewShellEnabled } from '../../../stores/settingsStore';
 import type { NativeToolOutputTarget } from '../../../../shared/nativeToolOutput';
 import React from 'react';
+import { toolExitCode } from '../../../utils/logEntries';
 import {
 	Bot,
 	FileEdit,
@@ -45,13 +46,36 @@ export function ToolStatusLabel({
 	theme,
 	kind,
 	quiet = false,
+	exitCode,
 }: {
 	theme: Theme;
 	kind: ToolStatusKind;
+	exitCode?: number;
 	/** Glyph only (a call inside an unfolded run whose row already says it). */
 	quiet?: boolean;
 }) {
 	const t = useT();
+	const newShell = useSettingsStore(selectNewShellEnabled);
+	if (newShell) {
+		if (kind === 'running' || kind === 'completed') return null;
+		return (
+			<span
+				className="shrink-0 whitespace-nowrap font-sans"
+				data-tool-status={kind}
+				style={{ color: readableTextOn(theme.colors.textDim, [theme.colors.bgMain]) }}
+			>
+				{exitCode !== undefined
+					? t('workflows.activity.exitCode', { code: exitCode })
+					: t(
+							kind === 'error'
+								? 'workflows.transcript.toolFailed'
+								: kind === 'canceled'
+									? 'workflows.transcript.toolStopped'
+									: 'workflows.transcript.toolUnknown'
+						)}
+			</span>
+		);
+	}
 	const background = theme.colors.bgMain;
 	const color =
 		kind === 'running'
@@ -169,7 +193,9 @@ export const ToolActivityLine = React.memo(function ToolActivityLine({
 					{target}
 				</span>
 			)}
-			{status && status !== 'completed' && <ToolStatusLabel theme={theme} kind={status} />}
+			{status && status !== 'completed' && (
+				<ToolStatusLabel theme={theme} kind={status} exitCode={toolExitCode(log)} />
+			)}
 		</span>
 	);
 });
@@ -266,7 +292,7 @@ export const ToolBadge = React.memo(function ToolBadge({
 					// a shrinkable wrapper squeezed the status to one character wide.
 					// The summary after it is what truncates.
 					<span className="shrink-0 pt-0.5" data-tool-status-slot="">
-						<ToolStatusLabel theme={theme} kind={feedStatus} />
+						<ToolStatusLabel theme={theme} kind={feedStatus} exitCode={toolExitCode(log)} />
 					</span>
 				)}
 				{!feedLayout && toolStatus === 'running' && (

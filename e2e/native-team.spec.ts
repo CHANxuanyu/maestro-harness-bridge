@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 import { NativeApp } from './fixtures/native-app';
 import { prepareNativeTeam } from './fixtures/native-team';
 import { reduceLedger } from '../src/shared/team/ledger';
-import type { TeamConfig, SeatRole } from '../src/shared/team/types';
+import type { TeamConfig, SeatRole, LedgerEvent } from '../src/shared/team/types';
 
 // Never turn this synthetic scenario into a paid run merely by setting REAL.
 test.skip(
@@ -117,8 +117,22 @@ test('team M1: three seats, CLI owner cards, report repair and forced-quit recov
 		expect(prompts('dev').every((text) => !text.includes(qaCwd))).toBe(true);
 		const exported = await native.cli('team', 'export', '--team', team.id);
 		expect(JSON.parse(exported).events).toEqual(all);
-		const shown = await native.cli('team', 'get', '--team', team.id);
-		expect(shown.events).toEqual(all);
+		const shown = await native.cli('team', 'show', 'events', '--team', team.id);
+		expect(shown).toEqual(all);
+		const compact = await native.cli('team', 'get', '--team', team.id);
+		expect(compact.events.map((event: LedgerEvent) => event.id)).toEqual(
+			all.map((event) => event.id)
+		);
+		for (const event of all) {
+			const projected = compact.events.find((item: LedgerEvent) => item.id === event.id);
+			if (event.kind === 'turn_dispatched') expect(projected.prompt).toBeUndefined();
+			if (event.kind === 'turn_finished') {
+				expect(projected.repairTail).toBeUndefined();
+				expect(projected.reportError).toBe(event.reportError);
+			}
+			if (['report_rejected', 'report_normalized', 'member_fault'].includes(event.kind))
+				expect(projected).toEqual(event);
+		}
 		for (const seat of ['pm', 'dev', 'qa'] as const)
 			expect(
 				await native.page.evaluate(({ id, seat }) => window.maestro.team.seatTranscript(id, seat), {

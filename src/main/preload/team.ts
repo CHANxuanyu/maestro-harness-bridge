@@ -20,8 +20,14 @@ export function createTeamApi() {
 		create: (input: CreateTeamInput): Promise<TeamConfig> =>
 			ipcRenderer.invoke('team:create', input),
 		list: (): Promise<TeamConfig[]> => ipcRenderer.invoke('team:list'),
-		get: (teamId: string): Promise<{ config: TeamConfig; events: LedgerEvent[] } | null> =>
-			ipcRenderer.invoke('team:get', teamId),
+		get: (
+			teamId: string,
+			full = false
+		): Promise<{ config: TeamConfig; events: LedgerEvent[] } | null> =>
+			ipcRenderer.invoke('team:get', teamId, full),
+		prompt: (teamId: string, dispatchId: string): Promise<string> =>
+			ipcRenderer.invoke('team:prompt', teamId, dispatchId),
+		events: (teamId: string): Promise<LedgerEvent[]> => ipcRenderer.invoke('team:events', teamId),
 		status: (teamId: string): Promise<TeamStatusView | null> =>
 			ipcRenderer.invoke('team:status', teamId),
 		answer: (teamId: string, cardId: string, optionId: string, note?: string): Promise<void> =>

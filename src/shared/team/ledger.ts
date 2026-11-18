@@ -1,5 +1,6 @@
 import { isOpenTeamIssue, missingOutputLocations } from './policy';
 import { decideNext, judgeAttempts, type AttemptInput } from '../progressRules';
+import { compactToolOutput } from '../toolOutput';
 import {
 	SEAT_ROLES,
 	type Brief,
@@ -10,6 +11,25 @@ import {
 	type TeamState,
 	type TeamUsage,
 } from './types';
+
+/** Default IPC/CLI replay and append deltas retain facts, not full audit text. */
+export function teamEventForTransport(event: LedgerEvent): LedgerEvent {
+	if (event.kind === 'turn_dispatched')
+		return {
+			...event,
+			prompt: undefined,
+			note: compactToolOutput(event.note).output as typeof event.note,
+		};
+	if (event.kind === 'turn_finished')
+		return {
+			...event,
+			repairTail: undefined,
+			message: compactToolOutput(event.message).output as typeof event.message,
+		};
+	if (event.kind === 'check_run')
+		return { ...event, outputTail: compactToolOutput(event.outputTail).output as string };
+	return event;
+}
 
 function emptyUsage(): TeamUsage {
 	return {

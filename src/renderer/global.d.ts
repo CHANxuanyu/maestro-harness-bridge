@@ -241,8 +241,15 @@ interface MaestroAPI {
 		create(input: CreateTeamInput): Promise<TeamConfig>;
 		/** Includes active, paused and terminal team configurations. */
 		list(): Promise<TeamConfig[]>;
-		/** Durable replay source. Null means unknown team. Events are ordered by seq. */
-		get(teamId: string): Promise<{ config: TeamConfig; events: LedgerEvent[] } | null>;
+		/** Replay facts, ordered by seq. Full audit payloads require full=true. */
+		get(
+			teamId: string,
+			full?: boolean
+		): Promise<{ config: TeamConfig; events: LedgerEvent[] } | null>;
+		/** Exact assignment from a sidecar or legacy inline dispatch. */
+		prompt: ReturnType<typeof import('../main/preload/team').createTeamApi>['prompt'];
+		/** Exact append-log audit, including stored raw repair text and legacy inline prompts. */
+		events: ReturnType<typeof import('../main/preload/team').createTeamApi>['events'];
 		/** App-generated evidence, waits, cards, seat health and budget. */
 		status(teamId: string): Promise<TeamStatusView | null>;
 		/** Answer an exact open card/option. Return/change options require a nonempty note. */
@@ -272,7 +279,7 @@ interface MaestroAPI {
 		action: ReturnType<typeof import('../main/preload/team').createTeamApi>['action'];
 		/** Returns the current demonstration to implementation with the owner's exact note. */
 		requestChanges(teamId: string, note: string): Promise<void>;
-		/** JSON text containing the same config and events as get(). No save dialog. */
+		/** JSON text containing config, unabridged events and prompts keyed by dispatch id. */
 		export(teamId: string): Promise<string>;
 		/** Native-history locator for existing agentSessions reads. Null before a seat is bound. */
 		seatTranscript(

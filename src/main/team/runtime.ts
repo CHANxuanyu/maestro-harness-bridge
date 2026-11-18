@@ -15,6 +15,7 @@ import { getAgentAccountDirLayers } from '../agents/provider-account-dirs';
 import { transcriptMessagesToLogEntries } from '../../shared/transcriptEntries';
 import { execGitReadOnly } from '../utils/remote-git';
 import { logger } from '../utils/logger';
+import { teamEventForTransport } from '../../shared/team/ledger';
 
 /** Match a result to its user-turn marker, never to the latest reply in an account. */
 export async function reconcileTeamTurn(request: SeatTurnRequest): Promise<SeatTurnResult | null> {
@@ -127,7 +128,7 @@ export function createTeamRuntime(
 		captureOutput: captureTeamOutput,
 	});
 	const unsubscribe = store.subscribe((teamId, event) =>
-		deps.safeSend('team:changed', { teamId, event })
+		deps.safeSend('team:changed', { teamId, event: teamEventForTransport(event) })
 	);
 	app.once('will-quit', () => {
 		scheduler.dispose();

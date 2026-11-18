@@ -116,7 +116,16 @@ describe('team scheduler', () => {
 		listeners = new Set();
 		notify = true;
 		hash = 'diff-1';
+		const prompts = new Map<string, string>();
 		const store: TeamSchedulerDependencies['store'] = {
+			writePrompt: vi.fn(async (_id, dispatchId, prompt) => {
+				prompts.set(dispatchId, prompt);
+				return `prompts/${dispatchId}.txt`;
+			}),
+			readPrompt: vi.fn(async (_id, dispatchId) => {
+				if (!prompts.has(dispatchId)) throw new Error('Missing audit sidecar');
+				return prompts.get(dispatchId)!;
+			}),
 			createTeam: vi.fn(async (value) => {
 				teamConfig = value;
 				return value;
@@ -1129,6 +1138,87 @@ describe('team scheduler', () => {
 			expect(deps.onError).not.toHaveBeenCalled();
 		}
 	);
+	it('reconciles an interrupted dispatch without loading its missing audit prompt', async () => {
+		config.turnBudget = 1;
+		await begin();
+		const original = latest('pm', 'brief');
+		scheduler.dispose();
+		const oldCount = requests.length;
+		vi.mocked(deps.store.readPrompt).mockRejectedValue(new Error('Audit sidecar unavailable'));
+		vi.mocked(deps.store.readPrompt).mockClear();
+		vi.mocked(deps.reconcile).mockResolvedValueOnce(
+			result(original, `Brief\n\`\`\`team-report\n${JSON.stringify(goodReports.brief)}\n\`\`\``)
+		);
+		// Exhaustion prevents subsequent challenge assignments from masking the receipt-only assertion.
+		scheduler = createTeamScheduler(deps);
+		await scheduler.start();
+		await drain();
+		expect(state().briefs).toHaveLength(1);
+		expect(requests).toHaveLength(oldCount);
+		expect(deps.store.readPrompt).not.toHaveBeenCalled();
+		expect(deps.onError).not.toHaveBeenCalled();
+	});
+	it('stores the assignment before reserving a turn and provides explicit audit reads', async () => {
+		await begin();
+		const original = latest('pm', 'brief');
+		const dispatch = events.find((e) => e.kind === 'turn_dispatched')!;
+		expect(dispatch).toMatchObject({
+			promptRef: `prompts/${original.dispatchId}.txt`,
+			promptDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+		});
+		expect(dispatch).not.toHaveProperty('prompt');
+		expect(vi.mocked(deps.store.writePrompt).mock.invocationCallOrder[0]).toBeLessThan(
+			vi.mocked(deps.store.append).mock.invocationCallOrder[events.indexOf(dispatch)]
+		);
+		expect(
+			(await scheduler.get(teamConfig.id))?.events.find((e) => e.kind === 'turn_dispatched')
+		).not.toHaveProperty('prompt', expect.any(String));
+		expect(await scheduler.prompt(teamConfig.id, original.dispatchId!)).toBe(original.prompt);
+		expect(
+			(await scheduler.get(teamConfig.id, true))?.events.find((e) => e.kind === 'turn_dispatched')
+		).toHaveProperty('prompt', original.prompt);
+		expect(JSON.parse(await scheduler.export(teamConfig.id)).prompts[original.dispatchId!]).toBe(
+			original.prompt
+		);
+		await expect(scheduler.prompt(teamConfig.id, 'unknown')).rejects.toThrow('Unknown dispatch');
+		vi.mocked(deps.store.readPrompt).mockResolvedValueOnce('Tampered prompt');
+		await expect(scheduler.prompt(teamConfig.id, original.dispatchId!)).rejects.toThrow(
+			'digest mismatch'
+		);
+	});
+	it('does not reserve or launch a turn if the prompt sidecar cannot be written', async () => {
+		vi.mocked(deps.store.writePrompt).mockRejectedValue(new Error('Disk full'));
+		await begin();
+		expect(events.filter((e) => e.kind === 'turn_dispatched')).toEqual([]);
+		expect(requests).toEqual([]);
+		expect(deps.onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Disk full' }));
+	});
+	it('keeps raw event audit and compact diagnostics readable when a prompt sidecar is missing', async () => {
+		await begin();
+		const original = latest('pm', 'brief');
+		await finish(original, 'Invalid reply without a report');
+		scheduler.dispose();
+		vi.mocked(deps.store.readPrompt).mockRejectedValue(
+			Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+		);
+		vi.mocked(deps.store.readPrompt).mockClear();
+		expect(await scheduler.events(teamConfig.id)).toEqual(events);
+		const compact = (await scheduler.get(teamConfig.id))!.events;
+		for (const event of events) {
+			if (event.kind === 'report_rejected' || event.kind === 'member_fault')
+				expect(compact.find((e) => e.id === event.id)).toEqual(event);
+			if (event.kind === 'turn_finished' && event.reportError)
+				expect(compact.find((e) => e.id === event.id)).toMatchObject({
+					reportError: event.reportError,
+					message: event.message,
+					repairTail: undefined,
+				});
+		}
+		expect(deps.store.readPrompt).not.toHaveBeenCalled();
+		await expect(scheduler.prompt(teamConfig.id, original.dispatchId!)).rejects.toThrow(
+			`Missing prompt sidecar prompts/${original.dispatchId}.txt for dispatch ${original.dispatchId}`
+		);
+	});
 
 	it.each([true, false])(
 		'M3 restart inspects the real interrupted workspace before reconciliation (native result: %s)',
@@ -1548,7 +1638,7 @@ describe('team scheduler', () => {
 		await finish(latest('pm', 'respond'), { type: 'respond', decisions: [], brief: revised });
 		for (const seat of ['dev', 'qa'] as const) {
 			const prompt = latest(seat, 'challenge').prompt;
-			expect(prompt).toContain('"round": 2');
+			expect(prompt).toContain('"round":2');
 			expect(prompt).toContain('Parses hours');
 			expect(prompt).toContain('Parses whole hours');
 			expect(prompt).not.toContain('Results are readable');
@@ -1611,7 +1701,7 @@ describe('team scheduler', () => {
 		expect(state().briefs.find((b) => b.version === originalVersion)!.criteria[0].how).not.toBe(
 			'Run complete-hour samples'
 		);
-		expect(latest('qa', 'challenge').prompt).toContain('"round": 1');
+		expect(latest('qa', 'challenge').prompt).toContain('"round":1');
 		expect(latest('qa', 'challenge').prompt).toContain('Results are readable');
 		await finish(latest('dev', 'challenge'), { type: 'challenge', objections: [] });
 		await finish(latest('qa', 'challenge'), goodReports.challenge);
@@ -1660,7 +1750,7 @@ describe('team scheduler', () => {
 			),
 		};
 		await finish(latest('pm', 'respond'), { type: 'respond', decisions: [], brief: amended });
-		expect(latest('qa', 'challenge').prompt).toContain('"round": 1');
+		expect(latest('qa', 'challenge').prompt).toContain('"round":1');
 		expect(latest('qa', 'challenge').prompt).toContain('Rejects bad input');
 		await finish(latest('dev', 'challenge'), goodReports.challenge);
 		await finish(latest('qa', 'challenge'), goodReports.challenge);
@@ -1708,7 +1798,10 @@ describe('team scheduler', () => {
 			expect(state().brief!.criteria.map((criterion) => criterion.id)).toEqual(['A1', 'E1']);
 			// An owner edit now starts a full challenge before the next confirmation card.
 			expect(state().openCards).toEqual([]);
-			expect(latest('qa', 'challenge').prompt).toContain('"round": 1');
+			const challengeData = JSON.parse(
+				latest('qa', 'challenge').prompt.split('Ledger slice')[1].split('\n\n')[1]
+			);
+			expect(challengeData.challengeRound.round).toBe(1);
 			expect(latest('qa', 'challenge').prompt).toContain('Readable output in both viewers');
 			await completeScriptedTurn('dev', 'challenge');
 			await completeScriptedTurn('qa', 'challenge');
@@ -1732,9 +1825,21 @@ describe('team scheduler', () => {
 			expect(
 				state().turns.find((turn) => turn.dispatchId === respond.dispatchId)!.dispatched!.seq
 			).toBeGreaterThan(returned.seq);
-			// Match the actual structured return-note field, not a note mentioned elsewhere in prose.
-			expect(respond.prompt).toContain(
-				JSON.stringify({ baselineReturns: [returned] }, null, '\t').slice(2, -2)
+			// Assert prompt data independently of compact or indented JSON formatting.
+			const respondData = JSON.parse(respond.prompt.split('Ledger slice')[1].split('\n\n')[1]);
+			expect(respondData.baselineReturns).toEqual([returned]);
+			expect(respondData.baselineEdits).toContainEqual(state().baseline.edits.at(-1));
+			expect(respondData.brief.version).toBe(editedVersion);
+			expect(respondData.brief.criteria).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						id: 'A1',
+						text: ownerText,
+						proof: 'app',
+						how: 'node check.cjs',
+					}),
+					expect.objectContaining({ id: 'E1', text: 'Readable output in both viewers' }),
+				])
 			);
 			await completeScriptedTurn('pm', 'respond');
 			const published = events.findLast((event) => event.kind === 'brief_published')!;
@@ -2288,7 +2393,9 @@ describe('team scheduler', () => {
 					nativeSessionId: undefined,
 				});
 				expect(takeover.prompt).toContain('Workspace inspection');
-				expect(takeover.prompt).toContain(config.idea);
+				expect(takeover.prompt).toContain(sampleBrief.scope);
+				for (const criterion of sampleBrief.criteria)
+					expect(takeover.prompt).toContain(criterion.text);
 				expect(takeover.prompt).toContain('decisions');
 				expect(state().openCards).toEqual([]);
 				expect(state().usage.turns).toBe(used + 1);

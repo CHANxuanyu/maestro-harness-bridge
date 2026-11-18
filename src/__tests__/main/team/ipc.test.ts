@@ -21,6 +21,8 @@ describe('team IPC/preload contract', () => {
 			'create',
 			'list',
 			'get',
+			'prompt',
+			'events',
 			'status',
 			'answer',
 			'baselineEdit',
@@ -68,6 +70,12 @@ describe('team IPC/preload contract', () => {
 	});
 	it('invokes fixed argument order and unsubscribes exactly its own changed listener', async () => {
 		const api = createTeamApi();
+		await api.get('team', true);
+		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith('team:get', 'team', true);
+		await api.prompt('team', 'dispatch');
+		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith('team:prompt', 'team', 'dispatch');
+		await api.events('team');
+		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith('team:events', 'team');
 		await api.answer('team', 'card', 'option', 'note');
 		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith(
 			'team:answer',

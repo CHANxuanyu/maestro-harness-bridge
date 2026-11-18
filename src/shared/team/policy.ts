@@ -2,6 +2,7 @@ import { resolveAgentAccountKey, resolveAgentBillingCredential } from '../provid
 import { getModelFamily } from '../modelFamily';
 import { isPathAtOrUnderRoot, normalizeWorktreePath } from '../worktreePaths';
 import { decideNext, judgeAttempts, type Candidate } from '../progressRules';
+import { truncateText } from '../formatters';
 import type {
 	BaselineDiff,
 	Brief,
@@ -221,7 +222,10 @@ export function teamEvidenceCatalog(state: TeamState): Array<{ id: string; descr
 		...state.outputs.flatMap((o) =>
 			[o.outputId, ...o.files, ...o.previews].map((id) => ({
 				id,
-				description: `Captured output ${o.outputId}: ${[...o.files, ...o.previews].join(', ')}`,
+				description:
+					id === o.outputId
+						? `Captured output: ${o.files.length} files, ${o.previews.length} previews`
+						: `Captured ${o.previews.includes(id) ? 'preview' : 'file'}: ${id}`,
 			}))
 		),
 		...state.criteria.flatMap((c) =>
@@ -236,7 +240,10 @@ export function teamEvidenceCatalog(state: TeamState): Array<{ id: string; descr
 	const catalog = new Map<string, { id: string; description: string }>();
 	for (const entry of entries)
 		if (!catalog.has(entry.id))
-			catalog.set(entry.id, { ...entry, description: entry.description.replace(/\s+/g, ' ') });
+			catalog.set(entry.id, {
+				...entry,
+				description: truncateText(entry.description.replace(/\s+/g, ' '), 240),
+			});
 	return [...catalog.values()];
 }
 

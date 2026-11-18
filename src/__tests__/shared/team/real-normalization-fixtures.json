@@ -1,0 +1,77 @@
+[
+	{
+		"seat": "qa",
+		"turn": "qa_prep",
+		"previousError": "QA tests must be relative file paths under qa/ without traversal.",
+		"report": {
+			"type": "qa_prep",
+			"tests": ["clamp.boundary.test.cjs"],
+			"samples": [
+				"Run against dev: CLAMP_PATH=<dev>/clamp.cjs node --test --test-reporter=tap qa/clamp.boundary.test.cjs. Every case must pass.",
+				"Baseline run: CLAMP_PATH=<qa>/clamp.cjs. Observed 12 'not ok' lines on value assertions, 12 pass, and the provenance test passes. Fail lines include clamp(0,0,10), clamp(-1,0,10), clamp(5,0,10) and clamp(0.15,0.1,0.2).",
+				"Boundary data: clamp(0,0,10)=0, clamp(10,0,10)=10, clamp(-0.0001,0,10)=0, clamp(10.0001,0,10)=10, clamp(-5,-10,-1)=-5, clamp(0,-10,-1)=-1, clamp(3,5,5)=5, clamp(7,5,5)=5, clamp(0.25,0.1,0.2)=0.2.",
+				"Signed zero is printed as an informational '# info' line and never asserted.",
+				"C2 probes: clamp(5,0,10)=5, clamp(-1,0,10)=0, clamp(11,0,10)=10, clamp(0,0,10)=0, clamp(10,0,10)=10. Also run git diff --name-only b2beabd, git status --porcelain --ignored and git diff b2beabd -- clamp.test.cjs package.json in the dev worktree."
+			]
+		}
+	},
+	{
+		"seat": "pm",
+		"turn": "position",
+		"previousError": "Only dev estimates implementation cost.",
+		"report": {
+			"type": "position",
+			"discussionId": "location-discussion",
+			"claim": "Accept the C3 modify as a location-only fix. The target becomes the absolute path of qa/clamp.boundary.test.cjs in the QA worktree. Criterion text, proof type and how stay unchanged.",
+			"basis": "The relative target resolved against the dev worktree, where the file does not exist. The file lives in the QA worktree, and the absolute path points there. This does not relax, remove or change how C3 is proven. The existing QA result already meets the unchanged proof: the dev run had 24 pass and 0 fail with provenance ok at dev HEAD c71eef3, and the baseline copy of b2beabd clamp.cjs had 12 fail on in-scope clamp value assertions. No extra turns are needed.",
+			"wouldChangeMind": "Evidence that the edit alters the text or `how` beyond the location target, or that the absolute path does not resolve to the QA file. Also any sign that the QA test file differs from the one that produced the recorded TAP results.",
+			"evidence": [
+				"Dev run with CLAMP_PATH=<dev>/clamp.cjs: 24 pass, 0 fail, provenance ok, sha256 2607f8cdf91f3fb9a45f5f6278d38ac23a48d7807e178b2b76489d5fecb1ce1c, dev HEAD c71eef3. Baseline run with CLAMP_PATH=<baseline-copy>/clamp.cjs (a copy of `git show b2beabd:clamp.cjs`, sha256 c6da9aa9353d6fe0e2bda3d59b848208b36266104864921aac15f22798a10879): module loaded, provenance ok, 12 pass and 12 fail, with the failures on clamp value assertions such as clamp(0,0,10), clamp(-1,0,10) and clamp(5,0,10). Signed-zero results were informational only. The QA worktree's own clamp.cjs is already the fixed version, so I used the b2beabd copy as the baseline."
+			],
+			"extraTurns": 0,
+			"preservesDeadline": true
+		}
+	},
+	{
+		"seat": "qa",
+		"turn": "position",
+		"previousError": "Only dev estimates implementation cost.",
+		"report": {
+			"type": "position",
+			"discussionId": "location-discussion",
+			"claim": "Accept the C3 modify. It only changes the location target to the absolute path of qa/clamp.boundary.test.cjs in the QA worktree. The criterion text and the proof method (CLAMP_PATH provenance, a run against the dev file, and a baseline run that must show in-scope 'not ok' lines) stay the same. Nothing is relaxed, so no extra turns are needed.",
+			"basis": "The relative target qa/clamp.boundary.test.cjs resolves against the dev workspace, where the file does not exist. QA owns that file and keeps it in the QA worktree, so the old location could not be judged. I compared the proposed criterion's text and how fields with the confirmed C3 and found them identical. Only locations[0].target differs, so the change stays within the confirmed meaning. I also checked that the change adds no new requirement and weakens no proof step. The prior QA record for C3 shows the same standard being met: 24 pass and 0 fail against dev HEAD c71eef3, and 12 fail on clamp value assertions against a copy of the b2beabd clamp.cjs. I am not treating that record as new evidence in this position.",
+			"wouldChangeMind": "I would object if the proposed criterion's text or how field differed from the confirmed C3 in any way beyond the location target. I would also object if the absolute path did not point to the real QA test file, or if the change dropped the provenance assertion or the requirement for a baseline 'not ok' from a clamp value assertion.",
+			"evidence": [],
+			"extraTurns": 0,
+			"preservesDeadline": true
+		}
+	},
+	{
+		"seat": "pm",
+		"turn": "proposal",
+		"previousError": "This layer is decided by owner.",
+		"report": {
+			"type": "proposal",
+			"discussionId": "location-discussion",
+			"proposal": "Accept the C3 modify as a location-only correction. The C3 location target becomes the absolute path of qa/clamp.boundary.test.cjs in the QA worktree. The criterion text, proof type (qa) and `how` stay unchanged, so no confirmed standard is relaxed or re-proved differently. The existing QA evidence already satisfies the unchanged proof: dev run with provenance ok, 24 pass and 0 fail at dev HEAD c71eef3, and a baseline run on a copy of b2beabd clamp.cjs with 12 fail on in-scope clamp value assertions. No requested publication: the brief forbids push and PR and the repository has no remote.",
+			"decider": "pm",
+			"actions": [
+				{
+					"seat": "pm",
+					"action": "After responses, if no evidenced objection arrives, decide to apply the location-only C3 modify. Then proceed to acceptance using the recorded C1, C2 and C3 evidence."
+				},
+				{
+					"seat": "dev",
+					"action": "No code change. If you object, respond with evidence that the edit alters the C3 text or `how`, or that the absolute path does not resolve to the QA file. Otherwise respond with agreement.",
+					"waitFor": "PM decision on discussion location-discussion"
+				},
+				{
+					"seat": "qa",
+					"action": "Respond confirming that the absolute target path is the file that produced the recorded TAP results. Respond with evidence if the test file differs from the one that produced them. Do not rewrite the tests.",
+					"waitFor": "PM decision on discussion location-discussion"
+				}
+			]
+		}
+	}
+]

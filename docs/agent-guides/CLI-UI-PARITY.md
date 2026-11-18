@@ -12,6 +12,11 @@ Every command accepts `--json`. Select a team with `--team <id>` (exact or
 unambiguous prefix); omission is accepted only when exactly one team exists.
 Handlers use `createTeamScheduler()` and require no Electron sender.
 
+Report normalization runs in that scheduler for native completion and recovery.
+The `team log --json` rows and preload `team.log()` expose the same optional
+`normalizations` array; `team get`, export and event broadcasts also include the
+app-owned `report_normalized` ledger events. No CLI-specific validator exists.
+
 | Preload action                             | CLI                                                                                                                                                                                                                           | Shared IPC                                                                             |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `team.create(input)`                       | `team start --idea <text> --pm tool:model:effort --dev tool:model:effort --qa tool:model:effort [--sub-pm ...] [--sub-dev ...] [--sub-qa ...] [--deadline <ISO>] [--turns <n>] [--allow checks,push,pr,temp] [--path <root>]` | `team:create`                                                                          |

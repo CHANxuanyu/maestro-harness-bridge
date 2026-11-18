@@ -358,6 +358,7 @@ export type LedgerEvent = EventBase &
 				message?: string;
 				/** Durable ingestion receipt; domain events can be recovered after a crash. */
 				report?: TeamReport;
+				normalizations?: ReportNormalization[];
 				repairTail?: string;
 				canceled?: boolean;
 				failureKind?: MemberFaultKind;
@@ -366,6 +367,12 @@ export type LedgerEvent = EventBase &
 		| { kind: 'report_accepted'; seat: SeatRole; dispatchId: string; report: TeamReport }
 		| { kind: 'report_repaired'; seat: SeatRole; dispatchId: string }
 		| { kind: 'report_rejected'; seat: SeatRole; dispatchId: string; reason: string }
+		| {
+				kind: 'report_normalized';
+				seat: SeatRole;
+				dispatchId: string;
+				changes: ReportNormalization[];
+		  }
 		| { kind: 'workspace_submitted'; dispatchId: string; revision: string; diffHash: string }
 		| { kind: 'qa_boundary_checked'; dispatchId: string }
 		| { kind: 'qa_boundary_restored'; dispatchId: string; paths: string[] }
@@ -832,6 +839,13 @@ export interface TeamDiscussion {
 	decision?: TeamEvent<'discussion_closed'>;
 }
 
+export interface ReportNormalization {
+	field: string;
+	before?: unknown;
+	after?: unknown;
+	reason: string;
+}
+
 export interface TeamUsage {
 	turns: number;
 	/** Compatibility alias of turns. Every dispatch reserves one slot, including quota failures. */
@@ -923,6 +937,7 @@ export interface TeamState {
 		report?: TeamReport;
 		reportError?: string;
 		repaired?: boolean;
+		normalizations?: ReportNormalization[];
 	}>;
 	pendingMessages: TeamEvent<'owner_message'>[];
 	messages: Array<{
@@ -944,6 +959,7 @@ export interface TeamTurnLog {
 	prompt?: string;
 	reply?: string;
 	report?: TeamReport;
+	normalizations?: ReportNormalization[];
 	error?: string;
 }
 

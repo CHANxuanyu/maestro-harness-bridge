@@ -144,4 +144,19 @@ describe('team turn prompts', () => {
 		expect(prompt).toContain('id equal to criterionId');
 		expect(prompt).toContain('Before confirmation, put draft edits in brief');
 	});
+	it('prompt schemas expose only seat-owned fields and leave proposal authority to the app', () => {
+		const state = reduceLedger(ledger(...proven));
+		for (const seat of ['pm', 'qa'] as const) {
+			expect(JSON.stringify(teamReportSchema('position', seat))).not.toContain('extraTurns');
+			expect(JSON.stringify(teamReportSchema('position', seat))).not.toContain('preservesDeadline');
+		}
+		expect(JSON.stringify(teamReportSchema('position', 'dev'))).toContain('extraTurns');
+		expect(JSON.stringify(teamReportSchema('position', 'dev'))).toContain('preservesDeadline');
+		expect(JSON.stringify(teamReportSchema('proposal', 'pm'))).not.toContain('decider');
+		expect(JSON.stringify(teamReportSchema('message', 'qa'))).not.toContain('resolvedStandards');
+		expect(JSON.stringify(teamReportSchema('message', 'pm'))).toContain('resolvedStandards');
+		expect(
+			reportRepairPrompt('position', 'Missing basis', 'reply', state, undefined, 'qa')
+		).not.toContain('extraTurns');
+	});
 });

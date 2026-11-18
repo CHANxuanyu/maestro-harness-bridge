@@ -346,6 +346,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 			case 'turn_finished':
 			case 'report_accepted':
 			case 'report_rejected':
+			case 'report_normalized':
 			case 'report_repaired': {
 				let turn = state.turns.find((t) => t.dispatchId === event.dispatchId);
 				if (!turn) {
@@ -360,6 +361,8 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				}
 				if (event.kind === 'report_rejected') turn.reportError = event.reason;
 				if (event.kind === 'report_repaired') turn.repaired = true;
+				if (event.kind === 'report_normalized' && event.actor === 'app')
+					turn.normalizations = [...(turn.normalizations ?? []), ...event.changes];
 				if (
 					event.kind !== 'report_accepted' ||
 					turn.report ||

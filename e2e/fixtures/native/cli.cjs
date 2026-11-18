@@ -130,7 +130,8 @@ async function run(provider) {
 			);
 		process.exitCode = 130;
 	});
-	for (const tool of tools) turn.startTool(tool);
+	if (scene.plan) turn.plan(scene.plan);
+	if (!scene.sequentialTools) for (const tool of tools) turn.startTool(tool);
 	if (approvalServer) {
 		if (!tools.length) throw new Error('Approval fixture requires a proposed tool');
 		for (const tool of tools) {
@@ -153,7 +154,15 @@ async function run(provider) {
 		while (!stopped) await delay(25);
 		return;
 	}
-	for (const tool of [...tools].reverse()) {
+	for (const [toolIndex, tool] of (scene.sequentialTools
+		? tools
+		: [...tools].reverse()
+	).entries()) {
+		if (scene.sequentialTools) {
+			for (const note of scene.narrations || [])
+				if (note.beforeTool === toolIndex) turn.note(note.text);
+			turn.startTool(tool);
+		}
 		for (const [index, output] of (tool.updates || []).entries()) {
 			await delay(250);
 			turn.updateTool(tool, output);
@@ -164,6 +173,8 @@ async function run(provider) {
 		}
 		await delay(scene.toolDelay ?? 300);
 		turn.finishTool(tool, tool.status);
+		if (scene.activityGates?.[toolIndex])
+			while (!fs.existsSync(scene.activityGates[toolIndex]) && !stopped) await delay(10);
 	}
 	if (!stopped && persist && scene.writes) {
 		for (const [relative, content] of Object.entries(scene.writes)) {
@@ -179,7 +190,11 @@ async function run(provider) {
 				);
 		}
 	}
-	if (!stopped) turn.finish(scene.answer, { quotaFailure: scene.quotaFailure === true });
+	if (!stopped && scene.terminalError) {
+		turn.fail(scene.terminalError);
+		process.stderr.write(`${scene.terminalError}\n`);
+		process.exitCode = 1;
+	} else if (!stopped) turn.finish(scene.answer, { quotaFailure: scene.quotaFailure === true });
 	if (provider === 'codex' && !stopped) await delay(1100);
 	// Hold the completed native writer before Maestro starts its exit synopsis.
 	if (scene.exitGate) while (!fs.existsSync(scene.exitGate) && !stopped) await delay(10);

@@ -1,5 +1,70 @@
 # 分支工作记录
 
+## 2026-11-18：B2 第五次回归跟进：晚到的回合交付
+
+验证对象为 `229aee9a4` 加本 worktree 未提交修改，不是发行包。用户在沙箱外重跑八套原生场景得到 35 passed、2 failed；此前已有场景全部通过，剩余两项均为 B2 的文件交付条。
+
+- 实际 Claude/Codex CLI 夹具经 stdout handler 复现：首个输出早于 Git 基线返回，旧 guard 丢弃基线，因此没有产生交付事件，不是 renderer token 匹配失效。修复前两项均失败。
+- 初始化输出不再取消基线；缓存在途的 Write/add-only 调用，并用现有只读 Git helper 确认所有目标仍不存在后才接纳基线。已有文件、编辑、命令或已完成工具与采样重叠时继续舍弃不确定结果，保持按回合统计的含义。SSH 探测仍走远程通道，超时及非阻塞退出策略不变。
+- Codex 原先忽略 file_change 开始事件；现经同一 parser/工具通道只向新 shell 提供开始状态，以便识别采样中的写入。classic 仍只接收原有完成事件，新增双路径测试验证。
+- 两种 provider 的补测覆盖完成和排队结束后晚到的交付，只附到原回合；未知 token、下一回合及其他 tab 不受影响。实际 persistence hook 保存后重新加载日志，交付条仍显示 `Changed 2 files · +3 -0`。
+
+最终回归：89 files passed，2112 tests passed、1 skipped（44.61 秒）。新增真实 CLI 顺序复现 2/2 通过；晚到、队列隔离、持久化恢复用例两种 provider 均通过；Codex 开始事件补测先得到 1 failed、1 passed，修复后 classic/newShell 均通过。四套 TypeScript 均退出 0。ESLint 0 errors、2 warnings，均为 HEAD 已有的 StdoutHandler 测试局部变量未使用；测试 dash lint、变更文件 Prettier 和 diff 检查通过。原生 Electron 场景和截图不能在沙箱验证，仍需外部执行 `node scripts/native-e2e.mjs e2e/native-activity-bar.spec.ts`。没有提交。
+
+本次验证命令：
+
+```sh
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput src/__tests__/renderer/hooks/agent src/__tests__/renderer/hooks/utils/useDebouncedPersistence.test.ts src/__tests__/renderer/utils/agentTaskList.test.ts src/__tests__/shared/gitChangeTurns.test.ts src/__tests__/main/git src/main/process-listeners/__tests__ src/__tests__/main/preload/process/core.test.ts src/__tests__/main/ipc/handlers/process.test.ts src/__tests__/main/process-manager src/__tests__/main/parsers/codex-output-parser.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.activity-bar.json --noEmit
+npx eslint --no-ignore src/main/git-changes.ts src/main/process-listeners/forwarding-listeners.ts src/main/parsers/agent-output-parser.ts src/main/parsers/codex-output-parser.ts src/main/process-manager/handlers/StdoutHandler.ts src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx
+npx eslint -c eslint.dashes.config.mjs src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx
+npx prettier --check src/main/git-changes.ts src/main/process-listeners/forwarding-listeners.ts src/main/parsers/agent-output-parser.ts src/main/parsers/codex-output-parser.ts src/main/process-manager/handlers/StdoutHandler.ts src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx docs/agent-guides/CANONICAL-UTILITIES.md docs/worklog.md
+git diff --check
+```
+
+## 2026-11-18：B2 第四次回归跟进（PR #94）
+
+验证对象为 `229aee9a4` 加本 worktree 未提交修改，不是发行包。读取该 head 的 CI job
+`134476406942`，日志实际列出 7 failed、1 skipped、174 passed；用户提到的其余两项未在该次日志中出现。
+
+- SSH 和 worktree 排队场景的夹具先发回答，再等测试释放退出门。B2 把最新回答也折进活动条，测试看不到回答而不能放行。现在回答立即显示，工具和过程说明仍折叠。
+- Git 交付统计不再阻塞 spawn 或 process:exit。基线和结果各用现有 20 秒只读 Git 总时限；输出开始时尚未就绪的基线丢弃，下一轮开始时丢弃上一轮未完成的测量。SSH 全程走远程 helper。退出立即结算、排队继续，晚到结果通过 token 写回原回合；失败时不显示文件交付项。
+- 登录摘要按钮的可访问名称原来包含“重新登录”，与真正的登录卡按钮重复匹配。摘要现在用已有的展开/收起活动名称，说明保留，登录卡仍是唯一登录操作。
+- Stop 原生用例只按 PRD D1 把运行工具行改成活动条状态断言；重启、历史保留和继续对话断言不变。CLI Tasks 快照与面板复用同一标题和说明，严格逐字比较两行。
+- 项目工具配置的 CI 失败发生在 update-agent 后立即 show agent，读到旧路径和 token 模式，不是回合卡住。显式保存与先前 autosave 竞争；更新内存后复用持久化 flush，旧写入结束并落盘最新配置才回复 CLI。真实 persistence hook 测试覆盖此顺序。
+- 修正此前误把最终回答藏起来的两条单测；未读始终精确为 3，阅读锚点不动，输入与 100 Hz 批次独立。回答流触发活动条重绘次数从 1 收紧为 0。
+
+修复前新增的回答可见性和配置持久化用例：2 failed、18 passed。TerminalOutput 整目录 12 文件、471 passed、1 skipped；capture/agent hooks/CLI parity/persistence 等定向回归 49 文件、982 passed；登录可访问名称与摘要补测 2 文件、82 passed。lint、main、CLI、E2E 四套 TypeScript 检查通过；变更文件 Prettier、diff 和禁用字符检查通过。ESLint 0 errors、6 warnings，均为 HEAD 已有的测试局部变量未使用。完整组件、hooks 加定向主进程回归：1024 files passed、1 skipped，22776 tests passed、86 skipped（408.21 秒）；控制台出现的 mock/错误边界异常均为被测试处理的输出，没有失败。
+原生六套场景发现 33 项；沙箱 Electron 首次启动失败，32 项未运行。默认 Vite 配置加载另被外部链接依赖目录写入权限拦住，改用 runner 并提供配置所需的根目录后 renderer/web-desktop 构建通过；main/preload 和 CLI 构建也通过。没有原生截图或 Linux 重跑结果，仍需沙箱外重跑六套场景及 activity-bar 场景。没有提交。
+
+## 2026-11-17：B2 活动条、交付条和任务页如实显示（第二轮 B2-1 到 B2-7）
+
+新界面运行中的回合显示固定两行活动条（计数、当前过程说明、展开明细），结束后折叠成一行摘要；只有以错误结束的回合标红。回合末尾的交付条按回合边界和写入记录统计文件增删，可打开按该回合筛选的改动面板；没有计划来源时任务页说明原因，不显示 0/0。
+
+集成中修掉的问题：
+
+- 以错误结束、但没有独立活动条目的回合（启动失败，或原生工具 ID 与上一轮重复被合并）原来直接沿用上一轮的成功摘要。现在这种回合也生成摘要，原错误卡和恢复入口保留；展开只定位本回合的失败步骤，不借用旧回合的条目。
+- 摘要原因原来被通用错误文案或退出码替代。`turnFailureReason()`（`src/renderer/utils/logEntries.ts`）读取 provider 原文（Codex 在 `raw.errorLine`，Claude 在 `raw.stderr`），去 ANSI、压成一行、限 240 字符，原始 JSON 信封退回可读文案。自动重试用系统标记代替错误日志，退出处理改为同时读取属于本进程、本回合的 `tab.agentError`。登录错误保留本地化的登录说明。
+- 没有执行步骤的失败回合显示“失败：原因”，不再显示“已处理 · 0 步”。0 文件不显示文件统计，交付条没有内容时不出现。
+- 原有 6 个用例与新行为冲突：5 个按原有属性改写（未删断言、未放宽计数），1 个是真实的重绘问题，已修。
+
+原生场景 `e2e/native-activity-bar.spec.ts`：错误回合的夹具原因原为 `connection failed`，会被错误模式识别成网络错误并触发 Agent Resilience 自动重试，后续“写两个文件”的消息一直排在重试后面。该场景验证的是错误结束的显示，不是重试，所以改用不会被分类为可重试的原因 `Activity fixture tool crashed`；自动重试路径另有单测覆盖（上文第二条）。断言未改。
+
+验证（沙箱外，本机）：
+
+```sh
+node scripts/native-e2e.mjs e2e/native-activity-bar.spec.ts
+# 3 passed (1.7m): claude / codex 完整活动、错误、交付场景；codex 计划冷恢复
+npx vitest run src/__tests__/renderer/components/TerminalOutput src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx src/__tests__/renderer/utils/logEntries.test.ts e2e/fixtures/native/protocol.test.ts
+# 14 files, 542 passed, 1 skipped
+npm run lint   # exit 0
+```
+
+改动文件 ESLint、Prettier 通过，新增行没有禁止的长横线字符。
+
 ## 2026-11-18：B3 左栏中间省略保留完整标题
 
 PR #93 的 Linux 原生 E2E 有三项失败（Claude 审批的 worktree 两项、子任务的已关闭父对话），本机复现。原因是 B3 的中间省略直接改写了标题文本，按完整标题查找的场景和读屏都只能拿到截断后的文字。现在可见标题仍做中间省略，截断时对辅助技术隐藏，旁边保留一份 `sr-only` 的完整标题；`data-conversation-title` 和 `title` 不变，264 像素下可见标题两两不同的断言不变。单测补充截断时完整标题可读的断言。
@@ -81,6 +146,126 @@ Codex 0.166 起把计划调用记成代码模式的 `exec` 脚本（`text(await 
 - 合成 Electron 场景 `native-codex-plan-restart` 通过：实时显示计划，关掉会话重启，再从原生历史打开，清单不变。反证：只去掉存储侧的解码，同一场景失败。`native-codex-plan` 回归通过。
 - 真实模型 `real-tasks-panel` 通过（Claude Code 2.1.317，Codex 0.169.0-alpha.11.1；Claude Sonnet 5.5、Codex GPT-6.2-Sol；1.1 分钟）。第一次运行在启动前被预检拦下：钥匙串里的 Claude 访问令牌过期，用一次最小的 `claude -p` 让 CLI 自己刷新后重跑，没有碰登录流程。
 - 类型检查（lint、main、real-acceptance）、ESLint、Prettier 通过。
+
+## 2026-11-17：B2 完整组件回归跟进
+
+验证对象仍为同一未提交工作树源码。先运行用户指出的两个测试文件，复现全部六项失败：
+74 项通过、6 项失败、1 项跳过。没有删除断言或放宽计数、锚点、渲染次数的界限。
+
+- `counts exactly one unread for a tail entry that lands in the same commit as the prepend`：
+  (a)，D1 把过程说明收到活动详情，不能再断言它是独立的末行。仍精确断言未读为 1、
+  阅读行及行内偏移不变，展开后说明内容存在；新增另一条会增加尾部高度的用户消息分支，
+  保留对错误“按底部距离定位”实现的检出能力。
+- `counts a streamed answer once, however many chunks extend it`：
+  (a)，运行中的答案位于活动折叠内。仍精确断言未读从 2 到 3、所有后续分块维持 3、
+  阅读位置不变，并新增结束后展示完整答案、未读仍为 3 的断言。
+- `holds the reader when rows above grow with no scroll, and through a later refresh`：
+  (a)，同样更新过程说明的行归属。保留上方行增长 250px 后的精确锚点校正，
+  同时检查刷新折叠说明和追加真实尾行两种情况，未读均精确为 1。
+- `bounds activity redraws with newShell=true, interim=false` 和 `interim=true`：
+  两项都是 (a)，D4 要求最终有正常答复的回合不因中途失败标红。仍保持 1000 个历史
+  折叠在 15 次更新中零次重复耗时格式化、展开详情及时更新；新增真实错误终态更正后
+  摘要显示错误原因的断言。
+- `keeps ordinary typing independent of 100 Hz stream batches (newShell=true)`：
+  最初的折叠数量断言属于 (a)，应精确为 100 个历史折叠加 1 个运行条；继续检查发现
+  (b) 的实现回归：关闭的运行条在 15 次仅答案变化的批处理中全部重绘。先增加渲染
+  计数复现 15 对 1 的失败，再让 memo 只比较运行条实际展示的工具和公开说明。
+  第一次活动条替换占位宿主后，其余答案分块不再触发重绘，展开或结束仍读取最新条目。
+  原有 15 次 store 更新及 transcript 渲染、键入零额外渲染、300 块完整内容断言不变，
+  并检查展开详情确实包含全部 300 块。运行计时器使用新回合的当前时间，避免夹具把
+  1970 年的时间戳当成正在运行的回合；未放宽原有零次历史耗时格式化界限。
+
+最终完整目录命令均以退出码 0 结束，没有新增跳过：
+
+```sh
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput
+npx vitest run --configLoader runner src/__tests__/renderer/components
+npx vitest run --configLoader runner src/__tests__/renderer/hooks
+npx tsc -p tsconfig.lint.json --noEmit
+npx eslint --no-ignore src/renderer/components/TerminalOutput/components/TurnActivityFold.tsx src/__tests__/renderer/components/TerminalOutput/TerminalOutput.backfillAnchor.test.tsx src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx
+npx prettier --check src/renderer/components/TerminalOutput/components/TurnActivityFold.tsx src/__tests__/renderer/components/TerminalOutput/TerminalOutput.backfillAnchor.test.tsx src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx docs/worklog.md
+git diff --check
+```
+
+`TerminalOutput`：12 文件通过，459 项通过、1 项跳过，75.30s。
+`components`：724 文件通过、1 文件跳过，15530 项通过、83 项跳过，318.42s。
+`hooks`：284 文件通过，6750 项通过、3 项跳过，143.07s。
+三个目录均零失败；components 已包含 TerminalOutput，数量不能相加作为独立覆盖。
+TypeScript、ESLint（零警告）、Prettier 和空白检查通过；新增行无禁止的长横线字符。
+完整 components 输出包含既有 ErrorBoundary、WizardProvider、图标 mock 与 jsdom
+navigation 的错误日志，但 Vitest 没有报告失败或未处理异常。
+
+本次仅修复重绘和跟进测试，不改变活动条的外观。仍未运行原生 Electron、截图或
+真实浏览器输入延迟测量，下文的原生与性能验收边界继续适用。没有提交。
+
+## 2026-11-17：B2 回合活动与交付条
+
+验证对象为 `f1aa864ff` 上的未提交工作树源码，没有构建发行包、启动 Electron、
+调用真实模型或改写个人账户。修改只在本工作树，经典界面保留原有展示。
+
+新界面复用 `foldTurnActivity`、`TurnActivityFold` 和 `TurnRunningStatus`。
+运行中显示固定 64px 的两行内容，公开过程说明、工具计数、当前命令和真实计划
+都从本回合记录派生；详情沿用现有条目，结束后收成耗时与步数。Claude 的公开文本
+在后续工具调用确认其为过程说明时进入现有 commentary 通道，最后答复和推理分开。
+终态优先于中途工具失败，退出码留在中性明细。批准请求在可见回合中替换活动条，
+侧栏变为强调色实心点；背景请求保留既有模态入口。新 UI 和 CLI 帮助均有中英文。
+
+交付条不能直接采用已有 Changes 的当前 HEAD 差异。主进程现在在启动前捕获有界的
+脏文件补丁，在退出时按既有成功写入归因比较边界，只保存汇总数字和路径。
+历史无边界、HEAD 变化、二进制、过大内容和不明确的重命名显示行数不可用。
+并发外部写入同一归因文件无法通过工作区边界分离。点击交付条打开已有 Changes 并按
+回合筛选，该面板依旧展示当前文件差异。CLI 对等为
+`tab panel <id> changes-turns --turn <turn-id>`；没有 F3 结果时不显示验收占位。
+
+最终定向单元与组件回归 16 文件、706 项通过，包含经典界面、审批卡与侧栏、真实计划、
+失败终态、原生刷新保留交付数字、CLI 过滤和已有 git 行为：
+
+```sh
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput/foldTurnActivity.test.ts src/__tests__/renderer/components/TerminalOutput/TurnActivityBar.test.tsx src/__tests__/shared/gitChangeTurns.test.ts src/__tests__/shared/newShellPanel.test.ts src/__tests__/main/parsers/claude-output-parser.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/main/git/changes.test.ts src/__tests__/renderer/components/ChangesPanel.test.tsx src/__tests__/renderer/components/TerminalOutput/TerminalOutput.feed.test.tsx src/__tests__/renderer/components/PermissionPrompt/PermissionPrompt.test.tsx src/__tests__/renderer/components/MainPanel/MainPanelHeader.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx src/__tests__/renderer/hooks/remote/useAppRemoteEventListenersSessionConfig.test.ts src/__tests__/renderer/utils/transcriptMessages.test.ts src/__tests__/cli/commands/tab.test.ts
+npx vitest run --configLoader runner --config e2e/fixtures/native/vitest.config.ts e2e/fixtures/native/protocol.test.ts -t 'emits three ordered|SIGINT records|executable stream'
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.activity-bar.json --noEmit
+npx playwright test e2e/native-activity-bar.spec.ts --project=native --list
+git ls-files -m -o --exclude-standard -z -- '*.ts' '*.tsx' '*.cjs' | xargs -0 npx eslint --no-ignore --rule 'no-undef:off'
+git ls-files -m -o --exclude-standard -z -- ':(exclude).survey-A0.md' | xargs -0 npx prettier --check
+npm run docs:verify
+git diff --check
+```
+
+协议定向测试 6 项通过，另 4 项未匹配筛选；四份 TypeScript 检查通过。
+ESLint 0 错误、4 条原有 unused 警告；`--no-ignore` 纳入测试，`no-undef:off`
+补偿现有 ESLint 对 `e2e/*.ts` 没有 Node globals 的配置，类型由 tsc 检查。
+改动文件 Prettier、文档路径检查及空白检查通过。默认 Vitest loader 因依赖目录
+只读而不能写临时配置，改用仓库已有的 runner loader。
+
+另尝试完整 fixture 命令
+`npx vitest run --configLoader runner --config e2e/fixtures/native/vitest.config.ts`。
+该次 92 项通过、6 项失败，其中新增的两项失败是断言误用不存在的 `isComplete`
+字段，改为 parser 的 `isResultMessage` 后通过上述定向复测；另外三项现有共享连接器
+用例因沙箱拒绝 Unix socket listen 而超时，一个现有 real-isolation relay 用例没有等到
+子进程记录。没有声称完整 fixture 套件通过，也没有放宽这些用例。
+
+新增 `e2e/native-activity-bar.spec.ts`，Playwright 收集 3 项。Claude/Codex 场景包含
+11 工具调用、3 段过程说明、35 秒附近的门控回合，检查高度不变、滚动增长最多一行、
+运行中 0 工具行、展开 11 条明细、唯一动画、中途失败后成功与终态失败，以及两文件
+`+3 -0` 交付过滤。Claude 使用 5 系模型且断言没有任务进度。第三项让 Codex 脚本计划
+在清除保存的展示日志后从原生历史恢复。
+
+原生场景和实际像素、截图、SSH、发行包均未验证。当前检出没有用户提到另一分支的
+Codex 脚本计划恢复前置修复，保留 `latestAgentTaskList`，不重复开发该修复。
+需要先整合该前置分支，再在沙箱外运行：
+
+```sh
+npm run build
+MAESTRO_E2E_REAL=0 npx playwright test e2e/native-activity-bar.spec.ts --project=native --workers=1 --retries=0
+```
+
+PRD 4.4 的 1000 消息选择器可交互 100ms 和流式按键等待标准未测。
+按 `docs/perf-renderer.md` 冻结 before/after 构建，在同一 Apple M4 上用已有
+`RendererRun.stage()` 运行器记录基线与复测，比较流式 p95 多轮中位数 85.7ms；
+选择器测量应与 B1 最终实现一起验收。禁止以 jsdom 的固定样式断言代替像素或性能结果。
 
 ## 2026-11-17：第二轮开工基线
 

@@ -1,3 +1,4 @@
+import { recordGitTurnTool } from '../git-changes';
 /**
  * Simple IPC forwarding listeners.
  * These listeners just forward events from ProcessManager to the renderer.
@@ -110,6 +111,7 @@ export function setupForwardingListeners(
 
 	// Handle tool execution events (OpenCode, Codex)
 	processManager.on('tool-execution', (sessionId: string, toolEvent: ToolExecution) => {
+		recordGitTurnTool(sessionId, toolEvent);
 		safeSend('process:tool-execution', sessionId, toolEvent);
 
 		// Metadata-only mirror for subscribed plugins: tool NAME and timing only.

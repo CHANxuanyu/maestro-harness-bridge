@@ -9,7 +9,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { canAppendToLogEntry, isSelfContainedCard } from '../../../renderer/utils/logEntries';
+import {
+	canAppendToLogEntry,
+	isSelfContainedCard,
+	turnFailureReason,
+} from '../../../renderer/utils/logEntries';
 import type { LogEntry } from '../../../renderer/types';
 
 function entry(overrides: Partial<LogEntry> = {}): LogEntry {
@@ -21,6 +25,44 @@ function entry(overrides: Partial<LogEntry> = {}): LogEntry {
 		...overrides,
 	};
 }
+
+describe('turnFailureReason', () => {
+	it.each([
+		{
+			raw: { errorLine: 'Provider disconnected', stderr: 'Other diagnostics' },
+			expected: 'Provider disconnected',
+		},
+		{ raw: { stderr: 'Provider disconnected\n' }, expected: 'Provider disconnected' },
+		{ raw: { errorLine: '{"error":"detail"}' }, expected: 'Connection failed' },
+		{ raw: { errorLine: '["detail"]' }, expected: 'Connection failed' },
+		{ raw: {}, expected: 'Connection failed' },
+		{
+			raw: { stderr: 'Connection lost\r\nTry again\tsoon' },
+			expected: 'Connection lost Try again soon',
+		},
+		{
+			raw: { errorLine: '\u001b[31m' + 'x'.repeat(300) + '\u001b[0m' },
+			expected: 'x'.repeat(239) + '…',
+		},
+	])('uses plain provider detail and excludes JSON envelopes: $raw', ({ raw, expected }) => {
+		expect(
+			turnFailureReason(
+				entry({
+					source: 'error',
+					text: 'Connection failed',
+					agentError: {
+						type: 'network_error',
+						message: 'Connection failed',
+						recoverable: true,
+						agentId: 'codex',
+						timestamp: 0,
+						raw,
+					},
+				})
+			)
+		).toBe(expected);
+	});
+});
 
 describe('isSelfContainedCard', () => {
 	it('is false for plain streamed output', () => {

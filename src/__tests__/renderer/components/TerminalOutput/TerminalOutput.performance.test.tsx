@@ -15,6 +15,24 @@ import { useAgentDataListener } from '../../../../renderer/hooks/agent/internal/
 import { useBatchedSessionUpdates } from '../../../../renderer/hooks/session/useBatchedSessionUpdates';
 import { useInputAreaTextChange } from '../../../../renderer/components/InputArea/hooks/useInputAreaTextChange';
 
+const activityBarRenders = vi.hoisted(() => vi.fn());
+vi.mock(
+	'../../../../renderer/components/TerminalOutput/components/TurnRunningStatus',
+	async (original) => {
+		const actual =
+			await original<
+				typeof import('../../../../renderer/components/TerminalOutput/components/TurnRunningStatus')
+			>();
+		return {
+			...actual,
+			TurnRunningStatus: memo((props: React.ComponentProps<typeof actual.TurnRunningStatus>) => {
+				if (props.summary) activityBarRenders();
+				return <actual.TurnRunningStatus {...props} />;
+			}),
+		};
+	}
+);
+
 vi.mock('../../../../shared/duration', async (original) => {
 	const actual = await original<typeof import('../../../../shared/duration')>();
 	return { ...actual, formatElapsedTickerCompact: vi.fn(actual.formatElapsedTickerCompact) };
@@ -215,7 +233,8 @@ it.each([
 		const fold = view.container.querySelector(
 			`[data-feed-row="turn-activity"][data-log-id="${interim ? 'interim-0' : 'tool-0'}"]`
 		)!;
-		expect(fold.querySelector('[data-tool-status="error"]')).not.toBeNull();
+		// D4: a failed step followed by a reply leaves the new-shell summary neutral.
+		expect(!!fold.querySelector('[data-tool-status="error"]')).toBe(!newShell);
 		fireEvent.click(fold.querySelector('button')!);
 		expect(fold).toHaveTextContent('Corrected tool');
 		const changedAgain = corrected.map((log) =>
@@ -230,6 +249,28 @@ it.each([
 		expect(fold).toHaveTextContent('Updated while open');
 		fireEvent.click(fold.querySelector('button')!);
 		expect(fold.querySelector('[data-turn-activity-steps]')).toBeNull();
+		if (newShell) {
+			// A real terminal outcome correction must still invalidate the memo.
+			const endedInError = changedAgain.map((log) =>
+				log.id === 'user-0'
+					? {
+							...log,
+							turnCompletion: {
+								status: 'error' as const,
+								timestamp: 3000,
+								reason: 'Connection lost',
+							},
+						}
+					: log
+			);
+			view.rerender(
+				<TerminalOutput
+					{...props}
+					session={{ ...session, aiTabs: [{ ...session.aiTabs[0], logs: endedInError }] }}
+				/>
+			);
+			expect(fold.querySelector('[data-tool-status="error"]')).toHaveTextContent('Connection lost');
+		}
 	},
 	// Asserts redraw counts, not time. A loaded Windows runner needs more than a minute.
 	180_000
@@ -280,7 +321,7 @@ it.each([true, false])(
 							id: 'current-user',
 							source: 'user',
 							text: 'Continue',
-							timestamp: historyTurns * 4000,
+							timestamp: Date.now(),
 							delivered: true,
 						},
 					],
@@ -344,9 +385,14 @@ it.each([true, false])(
 		}
 		act(() => vi.advanceTimersByTime(0));
 		expect(view.container.querySelectorAll('[data-feed-row="turn-activity"]')).toHaveLength(
-			historyTurns
+			historyTurns + (newShell ? 1 : 0)
 		);
+		if (newShell) {
+			expect(view.getAllByTestId('activity-collapsed')).toHaveLength(historyTurns);
+			expect(view.getAllByTestId('turn-activity-bar')).toHaveLength(1);
+		}
 		transcriptRenders.mockClear();
+		activityBarRenders.mockClear();
 		vi.mocked(formatElapsedTickerCompact).mockClear();
 		const storeUpdates = vi.fn();
 		const unsubscribe = useSessionStore.subscribe((state, previous) => {
@@ -403,5 +449,17 @@ it.each([true, false])(
 		expect(vi.mocked(formatElapsedTickerCompact)).toHaveBeenCalledTimes(
 			newShell ? 0 : historyTurns * 15
 		);
+		// Answer batches render outside the activity bar. They must never redraw it,
+		// including the first chunk while the process is still running.
+		expect(activityBarRenders).toHaveBeenCalledTimes(0);
+		const answer = view.container.querySelector(
+			`[data-log-id="${finalLogs[history.length + 1].id}"]`
+		);
+		expect(answer).toHaveTextContent(Array.from({ length: 300 }, (_, i) => `chunk-${i}`).join(' '));
+		if (newShell) {
+			fireEvent.click(view.getByTestId('activity-toggle'));
+			expect(answer?.closest('[data-turn-activity-steps]')).toBeNull();
+			expect(view.getByTestId('activity-toggle')).toHaveAttribute('data-activity-state', 'running');
+		}
 	}
 );

@@ -405,7 +405,11 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 			const sessions = [twoTabSession()];
 			vi.mocked(useSettingsStore.getState).mockReturnValue({ newShell } as never);
 			const { setSessions } = setup(sessions);
-			dispatchPatch('session-1', { tabId: 'tab-2', newShellPanelAction: 'changes-turns' });
+			dispatchPatch('session-1', {
+				tabId: 'tab-2',
+				newShellPanelAction: 'changes-turns',
+				newShellChangesTurnId: 'delivery-turn',
+			});
 			await flush();
 			if (newShell) {
 				const updated = applyUpdate(setSessions, sessions)[0];
@@ -414,6 +418,7 @@ describe('maestro:remoteUpdateSessionConfig with a tabId', () => {
 					tab: 'changes',
 					open: true,
 					changesView: 'turn',
+					changesTurnId: 'delivery-turn',
 				});
 				expect(setMany).toHaveBeenCalled();
 				expect(ack).toHaveBeenCalledWith('ch', expect.objectContaining({ success: true }));

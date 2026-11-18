@@ -474,33 +474,54 @@ describe.each([
 			expect(unreadButton(container)).toBeNull();
 		});
 
-		it('counts exactly one unread for a tail entry that lands in the same commit as the prepend', async () => {
-			const { container, rerender, before } = await mountScrolledIntoHistory();
-			// A live progress note, as the agent emits between tool calls: its own row
-			// (collapseAiResponseLogs never folds it into the answer above it).
-			const tail = liveProgressNote('live-p');
+		it.each(['progress note', 'new turn'] as const)(
+			'counts exactly one unread for a tail entry that lands in the same commit as the prepend (%s)',
+			async (tailKind) => {
+				const { container, rerender, before } = await mountScrolledIntoHistory();
+				// D1 folds notes into activity. Also exercise a new turn, which still adds
+				// tail height in both shells and catches distance-from-bottom anchoring.
+				const tail: LogEntry =
+					tailKind === 'progress note'
+						? liveProgressNote('live-p')
+						: {
+								id: 'live-q',
+								timestamp: 99_000,
+								source: 'user',
+								text: 'A follow-up from another client',
+							};
 
-			act(() => {
-				backfill.onPrepend!(older.length);
-				rerender(<TerminalOutput {...props(sessionWith([...older, ...current, tail]))} />);
-			});
-			// It really is a distinct row, the last one.
-			expect(renderedIds(container).slice(-1)[0]).toBe('live-p');
-			// Bottom distance would have moved the reader by the tail's height.
-			expect(readingRow()).toEqual(before);
-			const jump = unreadButton(container);
-			expect(jump).not.toBeNull();
-			expect(jump!.textContent?.trim()).toBe('1');
+				act(() => {
+					backfill.onPrepend!(older.length);
+					rerender(<TerminalOutput {...props(sessionWith([...older, ...current, tail]))} />);
+				});
+				expect(renderedIds(container).slice(-1)[0]).toBe(
+					newShell && tailKind === 'progress note' ? 'now11-a' : tail.id
+				);
+				// Bottom distance would have moved the reader by the tail's height.
+				expect(readingRow()).toEqual(before);
+				const jump = unreadButton(container);
+				expect(jump).not.toBeNull();
+				expect(jump!.textContent?.trim()).toBe('1');
 
-			// Expanding the window over the history does not add to it.
-			await hydrateWindow(container, () => {
+				// Expanding the window over the history does not add to it.
+				await hydrateWindow(container, () => {
+					expect(readingRow()).toEqual(before);
+					expect(unreadButton(container)!.textContent?.trim()).toBe('1');
+				});
+				expect(renderedIds(container)[0]).toBe('old0-q');
 				expect(readingRow()).toEqual(before);
 				expect(unreadButton(container)!.textContent?.trim()).toBe('1');
-			});
-			expect(renderedIds(container)[0]).toBe('old0-q');
-			expect(readingRow()).toEqual(before);
-			expect(unreadButton(container)!.textContent?.trim()).toBe('1');
-		});
+				if (newShell && tailKind === 'progress note') {
+					const fold = container.querySelector(
+						'[data-feed-row="turn-activity"][data-log-id="now11-t0"]'
+					)!;
+					fireEvent.click(fold.querySelector('button')!);
+					expect(fold.querySelector('[data-log-id="live-p"]')).toHaveTextContent(tail.text);
+					expect(readingRow()).toEqual(before);
+					expect(unreadButton(container)!.textContent?.trim()).toBe('1');
+				}
+			}
+		);
 
 		it('keeps the reader on a row the newest prepended answer merges into', async () => {
 			// The tab's slice starts mid-turn, on an answer; the page read back from
@@ -599,20 +620,18 @@ describe.each([
 				backfill.onPrepend!(older.length);
 				rerender(<TerminalOutput {...props(sessionWith([...older, ...current]))} />);
 			});
-			// A new turn arrives from elsewhere while the tab streams it (busy), so
-			// the conversation layout keeps that turn unfolded.
-			const show = (tail: LogEntry[]) =>
+			// A new turn arrives from elsewhere. Public notes fold in the new shell,
+			// but the latest answer stays visible while its process is still running.
+			const show = (tail: LogEntry[], busy = true) =>
 				act(() => {
 					rerender(
-						<TerminalOutput
-							{...props(sessionWith([...older, ...current, ...tail], { busy: true }))}
-						/>
+						<TerminalOutput {...props(sessionWith([...older, ...current, ...tail], { busy }))} />
 					);
 				});
 			const count = () => unreadButton(container)?.textContent?.trim();
 
 			// The live turn: its question, a progress note, then the answer starts
-			// streaming. Three distinct rows, three unread.
+			// streaming. Three distinct messages remain three unread in either layout.
 			const ask: LogEntry = { id: 'live-q', timestamp: 98_900, source: 'user', text: 'Why?' };
 			const note = liveProgressNote('live-p');
 			const answer = (text: string): LogEntry => ({
@@ -625,6 +644,10 @@ describe.each([
 			expect(count()).toBe('2');
 			show([ask, note, answer('The build')]);
 			expect(renderedIds(container).slice(-2)).toEqual(['live-p', 'live-a']);
+			if (newShell) {
+				expect(container.querySelectorAll('[data-testid="turn-activity-bar"]')).toHaveLength(1);
+				expect(container.querySelector('[data-log-id="live-a"]')).toHaveTextContent('The build');
+			}
 			expect(count()).toBe('3');
 			const rows = renderedIds(container).length;
 
@@ -649,6 +672,24 @@ describe.each([
 			]);
 			expect(renderedIds(container).length).toBe(rows);
 			expect(renderedIds(container)).not.toContain('live-a2');
+			expect(count()).toBe('3');
+			expect(readingRow()).toEqual(before);
+			// Completion keeps the answer visible without counting it a second time
+			// or disturbing the anchor as the activity bar becomes a summary.
+			show(
+				[
+					ask,
+					note,
+					answer(text),
+					{ id: 'live-a2', timestamp: 99_200, source: 'stdout', text: ' Retrying.' },
+				],
+				false
+			);
+			expect(renderedIds(container).slice(-2)).toEqual(['live-p', 'live-a']);
+			expect(container.querySelector('[data-log-id="live-a"]')).toHaveTextContent(
+				`${text} Retrying.`
+			);
+			expect(container.querySelector('[data-testid="turn-activity-bar"]')).toBeNull();
 			expect(count()).toBe('3');
 			expect(readingRow()).toEqual(before);
 		});
@@ -694,28 +735,40 @@ describe.each([
 			}
 		);
 
-		it('holds the reader when rows above grow with no scroll, and through a later refresh', async () => {
-			const { container, rerender, before } = await mountScrolledIntoHistory();
-			// A row above the reader swaps its height estimate for its real height:
-			// nothing scrolls and no scroll event fires; the content box changes.
-			const above = renderedIds(container)[3]!;
-			extraHeight.set(above, 250);
-			// Without a correction this is what the screen would show.
-			expect(readingRow()).not.toEqual(before);
-			fireContentResize();
-			expect(readingRow()).toEqual(before);
+		it.each(['progress note', 'new turn'] as const)(
+			'holds the reader when rows above grow with no scroll, and through a later refresh (%s)',
+			async (tailKind) => {
+				const { container, rerender, before } = await mountScrolledIntoHistory();
+				// A row above the reader swaps its height estimate for its real height:
+				// nothing scrolls and no scroll event fires; the content box changes.
+				const above = renderedIds(container)[3]!;
+				extraHeight.set(above, 250);
+				// Without a correction this is what the screen would show.
+				expect(readingRow()).not.toEqual(before);
+				fireContentResize();
+				expect(readingRow()).toEqual(before);
 
-			// Seconds later a native refresh appends the controller's progress note:
-			// no jump in either direction.
-			act(() => {
-				rerender(
-					<TerminalOutput {...props(sessionWith([...current, liveProgressNote('live-p')]))} />
+				// A later refresh can update a folded note or add a whole new tail row.
+				// Both must keep the corrected anchor without adding phantom unread.
+				const tail: LogEntry =
+					tailKind === 'progress note'
+						? liveProgressNote('live-p')
+						: {
+								id: 'live-q',
+								timestamp: 99_000,
+								source: 'user',
+								text: 'A follow-up from another client',
+							};
+				act(() => {
+					rerender(<TerminalOutput {...props(sessionWith([...current, tail]))} />);
+				});
+				expect(renderedIds(container).slice(-1)[0]).toBe(
+					newShell && tailKind === 'progress note' ? 'now11-a' : tail.id
 				);
-			});
-			expect(renderedIds(container).slice(-1)[0]).toBe('live-p');
-			expect(readingRow()).toEqual(before);
-			expect(unreadButton(container)!.textContent?.trim()).toBe('1');
-		});
+				expect(readingRow()).toEqual(before);
+				expect(unreadButton(container)!.textContent?.trim()).toBe('1');
+			}
+		);
 
 		it('brings the reader back to the same message when the transcript remounts', async () => {
 			const { container, rerender, unmount } = await mountScrolledIntoHistory();

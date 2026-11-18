@@ -874,6 +874,7 @@ function withRendererFields(cached: LogEntry, native: LogEntry): LogEntry {
 	const next: LogEntry = {
 		...native,
 		...(cached.delivered !== undefined ? { delivered: cached.delivered } : {}),
+		...(cached.turnCompletion ? { turnCompletion: cached.turnCompletion } : {}),
 		...(cached.readOnly !== undefined ? { readOnly: cached.readOnly } : {}),
 		...(cached.renderStyle ? { renderStyle: cached.renderStyle } : {}),
 		...(cached.aiCommand ? { aiCommand: cached.aiCommand } : {}),

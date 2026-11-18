@@ -304,12 +304,26 @@ export const ChangesPanel = memo(function ChangesPanel({
 			byTurn && changes
 				? groupChangesByTurn(
 						changes,
-						nativeWrites.length ? nativeWrites : turnWrites,
+						activeTab?.newShellPanel?.changesTurnId &&
+							turnWrites.some((turn) => turn.turnId === activeTab.newShellPanel?.changesTurnId)
+							? turnWrites
+							: nativeWrites.length
+								? nativeWrites
+								: turnWrites,
 						remoteCwd || cwd,
 						!!sshRemoteId
 					)
 				: null,
-		[byTurn, changes, turnWrites, nativeWrites, remoteCwd, cwd, sshRemoteId]
+		[
+			byTurn,
+			changes,
+			turnWrites,
+			nativeWrites,
+			remoteCwd,
+			cwd,
+			sshRemoteId,
+			activeTab?.newShellPanel?.changesTurnId,
+		]
 	);
 	const stagedCount =
 		changes?.stagedCount ??
@@ -368,18 +382,28 @@ export const ChangesPanel = memo(function ChangesPanel({
 				</p>
 			);
 		return (
-			<ul className="flex flex-col" data-testid="changes-list">
+			<ul
+				className="flex flex-col"
+				data-testid="changes-list"
+				data-turn-filter={activeTab?.newShellPanel?.changesTurnId}
+			>
 				{(turnChanges
-					? turnChanges.groups.map((group) => ({
-							label: group.turnId ?? 'other',
-							title:
-								group.turnId === null
-									? t('workflows.changes.other')
-									: group.title || t('workflows.changes.untitledTurn'),
-							timestamp: group.timestamp,
-							files: group.files,
-							count: group.files.length,
-						}))
+					? turnChanges.groups
+							.filter(
+								(group) =>
+									!activeTab?.newShellPanel?.changesTurnId ||
+									group.turnId === activeTab.newShellPanel.changesTurnId
+							)
+							.map((group) => ({
+								label: group.turnId ?? 'other',
+								title:
+									group.turnId === null
+										? t('workflows.changes.other')
+										: group.title || t('workflows.changes.untitledTurn'),
+								timestamp: group.timestamp,
+								files: group.files,
+								count: group.files.length,
+							}))
 					: newShell && stagedCount > 0
 						? [
 								{

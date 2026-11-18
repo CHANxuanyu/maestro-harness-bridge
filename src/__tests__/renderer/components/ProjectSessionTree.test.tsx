@@ -11,8 +11,11 @@ import type {
 } from '../../../renderer/utils/projectSessionTree';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useModalStore } from '../../../renderer/stores/modalStore';
+import { usePermissionRequestStore } from '../../../renderer/stores/permissionRequestStore';
 import { contrastRatio } from '../../../shared/colorContrast';
 import { mockTheme } from '../../helpers/mockTheme';
+
+beforeEach(() => usePermissionRequestStore.setState({ queue: [], responding: [], failed: [] }));
 
 // Pin the English copy so the tests do not depend on the catalog keys landing
 // in the same change.
@@ -200,6 +203,31 @@ function rowsOf(header: HTMLElement) {
 	const list = document.getElementById(header.getAttribute('aria-controls')!);
 	return list ? within(list).queryAllByRole('listitem') : [];
 }
+
+it.each([false, true])(
+	'replaces the spinner with an accent dot during approval only in new shell %s',
+	(newShell) => {
+		useSettingsStore.setState({ newShell });
+		usePermissionRequestStore.setState({
+			queue: [
+				{
+					requestId: 'approval',
+					sessionId: 'owner-claude-ai-tab-1',
+					toolName: 'Bash',
+					input: { command: 'npm test' },
+					createdAt: 1,
+				},
+			],
+		});
+		setup({ projects: [project({ conversations: [conversation({ busy: true })] })] });
+		const dot = screen.queryByTestId('conversation-approval-dot');
+		expect(!!dot).toBe(newShell);
+		if (newShell) {
+			expect(dot).toHaveStyle({ backgroundColor: mockTheme.colors.accent });
+			expect(dot?.className).not.toContain('animate');
+		}
+	}
+);
 
 it.each([false, true])(
 	'distinguishes busy shape and omits project emoji only in new shell %s',

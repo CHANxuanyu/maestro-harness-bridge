@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import type { LogEntry } from '../../../../renderer/types';
-import { foldTurnActivity } from '../../../../renderer/components/TerminalOutput/utils/foldTurnActivity';
+import {
+	foldTurnActivity,
+	summarizeTurnActivity,
+	turnActivityOutcome,
+} from '../../../../renderer/components/TerminalOutput/utils/foldTurnActivity';
 
 const entry = (id: string, ts: number, source: LogEntry['source'], extra: Partial<LogEntry> = {}) =>
 	({ id, timestamp: ts, source, text: id, ...extra }) as LogEntry;
@@ -90,5 +94,148 @@ describe('foldTurnActivity', () => {
 		expect(activityByHostId.get('t1')!.durationMs).toBe(3_000);
 		const instant = fold([user('u1', 0), tool('t1', 0), reply('a1', 0)]);
 		expect(instant.activityByHostId.get('t1')!.durationMs).toBeUndefined();
+	});
+});
+
+describe('new shell running turn', () => {
+	it('omits unavailable live delivery instead of falling back to unknown historical counts', () => {
+		const write = entry('write', 1, 'tool', {
+			text: 'Write',
+			metadata: { toolState: { status: 'completed', writePaths: ['a.ts'] } },
+		});
+		const prompt = user('u', 0);
+		const historical = foldTurnActivity([prompt, write, reply('answer', 2)], { newShell: true });
+		expect(historical.deliveryByHostId.get('answer')?.delivery).toMatchObject({
+			files: 1,
+			additions: null,
+			deletions: null,
+		});
+		const completed = { ...prompt, turnCompletion: { status: 'completed' as const, timestamp: 2 } };
+		const live = foldTurnActivity([completed, write, reply('answer', 2)], { newShell: true });
+		expect(live.deliveryByHostId.get('answer')?.delivery).toBeUndefined();
+	});
+	it.each(['completion only', 'error card', 'history slice'])(
+		'keeps an error summary without activity: %s',
+		(shape) => {
+			const prompt = {
+				...user('u', 0),
+				turnCompletion: { status: 'error' as const, timestamp: 2, reason: 'Connection lost' },
+			};
+			const error = entry('failure', 1, 'error', { text: 'Connection lost' });
+			const logs =
+				shape === 'completion only' ? [prompt] : shape === 'error card' ? [prompt, error] : [error];
+			const result = foldTurnActivity(logs, { newShell: true, keepLastTurnOpen: false });
+			expect([...result.activityByHostId.values()]).toEqual([
+				expect.objectContaining({ status: 'error', reason: 'Connection lost', entries: [] }),
+			]);
+			if (shape !== 'completion only') expect(result.logs).toContain(error);
+			const classic = foldTurnActivity(logs, { keepLastTurnOpen: false });
+			expect(classic.logs).toBe(logs);
+			expect(classic.activityByHostId.size).toBe(0);
+		}
+	);
+
+	it.each([false, true])(
+		'keeps the delivered answer visible before process exit, newShell=%s',
+		(newShell) => {
+			const answer = reply('answer', 3);
+			const result = foldTurnActivity([user('u', 0), tool('tool', 1), answer], {
+				newShell,
+				keepLastTurnOpen: true,
+			});
+			expect(result.logs).toContain(answer);
+			if (newShell) {
+				expect(result.activityByHostId.get('tool')).toMatchObject({
+					running: true,
+					entries: [tool('tool', 1)],
+				});
+			} else expect(result.activityByHostId.size).toBe(0);
+		}
+	);
+
+	it('keeps one activity row from before the first call through eleven calls', () => {
+		const prompt = user('u', 0);
+		const start = foldTurnActivity([prompt], { keepLastTurnOpen: true, newShell: true });
+		const calls = Array.from({ length: 11 }, (_, index) => tool(`t${index}`, index + 1));
+		const end = foldTurnActivity(
+			[prompt, note('n1', 1), ...calls, note('n2', 12), note('n3', 13)],
+			{ keepLastTurnOpen: true, newShell: true }
+		);
+		expect(ids(start.logs)).toEqual(['u', 'activity:u']);
+		expect(ids(end.logs)).toEqual(['u', 'n1']);
+		expect(
+			end.activityByHostId.get('n1')?.entries.filter((entry) => entry.source === 'tool')
+		).toHaveLength(11);
+		expect(
+			end.activityByHostId
+				.get('n1')
+				?.entries.filter((entry) => entry.purpose)
+				.map((entry) => entry.text)
+		).toEqual(['n1', 'n2', 'n3']);
+		// Opting out retains the classic expanded running path.
+		expect(foldTurnActivity([prompt, ...calls], { keepLastTurnOpen: true }).logs).toHaveLength(12);
+	});
+
+	it('derives counts, the latest public note and only an actual top-level plan', () => {
+		const entries = [
+			{ ...tool('r', 1), text: 'Read', metadata: { toolState: { input: { file_path: 'a.ts' } } } },
+			{ ...tool('e', 2), text: 'Edit', metadata: { toolState: { input: { file_path: 'a.ts' } } } },
+			{
+				...tool('c', 3),
+				text: 'Bash',
+				metadata: { toolState: { status: 'running' as const, input: { command: 'npm test' } } },
+			},
+			thinking('secret', 4),
+			note('public', 5),
+		];
+		expect(summarizeTurnActivity(entries)).toMatchObject({
+			counts: { reads: 1, edits: 1, commands: 1 },
+			steps: 3,
+			note: 'public',
+			current: { target: 'npm test' },
+			plan: null,
+		});
+		const plan = {
+			...tool('p', 6),
+			metadata: {
+				toolState: {
+					input: {
+						plan: [
+							{ step: 'Test', status: 'completed' },
+							{ step: 'Review', status: 'pending' },
+						],
+					},
+				},
+			},
+		};
+		expect(summarizeTurnActivity([...entries, plan]).plan?.completed).toBe(1);
+		expect(
+			summarizeTurnActivity([
+				...entries,
+				{ ...plan, metadata: { ...plan.metadata, parentToolUseId: 'child' } },
+			]).plan
+		).toBeNull();
+		expect(
+			summarizeTurnActivity([
+				plan,
+				{ ...tool('clear', 7), metadata: { toolState: { input: { plan: [] } } } },
+			]).plan
+		).toBeNull();
+	});
+
+	it('classifies the terminal outcome independently from step failures', () => {
+		const entries = [tool('failed', 1, 'failed'), reply('answer', 2)];
+		expect(turnActivityOutcome(entries)).toBe('completed');
+		expect(
+			turnActivityOutcome(
+				entries,
+				entry('u', 0, 'user', {
+					turnCompletion: { status: 'error', timestamp: 3, reason: 'Transport lost' },
+				})
+			)
+		).toBe('error');
+		expect(turnActivityOutcome([tool('c', 1, 'canceled')])).toBe('canceled');
+		expect(turnActivityOutcome([tool('c', 1, 'canceled'), reply('answer', 2)])).toBe('completed');
+		expect(turnActivityOutcome([tool('t', 1)])).toBe('unknown');
 	});
 });

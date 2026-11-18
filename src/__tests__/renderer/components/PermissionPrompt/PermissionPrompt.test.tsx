@@ -202,3 +202,23 @@ describe('Claude approval prompt', () => {
 		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 	});
 });
+
+it('renders the existing approval actions inside the activity host with an accent border', async () => {
+	const host = document.createElement('div');
+	host.id = `turn-approval:${request.sessionId}`;
+	document.body.appendChild(host);
+	try {
+		showPrompt();
+		const card = screen.getByTestId('permission-prompt');
+		expect(host.contains(card)).toBe(true);
+		expect(card).toHaveStyle({ borderColor: mockTheme.colors.accent });
+		expect(card).not.toHaveAttribute('aria-modal');
+		await act(async () => {
+			fireEvent.click(screen.getByRole('button', { name: '允许一次' }));
+		});
+		expect(respondPermission).toHaveBeenCalledWith(request.requestId, { behavior: 'allow' });
+	} finally {
+		cleanup();
+		host.remove();
+	}
+});

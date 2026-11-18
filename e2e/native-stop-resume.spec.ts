@@ -58,7 +58,12 @@ for (const provider of ['claude', 'codex'] as const) {
 			await native.cli('tab', 'save-to-history', 'active', 'true', '--agent', agentId);
 			const tabId = saved().find((session) => session.id === agentId)!.activeTabId;
 			await native.send(prompt);
-			await expect(native.output().locator('[data-tool-status="running"]').first()).toBeVisible();
+			// PRD D1: tool rows fold into the running activity bar in the new shell.
+			await expect(native.output().getByTestId('activity-toggle')).toHaveAttribute(
+				'data-activity-state',
+				'running'
+			);
+			await expect(native.output().getByTestId('turn-activity-bar')).toBeVisible();
 			await native.page.getByTestId('stop-turn-button').click();
 			await expect(native.page.getByTestId('stop-turn-button')).toHaveCount(0);
 			await expect(native.output().getByText(prompt, { exact: true })).toHaveCount(1);

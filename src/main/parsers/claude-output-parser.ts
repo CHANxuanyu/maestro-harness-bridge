@@ -335,6 +335,10 @@ export class ClaudeOutputParser implements AgentOutputParser {
 			const text = this.extractTextFromMessage(msg);
 			const thinkingText = this.extractThinkingFromMessage(msg);
 			const toolUseBlocks = this.extractToolUseBlocks(msg);
+			const publicNarration =
+				!isSubagentMessage(msg) && toolUseBlocks.length > 0
+					? [...(this.pendingReply?.texts ?? []), ...(text ? [text] : [])]
+					: [];
 			this.trackPendingReply(msg, text, toolUseBlocks.length > 0);
 
 			// For thinking content, prioritize thinking blocks over text blocks
@@ -348,6 +352,7 @@ export class ClaudeOutputParser implements AgentOutputParser {
 				sessionId: msg.session_id,
 				isPartial: true,
 				isReasoning: thinkingText.length > 0 || undefined,
+				...(publicNarration.length ? { publicNarration: [...new Set(publicNarration)] } : {}),
 				toolUseBlocks: toolUseBlocks.length > 0 ? toolUseBlocks : undefined,
 				parentToolUseId: normalizeParentToolUseId(msg),
 				raw: msg,

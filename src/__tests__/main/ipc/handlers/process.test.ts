@@ -44,6 +44,7 @@ import {
 	computeOmpCatalogKey,
 } from '../../../../main/agents/omp-model-catalog';
 import { runAsActingUser } from '../../../../main/web-server/auth/acting-user';
+import * as gitChanges from '../../../../main/git-changes';
 import {
 	noteTurnActor,
 	resolveTurnActor,
@@ -865,6 +866,34 @@ describe('process IPC handlers', () => {
 	});
 
 	describe('process:spawn', () => {
+		it.each(['hanging', 'throwing'] as const)(
+			'starts the provider without waiting for a %s turn baseline',
+			async (mode) => {
+				const capture = vi.spyOn(gitChanges, 'beginGitTurn').mockImplementation(() => {
+					if (mode === 'throwing') throw new Error('capture failed');
+					return new Promise(() => {});
+				});
+				try {
+					mockSettingsStore.get.mockImplementation((key, fallback) =>
+						key === 'newShell' ? true : fallback
+					);
+					mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+					mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+					await handlers.get('process:spawn')!({} as any, {
+						sessionId: 'capture-ai-tab',
+						toolType: 'codex',
+						cwd: '/test/project',
+						command: 'codex',
+						args: [],
+						prompt: 'Continue',
+					});
+					expect(capture).toHaveBeenCalled();
+					expect(mockProcessManager.spawn).toHaveBeenCalledTimes(1);
+				} finally {
+					capture.mockRestore();
+				}
+			}
+		);
 		it.each([
 			[
 				'interactive',

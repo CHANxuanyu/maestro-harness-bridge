@@ -13,7 +13,16 @@ vi.mock('../../../main/utils/logger', () => ({
 	logger: { debug: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 import { execFileNoThrow } from '../../../main/utils/execFile';
-import { getGitChanges, getGitChangeDiff, applyGitChange } from '../../../main/git-changes';
+import {
+	getGitChanges,
+	getGitChangeDiff,
+	applyGitChange,
+	beginGitTurn,
+	finishGitTurn,
+	recordGitTurnTool,
+} from '../../../main/git-changes';
+import { logger } from '../../../main/utils/logger';
+import { READ_ONLY_GIT_TIMEOUT_MS } from '../../../main/utils/remote-git';
 import { shellEscapeRemotePath, shellEscape } from '../../../main/utils/shell-escape';
 import type { SshRemoteConfig } from '../../../shared/types';
 
@@ -29,8 +38,174 @@ const remote: SshRemoteConfig = {
 describe('changes SSH transport', () => {
 	afterEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(execFileNoThrow).mockReset();
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
+	it('captures and measures a turn entirely through remote Git, never a local remote-path cwd', async () => {
+		const root = '/remote project';
+		vi.mocked(execFileNoThrow)
+			.mockResolvedValueOnce({
+				exitCode: 0,
+				stdout: `${root}\0# branch.head topic\0\0\0`,
+				stderr: '',
+			})
+			.mockResolvedValueOnce({ exitCode: 0, stdout: 'head\n', stderr: '' })
+			.mockResolvedValueOnce({ exitCode: 0, stdout: 'head\n', stderr: '' })
+			.mockResolvedValueOnce({ exitCode: 128, stdout: '', stderr: 'missing new file' })
+			.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+			.mockResolvedValueOnce({
+				exitCode: 0,
+				stdout:
+					'patch\0' + '1\t0\tnew.txt\0\0--- a/new.txt\n+++ b/new.txt\n@@ -0,0 +1 @@\n+created\n',
+				stderr: '',
+			});
+		await beginGitTurn('ssh-turn', '/local/unused', remote, root);
+		recordGitTurnTool('ssh-turn', {
+			toolName: 'Write',
+			toolCallId: 'write',
+			timestamp: 1,
+			state: { status: 'completed', input: { file_path: `${root}/new.txt` } },
+		});
+		expect(await finishGitTurn('ssh-turn')).toEqual({
+			files: 1,
+			additions: 1,
+			deletions: 0,
+			paths: ['new.txt'],
+		});
+		expect(execFileNoThrow).toHaveBeenCalledTimes(6);
+		for (const [command, args, cwd, options] of vi.mocked(execFileNoThrow).mock.calls) {
+			expect(command).toBe('ssh');
+			expect(cwd).toBeUndefined();
+			expect(args.join(' ')).toContain(shellEscapeRemotePath(root));
+			expect(options).toMatchObject({ timeout: READ_ONLY_GIT_TIMEOUT_MS });
+		}
+	});
+
+	it.each([false, true])(
+		'buffers early creation, but rejects an already existing target=%s',
+		async (existing) => {
+			let release!: (value: { exitCode: number; stdout: string; stderr: string }) => void;
+			vi.mocked(execFileNoThrow)
+				.mockImplementationOnce(
+					() =>
+						new Promise((resolve) => {
+							release = resolve;
+						})
+				)
+				.mockResolvedValueOnce({ exitCode: 128, stdout: '', stderr: 'unborn' })
+				.mockResolvedValueOnce({ exitCode: existing ? 1 : 0, stdout: '', stderr: '' })
+				.mockResolvedValueOnce({ exitCode: 128, stdout: '', stderr: 'unborn' })
+				.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+				.mockResolvedValueOnce({
+					exitCode: 0,
+					stdout:
+						'patch\0' + '1\t0\tnew.txt\0\0--- a/new.txt\n+++ b/new.txt\n@@ -0,0 +1 @@\n+created\n',
+					stderr: '',
+				});
+			const sessionId = `early-${existing}`;
+			const capture = beginGitTurn(sessionId, '/unused', remote, '/early');
+			await vi.waitFor(() => expect(release).toBeDefined());
+			recordGitTurnTool(sessionId, {
+				toolName: 'Write',
+				toolCallId: 'write',
+				timestamp: 1,
+				state: { status: 'running', input: { file_path: '/early/new.txt' } },
+			});
+			release({ exitCode: 0, stdout: '/early\0# branch.head main\0\0\0', stderr: '' });
+			await capture;
+			recordGitTurnTool(sessionId, {
+				toolName: 'Write',
+				toolCallId: 'write',
+				timestamp: 2,
+				state: { status: 'completed' },
+			});
+			expect(await finishGitTurn(sessionId)).toEqual(
+				existing ? undefined : { files: 1, additions: 1, deletions: 0, paths: ['new.txt'] }
+			);
+			const [command, args, cwd, options] = vi.mocked(execFileNoThrow).mock.calls[2];
+			expect(command).toBe('ssh');
+			expect(cwd).toBeUndefined();
+			expect(args.join(' ')).toContain('maestro-turn-absent');
+			expect(args.join(' ')).toContain('/early/new.txt');
+			expect(options).toMatchObject({ timeout: READ_ONLY_GIT_TIMEOUT_MS });
+		}
+	);
+
+	it.each(['hanging', 'throwing'] as const)(
+		'bounds a %s baseline and omits its result',
+		async (mode) => {
+			vi.useFakeTimers();
+			vi.mocked(execFileNoThrow).mockImplementationOnce(() => {
+				if (mode === 'throwing') throw new Error('SSH capture failed');
+				return new Promise(() => {});
+			});
+			const capture = beginGitTurn(`baseline-${mode}`, '/unused', remote, `/remote/${mode}`);
+			await vi.waitFor(() => expect(execFileNoThrow).toHaveBeenCalled());
+			await vi.advanceTimersByTimeAsync(READ_ONLY_GIT_TIMEOUT_MS);
+			await capture;
+			expect(finishGitTurn(`baseline-${mode}`)).toBeUndefined();
+			expect(logger.warn).toHaveBeenCalled();
+		}
+	);
+
+	it.each(['hanging', 'throwing'] as const)(
+		'bounds a %s delivery measurement and omits its result',
+		async (mode) => {
+			vi.useFakeTimers();
+			const root = `/measure-${mode}`;
+			vi.mocked(execFileNoThrow)
+				.mockResolvedValueOnce({
+					exitCode: 0,
+					stdout: `${root}\0# branch.head main\0\0\0`,
+					stderr: '',
+				})
+				.mockResolvedValueOnce({ exitCode: 0, stdout: 'head\n', stderr: '' });
+			await beginGitTurn(`measure-${mode}`, '/unused', remote, root);
+			recordGitTurnTool(`measure-${mode}`, {
+				toolName: 'Write',
+				toolCallId: 'write',
+				timestamp: 1,
+				state: { status: 'completed', input: { file_path: `${root}/new.txt` } },
+			});
+			vi.mocked(execFileNoThrow).mockImplementationOnce(() => {
+				if (mode === 'throwing') throw new Error('SSH measurement failed');
+				return new Promise(() => {});
+			});
+			const delivery = finishGitTurn(`measure-${mode}`);
+			await vi.waitFor(() => expect(execFileNoThrow).toHaveBeenCalledTimes(3));
+			await vi.advanceTimersByTimeAsync(READ_ONLY_GIT_TIMEOUT_MS);
+			expect(await delivery).toBeUndefined();
+			expect(logger.warn).toHaveBeenCalled();
+		}
+	);
+
+	it.each([
+		['Edit', 'running'],
+		['Bash', 'running'],
+		['Write', 'completed'],
+	])('discards a pending baseline on %s %s evidence', async (toolName, status) => {
+		let release!: (value: { exitCode: number; stdout: string; stderr: string }) => void;
+		vi.mocked(execFileNoThrow).mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = resolve;
+				})
+		);
+		const capture = beginGitTurn('late', '/unused', remote, '/late');
+		await vi.waitFor(() => expect(release).toBeDefined());
+		recordGitTurnTool('late', {
+			toolName,
+			toolCallId: 'call',
+			timestamp: 1,
+			state: { status, input: { file_path: '/late/file' } },
+		});
+		release({ exitCode: 0, stdout: '/late\0# branch.head main\0\0\0', stderr: '' });
+		await capture;
+		expect(finishGitTurn('late')).toBeUndefined();
+		expect(execFileNoThrow).toHaveBeenCalledTimes(1);
+	});
+
 	it('returns a native Windows root with slash-separated files without changing the host platform', async () => {
 		vi.spyOn(path, 'normalize').mockImplementation(path.win32.normalize);
 		const cwd = 'C:\\Users\\fixture\\repo\\sub';

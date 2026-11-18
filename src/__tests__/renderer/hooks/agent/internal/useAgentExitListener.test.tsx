@@ -1,6 +1,9 @@
 import { projectSettingsKey } from '../../../../../shared/projectSettings';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import React from 'react';
+import { NotificationCenter } from '../../../../../renderer/components/NotificationCenter';
+import { mockTheme } from '../../../../helpers/mockTheme';
+import { render, screen, renderHook, act } from '@testing-library/react';
 import { useAgentExitListener } from '../../../../../renderer/hooks/agent/internal/useAgentExitListener';
 import { useSessionStore } from '../../../../../renderer/stores/sessionStore';
 import { useRetryStore } from '../../../../../renderer/stores/retryStore';
@@ -784,9 +787,17 @@ describe('useAgentExitListener', () => {
 
 		expect(deps.activeHiddenToolRef.current.has('sess-1:tab-1')).toBe(false);
 	});
-	it.each([true, false])(
-		'records a final completion with viewing=%s while retaining popup/audio defaults',
-		async (viewing) => {
+	it.each([
+		[false, true, true],
+		[false, false, true],
+		[true, true, true],
+		[true, false, true],
+		[true, true, false],
+	])(
+		'records completion with newShell=%s viewing=%s windowFocused=%s',
+		async (newShell, viewing, focused) => {
+			const focus = vi.spyOn(document, 'hasFocus').mockReturnValue(focused);
+			useSettingsStore.setState({ newShell });
 			const tab = createMockAITab({
 				id: 'tab-1',
 				state: 'busy',
@@ -795,11 +806,17 @@ describe('useAgentExitListener', () => {
 			});
 			useSessionStore.setState({
 				sessions: [
-					createMockSession({ id: 'sess-1', aiTabs: [tab], activeTabId: 'tab-1', state: 'busy' }),
+					createMockSession({
+						id: 'sess-1',
+						aiTabs: [tab, createMockAITab({ id: 'other' })],
+						activeTabId: viewing ? 'tab-1' : 'other',
+						state: 'busy',
+					}),
 				],
-				activeSessionId: viewing ? 'sess-1' : '',
+				activeSessionId: 'sess-1',
 			});
 			const speak = vi.fn().mockResolvedValue(undefined);
+			render(<NotificationCenter theme={mockTheme} />);
 			window.maestro.notification.speak = speak;
 			useNotificationStore.getState().setAudioFeedback(true, 'say');
 			renderHook(() => useAgentExitListener(makeDeps()));
@@ -808,8 +825,13 @@ describe('useAgentExitListener', () => {
 				await new Promise((resolve) => setTimeout(resolve, 0));
 			});
 			expect(useNotificationStore.getState().history).toHaveLength(1);
+			expect(useNotificationStore.getState().history[0].read).toBe(newShell && viewing && focused);
+			expect(!!screen.queryByTestId('notification-center-badge')).toBe(
+				!(newShell && viewing && focused)
+			);
 			expect(useNotificationStore.getState().toasts).toHaveLength(viewing ? 0 : 1);
 			expect(speak).toHaveBeenCalledTimes(1);
+			focus.mockRestore();
 		}
 	);
 

@@ -147,6 +147,26 @@ describe('project conversation navigation', () => {
 			};
 		}
 
+		it('uses the canonical open title even when history has a different fallback', () => {
+			const tab = createMockAITab({
+				id: 'tab',
+				name: null,
+				agentSessionId: NATIVE,
+				logs: [{ id: 'question', timestamp: 1, source: 'user', text: '# Fix `drafts` **today**' }],
+			});
+			const owner = createMockSession({
+				id: 'owner',
+				groupId: project.id,
+				toolType: 'codex',
+				aiTabs: [tab],
+			});
+			const options = { sessions: [owner], groups: [project], history: [record()] };
+			expect(
+				buildProjectSessionTree({ ...options, newShell: true })[0].conversations[0].title
+			).toBe('Fix drafts today');
+			expect(buildProjectSessionTree(options)[0].conversations[0].title).toBe('Refactor parser');
+		});
+
 		it.each(['busy', 'idle'] as const)(
 			'claims a %s consult record without a resumable binding',
 			(state) => {

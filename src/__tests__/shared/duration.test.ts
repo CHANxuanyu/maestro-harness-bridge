@@ -10,6 +10,8 @@
 
 import {
 	humanizeDuration,
+	steppedElapsedTime,
+	formatSteppedElapsed,
 	formatDurationHuman,
 	formatDurationCompact,
 	formatDurationVerbose,
@@ -383,5 +385,26 @@ describe('shared/duration', () => {
 		it('uses the average Gregorian month, so twelve exceed a year', () => {
 			expect(DURATION_MS.month * 12).toBeGreaterThan(DURATION_MS.year);
 		});
+	});
+});
+
+describe('stepped running duration', () => {
+	it.each([
+		[0, 'just started', 10000],
+		[9999, 'just started', 1],
+		[10000, '10s', 10000],
+		[19999, '10s', 1],
+		[59000, '50s', 1000],
+		[60000, '1m', 60000],
+		[119999, '1m', 1],
+		[120000, '2m', 60000],
+		[3660000, '1h 1m', 60000],
+	] as const)('formats %s and schedules only its next boundary', (ms, label, nextUpdateMs) => {
+		expect(formatSteppedElapsed(ms, 'just started')).toBe(label);
+		expect(steppedElapsedTime(ms).nextUpdateMs).toBe(nextUpdateMs);
+	});
+	it('uses the translated initial label and tolerates invalid clocks', () => {
+		for (const ms of [0, -1, NaN, Infinity])
+			expect(formatSteppedElapsed(ms, '刚开始')).toBe('刚开始');
 	});
 });

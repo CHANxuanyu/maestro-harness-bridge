@@ -37,6 +37,7 @@ export interface SidebarConversation {
 	/** Native provider conversation id, when one exists. */
 	nativeSessionId: string | null;
 	title: string;
+	worktree?: ProjectHistoryConversation['worktree'];
 	/**
 	 * The provider's own name for the conversation, when it differs from
 	 * `title` (a tab the user or an older import named something else). Kept as
@@ -320,7 +321,9 @@ export function buildProjectSessionTree({
 			// rebuilds the row at the moment the first message lands, and later
 			// streamed chunks never touch the first message.
 			const name = tab.name && !isSessionIdLabel(tab.name, tab.agentSessionId) ? tab.name : '';
-			const title = name || recordTitle || conversationDisplayTitle(tab) || '';
+			const title = newShell
+				? conversationDisplayTitle(tab, true) || ''
+				: name || recordTitle || conversationDisplayTitle(tab) || '';
 			if (newShell) {
 				const source = tab.consultOrigin
 					? ownerById.get(tab.consultOrigin.sourceSessionId)
@@ -357,6 +360,15 @@ export function buildProjectSessionTree({
 				provider,
 				nativeSessionId: tab.agentSessionId ?? null,
 				title,
+				...(newShell && session.worktreeBranch
+					? {
+							worktree: record?.worktree ?? {
+								path: session.cwd,
+								branch: session.worktreeBranch,
+								name: getBasename(session.cwd),
+							},
+						}
+					: {}),
 				...aliasFor(title, record),
 				agentName: session.name,
 				projectPath: path,
@@ -377,22 +389,30 @@ export function buildProjectSessionTree({
 		const rows = rowsByProject.get(record.projectKey);
 		// A scope the window no longer has (agent removed mid-load) has nowhere to go.
 		if (!rows) continue;
+		// Read once: history records can be getters, and this loop runs over every
+		// native conversation of every project on each tree rebuild.
+		const nativeSessionId = record.nativeSessionId;
 		if (
 			archivedKeys.has(record.key) ||
 			(record.key.startsWith('local:') &&
-				archivedNative.has(JSON.stringify([record.ownerId, record.nativeSessionId])))
+				archivedNative.has(JSON.stringify([record.ownerId, nativeSessionId])))
 		)
 			archivedRows.add(`history:${record.key}`);
 		const owner = record.ownerId ? ownerById.get(record.ownerId) : undefined;
-		const title = historyTitle(record);
+		const title = newShell
+			? conversationDisplayTitle(
+					{ name: historyTitle(record), agentSessionId: nativeSessionId, logs: [] },
+					true
+				) || ''
+			: historyTitle(record);
 		rows.push({
 			key: `history:${record.key}`,
 			kind: 'history',
-			expanded: conversationExpanded(owner?.conversationTreeExpanded, null, record.nativeSessionId),
+			expanded: conversationExpanded(owner?.conversationTreeExpanded, null, nativeSessionId),
 			ownerId: owner ? owner.id : null,
 			tabId: null,
 			provider: historyProviderId(record, owner, sessions),
-			nativeSessionId: record.nativeSessionId,
+			nativeSessionId,
 			title,
 			...aliasFor(title, record),
 			agentName: owner?.name ?? '',

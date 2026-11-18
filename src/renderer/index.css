@@ -1248,6 +1248,13 @@ svg.wand-profiling-active {
 	display: flex;
 }
 
+/* New shell branch text is an end-ellipsized block, never a flex text item.
+ * It yields entirely below the existing 500px header breakpoint (680px in Auto Run).
+ */
+.header-git-branch-text.new-shell-branch-text {
+	display: block;
+}
+
 /* Git status compact mode hidden by default (shown at narrow widths) */
 .header-git-status-compact {
 	display: none;
@@ -1279,7 +1286,8 @@ svg.wand-profiling-active {
 
 /* Below 500px: Hide git branch text, show icon only */
 @container header (max-width: 500px) {
-	.header-git-branch-text {
+	.header-git-branch-text,
+	.header-git-branch-text.new-shell-branch-text {
 		display: none;
 	}
 }
@@ -1453,7 +1461,8 @@ svg.wand-profiling-active {
 }
 
 @container header (max-width: 680px) {
-	.header-container.header-auto-mode .header-git-branch-text {
+	.header-container.header-auto-mode .header-git-branch-text,
+	.header-container.header-auto-mode .header-git-branch-text.new-shell-branch-text {
 		display: none;
 	}
 }

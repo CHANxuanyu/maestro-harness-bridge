@@ -155,19 +155,19 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 	const shortcuts = useSettingsStore((s) => s.shortcuts);
 	const showAgentName = useSettingsStore((s) => s.showAgentName);
 	const conversationNavigation = useSettingsStore(selectConversationNavigation);
+	const newShell = useSettingsStore(selectNewShellEnabled);
 	// `null`: header shows the agent name as before. `''`: a conversation with
 	// nothing to call it yet ("New conversation"). Terminal agents have no
 	// conversation, so they keep their own name.
 	const conversationHeading =
 		conversationNavigation && activeTab && activeSession.toolType !== 'terminal'
-			? (conversationDisplayTitle(activeTab) ?? '')
+			? (conversationDisplayTitle(activeTab, newShell) ?? '')
 			: null;
 	const showSessionIdPill = useSettingsStore((s) => s.showSessionIdPill);
 	const showSessionCostPill = useSettingsStore((s) => s.showSessionCostPill);
 	const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
 	// The new shell has no tab menu to hold "Continue with another AI", so the
 	// header carries it.
-	const newShell = useSettingsStore(selectNewShellEnabled);
 	const nativeTitleBar = useSettingsStore((s) => s.useNativeTitleBar);
 	// Asked only in the new shell, so the classic header does no extra work.
 	const canHandOff = useCanHandOffTab(
@@ -457,7 +457,11 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 									className="w-4 h-4"
 								/>
 							</span>
-							<span className="truncate" style={{ color: theme.colors.textMain }}>
+							<span
+								className="truncate"
+								title={newShell ? conversationHeading || undefined : undefined}
+								style={{ color: theme.colors.textMain }}
+							>
 								{conversationHeading ||
 									t(
 										newShell
@@ -539,7 +543,9 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 								>
 									<GitBranch className="w-3 h-3 shrink-0" />
 									{/* Hide branch name text at narrow widths via CSS container query */}
-									<span className="header-git-branch-text truncate">
+									<span
+										className={`header-git-branch-text truncate${newShell ? ' new-shell-branch-text' : ''}`}
+									>
 										{gitInfo?.branch || 'GIT'}
 									</span>
 								</button>
@@ -563,7 +569,9 @@ export const MainPanelHeader = React.memo(function MainPanelHeader({
 								>
 									<GitBranch className="w-3 h-3 shrink-0" />
 									{/* Hide branch name text at narrow widths via CSS container query */}
-									<span className="header-git-branch-text truncate">
+									<span
+										className={`header-git-branch-text truncate${newShell ? ' new-shell-branch-text' : ''}`}
+									>
 										{gitInfo?.branch || 'GIT'}
 									</span>
 								</button>

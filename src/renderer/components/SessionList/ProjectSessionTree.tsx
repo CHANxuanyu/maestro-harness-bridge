@@ -8,6 +8,9 @@ import type {
 import { highlightMatches } from '../../utils/highlightMatches';
 import { useNewConversationTools, newShellConversation } from '../../services/newShellConversation';
 import { chooseProject } from '../../services/openProject';
+import { fitConversationTitle } from '../../utils/conversationTitle';
+import { useElementWidth } from '../../hooks/ui/useElementWidth';
+import { measureTextWidth } from '../../utils/measureTextWidth';
 import { Spinner } from '../ui/Spinner';
 /**
  * ProjectSessionTree - the Left Bar's conversation-first navigation.
@@ -29,6 +32,7 @@ import { Spinner } from '../ui/Spinner';
 
 import {
 	memo,
+	useMemo,
 	useCallback,
 	useEffect,
 	useId,
@@ -427,6 +431,7 @@ const StatusMark = memo(function StatusMark({
 });
 
 interface ConversationRowProps {
+	peers: SidebarConversation[];
 	theme: Theme;
 	conversation: SidebarConversation;
 	depth: number;
@@ -457,6 +462,7 @@ function findConversation(
 }
 
 const ConversationRow = memo(function ConversationRow({
+	peers,
 	theme,
 	conversation,
 	depth,
@@ -488,7 +494,19 @@ const ConversationRow = memo(function ConversationRow({
 			onSetChildrenExpanded?.(conversation, true);
 	}, [newShell, searching, forceExpanded, conversation, onSetChildrenExpanded]);
 	const title = conversationTitle(conversation, t, newShell);
-	const worktree = conversation.history?.worktree;
+	const titleRef = useRef<HTMLSpanElement>(null);
+	const titleWidth = useElementWidth(titleRef, newShell);
+	const visibleTitle = useMemo(() => {
+		if (!newShell || !titleRef.current || !titleWidth) return title;
+		const style = getComputedStyle(titleRef.current);
+		return fitConversationTitle(
+			title,
+			peers.map((peer) => conversationTitle(peer, t, true)),
+			titleWidth,
+			(text) => measureTextWidth(text, style.font, parseFloat(style.letterSpacing) || 0)
+		);
+	}, [newShell, title, titleWidth, peers, t]);
+	const worktree = (newShell && conversation.worktree) || conversation.history?.worktree;
 	const isOpen = conversation.kind === 'open';
 	const hasMenu = isOpen || (newShell && !!conversation.nativeSessionId);
 	const indent = 4 + depth * DEPTH_INDENT + 16;
@@ -591,21 +609,33 @@ const ConversationRow = memo(function ConversationRow({
 						agentName={conversation.agentName}
 					/>
 					<span
+						ref={titleRef}
+						data-conversation-title={newShell ? title : undefined}
 						className="truncate flex-1 min-w-0"
+						aria-hidden={visibleTitle !== title || undefined}
 						title={
-							conversation.nativeTitle
-								? `${title}\n${conversation.nativeTitle}`
-								: conversation.history?.preview || title
+							newShell
+								? title
+								: conversation.nativeTitle
+									? `${title}\n${conversation.nativeTitle}`
+									: conversation.history?.preview || title
 						}
 					>
-						{title}
+						{visibleTitle}
 					</span>
+					{/* A middle-shortened title is for the eye only; assistive tech and
+					    text search still get the whole title. */}
+					{visibleTitle !== title && <span className="sr-only">{title}</span>}
 					{worktree && (
 						// Where the conversation ran, kept quieter than its title: the
-						// folder name is short, the branch and full path wait in the hover.
+						// new shell keeps only the marker; branch and path wait in the hover.
 						<span
 							data-worktree
-							className="shrink min-w-0 max-w-[7rem] flex items-center gap-0.5 text-2xs"
+							className={
+								newShell
+									? 'shrink-0 flex items-center'
+									: 'shrink min-w-0 max-w-[7rem] flex items-center gap-0.5 text-2xs'
+							}
 							style={{
 								color: theme.colors.textDim,
 								opacity: worktree.missing ? 0.6 : undefined,
@@ -630,7 +660,7 @@ const ConversationRow = memo(function ConversationRow({
 								.join('\n')}
 						>
 							<GitBranch aria-hidden className="w-3 h-3 shrink-0" />
-							<span className="truncate">{worktree.name || worktree.branch}</span>
+							{!newShell && <span className="truncate">{worktree.name || worktree.branch}</span>}
 						</span>
 					)}
 					{conversation.starred && (
@@ -714,6 +744,7 @@ const ConversationRow = memo(function ConversationRow({
 							key={child.key}
 							theme={theme}
 							conversation={child}
+							peers={children!}
 							depth={depth + 1}
 							activeKey={activeKey}
 							openMenuState={openMenuState}
@@ -960,6 +991,7 @@ const ProjectSection = memo(function ProjectSection({
 							key={conversation.key}
 							theme={theme}
 							conversation={conversation}
+							peers={project.conversations}
 							depth={project.depth}
 							activeKey={activeKey}
 							openMenuState={openMenuState}

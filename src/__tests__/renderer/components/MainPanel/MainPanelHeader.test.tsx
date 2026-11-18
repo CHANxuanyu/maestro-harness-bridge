@@ -1,3 +1,6 @@
+import { buildProjectSessionTree } from '../../../../renderer/utils/projectSessionTree';
+import { createMockSession } from '../../../helpers/mockSession';
+import { createMockAITab } from '../../../helpers/mockTab';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
@@ -1029,4 +1032,37 @@ describe('MainPanelHeader', () => {
 		// Just verify the header renders without errors
 		expect(screen.getByText('main')).toBeInTheDocument();
 	});
+});
+
+it.each([true, false])('shares the new-shell title source with the sidebar (named=%s)', (named) => {
+	settingsMocks.overrides = { newShell: true };
+	const tab = createMockAITab({
+		id: 'tab-1',
+		name: named ? '# Fix `drafts` with **tests**' : null,
+		logs: [
+			{
+				id: 'question',
+				source: 'user',
+				text: '# Investigate ' + 'shared context '.repeat(10) + '`tail`',
+				timestamp: 1,
+			},
+		],
+	});
+	const session = createMockSession({ aiTabs: [tab], activeTabId: tab.id });
+	const rows = buildProjectSessionTree({ newShell: true, sessions: [session], groups: [] })[0]
+		.conversations;
+	render(<MainPanelHeader {...defaultProps} activeSession={session} activeTab={tab} />);
+	const header = screen.getByTestId('header-conversation-title');
+	expect(header.textContent).toBe(rows[0].title);
+	expect(header.textContent).not.toMatch(/[#`*]/);
+	expect(within(header).getByTitle(rows[0].title)).toBeInTheDocument();
+});
+
+it('keeps the entire new-shell branch string for end ellipsis and the tooltip', () => {
+	settingsMocks.overrides = { newShell: true };
+	const branch = 'feature/shared-prefix-and-a-long-distinguishing-tail';
+	render(<MainPanelHeader {...defaultProps} gitInfo={{ ...defaultProps.gitInfo, branch }} />);
+	const label = screen.getByText(branch);
+	expect(label).toHaveClass('new-shell-branch-text', 'truncate');
+	expect(label.closest('button')).toHaveAttribute('title', branch);
 });

@@ -1,4 +1,5 @@
 export default {
+	'workflows.newShellCopy.feedback.justStarted': 'just started',
 	'workflows.newShellCopy.feedback.updates.title': 'Update preferences',
 	'workflows.newShellCopy.feedback.updates.intro':
 		'Choose how Maestro checks for updates and reports crashes. You can change these settings later.',

@@ -571,3 +571,11 @@ F3 supplies evidence for the same turn.
 `agentTaskListEmptyState()` in `renderer/utils/agentTaskList.ts` shares the
 localized title and provider/model explanation between TasksPanel and the CLI.
 The CLI's `emptyText` joins those same two lines with a newline.
+
+## New shell conversation titles and elapsed counters
+
+`conversationDisplayTitle(tab, true)` in `src/renderer/utils/conversationTitle.ts` is the plain-text source for both the new shell header and open sidebar rows. It reuses `stripMarkdown`, keeps the distinguishing end of first-message titles, and never writes the cleaned title to native history. The classic default retains its existing formatting and excerpt limit. Open new-shell rows must not substitute a separately scanned history title over this source.
+
+`fitConversationTitle(title, peers, width, measure)` in that file fits both ends to the measured label track. If peer labels collide, it reveals the distinguishing prefix boundary instead. Pass `useElementWidth` and `measureTextWidth` with the resolved font, not a character count guessed from sidebar width. Keep the full canonical title in the tooltip. Identical full titles cannot become different without inventing a name.
+
+`steppedElapsedTime()` and `formatSteppedElapsed()` in `src/shared/duration.ts` define running counter boundaries: initial localized text below ten seconds, ten-second steps below one minute, then minute steps. `ElapsedTimeDisplay` schedules its next wake at that boundary and retains sleep-aware elapsed accounting and paused Auto Run behavior. It gates the new cadence by the shell setting; classic callers retain their formatter and second cadence. Do not add another per-second timer just to format its value less often.

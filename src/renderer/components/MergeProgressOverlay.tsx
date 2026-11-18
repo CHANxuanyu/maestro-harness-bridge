@@ -1,3 +1,5 @@
+import { ElapsedTimeDisplay as RunningElapsedTime } from './ui/ElapsedTimeDisplay';
+import { selectNewShellEnabled, useSettingsStore } from '../stores/settingsStore';
 /**
  * MergeProgressOverlay - Non-blocking progress indicator for context merge operation
  *
@@ -55,15 +57,18 @@ export interface MergeProgressOverlayProps {
  */
 const ElapsedTimeDisplay = memo(
 	({ startTime, textColor }: { startTime: number; textColor: string }) => {
+		const newShell = useSettingsStore(selectNewShellEnabled);
 		const [elapsedMs, setElapsedMs] = useState(Date.now() - startTime);
 
 		useEffect(() => {
+			if (newShell) return;
 			const interval = setInterval(() => {
 				setElapsedMs(Date.now() - startTime);
 			}, 1000);
 			return () => clearInterval(interval);
-		}, [startTime]);
+		}, [startTime, newShell]);
 
+		if (newShell) return <RunningElapsedTime startTime={startTime} textColor={textColor} />;
 		return (
 			<span className="font-mono text-xs" style={{ color: textColor }}>
 				{formatElapsedTime(elapsedMs)}

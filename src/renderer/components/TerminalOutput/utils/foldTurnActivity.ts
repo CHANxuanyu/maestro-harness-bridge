@@ -42,6 +42,41 @@ const isReplyEntry = (log: LogEntry): boolean =>
 	!isSelfContainedCard(log) &&
 	!isProgressNoteEntry(log);
 
+interface TurnActivityOptions {
+	keepLastTurnOpen: boolean;
+	newShell?: boolean;
+}
+
+interface TurnActivityProjection {
+	logs: LogEntry[];
+	activityByHostId: Map<string, TurnActivity>;
+	deliveryByHostId: Map<
+		string,
+		{
+			turnId: string;
+			delivery?: import('../../../../shared/gitChangeTurns').TurnDelivery;
+			plan: ReturnType<typeof latestAgentTaskList>;
+		}
+	>;
+}
+
+type TurnActivityCache = WeakMap<
+	LogEntry,
+	{
+		entries: LogEntry[];
+		isLast: boolean;
+		keepLastTurnOpen: boolean;
+		newShell: boolean;
+		projection: TurnActivityProjection;
+	}
+>;
+
+/** One mounted conversation owns this cache; removed entries can be collected. */
+export function createTurnActivityFolder(): typeof foldTurnActivity {
+	const cache: TurnActivityCache = new WeakMap();
+	return (logs, options) => foldTurnActivity(logs, options, cache);
+}
+
 /**
  * Fold each finished turn's process into ONE row, the way Codex shows
  * "Worked for 1m 23s" above the answer.
@@ -63,161 +98,204 @@ const isReplyEntry = (log: LogEntry): boolean =>
  */
 export function foldTurnActivity(
 	logs: LogEntry[],
-	{ keepLastTurnOpen, newShell = false }: { keepLastTurnOpen: boolean; newShell?: boolean }
-): {
-	logs: LogEntry[];
-	activityByHostId: Map<string, TurnActivity>;
-	deliveryByHostId: Map<
-		string,
-		{
-			turnId: string;
-			delivery?: import('../../../../shared/gitChangeTurns').TurnDelivery;
-			plan: ReturnType<typeof latestAgentTaskList>;
-		}
-	>;
-} {
+	{ keepLastTurnOpen, newShell = false }: TurnActivityOptions,
+	cache?: TurnActivityCache
+): TurnActivityProjection {
 	const activityByHostId = new Map<string, TurnActivity>();
-	const deliveryByHostId = new Map<
-		string,
-		{
-			turnId: string;
-			delivery?: import('../../../../shared/gitChangeTurns').TurnDelivery;
-			plan: ReturnType<typeof latestAgentTaskList>;
-		}
-	>();
+	const deliveryByHostId: TurnActivityProjection['deliveryByHostId'] = new Map();
 	if (!newShell && !logs.some(isTurnActivityEntry))
 		return { logs, activityByHostId, deliveryByHostId };
 
 	const result: LogEntry[] = [];
+	const output = { logs: result, activityByHostId, deliveryByHostId };
 	let user: LogEntry | undefined;
-	const foldTurn = (turn: LogEntry[], startedAt: number | undefined, isLast: boolean) => {
-		if (
-			turn.length === 0 &&
-			!(
-				newShell &&
-				user &&
-				((isLast && keepLastTurnOpen) || user.turnCompletion?.status === 'error')
-			)
-		)
-			return;
-		let finalReply = -1;
-		turn.forEach((log, i) => {
-			if (isReplyEntry(log)) finalReply = i;
-		});
-		// The last turn also stays open while it has no answer and still ends in
-		// activity: it is still working (e.g. Codex generating in the shared
-		// desktop app, so this tab is not the one marked busy).
-		if (newShell) {
-			const running = isLast && keepLastTurnOpen;
-			const status = running ? 'running' : turnActivityOutcome(turn, user);
-			const entries = turn.filter(
-				(log, index) => isTurnActivityEntry(log) || (isReplyEntry(log) && index !== finalReply)
+	let start = 0;
+	const appendTurn = (end: number, isLast: boolean) => {
+		if (!cache) {
+			foldActivityTurn(
+				logs.slice(start, end),
+				user,
+				isLast,
+				{ keepLastTurnOpen, newShell },
+				output
 			);
-			const footer =
-				!running && user
-					? {
-							turnId: user.nativeTranscript?.messageId ?? user.id,
-							delivery: user.turnCompletion
-								? user.turnCompletion.delivery
-								: (() => {
-										const writes = collectTurnWrites([user, ...turn])[0];
-										return writes
-											? summarizeTurnDelivery(
-													writes.paths.map((path) => ({ path, additions: null, deletions: null }))
-												)
-											: undefined;
-									})(),
-							plan: latestAgentTaskList(turn),
-						}
-					: undefined;
-			// A terminal failure still needs its own summary when no activity is
-			// available (startup errors, or a repeated native call id merged into
-			// history). Keep the actionable error card visible below this summary.
-			if (!entries.length && !running && status !== 'error') {
-				if (footer && turn.length) deliveryByHostId.set(turn[turn.length - 1].id, footer);
-				result.push(...turn);
-				return;
-			}
-			const error = [...turn].reverse().find((log) => log.source === 'error');
-			const host = entries[0] ?? {
-				...(user ?? error!),
-				id: `activity:${user?.id ?? error!.id}`,
-				source: 'system' as const,
-				text: '',
-			};
-			const end = user?.turnCompletion?.timestamp ?? turn.at(-1)?.timestamp ?? startedAt;
-			activityByHostId.set(host.id, {
-				entries,
-				running,
-				status,
-				startedAt,
-				turnId: user?.nativeTranscript?.messageId ?? user?.id,
-				durationMs: end !== undefined && startedAt !== undefined ? end - startedAt : undefined,
-				reason:
-					status === 'error'
-						? user?.turnCompletion?.reason
-							? turnFailureReason({ text: user.turnCompletion.reason })
-							: error && turnFailureReason(error)
-						: undefined,
-				errorType: status === 'error' ? error?.agentError?.type : undefined,
-				failingStepId:
-					status === 'error'
-						? [...entries]
-								.reverse()
-								.find((log) => log.source === 'tool' && toolRunStatus([log]) === 'error')?.id
-						: undefined,
+			return;
+		}
+		const key = user ?? (start < end ? logs[start] : undefined);
+		const cached = key && cache.get(key);
+		const keepOpen = isLast && keepLastTurnOpen;
+		// Verify the entire boundary by identity. Late tool/completion corrections,
+		// prepends, deletions and regrouped replies must invalidate the affected
+		// turn, even when its first/last ids and the transcript length are unchanged.
+		let matches =
+			!!cached &&
+			cached.isLast === isLast &&
+			cached.keepLastTurnOpen === keepOpen &&
+			cached.newShell === newShell &&
+			cached.entries.length === end - start;
+		for (let i = start; matches && i < end; i++) {
+			matches = logs[i] === cached!.entries[i - start];
+		}
+		let projection: TurnActivityProjection;
+		if (cached && matches) {
+			projection = cached.projection;
+		} else {
+			const entries = logs.slice(start, end);
+			projection = foldActivityTurn(entries, user, isLast, {
+				keepLastTurnOpen: keepOpen,
+				newShell,
 			});
-			const ids = new Set(entries.map((log) => log.id));
-			const visible = [host, ...turn.filter((log) => !ids.has(log.id))];
-			result.push(...visible);
-			if (footer) deliveryByHostId.set(visible[visible.length - 1].id, footer);
-			return;
+			// Streaming answer text does not change the bar's tools or public notes.
+			// Keep its memo input stable even while rebuilding the open turn.
+			for (const [id, activity] of projection.activityByHostId) {
+				const previous = cached?.projection.activityByHostId.get(id)?.entries;
+				if (
+					previous &&
+					previous.length === activity.entries.length &&
+					activity.entries.every((entry, index) => entry === previous[index])
+				)
+					activity.entries = previous;
+			}
+			if (key)
+				cache.set(key, { entries, isLast, keepLastTurnOpen: keepOpen, newShell, projection });
 		}
-		const stillWorking = isLast && finalReply === -1 && isTurnActivityEntry(turn[turn.length - 1]);
-		if ((isLast && keepLastTurnOpen) || stillWorking || !turn.some(isTurnActivityEntry)) {
-			result.push(...turn);
-			return;
-		}
-		// Only what came BEFORE the answer folds: the row sits above it, so
-		// anything after it would be read out of order. A turn with no answer
-		// (stopped, or only tool calls) folds all of its activity.
-		const before = finalReply === -1 ? turn.length : finalReply;
-		const folded = turn.filter(
-			(log, i) => i < before && (isTurnActivityEntry(log) || isReplyEntry(log))
-		);
-		if (!folded.some(isTurnActivityEntry)) {
-			result.push(...turn);
-			return;
-		}
-		const host = folded[0];
-		const start = startedAt ?? turn[0].timestamp;
-		const end = Math.max(...turn.map((log) => log.timestamp));
-		activityByHostId.set(host.id, {
-			entries: folded,
-			durationMs: end > start ? end - start : undefined,
-			status: toolRunStatus(folded.filter((log) => log.source === 'tool')),
-		});
-		const foldedIds = new Set(folded.map((log) => log.id));
-		for (const log of turn) {
-			if (log === host || !foldedIds.has(log.id)) result.push(log);
-		}
+		result.push(...projection.logs);
+		for (const [id, activity] of projection.activityByHostId) activityByHostId.set(id, activity);
+		for (const [id, delivery] of projection.deliveryByHostId) deliveryByHostId.set(id, delivery);
 	};
-
-	let turn: LogEntry[] = [];
-	let startedAt: number | undefined;
-	for (const log of logs) {
-		if (log.source === 'user') {
-			foldTurn(turn, startedAt, false);
-			result.push(log);
-			turn = [];
-			startedAt = log.timestamp;
-			user = log;
-			continue;
-		}
-		turn.push(log);
+	for (let index = 0; index < logs.length; index++) {
+		const log = logs[index];
+		if (log.source !== 'user') continue;
+		appendTurn(index, false);
+		result.push(log);
+		user = log;
+		start = index + 1;
 	}
-	foldTurn(turn, startedAt, true);
-	return { logs: result, activityByHostId, deliveryByHostId };
+	appendTurn(logs.length, true);
+	return output;
+}
+
+/** Project only a changed turn; finished projections retain their nested identities. */
+function foldActivityTurn(
+	turn: LogEntry[],
+	user: LogEntry | undefined,
+	isLast: boolean,
+	{ keepLastTurnOpen, newShell }: TurnActivityOptions,
+	projection: TurnActivityProjection = {
+		logs: [],
+		activityByHostId: new Map(),
+		deliveryByHostId: new Map(),
+	}
+): TurnActivityProjection {
+	const { logs: result, activityByHostId, deliveryByHostId } = projection;
+	const startedAt = user?.timestamp;
+	if (
+		turn.length === 0 &&
+		!(newShell && user && ((isLast && keepLastTurnOpen) || user.turnCompletion?.status === 'error'))
+	)
+		return projection;
+	let finalReply = -1;
+	turn.forEach((log, i) => {
+		if (isReplyEntry(log)) finalReply = i;
+	});
+	// The last turn also stays open while it has no answer and still ends in
+	// activity: it is still working (e.g. Codex generating in the shared
+	// desktop app, so this tab is not the one marked busy).
+	if (newShell) {
+		const running = isLast && keepLastTurnOpen;
+		const status = running ? 'running' : turnActivityOutcome(turn, user);
+		const entries = turn.filter(
+			(log, index) => isTurnActivityEntry(log) || (isReplyEntry(log) && index !== finalReply)
+		);
+		const footer =
+			!running && user
+				? {
+						turnId: user.nativeTranscript?.messageId ?? user.id,
+						delivery: user.turnCompletion
+							? user.turnCompletion.delivery
+							: (() => {
+									const writes = collectTurnWrites([user, ...turn])[0];
+									return writes
+										? summarizeTurnDelivery(
+												writes.paths.map((path) => ({ path, additions: null, deletions: null }))
+											)
+										: undefined;
+								})(),
+						plan: latestAgentTaskList(turn),
+					}
+				: undefined;
+		// A terminal failure still needs its own summary when no activity is
+		// available (startup errors, or a repeated native call id merged into
+		// history). Keep the actionable error card visible below this summary.
+		if (!entries.length && !running && status !== 'error') {
+			if (footer && turn.length) deliveryByHostId.set(turn[turn.length - 1].id, footer);
+			result.push(...turn);
+			return projection;
+		}
+		const error = [...turn].reverse().find((log) => log.source === 'error');
+		const host = entries[0] ?? {
+			...(user ?? error!),
+			id: `activity:${user?.id ?? error!.id}`,
+			source: 'system' as const,
+			text: '',
+		};
+		const end = user?.turnCompletion?.timestamp ?? turn.at(-1)?.timestamp ?? startedAt;
+		activityByHostId.set(host.id, {
+			entries,
+			running,
+			status,
+			startedAt,
+			turnId: user?.nativeTranscript?.messageId ?? user?.id,
+			durationMs: end !== undefined && startedAt !== undefined ? end - startedAt : undefined,
+			reason:
+				status === 'error'
+					? user?.turnCompletion?.reason
+						? turnFailureReason({ text: user.turnCompletion.reason })
+						: error && turnFailureReason(error)
+					: undefined,
+			errorType: status === 'error' ? error?.agentError?.type : undefined,
+			failingStepId:
+				status === 'error'
+					? [...entries]
+							.reverse()
+							.find((log) => log.source === 'tool' && toolRunStatus([log]) === 'error')?.id
+					: undefined,
+		});
+		const ids = new Set(entries.map((log) => log.id));
+		const visible = [host, ...turn.filter((log) => !ids.has(log.id))];
+		result.push(...visible);
+		if (footer) deliveryByHostId.set(visible[visible.length - 1].id, footer);
+		return projection;
+	}
+	const stillWorking = isLast && finalReply === -1 && isTurnActivityEntry(turn[turn.length - 1]);
+	if ((isLast && keepLastTurnOpen) || stillWorking || !turn.some(isTurnActivityEntry)) {
+		result.push(...turn);
+		return projection;
+	}
+	// Only what came BEFORE the answer folds: the row sits above it, so
+	// anything after it would be read out of order. A turn with no answer
+	// (stopped, or only tool calls) folds all of its activity.
+	const before = finalReply === -1 ? turn.length : finalReply;
+	const folded = turn.filter(
+		(log, i) => i < before && (isTurnActivityEntry(log) || isReplyEntry(log))
+	);
+	if (!folded.some(isTurnActivityEntry)) {
+		result.push(...turn);
+		return projection;
+	}
+	const host = folded[0];
+	const start = startedAt ?? turn[0].timestamp;
+	const end = Math.max(...turn.map((log) => log.timestamp));
+	activityByHostId.set(host.id, {
+		entries: folded,
+		durationMs: end > start ? end - start : undefined,
+		status: toolRunStatus(folded.filter((log) => log.source === 'tool')),
+	});
+	const foldedIds = new Set(folded.map((log) => log.id));
+	for (const log of turn) {
+		if (log === host || !foldedIds.has(log.id)) result.push(log);
+	}
+	return projection;
 }
 
 /** A failed tool is not a failed turn. Explicit completion wins over step status. */

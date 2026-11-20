@@ -49,6 +49,10 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 	<WindowProvider>{children}</WindowProvider>
 );
 
+// Real Git reads, fingerprints and check processes: each step spawns several
+// processes, which takes seconds on the Windows runner instead of milliseconds.
+const REAL_PROCESS_WAIT = { timeout: 30_000, interval: 100 };
+
 describe('conversation automation production wiring', () => {
 	let root: string;
 	let project: string;
@@ -324,8 +328,9 @@ describe('conversation automation production wiring', () => {
 		expect(initial.attempts).toEqual([]);
 		expect(initial.pendingTurn?.diagnosis).toBe(false);
 		for (const [index, contents] of ['first', 'second', 'first'].entries()) {
-			await vi.waitFor(() =>
-				expect(useSessionStore.getState().sessions[0].executionQueue).toHaveLength(index + 1)
+			await vi.waitFor(
+				() => expect(useSessionStore.getState().sessions[0].executionQueue).toHaveLength(index + 1),
+				REAL_PROCESS_WAIT
 			);
 			const item = useSessionStore.getState().sessions[0].executionQueue[index];
 			await beginGitTurn('agent-ai-exact', project);
@@ -344,12 +349,14 @@ describe('conversation automation production wiring', () => {
 				true
 			);
 			await finishGitTurn('agent-ai-exact');
-			await vi.waitFor(async () =>
-				expect((await invoke({ action: 'status' })).attempts).toHaveLength(index + 1)
+			await vi.waitFor(
+				async () => expect((await invoke({ action: 'status' })).attempts).toHaveLength(index + 1),
+				REAL_PROCESS_WAIT
 			);
 		}
-		await vi.waitFor(async () =>
-			expect((await invoke({ action: 'status' })).pendingTurn?.diagnosis).toBe(true)
+		await vi.waitFor(
+			async () => expect((await invoke({ action: 'status' })).pendingTurn?.diagnosis).toBe(true),
+			REAL_PROCESS_WAIT
 		);
 		const state = await invoke({ action: 'status' });
 		expect(state.progress.attempts.map((attempt) => attempt.verdict)).toEqual([
@@ -364,5 +371,5 @@ describe('conversation automation production wiring', () => {
 		expect(state.pendingTurn?.diagnosis).toBe(true);
 		expect(state.deliveries).toHaveLength(4);
 		expect(state.deliveries.at(-1)?.prompt).toContain('Diagnose why the last three attempts');
-	});
+	}, 120_000);
 });

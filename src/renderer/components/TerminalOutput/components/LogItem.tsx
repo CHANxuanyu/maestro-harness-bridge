@@ -316,6 +316,9 @@ export const LogItem = memo(
 				: undefined;
 
 		const isUserMessage = log.source === 'user';
+		// What the user typed is text: `<name>` or `Map<string>` must not be parsed
+		// as an HTML tag and sanitized away. Agent output keeps the chat default.
+		const userTextRawHtml = isUserMessage ? false : undefined;
 		const isReversed = isUserMessage
 			? userMessageAlignment === 'left'
 			: userMessageAlignment === 'right';
@@ -326,6 +329,7 @@ export const LogItem = memo(
 		const renderAiCommandBody = (text: string) =>
 			isAIMode && !markdownEditMode ? (
 				<MarkdownRenderer
+					allowRawHtml={userTextRawHtml}
 					content={text}
 					theme={theme}
 					onCopy={copyToClipboard}
@@ -551,6 +555,7 @@ export const LogItem = memo(
 					<span className="sr-only">{t('workflows.transcript.progressNote')}</span>
 					{isAIMode && !markdownEditMode ? (
 						<MarkdownRenderer
+							allowRawHtml={userTextRawHtml}
 							content={filteredText}
 							theme={theme}
 							onCopy={copyToClipboard}
@@ -601,6 +606,7 @@ export const LogItem = memo(
 						<div className="break-words" style={feedLayout ? undefined : { opacity: 0.9 }}>
 							{isAIMode && !markdownEditMode ? (
 								<MarkdownRenderer
+									allowRawHtml={userTextRawHtml}
 									content={filteredText}
 									theme={theme}
 									onCopy={copyToClipboard}
@@ -1310,6 +1316,7 @@ export const LogItem = memo(
 							</div>
 							<div className="text-sm" style={{ color: theme.colors.textMain }}>
 								<MarkdownRenderer
+									allowRawHtml={userTextRawHtml}
 									content={
 										signInRequired && !remoteAuthError
 											? t('workflows.shell.signInRequiredBody', {
@@ -1403,6 +1410,7 @@ export const LogItem = memo(
 							<span className="sr-only">{t('workflows.transcript.thinking')}</span>
 							{isAIMode && !markdownEditMode ? (
 								<MarkdownRenderer
+									allowRawHtml={userTextRawHtml}
 									content={log.text}
 									theme={theme}
 									onCopy={copyToClipboard}
@@ -1442,6 +1450,7 @@ export const LogItem = memo(
 							<div className="whitespace-pre-wrap text-sm break-words">
 								{isAIMode && !markdownEditMode ? (
 									<MarkdownRenderer
+										allowRawHtml={userTextRawHtml}
 										content={log.text}
 										theme={theme}
 										onCopy={copyToClipboard}
@@ -1620,6 +1629,7 @@ export const LogItem = memo(
 									) : isAIMode && !markdownEditMode ? (
 										// Collapsed markdown preview with rendered markdown
 										<MarkdownRenderer
+											allowRawHtml={userTextRawHtml}
 											content={displayText}
 											theme={theme}
 											onCopy={copyToClipboard}
@@ -1690,6 +1700,7 @@ export const LogItem = memo(
 									) : isAIMode && !markdownEditMode ? (
 										// Expanded markdown rendering
 										<MarkdownRenderer
+											allowRawHtml={userTextRawHtml}
 											content={filteredText}
 											theme={theme}
 											onCopy={copyToClipboard}
@@ -1747,6 +1758,7 @@ export const LogItem = memo(
 								) : isAIMode && !markdownEditMode ? (
 									// Rendered markdown for AI responses
 									<MarkdownRenderer
+										allowRawHtml={userTextRawHtml}
 										content={filteredText}
 										theme={theme}
 										onCopy={copyToClipboard}

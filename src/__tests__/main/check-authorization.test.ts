@@ -52,6 +52,42 @@ describe('check command scope', () => {
 			expect(await check(command)).toBe('network');
 		}
 	);
+	it.each([
+		'node --test',
+		'node --test --test-reporter=tap clamp.test.cjs',
+		'python3 -m pytest',
+		'python -m unittest',
+		'go test ./...',
+		'cargo test',
+		'bun test',
+		'deno test',
+	])(
+		'runs a project test command without asking again after project consent: %s',
+		async (command) => {
+			expect(await check(command)).toBeUndefined();
+		}
+	);
+	it('follows npm test to a node --test script (PRD F3)', async () => {
+		await fs.writeFile(
+			path.join(root, 'package.json'),
+			JSON.stringify({ scripts: { test: 'node --test --test-reporter=tap clamp.test.cjs' } })
+		);
+		expect(await check('npm test')).toBeUndefined();
+	});
+	it.each([
+		'node --test --require ./setup.cjs',
+		'node --test --import=./loader.mjs',
+		'node -e arbitrary --test',
+		'deno test --allow-net',
+		'bun test --preload ./setup.ts',
+		'python -m http.server',
+		'go run main.go',
+	])(
+		'keeps the one-use grant for code loaded from elsewhere or a wider sandbox: %s',
+		async (command) => {
+			expect(await check(command)).toBe('unverified-command');
+		}
+	);
 	it.each(['node -e arbitrary', 'true && eval code', 'eval code', 'sh run.sh'])(
 		'does not silently authorize opaque shell programs: %s',
 		async (command) => {

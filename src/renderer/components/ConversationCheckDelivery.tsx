@@ -27,21 +27,35 @@ export function useConversationCheckDelivery({
 }: CheckDeliveryTarget) {
 	const target = { kind: 'conversation' as const, sessionId, tabId };
 	const state = useConversationAutomationStore((s) => s.states[conversationKey(target)]);
-	const latestTurnId = useSessionStore(
-		(s) =>
-			s.sessions
-				.find((s) => s.id === sessionId)
-				?.aiTabs.find((tab) => tab.id === tabId)
-				?.logs.slice()
-				.reverse()
-				.find((log) => log.source === 'user')?.id
-	);
+	// A primitive key, so a streaming reply does not re-render every delivery bar:
+	// the latest turn, and when this turn started and the next one began.
+	const turnWindow = useSessionStore((s) => {
+		const logs =
+			s.sessions.find((s) => s.id === sessionId)?.aiTabs.find((tab) => tab.id === tabId)?.logs ??
+			[];
+		let latest = '';
+		let start = '';
+		let end = '';
+		for (const log of logs) {
+			if (log.source !== 'user') continue;
+			if (start && !end) end = String(log.timestamp);
+			if (log.id === turnId) start = String(log.timestamp);
+			latest = log.id;
+		}
+		return `${latest}|${start}|${end}`;
+	});
+	const [latestTurnId, start, end] = turnWindow.split('|');
+	// A batch run from the panel has no turn of its own: it belongs to the turn that
+	// was latest when it ran, and does not move to a newer turn afterwards.
+	const ranDuringThisTurn = (createdAt: number) =>
+		!!start && createdAt >= Number(start) && (!end || createdAt < Number(end));
 	const batch = state?.batches
 		.slice()
 		.reverse()
 		.find(
 			(batch) =>
-				batch.turnId === (checkRunId ?? turnId) || (!batch.turnId && turnId === latestTurnId)
+				batch.turnId === (checkRunId ?? turnId) ||
+				(!batch.turnId && ranDuringThisTurn(batch.createdAt))
 		);
 	const failed = batch?.checks.some((check) => check.outcome !== 'pass');
 	const hasChecks = !!state?.checks.length;

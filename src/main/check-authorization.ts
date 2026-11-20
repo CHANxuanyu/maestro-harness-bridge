@@ -6,6 +6,9 @@ import type {
 	ConversationAutomationState,
 } from '../shared/conversationAutomation';
 
+const NODE_CODE_FLAG =
+	/^(?:-e|--eval|-p|--print|-r|--require|--import|--loader|--experimental-loader)(?:=|$)/;
+
 /** Conservative scope review, not a shell sandbox. Opaque programs need a one-use grant. */
 export async function checkCommandBoundary(
 	command: string,
@@ -83,6 +86,30 @@ export async function checkCommandBoundary(
 	if (
 		['tsc', 'vitest', 'jest', 'eslint', 'prettier', 'pytest', 'ruff'].includes(program) &&
 		!words.some((word) => ['--config', '-c', '--plugin', '--require'].includes(word))
+	)
+		return undefined;
+	// Built-in test runners, trusted like the tools above: they run the project's own
+	// tests from the project directory. A flag that loads code from elsewhere (an eval
+	// string, a preload, a loader) or widens a sandbox keeps the one-use grant.
+	if (
+		program === 'node' &&
+		words.includes('--test') &&
+		!words.some((word) => NODE_CODE_FLAG.test(word))
+	)
+		return undefined;
+	if (
+		['python', 'python3'].includes(program) &&
+		verb === '-m' &&
+		['pytest', 'unittest'].includes(script)
+	)
+		return undefined;
+	if (program === 'go' && ['test', 'vet', 'build'].includes(verb)) return undefined;
+	if (program === 'cargo' && ['test', 'check', 'clippy', 'build', 'fmt'].includes(verb))
+		return undefined;
+	if (
+		['bun', 'deno'].includes(program) &&
+		verb === 'test' &&
+		!words.some((word) => /^(?:--allow-|-A$|--preload|-r$)/.test(word))
 	)
 		return undefined;
 	if (['true', 'false', 'echo', 'printf', 'exit'].includes(program)) return undefined;

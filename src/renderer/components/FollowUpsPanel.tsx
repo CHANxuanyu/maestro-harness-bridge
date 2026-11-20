@@ -123,7 +123,11 @@ export function FollowUpsPanel({ target, cwd }: { target: ConversationTarget; cw
 					</dd>
 				</dl>
 				<p>{t('workflows.automation.expiryBehavior')}</p>
-				<button disabled={busy || state?.stopped} type="submit">
+				<button
+					className="rounded border border-current/25 px-2 py-1 disabled:opacity-50"
+					disabled={busy || state?.stopped}
+					type="submit"
+				>
 					{t('workflows.automation.addFollowUp')}
 				</button>
 			</form>
@@ -159,6 +163,7 @@ export function FollowUpsPanel({ target, cwd }: { target: ConversationTarget; cw
 					{state.expired && (
 						<button
 							type="button"
+							className="rounded border border-current/25 px-2 py-1 disabled:opacity-50"
 							onClick={() => {
 								const card = document.getElementById(conversationExpiryCardId(target));
 								card?.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -173,6 +178,8 @@ export function FollowUpsPanel({ target, cwd }: { target: ConversationTarget; cw
 					) && <p role="status">{t('workflows.automation.undeliverable')}</p>}
 					{follow.state === 'pending' && (
 						<button
+							type="button"
+							className="rounded border border-current/25 px-2 py-1 disabled:opacity-50"
 							disabled={busy}
 							onClick={() => send({ action: 'follow-cancel', id: follow.id })}
 						>

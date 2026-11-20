@@ -61,7 +61,9 @@ export const TurnDeliveryBar = memo(function TurnDeliveryBar({
 							}))
 						}
 					>
-						{t('workflows.activity.files', { count: delivery.files })}
+						{t(delivery.files === 1 ? 'workflows.activity.filesOne' : 'workflows.activity.files', {
+							count: delivery.files,
+						})}
 						{' · '}
 						{delivery.additions === null || delivery.deletions === null
 							? t('workflows.activity.countsUnavailable')

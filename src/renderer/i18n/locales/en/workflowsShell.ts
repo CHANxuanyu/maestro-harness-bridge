@@ -16,6 +16,7 @@ export const workflowsShell = {
 	'workflows.activity.failedWithReason': 'Failed: {reason}',
 	'workflows.activity.exitCode': 'exit code {code}',
 	'workflows.activity.files': 'Changed {count} files',
+	'workflows.activity.filesOne': 'Changed {count} file',
 	'workflows.activity.countsUnavailable': 'Line counts unavailable',
 	'workflows.activity.turnFilterHelp':
 		'Filter changes-turns to this turn; an empty string clears it',
@@ -27,7 +28,7 @@ export const workflowsShell = {
 	'workflows.modelPicker.noConversation': 'Select a conversation first.',
 	'workflows.modelPicker.title': 'Model and effort',
 	'workflows.modelPicker.default': 'Default',
-	'workflows.modelPicker.unresolved': 'Default unresolved',
+	'workflows.modelPicker.unresolved': 'CLI default',
 	'workflows.modelPicker.filter': 'Filter models or enter a model ID',
 	'workflows.modelPicker.models': 'Models',
 	'workflows.modelPicker.followDefault': 'Follow default',

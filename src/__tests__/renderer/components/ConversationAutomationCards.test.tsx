@@ -62,6 +62,61 @@ describe('conversation automation cards', () => {
 		);
 	});
 
+	it('keeps a panel check run on the turn it ran under after a newer turn arrives', () => {
+		useSessionStore.setState({
+			sessions: [
+				createMockSession({
+					id: 's',
+					aiTabs: [
+						createMockAITab({
+							id: 't',
+							logs: [
+								{ id: 'first', source: 'user', text: 'fix', timestamp: 100 },
+								{ id: 'second', source: 'user', text: 'again', timestamp: 300 },
+							],
+						}),
+					],
+				}),
+			],
+		});
+		state.projectAuthorized = true;
+		state.batches = [
+			{
+				id: 'manual',
+				revision: 'r',
+				fingerprint: 'f',
+				createdAt: 200,
+				checks: [
+					{
+						id: 'run',
+						command: 'true',
+						cwd: '/project',
+						host: { kind: 'local' },
+						startedAt: 200,
+						endedAt: 201,
+						outcome: 'pass',
+						exitCode: 0,
+						outputTail: '',
+						truncated: false,
+					},
+				],
+			},
+		];
+		useConversationAutomationStore.getState().replace([state]);
+		const { container } = render(
+			<>
+				<div data-turn="first">
+					<ConversationCheckDelivery sessionId="s" tabId="t" turnId="first" />
+				</div>
+				<div data-turn="second">
+					<ConversationCheckDelivery sessionId="s" tabId="t" turnId="second" />
+				</div>
+			</>
+		);
+		expect(container.querySelector('[data-turn="first"]')).toHaveTextContent('1/1 passed');
+		expect(container.querySelector('[data-turn="second"]')).not.toHaveTextContent('1/1 passed');
+	});
+
 	it('draws no delivery bar for automation state that has nothing to show', () => {
 		Object.assign(state, { checks: [], projectAuthorized: true });
 		useSessionStore.setState({

@@ -211,6 +211,20 @@ describe('activity and delivery', () => {
 		expect(screen.getByTestId('turn-delivery').textContent).toBe('Changed 2 files · +9 -1');
 	});
 
+	it('names a single changed file in the singular', () => {
+		render(
+			<TurnDeliveryBar
+				sessionId="s"
+				tabId="t"
+				turnId="u"
+				textColor={mockTheme.colors.textDim}
+				plan={null}
+				delivery={{ files: 1, additions: 1, deletions: 1, paths: ['greet.cjs'] }}
+			/>
+		);
+		expect(screen.getByTestId('turn-delivery').textContent).toBe('Changed 1 file · +1 -1');
+	});
+
 	it.each([0, null])(
 		'hides a zero-file delivery without checks even with line counts %s',
 		(count) => {

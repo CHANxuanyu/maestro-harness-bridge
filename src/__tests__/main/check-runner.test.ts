@@ -59,6 +59,15 @@ describe('check runner', () => {
 		}
 	});
 
+	it('stores the output tail without color codes', async () => {
+		const exec = vi.fn((_command: string, _args: string[], options: ExecStreamingOptions) => {
+			options.onChunk('\u001b[32m✔ greets \u001b[90m(0.5ms)\u001b[39m\n', 'stdout');
+			return { cancel: vi.fn(), result: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }) };
+		});
+		const result = await createCheckRunner({ exec }).run({ command: 'check', cwd: os.tmpdir() });
+		expect(result.outputTail).toBe('✔ greets (0.5ms)\n');
+	});
+
 	it.each(['timeout', 'canceled'] as const)(
 		'kills before returning %s and removes timers',
 		async (kind) => {

@@ -54,6 +54,26 @@ describe('Markdown presets', () => {
 			expect(container.querySelector('.prose')).toBeInTheDocument();
 		});
 
+		it('keeps angle-bracket words as text when raw HTML is off, as for user messages', () => {
+			const content = "Make greet return 'Hello <name>!' as Map<string, number>.";
+			const { container: raw } = render(
+				<Markdown preset="chat" content={content} theme={mockTheme} onCopy={noop} />
+			);
+			// The chat default parses raw HTML, which is why LogItem turns it off for user text.
+			expect(raw.textContent).not.toContain('<name>');
+			const { container: text } = render(
+				<Markdown
+					preset="chat"
+					content={content}
+					theme={mockTheme}
+					onCopy={noop}
+					allowRawHtml={false}
+				/>
+			);
+			expect(text.textContent).toContain("'Hello <name>!'");
+			expect(text.textContent).toContain('Map<string, number>');
+		});
+
 		it('resets white-space so a pre-wrap parent cannot inflate table gaps (#1726)', () => {
 			const { container } = render(
 				<div className="whitespace-pre-wrap">

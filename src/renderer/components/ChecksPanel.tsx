@@ -42,6 +42,8 @@ export function ChecksPanel({ target }: { target: ConversationTarget }) {
 			</label>
 			<div className="flex flex-wrap gap-2">
 				<button
+					type="button"
+					className="rounded border border-current/25 px-2 py-1 disabled:opacity-50"
 					disabled={busy || state?.running}
 					onClick={() =>
 						send({
@@ -52,7 +54,12 @@ export function ChecksPanel({ target }: { target: ConversationTarget }) {
 				>
 					{t('workflows.automation.saveChecks')}
 				</button>
-				<button disabled={busy || state?.running} onClick={() => send({ action: 'checks-run' })}>
+				<button
+					type="button"
+					className="rounded border border-current/25 px-2 py-1 disabled:opacity-50"
+					disabled={busy || state?.running}
+					onClick={() => send({ action: 'checks-run' })}
+				>
 					{t('workflows.automation.runChecks')}
 				</button>
 			</div>
@@ -72,8 +79,10 @@ export function ChecksPanel({ target }: { target: ConversationTarget }) {
 							<p>
 								{t(
 									`workflows.automation.${check.outcome === 'pass' || check.outcome === 'fail' ? check.outcome : 'not-run'}`
-								)}{' '}
-								· {check.exitCode ?? ''}
+								)}
+								{check.outcome !== 'pass' && check.exitCode !== null && (
+									<> · {t('workflows.activity.exitCode', { code: check.exitCode })}</>
+								)}
 							</p>
 							<pre className="whitespace-pre-wrap break-all text-xs">
 								{check.error || check.outputTail}
@@ -84,7 +93,11 @@ export function ChecksPanel({ target }: { target: ConversationTarget }) {
 			)}
 			{state && <ConversationAutomationCards state={state} act={act} surface="panel" />}
 			{state?.fix === 'manual' && batch?.checks.some((check) => check.outcome === 'fail') && (
-				<button onClick={() => send({ action: 'fix', mode: 'auto' })}>
+				<button
+					type="button"
+					className="rounded border border-current/25 px-2 py-1 disabled:opacity-50"
+					onClick={() => send({ action: 'fix', mode: 'auto' })}
+				>
 					{t('workflows.automation.fixAuto')}
 				</button>
 			)}

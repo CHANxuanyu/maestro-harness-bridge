@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
 import { Markdown } from '../../../../renderer/components/Markdown/Markdown';
 import { mockTheme } from '../../../helpers/mockTheme';
+import { createMockSession } from '../../../helpers';
+import { useSessionStore } from '../../../../renderer/stores/sessionStore';
 
 // Mock Shiki + highlight.js so CodeFence's async highlighting doesn't hit the
 // real libraries (tests assert on the synchronous fallback).
@@ -72,6 +74,22 @@ describe('Markdown presets', () => {
 			);
 			expect(text.textContent).toContain("'Hello <name>!'");
 			expect(text.textContent).toContain('Map<string, number>');
+		});
+
+		it('keeps a typed mention as text when chips are off, as for user messages', () => {
+			useSessionStore.setState({ sessions: [createMockSession({ id: 'w', name: 'Worker' })] });
+			const { container } = render(
+				<Markdown
+					preset="chat"
+					content="@Worker Inspect the queue."
+					theme={mockTheme}
+					onCopy={noop}
+					allowRawHtml={false}
+					mentionChips={false}
+				/>
+			);
+			expect(container.textContent).toBe('@Worker Inspect the queue.');
+			useSessionStore.setState({ sessions: [] });
 		});
 
 		it('resets white-space so a pre-wrap parent cannot inflate table gaps (#1726)', () => {

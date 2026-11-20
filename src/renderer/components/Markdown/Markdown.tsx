@@ -69,6 +69,8 @@ export interface MarkdownProps {
 	onCopy?: (text: string) => void;
 	/** Allow raw HTML passthrough via rehype-raw (DOMPurify-sanitized). */
 	allowRawHtml?: boolean;
+	/** Chip-render `@agent` and `@file` mentions. Defaults to on for the chat preset. */
+	mentionChips?: boolean;
 	/** Treat single newlines as hard line breaks (#622). */
 	chatLineBreaks?: boolean;
 	/** Render `$...$` / `$$...$$` as KaTeX math (#622). */
@@ -129,6 +131,7 @@ export const Markdown = memo(function Markdown({
 	bionifyAlgorithm,
 	onCopy,
 	allowRawHtml,
+	mentionChips,
 	chatLineBreaks = false,
 	chatMath = false,
 	codexDirectives = false,
@@ -213,7 +216,7 @@ export const Markdown = memo(function Markdown({
 			codexDirectives: isChat && codexDirectives,
 			allowRawHtml: effectiveAllowRawHtml,
 			fileLinks: { indices: fileTreeIndices, cwd, projectRoot, homeDir },
-			mentionChips: isChat,
+			mentionChips: isChat && mentionChips !== false,
 			extraRemarkPlugins,
 			extraRehypePlugins,
 		});
@@ -225,6 +228,7 @@ export const Markdown = memo(function Markdown({
 		chatMath,
 		codexDirectives,
 		effectiveAllowRawHtml,
+		mentionChips,
 		fileTreeIndices,
 		cwd,
 		projectRoot,

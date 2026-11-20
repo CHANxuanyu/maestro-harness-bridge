@@ -318,6 +318,8 @@ export const LogItem = memo(
 		const isUserMessage = log.source === 'user';
 		// What the user typed is text: `<name>` or `Map<string>` must not be parsed
 		// as an HTML tag and sanitized away. Agent output keeps the chat default.
+		// Mentions keep their typed `@name` form here, as before: with raw HTML on,
+		// sanitizing already reduced them to text, and chips are a separate change.
 		const userTextRawHtml = isUserMessage ? false : undefined;
 		const isReversed = isUserMessage
 			? userMessageAlignment === 'left'
@@ -330,6 +332,7 @@ export const LogItem = memo(
 			isAIMode && !markdownEditMode ? (
 				<MarkdownRenderer
 					allowRawHtml={userTextRawHtml}
+					mentionChips={userTextRawHtml}
 					content={text}
 					theme={theme}
 					onCopy={copyToClipboard}
@@ -556,6 +559,7 @@ export const LogItem = memo(
 					{isAIMode && !markdownEditMode ? (
 						<MarkdownRenderer
 							allowRawHtml={userTextRawHtml}
+							mentionChips={userTextRawHtml}
 							content={filteredText}
 							theme={theme}
 							onCopy={copyToClipboard}
@@ -607,6 +611,7 @@ export const LogItem = memo(
 							{isAIMode && !markdownEditMode ? (
 								<MarkdownRenderer
 									allowRawHtml={userTextRawHtml}
+									mentionChips={userTextRawHtml}
 									content={filteredText}
 									theme={theme}
 									onCopy={copyToClipboard}
@@ -1317,6 +1322,7 @@ export const LogItem = memo(
 							<div className="text-sm" style={{ color: theme.colors.textMain }}>
 								<MarkdownRenderer
 									allowRawHtml={userTextRawHtml}
+									mentionChips={userTextRawHtml}
 									content={
 										signInRequired && !remoteAuthError
 											? t('workflows.shell.signInRequiredBody', {
@@ -1411,6 +1417,7 @@ export const LogItem = memo(
 							{isAIMode && !markdownEditMode ? (
 								<MarkdownRenderer
 									allowRawHtml={userTextRawHtml}
+									mentionChips={userTextRawHtml}
 									content={log.text}
 									theme={theme}
 									onCopy={copyToClipboard}
@@ -1451,6 +1458,7 @@ export const LogItem = memo(
 								{isAIMode && !markdownEditMode ? (
 									<MarkdownRenderer
 										allowRawHtml={userTextRawHtml}
+										mentionChips={userTextRawHtml}
 										content={log.text}
 										theme={theme}
 										onCopy={copyToClipboard}
@@ -1630,6 +1638,7 @@ export const LogItem = memo(
 										// Collapsed markdown preview with rendered markdown
 										<MarkdownRenderer
 											allowRawHtml={userTextRawHtml}
+											mentionChips={userTextRawHtml}
 											content={displayText}
 											theme={theme}
 											onCopy={copyToClipboard}
@@ -1701,6 +1710,7 @@ export const LogItem = memo(
 										// Expanded markdown rendering
 										<MarkdownRenderer
 											allowRawHtml={userTextRawHtml}
+											mentionChips={userTextRawHtml}
 											content={filteredText}
 											theme={theme}
 											onCopy={copyToClipboard}
@@ -1759,6 +1769,7 @@ export const LogItem = memo(
 									// Rendered markdown for AI responses
 									<MarkdownRenderer
 										allowRawHtml={userTextRawHtml}
+										mentionChips={userTextRawHtml}
 										content={filteredText}
 										theme={theme}
 										onCopy={copyToClipboard}

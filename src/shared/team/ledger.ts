@@ -457,6 +457,16 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				if (!brief) break;
 				state.baseline.brief = copyBrief(brief);
 				state.baseline.confirmedVersion = event.briefVersion;
+				state.decisions = state.decisions.map((decision) => ({
+					...decision,
+					supersededByBaseline: decision.supersededByBaseline ?? event.briefVersion,
+				}));
+				for (const discussion of state.discussions)
+					if (discussion.decision)
+						discussion.decision = state.decisions.find(
+							(decision) => decision.discussionId === discussion.id
+						);
+
 				state.baseline.proposedVersion = null;
 				syncCriteria(brief, true, event.seq);
 				ownerDecision(event);
@@ -553,7 +563,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				const status =
 					!event.evidenceId.trim() || event.notRun || (event.exitCode === null && !event.timedOut)
 						? 'pending'
-						: event.exitCode === 0 && !event.timedOut
+						: event.exitCode === (event.expectedExitCode ?? 0) && !event.timedOut
 							? 'pass'
 							: 'fail';
 				for (const id of event.covers)
@@ -645,7 +655,7 @@ export function reduceLedger(events: LedgerEvent[]): TeamState {
 				if (issue && (event.actor === 'pm' || event.actor === 'app')) {
 					issue.state = 'verified-pass';
 					issue.history.push(event);
-					if (issue.opened.criterionId)
+					if (issue.opened.criterionId && !event.baselineVersion)
 						addEvidence(issue.opened.criterionId, {
 							eventId: event.id,
 							seq: event.seq,

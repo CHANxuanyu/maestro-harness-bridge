@@ -15,6 +15,7 @@ const CMD_COMMAND_NOT_FOUND = /is not recognized as an internal or external comm
 
 export interface CheckRequest {
 	command: string;
+	expectedExitCode?: number;
 	cwd: string;
 	host?: CheckHost;
 	timeoutMs?: number;
@@ -34,6 +35,8 @@ export function createCheckRunner(deps: CheckRunnerDependencies = {}) {
 		async run(request: CheckRequest): Promise<CheckRun> {
 			const timeoutMs = request.timeoutMs ?? 10 * DURATION_MS.minute;
 			if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid check timeout');
+			if (request.expectedExitCode !== undefined && !Number.isInteger(request.expectedExitCode))
+				throw new Error('Expected exit code must be an integer');
 			if (!request.command.trim()) throw new Error('A check command is required');
 			const host = request.host ?? { kind: 'local' };
 			const startedAt = now();
@@ -62,6 +65,9 @@ export function createCheckRunner(deps: CheckRunnerDependencies = {}) {
 				endedAt: now(),
 				outcome,
 				exitCode,
+				...(request.expectedExitCode !== undefined
+					? { expectedExitCode: request.expectedExitCode }
+					: {}),
 				outputTail: compactToolOutput(tail).output as string,
 				truncated,
 				error,
@@ -136,7 +142,7 @@ export function createCheckRunner(deps: CheckRunnerDependencies = {}) {
 						completed.stderr || String(code)
 					);
 				}
-				return result(code === 0 ? 'pass' : 'fail', code);
+				return result(code === (request.expectedExitCode ?? 0) ? 'pass' : 'fail', code);
 			} catch (error) {
 				return result(stopped ?? 'not-run', null, String(error));
 			} finally {

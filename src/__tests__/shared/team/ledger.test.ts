@@ -394,6 +394,37 @@ describe('reduceLedger', () => {
 		).toBe('pass');
 	});
 
+	it('marks a decision recorded before the confirmed baseline as superseded by it (real run 5)', () => {
+		const closed = (discussionId: string, decision: string): EventInput => ({
+			kind: 'discussion_closed',
+			discussionId,
+			decision,
+			decider: 'pm',
+			contested: false,
+			dissent: '',
+			actions: [],
+		});
+		const state = reduceLedger(
+			ledger(
+				...baseline.slice(0, 2),
+				closed('before', 'Accept e/E exponents'),
+				{ kind: 'baseline_confirmed', actor: 'owner', briefVersion: 1 },
+				closed('after', 'Keep exponents rejected')
+			)
+		);
+		expect(state.decisions.map((d) => [d.discussionId, d.supersededByBaseline])).toEqual([
+			['before', 1],
+			['after', undefined],
+		]);
+	});
+
+	it('passes a check that exits with the code the brief expects, and fails any other', () => {
+		const negative = { ...check, command: 'node cli.cjs add 1e3 2', expectedExitCode: 2 };
+		expect(statusOf([...baseline, { ...negative, exitCode: 2 }])).toBe('pass');
+		expect(statusOf([...baseline, { ...negative, exitCode: 0 }])).toBe('fail');
+		expect(statusOf([...baseline, { ...check, exitCode: 2 }])).toBe('fail');
+	});
+
 	it('applies owner edits before confirmation and records approved standard changes afterwards', () => {
 		const state = reduceLedger(
 			ledger(

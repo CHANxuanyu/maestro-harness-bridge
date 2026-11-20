@@ -553,7 +553,7 @@ export function FeedEvent({
 							<b>{t('workflows.team.check')}</b> ·{' '}
 							{formatList(event.covers.map((id) => criterionLabel(state, id)))} ·{' '}
 							{t(
-								event.exitCode === 0 && !event.timedOut && !event.notRun
+								event.exitCode === (event.expectedExitCode ?? 0) && !event.timedOut && !event.notRun
 									? 'workflows.team.pass'
 									: 'workflows.team.fail'
 							)}{' '}
@@ -562,6 +562,11 @@ export function FeedEvent({
 					}
 				>
 					<code>{event.command}</code>
+					{!!event.expectedExitCode && (
+						<p className="team-dim">
+							{t('workflows.team.expectExit', { code: event.expectedExitCode })}
+						</p>
+					)}
 					<p className="team-dim">{teamPathLabel(event.cwd, state)}</p>
 					{event.purpose === 'trial' && <p>{t('workflows.team.trial')}</p>}
 					<p>

@@ -75,6 +75,8 @@ function shapeError(value: unknown, schema: ReportSchema, path = 'report'): stri
 			: `${path} does not match an allowed shape.`;
 	}
 	if (schema.type === 'null') return value === null ? undefined : `${path} must be null.`;
+	if (schema.type === 'integer')
+		return Number.isInteger(value) ? undefined : `${path} must be an integer.`;
 	if (schema.type === 'number')
 		return typeof value === 'number' &&
 			Number.isFinite(value) &&
@@ -186,6 +188,40 @@ export function validateTeamReport(
 					input.decider = decider;
 				}
 			}
+		}
+		const brief = input.type === 'brief' ? input : input.brief;
+		if (
+			brief &&
+			typeof brief === 'object' &&
+			!Array.isArray(brief) &&
+			'checks' in brief &&
+			Array.isArray(brief.checks)
+		) {
+			const checks = brief.checks.map((check, index) => {
+				if (
+					!check ||
+					typeof check !== 'object' ||
+					Array.isArray(check) ||
+					!('expectedExit' in check)
+				)
+					return check;
+				const { expectedExit, ...copy } = check;
+				if (
+					!Number.isInteger(expectedExit) ||
+					(copy.expectExit !== undefined && copy.expectExit !== expectedExit)
+				)
+					return check;
+				copy.expectExit = expectedExit;
+				note(
+					`checks[${index}].expectedExit`,
+					expectedExit,
+					expectedExit,
+					'Use the canonical expectExit field.'
+				);
+				return copy;
+			});
+			if (input.type === 'brief') input.checks = checks;
+			else input.brief = { ...brief, checks };
 		}
 		raw = input;
 	}

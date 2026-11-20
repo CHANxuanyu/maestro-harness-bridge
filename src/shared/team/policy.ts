@@ -19,6 +19,39 @@ import type {
 	TurnKind,
 } from './types';
 
+/** Resolve only an authority question, never an observed product defect or a proposed change. */
+export function supersededDecisionBaseline(topic: TeamTopic, state: TeamState): number | undefined {
+	const version = state.baseline.confirmedVersion;
+	if (
+		topic.kind !== 'standard' ||
+		!version ||
+		!state.criteria.some((c) => c.id === topic.criterionId && c.confirmed)
+	)
+		return;
+	const superseded = state.decisions.filter((decision) => decision.supersededByBaseline);
+	if (!superseded.length) return;
+	const question = topic.question ?? topic.topic;
+	// Legacy reports had no structured decision reference. Keep this fallback narrow:
+	// it must ask which authority governs, not whether implementation satisfies it.
+	if (
+		!/which (?:governs|takes precedence)|哪个.*(?:为准|优先)|以.*为准/i.test(question) ||
+		!/decision|决定|决策/i.test(question) ||
+		!/baseline|confirmed|v\d+|基线|已确认/i.test(question)
+	)
+		return;
+	const confirmedAt = Math.max(...state.criteria.map((c) => c.definitionSeq));
+	const evidence = topic.evidence ?? [];
+	if (
+		evidence.some(
+			(id) =>
+				state.checks.some((c) => c.seq > confirmedAt && (c.id === id || c.evidenceId === id)) ||
+				state.outputs.some((o) => o.seq > confirmedAt && (o.id === id || o.outputId === id))
+		)
+	)
+		return;
+	return version;
+}
+
 /** Members may await external effects, never the scheduler's own next step. */
 export function teamWaitRejection(
 	wait: {

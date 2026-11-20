@@ -474,3 +474,12 @@ concluded question and step-three insistence still require new recorded evidence
 reverify reports describe newly observed results, so their evidence text remains
 a new attributed observation rather than an id lookup. Demo claims still cannot
 establish proof; the app derives demo eligibility from recorded facts.
+
+## Efficiency from the fifth real run, 2026-11-20
+
+A real medium run spent 23 turns after the baseline without delivering. Four app causes, each fixed with a regression built from that run:
+
+- **The confirmed baseline governs.** On `baseline_confirmed`, every earlier decision is marked `supersededByBaseline` with that version. Prompts list such decisions as historical, with no actions, and the rules line says the owner-confirmed baseline governs. A standard issue that only asks whether such a decision or the baseline governs is resolved by the app (`standard_issue_resolved` with `baselineVersion`) without a discussion; a question backed by evidence recorded after confirmation still goes to PM. The Decisions tab marks superseded decisions.
+- **An experiment does not force a round.** When every current-round response agrees, a completed experiment is recorded as evidence in the decision and the discussion closes. Another round is dispatched only when a response disagrees or the result contradicts the experiment's optional `expectExit`.
+- **Decided steps carry their phase.** Conclusion actions still give each participant a next step (PRD 6.5 step 4). After confirmation, dev steps run as work or fix and QA steps as qa_prep; PM steps and steps from a standard issue (R1-10) stay message turns. The note names the steps and the decision they come from and says the turn carries no message ids; the pre-baseline "preparation only" note appears only before confirmation.
+- **A check can expect a nonzero exit.** Brief checks accept `expectExit` (integer, default 0; `expectedExit` is normalized). The runner records `expectedExitCode`, and every pass judgement (criterion status, batch pass, failure fingerprints, feed) compares against it. The baseline card and feed show the expected code when it is not 0. Single-conversation checks are unchanged unless a definition carries the field.

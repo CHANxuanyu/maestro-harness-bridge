@@ -1,0 +1,18 @@
+{
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+		"allowJs": true,
+		"checkJs": false
+	},
+	"include": [
+		"native-team.spec.ts",
+		"native-team-ui.spec.ts",
+		"native-team-m2.spec.ts",
+		"native-team-m2-ui.spec.ts",
+		"native-team-m3.spec.ts",
+		"native-team-m3-ui.spec.ts",
+		"../src/renderer/global.d.ts",
+		"../src/types"
+	]
+}

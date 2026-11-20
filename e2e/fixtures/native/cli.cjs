@@ -8,6 +8,25 @@ const { createTurn, transcriptPath } = require('./protocol.cjs');
 const { permissionServer, requestPermission } = require('./claude-permission.cjs');
 const { setTimeout: delay } = require('node:timers/promises');
 
+// Owner messages are out-of-band turns; they must not consume the scripted phase response.
+function nativeTeamScene(script, prompt, configDir, count, persist) {
+	const message = persist && script.teamMessages && /Turn: message\./.test(prompt);
+	return {
+		consumeTurn: !message,
+		scene: script.teamM3
+			? require('./team-m3.cjs').teamM3Scene(script.teamM3, prompt, configDir)
+			: script.teamM2 || message
+				? require('./team-m2.cjs').teamM2Scene(
+						script.teamM2 || script.teamMessages,
+						prompt,
+						configDir
+					)
+				: persist
+					? script.scene || script.turns[count]
+					: script.synopsis,
+	};
+}
+
 async function run(provider) {
 	const args = process.argv.slice(2);
 	if (args.includes('--version')) {
@@ -51,7 +70,7 @@ async function run(provider) {
 	const persist = !args.includes('--no-session-persistence');
 	const stateFile = path.join(configDir, 'fixture-turn-count');
 	const count = fs.existsSync(stateFile) ? Number(fs.readFileSync(stateFile, 'utf8')) : 0;
-	const scene = persist ? script.scene || script.turns[count] : script.synopsis;
+	const { scene, consumeTurn } = nativeTeamScene(script, prompt, configDir, count, persist);
 	if (!scene) throw new Error(`No scripted turn ${count}; unexpected invocation`);
 	const approvalServer = scene.approval && provider === 'claude' ? permissionServer(args) : null;
 	if (persist) {
@@ -59,7 +78,7 @@ async function run(provider) {
 			path.join(configDir, 'fixture-invocations.jsonl'),
 			`${JSON.stringify({ args, provider, cwd, processCwd: process.cwd(), sshConnection: process.env.SSH_CONNECTION ?? null })}\n`
 		);
-		fs.writeFileSync(stateFile, String(count + 1));
+		fs.writeFileSync(stateFile, String(count + Number(consumeTurn)));
 		// Cleanup checks the actual child PID, outside the native transcript.
 		fs.writeFileSync(path.join(configDir, 'fixture-process'), String(process.pid));
 	}
@@ -190,9 +209,20 @@ async function run(provider) {
 				);
 		}
 	}
+	if (!stopped && scene.exitError) {
+		process.stderr.write(`${scene.exitError}
+`);
+		process.exitCode = 1;
+		return;
+	}
+	// Hold after workspace effects but before the logical completion event. A process
+	// exit gate alone cannot hold a turn that ProcessManager already considers finished.
+	if (scene.completionGate)
+		while (!fs.existsSync(scene.completionGate) && !stopped) await delay(10);
 	if (!stopped && scene.terminalError) {
 		turn.fail(scene.terminalError);
-		process.stderr.write(`${scene.terminalError}\n`);
+		process.stderr.write(`${scene.terminalError}
+`);
 		process.exitCode = 1;
 	} else if (!stopped) turn.finish(scene.answer, { quotaFailure: scene.quotaFailure === true });
 	if (provider === 'codex' && !stopped) await delay(1100);
@@ -200,4 +230,4 @@ async function run(provider) {
 	if (scene.exitGate) while (!fs.existsSync(scene.exitGate) && !stopped) await delay(10);
 }
 
-module.exports = { run };
+module.exports = { run, nativeTeamScene };

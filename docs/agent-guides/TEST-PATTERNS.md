@@ -45,6 +45,36 @@ The specs skip before constructing fixtures. Ordinary fixture tests use temporar
 synthetic credentials only. `e2e/tsconfig.real-acceptance.json` checks these specs
 and their shared fixture graph, which production TypeScript configs do not include.
 
+### Synthetic team acceptance
+
+`prepareNativeTeam()` in `e2e/fixtures/native-team.ts` shares scripts, isolated
+accounts and ledger reads between the backend and UI native team specs. Both
+skip when `MAESTRO_E2E_REAL=1`. Its optional repair gates let the UI inspect
+opened and verified-pass issue states without timing sleeps. QA can complete
+between polls, so verify the intermediate fix-claim order in the ledger rather
+than requiring a poll to sample that transient state.
+`e2e/tsconfig.team.json` checks both scenarios and the shared fixture graph.
+
+The UI spec starts without any conversation or project, creates through IPC,
+then clicks the sidebar, baseline confirmation, composer and demo acceptance.
+It checks native transcript reading, Esc/focus return, ledger-derived chrome,
+card order, human-readable baseline, relative output paths, catalog model labels,
+the terminal summary and retained terminal rows. Renderer tests additionally
+cover Chinese copy, all terminal outcomes and old JSON baseline bodies.
+Run against a fresh build:
+
+```sh
+npx tsc -p e2e/tsconfig.team.json --noEmit
+npx playwright test e2e/native-team-ui.spec.ts --project=native --list
+npm run build
+MAESTRO_E2E_SHOTS=/tmp/team-ui-shots npx playwright test e2e/native-team-ui.spec.ts --project=native
+```
+
+`MAESTRO_E2E_SHOTS` is optional. It writes `native-team-ui-baseline.png`,
+`native-team-ui-demo.png` and `native-team-ui-terminal.png` in that directory.
+Keep these local captures out of public commits. Listing and type-checking the
+scenario do not execute Electron and are not acceptance evidence.
+
 ### maestro-p Live Suite
 
 The maestro-p unit tests (`src/__tests__/maestro-p/`) mock the PTY. The behavior that breaks in the field (envelopes, exit codes, slash commands, trust dialogs, `--continue`, process cleanup) only shows against a real `claude` TUI, so `scripts/maestro-p-suite.mjs` runs the binary end to end. Each case runs a real turn on the account it runs as. Run it after any change to `src/maestro-p/`, and add a case when you fix a bug only a live run can see.

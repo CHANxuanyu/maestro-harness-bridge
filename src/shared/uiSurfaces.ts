@@ -63,6 +63,15 @@ export const CUE_MODAL_TABS: UiSurfaceTab[] = [
 
 export const UI_SURFACES: UiSurface[] = [
 	{
+		id: 'create-team',
+		label: 'New team',
+		modal: 'createTeam',
+		description: 'Create a team in the new shell.',
+		shortcutId: 'createTeam',
+		commandPalette: 'New team',
+		click: 'Left Bar > New team',
+	},
+	{
 		id: 'model-picker',
 		label: 'Model and Effort',
 		modal: 'modelEffort',

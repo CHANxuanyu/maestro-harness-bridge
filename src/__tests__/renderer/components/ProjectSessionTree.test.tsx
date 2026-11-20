@@ -1,3 +1,4 @@
+import { useTeamStore } from '../../../renderer/stores/teamStore';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
@@ -772,6 +773,44 @@ it('shows a separate content group with highlighted snippet and keyboard opening
 	expect(document.activeElement).toBe(row);
 	fireEvent.click(row);
 	expect(open).toHaveBeenCalledWith(hit);
+});
+
+it('stacks full-width creation actions with icons before search and retains the header menu', () => {
+	useSettingsStore.setState({ newShell: true });
+	const newConversation = vi.fn();
+	const menu = vi.fn();
+	setup({
+		onNewConversationHere: newConversation,
+		headerMenu: (
+			<button aria-label="App menu" onClick={menu}>
+				Menu
+			</button>
+		),
+	});
+	const actions = screen.getByTestId('sidebar-create-actions');
+	const conversation = screen.getByTestId('sidebar-new-conversation');
+	const team = within(actions).getByRole('button', { name: 'workflows.team.new' });
+	expect(actions).toHaveClass('flex-col');
+	for (const button of [conversation, team]) {
+		expect(button).toHaveClass('w-full', 'whitespace-nowrap');
+		expect(button.querySelector('svg')).not.toBeNull();
+	}
+	expect(
+		conversation.compareDocumentPosition(team) & Node.DOCUMENT_POSITION_FOLLOWING
+	).toBeTruthy();
+	expect(
+		team.compareDocumentPosition(screen.getByRole('textbox')) & Node.DOCUMENT_POSITION_FOLLOWING
+	).toBeTruthy();
+	fireEvent.click(conversation);
+	expect(newConversation).toHaveBeenCalledOnce();
+	fireEvent.click(team);
+	expect(useTeamStore.getState().setupOpen).toBe(true);
+	const hamburger = within(actions).getByRole('button', { name: 'App menu' });
+	expect(hamburger.closest('button')).toBe(hamburger);
+	hamburger.focus();
+	expect(hamburger).toHaveFocus();
+	fireEvent.click(hamburger);
+	expect(menu).toHaveBeenCalledOnce();
 });
 
 it('gives eight worktree titles distinct visible text in a 264px bar', () => {

@@ -20,6 +20,11 @@ import { createGrokTurn } from './native/grok-protocol.cjs';
 import { createOpenCodeTurn, openCodeSchemaReady } from './native/opencode-protocol.cjs';
 import { createNativeTempDir } from './native/temp-root.cjs';
 
+import { getTranslator } from '../../src/renderer/i18n/translate';
+import { PLACEHOLDER_PATTERN } from '../../src/renderer/i18n/interpolate';
+import { resolveAppLocale } from '../../src/shared/i18n';
+import { escapeRegExp } from '../../src/shared/stringUtils';
+
 const exec = promisify(execFile);
 export type Provider = 'claude' | 'codex' | 'opencode' | 'grok' | 'omp' | 'copilot';
 export interface NativeTool {
@@ -69,6 +74,7 @@ export class NativeApp {
 	app!: ElectronApplication;
 	page!: Page;
 	private boot = 0;
+	private t = getTranslator('en');
 	readonly real = process.env.MAESTRO_E2E_REAL === '1';
 	realCli?: { executable: string; version: string };
 	private credentials: Record<string, string> = {};
@@ -200,14 +206,25 @@ export class NativeApp {
 			...(home ? { HOME: home } : {}),
 			...launchEnv,
 		});
+		this.t = getTranslator(
+			resolveAppLocale(
+				JSON.parse(fs.readFileSync(path.join(this.data, 'maestro-settings.json'), 'utf8'))
+					.uiLanguage
+			)
+		);
 		this.boot++;
 		await this.app.context().tracing.start({ screenshots: true, snapshots: true });
 		this.page = await this.app.firstWindow();
 		await this.page.waitForLoadState('domcontentloaded');
 		await expect(
 			this.page
-				.getByText('Create your first agent', { exact: true })
-				.or(this.page.getByRole('button', { name: 'Open project folder', exact: true }))
+				.getByText(this.t('workflows.emptyState.createFirstAgent'), { exact: true })
+				.or(
+					this.page.getByRole('button', {
+						name: this.t('workflows.projects.folder'),
+						exact: true,
+					})
+				)
 				.or(this.input())
 		).toBeVisible();
 	}
@@ -231,6 +248,17 @@ export class NativeApp {
 			await this.page.evaluate(() => window.maestro.app.confirmQuit());
 			await closed;
 		} else await this.app.close();
+	}
+	/** Kill Electron and its helpers without the quit path, the way a crash or force quit does. */
+	async forceQuit() {
+		const child = this.app.process();
+		const closed = this.app.waitForEvent('close');
+		// Playwright starts Electron as a process-group leader and reports close only
+		// after its stdio closes. Killing the leader alone leaves Linux helpers holding
+		// that stdio, so close never arrives.
+		if (process.platform === 'win32' || !child.pid) child.kill('SIGKILL');
+		else process.kill(-child.pid, 'SIGKILL');
+		await closed;
 	}
 	async restart(homeDir?: string) {
 		await this.close();
@@ -336,7 +364,22 @@ export class NativeApp {
 		return result.agentId as string;
 	}
 	input() {
-		return this.page.getByPlaceholder(/^(Talking to |Message )/);
+		const templates = [
+			this.t('workflows.shell.talkingToValuePoweredByValue'),
+			this.t('workflows.shell.messageProvider'),
+		];
+		return this.page.getByPlaceholder(
+			new RegExp(
+				`^(?:${templates
+					.map((template) =>
+						template
+							.split(PLACEHOLDER_PATTERN)
+							.map((part, index) => (index % 2 ? '.*' : escapeRegExp(part)))
+							.join('')
+					)
+					.join('|')})$`
+			)
+		);
 	}
 	/**
 	 * Open the Right Bar (files, history, Auto Run) the way a user does: it

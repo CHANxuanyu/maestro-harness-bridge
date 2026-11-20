@@ -428,3 +428,5 @@ export function registerAllHandlers(deps: HandlerDependencies): void {
 	// Setup logger event forwarding to renderer
 	setupLoggerEventForwarding(deps.getMainWindow);
 }
+
+export { registerTeamHandlers } from './team';

@@ -1,5 +1,190 @@
 # 分支工作记录
 
+## 2026-11-20：团队 PR 的 Windows 与 Linux 原生 CI
+
+PR 97 在 `21520dda5` 上 Windows 两个分片 12 项失败、Linux 原生任务两项超时后被 75 分钟上限取消。Windows：检查运行器把 `cmd /c` 找不到命令（退出码 1 和 cmd 的提示行）记为未运行；团队测试改为按主机解析账号目录、固定 `core.autocrlf=false`、Windows 上不用含换行的文件名、先删除隐藏的 `.git` 再写；原生临时目录用原生 realpath 展开 8.3 短名。Linux：强制退出改为杀掉 Electron 进程组（`NativeApp.forceQuit()`），Playwright 要等标准输出全部关闭才报告退出，只杀主进程时 Linux 辅助进程仍握着管道。本地 macOS 在旧提交和新提交上这两个场景都通过（11 到 14 秒），Linux 的原因据 Playwright 源码推断，以下一轮 CI 为准。原生任务上限改为 120 分钟，超时取消时也上传 `e2e-results/`。命令：团队相关单测 21 个文件 572 项通过；`npm run lint` 通过；`node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m3.spec.ts` 结果见 PR 评论。
+
+## 2026-11-18：M3 fix5/fix5b 集成
+
+在 `85da119c7` 合并 `86b915d4b` 的未完成合并上补齐 CLI 遗留项负责人测试的闭合，保留两侧测试，并给 M1 原生场景补上 `LedgerEvent` 类型导入。基线编辑退回回归只是匹配了旧版 JSON 空白；改为解析实际提示数据，增加退回意见、编辑记录、标准文字、证明方法和版本断言，脚本 PM 修改页脚及消息门控断言仍通过，没有改动运行时提示或调度规则。完整团队测试 530 项、4 份 TypeScript 检查、ESLint 和 27 个变更文件的 Prettier 检查通过，文档检查 746 条路径无缺失，完整命令见 M3 验证记录。本轮未运行 Electron，未暂存或提交。
+
+## 2026-11-18：M3 fix2/fix3 集成
+
+在 `838f3d31a` 合并 `f65c6933b` 的未完成合并上补齐基线质询历史、轮次和讨论边界 payload 类型，并在中英文卡片中显示。复现的 5 项失败来自旧的正文 JSON 断言和编辑后流程：保留硬预算、最多两轮质询、完整编辑质询和消息门控规则，调整 PM 确认样例保留老板改过的证明方法，退回测试先完成编辑触发的完整质询，原有版本、差异、脚注和消息顺序断言保留。完整团队测试 503 项、i18n 9 项、4 份 TypeScript 检查、ESLint 和 Prettier 通过，文档检查 742 条路径无缺失，命令见 M3 验证记录。用户此前的 40/40 原生通过属于 `838f3d31a`；本轮未运行 Electron，未暂存或提交，未实现后续 fix4。
+
+## 2026-11-18 M3 team renderer and merge resolution
+
+Resolved the in-progress M3 merge without staging or committing, retaining M2 baseline returns, message handling and human card bodies, plus M3 quota, takeover, waits and budget behavior. The merge gate passed 427 team tests and all four TypeScript projects before renderer work; takeover transcript lookup now follows the effective provider and launch source account. Added ledger-derived seat health, account login, app status, escalation/report detail, attempt history, residual ownership and cost surfaces in English and Chinese, with shared CLI/IPC assignment and reusable M3 native fixtures. Final verification passed 454 team tests, 70 adjacent renderer tests, the native fixture test, all four TypeScript projects, ESLint, Prettier and 740 documentation paths. Restart inspection retains a separate receipt from an earlier retry; both real-workspace regression cases fail before the fix and pass after it. Exact commands are recorded in `docs/round2/dev/team-m3-verification.md`; Electron, screenshots and real account recovery were not run here. The separate backend follow-up is not reimplemented.
+
+M3 UI 外部复检：用户运行六份原生场景，38 项通过、2 项失败。本轮读取失败截图、trace 和保留的 M1 台账，修复成功补报被 30 秒失败冷却误拦的问题，登录卡正文标明厂商与实际账号目录，结构化字段保留 provider ID。恢复与等待改用中英文说明，成员工作区加标签，侧栏接任标签保持单行，预算用完时不再显示手动暂停或恢复按钮。两个调度回归先失败后通过，完整团队测试 466 项、相邻组件和 i18n 70 项及四份 TypeScript 检查通过；ESLint、Prettier、文档检查结果和命令见 M3 验证记录。本轮未运行 Electron，未生成或加入截图，未暂存或提交合并。
+
+## 2026-11-18：M2 团队界面
+
+验证对象为合并 `eb53faa0a` 之上的未提交源码。修复 M1 合成 PM 脚本把消息处理误当评审的问题，保留真实调度的已处理回执；接入四步讨论、分层决定、基线编辑与差异及退回、标准变更、评审复盘、产出前后对比、增量演示和成员轮次记录，补齐中英文及 CLI 参数。新增共享脚本的 M2 UI 场景与中文评审路径；定向 Vitest 16 文件 341 项、最后界面复检 3 文件 58 项通过，renderer、main、CLI 及场景四份 TypeScript noEmit、ESLint、Prettier 均通过，文档检查 739 路径无缺失，原生场景只发现 15 项，未运行 Electron 或生成原生截图。检查命令和未验边界见 [M2 界面验证](round2/dev/team-m2-ui-verification.md)。
+
+M2 截图复检：查看用户提供的失败截图、trace 及讨论和标准变更截图，修复基线标签精确定位、按真实语言等待启动、消息最终已处理状态及送达顺序断言；讨论区分待决定与已决定、隐藏未来步骤并标注提案轮次，状态摘要压到两行并保留完整提示，标准变更说明两种选择后果。五条完整调度脚本按要求设 60 秒超时且不改断言；定向 Vitest 17 文件 352 项通过，最后启动助手复检 2 项通过，四份 TypeScript noEmit、变更文件 ESLint、Prettier 和 docs:verify 通过。未运行 Electron、未生成或加入截图，新的中英文原生验收待用户外部重跑；命令见同一验证记录。
+
+M2 第二次复检：用户外部运行 13/15 通过；两份失败台账都在退回讨论完成后停于空消息的 PM/开发准备回合，没有派发新的 PM respond。原因是合成脚本的消息门闩误拦了讨论准备，现仅拦含实际消息的回合；未改生产调度或放松场景断言。新增调度回归先复现失败，再验证 A1 编辑保留、退回意见进入 baselineReturns、PM 发布下一版并更新 E1、差异仅含 E1，且真实消息仍按门闩送达后处理。定向 Vitest 17 文件 353 项、四份 TypeScript noEmit、ESLint、Prettier 通过，docs:verify 检查 739 路径无缺失。本轮未运行 Electron，未提交；精确检查结果见 [M2 界面验证](round2/dev/team-m2-ui-verification.md)。
+
+## 2026-11-18：A1c 第三轮布局与终态输入
+
+验证对象为 `75f2537c7` 之上的未提交源码。查看用户提供的三张 fix2 截图后，将左栏入口改为全宽上下排列、终态标签改为带完整提示的小圆点，团队侧栏改为默认 520 px 的可调宽面板和带溢出渐隐的下划线页签；产出列表直接展开，列表连接使用界面语言，终态禁用发言并只留一个导出入口，暂停仍可排队。定向 Vitest 9 文件 144 项、三份 TypeScript noEmit、变更文件 ESLint 和 Prettier 均通过，文档检查 734 路径无缺失，diff 与禁用破折号检查通过。本轮没有运行 Electron；中英文默认及最窄左栏、侧栏收窄后的实际布局仍待用户截图验收。没有提交或加入截图。
+第四轮查看 fix3 截图后，侧栏默认改回普通右栏的 384 px、页签水平内边距收为 8 px，标题先截断并保持操作同排，阶段分隔符移出标签且需要你徽标固定在滚动区外，产出预览链接单行左对齐；定向 Vitest 9 文件 147 项、三份 TypeScript noEmit、变更文件 ESLint 和 Prettier 通过，未运行 Electron，1400 × 900 中英文实际布局待用户复核。
+
+## 2026-11-17：A1c 第二轮截图修正与终态总结
+
+验证对象仍是基于 `5ac69fdd2c2fcb2440aa0b6e81c16f897798da45` 的本 worktree
+未提交源码，不是发行包。已查看用户提供的 baseline 和 demo 两张本地截图，
+对照 P7.1 原型修正；没有把截图加入公共文档或重新生成 Electron 截图。
+
+真实调度器仅记录 `accepted` 或 `stopped` 就能进入终态，原 feed 却只在收到
+`terminal` 时渲染总结。现在从 `state.terminal` 渲染唯一的“这次协作”卡片，
+始终放在阶段折叠外，覆盖全部达标、带缺口验收和停止。总结读取共享 reducer
+的决定、主动消息、讨论、评审打回、复盘、恢复、替补、唤醒和回合统计，以及
+实际标准变更、残余问题和建议；没有按原型路径填固定数字。主动消息按消息
+身份、唤醒按派发身份计数，重放和送达回执不重复计数。
+
+基线后端卡片分离可读 `body` 与结构化 `payload`，保留 PM 的人类问题用于 CLI。
+唯一客户端适配器兼容旧 JSON body；界面展示标准、范围与原型的检查试跑说明。
+预算报告也不再在正文拼 JSON。基线和验收不显示边界文字，升级卡只显示一次，
+保留 `data-boundary`。成员标签通过现有目录 hook 按岗位账号读取厂商模型与档位
+名字，历史事件仍取当时模型，未知条目才回退到 ID。选择器共用同一档位名字函数。
+
+主视图和右栏去掉 Esc 控件及主视图的模态注册，成员返回与建队弹窗保留 Esc。
+应用 job 跟进的内部结算行不再进入 feed，真实成员跟进仍保留。演示先展示产出，
+文件名相对工作区显示，实际读取保持原路径；第三个按钮改为“看改动”。无普通
+对话时顶栏仍并列提供“新对话”和“新建团队”，前者复用已有打开项目流程。
+中文测试实际设置 `uiLanguage: 'zh-CN'`，覆盖基线、边界、总结、目录名字与导航。
+
+保留用户对问题修复状态竞态的调整：等待修复声明或核验结束，再查台账确认开发
+声明在 QA 核验之前。场景增加可读基线、目录名、相对文件名和总结统计断言，
+终态截图前滚到总结卡。可选截图变量与共享三岗位夹具继续复用。
+
+验证命令与结果：
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/components/ModelEffortPicker.test.tsx src/__tests__/renderer/components/AppShell.test.tsx src/__tests__/renderer/i18n/messages.test.tsx src/__tests__/shared/team/ledger.test.ts src/__tests__/main/team/scheduler.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg '\.(ts|tsx|md|json)$')
+npx playwright test e2e/native-team.spec.ts e2e/native-team-ui.spec.ts --project=native --list
+npm run docs:verify
+git diff --check
+```
+
+定向 Vitest 9 文件、158 项通过，无跳过；三份 TypeScript 检查通过。
+ESLint（含变更测试）、Prettier、diff 检查和禁用破折号扫描通过。
+文档路径检查 734 个、0 缺失。Playwright 仅发现 2 文件的 2 场景，没有运行。
+
+没有运行 Electron、真实模型或发行包，没有提交。用户给出的截图证明的是修复前
+界面；本轮视觉效果、完整 UI 接受路径及新终态截图仍待沙箱外运行。其他终态
+只在 reducer 和 renderer 测试中验证，未跑完整 Electron 分支。没有新增后端桩，
+基线编辑、差异和退回仍保持原有关闭的 feature gates。
+
+## 2026-11-17：A1c 后端接入后的左栏可达性与 UI 场景
+
+验证对象是基于 `5ac69fdd2c2fcb2440aa0b6e81c16f897798da45` 的本 worktree
+未提交源码，不是发行包。真实团队后端已合入。修复两处可达性门槛：没有普通
+对话时仍挂载项目左栏；团队所属路径不在树中时用同一个项目行补出项目，按
+主机和路径归属复用已有项目。搜索、提供方和未读过滤不移除团队项目，终态
+团队保留；停止后的未答卡片和迟到退出不再遮住终态标签。
+
+演示卡接管真实后端的 acceptance 边界，开放“验收”按钮而不重复另一张老板
+卡片。`teamClient` 从真实 preload 契约取类型，并处理 `get` 的空结果。
+成员原生历史读取增加岗位实际账号目录，由 main 使用既有账号解析器返回，
+renderer 仍走只读 `agentSessions.read` 和既有 transcript 组件。
+
+新增 `e2e/native-team-ui.spec.ts`，与后端场景共用
+`e2e/fixtures/native-team.ts` 中的三岗位脚本、独立账号、台账读取和释放门。
+场景从没有对话的窗口经 IPC 建队，随后点击真实左栏、基线确认、发送和演示
+验收按钮。断言标题/预算、七阶段、现状四格、需求/质询/基线/检查/问题链/
+评审/演示顺序、先产出后总结、PM 排队与送达、原生成员历史、Esc 焦点返回及
+验收后仍可选的团队行。`MAESTRO_E2E_SHOTS` 可保存 baseline、demo、terminal
+三张截图；默认不额外保存这些阶段图。
+
+验证命令与结果：
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team src/__tests__/renderer/components/AppShell.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/utils/projectSessionTree.test.ts src/__tests__/main/team/scheduler.test.ts src/__tests__/main/team/ipc.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg -v '^\.survey-A0\.md$')
+npx playwright test e2e/native-team.spec.ts e2e/native-team-ui.spec.ts --project=native --list
+npm run docs:verify
+git diff --check
+```
+
+定向 Vitest 8 文件、133 项通过；renderer、main 和场景三个 TypeScript 检查
+通过；ESLint（含变更测试）与 Prettier 通过。Playwright 发现 2 文件中的
+2 个场景，没有执行测试。文档检查 734 个路径、0 缺失，diff 检查及变更文件
+禁用破折号扫描通过。
+
+本轮按要求没有运行 Electron，也没有生成阶段截图。TypeScript 和 Playwright
+收集只验证场景可编译/发现，不能代替 UI 验收。待用户在沙箱外以本次源码构建
+后运行新场景，检查实际截图、原生历史账号隔离和焦点。旧后端场景提取助手后
+也未重跑 Electron。SSH、其他终态分支的完整运行及 Windows/Linux 未验证。
+基线编辑、差异、退回仍在原有关闭的 feature gates 后；本次没有新增后端桩。
+
+## 2026-11-17：A1c 团队群聊界面
+
+验证对象是基于 `5a8a8914d6bcb14989e79ea86d865feb524eabe8` 的本 worktree
+未提交源码，不是发行包。移植 P7.1 的团队场景：左栏建队入口与三岗位树、
+主视图标题和预算、七阶段、现状四格、历史阶段折叠、台账卡片、发言区，
+以及产出、进展、决定、证据、成员、改动六个侧栏页签。演示先展示产出，
+验收后仍可见；旧阶段收起，未答的老板卡片始终在折叠外。
+
+默认路径合成台账覆盖需求与标准、独立质询、基线确认、完整讨论、应用检查、
+问题状态链、额度和替补、打回及通过的产品评审、演示、消息投递、跟进和终态。
+需求、检查、讨论与证据沿用原型的展开层级；成员标签保留事件发生时的模型。
+老板卡片共用一种组件，附 `data-boundary`，推荐项在前，有代价与边界，
+不接受单独的“继续”选项。答复成功不乐观删除卡片，以后端事件为准。
+
+建队对话框复用 `ModelEffortPicker policy="team-seat"`，包括可选替补；
+四项授权默认勾选，40 回合，保留固定的始终询问清单和厂商来源说明。
+未打开选择器时也为已解析的 Codex 模型固定允许的强度，避免原生 Ultra
+默认值漏过团队策略。Esc、可见关闭、Tab 陷阱和选择器焦点返回使用既有组件。
+SSH 使用有效远程路径，缺主机时禁止误建成本机团队。成员对话经
+`seatTranscript` 和 `agentSessions.read({ readOnly: true })` 读取，复用
+`SessionMessagesView`，Esc 返回团队并把焦点还给成员行。改动复用既有
+`ChangesPanel` 的只读工作区模式。离开团队回到普通对话时恢复原有面板。
+
+台账镜像先订阅再读快照，按事件身份合并竞态，按团队保存还原结果，断开后
+丢弃迟到读取。唯一适配层为 `services/teamClient.ts`；没有内置运行时演示数据。
+服务缺席时显示未就绪。快捷键、菜单、命令面板和 `open create-team` 共用入口，
+团队显示时隐藏对话的删除、模型与 Git 快捷操作不会落到后台对话上。
+
+定向 Vitest 12 文件、364 项通过，包含团队新增测试及受影响的 shell、左栏、
+模型选择器、改动、键盘、表面注册和翻译测试。执行命令：
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team src/__tests__/renderer/components/ChangesPanel.test.tsx src/__tests__/renderer/components/ModelEffortPicker.test.tsx src/__tests__/renderer/components/AppShell.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/utils/openUiSurface.test.ts src/__tests__/renderer/constants/shortcuts.test.ts src/__tests__/shared/uiSurfaces.test.ts src/__tests__/renderer/i18n/messages.test.tsx src/__tests__/renderer/hooks/useMainKeyboardHandler.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg -v '^\.survey-A0\.md$')
+npm run docs:verify
+git diff --check
+```
+
+Vitest 默认配置加载器试图写入外部链接的依赖目录而被拒绝，故使用 runner
+加载器且禁用缓存。TypeScript、ESLint（含测试）、Prettier、文档路径和 diff
+检查通过；新增文件与变更文件没有禁用的两种破折号。
+
+待接入：真实 `window.maestro.team` 服务及事件，创建和列表暂按返回
+`TeamConfig` / `TeamConfig[]` 声明；导出只调用约定方法，保存与返回值语义
+待后端确认。基线编辑、差异、退回的控件与回调留在关闭的 feature gates 后。
+额度卡片展示替补事实和成员入口，原型“等原模型恢复”的主动切回没有对应
+后端方法，暂不提供。其余分支复用卡片但不宣称 M2/M3 验收完成；`team` CLI
+对等由并行后端任务补齐。
+
+未验证：真实团队派发、账号隔离下的成员历史、真实产出采集与导出保存、SSH
+团队、重启持久化、打包应用中的视觉和键盘走查、Windows/Linux。系统 Chrome
+启动被当前沙箱拒绝，没有用 jsdom 当作截图验收。按任务要求没有编写或运行
+Electron 场景。没有提交或发布；原有 `.survey-A0.md` 未改动。
+
 ## 2026-11-18: B2-perf streaming turn projection (PRD 4.4)
 
 Tested artifact: `bd575139d` plus this worktree's uncommitted changes on
@@ -206,6 +391,62 @@ catalog 和项目局部原生默认解析限制。没有提交、发布或改变
 变更 TypeScript 文件的 ESLint 使用 `--no-ignore`，包含仓库默认忽略的测试文件，0 错误、0 警告；全部 30 个变更文件的 Prettier 检查通过，`git diff --check` 通过，新增内容无禁用破折号。原有 `.survey-A0.md` 保持未改动。
 
 未验：真实模型推理、打包应用 GUI、SSH typed catalog、Windows/Linux CI、项目局部原生默认配置和自定义 CLI 参数/二进制；没有提交、发布或切换默认 UI。
+
+## 2026-11-18：M3 中型任务的挂起恢复、等待归属与停滞诊断，未提交
+
+以 `86b915d4b` 为基线核对 197 条真实账本事件：第一次 PM 立场已由接任模型恢复，随后讨论结论把“Dev and QA responses”登记为外部等待，阻断第二次讨论和原模型恢复后的派发。现统一拒绝、取消应用自有步骤的等待；挂起派发记录 resumedFrom 并保留任务上下文，原模型恢复也先检查工作区，旧额度采样不能撤销更新的恢复。十分钟没有事实进展时重算下一步，再发起一次 PM 诊断；纯重复的 PM 等待进入一次提醒、再诊断，真实外部轮询仍不算产品失败。话题引用中的未核实文字保留为依据，不当成证据。513 条团队测试、三项生产类型检查、场景类型检查、ESLint、格式、文档和 main/CLI 构建检查通过。新增回归及选择说明见 [M3 后端验证](round2/dev/team-m3-verification.md)。原生运行在构建沙箱边界和 Electron 启动处受阻，不能宣称场景通过；没有提交或付费模型调用。
+
+## 2026-11-18：M3 fix5 原生回归后的 CLI 审计契约修复，未提交
+
+核对外部失败产物：T21 的 CLI 已返回 JSON 字符串，测试却从已解析的字符串读取 stdout 并再次 JSON.parse；M1 比较的是精简 get 与完整账本，缺少的是原始 repairTail，reportError 仍在。保持提示响应形状，修正场景使用方式并声明字符串类型；新增完整 `team show events` 审计，与默认 get 的诊断保留断言分别验证。缺失提示侧文件增加派发上下文，异常无值响应拒绝作为成功。483 条团队测试、三项生产类型检查、场景类型检查、ESLint、格式和构建检查通过；针对三项失败的原生重试仍在 Electron 启动处受阻，1 项启动失败、2 项未运行。准确命令、结果和原生复验限制见 [M3 后端验证](round2/dev/team-m3-verification.md)。没有提交或调用付费模型。
+
+## 2026-11-18：M3 中型任务的提示侧文件与传输裁剪，未提交
+
+真实中型运行的失败来自 CLI 读取超过缓冲区上限，派发事件重复保存整份提示是账本主要体积来源；讨论提示还为每个产出证据 ID 重复整份文件清单。新派发先保存提示审计侧文件，再记录摘要和引用；默认读取及增量广播裁剪审计文本，完整读取、单次提示和导出仍可追溯。重启按派发标记匹配原生回执，不依赖提示文件。按回合保留必要标准、证据及当前讨论，约束近期历史；没有放宽事实或权限校验。
+
+验证对象为 `2f3f78cfb` 后未提交源码。475 条团队测试、三项生产类型检查和场景类型检查通过。40 回合夹具的默认读取从 1,562,890 字节降至 62,152 字节；真实快照的同口径提示重建从 614,135 降至 359,275 字节，不等同于已测量的模型 token/成本下降。原生场景仍在 Electron 启动前失败，1 项启动失败、24 项未运行；没有付费模型调用、提交或发布。具体命令、分回合尺寸、兼容性选择及外部复验命令见 [M3 后端验证](round2/dev/team-m3-verification.md)。未复制原始账户或运行捕获。
+
+## 2026-11-18：M3 QA 产出工作区与应用采集故障，未提交
+
+以 `f65c6933b` 为基线，核对第四次真实运行的 143 条账本事件和 19 次派发。C2 的测试实际位于 QA 工作区，旧采集器却只查开发工作区，随后错误创建标准问题，触发 PM message 和七回合讨论。现按目标路径选择工作区、记录来源，并按内容保存 QA 快照；采集失败作为应用观察在状态及预算进度报告中显示，保持评审门槛，由应用自行复查，不改变已确认标准。第二轮质询确实对应 C1/C2 的文本和验证方法变更，保留规则；只消除应用错误产生的 PM 处理链。
+
+新增实际 C2 形状的文件采集回归先失败再通过，另覆盖不回退到开发目录、QA 越界、同开发版本的 QA 更新、应用观察重启去重、无模型回合的复查与截止报告。463 条测试、三项生产类型检查、场景类型检查、ESLint、格式检查和开发构建通过；Electron 启动失败，24 个后续场景未运行，不能宣称原生通过。准确命令、结果和原生运行限制见 [M3 后端验证](round2/dev/team-m3-verification.md)。没有提交或调用付费模型；公开夹具只保留合成标准，没有复制完整捕获或账户路径。
+
+## 2026-11-18：M3 真实模型报告的格式归一化，未提交
+
+以 `ee282fec1` 为基线，读取负责人第三次运行的四份拒收报告。此前预算严格停在 20、质询最多两轮、基线在第 7 回合确认均已被真实运行验证；本次处理消耗补报回合的格式差异。非所属席位的估计字段丢弃，proposal 决策者由应用推导，QA 路径在实际工作区内归一化；原始报告用了裸文件名，因此只有应用找到 `qa/` 内唯一实际文件才补全路径。每次修正有可重放且不重复的账本说明，不能变成证据或关闭问题。产品原则、验证器审计及具体边界已写入团队模型和验证文档。
+
+验证对象为该提交后未提交源码。456 条测试、三项生产类型检查、Electron 场景类型检查、ESLint 和格式检查通过；原生运行在 Electron 启动时报错，不能计为场景通过。测试夹具仅保留四份合成任务报告，替换讨论 ID 和临时基线目录；没有复制整份运行捕获、账户路径或私人材料。准确命令、结果及原生复验边界见 [M3 后端验证](round2/dev/team-m3-verification.md)。没有调用付费模型、提交或发布。
+
+## 2026-11-18：M3 真实模型运行后的预算、依据和质询修复，未提交
+
+读取负责人提供的 151 条事件账本，确认第 21 次派发发生时旧预算计数只记了 20 次，因为豁免了一次额度失败。总预算现按实际派发计数，所有模型调用共用边界守卫，额度失败仍不计无进展次数。未知讨论引用保留为未核实依据，没有新证据的坚持变为保留意见；提示列出可引用 ID。按负责人产品决定，将质询限制为一次完整轮次加最多一次改动标准轮次，老板编辑或退回才重置；补全 respond 的标准变更形状及示例。
+
+验证对象为 `d0e1698c5` 后本工作区未提交源码；没有调用付费模型、提交或发布。原生 25/25 是负责人在本次修改前的外部结果，本次回归、准确命令与尚待外部复验项见 [M3 后端验证](round2/dev/team-m3-verification.md)。原始真实运行捕获未复制进公开文档。
+
+## 2026-11-18：M3 原生场景失败后的修复，未提交
+
+根据外部原生运行留下的账本，修复成功补报后仍派发 PM recovery 的错误分支（同时影响 M1 基线及 M3 缺失/错误报告），以及 CLI 默认收件人在 JSON 中变为 null 导致消息被拒的问题。消息入口返回已排队回执，JSON 失败保留 stdout 错误对象并补充 stderr。正常等待的登记时间与截止时间取自同一时钟读数。T17 原先在 dev 已完成后才关闭应用，现将合成提供方闸门放在完成事件之前并强制中断；实际 Git 工作区检查另有调度器集成覆盖。保留负责人恢复的 done 优先、10 分钟复查和 M2 流程测试 60 秒超时。
+
+新增回归先失败后通过，验证命令、根因及尚待外部重跑的原生验收见 [M3 后端验证](round2/dev/team-m3-verification.md)。原始日志、账户路径和捕获未加入公开文档。没有提交或发布。
+
+## 2026-11-18：M3 团队恢复、边界与预算后端，未提交
+
+修复 PM 额度耗尽后反复派发 topic 的实际故障路径；加入额度预检、按授权的新会话接任与重置恢复、正常等待、有限故障恢复、预算报告及终态、按席成本和真实任务分支推送/草稿 PR 执行。补齐 CLI 与 preload 对等入口。恢复复用账本、进展规则、原生历史、跟进和账户解析；没有增加第二套进展判定。
+
+验证对象是本工作区未提交源码及开发构建，没有安装、提交或发布。单元与类型检查、构建、Electron 启动受限的准确结果及命令见 [M3 后端验证](round2/dev/team-m3-verification.md)。合成 Electron 场景已新增并类型检查，但启动失败不计为原生验收。没有运行付费模型或向真实 GitHub 仓库推送。
+
+## 2026-11-17：M2 回合权限与立即失败重派修复，未提交
+
+读取负责人提供的失败账本后，将执行权限统一到 `teamTurnPermission()`：开发 work/fix、QA prep/reverify 可写，其余回合只读，PM 始终只读。成员立即失败只允许一次同回合重试，之后显示故障并等待恢复；新派发 ID、轮询、重启和旧账本中重复的根回合不会重置次数。状态与 CLI 共用此结果，模型接管仍留给 M3。
+
+复用 Electron 的同一组合成报告，在调度器测试中走通 discussion、contested、commitment、relaxation 和 review 全流程，另覆盖权限错误、model-unavailable、旧重复记录回放和恢复条件。17 个测试文件共 439 条通过，Electron 场景类型检查通过。完整命令和后续检查结果见 [M2 后端验证](round2/dev/team-m2-verification.md)。本次没有启动 Electron，由负责人在沙盒外运行；没有提交或发布。
+
+## 2026-11-17：M2 团队讨论与质量门禁后端，未提交
+
+以 `24c01ad8996dc7957307b9d73e6be927a34790ac` 为基线，在独立工作区增加四步讨论、四层决定、证据门禁、标准变更、评审打回和复盘、老板消息回执，以及基线编辑/差异/退回和成员记录的 CLI 对等。复用 `reduceLedger()`、报告 schema、`judgeAttempts()` 和合成原生提供方；渲染器由独立任务接入，没有改产品页面。
+
+验证对象是未提交源码及开发构建，不是安装包。17 个测试文件共 374 条通过；生产及 Electron 场景类型检查、主进程/preload/CLI/桌面与网页构建、ESLint、格式和文档引用检查通过。精确命令、最终结果、解释选择和未验边界见 [M2 后端验证](round2/dev/team-m2-verification.md)。Electron 在场景开始前启动失败，不能把类型检查或单元测试计为原生验收。T8 中检查授权之外的推送/草稿 PR/合并/新模型执行链路，以及外部原生查看器，未在本任务中完成验收。没有提交、打标签或发布。
 
 ## 2026-11-17：R2.0 Codex 计划从原生记录恢复，任务面板验收改认当前 CLI
 

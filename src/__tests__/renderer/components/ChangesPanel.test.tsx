@@ -82,6 +82,17 @@ beforeEach(() => {
 });
 
 describe('ChangesPanel', () => {
+	it('inspects a team workspace over SSH without conversation or Git write actions', async () => {
+		useSettingsStore.setState({ newShell: true });
+		changes.mockResolvedValue(twoFiles);
+		render(
+			<ChangesPanel theme={mockTheme} readOnlyScope={{ cwd: '/team/dev', sshRemoteId: 'host' }} />
+		);
+		await screen.findByText('app.ts');
+		expect(changes).toHaveBeenCalledWith('/team/dev', 'host', undefined);
+		expect(screen.queryByTestId('changes-review')).toBeNull();
+		expect(screen.queryByRole('button', { name: /stage|revert|commit/i })).toBeNull();
+	});
 	it('keeps the default file view independent of native history availability', async () => {
 		useSettingsStore.setState({ newShell: true });
 		const source = session({ toolType: 'codex' });

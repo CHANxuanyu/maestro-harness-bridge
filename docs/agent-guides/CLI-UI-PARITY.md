@@ -1,5 +1,14 @@
 # CLI / UI Parity Audit
 
+Team UI A1c (2026-11-17): `maestro-cli open create-team` uses the same registered
+new-shell setup surface as the sidebar, menu, palette and rebindable shortcut.
+The renderer routes create, answer, say, pause/resume/stop, accept,
+requestChanges and export through `teamClient()`. The service and `team` CLI
+verbs are the parallel backend work, not implemented by this UI task. Runtime
+command parity, export output and native seat identity must be verified when
+that bridge lands. Baseline edit/diff/return remain hidden feature gates; quota
+return-to-original has no verb in the supplied contract and is not offered.
+
 New-shell catalog picker: `maestro-cli open model-picker` reaches the same
 registered popover as the composer and shortcut. `models <provider> --agent
 <id> --json` reads the same catalog, defaults and quota. Existing `tab model`
@@ -13,6 +22,99 @@ Rule (constitutional, see CLAUDE.md): anything a person can do by pointing and
 clicking in Maestro, an agent MUST be able to do through `maestro-cli`, through
 the same code path. A UI action ships with its CLI verb. This file records where
 that holds today, where it does not yet, and why.
+
+## Team M1, M2 and M3 main-process contract (2026-11-18)
+
+These are the actions exposed for the separately implemented team renderer.
+Every command accepts `--json`. Select a team with `--team <id>` (exact or
+unambiguous prefix); omission is accepted only when exactly one team exists.
+Handlers use `createTeamScheduler()` and require no Electron sender.
+
+| Preload action                                      | CLI                                                                                                                                                                                                                           | Shared IPC                                                                             |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `team.create(input)`                                | `team start --idea <text> --pm tool:model:effort --dev tool:model:effort --qa tool:model:effort [--sub-pm ...] [--sub-dev ...] [--sub-qa ...] [--deadline <ISO>] [--turns <n>] [--allow checks,push,pr,temp] [--path <root>]` | `team:create`                                                                          |
+| `team.list()`                                       | `team list`                                                                                                                                                                                                                   | `team:list`                                                                            |
+| `team.get(id)`                                      | `team get`; `team show brief\|baseline\|decisions\|meetings\|changes\|suggestions\|issues\|evidence\|output\|cost\|residual\|messages`                                                                                        | `team:get`, shared `reduceLedger()` projections                                        |
+| `team.status(id)`                                   | `team status`                                                                                                                                                                                                                 | `team:status`, shared `teamStatus()`                                                   |
+| `team.answer(id, card, option, note?)`              | `team answer <card> <option> [--note <text>]`                                                                                                                                                                                 | `team:answer`                                                                          |
+| Confirm the baseline card                           | `team baseline confirm`                                                                                                                                                                                                       | `team:status` then the same `team:answer`                                              |
+| `team.baselineEdit(id, criterionId, text, fields?)` | `team baseline edit <criterion> --text <text> [--proof app\|qa\|pm] [--how <text>]`                                                                                                                                           | `team:baselineEdit`; returns the new brief and diff                                    |
+| `team.baselineDiff(id)`                             | `team baseline diff`                                                                                                                                                                                                          | `team:baselineDiff`                                                                    |
+| `team.baselineReturn(id, note)`                     | `team baseline return --note <text>`                                                                                                                                                                                          | `team:baselineReturn`; same owner return action                                        |
+| `team.log(id, seat?)`                               | `team log [--seat pm\|dev\|qa]`                                                                                                                                                                                               | `team:log`; frozen assigned prompts and visible replies                                |
+| `team.say(id, text, to?)`                           | `team say [--to pm\|dev\|qa] <text>`                                                                                                                                                                                          | `team:say`; durable queued receipt, default PM, delivery after recovery or active turn |
+| `team.pause(id)`                                    | `team pause`                                                                                                                                                                                                                  | `team:pause`                                                                           |
+| `team.resume(id)`                                   | `team resume`                                                                                                                                                                                                                 | `team:resume`                                                                          |
+| `team.stop(id)`                                     | `team stop`                                                                                                                                                                                                                   | `team:stop`                                                                            |
+| `team.accept(id)`                                   | `team accept`                                                                                                                                                                                                                 | `team:accept`                                                                          |
+| `team.requestChanges(id, note)`                     | `team request-changes --note <text>`                                                                                                                                                                                          | `team:requestChanges`                                                                  |
+| `team.export(id)`                                   | `team export`                                                                                                                                                                                                                 | `team:export`, JSON text of config and ledger                                          |
+| `team.seatTranscript(id, seat)`                     | `team seat-transcript <seat>`                                                                                                                                                                                                 | `team:seatTranscript`                                                                  |
+| `team.onChanged(listener)`                          | Re-read `team get` or `team status`                                                                                                                                                                                           | `team:changed` carries `{ teamId, event }` after every durable append                  |
+
+Report normalization runs in that scheduler for native completion and recovery.
+The `team log --json` rows and preload `team.log()` expose the same optional
+`normalizations` array; `team get`, export and event broadcasts also include the
+app-owned `report_normalized` ledger events. No CLI-specific validator exists.
+
+`team status --json` and preload `team.status()` also share `appObservations` for
+output capture faults. Plain status includes them in waiting reasons; `team get`
+and export retain the `output_observation` events and workspace-tagged captures.
+The app-generated budget card includes the same observations without a PM turn.
+
+| Preload action                             | CLI                                                                                                                                                                                                                           | Shared IPC                                                                                               |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `team.create(input)`                       | `team start --idea <text> --pm tool:model:effort --dev tool:model:effort --qa tool:model:effort [--sub-pm ...] [--sub-dev ...] [--sub-qa ...] [--deadline <ISO>] [--turns <n>] [--allow checks,push,pr,temp] [--path <root>]` | `team:create`                                                                                            |
+| `team.list()`                              | `team list`                                                                                                                                                                                                                   | `team:list`                                                                                              |
+| `team.get(id, full?)`                      | `team get [--full]`; `team show brief\|baseline\|decisions\|meetings\|changes\|suggestions\|issues\|evidence\|output\|cost\|residual\|messages`                                                                               | `team:get`, shared `reduceLedger()` projections                                                          |
+| `team.status(id)`                          | `team status`                                                                                                                                                                                                                 | `team:status`, shared `teamStatus()`                                                                     |
+| `team.answer(id, card, option, note?)`     | `team answer <card> <option> [--note <text>]`                                                                                                                                                                                 | `team:answer`                                                                                            |
+| Confirm the baseline card                  | `team baseline confirm`                                                                                                                                                                                                       | `team:status` then the same `team:answer`                                                                |
+| `team.baselineEdit(id, criterionId, text)` | `team baseline edit <criterion> --text <text>`                                                                                                                                                                                | `team:baselineEdit`; returns the new brief and diff                                                      |
+| `team.baselineDiff(id)`                    | `team baseline diff`                                                                                                                                                                                                          | `team:baselineDiff`                                                                                      |
+| `team.baselineReturn(id, note)`            | `team baseline return --note <text>`                                                                                                                                                                                          | `team:baselineReturn`; same owner return action                                                          |
+| `team.events(id)`                          | `team show events`                                                                                                                                                                                                            | `team:events`, complete stored ledger without sidecar hydration; `team get` stays compact                |
+| `team.prompt(id, dispatchId)`              | `team show prompt <dispatchId>`                                                                                                                                                                                               | `team:prompt`, exact assignment with digest verification; legacy inline supported                        |
+| `team.log(id, seat?)`                      | `team log [--seat pm\|dev\|qa]`                                                                                                                                                                                               | `team:log`; frozen assigned prompts and visible replies                                                  |
+| `team.say(id, text, to?)`                  | `team say [--to pm\|dev\|qa] <text>`                                                                                                                                                                                          | `team:say`; durable queued receipt, default PM, delivery after recovery or active turn                   |
+| `team.pause(id)`                           | `team pause`                                                                                                                                                                                                                  | `team:pause`                                                                                             |
+| `team.resume(id)`                          | `team resume`                                                                                                                                                                                                                 | `team:resume`                                                                                            |
+| `team.stop(id)`                            | `team stop`                                                                                                                                                                                                                   | `team:stop`                                                                                              |
+| `team.accept(id)`                          | `team accept`                                                                                                                                                                                                                 | `team:accept`                                                                                            |
+| `team.requestChanges(id, note)`            | `team request-changes --note <text>`                                                                                                                                                                                          | `team:requestChanges`                                                                                    |
+| `team.export(id)`                          | `team export`                                                                                                                                                                                                                 | `team:export`, JSON text of config, ledger and prompts keyed by dispatch id                              |
+| `team.seatTranscript(id, seat)`            | `team seat-transcript <seat>`                                                                                                                                                                                                 | `team:seatTranscript`                                                                                    |
+| `team.onChanged(listener)`                 | Re-read `team get` or `team status`                                                                                                                                                                                           | `team:changed` carries `{ teamId, event }` facts/previews after each durable append, never a full ledger |
+
+| Preload action                          | CLI                                                                        | Shared IPC                                                                                         |
+| --------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `team.extend(id, { hours?, turns? })`   | `team extend --hours <n> --turns <n>`                                      | `team:extend`                                                                                      |
+| `team.accept(id, true)`                 | `team accept --with-gaps`                                                  | `team:accept`, retains unmet evidence and adds residual items                                      |
+| `team.seatSet(id, seat, model)`         | `team seat set <seat> tool:model:effort`                                   | `team:seatSet`, new paid models first create a named model card                                    |
+| `team.seatSub(id, seat, model?, wait?)` | `team seat sub <seat> tool:model:effort` or `team seat sub <seat> --wait`  | `team:seatSub`                                                                                     |
+| `team.action(id, action, detail)`       | `team action push\|draftPr\|merge\|publish\|externalMessage --note <text>` | `team:action`, records intent; only authorized push/draft PR execute                               |
+| App status and informational wrap-up    | `team status --json`                                                       | `team:status`, includes `wrapUp`; no owner approval for the plan                                   |
+| Cost and residual list                  | `team show cost` / `team show residual`                                    | `team:get` with canonical reducer; actual turns and billable observations, budget turns separately |
+
+M3 renderer owner actions use the same methods above: generic boundary answers,
+report extension/acceptance with gaps, pause/resume, and remembered permission
+classes. Residual assignment uses `team.assignResidual(id, itemId, owner)` through
+`team:assignResidual`; CLI: `team residual assign <item> --owner <name>` (an empty
+owner clears it). Assignment appends a residual event and never changes criterion
+evidence. The login control opens the existing account-scoped ReauthModal with
+the failed seat's launch settings. Interactive provider login has the existing
+PTY exception below; `team answer <card> login` records explicit recovery after
+`CODEX_HOME=<dir> codex login` or `CLAUDE_CONFIG_DIR=<dir> claude` plus `/login`.
+
+The CLI uses the existing authenticated `bridge.invoke` transport. It does not
+write the team directory. The exact preload signatures and subscription replay
+recipe are documented in `src/renderer/global.d.ts`. M3 adds local quota recovery,
+persisted waits and budget extension, interrupted-effect inspection, and actual
+Git task-branch publication plus `gh pr create --draft` on the project's selected
+remote. Merge, publish and external messages create owner cards; the team never
+executes them. SSH workspaces and the separately owned renderer remain outside
+this backend task. Native acceptance evidence is recorded in
+[team-m3-verification.md](../round2/dev/team-m3-verification.md).
 
 Audited 2026-08-19 against the three surfaces that define "clickable": the
 keyboard shortcut registry (`src/renderer/constants/shortcuts.ts`), the Quick

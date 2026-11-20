@@ -12,6 +12,7 @@
  */
 
 import {
+	registerTeamHandlers,
 	registerGitHandlers,
 	registerAutorunHandlers,
 	registerPlaybooksHandlers,
@@ -66,6 +67,7 @@ import {
 	wireEmptySecondaryWindowAutoClose,
 	setupLoggerEventForwarding,
 } from '../handlers';
+import { createTeamRuntime } from '../../team/runtime';
 import { wireMultiWindowTelemetry } from '../../stats';
 import { saveWindowState } from '../../window-state-persistence';
 import { ensureCoworkingServerScript } from '../../coworking/coworking-server-paths';
@@ -272,6 +274,13 @@ export function setupIpcHandlers(deps: IpcBootstrapDependencies): void {
 	// This provides the new window.maestro.agentSessions.* API
 	// Pass the shared claudeSessionOriginsStore so session names/stars are consistent
 	initializeSessionStorages({ claudeSessionOriginsStore: deps.claudeSessionOriginsStore });
+	const team = createTeamRuntime({
+		...deps,
+		sessionsStore:
+			deps.sessionsStore as unknown as import('../handlers/process/handle-spawn').SpawnHandlerDependencies['sessionsStore'],
+	});
+	registerTeamHandlers(team);
+	void team.start().catch((error) => logger.error(String(error), 'TeamScheduler'));
 	registerAgentSessionsHandlers({
 		getProcessManager: deps.getProcessManager,
 		getWindowForSession: (sessionId) => {

@@ -1,0 +1,18 @@
+{
+	"id": "C2",
+	"text": "QA's independent boundary cases pass against the dev implementation, and the README accurately documents the real behaviour, including the finite-input, min <= max and validation-out-of-scope statements.",
+	"proof": "qa",
+	"how": "QA writes qa/clamp.qa.test.cjs in the QA worktree only. It loads the dev clamp.cjs by the absolute path the app provides as CLAMP_PATH, asserts the path is absolute, and asserts it is not the QA worktree's baseline file. Cases, as clamp(v,min,max)=expected: (5,0,10)=5; (0,0,10)=0; (10,0,10)=10; (7,7,7)=7; (3,7,7)=7; (9,7,7)=7; (-5,-10,-1)=-5; (-20,-10,-1)=-10; (0,-10,-1)=-1; (-1e308,0,10)=0; (1e308,0,10)=10; (2.5,0,10)=2.5; (-0.5,0,1)=0; (1.5,0,1)=1; (0.1,0.1,0.2)=0.1; (0.2,0.1,0.2)=0.2. Results are compared with === and not Object.is, so -0 is not distinguished. QA runs `node --test --test-reporter=tap qa/clamp.qa.test.cjs` and requires all cases to pass. QA then reads README.md from the same dev worktree as the resolved CLAMP_PATH module, against a claim-by-claim checklist where each behavioural claim maps to a passing case. The README must state the finite-input assumption, the min <= max assumption, and that validating other inputs is out of scope. QA fails the README if it promises behaviour for out-of-scope inputs, such as NaN, min > max, or -0 sign.",
+	"locations": [
+		{
+			"label": "README behaviour docs",
+			"target": "README.md",
+			"kind": "file"
+		},
+		{
+			"label": "QA independent tests",
+			"target": "qa/clamp.qa.test.cjs",
+			"kind": "file"
+		}
+	]
+}

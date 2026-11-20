@@ -19,6 +19,14 @@ export interface ModelEffort {
 	description: string;
 }
 
+/** Vendor vocabulary is intentionally untranslated; explanations are localized. */
+export function modelEffortLevelName(provider: ModelCatalogProvider, effort?: ModelEffort): string {
+	if (!effort) return '';
+	if (effort.displayName) return effort.displayName;
+	if (effort.id === 'xhigh') return provider === 'claude-code' ? 'Extra' : 'Extra High';
+	return effort.id.charAt(0).toUpperCase() + effort.id.slice(1);
+}
+
 export interface CatalogModel {
 	id: string;
 	displayName: string;

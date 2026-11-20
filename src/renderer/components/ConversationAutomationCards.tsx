@@ -8,6 +8,25 @@ import type {
 	ConversationAutomationState,
 } from '../../shared/conversationAutomation';
 
+/**
+ * Whether the transcript copy of the cards shows anything. Mirrors the sections
+ * below, so a turn's delivery bar never draws an empty card block; a test renders
+ * the component against this predicate to keep the two in step.
+ */
+export function hasTranscriptAutomationCards(state: ConversationAutomationState): boolean {
+	const latest = state.batches.at(-1);
+	return (
+		state.notes.length > 0 ||
+		(!!state.stopped && !state.expired) ||
+		(state.checks.length > 0 && !state.projectAuthorized) ||
+		state.checks.some((check) => check.boundary && !check.once) ||
+		(state.fix === 'ask' && !!latest?.checks.some((check) => check.outcome === 'fail')) ||
+		state.attempts.length > 0 ||
+		state.decision?.kind === 'escalate' ||
+		!!state.expired
+	);
+}
+
 export function ConversationAutomationCards({
 	state,
 	act,

@@ -3,7 +3,10 @@ import { patchNewShellPanel } from '../../shared/newShellPanel';
 import { useConversationAutomationStore } from '../stores/conversationAutomationStore';
 import { updateAiTab, useSessionStore } from '../stores/sessionStore';
 import { useT } from '../i18n';
-import { ConversationAutomationCards } from './ConversationAutomationCards';
+import {
+	ConversationAutomationCards,
+	hasTranscriptAutomationCards,
+} from './ConversationAutomationCards';
 
 interface CheckDeliveryTarget {
 	sessionId: string;
@@ -45,7 +48,7 @@ export function useConversationCheckDelivery({
 	const ranChecks = batch?.checks.some(
 		(check) => check.outcome === 'pass' || check.outcome === 'fail'
 	);
-	const showCards = !!state && turnId === latestTurnId;
+	const showCards = !!state && turnId === latestTurnId && hasTranscriptAutomationCards(state);
 	return { state, batch, failed, hasChecks, ranChecks, showCards, visible: hasChecks || showCards };
 }
 

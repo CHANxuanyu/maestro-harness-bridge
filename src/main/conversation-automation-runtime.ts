@@ -180,7 +180,7 @@ export function registerConversationAutomation(deps: IpcBootstrapDependencies): 
 		},
 	});
 	const offFinished = onGitTurnFinished(
-		(processId, delivery, scope) => {
+		(processId, delivery, scope, completedDelivery) => {
 			executionCwds.set(processId, scope.cwd);
 			for (const session of sessions()) {
 				const tab = session.aiTabs?.find(
@@ -189,19 +189,16 @@ export function registerConversationAutomation(deps: IpcBootstrapDependencies): 
 				);
 				if (!tab) continue;
 				const target = { kind: 'conversation' as const, sessionId: session.id, tabId: tab.id };
+				const deliveryId = completedDelivery as string | undefined;
 				void automation
-					.afterTurn(target, delivery.checkRunId, scope.changed, activeDeliveries.get(processId))
-					.catch((error) =>
-						onError(error, {
-							stage: 'after-turn',
-							target,
-							deliveryId: activeDeliveries.get(processId),
-						})
-					);
+					.afterTurn(target, delivery.checkRunId, scope.changed, deliveryId)
+					.catch((error) => onError(error, { stage: 'after-turn', target, deliveryId }));
 				break;
 			}
 		},
-		(processId) => automation.tracksTurn(processId)
+		(processId) => automation.tracksTurn(processId),
+		// Read at exit: the next queued turn replaces this entry while checks are measured.
+		(processId) => activeDeliveries.get(processId)
 	);
 	const ownerWindow = (event: Electron.IpcMainInvokeEvent) =>
 		deps.windowRegistry

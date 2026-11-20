@@ -105,7 +105,7 @@ describe('combined changes on a real repository', { timeout: 60_000 }, () => {
 			const delivery = await finishGitTurn('checks');
 			expect(delivery?.files).toBe(0);
 			expect(delivery?.checkRunId).toBeTruthy();
-			expect(observed).toHaveBeenCalledWith('checks', delivery, { cwd, changed: true });
+			expect(observed).toHaveBeenCalledWith('checks', delivery, { cwd, changed: true }, undefined);
 		} finally {
 			unsubscribe();
 		}
@@ -118,12 +118,64 @@ describe('combined changes on a real repository', { timeout: 60_000 }, () => {
 			await beginGitTurn('idle-check', cwd);
 			const delivery = await finishGitTurn('idle-check');
 			expect(delivery).toMatchObject({ files: 0, paths: [] });
-			expect(observed).toHaveBeenCalledWith('idle-check', delivery, { cwd, changed: false });
+			expect(observed).toHaveBeenCalledWith(
+				'idle-check',
+				delivery,
+				{ cwd, changed: false },
+				undefined
+			);
 			// An untracked turn without tool writes keeps the plain no-delivery result.
 			await beginGitTurn('untracked', cwd);
 			expect(await finishGitTurn('untracked')).toBeUndefined();
 		} finally {
 			unsubscribe();
+		}
+	});
+
+	it('ends a tracked turn whose baseline never formed, with the change unknown and assumed', async () => {
+		const observed = vi.fn();
+		let delivery = 'first-delivery';
+		const unsubscribe = onGitTurnFinished(
+			observed,
+			(id) => id === 'fast',
+			() => delivery
+		);
+		try {
+			// The exit arrives while the baseline read is still in flight.
+			const begun = beginGitTurn('fast', cwd);
+			const finished = await finishGitTurn('fast');
+			delivery = 'next-turn-delivery';
+			await begun;
+			expect(finished).toMatchObject({ files: 0 });
+			expect(finished?.checkRunId).toBeTruthy();
+			expect(observed).toHaveBeenCalledTimes(1);
+			expect(observed).toHaveBeenCalledWith(
+				'fast',
+				finished,
+				{ cwd, changed: true },
+				'first-delivery'
+			);
+		} finally {
+			unsubscribe();
+		}
+	});
+
+	it('reports a tracked turn outside Git as unchanged', async () => {
+		const outside = realpathSync.native(mkdtempSync(path.join(tmpdir(), 'maestro-no-git-')));
+		const observed = vi.fn();
+		const unsubscribe = onGitTurnFinished(observed, (id) => id === 'plain');
+		try {
+			await beginGitTurn('plain', outside);
+			await finishGitTurn('plain');
+			expect(observed).toHaveBeenCalledWith(
+				'plain',
+				expect.objectContaining({ files: 0 }),
+				{ cwd: outside, changed: false },
+				undefined
+			);
+		} finally {
+			unsubscribe();
+			rmSync(outside, { recursive: true, force: true });
 		}
 	});
 

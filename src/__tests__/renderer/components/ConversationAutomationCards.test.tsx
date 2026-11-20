@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { ConversationAutomationCards } from '../../../renderer/components/ConversationAutomationCards';
+import {
+	ConversationAutomationCards,
+	hasTranscriptAutomationCards,
+} from '../../../renderer/components/ConversationAutomationCards';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { judgeAttempts } from '../../../shared/progressRules';
 import type { ConversationAutomationState } from '../../../shared/conversationAutomation';
@@ -35,6 +38,50 @@ describe('conversation automation cards', () => {
 			notes: [],
 		};
 	});
+	it.each<[string, (state: ConversationAutomationState) => void]>([
+		['nothing to show', (state) => Object.assign(state, { checks: [], projectAuthorized: true })],
+		['unauthorized checks', () => {}],
+		[
+			'a note',
+			(state) => Object.assign(state, { checks: [], notes: [{ kind: 'checksRestarted' }] }),
+		],
+		['a stop', (state) => Object.assign(state, { checks: [], stopped: true })],
+		[
+			'an escalation',
+			(state) =>
+				Object.assign(state, {
+					checks: [],
+					decision: { kind: 'escalate', boundary: 'budget', options: [] },
+				}),
+		],
+	])('agrees with the rendered cards for %s', (_label, change) => {
+		change(state);
+		render(<ConversationAutomationCards state={state} act={vi.fn(async () => {})} />);
+		expect(screen.getByTestId('automation-cards').childElementCount > 0).toBe(
+			hasTranscriptAutomationCards(state)
+		);
+	});
+
+	it('draws no delivery bar for automation state that has nothing to show', () => {
+		Object.assign(state, { checks: [], projectAuthorized: true });
+		useSessionStore.setState({
+			sessions: [
+				createMockSession({
+					id: 's',
+					aiTabs: [
+						createMockAITab({
+							id: 't',
+							logs: [{ id: 'turn', source: 'user', text: 'hi', timestamp: 1 }],
+						}),
+					],
+				}),
+			],
+		});
+		useConversationAutomationStore.getState().replace([state]);
+		render(<TurnDeliveryBar sessionId="s" tabId="t" turnId="turn" textColor="#888" plan={null} />);
+		expect(screen.queryByTestId('turn-delivery')).toBeNull();
+	});
+
 	it('draws the delivery bar for a turn without files only when its conversation has checks', () => {
 		const bar = (
 			<TurnDeliveryBar

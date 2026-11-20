@@ -1,5 +1,9 @@
 # 分支工作记录
 
+## 2026-11-20：团队 PR 的 Windows 与 Linux 原生 CI
+
+PR 97 在 `21520dda5` 上 Windows 两个分片 12 项失败、Linux 原生任务两项超时后被 75 分钟上限取消。Windows：检查运行器把 `cmd /c` 找不到命令（退出码 1 和 cmd 的提示行）记为未运行；团队测试改为按主机解析账号目录、固定 `core.autocrlf=false`、Windows 上不用含换行的文件名、先删除隐藏的 `.git` 再写；原生临时目录用原生 realpath 展开 8.3 短名。Linux：强制退出改为杀掉 Electron 进程组（`NativeApp.forceQuit()`），Playwright 要等标准输出全部关闭才报告退出，只杀主进程时 Linux 辅助进程仍握着管道。本地 macOS 在旧提交和新提交上这两个场景都通过（11 到 14 秒），Linux 的原因据 Playwright 源码推断，以下一轮 CI 为准。原生任务上限改为 120 分钟，超时取消时也上传 `e2e-results/`。命令：团队相关单测 21 个文件 572 项通过；`npm run lint` 通过；`node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m3.spec.ts` 结果见 PR 评论。
+
 ## 2026-11-18：B4 第二次原生跟进，修复跟进显示
 
 上次改动的沙箱外重跑已通过 5/7：F1 两项、F2、F3、F4；两项 F6 因到期卡重复失败。已按失败截图修正产品表现：跟进、迟到、到期和修复回合显示本地化应用标记，可展开可读结果，保持给助手的原始提示不变；队列预览与原生历史恢复也不再显示内部信封。自动回合不参与命名，第一条真实用户消息决定标题。

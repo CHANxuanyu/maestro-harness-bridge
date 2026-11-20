@@ -41,9 +41,7 @@ test('team M1: three seats, CLI owner cards, report repair and forced-quit recov
 		expect(implementing.finished).toBeUndefined();
 		const beforeQuit = events();
 		// Kill Electron before the gated provider exits. Its native result already exists.
-		const closed = native.app.waitForEvent('close');
-		native.app.process().kill('SIGKILL');
-		await closed;
+		await native.forceQuit();
 		open = false;
 		for (const directory of Object.values(accounts)) {
 			const pidFile = path.join(directory, 'fixture-process');

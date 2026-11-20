@@ -265,6 +265,17 @@ export class NativeApp {
 			await closed;
 		} else await this.app.close();
 	}
+	/** Kill Electron and its helpers without the quit path, the way a crash or force quit does. */
+	async forceQuit() {
+		const child = this.app.process();
+		const closed = this.app.waitForEvent('close');
+		// Playwright starts Electron as a process-group leader and reports close only
+		// after its stdio closes. Killing the leader alone leaves Linux helpers holding
+		// that stdio, so close never arrives.
+		if (process.platform === 'win32' || !child.pid) child.kill('SIGKILL');
+		else process.kill(-child.pid, 'SIGKILL');
+		await closed;
+	}
 	async restart(homeDir?: string) {
 		await this.close();
 		await this.start(homeDir);

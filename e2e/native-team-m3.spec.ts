@@ -275,9 +275,7 @@ test('M3 T17 restart inspects interrupted external effects and reconciles the ex
 		expect(f.state().turns.find((t) => t.dispatchId === work.dispatchId)?.finished).toBeUndefined();
 		// Interrupt before the logical completion event. Closing normally can drain
 		// the provider and finish the turn, which would not exercise recovery.
-		const closed = f.native.app.waitForEvent('close');
-		f.native.app.process().kill('SIGKILL');
-		await closed;
+		await f.native.forceQuit();
 		for (const seat of ['pm', 'dev', 'qa'] as const) {
 			const pidFile = path.join(f.native.root, `${seat}-account`, 'fixture-process');
 			if (!fs.existsSync(pidFile)) continue;

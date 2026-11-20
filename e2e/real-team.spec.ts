@@ -97,7 +97,12 @@ function seatModel(
 ) {
 	const tool =
 		(process.env[`MAESTRO_E2E_TEAM_${role}`] as 'claude-code' | 'codex' | undefined) ?? fallback;
-	return `${tool}:${tool === 'codex' ? tools.codex?.model : tools.claude?.model}`;
+	// A seat may run a different model of its vendor, e.g. a lighter developer so the
+	// PM review loop has something to send back (roadmap M2-10).
+	const model =
+		process.env[`MAESTRO_E2E_TEAM_${role}_MODEL`]?.trim() ||
+		(tool === 'codex' ? tools.codex?.model : tools.claude?.model);
+	return `${tool}:${model}`;
 }
 
 async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {

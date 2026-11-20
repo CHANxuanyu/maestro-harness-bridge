@@ -53,7 +53,9 @@ Claude 和 Codex 使用订阅登录快照。`prepareCredentials()` 只读来源�
 
 RT 两项分别用 grep 运行，不要一次运行整份文件。沿用上面的 Claude keychain 或 `CLAUDE_CONFIG_DIR`、`CODEX_HOME` 只读快照和显式版本、模型设置；不需要第三家密钥。第三家模型：**待补覆盖**，不计为已通过。中等任务只是后续验收入口，本次编写不代表 M2/M3 或 PRD 6.13 的同条件对照研究已完成。
 
-团队通过 `maestro-cli team start` 建立，不设截止时间，显式传入 `--turns 20` 或 `--turns 40` 和 `--allow checks,push,pr,temp`。临时仓库没有 remote，任务不需要 push 或 PR。测试只在卡片出现后调用 `team baseline confirm`、`team accept` 或 `team answer`，平时只读 `team status --json` 与 `team get --json`；不调用 `team say`，不发继续或催促。默认只允许基线和验收两张卡。预算确实耗尽时记录边界、用 CLI 回答停止并让验收失败，不加预算、不接受遗留项；其他意外卡片记录原文和当时状态后失败，不自动批准。测试结束时的 `team stop` 是清理动作，单独记录，不混入老板介入次数。
+团队通过 `maestro-cli team start` 建立，不设截止时间，显式传入 `--turns 20` 或 `--turns 40` 和 `--allow checks,push,pr,temp`。临时仓库没有 remote，任务不需要 push 或 PR。测试只在卡片出现后调用 `team baseline confirm`、`team accept` 或 `team answer`，平时只读 `team status --json` 与 `team get --json`；不调用 `team say`，不发继续或催促。默认只允许基线和验收两张卡。团队按 PRD R1 第 4 条把改写标准或改证明方式的标准变更交给老板时，测试选卡片推荐的选项（推荐从不扩大范围），并计入老板介入次数。预算确实耗尽时记录边界、用 CLI 回答停止并让验收失败，不加预算、不接受遗留项；其他意外卡片记录原文和当时状态后失败，不自动批准。单个回合的墙钟上限是 10 分钟，与调度器判定成员停滞的时间一致。
+
+每个岗位的厂商用 `MAESTRO_E2E_TEAM_PM`、`MAESTRO_E2E_TEAM_DEV`、`MAESTRO_E2E_TEAM_QA`（`claude-code` 或 `codex`）选择，模型默认取该厂商的 `MAESTRO_E2E_*_MODEL`，可以用 `MAESTRO_E2E_TEAM_DEV_MODEL` 这类变量单独指定，例如让开发用较轻的模型，观察 PM 评审打回（路线图 M2-10）。测试结束时的 `team stop` 是清理动作，单独记录，不混入老板介入次数。
 
 RT 的脚本和 Playwright 不自动重跑失败调用。团队调度器自身的单次失败重试、补报告等有界恢复属于被测产品行为，每次真实启动都占用同一份跨岗位、跨厂商的 20/40 次硬上限，并记录原始回合与恢复关系；不在测试里再实现恢复。单个成员回合上限 4 分钟，小任务总墙钟上限 30 分钟，中等任务 60 分钟，另留 2 分钟清理。连续超过 2 分钟没有工作成员、登记等待或老板卡片时，按调度器缺陷失败；现状里的 “Scheduler to wake the PM” 占位提示不算登记等待。等待和检查轮询不产生模型调用。
 

@@ -229,7 +229,8 @@ describe('conversation automation production wiring', () => {
 		await vi.advanceTimersByTimeAsync(20_000);
 		await vi.waitFor(() =>
 			expect(errors).toHaveBeenCalledWith(
-				expect.stringContaining('EISDIR'),
+				// Replacing a directory is EISDIR on POSIX and EPERM on Windows.
+				expect.stringMatching(/EISDIR|EPERM/),
 				'ConversationAutomation',
 				expect.objectContaining({ stage: 'fire', followUpId: state.followUps[0].id, target })
 			)
@@ -313,7 +314,8 @@ describe('conversation automation production wiring', () => {
 
 	it('runs the native F4 sequence with real checks, Git fingerprints and progress rules', async () => {
 		renderHook(() => useConversationAutomation(), { wrapper });
-		await invoke({ action: 'checks-set', commands: ['false'] });
+		// `exit 1` fails under both sh and cmd; cmd has no `false`, which would be not-run.
+		await invoke({ action: 'checks-set', commands: ['exit 1'] });
 		await invoke({ action: 'authorize', choice: 'project' });
 		const initial = await invoke({ action: 'fix', mode: 'auto' });
 		// The native failure's empty transcript and gather decision describe this

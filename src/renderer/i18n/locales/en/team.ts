@@ -337,6 +337,9 @@ export const team = {
 		'The team made no progress for ten minutes. The app re-checked the next step and asked the PM for a diagnosis.',
 	'workflows.team.appObservationWait':
 		'A seat tried to wait on a step the app runs itself. The app ran the step instead.',
+	'workflows.team.supersededByBaseline':
+		'Superseded by the confirmed baseline v{version}; historical only.',
+	'workflows.team.expectExit': 'expects exit code {code}',
 	'workflows.team.superseded': 'Superseded by a later change',
 	'workflows.team.expected': 'Expected',
 	'workflows.team.actual': 'Actual',

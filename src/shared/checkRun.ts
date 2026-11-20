@@ -11,6 +11,7 @@ export interface CheckRun {
 	startedAt: number;
 	endedAt: number;
 	exitCode: number | null;
+	expectedExitCode?: number;
 	outcome: CheckOutcome;
 	outputTail: string;
 	truncated: boolean;

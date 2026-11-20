@@ -525,3 +525,76 @@ it('distinguishes genuine external conditions and unobservable prose from app-ow
 	expect(teamWaitRejection({ waitFor: 'New measured output' })).toContain('No external condition');
 	expect(teamWaitRejection({ waitFor: 'CI', needs: ['qa'] })).toContain('app-owned');
 });
+
+describe('confirmed baseline over pre-baseline decisions', () => {
+	// Real run 5 (2026-11-20): QA's report after baseline v3, trimmed to the fields used.
+	const realTopic = {
+		topic: 'PM decision accepts exponents but confirmed cli-contract v3 rejects them',
+		why: 'The ledger decision says to accept e/E exponents. Confirmed criterion cli-contract v3 and the check `add 1e3 2` say to reject exponents.',
+		participants: ['pm', 'dev', 'qa'],
+		owner: 'pm',
+		layer: 'product',
+		kind: 'standard',
+		criterionId: 'A1',
+		question:
+			'Which governs: v3 (reject exponents, check `add 1e3 2` expects exit 2) or the PM decision (accept e/E exponents)?',
+	} as const;
+	const dispatch = ledger({
+		kind: 'turn_dispatched',
+		dispatchId: 'qa-prep',
+		seat: 'qa',
+		turn: 'qa_prep',
+		promptDigest: '',
+	})[0] as TeamEvent<'turn_dispatched'>;
+	const stateWith = (decisionBeforeBaseline: boolean) =>
+		reduceLedger(
+			ledger(
+				...baseline.slice(0, 2),
+				...(decisionBeforeBaseline
+					? [
+							{
+								kind: 'discussion_closed',
+								discussionId: 'early',
+								decision: 'Accept e/E exponents',
+								decider: 'pm',
+								contested: false,
+								dissent: '',
+								actions: [],
+							} as const,
+						]
+					: []),
+				baseline[2]
+			)
+		);
+
+	it('resolves an authority question about a superseded decision without opening a discussion', () => {
+		const events = reportEvents(
+			dispatch,
+			{ ...goodReports.qa_prep, topic: realTopic } as TeamReport,
+			stateWith(true)
+		);
+		expect(events.map((e) => e.kind)).toEqual(
+			expect.arrayContaining(['issue_opened', 'standard_issue_resolved'])
+		);
+		expect(events.some((e) => e.kind === 'discussion_opened')).toBe(false);
+		expect(events.find((e) => e.kind === 'standard_issue_resolved')).toMatchObject({
+			baselineVersion: 1,
+		});
+	});
+
+	it('still routes a genuine standard problem to PM when no decision was superseded', () => {
+		const events = reportEvents(
+			dispatch,
+			{ ...goodReports.qa_prep, topic: realTopic } as TeamReport,
+			stateWith(false)
+		);
+		expect(events.some((e) => e.kind === 'standard_issue_resolved')).toBe(false);
+		expect(events.some((e) => e.kind === 'discussion_opened')).toBe(true);
+	});
+
+	it('shows a superseded decision to members as historical, with no actions to apply', () => {
+		const prompt = buildTeamTurnPrompt('work', 'dev', stateWith(true));
+		expect(prompt).toContain('Superseded by baseline v1; historical only, do not apply.');
+		expect(prompt).toContain('the owner-confirmed baseline governs');
+	});
+});

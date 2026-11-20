@@ -4,6 +4,7 @@ import {
 	topicParticipants,
 	topicRejection,
 	teamEvidence,
+	supersededDecisionBaseline,
 } from '../../shared/team/policy';
 import type {
 	StandardChangeRequest,
@@ -37,15 +38,27 @@ export function reportEvents(
 			return;
 		}
 		if (value.kind === 'standard') {
+			const issueId = `${dispatch.dispatchId}:standard:${events.length}`;
 			add({
 				kind: 'issue_opened',
 				actor: 'app',
-				issueId: `${dispatch.dispatchId}:standard:${events.length}`,
+				issueId,
 				title: value.topic,
 				criterionId: value.criterionId,
 				issueKind: 'standard',
 				steps: [value.why],
 			});
+			const baselineVersion = supersededDecisionBaseline(value, state);
+			if (baselineVersion) {
+				add({
+					kind: 'standard_issue_resolved',
+					actor: 'app',
+					issueId,
+					baselineVersion,
+					reason: `Confirmed baseline v${baselineVersion} supersedes pre-baseline decisions. Apply its criterion without changing the standard.`,
+				});
+				return;
+			}
 			value = {
 				...value,
 				owner: 'pm',

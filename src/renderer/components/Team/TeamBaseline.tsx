@@ -150,13 +150,13 @@ export function BaselineDiffView({ diff, state }: { diff: BaselineDiff; state: T
 					list(
 						diff.checks.before.map(
 							(check) =>
-								`${check.command} (${list(check.covers.map((id) => criterionLabel(state, id)))}) ${check.boundary ? t(`workflows.team.checkScope.${check.boundary}`) : ''}`
+								`${check.command}${check.expectExit ? ` ${t('workflows.team.expectExit', { code: check.expectExit })}` : ''} (${list(check.covers.map((id) => criterionLabel(state, id)))}) ${check.boundary ? t(`workflows.team.checkScope.${check.boundary}`) : ''}`
 						)
 					),
 					list(
 						diff.checks.after.map(
 							(check) =>
-								`${check.command} (${list(check.covers.map((id) => criterionLabel(state, id)))}) ${check.boundary ? t(`workflows.team.checkScope.${check.boundary}`) : ''}`
+								`${check.command}${check.expectExit ? ` ${t('workflows.team.expectExit', { code: check.expectExit })}` : ''} (${list(check.covers.map((id) => criterionLabel(state, id)))}) ${check.boundary ? t(`workflows.team.checkScope.${check.boundary}`) : ''}`
 						)
 					)
 				)}

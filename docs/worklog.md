@@ -1,5 +1,9 @@
 # 分支工作记录
 
+## 2026-11-20：团队 PR 的 Windows 与 Linux 原生 CI
+
+PR 97 在 `21520dda5` 上 Windows 两个分片 12 项失败、Linux 原生任务两项超时后被 75 分钟上限取消。Windows：检查运行器把 `cmd /c` 找不到命令（退出码 1 和 cmd 的提示行）记为未运行；团队测试改为按主机解析账号目录、固定 `core.autocrlf=false`、Windows 上不用含换行的文件名、先删除隐藏的 `.git` 再写；原生临时目录用原生 realpath 展开 8.3 短名。Linux：强制退出改为杀掉 Electron 进程组（`NativeApp.forceQuit()`），Playwright 要等标准输出全部关闭才报告退出，只杀主进程时 Linux 辅助进程仍握着管道。本地 macOS 在旧提交和新提交上这两个场景都通过（11 到 14 秒），Linux 的原因据 Playwright 源码推断，以下一轮 CI 为准。原生任务上限改为 120 分钟，超时取消时也上传 `e2e-results/`。命令：团队相关单测 21 个文件 572 项通过；`npm run lint` 通过；`node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m3.spec.ts` 结果见 PR 评论。
+
 ## 2026-11-18：M3 fix5/fix5b 集成
 
 在 `85da119c7` 合并 `86b915d4b` 的未完成合并上补齐 CLI 遗留项负责人测试的闭合，保留两侧测试，并给 M1 原生场景补上 `LedgerEvent` 类型导入。基线编辑退回回归只是匹配了旧版 JSON 空白；改为解析实际提示数据，增加退回意见、编辑记录、标准文字、证明方法和版本断言，脚本 PM 修改页脚及消息门控断言仍通过，没有改动运行时提示或调度规则。完整团队测试 530 项、4 份 TypeScript 检查、ESLint 和 27 个变更文件的 Prettier 检查通过，文档检查 746 条路径无缺失，完整命令见 M3 验证记录。本轮未运行 Electron，未暂存或提交。
